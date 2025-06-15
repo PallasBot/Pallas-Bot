@@ -1,9 +1,0 @@
-resource/sing/models
-├── amiya
-│   ├── config.json
-│   └── G_24210.pth
-├── pallas
-│   ├── config.json
-│   └── G_20000.pth
-├── checkpoint_best_legacy_500.pt
-└── path_structure.txt

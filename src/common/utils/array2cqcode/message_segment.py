@@ -15,9 +15,4 @@ class BaseMessageSegment:
 
     @staticmethod
     def escape(data: str) -> str:
-        return (
-            data.replace("&", "&amp;")
-            .replace("[", "&#91;")
-            .replace("]", "&#93;")
-            .replace(",", "&#44;")
-        )
+        return data.replace("&", "&amp;").replace("[", "&#91;").replace("]", "&#93;").replace(",", "&#44;")

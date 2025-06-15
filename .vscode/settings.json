@@ -1,10 +1,13 @@
 {
+    "ruff.nativeServer": "on",
     "[python]": {
-        "diffEditor.ignoreTrimWhitespace": false,
-        "editor.defaultFormatter": "ms-python.autopep8",
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        },
+        "editor.defaultFormatter": "charliermarsh.ruff",
         "editor.formatOnType": true,
-        "editor.formatOnSave": true
+        "editor.formatOnSave": true,
     },
-    "python.languageServer": "Pylance",
-    "python.analysis.typeCheckingMode": "basic"
+    "python.analysis.autoImportCompletions": true
 }

@@ -1,82 +1,48 @@
-import pymongo
-import httpx
+import asyncio
 import base64
 import re
 from datetime import datetime, timedelta
-from typing import Optional
-from src.common.config import plugin_config
 
-if plugin_config.use_rpc:
-    from src.common.utils.rpc import MongoClient
-else:
-    from pymongo import MongoClient
+import httpx
+from nonebot.adapters.onebot.v11 import MessageSegment
 
-mongo_client = MongoClient(plugin_config.mongo_host, plugin_config.mongo_port)
-mongo_db = mongo_client['PallasBot']
-
-image_cache = mongo_db['image_cache']
-image_cache.create_index(name='cq_code_index',
-                         keys=[('cq_code', pymongo.HASHED)])
+from src.common.db import ImageCache
+from src.common.utils import HTTPXClient
 
 
-async def insert_image(image_seg):
+async def insert_image(image_seg: MessageSegment):
     cq_code = re.sub(r"\.image,.+?\]", ".image]", str(image_seg))
-
-    db_filter = {'cq_code': cq_code}
-
-    idate = int(str(datetime.now().date()).replace('-', ''))
-    db_update = {
-        '$inc': {'ref_times': 1},
-        '$set': {'date': idate},
-    }
-
-    cache = image_cache.find_one(db_filter)
-
-    ref_times = 0
-    if cache:
-        if "ref_times" in cache:
-            ref_times = cache["ref_times"]
-        else:
-            ref_times = 1
-
-    ref_times += 1
-
+    cache = await ImageCache.find_one(ImageCache.cq_code == cq_code)
+    if not cache:
+        cache = ImageCache(cq_code=cq_code)
+        await cache.insert()
+        return
+    cache.ref_times += 1
     # 不是经常收到的图不缓存，不然会占用大量空间
-    if ref_times > 2 and 'base64_data' not in cache:
+    if cache.ref_times > 2 and cache.base64_data is None:
         url = image_seg.data["url"]
-        async with httpx.AsyncClient() as client:
-            rsp = await client.get(url)
-
-        if rsp.status_code != 200:
+        rsp = await HTTPXClient.get(url)
+        if rsp.status_code != httpx.codes.OK:
             return
-
-        base64_data = base64.b64encode(rsp.content)
-        base64_data = base64_data.decode()
-
-        db_update['$set']['base64_data'] = base64_data
-
-    image_cache.update_one(db_filter, db_update, upsert=True)
+        base64_data = base64.b64encode(rsp.content).decode()
+        cache.base64_data = base64_data
+    await cache.save()
 
 
-def get_image(cq_code) -> Optional[bytes]:
-    cache = image_cache.find_one({'cq_code': cq_code})
+async def get_image(cq_code) -> bytes | None:
+    cache = await ImageCache.find_one(ImageCache.cq_code == cq_code)
     if not cache:
         return None
-
-    if 'base64_data' not in cache:
+    if cache.base64_data is None:
         return None
-
-    base64_data = cache['base64_data']
-    return base64.b64decode(base64_data)
+    return base64.b64decode(cache.base64_data)
 
 
-def clear_image_cache(days: int = 5, times: int = 3):
-    idate = int(
-        str((datetime.now() - timedelta(days=days)).date()).replace('-', ''))
-    image_cache.delete_many({'ref_times': {"$exists": False}})
-    image_cache.delete_many(
-        {'date': {'$lt': idate}, 'ref_times': {'$lt': times}})
+async def clear_image_cache(days: int = 5, times: int = 3):
+    idate = int(str((datetime.now() - timedelta(days=days)).date()).replace("-", ""))
+    await ImageCache.find(ImageCache.date < idate).delete()
+    await ImageCache.find(ImageCache.ref_times < times).delete()
 
 
-if __name__ == '__main__':
-    clear_image_cache()
+if __name__ == "__main__":
+    asyncio.run(clear_image_cache(5, 3))

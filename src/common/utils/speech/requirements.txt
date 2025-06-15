@@ -1,3 +1,0 @@
-paddlepaddle==2.4.2
-paddlespeech>=1.3.0
-nltk

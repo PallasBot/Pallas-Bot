@@ -1,4 +1,0 @@
-[submodule "src/plugins/sing/so_vits_svc"]
-	path = src/plugins/sing/so_vits_svc
-	url = https://github.com/MistEO/so-vits-svc.git
-	branch = 4.0_pallas
