@@ -84,7 +84,7 @@ class Answer(BaseModel):
 class Context(Document):
     keywords: str = Field(...)
     time: int = Field(default_factory=lambda: int(time.time()))
-    count: int = 1
+    trigger_count: int = Field(default=1, alias="count")
     answers: list[Answer] = Field(default_factory=list)
     ban: list[Ban] = Field(default_factory=list)
     clear_time: int = 0
