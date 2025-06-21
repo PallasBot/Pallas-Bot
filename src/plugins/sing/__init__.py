@@ -1,13 +1,15 @@
 import time
+from typing import Annotated
 
 from arclet.alconna import Alconna, Args, Arparma
 from nepattern import BasePattern
 from nonebot import get_plugin_config, on_message, require
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
+from nonebot.params import Depends
 from nonebot.rule import Rule
 from nonebot.typing import T_State
-from nonebot_plugin_alconna import on_alconna
+from nonebot_plugin_alconna import AlconnaMatches, on_alconna
 
 from src.common.config import GroupConfig, TaskManager
 from src.common.db import SingProgress
@@ -32,7 +34,7 @@ sing_alc = Alconna(
 )
 
 
-async def is_to_sing(command: Arparma, state: T_State) -> bool:
+async def is_to_sing(command: Annotated[Arparma, Depends(AlconnaMatches)], state: T_State) -> bool:
     speaker = command.header["speaker"]
     if speaker not in SPEAKERS:
         return False
@@ -98,7 +100,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 sing_continue_alc = Alconna("{speaker:str}re:((接着)|(继续))唱")
 
 
-async def is_sing_continue(command: Arparma, state: T_State) -> bool:
+async def is_sing_continue(command: Annotated[Arparma, Depends(AlconnaMatches)], state: T_State) -> bool:
     speaker = command.header["speaker"]
     if speaker not in SPEAKERS:
         return False
@@ -163,7 +165,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 play_alc = Alconna("{speaker:str}唱歌")
 
 
-async def is_play(command: Arparma, state: T_State) -> bool:
+async def is_play(command: Annotated[Arparma, Depends(AlconnaMatches)], state: T_State) -> bool:
     speaker = command.header["speaker"]
     if speaker not in SPEAKERS:
         return False
