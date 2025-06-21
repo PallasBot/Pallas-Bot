@@ -1,6 +1,5 @@
 import asyncio
 import random
-from pathlib import Path
 
 from nonebot import get_bot, on_message, on_notice
 from nonebot.adapters import Bot

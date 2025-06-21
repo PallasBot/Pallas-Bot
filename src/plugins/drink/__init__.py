@@ -2,11 +2,9 @@ import asyncio
 import random
 
 from nonebot import logger, on_message, require
-from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, PrivateMessageEvent, permission
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 from nonebot.exception import ActionFailed
 from nonebot.rule import Rule
-from nonebot.typing import T_State
 
 from src.common.config import BotConfig
 

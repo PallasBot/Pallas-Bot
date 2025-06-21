@@ -1,8 +1,8 @@
 import random
 
 from nonebot import get_bot, logger, on_notice, require
-from nonebot.adapters import Bot, Event
-from nonebot.adapters.onebot.v11 import Message, NoticeEvent, permission
+from nonebot.adapters import Bot
+from nonebot.adapters.onebot.v11 import NoticeEvent, permission
 from nonebot.exception import ActionFailed
 from nonebot.rule import Rule
 

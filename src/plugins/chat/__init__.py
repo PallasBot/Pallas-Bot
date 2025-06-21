@@ -1,7 +1,7 @@
 import time
 
 from nonebot import get_plugin_config, logger, on_message
-from nonebot.adapters import Bot, Event
+from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 from nonebot.rule import Rule, to_me
 

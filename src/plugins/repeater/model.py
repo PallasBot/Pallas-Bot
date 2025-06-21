@@ -205,7 +205,7 @@ class Chat:
 
         raw_message = self.chat_data.raw_message
         keywords = self.chat_data.keywords
-        with Chat._reply_lock:
+        async with Chat._reply_lock:
             group_bot_replies.append(
                 {
                     "time": int(time.time()),
@@ -220,7 +220,7 @@ class Chat:
             answer_list, answer_keywords = results
             group_bot_replies = Chat._reply_dict[group_id][bot_id]
             for item in answer_list:
-                with Chat._reply_lock:
+                async with Chat._reply_lock:
                     group_bot_replies.append(
                         {
                             "time": int(time.time()),
@@ -497,7 +497,7 @@ class Chat:
         持久化
         """
 
-        with Chat._message_lock:
+        async with Chat._message_lock:
             save_list = [
                 msg
                 for group_msgs in Chat._message_dict.values()
@@ -728,7 +728,7 @@ class Chat:
 
     @staticmethod
     async def _sync_blacklist() -> None:
-        Chat._select_blacklist()
+        await Chat._select_blacklist()
 
         for group_id, answers in Chat._blacklist_answer.items():
             if not len(answers):

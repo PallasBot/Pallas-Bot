@@ -56,7 +56,7 @@ async def post_proc(message: Message, self_id: int, group_id: int) -> Message:
             new_msg += f"@{nick_name}"
         elif seg.type == "image":
             cq_code = str(seg)
-            base64_data = get_image(cq_code)
+            base64_data = await get_image(cq_code)
             if base64_data:
                 new_msg += MessageSegment.image(file=base64_data)
             else:
@@ -263,9 +263,21 @@ async def speak_up():
 
     for msg in messages:
         logger.info(f"bot [{bot_id}] ready to speak [{msg}] to group [{group_id}]")
-        await get_bot(str(bot_id)).call_api("send_group_msg", **{"message": msg, "group_id": group_id})
+        await get_bot(str(bot_id)).call_api(
+            "send_group_msg",
+            **{
+                "message": msg,
+                "group_id": group_id,
+            },
+        )
         if target_id:
-            await get_bot(str(bot_id)).call_api("group_poke", **{"user_id": target_id, "group_id": group_id})
+            await get_bot(str(bot_id)).call_api(
+                "group_poke",
+                **{
+                    "user_id": target_id,
+                    "group_id": group_id,
+                },
+            )
         await asyncio.sleep(random.randint(2, 5))
 
 
