@@ -3,7 +3,7 @@ import random
 import re
 import time
 
-from nonebot import get_bot, logger, on_message, on_notice, require
+from nonebot import get_bot, get_driver, logger, on_message, on_notice, require
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, GroupRecallNoticeEvent, Message, MessageSegment, permission
 from nonebot.exception import ActionFailed
@@ -19,6 +19,18 @@ from .model import Chat
 
 message_id_lock = asyncio.Lock()
 message_id_dict = {}
+
+driver = get_driver()
+
+
+@driver.on_startup
+async def startup():
+    await Chat.update_global_blacklist()
+
+
+@driver.on_shutdown
+async def shutdown():
+    await Chat.sync()
 
 
 async def is_shutup(self_id: int, group_id: int) -> bool:
