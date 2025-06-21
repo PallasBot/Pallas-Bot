@@ -1,198 +1,237 @@
-import os
-import random
 import time
-from pathlib import Path
-from threading import Lock
 
-from nonebot import get_plugin_config, logger, on_message
+from arclet.alconna import Alconna, Args, Arparma
+from nepattern import BasePattern
+from nonebot import get_plugin_config, on_message, require
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageSegment, permission
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 from nonebot.rule import Rule
 from nonebot.typing import T_State
+from nonebot_plugin_alconna import on_alconna
 
-from src.common.config import GroupConfig
+from src.common.config import GroupConfig, TaskManager
+from src.common.db import SingProgress
+from src.common.utils import HTTPXClient
 
 from .config import Config
 from .ncm import get_song_id, get_song_title
 
+require("nonebot_plugin_alconna")
+
 plugin_config = get_plugin_config(Config)
 
-SING_CMD = "唱歌"
-SING_CONTINUE_CMDS = ["继续唱", "接着唱"]
+SERVER_URL = f"http://{plugin_config.ai_server_host}:{plugin_config.ai_server_port}"
+
+SPEAKERS = plugin_config.sing_speakers.keys()
 SING_COOLDOWN_KEY = "sing"
 
 
-# TODO: Alconna 改造
-async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
-    text = event.get_plaintext()
-    if not text:
+sing_alc = Alconna(
+    "{speaker:str}唱歌",
+    Args["song_id_str", str]["key", BasePattern("(?:0|-?(?:[1-9]|1[0-2]))"), "0"],
+)
+
+
+async def is_to_sing(command: Arparma, state: T_State) -> bool:
+    speaker = command.header["speaker"]
+    if speaker not in SPEAKERS:
         return False
-
-    if SING_CMD not in text and not any(cmd in text for cmd in SING_CONTINUE_CMDS):
-        return False
-
-    if text.endswith(SING_CMD):
-        return False
-
-    has_spk = False
-    for name, speaker in plugin_config.sing_speakers.items():
-        if not text.startswith(name):
-            continue
-        text = text.replace(name, "").strip()
-        has_spk = True
-        state["speaker"] = speaker
-        break
-
-    if not has_spk:
-        return False
-
-    if "key=" in text:
-        key_pos = text.find("key=")
-        key_val = text[key_pos + 4 :].strip()  # 获取key=后面的值
-        text = text.replace("key=" + key_val, "")  # 去掉消息中的key信息
-        try:
-            key_int = int(key_val)  # 判断输入的key是不是整数
-            if key_int < -12 or key_int > 12:
-                return False  # 限制一下key的大小，一个八度应该够了
-        except ValueError:
-            return False
-    else:
-        key_val = 0
-    state["key"] = key_val
-
-    if text.startswith(SING_CMD):
-        song_key = text.replace(SING_CMD, "").strip()
-        if not song_key:
-            return False
-        state["song_id"] = song_key
-        state["chunk_index"] = 0
-        return True
-
-    if text in SING_CONTINUE_CMDS:
-        progress = GroupConfig(group_id=event.group_id).sing_progress()
-        if not progress:
-            return False
-
-        song_id = progress["song_id"]
-        chunk_index = progress["chunk_index"]
-        key_val = progress["key"]
-        if not song_id or chunk_index > 100:
-            return False
-        state["song_id"] = str(song_id)
-        state["chunk_index"] = chunk_index
-        state["key"] = key_val
-        return True
-
-    return False
+    state["speaker"] = plugin_config.sing_speakers[speaker]
+    state["song_id"] = command.query("song_id_str")
+    state["key"] = command.query("key")
+    return True
 
 
-sing_msg = on_message(
+sing_cmd = on_alconna(
+    command=sing_alc,
     rule=Rule(is_to_sing),
+    permission=permission.GROUP,
     priority=5,
+    block=True,
+)
+
+
+@sing_cmd.handle()
+async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+    config = GroupConfig(event.group_id, cooldown=120)
+    if not await config.is_cooldown(SING_COOLDOWN_KEY):
+        return
+    await config.refresh_cooldown(SING_COOLDOWN_KEY)
+    speaker = state["speaker"]
+    song_id = await get_song_id(state["song_id"])
+    if not song_id:
+        await sing_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+    key = int(state["key"])
+    chunk_index = 0
+    url = f"{SERVER_URL}{plugin_config.sing_endpoint}"
+    response = await HTTPXClient.post(
+        url,
+        json={
+            "speaker": speaker,
+            "song_id": song_id,
+            "chunk_index": chunk_index,
+            "key": key,
+        },
+    )
+    if not response:
+        await sing_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+    task_id = response.json().get("task_id", "")
+    if not task_id:
+        await sing_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+    await TaskManager.add_task(
+        task_id,
+        {
+            "bot_id": bot.self_id,
+            "group_id": event.group_id,
+            "start_time": time.time(),
+        },
+    )
+    sing_progress = SingProgress(
+        song_id=song_id,
+        chunk_index=chunk_index,
+        key=key,
+    )
+    await config.update_sing_progress(sing_progress)
+    await sing_cmd.finish("欢呼吧！")
+
+
+sing_continue_alc = Alconna("{speaker:str}re:((接着)|(继续))唱")
+
+
+async def is_sing_continue(command: Arparma, state: T_State) -> bool:
+    speaker = command.header["speaker"]
+    if speaker not in SPEAKERS:
+        return False
+    state["speaker"] = plugin_config.sing_speakers[speaker]
+    return True
+
+
+sing_continue_cmd = on_alconna(
+    command=sing_continue_alc,
+    rule=Rule(is_sing_continue),
+    permission=permission.GROUP,
+    priority=5,
+    block=True,
+)
+
+
+@sing_continue_cmd.handle()
+async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+    config = GroupConfig(event.group_id, cooldown=120)
+    if not await config.is_cooldown(SING_COOLDOWN_KEY):
+        return
+    await config.refresh_cooldown(SING_COOLDOWN_KEY)
+
+    speaker = state["speaker"]
+    progress = await config.sing_progress()
+    if not progress:
+        await sing_continue_cmd.finish()
+
+    song_id = progress.song_id
+    chunk_index = progress.chunk_index
+    key = progress.key
+
+    url = f"{SERVER_URL}{plugin_config.sing_endpoint}"
+    response = await HTTPXClient.post(
+        url,
+        json={
+            "speaker": speaker,
+            "song_id": song_id,
+            "chunk_index": chunk_index,
+            "key": key,
+        },
+    )
+    if not response:
+        await sing_continue_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+    task_id = response.json().get("task_id", "")
+    if not task_id:
+        await sing_continue_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+
+    await TaskManager.add_task(
+        task_id,
+        {
+            "bot_id": bot.self_id,
+            "group_id": event.group_id,
+            "start_time": time.time(),
+        },
+    )
+    progress.chunk_index += 1
+    await config.update_sing_progress(progress)
+    await sing_cmd.finish("欢呼吧！")
+
+
+play_alc = Alconna("{speaker:str}唱歌")
+
+
+async def is_play(command: Arparma, state: T_State) -> bool:
+    speaker = command.header["speaker"]
+    if speaker not in SPEAKERS:
+        return False
+    state["speaker"] = plugin_config.sing_speakers[speaker]
+    return True
+
+
+play_cmd = on_alconna(
+    command=play_alc,
+    rule=Rule(is_play),
+    permission=permission.GROUP,
+    priority=11,
+    block=False,
+)
+
+
+@play_cmd.handle()
+async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+    config = GroupConfig(event.group_id, cooldown=10)
+    if not await config.is_cooldown("music"):
+        return
+    await config.refresh_cooldown("music")
+
+    speaker = state["speaker"]
+    url = f"{SERVER_URL}{plugin_config.play_endpoint}/{speaker}"
+    response = await HTTPXClient.get(url)
+    if not response:
+        await sing_continue_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+    task_id = response.json().get("task_id", "")
+    if not task_id:
+        await sing_continue_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+
+    await TaskManager.add_task(
+        task_id,
+        {
+            "bot_id": bot.self_id,
+            "group_id": event.group_id,
+            "start_time": time.time(),
+        },
+    )
+    await sing_cmd.finish("欢呼吧！")
+
+
+async def what_song(event: Event) -> bool:
+    text = event.get_plaintext()
+    return any(text.startswith(spk) for spk in SPEAKERS) and any(key in text for key in ["什么歌", "哪首歌", "啥歌"])
+
+
+song_title_cmd = on_message(
+    rule=Rule(what_song),
+    priority=12,
     block=True,
     permission=permission.GROUP,
 )
 
 
-@sing_msg.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
-    config = GroupConfig(event.group_id, cooldown=120)
-    if not config.is_cooldown(SING_COOLDOWN_KEY):
-        return
-    config.refresh_cooldown(SING_COOLDOWN_KEY)
-
-    speaker = state["speaker"]
-    song_key = state["song_id"]
-    song_id = song_key if song_key.isdigit() else await get_song_id(song_key)
-    chunk_index = state["chunk_index"]
-    key = state["key"]
-
-    async def failed():
-        config.reset_cooldown(SING_COOLDOWN_KEY)
-        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
-
-    async def success(song: Path, spec_index: int = None):
-        config.reset_cooldown(SING_COOLDOWN_KEY)
-        config.update_sing_progress({
-            "song_id": song_id,
-            "chunk_index": (spec_index or chunk_index) + 1,
-            "key": key,
-        })
-
-        msg: Message = MessageSegment.record(file=song)
-        await sing_msg.finish(msg)
-
-    # 下载 -> 切片 -> 人声分离 -> 音色转换（SVC） -> 混音
-    # 其中 人声分离和音色转换是吃 GPU 的，所以要加锁，不然显存不够用
-    await sing_msg.send("欢呼吧！")
-
-    if not song_id:
-        logger.error("get_song_id failed", song_key, song_id)
-        await failed()
-
-
-# 随机放歌（bushi
-async def play_song(bot: Bot, event: Event, state: T_State) -> bool:
-    text = event.get_plaintext()
-    if not text or not text.endswith(SING_CMD):
-        return False
-
-    for name, speaker in plugin_config.sing_speakers.items():
-        if not text.startswith(name):
-            continue
-        state["speaker"] = speaker
-        return True
-
-    return False
-
-
-play_cmd = on_message(
-    rule=Rule(play_song),
-    priority=13,
-    block=False,
-    permission=permission.GROUP,
-)
-
-
-@play_cmd.handle()
-async def _(bot: Bot, event: Event, state: T_State):
-    config = GroupConfig(event.group_id, cooldown=10)
-    if not config.is_cooldown("music"):
-        return
-    config.refresh_cooldown("music")
-
-    speaker = state["speaker"]
-    rand_music = get_random_song(speaker)
-    if not rand_music:
-        return
-
-    msg: Message = MessageSegment.record(file=Path(rand_music))
-    await play_cmd.finish(msg)
-
-
-async def what_song(bot: Bot, event: Event, state: T_State) -> bool:
-    text = event.get_plaintext()
-    return any([text.startswith(spk) for spk in plugin_config.sing_speakers.keys()]) and any(
-        key in text for key in ["什么歌", "哪首歌", "啥歌"]
-    )
-
-
-song_title_cmd = on_message(rule=Rule(what_song), priority=13, block=True, permission=permission.GROUP)
-
-
 @song_title_cmd.handle()
-async def _(bot: Bot, event: Event, state: T_State):
+async def _(event: GroupMessageEvent):
     config = GroupConfig(event.group_id, cooldown=10)
-    progress = config.sing_progress()
+    progress = await config.sing_progress()
     if not progress:
         return
 
     if not config.is_cooldown("song_title"):
         return
-    config.refresh_cooldown("song_title")
+    await config.refresh_cooldown("song_title")
 
-    song_id = progress["song_id"]
-    song_title = await get_song_title(song_id)
+    song_title = await get_song_title(progress.song_id)
     if not song_title:
         return
 

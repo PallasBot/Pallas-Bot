@@ -5,7 +5,7 @@ from typing import Any
 from beanie import Document
 from pydantic import BaseModel
 
-from src.common.db import BotConfigModule, GroupConfigModule, UserConfigModule
+from src.common.db import BotConfigModule, GroupConfigModule, SingProgress, UserConfigModule
 
 KEY_JOINER = "."
 
@@ -163,27 +163,30 @@ class BotConfig(Config):
         """
         牛牛睡了么？
         """
-        value = self._find(f"sleep{KEY_JOINER}{self.group_id}")
+        value = self._find_in_memory(f"sleep{KEY_JOINER}{self.group_id}")
         return value > time.time() if value else False
 
     async def sleep(self, seconds: int) -> None:
         """
         牛牛睡觉
         """
-        self._update(f"sleep{KEY_JOINER}{self.group_id}", time.time() + seconds)
+        await self._update_in_memory(f"sleep{KEY_JOINER}{self.group_id}", time.time() + seconds)
 
     async def taken_name(self) -> int:
         """
         返回在该群夺舍的账号
         """
-        user_id = self._find(f"taken_name{KEY_JOINER}{self.group_id}")
-        return user_id or 0
+        user_ids = await self._find("taken_name")
+        user_id = user_ids.get(self.group_id) if user_ids else None
+        return user_id
 
     async def update_taken_name(self, user_id: int) -> None:
         """
         更新夺舍的账号
         """
-        self._update(f"taken_name{KEY_JOINER}{self.group_id}", user_id)
+        user_ids = await self._find("taken_name")
+        user_ids[self.group_id] = user_id
+        await self._update("taken_name", user_ids)
 
 
 class GroupConfig(Config):
@@ -199,7 +202,7 @@ class GroupConfig(Config):
 
         :return: 0 踢人 1 禁言
         """
-        mode = self._find("roulette_mode")
+        mode = await self._find("roulette_mode")
         return mode if mode is not None else 1
 
     async def set_roulette_mode(self, mode: int) -> None:
@@ -208,51 +211,51 @@ class GroupConfig(Config):
 
         :param mode: 0 踢人 1 禁言
         """
-        self._update("roulette_mode", mode)
+        await self._update("roulette_mode", mode)
 
     async def ban(self) -> None:
         """
         拉黑该群
         """
-        self._update("banned", True)
+        await self._update("banned", True)
 
     async def is_banned(self) -> bool:
         """
         群是否被拉黑
         """
-        banned = self._find("banned")
+        banned = await self._find("banned")
         return True if banned else False
 
     async def is_cooldown(self, action_type: str) -> bool:
         """
         是否冷却完成
         """
-        cd = self._find(f"cooldown{KEY_JOINER}{action_type}")
+        cd = await self._find_in_memory(f"cooldown{KEY_JOINER}{action_type}")
         return cd + self.cooldown < time.time() if cd else True
 
     async def refresh_cooldown(self, action_type: str) -> None:
         """
         刷新冷却时间
         """
-        self._update(f"cooldown{KEY_JOINER}{action_type}", time.time(), db=False)
+        await self._update_in_memory(f"cooldown{KEY_JOINER}{action_type}", time.time(), db=False)
 
     async def reset_cooldown(self, action_type: str) -> None:
         """
         重置冷却时间
         """
-        self._update(f"cooldown{KEY_JOINER}{action_type}", 0, db=False)
+        await self._update_in_memory(f"cooldown{KEY_JOINER}{action_type}", 0, db=False)
 
-    async def sing_progress(self) -> dict | None:
+    async def sing_progress(self) -> SingProgress | None:
         """
         获取歌曲进度
         """
-        return self._find("sing_progress")
+        return await self._find("sing_progress")
 
-    async def update_sing_progress(self, progress: dict) -> None:
+    async def update_sing_progress(self, progress: SingProgress) -> None:
         """
         更新歌曲进度
         """
-        self._update("sing_progress", progress)
+        await self._update("sing_progress", progress)
 
 
 class UserConfig(Config):
@@ -265,11 +268,46 @@ class UserConfig(Config):
         """
         拉黑这个人
         """
-        self._update("banned", True)
+        await self._update("banned", True)
 
     async def is_banned(self) -> bool:
         """
         是否被拉黑
         """
-        banned = self._find("banned")
+        banned = await self._find("banned")
         return True if banned else False
+
+
+class TaskManager:
+    _tasks: dict[str, dict] = {}
+    _lock: asyncio.Lock = asyncio.Lock()
+    _TTL: int = 600
+
+    @classmethod
+    async def refresh(cls):
+        async with cls._lock:
+            current_time = time.time()
+            cls._tasks = {
+                task_id: task_status
+                for task_id, task_status in cls._tasks.items()
+                if task_status.get("start_time", 0) + cls._TTL >= current_time
+            }
+
+    @classmethod
+    async def add_task(cls, task_id: str, task_status: dict):
+        await cls.refresh()
+        async with cls._lock:
+            cls._tasks[task_id] = task_status
+
+    @classmethod
+    async def get_task(cls, task_id: str) -> dict | None:
+        await cls.refresh()
+        async with cls._lock:
+            return cls._tasks.get(task_id)
+
+    @classmethod
+    async def remove_task(cls, task_id: str):
+        await cls.refresh()
+        async with cls._lock:
+            if task_id in cls._tasks:
+                del cls._tasks[task_id]

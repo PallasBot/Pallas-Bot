@@ -1,11 +1,11 @@
-import asyncio
+import time
 
 from nonebot import get_plugin_config, logger, on_message
 from nonebot.adapters import Bot, Event
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment, permission
-from nonebot.rule import Rule
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
+from nonebot.rule import Rule, to_me
 
-from src.common.config import BotConfig, GroupConfig
+from src.common.config import BotConfig, GroupConfig, TaskManager
 from src.common.utils import HTTPXClient
 
 from .config import Config
@@ -13,6 +13,7 @@ from .config import Config
 plugin_config = get_plugin_config(Config)
 
 SERVER_URL = f"http://{plugin_config.ai_server_host}:{plugin_config.ai_server_port}"
+CHAT_COOLDOWN_KEY = "chat"
 
 
 @BotConfig.handle_sober_up
@@ -23,13 +24,17 @@ async def on_sober_up(bot_id, group_id, drunkenness) -> None:
     await HTTPXClient.delete(url)
 
 
-def is_drunk(event: GroupMessageEvent) -> int:
+async def is_to_chat(event: GroupMessageEvent) -> bool:
+    text = event.get_plaintext()
+    if not text.startswith("牛牛") and not event.is_tome():
+        return False
     config = BotConfig(event.self_id, event.group_id)
-    return config.drunkenness()
+    drunkness = await config.drunkenness()
+    return drunkness > 0
 
 
 drunk_msg = on_message(
-    rule=Rule(is_drunk),
+    rule=Rule(is_to_chat),
     priority=13,
     block=True,
     permission=permission.GROUP,
@@ -37,31 +42,42 @@ drunk_msg = on_message(
 
 
 @drunk_msg.handle()
-async def _(event: GroupMessageEvent):
-    text = event.get_plaintext()
-    if not text.startswith("牛牛") and not event.is_tome():
-        return
-
+async def _(bot: Bot, event: GroupMessageEvent):
     config = GroupConfig(event.group_id, cooldown=10)
-    cd_key = "chat"
-    if not await config.is_cooldown(cd_key):
+    if not await config.is_cooldown(CHAT_COOLDOWN_KEY):
         return
-    await config.refresh_cooldown(cd_key)
+    await config.refresh_cooldown(CHAT_COOLDOWN_KEY)
 
-    session = f"{event.self_id}_{event.group_id}"
+    text = event.get_plaintext()
     if text.startswith("牛牛"):
         text = text[2:].strip()
     if "\n" in text:
         text = text.split("\n")[0]
-    if len(text) > 50:
-        text = text[:50]
+    text = text[:50].strip()
     if not text:
         return
+    session = f"{event.self_id}_{event.group_id}"
     url = f"{SERVER_URL}{plugin_config.chat_endpoint}"
-    # response = await HTTPXClient.post(
-    #     url, json={"session": session, "text": text, "token_count": 50, "tts": plugin_config.tts_enable}
-    # )
-    # if response:
-    #     task_id = response.json().get("task_id", "")
-    # else:
-    #     return
+    response = await HTTPXClient.post(
+        url,
+        json={
+            "session": session,
+            "text": text,
+            "token_count": 50,
+            "tts": plugin_config.tts_enable,
+        },
+    )
+    if not response:
+        return
+
+    task_id = response.json().get("task_id", "")
+    if not task_id:
+        return
+    await TaskManager.add_task(
+        task_id,
+        {
+            "bot_id": bot.self_id,
+            "group_id": event.group_id,
+            "start_time": time.time(),
+        },
+    )

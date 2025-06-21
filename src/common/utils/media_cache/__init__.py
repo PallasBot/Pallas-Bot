@@ -22,7 +22,7 @@ async def insert_image(image_seg: MessageSegment):
     if cache.ref_times > 2 and cache.base64_data is None:
         url = image_seg.data["url"]
         rsp = await HTTPXClient.get(url)
-        if rsp.status_code != httpx.codes.OK:
+        if not rsp or rsp.status_code != httpx.codes.OK:
             return
         base64_data = base64.b64encode(rsp.content).decode()
         cache.base64_data = base64_data

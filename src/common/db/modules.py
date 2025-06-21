@@ -8,9 +8,10 @@ from pymongo import IndexModel
 
 
 class SingProgress(BaseModel):
-    song_id: str
-    chunk_index: int
-    key: int
+    complete: bool = False
+    song_id: str = ""
+    chunk_index: int = 0
+    key: int = 0
 
 
 class BotConfigModule(Document):
@@ -20,20 +21,19 @@ class BotConfigModule(Document):
     security: bool = Field(default=False)
     taken_name: dict[int, int] = Field(default_factory=dict)
     drunk: dict[int, float] = Field(default_factory=dict)
-    sleep: dict[int, float] = Field(default_factory=dict)
 
     class Settings:
         collection = "config"
         use_cache = True
         cache_expiration_time = timedelta(minutes=30)
-        cache_capacity = 100
+        cache_capacity = 10000
 
 
 class GroupConfigModule(Document):
     group_id: int = Field(...)
-    roulette_mode: int
-    banned: bool
-    sing_progress: SingProgress
+    roulette_mode: int = 1
+    banned: bool = False
+    sing_progress: SingProgress | None = None
 
     class Settings:
         collection = "group_config"
@@ -127,8 +127,8 @@ class BaseImageCache(Document):
 
 class ImageCache(BaseImageCache):
     cq_code: str = Field(...)
-    base64_data: str | None = Field(default=None)
-    ref_times: int = Field(default=1)
+    base64_data: str | None = None
+    ref_times: int = 1
 
     class Settings:
         collection = "image_cache"

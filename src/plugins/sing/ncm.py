@@ -1,11 +1,13 @@
-from pyncm import apis as ncm
+from pyncm_async import apis as ncm
 
 
 async def get_song_id(song_name: str):
     if not song_name:
         return None
+    if song_name.isdigit():
+        return song_name
 
-    res = ncm.cloudsearch.GetSearchResult(song_name, 1, 10)
+    res = await ncm.cloudsearch.GetSearchResult(song_name, 1, 10)
     if "result" not in res or "songCount" not in res["result"]:
         return None
 
@@ -30,5 +32,5 @@ async def get_song_id(song_name: str):
 
 
 async def get_song_title(song_id):
-    response = ncm.track.GetTrackDetail(song_id)
+    response = await ncm.track.GetTrackDetail(song_id)
     return response["songs"][0]["name"]

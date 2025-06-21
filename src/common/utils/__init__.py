@@ -31,13 +31,15 @@ class HTTPXClient:
     DEFAULT_RETRY = {
         "stop": stop_after_attempt(3),
         "wait": wait_exponential(multiplier=1, min=1, max=5),
-        "retry": retry_if_exception_type((
-            httpx.ConnectTimeout,
-            httpx.ReadTimeout,
-            httpx.RemoteProtocolError,
-            httpx.NetworkError,
-        )),
-        "before_sleep": before_sleep_log(logger, logging.WARNING),
+        "retry": retry_if_exception_type(
+            (
+                httpx.ConnectTimeout,
+                httpx.ReadTimeout,
+                httpx.RemoteProtocolError,
+                httpx.NetworkError,
+            )
+        ),
+        "before_sleep": before_sleep_log(logger, logging.DEBUG),
     }
 
     @classmethod
@@ -73,25 +75,46 @@ class HTTPXClient:
             cls.DEFAULT_RETRY.update(retry_config)
 
     @classmethod
-    @retry(**DEFAULT_RETRY)
-    async def get(cls, url: str, **kwargs) -> httpx.Response:
-        async with cls.get_client() as client:
-            response = await client.get(url, **kwargs)
-            response.raise_for_status()
-            return response
+    async def get(cls, url: str, **kwargs) -> httpx.Response | None:
+        @retry(**cls.DEFAULT_RETRY)
+        async def _get():
+            async with cls.get_client() as client:
+                response = await client.get(url, **kwargs)
+                response.raise_for_status()
+                return response
+
+        try:
+            return await _get()
+        except httpx.HTTPStatusError as e:
+            logger.warning(f"Request GET {url} failed after retries: {e}")
+            return None
 
     @classmethod
-    @retry(**DEFAULT_RETRY)
-    async def post(cls, url: str, json: dict[str, Any] | None = None, **kwargs) -> httpx.Response:
-        async with cls.get_client() as client:
-            response = await client.post(url, json=json, **kwargs)
-            response.raise_for_status()
-            return response
+    async def post(cls, url: str, json: dict[str, Any] | None = None, **kwargs) -> httpx.Response | None:
+        @retry(**cls.DEFAULT_RETRY)
+        async def _post():
+            async with cls.get_client() as client:
+                response = await client.post(url, json=json, **kwargs)
+                response.raise_for_status()
+                return response
+
+        try:
+            return await _post()
+        except Exception as e:
+            logger.warning(f"Request POST {url} failed after retries: {e}")
+            return None
 
     @classmethod
-    @retry(**DEFAULT_RETRY)
-    async def delete(cls, url: str, **kwargs) -> httpx.Response:
-        async with cls.get_client() as client:
-            response = await client.delete(url, **kwargs)
-            response.raise_for_status()
-            return response
+    async def delete(cls, url: str, **kwargs) -> httpx.Response | None:
+        @retry(**cls.DEFAULT_RETRY)
+        async def _delete():
+            async with cls.get_client() as client:
+                response = await client.delete(url, **kwargs)
+                response.raise_for_status()
+                return response
+
+        try:
+            return await _delete()
+        except Exception as e:
+            logger.warning(f"Request DELETE {url} failed after retries: {e}")
+            return None
