@@ -4,7 +4,7 @@ services:
     image: pallasbot/pallas-bot
     restart: always
     ports:
-      - "8088:8088"
+      - 8088:8088
     env_file:
       - ".env.prod"
     environment:
@@ -27,7 +27,7 @@ services:
     image: mongo:8.0.10-noble
     restart: always
     ports:
-      - "27017:27017"
+      - 27017:27017
     environment:
       TZ: Asia/Shanghai
       wiredTigerCacheSizeGB: 1.5
@@ -36,6 +36,20 @@ services:
     volumes:
       - /opt/dockerstore/mongo/data:/data/db
       - /opt/dockerstore/mongo/logs:/var/log/mongodb
+
+  napcat:
+    container_name: napcat
+    image: mlikiowa/napcat-docker:latest
+    restart: always
+    environment:
+      - NAPCAT_UID=${NAPCAT_UID:-1000}
+      - NAPCAT_GID=${NAPCAT_GID:-1000}
+    network_mode: bridge
+    ports:
+        - 6099:6099
+    volumes:
+      - /opt/dockerstore/NapCat/QQ:/app/.config/QQ
+      - /opt/dockerstore/NapCat/config:/app/napcat/config
 
 networks:
   pallasbot:
