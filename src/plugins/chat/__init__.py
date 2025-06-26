@@ -3,7 +3,8 @@ import time
 from nonebot import get_plugin_config, logger, on_message
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
-from nonebot.rule import Rule, to_me
+from nonebot.rule import Rule
+from ulid import ULID
 
 from src.common.config import BotConfig, GroupConfig, TaskManager
 from src.common.utils import HTTPXClient
@@ -56,8 +57,19 @@ async def _(bot: Bot, event: GroupMessageEvent):
     text = text[:50].strip()
     if not text:
         return
+
     session = f"{event.self_id}_{event.group_id}"
-    url = f"{SERVER_URL}{plugin_config.chat_endpoint}"
+    request_id = str(ULID())
+    await TaskManager.add_task(
+        request_id,
+        {
+            "bot_id": bot.self_id,
+            "group_id": event.group_id,
+            "start_time": time.time(),
+        },
+    )
+
+    url = f"{SERVER_URL}{plugin_config.chat_endpoint}/{request_id}"
     response = await HTTPXClient.post(
         url,
         json={
@@ -68,16 +80,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
         },
     )
     if not response:
+        await TaskManager.remove_task(request_id)
         return
 
     task_id = response.json().get("task_id", "")
     if not task_id:
+        await TaskManager.remove_task(request_id)
         return
-    await TaskManager.add_task(
-        task_id,
-        {
-            "bot_id": bot.self_id,
-            "group_id": event.group_id,
-            "start_time": time.time(),
-        },
-    )

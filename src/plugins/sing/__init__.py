@@ -10,6 +10,7 @@ from nonebot.params import Depends
 from nonebot.rule import Rule
 from nonebot.typing import T_State
 from nonebot_plugin_alconna import AlconnaMatches, on_alconna
+from ulid import ULID
 
 from src.common.config import GroupConfig, TaskManager
 from src.common.db import SingProgress
@@ -65,7 +66,17 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         await sing_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
     key = int(state["key"])
     chunk_index = 0
-    url = f"{SERVER_URL}{plugin_config.sing_endpoint}"
+    request_id = str(ULID())
+    await TaskManager.add_task(
+        request_id,
+        {
+            "bot_id": bot.self_id,
+            "group_id": event.group_id,
+            "start_time": time.time(),
+        },
+    )
+
+    url = f"{SERVER_URL}{plugin_config.sing_endpoint}/{request_id}"
     response = await HTTPXClient.post(
         url,
         json={
@@ -77,17 +88,12 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     )
     if not response:
         await sing_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await TaskManager.remove_task(request_id)
     task_id = response.json().get("task_id", "")
     if not task_id:
         await sing_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
-    await TaskManager.add_task(
-        task_id,
-        {
-            "bot_id": bot.self_id,
-            "group_id": event.group_id,
-            "start_time": time.time(),
-        },
-    )
+        await TaskManager.remove_task(request_id)
+
     sing_progress = SingProgress(
         song_id=song_id,
         chunk_index=chunk_index,
@@ -132,8 +138,17 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     song_id = progress.song_id
     chunk_index = progress.chunk_index
     key = progress.key
+    request_id = str(ULID())
+    await TaskManager.add_task(
+        request_id,
+        {
+            "bot_id": bot.self_id,
+            "group_id": event.group_id,
+            "start_time": time.time(),
+        },
+    )
 
-    url = f"{SERVER_URL}{plugin_config.sing_endpoint}"
+    url = f"{SERVER_URL}{plugin_config.sing_endpoint}/{request_id}"
     response = await HTTPXClient.post(
         url,
         json={
@@ -145,18 +160,12 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     )
     if not response:
         await sing_continue_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await TaskManager.remove_task(request_id)
     task_id = response.json().get("task_id", "")
     if not task_id:
         await sing_continue_cmd.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        await TaskManager.remove_task(request_id)
 
-    await TaskManager.add_task(
-        task_id,
-        {
-            "bot_id": bot.self_id,
-            "group_id": event.group_id,
-            "start_time": time.time(),
-        },
-    )
     progress.chunk_index += 1
     await config.update_sing_progress(progress)
     await sing_cmd.finish("欢呼吧！")
