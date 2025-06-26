@@ -1,0 +1,41 @@
+services:
+  pallasbot:
+    container_name: pallasbot
+    image: pallasbot/pallas-bot
+    restart: always
+    ports:
+      - "8088:8088"
+    env_file:
+      - ".env.prod"
+    environment:
+      TZ: Asia/Shanghai
+      ENVIRONMENT: prod
+      APP_MODULE: bot:app
+      MAX_WORKERS: 1
+      WAIT_HOSTS: mongodb:27017
+      TIMEOUT: 480
+    networks:
+      - pallasbot
+    volumes:
+      - /opt/dockerstore/pallas-bot/resource/:/app/resource
+      - /opt/dockerstore/pallas-bot/.env.prod:/app/.env.prod
+    depends_on:
+      - mongodb
+
+  mongodb:
+    container_name: mongodb
+    image: mongo:8.0.10-noble
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      TZ: Asia/Shanghai
+      wiredTigerCacheSizeGB: 1.5
+    networks:
+      - pallasbot
+    volumes:
+      - /opt/dockerstore/mongo/data:/data/db
+      - /opt/dockerstore/mongo/logs:/var/log/mongodb
+
+networks:
+  pallasbot:
