@@ -53,6 +53,8 @@ class Config:
         self.__class__._primary_key = primary_key
         if self.__class__._in_memory_cache is None:
             self.__class__._in_memory_cache = {}
+        if self.__class__._lock is None:
+            self.__class__._lock = asyncio.Lock()
 
 
 class BotConfig(Config):
@@ -163,7 +165,7 @@ class BotConfig(Config):
         """
         牛牛睡了么？
         """
-        value = self._find_in_memory(f"sleep{KEY_JOINER}{self.group_id}")
+        value = await self._find_in_memory(f"sleep{KEY_JOINER}{self.group_id}")
         return value > time.time() if value else False
 
     async def sleep(self, seconds: int) -> None:
@@ -237,13 +239,13 @@ class GroupConfig(Config):
         """
         刷新冷却时间
         """
-        await self._update_in_memory(f"cooldown{KEY_JOINER}{action_type}", time.time(), db=False)
+        await self._update_in_memory(f"cooldown{KEY_JOINER}{action_type}", time.time())
 
     async def reset_cooldown(self, action_type: str) -> None:
         """
         重置冷却时间
         """
-        await self._update_in_memory(f"cooldown{KEY_JOINER}{action_type}", 0, db=False)
+        await self._update_in_memory(f"cooldown{KEY_JOINER}{action_type}", 0)
 
     async def sing_progress(self) -> SingProgress | None:
         """

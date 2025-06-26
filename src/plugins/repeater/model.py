@@ -464,7 +464,7 @@ class Chat:
 
         async with Chat._message_lock:
             Chat._message_dict[group_id].append(
-                Message(
+                MessageModel(
                     group_id=group_id,
                     user_id=self.chat_data.user_id,
                     bot_id=self.chat_data.bot_id,
