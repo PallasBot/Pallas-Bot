@@ -16,7 +16,6 @@ from nonebot.adapters.onebot.v11 import (
 )
 from nonebot.permission import Permission
 from nonebot.rule import Rule
-from nonebot.typing import T_State
 
 from src.common.config import BotConfig, GroupConfig
 
@@ -88,7 +87,7 @@ async def participate_in_roulette(event: GroupMessageEvent) -> bool:
     return random.random() < 0.1667
 
 
-async def roulette(messagae_handle, bot: Bot, event: GroupMessageEvent):
+async def roulette(messagae_handle, event: GroupMessageEvent):
     rand = random.randint(1, 6)
     logger.info(f"Roulette rand: {rand}")
     roulette_status[event.group_id] = rand
@@ -139,7 +138,7 @@ roulette_type_msg = on_message(
 
 
 @roulette_type_msg.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def _(event: GroupMessageEvent):
     plaintext = event.get_plaintext().strip()
     if "踢人" in plaintext:
         mode = 0
@@ -147,7 +146,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         mode = 1
     await GroupConfig(event.group_id).set_roulette_mode(mode)
 
-    await roulette(roulette_type_msg, bot, event, state)
+    await roulette(roulette_type_msg, event)
 
 
 async def is_roulette_msg(bot: Bot, event: GroupMessageEvent) -> bool:
@@ -164,13 +163,13 @@ roulette_msg = on_message(priority=5, block=True, rule=Rule(is_roulette_msg), pe
 
 
 @roulette_msg.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
-    await roulette(roulette_msg, bot, event, state)
+async def _(event: GroupMessageEvent):
+    await roulette(roulette_msg, event)
 
 
-async def is_shot_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
+async def is_shot_msg(event: GroupMessageEvent) -> bool:
     if roulette_status[event.group_id] != 0 and event.get_plaintext().strip() == "牛牛开枪":
-        return role_cache[event.self_id][event.group_id]
+        return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
 
     return False
 
@@ -235,7 +234,7 @@ shot_text = [
 
 
 @shot_msg.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def _(event: GroupMessageEvent):
     async with shot_lock:
         roulette_status[event.group_id] -= 1
         roulette_count[event.group_id] += 1
@@ -306,13 +305,13 @@ request_cmd = on_request(
 
 
 @request_cmd.handle()
-async def _(bot: Bot, event: GroupRequestEvent, state: T_State):
+async def _(bot: Bot, event: GroupRequestEvent):
     if event.sub_type == "add" and event.user_id in kicked_users[event.group_id]:
         kicked_users[event.group_id].remove(event.user_id)
         await event.approve(bot)
 
 
-async def is_drink_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
+async def is_drink_msg(event: GroupMessageEvent) -> bool:
     if roulette_status[event.group_id] != 0 and event.get_plaintext().strip() in {"牛牛喝酒", "牛牛干杯", "牛牛继续喝"}:
         return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
 
@@ -323,5 +322,5 @@ drink_msg = on_message(priority=4, block=False, rule=Rule(is_drink_msg), permiss
 
 
 @drink_msg.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
+async def _(event: GroupMessageEvent):
     roulette_player[event.group_id].append(event.user_id)
