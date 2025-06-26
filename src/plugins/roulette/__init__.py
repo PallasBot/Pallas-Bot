@@ -159,7 +159,12 @@ async def is_roulette_msg(bot: Bot, event: GroupMessageEvent) -> bool:
     return False
 
 
-roulette_msg = on_message(priority=5, block=True, rule=Rule(is_roulette_msg), permission=permission.GROUP)
+roulette_msg = on_message(
+    priority=5,
+    block=True,
+    rule=Rule(is_roulette_msg),
+    permission=permission.GROUP,
+)
 
 
 @roulette_msg.handle()
@@ -178,7 +183,7 @@ kicked_users = defaultdict(set)
 
 
 async def shot(self_id: int, user_id: int, group_id: int) -> Awaitable[None] | None:
-    mode = GroupConfig(group_id).roulette_mode()
+    mode = await GroupConfig(group_id).roulette_mode()
     self_role = role_cache[self_id][group_id]
 
     if self_id == user_id:
@@ -187,14 +192,23 @@ async def shot(self_id: int, user_id: int, group_id: int) -> Awaitable[None] | N
                 return None
 
             async def group_leave() -> None:
-                await get_bot(str(self_id)).call_api("set_group_leave", **{"group_id": group_id})
+                await get_bot(str(self_id)).call_api(
+                    "set_group_leave",
+                    **{
+                        "group_id": group_id,
+                    },
+                )
 
             return group_leave
         elif mode == 1:  # 牛牛没法禁言自己
             return None
 
     user_info = await get_bot(str(self_id)).call_api(
-        "get_group_member_info", **{"user_id": user_id, "group_id": group_id}
+        "get_group_member_info",
+        **{
+            "user_id": user_id,
+            "group_id": group_id,
+        },
     )
     user_role = user_info["role"]
 
@@ -207,7 +221,13 @@ async def shot(self_id: int, user_id: int, group_id: int) -> Awaitable[None] | N
 
         async def group_kick():
             kicked_users[group_id].add(user_id)
-            await get_bot(str(self_id)).call_api("set_group_kick", **{"user_id": user_id, "group_id": group_id})
+            await get_bot(str(self_id)).call_api(
+                "set_group_kick",
+                **{
+                    "user_id": user_id,
+                    "group_id": group_id,
+                },
+            )
 
         return group_kick
 
@@ -215,13 +235,23 @@ async def shot(self_id: int, user_id: int, group_id: int) -> Awaitable[None] | N
 
         async def group_ban():
             await get_bot(str(self_id)).call_api(
-                "set_group_ban", **{"user_id": user_id, "group_id": group_id, "duration": random.randint(5, 20) * 60}
+                "set_group_ban",
+                **{
+                    "user_id": user_id,
+                    "group_id": group_id,
+                    "duration": random.randint(5, 20) * 60,
+                },
             )
 
         return group_ban
 
 
-shot_msg = on_message(priority=5, block=True, rule=Rule(is_shot_msg), permission=permission.GROUP)
+shot_msg = on_message(
+    priority=5,
+    block=True,
+    rule=Rule(is_shot_msg),
+    permission=permission.GROUP,
+)
 
 shot_text = [
     "无需退路。",
@@ -318,7 +348,12 @@ async def is_drink_msg(event: GroupMessageEvent) -> bool:
     return False
 
 
-drink_msg = on_message(priority=4, block=False, rule=Rule(is_drink_msg), permission=permission.GROUP)
+drink_msg = on_message(
+    priority=4,
+    block=False,
+    rule=Rule(is_drink_msg),
+    permission=permission.GROUP,
+)
 
 
 @drink_msg.handle()

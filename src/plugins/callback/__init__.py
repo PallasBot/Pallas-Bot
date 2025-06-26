@@ -29,6 +29,13 @@ async def callback(
 
     if status == "failed":
         await TaskManager.remove_task(task_id)
+        await bot.call_api(
+            "send_group_msg",
+            **{
+                "message": "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。",
+                "group_id": group_id,
+            },
+        )
         return {"message": "ok"}
 
     elif status == "success":

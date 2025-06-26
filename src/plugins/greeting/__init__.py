@@ -122,7 +122,11 @@ async def handle_first_receive(
         await config.refresh_cooldown("poke")
 
         await get_bot(str(event.self_id)).call_api(
-            "group_poke", **{"group_id": event.group_id, "user_id": event.user_id}
+            "group_poke",
+            **{
+                "group_id": event.group_id,
+                "user_id": event.user_id,
+            },
         )
 
     elif event.notice_type == "group_increase":

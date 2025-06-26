@@ -34,7 +34,13 @@ async def shutdown():
 
 
 async def is_shutup(self_id: int, group_id: int) -> bool:
-    info = await get_bot(str(self_id)).call_api("get_group_member_info", **{"user_id": self_id, "group_id": group_id})
+    info = await get_bot(str(self_id)).call_api(
+        "get_group_member_info",
+        **{
+            "user_id": self_id,
+            "group_id": group_id,
+        },
+    )
     flag: bool = info["shut_up_timestamp"] > time.time()
 
     logger.info(f"bot [{self_id}] in group [{group_id}] is shutup: {flag}")
@@ -48,7 +54,11 @@ async def post_proc(message: Message, self_id: int, group_id: int) -> Message:
         if seg.type == "at":
             try:
                 info = await get_bot(str(self_id)).call_api(
-                    "get_group_member_info", **{"user_id": seg.data["qq"], "group_id": group_id}
+                    "get_group_member_info",
+                    **{
+                        "user_id": seg.data["qq"],
+                        "group_id": group_id,
+                    },
                 )
             except ActionFailed:  # 群员不存在
                 continue

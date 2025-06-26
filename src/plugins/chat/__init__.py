@@ -65,6 +65,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
         {
             "bot_id": bot.self_id,
             "group_id": event.group_id,
+            "task_type": "chat",
             "start_time": time.time(),
         },
     )
