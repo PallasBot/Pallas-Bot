@@ -131,7 +131,7 @@ async def handle_first_receive(
 
     elif event.notice_type == "group_increase":
         if event.user_id == event.self_id:
-            msg = "我是来自米诺斯的祭司帕拉斯，会在罗德岛休息一段时间......虽然这么说，我渴望以美酒和戏剧被招待，更渴望走向战场。"
+            msg = "我是来自米诺斯的祭司帕拉斯，会在罗德岛休息一段时间......虽然这么说，我渴望以美酒和戏剧被招待，更渴望走向战场。"  # noqa: E501
         elif await is_bot_admin(event.self_id, event.group_id):
             msg: Message = MessageSegment.at(event.user_id) + MessageSegment.text(
                 "博士，欢迎加入这盛大的庆典！我是来自米诺斯的祭司帕拉斯......要来一杯美酒么？"

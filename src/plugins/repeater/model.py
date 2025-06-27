@@ -492,7 +492,7 @@ class Chat:
             await Chat._sync(cur_time)
 
     @staticmethod
-    async def _sync(cur_time: int = time.time()):
+    async def _sync(cur_time: int = int(time.time())):
         """
         持久化
         """

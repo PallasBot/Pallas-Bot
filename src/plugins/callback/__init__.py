@@ -13,7 +13,7 @@ async def callback(
     task_id: str,
     status: str = Form(...),
     text: str | None = Form(None),
-    file: UploadFile | None = File(None),
+    file: UploadFile | None = File(None),  # noqa: B008
 ):
     task = await TaskManager.get_task(task_id)
     if not task:
