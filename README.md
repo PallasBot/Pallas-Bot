@@ -13,14 +13,15 @@
 </div>
 <br>
 
-牛牛 2.0 发布啦！
+🚀 Pallas-Bot 2.0 发布啦！🥳
 
-## 牛牛 2.0 有什么改进？
+## Pallas-Bot 2.0 有什么改进？
 
 1. 将 AI 功能分离至 [AI 服务端](https://github.com/PallasBot/Pallas-Bot-AI)
 2. 代码全面重构，牛牛更易维护
 3. 数据库操作全异步改造，牛牛运行更高效
 4. 项目文件规范化，牛牛部署更简单
+5. 优化 Docker 构建，支持 Arm64 架构
 
 ## 牛牛有什么功能？
 
@@ -63,14 +64,14 @@
 
 ## 牛牛的一些其他小功能
 
-- `牛牛喝酒`：切换至 ChatRWKV 模型，由 AI 回复（只回复 at 及 `牛牛` 开头的内容）
+- `牛牛喝酒`：增加牛牛说话概率，有概率喝醉（）
 - `牛牛轮盘` & `牛牛开枪`：需要给牛牛管理员才能使用，试试你就知道是啥功能了.jpg
 - 随机修改自己的群名片为近期发言的人，夺舍！期望时间 8 小时一次
 
 以下功能仅当部署了 [AI 服务端](https://github.com/PallasBot/Pallas-Bot-AI) 且开启对应功能时可用：
 
 - `牛牛唱歌 <网易云歌曲 ID>`：AI 牛牛翻唱！（人声提取 + 音色转换）
-- 酒后聊天：`牛牛喝酒` 后，调用大语言模型（LLM）聊天
+- 酒后聊天：`牛牛喝酒` 后，切换至 ChatRWKV 模型，由 AI 回复（只回复 at 及 `牛牛` 开头的内容）
 - 文本转语音（TTS）：酒后聊天的内容会被转换为牛牛的语音发送
 
 ## 题外话
@@ -102,16 +103,16 @@
 [beanie](https://github.com/BeanieODM/beanie): Asynchronous Python ODM for MongoDB
 [NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现
 
-~~[go-cqhttp](https://github.com/Mrs4s/go-cqhttp): cqhttp的golang实现，轻量、原生跨平台.~~
-~~[nonebot-plugin-gocqhttp](https://github.com/mnixry/nonebot-plugin-gocqhttp): 一款在NoneBot2中直接运行go-cqhttp的插件, 无需额外下载安装~~
-~~[so-vits-svc](https://github.com/innnky/so-vits-svc): 基于vits与softvc的歌声音色转换模型~~
-~~[PaddleSpeech](https://github.com/PaddlePaddle/PaddleSpeech): Easy-to-use Speech Toolkit including Self-Supervised Learning model, SOTA/Streaming ASR with punctuation, Streaming TTS with text frontend, Speaker Verification System, End-to-End Speech Translation and Keyword Spotting. Won NAACL2022 Best Demo Award.~~
+~~[go-cqhttp](https://github.com/Mrs4s/go-cqhttp): cqhttp的golang实现，轻量、原生跨平台.~~  
+~~[nonebot-plugin-gocqhttp](https://github.com/mnixry/nonebot-plugin-gocqhttp): 一款在NoneBot2中直接运行go-cqhttp的插件, 无需额外下载安装~~  
+~~[so-vits-svc](https://github.com/innnky/so-vits-svc): 基于vits与softvc的歌声音色转换模型~~  
+~~[PaddleSpeech](https://github.com/PaddlePaddle/PaddleSpeech): Easy-to-use Speech Toolkit including Self-Supervised Learning model, SOTA/Streaming ASR with punctuation, Streaming TTS with text frontend, Speaker Verification System, End-to-End Speech Translation and Keyword Spotting. Won NAACL2022 Best Demo Award.~~  
 
 ### 贡献者
 
 感谢各位大佬！
 
-[![Contributors](https://contributors-img.web.app/image?repo=MistEO/Pallas-Bot)](https://github.com/MistEO/Pallas-Bot/graphs/contributors)
+[![Contributors](https://contributors-img.web.app/image?repo=PallasBot/Pallas-Bot)](https://github.com/PallasBot/Pallas-Bot/graphs/contributors)
 
 ## QQ群
 
@@ -121,6 +122,7 @@
 ~~牛牛调教五群：228620837~~  
 牛牛~~调教~~闲聊六群（已转为闲聊群）：865638357  
 牛牛2.0总群（拉牛牛）：789311420  
+牛牛2.0闲聊群（仅闲聊）：566968684
 开发者群（开发者）: 716692626
 
 ## 打赏
