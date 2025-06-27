@@ -75,9 +75,9 @@ class ChatData:
 
     @cached_property
     def keywords_pinyin(self) -> str:
-        return "".join(
-            [item[0] for item in pypinyin.pinyin(self.keywords, style=pypinyin.NORMAL, errors="default")]
-        ).lower()
+        return "".join([
+            item[0] for item in pypinyin.pinyin(self.keywords, style=pypinyin.NORMAL, errors="default")
+        ]).lower()
 
     @cached_property
     def to_me(self) -> bool:
@@ -206,30 +206,26 @@ class Chat:
         raw_message = self.chat_data.raw_message
         keywords = self.chat_data.keywords
         async with Chat._reply_lock:
-            group_bot_replies.append(
-                {
-                    "time": int(time.time()),
-                    "pre_raw_message": raw_message,
-                    "pre_keywords": keywords,
-                    "reply": Chat.REPLY_FLAG,
-                    "reply_keywords": Chat.REPLY_FLAG,
-                }
-            )
+            group_bot_replies.append({
+                "time": int(time.time()),
+                "pre_raw_message": raw_message,
+                "pre_keywords": keywords,
+                "reply": Chat.REPLY_FLAG,
+                "reply_keywords": Chat.REPLY_FLAG,
+            })
 
         async def yield_results(results: tuple[list[str], str]) -> AsyncGenerator[Message, None, None]:
             answer_list, answer_keywords = results
             group_bot_replies = Chat._reply_dict[group_id][bot_id]
             for item in answer_list:
                 async with Chat._reply_lock:
-                    group_bot_replies.append(
-                        {
-                            "time": int(time.time()),
-                            "pre_raw_message": raw_message,
-                            "pre_keywords": keywords,
-                            "reply": item,
-                            "reply_keywords": answer_keywords,
-                        }
-                    )
+                    group_bot_replies.append({
+                        "time": int(time.time()),
+                        "pre_raw_message": raw_message,
+                        "pre_keywords": keywords,
+                        "reply": item,
+                        "reply_keywords": answer_keywords,
+                    })
                 if "[CQ:" not in item:
                     async with Chat._topics_lock:
                         Chat._recent_topics[group_id] += [
@@ -320,15 +316,13 @@ class Chat:
 
             # append 一个 flag, 防止这个群热度特别高，但压根就没有可用的 context 时，每次 speak 都查这个群，浪费时间
             async with Chat._reply_lock:
-                group_replies_front.append(
-                    {
-                        "time": int(cur_time),
-                        "pre_raw_message": Chat.SPEAK_FLAG,
-                        "pre_keywords": Chat.SPEAK_FLAG,
-                        "reply": Chat.SPEAK_FLAG,
-                        "reply_keywords": Chat.SPEAK_FLAG,
-                    }
-                )
+                group_replies_front.append({
+                    "time": int(cur_time),
+                    "pre_raw_message": Chat.SPEAK_FLAG,
+                    "pre_keywords": Chat.SPEAK_FLAG,
+                    "reply": Chat.SPEAK_FLAG,
+                    "reply_keywords": Chat.SPEAK_FLAG,
+                })
 
             bot_id = random.choice([bid for bid in group_replies.keys() if bid])
 
@@ -358,15 +352,13 @@ class Chat:
             Chat._recent_speak[group_id].append(speak)
 
             async with Chat._reply_lock:
-                group_replies[bot_id].append(
-                    {
-                        "time": int(cur_time),
-                        "pre_raw_message": Chat.SPEAK_FLAG,
-                        "pre_keywords": Chat.SPEAK_FLAG,
-                        "reply": speak,
-                        "reply_keywords": Chat.SPEAK_FLAG,
-                    }
-                )
+                group_replies[bot_id].append({
+                    "time": int(cur_time),
+                    "pre_raw_message": Chat.SPEAK_FLAG,
+                    "pre_keywords": Chat.SPEAK_FLAG,
+                    "reply": speak,
+                    "reply_keywords": Chat.SPEAK_FLAG,
+                })
 
             speak_list = [
                 Message(speak),
