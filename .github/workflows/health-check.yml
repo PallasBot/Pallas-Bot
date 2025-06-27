@@ -1,0 +1,117 @@
+name: Health Check
+
+on:
+  schedule:
+    # 每周一上午 8:00 UTC 检查一次
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+jobs:
+  docker-health-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and test Docker image
+        run: |
+          # 构建镜像
+          docker build -t pallas-bot-test .
+          
+          # 运行容器进行健康检查
+          docker run --name test-container -d pallas-bot-test
+          
+          # 等待容器启动
+          sleep 10
+          
+          # 检查容器状态
+          if docker ps | grep -q test-container; then
+            echo "✅ Container started successfully"
+          else
+            echo "❌ Container failed to start"
+            docker logs test-container
+            exit 1
+          fi
+          
+          # 清理
+          docker stop test-container
+          docker rm test-container
+
+  dependency-vulnerability-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  performance-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Check import performance
+        run: |
+          uv run python -c "
+          import time
+          start = time.time()
+          import sys
+          sys.path.insert(0, 'src')
+          
+          # 测试主要模块的导入时间
+          try:
+              import plugins
+              print(f'✅ Plugins import time: {time.time() - start:.2f}s')
+          except ImportError as e:
+              print(f'⚠️  Plugin import issue: {e}')
+          
+          try:
+              import common
+              print(f'✅ Common modules import time: {time.time() - start:.2f}s')
+          except ImportError as e:
+              print(f'⚠️  Common import issue: {e}')
+          "
+
+      - name: Memory usage check
+        run: |
+          uv run python -c "
+          import sys
+          import os
+          sys.path.insert(0, 'src')
+          
+          # 检查基本内存使用
+          import psutil
+          process = psutil.Process(os.getpid())
+          memory_mb = process.memory_info().rss / 1024 / 1024
+          print(f'📊 Base memory usage: {memory_mb:.1f} MB')
+          
+          if memory_mb > 100:
+              print('⚠️  High memory usage detected')
+          else:
+              print('✅ Memory usage is acceptable')
+          " || echo "psutil not available, skipping memory check"

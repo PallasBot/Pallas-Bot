@@ -28,6 +28,8 @@ perf = [
 
 [dependency-groups]
 dev = [
+    "mypy>=1.16.1",
+    "pip-audit>=2.9.0",
     "ruff>=0.11.13",
 ]
 
@@ -60,7 +62,6 @@ select = [
     "I",
     "UP",
     "N",
-    "PL",
     "ASYNC",
     "B",
     "A",

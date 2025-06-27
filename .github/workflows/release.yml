@@ -1,0 +1,131 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # 生成详细的变更日志
+          if git describe --tags --abbrev=0 HEAD~1 >/dev/null 2>&1; then
+            PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD~1)
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            
+            # 按类型分组显示提交
+            echo "### 🆕 新功能" >> $GITHUB_OUTPUT
+            git log --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" $PREVIOUS_TAG..HEAD --grep="^feat" >> $GITHUB_OUTPUT || echo "无" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            
+            echo "### 🐛 错误修复" >> $GITHUB_OUTPUT
+            git log --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" $PREVIOUS_TAG..HEAD --grep="^fix" >> $GITHUB_OUTPUT || echo "无" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            
+            echo "### 📚 文档更新" >> $GITHUB_OUTPUT
+            git log --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" $PREVIOUS_TAG..HEAD --grep="^docs" >> $GITHUB_OUTPUT || echo "无" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            
+            echo "### ⚡ 性能优化" >> $GITHUB_OUTPUT
+            git log --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" $PREVIOUS_TAG..HEAD --grep="^perf" >> $GITHUB_OUTPUT || echo "无" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            
+            echo "### 🔨 其他更改" >> $GITHUB_OUTPUT
+            git log --pretty=format:"* %s ([%h](https://github.com/${{ github.repository }}/commit/%H))" $PREVIOUS_TAG..HEAD --invert-grep --grep="^feat\|^fix\|^docs\|^perf" >> $GITHUB_OUTPUT || echo "无" >> $GITHUB_OUTPUT
+            
+            echo "" >> $GITHUB_OUTPUT
+            echo "**完整变更**: [\`$PREVIOUS_TAG...${{ steps.get_version.outputs.version }}\`](https://github.com/${{ github.repository }}/compare/$PREVIOUS_TAG...${{ steps.get_version.outputs.version }})" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "changelog=🎉 **首次发布**" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body: |
+            ## 更新内容
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## Docker 镜像
+            
+            ```bash
+            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:${{ steps.get_version.outputs.version }}
+            ```
+          draft: false
+          prerelease: false
+
+  build-tagged-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push tagged image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:${{ steps.get_version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:latest
