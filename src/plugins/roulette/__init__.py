@@ -24,6 +24,7 @@ roulette_time = defaultdict(int)
 roulette_count = defaultdict(int)
 timeout = 300
 roulette_player = defaultdict(list)
+ban_players = defaultdict(list)  
 role_cache = defaultdict(lambda: defaultdict(str))
 
 shot_lock = asyncio.Lock()
@@ -61,7 +62,6 @@ set_group_admin = on_notice(
 async def _(bot: Bot, event: GroupAdminNoticeEvent):
     await sync_role_cache(bot, event)
 
-
 def can_roulette_start(group_id: int) -> bool:
     if roulette_status[group_id] == 0 or time.time() - roulette_time[group_id] > timeout:
         return True
@@ -93,6 +93,7 @@ async def roulette(messagae_handle, event: GroupMessageEvent):
     roulette_status[event.group_id] = rand
     roulette_count[event.group_id] = 0
     roulette_time[event.group_id] = time.time()
+    ban_players[event.group_id] = [] 
     partin = await participate_in_roulette(event)
     if partin:
         roulette_player[event.group_id] = [
@@ -103,7 +104,6 @@ async def roulette(messagae_handle, event: GroupMessageEvent):
         roulette_player[event.group_id] = [
             event.user_id,
         ]
-
     mode = await GroupConfig(event.group_id).roulette_mode()
     if mode == 0:
         type_msg = "踢出群聊"
@@ -242,6 +242,8 @@ async def shot(self_id: int, user_id: int, group_id: int) -> Awaitable[None] | N
                     "duration": random.randint(5, 20) * 60,
                 },
             )
+            ban_players[group_id].append(user_id)  
+            logger.info(f"用户 {user_id} 被禁言") 
 
         return group_ban
 
@@ -344,7 +346,6 @@ async def _(bot: Bot, event: GroupRequestEvent):
 async def is_drink_msg(event: GroupMessageEvent) -> bool:
     if roulette_status[event.group_id] != 0 and event.get_plaintext().strip() in {"牛牛喝酒", "牛牛干杯", "牛牛继续喝"}:
         return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
-
     return False
 
 
@@ -359,3 +360,76 @@ drink_msg = on_message(
 @drink_msg.handle()
 async def _(event: GroupMessageEvent):
     roulette_player[event.group_id].append(event.user_id)
+
+async def is_rescue_msg(event: GroupMessageEvent) -> bool:
+    if event.get_plaintext().strip().startswith("牛牛救一下"):
+        return role_cache[event.self_id][event.group_id] in {"admin", "owner"} # 只给群主和管理权限
+    return False
+
+rescue_msg = on_message(
+    priority=5,
+    block=True,
+    rule=Rule(is_rescue_msg),
+    permission=permission.GROUP,
+)
+
+@rescue_msg.handle()
+async def _(bot: Bot, event: GroupMessageEvent):
+    current_group_id = event.group_id
+
+    at_list = [msg_seg.data["qq"] for msg_seg in event.message if msg_seg.type == "at" and msg_seg.data.get("qq") != "all"]
+    target_user_ids = list(map(int, at_list))
+
+    if target_user_ids:
+        rescued_users = []
+
+        for target_user_id in target_user_ids:
+            try:
+                await bot.call_api(
+                    "set_group_ban",
+                    **{
+                        "user_id": target_user_id,
+                        "group_id": current_group_id,
+                        "duration": 0,
+                    },
+                )
+                rescued_users.append(target_user_id)
+                
+                if current_group_id in ban_players and target_user_id in ban_players[current_group_id]:
+                    ban_players[current_group_id].remove(target_user_id)
+            except Exception as e:
+                logger.error(e)
+
+        reply_segments = []
+
+        if rescued_users:
+            reply_segments.append(MessageSegment.text("命运之手指向了为沉默所困之人："))
+            for user_id in rescued_users:
+                reply_segments.append(MessageSegment.at(user_id))
+            reply_segments.append(MessageSegment.text("，已从沉默中被解放。"))
+
+        await rescue_msg.finish(MessageSegment.text("").join(reply_segments))
+
+    else:
+        rescued_users = []
+        if current_group_id in ban_players:
+            for user_id in list(ban_players[current_group_id]):
+                try:
+                    await bot.call_api(
+                        "set_group_ban",
+                        **{
+                            "user_id": user_id,
+                            "group_id": current_group_id,
+                            "duration": 0,
+                        },
+                    )
+                    rescued_users.append(user_id)
+                except Exception as e:
+                    logger.error(e)
+
+            ban_players[current_group_id] = []
+
+        if rescued_users:
+            await rescue_msg.finish("命运的轮盘再次转动，所有的沉默都被打破。")
+        else:
+            await rescue_msg.finish("此刻并无需要拯救之人，和平仍在延续。")
