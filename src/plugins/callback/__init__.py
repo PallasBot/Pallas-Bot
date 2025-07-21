@@ -3,7 +3,8 @@ import base64
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from nonebot import get_app, get_bot
 
-from src.common.config import TaskManager
+from src.common.config import GroupConfig, TaskManager
+from src.common.db import SingProgress
 
 app: FastAPI = get_app()
 
@@ -13,6 +14,9 @@ async def callback(
     task_id: str,
     status: str = Form(...),
     text: str | None = Form(None),
+    song_id: str | None = Form(None),
+    chunk_index: int | None = Form(None),
+    key: int | None = Form(None),
     file: UploadFile | None = File(None),  # noqa: B008
 ):
     task = await TaskManager.get_task(task_id)
@@ -26,6 +30,16 @@ async def callback(
         bot = get_bot(bot_id)
     except Exception:
         return {"message": "failed"}
+
+    # 只要有 song_id、chunk_index、key 就更新
+    if group_id and song_id is not None and chunk_index is not None and key is not None:
+        config = GroupConfig(group_id)
+        sing_progress = SingProgress(
+            song_id=str(song_id),
+            chunk_index=chunk_index,
+            key=key,
+        )
+        await config.update_sing_progress(sing_progress)
 
     if status == "failed":
         await TaskManager.remove_task(task_id)
