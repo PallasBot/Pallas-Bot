@@ -8,7 +8,7 @@ from nonebot.typing import T_State
 from ulid import ULID
 
 from src.common.config import GroupConfig, TaskManager
-from src.common.db import SingProgress
+from src.common.db import GroupConfigModule, SingProgress
 from src.common.utils import HTTPXClient
 
 from .config import Config
@@ -216,15 +216,19 @@ song_title_cmd = on_message(
 
 @song_title_cmd.handle()
 async def _(event: GroupMessageEvent):
-    config = GroupConfig(event.group_id, cooldown=10)
-    progress = await config.sing_progress()
-    if not progress:
-        return
-
+    group_id = event.group_id
+    config = GroupConfig(group_id, cooldown=10)
     if not await config.is_cooldown(WHAT_SONG_COOLDOWN_KEY):
         return
     await config.refresh_cooldown(WHAT_SONG_COOLDOWN_KEY)
 
+    config_module = await GroupConfig.get_fresh_group_config_module(group_id)
+    if not config_module:
+        return
+
+    progress = config_module.sing_progress
+    if not progress:
+        return
     song_title = await get_song_title(progress.song_id)
     if not song_title:
         return

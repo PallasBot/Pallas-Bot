@@ -261,6 +261,15 @@ class GroupConfig(Config):
         """
         await self._update("sing_progress", progress)
 
+    async def get_fresh_group_config_module(self: int):
+        """
+        刷新配置
+        """
+        client = GroupConfigModule.get_motor_collection().database.client
+        async with await client.start_session() as session:
+            config_module = await GroupConfigModule.find_one(GroupConfigModule.group_id == self, session=session)
+            return config_module
+
 
 class UserConfig(Config):
     def __init__(self, user_id: int) -> None:
