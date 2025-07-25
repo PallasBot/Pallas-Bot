@@ -12,7 +12,7 @@ from src.common.db import GroupConfigModule, SingProgress
 from src.common.utils import HTTPXClient
 
 from .config import Config
-from .ncm import get_song_id, get_song_title
+from .ncm_login import get_song_id, get_song_title
 
 plugin_config = get_plugin_config(Config)
 
