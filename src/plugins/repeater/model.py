@@ -1,7 +1,9 @@
 import asyncio
 import random
 import re
+import threading
 import time
+from pathlib import Path
 from collections import defaultdict, deque
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
@@ -16,6 +18,7 @@ from src.common.config import BotConfig
 from src.common.db import Answer, Ban, Context
 from src.common.db import Message as MessageModel
 from src.common.db.modules import BlackList
+from nonebot import require
 
 from .config import Config
 
@@ -819,3 +822,109 @@ if __name__ == "__main__":
 
     # time.sleep(5)
     # print(Chat.speak())
+
+REPEATERSTATUS_FILE = Path("data/repeater/repeater_status.json")
+REPEATERSTATUS_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+class RepeaterStatus:
+    _instance = None
+    _status_file = None
+    _status_lock = threading.Lock()
+    _disabled_groups = None
+    _at_disabled_groups = None  # 新增：记录关闭@的群
+    _save_task = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(RepeaterStatus, cls).__new__(cls)
+            cls._status_file = REPEATERSTATUS_FILE
+            cls._disabled_groups = set()
+            cls._at_disabled_groups = set()  # 新增
+            cls._instance._sync_load_status()  # 在初始化时就同步加载状态
+        return cls._instance
+
+    def _sync_load_status(self):
+        """Synchronously load disabled groups and at status from JSON file during initialization"""
+        if self._status_file.exists():
+            try:
+                with open(self._status_file, 'r') as f:
+                    data = json.load(f)
+                    self._disabled_groups = set(data.get('disabled_groups', []))
+                    self._at_disabled_groups = set(data.get('at_disabled_groups', []))  # 新增
+            except Exception as e:
+                print(f"Error loading repeater status: {e}")
+                self._disabled_groups = set()
+                self._at_disabled_groups = set()  # 新增
+
+    async def _load_status(self):
+        """Load disabled groups and at status from JSON file"""
+        if self._disabled_groups is not None and self._at_disabled_groups is not None:
+            return
+
+        with self._status_lock:
+            if self._status_file.exists():
+                try:
+                    async with aiofiles.open(self._status_file, 'r') as f:
+                        content = await f.read()
+                        data = json.loads(content)
+                        self._disabled_groups = set(data.get('disabled_groups', []))
+                        self._at_disabled_groups = set(data.get('at_disabled_groups', []))  # 新增
+                except Exception as e:
+                    print(f"Error loading repeater status: {e}")
+                    self._disabled_groups = set()
+                    self._at_disabled_groups = set()  # 新增
+            else:
+                self._disabled_groups = set()
+                self._at_disabled_groups = set()  # 新增
+                await self._save_status()
+
+    async def _save_status(self):
+        """Save disabled groups and at status to JSON file"""
+        with self._status_lock:
+            self._status_file.parent.mkdir(parents=True, exist_ok=True)
+            async with aiofiles.open(self._status_file, 'w') as f:
+                await f.write(json.dumps({
+                    'disabled_groups': list(self._disabled_groups),
+                    'at_disabled_groups': list(self._at_disabled_groups),  # 新增
+                }))
+
+    async def is_enabled(self, group_id: int) -> bool:
+        """Check if repeater is enabled for a group"""
+        return group_id not in self._disabled_groups
+
+    async def set_status(self, group_id: int, enabled: bool):
+        """Set repeater status for a group"""
+        with self._status_lock:
+            changed = False
+            if enabled and group_id in self._disabled_groups:
+                self._disabled_groups.remove(group_id)
+                changed = True
+            elif not enabled and group_id not in self._disabled_groups:
+                self._disabled_groups.add(group_id)
+                changed = True
+
+            if changed:
+                if self._save_task and not self._save_task.done():
+                    self._save_task.cancel()
+                self._save_task = asyncio.create_task(self._save_status())
+
+    # 新增：复读@状态相关方法
+    async def is_at_enabled(self, group_id: int) -> bool:
+        """Check if at is enabled for a group"""
+        return group_id not in self._at_disabled_groups
+
+    async def set_at_status(self, group_id: int, enabled: bool):
+        """Set at status for a group"""
+        with self._status_lock:
+            changed = False
+            if enabled and group_id in self._at_disabled_groups:
+                self._at_disabled_groups.remove(group_id)
+                changed = True
+            elif not enabled and group_id not in self._at_disabled_groups:
+                self._at_disabled_groups.add(group_id)
+                changed = True
+
+            if changed:
+                if self._save_task and not self._save_task.done():
+                    self._save_task.cancel()
+                self._save_task = asyncio.create_task(self._save_status())

@@ -9,6 +9,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, GroupRecallNoticeEven
 from nonebot.exception import ActionFailed
 from nonebot.permission import SUPERUSER, Permission
 from nonebot.rule import Rule, keyword, to_me
+from nonebot.params import CommandArg
 from nonebot.typing import T_State
 
 from src.common.config import BotConfig
@@ -16,7 +17,22 @@ from src.common.utils.array2cqcode import try_convert_to_cqcode
 from src.common.utils.media_cache import get_image, insert_image
 
 from .emoji_reaction import reaction_msg
-from .model import Chat
+from .model import Chat, RepeaterStatus
+
+async def is_repeater_enabled(bot: Bot, event: GroupMessageEvent) -> bool:
+    """
+    检查复读机是否在本群开启
+    """
+    return await _repeater_status.is_enabled(event.group_id)
+
+any_msg = on_message(
+    rule=Rule(is_repeater_enabled),  # 增加 Rule 检查复读机状态
+    priority=15,
+    block=False,
+    permission=permission.GROUP  # | permission.PRIVATE_FRIEND
+)
+
+_repeater_status = RepeaterStatus()
 
 message_id_lock = asyncio.Lock()
 message_id_dict = {}
@@ -299,3 +315,41 @@ update_sched = require("nonebot_plugin_apscheduler").scheduler
 async def update_data():
     await Chat.sync()
     await Chat.clearup_context()
+
+toggle_repeater = on_command("复读机", permission=IsAdmin, priority=5, block=True)
+
+@toggle_repeater.handle()
+async def _(bot: Bot, event: GroupMessageEvent, args: Message = CommandArg()):
+    group_id = event.group_id
+    command = args.extract_plain_text().strip()
+
+    if command == "开启":
+        await _repeater_status.set_status(group_id, True)  # 改为异步调用
+        await toggle_repeater.finish("本群复读机已开启！")
+    elif command == "关闭":
+        await _repeater_status.set_status(group_id, False)  # 改为异步调用
+        await toggle_repeater.finish("本群复读机已关闭！")
+    else:
+        await toggle_repeater.finish("请使用命令：复读机 开启 或 复读机 关闭")
+
+query_repeater = on_command("查询本群复读机状态", permission=permission.GROUP, priority=5, block=True)
+
+@query_repeater.handle()
+async def _(bot: Bot, event: GroupMessageEvent):
+    group_id = event.group_id
+    status = await _repeater_status.is_enabled(group_id)  # 改为异步调用
+    status_text = "开启" if status else "关闭"
+    await query_repeater.finish(f"本群复读机状态：{status_text}")
+
+repeater_menu = on_command("复读菜单", permission=permission.GROUP, priority=5, block=True)
+
+@repeater_menu.handle()
+async def _(bot: Bot, event: GroupMessageEvent):
+    menu_text = (
+        "复读机控制菜单：\n"
+        "1. 开启复读机：发送命令 '复读机 开启'\n"
+        "2. 关闭复读机：发送命令 '复读机 关闭'\n"
+        "3. 查询复读机状态：发送命令 '查询本群复读机状态'\n"
+        "4. 开启/关闭复读@：发送命令 '复读@ 开启' 或 '复读@ 关闭'\n"
+    )
+    await repeater_menu.finish(menu_text)
