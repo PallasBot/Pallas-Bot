@@ -151,7 +151,7 @@ def generate_function_detail_markdown(plugin_config: Config, plugin_name: str, f
                 break
 
     if not target_function:
-        return f"# 未找到功能\n\n在插件 '{target_plugin.name}' 中未找到功能 '{function_name}'。\n\n使用 `牛牛帮助 {target_plugin.name}` 查看功能列表。"
+        return f"# 未找到功能\n\n在插件 '{target_plugin.name}' 中未找到功能 '{function_name}'。\n\n使用 `牛牛帮助 {target_plugin.name}` 查看功能列表。"  # noqa: E501
 
     func_name = target_function.get("func", "未命名功能")
     plugin_name_display = target_plugin.name or "未命名插件"

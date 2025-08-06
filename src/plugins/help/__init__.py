@@ -7,7 +7,7 @@ from nonebot.typing import T_State
 from src.common.config import BotConfig, GroupConfig
 
 from .config import Config
-from .event_preprocessor import *
+from .event_preprocessor import IGNORED_PLUGINS
 
 # 导入处理函数
 from .handlers import (
@@ -130,7 +130,6 @@ async def toggle_all_plugins(bot: Bot, event: GroupMessageEvent | PrivateMessage
     """处理启用/禁用所有功能的命令"""
     from nonebot import get_loaded_plugins
 
-    from .event_preprocessor import IGNORED_PLUGINS
     from .handlers import get_context_info
     from .plugin_manager import toggle_plugin
 

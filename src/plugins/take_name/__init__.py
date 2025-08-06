@@ -40,7 +40,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "scheduler",
                 "trigger_condition": "醉酒状态",
                 "brief_des": "醉酒时随机更换群友名片",
-                "detail_des": "当牛牛处于醉酒状态且为群管理员时，更换自己名片的同时有概率将被取名用户的名字改为固定名称（帕拉斯、牛牛等）。",
+                "detail_des": "当牛牛处于醉酒状态且为群管理员时，更换自己名片的同时有概率将被取名用户的名字改为固定名称（帕拉斯、牛牛等）。",  # noqa: E501
             },
             {
                 "func": "名片同步",

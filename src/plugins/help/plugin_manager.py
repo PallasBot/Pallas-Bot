@@ -212,7 +212,8 @@ async def update_config_and_cache(
         action_name = "禁用" if should_disable else "启用"
         scope_info = "全局" if config_type == "bot" else f"群 {id_value}"
         logger.error(
-            f"{action_name}失败：插件 {plugin_name} 未能正确更新到{scope_info}{'禁用' if should_disable else '启用'}状态"
+            f"{action_name}失败：插件 {plugin_name} 未能正确更新到"
+            f"{scope_info}{'禁用' if should_disable else '启用'}状态"
         )
         return False, config
 
@@ -338,7 +339,10 @@ async def find_plugin_by_identifier(plugin_identifier: str, ignored_plugins: lis
     else:
         return (
             None,
-            f"博士，'{plugin_identifier}' 这个数字太大了，在米诺斯女神允许的情况下，我们可以使用 1 到 {len(sorted_plugins)} 之间的序号。",
+            (
+                f"博士，'{plugin_identifier}' 这个数字太大了，"
+                f"在米诺斯女神允许的情况下，我们可以使用 1 到 {len(sorted_plugins)} 之间的序号。"
+            ),
         )
 
 

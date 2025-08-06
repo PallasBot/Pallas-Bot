@@ -33,7 +33,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_condition": "@牛牛 或 消息以'牛牛'开头",
                 "brief_des": "在牛牛醉酒时转为ChatRWKV模型AI聊天",
-                "detail_des": "当牛牛处于醉酒状态时，用户可以通过@牛牛或以'牛牛'开头的消息与其进行智能对话。牛牛会根据上下文进行回复，并可能附带语音回复（如果启用了TTS功能）。",
+                "detail_des": "当牛牛处于醉酒状态时，用户可以通过@牛牛或以'牛牛'开头的消息与其进行智能对话。牛牛会根据上下文进行回复，并可能附带语音回复（如果启用了TTS功能）。",  # noqa: E501
             },
         ],
         "menu_template": "default",

@@ -47,14 +47,14 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_condition": "牛牛轮盘/牛牛轮盘踢人/牛牛轮盘禁言",
                 "brief_des": "启动轮盘",
-                "detail_des": "管理员可以启动，可选择踢人模式或禁言模式。游戏开始后，六个弹槽中只有一颗子弹，触发者可能会被踢出群聊或禁言。",
+                "detail_des": "管理员可以启动，可选择踢人模式或禁言模式。游戏开始后，六个弹槽中只有一颗子弹，触发者可能会被踢出群聊或禁言。",  # noqa: E501
             },
             {
                 "func": "参与轮盘",
                 "trigger_method": "on_message",
                 "trigger_condition": "牛牛开枪",
                 "brief_des": "参与轮盘",
-                "detail_des": "在游戏进行中，参与者发送'牛牛开枪'来触发轮盘。如果命中子弹，根据游戏模式，触发者可能会被踢出群聊或禁言。",
+                "detail_des": "在游戏进行中，参与者发送'牛牛开枪'来触发轮盘。如果命中子弹，根据游戏模式，触发者可能会被踢出群聊或禁言。",  # noqa: E501
             },
             {
                 "func": "牛牛喝酒",
@@ -68,7 +68,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_condition": "牛牛救一下",
                 "brief_des": "解除被禁言的用户",
-                "detail_des": "管理员可以使用救援功能解除被禁言的用户。发送'牛牛救一下'解除所有禁言，发送'牛牛救一下@用户'解除指定用户的禁言。",
+                "detail_des": "管理员可以使用救援功能解除被禁言的用户。发送'牛牛救一下'解除所有禁言，发送'牛牛救一下@用户'解除指定用户的禁言。",  # noqa: E501
             },
         ],
         "menu_template": "default",

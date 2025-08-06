@@ -48,7 +48,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_condition": "群内对话",
                 "brief_des": "自动学习并回复相关内容",
-                "detail_des": "牛牛会自动学习群内对话，根据话题相似度、消息重复度等条件智能回复。牛牛会根据上下文理解话题，并在适当时候参与讨论。",
+                "detail_des": "牛牛会自动学习群内对话，根据话题相似度、消息重复度等条件智能回复。牛牛会根据上下文理解话题，并在适当时候参与讨论。",  # noqa: E501
             },
             {
                 "func": "复读",
@@ -69,7 +69,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_condition": "管理员指令",
                 "brief_des": "管理员可以管理牛牛的回复内容",
-                "detail_des": "管理员可以通过回复并发送'不可以'、'不可以发这个'或撤回牛牛的消息来禁止牛牛回复某些内容。",
+                "detail_des": "管理员可以通过回复并发送'不可以'、'不可以发这个'或撤回牛牛的消息来禁止牛牛回复某些内容。",  # noqa: E501
             },
             {
                 "func": "表情回应",

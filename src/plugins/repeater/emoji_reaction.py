@@ -324,10 +324,7 @@ async def subfeature_enabled(flag_name: str):
 
 
 reaction_msg = on_message(
-    rule=Rule(reaction_enabled)
-    & Rule(
-        lambda bot, event, state: random.random() < plugin_config.reaction_probability
-    ),
+    rule=Rule(reaction_enabled) & Rule(lambda bot, event, state: random.random() < plugin_config.reaction_probability),
     priority=16,
 )
 
@@ -368,9 +365,7 @@ reaction_msg_with_face = on_message(
 async def handle_reaction_with_face(bot: Bot, event: GroupMessageEvent):
     """对话里带表情的回应"""
     if not plugin_config.enable_face_reaction:
-        logger.debug(
-            "[Reaction] Face reaction is disabled", extra={"bot_id": str(bot.self_id)}
-        )
+        logger.debug("[Reaction] Face reaction is disabled", extra={"bot_id": str(bot.self_id)})
         return
 
     bot_id = str(bot.self_id)
@@ -412,28 +407,18 @@ async def handle_auto_reaction(bot: Bot, event: NoticeEvent, state: T_State):
         return
     message_id = event.message_id
     emoji_code = ""
-    if (
-        hasattr(event, "likes")
-        and isinstance(event.likes, list)
-        and len(event.likes) > 0
-    ):
+    if hasattr(event, "likes") and isinstance(event.likes, list) and len(event.likes) > 0:
         emoji_code = str(event.likes[0].get("emoji_id", ""))
     elif hasattr(event, "code"):
         emoji_code = str(event.code)
 
     if not emoji_code:
-        logger.warning(
-            f"[Reaction] No valid emoji found in event for message {message_id}"
-        )
+        logger.warning(f"[Reaction] No valid emoji found in event for message {message_id}")
         return
-    reply_emoji = (
-        str(emoji_code) if plugin_config.reply_with_same_emoji else get_random_emoji()
-    )
+    reply_emoji = str(emoji_code) if plugin_config.reply_with_same_emoji else get_random_emoji()
 
     if has_sent_reaction(bot_id, message_id):
-        logger.debug(
-            f"[Reaction] Bot {bot_id} already reacted to message {message_id} in group {event.group_id}"
-        )
+        logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id} in group {event.group_id}")
         return
 
     try:
@@ -461,17 +446,13 @@ def cleanup_expired_records():
 
     for bot_id in list(sent_reactions.keys()):
         sent_reactions[bot_id] = {
-            msg_id: timestamp
-            for msg_id, timestamp in sent_reactions[bot_id].items()
-            if current_time - timestamp < 3600
+            msg_id: timestamp for msg_id, timestamp in sent_reactions[bot_id].items() if current_time - timestamp < 3600
         }
         if not sent_reactions[bot_id]:
             del sent_reactions[bot_id]
 
     last_cleanup_time = current_time
-    logger.info(
-        f"[Reaction] Cleanup completed. Total reactions cached: {sum(len(r) for r in sent_reactions.values())}"
-    )
+    logger.info(f"[Reaction] Cleanup completed. Total reactions cached: {sum(len(r) for r in sent_reactions.values())}")
 
 
 def cleanup_protocol_cache():
@@ -483,9 +464,7 @@ def cleanup_protocol_cache():
 
 async def async_cleanup_idle_locks():
     cutoff = time.time() - 3600  # 清理超过1小时未使用的锁
-    logger.info(
-        f"[Reaction] Cleaning up idle bot locks (Total before: {len(bot_locks)})"
-    )
+    logger.info(f"[Reaction] Cleaning up idle bot locks (Total before: {len(bot_locks)})")
 
     for bot_id in list(bot_locks.keys()):
         group_locks = bot_locks[bot_id]
@@ -496,9 +475,7 @@ async def async_cleanup_idle_locks():
         if not group_locks:
             del bot_locks[bot_id]
 
-    logger.info(
-        f"[Reaction] Lock cleanup completed. Remaining bot locks: {sum(len(g) for g in bot_locks.values())}"
-    )
+    logger.info(f"[Reaction] Lock cleanup completed. Remaining bot locks: {sum(len(g) for g in bot_locks.values())}")
 
 
 scheduler.add_job(async_cleanup_idle_locks, "interval", minutes=5)
