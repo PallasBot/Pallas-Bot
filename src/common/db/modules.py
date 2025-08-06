@@ -21,6 +21,7 @@ class BotConfigModule(Document):
     security: bool = Field(default=False)
     taken_name: dict[int, int] = Field(default_factory=dict)
     drunk: dict[int, float] = Field(default_factory=dict)
+    disabled_plugins: list[str] = Field(default_factory=list)
 
     class Settings:
         name = "config"
@@ -35,6 +36,7 @@ class GroupConfigModule(Document):
     roulette_mode: int = 1
     banned: bool = False
     sing_progress: SingProgress | None = None
+    disabled_plugins: list[str] = Field(default_factory=list)
 
     class Settings:
         name = "group_config"

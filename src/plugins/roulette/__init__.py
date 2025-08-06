@@ -15,9 +15,66 @@ from nonebot.adapters.onebot.v11 import (
     permission,
 )
 from nonebot.permission import Permission
+from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
 from src.common.config import BotConfig, GroupConfig
+
+__plugin_meta__ = PluginMetadata(
+    name="牛牛轮盘",
+    description="危险的轮盘游戏，参与者可能被踢出群聊或禁言，有概率炸膛哦",
+    usage="""
+管理员可以启动游戏：
+1. 启动游戏：
+    - 发送"牛牛轮盘"启动默认模式（踢人模式）
+    - 发送"牛牛轮盘踢人"启动踢人模式
+    - 发送"牛牛轮盘禁言"启动禁言模式
+2. 参与游戏：
+    - 发送"牛牛开枪"进行轮盘游戏
+    - 牛牛喝酒会乱开枪哦
+3. 救援功能：
+    - 管理员发送"牛牛救一下"可以解除所有禁言
+    - 管理员发送"牛牛救一下@用户"可以解除指定用户的禁言
+    """.strip(),
+    type="application",
+    homepage="https://github.com/PallasBot",
+    supported_adapters=["~onebot.v11"],
+    extra={
+        "version": "2.0.0",
+        "menu_data": [
+            {
+                "func": "牛牛轮盘",
+                "trigger_method": "on_message",
+                "trigger_condition": "牛牛轮盘/牛牛轮盘踢人/牛牛轮盘禁言",
+                "brief_des": "启动轮盘",
+                "detail_des": "管理员可以启动，可选择踢人模式或禁言模式。游戏开始后，六个弹槽中只有一颗子弹，触发者可能会被踢出群聊或禁言。",
+            },
+            {
+                "func": "参与轮盘",
+                "trigger_method": "on_message",
+                "trigger_condition": "牛牛开枪",
+                "brief_des": "参与轮盘",
+                "detail_des": "在游戏进行中，参与者发送'牛牛开枪'来触发轮盘。如果命中子弹，根据游戏模式，触发者可能会被踢出群聊或禁言。",
+            },
+            {
+                "func": "牛牛喝酒",
+                "trigger_method": "on_message",
+                "trigger_condition": "牛牛喝酒/牛牛干杯/牛牛继续喝",
+                "brief_des": "在轮盘游戏中通过喝酒参与",
+                "detail_des": "在轮盘游戏进行中，发送'牛牛喝酒'、'牛牛干杯'或'牛牛继续喝'可以参与游戏，增加被选中概率。",
+            },
+            {
+                "func": "救援功能",
+                "trigger_method": "on_message",
+                "trigger_condition": "牛牛救一下",
+                "brief_des": "解除被禁言的用户",
+                "detail_des": "管理员可以使用救援功能解除被禁言的用户。发送'牛牛救一下'解除所有禁言，发送'牛牛救一下@用户'解除指定用户的禁言。",
+            },
+        ],
+        "menu_template": "default",
+    },
+)
+
 
 roulette_status = defaultdict(int)  # 0 关闭 1 开启
 roulette_time = defaultdict(int)

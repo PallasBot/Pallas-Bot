@@ -5,12 +5,37 @@ from datetime import datetime, timedelta
 from nonebot import get_bot, logger, on_message, require
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 from nonebot.exception import ActionFailed
+from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from nonebot_plugin_apscheduler import scheduler
 
 from src.common.config import BotConfig
 
 require("nonebot_plugin_apscheduler")
+
+__plugin_meta__ = PluginMetadata(
+    name="牛牛喝酒",
+    description="让牛牛喝酒！",
+    usage="""
+牛牛喝酒 - 让牛牛喝酒，增加聊天概率，有概率睡着zzz...
+    """.strip(),
+    type="application",
+    homepage="https://github.com/PallasBot",
+    supported_adapters=["~onebot.v11"],
+    extra={
+        "version": "2.0.0",
+        "menu_data": [
+            {
+                "func": "牛牛喝酒",
+                "trigger_method": "on_message",
+                "trigger_condition": "牛牛喝酒/牛牛干杯/牛牛继续喝",
+                "brief_des": "让牛牛喝酒并产生醉酒效果",
+                "detail_des": "触发后牛牛会喝酒，根据醉酒程度可能会发送醉酒消息或直接睡着，一段时间后会自动清醒",
+            },
+        ],
+        "menu_template": "default",
+    },
+)
 
 
 async def is_drink_msg(event: GroupMessageEvent) -> bool:

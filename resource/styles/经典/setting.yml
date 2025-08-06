@@ -1,0 +1,124 @@
+# name: "名称" # style名，同时也是id名
+# intr: "描述" # style的描述信息
+# author: "作者" # style的作者
+# version: "1.0" # style的版本号
+
+# cost: 100 # style的价格（不知道有什么用X）
+# selling: false # 出售中（不知道有什么用X）
+
+# fontSize: 25 # 正文字体大小
+
+# title1FontSize: 70 # 一级标题字体大小
+# title2FontSize: 55 # 二级标题文本大小
+# title3FontSize: 40 # 三级标题文本大小
+
+# expressionFontSizeRate: 0.8 # 表达式类（包括行中代码）字体缩放倍率
+# codeBlockFontSize: 15 # 行中代码块文本大小
+
+# rd: 150 # 右边距
+# ld: 150 # 左边距
+# ud: 150 # 上边距
+# dd: 150 # 下边距
+
+# xSizeMax: 1000 # X轴单行元素最大长度
+
+# font: "yahei.ttf" # 正文字体
+# titleFont: "yahei.ttf" # 标题字体
+# expressionFont: "STIXTwoMath-Regular.ttf" # 表达式字体
+# codeFont: "yahei.ttf" # 代码字体
+
+# codeBlockLRDistance: 20 # 代码块左右边距
+# codeBlockUDDistance: 20 # 代码块上下边距
+
+# formLineDistance: 20 # 表格行间距
+# lineDistance: 10 # 行间距
+# citeDistance: 30 # 引用间距
+
+# pageLineColor: [0, 0, 0] # 分页竖线颜色
+# pageLineStyle: "full_line" # 分页竖线样式（full_line 实线 / dotted_line 虚线）
+
+# unorderedListDotColor: [0,0,0] # 无序列表前置点颜色
+# orderedListDotColor: [0,0,0] # 有序列表前置点颜色
+# orderedListNumberColor: [255,255,255] # 有序列表序号颜色
+
+# citeUnderpainting: [0,0,0,50] # 引用底色
+# citeSplitLineColor: [160,160,160] # 引用分割线颜色
+
+# codeBlockUnderpainting: [40,40,40] # 代码块底色
+# codeBlockTitleColor: [0,255,0] # 代码块标题颜色
+
+# formLineColor: [0,0,0] # 表格分割线颜色
+# formTextColor: [0,0,0] # 表格文本颜色
+# formUnderpainting: [0,0,0,0] # 表格底色
+# formTitleUnderpainting: [0,0,0,0] # 表格标题底色
+
+# textColor: [0, 0, 0] # 文本基础颜色
+# textGradientEndColor: [0, 0, 0] # 由普通字体到一级标题时颜色变化的最终色
+# linkColor: [0,0,255] # 链接颜色
+
+# expressionUnderpainting: [180,180,255] # 表达式底色
+# insertCodeUnderpating: [150,150, 150] # 行中代码底色
+
+# idlineColor: [0,0,0] # 行间分割线颜色
+
+# expressionTextColor: [0,0,255] # 表达式文本颜色
+# insertCodeTextColor: [158,255,52] # 行中代码文本颜色
+# codeBlockTextColor: [0,255,0] # 代码块文本颜色
+
+# remarkColor: [0,0,0] # 标题备注颜色
+# remarkFontSize: 20 # 标题备注字体大小
+# remarkCoordinate: [5,5] # 标题备注坐标（x正表示距左，为负表示距右；y正表示距上，为负表示距下）
+
+# secondFonts: ["yahei.ttf","unifont.ttf"] # 备用字体列表
+
+# fontYCorrect: # 字体Y轴偏移量，正值表示向下偏移，负值表示向上偏移，单位为百分比
+#   yahei.ttf: +15 # 微软雅黑偏移（自带的yahei.ttf显示有问题，需要+15%偏移）
+
+# backgroudFunc: null # 背景函数，默认值为None，表示不使用背景函数。使用则需要在本目录下添加“style.py”文件，且定义对应的函数，在这里填入函数名。需保证函数的参数为两个int（背景长宽），返回Image对象
+{
+    "cost":0,
+    "selling":false,
+    "fontSize": 25,
+    "title1FontSize": 70,
+    "title2FontSize": 55,
+    "title3FontSize": 40,
+    "expressionFontSizeRate": 0.8,
+    "codeBlockFontSize": 15,
+    "rd": 200,
+    "ld": 200,
+    "ud": 200,
+    "dd": 200,
+    "xSizeMax": 2600,
+    "font": "smSans.ttf",
+    "titleFont": "smSans.ttf",
+    "expressionFont": "STIXTwoMath-Regular.ttf",
+    "codeFont": "smSans.ttf",
+    "codeBlockLRDistance": 20,
+    "codeBlockUDDistance": 20,
+    "formLineDistance": 20,
+    "lineDistance": 10,
+    "citeDistance": 30,
+    "pageLineColor": [253,205,207,150],
+    "pageLineStyle": "dotted_line",
+   "unorderedListDotColor": [234,149,123],
+    "orderedListDotColor": [241,207,131],
+    "orderedListNumberColor": [240,240,233],
+    "citeUnderpainting": [196,237,237],
+    "citeSplitLineColor": [74,72,114,200],
+    "codeBlockUnderpainting": [253,205,207,180],
+    "codeBlockTitleColor": [227,95,130],
+    "formLineColor": [105,83,118],
+    "textColor": [98,79,137],
+    "textGradientEndColor": [186,99,133],
+    "linkColor": [132,162,240],
+    "expressionUnderpainting": [74,72,114],
+    "insertCodeUnderpating": [253,205,207,180],
+    "idlineColor": [186,99,133],
+    "expressionTextColor": [244,248,248],
+    "insertCodeTextColor": [77,84,139],
+    "codeBlockTextColor": [80,89,162],
+    "remarkColor": [212,234,151],
+    "formTextColor":[105,83,118],
+    "formUnderpainting":[212,227,205,255],
+    "formTitleUnderpainting":[245,213,100,90]
+}

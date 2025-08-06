@@ -8,6 +8,7 @@ from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, GroupRecallNoticeEvent, Message, MessageSegment, permission
 from nonebot.exception import ActionFailed
 from nonebot.permission import SUPERUSER, Permission
+from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule, keyword, to_me
 from nonebot.typing import T_State
 
@@ -18,6 +19,90 @@ from src.common.utils.media_cache import get_image, insert_image
 from .emoji_reaction import reaction_msg
 from .model import Chat
 
+__plugin_meta__ = PluginMetadata(
+    name="牛牛复读",
+    description="具备智能学习和复读功能的聊天插件，可以学习群内对话并进行智能回复",
+    usage="""
+这个插件会自动学习群内对话并在适当时候进行回复：
+1. 牛牛会自动学习群内对话内容
+2. 当群内出现相似话题时，牛牛会自动回复相关内容
+3. 当群内有消息被重复发送多次时，牛牛会复读该消息
+4. 牛牛会主动参与群聊，根据上下文发表相关言论
+5. 管理员功能：
+    - 回复某条消息并发送"不可以"可以禁止牛牛回复该内容
+    - 发送"不可以发这个"可以禁止牛牛回复你最新回复的消息
+    - 管理员撤回牛牛的消息时，会自动将该消息加入禁用列表
+6. 表情回应功能：
+    - 智能表情回应群消息
+    - 回应包含表情的消息
+    - 跟随其他用户的表情回应
+    """.strip(),
+    type="application",
+    homepage="https://github.com/PallasBot",
+    supported_adapters=["~onebot.v11"],
+    extra={
+        "version": "2.0.0",
+        "menu_data": [
+            {
+                "func": "牛牛复读",
+                "trigger_method": "on_message",
+                "trigger_condition": "群内对话",
+                "brief_des": "自动学习并回复相关内容",
+                "detail_des": "牛牛会自动学习群内对话，根据话题相似度、消息重复度等条件智能回复。牛牛会根据上下文理解话题，并在适当时候参与讨论。",
+            },
+            {
+                "func": "复读",
+                "trigger_method": "on_message",
+                "trigger_condition": "相同消息重复出现",
+                "brief_des": "当相同消息重复出现时自动复读",
+                "detail_des": "当群内相同消息重复出现达到3次时，牛牛会自动复读该消息。",
+            },
+            {
+                "func": "主动发言",
+                "trigger_method": "scheduler",
+                "trigger_condition": "定时任务",
+                "brief_des": "牛牛会主动参与群聊发言",
+                "detail_des": "牛牛会根据学习到的内容，按一定概率主动在群内发言，参与群聊讨论。",
+            },
+            {
+                "func": "不可以",
+                "trigger_method": "on_message",
+                "trigger_condition": "管理员指令",
+                "brief_des": "管理员可以管理牛牛的回复内容",
+                "detail_des": "管理员可以通过回复并发送'不可以'、'不可以发这个'或撤回牛牛的消息来禁止牛牛回复某些内容。",
+            },
+            {
+                "func": "表情回应",
+                "trigger_method": "on_message/on_notice",
+                "trigger_condition": "消息/表情回应事件",
+                "brief_des": "智能表情回应功能",
+                "detail_des": "根据配置规则对消息进行表情回应，包括随机回应、表情消息回应和跟随回应等。",
+            },
+            {
+                "func": "随机表情回应",
+                "trigger_method": "on_message",
+                "trigger_condition": "群内消息",
+                "brief_des": "按概率自动回应消息",
+                "detail_des": "根据配置的概率值，自动对群内消息添加表情回应。默认概率为0.02%。",
+            },
+            {
+                "func": "表情消息回应",
+                "trigger_method": "on_message",
+                "trigger_condition": "包含表情的消息",
+                "brief_des": "对包含表情的消息进行回应",
+                "detail_des": "当检测到消息中包含表情时，自动添加表情回应。此功能默认关闭。",
+            },
+            {
+                "func": "跟随表情回应",
+                "trigger_method": "on_notice",
+                "trigger_condition": "他人添加表情",
+                "brief_des": "跟随其他人的表情回应",
+                "detail_des": "当检测到其他用户对消息添加表情时，牛牛也会自动添加表情回应。",
+            },
+        ],
+        "menu_template": "default",
+    },
+)
 message_id_lock = asyncio.Lock()
 message_id_dict = {}
 

@@ -1,0 +1,77 @@
+name: "名称" # style名，同时也是id名
+intr: "描述" # style的描述信息
+author: "作者" # style的作者
+version: "1.0" # style的版本号
+
+cost: 100 # style的价格（不知道有什么用X）
+selling: false # 出售中（不知道有什么用X）
+
+fontSize: 25 # 正文字体大小
+
+title1FontSize: 70 # 一级标题字体大小
+title2FontSize: 55 # 二级标题文本大小
+title3FontSize: 40 # 三级标题文本大小
+
+expressionFontSizeRate: 0.8 # 表达式类（包括行中代码）字体缩放倍率
+codeBlockFontSize: 15 # 行中代码块文本大小
+
+rd: 30 # 右边距
+ld: 30 # 左边距
+ud: 30 # 上边距
+dd: 30 # 下边距
+
+xSizeMax: 1000 # X轴单行元素最大长度
+
+font: "smSans.ttf" # 正文字体
+titleFont: "smSans.ttf" # 标题字体
+expressionFont: "smSans.ttf" # 表达式字体
+codeFont: "smSans.ttf" # 代码字体
+
+codeBlockLRDistance: 20 # 代码块左右边距
+codeBlockUDDistance: 20 # 代码块上下边距
+
+formLineDistance: 20 # 表格行间距
+lineDistance: 10 # 行间距
+citeDistance: 30 # 引用间距
+
+pageLineColor: [50,255,255,150] # 分页竖线颜色
+pageLineStyle: "full_line" # 分页竖线样式（full_line 实线 / dotted_line 虚线）
+
+unorderedListDotColor: [204,229,255] # 无序列表前置点颜色
+orderedListDotColor: [204,229,255] # 有序列表前置点颜色
+orderedListNumberColor: [76,0,153] # 有序列表序号颜色
+
+citeUnderpainting: [0,60,120,180] # 引用底色
+citeSplitLineColor: [0,102,204,238] # 引用分割线颜色
+
+codeBlockUnderpainting: [0,0,102,180] # 代码块底色
+codeBlockTitleColor: [204,229,255] # 代码块标题颜色
+
+formLineColor: [85,255,255] # 表格分割线颜色
+formTextColor: [255,255,255] # 表格文本颜色
+formUnderpainting: [0,0,0,0] # 表格底色
+formTitleUnderpainting: [0,0,0,0] # 表格标题底色
+
+textColor: [255,255,255] # 文本基础颜色
+textGradientEndColor: [30,255,255] # 由普通字体到一级标题时颜色变化的最终色
+linkColor: [255,187,255] # 链接颜色
+
+expressionUnderpainting: [0,0,102,180] # 表达式底色
+insertCodeUnderpating: [0,0,102,180] # 行中代码底色
+
+idlineColor: [120,255,255] # 行间分割线颜色
+
+expressionTextColor: [153,204,255] # 表达式文本颜色
+insertCodeTextColor: [153,255,153] # 行中代码文本颜色
+codeBlockTextColor: [153,255,153] # 代码块文本颜色
+
+remarkColor: [51,255,246] # 标题备注颜色
+remarkFontSize: 15 # 标题备注字体大小
+remarkCoordinate: [30,2] # 标题备注坐标（x正表示距左，为负表示距右；y正表示距上，为负表示距下）
+
+secondFonts: ["yahei.ttf","unifont.ttf"] # 备用字体列表
+
+fontYCorrect: # 字体Y轴偏移量，正值表示向下偏移，负值表示向上偏移，单位为百分比
+  yahei.ttf: +15 # 微软雅黑偏移（自带的yahei.ttf显示有问题，需要+15%偏移）
+
+backgroudFunc: null # 背景函数，默认值为None，表示不使用背景函数。使用则需要在本目录下添加“style.py”文件，且定义对应的函数，在这里填入函数名。需保证函数的参数为两个int（背景长宽），返回Image对象

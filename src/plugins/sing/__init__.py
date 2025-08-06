@@ -3,6 +3,7 @@ import time
 from nonebot import get_plugin_config, on_message
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
+from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from nonebot.typing import T_State
 from ulid import ULID
@@ -13,6 +14,62 @@ from src.common.utils import HTTPXClient
 
 from .config import Config
 from .ncm_login import get_song_id, get_song_title
+
+__plugin_meta__ = PluginMetadata(
+    name="牛牛唱歌",
+    description="基于AI的唱歌功能，可以演唱网易云音乐歌曲",
+    usage="""
+这个插件可以让牛牛演唱歌曲：
+1. 唱歌：
+    - 发送"[角色名]唱歌 [歌曲名]"让牛牛唱歌，例如"牛牛唱歌 富士山下"、"兔兔唱歌 虚拟"等
+    - 可以指定音调："牛牛唱歌 富士山下 key=2" 或 "牛牛唱歌 富士山下 key=-2"
+2. 继续唱：
+    - 发送"[角色名]继续唱"或"[角色名]接着唱"可以继续上次未完成的歌曲
+3. 查询歌曲：
+    - 发送"[角色名]什么歌"、"[角色名]哪首歌"或"[角色名]啥歌"可以查询当前播放的歌曲名
+4. 播放：
+    - 发送"[角色名]唱歌"可以播放唱过的歌
+5. 目前支持的角色：
+    - 牛牛 兔兔
+    """.strip(),
+    type="application",
+    homepage="https://github.com/PallasBot",
+    supported_adapters=["~onebot.v11"],
+    extra={
+        "version": "2.0.0",
+        "menu_data": [
+            {
+                "func": "牛牛唱歌",
+                "trigger_method": "on_message",
+                "trigger_condition": "[角色名]唱歌 [歌曲名]",
+                "brief_des": "演唱指定歌曲",
+                "detail_des": "通过网易云音乐搜索并演唱指定歌曲，支持调节音调（key参数），每个片段大约120秒。",
+            },
+            {
+                "func": "继续唱",
+                "trigger_method": "on_message",
+                "trigger_condition": "[角色名]继续唱/接着唱",
+                "brief_des": "继续上次未完成的歌曲",
+                "detail_des": "继续播放上次未完成的歌曲的下一个片段。",
+            },
+            {
+                "func": "牛牛什么歌",
+                "trigger_method": "on_message",
+                "trigger_condition": "[角色名]什么歌/哪首歌/啥歌",
+                "brief_des": "查询当前播放的歌曲名",
+                "detail_des": "查询牛牛当前正在演唱的歌曲名称。",
+            },
+            {
+                "func": "播放歌曲",
+                "trigger_method": "on_message",
+                "trigger_condition": "[角色名]唱歌",
+                "brief_des": "开始随机播放唱过的歌。",
+                "detail_des": "发送[角色名]唱歌，随机播放一首唱过的歌",
+            },
+        ],
+        "menu_template": "default",
+    },
+)
 
 plugin_config = get_plugin_config(Config)
 
@@ -75,7 +132,13 @@ async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
         return True
 
     if text in SING_CONTINUE_CMDS:
+        group_id = event.group_id
+        config_module = await GroupConfig.get_fresh_group_config_module(group_id)
+        if not config_module:
+            return
+
         progress = await GroupConfig(group_id=event.group_id).sing_progress()
+        print(progress)
         if not progress:
             return False
 
@@ -102,7 +165,7 @@ sing_msg = on_message(
 
 @sing_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
-    config = GroupConfig(event.group_id, cooldown=120)
+    config = GroupConfig(event.group_id, cooldown=10)
     if not await config.is_cooldown(SING_COOLDOWN_KEY):
         return
     await config.refresh_cooldown(SING_COOLDOWN_KEY)

@@ -4,6 +4,7 @@ from nonebot import get_bot, logger, on_notice, require
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import NoticeEvent, permission
 from nonebot.exception import ActionFailed
+from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
 from src.common.config import BotConfig
@@ -11,6 +12,47 @@ from src.common.utils import is_bot_admin
 from src.plugins.repeater.model import Chat
 
 change_name_sched = require("nonebot_plugin_apscheduler").scheduler
+
+__plugin_meta__ = PluginMetadata(
+    name="自动夺舍",
+    description="牛牛自动取名和同步群名片的功能",
+    usage="""
+这个插件会让牛牛自动更换群名片：
+1. 牛牛会定期自动更换自己的群名片为群内随机用户的名片
+2. 当牛牛醉酒时，有一定概率会"夺舍"其他群友的名片
+3. 当被取名的用户修改自己的群名片时，牛牛会同步修改自己的群名片为该用户的新名片
+    """.strip(),
+    type="application",
+    homepage="https://github.com/PallasBot",
+    supported_adapters=["~onebot.v11"],
+    extra={
+        "version": "2.0.0",
+        "menu_data": [
+            {
+                "func": "牛牛夺舍",
+                "trigger_method": "scheduler",
+                "trigger_condition": "定时任务",
+                "brief_des": "牛牛自动更换群名片",
+                "detail_des": "牛牛每分钟有约0.2%的概率自动更换自己的群名片为群内随机用户的名片，并戳一戳该用户。",
+            },
+            {
+                "func": "醉酒夺舍",
+                "trigger_method": "scheduler",
+                "trigger_condition": "醉酒状态",
+                "brief_des": "醉酒时随机更换群友名片",
+                "detail_des": "当牛牛处于醉酒状态且为群管理员时，更换自己名片的同时有概率将被取名用户的名字改为固定名称（帕拉斯、牛牛等）。",
+            },
+            {
+                "func": "名片同步",
+                "trigger_method": "on_notice",
+                "trigger_condition": "群名片变更",
+                "brief_des": "同步被取名用户的群名片",
+                "detail_des": "当被牛牛取名的用户修改自己的群名片时，牛牛会自动同步修改自己的群名片为该用户的新名片。",
+            },
+        ],
+        "menu_template": "default",
+    },
+)
 
 
 @change_name_sched.scheduled_job("cron", minute="*/1")

@@ -1,0 +1,47 @@
+
+{
+    "enable":true,
+    "background":{
+        "mode": 1,
+        "data": {
+            "left-up": "点九1.jpg",
+            "left": "点九4.jpg",
+            "left-down": "点九7.jpg",
+            "up": "点九2.jpg",
+            "down": "点九8.jpg",
+            "right-up": "点九3.jpg",
+            "right": "点九6.jpg",
+            "right-down": "点九9.jpg",
+
+            "lr-mode": 0,
+            "ud-mode": 0,
+
+            "middle": "点九5.jpg",
+            "middle-mode": 0
+        }
+    },
+    "decorates":{
+        "top":{
+            "left-up": [],
+            "left": [],
+            "left-down": [],
+            "up": [],
+            "down": [],
+            "right-up": [],
+            "right": [],
+            "right-down": [],
+            "middle": []
+        },
+        "bottom":{
+            "left-up": [],
+            "left": [],
+            "left-down": [],
+            "up": [],
+            "down": [],
+            "right-up": [],
+            "right": [],
+            "right-down": [],
+            "middle": []
+        }
+    }
+}
