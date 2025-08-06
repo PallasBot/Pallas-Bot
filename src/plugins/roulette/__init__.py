@@ -61,7 +61,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_condition": "牛牛喝酒/牛牛干杯/牛牛继续喝",
                 "brief_des": "在轮盘游戏中通过喝酒参与",
-                "detail_des": "在轮盘游戏进行中，发送'牛牛喝酒'、'牛牛干杯'或'牛牛继续喝'可以参与游戏，增加被选中概率。",
+                "detail_des": "在轮盘游戏进行中，发送'牛牛喝酒'、'牛牛干杯'或'牛牛继续喝'可以参与游戏，增加被选中概率。",  # noqa: E501
             },
             {
                 "func": "救援功能",
