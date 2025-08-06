@@ -45,7 +45,7 @@ async def handle_help_command(
         # 一级菜单：显示所有插件列表（包含状态）
         markdown_content = generate_plugins_markdown(plugin_config)
         markdown_content = await fill_plugin_status(markdown_content, bot_id, group_id)
-        await send_markdown_as_image(markdown_content, style_name, available_styles, matcher)
+        await send_markdown_as_image(markdown_content, style_name, available_styles, matcher, group_id)
         return
 
     # 处理插件标识符（适用于二级和三级菜单）
@@ -69,7 +69,7 @@ async def handle_help_command(
         is_disabled = await is_plugin_disabled(plugin_name, group_id, bot_id)
         plugin_status = "⛔ 禁用" if is_disabled else "✅ 启用"
         markdown_content = generate_plugin_functions_markdown(plugin_config, plugin_name, plugin_status)
-        await send_markdown_as_image(markdown_content, style_name, available_styles, matcher)
+        await send_markdown_as_image(markdown_content, style_name, available_styles, matcher, group_id)
         return
 
     if len(args) == 2:
@@ -83,7 +83,7 @@ async def handle_help_command(
         elif "错误" in markdown_content:
             await matcher.finish(f"博士，'{plugin_name}'只有这么多信息了")
 
-        await send_markdown_as_image(markdown_content, style_name, available_styles, matcher)
+        await send_markdown_as_image(markdown_content, style_name, available_styles, matcher, group_id)
         return
 
     # 参数过多

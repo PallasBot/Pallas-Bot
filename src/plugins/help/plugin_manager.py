@@ -1,4 +1,6 @@
 import copy
+import shutil
+from pathlib import Path
 from typing import Any
 
 from nonebot import get_loaded_plugins, logger
@@ -11,6 +13,31 @@ from .styles import load_config
 plugin_config = load_config()
 ignored_plugins = plugin_config.ignored_plugins if plugin_config else []
 CORE_PLUGINS = ["help"]
+
+
+def clear_help_cache(group_id: int = None):
+    """清理本地帮助缓存"""
+    cache_base_dir = Path("data/help")
+    if not cache_base_dir.exists():
+        return
+
+    # 如果在群，只清理该群组的缓存
+    if group_id is not None:
+        group_cache_dir = cache_base_dir / str(group_id)
+        if group_cache_dir.exists():
+            try:
+                shutil.rmtree(group_cache_dir)
+                logger.debug(f"清理群组 {group_id} 的缓存: {group_cache_dir}")
+            except Exception as e:
+                logger.warning(f"删除群缓存失败 {group_cache_dir}: {e}")
+    else:
+        try:
+            for item in cache_base_dir.iterdir():
+                if item.is_dir():
+                    shutil.rmtree(item)
+            logger.debug("清理所有帮助缓存")
+        except Exception as e:
+            logger.warning(f"清理帮助缓存失败: {e}")
 
 
 async def is_plugin_disabled(
@@ -108,6 +135,9 @@ async def update_bot_config(bot_id: int, disabled_plugins: list[str]) -> BotConf
 
     clear_model_cache(BotConfigModule)
 
+    # 清理所有缓存，因为全局设置影响所有群组
+    clear_help_cache()
+
     return bot_config
 
 
@@ -123,6 +153,8 @@ async def update_group_config(group_id: int, disabled_plugins: list[str]) -> Gro
     await group_config.save()
 
     clear_model_cache(GroupConfigModule)
+
+    clear_help_cache(group_id)
 
     return group_config
 
@@ -207,9 +239,6 @@ async def toggle_plugin(
     if plugin_name in ignored_plugins:
         return False, None
 
-    if plugin_name.lower() in CORE_PLUGINS:
-        return False, f"博士，{plugin_name}是身为米诺斯的女神所必要的"  # 不能禁用核心插件
-
     if bot_id and not group_id:
         return await _handle_global_plugin_operation(plugin_name, bot_id, action)
     elif group_id:
@@ -232,18 +261,18 @@ async def _handle_global_plugin_operation(plugin_name: str, bot_id: int, action:
     # 检查是否已经处于目标状态
     is_disabled = plugin_name in current_disabled
     if should_disable == is_disabled:
-        status = "还需要练习，等你允许在发挥吧！" if is_disabled else "是小菜一碟呢！"
-        return True, f"听你的，博士。{plugin_name} 对我来说{status}"
+        status = "禁用" if is_disabled else "启用"  # 超管私聊就不用搞什么七七八八的回复了吧(
+        return True, f"{plugin_name} 已经 {status}"
 
     new_disabled = await modify_disabled_list(current_disabled, plugin_name, should_disable)
 
     success, _ = await update_config_and_cache("bot", bot_id, new_disabled, plugin_name, should_disable)
     if not success:
-        action_name = "停止" if should_disable else "启用"
-        return False, f"呜...看来是喝多了...无法感受到米诺斯的联系，{action_name} {plugin_name}失败了..."
+        action_name = "禁用" if should_disable else "启用"
+        return False, f"{action_name} {plugin_name}失败"
 
-    action_name = "禁止" if should_disable else "允许"
-    return True, f"米诺斯女神已经{action_name}了 {plugin_name}"
+    action_name = "禁止" if should_disable else "启用"
+    return True, f"{plugin_name} 已经 {action_name}"
 
 
 async def _handle_group_plugin_operation(plugin_name: str, group_id: int, bot_id: int, action: str) -> tuple[bool, str]:
@@ -253,7 +282,7 @@ async def _handle_group_plugin_operation(plugin_name: str, group_id: int, bot_id
     current_disabled = group_config.disabled_plugins
 
     is_globally_disabled = await is_plugin_globally_disabled(plugin_name, bot_id)
-    scope_info = f"在这里：{group_id}"
+    scope_info = f"在{group_id}这块地方"
 
     should_disable = (
         plugin_name not in current_disabled if action == "toggle" else True if action == "disable" else False
@@ -263,20 +292,20 @@ async def _handle_group_plugin_operation(plugin_name: str, group_id: int, bot_id
     if should_disable == is_disabled:
         status = "停止" if is_disabled else "启用"
         if not is_disabled and is_globally_disabled:
-            return True, f"博士,{scope_info}已经{status}了 {plugin_name}，但我同时受到了米诺斯的制约..."
-        return True, f"博士,{scope_info} {plugin_name} 已经{status}了呢！"
+            return True, f"博士,我在{scope_info}已经{status}了 {plugin_name}，但我同时受到了米诺斯的制约..."
+        return True, f"听你的，博士。{scope_info}我为你{status}了{plugin_name}"
 
     new_disabled = await modify_disabled_list(current_disabled, plugin_name, should_disable)
 
     success, _ = await update_config_and_cache("group", group_id, new_disabled, plugin_name, should_disable)
     if not success:
-        action_name = "停止" if should_disable else "实施"
+        action_name = "停止" if should_disable else "启用"
         return False, f"呜...看来是喝多了...无法感受到米诺斯的联系，{scope_info}{action_name} {plugin_name}失败了..."
-    action_name = "禁用" if should_disable else "启用"
+    action_name = "停止" if should_disable else "启用"
     if not should_disable and is_globally_disabled:
-        return True, f"博士,{scope_info}我已经{action_name}了 {plugin_name}，但我同时受到了米诺斯的制约..."
+        return True, f"博士,我在{scope_info}已经{action_name}了 {plugin_name}，但我同时受到了米诺斯的制约..."
 
-    return True, f"博士,{scope_info} {plugin_name} 已经{action_name}了呢！"
+    return True, f"听你的，博士。{scope_info}我为你{action_name}了{plugin_name}"
 
 
 async def find_plugin_by_identifier(plugin_identifier: str, ignored_plugins: list = None):

@@ -78,13 +78,13 @@ async def is_config_admin(event: GroupMessageEvent) -> bool:
 
 IsAdmin = permission.GROUP_OWNER | permission.GROUP_ADMIN | Permission(is_config_admin)
 
-plugin_enable_cmd = on_command("牛牛开启", priority=5, block=True, permission=IsAdmin)
+plugin_enable_cmd = on_command("牛牛开启", priority=5, block=True, permission=IsAdmin | SUPERUSER)
 
-plugin_disable_cmd = on_command("牛牛关闭", priority=5, block=True, permission=IsAdmin)
+plugin_disable_cmd = on_command("牛牛关闭", priority=5, block=True, permission=IsAdmin | SUPERUSER)
 
-plugin_enable_all_cmd = on_command("牛牛开启全部功能", priority=5, block=True, permission=IsAdmin)
+plugin_enable_all_cmd = on_command("牛牛开启全部功能", priority=5, block=True, permission=IsAdmin | SUPERUSER)
 
-plugin_disable_all_cmd = on_command("牛牛关闭全部功能", priority=5, block=True, permission=IsAdmin)
+plugin_disable_all_cmd = on_command("牛牛关闭全部功能", priority=5, block=True, permission=IsAdmin | SUPERUSER)
 
 
 @help_cmd.handle()
@@ -107,7 +107,7 @@ async def handle_enable_command(bot: Bot, event: GroupMessageEvent | PrivateMess
     """处理功能启用命令"""
     plugin_name = extract_plugin_name_from_command(event, "牛牛开启")
     if not plugin_name:
-        await plugin_enable_cmd.finish("请指定要启用的功能名称或序号")
+        await plugin_enable_cmd.finish("博士，即使身为大祭司，你不说想要开启什么，我也帮不了你呀")
         return
 
     state["plugin_name"] = plugin_name
@@ -119,7 +119,7 @@ async def handle_disable_command(bot: Bot, event: GroupMessageEvent | PrivateMes
     """处理功能禁用命令"""
     plugin_name = extract_plugin_name_from_command(event, "牛牛关闭")
     if not plugin_name:
-        await plugin_disable_cmd.finish("请指定要禁用的功能名称或序号")
+        await plugin_disable_cmd.finish("博士，即使身为大祭司，你不说想要关闭什么，我也帮不了你呀")
         return
 
     state["plugin_name"] = plugin_name
@@ -145,8 +145,8 @@ async def toggle_all_plugins(bot: Bot, event: GroupMessageEvent | PrivateMessage
         if success:
             count += 1
 
-    action_name = "启用" if action == "enable" else "禁用"
-    await matcher.finish(f"已{action_name} {count} 个功能")
+    action_name = "启用" if action == "enable" else "停止"
+    await matcher.finish(f"在米诺斯女神的允许下，我将{action_name} {count} 个能力")
 
 
 @plugin_enable_all_cmd.handle()
