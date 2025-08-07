@@ -29,6 +29,10 @@ def load_custom_styles(config) -> dict[str, object]:
     }
     styles.update(named_styles)
 
+    # 加载内置默认样式
+    if config.default_styles:
+        _load_user_defined_styles(config.default_styles, styles)
+
     # 如果启用自定义样式加载且有配置的自定义样式
     if config.enable_custom_style_loading and config.custom_styles:
         _load_user_defined_styles(config.custom_styles, styles)

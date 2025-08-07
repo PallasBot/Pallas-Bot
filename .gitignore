@@ -212,6 +212,7 @@ accounts
 mixed_data
 backups
 log
+data
 
 test.py
 .env.dev
