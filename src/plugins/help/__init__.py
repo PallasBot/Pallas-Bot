@@ -71,6 +71,8 @@ DEFAULT_STYLE_NAME = get_default_style(plugin_config)
 
 help_cmd = on_command("牛牛帮助", priority=5, block=True)
 
+HELP_COOLDOWN_KEY = "help"
+
 
 async def is_config_admin(event: GroupMessageEvent) -> bool:
     return await BotConfig(event.self_id).is_admin_of_bot(event.user_id)
@@ -90,6 +92,13 @@ plugin_disable_all_cmd = on_command("牛牛关闭全部功能", priority=5, bloc
 @help_cmd.handle()
 async def handle_help_cmd(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
     """处理帮助命令（群聊和私聊）"""
+    if isinstance(event, GroupMessageEvent):
+        config = GroupConfig(event.group_id, cooldown=3)
+        if not await config.is_cooldown(HELP_COOLDOWN_KEY):
+            await help_cmd.finish()
+            return
+        await config.refresh_cooldown(HELP_COOLDOWN_KEY)
+
     await handle_help_command(bot, event, state, plugin_config, AVAILABLE_STYLES, DEFAULT_STYLE_NAME, help_cmd)
 
 
