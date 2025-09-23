@@ -4,13 +4,19 @@ import re
 from datetime import datetime, timedelta
 
 import httpx
-from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters.milky import MessageSegment
 
 from src.common.db import ImageCache
 from src.common.utils import HTTPXClient
 
 
 async def insert_image(image_seg: MessageSegment):
+    if image_seg.type != "image":
+        return
+    resource_id = image_seg.data.get("resource_id", "")
+    temp_url = image_seg.data.get("temp_url", "")
+    if not resource_id and not temp_url:
+        return
     cq_code = re.sub(r"\.image,.+?\]", ".image]", str(image_seg))
     cache = await ImageCache.find_one(ImageCache.cq_code == cq_code)
     if not cache:

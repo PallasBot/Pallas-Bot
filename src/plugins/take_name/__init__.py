@@ -1,11 +1,8 @@
 import random
 
-from nonebot import get_bot, logger, on_notice
-from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import NoticeEvent, permission
+from nonebot import get_bot, logger
 from nonebot.exception import ActionFailed
 from nonebot.plugin import PluginMetadata
-from nonebot.rule import Rule
 from nonebot_plugin_apscheduler import scheduler
 
 from src.common.config import BotConfig
@@ -23,7 +20,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot",
-    supported_adapters={"~onebot.v11"},
+    supported_adapters={"~milky"},
     extra={
         "version": "2.0.0",
         "menu_data": [
@@ -40,13 +37,6 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_condition": "醉酒状态",
                 "brief_des": "醉酒时随机更换群友名片",
                 "detail_des": "当牛牛处于醉酒状态且为群管理员时，更换自己名片的同时有概率将被取名用户的名字改为固定名称（帕拉斯、牛牛等）。",  # noqa: E501
-            },
-            {
-                "func": "名片同步",
-                "trigger_method": "on_notice",
-                "trigger_condition": "群名片变更",
-                "brief_des": "同步被取名用户的群名片",
-                "detail_des": "当被牛牛取名的用户修改自己的群名片时，牛牛会自动同步修改自己的群名片为该用户的新名片。",
             },
         ],
         "menu_template": "default",
@@ -96,7 +86,7 @@ async def change_name():
         try:
             # 改牛牛自己的群名片
             await bot.call_api(
-                "set_group_card",
+                "set_group_member_card",
                 **{
                     "group_id": group_id,
                     "user_id": bot_id,
@@ -107,7 +97,7 @@ async def change_name():
             # 酒后夺舍！改群友的！
             if await config.drunkenness() and await is_bot_admin(bot_id, group_id, True):
                 await bot.call_api(
-                    "set_group_card",
+                    "set_group_member_card",
                     **{
                         "group_id": group_id,
                         "user_id": target_user_id,
@@ -117,10 +107,10 @@ async def change_name():
 
             # 戳一戳
             await bot.call_api(
-                "group_poke",
+                "send_group_nudge",
                 **{
-                    "user_id": target_user_id,
                     "group_id": group_id,
+                    "user_id": target_user_id,
                 },
             )
 
@@ -129,53 +119,3 @@ async def change_name():
         except ActionFailed:
             # 可能牛牛退群了
             continue
-
-
-async def is_change_name_notice(event: NoticeEvent) -> bool:
-    if event.notice_type == "group_card":
-        config = BotConfig(event.self_id, event.group_id)
-        if event.user_id == await config.taken_name():
-            return True
-    return False
-
-
-watch_name = on_notice(
-    rule=Rule(is_change_name_notice),
-    permission=permission.GROUP,
-    priority=4,
-)
-
-
-@watch_name.handle()
-async def watch_name_handle(bot: Bot, event: NoticeEvent):
-    group_id = event.group_id
-    user_id = event.user_id
-    bot_id = event.self_id
-
-    try:
-        info = await bot.call_api(
-            "get_group_member_info",
-            **{
-                "group_id": group_id,
-                "user_id": user_id,
-                "no_cache": True,
-            },
-        )
-    except ActionFailed:
-        return
-    card = info["card"] or info["nickname"]
-    logger.info(f"bot [{bot.self_id}] watch name change by [{user_id}] in group [{group_id}]")
-    config = BotConfig(int(bot.self_id), group_id)
-
-    try:
-        await bot.call_api(
-            "set_group_card",
-            **{
-                "group_id": group_id,
-                "user_id": bot_id,
-                "card": card,
-            },
-        )
-        await config.update_taken_name(user_id)
-    except ActionFailed:
-        return

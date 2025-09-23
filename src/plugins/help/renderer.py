@@ -3,7 +3,7 @@ import io
 from pathlib import Path
 
 import pillowmd
-from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters.milky import MessageSegment
 from nonebot.matcher import Matcher
 from PIL import Image
 
@@ -94,4 +94,4 @@ async def send_markdown_as_image(
 ) -> None:
     # 获取缓存的图片或渲染新图片
     image_data = await render_markdown_to_image(markdown_content, style_name, available_styles, group_id)
-    await matcher.finish(MessageSegment.image(image_data))
+    await matcher.finish(MessageSegment.image(raw=image_data))

@@ -1,6 +1,6 @@
 from nonebot import get_driver, get_loaded_plugins, logger
-from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
+from nonebot.adapters.milky import Bot
+from nonebot.adapters.milky.event import GroupMessageEvent
 from nonebot.exception import IgnoredException
 from nonebot.internal.matcher import Matcher
 from nonebot.message import event_preprocessor, run_preprocessor
@@ -35,13 +35,13 @@ async def block_disabled_plugins(bot: Bot, event: GroupMessageEvent):
     if not isinstance(event, GroupMessageEvent):
         return
 
-    event_id = f"{bot.self_id}_{event.message_id}_{event.group_id}"
+    event_id = f"{bot.self_id}_{event.data.message_seq}_{event.data.peer_id}"
 
     # 为每个新事件创建一个空集合
     _blocked_events[event_id] = set()
 
     bot_id = int(bot.self_id)
-    group_id = event.group_id
+    group_id = event.data.peer_id
 
     plugins = get_loaded_plugins()
 
@@ -80,9 +80,9 @@ async def check_plugin_enabled(matcher: Matcher, bot: Bot, event: GroupMessageEv
     if plugin_name.lower() in IGNORED_PLUGINS:
         return
 
-    event_id = f"{bot.self_id}_{event.message_id}_{event.group_id}"
+    event_id = f"{bot.self_id}_{event.data.message_seq}_{event.data.peer_id}"
     bot_id = int(bot.self_id)
-    group_id = event.group_id
+    group_id = event.data.peer_id
 
     if event_id in _blocked_events and plugin_name in _blocked_events[event_id]:
         logger.debug(f"{plugin_name} 已禁用")

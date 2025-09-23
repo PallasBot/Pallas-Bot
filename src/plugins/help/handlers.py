@@ -1,4 +1,5 @@
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, PrivateMessageEvent
+from nonebot.adapters.milky import Bot
+from nonebot.adapters.milky.event import FriendMessageEvent, GroupMessageEvent
 from nonebot.permission import SUPERUSER
 from nonebot.typing import T_State
 
@@ -16,19 +17,19 @@ from .plugin_manager import (
 from .renderer import send_markdown_as_image
 
 
-def get_context_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+def get_context_info(bot: Bot, event: GroupMessageEvent | FriendMessageEvent):
     bot_id = int(bot.self_id)
 
     group_id = None
     if isinstance(event, GroupMessageEvent):
-        group_id = event.group_id
+        group_id = event.data.peer_id
 
     return bot_id, group_id
 
 
 async def handle_help_command(
     bot: Bot,
-    event: GroupMessageEvent | PrivateMessageEvent,
+    event: GroupMessageEvent | FriendMessageEvent,
     state: T_State,
     plugin_config,
     available_styles: dict,
@@ -42,7 +43,7 @@ async def handle_help_command(
     style_name = default_style_name
 
     is_superuser = await SUPERUSER(bot, event)
-    is_private = isinstance(event, PrivateMessageEvent)
+    is_private = isinstance(event, FriendMessageEvent)
     show_ignored = is_superuser and is_private
 
     if len(args) == 0:
@@ -103,7 +104,7 @@ async def handle_help_command(
 
 
 async def handle_plugin_operation(
-    bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State, action: str, matcher
+    bot: Bot, event: GroupMessageEvent | FriendMessageEvent, state: T_State, action: str, matcher
 ):
     """处理插件操作命令，支持群聊和私聊"""
     # 获取命令参数和上下文信息
@@ -111,7 +112,7 @@ async def handle_plugin_operation(
     bot_id, group_id = get_context_info(bot, event)
 
     is_superuser = await SUPERUSER(bot, event)
-    is_private = isinstance(event, PrivateMessageEvent)
+    is_private = isinstance(event, FriendMessageEvent)
     show_ignored = is_superuser and is_private
 
     plugin_identifier = state.get("plugin_name", "") or (args[0] if args else "")

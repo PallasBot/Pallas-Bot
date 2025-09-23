@@ -4,20 +4,18 @@ import re
 import time
 
 from nonebot import get_bot, get_driver, logger, on_message, on_notice
-from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, GroupRecallNoticeEvent, Message, MessageSegment, permission
+from nonebot.adapters.milky import Bot, Message, MessageSegment
+from nonebot.adapters.milky.event import GroupMessageEvent, MessageRecallEvent
 from nonebot.exception import ActionFailed
 from nonebot.permission import SUPERUSER, Permission
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule, keyword, to_me
-from nonebot.typing import T_State
 from nonebot_plugin_apscheduler import scheduler
 
+import src.common.utils.permission as permission
 from src.common.config import BotConfig
-from src.common.utils.array2cqcode import try_convert_to_cqcode
 from src.common.utils.media_cache import get_image, insert_image
 
-from .emoji_reaction import reaction_msg
 from .model import Chat
 
 __plugin_meta__ = PluginMetadata(
@@ -40,7 +38,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot",
-    supported_adapters={"~onebot.v11"},
+    supported_adapters={"~milky"},
     extra={
         "version": "2.0.0",
         "menu_data": [
@@ -155,7 +153,7 @@ async def post_proc(message: Message, self_id: int, group_id: int) -> Message:
             cq_code = str(seg)
             base64_data = await get_image(cq_code)
             if base64_data:
-                new_msg += MessageSegment.image(file=base64_data)
+                new_msg += MessageSegment.image(raw=base64_data)
             else:
                 new_msg += seg
         else:
@@ -182,7 +180,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     # 多账号登陆，且在同一群中时；避免一条消息被处理多次
     async with message_id_lock:
         message_id = event.message_id
-        group_id = event.group_id
+        group_id = event.data.peer_id
         if group_id in message_id_dict:
             if message_id in message_id_dict[group_id]:
                 to_learn = False
@@ -197,7 +195,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
     chat: Chat = Chat(event)
 
     answers = None
-    config = BotConfig(event.self_id, event.group_id)
+    config = BotConfig(event.self_id, event.data.peer_id)
     if await config.is_cooldown("repeat"):
         answers = await chat.answer()
 
@@ -214,8 +212,8 @@ async def _(bot: Bot, event: GroupMessageEvent):
     await config.refresh_cooldown("repeat")
     delay = random.randint(2, 5)
     async for item in answers:
-        msg = await post_proc(item, event.self_id, event.group_id)
-        logger.info(f"bot [{event.self_id}] ready to send [{str(msg)[:30]}] to group [{event.group_id}]")
+        msg = await post_proc(item, event.self_id, event.data.peer_id)
+        logger.info(f"bot [{event.self_id}] ready to send [{str(msg)[:30]}] to group [{event.data.peer_id}]")
 
         await asyncio.sleep(delay)
         await config.refresh_cooldown("repeat")
@@ -226,16 +224,16 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 continue
 
             # 自动删除失效消息。若 bot 处于风控期，请勿开启该功能
-            shutup = await is_shutup(event.self_id, event.group_id)
+            shutup = await is_shutup(event.self_id, event.data.peer_id)
             if not shutup:  # 说明这条消息失效了
-                logger.info(f"bot [{event.self_id}] ready to ban [{str(item)}] in group [{event.group_id}]")
-                await Chat.ban(event.group_id, event.self_id, str(item), "ActionFailed")
+                logger.info(f"bot [{event.self_id}] ready to ban [{str(item)}] in group [{event.data.peer_id}]")
+                await Chat.ban(event.data.peer_id, event.self_id, str(item), "ActionFailed")
                 break
         delay = random.randint(1, 3)
 
 
 async def is_config_admin(event: GroupMessageEvent) -> bool:
-    return await BotConfig(event.self_id).is_admin_of_bot(event.user_id)
+    return await BotConfig(event.self_id).is_admin_of_bot(event.data.sender_id)
 
 
 IsAdmin = permission.GROUP_OWNER | permission.GROUP_ADMIN | SUPERUSER | Permission(is_config_admin)
@@ -255,41 +253,40 @@ ban_msg = on_message(
 
 @ban_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
-    if "[CQ:reply," not in try_convert_to_cqcode(event.raw_message):
-        return False
+    if event.reply is None:
+        return
 
     raw_message = ""
-    for item in event.reply.message:  # type: ignore
+    for item in event.reply.message:
         raw_reply = str(item)
         # 去掉图片消息中的 url, subType 等字段
         raw_message += re.sub(r"(\[CQ\:.+)(?:,url=*)(\])", r"\1\2", raw_reply)
 
-    logger.info(f"bot [{event.self_id}] ready to ban [{raw_message}] in group [{event.group_id}]")
+    logger.info(f"bot [{event.self_id}] ready to ban [{raw_message}] in group [{event.data.peer_id}]")
 
     try:
-        await bot.delete_msg(message_id=event.reply.message_id)  # type: ignore
+        await bot.recall_group_message(group_id=event.data.peer_id, message_seq=event.reply.message_seq)
     except ActionFailed:
-        logger.warning(f"bot [{event.self_id}] failed to delete [{raw_message}] in group [{event.group_id}]")
+        logger.warning(f"bot [{event.self_id}] failed to delete [{raw_message}] in group [{event.data.peer_id}]")
 
-    if await Chat.ban(event.group_id, event.self_id, raw_message, str(event.user_id)):
+    if await Chat.ban(event.data.peer_id, event.self_id, raw_message, str(event.data.sender_id)):
         await ban_msg.finish("这对角可能会不小心撞倒些家具，我会尽量小心。")
 
 
-async def is_admin_recall_self_msg(bot: Bot, event: GroupRecallNoticeEvent):
-    # 好像不需要这句
-    # if event.notice_type != "group_recall":
-    #     return False
+async def is_admin_recall_self_msg(bot: Bot, event: MessageRecallEvent) -> bool:
+    if event.data.message_scene != "group":
+        return False
     self_id = event.self_id
-    user_id = event.user_id
-    group_id = event.group_id
-    operator_id = event.operator_id
+    user_id = event.data.sender_id
+    group_id = event.data.peer_id
+    operator_id = event.data.operator_id
     if self_id != user_id:
         return False
     # 如果是自己撤回的就不用管
-    if operator_id == self_id:
+    if operator_id is None or operator_id == self_id:
         return False
     operator_info = await bot.get_group_member_info(group_id=group_id, user_id=operator_id)
-    return operator_info["role"] == "owner" or operator_info["role"] == "admin"
+    return operator_info.role in ("admin", "owner")
 
 
 ban_recalled_msg = on_notice(
@@ -300,27 +297,30 @@ ban_recalled_msg = on_notice(
 
 
 @ban_recalled_msg.handle()
-async def _(bot: Bot, event: GroupRecallNoticeEvent, state: T_State):
+async def _(bot: Bot, event: MessageRecallEvent):
     try:
-        msg = await bot.get_msg(message_id=event.message_id)
+        msg = await bot.get_message(
+            message_scene="group", peer_id=event.data.peer_id, message_seq=event.data.message_seq
+        )
     except ActionFailed:
-        logger.warning(f"bot [{event.self_id}] failed to get msg [{event.message_id}]")
+        logger.warning(
+            f"bot [{event.self_id}] failed to get msg [{event.data.message_seq}] in group [{event.data.peer_id}]"
+        )
         return
 
     raw_message = ""
-    # 使用get_msg得到的消息不是消息序列，使用正则生成一个迭代对象
-    for item in re.compile(r"\[[^\]]*\]|\w+").findall(try_convert_to_cqcode(msg["message"])):
+    for item in msg.message:
         raw_reply = str(item)
         # 去掉图片消息中的 url, subType 等字段
         raw_message += re.sub(r"(\[CQ\:.+)(?:,url=*)(\])", r"\1\2", raw_reply)
 
-    logger.info(f"bot [{event.self_id}] ready to ban [{raw_message}] in group [{event.group_id}]")
+    logger.info(f"bot [{event.self_id}] ready to ban [{raw_message}] in group [{event.data.peer_id}]")
 
-    if await Chat.ban(event.group_id, event.self_id, raw_message, str(f"recall by {event.operator_id}")):
+    if await Chat.ban(event.data.peer_id, event.self_id, raw_message, str(f"recall by {event.data.operator_id}")):
         await ban_recalled_msg.finish("这对角可能会不小心撞倒些家具，我会尽量小心。")
 
 
-async def message_is_ban(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
+async def message_is_ban(event: GroupMessageEvent) -> bool:
     return event.get_plaintext().strip() == "不可以发这个"
 
 
@@ -333,17 +333,18 @@ ban_msg_latest = on_message(
 
 
 @ban_msg_latest.handle()
-async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
-    logger.info(f"bot [{event.self_id}] ready to ban latest reply in group [{event.group_id}]")
+async def _(bot: Bot, event: GroupMessageEvent):
+    logger.info(f"bot [{event.self_id}] ready to ban latest reply in group [{event.data.peer_id}]")
 
     try:
-        await bot.delete_msg(message_id=event.reply.message_id)  # type: ignore
+        await bot.recall_group_message(group_id=event.data.peer_id, message_seq=event.data.message_seq)
     except ActionFailed:
         logger.warning(
-            f"bot [{event.self_id}] failed to delete latest reply [{event.raw_message}] in group [{event.group_id}]"
+            f"bot [{event.self_id}] failed to delete latest reply [{event.data.message}]"
+            f" in group [{event.data.peer_id}]"
         )
 
-    if await Chat.ban(event.group_id, event.self_id, "", str(event.user_id)):
+    if await Chat.ban(event.data.peer_id, event.self_id, "", str(event.data.sender_id)):
         await ban_msg_latest.finish("这对角可能会不小心撞倒些家具，我会尽量小心。")
 
 
@@ -360,16 +361,16 @@ async def speak_up():
         await get_bot(str(bot_id)).call_api(
             "send_group_msg",
             **{
-                "message": msg,
                 "group_id": group_id,
+                "message": msg,
             },
         )
         if target_id:
             await get_bot(str(bot_id)).call_api(
-                "group_poke",
+                "send_group_nudge",
                 **{
-                    "user_id": target_id,
                     "group_id": group_id,
+                    "user_id": target_id,
                 },
             )
         await asyncio.sleep(random.randint(2, 5))

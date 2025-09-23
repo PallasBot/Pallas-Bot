@@ -1,8 +1,9 @@
 from nonebot import get_driver, get_plugin_config, logger, on_message, on_notice
-from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent, GroupMessageEvent, PokeNotifyEvent, permission
+from nonebot.adapters.milky import Bot
+from nonebot.adapters.milky.event import GroupMemberIncreaseEvent, GroupMessageEvent, GroupNudgeEvent
 from nonebot.rule import Rule
 
+import src.common.utils.permission as permission
 from src.common.config import BotConfig
 
 from .config import Config
@@ -13,14 +14,14 @@ driver = get_driver()
 
 @driver.on_bot_connect
 async def bot_connect(bot: Bot) -> None:
-    if bot.self_id.isnumeric() and bot.type == "OneBot V11":
+    if bot.self_id.isnumeric() and bot.type == "Milky":
         logger.info(f"Bot {bot.self_id} connected.")
         plugin_config.bots.add(int(bot.self_id))
 
 
 @driver.on_bot_disconnect
 async def bot_disconnect(bot: Bot) -> None:
-    if bot.self_id.isnumeric() and bot.type == "OneBot V11":
+    if bot.self_id.isnumeric() and bot.type == "Milky":
         try:
             plugin_config.bots.remove(int(bot.self_id))
         except ValueError:
@@ -30,33 +31,37 @@ async def bot_disconnect(bot: Bot) -> None:
 
 
 async def is_other_bot(event: GroupMessageEvent) -> bool:
-    return event.user_id in plugin_config.bots
+    return event.data.sender_id in plugin_config.bots
 
 
-async def is_sleep(event: GroupMessageEvent | GroupIncreaseNoticeEvent | PokeNotifyEvent) -> bool:
-    if not event.group_id:
+async def is_sleep(event: GroupMessageEvent | GroupMemberIncreaseEvent | GroupNudgeEvent) -> bool:
+    if isinstance(event, GroupMessageEvent):
+        group_id = event.data.peer_id
+    else:
+        group_id = event.data.group_id
+    if not group_id:
         return False
-    return await BotConfig(event.self_id, event.group_id).is_sleep()
+    return await BotConfig(event.self_id, group_id).is_sleep()
 
 
 other_bot_msg = on_message(
-    priority=1,
-    block=True,
     rule=Rule(is_other_bot),
     permission=permission.GROUP,
+    priority=1,
+    block=True,
 )
 
 any_msg = on_message(
-    priority=4,
-    block=True,
     rule=Rule(is_sleep),
     permission=permission.GROUP,
+    priority=4,
+    block=True,
 )
 
 any_notice = on_notice(
+    rule=Rule(is_sleep),
     priority=4,
     block=True,
-    rule=Rule(is_sleep),
 )
 
 
