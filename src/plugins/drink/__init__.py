@@ -3,12 +3,13 @@ import random
 from datetime import datetime, timedelta
 
 from nonebot import get_bot, get_driver, logger, on_message
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
+from nonebot.adapters.milky.event import GroupMessageEvent
 from nonebot.exception import ActionFailed
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from nonebot_plugin_apscheduler import scheduler
 
+import src.common.utils.permission as permission
 from src.common.config import BotConfig
 
 __plugin_meta__ = PluginMetadata(
@@ -19,7 +20,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot",
-    supported_adapters={"~onebot.v11"},
+    supported_adapters={"~milky"},
     extra={
         "version": "2.0.0",
         "menu_data": [
@@ -44,9 +45,9 @@ async def is_drink_msg(event: GroupMessageEvent) -> bool:
 
 drink_msg = on_message(
     rule=Rule(is_drink_msg),
+    permission=permission.GROUP,
     priority=5,
     block=True,
-    permission=permission.GROUP,
 )
 
 
@@ -65,14 +66,14 @@ async def sober_up_later(bot_id: int, group_id: int):
 
 @drink_msg.handle()
 async def _(event: GroupMessageEvent):
-    config = BotConfig(event.self_id, event.group_id, cooldown=3)
+    config = BotConfig(event.self_id, event.data.peer_id, cooldown=3)
     if not await config.is_cooldown("drink"):
         return
     await config.refresh_cooldown("drink")
 
     drunk_duration = random.randint(60, 600)
     logger.info(
-        f"bot [{event.self_id}] ready to drink in group [{event.group_id}], sober up after {drunk_duration} sec"
+        f"bot [{event.self_id}] ready to drink in group [{event.data.peer_id}], sober up after {drunk_duration} sec"
     )
 
     await config.drink()
@@ -82,7 +83,7 @@ async def _(event: GroupMessageEvent):
         # 35 是期望概率
         sleep_duration = (min(drunkenness, 35) + random.random()) * 800
         logger.info(
-            f"bot [{event.self_id}] go to sleep in group [{event.group_id}], wake up after {sleep_duration} sec"
+            f"bot [{event.self_id}] go to sleep in group [{event.data.peer_id}], wake up after {sleep_duration} sec"
         )
         await config.sleep(int(sleep_duration))
 
@@ -101,7 +102,7 @@ async def _(event: GroupMessageEvent):
         sober_up_later,
         trigger="date",
         run_date=sober_up_date,
-        args=(event.self_id, event.group_id),
+        args=(event.self_id, event.data.peer_id),
     )
 
 

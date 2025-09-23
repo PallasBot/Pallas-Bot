@@ -2,11 +2,12 @@ import time
 
 from nonebot import get_plugin_config, logger, on_message
 from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
+from nonebot.adapters.milky.event import GroupMessageEvent
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from ulid import ULID
 
+import src.common.utils.permission as permission
 from src.common.config import BotConfig, GroupConfig, TaskManager
 from src.common.utils import HTTPXClient
 
@@ -24,7 +25,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot",
-    supported_adapters={"~onebot.v11"},
+    supported_adapters={"~milky"},
     extra={
         "version": "2.0.0",
         "menu_data": [
@@ -62,22 +63,22 @@ async def is_to_chat(event: GroupMessageEvent) -> bool:
     text = event.get_plaintext()
     if not text.startswith("牛牛") and not event.is_tome():
         return False
-    config = BotConfig(event.self_id, event.group_id)
+    config = BotConfig(event.self_id, event.data.peer_id)
     drunkness = await config.drunkenness()
     return drunkness > 0
 
 
 drunk_msg = on_message(
     rule=Rule(is_to_chat),
+    permission=permission.GROUP,
     priority=13,
     block=True,
-    permission=permission.GROUP,
 )
 
 
 @drunk_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
-    config = GroupConfig(event.group_id, cooldown=10)
+    config = GroupConfig(event.data.peer_id, cooldown=10)
     if not await config.is_cooldown(CHAT_COOLDOWN_KEY):
         return
     await config.refresh_cooldown(CHAT_COOLDOWN_KEY)
@@ -91,13 +92,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
     if not text:
         return
 
-    session = f"{event.self_id}_{event.group_id}"
+    session = f"{event.self_id}_{event.data.peer_id}"
     request_id = str(ULID())
     await TaskManager.add_task(
         request_id,
         {
             "bot_id": bot.self_id,
-            "group_id": event.group_id,
+            "group_id": event.data.peer_id,
             "task_type": "chat",
             "start_time": time.time(),
         },

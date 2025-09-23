@@ -2,11 +2,12 @@ import re
 
 import httpx
 from nonebot import get_plugin_config, on_command
-from nonebot.adapters.onebot.v11 import MessageEvent, PrivateMessageEvent
+from nonebot.adapters.milky.event import FriendMessageEvent
 from nonebot.exception import FinishedException
 from nonebot.log import logger
 from nonebot.params import ArgStr
 from nonebot.permission import SUPERUSER
+from nonebot.rule import is_type
 from nonebot.typing import T_State
 from pydantic import BaseModel
 from pyncm_async import apis as ncm
@@ -27,15 +28,25 @@ plugin_config = get_plugin_config(NCMLoginConfig)
 
 SERVER_URL = f"http://{plugin_config.ai_server_host}:{plugin_config.ai_server_port}"
 
-ncm_login_cmd = on_command("网易云登录", priority=10, block=True, permission=SUPERUSER)
-ncm_logout_cmd = on_command("网易云登出", priority=10, block=True, permission=SUPERUSER)
+ncm_login_cmd = on_command(
+    "网易云登录",
+    rule=is_type(FriendMessageEvent),
+    priority=10,
+    block=True,
+    permission=SUPERUSER,
+)
+
+ncm_logout_cmd = on_command(
+    "网易云登出",
+    rule=is_type(FriendMessageEvent),
+    priority=10,
+    block=True,
+    permission=SUPERUSER,
+)
 
 
 @ncm_login_cmd.handle()
-async def handle_first_receive(event: MessageEvent, state: T_State):
-    if not isinstance(event, PrivateMessageEvent):
-        return
-
+async def handle_first_receive(event: FriendMessageEvent, state: T_State):
     # 检查是否已经登录
     if await is_ncm_logged_in():
         await ncm_login_cmd.finish("已登录")
@@ -46,7 +57,7 @@ async def handle_first_receive(event: MessageEvent, state: T_State):
 
 
 @ncm_login_cmd.got("phone")
-async def got_phone(event: MessageEvent, state: T_State, phone: str = ArgStr()):
+async def got_phone(event: FriendMessageEvent, state: T_State, phone: str = ArgStr()):
     if not state.get("need_phone"):
         return
 
@@ -71,7 +82,7 @@ async def got_phone(event: MessageEvent, state: T_State, phone: str = ArgStr()):
 
 
 @ncm_login_cmd.got("captcha")
-async def got_captcha(event: MessageEvent, state: T_State, captcha: str = ArgStr()):
+async def got_captcha(event: FriendMessageEvent, state: T_State, captcha: str = ArgStr()):
     if not state.get("need_captcha"):
         return
 
@@ -98,10 +109,7 @@ async def got_captcha(event: MessageEvent, state: T_State, captcha: str = ArgStr
 
 
 @ncm_logout_cmd.handle()
-async def handle_logout(event: MessageEvent):
-    if not isinstance(event, PrivateMessageEvent):
-        return
-
+async def handle_logout(event: FriendMessageEvent):
     try:
         url = f"{SERVER_URL}{plugin_config.ncm_logout_endpoint}"
         response = await HTTPXClient.post(url)

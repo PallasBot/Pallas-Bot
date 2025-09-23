@@ -2,12 +2,11 @@ import random
 import time
 
 from nonebot import get_plugin_config, logger, on_message, on_notice
-from nonebot.adapters import Bot, Event
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, NoticeEvent
+from nonebot.adapters.milky import Bot
+from nonebot.adapters.milky.event import GroupMessageEvent, GroupMessageReactionEvent
 from nonebot.exception import ActionFailed
-from nonebot.rule import Rule
+from nonebot.rule import Rule, is_type
 from nonebot.typing import T_State
-from nonebot_plugin_alconna import message_reaction
 from nonebot_plugin_apscheduler import scheduler
 
 from .config import Config
@@ -207,21 +206,20 @@ def mark_reaction_sent(bot_id: str, message_id: int):
     sent_reactions[bot_id][message_id] = time.time()
 
 
-async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
-    bot_id = str(bot.self_id)
-    message_id = event.message_id
+async def send_reaction(bot: Bot, group_id: int, message_id: int, emoji_code: str) -> None:
+    bot_id = bot.self_id
 
     if has_sent_reaction(bot_id, message_id):
-        logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id}")
+        logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id} in group {group_id}")
         return
 
     try:
-        await message_reaction(emoji_code, str(message_id), event, bot, delete=False)
+        await bot.send_group_message_reaction(group_id=group_id, message_seq=message_id, reaction=emoji_code)
         mark_reaction_sent(bot_id, message_id)
-        logger.debug(f"[Reaction] Bot {bot_id} successfully sent emoji {emoji_code} in group {event.group_id}")
+        logger.debug(f"[Reaction] Bot {bot_id} successfully sent emoji {emoji_code} in group {group_id}")
     except ActionFailed as e:
         logger.debug(
-            f"[Reaction] Bot {bot_id} failed to send emoji {emoji_code} in group {event.group_id}: {str(e)}",
+            f"[Reaction] Bot {bot_id} failed to send emoji {emoji_code} in group {group_id}: {str(e)}",
             exc_info=True,
         )
         raise
@@ -233,19 +231,19 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
         raise
 
 
-async def reaction_enabled(bot: Bot, event: Event, state: T_State) -> bool:
+async def reaction_enabled() -> bool:
     return plugin_config.enable_reaction
 
 
 async def subfeature_enabled(flag_name: str):
-    async def _enabled_check(bot: Bot, event: Event, state: T_State) -> bool:
+    async def _enabled_check() -> bool:
         return getattr(plugin_config, flag_name, True)
 
     return _enabled_check
 
 
 reaction_msg = on_message(
-    rule=Rule(reaction_enabled) & Rule(lambda bot, event, state: random.random() < plugin_config.reaction_probability),
+    rule=Rule(reaction_enabled) & Rule(should_trigger_reaction),
     priority=16,
 )
 
@@ -264,10 +262,10 @@ async def handle_reaction(bot: Bot, event: GroupMessageEvent):
     emoji_code = get_random_emoji()
 
     try:
-        await send_reaction(bot, event, emoji_code)
+        await send_reaction(bot, event.data.peer_id, event.data.message_seq, emoji_code)
     except ActionFailed as e:
         logger.debug(
-            f"[Reaction] Bot {bot_id} failed to send emoji {emoji_code} in group {event.group_id}: {str(e)}",
+            f"[Reaction] Bot {bot_id} failed to send emoji {emoji_code} in group {event.data.peer_id}: {str(e)}",
             exc_info=True,
         )
 
@@ -293,7 +291,7 @@ async def handle_reaction_with_face(bot: Bot, event: GroupMessageEvent):
     emoji_code = get_random_emoji()
 
     try:
-        await send_reaction(bot, event, emoji_code)
+        await send_reaction(bot, event.data.peer_id, event.data.message_seq, emoji_code)
     except ActionFailed as e:
         logger.debug(
             f"[Reaction] Bot {bot_id} failed to send face reaction emoji {emoji_code}: {str(e)}",
@@ -301,56 +299,50 @@ async def handle_reaction_with_face(bot: Bot, event: GroupMessageEvent):
         )
 
 
-def _check_reaction_event(event: NoticeEvent) -> bool:
-    if event.notice_type == "reaction" and event.sub_type == "add":
-        return getattr(event, "operator_id", None) != getattr(event, "self_id", None)
-
-    if event.notice_type == "group_msg_emoji_like":
-        operator_id = getattr(event, "user_id", None)
-        self_id = getattr(event, "self_id", None)
-        return operator_id != self_id
+def _check_reaction_event(event: GroupMessageReactionEvent) -> bool:
+    if isinstance(event, GroupMessageReactionEvent):
+        if not event.data.is_add:
+            return False
+        if event.data.user_id == event.self_id:
+            return False
+        return True
 
     return False
 
 
 auto_reaction_add = on_notice(
-    rule=Rule(_check_reaction_event),
+    rule=Rule(is_type(GroupMessageReactionEvent)) & Rule(_check_reaction_event),
 )
 
 
 @auto_reaction_add.handle()
-async def handle_auto_reaction(bot: Bot, event: NoticeEvent, state: T_State):
+async def handle_auto_reaction(bot: Bot, event: GroupMessageReactionEvent):
     """跟着别人回应"""
-    bot_id = str(bot.self_id)
+    bot_id = bot.self_id
     if not plugin_config.enable_auto_reply_on_reaction:
         logger.debug(f"[Reaction] Bot {bot_id} auto reply on reaction is disabled")
         return
-    message_id = event.message_id
-    emoji_code = ""
-    if hasattr(event, "likes") and isinstance(event.likes, list) and len(event.likes) > 0:
-        emoji_code = str(event.likes[0].get("emoji_id", ""))
-    elif hasattr(event, "code"):
-        emoji_code = str(event.code)
+    message_seq = event.data.message_seq
+    face_id = event.data.face_id
 
-    if not emoji_code:
-        logger.debug(f"[Reaction] No valid emoji found in event for message {message_id}")
-        return
-    reply_emoji = str(emoji_code) if plugin_config.reply_with_same_emoji else get_random_emoji()
+    reply_emoji = face_id if plugin_config.reply_with_same_emoji else get_random_emoji()
 
-    if has_sent_reaction(bot_id, message_id):
-        logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id} in group {event.group_id}")
+    if has_sent_reaction(bot_id, message_seq):
+        logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_seq} in group {event.data.group_id}")
         return
 
     try:
         logger.debug(
             f"[Reaction] Bot {bot_id} sending auto reply emoji {reply_emoji} "
-            f"for message {message_id} in group {event.group_id}"
+            f"for message {message_seq} in group {event.data.group_id}",
         )
 
-        await send_reaction(bot, event, reply_emoji)
-        mark_reaction_sent(bot_id, message_id)
+        await send_reaction(bot, event.data.group_id, event.data.message_seq, reply_emoji)
+        mark_reaction_sent(bot_id, message_seq)
     except ActionFailed as e:
-        logger.debug(f"[Reaction] Bot {bot_id} failed to send emoji {reply_emoji} in group {event.group_id}: {str(e)}")
+        logger.debug(
+            f"[Reaction] Bot {bot_id} failed to send emoji {reply_emoji} in group {event.data.group_id}: {str(e)}"
+        )
 
 
 @scheduler.scheduled_job("cron", hour=1)

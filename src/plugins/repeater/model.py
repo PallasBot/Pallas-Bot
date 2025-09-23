@@ -7,10 +7,12 @@ from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from functools import cached_property, cmp_to_key
 
+import jieba_next.analyse as jieba_analyse
 import pypinyin
 from beanie.operators import Or
 from nonebot import get_plugin_config
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
+from nonebot.adapters.milky import Message
+from nonebot.adapters.milky.event import GroupMessageEvent
 
 from src.common.config import BotConfig
 from src.common.db import Answer, Ban, Context
@@ -18,16 +20,6 @@ from src.common.db import Message as MessageModel
 from src.common.db.modules import BlackList
 
 from .config import Config
-
-try:
-    import jieba_next.analyse as jieba_analyse
-
-    print("Using jieba_next for repeater")
-except ImportError:
-    import jieba.analyse as jieba_analyse
-
-    print("Using jieba for repeater")
-
 
 plugin_config = get_plugin_config(Config)
 
@@ -138,17 +130,17 @@ class Chat:
         if isinstance(data, ChatData):
             self.chat_data = data
             self.config = BotConfig(data.bot_id, data.group_id)
-        elif isinstance(data, GroupMessageEvent):
+        else:
             self.chat_data = ChatData(
-                group_id=data.group_id,
-                user_id=data.user_id,
+                group_id=data.data.peer_id,
+                user_id=data.data.sender_id,
                 # 删除图片子类型字段，同一张图子类型经常不一样，影响判断
-                raw_message=re.sub(r"\.image,.+?\]", ".image]", data.raw_message),
+                raw_message=re.sub(r"\.image,.+?\]", ".image]", str(data.data.message)),
                 plain_text=data.get_plaintext(),
                 time=data.time,
                 bot_id=data.self_id,
             )
-            self.config = BotConfig(data.self_id, data.group_id)
+            self.config = BotConfig(data.self_id, data.data.peer_id)
 
     async def learn(self) -> bool:
         """

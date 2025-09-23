@@ -1,5 +1,5 @@
 import nonebot
-from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
+from nonebot.adapters.milky import Adapter
 
 from src.common.db import init_db
 from src.common.utils.voice_downloader import ensure_voices
@@ -7,7 +7,7 @@ from src.common.utils.voice_downloader import ensure_voices
 nonebot.init()
 
 driver = nonebot.get_driver()
-driver.register_adapter(ONEBOT_V11Adapter)
+driver.register_adapter(Adapter)
 config = driver.config
 
 

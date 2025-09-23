@@ -3,21 +3,16 @@ import random
 import time
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
+from typing import Literal
 
 from nonebot import get_bot, logger, on_message, on_notice, on_request
-from nonebot.adapters.onebot.v11 import (
-    Bot,
-    GroupAdminNoticeEvent,
-    GroupMessageEvent,
-    GroupRequestEvent,
-    MessageSegment,
-    NoticeEvent,
-    permission,
-)
+from nonebot.adapters.milky import Bot, MessageSegment
+from nonebot.adapters.milky.event import GroupAdminChangeEvent, GroupMessageEvent, GroupRequestEvent
 from nonebot.permission import Permission
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
+import src.common.utils.permission as permission
 from src.common.config import BotConfig, GroupConfig
 
 __plugin_meta__ = PluginMetadata(
@@ -43,7 +38,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot",
-    supported_adapters={"~onebot.v11"},
+    supported_adapters={"~milky"},
     extra={
         "version": "2.0.0",
         "menu_data": [
@@ -99,23 +94,22 @@ role_cache = defaultdict(lambda: defaultdict(str))
 shot_lock = asyncio.Lock()
 
 
-async def sync_role_cache(bot: Bot, event: GroupMessageEvent | GroupAdminNoticeEvent) -> str:
-    info = await bot.call_api(
-        "get_group_member_info",
-        **{
-            "user_id": event.self_id,
-            "group_id": event.group_id,
-            "no_cache": True,
-        },
-    )
-    role_cache[event.self_id][event.group_id] = info["role"]
-    return info["role"]
+async def sync_role_cache(
+    bot: Bot, event: GroupMessageEvent | GroupAdminChangeEvent
+) -> Literal["owner", "admin", "member"]:
+    if isinstance(event, GroupMessageEvent):
+        info = await bot.get_group_member_info(user_id=event.self_id, group_id=event.data.peer_id, no_cache=True)
+        role_cache[event.self_id][event.data.peer_id] = info.role
+        return info.role
+    else:
+        info = await bot.get_group_member_info(user_id=event.self_id, group_id=event.data.group_id, no_cache=True)
+        role_cache[event.self_id][event.data.group_id] = info.role
+        return info.role
 
 
-async def is_set_group_admin(event: NoticeEvent) -> bool:
-    if event.notice_type == "set_group_admin":
-        if event.user_id == event.self_id:
-            return True
+async def is_set_group_admin(event: GroupAdminChangeEvent) -> bool:
+    if event.data.user_id == event.self_id and event.data.is_set:
+        return True
     return False
 
 
@@ -128,7 +122,7 @@ set_group_admin = on_notice(
 
 
 @set_group_admin.handle()
-async def _(bot: Bot, event: GroupAdminNoticeEvent):
+async def _(bot: Bot, event: GroupAdminChangeEvent):
     await sync_role_cache(bot, event)
 
 
@@ -143,15 +137,15 @@ async def participate_in_roulette(event: GroupMessageEvent) -> bool:
     """
     牛牛自己是否参与轮盘
     """
-    if await BotConfig(event.self_id, event.group_id).drunkenness() <= 0:
+    if await BotConfig(event.self_id, event.data.peer_id).drunkenness() <= 0:
         return False
 
-    if await GroupConfig(event.group_id).roulette_mode() == 1:
+    if await GroupConfig(event.data.peer_id).roulette_mode() == 1:
         # 没法禁言自己
         return False
 
     # 群主退不了群（除非解散），所以群主牛牛不参与游戏
-    if role_cache[event.self_id][event.group_id] == "owner":
+    if role_cache[event.self_id][event.data.peer_id] == "owner":
         return False
 
     return random.random() < 0.1667
@@ -160,21 +154,21 @@ async def participate_in_roulette(event: GroupMessageEvent) -> bool:
 async def roulette(messagae_handle, event: GroupMessageEvent):
     rand = random.randint(1, 6)
     logger.info(f"Roulette rand: {rand}")
-    roulette_status[event.group_id] = rand
-    roulette_count[event.group_id] = 0
-    roulette_time[event.group_id] = int(time.time())
-    ban_players[event.group_id] = []
+    roulette_status[event.data.peer_id] = rand
+    roulette_count[event.data.peer_id] = 0
+    roulette_time[event.data.peer_id] = int(time.time())
+    ban_players[event.data.peer_id] = []
     partin = await participate_in_roulette(event)
     if partin:
-        roulette_player[event.group_id] = [
+        roulette_player[event.data.peer_id] = [
             event.self_id,
-            event.user_id,
+            event.data.sender_id,
         ]
     else:
-        roulette_player[event.group_id] = [
-            event.user_id,
+        roulette_player[event.data.peer_id] = [
+            event.data.sender_id,
         ]
-    mode = await GroupConfig(event.group_id).roulette_mode()
+    mode = await GroupConfig(event.data.peer_id).roulette_mode()
     if mode == 0:
         type_msg = "踢出群聊"
     else:
@@ -186,15 +180,15 @@ async def roulette(messagae_handle, event: GroupMessageEvent):
 
 async def is_roulette_type_msg(bot: Bot, event: GroupMessageEvent) -> bool:
     if event.get_plaintext().strip() in {"牛牛轮盘踢人", "牛牛轮盘禁言", "牛牛踢人轮盘", "牛牛禁言轮盘"}:
-        if can_roulette_start(event.group_id):
-            if not role_cache[event.self_id][event.group_id]:
+        if can_roulette_start(event.data.peer_id):
+            if not role_cache[event.self_id][event.data.peer_id]:
                 await sync_role_cache(bot, event)
-            return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
+            return role_cache[event.self_id][event.data.peer_id] in {"admin", "owner"}
     return False
 
 
 async def is_config_admin(event: GroupMessageEvent) -> bool:
-    return await BotConfig(event.self_id).is_admin_of_bot(event.user_id)
+    return await BotConfig(event.self_id).is_admin_of_bot(event.data.sender_id)
 
 
 IsAdmin = permission.GROUP_OWNER | permission.GROUP_ADMIN | Permission(is_config_admin)
@@ -216,17 +210,17 @@ async def _(event: GroupMessageEvent):
     elif "禁言" in plaintext:
         mode = 1
     if mode is not None:
-        await GroupConfig(event.group_id).set_roulette_mode(mode)
+        await GroupConfig(event.data.peer_id).set_roulette_mode(mode)
 
     await roulette(roulette_type_msg, event)
 
 
 async def is_roulette_msg(bot: Bot, event: GroupMessageEvent) -> bool:
     if event.get_plaintext().strip() == "牛牛轮盘":
-        if can_roulette_start(event.group_id):
-            if not role_cache[event.self_id][event.group_id]:
+        if can_roulette_start(event.data.peer_id):
+            if not role_cache[event.self_id][event.data.peer_id]:
                 await sync_role_cache(bot, event)
-            return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
+            return role_cache[event.self_id][event.data.peer_id] in {"admin", "owner"}
 
     return False
 
@@ -245,8 +239,8 @@ async def _(event: GroupMessageEvent):
 
 
 async def is_shot_msg(event: GroupMessageEvent) -> bool:
-    if roulette_status[event.group_id] != 0 and event.get_plaintext().strip() == "牛牛开枪":
-        return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
+    if roulette_status[event.data.peer_id] != 0 and event.get_plaintext().strip() == "牛牛开枪":
+        return role_cache[event.self_id][event.data.peer_id] in {"admin", "owner"}
 
     return False
 
@@ -340,32 +334,32 @@ shot_text = [
 @shot_msg.handle()
 async def _(event: GroupMessageEvent):
     async with shot_lock:
-        roulette_status[event.group_id] -= 1
-        roulette_count[event.group_id] += 1
-        shot_msg_count = roulette_count[event.group_id]
-        roulette_time[event.group_id] = int(time.time())
-        roulette_player[event.group_id].append(event.user_id)
+        roulette_status[event.data.peer_id] -= 1
+        roulette_count[event.data.peer_id] += 1
+        shot_msg_count = roulette_count[event.data.peer_id]
+        roulette_time[event.data.peer_id] = int(time.time())
+        roulette_player[event.data.peer_id].append(event.data.sender_id)
 
         if shot_msg_count == 6 and random.random() < 0.125:
-            roulette_status[event.group_id] = 0
-            roulette_player[event.group_id] = []
+            roulette_status[event.data.peer_id] = 0
+            roulette_player[event.data.peer_id] = []
             await roulette_msg.finish("我的手中的这把武器，找了无数工匠都难以修缮如新。不......不该如此......")
 
-        elif roulette_status[event.group_id] > 0:
+        elif roulette_status[event.data.peer_id] > 0:
             await roulette_msg.finish(shot_text[shot_msg_count - 1] + f"( {shot_msg_count} / 6 )")
 
-        roulette_status[event.group_id] = 0
+        roulette_status[event.data.peer_id] = 0
 
         async def let_the_bullets_fly():
             await asyncio.sleep(random.randint(5, 20))
 
-        if await BotConfig(event.self_id, event.group_id).drunkenness() <= 0:
-            roulette_player[event.group_id] = []
-            shot_awaitable = await shot(event.self_id, event.user_id, event.group_id)
+        if await BotConfig(event.self_id, event.data.peer_id).drunkenness() <= 0:
+            roulette_player[event.data.peer_id] = []
+            shot_awaitable = await shot(event.self_id, event.data.sender_id, event.data.peer_id)
             if shot_awaitable:
                 reply_msg = (
-                    MessageSegment.text("米诺斯英雄们的故事......有喜剧，便也会有悲剧。舍弃了荣耀，")
-                    + MessageSegment.at(event.user_id)
+                    "米诺斯英雄们的故事......有喜剧，便也会有悲剧。舍弃了荣耀，"
+                    + MessageSegment.mention(event.data.sender_id)
                     + MessageSegment.text("选择回归平凡......")
                 )
                 await roulette_msg.send(reply_msg)
@@ -376,20 +370,20 @@ async def _(event: GroupMessageEvent):
                 await roulette_msg.finish(reply_msg)
 
         else:
-            player = roulette_player[event.group_id]
+            player = roulette_player[event.data.peer_id]
             rand_list = player[-random.randint(1, min(len(player), 6)) :][::-1]
-            roulette_player[event.group_id] = []
+            roulette_player[event.data.peer_id] = []
             shot_awaitable_list = []
             for user_id in rand_list:
-                shot_awaitable = await shot(event.self_id, user_id, event.group_id)
+                shot_awaitable = await shot(event.self_id, user_id, event.data.peer_id)
                 if not shot_awaitable:
                     continue
 
                 shot_awaitable_list.append(shot_awaitable)
 
                 reply_msg = (
-                    MessageSegment.text("米诺斯英雄们的故事......有喜剧，便也会有悲剧。舍弃了荣耀，")
-                    + MessageSegment.at(user_id)
+                    "米诺斯英雄们的故事......有喜剧，便也会有悲剧。舍弃了荣耀，"
+                    + MessageSegment.mention(user_id)
                     + MessageSegment.text(f"选择回归平凡...... ( {len(shot_awaitable_list)} / 6 )")
                 )
                 await roulette_msg.send(reply_msg)
@@ -410,14 +404,18 @@ request_cmd = on_request(
 
 @request_cmd.handle()
 async def _(bot: Bot, event: GroupRequestEvent):
-    if event.sub_type == "add" and event.user_id in kicked_users[event.group_id]:
-        kicked_users[event.group_id].remove(event.user_id)
-        await event.approve(bot)
+    if event.data.initiator_id in kicked_users[event.data.group_id]:
+        kicked_users[event.data.group_id].remove(event.data.initiator_id)
+        await bot.accept_group_request(request_id=event.data.request_id)
 
 
 async def is_drink_msg(event: GroupMessageEvent) -> bool:
-    if roulette_status[event.group_id] != 0 and event.get_plaintext().strip() in {"牛牛喝酒", "牛牛干杯", "牛牛继续喝"}:
-        return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
+    if roulette_status[event.data.peer_id] != 0 and event.get_plaintext().strip() in {
+        "牛牛喝酒",
+        "牛牛干杯",
+        "牛牛继续喝",
+    }:
+        return role_cache[event.self_id][event.data.peer_id] in {"admin", "owner"}
     return False
 
 
@@ -431,12 +429,12 @@ drink_msg = on_message(
 
 @drink_msg.handle()
 async def _(event: GroupMessageEvent):
-    roulette_player[event.group_id].append(event.user_id)
+    roulette_player[event.data.peer_id].append(event.data.sender_id)
 
 
 async def is_rescue_msg(event: GroupMessageEvent) -> bool:
     if event.get_plaintext().strip().startswith("牛牛救一下"):
-        return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
+        return role_cache[event.self_id][event.data.peer_id] in {"admin", "owner"}
     return False
 
 
@@ -450,46 +448,31 @@ rescue_msg = on_message(
 
 @rescue_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
-    current_group_id = event.group_id
+    current_group_id = event.data.peer_id
     if random.random() < 0.125:
         await rescue_msg.finish("十二英雄神殿中的圣火也依然在熊熊燃烧吧，只是我再也没资格去点燃圣火了...")
 
-    if await BotConfig(event.self_id, event.group_id).drunkenness() > 0 and random.random() < 0.3:
-        mode = await GroupConfig(event.group_id).roulette_mode()
+    if await BotConfig(event.self_id, event.data.peer_id).drunkenness() > 0 and random.random() < 0.3:
+        mode = await GroupConfig(event.data.peer_id).roulette_mode()
         if mode == 0:
-            user_info = await bot.call_api(
-                "get_group_member_info",
-                **{
-                    "user_id": event.user_id,
-                    "group_id": event.group_id,
-                },
-            )
-            user_role = user_info["role"]
+            user_info = await bot.get_group_member_info(user_id=event.self_id, group_id=event.data.peer_id)
+            user_role = user_info.role
 
             if user_role != "owner" and not (
-                user_role == "admin" and role_cache[event.self_id][event.group_id] != "owner"
+                user_role == "admin" and role_cache[event.self_id][event.data.peer_id] != "owner"
             ):
-                kicked_users[event.group_id].add(event.user_id)
-                await bot.call_api(
-                    "set_group_kick",
-                    **{
-                        "user_id": event.user_id,
-                        "group_id": event.group_id,
-                    },
-                )
+                kicked_users[event.data.peer_id].add(event.data.sender_id)
+                await bot.kick_group_member(group_id=event.data.peer_id, user_id=event.data.sender_id)
                 await rescue_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的可以在我头上放吗...")
             else:
                 await rescue_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的是在他头上放吗...")
         else:
-            await bot.call_api(
-                "set_group_ban",
-                **{
-                    "user_id": event.user_id,
-                    "group_id": event.group_id,
-                    "duration": random.randint(5, 20) * 60,
-                },
+            await bot.set_group_member_mute(
+                group_id=event.data.peer_id,
+                user_id=event.data.sender_id,
+                duration=random.randint(5, 20) * 60,
             )
-            ban_players[event.group_id].append(event.user_id)
+            ban_players[event.data.peer_id].append(event.data.sender_id)
             await rescue_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的是在他头上放吗...")
         return
 
@@ -503,13 +486,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
         for target_user_id in target_user_ids:
             try:
-                await bot.call_api(
-                    "set_group_ban",
-                    **{
-                        "user_id": target_user_id,
-                        "group_id": current_group_id,
-                        "duration": 0,
-                    },
+                await bot.set_group_member_mute(
+                    group_id=current_group_id,
+                    user_id=target_user_id,
+                    duration=0,
                 )
                 rescued_users.append(target_user_id)
 
@@ -522,7 +502,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
         if rescued_users:
             reply_segments.append(MessageSegment.text("命运之手指向了为沉默所困之人："))
-            reply_segments.extend(MessageSegment.at(user_id) for user_id in rescued_users)
+            reply_segments.extend(MessageSegment.mention(user_id) for user_id in rescued_users)
             reply_segments.append(MessageSegment.text("，已从沉默中被解放。"))
 
         await rescue_msg.finish(MessageSegment.text("").join(reply_segments))
@@ -532,13 +512,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
         if current_group_id in ban_players:
             for user_id in list(ban_players[current_group_id]):
                 try:
-                    await bot.call_api(
-                        "set_group_ban",
-                        **{
-                            "user_id": user_id,
-                            "group_id": current_group_id,
-                            "duration": 0,
-                        },
+                    await bot.set_group_member_mute(
+                        group_id=current_group_id,
+                        user_id=user_id,
+                        duration=0,
                     )
                     rescued_users.append(user_id)
                 except Exception as e:

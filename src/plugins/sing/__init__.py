@@ -1,8 +1,8 @@
 import time
 
 from nonebot import get_plugin_config, logger, on_message
-from nonebot.adapters import Bot, Event
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
+from nonebot.adapters.milky import Bot
+from nonebot.adapters.milky.event import GroupMessageEvent
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from nonebot.typing import T_State
@@ -10,7 +10,7 @@ from ulid import ULID
 
 from src.common.config import GroupConfig, TaskManager
 from src.common.db import SingProgress
-from src.common.utils import HTTPXClient
+from src.common.utils import HTTPXClient, permission
 
 from .config import Config
 from .ncm_login import get_song_id, get_song_title
@@ -36,7 +36,7 @@ __plugin_meta__ = PluginMetadata(
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot",
-    supported_adapters={"~onebot.v11"},
+    supported_adapters={"~milky"},
     extra={
         "version": "2.0.0",
         "menu_data": [
@@ -143,7 +143,7 @@ async def is_to_sing(event: GroupMessageEvent, state: T_State) -> bool:
         return True
 
     if text in SING_CONTINUE_CMDS:
-        progress = await GroupConfig(group_id=event.group_id).sing_progress()
+        progress = await GroupConfig(group_id=event.data.peer_id).sing_progress()
         logger.info(f"now progress: {progress}")
         if not progress:
             return False
@@ -171,7 +171,7 @@ sing_msg = on_message(
 
 @sing_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
-    config = GroupConfig(event.group_id, cooldown=10)
+    config = GroupConfig(event.data.peer_id, cooldown=10)
     if not await config.is_cooldown(SING_COOLDOWN_KEY):
         return
     await config.refresh_cooldown(SING_COOLDOWN_KEY)
@@ -186,7 +186,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         request_id,
         {
             "bot_id": bot.self_id,
-            "group_id": event.group_id,
+            "group_id": event.data.peer_id,
             "task_type": "sing",
             "start_time": time.time(),
         },
@@ -220,7 +220,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     await sing_msg.finish("欢呼吧！")
 
 
-async def is_play(bot: Bot, event: Event, state: T_State) -> bool:
+async def is_play(event: GroupMessageEvent, state: T_State) -> bool:
     text = event.get_plaintext()
     if not text or not text.endswith(SING_CMD):
         return False
@@ -244,7 +244,7 @@ play_cmd = on_message(
 
 @play_cmd.handle()
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
-    config = GroupConfig(event.group_id, cooldown=10)
+    config = GroupConfig(event.data.peer_id, cooldown=10)
     if not await config.is_cooldown(PLAY_COOLDOWN_KEY):
         return
     await config.refresh_cooldown(PLAY_COOLDOWN_KEY)
@@ -262,7 +262,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         task_id,
         {
             "bot_id": bot.self_id,
-            "group_id": event.group_id,
+            "group_id": event.data.peer_id,
             "task_type": "play",
             "start_time": time.time(),
         },
@@ -313,7 +313,7 @@ request_song_msg = on_message(
 
 @request_song_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
-    config = GroupConfig(event.group_id, cooldown=10)
+    config = GroupConfig(event.data.peer_id, cooldown=10)
     if not await config.is_cooldown(REQUEST_SONG_COOLDOWN_KEY):
         return
     await config.refresh_cooldown(REQUEST_SONG_COOLDOWN_KEY)
@@ -337,7 +337,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         request_id,
         {
             "bot_id": bot.self_id,
-            "group_id": event.group_id,
+            "group_id": event.data.peer_id,
             "task_type": "request",
             "start_time": time.time(),
         },
@@ -354,7 +354,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
     await sing_msg.finish("欢呼吧！")
 
 
-async def what_song(event: Event) -> bool:
+async def what_song(event: GroupMessageEvent) -> bool:
     text = event.get_plaintext()
     return any(text.startswith(spk) for spk in SPEAKERS) and any(key in text for key in WHAT_SONG_CMDS)
 
@@ -369,7 +369,7 @@ song_title_cmd = on_message(
 
 @song_title_cmd.handle()
 async def _(event: GroupMessageEvent):
-    config = GroupConfig(event.group_id, cooldown=10)
+    config = GroupConfig(event.data.peer_id, cooldown=10)
     progress = await config.sing_progress()
     logger.info(f"now progress: {progress}")
 
