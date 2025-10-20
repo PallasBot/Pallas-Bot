@@ -1,9 +1,8 @@
 from nonebot import get_driver, get_plugin_config, logger, on_message, on_notice
-from nonebot.adapters.milky import Bot
+from nonebot.adapters.milky import Bot, permission
 from nonebot.adapters.milky.event import GroupMemberIncreaseEvent, GroupMessageEvent, GroupNudgeEvent
 from nonebot.rule import Rule
 
-import src.common.utils.permission as permission
 from src.common.config import BotConfig
 
 from .config import Config

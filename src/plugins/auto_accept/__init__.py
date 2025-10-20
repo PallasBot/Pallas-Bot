@@ -15,9 +15,9 @@ request_cmd = on_request(
 @request_cmd.handle()
 async def handle_group_request(bot: Bot, event: GroupInvitationEvent):
     if await GroupConfig(event.data.group_id).is_banned() or await UserConfig(event.data.initiator_id).is_banned():
-        await bot.reject_group_invitation(request_id=event.data.request_id)
+        await bot.reject_group_invitation(group_id=event.data.group_id, invitation_seq=event.data.invitation_seq)
         return
 
     bot_config = BotConfig(event.self_id)
     if await bot_config.auto_accept() or await bot_config.is_admin_of_bot(event.data.initiator_id):
-        await bot.accept_group_invitation(request_id=event.data.request_id)
+        await bot.accept_group_invitation(group_id=event.data.group_id, invitation_seq=event.data.invitation_seq)

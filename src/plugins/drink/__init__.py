@@ -3,13 +3,13 @@ import random
 from datetime import datetime, timedelta
 
 from nonebot import get_bot, get_driver, logger, on_message
+from nonebot.adapters.milky import permission
 from nonebot.adapters.milky.event import GroupMessageEvent
 from nonebot.exception import ActionFailed
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from nonebot_plugin_apscheduler import scheduler
 
-import src.common.utils.permission as permission
 from src.common.config import BotConfig
 
 __plugin_meta__ = PluginMetadata(

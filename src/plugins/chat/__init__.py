@@ -2,12 +2,12 @@ import time
 
 from nonebot import get_plugin_config, logger, on_message
 from nonebot.adapters import Bot
+from nonebot.adapters.milky import permission
 from nonebot.adapters.milky.event import GroupMessageEvent
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from ulid import ULID
 
-import src.common.utils.permission as permission
 from src.common.config import BotConfig, GroupConfig, TaskManager
 from src.common.utils import HTTPXClient
 
