@@ -10,9 +10,9 @@ requires-python = ">=3.12,<4.0"
 dependencies = [
     "beanie>=2.0.0",
     "httpx>=0.27.0",
-    "jieba-next>=1.0.0a4",
+    "jieba-next>=1.0.0a5",
     "nb-cli>=1.4.2",
-    "nonebot-adapter-milky>=0.4.3",
+    "nonebot-adapter-milky>=1.0.0",
     "nonebot-plugin-apscheduler>=0.5.0",
     "nonebot2[fastapi]>=2.4.2",
     "pillowmd>=0.7.0",
@@ -40,7 +40,7 @@ url = "https://pypi.org/simple"
 
 [tool.nonebot]
 adapters = [
-    { name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" }
+    { name = "nonebot-adapter-milky", module_name = "nonebot.adapters.milky" }
 ]
 plugins = ["nonebot_plugin_apscheduler"]
 plugin_dirs = ["src/plugins"]
