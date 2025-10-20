@@ -4,7 +4,7 @@ import re
 import time
 
 from nonebot import get_bot, get_driver, logger, on_message, on_notice
-from nonebot.adapters.milky import Bot, Message, MessageSegment
+from nonebot.adapters.milky import Bot, Message, MessageSegment, permission
 from nonebot.adapters.milky.event import GroupMessageEvent, MessageRecallEvent
 from nonebot.exception import ActionFailed
 from nonebot.permission import SUPERUSER, Permission
@@ -12,7 +12,6 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule, keyword, to_me
 from nonebot_plugin_apscheduler import scheduler
 
-import src.common.utils.permission as permission
 from src.common.config import BotConfig
 from src.common.utils.media_cache import get_image, insert_image
 

@@ -1,11 +1,10 @@
 from nonebot import get_plugin_config, on_command
-from nonebot.adapters.milky import Bot
+from nonebot.adapters.milky import Bot, permission
 from nonebot.adapters.milky.event import FriendMessageEvent, GroupMessageEvent
 from nonebot.permission import SUPERUSER, Permission
 from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
 
-import src.common.utils.permission as permission
 from src.common.config import BotConfig, GroupConfig
 
 from .config import Config

@@ -6,13 +6,12 @@ from collections.abc import Awaitable, Callable
 from typing import Literal
 
 from nonebot import get_bot, logger, on_message, on_notice, on_request
-from nonebot.adapters.milky import Bot, MessageSegment
-from nonebot.adapters.milky.event import GroupAdminChangeEvent, GroupMessageEvent, GroupRequestEvent
+from nonebot.adapters.milky import Bot, MessageSegment, permission
+from nonebot.adapters.milky.event import GroupAdminChangeEvent, GroupJoinRequestEvent, GroupMessageEvent
 from nonebot.permission import Permission
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
-import src.common.utils.permission as permission
 from src.common.config import BotConfig, GroupConfig
 
 __plugin_meta__ = PluginMetadata(
@@ -403,10 +402,12 @@ request_cmd = on_request(
 
 
 @request_cmd.handle()
-async def _(bot: Bot, event: GroupRequestEvent):
+async def _(bot: Bot, event: GroupJoinRequestEvent):
     if event.data.initiator_id in kicked_users[event.data.group_id]:
         kicked_users[event.data.group_id].remove(event.data.initiator_id)
-        await bot.accept_group_request(request_id=event.data.request_id)
+        await bot.accept_group_request(
+            notification_seq=event.data.notification_seq, notification_type="join_request", group_id=event.data.group_id
+        )
 
 
 async def is_drink_msg(event: GroupMessageEvent) -> bool:
