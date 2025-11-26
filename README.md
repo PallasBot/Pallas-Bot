@@ -105,7 +105,7 @@
 ### 开源库
 
 [nonebot2](https://github.com/nonebot/nonebot2): 跨平台 Python 异步聊天机器人框架  
-[jieba_fast](https://github.com/deepcs233/jieba_fast): 高效的中文分词库  
+[jieba_next](https://github.com/mxcoras/jieba-next): 高效的中文分词库  
 [beanie](https://github.com/BeanieODM/beanie): Asynchronous Python ODM for MongoDB  
 [NapCat](https://github.com/NapNeko/NapCatQQ): 现代化的基于 NTQQ 的 Bot 协议端实现  
 

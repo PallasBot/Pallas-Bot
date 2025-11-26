@@ -20,9 +20,9 @@ from src.common.db.modules import BlackList
 from .config import Config
 
 try:
-    import jieba_fast.analyse as jieba_analyse
+    import jieba_next.analyse as jieba_analyse
 
-    print("Using jieba_fast for repeater")
+    print("Using jieba_next for repeater")
 except ImportError:
     import jieba.analyse as jieba_analyse
 

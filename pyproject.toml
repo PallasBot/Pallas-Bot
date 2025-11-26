@@ -27,7 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 perf = [
-    "jieba-fast>=0.53",
+    "jieba-next>=1.0.0a5"
 ]
 
 [dependency-groups]
