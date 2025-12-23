@@ -2,7 +2,7 @@ import asyncio
 import random
 
 from nonebot import get_plugin_config, on_message, on_notice
-from nonebot.adapters.milky import Bot, MessageSegment
+from nonebot.adapters.milky import Bot, MessageSegment, permission
 from nonebot.adapters.milky.event import (
     GroupAdminChangeEvent,
     GroupMemberDecreaseEvent,
@@ -14,7 +14,7 @@ from nonebot.adapters.milky.event import (
 from nonebot.rule import Rule, is_type, to_me
 
 from src.common.config import BotConfig, GroupConfig, UserConfig
-from src.common.utils import is_bot_admin, permission
+from src.common.utils import is_bot_admin
 
 from .config import Config
 from .voice import get_random_voice, get_voice_filepath

@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timedelta
 
 from nonebot import get_bots, logger
-from nonebot.adapters.onebot.v11 import Bot
+from nonebot.adapters.milky import Bot
 from nonebot_plugin_apscheduler import scheduler
 
 from src.plugins.block import plugin_config as block_config

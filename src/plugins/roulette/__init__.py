@@ -532,7 +532,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
 async def is_judgment_msg(event: GroupMessageEvent) -> bool:
     if event.get_plaintext().strip().startswith("牛牛补一枪"):
-        return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
+        return role_cache[event.self_id][event.data.peer_id] in {"admin", "owner"}
     return False
 
 
@@ -546,31 +546,31 @@ judgment_msg = on_message(
 
 @judgment_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
-    current_group_id = event.group_id
+    current_group_id = event.data.peer_id
     if random.random() < 0.125:
         await judgment_msg.finish("我的手中的这把武器，找了无数工匠都难以修缮如新。不......不该如此......")
 
-    if await BotConfig(event.self_id, event.group_id).drunkenness() > 0 and random.random() < 0.3:
-        mode = await GroupConfig(event.group_id).roulette_mode()
+    if await BotConfig(event.self_id, event.data.peer_id).drunkenness() > 0 and random.random() < 0.3:
+        mode = await GroupConfig(event.data.peer_id).roulette_mode()
         if mode == 0:
             user_info = await bot.call_api(
                 "get_group_member_info",
                 **{
-                    "user_id": event.user_id,
-                    "group_id": event.group_id,
+                    "user_id": event.data.sender_id,
+                    "group_id": event.data.peer_id,
                 },
             )
             user_role = user_info["role"]
 
             if user_role != "owner" and not (
-                user_role == "admin" and role_cache[event.self_id][event.group_id] != "owner"
+                user_role == "admin" and role_cache[event.self_id][event.data.peer_id] != "owner"
             ):
-                kicked_users[event.group_id].add(event.user_id)
+                kicked_users[event.data.peer_id].add(event.data.sender_id)
                 await bot.call_api(
                     "set_group_kick",
                     **{
-                        "user_id": event.user_id,
-                        "group_id": event.group_id,
+                        "user_id": event.data.sender_id,
+                        "group_id": event.data.peer_id,
                     },
                 )
                 await judgment_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的可以在我头上放吗...")
@@ -580,12 +580,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
             await bot.call_api(
                 "set_group_ban",
                 **{
-                    "user_id": event.user_id,
-                    "group_id": event.group_id,
+                    "user_id": event.data.sender_id,
+                    "group_id": event.data.peer_id,
                     "duration": random.randint(25, 120) * 60,
                 },
             )
-            ban_players[event.group_id].append(event.user_id)
+            ban_players[event.data.peer_id].append(event.data.sender_id)
             await judgment_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的是在他头上放吗...")
         return
 
@@ -618,7 +618,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
         if judgmentd_users:
             reply_segments.append(MessageSegment.text("	哭嚎吧，"))
-            reply_segments.extend(MessageSegment.at(user_id) for user_id in judgmentd_users)
+            reply_segments.extend(MessageSegment.mention(user_id) for user_id in judgmentd_users)
             reply_segments.append(MessageSegment.text(",为你们不堪一击的信念。"))
 
         await judgment_msg.finish(MessageSegment.text("").join(reply_segments))

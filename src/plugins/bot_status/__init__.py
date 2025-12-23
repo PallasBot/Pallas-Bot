@@ -6,7 +6,8 @@ from nonebot import (
     on_command,
     on_notice,
 )
-from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent, NoticeEvent
+from nonebot.adapters.milky import Bot
+from nonebot.adapters.milky.event import GroupMessageEvent, MessageEvent, NoticeEvent
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 
@@ -28,7 +29,7 @@ __plugin_meta__ = PluginMetadata(
 """,
     type="application",
     homepage="https://github.com/PallasBot",
-    supported_adapters={"~onebot.v11"},
+    supported_adapters={"~milky"},
     extra={
         "version": "2.0.0",
         "menu_data": [
@@ -82,17 +83,11 @@ async def handle_bot_offline_events(event: NoticeEvent):
     offline_message = ""
     source = ""
 
-    if event.notice_type == "bot_offline":  # NapCat
-        bot_id = event.user_id
-        offline_message = getattr(event, "message", "")
+    if event.event_type == "bot_offline":
+        bot_id = int(event.get_user_id())
+        offline_message = event.data.get("reason", "No reason provided")
         source = "napcat_event"
-        logger.warning(f"NapCat Bot {bot_id} offline: {offline_message}")
-
-    elif hasattr(event, "sub_type") and event.sub_type == "BotOfflineEvent":  # Lagrange
-        bot_id = getattr(event, "self_id", getattr(event, "user_id", 0))
-        offline_message = "Bot Offline"
-        source = "lagrange_event"
-        logger.warning(f"Lagrange Bot {bot_id} offline")
+        logger.warning(f"Bot {bot_id} offline: {offline_message}")
 
     if bot_id and source:
         from .bot_monitor import get_bot_nickname
@@ -130,7 +125,7 @@ async def handle_bot_status(bot: Bot, event: MessageEvent) -> None:
     from src.common.config import GroupConfig
 
     if isinstance(event, GroupMessageEvent):
-        config = GroupConfig(group_id=event.group_id, cooldown=10)
+        config = GroupConfig(group_id=event.data.peer_id, cooldown=10)
         if not await config.is_cooldown(STATUS_COOLDOWN_KEY):
             return
         await config.refresh_cooldown(STATUS_COOLDOWN_KEY)

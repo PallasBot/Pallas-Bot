@@ -1,7 +1,7 @@
 import time
 
 from nonebot import get_plugin_config, logger, on_message
-from nonebot.adapters.milky import Bot
+from nonebot.adapters.milky import Bot, permission
 from nonebot.adapters.milky.event import GroupMessageEvent
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
@@ -10,7 +10,7 @@ from ulid import ULID
 
 from src.common.config import GroupConfig, TaskManager
 from src.common.db import SingProgress
-from src.common.utils import HTTPXClient, permission
+from src.common.utils import HTTPXClient
 
 from .config import Config
 from .ncm_login import get_song_id, get_song_title
