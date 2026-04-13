@@ -28,7 +28,6 @@ class Config(BaseModel, extra="ignore"):
     ignored_plugins: list[str] = [
         "nonebot-plugin-alconna",
         "nonebot_plugin_apscheduler",
-        "auto_accept",
         "callback",
         "block",
         "greeting",
