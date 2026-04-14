@@ -9,7 +9,7 @@ from functools import cached_property, cmp_to_key
 
 import pypinyin
 from beanie.operators import Or
-from nonebot import get_plugin_config
+from nonebot import get_plugin_config, logger
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from src.common.config import BotConfig
@@ -495,6 +495,7 @@ class Chat:
         持久化
         """
 
+        # Step 1: Collect save_list without clearing _message_dict yet
         async with Chat._message_lock:
             save_list = [
                 msg
@@ -505,6 +506,16 @@ class Chat:
             if not save_list:
                 return
 
+        # Step 2: Call insert_many OUTSIDE the lock
+        try:
+            await MessageModel.insert_many(save_list)
+        except Exception as e:
+            # Step 4: If insert_many fails, log error and preserve data
+            logger.error(f"Failed to insert messages in _sync: {e}")
+            return
+
+        # Step 3: Only truncate and update _late_save_time if insert_many succeeded
+        async with Chat._message_lock:
             new_dict = {
                 group_id: group_msgs[-Chat.SAVE_RESERVED_SIZE :] for group_id, group_msgs in Chat._message_dict.items()
             }
@@ -512,8 +523,6 @@ class Chat:
             Chat._message_dict.update(new_dict)
 
             Chat._late_save_time = cur_time
-
-        await MessageModel.insert_many(save_list)
 
     async def _context_insert(self, pre_msg: MessageModel | None):
         if not pre_msg:
