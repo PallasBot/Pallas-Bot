@@ -217,32 +217,36 @@ class Chat:
         async def yield_results(results: tuple[list[str], str]) -> AsyncGenerator[Message, None]:
             answer_list, answer_keywords = results
             group_bot_replies = Chat._reply_dict[group_id][bot_id]
-            for item in answer_list:
-                async with Chat._reply_lock:
-                    group_bot_replies.append({
-                        "time": int(time.time()),
-                        "pre_raw_message": raw_message,
-                        "pre_keywords": keywords,
-                        "reply": item,
-                        "reply_keywords": answer_keywords,
-                    })
-                if "[CQ:" not in item:
+            try:
+                for item in answer_list:
+                    async with Chat._reply_lock:
+                        group_bot_replies.append({
+                            "time": int(time.time()),
+                            "pre_raw_message": raw_message,
+                            "pre_keywords": keywords,
+                            "reply": item,
+                            "reply_keywords": answer_keywords,
+                        })
+                    if "[CQ:" not in item:
+                        async with Chat._topics_lock:
+                            Chat._recent_topics[group_id] += [
+                                k for k in answer_keywords.split(" ") if not k.startswith("牛牛")
+                            ]
                     async with Chat._topics_lock:
                         Chat._recent_topics[group_id] += [
-                            k for k in answer_keywords.split(" ") if not k.startswith("牛牛")
+                            k
+                            for k in self.chat_data._keywords_list
+                            if not k.startswith("牛牛")  # type: ignore
                         ]
-                async with Chat._topics_lock:
-                    Chat._recent_topics[group_id] += [
-                        k
-                        for k in self.chat_data._keywords_list
-                        if not k.startswith("牛牛")  # type: ignore
+                    # if "[CQ:" not in item and len(item) > Chat.DRUNK_TTS_THRESHOLD and \
+                    #    await self.config.drunkenness():
+                    #     yield Message(Chat._text_to_speech(item))
+                    yield Message(item)
+            finally:
+                async with Chat._reply_lock:
+                    Chat._reply_dict[group_id][bot_id][:] = Chat._reply_dict[group_id][bot_id][
+                        -Chat.SAVE_RESERVED_SIZE :
                     ]
-                # if "[CQ:" not in item and len(item) > Chat.DRUNK_TTS_THRESHOLD and await self.config.drunkenness():
-                #     yield Message(Chat._text_to_speech(item))
-                yield Message(item)
-
-            async with Chat._reply_lock:
-                group_bot_replies = group_bot_replies[-Chat.SAVE_RESERVED_SIZE :]
 
         return yield_results(results)
 
