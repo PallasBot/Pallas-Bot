@@ -14,10 +14,10 @@ from nonebot import get_plugin_config
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from src.common.config import BotConfig
-from src.common.db import Answer, Ban, Context
+from src.common.db import Answer, Context
 from src.common.db import Message as MessageModel
-from src.common.db.modules import BlackList
 
+from .ban_manager import BanManager
 from .config import Config
 from .message_store import MessageStore
 
@@ -124,9 +124,6 @@ class Chat:
 
     _reply_lock = asyncio.Lock()  # 回复消息缓存锁
     _topics_lock = asyncio.Lock()
-
-    _blacklist_answer = defaultdict(set)
-    _blacklist_answer_reserve = defaultdict(set)
 
     _recent_topics = defaultdict(lambda: deque(maxlen=Chat.TOPICS_SIZE))
     _recent_speak = defaultdict(lambda: deque(maxlen=Chat.DUPLICATE_REPLY))  # 主动发言记录，避免重复内容
@@ -326,7 +323,7 @@ class Chat:
 
             bot_id = random.choice([bid for bid in group_replies.keys() if bid])
 
-            ban_keywords = await Chat._find_ban_keywords(context=None, group_id=group_id)
+            ban_keywords = await BanManager.find_ban_keywords(context=None, group_id=group_id)
 
             recently = Chat._recent_speak[group_id]
 
@@ -390,54 +387,7 @@ class Chat:
 
     @staticmethod
     async def ban(group_id: int, bot_id: int, ban_raw_message: str, reason: str) -> bool:
-        """
-        禁止以后回复这句话，仅对该群有效果
-        """
-
-        if group_id not in Chat._reply_dict:
-            return False
-
-        ban_reply = None
-        reply_data = Chat._reply_dict[group_id][bot_id][::-1]
-
-        for reply in reply_data:
-            cur_reply = reply["reply"]
-            # 为空时就直接 ban 最后一条回复
-            if not ban_raw_message or ban_raw_message in cur_reply:
-                ban_reply = reply
-                break
-
-        # 这种情况一般是有些 CQ 码，牛牛发送的时候，和被回复的时候，里面的内容不一样
-        if not ban_reply:
-            search = re.search(r"(\[CQ:[a-zA-z0-9-_.]+)", ban_raw_message)
-            if search:
-                type_keyword = search.group(1)
-                for reply in reply_data:
-                    cur_reply = reply["reply"]
-                    if type_keyword in cur_reply:
-                        ban_reply = reply
-                        break
-
-        if not ban_reply:
-            return False
-
-        pre_keywords = ban_reply["pre_keywords"]
-        keywords = ban_reply["reply_keywords"]
-
-        context_to_ban = await Context.find_one(Context.keywords == pre_keywords)
-        if context_to_ban:
-            ban_reason = Ban(keywords=keywords, group_id=group_id, reason=reason, time=int(time.time()))
-            context_to_ban.ban.append(ban_reason)
-            await context_to_ban.save()
-
-        if keywords in Chat._blacklist_answer_reserve[group_id]:
-            Chat._blacklist_answer[group_id].add(keywords)
-            if keywords in Chat._blacklist_answer_reserve[Chat.BLACKLIST_FLAG]:
-                Chat._blacklist_answer[Chat.BLACKLIST_FLAG].add(keywords)
-        else:
-            Chat._blacklist_answer_reserve[group_id].add(keywords)
-
-        return True
+        return await BanManager.ban(group_id, bot_id, ban_raw_message, reason, Chat._reply_dict)
 
     @staticmethod
     async def get_random_message_from_each_group() -> dict[int, MessageModel]:
@@ -546,7 +496,7 @@ class Chat:
         else:
             cross_group_threshold = Chat.CROSS_GROUP_THRESHOLD
 
-        ban_keywords = await Chat._find_ban_keywords(context=context, group_id=group_id)
+        ban_keywords = await BanManager.find_ban_keywords(context=context, group_id=group_id)
 
         candidate_answers: dict[str, Answer] = {}
         other_group_cache = {}
@@ -635,51 +585,7 @@ class Chat:
 
     @staticmethod
     async def update_global_blacklist() -> None:
-        await Chat._select_blacklist()
-
-        keywords_dict = defaultdict(int)
-        global_blacklist = set()
-        for keywords_list in Chat._blacklist_answer.values():
-            for keywords in keywords_list:
-                keywords_dict[keywords] += 1
-                if keywords_dict[keywords] == Chat.CROSS_GROUP_THRESHOLD:
-                    global_blacklist.add(keywords)
-
-        Chat._blacklist_answer[Chat.BLACKLIST_FLAG] |= global_blacklist
-
-    @staticmethod
-    async def _select_blacklist() -> None:
-        all_blacklist = await BlackList.find_all().to_list()
-
-        for item in all_blacklist:
-            group_id = item.group_id
-            if item.answers:
-                Chat._blacklist_answer[group_id] |= set(item.answers)
-            if item.answers_reserve:
-                Chat._blacklist_answer_reserve[group_id] |= set(item.answers_reserve)
-
-    @staticmethod
-    async def _sync_blacklist() -> None:
-        await Chat._select_blacklist()
-
-        for group_id, answers in Chat._blacklist_answer.items():
-            if not len(answers):
-                continue
-            await BlackList.find_one(BlackList.group_id == group_id).upsert(  # type: ignore[misc]
-                {"$set": {"answers": list(answers)}}, on_insert=BlackList(group_id=group_id, answers=list(answers))
-            )
-
-        for group_id, answers_set in Chat._blacklist_answer_reserve.items():
-            if not len(answers_set):
-                continue
-            filtered_answers = answers_set
-            if group_id in Chat._blacklist_answer:
-                filtered_answers = answers_set - Chat._blacklist_answer[group_id]
-
-            await BlackList.find_one(BlackList.group_id == group_id).upsert(  # type: ignore[misc]
-                {"$set": {"answers_reserve": list(filtered_answers)}},
-                on_insert=BlackList(group_id=group_id, answers_reserve=list(filtered_answers)),
-            )
+        await BanManager.update_global_blacklist()
 
     @staticmethod
     async def clearup_context() -> None:
@@ -700,28 +606,6 @@ class Chat:
             await context.save()
 
     @staticmethod
-    async def _find_ban_keywords(context: Context | None, group_id) -> set:
-        """
-        找到在 group_id 群中对应 context 不能回复的关键词
-        """
-
-        # 全局的黑名单
-        ban_keywords = Chat._blacklist_answer[Chat.BLACKLIST_FLAG] | Chat._blacklist_answer[group_id]
-        # 针对单条回复的黑名单
-        if context is not None and context.ban:
-            ban_count = defaultdict(int)
-            for ban in context.ban:
-                ban_key = ban.keywords
-                if ban.group_id in {group_id, Chat.BLACKLIST_FLAG}:
-                    ban_keywords.add(ban_key)
-                else:
-                    # 超过 N 个群都把这句话 ban 了，那就全局 ban 掉
-                    ban_count[ban_key] += 1
-                    if ban_count[ban_key] == Chat.CROSS_GROUP_THRESHOLD:
-                        ban_keywords.add(ban_key)
-        return ban_keywords
-
-    @staticmethod
     async def sync():
         await MessageStore._sync()
-        await Chat._sync_blacklist()
+        await BanManager._sync_blacklist()
