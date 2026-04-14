@@ -20,6 +20,7 @@ from src.common.db import Message as MessageModel
 from .ban_manager import BanManager
 from .config import Config
 from .message_store import MessageStore
+from .responder import Responder
 
 try:
     import jieba_next.analyse as jieba_analyse
@@ -181,82 +182,25 @@ class Chat:
         return True
 
     async def answer(self) -> AsyncGenerator[Message, None] | None:
-        """
-        回复这句话，可能会分多次回复，也可能不回复
-        """
-        # 不回复太短的对话，大部分是“？”、“草”
-        if self.chat_data.is_plain_text and len(self.chat_data.plain_text) < 2:
-            return None
-
-        results = await self._context_find()
-        if not results:
-            return None
-
-        group_id = self.chat_data.group_id
-        bot_id = self.chat_data.bot_id
-        group_bot_replies = Chat._reply_dict[group_id][bot_id]
-
-        raw_message = self.chat_data.raw_message
-        keywords = self.chat_data.keywords
-        async with Chat._reply_lock:
-            group_bot_replies.append({
-                "time": int(time.time()),
-                "pre_raw_message": raw_message,
-                "pre_keywords": keywords,
-                "reply": Chat.REPLY_FLAG,
-                "reply_keywords": Chat.REPLY_FLAG,
-            })
-
-        async def yield_results(results: tuple[list[str], str]) -> AsyncGenerator[Message, None]:
-            answer_list, answer_keywords = results
-            group_bot_replies = Chat._reply_dict[group_id][bot_id]
-            try:
-                for item in answer_list:
-                    async with Chat._reply_lock:
-                        group_bot_replies.append({
-                            "time": int(time.time()),
-                            "pre_raw_message": raw_message,
-                            "pre_keywords": keywords,
-                            "reply": item,
-                            "reply_keywords": answer_keywords,
-                        })
-                    if "[CQ:" not in item:
-                        async with Chat._topics_lock:
-                            Chat._recent_topics[group_id] += [
-                                k for k in answer_keywords.split(" ") if not k.startswith("牛牛")
-                            ]
-                    async with Chat._topics_lock:
-                        Chat._recent_topics[group_id] += [
-                            k for k in self.chat_data._keywords_list if not k.startswith("牛牛")
-                        ]
-                    # if "[CQ:" not in item and len(item) > Chat.DRUNK_TTS_THRESHOLD and \
-                    #    await self.config.drunkenness():
-                    #     yield Message(Chat._text_to_speech(item))
-                    yield Message(item)
-            finally:
-                async with Chat._reply_lock:
-                    Chat._reply_dict[group_id][bot_id][:] = Chat._reply_dict[group_id][bot_id][
-                        -Chat.SAVE_RESERVED_SIZE :
-                    ]
-
-        return yield_results(results)
+        return await Responder.answer(
+            self.chat_data,
+            self.config,
+            Chat._reply_dict,
+            Chat._reply_lock,
+            Chat._recent_topics,
+            Chat._topics_lock,
+        )
 
     @staticmethod
     async def reply_post_proc(raw_message: str, new_msg: str, bot_id: int, group_id: int) -> bool:
-        """
-        对 bot 回复的消息进行后处理，将缓存替换为处理后的消息
-        """
-
-        if raw_message == new_msg:
-            return True
-
-        async with Chat._reply_lock:
-            reply_data = Chat._reply_dict[group_id][bot_id][::-1]
-            for item in reply_data:
-                if item["reply"] == raw_message:
-                    item["reply"] = new_msg
-                    return True
-        return False
+        return await Responder.reply_post_proc(
+            raw_message,
+            new_msg,
+            bot_id,
+            group_id,
+            Chat._reply_dict,
+            Chat._reply_lock,
+        )
 
     @staticmethod
     async def speak() -> tuple[int, int, list[Message], int | None] | None:
@@ -449,139 +393,6 @@ class Chat:
                 answers=[Answer(keywords=keywords, group_id=group_id, count=1, time=cur_time, messages=[raw_message])],
             )
             await context.insert()
-
-    async def _context_find(self) -> tuple[list[str], str] | None:
-        group_id = self.chat_data.group_id
-        raw_message = self.chat_data.raw_message
-        keywords = self.chat_data.keywords
-        bot_id = self.chat_data.bot_id
-
-        # 复读！
-        if group_id in MessageStore._message_dict:
-            group_msgs = MessageStore._message_dict[group_id]
-            if len(group_msgs) >= Chat.REPEAT_THRESHOLD and all(
-                item.raw_message == raw_message for item in group_msgs[-Chat.REPEAT_THRESHOLD + 1 :]
-            ):
-                # 到这里说明当前群里是在复读
-                group_bot_replies = Chat._reply_dict[group_id][bot_id]
-                if len(group_bot_replies) and group_bot_replies[-1]["reply"] != raw_message:
-                    return (
-                        [
-                            raw_message,
-                        ],
-                        keywords,
-                    )
-                else:
-                    # 复读过一次就不再回复这句话了
-                    return None
-
-        context = await Context.find_one(Context.keywords == keywords)
-
-        if not context:
-            return None
-
-        is_drunk = await self.config.drunkenness() > 0
-
-        if is_drunk:
-            answer_count_threshold = 1
-        else:
-            answer_count_threshold = random.choices(
-                Chat.ANSWER_THRESHOLD_CHOICE_LIST, weights=Chat.ANSWER_THRESHOLD_WEIGHTS
-            )[0]
-            if self.chat_data.keywords_len == ChatData._keywords_size:
-                answer_count_threshold -= 1
-
-        if self.chat_data.to_me:
-            cross_group_threshold = 1
-        else:
-            cross_group_threshold = Chat.CROSS_GROUP_THRESHOLD
-
-        ban_keywords = await BanManager.find_ban_keywords(context=context, group_id=group_id)
-
-        candidate_answers: dict[str, Answer] = {}
-        other_group_cache = {}
-        answers_count = defaultdict(int)
-        recent_replies = [r["reply_keywords"] for r in Chat._reply_dict[group_id][bot_id][-Chat.DUPLICATE_REPLY :]]
-        recent_message = [m.raw_message for m in MessageStore._message_dict[group_id][-Chat.DUPLICATE_REPLY :]]
-
-        def candidate_append(dst: dict[str, Answer], answer: Answer):
-            answer_key = answer.keywords
-            if "[CQ:" not in answer_key:
-                topics = Chat._recent_topics[group_id]
-                for key in answer_key.split(" "):
-                    if key in topics:
-                        answer._topical += topics.count(key)
-
-            if answer_key not in dst:
-                dst[answer_key] = answer
-            else:
-                pre_answer = dst[answer_key]
-                pre_answer.count += answer.count
-                pre_answer.messages += answer.messages
-
-        for answer in context.answers:
-            count = answer.count
-            if not is_drunk and count < answer_count_threshold:
-                continue
-
-            answer_key = answer.keywords
-            if answer_key in ban_keywords or answer_key in recent_replies or answer_key == keywords:
-                continue
-
-            sample_msg = answer.messages[0]
-            if self.chat_data.is_image and "[CQ:" not in sample_msg:
-                # 图片消息不回复纯文本。图片经常是表情包，后面的纯文本啥都有，很乱
-                continue
-            if sample_msg.startswith("牛牛"):
-                if not self.chat_data.to_me or len(sample_msg) <= 6:
-                    # 这种一般是学反过来的，比如有人教“牛牛你好”——“你好”（反复发了好几次，互为上下文了）
-                    # 然后下次有人发“你好”，突然回个“牛牛你好”，有点莫名其妙的
-                    continue
-            if sample_msg.startswith("[CQ:xml"):
-                continue
-            if "\n" in sample_msg:
-                continue
-            if count < 3 and sample_msg in recent_message:  # 别人刚发的就重复，显得很笨
-                continue
-
-            if answer.group_id == group_id:
-                candidate_append(candidate_answers, answer)
-            # 别的群的 at, 忽略
-            elif "[CQ:at,qq=" in sample_msg:
-                continue
-            elif is_drunk and count > answer_count_threshold:
-                candidate_append(candidate_answers, answer)
-            else:  # 有这么 N 个群都有相同的回复，就作为全局回复
-                answers_count[answer_key] += 1
-                cur_count = answers_count[answer_key]
-                if cur_count < cross_group_threshold:  # 没达到阈值前，先缓存
-                    candidate_append(other_group_cache, answer)
-                elif cur_count == cross_group_threshold:  # 刚达到阈值时，将缓存加入
-                    if cur_count > 1:
-                        candidate_append(candidate_answers, other_group_cache[answer_key])
-                    candidate_append(candidate_answers, answer)
-                else:  # 超过阈值后，加入
-                    candidate_append(candidate_answers, answer)
-
-        if not candidate_answers:
-            return None
-
-        weights = [
-            min(answer.count, 10) + answer._topical * Chat.TOPICS_IMPORTANCE for answer in candidate_answers.values()
-        ]
-        final_answer = random.choices(list(candidate_answers.values()), weights=weights)[0]
-        answer_str = random.choice(final_answer.messages)
-        answer_keywords = final_answer.keywords
-        answer_str = answer_str.removeprefix("牛牛")
-
-        if 0 < answer_str.count("，") <= 3 and "[CQ:" not in answer_str and random.random() < Chat.SPLIT_PROBABILITY:
-            return (answer_str.split("，"), answer_keywords)
-        return (
-            [
-                answer_str,
-            ],
-            answer_keywords,
-        )
 
     @staticmethod
     async def update_global_blacklist() -> None:
