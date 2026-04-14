@@ -427,8 +427,8 @@ class Chat:
         if not ban_reply:
             return False
 
-        pre_keywords = reply["pre_keywords"]
-        keywords = reply["reply_keywords"]
+        pre_keywords = ban_reply["pre_keywords"]
+        keywords = ban_reply["reply_keywords"]
 
         context_to_ban = await Context.find_one(Context.keywords == pre_keywords)
         if context_to_ban:

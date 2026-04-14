@@ -72,3 +72,15 @@ async def beanie_fixture():
     await motor_db.drop_collection("blacklist")
     await motor_db.drop_collection("image_cache")
     motor_client.close()
+
+
+def pytest_configure(config):  # noqa: ARG001
+    """Initialize NoneBot before running tests."""
+    import nonebot
+
+    # Check if NoneBot is already initialized
+    try:
+        nonebot.get_driver()
+    except ValueError:
+        # Not initialized, so initialize it
+        nonebot.init()
