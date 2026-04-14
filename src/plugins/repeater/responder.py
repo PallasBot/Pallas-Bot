@@ -25,6 +25,8 @@ _context_repo = MongoContextRepository()
 
 
 class Responder:
+    """回复决策模块，负责根据上下文检索候选回答并选择最终回复"""
+
     ANSWER_THRESHOLD = plugin_config.answer_threshold
     ANSWER_THRESHOLD_WEIGHTS = plugin_config.answer_threshold_weights
     TOPICS_SIZE = plugin_config.topics_size

@@ -17,8 +17,7 @@ _context_repo = MongoContextRepository()
 
 class Learner:
     """
-    Learning logic extracted from Chat class.
-    Handles context insertion and message learning patterns.
+    从 Chat 类提取的学习逻辑，负责上下文插入和消息学习
     """
 
     @staticmethod
@@ -29,14 +28,6 @@ class Learner:
     ) -> bool:
         """
         学习这句话
-
-        Args:
-            chat_data: The chat data to learn from
-            topics_lock: Lock for topics synchronization
-            recent_topics: Recent topics dict by group_id
-
-        Returns:
-            bool: True if learned, False if skipped
         """
 
         if len(chat_data.raw_message.strip()) == 0:
@@ -71,11 +62,7 @@ class Learner:
     @staticmethod
     async def _context_insert(chat_data: "ChatData", pre_msg: MessageModel | None):
         """
-        Insert a context relationship between a previous message and current message.
-
-        Args:
-            chat_data: The current chat data
-            pre_msg: The previous message to learn from
+        插入上下文关联：将前一条消息与当前消息建立学习关系
         """
         if not pre_msg:
             return

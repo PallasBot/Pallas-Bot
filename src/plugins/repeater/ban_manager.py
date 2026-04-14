@@ -17,15 +17,15 @@ _blacklist_repo = MongoBlackListRepository()
 
 
 class BanManager:
-    """Manages ban/blacklist functionality for the repeater plugin."""
+    """复读插件的禁言/黑名单管理"""
 
     # Constants
     BLACKLIST_FLAG = 114514
     CROSS_GROUP_THRESHOLD = plugin_config.cross_group_threshold
 
     # Class variables
-    _blacklist_answer = defaultdict(set)  # per-group banned keywords
-    _blacklist_answer_reserve = defaultdict(set)  # reserve blacklist (second offense triggers real ban)
+    _blacklist_answer = defaultdict(set)  # 每个群的封禁关键词
+    _blacklist_answer_reserve = defaultdict(set)  # 候选黑名单（再次触发才正式封禁）
 
     @staticmethod
     async def ban(group_id: int, bot_id: int, ban_raw_message: str, reason: str, reply_dict: dict) -> bool:

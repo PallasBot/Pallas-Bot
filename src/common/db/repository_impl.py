@@ -1,4 +1,4 @@
-"""MongoDB implementations of Repository Protocol interfaces."""
+"""MongoDB 版 Repository 协议接口实现"""
 
 from beanie.operators import Or
 
@@ -6,7 +6,7 @@ from src.common.db.modules import BlackList, Context, Message
 
 
 class MongoContextRepository:
-    """MongoDB implementation of ContextRepository using beanie ODM."""
+    """MongoDB 版 ContextRepository 实现"""
 
     async def find_by_keywords(self, keywords: str) -> Context | None:
         return await Context.find_one(Context.keywords == keywords)
@@ -33,14 +33,14 @@ class MongoContextRepository:
 
 
 class MongoMessageRepository:
-    """MongoDB implementation of MessageRepository using beanie ODM."""
+    """MongoDB 版 MessageRepository 实现"""
 
     async def bulk_insert(self, messages: list[Message]) -> None:
         await Message.insert_many(messages)
 
 
 class MongoBlackListRepository:
-    """MongoDB implementation of BlackListRepository using beanie ODM."""
+    """MongoDB 版 BlackListRepository 实现"""
 
     async def find_all(self) -> list[BlackList]:
         return await BlackList.find_all().to_list()

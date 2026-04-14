@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 
 class Speaker:
+    """主动发言模块，根据群聊活跃度自动触发发言"""
+
     SPEAK_THRESHOLD = Chat.SPEAK_THRESHOLD
     SPEAK_FLAG = Chat.SPEAK_FLAG
     SPEAK_CONTINUOUSLY_PROBABILITY = Chat.SPEAK_CONTINUOUSLY_PROBABILITY
@@ -40,6 +42,9 @@ class Speaker:
         recent_topics,
         topics_lock: asyncio.Lock,
     ) -> tuple[int, int, list[Message], int | None] | None:
+        """
+        根据群聊活跃度判断是否主动发言，返回 (bot_id, group_id, 消息列表, 戳一戳目标) 或 None
+        """
         basic_msgs_len = 10
         basic_delay = 600
 

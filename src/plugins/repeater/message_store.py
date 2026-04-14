@@ -24,8 +24,7 @@ _message_repo = MongoMessageRepository()
 
 class MessageStore:
     """
-    Message storage and persistence layer for Chat plugin.
-    Handles message caching, synchronization to database, and retrieval.
+    消息存储与持久化层，负责消息缓存、数据库同步和检索
     """
 
     # Constants
@@ -43,11 +42,7 @@ class MessageStore:
         chat_data: "ChatData", topics_callback: Callable[[int, list[str]], Awaitable[None]] | None = None
     ):
         """
-        Insert a message into the message cache and optionally trigger persistence.
-
-        Args:
-            chat_data: The chat data to insert
-            topics_callback: Optional callback to update topics, called with (group_id, keywords_list)
+        将消息插入缓存，达到阈值时触发持久化
         """
         group_id = chat_data.group_id
 
@@ -65,7 +60,7 @@ class MessageStore:
                 )
             )
 
-        # Call topics callback if provided and message is plain text
+        # 纯文本消息时调用 topics 回调
         if chat_data.is_plain_text and topics_callback:
             await topics_callback(group_id, chat_data._keywords_list)
 
@@ -86,7 +81,7 @@ class MessageStore:
         持久化
         """
 
-        # Step 1: Collect save_list without clearing _message_dict yet
+        # 步骤 1: 收集待保存列表，暂不清空 _message_dict
         async with MessageStore._message_lock:
             save_list = [
                 msg
@@ -97,15 +92,15 @@ class MessageStore:
             if not save_list:
                 return
 
-        # Step 2: Call insert_many OUTSIDE the lock
+        # 步骤 2: 在锁外执行 insert_many
         try:
             await _message_repo.bulk_insert(save_list)
         except Exception as e:
-            # Step 4: If insert_many fails, log error and preserve data
+            # 插入失败时记录错误并保留数据，避免丢失
             logger.error(f"Failed to insert messages in _sync: {e}")
             return
 
-        # Step 3: Only truncate and update _late_save_time if insert_many succeeded
+        # 步骤 3: 插入成功后才截断并更新 _late_save_time
         async with MessageStore._message_lock:
             new_dict = {
                 group_id: group_msgs[-MessageStore.SAVE_RESERVED_SIZE :]
