@@ -81,8 +81,10 @@ def save_json(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-pending_friend: dict[str, str] = load_json(FRIEND_REQ_FILE)
-pending_group: dict[str, dict] = load_json(GROUP_REQ_FILE)
+# {bot_id: {user_id: flag}}
+pending_friend: dict[str, dict[str, str]] = load_json(FRIEND_REQ_FILE)
+# {bot_id: {group_id: {...}}}
+pending_group: dict[str, dict[str, dict]] = load_json(GROUP_REQ_FILE)
 
 
 async def get_nickname(bot: Bot, user_id: int) -> str:
@@ -141,24 +143,25 @@ async def notify_admins(bot: Bot, msg: str) -> None:
 
 @request_cmd.handle()
 async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
-    pending_friend[str(event.user_id)] = event.flag
+    bot_id = int(bot.self_id)
+    bot_key = str(bot_id)
+    pending_friend.setdefault(bot_key, {})[str(event.user_id)] = event.flag
     save_json(FRIEND_REQ_FILE, pending_friend)
 
-    bot_id = int(bot.self_id)
     if not await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
         nickname = await get_nickname(bot, event.user_id)
         msg = (
             f"[好友申请]\n"
             f"申请人：{nickname}（{event.user_id}）\n"
             f"验证消息：{event.comment or '（无）'}\n"
-            f"同意：同意好友 {event.user_id}"
+            f"同意：同意好友 {event.user_id}\n"
             f"发送同意所有好友可以批量同意"
         )
         await notify_admins(bot, msg)
 
     if await BotConfig(bot_id).auto_accept():
         await event.approve(bot)
-        pending_friend.pop(str(event.user_id), None)
+        pending_friend.get(bot_key, {}).pop(str(event.user_id), None)
         save_json(FRIEND_REQ_FILE, pending_friend)
 
 
@@ -170,12 +173,15 @@ async def handle_approve_friend(bot: Bot, event: MessageEvent, args: Message = C
     if not arg.isdigit():
         await approve_friend_cmd.finish("请输入正确的QQ号，例如：同意好友 123456")
 
-    flag = pending_friend.get(arg)
+    bot_key = str(bot.self_id)
+    bot_pending = pending_friend.get(bot_key, {})
+    flag = bot_pending.get(arg)
+    nickname = await get_nickname(bot, event.user_id)
     if not flag:
-        await approve_friend_cmd.finish(f"未找到来自 {arg} 的待处理好友申请")
+        await approve_friend_cmd.finish(f"未找到来自 {nickname}（{arg}）的待处理好友申请")
 
     await bot.set_friend_add_request(flag=flag, approve=True)
-    pending_friend.pop(arg, None)
+    bot_pending.pop(arg, None)
     save_json(FRIEND_REQ_FILE, pending_friend)
     nickname = await get_nickname(bot, int(arg))
     await approve_friend_cmd.finish(f"已同意 {nickname}（{arg}）的好友申请")
@@ -188,8 +194,10 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
             await event.reject(bot)
             return
 
-        key = str(event.group_id)
-        pending_group[key] = {
+        bot_id = int(bot.self_id)
+        bot_key = str(bot_id)
+        group_key = str(event.group_id)
+        pending_group.setdefault(bot_key, {})[group_key] = {
             "flag": event.flag,
             "sub_type": "invite",
             "user_id": event.user_id,
@@ -198,7 +206,6 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
         }
         save_json(GROUP_REQ_FILE, pending_group)
 
-        bot_id = int(bot.self_id)
         if not await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
             nickname = await get_nickname(bot, event.user_id)
             group_name = await get_group_name(bot, event.group_id)
@@ -207,15 +214,15 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
                 f"邀请人：{nickname}（{event.user_id}）\n"
                 f"群：{group_name}（{event.group_id}）\n"
                 f"同意：同意入群 {event.group_id}\n"
-                f"拒绝：拒绝入群 {event.group_id}"
-                f"发送“同意所有入群”可以批量同意"
+                f"拒绝：拒绝入群 {event.group_id}\n"
+                f"发送同意所有入群可以批量同意"
             )
             await notify_admins(bot, msg)
 
         bot_config = BotConfig(bot_id)
         if await bot_config.auto_accept() or await bot_config.is_admin_of_bot(event.user_id):
             await event.approve(bot)
-            pending_group.pop(key, None)
+            pending_group.get(bot_key, {}).pop(group_key, None)
             save_json(GROUP_REQ_FILE, pending_group)
 
 
@@ -223,13 +230,15 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
 async def handle_approve_all_friends(bot: Bot, event: MessageEvent):
     if not await PERM(bot, event):
         return
-    if not pending_friend:
+    bot_key = str(bot.self_id)
+    bot_pending = pending_friend.get(bot_key, {})
+    if not bot_pending:
         await approve_all_friends_cmd.finish("当前没有待处理的好友申请")
     ok, fail = 0, 0
-    for uid, flag in list(pending_friend.items()):
+    for uid, flag in list(bot_pending.items()):
         try:
             await bot.set_friend_add_request(flag=flag, approve=True)
-            pending_friend.pop(uid, None)
+            bot_pending.pop(uid, None)
             ok += 1
         except Exception:
             fail += 1
@@ -241,13 +250,15 @@ async def handle_approve_all_friends(bot: Bot, event: MessageEvent):
 async def handle_approve_all_groups(bot: Bot, event: MessageEvent):
     if not await PERM(bot, event):
         return
-    if not pending_group:
+    bot_key = str(bot.self_id)
+    bot_pending = pending_group.get(bot_key, {})
+    if not bot_pending:
         await approve_all_groups_cmd.finish("当前没有待处理的入群邀请")
     ok, fail = 0, 0
-    for key, req in list(pending_group.items()):
+    for key, req in list(bot_pending.items()):
         try:
             await bot.set_group_add_request(flag=req["flag"], sub_type="invite", approve=True)
-            pending_group.pop(key, None)
+            bot_pending.pop(key, None)
             ok += 1
         except Exception:
             fail += 1
@@ -263,19 +274,22 @@ async def handle_approve_group(bot: Bot, event: MessageEvent, args: Message = Co
     if not arg.isdigit():
         await approve_group_cmd.finish("格式：同意入群 <群号>")
 
+    bot_key = str(bot.self_id)
     group_id = int(arg)
-    req = pending_group.get(str(group_id))
+    group_key = str(group_id)
+    bot_pending = pending_group.get(bot_key, {})
+    req = bot_pending.get(group_key)
     if not req:
         await approve_group_cmd.finish(f"未找到群 {group_id} 的待处理入群邀请")
 
     try:
         await bot.set_group_add_request(flag=req["flag"], sub_type="invite", approve=True)
     except Exception as e:
-        pending_group.pop(str(group_id), None)
+        bot_pending.pop(group_key, None)
         save_json(GROUP_REQ_FILE, pending_group)
         await approve_group_cmd.finish(f"操作失败（请求可能已过期或被处理）：{e}")
         return
-    pending_group.pop(str(group_id), None)
+    bot_pending.pop(group_key, None)
     save_json(GROUP_REQ_FILE, pending_group)
     nickname = await get_nickname(bot, req["user_id"])
     group_name = await get_group_name(bot, group_id)
@@ -290,19 +304,22 @@ async def handle_reject_group(bot: Bot, event: MessageEvent, args: Message = Com
     if not arg.isdigit():
         await reject_group_cmd.finish("格式：拒绝入群 <群号>")
 
+    bot_key = str(bot.self_id)
     group_id = int(arg)
-    req = pending_group.get(str(group_id))
+    group_key = str(group_id)
+    bot_pending = pending_group.get(bot_key, {})
+    req = bot_pending.get(group_key)
     if not req:
         await reject_group_cmd.finish(f"未找到群 {group_id} 的待处理入群邀请")
 
     try:
         await bot.set_group_add_request(flag=req["flag"], sub_type="invite", approve=False)
     except Exception as e:
-        pending_group.pop(str(group_id), None)
+        bot_pending.pop(group_key, None)
         save_json(GROUP_REQ_FILE, pending_group)
         await reject_group_cmd.finish(f"操作失败（请求可能已过期或被处理）：{e}")
         return
-    pending_group.pop(str(group_id), None)
+    bot_pending.pop(group_key, None)
     save_json(GROUP_REQ_FILE, pending_group)
     nickname = await get_nickname(bot, req["user_id"])
     group_name = await get_group_name(bot, group_id)
