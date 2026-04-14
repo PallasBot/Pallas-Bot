@@ -20,7 +20,7 @@ async def test_ban_correct_keywords():
     This tests the fix for the bug where lines 430-431 used `reply` instead of `ban_reply`.
     """
     # Lazy import to avoid NoneBot initialization in module level
-    from src.plugins.repeater.model import Chat, Context
+    from src.plugins.repeater.model import Chat
 
     # Setup: Insert multiple replies with different keywords
     group_id = 12345
@@ -54,16 +54,15 @@ async def test_ban_correct_keywords():
     ban_raw_message = "hi there 2"
     expected_keywords = "hi_there_2"
 
-    # Mock Context.find_one to return a mock context
     mock_context = MagicMock()
     mock_context.ban = []
     mock_context.save = AsyncMock()  # Make save async
 
     try:
-        # Use create=True to allow patching non-existent attributes
-        with (
-            patch.object(Context, "find_one", new_callable=AsyncMock, return_value=mock_context),
-            patch.object(Context, "keywords", create=True),
+        with patch(
+            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            new_callable=AsyncMock,
+            return_value=mock_context,
         ):
             result = await Chat.ban(group_id, bot_id, ban_raw_message, "test reason")
 
@@ -88,7 +87,7 @@ async def test_ban_latest():
     """
     Verify that ban() bans the LATEST reply when ban_raw_message is empty.
     """
-    from src.plugins.repeater.model import Chat, Context
+    from src.plugins.repeater.model import Chat
 
     # Setup: Insert multiple replies
     group_id = 22222
@@ -121,15 +120,15 @@ async def test_ban_latest():
     # Ban with empty message - should ban the latest reply
     ban_raw_message = ""
 
-    # Mock Context.find_one
     mock_context = MagicMock()
     mock_context.ban = []
     mock_context.save = AsyncMock()  # Make save async
 
     try:
-        with (
-            patch.object(Context, "find_one", new_callable=AsyncMock, return_value=mock_context),
-            patch.object(Context, "keywords", create=True),
+        with patch(
+            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            new_callable=AsyncMock,
+            return_value=mock_context,
         ):
             result = await Chat.ban(group_id, bot_id, ban_raw_message, "test reason")
 

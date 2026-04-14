@@ -1,6 +1,7 @@
 import asyncio
 from collections import defaultdict, deque
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -43,8 +44,16 @@ async def test_context_find_repeat_detection():
     recent_topics = defaultdict(lambda: deque(maxlen=16))
 
     try:
-        with patch("src.plugins.repeater.responder.Context.find_one", new_callable=AsyncMock) as mock_find_one:
-            result = await Responder._context_find(chat_data, config, reply_dict, message_dict, recent_topics)
+        with patch(
+            "src.plugins.repeater.responder._context_repo.find_by_keywords", new_callable=AsyncMock
+        ) as mock_find_one:
+            result = await Responder._context_find(
+                cast("Any", chat_data),
+                cast("Any", config),
+                reply_dict,
+                message_dict,
+                recent_topics,
+            )
             assert result == ([raw_message], keywords)
             mock_find_one.assert_not_called()
     finally:
@@ -74,8 +83,16 @@ async def test_context_find_returns_none_no_context():
     recent_topics = defaultdict(lambda: deque(maxlen=16))
 
     try:
-        with patch("src.plugins.repeater.responder.Context.find_one", new_callable=AsyncMock, return_value=None):
-            result = await Responder._context_find(chat_data, config, reply_dict, message_dict, recent_topics)
+        with patch(
+            "src.plugins.repeater.responder._context_repo.find_by_keywords", new_callable=AsyncMock, return_value=None
+        ):
+            result = await Responder._context_find(
+                cast("Any", chat_data),
+                cast("Any", config),
+                reply_dict,
+                message_dict,
+                recent_topics,
+            )
             assert result is None
     finally:
         reply_dict.clear()
@@ -111,7 +128,11 @@ async def test_context_find_threshold_filtering():
 
     try:
         with (
-            patch("src.plugins.repeater.responder.Context.find_one", new_callable=AsyncMock, return_value=context),
+            patch(
+                "src.plugins.repeater.responder._context_repo.find_by_keywords",
+                new_callable=AsyncMock,
+                return_value=context,
+            ),
             patch(
                 "src.plugins.repeater.responder.BanManager.find_ban_keywords",
                 new_callable=AsyncMock,
@@ -121,7 +142,13 @@ async def test_context_find_threshold_filtering():
             patch("src.plugins.repeater.responder.random.choice", return_value="high_msg"),
             patch("src.plugins.repeater.responder.random.random", return_value=1.0),
         ):
-            result = await Responder._context_find(chat_data, config, reply_dict, message_dict, recent_topics)
+            result = await Responder._context_find(
+                cast("Any", chat_data),
+                cast("Any", config),
+                reply_dict,
+                message_dict,
+                recent_topics,
+            )
             assert result == (["high_msg"], "ans_high")
     finally:
         reply_dict.clear()

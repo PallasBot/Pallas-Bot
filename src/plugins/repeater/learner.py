@@ -4,11 +4,15 @@ from typing import TYPE_CHECKING
 
 from src.common.db import Answer, Context
 from src.common.db import Message as MessageModel
+from src.common.db.repository_impl import MongoContextRepository
 
 from .message_store import MessageStore
 
 if TYPE_CHECKING:
     from .model import ChatData
+
+
+_context_repo = MongoContextRepository()
 
 
 class Learner:
@@ -91,7 +95,7 @@ class Learner:
         pre_keywords = pre_msg.keywords
         cur_time = chat_data.time
 
-        context = await Context.find_one(Context.keywords == pre_keywords)
+        context = await _context_repo.find_by_keywords(pre_keywords)
         if context:
             answer_index = next(
                 (
@@ -112,7 +116,7 @@ class Learner:
                 )
             context.time = cur_time
             context.trigger_count += 1
-            await context.save()
+            await _context_repo.save(context)
 
         else:
             context = Context(
@@ -121,4 +125,4 @@ class Learner:
                 trigger_count=1,  # type: ignore
                 answers=[Answer(keywords=keywords, group_id=group_id, count=1, time=cur_time, messages=[raw_message])],
             )
-            await context.insert()
+            await _context_repo.insert(context)

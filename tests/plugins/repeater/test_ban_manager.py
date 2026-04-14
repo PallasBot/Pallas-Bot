@@ -15,7 +15,6 @@ async def test_ban_with_reply_dict():
     Verify that ban is applied when matching reply is found.
     """
     from src.plugins.repeater.ban_manager import BanManager
-    from src.plugins.repeater.model import Context
 
     # Setup reply_dict
     group_id = 10001
@@ -31,7 +30,6 @@ async def test_ban_with_reply_dict():
         }
     ]
 
-    # Mock Context.find_one
     mock_context = MagicMock()
     mock_context.ban = []
     mock_context.save = AsyncMock()
@@ -41,9 +39,10 @@ async def test_ban_with_reply_dict():
     BanManager._blacklist_answer_reserve.clear()
 
     try:
-        with (
-            patch.object(Context, "find_one", new_callable=AsyncMock, return_value=mock_context),
-            patch.object(Context, "keywords", create=True),
+        with patch(
+            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            new_callable=AsyncMock,
+            return_value=mock_context,
         ):
             result = await BanManager.ban(group_id, bot_id, "test output", "test reason", reply_dict)
 
@@ -71,7 +70,6 @@ async def test_find_ban_keywords_aggregation():
     Verify that it correctly combines blacklist from multiple sources.
     """
     from src.plugins.repeater.ban_manager import BanManager
-    from src.plugins.repeater.model import Context
     from src.common.db import Ban
 
     group_id = 10002
@@ -183,7 +181,6 @@ async def test_ban_second_offense():
     Test that second ban offense moves keyword from reserve to active blacklist.
     """
     from src.plugins.repeater.ban_manager import BanManager
-    from src.plugins.repeater.model import Context
 
     group_id = 10004
     bot_id = 20004
@@ -208,9 +205,10 @@ async def test_ban_second_offense():
         mock_context.ban = []
         mock_context.save = AsyncMock()
 
-        with (
-            patch.object(Context, "find_one", new_callable=AsyncMock, return_value=mock_context),
-            patch.object(Context, "keywords", create=True),
+        with patch(
+            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            new_callable=AsyncMock,
+            return_value=mock_context,
         ):
             await BanManager.ban(group_id, bot_id, "bad_reply", "first offense", reply_dict)
 
@@ -230,9 +228,10 @@ async def test_ban_second_offense():
         mock_context2.ban = []
         mock_context2.save = AsyncMock()
 
-        with (
-            patch.object(Context, "find_one", new_callable=AsyncMock, return_value=mock_context2),
-            patch.object(Context, "keywords", create=True),
+        with patch(
+            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            new_callable=AsyncMock,
+            return_value=mock_context2,
         ):
             await BanManager.ban(group_id, bot_id, "bad_reply_again", "second offense", reply_dict)
 
@@ -251,7 +250,6 @@ async def test_select_blacklist():
     Test BanManager._select_blacklist() loads data from database.
     """
     from src.plugins.repeater.ban_manager import BanManager
-    from src.common.db.modules import BlackList
 
     # Clean state
     BanManager._blacklist_answer.clear()
@@ -264,10 +262,11 @@ async def test_select_blacklist():
             MagicMock(group_id=10002, answers=["ban3"], answers_reserve=["reserve2", "reserve3"]),
         ]
 
-        mock_query = MagicMock()
-        mock_query.to_list = AsyncMock(return_value=mock_blacklist_items)
-
-        with patch.object(BlackList, "find_all", return_value=mock_query):
+        with patch(
+            "src.plugins.repeater.ban_manager._blacklist_repo.find_all",
+            new_callable=AsyncMock,
+            return_value=mock_blacklist_items,
+        ):
             await BanManager._select_blacklist()
 
         # Verify data was loaded

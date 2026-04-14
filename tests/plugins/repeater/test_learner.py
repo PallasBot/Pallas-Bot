@@ -57,18 +57,16 @@ async def test_learn_basic_flow(beanie_fixture):
             bot_id=bot_id,
         )
 
-        from src.common.db import Context
+        with (
+            patch(
+                "src.plugins.repeater.learner._context_repo.find_by_keywords", new_callable=AsyncMock, return_value=None
+            ),
+            patch("src.plugins.repeater.learner._context_repo.insert", new_callable=AsyncMock) as mock_insert,
+        ):
+            result = await Learner.learn(chat_data, topics_lock, recent_topics)
 
-        mock_context_instance = MagicMock()
-        mock_context_instance.insert = AsyncMock()
-
-        with patch.object(Context, "find_one", new_callable=AsyncMock, return_value=None):
-            with patch.object(Context, "__init__", return_value=None):
-                with patch.object(Context, "insert", new=AsyncMock()) as mock_insert:
-                    result = await Learner.learn(chat_data, topics_lock, recent_topics)
-
-                    assert result is True
-                    assert mock_insert.call_count == 1
+            assert result is True
+            assert mock_insert.call_count == 1
 
     finally:
         # Cleanup
@@ -142,11 +140,10 @@ async def test_context_insert_skip_repeat(beanie_fixture):
         time=1000,
     )
 
-    with patch("src.plugins.repeater.learner.Context.find_one") as mock_find:
+    with patch("src.plugins.repeater.learner._context_repo.find_by_keywords") as mock_find:
         # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
 
-        # Verify Context.find_one was NOT called (repeat filter)
         assert mock_find.call_count == 0, "Should skip repeats without querying Context"
 
 
@@ -180,11 +177,10 @@ async def test_context_insert_skip_reply(beanie_fixture):
         time=1000,
     )
 
-    with patch("src.plugins.repeater.learner.Context.find_one") as mock_find:
+    with patch("src.plugins.repeater.learner._context_repo.find_by_keywords") as mock_find:
         # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
 
-        # Verify Context.find_one was NOT called (reply filter)
         assert mock_find.call_count == 0, "Should skip replies without querying Context"
 
 
@@ -205,11 +201,10 @@ async def test_context_insert_skip_none(beanie_fixture):
         bot_id=11111,
     )
 
-    with patch("src.plugins.repeater.learner.Context.find_one") as mock_find:
+    with patch("src.plugins.repeater.learner._context_repo.find_by_keywords") as mock_find:
         # Call context_insert with None
         await Learner._context_insert(chat_data, None)
 
-        # Verify Context.find_one was NOT called
         assert mock_find.call_count == 0, "Should skip None pre_msg without querying Context"
 
 
@@ -257,11 +252,14 @@ async def test_context_insert_increment_count(beanie_fixture):
     mock_context.answers = [existing_answer]
     mock_context.time = 1500
     mock_context.trigger_count = 10
-    mock_context.save = AsyncMock()
-
-    with patch("src.plugins.repeater.learner.Context.find_one") as mock_find:
-        mock_find.return_value = AsyncMock(return_value=mock_context)()
-
+    with (
+        patch(
+            "src.plugins.repeater.learner._context_repo.find_by_keywords",
+            new_callable=AsyncMock,
+            return_value=mock_context,
+        ),
+        patch("src.plugins.repeater.learner._context_repo.save", new_callable=AsyncMock) as mock_save,
+    ):
         # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
 
@@ -270,7 +268,7 @@ async def test_context_insert_increment_count(beanie_fixture):
         assert existing_answer.time == 2000, "Time should be updated"
 
         # Verify context was saved
-        assert mock_context.save.called, "Context should be saved"
+        assert mock_save.called, "Context should be saved"
         assert mock_context.trigger_count == 11, "Trigger count should be incremented"
 
 
@@ -318,11 +316,14 @@ async def test_context_insert_new_answer(beanie_fixture):
     mock_context.answers = [existing_answer]
     mock_context.time = 1500
     mock_context.trigger_count = 10
-    mock_context.save = AsyncMock()
-
-    with patch("src.plugins.repeater.learner.Context.find_one") as mock_find:
-        mock_find.return_value = AsyncMock(return_value=mock_context)()
-
+    with (
+        patch(
+            "src.plugins.repeater.learner._context_repo.find_by_keywords",
+            new_callable=AsyncMock,
+            return_value=mock_context,
+        ),
+        patch("src.plugins.repeater.learner._context_repo.save", new_callable=AsyncMock) as mock_save,
+    ):
         # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
 
@@ -334,7 +335,7 @@ async def test_context_insert_new_answer(beanie_fixture):
         assert new_answer.count == 1
 
         # Verify context was saved
-        assert mock_context.save.called, "Context should be saved"
+        assert mock_save.called, "Context should be saved"
 
 
 @pytest.mark.asyncio
@@ -419,15 +420,16 @@ async def test_learn_user_backtracking(beanie_fixture):
             bot_id=bot_id,
         )
 
-        from src.common.db import Context
+        with (
+            patch(
+                "src.plugins.repeater.learner._context_repo.find_by_keywords", new_callable=AsyncMock, return_value=None
+            ),
+            patch("src.plugins.repeater.learner._context_repo.insert", new_callable=AsyncMock) as mock_insert,
+        ):
+            result = await Learner.learn(chat_data, topics_lock, recent_topics)
 
-        with patch.object(Context, "find_one", new_callable=AsyncMock, return_value=None):
-            with patch.object(Context, "__init__", return_value=None):
-                with patch.object(Context, "insert", new=AsyncMock()) as mock_insert:
-                    result = await Learner.learn(chat_data, topics_lock, recent_topics)
-
-                    assert result is True
-                    assert mock_insert.call_count == 2, "Should create context for both group prev and user prev"
+            assert result is True
+            assert mock_insert.call_count == 2, "Should create context for both group prev and user prev"
 
     finally:
         MessageStore._message_dict.clear()
