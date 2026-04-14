@@ -14,8 +14,10 @@ __plugin_meta__ = PluginMetadata(
     name="申请管理",
     description="处理好友申请与入群邀请，通知管理员并支持手动审批",
     usage="""
+查看好友申请 - 查看所有待处理的好友申请
 同意好友 <QQ号> - 同意待处理的好友申请
 同意所有好友 - 同意所有待处理的好友申请
+查看入群邀请 - 查看所有待处理的入群邀请
 同意入群 <群号> - 同意待处理的入群邀请
 同意所有入群 - 同意所有待处理的入群邀请
 拒绝入群 <群号> - 拒绝待处理的入群邀请
@@ -26,6 +28,13 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": "1.0.0",
         "menu_data": [
+            {
+                "func": "查看待处理申请",
+                "trigger_method": "on_cmd",
+                "trigger_condition": "查看好友申请 / 查看入群邀请",
+                "brief_des": "查看所有待处理的好友申请或入群邀请",
+                "detail_des": "由牛牛管理员执行，列出当前所有待处理的好友申请或入群邀请",
+            },
             {
                 "func": "好友申请审批",
                 "trigger_method": "on_cmd",
@@ -116,8 +125,10 @@ async def get_group_name(bot: Bot, group_id: int) -> str:
 
 request_cmd = on_request(priority=14, block=False)
 
+list_friends_cmd = on_command("查看好友申请", priority=5, block=True)
 approve_friend_cmd = on_command("同意好友", priority=5, block=True)
 approve_all_friends_cmd = on_command("同意所有好友", priority=5, block=True)
+list_groups_cmd = on_command("查看入群邀请", priority=5, block=True)
 approve_group_cmd = on_command("同意入群", priority=5, block=True)
 approve_all_groups_cmd = on_command("同意所有入群", priority=5, block=True)
 reject_group_cmd = on_command("拒绝入群", priority=5, block=True)
@@ -155,7 +166,8 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
             f"申请人：{nickname}（{event.user_id}）\n"
             f"验证消息：{event.comment or '（无）'}\n"
             f"同意：同意好友 {event.user_id}\n"
-            f"发送同意所有好友可以批量同意"
+            f"发送同意所有好友可以批量同意\n"
+            f"发送查看好友申请可以查看所有待处理的好友申请"
         )
         await notify_admins(bot, msg)
 
@@ -163,6 +175,22 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
         await event.approve(bot)
         pending_friend.get(bot_key, {}).pop(str(event.user_id), None)
         save_json(FRIEND_REQ_FILE, pending_friend)
+
+
+@list_friends_cmd.handle()
+async def handle_list_friends(bot: Bot, event: MessageEvent):
+    if not await PERM(bot, event):
+        return
+    bot_key = str(bot.self_id)
+    bot_pending = pending_friend.get(bot_key, {})
+    if not bot_pending:
+        await list_friends_cmd.finish("当前没有待处理的好友申请")
+    lines = [f"待处理好友申请（共 {len(bot_pending)} 条）："]
+    for uid in bot_pending.keys():
+        nickname = await get_nickname(bot, int(uid))
+        lines.append(f"  {nickname}（{uid}）")
+    lines.append("发送 同意好友 <QQ号> 或 同意所有好友 来审批")
+    await list_friends_cmd.finish("\n".join(lines))
 
 
 @approve_friend_cmd.handle()
@@ -176,8 +204,8 @@ async def handle_approve_friend(bot: Bot, event: MessageEvent, args: Message = C
     bot_key = str(bot.self_id)
     bot_pending = pending_friend.get(bot_key, {})
     flag = bot_pending.get(arg)
-    nickname = await get_nickname(bot, event.user_id)
     if not flag:
+        nickname = await get_nickname(bot, int(arg))
         await approve_friend_cmd.finish(f"未找到来自 {nickname}（{arg}）的待处理好友申请")
 
     await bot.set_friend_add_request(flag=flag, approve=True)
@@ -185,6 +213,23 @@ async def handle_approve_friend(bot: Bot, event: MessageEvent, args: Message = C
     save_json(FRIEND_REQ_FILE, pending_friend)
     nickname = await get_nickname(bot, int(arg))
     await approve_friend_cmd.finish(f"已同意 {nickname}（{arg}）的好友申请")
+
+
+@list_groups_cmd.handle()
+async def handle_list_groups(bot: Bot, event: MessageEvent):
+    if not await PERM(bot, event):
+        return
+    bot_key = str(bot.self_id)
+    bot_pending = pending_group.get(bot_key, {})
+    if not bot_pending:
+        await list_groups_cmd.finish("当前没有待处理的入群邀请")
+    lines = [f"待处理入群邀请（共 {len(bot_pending)} 条）："]
+    for group_key, req in bot_pending.items():
+        nickname = await get_nickname(bot, req["user_id"])
+        group_name = await get_group_name(bot, int(group_key))
+        lines.append(f"  {group_name}（{group_key}）← {nickname}（{req['user_id']}）邀请")
+    lines.append("发送 同意入群 <群号> / 拒绝入群 <群号> 或 同意所有入群 来审批")
+    await list_groups_cmd.finish("\n".join(lines))
 
 
 @request_cmd.handle()
@@ -280,7 +325,8 @@ async def handle_approve_group(bot: Bot, event: MessageEvent, args: Message = Co
     bot_pending = pending_group.get(bot_key, {})
     req = bot_pending.get(group_key)
     if not req:
-        await approve_group_cmd.finish(f"未找到群 {group_id} 的待处理入群邀请")
+        group_name = await get_group_name(bot, group_id)
+        await approve_group_cmd.finish(f"未找到群 {group_name}（{group_id}）的待处理入群邀请")
 
     try:
         await bot.set_group_add_request(flag=req["flag"], sub_type="invite", approve=True)
@@ -310,7 +356,8 @@ async def handle_reject_group(bot: Bot, event: MessageEvent, args: Message = Com
     bot_pending = pending_group.get(bot_key, {})
     req = bot_pending.get(group_key)
     if not req:
-        await reject_group_cmd.finish(f"未找到群 {group_id} 的待处理入群邀请")
+        group_name = await get_group_name(bot, group_id)
+        await reject_group_cmd.finish(f"未找到群 {group_name}（{group_id}）的待处理入群邀请")
 
     try:
         await bot.set_group_add_request(flag=req["flag"], sub_type="invite", approve=False)
