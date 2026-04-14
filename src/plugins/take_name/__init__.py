@@ -10,7 +10,7 @@ from nonebot_plugin_apscheduler import scheduler
 
 from src.common.config import BotConfig
 from src.common.utils import is_bot_admin
-from src.plugins.repeater.model import Chat
+from src.plugins.repeater.message_store import MessageStore
 
 __plugin_meta__ = PluginMetadata(
     name="自动夺舍",
@@ -56,7 +56,7 @@ __plugin_meta__ = PluginMetadata(
 
 @scheduler.scheduled_job("cron", minute="*/1")
 async def change_name():
-    rand_messages = await Chat.get_random_message_from_each_group()
+    rand_messages = await MessageStore.get_random_message_from_each_group()
     if not rand_messages:
         return
 
