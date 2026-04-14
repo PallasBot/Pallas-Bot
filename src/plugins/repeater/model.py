@@ -14,11 +14,12 @@ from nonebot import get_plugin_config
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from src.common.config import BotConfig
-from src.common.db import Answer, Context
+from src.common.db import Context
 from src.common.db import Message as MessageModel
 
 from .ban_manager import BanManager
 from .config import Config
+from .learner import Learner
 from .message_store import MessageStore
 from .responder import Responder
 
@@ -151,35 +152,7 @@ class Chat:
         """
         学习这句话
         """
-
-        if len(self.chat_data.raw_message.strip()) == 0:
-            return False
-
-        group_id = self.chat_data.group_id
-        if group_id in MessageStore._message_dict:
-            group_msgs = MessageStore._message_dict[group_id]
-            if group_msgs:
-                group_pre_msg = group_msgs[-1]
-            else:
-                group_pre_msg = None
-
-            # 群里的上一条发言
-            await self._context_insert(group_pre_msg)
-
-            user_id = self.chat_data.user_id
-            if group_pre_msg and group_pre_msg.user_id != user_id:
-                # 该用户在群里的上一条发言（倒序三句之内）
-                for msg in group_msgs[:-3:-1]:
-                    if msg.user_id == user_id:
-                        await self._context_insert(msg)
-                        break
-
-        async def _topics_callback(group_id: int, keywords_list: list[str]):
-            async with Chat._topics_lock:
-                Chat._recent_topics[group_id] += [k for k in keywords_list if not k.startswith("牛牛")]
-
-        await MessageStore.message_insert(self.chat_data, topics_callback=_topics_callback)
-        return True
+        return await Learner.learn(self.chat_data, Chat._topics_lock, Chat._recent_topics)
 
     async def answer(self) -> AsyncGenerator[Message, None] | None:
         return await Responder.answer(
@@ -342,57 +315,6 @@ class Chat:
         """
 
         return await MessageStore.get_random_message_from_each_group()
-
-    async def _context_insert(self, pre_msg: MessageModel | None):
-        if not pre_msg:
-            return
-
-        raw_message = self.chat_data.raw_message
-
-        # 在复读，不学
-        if pre_msg.raw_message == raw_message:
-            return
-
-        # 回复别人的，不学
-        if "[CQ:reply," in raw_message:
-            return
-
-        keywords = self.chat_data.keywords
-        group_id = self.chat_data.group_id
-        pre_keywords = pre_msg.keywords
-        cur_time = self.chat_data.time
-
-        context = await Context.find_one(Context.keywords == pre_keywords)
-        if context:
-            answer_index = next(
-                (
-                    idx
-                    for idx, answer in enumerate(context.answers)
-                    if answer.group_id == group_id and answer.keywords == keywords
-                ),
-                -1,
-            )
-            if answer_index != -1:
-                context.answers[answer_index].count += 1
-                context.answers[answer_index].time = cur_time
-                if self.chat_data.is_plain_text:
-                    context.answers[answer_index].messages.append(raw_message)
-            else:
-                context.answers.append(
-                    Answer(keywords=keywords, group_id=group_id, count=1, time=cur_time, messages=[raw_message])
-                )
-            context.time = cur_time
-            context.trigger_count += 1
-            await context.save()
-
-        else:
-            context = Context(
-                keywords=pre_keywords,
-                time=cur_time,
-                trigger_count=1,  # type: ignore
-                answers=[Answer(keywords=keywords, group_id=group_id, count=1, time=cur_time, messages=[raw_message])],
-            )
-            await context.insert()
 
     @staticmethod
     async def update_global_blacklist() -> None:
