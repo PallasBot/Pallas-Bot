@@ -1,3 +1,4 @@
+import operator
 import random
 import time
 
@@ -201,10 +202,16 @@ def has_sent_reaction(bot_id: str, message_id: int) -> bool:
     return message_id in sent_reactions[bot_id]
 
 
+SENT_REACTIONS_MAX_SIZE = 10000
+
+
 def mark_reaction_sent(bot_id: str, message_id: int):
     if bot_id not in sent_reactions:
         sent_reactions[bot_id] = {}
     sent_reactions[bot_id][message_id] = time.time()
+    if len(sent_reactions[bot_id]) > SENT_REACTIONS_MAX_SIZE:
+        sorted_items = sorted(sent_reactions[bot_id].items(), key=operator.itemgetter(1))
+        sent_reactions[bot_id] = dict(sorted_items[len(sorted_items) // 2 :])
 
 
 async def send_reaction(bot: Bot, event: GroupMessageEvent, emoji_code: str) -> None:
