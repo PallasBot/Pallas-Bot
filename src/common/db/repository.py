@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from src.common.db.modules import BlackList, Context, Message
+if TYPE_CHECKING:
+    from src.common.db.modules import BlackList, Context, Message
 
 
 @runtime_checkable
