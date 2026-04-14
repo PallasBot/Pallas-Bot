@@ -1,0 +1,68 @@
+"""Tests for Repository Protocol interfaces."""
+
+import pytest
+from src.common.db.repository import (
+    ContextRepository,
+    MessageRepository,
+    BlackListRepository,
+)
+
+
+class MockContextRepo:
+    async def find_by_keywords(self, keywords):
+        return None
+
+    async def save(self, context):
+        pass
+
+    async def insert(self, context):
+        pass
+
+    async def delete_expired(self, expiration, threshold):
+        pass
+
+    async def find_for_cleanup(self, trigger_threshold, expiration):
+        return []
+
+
+class MockMessageRepo:
+    async def bulk_insert(self, messages):
+        pass
+
+
+class MockBlackListRepo:
+    async def find_all(self):
+        return []
+
+    async def upsert_answers(self, group_id, answers):
+        pass
+
+    async def upsert_answers_reserve(self, group_id, answers):
+        pass
+
+
+def test_context_repo_protocol():
+    repo = MockContextRepo()
+    assert isinstance(repo, ContextRepository)
+
+
+def test_message_repo_protocol():
+    repo = MockMessageRepo()
+    assert isinstance(repo, MessageRepository)
+
+
+def test_blacklist_repo_protocol():
+    repo = MockBlackListRepo()
+    assert isinstance(repo, BlackListRepository)
+
+
+class IncompleteContextRepo:
+    async def find_by_keywords(self, keywords):
+        return None
+
+    # Missing other methods
+
+
+def test_incomplete_repo_fails_protocol():
+    repo = IncompleteContextRepo()
+    assert not isinstance(repo, ContextRepository)
