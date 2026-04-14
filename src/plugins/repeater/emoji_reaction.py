@@ -207,7 +207,7 @@ def mark_reaction_sent(bot_id: str, message_id: int):
     sent_reactions[bot_id][message_id] = time.time()
 
 
-async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
+async def send_reaction(bot: Bot, event: GroupMessageEvent, emoji_code: str) -> None:
     bot_id = str(bot.self_id)
     message_id = event.message_id
 
@@ -237,6 +237,7 @@ async def reaction_enabled(bot: Bot, event: Event, state: T_State) -> bool:
     return plugin_config.enable_reaction
 
 
+# TODO: 预留的子功能开关工厂函数，待集成使用
 async def subfeature_enabled(flag_name: str):
     async def _enabled_check(bot: Bot, event: Event, state: T_State) -> bool:
         return getattr(plugin_config, flag_name, True)
@@ -302,7 +303,7 @@ async def handle_reaction_with_face(bot: Bot, event: GroupMessageEvent):
 
 
 def _check_reaction_event(event: NoticeEvent) -> bool:
-    if event.notice_type == "reaction" and event.sub_type == "add":
+    if event.notice_type == "reaction" and event.sub_type == "add":  # type: ignore[attr-defined]
         return getattr(event, "operator_id", None) != getattr(event, "self_id", None)
 
     if event.notice_type == "group_msg_emoji_like":
@@ -325,12 +326,12 @@ async def handle_auto_reaction(bot: Bot, event: NoticeEvent, state: T_State):
     if not plugin_config.enable_auto_reply_on_reaction:
         logger.debug(f"[Reaction] Bot {bot_id} auto reply on reaction is disabled")
         return
-    message_id = event.message_id
+    message_id = event.message_id  # type: ignore[attr-defined]
     emoji_code = ""
-    if hasattr(event, "likes") and isinstance(event.likes, list) and len(event.likes) > 0:
-        emoji_code = str(event.likes[0].get("emoji_id", ""))
+    if hasattr(event, "likes") and isinstance(event.likes, list) and len(event.likes) > 0:  # type: ignore[attr-defined]
+        emoji_code = str(event.likes[0].get("emoji_id", ""))  # type: ignore[attr-defined]
     elif hasattr(event, "code"):
-        emoji_code = str(event.code)
+        emoji_code = str(event.code)  # type: ignore[attr-defined]
 
     if not emoji_code:
         logger.debug(f"[Reaction] No valid emoji found in event for message {message_id}")
@@ -338,19 +339,19 @@ async def handle_auto_reaction(bot: Bot, event: NoticeEvent, state: T_State):
     reply_emoji = str(emoji_code) if plugin_config.reply_with_same_emoji else get_random_emoji()
 
     if has_sent_reaction(bot_id, message_id):
-        logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id} in group {event.group_id}")
+        logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id} in group {event.group_id}")  # type: ignore[attr-defined]
         return
 
     try:
         logger.debug(
             f"[Reaction] Bot {bot_id} sending auto reply emoji {reply_emoji} "
-            f"for message {message_id} in group {event.group_id}"
+            f"for message {message_id} in group {event.group_id}"  # type: ignore[attr-defined]
         )
 
         await send_reaction(bot, event, reply_emoji)
         mark_reaction_sent(bot_id, message_id)
     except ActionFailed as e:
-        logger.debug(f"[Reaction] Bot {bot_id} failed to send emoji {reply_emoji} in group {event.group_id}: {str(e)}")
+        logger.debug(f"[Reaction] Bot {bot_id} failed to send emoji {reply_emoji} in group {event.group_id}: {str(e)}")  # type: ignore[attr-defined]
 
 
 @scheduler.scheduled_job("cron", hour=1)

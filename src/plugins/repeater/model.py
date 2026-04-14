@@ -6,6 +6,7 @@ from collections import defaultdict, deque
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 from functools import cached_property, cmp_to_key
+from typing import cast
 
 import pypinyin
 from beanie.operators import Or
@@ -52,11 +53,12 @@ class ChatData:
         return "[CQ:image," in self.raw_message or "[CQ:face," in self.raw_message
 
     @cached_property
-    def _keywords_list(self):
+    def _keywords_list(self) -> list[str]:
         if not self.is_plain_text and len(self.plain_text) == 0:
             return []
 
-        return jieba_analyse.extract_tags(self.plain_text, topK=ChatData._keywords_size)
+        result = jieba_analyse.extract_tags(self.plain_text, topK=ChatData._keywords_size)
+        return cast(list[str], result)  # type: ignore[return-value]
 
     @cached_property
     def keywords_len(self) -> int:
@@ -188,13 +190,6 @@ class Chat:
         if self.chat_data.is_plain_text and len(self.chat_data.plain_text) < 2:
             return None
 
-        # # 不要一直回复同一个内容
-        # if self.chat_data.raw_message == latest_reply['pre_raw_message']:
-        #     return None
-        # 有人复读了牛牛的回复，不继续回复
-        # if self.chat_data.raw_message == latest_reply['reply']:
-        #    return None
-
         results = await self._context_find()
         if not results:
             return None
@@ -236,7 +231,7 @@ class Chat:
                         Chat._recent_topics[group_id] += [
                             k
                             for k in self.chat_data._keywords_list
-                            if not k.startswith("牛牛")  # type: ignore
+                            if not k.startswith("牛牛")
                         ]
                     # if "[CQ:" not in item and len(item) > Chat.DRUNK_TTS_THRESHOLD and \
                     #    await self.config.drunkenness():
@@ -476,7 +471,7 @@ class Chat:
 
         if self.chat_data.is_plain_text:
             async with Chat._topics_lock:
-                Chat._recent_topics[group_id] += [k for k in self.chat_data._keywords_list if not k.startswith("牛牛")]
+                Chat._recent_topics[group_id] += [k for k in self.chat_data._keywords_list if not k.startswith("牛牛")]  # type: ignore[union-attr]
 
         cur_time = self.chat_data.time
         if Chat._late_save_time == 0:
@@ -740,7 +735,7 @@ class Chat:
         for group_id, answers in Chat._blacklist_answer.items():
             if not len(answers):
                 continue
-            await BlackList.find_one(BlackList.group_id == group_id).upsert(
+            await BlackList.find_one(BlackList.group_id == group_id).upsert(  # type: ignore[misc]
                 {"$set": {"answers": list(answers)}}, on_insert=BlackList(group_id=group_id, answers=list(answers))
             )
 
@@ -751,7 +746,7 @@ class Chat:
             if group_id in Chat._blacklist_answer:
                 filtered_answers = answers_set - Chat._blacklist_answer[group_id]
 
-            await BlackList.find_one(BlackList.group_id == group_id).upsert(
+            await BlackList.find_one(BlackList.group_id == group_id).upsert(  # type: ignore[misc]
                 {"$set": {"answers_reserve": list(filtered_answers)}},
                 on_insert=BlackList(group_id=group_id, answers_reserve=list(filtered_answers)),
             )
@@ -802,35 +797,3 @@ class Chat:
         await Chat._sync_blacklist()
 
 
-# if __name__ == "__main__":
-#     Chat.clearup_context()
-#     while True:
-#     test_data: ChatData = ChatData(
-#         group_id=1234567,
-#         user_id=1111111,
-#         raw_message="完了又有新bug",
-#         plain_text="完了又有新bug",
-#         time=time.time(),
-#         bot_id=0,
-#     )
-
-#     test_chat: Chat = Chat(test_data)
-
-#     print(test_chat.answer())
-#     test_chat.learn()
-
-#     test_answer_data: ChatData = ChatData(
-#         group_id=1234567,
-#         user_id=1111111,
-#         raw_message="完了又有新bug",
-#         plain_text="完了又有新bug",
-#         time=time.time(),
-#         bot_id=0,
-#     )
-
-#     test_answer: Chat = Chat(test_answer_data)
-#     print(test_chat.answer())
-#     test_answer.learn()
-
-#     time.sleep(5)
-#     print(Chat.speak())
