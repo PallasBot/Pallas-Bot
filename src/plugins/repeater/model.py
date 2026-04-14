@@ -1,11 +1,10 @@
 import asyncio
-import random
 import re
 import time
 from collections import defaultdict, deque
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from functools import cached_property, cmp_to_key
+from functools import cached_property
 from typing import cast
 
 import pypinyin
@@ -128,7 +127,6 @@ class Chat:
     _topics_lock = asyncio.Lock()
 
     _recent_topics = defaultdict(lambda: deque(maxlen=Chat.TOPICS_SIZE))
-    _recent_speak = defaultdict(lambda: deque(maxlen=Chat.DUPLICATE_REPLY))  # 主动发言记录，避免重复内容
 
     ###
 
@@ -177,130 +175,9 @@ class Chat:
 
     @staticmethod
     async def speak() -> tuple[int, int, list[Message], int | None] | None:
-        """
-        主动发言，返回当前最希望发言的 bot 账号、群号、发言消息 List、戳一戳目标，也有可能不发言
-        """
+        from .speaker import Speaker
 
-        basic_msgs_len = 10
-        basic_delay = 600
-
-        def group_popularity_cmp(lhs: tuple[int, list[MessageModel]], rhs: tuple[int, list[MessageModel]]) -> int:
-            def cmp(a: int | float, b: int | float) -> int:
-                return (a > b) - (a < b)
-
-            lhs_group_id, lhs_msgs = lhs
-            rhs_group_id, rhs_msgs = rhs
-
-            lhs_len = len(lhs_msgs)
-            rhs_len = len(rhs_msgs)
-
-            if lhs_len < basic_msgs_len or rhs_len < basic_msgs_len:
-                return cmp(lhs_len, rhs_len)
-
-            lhs_duration = lhs_msgs[-1].time - lhs_msgs[0].time
-            rhs_duration = rhs_msgs[-1].time - rhs_msgs[0].time
-
-            if not lhs_duration or not rhs_duration:
-                return cmp(lhs_len, rhs_len)
-
-            return cmp(lhs_len / lhs_duration, rhs_len / rhs_duration)
-
-        # 按群聊热度排序
-        popularity = sorted(MessageStore._message_dict.items(), key=cmp_to_key(group_popularity_cmp))
-
-        cur_time = time.time()
-        for group_id, group_msgs in popularity:
-            group_replies = Chat._reply_dict[group_id]
-            if not len(group_replies) or len(group_msgs) < basic_msgs_len:
-                continue
-
-            # 一般来说所有牛牛都是一起回复的，最后发言时间应该是一样的，随意随便选一个[0]就好了
-            group_replies_front = list(group_replies.values())[0]
-            if not len(group_replies_front) or group_replies_front[-1]["time"] > group_msgs[-1].time:
-                continue
-
-            msgs_len = len(group_msgs)
-            latest_time = group_msgs[-1].time
-            duration = latest_time - group_msgs[0].time
-            avg_interval = duration / msgs_len
-
-            # 已经超过平均发言间隔 N 倍的时间没有人说话了，才主动发言
-            if cur_time - latest_time < avg_interval * Chat.SPEAK_THRESHOLD + basic_delay:
-                continue
-
-            # append 一个 flag, 防止这个群热度特别高，但压根就没有可用的 context 时，每次 speak 都查这个群，浪费时间
-            async with Chat._reply_lock:
-                group_replies_front.append({
-                    "time": int(cur_time),
-                    "pre_raw_message": Chat.SPEAK_FLAG,
-                    "pre_keywords": Chat.SPEAK_FLAG,
-                    "reply": Chat.SPEAK_FLAG,
-                    "reply_keywords": Chat.SPEAK_FLAG,
-                })
-
-            bot_id = random.choice([bid for bid in group_replies.keys() if bid])
-
-            ban_keywords = await BanManager.find_ban_keywords(context=None, group_id=group_id)
-
-            recently = Chat._recent_speak[group_id]
-
-            def msg_filter(msg: MessageModel) -> bool:
-                cur_raw_message = msg.raw_message
-                cur_keywords = msg.keywords
-                return (
-                    cur_keywords not in ban_keywords  # noqa: B023
-                    and cur_raw_message not in recently  # noqa: B023
-                    and not cur_raw_message.startswith("牛牛")
-                    and not cur_raw_message.startswith("[CQ:xml")
-                    and "\n" not in cur_raw_message
-                )
-
-            available_messages = list(filter(msg_filter, MessageStore._message_dict[group_id]))
-            if not available_messages:
-                continue
-
-            taken_name = await BotConfig(bot_id, group_id).taken_name()
-            pretend_msg = list(filter(lambda msg: msg.user_id == taken_name, available_messages))
-            first_message = pretend_msg[0] if pretend_msg else available_messages[0]
-            speak = first_message.raw_message
-            Chat._recent_speak[group_id].append(speak)
-
-            async with Chat._reply_lock:
-                group_replies[bot_id].append({
-                    "time": int(cur_time),
-                    "pre_raw_message": Chat.SPEAK_FLAG,
-                    "pre_keywords": Chat.SPEAK_FLAG,
-                    "reply": speak,
-                    "reply_keywords": Chat.SPEAK_FLAG,
-                })
-
-            speak_list = [
-                Message(speak),
-            ]
-
-            while (
-                random.random() < Chat.SPEAK_CONTINUOUSLY_PROBABILITY
-                and len(speak_list) < Chat.SPEAK_CONTINUOUSLY_MAX_LEN
-            ):
-                pre_msg = str(speak_list[-1])
-
-                answer_generator = await Chat(ChatData(group_id, 0, pre_msg, pre_msg, int(cur_time), 0)).answer()
-                if not answer_generator:
-                    break
-
-                new_messages = [msg_item async for msg_item in answer_generator]
-                if not new_messages:
-                    break
-
-                speak_list.extend(new_messages)
-
-            target_id = None
-            if random.random() < Chat.SPEAK_POKE_PROBABILITY:
-                target_id = random.choice(MessageStore._message_dict[group_id]).user_id
-
-            return (bot_id, group_id, speak_list, target_id)
-
-        return None
+        return await Speaker.speak(Chat._reply_dict, Chat._reply_lock, Chat._recent_topics, Chat._topics_lock)
 
     @staticmethod
     async def ban(group_id: int, bot_id: int, ban_raw_message: str, reason: str) -> bool:
