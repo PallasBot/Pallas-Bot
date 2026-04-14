@@ -259,12 +259,12 @@ class Chat:
         if raw_message == new_msg:
             return True
 
-        reply_data = Chat._reply_dict[group_id][bot_id][::-1]
-        for item in reply_data:
-            if item["reply"] == raw_message:
-                async with Chat._reply_lock:
+        async with Chat._reply_lock:
+            reply_data = Chat._reply_dict[group_id][bot_id][::-1]
+            for item in reply_data:
+                if item["reply"] == raw_message:
                     item["reply"] = new_msg
-                return True
+                    return True
         return False
 
     @staticmethod
