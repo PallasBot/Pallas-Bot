@@ -10,7 +10,7 @@ from typing import cast
 
 import pypinyin
 from beanie.operators import Or
-from nonebot import get_plugin_config, logger
+from nonebot import get_plugin_config
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from src.common.config import BotConfig
@@ -19,6 +19,7 @@ from src.common.db import Message as MessageModel
 from src.common.db.modules import BlackList
 
 from .config import Config
+from .message_store import MessageStore
 
 try:
     import jieba_next.analyse as jieba_analyse
@@ -58,7 +59,7 @@ class ChatData:
             return []
 
         result = jieba_analyse.extract_tags(self.plain_text, topK=ChatData._keywords_size)
-        return cast(list[str], result)  # type: ignore[return-value]
+        return cast("list[str]", result)  # type: ignore[return-value]
 
     @cached_property
     def keywords_len(self) -> int:
@@ -120,13 +121,9 @@ class Chat:
     # 运行期变量
 
     _reply_dict = defaultdict(lambda: defaultdict(list))  # 牛牛回复的消息缓存，暂未做持久化
-    _message_dict: dict[int, list[MessageModel]] = defaultdict(list)  # 群消息缓存
 
     _reply_lock = asyncio.Lock()  # 回复消息缓存锁
-    _message_lock = asyncio.Lock()
     _topics_lock = asyncio.Lock()
-
-    _late_save_time = 0  # 上次保存（消息数据持久化）的时刻 ( time.time(), 秒 )
 
     _blacklist_answer = defaultdict(set)
     _blacklist_answer_reserve = defaultdict(set)
@@ -161,8 +158,8 @@ class Chat:
             return False
 
         group_id = self.chat_data.group_id
-        if group_id in Chat._message_dict:
-            group_msgs = Chat._message_dict[group_id]
+        if group_id in MessageStore._message_dict:
+            group_msgs = MessageStore._message_dict[group_id]
             if group_msgs:
                 group_pre_msg = group_msgs[-1]
             else:
@@ -179,7 +176,11 @@ class Chat:
                         await self._context_insert(msg)
                         break
 
-        await self._message_insert()
+        async def _topics_callback(group_id: int, keywords_list: list[str]):
+            async with Chat._topics_lock:
+                Chat._recent_topics[group_id] += [k for k in keywords_list if not k.startswith("牛牛")]
+
+        await MessageStore.message_insert(self.chat_data, topics_callback=_topics_callback)
         return True
 
     async def answer(self) -> AsyncGenerator[Message, None] | None:
@@ -229,9 +230,7 @@ class Chat:
                             ]
                     async with Chat._topics_lock:
                         Chat._recent_topics[group_id] += [
-                            k
-                            for k in self.chat_data._keywords_list
-                            if not k.startswith("牛牛")
+                            k for k in self.chat_data._keywords_list if not k.startswith("牛牛")
                         ]
                     # if "[CQ:" not in item and len(item) > Chat.DRUNK_TTS_THRESHOLD and \
                     #    await self.config.drunkenness():
@@ -293,7 +292,7 @@ class Chat:
             return cmp(lhs_len / lhs_duration, rhs_len / rhs_duration)
 
         # 按群聊热度排序
-        popularity = sorted(Chat._message_dict.items(), key=cmp_to_key(group_popularity_cmp))
+        popularity = sorted(MessageStore._message_dict.items(), key=cmp_to_key(group_popularity_cmp))
 
         cur_time = time.time()
         for group_id, group_msgs in popularity:
@@ -342,7 +341,7 @@ class Chat:
                     and "\n" not in cur_raw_message
                 )
 
-            available_messages = list(filter(msg_filter, Chat._message_dict[group_id]))
+            available_messages = list(filter(msg_filter, MessageStore._message_dict[group_id]))
             if not available_messages:
                 continue
 
@@ -383,7 +382,7 @@ class Chat:
 
             target_id = None
             if random.random() < Chat.SPEAK_POKE_PROBABILITY:
-                target_id = random.choice(Chat._message_dict[group_id]).user_id
+                target_id = random.choice(MessageStore._message_dict[group_id]).user_id
 
             return (bot_id, group_id, speak_list, target_id)
 
@@ -448,76 +447,7 @@ class Chat:
         TODO: 随机权重可以改为 keywords 出现频率 或 用户发言频率 正相关
         """
 
-        return {
-            group_id: random.choice(group_msgs) for group_id, group_msgs in Chat._message_dict.items() if group_msgs
-        }
-
-    async def _message_insert(self):
-        group_id = self.chat_data.group_id
-
-        async with Chat._message_lock:
-            Chat._message_dict[group_id].append(
-                MessageModel(
-                    group_id=group_id,
-                    user_id=self.chat_data.user_id,
-                    bot_id=self.chat_data.bot_id,
-                    raw_message=self.chat_data.raw_message,
-                    is_plain_text=self.chat_data.is_plain_text,
-                    plain_text=self.chat_data.plain_text,
-                    keywords=self.chat_data.keywords,
-                    time=self.chat_data.time,
-                )
-            )
-
-        if self.chat_data.is_plain_text:
-            async with Chat._topics_lock:
-                Chat._recent_topics[group_id] += [k for k in self.chat_data._keywords_list if not k.startswith("牛牛")]  # type: ignore[union-attr]
-
-        cur_time = self.chat_data.time
-        if Chat._late_save_time == 0:
-            Chat._late_save_time = cur_time - 1
-            return
-
-        if len(Chat._message_dict[group_id]) > Chat.SAVE_COUNT_THRESHOLD:
-            await Chat._sync(cur_time)
-
-        elif cur_time - Chat._late_save_time > Chat.SAVE_TIME_THRESHOLD:
-            await Chat._sync(cur_time)
-
-    @staticmethod
-    async def _sync(cur_time: int = int(time.time())):
-        """
-        持久化
-        """
-
-        # Step 1: Collect save_list without clearing _message_dict yet
-        async with Chat._message_lock:
-            save_list = [
-                msg
-                for group_msgs in Chat._message_dict.values()
-                for msg in group_msgs
-                if msg.time > Chat._late_save_time
-            ]
-            if not save_list:
-                return
-
-        # Step 2: Call insert_many OUTSIDE the lock
-        try:
-            await MessageModel.insert_many(save_list)
-        except Exception as e:
-            # Step 4: If insert_many fails, log error and preserve data
-            logger.error(f"Failed to insert messages in _sync: {e}")
-            return
-
-        # Step 3: Only truncate and update _late_save_time if insert_many succeeded
-        async with Chat._message_lock:
-            new_dict = {
-                group_id: group_msgs[-Chat.SAVE_RESERVED_SIZE :] for group_id, group_msgs in Chat._message_dict.items()
-            }
-            Chat._message_dict.clear()
-            Chat._message_dict.update(new_dict)
-
-            Chat._late_save_time = cur_time
+        return await MessageStore.get_random_message_from_each_group()
 
     async def _context_insert(self, pre_msg: MessageModel | None):
         if not pre_msg:
@@ -577,8 +507,8 @@ class Chat:
         bot_id = self.chat_data.bot_id
 
         # 复读！
-        if group_id in Chat._message_dict:
-            group_msgs = Chat._message_dict[group_id]
+        if group_id in MessageStore._message_dict:
+            group_msgs = MessageStore._message_dict[group_id]
             if len(group_msgs) >= Chat.REPEAT_THRESHOLD and all(
                 item.raw_message == raw_message for item in group_msgs[-Chat.REPEAT_THRESHOLD + 1 :]
             ):
@@ -622,7 +552,7 @@ class Chat:
         other_group_cache = {}
         answers_count = defaultdict(int)
         recent_replies = [r["reply_keywords"] for r in Chat._reply_dict[group_id][bot_id][-Chat.DUPLICATE_REPLY :]]
-        recent_message = [m.raw_message for m in Chat._message_dict[group_id][-Chat.DUPLICATE_REPLY :]]
+        recent_message = [m.raw_message for m in MessageStore._message_dict[group_id][-Chat.DUPLICATE_REPLY :]]
 
         def candidate_append(dst: dict[str, Answer], answer: Answer):
             answer_key = answer.keywords
@@ -793,7 +723,5 @@ class Chat:
 
     @staticmethod
     async def sync():
-        await Chat._sync()
+        await MessageStore._sync()
         await Chat._sync_blacklist()
-
-

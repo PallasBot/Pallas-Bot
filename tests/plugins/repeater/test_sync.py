@@ -22,13 +22,13 @@ async def test_no_data_loss_on_failure(beanie_fixture):
     - _late_save_time should NOT be updated
     - _sync should log the error and return gracefully
     """
-    from src.plugins.repeater.model import Chat
+    from src.plugins.repeater.message_store import MessageStore
 
-    # Setup: Initialize Chat state
-    Chat._message_lock = asyncio.Lock()
-    Chat._message_dict = defaultdict(list)
-    Chat._late_save_time = 0
-    Chat.SAVE_RESERVED_SIZE = 100
+    # Setup: Initialize MessageStore state
+    MessageStore._message_lock = asyncio.Lock()
+    MessageStore._message_dict = defaultdict(list)
+    MessageStore._late_save_time = 0
+    MessageStore.SAVE_RESERVED_SIZE = 100
 
     group_id = 12345
     cur_time = 1000
@@ -40,28 +40,28 @@ async def test_no_data_loss_on_failure(beanie_fixture):
         mock_messages.append(msg)
 
     # Populate _message_dict
-    async with Chat._message_lock:
-        Chat._message_dict[group_id] = mock_messages.copy()
+    async with MessageStore._message_lock:
+        MessageStore._message_dict[group_id] = mock_messages.copy()
 
-    initial_message_count = len(Chat._message_dict[group_id])
+    initial_message_count = len(MessageStore._message_dict[group_id])
     assert initial_message_count == 10
 
     # Mock insert_many to raise an exception
-    with patch("src.plugins.repeater.model.MessageModel.insert_many") as mock_insert:
+    with patch("src.plugins.repeater.message_store.MessageModel.insert_many") as mock_insert:
         mock_insert.side_effect = Exception("Database connection failed")
 
         # Call _sync - it should fail gracefully
-        await Chat._sync(cur_time=cur_time)
+        await MessageStore._sync(cur_time=cur_time)
 
     # Verify data is preserved
-    final_message_count = len(Chat._message_dict[group_id])
+    final_message_count = len(MessageStore._message_dict[group_id])
     assert final_message_count == initial_message_count, (
         f"Data loss detected: initial={initial_message_count}, final={final_message_count}"
     )
 
     # Verify _late_save_time was NOT updated (still 0)
-    assert Chat._late_save_time == 0, (
-        f"_late_save_time should not be updated on failure, but got {Chat._late_save_time}"
+    assert MessageStore._late_save_time == 0, (
+        f"_late_save_time should not be updated on failure, but got {MessageStore._late_save_time}"
     )
 
 
@@ -74,13 +74,13 @@ async def test_cleanup_after_success(beanie_fixture):
     - _message_dict should be truncated to SAVE_RESERVED_SIZE per group
     - _late_save_time should be updated to cur_time
     """
-    from src.plugins.repeater.model import Chat
+    from src.plugins.repeater.message_store import MessageStore
 
-    # Setup: Initialize Chat state
-    Chat._message_lock = asyncio.Lock()
-    Chat._message_dict = defaultdict(list)
-    Chat._late_save_time = 0
-    Chat.SAVE_RESERVED_SIZE = 100
+    # Setup: Initialize MessageStore state
+    MessageStore._message_lock = asyncio.Lock()
+    MessageStore._message_dict = defaultdict(list)
+    MessageStore._late_save_time = 0
+    MessageStore.SAVE_RESERVED_SIZE = 100
 
     group_id = 54321
     cur_time = 2000
@@ -93,32 +93,34 @@ async def test_cleanup_after_success(beanie_fixture):
         mock_messages.append(msg)
 
     # Populate _message_dict with all messages
-    async with Chat._message_lock:
-        Chat._message_dict[group_id] = mock_messages.copy()
+    async with MessageStore._message_lock:
+        MessageStore._message_dict[group_id] = mock_messages.copy()
 
-    initial_message_count = len(Chat._message_dict[group_id])
+    initial_message_count = len(MessageStore._message_dict[group_id])
     assert initial_message_count == 150, f"Expected 150 messages, got {initial_message_count}"
 
     # Mock insert_many to succeed
-    with patch("src.plugins.repeater.model.MessageModel.insert_many") as mock_insert:
+    with patch("src.plugins.repeater.message_store.MessageModel.insert_many") as mock_insert:
         mock_insert.return_value = AsyncMock(return_value=None)()
 
         # Call _sync
-        await Chat._sync(cur_time=cur_time)
+        await MessageStore._sync(cur_time=cur_time)
 
     # Verify truncation happened
-    final_message_count = len(Chat._message_dict[group_id])
-    assert final_message_count <= Chat.SAVE_RESERVED_SIZE, (
-        f"Messages not truncated: got {final_message_count}, max should be {Chat.SAVE_RESERVED_SIZE}"
+    final_message_count = len(MessageStore._message_dict[group_id])
+    assert final_message_count <= MessageStore.SAVE_RESERVED_SIZE, (
+        f"Messages not truncated: got {final_message_count}, max should be {MessageStore.SAVE_RESERVED_SIZE}"
     )
 
     # Verify we kept the last 100 messages (if there were more than 100)
-    assert final_message_count == Chat.SAVE_RESERVED_SIZE, (
-        f"Expected exactly {Chat.SAVE_RESERVED_SIZE} messages after truncation, got {final_message_count}"
+    assert final_message_count == MessageStore.SAVE_RESERVED_SIZE, (
+        f"Expected exactly {MessageStore.SAVE_RESERVED_SIZE} messages after truncation, got {final_message_count}"
     )
 
     # Verify _late_save_time was updated
-    assert Chat._late_save_time == cur_time, f"_late_save_time should be {cur_time}, but got {Chat._late_save_time}"
+    assert MessageStore._late_save_time == cur_time, (
+        f"_late_save_time should be {cur_time}, but got {MessageStore._late_save_time}"
+    )
 
     # Verify insert_many was called exactly once
     assert mock_insert.call_count == 1, (
