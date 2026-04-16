@@ -108,6 +108,8 @@ def make_pg_blacklist() -> BlackListRepository:
 
 async def init_postgresql_db(host: str, port: int, user: str, password: str) -> None:
     """初始化 PostgreSQL 连接，若目标数据库不存在则自动创建。"""
+    import re
+
     try:
         import asyncpg
         from sqlalchemy.ext.asyncio import create_async_engine
@@ -117,6 +119,10 @@ async def init_postgresql_db(host: str, port: int, user: str, password: str) -> 
         raise ImportError("PostgreSQL 后端需要额外依赖，请执行：uv run --extra pg") from e
 
     db = os.getenv("PG_DB", "PallasBot")
+
+    # 校验数据库名，仅允许字母、数字、下划线和连字符，防止 SQL 注入
+    if not re.match(r"^[A-Za-z0-9_\-]+$", db):
+        raise ValueError(f"非法的数据库名称: {db!r}，仅允许字母、数字、下划线和连字符")
 
     # 连接默认库，检查并按需创建目标数据库
     conn = await asyncpg.connect(
