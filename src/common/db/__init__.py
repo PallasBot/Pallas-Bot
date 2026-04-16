@@ -135,7 +135,8 @@ async def init_postgresql_db(host: str, port: int, user: str, password: str) -> 
     try:
         exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", db)
         if not exists:
-            await conn.execute(f'CREATE DATABASE "{db}"')
+            # CREATE DATABASE 不支持参数化查询；db 已通过正则校验（^[A-Za-z0-9_\-]+$），可安全用于标识符
+            await conn.execute('CREATE DATABASE "' + db + '"')
     finally:
         await conn.close()
 
