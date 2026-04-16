@@ -111,8 +111,9 @@ async def init_postgresql_db(host: str, port: int, user: str, password: str) -> 
     import re
 
     try:
-        import asyncpg
+        from sqlalchemy import text
         from sqlalchemy.ext.asyncio import create_async_engine
+        from sqlalchemy.sql.elements import quoted_name
 
         from .repository_pg import init_pg
     except ImportError as e:
@@ -124,21 +125,27 @@ async def init_postgresql_db(host: str, port: int, user: str, password: str) -> 
     if not re.match(r"^[A-Za-z0-9_\-]+$", db):
         raise ValueError(f"非法的数据库名称: {db!r}，仅允许字母、数字、下划线和连字符")
 
-    # 连接默认库，检查并按需创建目标数据库
-    conn = await asyncpg.connect(
-        host=host,
-        port=port,
-        user=user or None,
-        password=password or None,
-        database="postgres",
-    )
+    # 使用 SQLAlchemy 连接默认库，检查并按需创建目标数据库
+    if user and password:
+        admin_dsn = f"postgresql+asyncpg://{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/postgres"
+    else:
+        admin_dsn = f"postgresql+asyncpg://{host}:{port}/postgres"
+
+    # AUTOCOMMIT 模式：CREATE DATABASE 不能在事务块内执行
+    admin_engine = create_async_engine(admin_dsn, echo=False, isolation_level="AUTOCOMMIT")
     try:
-        exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", db)
-        if not exists:
-            # CREATE DATABASE 不支持参数化查询；db 已通过正则校验（^[A-Za-z0-9_\-]+$），可安全用于标识符
-            await conn.execute('CREATE DATABASE "' + db + '"')
+        async with admin_engine.connect() as admin_conn:
+            exists = await admin_conn.scalar(
+                text("SELECT 1 FROM pg_database WHERE datname = :db"),
+                {"db": db},
+            )
+            if not exists:
+                # CREATE DATABASE 不支持参数化查询
+                # 使用 SQLAlchemy quoted_name 对标识符进行安全引用
+                db_identifier = quoted_name(db, quote=True)
+                await admin_conn.execute(text("CREATE DATABASE " + db_identifier))
     finally:
-        await conn.close()
+        await admin_engine.dispose()
 
     if user and password:
         dsn = f"postgresql+asyncpg://{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/{db}"
