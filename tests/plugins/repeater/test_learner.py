@@ -59,9 +59,9 @@ async def test_learn_basic_flow(beanie_fixture):
 
         with (
             patch(
-                "src.plugins.repeater.learner._context_repo.find_by_keywords", new_callable=AsyncMock, return_value=None
+                "src.plugins.repeater.learner.context_repo.find_by_keywords", new_callable=AsyncMock, return_value=None
             ),
-            patch("src.plugins.repeater.learner._context_repo.insert", new_callable=AsyncMock) as mock_insert,
+            patch("src.plugins.repeater.learner.context_repo.insert", new_callable=AsyncMock) as mock_insert,
         ):
             result = await Learner.learn(chat_data, topics_lock, recent_topics)
 
@@ -111,6 +111,63 @@ async def test_learn_empty_message(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_topics_callback_filters_niuniu_keywords(beanie_fixture):
+    """
+    Test that _topics_callback filters out keywords starting with '牛牛'
+    before updating recent_topics.
+    """
+    from src.plugins.repeater.learner import Learner
+    from src.plugins.repeater.message_store import MessageStore
+    from src.plugins.repeater.model import ChatData
+
+    MessageStore._message_lock = asyncio.Lock()
+    MessageStore._message_dict = defaultdict(list)
+    MessageStore._late_save_time = 0
+
+    topics_lock = asyncio.Lock()
+    recent_topics = defaultdict(lambda: deque(maxlen=20))
+
+    try:
+        group_id = 12345
+        bot_id = 11111
+
+        # Build a plain-text message whose keywords include both normal and "牛牛..." tokens.
+        # ChatData.keywords is a space-joined string; _keywords_list splits it back.
+        chat_data = ChatData(
+            group_id=group_id,
+            user_id=67890,
+            raw_message="你好 牛牛打架 世界 牛牛你好",
+            plain_text="你好 牛牛打架 世界 牛牛你好",
+            time=2000,
+            bot_id=bot_id,
+        )
+        # Patch keywords so we control the exact token list
+        chat_data._keywords_list = ["你好", "牛牛打架", "世界", "牛牛你好"]
+
+        with (
+            patch(
+                "src.plugins.repeater.learner.context_repo.find_by_keywords",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch("src.plugins.repeater.learner.context_repo.insert", new_callable=AsyncMock),
+        ):
+            result = await Learner.learn(chat_data, topics_lock, recent_topics)
+
+        assert result is True
+
+        topics = list(recent_topics[group_id])
+        assert "你好" in topics, "Normal keyword '你好' should be in recent_topics"
+        assert "世界" in topics, "Normal keyword '世界' should be in recent_topics"
+        assert "牛牛打架" not in topics, "'牛牛打架' starts with '牛牛' and must be filtered out"
+        assert "牛牛你好" not in topics, "'牛牛你好' starts with '牛牛' and must be filtered out"
+
+    finally:
+        MessageStore._message_dict.clear()
+        MessageStore._late_save_time = 0
+
+
+@pytest.mark.asyncio
 async def test_context_insert_skip_repeat(beanie_fixture):
     """
     Test that _context_insert skips when message is a repeat.
@@ -140,7 +197,7 @@ async def test_context_insert_skip_repeat(beanie_fixture):
         time=1000,
     )
 
-    with patch("src.plugins.repeater.learner._context_repo.find_by_keywords") as mock_find:
+    with patch("src.plugins.repeater.learner.context_repo.find_by_keywords") as mock_find:
         # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
 
@@ -177,7 +234,7 @@ async def test_context_insert_skip_reply(beanie_fixture):
         time=1000,
     )
 
-    with patch("src.plugins.repeater.learner._context_repo.find_by_keywords") as mock_find:
+    with patch("src.plugins.repeater.learner.context_repo.find_by_keywords") as mock_find:
         # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
 
@@ -201,7 +258,7 @@ async def test_context_insert_skip_none(beanie_fixture):
         bot_id=11111,
     )
 
-    with patch("src.plugins.repeater.learner._context_repo.find_by_keywords") as mock_find:
+    with patch("src.plugins.repeater.learner.context_repo.find_by_keywords") as mock_find:
         # Call context_insert with None
         await Learner._context_insert(chat_data, None)
 
@@ -254,11 +311,11 @@ async def test_context_insert_increment_count(beanie_fixture):
     mock_context.trigger_count = 10
     with (
         patch(
-            "src.plugins.repeater.learner._context_repo.find_by_keywords",
+            "src.plugins.repeater.learner.context_repo.find_by_keywords",
             new_callable=AsyncMock,
             return_value=mock_context,
         ),
-        patch("src.plugins.repeater.learner._context_repo.save", new_callable=AsyncMock) as mock_save,
+        patch("src.plugins.repeater.learner.context_repo.save", new_callable=AsyncMock) as mock_save,
     ):
         # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
@@ -318,11 +375,11 @@ async def test_context_insert_new_answer(beanie_fixture):
     mock_context.trigger_count = 10
     with (
         patch(
-            "src.plugins.repeater.learner._context_repo.find_by_keywords",
+            "src.plugins.repeater.learner.context_repo.find_by_keywords",
             new_callable=AsyncMock,
             return_value=mock_context,
         ),
-        patch("src.plugins.repeater.learner._context_repo.save", new_callable=AsyncMock) as mock_save,
+        patch("src.plugins.repeater.learner.context_repo.save", new_callable=AsyncMock) as mock_save,
     ):
         # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
@@ -422,9 +479,9 @@ async def test_learn_user_backtracking(beanie_fixture):
 
         with (
             patch(
-                "src.plugins.repeater.learner._context_repo.find_by_keywords", new_callable=AsyncMock, return_value=None
+                "src.plugins.repeater.learner.context_repo.find_by_keywords", new_callable=AsyncMock, return_value=None
             ),
-            patch("src.plugins.repeater.learner._context_repo.insert", new_callable=AsyncMock) as mock_insert,
+            patch("src.plugins.repeater.learner.context_repo.insert", new_callable=AsyncMock) as mock_insert,
         ):
             result = await Learner.learn(chat_data, topics_lock, recent_topics)
 

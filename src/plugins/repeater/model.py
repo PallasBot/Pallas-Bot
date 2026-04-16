@@ -13,7 +13,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from src.common.config import BotConfig
 from src.common.db import Message as MessageModel
-from src.common.db.repository_impl import MongoContextRepository
+from src.common.db import make_context_repository
 
 from .ban_manager import BanManager
 from .config import Config
@@ -34,7 +34,7 @@ except ImportError:
 plugin_config = get_plugin_config(Config)
 
 
-_context_repo = MongoContextRepository()
+context_repo = make_context_repository()
 
 
 @dataclass
@@ -208,14 +208,14 @@ class Chat:
         cur_time = int(time.time())
         expiration = cur_time - 15 * 24 * 3600  # 15 天前
 
-        await _context_repo.delete_expired(expiration, Chat.ANSWER_THRESHOLD)
+        await context_repo.delete_expired(expiration, Chat.ANSWER_THRESHOLD)
 
-        all_context = await _context_repo.find_for_cleanup(100, expiration)
+        all_context = await context_repo.find_for_cleanup(100, expiration)
         for context in all_context:
             answers = [ans for ans in context.answers if ans.count > 1 or ans.time > expiration]
             context.answers = answers
             context.clear_time = cur_time
-            await _context_repo.save(context)
+            await context_repo.save(context)
 
     @staticmethod
     async def sync():

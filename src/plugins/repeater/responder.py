@@ -8,8 +8,7 @@ from nonebot import get_plugin_config
 from nonebot.adapters.onebot.v11 import Message
 
 from src.common.config import BotConfig
-from src.common.db import Answer
-from src.common.db.repository_impl import MongoContextRepository
+from src.common.db import Answer, make_context_repository
 
 from .ban_manager import BanManager
 from .config import Config
@@ -21,7 +20,7 @@ if TYPE_CHECKING:
 plugin_config = get_plugin_config(Config)
 
 
-_context_repo = MongoContextRepository()
+context_repo = make_context_repository()
 
 
 class Responder:
@@ -165,7 +164,7 @@ class Responder:
                     # 复读过一次就不再回复这句话了
                     return None
 
-        context = await _context_repo.find_by_keywords(keywords)
+        context = await context_repo.find_by_keywords(keywords)
 
         if not context:
             return None

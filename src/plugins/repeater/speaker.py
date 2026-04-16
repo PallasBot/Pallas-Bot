@@ -116,7 +116,7 @@ class Speaker:
                     and "\n" not in cur_raw_message
                 )
 
-            available_messages = list(filter(msg_filter, MessageStore._message_dict[group_id]))
+            available_messages = list(filter(msg_filter, group_msgs))
             if not available_messages:
                 continue
 
@@ -164,7 +164,7 @@ class Speaker:
 
             target_id = None
             if random.random() < Speaker.SPEAK_POKE_PROBABILITY:
-                target_id = random.choice(MessageStore._message_dict[group_id]).user_id
+                target_id = random.choice(group_msgs).user_id
 
             return (bot_id, group_id, speak_list, target_id)
 

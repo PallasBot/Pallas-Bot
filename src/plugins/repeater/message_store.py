@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from nonebot import get_plugin_config, logger
 
 from src.common.db import Message as MessageModel
-from src.common.db.repository_impl import MongoMessageRepository
+from src.common.db import make_message_repository
 
 from .config import Config
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 plugin_config = get_plugin_config(Config)
 
 
-_message_repo = MongoMessageRepository()
+message_repo = make_message_repository()
 
 
 class MessageStore:
@@ -96,7 +96,7 @@ class MessageStore:
 
         # 步骤 2: 在锁外执行 insert_many
         try:
-            await _message_repo.bulk_insert(save_list)
+            await message_repo.bulk_insert(save_list)
         except Exception as e:
             # 插入失败时记录错误并保留数据，避免丢失
             logger.error(f"Failed to insert messages in _sync: {e}")

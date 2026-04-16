@@ -4,16 +4,15 @@ from collections import defaultdict
 
 from nonebot import get_plugin_config
 
-from src.common.db import Ban, Context
-from src.common.db.repository_impl import MongoBlackListRepository, MongoContextRepository
+from src.common.db import Ban, Context, make_blacklist_repository, make_context_repository
 
 from .config import Config
 
 plugin_config = get_plugin_config(Config)
 
 
-_context_repo = MongoContextRepository()
-_blacklist_repo = MongoBlackListRepository()
+context_repo = make_context_repository()
+blacklist_repo = make_blacklist_repository()
 
 
 class BanManager:
@@ -63,11 +62,11 @@ class BanManager:
         pre_keywords = ban_reply["pre_keywords"]
         keywords = ban_reply["reply_keywords"]
 
-        context_to_ban = await _context_repo.find_by_keywords(pre_keywords)
+        context_to_ban = await context_repo.find_by_keywords(pre_keywords)
         if context_to_ban:
             ban_reason = Ban(keywords=keywords, group_id=group_id, reason=reason, time=int(time.time()))
             context_to_ban.ban.append(ban_reason)
-            await _context_repo.save(context_to_ban)
+            await context_repo.save(context_to_ban)
 
         if keywords in BanManager._blacklist_answer_reserve[group_id]:
             BanManager._blacklist_answer[group_id].add(keywords)
@@ -116,7 +115,7 @@ class BanManager:
 
     @staticmethod
     async def _select_blacklist() -> None:
-        all_blacklist = await _blacklist_repo.find_all()
+        all_blacklist = await blacklist_repo.find_all()
 
         for item in all_blacklist:
             group_id = item.group_id
@@ -132,7 +131,7 @@ class BanManager:
         for group_id, answers in BanManager._blacklist_answer.items():
             if not len(answers):
                 continue
-            await _blacklist_repo.upsert_answers(group_id, list(answers))
+            await blacklist_repo.upsert_answers(group_id, list(answers))
 
         for group_id, answers_set in BanManager._blacklist_answer_reserve.items():
             if not len(answers_set):
@@ -141,4 +140,4 @@ class BanManager:
             if group_id in BanManager._blacklist_answer:
                 filtered_answers = answers_set - BanManager._blacklist_answer[group_id]
 
-            await _blacklist_repo.upsert_answers_reserve(group_id, list(filtered_answers))
+            await blacklist_repo.upsert_answers_reserve(group_id, list(filtered_answers))

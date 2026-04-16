@@ -214,9 +214,9 @@ def mark_reaction_sent(bot_id: str, message_id: int):
         sent_reactions[bot_id] = dict(sorted_items[len(sorted_items) // 2 :])
 
 
-async def send_reaction(bot: Bot, event: GroupMessageEvent, emoji_code: str) -> None:
+async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
     bot_id = str(bot.self_id)
-    message_id = event.message_id
+    message_id = event.message_id  # type: ignore[attr-defined]
 
     if has_sent_reaction(bot_id, message_id):
         logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id}")
@@ -225,10 +225,10 @@ async def send_reaction(bot: Bot, event: GroupMessageEvent, emoji_code: str) -> 
     try:
         await message_reaction(emoji_code, str(message_id), event, bot, delete=False)
         mark_reaction_sent(bot_id, message_id)
-        logger.debug(f"[Reaction] Bot {bot_id} successfully sent emoji {emoji_code} in group {event.group_id}")
+        logger.debug(f"[Reaction] Bot {bot_id} successfully sent emoji {emoji_code} in group {event.group_id}")  # type: ignore[attr-defined]
     except ActionFailed as e:
         logger.debug(
-            f"[Reaction] Bot {bot_id} failed to send emoji {emoji_code} in group {event.group_id}: {str(e)}",
+            f"[Reaction] Bot {bot_id} failed to send emoji {emoji_code} in group {event.group_id}: {str(e)}",  # type: ignore[attr-defined]
             exc_info=True,
         )
         raise
