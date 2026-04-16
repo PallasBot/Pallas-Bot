@@ -14,7 +14,7 @@ __plugin_meta__ = PluginMetadata(
     name="申请管理",
     description="处理好友申请与入群邀请，通知管理员并支持手动审批",
     usage="""
-查看好友申请 - 查看所有待处理的好友申请
+查看好友申请 - 查看所有待处理的好友申请（含被过滤的可疑申请）
 同意好友 <QQ号> - 同意待处理的好友申请
 同意所有好友 - 同意所有待处理的好友申请
 查看入群邀请 - 查看所有待处理的入群邀请
@@ -92,8 +92,21 @@ def save_json(path: Path, data: dict) -> None:
 
 # {bot_id: {user_id: flag}}
 pending_friend: dict[str, dict[str, str]] = load_json(FRIEND_REQ_FILE)
+# 被过滤的好友申请 {bot_id: {user_id: flag}}
+cached_doubt_friend: dict[str, dict[str, str]] = {}
 # {bot_id: {group_id: {...}}}
 pending_group: dict[str, dict[str, dict]] = load_json(GROUP_REQ_FILE)
+
+
+async def fetch_doubt_friends(bot: Bot) -> dict[str, str]:
+    """获取被过滤的好友申请"""
+    try:
+        result = await bot.call_api("get_doubt_friends_add_request", count=50)
+        if isinstance(result, list):
+            return {str(item["user_id"]): item["flag"] for item in result}
+    except Exception:
+        pass
+    return {}
 
 
 async def get_nickname(bot: Bot, user_id: int) -> str:
@@ -166,8 +179,8 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
             f"申请人：{nickname}（{event.user_id}）\n"
             f"验证消息：{event.comment or '（无）'}\n"
             f"同意：同意好友 {event.user_id}\n"
-            f"发送同意所有好友可以批量同意\n"
-            f"发送查看好友申请可以查看所有待处理的好友申请"
+            f"发送'同意所有好友'可以批量同意所有好友请求\n"
+            f"发送'查看好友申请'可以查看所有待处理的好友申请"
         )
         await notify_admins(bot, msg)
 
@@ -183,12 +196,24 @@ async def handle_list_friends(bot: Bot, event: MessageEvent):
         return
     bot_key = str(bot.self_id)
     bot_pending = pending_friend.get(bot_key, {})
-    if not bot_pending:
+
+    # 获取被过滤的好友申请并缓存
+    doubt_requests = await fetch_doubt_friends(bot)
+    cached_doubt_friend[bot_key] = doubt_requests
+
+    # 去重：被过滤列表中已在普通列表的不重复计数
+    doubt_only = {uid: flag for uid, flag in doubt_requests.items() if uid not in bot_pending}
+    total = len(bot_pending) + len(doubt_only)
+    if total == 0:
         await list_friends_cmd.finish("当前没有待处理的好友申请")
-    lines = [f"待处理好友申请（共 {len(bot_pending)} 条）："]
+
+    lines = [f"待处理好友申请（共 {total} 条）："]
     for uid in bot_pending.keys():
         nickname = await get_nickname(bot, int(uid))
         lines.append(f"  {nickname}（{uid}）")
+    for uid in doubt_only.keys():
+        nickname = await get_nickname(bot, int(uid))
+        lines.append(f"  {nickname}（{uid}）[被过滤]")
     lines.append("发送 同意好友 <QQ号> 或 同意所有好友 来审批")
     await list_friends_cmd.finish("\n".join(lines))
 
@@ -204,13 +229,25 @@ async def handle_approve_friend(bot: Bot, event: MessageEvent, args: Message = C
     bot_key = str(bot.self_id)
     bot_pending = pending_friend.get(bot_key, {})
     flag = bot_pending.get(arg)
-    if not flag:
+
+    if flag:
+        # 普通好友申请
+        await bot.set_friend_add_request(flag=flag, approve=True)
+        bot_pending.pop(arg, None)
+        save_json(FRIEND_REQ_FILE, pending_friend)
+        nickname = await get_nickname(bot, int(arg))
+        await approve_friend_cmd.finish(f"已同意 {nickname}（{arg}）的好友申请")
+
+    # 检查被过滤好友申请，先查缓存，缓存没有则实时拉取
+    doubt_cache = cached_doubt_friend.get(bot_key) or await fetch_doubt_friends(bot)
+    cached_doubt_friend[bot_key] = doubt_cache
+    doubt_flag = doubt_cache.get(arg)
+    if not doubt_flag:
         nickname = await get_nickname(bot, int(arg))
         await approve_friend_cmd.finish(f"未找到来自 {nickname}（{arg}）的待处理好友申请")
 
-    await bot.set_friend_add_request(flag=flag, approve=True)
-    bot_pending.pop(arg, None)
-    save_json(FRIEND_REQ_FILE, pending_friend)
+    await bot.call_api("set_doubt_friends_add_request", flag=doubt_flag, approve=True)
+    cached_doubt_friend[bot_key].pop(arg, None)
     nickname = await get_nickname(bot, int(arg))
     await approve_friend_cmd.finish(f"已同意 {nickname}（{arg}）的好友申请")
 
@@ -260,7 +297,8 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
                 f"群：{group_name}（{event.group_id}）\n"
                 f"同意：同意入群 {event.group_id}\n"
                 f"拒绝：拒绝入群 {event.group_id}\n"
-                f"发送同意所有入群可以批量同意"
+                f"发送'同意所有入群'可以批量同意\n"
+                f"发送'查看入群邀请'可以查看所有待处理的入群邀请"
             )
             await notify_admins(bot, msg)
 
@@ -277,8 +315,12 @@ async def handle_approve_all_friends(bot: Bot, event: MessageEvent):
         return
     bot_key = str(bot.self_id)
     bot_pending = pending_friend.get(bot_key, {})
-    if not bot_pending:
+    doubt_requests = await fetch_doubt_friends(bot)
+    cached_doubt_friend[bot_key] = doubt_requests
+
+    if not bot_pending and not doubt_requests:
         await approve_all_friends_cmd.finish("当前没有待处理的好友申请")
+
     ok, fail = 0, 0
     for uid, flag in list(bot_pending.items()):
         try:
@@ -288,6 +330,15 @@ async def handle_approve_all_friends(bot: Bot, event: MessageEvent):
         except Exception:
             fail += 1
     save_json(FRIEND_REQ_FILE, pending_friend)
+
+    for uid, flag in list(doubt_requests.items()):
+        try:
+            await bot.call_api("set_doubt_friends_add_request", flag=flag, approve=True)
+            cached_doubt_friend[bot_key].pop(uid, None)
+            ok += 1
+        except Exception:
+            fail += 1
+
     await approve_all_friends_cmd.finish(f"已同意 {ok} 个好友申请" + (f"，{fail} 个失败" if fail else ""))
 
 
