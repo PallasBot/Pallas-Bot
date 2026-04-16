@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from nonebot import on_command, on_request
+from nonebot import get_driver, on_command, on_request
 from nonebot.adapters.onebot.v11 import Bot, FriendRequestEvent, GroupRequestEvent, Message, MessageEvent
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER, Permission
@@ -9,6 +9,7 @@ from nonebot.plugin import PluginMetadata
 
 from src.common.config import BotConfig, GroupConfig, UserConfig
 from src.plugins.help.plugin_manager import is_plugin_disabled
+from src.plugins.request_handler.config import Config
 
 __plugin_meta__ = PluginMetadata(
     name="申请管理",
@@ -156,8 +157,17 @@ BOT_ADMIN = Permission(is_bot_admin)
 PERM = SUPERUSER | BOT_ADMIN
 
 
+def plugin_config() -> Config:
+    return Config.model_validate(get_driver().config.model_dump())
+
+
 async def notify_admins(bot: Bot, msg: str) -> None:
     admins = await BotConfig(int(bot.self_id))._find("admins")
+    plugin_cfg = plugin_config()
+    if not plugin_cfg.request_handler_notify_superusers:
+        superusers = {int(uid) for uid in get_driver().config.superusers}
+        # 过滤掉 SUPERUSER，若全部都是 SUPERUSER 则发送给SUPERUSER
+        admins = [uid for uid in admins if uid not in superusers] or admins
     for admin_id in admins:
         try:
             await bot.send_private_msg(user_id=admin_id, message=msg)
