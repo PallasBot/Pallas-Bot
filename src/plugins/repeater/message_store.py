@@ -76,10 +76,12 @@ class MessageStore:
             await MessageStore._sync(cur_time)
 
     @staticmethod
-    async def _sync(cur_time: int = int(time.time())):
+    async def _sync(cur_time: int | None = None):
         """
         持久化
         """
+        if cur_time is None:
+            cur_time = int(time.time())
 
         # 步骤 1: 收集待保存列表，暂不清空 _message_dict
         async with MessageStore._message_lock:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import random
 import time
 from collections import defaultdict, deque
@@ -33,7 +32,7 @@ class Speaker:
     DUPLICATE_REPLY = Chat.DUPLICATE_REPLY
     REPLY_FLAG = Chat.REPLY_FLAG
 
-    _recent_speak = defaultdict(lambda: deque(maxlen=Speaker.DUPLICATE_REPLY))
+    _recent_speak = defaultdict(lambda: deque(maxlen=Chat.DUPLICATE_REPLY))
 
     @staticmethod
     async def speak(
@@ -52,8 +51,8 @@ class Speaker:
             def cmp(a: int | float, b: int | float) -> int:
                 return (a > b) - (a < b)
 
-            lhs_group_id, lhs_msgs = lhs
-            rhs_group_id, rhs_msgs = rhs
+            _, lhs_msgs = lhs
+            _, rhs_msgs = rhs
 
             lhs_len = len(lhs_msgs)
             rhs_len = len(rhs_msgs)
@@ -69,7 +68,9 @@ class Speaker:
 
             return cmp(lhs_len / lhs_duration, rhs_len / rhs_duration)
 
-        popularity = sorted(MessageStore._message_dict.items(), key=cmp_to_key(group_popularity_cmp))
+        async with MessageStore._message_lock:
+            message_items = list(MessageStore._message_dict.items())
+        popularity = sorted(message_items, key=cmp_to_key(group_popularity_cmp))
 
         cur_time = time.time()
         for group_id, group_msgs in popularity:

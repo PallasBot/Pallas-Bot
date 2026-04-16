@@ -5,10 +5,9 @@ by testing the fix where lines 430-431 now correctly use ban_reply
 instead of the loop variable reply.
 """
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.plugins.repeater.ban_manager import BanManager
+import pytest
 
 
 @pytest.mark.asyncio
@@ -137,7 +136,7 @@ async def test_ban_latest():
         assert len(mock_context.ban) > 0
         assert mock_context.ban[0].keywords == "keywords3"
         assert mock_context.ban[0].group_id == group_id
-        print(f"✓ Correctly banned latest reply with keywords: keywords3")
+        print("✓ Correctly banned latest reply with keywords: keywords3")
     finally:
         # Clean up
         if group_id in Chat._reply_dict and bot_id in Chat._reply_dict[group_id]:
@@ -171,7 +170,7 @@ async def test_ban_no_match():
 
         # Verify ban failed
         assert result is False
-        print(f"✓ Correctly returned False for non-existent message")
+        print("✓ Correctly returned False for non-existent message")
     finally:
         # Clean up
         if group_id in Chat._reply_dict and bot_id in Chat._reply_dict[group_id]:
@@ -190,4 +189,4 @@ async def test_ban_group_not_found():
 
     result = await Chat.ban(group_id, bot_id, "test", "test reason")
     assert result is False
-    print(f"✓ Correctly returned False for non-existent group")
+    print("✓ Correctly returned False for non-existent group")

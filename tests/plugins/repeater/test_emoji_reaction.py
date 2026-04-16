@@ -1,6 +1,3 @@
-import time
-
-
 def test_sent_reactions_bounded():
     from src.plugins.repeater.emoji_reaction import (
         SENT_REACTIONS_MAX_SIZE,

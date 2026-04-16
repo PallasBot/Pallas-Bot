@@ -3,9 +3,10 @@
 This test file focuses on testing the BanManager class methods independently.
 """
 
-import pytest
 from collections import defaultdict
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 @pytest.mark.asyncio
@@ -69,8 +70,8 @@ async def test_find_ban_keywords_aggregation():
     Test BanManager.find_ban_keywords() aggregates group-specific and global bans.
     Verify that it correctly combines blacklist from multiple sources.
     """
-    from src.plugins.repeater.ban_manager import BanManager
     from src.common.db import Ban
+    from src.plugins.repeater.ban_manager import BanManager
 
     group_id = 10002
 
@@ -148,7 +149,6 @@ async def test_update_global_blacklist():
     Verify that keywords banned in multiple groups become global bans.
     """
     from src.plugins.repeater.ban_manager import BanManager
-    from src.common.db.modules import BlackList
 
     # Clean state
     BanManager._blacklist_answer.clear()

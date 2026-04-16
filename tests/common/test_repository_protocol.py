@@ -1,10 +1,9 @@
 """Tests for Repository Protocol interfaces."""
 
-import pytest
 from src.common.db.repository import (
+    BlackListRepository,
     ContextRepository,
     MessageRepository,
-    BlackListRepository,
 )
 
 
