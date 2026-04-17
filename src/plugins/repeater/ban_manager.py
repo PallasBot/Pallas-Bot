@@ -62,11 +62,10 @@ class BanManager:
         pre_keywords = ban_reply["pre_keywords"]
         keywords = ban_reply["reply_keywords"]
 
-        context_to_ban = await context_repo.find_by_keywords(pre_keywords)
-        if context_to_ban:
-            ban_reason = Ban(keywords=keywords, group_id=group_id, reason=reason, time=int(time.time()))
-            context_to_ban.ban.append(ban_reason)
-            await context_repo.save(context_to_ban)
+        # 通过 append_ban 细粒度 API 原子追加，避免整文档读-改-写。
+        # 当 Context(keywords=pre_keywords) 不存在时为 no-op（Mongo update_one matched=0）。
+        ban_reason = Ban(keywords=keywords, group_id=group_id, reason=reason, time=int(time.time()))
+        await context_repo.append_ban(pre_keywords, ban_reason)
 
         if keywords in BanManager._blacklist_answer_reserve[group_id]:
             BanManager._blacklist_answer[group_id].add(keywords)

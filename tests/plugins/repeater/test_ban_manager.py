@@ -13,11 +13,10 @@ import pytest
 async def test_ban_with_reply_dict():
     """
     Test BanManager.ban() with reply_dict parameter.
-    Verify that ban is applied when matching reply is found.
+    Verify that ban is applied via context_repo.append_ban.
     """
     from src.plugins.repeater.ban_manager import BanManager
 
-    # Setup reply_dict
     group_id = 10001
     bot_id = 20001
     reply_dict = defaultdict(lambda: defaultdict(list))
@@ -31,35 +30,25 @@ async def test_ban_with_reply_dict():
         }
     ]
 
-    mock_context = MagicMock()
-    mock_context.ban = []
-    mock_context.save = AsyncMock()
-
-    # Clean state before test
     BanManager._blacklist_answer.clear()
     BanManager._blacklist_answer_reserve.clear()
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
-            return_value=mock_context,
-        ):
+        ) as mock_append:
             result = await BanManager.ban(group_id, bot_id, "test output", "test reason", reply_dict)
 
-        # Verify ban was successful
         assert result is True
-        assert len(mock_context.ban) > 0
-        assert mock_context.ban[0].keywords == "test_output_key"
-        assert mock_context.ban[0].group_id == group_id
-        assert mock_context.ban[0].reason == "test reason"
-
-        # Verify reserve blacklist was updated
+        assert mock_append.call_count == 1
+        pre_kw, ban_obj = mock_append.call_args.args
+        assert pre_kw == "test_input_key"
+        assert ban_obj.keywords == "test_output_key"
+        assert ban_obj.group_id == group_id
+        assert ban_obj.reason == "test reason"
         assert "test_output_key" in BanManager._blacklist_answer_reserve[group_id]
-
-        print("✓ BanManager.ban() correctly processes reply_dict parameter")
     finally:
-        # Cleanup
         BanManager._blacklist_answer.clear()
         BanManager._blacklist_answer_reserve.clear()
 
@@ -200,22 +189,15 @@ async def test_ban_second_offense():
     BanManager._blacklist_answer_reserve.clear()
 
     try:
-        # First offense - should go to reserve
-        mock_context = MagicMock()
-        mock_context.ban = []
-        mock_context.save = AsyncMock()
-
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
-            return_value=mock_context,
         ):
             await BanManager.ban(group_id, bot_id, "bad_reply", "first offense", reply_dict)
 
         assert "bad_keywords" in BanManager._blacklist_answer_reserve[group_id]
         assert "bad_keywords" not in BanManager._blacklist_answer[group_id]
 
-        # Second offense - should move to active blacklist
         reply_dict[group_id][bot_id].append({
             "time": 200,
             "pre_raw_message": "test2",
@@ -224,20 +206,13 @@ async def test_ban_second_offense():
             "reply_keywords": "bad_keywords",  # same keywords
         })
 
-        mock_context2 = MagicMock()
-        mock_context2.ban = []
-        mock_context2.save = AsyncMock()
-
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
-            return_value=mock_context2,
         ):
             await BanManager.ban(group_id, bot_id, "bad_reply_again", "second offense", reply_dict)
 
         assert "bad_keywords" in BanManager._blacklist_answer[group_id]
-
-        print("✓ BanManager.ban() correctly handles second offense escalation")
     finally:
         # Cleanup
         BanManager._blacklist_answer.clear()

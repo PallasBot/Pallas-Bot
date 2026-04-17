@@ -5,7 +5,7 @@ by testing the fix where lines 430-431 now correctly use ban_reply
 instead of the loop variable reply.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -14,14 +14,10 @@ import pytest
 async def test_ban_correct_keywords():
     """
     Verify that ban() extracts keywords from the CORRECT reply (ban_reply),
-    not from the loop variable (reply) which would be the last iterated item.
-
-    This tests the fix for the bug where lines 430-431 used `reply` instead of `ban_reply`.
+    not from the loop variable (reply). 通过 append_ban 细粒度 API 的调用参数验证。
     """
-    # Lazy import to avoid NoneBot initialization in module level
     from src.plugins.repeater.model import Chat
 
-    # Setup: Insert multiple replies with different keywords
     group_id = 12345
     bot_id = 67890
 
@@ -49,34 +45,25 @@ async def test_ban_correct_keywords():
         },
     ]
 
-    # Ban the second reply (not the last one)
     ban_raw_message = "hi there 2"
     expected_keywords = "hi_there_2"
-
-    mock_context = MagicMock()
-    mock_context.ban = []
-    mock_context.save = AsyncMock()  # Make save async
+    expected_pre_keywords = "hello_key_2"
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
-            return_value=mock_context,
-        ):
+        ) as mock_append:
             result = await Chat.ban(group_id, bot_id, ban_raw_message, "test reason")
 
-        # Verify the ban was successful
         assert result is True
-
-        # Verify the correct keywords were used (from the matched reply, not the loop variable)
-        # If bug exists, it would use keywords from the LAST reply (hi_there_3) instead of hi_there_2
-        assert len(mock_context.ban) > 0
-        assert mock_context.ban[0].keywords == expected_keywords
-        assert mock_context.ban[0].group_id == group_id
-        assert mock_context.ban[0].reason == "test reason"
-        print(f"✓ Correctly used keywords from matched reply: {expected_keywords}")
+        assert mock_append.call_count == 1
+        called_pre_keywords, called_ban = mock_append.call_args.args
+        assert called_pre_keywords == expected_pre_keywords
+        assert called_ban.keywords == expected_keywords
+        assert called_ban.group_id == group_id
+        assert called_ban.reason == "test reason"
     finally:
-        # Clean up
         if group_id in Chat._reply_dict and bot_id in Chat._reply_dict[group_id]:
             del Chat._reply_dict[group_id][bot_id]
 
@@ -88,7 +75,6 @@ async def test_ban_latest():
     """
     from src.plugins.repeater.model import Chat
 
-    # Setup: Insert multiple replies
     group_id = 22222
     bot_id = 33333
 
@@ -112,33 +98,25 @@ async def test_ban_latest():
             "pre_raw_message": "msg3",
             "pre_keywords": "key3",
             "reply": "reply3",
-            "reply_keywords": "keywords3",  # This should be banned
+            "reply_keywords": "keywords3",
         },
     ]
 
-    # Ban with empty message - should ban the latest reply
     ban_raw_message = ""
-
-    mock_context = MagicMock()
-    mock_context.ban = []
-    mock_context.save = AsyncMock()  # Make save async
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
-            return_value=mock_context,
-        ):
+        ) as mock_append:
             result = await Chat.ban(group_id, bot_id, ban_raw_message, "test reason")
 
-        # Verify the latest reply's keywords were banned
         assert result is True
-        assert len(mock_context.ban) > 0
-        assert mock_context.ban[0].keywords == "keywords3"
-        assert mock_context.ban[0].group_id == group_id
-        print("✓ Correctly banned latest reply with keywords: keywords3")
+        assert mock_append.call_count == 1
+        _, called_ban = mock_append.call_args.args
+        assert called_ban.keywords == "keywords3"
+        assert called_ban.group_id == group_id
     finally:
-        # Clean up
         if group_id in Chat._reply_dict and bot_id in Chat._reply_dict[group_id]:
             del Chat._reply_dict[group_id][bot_id]
 
