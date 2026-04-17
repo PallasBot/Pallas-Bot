@@ -29,6 +29,10 @@ dependencies = [
 perf = [
     "jieba-next>=1.0.0a5"
 ]
+pg = [
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+]
 
 [dependency-groups]
 dev = [
