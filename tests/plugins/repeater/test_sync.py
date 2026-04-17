@@ -47,7 +47,7 @@ async def test_no_data_loss_on_failure(beanie_fixture):
     assert initial_message_count == 10
 
     # Mock insert_many to raise an exception
-    with patch("src.plugins.repeater.message_store._message_repo.bulk_insert") as mock_insert:
+    with patch("src.plugins.repeater.message_store.message_repo.bulk_insert") as mock_insert:
         mock_insert.side_effect = Exception("Database connection failed")
 
         # Call _sync - it should fail gracefully
@@ -100,7 +100,7 @@ async def test_cleanup_after_success(beanie_fixture):
     assert initial_message_count == 150, f"Expected 150 messages, got {initial_message_count}"
 
     # Mock insert_many to succeed
-    with patch("src.plugins.repeater.message_store._message_repo.bulk_insert") as mock_insert:
+    with patch("src.plugins.repeater.message_store.message_repo.bulk_insert") as mock_insert:
         mock_insert.return_value = AsyncMock(return_value=None)()
 
         # Call _sync

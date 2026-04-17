@@ -45,7 +45,7 @@ async def test_context_find_repeat_detection():
 
     try:
         with patch(
-            "src.plugins.repeater.responder._context_repo.find_by_keywords", new_callable=AsyncMock
+            "src.plugins.repeater.responder.context_repo.find_by_keywords", new_callable=AsyncMock
         ) as mock_find_one:
             result = await Responder._context_find(
                 cast("Any", chat_data),
@@ -84,7 +84,7 @@ async def test_context_find_returns_none_no_context():
 
     try:
         with patch(
-            "src.plugins.repeater.responder._context_repo.find_by_keywords", new_callable=AsyncMock, return_value=None
+            "src.plugins.repeater.responder.context_repo.find_by_keywords", new_callable=AsyncMock, return_value=None
         ):
             result = await Responder._context_find(
                 cast("Any", chat_data),
@@ -129,7 +129,7 @@ async def test_context_find_threshold_filtering():
     try:
         with (
             patch(
-                "src.plugins.repeater.responder._context_repo.find_by_keywords",
+                "src.plugins.repeater.responder.context_repo.find_by_keywords",
                 new_callable=AsyncMock,
                 return_value=context,
             ),

@@ -59,7 +59,7 @@ async def test_ban_correct_keywords():
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
             new_callable=AsyncMock,
             return_value=mock_context,
         ):
@@ -125,7 +125,7 @@ async def test_ban_latest():
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
             new_callable=AsyncMock,
             return_value=mock_context,
         ):

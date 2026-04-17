@@ -41,7 +41,7 @@ async def test_ban_with_reply_dict():
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
             new_callable=AsyncMock,
             return_value=mock_context,
         ):
@@ -206,7 +206,7 @@ async def test_ban_second_offense():
         mock_context.save = AsyncMock()
 
         with patch(
-            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
             new_callable=AsyncMock,
             return_value=mock_context,
         ):
@@ -229,7 +229,7 @@ async def test_ban_second_offense():
         mock_context2.save = AsyncMock()
 
         with patch(
-            "src.plugins.repeater.ban_manager._context_repo.find_by_keywords",
+            "src.plugins.repeater.ban_manager.context_repo.find_by_keywords",
             new_callable=AsyncMock,
             return_value=mock_context2,
         ):
@@ -263,7 +263,7 @@ async def test_select_blacklist():
         ]
 
         with patch(
-            "src.plugins.repeater.ban_manager._blacklist_repo.find_all",
+            "src.plugins.repeater.ban_manager.blacklist_repo.find_all",
             new_callable=AsyncMock,
             return_value=mock_blacklist_items,
         ):

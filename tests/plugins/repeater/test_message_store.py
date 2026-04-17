@@ -83,7 +83,7 @@ async def test_sync_persistence(beanie_fixture):
         bot_id = 11111
 
         # Mock insert_many to track calls
-        with patch("src.plugins.repeater.message_store._message_repo.bulk_insert") as mock_insert:
+        with patch("src.plugins.repeater.message_store.message_repo.bulk_insert") as mock_insert:
             mock_insert.return_value = AsyncMock(return_value=None)()
 
             # Insert messages to exceed count threshold

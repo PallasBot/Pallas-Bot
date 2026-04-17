@@ -63,8 +63,10 @@ async def test_speak_filters_banned_keywords(beanie_fixture):
     group_id = 30002
     bot_id = 10001
     msg_list = [_build_message(group_id, 20001 + i, f"牛牛-warmup-{i}", f"warmup-{i}", i + 1) for i in range(8)]
-    msg_list.append(_build_message(group_id, 20021, "banned-content", "ban_kw", 9))
-    msg_list.append(_build_message(group_id, 20022, "allowed-content", "allow_kw", 10))
+    msg_list.extend([
+        _build_message(group_id, 20021, "banned-content", "ban_kw", 9),
+        _build_message(group_id, 20022, "allowed-content", "allow_kw", 10),
+    ])
     MessageStore._message_dict[group_id] = msg_list
 
     reply_dict[group_id][bot_id] = [{"time": 1, "reply": "x", "reply_keywords": "x"}]
@@ -107,8 +109,10 @@ async def test_speak_recent_dedup_avoids_same_message_twice(beanie_fixture):
     group_id = 30003
     bot_id = 10001
     msg_list = [_build_message(group_id, 21000 + i, f"牛牛-warmup-{i}", f"warmup-{i}", i + 1) for i in range(8)]
-    msg_list.append(_build_message(group_id, 21021, "dup-a", "dup-a", 9))
-    msg_list.append(_build_message(group_id, 21022, "dup-b", "dup-b", 10))
+    msg_list.extend([
+        _build_message(group_id, 21021, "dup-a", "dup-a", 9),
+        _build_message(group_id, 21022, "dup-b", "dup-b", 10),
+    ])
     MessageStore._message_dict[group_id] = msg_list
 
     reply_dict[group_id][bot_id] = [{"time": 1, "reply": "x", "reply_keywords": "x"}]

@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from src.common.db.modules import Answer, BlackList, Context, Message
+from src.common.db.modules import Answer, Context, Message
 from src.common.db.repository import (
     BlackListRepository,
     ContextRepository,

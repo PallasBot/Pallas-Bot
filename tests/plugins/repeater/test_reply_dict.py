@@ -13,7 +13,6 @@ from collections import defaultdict
 
 import pytest
 
-
 SAVE_RESERVED_SIZE = 100
 
 
@@ -101,7 +100,7 @@ async def test_generator_cleanup(beanie_fixture):
 
     initial_size = len(_reply_dict[group_id][bot_id])
     assert initial_size == 300, f"Expected initial size 300, got {initial_size}"
-    assert initial_size > SAVE_RESERVED_SIZE, f"Initial size must be > SAVE_RESERVED_SIZE for this test"
+    assert initial_size > SAVE_RESERVED_SIZE, "Initial size must be > SAVE_RESERVED_SIZE for this test"
 
     answer_list = [f"new_reply_{i}" for i in range(10)]
     answer_keywords = "new keyword"
@@ -127,7 +126,7 @@ async def test_generator_cleanup(beanie_fixture):
     generator = mock_yield_results_with_cleanup((answer_list, answer_keywords))
 
     count = 0
-    async for item in generator:
+    async for _item in generator:
         count += 1
         if count == 1:
             break

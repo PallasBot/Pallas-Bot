@@ -7,7 +7,7 @@ Tests verify that:
 """
 
 import asyncio
-from collections import deque, defaultdict
+from collections import defaultdict, deque
 
 import pytest
 
