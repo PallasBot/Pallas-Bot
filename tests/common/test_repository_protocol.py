@@ -23,9 +23,7 @@ class MockContextRepo:
     async def find_for_cleanup(self, trigger_threshold, expiration):
         return []
 
-    async def upsert_answer(
-        self, keywords, group_id, answer_keywords, answer_time, message, append_on_existing
-    ):
+    async def upsert_answer(self, keywords, group_id, answer_keywords, answer_time, message, append_on_existing):
         pass
 
     async def replace_answers(self, keywords, answers, clear_time):

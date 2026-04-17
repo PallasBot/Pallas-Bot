@@ -304,9 +304,7 @@ async def test_context_insert_calls_upsert_answer_when_context_exists(beanie_fix
             new_callable=AsyncMock,
             return_value=mock_context,
         ),
-        patch(
-            "src.plugins.repeater.learner.context_repo.upsert_answer", new_callable=AsyncMock
-        ) as mock_upsert,
+        patch("src.plugins.repeater.learner.context_repo.upsert_answer", new_callable=AsyncMock) as mock_upsert,
         patch("src.plugins.repeater.learner.context_repo.insert", new_callable=AsyncMock) as mock_insert,
         patch("src.plugins.repeater.learner.context_repo.save", new_callable=AsyncMock) as mock_save,
     ):
@@ -365,9 +363,7 @@ async def test_context_insert_no_append_when_non_plain_text(beanie_fixture):
             new_callable=AsyncMock,
             return_value=mock_context,
         ),
-        patch(
-            "src.plugins.repeater.learner.context_repo.upsert_answer", new_callable=AsyncMock
-        ) as mock_upsert,
+        patch("src.plugins.repeater.learner.context_repo.upsert_answer", new_callable=AsyncMock) as mock_upsert,
     ):
         await Learner._context_insert(chat_data, pre_msg)
 
@@ -409,9 +405,7 @@ async def test_context_insert_creates_new_context_when_missing(beanie_fixture):
             return_value=None,
         ),
         patch("src.plugins.repeater.learner.context_repo.insert", new_callable=AsyncMock) as mock_insert,
-        patch(
-            "src.plugins.repeater.learner.context_repo.upsert_answer", new_callable=AsyncMock
-        ) as mock_upsert,
+        patch("src.plugins.repeater.learner.context_repo.upsert_answer", new_callable=AsyncMock) as mock_upsert,
     ):
         await Learner._context_insert(chat_data, pre_msg)
 

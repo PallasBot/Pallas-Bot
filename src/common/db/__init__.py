@@ -249,9 +249,7 @@ def make_bot_config_repository() -> ConfigRepository:
     """根据当前配置的后端，返回 BotConfig Repository 实例。"""
     backend = get_db_backend()
     if backend not in BOT_CONFIG_REPO_REGISTRY:
-        raise ValueError(
-            f"后端 {backend} 未注册 BotConfig Repository，已注册：{list(BOT_CONFIG_REPO_REGISTRY)}"
-        )
+        raise ValueError(f"后端 {backend} 未注册 BotConfig Repository，已注册：{list(BOT_CONFIG_REPO_REGISTRY)}")
     return BOT_CONFIG_REPO_REGISTRY[backend]()
 
 
@@ -259,9 +257,7 @@ def make_group_config_repository() -> ConfigRepository:
     """根据当前配置的后端，返回 GroupConfig Repository 实例。"""
     backend = get_db_backend()
     if backend not in GROUP_CONFIG_REPO_REGISTRY:
-        raise ValueError(
-            f"后端 {backend} 未注册 GroupConfig Repository，已注册：{list(GROUP_CONFIG_REPO_REGISTRY)}"
-        )
+        raise ValueError(f"后端 {backend} 未注册 GroupConfig Repository，已注册：{list(GROUP_CONFIG_REPO_REGISTRY)}")
     return GROUP_CONFIG_REPO_REGISTRY[backend]()
 
 
@@ -269,9 +265,7 @@ def make_user_config_repository() -> ConfigRepository:
     """根据当前配置的后端，返回 UserConfig Repository 实例。"""
     backend = get_db_backend()
     if backend not in USER_CONFIG_REPO_REGISTRY:
-        raise ValueError(
-            f"后端 {backend} 未注册 UserConfig Repository，已注册：{list(USER_CONFIG_REPO_REGISTRY)}"
-        )
+        raise ValueError(f"后端 {backend} 未注册 UserConfig Repository，已注册：{list(USER_CONFIG_REPO_REGISTRY)}")
     return USER_CONFIG_REPO_REGISTRY[backend]()
 
 
@@ -279,9 +273,7 @@ def make_image_cache_repository() -> ImageCacheRepository:
     """根据当前配置的后端，返回 ImageCache Repository 实例。"""
     backend = get_db_backend()
     if backend not in IMAGE_CACHE_REPO_REGISTRY:
-        raise ValueError(
-            f"后端 {backend} 未注册 ImageCache Repository，已注册：{list(IMAGE_CACHE_REPO_REGISTRY)}"
-        )
+        raise ValueError(f"后端 {backend} 未注册 ImageCache Repository，已注册：{list(IMAGE_CACHE_REPO_REGISTRY)}")
     return IMAGE_CACHE_REPO_REGISTRY[backend]()
 
 

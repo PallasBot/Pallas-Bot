@@ -149,7 +149,9 @@ async def test_upsert_answer_increments_existing(beanie_fixture):
         )
     )
 
-    await repo.upsert_answer("kw", group_id=1, answer_keywords="a", answer_time=cur + 10, message="m1", append_on_existing=True)
+    await repo.upsert_answer(
+        "kw", group_id=1, answer_keywords="a", answer_time=cur + 10, message="m1", append_on_existing=True
+    )
 
     found = await repo.find_by_keywords("kw")
     assert found is not None
@@ -217,7 +219,9 @@ async def test_upsert_answer_differentiates_by_group(beanie_fixture):
         )
     )
 
-    await repo.upsert_answer("kw", group_id=2, answer_keywords="a", answer_time=cur + 5, message="m2", append_on_existing=True)
+    await repo.upsert_answer(
+        "kw", group_id=2, answer_keywords="a", answer_time=cur + 5, message="m2", append_on_existing=True
+    )
 
     found = await repo.find_by_keywords("kw")
     assert found is not None
