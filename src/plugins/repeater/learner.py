@@ -83,27 +83,16 @@ class Learner:
 
         context = await context_repo.find_by_keywords(pre_keywords)
         if context:
-            answer_index = next(
-                (
-                    idx
-                    for idx, answer in enumerate(context.answers)
-                    if answer.group_id == group_id and answer.keywords == keywords
-                ),
-                -1,
+            # 使用细粒度 upsert_answer：原子地 inc count / set time / 可选 push message
+            # append_on_existing 保留原有 "仅 plain text 才追加 message" 的语义
+            await context_repo.upsert_answer(
+                keywords=pre_keywords,
+                group_id=group_id,
+                answer_keywords=keywords,
+                answer_time=cur_time,
+                message=raw_message,
+                append_on_existing=chat_data.is_plain_text,
             )
-            if answer_index != -1:
-                context.answers[answer_index].count += 1
-                context.answers[answer_index].time = cur_time
-                if chat_data.is_plain_text:
-                    context.answers[answer_index].messages.append(raw_message)
-            else:
-                context.answers.append(
-                    Answer(keywords=keywords, group_id=group_id, count=1, time=cur_time, messages=[raw_message])
-                )
-            context.time = cur_time
-            context.trigger_count += 1
-            await context_repo.save(context)
-
         else:
             context = Context(
                 keywords=pre_keywords,

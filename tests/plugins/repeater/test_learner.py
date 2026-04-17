@@ -266,11 +266,11 @@ async def test_context_insert_skip_none(beanie_fixture):
 
 
 @pytest.mark.asyncio
-async def test_context_insert_increment_count(beanie_fixture):
+async def test_context_insert_calls_upsert_answer_when_context_exists(beanie_fixture):
     """
-    Test that _context_insert increments count for existing context with matching answer.
+    Context 已存在时，_context_insert 应委托 upsert_answer（而非读-改-写 save），
+    以便在拆表后具备原子 inc count 的能力。
     """
-    from src.common.db import Answer
     from src.common.db import Message as MessageModel
     from src.plugins.repeater.learner import Learner
     from src.plugins.repeater.model import ChatData
@@ -295,46 +295,90 @@ async def test_context_insert_increment_count(beanie_fixture):
         time=1000,
     )
 
-    # Mock existing context with matching answer
-    existing_answer = Answer(
-        keywords=chat_data.keywords,
-        group_id=chat_data.group_id,
-        count=5,
-        time=1500,
-        messages=["Response message"],
-    )
-
     mock_context = MagicMock()
     mock_context.keywords = "Trigger message"
-    mock_context.answers = [existing_answer]
-    mock_context.time = 1500
-    mock_context.trigger_count = 10
+
     with (
         patch(
             "src.plugins.repeater.learner.context_repo.find_by_keywords",
             new_callable=AsyncMock,
             return_value=mock_context,
         ),
+        patch(
+            "src.plugins.repeater.learner.context_repo.upsert_answer", new_callable=AsyncMock
+        ) as mock_upsert,
+        patch("src.plugins.repeater.learner.context_repo.insert", new_callable=AsyncMock) as mock_insert,
         patch("src.plugins.repeater.learner.context_repo.save", new_callable=AsyncMock) as mock_save,
     ):
-        # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
 
-        # Verify count was incremented
-        assert existing_answer.count == 6, "Count should be incremented"
-        assert existing_answer.time == 2000, "Time should be updated"
+        assert mock_upsert.call_count == 1
+        call_kwargs = mock_upsert.call_args.kwargs
+        assert call_kwargs["keywords"] == pre_msg.keywords
+        assert call_kwargs["group_id"] == chat_data.group_id
+        assert call_kwargs["answer_keywords"] == chat_data.keywords
+        assert call_kwargs["answer_time"] == chat_data.time
+        assert call_kwargs["message"] == chat_data.raw_message
+        assert call_kwargs["append_on_existing"] is True  # plain text
 
-        # Verify context was saved
-        assert mock_save.called, "Context should be saved"
-        assert mock_context.trigger_count == 11, "Trigger count should be incremented"
+        assert mock_insert.call_count == 0
+        assert mock_save.call_count == 0
 
 
 @pytest.mark.asyncio
-async def test_context_insert_new_answer(beanie_fixture):
+async def test_context_insert_no_append_when_non_plain_text(beanie_fixture):
     """
-    Test that _context_insert adds new answer for existing context without matching answer.
+    非纯文本（含 CQ 码的）消息对已有 answer 不应 push message，
+    通过 upsert_answer 的 append_on_existing=False 表达。
     """
-    from src.common.db import Answer
+    from src.common.db import Message as MessageModel
+    from src.plugins.repeater.learner import Learner
+    from src.plugins.repeater.model import ChatData
+
+    # 含 CQ 码 => is_plain_text=False
+    chat_data = ChatData(
+        group_id=12345,
+        user_id=67890,
+        raw_message="[CQ:image,url=x]",
+        plain_text="",
+        time=2000,
+        bot_id=11111,
+    )
+    assert not chat_data.is_plain_text
+
+    pre_msg = MessageModel(
+        group_id=12345,
+        user_id=99999,
+        bot_id=11111,
+        raw_message="Trigger",
+        is_plain_text=True,
+        plain_text="Trigger",
+        keywords="Trigger",
+        time=1000,
+    )
+
+    mock_context = MagicMock()
+
+    with (
+        patch(
+            "src.plugins.repeater.learner.context_repo.find_by_keywords",
+            new_callable=AsyncMock,
+            return_value=mock_context,
+        ),
+        patch(
+            "src.plugins.repeater.learner.context_repo.upsert_answer", new_callable=AsyncMock
+        ) as mock_upsert,
+    ):
+        await Learner._context_insert(chat_data, pre_msg)
+
+        assert mock_upsert.call_args.kwargs["append_on_existing"] is False
+
+
+@pytest.mark.asyncio
+async def test_context_insert_creates_new_context_when_missing(beanie_fixture):
+    """
+    Context 不存在时应走 insert(Context(...)) 路径，不调用 upsert_answer。
+    """
     from src.common.db import Message as MessageModel
     from src.plugins.repeater.learner import Learner
     from src.plugins.repeater.model import ChatData
@@ -347,52 +391,37 @@ async def test_context_insert_new_answer(beanie_fixture):
         time=2000,
         bot_id=11111,
     )
-
     pre_msg = MessageModel(
         group_id=12345,
         user_id=99999,
         bot_id=11111,
-        raw_message="Trigger message",
+        raw_message="Trigger",
         is_plain_text=True,
-        plain_text="Trigger message",
-        keywords="Trigger message",
+        plain_text="Trigger",
+        keywords="Trigger",
         time=1000,
     )
 
-    # Mock existing context with different answer
-    existing_answer = Answer(
-        keywords="Different keywords",
-        group_id=12345,
-        count=5,
-        time=1500,
-        messages=["Different response"],
-    )
-
-    mock_context = MagicMock()
-    mock_context.keywords = "Trigger message"
-    mock_context.answers = [existing_answer]
-    mock_context.time = 1500
-    mock_context.trigger_count = 10
     with (
         patch(
             "src.plugins.repeater.learner.context_repo.find_by_keywords",
             new_callable=AsyncMock,
-            return_value=mock_context,
+            return_value=None,
         ),
-        patch("src.plugins.repeater.learner.context_repo.save", new_callable=AsyncMock) as mock_save,
+        patch("src.plugins.repeater.learner.context_repo.insert", new_callable=AsyncMock) as mock_insert,
+        patch(
+            "src.plugins.repeater.learner.context_repo.upsert_answer", new_callable=AsyncMock
+        ) as mock_upsert,
     ):
-        # Call context_insert
         await Learner._context_insert(chat_data, pre_msg)
 
-        # Verify new answer was appended
-        assert len(mock_context.answers) == 2, "Should have 2 answers now"
-        new_answer = mock_context.answers[1]
-        assert new_answer.keywords == chat_data.keywords
-        assert new_answer.group_id == chat_data.group_id
-        assert new_answer.count == 1
-
-        # Verify context was saved
-        assert mock_save.called, "Context should be saved"
+        assert mock_insert.call_count == 1
+        assert mock_upsert.call_count == 0
+        # 新 context 的 answers 第一条应是当前消息
+        inserted_ctx = mock_insert.call_args.args[0]
+        assert inserted_ctx.keywords == pre_msg.keywords
+        assert len(inserted_ctx.answers) == 1
+        assert inserted_ctx.answers[0].keywords == chat_data.keywords
 
 
 @pytest.mark.asyncio
