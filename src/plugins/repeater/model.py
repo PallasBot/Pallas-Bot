@@ -213,9 +213,8 @@ class Chat:
         all_context = await context_repo.find_for_cleanup(100, expiration)
         for context in all_context:
             answers = [ans for ans in context.answers if ans.count > 1 or ans.time > expiration]
-            context.answers = answers
-            context.clear_time = cur_time
-            await context_repo.save(context)
+            # 使用 replace_answers 细粒度 API，便于拆表后只写 answer 子表 + 更新 clear_time
+            await context_repo.replace_answers(context.keywords, answers, cur_time)
 
     @staticmethod
     async def sync():
