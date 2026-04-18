@@ -55,24 +55,29 @@ class MongoContextRepository:
         message: str,
         append_on_existing: bool,
     ) -> None:
-        # 走 pymongo 原始 collection，以便使用 positional update operator
+        """
+        原子 upsert：
+          - 命中 (group_id, answer_keywords) 时：$inc count / $set time，
+            append_on_existing 时 $push message
+          - 未命中时：$push 新 Answer；第二步 filter 使用
+            $not $elemMatch 防止并发下两个 writer 同时 push 造成重复 answer
+          - 若第二步因并发被抢先（matched_count == 0），回退到第一步重试
+            increment，保证 count 精确累加
+        """
         collection = Context.get_pymongo_collection()
 
-        existing_update: dict = {
+        increment_filter: dict[str, Any] = {
+            "keywords": keywords,
+            "answers": {"$elemMatch": {"group_id": group_id, "keywords": answer_keywords}},
+        }
+        increment_update: dict[str, Any] = {
             "$inc": {"answers.$.count": 1, "count": 1},
             "$set": {"answers.$.time": answer_time, "time": answer_time},
         }
         if append_on_existing:
-            existing_update["$push"] = {"answers.$.messages": message}
+            increment_update["$push"] = {"answers.$.messages": message}
 
-        result = await collection.update_one(
-            {
-                "keywords": keywords,
-                "answers": {"$elemMatch": {"group_id": group_id, "keywords": answer_keywords}},
-            },
-            existing_update,
-        )
-
+        result = await collection.update_one(increment_filter, increment_update)
         if result.matched_count:
             return
 
@@ -84,14 +89,24 @@ class MongoContextRepository:
             messages=[message],
         ).model_dump(by_alias=True)
 
-        await collection.update_one(
-            {"keywords": keywords},
+        push_result = await collection.update_one(
+            {
+                "keywords": keywords,
+                "answers": {
+                    "$not": {"$elemMatch": {"group_id": group_id, "keywords": answer_keywords}},
+                },
+            },
             {
                 "$push": {"answers": new_answer},
                 "$inc": {"count": 1},
                 "$set": {"time": answer_time},
             },
         )
+        if push_result.matched_count:
+            return
+
+        # 并发下被其他 writer 抢先 push，此处 answer 已存在 —— 回退为 increment
+        await collection.update_one(increment_filter, increment_update)
 
     async def replace_answers(self, keywords: str, answers: list[Answer], clear_time: int) -> None:
         collection = Context.get_pymongo_collection()
