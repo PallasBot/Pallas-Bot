@@ -1,5 +1,4 @@
 import pymongo
-import time
 
 mongo_client = pymongo.MongoClient("127.0.0.1", 27017, unicode_decode_error_handler="ignore")
 
