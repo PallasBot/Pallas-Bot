@@ -113,9 +113,11 @@ async def update_bot_config(bot_id: int, disabled_plugins: list[str]) -> BotConf
     # 清理所有缓存，因为全局设置影响所有群组
     clear_help_cache()
 
-    # 返回最新的配置文档给调用方做断言
     bot_config = await bot_config_repo.get(bot_id, ignore_cache=True)
-    assert bot_config is not None  # upsert_field 已保证存在
+    # 不用 assert：python -O 下 assert 会被剥离。
+    # upsert_field 语义上应保证文档存在，若仍拿不到说明仓储实现出问题，显式报错
+    if bot_config is None:
+        raise RuntimeError(f"BotConfig for bot_id={bot_id} not found after upsert_field")
     return bot_config
 
 
@@ -128,7 +130,8 @@ async def update_group_config(group_id: int, disabled_plugins: list[str]) -> Gro
     clear_help_cache(group_id)
 
     group_config = await group_config_repo.get(group_id, ignore_cache=True)
-    assert group_config is not None
+    if group_config is None:
+        raise RuntimeError(f"GroupConfig for group_id={group_id} not found after upsert_field")
     return group_config
 
 
