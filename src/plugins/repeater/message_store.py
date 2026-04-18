@@ -45,6 +45,10 @@ class MessageStore:
         将消息插入缓存，达到阈值时触发持久化
         """
         group_id = chat_data.group_id
+        cur_time = chat_data.time
+
+        should_sync = False
+        trigger_keywords: list[str] | None = None
 
         async with MessageStore._message_lock:
             MessageStore._message_dict[group_id].append(
@@ -60,32 +64,39 @@ class MessageStore:
                 )
             )
 
-        # 纯文本消息时调用 topics 回调
-        if chat_data.is_plain_text and topics_callback:
-            await topics_callback(group_id, chat_data._keywords_list)
+            if chat_data.is_plain_text and topics_callback is not None:
+                trigger_keywords = chat_data._keywords_list
 
-        cur_time = chat_data.time
-        if MessageStore._late_save_time == 0:
-            MessageStore._late_save_time = cur_time - 1
-            return
+            # 阈值判断与 _late_save_time 更新必须与 append 处于同一把锁下，
+            # 否则并发插入可能同时看到跨阈值 / 同时触发 _sync
+            if MessageStore._late_save_time == 0:
+                MessageStore._late_save_time = cur_time - 1
+            else:
+                count = len(MessageStore._message_dict[group_id])
+                if (
+                    count > MessageStore.SAVE_COUNT_THRESHOLD
+                    or cur_time - MessageStore._late_save_time > MessageStore.SAVE_TIME_THRESHOLD
+                ):
+                    should_sync = True
 
-        if len(MessageStore._message_dict[group_id]) > MessageStore.SAVE_COUNT_THRESHOLD:
-            await MessageStore._sync(cur_time)
+        # topics 回调可能较慢（含 IO），放在锁外执行
+        if trigger_keywords is not None and topics_callback is not None:
+            await topics_callback(group_id, trigger_keywords)
 
-        elif cur_time - MessageStore._late_save_time > MessageStore.SAVE_TIME_THRESHOLD:
+        if should_sync:
             await MessageStore._sync(cur_time)
 
     @staticmethod
     async def _sync(cur_time: int | None = None):
         """
-        持久化
+        持久化：按身份（id(msg)）标记待同步消息，bulk_insert 成功后仅移除
+        这些消息，避免把同步期间新到达的未同步消息截断丢弃。
         """
         if cur_time is None:
             cur_time = int(time.time())
 
-        # 步骤 1: 收集待保存列表，暂不清空 _message_dict
         async with MessageStore._message_lock:
-            save_list = [
+            save_list: list[MessageModel] = [
                 msg
                 for group_msgs in MessageStore._message_dict.values()
                 for msg in group_msgs
@@ -93,21 +104,30 @@ class MessageStore:
             ]
             if not save_list:
                 return
+            syncing_ids = {id(msg) for msg in save_list}
 
-        # 步骤 2: 在锁外执行 insert_many
         try:
             await message_repo.bulk_insert(save_list)
         except Exception as e:
-            # 插入失败时记录错误并保留数据，避免丢失
             logger.error(f"Failed to insert messages in _sync: {e}")
             return
 
-        # 步骤 3: 插入成功后才截断并更新 _late_save_time
         async with MessageStore._message_lock:
-            new_dict = {
-                group_id: group_msgs[-MessageStore.SAVE_RESERVED_SIZE :]
-                for group_id, group_msgs in MessageStore._message_dict.items()
-            }
+            # 仅丢弃本轮真正已同步的消息（按 id 判定），
+            # 已同步的消息保留最后 SAVE_RESERVED_SIZE 条供随机采样，
+            # 未同步的新消息全部保留，留给下一轮 _sync
+            new_dict: dict[int, list[MessageModel]] = {}
+            for group_id, group_msgs in MessageStore._message_dict.items():
+                synced: list[MessageModel] = []
+                unsynced: list[MessageModel] = []
+                for msg in group_msgs:
+                    if id(msg) in syncing_ids:
+                        synced.append(msg)
+                    else:
+                        unsynced.append(msg)
+                if len(synced) > MessageStore.SAVE_RESERVED_SIZE:
+                    synced = synced[-MessageStore.SAVE_RESERVED_SIZE :]
+                new_dict[group_id] = synced + unsynced
             MessageStore._message_dict.clear()
             MessageStore._message_dict.update(new_dict)
 
