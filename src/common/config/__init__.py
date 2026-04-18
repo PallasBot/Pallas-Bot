@@ -73,12 +73,19 @@ class BotConfig(Config):
         security = await self._find("security")
         return True if security else False
 
-    async def auto_accept(self) -> bool:
+    async def auto_accept_friend(self) -> bool:
         """
-        是否自动接受加群、加好友请求
+        是否自动接受好友请求
         """
-        accept = await self._find("auto_accept")
-        return True if accept else False
+        v = await self._find("auto_accept_friend")
+        return True if v else False
+
+    async def auto_accept_group(self) -> bool:
+        """
+        是否自动接受入群邀请
+        """
+        v = await self._find("auto_accept_group")
+        return True if v else False
 
     async def is_admin_of_bot(self, user_id: int) -> bool:
         """

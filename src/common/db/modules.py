@@ -22,7 +22,8 @@ class SingProgress(BaseModel):
 class BotConfigModule(Document):
     account: int = Field(...)
     admins: list[int] = Field(default_factory=list)
-    auto_accept: bool = Field(default=False)
+    auto_accept_friend: bool = Field(default=False)
+    auto_accept_group: bool = Field(default=False)
     security: bool = Field(default=False)
     taken_name: dict[int, int] = Field(default_factory=dict)
     drunk: dict[int, float] = Field(default_factory=dict)
