@@ -71,7 +71,8 @@ async def test_bot_config_class_uses_repo(beanie_fixture):
 
     bot = BotConfig(bot_id=999)
     assert await bot.security() is False  # default
-    assert await bot.auto_accept() is False
+    assert await bot.auto_accept_friend() is False
+    assert await bot.auto_accept_group() is False
 
 
 @pytest.mark.asyncio
