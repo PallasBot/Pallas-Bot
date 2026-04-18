@@ -15,7 +15,6 @@ async def beanie_fixture():
     Registers all Document models and clears collections after each test.
     """
     from beanie import init_beanie
-    from mongomock import MongoClient as MockMongoClient
     from mongomock_motor import AsyncMongoMockClient
 
     from src.common.db.modules import (
@@ -28,19 +27,11 @@ async def beanie_fixture():
         UserConfigModule,
     )
 
-    mock_client = MockMongoClient()
-    db = mock_client["test_pallas_bot"]
-
-    original_list_collection_names = db.list_collection_names
-
-    def patched_list_collection_names(session=None, **kwargs):  # noqa: ARG001
-        return original_list_collection_names(session=session)
-
-    db.list_collection_names = patched_list_collection_names
-
     motor_client = AsyncMongoMockClient()
     motor_db = motor_client["test_pallas_bot"]
 
+    # mongomock_motor 的 list_collection_names 不接受 nameOnly 等 kwargs，
+    # Beanie init 会向其传递 kwargs，这里做一层 shim 让 kwargs 被丢弃
     original_motor_list = motor_db.list_collection_names
 
     async def patched_motor_list(session=None, **kwargs):  # noqa: ARG001
