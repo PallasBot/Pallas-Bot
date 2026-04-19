@@ -211,20 +211,36 @@ def make_pg_image_cache() -> ImageCacheRepository:
 
 async def init_postgresql_db() -> None:
     """初始化 PostgreSQL 连接"""
+    import re
+
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
     from .repository_pg import dispose_pg, init_pg
 
-    host = _cfg("PG_HOST", _cfg("MONGO_HOST", "127.0.0.1"))
+    from nonebot.log import logger
+
+    pg_host_raw = _cfg("PG_HOST", "")
+    if pg_host_raw:
+        host = pg_host_raw
+    else:
+        host = _cfg("MONGO_HOST", "127.0.0.1")
+        if host != "127.0.0.1":
+            logger.warning(
+                f"PG_HOST 未设置，已 fallback 到 MONGO_HOST={host}；如 PG/Mongo 不同机器请显式设置 PG_HOST"
+            )
     port = int(_cfg("PG_PORT", "5432"))
     user = _cfg("PG_USER", "")
     password = _cfg("PG_PASSWORD", "")
     db_name = _cfg("PG_DB", "PallasBot")
+    if not re.match(r"^[A-Za-z0-9_\-]+$", db_name):
+        raise ValueError(f"非法的 PG_DB: {db_name!r}")
     auth = f"{quote_plus(user)}:{quote_plus(password)}@" if user and password else ""
     base_url = f"postgresql+asyncpg://{auth}{host}:{port}"
 
-    from nonebot.log import logger
+    pool_size = int(_cfg("PG_POOL_SIZE", "10"))
+    max_overflow = int(_cfg("PG_MAX_OVERFLOW", "20"))
+    pool_recycle = int(_cfg("PG_POOL_RECYCLE", "1800"))
 
     logger.info(f"正在连接 PostgreSQL {host}:{port}，Database：{db_name}")
 
@@ -239,16 +255,15 @@ async def init_postgresql_db() -> None:
     finally:
         await admin_engine.dispose()
 
-    pool_size = int(_cfg("PG_POOL_SIZE", "20"))
-    max_overflow = int(_cfg("PG_MAX_OVERFLOW", "40"))
     engine = create_async_engine(
         f"{base_url}/{db_name}",
         pool_size=pool_size,
         max_overflow=max_overflow,
+        pool_recycle=pool_recycle,
         pool_pre_ping=True,
     )
     await init_pg(engine)
-    logger.info(f"{db_name} 连接成功！")
+    logger.info(f"{db_name} 连接成功！(pool={pool_size}+{max_overflow}, recycle={pool_recycle}s)")
 
     # bot 退出时释放连接池
     try:

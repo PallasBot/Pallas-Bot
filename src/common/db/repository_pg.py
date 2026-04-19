@@ -2,11 +2,32 @@
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import os
+import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, BigInteger, Boolean, ForeignKey, Text, delete, select, update
+from sqlalchemy import (
+    JSON,
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+    delete,
+    insert,
+    literal_column,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, selectinload
@@ -17,19 +38,49 @@ if TYPE_CHECKING:
 _JsonB = JSONB().with_variant(JSON(), "sqlite")
 
 
+# ---------------------------------------------------------------------------
+# 运行时 \x00 防御：PostgreSQL TEXT 不接受 NUL 字符，需在写入前统一剥除
+# ---------------------------------------------------------------------------
+
+
+def _s(x: str | None) -> str | None:
+    if x is None:
+        return None
+    return x.replace("\x00", "") if "\x00" in x else x
+
+
+def _strip_null_deep(obj: Any) -> Any:
+    """递归剥除 str / dict / list 中的 \\u0000，用于 JSONB 字段。"""
+    if isinstance(obj, str):
+        return _s(obj)
+    if isinstance(obj, dict):
+        return {k: _strip_null_deep(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_strip_null_deep(i) for i in obj]
+    return obj
+
+
+# ---------------------------------------------------------------------------
+# ORM 定义
+# ---------------------------------------------------------------------------
+
+
 class Base(DeclarativeBase):
     pass
 
 
 class ContextAnswerRow(Base):
     __tablename__ = "context_answer"
+    __table_args__ = (
+        UniqueConstraint("context_id", "group_id", "keywords", name="uq_context_answer_ctx_group_kw"),
+    )
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     context_id: Mapped[int] = mapped_column(ForeignKey("context.id", ondelete="CASCADE"), nullable=False, index=True)
     keywords: Mapped[str] = mapped_column(Text, nullable=False)
-    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    count: Mapped[int] = mapped_column(nullable=False, default=1)
-    time: Mapped[int] = mapped_column(nullable=False, default=0)
+    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
     messages: Mapped[list[ContextAnswerMessageRow]] = relationship(
         "ContextAnswerMessageRow", cascade="all, delete-orphan", lazy="noload"
@@ -39,7 +90,7 @@ class ContextAnswerRow(Base):
 class ContextAnswerMessageRow(Base):
     __tablename__ = "context_answer_message"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     answer_id: Mapped[int] = mapped_column(
         ForeignKey("context_answer.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -49,23 +100,24 @@ class ContextAnswerMessageRow(Base):
 class ContextBanRow(Base):
     __tablename__ = "context_ban"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     context_id: Mapped[int] = mapped_column(ForeignKey("context.id", ondelete="CASCADE"), nullable=False, index=True)
     keywords: Mapped[str] = mapped_column(Text, nullable=False)
     group_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    time: Mapped[int] = mapped_column(nullable=False, default=0)
+    time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
 class ContextRow(Base):
     __tablename__ = "context"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     keywords: Mapped[str] = mapped_column(Text, nullable=False)
-    keywords_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
-    time: Mapped[int] = mapped_column(nullable=False, default=0)
-    trigger_count: Mapped[int] = mapped_column(nullable=False, default=1)
-    clear_time: Mapped[int] = mapped_column(nullable=False, default=0)
+    # unique=True 已由 PG 自动建 btree，不再附加 index=True 以免冗余索引
+    keywords_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    trigger_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    clear_time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
     answers: Mapped[list[ContextAnswerRow]] = relationship(
         "ContextAnswerRow", cascade="all, delete-orphan", lazy="noload"
@@ -75,8 +127,9 @@ class ContextRow(Base):
 
 class MessageRow(Base):
     __tablename__ = "message"
+    __table_args__ = (Index("ix_message_time", "time"),)
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     group_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     bot_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -84,14 +137,14 @@ class MessageRow(Base):
     is_plain_text: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     plain_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     keywords: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    time: Mapped[int] = mapped_column(nullable=False, default=0)
+    time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
 class BlackListRow(Base):
     __tablename__ = "blacklist"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True)
     answers: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
     answers_reserve: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
 
@@ -113,7 +166,7 @@ class GroupConfigRow(Base):
     __tablename__ = "group_config"
 
     group_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    roulette_mode: Mapped[int] = mapped_column(nullable=False, default=1)
+    roulette_mode: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     banned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sing_progress: Mapped[Any] = mapped_column(_JsonB, nullable=True)
     disabled_plugins: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
@@ -129,11 +182,16 @@ class UserConfigRow(Base):
 class ImageCacheRow(Base):
     __tablename__ = "image_cache"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    cq_code: Mapped[str] = mapped_column(Text, unique=True, nullable=False, index=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    cq_code: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
     base64_data: Mapped[str | None] = mapped_column(Text, nullable=True)
-    ref_times: Mapped[int] = mapped_column(nullable=False, default=1)
-    date: Mapped[int] = mapped_column(nullable=False, index=True)
+    ref_times: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    date: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+
+# ---------------------------------------------------------------------------
+# 引擎 / 会话
+# ---------------------------------------------------------------------------
 
 
 _engine: AsyncEngine | None = None
@@ -149,7 +207,7 @@ async def get_session():
 
 
 async def init_pg(engine: AsyncEngine) -> None:
-    """创建表结构并注入 engine"""
+    """创建表结构并注入 engine。新库首次启动时会建出当前最新 schema。"""
     global _engine, _session_factory
     _engine = engine
     _session_factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -172,9 +230,9 @@ _LOAD_RELATED = [
 
 
 def keywords_hash(keywords: str) -> str:
-    import hashlib
-
-    return hashlib.md5(keywords.encode()).hexdigest()
+    # 先剥除 \x00 再哈希，与 ContextRow.keywords 实际存储值保持一致
+    clean = keywords.replace("\x00", "") if keywords and "\x00" in keywords else keywords
+    return hashlib.md5((clean or "").encode("utf-8", errors="replace")).hexdigest()
 
 
 # asyncpg 单语句参数上限 32767
@@ -188,11 +246,10 @@ async def _insert_answers_batched(session: AsyncSession, context_id: int, answer
 
     for i in range(0, len(answers), _ANSWER_BATCH):
         batch: list[Answer] = answers[i : i + _ANSWER_BATCH]
-        # 先插入 answer 行（不带 messages 关系，避免 SQLAlchemy 一次性级联）
         rows = [
             ContextAnswerRow(
                 context_id=context_id,
-                keywords=a.keywords,
+                keywords=_s(a.keywords) or "",
                 group_id=a.group_id,
                 count=a.count,
                 time=a.time,
@@ -200,11 +257,12 @@ async def _insert_answers_batched(session: AsyncSession, context_id: int, answer
             for a in batch
         ]
         session.add_all(rows)
-        await session.flush()  # 获取自增 id
+        await session.flush()
 
-        # 再分批插入 message 行
         msg_rows = [
-            ContextAnswerMessageRow(answer_id=rows[j].id, message=m) for j, a in enumerate(batch) for m in a.messages
+            ContextAnswerMessageRow(answer_id=rows[j].id, message=_s(m) or "")
+            for j, a in enumerate(batch)
+            for m in a.messages
         ]
         for k in range(0, len(msg_rows), _MSG_BATCH):
             session.add_all(msg_rows[k : k + _MSG_BATCH])
@@ -218,9 +276,9 @@ async def _insert_bans_batched(session: AsyncSession, context_id: int, bans) -> 
         session.add_all([
             ContextBanRow(
                 context_id=context_id,
-                keywords=b.keywords,
+                keywords=_s(b.keywords) or "",
                 group_id=b.group_id,
-                reason=b.reason,
+                reason=_s(b.reason) or "",
                 time=b.time,
             )
             for b in batch
@@ -299,7 +357,7 @@ class PgContextRepository:
 
             if row is None:
                 row = ContextRow(
-                    keywords=context.keywords,
+                    keywords=_s(context.keywords) or "",
                     keywords_hash=khash,
                     time=context.time,
                     trigger_count=context.trigger_count,
@@ -319,11 +377,12 @@ class PgContextRepository:
             await session.commit()
 
     async def insert(self, context: Context) -> None:
+        """插入新 Context。并发下同 keywords 第二个写入会被 unique 约束拒绝，等价为 no-op。"""
         khash = keywords_hash(context.keywords)
         try:
             async with get_session() as session:
                 row = ContextRow(
-                    keywords=context.keywords,
+                    keywords=_s(context.keywords) or "",
                     keywords_hash=khash,
                     time=context.time,
                     trigger_count=context.trigger_count,
@@ -335,31 +394,60 @@ class PgContextRepository:
                 await _insert_bans_batched(session, row.id, context.ban)
                 await session.commit()
         except IntegrityError:
-            # 另一个协程已插入相同 keywords，忽略即可
             pass
 
+    _DELETE_EXPIRED_CHUNK = 10000
+
     async def delete_expired(self, expiration: int, threshold: int) -> None:
-        async with get_session() as session:
-            await session.execute(
-                delete(ContextRow).where(
-                    ContextRow.time < expiration,
-                    ContextRow.trigger_count < threshold,
+        """分批删除过期 Context，避免千万级时长锁表。级联删除由 FK ondelete=CASCADE 处理。"""
+        while True:
+            async with get_session() as session:
+                subq = (
+                    select(ContextRow.id)
+                    .where(ContextRow.time < expiration, ContextRow.trigger_count < threshold)
+                    .limit(self._DELETE_EXPIRED_CHUNK)
+                    .subquery()
                 )
-            )
-            await session.commit()
+                result = await session.execute(
+                    delete(ContextRow).where(ContextRow.id.in_(select(subq.c.id))).returning(ContextRow.id)
+                )
+                deleted = len(result.scalars().all())
+                await session.commit()
+            if deleted < self._DELETE_EXPIRED_CHUNK:
+                break
+
+    _CLEANUP_CHUNK = 500
 
     async def find_for_cleanup(self, trigger_threshold: int, expiration: int) -> list[Context]:
-        async with get_session() as session:
-            result = await session.execute(
-                select(ContextRow)
-                .options(*_LOAD_RELATED)
-                .where(
-                    ContextRow.trigger_count >= trigger_threshold,
-                    ContextRow.clear_time <= expiration,
+        """
+        语义对齐 Mongo：trigger_count > threshold OR clear_time < expiration。
+        流式按主键 id 分页，避免千万级时一次性全加载 OOM。
+        """
+        results: list[Context] = []
+        last_id = 0
+        while True:
+            async with get_session() as session:
+                result = await session.execute(
+                    select(ContextRow)
+                    .options(*_LOAD_RELATED)
+                    .where(
+                        or_(
+                            ContextRow.trigger_count > trigger_threshold,
+                            ContextRow.clear_time < expiration,
+                        ),
+                        ContextRow.id > last_id,
+                    )
+                    .order_by(ContextRow.id)
+                    .limit(self._CLEANUP_CHUNK)
                 )
-            )
-            rows = result.scalars().all()
-            return [row_to_context(r) for r in rows]
+                rows = list(result.scalars().all())
+            if not rows:
+                break
+            results.extend(row_to_context(r) for r in rows)
+            last_id = rows[-1].id
+            if len(rows) < self._CLEANUP_CHUNK:
+                break
+        return results
 
     async def upsert_answer(
         self,
@@ -370,41 +458,53 @@ class PgContextRepository:
         message: str,
         append_on_existing: bool,
     ) -> None:
+        """
+        原子 upsert，依赖 UNIQUE(context_id, group_id, keywords)：
+          - INSERT ... ON CONFLICT DO UPDATE SET count = count + 1, time = EXCLUDED.time
+          - RETURNING 中借助 xmax 判断 insert vs update，决定是否 append message
+          - 最后原子递增 Context.trigger_count / 更新 time
+        """
         khash = keywords_hash(keywords)
+        ans_kw_s = _s(answer_keywords) or ""
+        msg_s = _s(message) or ""
+
         async with get_session() as session:
-            ctx_result = await session.execute(select(ContextRow).where(ContextRow.keywords_hash == khash))
-            ctx_row = ctx_result.scalar_one_or_none()
-            if ctx_row is None:
+            ctx_result = await session.execute(
+                select(ContextRow.id).where(ContextRow.keywords_hash == khash)
+            )
+            ctx_id = ctx_result.scalar_one_or_none()
+            if ctx_id is None:
                 return
 
-            ans_result = await session.execute(
-                select(ContextAnswerRow).where(
-                    ContextAnswerRow.context_id == ctx_row.id,
-                    ContextAnswerRow.group_id == group_id,
-                    ContextAnswerRow.keywords == answer_keywords,
-                )
+            stmt = pg_insert(ContextAnswerRow).values(
+                context_id=ctx_id,
+                keywords=ans_kw_s,
+                group_id=group_id,
+                count=1,
+                time=answer_time,
             )
-            ans_row = ans_result.scalar_one_or_none()
+            stmt = stmt.on_conflict_do_update(
+                constraint="uq_context_answer_ctx_group_kw",
+                set_={
+                    "count": ContextAnswerRow.count + 1,
+                    "time": stmt.excluded.time,
+                },
+            ).returning(ContextAnswerRow.id, literal_column("(xmax = 0)").label("was_insert"))
 
-            if ans_row is not None:
-                ans_row.count += 1
-                ans_row.time = answer_time
-                if append_on_existing:
-                    session.add(ContextAnswerMessageRow(answer_id=ans_row.id, message=message))
-            else:
-                new_ans = ContextAnswerRow(
-                    context_id=ctx_row.id,
-                    keywords=answer_keywords,
-                    group_id=group_id,
-                    count=1,
-                    time=answer_time,
+            row = (await session.execute(stmt)).first()
+            assert row is not None
+            ans_id, was_insert = int(row.id), bool(row.was_insert)
+
+            if was_insert or append_on_existing:
+                await session.execute(
+                    insert(ContextAnswerMessageRow).values(answer_id=ans_id, message=msg_s)
                 )
-                session.add(new_ans)
-                await session.flush()
-                session.add(ContextAnswerMessageRow(answer_id=new_ans.id, message=message))
 
-            ctx_row.trigger_count += 1
-            ctx_row.time = answer_time
+            await session.execute(
+                update(ContextRow)
+                .where(ContextRow.id == ctx_id)
+                .values(trigger_count=ContextRow.trigger_count + 1, time=answer_time)
+            )
             await session.commit()
 
     async def replace_answers(self, keywords: str, answers: list[Answer], clear_time: int) -> None:
@@ -423,17 +523,17 @@ class PgContextRepository:
     async def append_ban(self, keywords: str, ban: Ban) -> None:
         khash = keywords_hash(keywords)
         async with get_session() as session:
-            ctx_result = await session.execute(select(ContextRow).where(ContextRow.keywords_hash == khash))
-            ctx_row = ctx_result.scalar_one_or_none()
-            if ctx_row is None:
+            ctx_result = await session.execute(select(ContextRow.id).where(ContextRow.keywords_hash == khash))
+            ctx_id = ctx_result.scalar_one_or_none()
+            if ctx_id is None:
                 return
 
-            session.add(
-                ContextBanRow(
-                    context_id=ctx_row.id,
-                    keywords=ban.keywords,
+            await session.execute(
+                insert(ContextBanRow).values(
+                    context_id=ctx_id,
+                    keywords=_s(ban.keywords) or "",
                     group_id=ban.group_id,
-                    reason=ban.reason,
+                    reason=_s(ban.reason) or "",
                     time=ban.time,
                 )
             )
@@ -445,23 +545,26 @@ class PgMessageRepository:
     _BULK_BATCH_SIZE = 4000
 
     async def bulk_insert(self, messages: list[Message]) -> None:
+        if not messages:
+            return
         async with get_session() as session:
             for i in range(0, len(messages), self._BULK_BATCH_SIZE):
                 batch = messages[i : i + self._BULK_BATCH_SIZE]
-                session.add_all([
-                    MessageRow(
-                        group_id=m.group_id,
-                        user_id=m.user_id,
-                        bot_id=m.bot_id,
-                        raw_message=m.raw_message,
-                        is_plain_text=m.is_plain_text,
-                        plain_text=m.plain_text,
-                        keywords=m.keywords,
-                        time=m.time,
-                    )
+                values = [
+                    {
+                        "group_id": m.group_id,
+                        "user_id": m.user_id,
+                        "bot_id": m.bot_id,
+                        "raw_message": _s(m.raw_message) or "",
+                        "is_plain_text": m.is_plain_text,
+                        "plain_text": _s(m.plain_text) or "",
+                        "keywords": _s(m.keywords) or "",
+                        "time": m.time,
+                    }
                     for m in batch
-                ])
-                await session.flush()
+                ]
+                # 走 Core executemany，避免 ORM 构造开销
+                await session.execute(insert(MessageRow), values)
             await session.commit()
 
 
@@ -473,23 +576,26 @@ class PgBlackListRepository:
             return [row_to_blacklist(r) for r in rows]
 
     async def upsert_answers(self, group_id: int, answers: list[str]) -> None:
+        """原子 upsert，基于 group_id 唯一约束。"""
+        cleaned = _strip_null_deep(answers)
         async with get_session() as session:
-            result = await session.execute(select(BlackListRow).where(BlackListRow.group_id == group_id))
-            row = result.scalar_one_or_none()
-            if row is None:
-                session.add(BlackListRow(group_id=group_id, answers=answers, answers_reserve=[]))
-            else:
-                row.answers = answers
+            stmt = pg_insert(BlackListRow).values(group_id=group_id, answers=cleaned, answers_reserve=[])
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["group_id"],
+                set_={"answers": stmt.excluded.answers},
+            )
+            await session.execute(stmt)
             await session.commit()
 
     async def upsert_answers_reserve(self, group_id: int, answers: list[str]) -> None:
+        cleaned = _strip_null_deep(answers)
         async with get_session() as session:
-            result = await session.execute(select(BlackListRow).where(BlackListRow.group_id == group_id))
-            row = result.scalar_one_or_none()
-            if row is None:
-                session.add(BlackListRow(group_id=group_id, answers=[], answers_reserve=answers))
-            else:
-                row.answers_reserve = answers
+            stmt = pg_insert(BlackListRow).values(group_id=group_id, answers=[], answers_reserve=cleaned)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["group_id"],
+                set_={"answers_reserve": stmt.excluded.answers_reserve},
+            )
+            await session.execute(stmt)
             await session.commit()
 
 
@@ -500,18 +606,101 @@ _CONFIG_TABLE_MAP: dict[str, tuple[type, str]] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# 配置 Repository 的 TTL 缓存
+# ---------------------------------------------------------------------------
+
+
+def _cfg_env(key: str, default: str) -> str:
+    try:
+        import nonebot
+
+        val = getattr(nonebot.get_driver().config, key.lower(), None)
+        if val is not None:
+            return str(val)
+    except Exception:
+        pass
+    return os.getenv(key, default)
+
+
+class _ConfigCache:
+    """
+    简单的容量 + TTL 缓存，对齐 Mongo Beanie 的 model-level cache 语义。
+    对每个 (row_class) 一个实例；key 是主键值，value 是 (row, expire_ts)；
+    None 也会被缓存（避免缓存击穿）。
+    """
+
+    def __init__(self, ttl: float, capacity: int) -> None:
+        self._ttl = ttl
+        self._capacity = capacity
+        self._store: OrderedDict[Any, tuple[Any, float]] = OrderedDict()
+        self._lock = asyncio.Lock()
+
+    async def get(self, key: Any) -> tuple[bool, Any]:
+        """返回 (hit, value)。miss 时 value 未定义。"""
+        if self._ttl <= 0 or self._capacity <= 0:
+            return False, None
+        async with self._lock:
+            item = self._store.get(key)
+            if item is None:
+                return False, None
+            value, expire_ts = item
+            if expire_ts <= time.time():
+                self._store.pop(key, None)
+                return False, None
+            self._store.move_to_end(key)
+            return True, value
+
+    async def put(self, key: Any, value: Any) -> None:
+        if self._ttl <= 0 or self._capacity <= 0:
+            return
+        async with self._lock:
+            self._store[key] = (value, time.time() + self._ttl)
+            self._store.move_to_end(key)
+            while len(self._store) > self._capacity:
+                self._store.popitem(last=False)
+
+    async def invalidate(self, key: Any) -> None:
+        async with self._lock:
+            self._store.pop(key, None)
+
+    async def clear(self) -> None:
+        async with self._lock:
+            self._store.clear()
+
+
+_CONFIG_CACHES: dict[type, _ConfigCache] = {}
+
+
+def _get_config_cache(row_class: type) -> _ConfigCache:
+    cache = _CONFIG_CACHES.get(row_class)
+    if cache is None:
+        ttl = float(_cfg_env("PG_CONFIG_CACHE_TTL", "60"))
+        capacity = int(_cfg_env("PG_CONFIG_CACHE_SIZE", "10000"))
+        cache = _ConfigCache(ttl=ttl, capacity=capacity)
+        _CONFIG_CACHES[row_class] = cache
+    return cache
+
+
 class PgConfigRepository:
     def __init__(self, table: str, primary_key: str) -> None:
         if table not in _CONFIG_TABLE_MAP:
             raise ValueError(f"Unknown config table: {table}")
         self._row_class, self._pk_field = _CONFIG_TABLE_MAP[table]
+        self._cache = _get_config_cache(self._row_class)
 
     async def get(self, key_id: int, *, ignore_cache: bool = False) -> Any | None:
+        if not ignore_cache:
+            hit, value = await self._cache.get(key_id)
+            if hit:
+                return value
         async with get_session() as session:
             result = await session.execute(
                 select(self._row_class).where(getattr(self._row_class, self._pk_field) == key_id)
             )
-            return result.scalar_one_or_none()
+            row = result.scalar_one_or_none()
+        await self._cache.put(key_id, row)
+        return row
 
     async def get_or_create(self, key_id: int, **defaults: Any) -> tuple[Any, bool]:
         async with get_session() as session:
@@ -520,30 +709,39 @@ class PgConfigRepository:
             )
             row = result.scalar_one_or_none()
             if row is not None:
+                await self._cache.put(key_id, row)
                 return row, False
-            new_row = self._row_class(**{self._pk_field: key_id, **defaults})
-            session.add(new_row)
-            await session.commit()
+            try:
+                new_row = self._row_class(**{self._pk_field: key_id, **_strip_null_deep(defaults)})
+                session.add(new_row)
+                await session.commit()
+            except IntegrityError:
+                # 并发下已被其他 writer 插入，回源拿最新行
+                await session.rollback()
+                result = await session.execute(
+                    select(self._row_class).where(getattr(self._row_class, self._pk_field) == key_id)
+                )
+                existing = result.scalar_one_or_none()
+                await self._cache.put(key_id, existing)
+                return existing, False
+            await self._cache.put(key_id, new_row)
             return new_row, True
 
     async def upsert_field(self, key_id: int, field: str, value: Any) -> None:
+        """字段级 upsert，基于主键 ON CONFLICT 原子化。"""
+        cleaned_value = _strip_null_deep(value)
         async with get_session() as session:
-            result = await session.execute(
-                select(self._row_class).where(getattr(self._row_class, self._pk_field) == key_id)
+            stmt = pg_insert(self._row_class).values(**{self._pk_field: key_id, field: cleaned_value})
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[self._pk_field],
+                set_={field: getattr(stmt.excluded, field)},
             )
-            row = result.scalar_one_or_none()
-            if row is not None:
-                await session.execute(
-                    update(self._row_class)
-                    .where(getattr(self._row_class, self._pk_field) == key_id)
-                    .values(**{field: value})
-                )
-            else:
-                session.add(self._row_class(**{self._pk_field: key_id, field: value}))
+            await session.execute(stmt)
             await session.commit()
+        await self._cache.invalidate(key_id)
 
     async def invalidate_cache(self) -> None:
-        return None
+        await self._cache.clear()
 
 
 class PgImageCacheRepository:
@@ -554,30 +752,36 @@ class PgImageCacheRepository:
             return row_to_image_cache(row) if row else None
 
     async def insert(self, cache: ImageCache) -> None:
-        try:
-            async with get_session() as session:
-                session.add(
-                    ImageCacheRow(
-                        cq_code=cache.cq_code,
-                        base64_data=cache.base64_data,
-                        ref_times=cache.ref_times,
-                        date=cache.date,
-                    )
-                )
-                await session.commit()
-        except IntegrityError:
-            # 另一个协程已插入相同 cq_code，忽略即可
-            pass
+        """并发下相同 cq_code 的第二次 insert 等价为 no-op。"""
+        async with get_session() as session:
+            stmt = pg_insert(ImageCacheRow).values(
+                cq_code=_s(cache.cq_code) or "",
+                base64_data=_s(cache.base64_data),
+                ref_times=cache.ref_times,
+                date=cache.date,
+            )
+            await session.execute(stmt.on_conflict_do_nothing(index_elements=["cq_code"]))
+            await session.commit()
 
     async def save(self, cache: ImageCache) -> None:
+        """与 Mongo save() 语义一致：存在则更新，不存在则插入。"""
         async with get_session() as session:
-            result = await session.execute(select(ImageCacheRow).where(ImageCacheRow.cq_code == cache.cq_code))
-            row = result.scalar_one_or_none()
-            if row is not None:
-                row.ref_times = cache.ref_times
-                row.date = cache.date
-                row.base64_data = cache.base64_data
-                await session.commit()
+            stmt = pg_insert(ImageCacheRow).values(
+                cq_code=_s(cache.cq_code) or "",
+                base64_data=_s(cache.base64_data),
+                ref_times=cache.ref_times,
+                date=cache.date,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["cq_code"],
+                set_={
+                    "ref_times": stmt.excluded.ref_times,
+                    "date": stmt.excluded.date,
+                    "base64_data": stmt.excluded.base64_data,
+                },
+            )
+            await session.execute(stmt)
+            await session.commit()
 
     async def delete_old(self, before_date: int) -> None:
         async with get_session() as session:
