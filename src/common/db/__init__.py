@@ -239,7 +239,14 @@ async def init_postgresql_db() -> None:
     finally:
         await admin_engine.dispose()
 
-    engine = create_async_engine(f"{base_url}/{db_name}")
+    pool_size = int(_cfg("PG_POOL_SIZE", "20"))
+    max_overflow = int(_cfg("PG_MAX_OVERFLOW", "40"))
+    engine = create_async_engine(
+        f"{base_url}/{db_name}",
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_pre_ping=True,
+    )
     await init_pg(engine)
     logger.info(f"{db_name} 连接成功！")
 
