@@ -4,31 +4,43 @@ MongoDB → PostgreSQL 迁移脚本
 
 迁移范围：Context、Message、BlackList、BotConfig、GroupConfig、UserConfig、ImageCache
 
+特性：
+- 基于 Mongo `_id` 游标流式读取，不走 skip/limit，千万级数据也不会退化成 O(n)
+- migration_state 表记录每张表的 last_id；中断后重跑自动断点续传，不会重复写入
+- 批级 commit 与 migration_state 在同一事务内原子写入，保证"恰好一次"
+- 逐条 defensive 解析，脏数据（缺字段 / 非法类型 / NUL 字符）跳过并计入汇总，不阻断
+- Context 聚合同 batch 内相同 keywords_hash 的 answers / bans，不再丢数据
+- upsert 依赖 `repository_pg` 里定义的唯一约束（含复合 upsert_answer 约束），新字段自动加到 PG
+
 用法：
     uv run --extra pg python tools/migrate_mongo_to_pg.py
 
 选项：
     --batch N       每批处理条数，默认 1000
     --dry-run       只统计数量，不写入 PostgreSQL
-    --pg-db NAME    目标 PostgreSQL 数据库名，默认读取 PG_DB 环境变量（fallback: PallasBot）
-    --tables TABLE  仅迁移指定表（可多选），可选值：
-                      context message blacklist botconfig groupconfig userconfig imagecache
+    --pg-db NAME    目标 PG 库名，覆盖 PG_DB 环境变量
+    --mongo-db NAME 源 Mongo 库名，覆盖 MONGO_DB 环境变量（默认 PallasBot）
+    --tables TABLE  仅迁移指定表，可选：context message blacklist botconfig groupconfig userconfig imagecache
+    --restart       清空 migration_state 重新从头迁移
 
 示例：
-    # 全量迁移
+    # 全量迁移（自动续传）
     uv run --extra pg python tools/migrate_mongo_to_pg.py
 
-    # 指定目标数据库名
-    uv run --extra pg python tools/migrate_mongo_to_pg.py --pg-db MyBot
+    # 指定目标库
+    uv run --extra pg python tools/migrate_mongo_to_pg.py --pg-db MyBot --mongo-db PallasBot
 
-    # 仅迁移消息和上下文，每批 500 条
+    # 仅迁移 context 和 message，批量 500
     uv run --extra pg python tools/migrate_mongo_to_pg.py --tables context message --batch 500
 
-    # 预演（不写入数据库）
+    # 预演
     uv run --extra pg python tools/migrate_mongo_to_pg.py --dry-run
 
+    # 重新迁移（清空 state）
+    uv run --extra pg python tools/migrate_mongo_to_pg.py --restart
+
 环境变量（从 .env 读取，也可手动设置）：
-    MONGO_HOST / MONGO_PORT / MONGO_USER / MONGO_PASSWORD
+    MONGO_HOST / MONGO_PORT / MONGO_USER / MONGO_PASSWORD / MONGO_DB
     PG_HOST / PG_PORT / PG_USER / PG_PASSWORD / PG_DB
 """
 
@@ -36,10 +48,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
+import hashlib
 import os
+import re
 import sys
+import time
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote_plus
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -62,31 +78,83 @@ ALL_TABLES = ["context", "message", "blacklist", "botconfig", "groupconfig", "us
 
 # asyncpg 单语句参数上限 32767
 _ANS_BATCH = 6000  # ContextAnswerRow    5 列
-_MSG_BATCH = 16000  # ContextAnswerMsg    2 列
+_MSG_BATCH = 16000  # ContextAnswerMessageRow 2 列
 _BAN_BATCH = 6000  # ContextBanRow       5 列
 _IC_BATCH = 6000  # ImageCacheRow       4 列
-_MSG_ROW_BATCH = 4000  # MessageRow       8 列
+_MSG_ROW_BATCH = 4000  # MessageRow          8 列
 
 
-def _mongo_dsn() -> str:
-    h, p = os.getenv("MONGO_HOST", "127.0.0.1"), int(os.getenv("MONGO_PORT", "27017"))
-    u, pw = os.getenv("MONGO_USER", ""), os.getenv("MONGO_PASSWORD", "")
-    return f"mongodb://{quote_plus(u)}:{quote_plus(pw)}@{h}:{p}" if u and pw else f"mongodb://{h}:{p}"
+# ---------------------------------------------------------------------------
+# 通用工具 / defensive helpers
+# ---------------------------------------------------------------------------
 
 
-def _pg_dsn() -> str:
-    h = os.getenv("PG_HOST", os.getenv("MONGO_HOST", "127.0.0.1"))
-    p = int(os.getenv("PG_PORT", "5432"))
-    u, pw = os.getenv("PG_USER", ""), os.getenv("PG_PASSWORD", "")
-    db = os.getenv("PG_DB", "PallasBot")
-    auth = f"{quote_plus(u)}:{quote_plus(pw)}@" if u and pw else ""
-    return f"postgresql+asyncpg://{auth}{h}:{p}/{db}"
+@dataclass
+class _TableStats:
+    """单表迁移摘要，脏数据跳过时计入 failed。"""
+
+    total: int = 0
+    migrated: int = 0
+    skipped: int = 0
+    failed: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+    def warn(self, msg: str) -> None:
+        self.failed += 1
+        if len(self.warnings) < 20:
+            self.warnings.append(msg)
 
 
-def _strip_null(obj):
-    """递归去除 PostgreSQL 不支持的 \\u0000 字符"""
+def _as_int(x: Any, default: int = 0) -> int:
+    if isinstance(x, bool):
+        return int(x)
+    if isinstance(x, int):
+        return x
+    try:
+        return int(x)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_str(x: Any, default: str = "") -> str:
+    if x is None:
+        return default
+    if isinstance(x, str):
+        return x
+    return str(x)
+
+
+def _as_bool(x: Any, default: bool = False) -> bool:
+    if isinstance(x, bool):
+        return x
+    if x is None:
+        return default
+    if isinstance(x, (int, float)):
+        return bool(x)
+    if isinstance(x, str):
+        return x.strip().lower() in ("true", "1", "yes", "y", "on")
+    return default
+
+
+def _as_list(x: Any) -> list:
+    if isinstance(x, list):
+        return x
+    if x is None:
+        return []
+    # tuple / set 也视为可迭代
+    if isinstance(x, (tuple, set)):
+        return list(x)
+    return []
+
+
+def _as_dict(x: Any) -> dict:
+    return x if isinstance(x, dict) else {}
+
+
+def _strip_null(obj: Any) -> Any:
+    """递归剥除 PostgreSQL TEXT 不接受的 \\x00 字节。"""
     if isinstance(obj, str):
-        return obj.replace("\x00", "")
+        return obj.replace("\x00", "") if "\x00" in obj else obj
     if isinstance(obj, dict):
         return {k: _strip_null(v) for k, v in obj.items()}
     if isinstance(obj, list):
@@ -95,17 +163,34 @@ def _strip_null(obj):
 
 
 def _kw_hash(keywords: str) -> str:
-    import hashlib
+    # 与 repository_pg.keywords_hash 保持一致：先 strip \x00 再哈希
+    clean = keywords.replace("\x00", "") if keywords and "\x00" in keywords else keywords
+    return hashlib.md5((clean or "").encode("utf-8", errors="replace")).hexdigest()
 
-    return hashlib.md5(keywords.encode("utf-8", errors="replace")).hexdigest()
+
+def _mongo_dsn() -> str:
+    h, p = os.getenv("MONGO_HOST", "127.0.0.1"), int(os.getenv("MONGO_PORT", "27017"))
+    u, pw = os.getenv("MONGO_USER", ""), os.getenv("MONGO_PASSWORD", "")
+    return f"mongodb://{quote_plus(u)}:{quote_plus(pw)}@{h}:{p}" if u and pw else f"mongodb://{h}:{p}"
+
+
+def _mongo_db_name() -> str:
+    return os.getenv("MONGO_DB") or "PallasBot"
+
+
+def _pg_dsn() -> str:
+    h = os.getenv("PG_HOST") or os.getenv("MONGO_HOST", "127.0.0.1")
+    p = int(os.getenv("PG_PORT", "5432"))
+    u, pw = os.getenv("PG_USER", ""), os.getenv("PG_PASSWORD", "")
+    db = os.getenv("PG_DB", "PallasBot")
+    auth = f"{quote_plus(u)}:{quote_plus(pw)}@" if u and pw else ""
+    return f"postgresql+asyncpg://{auth}{h}:{p}/{db}"
 
 
 async def _ensure_db() -> None:
-    import re
-
     import asyncpg
 
-    h = os.getenv("PG_HOST", os.getenv("MONGO_HOST", "127.0.0.1"))
+    h = os.getenv("PG_HOST") or os.getenv("MONGO_HOST", "127.0.0.1")
     p = int(os.getenv("PG_PORT", "5432"))
     u, pw = os.getenv("PG_USER", "") or None, os.getenv("PG_PASSWORD", "") or None
     db = os.getenv("PG_DB", "PallasBot")
@@ -123,40 +208,222 @@ async def _ensure_db() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 各表迁移函数
+# migration_state：断点续传
 # ---------------------------------------------------------------------------
 
 
-async def _migrate_context(Context, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, batch_size, dry_run):
+async def _ensure_state_table(engine) -> None:
+    from sqlalchemy import text as T
+
+    async with engine.begin() as conn:
+        await conn.execute(
+            T(
+                """
+                CREATE TABLE IF NOT EXISTS migration_state (
+                    table_name TEXT PRIMARY KEY,
+                    last_id TEXT NOT NULL,
+                    updated_at TIMESTAMPTZ DEFAULT NOW()
+                )
+                """
+            )
+        )
+
+
+async def _reset_state(engine) -> None:
+    from sqlalchemy import text as T
+
+    async with engine.begin() as conn:
+        await conn.execute(T("DELETE FROM migration_state"))
+    print("已清空 migration_state，将从头迁移")
+
+
+async def _get_state(session, table: str) -> str | None:
+    from sqlalchemy import text as T
+
+    result = await session.execute(
+        T("SELECT last_id FROM migration_state WHERE table_name = :t"), {"t": table}
+    )
+    return result.scalar_one_or_none()
+
+
+async def _set_state(session, table: str, last_id: str) -> None:
+    from sqlalchemy import text as T
+
+    await session.execute(
+        T(
+            """
+            INSERT INTO migration_state (table_name, last_id, updated_at)
+            VALUES (:t, :id, NOW())
+            ON CONFLICT (table_name) DO UPDATE
+                SET last_id = EXCLUDED.last_id, updated_at = NOW()
+            """
+        ),
+        {"t": table, "id": last_id},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mongo 游标流式工具
+# ---------------------------------------------------------------------------
+
+
+def _oid(s: str | None):
+    """字符串 _id 转为 ObjectId（如果可能）。非合法 ObjectId 当字符串用。"""
+    from bson import ObjectId
+
+    if s is None:
+        return None
+    try:
+        return ObjectId(s)
+    except Exception:
+        return s
+
+
+async def _stream_batches(col, last_id_str: str | None, batch_size: int):
+    """按 _id 递增游标分批 yield Mongo 文档，返回 (batch_docs, last_id_str)。"""
+    last_id = _oid(last_id_str)
+    while True:
+        q: dict[str, Any] = {}
+        if last_id is not None:
+            q["_id"] = {"$gt": last_id}
+        cursor = col.find(q).sort("_id", 1).limit(batch_size)
+        batch = await cursor.to_list(length=batch_size)
+        if not batch:
+            return
+        yield batch
+        last_id = batch[-1].get("_id")
+        if len(batch) < batch_size:
+            return
+
+
+# ---------------------------------------------------------------------------
+# Context 迁移（支持 batch 内 keywords 合并）
+# ---------------------------------------------------------------------------
+
+
+def _prepare_context_batch(docs: list[dict], stats: _TableStats) -> dict[str, dict]:
+    """batch 内按 keywords_hash 合并，返回 hash -> {ctx fields, answers, bans}"""
+    merged: dict[str, dict] = {}
+    for doc in docs:
+        try:
+            kw = _as_str(doc.get("keywords"))
+            if not kw:
+                stats.warn(f"context skipped: empty keywords, _id={doc.get('_id')}")
+                continue
+            h = _kw_hash(kw)
+            time_v = _as_int(doc.get("time"))
+            # 兼容 Beanie alias："count" 或 "trigger_count" 都可能写到文档里
+            trigger_v = _as_int(doc.get("trigger_count", doc.get("count", 1)), 1)
+            clear_v = _as_int(doc.get("clear_time"))
+
+            if h not in merged:
+                merged[h] = {
+                    "keywords": _strip_null(kw),
+                    "keywords_hash": h,
+                    "time": time_v,
+                    "trigger_count": trigger_v,
+                    "clear_time": clear_v,
+                    "answers": [],
+                    "bans": [],
+                }
+            else:
+                g = merged[h]
+                g["time"] = max(g["time"], time_v)
+                g["trigger_count"] = max(g["trigger_count"], trigger_v)
+                g["clear_time"] = max(g["clear_time"], clear_v)
+
+            for a in _as_list(doc.get("answers")):
+                if not isinstance(a, dict):
+                    continue
+                ak = _as_str(a.get("keywords"))
+                if not ak:
+                    continue
+                merged[h]["answers"].append({
+                    "keywords": _strip_null(ak),
+                    "group_id": _as_int(a.get("group_id")),
+                    "count": _as_int(a.get("count"), 1),
+                    "time": _as_int(a.get("time")),
+                    "messages": [_strip_null(_as_str(m)) for m in _as_list(a.get("messages")) if m is not None],
+                })
+            for b in _as_list(doc.get("ban")):
+                if not isinstance(b, dict):
+                    continue
+                bk = _as_str(b.get("keywords"))
+                if not bk:
+                    continue
+                merged[h]["bans"].append({
+                    "keywords": _strip_null(bk),
+                    "group_id": _as_int(b.get("group_id")),
+                    "reason": _strip_null(_as_str(b.get("reason"))),
+                    "time": _as_int(b.get("time")),
+                })
+        except Exception as e:
+            stats.warn(f"context parse failed _id={doc.get('_id')}: {e}")
+    return merged
+
+
+def _dedupe_by_key(rows: list[dict], key_fields: tuple[str, ...]) -> list[dict]:
+    """同批内按唯一键去重，后入者覆盖（Mongo 游标按 _id 升序，后者即新）。
+
+    PG 的 INSERT ... ON CONFLICT 不允许单次语句里出现两条命中同一冲突目标的行，
+    必须先在客户端侧合并。
+    """
+    seen: dict[tuple, dict] = {}
+    for r in rows:
+        k = tuple(r.get(f) for f in key_fields)
+        seen[k] = r
+    return list(seen.values())
+
+
+def _dedupe_answers(answers: list[dict]) -> list[dict]:
+    """去重 (group_id, keywords)：累加 count / 取 max time / 合并 messages。"""
+    m: dict[tuple, dict] = {}
+    for a in answers:
+        k = (a["group_id"], a["keywords"])
+        if k not in m:
+            m[k] = {**a, "messages": list(a["messages"])}
+        else:
+            m[k]["count"] += a["count"]
+            m[k]["time"] = max(m[k]["time"], a["time"])
+            m[k]["messages"].extend(a["messages"])
+    return list(m.values())
+
+
+async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, batch_size, dry_run) -> _TableStats:
     from sqlalchemy import delete as D
     from sqlalchemy import select as S
 
-    total = await Context.count()
-    print(f"\n📦 Context: {total} 条")
-    migrated = skip = 0
+    col = db["context"]
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[Context] total={stats.total}")
 
-    while True:
-        batch = await Context.find_all().skip(skip).limit(batch_size).to_list()
-        if not batch:
-            break
+    last_id_str: str | None = None
+    if not dry_run:
+        async with sf() as session:
+            last_id_str = await _get_state(session, "context")
+        if last_id_str:
+            print(f"  [Context] resume from _id > {last_id_str}")
 
-        seen: dict[str, tuple] = {}
-        for doc in batch:
-            h = _kw_hash(doc.keywords)
-            seen[h] = (
-                doc,
-                {
-                    "keywords": _strip_null(doc.keywords),
-                    "keywords_hash": h,
-                    "time": doc.time,
-                    "trigger_count": doc.trigger_count,
-                    "clear_time": doc.clear_time,
-                },
-            )
+    t0 = time.time()
+    async for batch in _stream_batches(col, last_id_str, batch_size):
+        merged = _prepare_context_batch(batch, stats)
+        if not merged:
+            if not dry_run:
+                async with sf() as session:
+                    await _set_state(session, "context", str(batch[-1]["_id"]))
+                    await session.commit()
+            stats.skipped += len(batch)
+            continue
 
         if not dry_run:
             async with sf() as session:
-                stmt = ins(ContextRow).values([v[1] for v in seen.values()])
+                # 1. upsert context rows
+                ctx_values = [
+                    {k: v for k, v in g.items() if k in ("keywords", "keywords_hash", "time", "trigger_count", "clear_time")}
+                    for g in merged.values()
+                ]
+                stmt = ins(ContextRow).values(ctx_values)
                 await session.execute(
                     stmt.on_conflict_do_update(
                         index_elements=["keywords_hash"],
@@ -168,294 +435,391 @@ async def _migrate_context(Context, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, i
                         },
                     )
                 )
-                await session.commit()
-
+                # 2. 拿回 context_id
                 result = await session.execute(
-                    S(ContextRow.id, ContextRow.keywords_hash).where(ContextRow.keywords_hash.in_(seen.keys()))
+                    S(ContextRow.id, ContextRow.keywords_hash).where(
+                        ContextRow.keywords_hash.in_(list(merged.keys()))
+                    )
                 )
-                h2id = {r.keywords_hash: r.id for r in result}
-                ctx_ids = list(h2id.values())
-                await session.execute(D(AnsRow).where(AnsRow.context_id.in_(ctx_ids)))
-                await session.execute(D(BanRow).where(BanRow.context_id.in_(ctx_ids)))
+                h2id: dict[str, int] = {r.keywords_hash: r.id for r in result}
+                ctx_ids = [cid for cid in h2id.values() if cid is not None]
 
-                ans_data, ban_rows = [], []
-                for h, (doc, _) in seen.items():
+                # 3. 重写 answers / bans：先删再插（针对本批涉及的 context_id）
+                if ctx_ids:
+                    await session.execute(D(AnsRow).where(AnsRow.context_id.in_(ctx_ids)))
+                    await session.execute(D(BanRow).where(BanRow.context_id.in_(ctx_ids)))
+
+                ans_rows: list[dict] = []
+                ans_msg_pending: list[tuple[int, tuple[int, int, str], list[str]]] = []
+                ban_rows: list[dict] = []
+
+                for h, g in merged.items():
                     cid = h2id.get(h)
                     if cid is None:
+                        stats.warn(f"context_id missing after upsert: hash={h}")
                         continue
-                    for a in doc.answers:
-                        ans_data.append({
+                    for a in _dedupe_answers(g["answers"]):
+                        ans_rows.append({
                             "context_id": cid,
-                            "keywords": _strip_null(a.keywords),
-                            "group_id": a.group_id,
-                            "count": a.count,
-                            "time": a.time,
-                            "_msgs": [_strip_null(m) for m in a.messages],
+                            "keywords": a["keywords"],
+                            "group_id": a["group_id"],
+                            "count": a["count"],
+                            "time": a["time"],
                         })
-                    for b in doc.ban:
+                        if a["messages"]:
+                            ans_msg_pending.append(
+                                (cid, (cid, a["group_id"], a["keywords"]), a["messages"])
+                            )
+                    for b in g["bans"]:
                         ban_rows.append({
                             "context_id": cid,
-                            "keywords": _strip_null(b.keywords),
-                            "group_id": b.group_id,
-                            "reason": _strip_null(b.reason),
-                            "time": b.time,
+                            "keywords": b["keywords"],
+                            "group_id": b["group_id"],
+                            "reason": b["reason"],
+                            "time": b["time"],
                         })
 
-                if ans_data:
-                    no_msg = [{k: v for k, v in d.items() if k != "_msgs"} for d in ans_data]
-                    lookup: dict[tuple, list[int]] = {}
-                    for i in range(0, len(no_msg), _ANS_BATCH):
-                        ret = await session.execute(
-                            ins(AnsRow)
-                            .values(no_msg[i : i + _ANS_BATCH])
-                            .returning(AnsRow.id, AnsRow.context_id, AnsRow.group_id, AnsRow.keywords)
-                        )
-                        for r in ret.fetchall():
-                            lookup.setdefault((r.context_id, r.group_id, r.keywords), []).append(r.id)
+                # 4. 批量插 answer 并拿回 id（走 RETURNING）
+                key2aid: dict[tuple[int, int, str], int] = {}
+                for i in range(0, len(ans_rows), _ANS_BATCH):
+                    ret = await session.execute(
+                        ins(AnsRow)
+                        .values(ans_rows[i : i + _ANS_BATCH])
+                        .returning(AnsRow.id, AnsRow.context_id, AnsRow.group_id, AnsRow.keywords)
+                    )
+                    for r in ret.fetchall():
+                        key2aid[(r.context_id, r.group_id, r.keywords)] = int(r.id)
 
-                    msg_rows = []
-                    for d in ans_data:
-                        ids = lookup.get((d["context_id"], d["group_id"], d["keywords"]), [])
-                        if ids:
-                            aid = ids.pop(0)
-                            msg_rows.extend({"answer_id": aid, "message": m} for m in d["_msgs"])
-                    for i in range(0, len(msg_rows), _MSG_BATCH):
-                        await session.execute(ins(AnsMsgRow).values(msg_rows[i : i + _MSG_BATCH]))
+                # 5. 关联 messages
+                msg_rows: list[dict] = []
+                for _cid, key, messages in ans_msg_pending:
+                    aid = key2aid.get(key)
+                    if aid is None:
+                        continue
+                    msg_rows.extend({"answer_id": aid, "message": m} for m in messages)
+                for i in range(0, len(msg_rows), _MSG_BATCH):
+                    await session.execute(ins(AnsMsgRow).values(msg_rows[i : i + _MSG_BATCH]))
 
+                # 6. 插 bans
                 for i in range(0, len(ban_rows), _BAN_BATCH):
                     await session.execute(ins(BanRow).values(ban_rows[i : i + _BAN_BATCH]))
+
+                # 7. 更新 migration_state 并一并 commit
+                await _set_state(session, "context", str(batch[-1]["_id"]))
                 await session.commit()
 
-        migrated += len(batch)
-        skip += batch_size
-        print(f"  Context {migrated}/{total}", end="\r")
-    print(f"  Context {migrated}/{total} ✓")
+        stats.migrated += len(batch)
+        elapsed = time.time() - t0
+        rate = stats.migrated / elapsed if elapsed else 0
+        eta = (stats.total - stats.migrated) / rate if rate > 0 else 0
+        print(f"  [Context] {stats.migrated}/{stats.total} ({rate:.0f}/s, ETA {eta:.0f}s)", end="\r")
+
+    print(f"  [Context] {stats.migrated}/{stats.total} done (failed={stats.failed}, skipped={stats.skipped})")
+    return stats
 
 
-async def _migrate_message(Message, sf, MsgRow, ins, batch_size, dry_run):
-    col = Message.get_pymongo_collection()
-    total = await col.count_documents({})
-    print(f"\n📦 Message: {total} 条")
-    migrated, batch = 0, []
-
-    async for doc in col.find({}, batch_size=batch_size):
-        raw = doc.get("raw_message", "")
-        batch.append(
-            _strip_null({
-                "group_id": int(doc.get("group_id", 0)),
-                "user_id": int(doc.get("user_id", 0)),
-                "bot_id": int(doc.get("bot_id", 0)),
-                "raw_message": raw,
-                "is_plain_text": doc.get("is_plain_text", True),
-                "plain_text": doc.get("plain_text", raw),
-                "keywords": doc.get("keywords", ""),
-                "time": doc.get("time", 0),
-            })
-        )
-        if len(batch) >= _MSG_ROW_BATCH:
-            if not dry_run:
-                async with sf() as session:
-                    await session.execute(ins(MsgRow).values(batch).on_conflict_do_nothing())
-                    await session.commit()
-            migrated += len(batch)
-            batch = []
-            print(f"  Message {migrated}/{total}", end="\r")
-
-    if batch:
-        if not dry_run:
-            async with sf() as session:
-                await session.execute(ins(MsgRow).values(batch).on_conflict_do_nothing())
-                await session.commit()
-        migrated += len(batch)
-    print(f"  Message {migrated}/{total} ✓")
+# ---------------------------------------------------------------------------
+# Message 迁移
+# ---------------------------------------------------------------------------
 
 
-async def _migrate_blacklist(BlackList, sf, BLRow, ins, dry_run):
-    total = await BlackList.count()
-    print(f"\n📦 BlackList: {total} 条")
-    docs = await BlackList.find_all().to_list()
-    if not docs:
-        print("  BlackList 0/0 ✓")
-        return
-    rows = [
-        _strip_null({"group_id": int(d.group_id), "answers": d.answers, "answers_reserve": d.answers_reserve})
-        for d in docs
-    ]
+async def _migrate_message(db, sf, MsgRow, ins, batch_size, dry_run) -> _TableStats:
+    col = db["message"]
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[Message] total={stats.total}")
+
+    last_id_str: str | None = None
     if not dry_run:
         async with sf() as session:
-            stmt = ins(BLRow).values(rows)
-            await session.execute(
-                stmt.on_conflict_do_update(
-                    index_elements=["group_id"],
-                    set_={"answers": stmt.excluded.answers, "answers_reserve": stmt.excluded.answers_reserve},
+            last_id_str = await _get_state(session, "message")
+        if last_id_str:
+            print(f"  [Message] resume from _id > {last_id_str}")
+
+    t0 = time.time()
+    async for batch in _stream_batches(col, last_id_str, max(batch_size, _MSG_ROW_BATCH)):
+        rows: list[dict] = []
+        for doc in batch:
+            try:
+                raw = _as_str(doc.get("raw_message"))
+                rows.append({
+                    "group_id": _as_int(doc.get("group_id")),
+                    "user_id": _as_int(doc.get("user_id")),
+                    "bot_id": _as_int(doc.get("bot_id")),
+                    "raw_message": _strip_null(raw),
+                    "is_plain_text": _as_bool(doc.get("is_plain_text"), True),
+                    "plain_text": _strip_null(_as_str(doc.get("plain_text"), raw)),
+                    "keywords": _strip_null(_as_str(doc.get("keywords"))),
+                    "time": _as_int(doc.get("time")),
+                })
+            except Exception as e:
+                stats.warn(f"message parse failed _id={doc.get('_id')}: {e}")
+
+        if rows and not dry_run:
+            async with sf() as session:
+                # 分批插入避免超出 asyncpg 参数上限
+                for i in range(0, len(rows), _MSG_ROW_BATCH):
+                    await session.execute(ins(MsgRow), rows[i : i + _MSG_ROW_BATCH])
+                await _set_state(session, "message", str(batch[-1]["_id"]))
+                await session.commit()
+
+        stats.migrated += len(batch)
+        elapsed = time.time() - t0
+        rate = stats.migrated / elapsed if elapsed else 0
+        eta = (stats.total - stats.migrated) / rate if rate > 0 else 0
+        print(f"  [Message] {stats.migrated}/{stats.total} ({rate:.0f}/s, ETA {eta:.0f}s)", end="\r")
+
+    print(f"  [Message] {stats.migrated}/{stats.total} done (failed={stats.failed})")
+    return stats
+
+
+# ---------------------------------------------------------------------------
+# BlackList / Config 系列（上游数据量小，单批搞定即可，仍走流式以防万一）
+# ---------------------------------------------------------------------------
+
+
+async def _migrate_blacklist(db, sf, BLRow, ins, batch_size, dry_run) -> _TableStats:
+    col = db["blacklist"]
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[BlackList] total={stats.total}")
+
+    last_id_str: str | None = None
+    if not dry_run:
+        async with sf() as session:
+            last_id_str = await _get_state(session, "blacklist")
+
+    async for batch in _stream_batches(col, last_id_str, batch_size):
+        rows: list[dict] = []
+        for doc in batch:
+            try:
+                rows.append({
+                    "group_id": _as_int(doc.get("group_id")),
+                    "answers": [_strip_null(_as_str(x)) for x in _as_list(doc.get("answers"))],
+                    "answers_reserve": [_strip_null(_as_str(x)) for x in _as_list(doc.get("answers_reserve"))],
+                })
+            except Exception as e:
+                stats.warn(f"blacklist parse failed _id={doc.get('_id')}: {e}")
+
+        if rows and not dry_run:
+            rows = _dedupe_by_key(rows, ("group_id",))
+            async with sf() as session:
+                stmt = ins(BLRow).values(rows)
+                await session.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=["group_id"],
+                        set_={"answers": stmt.excluded.answers, "answers_reserve": stmt.excluded.answers_reserve},
+                    )
                 )
-            )
-            await session.commit()
-    print(f"  BlackList {len(docs)}/{total} ✓")
+                await _set_state(session, "blacklist", str(batch[-1]["_id"]))
+                await session.commit()
+
+        stats.migrated += len(batch)
+
+    print(f"  [BlackList] {stats.migrated}/{stats.total} done (failed={stats.failed})")
+    return stats
 
 
-async def _migrate_bot_config(BotConfigModule, sf, BCRow, ins, dry_run):
-    col = BotConfigModule.get_pymongo_collection()
-    total = await col.count_documents({})
-    print(f"\n📦 BotConfig: {total} 条")
-    raw_docs = await col.find({}).to_list(length=None)
-    if not raw_docs:
-        print("  BotConfig 0/0 ✓")
-        return
+async def _migrate_bot_config(db, sf, BCRow, ins, batch_size, dry_run) -> _TableStats:
+    col = db["config"]  # Mongo collection 名是 "config"
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[BotConfig] total={stats.total}")
 
-    rows = []
-    for raw in raw_docs:
-        try:
-            if "auto_accept" in raw and "auto_accept_group" not in raw:
-                ag, af = bool(raw["auto_accept"]), False
-            else:
-                ag = bool(raw.get("auto_accept_group", False))
-                af = bool(raw.get("auto_accept_friend", False))
-            admins = []
-            for x in raw.get("admins", []):
-                try:
-                    admins.append(int(x))
-                except (TypeError, ValueError):
-                    print(f"  ⚠️  BotConfig account={raw.get('account')} admins 跳过无效值: {x!r}")
-            tn = raw.get("taken_name", {})
-            dk = raw.get("drunk", {})
-            rows.append(
-                _strip_null({
-                    "account": int(raw["account"]),
+    last_id_str: str | None = None
+    if not dry_run:
+        async with sf() as session:
+            last_id_str = await _get_state(session, "botconfig")
+
+    async for batch in _stream_batches(col, last_id_str, batch_size):
+        rows: list[dict] = []
+        for raw in batch:
+            try:
+                # 兼容旧字段：auto_accept 仅对 group 生效
+                if "auto_accept" in raw and "auto_accept_group" not in raw:
+                    ag, af = _as_bool(raw.get("auto_accept")), False
+                else:
+                    ag = _as_bool(raw.get("auto_accept_group"))
+                    af = _as_bool(raw.get("auto_accept_friend"))
+                admins = []
+                for x in _as_list(raw.get("admins")):
+                    try:
+                        admins.append(int(x))
+                    except (TypeError, ValueError):
+                        stats.warn(f"botconfig account={raw.get('account')} admins 非法值: {x!r}")
+                tn = _as_dict(raw.get("taken_name"))
+                dk = _as_dict(raw.get("drunk"))
+                rows.append({
+                    "account": _as_int(raw.get("account")),
                     "admins": admins,
                     "auto_accept_friend": af,
                     "auto_accept_group": ag,
-                    "security": bool(raw.get("security", False)),
-                    "taken_name": {str(k): v for k, v in (tn.items() if isinstance(tn, dict) else {})},
-                    "drunk": {str(k): v for k, v in (dk.items() if isinstance(dk, dict) else {})},
-                    "disabled_plugins": raw.get("disabled_plugins", []),
+                    "security": _as_bool(raw.get("security")),
+                    "taken_name": {str(k): v for k, v in tn.items()},
+                    "drunk": {str(k): v for k, v in dk.items()},
+                    "disabled_plugins": [_strip_null(_as_str(x)) for x in _as_list(raw.get("disabled_plugins"))],
                 })
-            )
-        except Exception as e:
-            print(f"  ⚠️  BotConfig 跳过 account={raw.get('account')}: {e}")
+            except Exception as e:
+                stats.warn(f"botconfig parse failed _id={raw.get('_id')}: {e}")
 
+        if rows and not dry_run:
+            rows = _dedupe_by_key(rows, ("account",))
+            async with sf() as session:
+                stmt = ins(BCRow).values(rows)
+                await session.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=["account"],
+                        set_={
+                            f: getattr(stmt.excluded, f)
+                            for f in (
+                                "admins",
+                                "auto_accept_friend",
+                                "auto_accept_group",
+                                "security",
+                                "taken_name",
+                                "drunk",
+                                "disabled_plugins",
+                            )
+                        },
+                    )
+                )
+                await _set_state(session, "botconfig", str(batch[-1]["_id"]))
+                await session.commit()
+        stats.migrated += len(batch)
+
+    print(f"  [BotConfig] {stats.migrated}/{stats.total} done (failed={stats.failed})")
+    return stats
+
+
+async def _migrate_group_config(db, sf, GCRow, ins, batch_size, dry_run) -> _TableStats:
+    col = db["group_config"]
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[GroupConfig] total={stats.total}")
+
+    last_id_str: str | None = None
     if not dry_run:
         async with sf() as session:
-            stmt = ins(BCRow).values(rows)
-            await session.execute(
-                stmt.on_conflict_do_update(
-                    index_elements=["account"],
-                    set_={
-                        f: getattr(stmt.excluded, f)
-                        for f in [
-                            "admins",
-                            "auto_accept_friend",
-                            "auto_accept_group",
-                            "security",
-                            "taken_name",
-                            "drunk",
-                            "disabled_plugins",
-                        ]
-                    },
+            last_id_str = await _get_state(session, "groupconfig")
+
+    async for batch in _stream_batches(col, last_id_str, batch_size):
+        rows: list[dict] = []
+        for raw in batch:
+            try:
+                sing = raw.get("sing_progress")
+                rows.append({
+                    "group_id": _as_int(raw.get("group_id")),
+                    "roulette_mode": _as_int(raw.get("roulette_mode"), 1),
+                    "banned": _as_bool(raw.get("banned")),
+                    "sing_progress": _strip_null(sing) if isinstance(sing, dict) else None,
+                    "disabled_plugins": [_strip_null(_as_str(x)) for x in _as_list(raw.get("disabled_plugins"))],
+                })
+            except Exception as e:
+                stats.warn(f"groupconfig parse failed _id={raw.get('_id')}: {e}")
+
+        if rows and not dry_run:
+            rows = _dedupe_by_key(rows, ("group_id",))
+            async with sf() as session:
+                stmt = ins(GCRow).values(rows)
+                await session.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=["group_id"],
+                        set_={
+                            f: getattr(stmt.excluded, f)
+                            for f in ("roulette_mode", "banned", "sing_progress", "disabled_plugins")
+                        },
+                    )
                 )
-            )
-            await session.commit()
-    print(f"  BotConfig {len(rows)}/{total} ✓")
+                await _set_state(session, "groupconfig", str(batch[-1]["_id"]))
+                await session.commit()
+        stats.migrated += len(batch)
+
+    print(f"  [GroupConfig] {stats.migrated}/{stats.total} done (failed={stats.failed})")
+    return stats
 
 
-async def _migrate_group_config(GroupConfigModule, sf, GCRow, ins, dry_run):
-    total = await GroupConfigModule.count()
-    print(f"\n📦 GroupConfig: {total} 条")
-    docs = await GroupConfigModule.find_all().to_list()
-    if not docs:
-        print("  GroupConfig 0/0 ✓")
-        return
-    rows = [
-        _strip_null({
-            "group_id": int(d.group_id),
-            "roulette_mode": d.roulette_mode,
-            "banned": d.banned,
-            "sing_progress": json.loads(d.sing_progress.model_dump_json()) if d.sing_progress else None,
-            "disabled_plugins": d.disabled_plugins,
-        })
-        for d in docs
-    ]
+async def _migrate_user_config(db, sf, UCRow, ins, batch_size, dry_run) -> _TableStats:
+    col = db["user_config"]
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[UserConfig] total={stats.total}")
+
+    last_id_str: str | None = None
     if not dry_run:
         async with sf() as session:
-            stmt = ins(GCRow).values(rows)
-            await session.execute(
-                stmt.on_conflict_do_update(
-                    index_elements=["group_id"],
-                    set_={
-                        f: getattr(stmt.excluded, f)
-                        for f in ["roulette_mode", "banned", "sing_progress", "disabled_plugins"]
-                    },
-                )
-            )
-            await session.commit()
-    print(f"  GroupConfig {len(docs)}/{total} ✓")
+            last_id_str = await _get_state(session, "userconfig")
 
+    async for batch in _stream_batches(col, last_id_str, batch_size):
+        rows: list[dict] = []
+        for raw in batch:
+            try:
+                rows.append({
+                    "user_id": _as_int(raw.get("user_id")),
+                    "banned": _as_bool(raw.get("banned")),
+                })
+            except Exception as e:
+                stats.warn(f"userconfig parse failed _id={raw.get('_id')}: {e}")
 
-async def _migrate_user_config(UserConfigModule, sf, UCRow, ins, batch_size, dry_run):
-    total = await UserConfigModule.count()
-    print(f"\n📦 UserConfig: {total} 条")
-    migrated = skip = 0
-    while True:
-        batch = await UserConfigModule.find_all().skip(skip).limit(batch_size).to_list()
-        if not batch:
-            break
-        rows = [_strip_null({"user_id": int(d.user_id), "banned": d.banned}) for d in batch]
-        if not dry_run:
+        if rows and not dry_run:
+            rows = _dedupe_by_key(rows, ("user_id",))
             async with sf() as session:
                 stmt = ins(UCRow).values(rows)
                 await session.execute(
                     stmt.on_conflict_do_update(index_elements=["user_id"], set_={"banned": stmt.excluded.banned})
                 )
+                await _set_state(session, "userconfig", str(batch[-1]["_id"]))
                 await session.commit()
-        migrated += len(batch)
-        skip += batch_size
-        print(f"  UserConfig {migrated}/{total}", end="\r")
-    print(f"  UserConfig {migrated}/{total} ✓")
+        stats.migrated += len(batch)
+
+    print(f"  [UserConfig] {stats.migrated}/{stats.total} done (failed={stats.failed})")
+    return stats
 
 
-async def _migrate_image_cache(ImageCache, sf, ICRow, ins, batch_size, dry_run):
-    col = ImageCache.get_pymongo_collection()
-    total = await col.count_documents({})
-    print(f"\n📦 ImageCache: {total} 条")
-    migrated, batch = 0, []
+async def _migrate_image_cache(db, sf, ICRow, ins, batch_size, dry_run) -> _TableStats:
+    col = db["image_cache"]
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[ImageCache] total={stats.total}")
 
-    async for doc in col.find({}, batch_size=batch_size):
-        batch.append(
-            _strip_null({
-                "cq_code": doc.get("cq_code", ""),
-                "base64_data": doc.get("base64_data"),
-                "ref_times": int(doc.get("ref_times", 1)),
-                "date": int(doc.get("date", 0)),
-            })
-        )
-        if len(batch) >= _IC_BATCH:
-            if not dry_run:
-                async with sf() as session:
-                    stmt = ins(ICRow).values(batch)
+    last_id_str: str | None = None
+    if not dry_run:
+        async with sf() as session:
+            last_id_str = await _get_state(session, "imagecache")
+
+    async for batch in _stream_batches(col, last_id_str, max(batch_size, _IC_BATCH)):
+        rows: list[dict] = []
+        for doc in batch:
+            try:
+                cq = _as_str(doc.get("cq_code"))
+                if not cq:
+                    stats.warn(f"imagecache empty cq_code _id={doc.get('_id')}")
+                    continue
+                rows.append({
+                    "cq_code": _strip_null(cq),
+                    "base64_data": _strip_null(doc.get("base64_data")) if doc.get("base64_data") else None,
+                    "ref_times": _as_int(doc.get("ref_times"), 1),
+                    "date": _as_int(doc.get("date")),
+                })
+            except Exception as e:
+                stats.warn(f"imagecache parse failed _id={doc.get('_id')}: {e}")
+
+        if rows and not dry_run:
+            rows = _dedupe_by_key(rows, ("cq_code",))
+            async with sf() as session:
+                for i in range(0, len(rows), _IC_BATCH):
+                    stmt = ins(ICRow).values(rows[i : i + _IC_BATCH])
                     await session.execute(
                         stmt.on_conflict_do_update(
                             index_elements=["cq_code"],
-                            set_={f: getattr(stmt.excluded, f) for f in ["base64_data", "ref_times", "date"]},
+                            set_={f: getattr(stmt.excluded, f) for f in ("base64_data", "ref_times", "date")},
                         )
                     )
-                    await session.commit()
-            migrated += len(batch)
-            batch = []
-            print(f"  ImageCache {migrated}/{total}", end="\r")
-
-    if batch:
-        if not dry_run:
-            async with sf() as session:
-                stmt = ins(ICRow).values(batch)
-                await session.execute(
-                    stmt.on_conflict_do_update(
-                        index_elements=["cq_code"],
-                        set_={f: getattr(stmt.excluded, f) for f in ["base64_data", "ref_times", "date"]},
-                    )
-                )
+                await _set_state(session, "imagecache", str(batch[-1]["_id"]))
                 await session.commit()
-        migrated += len(batch)
-    print(f"  ImageCache {migrated}/{total} ✓")
+        stats.migrated += len(batch)
+
+    print(f"  [ImageCache] {stats.migrated}/{stats.total} done (failed={stats.failed})")
+    return stats
 
 
 # ---------------------------------------------------------------------------
@@ -463,30 +827,29 @@ async def _migrate_image_cache(ImageCache, sf, ICRow, ins, batch_size, dry_run):
 # ---------------------------------------------------------------------------
 
 
-async def migrate(batch_size: int, dry_run: bool, tables: set[str], pg_db: str | None = None) -> None:
+async def migrate(
+    batch_size: int,
+    dry_run: bool,
+    tables: set[str],
+    pg_db: str | None,
+    mongo_db: str | None,
+    restart: bool,
+) -> None:
     if pg_db:
         os.environ["PG_DB"] = pg_db
+    if mongo_db:
+        os.environ["MONGO_DB"] = mongo_db
+
     try:
         from sqlalchemy.ext.asyncio import create_async_engine
     except ImportError:
         print("❌ 缺少 SQLAlchemy/asyncpg，请执行：uv sync --extra pg")
         sys.exit(1)
 
-    from beanie import init_beanie
     from pymongo import AsyncMongoClient
-    from sqlalchemy import text as T
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
-    from src.common.db.modules import (
-        BlackList,
-        BotConfigModule,
-        Context,
-        GroupConfigModule,
-        ImageCache,
-        Message,
-        UserConfigModule,
-    )
     from src.common.db.repository_pg import (
         BlackListRow,
         BotConfigRow,
@@ -501,60 +864,60 @@ async def migrate(batch_size: int, dry_run: bool, tables: set[str], pg_db: str |
         init_pg,
     )
 
-    print(f"🔗 连接 MongoDB: {_mongo_dsn()}")
+    print(f"[Mongo] {_mongo_dsn()} db={_mongo_db_name()}")
     mongo_client = AsyncMongoClient(_mongo_dsn(), unicode_decode_error_handler="ignore")
-    await init_beanie(
-        database=mongo_client["PallasBot"],
-        document_models=[Context, Message, BlackList, BotConfigModule, GroupConfigModule, UserConfigModule, ImageCache],
-    )
+    db = mongo_client[_mongo_db_name()]
 
-    print(f"🔗 连接 PostgreSQL: {_pg_dsn()}")
+    print(f"[PG] {_pg_dsn()}")
     if not dry_run:
         await _ensure_db()
 
     engine = create_async_engine(_pg_dsn(), echo=False)
     if not dry_run:
         await init_pg(engine)
-        async with engine.begin() as conn:
-            # 删除旧的 keywords 唯一约束（超长值会超出 btree 2704 字节限制）
-            await conn.execute(T("ALTER TABLE context DROP CONSTRAINT IF EXISTS context_keywords_key"))
-            await conn.execute(T("DROP INDEX IF EXISTS ix_context_keywords"))
-            await conn.execute(T("ALTER TABLE context ADD COLUMN IF NOT EXISTS keywords_hash TEXT"))
-            await conn.execute(T("UPDATE context SET keywords_hash = md5(keywords) WHERE keywords_hash IS NULL"))
-            await conn.execute(T("ALTER TABLE context ALTER COLUMN keywords_hash SET NOT NULL"))
-            await conn.execute(
-                T("CREATE UNIQUE INDEX IF NOT EXISTS ix_context_keywords_hash ON context (keywords_hash)")
-            )
+        await _ensure_state_table(engine)
+        if restart:
+            await _reset_state(engine)
 
     sf = async_sessionmaker(engine, expire_on_commit=False)
 
+    summaries: list[tuple[str, _TableStats]] = []
+
     if "context" in tables:
-        await _migrate_context(
-            Context,
-            sf,
-            ContextRow,
-            ContextAnswerRow,
-            ContextAnswerMessageRow,
-            ContextBanRow,
-            pg_insert,
-            batch_size,
-            dry_run,
+        s = await _migrate_context(
+            db, sf, ContextRow, ContextAnswerRow, ContextAnswerMessageRow, ContextBanRow, pg_insert, batch_size, dry_run
         )
+        summaries.append(("context", s))
     if "message" in tables:
-        await _migrate_message(Message, sf, MessageRow, pg_insert, batch_size, dry_run)
+        s = await _migrate_message(db, sf, MessageRow, pg_insert, batch_size, dry_run)
+        summaries.append(("message", s))
     if "blacklist" in tables:
-        await _migrate_blacklist(BlackList, sf, BlackListRow, pg_insert, dry_run)
+        s = await _migrate_blacklist(db, sf, BlackListRow, pg_insert, batch_size, dry_run)
+        summaries.append(("blacklist", s))
     if "botconfig" in tables:
-        await _migrate_bot_config(BotConfigModule, sf, BotConfigRow, pg_insert, dry_run)
+        s = await _migrate_bot_config(db, sf, BotConfigRow, pg_insert, batch_size, dry_run)
+        summaries.append(("botconfig", s))
     if "groupconfig" in tables:
-        await _migrate_group_config(GroupConfigModule, sf, GroupConfigRow, pg_insert, dry_run)
+        s = await _migrate_group_config(db, sf, GroupConfigRow, pg_insert, batch_size, dry_run)
+        summaries.append(("groupconfig", s))
     if "userconfig" in tables:
-        await _migrate_user_config(UserConfigModule, sf, UserConfigRow, pg_insert, batch_size, dry_run)
+        s = await _migrate_user_config(db, sf, UserConfigRow, pg_insert, batch_size, dry_run)
+        summaries.append(("userconfig", s))
     if "imagecache" in tables:
-        await _migrate_image_cache(ImageCache, sf, ImageCacheRow, pg_insert, batch_size, dry_run)
+        s = await _migrate_image_cache(db, sf, ImageCacheRow, pg_insert, batch_size, dry_run)
+        summaries.append(("imagecache", s))
 
     await engine.dispose()
-    print("\n✅ 迁移完成")
+
+    # 汇总
+    print("\n========== 迁移摘要 ==========")
+    total_failed = 0
+    for name, s in summaries:
+        print(f"  {name:<12} total={s.total:<10} migrated={s.migrated:<10} failed={s.failed:<6}")
+        total_failed += s.failed
+        for w in s.warnings[:5]:
+            print(f"      · {w}")
+    print(f"========== 完成（total_failed={total_failed}） ==========")
 
 
 if __name__ == "__main__":
@@ -565,16 +928,18 @@ if __name__ == "__main__":
     )
     parser.add_argument("--batch", type=int, default=1000, metavar="N", help="每批处理条数（默认 1000）")
     parser.add_argument("--dry-run", action="store_true", help="只统计数量，不写入 PostgreSQL")
-    parser.add_argument("--pg-db", metavar="NAME", help="目标 PostgreSQL 数据库名（覆盖 PG_DB 环境变量）")
+    parser.add_argument("--pg-db", metavar="NAME", help="目标 PG 库名，覆盖 PG_DB")
+    parser.add_argument("--mongo-db", metavar="NAME", help="源 Mongo 库名，覆盖 MONGO_DB")
     parser.add_argument(
         "--tables", nargs="+", choices=ALL_TABLES, metavar="TABLE", help="仅迁移指定表（空格分隔），不指定则迁移全部"
     )
+    parser.add_argument("--restart", action="store_true", help="清空 migration_state 从头迁移")
     args = parser.parse_args()
 
     selected = set(args.tables) if args.tables else set(ALL_TABLES)
     if args.dry_run:
         print("⚠️  dry-run 模式，不会写入 PostgreSQL")
     if args.tables:
-        print(f"📋 仅迁移：{', '.join(t for t in ALL_TABLES if t in selected)}")
+        print(f"仅迁移：{', '.join(t for t in ALL_TABLES if t in selected)}")
 
-    asyncio.run(migrate(args.batch, args.dry_run, selected, args.pg_db))
+    asyncio.run(migrate(args.batch, args.dry_run, selected, args.pg_db, args.mongo_db, args.restart))
