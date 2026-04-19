@@ -28,6 +28,14 @@ from .repository import (
 
 def get_db_backend() -> str:
     """读取当前配置的数据库后端名称，默认为 mongodb。"""
+    try:
+        import nonebot
+
+        backend = getattr(nonebot.get_driver().config, "db_backend", None)
+        if backend:
+            return str(backend).lower()
+    except Exception:
+        pass
     return os.getenv("DB_BACKEND", "mongodb").lower()
 
 
@@ -117,15 +125,35 @@ def make_mongo_image_cache() -> ImageCacheRepository:
     return MongoImageCacheRepository()
 
 
-async def init_mongodb_db(host: str, port: int, user: str, password: str) -> None:
+def _cfg(key: str, default: str = "") -> str:
+    try:
+        import nonebot
+
+        val = getattr(nonebot.get_driver().config, key.lower(), None)
+        if val is not None:
+            return str(val)
+    except Exception:
+        pass
+    return os.getenv(key.upper(), default)
+
+
+async def init_mongodb_db() -> None:
     """初始化 MongoDB 连接。"""
+    from nonebot.log import logger
+
+    host = _cfg("MONGO_HOST", "127.0.0.1")
+    port = int(_cfg("MONGO_PORT", "27017"))
+    user = _cfg("MONGO_USER", "")
+    password = _cfg("MONGO_PASSWORD", "")
     if user and password:
         connection_string = f"mongodb://{quote_plus(user)}:{quote_plus(password)}@{host}:{port}"
     else:
         connection_string = f"mongodb://{host}:{port}"
+    db_name = _cfg("MONGO_DB", "PallasBot")
+    logger.info(f"正在尝试连接 MongoDB {host}:{port}，Database：{db_name}")
     mongo_client = AsyncMongoClient(connection_string, unicode_decode_error_handler="ignore")
     await init_beanie(
-        database=mongo_client["PallasBot"],
+        database=mongo_client[db_name],
         document_models=[
             BotConfigModule,
             GroupConfigModule,
@@ -136,6 +164,7 @@ async def init_mongodb_db(host: str, port: int, user: str, password: str) -> Non
             ImageCache,
         ],
     )
+    logger.info(f"{db_name} 连接成功！")
 
 
 def make_pg_context() -> ContextRepository:
@@ -180,17 +209,52 @@ def make_pg_image_cache() -> ImageCacheRepository:
     return PgImageCacheRepository()
 
 
-async def init_postgresql_db(host: str, port: int, user: str, password: str) -> None:
-    """
-    初始化 PostgreSQL 连接（预留骨架，尚未实现）。
+async def init_postgresql_db() -> None:
+    """初始化 PostgreSQL 连接"""
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
 
-    当前 PG 后端仅包含接口骨架（repository_pg.Pg*Repository），数据库建库、
-    建表、ORM 映射等实际实现留给后续 PR。一旦实现完整，再填充此函数。
-    """
-    raise NotImplementedError(
-        "PostgreSQL 后端尚未实现。Repository 抽象层已就绪，但 PG 侧实现仅为骨架；"
-        "若要启用，请先完成 src/common/db/repository_pg.py 并补齐 pg optional-dependency。"
-    )
+    from .repository_pg import dispose_pg, init_pg
+
+    host = _cfg("PG_HOST", _cfg("MONGO_HOST", "127.0.0.1"))
+    port = int(_cfg("PG_PORT", "5432"))
+    user = _cfg("PG_USER", "")
+    password = _cfg("PG_PASSWORD", "")
+    db_name = _cfg("PG_DB", "PallasBot")
+    auth = f"{quote_plus(user)}:{quote_plus(password)}@" if user and password else ""
+    base_url = f"postgresql+asyncpg://{auth}{host}:{port}"
+
+    from nonebot.log import logger
+
+    logger.info(f"正在连接 PostgreSQL {host}:{port}，Database：{db_name}")
+
+    admin_engine = create_async_engine(f"{base_url}/postgres", isolation_level="AUTOCOMMIT")
+    try:
+        async with admin_engine.connect() as conn:
+            result = await conn.execute(text("SELECT 1 FROM pg_database WHERE datname = :db"), {"db": db_name})
+            if result.scalar() is None:
+                logger.info(f"{db_name} 不存在，正在自动创建...")
+                await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+                logger.info(f"{db_name} 创建成功")
+    finally:
+        await admin_engine.dispose()
+
+    engine = create_async_engine(f"{base_url}/{db_name}")
+    await init_pg(engine)
+    logger.info(f"{db_name} 连接成功！")
+
+    # bot 退出时释放连接池
+    try:
+        import nonebot
+
+        driver = nonebot.get_driver()
+
+        @driver.on_shutdown
+        async def _dispose_pg():
+            await dispose_pg()
+
+    except Exception:
+        pass
 
 
 register_backend(
@@ -277,12 +341,12 @@ def make_image_cache_repository() -> ImageCacheRepository:
     return IMAGE_CACHE_REPO_REGISTRY[backend]()
 
 
-async def init_db(host: str, port: int, user: str, password: str, backend: str | None = None) -> None:
+async def init_db(backend: str | None = None) -> None:
     """
     初始化数据库连接。
 
     根据 backend 参数选择后端，未传入时从环境变量 DB_BACKEND 读取，
-    默认使用 mongodb。新增后端只需调用 register_backend() 注册，无需修改此函数。
+    默认使用 mongodb。连接参数均从环境变量读取。
     """
     if backend is None:
         backend = get_db_backend()
@@ -290,4 +354,4 @@ async def init_db(host: str, port: int, user: str, password: str, backend: str |
     if backend not in INIT_DB_REGISTRY:
         raise ValueError(f"不支持的数据库后端: {backend}，已注册的后端: {list(INIT_DB_REGISTRY)}")
 
-    await INIT_DB_REGISTRY[backend](host, port, user, password)
+    await INIT_DB_REGISTRY[backend]()

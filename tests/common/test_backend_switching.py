@@ -24,6 +24,15 @@ class _FakeContextRepo:
     async def find_for_cleanup(self, trigger_threshold, expiration):  # noqa: ARG002
         return []
 
+    async def upsert_answer(self, keywords, group_id, answer_keywords, answer_time, message, append_on_existing):  # noqa: ARG002
+        return None
+
+    async def replace_answers(self, keywords, answers, clear_time):  # noqa: ARG002
+        return None
+
+    async def append_ban(self, keywords, ban):  # noqa: ARG002
+        return None
+
 
 class _FakeMessageRepo:
     async def bulk_insert(self, messages):  # noqa: ARG002
@@ -41,7 +50,7 @@ class _FakeBlackListRepo:
         return None
 
 
-async def _fake_init(host, port, user, password):  # noqa: ARG001
+async def _fake_init():
     return None
 
 
@@ -107,13 +116,4 @@ async def test_init_db_dispatches_to_registered_backend(fake_backend):
     from src.common.db import init_db
 
     # fake backend 的 init 直接返回 None 不抛异常
-    await init_db("host", 0, "", "", backend=fake_backend)
-
-
-@pytest.mark.asyncio
-async def test_init_db_postgresql_skeleton_raises():
-    """当前 postgresql 后端为 skeleton-only，init 应抛 NotImplementedError。"""
-    from src.common.db import init_db
-
-    with pytest.raises(NotImplementedError, match="PostgreSQL"):
-        await init_db("host", 5432, "", "", backend="postgresql")
+    await init_db(backend=fake_backend)

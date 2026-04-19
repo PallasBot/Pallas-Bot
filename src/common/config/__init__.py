@@ -273,13 +273,18 @@ class GroupConfig(Config):
         """
         获取歌曲进度
         """
-        return await self._find("sing_progress")
+        result = await self._find("sing_progress")
+        if result is None:
+            return None
+        if isinstance(result, dict):
+            return SingProgress(**result)
+        return result
 
     async def update_sing_progress(self, progress: SingProgress) -> None:
         """
         更新歌曲进度
         """
-        await self._update("sing_progress", progress)
+        await self._update("sing_progress", progress.model_dump())
 
 
 class UserConfig(Config):

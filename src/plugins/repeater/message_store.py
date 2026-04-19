@@ -52,7 +52,7 @@ class MessageStore:
 
         async with MessageStore._message_lock:
             MessageStore._message_dict[group_id].append(
-                MessageModel(
+                MessageModel.model_construct(
                     group_id=group_id,
                     user_id=chat_data.user_id,
                     bot_id=chat_data.bot_id,
