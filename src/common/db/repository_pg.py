@@ -216,11 +216,14 @@ async def init_pg(engine: AsyncEngine) -> None:
 
 
 async def dispose_pg() -> None:
-    """关闭连接池，bot 退出时调用"""
+    """关闭连接池并清空配置 TTL 缓存，bot 退出或测试 teardown 时调用。"""
     global _engine
     if _engine is not None:
         await _engine.dispose()
         _engine = None
+    # schema 重建后若保留旧 ORM 行，下一轮 get() 会命中已失效数据
+    for cache in _CONFIG_CACHES.values():
+        await cache.clear()
 
 
 _LOAD_RELATED = [
