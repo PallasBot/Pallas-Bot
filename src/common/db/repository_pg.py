@@ -71,13 +71,18 @@ class Base(DeclarativeBase):
 
 class ContextAnswerRow(Base):
     __tablename__ = "context_answer"
+    # 唯一性建在定长 md5(keywords_hash) 上：Mongo 侧 answer.keywords 最长可达
+    # 数 KB，直接把 TEXT 列塞进 btree 会超 2704 字节页上限（PG 报
+    # index row size ... exceeds btree version 4 maximum）。保留原 constraint
+    # 名便于 upsert 代码复用。
     __table_args__ = (
-        UniqueConstraint("context_id", "group_id", "keywords", name="uq_context_answer_ctx_group_kw"),
+        UniqueConstraint("context_id", "group_id", "keywords_hash", name="uq_context_answer_ctx_group_kw"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     context_id: Mapped[int] = mapped_column(ForeignKey("context.id", ondelete="CASCADE"), nullable=False, index=True)
     keywords: Mapped[str] = mapped_column(Text, nullable=False)
+    keywords_hash: Mapped[str] = mapped_column(Text, nullable=False)
     group_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
@@ -239,7 +244,7 @@ def keywords_hash(keywords: str) -> str:
 
 
 # asyncpg 单语句参数上限 32767
-_ANSWER_BATCH = 500  # ContextAnswerRow 5 列 × 500 = 2500
+_ANSWER_BATCH = 500  # ContextAnswerRow 6 列 × 500 = 3000
 _MSG_BATCH = 16000  # ContextAnswerMessageRow 2 列 × 16000 = 32000
 _BAN_BATCH = 6000  # ContextBanRow 5 列 × 6000 = 30000
 
@@ -249,16 +254,19 @@ async def _insert_answers_batched(session: AsyncSession, context_id: int, answer
 
     for i in range(0, len(answers), _ANSWER_BATCH):
         batch: list[Answer] = answers[i : i + _ANSWER_BATCH]
-        rows = [
-            ContextAnswerRow(
-                context_id=context_id,
-                keywords=_s(a.keywords) or "",
-                group_id=a.group_id,
-                count=a.count,
-                time=a.time,
+        rows = []
+        for a in batch:
+            kw = _s(a.keywords) or ""
+            rows.append(
+                ContextAnswerRow(
+                    context_id=context_id,
+                    keywords=kw,
+                    keywords_hash=keywords_hash(kw),
+                    group_id=a.group_id,
+                    count=a.count,
+                    time=a.time,
+                )
             )
-            for a in batch
-        ]
         session.add_all(rows)
         await session.flush()
 
@@ -482,6 +490,7 @@ class PgContextRepository:
             stmt = pg_insert(ContextAnswerRow).values(
                 context_id=ctx_id,
                 keywords=ans_kw_s,
+                keywords_hash=keywords_hash(ans_kw_s),
                 group_id=group_id,
                 count=1,
                 time=answer_time,

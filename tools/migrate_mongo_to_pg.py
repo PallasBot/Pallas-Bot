@@ -77,7 +77,7 @@ except ImportError:
 ALL_TABLES = ["context", "message", "blacklist", "botconfig", "groupconfig", "userconfig", "imagecache"]
 
 # asyncpg 单语句参数上限 32767
-_ANS_BATCH = 6000  # ContextAnswerRow    5 列
+_ANS_BATCH = 5000  # ContextAnswerRow    6 列（含 keywords_hash）
 _MSG_BATCH = 16000  # ContextAnswerMessageRow 2 列
 _BAN_BATCH = 6000  # ContextBanRow       5 列
 _IC_BATCH = 6000  # ImageCacheRow       4 列
@@ -459,16 +459,18 @@ async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, b
                         stats.warn(f"context_id missing after upsert: hash={h}")
                         continue
                     for a in _dedupe_answers(g["answers"]):
+                        kh = _kw_hash(a["keywords"])
                         ans_rows.append({
                             "context_id": cid,
                             "keywords": a["keywords"],
+                            "keywords_hash": kh,
                             "group_id": a["group_id"],
                             "count": a["count"],
                             "time": a["time"],
                         })
                         if a["messages"]:
                             ans_msg_pending.append(
-                                (cid, (cid, a["group_id"], a["keywords"]), a["messages"])
+                                (cid, (cid, a["group_id"], kh), a["messages"])
                             )
                     for b in g["bans"]:
                         ban_rows.append({
@@ -480,15 +482,17 @@ async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, b
                         })
 
                 # 4. 批量插 answer 并拿回 id（走 RETURNING）
+                # 键 = (context_id, group_id, keywords_hash) 对齐 UNIQUE 约束，
+                # 避免用 TEXT keywords 作 key 时超长字符串带来的内存开销
                 key2aid: dict[tuple[int, int, str], int] = {}
                 for i in range(0, len(ans_rows), _ANS_BATCH):
                     ret = await session.execute(
                         ins(AnsRow)
                         .values(ans_rows[i : i + _ANS_BATCH])
-                        .returning(AnsRow.id, AnsRow.context_id, AnsRow.group_id, AnsRow.keywords)
+                        .returning(AnsRow.id, AnsRow.context_id, AnsRow.group_id, AnsRow.keywords_hash)
                     )
                     for r in ret.fetchall():
-                        key2aid[(r.context_id, r.group_id, r.keywords)] = int(r.id)
+                        key2aid[(r.context_id, r.group_id, r.keywords_hash)] = int(r.id)
 
                 # 5. 关联 messages
                 msg_rows: list[dict] = []

@@ -167,6 +167,27 @@ async def test_null_byte_stripping(pg_engine):
 
 
 @pytest.mark.asyncio
+async def test_upsert_answer_handles_long_keywords(pg_engine):
+    """answer.keywords 超出 btree 2704 字节上限时，UNIQUE 约束走 keywords_hash，不应触发 ProgramLimitExceededError。"""
+    from src.common.db.modules import Context
+    from src.common.db.repository_pg import PgContextRepository
+
+    repo = PgContextRepository()
+    await repo.insert(
+        Context.model_construct(keywords="longkw", time=0, trigger_count=1, answers=[], ban=[], clear_time=0)
+    )
+    long_ak = "x" * 5000  # 远超 btree 单行 2704 字节硬上限
+    await repo.upsert_answer("longkw", 1, long_ak, 100, "m1", append_on_existing=True)
+    await repo.upsert_answer("longkw", 1, long_ak, 200, "m2", append_on_existing=True)
+
+    found = await repo.find_by_keywords("longkw")
+    assert found is not None
+    assert len(found.answers) == 1
+    assert found.answers[0].keywords == long_ak
+    assert found.answers[0].count == 2
+
+
+@pytest.mark.asyncio
 async def test_blacklist_upsert_is_atomic(pg_engine):
     """并发 upsert_answers 到同一 group_id 不会炸库、最终只剩 1 行。"""
     from src.common.db.repository_pg import PgBlackListRepository
