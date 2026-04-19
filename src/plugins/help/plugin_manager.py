@@ -5,10 +5,13 @@ from typing import Any
 
 from nonebot import get_loaded_plugins, logger
 
+from src.common.db import make_bot_config_repository, make_group_config_repository
 from src.common.db.modules import BotConfigModule, GroupConfigModule
-from src.common.utils.invalidate_cache import clear_model_cache
 
 from .styles import load_config
+
+bot_config_repo = make_bot_config_repository()
+group_config_repo = make_group_config_repository()
 
 plugin_config = load_config()
 ignored_plugins = plugin_config.ignored_plugins if plugin_config else []
@@ -47,62 +50,46 @@ async def is_plugin_disabled(
     检查插件是否被禁用
     """
     try:
-        # 检查全局禁用状态
         if bot_id:
-            bot_config = await BotConfigModule.find_one(
-                {"account": bot_id}, fetch_links=True, ignore_cache=ignore_cache
-            )
+            bot_config = await bot_config_repo.get(bot_id, ignore_cache=ignore_cache)
             if bot_config:
                 if plugin_name in bot_config.disabled_plugins:
                     logger.debug(f"插件 {plugin_name} 在全局级别被禁用")
                     return True
-            elif not bot_config:
-                bot_config = BotConfigModule(account=bot_id, disabled_plugins=[])
-                await bot_config.save()
+            else:
+                # 自愈：首次访问时自动建空配置
+                await bot_config_repo.get_or_create(bot_id, disabled_plugins=[])
 
-        # 检查群级禁用状态
         if group_id:
-            group_config = await GroupConfigModule.find_one(
-                {"group_id": group_id}, fetch_links=True, ignore_cache=ignore_cache
-            )
-            if group_config:
-                if plugin_name in group_config.disabled_plugins:
-                    logger.debug(f"插件 {plugin_name} 在群 {group_id} 级别被禁用")
-                    return True
+            group_config = await group_config_repo.get(group_id, ignore_cache=ignore_cache)
+            if group_config and plugin_name in group_config.disabled_plugins:
+                logger.debug(f"插件 {plugin_name} 在群 {group_id} 级别被禁用")
+                return True
 
         return False
     except Exception as e:
         logger.error(f"检查插件 {plugin_name} 状态时出错: {str(e)}")
-        # 出错时返回False，假设插件是启用的
         return False
 
 
 async def is_plugin_globally_disabled(plugin_name: str, bot_id: int, ignore_cache: bool = False) -> bool:
     """
     检查插件是否在全局范围内被禁用
-
     """
     if not bot_id:
         return False
 
-    bot_config = await BotConfigModule.find_one({"account": bot_id}, fetch_links=True, ignore_cache=ignore_cache)
+    bot_config = await bot_config_repo.get(bot_id, ignore_cache=ignore_cache)
     return bool(bot_config and plugin_name in bot_config.disabled_plugins)
 
 
 async def get_bot_config(bot_id: int) -> tuple[BotConfigModule, bool]:
     """
     获取Bot配置，如果不存在则创建
-
     """
-    bot_config = await BotConfigModule.find_one({"account": bot_id})
-    created = False
-
-    if not bot_config:
+    bot_config, created = await bot_config_repo.get_or_create(bot_id, disabled_plugins=[])
+    if created:
         logger.debug(f"为Bot {bot_id} 创建新的配置")
-        bot_config = BotConfigModule(account=bot_id, disabled_plugins=[])
-        await bot_config.insert()
-        created = True
-
     return bot_config, created
 
 
@@ -110,15 +97,9 @@ async def get_group_config(group_id: int) -> tuple[GroupConfigModule, bool]:
     """
     获取群配置，如果不存在则创建
     """
-    group_config = await GroupConfigModule.find_one({"group_id": group_id})
-    created = False
-
-    if not group_config:
+    group_config, created = await group_config_repo.get_or_create(group_id, disabled_plugins=[])
+    if created:
         logger.debug(f"为群 {group_id} 创建新的配置")
-        group_config = GroupConfigModule(group_id=group_id, disabled_plugins=[])
-        await group_config.insert()
-        created = True
-
     return group_config, created
 
 
@@ -126,18 +107,17 @@ async def update_bot_config(bot_id: int, disabled_plugins: list[str]) -> BotConf
     """
     更新Bot配置中的禁用插件列表
     """
-
-    bot_config, _ = await get_bot_config(bot_id)
-
-    bot_config.disabled_plugins = disabled_plugins.copy()
-
-    await bot_config.save()
-
-    clear_model_cache(BotConfigModule)
+    await bot_config_repo.upsert_field(bot_id, "disabled_plugins", disabled_plugins.copy())
+    await bot_config_repo.invalidate_cache()
 
     # 清理所有缓存，因为全局设置影响所有群组
     clear_help_cache()
 
+    bot_config = await bot_config_repo.get(bot_id, ignore_cache=True)
+    # 不用 assert：python -O 下 assert 会被剥离。
+    # upsert_field 语义上应保证文档存在，若仍拿不到说明仓储实现出问题，显式报错
+    if bot_config is None:
+        raise RuntimeError(f"BotConfig for bot_id={bot_id} not found after upsert_field")
     return bot_config
 
 
@@ -145,17 +125,13 @@ async def update_group_config(group_id: int, disabled_plugins: list[str]) -> Gro
     """
     更新群配置中的禁用插件列表
     """
-
-    group_config, _ = await get_group_config(group_id)
-
-    group_config.disabled_plugins = disabled_plugins.copy()
-
-    await group_config.save()
-
-    clear_model_cache(GroupConfigModule)
-
+    await group_config_repo.upsert_field(group_id, "disabled_plugins", disabled_plugins.copy())
+    await group_config_repo.invalidate_cache()
     clear_help_cache(group_id)
 
+    group_config = await group_config_repo.get(group_id, ignore_cache=True)
+    if group_config is None:
+        raise RuntimeError(f"GroupConfig for group_id={group_id} not found after upsert_field")
     return group_config
 
 

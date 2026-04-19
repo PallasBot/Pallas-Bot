@@ -216,3 +216,6 @@ data
 
 test.py
 .env.dev
+
+# AI orchestration internal data
+.sisyphus/

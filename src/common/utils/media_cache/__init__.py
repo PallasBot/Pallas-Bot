@@ -6,16 +6,18 @@ from datetime import datetime, timedelta
 import httpx
 from nonebot.adapters.onebot.v11 import MessageSegment
 
-from src.common.db import ImageCache
+from src.common.db import ImageCache, make_image_cache_repository
 from src.common.utils import HTTPXClient
+
+image_cache_repo = make_image_cache_repository()
 
 
 async def insert_image(image_seg: MessageSegment):
     cq_code = re.sub(r"\.image,.+?\]", ".image]", str(image_seg))
-    cache = await ImageCache.find_one(ImageCache.cq_code == cq_code)
+    cache = await image_cache_repo.find_by_cq_code(cq_code)
     if not cache:
         cache = ImageCache(cq_code=cq_code)
-        await cache.insert()
+        await image_cache_repo.insert(cache)
         return
     cache.ref_times += 1
     # 不是经常收到的图不缓存，不然会占用大量空间
@@ -26,11 +28,11 @@ async def insert_image(image_seg: MessageSegment):
             return
         base64_data = base64.b64encode(rsp.content).decode()
         cache.base64_data = base64_data
-    await cache.save()
+    await image_cache_repo.save(cache)
 
 
 async def get_image(cq_code) -> bytes | None:
-    cache = await ImageCache.find_one(ImageCache.cq_code == cq_code)
+    cache = await image_cache_repo.find_by_cq_code(cq_code)
     if not cache:
         return None
     if cache.base64_data is None:
@@ -40,8 +42,8 @@ async def get_image(cq_code) -> bytes | None:
 
 async def clear_image_cache(days: int = 5, times: int = 3):
     idate = int(str((datetime.now() - timedelta(days=days)).date()).replace("-", ""))
-    await ImageCache.find(ImageCache.date < idate).delete()
-    await ImageCache.find(ImageCache.ref_times < times).delete()
+    await image_cache_repo.delete_old(idate)
+    await image_cache_repo.delete_low_ref(times)
 
 
 if __name__ == "__main__":

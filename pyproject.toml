@@ -29,11 +29,18 @@ dependencies = [
 perf = [
     "jieba-next>=1.0.0a5"
 ]
+pg = [
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+]
 
 [dependency-groups]
 dev = [
     "pip-audit>=2.9.0",
     "ruff>=0.11.13",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "mongomock-motor>=0.0.30",
 ]
 
 [[tool.uv.index]]
@@ -57,3 +64,10 @@ nonebot-plugin-apscheduler = ["nonebot_plugin_apscheduler"]
 [tool.nonebot.adapters]
 "@local" = []
 nonebot-adapter-onebot = [{name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11"}]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

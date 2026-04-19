@@ -2,6 +2,7 @@ import asyncio
 import random
 import re
 import time
+from collections import defaultdict, deque
 
 from nonebot import get_bot, get_driver, logger, on_message, on_notice
 from nonebot.adapters import Bot
@@ -105,7 +106,7 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 message_id_lock = asyncio.Lock()
-message_id_dict = {}
+message_id_dict = defaultdict(lambda: deque(maxlen=100))
 
 driver = get_driver()
 
@@ -187,12 +188,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
             if message_id in message_id_dict[group_id]:
                 to_learn = False
         else:
-            message_id_dict[group_id] = []
+            message_id_dict[group_id] = deque(maxlen=100)
 
         group_message = message_id_dict[group_id]
         group_message.append(message_id)
-        if len(group_message) > 100:
-            group_message = group_message[:-10]
 
     chat: Chat = Chat(event)
 

@@ -3,24 +3,25 @@ import asyncio
 import time
 from typing import Any
 
-from beanie import Document
-from pydantic import BaseModel
-
-from src.common.db import BotConfigModule, GroupConfigModule, SingProgress, UserConfigModule
-from src.common.utils.invalidate_cache import invalidate_cache
+from src.common.db import (
+    SingProgress,
+    make_bot_config_repository,
+    make_group_config_repository,
+    make_user_config_repository,
+)
+from src.common.db.repository import ConfigRepository
 
 KEY_JOINER = "."
 
 
 class Config:
     _in_memory_cache: dict | None = None
-    _module_class: Document | None = None
-    _primary_key: str | None = None
+    _repo: ConfigRepository | None = None
     _lock: asyncio.Lock | None = None
 
     async def _find(self, key: str) -> Any:
-        config_document = await self._module_class.find_one(self._db_filter)
-        return getattr(config_document, key) if config_document else None
+        document = await self._repo.get(self._document_key)
+        return getattr(document, key) if document else None
 
     async def _find_in_memory(self, key: str) -> Any:
         async with self._lock:
@@ -30,15 +31,7 @@ class Config:
             return cache.get(key)
 
     async def _update(self, key: str, value: Any) -> None:
-        document = await self._module_class.find_one(self._db_filter)
-        if document:
-            if hasattr(self._module_class, "_cache") and self._module_class._cache:
-                invalidate_cache(self._module_class, document.id)
-            setattr(document, key, value)
-            await document.save()
-        else:
-            new_document = self._module_class(**{self._primary_key: self._document_key, key: value})
-            await new_document.insert()
+        await self._repo.upsert_field(self._document_key, key, value)
 
     async def _update_in_memory(self, key: str, value: Any) -> None:
         async with self._lock:
@@ -54,11 +47,11 @@ class Config:
                 async with cls._lock:
                     cls._in_memory_cache[cache_key] = value
 
-    def __init__(self, module_class: Document, primary_key: str, key_id: int) -> None:
+    def __init__(self, repo: ConfigRepository, key_id: int) -> None:
         self._document_key = key_id
-        self._db_filter = {primary_key: key_id}
-        self.__class__._module_class = module_class
-        self.__class__._primary_key = primary_key
+        # _repo / _in_memory_cache / _lock 沿用类级挂载以兼容 _update_all
+        # 以及 in-memory cache 的历史语义；每个 Config 子类一份
+        self.__class__._repo = repo
         if self.__class__._in_memory_cache is None:
             self.__class__._in_memory_cache = {}
         if self.__class__._lock is None:
@@ -67,7 +60,7 @@ class Config:
 
 class BotConfig(Config):
     def __init__(self, bot_id: int, group_id: int = 0, cooldown: int = 5) -> None:
-        super().__init__(module_class=BotConfigModule, primary_key="account", key_id=bot_id)
+        super().__init__(repo=make_bot_config_repository(), key_id=bot_id)
 
         self.bot_id = bot_id
         self.group_id = group_id
@@ -80,12 +73,19 @@ class BotConfig(Config):
         security = await self._find("security")
         return True if security else False
 
-    async def auto_accept(self) -> bool:
+    async def auto_accept_friend(self) -> bool:
         """
-        是否自动接受加群、加好友请求
+        是否自动接受好友请求
         """
-        accept = await self._find("auto_accept")
-        return True if accept else False
+        v = await self._find("auto_accept_friend")
+        return True if v else False
+
+    async def auto_accept_group(self) -> bool:
+        """
+        是否自动接受入群邀请
+        """
+        v = await self._find("auto_accept_group")
+        return True if v else False
 
     async def is_admin_of_bot(self, user_id: int) -> bool:
         """
@@ -203,7 +203,7 @@ class BotConfig(Config):
 
 class GroupConfig(Config):
     def __init__(self, group_id: int, cooldown: int = 5) -> None:
-        super().__init__(module_class=GroupConfigModule, primary_key="group_id", key_id=group_id)
+        super().__init__(repo=make_group_config_repository(), key_id=group_id)
 
         self.group_id = group_id
         self.cooldown = cooldown
@@ -272,7 +272,7 @@ class GroupConfig(Config):
 
 class UserConfig(Config):
     def __init__(self, user_id: int) -> None:
-        super().__init__(module_class=UserConfigModule, primary_key="user_id", key_id=user_id)
+        super().__init__(repo=make_user_config_repository(), key_id=user_id)
 
         self.user_id = user_id
 
