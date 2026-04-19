@@ -22,6 +22,9 @@ __plugin_meta__ = PluginMetadata(
 同意入群 <群号> - 同意待处理的入群邀请
 同意所有入群 - 同意所有待处理的入群邀请
 拒绝入群 <群号> - 拒绝待处理的入群邀请
+查看自动同意 - 查看自动同意好友/入群的开关状态
+开启自动同意好友 / 关闭自动同意好友 - 切换自动同意好友开关
+开启自动同意入群 / 关闭自动同意入群 - 切换自动同意入群开关
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot/Pallas-Bot",
@@ -63,6 +66,13 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_condition": "牛牛开启/关闭 request_handler",
                 "brief_des": "控制申请通知是否推送给管理员",
                 "detail_des": "通过 help 控制好友申请和入群邀请的通知推送",
+            },
+            {
+                "func": "自动同意开关",
+                "trigger_method": "on_cmd",
+                "trigger_condition": "查看自动同意 / 开启/关闭自动同意好友 / 开启/关闭自动同意入群",
+                "brief_des": "查看或切换自动同意好友/入群的开关",
+                "detail_des": "由牛牛管理员执行，查看当前自动同意状态，或开启/关闭自动同意好友申请、入群邀请",
             },
         ],
         "menu_template": "default",
@@ -146,6 +156,11 @@ list_groups_cmd = on_command("查看入群邀请", priority=5, block=True)
 approve_group_cmd = on_command("同意入群", priority=5, block=True)
 approve_all_groups_cmd = on_command("同意所有入群", priority=5, block=True)
 reject_group_cmd = on_command("拒绝入群", priority=5, block=True)
+auto_accept_status_cmd = on_command("查看自动同意", priority=5, block=True)
+enable_auto_friend_cmd = on_command("开启自动同意好友", priority=5, block=True)
+disable_auto_friend_cmd = on_command("关闭自动同意好友", priority=5, block=True)
+enable_auto_group_cmd = on_command("开启自动同意入群", priority=5, block=True)
+disable_auto_group_cmd = on_command("关闭自动同意入群", priority=5, block=True)
 
 
 async def is_bot_admin(bot: Bot, event: MessageEvent) -> bool:
@@ -182,6 +197,13 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
     pending_friend.setdefault(bot_key, {})[str(event.user_id)] = event.flag
     save_json(FRIEND_REQ_FILE, pending_friend)
 
+    bot_config = BotConfig(bot_id)
+    if await bot_config.auto_accept_friend():
+        await event.approve(bot)
+        pending_friend.get(bot_key, {}).pop(str(event.user_id), None)
+        save_json(FRIEND_REQ_FILE, pending_friend)
+        return
+
     if not await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
         nickname = await get_nickname(bot, event.user_id)
         msg = (
@@ -189,15 +211,10 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
             f"申请人：{nickname}（{event.user_id}）\n"
             f"验证消息：{event.comment or '（无）'}\n"
             f"同意：同意好友 {event.user_id}\n"
-            f"发送'同意所有好友'可以批量同意所有好友请求\n"
-            f"发送'查看好友申请'可以查看所有待处理的好友申请"
+            f"发送同意所有好友可以批量同意\n"
+            f"发送牛牛帮助 request_handler 获取所有指令"
         )
         await notify_admins(bot, msg)
-
-    if await BotConfig(bot_id).auto_accept():
-        await event.approve(bot)
-        pending_friend.get(bot_key, {}).pop(str(event.user_id), None)
-        save_json(FRIEND_REQ_FILE, pending_friend)
 
 
 @list_friends_cmd.handle()
@@ -298,6 +315,13 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
         }
         save_json(GROUP_REQ_FILE, pending_group)
 
+        bot_config = BotConfig(bot_id)
+        if await bot_config.auto_accept_group() or await bot_config.is_admin_of_bot(event.user_id):
+            await event.approve(bot)
+            pending_group.get(bot_key, {}).pop(group_key, None)
+            save_json(GROUP_REQ_FILE, pending_group)
+            return
+
         if not await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
             nickname = await get_nickname(bot, event.user_id)
             group_name = await get_group_name(bot, event.group_id)
@@ -307,16 +331,10 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
                 f"群：{group_name}（{event.group_id}）\n"
                 f"同意：同意入群 {event.group_id}\n"
                 f"拒绝：拒绝入群 {event.group_id}\n"
-                f"发送'同意所有入群'可以批量同意\n"
-                f"发送'查看入群邀请'可以查看所有待处理的入群邀请"
+                f"发送同意所有入群可以批量同意\n"
+                f"发送牛牛帮助 request_handler 获取所有指令"
             )
             await notify_admins(bot, msg)
-
-        bot_config = BotConfig(bot_id)
-        if await bot_config.auto_accept() or await bot_config.is_admin_of_bot(event.user_id):
-            await event.approve(bot)
-            pending_group.get(bot_key, {}).pop(group_key, None)
-            save_json(GROUP_REQ_FILE, pending_group)
 
 
 @approve_all_friends_cmd.handle()
@@ -401,6 +419,54 @@ async def handle_approve_group(bot: Bot, event: MessageEvent, args: Message = Co
     nickname = await get_nickname(bot, req["user_id"])
     group_name = await get_group_name(bot, group_id)
     await approve_group_cmd.finish(f"已同意 {nickname}（{req['user_id']}）的入群邀请:{group_name}({group_id})")
+
+
+@auto_accept_status_cmd.handle()
+async def handle_auto_accept_status(bot: Bot, event: MessageEvent):
+    if not await PERM(bot, event):
+        return
+    bot_config = BotConfig(int(bot.self_id))
+    friend_on = await bot_config.auto_accept_friend()
+    group_on = await bot_config.auto_accept_group()
+    friend_str = "✅ 开启" if friend_on else "❌ 关闭"
+    group_str = "✅ 开启" if group_on else "❌ 关闭"
+    await auto_accept_status_cmd.finish(
+        f"自动同意好友：{friend_str}\n"
+        f"自动同意入群：{group_str}\n"
+        f"切换命令：开启/关闭自动同意好友 / 开启/关闭自动同意入群"
+    )
+
+
+@enable_auto_friend_cmd.handle()
+async def handle_enable_auto_friend(bot: Bot, event: MessageEvent):
+    if not await PERM(bot, event):
+        return
+    await BotConfig(int(bot.self_id)).set_auto_accept_friend(True)
+    await enable_auto_friend_cmd.finish("已开启自动同意好友申请")
+
+
+@disable_auto_friend_cmd.handle()
+async def handle_disable_auto_friend(bot: Bot, event: MessageEvent):
+    if not await PERM(bot, event):
+        return
+    await BotConfig(int(bot.self_id)).set_auto_accept_friend(False)
+    await disable_auto_friend_cmd.finish("已关闭自动同意好友申请")
+
+
+@enable_auto_group_cmd.handle()
+async def handle_enable_auto_group(bot: Bot, event: MessageEvent):
+    if not await PERM(bot, event):
+        return
+    await BotConfig(int(bot.self_id)).set_auto_accept_group(True)
+    await enable_auto_group_cmd.finish("已开启自动同意入群邀请")
+
+
+@disable_auto_group_cmd.handle()
+async def handle_disable_auto_group(bot: Bot, event: MessageEvent):
+    if not await PERM(bot, event):
+        return
+    await BotConfig(int(bot.self_id)).set_auto_accept_group(False)
+    await disable_auto_group_cmd.finish("已关闭自动同意入群邀请")
 
 
 @reject_group_cmd.handle()

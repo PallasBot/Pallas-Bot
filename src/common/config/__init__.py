@@ -87,6 +87,18 @@ class BotConfig(Config):
         v = await self._find("auto_accept_group")
         return True if v else False
 
+    async def set_auto_accept_friend(self, value: bool) -> None:
+        """
+        设置是否自动接受好友请求
+        """
+        await self._update("auto_accept_friend", value)
+
+    async def set_auto_accept_group(self, value: bool) -> None:
+        """
+        设置是否自动接受入群邀请
+        """
+        await self._update("auto_accept_group", value)
+
     async def is_admin_of_bot(self, user_id: int) -> bool:
         """
         是否是管理员
