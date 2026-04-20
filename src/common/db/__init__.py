@@ -250,7 +250,9 @@ async def init_postgresql_db() -> None:
             result = await conn.execute(text("SELECT 1 FROM pg_database WHERE datname = :db"), {"db": db_name})
             if result.scalar() is None:
                 logger.info(f"{db_name} 不存在，正在自动创建...")
-                await conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+                # PG 不支持给 identifier 绑占位符，只能拼接；上面 [A-Za-z0-9_-]
+                # 的正则已保证 db_name 无注入风险。
+                await conn.execute(text(f'CREATE DATABASE "{db_name}"'))  # noqa: S608
                 logger.info(f"{db_name} 创建成功")
     finally:
         await admin_engine.dispose()

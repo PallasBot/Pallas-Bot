@@ -222,10 +222,13 @@ async def init_pg(engine: AsyncEngine) -> None:
 
 async def dispose_pg() -> None:
     """关闭连接池并清空配置 TTL 缓存，bot 退出或测试 teardown 时调用。"""
-    global _engine
+    global _engine, _session_factory
     if _engine is not None:
         await _engine.dispose()
         _engine = None
+    # 同步清掉 session factory，避免后续 get_session() 拿到绑定在已释放 engine
+    # 上的 AsyncSession；正确行为是抛 "PostgreSQL 尚未初始化"。
+    _session_factory = None
     # schema 重建后若保留旧 ORM 行，下一轮 get() 会命中已失效数据
     for cache in _CONFIG_CACHES.values():
         await cache.clear()
@@ -698,7 +701,14 @@ class PgConfigRepository:
     def __init__(self, table: str, primary_key: str) -> None:
         if table not in _CONFIG_TABLE_MAP:
             raise ValueError(f"Unknown config table: {table}")
-        self._row_class, self._pk_field = _CONFIG_TABLE_MAP[table]
+        row_class, pk_field = _CONFIG_TABLE_MAP[table]
+        # primary_key 由工厂函数传入（对齐 Mongo ConfigRepository 的构造签名），
+        # 这里做一致性断言，避免静默与 _CONFIG_TABLE_MAP 失同步。
+        if primary_key != pk_field:
+            raise ValueError(
+                f"primary_key {primary_key!r} 与 {table} 登记的主键 {pk_field!r} 不一致"
+            )
+        self._row_class, self._pk_field = row_class, pk_field
         self._cache = _get_config_cache(self._row_class)
 
     async def get(self, key_id: int, *, ignore_cache: bool = False) -> Any | None:
