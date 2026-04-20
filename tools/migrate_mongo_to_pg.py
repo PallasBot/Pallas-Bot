@@ -6,8 +6,8 @@ MongoDB → PostgreSQL 迁移脚本
 
 特性：
 - 基于 Mongo `_id` 游标流式读取，不走 skip/limit，千万级数据也不会退化成 O(n)
-- migration_state 表记录每张表的 last_id；中断后重跑自动断点续传，不会重复写入
-- 批级 commit 与 migration_state 在同一事务内原子写入，保证"恰好一次"
+- pallas_migration_state 表记录每张表的 last_id；中断后重跑自动断点续传，不会重复写入
+- 批级 commit 与 pallas_migration_state 在同一事务内原子写入，保证"恰好一次"
 - 逐条 defensive 解析，脏数据（缺字段 / 非法类型 / NUL 字符）跳过并计入汇总，不阻断
 - Context 聚合同 batch 内相同 keywords_hash 的 answers / bans，不再丢数据
 - upsert 依赖 `repository_pg` 里定义的唯一约束（含复合 upsert_answer 约束），新字段自动加到 PG
@@ -21,7 +21,7 @@ MongoDB → PostgreSQL 迁移脚本
     --pg-db NAME    目标 PG 库名，覆盖 PG_DB 环境变量
     --mongo-db NAME 源 Mongo 库名，覆盖 MONGO_DB 环境变量（默认 PallasBot）
     --tables TABLE  仅迁移指定表，可选：context message blacklist botconfig groupconfig userconfig imagecache
-    --restart       清空 migration_state 重新从头迁移
+    --restart       清空 pallas_migration_state 重新从头迁移
 
 示例：
     # 全量迁移（自动续传）
@@ -196,10 +196,20 @@ async def _ensure_db() -> None:
     db = os.getenv("PG_DB", "PallasBot")
     if not re.match(r"^[A-Za-z0-9_\-]+$", db):
         raise ValueError(f"非法数据库名: {db!r}")
-    conn = await asyncpg.connect(host=h, port=p, user=u, password=pw, database="postgres")
+    # 未显式指定 PG_USER/PG_PASSWORD 时省掉这两个参数，让 libpq 走默认用户
+    # （PGUSER / 当前 OS 用户）和 .pgpass，否则很多本地 trust / peer 鉴权环境
+    # 会因为 user=None 直接连不上。
+    conn_kwargs: dict[str, object] = {"host": h, "port": p, "database": "postgres"}
+    if u is not None:
+        conn_kwargs["user"] = u
+    if pw is not None:
+        conn_kwargs["password"] = pw
+    conn = await asyncpg.connect(**conn_kwargs)
     try:
         if not await conn.fetchval("SELECT 1 FROM pg_database WHERE datname=$1", db):
-            await conn.execute(f'CREATE DATABASE "{db}"')
+            # PG 不支持用占位符绑定 identifier，只能拼接；上面的正则已保证 db 仅含
+            # [A-Za-z0-9_-]，不存在注入风险。
+            await conn.execute(f'CREATE DATABASE "{db}"')  # noqa: S608
             print(f"已创建数据库 {db}")
         else:
             print(f"数据库 {db} 已存在")
@@ -208,8 +218,13 @@ async def _ensure_db() -> None:
 
 
 # ---------------------------------------------------------------------------
-# migration_state：断点续传
+# pallas_migration_state：断点续传
+#
+# 表名加 pallas_ 前缀，避免与用户已有共享库里的同名 migration_state 冲突。
 # ---------------------------------------------------------------------------
+
+
+_STATE_TABLE = "pallas_migration_state"
 
 
 async def _ensure_state_table(engine) -> None:
@@ -218,8 +233,8 @@ async def _ensure_state_table(engine) -> None:
     async with engine.begin() as conn:
         await conn.execute(
             T(
-                """
-                CREATE TABLE IF NOT EXISTS migration_state (
+                f"""
+                CREATE TABLE IF NOT EXISTS {_STATE_TABLE} (
                     table_name TEXT PRIMARY KEY,
                     last_id TEXT NOT NULL,
                     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -233,15 +248,15 @@ async def _reset_state(engine) -> None:
     from sqlalchemy import text as T
 
     async with engine.begin() as conn:
-        await conn.execute(T("DELETE FROM migration_state"))
-    print("已清空 migration_state，将从头迁移")
+        await conn.execute(T(f"DELETE FROM {_STATE_TABLE}"))
+    print(f"已清空 {_STATE_TABLE}，将从头迁移")
 
 
 async def _get_state(session, table: str) -> str | None:
     from sqlalchemy import text as T
 
     result = await session.execute(
-        T("SELECT last_id FROM migration_state WHERE table_name = :t"), {"t": table}
+        T(f"SELECT last_id FROM {_STATE_TABLE} WHERE table_name = :t"), {"t": table}
     )
     return result.scalar_one_or_none()
 
@@ -251,8 +266,8 @@ async def _set_state(session, table: str, last_id: str) -> None:
 
     await session.execute(
         T(
-            """
-            INSERT INTO migration_state (table_name, last_id, updated_at)
+            f"""
+            INSERT INTO {_STATE_TABLE} (table_name, last_id, updated_at)
             VALUES (:t, :id, NOW())
             ON CONFLICT (table_name) DO UPDATE
                 SET last_id = EXCLUDED.last_id, updated_at = NOW()
@@ -508,7 +523,7 @@ async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, b
                 for i in range(0, len(ban_rows), _BAN_BATCH):
                     await session.execute(ins(BanRow).values(ban_rows[i : i + _BAN_BATCH]))
 
-                # 7. 更新 migration_state 并一并 commit
+                # 7. 更新 pallas_migration_state 并一并 commit
                 await _set_state(session, "context", str(batch[-1]["_id"]))
                 await session.commit()
 
@@ -937,7 +952,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--tables", nargs="+", choices=ALL_TABLES, metavar="TABLE", help="仅迁移指定表（空格分隔），不指定则迁移全部"
     )
-    parser.add_argument("--restart", action="store_true", help="清空 migration_state 从头迁移")
+    parser.add_argument("--restart", action="store_true", help="清空 pallas_migration_state 从头迁移")
     args = parser.parse_args()
 
     selected = set(args.tables) if args.tables else set(ALL_TABLES)

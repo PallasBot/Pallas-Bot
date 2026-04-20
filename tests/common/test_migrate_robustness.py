@@ -231,7 +231,7 @@ async def test_migrate_context_merges_duplicate_keywords(pg_env):
 
 
 async def test_migrate_message_resumable(pg_env):
-    """migration_state 已写 last_id 时，重跑只补未迁部分、不产生重复。"""
+    """pallas_migration_state 已写 last_id 时，重跑只补未迁部分、不产生重复。"""
     from bson import ObjectId
     from sqlalchemy import func, insert as sa_insert, select
 
