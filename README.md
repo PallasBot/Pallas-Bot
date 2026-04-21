@@ -13,17 +13,18 @@
 </div>
 <br>
 
-🚀 Pallas-Bot 2.0 发布啦！🥳
+🚀 Pallas-Bot 3.0 发布啦！🥳
 
-## Pallas-Bot 2.0 有什么改进？
+> 仍希望沿用 MongoDB-only 的老版本？完全兼容的 2.0 代码保留在 [`archive/v2`](https://github.com/PallasBot/Pallas-Bot/tree/archive/v2) 分支。
 
-1. 将 AI 功能分离至 [AI 服务端](https://github.com/PallasBot/Pallas-Bot-AI)
-2. 代码全面重构，牛牛更易维护
-3. 数据库操作全异步改造，牛牛运行更高效
-4. 项目文件规范化，牛牛部署更简单
-5. 优化 Docker 构建，支持 Arm64 架构
-6. 支持语音文件自动下载，启动时自动检查并配置语音资源
-7. 修复了一些老 bug
+## Pallas-Bot 3.0 有什么改进？
+
+1. 新增 PostgreSQL 数据库后端，通过 `DB_BACKEND` 环境变量一键切换，Mongo 与 PG 共用同一套 Repository 抽象
+2. 提供 Mongo → PG 迁移脚本，支持千万级数据流式迁移、断点续传与脏数据容错
+3. 牛牛的高频写入场景并发原子化（`upsert_answer` / 黑名单 / 图缓存 / 配置均走原子 `ON CONFLICT`），不再丢计数
+4. 主键 BigInt 化、冗余索引清理、`Message.time` 索引补齐，支撑千万级长期累积
+5. 内置配置 TTL 缓存与连接池参数化（`PG_POOL_SIZE` / `PG_MAX_OVERFLOW` / `PG_POOL_RECYCLE`），PG 后端在高 QPS 下表现稳定
+6. 修复了一些老 bug
 
 ## 牛牛有什么功能？
 
