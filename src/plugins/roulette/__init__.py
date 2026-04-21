@@ -81,8 +81,6 @@ roulette_status = defaultdict(int)  # 0 关闭 1 开启
 roulette_time = defaultdict(int)
 roulette_count = defaultdict(int)
 timeout = 300
-roulette_player = defaultdict(list)
-ban_players = defaultdict(list)
 role_cache = defaultdict(lambda: defaultdict(str))
 
 shot_lock = asyncio.Lock()
@@ -96,8 +94,8 @@ RESCUE_CONFIG = {
         "self_punish_drink_prob": 0.0,  # 不需要喝酒
         "self_ban_duration": lambda: random.randint(5, 20) * 60,
         "self_kick_msg": '呃......咳嗯，博士，这个叫"二踢脚"的可以在我头上放吗...',
-        "self_kick_protected_msg": '呃......咳嗯，博士，这个叫"二踢脚"的是在他头上放吗...',
-        "self_ban_msg": '呃......咳嗯，博士，这个叫"二踢脚"的是在他头上放吗...',
+        "self_kick_protected_msg": "呃......咳嗯，博士，这个叫“二踢脚”好像在他头上放不了...",
+        "self_ban_msg": '呃......咳嗯，博士，这个叫"二踢脚"的可以在我头上放吗...',
         "target_ban_duration": 0,  # 解禁
         "target_prefix": "命运之手指向了为沉默所困之人：",
         "target_suffix": "，已从沉默中被解放。",
@@ -111,8 +109,8 @@ RESCUE_CONFIG = {
         "self_punish_drink_prob": 0.2,  # 需要喝酒
         "self_ban_duration": lambda: random.randint(25, 120) * 60,
         "self_kick_msg": "呃......咳嗯，博士，这个叫“二踢脚”的可以在我头上放吗...",
-        "self_kick_protected_msg": "呃......咳嗯，博士，这个叫“二踢脚”的是在他头上放吗...",
-        "self_ban_msg": '呃......咳嗯，博士，这个叫"二踢脚"的是在他头上放吗...',
+        "self_kick_protected_msg": "呃......咳嗯，博士，这个叫“二踢脚”好像在他头上放不了...",
+        "self_ban_msg": '呃......咳嗯，博士，这个叫"二踢脚"的可以在我头上放吗...',
         "target_ban_duration": lambda: random.randint(30, 80) * 60,
         "target_prefix": "哭嚎吧，",
         "target_suffix": ",为你们不堪一击的信念。",
@@ -225,7 +223,7 @@ async def sync_role_cache(bot: Bot, event: GroupMessageEvent | GroupAdminNoticeE
     return info["role"]
 
 
-async def is_set_group_admin(event: NoticeEvent) -> bool:
+async def is_set_group_admin(event: GroupAdminNoticeEvent) -> bool:
     if event.notice_type == "set_group_admin":
         if event.user_id == event.self_id:
             return True
@@ -546,10 +544,11 @@ async def _(event: GroupMessageEvent):
 async def is_rescue_or_judgment(event: GroupMessageEvent) -> bool:
     """检测是否为救一下或补一枪的消息"""
     plaintext = event.get_plaintext().strip()
-    return plaintext.startswith(("牛牛救一下", "牛牛补一枪")) and role_cache[event.self_id][event.group_id] in {
-        "admin",
-        "owner",
-    }
+    if role_cache[event.self_id][event.group_id] not in {"admin", "owner"}:
+        return False
+    if plaintext.startswith("牛牛补一枪"):
+        return len(ban_players.get_user_ids(event.group_id)) > 0
+    return plaintext.startswith("牛牛救一下")
 
 
 rescue_or_judgment = on_message(
@@ -608,15 +607,24 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
             else:
                 await bot.send(event, cfg["self_kick_protected_msg"])
         else:
-            duration = cfg["self_ban_duration"]()
-            await bot.call_api(
-                "set_group_ban",
+            user_info = await bot.call_api(
+                "get_group_member_info",
                 user_id=event.user_id,
                 group_id=event.group_id,
-                duration=duration,
             )
-            ban_players.append(event.user_id, event.group_id)
-            await bot.send(event, cfg["self_ban_msg"])
+            user_role = user_info["role"]
+            if user_role == "owner" or (user_role == "admin" and role_cache[event.self_id][event.group_id] != "owner"):
+                await bot.send(event, cfg["self_kick_protected_msg"])
+            else:
+                duration = cfg["self_ban_duration"]()
+                await bot.call_api(
+                    "set_group_ban",
+                    user_id=event.user_id,
+                    group_id=event.group_id,
+                    duration=duration,
+                )
+                ban_players.append(event.user_id, event.group_id)
+                await bot.send(event, cfg["self_ban_msg"])
         return
 
     # @ 目标处理
@@ -632,6 +640,16 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
             if target_user_id not in roulette_player.get_user_ids(current_group_id):
                 continue  # 跳过未参与轮盘的成员
             try:
+                target_info = await bot.call_api(
+                    "get_group_member_info",
+                    user_id=target_user_id,
+                    group_id=current_group_id,
+                )
+                target_role = target_info["role"]
+                if target_role == "owner":
+                    continue
+                if target_role == "admin" and role_cache[event.self_id][current_group_id] != "owner":
+                    continue
                 duration = cfg["target_ban_duration"]
                 if callable(duration):
                     duration = duration()
@@ -680,6 +698,16 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
         ban_users = []
         for user_id in ban_players.get_user_ids(current_group_id):
             try:
+                member_info = await bot.call_api(
+                    "get_group_member_info",
+                    user_id=user_id,
+                    group_id=current_group_id,
+                )
+                member_role = member_info["role"]
+                if member_role == "owner":
+                    continue
+                if member_role == "admin" and role_cache[event.self_id][current_group_id] != "owner":
+                    continue
                 duration = cfg["all_ban_duration"]()
                 await bot.call_api(
                     "set_group_ban",
@@ -688,9 +716,9 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
                     duration=duration,
                 )
                 ban_users.append(user_id)
+                ban_players.find_and_refresh(user_id, current_group_id)
             except Exception as e:
                 logger.error(e)
-        ban_players.clear(current_group_id)
 
         if ban_users:
             await bot.send(event, cfg["all_ban_msg"])
