@@ -30,7 +30,7 @@ __plugin_meta__ = PluginMetadata(
     homepage="https://github.com/PallasBot/Pallas-Bot",
     supported_adapters={"~onebot.v11"},
     extra={
-        "version": "1.0.0",
+        "version": "3.0.0",
         "menu_data": [
             {
                 "func": "查看待处理申请",
