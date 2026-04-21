@@ -118,7 +118,10 @@ async def startup():
 
 @driver.on_shutdown
 async def shutdown():
-    await Chat.sync()
+    try:
+        await Chat.sync()
+    except Exception:
+        pass
 
 
 async def is_shutup(self_id: int, group_id: int) -> bool:

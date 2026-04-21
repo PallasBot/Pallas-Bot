@@ -108,6 +108,8 @@ class MessageStore:
 
         try:
             await message_repo.bulk_insert(save_list)
+        except RuntimeError:
+            return
         except Exception as e:
             logger.error(f"Failed to insert messages in _sync: {e}")
             return
