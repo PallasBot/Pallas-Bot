@@ -36,10 +36,6 @@ __plugin_meta__ = PluginMetadata(
     - 发送"牛牛救一下"可以解除所有禁言
     - 发送"牛牛救一下@用户"可以解除指定用户的禁言
     - 牛牛救一下有概率炸膛，喝酒后会引发特别的效果...
-4. 补枪功能：
-    - 发送"牛牛补一枪"可以让所有禁言延长
-    - 发送"牛牛补一枪@用户"可以延长指定用户的禁言
-    - 牛牛补一枪也有概率炸膛，喝酒后会引发特别的效果...
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot",
@@ -75,13 +71,6 @@ __plugin_meta__ = PluginMetadata(
                 "brief_des": "解除被禁言的用户",
                 "detail_des": "解除被禁言的用户。发送'牛牛救一下'解除所有禁言，发送'牛牛救一下@用户'解除指定用户的禁言。在牛牛喝酒以后，牛牛救一下有概率把请求的人处决了()",  # noqa: E501
             },
-            {
-                "func": "补枪功能",
-                "trigger_method": "on_message",
-                "trigger_condition": "牛牛补一枪",
-                "brief_des": "延长被禁言用户的禁言时间",
-                "detail_des": "延长被禁言用户的禁言时间。发送'牛牛补一枪'可以让所有禁言延长，发送'牛牛补一枪@用户'可以延长指定用户的禁言。在牛牛喝酒以后，牛牛补一枪有概率把请求的人处决了()",  # noqa: E501
-            },
         ],
         "menu_template": "default",
     },
@@ -97,6 +86,130 @@ ban_players = defaultdict(list)
 role_cache = defaultdict(lambda: defaultdict(str))
 
 shot_lock = asyncio.Lock()
+
+
+# 救一下/补一枪 的配置参数
+RESCUE_CONFIG = {
+    "rescue": {
+        "fail_msg": "十二英雄神殿中的圣火也依然在熊熊燃烧吧，只是我再也没资格去点燃圣火了...",
+        "self_punish_prob": 0.3,
+        "self_punish_drink_prob": 0.0,  # 不需要喝酒
+        "self_ban_duration": lambda: random.randint(5, 20) * 60,
+        "self_kick_msg": '呃......咳嗯，博士，这个叫"二踢脚"的可以在我头上放吗...',
+        "self_kick_protected_msg": '呃......咳嗯，博士，这个叫"二踢脚"的是在他头上放吗...',
+        "self_ban_msg": '呃......咳嗯，博士，这个叫"二踢脚"的是在他头上放吗...',
+        "target_ban_duration": 0,  # 解禁
+        "target_prefix": "命运之手指向了为沉默所困之人：",
+        "target_suffix": "，已从沉默中被解放。",
+        "no_target_all_unban": True,
+        "all_unban_msg": "命运的轮盘再次转动，所有的沉默都被打破。",
+        "no_target_no_one_msg": "此刻并无需要拯救之人，和平仍在延续。",
+    },
+    "judgment": {
+        "fail_msg": "我的手中的这把武器，找了无数工匠都难以修缮如新。不......不该如此......",
+        "self_punish_prob": 0.2,
+        "self_punish_drink_prob": 0.2,  # 需要喝酒
+        "self_ban_duration": lambda: random.randint(25, 120) * 60,
+        "self_kick_msg": "呃......咳嗯，博士，这个叫“二踢脚”的可以在我头上放吗...",
+        "self_kick_protected_msg": "呃......咳嗯，博士，这个叫“二踢脚”的是在他头上放吗...",
+        "self_ban_msg": '呃......咳嗯，博士，这个叫"二踢脚"的是在他头上放吗...',
+        "target_ban_duration": lambda: random.randint(30, 80) * 60,
+        "target_prefix": "哭嚎吧，",
+        "target_suffix": ",为你们不堪一击的信念。",
+        "no_target_all_ban": True,
+        "all_ban_duration": lambda: random.randint(20, 40) * 60,
+        "all_ban_msg": "是吗，我们做到了吗......我现在，正体会至高的荣誉和幸福。",
+        "no_target_no_one_msg": "转身吧，勇士们。我们已经获得了完美的胜利，现在是该回去享受庆祝的盛典了。",
+    },
+}
+
+
+class Player:
+    """玩家缓存对象，绑定群组和超时时间"""
+
+    __slots__ = ("group_id", "user_id", "expire_time")
+
+    def __init__(self, group_id: int, user_id: int, timeout: int = 300):
+        self.group_id = group_id
+        self.user_id = user_id
+        self.expire_time = time.time() + timeout
+
+    def is_expired(self) -> bool:
+        return time.time() > self.expire_time
+
+    def refresh(self) -> None:
+        self.expire_time = time.time() + 300
+
+    def match(self, user_id: int, group_id: int) -> bool:
+        """检查是否匹配指定用户和群组"""
+        return self.user_id == user_id and self.group_id == group_id
+
+
+class PlayerList:
+    """玩家列表容器，按群隔离，自动超时清理"""
+
+    def __init__(self, timeout: int = 300):
+        self.timeout = timeout
+        self._players: dict[int, list[Player]] = defaultdict(list)
+
+    def _get_players(self, group_id: int) -> list[Player]:
+        """获取指定群的玩家列表，超时清理"""
+        players = self._players[group_id]
+        # 清理过期玩家
+        self._players[group_id] = [p for p in players if not p.is_expired()]
+        return self._players[group_id]
+
+    def append(self, user_id: int, group_id: int) -> None:
+        """添加玩家，超时则清空后添加"""
+        players = self._get_players(group_id)
+        # 避免重复添加
+        if not any(p.match(user_id, group_id) for p in players):
+            players.append(Player(group_id, user_id, self.timeout))
+
+    def extend(self, user_ids: list[int], group_id: int) -> None:
+        """批量添加玩家"""
+        for uid in user_ids:
+            self.append(uid, group_id)
+
+    def find_and_refresh(self, user_id: int, group_id: int) -> bool:
+        """查找玩家并刷新超时，返回是否找到"""
+        players = self._get_players(group_id)
+        for p in players:
+            if p.match(user_id, group_id):
+                p.refresh()
+                return True
+        return False
+
+    def clear(self, group_id: int) -> None:
+        """清空指定群的玩家"""
+        self._players[group_id] = []
+
+    def __iter__(self):
+        return iter(self._players)
+
+    def __contains__(self, user_id: int, group_id: int) -> bool:
+        """检查用户是否在列表中（按user_id和group_id匹配）"""
+        return any(p.match(user_id, group_id) for p in self._get_players(group_id))
+
+    def __getitem__(self, group_id: int) -> list[Player]:
+        return self._get_players(group_id)
+
+    def get_user_ids(self, group_id: int) -> list[int]:
+        """获取指定群的所有玩家ID列表"""
+        return [p.user_id for p in self._get_players(group_id)]
+
+    def remove(self, user_id: int, group_id: int) -> bool:
+        """移除指定用户，返回是否移除成功"""
+        players = self._players[group_id]
+        for p in players:
+            if p.user_id == user_id:
+                players.remove(p)
+                return True
+        return False
+
+
+roulette_player = PlayerList()
+ban_players = PlayerList()
 
 
 async def sync_role_cache(bot: Bot, event: GroupMessageEvent | GroupAdminNoticeEvent) -> str:
@@ -163,17 +276,13 @@ async def roulette(messagae_handle, event: GroupMessageEvent):
     roulette_status[event.group_id] = rand
     roulette_count[event.group_id] = 0
     roulette_time[event.group_id] = int(time.time())
-    ban_players[event.group_id] = []
+    ban_players.clear(event.group_id)
     partin = await participate_in_roulette(event)
     if partin:
-        roulette_player[event.group_id] = [
-            event.self_id,
-            event.user_id,
-        ]
+        roulette_player.append(event.self_id, event.group_id)
+        roulette_player.append(event.user_id, event.group_id)
     else:
-        roulette_player[event.group_id] = [
-            event.user_id,
-        ]
+        roulette_player.append(event.user_id, event.group_id)
     mode = await GroupConfig(event.group_id).roulette_mode()
     if mode == 0:
         type_msg = "踢出群聊"
@@ -314,7 +423,7 @@ async def shot(self_id: int, user_id: int, group_id: int) -> Callable[[], Awaita
                     "duration": random.randint(5, 20) * 60,
                 },
             )
-            ban_players[group_id].append(user_id)
+            ban_players.append(user_id, group_id)
             logger.info(f"用户 {user_id} 被禁言")
 
         return group_ban
@@ -344,11 +453,11 @@ async def _(event: GroupMessageEvent):
         roulette_count[event.group_id] += 1
         shot_msg_count = roulette_count[event.group_id]
         roulette_time[event.group_id] = int(time.time())
-        roulette_player[event.group_id].append(event.user_id)
+        roulette_player.append(event.user_id, event.group_id)
 
         if shot_msg_count == 6 and random.random() < 0.125:
             roulette_status[event.group_id] = 0
-            roulette_player[event.group_id] = []
+            roulette_player.clear(event.group_id)
             await roulette_msg.finish("我的手中的这把武器，找了无数工匠都难以修缮如新。不......不该如此......")
 
         elif roulette_status[event.group_id] > 0:
@@ -360,7 +469,7 @@ async def _(event: GroupMessageEvent):
             await asyncio.sleep(random.randint(5, 20))
 
         if await BotConfig(event.self_id, event.group_id).drunkenness() <= 0:
-            roulette_player[event.group_id] = []
+            roulette_player.clear(event.group_id)
             shot_awaitable = await shot(event.self_id, event.user_id, event.group_id)
             if shot_awaitable:
                 reply_msg = (
@@ -376,9 +485,9 @@ async def _(event: GroupMessageEvent):
                 await roulette_msg.finish(reply_msg)
 
         else:
-            player = roulette_player[event.group_id]
-            rand_list = player[-random.randint(1, min(len(player), 6)) :][::-1]
-            roulette_player[event.group_id] = []
+            player_ids = roulette_player.get_user_ids(event.group_id)
+            rand_list = player_ids[-random.randint(1, min(len(player_ids), 6)) :][::-1]
+            roulette_player.clear(event.group_id)
             shot_awaitable_list = []
             for user_id in rand_list:
                 shot_awaitable = await shot(event.self_id, user_id, event.group_id)
@@ -431,38 +540,58 @@ drink_msg = on_message(
 
 @drink_msg.handle()
 async def _(event: GroupMessageEvent):
-    roulette_player[event.group_id].append(event.user_id)
+    roulette_player.append(event.user_id, event.group_id)
 
 
-async def is_rescue_msg(event: GroupMessageEvent) -> bool:
-    if event.get_plaintext().strip().startswith("牛牛救一下"):
-        return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
-    return False
+async def is_rescue_or_judgment(event: GroupMessageEvent) -> bool:
+    """检测是否为救一下或补一枪的消息"""
+    plaintext = event.get_plaintext().strip()
+    return plaintext.startswith(("牛牛救一下", "牛牛补一枪")) and role_cache[event.self_id][event.group_id] in {
+        "admin",
+        "owner",
+    }
 
 
-rescue_msg = on_message(
-    priority=5,
-    block=True,
-    rule=Rule(is_rescue_msg),
+rescue_or_judgment = on_message(
+    priority=4,
+    block=False,
+    rule=Rule(is_rescue_or_judgment),
     permission=permission.GROUP,
 )
 
 
-@rescue_msg.handle()
+@rescue_or_judgment.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
-    current_group_id = event.group_id
-    if random.random() < 0.125:
-        await rescue_msg.finish("十二英雄神殿中的圣火也依然在熊熊燃烧吧，只是我再也没资格去点燃圣火了...")
+    await rescue_or_judgment_handler(bot, event)
 
-    if await BotConfig(event.self_id, event.group_id).drunkenness() > 0 and random.random() < 0.3:
+
+async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
+    """救一下/补一枪 的统一处理函数"""
+    plaintext = event.get_plaintext().strip()
+    is_rescue = plaintext.startswith("牛牛救一下")
+    cfg = RESCUE_CONFIG["rescue" if is_rescue else "judgment"]
+    current_group_id = event.group_id
+
+    # 12.5% 失败
+    if random.random() < 0.125:
+        await bot.send(event, cfg["fail_msg"])
+        return
+
+    # 自罚判定
+    drink_prob = cfg["self_punish_drink_prob"]
+    self_punish_prob = cfg["self_punish_prob"]
+    if drink_prob == 0 or await BotConfig(event.self_id, event.group_id).drunkenness() <= 0:
+        should_punish = random.random() < self_punish_prob
+    else:
+        should_punish = random.random() < drink_prob
+
+    if should_punish:
         mode = await GroupConfig(event.group_id).roulette_mode()
         if mode == 0:
             user_info = await bot.call_api(
                 "get_group_member_info",
-                **{
-                    "user_id": event.user_id,
-                    "group_id": event.group_id,
-                },
+                user_id=event.user_id,
+                group_id=event.group_id,
             )
             user_role = user_info["role"]
 
@@ -472,199 +601,98 @@ async def _(bot: Bot, event: GroupMessageEvent):
                 kicked_users[event.group_id].add(event.user_id)
                 await bot.call_api(
                     "set_group_kick",
-                    **{
-                        "user_id": event.user_id,
-                        "group_id": event.group_id,
-                    },
+                    user_id=event.user_id,
+                    group_id=event.group_id,
                 )
-                await rescue_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的可以在我头上放吗...")
+                await bot.send(event, cfg["self_kick_msg"])
             else:
-                await rescue_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的是在他头上放吗...")
+                await bot.send(event, cfg["self_kick_protected_msg"])
         else:
+            duration = cfg["self_ban_duration"]()
             await bot.call_api(
                 "set_group_ban",
-                **{
-                    "user_id": event.user_id,
-                    "group_id": event.group_id,
-                    "duration": random.randint(5, 20) * 60,
-                },
+                user_id=event.user_id,
+                group_id=event.group_id,
+                duration=duration,
             )
-            ban_players[event.group_id].append(event.user_id)
-            await rescue_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的是在他头上放吗...")
+            ban_players.append(event.user_id, event.group_id)
+            await bot.send(event, cfg["self_ban_msg"])
         return
 
+    # @ 目标处理
     at_list = [
         msg_seg.data["qq"] for msg_seg in event.message if msg_seg.type == "at" and msg_seg.data.get("qq") != "all"
     ]
     target_user_ids = list(map(int, at_list))
 
     if target_user_ids:
-        rescued_users = []
+        processed_users = []
 
         for target_user_id in target_user_ids:
+            if target_user_id not in roulette_player.get_user_ids(current_group_id):
+                continue  # 跳过未参与轮盘的成员
             try:
+                duration = cfg["target_ban_duration"]
+                if callable(duration):
+                    duration = duration()
                 await bot.call_api(
                     "set_group_ban",
-                    **{
-                        "user_id": target_user_id,
-                        "group_id": current_group_id,
-                        "duration": 0,
-                    },
+                    user_id=target_user_id,
+                    group_id=current_group_id,
+                    duration=duration,
                 )
-                rescued_users.append(target_user_id)
+                processed_users.append(target_user_id)
 
-                if current_group_id in ban_players and target_user_id in ban_players[current_group_id]:
-                    ban_players[current_group_id].remove(target_user_id)
+                # 刷新ban_players中的超时时间戳
+                ban_players.find_and_refresh(target_user_id, current_group_id)
             except Exception as e:
                 logger.error(e)
 
-        reply_segments = []
-
-        if rescued_users:
-            reply_segments.append(MessageSegment.text("命运之手指向了为沉默所困之人："))
-            reply_segments.extend(MessageSegment.at(user_id) for user_id in rescued_users)
-            reply_segments.append(MessageSegment.text("，已从沉默中被解放。"))
-
-        await rescue_msg.finish(MessageSegment.text("").join(reply_segments))
-
-    else:
-        rescued_users = []
-        if current_group_id in ban_players:
-            for user_id in list(ban_players[current_group_id]):
-                try:
-                    await bot.call_api(
-                        "set_group_ban",
-                        **{
-                            "user_id": user_id,
-                            "group_id": current_group_id,
-                            "duration": 0,
-                        },
-                    )
-                    rescued_users.append(user_id)
-                except Exception as e:
-                    logger.error(e)
-
-            ban_players[current_group_id] = []
-
-        if rescued_users:
-            await rescue_msg.finish("命运的轮盘再次转动，所有的沉默都被打破。")
-        else:
-            await rescue_msg.finish("此刻并无需要拯救之人，和平仍在延续。")
-
-
-async def is_judgment_msg(event: GroupMessageEvent) -> bool:
-    if event.get_plaintext().strip().startswith("牛牛补一枪"):
-        return role_cache[event.self_id][event.group_id] in {"admin", "owner"}
-    return False
-
-
-judgment_msg = on_message(
-    priority=5,
-    block=True,
-    rule=Rule(is_judgment_msg),
-    permission=permission.GROUP,
-)
-
-
-@judgment_msg.handle()
-async def _(bot: Bot, event: GroupMessageEvent):
-    current_group_id = event.group_id
-    if random.random() < 0.125:
-        await judgment_msg.finish("我的手中的这把武器，找了无数工匠都难以修缮如新。不......不该如此......")
-
-    if await BotConfig(event.self_id, event.group_id).drunkenness() > 0 and random.random() < 0.3:
-        mode = await GroupConfig(event.group_id).roulette_mode()
-        if mode == 0:
-            user_info = await bot.call_api(
-                "get_group_member_info",
-                **{
-                    "user_id": event.user_id,
-                    "group_id": event.group_id,
-                },
-            )
-            user_role = user_info["role"]
-
-            if user_role != "owner" and not (
-                user_role == "admin" and role_cache[event.self_id][event.group_id] != "owner"
-            ):
-                kicked_users[event.group_id].add(event.user_id)
-                await bot.call_api(
-                    "set_group_kick",
-                    **{
-                        "user_id": event.user_id,
-                        "group_id": event.group_id,
-                    },
-                )
-                await judgment_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的可以在我头上放吗...")
-            else:
-                await judgment_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的是在他头上放吗...")
-        else:
-            await bot.call_api(
-                "set_group_ban",
-                **{
-                    "user_id": event.user_id,
-                    "group_id": event.group_id,
-                    "duration": random.randint(25, 120) * 60,
-                },
-            )
-            ban_players[event.group_id].append(event.user_id)
-            await judgment_msg.finish("呃......咳嗯，博士，这个叫“二踢脚”的是在他头上放吗...")
+        if processed_users:
+            reply_segments = [MessageSegment.text(cfg["target_prefix"])]
+            reply_segments.extend(MessageSegment.at(uid) for uid in processed_users)
+            reply_segments.append(MessageSegment.text(cfg["target_suffix"]))
+            await bot.send(event, MessageSegment.text("").join(reply_segments))
         return
 
-    at_list = [
-        msg_seg.data["qq"] for msg_seg in event.message if msg_seg.type == "at" and msg_seg.data.get("qq") != "all"
-    ]
-    target_user_ids = list(map(int, at_list))
-
-    if target_user_ids:
-        judgmentd_users = []
-
-        for target_user_id in target_user_ids:
+    # 无@目标处理
+    if cfg.get("no_target_all_unban"):
+        unban_users = []
+        for user_id in ban_players.get_user_ids(current_group_id):
             try:
                 await bot.call_api(
                     "set_group_ban",
-                    **{
-                        "user_id": target_user_id,
-                        "group_id": current_group_id,
-                        "duration": random.randint(30, 80) * 60,
-                    },
+                    user_id=user_id,
+                    group_id=current_group_id,
+                    duration=0,
                 )
-                judgmentd_users.append(target_user_id)
-
-                if current_group_id in ban_players and target_user_id in ban_players[current_group_id]:
-                    ban_players[current_group_id].remove(target_user_id)
+                unban_users.append(user_id)
             except Exception as e:
                 logger.error(e)
+        ban_players.clear(current_group_id)
 
-        reply_segments = []
-
-        if judgmentd_users:
-            reply_segments.append(MessageSegment.text("	哭嚎吧，"))
-            reply_segments.extend(MessageSegment.at(user_id) for user_id in judgmentd_users)
-            reply_segments.append(MessageSegment.text(",为你们不堪一击的信念。"))
-
-        await judgment_msg.finish(MessageSegment.text("").join(reply_segments))
-
-    else:
-        judgmentd_users = []
-        if current_group_id in ban_players:
-            for user_id in list(ban_players[current_group_id]):
-                try:
-                    await bot.call_api(
-                        "set_group_ban",
-                        **{
-                            "user_id": user_id,
-                            "group_id": current_group_id,
-                            "duration": random.randint(20, 40) * 60,
-                        },
-                    )
-                    judgmentd_users.append(user_id)
-                except Exception as e:
-                    logger.error(e)
-
-            ban_players[current_group_id] = []
-
-        if judgmentd_users:
-            await judgment_msg.finish("是吗，我们做到了吗......我现在，正体会至高的荣誉和幸福。")
+        if unban_users:
+            await bot.send(event, cfg["all_unban_msg"])
         else:
-            await judgment_msg.finish("转身吧，勇士们。我们已经获得了完美的胜利，现在是该回去享受庆祝的盛典了。")
+            await bot.send(event, cfg["no_target_no_one_msg"])
+
+    elif cfg.get("no_target_all_ban"):
+        ban_users = []
+        for user_id in ban_players.get_user_ids(current_group_id):
+            try:
+                duration = cfg["all_ban_duration"]()
+                await bot.call_api(
+                    "set_group_ban",
+                    user_id=user_id,
+                    group_id=current_group_id,
+                    duration=duration,
+                )
+                ban_users.append(user_id)
+            except Exception as e:
+                logger.error(e)
+        ban_players.clear(current_group_id)
+
+        if ban_users:
+            await bot.send(event, cfg["all_ban_msg"])
+        else:
+            await bot.send(event, cfg["no_target_no_one_msg"])
