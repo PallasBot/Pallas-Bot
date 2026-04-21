@@ -16,6 +16,7 @@ __plugin_meta__ = PluginMetadata(
     description="让牛牛喝酒！",
     usage="""
 牛牛喝酒 - 让牛牛喝酒，增加聊天概率，有概率睡着zzz...
+牛牛醒一醒 - 让牛牛醒酒
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot",
@@ -29,6 +30,13 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_condition": "牛牛喝酒/牛牛干杯/牛牛继续喝",
                 "brief_des": "让牛牛喝酒并产生醉酒效果",
                 "detail_des": "触发后牛牛会喝酒，根据醉酒程度可能会发送醉酒消息或直接睡着，一段时间后会自动清醒",
+            },
+            {
+                "func": "牛牛醒一醒",
+                "trigger_method": "on_message",
+                "trigger_condition": "牛牛醒一醒/牛牛别喝了",
+                "brief_des": "让牛牛醒酒",
+                "detail_des": "立即清除牛牛的醉酒状态",
             },
         ],
         "menu_template": "default",
@@ -103,6 +111,28 @@ async def _(event: GroupMessageEvent):
         run_date=sober_up_date,
         args=(event.self_id, event.group_id),
     )
+
+
+async def is_sober_up_msg(event: GroupMessageEvent) -> bool:
+    return event.get_plaintext().strip() in {"牛牛醒一醒", "牛牛别喝了"}
+
+
+sober_up_msg = on_message(
+    rule=Rule(is_sober_up_msg),
+    priority=5,
+    block=True,
+    permission=permission.GROUP,
+)
+
+
+@sober_up_msg.handle()
+async def _(event: GroupMessageEvent):
+    config = BotConfig(event.self_id, event.group_id)
+    if await config.drunkenness() <= 0:
+        return
+    while not await config.sober_up():
+        pass
+    await sober_up_msg.send("呃......咳嗯，下次不能喝、喝这么多了......")
 
 
 @scheduler.scheduled_job("cron", hour=4)
