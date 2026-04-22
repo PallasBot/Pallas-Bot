@@ -79,7 +79,12 @@ docker compose up -d
 
 浏览器访问 `http://<宿主机ip>:6099/webui`，默认 token 为 `napcat`。
 
-扫码登录后，点击 `网络配置` -> `新建` -> `WebSocket 客户端`，打开 `启用` 开关，填入任意自定义名称，在 `URL` 栏填写 `ws://pallasbot:8088/onebot/v11/ws`，点击保存即可连接到 `Pallas-Bot`。
+扫码登录后，按下面步骤配置：
+
+1. 点击 `网络配置` -> `新建` -> `WebSocket 客户端`
+2. 打开 `启用` 开关，名称随便填（例如 `PallasBot`）
+3. 在 `URL` 栏填写 `pallasbot:8088/onebot/v11/ws`，协议选择 `ws`
+4. 点击保存，看到连接成功后就表示 `Pallas-Bot` 已接通
 
 ### 查看日志
 
