@@ -213,12 +213,11 @@ async def init_postgresql_db() -> None:
     """初始化 PostgreSQL 连接"""
     import re
 
+    from nonebot.log import logger
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
     from .repository_pg import dispose_pg, init_pg
-
-    from nonebot.log import logger
 
     pg_host_raw = _cfg("PG_HOST", "")
     if pg_host_raw:
@@ -226,9 +225,7 @@ async def init_postgresql_db() -> None:
     else:
         host = _cfg("MONGO_HOST", "127.0.0.1")
         if host != "127.0.0.1":
-            logger.warning(
-                f"PG_HOST 未设置，已 fallback 到 MONGO_HOST={host}；如 PG/Mongo 不同机器请显式设置 PG_HOST"
-            )
+            logger.warning(f"PG_HOST 未设置，已 fallback 到 MONGO_HOST={host}；如 PG/Mongo 不同机器请显式设置 PG_HOST")
     port = int(_cfg("PG_PORT", "5432"))
     user = _cfg("PG_USER", "")
     password = _cfg("PG_PASSWORD", "")

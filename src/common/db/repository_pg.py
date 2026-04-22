@@ -483,9 +483,7 @@ class PgContextRepository:
         msg_s = _s(message) or ""
 
         async with get_session() as session:
-            ctx_result = await session.execute(
-                select(ContextRow.id).where(ContextRow.keywords_hash == khash)
-            )
+            ctx_result = await session.execute(select(ContextRow.id).where(ContextRow.keywords_hash == khash))
             ctx_id = ctx_result.scalar_one_or_none()
             if ctx_id is None:
                 return
@@ -511,9 +509,7 @@ class PgContextRepository:
             ans_id, was_insert = int(row.id), bool(row.was_insert)
 
             if was_insert or append_on_existing:
-                await session.execute(
-                    insert(ContextAnswerMessageRow).values(answer_id=ans_id, message=msg_s)
-                )
+                await session.execute(insert(ContextAnswerMessageRow).values(answer_id=ans_id, message=msg_s))
 
             await session.execute(
                 update(ContextRow)
@@ -705,9 +701,7 @@ class PgConfigRepository:
         # primary_key 由工厂函数传入（对齐 Mongo ConfigRepository 的构造签名），
         # 这里做一致性断言，避免静默与 _CONFIG_TABLE_MAP 失同步。
         if primary_key != pk_field:
-            raise ValueError(
-                f"primary_key {primary_key!r} 与 {table} 登记的主键 {pk_field!r} 不一致"
-            )
+            raise ValueError(f"primary_key {primary_key!r} 与 {table} 登记的主键 {pk_field!r} 不一致")
         self._row_class, self._pk_field = row_class, pk_field
         self._cache = _get_config_cache(self._row_class)
 
