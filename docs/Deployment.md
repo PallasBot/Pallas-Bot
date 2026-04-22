@@ -1,13 +1,15 @@
 # Pallas-Bot 的部署简单教程
 
+> 导航：[`README`](../README.md) · [`Docker 部署`](DockerDeployment.md) · [`FAQ`](FAQ.md)
+
 快来部署属于你自己的牛牛吧 (｡･∀･)ﾉﾞ
 
 ## 看前提示
 
 - 你需要一个额外的 QQ 小号，一台自己的 `电脑` 或 `服务器`，不推荐用大号进行部署
 - 你自己部署的牛牛与其他牛牛数据并不互通，是一张白纸，需要从头调教
-- 牛牛支持使用 Docker Compose 一键部署，可以参考 [Docker 部署](DockerDeployment.md)
-- 以下的内容适用于将牛牛作为一个独立 Bot 来部署，如果你想将牛牛的功能作为一组 plugin 添加到现有的 Bot，请参照 [作为插件部署](#作为插件部署) 一节
+- 牛牛支持使用 `Docker Compose` 一键部署，可以参考 [Docker 部署](DockerDeployment.md)
+- 以下内容适用于将牛牛作为一个独立 `Bot` 部署。如果你想将牛牛功能作为一组 `plugin` 添加到现有 `Bot`，请参照 [作为插件部署](#作为插件部署) 一节
 
 ## 基本环境配置
 
@@ -63,12 +65,12 @@
     若安装失败，在 Windows 上可能需要额外安装 `Visual Studio`，Linux 上需要 `build-essential`  
     注：项目将优先尝试导入 `jieba-fast` 库，如果导入失败则使用 `jieba` 库，无需手动修改代码。
 
-3. 安装并启动 Mongodb （这是启动核心功能所必须的）
+3. 安装并启动 `MongoDB`（这是启动核心功能所必须的）
 
     - [Windows 平台安装 MongoDB](https://www.runoob.com/mongodb/mongodb-window-install.html)
     - [Linux 平台安装 MongoDB](https://www.runoob.com/mongodb/mongodb-linux-install.html)
 
-    只需要确认 Mongodb 启动即可，后面的部分会由 Pallas-Bot 自动完成。
+    只需要确认 `MongoDB` 启动即可，后面的部分会由 `Pallas-Bot` 自动完成。
 
 4. 配置语音功能
 
@@ -80,17 +82,17 @@
 
     - 下载 [牛牛语音文件](https://huggingface.co/pallasbot/Pallas-Bot/blob/main/voices/Pallas.zip)，解压放到 `resource/voices/` 文件夹下，目录结构参考 [path_structure.txt](../resource/voices/path_structure.txt)
 
-5. 安装并配置 NapCat
+5. 安装并配置 `NapCat`
 
     若使用 `NapCat` 作为 QQ 客户端，可支持戳一戳功能。具体部署方法参照 [NapCat](https://napneko.github.io/) 官方步骤。Windows 用户推荐使用 [NapCat.Win.一键版本](https://napneko.github.io/guide/boot/Shell#napcat-win-%E4%B8%80%E9%94%AE%E7%89%88%E6%9C%AC)。
 
-    运行 `NapCat` 后，使用浏览器访问 `http://localhost:6099/webui`，登录页默认 token 为 `napcat`。
+    运行 `NapCat` 后，使用浏览器访问 `http://localhost:6099/webui`，登录页默认 `token` 为 `napcat`。
 
-    扫码登录后，点击 `网络配置` -> `新建` -> `Websocket客户端`，打开 `启用` 开关，填入任意自定义名称，在 `URL` 栏填写 `ws://localhost:8088/onebot/v11/ws`，点击保存即可连接到 `Pallas-Bot`。`NapCat` 的 `WebUI` 配置方法可参考 [NapCat 基础配置](https://napneko.github.io/config/basic)。
+    扫码登录后，点击 `网络配置` -> `新建` -> `WebSocket 客户端`，打开 `启用` 开关，填入任意自定义名称，在 `URL` 栏填写 `ws://localhost:8088/onebot/v11/ws`，点击保存即可连接到 `Pallas-Bot`。`NapCat` 的 `WebUI` 配置方法可参考 [NapCat 基础配置](https://napneko.github.io/config/basic)。
 
     如果需要，上面两个 localhost 可以替换为你的电脑/服务器 IP 地址。
 
-    牛牛同样支持其他实现的 QQ 客户端，如 [Lagrange.OneBot](https://lagrangedev.github.io/Lagrange.Doc/v1/Lagrange.OneBot/) ，[AstralGocq](https://github.com/ProtocolScience/AstralGocq) 等。`Websocket URL` 同上。
+    牛牛同样支持其他实现的 QQ 客户端，如 [Lagrange.OneBot](https://lagrangedev.github.io/Lagrange.Doc/v1/Lagrange.OneBot/)、[AstralGocq](https://github.com/ProtocolScience/AstralGocq) 等。`WebSocket URL` 同上。
 
 6. （可选）配置 `.env` 文件
 
@@ -103,9 +105,9 @@ cd Pallas-Bot # 进入项目目录
 uv run nb run        # 运行
 ```
 
-**注意！请不要关闭这个命令行窗口！这会导致 Pallas-Bot 停止运行！**
-**同样请不要关闭 NapCat 的命令行窗口！**
-Linux 用户推荐使用 [termux](https://termux.dev/) 或 [GNU Screen](https://zhuanlan.zhihu.com/p/405968623) 来保持 Pallas-Bot 和你的 QQ 客户端在后台运行，或者考虑使用 [Docker 部署](DockerDeployment.md)。
+**注意：请不要关闭这个命令行窗口！这会导致 `Pallas-Bot` 停止运行！**  
+**同样请不要关闭 `NapCat` 的命令行窗口！**  
+Linux 用户推荐使用 [Termux](https://termux.dev/) 或 [GNU Screen](https://zhuanlan.zhihu.com/p/405968623) 来保持 `Pallas-Bot` 和 QQ 客户端在后台运行，或者考虑使用 [Docker 部署](DockerDeployment.md)。
 
 ## 后续更新
 
