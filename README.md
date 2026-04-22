@@ -37,6 +37,9 @@
 - [版本更新（3.0）](#版本更新30)
 - [常见问题（FAQ）](#常见问题faq)
   - [FAQ 文档](docs/FAQ.md)
+- [架构与目录约定](#架构与目录约定)
+  - [项目结构约定（草案）](docs/architecture/project-structure.md)
+  - [插件目录约定（草案）](docs/architecture/plugin-convention.md)
 - [开发与贡献指南](#开发与贡献指南)
 - [社区与支持](#社区与支持)
 - [致谢](#致谢)
@@ -128,7 +131,7 @@ uv run nb run
 - `牛牛轮盘` / `牛牛开枪`
 - `牛牛救一下` / `牛牛补一枪`（可 @ 用户）
 - `设置好友欢迎` / `清除好友欢迎`
-- `牛牛在吗`（仅超管，详见 [`bot_status`](src/plugins/bot_status/README.md)）
+- `牛牛在吗`（仅超管，详见 [`bot_status`](docs/plugins/bot_status.md)）
 
 ### AI 扩展能力（可选）
 
@@ -192,6 +195,13 @@ uv run nb run
 
 如果你是第一次部署，建议阅读顺序：
 [`快速开始（部署）`](#快速开始部署) -> [`首次启动自检`](#首次启动自检) -> [`部署排障`](docs/FAQ.md#部署排障)
+
+## 架构与目录约定
+
+为减少目录扩展过程中的歧义，项目新增以下约定文档（先约定、后渐进调整）：
+
+- [`项目结构约定（草案）`](docs/architecture/project-structure.md)
+- [`插件目录约定（草案）`](docs/architecture/plugin-convention.md)
 
 ## 开发与贡献指南
 
