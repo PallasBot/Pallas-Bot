@@ -16,7 +16,9 @@ async def insert_image(image_seg: MessageSegment):
     cq_code = re.sub(r"\.image,.+?\]", ".image]", str(image_seg))
     cache = await image_cache_repo.find_by_cq_code(cq_code)
     if not cache:
-        cache = ImageCache(cq_code=cq_code)
+        cache = ImageCache.model_construct(
+            cq_code=cq_code, base64_data=None, ref_times=1, date=int(str(datetime.now().date()).replace("-", ""))
+        )
         await image_cache_repo.insert(cache)
         return
     cache.ref_times += 1

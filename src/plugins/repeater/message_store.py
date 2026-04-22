@@ -52,7 +52,7 @@ class MessageStore:
 
         async with MessageStore._message_lock:
             MessageStore._message_dict[group_id].append(
-                MessageModel(
+                MessageModel.model_construct(
                     group_id=group_id,
                     user_id=chat_data.user_id,
                     bot_id=chat_data.bot_id,
@@ -108,6 +108,8 @@ class MessageStore:
 
         try:
             await message_repo.bulk_insert(save_list)
+        except RuntimeError:
+            return
         except Exception as e:
             logger.error(f"Failed to insert messages in _sync: {e}")
             return

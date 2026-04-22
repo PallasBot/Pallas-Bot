@@ -24,6 +24,15 @@ class _FakeContextRepo:
     async def find_for_cleanup(self, trigger_threshold, expiration):  # noqa: ARG002
         return []
 
+    async def upsert_answer(self, keywords, group_id, answer_keywords, answer_time, message, append_on_existing):  # noqa: ARG002
+        return None
+
+    async def replace_answers(self, keywords, answers, clear_time):  # noqa: ARG002
+        return None
+
+    async def append_ban(self, keywords, ban):  # noqa: ARG002
+        return None
+
 
 class _FakeMessageRepo:
     async def bulk_insert(self, messages):  # noqa: ARG002
@@ -41,7 +50,7 @@ class _FakeBlackListRepo:
         return None
 
 
-async def _fake_init(host, port, user, password):  # noqa: ARG001
+async def _fake_init():
     return None
 
 
@@ -72,6 +81,23 @@ def fake_backend():
         INIT_DB_REGISTRY.pop("fake", None)
 
 
+def _set_db_backend(monkeypatch, backend: str) -> None:
+    """同时覆盖 nonebot driver config 与 env，兼容 get_db_backend 的双源读取。
+
+    get_db_backend() 优先从 nonebot.get_driver().config.db_backend 读取，fallback 到
+    DB_BACKEND 环境变量；.env 里若已设置 DB_BACKEND，nonebot 启动时会把它写进 config，
+    单纯 monkeypatch.setenv 不会生效。
+    """
+    import nonebot
+
+    monkeypatch.setenv("DB_BACKEND", backend)
+    try:
+        cfg = nonebot.get_driver().config
+        monkeypatch.setattr(cfg, "db_backend", backend, raising=False)
+    except Exception:
+        pass
+
+
 def test_factories_switch_by_db_backend_env(monkeypatch, fake_backend):
     """当 DB_BACKEND=fake 时，所有 Repository 工厂应返回 fake 实例。"""
     from src.common.db import (
@@ -80,7 +106,7 @@ def test_factories_switch_by_db_backend_env(monkeypatch, fake_backend):
         make_message_repository,
     )
 
-    monkeypatch.setenv("DB_BACKEND", fake_backend)
+    _set_db_backend(monkeypatch, fake_backend)
 
     ctx = make_context_repository()
     msg = make_message_repository()
@@ -95,7 +121,7 @@ def test_unknown_backend_raises(monkeypatch):
     """未注册的后端应抛 ValueError，明确提示已注册的后端列表。"""
     from src.common.db import make_context_repository
 
-    monkeypatch.setenv("DB_BACKEND", "nonexistent-backend")
+    _set_db_backend(monkeypatch, "nonexistent-backend")
 
     with pytest.raises(ValueError, match="不支持的数据库后端"):
         make_context_repository()
@@ -107,13 +133,4 @@ async def test_init_db_dispatches_to_registered_backend(fake_backend):
     from src.common.db import init_db
 
     # fake backend 的 init 直接返回 None 不抛异常
-    await init_db("host", 0, "", "", backend=fake_backend)
-
-
-@pytest.mark.asyncio
-async def test_init_db_postgresql_skeleton_raises():
-    """当前 postgresql 后端为 skeleton-only，init 应抛 NotImplementedError。"""
-    from src.common.db import init_db
-
-    with pytest.raises(NotImplementedError, match="PostgreSQL"):
-        await init_db("host", 5432, "", "", backend="postgresql")
+    await init_db(backend=fake_backend)

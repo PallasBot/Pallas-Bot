@@ -94,10 +94,12 @@ class Learner:
                 append_on_existing=chat_data.is_plain_text,
             )
         else:
-            context = Context(
+            context = Context.model_construct(
                 keywords=pre_keywords,
                 time=cur_time,
-                trigger_count=1,  # type: ignore
+                trigger_count=1,
                 answers=[Answer(keywords=keywords, group_id=group_id, count=1, time=cur_time, messages=[raw_message])],
+                ban=[],
+                clear_time=0,
             )
             await context_repo.insert(context)

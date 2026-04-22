@@ -122,7 +122,14 @@ class Speaker:
 
             taken_name = await BotConfig(bot_id, group_id).taken_name()
             pretend_msg = list(filter(lambda msg: msg.user_id == taken_name, available_messages))
-            first_message = pretend_msg[0] if pretend_msg else available_messages[0]
+            candidate_pool = pretend_msg or available_messages
+
+            # 按 keywords 分组后先随机选 topic，再从该 topic 中随机选消息
+            keyword_groups: defaultdict[str, list] = defaultdict(list)
+            for msg in candidate_pool:
+                keyword_groups[msg.keywords].append(msg)
+            chosen_group = random.choice(list(keyword_groups.values()))
+            first_message = random.choice(chosen_group)
             speak = first_message.raw_message
             Speaker._recent_speak[group_id].append(speak)
 

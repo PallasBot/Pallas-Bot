@@ -30,7 +30,7 @@ __plugin_meta__ = PluginMetadata(
     homepage="https://github.com/PallasBot",
     supported_adapters={"~onebot.v11"},
     extra={
-        "version": "2.0.0",
+        "version": "3.0.0",
         "menu_data": [
             {
                 "func": "查看牛牛在线状况",

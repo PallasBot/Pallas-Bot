@@ -13,7 +13,7 @@ config = driver.config
 
 @driver.on_startup
 async def startup():
-    await init_db(config.mongo_host, config.mongo_port, config.mongo_user, config.mongo_password)
+    await init_db()
 
     await ensure_voices()
 
