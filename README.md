@@ -38,8 +38,8 @@
 - [常见问题（FAQ）](#常见问题faq)
   - [FAQ 文档](docs/FAQ.md)
 - [架构与目录约定](#架构与目录约定)
-  - [项目结构约定（草案）](docs/architecture/project-structure.md)
-  - [插件目录约定（草案）](docs/architecture/plugin-convention.md)
+  - [项目结构约定](docs/architecture/project-structure.md)
+  - [插件目录约定](docs/architecture/plugin-convention.md)
 - [开发与贡献指南](#开发与贡献指南)
 - [社区与支持](#社区与支持)
 - [致谢](#致谢)
@@ -200,8 +200,8 @@ uv run nb run
 
 为减少目录扩展过程中的歧义，项目新增以下约定文档（先约定、后渐进调整）：
 
-- [`项目结构约定（草案）`](docs/architecture/project-structure.md)
-- [`插件目录约定（草案）`](docs/architecture/plugin-convention.md)
+- [`项目结构约定`](docs/architecture/project-structure.md)
+- [`插件目录约定`](docs/architecture/plugin-convention.md)
 
 ## 开发与贡献指南
 

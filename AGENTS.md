@@ -8,7 +8,7 @@
 - **语言/运行时**：Python **3.12**
 - **依赖管理**：`uv`
 - **主要代码目录**：`src/`
-- **质量门禁（CI）**：Ruff lint + Ruff format（见 `.github/workflows/ci.yml`）
+- **质量门禁（CI）**：Ruff lint/format + 依赖漏洞扫描 + Docker 构建校验（见 `.github/workflows/ci.yml`）
 
 ## 本地开发快速开始
 
@@ -24,6 +24,15 @@ uv sync --dev
 uv run ruff check src/
 uv run ruff format --check src/
 ```
+
+可选执行与 CI 对齐的补充检查：
+
+```bash
+uv run pip-audit
+docker build -t test-build .
+```
+
+> 说明：`pip-audit` 在 CI 中采用“尽量报告不阻断”的策略（`|| true`），用于优先暴露风险而不是拦截合并；本地可先查看结果再决定修复节奏。
 
 如果需要自动修复与格式化：
 
@@ -102,6 +111,7 @@ uv run ruff format --check src/
 - 按较低频率自动更新 hooks 版本（当前为 `quarterly`）
 - 在 PR 上自动应用可自动修复的变更（例如格式化、部分 lint autofix）
 - 使用中文自动更新提交信息，便于与仓库日常提交风格保持一致
+- 与本仓库 pre-commit 约定对齐：基础文件卫生检查覆盖全仓，Ruff 仅作用于 `src/`（避免无关目录被 Python 工具链改写）
 
 启用方式：
 
