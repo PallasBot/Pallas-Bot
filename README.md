@@ -11,44 +11,25 @@
     <a href="docs/Deployment.md">快速部署</a>
   </p>
 
-  <p>
-    <a href="./LICENSE">
-      <img src="https://img.shields.io/badge/license-AGPL3.0-FE7D37" alt="license" />
-    </a>
-    <a href="https://www.python.org">
-      <img src="https://img.shields.io/badge/Python-3.12%2B-blue" alt="python" />
-    </a>
-    <a href="https://nonebot.dev/">
-      <img src="https://img.shields.io/badge/nonebot2-%3E%3D2.4.4-EA5252" alt="nonebot2" />
-    </a>
-    <a href="https://onebot.dev/">
-      <img src="https://img.shields.io/badge/OneBot-v11-black?style=social&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAIVBMVEUAAAAAAAADAwMHBwceHh4UFBQNDQ0ZGRkoKCgvLy8iIiLWSdWYAAAAAXRSTlMAQObYZgAAAQVJREFUSMftlM0RgjAQhV+0ATYK6i1Xb+iMd0qgBEqgBEuwBOxU2QDKsjvojQPvkJ/ZL5sXkgWrFirK4MibYUdE3OR2nEpuKz1/q8CdNxNQgthZCXYVLjyoDQftaKuniHHWRnPh2GCUetR2/9HsMAXyUT4/3UHwtQT2AggSCGKeSAsFnxBIOuAggdh3AKTL7pDuCyABcMb0aQP7aM4AnAbc/wHwA5D2wDHTTe56gIIOUA/4YYV2e1sg713PXdZJAuncdZMAGkAukU9OAn40O849+0ornPwT93rphWF0mgAbauUrEOthlX8Zu7P5A6kZyKCJy75hhw1Mgr9RAUvX7A3csGqZegEdniCx30c3agAAAABJRU5ErkJggg==" alt="onebot" />
-    </a>
-    <a href="https://github.com/PallasBot/Pallas-Bot/stargazers">
-      <img src="https://img.shields.io/github/stars/PallasBot/Pallas-Bot?style=social" alt="stars" />
-    </a>
-    <a href="https://github.com/astral-sh/ruff">
-      <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json" alt="ruff" />
-    </a>
-  </p>
+</div>
 
-  <p>
-    <img src="https://img.shields.io/badge/Feature-%E5%AD%A6%E4%B9%A0%E5%9E%8B%E5%A4%8D%E8%AF%BB-8A2BE2" alt="learning-repeater" />
-    <img src="https://img.shields.io/badge/Feature-%E6%8F%92%E4%BB%B6%E5%8C%96-00A3FF" alt="plugin-system" />
-    <a href="https://github.com/PallasBot/Pallas-Bot-AI.git">
-      <img src="https://img.shields.io/badge/AI-Chat%26Sing%26TTS-6A5ACD" alt="ai-chat-sing-tts" />
-    </a>
-    <img src="https://img.shields.io/badge/Database-MongoDB%20%7C%20PostgreSQL-4EA94B" alt="database" />
-  </p>
+<div align="center">
 
-  <p>
-    <a href="https://jq.qq.com/?_wv=1027&k=tlLDuWzc">
-      <img alt="tencent-qq" src="https://img.shields.io/badge/%E7%BE%A4-开发者群-red?style=logo=tencent-qq" />
-    </a>
-    <a href="#qq-群">
-      <img alt="tencent-qq" src="https://img.shields.io/badge/%E7%BE%A4-拉牛牛群-c73e7e?style=logo=tencent-qq" />
-    </a>
-  </p>
+[![license](https://img.shields.io/badge/license-AGPL3.0-FE7D37)](./LICENSE)
+[![python](https://img.shields.io/badge/Python-3.12%2B-blue)](https://www.python.org)
+[![nonebot2](https://img.shields.io/badge/nonebot2-%3E%3D2.4.4-EA5252)](https://nonebot.dev/)
+[![onebot](https://img.shields.io/badge/OneBot-v11-black?style=social&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAIVBMVEUAAAAAAAADAwMHBwceHh4UFBQNDQ0ZGRkoKCgvLy8iIiLWSdWYAAAAAXRSTlMAQObYZgAAAQVJREFUSMftlM0RgjAQhV+0ATYK6i1Xb+iMd0qgBEqgBEuwBOxU2QDKsjvojQPvkJ/ZL5sXkgWrFirK4MibYUdE3OR2nEpuKz1/q8CdNxNQgthZCXYVLjyoDQftaKuniHHWRnPh2GCUetR2/9HsMAXyUT4/3UHwtQT2AggSCGKeSAsFnxBIOuAggdh3AKTL7pDuCyABcMb0aQP7aM4AnAbc/wHwA5D2wDHTTe56gIIOUA/4YYV2e1sg713PXdZJAuncdZMAGkAukU9OAn40O849+0ornPwT93rphWF0mgAbauUrEOthlX8Zu7P5A6kZyKCJy75hhw1Mgr9RAUvX7A3csGqZegEdniCx30c3agAAAABJRU5ErkJggg==)](https://onebot.dev/)
+[![stars](https://img.shields.io/github/stars/PallasBot/Pallas-Bot?style=social)](https://github.com/PallasBot/Pallas-Bot/stargazers)
+[![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
+![learning-repeater](https://img.shields.io/badge/Feature-%E5%AD%A6%E4%B9%A0%E5%9E%8B%E5%A4%8D%E8%AF%BB-8A2BE2)
+![plugin-system](https://img.shields.io/badge/Feature-%E6%8F%92%E4%BB%B6%E5%8C%96-00A3FF)
+[![ai-chat-sing-tts](https://img.shields.io/badge/AI-Chat%26Sing%26TTS-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI.git)
+![database](https://img.shields.io/badge/Database-MongoDB%20%7C%20PostgreSQL-4EA94B)
+
+[![tencent-qq](https://img.shields.io/badge/%E7%BE%A4-开发者群-red?style=logo=tencent-qq)](https://jq.qq.com/?_wv=1027&k=tlLDuWzc)
+[![tencent-qq](https://img.shields.io/badge/%E7%BE%A4-拉牛牛群-c73e7e?style=logo=tencent-qq)](#qq-群)
+
 </div>
 
 > 面向群聊场景的学习型机器人：会复读、会整活、可管理、可扩展。  
