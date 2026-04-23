@@ -130,8 +130,7 @@ async def _(event: GroupMessageEvent):
     config = BotConfig(event.self_id, event.group_id)
     if await config.drunkenness() <= 0:
         return
-    while not await config.sober_up():
-        pass
+    await config.fully_sober_up_now()
     await sober_up_msg.send("呃......咳嗯，下次不能喝、喝这么多了......")
 
 
