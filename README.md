@@ -10,38 +10,71 @@
     <a href="https://github.com/PallasBot/Pallas-Bot/issues">提出新特性</a> ·
     <a href="docs/Deployment.md">快速部署</a>
   </p>
+
+  <p>
+    <a href="./LICENSE">
+      <img src="https://img.shields.io/badge/license-AGPL3.0-FE7D37" alt="license" />
+    </a>
+    <a href="https://www.python.org">
+      <img src="https://img.shields.io/badge/Python-3.12%2B-blue" alt="python" />
+    </a>
+    <a href="https://nonebot.dev/">
+      <img src="https://img.shields.io/badge/nonebot2-%3E%3D2.4.4-EA5252" alt="nonebot2" />
+    </a>
+    <a href="https://onebot.dev/">
+      <img src="https://img.shields.io/badge/OneBot-v11-black?style=social&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABABAMAAABYR2ztAAAAIVBMVEUAAAAAAAADAwMHBwceHh4UFBQNDQ0ZGRkoKCgvLy8iIiLWSdWYAAAAAXRSTlMAQObYZgAAAQVJREFUSMftlM0RgjAQhV+0ATYK6i1Xb+iMd0qgBEqgBEuwBOxU2QDKsjvojQPvkJ/ZL5sXkgWrFirK4MibYUdE3OR2nEpuKz1/q8CdNxNQgthZCXYVLjyoDQftaKuniHHWRnPh2GCUetR2/9HsMAXyUT4/3UHwtQT2AggSCGKeSAsFnxBIOuAggdh3AKTL7pDuCyABcMb0aQP7aM4AnAbc/wHwA5D2wDHTTe56gIIOUA/4YYV2e1sg713PXdZJAuncdZMAGkAukU9OAn40O849+0ornPwT93rphWF0mgAbauUrEOthlX8Zu7P5A6kZyKCJy75hhw1Mgr9RAUvX7A3csGqZegEdniCx30c3agAAAABJRU5ErkJggg==" alt="onebot" />
+    </a>
+    <a href="https://github.com/PallasBot/Pallas-Bot/stargazers">
+      <img src="https://img.shields.io/github/stars/PallasBot/Pallas-Bot?style=social" alt="stars" />
+    </a>
+    <a href="https://github.com/astral-sh/ruff">
+      <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json" alt="ruff" />
+    </a>
+  </p>
+
+  <p>
+    <img src="https://img.shields.io/badge/Feature-%E5%AD%A6%E4%B9%A0%E5%9E%8B%E5%A4%8D%E8%AF%BB-8A2BE2" alt="learning-repeater" />
+    <img src="https://img.shields.io/badge/Feature-%E6%8F%92%E4%BB%B6%E5%8C%96-00A3FF" alt="plugin-system" />
+    <a href="https://github.com/PallasBot/Pallas-Bot-AI.git">
+      <img src="https://img.shields.io/badge/AI-Chat%26Sing%26TTS-6A5ACD" alt="ai-chat-sing-tts" />
+    </a>
+    <img src="https://img.shields.io/badge/Database-MongoDB%20%7C%20PostgreSQL-4EA94B" alt="database" />
+  </p>
+
+  <p>
+    <a href="https://jq.qq.com/?_wv=1027&k=tlLDuWzc">
+      <img alt="tencent-qq" src="https://img.shields.io/badge/%E7%BE%A4-开发者群-red?style=logo=tencent-qq" />
+    </a>
+    <a href="#qq-群">
+      <img alt="tencent-qq" src="https://img.shields.io/badge/%E7%BE%A4-拉牛牛群-c73e7e?style=logo=tencent-qq" />
+    </a>
+  </p>
 </div>
 
+> 面向群聊场景的学习型机器人：会复读、会整活、可管理、可扩展。  
 > 🚀 当前主线：**Pallas-Bot 3.0**  
 > 仍希望沿用 MongoDB-only 的老版本？完全兼容的 2.0 代码保留在 [`archive/v2`](https://github.com/PallasBot/Pallas-Bot/tree/archive/v2) 分支。  
-> 从旧版本迁移到 `PG`：使用项目提供的 [Mongo -> PG 迁移脚本](tools/migrate_mongo_to_pg.py)。  
-> 面向群聊场景的学习型机器人：会复读、会整活、可管理、可扩展。  
-> 查看主线更新明细：[`版本更新（3.0）`](#版本更新30)
+> 从旧版本迁移到 `PG`：使用项目提供的 [Mongo -> PG 迁移脚本](tools/migrate_mongo_to_pg.py)。    
+> 查看主线更新明细：[`版本更新`](#版本更新)
 
 ## 目录
 
 - [关于项目](#关于项目)
   - [项目特点](#项目特点)
-  - [技术栈](#技术栈)
 - [快速开始（部署）](#快速开始部署)
   - [部署方式](#部署方式)
   - [环境要求](#环境要求)
-  - [安装步骤](#安装步骤)
-  - [最小运行要求](#最小运行要求)
-  - [运行方式](#运行方式)
-  - [首次启动自检](#首次启动自检)
+  - [简单部署](#简单部署)
 - [使用指南](#使用指南)
-  - [常用指令](#常用指令)
-  - [AI 扩展能力可选](#ai-扩展能力可选)
+  - [功能列表](#功能列表)
+  - [AI 扩展](#ai-扩展)
 - [配置与后端](#配置与后端)
-- [版本更新（3.0）](#版本更新30)
+- [版本更新](#版本更新)
 - [常见问题（FAQ）](#常见问题faq)
-  - [FAQ 文档](docs/FAQ.md)
-- [架构与目录约定](#架构与目录约定)
-  - [项目结构约定](docs/architecture/project-structure.md)
-  - [插件目录约定](docs/architecture/plugin-convention.md)
 - [开发与贡献指南](#开发与贡献指南)
 - [社区与支持](#社区与支持)
+  - [QQ 群](#qq-群)
+  - [打赏](#打赏)
 - [致谢](#致谢)
 - [许可证](#许可证)
 
@@ -58,22 +91,14 @@
 - 管理能力：黑名单、好友欢迎、好友/入群申请管理
 - 数据后端支持 `MongoDB` 与 `PostgreSQL`
 
-### 技术栈
-
-- Bot Framework: [`NoneBot2`](https://github.com/nonebot/nonebot2)
-- Adapter/Protocol: `OneBot v11`（`NapCat` / `Lagrange.OneBot` / `AstralGocq`）
-- Database: `MongoDB` / `PostgreSQL`
-- Runtime: `Python 3.12+`
-- Dependency Manager: `uv`
 
 ## 快速开始（部署）
 
 ### 部署方式
 
-- **托管实例接入**：加入 [`拉牛牛` QQ 群](#qq-群) 获取可用实例
+- **托管实例接入**：加入 [`拉牛牛群`](#qq-群) 获取可用实例
 - **标准部署（推荐）**：按 [部署教程](docs/Deployment.md) 执行完整流程
 - **容器化部署**：使用 [Docker 部署](docs/DockerDeployment.md)
-- **最小可运行验证**：按本节最小运行要求与运行方式启动
 
 ### 环境要求
 
@@ -82,62 +107,62 @@
 - `MongoDB` 或 `PostgreSQL`（二选一）
 - `OneBot v11` 协议端
 
-### 安装步骤
+### 简单部署
 
 ```bash
+#获取代码
 git clone https://github.com/PallasBot/Pallas-Bot.git
+
+#进入目录
 cd Pallas-Bot
-uv sync
-```
 
-### 最小运行要求
+# 安装依赖
+pip install uv          # 安装 uv
+uv sync                 # 安装依赖
 
-首次启动至少确保下面 3 项成立：
-
-1. 已在 `.env` 中选择数据后端（`DB_BACKEND=mongo` 或 `DB_BACKEND=postgres`）
-2. 数据库服务可连接（本机默认地址或你自定义地址）
-3. `OneBot v11` 协议端已启动，并连接到：
-  - `ws://localhost:8088/onebot/v11/ws`
-
-### 运行方式
-
-1. 根据仓库根目录 `.env` 注释按需配置
-2. 启动 `OneBot v11` 协议端，`WebSocket URL` 指向：
-  - `ws://localhost:8088/onebot/v11/ws`
-3. 启动 Bot：
-
-```bash
+# 开始运行
 uv run nb run
 ```
-
-### 首次启动自检
-
-启动后可用以下方式快速确认是否部署成功：
-
-- 控制台无持续报错，Bot 进程保持运行
-- 在群聊发送 `牛牛帮助` 能收到回复
-- 在群聊发送 `牛牛在吗`（超管）可看到在线状态
-
-若失败，请检查：数据库连通性、`OneBot WS` 地址、`.env` 配置是否生效。
-
-> 完整部署细节请查看 [部署教程](docs/Deployment.md) 和 [Docker 部署](docs/DockerDeployment.md)。
+> 完整部署细节请查看 [部署教程](docs/Deployment.md) 和 [Docker 部署](docs/DockerDeployment.md)。  
+> 部署好自己牛牛之后，如果托管别人的账号成为你的牛牛，别忘记将他设置为牛牛的管理员!号主们都应该有控制自己牛牛的权力。
 
 ## 使用指南
 
-### 常用指令
+### 功能列表
 
-- `牛牛帮助`：查看所有功能并控制功能的开关
-- `牛牛喝酒` / `牛牛醒一醒` / `牛牛别喝了`
-- `牛牛轮盘` / `牛牛开枪`
-- `牛牛救一下` / `牛牛补一枪`（可 @ 用户）
-- `设置好友欢迎` / `清除好友欢迎`
-- `牛牛在吗`（仅超管，详见 [`bot_status`](docs/plugins/bot_status.md)）
+<details>
+  <summary>展开查看完整功能列表</summary>
 
-### AI 扩展能力（可选）
+#### 基础功能
+
+- `help`:牛牛帮助，查看牛牛可用插件以及开关状态
+- `repeater`：牛牛复读的核心组件
+- `drink`:牛牛喝酒，控制牛牛醉酒与醒酒状态，并影响聊天/轮盘行为概率。
+- `roulette`:牛牛轮盘，提供踢人/禁言轮盘玩法，支持“救一下”“补一枪”。
+- `greeting`:牛牛群欢迎，处理入群/好友欢迎和部分群通知，支持自定义欢迎消息。
+- `take_name`:自动夺舍，定时同步或随机更换牛牛群名片。
+- `chat`:酒后聊天，牛牛醉酒时启用 AI 对话能力，支持 @牛牛 或“牛牛 + 文本”触发。（依赖 AI 服务端）。
+- `sing`:牛牛唱歌，提供 AI 唱歌、继续唱、点歌与歌曲查询能力（依赖 AI 服务端）。
+#### 群管理员功能
+
+- `help`:牛牛帮助，管理员可以查看帮助并管理功能开关（按功能名/序号启用或禁用）。
+- `roulette`:牛牛轮盘，管理员可以通过牛牛轮盘禁言/踢人控制玩法，支持“救一下”“补一枪”。
+#### 牛牛管理员可用功能
+
+- `greeting`:牛牛群欢迎，自定义牛牛添加好友的欢迎消息。
+- `request_handler`:申请管理，管理好友申请与入群邀请，支持审批与自动同意开关。
+#### 超管可用功能
+
+- `bot_status`:牛牛状态查询，查询在线/离线 bot 状态并支持离线通知（含测试邮件）。
+- `help`:牛牛帮助，超管可以查看并管理隐藏的功能（按功能名/序号启用或禁用）。
+- `bot_status`:牛牛在吗，查询在线/离线 bot 并支持离线通知（含测试邮件）。
+</details>
+
+### AI 扩展
 
 部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 并开启对应能力后可用：
 
-- `牛牛唱歌 <网易云歌曲 ID 或 歌名>`
+- `牛牛唱歌 <网易云歌曲 ID 或 歌名>`（指定翻唱）`牛牛唱歌`（播放唱过的歌曲）
 - `牛牛点歌 <网易云歌曲 ID 或 歌名>`
 - `网易云登录` / `网易云登出`
 - 酒后聊天（ChatRWKV 模型）
@@ -157,37 +182,22 @@ uv run nb run
 | `OneBot WS URL`   | `ws://localhost:8088/onebot/v11/ws` | 协议端连接地址               | 是       |
 
 
-## 版本更新（3.0）
+## 版本更新
 
-### 数据层
+当前主线（`3.0`）简要更新：
 
-1. 新增 `PostgreSQL` 后端，`DB_BACKEND` 一键切换（`c334a07`）
-2. 提供 [`Mongo -> PG` 迁移脚本](tools/migrate_mongo_to_pg.py)（流式迁移、断点续传、脏数据容错）（`c334a07`）
-3. 高频写入原子化（`ON CONFLICT`）降低计数丢失风险（`c334a07`）
-4. 主键 `BigInt` 化与索引优化，支持千万级长期累积（`c334a07`）
-5. 连接池参数化与缓存优化，提高高 QPS 稳定性（`c334a07`）
+- 数据层：新增 `PostgreSQL` 后端并支持 `Mongo -> PG` 迁移
+- 插件体验：优化 `repeater`、重构并修复 `roulette`、新增 `drink` 醒酒能力
+- 稳定性：修复 `Bot` 关闭时的 `RuntimeError`
+- 工程化：引入 `AGENTS.md` 与 `pre-commit` 规范
 
-### 插件与体验
-
-1. `repeater` 优化 `speaker` 消息选择策略，减少重复回复（`0419297`）
-2. `roulette` 重构：合并“救一下 / 补一枪”能力，修复玩家状态管理并拆分插件结构（`d275b0c`、`8763d2f`）
-3. `roulette` 修复“补一枪后无法救一下”问题，并同步优化相关配置（`1110b77`、`c30e8b4`）
-4. `drink` 新增醒酒功能：`牛牛醒一醒` / `牛牛别喝了`（`8f30106`）
-5. 全部插件版本号升级至 `3.0.0`（`b85b1a8`）
-
-### Bug 修复
-
-1. 修复 `Bot` 关闭时异常的 `RuntimeError`（`20d5535`）
-
-### 工程化
-
-1. 增加 `AGENTS.md` 协作约定，并引入 `pre-commit` 配置以统一本地检查流程（`4d5ec98`）
+更多版本详情请查看 [Releases](https://github.com/PallasBot/Pallas-Bot/releases)。
 
 ## 常见问题（FAQ）
 
-完整 FAQ 已迁移到独立文档：[`docs/FAQ.md`](docs/FAQ.md)。
+[`FAQ`](docs/FAQ.md)
 
-高频问题快速入口：
+快速入口：
 
 - [`学习机制`](docs/FAQ.md#学习机制)：跨群语料、训练方式
 - [`使用与管理`](docs/FAQ.md#使用与管理)：不当发言处理、主动发言机制
@@ -196,37 +206,11 @@ uv run nb run
 如果你是第一次部署，建议阅读顺序：
 [`快速开始（部署）`](#快速开始部署) -> [`首次启动自检`](#首次启动自检) -> [`部署排障`](docs/FAQ.md#部署排障)
 
-## 架构与目录约定
-
-为减少目录扩展过程中的歧义，项目新增以下约定文档（先约定、后渐进调整）：
-
-- [`项目结构约定`](docs/architecture/project-structure.md)
-- [`插件目录约定`](docs/architecture/plugin-convention.md)
-
 ## 开发与贡献指南
 
-### 本地开发
+欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。  
+查看我们的 [`贡献指南`](CONTRIBUTING.md)以了解如何参与贡献。
 
-```bash
-uv sync --dev
-uv run ruff check src/
-uv run ruff format --check src/
-```
-
-自动修复：
-
-```bash
-uv run ruff check --fix src/
-uv run ruff format src/
-```
-
-运行测试（如仓库包含测试）：
-
-```bash
-uv run pytest
-```
-
-欢迎通过 Issue / PR 参与改进。
 
 ## 社区与支持
 
