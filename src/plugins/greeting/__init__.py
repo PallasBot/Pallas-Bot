@@ -22,6 +22,7 @@ from nonebot.rule import Rule, to_me
 from nonebot.typing import T_State
 
 from src.common.config import BotConfig, GroupConfig, UserConfig
+from src.common.paths import plugin_data_dir
 from src.common.utils import HTTPXClient, is_bot_admin
 from src.plugins.help.plugin_manager import is_plugin_disabled
 
@@ -112,7 +113,7 @@ greeting_voices = [
 
 target_msgs = {"牛牛", "帕拉斯"}
 
-GREETING_DIR = Path("data/greeting")
+GREETING_DIR = plugin_data_dir("greeting")
 
 
 def _bot_dir(bot_id: int) -> Path:

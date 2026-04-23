@@ -3,6 +3,8 @@ from pathlib import Path
 import pillowmd
 from nonebot import get_plugin_config, logger
 
+from src.common.paths import project_path
+
 from .config import Config
 
 
@@ -44,7 +46,9 @@ def _load_user_defined_styles(custom_styles, styles_dict):
     """加载用户自定义样式"""
     for style_config in custom_styles:
         try:
-            style_path = Path(style_config.path).resolve()
+            raw_path = Path(style_config.path)
+            style_path = raw_path if raw_path.is_absolute() else project_path(style_config.path)
+            style_path = style_path.resolve()
             if not style_path.exists():
                 logger.warning(f"样式路径不存在 '{style_path}'")
                 continue

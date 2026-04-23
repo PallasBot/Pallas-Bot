@@ -1,12 +1,12 @@
 import copy
 import shutil
-from pathlib import Path
 from typing import Any
 
 from nonebot import get_loaded_plugins, logger
 
 from src.common.db import make_bot_config_repository, make_group_config_repository
 from src.common.db.modules import BotConfigModule, GroupConfigModule
+from src.common.paths import plugin_data_dir
 
 from .styles import load_config
 
@@ -20,7 +20,7 @@ CORE_PLUGINS = ["help"]
 
 def clear_help_cache(group_id: int | None = None):
     """清理本地帮助缓存"""
-    cache_base_dir = Path("data/help")
+    cache_base_dir = plugin_data_dir("help")
     if not cache_base_dir.exists():
         return
 
