@@ -7,6 +7,8 @@ from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 from PIL import Image
 
+from src.common.paths import plugin_data_dir
+
 from .styles import get_default_style
 
 
@@ -28,10 +30,11 @@ def convert_image_to_bytes(image) -> io.BytesIO:
 
 def get_cache_path(markdown_content: str, style_name: str, group_id: int | None = None) -> Path:
     """根据markdown内容和群id生成本地路径"""
+    help_data_dir = plugin_data_dir("help")
     if group_id is not None:
-        cache_dir = Path("data/help") / str(group_id)
+        cache_dir = help_data_dir / str(group_id)
     else:
-        cache_dir = Path("data/help") / "private"
+        cache_dir = help_data_dir / "private"
 
     cache_dir.mkdir(parents=True, exist_ok=True)
 

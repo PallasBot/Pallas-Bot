@@ -8,6 +8,7 @@ from nonebot.permission import SUPERUSER, Permission
 from nonebot.plugin import PluginMetadata
 
 from src.common.config import BotConfig, GroupConfig, UserConfig
+from src.common.paths import plugin_data_dir
 from src.plugins.help.plugin_manager import is_plugin_disabled
 from src.plugins.request_handler.config import Config
 
@@ -79,8 +80,7 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 
-DATA_DIR = Path("data/request_handler")
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR = plugin_data_dir("request_handler")
 
 FRIEND_REQ_FILE = DATA_DIR / "pending_friend_requests.json"
 GROUP_REQ_FILE = DATA_DIR / "pending_group_requests.json"
