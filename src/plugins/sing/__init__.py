@@ -204,12 +204,13 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         },
     )
     if not response:
-        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
         await TaskManager.remove_task(request_id)
+        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
     task_id = response.json().get("task_id", "")
     if not task_id:
-        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
         await TaskManager.remove_task(request_id)
+        await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
+        
 
     sing_progress = SingProgress(
         song_id=str(song_id),
