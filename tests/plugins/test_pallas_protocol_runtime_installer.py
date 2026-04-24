@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from src.plugins.pallas_protocol.runtime.installer import (
     _github_release_asset_url,
+    _pick_appimage_asset_from_release,
     _safe_extract_zip,
     asset_is_windows_onekey,
     default_release_asset_for_platform,
@@ -128,3 +129,14 @@ def test_find_appimage_under_dir(tmp_path: Path) -> None:
     app.parent.mkdir(parents=True)
     app.write_bytes(b"ELF")
     assert find_appimage_under_dir(tmp_path) == app
+
+
+def test_pick_appimage_asset_from_release_prefers_arch_match() -> None:
+    rel = {
+        "assets": [
+            {"name": "QQ-44343_NapCat-v4.18.0-amd64.AppImage", "browser_download_url": "https://x/amd64"},
+            {"name": "QQ-44343_NapCat-v4.18.0-arm64.AppImage", "browser_download_url": "https://x/arm64"},
+        ]
+    }
+    picked = _pick_appimage_asset_from_release(rel, "QQ-x86_64.AppImage")
+    assert picked == ("QQ-44343_NapCat-v4.18.0-amd64.AppImage", "https://x/amd64")

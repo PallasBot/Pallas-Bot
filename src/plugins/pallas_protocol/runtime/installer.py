@@ -38,6 +38,51 @@ def _github_release_asset_url(repo: str, asset_name: str, tag: str = "") -> str:
     return f"https://github.com/{owner_part}/{name_part}/releases/download/{tag.strip()}/{encoded}"
 
 
+def _github_release_api_url(repo: str, tag: str = "") -> str:
+    owner_part, _, name_part = repo.partition("/")
+    if not owner_part or not name_part:
+        msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
+        raise ValueError(msg)
+    if not tag.strip():
+        return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/latest"
+    return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/tags/{tag.strip()}"
+
+
+def _arch_tokens_from_asset_name(asset_name: str) -> tuple[str, ...]:
+    n = asset_name.lower()
+    if "arm64" in n or "aarch64" in n:
+        return ("arm64", "aarch64")
+    if "amd64" in n or "x86_64" in n:
+        return ("amd64", "x86_64")
+    return ()
+
+
+def _pick_appimage_asset_from_release(release_json: dict[str, Any], preferred_asset: str) -> tuple[str, str] | None:
+    assets = release_json.get("assets")
+    if not isinstance(assets, list):
+        return None
+    by_name: dict[str, str] = {}
+    for item in assets:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        url = str(item.get("browser_download_url", "")).strip()
+        if not name or not url or not name.endswith(".AppImage"):
+            continue
+        by_name[name] = url
+    if preferred_asset in by_name:
+        return preferred_asset, by_name[preferred_asset]
+    arch_tokens = _arch_tokens_from_asset_name(preferred_asset)
+    if arch_tokens:
+        for name, url in by_name.items():
+            low = name.lower()
+            if any(tok in low for tok in arch_tokens):
+                return name, url
+    for name, url in by_name.items():
+        return name, url
+    return None
+
+
 def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> None:
     dest_dir.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(zip_path) as zf:
@@ -317,7 +362,9 @@ class NapCatRuntimeStore:
                 msg = "未配置 pallas_protocol_release_asset，无法下载"
                 raise ValueError(msg)
             self._set_job("downloading", "准备下载…")
-            url = _github_release_asset_url(self._repo(), asset_name, self._release_tag())
+            repo = self._repo()
+            release_tag = self._release_tag()
+            url = _github_release_asset_url(repo, asset_name, release_tag)
             self._dist_dir.mkdir(parents=True, exist_ok=True)
             dist_file = self._dist_dir / asset_name
 
@@ -328,6 +375,14 @@ class NapCatRuntimeStore:
                 headers={"User-Agent": "Pallas-Bot-PallasProtocol/1.0"},
             )
             try:
+                if asset_is_linux_appimage(asset_name):
+                    rel_api = _github_release_api_url(repo, release_tag)
+                    rel_resp = await hc.get(rel_api)
+                    if rel_resp.status_code == 200:
+                        pick = _pick_appimage_asset_from_release(rel_resp.json(), asset_name)
+                        if pick is not None:
+                            asset_name, url = pick
+                            dist_file = self._dist_dir / asset_name
                 async with hc.stream("GET", url) as resp:
                     if resp.status_code != 200:
                         msg = f"下载失败 HTTP {resp.status_code}: {url}"
