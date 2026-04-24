@@ -36,7 +36,7 @@
 
 - 持久化数据使用 `data/<plugin_name>/...`。
 - 资源文件使用全局目录 `resource/...`。
-- 插件代码中优先通过 `src/common/paths.py` 的统一 helper 获取路径，不直接硬编码相对路径字符串。
+- 插件代码中优先通过 `src/common/paths/`（包 `src.common.paths`）的统一 helper 获取路径，不直接硬编码相对路径字符串。
 
 说明：这样做可以避免运行目录变化导致路径漂移，也能统一备份与清理策略。
 
@@ -46,7 +46,7 @@
 - `src/plugins/greeting/voice.py` 使用 `resource_dir("voices")` 读取语音资源目录。
 - `src/plugins/help/renderer.py` 与 `src/plugins/help/plugin_manager.py` 使用 `plugin_data_dir("help")` 管理缓存目录。
 - `src/plugins/request_handler/__init__.py` 使用 `plugin_data_dir("request_handler")` 管理申请缓存目录。
-- `src/common/paths.py` 提供统一路径 helper，作为插件路径访问的推荐入口。
+- `src/common/paths/` 提供统一路径 helper，作为插件路径访问的推荐入口。
 
 ## 命名建议
 

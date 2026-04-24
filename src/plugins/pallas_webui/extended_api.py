@@ -1,0 +1,1380 @@
+"""控制台扩展 JSON：系统/插件/连接/日志，以及实例、库、Bot/群配置等只读与受控写接口。"""
+
+from __future__ import annotations
+
+import asyncio
+import platform
+import shutil
+import time
+import typing
+from pathlib import Path
+from typing import Any, Literal
+
+from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi.responses import JSONResponse
+from nonebot import get_bots, get_driver, get_loaded_plugins, logger
+from pydantic import BaseModel, ConfigDict, Field
+
+if typing.TYPE_CHECKING:
+    from .config import Config
+
+_CONSOLE_EXTRA: dict[str, Any] = {}
+_INIT_LOG_SINK = False
+_READ_CACHE: dict[str, dict[str, Any]] = {}
+
+
+def set_console_meta(d: dict[str, Any] | None) -> None:
+    """由 __init__ 在启动时注入 static_root、http_base 等，供 /system 与前端展示。"""
+    _CONSOLE_EXTRA.clear()
+    if d:
+        _CONSOLE_EXTRA.update(d)
+
+
+def _ensure_log_sink() -> None:
+    global _INIT_LOG_SINK
+    if _INIT_LOG_SINK:
+        return
+    from src.common.web import install_nonebot_log_sink
+
+    install_nonebot_log_sink()
+    _INIT_LOG_SINK = True
+    logger.info("Pallas 控制台: 已接入 NoneBot 日志环（/pallas/api/logs）")
+
+
+async def _cached_read(
+    *,
+    key: str,
+    loader: typing.Callable[[], typing.Awaitable[Any]],
+    ttl_sec: float = 1.0,
+    stale_sec: float = 20.0,
+) -> Any:
+    """读取接口防抖：短 TTL 复用；失败时回退最近成功快照，降低前端空白概率。"""
+    now = time.monotonic()
+    hit = _READ_CACHE.get(key)
+    if hit and now < float(hit["exp"]):
+        return hit["data"]
+    try:
+        data = await loader()
+    except Exception:
+        if hit and now < float(hit["stale_exp"]):
+            logger.warning("Pallas 控制台: 使用缓存兜底 key=%s", key)
+            return hit["data"]
+        raise
+    _READ_CACHE[key] = {
+        "data": data,
+        "exp": now + max(0.05, ttl_sec),
+        "stale_exp": now + max(ttl_sec, stale_sec),
+    }
+    return data
+
+
+def _drop_read_cache(prefixes: tuple[str, ...]) -> None:
+    if not _READ_CACHE:
+        return
+    for k in [k for k in _READ_CACHE if any(k.startswith(p) for p in prefixes)]:
+        _READ_CACHE.pop(k, None)
+
+
+def _metadata_to_dict(meta: object | None) -> dict[str, Any] | None:
+    if meta is None:
+        return None
+    d: dict[str, Any] = {
+        "name": getattr(meta, "name", None),
+        "description": (getattr(meta, "description", None) or "")[:2000],
+        "usage": (getattr(meta, "usage", None) or "")[:4000],
+    }
+    ex = getattr(meta, "extra", None)
+    if ex:
+        d["extra"] = dict(ex) if isinstance(ex, dict) else ex
+    typ = getattr(meta, "type", None)
+    if typ is not None:
+        d["type"] = str(typ)
+    return d
+
+
+def _list_plugins_dict() -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for p in get_loaded_plugins():
+        if not p.name:
+            continue
+        mod = getattr(p, "module", None)
+        module_name = getattr(mod, "__name__", "") if mod is not None else ""
+        if not module_name:
+            module_name = str(getattr(p, "module_name", "") or "")
+        out.append(
+            {
+                "name": p.name,
+                "module": module_name,
+                "metadata": _metadata_to_dict(p.metadata),
+            }
+        )
+    out.sort(key=lambda x: x["name"] or "")
+    return out
+
+
+def _list_bots_dict() -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for key, bot in get_bots().items():
+        self_id: str
+        try:
+            self_id = str(bot.self_id)  # type: ignore[union-attr]
+        except Exception:  # noqa: BLE001
+            self_id = "?"
+        adapter = ""
+        try:
+            a = bot.adapter
+            if a is not None and hasattr(a, "get_name"):
+                adapter = str(a.get_name())
+        except Exception:  # noqa: BLE001
+            pass
+        rows.append(
+            {
+                "connection_key": str(key),
+                "self_id": self_id,
+                "adapter": adapter,
+            }
+        )
+    return rows
+
+
+def _bot_adapter_label(bot: object) -> str:
+    try:
+        a = getattr(bot, "adapter", None)
+        if a is not None and hasattr(a, "get_name"):
+            return str(a.get_name())
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def _is_onebot_v11_bot(bot: object) -> bool:
+    try:
+        from nonebot.adapters.onebot.v11 import Bot as V11Bot  # type: ignore[attr-defined]
+
+        return isinstance(bot, V11Bot)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _read_pending_friend_requests_disk() -> dict[str, dict[str, str]]:
+    """与 request_handler 插件写入的 JSON 结构一致：{ bot_id: { user_id: flag } }。"""
+    import json
+
+    from src.common.paths import plugin_data_dir
+
+    path = plugin_data_dir("request_handler", create=False) / "pending_friend_requests.json"
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, str]] = {}
+    for bot_key, mp in raw.items():
+        if not isinstance(mp, dict):
+            continue
+        bk = str(bot_key)
+        out[bk] = {str(u): str(f) for u, f in mp.items()}
+    return out
+
+
+def _save_pending_friend_requests_disk(data: dict[str, dict[str, str]]) -> None:
+    import json
+
+    from src.common.paths import plugin_data_dir
+
+    path = plugin_data_dir("request_handler") / "pending_friend_requests.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _read_pending_group_requests_disk() -> dict[str, dict[str, dict[str, Any]]]:
+    """与 request_handler 插件写入的 JSON 结构一致：{ bot_id: { group_id: request } }。"""
+    import json
+
+    from src.common.paths import plugin_data_dir
+
+    path = plugin_data_dir("request_handler", create=False) / "pending_group_requests.json"
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, dict[str, dict[str, Any]]] = {}
+    for bot_key, mp in raw.items():
+        if not isinstance(mp, dict):
+            continue
+        clean: dict[str, dict[str, Any]] = {}
+        for req in mp.values():
+            if not isinstance(req, dict):
+                continue
+            group_id = req.get("group_id")
+            user_id = req.get("user_id")
+            flag = req.get("flag")
+            if flag is None:
+                continue
+            try:
+                group_i = int(group_id)
+                user_i = int(user_id)
+            except (TypeError, ValueError):
+                continue
+            clean[str(group_i)] = {
+                "flag": str(flag),
+                "sub_type": str(req.get("sub_type") or "invite"),
+                "user_id": user_i,
+                "group_id": group_i,
+                "comment": str(req.get("comment") or ""),
+            }
+        out[str(bot_key)] = clean
+    return out
+
+
+def _save_pending_group_requests_disk(data: dict[str, dict[str, dict[str, Any]]]) -> None:
+    import json
+
+    from src.common.paths import plugin_data_dir
+
+    path = plugin_data_dir("request_handler") / "pending_group_requests.json"
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _ai_extension_config_path():
+    from src.common.paths import plugin_data_dir
+
+    return plugin_data_dir("pallas_webui") / "ai_extension.json"
+
+
+def _normalize_ai_extension_config(raw: dict[str, Any] | None) -> dict[str, Any]:
+    d = raw or {}
+    base_url = str(d.get("base_url", "")).strip() or "http://127.0.0.1:9099"
+    api_prefix = str(d.get("api_prefix", "")).strip() or "/api"
+    if not api_prefix.startswith("/"):
+        api_prefix = "/" + api_prefix
+    token = str(d.get("token", "")).strip()
+    health_paths_raw = d.get("health_paths", ["/health", "/api/health"])
+    if isinstance(health_paths_raw, list):
+        health_paths = [str(x).strip() for x in health_paths_raw if str(x).strip()]
+    else:
+        health_paths = ["/health", "/api/health"]
+    if not health_paths:
+        health_paths = ["/health", "/api/health"]
+    root = Path(__file__).resolve().parents[3]
+    default_ai_root = (root.parent / "Pallas-Bot-AI").resolve()
+    uvicorn_log_file = str(d.get("uvicorn_log_file", "")).strip() or str(default_ai_root / "logs" / "app.log")
+    celery_log_file = str(d.get("celery_log_file", "")).strip() or str(default_ai_root / "logs" / "app.log")
+    timeout_sec = d.get("timeout_sec", 8)
+    try:
+        timeout_i = int(timeout_sec)
+    except (TypeError, ValueError):
+        timeout_i = 8
+    timeout_i = max(2, min(timeout_i, 30))
+    return {
+        "base_url": base_url.rstrip("/"),
+        "api_prefix": api_prefix,
+        "token": token,
+        "health_paths": health_paths,
+        "uvicorn_log_file": uvicorn_log_file,
+        "celery_log_file": celery_log_file,
+        "timeout_sec": timeout_i,
+    }
+
+
+def _load_ai_extension_config() -> dict[str, Any]:
+    import json
+
+    path = _ai_extension_config_path()
+    if not path.exists():
+        return _normalize_ai_extension_config(None)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return _normalize_ai_extension_config(None)
+    if not isinstance(raw, dict):
+        return _normalize_ai_extension_config(None)
+    return _normalize_ai_extension_config(raw)
+
+
+def _save_ai_extension_config(data: dict[str, Any]) -> dict[str, Any]:
+    import json
+
+    clean = _normalize_ai_extension_config(data)
+    path = _ai_extension_config_path()
+    path.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
+    return clean
+
+
+def _find_online_onebot_v11_bot(self_id: str) -> tuple[str, object]:
+    target = str(self_id).strip()
+    for key, bot in get_bots().items():
+        if str(getattr(bot, "self_id", "") or "") != target:
+            continue
+        if not _is_onebot_v11_bot(bot):
+            raise HTTPException(status_code=400, detail="当前连接不是 OneBot V11")
+        return str(key), bot
+    raise HTTPException(status_code=404, detail="指定账号当前未连接")
+
+
+def _normalize_friend_list_item(item: object) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    uid = item.get("user_id")
+    try:
+        user_id = int(uid)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if user_id <= 0:
+        return None
+    sex = item.get("sex")
+    return {
+        "user_id": user_id,
+        "nickname": str(item.get("nickname") or ""),
+        "remark": str(item.get("remark") or ""),
+        **({"sex": sex} if sex is not None else {}),
+    }
+
+
+async def _call_get_friend_list(
+    bot: object,
+    *,
+    limit: int,
+) -> tuple[list[dict[str, Any]], str | None, bool]:
+    """OneBot V11 `get_friend_list`；不同实现可能返回 list 或包在 dict 里。
+
+    返回 (friends, error, truncated)。
+    """
+    try:
+        raw = await bot.call_api("get_friend_list")  # type: ignore[union-attr]
+    except Exception as e:  # noqa: BLE001
+        return [], str(e), False
+    friends_raw: list[Any]
+    if isinstance(raw, list):
+        friends_raw = raw
+    elif isinstance(raw, dict):
+        friends_raw = []
+        for k in ("friend_list", "friends", "data"):
+            v = raw.get(k)
+            if isinstance(v, list):
+                friends_raw = v
+                break
+    else:
+        friends_raw = []
+    out: list[dict[str, Any]] = []
+    for it in friends_raw:
+        row = _normalize_friend_list_item(it)
+        if row:
+            out.append(row)
+    out.sort(key=lambda r: int(r["user_id"]))
+    truncated = len(out) > limit
+    if truncated:
+        out = out[:limit]
+    return out, None, truncated
+
+
+async def _call_get_doubt_friends(bot: object) -> list[dict[str, Any]]:
+    try:
+        raw = await bot.call_api("get_doubt_friends_add_request", count=50)  # type: ignore[union-attr]
+    except Exception:  # noqa: BLE001
+        return []
+    if not isinstance(raw, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for x in raw:
+        if not isinstance(x, dict) or "user_id" not in x:
+            continue
+        try:
+            uid = int(x["user_id"])
+        except (TypeError, ValueError):
+            continue
+        out.append({"user_id": uid, "flag": str(x.get("flag", ""))})
+    return out
+
+
+def _normalize_message_item(item: object) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    out: dict[str, Any] = {}
+    for k in ("message_id", "time", "raw_message", "message_type"):
+        v = item.get(k)
+        if v is not None:
+            out[k] = v
+    sender = item.get("sender")
+    if isinstance(sender, dict):
+        nick = sender.get("nickname")
+        if nick is not None:
+            out["nickname"] = str(nick)
+        uid = sender.get("user_id")
+        if uid is not None:
+            try:
+                out["user_id"] = int(uid)
+            except (TypeError, ValueError):
+                pass
+    uid2 = item.get("user_id")
+    if "user_id" not in out and uid2 is not None:
+        try:
+            out["user_id"] = int(uid2)
+        except (TypeError, ValueError):
+            pass
+    gid = item.get("group_id")
+    if gid is not None:
+        try:
+            out["group_id"] = int(gid)
+        except (TypeError, ValueError):
+            pass
+    if not out:
+        return None
+    return out
+
+
+async def _call_get_message_history(
+    bot: object,
+    *,
+    kind: Literal["friend", "group"],
+    target_id: int,
+    count: int,
+) -> list[dict[str, Any]]:
+    base_params: dict[str, Any] = {
+        "count": int(count),
+        "reverse_order": False,
+        "disable_get_url": False,
+        "parse_mult_msg": True,
+        "quick_reply": False,
+        "reverseOrder": False,
+    }
+    if kind == "friend":
+        key = "user_id"
+        api_name = "get_friend_msg_history"
+    else:
+        key = "group_id"
+        api_name = "get_group_msg_history"
+    target_num = int(target_id)
+    tried: list[dict[str, Any]] = [
+        {**base_params, key: target_num},
+        {**base_params, key: str(target_num)},
+        {"count": int(count), key: target_num},
+        {"count": int(count), key: str(target_num)},
+    ]
+    last_err: Exception | None = None
+    raw: Any = {}
+    for params in tried:
+        try:
+            raw = await bot.call_api(api_name, **params)  # type: ignore[union-attr]
+            last_err = None
+            break
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+    if last_err is not None:
+        raise last_err
+    messages_raw: list[Any] = []
+    if isinstance(raw, dict):
+        maybe = raw.get("messages")
+        if isinstance(maybe, list):
+            messages_raw = maybe
+        elif isinstance(raw.get("data"), dict):
+            inner = raw["data"].get("messages")
+            if isinstance(inner, list):
+                messages_raw = inner
+    elif isinstance(raw, list):
+        messages_raw = raw
+    out: list[dict[str, Any]] = []
+    for it in messages_raw:
+        row = _normalize_message_item(it)
+        if row:
+            out.append(row)
+    out.sort(key=lambda x: int(x.get("time") or 0))
+    return out
+
+
+async def _friend_requests_overview(
+    *,
+    self_id: str | None,
+    include_doubt: bool,
+) -> dict[str, Any]:
+    disk = _read_pending_friend_requests_disk()
+    online_by_self: dict[str, tuple[str, object]] = {}
+    for key, bot in get_bots().items():
+        sid = str(getattr(bot, "self_id", "") or "")
+        if sid:
+            online_by_self[sid] = (str(key), bot)
+
+    ids = set(disk.keys()) | set(online_by_self.keys())
+    if self_id is not None and str(self_id).strip():
+        want = str(self_id).strip()
+        ids = {i for i in ids if i == want}
+
+    def _sort_key(s: str) -> tuple[int, str]:
+        return (int(s), s) if s.isdigit() else (10**18, s)
+
+    rows: list[dict[str, Any]] = []
+    for sid in sorted(ids, key=_sort_key):
+        pend_map = disk.get(sid, {})
+        pending = [{"user_id": int(u), "flag": fl} for u, fl in pend_map.items() if u.isdigit()]
+        doubt: list[dict[str, Any]] = []
+        conn: str | None = None
+        adapter = ""
+        online = sid in online_by_self
+        if online:
+            conn, bot = online_by_self[sid]
+            adapter = _bot_adapter_label(bot)
+            if include_doubt and _is_onebot_v11_bot(bot):
+                doubt = await _call_get_doubt_friends(bot)
+        rows.append(
+            {
+                "self_id": sid,
+                "connection_key": conn,
+                "adapter": adapter,
+                "online": online,
+                "pending_friend_requests": pending,
+                "doubt_friend_requests": doubt,
+            }
+        )
+    return {"bots": rows}
+
+
+def _system_dict() -> dict[str, Any]:
+    d = get_driver().config
+    sup = getattr(d, "superusers", None) or set()
+    try:
+        n_sup = len(sup)
+    except TypeError:
+        n_sup = 0
+    host = getattr(d, "host", None)
+    port = getattr(d, "port", None)
+    # Pydantic/宿主机可能将 host 解析为 ipaddress.IPv4Address，JSON 无法直接序列化
+    host_s: str | None = None if host is None else str(host)
+    port_s: int | None
+    if port is None:
+        port_s = None
+    else:
+        try:
+            port_s = int(port)
+        except (TypeError, ValueError):
+            port_s = None
+    return {
+        "nonebot2_driver": {
+            "host": host_s,
+            "port": port_s,
+        },
+        "superuser_count": n_sup,
+        "server_time": time.time(),
+        "plugin_count": len(_list_plugins_dict()),
+        "bot_count": len(get_bots()),
+        "console": dict(_CONSOLE_EXTRA),
+        "runtime": _runtime_metrics(),
+    }
+
+
+def _runtime_metrics() -> dict[str, Any]:
+    cpu_percent: float | None = None
+    mem: dict[str, Any] = {"total": None, "used": None, "percent": None}
+    try:
+        import psutil  # type: ignore
+
+        cpu_percent = float(psutil.cpu_percent(interval=0.0))
+        vm = psutil.virtual_memory()
+        mem = {
+            "total": int(getattr(vm, "total", 0) or 0),
+            "used": int(getattr(vm, "used", 0) or 0),
+            "percent": float(getattr(vm, "percent", 0.0) or 0.0),
+        }
+    except Exception:  # noqa: BLE001
+        pass
+
+    disk = {"total": None, "used": None, "free": None, "percent": None}
+    try:
+        du = shutil.disk_usage("/")
+        used = int(du.total - du.free)
+        pct = (used / du.total * 100.0) if du.total else 0.0
+        disk = {
+            "total": int(du.total),
+            "used": used,
+            "free": int(du.free),
+            "percent": round(pct, 2),
+        }
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {
+        "platform": platform.platform(),
+        "python": platform.python_version(),
+        "cpu_percent": cpu_percent,
+        "memory": mem,
+        "disk": disk,
+    }
+
+
+def _check_pallas_write_token(
+    plugin_config: Any,
+    *,
+    x_pallas_token: str | None,
+    token: str | None,
+) -> None:
+    need = (getattr(plugin_config, "pallas_webui_api_token", None) or "").strip()
+    if not need:
+        return
+    if (x_pallas_token or token or "").strip() != need:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+def _require_pallas_token_configured(
+    plugin_config: Any,
+    *,
+    x_pallas_token: str | None,
+    token: str | None,
+) -> None:
+    """数据库管道等敏感能力：未配置 token 时直接拒绝，避免匿名滥用。"""
+    need = (getattr(plugin_config, "pallas_webui_api_token", None) or "").strip()
+    if not need:
+        raise HTTPException(
+            status_code=403,
+            detail="请先在环境变量中配置 pallas_webui_api_token，并在控制台设置页填入后再试",
+        )
+    if (x_pallas_token or token or "").strip() != need:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
+class _BotConfigPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    admins: list[int] | None = None
+    disabled_plugins: list[str] | None = None
+    auto_accept_friend: bool | None = None
+    auto_accept_group: bool | None = None
+    security: bool | None = None
+
+
+class _GroupConfigPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    disabled_plugins: list[str] | None = None
+    roulette_mode: int | None = Field(default=None, ge=0, le=1)
+    banned: bool | None = None
+
+
+class _UserConfigPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    banned: bool | None = None
+
+
+class _MongoAggregateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    collection: str = Field(min_length=1, max_length=64)
+    pipeline: list[Any] = Field(default_factory=list, max_length=16)
+
+
+class _AiExtensionConfigBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: str = Field(min_length=7, max_length=200)
+    api_prefix: str = Field(default="/api", min_length=1, max_length=50)
+    token: str = Field(default="", max_length=300)
+    health_paths: list[str] = Field(default_factory=lambda: ["/health", "/api/health"], max_length=8)
+    uvicorn_log_file: str = Field(default="", max_length=500)
+    celery_log_file: str = Field(default="", max_length=500)
+    timeout_sec: int = Field(default=8, ge=2, le=30)
+
+
+class _AiNcmSendSmsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str = Field(min_length=5, max_length=32)
+    ctcode: int = Field(default=86, ge=1, le=999)
+
+
+class _AiNcmVerifySmsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str = Field(min_length=5, max_length=32)
+    captcha: str = Field(min_length=2, max_length=16)
+    ctcode: int = Field(default=86, ge=1, le=999)
+
+
+class _RequestActionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    self_id: int = Field(ge=1)
+    kind: Literal["friend", "group"]
+    action: Literal["approve", "reject"] = "approve"
+    source: Literal["pending", "doubt"] = "pending"
+    user_id: int | None = Field(default=None, ge=1)
+    group_id: int | None = Field(default=None, ge=1)
+
+
+async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[str, Any]:
+    from src.common.db import make_bot_config_repository
+    from src.common.db.pallas_console_data import bot_config_to_public
+
+    repo = make_bot_config_repository()
+    # 与 help.plugin_manager 一致，保证有文档可写
+    await repo.get_or_create(account, disabled_plugins=[])
+    for field_name, raw in body.model_dump(exclude_none=True).items():
+        if field_name in ("admins", "disabled_plugins") and raw is not None:
+            if field_name == "disabled_plugins":
+                value = [str(s).strip() for s in raw if str(s).strip()]
+            else:
+                value = [int(x) for x in raw]
+        else:
+            value = raw
+        await repo.upsert_field(account, str(field_name), value)
+    await repo.invalidate_cache()
+    doc = await repo.get(account, ignore_cache=True)
+    if doc is None:
+        raise HTTPException(status_code=500, detail="config upsert 后回读失败")
+    return bot_config_to_public(doc)
+
+
+async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> dict[str, Any]:
+    from src.common.db import make_group_config_repository
+    from src.common.db.pallas_console_data import group_config_to_public
+
+    repo = make_group_config_repository()
+    await repo.get_or_create(group_id, disabled_plugins=[])
+    for field_name, raw in body.model_dump(exclude_none=True).items():
+        if field_name == "disabled_plugins" and raw is not None:
+            value: Any = [str(s).strip() for s in raw if str(s).strip()]
+        elif field_name == "roulette_mode":
+            # 轮盘模式只保留 0(踢人) / 1(禁言)
+            value = 1 if int(raw) == 1 else 0
+        else:
+            value = raw
+        await repo.upsert_field(group_id, str(field_name), value)
+    await repo.invalidate_cache()
+    doc = await repo.get(group_id, ignore_cache=True)
+    if doc is None:
+        raise HTTPException(status_code=500, detail="config upsert 后回读失败")
+    return group_config_to_public(doc)
+
+
+async def _apply_user_config_patch(user_id: int, body: _UserConfigPatch) -> dict[str, Any]:
+    from src.common.db import make_user_config_repository
+    from src.common.db.pallas_console_data import user_config_to_public
+
+    repo = make_user_config_repository()
+    await repo.get_or_create(user_id, banned=False)
+    for field_name, raw in body.model_dump(exclude_none=True).items():
+        await repo.upsert_field(user_id, str(field_name), raw)
+    await repo.invalidate_cache()
+    doc = await repo.get(user_id, ignore_cache=True)
+    if doc is None:
+        raise HTTPException(status_code=500, detail="user_config upsert 后回读失败")
+    return user_config_to_public(doc)
+
+
+def register_extended_api(
+    app,
+    *,
+    api_base: str,
+    plugin_config: Config,
+) -> None:
+    x = (api_base or "/pallas/api").strip()
+    if not x.startswith("/"):
+        x = "/" + x
+    x = x.rstrip("/")
+
+    router = APIRouter(tags=["Pallas 控制台"])
+
+    @router.get(f"{x}/system", include_in_schema=True)
+    async def _system() -> JSONResponse:
+        async def _load() -> dict[str, Any]:
+            return _system_dict()
+
+        data = await _cached_read(key="system", loader=_load, ttl_sec=0.8, stale_sec=8.0)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/plugins", include_in_schema=True)
+    async def _plugins() -> JSONResponse:
+        async def _load() -> list[dict[str, Any]]:
+            return _list_plugins_dict()
+
+        data = await _cached_read(key="plugins", loader=_load, ttl_sec=1.6, stale_sec=25.0)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/bots", include_in_schema=True)
+    async def _bots() -> JSONResponse:
+        async def _load() -> list[dict[str, Any]]:
+            return _list_bots_dict()
+
+        data = await _cached_read(key="bots", loader=_load, ttl_sec=0.9, stale_sec=15.0)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/logs", include_in_schema=True)
+    async def _logs(
+        n: int = Query(default=200, ge=1, le=plugin_config.pallas_webui_log_lines_max),
+    ) -> JSONResponse:
+        _ensure_log_sink()
+        from src.common.web import tail_nonebot_log_lines
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": {
+                    "lines": tail_nonebot_log_lines(n),
+                    "max": plugin_config.pallas_webui_log_lines_max,
+                },
+            }
+        )
+
+    @router.get(
+        f"{x}/plugin-config-hint",
+        include_in_schema=True,
+    )
+    async def _plugin_config_hint() -> JSONResponse:
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": {
+                    "message": (
+                        "「按 Bot 禁用插件」等规则存于数据库（config / group_config），"
+                        "请用本控制台的 GET/PUT /pallas/api/bot-configs 与 group-configs 修改。"
+                        "各插件 Pydantic 专属项仍多数在 .env 与 data/ 目录，本页 /plugins 为只读元数据。"
+                    ),
+                },
+            }
+        )
+
+    @router.get(f"{x}/db/overview", include_in_schema=True)
+    async def _db_overview() -> JSONResponse:
+        from src.common.db.pallas_console_data import database_overview
+
+        try:
+            data = await _cached_read(
+                key="db_overview",
+                loader=database_overview,
+                ttl_sec=1.5,
+                stale_sec=30.0,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: 数据库概览失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/db/mongodb/aggregate", include_in_schema=True)
+    async def _db_mongo_aggregate(
+        body: _MongoAggregateBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        """受限 MongoDB aggregate（只读阶段白名单 + 强制结果上限）；须配置并携带 pallas_webui_api_token。"""
+        _require_pallas_token_configured(
+            plugin_config,
+            x_pallas_token=x_pallas_token,
+            token=token,
+        )
+        from src.common.db.pallas_console_data import mongo_aggregate_console
+
+        try:
+            rows = await mongo_aggregate_console(
+                collection=body.collection,
+                pipeline=body.pipeline,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: Mongo aggregate 失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": {"rows": rows, "truncated_to": len(rows)}})
+
+    @router.get(f"{x}/instances", include_in_schema=True)
+    async def _instances() -> JSONResponse:
+        from src.common.db.pallas_console_data import list_all_bot_configs_public, pallas_protocol_snapshot
+
+        async def _load() -> dict[str, Any]:
+            db_bots = await list_all_bot_configs_public()
+            snap = pallas_protocol_snapshot()
+            payload: dict[str, Any] = {
+                "nonebot_bots": _list_bots_dict(),
+                "db_bot_configs": db_bots,
+                "pallas_protocol": snap,
+            }
+            if snap is not None:
+                payload["napcat"] = snap
+            return payload
+
+        try:
+            payload = await _cached_read(
+                key="instances",
+                loader=_load,
+                ttl_sec=1.0,
+                stale_sec=20.0,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: 加载实例视图失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": payload})
+
+    @router.get(f"{x}/bot-configs", include_in_schema=True)
+    async def _bot_configs_list() -> JSONResponse:
+        from src.common.db.pallas_console_data import list_all_bot_configs_public
+
+        try:
+            rows = await _cached_read(
+                key="bot_configs_list",
+                loader=list_all_bot_configs_public,
+                ttl_sec=1.0,
+                stale_sec=20.0,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": rows})
+
+    @router.get(f"{x}/bot-configs/{{account}}", include_in_schema=True)
+    async def _bot_config_one(
+        account: int,
+    ) -> JSONResponse:
+        from src.common.db import make_bot_config_repository
+        from src.common.db.pallas_console_data import bot_config_to_public
+
+        repo = make_bot_config_repository()
+        doc = await repo.get(account, ignore_cache=True)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="未找到该账号的 Bot 配置")
+        return JSONResponse({"ok": True, "data": bot_config_to_public(doc)})
+
+    @router.put(f"{x}/bot-configs/{{account}}", include_in_schema=True)
+    async def _bot_config_put(
+        account: int,
+        body: _BotConfigPatch,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        if not body.model_dump(exclude_none=True):
+            raise HTTPException(status_code=400, detail="body 为空")
+        try:
+            data = await _apply_bot_config_patch(account, body)
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: 更新 Bot 配置失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        _drop_read_cache(("instances", "bot_configs_list", "db_overview"))
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/group-configs", include_in_schema=True)
+    async def _group_configs_list(
+        limit: int = Query(default=1000, ge=1, le=10_000),
+    ) -> JSONResponse:
+        from src.common.db.pallas_console_data import list_group_configs_public
+
+        key = f"group_configs_list:{int(limit)}"
+
+        async def _load() -> list[dict[str, Any]]:
+            return await list_group_configs_public(limit)
+
+        try:
+            rows = await _cached_read(key=key, loader=_load, ttl_sec=1.0, stale_sec=20.0)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": rows, "meta": {"limit": limit}})
+
+    @router.get(f"{x}/group-configs/{{group_id}}", include_in_schema=True)
+    async def _group_config_one(
+        group_id: int,
+    ) -> JSONResponse:
+        from src.common.db import make_group_config_repository
+        from src.common.db.pallas_console_data import group_config_to_public
+
+        repo = make_group_config_repository()
+        doc = await repo.get(group_id, ignore_cache=True)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="未找到该群配置")
+        return JSONResponse({"ok": True, "data": group_config_to_public(doc)})
+
+    @router.put(f"{x}/group-configs/{{group_id}}", include_in_schema=True)
+    async def _group_config_put(
+        group_id: int,
+        body: _GroupConfigPatch,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        if not body.model_dump(exclude_none=True):
+            raise HTTPException(status_code=400, detail="body 为空")
+        try:
+            data = await _apply_group_config_patch(group_id, body)
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: 更新群配置失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        _drop_read_cache(("group_configs_list", "db_overview"))
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/user-configs/{{user_id}}", include_in_schema=True)
+    async def _user_config_one(
+        user_id: int,
+    ) -> JSONResponse:
+        from src.common.db import make_user_config_repository
+        from src.common.db.pallas_console_data import user_config_to_public
+
+        repo = make_user_config_repository()
+        doc, _created = await repo.get_or_create(user_id, banned=False)
+        return JSONResponse({"ok": True, "data": user_config_to_public(doc)})
+
+    @router.put(f"{x}/user-configs/{{user_id}}", include_in_schema=True)
+    async def _user_config_put(
+        user_id: int,
+        body: _UserConfigPatch,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        if not body.model_dump(exclude_none=True):
+            raise HTTPException(status_code=400, detail="body 为空")
+        try:
+            data = await _apply_user_config_patch(user_id, body)
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: 更新 User 配置失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        _drop_read_cache(("db_overview",))
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/ai-extension/config", include_in_schema=True)
+    async def _ai_extension_get() -> JSONResponse:
+        return JSONResponse({"ok": True, "data": _load_ai_extension_config()})
+
+    @router.put(f"{x}/ai-extension/config", include_in_schema=True)
+    async def _ai_extension_put(
+        body: _AiExtensionConfigBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        clean = _save_ai_extension_config(body.model_dump())
+        return JSONResponse({"ok": True, "data": clean})
+
+    @router.post(f"{x}/ai-extension/test", include_in_schema=True)
+    async def _ai_extension_test() -> JSONResponse:
+        import urllib.error
+        import urllib.request
+
+        cfg = _load_ai_extension_config()
+        tried_urls: list[str] = []
+        headers: dict[str, str] = {}
+        if cfg.get("token"):
+            headers["Authorization"] = f"Bearer {cfg['token']}"
+        base = str(cfg["base_url"]).rstrip("/")
+        paths = [str(x) for x in cfg.get("health_paths", []) if str(x).strip()]
+        last_error = "未命中可用健康检查地址"
+        last_status: int | None = None
+        last_url = ""
+        for p in paths:
+            pp = p if p.startswith("/") else f"/{p}"
+            health_url = f"{base}{pp}"
+            tried_urls.append(health_url)
+            req = urllib.request.Request(health_url, method="GET", headers=headers)
+
+            def _do_request(_req=req) -> int:
+                with urllib.request.urlopen(_req, timeout=float(cfg["timeout_sec"])) as resp:
+                    return int(getattr(resp, "status", 200) or 200)
+
+            try:
+                status_code = await asyncio.to_thread(_do_request)
+                return JSONResponse(
+                    {
+                        "ok": True,
+                        "data": {
+                            "ok": 200 <= status_code < 300,
+                            "status_code": status_code,
+                            "health_url": health_url,
+                            "tried_urls": tried_urls,
+                            "error": None,
+                        },
+                    },
+                )
+            except urllib.error.HTTPError as e:
+                last_status = int(getattr(e, "code", 0) or 0)
+                last_error = str(e)
+                last_url = health_url
+            except Exception as e:  # noqa: BLE001
+                last_status = None
+                last_error = str(e)
+                last_url = health_url
+        return JSONResponse(
+            {
+                "ok": True,
+                "data": {
+                    "ok": False,
+                    "status_code": last_status,
+                    "health_url": last_url,
+                    "tried_urls": tried_urls,
+                    "error": last_error,
+                },
+            },
+        )
+
+    async def _ai_extension_http_json(
+        *,
+        method: Literal["GET", "POST"],
+        path: str,
+        body: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        import json
+        import urllib.error
+        import urllib.request
+
+        cfg = _load_ai_extension_config()
+        base = str(cfg["base_url"]).rstrip("/")
+        api_prefix = str(cfg.get("api_prefix", "/api")).strip() or "/api"
+        if not api_prefix.startswith("/"):
+            api_prefix = "/" + api_prefix
+        merged_path = f"{api_prefix.rstrip('/')}/{path.lstrip('/')}"
+        p = merged_path if merged_path.startswith("/") else f"/{merged_path}"
+        url = f"{base}{p}"
+        headers = {"Content-Type": "application/json"}
+        if cfg.get("token"):
+            headers["Authorization"] = f"Bearer {cfg['token']}"
+        data_b = json.dumps(body or {}).encode("utf-8") if method == "POST" else None
+        req = urllib.request.Request(url, method=method, headers=headers, data=data_b)
+
+        def _do() -> tuple[int, str]:
+            with urllib.request.urlopen(req, timeout=float(cfg["timeout_sec"])) as resp:
+                status_code = int(getattr(resp, "status", 200) or 200)
+                txt = resp.read().decode("utf-8", errors="ignore")
+                return status_code, txt
+
+        try:
+            status_code, txt = await asyncio.to_thread(_do)
+            try:
+                data = json.loads(txt) if txt else {}
+            except Exception:  # noqa: BLE001
+                data = {"raw": txt}
+            return {"ok": 200 <= status_code < 300, "status_code": status_code, "url": url, "data": data, "error": None}
+        except urllib.error.HTTPError as e:
+            return {
+                "ok": False,
+                "status_code": int(getattr(e, "code", 0) or 0),
+                "url": url,
+                "data": {},
+                "error": str(e),
+            }
+        except Exception as e:  # noqa: BLE001
+            return {"ok": False, "status_code": None, "url": url, "data": {}, "error": str(e)}
+
+    @router.get(f"{x}/ai-extension/logs", include_in_schema=True)
+    async def _ai_extension_logs(
+        kind: Literal["uvicorn", "celery"] = Query(default="uvicorn"),
+        n: int = Query(default=200, ge=1, le=2000),
+    ) -> JSONResponse:
+        cfg = _load_ai_extension_config()
+        path_s = str(cfg["uvicorn_log_file"] if kind == "uvicorn" else cfg["celery_log_file"])
+        p = Path(path_s)
+        if not await asyncio.to_thread(p.exists):
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": {"kind": kind, "path": path_s, "lines": [], "error": "日志文件不存在"},
+                },
+            )
+        try:
+            text = await asyncio.to_thread(p.read_text, encoding="utf-8", errors="ignore")
+            lines = text.splitlines()[-int(n) :]
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": {"kind": kind, "path": path_s, "lines": lines, "error": None},
+                },
+            )
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": {"kind": kind, "path": path_s, "lines": [], "error": str(e)},
+                },
+            )
+
+    @router.get(f"{x}/ai-extension/ncm/status", include_in_schema=True)
+    async def _ai_extension_ncm_status() -> JSONResponse:
+        d = await _ai_extension_http_json(method="GET", path="/ncm/login/status")
+        return JSONResponse({"ok": True, "data": d})
+
+    @router.post(f"{x}/ai-extension/ncm/send-sms", include_in_schema=True)
+    async def _ai_extension_ncm_send_sms(
+        body: _AiNcmSendSmsBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        d = await _ai_extension_http_json(
+            method="POST",
+            path="/ncm/login/cellphone/send-sms",
+            body=body.model_dump(),
+        )
+        return JSONResponse({"ok": True, "data": d})
+
+    @router.post(f"{x}/ai-extension/ncm/verify-sms", include_in_schema=True)
+    async def _ai_extension_ncm_verify_sms(
+        body: _AiNcmVerifySmsBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        d = await _ai_extension_http_json(
+            method="POST",
+            path="/ncm/login/cellphone/verify-sms",
+            body=body.model_dump(),
+        )
+        return JSONResponse({"ok": True, "data": d})
+
+    @router.post(f"{x}/ai-extension/ncm/logout", include_in_schema=True)
+    async def _ai_extension_ncm_logout(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        d = await _ai_extension_http_json(method="POST", path="/ncm/login/logout", body={})
+        return JSONResponse({"ok": True, "data": d})
+
+    @router.get(f"{x}/friend-requests", include_in_schema=True)
+    async def _friend_requests(
+        self_id: int | None = Query(default=None, description="仅查看指定 Bot QQ；不传则返回全部"),
+        doubt: bool = Query(default=True, description="是否对在线 OneBot V11 号尝试拉取被过滤的可疑好友申请"),
+    ) -> JSONResponse:
+        """只读：request_handler 落盘的待处理好友申请 +（可选）协议侧可疑申请。"""
+
+        async def _load() -> dict[str, Any]:
+            sid = str(int(self_id)) if self_id is not None else None
+            return await _friend_requests_overview(self_id=sid, include_doubt=bool(doubt))
+
+        try:
+            data = await _cached_read(
+                key=f"friend_requests:{self_id}:{int(doubt)}",
+                loader=_load,
+                ttl_sec=1.0,
+                stale_sec=12.0,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: 读取好友申请概览失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/friend-list", include_in_schema=True)
+    async def _friend_list(
+        self_id: int = Query(..., description="Bot QQ（须当前在 NoneBot 已连接）"),
+        limit: int = Query(default=800, ge=1, le=8000),
+    ) -> JSONResponse:
+        """只读：对在线 Bot 调用 OneBot `get_friend_list`（大列表时按 limit 截断并标记 truncated）。"""
+        target = str(int(self_id))
+        bot = None
+        conn_key = ""
+        for key, b in get_bots().items():
+            if str(getattr(b, "self_id", "") or "") == target:
+                bot = b
+                conn_key = str(key)
+                break
+        if bot is None:
+            raise HTTPException(status_code=404, detail="指定账号当前未连接")
+        if not _is_onebot_v11_bot(bot):
+            raise HTTPException(status_code=400, detail="当前连接不是 OneBot V11，无法拉取好友列表")
+
+        friends, err, truncated = await _call_get_friend_list(bot, limit=int(limit))
+        payload: dict[str, Any] = {
+            "self_id": target,
+            "connection_key": conn_key,
+            "adapter": _bot_adapter_label(bot),
+            "friends": friends,
+            "truncated": truncated,
+            "limit": int(limit),
+            "error": err,
+        }
+        return JSONResponse({"ok": True, "data": payload})
+
+    @router.get(f"{x}/request-overview", include_in_schema=True)
+    async def _request_overview() -> JSONResponse:
+        friend = await _friend_requests_overview(self_id=None, include_doubt=True)
+        group = _read_pending_group_requests_disk()
+        by_self: dict[str, dict[str, Any]] = {}
+        for row in friend.get("bots", []):
+            sid = str(row.get("self_id") or "")
+            if not sid:
+                continue
+            by_self[sid] = {
+                "self_id": sid,
+                "online": bool(row.get("online")),
+                "adapter": str(row.get("adapter") or ""),
+                "connection_key": row.get("connection_key"),
+                "pending_friend_requests": row.get("pending_friend_requests") or [],
+                "doubt_friend_requests": row.get("doubt_friend_requests") or [],
+                "pending_group_requests": [],
+            }
+        for sid, mp in group.items():
+            row = by_self.setdefault(
+                str(sid),
+                {
+                    "self_id": str(sid),
+                    "online": False,
+                    "adapter": "",
+                    "connection_key": None,
+                    "pending_friend_requests": [],
+                    "doubt_friend_requests": [],
+                    "pending_group_requests": [],
+                },
+            )
+            vals = [v for v in mp.values() if isinstance(v, dict)]
+            vals.sort(key=lambda v: int(v.get("group_id") or 0))
+            row["pending_group_requests"] = vals
+        rows = sorted(
+            by_self.values(),
+            key=lambda r: int(str(r["self_id"])) if str(r["self_id"]).isdigit() else 10**18,
+        )
+        return JSONResponse({"ok": True, "data": {"bots": rows}})
+
+    @router.post(f"{x}/request-actions", include_in_schema=True)
+    async def _request_actions(
+        body: _RequestActionBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        _, bot = _find_online_onebot_v11_bot(str(body.self_id))
+        approve = body.action == "approve"
+        if body.kind == "friend":
+            if body.user_id is None:
+                raise HTTPException(status_code=400, detail="friend 请求需要 user_id")
+            uid = str(int(body.user_id))
+            if body.source == "doubt":
+                doubt = await _call_get_doubt_friends(bot)
+                flag = next((str(x.get("flag") or "") for x in doubt if str(x.get("user_id")) == uid), "")
+                if not flag:
+                    raise HTTPException(status_code=404, detail="未找到可疑好友申请")
+                await bot.call_api("set_doubt_friends_add_request", flag=flag, approve=approve)  # type: ignore[union-attr]
+                _drop_read_cache(("friend_requests",))
+                return JSONResponse({"ok": True, "data": {"handled": True}})
+            pending = _read_pending_friend_requests_disk()
+            by_bot = pending.get(str(body.self_id), {})
+            flag = str(by_bot.get(uid) or "")
+            if not flag:
+                raise HTTPException(status_code=404, detail="未找到待处理好友申请")
+            await bot.set_friend_add_request(flag=flag, approve=approve)  # type: ignore[union-attr]
+            by_bot.pop(uid, None)
+            pending[str(body.self_id)] = by_bot
+            _save_pending_friend_requests_disk(pending)
+            _drop_read_cache(("friend_requests",))
+            return JSONResponse({"ok": True, "data": {"handled": True}})
+
+        if body.group_id is None:
+            raise HTTPException(status_code=400, detail="group 请求需要 group_id")
+        pending_g = _read_pending_group_requests_disk()
+        by_bot_g = pending_g.get(str(body.self_id), {})
+        req = by_bot_g.get(str(int(body.group_id)))
+        if not isinstance(req, dict):
+            raise HTTPException(status_code=404, detail="未找到待处理群邀请")
+        await bot.set_group_add_request(  # type: ignore[union-attr]
+            flag=str(req.get("flag") or ""),
+            sub_type=str(req.get("sub_type") or "invite"),
+            approve=approve,
+        )
+        by_bot_g.pop(str(int(body.group_id)), None)
+        pending_g[str(body.self_id)] = by_bot_g
+        _save_pending_group_requests_disk(pending_g)
+        _drop_read_cache(("friend_requests",))
+        return JSONResponse({"ok": True, "data": {"handled": True}})
+
+    app.include_router(router)
