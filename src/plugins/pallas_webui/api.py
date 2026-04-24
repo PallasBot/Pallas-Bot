@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import tomllib
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,22 @@ def register_api(
 
     router = APIRouter(tags=["Pallas 控制台"])
 
+    console_meta = dict(extra_meta or {})
+    static_root = Path(str(console_meta.get("static_root", "")).strip()) if console_meta.get("static_root") else None
+    if static_root and static_root.is_dir():
+        version_file = static_root / "console-version.json"
+        if version_file.is_file():
+            try:
+                data = json.loads(version_file.read_text(encoding="utf-8"))
+                if isinstance(data, dict):
+                    # 注入构建元信息，供 /health 与关于页展示控制台版本。
+                    for key in ("version", "commit", "build_time"):
+                        val = str(data.get(key, "")).strip()
+                        if val:
+                            console_meta[key] = val
+            except Exception:
+                pass
+
     pallas_ver: str
     try:
         root = Path(__file__).resolve().parents[3]
@@ -45,7 +62,7 @@ def register_api(
                 "ok": True,
                 "nonebot2": str(_nb_ver),
                 "pallas_bot": pallas_ver,
-                "console": (extra_meta or {}),
+                "console": console_meta,
             },
             status_code=status.HTTP_200_OK,
         )
