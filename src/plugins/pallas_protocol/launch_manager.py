@@ -142,11 +142,19 @@ class LaunchManager:
         ]
         account["command"] = str(appimage)
         account["args"] = appimage_args
+        # AppImage 启动时工作目录应为其所在目录，避免把二进制文件路径当目录创建。
+        account["working_dir"] = str(appimage.parent)
 
     def prepare_dirs(self, account: dict) -> None:
         program_dir_raw = str(account.get("working_dir", "")).strip()
         if program_dir_raw:
-            Path(program_dir_raw).mkdir(parents=True, exist_ok=True)
+            program_dir_path = Path(program_dir_raw)
+            # 兼容历史数据：working_dir 可能被写成 AppImage 文件路径。
+            if program_dir_path.exists() and program_dir_path.is_file():
+                program_dir_path = program_dir_path.parent
+            elif program_dir_path.suffix == ".AppImage":
+                program_dir_path = program_dir_path.parent
+            program_dir_path.mkdir(parents=True, exist_ok=True)
         account_data_dir = str(account.get("account_data_dir", "")).strip()
         if account_data_dir:
             Path(account_data_dir).mkdir(parents=True, exist_ok=True)
