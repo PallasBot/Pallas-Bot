@@ -158,6 +158,8 @@ class LaunchManager:
         account["args"] = appimage_args
         # AppImage 启动时工作目录应为其所在目录，避免把二进制文件路径当目录创建。
         account["working_dir"] = str(appimage.parent)
+        # AppImage 启动时工作目录应为其所在目录，避免把二进制文件路径当目录创建。
+        account["working_dir"] = str(appimage.parent)
 
     def prepare_dirs(self, account: dict) -> None:
         program_dir_raw = str(account.get("working_dir", "")).strip()
