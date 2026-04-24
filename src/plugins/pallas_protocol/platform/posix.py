@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +15,14 @@ class PosixNapcatPlatform(NapcatPlatform):
     def kill_process_tree(self, pid: int) -> None:
         if pid <= 0:
             return
+
+        def _is_alive(target_pid: int) -> bool:
+            try:
+                os.kill(target_pid, 0)
+                return True
+            except OSError:
+                return False
+
         def _children_map() -> dict[int, list[int]]:
             out: dict[int, list[int]] = {}
             proc_root = Path("/proc")
@@ -45,15 +54,28 @@ class PosixNapcatPlatform(NapcatPlatform):
 
         cmap = _children_map()
         descendants = _collect_descendants(pid, cmap)
-        for cpid in reversed(descendants):
+
+        targets = [*reversed(descendants), pid]
+        # 先温和终止，给子进程留清理窗口。
+        for target in targets:
             try:
-                os.kill(cpid, 15)
+                os.kill(target, 15)
             except OSError:
                 pass
-        try:
-            os.kill(pid, 15)
-        except OSError:
-            pass
+
+        deadline = time.time() + 2.5
+        while time.time() < deadline:
+            if not any(_is_alive(target) for target in targets):
+                return
+            time.sleep(0.05)
+
+        for target in targets:
+            if not _is_alive(target):
+                continue
+            try:
+                os.kill(target, 9)
+            except OSError:
+                pass
 
     def resolve_default_command(self, default_command: str) -> str:
         return default_command

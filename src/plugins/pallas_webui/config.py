@@ -11,7 +11,19 @@ class Config(BaseModel):
     )
     pallas_webui_dist_zip_url: str = Field(
         default="",
-        description="dist 的 zip 直链；非空且 public 下无 index.html 时自动下载并解压",
+        description="dist 的 zip 直链；留空时按 repo/tag/asset 自动拼接 GitHub Releases 下载地址",
+    )
+    pallas_webui_dist_zip_repo: str = Field(
+        default="TogetsuDo/Pallas-Bot-WebUI",
+        description="pallas_webui_dist_zip_url 为空时生效：GitHub 仓库（Owner/Repo）",
+    )
+    pallas_webui_dist_zip_tag: str = Field(
+        default="",
+        description="pallas_webui_dist_zip_url 为空时生效：版本标签（空=latest）",
+    )
+    pallas_webui_dist_zip_asset: str = Field(
+        default="dist.zip",
+        description="pallas_webui_dist_zip_url 为空时生效：发布资产文件名",
     )
     pallas_webui_cors: bool = Field(
         default=True,

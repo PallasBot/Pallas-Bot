@@ -10,7 +10,8 @@ from .extended_api import register_extended_api, set_console_meta
 from .manager import (
     check_webui_exists,
     download_and_extract_dist_zip,
-    migrate_legacy_dist_if_needed,
+    github_release_asset_url,
+    resolve_github_release_asset_urls,
     webui_public_path,
 )
 from .public import register_routes
@@ -50,13 +51,36 @@ async def _pallas_webui_startup() -> None:
     if not plugin_config.pallas_webui_enabled:
         return
     public = webui_public_path()
-    migrate_legacy_dist_if_needed(public)
     url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
-    if url and not check_webui_exists(public):
+    url_candidates: list[str] = []
+    if not url:
+        # URL 留空时先查 GitHub release 资产列表再选，减少环境里硬编码版本地址。
         try:
-            await download_and_extract_dist_zip(public, url)
+            repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "")
+            asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "")
+            tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
+            url_candidates = await resolve_github_release_asset_urls(repo, asset, tag)
+            url = github_release_asset_url(
+                str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or ""),
+                str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or ""),
+                str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or ""),
+            )
         except Exception:
-            logger.exception("Pallas 控制台: 下载或解压 dist zip 失败")
+            url = ""
+            url_candidates = []
+    elif url:
+        url_candidates = [url]
+    if url and not check_webui_exists(public):
+        errors: list[str] = []
+        for candidate in (url_candidates or [url]):
+            try:
+                await download_and_extract_dist_zip(public, candidate)
+                errors.clear()
+                break
+            except Exception as e:
+                errors.append(f"{candidate} -> {e}")
+        if errors:
+            logger.error("Pallas 控制台: 下载或解压 dist zip 失败，已尝试: %s", " | ".join(errors))
     base = (plugin_config.pallas_webui_http_base or "/pallas").strip()
     if not base.startswith("/"):
         base = "/" + base

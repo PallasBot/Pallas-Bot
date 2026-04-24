@@ -5,11 +5,7 @@ from src.plugins.pallas_protocol.config import Config, resolve_onebot_ws_setting
 
 
 def test_resolve_onebot_ws_settings_fallback_to_driver_config() -> None:
-    cfg = Config(
-        pallas_protocol_onebot_host="",
-        pallas_protocol_onebot_port=None,
-        pallas_protocol_access_token="",
-    )
+    cfg = Config()
     fake_driver = SimpleNamespace(config=SimpleNamespace(host="127.0.0.1", port=8080, access_token="abc123"))
     with (
         patch.dict("os.environ", {}, clear=True),
@@ -22,11 +18,7 @@ def test_resolve_onebot_ws_settings_fallback_to_driver_config() -> None:
 
 
 def test_resolve_onebot_ws_settings_normalizes_wildcard_host() -> None:
-    cfg = Config(
-        pallas_protocol_onebot_host="",
-        pallas_protocol_onebot_port=None,
-        pallas_protocol_access_token="",
-    )
+    cfg = Config()
     fake_driver = SimpleNamespace(config=SimpleNamespace(host="0.0.0.0", port=8080, access_token="abc123"))
     with (
         patch.dict("os.environ", {}, clear=True),

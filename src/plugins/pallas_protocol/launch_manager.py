@@ -258,14 +258,7 @@ class LaunchManager:
         if (workdir.exists() and workdir.is_file()) or workdir.suffix == ".AppImage":
             workdir = workdir.parent
             account["working_dir"] = str(workdir)
-        # 兼容历史数据：working_dir 可能仍是 AppImage 文件路径，自动纠正为父目录。
-        if (workdir.exists() and workdir.is_file()) or workdir.suffix == ".AppImage":
-            workdir = workdir.parent
-            account["working_dir"] = str(workdir)
         if not workdir.exists():
-            return [f"program_dir 不存在: {workdir}"]
-        if not workdir.is_dir():
-            return [f"program_dir 不是目录: {workdir}"]
             return [f"program_dir 不存在: {workdir}"]
         if not workdir.is_dir():
             return [f"program_dir 不是目录: {workdir}"]

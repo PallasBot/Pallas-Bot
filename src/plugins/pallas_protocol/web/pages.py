@@ -256,9 +256,41 @@ textarea.cfg { min-height: 220px; }
 """
 
 
+def _render_common_api_js() -> str:
+    return """
+    async function api(path, options = {}) {
+      const token = (document.getElementById("token")?.value || "").trim();
+      const headers = options.headers || {};
+      if (token) headers["X-Pallas-Protocol-Token"] = token;
+      const joiner = path.includes("?") ? "&" : "?";
+      const tokenPart = token ? `${joiner}token=${encodeURIComponent(token)}` : "";
+      const res = await fetch(`${basePath}${path}${tokenPart}`, { ...options, headers });
+      if (!res.ok) throw new Error((await res.text()) || res.status);
+      return res.json();
+    }
+"""
+
+
+def _render_hidden_token_sync_js(back_button_id: str = "backDash") -> str:
+    back_id_js = json.dumps(back_button_id)
+    return f"""
+    (function initTokenSync() {{
+      const u = new URL(location.href);
+      const fromQs = (u.searchParams.get("token") || "").trim();
+      const fromLs = (localStorage.getItem("pallas_protocol_token") || "").trim();
+      const t = fromQs || fromLs;
+      const tokenEl = document.getElementById("token");
+      if (tokenEl) tokenEl.value = t;
+      const b = document.getElementById({back_id_js});
+      if (b) b.href = t ? basePath + "?token=" + encodeURIComponent(t) : basePath;
+    }})();
+"""
+
+
 def render_dashboard(base_path: str) -> str:
     path = base_path.rstrip("/") or resolve_public_mount_path(path_override="", implementation_slug="")
     p = json.dumps(path)
+    common_api_js = _render_common_api_js()
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -275,7 +307,7 @@ def render_dashboard(base_path: str) -> str:
         <div class="token-inline">
           <input id="token" type="password" autocomplete="off" placeholder="Token" />
         </div>
-        <a href="#" class="btn secondary" id="linkRuntime">更新</a>
+        <a href="#" class="btn secondary" id="linkRuntime">更新/下载</a>
         <button class="btn secondary" id="btnTheme" type="button">切换深浅</button>
         <button class="btn secondary" id="btnRefresh" type="button" onclick="refreshAccounts()">刷新</button>
       </div>
@@ -284,7 +316,7 @@ def render_dashboard(base_path: str) -> str:
     <div class="section">
       <div class="row" style="justify-content:flex-start;align-items:center;margin-bottom:14px;gap:8px">
         <h2 style="margin:0">账号</h2>
-        <a href="#" class="btn linkish" id="linkNewAccount">创建账号</a>
+        <a href="#" class="btn" id="linkNewAccount">+ 创建账号</a>
       </div>
       <div class="kpi-grid" id="kpis"></div>
       <div class="toolbar">
@@ -345,19 +377,7 @@ def render_dashboard(base_path: str) -> str:
       host.appendChild(el);
       setTimeout(() => el.remove(), 4200);
     }}
-    async function api(path, options = {{}}) {{
-      const token = document.getElementById("token").value.trim();
-      const headers = options.headers || {{}};
-      if (token) headers["X-Pallas-Protocol-Token"] = token;
-      const joiner = path.includes("?") ? "&" : "?";
-      const tokenPart = token ? `${{joiner}}token=${{encodeURIComponent(token)}}` : "";
-      const res = await fetch(`${{basePath}}${{path}}${{tokenPart}}`, {{ ...options, headers }});
-      if (!res.ok) {{
-        const text = await res.text();
-        throw new Error(text || `HTTP ${{res.status}}`);
-      }}
-      return res.json();
-    }}
+{common_api_js}
     document.getElementById("linkNewAccount").addEventListener("click", (e) => {{
       e.preventDefault();
       const t = document.getElementById("token").value.trim();
@@ -519,6 +539,8 @@ def render_dashboard(base_path: str) -> str:
 def render_new_account_page(base_path: str) -> str:
     path = base_path.rstrip("/") or resolve_public_mount_path(path_override="", implementation_slug="")
     p = json.dumps(path)
+    common_api_js = _render_common_api_js()
+    token_sync_js = _render_hidden_token_sync_js("backDash")
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -555,25 +577,8 @@ def render_new_account_page(base_path: str) -> str:
   <script>
     const basePath = {p};
     document.body.setAttribute("data-theme", localStorage.getItem("pallas_protocol_theme") || "light");
-    (function initToken() {{
-      const u = new URL(location.href);
-      const fromQs = (u.searchParams.get("token") || "").trim();
-      const fromLs = (localStorage.getItem("pallas_protocol_token") || "").trim();
-      const t = fromQs || fromLs;
-      document.getElementById("token").value = t;
-      const b = document.getElementById("backDash");
-      b.href = t ? basePath + "?token=" + encodeURIComponent(t) : basePath;
-    }})();
-    async function api(path, options = {{}}) {{
-      const token = (document.getElementById("token").value || "").trim();
-      const headers = options.headers || {{}};
-      if (token) headers["X-Pallas-Protocol-Token"] = token;
-      const joiner = path.includes("?") ? "&" : "?";
-      const tokenPart = token ? `${{joiner}}token=${{encodeURIComponent(token)}}` : "";
-      const res = await fetch(`${{basePath}}${{path}}${{tokenPart}}`, {{ ...options, headers }});
-      if (!res.ok) throw new Error((await res.text()) || res.status);
-      return res.json();
-    }}
+{token_sync_js}
+{common_api_js}
     async function createAccount() {{
       try {{
         const wport = document.getElementById("webui_port").value.trim();
@@ -604,26 +609,27 @@ def render_new_account_page(base_path: str) -> str:
 def render_runtime_page(base_path: str) -> str:
     path = base_path.rstrip("/") or resolve_public_mount_path(path_override="", implementation_slug="")
     p = json.dumps(path)
+    common_api_js = _render_common_api_js()
+    token_sync_js = _render_hidden_token_sync_js("backDash")
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>更新</title>
+  <title>更新/下载</title>
   <style>{NAPCAT_SHELL_CSS}</style>
 </head>
 <body>
   <input type="hidden" id="token" value="" autocomplete="off" />
   <div class="shell">
     <header class="topbar">
-      <div class="brand">Pallas <span>更新</span></div>
+      <div class="brand">Pallas <span>更新/下载</span></div>
       <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="margin-left:auto;display:inline-flex;align-items:center">← 返回仪表盘</a>
     </header>
     <div class="card">
       <p class="muted">
-        一键包与标准 Shell 不同；官方流程见
-        <a href="https://napneko.github.io/guide/boot/Shell" target="_blank" rel="noopener">NapCat Shell 文档</a>。
-        标准 <code>napcat.mjs</code> 请将配置 <code>pallas_protocol_release_asset</code> 设为 <code>NapCat.Shell.zip</code>。
+        此页面用于更新或下载协议端运行时；默认会自动从 release 资产中选择可用包。
+        如需固定版本，请在配置中设置 <code>pallas_protocol_release_tag</code>。
       </p>
       <div class="kpi-grid">
         <div class="kpi"><div class="k">任务状态</div><div class="v" id="rtStatus">-</div></div>
@@ -694,16 +700,7 @@ def render_runtime_page(base_path: str) -> str:
       el.textContent = v;
       el.title = v;
     }}
-    async function api(path, options = {{}}) {{
-      const token = document.getElementById("token").value.trim();
-      const headers = options.headers || {{}};
-      if (token) headers["X-Pallas-Protocol-Token"] = token;
-      const joiner = path.includes("?") ? "&" : "?";
-      const tokenPart = token ? `${{joiner}}token=${{encodeURIComponent(token)}}` : "";
-      const res = await fetch(`${{basePath}}${{path}}${{tokenPart}}`, {{ ...options, headers }});
-      if (!res.ok) throw new Error(await res.text() || res.status);
-      return res.json();
-    }}
+{common_api_js}
     async function refreshRuntime() {{
       setBtnBusy(document.getElementById("btnRefreshRuntime"), true, "刷新状态", "刷新中...");
       try {{
@@ -749,15 +746,7 @@ def render_runtime_page(base_path: str) -> str:
         setBtnBusy(document.getElementById("btnRescan"), false, "刷新检测", "检测中...");
       }}
     }}
-    (function sync() {{
-      const u = new URL(location.href);
-      const fromQs = (u.searchParams.get("token") || "").trim();
-      const fromLs = (localStorage.getItem("pallas_protocol_token") || "").trim();
-      const t = fromQs || fromLs;
-      document.getElementById("token").value = t;
-      const b = document.getElementById("backDash");
-      b.href = t ? `${{basePath}}?token=${{encodeURIComponent(t)}}` : basePath;
-    }})();
+{token_sync_js}
     refreshRuntime();
     setInterval(refreshRuntime, 3000);
   </script>
@@ -771,6 +760,8 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
     p = json.dumps(path)
     aid = json.dumps(account_id)
     aid_h = html_escape(account_id, quote=True)
+    common_api_js = _render_common_api_js()
+    token_sync_js = _render_hidden_token_sync_js("backDash")
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -791,7 +782,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
         <a href="#" class="active" data-tab="overview">概览</a>
         <a href="#" data-tab="settings">设置</a>
         <a href="#" data-tab="configs">原始配置</a>
-        <a href="#" id="accLinkRuntime">更新</a>
+        <a href="#" id="accLinkRuntime">更新/下载</a>
       </nav>
       <div>
         <section class="panel active" id="panel-overview">
@@ -847,16 +838,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
     const accountId = {aid};
     let accountProcessRunning = false;
     document.body.setAttribute("data-theme", localStorage.getItem("pallas_protocol_theme") || "light");
-    async function api(ap, options = {{}}) {{
-      const token = document.getElementById("token").value.trim();
-      const headers = options.headers || {{}};
-      if (token) headers["X-Pallas-Protocol-Token"] = token;
-      const joiner = ap.includes("?") ? "&" : "?";
-      const tokenPart = token ? `${{joiner}}token=${{encodeURIComponent(token)}}` : "";
-      const res = await fetch(`${{basePath}}${{ap}}${{tokenPart}}`, {{ ...options, headers }});
-      if (!res.ok) throw new Error(await res.text() || res.status);
-      return res.json();
-    }}
+{common_api_js}
     let activeTab = "overview";
     function tab(name) {{
       activeTab = name;
@@ -1021,13 +1003,8 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       location.href = document.getElementById("backDash").href;
     }}
     (function init() {{
+{token_sync_js}
       const u = new URL(location.href);
-      const fromQs = (u.searchParams.get("token") || "").trim();
-      const fromLs = (localStorage.getItem("pallas_protocol_token") || "").trim();
-      document.getElementById("token").value = fromQs || fromLs;
-      const b = document.getElementById("backDash");
-      const t = document.getElementById("token").value.trim();
-      b.href = t ? `${{basePath}}?token=${{encodeURIComponent(t)}}` : basePath;
       const tabn = (u.searchParams.get("tab") || "overview").toLowerCase();
       tab(["overview","settings","configs"].includes(tabn) ? tabn : "overview");
     }})();

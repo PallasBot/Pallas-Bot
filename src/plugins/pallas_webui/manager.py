@@ -7,6 +7,7 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 from nonebot import logger
@@ -14,26 +15,101 @@ from nonebot import logger
 from src.common.paths import plugin_data_dir
 
 
+def github_release_asset_url(repo: str, asset_name: str, tag: str = "") -> str:
+    owner_part, _, name_part = (repo or "").strip().partition("/")
+    if not owner_part or not name_part:
+        msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
+        raise ValueError(msg)
+    encoded = quote((asset_name or "").strip(), safe=".")
+    if not encoded:
+        raise ValueError("发布资产名不能为空")
+    if not (tag or "").strip():
+        return f"https://github.com/{owner_part}/{name_part}/releases/latest/download/{encoded}"
+    return f"https://github.com/{owner_part}/{name_part}/releases/download/{(tag or '').strip()}/{encoded}"
+
+
+def github_release_asset_url_candidates(repo: str, asset_name: str, tag: str = "") -> list[str]:
+    """返回可尝试的下载地址：优先 tag，其次 latest。"""
+    out: list[str] = []
+    tag_clean = (tag or "").strip()
+    if tag_clean:
+        out.append(github_release_asset_url(repo, asset_name, tag_clean))
+    out.append(github_release_asset_url(repo, asset_name, ""))
+    dedup: list[str] = []
+    seen: set[str] = set()
+    for u in out:
+        if u in seen:
+            continue
+        seen.add(u)
+        dedup.append(u)
+    return dedup
+
+
+def _github_release_api_url(repo: str, tag: str = "") -> str:
+    owner_part, _, name_part = (repo or "").strip().partition("/")
+    if not owner_part or not name_part:
+        msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
+        raise ValueError(msg)
+    if not (tag or "").strip():
+        return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/latest"
+    return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/tags/{(tag or '').strip()}"
+
+
+async def resolve_github_release_asset_urls(repo: str, preferred_asset: str, tag: str = "") -> list[str]:
+    """先查 release 资产列表再选下载 URL；失败时回退到直链候选。"""
+    preferred = (preferred_asset or "").strip()
+    if not preferred:
+        raise ValueError("发布资产名不能为空")
+    candidates: list[str] = []
+    release_apis = [_github_release_api_url(repo, tag)]
+    if (tag or "").strip():
+        release_apis.append(_github_release_api_url(repo, ""))
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=httpx.Timeout(30.0, connect=10.0),
+        headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
+    ) as client:
+        for api in release_apis:
+            try:
+                resp = await client.get(api)
+            except Exception:
+                continue
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            assets = data.get("assets")
+            if not isinstance(assets, list):
+                continue
+            urls: dict[str, str] = {}
+            for item in assets:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name", "")).strip()
+                url = str(item.get("browser_download_url", "")).strip()
+                if not name or not url:
+                    continue
+                urls[name] = url
+            if preferred in urls:
+                candidates.append(urls[preferred])
+            elif urls:
+                for name, url in urls.items():
+                    if name.lower().endswith(".zip"):
+                        candidates.append(url)
+                        break
+    # 保底：仍然回退到固定直链策略（tag -> latest）
+    candidates.extend(github_release_asset_url_candidates(repo, preferred, tag))
+    dedup: list[str] = []
+    seen: set[str] = set()
+    for u in candidates:
+        if u in seen:
+            continue
+        seen.add(u)
+        dedup.append(u)
+    return dedup
+
+
 def webui_public_path() -> Path:
     return plugin_data_dir("pallas_webui") / "public"
-
-
-def migrate_legacy_dist_if_needed(public_dir: Path) -> bool:
-    """兼容历史部署路径 src/plugins/pallas_webui/dist -> data/pallas_webui/public。"""
-    if check_webui_exists(public_dir):
-        return False
-    legacy_dist = Path(__file__).resolve().parent / "dist"
-    if not check_webui_exists(legacy_dist):
-        return False
-    if public_dir.exists():
-        shutil.rmtree(public_dir)
-    public_dir.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(legacy_dist, public_dir, dirs_exist_ok=True)
-    logger.warning(
-        "Pallas 控制台: 检测到历史 dist 路径，已迁移到 data/pallas_webui/public；"
-        "后续请将前端产物发布到 data/<plugin_name>/public。",
-    )
-    return True
 
 
 def check_webui_exists(path: Path) -> bool:

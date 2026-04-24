@@ -68,6 +68,48 @@ def _arch_tokens_from_asset_name(asset_name: str) -> tuple[str, ...]:
     return ()
 
 
+def _asset_ext(asset_name: str) -> str:
+    return Path((asset_name or "").strip()).suffix.lower()
+
+
+def _pick_release_asset_generic(
+    release_json: dict[str, Any],
+    preferred_asset: str,
+) -> tuple[str, str] | None:
+    assets = release_json.get("assets")
+    if not isinstance(assets, list):
+        return None
+    entries: list[tuple[str, str]] = []
+    by_name: dict[str, str] = {}
+    for item in assets:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        url = str(item.get("browser_download_url", "")).strip()
+        if not name or not url:
+            continue
+        entries.append((name, url))
+        by_name[name] = url
+    if preferred_asset in by_name:
+        return preferred_asset, by_name[preferred_asset]
+    if not entries:
+        return None
+    pref_ext = _asset_ext(preferred_asset)
+    arch_tokens = _arch_tokens_from_asset_name(preferred_asset)
+    if pref_ext:
+        by_ext = [(n, u) for n, u in entries if n.lower().endswith(pref_ext)]
+    else:
+        by_ext = entries
+    if arch_tokens:
+        for name, url in by_ext:
+            low = name.lower()
+            if any(tok in low for tok in arch_tokens):
+                return name, url
+    if by_ext:
+        return by_ext[0]
+    return entries[0]
+
+
 def _pick_appimage_asset_from_release(release_json: dict[str, Any], preferred_asset: str) -> tuple[str, str] | None:
     assets = release_json.get("assets")
     if not isinstance(assets, list):
@@ -385,11 +427,25 @@ class NapCatRuntimeStore:
         configured = str(getattr(self._config, "pallas_protocol_github_repo", "")).strip()
         return configured or default_release_repo_for_platform()
 
+    def _repo_candidates(self) -> list[str]:
+        """Linux 下自动尝试多个来源，减少因单仓库命名变化导致的硬编码配置。"""
+        primary = self._repo()
+        out: list[str] = [primary]
+        if sys.platform.startswith("linux"):
+            for repo in (_NC_REPO_APPIMAGE, _NC_REPO_SHELL):
+                if repo not in out:
+                    out.append(repo)
+        return out
+
     def _asset_name(self) -> str:
         fn = getattr(self._config, "resolved_release_asset", None)
         if callable(fn):
-            return str(fn()).strip()
-        return str(getattr(self._config, "pallas_protocol_release_asset", "")).strip()
+            val = str(fn()).strip()
+        else:
+            val = str(getattr(self._config, "pallas_protocol_release_asset", "")).strip()
+        if val.lower() in ("auto", "latest"):
+            return ""
+        return val
 
     def _release_tag(self) -> str:
         return str(getattr(self._config, "pallas_protocol_release_tag", "")).strip()
@@ -397,10 +453,12 @@ class NapCatRuntimeStore:
     async def download_and_install(self, *, client: httpx.AsyncClient | None = None) -> RuntimeManifest:
         async with self._lock:
             configured_asset = self._asset_name()
+            if not configured_asset:
+                configured_asset = default_release_asset_for_platform()
             direct_asset_url = configured_asset if _looks_like_http_url(configured_asset) else ""
             asset_name = _asset_name_from_url(direct_asset_url) if direct_asset_url else configured_asset
             if not asset_name:
-                msg = "未配置 pallas_protocol_release_asset，无法下载"
+                msg = "未解析到可下载资产名，请检查 pallas_protocol_release_asset"
                 raise ValueError(msg)
             self._set_job("downloading", "准备下载…")
             repo = self._repo()
@@ -416,44 +474,78 @@ class NapCatRuntimeStore:
                 headers={"User-Agent": "Pallas-Bot-PallasProtocol/1.0"},
             )
             try:
-                if asset_is_linux_appimage(asset_name) and not direct_asset_url:
-                    rel_api = _github_release_api_url(repo, release_tag)
-                    rel_resp = await hc.get(rel_api)
-                    if rel_resp.status_code == 200:
-                        pick = _pick_appimage_asset_from_release(rel_resp.json(), asset_name)
-                        if pick is not None:
-                            asset_name, url = pick
-                            dist_file = self._dist_dir / asset_name
-                    elif rel_resp.status_code in (403, 404, 429):
-                        # GitHub API 受限时回退解析发布页，避免固定资产名直链 404。
-                        rel_web = (
-                            f"https://github.com/{repo}/releases/latest"
-                            if not release_tag.strip()
-                            else f"https://github.com/{repo}/releases/tag/{release_tag.strip()}"
-                        )
-                        web_resp = await hc.get(rel_web)
-                        if web_resp.status_code == 200:
-                            pick = _pick_appimage_asset_from_release_html(web_resp.text, repo, asset_name)
-                            if pick is not None:
-                                asset_name, url = pick
-                                dist_file = self._dist_dir / asset_name
-                async with hc.stream("GET", url) as resp:
-                    if resp.status_code != 200:
-                        msg = f"下载失败 HTTP {resp.status_code}: {url}"
-                        raise RuntimeError(msg)
-                    total = int(resp.headers.get("content-length") or 0)
-                    received = 0
-                    with dist_file.open("wb") as out:
-                        async for chunk in resp.aiter_bytes(1024 * 256):
-                            if not chunk:
-                                continue
-                            out.write(chunk)
-                            received += len(chunk)
-                            if total > 0:
-                                pct = min(99, int(received * 100 / total))
-                                self._set_job("downloading", f"下载中 {pct}% ({received // (1024 * 1024)} MiB)")
-                            else:
-                                self._set_job("downloading", f"下载中… ({received // (1024 * 1024)} MiB)")
+                download_candidates: list[tuple[str, str, str]] = []
+                if direct_asset_url:
+                    download_candidates.append((repo, asset_name, url))
+                else:
+                    tag_candidates = [release_tag] if release_tag else [""]
+                    if release_tag:
+                        tag_candidates.append("")
+                    for repo_try in self._repo_candidates():
+                        for tag_try in tag_candidates:
+                            rel_api = _github_release_api_url(repo_try, tag_try)
+                            rel_resp = await hc.get(rel_api)
+                            if rel_resp.status_code == 200:
+                                pick = _pick_release_asset_generic(rel_resp.json(), asset_name)
+                                if pick is not None:
+                                    pick_name, pick_url = pick
+                                    download_candidates.append((repo_try, pick_name, pick_url))
+                                    continue
+                            if asset_is_linux_appimage(asset_name) and rel_resp.status_code in (403, 404, 429):
+                                # GitHub API 受限时回退解析发布页，避免固定资产名直链 404。
+                                rel_web = (
+                                    f"https://github.com/{repo_try}/releases/latest"
+                                    if not tag_try.strip()
+                                    else f"https://github.com/{repo_try}/releases/tag/{tag_try.strip()}"
+                                )
+                                web_resp = await hc.get(rel_web)
+                                if web_resp.status_code == 200:
+                                    pick = _pick_appimage_asset_from_release_html(web_resp.text, repo_try, asset_name)
+                                    if pick is not None:
+                                        pick_name, pick_url = pick
+                                        download_candidates.append((repo_try, pick_name, pick_url))
+                    if not download_candidates:
+                        # 保底使用原始直链规则；若失败会返回清晰的 HTTP 错误。
+                        download_candidates.append((repo, asset_name, _github_release_asset_url(repo, asset_name, release_tag)))
+
+                errors: list[str] = []
+                deduped: list[tuple[str, str, str]] = []
+                seen: set[str] = set()
+                for cand in download_candidates:
+                    sig = f"{cand[0]}|{cand[1]}|{cand[2]}"
+                    if sig in seen:
+                        continue
+                    seen.add(sig)
+                    deduped.append(cand)
+
+                success = False
+                for repo_try, name_try, url_try in deduped:
+                    async with hc.stream("GET", url_try) as resp:
+                        if resp.status_code != 200:
+                            errors.append(f"{name_try} @ {repo_try} -> HTTP {resp.status_code}")
+                            continue
+                        repo = repo_try
+                        asset_name = name_try
+                        url = url_try
+                        dist_file = self._dist_dir / asset_name
+                        success = True
+                        total = int(resp.headers.get("content-length") or 0)
+                        received = 0
+                        with dist_file.open("wb") as out:
+                            async for chunk in resp.aiter_bytes(1024 * 256):
+                                if not chunk:
+                                    continue
+                                out.write(chunk)
+                                received += len(chunk)
+                                if total > 0:
+                                    pct = min(99, int(received * 100 / total))
+                                    self._set_job("downloading", f"下载中 {pct}% ({received // (1024 * 1024)} MiB)")
+                                else:
+                                    self._set_job("downloading", f"下载中… ({received // (1024 * 1024)} MiB)")
+                        break
+                if not success:
+                    msg = f"下载失败，候选均不可用: {' | '.join(errors)}"
+                    raise RuntimeError(msg)
             finally:
                 if own_client:
                     await hc.aclose()
