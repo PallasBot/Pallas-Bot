@@ -175,6 +175,14 @@ def _ob_parse_port(raw: object) -> int | None:
     return p if 1 <= p <= 65535 else None
 
 
+def _ob_normalize_target_host(raw_host: str) -> str:
+    """将监听地址归一为客户端可连接地址。"""
+    h = (raw_host or "").strip()
+    if h in ("0.0.0.0", "::", "[::]"):
+        return "127.0.0.1"
+    return h
+
+
 def resolve_onebot_ws_settings(config: Config) -> tuple[str, str, str]:
     cfg_host = str(getattr(config, "pallas_protocol_onebot_host", "") or "").strip()
     cfg_port = getattr(config, "pallas_protocol_onebot_port", None)
@@ -198,6 +206,7 @@ def resolve_onebot_ws_settings(config: Config) -> tuple[str, str, str]:
         or _ob_env_first("PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME", "ONEBOT_CLIENT_NAME")
         or "pallas"
     ).strip() or "pallas"
+    host = _ob_normalize_target_host(host)
     if not host or port is None:
         return "", name, token
     return f"ws://{host}:{port}{_ONEBOT_WS_PATH}", name, token

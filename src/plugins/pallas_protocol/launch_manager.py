@@ -125,6 +125,17 @@ class LaunchManager:
         if not command:
             return
         if Path(command).suffix == ".AppImage":
+            cmd_path = Path(command)
+            args = [str(x) for x in (account.get("args") or [])]
+            if hasattr(os, "geteuid") and os.geteuid() == 0 and "--no-sandbox" not in args:
+                account["args"] = [*args, "--no-sandbox"]
+            working_dir = str(account.get("working_dir", "")).strip()
+            if not working_dir:
+                account["working_dir"] = str(cmd_path.parent)
+            else:
+                wd_path = Path(working_dir)
+                if (wd_path.exists() and wd_path.is_file()) or wd_path.suffix == ".AppImage":
+                    account["working_dir"] = str(wd_path.parent)
             return
         if Path(command).name.lower() not in ("node", "node.exe"):
             return
@@ -140,13 +151,25 @@ class LaunchManager:
         appimage_args = [
             str(x) for x in (getattr(self._config, "pallas_protocol_linux_appimage_args", []) or [])
         ]
+        if hasattr(os, "geteuid") and os.geteuid() == 0 and "--no-sandbox" not in appimage_args:
+            # Electron AppImage 在 root 下运行需要显式关闭 sandbox。
+            appimage_args.append("--no-sandbox")
         account["command"] = str(appimage)
         account["args"] = appimage_args
+        # AppImage 启动时工作目录应为其所在目录，避免把二进制文件路径当目录创建。
+        account["working_dir"] = str(appimage.parent)
 
     def prepare_dirs(self, account: dict) -> None:
         program_dir_raw = str(account.get("working_dir", "")).strip()
         if program_dir_raw:
-            Path(program_dir_raw).mkdir(parents=True, exist_ok=True)
+            program_dir_path = Path(program_dir_raw)
+            # 兼容历史数据：working_dir 可能被写成 AppImage 文件路径。
+            if program_dir_path.exists() and program_dir_path.is_file():
+                program_dir_path = program_dir_path.parent
+            elif program_dir_path.suffix == ".AppImage":
+                program_dir_path = program_dir_path.parent
+            program_dir_path.mkdir(parents=True, exist_ok=True)
+            account["working_dir"] = str(program_dir_path)
         account_data_dir = str(account.get("account_data_dir", "")).strip()
         if account_data_dir:
             Path(account_data_dir).mkdir(parents=True, exist_ok=True)
@@ -225,8 +248,14 @@ class LaunchManager:
         if not program_dir_raw:
             return ["program_dir 为空"]
         workdir = Path(program_dir_raw)
+        # 兼容历史数据：working_dir 可能仍是 AppImage 文件路径，自动纠正为父目录。
+        if (workdir.exists() and workdir.is_file()) or workdir.suffix == ".AppImage":
+            workdir = workdir.parent
+            account["working_dir"] = str(workdir)
         if not workdir.exists():
-            return [f"program_dir 不存在: {program_dir_raw}"]
+            return [f"program_dir 不存在: {workdir}"]
+        if not workdir.is_dir():
+            return [f"program_dir 不是目录: {workdir}"]
 
         args = [str(item) for item in (account.get("args") or [])]
         script_like = next((arg for arg in args if arg.endswith((".mjs", ".js", ".cjs"))), None)

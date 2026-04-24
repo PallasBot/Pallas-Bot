@@ -609,14 +609,14 @@ def render_runtime_page(base_path: str) -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>运行时更新</title>
+  <title>更新</title>
   <style>{NAPCAT_SHELL_CSS}</style>
 </head>
 <body>
   <input type="hidden" id="token" value="" autocomplete="off" />
   <div class="shell">
     <header class="topbar">
-      <div class="brand">Pallas <span>运行时</span></div>
+      <div class="brand">Pallas <span>更新</span></div>
       <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="margin-left:auto;display:inline-flex;align-items:center">← 返回仪表盘</a>
     </header>
     <div class="card">
@@ -625,17 +625,75 @@ def render_runtime_page(base_path: str) -> str:
         <a href="https://napneko.github.io/guide/boot/Shell" target="_blank" rel="noopener">NapCat Shell 文档</a>。
         标准 <code>napcat.mjs</code> 请将配置 <code>pallas_protocol_release_asset</code> 设为 <code>NapCat.Shell.zip</code>。
       </p>
-      <div class="row">
-        <button class="btn" type="button" onclick="downloadRuntime()">下载 / 更新</button>
-        <button class="btn secondary" type="button" onclick="rescanRuntime()">刷新检测</button>
-        <button class="btn secondary" type="button" onclick="refreshRuntime()">刷新状态</button>
+      <div class="kpi-grid">
+        <div class="kpi"><div class="k">任务状态</div><div class="v" id="rtStatus">-</div></div>
+        <div class="kpi"><div class="k">当前阶段</div><div class="v" id="rtStage">-</div></div>
+        <div class="kpi"><div class="k">目标资产</div><div class="v" id="rtAsset">-</div></div>
+        <div class="kpi"><div class="k">最后刷新</div><div class="v" id="rtTime">-</div></div>
       </div>
-      <pre class="mono muted" id="runtimeStatus" style="max-height:min(70vh,720px);overflow:auto;margin-top:14px;font-size:12px"></pre>
+      <div class="card" style="margin:10px 0 0;box-shadow:none">
+        <div class="field" style="margin-bottom:10px">
+          <label>状态消息</label>
+          <div class="mono" id="rtMessage">-</div>
+        </div>
+        <div class="field" style="margin-bottom:10px">
+          <label>下载来源</label>
+          <div class="mono" id="rtSource">-</div>
+        </div>
+        <div class="field" style="margin-bottom:0">
+          <label>运行目录</label>
+          <div class="mono" id="rtProgramDir">-</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="btnUpdate" type="button" onclick="downloadRuntime()">立即更新</button>
+        <button class="btn secondary" id="btnRescan" type="button" onclick="rescanRuntime()">刷新检测</button>
+        <button class="btn secondary" id="btnRefreshRuntime" type="button" onclick="refreshRuntime()">刷新状态</button>
+      </div>
+      <details style="margin-top:14px">
+        <summary class="muted" style="cursor:pointer">查看原始状态 JSON（排障用）</summary>
+        <pre class="mono muted" id="runtimeStatus" style="max-height:min(70vh,720px);overflow:auto;margin-top:8px;font-size:12px"></pre>
+      </details>
     </div>
   </div>
   <script>
     const basePath = {p};
     document.body.setAttribute("data-theme", localStorage.getItem("pallas_protocol_theme") || "light");
+    function setBtnBusy(el, busy, idleText, busyText) {{
+      if (!el) return;
+      el.disabled = !!busy;
+      el.textContent = busy ? busyText : idleText;
+      el.classList.toggle("busy", !!busy);
+    }}
+    function statusText(s) {{
+      if (!s) return "未知";
+      const map = {{
+        idle: "空闲",
+        downloading: "下载中",
+        extracting: "处理中",
+        installing: "安装中",
+        done: "完成",
+        error: "失败",
+      }};
+      return map[s] || s;
+    }}
+    function stageText(msg) {{
+      const m = String(msg || "");
+      if (!m) return "-";
+      if (m.includes("下载")) return "下载";
+      if (m.includes("解压") || m.includes("安装")) return "安装/解包";
+      if (m.includes("检测")) return "检测";
+      if (m.includes("完成")) return "完成";
+      if (m.includes("失败") || m.includes("错误")) return "失败";
+      return "处理中";
+    }}
+    function setText(id, value) {{
+      const el = document.getElementById(id);
+      if (!el) return;
+      const v = String(value || "-");
+      el.textContent = v;
+      el.title = v;
+    }}
     async function api(path, options = {{}}) {{
       const token = document.getElementById("token").value.trim();
       const headers = options.headers || {{}};
@@ -647,24 +705,49 @@ def render_runtime_page(base_path: str) -> str:
       return res.json();
     }}
     async function refreshRuntime() {{
+      setBtnBusy(document.getElementById("btnRefreshRuntime"), true, "刷新状态", "刷新中...");
       try {{
         const data = await api("/api/runtime");
         document.getElementById("runtimeStatus").textContent = JSON.stringify(data, null, 2);
+        const job = data.job || {{}};
+        const d = data.download || {{}};
+        const manifest = data.manifest || {{}};
+        setText("rtStatus", statusText(job.status));
+        setText("rtStage", stageText(job.message));
+        setText("rtAsset", d.asset || manifest.asset_name || "-");
+        setText("rtMessage", job.message || "-");
+        setText("rtSource", manifest.source_url || `${{d.repo || "-"}} @ ${{d.tag || "latest"}}`);
+        setText("rtProgramDir", data.effective_program_dir || manifest.program_dir || "-");
+        setText("rtTime", new Date().toLocaleTimeString());
       }} catch (e) {{
         document.getElementById("runtimeStatus").textContent = String(e.message || e);
+        setText("rtStatus", "失败");
+        setText("rtStage", "错误");
+        setText("rtMessage", String(e.message || e));
+        setText("rtTime", new Date().toLocaleTimeString());
+      }} finally {{
+        setBtnBusy(document.getElementById("btnRefreshRuntime"), false, "刷新状态", "刷新中...");
       }}
     }}
     async function downloadRuntime() {{
+      setBtnBusy(document.getElementById("btnUpdate"), true, "立即更新", "更新中...");
       try {{
         await api("/api/runtime/download", {{ method: "POST" }});
         await refreshRuntime();
       }} catch (e) {{ alert(e.message); }}
+      finally {{
+        setBtnBusy(document.getElementById("btnUpdate"), false, "立即更新", "更新中...");
+      }}
     }}
     async function rescanRuntime() {{
+      setBtnBusy(document.getElementById("btnRescan"), true, "刷新检测", "检测中...");
       try {{
         await api("/api/runtime/rescan", {{ method: "POST" }});
         await refreshRuntime();
       }} catch (e) {{ alert(e.message); }}
+      finally {{
+        setBtnBusy(document.getElementById("btnRescan"), false, "刷新检测", "检测中...");
+      }}
     }}
     (function sync() {{
       const u = new URL(location.href);

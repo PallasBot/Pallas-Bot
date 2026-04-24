@@ -441,6 +441,17 @@ class PallasProtocolService:
             command, args, env_map, cwd_quick = self._launch.resolve_boot_launch(
                 account, command, args, env_map, self._resolve_qq
             )
+            if (
+                os.name != "nt"
+                and os.geteuid() == 0
+                and "--no-sandbox" not in args
+                and (
+                    Path(command).suffix == ".AppImage"
+                    or any(Path(str(a)).suffix == ".AppImage" for a in args)
+                )
+            ):
+                # root 启动 Electron AppImage 时带 --no-sandbox。
+                args.append("--no-sandbox")
             launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
             if launch_issues:
                 raise ValueError("; ".join(launch_issues))
@@ -599,6 +610,8 @@ class PallasProtocolService:
         need_restart = self._napcat_core_running(account_id, account)
         self._launch.apply_defaults(account, self._resolve_qq)
         merged = self._configs.update_account_configs(account, payload, self._resolve_qq)
+        account["updated_at"] = datetime.now(UTC).isoformat()
+        self._save_accounts()
         restarted = bool(need_restart and restart)
         if restarted:
             await self.restart_account(account_id)

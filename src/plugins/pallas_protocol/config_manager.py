@@ -48,6 +48,7 @@ class AccountConfigManager:
             current = self.safe_read_json(onebot_path)
             merged = {**current, **payload["onebot"]}
             onebot_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+            self._sync_account_onebot_fields(account, merged)
         if "napcat" in payload and isinstance(payload["napcat"], dict):
             current = self.safe_read_json(napcat_path)
             merged = {**current, **payload["napcat"]}
@@ -57,6 +58,7 @@ class AccountConfigManager:
             current = self.safe_read_json(webui_path)
             merged = {**current, **payload["webui"]}
             webui_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+            self._sync_account_webui_fields(account, merged)
 
         return self.get_account_configs(account, resolve_qq)
 
@@ -232,3 +234,33 @@ class AccountConfigManager:
             return data if isinstance(data, dict) else {}
         except Exception:
             return {}
+
+    def _sync_account_onebot_fields(self, account: dict, onebot_json: dict) -> None:
+        network = onebot_json.get("network")
+        if not isinstance(network, dict):
+            return
+        clients = network.get("websocketClients")
+        if not isinstance(clients, list) or not clients:
+            return
+        first = clients[0]
+        if not isinstance(first, dict):
+            return
+        url = str(first.get("url", "")).strip()
+        name = str(first.get("name", "")).strip()
+        token = str(first.get("token", "")).strip()
+        if url:
+            account["ws_url"] = url
+        if name:
+            account["ws_name"] = name
+        account["ws_token"] = token
+
+    def _sync_account_webui_fields(self, account: dict, webui_json: dict) -> None:
+        try:
+            port = int(webui_json.get("port"))
+            if 1 <= port <= 65535:
+                account["webui_port"] = port
+        except (TypeError, ValueError):
+            pass
+        token = str(webui_json.get("token", "")).strip()
+        if token:
+            account["webui_token"] = token
