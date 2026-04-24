@@ -151,6 +151,22 @@ jobs:
             ```bash
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:${{ steps.get_version.outputs.version }}
             ```
+
+            ## WebUI 使用文档
+
+            - 主仓插件说明（自动下载/部署配置）：[src/plugins/pallas_webui/README.md](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/src/plugins/pallas_webui/README.md)
+            - 前端仓库说明（开发/发版/对接）：[TogetsuDo/Pallas-Bot-WebUI README](https://github.com/TogetsuDo/Pallas-Bot-WebUI/blob/main/README.md)
+
+            ## WebUI 快速配置（可复制）
+
+            ```env
+            PALLAS_WEBUI_DIST_ZIP_URL=
+            PALLAS_WEBUI_DIST_ZIP_REPO=TogetsuDo/Pallas-Bot-WebUI
+            PALLAS_WEBUI_DIST_ZIP_TAG=
+            PALLAS_WEBUI_DIST_ZIP_ASSET=dist.zip
+            ```
+
+            说明：`PALLAS_WEBUI_DIST_ZIP_TAG` 留空表示自动跟随 latest；如需固定版本请填写具体 tag（例如 `v0.2.0`）。
           files: |
             pallas-webui-dist.zip
           draft: false
