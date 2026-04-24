@@ -694,6 +694,14 @@ class _MongoAggregateBody(BaseModel):
     pipeline: list[Any] = Field(default_factory=list, max_length=16)
 
 
+class _DbTableRowUpsertBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    table: str = Field(min_length=1, max_length=64)
+    row_id: int = Field(ge=1)
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
 class _AiExtensionConfigBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -792,6 +800,126 @@ async def _apply_user_config_patch(user_id: int, body: _UserConfigPatch) -> dict
     return user_config_to_public(doc)
 
 
+def _normalize_table_name(raw: str) -> str:
+    name = (raw or "").strip().lower()
+    aliases = {
+        "config": "bot_config",
+        "bot_config": "bot_config",
+        "group_config": "group_config",
+        "user_config": "user_config",
+    }
+    return aliases.get(name, "")
+
+
+async def _get_db_table_row_public(table: str, row_id: int) -> dict[str, Any] | None:
+    from src.common.db import make_bot_config_repository, make_group_config_repository, make_user_config_repository
+    from src.common.db.pallas_console_data import bot_config_to_public, group_config_to_public, user_config_to_public
+
+    t = _normalize_table_name(table)
+    if t == "bot_config":
+        repo = make_bot_config_repository()
+        row = await repo.get(int(row_id), ignore_cache=True)
+        return None if row is None else bot_config_to_public(row)
+    if t == "group_config":
+        repo = make_group_config_repository()
+        row = await repo.get(int(row_id), ignore_cache=True)
+        return None if row is None else group_config_to_public(row)
+    if t == "user_config":
+        repo = make_user_config_repository()
+        row = await repo.get(int(row_id), ignore_cache=True)
+        return None if row is None else user_config_to_public(row)
+    raise ValueError("仅支持 config(bot_config)/group_config/user_config")
+
+
+async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) -> dict[str, Any]:
+    from src.common.db import make_bot_config_repository, make_group_config_repository, make_user_config_repository
+
+    t = _normalize_table_name(table)
+    payload = dict(data or {})
+    if t == "bot_config":
+        repo = make_bot_config_repository()
+        allowed = {"admins", "disabled_plugins", "auto_accept_friend", "auto_accept_group", "security", "taken_name", "drunk"}
+        for k in payload:
+            if k not in allowed:
+                raise ValueError(f"bot_config 不允许字段: {k}")
+        await repo.get_or_create(int(row_id), disabled_plugins=[])
+        for k, v in payload.items():
+            await repo.upsert_field(int(row_id), k, v)
+        await repo.invalidate_cache()
+        got = await _get_db_table_row_public("bot_config", int(row_id))
+        if got is None:
+            raise ValueError("upsert 后回读失败")
+        return got
+    if t == "group_config":
+        repo = make_group_config_repository()
+        allowed = {"disabled_plugins", "roulette_mode", "banned", "sing_progress"}
+        for k in payload:
+            if k not in allowed:
+                raise ValueError(f"group_config 不允许字段: {k}")
+        await repo.get_or_create(int(row_id), disabled_plugins=[])
+        for k, v in payload.items():
+            await repo.upsert_field(int(row_id), k, v)
+        await repo.invalidate_cache()
+        got = await _get_db_table_row_public("group_config", int(row_id))
+        if got is None:
+            raise ValueError("upsert 后回读失败")
+        return got
+    if t == "user_config":
+        repo = make_user_config_repository()
+        allowed = {"banned"}
+        for k in payload:
+            if k not in allowed:
+                raise ValueError(f"user_config 不允许字段: {k}")
+        await repo.get_or_create(int(row_id), banned=False)
+        for k, v in payload.items():
+            await repo.upsert_field(int(row_id), k, v)
+        await repo.invalidate_cache()
+        got = await _get_db_table_row_public("user_config", int(row_id))
+        if got is None:
+            raise ValueError("upsert 后回读失败")
+        return got
+    raise ValueError("仅支持 config(bot_config)/group_config/user_config")
+
+
+async def _delete_db_table_row(table: str, row_id: int) -> bool:
+    from src.common.db import get_db_backend
+
+    t = _normalize_table_name(table)
+    if not t:
+        raise ValueError("仅支持 config(bot_config)/group_config/user_config")
+    backend = get_db_backend()
+    if backend == "mongodb":
+        from src.common.db.modules import BotConfigModule, GroupConfigModule, UserConfigModule
+
+        model_map = {
+            "bot_config": (BotConfigModule, "account"),
+            "group_config": (GroupConfigModule, "group_id"),
+            "user_config": (UserConfigModule, "user_id"),
+        }
+        model, key = model_map[t]
+        doc = await model.find_one({key: int(row_id)})
+        if doc is None:
+            return False
+        await doc.delete()
+        return True
+    if backend in ("postgres", "postgresql", "pg"):
+        from sqlalchemy import delete
+
+        from src.common.db.repository_pg import BotConfigRow, GroupConfigRow, UserConfigRow, get_session
+
+        row_map = {
+            "bot_config": (BotConfigRow, "account"),
+            "group_config": (GroupConfigRow, "group_id"),
+            "user_config": (UserConfigRow, "user_id"),
+        }
+        row_class, key = row_map[t]
+        async with get_session() as session:
+            result = await session.execute(delete(row_class).where(getattr(row_class, key) == int(row_id)))
+            await session.commit()
+            return bool(int(result.rowcount or 0) > 0)
+    raise ValueError(f"不支持的 DB 后端: {backend}")
+
+
 def register_extended_api(
     app,
     *,
@@ -855,11 +983,7 @@ def register_extended_api(
             {
                 "ok": True,
                 "data": {
-                    "message": (
-                        "「按 Bot 禁用插件」等规则存于数据库（config / group_config），"
-                        "请用本控制台的 GET/PUT /pallas/api/bot-configs 与 group-configs 修改。"
-                        "各插件 Pydantic 专属项仍多数在 .env 与 data/ 目录，本页 /plugins 为只读元数据。"
-                    ),
+                    "message": "",
                 },
             }
         )
@@ -905,6 +1029,61 @@ def register_extended_api(
             logger.exception("Pallas 控制台: Mongo aggregate 失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": {"rows": rows, "truncated_to": len(rows)}})
+
+    @router.get(f"{x}/db/table-row", include_in_schema=True)
+    async def _db_table_row_get(
+        table: str = Query(..., description="config|bot_config|group_config|user_config"),
+        row_id: int = Query(..., ge=1, description="主键值"),
+    ) -> JSONResponse:
+        try:
+            data = await _get_db_table_row_public(table, int(row_id))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: 读取表行失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if data is None:
+            raise HTTPException(status_code=404, detail="未找到该行")
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(f"{x}/db/table-row", include_in_schema=True)
+    async def _db_table_row_put(
+        body: _DbTableRowUpsertBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        if not body.data:
+            raise HTTPException(status_code=400, detail="data 为空")
+        try:
+            data = await _upsert_db_table_row(body.table, int(body.row_id), dict(body.data))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: 写入表行失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        _drop_read_cache(("db_overview", "bot_configs_list", "group_configs_list", "instances"))
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.delete(f"{x}/db/table-row", include_in_schema=True)
+    async def _db_table_row_delete(
+        table: str = Query(..., description="config|bot_config|group_config|user_config"),
+        row_id: int = Query(..., ge=1, description="主键值"),
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            deleted = await _delete_db_table_row(table, int(row_id))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: 删除表行失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        _drop_read_cache(("db_overview", "bot_configs_list", "group_configs_list", "instances"))
+        if not deleted:
+            raise HTTPException(status_code=404, detail="未找到该行")
+        return JSONResponse({"ok": True, "data": {"deleted": True}})
 
     @router.get(f"{x}/instances", include_in_schema=True)
     async def _instances() -> JSONResponse:
