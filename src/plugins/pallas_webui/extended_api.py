@@ -488,6 +488,33 @@ async def _call_get_message_history(
     return out
 
 
+async def _collect_online_bot_profiles() -> dict[str, dict[str, Any]]:
+    """尽力读取在线 OneBot V11 账号资料，失败时忽略单个账号并保留其它结果。"""
+    out: dict[str, dict[str, Any]] = {}
+    for key, bot in get_bots().items():
+        self_id = str(getattr(bot, "self_id", "") or "").strip()
+        if not self_id:
+            continue
+        if not _is_onebot_v11_bot(bot):
+            continue
+        try:
+            raw = await bot.call_api("get_login_info")  # type: ignore[union-attr]
+        except Exception:  # noqa: BLE001
+            logger.debug("Pallas 控制台: get_login_info 失败 key=%s self_id=%s", key, self_id)
+            continue
+        if not isinstance(raw, dict):
+            continue
+        nickname = str(raw.get("nickname") or "").strip()
+        user_id = raw.get("user_id")
+        out[self_id] = {
+            "nickname": nickname,
+            "user_id": int(user_id) if isinstance(user_id, int) else None,
+            "connection_key": str(key),
+            "adapter": _bot_adapter_label(bot),
+        }
+    return out
+
+
 async def _friend_requests_overview(
     *,
     self_id: str | None,
@@ -886,10 +913,12 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             db_bots = await list_all_bot_configs_public()
             snap = pallas_protocol_snapshot()
+            bot_profiles = await _collect_online_bot_profiles()
             payload: dict[str, Any] = {
                 "nonebot_bots": _list_bots_dict(),
                 "db_bot_configs": db_bots,
                 "pallas_protocol": snap,
+                "bot_profiles": bot_profiles,
             }
             if snap is not None:
                 payload["napcat"] = snap
