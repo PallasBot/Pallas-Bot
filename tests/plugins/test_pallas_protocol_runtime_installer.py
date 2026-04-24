@@ -3,7 +3,9 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.plugins.pallas_protocol.runtime.installer import (
+    _asset_name_from_url,
     _github_release_asset_url,
+    _looks_like_http_url,
     _pick_appimage_asset_from_release,
     _pick_appimage_asset_from_release_html,
     _safe_extract_zip,
@@ -153,3 +155,9 @@ def test_pick_appimage_asset_from_release_html_prefers_arch_match() -> None:
         "QQ-44343_NapCat-v4.18.0-amd64.AppImage",
         "https://github.com/NapNeko/NapCatAppImageBuild/releases/download/v4.18.0/QQ-44343_NapCat-v4.18.0-amd64.AppImage",
     )
+
+
+def test_url_helpers() -> None:
+    u = "https://github.com/NapNeko/NapCatAppImageBuild/releases/download/v4.18.0/QQ-44343_NapCat-v4.18.0-amd64.AppImage"
+    assert _looks_like_http_url(u) is True
+    assert _asset_name_from_url(u) == "QQ-44343_NapCat-v4.18.0-amd64.AppImage"

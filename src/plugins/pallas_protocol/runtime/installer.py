@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from stat import S_IXGRP, S_IXOTH, S_IXUSR
 from typing import Any, Literal
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 import httpx
 
@@ -47,6 +47,16 @@ def _github_release_api_url(repo: str, tag: str = "") -> str:
     if not tag.strip():
         return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/latest"
     return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/tags/{tag.strip()}"
+
+
+def _looks_like_http_url(value: str) -> bool:
+    s = (value or "").strip()
+    return s.startswith(("http://", "https://"))
+
+
+def _asset_name_from_url(value: str) -> str:
+    parsed = urlparse(value)
+    return Path(parsed.path).name.strip()
 
 
 def _arch_tokens_from_asset_name(asset_name: str) -> tuple[str, ...]:
@@ -386,14 +396,16 @@ class NapCatRuntimeStore:
 
     async def download_and_install(self, *, client: httpx.AsyncClient | None = None) -> RuntimeManifest:
         async with self._lock:
-            asset_name = self._asset_name()
+            configured_asset = self._asset_name()
+            direct_asset_url = configured_asset if _looks_like_http_url(configured_asset) else ""
+            asset_name = _asset_name_from_url(direct_asset_url) if direct_asset_url else configured_asset
             if not asset_name:
                 msg = "未配置 pallas_protocol_release_asset，无法下载"
                 raise ValueError(msg)
             self._set_job("downloading", "准备下载…")
             repo = self._repo()
             release_tag = self._release_tag()
-            url = _github_release_asset_url(repo, asset_name, release_tag)
+            url = direct_asset_url or _github_release_asset_url(repo, asset_name, release_tag)
             self._dist_dir.mkdir(parents=True, exist_ok=True)
             dist_file = self._dist_dir / asset_name
 
@@ -404,7 +416,7 @@ class NapCatRuntimeStore:
                 headers={"User-Agent": "Pallas-Bot-PallasProtocol/1.0"},
             )
             try:
-                if asset_is_linux_appimage(asset_name):
+                if asset_is_linux_appimage(asset_name) and not direct_asset_url:
                     rel_api = _github_release_api_url(repo, release_tag)
                     rel_resp = await hc.get(rel_api)
                     if rel_resp.status_code == 200:
