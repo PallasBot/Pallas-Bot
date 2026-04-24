@@ -27,6 +27,54 @@ class LaunchManager:
         self._runtime_dir_provider = runtime_dir_provider
         self._platform = platform or get_napcat_platform()
 
+    def _managed_runtime_extract_root(self) -> Path:
+        return (self._plugin_data_dir / "runtime_extract").resolve()
+
+    def _is_managed_runtime_path(self, raw: str) -> bool:
+        s = str(raw or "").strip()
+        if not s:
+            return False
+        p = Path(s)
+        try:
+            rp = p.resolve()
+        except OSError:
+            return False
+        root = self._managed_runtime_extract_root()
+        return rp == root or root in rp.parents
+
+    def _refresh_managed_runtime_refs(self, account: dict, runtime_path: str) -> None:
+        """runtime 更新后，自动把账号内指向旧 runtime_extract 的路径切到最新。"""
+        if not runtime_path:
+            return
+        rt = Path(runtime_path)
+        rt_parent = str(rt.parent)
+
+        cur_prog = str(account.get("program_dir", "")).strip()
+        if cur_prog and self._is_managed_runtime_path(cur_prog) and Path(cur_prog) != rt:
+            account["program_dir"] = runtime_path
+
+        cur_work = str(account.get("working_dir", "")).strip()
+        if cur_work and self._is_managed_runtime_path(cur_work):
+            # working_dir 统一落到最新 AppImage 所在目录。
+            account["working_dir"] = rt_parent
+
+        cmd = str(account.get("command", "") or "").strip()
+        if cmd.endswith(".AppImage") and self._is_managed_runtime_path(cmd) and Path(cmd) != rt:
+            account["command"] = runtime_path
+
+        args = [str(a) for a in (account.get("args") or [])]
+        if not args:
+            return
+        changed = False
+        for i, a in enumerate(args):
+            if not a.endswith(".AppImage"):
+                continue
+            if self._is_managed_runtime_path(a) and Path(a) != rt:
+                args[i] = runtime_path
+                changed = True
+        if changed:
+            account["args"] = args
+
     def apply_defaults(self, account: dict, resolve_qq) -> None:
         qq = resolve_qq(account)
         if qq:
@@ -43,11 +91,15 @@ class LaunchManager:
             account["args"] = []
 
         program_dir_raw = str(account.get("program_dir", "")).strip()
+        lazy_rt = self._runtime_dir_provider() if self._runtime_dir_provider else None
+        runtime_str = str(lazy_rt).strip() if lazy_rt else ""
+        configured_program_dir = str(getattr(self._config, "pallas_protocol_program_dir", "")).strip()
         if not program_dir_raw:
-            configured_program_dir = str(getattr(self._config, "pallas_protocol_program_dir", "")).strip()
-            lazy_rt = self._runtime_dir_provider() if self._runtime_dir_provider else None
-            runtime_str = str(lazy_rt).strip() if lazy_rt else ""
             program_dir_raw = configured_program_dir or runtime_str or str(self._resource_root / "napcat")
+        elif not configured_program_dir:
+            # 未显式固定 program_dir 时，允许受管 runtime 路径自动前移到最新下载版本。
+            self._refresh_managed_runtime_refs(account, runtime_str)
+            program_dir_raw = str(account.get("program_dir", "")).strip() or program_dir_raw
         account["program_dir"] = program_dir_raw
         account["working_dir"] = program_dir_raw
 
