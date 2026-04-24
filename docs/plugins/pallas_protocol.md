@@ -61,9 +61,9 @@
 
 ### 运行时下载
 
-- `pallas_protocol_github_repo`（`PALLAS_PROTOCOL_GITHUB_REPO`）
+- `pallas_protocol_github_repo`（`PALLAS_PROTOCOL_GITHUB_REPO`，默认按平台：Linux 为 `NapNeko/NapCatAppImageBuild`，其余为 `NapNeko/NapCatQQ`）
 - `pallas_protocol_release_tag`（`PALLAS_PROTOCOL_RELEASE_TAG`，空表示 latest）
-- `pallas_protocol_release_asset`（`PALLAS_PROTOCOL_RELEASE_ASSET`，空表示按平台默认）
+- `pallas_protocol_release_asset`（`PALLAS_PROTOCOL_RELEASE_ASSET`，空表示按平台默认；Linux 默认 `QQ-x86_64.AppImage`/`QQ-aarch64.AppImage`）
 - `pallas_protocol_auto_download_runtime`（`PALLAS_PROTOCOL_AUTO_DOWNLOAD_RUNTIME`）
 
 ### OneBot 连接
@@ -76,6 +76,10 @@
 ### Linux Docker（可选）
 
 - `pallas_protocol_linux_use_docker`（`PALLAS_PROTOCOL_LINUX_USE_DOCKER`）
+- `pallas_protocol_linux_use_xvfb`（`PALLAS_PROTOCOL_LINUX_USE_XVFB`，Linux 非 Docker 默认 `true`）
+- `pallas_protocol_linux_xvfb_command`（`PALLAS_PROTOCOL_LINUX_XVFB_COMMAND`，默认 `xvfb-run`）
+- `pallas_protocol_linux_xvfb_args`（`PALLAS_PROTOCOL_LINUX_XVFB_ARGS`，默认 `["--auto-servernum","--server-args=-screen 0 1280x720x24"]`）
+- `pallas_protocol_linux_appimage_args`（`PALLAS_PROTOCOL_LINUX_APPIMAGE_ARGS`，默认 `["--appimage-extract-and-run"]`）
 - `pallas_protocol_docker_image`（`PALLAS_PROTOCOL_DOCKER_IMAGE`）
 - `pallas_protocol_docker_onebot_host`（`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`）
 - `pallas_protocol_docker_internal_webui_port`（`PALLAS_PROTOCOL_DOCKER_INTERNAL_WEBUI_PORT`）

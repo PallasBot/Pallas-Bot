@@ -7,6 +7,8 @@ from src.plugins.pallas_protocol.runtime.installer import (
     _safe_extract_zip,
     asset_is_windows_onekey,
     default_release_asset_for_platform,
+    default_release_repo_for_platform,
+    find_appimage_under_dir,
     find_napcat_program_dir,
     find_onekey_post_install_program_dir,
     resolve_program_dir_under_extract,
@@ -98,6 +100,31 @@ def test_asset_is_windows_onekey() -> None:
 def test_default_release_asset_for_platform() -> None:
     with patch("src.plugins.pallas_protocol.runtime.installer.sys.platform", "win32"):
         assert default_release_asset_for_platform() == "NapCat.Shell.Windows.OneKey.zip"
-    for plat in ("linux", "linux2", "darwin", "freebsd15"):
+    with (
+        patch("src.plugins.pallas_protocol.runtime.installer.sys.platform", "linux"),
+        patch("src.plugins.pallas_protocol.runtime.installer.py_platform.machine", return_value="x86_64"),
+    ):
+        assert default_release_asset_for_platform() == "QQ-x86_64.AppImage"
+    with (
+        patch("src.plugins.pallas_protocol.runtime.installer.sys.platform", "linux"),
+        patch("src.plugins.pallas_protocol.runtime.installer.py_platform.machine", return_value="aarch64"),
+    ):
+        assert default_release_asset_for_platform() == "QQ-aarch64.AppImage"
+    for plat in ("darwin", "freebsd15"):
         with patch("src.plugins.pallas_protocol.runtime.installer.sys.platform", plat):
             assert default_release_asset_for_platform() == "NapCat.Shell.zip", plat
+
+
+def test_default_release_repo_for_platform() -> None:
+    with patch("src.plugins.pallas_protocol.runtime.installer.sys.platform", "linux"):
+        assert default_release_repo_for_platform() == "NapNeko/NapCatAppImageBuild"
+    for plat in ("win32", "darwin", "freebsd15"):
+        with patch("src.plugins.pallas_protocol.runtime.installer.sys.platform", plat):
+            assert default_release_repo_for_platform() == "NapNeko/NapCatQQ"
+
+
+def test_find_appimage_under_dir(tmp_path: Path) -> None:
+    app = tmp_path / "NapCat" / "QQ-x86_64.AppImage"
+    app.parent.mkdir(parents=True)
+    app.write_bytes(b"ELF")
+    assert find_appimage_under_dir(tmp_path) == app

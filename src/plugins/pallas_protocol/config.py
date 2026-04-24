@@ -7,7 +7,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from .contract import resolve_public_mount_path
-from .runtime.installer import default_release_asset_for_platform
+from .runtime.installer import default_release_asset_for_platform, default_release_repo_for_platform
 
 
 class Config(BaseModel):
@@ -41,7 +41,10 @@ class Config(BaseModel):
     pallas_protocol_webui_port_min: int = Field(default=6099, ge=1024, le=65534)
     pallas_protocol_webui_port_max: int = Field(default=7999, ge=1025, le=65535)
     # 从 GitHub Releases 直链下载 Shell/一键包（空字符串表示 latest）
-    pallas_protocol_github_repo: str = "NapNeko/NapCatQQ"
+    pallas_protocol_github_repo: str = Field(
+        default_factory=default_release_repo_for_platform,
+        description="空时按平台默认：Windows/非 Linux 使用 NapNeko/NapCatQQ，Linux 使用 NapNeko/NapCatAppImageBuild",
+    )
     pallas_protocol_release_tag: str = ""
     pallas_protocol_release_asset: str = Field(
         default_factory=default_release_asset_for_platform,
@@ -75,6 +78,22 @@ class Config(BaseModel):
             "仅 Linux 为 true 时用 Docker 镜像；false 时本机 node+Shell 运行时，"
             "多账号=多进程+独立 data 与 webui_port"
         ),
+    )
+    pallas_protocol_linux_use_xvfb: bool = Field(
+        default=True,
+        description="仅 Linux 且非 Docker 时，是否用 xvfb-run 包裹本地启动（无头环境推荐开启）",
+    )
+    pallas_protocol_linux_xvfb_command: str = Field(
+        default="xvfb-run",
+        description="Linux 本地无头启动命令（通常为 xvfb-run）",
+    )
+    pallas_protocol_linux_xvfb_args: list[str] = Field(
+        default_factory=lambda: ["--auto-servernum", "--server-args=-screen 0 1280x720x24"],
+        description="xvfb-run 默认参数；可按机器图形栈调整",
+    )
+    pallas_protocol_linux_appimage_args: list[str] = Field(
+        default_factory=lambda: ["--appimage-extract-and-run"],
+        description="Linux 本地运行 AppImage 时追加参数（默认规避 FUSE 依赖）",
     )
     pallas_protocol_docker_image: str = Field(
         default="mlikiowa/napcat-appimage:latest",

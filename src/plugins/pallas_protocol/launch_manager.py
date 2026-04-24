@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -65,6 +66,8 @@ class LaunchManager:
             account["args"] = [mjs, "-q", q] if q.isdigit() else [mjs]
 
         self._apply_linux_docker_profile(account, resolve_qq)
+        self._apply_linux_local_appimage_profile(account)
+        self._apply_linux_local_xvfb_profile(account)
 
     def _apply_linux_docker_profile(self, account: dict, resolve_qq) -> None:
         from .linux_docker import build_docker_run_argv, is_linux
@@ -91,6 +94,54 @@ class LaunchManager:
             "mlikiowa/napcat-appimage:latest"
         )
         account["program_dir"] = f"docker:{img}"
+
+    def _apply_linux_local_xvfb_profile(self, account: dict) -> None:
+        # Linux 本地模式优先使用 xvfb-run，贴近 NapCatAppImageBuild 文档的无头启动实践。
+        if not sys.platform.startswith("linux"):
+            return
+        if account.get("napcat_linux_docker"):
+            return
+        if not bool(getattr(self._config, "pallas_protocol_linux_use_xvfb", True)):
+            return
+        command = str(account.get("command", "") or "").strip()
+        if not command:
+            return
+        xvfb_command = str(getattr(self._config, "pallas_protocol_linux_xvfb_command", "xvfb-run") or "").strip()
+        if not xvfb_command:
+            return
+        if Path(command).name == Path(xvfb_command).name:
+            return
+        original_args = [str(item) for item in (account.get("args") or [])]
+        xvfb_args = [str(item) for item in (getattr(self._config, "pallas_protocol_linux_xvfb_args", []) or [])]
+        account["command"] = xvfb_command
+        account["args"] = [*xvfb_args, command, *original_args]
+
+    def _apply_linux_local_appimage_profile(self, account: dict) -> None:
+        if not sys.platform.startswith("linux"):
+            return
+        if account.get("napcat_linux_docker"):
+            return
+        command = str(account.get("command", "") or "").strip()
+        if not command:
+            return
+        if Path(command).suffix == ".AppImage":
+            return
+        if Path(command).name.lower() not in ("node", "node.exe"):
+            return
+        program_dir = Path(str(account.get("program_dir", "")).strip())
+        if not program_dir.exists():
+            return
+        appimage = program_dir if program_dir.is_file() and program_dir.suffix == ".AppImage" else None
+        if appimage is None and program_dir.is_dir():
+            cands = sorted(program_dir.glob("*.AppImage"))
+            appimage = cands[0] if cands else None
+        if appimage is None:
+            return
+        appimage_args = [
+            str(x) for x in (getattr(self._config, "pallas_protocol_linux_appimage_args", []) or [])
+        ]
+        account["command"] = str(appimage)
+        account["args"] = appimage_args
 
     def prepare_dirs(self, account: dict) -> None:
         program_dir_raw = str(account.get("working_dir", "")).strip()
@@ -152,6 +203,14 @@ class LaunchManager:
             except OSError as e:
                 return [f"无法创建 Docker 数据目录: {e}"]
             return []
+        if (
+            sys.platform.startswith("linux")
+            and bool(getattr(self._config, "pallas_protocol_linux_use_xvfb", True))
+            and not account.get("napcat_linux_docker")
+        ):
+            xvfb_command = str(getattr(self._config, "pallas_protocol_linux_xvfb_command", "xvfb-run") or "").strip()
+            if xvfb_command and shutil.which(xvfb_command) is None:
+                issues.append(f"系统找不到命令: {xvfb_command}（可安装 xvfb，或关闭 pallas_protocol_linux_use_xvfb）")
 
         command = str(account.get("command", "")).strip()
         if not command:

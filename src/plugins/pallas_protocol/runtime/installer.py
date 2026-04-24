@@ -1,10 +1,11 @@
-"""NapCat Shell 运行时的下载与解压（使用 GitHub releases 直链，避免 API 限流）。"""
+"""NapCat 运行时下载与安装（Shell zip / Linux AppImage）。"""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import os
+import platform as py_platform
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import zipfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from stat import S_IXGRP, S_IXOTH, S_IXUSR
 from typing import Any, Literal
 from urllib.parse import quote
 
@@ -53,6 +55,21 @@ def _safe_extract_zip(zip_path: Path, dest_dir: Path) -> None:
 
 def asset_is_windows_onekey(asset_name: str) -> bool:
     return "OneKey" in asset_name
+
+
+def asset_is_linux_appimage(asset_name: str) -> bool:
+    return asset_name.strip().endswith(".AppImage")
+
+
+def find_appimage_under_dir(search_root: Path) -> Path | None:
+    root = search_root.resolve()
+    if not root.is_dir():
+        return None
+    cands = [p for p in root.rglob("*.AppImage") if p.is_file()]
+    if not cands:
+        return None
+    cands.sort(key=lambda p: (len(p.relative_to(root).parts), -p.stat().st_mtime))
+    return cands[0]
 
 
 def find_onekey_post_install_program_dir(search_root: Path) -> Path | None:
@@ -227,9 +244,16 @@ class NapCatRuntimeStore:
         prog = Path(m.program_dir)
         extract = Path(m.extract_root)
         onekey = asset_is_windows_onekey(m.asset_name)
+        appimage = asset_is_linux_appimage(m.asset_name)
 
         def usable(d: Path) -> bool:
-            return d.is_dir() and ((d / "NapCatWinBootMain.exe").is_file() or (d / "napcat.mjs").is_file())
+            if d.is_dir() and ((d / "NapCatWinBootMain.exe").is_file() or (d / "napcat.mjs").is_file()):
+                return True
+            if d.is_file() and d.suffix == ".AppImage":
+                return True
+            if d.is_dir() and find_appimage_under_dir(d) is not None:
+                return True
+            return False
 
         if usable(prog):
             if onekey and extract.is_dir():
@@ -244,6 +268,17 @@ class NapCatRuntimeStore:
                     return shell_hit
             return prog
         if extract.is_dir():
+            if appimage:
+                hit = find_appimage_under_dir(extract)
+                if hit is not None:
+                    if hit.resolve() != prog.resolve():
+                        data = m.to_json()
+                        data["program_dir"] = str(hit.resolve())
+                        self._manifest_path.write_text(
+                            json.dumps(data, ensure_ascii=False, indent=2),
+                            encoding="utf-8",
+                        )
+                    return hit
             found = resolve_program_dir_under_extract(extract, onekey=onekey)
             if found and usable(found):
                 if found.resolve() != prog.resolve():
@@ -254,7 +289,7 @@ class NapCatRuntimeStore:
                         encoding="utf-8",
                     )
                 return found
-        return prog if prog.is_dir() else None
+        return prog if usable(prog) else None
 
     def job_snapshot(self) -> dict[str, Any]:
         return {"status": self._job_status, "message": self._job_message}
@@ -263,7 +298,8 @@ class NapCatRuntimeStore:
         return self._job_status in ("downloading", "extracting", "installing")
 
     def _repo(self) -> str:
-        return str(getattr(self._config, "pallas_protocol_github_repo", "")).strip() or "NapNeko/NapCatQQ"
+        configured = str(getattr(self._config, "pallas_protocol_github_repo", "")).strip()
+        return configured or default_release_repo_for_platform()
 
     def _asset_name(self) -> str:
         fn = getattr(self._config, "resolved_release_asset", None)
@@ -283,7 +319,7 @@ class NapCatRuntimeStore:
             self._set_job("downloading", "准备下载…")
             url = _github_release_asset_url(self._repo(), asset_name, self._release_tag())
             self._dist_dir.mkdir(parents=True, exist_ok=True)
-            dest_zip = self._dist_dir / asset_name
+            dist_file = self._dist_dir / asset_name
 
             own_client = client is None
             hc = client or httpx.AsyncClient(
@@ -298,7 +334,7 @@ class NapCatRuntimeStore:
                         raise RuntimeError(msg)
                     total = int(resp.headers.get("content-length") or 0)
                     received = 0
-                    with dest_zip.open("wb") as out:
+                    with dist_file.open("wb") as out:
                         async for chunk in resp.aiter_bytes(1024 * 256):
                             if not chunk:
                                 continue
@@ -313,12 +349,23 @@ class NapCatRuntimeStore:
                 if own_client:
                     await hc.aclose()
 
-            self._set_job("extracting", "解压中…")
+            self._set_job("extracting", "安装中…")
             stage = Path(tempfile.mkdtemp(prefix="napcat_extract_", dir=str(self._data_dir)))
             try:
-                await asyncio.to_thread(_safe_extract_zip, dest_zip, stage)
+                is_appimage = asset_is_linux_appimage(asset_name)
+                if is_appimage:
+                    app_dst = stage / asset_name
+                    await asyncio.to_thread(shutil.copy2, dist_file, app_dst)
+                    mode = app_dst.stat().st_mode
+                    app_dst.chmod(mode | S_IXUSR | S_IXGRP | S_IXOTH)
+                else:
+                    await asyncio.to_thread(_safe_extract_zip, dist_file, stage)
                 prefer_boot = asset_is_windows_onekey(asset_name)
-                if prefer_boot:
+                if is_appimage:
+                    if find_appimage_under_dir(stage) is None:
+                        msg = "下载完成但未找到 AppImage 文件，请确认 release 资产名与内容。"
+                        raise RuntimeError(msg)
+                elif prefer_boot:
                     has_marker = (
                         (stage / "NapCatInstaller.exe").is_file()
                         or find_napcat_program_dir(stage, prefer_bootmain=True) is not None
@@ -359,16 +406,22 @@ class NapCatRuntimeStore:
                         )
                         raise RuntimeError(msg)
 
-                program_dir = resolve_program_dir_under_extract(final_root, onekey=prefer_boot)
-                if program_dir is None and prefer_boot and not (final_root / "NapCatInstaller.exe").is_file():
-                    program_dir = find_napcat_program_dir(final_root, prefer_bootmain=prefer_boot)
+                if is_appimage:
+                    program_dir = find_appimage_under_dir(final_root)
+                else:
+                    program_dir = resolve_program_dir_under_extract(final_root, onekey=prefer_boot)
+                    if program_dir is None and prefer_boot and not (final_root / "NapCatInstaller.exe").is_file():
+                        program_dir = find_napcat_program_dir(final_root, prefer_bootmain=prefer_boot)
                 if program_dir is None:
-                    msg = (
-                        "未找到可启动目录。"
-                        "一键包请确认 NapCatInstaller.exe 已成功生成 NapCat.*.Shell 目录；"
-                        "亦可手动运行安装器后点「刷新检测」。"
-                        "说明见 https://napneko.github.io/guide/boot/Shell"
-                    )
+                    if is_appimage:
+                        msg = "未找到可执行 AppImage 文件。"
+                    else:
+                        msg = (
+                            "未找到可启动目录。"
+                            "一键包请确认 NapCatInstaller.exe 已成功生成 NapCat.*.Shell 目录；"
+                            "亦可手动运行安装器后点「刷新检测」。"
+                            "说明见 https://napneko.github.io/guide/boot/Shell"
+                        )
                     raise RuntimeError(msg)
 
                 manifest = RuntimeManifest(
@@ -414,10 +467,15 @@ class NapCatRuntimeStore:
             return None
         candidates = sorted(self._extract_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
         prefer_boot = asset_is_windows_onekey(self._asset_name())
+        prefer_appimage = asset_is_linux_appimage(self._asset_name())
         for folder in candidates:
             if not folder.is_dir():
                 continue
-            program_dir = resolve_program_dir_under_extract(folder, onekey=prefer_boot)
+            program_dir = (
+                find_appimage_under_dir(folder)
+                if prefer_appimage
+                else resolve_program_dir_under_extract(folder, onekey=prefer_boot)
+            )
             if program_dir is None:
                 program_dir = (
                     find_napcat_program_dir(folder, prefer_bootmain=prefer_boot)
@@ -446,17 +504,28 @@ class NapCatRuntimeStore:
 # NapNeko/NapCatQQ releases：Windows 为显式包名；Linux/macOS/其他类 Unix 为无 Windows 前缀的通用 Shell
 _NC_ASSET_WINDOWS_ONEKEY = "NapCat.Shell.Windows.OneKey.zip"
 _NC_ASSET_SHELL_GENERIC = "NapCat.Shell.zip"
+_NC_REPO_SHELL = "NapNeko/NapCatQQ"
+_NC_REPO_APPIMAGE = "NapNeko/NapCatAppImageBuild"
+_NC_APPIMAGE_X64 = "QQ-x86_64.AppImage"
+_NC_APPIMAGE_AARCH64 = "QQ-aarch64.AppImage"
+
+
+def default_release_repo_for_platform() -> str:
+    if sys.platform.startswith("linux"):
+        return _NC_REPO_APPIMAGE
+    return _NC_REPO_SHELL
 
 
 def default_release_asset_for_platform() -> str:
-    """按 **当前运行 Python 的平台** 选择官方 Release 中的 zip 名（空配置时 `resolved_release_asset` 会调用本函数）。
+    """按平台选择默认 release 资产名（空配置时 `resolved_release_asset` 会调用）。
 
-    `NapNeko/NapCatQQ` 的 Asset 里并没有 ``NapCat.Shell.Linux.zip`` 这种单独命名；与 Windows 三件套并列、
-    无 ``Windows`` 前缀的 ``NapCat.Shell.zip`` 即文档/发行中的 **Linux 与类 Unix 通用** Shell 包。Windows
-    默认用一键包（会跑 ``NapCatInstaller.exe``）。若需 Win 的 Node 轻量包，请在配置中写
-    ``NapCat.Shell.Windows.Node.zip`` 等显式值。
+    - Windows：NapCatQQ 一键包 zip
+    - Linux：NapCatAppImageBuild 的 AppImage（按架构）
+    - 其它 POSIX：保留 NapCat.Shell.zip
     """
     if sys.platform == "win32":
         return _NC_ASSET_WINDOWS_ONEKEY
-    # linux / darwin / 其他 BSD、POSIX
+    if sys.platform.startswith("linux"):
+        machine = (py_platform.machine() or "").lower()
+        return _NC_APPIMAGE_AARCH64 if machine in ("aarch64", "arm64") else _NC_APPIMAGE_X64
     return _NC_ASSET_SHELL_GENERIC
