@@ -124,11 +124,15 @@ class LaunchManager:
         command = str(account.get("command", "") or "").strip()
         if not command:
             return
+        qq = str(account.get("qq", "")).strip()
         if Path(command).suffix == ".AppImage":
             cmd_path = Path(command)
             args = [str(x) for x in (account.get("args") or [])]
+            if qq.isdigit() and "-q" not in args and "--qq" not in args:
+                args = [*args, "-q", qq]
             if hasattr(os, "geteuid") and os.geteuid() == 0 and "--no-sandbox" not in args:
-                account["args"] = [*args, "--no-sandbox"]
+                args = [*args, "--no-sandbox"]
+            account["args"] = args
             working_dir = str(account.get("working_dir", "")).strip()
             if not working_dir:
                 account["working_dir"] = str(cmd_path.parent)
@@ -151,13 +155,13 @@ class LaunchManager:
         appimage_args = [
             str(x) for x in (getattr(self._config, "pallas_protocol_linux_appimage_args", []) or [])
         ]
+        if qq.isdigit() and "-q" not in appimage_args and "--qq" not in appimage_args:
+            appimage_args.extend(["-q", qq])
         if hasattr(os, "geteuid") and os.geteuid() == 0 and "--no-sandbox" not in appimage_args:
             # Electron AppImage 在 root 下运行需要显式关闭 sandbox。
             appimage_args.append("--no-sandbox")
         account["command"] = str(appimage)
         account["args"] = appimage_args
-        # AppImage 启动时工作目录应为其所在目录，避免把二进制文件路径当目录创建。
-        account["working_dir"] = str(appimage.parent)
         # AppImage 启动时工作目录应为其所在目录，避免把二进制文件路径当目录创建。
         account["working_dir"] = str(appimage.parent)
 

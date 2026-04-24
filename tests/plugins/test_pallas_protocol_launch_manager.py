@@ -79,4 +79,4 @@ def test_apply_defaults_linux_prefers_appimage_then_xvfb(tmp_path: Path) -> None
     with patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"):
         mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
     assert account["command"] == "xvfb-run"
-    assert account["args"] == ["--auto-servernum", str(runtime_file), "--appimage-extract-and-run"]
+    assert account["args"] == ["--auto-servernum", str(runtime_file), "--appimage-extract-and-run", "-q", "10003"]
