@@ -141,6 +141,25 @@ def _ob_env_first(*keys: str) -> str:
     return ""
 
 
+def _ob_driver_first(*keys: str) -> str:
+    try:
+        from nonebot import get_driver
+
+        dconf = get_driver().config
+    except Exception:
+        return ""
+    for k in keys:
+        for attr in (k, k.lower()):
+            try:
+                v = getattr(dconf, attr, None)
+            except Exception:
+                v = None
+            s = str(v or "").strip()
+            if s:
+                return s
+    return ""
+
+
 def _ob_parse_port(raw: object) -> int | None:
     if raw is None:
         return None
@@ -162,12 +181,18 @@ def resolve_onebot_ws_settings(config: Config) -> tuple[str, str, str]:
     cfg_tok = str(getattr(config, "pallas_protocol_access_token", "") or "").strip()
     cfg_name = str(getattr(config, "pallas_protocol_onebot_client_name", "") or "").strip()
     host = cfg_host or _ob_env_first("PALLAS_PROTOCOL_ONEBOT_HOST", "HOST", "ONEBOT_HOST")
+    if not host:
+        host = _ob_driver_first("host", "onebot_host")
     port: int | None = _ob_parse_port(cfg_port) if cfg_port is not None else None
     if port is None:
         port = _ob_parse_port(
             _ob_env_first("PALLAS_PROTOCOL_ONEBOT_PORT", "PORT", "ONEBOT_PORT")
         )
+    if port is None:
+        port = _ob_parse_port(_ob_driver_first("port", "onebot_port"))
     token = cfg_tok or _ob_env_first("PALLAS_PROTOCOL_ACCESS_TOKEN", "ACCESS_TOKEN")
+    if not token:
+        token = _ob_driver_first("access_token")
     name = (
         cfg_name
         or _ob_env_first("PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME", "ONEBOT_CLIENT_NAME")
@@ -182,13 +207,15 @@ def onebot_connection_hints(config: Config) -> dict[str, object]:
     url, name, tok = resolve_onebot_ws_settings(config)
     cfg_host = str(getattr(config, "pallas_protocol_onebot_host", "") or "").strip()
     env_host = _ob_env_first("PALLAS_PROTOCOL_ONEBOT_HOST", "HOST", "ONEBOT_HOST")
-    h = cfg_host or env_host
+    h = cfg_host or env_host or _ob_driver_first("host", "onebot_host")
     cfg_port = getattr(config, "pallas_protocol_onebot_port", None)
     port: int | None = _ob_parse_port(cfg_port) if cfg_port is not None else None
     if port is None:
         port = _ob_parse_port(
             _ob_env_first("PALLAS_PROTOCOL_ONEBOT_PORT", "PORT", "ONEBOT_PORT")
         )
+    if port is None:
+        port = _ob_parse_port(_ob_driver_first("port", "onebot_port"))
     return {
         "onebot_ws_url": url,
         "onebot_ws_name": name,
