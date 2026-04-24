@@ -47,7 +47,8 @@ class AccountConfigManager:
         if "onebot" in payload and isinstance(payload["onebot"], dict):
             current = self.safe_read_json(onebot_path)
             merged = {**current, **payload["onebot"]}
-            onebot_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+            for path in self._onebot_sync_targets(config_dir, qq):
+                path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
             self._sync_account_onebot_fields(account, merged)
         if "napcat" in payload and isinstance(payload["napcat"], dict):
             current = self.safe_read_json(napcat_path)
@@ -109,7 +110,8 @@ class AccountConfigManager:
             "timeout",
             {"baseTimeout": 10000, "uploadSpeedKBps": 256, "downloadSpeedKBps": 256, "maxTimeout": 1800000},
         )
-        config_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        for path in self._onebot_sync_targets(config_dir, qq):
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         account["qq"] = qq
         account["onebot_config_path"] = str(config_path)
 
@@ -221,10 +223,16 @@ class AccountConfigManager:
         for path in preferred:
             if path.exists():
                 return path
+        canonical = config_dir / "onebot11.json"
+        if canonical.exists():
+            return canonical
         has_legacy_prefix = any(path.name.startswith("onebot_") for path in config_dir.glob("onebot_*.json"))
         if has_legacy_prefix:
             return config_dir / f"onebot_{qq}.json"
         return config_dir / f"onebot11_{qq}.json"
+
+    def _onebot_sync_targets(self, config_dir: Path, qq: str) -> list[Path]:
+        return [config_dir / f"onebot11_{qq}.json", config_dir / "onebot11.json"]
 
     def safe_read_json(self, path: Path) -> dict:
         if not path.exists():

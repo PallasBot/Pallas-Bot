@@ -3,6 +3,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -375,9 +376,20 @@ class PallasProtocolService:
     async def delete_account(self, account_id: str) -> None:
         if account_id not in self._accounts:
             raise KeyError("账号不存在")
+        account = self._accounts.get(account_id) or {}
+        account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
         await self.stop_account(account_id)
         self._accounts.pop(account_id, None)
         self._runtimes.pop(account_id, None)
+        try:
+            if account_data_dir.is_dir():
+                data_dir_resolved = account_data_dir.resolve()
+                instances_root_resolved = self._instances_root.resolve()
+                # 仅清理实例根目录下的数据，避免误删用户自定义的外部路径。
+                if data_dir_resolved == instances_root_resolved or instances_root_resolved in data_dir_resolved.parents:
+                    shutil.rmtree(data_dir_resolved, ignore_errors=True)
+        except OSError:
+            pass
         self._save_accounts()
 
     def is_running(self, account_id: str) -> bool:
@@ -427,13 +439,11 @@ class PallasProtocolService:
             if not command:
                 raise ValueError("command 不能为空")
             args = [str(item) for item in (account.get("args") or [])]
-            workdir = str(account.get("working_dir", "")).strip() or None
             env_map = os.environ.copy()
             account_data_dir = str(account.get("account_data_dir", "")).strip()
             if account_data_dir:
                 ad_abs = await asyncio.to_thread(_realpath_sync, account_data_dir)
                 # NapCatPathWrapper 用 NAPCAT_WORKDIR。Windows 勿改 USERPROFILE/HOME，
-                # 否则 BootMain 拉起的 QQ 易秒退（日志里只剩 Process exited）。
                 env_map["NAPCAT_WORKDIR"] = ad_abs
                 if self._launch.should_set_home_to_workdir():
                     env_map["HOME"] = ad_abs
@@ -455,10 +465,22 @@ class PallasProtocolService:
             launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
             if launch_issues:
                 raise ValueError("; ".join(launch_issues))
+            # check_launch_issues 可能会归一化 account["working_dir"]（如 AppImage 文件路径 -> 父目录）。
+            workdir = str(account.get("working_dir", "")).strip() or None
             runtime.logs.clear()
             runtime.tracked_child_root_pid = None
             runtime.expect_bootmain_detach = bool(cwd_quick)
             cwd_final = (cwd_quick or "").strip() or workdir
+            if (
+                os.name != "nt"
+                and account_data_dir
+                and (
+                    Path(command).suffix == ".AppImage"
+                    or any(Path(str(a)).suffix == ".AppImage" for a in args)
+                )
+            ):
+                # Linux AppImage 下统一以账号目录为 cwd，确保多开时 cache/config 落在各自实例目录。
+                cwd_final = account_data_dir
             runtime.process = await asyncio.create_subprocess_exec(
                 command,
                 *args,
@@ -564,8 +586,8 @@ class PallasProtocolService:
         async with runtime.lock:
             proc = runtime.process
             if proc and proc.returncode is None:
-                # Windows：BootMain 会拉起 QQ 等子进程，仅 terminate 父进程无法结束整树。
-                if os.name == "nt" and proc.pid:
+                # Linux/Windows：启动器可能派生子进程，停止时优先结束整棵进程树。
+                if proc.pid:
                     await asyncio.to_thread(self._launch.kill_process_tree, proc.pid)
                 else:
                     proc.terminate()
@@ -574,8 +596,7 @@ class PallasProtocolService:
                 except TimeoutError:
                     proc.kill()
                     await proc.wait()
-            elif os.name == "nt" and runtime.tracked_child_root_pid:
-                # BootMain 已退出但子进程仍在：按日志里的 Main Process ID 结束进程树
+            elif runtime.tracked_child_root_pid:
                 await asyncio.to_thread(
                     self._launch.kill_process_tree,
                     runtime.tracked_child_root_pid,
@@ -651,6 +672,18 @@ class PallasProtocolService:
                     break
                 text = line.decode("utf-8", errors="replace").rstrip("\r\n")
                 runtime.logs.append(text)
+                qr_saved = re.search(r"二维码已保存到\s+(.+qrcode\.png)\s*$", text)
+                if qr_saved:
+                    try:
+                        src_qr = Path(qr_saved.group(1).strip())
+                        account = self._accounts.get(account_id) or {}
+                        account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+                        if src_qr.is_file() and account_data_dir:
+                            account_cache_dir = account_data_dir / "cache"
+                            account_cache_dir.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(src_qr, account_cache_dir / "qrcode.png")
+                    except OSError:
+                        pass
                 m = re.search(r"Main Process ID[:\s]+(\d+)", text, re.IGNORECASE)
                 if m:
                     try:
