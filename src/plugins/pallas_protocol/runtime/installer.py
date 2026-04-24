@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import platform as py_platform
+import re
 import shutil
 import subprocess
 import sys
@@ -79,6 +80,34 @@ def _pick_appimage_asset_from_release(release_json: dict[str, Any], preferred_as
             if any(tok in low for tok in arch_tokens):
                 return name, url
     for name, url in by_name.items():
+        return name, url
+    return None
+
+
+def _pick_appimage_asset_from_release_html(html: str, repo: str, preferred_asset: str) -> tuple[str, str] | None:
+    if not html.strip():
+        return None
+    owner_part, _, name_part = repo.partition("/")
+    if not owner_part or not name_part:
+        return None
+    base = f"/{owner_part}/{name_part}/releases/download/"
+    hits = re.findall(r'href="([^"]+\.AppImage)"', html)
+    assets: dict[str, str] = {}
+    for href in hits:
+        if base not in href:
+            continue
+        full = f"https://github.com{href}" if href.startswith("/") else href
+        name = full.rsplit("/", 1)[-1]
+        assets[name] = full
+    if preferred_asset in assets:
+        return preferred_asset, assets[preferred_asset]
+    arch_tokens = _arch_tokens_from_asset_name(preferred_asset)
+    if arch_tokens:
+        for name, url in assets.items():
+            low = name.lower()
+            if any(tok in low for tok in arch_tokens):
+                return name, url
+    for name, url in assets.items():
         return name, url
     return None
 
@@ -383,6 +412,19 @@ class NapCatRuntimeStore:
                         if pick is not None:
                             asset_name, url = pick
                             dist_file = self._dist_dir / asset_name
+                    elif rel_resp.status_code in (403, 404, 429):
+                        # GitHub API 受限时回退解析发布页，避免固定资产名直链 404。
+                        rel_web = (
+                            f"https://github.com/{repo}/releases/latest"
+                            if not release_tag.strip()
+                            else f"https://github.com/{repo}/releases/tag/{release_tag.strip()}"
+                        )
+                        web_resp = await hc.get(rel_web)
+                        if web_resp.status_code == 200:
+                            pick = _pick_appimage_asset_from_release_html(web_resp.text, repo, asset_name)
+                            if pick is not None:
+                                asset_name, url = pick
+                                dist_file = self._dist_dir / asset_name
                 async with hc.stream("GET", url) as resp:
                     if resp.status_code != 200:
                         msg = f"下载失败 HTTP {resp.status_code}: {url}"

@@ -5,6 +5,7 @@ from unittest.mock import patch
 from src.plugins.pallas_protocol.runtime.installer import (
     _github_release_asset_url,
     _pick_appimage_asset_from_release,
+    _pick_appimage_asset_from_release_html,
     _safe_extract_zip,
     asset_is_windows_onekey,
     default_release_asset_for_platform,
@@ -140,3 +141,15 @@ def test_pick_appimage_asset_from_release_prefers_arch_match() -> None:
     }
     picked = _pick_appimage_asset_from_release(rel, "QQ-x86_64.AppImage")
     assert picked == ("QQ-44343_NapCat-v4.18.0-amd64.AppImage", "https://x/amd64")
+
+
+def test_pick_appimage_asset_from_release_html_prefers_arch_match() -> None:
+    html = """
+    <a href="/NapNeko/NapCatAppImageBuild/releases/download/v4.18.0/QQ-44343_NapCat-v4.18.0-amd64.AppImage">amd64</a>
+    <a href="/NapNeko/NapCatAppImageBuild/releases/download/v4.18.0/QQ-44343_NapCat-v4.18.0-arm64.AppImage">arm64</a>
+    """
+    picked = _pick_appimage_asset_from_release_html(html, "NapNeko/NapCatAppImageBuild", "QQ-x86_64.AppImage")
+    assert picked == (
+        "QQ-44343_NapCat-v4.18.0-amd64.AppImage",
+        "https://github.com/NapNeko/NapCatAppImageBuild/releases/download/v4.18.0/QQ-44343_NapCat-v4.18.0-amd64.AppImage",
+    )
