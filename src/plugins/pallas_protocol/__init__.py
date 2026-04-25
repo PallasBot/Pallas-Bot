@@ -13,15 +13,39 @@ from .web import register_pallas_protocol_routes
 
 __plugin_meta__ = PluginMetadata(
     name="Pallas 协议端",
-    description="通过 /protocol/<实现名> 管理协议端；实现名默认见 contract.DEFAULT_PROTOCOL_BACKEND，可用 pallas_protocol_web_implementation 覆盖",
+    description="提供协议端账号管理与启动控制页面。",
     usage="""
-默认挂载 /protocol/<实现>/…（实现默认同 DEFAULT_PROTOCOL_BACKEND）；也可用 pallas_protocol_webui_path 整段覆盖。
-鉴权：X-Pallas-Protocol-Token 或 ?token=（若已配置 pallas_protocol_token）
+默认挂载：
+/protocol/napcat
+
+常用能力：
+新增账号、启动/停止/重启账号、查看日志、同步配置
+
+鉴权方式：
+X-Pallas-Protocol-Token 或 ?token=
 """.strip(),
     type="application",
     homepage="https://github.com/PallasBot/Pallas-Bot",
     supported_adapters={"~onebot.v11"},
-    extra={"version": "0.3.0"},
+    extra={
+        "version": "0.3.0",
+        "menu_data": [
+            {
+                "func": "协议端管理页",
+                "trigger_method": "http",
+                "trigger_condition": "/protocol/napcat",
+                "brief_des": "管理协议账号与进程",
+                "detail_des": "可在页面执行创建账号、启动、停止、重启与日志查看。",
+            },
+            {
+                "func": "协议端 API",
+                "trigger_method": "http",
+                "trigger_condition": "/protocol/*",
+                "brief_des": "提供协议管理接口",
+                "detail_des": "提供账号、配置、运行时下载与状态查询接口。",
+            },
+        ],
+    },
 )
 
 plugin_config = get_plugin_config(Config)
@@ -45,5 +69,5 @@ async def _startup() -> None:
             port=getattr(dconf, "port", None),
         )
         path = resolve_protocol_webui_base_path(plugin_config)
-        logger.info(f"Pallas 协议端（浏览器）: {base_u}{path}/")
+        logger.info(f"Pallas 协议端 | WebUI={base_u}{path}/")
     await manager.start_all_enabled_accounts()

@@ -44,7 +44,7 @@ body[data-theme="dark"] {
 }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-.shell { max-width: 1180px; margin: 0 auto; padding: 28px 20px 48px; }
+.shell { max-width: 1280px; margin: 0 auto; padding: 28px 20px 48px; }
 .topbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px;
   margin-bottom: 28px;
@@ -235,8 +235,31 @@ body[data-theme="dark"] pre.logs {
 body[data-theme="dark"] pre.logs.logs-protocol {
   color: #e8eefc;
 }
-.layout-acc { display: grid; grid-template-columns: 220px 1fr; gap: 22px; align-items: start; }
-@media (max-width: 860px) { .layout-acc { grid-template-columns: 1fr; } }
+.layout-acc { display: grid; grid-template-columns: clamp(180px, 22vw, 240px) minmax(0, 1fr); gap: 22px; align-items: start; }
+.acc-main {
+  min-width: 0;
+  width: 100%;
+  max-width: 980px;
+}
+@media (max-width: 860px) {
+  .layout-acc { grid-template-columns: 1fr; gap: 12px; }
+  .acc-main { max-width: none; }
+  .side {
+    position: static;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(138px, 1fr));
+    gap: 8px;
+    padding: 10px;
+  }
+  .side a {
+    margin: 0;
+    text-align: center;
+    padding: 10px 8px;
+  }
+  .row {
+    gap: 8px;
+  }
+}
 .side {
   position: sticky; top: 18px;
   background: var(--card); border: 1px solid var(--bd); border-radius: var(--radius); padding: 12px;
@@ -247,7 +270,10 @@ body[data-theme="dark"] pre.logs.logs-protocol {
 .side a:hover { background: var(--bg1); color: var(--txt); text-decoration: none; }
 .side a.active { background: rgba(56,189,248,0.12); color: var(--accent); }
 .panel { display: none; }
-.panel.active { display: block; }
+.panel.active { display: block; width: 100%; }
+.panel > .card {
+  width: 100%;
+}
 .field label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; font-weight: 600; }
 .field { margin-bottom: 14px; }
 .field input, .field textarea { width: 100%; }
@@ -784,7 +810,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
         <a href="#" data-tab="configs">原始配置</a>
         <a href="#" id="accLinkRuntime">更新/下载</a>
       </nav>
-      <div>
+      <div class="acc-main">
         <section class="panel active" id="panel-overview">
           <div class="card">
             <h3>状态</h3>

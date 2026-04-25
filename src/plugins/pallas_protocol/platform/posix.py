@@ -56,7 +56,7 @@ class PosixNapcatPlatform(NapcatPlatform):
         descendants = _collect_descendants(pid, cmap)
 
         targets = [*reversed(descendants), pid]
-        # 先温和终止，给子进程留清理窗口。
+        # 先发送终止信号
         for target in targets:
             try:
                 os.kill(target, 15)

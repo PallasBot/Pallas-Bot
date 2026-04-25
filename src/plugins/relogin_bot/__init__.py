@@ -15,7 +15,7 @@ from src.plugins.pallas_protocol import manager as protocol_manager
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛重新上号",
-    description="基于协议端管理器为指定账号重启并推送二维码",
+    description="为指定 QQ 账号重启协议端并推送登录二维码。",
     usage="""
 牛牛重新上号 <QQ号>
 示例：牛牛重新上号 3879348674
@@ -23,7 +23,18 @@ __plugin_meta__ = PluginMetadata(
     type="application",
     homepage="https://github.com/PallasBot/Pallas-Bot",
     supported_adapters={"~onebot.v11"},
-    extra={"version": "3.0.0"},
+    extra={
+        "version": "3.0.0",
+        "menu_data": [
+            {
+                "func": "重新上号",
+                "trigger_method": "on_cmd",
+                "trigger_condition": "牛牛重新上号 <QQ号>",
+                "brief_des": "重启账号并回传二维码",
+                "detail_des": "自动重启协议端账号，等待二维码文件生成并在私聊推送。",
+            },
+        ],
+    },
 )
 
 relogin_cmd = on_command("牛牛重新上号", priority=5, block=True)
@@ -117,4 +128,3 @@ async def _(bot: Bot, event: MessageEvent, qq_input: str = ArgPlainText("qq")):
         await bot.send(event, Message(f"[CQ:image,file=base64://{encoded}]"))
     except OSError as e:
         await relogin_cmd.finish(f"二维码读取失败：{e}")
-

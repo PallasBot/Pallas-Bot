@@ -55,7 +55,7 @@ class LaunchManager:
 
         cur_work = str(account.get("working_dir", "")).strip()
         if cur_work and self._is_managed_runtime_path(cur_work):
-            # working_dir 统一落到最新 AppImage 所在目录。
+            # 更新工作目录
             account["working_dir"] = rt_parent
 
         cmd = str(account.get("command", "") or "").strip()
@@ -97,7 +97,7 @@ class LaunchManager:
         if not program_dir_raw:
             program_dir_raw = configured_program_dir or runtime_str or str(self._resource_root / "napcat")
         elif not configured_program_dir:
-            # 未显式固定 program_dir 时，允许受管 runtime 路径自动前移到最新下载版本。
+            # 同步运行时目录
             self._refresh_managed_runtime_refs(account, runtime_str)
             program_dir_raw = str(account.get("program_dir", "")).strip() or program_dir_raw
         account["program_dir"] = program_dir_raw
@@ -114,7 +114,7 @@ class LaunchManager:
         if cmd_raw and Path(cmd_raw).name.lower() in ("node", "node.exe") and qq:
             mjs = str(Path(program_dir_raw) / "napcat.mjs")
             q = str(qq).strip()
-            # 与 NapCat shell 一致：-q/--qq 让 worker 优先走本机历史会话的快速登录。
+            # 写入账号参数
             account["args"] = [mjs, "-q", q] if q.isdigit() else [mjs]
 
         self._apply_linux_docker_profile(account, resolve_qq)
@@ -148,7 +148,7 @@ class LaunchManager:
         account["program_dir"] = f"docker:{img}"
 
     def _apply_linux_local_xvfb_profile(self, account: dict) -> None:
-        # Linux 本地模式优先使用 xvfb-run，贴近 NapCatAppImageBuild 文档的无头启动实践。
+        # 应用 xvfb 启动配置
         if not sys.platform.startswith("linux"):
             return
         if account.get("napcat_linux_docker"):
@@ -210,18 +210,18 @@ class LaunchManager:
         if qq.isdigit() and "-q" not in appimage_args and "--qq" not in appimage_args:
             appimage_args.extend(["-q", qq])
         if hasattr(os, "geteuid") and os.geteuid() == 0 and "--no-sandbox" not in appimage_args:
-            # Electron AppImage 在 root 下运行需要显式关闭 sandbox。
+            # 追加 no-sandbox 参数
             appimage_args.append("--no-sandbox")
         account["command"] = str(appimage)
         account["args"] = appimage_args
-        # AppImage 启动时工作目录应为其所在目录，避免把二进制文件路径当目录创建。
+        # 设置 AppImage 工作目录
         account["working_dir"] = str(appimage.parent)
 
     def prepare_dirs(self, account: dict) -> None:
         program_dir_raw = str(account.get("working_dir", "")).strip()
         if program_dir_raw:
             program_dir_path = Path(program_dir_raw)
-            # 兼容历史数据：working_dir 可能被写成 AppImage 文件路径。
+            # 规范工作目录路径
             if program_dir_path.exists() and program_dir_path.is_file():
                 program_dir_path = program_dir_path.parent
             elif program_dir_path.suffix == ".AppImage":
@@ -306,7 +306,7 @@ class LaunchManager:
         if not program_dir_raw:
             return ["program_dir 为空"]
         workdir = Path(program_dir_raw)
-        # 兼容历史数据：working_dir 可能仍是 AppImage 文件路径，自动纠正为父目录。
+        # 规范工作目录路径
         if (workdir.exists() and workdir.is_file()) or workdir.suffix == ".AppImage":
             workdir = workdir.parent
             account["working_dir"] = str(workdir)

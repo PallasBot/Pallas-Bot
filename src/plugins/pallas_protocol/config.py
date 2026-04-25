@@ -40,7 +40,7 @@ class Config(BaseModel):
     pallas_protocol_max_log_lines: int = Field(default=500, ge=100, le=5000)
     pallas_protocol_webui_port_min: int = Field(default=6099, ge=1024, le=65534)
     pallas_protocol_webui_port_max: int = Field(default=7999, ge=1025, le=65535)
-    # 从 GitHub Releases 直链下载 Shell/一键包（空字符串表示 latest）
+    # 下载仓库配置
     pallas_protocol_github_repo: str = Field(
         default_factory=default_release_repo_for_platform,
         description="空时按平台默认：Windows/非 Linux 使用 NapNeko/NapCatQQ，Linux 使用 NapNeko/NapCatAppImageBuild",
@@ -54,12 +54,12 @@ class Config(BaseModel):
         default=False,
         description="启动时若未检测到 manifest 中的 program_dir，则后台尝试下载（可能较慢）",
     )
-    # WS 固定 ws://host:port/onebot/v11/ws；直接读取全局 HOST/PORT/ACCESS_TOKEN（再回退驱动配置）
+    # OneBot 连接名配置
     pallas_protocol_onebot_client_name: str = Field(
         default="",
         description="onebot 连接名，空则读 PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME，再读 ONEBOT_CLIENT_NAME 或 pallas",
     )
-    # 可选：Linux + Docker 镜像无头；默认 false，与 Windows 一样走本机 node + 运行时，持久化/多开靠多账号目录与端口
+    # Linux Docker 模式开关
     pallas_protocol_linux_use_docker: bool = Field(
         default=False,
         description=(

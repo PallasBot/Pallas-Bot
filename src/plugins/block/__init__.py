@@ -1,11 +1,36 @@
 from nonebot import get_driver, get_plugin_config, logger, on_message, on_notice
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent, GroupMessageEvent, PokeNotifyEvent, permission
+from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
 from src.common.config import BotConfig
 
 from .config import Config
+
+__plugin_meta__ = PluginMetadata(
+    name="休眠拦截",
+    description="拦截消息与通知。",
+    usage="""
+功能说明：
+将拦截其他牛牛的群消息与群通知事件。
+""".strip(),
+    type="application",
+    homepage="https://github.com/PallasBot/Pallas-Bot",
+    supported_adapters={"~onebot.v11"},
+    extra={
+        "version": "3.0.0",
+        "menu_data": [
+            {
+                "func": "消息拦截",
+                "trigger_method": "on_message/on_notice",
+                "trigger_condition": "",
+                "brief_des": "拦截群事件",
+                "detail_des": "阻断群消息与通知，避免触发后续插件逻辑。",
+            },
+        ],
+    },
+)
 
 plugin_config = get_plugin_config(Config)
 driver = get_driver()

@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-# 当前内置实现标识（账号 protocol_backend 默认值；Web 挂载段默认值）
+# 默认协议实现
 DEFAULT_PROTOCOL_BACKEND: str = "napcat"
-# 账号对象中可选字段，缺省视为 DEFAULT_PROTOCOL_BACKEND
+# 账号协议字段名
 ACCOUNT_PROTOCOL_BACKEND_KEY: str = "protocol_backend"
 
-# 浏览器统一前缀；具体实现为第二段 /protocol/<slug>
+# 协议页面前缀
 PROTOCOL_HTTP_PREFIX: str = "/protocol"
 
 

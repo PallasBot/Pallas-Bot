@@ -96,7 +96,7 @@ async def resolve_github_release_asset_urls(repo: str, preferred_asset: str, tag
                     if name.lower().endswith(".zip"):
                         candidates.append(url)
                         break
-    # 保底：仍然回退到固定直链策略（tag -> latest）
+    # 追加直链候选
     candidates.extend(github_release_asset_url_candidates(repo, preferred, tag))
     dedup: list[str] = []
     seen: set[str] = set()

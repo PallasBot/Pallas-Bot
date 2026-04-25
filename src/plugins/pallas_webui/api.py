@@ -35,7 +35,7 @@ def register_api(
             try:
                 data = json.loads(version_file.read_text(encoding="utf-8"))
                 if isinstance(data, dict):
-                    # 注入构建元信息，供 /health 与关于页展示控制台版本。
+                    # 写入控制台版本元信息
                     for key in ("version", "commit", "build_time"):
                         val = str(data.get(key, "")).strip()
                         if val:

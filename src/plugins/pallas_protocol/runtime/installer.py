@@ -23,8 +23,7 @@ import httpx
 
 JobStatus = Literal["idle", "downloading", "extracting", "installing", "done", "error"]
 
-# 官方一键流程：解压后运行 NapCatInstaller.exe，生成 NapCat.*.Shell；见
-# https://napneko.github.io/guide/boot/Shell
+# 一键安装超时秒数
 _INSTALLER_TIMEOUT_SEC = 7200
 
 
@@ -492,7 +491,7 @@ class NapCatRuntimeStore:
                                     download_candidates.append((repo_try, pick_name, pick_url))
                                     continue
                             if asset_is_linux_appimage(asset_name) and rel_resp.status_code in (403, 404, 429):
-                                # GitHub API 受限时回退解析发布页，避免固定资产名直链 404。
+                                # 解析发布页资产
                                 rel_web = (
                                     f"https://github.com/{repo_try}/releases/latest"
                                     if not tag_try.strip()
@@ -505,8 +504,14 @@ class NapCatRuntimeStore:
                                         pick_name, pick_url = pick
                                         download_candidates.append((repo_try, pick_name, pick_url))
                     if not download_candidates:
-                        # 保底使用原始直链规则；若失败会返回清晰的 HTTP 错误。
-                        download_candidates.append((repo, asset_name, _github_release_asset_url(repo, asset_name, release_tag)))
+                        # 添加直链候选
+                        download_candidates.append(
+                            (
+                                repo,
+                                asset_name,
+                                _github_release_asset_url(repo, asset_name, release_tag),
+                            )
+                        )
 
                 errors: list[str] = []
                 deduped: list[tuple[str, str, str]] = []
@@ -702,7 +707,7 @@ class NapCatRuntimeStore:
         return None
 
 
-# NapNeko/NapCatQQ releases：Windows 为显式包名；Linux/macOS/其他类 Unix 为无 Windows 前缀的通用 Shell
+# 默认发布资产名称
 _NC_ASSET_WINDOWS_ONEKEY = "NapCat.Shell.Windows.OneKey.zip"
 _NC_ASSET_SHELL_GENERIC = "NapCat.Shell.zip"
 _NC_REPO_SHELL = "NapNeko/NapCatQQ"

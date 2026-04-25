@@ -13,7 +13,7 @@ class AccountConfigManager:
         self._webui_port_fallback_min = int(webui_port_fallback_min)
 
     def _resolved_webui_host(self) -> str:
-        # NapCat 默认 "::"，在部分 Windows 上 listen 会报 UNKNOWN，与 pallas_protocol_bind_host 对齐为 IPv4。
+        # 归一化 WebUI host
         h = self._webui_listen_host
         if not h or h in ("::", "[::]", "0.0.0.0"):
             return "127.0.0.1"
@@ -153,7 +153,7 @@ class AccountConfigManager:
         webui_path = config_dir / "webui.json"
         data = self.safe_read_json(webui_path)
         data.setdefault("loginRate", 10)
-        # NapCat WebUI 启动后会读 autoLoginAccount 尝试自动快速登录（NAPCAT_QUICK_ACCOUNT 可覆盖）。
+        # 写入自动登录账号
         q = str(qq or "").strip()
         if q.isdigit():
             data["autoLoginAccount"] = q

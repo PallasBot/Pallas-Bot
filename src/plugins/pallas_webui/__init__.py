@@ -18,22 +18,48 @@ from .public import register_routes
 
 __plugin_meta__ = PluginMetadata(
     name="Pallas 控制台",
-    description="独立 Web 构建产物 + JSON API：静态资源目录 data/pallas_webui/public 与路径前缀 /pallas/api。",
-    usage="""将 Vite/ Vue 等 dist 放入 data/pallas_webui/public，或配置 pallas_webui_dist_zip_url 拉取。
-浏览器: /pallas/ ；API: /pallas/api/health, /system, /plugins, /bots, /logs, /db/overview,
-/db/mongodb/aggregate（须配置 pallas_webui_api_token）, /instances, /bot-configs, /group-configs,
-/friend-requests, /friend-list 等
+    description="提供 Pallas 控制台页面与扩展 API。",
+    usage="""
+浏览器入口：
+/pallas/
+
+核心接口：
+/pallas/api/health
+/pallas/api/system
+/pallas/api/instances
+/pallas/api/logs
+/pallas/api/db/overview
+/pallas/api/message-stats
 """.strip(),
     type="application",
     homepage="https://github.com/PallasBot/Pallas-Bot",
-    extra={"version": "0.1.0"},
+    supported_adapters={"~onebot.v11"},
+    extra={
+        "version": "3.0.0",
+        "menu_data": [
+            {
+                "func": "控制台页面",
+                "trigger_method": "http",
+                "trigger_condition": "/pallas/",
+                "brief_des": "提供控制台界面",
+                "detail_des": "展示实例状态、日志、数据库与插件信息。",
+            },
+            {
+                "func": "扩展状态接口",
+                "trigger_method": "http",
+                "trigger_condition": "/pallas/api/*",
+                "brief_des": "提供控制台数据接口",
+                "detail_des": "提供 health、system、instances、logs、message-stats 等接口。",
+            },
+        ],
+    },
 )
 
 plugin_config = get_plugin_config(Config)
 app = get_app()
 driver = get_driver()
 
-# 便于本地用独立 dev server（Vite）与 Bot 进程分离调试时跨域
+# 启用控制台跨域访问
 if plugin_config.pallas_webui_enabled and plugin_config.pallas_webui_cors:
     from fastapi.middleware.cors import CORSMiddleware
 
@@ -54,7 +80,7 @@ async def _pallas_webui_startup() -> None:
     url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
     url_candidates: list[str] = []
     if not url:
-        # URL 留空时先查 GitHub release 资产列表再选，减少环境里硬编码版本地址。
+        # 自动解析发布资产下载地址
         try:
             repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "")
             asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "")
@@ -99,6 +125,4 @@ async def _pallas_webui_startup() -> None:
         host=getattr(dconf, "host", None),
         port=getattr(dconf, "port", None),
     )
-    logger.info(
-        f"Pallas 控制台: 浏览器 {open_base}{base}/ · API {api_base} · public={public}",
-    )
+    logger.info(f"Pallas 控制台 | WebUI={open_base}{base}/")

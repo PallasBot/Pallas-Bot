@@ -95,5 +95,5 @@ def register_routes(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    # 必须在同前缀的 /pallas/api 路由之后注册，见主插件 startup 中调用顺序
+    # 注册静态路由
     app.include_router(router)

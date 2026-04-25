@@ -35,7 +35,7 @@ class NapCatRuntime:
     logs: deque[str] = field(default_factory=deque)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     drain_task: asyncio.Task | None = None
-    # BootMain 一键：父进程常立即退出；从日志解析子树根 PID 供「停止」与说明
+    # BootMain 状态字段
     expect_bootmain_detach: bool = False
     tracked_child_root_pid: int | None = None
     docker_container_name: str | None = None
@@ -382,10 +382,10 @@ class PallasProtocolService:
         self._accounts.pop(account_id, None)
         self._runtimes.pop(account_id, None)
         try:
-            if account_data_dir.is_dir():
-                data_dir_resolved = account_data_dir.resolve()
-                instances_root_resolved = self._instances_root.resolve()
-                # 仅清理实例根目录下的数据，避免误删用户自定义的外部路径。
+            if await asyncio.to_thread(account_data_dir.is_dir):
+                data_dir_resolved = await asyncio.to_thread(account_data_dir.resolve)
+                instances_root_resolved = await asyncio.to_thread(self._instances_root.resolve)
+                # 清理实例目录数据
                 if data_dir_resolved == instances_root_resolved or instances_root_resolved in data_dir_resolved.parents:
                     shutil.rmtree(data_dir_resolved, ignore_errors=True)
         except OSError:
@@ -443,7 +443,7 @@ class PallasProtocolService:
             account_data_dir = str(account.get("account_data_dir", "")).strip()
             if account_data_dir:
                 ad_abs = await asyncio.to_thread(_realpath_sync, account_data_dir)
-                # NapCatPathWrapper 用 NAPCAT_WORKDIR。Windows 勿改 USERPROFILE/HOME，
+                # 设置 NapCat 工作目录
                 env_map["NAPCAT_WORKDIR"] = ad_abs
                 if self._launch.should_set_home_to_workdir():
                     env_map["HOME"] = ad_abs
@@ -460,12 +460,12 @@ class PallasProtocolService:
                     or any(Path(str(a)).suffix == ".AppImage" for a in args)
                 )
             ):
-                # root 启动 Electron AppImage 时带 --no-sandbox。
+                # 追加 no-sandbox 参数
                 args.append("--no-sandbox")
             launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
             if launch_issues:
                 raise ValueError("; ".join(launch_issues))
-            # check_launch_issues 可能会归一化 account["working_dir"]（如 AppImage 文件路径 -> 父目录）。
+            # 读取工作目录
             workdir = str(account.get("working_dir", "")).strip() or None
             runtime.logs.clear()
             runtime.tracked_child_root_pid = None
@@ -479,7 +479,7 @@ class PallasProtocolService:
                     or any(Path(str(a)).suffix == ".AppImage" for a in args)
                 )
             ):
-                # Linux AppImage 下统一以账号目录为 cwd，确保多开时 cache/config 落在各自实例目录。
+                # AppImage 使用账号目录作为 cwd
                 cwd_final = account_data_dir
             runtime.process = await asyncio.create_subprocess_exec(
                 command,
@@ -586,7 +586,7 @@ class PallasProtocolService:
         async with runtime.lock:
             proc = runtime.process
             if proc and proc.returncode is None:
-                # Linux/Windows：启动器可能派生子进程，停止时优先结束整棵进程树。
+                # 结束进程树
                 if proc.pid:
                     await asyncio.to_thread(self._launch.kill_process_tree, proc.pid)
                 else:
@@ -678,7 +678,7 @@ class PallasProtocolService:
                         src_qr = Path(qr_saved.group(1).strip())
                         account = self._accounts.get(account_id) or {}
                         account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
-                        if src_qr.is_file() and account_data_dir:
+                        if await asyncio.to_thread(src_qr.is_file) and account_data_dir:
                             account_cache_dir = account_data_dir / "cache"
                             account_cache_dir.mkdir(parents=True, exist_ok=True)
                             shutil.copy2(src_qr, account_cache_dir / "qrcode.png")
@@ -740,7 +740,7 @@ class PallasProtocolService:
         try:
             if str(wport).strip():
                 p = int(wport)
-                # NapCat express 仅匹配 /webui/...；官方日志里的 /webui?token= 无尾斜杠会落不到静态页（空白）
+                # 生成内嵌 WebUI 地址
                 base = f"http://{bind}:{p}/webui/"
                 native_webui = f"{base}?token={quote(wtok, safe='')}" if wtok else base
         except (TypeError, ValueError):

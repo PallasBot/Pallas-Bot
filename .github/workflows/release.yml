@@ -52,15 +52,25 @@ jobs:
       - name: Write console version metadata
         run: |
           BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          mkdir -p pallas-webui/dist
-          cat > pallas-webui/dist/console-version.json <<'EOF'
-          {
-            "version": "${{ steps.get_version.outputs.version }}",
-            "commit": "${{ github.sha }}",
-            "build_time": "__BUILD_TIME__"
-          }
-          EOF
-          sed -i "s/__BUILD_TIME__/${BUILD_TIME}/g" pallas-webui/dist/console-version.json
+          if [ -f pallas-webui/scripts/write-console-version.mjs ]; then
+            (
+              cd pallas-webui
+              CONSOLE_VERSION="${{ steps.get_version.outputs.version }}" \
+              GIT_COMMIT="${{ github.sha }}" \
+              BUILD_TIME="${BUILD_TIME}" \
+              node ./scripts/write-console-version.mjs
+            )
+          else
+            mkdir -p pallas-webui/dist
+            cat > pallas-webui/dist/console-version.json <<'EOF'
+            {
+              "version": "${{ steps.get_version.outputs.version }}",
+              "commit": "${{ github.sha }}",
+              "build_time": "__BUILD_TIME__"
+            }
+            EOF
+            sed -i "s/__BUILD_TIME__/${BUILD_TIME}/g" pallas-webui/dist/console-version.json
+          fi
 
       - name: Pack dist artifact
         run: |

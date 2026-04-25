@@ -23,6 +23,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "python-ulid>=3.1.0",
     "psutil>=6.1.0",
+    "nvidia-ml-py",
     "tenacity>=9.1.2",
 ]
 

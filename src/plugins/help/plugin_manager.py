@@ -9,6 +9,7 @@ from src.common.db.modules import BotConfigModule, GroupConfigModule
 from src.common.paths import plugin_data_dir
 
 from .styles import load_config
+from .visibility import load_help_hidden_plugins
 
 bot_config_repo = make_bot_config_repository()
 group_config_repo = make_group_config_repository()
@@ -325,8 +326,13 @@ async def find_plugin_by_identifier(plugin_identifier: str, ignored_plugins: lis
         ignored_plugins = plugin_config.ignored_plugins if plugin_config else []
 
     # 过滤和排序插件
+    hidden_plugins = set(load_help_hidden_plugins())
     filtered_plugins = [
-        p for p in get_loaded_plugins() if p.name and (ignored_plugins is None or p.name not in ignored_plugins)
+        p
+        for p in get_loaded_plugins()
+        if p.name
+        and (ignored_plugins is None or p.name not in ignored_plugins)
+        and (p.name not in hidden_plugins)
     ]
     sorted_plugins = sorted(filtered_plugins, key=lambda p: p.name or "")
 
@@ -358,7 +364,10 @@ async def fill_plugin_status(
     else:
         # 普通情况，过滤掉忽略的插件
         ignored_plugins = plugin_config.ignored_plugins if plugin_config else []
-        filtered_plugins = [p for p in get_loaded_plugins() if p.name and p.name not in ignored_plugins]
+        hidden_plugins = set(load_help_hidden_plugins())
+        filtered_plugins = [
+            p for p in get_loaded_plugins() if p.name and p.name not in ignored_plugins and p.name not in hidden_plugins
+        ]
 
     sorted_plugins = sorted(filtered_plugins, key=lambda p: p.name or "")
     logger.debug(f"已排序的插件列表 (共{len(sorted_plugins)}个)")

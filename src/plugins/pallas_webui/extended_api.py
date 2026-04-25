@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
+import json
 import platform
+import re
 import shutil
 import time
 import typing
@@ -12,8 +15,9 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
-from nonebot import get_bots, get_driver, get_loaded_plugins, logger
+from nonebot import get_bots, get_driver, get_loaded_plugins, get_plugin_config, logger
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic_core import PydanticUndefined
 
 if typing.TYPE_CHECKING:
     from .config import Config
@@ -92,7 +96,24 @@ def _metadata_to_dict(meta: object | None) -> dict[str, Any] | None:
     return d
 
 
+def _help_menu_control() -> tuple[set[str], set[str]]:
+    """返回 (help 忽略名单, 额外隐藏名单)。"""
+    ignored: set[str] = set()
+    hidden: set[str] = set()
+    try:
+        from src.plugins.help.config import Config as HelpConfig
+        from src.plugins.help.visibility import load_help_hidden_plugins
+
+        cfg = get_plugin_config(HelpConfig)
+        ignored = {str(x).strip() for x in list(getattr(cfg, "ignored_plugins", []) or []) if str(x).strip()}
+        hidden = {str(x).strip() for x in load_help_hidden_plugins() if str(x).strip()}
+    except Exception:
+        pass
+    return ignored, hidden
+
+
 def _list_plugins_dict() -> list[dict[str, Any]]:
+    ignored, hidden = _help_menu_control()
     out: list[dict[str, Any]] = []
     for p in get_loaded_plugins():
         if not p.name:
@@ -106,10 +127,142 @@ def _list_plugins_dict() -> list[dict[str, Any]]:
                 "name": p.name,
                 "module": module_name,
                 "metadata": _metadata_to_dict(p.metadata),
+                "help_visible": p.name not in ignored and p.name not in hidden,
+                "help_ignored": p.name in ignored,
+                "help_hidden": p.name in hidden,
             }
         )
     out.sort(key=lambda x: x["name"] or "")
     return out
+
+
+def _jsonable_value(v: Any) -> Any:
+    if v is PydanticUndefined:
+        return None
+    if isinstance(v, BaseModel):
+        return v.model_dump(mode="python")
+    if isinstance(v, Path):
+        return str(v)
+    if isinstance(v, dict):
+        return {str(k): _jsonable_value(val) for k, val in v.items()}
+    if isinstance(v, list):
+        return [_jsonable_value(x) for x in v]
+    if isinstance(v, (set, tuple)):
+        return [_jsonable_value(x) for x in v]
+    return v
+
+
+def _plugin_env_path() -> Path:
+    return Path(__file__).resolve().parents[3] / ".env"
+
+
+def _find_loaded_plugin(plugin_name: str):
+    target = (plugin_name or "").strip()
+    for p in get_loaded_plugins():
+        if str(getattr(p, "name", "") or "").strip() == target:
+            return p
+    return None
+
+
+def _plugin_module_name(p: Any) -> str:
+    mod = getattr(p, "module", None)
+    module_name = getattr(mod, "__name__", "") if mod is not None else ""
+    if not module_name:
+        module_name = str(getattr(p, "module_name", "") or "")
+    return module_name.strip()
+
+
+def _plugin_config_model_by_name(plugin_name: str):
+    p = _find_loaded_plugin(plugin_name)
+    if p is None:
+        raise ValueError(f"未找到插件: {plugin_name}")
+    module_name = _plugin_module_name(p)
+    if not module_name:
+        raise ValueError(f"插件模块名为空: {plugin_name}")
+    cfg_mod_name = module_name if module_name.endswith(".config") else f"{module_name}.config"
+    try:
+        cfg_mod = importlib.import_module(cfg_mod_name)
+    except Exception as e:  # noqa: BLE001
+        raise ValueError(f"插件缺少 config.py: {plugin_name}") from e
+    cfg_cls = getattr(cfg_mod, "Config", None)
+    if cfg_cls is None or not isinstance(cfg_cls, type) or not issubclass(cfg_cls, BaseModel):
+        raise ValueError(f"插件 config.py 未定义 Config(BaseModel): {plugin_name}")
+    return p, module_name, cfg_cls
+
+
+def _field_kind_from_annotation(ann: Any) -> str:
+    text = str(ann).lower()
+    if "list" in text or "dict" in text or "set" in text or "tuple" in text:
+        return "json"
+    if "bool" in text:
+        return "bool"
+    if "int" in text:
+        return "int"
+    if "float" in text:
+        return "float"
+    return "string"
+
+
+def _plugin_config_payload(plugin_name: str) -> dict[str, Any]:
+    p, module_name, cfg_cls = _plugin_config_model_by_name(plugin_name)
+    cfg_obj = get_plugin_config(cfg_cls)
+    fields: list[dict[str, Any]] = []
+    for key, f in cfg_cls.model_fields.items():
+        cur = getattr(cfg_obj, key, f.default)
+        default_value = None if f.default is PydanticUndefined else f.default
+        fields.append(
+            {
+                "name": key,
+                "kind": _field_kind_from_annotation(f.annotation),
+                "required": bool(f.is_required()),
+                "description": str(f.description or ""),
+                "env_key": key.upper(),
+                "default": _jsonable_value(default_value),
+                "current": _jsonable_value(cur),
+            }
+        )
+    return {
+        "plugin": str(getattr(p, "name", "") or plugin_name),
+        "module": module_name,
+        "fields": fields,
+    }
+
+
+def _to_env_value(v: Any) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (dict, list)):
+        return json.dumps(v, ensure_ascii=False)
+    if v is None:
+        return ""
+    return str(v)
+
+
+def _upsert_env_items(items: dict[str, str]) -> None:
+    path = _plugin_env_path()
+    if path.exists():
+        lines = path.read_text(encoding="utf-8").splitlines()
+    else:
+        lines = []
+    remained = set(items.keys())
+    out: list[str] = []
+    for line in lines:
+        replaced = False
+        for k, v in items.items():
+            # 同名键若存在注释行，直接改写并取消注释
+            if re.match(rf"^\s*#?\s*{re.escape(k)}\s*=", line):
+                out.append(f"{k}={v}")
+                remained.discard(k)
+                replaced = True
+                break
+        if not replaced:
+            out.append(line)
+    if remained:
+        if out and out[-1].strip() != "":
+            out.append("")
+        for k in sorted(remained):
+            out.append(f"{k}={items[k]}")
+    path.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
 def _list_bots_dict() -> list[dict[str, Any]]:
@@ -429,6 +582,115 @@ def _normalize_message_item(item: object) -> dict[str, Any] | None:
     return out
 
 
+def _gpu_metrics() -> dict[str, Any]:
+    """GPU 监控（可选）：优先 NVML，未安装时返回 unavailable。"""
+    fallback = {"available": False, "reason": "pynvml not installed", "devices": []}
+    try:
+        import pynvml  # type: ignore
+    except Exception:  # noqa: BLE001
+        return fallback
+
+    try:
+        pynvml.nvmlInit()
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "reason": str(e), "devices": []}
+
+    devices: list[dict[str, Any]] = []
+    try:
+        count = int(pynvml.nvmlDeviceGetCount())
+        for i in range(count):
+            h = pynvml.nvmlDeviceGetHandleByIndex(i)
+            mem = pynvml.nvmlDeviceGetMemoryInfo(h)
+            util = pynvml.nvmlDeviceGetUtilizationRates(h)
+            try:
+                temp = int(pynvml.nvmlDeviceGetTemperature(h, pynvml.NVML_TEMPERATURE_GPU))
+            except Exception:  # noqa: BLE001
+                temp = None
+            name_raw = pynvml.nvmlDeviceGetName(h)
+            if isinstance(name_raw, (bytes, bytearray)):
+                name = name_raw.decode("utf-8", errors="ignore")
+            else:
+                name = str(name_raw)
+            devices.append(
+                {
+                    "index": i,
+                    "name": name,
+                    "memory_total": int(getattr(mem, "total", 0) or 0),
+                    "memory_used": int(getattr(mem, "used", 0) or 0),
+                    "memory_free": int(getattr(mem, "free", 0) or 0),
+                    "utilization_gpu": float(getattr(util, "gpu", 0) or 0),
+                    "utilization_memory": float(getattr(util, "memory", 0) or 0),
+                    "temperature": temp,
+                }
+            )
+    except Exception as e:  # noqa: BLE001
+        return {"available": False, "reason": str(e), "devices": []}
+    finally:
+        try:
+            pynvml.nvmlShutdown()
+        except Exception:  # noqa: BLE001
+            pass
+
+    return {"available": True, "reason": "", "devices": devices}
+
+
+def _extract_message_stats(raw: object) -> dict[str, int]:
+    """尽量兼容不同 OneBot 实现的 get_status 统计字段。"""
+    sent = 0
+    recv = 0
+    if not isinstance(raw, dict):
+        return {"sent": sent, "received": recv}
+    stat = raw.get("stat")
+    if isinstance(stat, dict):
+        for k in ("message_sent", "msg_sent", "packet_sent"):
+            v = stat.get(k)
+            if isinstance(v, (int, float)):
+                sent = max(sent, int(v))
+        for k in ("message_received", "msg_received", "packet_received"):
+            v = stat.get(k)
+            if isinstance(v, (int, float)):
+                recv = max(recv, int(v))
+    for k in ("message_sent", "msg_sent", "packet_sent"):
+        v = raw.get(k)
+        if isinstance(v, (int, float)):
+            sent = max(sent, int(v))
+    for k in ("message_received", "msg_received", "packet_received"):
+        v = raw.get(k)
+        if isinstance(v, (int, float)):
+            recv = max(recv, int(v))
+    return {"sent": sent, "received": recv}
+
+
+async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    total_sent = 0
+    total_received = 0
+    for key, bot in get_bots().items():
+        sid = str(getattr(bot, "self_id", "") or "").strip()
+        if not sid:
+            continue
+        if self_id and sid != str(self_id).strip():
+            continue
+        if not _is_onebot_v11_bot(bot):
+            continue
+        try:
+            status_raw = await bot.call_api("get_status")  # type: ignore[union-attr]
+        except Exception:  # noqa: BLE001
+            continue
+        stats = _extract_message_stats(status_raw)
+        total_sent += int(stats["sent"])
+        total_received += int(stats["received"])
+        rows.append(
+            {
+                "self_id": sid,
+                "connection_key": str(key),
+                "sent": int(stats["sent"]),
+                "received": int(stats["received"]),
+            }
+        )
+    return {"total_sent": total_sent, "total_received": total_received, "bots": rows}
+
+
 async def _call_get_message_history(
     bot: object,
     *,
@@ -570,7 +832,7 @@ def _system_dict() -> dict[str, Any]:
         n_sup = 0
     host = getattr(d, "host", None)
     port = getattr(d, "port", None)
-    # Pydantic/宿主机可能将 host 解析为 ipaddress.IPv4Address，JSON 无法直接序列化
+    # 统一为可序列化的 host 字符串
     host_s: str | None = None if host is None else str(host)
     port_s: int | None
     if port is None:
@@ -630,6 +892,7 @@ def _runtime_metrics() -> dict[str, Any]:
         "cpu_percent": cpu_percent,
         "memory": mem,
         "disk": disk,
+        "gpu": _gpu_metrics(),
     }
 
 
@@ -729,6 +992,18 @@ class _AiNcmVerifySmsBody(BaseModel):
     ctcode: int = Field(default=86, ge=1, le=999)
 
 
+class _HelpMenuVisibilityBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    hidden_plugins: list[str] = Field(default_factory=list, max_length=2000)
+
+
+class _PluginConfigUpdateBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    values: dict[str, Any] = Field(default_factory=dict)
+
+
 class _RequestActionBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -745,7 +1020,7 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
     from src.common.db.pallas_console_data import bot_config_to_public
 
     repo = make_bot_config_repository()
-    # 与 help.plugin_manager 一致，保证有文档可写
+    # 初始化账号配置
     await repo.get_or_create(account, disabled_plugins=[])
     for field_name, raw in body.model_dump(exclude_none=True).items():
         if field_name in ("admins", "disabled_plugins") and raw is not None:
@@ -773,7 +1048,7 @@ async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> d
         if field_name == "disabled_plugins" and raw is not None:
             value: Any = [str(s).strip() for s in raw if str(s).strip()]
         elif field_name == "roulette_mode":
-            # 轮盘模式只保留 0(踢人) / 1(禁言)
+            # 规范为 0/1
             value = 1 if int(raw) == 1 else 0
         else:
             value = raw
@@ -838,7 +1113,15 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
     payload = dict(data or {})
     if t == "bot_config":
         repo = make_bot_config_repository()
-        allowed = {"admins", "disabled_plugins", "auto_accept_friend", "auto_accept_group", "security", "taken_name", "drunk"}
+        allowed = {
+            "admins",
+            "disabled_plugins",
+            "auto_accept_friend",
+            "auto_accept_group",
+            "security",
+            "taken_name",
+            "drunk",
+        }
         for k in payload:
             if k not in allowed:
                 raise ValueError(f"bot_config 不允许字段: {k}")
@@ -941,12 +1224,90 @@ def register_extended_api(
         data = await _cached_read(key="system", loader=_load, ttl_sec=0.8, stale_sec=8.0)
         return JSONResponse({"ok": True, "data": data})
 
+    @router.get(f"{x}/message-stats", include_in_schema=True)
+    async def _message_stats(
+        self_id: int | None = Query(default=None, ge=1),
+    ) -> JSONResponse:
+        async def _load() -> dict[str, Any]:
+            return await _message_stats_overview(self_id=str(self_id) if self_id is not None else None)
+
+        key = f"message-stats:{self_id or 'all'}"
+        data = await _cached_read(key=key, loader=_load, ttl_sec=2.0, stale_sec=10.0)
+        return JSONResponse({"ok": True, "data": data})
+
     @router.get(f"{x}/plugins", include_in_schema=True)
     async def _plugins() -> JSONResponse:
         async def _load() -> list[dict[str, Any]]:
             return _list_plugins_dict()
 
         data = await _cached_read(key="plugins", loader=_load, ttl_sec=1.6, stale_sec=25.0)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/plugins/help-menu-visibility", include_in_schema=True)
+    async def _plugins_help_menu_visibility() -> JSONResponse:
+        try:
+            from src.plugins.help.visibility import load_help_hidden_plugins, resolve_help_ignored_plugins
+
+            data = {
+                "hidden_plugins": load_help_hidden_plugins(),
+                "ignored_plugins": resolve_help_ignored_plugins(),
+            }
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(f"{x}/plugins/help-menu-visibility", include_in_schema=True)
+    async def _plugins_help_menu_visibility_put(
+        body: _HelpMenuVisibilityBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            from src.plugins.help.visibility import save_help_hidden_plugins
+
+            hidden = save_help_hidden_plugins(body.hidden_plugins)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        _drop_read_cache(("plugins",))
+        return JSONResponse({"ok": True, "data": {"hidden_plugins": hidden}})
+
+    @router.get(f"{x}/plugins/{{plugin_name}}/config", include_in_schema=True)
+    async def _plugin_config_get(plugin_name: str) -> JSONResponse:
+        try:
+            data = _plugin_config_payload(plugin_name)
+        except ValueError:
+            # 无 config.py 或配置模型不可用时返回空配置，前端以“不可编辑”展示
+            data = {"plugin": plugin_name, "module": "", "fields": []}
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(f"{x}/plugins/{{plugin_name}}/config", include_in_schema=True)
+    async def _plugin_config_put(
+        plugin_name: str,
+        body: _PluginConfigUpdateBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            _, _, cfg_cls = _plugin_config_model_by_name(plugin_name)
+            current = get_plugin_config(cfg_cls).model_dump(mode="python")
+            patch = dict(body.values or {})
+            allowed = set(cfg_cls.model_fields.keys())
+            for k in patch:
+                if k not in allowed:
+                    raise ValueError(f"未知配置项: {k}")
+            merged = {**current, **patch}
+            validated = cfg_cls(**merged).model_dump(mode="python")
+            env_items = {str(k).upper(): _to_env_value(validated[k]) for k in patch}
+            _upsert_env_items(env_items)
+            data = _plugin_config_payload(plugin_name)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/bots", include_in_schema=True)
