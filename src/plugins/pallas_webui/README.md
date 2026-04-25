@@ -42,7 +42,7 @@ Pallas 控制台插件，负责：
 下载相关配置：
 
 - `pallas_webui_dist_zip_url`：dist.zip 直链（留空则走自动解析）
-- `pallas_webui_dist_zip_repo`：GitHub 仓库（默认 `TogetsuDo/Pallas-Bot-WebUI`）
+- `pallas_webui_dist_zip_repo`：GitHub 仓库（默认 `PallasBot/Pallas-Bot-WebUI`）
 - `pallas_webui_dist_zip_tag`：release tag（空表示 latest）
 - `pallas_webui_dist_zip_asset`：资产名（默认 `dist.zip`）
 
@@ -52,7 +52,7 @@ Pallas 控制台插件，负责：
 
 ```env
 PALLAS_WEBUI_DIST_ZIP_URL=
-PALLAS_WEBUI_DIST_ZIP_REPO=TogetsuDo/Pallas-Bot-WebUI
+PALLAS_WEBUI_DIST_ZIP_REPO=PallasBot/Pallas-Bot-WebUI
 PALLAS_WEBUI_DIST_ZIP_TAG=
 PALLAS_WEBUI_DIST_ZIP_ASSET=dist.zip
 ```
@@ -61,8 +61,7 @@ PALLAS_WEBUI_DIST_ZIP_ASSET=dist.zip
 
 ```env
 PALLAS_WEBUI_DIST_ZIP_URL=
-PALLAS_WEBUI_DIST_ZIP_REPO=TogetsuDo/Pallas-Bot-WebUI
+PALLAS_WEBUI_DIST_ZIP_REPO=PallasBot/Pallas-Bot-WebUI
 PALLAS_WEBUI_DIST_ZIP_TAG=v0.2.0
 PALLAS_WEBUI_DIST_ZIP_ASSET=dist.zip
 ```
-
