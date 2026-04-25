@@ -1,7 +1,9 @@
+"""仓库根、data、resource 等路径锚点（与 NoneBot 工作目录无关）。"""
+
 from pathlib import Path
 
-# 统一以仓库根目录为锚点，避免依赖运行时工作目录。
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# __file__ = .../src/common/paths/__init__.py → 仓库根为向上 3 级
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DATA_ROOT = PROJECT_ROOT / "data"
 RESOURCE_ROOT = PROJECT_ROOT / "resource"
 

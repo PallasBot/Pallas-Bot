@@ -12,8 +12,80 @@ on:
         type: string
 
 jobs:
+  build-webui-dist:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout WebUI repo
+        uses: actions/checkout@v6
+        with:
+          repository: TogetsuDo/Pallas-Bot-WebUI
+          ref: main
+          path: pallas-webui
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: pallas-webui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: pallas-webui
+
+      - name: Build WebUI
+        run: npm run build:ci
+        working-directory: pallas-webui
+
+      - name: Write console version metadata
+        run: |
+          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          if [ -f pallas-webui/scripts/write-console-version.mjs ]; then
+            (
+              cd pallas-webui
+              CONSOLE_VERSION="${{ steps.get_version.outputs.version }}" \
+              GIT_COMMIT="${{ github.sha }}" \
+              BUILD_TIME="${BUILD_TIME}" \
+              node ./scripts/write-console-version.mjs
+            )
+          else
+            mkdir -p pallas-webui/dist
+            cat > pallas-webui/dist/console-version.json <<'EOF'
+            {
+              "version": "${{ steps.get_version.outputs.version }}",
+              "commit": "${{ github.sha }}",
+              "build_time": "__BUILD_TIME__"
+            }
+            EOF
+            sed -i "s/__BUILD_TIME__/${BUILD_TIME}/g" pallas-webui/dist/console-version.json
+          fi
+
+      - name: Pack dist artifact
+        run: |
+          cd pallas-webui/dist
+          zip -r ../../pallas-webui-dist.zip .
+
+      - name: Upload WebUI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pallas-webui-dist
+          path: pallas-webui-dist.zip
+
   create-release:
     runs-on: ubuntu-latest
+    needs: build-webui-dist
     permissions:
       contents: write
       packages: write
@@ -68,6 +140,12 @@ jobs:
             echo "changelog=🎉 **首次发布**" >> $GITHUB_OUTPUT
           fi
 
+      - name: Download WebUI artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pallas-webui-dist
+          path: .
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
@@ -83,6 +161,24 @@ jobs:
             ```bash
             docker pull ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:${{ steps.get_version.outputs.version }}
             ```
+
+            ## WebUI 使用文档
+
+            - 主仓插件说明（自动下载/部署配置）：[src/plugins/pallas_webui/README.md](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/src/plugins/pallas_webui/README.md)
+            - 前端仓库说明（开发/发版/对接）：[TogetsuDo/Pallas-Bot-WebUI README](https://github.com/TogetsuDo/Pallas-Bot-WebUI/blob/main/README.md)
+
+            ## WebUI 快速配置（可复制）
+
+            ```env
+            PALLAS_WEBUI_DIST_ZIP_URL=
+            PALLAS_WEBUI_DIST_ZIP_REPO=TogetsuDo/Pallas-Bot-WebUI
+            PALLAS_WEBUI_DIST_ZIP_TAG=
+            PALLAS_WEBUI_DIST_ZIP_ASSET=dist.zip
+            ```
+
+            说明：`PALLAS_WEBUI_DIST_ZIP_TAG` 留空表示自动跟随 latest；如需固定版本请填写具体 tag（例如 `v0.2.0`）。
+          files: |
+            pallas-webui-dist.zip
           draft: false
           prerelease: false
         env:

@@ -1,0 +1,157 @@
+"""控制台静态资源：默认目录 data/pallas_webui/public，可选 zip 直链下载解压。"""
+
+from __future__ import annotations
+
+import asyncio
+import shutil
+import tempfile
+import zipfile
+from pathlib import Path
+from urllib.parse import quote
+
+import httpx
+from nonebot import logger
+
+from src.common.paths import plugin_data_dir
+
+
+def github_release_asset_url(repo: str, asset_name: str, tag: str = "") -> str:
+    owner_part, _, name_part = (repo or "").strip().partition("/")
+    if not owner_part or not name_part:
+        msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
+        raise ValueError(msg)
+    encoded = quote((asset_name or "").strip(), safe=".")
+    if not encoded:
+        raise ValueError("发布资产名不能为空")
+    if not (tag or "").strip():
+        return f"https://github.com/{owner_part}/{name_part}/releases/latest/download/{encoded}"
+    return f"https://github.com/{owner_part}/{name_part}/releases/download/{(tag or '').strip()}/{encoded}"
+
+
+def github_release_asset_url_candidates(repo: str, asset_name: str, tag: str = "") -> list[str]:
+    """返回可尝试的下载地址：优先 tag，其次 latest。"""
+    out: list[str] = []
+    tag_clean = (tag or "").strip()
+    if tag_clean:
+        out.append(github_release_asset_url(repo, asset_name, tag_clean))
+    out.append(github_release_asset_url(repo, asset_name, ""))
+    dedup: list[str] = []
+    seen: set[str] = set()
+    for u in out:
+        if u in seen:
+            continue
+        seen.add(u)
+        dedup.append(u)
+    return dedup
+
+
+def _github_release_api_url(repo: str, tag: str = "") -> str:
+    owner_part, _, name_part = (repo or "").strip().partition("/")
+    if not owner_part or not name_part:
+        msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
+        raise ValueError(msg)
+    if not (tag or "").strip():
+        return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/latest"
+    return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/tags/{(tag or '').strip()}"
+
+
+async def resolve_github_release_asset_urls(repo: str, preferred_asset: str, tag: str = "") -> list[str]:
+    """先查 release 资产列表再选下载 URL；失败时回退到直链候选。"""
+    preferred = (preferred_asset or "").strip()
+    if not preferred:
+        raise ValueError("发布资产名不能为空")
+    candidates: list[str] = []
+    release_apis = [_github_release_api_url(repo, tag)]
+    if (tag or "").strip():
+        release_apis.append(_github_release_api_url(repo, ""))
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=httpx.Timeout(30.0, connect=10.0),
+        headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
+    ) as client:
+        for api in release_apis:
+            try:
+                resp = await client.get(api)
+            except Exception:
+                continue
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            assets = data.get("assets")
+            if not isinstance(assets, list):
+                continue
+            urls: dict[str, str] = {}
+            for item in assets:
+                if not isinstance(item, dict):
+                    continue
+                name = str(item.get("name", "")).strip()
+                url = str(item.get("browser_download_url", "")).strip()
+                if not name or not url:
+                    continue
+                urls[name] = url
+            if preferred in urls:
+                candidates.append(urls[preferred])
+            elif urls:
+                for name, url in urls.items():
+                    if name.lower().endswith(".zip"):
+                        candidates.append(url)
+                        break
+    # 追加直链候选
+    candidates.extend(github_release_asset_url_candidates(repo, preferred, tag))
+    dedup: list[str] = []
+    seen: set[str] = set()
+    for u in candidates:
+        if u in seen:
+            continue
+        seen.add(u)
+        dedup.append(u)
+    return dedup
+
+
+def webui_public_path() -> Path:
+    return plugin_data_dir("pallas_webui") / "public"
+
+
+def check_webui_exists(path: Path) -> bool:
+    return (path / "index.html").is_file()
+
+
+def _resolved_extract_root(archive_dir: Path) -> Path:
+    if (archive_dir / "index.html").is_file():
+        return archive_dir
+    subdirs = [d for d in archive_dir.iterdir() if d.is_dir()]
+    if len(subdirs) == 1 and (subdirs[0] / "index.html").is_file():
+        return subdirs[0]
+    if len(subdirs) == 1:
+        return subdirs[0]
+    return archive_dir
+
+
+def _sync_write_dist_from_zip_bytes(public_dir: Path, content: bytes) -> None:
+    public_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        tpath = Path(tmp)
+        zip_path = tpath / "webui.zip"
+        zip_path.write_bytes(content)
+        with zipfile.ZipFile(zip_path) as zf:
+            extract_root = tpath / "extracted"
+            extract_root.mkdir()
+            zf.extractall(extract_root)
+        source = _resolved_extract_root(extract_root)
+        if public_dir.exists():
+            shutil.rmtree(public_dir)
+        public_dir.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(source, public_dir, dirs_exist_ok=True)
+
+
+async def download_and_extract_dist_zip(public_dir: Path, url: str, *, follow_redirects: bool = True) -> bool:
+    url = (url or "").strip()
+    if not url:
+        return False
+    async with httpx.AsyncClient(follow_redirects=follow_redirects, timeout=300.0) as c:
+        r = await c.get(url)
+        r.raise_for_status()
+        content = r.content
+    await asyncio.to_thread(_sync_write_dist_from_zip_bytes, public_dir, content)
+    logger.info("Pallas 控制台: 已解压 dist 到 data/pallas_webui/public")
+    return True

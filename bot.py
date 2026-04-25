@@ -3,9 +3,10 @@ from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
 
 from src.common.db import init_db
 from src.common.utils.voice_downloader import ensure_voices
+from src.common.web import install_nonebot_log_sink
 
 nonebot.init()
-
+install_nonebot_log_sink()
 driver = nonebot.get_driver()
 driver.register_adapter(ONEBOT_V11Adapter)
 config = driver.config
