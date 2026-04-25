@@ -9,8 +9,8 @@ from src.common.config import BotConfig
 from .config import Config
 
 __plugin_meta__ = PluginMetadata(
-    name="休眠拦截",
-    description="拦截消息与通知。",
+    name="其他牛牛消息拦截",
+    description="拦截其他牛牛的消息与通知。",
     usage="""
 功能说明：
 将拦截其他牛牛的群消息与群通知事件。
