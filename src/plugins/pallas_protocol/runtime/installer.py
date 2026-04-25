@@ -235,14 +235,21 @@ def _run_napcat_installer_sync(extract_root: Path, *, timeout_sec: int = _INSTAL
     """Windows 下一键包官方步骤：运行解压根目录的 NapCatInstaller.exe；未找到则跳过。"""
     if os.name != "nt":
         return None
-    exe = extract_root / "NapCatInstaller.exe"
+    root = extract_root.resolve()
+    exe = (root / "NapCatInstaller.exe").resolve()
     if not exe.is_file():
         return None
+    # 仅允许执行当前解压目录内的官方安装器，避免路径被外部输入污染。
+    if not str(exe).startswith(str(root) + os.sep):
+        msg = f"检测到异常安装器路径: {exe}"
+        raise RuntimeError(msg)
+    # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
     completed = subprocess.run(
         [str(exe)],
-        cwd=str(extract_root),
+        cwd=str(root),
         timeout=timeout_sec,
         check=False,
+        shell=False,
     )
     return int(completed.returncode)
 
