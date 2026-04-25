@@ -188,10 +188,10 @@ def resolve_onebot_ws_settings(config: Config) -> tuple[str, str, str]:
     if not host or port is None:
         return "", name, token
     return (
-        f"ws://{host}:{port}{_ONEBOT_WS_PATH}",
+        f"ws://{host}:{port}{_ONEBOT_WS_PATH}",  # nosemgrep: javascript.lang.security.detect-insecure-websocket
         name,
         token,
-    )  # nosemgrep: javascript.lang.security.detect-insecure-websocket
+    )
 
 
 def onebot_connection_hints(config: Config) -> dict[str, object]:
