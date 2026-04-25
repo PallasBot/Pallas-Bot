@@ -117,6 +117,12 @@ class ConfigRepository(Protocol):
         """
         ...
 
+    async def upsert_fields(self, key_id: int, fields: dict[str, Any]) -> None:
+        """
+        批量更新/插入多个字段，一次原子 $set。不存在则新建文档。
+        """
+        ...
+
     async def invalidate_cache(self) -> None:
         """
         失效 Repository 级缓存（仅部分实现有意义，如 Beanie 的 model-level cache）。

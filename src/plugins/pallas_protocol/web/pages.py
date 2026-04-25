@@ -202,7 +202,7 @@ table.acc-table td { font-size: 0.96rem; }
   border-radius: 10px; padding: 10px 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.3);
   font-size: 13px;
 }
-.toast.ok { border-color: rgba(52,211,153,0.45); }
+.toast.ok { border-color: rgba(52,211,153,0.45); animation: toast-in .22s ease both, success-pulse .9s ease .15s; }
 .toast.warn { border-color: rgba(251,191,36,0.45); }
 .toast.err { border-color: rgba(248,113,113,0.5); }
 @keyframes toast-in {
@@ -215,6 +215,43 @@ table.acc-table td { font-size: 0.96rem; }
   to { opacity: 1; transform: translateY(0); }
 }
 .section, .topbar, .layout-acc { animation: shell-fade-up .28s ease both; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block; width: 13px; height: 13px;
+  border: 2px solid rgba(255,255,255,0.35);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: spin .65s linear infinite;
+  vertical-align: middle; margin-right: 5px;
+}
+.btn.secondary .spinner { border-color: rgba(100,120,160,0.22); border-top-color: var(--muted); }
+@keyframes success-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(34,160,107,0.5); }
+  60%  { box-shadow: 0 0 0 8px rgba(34,160,107,0); }
+  100% { box-shadow: 0 0 0 0 rgba(34,160,107,0); }
+}
+.page-overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: rgba(7, 14, 26, 0.55);
+  backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s ease;
+}
+.page-overlay.visible { opacity: 1; pointer-events: auto; }
+.page-overlay-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 16px;
+  background: var(--card); border: 1px solid var(--bd); border-radius: var(--radius);
+  padding: 32px 40px; box-shadow: 0 20px 48px rgba(0,0,0,0.35);
+}
+.page-overlay-spinner {
+  width: 36px; height: 36px;
+  border: 3px solid rgba(56,189,248,0.25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+.page-overlay-label { font-size: 0.95rem; font-weight: 600; color: var(--txt); }
 pre.logs {
   background: #f3f8ff; color: #24324a; padding: 14px; border-radius: var(--radius);
   border: 1px solid var(--bd); max-height: min(68vh, 560px); overflow: auto; font-size: 12px; line-height: 1.45;
@@ -459,9 +496,9 @@ def render_dashboard(base_path: str) -> str:
             <td>
               <div class="row">
                 <button class="btn secondary" type="button" onclick="openAccount('${{a.id}}')">控制台</button>
-                <button class="btn secondary" type="button" onclick="startAccount('${{a.id}}')">启动</button>
-                <button class="btn secondary" type="button" onclick="stopAccount('${{a.id}}')">停止</button>
-                <button class="btn secondary" type="button" onclick="restartAccount('${{a.id}}')">重启</button>
+                <button class="btn secondary" type="button" onclick="startAccount('${{a.id}}',this)">启动</button>
+                <button class="btn secondary" type="button" onclick="stopAccount('${{a.id}}',this)">停止</button>
+                <button class="btn secondary" type="button" onclick="restartAccount('${{a.id}}',this)">重启</button>
               </div>
             </td>
           </tr>`;
@@ -488,9 +525,9 @@ def render_dashboard(base_path: str) -> str:
           <div class="mono muted">QQ: ${{a.qq || a.id}}</div>
           ${{wu ? `<div class="mono"><a href="${{wu}}" target="_blank" rel="noopener">NapCat 内置 WebUI</a> · token ${{wtok}}</div>` : ""}}
           <div class="row" style="margin-top:8px">
-            <button class="btn secondary" type="button" onclick="startAccount('${{a.id}}')">启动</button>
-            <button class="btn secondary" type="button" onclick="stopAccount('${{a.id}}')">停止</button>
-            <button class="btn secondary" type="button" onclick="restartAccount('${{a.id}}')">重启</button>
+            <button class="btn secondary" type="button" onclick="startAccount('${{a.id}}',this)">启动</button>
+            <button class="btn secondary" type="button" onclick="stopAccount('${{a.id}}',this)">停止</button>
+            <button class="btn secondary" type="button" onclick="restartAccount('${{a.id}}',this)">重启</button>
             <button class="btn danger" type="button" onclick="deleteAccount('${{a.id}}')">删除</button>
           </div>`;
         g.appendChild(card);
@@ -520,23 +557,41 @@ def render_dashboard(base_path: str) -> str:
       try {{
         const data = await api("/api/nonebot-logs?lines=800");
         const el = document.getElementById("nbLogs");
+        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         el.textContent = (data.logs || []).join("\\n");
-        el.scrollTop = el.scrollHeight;
+        if (atBottom) el.scrollTop = el.scrollHeight;
       }} catch (e) {{
         document.getElementById("nbLogs").textContent = String(e.message || e);
       }}
     }}
-    async function startAccount(id) {{
+    function btnLoad(btn, text) {{
+      if (!btn) return;
+      btn.disabled = true;
+      btn.dataset.idle = btn.textContent;
+      btn.innerHTML = `<span class="spinner"></span>${{text}}`;
+    }}
+    function btnReset(btn) {{
+      if (!btn) return;
+      btn.disabled = false;
+      btn.textContent = btn.dataset.idle || btn.textContent;
+    }}
+    async function startAccount(id, btn) {{
+      btnLoad(btn, "启动中…");
       try {{ await api(`/api/accounts/${{id}}/start`, {{ method: "POST" }}); await refreshAccounts({{ silent: true }}); notify(`已启动 ${{id}}`, "ok"); }}
       catch (e) {{ notify(e.message || e, "err"); }}
+      finally {{ btnReset(btn); }}
     }}
-    async function stopAccount(id) {{
+    async function stopAccount(id, btn) {{
+      btnLoad(btn, "停止中…");
       try {{ await api(`/api/accounts/${{id}}/stop`, {{ method: "POST" }}); await refreshAccounts({{ silent: true }}); notify(`已停止 ${{id}}`, "warn"); }}
       catch (e) {{ notify(e.message || e, "err"); }}
+      finally {{ btnReset(btn); }}
     }}
-    async function restartAccount(id) {{
+    async function restartAccount(id, btn) {{
+      btnLoad(btn, "重启中…");
       try {{ await api(`/api/accounts/${{id}}/restart`, {{ method: "POST" }}); await refreshAccounts({{ silent: true }}); notify(`已重启 ${{id}}`, "ok"); }}
       catch (e) {{ notify(e.message || e, "err"); }}
+      finally {{ btnReset(btn); }}
     }}
     async function deleteAccount(id) {{
       if (!confirm("确定删除 " + id + " ?")) return;
@@ -595,6 +650,18 @@ def render_new_account_page(base_path: str) -> str:
       <div class="field"><label>内置 WebUI token（可选）</label>
         <input id="webui_token" type="password" autocomplete="off" placeholder="留空则随机生成" />
       </div>
+      <hr style="border:none;border-top:1px solid var(--bd);margin:6px 0 14px" />
+      <h4 style="margin:0 0 12px;font-size:0.9rem;color:var(--muted);font-weight:700">WS 连接（协议端 → Bot，可选）</h4>
+      <p class="muted" style="margin:0 0 12px">NapCat 主动连接 Bot 的地址。Bot 与协议端不同机部署时填写，留空则使用默认值 ws://127.0.0.1:8088/onebot/v11/ws。</p>
+      <div class="field"><label>WS 连接地址</label>
+        <input id="ws_url" placeholder="ws://bot-host:8088/onebot/v11/ws" autocomplete="off" />
+      </div>
+      <div class="field"><label>连接名（NapCat 侧显示）</label>
+        <input id="ws_name" placeholder="pallas" autocomplete="off" />
+      </div>
+      <div class="field"><label>WS Token（与 Bot 侧 access_token 一致）</label>
+        <input id="ws_token" type="password" autocomplete="off" placeholder="留空则不鉴权" />
+      </div>
       <div class="row" style="margin-top:4px">
         <button class="btn" type="button" onclick="createAccount()">创建</button>
       </div>
@@ -612,6 +679,9 @@ def render_new_account_page(base_path: str) -> str:
         const wn = parseInt(wport, 10);
         const disp = document.getElementById("display_name").value.trim();
         const qq = document.getElementById("qq").value.trim();
+        const wsUrl = document.getElementById("ws_url").value.trim();
+        const wsName = document.getElementById("ws_name").value.trim();
+        const wsTok = document.getElementById("ws_token").value;
         const body = {{
           id: qq,
           qq,
@@ -619,6 +689,9 @@ def render_new_account_page(base_path: str) -> str:
           enabled: true,
           ...(wport && !Number.isNaN(wn) ? {{ webui_port: wn }} : {{}}),
           ...(wtok ? {{ webui_token: wtok }} : {{}}),
+          ...(wsUrl ? {{ ws_url: wsUrl }} : {{}}),
+          ...(wsName ? {{ ws_name: wsName }} : {{}}),
+          ...(wsTok ? {{ ws_token: wsTok }} : {{}}),
         }};
         if (!qq) throw new Error("请填写 QQ 号");
         await api("/api/accounts", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify(body) }});
@@ -841,6 +914,18 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
             <div class="field"><label>QQ（只读）</label><input id="qq" readonly /></div>
             <div class="field"><label>内置 WebUI 端口</label><input id="webui_port" type="number" /></div>
             <div class="field"><label>内置 WebUI token</label><input id="webui_token" autocomplete="off" /></div>
+            <hr style="border:none;border-top:1px solid var(--bd);margin:6px 0 14px" />
+            <h4 style="margin:0 0 12px;font-size:0.9rem;color:var(--muted);font-weight:700">WS 连接（协议端 → Bot）</h4>
+            <p class="muted" style="margin:0 0 12px">NapCat 主动连接 Bot 的地址。Bot 与协议端不同机部署时在此填写 Bot 所在机器的地址，保存后重启协议端进程即可，无需重启 Bot。</p>
+            <div class="field"><label>WS 连接地址</label>
+              <input id="ws_url" placeholder="ws://bot-host:8088/onebot/v11/ws" autocomplete="off" />
+            </div>
+            <div class="field"><label>连接名（NapCat 侧显示）</label>
+              <input id="ws_name" placeholder="pallas" autocomplete="off" />
+            </div>
+            <div class="field"><label>WS Token（与 Bot 侧 access_token 一致）</label>
+              <input id="ws_token" type="password" autocomplete="off" placeholder="留空则不鉴权" />
+            </div>
             <div class="row">
               <button class="btn" type="button" onclick="saveSettings()">保存</button>
             </div>
@@ -923,21 +1008,26 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       document.getElementById("qq").value = a.qq || "";
       document.getElementById("webui_port").value = a.webui_port != null ? String(a.webui_port) : "";
       document.getElementById("webui_token").value = a.webui_token || "";
+      document.getElementById("ws_url").value = a.ws_url || "";
+      document.getElementById("ws_name").value = a.ws_name || "";
+      document.getElementById("ws_token").value = a.ws_token || "";
     }}
     async function pollAccLogs() {{
       try {{
         const data = await api(`/api/accounts/${{encodeURIComponent(accountId)}}/logs?lines=900`);
         const el = document.getElementById("accLogs");
+        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         el.textContent = (data.logs || []).join("\\n");
-        el.scrollTop = el.scrollHeight;
+        if (atBottom) el.scrollTop = el.scrollHeight;
       }} catch (e) {{ document.getElementById("accLogs").textContent = String(e.message || e); }}
     }}
     async function pollAccNbLogs() {{
       try {{
         const data = await api("/api/nonebot-logs?lines=500");
         const el = document.getElementById("accNbLogs");
+        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
         el.textContent = (data.logs || []).join("\\n");
-        el.scrollTop = el.scrollHeight;
+        if (atBottom) el.scrollTop = el.scrollHeight;
       }} catch (e) {{ document.getElementById("accNbLogs").textContent = String(e.message || e); }}
     }}
     async function loadJsonCfgs() {{
@@ -955,18 +1045,25 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
         const body = {{
           display_name: document.getElementById("display_name").value.trim(),
           webui_token: document.getElementById("webui_token").value.trim(),
+          ws_url: document.getElementById("ws_url").value.trim(),
+          ws_name: document.getElementById("ws_name").value.trim(),
+          ws_token: document.getElementById("ws_token").value,
         }};
         if (wport && !Number.isNaN(wn)) body.webui_port = wn;
         let restartNow = true;
         if (accountProcessRunning) {{
           restartNow = confirm("当前账号正在运行，保存后需要重启进程才能生效。是否立即重启？");
         }}
+        showPageLoading("保存中…");
         const put = await api(`/api/accounts/${{encodeURIComponent(accountId)}}?restart=${{restartNow ? "1" : "0"}}`, {{
           method: "PUT", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify(body),
         }});
-        el.textContent = put.restarted ? "已保存并已重启进程。" : (put.needs_restart ? "已保存，重启后生效。" : "已保存。");
+        showPageLoading("读取最新数据…");
         await loadAccount();
-      }} catch (e) {{ el.textContent = String(e.message || e); }}
+        hidePageLoading();
+        el.textContent = put.restarted ? "已保存并已重启进程。" : (put.needs_restart ? "已保存，重启后生效。" : "已保存。");
+        notify(el.textContent, "ok");
+      }} catch (e) {{ hidePageLoading(); el.textContent = String(e.message || e); }}
     }}
     async function saveConfigs() {{
       const el = document.getElementById("cfgMsg");
@@ -981,12 +1078,26 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
         if (accountProcessRunning) {{
           restartNow = confirm("当前账号正在运行，配置变更需重启后生效。是否立即重启？");
         }}
+        showPageLoading("保存中…");
         const cfgPut = await api(`/api/accounts/${{encodeURIComponent(accountId)}}/configs?restart=${{restartNow ? "1" : "0"}}`, {{
           method: "PUT", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify(payload),
         }});
-        el.textContent = cfgPut.restarted ? "已写入磁盘并已重启进程。" : (cfgPut.needs_restart ? "已写入磁盘，重启后生效。" : "已写入磁盘。");
+        showPageLoading("读取最新数据…");
         await loadJsonCfgs();
-      }} catch (e) {{ el.textContent = String(e.message || e); }}
+        hidePageLoading();
+        el.textContent = cfgPut.restarted ? "已写入磁盘并已重启进程。" : (cfgPut.needs_restart ? "已写入磁盘，重启后生效。" : "已写入磁盘。");
+        notify(el.textContent, "ok");
+      }} catch (e) {{ hidePageLoading(); el.textContent = String(e.message || e); }}
+    }}
+    function showPageLoading(label = "加载中…") {{
+      const ov = document.getElementById("pageOverlay");
+      const lb = document.getElementById("pageOverlayLabel");
+      if (lb) lb.textContent = label;
+      if (ov) ov.classList.add("visible");
+    }}
+    function hidePageLoading() {{
+      const ov = document.getElementById("pageOverlay");
+      if (ov) ov.classList.remove("visible");
     }}
     function notify(msg, level = "ok") {{
       const host = document.getElementById("statusbar");
@@ -996,32 +1107,49 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       host.appendChild(el);
       setTimeout(() => el.remove(), 4200);
     }}
+    function accBtnLoad(btn, text) {{
+      if (!btn) return;
+      btn.disabled = true;
+      btn.dataset.idle = btn.textContent;
+      btn.innerHTML = `<span class="spinner"></span>${{text}}`;
+    }}
+    function accBtnReset(btn) {{
+      if (!btn) return;
+      btn.disabled = false;
+      btn.textContent = btn.dataset.idle || btn.textContent;
+    }}
     async function doStart() {{
+      const btn = event?.currentTarget || null;
+      accBtnLoad(btn, "启动中…");
       try {{
         await api(`/api/accounts/${{encodeURIComponent(accountId)}}/start`, {{ method: "POST" }});
         await loadAccount();
         notify("启动成功", "ok");
       }} catch (e) {{
         notify(e.message || e, "err");
-      }}
+      }} finally {{ accBtnReset(btn); }}
     }}
     async function doStop() {{
+      const btn = event?.currentTarget || null;
+      accBtnLoad(btn, "停止中…");
       try {{
         await api(`/api/accounts/${{encodeURIComponent(accountId)}}/stop`, {{ method: "POST" }});
         await loadAccount();
         notify("停止成功", "warn");
       }} catch (e) {{
         notify(e.message || e, "err");
-      }}
+      }} finally {{ accBtnReset(btn); }}
     }}
     async function doRestart() {{
+      const btn = event?.currentTarget || null;
+      accBtnLoad(btn, "重启中…");
       try {{
         await api(`/api/accounts/${{encodeURIComponent(accountId)}}/restart`, {{ method: "POST" }});
         await loadAccount();
         notify("重启成功", "ok");
       }} catch (e) {{
         notify(e.message || e, "err");
-      }}
+      }} finally {{ accBtnReset(btn); }}
     }}
     async function doDelete() {{
       if (!confirm("确定删除该账号？")) return;
@@ -1047,6 +1175,12 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       if (activeTab === "overview") pollAccNbLogs();
     }}, 2000);
   </script>
+  <div id="pageOverlay" class="page-overlay">
+    <div class="page-overlay-inner">
+      <div class="page-overlay-spinner"></div>
+      <div class="page-overlay-label" id="pageOverlayLabel">保存中…</div>
+    </div>
+  </div>
   <div id="statusbar" class="statusbar"></div>
 </body>
 </html>

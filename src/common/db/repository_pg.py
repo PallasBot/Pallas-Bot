@@ -756,6 +756,21 @@ class PgConfigRepository:
             await session.commit()
         await self._cache.invalidate(key_id)
 
+    async def upsert_fields(self, key_id: int, fields: dict[str, Any]) -> None:
+        """批量字段级 upsert"""
+        if not fields:
+            return
+        cleaned = {k: _strip_null_deep(v) for k, v in fields.items()}
+        async with get_session() as session:
+            stmt = pg_insert(self._row_class).values(**{self._pk_field: key_id, **cleaned})
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[self._pk_field],
+                set_={k: getattr(stmt.excluded, k) for k in cleaned},
+            )
+            await session.execute(stmt)
+            await session.commit()
+        await self._cache.invalidate(key_id)
+
     async def invalidate_cache(self) -> None:
         await self._cache.clear()
 

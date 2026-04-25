@@ -54,10 +54,28 @@ class Config(BaseModel):
         default=False,
         description="启动时若未检测到 manifest 中的 program_dir，则后台尝试下载（可能较慢）",
     )
-    # OneBot 连接名配置
+    # OneBot WS 连接配置
     pallas_protocol_onebot_client_name: str = Field(
         default="",
         description="onebot 连接名，空则读 PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME，再读 ONEBOT_CLIENT_NAME 或 pallas",
+    )
+    pallas_protocol_onebot_ws_url: str = Field(
+        default="",
+        description="完整 WS 直链，跳过自动探测",
+    )
+    pallas_protocol_onebot_ws_host: str = Field(
+        default="",
+        description="WS 目标主机",
+    )
+    pallas_protocol_onebot_ws_port: int = Field(
+        default=0,
+        ge=0,
+        le=65535,
+        description="WS 目标端口",
+    )
+    pallas_protocol_onebot_ws_path: str = Field(
+        default="",
+        description="WS 路径；空则使用默认 /onebot/v11/ws",
     )
     # Linux Docker 模式开关
     pallas_protocol_linux_use_docker: bool = Field(
@@ -172,23 +190,38 @@ def _ob_normalize_target_host(raw_host: str) -> str:
 
 def resolve_onebot_ws_settings(config: Config) -> tuple[str, str, str]:
     cfg_name = str(getattr(config, "pallas_protocol_onebot_client_name", "") or "").strip()
-    host = _ob_env_first("HOST", "ONEBOT_HOST")
-    if not host:
-        host = _ob_driver_first("host", "onebot_host")
-    port = _ob_parse_port(_ob_env_first("PORT", "ONEBOT_PORT"))
-    if port is None:
-        port = _ob_parse_port(_ob_driver_first("port", "onebot_port"))
-    token = _ob_env_first("ACCESS_TOKEN")
-    if not token:
-        token = _ob_driver_first("access_token")
     name = (
         cfg_name or _ob_env_first("PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME", "ONEBOT_CLIENT_NAME") or "pallas"
     ).strip() or "pallas"
+
+    token = _ob_env_first("ACCESS_TOKEN")
+    if not token:
+        token = _ob_driver_first("access_token")
+
+    cfg_url = str(getattr(config, "pallas_protocol_onebot_ws_url", "") or "").strip()
+    if cfg_url:
+        return cfg_url, name, token
+
+    cfg_host = str(getattr(config, "pallas_protocol_onebot_ws_host", "") or "").strip()
+    cfg_port = _ob_parse_port(getattr(config, "pallas_protocol_onebot_ws_port", 0) or 0)
+    cfg_path = str(getattr(config, "pallas_protocol_onebot_ws_path", "") or "").strip()
+    ws_path = cfg_path or _ONEBOT_WS_PATH
+
+    host = cfg_host
+    port = cfg_port or None
+
+    if not host:
+        host = _ob_env_first("HOST", "ONEBOT_HOST") or _ob_driver_first("host", "onebot_host")
+    if port is None:
+        port = _ob_parse_port(_ob_env_first("PORT", "ONEBOT_PORT"))
+    if port is None:
+        port = _ob_parse_port(_ob_driver_first("port", "onebot_port"))
+
     host = _ob_normalize_target_host(host)
     if not host or port is None:
         return "", name, token
     return (
-        f"ws://{host}:{port}{_ONEBOT_WS_PATH}",  # nosemgrep: javascript.lang.security.detect-insecure-websocket
+        f"ws://{host}:{port}{ws_path}",  # nosemgrep: javascript.lang.security.detect-insecure-websocket
         name,
         token,
     )
@@ -196,8 +229,13 @@ def resolve_onebot_ws_settings(config: Config) -> tuple[str, str, str]:
 
 def onebot_connection_hints(config: Config) -> dict[str, object]:
     url, name, tok = resolve_onebot_ws_settings(config)
-    h = _ob_env_first("HOST", "ONEBOT_HOST") or _ob_driver_first("host", "onebot_host")
-    port = _ob_parse_port(_ob_env_first("PORT", "ONEBOT_PORT"))
+    # 用于前端展示的原始 host/port
+    cfg_host = str(getattr(config, "pallas_protocol_onebot_ws_host", "") or "").strip()
+    cfg_port = _ob_parse_port(getattr(config, "pallas_protocol_onebot_ws_port", 0) or 0)
+    h = cfg_host or _ob_env_first("HOST", "ONEBOT_HOST") or _ob_driver_first("host", "onebot_host")
+    port = cfg_port
+    if port is None:
+        port = _ob_parse_port(_ob_env_first("PORT", "ONEBOT_PORT"))
     if port is None:
         port = _ob_parse_port(_ob_driver_first("port", "onebot_port"))
     return {

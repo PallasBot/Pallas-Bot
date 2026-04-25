@@ -106,8 +106,15 @@ class PallasProtocolService:
         if changed:
             self._save_accounts()
 
-    def _merge_onebot_ws_from_env(self, account: dict) -> bool:
-        """当 URL 在配置/环境中有值时，用其覆盖账号上的 ws 三字段。"""
+    def _merge_onebot_ws_from_env(self, account: dict, *, force: bool = False) -> bool:
+        """将 env/配置中的 WS 设置同步到账号。
+
+        仅在账号尚未设置 ws_url（或 force=True）时才覆盖，
+        避免用户在 UI 手动填写的值被 env 默认值冲掉。
+        """
+        # 账号已有用户自定义值时跳过（除非强制）
+        if not force and str(account.get("ws_url", "")).strip():
+            return False
         base_url, name, tok = resolve_onebot_ws_settings(self._config)
         if not base_url:
             return False
@@ -131,9 +138,10 @@ class PallasProtocolService:
         return changed
 
     def _apply_onebot_ws_to_all_accounts(self) -> None:
+        """初始化时：仅对尚未设置 ws_url 的账号补填 env 默认值。"""
         c = False
         for acc in self._accounts.values():
-            if self._merge_onebot_ws_from_env(acc):
+            if self._merge_onebot_ws_from_env(acc, force=False):
                 c = True
         if c:
             self._save_accounts()
@@ -196,9 +204,10 @@ class PallasProtocolService:
 
     def _migrate_account_webui_fields(self, account_id: str, account: dict) -> bool:
         changed = False
-        if ACCOUNT_PROTOCOL_BACKEND_KEY not in account or not str(
-            account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or ""
-        ).strip():
+        if (
+            ACCOUNT_PROTOCOL_BACKEND_KEY not in account
+            or not str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or "").strip()
+        ):
             account[ACCOUNT_PROTOCOL_BACKEND_KEY] = DEFAULT_PROTOCOL_BACKEND
             changed = True
         if "webui_port" not in account:
@@ -302,12 +311,19 @@ class PallasProtocolService:
         wtok = str(payload.get("webui_token", "")).strip()
         if wtok:
             account["webui_token"] = wtok
+        # payload 中显式提供的 ws 字段优先级高于 env 默认值
+        for ws_key in ("ws_url", "ws_name", "ws_token"):
+            v = str(payload.get(ws_key, "")).strip() if ws_key != "ws_token" else payload.get(ws_key, "")
+            if v:
+                account[ws_key] = v
         self._launch.apply_defaults(account, self._resolve_qq)
         if "webui_port" not in account:
             account["webui_port"] = self._next_free_webui_port()
         if "webui_token" not in account:
             account["webui_token"] = secrets.token_hex(6)
-        self._merge_onebot_ws_from_env(account)
+        # 仅在 payload 未提供 ws_url 时才用 env 默认值补填
+        if not str(payload.get("ws_url", "")).strip():
+            self._merge_onebot_ws_from_env(account)
         self._launch.prepare_dirs(account)
         self._configs.sync_onebot(account, self._resolve_qq)
         self._configs.sync_napcat_core(account, self._resolve_qq)
@@ -332,6 +348,9 @@ class PallasProtocolService:
             "program_dir",
             "account_data_dir",
             "webui_token",
+            "ws_url",
+            "ws_name",
+            "ws_token",
             ACCOUNT_PROTOCOL_BACKEND_KEY,
         )
         for key in editable_keys:
@@ -357,7 +376,9 @@ class PallasProtocolService:
                     raise ValueError("WebUI 端口已被其他账号占用")
             account["webui_port"] = wp
         self._launch.apply_defaults(account, self._resolve_qq)
-        self._merge_onebot_ws_from_env(account)
+        # 仅在 payload 未显式提供 ws_url 时才用 env 默认值补填
+        if "ws_url" not in payload:
+            self._merge_onebot_ws_from_env(account)
         self._launch.prepare_dirs(account)
         self._configs.sync_onebot(account, self._resolve_qq)
         self._configs.sync_napcat_core(account, self._resolve_qq)
@@ -455,10 +476,7 @@ class PallasProtocolService:
                 os.name != "nt"
                 and os.geteuid() == 0
                 and "--no-sandbox" not in args
-                and (
-                    Path(command).suffix == ".AppImage"
-                    or any(Path(str(a)).suffix == ".AppImage" for a in args)
-                )
+                and (Path(command).suffix == ".AppImage" or any(Path(str(a)).suffix == ".AppImage" for a in args))
             ):
                 # 追加 no-sandbox 参数
                 args.append("--no-sandbox")
@@ -474,10 +492,7 @@ class PallasProtocolService:
             if (
                 os.name != "nt"
                 and account_data_dir
-                and (
-                    Path(command).suffix == ".AppImage"
-                    or any(Path(str(a)).suffix == ".AppImage" for a in args)
-                )
+                and (Path(command).suffix == ".AppImage" or any(Path(str(a)).suffix == ".AppImage" for a in args))
             ):
                 # AppImage 使用账号目录作为 cwd
                 cwd_final = account_data_dir
@@ -494,9 +509,7 @@ class PallasProtocolService:
             runtime.drain_task = asyncio.create_task(self._drain_logs(account_id))
         return self._compose_account_state(account_id, account)
 
-    async def _start_account_linux_docker(
-        self, account_id: str, account: dict, runtime: NapCatRuntime
-    ) -> dict:
+    async def _start_account_linux_docker(self, account_id: str, account: dict, runtime: NapCatRuntime) -> dict:
         from .linux_docker import (
             build_docker_run_argv,
             docker_container_name,

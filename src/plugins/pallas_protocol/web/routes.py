@@ -105,9 +105,7 @@ def register_pallas_protocol_routes(
         _auth(x_pallas_protocol_token, token)
         if not manager.has_account(account_id):
             raise HTTPException(status_code=404, detail="账号不存在")
-        return HTMLResponse(
-            render_account_workspace(resolve_protocol_webui_base_path(plugin_config), account_id)
-        )
+        return HTMLResponse(render_account_workspace(resolve_protocol_webui_base_path(plugin_config), account_id))
 
     @app.get(f"{base}/api/runtime")
     async def runtime_status(

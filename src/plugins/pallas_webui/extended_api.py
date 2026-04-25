@@ -122,16 +122,14 @@ def _list_plugins_dict() -> list[dict[str, Any]]:
         module_name = getattr(mod, "__name__", "") if mod is not None else ""
         if not module_name:
             module_name = str(getattr(p, "module_name", "") or "")
-        out.append(
-            {
-                "name": p.name,
-                "module": module_name,
-                "metadata": _metadata_to_dict(p.metadata),
-                "help_visible": p.name not in ignored and p.name not in hidden,
-                "help_ignored": p.name in ignored,
-                "help_hidden": p.name in hidden,
-            }
-        )
+        out.append({
+            "name": p.name,
+            "module": module_name,
+            "metadata": _metadata_to_dict(p.metadata),
+            "help_visible": p.name not in ignored and p.name not in hidden,
+            "help_ignored": p.name in ignored,
+            "help_hidden": p.name in hidden,
+        })
     out.sort(key=lambda x: x["name"] or "")
     return out
 
@@ -210,17 +208,15 @@ def _plugin_config_payload(plugin_name: str) -> dict[str, Any]:
     for key, f in cfg_cls.model_fields.items():
         cur = getattr(cfg_obj, key, f.default)
         default_value = None if f.default is PydanticUndefined else f.default
-        fields.append(
-            {
-                "name": key,
-                "kind": _field_kind_from_annotation(f.annotation),
-                "required": bool(f.is_required()),
-                "description": str(f.description or ""),
-                "env_key": key.upper(),
-                "default": _jsonable_value(default_value),
-                "current": _jsonable_value(cur),
-            }
-        )
+        fields.append({
+            "name": key,
+            "kind": _field_kind_from_annotation(f.annotation),
+            "required": bool(f.is_required()),
+            "description": str(f.description or ""),
+            "env_key": key.upper(),
+            "default": _jsonable_value(default_value),
+            "current": _jsonable_value(cur),
+        })
     return {
         "plugin": str(getattr(p, "name", "") or plugin_name),
         "module": module_name,
@@ -280,13 +276,11 @@ def _list_bots_dict() -> list[dict[str, Any]]:
                 adapter = str(a.get_name())
         except Exception:  # noqa: BLE001
             pass
-        rows.append(
-            {
-                "connection_key": str(key),
-                "self_id": self_id,
-                "adapter": adapter,
-            }
-        )
+        rows.append({
+            "connection_key": str(key),
+            "self_id": self_id,
+            "adapter": adapter,
+        })
     return rows
 
 
@@ -611,18 +605,16 @@ def _gpu_metrics() -> dict[str, Any]:
                 name = name_raw.decode("utf-8", errors="ignore")
             else:
                 name = str(name_raw)
-            devices.append(
-                {
-                    "index": i,
-                    "name": name,
-                    "memory_total": int(getattr(mem, "total", 0) or 0),
-                    "memory_used": int(getattr(mem, "used", 0) or 0),
-                    "memory_free": int(getattr(mem, "free", 0) or 0),
-                    "utilization_gpu": float(getattr(util, "gpu", 0) or 0),
-                    "utilization_memory": float(getattr(util, "memory", 0) or 0),
-                    "temperature": temp,
-                }
-            )
+            devices.append({
+                "index": i,
+                "name": name,
+                "memory_total": int(getattr(mem, "total", 0) or 0),
+                "memory_used": int(getattr(mem, "used", 0) or 0),
+                "memory_free": int(getattr(mem, "free", 0) or 0),
+                "utilization_gpu": float(getattr(util, "gpu", 0) or 0),
+                "utilization_memory": float(getattr(util, "memory", 0) or 0),
+                "temperature": temp,
+            })
     except Exception as e:  # noqa: BLE001
         return {"available": False, "reason": str(e), "devices": []}
     finally:
@@ -680,14 +672,12 @@ async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
         stats = _extract_message_stats(status_raw)
         total_sent += int(stats["sent"])
         total_received += int(stats["received"])
-        rows.append(
-            {
-                "self_id": sid,
-                "connection_key": str(key),
-                "sent": int(stats["sent"]),
-                "received": int(stats["received"]),
-            }
-        )
+        rows.append({
+            "self_id": sid,
+            "connection_key": str(key),
+            "sent": int(stats["sent"]),
+            "received": int(stats["received"]),
+        })
     return {"total_sent": total_sent, "total_received": total_received, "bots": rows}
 
 
@@ -810,16 +800,14 @@ async def _friend_requests_overview(
             adapter = _bot_adapter_label(bot)
             if include_doubt and _is_onebot_v11_bot(bot):
                 doubt = await _call_get_doubt_friends(bot)
-        rows.append(
-            {
-                "self_id": sid,
-                "connection_key": conn,
-                "adapter": adapter,
-                "online": online,
-                "pending_friend_requests": pending,
-                "doubt_friend_requests": doubt,
-            }
-        )
+        rows.append({
+            "self_id": sid,
+            "connection_key": conn,
+            "adapter": adapter,
+            "online": online,
+            "pending_friend_requests": pending,
+            "doubt_friend_requests": doubt,
+        })
     return {"bots": rows}
 
 
@@ -1020,18 +1008,17 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
     from src.common.db.pallas_console_data import bot_config_to_public
 
     repo = make_bot_config_repository()
-    # 初始化账号配置
     await repo.get_or_create(account, disabled_plugins=[])
+    fields: dict[str, Any] = {}
     for field_name, raw in body.model_dump(exclude_none=True).items():
         if field_name in ("admins", "disabled_plugins") and raw is not None:
             if field_name == "disabled_plugins":
-                value = [str(s).strip() for s in raw if str(s).strip()]
+                fields[field_name] = [str(s).strip() for s in raw if str(s).strip()]
             else:
-                value = [int(x) for x in raw]
+                fields[field_name] = [int(x) for x in raw]
         else:
-            value = raw
-        await repo.upsert_field(account, str(field_name), value)
-    await repo.invalidate_cache()
+            fields[field_name] = raw
+    await repo.upsert_fields(account, fields)
     doc = await repo.get(account, ignore_cache=True)
     if doc is None:
         raise HTTPException(status_code=500, detail="config upsert 后回读失败")
@@ -1044,16 +1031,15 @@ async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> d
 
     repo = make_group_config_repository()
     await repo.get_or_create(group_id, disabled_plugins=[])
+    fields: dict[str, Any] = {}
     for field_name, raw in body.model_dump(exclude_none=True).items():
         if field_name == "disabled_plugins" and raw is not None:
-            value: Any = [str(s).strip() for s in raw if str(s).strip()]
+            fields[field_name] = [str(s).strip() for s in raw if str(s).strip()]
         elif field_name == "roulette_mode":
-            # 规范为 0/1
-            value = 1 if int(raw) == 1 else 0
+            fields[field_name] = 1 if int(raw) == 1 else 0
         else:
-            value = raw
-        await repo.upsert_field(group_id, str(field_name), value)
-    await repo.invalidate_cache()
+            fields[field_name] = raw
+    await repo.upsert_fields(group_id, fields)
     doc = await repo.get(group_id, ignore_cache=True)
     if doc is None:
         raise HTTPException(status_code=500, detail="config upsert 后回读失败")
@@ -1066,9 +1052,7 @@ async def _apply_user_config_patch(user_id: int, body: _UserConfigPatch) -> dict
 
     repo = make_user_config_repository()
     await repo.get_or_create(user_id, banned=False)
-    for field_name, raw in body.model_dump(exclude_none=True).items():
-        await repo.upsert_field(user_id, str(field_name), raw)
-    await repo.invalidate_cache()
+    await repo.upsert_fields(user_id, body.model_dump(exclude_none=True))
     doc = await repo.get(user_id, ignore_cache=True)
     if doc is None:
         raise HTTPException(status_code=500, detail="user_config upsert 后回读失败")
@@ -1325,29 +1309,25 @@ def register_extended_api(
         _ensure_log_sink()
         from src.common.web import tail_nonebot_log_lines
 
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": {
-                    "lines": tail_nonebot_log_lines(n),
-                    "max": plugin_config.pallas_webui_log_lines_max,
-                },
-            }
-        )
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "lines": tail_nonebot_log_lines(n),
+                "max": plugin_config.pallas_webui_log_lines_max,
+            },
+        })
 
     @router.get(
         f"{x}/plugin-config-hint",
         include_in_schema=True,
     )
     async def _plugin_config_hint() -> JSONResponse:
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": {
-                    "message": "",
-                },
-            }
-        )
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "message": "",
+            },
+        })
 
     @router.get(f"{x}/db/overview", include_in_schema=True)
     async def _db_overview() -> JSONResponse:

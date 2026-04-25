@@ -64,9 +64,10 @@ class AccountConfigManager:
         return self.get_account_configs(account, resolve_qq)
 
     def sync_onebot(self, account: dict, resolve_qq) -> None:
-        account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
-        if not str(account_data_dir):
+        raw_data_dir = str(account.get("account_data_dir", "")).strip()
+        if not raw_data_dir:
             return
+        account_data_dir = Path(raw_data_dir)
         qq = resolve_qq(account)
         if not qq:
             return
@@ -75,7 +76,8 @@ class AccountConfigManager:
         config_path = self._resolve_onebot_config_path(config_dir, qq)
         data = self.safe_read_json(config_path)
 
-        data.setdefault("network", {})
+        if not isinstance(data.get("network"), dict):
+            data["network"] = {}
         network = data["network"]
         network.setdefault("httpServers", [])
         network.setdefault("httpSseServers", [])
@@ -110,7 +112,13 @@ class AccountConfigManager:
             "timeout",
             {"baseTimeout": 10000, "uploadSpeedKBps": 256, "downloadSpeedKBps": 256, "maxTimeout": 1800000},
         )
-        for path in self._onebot_sync_targets(config_dir, qq):
+        write_targets: list[Path] = []
+        seen_paths: set[Path] = set()
+        for p in [config_path, *self._onebot_sync_targets(config_dir, qq)]:
+            if p not in seen_paths:
+                seen_paths.add(p)
+                write_targets.append(p)
+        for path in write_targets:
             path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         account["qq"] = qq
         account["onebot_config_path"] = str(config_path)

@@ -19,17 +19,20 @@
 - `PALLAS_PROTOCOL_WEBUI_PATH`：整段覆盖管理页挂载路径（为空时自动生成 `/protocol/<slug>`）。
 - `PALLAS_PROTOCOL_TOKEN`：管理页/API 鉴权 token（对应 `X-Pallas-Protocol-Token` 或 `?token=`）。
 - `PALLAS_PROTOCOL_PROGRAM_DIR`：运行时目录（不填则自动发现/可配合自动下载）。
-- `PALLAS_PROTOCOL_ONEBOT_HOST` / `PALLAS_PROTOCOL_ONEBOT_PORT` / `PALLAS_PROTOCOL_ACCESS_TOKEN`：反向 WS 连接关键项。
+- `PALLAS_PROTOCOL_ONEBOT_WS_URL`：完整 WS 直链，优先级最高（如 `ws://127.0.0.1:8088/onebot/v11/ws`）。
+- `PALLAS_PROTOCOL_ONEBOT_WS_HOST` / `PALLAS_PROTOCOL_ONEBOT_WS_PORT`：分项覆盖，与直链二选一。
+- `PALLAS_PROTOCOL_ONEBOT_WS_PATH`：WS 路径，默认 `/onebot/v11/ws`。
+- `PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME`：连接名（NapCat 侧显示名称，默认 `pallas`）。
 
 ## 反向 WS 配置优先级
 
 `resolve_onebot_ws_settings` 的解析顺序如下：
 
-1. 插件配置字段（`pallas_protocol_onebot_*`, `pallas_protocol_access_token`）
-2. 对应环境变量（`PALLAS_PROTOCOL_ONEBOT_*`, `PALLAS_PROTOCOL_ACCESS_TOKEN`）
-3. 全局变量回退（`HOST`/`PORT`/`ACCESS_TOKEN`/`ONEBOT_*`）
+1. `PALLAS_PROTOCOL_ONEBOT_WS_URL`：完整直链，非空时直接使用，跳过后续所有探测。
+2. `PALLAS_PROTOCOL_ONEBOT_WS_HOST` / `PALLAS_PROTOCOL_ONEBOT_WS_PORT` / `PALLAS_PROTOCOL_ONEBOT_WS_PATH`：分项显式配置。
+3. 全局变量回退（`HOST`/`PORT`/`ACCESS_TOKEN`/`ONEBOT_*`）。
 
-固定路径为：`<scheme>://<host>:<port>/onebot/v11/ws`（scheme 为 `ws` 或 `wss`，取决于部署环境）
+WS 路径默认为 `/onebot/v11/ws`，可通过 `PALLAS_PROTOCOL_ONEBOT_WS_PATH` 覆盖。
 
 ## 全量配置参考
 
@@ -68,10 +71,11 @@
 
 ### OneBot 连接
 
-- `pallas_protocol_onebot_host`（`PALLAS_PROTOCOL_ONEBOT_HOST`）
-- `pallas_protocol_onebot_port`（`PALLAS_PROTOCOL_ONEBOT_PORT`）
-- `pallas_protocol_access_token`（`PALLAS_PROTOCOL_ACCESS_TOKEN`）
-- `pallas_protocol_onebot_client_name`（`PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME`）
+- `pallas_protocol_onebot_ws_url`（`PALLAS_PROTOCOL_ONEBOT_WS_URL`）：完整 WS 直链，优先级最高
+- `pallas_protocol_onebot_ws_host`（`PALLAS_PROTOCOL_ONEBOT_WS_HOST`）：WS 目标主机
+- `pallas_protocol_onebot_ws_port`（`PALLAS_PROTOCOL_ONEBOT_WS_PORT`）：WS 目标端口
+- `pallas_protocol_onebot_ws_path`（`PALLAS_PROTOCOL_ONEBOT_WS_PATH`）：WS 路径，默认 `/onebot/v11/ws`
+- `pallas_protocol_onebot_client_name`（`PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME`）：连接名，默认 `pallas`
 
 ### Linux Docker（可选）
 
