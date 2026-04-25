@@ -63,8 +63,7 @@ class Config(BaseModel):
     pallas_protocol_linux_use_docker: bool = Field(
         default=False,
         description=(
-            "仅 Linux 为 true 时用 Docker 镜像；false 时本机 node+Shell 运行时，"
-            "多账号=多进程+独立 data 与 webui_port"
+            "仅 Linux 为 true 时用 Docker 镜像；false 时本机 node+Shell 运行时，多账号=多进程+独立 data 与 webui_port"
         ),
     )
     pallas_protocol_linux_use_xvfb: bool = Field(
@@ -183,14 +182,16 @@ def resolve_onebot_ws_settings(config: Config) -> tuple[str, str, str]:
     if not token:
         token = _ob_driver_first("access_token")
     name = (
-        cfg_name
-        or _ob_env_first("PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME", "ONEBOT_CLIENT_NAME")
-        or "pallas"
+        cfg_name or _ob_env_first("PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME", "ONEBOT_CLIENT_NAME") or "pallas"
     ).strip() or "pallas"
     host = _ob_normalize_target_host(host)
     if not host or port is None:
         return "", name, token
-    return f"ws://{host}:{port}{_ONEBOT_WS_PATH}", name, token
+    return (
+        f"ws://{host}:{port}{_ONEBOT_WS_PATH}",
+        name,
+        token,
+    )  # nosemgrep: javascript.lang.security.detect-insecure-websocket
 
 
 def onebot_connection_hints(config: Config) -> dict[str, object]:

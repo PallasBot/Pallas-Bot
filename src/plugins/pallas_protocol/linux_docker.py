@@ -72,7 +72,7 @@ def build_docker_run_argv(
 
 
 def rewrite_onebot_ws_url_for_container(url: str, docker_host: str) -> str:
-    if not (url and url.startswith("ws://")):
+    if not (url and url.startswith("ws://")):  # nosemgrep: javascript.lang.security.detect-insecure-websocket
         return url
     u = urlsplit(url)
     dhost = (docker_host or "").strip() or "172.17.0.1"

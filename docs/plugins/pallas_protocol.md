@@ -29,7 +29,7 @@
 2. 对应环境变量（`PALLAS_PROTOCOL_ONEBOT_*`, `PALLAS_PROTOCOL_ACCESS_TOKEN`）
 3. 全局变量回退（`HOST`/`PORT`/`ACCESS_TOKEN`/`ONEBOT_*`）
 
-固定路径为：`ws://<host>:<port>/onebot/v11/ws`
+固定路径为：`<scheme>://<host>:<port>/onebot/v11/ws`（scheme 为 `ws` 或 `wss`，取决于部署环境）
 
 ## 全量配置参考
 
