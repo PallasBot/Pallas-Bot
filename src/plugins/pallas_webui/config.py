@@ -14,7 +14,7 @@ class Config(BaseModel):
         description="dist 的 zip 直链；留空时按 repo/tag/asset 自动拼接 GitHub Releases 下载地址",
     )
     pallas_webui_dist_zip_repo: str = Field(
-        default="TogetsuDo/Pallas-Bot-WebUI",
+        default="PallasBot/Pallas-Bot-WebUI",
         description="pallas_webui_dist_zip_url 为空时生效：GitHub 仓库（Owner/Repo）",
     )
     pallas_webui_dist_zip_tag: str = Field(
