@@ -8,17 +8,20 @@ from nonebot.adapters.onebot.v11 import Bot, Message, MessageEvent, PrivateMessa
 from nonebot.params import ArgPlainText, CommandArg
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
+from nonebot.typing import T_State
 
 from src.common.config import BotConfig
 from src.common.db import make_bot_config_repository
 from src.plugins.pallas_protocol import manager as protocol_manager
 
+__all__ = ["relogin_cmd", "create_cmd"]
+
 __plugin_meta__ = PluginMetadata(
     name="牛牛重新上号",
-    description="为指定 QQ 账号重启协议端并推送登录二维码。",
+    description="为指定 QQ 账号重启协议端并推送登录二维码，牛牛管理员可用；超管可创建新牛牛账号。",
     usage="""
-牛牛重新上号 <QQ号>
-示例：牛牛重新上号 3879348674
+牛牛重新上号
+创建牛牛
 """.strip(),
     type="application",
     homepage="https://github.com/PallasBot/Pallas-Bot",
@@ -29,15 +32,25 @@ __plugin_meta__ = PluginMetadata(
             {
                 "func": "重新上号",
                 "trigger_method": "on_cmd",
-                "trigger_condition": "牛牛重新上号 <QQ号>",
-                "brief_des": "重启账号并回传二维码",
+                "trigger_condition": "牛牛重新上号 [QQ号]",
+                "brief_des": "重启账号并回传二维码（牛牛管理员可用）",
                 "detail_des": "自动重启协议端账号，等待二维码文件生成并在私聊推送。",
+            },
+            {
+                "func": "创建牛牛",
+                "trigger_method": "on_cmd",
+                "trigger_condition": "创建牛牛 [昵称 牛牛QQ 号主QQ ...]",
+                "brief_des": "创建并启动新牛牛账号（仅超管）",
+                "detail_des": "在协议端创建账号并启动。",
             },
         ],
     },
 )
 
 relogin_cmd = on_command("牛牛重新上号", priority=5, block=True)
+create_cmd = on_command("创建牛牛", priority=5, block=True, permission=SUPERUSER)
+
+_CANCEL_WORDS = {"取消", "cancel", "退出", "quit"}
 
 
 async def _is_bot_admin(bot: Bot, event: MessageEvent) -> bool:
@@ -77,7 +90,7 @@ async def _wait_qrcode(account_data_dir: Path, since: datetime, timeout_sec: int
 
 
 @relogin_cmd.handle()
-async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):  # noqa: B008
+async def _relogin_handle(bot: Bot, event: MessageEvent, args: Message = CommandArg()):  # noqa: B008
     if not isinstance(event, PrivateMessageEvent):
         await relogin_cmd.finish("请私聊使用该命令。")
     if not (await _is_bot_admin(bot, event) or await SUPERUSER(bot, event)):
@@ -86,45 +99,160 @@ async def _(bot: Bot, event: MessageEvent, args: Message = CommandArg()):  # noq
     qq = _extract_qq(args.extract_plain_text())
     if qq:
         relogin_cmd.set_arg("qq", Message(qq))
-        return
-    await relogin_cmd.send("请回复要重新上号的QQ号：")
+    else:
+        await relogin_cmd.send("请回复要重新上号的QQ号：")
 
 
 @relogin_cmd.got("qq")
-async def _(bot: Bot, event: MessageEvent, qq_input: str = ArgPlainText("qq")):
+async def _relogin_got_qq(bot: Bot, event: MessageEvent, state: T_State, qq_input: str = ArgPlainText("qq")):  # noqa: B008
+    if qq_input.strip() in _CANCEL_WORDS:
+        await relogin_cmd.finish("已取消重新上号。")
+
     qq = _extract_qq(qq_input)
     if not qq:
-        await relogin_cmd.finish("QQ号格式不正确，请重新执行：牛牛重新上号")
-    if not protocol_manager.has_account(qq):
+        await relogin_cmd.reject("QQ号格式不正确，请重新输入：")
+
+    state["_qq"] = qq
+
+    if protocol_manager.has_account(qq):
+        state["_needs_create"] = False
+        relogin_cmd.set_arg("nickname", Message("__skip__"))
+    else:
         if not await _bot_id_exists_in_db(int(qq)):
-            await relogin_cmd.finish(f"数据库中不存在 bot_id={qq}，请先完成牛牛创建流程。")
+            await relogin_cmd.finish(f"数据库中不存在账号为：{qq} 的牛牛")
+        state["_needs_create"] = True
+        await relogin_cmd.send("该账号协议端不存在，请输入牛牛昵称以自动创建：")
+
+
+@relogin_cmd.got("nickname")
+async def _relogin_got_nickname(
+    bot: Bot,
+    event: MessageEvent,
+    state: T_State,
+    nickname_input: str = ArgPlainText("nickname"),  # noqa: B008
+):
+    qq: str = state["_qq"]
+    needs_create: bool = state.get("_needs_create", False)
+
+    if needs_create:
+        if nickname_input.strip() in _CANCEL_WORDS:
+            await relogin_cmd.finish("已取消重新上号。")
+        nickname = nickname_input.strip()
+        if not nickname:
+            await relogin_cmd.reject("昵称不能为空，请重新输入：")
         try:
-            protocol_manager.create_account({"qq": qq, "enabled": True})
-            await bot.send(event, f"未找到账号 {qq}，已自动创建并继续上号流程。")
+            protocol_manager.create_account({"qq": qq, "display_name": nickname, "enabled": True})
+            await bot.send(event, f"已创建 {nickname} 并继续上号流程。")
         except Exception as e:
-            await relogin_cmd.finish(f"未找到账号且自动创建失败：{e}")
+            await relogin_cmd.finish(f"自动创建协议端失败：{e}")
+
     account = protocol_manager.get_account(qq) or {}
     account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
     if not account_data_dir:
         await relogin_cmd.finish("账号目录缺失，无法执行重新上号。")
 
-    await bot.send(event, f"开始为账号 {qq} 重新上号，正在重启协议端...")
+    await bot.send(event, "正在启动协议端...")
     started_at = datetime.now().astimezone()
     try:
         await protocol_manager.restart_account(qq)
     except Exception as e:
-        await relogin_cmd.finish(f"重启失败：{e}")
+        await relogin_cmd.finish(f"启动失败：{e}")
 
     qr_path = await _wait_qrcode(account_data_dir, started_at)
     if qr_path is None:
-        await relogin_cmd.finish(
-            "已完成重启，但在 60 秒内未检测到新的二维码文件。\n"
-            "可去协议端管理页查看实时日志，或稍后重试。"
-        )
+        await relogin_cmd.finish("已完成启动，但在 60 秒内未检测到新的二维码文件，请寻找牛牛管理员上报情况")
 
     try:
         encoded = base64.b64encode(qr_path.read_bytes()).decode()
-        await bot.send(event, "重启完成，请使用下面二维码登录：")
+        await bot.send(event, "启动完成，请使用下面二维码登录：")
         await bot.send(event, Message(f"[CQ:image,file=base64://{encoded}]"))
     except OSError as e:
         await relogin_cmd.finish(f"二维码读取失败：{e}")
+
+
+@create_cmd.handle()
+async def _create_handle(event: MessageEvent, state: T_State, args: Message = CommandArg()):  # noqa: B008
+    if not isinstance(event, PrivateMessageEvent):
+        await create_cmd.finish("请私聊使用该命令。")
+
+    text = args.extract_plain_text().strip()
+    if text:
+        parts = text.split()
+        if len(parts) < 3:  # noqa: PLR2004
+            await create_cmd.finish("参数不足，需要：牛牛昵称 牛牛账号 号主账号（至少一个）")
+        display_name, qq, *owner_qqs = parts
+        if not qq.isdigit() or len(qq) < 5:  # noqa: PLR2004
+            await create_cmd.finish("牛牛账号格式不正确")
+        invalid = [oq for oq in owner_qqs if not oq.isdigit()]
+        if invalid:
+            await create_cmd.finish(f"号主账号格式不正确：{'、'.join(invalid)}")
+        create_cmd.set_arg("display_name", Message(display_name))
+        create_cmd.set_arg("qq", Message(qq))
+        create_cmd.set_arg("owners", Message(" ".join(owner_qqs)))
+        state["_interactive"] = False
+        return
+
+    state["_interactive"] = True
+    await create_cmd.send("请输入牛牛昵称：")
+
+
+@create_cmd.got("display_name")
+async def _create_got_name(state: T_State, display_name_input: str = ArgPlainText("display_name")):  # noqa: B008
+    if display_name_input.strip() in _CANCEL_WORDS:
+        await create_cmd.finish("已取消创建牛牛。")
+    if not display_name_input.strip():
+        await create_cmd.reject("昵称不能为空，请重新输入：")
+    if state.get("_interactive"):
+        await create_cmd.send("请输入牛牛QQ号：")
+
+
+@create_cmd.got("qq")
+async def _create_got_qq(state: T_State, qq_input: str = ArgPlainText("qq")):  # noqa: B008
+    if qq_input.strip() in _CANCEL_WORDS:
+        await create_cmd.finish("已取消创建牛牛。")
+    qq = qq_input.strip()
+    if not qq.isdigit() or len(qq) < 5:  # noqa: PLR2004
+        await create_cmd.reject("QQ号格式不正确，请重新输入：")
+    if state.get("_interactive"):
+        await create_cmd.send("请输入号主QQ号（如有多个用空格分隔）：")
+
+
+@create_cmd.got("owners")
+async def _create_got_owners(
+    display_name_input: str = ArgPlainText("display_name"),  # noqa: B008
+    qq_input: str = ArgPlainText("qq"),
+    owners_input: str = ArgPlainText("owners"),
+):
+    if owners_input.strip() in _CANCEL_WORDS:
+        await create_cmd.finish("已取消创建牛牛。")
+
+    owner_qqs = owners_input.strip().split()
+    if not owner_qqs:
+        await create_cmd.reject("号主账号不能为空，请重新输入：")
+
+    invalid = [oq for oq in owner_qqs if not oq.isdigit()]
+    if invalid:
+        await create_cmd.reject(f"号主账号格式不正确：{'、'.join(invalid)}，请重新输入：")
+
+    display_name = display_name_input.strip()
+    qq = qq_input.strip()
+
+    try:
+        protocol_manager.create_account({"qq": qq, "display_name": display_name, "enabled": True})
+    except Exception as e:
+        await create_cmd.finish(f"创建账号失败：{e}")
+
+    try:
+        await protocol_manager.start_account(qq)
+    except Exception as e:
+        await create_cmd.finish(f"账号已创建，但启动失败：{e}")
+
+    owner_ids = [int(oq) for oq in owner_qqs]
+    try:
+        repo = make_bot_config_repository()
+        await repo.upsert_field(int(qq), "admins", owner_ids)
+    except Exception as e:
+        await create_cmd.finish(f"账号已创建并启动，但写入号主失败：{e}")
+
+    owners_str = "、".join(owner_qqs)
+    await create_cmd.finish(f"{display_name}：{qq} 已创建并启动。\n号主：{owners_str}")
