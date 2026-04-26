@@ -469,6 +469,16 @@ def _find_online_onebot_v11_bot(self_id: str) -> tuple[str, object]:
 
 
 def _normalize_group_list_item(item: object) -> dict[str, Any] | None:
+    if hasattr(item, "model_dump"):
+        try:
+            item = item.model_dump()  # type: ignore[union-attr]
+        except Exception:  # noqa: BLE001
+            pass
+    elif hasattr(item, "dict") and callable(item.dict):
+        try:
+            item = item.dict()  # type: ignore[union-attr]
+        except Exception:  # noqa: BLE001
+            pass
     if not isinstance(item, dict):
         return None
     gid = item.get("group_id")
@@ -478,11 +488,19 @@ def _normalize_group_list_item(item: object) -> dict[str, Any] | None:
         return None
     if group_id <= 0:
         return None
+    try:
+        member_count = int(float(item.get("member_count") or 0))
+    except (TypeError, ValueError):
+        member_count = 0
+    try:
+        max_member_count = int(float(item.get("max_member_count") or 0))
+    except (TypeError, ValueError):
+        max_member_count = 0
     return {
         "group_id": group_id,
         "group_name": str(item.get("group_name") or ""),
-        "member_count": int(item.get("member_count") or 0),  # type: ignore[arg-type]
-        "max_member_count": int(item.get("max_member_count") or 0),  # type: ignore[arg-type]
+        "member_count": member_count,
+        "max_member_count": max_member_count,
     }
 
 
@@ -517,6 +535,7 @@ async def _call_get_group_list(
     try:
         raw = await bot.call_api("get_group_list")  # type: ignore[union-attr]
     except Exception as e:  # noqa: BLE001
+        logger.warning("Pallas 控制台: get_group_list 调用失败: %s", e)
         return [], str(e), False
     groups_raw: list[Any]
     if isinstance(raw, list):
@@ -528,11 +547,18 @@ async def _call_get_group_list(
             if isinstance(v, list):
                 groups_raw = v
                 break
+        if not groups_raw:
+            logger.warning("Pallas 控制台: get_group_list 返回 dict 但未找到列表字段, keys=%s", list(raw.keys()))
     else:
+        logger.warning("Pallas 控制台: get_group_list 返回意外类型 %s", type(raw).__name__)
         groups_raw = []
     out: list[dict[str, Any]] = []
     for it in groups_raw:
-        row = _normalize_group_list_item(it)
+        try:
+            row = _normalize_group_list_item(it)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Pallas 控制台: 群列表条目解析失败 item=%r err=%s", it, e)
+            continue
         if row:
             out.append(row)
     out.sort(key=lambda r: int(r["group_id"]))
