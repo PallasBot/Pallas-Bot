@@ -55,8 +55,7 @@ _CANCEL_WORDS = {"取消", "cancel", "退出", "quit"}
 
 async def _is_bot_admin(bot: Bot, event: MessageEvent) -> bool:
     try:
-        admins = await BotConfig(int(bot.self_id))._find("admins")
-        return int(event.get_user_id()) in admins
+        return await BotConfig(int(bot.self_id)).is_admin_of_bot(int(event.get_user_id()))
     except Exception:
         return False
 
@@ -90,11 +89,9 @@ async def _wait_qrcode(account_data_dir: Path, since: datetime, timeout_sec: int
 
 
 @relogin_cmd.handle()
-async def _relogin_handle(bot: Bot, event: MessageEvent, state: T_State, args: Message = CommandArg()):  # noqa: B008
+async def _relogin_handle(event: MessageEvent, state: T_State, args: Message = CommandArg()):  # noqa: B008
     if not isinstance(event, PrivateMessageEvent):
         await relogin_cmd.finish("请私聊使用该命令。")
-    if not (await _is_bot_admin(bot, event) or await SUPERUSER(bot, event)):
-        await relogin_cmd.finish("你不是该牛牛管理员，无法执行重新上号。")
 
     qq = _extract_qq(args.extract_plain_text())
     if qq:
@@ -111,6 +108,11 @@ async def _relogin_got_qq(bot: Bot, event: MessageEvent, state: T_State, qq_inpu
     qq = _extract_qq(qq_input)
     if not qq:
         await relogin_cmd.reject("QQ号格式不正确，请重新输入：")
+
+    # 检查用户是否是目标 bot 的管理员（或超管）
+    is_target_admin = await BotConfig(int(qq)).is_admin_of_bot(int(event.get_user_id()))
+    if not (is_target_admin or await SUPERUSER(bot, event)):
+        await relogin_cmd.finish(f"你不是 {qq} 的管理员，无法执行重新上号。")
 
     state["_qq"] = qq
 
