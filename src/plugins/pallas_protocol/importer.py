@@ -140,10 +140,14 @@ def run_import(
     ws_url: str = "",
     ws_name: str = "pallas",
     ws_token: str = "",
+    instances_root: Path | None = None,
 ) -> tuple[ImportResult, dict]:
     """
     扫描 source_dir，返回 (ImportResult, new_accounts_dict)。
     new_accounts_dict 是合并后的完整账号字典（dry_run 时与 existing_accounts 相同）。
+
+    instances_root: 若提供，则将账号数据复制到 instances_root/<qq>/ 并以此作为
+                    account_data_dir；否则原地注册（account_data_dir = source folder）。
     """
     result = ImportResult()
     accounts = dict(existing_accounts)
@@ -166,7 +170,12 @@ def run_import(
 
         webui_port = _next_port(accounts)
         webui_token = secrets.token_hex(6)
-        account_data_dir = str(folder.resolve())
+
+        # 决定 account_data_dir：优先使用 instances_root/<qq>，否则原地注册
+        if instances_root is not None:
+            account_data_dir = str((instances_root / qq).resolve())
+        else:
+            account_data_dir = str(folder.resolve())
 
         account = {
             "id": qq,
@@ -189,14 +198,39 @@ def run_import(
 
         qq_copied: str | None = None
         if not dry_run:
-            config_dir.mkdir(parents=True, exist_ok=True)
-            _sync_configs(config_dir, qq, webui_port, webui_token, ws_url, ws_name, ws_token)
-            qq_src = folder / "QQ"
-            qq_dst = folder / ".config" / "QQ"
-            if qq_src.is_dir() and not qq_dst.exists():
-                qq_dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(str(qq_src), str(qq_dst))
-                qq_copied = str(qq_dst)
+            if instances_root is not None:
+                # 将数据复制到 instances_root/<qq>/
+                inst_dir = instances_root / qq
+                inst_config_dir = inst_dir / "config"
+                inst_config_dir.mkdir(parents=True, exist_ok=True)
+                # 复制 config/ 下的所有文件
+                for f in config_dir.iterdir():
+                    if f.is_file():
+                        shutil.copy2(str(f), str(inst_config_dir / f.name))
+                # 复制 QQ NT 数据：优先 QQ/，其次 .config/QQ/
+                qq_src = folder / "QQ"
+                qq_src_legacy = folder / ".config" / "QQ"
+                inst_qq_dst = inst_dir / ".config" / "QQ"
+                if qq_src.is_dir() and not inst_qq_dst.exists():
+                    inst_qq_dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(str(qq_src), str(inst_qq_dst))
+                    qq_copied = str(inst_qq_dst)
+                elif qq_src_legacy.is_dir() and not inst_qq_dst.exists():
+                    inst_qq_dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(str(qq_src_legacy), str(inst_qq_dst))
+                    qq_copied = str(inst_qq_dst)
+                # 在 instances 目录写入最终配置
+                _sync_configs(inst_config_dir, qq, webui_port, webui_token, ws_url, ws_name, ws_token)
+            else:
+                # 原地注册：在源目录写入配置
+                config_dir.mkdir(parents=True, exist_ok=True)
+                _sync_configs(config_dir, qq, webui_port, webui_token, ws_url, ws_name, ws_token)
+                qq_src = folder / "QQ"
+                qq_dst = folder / ".config" / "QQ"
+                if qq_src.is_dir() and not qq_dst.exists():
+                    qq_dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copytree(str(qq_src), str(qq_dst))
+                    qq_copied = str(qq_dst)
 
         accounts[qq] = account
         result.imported.append({

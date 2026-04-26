@@ -95,7 +95,13 @@ class LaunchManager:
         runtime_str = str(lazy_rt).strip() if lazy_rt else ""
         configured_program_dir = str(getattr(self._config, "pallas_protocol_program_dir", "")).strip()
         if not program_dir_raw:
-            program_dir_raw = configured_program_dir or runtime_str or str(self._resource_root / "napcat")
+            if configured_program_dir:
+                program_dir_raw = configured_program_dir
+            elif runtime_str:
+                program_dir_raw = runtime_str
+            else:
+                fallback = self._resource_root / "napcat"
+                program_dir_raw = str(fallback) if fallback.is_dir() else ""
         elif not configured_program_dir:
             # 同步运行时目录
             self._refresh_managed_runtime_refs(account, runtime_str)
@@ -204,9 +210,7 @@ class LaunchManager:
             appimage = cands[0] if cands else None
         if appimage is None:
             return
-        appimage_args = [
-            str(x) for x in (getattr(self._config, "pallas_protocol_linux_appimage_args", []) or [])
-        ]
+        appimage_args = [str(x) for x in (getattr(self._config, "pallas_protocol_linux_appimage_args", []) or [])]
         if qq.isdigit() and "-q" not in appimage_args and "--qq" not in appimage_args:
             appimage_args.extend(["-q", qq])
         if hasattr(os, "geteuid") and os.geteuid() == 0 and "--no-sandbox" not in appimage_args:

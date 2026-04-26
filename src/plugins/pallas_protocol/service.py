@@ -665,6 +665,7 @@ class PallasProtocolService:
                 continue
             self._launch.apply_defaults(account, self._resolve_qq)
             self._migrate_account_webui_fields(account_id, account)
+            self._launch.prepare_dirs(account)
             self._configs.sync_onebot(account, self._resolve_qq)
             self._configs.sync_napcat_core(account, self._resolve_qq)
             self._configs.sync_webui(account, self._resolve_qq)

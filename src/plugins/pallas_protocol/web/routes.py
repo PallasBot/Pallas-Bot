@@ -107,6 +107,7 @@ def register_pallas_protocol_routes(
             ws_url=ws_url,
             ws_name=ws_name,
             ws_token=ws_token,
+            instances_root=manager._instances_root,
         )
         if not dry_run and result.imported:
             manager.bulk_register(new_accounts)

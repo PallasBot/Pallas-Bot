@@ -35,6 +35,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 from src.common.paths import plugin_data_dir  # noqa: E402
 
+_DEFAULT_INSTANCES_ROOT = plugin_data_dir("pallas_protocol") / "instances"
+
 
 def _extract_qq_from_config_dir(config_dir: Path) -> str | None:
     """从 config/ 目录下的 onebot_*.json 文件名提取 QQ 号。"""
@@ -233,10 +235,15 @@ def import_accounts(
     ws_url: str = "",
     ws_name: str = "pallas",
     ws_token: str = "",
+    instances_root: Path | None = None,
 ) -> None:
     if not source_dir.is_dir():
         print(f"[ERROR] 源目录不存在: {source_dir}")
         sys.exit(1)
+
+    # 默认使用 data/pallas_protocol/instances/ 作为实例根目录
+    if instances_root is None:
+        instances_root = _DEFAULT_INSTANCES_ROOT
 
     # 加载现有 accounts.json
     if accounts_file.is_file():
@@ -277,7 +284,9 @@ def import_accounts(
         webui_port = _next_free_port(accounts)
         webui_token = secrets.token_hex(6)
 
-        account_data_dir = str(folder.resolve())
+        # 将数据复制到 instances_root/<qq>/
+        inst_dir = instances_root / qq
+        account_data_dir = str(inst_dir.resolve())
 
         account = {
             "id": qq,
@@ -299,22 +308,36 @@ def import_accounts(
         }
 
         if not dry_run:
-            config_dir.mkdir(parents=True, exist_ok=True)
-            _sync_onebot(config_dir, qq, ws_url, ws_name, ws_token)
-            _sync_napcat(config_dir, qq)
-            _sync_webui(config_dir, qq, webui_port, webui_token)
-            # 将 QQ/ 复制到 .config/QQ/（NapCat 期望的 QQ NT 数据路径）
+            # 创建实例目录并复制 config/
+            inst_config_dir = inst_dir / "config"
+            inst_config_dir.mkdir(parents=True, exist_ok=True)
+            for f in config_dir.iterdir():
+                if f.is_file():
+                    shutil.copy2(str(f), str(inst_config_dir / f.name))
+
+            # 写入最终配置到实例目录
+            _sync_onebot(inst_config_dir, qq, ws_url, ws_name, ws_token)
+            _sync_napcat(inst_config_dir, qq)
+            _sync_webui(inst_config_dir, qq, webui_port, webui_token)
+
+            # 复制 QQ NT 数据：优先 QQ/，其次 .config/QQ/
             qq_src = folder / "QQ"
-            qq_dst = folder / ".config" / "QQ"
-            if qq_src.is_dir() and not qq_dst.exists():
-                qq_dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copytree(str(qq_src), str(qq_dst))
-                print("         QQ/ → .config/QQ/ 复制完成")
-            elif qq_src.is_dir() and qq_dst.exists():
-                print("         .config/QQ/ 已存在，跳过复制")
+            qq_src_legacy = folder / ".config" / "QQ"
+            inst_qq_dst = inst_dir / ".config" / "QQ"
+            if qq_src.is_dir() and not inst_qq_dst.exists():
+                inst_qq_dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(str(qq_src), str(inst_qq_dst))
+                print(f"         QQ/ → {inst_qq_dst} 复制完成")
+            elif qq_src_legacy.is_dir() and not inst_qq_dst.exists():
+                inst_qq_dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copytree(str(qq_src_legacy), str(inst_qq_dst))
+                print(f"         .config/QQ/ → {inst_qq_dst} 复制完成")
 
         accounts[qq] = account
-        print(f"[OK]   {folder.name}: QQ={qq}  webui_port={webui_port}" + ("  [DRY RUN]" if dry_run else ""))
+        print(
+            f"[OK]   {folder.name}: QQ={qq}  webui_port={webui_port}  "
+            f"account_data_dir={account_data_dir}" + ("  [DRY RUN]" if dry_run else "")
+        )
         imported += 1
 
     if not dry_run and imported > 0:
@@ -338,6 +361,11 @@ def main() -> None:
     parser.add_argument("--ws-url", default="", help="覆盖 WS URL（默认从 .env 读取）")
     parser.add_argument("--ws-name", default="", help="覆盖 WS 连接名（默认 pallas）")
     parser.add_argument("--ws-token", default="", help="覆盖 WS token（默认从 .env 读取）")
+    parser.add_argument(
+        "--instances-root",
+        default="",
+        help="实例根目录（默认 data/pallas_protocol/instances/）",
+    )
     args = parser.parse_args()
 
     env_url, env_name, env_token = _load_env_ws_settings()
@@ -349,6 +377,7 @@ def main() -> None:
         print("[WARN] 未能从 .env 读取 WS URL，onebot 配置将使用默认值 ws://127.0.0.1:8088/onebot/v11/ws")
         print("       可用 --ws-url 手动指定，或确保 .env 中有 HOST 和 PORT。\n")
 
+    instances_root = Path(args.instances_root).resolve() if args.instances_root else None
     import_accounts(
         source_dir=Path(args.source).resolve(),
         accounts_file=Path(args.accounts_file).resolve(),
@@ -357,6 +386,7 @@ def main() -> None:
         ws_url=ws_url,
         ws_name=ws_name,
         ws_token=ws_token,
+        instances_root=instances_root,
     )
 
 
