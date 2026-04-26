@@ -1667,7 +1667,7 @@ def register_extended_api(
         if self_id is not None:
             target = str(int(self_id))
             bot = None
-            for _key, b in get_bots().items():
+            for b in get_bots().values():
                 if str(getattr(b, "self_id", "") or "") == target:
                     bot = b
                     break

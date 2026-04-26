@@ -19,6 +19,7 @@ dependencies = [
     "nonebot2[fastapi]>=2.4.4",
     "pillowmd>=0.7.3",
     "pyncm-async>=1.8.2",
+    "pynvml>=13.0.1",
     "pypinyin>=0.55.0",
     "python-multipart>=0.0.20",
     "python-ulid>=3.1.0",
