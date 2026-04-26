@@ -155,3 +155,122 @@ async def download_and_extract_dist_zip(public_dir: Path, url: str, *, follow_re
     await asyncio.to_thread(_sync_write_dist_from_zip_bytes, public_dir, content)
     logger.info("Pallas 控制台: 已解压 dist 到 data/pallas_webui/public")
     return True
+
+
+def webui_version_path() -> Path:
+    return plugin_data_dir("pallas_webui") / "version.json"
+
+
+def get_webui_dist_version() -> str:
+    import json
+
+    path = webui_public_path() / "console-version.json"
+    if not path.exists():
+        return ""
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(raw, dict):
+            return str(raw.get("version") or raw.get("tag") or "").strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return ""
+
+
+def get_installed_webui_version() -> dict:
+    import json
+
+    path = webui_version_path()
+    result: dict = {}
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            result = raw if isinstance(raw, dict) else {}
+        except Exception:  # noqa: BLE001
+            pass
+    # version.json 没有 tag 时，从 dist 的 console-version.json 补充
+    if not result.get("tag"):
+        dist_ver = get_webui_dist_version()
+        if dist_ver:
+            result = {**result, "tag": dist_ver}
+    return result
+
+
+def save_installed_webui_version(tag: str, asset_url: str = "") -> None:
+    """下载成功后写入版本信息。"""
+    import json
+    import time
+
+    path = webui_version_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "tag": (tag or "").strip(),
+        "asset_url": (asset_url or "").strip(),
+        "installed_at": time.time(),
+    }
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+_BOT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def get_bot_current_version() -> dict:
+    import subprocess
+
+    root = _BOT_ROOT
+    tag = ""
+    commit = ""
+    try:
+        tag = subprocess.check_output(
+            ["git", "describe", "--tags", "--exact-match"],
+            cwd=root,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        commit = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=root,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return {"tag": tag, "commit": commit}
+
+
+async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot") -> dict:
+    api_url = _github_release_api_url(repo)
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=httpx.Timeout(15.0, connect=8.0),
+        headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
+    ) as client:
+        resp = await client.get(api_url)
+        resp.raise_for_status()
+        data = resp.json()
+    tag = str(data.get("tag_name") or "").strip()
+    html_url = str(data.get("html_url") or "").strip()
+    return {"tag": tag, "html_url": html_url}
+
+
+async def fetch_latest_webui_release(repo: str) -> dict:
+    api_url = _github_release_api_url(repo)
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=httpx.Timeout(15.0, connect=8.0),
+        headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
+    ) as client:
+        resp = await client.get(api_url)
+        resp.raise_for_status()
+        data = resp.json()
+    tag = str(data.get("tag_name") or "").strip()
+    html_url = str(data.get("html_url") or "").strip()
+    assets = data.get("assets") or []
+    asset_url = ""
+    for item in assets:
+        if isinstance(item, dict) and str(item.get("name", "")).lower().endswith(".zip"):
+            asset_url = str(item.get("browser_download_url", "")).strip()
+            break
+    return {"tag": tag, "html_url": html_url, "asset_url": asset_url}

@@ -399,7 +399,10 @@ class PallasProtocolService:
             raise KeyError("账号不存在")
         account = self._accounts.get(account_id) or {}
         account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
-        await self.stop_account(account_id)
+        try:
+            await self.stop_account(account_id)
+        except Exception:
+            pass
         self._accounts.pop(account_id, None)
         self._runtimes.pop(account_id, None)
         try:
@@ -609,7 +612,9 @@ class PallasProtocolService:
                 except TimeoutError:
                     proc.kill()
                     await proc.wait()
-            elif runtime.tracked_child_root_pid:
+            # 无论 proc 是否存在，都尝试杀掉 BootMain 脱离后追踪到的子进程
+            # （Windows BootMain 场景：launcher 已退出但 QQ/NapCat 子进程仍在运行）
+            if runtime.tracked_child_root_pid:
                 await asyncio.to_thread(
                     self._launch.kill_process_tree,
                     runtime.tracked_child_root_pid,

@@ -2109,4 +2109,152 @@ def register_extended_api(
         _drop_read_cache(("friend_requests",))
         return JSONResponse({"ok": True, "data": {"handled": True}})
 
+    @router.get(f"{x}/update/check", include_in_schema=True)
+    async def _update_check() -> JSONResponse:
+        from .manager import fetch_latest_webui_release, get_installed_webui_version
+
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
+        installed = get_installed_webui_version()
+        current_tag = str(installed.get("tag", "") or "").strip()
+        try:
+            latest = await fetch_latest_webui_release(repo)
+            latest_tag = str(latest.get("tag", "") or "").strip()
+            release_url = str(latest.get("html_url", "") or "").strip()
+            asset_url = str(latest.get("asset_url", "") or "").strip()
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({
+                "ok": True,
+                "data": {
+                    "current_tag": current_tag,
+                    "latest_tag": None,
+                    "has_update": False,
+                    "release_url": "",
+                    "asset_url": "",
+                    "error": str(e),
+                    "checked_at": time.time(),
+                },
+            })
+        has_update = bool(latest_tag and current_tag != latest_tag)
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "current_tag": current_tag,
+                "latest_tag": latest_tag,
+                "has_update": has_update,
+                "release_url": release_url,
+                "asset_url": asset_url,
+                "error": None,
+                "checked_at": time.time(),
+            },
+        })
+
+    @router.get(f"{x}/update/bot/check", include_in_schema=True)
+    async def _bot_update_check() -> JSONResponse:
+        from .manager import fetch_latest_bot_release, get_bot_current_version
+
+        current = get_bot_current_version()
+        current_tag = current.get("tag", "")
+        current_commit = current.get("commit", "")
+        try:
+            latest = await fetch_latest_bot_release("PallasBot/Pallas-Bot")
+            latest_tag = str(latest.get("tag", "") or "").strip()
+            release_url = str(latest.get("html_url", "") or "").strip()
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse({
+                "ok": True,
+                "data": {
+                    "current_tag": current_tag,
+                    "current_commit": current_commit,
+                    "latest_tag": None,
+                    "has_update": False,
+                    "release_url": "",
+                    "error": str(e),
+                    "checked_at": time.time(),
+                },
+            })
+        has_update = bool(latest_tag and current_tag and current_tag != latest_tag)
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "current_tag": current_tag,
+                "current_commit": current_commit,
+                "latest_tag": latest_tag,
+                "has_update": has_update,
+                "release_url": release_url,
+                "error": None,
+                "checked_at": time.time(),
+            },
+        })
+
+    @router.post(f"{x}/update/bot/apply", include_in_schema=True)
+    async def _bot_update_apply(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from .manager import apply_bot_git_pull, get_bot_current_version
+
+        try:
+            result = await apply_bot_git_pull()
+            if result["returncode"] != 0:
+                raise ValueError(f"git pull 失败: {result['stderr'] or result['stdout']}")
+            current = get_bot_current_version()
+            new_tag = current.get("tag", "") or current.get("commit", "")
+            output = result["stdout"] or "已执行 git pull"
+            logger.info("Pallas 控制台: Bot 已更新，输出: %s", output)
+            return JSONResponse({"ok": True, "data": {"tag": new_tag, "message": output}})
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: Bot 更新失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+    @router.post(f"{x}/update/apply", include_in_schema=True)
+    async def _update_apply(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from .manager import (
+            download_and_extract_dist_zip,
+            fetch_latest_webui_release,
+            resolve_github_release_asset_urls,
+            save_installed_webui_version,
+            webui_public_path,
+        )
+
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
+        asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
+        tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
+        public = webui_public_path()
+        try:
+            url_candidates = await resolve_github_release_asset_urls(repo, asset, tag)
+            if not url_candidates:
+                raise ValueError("未找到可用的下载地址")
+            errors: list[str] = []
+            succeeded_url = ""
+            for candidate in url_candidates:
+                try:
+                    await download_and_extract_dist_zip(public, candidate)
+                    succeeded_url = candidate
+                    errors.clear()
+                    break
+                except Exception as e:  # noqa: BLE001
+                    errors.append(f"{candidate} -> {e}")
+            if errors:
+                raise ValueError("下载失败: " + " | ".join(errors))
+            try:
+                info = await fetch_latest_webui_release(repo)
+                new_tag = str(info.get("tag", "") or tag).strip()
+            except Exception:  # noqa: BLE001
+                new_tag = tag
+            save_installed_webui_version(new_tag, succeeded_url)
+            logger.info("Pallas 控制台: WebUI 已更新至 %s", new_tag)
+            return JSONResponse({"ok": True, "data": {"tag": new_tag, "message": "更新成功"}})
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas 控制台: WebUI 更新失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
     app.include_router(router)

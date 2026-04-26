@@ -10,8 +10,14 @@ from .extended_api import register_extended_api, set_console_meta
 from .manager import (
     check_webui_exists,
     download_and_extract_dist_zip,
+    fetch_latest_bot_release,
+    fetch_latest_webui_release,
+    get_bot_current_version,
+    get_installed_webui_version,
+    get_webui_dist_version,
     github_release_asset_url,
     resolve_github_release_asset_urls,
+    save_installed_webui_version,
     webui_public_path,
 )
 from .public import register_routes
@@ -98,15 +104,31 @@ async def _pallas_webui_startup() -> None:
         url_candidates = [url]
     if url and not check_webui_exists(public):
         errors: list[str] = []
-        for candidate in (url_candidates or [url]):
+        succeeded_url = ""
+        for candidate in url_candidates or [url]:
             try:
                 await download_and_extract_dist_zip(public, candidate)
+                succeeded_url = candidate
                 errors.clear()
                 break
             except Exception as e:
                 errors.append(f"{candidate} -> {e}")
         if errors:
             logger.error("Pallas 控制台: 下载或解压 dist zip 失败，已尝试: %s", " | ".join(errors))
+        elif succeeded_url:
+            # 记录已安装版本
+            try:
+                tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "").strip()
+                if not tag:
+                    try:
+                        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "")
+                        info = await fetch_latest_webui_release(repo)
+                        tag = info.get("tag", "")
+                    except Exception:
+                        tag = ""
+                save_installed_webui_version(tag, succeeded_url)
+            except Exception:
+                pass
     base = (plugin_config.pallas_webui_http_base or "/pallas").strip()
     if not base.startswith("/"):
         base = "/" + base
@@ -117,7 +139,8 @@ async def _pallas_webui_startup() -> None:
         api_base=api_base,
         extra_meta={"static_root": str(public), "http_base": base},
     )
-    set_console_meta({"static_root": str(public), "http_base": base})
+    webui_version = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
+    set_console_meta({"static_root": str(public), "http_base": base, "version": webui_version})
     register_extended_api(app, api_base=api_base, plugin_config=plugin_config)
     register_routes(app, public_dir=public, base=base)
     dconf = get_driver().config
@@ -126,3 +149,41 @@ async def _pallas_webui_startup() -> None:
         port=getattr(dconf, "port", None),
     )
     logger.info(f"Pallas 控制台 | WebUI={open_base}{base}/")
+    # 启动时检查 WebUI 更新
+    try:
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
+        installed = get_installed_webui_version()
+        current_tag = str(installed.get("tag", "") or "").strip()
+        latest_info = await fetch_latest_webui_release(repo)
+        latest_tag = str(latest_info.get("tag", "") or "").strip()
+        if latest_tag and current_tag != latest_tag:
+            release_url = str(latest_info.get("html_url", "") or "").strip()
+            logger.info(
+                f"Pallas 控制台: 发现新版本 WebUI {latest_tag}（当前: {current_tag or '未知'}）"
+                + (f" → {release_url}" if release_url else "")
+                + "，可在控制台更新页面一键更新"
+            )
+        else:
+            logger.info(f"Pallas 控制台: WebUI 已是最新版本（{current_tag or '未知'}）")
+    except Exception as _upd_err:
+        logger.debug(f"Pallas 控制台: 检查 WebUI 更新失败: {_upd_err}")
+    # 启动时检查 Bot 更新
+    try:
+        bot_current = get_bot_current_version()
+        bot_current_tag = bot_current.get("tag", "")
+        bot_current_commit = bot_current.get("commit", "")
+        bot_latest_info = await fetch_latest_bot_release("PallasBot/Pallas-Bot")
+        bot_latest_tag = str(bot_latest_info.get("tag", "") or "").strip()
+        if bot_latest_tag and bot_current_tag and bot_current_tag != bot_latest_tag:
+            bot_release_url = str(bot_latest_info.get("html_url", "") or "").strip()
+            logger.info(
+                f"Pallas 控制台: 发现新版本 Bot {bot_latest_tag}（当前: {bot_current_tag}）"
+                + (f" → {bot_release_url}" if bot_release_url else "")
+                + "，可在控制台查看更新"
+            )
+        elif bot_current_tag:
+            logger.info(f"Pallas 控制台: Bot 已是最新版本（{bot_current_tag}）")
+        else:
+            logger.info(f"Pallas 控制台: Bot under development,commit={bot_current_commit or '未知'}")
+    except Exception as _bot_upd_err:
+        logger.debug(f"Pallas 控制台: 检查 Bot 更新失败: {_bot_upd_err}")
