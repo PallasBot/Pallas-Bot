@@ -36,6 +36,7 @@ def register_pallas_protocol_routes(
     from .pages import (
         render_account_workspace,
         render_dashboard,
+        render_import_page,
         render_new_account_page,
         render_runtime_page,
     )
@@ -65,6 +66,55 @@ def register_pallas_protocol_routes(
             raise HTTPException(status_code=404, detail="Pallas 协议端管理页已关闭")
         _auth(x_pallas_protocol_token, token)
         return HTMLResponse(render_new_account_page(resolve_protocol_webui_base_path(plugin_config)))
+
+    @app.get(f"{base}/import", response_class=HTMLResponse)
+    async def napcat_import_page(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        if not plugin_config.pallas_protocol_webui_enabled:
+            raise HTTPException(status_code=404, detail="Pallas 协议端管理页已关闭")
+        _auth(x_pallas_protocol_token, token)
+        return HTMLResponse(render_import_page(resolve_protocol_webui_base_path(plugin_config)))
+
+    @app.post(f"{base}/api/accounts/import")
+    async def import_accounts(
+        payload: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        import asyncio
+        from pathlib import Path
+
+        from ..importer import run_import
+
+        source_dir = Path(str(payload.get("source_dir", "")).strip())
+        if not await asyncio.to_thread(source_dir.is_dir):
+            raise HTTPException(status_code=400, detail=f"目录不存在: {source_dir}")
+        dry_run = bool(payload.get("dry_run", False))
+        skip_existing = bool(payload.get("skip_existing", True))
+        ws_url = str(payload.get("ws_url", "") or "").strip()
+        ws_token = str(payload.get("ws_token", "") or "")
+        ws_name = str(payload.get("ws_name", "") or "pallas").strip() or "pallas"
+
+        existing = {acc["id"]: acc for acc in manager.list_accounts()}
+        result, new_accounts = run_import(
+            source_dir,
+            existing,
+            dry_run=dry_run,
+            skip_existing=skip_existing,
+            ws_url=ws_url,
+            ws_name=ws_name,
+            ws_token=ws_token,
+        )
+        if not dry_run and result.imported:
+            manager.bulk_register(new_accounts)
+        return {
+            "imported": result.imported,
+            "skipped": result.skipped,
+            "failed": result.failed,
+        }
 
     @app.get(f"{base}/runtime", response_class=HTMLResponse)
     async def napcat_runtime_page(

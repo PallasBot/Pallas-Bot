@@ -652,6 +652,22 @@ class PallasProtocolService:
             merged = self.get_account_configs(account_id)
         return {**merged, "restarted": restarted, "needs_restart": bool(need_restart)}
 
+    def bulk_register(self, accounts: dict[str, dict]) -> None:
+        """将 importer 产出的账号字典合并写入，跳过已存在的条目。"""
+        changed = False
+        for account_id, account in accounts.items():
+            if account_id in self._accounts:
+                continue
+            self._launch.apply_defaults(account, self._resolve_qq)
+            self._migrate_account_webui_fields(account_id, account)
+            self._configs.sync_onebot(account, self._resolve_qq)
+            self._configs.sync_napcat_core(account, self._resolve_qq)
+            self._configs.sync_webui(account, self._resolve_qq)
+            self._accounts[account_id] = account
+            changed = True
+        if changed:
+            self._save_accounts()
+
     def _resolve_qq(self, account: dict) -> str:
         explicit = str(account.get("qq", "")).strip()
         if explicit.isdigit():
