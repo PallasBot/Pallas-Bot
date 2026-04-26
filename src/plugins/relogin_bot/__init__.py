@@ -90,7 +90,7 @@ async def _wait_qrcode(account_data_dir: Path, since: datetime, timeout_sec: int
 
 
 @relogin_cmd.handle()
-async def _relogin_handle(bot: Bot, event: MessageEvent, args: Message = CommandArg()):  # noqa: B008
+async def _relogin_handle(bot: Bot, event: MessageEvent, state: T_State, args: Message = CommandArg()):  # noqa: B008
     if not isinstance(event, PrivateMessageEvent):
         await relogin_cmd.finish("请私聊使用该命令。")
     if not (await _is_bot_admin(bot, event) or await SUPERUSER(bot, event)):
@@ -98,7 +98,7 @@ async def _relogin_handle(bot: Bot, event: MessageEvent, args: Message = Command
 
     qq = _extract_qq(args.extract_plain_text())
     if qq:
-        relogin_cmd.set_arg("qq", Message(qq))
+        state["qq"] = Message(qq)
     else:
         await relogin_cmd.send("请回复要重新上号的QQ号：")
 
@@ -116,7 +116,7 @@ async def _relogin_got_qq(bot: Bot, event: MessageEvent, state: T_State, qq_inpu
 
     if protocol_manager.has_account(qq):
         state["_needs_create"] = False
-        relogin_cmd.set_arg("nickname", Message("__skip__"))
+        state["nickname"] = Message("__skip__")
     else:
         if not await _bot_id_exists_in_db(int(qq)):
             await relogin_cmd.finish(f"数据库中不存在账号为：{qq} 的牛牛")
@@ -186,9 +186,9 @@ async def _create_handle(event: MessageEvent, state: T_State, args: Message = Co
         invalid = [oq for oq in owner_qqs if not oq.isdigit()]
         if invalid:
             await create_cmd.finish(f"号主账号格式不正确：{'、'.join(invalid)}")
-        create_cmd.set_arg("display_name", Message(display_name))
-        create_cmd.set_arg("qq", Message(qq))
-        create_cmd.set_arg("owners", Message(" ".join(owner_qqs)))
+        state["display_name"] = Message(display_name)
+        state["qq"] = Message(qq)
+        state["owners"] = Message(" ".join(owner_qqs))
         state["_interactive"] = False
         return
 
