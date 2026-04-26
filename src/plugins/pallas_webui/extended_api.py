@@ -25,6 +25,8 @@ if typing.TYPE_CHECKING:
 _CONSOLE_EXTRA: dict[str, Any] = {}
 _INIT_LOG_SINK = False
 _READ_CACHE: dict[str, dict[str, Any]] = {}
+_MSG_STATS: dict[str, dict[str, int]] = {}  # {self_id: {"sent": N, "received": N}}
+_MSG_TRACKING_INIT = False
 
 
 def set_console_meta(d: dict[str, Any] | None) -> None:
@@ -686,25 +688,83 @@ def _extract_message_stats(raw: object) -> dict[str, int]:
     recv = 0
     if not isinstance(raw, dict):
         return {"sent": sent, "received": recv}
+
+    _sent_keys = (
+        "message_sent",
+        "msg_sent",
+        "packet_sent",
+        "MessageSent",
+        "MsgSent",
+        "PacketSent",
+    )
+    _recv_keys = (
+        "message_received",
+        "msg_received",
+        "packet_received",
+        "MessageReceived",
+        "MsgReceived",
+        "PacketReceived",
+    )
+
     stat = raw.get("stat")
     if isinstance(stat, dict):
-        for k in ("message_sent", "msg_sent", "packet_sent"):
+        for k in _sent_keys:
             v = stat.get(k)
             if isinstance(v, (int, float)):
                 sent = max(sent, int(v))
-        for k in ("message_received", "msg_received", "packet_received"):
+        for k in _recv_keys:
             v = stat.get(k)
             if isinstance(v, (int, float)):
                 recv = max(recv, int(v))
-    for k in ("message_sent", "msg_sent", "packet_sent"):
+    for k in _sent_keys:
         v = raw.get(k)
         if isinstance(v, (int, float)):
             sent = max(sent, int(v))
-    for k in ("message_received", "msg_received", "packet_received"):
+    for k in _recv_keys:
         v = raw.get(k)
         if isinstance(v, (int, float)):
             recv = max(recv, int(v))
     return {"sent": sent, "received": recv}
+
+
+def _init_message_tracking() -> None:
+    """注册 NoneBot2 钩子，在内存中统计每个 Bot 的收发消息数。
+    - 收消息：event_preprocessor，事件类型为 "message" 时计数
+    - 发消息：Bot.on_called_api，send_msg / send_group_msg / send_private_msg 成功时计数
+    """
+    global _MSG_TRACKING_INIT
+    if _MSG_TRACKING_INIT:
+        return
+    _MSG_TRACKING_INIT = True
+
+    from nonebot.adapters import Bot as BaseBot
+    from nonebot.adapters import Event
+    from nonebot.message import event_preprocessor
+
+    _send_apis = frozenset({"send_msg", "send_group_msg", "send_private_msg", "send_message"})
+
+    @BaseBot.on_called_api
+    async def _count_sent(
+        bot: BaseBot,
+        exception: Exception | None,
+        api: str,
+        data: dict[str, Any],
+        result: Any,
+    ) -> None:
+        if exception is None and api in _send_apis:
+            sid = str(getattr(bot, "self_id", "") or "").strip()
+            if sid:
+                _MSG_STATS.setdefault(sid, {"sent": 0, "received": 0})["sent"] += 1
+
+    @event_preprocessor
+    async def _count_received(bot: BaseBot, event: Event) -> None:
+        try:
+            if event.get_type() == "message":
+                sid = str(getattr(bot, "self_id", "") or "").strip()
+                if sid:
+                    _MSG_STATS.setdefault(sid, {"sent": 0, "received": 0})["received"] += 1
+        except Exception:  # noqa: BLE001
+            pass
 
 
 async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
@@ -719,18 +779,28 @@ async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
             continue
         if not _is_onebot_v11_bot(bot):
             continue
+
+        # 优先使用内存计数器（兼容 NapCat 等 stat:{} 为空的实现）
+        mem = _MSG_STATS.get(sid, {"sent": 0, "received": 0})
+        sent = mem["sent"]
+        received = mem["received"]
+
+        # 同时尝试 get_status（go-cqhttp 等会返回真实统计），取较大值
         try:
             status_raw = await bot.call_api("get_status")  # type: ignore[union-attr]
+            api_stats = _extract_message_stats(status_raw)
+            sent = max(sent, api_stats["sent"])
+            received = max(received, api_stats["received"])
         except Exception:  # noqa: BLE001
-            continue
-        stats = _extract_message_stats(status_raw)
-        total_sent += int(stats["sent"])
-        total_received += int(stats["received"])
+            pass
+
+        total_sent += sent
+        total_received += received
         rows.append({
             "self_id": sid,
             "connection_key": str(key),
-            "sent": int(stats["sent"]),
-            "received": int(stats["received"]),
+            "sent": sent,
+            "received": received,
         })
     return {"total_sent": total_sent, "total_received": total_received, "bots": rows}
 
@@ -1247,6 +1317,7 @@ def register_extended_api(
     api_base: str,
     plugin_config: Config,
 ) -> None:
+    _init_message_tracking()
     x = (api_base or "/pallas/api").strip()
     if not x.startswith("/"):
         x = "/" + x
