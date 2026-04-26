@@ -16,6 +16,8 @@ from typing import Any, Literal
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from nonebot import get_bots, get_driver, get_loaded_plugins, get_plugin_config, logger
+from nonebot.adapters import Bot as BaseBot  # noqa: TC002
+from nonebot.adapters import Event  # noqa: TC002
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_core import PydanticUndefined
 
@@ -738,7 +740,6 @@ def _init_message_tracking() -> None:
     _MSG_TRACKING_INIT = True
 
     from nonebot.adapters import Bot as BaseBot
-    from nonebot.adapters import Event
     from nonebot.message import event_preprocessor
 
     _send_apis = frozenset({"send_msg", "send_group_msg", "send_private_msg", "send_message"})
