@@ -1,0 +1,42 @@
+name: 💬 提问 / 使用咨询
+description: 使用上有疑问，或需要帮助
+title: "[Question] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        在提问前，建议先查阅 [文档](../docs/) 和已有 issue，可能已有解答。
+
+  - type: textarea
+    id: question
+    attributes:
+      label: 你的问题
+      description: 清晰描述你遇到的疑问或困惑。
+      placeholder: 我想了解 / 我不知道如何 ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: 已尝试的方法
+      description: 你已经尝试过哪些方式？
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息（如相关）
+      placeholder: |
+        - OS: [e.g. Ubuntu 22.04 / Windows 11]
+        - Python 版本: [e.g. 3.12]
+        - Pallas-Bot 版本/commit: [e.g. v1.0.0 或 commit hash]
+        - 部署方式: [Docker / 本地]
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已查阅文档和现有 issue，未找到答案
+          required: true

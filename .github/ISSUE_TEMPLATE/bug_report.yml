@@ -1,0 +1,74 @@
+name: 🐛 报告问题
+description: 报告一个 Bug 或异常行为
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你花时间填写此报告！请尽量提供详细信息，以便我们快速定位问题。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 清晰简洁地描述发生了什么问题。
+      placeholder: 描述你遇到的问题...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 如何复现此问题？
+      placeholder: |
+        1. 执行了 '...'
+        2. 发送了 '...'
+        3. 看到了错误 '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+      description: 你期望发生什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 实际发生了什么？可附上截图或日志。
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: 请填写相关环境信息。
+      placeholder: |
+        - OS: [e.g. Ubuntu 22.04 / Windows 11]
+        - Python 版本: [e.g. 3.12]
+        - Pallas-Bot 版本/commit: [e.g. v1.0.0 或 commit hash]
+        - 部署方式: [Docker / 本地]
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志
+      description: 粘贴相关错误日志（如有）。
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索过现有 issue，确认此问题未被报告过
+          required: true
+        - label: 我已阅读过文档，确认这不是配置问题
+          required: true
