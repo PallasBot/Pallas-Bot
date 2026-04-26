@@ -256,8 +256,7 @@ def _upsert_env_items(items: dict[str, str]) -> None:
     if remained:
         if out and out[-1].strip() != "":
             out.append("")
-        for k in sorted(remained):
-            out.append(f"{k}={items[k]}")
+        out.extend(f"{k}={items[k]}" for k in sorted(remained))
     path.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
@@ -465,6 +464,24 @@ def _find_online_onebot_v11_bot(self_id: str) -> tuple[str, object]:
     raise HTTPException(status_code=404, detail="指定账号当前未连接")
 
 
+def _normalize_group_list_item(item: object) -> dict[str, Any] | None:
+    if not isinstance(item, dict):
+        return None
+    gid = item.get("group_id")
+    try:
+        group_id = int(gid)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if group_id <= 0:
+        return None
+    return {
+        "group_id": group_id,
+        "group_name": str(item.get("group_name") or ""),
+        "member_count": int(item.get("member_count") or 0),  # type: ignore[arg-type]
+        "max_member_count": int(item.get("max_member_count") or 0),  # type: ignore[arg-type]
+    }
+
+
 def _normalize_friend_list_item(item: object) -> dict[str, Any] | None:
     if not isinstance(item, dict):
         return None
@@ -482,6 +499,43 @@ def _normalize_friend_list_item(item: object) -> dict[str, Any] | None:
         "remark": str(item.get("remark") or ""),
         **({"sex": sex} if sex is not None else {}),
     }
+
+
+async def _call_get_group_list(
+    bot: object,
+    *,
+    limit: int,
+) -> tuple[list[dict[str, Any]], str | None, bool]:
+    """OneBot V11 `get_group_list`；不同实现可能返回 list 或包在 dict 里。
+
+    返回 (groups, error, truncated)。
+    """
+    try:
+        raw = await bot.call_api("get_group_list")  # type: ignore[union-attr]
+    except Exception as e:  # noqa: BLE001
+        return [], str(e), False
+    groups_raw: list[Any]
+    if isinstance(raw, list):
+        groups_raw = raw
+    elif isinstance(raw, dict):
+        groups_raw = []
+        for k in ("group_list", "groups", "data"):
+            v = raw.get(k)
+            if isinstance(v, list):
+                groups_raw = v
+                break
+    else:
+        groups_raw = []
+    out: list[dict[str, Any]] = []
+    for it in groups_raw:
+        row = _normalize_group_list_item(it)
+        if row:
+            out.append(row)
+    out.sort(key=lambda r: int(r["group_id"]))
+    truncated = len(out) > limit
+    if truncated:
+        out = out[:limit]
+    return out, None, truncated
 
 
 async def _call_get_friend_list(
@@ -1829,6 +1883,37 @@ def register_extended_api(
             "connection_key": conn_key,
             "adapter": _bot_adapter_label(bot),
             "friends": friends,
+            "truncated": truncated,
+            "limit": int(limit),
+            "error": err,
+        }
+        return JSONResponse({"ok": True, "data": payload})
+
+    @router.get(f"{x}/group-list", include_in_schema=True)
+    async def _group_list(
+        self_id: int = Query(..., description="Bot QQ（须当前在 NoneBot 已连接）"),
+        limit: int = Query(default=1000, ge=1, le=10000),
+    ) -> JSONResponse:
+        """只读：对在线 Bot 调用 OneBot `get_group_list`（大列表时按 limit 截断并标记 truncated）。"""
+        target = str(int(self_id))
+        bot = None
+        conn_key = ""
+        for key, b in get_bots().items():
+            if str(getattr(b, "self_id", "") or "") == target:
+                bot = b
+                conn_key = str(key)
+                break
+        if bot is None:
+            raise HTTPException(status_code=404, detail="指定账号当前未连接")
+        if not _is_onebot_v11_bot(bot):
+            raise HTTPException(status_code=400, detail="当前连接不是 OneBot V11，无法拉取群列表")
+
+        groups, err, truncated = await _call_get_group_list(bot, limit=int(limit))
+        payload: dict[str, Any] = {
+            "self_id": target,
+            "connection_key": conn_key,
+            "adapter": _bot_adapter_label(bot),
+            "groups": groups,
             "truncated": truncated,
             "limit": int(limit),
             "error": err,
