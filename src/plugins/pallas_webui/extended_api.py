@@ -1659,16 +1659,67 @@ def register_extended_api(
     @router.get(f"{x}/group-configs", include_in_schema=True)
     async def _group_configs_list(
         limit: int = Query(default=1000, ge=1, le=10_000),
+        self_id: int | None = Query(default=None, description="Bot QQ；传入时仅返回该 Bot 所在群的配置"),
     ) -> JSONResponse:
-        from src.common.db.pallas_console_data import list_group_configs_public
+        from src.common.db.pallas_console_data import list_group_configs_by_ids_public, list_group_configs_public
 
-        key = f"group_configs_list:{int(limit)}"
+        # 按账号过滤：拉取 Bot 的群列表，再从 DB 取对应群配置并合并
+        if self_id is not None:
+            target = str(int(self_id))
+            bot = None
+            for _key, b in get_bots().items():
+                if str(getattr(b, "self_id", "") or "") == target:
+                    bot = b
+                    break
+            if bot is None:
+                raise HTTPException(status_code=404, detail="指定账号当前未连接")
+            if not _is_onebot_v11_bot(bot):
+                raise HTTPException(status_code=400, detail="当前连接不是 OneBot V11，无法拉取群列表")
+
+            groups, err, truncated = await _call_get_group_list(bot, limit=int(limit))
+            group_ids = [int(g["group_id"]) for g in groups]
+
+            try:
+                db_configs = await list_group_configs_by_ids_public(group_ids)
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(status_code=500, detail=str(e)) from e
+
+            rows: list[dict[str, Any]] = []
+            for g in groups:
+                gid = int(g["group_id"])
+                cfg = db_configs.get(gid, {
+                    "group_id": gid,
+                    "roulette_mode": 1,
+                    "banned": False,
+                    "sing_progress": None,
+                    "disabled_plugins": [],
+                })
+                rows.append({
+                    **cfg,
+                    "group_name": g.get("group_name", ""),
+                    "member_count": g.get("member_count", 0),
+                })
+
+            return JSONResponse({
+                "ok": True,
+                "data": rows,
+                "meta": {
+                    "limit": limit,
+                    "self_id": target,
+                    "from_bot": True,
+                    "error": err,
+                    "truncated": truncated,
+                },
+            })
+
+        # 原有行为：返回 DB 中所有群配置
+        cache_key = f"group_configs_list:{int(limit)}"
 
         async def _load() -> list[dict[str, Any]]:
             return await list_group_configs_public(limit)
 
         try:
-            rows = await _cached_read(key=key, loader=_load, ttl_sec=1.0, stale_sec=20.0)
+            rows = await _cached_read(key=cache_key, loader=_load, ttl_sec=1.0, stale_sec=20.0)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": rows, "meta": {"limit": limit}})

@@ -79,6 +79,30 @@ async def list_all_bot_configs_public() -> list[dict[str, Any]]:
     raise ValueError(f"不支持的 DB 后端: {backend}")
 
 
+async def list_group_configs_by_ids_public(group_ids: list[int]) -> dict[int, dict[str, Any]]:
+    """按 group_id 列表批量读取群配置，返回 {group_id: config_dict}。"""
+    if not group_ids:
+        return {}
+    backend = get_db_backend()
+    if backend == "mongodb":
+        from src.common.db.modules import GroupConfigModule
+
+        docs = await GroupConfigModule.find({"group_id": {"$in": group_ids}}).to_list()
+        return {int(d.group_id): group_config_to_public(d) for d in docs}
+    if _is_pg_backend(backend):
+        from sqlalchemy import select
+
+        from src.common.db.repository_pg import GroupConfigRow, get_session
+
+        async with get_session() as session:
+            result = await session.execute(
+                select(GroupConfigRow).where(GroupConfigRow.group_id.in_(group_ids))
+            )
+            rows = list(result.scalars().all())
+        return {int(r.group_id): group_config_to_public(r) for r in rows}
+    raise ValueError(f"不支持的 DB 后端: {backend}")
+
+
 async def list_group_configs_public(limit: int) -> list[dict[str, Any]]:
     cap = max(1, min(limit, _GROUP_LIST_CAP))
     backend = get_db_backend()
