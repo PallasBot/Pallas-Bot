@@ -13,6 +13,7 @@
 
 </div>
 
+
 <div align="center">
 
 [![license](https://img.shields.io/badge/license-AGPL3.0-FE7D37)](./LICENSE)
@@ -52,7 +53,7 @@
   - [AI 扩展](#ai-扩展)
 - [配置与后端](#配置与后端)
 - [版本更新](#版本更新)
-- [常见问题（FAQ）](#常见问题faq)
+- [常见问题](#常见问题)
 - [开发与贡献指南](#开发与贡献指南)
 - [社区与支持](#社区与支持)
   - [QQ 群](#qq-群)
@@ -119,7 +120,7 @@ uv run nb run
 
 - `牛牛帮助`:查看牛牛可用插件以及开关状态
 - `牛牛喝酒` / `牛牛醒一醒`:控制牛牛醉酒与醒酒状态，影响聊天/轮盘/夺舍行为概率。
-- `牛牛轮盘`:提供踢人/禁言轮盘玩法，支持"救一下""补一枪"。
+- `牛牛轮盘`:提供踢人/禁言轮盘玩法，支持`牛牛救一下`与`牛牛补一枪`。
 - `酒后聊天`:牛牛醉酒时启用 AI 对话能力，支持 @牛牛 或"牛牛 + 文本"触发。（依赖 AI 服务端）。
 - `牛牛唱歌`:提供 AI 唱歌、继续唱、点歌、查询歌名支持（依赖 AI 服务端）。
 
@@ -130,7 +131,7 @@ uv run nb run
 #### 管理功能
 
 - `pallas_webui`:Web 控制台，提供可视化管理界面（需部署前端，启动时自动下载）。
-- `pallas_protocol`:NapCat 协议端管理，支持多账号运行、运行时自动下载与状态管理。
+- `pallas_protocol`:协议端管理，支持多账号运行、运行时自动下载与状态管理。
 #### 群管理员功能
 
 - 管理员可以查看帮助并管理功能开关（按功能名/序号启用或禁用，支持`牛牛开启/关闭全部功能`）。
@@ -182,19 +183,22 @@ uv run nb run
 当前主线（`3.0`）简要更新：
 
 - 数据层：新增 `PostgreSQL` 后端并支持 `Mongo -> PG` 迁移
-- 插件体验：优化 `repeater`、重构并修复 `roulette`、新增 `drink` 醒酒能力
-- 新增 `pallas_webui`：Web 控制台，可视化管理界面，启动时自动下载前端产物
-- 新增 `pallas_protocol`：协议端管理，支持多账号、多平台运行时自动下载
-- 新增 `relogin_bot`：重新登录与创建新牛牛
-- 帮助系统：支持图片渲染与样式配置，新增 `牛牛开启/关闭全部功能` 批量管理命令
-- 稳定性：修复 `Bot` 关闭时的 `RuntimeError`
-- 工程化：引入 `AGENTS.md` 与 `pre-commit` 规范
+- 插件体验：
+  - 优化 `repeater`
+  - 重构并修复 `roulette`
+  - 新增 `drink` 完全醒酒能力
+  - 新增 `pallas_webui`：Web 控制台，可视化管理界面，启动时自动下载前端产物
+  - 新增 `pallas_protocol`：协议端管理，支持多账号、多平台运行时自动下载
+  - 新增 `relogin_bot`：重新登录与创建新牛牛
+  - 修复 `sing` 未处理消息响应
+- 稳定性：修复 `Bot` 关闭时的 `RuntimeError`，移除冗余导入的 `Event`
+- 工程化：引入 `AGENTS.md` 与 `pre-commit` 规范，引入 `CONTRIBUTING` 及 `architecture` 文档，明确项目结构与插件约定
 
 更多版本详情请查看 [Releases](https://github.com/PallasBot/Pallas-Bot/releases)。
 
-## 常见问题（FAQ）
+## 常见问题
 
-[`FAQ`](docs/FAQ.md)
+[FAQ](docs/FAQ.md)
 
 快速入口：
 
@@ -202,30 +206,27 @@ uv run nb run
 - [`使用与管理`](docs/FAQ.md#使用与管理)：不当发言处理、主动发言机制
 - [`部署排障`](docs/FAQ.md#部署排障)：启动后不回复的优先排查顺序
 
-如果你是第一次部署，建议阅读顺序：
-[`快速开始（部署）`](#快速开始部署) -> [`首次启动自检`](#首次启动自检) -> [`部署排障`](docs/FAQ.md#部署排障)
-
 ## 开发与贡献指南
 
 欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。  
-查看我们的 [`贡献指南`](CONTRIBUTING.md)以了解如何参与贡献。
+查看我们的 [贡献指南](CONTRIBUTING.md)，了解如何参与贡献。
 
 
 ## 社区与支持
 
 ### QQ 群
 
-- 开发者
-  - 开发者群：`716692626`
-- 拉牛牛
-  - 牢牛今天寄了吗：`789311420`
-  - 西海福牛养殖基地：`372948792`
-  - 牛牛工坊：`1043301356`
-- 闲聊
-  - 帕拉斯工坊：`566968684`
-  - 帕拉斯の工坊：`865638357`
-  - 西海福牛养殖学院：`733291779`
-  - 丽丽玛玛玛：`926623539`
+- #### 开发者
+  - [`牛牛听话!`](https://qm.qq.com/q/yIiAajYwms)
+- #### 拉牛牛
+  - [`牢牛今天寄了吗`](https://qun.qq.com/universal-share/share?ac=1&authKey=ED2GgLVICB%2F%2BCVuZKtMrOFBr%2F8foYDU2DE80dFji9gvwaTb0GNitvZv2c8ifkLfR&busi_data=eyJncm91cENvZGUiOiI3ODkzMTE0MjAiLCJ0b2tlbiI6IlFZN2EyanJuSGEwR3Exb0RWNjYxSldLT3hPWSt2V0o5QVhqYktHNnVyZFlQbFJ2MlNIcDlpNC9zRVk0TS83TWIiLCJ1aW4iOiIzNDE1NzUwMTc4In0%3D&data=KMV9QtwR8GD1IJe2iba5hugcJCZcWsmv9vGhWZEnOIp0wHpnE7k7fVBKxJHgbYs7Ym4xKuar30OLIqVFySDPmA&svctype=4&tempid=h5_group_info)
+  - [`西海福牛养殖基地`](https://qm.qq.com/q/5GjZ2xHeb6)
+  - [`牛牛工坊`](http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=snSe5PkcmHZrD0OA5Wzl2RAnM-qoAMUc&authKey=T%2FQlcyy31oE7YyMDMd7Yys7utl5a9jP84VYgnknra8Knsq3BhEy5TrwiWK7rG8j6&noverify=0&group_code=1043301356)
+- #### 闲聊
+  - [`泛用型群聊解决方案0.1.0b1`](https://qm.qq.com/q/KEB1Z8kC4)
+  - [`帕拉斯の工坊`](https://qm.qq.com/q/qP3hv0OfE6)
+  - [`西海福牛养殖学院`](https://qm.qq.com/q/8P)
+  - [`丽丽玛玛玛?`](https://qm.qq.com/q/Qgc6ir7Jk)
 
 ### 打赏
 
