@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
 import tempfile
 import zipfile
@@ -13,6 +14,24 @@ import httpx
 from nonebot import logger
 
 from src.common.paths import plugin_data_dir
+
+
+def _shared_github_auth_headers() -> dict[str, str]:
+    """优先复用 pallas_protocol 的 GitHub token。"""
+    token = (os.environ.get("PALLAS_PROTOCOL_GITHUB_TOKEN") or "").strip()
+    if not token:
+        try:
+            from nonebot import get_plugin_config
+
+            from src.plugins.pallas_protocol.config import Config as ProtocolConfig
+
+            cfg = get_plugin_config(ProtocolConfig)
+            token = str(getattr(cfg, "pallas_protocol_github_token", "") or "").strip()
+        except Exception:  # noqa: BLE001
+            token = ""
+    if not token:
+        return {}
+    return {"Authorization": f"Bearer {token}"}
 
 
 def github_release_asset_url(repo: str, asset_name: str, tag: str = "") -> str:
@@ -69,9 +88,10 @@ async def resolve_github_release_asset_urls(repo: str, preferred_asset: str, tag
         timeout=httpx.Timeout(30.0, connect=10.0),
         headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
     ) as client:
+        auth_headers = _shared_github_auth_headers()
         for api in release_apis:
             try:
-                resp = await client.get(api)
+                resp = await client.get(api, headers=auth_headers)
             except Exception:
                 continue
             if resp.status_code != 200:
@@ -247,7 +267,7 @@ async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot") -> dict:
         timeout=httpx.Timeout(15.0, connect=8.0),
         headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
     ) as client:
-        resp = await client.get(api_url)
+        resp = await client.get(api_url, headers=_shared_github_auth_headers())
         resp.raise_for_status()
         data = resp.json()
     tag = str(data.get("tag_name") or "").strip()
@@ -262,7 +282,7 @@ async def fetch_latest_webui_release(repo: str) -> dict:
         timeout=httpx.Timeout(15.0, connect=8.0),
         headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
     ) as client:
-        resp = await client.get(api_url)
+        resp = await client.get(api_url, headers=_shared_github_auth_headers())
         resp.raise_for_status()
         data = resp.json()
     tag = str(data.get("tag_name") or "").strip()

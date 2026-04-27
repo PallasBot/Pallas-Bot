@@ -994,7 +994,7 @@ def render_runtime_page(base_path: str) -> str:
       btn.disabled = true;
       btn.textContent = "加载中…";
       try {{
-        const data = await api("/api/runtime/releases?limit=20");
+        const data = await api("/api/runtime/releases?limit=200");
         const releases = data.releases || [];
         const sel = document.getElementById("releaseSelect");
         sel.innerHTML = releases.map((r) => {{

@@ -199,7 +199,7 @@ def register_pallas_protocol_routes(
 
     @app.get(f"{base}/api/runtime/releases")
     async def runtime_releases(
-        limit: int = Query(default=10, ge=1, le=30),
+        limit: int = Query(default=10, ge=1, le=200),
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
     ):

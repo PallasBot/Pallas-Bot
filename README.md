@@ -241,7 +241,11 @@ uv run nb run
 
 ### 💝 打赏
 
-请作者喝杯咖啡吧（请备注牛牛项目，感谢你的支持 ✿✿ヽ(°▽°)ノ✿）：
+请作者喝杯咖啡吧（请备注牛牛项目，感谢你的支持 ✿✿ヽ(°▽°)ノ✿）：  
+
+<a href="https://afdian.com/a/misteo">
+  <img width="200" src="https://pic1.afdiancdn.com/static/img/welcome/button-sponsorme.png">
+</a>
 
 ## 🙏 致谢
 
