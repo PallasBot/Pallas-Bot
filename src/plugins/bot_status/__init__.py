@@ -10,6 +10,8 @@ from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent, No
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
 
+from src.common.config import BotConfig
+
 from .bot_monitor import (
     get_bot_status_info,
     handle_bot_connect,
@@ -52,9 +54,16 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
+async def _is_bot_admin(bot: Bot, event: MessageEvent) -> bool:
+    try:
+        return await BotConfig(int(bot.self_id)).is_admin_of_bot(int(event.get_user_id()))
+    except Exception:
+        return False
+
+
 STATUS_COOLDOWN_KEY: str = "bot_status"
 offline_notice = on_notice(priority=5, block=False)
-bot_status_cmd = on_command("牛牛在吗", permission=SUPERUSER, priority=5, block=True)
+bot_status_cmd = on_command("牛牛在吗", permission=_is_bot_admin, priority=5, block=True)
 test_mail_cmd = on_command("测试邮件", permission=SUPERUSER, priority=5, block=True)
 
 driver = get_driver()
