@@ -961,8 +961,14 @@ def render_runtime_page(base_path: str) -> str:
       el.title = v;
     }}
 {common_api_js}
-    async function refreshRuntime() {{
-      setBtnBusy(document.getElementById("btnRefreshRuntime"), true, "刷新状态", "刷新中...");
+    let runtimeRefreshing = false;
+    async function refreshRuntime(opts = {{}}) {{
+      const silent = !!opts.silent;
+      if (runtimeRefreshing) return;
+      runtimeRefreshing = true;
+      if (!silent) {{
+        setBtnBusy(document.getElementById("btnRefreshRuntime"), true, "刷新状态", "刷新中...");
+      }}
       try {{
         const data = await api("/api/runtime");
         document.getElementById("runtimeStatus").textContent = JSON.stringify(data, null, 2);
@@ -986,7 +992,10 @@ def render_runtime_page(base_path: str) -> str:
         setText("rtMessage", String(e.message || e));
         setText("rtTime", new Date().toLocaleTimeString());
       }} finally {{
-        setBtnBusy(document.getElementById("btnRefreshRuntime"), false, "刷新状态", "刷新中...");
+        if (!silent) {{
+          setBtnBusy(document.getElementById("btnRefreshRuntime"), false, "刷新状态", "刷新中...");
+        }}
+        runtimeRefreshing = false;
       }}
     }}
     async function loadReleases() {{
@@ -1067,8 +1076,8 @@ def render_runtime_page(base_path: str) -> str:
       }}
     }}
 {token_sync_js}
-    refreshRuntime();
-    setInterval(refreshRuntime, 86400000);
+    refreshRuntime({{ silent: true }});
+    setInterval(() => refreshRuntime({{ silent: true }}), 1200);
   </script>
 </body>
 </html>
