@@ -381,6 +381,7 @@ def render_dashboard(base_path: str) -> str:
       <div class="row" style="justify-content:flex-start;align-items:center;margin-bottom:14px;gap:8px">
         <h2 style="margin:0">账号</h2>
         <a href="#" class="btn" id="linkNewAccount">+ 创建账号</a>
+        <button class="btn secondary" id="btnToggleAll" type="button" onclick="toggleAllAccounts(this)">一键启动全部</button>
       </div>
       <div class="kpi-grid" id="kpis"></div>
       <div class="toolbar">
@@ -553,9 +554,10 @@ def render_dashboard(base_path: str) -> str:
       if (!silent) setBusy(btn, true, "刷新", "刷新中...");
       try {{
         const data = await api("/api/accounts");
-        accountRows = data.accounts || [];
+        accountRows = sortAccountsOnlineFirst(data.accounts || []);
         renderKpis(accountRows);
         renderAccounts();
+        updateToggleAllButton();
         if (!silent) notify("已刷新账号列表", "ok");
       }} finally {{
         if (!silent) setBusy(btn, false, "刷新", "刷新中...");
@@ -583,6 +585,25 @@ def render_dashboard(base_path: str) -> str:
       btn.disabled = false;
       btn.textContent = btn.dataset.idle || btn.textContent;
     }}
+    function isAccountOnline(a) {{
+      return !!(a && a.connected);
+    }}
+    function sortAccountsOnlineFirst(rows) {{
+      return [...(rows || [])].sort((a, b) => {{
+        const ao = isAccountOnline(a) ? 1 : 0;
+        const bo = isAccountOnline(b) ? 1 : 0;
+        if (ao !== bo) return bo - ao;
+        const an = String(a?.display_name || a?.qq || a?.id || "");
+        const bn = String(b?.display_name || b?.qq || b?.id || "");
+        return an.localeCompare(bn, "zh-CN", {{ sensitivity: "base", numeric: true }});
+      }});
+    }}
+    function updateToggleAllButton() {{
+      const btn = document.getElementById("btnToggleAll");
+      if (!btn) return;
+      const allOnline = accountRows.length > 0 && accountRows.every((a) => isAccountOnline(a));
+      btn.textContent = allOnline ? "一键停止全部" : "一键启动全部";
+    }}
     async function startAccount(id, btn) {{
       btnLoad(btn, "启动中…");
       try {{ await api(`/api/accounts/${{id}}/start`, {{ method: "POST" }}); await refreshAccounts({{ silent: true }}); notify(`已启动 ${{id}}`, "ok"); }}
@@ -600,6 +621,25 @@ def render_dashboard(base_path: str) -> str:
       try {{ await api(`/api/accounts/${{id}}/restart`, {{ method: "POST" }}); await refreshAccounts({{ silent: true }}); notify(`已重启 ${{id}}`, "ok"); }}
       catch (e) {{ notify(e.message || e, "err"); }}
       finally {{ btnReset(btn); }}
+    }}
+    async function toggleAllAccounts(btn) {{
+      if (!accountRows.length) {{
+        notify("当前没有可操作实例", "warn");
+        return;
+      }}
+      const allOnline = accountRows.every((a) => isAccountOnline(a));
+      const action = allOnline ? "stop" : "start";
+      const loadingText = allOnline ? "停止全部中…" : "启动全部中…";
+      btnLoad(btn, loadingText);
+      try {{
+        await Promise.all(accountRows.map((a) => api(`/api/accounts/${{a.id}}/${{action}}`, {{ method: "POST" }})));
+        await refreshAccounts({{ silent: true }});
+        notify(allOnline ? "已停止全部实例" : "已启动全部实例", allOnline ? "warn" : "ok");
+      }} catch (e) {{
+        notify(e.message || e, "err");
+      }} finally {{
+        btnReset(btn);
+      }}
     }}
     async function deleteAccount(id) {{
       if (!confirm("确定删除 " + id + " ?")) return;
