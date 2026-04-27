@@ -77,14 +77,17 @@ WS 路径默认为 `/onebot/v11/ws`，可通过 `PALLAS_PROTOCOL_ONEBOT_WS_PATH`
 - `pallas_protocol_onebot_ws_path`（`PALLAS_PROTOCOL_ONEBOT_WS_PATH`）：WS 路径，默认 `/onebot/v11/ws`
 - `pallas_protocol_onebot_client_name`（`PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME`）：连接名，默认 `pallas`
 
-### Linux Docker（可选）
+### Linux 本地（node / AppImage）与 xvfb（可选）
 
-- `pallas_protocol_linux_use_docker`（`PALLAS_PROTOCOL_LINUX_USE_DOCKER`）
-- `pallas_protocol_linux_use_xvfb`（`PALLAS_PROTOCOL_LINUX_USE_XVFB`，Linux 非 Docker 默认 `true`）
+- `pallas_protocol_linux_use_xvfb`（`PALLAS_PROTOCOL_LINUX_USE_XVFB`）：仅 **Linux 且非 Docker** 时，是否在启动命令外再包一层 `xvfb-run`（默认 `true`，无头机常用）。
 - `pallas_protocol_linux_xvfb_command`（`PALLAS_PROTOCOL_LINUX_XVFB_COMMAND`，默认 `xvfb-run`）
 - `pallas_protocol_linux_xvfb_args`（`PALLAS_PROTOCOL_LINUX_XVFB_ARGS`，默认 `["--auto-servernum","--server-args=-screen 0 1280x720x24"]`）
 - `pallas_protocol_linux_appimage_args`（`PALLAS_PROTOCOL_LINUX_APPIMAGE_ARGS`，默认 `["--appimage-extract-and-run"]`）
-- `pallas_protocol_docker_image`（`PALLAS_PROTOCOL_DOCKER_IMAGE`）
+
+### Linux Docker（可选）
+
+- `pallas_protocol_linux_use_docker`（`PALLAS_PROTOCOL_LINUX_USE_DOCKER`）
+- `pallas_protocol_docker_image`（`PALLAS_PROTOCOL_DOCKER_IMAGE`）：默认 `mlikiowa/napcat-docker:latest`；可写版本 tag，如 `mlikiowa/napcat-docker:v4.18.1`
 - `pallas_protocol_docker_onebot_host`（`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`）
 - `pallas_protocol_docker_internal_webui_port`（`PALLAS_PROTOCOL_DOCKER_INTERNAL_WEBUI_PORT`）
 

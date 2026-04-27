@@ -1,6 +1,6 @@
-"""Linux：基于 NapCatAppImageBuild 的 Docker 镜像无头跑 NapCat。
+"""Linux：基于 mlikiowa/napcat-docker（NapCat-Docker）无头跑 NapCat。
 
-参考: https://github.com/NapNeko/NapCatAppImageBuild
+参考: https://github.com/NapNeko/NapCat-Docker
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def build_docker_run_argv(
     resolve_qq,
 ) -> list[str]:
     _ = str(resolve_qq(account) or "").strip()
-    img = (getattr(config, "pallas_protocol_docker_image", None) or "mlikiowa/napcat-appimage:latest").strip()
+    img = (getattr(config, "pallas_protocol_docker_image", None) or "mlikiowa/napcat-docker:latest").strip()
     in_port = int(getattr(config, "pallas_protocol_docker_internal_webui_port", 6099) or 6099)
     wport = account.get("webui_port", in_port)
     try:

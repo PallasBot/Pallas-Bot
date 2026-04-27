@@ -109,8 +109,8 @@ class Config(BaseModel):
         description="Linux 本地运行 AppImage 时追加参数（默认规避 FUSE 依赖）",
     )
     pallas_protocol_docker_image: str = Field(
-        default="mlikiowa/napcat-appimage:latest",
-        description="可换 ghcr.io/napneko/napcatappimagebuild:latest",
+        default="mlikiowa/napcat-docker:latest",
+        description="Docker Hub napcat-docker；可用版本 tag，如 mlikiowa/napcat-docker:v4.18.1",
     )
     pallas_protocol_docker_onebot_host: str = Field(
         default="172.17.0.1",

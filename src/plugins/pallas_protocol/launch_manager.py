@@ -149,7 +149,7 @@ class LaunchManager:
         ad = str(account.get("account_data_dir", "")).strip()
         account["working_dir"] = ad or "/"
         img = (getattr(self._config, "pallas_protocol_docker_image", None) or "").strip() or (
-            "mlikiowa/napcat-appimage:latest"
+            "mlikiowa/napcat-docker:latest"
         )
         account["program_dir"] = f"docker:{img}"
 

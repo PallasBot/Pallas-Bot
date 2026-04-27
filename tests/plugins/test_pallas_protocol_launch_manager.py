@@ -13,7 +13,7 @@ def _cfg(**kwargs):
         "pallas_protocol_program_dir": "",
         "pallas_protocol_linux_use_docker": False,
         "pallas_protocol_docker_internal_webui_port": 6099,
-        "pallas_protocol_docker_image": "mlikiowa/napcat-appimage:latest",
+        "pallas_protocol_docker_image": "mlikiowa/napcat-docker:latest",
         "pallas_protocol_linux_use_xvfb": True,
         "pallas_protocol_linux_xvfb_command": "xvfb-run",
         "pallas_protocol_linux_xvfb_args": ["--auto-servernum"],
