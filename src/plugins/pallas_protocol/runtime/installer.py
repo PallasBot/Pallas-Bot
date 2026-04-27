@@ -664,6 +664,7 @@ class NapCatRuntimeStore:
         if self.is_busy():
             msg = "已有下载或解压任务在执行"
             raise RuntimeError(msg)
+        self._job_tag = tag.strip() if tag and tag.strip() else self._release_tag()
 
         async def _run() -> None:
             try:

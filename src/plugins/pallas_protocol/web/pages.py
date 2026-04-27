@@ -497,6 +497,7 @@ def render_dashboard(base_path: str) -> str:
           return `<tr>
             <td>${{a.display_name || a.qq || a.id}}</td>
             <td>${{a.qq || a.id}}</td>
+            <td>${{a.runtime_version || "未知"}}</td>
             <td><span class="tag ${{cls}}">${{st}}</span></td>
             <td class="mono">${{a.native_webui_url ? `<a href="${{a.native_webui_url}}" target="_blank" rel="noopener">前往</a>` : "—"}}</td>
             <td>
@@ -510,8 +511,8 @@ def render_dashboard(base_path: str) -> str:
           </tr>`;
         }}).join("");
         tw.innerHTML = `<table class="acc-table"><thead><tr>
-          <th>实例名</th><th>QQ号</th><th>状态</th><th>内置 WebUI</th><th>操作</th>
-        </tr></thead><tbody>${{body || `<tr><td colspan="5" class="muted">无匹配账号</td></tr>`}}</tbody></table>`;
+          <th>实例名</th><th>QQ号</th><th>版本</th><th>状态</th><th>内置 WebUI</th><th>操作</th>
+        </tr></thead><tbody>${{body || `<tr><td colspan="6" class="muted">无匹配账号</td></tr>`}}</tbody></table>`;
         return;
       }}
       g.style.display = "grid";
@@ -529,6 +530,7 @@ def render_dashboard(base_path: str) -> str:
             <button class="btn secondary" type="button" onclick="openAccount('${{a.id}}')">控制台</button>
           </div>
           <div class="mono muted">QQ: ${{a.qq || a.id}}</div>
+          <div class="mono muted">版本: ${{a.runtime_version || "未知"}}</div>
           ${{wu ? `<div class="mono"><a href="${{wu}}" target="_blank" rel="noopener">NapCat 内置 WebUI</a> · token ${{wtok}}</div>` : ""}}
           <div class="row" style="margin-top:8px">
             <button class="btn secondary" type="button" onclick="startAccount('${{a.id}}',this)">启动</button>
@@ -977,7 +979,7 @@ def render_runtime_page(base_path: str) -> str:
         const manifest = data.manifest || {{}};
         setText("rtStatus", statusText(job.status));
         setText("rtStage", stageText(job.message));
-        const tag = job.tag || manifest.release_tag || d.tag || "";
+        const tag = pendingTag || job.tag || manifest.release_tag || d.tag || "";
         const assetEl = document.getElementById("rtAsset");
         if (assetEl) {{ assetEl.title = d.asset || manifest.asset_name || ""; }}
         setText("rtAsset", tag || d.asset || manifest.asset_name || "-");
@@ -1232,6 +1234,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
         st = (a.launch_issues || []).join("; ");
       }}
       ov.innerHTML = `<div><strong>${{st}}</strong></div>
+        <div class="muted" style="margin-top:8px">版本: ${{a.runtime_version || "未知"}}</div>
         ${{a.native_webui_url ? `<div style="margin-top:8px"><a href="${{a.native_webui_url}}" target="_blank" rel="noopener">打开原生 WebUI</a></div>` : ""}}
         <div class="muted" style="margin-top:8px">WORKDIR: ${{a.account_data_dir || ""}}</div>`;
       document.getElementById("display_name").value = a.display_name || "";

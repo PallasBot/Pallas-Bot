@@ -784,6 +784,7 @@ class PallasProtocolService:
                 native_webui = f"{base}?token={quote(wtok, safe='')}" if wtok else base
         except (TypeError, ValueError):
             pass
+        runtime_version = self._resolve_account_runtime_version(account)
         return {
             **account,
             "running": process_running or connected,
@@ -795,4 +796,37 @@ class PallasProtocolService:
             "started_at": started_at,
             "data_path_hints": self._launch.describe_account_data_paths(account),
             "native_webui_url": native_webui,
+            "runtime_version": runtime_version,
         }
+
+    def _resolve_account_runtime_version(self, account: dict) -> str:
+        """为账号推导当前运行时版本显示值。"""
+        if account.get("napcat_linux_docker"):
+            image = str(account.get("program_dir", "") or "").strip()
+            if image.startswith("docker:"):
+                image = image[len("docker:") :].strip()
+            if ":" in image:
+                _, tag = image.rsplit(":", 1)
+                return tag.strip() or "latest"
+            return "latest" if image else "docker"
+
+        manifest = self._runtime_store.read_manifest()
+        if manifest is None:
+            return "未知"
+        tag = str(manifest.release_tag or "").strip() or "latest"
+
+        acc_program = str(account.get("program_dir", "") or "").strip()
+        if not acc_program:
+            return tag
+        try:
+            acc_path = Path(acc_program).resolve()
+            manifest_program = Path(manifest.program_dir).resolve()
+            manifest_extract = Path(manifest.extract_root).resolve()
+        except OSError:
+            return "自定义"
+
+        if acc_path == manifest_program:
+            return tag
+        if acc_path == manifest_extract or manifest_extract in acc_path.parents:
+            return tag
+        return "自定义"
