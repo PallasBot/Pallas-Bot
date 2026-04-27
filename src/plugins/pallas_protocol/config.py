@@ -41,6 +41,14 @@ class Config(BaseModel):
     pallas_protocol_webui_port_min: int = Field(default=6099, ge=1024, le=65534)
     pallas_protocol_webui_port_max: int = Field(default=7999, ge=1025, le=65535)
     # 下载仓库配置
+    pallas_protocol_github_token: str = Field(
+        default="",
+        description=(
+            "GitHub Personal Access Token（可选）；"
+            "设置后 API 请求限额从 60/h 提升至 5000/h，"
+            "适合频繁检查更新的场景"
+        ),
+    )
     pallas_protocol_github_repo: str = Field(
         default_factory=default_release_repo_for_platform,
         description="空时按平台默认：Windows/非 Linux 使用 NapNeko/NapCatQQ，Linux 使用 NapNeko/NapCatAppImageBuild",

@@ -189,12 +189,23 @@ def register_pallas_protocol_routes(
     async def runtime_download(
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+        tag: str | None = Query(default=None),
     ):
         _auth(x_pallas_protocol_token, token)
         try:
-            return manager.start_runtime_download()
+            return manager.start_runtime_download(tag=tag or None)
         except RuntimeError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
+
+    @app.get(f"{base}/api/runtime/releases")
+    async def runtime_releases(
+        limit: int = Query(default=10, ge=1, le=30),
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        releases = await manager.fetch_runtime_releases(limit=limit)
+        return {"releases": releases}
 
     @app.post(f"{base}/api/runtime/rescan")
     async def runtime_rescan(

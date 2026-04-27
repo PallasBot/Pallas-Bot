@@ -2237,29 +2237,6 @@ def register_extended_api(
             },
         })
 
-    @router.post(f"{x}/update/bot/apply", include_in_schema=True)
-    async def _bot_update_apply(
-        token: str | None = Query(default=None),
-        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
-    ) -> JSONResponse:
-        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from .manager import apply_bot_git_pull, get_bot_current_version
-
-        try:
-            result = await apply_bot_git_pull()
-            if result["returncode"] != 0:
-                raise ValueError(f"git pull 失败: {result['stderr'] or result['stdout']}")
-            current = get_bot_current_version()
-            new_tag = current.get("tag", "") or current.get("commit", "")
-            output = result["stdout"] or "已执行 git pull"
-            logger.info("Pallas 控制台: Bot 已更新，输出: %s", output)
-            return JSONResponse({"ok": True, "data": {"tag": new_tag, "message": output}})
-        except HTTPException:
-            raise
-        except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas 控制台: Bot 更新失败")
-            raise HTTPException(status_code=500, detail=str(e)) from e
-
     @router.post(f"{x}/update/apply", include_in_schema=True)
     async def _update_apply(
         token: str | None = Query(default=None),
@@ -2300,7 +2277,7 @@ def register_extended_api(
             except Exception:  # noqa: BLE001
                 new_tag = tag
             save_installed_webui_version(new_tag, succeeded_url)
-            logger.info("Pallas 控制台: WebUI 已更新至 %s", new_tag)
+            logger.info("Pallas 控制台: WebUI 已更新至 {}", new_tag)
             return JSONResponse({"ok": True, "data": {"tag": new_tag, "message": "更新成功"}})
         except HTTPException:
             raise

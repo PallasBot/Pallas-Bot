@@ -84,9 +84,13 @@ class PallasProtocolService:
             },
         }
 
-    def start_runtime_download(self) -> dict:
-        self._runtime_store.start_background_download()
+    def start_runtime_download(self, *, tag: str | None = None) -> dict:
+        self._runtime_store.start_background_download(tag=tag)
         return self.runtime_overview()
+
+    async def fetch_runtime_releases(self, *, limit: int = 10) -> list[dict]:
+        """获取 GitHub release 列表，供前端 tag 选择器使用。"""
+        return await self._runtime_store.fetch_releases(limit=limit)
 
     def rescan_runtime_extract(self) -> dict:
         m = self._runtime_store.rescan_existing_extract()

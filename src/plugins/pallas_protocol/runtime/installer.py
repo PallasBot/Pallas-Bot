@@ -21,6 +21,8 @@ from urllib.parse import quote, urlparse
 
 import httpx
 
+from src.common.utils.github_release import fetch_github_releases, github_release_api_url
+
 JobStatus = Literal["idle", "downloading", "extracting", "installing", "done", "error"]
 
 # 一键安装超时秒数
@@ -36,16 +38,6 @@ def _github_release_asset_url(repo: str, asset_name: str, tag: str = "") -> str:
     if not tag.strip():
         return f"https://github.com/{owner_part}/{name_part}/releases/latest/download/{encoded}"
     return f"https://github.com/{owner_part}/{name_part}/releases/download/{tag.strip()}/{encoded}"
-
-
-def _github_release_api_url(repo: str, tag: str = "") -> str:
-    owner_part, _, name_part = repo.partition("/")
-    if not owner_part or not name_part:
-        msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
-        raise ValueError(msg)
-    if not tag.strip():
-        return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/latest"
-    return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/tags/{tag.strip()}"
 
 
 def _looks_like_http_url(value: str) -> bool:
@@ -429,6 +421,9 @@ class NapCatRuntimeStore:
     def is_busy(self) -> bool:
         return self._job_status in ("downloading", "extracting", "installing")
 
+    def _github_token(self) -> str:
+        return str(getattr(self._config, "pallas_protocol_github_token", "") or "").strip()
+
     def _repo(self) -> str:
         configured = str(getattr(self._config, "pallas_protocol_github_repo", "")).strip()
         return configured or default_release_repo_for_platform()
@@ -456,11 +451,14 @@ class NapCatRuntimeStore:
     def _release_tag(self) -> str:
         return str(getattr(self._config, "pallas_protocol_release_tag", "")).strip()
 
-    async def download_and_install(self, *, client: httpx.AsyncClient | None = None) -> RuntimeManifest:
+    async def download_and_install(
+        self, *, client: httpx.AsyncClient | None = None, tag: str | None = None
+    ) -> RuntimeManifest:
         async with self._lock:
             configured_asset = self._asset_name()
+            release_tag = tag.strip() if tag and tag.strip() else self._release_tag()
             if not configured_asset:
-                configured_asset = default_release_asset_for_platform()
+                configured_asset = default_release_asset_for_platform(release_tag)
             direct_asset_url = configured_asset if _looks_like_http_url(configured_asset) else ""
             asset_name = _asset_name_from_url(direct_asset_url) if direct_asset_url else configured_asset
             if not asset_name:
@@ -468,11 +466,11 @@ class NapCatRuntimeStore:
                 raise ValueError(msg)
             self._set_job("downloading", "准备下载…")
             repo = self._repo()
-            release_tag = self._release_tag()
             url = direct_asset_url or _github_release_asset_url(repo, asset_name, release_tag)
             self._dist_dir.mkdir(parents=True, exist_ok=True)
             dist_file = self._dist_dir / asset_name
 
+            github_token = self._github_token()
             own_client = client is None
             hc = client or httpx.AsyncClient(
                 follow_redirects=True,
@@ -487,10 +485,13 @@ class NapCatRuntimeStore:
                     tag_candidates = [release_tag] if release_tag else [""]
                     if release_tag:
                         tag_candidates.append("")
+                    from src.common.utils.github_release import _github_auth_headers
+
+                    _gh_headers = _github_auth_headers(github_token)
                     for repo_try in self._repo_candidates():
                         for tag_try in tag_candidates:
-                            rel_api = _github_release_api_url(repo_try, tag_try)
-                            rel_resp = await hc.get(rel_api)
+                            rel_api = github_release_api_url(repo_try, tag_try)
+                            rel_resp = await hc.get(rel_api, headers=_gh_headers)
                             if rel_resp.status_code == 200:
                                 pick = _pick_release_asset_generic(rel_resp.json(), asset_name)
                                 if pick is not None:
@@ -657,14 +658,14 @@ class NapCatRuntimeStore:
                 if await asyncio.to_thread(stage.exists):
                     shutil.rmtree(stage, ignore_errors=True)
 
-    def start_background_download(self) -> None:
+    def start_background_download(self, *, tag: str | None = None) -> None:
         if self.is_busy():
             msg = "已有下载或解压任务在执行"
             raise RuntimeError(msg)
 
         async def _run() -> None:
             try:
-                await self.download_and_install()
+                await self.download_and_install(tag=tag)
             except Exception as e:
                 self._set_job("error", str(e))
 
@@ -673,6 +674,19 @@ class NapCatRuntimeStore:
     def _set_job(self, status: JobStatus, message: str) -> None:
         self._job_status = status
         self._job_message = message
+
+    async def fetch_releases(self, *, limit: int = 10) -> list[dict[str, Any]]:
+        """获取当前配置仓库的 release 列表，供前端展示 tag 选择。
+
+        返回 ``[{tag, assets: [{name, url}]}]``，Windows 资产不含 tag 后缀，
+        Linux AppImage 资产名含 tag 与架构，调用方可直接用于构造下载参数。
+        """
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            headers={"User-Agent": "Pallas-Bot-PallasProtocol/1.0"},
+        ) as client:
+            return await fetch_github_releases(self._repo(), client=client, limit=limit, token=self._github_token())
 
     def rescan_existing_extract(self) -> RuntimeManifest | None:
         """不重新下载，仅在已有解压目录中查找 Shell 根（用于一键包安装器生成子目录后）。"""
@@ -719,8 +733,10 @@ _NC_ASSET_WINDOWS_ONEKEY = "NapCat.Shell.Windows.OneKey.zip"
 _NC_ASSET_SHELL_GENERIC = "NapCat.Shell.zip"
 _NC_REPO_SHELL = "NapNeko/NapCatQQ"
 _NC_REPO_APPIMAGE = "NapNeko/NapCatAppImageBuild"
-_NC_APPIMAGE_X64 = "QQ-x86_64.AppImage"
-_NC_APPIMAGE_AARCH64 = "QQ-aarch64.AppImage"
+# NapCatAppImageBuild 资产命名格式：QQ-{qq_ver}_NapCat-{tag}-{arch}.AppImage
+# 使用 NapCat-{tag}-{arch}.AppImage 作为 preferred name，可精准命中 arch token 匹配
+_NC_APPIMAGE_X64 = "NapCat-amd64.AppImage"
+_NC_APPIMAGE_AARCH64 = "NapCat-arm64.AppImage"
 
 
 def default_release_repo_for_platform() -> str:
@@ -729,16 +745,20 @@ def default_release_repo_for_platform() -> str:
     return _NC_REPO_SHELL
 
 
-def default_release_asset_for_platform() -> str:
+def default_release_asset_for_platform(tag: str = "") -> str:
     """按平台选择默认 release 资产名（空配置时 `resolved_release_asset` 会调用）。
 
     - Windows：NapCatQQ 一键包 zip
-    - Linux：NapCatAppImageBuild 的 AppImage（按架构）
+    - Linux：NapCatAppImageBuild 的 AppImage（按架构）；若提供 tag 则拼接为
+      ``NapCat-{tag}-{arch}.AppImage``，与实际资产命名后缀对齐，提升命中率
     - 其它 POSIX：保留 NapCat.Shell.zip
     """
     if sys.platform == "win32":
         return _NC_ASSET_WINDOWS_ONEKEY
     if sys.platform.startswith("linux"):
         machine = (py_platform.machine() or "").lower()
-        return _NC_APPIMAGE_AARCH64 if machine in ("aarch64", "arm64") else _NC_APPIMAGE_X64
+        arch = "arm64" if machine in ("aarch64", "arm64") else "amd64"
+        if tag.strip():
+            return f"NapCat-{tag.strip()}-{arch}.AppImage"
+        return _NC_APPIMAGE_AARCH64 if arch == "arm64" else _NC_APPIMAGE_X64
     return _NC_ASSET_SHELL_GENERIC

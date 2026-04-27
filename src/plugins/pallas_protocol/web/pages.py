@@ -158,7 +158,7 @@ input:focus, textarea:focus { outline: 2px solid rgba(56,189,248,0.35); border-c
   background: var(--bg1); border: 1px solid var(--bd); border-radius: 10px; padding: 10px 12px;
 }
 .kpi .k { color: var(--muted); font-size: 0.75rem; }
-.kpi .v { font-size: 1.15rem; font-weight: 700; margin-top: 4px; }
+.kpi .v { font-size: 1.05rem; font-weight: 700; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toolbar { margin-bottom: 10px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .toolbar .grow { flex: 1; min-width: 220px; }
 .help-tip { font-size: 0.78rem; color: var(--muted); }
@@ -880,7 +880,7 @@ def render_runtime_page(base_path: str) -> str:
       <div class="kpi-grid">
         <div class="kpi"><div class="k">任务状态</div><div class="v" id="rtStatus">-</div></div>
         <div class="kpi"><div class="k">当前阶段</div><div class="v" id="rtStage">-</div></div>
-        <div class="kpi"><div class="k">目标资产</div><div class="v" id="rtAsset">-</div></div>
+        <div class="kpi"><div class="k">目标版本</div><div class="v" id="rtAsset" title="">-</div></div>
         <div class="kpi"><div class="k">最后刷新</div><div class="v" id="rtTime">-</div></div>
       </div>
       <div class="card" style="margin:10px 0 0;box-shadow:none">
@@ -901,6 +901,20 @@ def render_runtime_page(base_path: str) -> str:
         <button class="btn" id="btnUpdate" type="button" onclick="downloadRuntime()">立即更新</button>
         <button class="btn secondary" id="btnRescan" type="button" onclick="rescanRuntime()">刷新检测</button>
         <button class="btn secondary" id="btnRefreshRuntime" type="button" onclick="refreshRuntime()">刷新状态</button>
+      </div>
+      <div style="margin-top:18px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">选择版本</span>
+          <button class="btn secondary" id="btnLoadReleases" type="button" onclick="loadReleases()" style="font-size:0.82rem;padding:7px 14px">加载版本列表</button>
+        </div>
+        <div id="releasesArea" style="display:none">
+          <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+            <select id="releaseSelect" style="flex:1;min-width:200px;height:40px"></select>
+            <button class="btn secondary" id="btnDownloadTag" type="button" onclick="downloadSelectedTag()">选择此版本</button>
+          </div>
+          <div id="releaseDetail" class="muted" style="font-size:0.78rem;min-height:1.4em"></div>
+        </div>
+        <p id="releasesPlaceholder" class="muted" style="margin:0;font-size:0.82rem">点击「加载版本列表」从 GitHub 获取可用版本。</p>
       </div>
       <details style="margin-top:14px">
         <summary class="muted" style="cursor:pointer">查看原始状态 JSON（排障用）</summary>
@@ -957,7 +971,10 @@ def render_runtime_page(base_path: str) -> str:
         const manifest = data.manifest || {{}};
         setText("rtStatus", statusText(job.status));
         setText("rtStage", stageText(job.message));
-        setText("rtAsset", d.asset || manifest.asset_name || "-");
+        const tag = d.tag || job.tag || manifest.tag || "";
+        const assetEl = document.getElementById("rtAsset");
+        if (assetEl) {{ assetEl.title = d.asset || manifest.asset_name || ""; }}
+        setText("rtAsset", tag || d.asset || manifest.asset_name || "-");
         setText("rtMessage", job.message || "-");
         setText("rtSource", manifest.source_url || `${{d.repo || "-"}} @ ${{d.tag || "latest"}}`);
         setText("rtProgramDir", data.effective_program_dir || manifest.program_dir || "-");
@@ -972,10 +989,67 @@ def render_runtime_page(base_path: str) -> str:
         setBtnBusy(document.getElementById("btnRefreshRuntime"), false, "刷新状态", "刷新中...");
       }}
     }}
+    async function loadReleases() {{
+      const btn = document.getElementById("btnLoadReleases");
+      btn.disabled = true;
+      btn.textContent = "加载中…";
+      try {{
+        const data = await api("/api/runtime/releases?limit=20");
+        const releases = data.releases || [];
+        const sel = document.getElementById("releaseSelect");
+        sel.innerHTML = releases.map((r) => {{
+          const label = r.tag_name + (r.prerelease ? " (pre)" : "") + (r.name && r.name !== r.tag_name ? " · " + r.name : "");
+          return `<option value="${{r.tag_name}}">${{label}}</option>`;
+        }}).join("");
+        document.getElementById("releasesArea").style.display = "block";
+        document.getElementById("releasesPlaceholder").style.display = "none";
+        updateReleaseDetail(releases);
+        sel.addEventListener("change", () => updateReleaseDetail(releases));
+      }} catch (e) {{
+        alert("加载 release 列表失败: " + (e.message || e));
+      }} finally {{
+        btn.disabled = false;
+        btn.textContent = "刷新列表";
+      }}
+    }}
+    function updateReleaseDetail(releases) {{
+      const sel = document.getElementById("releaseSelect");
+      const tag = sel.value;
+      const r = releases.find((x) => x.tag_name === tag);
+      const el = document.getElementById("releaseDetail");
+      if (!r) {{ el.textContent = ""; return; }}
+      const parts = [];
+      if (r.published_at) parts.push("发布于 " + new Date(r.published_at).toLocaleDateString("zh-CN"));
+      if (r.assets && r.assets.length) parts.push("资产: " + r.assets.map((a) => a.name).join(", "));
+      el.textContent = parts.join(" · ");
+    }}
+    let pendingTag = null;
+    function downloadSelectedTag() {{
+      const sel = document.getElementById("releaseSelect");
+      const tag = sel.value;
+      if (!tag) {{ alert("请先选择版本"); return; }}
+      pendingTag = tag;
+      const detailEl = document.getElementById("releaseDetail");
+      const assetHint = detailEl ? detailEl.textContent : "";
+      setText("rtAsset", tag);
+      setText("rtSource", assetHint ? "待下载: " + assetHint : "待下载: " + tag);
+      setText("rtStatus", "待更新");
+      setText("rtStage", "已选择");
+      setText("rtMessage", "已选择版本 " + tag + "，点击「立即更新」开始下载");
+      setText("rtTime", new Date().toLocaleTimeString());
+      const btn = document.getElementById("btnDownloadTag");
+      const prev = btn.textContent;
+      btn.textContent = "✓ 已选择";
+      setTimeout(() => {{ btn.textContent = prev; }}, 1500);
+    }}
     async function downloadRuntime() {{
       setBtnBusy(document.getElementById("btnUpdate"), true, "立即更新", "更新中...");
       try {{
-        await api("/api/runtime/download", {{ method: "POST" }});
+        const url = pendingTag
+          ? "/api/runtime/download?tag=" + encodeURIComponent(pendingTag)
+          : "/api/runtime/download";
+        await api(url, {{ method: "POST" }});
+        pendingTag = null;
         await refreshRuntime();
       }} catch (e) {{ alert(e.message); }}
       finally {{
@@ -994,7 +1068,7 @@ def render_runtime_page(base_path: str) -> str:
     }}
 {token_sync_js}
     refreshRuntime();
-    setInterval(refreshRuntime, 3000);
+    setInterval(refreshRuntime, 86400000);
   </script>
 </body>
 </html>
