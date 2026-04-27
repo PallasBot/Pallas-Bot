@@ -179,8 +179,10 @@ class PallasProtocolService:
                 continue
             try:
                 await self.start_account(account_id)
+            except ValueError as e:
+                logger.warning(f"NapCat: 自动启动账号 {account_id} 失败：{e}")
             except Exception:
-                logger.exception("NapCat: 自动启动账号 %s 失败", account_id)
+                logger.exception(f"NapCat: 自动启动账号 {account_id} 出现未预期异常")
 
     def _used_webui_ports(self, exclude_account_id: str | None = None) -> set[int]:
         used: set[int] = set()

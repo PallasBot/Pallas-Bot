@@ -159,12 +159,36 @@ class LaunchManager:
             return
         if account.get("napcat_linux_docker"):
             return
+        xvfb_command = str(getattr(self._config, "pallas_protocol_linux_xvfb_command", "xvfb-run") or "").strip()
         if not bool(getattr(self._config, "pallas_protocol_linux_use_xvfb", True)):
+            command = str(account.get("command", "") or "").strip()
+            # 关闭 xvfb 后，兼容历史已包裹的命令并自动解包。
+            if xvfb_command and command and Path(command).name == Path(xvfb_command).name:
+                raw_args = [str(item) for item in (account.get("args") or [])]
+                configured_xvfb_args = [
+                    str(item) for item in (getattr(self._config, "pallas_protocol_linux_xvfb_args", []) or [])
+                ]
+                restored_command = ""
+                restored_args: list[str] = []
+                has_prefix = len(raw_args) > len(configured_xvfb_args) and (
+                    raw_args[: len(configured_xvfb_args)] == configured_xvfb_args
+                )
+                if has_prefix:
+                    restored_command = raw_args[len(configured_xvfb_args)]
+                    restored_args = raw_args[len(configured_xvfb_args) + 1 :]
+                else:
+                    for i, arg in enumerate(raw_args):
+                        if not str(arg).startswith("-"):
+                            restored_command = arg
+                            restored_args = raw_args[i + 1 :]
+                            break
+                if restored_command:
+                    account["command"] = restored_command
+                    account["args"] = restored_args
             return
         command = str(account.get("command", "") or "").strip()
         if not command:
             return
-        xvfb_command = str(getattr(self._config, "pallas_protocol_linux_xvfb_command", "xvfb-run") or "").strip()
         if not xvfb_command:
             return
         if Path(command).name == Path(xvfb_command).name:
