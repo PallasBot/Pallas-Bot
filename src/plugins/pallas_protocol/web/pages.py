@@ -977,12 +977,12 @@ def render_runtime_page(base_path: str) -> str:
         const manifest = data.manifest || {{}};
         setText("rtStatus", statusText(job.status));
         setText("rtStage", stageText(job.message));
-        const tag = d.tag || job.tag || manifest.tag || "";
+        const tag = job.tag || manifest.release_tag || d.tag || "";
         const assetEl = document.getElementById("rtAsset");
         if (assetEl) {{ assetEl.title = d.asset || manifest.asset_name || ""; }}
         setText("rtAsset", tag || d.asset || manifest.asset_name || "-");
         setText("rtMessage", job.message || "-");
-        setText("rtSource", manifest.source_url || `${{d.repo || "-"}} @ ${{d.tag || "latest"}}`);
+        setText("rtSource", manifest.source_url || `${{d.repo || "-"}} @ ${{tag || "latest"}}`);
         setText("rtProgramDir", data.effective_program_dir || manifest.program_dir || "-");
         setText("rtTime", new Date().toLocaleTimeString());
       }} catch (e) {{

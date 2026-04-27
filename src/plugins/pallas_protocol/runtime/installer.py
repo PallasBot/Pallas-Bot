@@ -341,6 +341,7 @@ class NapCatRuntimeStore:
         self._lock = asyncio.Lock()
         self._job_status: JobStatus = "idle"
         self._job_message = ""
+        self._job_tag = ""
         self._job_task: asyncio.Task[None] | None = None
 
     def manifest_path(self) -> Path:
@@ -416,7 +417,7 @@ class NapCatRuntimeStore:
         return prog if usable(prog) else None
 
     def job_snapshot(self) -> dict[str, Any]:
-        return {"status": self._job_status, "message": self._job_message}
+        return {"status": self._job_status, "message": self._job_message, "tag": self._job_tag}
 
     def is_busy(self) -> bool:
         return self._job_status in ("downloading", "extracting", "installing")
@@ -457,6 +458,7 @@ class NapCatRuntimeStore:
         async with self._lock:
             configured_asset = self._asset_name()
             release_tag = tag.strip() if tag and tag.strip() else self._release_tag()
+            self._job_tag = release_tag
             if not configured_asset:
                 configured_asset = default_release_asset_for_platform(release_tag)
             direct_asset_url = configured_asset if _looks_like_http_url(configured_asset) else ""
@@ -642,7 +644,7 @@ class NapCatRuntimeStore:
                     program_dir=str(program_dir.resolve()),
                     extract_root=str(final_root.resolve()),
                     asset_name=asset_name,
-                    release_tag=self._release_tag(),
+                    release_tag=release_tag,
                     source_url=url,
                 )
                 self._manifest_path.write_text(
