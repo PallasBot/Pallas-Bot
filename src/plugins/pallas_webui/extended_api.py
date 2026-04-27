@@ -2165,10 +2165,11 @@ def register_extended_api(
         from .manager import fetch_latest_webui_release, get_installed_webui_version
 
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
+        github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         installed = get_installed_webui_version()
         current_tag = str(installed.get("tag", "") or "").strip()
         try:
-            latest = await fetch_latest_webui_release(repo)
+            latest = await fetch_latest_webui_release(repo, token=github_token)
             latest_tag = str(latest.get("tag", "") or "").strip()
             release_url = str(latest.get("html_url", "") or "").strip()
             asset_url = str(latest.get("asset_url", "") or "").strip()
@@ -2203,11 +2204,12 @@ def register_extended_api(
     async def _bot_update_check() -> JSONResponse:
         from .manager import fetch_latest_bot_release, get_bot_current_version
 
+        github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         current = get_bot_current_version()
         current_tag = current.get("tag", "")
         current_commit = current.get("commit", "")
         try:
-            latest = await fetch_latest_bot_release("PallasBot/Pallas-Bot")
+            latest = await fetch_latest_bot_release("PallasBot/Pallas-Bot", token=github_token)
             latest_tag = str(latest.get("tag", "") or "").strip()
             release_url = str(latest.get("html_url", "") or "").strip()
         except Exception as e:  # noqa: BLE001
@@ -2254,9 +2256,10 @@ def register_extended_api(
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
+        github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         public = webui_public_path()
         try:
-            url_candidates = await resolve_github_release_asset_urls(repo, asset, tag)
+            url_candidates = await resolve_github_release_asset_urls(repo, asset, tag, token=github_token)
             if not url_candidates:
                 raise ValueError("未找到可用的下载地址")
             errors: list[str] = []
@@ -2272,7 +2275,7 @@ def register_extended_api(
             if errors:
                 raise ValueError("下载失败: " + " | ".join(errors))
             try:
-                info = await fetch_latest_webui_release(repo)
+                info = await fetch_latest_webui_release(repo, token=github_token)
                 new_tag = str(info.get("tag", "") or tag).strip()
             except Exception:  # noqa: BLE001
                 new_tag = tag

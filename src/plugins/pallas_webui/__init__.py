@@ -85,13 +85,14 @@ async def _pallas_webui_startup() -> None:
     public = webui_public_path()
     url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
     url_candidates: list[str] = []
+    github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
     if not url:
         # 自动解析发布资产下载地址
         try:
             repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "")
             asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "")
             tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
-            url_candidates = await resolve_github_release_asset_urls(repo, asset, tag)
+            url_candidates = await resolve_github_release_asset_urls(repo, asset, tag, token=github_token)
             url = github_release_asset_url(
                 str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or ""),
                 str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or ""),
@@ -122,7 +123,7 @@ async def _pallas_webui_startup() -> None:
                 if not tag:
                     try:
                         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "")
-                        info = await fetch_latest_webui_release(repo)
+                        info = await fetch_latest_webui_release(repo, token=github_token)
                         tag = info.get("tag", "")
                     except Exception:
                         tag = ""
@@ -154,7 +155,7 @@ async def _pallas_webui_startup() -> None:
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
         installed = get_installed_webui_version()
         current_tag = str(installed.get("tag", "") or "").strip()
-        latest_info = await fetch_latest_webui_release(repo)
+        latest_info = await fetch_latest_webui_release(repo, token=github_token)
         latest_tag = str(latest_info.get("tag", "") or "").strip()
         if latest_tag and current_tag != latest_tag:
             release_url = str(latest_info.get("html_url", "") or "").strip()
@@ -172,7 +173,7 @@ async def _pallas_webui_startup() -> None:
         bot_current = get_bot_current_version()
         bot_current_tag = bot_current.get("tag", "")
         bot_current_commit = bot_current.get("commit", "")
-        bot_latest_info = await fetch_latest_bot_release("PallasBot/Pallas-Bot")
+        bot_latest_info = await fetch_latest_bot_release("PallasBot/Pallas-Bot", token=github_token)
         bot_latest_tag = str(bot_latest_info.get("tag", "") or "").strip()
         if bot_latest_tag and bot_current_tag and bot_current_tag != bot_latest_tag:
             bot_release_url = str(bot_latest_info.get("html_url", "") or "").strip()
