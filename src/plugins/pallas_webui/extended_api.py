@@ -1687,13 +1687,16 @@ def register_extended_api(
             rows: list[dict[str, Any]] = []
             for g in groups:
                 gid = int(g["group_id"])
-                cfg = db_configs.get(gid, {
-                    "group_id": gid,
-                    "roulette_mode": 1,
-                    "banned": False,
-                    "sing_progress": None,
-                    "disabled_plugins": [],
-                })
+                cfg = db_configs.get(
+                    gid,
+                    {
+                        "group_id": gid,
+                        "roulette_mode": 1,
+                        "banned": False,
+                        "sing_progress": None,
+                        "disabled_plugins": [],
+                    },
+                )
                 rows.append({
                     **cfg,
                     "group_name": g.get("group_name", ""),

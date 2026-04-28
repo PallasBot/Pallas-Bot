@@ -44,9 +44,7 @@ class Config(BaseModel):
     pallas_protocol_github_token: str = Field(
         default="",
         description=(
-            "GitHub Personal Access Token（可选）；"
-            "设置后 API 请求限额从 60/h 提升至 5000/h，"
-            "适合频繁检查更新的场景"
+            "GitHub Personal Access Token（可选）；设置后 API 请求限额从 60/h 提升至 5000/h，适合频繁检查更新的场景"
         ),
     )
     pallas_protocol_github_repo: str = Field(

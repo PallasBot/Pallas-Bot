@@ -525,13 +525,11 @@ class NapCatRuntimeStore:
                                         download_candidates.append((repo_try, pick_name, pick_url))
                     if not download_candidates:
                         # 添加直链候选
-                        download_candidates.append(
-                            (
-                                repo,
-                                asset_name,
-                                _github_release_asset_url(repo, asset_name, release_tag),
-                            )
-                        )
+                        download_candidates.append((
+                            repo,
+                            asset_name,
+                            _github_release_asset_url(repo, asset_name, release_tag),
+                        ))
 
                 errors: list[str] = []
                 deduped: list[tuple[str, str, str]] = []

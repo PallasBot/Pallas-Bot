@@ -186,9 +186,11 @@ class PallasProtocolService:
             resolved_repo = default_release_repo_for_platform(target_platform)
         else:
             auto_repo = default_release_repo_for_platform("auto")
-            resolved_repo = default_release_repo_for_platform(target_platform) if (
-                target_platform != "auto" and raw_repo == auto_repo
-            ) else raw_repo
+            resolved_repo = (
+                default_release_repo_for_platform(target_platform)
+                if (target_platform != "auto" and raw_repo == auto_repo)
+                else raw_repo
+            )
         return {
             "job": self._runtime_store.job_snapshot(),
             "manifest": manifest.to_json() if manifest else None,
@@ -253,14 +255,12 @@ class PallasProtocolService:
             parts = item.split("|", 3)
             while len(parts) < 4:
                 parts.append("")
-            rows.append(
-                {
-                    "name": parts[0],
-                    "id": parts[1],
-                    "created_since": parts[2],
-                    "size": parts[3],
-                }
-            )
+            rows.append({
+                "name": parts[0],
+                "id": parts[1],
+                "created_since": parts[2],
+                "size": parts[3],
+            })
         return {
             "ok": proc.returncode == 0,
             "code": proc.returncode,

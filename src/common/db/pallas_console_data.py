@@ -116,9 +116,7 @@ async def list_group_configs_by_ids_public(group_ids: list[int]) -> dict[int, di
         from src.common.db.repository_pg import GroupConfigRow, get_session
 
         async with get_session() as session:
-            result = await session.execute(
-                select(GroupConfigRow).where(GroupConfigRow.group_id.in_(ids))
-            )
+            result = await session.execute(select(GroupConfigRow).where(GroupConfigRow.group_id.in_(ids)))
             rows = list(result.scalars().all())
         return {int(r.group_id): group_config_to_public(r) for r in rows}
     raise ValueError(f"不支持的 DB 后端: {backend}")
@@ -202,17 +200,15 @@ def _mongo_agg_models() -> dict[str, type]:
         UserConfigModule,
     )
 
-    _MONGO_AGG_COLLECTIONS.update(
-        {
-            "config": BotConfigModule,
-            "group_config": GroupConfigModule,
-            "user_config": UserConfigModule,
-            "message": Message,
-            "context": Context,
-            "blacklist": BlackList,
-            "image_cache": ImageCache,
-        }
-    )
+    _MONGO_AGG_COLLECTIONS.update({
+        "config": BotConfigModule,
+        "group_config": GroupConfigModule,
+        "user_config": UserConfigModule,
+        "message": Message,
+        "context": Context,
+        "blacklist": BlackList,
+        "image_cache": ImageCache,
+    })
     return _MONGO_AGG_COLLECTIONS
 
 

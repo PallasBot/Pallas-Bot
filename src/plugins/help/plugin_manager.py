@@ -330,9 +330,7 @@ async def find_plugin_by_identifier(plugin_identifier: str, ignored_plugins: lis
     filtered_plugins = [
         p
         for p in get_loaded_plugins()
-        if p.name
-        and (ignored_plugins is None or p.name not in ignored_plugins)
-        and (p.name not in hidden_plugins)
+        if p.name and (ignored_plugins is None or p.name not in ignored_plugins) and (p.name not in hidden_plugins)
     ]
     sorted_plugins = sorted(filtered_plugins, key=lambda p: p.name or "")
 
