@@ -1,6 +1,7 @@
 from nonebot import get_loaded_plugins, get_plugin_config, logger
 
 from .config import Config
+from .visibility import load_help_hidden_plugins
 
 plugin_config = get_plugin_config(Config)
 
@@ -17,7 +18,12 @@ def generate_plugins_markdown(
     else:
         # 普通情况，过滤掉忽略的插件
         ignored_plugins = ignored_plugins or (plugin_config.ignored_plugins if plugin_config else [])
-        filtered_plugins = [plugin for plugin in plugins if plugin.name and plugin.name not in ignored_plugins]
+        hidden_plugins = set(load_help_hidden_plugins())
+        filtered_plugins = [
+            plugin
+            for plugin in plugins
+            if plugin.name and plugin.name not in ignored_plugins and plugin.name not in hidden_plugins
+        ]
 
     # 构建Markdown内容
     title = "# 牛牛帮助" if not show_ignored else "# 牛牛帮助 - 超级用户"
@@ -214,7 +220,12 @@ def generate_plugins_status_markdown(
         filtered_plugins = [plugin for plugin in plugins if plugin.name]
     else:
         ignored_plugins = ignored_plugins or (plugin_config.ignored_plugins if plugin_config else [])
-        filtered_plugins = [plugin for plugin in plugins if plugin.name and plugin.name not in ignored_plugins]
+        hidden_plugins = set(load_help_hidden_plugins())
+        filtered_plugins = [
+            plugin
+            for plugin in plugins
+            if plugin.name and plugin.name not in ignored_plugins and plugin.name not in hidden_plugins
+        ]
 
     sorted_plugins = sorted(filtered_plugins, key=lambda p: p.name or "")
     logger.debug(f"生成插件状态Markdown: 共{len(sorted_plugins)}个插件")

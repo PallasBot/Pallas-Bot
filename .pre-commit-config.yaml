@@ -1,0 +1,27 @@
+# 避免 pre-commit 触碰本地敏感配置文件。
+exclude: ^\.env$
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      # 基础仓库卫生检查继续覆盖全仓。
+      - id: check-added-large-files
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.0
+    hooks:
+      - id: ruff
+        # Python 代码质量检查仅针对主代码目录。
+        files: ^src/
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+        # 代码格式化同样只处理 src 下的 Python 文件。
+        files: ^src/

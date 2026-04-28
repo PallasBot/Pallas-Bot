@@ -167,6 +167,19 @@ class BotConfig(Config):
             await on_sober_up(self.bot_id, self.group_id, value)
         return True
 
+    async def fully_sober_up_now(self) -> bool:
+        """
+        立即醒酒
+        """
+        value = await self.drunkenness()
+        if value <= 0:
+            return False
+
+        await self._update_in_memory(f"drunk{KEY_JOINER}{self.group_id}", 0)
+        for on_sober_up in self._sober_up_handlers:
+            await on_sober_up(self.bot_id, self.group_id, 0)
+        return True
+
     async def drunkenness(self) -> int:
         """
         获取醉酒程度
@@ -273,13 +286,18 @@ class GroupConfig(Config):
         """
         获取歌曲进度
         """
-        return await self._find("sing_progress")
+        result = await self._find("sing_progress")
+        if result is None:
+            return None
+        if isinstance(result, dict):
+            return SingProgress(**result)
+        return result
 
     async def update_sing_progress(self, progress: SingProgress) -> None:
         """
         更新歌曲进度
         """
-        await self._update("sing_progress", progress)
+        await self._update("sing_progress", progress.model_dump())
 
 
 class UserConfig(Config):

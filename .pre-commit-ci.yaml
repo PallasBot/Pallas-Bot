@@ -1,0 +1,6 @@
+ci:
+  # 减少自动升级频率，避免频繁触发纯工具链更新 PR。
+  autoupdate_schedule: quarterly
+  # 保持机器人提交信息与仓库日常语言一致。
+  autoupdate_commit_msg: "chore(pre-commit): 更新 hooks 版本"
+  autofix_prs: true

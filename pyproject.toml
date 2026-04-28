@@ -17,11 +17,14 @@ dependencies = [
     "nonebot-plugin-alconna>=0.60.3",
     "nonebot-plugin-apscheduler>=0.5.0",
     "nonebot2[fastapi]>=2.4.4",
+    "nvidia-ml-py>=13.595.45",
     "pillowmd>=0.7.3",
     "pyncm-async>=1.8.2",
     "pypinyin>=0.55.0",
     "python-multipart>=0.0.20",
     "python-ulid>=3.1.0",
+    "psutil>=6.1.0",
+    "nvidia-ml-py",
     "tenacity>=9.1.2",
 ]
 

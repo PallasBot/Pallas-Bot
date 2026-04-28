@@ -1,10 +1,10 @@
 #!/bin/shell
 
-working_path=$(cd "$(dirname "$0")""/.."; pwd) 
+working_path=$(cd "$(dirname "$0")""/../.."; pwd) 
 echo working path: $working_path
 
 usage() {
-    echo "Usage: sh tools/backup.sh [options]"
+    echo "Usage: sh tools/scripts/backup.sh [options]"
     echo "Options:"
     echo "  -h           Show this help message and exit"
     echo "  -a           Backup full data"

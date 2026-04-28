@@ -14,7 +14,7 @@ from src.common.db.modules import (
     ImageCache,
     Message,
 )
-from src.common.utils.invalidate_cache import clear_model_cache, invalidate_cache
+from src.common.utils.invalidate_cache import clear_model_cache
 
 if TYPE_CHECKING:
     from beanie import Document
@@ -175,20 +175,34 @@ class MongoConfigRepository:
         existing = await self._module_class.find_one({self._primary_key: key_id})
         if existing is not None:
             return existing, False
-        new_doc = self._module_class(**{self._primary_key: key_id, **defaults})
-        await new_doc.insert()
-        return new_doc, True
+        try:
+            new_doc = self._module_class(**{self._primary_key: key_id, **defaults})
+            await new_doc.insert()
+            return new_doc, True
+        except Exception:
+            doc = await self._module_class.find_one({self._primary_key: key_id})
+            return doc, False
 
     async def upsert_field(self, key_id: int, field: str, value: Any) -> None:
-        document = await self._module_class.find_one({self._primary_key: key_id})
-        if document:
-            if getattr(self._module_class, "_cache", None):
-                invalidate_cache(self._module_class, document.id)
-            setattr(document, field, value)
-            await document.save()
-        else:
-            new_document = self._module_class(**{self._primary_key: key_id, field: value})
-            await new_document.insert()
+        collection = self._module_class.get_pymongo_collection()
+        await collection.update_one(
+            {self._primary_key: key_id},
+            {"$set": {field: value}},
+            upsert=True,
+        )
+        clear_model_cache(self._module_class)
+
+    async def upsert_fields(self, key_id: int, fields: dict[str, Any]) -> None:
+        """批量原子 $set 多个字段"""
+        if not fields:
+            return
+        collection = self._module_class.get_pymongo_collection()
+        await collection.update_one(
+            {self._primary_key: key_id},
+            {"$set": fields},
+            upsert=True,
+        )
+        clear_model_cache(self._module_class)
 
     async def invalidate_cache(self) -> None:
         clear_model_cache(self._module_class)

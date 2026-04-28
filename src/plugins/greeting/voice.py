@@ -1,6 +1,8 @@
 import random
 from pathlib import Path
 
+from src.common.paths import resource_dir
+
 voice_set = {
     "任命助理",
     "交谈1",
@@ -23,13 +25,13 @@ voice_set = {
 }
 
 
-voices_source = "resource/voices"
+voices_source = resource_dir("voices")
 
 
 def get_voice_filepath(operator, voice_name) -> Path | None:
     if voice_name not in voice_set:
         return None
-    f = Path(f"{voices_source}/{operator}/{voice_name}.wav")
+    f = voices_source / operator / f"{voice_name}.wav"
     return f if f.exists() else None
 
 

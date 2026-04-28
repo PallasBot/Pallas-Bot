@@ -1,0 +1,1189 @@
+import asyncio
+import json
+import os
+import re
+import secrets
+import shutil
+import socket
+import sys
+from collections import deque
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
+from urllib.parse import quote
+
+from src.common.paths import resource_dir
+
+from .config import (
+    Config,
+    instances_root_for,
+    onebot_connection_hints,
+    resolve_onebot_ws_settings,
+)
+from .config_manager import AccountConfigManager
+from .contract import ACCOUNT_PROTOCOL_BACKEND_KEY, DEFAULT_PROTOCOL_BACKEND
+from .launch_manager import LaunchManager
+from .runtime.installer import NapCatRuntimeStore, default_release_asset_for_platform, default_release_repo_for_platform
+
+
+def _realpath_sync(path: str) -> str:
+    return os.path.realpath(path)
+
+
+@dataclass
+class NapCatRuntime:
+    process: asyncio.subprocess.Process | None = None
+    started_at: datetime | None = None
+    logs: deque[str] = field(default_factory=deque)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    drain_task: asyncio.Task | None = None
+    # BootMain 状态字段
+    expect_bootmain_detach: bool = False
+    tracked_child_root_pid: int | None = None
+    docker_container_name: str | None = None
+
+
+class PallasProtocolService:
+    def __init__(self, data_dir: Path, config: Config) -> None:
+        self._data_dir = data_dir
+        self._resource_root = resource_dir()
+        self._config = config
+        self._instances_root = instances_root_for(self._data_dir, self._config)
+        self._accounts_file = self._data_dir / "accounts.json"
+        self._accounts: dict[str, dict] = {}
+        self._runtimes: dict[str, NapCatRuntime] = {}
+        self._runtime_store = NapCatRuntimeStore(data_dir, config)
+        self._runtime_profile_path = self._data_dir / "runtime_profile.json"
+        self._launch = LaunchManager(
+            self._data_dir,
+            self._resource_root,
+            self._config,
+            instances_root=self._instances_root,
+            runtime_dir_provider=self._runtime_store.resolved_program_dir,
+            runtime_profile_provider=self.runtime_profile,
+        )
+        self._configs = AccountConfigManager(
+            self._config.pallas_protocol_bind_host,
+            webui_port_fallback_min=int(getattr(self._config, "pallas_protocol_webui_port_min", 6099)),
+        )
+
+    def effective_runtime_program_dir(self) -> Path | None:
+        configured = str(getattr(self._config, "pallas_protocol_program_dir", "")).strip()
+        if configured:
+            p = Path(configured)
+            return p if p.is_dir() else None
+        return self._runtime_store.resolved_program_dir()
+
+    def _default_runtime_mode(self) -> str:
+        if os.name == "nt":
+            return "shell"
+        if sys.platform.startswith("linux"):
+            if bool(getattr(self._config, "pallas_protocol_linux_use_docker", False)):
+                return "docker"
+            return "appimage"
+        return "shell"
+
+    def runtime_profile(self) -> dict[str, object]:
+        default = {
+            "runtime_mode": self._default_runtime_mode(),
+            "target_platform": "auto",
+            "docker_image": str(getattr(self._config, "pallas_protocol_docker_image", "") or "").strip()
+            or "mlikiowa/napcat-docker:latest",
+            "follow_bot_lifecycle": bool(getattr(self._config, "pallas_protocol_follow_bot_lifecycle", True)),
+        }
+        if not self._runtime_profile_path.exists():
+            return default
+        try:
+            raw = json.loads(self._runtime_profile_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return default
+        if not isinstance(raw, dict):
+            return default
+        mode = str(raw.get("runtime_mode", "")).strip().lower()
+        if mode not in ("docker", "appimage", "shell"):
+            mode = default["runtime_mode"]
+        platform = str(raw.get("target_platform", "")).strip().lower()
+        if platform not in ("auto", "linux-amd64", "linux-arm64", "windows-amd64"):
+            platform = "auto"
+        image = str(raw.get("docker_image", "")).strip() or default["docker_image"]
+        follow = raw.get("follow_bot_lifecycle", default["follow_bot_lifecycle"])
+        if isinstance(follow, str):
+            follow = follow.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            follow = bool(follow)
+        return {
+            "runtime_mode": mode,
+            "target_platform": platform,
+            "docker_image": image,
+            "follow_bot_lifecycle": follow,
+        }
+
+    def _apply_runtime_profile_to_config(self, profile: dict[str, object] | None = None) -> None:
+        """将 runtime_profile 持久化设置同步到当前进程配置。"""
+        p = profile or self.runtime_profile()
+        mode = str(p.get("runtime_mode", "")).strip().lower()
+        image = str(p.get("docker_image", "")).strip() or "mlikiowa/napcat-docker:latest"
+        follow = p.get("follow_bot_lifecycle", True)
+        if isinstance(follow, str):
+            follow = follow.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            follow = bool(follow)
+        if mode == "docker":
+            self._config.pallas_protocol_linux_use_docker = True
+            self._config.pallas_protocol_docker_image = image
+        elif mode in ("appimage", "shell"):
+            self._config.pallas_protocol_linux_use_docker = False
+        self._config.pallas_protocol_follow_bot_lifecycle = bool(follow)
+
+    def update_runtime_profile(self, payload: dict) -> dict[str, object]:
+        current = self.runtime_profile()
+        mode = str(payload.get("runtime_mode", current["runtime_mode"])).strip().lower()
+        if mode not in ("docker", "appimage", "shell"):
+            raise ValueError("runtime_mode 仅支持 docker/appimage/shell")
+        if mode == "docker" and not sys.platform.startswith("linux"):
+            raise ValueError("Docker 模式仅支持 Linux 主机，请改用shell")
+        platform = str(payload.get("target_platform", current["target_platform"])).strip().lower()
+        if platform not in ("auto", "linux-amd64", "linux-arm64", "windows-amd64"):
+            raise ValueError("target_platform 仅支持 auto/linux-amd64/linux-arm64/windows-amd64")
+        image = str(payload.get("docker_image", current["docker_image"])).strip() or current["docker_image"]
+        follow = payload.get("follow_bot_lifecycle", current["follow_bot_lifecycle"])
+        if isinstance(follow, str):
+            follow = follow.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            follow = bool(follow)
+        updated = {
+            "runtime_mode": mode,
+            "target_platform": platform,
+            "docker_image": image,
+            "follow_bot_lifecycle": follow,
+        }
+        self._runtime_profile_path.write_text(json.dumps(updated, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._apply_runtime_profile_to_config(updated)
+        return updated
+
+    def runtime_overview(self) -> dict:
+        manifest = self._runtime_store.read_manifest()
+        eff = self.effective_runtime_program_dir()
+        profile = self.runtime_profile()
+        target_platform = str(profile.get("target_platform", "auto") or "auto")
+        raw_asset = str(getattr(self._config, "pallas_protocol_release_asset", "") or "").strip()
+        raw_repo = str(getattr(self._config, "pallas_protocol_github_repo", "") or "").strip()
+        if not raw_asset:
+            resolved_asset = default_release_asset_for_platform(
+                self._config.pallas_protocol_release_tag.strip() or "",
+                target_platform=target_platform,
+            )
+        else:
+            auto_asset = default_release_asset_for_platform()
+            if target_platform != "auto" and raw_asset == auto_asset:
+                resolved_asset = default_release_asset_for_platform(
+                    self._config.pallas_protocol_release_tag.strip() or "",
+                    target_platform=target_platform,
+                )
+            else:
+                resolved_asset = raw_asset
+        if not raw_repo:
+            resolved_repo = default_release_repo_for_platform(target_platform)
+        else:
+            auto_repo = default_release_repo_for_platform("auto")
+            resolved_repo = (
+                default_release_repo_for_platform(target_platform)
+                if (target_platform != "auto" and raw_repo == auto_repo)
+                else raw_repo
+            )
+        return {
+            "job": self._runtime_store.job_snapshot(),
+            "manifest": manifest.to_json() if manifest else None,
+            "effective_program_dir": str(eff) if eff else None,
+            "profile": profile,
+            "download": {
+                "repo": resolved_repo,
+                "asset": resolved_asset,
+                "tag": self._config.pallas_protocol_release_tag.strip() or "latest",
+            },
+        }
+
+    def start_runtime_download(
+        self, *, tag: str | None = None, target_platform: str | None = None, runtime_mode: str | None = None
+    ) -> dict:
+        profile = self.runtime_profile()
+        mode = str(runtime_mode or profile.get("runtime_mode", "")).strip().lower()
+        if mode == "docker":
+            raise ValueError("Docker 模式请使用镜像拉取，不支持运行时资产下载")
+        platform_hint = str(target_platform or profile.get("target_platform", "auto")).strip().lower()
+        self._runtime_store.start_background_download(tag=tag, target_platform=platform_hint)
+        return self.runtime_overview()
+
+    async def pull_docker_image(self, image: str | None = None) -> dict[str, object]:
+        profile = self.runtime_profile()
+        img = str(image or profile.get("docker_image", "")).strip() or "mlikiowa/napcat-docker:latest"
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "pull",
+            img,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await proc.communicate()
+        text = out.decode("utf-8", errors="replace") if out else ""
+        return {
+            "ok": proc.returncode == 0,
+            "image": img,
+            "code": proc.returncode,
+            "output": text[-4000:],
+        }
+
+    async def list_local_docker_images(self) -> dict[str, object]:
+        """列出本机 Docker 镜像（仅用于 Docker 模式排障展示）。"""
+        if not shutil.which("docker"):
+            return {"ok": False, "detail": "未找到 docker 命令", "images": []}
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "images",
+            "--format",
+            "{{.Repository}}:{{.Tag}}|{{.ID}}|{{.CreatedSince}}|{{.Size}}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await proc.communicate()
+        text = out.decode("utf-8", errors="replace") if out else ""
+        rows: list[dict[str, str]] = []
+        for line in text.splitlines():
+            item = line.strip()
+            if not item:
+                continue
+            parts = item.split("|", 3)
+            while len(parts) < 4:
+                parts.append("")
+            rows.append({
+                "name": parts[0],
+                "id": parts[1],
+                "created_since": parts[2],
+                "size": parts[3],
+            })
+        return {
+            "ok": proc.returncode == 0,
+            "code": proc.returncode,
+            "images": rows,
+            "output": text[-4000:] if proc.returncode != 0 else "",
+        }
+
+    async def stop_all_labeled_docker_containers(self) -> dict[str, object]:
+        """停止所有 pallas protocol label 下运行中的容器。"""
+        if not shutil.which("docker"):
+            return {"ok": False, "detail": "未找到 docker 命令", "stopped": 0}
+        ps = await asyncio.create_subprocess_exec(
+            "docker",
+            "ps",
+            "-q",
+            "--filter",
+            "label=pallas.protocol=napcat",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await ps.communicate()
+        ids = [x.strip() for x in (out.decode("utf-8", errors="replace") if out else "").splitlines() if x.strip()]
+        if not ids:
+            return {"ok": True, "stopped": 0}
+        stop = await asyncio.create_subprocess_exec(
+            "docker",
+            "stop",
+            *ids,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        sout, _ = await stop.communicate()
+        return {
+            "ok": stop.returncode == 0,
+            "code": stop.returncode,
+            "stopped": len(ids) if stop.returncode == 0 else 0,
+            "output": (sout.decode("utf-8", errors="replace") if sout else "")[-4000:],
+        }
+
+    async def prune_stopped_labeled_docker_containers(self) -> dict[str, object]:
+        """清理所有 pallas protocol label 下已停止容器。"""
+        if not shutil.which("docker"):
+            return {"ok": False, "detail": "未找到 docker 命令", "removed": 0}
+        ps = await asyncio.create_subprocess_exec(
+            "docker",
+            "ps",
+            "-aq",
+            "--filter",
+            "label=pallas.protocol=napcat",
+            "--filter",
+            "status=exited",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await ps.communicate()
+        ids = [x.strip() for x in (out.decode("utf-8", errors="replace") if out else "").splitlines() if x.strip()]
+        if not ids:
+            return {"ok": True, "removed": 0}
+        rm = await asyncio.create_subprocess_exec(
+            "docker",
+            "rm",
+            *ids,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        rout, _ = await rm.communicate()
+        return {
+            "ok": rm.returncode == 0,
+            "code": rm.returncode,
+            "removed": len(ids) if rm.returncode == 0 else 0,
+            "output": (rout.decode("utf-8", errors="replace") if rout else "")[-4000:],
+        }
+
+    async def fetch_runtime_releases(self, *, limit: int = 10) -> list[dict]:
+        """获取 GitHub release 列表，供前端 tag 选择器使用。"""
+        return await self._runtime_store.fetch_releases(limit=limit)
+
+    def rescan_runtime_extract(self) -> dict:
+        m = self._runtime_store.rescan_existing_extract()
+        return {**self.runtime_overview(), "rescanned": m is not None}
+
+    def _rewrite_webui_for_all_accounts(self) -> None:
+        """修正历史 webui.json（例如 NapCat 首次生成的 host='::'），避免 Windows 上绑定 UNKNOWN。"""
+        for account in self._accounts.values():
+            self._launch.apply_defaults(account, self._resolve_qq)
+            self._configs.sync_webui(account, self._resolve_qq)
+
+    def _pull_all_webui_from_disk(self) -> None:
+        changed = False
+        for account in self._accounts.values():
+            if self._configs.read_webui_into_account(account):
+                changed = True
+        if changed:
+            self._save_accounts()
+
+    def _merge_onebot_ws_from_env(self, account: dict, *, force: bool = False) -> bool:
+        """将 env/配置中的 WS 设置同步到账号。
+
+        仅在账号尚未设置 ws_url（或 force=True）时才覆盖，
+        避免用户在 UI 手动填写的值被 env 默认值冲掉。
+        """
+        if account.get("napcat_linux_docker"):
+            current = str(account.get("ws_url", "")).strip()
+            if current:
+                from .linux_docker import rewrite_onebot_ws_url_for_container
+
+                dh = str(getattr(self._config, "pallas_protocol_docker_onebot_host", "") or "").strip() or "172.17.0.1"
+                rewritten = rewrite_onebot_ws_url_for_container(current, dh)
+                if rewritten and rewritten != current:
+                    account["ws_url"] = rewritten
+                    return True
+        # 账号已有用户自定义值时跳过（除非强制）
+        if not force and str(account.get("ws_url", "")).strip():
+            return False
+        base_url, name, tok = resolve_onebot_ws_settings(self._config)
+        if not base_url:
+            return False
+        if account.get("napcat_linux_docker"):
+            from .linux_docker import rewrite_onebot_ws_url_for_container
+
+            dh = str(getattr(self._config, "pallas_protocol_docker_onebot_host", "") or "").strip() or "172.17.0.1"
+            url = rewrite_onebot_ws_url_for_container(base_url, dh)
+        else:
+            url = base_url
+        changed = False
+        if account.get("ws_url") != url:
+            account["ws_url"] = url
+            changed = True
+        if account.get("ws_name") != name:
+            account["ws_name"] = name
+            changed = True
+        if account.get("ws_token") != tok:
+            account["ws_token"] = tok
+            changed = True
+        return changed
+
+    def _apply_onebot_ws_to_all_accounts(self) -> None:
+        """初始化时：仅对尚未设置 ws_url 的账号补填 env 默认值。"""
+        c = False
+        for acc in self._accounts.values():
+            if self._merge_onebot_ws_from_env(acc, force=False):
+                c = True
+        if c:
+            self._save_accounts()
+
+    def connection_hints(self) -> dict[str, object]:
+        return onebot_connection_hints(self._config)
+
+    async def initialize(self) -> None:
+        self._apply_runtime_profile_to_config()
+        self._load_accounts()
+        self._pull_all_webui_from_disk()
+        for account in self._accounts.values():
+            self._launch.apply_defaults(account, self._resolve_qq)
+        self._apply_onebot_ws_to_all_accounts()
+        for account in self._accounts.values():
+            self._configs.sync_onebot(account, self._resolve_qq)
+        self._rewrite_webui_for_all_accounts()
+        if self._config.pallas_protocol_auto_download_runtime and self.effective_runtime_program_dir() is None:
+            if not self._runtime_store.is_busy():
+                try:
+                    self._runtime_store.start_background_download()
+                except RuntimeError:
+                    pass
+
+    async def start_all_enabled_accounts(self) -> None:
+        from nonebot import logger
+
+        for account_id, account in list(self._accounts.items()):
+            if not bool(account.get("enabled", True)):
+                continue
+            if self.is_running(account_id):
+                continue
+            try:
+                await self.start_account(account_id)
+            except ValueError as e:
+                logger.warning(f"NapCat: 自动启动账号 {account_id} 失败：{e}")
+            except Exception:
+                logger.exception(f"NapCat: 自动启动账号 {account_id} 出现未预期异常")
+
+    async def stop_all_enabled_accounts(self) -> None:
+        from nonebot import logger
+
+        for account_id, account in list(self._accounts.items()):
+            if not bool(account.get("enabled", True)):
+                continue
+            if not self.is_running(account_id):
+                continue
+            try:
+                await self.stop_account(account_id)
+            except Exception:
+                logger.exception(f"NapCat: 自动停止账号 {account_id} 出现未预期异常")
+
+    def _used_webui_ports(self, exclude_account_id: str | None = None) -> set[int]:
+        used: set[int] = set()
+        for aid, acc in self._accounts.items():
+            if exclude_account_id is not None and aid == exclude_account_id:
+                continue
+            p = acc.get("webui_port")
+            if isinstance(p, int) and 1 <= p <= 65535:
+                used.add(p)
+            elif isinstance(p, str) and str(p).strip().isdigit():
+                used.add(int(str(p).strip()))
+        return used
+
+    def _next_free_webui_port(self, *, exclude_account_id: str | None = None) -> int:
+        lo = int(getattr(self._config, "pallas_protocol_webui_port_min", 6099))
+        hi = int(getattr(self._config, "pallas_protocol_webui_port_max", 7999))
+        if hi < lo:
+            lo, hi = hi, lo
+        used = self._used_webui_ports(exclude_account_id=exclude_account_id)
+        for port in range(lo, hi + 1):
+            if port not in used:
+                return port
+        msg = f"在 {lo}-{hi} 内无可用 NapCat WebUI 端口"
+        raise ValueError(msg)
+
+    def _is_host_port_available(self, port: int) -> bool:
+        if not (1 <= int(port) <= 65535):
+            return False
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("0.0.0.0", int(port)))
+        except OSError:
+            return False
+        finally:
+            sock.close()
+        return True
+
+    def _next_free_bindable_webui_port(self, *, exclude_account_id: str | None = None) -> int:
+        lo = int(getattr(self._config, "pallas_protocol_webui_port_min", 6099))
+        hi = int(getattr(self._config, "pallas_protocol_webui_port_max", 7999))
+        if hi < lo:
+            lo, hi = hi, lo
+        used = self._used_webui_ports(exclude_account_id=exclude_account_id)
+        for port in range(lo, hi + 1):
+            if port in used:
+                continue
+            if self._is_host_port_available(port):
+                return port
+        msg = f"在 {lo}-{hi} 内无可绑定的 NapCat WebUI 端口"
+        raise ValueError(msg)
+
+    def _migrate_account_webui_fields(self, account_id: str, account: dict) -> bool:
+        changed = False
+        if (
+            ACCOUNT_PROTOCOL_BACKEND_KEY not in account
+            or not str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or "").strip()
+        ):
+            account[ACCOUNT_PROTOCOL_BACKEND_KEY] = DEFAULT_PROTOCOL_BACKEND
+            changed = True
+        if "webui_port" not in account:
+            account["webui_port"] = self._next_free_webui_port(exclude_account_id=account_id)
+            changed = True
+        if "webui_token" not in account:
+            account["webui_token"] = secrets.token_hex(6)
+            changed = True
+        return changed
+
+    def _load_accounts(self) -> None:
+        if not self._accounts_file.exists():
+            self._accounts = {}
+            return
+        try:
+            self._accounts = json.loads(self._accounts_file.read_text(encoding="utf-8"))
+            changed = False
+            for account_id, account in self._accounts.items():
+                before = json.dumps(account, ensure_ascii=False, sort_keys=True)
+                self._launch.apply_defaults(account, self._resolve_qq)
+                if self._migrate_account_webui_fields(account_id, account):
+                    changed = True
+                after = json.dumps(account, ensure_ascii=False, sort_keys=True)
+                if before != after:
+                    changed = True
+            if changed:
+                self._save_accounts()
+        except Exception:
+            self._accounts = {}
+
+    def _save_accounts(self) -> None:
+        self._accounts_file.write_text(json.dumps(self._accounts, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def _runtime(self, account_id: str) -> NapCatRuntime:
+        if account_id not in self._runtimes:
+            self._runtimes[account_id] = NapCatRuntime(logs=deque(maxlen=self._config.pallas_protocol_max_log_lines))
+        return self._runtimes[account_id]
+
+    def list_accounts(self) -> list[dict]:
+        out: list[dict] = []
+        for account_id, account in self._accounts.items():
+            out.append(self._compose_account_state(account_id, account))
+        return out
+
+    def has_account(self, account_id: str) -> bool:
+        return account_id in self._accounts
+
+    def get_account(self, account_id: str) -> dict | None:
+        account = self._accounts.get(account_id)
+        if not account:
+            return None
+        return self._compose_account_state(account_id, account)
+
+    def create_account(self, payload: dict) -> dict:
+        qq = str(payload.get("qq", "")).strip() or str(payload.get("id", "")).strip()
+        if not qq:
+            raise ValueError("QQ 号不能为空")
+        if not qq.isdigit() or len(qq) < 5:
+            raise ValueError("QQ 号需为 5 位以上数字")
+        account_id = qq
+        if account_id in self._accounts:
+            raise ValueError("该 QQ 对应账号已存在")
+
+        url, name, tok = resolve_onebot_ws_settings(self._config)
+        if not url:
+            raise ValueError(
+                "未配置 OneBot：请在 .env 设置 PALLAS_PROTOCOL_ONEBOT_HOST/PORT 与 PALLAS_PROTOCOL_ACCESS_TOKEN，"
+                "或与 NoneBot 共用的 HOST、PORT、ACCESS_TOKEN。"
+            )
+        disp = str(payload.get("display_name", "")).strip()
+        proto_backend = str(payload.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip() or DEFAULT_PROTOCOL_BACKEND
+        account = {
+            "id": account_id,
+            "display_name": disp or account_id,
+            ACCOUNT_PROTOCOL_BACKEND_KEY: proto_backend,
+            "command": str(payload.get("command", "")).strip(),
+            "args": payload.get("args"),
+            "working_dir": str(payload.get("working_dir", "")).strip(),
+            "env": payload.get("env", {}),
+            "enabled": bool(payload.get("enabled", True)),
+            "qq": qq,
+            "ws_url": url,
+            "ws_name": name,
+            "ws_token": tok,
+            "program_dir": str(payload.get("program_dir", "")).strip(),
+            "account_data_dir": str(payload.get("account_data_dir", "")).strip(),
+            "created_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
+        }
+        wport_raw = payload.get("webui_port")
+        if wport_raw is not None and str(wport_raw).strip() != "":
+            try:
+                wp = int(str(wport_raw).strip())
+            except ValueError as e:
+                raise ValueError("webui_port 必须为整数") from e
+            if not (1 <= wp <= 65535):
+                raise ValueError("webui_port 必须在 1-65535 之间")
+            if wp in self._used_webui_ports():
+                raise ValueError("WebUI 端口已被其他账号占用")
+            account["webui_port"] = wp
+        wtok = str(payload.get("webui_token", "")).strip()
+        if wtok:
+            account["webui_token"] = wtok
+        # payload 中显式提供的 ws 字段优先级高于 env 默认值
+        for ws_key in ("ws_url", "ws_name", "ws_token"):
+            v = str(payload.get(ws_key, "")).strip() if ws_key != "ws_token" else payload.get(ws_key, "")
+            if v:
+                account[ws_key] = v
+        self._launch.apply_defaults(account, self._resolve_qq)
+        if "webui_port" not in account:
+            account["webui_port"] = self._next_free_webui_port()
+        if "webui_token" not in account:
+            account["webui_token"] = secrets.token_hex(6)
+        # 仅在 payload 未提供 ws_url 时才用 env 默认值补填
+        if not str(payload.get("ws_url", "")).strip():
+            self._merge_onebot_ws_from_env(account)
+        self._launch.prepare_dirs(account)
+        self._configs.sync_onebot(account, self._resolve_qq)
+        self._configs.sync_napcat_core(account, self._resolve_qq)
+        self._configs.sync_webui(account, self._resolve_qq)
+        self._accounts[account_id] = account
+        self._save_accounts()
+        return self._compose_account_state(account_id, account)
+
+    async def update_account(self, account_id: str, payload: dict, *, restart: bool = True) -> dict:
+        account = self._accounts.get(account_id)
+        if not account:
+            raise KeyError("账号不存在")
+        need_restart = self._napcat_core_running(account_id, account)
+        editable_keys = (
+            "display_name",
+            "command",
+            "args",
+            "working_dir",
+            "env",
+            "enabled",
+            "qq",
+            "program_dir",
+            "account_data_dir",
+            "webui_token",
+            "ws_url",
+            "ws_name",
+            "ws_token",
+            ACCOUNT_PROTOCOL_BACKEND_KEY,
+        )
+        for key in editable_keys:
+            if key in payload:
+                account[key] = payload[key]
+        if ACCOUNT_PROTOCOL_BACKEND_KEY in account:
+            v = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or "").strip()
+            account[ACCOUNT_PROTOCOL_BACKEND_KEY] = v or DEFAULT_PROTOCOL_BACKEND
+        if "webui_port" in payload:
+            try:
+                wp = int(str(payload["webui_port"]).strip())
+            except ValueError as e:
+                raise ValueError("webui_port 必须为整数") from e
+            if not (1 <= wp <= 65535):
+                raise ValueError("webui_port 必须在 1-65535 之间")
+            for oid, oacc in self._accounts.items():
+                if oid == account_id:
+                    continue
+                op = oacc.get("webui_port")
+                if isinstance(op, str) and str(op).strip().isdigit():
+                    op = int(str(op).strip())
+                if isinstance(op, int) and op == wp:
+                    raise ValueError("WebUI 端口已被其他账号占用")
+            account["webui_port"] = wp
+        self._launch.apply_defaults(account, self._resolve_qq)
+        # 仅在 payload 未显式提供 ws_url 时才用 env 默认值补填
+        if "ws_url" not in payload:
+            self._merge_onebot_ws_from_env(account)
+        self._launch.prepare_dirs(account)
+        self._configs.sync_onebot(account, self._resolve_qq)
+        self._configs.sync_napcat_core(account, self._resolve_qq)
+        self._configs.sync_webui(account, self._resolve_qq)
+        account["updated_at"] = datetime.now(UTC).isoformat()
+        self._save_accounts()
+        restarted = bool(need_restart and restart)
+        if restarted:
+            await self.restart_account(account_id)
+        return {
+            "account": self._compose_account_state(account_id, account),
+            "restarted": restarted,
+            "needs_restart": bool(need_restart),
+        }
+
+    async def delete_account(self, account_id: str) -> None:
+        if account_id not in self._accounts:
+            raise KeyError("账号不存在")
+        account = self._accounts.get(account_id) or {}
+        account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+        try:
+            await self.stop_account(account_id)
+        except Exception:
+            pass
+        if account.get("napcat_linux_docker"):
+            try:
+                from .linux_docker import docker_container_name, docker_remove_force
+
+                await docker_remove_force(docker_container_name(account))
+            except Exception:
+                pass
+        self._accounts.pop(account_id, None)
+        self._runtimes.pop(account_id, None)
+        try:
+            if await asyncio.to_thread(account_data_dir.is_dir):
+                data_dir_resolved = await asyncio.to_thread(account_data_dir.resolve)
+                instances_root_resolved = await asyncio.to_thread(self._instances_root.resolve)
+                # 清理实例目录数据
+                if data_dir_resolved == instances_root_resolved or instances_root_resolved in data_dir_resolved.parents:
+                    shutil.rmtree(data_dir_resolved, ignore_errors=True)
+        except OSError:
+            pass
+        self._save_accounts()
+
+    def is_running(self, account_id: str) -> bool:
+        account = self._accounts.get(account_id)
+        if not account:
+            return False
+        if self._napcat_core_running(account_id, account):
+            return True
+        return self._is_bot_connected(account)
+
+    def _napcat_core_running(self, account_id: str, account: dict | None = None) -> bool:
+        """NapCat 子进程 / Docker 容器是否在跑（不含「仅 OneBot 已连接」）。"""
+        acc = account if account is not None else self._accounts.get(account_id)
+        if not acc:
+            return False
+        if acc.get("napcat_linux_docker"):
+            from .linux_docker import docker_container_name, docker_container_running_sync
+
+            return docker_container_running_sync(docker_container_name(acc))
+        runtime = self._runtimes.get(account_id)
+        return bool(runtime and runtime.process and runtime.process.returncode is None)
+
+    async def start_account(self, account_id: str) -> dict:
+        account = self._accounts.get(account_id)
+        if not account:
+            raise KeyError("账号不存在")
+        disk_changed = self._configs.read_webui_into_account(account)
+        env_changed = self._merge_onebot_ws_from_env(account)
+        if disk_changed or env_changed:
+            self._save_accounts()
+        self._launch.apply_defaults(account, self._resolve_qq)
+        self._launch.prepare_dirs(account)
+        self._configs.sync_onebot(account, self._resolve_qq)
+        self._configs.sync_napcat_core(account, self._resolve_qq)
+        self._configs.sync_webui(account, self._resolve_qq)
+        runtime = self._runtime(account_id)
+        async with runtime.lock:
+            if account.get("napcat_linux_docker"):
+                from .linux_docker import docker_container_name, docker_container_running_sync
+
+                if docker_container_running_sync(docker_container_name(account)):
+                    return self._compose_account_state(account_id, account)
+                return await self._start_account_linux_docker(account_id, account, runtime)
+            if runtime.process and runtime.process.returncode is None:
+                return self._compose_account_state(account_id, account)
+            command = str(account.get("command", "")).strip()
+            if not command:
+                raise ValueError("command 不能为空")
+            args = [str(item) for item in (account.get("args") or [])]
+            env_map = os.environ.copy()
+            account_data_dir = str(account.get("account_data_dir", "")).strip()
+            if account_data_dir:
+                ad_abs = await asyncio.to_thread(_realpath_sync, account_data_dir)
+                # 设置 NapCat 工作目录
+                env_map["NAPCAT_WORKDIR"] = ad_abs
+                if self._launch.should_set_home_to_workdir():
+                    env_map["HOME"] = ad_abs
+            env_map.update({str(k): str(v) for k, v in (account.get("env") or {}).items()})
+            command, args, env_map, cwd_quick = self._launch.resolve_boot_launch(
+                account, command, args, env_map, self._resolve_qq
+            )
+            if (
+                os.name != "nt"
+                and os.geteuid() == 0
+                and "--no-sandbox" not in args
+                and (Path(command).suffix == ".AppImage" or any(Path(str(a)).suffix == ".AppImage" for a in args))
+            ):
+                # 追加 no-sandbox 参数
+                args.append("--no-sandbox")
+            launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
+            if launch_issues:
+                raise ValueError("; ".join(launch_issues))
+            # 读取工作目录
+            workdir = str(account.get("working_dir", "")).strip() or None
+            runtime.logs.clear()
+            runtime.tracked_child_root_pid = None
+            runtime.expect_bootmain_detach = bool(cwd_quick)
+            cwd_final = (cwd_quick or "").strip() or workdir
+            if (
+                os.name != "nt"
+                and account_data_dir
+                and (Path(command).suffix == ".AppImage" or any(Path(str(a)).suffix == ".AppImage" for a in args))
+            ):
+                # AppImage 使用账号目录作为 cwd
+                cwd_final = account_data_dir
+            runtime.process = await asyncio.create_subprocess_exec(
+                command,
+                *args,
+                cwd=cwd_final,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+                env=env_map,
+                creationflags=self._launch.creation_flags(),
+            )
+            runtime.started_at = datetime.now(UTC)
+            runtime.drain_task = asyncio.create_task(self._drain_logs(account_id))
+        return self._compose_account_state(account_id, account)
+
+    async def _start_account_linux_docker(self, account_id: str, account: dict, runtime: NapCatRuntime) -> dict:
+        from .linux_docker import (
+            build_docker_run_argv,
+            docker_container_name,
+            docker_container_running_sync,
+            docker_remove_force,
+        )
+
+        try:
+            current_port = int(str(account.get("webui_port", "")).strip())
+        except ValueError:
+            current_port = 0
+        if current_port <= 0 or not self._is_host_port_available(current_port):
+            account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
+            self._configs.sync_webui(account, self._resolve_qq)
+            self._save_accounts()
+        account["args"] = build_docker_run_argv(account, self._config, self._resolve_qq)
+        args = [str(x) for x in (account.get("args") or [])]
+        launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
+        if launch_issues:
+            raise ValueError("; ".join(launch_issues))
+        name = docker_container_name(account)
+        await docker_remove_force(name)
+        runtime.logs.clear()
+        runtime.tracked_child_root_pid = None
+        runtime.expect_bootmain_detach = False
+        runtime.docker_container_name = name
+        cwd_run = str(account.get("account_data_dir", "")).strip() or None
+        for attempt in range(2):
+            proc = await asyncio.create_subprocess_exec(
+                "docker",
+                *args,
+                cwd=cwd_run,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            out, _ = await proc.communicate()
+            text = out.decode("utf-8", errors="replace") if out else ""
+            if text.strip():
+                runtime.logs.append(text.strip())
+            if proc.returncode == 0:
+                break
+            if attempt == 0 and "port is already allocated" in text.lower():
+                account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
+                self._configs.sync_webui(account, self._resolve_qq)
+                self._save_accounts()
+                account["args"] = build_docker_run_argv(account, self._config, self._resolve_qq)
+                args = [str(x) for x in (account.get("args") or [])]
+                continue
+            err = f"docker run 失败 (exit {proc.returncode})"
+            if text:
+                err += ": " + text[:1200]
+            raise ValueError(err)
+        else:
+            raise ValueError("docker run 启动失败")
+        if not docker_container_running_sync(name):
+            raise ValueError("容器已创建但未在运行，请检查: docker logs " + name)
+        runtime.started_at = datetime.now(UTC)
+        logp = await asyncio.create_subprocess_exec(
+            "docker",
+            "logs",
+            "-f",
+            "--since",
+            "0s",
+            name,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        runtime.process = logp
+        runtime.drain_task = asyncio.create_task(self._drain_logs(account_id))
+        return self._compose_account_state(account_id, account)
+
+    async def _stop_account_linux_docker(self, account_id: str, account: dict) -> dict | None:
+        from .linux_docker import docker_container_name, docker_stop
+
+        name = docker_container_name(account)
+        runtime = self._runtimes.get(account_id) or self._runtime(account_id)
+        async with runtime.lock:
+            if runtime.drain_task and not runtime.drain_task.done():
+                runtime.drain_task.cancel()
+            proc = runtime.process
+            if proc and proc.returncode is None:
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    pass
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=6)
+                except TimeoutError:
+                    try:
+                        proc.kill()
+                    except ProcessLookupError:
+                        pass
+                    await proc.wait()
+            runtime.process = None
+            await docker_stop(name)
+            runtime.docker_container_name = None
+        return self._compose_account_state(account_id, account)
+
+    async def stop_account(self, account_id: str) -> dict | None:
+        account = self._accounts.get(account_id)
+        runtime = self._runtimes.get(account_id)
+        if account is None:
+            return None
+        if account.get("napcat_linux_docker"):
+            return await self._stop_account_linux_docker(account_id, account)
+        if not runtime:
+            return self._compose_account_state(account_id, account)
+        async with runtime.lock:
+            proc = runtime.process
+            if proc and proc.returncode is None:
+                # 结束进程树
+                if proc.pid:
+                    await asyncio.to_thread(self._launch.kill_process_tree, proc.pid)
+                else:
+                    proc.terminate()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=12)
+                except TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+            # 无论 proc 是否存在，都尝试杀掉 BootMain 脱离后追踪到的子进程
+            # （Windows BootMain 场景：launcher 已退出但 QQ/NapCat 子进程仍在运行）
+            if runtime.tracked_child_root_pid:
+                await asyncio.to_thread(
+                    self._launch.kill_process_tree,
+                    runtime.tracked_child_root_pid,
+                )
+                runtime.tracked_child_root_pid = None
+            if runtime.drain_task and not runtime.drain_task.done():
+                runtime.drain_task.cancel()
+            runtime.process = None
+        return self._compose_account_state(account_id, account)
+
+    async def restart_account(self, account_id: str) -> dict:
+        await self.stop_account(account_id)
+        return await self.start_account(account_id)
+
+    def tail_logs(self, account_id: str, lines: int = 200) -> list[str]:
+        if lines <= 0:
+            return []
+        runtime = self._runtime(account_id)
+        return list(runtime.logs)[-lines:]
+
+    def get_account_configs(self, account_id: str) -> dict:
+        account = self._accounts.get(account_id)
+        if not account:
+            raise KeyError("账号不存在")
+        self._launch.apply_defaults(account, self._resolve_qq)
+        return self._configs.get_account_configs(account, self._resolve_qq)
+
+    async def update_account_configs(self, account_id: str, payload: dict, *, restart: bool = True) -> dict:
+        account = self._accounts.get(account_id)
+        if not account:
+            raise KeyError("账号不存在")
+        need_restart = self._napcat_core_running(account_id, account)
+        self._launch.apply_defaults(account, self._resolve_qq)
+        merged = self._configs.update_account_configs(account, payload, self._resolve_qq)
+        account["updated_at"] = datetime.now(UTC).isoformat()
+        self._save_accounts()
+        restarted = bool(need_restart and restart)
+        if restarted:
+            await self.restart_account(account_id)
+            merged = self.get_account_configs(account_id)
+        return {**merged, "restarted": restarted, "needs_restart": bool(need_restart)}
+
+    def bulk_register(self, accounts: dict[str, dict]) -> None:
+        """将 importer 产出的账号字典合并写入，跳过已存在的条目。"""
+        changed = False
+        for account_id, account in accounts.items():
+            if account_id in self._accounts:
+                continue
+            self._launch.apply_defaults(account, self._resolve_qq)
+            self._migrate_account_webui_fields(account_id, account)
+            self._launch.prepare_dirs(account)
+            self._configs.sync_onebot(account, self._resolve_qq)
+            self._configs.sync_napcat_core(account, self._resolve_qq)
+            self._configs.sync_webui(account, self._resolve_qq)
+            self._accounts[account_id] = account
+            changed = True
+        if changed:
+            self._save_accounts()
+
+    def _resolve_qq(self, account: dict) -> str:
+        explicit = str(account.get("qq", "")).strip()
+        if explicit.isdigit():
+            return explicit
+        account_id = str(account.get("id", "")).strip()
+        if account_id.isdigit():
+            return account_id
+        match = re.search(r"\d{5,}", account_id)
+        return match.group(0) if match else ""
+
+    def _is_bot_connected(self, account: dict) -> bool:
+        qq = self._resolve_qq(account)
+        if not qq:
+            return False
+        try:
+            from nonebot import get_bots
+
+            return qq in get_bots()
+        except Exception:
+            return False
+
+    async def _drain_logs(self, account_id: str) -> None:
+        runtime = self._runtime(account_id)
+        process = runtime.process
+        if not process or not process.stdout:
+            return
+        try:
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                text = line.decode("utf-8", errors="replace").rstrip("\r\n")
+                runtime.logs.append(text)
+                qr_saved = re.search(r"二维码已保存到\s+(.+qrcode\.png)\s*$", text)
+                if qr_saved:
+                    try:
+                        src_qr = Path(qr_saved.group(1).strip())
+                        account = self._accounts.get(account_id) or {}
+                        account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+                        if await asyncio.to_thread(src_qr.is_file) and account_data_dir:
+                            account_cache_dir = account_data_dir / "cache"
+                            account_cache_dir.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(src_qr, account_cache_dir / "qrcode.png")
+                    except OSError:
+                        pass
+                m = re.search(r"Main Process ID[:\s]+(\d+)", text, re.IGNORECASE)
+                if m:
+                    try:
+                        runtime.tracked_child_root_pid = int(m.group(1))
+                    except ValueError:
+                        pass
+                if "Please run this script in administrator mode." in text:
+                    runtime.logs.append(
+                        "[pallas-protocol] 检测到启动器触发提权/进程脱离，后续输出可能无法被当前进程捕获。"
+                    )
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if process.returncode is None:
+                await process.wait()
+            code = process.returncode
+            acc = self._accounts.get(account_id) or {}
+            if acc.get("napcat_linux_docker"):
+                runtime.process = None
+            elif runtime.expect_bootmain_detach:
+                if code == 0:
+                    runtime.logs.append(
+                        "[pallas-protocol] BootMain 已退出（常见）。"
+                        "「Process exited」多为启动器结束，QQ/NapCat 仍在子进程；以「已连接」或任务管理器为准。"
+                    )
+                elif code is not None:
+                    runtime.logs.append(f"[pallas-protocol] BootMain 退出码 {code}，若未连上 Bot 请结合上文排查。")
+                runtime.expect_bootmain_detach = False
+                runtime.process = None
+            else:
+                runtime.process = None
+
+    def _compose_account_state(self, account_id: str, account: dict) -> dict:
+        self._launch.apply_defaults(account, self._resolve_qq)
+        runtime = self._runtimes.get(account_id)
+        process_running = False
+        pid = None
+        started_at = None
+        if account.get("napcat_linux_docker"):
+            from .linux_docker import docker_container_name, docker_container_running_sync
+
+            process_running = docker_container_running_sync(docker_container_name(account))
+            started_at = runtime.started_at.isoformat() if runtime and runtime.started_at else None
+        elif runtime and runtime.process and runtime.process.returncode is None:
+            process_running = True
+            pid = runtime.process.pid
+            started_at = runtime.started_at.isoformat() if runtime.started_at else None
+        connected = self._is_bot_connected(account)
+        launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
+        bind = str(getattr(self._config, "pallas_protocol_bind_host", "127.0.0.1") or "127.0.0.1").strip()
+        wport = account.get("webui_port", "")
+        wtok = str(account.get("webui_token", "")).strip()
+        native_webui = ""
+        try:
+            if str(wport).strip():
+                p = int(wport)
+                # 生成内嵌 WebUI 地址
+                base = f"http://{bind}:{p}/webui/"
+                native_webui = f"{base}?token={quote(wtok, safe='')}" if wtok else base
+        except (TypeError, ValueError):
+            pass
+        runtime_version = self._resolve_account_runtime_version(account)
+        runtime_source = self._resolve_account_runtime_source(account)
+        return {
+            **account,
+            "running": process_running or connected,
+            "connected": connected,
+            "process_running": process_running,
+            "launch_ready": len(launch_issues) == 0,
+            "launch_issues": launch_issues,
+            "pid": pid,
+            "started_at": started_at,
+            "data_path_hints": self._launch.describe_account_data_paths(account),
+            "native_webui_url": native_webui,
+            "runtime_version": runtime_version,
+            "runtime_source": runtime_source,
+        }
+
+    def _resolve_account_runtime_version(self, account: dict) -> str:
+        """为账号推导当前运行时版本显示值。"""
+        if account.get("napcat_linux_docker"):
+            image = str(account.get("program_dir", "") or "").strip()
+            if image.startswith("docker:"):
+                image = image[len("docker:") :].strip()
+            if ":" in image:
+                _, tag = image.rsplit(":", 1)
+                return tag.strip() or "latest"
+            return "latest" if image else "docker"
+
+        manifest = self._runtime_store.read_manifest()
+        if manifest is None:
+            return "未知"
+        tag = str(manifest.release_tag or "").strip() or "latest"
+
+        acc_program = str(account.get("program_dir", "") or "").strip()
+        if not acc_program:
+            return tag
+        try:
+            acc_path = Path(acc_program).resolve()
+            manifest_program = Path(manifest.program_dir).resolve()
+            manifest_extract = Path(manifest.extract_root).resolve()
+        except OSError:
+            return "自定义"
+
+        if acc_path == manifest_program:
+            return tag
+        if acc_path == manifest_extract or manifest_extract in acc_path.parents:
+            return tag
+        return "自定义"
+
+    def _resolve_account_runtime_source(self, account: dict) -> str:
+        """为账号推导版本归属来源。"""
+        if account.get("napcat_linux_docker"):
+            image = str(account.get("program_dir", "") or "").strip()
+            if image.startswith("docker:"):
+                image = image[len("docker:") :].strip()
+            return f"Docker 镜像（{image or '未设置'}）"
+
+        manifest = self._runtime_store.read_manifest()
+        if manifest is None:
+            return "未知来源"
+
+        acc_program = str(account.get("program_dir", "") or "").strip()
+        if not acc_program:
+            return "托管运行时"
+        try:
+            acc_path = Path(acc_program).resolve()
+            manifest_program = Path(manifest.program_dir).resolve()
+            manifest_extract = Path(manifest.extract_root).resolve()
+        except OSError:
+            return "自定义路径"
+
+        if acc_path == manifest_program:
+            return "托管运行时"
+        if acc_path == manifest_extract or manifest_extract in acc_path.parents:
+            return "托管运行时"
+        return "自定义路径"

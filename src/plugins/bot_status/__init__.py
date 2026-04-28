@@ -1,6 +1,9 @@
+import asyncio
+import random
 from datetime import datetime
 
 from nonebot import (
+    get_bots,
     get_driver,
     logger,
     on_command,
@@ -9,6 +12,8 @@ from nonebot import (
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent, NoticeEvent
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
+
+from src.common.config import BotConfig
 
 from .bot_monitor import (
     get_bot_status_info,
@@ -24,13 +29,14 @@ __plugin_meta__ = PluginMetadata(
     description="查询当前连接的Bot状态，检测Bot离线并发送通知",
     usage="""
 牛牛在吗 - 查询当前连接的Bot列表
+牛牛报数 - 让当前群内在线牛牛随机报数
 测试邮件 - 测试邮件发送功能
 """,
     type="application",
     homepage="https://github.com/PallasBot",
     supported_adapters={"~onebot.v11"},
     extra={
-        "version": "2.0.0",
+        "version": "3.0.0",
         "menu_data": [
             {
                 "func": "查看牛牛在线状况",
@@ -46,15 +52,31 @@ __plugin_meta__ = PluginMetadata(
                 "brief_des": "发送测试邮件",
                 "detail_des": "给配置中的邮箱发送测试邮件",
             },
+            {
+                "func": "牛牛依次报数",
+                "trigger_method": "on_message",
+                "trigger_condition": "牛牛报数",
+                "brief_des": "在线牛牛依次报数",
+                "detail_des": "仅当前群内在线 Bot 参与，随机顺序在群内轮流报数",
+            },
         ],
         "menu_template": "default",
     },
 )
 
 
+async def _is_bot_admin(bot: Bot, event: MessageEvent) -> bool:
+    try:
+        return await BotConfig(int(bot.self_id)).is_admin_of_bot(int(event.get_user_id()))
+    except Exception:
+        return False
+
+
 STATUS_COOLDOWN_KEY: str = "bot_status"
+COUNT_COOLDOWN_KEY: str = "bot_count"
 offline_notice = on_notice(priority=5, block=False)
-bot_status_cmd = on_command("牛牛在吗", permission=SUPERUSER, priority=5, block=True)
+bot_status_cmd = on_command("牛牛在吗", permission=_is_bot_admin, priority=5, block=True)
+bot_count_cmd = on_command("牛牛报数", aliases={"牛牛出列"}, priority=5, block=True)
 test_mail_cmd = on_command("测试邮件", permission=SUPERUSER, priority=5, block=True)
 
 driver = get_driver()
@@ -160,3 +182,58 @@ async def handle_bot_status(bot: Bot, event: MessageEvent) -> None:
         message = online_info
 
     await bot_status_cmd.finish(message)
+
+
+@bot_count_cmd.handle()
+async def handle_bot_count(bot: Bot, event: MessageEvent) -> None:
+    """处理牛牛报数命令"""
+    from src.common.config import GroupConfig
+
+    if not isinstance(event, GroupMessageEvent):
+        await bot_count_cmd.finish("牛牛报数仅支持群聊中使用")
+
+    config = GroupConfig(group_id=event.group_id, cooldown=10)
+    if not await config.is_cooldown(COUNT_COOLDOWN_KEY):
+        return
+    await config.refresh_cooldown(COUNT_COOLDOWN_KEY)
+
+    online_bots, _ = await get_bot_status_info()
+
+    current_bots = get_bots()
+    group_bot_ids: list[int] = []
+    for bot_id in online_bots:
+        bot_key = str(bot_id)
+        if bot_key not in current_bots:
+            continue
+        bot_instance = current_bots[bot_key]
+        try:
+            await bot_instance.get_group_member_info(
+                group_id=event.group_id,
+                user_id=int(bot_id),
+                no_cache=True,
+            )
+            group_bot_ids.append(bot_id)
+        except Exception:
+            continue
+
+    if not group_bot_ids:
+        return
+
+    seed_text = f"{datetime.now().strftime('%Y-%m-%d')}:{event.group_id}"
+    random.Random(seed_text).shuffle(group_bot_ids)
+    failed_bots: list[int] = []
+
+    for index, bot_id in enumerate(group_bot_ids, start=1):
+        bot_instance = current_bots[str(bot_id)]
+        try:
+            await bot_instance.send_group_msg(group_id=event.group_id, message=str(f"牛牛{index}号报到！"))
+            await asyncio.sleep(0.3)
+        except Exception as e:
+            logger.warning(f"Bot {bot_id} failed to count in group {event.group_id}: {e}")
+            failed_bots.append(bot_id)
+
+    if failed_bots:
+        failed_text = "、".join(online_bots.get(bot_id, str(bot_id)) for bot_id in failed_bots)
+        await bot_count_cmd.finish(f"报数完成，以下牛牛没能报数：{failed_text}")
+
+    await bot_count_cmd.finish("牛牛们报数完毕！")
