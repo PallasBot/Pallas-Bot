@@ -382,6 +382,7 @@ def render_dashboard(base_path: str) -> str:
         <h2 style="margin:0">账号</h2>
         <a href="#" class="btn" id="linkNewAccount">+ 创建账号</a>
         <button class="btn secondary" id="btnToggleAll" type="button" onclick="toggleAllAccounts(this)">一键启动全部</button>
+        <button class="btn secondary" id="btnRestartAll" type="button" onclick="restartAllAccounts(this)">一键重启全部</button>
       </div>
       <div class="kpi-grid" id="kpis"></div>
       <div class="toolbar">
@@ -640,6 +641,24 @@ def render_dashboard(base_path: str) -> str:
         notify(e.message || e, "err");
       }} finally {{
         btnReset(btn);
+        updateToggleAllButton();
+      }}
+    }}
+    async function restartAllAccounts(btn) {{
+      if (!accountRows.length) {{
+        notify("当前没有可操作实例", "warn");
+        return;
+      }}
+      btnLoad(btn, "重启全部中…");
+      try {{
+        await Promise.all(accountRows.map((a) => api(`/api/accounts/${{a.id}}/restart`, {{ method: "POST" }})));
+        await refreshAccounts({{ silent: true }});
+        notify("已重启全部实例", "ok");
+      }} catch (e) {{
+        notify(e.message || e, "err");
+      }} finally {{
+        btnReset(btn);
+        updateToggleAllButton();
       }}
     }}
     async function deleteAccount(id, btn) {{

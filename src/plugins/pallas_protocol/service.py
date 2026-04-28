@@ -362,6 +362,16 @@ class PallasProtocolService:
         仅在账号尚未设置 ws_url（或 force=True）时才覆盖，
         避免用户在 UI 手动填写的值被 env 默认值冲掉。
         """
+        if account.get("napcat_linux_docker"):
+            current = str(account.get("ws_url", "")).strip()
+            if current:
+                from .linux_docker import rewrite_onebot_ws_url_for_container
+
+                dh = str(getattr(self._config, "pallas_protocol_docker_onebot_host", "") or "").strip() or "172.17.0.1"
+                rewritten = rewrite_onebot_ws_url_for_container(current, dh)
+                if rewritten and rewritten != current:
+                    account["ws_url"] = rewritten
+                    return True
         # 账号已有用户自定义值时跳过（除非强制）
         if not force and str(account.get("ws_url", "")).strip():
             return False
@@ -885,7 +895,7 @@ class PallasProtocolService:
         return self._compose_account_state(account_id, account)
 
     async def _stop_account_linux_docker(self, account_id: str, account: dict) -> dict | None:
-        from .linux_docker import docker_container_name, docker_stop_sync
+        from .linux_docker import docker_container_name, docker_stop
 
         name = docker_container_name(account)
         runtime = self._runtimes.get(account_id) or self._runtime(account_id)
@@ -894,14 +904,20 @@ class PallasProtocolService:
                 runtime.drain_task.cancel()
             proc = runtime.process
             if proc and proc.returncode is None:
-                proc.terminate()
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    pass
                 try:
                     await asyncio.wait_for(proc.wait(), timeout=6)
                 except TimeoutError:
-                    proc.kill()
+                    try:
+                        proc.kill()
+                    except ProcessLookupError:
+                        pass
                     await proc.wait()
             runtime.process = None
-            docker_stop_sync(name)
+            await docker_stop(name)
             runtime.docker_container_name = None
         return self._compose_account_state(account_id, account)
 

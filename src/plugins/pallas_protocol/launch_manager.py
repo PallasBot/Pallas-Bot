@@ -154,7 +154,7 @@ class LaunchManager:
             return
         raw = str(account.get("command", "") or "").strip()
         raw_name = Path(raw).name.lower() if raw else ""
-        if raw and raw_name not in ("node", "node.exe", "docker", "docker.exe"):
+        if profile_mode != "docker" and raw and raw_name not in ("node", "node.exe", "docker", "docker.exe"):
             return
         account["napcat_linux_docker"] = True
         account["command"] = "docker"
@@ -430,7 +430,7 @@ class LaunchManager:
         )
         if account.get("napcat_linux_docker"):
             base_note += (
-                " Linux/Docker：config、docker/qq、cache 分别挂到容器 "
+                " Linux/Docker：config、.config/QQ、cache 分别挂到容器 "
                 "/app/napcat/config、/app/.config/QQ、/app/napcat/cache。"
             )
         return {

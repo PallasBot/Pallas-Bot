@@ -35,7 +35,11 @@ def docker_container_name(account: dict) -> str:
 
 def docker_volume_paths(account: dict) -> tuple[Path, Path]:
     ad = Path(str(account.get("account_data_dir", "")).strip()).resolve()
-    return ad / "config", ad / "docker" / "qq"
+    qq_dir = ad / ".config" / "QQ"
+    legacy_qq_dir = ad / "docker" / "qq"
+    if not qq_dir.exists() and legacy_qq_dir.exists():
+        qq_dir = legacy_qq_dir
+    return ad / "config", qq_dir
 
 
 def docker_cache_path(account: dict) -> Path:
@@ -137,6 +141,23 @@ async def docker_remove_force(name: str) -> None:
         return
     p = await asyncio.create_subprocess_exec("docker", "rm", "-f", name, stderr=asyncio.subprocess.DEVNULL)
     await p.wait()
+
+
+async def docker_stop(name: str) -> None:
+    if not shutil.which("docker"):
+        return
+    proc = await asyncio.create_subprocess_exec(
+        "docker",
+        "stop",
+        name,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=60)
+    except TimeoutError:
+        proc.kill()
+        await proc.wait()
 
 
 def docker_container_running_sync(name: str) -> bool:
