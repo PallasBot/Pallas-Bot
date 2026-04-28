@@ -1,6 +1,6 @@
 # Pallas-Bot 的部署简单教程
 
-> 导航：[`README`](../README.md) · [`Docker 部署`](DockerDeployment.md) · [`FAQ`](FAQ.md)
+> 导航：[`README`](../README.md) · [`Docker 部署`](DockerDeployment.md) · [`3.0 迁移`](Migration-v3.md) · [`FAQ`](FAQ.md)
 
 快来部署属于你自己的牛牛吧 (｡･∀･)ﾉﾞ
 
@@ -65,12 +65,16 @@
     若安装失败，在 Windows 上可能需要额外安装 `Visual Studio`，Linux 上需要 `build-essential`  
     注：项目将优先尝试导入 `jieba-fast` 库，如果导入失败则使用 `jieba` 库，无需手动修改代码。
 
-3. 安装并启动 `MongoDB`（这是启动核心功能所必须的）
+3. 准备数据库（`MongoDB` 或 `PostgreSQL`）
 
-    - [Windows 平台安装 MongoDB](https://www.runoob.com/mongodb/mongodb-window-install.html)
-    - [Linux 平台安装 MongoDB](https://www.runoob.com/mongodb/mongodb-linux-install.html)
+    - 默认建议：先使用 `MongoDB`，上手最简单
+      - [Windows 平台安装 MongoDB](https://www.runoob.com/mongodb/mongodb-window-install.html)
+      - [Linux 平台安装 MongoDB](https://www.runoob.com/mongodb/mongodb-linux-install.html)
+      - [Windows 平台安装 PostgreSQL](https://www.postgresql.org/download/windows/)
+      - [Linux 平台安装 PostgreSQL](https://www.postgresql.org/download/linux/)
+    - 3.0 也支持 `PostgreSQL`，如需从历史数据迁移请参考 [`3.0 迁移指南`](Migration-v3.md)
 
-    只需要确认 `MongoDB` 启动即可，后面的部分会由 `Pallas-Bot` 自动完成。
+    只需要确认你选用的数据库可连接，后面的部分会由 `Pallas-Bot` 自动完成初始化。
 
 4. 配置语音功能
 
@@ -108,6 +112,15 @@ uv run nb run        # 运行
 **注意：请不要关闭这个命令行窗口！这会导致 `Pallas-Bot` 停止运行！**  
 **同样请不要关闭 `NapCat` 的命令行窗口！**  
 Linux 用户推荐使用 [Termux](https://termux.dev/) 或 [GNU Screen](https://zhuanlan.zhihu.com/p/405968623) 来保持 `Pallas-Bot` 和 QQ 客户端在后台运行，或者考虑使用 [Docker 部署](DockerDeployment.md)。
+
+## 访问 3.0 控制台
+
+启动后可在浏览器访问：
+
+- 控制台页面：`http://<主机IP>:8088/pallas/`
+- 控制台接口基址：`http://<主机IP>:8088/pallas/api`
+
+若你修改了 `.env` 中的 `HOST` / `PORT` 或 `pallas_webui_http_base`，请按实际值替换地址。
 
 ## 后续更新
 

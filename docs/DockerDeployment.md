@@ -1,6 +1,6 @@
 # Docker 部署
 
-> 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`FAQ`](FAQ.md)
+> 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`3.0 迁移`](Migration-v3.md) · [`FAQ`](FAQ.md)
 
 如果你不想自己配置环境，可以使用 `Docker Compose` 一键部署已构建好的镜像。镜像中集成了 `Pallas-Bot` 运行所需要的所有环境并经过充分测试，你只需要安装 `Docker` 和 `Docker Compose`（较新版本的 `Docker` 已集成 `Compose` 插件）即可。`Pallas-Bot` 提供的镜像支持 `amd64` 与 `arm64` 架构。
 
@@ -55,6 +55,8 @@
 
 3. （可选）如有需要，在你映射的目录下复制一份 [`.env`](../.env) 文件，并根据需要填写相关参数。具体请参考 [`.env`](../.env) 文件中的注释。
 
+4. 3.0 同时支持 `MongoDB` 与 `PostgreSQL` 数据后端；如果你是从历史数据升级，请先参考 [`3.0 迁移指南`](Migration-v3.md)。
+
 ## 启动与登录牛牛
 
 ### 启动牛牛
@@ -89,6 +91,15 @@ docker compose up -d
 ### 查看日志
 
 在 `docker-compose.yml` 的目录下通过 `docker compose logs -f` 查看实时日志，启动完成后就可以访问 `NapCat` 后台并登陆账号了。
+
+### 访问 3.0 控制台
+
+容器启动后可访问：
+
+- 控制台页面：`http://<宿主机ip>:8088/pallas/`
+- 控制台接口基址：`http://<宿主机ip>:8088/pallas/api`
+
+如果你在 `docker-compose.yml` 里修改了 `pallasbot` 的端口映射，请按实际端口访问。
 
 ## 后续更新
 
