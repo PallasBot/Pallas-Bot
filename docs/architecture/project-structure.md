@@ -49,11 +49,16 @@
 - `docs/Deployment.md`、`docs/DockerDeployment.md`：部署类文档
 - `docs/FAQ.md`：常见问题
 - `docs/architecture/`：架构与约定文档（本文件所在目录）
-- `docs/plugins/`：插件专项说明（后续可逐步迁入）
+- `docs/plugins/`：插件专项说明（按插件目录组织）
+
+目录约定：
+
+- 每个插件使用独立目录：`docs/plugins/<plugin_name>/README.md`
+- 插件文档总索引：`docs/plugins/README.md`
 
 当前已迁移示例：
 
-- `bot_status` 插件文档已迁移到 `docs/plugins/bot_status.md`
+- `bot_status` 插件文档：`docs/plugins/bot_status/README.md`
 
 ## tools 目录约定
 

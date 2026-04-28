@@ -164,8 +164,8 @@ jobs:
 
             ## WebUI 使用文档
 
-            - 主仓插件说明（自动下载/部署配置）：[src/plugins/pallas_webui/README.md](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/src/plugins/pallas_webui/README.md)
-            - 前端仓库说明（开发/发版/对接）：[TogetsuDo/Pallas-Bot-WebUI README](https://github.com/TogetsuDo/Pallas-Bot-WebUI/blob/main/README.md)
+            - 主仓插件说明（自动下载/部署配置）：[docs/plugins/pallas_webui/README.md](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/plugins/pallas_webui/README.md)
+            - 前端仓库说明（开发/发版/对接）：[PallasBot/Pallas-Bot-WebUI README](https://github.com/PallasBot/Pallas-Bot-WebUI/blob/main/README.md)
 
             ## WebUI 快速配置（可复制）
 

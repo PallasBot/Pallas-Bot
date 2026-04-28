@@ -64,6 +64,7 @@
 - [配置与后端](#配置与后端)
 - [版本更新](#版本更新)
 - [常见问题](#常见问题)
+- [插件文档索引](#插件文档索引)
 - [开发与贡献指南](#开发与贡献指南)
 - [社区与支持](#社区与支持)
   - [QQ 群](#qq-群)
@@ -216,6 +217,12 @@ uv run nb run
 - [`学习机制`](docs/FAQ.md#学习机制)：跨群语料、训练方式
 - [`使用与管理`](docs/FAQ.md#使用与管理)：不当发言处理、主动发言机制
 - [`部署排障`](docs/FAQ.md#部署排障)：启动后不回复的优先排查顺序
+
+## 🧩 插件文档索引
+
+- [插件文档目录](docs/plugins/README.md)
+- [协议端管理（pallas_protocol）](docs/plugins/pallas_protocol/README.md)
+- [控制台（pallas_webui）](docs/plugins/pallas_webui/README.md)
 
 ## 💻 开发与贡献指南
 
