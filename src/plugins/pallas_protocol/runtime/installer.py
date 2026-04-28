@@ -425,21 +425,27 @@ class NapCatRuntimeStore:
     def _github_token(self) -> str:
         return str(getattr(self._config, "pallas_protocol_github_token", "") or "").strip()
 
-    def _repo(self) -> str:
+    def _repo(self, target_platform: str = "auto") -> str:
         configured = str(getattr(self._config, "pallas_protocol_github_repo", "")).strip()
-        return configured or default_release_repo_for_platform()
+        if not configured:
+            return default_release_repo_for_platform(target_platform)
+        if (target_platform or "auto").strip().lower() != "auto":
+            auto_default = default_release_repo_for_platform("auto")
+            if configured == auto_default:
+                return default_release_repo_for_platform(target_platform)
+        return configured
 
-    def _repo_candidates(self) -> list[str]:
+    def _repo_candidates(self, target_platform: str = "auto") -> list[str]:
         """Linux 下自动尝试多个来源，减少因单仓库命名变化导致的硬编码配置。"""
-        primary = self._repo()
+        primary = self._repo(target_platform)
         out: list[str] = [primary]
-        if sys.platform.startswith("linux"):
+        if target_platform.startswith("linux") or (target_platform == "auto" and sys.platform.startswith("linux")):
             for repo in (_NC_REPO_APPIMAGE, _NC_REPO_SHELL):
                 if repo not in out:
                     out.append(repo)
         return out
 
-    def _asset_name(self) -> str:
+    def _asset_name(self, target_platform: str = "auto") -> str:
         fn = getattr(self._config, "resolved_release_asset", None)
         if callable(fn):
             val = str(fn()).strip()
@@ -447,27 +453,31 @@ class NapCatRuntimeStore:
             val = str(getattr(self._config, "pallas_protocol_release_asset", "")).strip()
         if val.lower() in ("auto", "latest"):
             return ""
+        if (target_platform or "auto").strip().lower() != "auto":
+            auto_default = default_release_asset_for_platform()
+            if val == auto_default:
+                return default_release_asset_for_platform(target_platform=target_platform)
         return val
 
     def _release_tag(self) -> str:
         return str(getattr(self._config, "pallas_protocol_release_tag", "")).strip()
 
     async def download_and_install(
-        self, *, client: httpx.AsyncClient | None = None, tag: str | None = None
+        self, *, client: httpx.AsyncClient | None = None, tag: str | None = None, target_platform: str = "auto"
     ) -> RuntimeManifest:
         async with self._lock:
-            configured_asset = self._asset_name()
+            configured_asset = self._asset_name(target_platform)
             release_tag = tag.strip() if tag and tag.strip() else self._release_tag()
             self._job_tag = release_tag
             if not configured_asset:
-                configured_asset = default_release_asset_for_platform(release_tag)
+                configured_asset = default_release_asset_for_platform(release_tag, target_platform=target_platform)
             direct_asset_url = configured_asset if _looks_like_http_url(configured_asset) else ""
             asset_name = _asset_name_from_url(direct_asset_url) if direct_asset_url else configured_asset
             if not asset_name:
                 msg = "未解析到可下载资产名，请检查 pallas_protocol_release_asset"
                 raise ValueError(msg)
             self._set_job("downloading", "准备下载…")
-            repo = self._repo()
+            repo = self._repo(target_platform)
             url = direct_asset_url or _github_release_asset_url(repo, asset_name, release_tag)
             self._dist_dir.mkdir(parents=True, exist_ok=True)
             dist_file = self._dist_dir / asset_name
@@ -490,7 +500,7 @@ class NapCatRuntimeStore:
                     from src.common.utils.github_release import _github_auth_headers
 
                     _gh_headers = _github_auth_headers(github_token)
-                    for repo_try in self._repo_candidates():
+                    for repo_try in self._repo_candidates(target_platform):
                         for tag_try in tag_candidates:
                             rel_api = github_release_api_url(repo_try, tag_try)
                             rel_resp = await hc.get(rel_api, headers=_gh_headers)
@@ -660,7 +670,7 @@ class NapCatRuntimeStore:
                 if await asyncio.to_thread(stage.exists):
                     shutil.rmtree(stage, ignore_errors=True)
 
-    def start_background_download(self, *, tag: str | None = None) -> None:
+    def start_background_download(self, *, tag: str | None = None, target_platform: str = "auto") -> None:
         if self.is_busy():
             msg = "已有下载或解压任务在执行"
             raise RuntimeError(msg)
@@ -668,7 +678,7 @@ class NapCatRuntimeStore:
 
         async def _run() -> None:
             try:
-                await self.download_and_install(tag=tag)
+                await self.download_and_install(tag=tag, target_platform=target_platform)
             except Exception as e:
                 self._set_job("error", str(e))
 
@@ -742,13 +752,18 @@ _NC_APPIMAGE_X64 = "NapCat-amd64.AppImage"
 _NC_APPIMAGE_AARCH64 = "NapCat-arm64.AppImage"
 
 
-def default_release_repo_for_platform() -> str:
+def default_release_repo_for_platform(target_platform: str = "auto") -> str:
+    tp = (target_platform or "auto").strip().lower()
+    if tp.startswith("linux"):
+        return _NC_REPO_APPIMAGE
+    if tp.startswith("windows"):
+        return _NC_REPO_SHELL
     if sys.platform.startswith("linux"):
         return _NC_REPO_APPIMAGE
     return _NC_REPO_SHELL
 
 
-def default_release_asset_for_platform(tag: str = "") -> str:
+def default_release_asset_for_platform(tag: str = "", target_platform: str = "auto") -> str:
     """按平台选择默认 release 资产名（空配置时 `resolved_release_asset` 会调用）。
 
     - Windows：NapCatQQ 一键包 zip
@@ -756,6 +771,14 @@ def default_release_asset_for_platform(tag: str = "") -> str:
       ``NapCat-{tag}-{arch}.AppImage``，与实际资产命名后缀对齐，提升命中率
     - 其它 POSIX：保留 NapCat.Shell.zip
     """
+    tp = (target_platform or "auto").strip().lower()
+    if tp == "windows-amd64":
+        return _NC_ASSET_WINDOWS_ONEKEY
+    if tp in ("linux-amd64", "linux-arm64"):
+        arch = "arm64" if tp.endswith("arm64") else "amd64"
+        if tag.strip():
+            return f"NapCat-{tag.strip()}-{arch}.AppImage"
+        return _NC_APPIMAGE_AARCH64 if arch == "arm64" else _NC_APPIMAGE_X64
     if sys.platform == "win32":
         return _NC_ASSET_WINDOWS_ONEKEY
     if sys.platform.startswith("linux"):

@@ -122,6 +122,22 @@ class Config(BaseModel):
         le=65535,
         description="镜像内 WebUI 端口，与 -p 宿主机:该端口 映射",
     )
+    pallas_protocol_follow_bot_lifecycle: bool = Field(
+        default=True,
+        description="实例是否跟随 Bot 生命周期自动启动/停止",
+    )
+    pallas_protocol_docker_network_mode: str = Field(
+        default="bridge",
+        description="Docker 网络模式：bridge 或 host",
+    )
+    pallas_protocol_docker_uid: int | None = Field(
+        default=None,
+        description="Docker 环境变量 NAPCAT_UID；为空时自动取当前用户 uid（Linux）",
+    )
+    pallas_protocol_docker_gid: int | None = Field(
+        default=None,
+        description="Docker 环境变量 NAPCAT_GID；为空时自动取当前用户 gid（Linux）",
+    )
 
     def resolved_release_asset(self) -> str:
         asset = (self.pallas_protocol_release_asset or "").strip()

@@ -190,12 +190,76 @@ def register_pallas_protocol_routes(
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
         tag: str | None = Query(default=None),
+        target_platform: str | None = Query(default=None),
+        runtime_mode: str | None = Query(default=None),
     ):
         _auth(x_pallas_protocol_token, token)
         try:
-            return manager.start_runtime_download(tag=tag or None)
+            return manager.start_runtime_download(
+                tag=tag or None,
+                target_platform=target_platform or None,
+                runtime_mode=runtime_mode or None,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except RuntimeError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
+
+    @app.get(f"{base}/api/runtime/profile")
+    async def runtime_profile(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        return {"profile": manager.runtime_profile()}
+
+    @app.put(f"{base}/api/runtime/profile")
+    async def update_runtime_profile(
+        payload: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        try:
+            return {"profile": manager.update_runtime_profile(payload)}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post(f"{base}/api/runtime/docker/pull")
+    async def runtime_docker_pull(
+        payload: dict[str, Any] | None = None,
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        image = ""
+        if isinstance(payload, dict):
+            image = str(payload.get("image", "") or "").strip()
+        return await manager.pull_docker_image(image or None)
+
+    @app.get(f"{base}/api/runtime/docker/images")
+    async def runtime_docker_images(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        return await manager.list_local_docker_images()
+
+    @app.post(f"{base}/api/runtime/docker/stop-all")
+    async def runtime_docker_stop_all(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        return await manager.stop_all_labeled_docker_containers()
+
+    @app.post(f"{base}/api/runtime/docker/prune-stopped")
+    async def runtime_docker_prune_stopped(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        return await manager.prune_stopped_labeled_docker_containers()
 
     @app.get(f"{base}/api/runtime/releases")
     async def runtime_releases(

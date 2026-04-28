@@ -18,6 +18,7 @@ class LaunchManager:
         *,
         instances_root: Path,
         runtime_dir_provider: Callable[[], Path | None] | None = None,
+        runtime_profile_provider: Callable[[], dict] | None = None,
         platform: NapcatPlatform | None = None,
     ) -> None:
         self._plugin_data_dir = plugin_data_dir
@@ -25,6 +26,7 @@ class LaunchManager:
         self._config = config
         self._instances_root = instances_root
         self._runtime_dir_provider = runtime_dir_provider
+        self._runtime_profile_provider = runtime_profile_provider
         self._platform = platform or get_napcat_platform()
 
     def _managed_runtime_extract_root(self) -> Path:
@@ -133,13 +135,26 @@ class LaunchManager:
         if not is_linux():
             account["napcat_linux_docker"] = False
             return
-        if not bool(getattr(self._config, "pallas_protocol_linux_use_docker", True)):
+        profile_mode = ""
+        if self._runtime_profile_provider is not None:
+            try:
+                profile = self._runtime_profile_provider() or {}
+                profile_mode = str(profile.get("runtime_mode", "")).strip().lower()
+            except Exception:
+                profile_mode = ""
+        docker_enabled = bool(getattr(self._config, "pallas_protocol_linux_use_docker", True))
+        if profile_mode == "docker":
+            docker_enabled = True
+        elif profile_mode in ("appimage", "shell"):
+            docker_enabled = False
+        if not docker_enabled:
             account["napcat_linux_docker"] = False
             return
-        if account.get("napcat_linux_docker") is False:
+        if profile_mode != "docker" and account.get("napcat_linux_docker") is False:
             return
         raw = str(account.get("command", "") or "").strip()
-        if raw and raw not in ("node", "docker", ""):
+        raw_name = Path(raw).name.lower() if raw else ""
+        if raw and raw_name not in ("node", "node.exe", "docker", "docker.exe"):
             return
         account["napcat_linux_docker"] = True
         account["command"] = "docker"
@@ -203,6 +218,13 @@ class LaunchManager:
             return
         if account.get("napcat_linux_docker"):
             return
+        if self._runtime_profile_provider is not None:
+            try:
+                mode = str((self._runtime_profile_provider() or {}).get("runtime_mode", "")).strip().lower()
+            except Exception:
+                mode = ""
+            if mode == "shell":
+                return
         command = str(account.get("command", "") or "").strip()
         if not command:
             return
@@ -260,17 +282,25 @@ class LaunchManager:
         if account_data_dir:
             Path(account_data_dir).mkdir(parents=True, exist_ok=True)
         if account.get("napcat_linux_docker"):
-            from .linux_docker import docker_volume_paths
+            from .linux_docker import docker_cache_path, docker_volume_paths
 
             cfg, qqd = docker_volume_paths(account)
+            cache = docker_cache_path(account)
             try:
                 cfg.mkdir(parents=True, exist_ok=True)
                 qqd.mkdir(parents=True, exist_ok=True)
+                cache.mkdir(parents=True, exist_ok=True)
             except OSError:
                 pass
 
     def check_launch_issues(self, account: dict, resolve_qq) -> list[str]:
         issues: list[str] = []
+        profile_mode = ""
+        if self._runtime_profile_provider is not None:
+            try:
+                profile_mode = str((self._runtime_profile_provider() or {}).get("runtime_mode", "")).strip().lower()
+            except Exception:
+                profile_mode = ""
         program_dir = Path(str(account.get("program_dir", "")).strip())
         if os.name == "nt" and program_dir.exists():
             qq_path = self._platform.detect_qq_path(program_dir)
@@ -303,12 +333,14 @@ class LaunchManager:
                 return ["未找到 docker，请安装 Docker Engine，或将 pallas_protocol_linux_use_docker=false"]
             if not str(account.get("account_data_dir", "")).strip():
                 return ["account_data_dir 为空"]
-            from .linux_docker import docker_volume_paths
+            from .linux_docker import docker_cache_path, docker_volume_paths
 
             cfg, qqd = docker_volume_paths(account)
+            cache = docker_cache_path(account)
             try:
                 cfg.mkdir(parents=True, exist_ok=True)
                 qqd.mkdir(parents=True, exist_ok=True)
+                cache.mkdir(parents=True, exist_ok=True)
             except OSError as e:
                 return [f"无法创建 Docker 数据目录: {e}"]
             return []
@@ -332,7 +364,9 @@ class LaunchManager:
 
         program_dir_raw = str(account.get("working_dir", "")).strip()
         if not program_dir_raw:
-            return ["program_dir 为空"]
+            if profile_mode == "docker" and not sys.platform.startswith("linux"):
+                return ["当前为 Docker 模式，但 Docker 模式仅支持 Linux 主机，请切换为 shell"]
+            return ["program_dir 为空：请先在「更新/下载」页面下载运行时，或配置 PALLAS_PROTOCOL_PROGRAM_DIR"]
         workdir = Path(program_dir_raw)
         # 规范工作目录路径
         if (workdir.exists() and workdir.is_file()) or workdir.suffix == ".AppImage":
@@ -396,8 +430,8 @@ class LaunchManager:
         )
         if account.get("napcat_linux_docker"):
             base_note += (
-                " Linux/Docker：config 与 docker/qq 挂到容器 /app/napcat/config 与 /app/.config/QQ"
-                "（NapCatAppImageBuild）。"
+                " Linux/Docker：config、docker/qq、cache 分别挂到容器 "
+                "/app/napcat/config、/app/.config/QQ、/app/napcat/cache。"
             )
         return {
             "napcat_paths": dedupe(napcat),

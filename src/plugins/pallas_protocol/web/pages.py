@@ -498,7 +498,7 @@ def render_dashboard(base_path: str) -> str:
           return `<tr>
             <td>${{a.display_name || a.qq || a.id}}</td>
             <td>${{a.qq || a.id}}</td>
-            <td>${{a.runtime_version || "未知"}}</td>
+            <td>${{a.runtime_version || "未知"}}<div class="muted" style="font-size:0.75rem">${{a.runtime_source || "未知来源"}}</div></td>
             <td><span class="tag ${{cls}}">${{st}}</span></td>
             <td class="mono">${{a.native_webui_url ? `<a href="${{a.native_webui_url}}" target="_blank" rel="noopener">前往</a>` : "—"}}</td>
             <td>
@@ -532,12 +532,13 @@ def render_dashboard(base_path: str) -> str:
           </div>
           <div class="mono muted">QQ: ${{a.qq || a.id}}</div>
           <div class="mono muted">版本: ${{a.runtime_version || "未知"}}</div>
+          <div class="mono muted">归属: ${{a.runtime_source || "未知来源"}}</div>
           ${{wu ? `<div class="mono"><a href="${{wu}}" target="_blank" rel="noopener">NapCat 内置 WebUI</a> · token ${{wtok}}</div>` : ""}}
           <div class="row" style="margin-top:8px">
             <button class="btn secondary" type="button" onclick="startAccount('${{a.id}}',this)">启动</button>
             <button class="btn secondary" type="button" onclick="stopAccount('${{a.id}}',this)">停止</button>
             <button class="btn secondary" type="button" onclick="restartAccount('${{a.id}}',this)">重启</button>
-            <button class="btn danger" type="button" onclick="deleteAccount('${{a.id}}')">删除</button>
+            <button class="btn danger" type="button" onclick="deleteAccount('${{a.id}}', this)">删除</button>
           </div>`;
         g.appendChild(card);
       }});
@@ -641,14 +642,17 @@ def render_dashboard(base_path: str) -> str:
         btnReset(btn);
       }}
     }}
-    async function deleteAccount(id) {{
+    async function deleteAccount(id, btn) {{
       if (!confirm("确定删除 " + id + " ?")) return;
+      btnLoad(btn, "删除中…");
       try {{
         await api(`/api/accounts/${{id}}`, {{ method: "DELETE" }});
         await refreshAccounts({{ silent: true }});
         notify(`已删除 ${{id}}`, "warn");
       }} catch (e) {{
         notify(e.message || e, "err");
+      }} finally {{
+        btnReset(btn);
       }}
     }}
     refreshAccounts({{ silent: true }}).catch((e) => notify(e.message || e, "err"));
@@ -841,7 +845,7 @@ def render_new_account_page(base_path: str) -> str:
       </div>
       <hr style="border:none;border-top:1px solid var(--bd);margin:6px 0 14px" />
       <h4 style="margin:0 0 12px;font-size:0.9rem;color:var(--muted);font-weight:700">WS 连接（协议端 → Bot，可选）</h4>
-      <p class="muted" style="margin:0 0 12px">NapCat 主动连接 Bot 的地址。Bot 与协议端不同机部署时填写，留空则使用默认值 ws://127.0.0.1:8088/onebot/v11/ws。</p>
+      <p class="muted" style="margin:0 0 12px">NapCat 主动连接 Bot 的地址。Bot 与协议端不同机部署时填写；留空则按当前配置/环境变量自动解析（常见兜底示例：ws://127.0.0.1:8088/onebot/v11/ws）。</p>
       <div class="field"><label>WS 连接地址</label>
         <input id="ws_url" placeholder="ws://bot-host:8088/onebot/v11/ws" autocomplete="off" />
       </div>
@@ -919,6 +923,63 @@ def render_runtime_page(base_path: str) -> str:
         此页面用于更新或下载协议端运行时；默认会自动从 release 资产中选择可用包。
         如需固定版本，请在配置中设置 <code>pallas_protocol_release_tag</code>。
       </p>
+      <div style="margin-top:10px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">全局运行模式</span>
+          <button class="btn" id="btnSaveProfile" type="button" onclick="saveRuntimeProfile()" style="font-size:0.92rem;padding:10px 18px;font-weight:700">保存设置</button>
+          <span id="saveProfileDirtyHint" class="muted" style="display:none;color:#b91c1c;font-weight:600">有未保存修改</span>
+        </div>
+        <div class="row" style="gap:12px;align-items:flex-end">
+          <div class="field" style="margin:0;min-width:170px;flex:1">
+            <label>运行模式</label>
+            <select id="runtimeMode" onchange="onRuntimeModeChanged()">
+              <option value="docker">Docker</option>
+              <option value="appimage">AppImage</option>
+              <option value="shell">Shell</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0;min-width:190px;flex:1">
+            <label>下载平台</label>
+            <select id="targetPlatform">
+              <option value="auto">auto（跟随当前平台）</option>
+              <option value="linux-amd64">linux-amd64</option>
+              <option value="linux-arm64">linux-arm64</option>
+              <option value="windows-amd64">windows-amd64</option>
+            </select>
+          </div>
+        </div>
+        <div id="dockerProfileArea" style="margin-top:10px;display:none">
+          <div class="row" style="gap:8px;align-items:flex-end">
+            <div class="field" style="margin:0;min-width:260px;flex:1">
+              <label>Docker 镜像</label>
+              <input id="dockerImage" placeholder="mlikiowa/napcat-docker:latest" autocomplete="off" />
+            </div>
+            <button class="btn secondary" id="btnPullImage" type="button" onclick="pullDockerImage()">一键 pull 镜像</button>
+            <button class="btn secondary" id="btnListImage" type="button" onclick="listDockerImages()">查看本地镜像</button>
+          </div>
+          <div class="row" style="gap:8px;align-items:flex-end;margin-top:8px">
+            <div class="field" style="margin:0;min-width:260px;flex:1">
+              <label>本地镜像选择</label>
+              <select id="dockerImageSelect">
+                <option value="">（点击「查看本地镜像」后可选择）</option>
+              </select>
+            </div>
+            <button class="btn secondary" id="btnUseSelectedImage" type="button" onclick="applySelectedDockerImage()">使用所选镜像</button>
+            <button class="btn secondary" id="btnStopAllDocker" type="button" onclick="stopAllDockerContainers()">停止全部协议容器</button>
+            <button class="btn secondary" id="btnPruneStoppedDocker" type="button" onclick="pruneStoppedDockerContainers()">清理已停止协议容器</button>
+          </div>
+          <p class="muted" style="margin:8px 0 0">Docker 模式使用容器运行，不走运行时资产下载；QQ/config/cache 会按账号目录持久化。</p>
+          <details style="margin-top:10px">
+            <summary class="muted" style="cursor:pointer">查看 Docker pull 日志</summary>
+            <pre class="mono" id="dockerPullLogs" style="max-height:min(42vh,360px);overflow:auto;margin-top:8px;font-size:12px;background:#0f1624;color:#dbe7ff;padding:10px;border-radius:10px;border:1px solid var(--bd)">尚未执行拉取。</pre>
+          </details>
+        </div>
+        <div class="row" style="margin-top:10px;align-items:center;gap:8px">
+          <input id="followBotLifecycle" type="checkbox" style="width:auto;height:auto" />
+          <label for="followBotLifecycle" class="muted" style="margin:0">实例跟随 Bot 生命周期（启动时自动启动，退出时自动停止）</label>
+        </div>
+        <p class="muted" style="margin:8px 0 0;color:#b45309">提示：修改运行模式、镜像、生命周期后，需要点击「保存设置」才会生效。</p>
+      </div>
       <div class="kpi-grid">
         <div class="kpi"><div class="k">任务状态</div><div class="v" id="rtStatus">-</div></div>
         <div class="kpi"><div class="k">当前阶段</div><div class="v" id="rtStage">-</div></div>
@@ -1002,8 +1063,225 @@ def render_runtime_page(base_path: str) -> str:
       el.textContent = v;
       el.title = v;
     }}
+    function appendDockerPullLog(line) {{
+      const el = document.getElementById("dockerPullLogs");
+      if (!el) return;
+      const now = new Date().toLocaleTimeString();
+      const text = `[${{now}}] ${{String(line || "")}}`;
+      if (!el.textContent || el.textContent === "尚未执行拉取。") {{
+        el.textContent = text;
+      }} else {{
+        el.textContent += "\\n" + text;
+      }}
+      el.scrollTop = el.scrollHeight;
+    }}
 {common_api_js}
     let runtimeRefreshing = false;
+    let runtimeProfileSnapshot = null;
+    let runtimeProfileWatchBound = false;
+    function normalizeRuntimeProfile(p) {{
+      const mode = ["docker", "appimage", "shell"].includes(String(p.runtime_mode || "")) ? String(p.runtime_mode) : "shell";
+      const platform = ["auto", "linux-amd64", "linux-arm64", "windows-amd64"].includes(String(p.target_platform || ""))
+        ? String(p.target_platform)
+        : "auto";
+      return {{
+        runtime_mode: mode,
+        target_platform: platform,
+        docker_image: String(p.docker_image || "").trim(),
+        follow_bot_lifecycle: !!p.follow_bot_lifecycle,
+      }};
+    }}
+    function currentRuntimeProfileForm() {{
+      return normalizeRuntimeProfile({{
+        runtime_mode: document.getElementById("runtimeMode")?.value || "shell",
+        target_platform: document.getElementById("targetPlatform")?.value || "auto",
+        docker_image: document.getElementById("dockerImage")?.value || "",
+        follow_bot_lifecycle: !!document.getElementById("followBotLifecycle")?.checked,
+      }});
+    }}
+    function updateSaveProfileDirtyState() {{
+      const hint = document.getElementById("saveProfileDirtyHint");
+      if (!hint || !runtimeProfileSnapshot) return;
+      const dirty = JSON.stringify(currentRuntimeProfileForm()) !== JSON.stringify(runtimeProfileSnapshot);
+      hint.style.display = dirty ? "inline" : "none";
+    }}
+    function bindRuntimeProfileWatchers() {{
+      if (runtimeProfileWatchBound) return;
+      runtimeProfileWatchBound = true;
+      ["runtimeMode", "targetPlatform", "dockerImage", "followBotLifecycle"].forEach((id) => {{
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener("change", updateSaveProfileDirtyState);
+        el.addEventListener("input", updateSaveProfileDirtyState);
+      }});
+    }}
+    function onRuntimeModeChanged() {{
+      const mode = String(document.getElementById("runtimeMode")?.value || "");
+      const isDocker = mode === "docker";
+      const dockerArea = document.getElementById("dockerProfileArea");
+      if (dockerArea) dockerArea.style.display = isDocker ? "block" : "none";
+      const target = document.getElementById("targetPlatform");
+      if (target) target.disabled = isDocker;
+      const dlTagBtn = document.getElementById("btnDownloadTag");
+      const dlBtn = document.getElementById("btnUpdate");
+      if (dlTagBtn) dlTagBtn.disabled = isDocker;
+      if (dlBtn) dlBtn.textContent = isDocker ? "Docker 模式无需下载" : "立即更新";
+    }}
+    async function loadRuntimeProfile() {{
+      const data = await api("/api/runtime/profile");
+      const p = data.profile || {{}};
+      const mode = ["docker", "appimage", "shell"].includes(String(p.runtime_mode || "")) ? p.runtime_mode : "shell";
+      const platform = ["auto", "linux-amd64", "linux-arm64", "windows-amd64"].includes(String(p.target_platform || ""))
+        ? p.target_platform
+        : "auto";
+      document.getElementById("runtimeMode").value = mode;
+      document.getElementById("targetPlatform").value = platform;
+      document.getElementById("dockerImage").value = String(p.docker_image || "");
+      document.getElementById("followBotLifecycle").checked = !!p.follow_bot_lifecycle;
+      runtimeProfileSnapshot = normalizeRuntimeProfile(p);
+      bindRuntimeProfileWatchers();
+      updateSaveProfileDirtyState();
+      onRuntimeModeChanged();
+    }}
+    async function saveRuntimeProfile() {{
+      const btn = document.getElementById("btnSaveProfile");
+      setBtnBusy(btn, true, "保存设置", "保存中...");
+      try {{
+        const body = {{
+          runtime_mode: document.getElementById("runtimeMode").value,
+          target_platform: document.getElementById("targetPlatform").value,
+          docker_image: document.getElementById("dockerImage").value.trim(),
+          follow_bot_lifecycle: !!document.getElementById("followBotLifecycle").checked,
+        }};
+        await api("/api/runtime/profile", {{
+          method: "PUT",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify(body),
+        }});
+        runtimeProfileSnapshot = normalizeRuntimeProfile(body);
+        updateSaveProfileDirtyState();
+        await refreshRuntime({{ silent: true }});
+      }} catch (e) {{
+        alert(e.message || e);
+      }} finally {{
+        setBtnBusy(btn, false, "保存设置", "保存中...");
+      }}
+    }}
+    async function pullDockerImage() {{
+      const btn = document.getElementById("btnPullImage");
+      setBtnBusy(btn, true, "一键 pull 镜像", "拉取中...");
+      try {{
+        const image = document.getElementById("dockerImage").value.trim();
+        appendDockerPullLog("开始拉取镜像: " + (image || "mlikiowa/napcat-docker:latest"));
+        const body = {{ image }};
+        const res = await api("/api/runtime/docker/pull", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify(body),
+        }});
+        const output = String(res.output || "").trim();
+        if (output) appendDockerPullLog(output);
+        if (!res.ok) {{
+          appendDockerPullLog("拉取失败，退出码: " + String(res.code ?? "-"));
+          return;
+        }}
+        appendDockerPullLog("拉取成功: " + String(res.image || ""));
+      }} catch (e) {{
+        appendDockerPullLog("拉取异常: " + String(e.message || e));
+      }} finally {{
+        setBtnBusy(btn, false, "一键 pull 镜像", "拉取中...");
+      }}
+    }}
+    async function listDockerImages() {{
+      const btn = document.getElementById("btnListImage");
+      setBtnBusy(btn, true, "查看本地镜像", "查询中...");
+      try {{
+        const res = await api("/api/runtime/docker/images");
+        if (!res.ok) {{
+          appendDockerPullLog("查询失败: " + String(res.detail || res.output || res.code || "未知错误"));
+          return;
+        }}
+        const images = Array.isArray(res.images) ? res.images : [];
+        const sel = document.getElementById("dockerImageSelect");
+        const currentImage = String(document.getElementById("dockerImage")?.value || "").trim();
+        if (sel) {{
+          const options = [`<option value="">（请选择）</option>`];
+          images.forEach((img) => {{
+            const name = String(img.name || "").trim();
+            if (!name) return;
+            const meta = [img.created_since ? String(img.created_since) : "", img.size ? String(img.size) : ""].filter(Boolean).join(" / ");
+            const currentMark = name === currentImage ? "（当前）" : "";
+            options.push(`<option value="${{name.replace(/"/g, "&quot;")}}">${{name}}${{currentMark ? " " + currentMark : ""}}${{meta ? " · " + meta : ""}}</option>`);
+          }});
+          sel.innerHTML = options.join("");
+          if (currentImage) sel.value = currentImage;
+        }}
+        if (!images.length) {{
+          appendDockerPullLog("本地暂无镜像。");
+          return;
+        }}
+        appendDockerPullLog("本地镜像列表（" + String(images.length) + "）:");
+        images.slice(0, 80).forEach((img) => {{
+          const line = [
+            String(img.name || "<none>:<none>"),
+            img.id ? `id=${{img.id}}` : "",
+            img.created_since ? `created=${{img.created_since}}` : "",
+            img.size ? `size=${{img.size}}` : "",
+          ].filter(Boolean).join(" | ");
+          appendDockerPullLog("  - " + line);
+        }});
+      }} catch (e) {{
+        appendDockerPullLog("查询异常: " + String(e.message || e));
+      }} finally {{
+        setBtnBusy(btn, false, "查看本地镜像", "查询中...");
+      }}
+    }}
+    function applySelectedDockerImage() {{
+      const sel = document.getElementById("dockerImageSelect");
+      const input = document.getElementById("dockerImage");
+      if (!sel || !input) return;
+      const v = String(sel.value || "").trim();
+      if (!v) {{
+        alert("请先从下拉框选择一个本地镜像。");
+        return;
+      }}
+      input.value = v;
+      appendDockerPullLog("已选择镜像: " + v + "（记得点「保存设置」生效）");
+    }}
+    async function stopAllDockerContainers() {{
+      const btn = document.getElementById("btnStopAllDocker");
+      setBtnBusy(btn, true, "停止全部协议容器", "处理中...");
+      try {{
+        const res = await api("/api/runtime/docker/stop-all", {{ method: "POST" }});
+        if (!res.ok) {{
+          appendDockerPullLog("批量停止失败: " + String(res.detail || res.output || res.code || "未知错误"));
+          return;
+        }}
+        appendDockerPullLog("已停止协议容器数量: " + String(res.stopped || 0));
+        if (res.output) appendDockerPullLog(String(res.output));
+      }} catch (e) {{
+        appendDockerPullLog("批量停止异常: " + String(e.message || e));
+      }} finally {{
+        setBtnBusy(btn, false, "停止全部协议容器", "处理中...");
+      }}
+    }}
+    async function pruneStoppedDockerContainers() {{
+      const btn = document.getElementById("btnPruneStoppedDocker");
+      setBtnBusy(btn, true, "清理已停止协议容器", "处理中...");
+      try {{
+        const res = await api("/api/runtime/docker/prune-stopped", {{ method: "POST" }});
+        if (!res.ok) {{
+          appendDockerPullLog("清理失败: " + String(res.detail || res.output || res.code || "未知错误"));
+          return;
+        }}
+        appendDockerPullLog("已清理停止容器数量: " + String(res.removed || 0));
+        if (res.output) appendDockerPullLog(String(res.output));
+      }} catch (e) {{
+        appendDockerPullLog("清理异常: " + String(e.message || e));
+      }} finally {{
+        setBtnBusy(btn, false, "清理已停止协议容器", "处理中...");
+      }}
+    }}
     async function refreshRuntime(opts = {{}}) {{
       const silent = !!opts.silent;
       if (runtimeRefreshing) return;
@@ -1094,11 +1372,21 @@ def render_runtime_page(base_path: str) -> str:
       setTimeout(() => {{ btn.textContent = prev; }}, 1500);
     }}
     async function downloadRuntime() {{
+      const mode = String(document.getElementById("runtimeMode")?.value || "");
+      if (mode === "docker") {{
+        alert("Docker 模式无需下载运行时资产，请使用「一键 pull 镜像」。");
+        return;
+      }}
       setBtnBusy(document.getElementById("btnUpdate"), true, "立即更新", "更新中...");
       try {{
+        const tp = String(document.getElementById("targetPlatform")?.value || "auto");
+        const modeQ = String(document.getElementById("runtimeMode")?.value || "");
+        const qs = [];
+        if (tp) qs.push("target_platform=" + encodeURIComponent(tp));
+        if (modeQ) qs.push("runtime_mode=" + encodeURIComponent(modeQ));
         const url = pendingTag
-          ? "/api/runtime/download?tag=" + encodeURIComponent(pendingTag)
-          : "/api/runtime/download";
+          ? "/api/runtime/download?tag=" + encodeURIComponent(pendingTag) + (qs.length ? "&" + qs.join("&") : "")
+          : "/api/runtime/download" + (qs.length ? "?" + qs.join("&") : "");
         await api(url, {{ method: "POST" }});
         pendingTag = null;
         await refreshRuntime();
@@ -1118,6 +1406,9 @@ def render_runtime_page(base_path: str) -> str:
       }}
     }}
 {token_sync_js}
+    loadRuntimeProfile().catch((e) => {{
+      document.getElementById("runtimeStatus").textContent = "加载 profile 失败: " + String(e.message || e);
+    }});
     refreshRuntime({{ silent: true }});
     setInterval(() => refreshRuntime({{ silent: true }}), 1200);
   </script>
@@ -1426,8 +1717,16 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
     }}
     async function doDelete() {{
       if (!confirm("确定删除该账号？")) return;
-      await api(`/api/accounts/${{encodeURIComponent(accountId)}}`, {{ method: "DELETE" }});
-      location.href = document.getElementById("backDash").href;
+      const btn = event?.currentTarget || null;
+      accBtnLoad(btn, "删除中…");
+      try {{
+        await api(`/api/accounts/${{encodeURIComponent(accountId)}}`, {{ method: "DELETE" }});
+        location.href = document.getElementById("backDash").href;
+      }} catch (e) {{
+        notify(e.message || e, "err");
+      }} finally {{
+        accBtnReset(btn);
+      }}
     }}
     (function init() {{
 {token_sync_js}

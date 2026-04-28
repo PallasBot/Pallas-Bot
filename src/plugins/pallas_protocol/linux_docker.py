@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import shutil
 import subprocess
@@ -37,6 +38,11 @@ def docker_volume_paths(account: dict) -> tuple[Path, Path]:
     return ad / "config", ad / "docker" / "qq"
 
 
+def docker_cache_path(account: dict) -> Path:
+    ad = Path(str(account.get("account_data_dir", "")).strip()).resolve()
+    return ad / "cache"
+
+
 def build_docker_run_argv(
     account: dict,
     config: Config,
@@ -54,21 +60,46 @@ def build_docker_run_argv(
         host_map = in_port
     name = docker_container_name(account)
     cfg, qqd = docker_volume_paths(account)
-    return [
+    cache = docker_cache_path(account)
+    network_mode = str(getattr(config, "pallas_protocol_docker_network_mode", "bridge") or "bridge").strip() or "bridge"
+    uid = getattr(config, "pallas_protocol_docker_uid", None)
+    gid = getattr(config, "pallas_protocol_docker_gid", None)
+    if uid is None:
+        uid = getattr(os, "getuid", lambda: 1000)()
+    if gid is None:
+        gid = getattr(os, "getgid", lambda: 1000)()
+    if int(uid) < 0:
+        uid = 1000
+    if int(gid) < 0:
+        gid = 1000
+    argv: list[str] = [
         "run",
         "-d",
         "--name",
         name,
+        "--label",
+        "pallas.protocol=napcat",
+        "--label",
+        f"pallas.account_id={sanitize_docker_name_suffix(str(account.get('id', 'x')))}",
         "--restart",
         "unless-stopped",
-        "-p",
-        f"{host_map}:{in_port}",
+        "-e",
+        f"NAPCAT_UID={uid}",
+        "-e",
+        f"NAPCAT_GID={gid}",
         "-v",
         f"{cfg}:/app/napcat/config",
         "-v",
         f"{qqd}:/app/.config/QQ",
-        img,
+        "-v",
+        f"{cache}:/app/napcat/cache",
     ]
+    if network_mode == "host":
+        argv.extend(["--network", "host"])
+    else:
+        argv.extend(["-p", f"{host_map}:{in_port}"])
+    argv.append(img)
+    return argv
 
 
 def rewrite_onebot_ws_url_for_container(url: str, docker_host: str) -> str:

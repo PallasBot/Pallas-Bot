@@ -70,4 +70,16 @@ async def _startup() -> None:
         )
         path = resolve_protocol_webui_base_path(plugin_config)
         logger.info(f"Pallas 协议端 | WebUI={base_u}{path}/")
-    await manager.start_all_enabled_accounts()
+    profile = manager.runtime_profile()
+    if bool(profile.get("follow_bot_lifecycle", True)):
+        await manager.start_all_enabled_accounts()
+
+
+@driver.on_shutdown
+async def _shutdown() -> None:
+    if not plugin_config.pallas_protocol_enabled:
+        return
+    profile = manager.runtime_profile()
+    if not bool(profile.get("follow_bot_lifecycle", True)):
+        return
+    await manager.stop_all_enabled_accounts()

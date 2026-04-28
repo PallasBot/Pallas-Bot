@@ -4,6 +4,8 @@ import os
 import re
 import secrets
 import shutil
+import socket
+import sys
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -21,7 +23,7 @@ from .config import (
 from .config_manager import AccountConfigManager
 from .contract import ACCOUNT_PROTOCOL_BACKEND_KEY, DEFAULT_PROTOCOL_BACKEND
 from .launch_manager import LaunchManager
-from .runtime.installer import NapCatRuntimeStore
+from .runtime.installer import NapCatRuntimeStore, default_release_asset_for_platform, default_release_repo_for_platform
 
 
 def _realpath_sync(path: str) -> str:
@@ -51,12 +53,14 @@ class PallasProtocolService:
         self._accounts: dict[str, dict] = {}
         self._runtimes: dict[str, NapCatRuntime] = {}
         self._runtime_store = NapCatRuntimeStore(data_dir, config)
+        self._runtime_profile_path = self._data_dir / "runtime_profile.json"
         self._launch = LaunchManager(
             self._data_dir,
             self._resource_root,
             self._config,
             instances_root=self._instances_root,
             runtime_dir_provider=self._runtime_store.resolved_program_dir,
+            runtime_profile_provider=self.runtime_profile,
         )
         self._configs = AccountConfigManager(
             self._config.pallas_protocol_bind_host,
@@ -70,23 +74,265 @@ class PallasProtocolService:
             return p if p.is_dir() else None
         return self._runtime_store.resolved_program_dir()
 
+    def _default_runtime_mode(self) -> str:
+        if os.name == "nt":
+            return "shell"
+        if sys.platform.startswith("linux"):
+            if bool(getattr(self._config, "pallas_protocol_linux_use_docker", False)):
+                return "docker"
+            return "appimage"
+        return "shell"
+
+    def runtime_profile(self) -> dict[str, object]:
+        default = {
+            "runtime_mode": self._default_runtime_mode(),
+            "target_platform": "auto",
+            "docker_image": str(getattr(self._config, "pallas_protocol_docker_image", "") or "").strip()
+            or "mlikiowa/napcat-docker:latest",
+            "follow_bot_lifecycle": bool(getattr(self._config, "pallas_protocol_follow_bot_lifecycle", True)),
+        }
+        if not self._runtime_profile_path.exists():
+            return default
+        try:
+            raw = json.loads(self._runtime_profile_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return default
+        if not isinstance(raw, dict):
+            return default
+        mode = str(raw.get("runtime_mode", "")).strip().lower()
+        if mode not in ("docker", "appimage", "shell"):
+            mode = default["runtime_mode"]
+        platform = str(raw.get("target_platform", "")).strip().lower()
+        if platform not in ("auto", "linux-amd64", "linux-arm64", "windows-amd64"):
+            platform = "auto"
+        image = str(raw.get("docker_image", "")).strip() or default["docker_image"]
+        follow = raw.get("follow_bot_lifecycle", default["follow_bot_lifecycle"])
+        if isinstance(follow, str):
+            follow = follow.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            follow = bool(follow)
+        return {
+            "runtime_mode": mode,
+            "target_platform": platform,
+            "docker_image": image,
+            "follow_bot_lifecycle": follow,
+        }
+
+    def _apply_runtime_profile_to_config(self, profile: dict[str, object] | None = None) -> None:
+        """将 runtime_profile 持久化设置同步到当前进程配置。"""
+        p = profile or self.runtime_profile()
+        mode = str(p.get("runtime_mode", "")).strip().lower()
+        image = str(p.get("docker_image", "")).strip() or "mlikiowa/napcat-docker:latest"
+        follow = p.get("follow_bot_lifecycle", True)
+        if isinstance(follow, str):
+            follow = follow.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            follow = bool(follow)
+        if mode == "docker":
+            self._config.pallas_protocol_linux_use_docker = True
+            self._config.pallas_protocol_docker_image = image
+        elif mode in ("appimage", "shell"):
+            self._config.pallas_protocol_linux_use_docker = False
+        self._config.pallas_protocol_follow_bot_lifecycle = bool(follow)
+
+    def update_runtime_profile(self, payload: dict) -> dict[str, object]:
+        current = self.runtime_profile()
+        mode = str(payload.get("runtime_mode", current["runtime_mode"])).strip().lower()
+        if mode not in ("docker", "appimage", "shell"):
+            raise ValueError("runtime_mode 仅支持 docker/appimage/shell")
+        if mode == "docker" and not sys.platform.startswith("linux"):
+            raise ValueError("Docker 模式仅支持 Linux 主机，请改用shell")
+        platform = str(payload.get("target_platform", current["target_platform"])).strip().lower()
+        if platform not in ("auto", "linux-amd64", "linux-arm64", "windows-amd64"):
+            raise ValueError("target_platform 仅支持 auto/linux-amd64/linux-arm64/windows-amd64")
+        image = str(payload.get("docker_image", current["docker_image"])).strip() or current["docker_image"]
+        follow = payload.get("follow_bot_lifecycle", current["follow_bot_lifecycle"])
+        if isinstance(follow, str):
+            follow = follow.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            follow = bool(follow)
+        updated = {
+            "runtime_mode": mode,
+            "target_platform": platform,
+            "docker_image": image,
+            "follow_bot_lifecycle": follow,
+        }
+        self._runtime_profile_path.write_text(json.dumps(updated, ensure_ascii=False, indent=2), encoding="utf-8")
+        self._apply_runtime_profile_to_config(updated)
+        return updated
+
     def runtime_overview(self) -> dict:
         manifest = self._runtime_store.read_manifest()
         eff = self.effective_runtime_program_dir()
+        profile = self.runtime_profile()
+        target_platform = str(profile.get("target_platform", "auto") or "auto")
+        raw_asset = str(getattr(self._config, "pallas_protocol_release_asset", "") or "").strip()
+        raw_repo = str(getattr(self._config, "pallas_protocol_github_repo", "") or "").strip()
+        if not raw_asset:
+            resolved_asset = default_release_asset_for_platform(
+                self._config.pallas_protocol_release_tag.strip() or "",
+                target_platform=target_platform,
+            )
+        else:
+            auto_asset = default_release_asset_for_platform()
+            if target_platform != "auto" and raw_asset == auto_asset:
+                resolved_asset = default_release_asset_for_platform(
+                    self._config.pallas_protocol_release_tag.strip() or "",
+                    target_platform=target_platform,
+                )
+            else:
+                resolved_asset = raw_asset
+        if not raw_repo:
+            resolved_repo = default_release_repo_for_platform(target_platform)
+        else:
+            auto_repo = default_release_repo_for_platform("auto")
+            resolved_repo = default_release_repo_for_platform(target_platform) if (
+                target_platform != "auto" and raw_repo == auto_repo
+            ) else raw_repo
         return {
             "job": self._runtime_store.job_snapshot(),
             "manifest": manifest.to_json() if manifest else None,
             "effective_program_dir": str(eff) if eff else None,
+            "profile": profile,
             "download": {
-                "repo": self._config.pallas_protocol_github_repo,
-                "asset": self._config.resolved_release_asset(),
+                "repo": resolved_repo,
+                "asset": resolved_asset,
                 "tag": self._config.pallas_protocol_release_tag.strip() or "latest",
             },
         }
 
-    def start_runtime_download(self, *, tag: str | None = None) -> dict:
-        self._runtime_store.start_background_download(tag=tag)
+    def start_runtime_download(
+        self, *, tag: str | None = None, target_platform: str | None = None, runtime_mode: str | None = None
+    ) -> dict:
+        profile = self.runtime_profile()
+        mode = str(runtime_mode or profile.get("runtime_mode", "")).strip().lower()
+        if mode == "docker":
+            raise ValueError("Docker 模式请使用镜像拉取，不支持运行时资产下载")
+        platform_hint = str(target_platform or profile.get("target_platform", "auto")).strip().lower()
+        self._runtime_store.start_background_download(tag=tag, target_platform=platform_hint)
         return self.runtime_overview()
+
+    async def pull_docker_image(self, image: str | None = None) -> dict[str, object]:
+        profile = self.runtime_profile()
+        img = str(image or profile.get("docker_image", "")).strip() or "mlikiowa/napcat-docker:latest"
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "pull",
+            img,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await proc.communicate()
+        text = out.decode("utf-8", errors="replace") if out else ""
+        return {
+            "ok": proc.returncode == 0,
+            "image": img,
+            "code": proc.returncode,
+            "output": text[-4000:],
+        }
+
+    async def list_local_docker_images(self) -> dict[str, object]:
+        """列出本机 Docker 镜像（仅用于 Docker 模式排障展示）。"""
+        if not shutil.which("docker"):
+            return {"ok": False, "detail": "未找到 docker 命令", "images": []}
+        proc = await asyncio.create_subprocess_exec(
+            "docker",
+            "images",
+            "--format",
+            "{{.Repository}}:{{.Tag}}|{{.ID}}|{{.CreatedSince}}|{{.Size}}",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await proc.communicate()
+        text = out.decode("utf-8", errors="replace") if out else ""
+        rows: list[dict[str, str]] = []
+        for line in text.splitlines():
+            item = line.strip()
+            if not item:
+                continue
+            parts = item.split("|", 3)
+            while len(parts) < 4:
+                parts.append("")
+            rows.append(
+                {
+                    "name": parts[0],
+                    "id": parts[1],
+                    "created_since": parts[2],
+                    "size": parts[3],
+                }
+            )
+        return {
+            "ok": proc.returncode == 0,
+            "code": proc.returncode,
+            "images": rows,
+            "output": text[-4000:] if proc.returncode != 0 else "",
+        }
+
+    async def stop_all_labeled_docker_containers(self) -> dict[str, object]:
+        """停止所有 pallas protocol label 下运行中的容器。"""
+        if not shutil.which("docker"):
+            return {"ok": False, "detail": "未找到 docker 命令", "stopped": 0}
+        ps = await asyncio.create_subprocess_exec(
+            "docker",
+            "ps",
+            "-q",
+            "--filter",
+            "label=pallas.protocol=napcat",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await ps.communicate()
+        ids = [x.strip() for x in (out.decode("utf-8", errors="replace") if out else "").splitlines() if x.strip()]
+        if not ids:
+            return {"ok": True, "stopped": 0}
+        stop = await asyncio.create_subprocess_exec(
+            "docker",
+            "stop",
+            *ids,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        sout, _ = await stop.communicate()
+        return {
+            "ok": stop.returncode == 0,
+            "code": stop.returncode,
+            "stopped": len(ids) if stop.returncode == 0 else 0,
+            "output": (sout.decode("utf-8", errors="replace") if sout else "")[-4000:],
+        }
+
+    async def prune_stopped_labeled_docker_containers(self) -> dict[str, object]:
+        """清理所有 pallas protocol label 下已停止容器。"""
+        if not shutil.which("docker"):
+            return {"ok": False, "detail": "未找到 docker 命令", "removed": 0}
+        ps = await asyncio.create_subprocess_exec(
+            "docker",
+            "ps",
+            "-aq",
+            "--filter",
+            "label=pallas.protocol=napcat",
+            "--filter",
+            "status=exited",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        out, _ = await ps.communicate()
+        ids = [x.strip() for x in (out.decode("utf-8", errors="replace") if out else "").splitlines() if x.strip()]
+        if not ids:
+            return {"ok": True, "removed": 0}
+        rm = await asyncio.create_subprocess_exec(
+            "docker",
+            "rm",
+            *ids,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        rout, _ = await rm.communicate()
+        return {
+            "ok": rm.returncode == 0,
+            "code": rm.returncode,
+            "removed": len(ids) if rm.returncode == 0 else 0,
+            "output": (rout.decode("utf-8", errors="replace") if rout else "")[-4000:],
+        }
 
     async def fetch_runtime_releases(self, *, limit: int = 10) -> list[dict]:
         """获取 GitHub release 列表，供前端 tag 选择器使用。"""
@@ -154,6 +400,7 @@ class PallasProtocolService:
         return onebot_connection_hints(self._config)
 
     async def initialize(self) -> None:
+        self._apply_runtime_profile_to_config()
         self._load_accounts()
         self._pull_all_webui_from_disk()
         for account in self._accounts.values():
@@ -184,6 +431,19 @@ class PallasProtocolService:
             except Exception:
                 logger.exception(f"NapCat: 自动启动账号 {account_id} 出现未预期异常")
 
+    async def stop_all_enabled_accounts(self) -> None:
+        from nonebot import logger
+
+        for account_id, account in list(self._accounts.items()):
+            if not bool(account.get("enabled", True)):
+                continue
+            if not self.is_running(account_id):
+                continue
+            try:
+                await self.stop_account(account_id)
+            except Exception:
+                logger.exception(f"NapCat: 自动停止账号 {account_id} 出现未预期异常")
+
     def _used_webui_ports(self, exclude_account_id: str | None = None) -> set[int]:
         used: set[int] = set()
         for aid, acc in self._accounts.items():
@@ -206,6 +466,33 @@ class PallasProtocolService:
             if port not in used:
                 return port
         msg = f"在 {lo}-{hi} 内无可用 NapCat WebUI 端口"
+        raise ValueError(msg)
+
+    def _is_host_port_available(self, port: int) -> bool:
+        if not (1 <= int(port) <= 65535):
+            return False
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("0.0.0.0", int(port)))
+        except OSError:
+            return False
+        finally:
+            sock.close()
+        return True
+
+    def _next_free_bindable_webui_port(self, *, exclude_account_id: str | None = None) -> int:
+        lo = int(getattr(self._config, "pallas_protocol_webui_port_min", 6099))
+        hi = int(getattr(self._config, "pallas_protocol_webui_port_max", 7999))
+        if hi < lo:
+            lo, hi = hi, lo
+        used = self._used_webui_ports(exclude_account_id=exclude_account_id)
+        for port in range(lo, hi + 1):
+            if port in used:
+                continue
+            if self._is_host_port_available(port):
+                return port
+        msg = f"在 {lo}-{hi} 内无可绑定的 NapCat WebUI 端口"
         raise ValueError(msg)
 
     def _migrate_account_webui_fields(self, account_id: str, account: dict) -> bool:
@@ -409,6 +696,13 @@ class PallasProtocolService:
             await self.stop_account(account_id)
         except Exception:
             pass
+        if account.get("napcat_linux_docker"):
+            try:
+                from .linux_docker import docker_container_name, docker_remove_force
+
+                await docker_remove_force(docker_container_name(account))
+            except Exception:
+                pass
         self._accounts.pop(account_id, None)
         self._runtimes.pop(account_id, None)
         try:
@@ -526,9 +820,15 @@ class PallasProtocolService:
             docker_remove_force,
         )
 
-        raw_args = account.get("args")
-        if not raw_args:
-            account["args"] = build_docker_run_argv(account, self._config, self._resolve_qq)
+        try:
+            current_port = int(str(account.get("webui_port", "")).strip())
+        except ValueError:
+            current_port = 0
+        if current_port <= 0 or not self._is_host_port_available(current_port):
+            account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
+            self._configs.sync_webui(account, self._resolve_qq)
+            self._save_accounts()
+        account["args"] = build_docker_run_argv(account, self._config, self._resolve_qq)
         args = [str(x) for x in (account.get("args") or [])]
         launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
         if launch_issues:
@@ -540,23 +840,33 @@ class PallasProtocolService:
         runtime.expect_bootmain_detach = False
         runtime.docker_container_name = name
         cwd_run = str(account.get("account_data_dir", "")).strip() or None
-        proc = await asyncio.create_subprocess_exec(
-            "docker",
-            *args,
-            cwd=cwd_run,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-        )
-        out, _ = await proc.communicate()
-        if out:
-            o = out.decode("utf-8", errors="replace").strip()
-            if o:
-                runtime.logs.append(o)
-        if proc.returncode != 0:
+        for attempt in range(2):
+            proc = await asyncio.create_subprocess_exec(
+                "docker",
+                *args,
+                cwd=cwd_run,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            out, _ = await proc.communicate()
+            text = out.decode("utf-8", errors="replace") if out else ""
+            if text.strip():
+                runtime.logs.append(text.strip())
+            if proc.returncode == 0:
+                break
+            if attempt == 0 and "port is already allocated" in text.lower():
+                account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
+                self._configs.sync_webui(account, self._resolve_qq)
+                self._save_accounts()
+                account["args"] = build_docker_run_argv(account, self._config, self._resolve_qq)
+                args = [str(x) for x in (account.get("args") or [])]
+                continue
             err = f"docker run 失败 (exit {proc.returncode})"
-            if out:
-                err += ": " + out.decode("utf-8", errors="replace")[:1200]
+            if text:
+                err += ": " + text[:1200]
             raise ValueError(err)
+        else:
+            raise ValueError("docker run 启动失败")
         if not docker_container_running_sync(name):
             raise ValueError("容器已创建但未在运行，请检查: docker logs " + name)
         runtime.started_at = datetime.now(UTC)
@@ -575,7 +885,7 @@ class PallasProtocolService:
         return self._compose_account_state(account_id, account)
 
     async def _stop_account_linux_docker(self, account_id: str, account: dict) -> dict | None:
-        from .linux_docker import docker_container_name, docker_remove_force, docker_stop_sync
+        from .linux_docker import docker_container_name, docker_stop_sync
 
         name = docker_container_name(account)
         runtime = self._runtimes.get(account_id) or self._runtime(account_id)
@@ -592,7 +902,6 @@ class PallasProtocolService:
                     await proc.wait()
             runtime.process = None
             docker_stop_sync(name)
-            await docker_remove_force(name)
             runtime.docker_container_name = None
         return self._compose_account_state(account_id, account)
 
@@ -787,6 +1096,7 @@ class PallasProtocolService:
         except (TypeError, ValueError):
             pass
         runtime_version = self._resolve_account_runtime_version(account)
+        runtime_source = self._resolve_account_runtime_source(account)
         return {
             **account,
             "running": process_running or connected,
@@ -799,6 +1109,7 @@ class PallasProtocolService:
             "data_path_hints": self._launch.describe_account_data_paths(account),
             "native_webui_url": native_webui,
             "runtime_version": runtime_version,
+            "runtime_source": runtime_source,
         }
 
     def _resolve_account_runtime_version(self, account: dict) -> str:
@@ -832,3 +1143,31 @@ class PallasProtocolService:
         if acc_path == manifest_extract or manifest_extract in acc_path.parents:
             return tag
         return "自定义"
+
+    def _resolve_account_runtime_source(self, account: dict) -> str:
+        """为账号推导版本归属来源。"""
+        if account.get("napcat_linux_docker"):
+            image = str(account.get("program_dir", "") or "").strip()
+            if image.startswith("docker:"):
+                image = image[len("docker:") :].strip()
+            return f"Docker 镜像（{image or '未设置'}）"
+
+        manifest = self._runtime_store.read_manifest()
+        if manifest is None:
+            return "未知来源"
+
+        acc_program = str(account.get("program_dir", "") or "").strip()
+        if not acc_program:
+            return "托管运行时"
+        try:
+            acc_path = Path(acc_program).resolve()
+            manifest_program = Path(manifest.program_dir).resolve()
+            manifest_extract = Path(manifest.extract_root).resolve()
+        except OSError:
+            return "自定义路径"
+
+        if acc_path == manifest_program:
+            return "托管运行时"
+        if acc_path == manifest_extract or manifest_extract in acc_path.parents:
+            return "托管运行时"
+        return "自定义路径"
