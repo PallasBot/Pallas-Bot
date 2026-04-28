@@ -1,4 +1,5 @@
 import asyncio
+import random
 from datetime import datetime
 
 from nonebot import (
@@ -28,7 +29,7 @@ __plugin_meta__ = PluginMetadata(
     description="查询当前连接的Bot状态，检测Bot离线并发送通知",
     usage="""
 牛牛在吗 - 查询当前连接的Bot列表
-牛牛报数 - 让在线牛牛依次报数
+牛牛报数 - 让当前群内在线牛牛随机报数
 测试邮件 - 测试邮件发送功能
 """,
     type="application",
@@ -56,7 +57,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_condition": "牛牛报数",
                 "brief_des": "在线牛牛依次报数",
-                "detail_des": "按在线 Bot ID 升序在群内轮流报数",
+                "detail_des": "仅当前群内在线 Bot 参与，随机顺序在群内轮流报数",
             },
         ],
         "menu_template": "default",
@@ -199,10 +200,30 @@ async def handle_bot_count(bot: Bot, event: MessageEvent) -> None:
     online_bots, _ = await get_bot_status_info()
 
     current_bots = get_bots()
-    online_bot_ids = [bot_id for bot_id in sorted(online_bots.keys()) if str(bot_id) in current_bots]
+    group_bot_ids: list[int] = []
+    for bot_id in online_bots:
+        bot_key = str(bot_id)
+        if bot_key not in current_bots:
+            continue
+        bot_instance = current_bots[bot_key]
+        try:
+            await bot_instance.get_group_member_info(
+                group_id=event.group_id,
+                user_id=int(bot_id),
+                no_cache=True,
+            )
+            group_bot_ids.append(bot_id)
+        except Exception:
+            continue
+
+    if not group_bot_ids:
+        return
+
+    seed_text = f"{datetime.now().strftime('%Y-%m-%d')}:{event.group_id}"
+    random.Random(seed_text).shuffle(group_bot_ids)
     failed_bots: list[int] = []
 
-    for index, bot_id in enumerate(online_bot_ids, start=1):
+    for index, bot_id in enumerate(group_bot_ids, start=1):
         bot_instance = current_bots[str(bot_id)]
         try:
             await bot_instance.send_group_msg(group_id=event.group_id, message=str(f"牛牛{index}号报到！"))
@@ -212,7 +233,7 @@ async def handle_bot_count(bot: Bot, event: MessageEvent) -> None:
             failed_bots.append(bot_id)
 
     if failed_bots:
-        failed_text = "、".join(str(bot_id) for bot_id in failed_bots)
+        failed_text = "、".join(online_bots.get(bot_id, str(bot_id)) for bot_id in failed_bots)
         await bot_count_cmd.finish(f"报数完成，以下牛牛没能报数：{failed_text}")
 
     await bot_count_cmd.finish("牛牛们报数完毕！")
