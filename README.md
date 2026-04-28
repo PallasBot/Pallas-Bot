@@ -72,11 +72,13 @@
 - [致谢](#致谢)
 - [许可证](#许可证)
 
+<a id="关于项目"></a>
 ## 📖 关于项目
 
 牛牛的功能就是废话和复读。可以认为是高级版的复读机。  
 发现牛牛学了一些不合适的话及时帮忙[删除](docs/FAQ.md#使用与管理)。
 大家一起教出更棒更聪明的牛牛！✿✿ヽ(°▽°)ノ✿
+<a id="项目特点"></a>
 ### ✨ 项目特点
 
 - 学习型复读，不依赖硬编码问答库
@@ -86,14 +88,17 @@
 - 数据后端支持 `MongoDB` 与 `PostgreSQL`
 
 
+<a id="快速开始部署"></a>
 ## 🚀 快速开始（部署）
 
+<a id="部署方式"></a>
 ### 📦 部署方式
 
 - **托管实例接入**：加入 [拉牛牛群](#qq-群) 获取可用实例
 - **标准部署**：按 [部署教程](docs/Deployment.md) 执行完整流程
 - **容器化部署**：使用 [Docker 部署](docs/DockerDeployment.md)
 
+<a id="环境要求"></a>
 ### 📋 环境要求
 
 - `Python 3.12+`
@@ -101,6 +106,7 @@
 - `MongoDB` 或 `PostgreSQL`（二选一）
 - `OneBot v11` 协议端
 
+<a id="简单部署"></a>
 ### ⚡ 简单部署
 
 ```bash
@@ -120,8 +126,10 @@ uv run nb run
 > 完整部署细节请查看 [部署教程](docs/Deployment.md) 和 [Docker 部署](docs/DockerDeployment.md)。  
 > 部署好自己牛牛之后，如果托管别人的账号成为你的牛牛，别忘记将他设置为牛牛的管理员!号主们都应该有控制自己牛牛的权力。
 
+<a id="使用指南"></a>
 ## 📚 使用指南
 
+<a id="功能列表"></a>
 ### 🎮 功能列表
 
 <details>
@@ -160,6 +168,7 @@ uv run nb run
 - `牛牛在吗`:查询在线/离线 bot 并支持离线通知（含测试邮件）。
 </details>
 
+<a id="ai-扩展"></a>
 ### 🤖 AI 扩展
 
 部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 并开启对应能力后可用：
@@ -176,6 +185,7 @@ uv run nb run
 
 </details>
 
+<a id="配置与后端"></a>
 ## ⚙️ 配置与后端
 
 以下为常用配置项，完整说明请以 `.env` 文件注释为准：
@@ -190,6 +200,7 @@ uv run nb run
 | `OneBot WS URL`   | `ws://localhost:8088/onebot/v11/ws` | 协议端连接地址               | 是       |
 
 
+<a id="版本更新"></a>
 ## 📝 版本更新
 
 当前主线（`3.0`）简要更新：
@@ -208,6 +219,7 @@ uv run nb run
 
 更多版本详情请查看 [Releases](https://github.com/PallasBot/Pallas-Bot/releases)。
 
+<a id="常见问题"></a>
 ## ❓ 常见问题
 
 [FAQ](docs/FAQ.md)
@@ -218,20 +230,24 @@ uv run nb run
 - [`使用与管理`](docs/FAQ.md#使用与管理)：不当发言处理、主动发言机制
 - [`部署排障`](docs/FAQ.md#部署排障)：启动后不回复的优先排查顺序
 
+<a id="插件文档索引"></a>
 ## 🧩 插件文档索引
 
 - [插件文档目录](docs/plugins/README.md)
 - [协议端管理（pallas_protocol）](docs/plugins/pallas_protocol/README.md)
 - [控制台（pallas_webui）](docs/plugins/pallas_webui/README.md)
 
+<a id="开发与贡献指南"></a>
 ## 💻 开发与贡献指南
 
 欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。  
 查看我们的 [贡献指南](CONTRIBUTING.md)，了解如何参与贡献。
 
 
+<a id="社区与支持"></a>
 ## 🤝 社区与支持
 
+<a id="qq-群"></a>
 ### 💬 QQ 群
 
 - #### 开发者
@@ -246,6 +262,7 @@ uv run nb run
   - [`西海福牛养殖学院`](https://qm.qq.com/q/8P)
   - [`丽丽玛玛玛?`](https://qm.qq.com/q/Qgc6ir7Jk)
 
+<a id="打赏"></a>
 ### 💝 打赏
 
 请作者喝杯咖啡吧（请备注牛牛项目，感谢你的支持 ✿✿ヽ(°▽°)ノ✿）：  
@@ -254,6 +271,7 @@ uv run nb run
   <img width="200" src="https://pic1.afdiancdn.com/static/img/welcome/button-sponsorme.png">
 </a>
 
+<a id="致谢"></a>
 ## 🙏 致谢
 
 - [`NoneBot2`](https://github.com/nonebot/nonebot2)：跨平台 Python 异步聊天机器人框架 
@@ -290,6 +308,7 @@ uv run nb run
 
 [![Contributors](https://contributors-img.web.app/image?repo=PallasBot/Pallas-Bot)](https://github.com/PallasBot/Pallas-Bot/graphs/contributors)
 
+<a id="许可证"></a>
 ## 📄 许可证
 
 本项目采用 `GNU Affero General Public License v3.0`（AGPL-3.0）许可证，详见 [LICENSE](LICENSE)。
