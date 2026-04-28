@@ -65,7 +65,7 @@ async def _cached_read(
         data = await loader()
     except Exception:
         if hit and now < float(hit["stale_exp"]):
-            logger.warning("Pallas 控制台: 使用缓存兜底 key=%s", key)
+            logger.warning("Pallas 控制台: 使用缓存兜底 key={}", key)
             return hit["data"]
         raise
     _READ_CACHE[key] = {
@@ -535,7 +535,7 @@ async def _call_get_group_list(
     try:
         raw = await bot.call_api("get_group_list")  # type: ignore[union-attr]
     except Exception as e:  # noqa: BLE001
-        logger.warning("Pallas 控制台: get_group_list 调用失败: %s", e)
+        logger.warning("Pallas 控制台: get_group_list 调用失败: {}", e)
         return [], str(e), False
     groups_raw: list[Any]
     if isinstance(raw, list):
@@ -548,16 +548,16 @@ async def _call_get_group_list(
                 groups_raw = v
                 break
         if not groups_raw:
-            logger.warning("Pallas 控制台: get_group_list 返回 dict 但未找到列表字段, keys=%s", list(raw.keys()))
+            logger.warning("Pallas 控制台: get_group_list 返回 dict 但未找到列表字段, keys={}", list(raw.keys()))
     else:
-        logger.warning("Pallas 控制台: get_group_list 返回意外类型 %s", type(raw).__name__)
+        logger.warning("Pallas 控制台: get_group_list 返回意外类型 {}", type(raw).__name__)
         groups_raw = []
     out: list[dict[str, Any]] = []
     for it in groups_raw:
         try:
             row = _normalize_group_list_item(it)
         except Exception as e:  # noqa: BLE001
-            logger.warning("Pallas 控制台: 群列表条目解析失败 item=%r err=%s", it, e)
+            logger.warning("Pallas 控制台: 群列表条目解析失败 item={} err={}", repr(it), e)
             continue
         if row:
             out.append(row)
@@ -903,7 +903,7 @@ async def _collect_online_bot_profiles() -> dict[str, dict[str, Any]]:
         try:
             raw = await bot.call_api("get_login_info")  # type: ignore[union-attr]
         except Exception:  # noqa: BLE001
-            logger.debug("Pallas 控制台: get_login_info 失败 key=%s self_id=%s", key, self_id)
+            logger.debug("Pallas 控制台: get_login_info 失败 key={} self_id={}", key, self_id)
             continue
         if not isinstance(raw, dict):
             continue

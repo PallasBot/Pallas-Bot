@@ -115,7 +115,7 @@ async def _pallas_webui_startup() -> None:
             except Exception as e:
                 errors.append(f"{candidate} -> {e}")
         if errors:
-            logger.error("Pallas 控制台: 下载或解压 dist zip 失败，已尝试: %s", " | ".join(errors))
+            logger.error("Pallas 控制台: 下载或解压 dist zip 失败，已尝试: {}", " | ".join(errors))
         elif succeeded_url:
             # 记录已安装版本
             try:
