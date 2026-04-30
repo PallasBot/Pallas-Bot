@@ -55,6 +55,16 @@ def register_routes(
     def _request_token(request: Request, query_token: str | None) -> str:
         return (query_token or request.cookies.get(page_cookie_name) or "").strip()
 
+    def _refresh_page_cookie(response: FileResponse | RedirectResponse, request: Request, token: str) -> None:
+        response.set_cookie(
+            key=page_cookie_name,
+            value=token,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+            path=base or "/",
+        )
+
     def _login_redirect(next_path: str, *, reason: str = "") -> RedirectResponse:
         encoded_next = quote(next_path, safe="/?=&-_.~")
         if reason:
@@ -178,8 +188,8 @@ def register_routes(
   <section class="card">
     <h2>Pallas 控制台登录</h2>
     <p>请输入控制台 Token 后进入 WebUI。</p>
-    {'<p class="msg warn">' + html_escape(detail) + '</p>' if detail else ''}
-    {'<p class="msg err">' + html_escape(error) + '</p>' if error else ''}
+    {'<p class="msg warn">' + html_escape(detail) + "</p>" if detail else ""}
+    {'<p class="msg err">' + html_escape(error) + "</p>" if error else ""}
     <form id="loginForm" method="post" action="{base}/login">
       <input type="hidden" name="next" value="{html_escape(target, quote=True)}" />
       <input
@@ -277,7 +287,9 @@ def register_routes(
             )
         idx = public_dir / "index.html"
         if idx.is_file():
-            return FileResponse(idx)
+            response = FileResponse(idx)
+            _refresh_page_cookie(response, request, got)
+            return response
         logger.warning(
             f"Pallas 控制台: 未找到 {public_dir / 'index.html'}，可设置 pallas_webui_dist_zip_url 或手动放置构建产物。",
         )
@@ -313,14 +325,18 @@ def register_routes(
             if target.suffix.lower() == ".html":
                 got = _request_token(request, token)
                 if _is_token_valid(got):
-                    return FileResponse(target)
+                    response = FileResponse(target)
+                    _refresh_page_cookie(response, request, got)
+                    return response
                 return _login_redirect(f"{base}/{path}", reason="请先登录后再访问页面")
             return FileResponse(target)
         fallback = _pick_index_fallback()
         if fallback is not None:
             got = _request_token(request, token)
             if _is_token_valid(got):
-                return FileResponse(fallback)
+                response = FileResponse(fallback)
+                _refresh_page_cookie(response, request, got)
+                return response
             return _login_redirect(f"{base}/{path}", reason="请先登录后再访问页面")
         return HTMLResponse(
             content=_PLACEHOLDER_HTML,
