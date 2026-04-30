@@ -1,6 +1,6 @@
 [project]
 name = "pallas-bot"
-version = "2.2.0"
+version = "3.0.0"
 description = "《明日方舟》帕拉斯 Bot"
 authors = [{ name = "MistEO" }]
 maintainers = [{ name = "mxcoras", email = "mxcoras@outlook.com" }]
