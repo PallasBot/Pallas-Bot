@@ -167,16 +167,10 @@ jobs:
             - 主仓插件说明（自动下载/部署配置）：[docs/plugins/pallas_webui/README.md](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/plugins/pallas_webui/README.md)
             - 前端仓库说明（开发/发版/对接）：[PallasBot/Pallas-Bot-WebUI README](https://github.com/PallasBot/Pallas-Bot-WebUI/blob/main/README.md)
 
-            ## WebUI 快速配置（可复制）
+            ## WebUI 使用说明
 
-            ```env
-            PALLAS_WEBUI_DIST_ZIP_URL=
-            PALLAS_WEBUI_DIST_ZIP_REPO=TogetsuDo/Pallas-Bot-WebUI
-            PALLAS_WEBUI_DIST_ZIP_TAG=
-            PALLAS_WEBUI_DIST_ZIP_ASSET=dist.zip
-            ```
-
-            说明：`PALLAS_WEBUI_DIST_ZIP_TAG` 留空表示自动跟随 latest；如需固定版本请填写具体 tag（例如 `v0.2.0`）。
+            默认无需手动配置，首次启用时会自动下载并部署 WebUI 静态资源。
+            如需手动部署，可下载 Release 附件中的 `pallas-webui-dist.zip`（即 `dist.zip`），解压到 `data/pallas_webui/public`。
           files: |
             pallas-webui-dist.zip
           draft: false

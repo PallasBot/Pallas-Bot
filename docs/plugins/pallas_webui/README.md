@@ -18,47 +18,20 @@ PALLAS_WEBUI_API_TOKEN=你的控制台口令
 - `PALLAS_WEBUI_API_TOKEN` 为空时，写操作不做 token 校验；建议生产环境设置
 - 页面默认地址是 `/pallas/`，改了 `HTTP_BASE` 后地址会跟着变
 
-## 前端静态资源从哪来
+## 前端静态资源
 
-启动时先检查：
+默认无需手动配置。启动时如果不存在 `data/pallas_webui/public/index.html`，插件会自动下载并解压 WebUI 产物。
 
-- `data/pallas_webui/public/index.html`
+如需手动部署，可下载 `Pallas-Bot-WebUI` Release 中的 `dist.zip`，解压到 `data/pallas_webui/public`。
 
-存在：直接使用本地文件  
-不存在：触发自动下载
+## 下载高级配置（按需）
 
-下载优先级：
+仅在你需要指定下载来源或固定版本时再配置：
 
-1. 若设置了 `PALLAS_WEBUI_DIST_ZIP_URL`，优先直链下载
-2. 否则走 GitHub Release 解析（仓库/tag/资产名）
-3. 全部候选失败时，日志会输出失败详情
-
-## 下载相关配置（按需）
-
-- `PALLAS_WEBUI_DIST_ZIP_URL`：直链下载地址（最直接）
+- `PALLAS_WEBUI_DIST_ZIP_URL`：直链下载地址（优先级最高）
 - `PALLAS_WEBUI_DIST_ZIP_REPO`：仓库（默认 `PallasBot/Pallas-Bot-WebUI`）
-- `PALLAS_WEBUI_DIST_ZIP_TAG`：版本 tag（空为 latest）
+- `PALLAS_WEBUI_DIST_ZIP_TAG`：版本 tag（留空表示 latest）
 - `PALLAS_WEBUI_DIST_ZIP_ASSET`：资产名（默认 `dist.zip`）
-
-## 推荐配置示例
-
-### 自动跟随最新
-
-```env
-PALLAS_WEBUI_DIST_ZIP_URL=
-PALLAS_WEBUI_DIST_ZIP_REPO=PallasBot/Pallas-Bot-WebUI
-PALLAS_WEBUI_DIST_ZIP_TAG=
-PALLAS_WEBUI_DIST_ZIP_ASSET=dist.zip
-```
-
-### 固定某个版本
-
-```env
-PALLAS_WEBUI_DIST_ZIP_URL=
-PALLAS_WEBUI_DIST_ZIP_REPO=PallasBot/Pallas-Bot-WebUI
-PALLAS_WEBUI_DIST_ZIP_TAG=v0.2.0
-PALLAS_WEBUI_DIST_ZIP_ASSET=dist.zip
-```
 
 ## 常见问题
 
