@@ -13,7 +13,7 @@ import typing
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from nonebot import get_bots, get_driver, get_loaded_plugins, get_plugin_config, logger
 from nonebot.adapters import Bot as BaseBot  # noqa: TC002
@@ -398,6 +398,31 @@ def _ai_extension_config_path():
     return plugin_data_dir("pallas_webui") / "ai_extension.json"
 
 
+def _ai_extension_log_roots() -> list[Path]:
+    """允许的日志根目录：仓库根 + 同级 Pallas-Bot-AI 根。"""
+    repo_root = Path(__file__).resolve().parents[3]
+    ai_root = (repo_root.parent / "Pallas-Bot-AI").resolve()
+    return [repo_root.resolve(), ai_root]
+
+
+def _is_allowed_log_path(path_s: str) -> bool:
+    """限制日志读取仅落在白名单根内，挡住 /etc/passwd 等任意文件读取。"""
+    s = (path_s or "").strip()
+    if not s:
+        return False
+    try:
+        p = Path(s).resolve()
+    except (OSError, RuntimeError):
+        return False
+    for root in _ai_extension_log_roots():
+        try:
+            if p == root or p.is_relative_to(root):
+                return True
+        except (OSError, RuntimeError):
+            continue
+    return False
+
+
 def _normalize_ai_extension_config(raw: dict[str, Any] | None) -> dict[str, Any]:
     d = raw or {}
     base_url = str(d.get("base_url", "")).strip() or "http://127.0.0.1:9099"
@@ -414,8 +439,15 @@ def _normalize_ai_extension_config(raw: dict[str, Any] | None) -> dict[str, Any]
         health_paths = ["/health", "/api/health"]
     root = Path(__file__).resolve().parents[3]
     default_ai_root = (root.parent / "Pallas-Bot-AI").resolve()
-    uvicorn_log_file = str(d.get("uvicorn_log_file", "")).strip() or str(default_ai_root / "logs" / "app.log")
-    celery_log_file = str(d.get("celery_log_file", "")).strip() or str(default_ai_root / "logs" / "app.log")
+    default_uvicorn_log = str(default_ai_root / "logs" / "app.log")
+    default_celery_log = str(default_ai_root / "logs" / "app.log")
+    uvicorn_log_file = str(d.get("uvicorn_log_file", "")).strip() or default_uvicorn_log
+    celery_log_file = str(d.get("celery_log_file", "")).strip() or default_celery_log
+    # 任一路径越界即回退默认值，避免被持票攻击者污染配置后读任意文件
+    if not _is_allowed_log_path(uvicorn_log_file):
+        uvicorn_log_file = default_uvicorn_log
+    if not _is_allowed_log_path(celery_log_file):
+        celery_log_file = default_celery_log
     timeout_sec = d.get("timeout_sec", 8)
     try:
         timeout_i = int(timeout_sec)
@@ -1035,34 +1067,28 @@ def _runtime_metrics() -> dict[str, Any]:
     }
 
 
-def _check_pallas_write_token(
-    plugin_config: Any,
-    *,
-    x_pallas_token: str | None,
-    token: str | None,
-) -> None:
-    need = (getattr(plugin_config, "pallas_webui_api_token", None) or "").strip()
-    if not need:
-        return
-    if (x_pallas_token or token or "").strip() != need:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-
 def _require_pallas_token_configured(
     plugin_config: Any,
     *,
     x_pallas_token: str | None,
     token: str | None,
 ) -> None:
-    """数据库管道等敏感能力：未配置 token 时直接拒绝，避免匿名滥用。"""
+    """所有控制台 API 共享的鉴权入口：未配置 token 时直接 403，避免匿名滥用。"""
     need = (getattr(plugin_config, "pallas_webui_api_token", None) or "").strip()
     if not need:
         raise HTTPException(
             status_code=403,
-            detail="请先在环境变量中配置 pallas_webui_api_token，并在控制台设置页填入后再试",
+            detail=(
+                "pallas_webui_api_token 未配置，控制台 API 已禁用；"
+                "请在 .env 中设置 PALLAS_WEBUI_API_TOKEN 并在控制台设置页填入后再试"
+            ),
         )
     if (x_pallas_token or token or "").strip() != need:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+# 历史调用点保留同名别名，写操作与受保护读操作行为已统一
+_check_pallas_write_token = _require_pallas_token_configured
 
 
 class _BotConfigPatch(BaseModel):
@@ -1350,7 +1376,18 @@ def register_extended_api(
         x = "/" + x
     x = x.rstrip("/")
 
-    router = APIRouter(tags=["Pallas 控制台"])
+    async def _pallas_token_dep(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> None:
+        """全局依赖：所有控制台 API（除 /health 外）必须携带有效 token。"""
+        _require_pallas_token_configured(
+            plugin_config,
+            x_pallas_token=x_pallas_token,
+            token=token,
+        )
+
+    router = APIRouter(tags=["Pallas 控制台"], dependencies=[Depends(_pallas_token_dep)])
 
     @router.get(f"{x}/system", include_in_schema=True)
     async def _system() -> JSONResponse:
@@ -1920,6 +1957,14 @@ def register_extended_api(
     ) -> JSONResponse:
         cfg = _load_ai_extension_config()
         path_s = str(cfg["uvicorn_log_file"] if kind == "uvicorn" else cfg["celery_log_file"])
+        # 防御深度：即便规范化阶段已校验，读取前再检一次，杜绝持久化污染绕过
+        if not _is_allowed_log_path(path_s):
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "data": {"kind": kind, "path": path_s, "lines": [], "error": "日志路径越界，已拒绝"},
+                },
+            )
         p = Path(path_s)
         if not await asyncio.to_thread(p.exists):
             return JSONResponse(

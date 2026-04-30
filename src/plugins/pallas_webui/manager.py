@@ -141,6 +141,29 @@ def _resolved_extract_root(archive_dir: Path) -> Path:
     return archive_dir
 
 
+def _safe_extract_zip(zf: zipfile.ZipFile, extract_root: Path) -> None:
+    """防 Zip Slip：逐成员校验解析后路径必须落在 extract_root 内部。"""
+    root = extract_root.resolve()
+    for member in zf.infolist():
+        raw_name = member.filename or ""
+        if not raw_name:
+            continue
+        # 拒绝绝对路径与 Windows 驱动器/UNC 前缀
+        if raw_name.startswith(("/", "\\")) or (len(raw_name) >= 2 and raw_name[1] == ":"):
+            msg = f"禁止的 ZIP 路径（绝对路径）: {raw_name}"
+            raise ValueError(msg)
+        dest = (root / raw_name).resolve()
+        if dest != root and not dest.is_relative_to(root):
+            msg = f"禁止的 ZIP 路径（越界）: {raw_name}"
+            raise ValueError(msg)
+        if member.is_dir():
+            dest.mkdir(parents=True, exist_ok=True)
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(member) as src, dest.open("wb") as dst:
+            shutil.copyfileobj(src, dst)
+
+
 def _sync_write_dist_from_zip_bytes(public_dir: Path, content: bytes) -> None:
     public_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
@@ -150,7 +173,7 @@ def _sync_write_dist_from_zip_bytes(public_dir: Path, content: bytes) -> None:
         with zipfile.ZipFile(zip_path) as zf:
             extract_root = tpath / "extracted"
             extract_root.mkdir()
-            zf.extractall(extract_root)
+            _safe_extract_zip(zf, extract_root)
         source = _resolved_extract_root(extract_root)
         if public_dir.exists():
             shutil.rmtree(public_dir)

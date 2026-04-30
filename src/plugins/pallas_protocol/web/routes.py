@@ -20,7 +20,10 @@ def _check_pallas_protocol_token(
 ) -> None:
     need = (plugin_config.pallas_protocol_token or "").strip()
     if not need:
-        return
+        raise HTTPException(
+            status_code=403,
+            detail="pallas_protocol_token 未配置，协议端管理 API 已禁用；请在 .env 中设置 PALLAS_PROTOCOL_TOKEN 后再试",
+        )
     got = (x_pallas_protocol_token or query_token or "").strip()
     if got != need:
         raise HTTPException(status_code=401, detail="Invalid token")

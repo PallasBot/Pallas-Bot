@@ -26,8 +26,17 @@ class Config(BaseModel):
         description="pallas_webui_dist_zip_url 为空时生效：发布资产文件名",
     )
     pallas_webui_cors: bool = Field(
-        default=True,
-        description="为开发时前后端分离调试开启 CORS（例如 Vite dev 连远程 Bot）",
+        default=False,
+        description=(
+            "为开发时前后端分离调试开启 CORS（例如 Vite dev 连远程 Bot）；启用前请同时配置 pallas_webui_allowed_origins"
+        ),
+    )
+    pallas_webui_allowed_origins: list[str] = Field(
+        default_factory=list,
+        description=(
+            "启用 CORS 时允许的来源列表（如 ['http://localhost:5173']）；"
+            "为空则不挂载 CORS 中间件；含 '*' 时强制关闭 allow_credentials"
+        ),
     )
     pallas_webui_log_lines_max: int = Field(
         default=2000,
@@ -37,5 +46,5 @@ class Config(BaseModel):
     )
     pallas_webui_api_token: str = Field(
         default="",
-        description="非空时：对 Bot/群 配置、实例相关写操作要求 X-Pallas-Token 或 ?token=",
+        description="控制台 API 鉴权 token；未配置时 /pallas/api/* 全部禁用（仅 /pallas/api/health 例外）",
     )

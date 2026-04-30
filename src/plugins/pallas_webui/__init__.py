@@ -65,23 +65,35 @@ plugin_config = get_plugin_config(Config)
 app = get_app()
 driver = get_driver()
 
-# 启用控制台跨域访问
+# 启用控制台跨域访问：仅在显式列出来源时挂载，避免 ['*'] + credentials 的 CSRF 组合
 if plugin_config.pallas_webui_enabled and plugin_config.pallas_webui_cors:
-    from fastapi.middleware.cors import CORSMiddleware
+    _cors_origins = [str(o).strip() for o in (plugin_config.pallas_webui_allowed_origins or []) if str(o).strip()]
+    if not _cors_origins:
+        logger.warning("Pallas 控制台: pallas_webui_cors=True 但 pallas_webui_allowed_origins 为空，未挂载 CORS 中间件")
+    else:
+        from fastapi.middleware.cors import CORSMiddleware
 
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+        _has_wildcard = "*" in _cors_origins
+        if _has_wildcard:
+            logger.warning("Pallas 控制台: pallas_webui_allowed_origins 含 '*'，已强制关闭 allow_credentials 以防 CSRF")
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=_cors_origins,
+            allow_credentials=not _has_wildcard,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
 
 @driver.on_startup
 async def _pallas_webui_startup() -> None:
     if not plugin_config.pallas_webui_enabled:
         return
+    if not (plugin_config.pallas_webui_api_token or "").strip():
+        logger.warning(
+            "Pallas 控制台: 未配置 PALLAS_WEBUI_API_TOKEN，所有 /pallas/api/* 已禁用（仅 /health 例外）；"
+            "请在 .env 中设置 PALLAS_WEBUI_API_TOKEN 后重启"
+        )
     public = webui_public_path()
     url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
     url_candidates: list[str] = []

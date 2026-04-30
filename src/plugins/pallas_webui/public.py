@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import posixpath
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, HTTPException
@@ -40,6 +41,31 @@ def register_routes(
     if not base.startswith("/"):
         base = "/" + base
     base = base.rstrip("/")
+
+    root_resolved = public_dir.resolve()
+
+    def _pick_static_target(raw_path: str) -> Path | None:
+        """同步 IO：在 root_resolved 内挑选要响应的静态文件；越界一律返回 None。"""
+        normalized = posixpath.normpath("/" + raw_path).lstrip("/")
+        try:
+            candidate = (public_dir / normalized).resolve()
+        except (OSError, RuntimeError):
+            return None
+        try:
+            candidate.relative_to(root_resolved)
+        except ValueError:
+            return None
+        if candidate.is_file():
+            return candidate
+        if candidate.is_dir():
+            inner = candidate / "index.html"
+            if inner.is_file():
+                return inner
+        return None
+
+    def _pick_index_fallback() -> Path | None:
+        idx = public_dir / "index.html"
+        return idx if idx.is_file() else None
 
     router = APIRouter()
 
@@ -82,14 +108,12 @@ def register_routes(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"JSON 接口请使用 {base}/api/，勿走静态 catch-all",
             )
-        candidate = public_dir / path
-        if candidate.is_file():
-            return FileResponse(candidate)
-        if candidate.is_dir() and (candidate / "index.html").is_file():
-            return FileResponse(candidate / "index.html")
-        idx = public_dir / "index.html"
-        if idx.is_file():
-            return FileResponse(idx)
+        target = _pick_static_target(path)
+        if target is not None:
+            return FileResponse(target)
+        fallback = _pick_index_fallback()
+        if fallback is not None:
+            return FileResponse(fallback)
         return HTMLResponse(
             content=_PLACEHOLDER_HTML,
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
