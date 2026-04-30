@@ -37,7 +37,7 @@ PALLAS_PROTOCOL_TOKEN=你的管理口令
 
 - `PALLAS_PROTOCOL_ENABLED`：是否启用插件
 - `PALLAS_PROTOCOL_WEBUI_ENABLED`：是否启用管理页
-- `PALLAS_PROTOCOL_TOKEN`：必填，用于管理页/API 鉴权
+- `PALLAS_PROTOCOL_TOKEN`：必填，用于管理页/API 鉴权；必须按字符串填写（纯数字请加引号，如 `"1234"`）
 
 很多情况下，默认值就已经够用，连这几项都不一定需要额外改。
 

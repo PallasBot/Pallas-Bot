@@ -155,7 +155,12 @@ async def _pallas_webui_startup() -> None:
     webui_version = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
     set_console_meta({"static_root": str(public), "http_base": base, "version": webui_version})
     register_extended_api(app, api_base=api_base, plugin_config=plugin_config)
-    register_routes(app, public_dir=public, base=base)
+    register_routes(
+        app,
+        public_dir=public,
+        base=base,
+        api_token=str(getattr(plugin_config, "pallas_webui_api_token", "") or ""),
+    )
     dconf = get_driver().config
     open_base = public_base_url(
         host=getattr(dconf, "host", None),

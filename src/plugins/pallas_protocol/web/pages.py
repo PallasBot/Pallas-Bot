@@ -321,16 +321,34 @@ textarea.cfg { min-height: 220px; }
 
 def _render_common_api_js() -> str:
     return """
+    function getSessionToken() {
+      return (sessionStorage.getItem("pallas_protocol_token_session") || "").trim();
+    }
+
+    async function logout() {
+      sessionStorage.removeItem("pallas_protocol_token_session");
+      try {
+        await fetch(`${basePath}/logout`, { method: "POST" });
+      } finally {
+        location.href = `${basePath}/login`;
+      }
+    }
+
     async function api(path, options = {}) {
-      const token = (document.getElementById("token")?.value || "").trim();
+      const token = getSessionToken();
       const headers = options.headers || {};
       if (token) headers["X-Pallas-Protocol-Token"] = token;
-      const joiner = path.includes("?") ? "&" : "?";
-      const tokenPart = token ? `${joiner}token=${encodeURIComponent(token)}` : "";
-      const res = await fetch(`${basePath}${path}${tokenPart}`, { ...options, headers });
+      const res = await fetch(`${basePath}${path}`, { ...options, headers });
       if (!res.ok) throw new Error((await res.text()) || res.status);
       return res.json();
     }
+
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-action='logout']");
+      if (!btn) return;
+      e.preventDefault();
+      logout();
+    });
 """
 
 
@@ -340,12 +358,13 @@ def _render_hidden_token_sync_js(back_button_id: str = "backDash") -> str:
     (function initTokenSync() {{
       const u = new URL(location.href);
       const fromQs = (u.searchParams.get("token") || "").trim();
-      const fromLs = (localStorage.getItem("pallas_protocol_token") || "").trim();
-      const t = fromQs || fromLs;
+      const fromSession = (sessionStorage.getItem("pallas_protocol_token_session") || "").trim();
+      const t = fromQs || fromSession;
+      if (t) sessionStorage.setItem("pallas_protocol_token_session", t);
       const tokenEl = document.getElementById("token");
       if (tokenEl) tokenEl.value = t;
       const b = document.getElementById({back_id_js});
-      if (b) b.href = t ? basePath + "?token=" + encodeURIComponent(t) : basePath;
+      if (b) b.href = basePath;
     }})();
 """
 
@@ -367,11 +386,9 @@ def render_dashboard(base_path: str) -> str:
     <header class="topbar">
       <div class="brand">Pallas <span>协议端仪表盘</span></div>
       <div class="row" style="margin-left:auto;align-items:center;flex-wrap:wrap;gap:8px">
-        <div class="token-inline">
-          <input id="token" type="password" autocomplete="off" placeholder="Token" />
-        </div>
         <a href="#" class="btn secondary" id="linkRuntime">更新/下载</a>
         <a href="#" class="btn secondary" id="linkImport">导入账号</a>
+        <button class="btn secondary" type="button" data-action="logout">退出登录</button>
         <button class="btn secondary" id="btnTheme" type="button">切换深浅</button>
         <button class="btn secondary" id="btnRefresh" type="button" onclick="refreshAccounts()">刷新</button>
       </div>
@@ -423,12 +440,6 @@ def render_dashboard(base_path: str) -> str:
       if (typeof el.textContent === "string") el.textContent = busy ? busyText : idleText;
     }}
     (function initPagePrefs() {{
-      const t = localStorage.getItem("pallas_protocol_token") || "";
-      const tokenEl = document.getElementById("token");
-      tokenEl.value = t;
-      tokenEl.addEventListener("input", () => {{
-        localStorage.setItem("pallas_protocol_token", tokenEl.value || "");
-      }});
       applyTheme(localStorage.getItem("pallas_protocol_theme") || "light");
       document.getElementById("btnTheme").addEventListener("click", () => {{
         const now = document.body.getAttribute("data-theme") === "dark" ? "dark" : "light";
@@ -446,25 +457,18 @@ def render_dashboard(base_path: str) -> str:
 {common_api_js}
     document.getElementById("linkNewAccount").addEventListener("click", (e) => {{
       e.preventDefault();
-      const t = document.getElementById("token").value.trim();
-      location.href = `${{basePath}}/new${{t ? "?token=" + encodeURIComponent(t) : ""}}`;
+      location.href = `${{basePath}}/new`;
     }});
     document.getElementById("linkRuntime").addEventListener("click", (e) => {{
       e.preventDefault();
-      const t = document.getElementById("token").value.trim();
-      location.href = `${{basePath}}/runtime${{t ? "?token=" + encodeURIComponent(t) : ""}}`;
+      location.href = `${{basePath}}/runtime`;
     }});
     document.getElementById("linkImport").addEventListener("click", (e) => {{
       e.preventDefault();
-      const t = document.getElementById("token").value.trim();
-      location.href = `${{basePath}}/import${{t ? "?token=" + encodeURIComponent(t) : ""}}`;
+      location.href = `${{basePath}}/import`;
     }});
     function openAccount(id) {{
-      const token = document.getElementById("token").value.trim();
-      const q = new URLSearchParams();
-      if (token) q.set("token", token);
-      const qs = q.toString();
-      location.href = `${{basePath}}/account/${{encodeURIComponent(id)}}${{qs ? "?" + qs : ""}}`;
+      location.href = `${{basePath}}/account/${{encodeURIComponent(id)}}`;
     }}
     function renderKpis(rows) {{
       const total = rows.length;
@@ -711,7 +715,10 @@ def render_import_page(base_path: str) -> str:
   <div class="shell">
     <header class="topbar">
       <div class="brand">Pallas <span>导入账号</span></div>
-      <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="margin-left:auto;display:inline-flex;align-items:center">← 返回仪表盘</a>
+      <div class="row" style="margin-left:auto;align-items:center;gap:8px">
+        <button class="btn secondary" type="button" data-action="logout">退出登录</button>
+        <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="display:inline-flex;align-items:center">← 返回仪表盘</a>
+      </div>
     </header>
 
     <div class="card" style="max-width:42rem">
@@ -847,7 +854,10 @@ def render_new_account_page(base_path: str) -> str:
   <div class="shell">
     <header class="topbar">
       <div class="brand">新建 <span>账号</span></div>
-      <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="margin-left:auto;display:inline-flex;align-items:center">← 返回仪表盘</a>
+      <div class="row" style="margin-left:auto;align-items:center;gap:8px">
+        <button class="btn secondary" type="button" data-action="logout">退出登录</button>
+        <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="display:inline-flex;align-items:center">← 返回仪表盘</a>
+      </div>
     </header>
     <div class="card" style="max-width:28rem">
       <div class="field"><label>QQ 号</label>
@@ -908,7 +918,7 @@ def render_new_account_page(base_path: str) -> str:
         if (!qq) throw new Error("请填写 QQ 号");
         await api("/api/accounts", {{ method: "POST", headers: {{ "Content-Type": "application/json" }}, body: JSON.stringify(body) }});
         const t = (document.getElementById("token").value || "").trim();
-        location.href = t ? basePath + "?token=" + encodeURIComponent(t) : basePath;
+        location.href = basePath;
       }} catch (e) {{ alert(e.message); }}
     }}
   </script>
@@ -935,7 +945,10 @@ def render_runtime_page(base_path: str) -> str:
   <div class="shell">
     <header class="topbar">
       <div class="brand">Pallas <span>更新/下载</span></div>
-      <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="margin-left:auto;display:inline-flex;align-items:center">← 返回仪表盘</a>
+      <div class="row" style="margin-left:auto;align-items:center;gap:8px">
+        <button class="btn secondary" type="button" data-action="logout">退出登录</button>
+        <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="display:inline-flex;align-items:center">← 返回仪表盘</a>
+      </div>
     </header>
     <div class="card">
       <p class="muted">
@@ -1456,7 +1469,10 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
   <div class="shell">
     <header class="topbar">
       <div class="brand">账号 <span>{aid_h}</span></div>
-      <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="margin-left:auto;display:inline-flex;align-items:center">← 返回仪表盘</a>
+      <div class="row" style="margin-left:auto;align-items:center;gap:8px">
+        <button class="btn secondary" type="button" data-action="logout">退出登录</button>
+        <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="display:inline-flex;align-items:center">← 返回仪表盘</a>
+      </div>
     </header>
     <div class="layout-acc">
       <nav class="side" id="nav">
@@ -1538,8 +1554,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       document.querySelectorAll(".panel").forEach((el) => el.classList.remove("active"));
       document.getElementById("panel-" + name).classList.add("active");
       document.querySelectorAll(".side a[data-tab]").forEach((a) => a.classList.toggle("active", a.dataset.tab === name));
-      const t = document.getElementById("token").value.trim();
-      const q = "tab=" + encodeURIComponent(name) + (t ? "&token=" + encodeURIComponent(t) : "");
+      const q = "tab=" + encodeURIComponent(name);
       history.replaceState(null, "", `${{basePath}}/account/${{encodeURIComponent(accountId)}}?${{q}}`);
       if (name === "settings") loadHints();
     }}
@@ -1551,8 +1566,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
     }});
     document.getElementById("accLinkRuntime").addEventListener("click", (e) => {{
       e.preventDefault();
-      const t = document.getElementById("token").value.trim();
-      location.href = `${{basePath}}/runtime${{t ? "?token=" + encodeURIComponent(t) : ""}}`;
+      location.href = `${{basePath}}/runtime`;
     }});
     async function loadHints() {{
       try {{

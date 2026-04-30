@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from html import escape as html_escape
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 if TYPE_CHECKING:
@@ -17,6 +18,7 @@ def _check_pallas_protocol_token(
     plugin_config: Config,
     x_pallas_protocol_token: str | None,
     query_token: str | None,
+    cookie_token: str | None = None,
 ) -> None:
     need = (plugin_config.pallas_protocol_token or "").strip()
     if not need:
@@ -24,9 +26,17 @@ def _check_pallas_protocol_token(
             status_code=403,
             detail="pallas_protocol_token 未配置，协议端管理 API 已禁用；请在 .env 中设置 PALLAS_PROTOCOL_TOKEN 后再试",
         )
-    got = (x_pallas_protocol_token or query_token or "").strip()
+    got = (x_pallas_protocol_token or query_token or cookie_token or "").strip()
+    if not got:
+        raise HTTPException(
+            status_code=401,
+            detail="未提供协议端管理 Token",
+        )
     if got != need:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(
+            status_code=401,
+            detail="协议端管理 Token 校验失败，请重新输入后登录",
+        )
 
 
 def register_pallas_protocol_routes(
@@ -45,39 +55,261 @@ def register_pallas_protocol_routes(
     )
 
     base = resolve_protocol_webui_base_path(plugin_config)
+    page_cookie_name = "pallas_protocol_page_token"
 
-    def _auth(h: str | None, q: str | None) -> None:
-        _check_pallas_protocol_token(plugin_config, h, q)
+    def _auth(h: str | None, q: str | None, c: str | None = None) -> None:
+        _check_pallas_protocol_token(plugin_config, h, q, c)
+
+    def _ensure_page_auth(
+        *,
+        request: Request,
+        token: str | None,
+        x_pallas_protocol_token: str | None,
+        next_path: str,
+    ) -> RedirectResponse | None:
+        try:
+            cookie_token = request.cookies.get(page_cookie_name)
+            _auth(x_pallas_protocol_token, token, cookie_token)
+            return None
+        except HTTPException as e:
+            encoded_next = quote(next_path, safe="/?=&-_.~")
+            detail = str(getattr(e, "detail", "") or "鉴权失败")
+            if detail == "未提供协议端管理 Token":
+                return RedirectResponse(url=f"{base}/login?next={encoded_next}", status_code=307)
+            reason = quote(detail, safe="")
+            return RedirectResponse(url=f"{base}/login?next={encoded_next}&reason={reason}", status_code=307)
+
+    def _resolve_login_target(next_path: str | None) -> str:
+        target = (next_path or f"{base}/").strip() or f"{base}/"
+        if not target.startswith(base):
+            target = f"{base}/"
+        return target
+
+    def _render_login_page(*, target: str, err: str, detail: str) -> HTMLResponse:
+        error_html = f"<p style='color:#c0392b;margin-top:8px'>{html_escape(err)}</p>" if err else ""
+        detail_html = f"<p style='color:#8a6d3b;margin-top:8px'>{html_escape(detail)}</p>" if detail else ""
+        return HTMLResponse(
+            f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pallas 协议端登录</title>
+  <style>
+    :root {{
+      --bg0: #f2f6fc;
+      --card: #ffffff;
+      --bd: rgba(22, 100, 196, 0.14);
+      --txt: #1f2a44;
+      --muted: #5c6e8f;
+      --accent: #1664c4;
+      --radius: 14px;
+      --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }}
+    @media (prefers-color-scheme: dark) {{
+      :root {{
+        --bg0: #070a0f;
+        --card: #121a28;
+        --bd: rgba(148, 163, 184, 0.16);
+        --txt: #e8edf7;
+        --muted: #8b9bb8;
+        --accent: #38bdf8;
+      }}
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      background: radial-gradient(1200px 600px at 10% -10%, rgba(22,100,196,0.10), transparent), var(--bg0);
+      color: var(--txt);
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }}
+    .card {{
+      width: min(520px, 100%);
+      background: var(--card);
+      border: 1px solid var(--bd);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: 0 12px 28px rgba(15, 35, 65, 0.16);
+    }}
+    h2 {{ margin: 0 0 8px; }}
+    p {{ margin: 0; color: var(--muted); line-height: 1.6; }}
+    .msg {{ margin-top: 10px; font-size: 14px; }}
+    .msg.err {{ color: #d84a4a; }}
+    .msg.warn {{ color: #b45309; }}
+    form {{ margin-top: 14px; display: grid; gap: 10px; }}
+    .hint {{ margin-top: 8px; font-size: 13px; color: var(--muted); }}
+    input {{
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--bd);
+      background: transparent;
+      color: var(--txt);
+      padding: 11px 12px;
+      font: inherit;
+    }}
+    button {{
+      border: none;
+      border-radius: 10px;
+      padding: 11px 14px;
+      font: inherit;
+      font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, var(--accent), #2b78d6);
+      cursor: pointer;
+    }}
+  </style>
+</head>
+<body>
+  <section class="card">
+    <h2>Pallas 协议端登录</h2>
+    <p>请输入协议端管理 Token 后进入控制台。</p>
+    {detail_html.replace("<p ", "<p class='msg warn' ")}
+    {error_html.replace("<p ", "<p class='msg err' ")}
+    <form method="post" action="{base}/login">
+      <input type="hidden" name="next" value="{html_escape(target, quote=True)}" />
+      <input
+        id="tokenInput"
+        name="token"
+        type="password"
+        placeholder="PALLAS_PROTOCOL_TOKEN"
+        autocomplete="off"
+        required
+      />
+      <button id="submitBtn" type="submit">进入控制台</button>
+    </form>
+    <p class="hint">可在当前浏览器会话内临时保存 Token（关闭页面后失效）。</p>
+  </section>
+  <script>
+    (function initLogin() {{
+      const KEY = "pallas_protocol_token_session";
+      const form = document.querySelector("form");
+      const input = document.getElementById("tokenInput");
+      const btn = document.getElementById("submitBtn");
+      const saved = (sessionStorage.getItem(KEY) || "").trim();
+      if (input && !input.value) input.value = saved;
+      if (form && input) {{
+        form.addEventListener("submit", () => {{
+          const t = (input.value || "").trim();
+          if (t) sessionStorage.setItem(KEY, t);
+          if (btn) {{
+            btn.textContent = "登录中...";
+            btn.setAttribute("disabled", "disabled");
+          }}
+        }});
+      }}
+    }})();
+  </script>
+</body>
+</html>"""
+        )
+
+    @app.get(f"{base}/login", response_class=HTMLResponse, response_model=None)
+    async def napcat_login_page(
+        next_path: str | None = Query(default=None, alias="next"),
+        reason: str | None = Query(default=None),
+    ):
+        target = _resolve_login_target(next_path)
+        err = ""
+        default_reason = (reason or "").strip()
+        if default_reason:
+            err = default_reason
+        detail = ""
+        if not (plugin_config.pallas_protocol_token or "").strip():
+            detail = "当前未配置 PALLAS_PROTOCOL_TOKEN，请先在 .env 中设置并重启 Bot。"
+        return _render_login_page(target=target, err=err, detail=detail)
+
+    @app.post(f"{base}/login", response_class=HTMLResponse, response_model=None)
+    async def napcat_login_submit(
+        request: Request,
+        next_path: str | None = Form(default=None, alias="next"),
+        token: str = Form(...),
+    ) -> RedirectResponse | HTMLResponse:
+        target = _resolve_login_target(next_path)
+        detail = ""
+        if not (plugin_config.pallas_protocol_token or "").strip():
+            detail = "当前未配置 PALLAS_PROTOCOL_TOKEN，请先在 .env 中设置并重启 Bot。"
+        try:
+            _auth(None, token)
+        except HTTPException as e:
+            return _render_login_page(
+                target=target,
+                err=str(getattr(e, "detail", "") or "Token 校验失败"),
+                detail=detail,
+            )
+        response = RedirectResponse(url=target, status_code=303)
+        response.set_cookie(
+            key=page_cookie_name,
+            value=token,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+            path=base or "/",
+        )
+        return response
+
+    @app.post(f"{base}/logout", response_model=None)
+    async def napcat_logout() -> RedirectResponse:
+        response = RedirectResponse(url=f"{base}/login", status_code=303)
+        response.delete_cookie(key=page_cookie_name, path=base or "/")
+        return response
 
     @app.get(base, response_class=HTMLResponse)
     @app.get(f"{base}/", response_class=HTMLResponse)
     async def napcat_dashboard(
+        request: Request,
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
     ):
         if not plugin_config.pallas_protocol_webui_enabled:
             raise HTTPException(status_code=404, detail="Pallas 协议端管理页已关闭")
-        _auth(x_pallas_protocol_token, token)
+        redirect = _ensure_page_auth(
+            request=request,
+            token=token,
+            x_pallas_protocol_token=x_pallas_protocol_token,
+            next_path=str(request.url.path),
+        )
+        if redirect is not None:
+            return redirect
         return HTMLResponse(render_dashboard(resolve_protocol_webui_base_path(plugin_config)))
 
     @app.get(f"{base}/new", response_class=HTMLResponse)
     async def napcat_new_account(
+        request: Request,
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
     ):
         if not plugin_config.pallas_protocol_webui_enabled:
             raise HTTPException(status_code=404, detail="Pallas 协议端管理页已关闭")
-        _auth(x_pallas_protocol_token, token)
+        redirect = _ensure_page_auth(
+            request=request,
+            token=token,
+            x_pallas_protocol_token=x_pallas_protocol_token,
+            next_path=str(request.url.path),
+        )
+        if redirect is not None:
+            return redirect
         return HTMLResponse(render_new_account_page(resolve_protocol_webui_base_path(plugin_config)))
 
     @app.get(f"{base}/import", response_class=HTMLResponse)
     async def napcat_import_page(
+        request: Request,
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
     ):
         if not plugin_config.pallas_protocol_webui_enabled:
             raise HTTPException(status_code=404, detail="Pallas 协议端管理页已关闭")
-        _auth(x_pallas_protocol_token, token)
+        redirect = _ensure_page_auth(
+            request=request,
+            token=token,
+            x_pallas_protocol_token=x_pallas_protocol_token,
+            next_path=str(request.url.path),
+        )
+        if redirect is not None:
+            return redirect
         return HTMLResponse(render_import_page(resolve_protocol_webui_base_path(plugin_config)))
 
     @app.post(f"{base}/api/accounts/import")
@@ -122,41 +354,63 @@ def register_pallas_protocol_routes(
 
     @app.get(f"{base}/runtime", response_class=HTMLResponse)
     async def napcat_runtime_page(
+        request: Request,
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
     ):
         if not plugin_config.pallas_protocol_webui_enabled:
             raise HTTPException(status_code=404, detail="Pallas 协议端管理页已关闭")
-        _auth(x_pallas_protocol_token, token)
+        redirect = _ensure_page_auth(
+            request=request,
+            token=token,
+            x_pallas_protocol_token=x_pallas_protocol_token,
+            next_path=str(request.url.path),
+        )
+        if redirect is not None:
+            return redirect
         return HTMLResponse(render_runtime_page(resolve_protocol_webui_base_path(plugin_config)))
 
     @app.get(f"{base}/account/{{account_id}}/edit")
     async def napcat_edit_redirect(
         account_id: str,
+        request: Request,
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
     ):
         """旧书签 ``…/edit`` → 账号子路径设置页。"""
         if not plugin_config.pallas_protocol_webui_enabled:
             raise HTTPException(status_code=404, detail="Pallas 协议端管理页已关闭")
-        _auth(x_pallas_protocol_token, token)
+        redirect = _ensure_page_auth(
+            request=request,
+            token=token,
+            x_pallas_protocol_token=x_pallas_protocol_token,
+            next_path=str(request.url.path),
+        )
+        if redirect is not None:
+            return redirect
         if not manager.has_account(account_id):
             raise HTTPException(status_code=404, detail="账号不存在")
         q = "tab=settings"
-        if (token or "").strip():
-            q += "&token=" + quote((token or "").strip(), safe="")
         aid = quote(str(account_id), safe="")
         return RedirectResponse(url=f"{base}/account/{aid}?{q}", status_code=307)
 
     @app.get(f"{base}/account/{{account_id}}", response_class=HTMLResponse)
     async def napcat_account_workspace(
         account_id: str,
+        request: Request,
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
     ):
         if not plugin_config.pallas_protocol_webui_enabled:
             raise HTTPException(status_code=404, detail="Pallas 协议端管理页已关闭")
-        _auth(x_pallas_protocol_token, token)
+        redirect = _ensure_page_auth(
+            request=request,
+            token=token,
+            x_pallas_protocol_token=x_pallas_protocol_token,
+            next_path=str(request.url.path),
+        )
+        if redirect is not None:
+            return redirect
         if not manager.has_account(account_id):
             raise HTTPException(status_code=404, detail="账号不存在")
         return HTMLResponse(render_account_workspace(resolve_protocol_webui_base_path(plugin_config), account_id))
