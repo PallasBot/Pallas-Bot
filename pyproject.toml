@@ -3,7 +3,10 @@ name = "pallas-bot"
 version = "3.0.0"
 description = "《明日方舟》帕拉斯 Bot"
 authors = [{ name = "MistEO" }]
-maintainers = [{ name = "mxcoras", email = "mxcoras@outlook.com" }]
+maintainers = [
+    { name = "mxcoras", email = "mxcoras@outlook.com" },
+    { name = "TogetsuDo", email = "togetsudo@outlook.com" },
+]
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.12,<4.0"

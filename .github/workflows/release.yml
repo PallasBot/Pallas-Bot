@@ -21,7 +21,7 @@ jobs:
       - name: Checkout WebUI repo
         uses: actions/checkout@v6
         with:
-          repository: TogetsuDo/Pallas-Bot-WebUI
+          repository: PallasBot/Pallas-Bot-WebUI
           ref: main
           path: pallas-webui
 
