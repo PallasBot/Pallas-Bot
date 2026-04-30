@@ -15,7 +15,7 @@ PALLAS_WEBUI_API_TOKEN=你的控制台口令
 
 说明：
 
-- `PALLAS_WEBUI_API_TOKEN` 为空时，写操作不做 token 校验；建议生产环境设置
+- `PALLAS_WEBUI_API_TOKEN`：必填，用于管理页/API 鉴权；请求时请携带 `X-Pallas-Token` 或 `token` 参数
 - 页面默认地址是 `/pallas/`，改了 `HTTP_BASE` 后地址会跟着变
 
 ## 前端静态资源
