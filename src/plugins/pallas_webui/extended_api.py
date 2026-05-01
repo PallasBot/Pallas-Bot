@@ -2308,6 +2308,7 @@ def register_extended_api(
         from .manager import (
             download_and_extract_dist_zip,
             fetch_latest_webui_release,
+            get_webui_dist_version,
             resolve_github_release_asset_urls,
             save_installed_webui_version,
             webui_public_path,
@@ -2340,8 +2341,11 @@ def register_extended_api(
             except Exception:  # noqa: BLE001
                 new_tag = tag
             save_installed_webui_version(new_tag, succeeded_url)
-            logger.info("Pallas 控制台: WebUI 已更新至 {}", new_tag)
-            return JSONResponse({"ok": True, "data": {"tag": new_tag, "message": "更新成功"}})
+            # 更新成功后同步刷新内存里的 console 版本，避免必须重启后前端才显示新版本。
+            effective_version = get_webui_dist_version() or new_tag or "unknown"
+            set_console_meta({**_CONSOLE_EXTRA, "version": effective_version})
+            logger.info("Pallas 控制台: WebUI 已更新至 {}", effective_version)
+            return JSONResponse({"ok": True, "data": {"tag": effective_version, "message": "更新成功"}})
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
