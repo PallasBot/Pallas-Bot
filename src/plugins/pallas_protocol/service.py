@@ -432,6 +432,13 @@ class PallasProtocolService:
         for account_id, account in list(self._accounts.items()):
             if not bool(account.get("enabled", True)):
                 continue
+            self._launch.apply_defaults(account, self._resolve_qq)
+            if account.get("napcat_linux_docker"):
+                from .linux_docker import docker_container_name, docker_container_running_sync
+
+                if docker_container_running_sync(docker_container_name(account)):
+                    await self.ensure_docker_logs_if_needed(account_id)
+                    continue
             if self.is_running(account_id):
                 continue
             try:
@@ -765,6 +772,7 @@ class PallasProtocolService:
                 from .linux_docker import docker_container_name, docker_container_running_sync
 
                 if docker_container_running_sync(docker_container_name(account)):
+                    await self._ensure_docker_logs_follower_locked(account_id, account, runtime)
                     return self._compose_account_state(account_id, account)
                 return await self._start_account_linux_docker(account_id, account, runtime)
             if runtime.process and runtime.process.returncode is None:
@@ -821,6 +829,78 @@ class PallasProtocolService:
             runtime.started_at = datetime.now(UTC)
             runtime.drain_task = asyncio.create_task(self._drain_logs(account_id))
         return self._compose_account_state(account_id, account)
+
+    async def ensure_docker_logs_if_needed(self, account_id: str) -> None:
+        """Docker 实例在容器已运行时仍可能没有附着 docker logs；按需拉起日志跟随。"""
+        account = self._accounts.get(account_id)
+        if not account or not account.get("napcat_linux_docker"):
+            return
+        self._launch.apply_defaults(account, self._resolve_qq)
+        from .linux_docker import docker_container_name, docker_container_running_sync
+
+        if not docker_container_running_sync(docker_container_name(account)):
+            return
+        runtime = self._runtime(account_id)
+        async with runtime.lock:
+            await self._ensure_docker_logs_follower_locked(account_id, account, runtime)
+
+    async def _ensure_docker_logs_follower_locked(self, account_id: str, account: dict, runtime: NapCatRuntime) -> None:
+        """在已持有 runtime.lock 的前提下，确保对运行中容器附着 docker logs -f。"""
+        from .linux_docker import docker_container_name, docker_container_running_sync
+
+        name = docker_container_name(account)
+        if not docker_container_running_sync(name):
+            return
+
+        following_ok = (
+            runtime.process is not None
+            and runtime.process.returncode is None
+            and runtime.drain_task is not None
+            and not runtime.drain_task.done()
+        )
+        if following_ok:
+            return
+
+        if runtime.drain_task and not runtime.drain_task.done():
+            runtime.drain_task.cancel()
+            try:
+                await runtime.drain_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+        runtime.drain_task = None
+
+        proc = runtime.process
+        if proc and proc.returncode is None:
+            try:
+                proc.terminate()
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except TimeoutError:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
+                await proc.wait()
+            except ProcessLookupError:
+                pass
+        runtime.process = None
+
+        logp = await asyncio.create_subprocess_exec(
+            "docker",
+            "logs",
+            "-f",
+            "--since",
+            "0s",
+            name,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        runtime.docker_container_name = name
+        if runtime.started_at is None:
+            runtime.started_at = datetime.now(UTC)
+        runtime.process = logp
+        runtime.drain_task = asyncio.create_task(self._drain_logs(account_id))
 
     async def _start_account_linux_docker(self, account_id: str, account: dict, runtime: NapCatRuntime) -> dict:
         from .linux_docker import (

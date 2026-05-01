@@ -651,6 +651,7 @@ def register_pallas_protocol_routes(
         _auth(x_pallas_protocol_token, token)
         if not manager.has_account(account_id):
             raise HTTPException(status_code=404, detail="账号不存在")
+        await manager.ensure_docker_logs_if_needed(account_id)
         return {"logs": manager.tail_logs(account_id, lines=lines)}
 
     @app.get(f"{base}/api/accounts/{{account_id}}/configs")
