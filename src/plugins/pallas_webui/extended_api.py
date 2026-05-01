@@ -2222,18 +2222,21 @@ def register_extended_api(
 
     @router.get(f"{x}/update/check", include_in_schema=True)
     async def _update_check() -> JSONResponse:
-        from .manager import fetch_latest_webui_release, get_installed_webui_version
+        from .manager import fetch_latest_webui_release, format_exception_for_log, get_installed_webui_version
 
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
+        asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         installed = get_installed_webui_version()
         current_tag = str(installed.get("tag", "") or "").strip()
         try:
-            latest = await fetch_latest_webui_release(repo, token=github_token)
+            latest = await fetch_latest_webui_release(repo, token=github_token, asset_name=asset)
             latest_tag = str(latest.get("tag", "") or "").strip()
             release_url = str(latest.get("html_url", "") or "").strip()
             asset_url = str(latest.get("asset_url", "") or "").strip()
         except Exception as e:  # noqa: BLE001
+            err_msg = format_exception_for_log(e)
+            logger.warning("Pallas 控制台: WebUI 更新检查失败（GitHub），repo={} err={}", repo, err_msg)
             return JSONResponse({
                 "ok": True,
                 "data": {
@@ -2242,7 +2245,7 @@ def register_extended_api(
                     "has_update": False,
                     "release_url": "",
                     "asset_url": "",
-                    "error": str(e),
+                    "error": err_msg,
                     "checked_at": time.time(),
                 },
             })
@@ -2262,7 +2265,7 @@ def register_extended_api(
 
     @router.get(f"{x}/update/bot/check", include_in_schema=True)
     async def _bot_update_check() -> JSONResponse:
-        from .manager import fetch_latest_bot_release, get_bot_current_version
+        from .manager import fetch_latest_bot_release, format_exception_for_log, get_bot_current_version
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         current = get_bot_current_version()
@@ -2273,6 +2276,8 @@ def register_extended_api(
             latest_tag = str(latest.get("tag", "") or "").strip()
             release_url = str(latest.get("html_url", "") or "").strip()
         except Exception as e:  # noqa: BLE001
+            err_msg = format_exception_for_log(e)
+            logger.warning("Pallas 控制台: Bot 版本更新检查失败（GitHub） err={}", err_msg)
             return JSONResponse({
                 "ok": True,
                 "data": {
@@ -2281,7 +2286,7 @@ def register_extended_api(
                     "latest_tag": None,
                     "has_update": False,
                     "release_url": "",
-                    "error": str(e),
+                    "error": err_msg,
                     "checked_at": time.time(),
                 },
             })
@@ -2308,6 +2313,7 @@ def register_extended_api(
         from .manager import (
             download_and_extract_dist_zip,
             fetch_latest_webui_release,
+            format_exception_for_log,
             get_webui_dist_version,
             resolve_github_release_asset_urls,
             save_installed_webui_version,
@@ -2320,25 +2326,42 @@ def register_extended_api(
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         public = webui_public_path()
         try:
+            logger.info(
+                "Pallas 控制台: WebUI 在线更新开始 repo={} asset={} tag={}",
+                repo,
+                asset,
+                tag or "(latest)",
+            )
             url_candidates = await resolve_github_release_asset_urls(repo, asset, tag, token=github_token)
             if not url_candidates:
+                logger.warning("Pallas 控制台: WebUI 更新未得到任何下载 URL（resolve 为空）")
                 raise ValueError("未找到可用的下载地址")
+            logger.info("Pallas 控制台: WebUI 更新候选地址 {} 条", len(url_candidates))
             errors: list[str] = []
             succeeded_url = ""
-            for candidate in url_candidates:
+            for i, candidate in enumerate(url_candidates, start=1):
+                short = candidate if len(candidate) <= 160 else candidate[:157] + "..."
+                logger.info("Pallas 控制台: WebUI 更新尝试 {}/{} {}", i, len(url_candidates), short)
                 try:
                     await download_and_extract_dist_zip(public, candidate)
                     succeeded_url = candidate
                     errors.clear()
                     break
                 except Exception as e:  # noqa: BLE001
-                    errors.append(f"{candidate} -> {e}")
+                    err_msg = format_exception_for_log(e)
+                    errors.append(f"{candidate} -> {err_msg}")
+                    logger.warning("Pallas 控制台: WebUI 下载/解压失败 {}", err_msg)
             if errors:
                 raise ValueError("下载失败: " + " | ".join(errors))
             try:
-                info = await fetch_latest_webui_release(repo, token=github_token)
+                info = await fetch_latest_webui_release(repo, token=github_token, asset_name=asset)
                 new_tag = str(info.get("tag", "") or tag).strip()
-            except Exception:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "Pallas 控制台: 获取 WebUI release 元数据失败，使用配置 tag={} err={}",
+                    tag or "(空)",
+                    format_exception_for_log(e),
+                )
                 new_tag = tag
             save_installed_webui_version(new_tag, succeeded_url)
             # 更新成功后同步刷新内存里的 console 版本，避免必须重启后前端才显示新版本。
@@ -2361,6 +2384,6 @@ def register_extended_api(
             raise
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas 控制台: WebUI 更新失败")
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     app.include_router(router)

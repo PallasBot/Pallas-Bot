@@ -3,63 +3,56 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from urllib.parse import quote
 
 import httpx
 from nonebot import logger
 
 from src.common.paths import plugin_data_dir
+from src.common.utils.github_release import (
+    fetch_latest_release,
+    fetch_latest_release_tag_via_github_web,
+    github_auth_headers,
+    github_release_api_url,
+    github_release_asset_url,
+    github_release_asset_url_candidates,
+)
+from src.common.utils.stream_download import (
+    StreamDownloadProgress,
+    format_download_byte_size,
+    sync_stream_download_to_file,
+)
 
 
-def _github_auth_headers(token: str = "") -> dict[str, str]:
-    t = (token or "").strip()
-    if not t:
-        return {}
-    return {"Authorization": f"Bearer {t}"}
+def format_exception_for_log(exc: BaseException) -> str:
+    """将异常格式化为单行摘要（日志 / API error 字段）。
 
-
-def github_release_asset_url(repo: str, asset_name: str, tag: str = "") -> str:
-    owner_part, _, name_part = (repo or "").strip().partition("/")
-    if not owner_part or not name_part:
-        msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
-        raise ValueError(msg)
-    encoded = quote((asset_name or "").strip(), safe=".")
-    if not encoded:
-        raise ValueError("发布资产名不能为空")
-    if not (tag or "").strip():
-        return f"https://github.com/{owner_part}/{name_part}/releases/latest/download/{encoded}"
-    return f"https://github.com/{owner_part}/{name_part}/releases/download/{(tag or '').strip()}/{encoded}"
-
-
-def github_release_asset_url_candidates(repo: str, asset_name: str, tag: str = "") -> list[str]:
-    """返回可尝试的下载地址：优先 tag，其次 latest。"""
-    out: list[str] = []
-    tag_clean = (tag or "").strip()
-    if tag_clean:
-        out.append(github_release_asset_url(repo, asset_name, tag_clean))
-    out.append(github_release_asset_url(repo, asset_name, ""))
-    dedup: list[str] = []
-    seen: set[str] = set()
-    for u in out:
-        if u in seen:
-            continue
-        seen.add(u)
-        dedup.append(u)
-    return dedup
-
-
-def _github_release_api_url(repo: str, tag: str = "") -> str:
-    owner_part, _, name_part = (repo or "").strip().partition("/")
-    if not owner_part or not name_part:
-        msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
-        raise ValueError(msg)
-    if not (tag or "").strip():
-        return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/latest"
-    return f"https://api.github.com/repos/{owner_part}/{name_part}/releases/tags/{(tag or '').strip()}"
+    勿把裸 ``Exception`` 传入 loguru 的「{}」占位：部分环境下会得到空白输出。
+    """
+    if isinstance(exc, httpx.HTTPStatusError):
+        resp = exc.response
+        url = str(resp.request.url)
+        reason = (getattr(resp, "reason_phrase", None) or "").strip()
+        head = f"{resp.status_code}"
+        if reason:
+            head = f"{head} {reason}"
+        text = (resp.text or "").replace("\r", "").strip().replace("\n", " ")
+        if len(text) > 400:
+            text = text[:397] + "..."
+        return f"HTTPStatusError {head} url={url}" + (f" body={text!r}" if text else "")
+    if isinstance(exc, httpx.RequestError):
+        url = str(exc.request.url) if exc.request is not None else ""
+        suffix = f" url={url}" if url else ""
+        detail = str(exc).strip() or repr(exc)
+        return f"{type(exc).__name__}{suffix}: {detail}"
+    msg = str(exc).strip()
+    if msg:
+        return f"{type(exc).__name__}: {msg}"
+    return f"{type(exc).__name__}: {exc!r}"
 
 
 async def resolve_github_release_asset_urls(
@@ -74,21 +67,32 @@ async def resolve_github_release_asset_urls(
     if not preferred:
         raise ValueError("发布资产名不能为空")
     candidates: list[str] = []
-    release_apis = [_github_release_api_url(repo, tag)]
+    release_apis = [github_release_api_url(repo, tag)]
     if (tag or "").strip():
-        release_apis.append(_github_release_api_url(repo, ""))
+        release_apis.append(github_release_api_url(repo, ""))
     async with httpx.AsyncClient(
         follow_redirects=True,
         timeout=httpx.Timeout(30.0, connect=10.0),
         headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
     ) as client:
-        auth_headers = _github_auth_headers(token)
+        auth_headers = github_auth_headers(token)
         for api in release_apis:
             try:
                 resp = await client.get(api, headers=auth_headers)
-            except Exception:
+            except Exception as e:
+                # API 失败仍会追加 releases/download 直链候选，默认不打 WARNING 以免刷屏
+                logger.debug(
+                    "Pallas 控制台: GitHub Release API 请求异常（将尝试直链）api={} err={}",
+                    api,
+                    format_exception_for_log(e),
+                )
                 continue
             if resp.status_code != 200:
+                logger.debug(
+                    "Pallas 控制台: GitHub Release API 非 200（将尝试直链）status={} api={}",
+                    resp.status_code,
+                    api,
+                )
                 continue
             data = resp.json()
             assets = data.get("assets")
@@ -164,15 +168,13 @@ def _safe_extract_zip(zf: zipfile.ZipFile, extract_root: Path) -> None:
             shutil.copyfileobj(src, dst)
 
 
-def _sync_write_dist_from_zip_bytes(public_dir: Path, content: bytes) -> None:
+def _sync_extract_dist_zip_file(zip_path: Path, public_dir: Path) -> None:
     public_dir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory() as tmp:
         tpath = Path(tmp)
-        zip_path = tpath / "webui.zip"
-        zip_path.write_bytes(content)
+        extract_root = tpath / "extracted"
+        extract_root.mkdir()
         with zipfile.ZipFile(zip_path) as zf:
-            extract_root = tpath / "extracted"
-            extract_root.mkdir()
             _safe_extract_zip(zf, extract_root)
         source = _resolved_extract_root(extract_root)
         if public_dir.exists():
@@ -181,16 +183,75 @@ def _sync_write_dist_from_zip_bytes(public_dir: Path, content: bytes) -> None:
         shutil.copytree(source, public_dir, dirs_exist_ok=True)
 
 
+def _sync_write_dist_from_zip_bytes(public_dir: Path, content: bytes) -> None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tf:
+        tf.write(content)
+        zip_path = Path(tf.name)
+    try:
+        _sync_extract_dist_zip_file(zip_path, public_dir)
+    finally:
+        zip_path.unlink(missing_ok=True)
+
+
+def _unlink_ignore_missing(path: Path) -> None:
+    path.unlink(missing_ok=True)
+
+
+def _webui_download_progress_log(ev: StreamDownloadProgress) -> None:
+    if ev["event"] == "percent":
+        logger.info(
+            "Pallas 控制台: WebUI dist 下载进度 {}%（{}/{}）",
+            ev["milestone_percent"],
+            format_download_byte_size(ev["received"]),
+            format_download_byte_size(ev["total"]),
+        )
+    elif ev["event"] == "unknown_step":
+        logger.info(
+            "Pallas 控制台: WebUI dist 已下载 {}（服务器未提供文件大小）",
+            format_download_byte_size(ev["received"]),
+        )
+    elif ev["event"] == "complete":
+        if ev["total"] is not None:
+            logger.info(
+                "Pallas 控制台: WebUI dist 下载完成 {} / {}",
+                format_download_byte_size(ev["received"]),
+                format_download_byte_size(ev["total"]),
+            )
+        elif ev["received"] > 0:
+            logger.info(
+                "Pallas 控制台: WebUI dist 下载完成 {}",
+                format_download_byte_size(ev["received"]),
+            )
+
+
+def _sync_download_webui_zip(url: str, dest: Path, *, follow_redirects: bool) -> None:
+    sync_stream_download_to_file(
+        url,
+        dest,
+        follow_redirects=follow_redirects,
+        timeout=httpx.Timeout(300.0, connect=60.0),
+        on_progress=_webui_download_progress_log,
+    )
+
+
 async def download_and_extract_dist_zip(public_dir: Path, url: str, *, follow_redirects: bool = True) -> bool:
     url = (url or "").strip()
     if not url:
         return False
-    async with httpx.AsyncClient(follow_redirects=follow_redirects, timeout=300.0) as c:
-        r = await c.get(url)
-        r.raise_for_status()
-        content = r.content
-    await asyncio.to_thread(_sync_write_dist_from_zip_bytes, public_dir, content)
-    logger.info("Pallas 控制台: 已解压 dist 到 data/pallas_webui/public")
+    preview = url if len(url) <= 200 else url[:197] + "..."
+    logger.info("Pallas 控制台: 正在下载 WebUI dist {}", preview)
+
+    tmp_zip = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
+    zip_path = Path(tmp_zip.name)
+    tmp_zip.close()
+
+    try:
+        await asyncio.to_thread(_sync_download_webui_zip, url, zip_path, follow_redirects=follow_redirects)
+        await asyncio.to_thread(_sync_extract_dist_zip_file, zip_path, public_dir)
+        logger.info("Pallas 控制台: 已解压 dist 到 data/pallas_webui/public")
+    finally:
+        await asyncio.to_thread(_unlink_ignore_missing, zip_path)
+
     return True
 
 
@@ -278,36 +339,53 @@ def get_bot_current_version() -> dict:
 
 
 async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot", *, token: str = "") -> dict:
-    api_url = _github_release_api_url(repo)
-    async with httpx.AsyncClient(
-        follow_redirects=True,
-        timeout=httpx.Timeout(15.0, connect=8.0),
-        headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
-    ) as client:
-        resp = await client.get(api_url, headers=_github_auth_headers(token))
-        resp.raise_for_status()
-        data = resp.json()
-    tag = str(data.get("tag_name") or "").strip()
-    html_url = str(data.get("html_url") or "").strip()
-    return {"tag": tag, "html_url": html_url}
+    try:
+        data = await fetch_latest_release(
+            repo,
+            user_agent="Pallas-Bot-PallasWebUI/1.0",
+            token=token,
+            include_asset_url=False,
+        )
+        return {"tag": data["tag"], "html_url": data["html_url"]}
+    except (httpx.HTTPError, json.JSONDecodeError, TypeError, ValueError) as first_err:
+        try:
+            fb = await fetch_latest_release_tag_via_github_web(
+                repo,
+                token=token,
+                user_agent="Pallas-Bot-PallasWebUI/1.0",
+            )
+            logger.info(
+                "Pallas 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底 tag={}",
+                fb["tag"],
+            )
+            return {"tag": fb["tag"], "html_url": fb["html_url"]}
+        except Exception:
+            raise first_err from None
 
 
-async def fetch_latest_webui_release(repo: str, *, token: str = "") -> dict:
-    api_url = _github_release_api_url(repo)
-    async with httpx.AsyncClient(
-        follow_redirects=True,
-        timeout=httpx.Timeout(15.0, connect=8.0),
-        headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
-    ) as client:
-        resp = await client.get(api_url, headers=_github_auth_headers(token))
-        resp.raise_for_status()
-        data = resp.json()
-    tag = str(data.get("tag_name") or "").strip()
-    html_url = str(data.get("html_url") or "").strip()
-    assets = data.get("assets") or []
-    asset_url = ""
-    for item in assets:
-        if isinstance(item, dict) and str(item.get("name", "")).lower().endswith(".zip"):
-            asset_url = str(item.get("browser_download_url", "")).strip()
-            break
-    return {"tag": tag, "html_url": html_url, "asset_url": asset_url}
+async def fetch_latest_webui_release(repo: str, *, token: str = "", asset_name: str = "dist.zip") -> dict:
+    asset_clean = (asset_name or "").strip() or "dist.zip"
+    try:
+        return await fetch_latest_release(
+            repo,
+            user_agent="Pallas-Bot-PallasWebUI/1.0",
+            token=token,
+            preferred_asset_name=asset_clean,
+            include_asset_url=True,
+        )
+    except (httpx.HTTPError, json.JSONDecodeError, TypeError, ValueError) as first_err:
+        try:
+            fb = await fetch_latest_release_tag_via_github_web(
+                repo,
+                token=token,
+                user_agent="Pallas-Bot-PallasWebUI/1.0",
+            )
+            tag_fb = fb["tag"]
+            asset_url_fb = github_release_asset_url(repo, asset_clean, tag_fb)
+            logger.info(
+                "Pallas 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底 tag={}",
+                tag_fb,
+            )
+            return {"tag": tag_fb, "html_url": fb["html_url"], "asset_url": asset_url_fb}
+        except Exception:
+            raise first_err from None
