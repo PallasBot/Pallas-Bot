@@ -94,16 +94,18 @@ jobs:
           export BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           npm run build:ci
 
+      # zip 根目录为 public/，在 Bot 侧解压到 data/pallas_webui 即得到 public/index.html（与插件默认路径一致）。
       - name: Pack dist artifact
         run: |
-          cd pallas-webui/dist
-          zip -r ../../pallas-webui-dist.zip .
+          mkdir -p webui-zip-root/public
+          cp -a pallas-webui/dist/. webui-zip-root/public/
+          (cd webui-zip-root && zip -r ../dist.zip public)
 
       - name: Upload WebUI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pallas-webui-dist
-          path: pallas-webui-dist.zip
+          name: webui-dist-zip
+          path: dist.zip
 
   create-release:
     runs-on: ubuntu-latest
@@ -165,7 +167,7 @@ jobs:
       - name: Download WebUI artifact
         uses: actions/download-artifact@v4
         with:
-          name: pallas-webui-dist
+          name: webui-dist-zip
           path: .
 
       - name: Create Release
@@ -194,9 +196,9 @@ jobs:
             本 Release 附件中的静态资源基于 WebUI 仓库检出：**`${{ needs.build-webui-dist.outputs.webui_git_ref }}`**（`console-version.json` 中 `version`：**`${{ needs.build-webui-dist.outputs.webui_console_version }}`**）。
 
             默认无需手动配置，首次启用时会自动下载并部署 WebUI 静态资源。
-            如需手动部署，可下载 Release 附件中的 `pallas-webui-dist.zip`（即 `dist.zip`），解压到 `data/pallas_webui/public`。
+            手动部署：下载附件 **`dist.zip`**，解压到 **`data/pallas_webui`**（得到 `data/pallas_webui/public/index.html` 等，无需改 zip 内目录名）。
           files: |
-            pallas-webui-dist.zip
+            dist.zip
           draft: false
           prerelease: false
         env:

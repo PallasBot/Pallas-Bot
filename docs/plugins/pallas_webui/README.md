@@ -22,7 +22,7 @@ PALLAS_WEBUI_API_TOKEN=你的控制台口令
 
 默认无需手动配置。启动时如果不存在 `data/pallas_webui/public/index.html`，插件会自动下载并解压 WebUI 产物。
 
-如需手动部署，可下载 `Pallas-Bot-WebUI` Release 中的 `dist.zip`，解压到 `data/pallas_webui/public`。
+如需手动部署，推荐下载 **本仓库（Pallas-Bot）对应版本的 Release 附件 `dist.zip`**（与当次 Bot 发版一并构建）；亦可使用 `Pallas-Bot-WebUI` 仓库 Release 中的 `dist.zip`。将 zip **解压到 `data/pallas_webui`**（内含 `public/` 目录，将得到 `data/pallas_webui/public/index.html` 等）。
 
 ## 下载高级配置（按需）
 
