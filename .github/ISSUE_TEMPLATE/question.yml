@@ -39,4 +39,4 @@ body:
       label: 提交前确认
       options:
         - label: 我已查阅文档和现有 issue，未找到答案
-          required: true
+          required: false

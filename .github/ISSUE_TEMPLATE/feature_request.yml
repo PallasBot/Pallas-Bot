@@ -21,9 +21,8 @@ body:
     id: solution
     attributes:
       label: 期望的解决方案
-      description: 描述你希望实现的功能或行为。
-    validations:
-      required: true
+      description: 若有初步想法，描述你希望实现的功能或行为（可选）。
+      placeholder: 例如希望增加某个命令、某个配置项...
 
   - type: textarea
     id: alternatives
@@ -31,21 +30,10 @@ body:
       label: 已考虑的替代方案
       description: 你是否考虑过其他实现方式？
 
-  - type: dropdown
-    id: priority
-    attributes:
-      label: 优先级（你认为）
-      options:
-        - 低 - 锦上添花
-        - 中 - 比较有用
-        - 高 - 强烈需要
-    validations:
-      required: true
-
   - type: checkboxes
     id: checklist
     attributes:
       label: 提交前确认
       options:
         - label: 我已搜索过现有 issue，确认此需求未被提出过
-          required: true
+          required: false
