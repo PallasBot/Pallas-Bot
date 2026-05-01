@@ -1,10 +1,9 @@
 import asyncio
-import base64
 from datetime import datetime
 from pathlib import Path
 
 from nonebot import on_command
-from nonebot.adapters.onebot.v11 import Bot, Message, MessageEvent, PrivateMessageEvent
+from nonebot.adapters.onebot.v11 import Bot, Message, MessageEvent, MessageSegment, PrivateMessageEvent
 from nonebot.params import ArgPlainText, CommandArg
 from nonebot.permission import SUPERUSER
 from nonebot.plugin import PluginMetadata
@@ -41,7 +40,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_cmd",
                 "trigger_condition": "创建牛牛 [昵称 牛牛QQ 号主QQ ...]",
                 "brief_des": "创建并启动新牛牛账号（仅超管）",
-                "detail_des": "在协议端创建账号并启动。",
+                "detail_des": "在协议端创建账号并启动，私聊回传登录二维码",
             },
         ],
     },
@@ -165,9 +164,9 @@ async def _relogin_got_nickname(
         await relogin_cmd.finish("已完成启动，但在 60 秒内未检测到新的二维码文件，请寻找牛牛管理员上报情况")
 
     try:
-        encoded = base64.b64encode(qr_path.read_bytes()).decode()
+        qr_bytes = qr_path.read_bytes()
         await bot.send(event, "启动完成，请使用下面二维码登录：")
-        await bot.send(event, Message(f"[CQ:image,file=base64://{encoded}]"))
+        await bot.send(event, MessageSegment.image(qr_bytes))
     except OSError as e:
         await relogin_cmd.finish(f"二维码读取失败：{e}")
 
@@ -221,6 +220,8 @@ async def _create_got_qq(state: T_State, qq_input: str = ArgPlainText("qq")):  #
 
 @create_cmd.got("owners")
 async def _create_got_owners(
+    bot: Bot,
+    event: MessageEvent,
     display_name_input: str = ArgPlainText("display_name"),  # noqa: B008
     qq_input: str = ArgPlainText("qq"),
     owners_input: str = ArgPlainText("owners"),
@@ -244,6 +245,13 @@ async def _create_got_owners(
     except Exception as e:
         await create_cmd.finish(f"创建账号失败：{e}")
 
+    account = protocol_manager.get_account(qq) or {}
+    account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+    if not account_data_dir:
+        await create_cmd.finish("账号已创建，但账号目录缺失，无法启动。")
+
+    await bot.send(event, "正在启动协议端...")
+    started_at = datetime.now().astimezone()
     try:
         await protocol_manager.start_account(qq)
     except Exception as e:
@@ -256,5 +264,15 @@ async def _create_got_owners(
     except Exception as e:
         await create_cmd.finish(f"账号已创建并启动，但写入号主失败：{e}")
 
+    qr_path = await _wait_qrcode(account_data_dir, started_at)
+    if qr_path is not None:
+        try:
+            qr_bytes = qr_path.read_bytes()
+            await bot.send(event, "请使用下面二维码完成登录：")
+            await bot.send(event, MessageSegment.image(qr_bytes))
+        except OSError as e:
+            await bot.send(event, f"二维码读取失败：{e}")
+
     owners_str = "、".join(owner_qqs)
-    await create_cmd.finish(f"{display_name}：{qq} 已创建并启动。\n号主：{owners_str}")
+    timeout_hint = "\n但在 60 秒内未检测到新的二维码文件，请到协议端控制台查看或联系管理员。" if qr_path is None else ""
+    await create_cmd.finish(f"{display_name}：{qq} 已创建并启动。\n号主：{owners_str}{timeout_hint}")
