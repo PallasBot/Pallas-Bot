@@ -59,7 +59,7 @@ async def pg_env(pg_engine):
     await migrate._ensure_state_table(pg_engine)
     sf = async_sessionmaker(pg_engine, expire_on_commit=False)
 
-    yield {
+    return {
         "engine": pg_engine,
         "sf": sf,
         "migrate": migrate,
@@ -72,10 +72,9 @@ def _load_migrate_module():
     mod_name = "_pallas_migrate_mongo_to_pg"
     if mod_name in sys.modules:
         return sys.modules[mod_name]
-    spec = importlib.util.spec_from_file_location(
-        mod_name, _ROOT / "tools" / "migrate_mongo_to_pg.py"
-    )
-    assert spec and spec.loader
+    spec = importlib.util.spec_from_file_location(mod_name, _ROOT / "tools" / "migrate_mongo_to_pg.py")
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     sys.modules[mod_name] = mod
     spec.loader.exec_module(mod)

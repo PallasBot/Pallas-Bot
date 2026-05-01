@@ -1496,7 +1496,10 @@ def register_extended_api(
         n: int = Query(default=200, ge=1, le=plugin_config.pallas_webui_log_lines_max),
         scope: Literal["all", "webui", "protocol"] = Query(
             default="all",
-            description="all=全部；webui=pallas_webui 插件日志（或正文含 [pallas-webui]）；protocol=pallas_protocol（或 [pallas-protocol]）",
+            description=(
+                "all=全部；webui=pallas_webui 插件或正文含 [pallas-webui]；"
+                "protocol=pallas_protocol 或 [pallas-protocol]"
+            ),
         ),
     ) -> JSONResponse:
         _ensure_log_sink()

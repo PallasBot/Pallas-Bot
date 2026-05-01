@@ -52,13 +52,16 @@ async def test_upsert_answer_is_atomic(pg_engine):
     from src.common.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
-    await repo.insert(
-        Context.model_construct(keywords="kw", time=0, trigger_count=1, answers=[], ban=[], clear_time=0)
-    )
+    await repo.insert(Context.model_construct(keywords="kw", time=0, trigger_count=1, answers=[], ban=[], clear_time=0))
 
     async def _u(i: int):
         await repo.upsert_answer(
-            keywords="kw", group_id=1, answer_keywords="a", answer_time=100 + i, message=f"m{i}", append_on_existing=True
+            keywords="kw",
+            group_id=1,
+            answer_keywords="a",
+            answer_time=100 + i,
+            message=f"m{i}",
+            append_on_existing=True,
         )
 
     await asyncio.gather(*[_u(i) for i in range(50)])
@@ -78,9 +81,7 @@ async def test_upsert_answer_append_flag(pg_engine):
     from src.common.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
-    await repo.insert(
-        Context.model_construct(keywords="k", time=0, trigger_count=1, answers=[], ban=[], clear_time=0)
-    )
+    await repo.insert(Context.model_construct(keywords="k", time=0, trigger_count=1, answers=[], ban=[], clear_time=0))
 
     await repo.upsert_answer("k", 1, "a", 100, "first", append_on_existing=True)
     await repo.upsert_answer("k", 1, "a", 200, "second", append_on_existing=False)
@@ -275,11 +276,13 @@ async def test_config_cache_hit_and_invalidate_on_write(pg_engine):
     repo = PgConfigRepository("bot_config", "account")
     await repo.upsert_field(1001, "security", True)
     row1 = await repo.get(1001)
-    assert row1 is not None and row1.security is True
+    assert row1 is not None
+    assert row1.security is True
 
     await repo.upsert_field(1001, "security", False)
     row2 = await repo.get(1001)
-    assert row2 is not None and row2.security is False
+    assert row2 is not None
+    assert row2.security is False
 
 
 @pytest.mark.asyncio
