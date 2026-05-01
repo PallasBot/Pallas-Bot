@@ -2342,10 +2342,21 @@ def register_extended_api(
                 new_tag = tag
             save_installed_webui_version(new_tag, succeeded_url)
             # 更新成功后同步刷新内存里的 console 版本，避免必须重启后前端才显示新版本。
-            effective_version = get_webui_dist_version() or new_tag or "unknown"
+            try:
+                dist_ver = get_webui_dist_version()
+            except Exception:  # noqa: BLE001
+                dist_ver = ""
+            effective_version = (dist_ver or "").strip() or new_tag or "unknown"
             set_console_meta({**_CONSOLE_EXTRA, "version": effective_version})
-            logger.info("Pallas 控制台: WebUI 已更新至 {}", effective_version)
-            return JSONResponse({"ok": True, "data": {"tag": effective_version, "message": "更新成功"}})
+            logger.info("Pallas 控制台: WebUI 已更新至 {}（发布 tag: {}）", effective_version, new_tag)
+            return JSONResponse({
+                "ok": True,
+                "data": {
+                    "tag": new_tag,
+                    "version": effective_version,
+                    "message": "更新成功",
+                },
+            })
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
