@@ -2,9 +2,11 @@ import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
 
 from src.common.db import init_db
+from src.common.logging import apply_stdlib_logging_channel_prefix
 from src.common.utils.voice_downloader import ensure_voices
 from src.common.web import install_nonebot_log_sink
 
+apply_stdlib_logging_channel_prefix()
 nonebot.init()
 install_nonebot_log_sink()
 driver = nonebot.get_driver()

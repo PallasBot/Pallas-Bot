@@ -1494,15 +1494,20 @@ def register_extended_api(
     @router.get(f"{x}/logs", include_in_schema=True)
     async def _logs(
         n: int = Query(default=200, ge=1, le=plugin_config.pallas_webui_log_lines_max),
+        scope: Literal["all", "webui", "protocol"] = Query(
+            default="all",
+            description="all=全部；webui=pallas_webui 插件日志（或正文含 [pallas-webui]）；protocol=pallas_protocol（或 [pallas-protocol]）",
+        ),
     ) -> JSONResponse:
         _ensure_log_sink()
-        from src.common.web import tail_nonebot_log_lines
+        from src.common.web import tail_nonebot_log_lines_scoped
 
         return JSONResponse({
             "ok": True,
             "data": {
-                "lines": tail_nonebot_log_lines(n),
+                "lines": tail_nonebot_log_lines_scoped(n, scope),
                 "max": plugin_config.pallas_webui_log_lines_max,
+                "scope": scope,
             },
         })
 

@@ -15,6 +15,8 @@
 ## 源码分层约定
 
 - `src/common/`: 跨插件复用能力（如配置、数据库、工具函数）
+- `src/common/logging/`: 与 NoneBot / loguru 衔接的日志集成（如 stdlib 转发通道标签）
+- `src/common/web/`: HTTP 控制台相关的公共能力（如日志环、本机基址）
 - `src/plugins/`: 业务插件，按功能域拆分
 
 约定原则：
@@ -41,6 +43,7 @@
 - 测试目录尽量镜像源码目录，例如：
   - `src/plugins/repeater/...` -> `tests/plugins/repeater/...`
   - `src/common/db/...` -> `tests/common/...`
+  - `src/common/web/...` -> `tests/common/web/...`
 
 这样可以降低定位测试与补测成本。
 
