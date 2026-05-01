@@ -11,7 +11,7 @@ import shutil
 import time
 import typing
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -20,6 +20,8 @@ from nonebot.adapters import Bot as BaseBot  # noqa: TC002
 from nonebot.adapters import Event  # noqa: TC002
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_core import PydanticUndefined
+
+from src.common.web.bot_web import LogScope  # noqa: TC001  # FastAPI/OpenAPI 需在运行时解析注解
 
 if typing.TYPE_CHECKING:
     from .config import Config
@@ -1494,13 +1496,15 @@ def register_extended_api(
     @router.get(f"{x}/logs", include_in_schema=True)
     async def _logs(
         n: int = Query(default=200, ge=1, le=plugin_config.pallas_webui_log_lines_max),
-        scope: Literal["all", "webui", "protocol"] = Query(
-            default="all",
-            description=(
-                "all=全部；webui=pallas_webui 插件或正文含 [pallas-webui]；"
-                "protocol=pallas_protocol 或 [pallas-protocol]"
+        scope: Annotated[
+            LogScope,
+            Query(
+                description=(
+                    "all=全部；webui=pallas_webui 插件或正文含 [pallas-webui]；"
+                    "protocol=pallas_protocol 或 [pallas-protocol]"
+                ),
             ),
-        ),
+        ] = "all",
     ) -> JSONResponse:
         _ensure_log_sink()
         from src.common.web import tail_nonebot_log_lines_scoped

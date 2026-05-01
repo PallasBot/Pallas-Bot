@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import threading
 from collections import deque
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 _MAX = 2000
 _lines: deque[str] = deque(maxlen=_MAX)
@@ -27,7 +30,10 @@ def public_base_url(*, host: str | object | None, port: int | object | None) -> 
     return f"http://{h}:{p}"
 
 
-def nonebot_log_record_matches_http_facet(record: Any, facet: Literal["webui", "protocol"]) -> bool:
+def nonebot_log_record_matches_http_facet(
+    record: Mapping[str, Any],
+    facet: Literal["webui", "protocol"],
+) -> bool:
     """是否与控制台或协议端相关（独立日志环；匹配插件 id 或正文中的 realm 标记）。"""
     name = str(record.get("name") or "")
     raw_msg = record.get("message")

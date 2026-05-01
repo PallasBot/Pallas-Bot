@@ -27,7 +27,7 @@ class ChannelLoguruHandler(LoguruHandler):
     def emit(self, record: LogRecord) -> None:
         text = record.getMessage()
         label = _stdlib_logger_channel_label(record.name)
-        record.msg = f"[{label}] {text}"
+        record.msg = f"[{label}] {text}" if label else text
         record.args = ()
         super().emit(record)
 
