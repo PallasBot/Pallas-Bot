@@ -10,12 +10,20 @@ on:
         description: 'Release version (e.g., v2.0.0-beta.1)'
         required: true
         type: string
+      webui_tag:
+        description: '可选：捆绑的 WebUI 仓库 tag（默认取当前 main 上可达的最新 v* tag）'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   build-webui-dist:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      webui_console_version: ${{ steps.webui_ref.outputs.console_version }}
+      webui_git_ref: ${{ steps.webui_ref.outputs.resolved_ref }}
 
     steps:
       - name: Checkout WebUI repo
@@ -24,6 +32,37 @@ jobs:
           repository: PallasBot/Pallas-Bot-WebUI
           ref: main
           path: pallas-webui
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Resolve WebUI release tag
+        id: webui_ref
+        working-directory: pallas-webui
+        env:
+          PIN_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.webui_tag || '' }}
+        run: |
+          set -euo pipefail
+          git fetch origin --tags --force
+          if [ -n "${PIN_TAG}" ]; then
+            git checkout "${PIN_TAG}"
+            echo "console_version=${PIN_TAG}" >> "$GITHUB_OUTPUT"
+            echo "resolved_ref=${PIN_TAG}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          TAG=$(git tag -l 'v*' --merged HEAD --sort=-version:refname | head -n1)
+          if [ -z "${TAG}" ]; then
+            TAG=$(git tag -l 'v*' --sort=-version:refname | head -n1)
+          fi
+          if [ -n "${TAG}" ]; then
+            git checkout "${TAG}"
+            echo "console_version=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "resolved_ref=${TAG}" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::WebUI 仓库无 v* tag，使用 main；console 版本取自 package.json"
+            VER=$(node -p "require('./package.json').version")
+            echo "console_version=${VER}" >> "$GITHUB_OUTPUT"
+            echo "resolved_ref=main" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Get version
         id: get_version
@@ -45,30 +84,15 @@ jobs:
         run: npm ci
         working-directory: pallas-webui
 
+      # console-version.json：version = 上游 WebUI 发版 tag（或手动 PIN / 无 tag 时 package.json）。
       - name: Build WebUI
-        run: npm run build:ci
         working-directory: pallas-webui
-
-      - name: Write console version metadata
+        env:
+          CONSOLE_VERSION: ${{ steps.webui_ref.outputs.console_version }}
         run: |
-          BUILD_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          if [ -f pallas-webui/scripts/write-console-version.mjs ]; then
-            (
-              cd pallas-webui
-              CONSOLE_VERSION="${{ steps.get_version.outputs.version }}" \
-              GIT_COMMIT="${{ github.sha }}" \
-              BUILD_TIME="${BUILD_TIME}" \
-              node ./scripts/write-console-version.mjs
-            )
-          else
-            mkdir -p pallas-webui/dist
-            printf '%s\n' \
-              '{' \
-              '  "version": "${{ steps.get_version.outputs.version }}",' \
-              '  "commit": "${{ github.sha }}",' \
-              "  \"build_time\": \"${BUILD_TIME}\"" \
-              '}' > pallas-webui/dist/console-version.json
-          fi
+          export GIT_COMMIT="$(git rev-parse HEAD)"
+          export BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          npm run build:ci
 
       - name: Pack dist artifact
         run: |
@@ -166,6 +190,8 @@ jobs:
             - 前端仓库说明（开发/发版/对接）：[PallasBot/Pallas-Bot-WebUI README](https://github.com/PallasBot/Pallas-Bot-WebUI/blob/main/README.md)
 
             ## WebUI 使用说明
+
+            本 Release 附件中的静态资源基于 WebUI 仓库检出：**`${{ needs.build-webui-dist.outputs.webui_git_ref }}`**（`console-version.json` 中 `version`：**`${{ needs.build-webui-dist.outputs.webui_console_version }}`**）。
 
             默认无需手动配置，首次启用时会自动下载并部署 WebUI 静态资源。
             如需手动部署，可下载 Release 附件中的 `pallas-webui-dist.zip`（即 `dist.zip`），解压到 `data/pallas_webui/public`。
