@@ -17,27 +17,26 @@ from datetime import UTC, datetime
 from pathlib import Path
 from stat import S_IXGRP, S_IXOTH, S_IXUSR
 from typing import Any, Literal
-from urllib.parse import quote, urlparse
+from urllib.parse import urlparse
 
 import httpx
 
-from src.common.utils.github_release import fetch_github_releases, github_release_api_url
+from src.common.utils.github_release import (
+    fetch_github_releases,
+    github_auth_headers,
+    github_release_api_url,
+    github_release_asset_url,
+)
+from src.common.utils.stream_download import (
+    StreamDownloadProgress,
+    format_download_byte_size,
+    sync_stream_download_to_file,
+)
 
 JobStatus = Literal["idle", "downloading", "extracting", "installing", "done", "error"]
 
 # 一键安装超时秒数
 _INSTALLER_TIMEOUT_SEC = 7200
-
-
-def _github_release_asset_url(repo: str, asset_name: str, tag: str = "") -> str:
-    owner_part, _, name_part = repo.partition("/")
-    if not owner_part or not name_part:
-        msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
-        raise ValueError(msg)
-    encoded = quote(asset_name, safe=".")
-    if not tag.strip():
-        return f"https://github.com/{owner_part}/{name_part}/releases/latest/download/{encoded}"
-    return f"https://github.com/{owner_part}/{name_part}/releases/download/{tag.strip()}/{encoded}"
 
 
 def _looks_like_http_url(value: str) -> bool:
@@ -462,6 +461,19 @@ class NapCatRuntimeStore:
     def _release_tag(self) -> str:
         return str(getattr(self._config, "pallas_protocol_release_tag", "")).strip()
 
+    def _on_stream_download_progress(self, ev: StreamDownloadProgress) -> None:
+        if ev["event"] == "percent":
+            self._set_job(
+                "downloading",
+                f"下载中 {ev['milestone_percent']}% "
+                f"({format_download_byte_size(ev['received'])}/{format_download_byte_size(ev['total'])})",
+            )
+        elif ev["event"] == "unknown_step":
+            self._set_job(
+                "downloading",
+                f"下载中… ({format_download_byte_size(ev['received'])})",
+            )
+
     async def download_and_install(
         self, *, client: httpx.AsyncClient | None = None, tag: str | None = None, target_platform: str = "auto"
     ) -> RuntimeManifest:
@@ -478,7 +490,7 @@ class NapCatRuntimeStore:
                 raise ValueError(msg)
             self._set_job("downloading", "准备下载…")
             repo = self._repo(target_platform)
-            url = direct_asset_url or _github_release_asset_url(repo, asset_name, release_tag)
+            url = direct_asset_url or github_release_asset_url(repo, asset_name, release_tag)
             self._dist_dir.mkdir(parents=True, exist_ok=True)
             dist_file = self._dist_dir / asset_name
 
@@ -497,9 +509,7 @@ class NapCatRuntimeStore:
                     tag_candidates = [release_tag] if release_tag else [""]
                     if release_tag:
                         tag_candidates.append("")
-                    from src.common.utils.github_release import _github_auth_headers
-
-                    _gh_headers = _github_auth_headers(github_token)
+                    _gh_headers = github_auth_headers(github_token)
                     for repo_try in self._repo_candidates(target_platform):
                         for tag_try in tag_candidates:
                             rel_api = github_release_api_url(repo_try, tag_try)
@@ -528,7 +538,7 @@ class NapCatRuntimeStore:
                         download_candidates.append((
                             repo,
                             asset_name,
-                            _github_release_asset_url(repo, asset_name, release_tag),
+                            github_release_asset_url(repo, asset_name, release_tag),
                         ))
 
                 errors: list[str] = []
@@ -541,31 +551,34 @@ class NapCatRuntimeStore:
                     seen.add(sig)
                     deduped.append(cand)
 
+                download_headers: dict[str, str] = {
+                    "User-Agent": "Pallas-Bot-PallasProtocol/1.0",
+                    **github_auth_headers(github_token),
+                }
+
                 success = False
                 for repo_try, name_try, url_try in deduped:
-                    async with hc.stream("GET", url_try) as resp:
-                        if resp.status_code != 200:
-                            errors.append(f"{name_try} @ {repo_try} -> HTTP {resp.status_code}")
-                            continue
-                        repo = repo_try
-                        asset_name = name_try
-                        url = url_try
-                        dist_file = self._dist_dir / asset_name
-                        success = True
-                        total = int(resp.headers.get("content-length") or 0)
-                        received = 0
-                        with dist_file.open("wb") as out:
-                            async for chunk in resp.aiter_bytes(1024 * 256):
-                                if not chunk:
-                                    continue
-                                out.write(chunk)
-                                received += len(chunk)
-                                if total > 0:
-                                    pct = min(99, int(received * 100 / total))
-                                    self._set_job("downloading", f"下载中 {pct}% ({received // (1024 * 1024)} MiB)")
-                                else:
-                                    self._set_job("downloading", f"下载中… ({received // (1024 * 1024)} MiB)")
-                        break
+                    cand_dist = self._dist_dir / name_try
+                    try:
+                        await asyncio.to_thread(
+                            sync_stream_download_to_file,
+                            url_try,
+                            cand_dist,
+                            follow_redirects=True,
+                            timeout=httpx.Timeout(600.0, connect=30.0),
+                            headers=download_headers,
+                            on_progress=self._on_stream_download_progress,
+                        )
+                    except httpx.HTTPStatusError as e:
+                        code = e.response.status_code if e.response is not None else "?"
+                        errors.append(f"{name_try} @ {repo_try} -> HTTP {code}")
+                        continue
+                    repo = repo_try
+                    asset_name = name_try
+                    url = url_try
+                    dist_file = cand_dist
+                    success = True
+                    break
                 if not success:
                     msg = f"下载失败，候选均不可用: {' | '.join(errors)}"
                     raise RuntimeError(msg)
@@ -722,7 +735,7 @@ class NapCatRuntimeStore:
                 )
             if program_dir is None:
                 continue
-            url = _github_release_asset_url(self._repo(), self._asset_name(), self._release_tag())
+            url = github_release_asset_url(self._repo(), self._asset_name(), self._release_tag())
             manifest = RuntimeManifest(
                 program_dir=str(program_dir.resolve()),
                 extract_root=str(folder.resolve()),

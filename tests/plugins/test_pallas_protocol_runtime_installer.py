@@ -2,9 +2,9 @@ import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
+from src.common.utils.github_release import github_release_asset_url
 from src.plugins.pallas_protocol.runtime.installer import (
     _asset_name_from_url,
-    _github_release_asset_url,
     _looks_like_http_url,
     _pick_appimage_asset_from_release,
     _pick_appimage_asset_from_release_html,
@@ -20,12 +20,12 @@ from src.plugins.pallas_protocol.runtime.installer import (
 
 
 def test_github_release_asset_url_latest() -> None:
-    u = _github_release_asset_url("NapNeko/NapCatQQ", "NapCat.Shell.zip", "")
+    u = github_release_asset_url("NapNeko/NapCatQQ", "NapCat.Shell.zip", "")
     assert u.endswith("/NapNeko/NapCatQQ/releases/latest/download/NapCat.Shell.zip")
 
 
 def test_github_release_asset_url_tagged() -> None:
-    u = _github_release_asset_url("NapNeko/NapCatQQ", "NapCat.Shell.zip", "v1.2.3")
+    u = github_release_asset_url("NapNeko/NapCatQQ", "NapCat.Shell.zip", "v1.2.3")
     assert "releases/download/v1.2.3/NapCat.Shell.zip" in u
 
 
