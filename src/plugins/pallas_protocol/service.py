@@ -836,16 +836,14 @@ class PallasProtocolService:
         if not account or not account.get("napcat_linux_docker"):
             return
         self._launch.apply_defaults(account, self._resolve_qq)
-        from .linux_docker import docker_container_name, docker_container_running_sync
-
-        if not docker_container_running_sync(docker_container_name(account)):
-            return
         runtime = self._runtime(account_id)
         async with runtime.lock:
             await self._ensure_docker_logs_follower_locked(account_id, account, runtime)
 
     async def _ensure_docker_logs_follower_locked(self, account_id: str, account: dict, runtime: NapCatRuntime) -> None:
         """在已持有 runtime.lock 的前提下，确保对运行中容器附着 docker logs -f。"""
+        from nonebot import logger
+
         from .linux_docker import docker_container_name, docker_container_running_sync
 
         name = docker_container_name(account)
@@ -868,7 +866,9 @@ class PallasProtocolService:
             except asyncio.CancelledError:
                 pass
             except Exception:
-                pass
+                logger.exception(
+                    f"NapCat Docker 日志跟随：等待 drain 任务结束时出现未预期异常 (account_id={account_id})"
+                )
         runtime.drain_task = None
 
         proc = runtime.process
