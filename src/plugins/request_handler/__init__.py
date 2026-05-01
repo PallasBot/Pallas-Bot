@@ -1,4 +1,6 @@
 import json
+import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -12,6 +14,7 @@ from nonebot.adapters.onebot.v11 import (
     MessageEvent,
     PrivateMessageEvent,
 )
+from nonebot.exception import ActionFailed
 from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER, Permission
 from nonebot.plugin import PluginMetadata
@@ -107,6 +110,9 @@ APPROVAL_NOTICE_FILE = DATA_DIR / "approval_notice_messages.json"
 
 PLUGIN_NAME = "request_handler"
 
+# 审批提醒元数据：超过此时长视为过期，不再用于「同意」与引用回复（秒）
+_NOTIFY_RECORD_MAX_AGE_SEC = 7 * 24 * 3600
+
 RH_HELP_CMD = "牛牛帮助 request_handler"
 RH_APPROVE_HINT = "通过：引用本条，发送「同意」「好」或留空；或直接私聊发送「同意」（按最新一条提醒）"
 RH_HELP_HINT = f"帮助：{RH_HELP_CMD}"
@@ -136,29 +142,98 @@ def load_json(path: Path) -> dict:
 
 
 def save_json(path: Path, data: dict) -> None:
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+    fd, tmp_path = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        text=True,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fp:
+            fp.write(payload)
+        Path(tmp_path).replace(path)
+    except Exception:
+        try:
+            Path(tmp_path).unlink()
+        except OSError:
+            pass
+        raise
 
 
-def load_last_notified_store() -> dict[str, dict[str, str | float]]:
+def notify_ts_expired(ts: float, now: float | None = None) -> bool:
+    now = time.time() if now is None else now
+    return bool(ts > 0 and now - ts > _NOTIFY_RECORD_MAX_AGE_SEC)
+
+
+def api_failure_is_request_gone(exc: BaseException) -> bool:
+    """协议返回「请求已不存在 / 已失效」等时可移除本地 pending。"""
+    if not isinstance(exc, ActionFailed):
+        return False
+    for arg in exc.args:
+        if isinstance(arg, dict):
+            if arg.get("retcode") == 120:
+                return True
+            wording = str(arg.get("wording", ""))
+            if any(k in wording for k in ("失效", "过期", "不存在", "已处理", "无效")):
+                return True
+    return False
+
+
+def load_last_notified_store() -> tuple[dict[str, dict[str, str | float]], bool]:
     raw = load_json(LAST_NOTIFIED_FILE)
     out: dict[str, dict[str, str | float]] = {}
+    dirty = False
+    now = time.time()
+    if not isinstance(raw, dict):
+        return {}, bool(raw)
+
+    dict_rows = sum(1 for v in raw.values() if isinstance(v, dict))
     for bot_key, row in raw.items():
+        bk = str(bot_key)
         if not isinstance(row, dict):
+            dirty = True
             continue
         kind = row.get("kind")
         target_id = row.get("target_id")
         if kind not in ("friend", "group") or not isinstance(target_id, str) or not target_id.isdigit():
+            dirty = True
             continue
         try:
             ts = float(row["ts"])
         except (KeyError, TypeError, ValueError):
-            ts = 0.0
-        out[str(bot_key)] = {"kind": kind, "target_id": target_id, "ts": ts}
-    return out
+            ts = now
+            dirty = True
+        if notify_ts_expired(ts, now):
+            dirty = True
+            continue
+        out[bk] = {"kind": kind, "target_id": target_id, "ts": ts}
+
+    if len(out) != dict_rows:
+        dirty = True
+    return out, dirty
 
 
 def persist_last_notified_store() -> None:
+    prune_stale_last_notified_entries()
     save_json(LAST_NOTIFIED_FILE, last_notified_store)
+
+
+def prune_stale_last_notified_entries() -> bool:
+    changed = False
+    now = time.time()
+    for bk in list(last_notified_store.keys()):
+        row = last_notified_store.get(bk)
+        if not isinstance(row, dict):
+            last_notified_store.pop(bk, None)
+            changed = True
+            continue
+        ts = float(row.get("ts") or 0)
+        if notify_ts_expired(ts, now):
+            last_notified_store.pop(bk, None)
+            changed = True
+    return changed
 
 
 def set_last_notified(bot_key: str, kind: str, target_id: str) -> None:
@@ -178,34 +253,85 @@ def get_last_notified(bot_key: str) -> tuple[str, str, float] | None:
         ts = float(row.get("ts") or 0)
     except (TypeError, ValueError):
         ts = 0.0
+    if notify_ts_expired(ts):
+        last_notified_store.pop(bot_key, None)
+        persist_last_notified_store()
+        return None
     return kind, target_id, ts
 
 
-def load_approval_notice_map() -> dict[str, dict[str, dict[str, str | float]]]:
+def load_approval_notice_map() -> tuple[dict[str, dict[str, dict[str, str | float]]], bool]:
     raw = load_json(APPROVAL_NOTICE_FILE)
     out: dict[str, dict[str, dict[str, str | float]]] = {}
+    dirty = False
+    now = time.time()
+    if not isinstance(raw, dict):
+        return {}, bool(raw)
+
+    rows_seen = 0
+    rows_kept = 0
     for bot_key, msgs in raw.items():
+        bk = str(bot_key)
         if not isinstance(msgs, dict):
+            dirty = True
             continue
         inner: dict[str, dict[str, str | float]] = {}
         for mid, row in msgs.items():
+            rows_seen += 1
             if not isinstance(row, dict):
+                dirty = True
                 continue
             kind = row.get("kind")
             tid = row.get("target_id")
             if kind not in ("friend", "group") or not isinstance(tid, str) or not tid.isdigit():
+                dirty = True
                 continue
             try:
                 ts = float(row["ts"])
             except (KeyError, TypeError, ValueError):
-                ts = 0.0
+                ts = now
+                dirty = True
+            if notify_ts_expired(ts, now):
+                dirty = True
+                continue
             inner[str(mid)] = {"kind": kind, "target_id": tid, "ts": ts}
+            rows_kept += 1
         if inner:
-            out[str(bot_key)] = inner
-    return out
+            out[bk] = inner
+        elif msgs:
+            dirty = True
+
+    if rows_kept != rows_seen:
+        dirty = True
+    return out, dirty
+
+
+def prune_stale_approval_notice_entries() -> bool:
+    changed = False
+    now = time.time()
+    for bk in list(approval_notice_map.keys()):
+        inner = approval_notice_map.get(bk)
+        if not inner:
+            approval_notice_map.pop(bk, None)
+            continue
+        for mid in list(inner.keys()):
+            meta = inner.get(mid)
+            if not isinstance(meta, dict):
+                inner.pop(mid, None)
+                changed = True
+                continue
+            ts = float(meta.get("ts") or 0)
+            if notify_ts_expired(ts, now):
+                inner.pop(mid)
+                changed = True
+        if not inner:
+            approval_notice_map.pop(bk, None)
+            changed = True
+    return changed
 
 
 def persist_approval_notice_map() -> None:
+    prune_stale_approval_notice_entries()
     save_json(APPROVAL_NOTICE_FILE, approval_notice_map)
 
 
@@ -233,8 +359,8 @@ def extract_message_id(result: object) -> int | None:
 
 def clear_quick_approve_state(bot_key: str, kind: str, target_id: str) -> None:
     ln_changed = False
-    entry = get_last_notified(bot_key)
-    if entry and entry[0] == kind and entry[1] == target_id:
+    row = last_notified_store.get(bot_key)
+    if isinstance(row, dict) and row.get("kind") == kind and str(row.get("target_id")) == str(target_id):
         last_notified_store.pop(bot_key, None)
         ln_changed = True
     notice_changed = False
@@ -260,9 +386,15 @@ cached_doubt_friend: dict[str, dict[str, str]] = {}
 # {bot_id: {group_id: {...}}}
 pending_group: dict[str, dict[str, dict]] = load_json(GROUP_REQ_FILE)
 # 最近一次推送：bot_id -> { kind, target_id, ts }，用于「同意」快捷审批
-last_notified_store: dict[str, dict[str, str | float]] = load_last_notified_store()
+_last_loaded_ln, _last_notified_dirty = load_last_notified_store()
+last_notified_store: dict[str, dict[str, str | float]] = _last_loaded_ln
 # 审批通知 message_id：bot_id -> { message_id_str -> { kind, target_id, ts } }，用于引用回复处理对应申请
-approval_notice_map: dict[str, dict[str, dict[str, str | float]]] = load_approval_notice_map()
+_last_loaded_an, _approval_notice_dirty = load_approval_notice_map()
+approval_notice_map: dict[str, dict[str, dict[str, str | float]]] = _last_loaded_an
+if _last_notified_dirty:
+    save_json(LAST_NOTIFIED_FILE, last_notified_store)
+if _approval_notice_dirty:
+    save_json(APPROVAL_NOTICE_FILE, approval_notice_map)
 
 # 引用审批通知时允许的正文（小写比较）；空字符串表示仅引用不打字
 _APPROVE_REPLY_TEXT = frozenset({"", "同意", "好", "yes", "y", "ok"})
@@ -339,10 +471,14 @@ async def approve_group_invite_by_gid(bot: Bot, bot_key: str, group_key: str) ->
 
     try:
         await bot.set_group_add_request(flag=req["flag"], sub_type="invite", approve=True)
+    except ActionFailed as e:
+        if api_failure_is_request_gone(e):
+            bot_pending.pop(group_key, None)
+            save_json(GROUP_REQ_FILE, pending_group)
+            return False, f"失败：{e}（请求失效或已处理）"
+        return False, f"操作未成功：{e}（请稍后重试）"
     except Exception as e:
-        bot_pending.pop(group_key, None)
-        save_json(GROUP_REQ_FILE, pending_group)
-        return False, f"失败：{e}（请求失效或已处理）"
+        return False, f"操作未成功：{e}（请稍后重试）"
     bot_pending.pop(group_key, None)
     save_json(GROUP_REQ_FILE, pending_group)
     nickname = await get_nickname(bot, req["user_id"])
@@ -380,7 +516,7 @@ def plugin_config() -> Config:
     return Config.model_validate(get_driver().config.model_dump())
 
 
-async def notify_admins(bot: Bot, msg: str, *, kind: str, target_id: str) -> None:
+async def notify_admins(bot: Bot, msg: str, *, kind: str, target_id: str) -> bool:
     bot_key = str(bot.self_id)
     admins = await BotConfig(int(bot.self_id))._find("admins")
     plugin_cfg = plugin_config()
@@ -389,9 +525,11 @@ async def notify_admins(bot: Bot, msg: str, *, kind: str, target_id: str) -> Non
         # 过滤掉 SUPERUSER，若全部都是 SUPERUSER 则发送给SUPERUSER
         admins = [uid for uid in admins if uid not in superusers] or admins
     registered = False
+    delivered_any = False
     for admin_id in admins:
         try:
             ret = await bot.send_private_msg(user_id=admin_id, message=msg)
+            delivered_any = True
             mid = extract_message_id(ret)
             if mid is not None:
                 register_approval_notice(bot_key, mid, kind, target_id, persist=False)
@@ -400,6 +538,7 @@ async def notify_admins(bot: Bot, msg: str, *, kind: str, target_id: str) -> Non
             pass
     if registered:
         persist_approval_notice_map()
+    return delivered_any
 
 
 async def approval_reply_rule(bot: Bot, event: Event) -> bool:
@@ -411,7 +550,18 @@ async def approval_reply_rule(bot: Bot, event: Event) -> bool:
         return False
     bot_key = str(bot.self_id)
     mid = str(event.reply.message_id)
-    return mid in approval_notice_map.get(bot_key, {})
+    bot_msgs = approval_notice_map.get(bot_key)
+    if not bot_msgs or mid not in bot_msgs:
+        return False
+    meta = bot_msgs[mid]
+    ts = float(meta.get("ts") or 0)
+    if ts and notify_ts_expired(ts):
+        bot_msgs.pop(mid, None)
+        if not bot_msgs:
+            approval_notice_map.pop(bot_key, None)
+        persist_approval_notice_map()
+        return False
+    return True
 
 
 approval_reply_cmd = on_message(rule=Rule(approval_reply_rule), priority=4, block=True)
@@ -454,7 +604,6 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
 
     if not await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
         nickname = await get_nickname(bot, event.user_id)
-        set_last_notified(bot_key, "friend", str(event.user_id))
         msg = (
             f"[好友申请]\n"
             f"申请人：{nickname}（{event.user_id}）\n"
@@ -462,7 +611,8 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
             f"{RH_APPROVE_HINT}\n"
             f"{RH_HELP_HINT}"
         )
-        await notify_admins(bot, msg, kind="friend", target_id=str(event.user_id))
+        if await notify_admins(bot, msg, kind="friend", target_id=str(event.user_id)):
+            set_last_notified(bot_key, "friend", str(event.user_id))
 
 
 @list_friends_cmd.handle()
@@ -578,7 +728,6 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
         if not await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
             nickname = await get_nickname(bot, event.user_id)
             group_name = await get_group_name(bot, event.group_id)
-            set_last_notified(bot_key, "group", group_key)
             msg = (
                 f"[入群邀请]\n"
                 f"邀请人：{nickname}（{event.user_id}）\n"
@@ -587,7 +736,8 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
                 f"拒绝：拒绝入群 {event.group_id}\n"
                 f"{RH_HELP_HINT}"
             )
-            await notify_admins(bot, msg, kind="group", target_id=group_key)
+            if await notify_admins(bot, msg, kind="group", target_id=group_key):
+                set_last_notified(bot_key, "group", group_key)
 
 
 @approve_all_friends_cmd.handle()
@@ -734,10 +884,16 @@ async def handle_reject_group(bot: Bot, event: MessageEvent, args: Message = Com
 
     try:
         await bot.set_group_add_request(flag=req["flag"], sub_type="invite", approve=False)
+    except ActionFailed as e:
+        if api_failure_is_request_gone(e):
+            bot_pending.pop(group_key, None)
+            save_json(GROUP_REQ_FILE, pending_group)
+            await reject_group_cmd.finish(f"失败：{e}（请求失效或已处理）")
+            return
+        await reject_group_cmd.finish(f"操作未成功：{e}（请稍后重试）")
+        return
     except Exception as e:
-        bot_pending.pop(group_key, None)
-        save_json(GROUP_REQ_FILE, pending_group)
-        await reject_group_cmd.finish(f"失败：{e}（请求失效或已处理）")
+        await reject_group_cmd.finish(f"操作未成功：{e}（请稍后重试）")
         return
     bot_pending.pop(group_key, None)
     save_json(GROUP_REQ_FILE, pending_group)
