@@ -14,6 +14,13 @@ DEFAULT_PROGRESS_BYTES_STEP = 5 * 1024 * 1024
 DEFAULT_STREAM_DOWNLOAD_TIMEOUT = httpx.Timeout(300.0, connect=60.0)
 
 
+def _unlink_quiet(path: Path) -> None:
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
 class StreamDownloadProgressPercent(TypedDict):
     event: Literal["percent"]
     milestone_percent: int
@@ -70,41 +77,51 @@ def sync_stream_download_to_file(
     received = 0
     last_pct_logged = 0
     next_bytes_log = progress_bytes_step
+    part = dest.with_name(dest.name + ".download")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _unlink_quiet(part)
 
-    with httpx.Client(follow_redirects=follow_redirects, timeout=eff_timeout, headers=hdrs) as client:
-        with client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            raw_len = resp.headers.get("content-length")
-            total: int | None = int(raw_len) if raw_len and raw_len.isdigit() else None
+    try:
+        with httpx.Client(follow_redirects=follow_redirects, timeout=eff_timeout, headers=hdrs) as client:
+            with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                raw_len = resp.headers.get("content-length")
+                total: int | None = int(raw_len) if raw_len and raw_len.isdigit() else None
 
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            with dest.open("wb") as out:
-                for chunk in resp.iter_bytes(chunk_size=chunk_size):
-                    if not chunk:
-                        continue
-                    out.write(chunk)
-                    received += len(chunk)
-                    if on_progress is None:
-                        continue
-                    if total and total > 0:
-                        pct_now = min(100, int(received * 100 / total))
-                        while last_pct_logged + progress_percent_step <= pct_now:
-                            last_pct_logged += progress_percent_step
-                            if last_pct_logged >= 100:
-                                break
-                            on_progress(
-                                {
-                                    "event": "percent",
-                                    "milestone_percent": last_pct_logged,
-                                    "received": received,
-                                    "total": total,
-                                },
-                            )
-                    elif received >= next_bytes_log:
-                        on_progress({"event": "unknown_step", "received": received})
-                        next_bytes_log = received + progress_bytes_step
+                with part.open("wb") as out:
+                    for chunk in resp.iter_bytes(chunk_size=chunk_size):
+                        if not chunk:
+                            continue
+                        out.write(chunk)
+                        received += len(chunk)
+                        if on_progress is None:
+                            continue
+                        if total and total > 0:
+                            pct_now = min(100, int(received * 100 / total))
+                            while last_pct_logged + progress_percent_step <= pct_now:
+                                last_pct_logged += progress_percent_step
+                                if last_pct_logged >= 100:
+                                    break
+                                on_progress(
+                                    {
+                                        "event": "percent",
+                                        "milestone_percent": last_pct_logged,
+                                        "received": received,
+                                        "total": total,
+                                    },
+                                )
+                        elif received >= next_bytes_log:
+                            on_progress({"event": "unknown_step", "received": received})
+                            next_bytes_log = received + progress_bytes_step
 
-            if on_progress is not None:
-                on_progress({"event": "complete", "received": received, "total": total})
+        dest.unlink(missing_ok=True)
+        part.replace(dest)
+
+        if on_progress is not None:
+            on_progress({"event": "complete", "received": received, "total": total})
+
+    except BaseException:
+        _unlink_quiet(part)
+        raise
 
     return received

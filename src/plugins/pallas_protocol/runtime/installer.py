@@ -468,6 +468,8 @@ class NapCatRuntimeStore:
                 f"下载中 {ev['milestone_percent']}% "
                 f"({format_download_byte_size(ev['received'])}/{format_download_byte_size(ev['total'])})",
             )
+        elif ev["event"] == "complete":
+            self._set_job("downloading", "下载完成，准备解压…")
         elif ev["event"] == "unknown_step":
             self._set_job(
                 "downloading",

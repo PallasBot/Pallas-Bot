@@ -4,6 +4,7 @@ import asyncio
 from nonebot import get_app, get_driver, get_plugin_config, logger
 from nonebot.plugin import PluginMetadata
 
+from src.common.utils.format_exception import format_exception_for_log
 from src.common.web import public_base_url
 
 from .api import register_api
@@ -14,7 +15,6 @@ from .manager import (
     download_and_extract_dist_zip,
     fetch_latest_bot_release,
     fetch_latest_webui_release,
-    format_exception_for_log,
     get_bot_current_version,
     get_installed_webui_version,
     get_webui_dist_version,
@@ -127,12 +127,11 @@ async def _pallas_webui_startup() -> None:
     async def _bootstrap_webui_dist() -> None:
         if check_webui_exists(public):
             return
-        logger.info(
-            "Pallas 控制台: 首次部署，后台拉取 WebUI 静态资源；就绪后请刷新控制台"
-        )
+        logger.info("Pallas 控制台: 首次部署，后台拉取 WebUI 静态资源；就绪后请刷新控制台")
         tok = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
         url_candidates: list[str] = []
+        resolve_err = ""
         if not url:
             try:
                 repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "")
@@ -144,15 +143,22 @@ async def _pallas_webui_startup() -> None:
                     str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or ""),
                     str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or ""),
                 )
-            except Exception:
+            except Exception as e:
+                resolve_err = format_exception_for_log(e)
                 url = ""
                 url_candidates = []
         else:
             url_candidates = [url]
         if not url:
-            logger.error(
-                "Pallas 控制台: 无法解析 WebUI 下载地址，请配置 dist zip 直链或手动放置构建产物到 data/pallas_webui/public"
-            )
+            if resolve_err:
+                logger.error(
+                    "Pallas 控制台: 无法解析 WebUI 下载地址（{}），请配置 dist zip 直链或手动放置构建产物到 data/pallas_webui/public",
+                    resolve_err,
+                )
+            else:
+                logger.error(
+                    "Pallas 控制台: 无法解析 WebUI 下载地址，请配置 dist zip 直链或手动放置构建产物到 data/pallas_webui/public"
+                )
             return
         errors: list[str] = []
         succeeded_url = ""
@@ -225,6 +231,12 @@ async def _pallas_webui_startup() -> None:
         except Exception as e:
             logger.debug("Pallas 控制台: 检查 Bot 更新失败: {}", format_exception_for_log(e))
 
+    async def _guarded(name: str, fn):
+        try:
+            await fn()
+        except Exception as e:
+            logger.error("Pallas 控制台: 后台任务「{}」异常: {}", name, format_exception_for_log(e))
+
     if not check_webui_exists(public):
-        asyncio.create_task(_bootstrap_webui_dist())
-    asyncio.create_task(_background_release_checks())
+        asyncio.create_task(_guarded("webui-dist-bootstrap", _bootstrap_webui_dist))
+    asyncio.create_task(_guarded("release-version-check", _background_release_checks))

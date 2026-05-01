@@ -2222,7 +2222,9 @@ def register_extended_api(
 
     @router.get(f"{x}/update/check", include_in_schema=True)
     async def _update_check() -> JSONResponse:
-        from .manager import fetch_latest_webui_release, format_exception_for_log, get_installed_webui_version
+        from src.common.utils.format_exception import format_exception_for_log
+
+        from .manager import fetch_latest_webui_release, get_installed_webui_version
 
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
@@ -2265,7 +2267,9 @@ def register_extended_api(
 
     @router.get(f"{x}/update/bot/check", include_in_schema=True)
     async def _bot_update_check() -> JSONResponse:
-        from .manager import fetch_latest_bot_release, format_exception_for_log, get_bot_current_version
+        from src.common.utils.format_exception import format_exception_for_log
+
+        from .manager import fetch_latest_bot_release, get_bot_current_version
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         current = get_bot_current_version()
@@ -2310,10 +2314,11 @@ def register_extended_api(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from src.common.utils.format_exception import format_exception_for_log
+
         from .manager import (
             download_and_extract_dist_zip,
             fetch_latest_webui_release,
-            format_exception_for_log,
             get_webui_dist_version,
             resolve_github_release_asset_urls,
             save_installed_webui_version,
