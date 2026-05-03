@@ -32,6 +32,11 @@ class Learner:
         if len(chat_data.raw_message.strip()) == 0:
             return False
 
+        from .responder import Responder
+
+        if chat_data.user_id in Responder._repeat_ignore_user_ids():
+            return False
+
         group_id = chat_data.group_id
         if group_id in MessageStore._message_dict:
             group_msgs = MessageStore._message_dict[group_id]

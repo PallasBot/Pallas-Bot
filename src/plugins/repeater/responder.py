@@ -4,7 +4,7 @@ from collections import defaultdict
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from nonebot import get_plugin_config
+from nonebot import get_bots, get_plugin_config
 from nonebot.adapters.onebot.v11 import Message
 
 from src.common.config import BotConfig
@@ -43,6 +43,17 @@ class Responder:
     )
     BLACKLIST_FLAG = 114514
     REPLY_FLAG = "[PallasBot: Reply]"
+
+    @staticmethod
+    def _repeat_ignore_user_ids() -> set[int]:
+        ids = {int(b.self_id) for b in get_bots().values()}
+        ids.update(plugin_config.repeat_ignore_user_ids)
+        return ids
+
+    @staticmethod
+    def _human_messages_for_repeat(group_msgs: list) -> list:
+        ignore = Responder._repeat_ignore_user_ids()
+        return [m for m in group_msgs if (uid := getattr(m, "user_id", None)) is None or uid not in ignore]
 
     @staticmethod
     async def answer(
@@ -145,12 +156,13 @@ class Responder:
         keywords = chat_data.keywords
         bot_id = chat_data.bot_id
 
-        # 复读！
-        if group_id in message_dict:
+        # 复读！（只统计非本进程 Bot / 配置忽略账号，避免多 Bot 同句堆叠误判）
+        rt = Responder.REPEAT_THRESHOLD
+        if rt >= 2 and group_id in message_dict:
             group_msgs = message_dict[group_id]
-            if len(group_msgs) >= Responder.REPEAT_THRESHOLD and all(
-                item.raw_message == raw_message for item in group_msgs[-Responder.REPEAT_THRESHOLD + 1 :]
-            ):
+            human_msgs = Responder._human_messages_for_repeat(group_msgs)
+            tail = rt - 1
+            if len(human_msgs) >= tail and all(item.raw_message == raw_message for item in human_msgs[-tail:]):
                 # 到这里说明当前群里是在复读
                 group_bot_replies = reply_dict[group_id][bot_id]
                 if len(group_bot_replies) and group_bot_replies[-1]["reply"] != raw_message:
