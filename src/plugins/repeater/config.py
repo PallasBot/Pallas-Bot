@@ -14,6 +14,8 @@ class Config(BaseModel, extra="ignore"):
     cross_group_threshold: int = 2
     # 复读的阈值，群里连续多少次有相同的发言，就复读
     repeat_threshold: int = 3
+    # 复读判定与学习均忽略的第三方 QQ
+    repeat_ignore_user_ids: list[int] = []
     # 主动发言的阈值，越小废话越多
     speak_threshold: int = 5
     # 说过的话，接下来多少次不再说

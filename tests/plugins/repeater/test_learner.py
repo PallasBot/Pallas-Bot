@@ -75,6 +75,73 @@ async def test_learn_basic_flow(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_learn_skips_repeat_ignore_user_ids(beanie_fixture):
+    """repeat_ignore / 本进程 Bot QQ 不参与学习：不插库、不写上下文。"""
+    from src.common.db import Message as MessageModel
+    from src.plugins.repeater.learner import Learner
+    from src.plugins.repeater.message_store import MessageStore
+    from src.plugins.repeater.model import ChatData
+
+    MessageStore._message_lock = asyncio.Lock()
+    MessageStore._message_dict = defaultdict(list)
+    MessageStore._late_save_time = 0
+
+    topics_lock = asyncio.Lock()
+    recent_topics = defaultdict(lambda: deque(maxlen=10))
+
+    try:
+        group_id = 55501
+        ignored_uid = 888001
+        bot_id = 11111
+
+        prev_msg = MessageModel(
+            group_id=group_id,
+            user_id=99999,
+            bot_id=bot_id,
+            raw_message="before",
+            is_plain_text=True,
+            plain_text="before",
+            keywords="before",
+            time=1000,
+        )
+        MessageStore._message_dict[group_id].append(prev_msg)
+
+        chat_data = ChatData(
+            group_id=group_id,
+            user_id=ignored_uid,
+            raw_message="ignored user says",
+            plain_text="ignored user says",
+            time=2000,
+            bot_id=bot_id,
+        )
+
+        with (
+            patch(
+                "src.plugins.repeater.responder.Responder._repeat_ignore_user_ids",
+                return_value={ignored_uid},
+            ),
+            patch(
+                "src.plugins.repeater.learner.context_repo.find_by_keywords", new_callable=AsyncMock
+            ) as mock_find,
+            patch("src.plugins.repeater.learner.context_repo.insert", new_callable=AsyncMock) as mock_insert,
+            patch(
+                "src.plugins.repeater.message_store.MessageStore.message_insert",
+                new_callable=AsyncMock,
+            ) as mock_insert_msg,
+        ):
+            result = await Learner.learn(chat_data, topics_lock, recent_topics)
+
+            assert result is False
+            mock_find.assert_not_called()
+            mock_insert.assert_not_called()
+            mock_insert_msg.assert_not_called()
+            assert len(MessageStore._message_dict[group_id]) == 1
+    finally:
+        MessageStore._message_dict.clear()
+        MessageStore._late_save_time = 0
+
+
+@pytest.mark.asyncio
 async def test_learn_empty_message(beanie_fixture):
     """
     Test that learn() returns False for empty messages.
