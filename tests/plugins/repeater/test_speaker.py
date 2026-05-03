@@ -71,10 +71,14 @@ async def test_speak_filters_banned_keywords(beanie_fixture):
 
     reply_dict[group_id][bot_id] = [{"time": 1, "reply": "x", "reply_keywords": "x"}]
 
+    allowed_msg = msg_list[-1]
     try:
         with (
             patch("src.plugins.repeater.speaker.time.time", return_value=10000),
-            patch("src.plugins.repeater.speaker.random.choice", return_value=bot_id),
+            patch(
+                "src.plugins.repeater.speaker.random.choice",
+                side_effect=[bot_id, [allowed_msg], allowed_msg],
+            ),
             patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
             patch(
                 "src.plugins.repeater.speaker.BanManager.find_ban_keywords",
@@ -117,10 +121,15 @@ async def test_speak_recent_dedup_avoids_same_message_twice(beanie_fixture):
 
     reply_dict[group_id][bot_id] = [{"time": 1, "reply": "x", "reply_keywords": "x"}]
 
+    dup_a_msg = msg_list[-2]
+    dup_b_msg = msg_list[-1]
     try:
         with (
             patch("src.plugins.repeater.speaker.time.time", return_value=10000),
-            patch("src.plugins.repeater.speaker.random.choice", return_value=bot_id),
+            patch(
+                "src.plugins.repeater.speaker.random.choice",
+                side_effect=[bot_id, [dup_a_msg], dup_a_msg],
+            ),
             patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
             patch(
                 "src.plugins.repeater.speaker.BanManager.find_ban_keywords",
@@ -138,7 +147,10 @@ async def test_speak_recent_dedup_avoids_same_message_twice(beanie_fixture):
 
         with (
             patch("src.plugins.repeater.speaker.time.time", return_value=30000),
-            patch("src.plugins.repeater.speaker.random.choice", return_value=bot_id),
+            patch(
+                "src.plugins.repeater.speaker.random.choice",
+                side_effect=[bot_id, [dup_b_msg], dup_b_msg],
+            ),
             patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
             patch(
                 "src.plugins.repeater.speaker.BanManager.find_ban_keywords",

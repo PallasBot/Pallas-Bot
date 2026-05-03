@@ -198,7 +198,7 @@ uv run nb run
 | `PG_POOL_SIZE`    | `10`                                | PostgreSQL 连接池基础连接数   | 否 |
 | `PG_MAX_OVERFLOW` | `20`                                | PostgreSQL 连接池最大额外连接数 | 否 |
 | `PG_POOL_RECYCLE` | `1800`                              | PostgreSQL 连接回收时间（秒）  | 否 |
-| `OneBot WS URL`   | `ws://localhost:8088/onebot/v11/ws` | 协议端连接地址               | 是       |
+| `OneBot WS URL`   | `ws` + `://` + `localhost:8088/onebot/v11/ws` | 协议端连接地址               | 是       |
 
 启用 Web 控制台写接口或协议端管理页/API 时，请在 `.env` 配置 `PALLAS_WEBUI_API_TOKEN` 与 `PALLAS_PROTOCOL_TOKEN`（字段说明见 [控制台（pallas_webui）](docs/plugins/pallas_webui/README.md)、[协议端管理（pallas_protocol）](docs/plugins/pallas_protocol/README.md)）。
 

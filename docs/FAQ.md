@@ -87,6 +87,6 @@ A: **不用。** 仓库 [`docker-compose.yml`](../docker-compose.yml) 已用 **`
 
 A: Compose 把宿主机 **`./pallas-bot/.env`** 挂到容器 **`/app/.env`**，两边都必须是**同一个文件**。若宿主机上 `.env` 被建成了**文件夹**（例如在还没有 `.env` 文件时就启动过，或手动建错），就会报这类错。请删除宿主机上错误的 **`pallas-bot/.env` 目录**，从仓库复制 [`.env`](../.env) 为**文件**放到该路径，再重新 `docker compose up`。详见 [Docker 部署](DockerDeployment.md) 中「排障」与配置步骤里的说明。
 
-### Q: 协议端管理里 WebSocket 要不要写 `ws://pallasbot:端口/...`？和 Compose 的 `pallasbot` 网络是什么关系？
+### Q: 协议端管理里 WebSocket 要不要写「`ws` + `://` + `pallasbot:端口/...`」？和 Compose 的 `pallasbot` 网络是什么关系？
 
-A: **`pallasbot` 只是 Compose 服务名**，DNS 只在**同一 Compose 网络里的容器**之间有效。协议端在 **Linux Docker 模式**下用 `docker run` 起的 NapCat **默认不在**该网络里，写 **`ws://pallasbot:...` 往往连不上**；插件会把 WS 主机改成 **`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`**（默认 **`172.17.0.1`**）再写入 **`onebot*.json`**，不是自动用 `pallasbot`。不必为了这个去「取消」Compose 自定义网络；若你**自己**把 NapCat 写成与 Bot **同网**的 service，才适合用 `ws://pallasbot:<PORT>/onebot/v11/ws`。详见 [Docker 部署](DockerDeployment.md) 排障与 [`pallas_protocol` 插件说明](plugins/pallas_protocol/README.md) 中「WS 地址」一节。
+A: **`pallasbot` 只是 Compose 服务名**，DNS 只在**同一 Compose 网络里的容器**之间有效。协议端在 **Linux Docker 模式**下用 `docker run` 起的 NapCat **默认不在**该网络里，把 URL 写成 **`ws`** + **`://`** + **`pallasbot:...` 往往连不上**；插件会把 WS 主机改成 **`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`**（默认 **`172.17.0.1`**）再写入 **`onebot*.json`**，不是自动用 `pallasbot`。不必为了这个去「取消」Compose 自定义网络；若你**自己**把 NapCat 写成与 Bot **同网**的 service，才适合用 **`ws`** + **`://`** + **`pallasbot:<PORT>/onebot/v11/ws`**。详见 [Docker 部署](DockerDeployment.md) 排障与 [`pallas_protocol` 插件说明](plugins/pallas_protocol/README.md) 中「WS 地址」一节。

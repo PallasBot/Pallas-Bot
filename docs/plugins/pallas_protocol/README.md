@@ -78,7 +78,7 @@ PALLAS_PROTOCOL_PROGRAM_DIR=你的运行时目录
 
 ### Linux +「Docker 模式」拉起 NapCat 时多走一步
 
-协议端用 **`docker run`** 起的 NapCat 容器默认在 **bridge**，**不会**自动加入你 `docker compose` 里自定义的 **`pallasbot` 网络**，因此 **`ws://pallasbot:端口/...` 一般不可用**（`pallasbot` 只在同一 Compose 网络内的容器之间解析）。
+协议端用 **`docker run`** 起的 NapCat 容器默认在 **bridge**，**不会**自动加入你 `docker compose` 里自定义的 **`pallasbot` 网络**，因此把 URL 写成 **`ws`** + **`://`** + **`pallasbot:端口/...` 一般不可用**（`pallasbot` 只在同一 Compose 网络内的容器之间解析）。
 
 此时会把上面解析出的 WS 的 **主机名** 再替换为 **`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`**（默认 **`172.17.0.1`**，常见为宿主机在默认 bridge 上的地址，用于访问映射到宿主机的 Bot 端口）。写入 **`onebot*.json`** 时走的也是这套逻辑（见 `config_manager.sync_onebot` / `service._merge_onebot_ws_from_env`）。
 
