@@ -1,8 +1,8 @@
-# Docker 部署
+# Pallas-Bot 3.0 Docker 部署
 
 > 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`3.0 迁移`](Migration-v3.md) · [`FAQ`](FAQ.md)
 
-如果你不想自己配置环境，可以使用 `Docker Compose` 一键部署已构建好的镜像。镜像中集成了 `Pallas-Bot` 运行所需要的所有环境并经过充分测试，你只需要安装 `Docker` 和 `Docker Compose`（较新版本的 `Docker` 已集成 `Compose` 插件）即可。`Pallas-Bot` 提供的镜像支持 `amd64` 与 `arm64` 架构。
+如果你不想自己配置环境，可以使用 `Docker Compose` 一键部署已构建好的镜像。拉取镜像请优先使用与你的版本对应的 **Release** 标签。在 **`.env`** 里选择 **`DB_BACKEND=mongo`** 或 **`DB_BACKEND=postgres`** 并填写对应连接信息即可。你需要安装 `Docker` 与 `Docker Compose`（较新版本的 `Docker` 已集成 `Compose` 插件），镜像支持 `amd64` 与 `arm64`。
 
 ## 准备工作
 
@@ -29,84 +29,139 @@
 
 ### 配置 docker-compose.yml
 
-1. 复制一份 [docker-compose.yml](../docker-compose.yml) 文件到本地单独的目录并按需修改 `volumes` 的路径：
+1. 复制一份 [docker-compose.yml](../docker-compose.yml) 到本地单独目录，按需修改 `volumes` 路径：
 
     ```yml
     ...
     volumes:
-    # 根据需求修改冒号左边路径，推荐保持默认，即在当前目录下自动创建映射目录
-    # Windows 用户如需使用绝对路径，请修改冒号左边为 D:\Pallas-Bot 这样的路径
-    # 建议与 docker-compose.yml 在同一目录下
-        - ./pallas-bot/resource/:/app/resource
+        - ./pallas-bot/resource/voices:/app/resource/voices
         - ./pallas-bot/.env:/app/.env
+        - ./pallas-bot/data:/app/data
     ...
-    volumes:
-    # mongodb 数据与日志存储路径，修改方法同上
       - ./mongo/data:/data/db
       - ./mongo/logs:/var/log/mongodb
     ...
-    # NapCat 数据与配置存储路径，修改方法同上
-    volumes:
-      - ./NapCat/QQ:/app/.config/QQ
-      - ./NapCat/config:/app/napcat/config
+      - ./postgres/data:/var/lib/postgresql/data   # 仅在使用 --profile postgres 时创建
     ```
 
-2. 默认提供的 `docker-compose.yml` 中包含了 `NapCat` 作为 QQ 客户端，你可以根据需要将其替换为 [Lagrange](https://github.com/LagrangeDev/Lagrange.Core/blob/master/Docker_zh.md) 或其他支持 `Docker` 部署的客户端。如果你想手动部署，可将 `NapCat` service 删除。
+    说明：
 
-3. （可选）如有需要，在你映射的目录下复制一份 [`.env`](../.env) 文件，并根据需要填写相关参数。具体请参考 [`.env`](../.env) 文件中的注释。若填写 `PALLAS_WEBUI_API_TOKEN`、`PALLAS_PROTOCOL_TOKEN` 等口令，纯数字可不写引号（插件加载时会转为字符串）。
+    - **`./pallas-bot/.env` 必须是宿主机上的一个「文件」**（从仓库根目录复制 [`.env`](../.env) 后按注释填写）。若该路径不存在就执行 `compose up`，在 Windows 上有时会被自动建成**同名文件夹**，再启动就会报 **`mounting ... .env ... not a directory` / `directory onto file`**：请删除错误的 `.env` 目录，改放真正的 `.env` 文件后再启动。
+    - **`resource/voices`** 单独挂载：持久化语音文件。**不要**把宿主机空目录挂到 **`/app/resource` 根目录**，否则会盖住镜像内的 **`resource/styles/default`**（`help` 插件），出现「样式路径不存在」告警。
+    - **`pallas-bot/data`** 映射到容器内 **`/app/data`**，用于持久化 **协议端管理**（`pallas_protocol`）的实例与 `runtime_profile.json` 等；不映射则容器删除后配置会丢。
+    - **`postgres` 服务**默认带 **`profiles: ["postgres"]`**，只有加 `--profile postgres` 才会启动；默认栈里 **只有 MongoDB** 作为数据库容器。
 
-4. 3.0 同时支持 `MongoDB` 与 `PostgreSQL` 数据后端；如果你是从历史数据升级，请先参考 [`3.0 迁移指南`](Migration-v3.md)。
+2. 复制 [`.env`](../.env) 到映射路径（如 `./pallas-bot/.env`），按注释填写。写接口需 `PALLAS_WEBUI_API_TOKEN`、协议端管理需 **`PALLAS_PROTOCOL_TOKEN`**（纯数字可不写引号）。
 
-## 启动与登录牛牛
+3. **数据后端二选一**
 
-### 启动牛牛
+    - **MongoDB（默认）**：直接 `docker compose up -d`。`.env` 中 `DB_BACKEND=mongo`（或默认）。compose 已为 `pallasbot` 注入 **`MONGO_HOST=mongodb`**、**`MONGO_PORT=27017`**。若你自建 Mongo 或改服务名，请同步改 compose 或 `.env`。
+    - **PostgreSQL**：在 **`pallas-bot/.env`** 中设置 `DB_BACKEND=postgres`，并填写 **`PG_USER`** / **`PG_PASSWORD`** / **`PG_DB`**。compose 已为 `pallasbot` 注入 **`PG_HOST=postgres`**、**`PG_PORT=5432`**，无需在 `.env` 里再写 `127.0.0.1`。启动内置数据库时请执行 **`docker compose --env-file ./pallas-bot/.env --profile postgres up -d`**，以便 compose 把 **`PG_USER`/`PG_PASSWORD`/`PG_DB`** 插值写入 `postgres` 容器的 **`POSTGRES_*`**。若使用自建 Postgres，可不加 `--profile postgres`，删掉 compose 里 **`PG_HOST`/`PG_PORT`** 覆盖并在 `.env` 写明真实地址，并从 `depends_on` 中视情况移除对内置 `postgres` 的等待（见仓库 `docker-compose.yml` 注释）。
 
-一键启动！
+    从历史数据迁移请参考 [`3.0 迁移指南`](Migration-v3.md)。
+
+4. **QQ / NapCat 与协议端管理**
+
+    默认 **不再** 在 Compose 中编排独立 **`napcat`** 容器；请在浏览器打开 **`http://<宿主机>:8088/protocol/napcat/`**（端口随映射变化），在 **协议端管理** 中创建实例并登录。管理页会按当前 Bot 的运行方式（本机进程或 Docker 等）自动填写 OneBot WebSocket 等连接信息，一般无需手动改；自管 NapCat 或网络异常时再查 [`pallas_protocol` 说明](plugins/pallas_protocol/README.md)。
+
+    - **Linux** 且管理页里使用 **Docker 模式** 拉起 NapCat：需在 `pallasbot` 服务上挂载 **`/var/run/docker.sock`**（`docker-compose.yml` 内已用注释标出；有安全风险，生产环境请加固）。
+    - 若仍希望 **单独** 起一个 NapCat 容器，可自行写 compose 并做好与 Bot 的网络互通；注意与协议端管理不要 **重复登录同一账号**。
+
+## 启动与使用
+
+### 启动
 
 ```bash
-# Linux root 用户在 docker-compose.yml 所在目录下执行
-NAPCAT_UID=$(id -u) NAPCAT_GID=$(id -g) docker compose up -d
-# Windows 请使用 powershell 直接执行，无需管理员权限，请不要在 wsl 内执行
-```
-
-你也可以通过 `id -u` 和 `id -g` 手动获取并修改 docker-compose.yml 中的 `NAPCAT_UID` 与 `NAPCAT_GID`，然后直接使用以下命令启动：
-
-```bash
+# 仅 MongoDB（默认）
 docker compose up -d
+
+# 需要本 compose 内的 PostgreSQL 时（PG_* 写在 pallas-bot/.env）
+docker compose --env-file ./pallas-bot/.env --profile postgres up -d
 ```
-
-和手动部署一样，牛牛也会自动下载语音文件到你映射的 `resource/voices/` 目录下。
-
-### 登录账号
-
-浏览器访问 `http://<宿主机ip>:6099/webui`，默认 token 为 `napcat`。
-
-扫码登录后，按下面步骤配置：
-
-1. 点击 `网络配置` -> `新建` -> `WebSocket 客户端`
-2. 打开 `启用` 开关，名称随便填（例如 `PallasBot`）
-3. 在 `URL` 栏填写 `pallasbot:8088/onebot/v11/ws`，协议选择 `ws`
-4. 点击保存，看到连接成功后就表示 `Pallas-Bot` 已接通
 
 ### 查看日志
 
-在 `docker-compose.yml` 的目录下通过 `docker compose logs -f` 查看实时日志，启动完成后就可以访问 `NapCat` 后台并登陆账号了。
+在 `docker-compose.yml` 所在目录执行：
 
-### 访问 3.0 控制台
+```bash
+docker compose logs -f pallasbot
+```
 
-容器启动后可访问：
+### 访问 3.0 控制台与协议端管理
 
-- 控制台页面：`http://<宿主机ip>:8088/pallas/`
-- 控制台接口基址：`http://<宿主机ip>:8088/pallas/api`
+（默认映射宿主机 `8088`，若已修改 `ports` 请替换。）
 
-如果你在 `docker-compose.yml` 里修改了 `pallasbot` 的端口映射，请按实际端口访问。
+- **Web 控制台**：`http://<宿主机ip>:8088/pallas/`（HTTP API 一般为 `http://<宿主机ip>:8088/pallas/api`）
+- **协议端管理**：`http://<宿主机ip>:8088/protocol/napcat/`（需配置 `PALLAS_PROTOCOL_TOKEN`；详见 [`pallas_protocol`](plugins/pallas_protocol/README.md)）
+
+写操作与敏感接口需配置 `PALLAS_WEBUI_API_TOKEN` / `PALLAS_PROTOCOL_TOKEN`（纯数字可不写引号）。
+
+## 排障
+
+### `project name must not be empty`
+
+Compose 默认用**当前文件夹名**作为项目名；目录名为中文等时，部分 Docker Desktop 版本会推出**空项目名**从而报错。本仓库 [`docker-compose.yml`](../docker-compose.yml) 已在顶层设置 **`name: pallas-bot`** 规避该问题。
+
+若你使用的 `docker-compose.yml` 尚无此行，可任选其一：
+
+- 启动时指定项目名：`docker compose -p pallas-bot --profile postgres up -d`
+- PowerShell：`$env:COMPOSE_PROJECT_NAME = "pallas-bot"` 后再执行 `docker compose ...`
+
+同一台机器多套实例时请改用不同项目名（例如 `-p pallasbot-home2`），避免网络/容器名冲突。
+
+### `help` 告警「样式路径不存在 `/app/resource/styles/default`」
+
+多为 **Compose 把整条 `./pallas-bot/resource` 挂到 `/app/resource`**，宿主机目录里没有从仓库带过来的 **`styles/default`**，把镜像内自带样式**遮住**了。请改用仓库当前写法：**只挂载 `./pallas-bot/resource/voices:/app/resource/voices`**，或保证宿主机 `resource` 下包含与仓库一致的 **`styles/default`**。
+
+### PG 日志 `FATAL: database "PallasBot" does not exist`
+
+**不是** Postgres 容器坏了，而是：**当前数据目录里根本没有名为 `PallasBot` 的库**，而 Bot 的 **`PG_DB`**（默认 `PallasBot`）正在连这个库。
+
+常见原因：
+
+1. **数据卷是以前用别的 `POSTGRES_DB` 初始化过的**（例如旧 compose 默认建过库名 **`pallas`**）。Postgres 官方镜像**只在数据目录为空时**根据 `POSTGRES_DB` 建库，**改环境变量不会自动改名/建新库**。
+2. **`.env` 里 `PG_DB` 与 compose 插值出的 `POSTGRES_DB` 不一致**（且卷里只有其中一侧的库）。
+
+处理任选其一：
+
+- **对齐名字**：把 **`pallas-bot/.env`** 里的 **`PG_DB`** 改成与卷里**已有**库名一致（若当初建的是 `pallas` 就写 `pallas`），并 **`docker compose restart pallasbot`**。
+- **重建空卷（会删库）**：`docker compose --profile postgres down`，删除宿主机 **`./postgres/data`** 目录，再 **`docker compose --env-file ./pallas-bot/.env --profile postgres up -d`**，让镜像按当前 **`POSTGRES_DB`**（默认与 **`PG_DB`** 一致为 **`PallasBot`**）重新初始化。
+- **保留数据手动建库**：`docker exec -it pallasbot_postgres psql -U <PG_USER> -d postgres -c 'CREATE DATABASE "PallasBot";'`（库名与 **`PG_DB`** 一致即可）。
+
+### `python:3.12-slim` / `registry-1.docker.io` 拉取失败、`EOF`、`connectex`
+
+访问 **Docker Hub** 不稳定时，构建会在 **`FROM python`** 或解析 manifest 阶段失败。可选做法：
+
+1. **构建参数换基础镜像前缀**（仓库 [`Dockerfile`](../Dockerfile) 支持 **`BASE_IMAGE`**）：
+
+    ```bash
+    docker build --build-arg BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim -t pallasbot:local .
+    ```
+
+    若某镜像站不可用，请换你环境能访问的 **`library/python:3.12-slim`** 同步源（需与官方标签一致或兼容）。
+
+2. **Docker Desktop**：在 **Settings → Docker Engine** 中为 `registry-mirrors` 配置加速，并重试 `docker build`。
+
+3. **代理 / VPN**：让 Docker 守护进程能访问 `registry-1.docker.io`。
+
+### `mounting ... /.env ... not a directory` / `Are you trying to mount a directory onto a file`
+
+宿主机上 `./pallas-bot/.env` 与容器内 **`/app/.env`（文件）** 类型不一致时会出现。常见原因：`pallas-bot/.env` 实际是**文件夹**，或路径写错。处理：删掉宿主机上误建的 **`.env` 目录**，从仓库复制 **`.env` 文件**到 `pallas-bot/.env`，保存为普通文本文件后再 `docker compose up`。
+
+### `ws://pallasbot` 与 Compose 里的 `pallasbot` 网络
+
+- **不必**为了协议端专门「取消」自定义网络：Compose 会为项目建网络，**服务名 DNS**（如 `pallasbot`）只在该网络内的容器之间生效；删掉显式 `networks:` 仍会生成默认网络，**并不能**让协议端 Docker 模式自动改用 `pallasbot` 主机名。
+- **协议端管理**写入 **`onebot*.json`** 时，依据的是 **`.env` / 驱动里的 `HOST`、`PORT` 等** 解析出 WS，再在 **Linux Docker 模式**下把主机替换为 **`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`**（见上节与插件文档），**不会**根据 Compose 服务名自动填 `pallasbot`。
+- 若你**自行**把 NapCat 写成与 `pallasbot` **同一 Compose 网络**的 service，则可在 NapCat 里使用 **`ws://pallasbot:<PORT>/onebot/v11/ws`**；这与当前协议端插件 **`docker run` 默认网络** 是两条路径。
 
 ## 后续更新
 
 ```bash
-# Linux root 用户在 docker-compose.yml 所在目录下执行
-docker compose down     # 停止容器
-docker compose pull     # 拉取最新镜像
-docker compose up -d    # 重新启动容器
-# Windows 请使用 powershell 直接执行，无需管理员权限，请不要在 wsl 内执行
+docker compose down
+docker compose pull
+docker compose up -d
+# 若使用 postgres profile：
+# docker compose --env-file ./pallas-bot/.env --profile postgres down
+# docker compose pull
+# docker compose --env-file ./pallas-bot/.env --profile postgres up -d
 ```

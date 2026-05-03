@@ -1,3 +1,9 @@
+# 默认：Pallas-Bot + MongoDB；NapCat 由 3.0 协议端管理（/protocol/napcat/）在宿主机或容器内拉起，不再单独编排 napcat 服务。
+# 使用 PostgreSQL：在 pallas-bot/.env 配好 PG_* 与 DB_BACKEND=postgres 后执行：
+#   docker compose --env-file ./pallas-bot/.env --profile postgres up -d
+#（postgres 服务从 PG_USER / PG_PASSWORD / PG_DB 映射 POSTGRES_*，无需再维护两套数据库账号变量；若不用 --env-file，插值会回落到下方默认值，可能与 Bot 读到的 .env 不一致。）
+# 固定项目名：避免工作目录名为中文等时，Compose 推导出的项目名为空而报错「project name must not be empty」
+name: pallas-bot
 services:
   pallasbot:
     container_name: pallasbot
@@ -10,14 +16,28 @@ services:
       ENVIRONMENT: prod
       APP_MODULE: bot:app
       MAX_WORKERS: 1
+      # 与本 compose 内 mongodb 服务同网；容器内 127.0.0.1 不是宿主机也不是兄弟容器
+      MONGO_HOST: mongodb
+      MONGO_PORT: "27017"
+      # 使用 --profile postgres 且 DB_BACKEND=postgres 时连本编排内 postgres 服务；外置 PG 请删改这两项
+      PG_HOST: postgres
+      PG_PORT: "5432"
     networks:
       - pallasbot
     volumes:
-      - ./pallas-bot/resource/:/app/resource
+      # 勿挂载整个 /app/resource，否则会盖住镜像内的 help 样式（resource/styles/default）；语音持久化只挂 voices
+      - ./pallas-bot/resource/voices:/app/resource/voices
       - ./pallas-bot/.env:/app/.env
+      # 协议端实例、runtime_profile 等（见 docs/plugins/pallas_protocol/README.md）
+      - ./pallas-bot/data:/app/data
+      # Linux 且协议端使用「Docker 模式」拉起 NapCat 时再取消注释（挂载 Docker socket 有安全风险，生产请加固）
+      # - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       mongodb:
         condition: service_healthy
+      postgres:
+        condition: service_healthy
+        required: false
 
   mongodb:
     container_name: mongodb
@@ -40,20 +60,28 @@ services:
       retries: 3
       start_period: 15s
 
-  napcat:
-    container_name: napcat
-    image: mlikiowa/napcat-docker:latest
+  postgres:
+    profiles: ["postgres"]
+    container_name: pallasbot_postgres
+    image: postgres:16-alpine
     restart: always
+    # 与 Bot 共用 pallas-bot/.env 里的 PG_*：由 compose 插值写入镜像所需 POSTGRES_*（请配合文件首条注释使用 --env-file）
     environment:
-      - NAPCAT_UID=${NAPCAT_UID:-1000}
-      - NAPCAT_GID=${NAPCAT_GID:-1000}
-    networks: 
+      TZ: Asia/Shanghai
+      POSTGRES_USER: ${PG_USER:-pallas}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-pallas}
+      POSTGRES_DB: ${PG_DB:-PallasBot}
+    networks:
       - pallasbot
-    ports:
-        - 6099:6099
     volumes:
-      - ./NapCat/QQ:/app/.config/QQ
-      - ./NapCat/config:/app/napcat/config
+      # 若曾用旧默认库名初始化过，改 PG_DB/POSTGRES_DB 不会自动变库；需删本目录重建或手动 CREATE DATABASE（见 DockerDeployment.md 排障）
+      - ./postgres/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
 networks:
   pallasbot:

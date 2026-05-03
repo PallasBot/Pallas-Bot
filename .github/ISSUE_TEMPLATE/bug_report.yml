@@ -59,7 +59,7 @@ body:
   - type: checkboxes
     id: checklist
     attributes:
-      label: 提交前确认（可选）
+      label: 提交前确认
       options:
         - label: 我已搜索过现有 issue，确认此问题未被报告过
           required: false

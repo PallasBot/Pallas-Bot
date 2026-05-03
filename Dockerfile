@@ -1,5 +1,8 @@
-# syntax=docker/dockerfile:1
-FROM --platform=$BUILDPLATFORM python:3.12-slim
+# 基础镜像默认 Docker Hub；国内/弱网拉 registry-1.docker.io 失败时：
+#   docker build --build-arg BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim -t pallasbot:local .
+#（镜像站域名以当时可用为准，见 docs/DockerDeployment.md）
+ARG BASE_IMAGE=python:3.12-slim
+FROM ${BASE_IMAGE}
 
 WORKDIR /app
 
@@ -12,7 +15,8 @@ RUN apt-get update && \
 
 COPY pyproject.toml ./
 
-RUN uv pip install --system ".[perf]" --no-cache-dir && \
+# perf：jieba-next；pg：PostgreSQL 后端
+RUN uv pip install --system ".[perf,pg]" --no-cache-dir && \
     apt-get purge -y build-essential && \
     apt-get autoremove -y && \
     rm -rf /root/.cache/pip
