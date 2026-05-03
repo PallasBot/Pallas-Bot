@@ -12,6 +12,9 @@ class _FakeContextRepo:
     async def find_by_keywords(self, keywords):  # noqa: ARG002
         return None
 
+    async def context_exists_by_keywords(self, keywords):  # noqa: ARG002
+        return False
+
     async def save(self, context):  # noqa: ARG002
         return None
 

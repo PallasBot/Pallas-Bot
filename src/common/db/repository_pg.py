@@ -354,6 +354,12 @@ def row_to_image_cache(row: ImageCacheRow) -> ImageCache:
 
 
 class PgContextRepository:
+    async def context_exists_by_keywords(self, keywords: str) -> bool:
+        khash = keywords_hash(keywords)
+        async with get_session() as session:
+            result = await session.execute(select(ContextRow.id).where(ContextRow.keywords_hash == khash).limit(1))
+            return result.scalar_one_or_none() is not None
+
     async def find_by_keywords(self, keywords: str) -> Context | None:
         khash = keywords_hash(keywords)
         async with get_session() as session:

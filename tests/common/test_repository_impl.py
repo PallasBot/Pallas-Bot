@@ -70,6 +70,14 @@ async def test_context_repo_find_not_found(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_context_repo_exists_by_keywords(beanie_fixture):
+    repo = MongoContextRepository()
+    assert await repo.context_exists_by_keywords("ghost") is False
+    await repo.insert(Context(keywords="live", time=0, trigger_count=1, answers=[]))  # type: ignore
+    assert await repo.context_exists_by_keywords("live") is True
+
+
+@pytest.mark.asyncio
 async def test_context_repo_delete_expired(beanie_fixture):
     """Test delete_expired removes old low-count contexts."""
     repo = MongoContextRepository()

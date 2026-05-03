@@ -86,8 +86,7 @@ class Learner:
         pre_keywords = pre_msg.keywords
         cur_time = chat_data.time
 
-        context = await context_repo.find_by_keywords(pre_keywords)
-        if context:
+        if await context_repo.context_exists_by_keywords(pre_keywords):
             # 使用细粒度 upsert_answer：原子地 inc count / set time / 可选 push message
             # append_on_existing 保留原有 "仅 plain text 才追加 message" 的语义
             await context_repo.upsert_answer(

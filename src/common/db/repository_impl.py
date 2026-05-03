@@ -23,6 +23,11 @@ if TYPE_CHECKING:
 class MongoContextRepository:
     """MongoDB 版 ContextRepository 实现"""
 
+    async def context_exists_by_keywords(self, keywords: str) -> bool:
+        coll = Context.get_pymongo_collection()
+        doc = await coll.find_one({"keywords": keywords}, projection={"_id": 1})
+        return doc is not None
+
     async def find_by_keywords(self, keywords: str) -> Context | None:
         return await Context.find_one(Context.keywords == keywords)
 

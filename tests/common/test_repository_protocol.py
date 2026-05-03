@@ -11,6 +11,9 @@ class MockContextRepo:
     async def find_by_keywords(self, keywords):
         return None
 
+    async def context_exists_by_keywords(self, keywords):  # noqa: ARG002
+        return False
+
     async def save(self, context):
         pass
 

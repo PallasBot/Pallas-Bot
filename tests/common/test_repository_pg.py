@@ -46,6 +46,20 @@ async def test_find_for_cleanup_or_semantics(pg_engine):
 
 
 @pytest.mark.asyncio
+async def test_context_exists_by_keywords(pg_engine):
+    """Learner仅需分支判断时应只查 id，避免误用全量 find_by_keywords。"""
+    from src.common.db.modules import Context
+    from src.common.db.repository_pg import PgContextRepository
+
+    repo = PgContextRepository()
+    assert await repo.context_exists_by_keywords("absent_kw") is False
+    await repo.insert(
+        Context.model_construct(keywords="present_kw", time=0, trigger_count=1, answers=[], ban=[], clear_time=0)
+    )
+    assert await repo.context_exists_by_keywords("present_kw") is True
+
+
+@pytest.mark.asyncio
 async def test_upsert_answer_is_atomic(pg_engine):
     """并发 50 次 upsert_answer 只产生 1 条 Answer、count=50、trigger_count 精确累加。"""
     from src.common.db.modules import Context
