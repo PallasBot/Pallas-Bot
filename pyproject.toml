@@ -22,7 +22,8 @@ dependencies = [
     "nonebot2[fastapi]>=2.4.4",
     "nvidia-ml-py>=13.595.45",
     "pillowmd>=0.7.3",
-    "pyncm-async>=1.8.2",
+    # PyPI/镜像常不可解析该包，固定已校验的发行包地址（issue #166）
+    "pyncm-async @ https://files.pythonhosted.org/packages/52/14/8892c8bef54293eaf13c3ff95685a097d8a48272ce07b8600138f5c24d3e/pyncm_async-1.8.2.tar.gz",
     "pypinyin>=0.55.0",
     "python-multipart>=0.0.20",
     "python-ulid>=3.1.0",
