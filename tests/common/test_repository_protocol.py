@@ -1,18 +1,18 @@
 """Tests for Repository Protocol interfaces."""
 
+import pytest
+
 from src.common.db.repository import (
     BlackListRepository,
     ContextRepository,
+    ContextRepositoryExistenceMixin,
     MessageRepository,
 )
 
 
-class MockContextRepo:
-    async def find_by_keywords(self, keywords):
+class MockContextRepo(ContextRepositoryExistenceMixin):
+    async def find_by_keywords(self, keywords):  # noqa: ARG002
         return None
-
-    async def context_exists_by_keywords(self, keywords):  # noqa: ARG002
-        return False
 
     async def save(self, context):
         pass
@@ -55,6 +55,17 @@ class MockBlackListRepo:
 def test_context_repo_protocol():
     repo = MockContextRepo()
     assert isinstance(repo, ContextRepository)
+
+
+@pytest.mark.asyncio
+async def test_existence_mixin_delegates_to_find():
+    class _Repo(ContextRepositoryExistenceMixin):
+        async def find_by_keywords(self, kw: str):
+            return object() if kw == "hit" else None
+
+    repo = _Repo()
+    assert await repo.context_exists_by_keywords("hit") is True
+    assert await repo.context_exists_by_keywords("miss") is False
 
 
 def test_message_repo_protocol():

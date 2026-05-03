@@ -13,7 +13,11 @@ class ContextRepository(Protocol):
         ...
 
     async def context_exists_by_keywords(self, keywords: str) -> bool:
-        """是否已有 Context(keywords)；用于仅需分支判断时避免全量加载。"""
+        """是否已有 Context(keywords)；用于仅需分支判断时避免全量加载。
+
+        自定义后端若暂无轻量查询，可混入 `ContextRepositoryExistenceMixin`，
+        由 `find_by_keywords` 推导存在性（仍会全量加载）。
+        """
         ...
 
     async def save(self, context: Context) -> None:
@@ -72,6 +76,13 @@ class ContextRepository(Protocol):
         若 Context(keywords=keywords) 不存在，则应为 no-op。
         """
         ...
+
+
+class ContextRepositoryExistenceMixin:
+    """为已实现 `find_by_keywords` 的仓储提供 `context_exists_by_keywords` 默认实现。"""
+
+    async def context_exists_by_keywords(self, keywords: str) -> bool:
+        return (await self.find_by_keywords(keywords)) is not None
 
 
 @runtime_checkable

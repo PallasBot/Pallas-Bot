@@ -21,6 +21,7 @@ from .repository import (
     BlackListRepository,
     ConfigRepository,
     ContextRepository,
+    ContextRepositoryExistenceMixin,
     ImageCacheRepository,
     MessageRepository,
 )
