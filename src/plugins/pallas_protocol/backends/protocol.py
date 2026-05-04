@@ -1,4 +1,4 @@
-"""协议端运行时抽象"""
+"""协议端运行时抽象：新栈实现 ``ProtocolRuntimeBackend``，并用 ``register_protocol_runtime_backend`` 登记。"""
 
 from __future__ import annotations
 

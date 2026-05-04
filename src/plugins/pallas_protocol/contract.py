@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-# 默认协议实现
+# 默认协议实现（须与 backends 中已注册名一致，见 register_protocol_runtime_backend）
 DEFAULT_PROTOCOL_BACKEND: str = "napcat"
-# 账号协议字段名
+# 账号协议字段名；取值对应运行时注册表中的 kind
 ACCOUNT_PROTOCOL_BACKEND_KEY: str = "protocol_backend"
 
 # 协议页面前缀

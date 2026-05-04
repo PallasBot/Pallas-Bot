@@ -1,4 +1,6 @@
-"""协议端运行时注册表：按 `protocol_backend` 分派至具体实现。"""
+"""协议端运行时注册表：按账号 `protocol_backend` 字段分派（与 `contract.ACCOUNT_PROTOCOL_BACKEND_KEY` 一致）。"""
+
+# 新协议栈：实现 ProtocolRuntimeBackend 后在此 register；kind 与账号里存的字符串同形且小写匹配（如 napcat）。
 
 from __future__ import annotations
 
@@ -15,6 +17,7 @@ _PROTOCOL_RUNTIME_FACTORIES: dict[str, ProtocolRuntimeBackendFactory] = {}
 
 
 def register_protocol_runtime_backend(kind: str, factory: ProtocolRuntimeBackendFactory) -> None:
+    """登记一种实现；factory 接收 PallasProtocolService，返回该后端的 RuntimeBackend 实例。应在插件加载阶段调用。"""
     key = (kind or "").strip().lower()
     if not key:
         msg = "协议端 backend 注册名不能为空"
@@ -27,6 +30,7 @@ def registered_protocol_runtime_backends() -> tuple[str, ...]:
 
 
 def make_protocol_runtime_backend(service: Any, kind: str) -> ProtocolRuntimeBackend:
+    """按 kind 取工厂；空串回退到 contract.DEFAULT_PROTOCOL_BACKEND。未登记则 ValueError。"""
     raw = (kind or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
     factory = _PROTOCOL_RUNTIME_FACTORIES.get(raw)
     if factory is None:
@@ -36,6 +40,7 @@ def make_protocol_runtime_backend(service: Any, kind: str) -> ProtocolRuntimeBac
     return factory(service)
 
 
+# 内置：与 DEFAULT_PROTOCOL_BACKEND 一致
 register_protocol_runtime_backend("napcat", lambda s: NapcatRuntimeBackend(s))
 
 __all__ = [
