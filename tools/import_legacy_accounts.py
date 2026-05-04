@@ -34,6 +34,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 from src.common.paths import plugin_data_dir  # noqa: E402
+from src.plugins.pallas_protocol.contract import normalize_instance_folder_segment  # noqa: E402
 
 _DEFAULT_INSTANCES_ROOT = plugin_data_dir("pallas_protocol") / "instances"
 
@@ -284,8 +285,8 @@ def import_accounts(
         webui_port = _next_free_port(accounts)
         webui_token = secrets.token_hex(6)
 
-        # 将数据复制到 instances_root/<qq>/
-        inst_dir = instances_root / qq
+        # 将数据复制到 instances_root/<qq>/<napcat>/
+        inst_dir = instances_root / qq / normalize_instance_folder_segment("napcat")
         account_data_dir = str(inst_dir.resolve())
 
         account = {
