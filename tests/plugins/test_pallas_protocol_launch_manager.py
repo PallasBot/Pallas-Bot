@@ -2,6 +2,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from src.plugins.pallas_protocol.contract import SNOWLUMA_PROTOCOL_BACKEND
 from src.plugins.pallas_protocol.launch_manager import LaunchManager
 from src.plugins.pallas_protocol.platform.posix import PosixNapcatPlatform
 
@@ -11,6 +12,7 @@ def _cfg(**kwargs):
         "pallas_protocol_default_command": "node",
         "pallas_protocol_default_args": ["napcat.mjs"],
         "pallas_protocol_program_dir": "",
+        "pallas_protocol_snowluma_program_dir": "",
         "pallas_protocol_linux_use_docker": False,
         "pallas_protocol_docker_internal_webui_port": 6099,
         "pallas_protocol_docker_image": "mlikiowa/napcat-docker:latest",
@@ -61,6 +63,52 @@ def test_apply_defaults_linux_docker_mode_keeps_docker_command(tmp_path: Path) -
         mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
     assert account["command"] == "docker"
     assert account.get("napcat_linux_docker") is True
+
+
+def test_apply_defaults_snowluma_sets_program_and_entry(tmp_path: Path) -> None:
+    sl_root = tmp_path / "snowluma_dist"
+    sl_root.mkdir()
+    (sl_root / "index.mjs").write_text("//", encoding="utf-8")
+    mgr = LaunchManager(
+        tmp_path / "data",
+        tmp_path / "resource",
+        _cfg(pallas_protocol_snowluma_program_dir=str(sl_root)),
+        instances_root=tmp_path / "instances",
+        platform=PosixNapcatPlatform(),
+    )
+    account = {
+        "id": "10005",
+        "qq": "10005",
+        "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND,
+    }
+    mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
+    assert account["program_dir"] == str(sl_root)
+    assert str(sl_root / "index.mjs") in account["args"][0]
+    assert "snowluma" in account["account_data_dir"].replace("\\", "/")
+
+
+def test_apply_defaults_snowluma_prefers_runtime_store_over_resource(tmp_path: Path) -> None:
+    sl_root = tmp_path / "data" / "runtime_extract" / "snowluma" / "pkg"
+    sl_root.mkdir(parents=True)
+    (sl_root / "index.mjs").write_text("//", encoding="utf-8")
+    res = tmp_path / "resource" / "snowluma"
+    res.mkdir(parents=True)
+    (res / "index.mjs").write_text("old", encoding="utf-8")
+    mgr = LaunchManager(
+        tmp_path / "data",
+        tmp_path / "resource",
+        _cfg(pallas_protocol_snowluma_program_dir=""),
+        instances_root=tmp_path / "instances",
+        platform=PosixNapcatPlatform(),
+        snowluma_runtime_dir_provider=lambda: sl_root,
+    )
+    account = {
+        "id": "10006",
+        "qq": "10006",
+        "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND,
+    }
+    mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
+    assert account["program_dir"] == str(sl_root)
 
 
 def test_apply_defaults_linux_prefers_appimage_then_xvfb(tmp_path: Path) -> None:
