@@ -108,6 +108,32 @@ __plugin_meta__ = PluginMetadata(
 message_id_lock = asyncio.Lock()
 message_id_dict = defaultdict(lambda: deque(maxlen=100))
 
+# 多 Bot 同群时，协议可能对同一条群消息向每个连接各上报一次
+# 不合并会在 MessageStore 里堆出多条「连续相同句」，误触复读。
+_GROUP_EVENT_DEDUP_MAX = 4000
+_group_event_dedup_lock = asyncio.Lock()
+_group_event_sigs: deque[tuple[int, int, str, int]] = deque()
+_group_event_sig_set: set[tuple[int, int, str, int]] = set()
+
+
+def _normalize_group_raw_message(raw_message: str) -> str:
+    # 与 ChatData / learn 侧一致，避免图片子类型差异导致去重失败
+    return re.sub(r"\.image,.+?\]", ".image]", raw_message)
+
+
+async def _should_skip_duplicate_group_event(group_id: int, user_id: int, norm_raw: str, time: int) -> bool:
+    sig = (group_id, user_id, norm_raw, time)
+    async with _group_event_dedup_lock:
+        if sig in _group_event_sig_set:
+            return True
+        while len(_group_event_sigs) >= _GROUP_EVENT_DEDUP_MAX:
+            old = _group_event_sigs.popleft()
+            _group_event_sig_set.discard(old)
+        _group_event_sigs.append(sig)
+        _group_event_sig_set.add(sig)
+        return False
+
+
 driver = get_driver()
 
 
@@ -182,19 +208,19 @@ any_msg = on_message(
 
 @any_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent):
-    to_learn = True
     # 多账号登陆，且在同一群中时；避免一条消息被处理多次
     async with message_id_lock:
         message_id = event.message_id
         group_id = event.group_id
-        if group_id in message_id_dict:
-            if message_id in message_id_dict[group_id]:
-                to_learn = False
-        else:
+        if group_id not in message_id_dict:
             message_id_dict[group_id] = deque(maxlen=100)
+        if message_id in message_id_dict[group_id]:
+            return
+        message_id_dict[group_id].append(message_id)
 
-        group_message = message_id_dict[group_id]
-        group_message.append(message_id)
+    norm_raw = _normalize_group_raw_message(event.raw_message)
+    if await _should_skip_duplicate_group_event(event.group_id, event.user_id, norm_raw, event.time):
+        return
 
     chat: Chat = Chat(event)
 
@@ -203,12 +229,11 @@ async def _(bot: Bot, event: GroupMessageEvent):
     if await config.is_cooldown("repeat"):
         answers = await chat.answer()
 
-    if to_learn:
-        for seg in event.message:
-            if seg.type == "image":
-                await insert_image(seg)
+    for seg in event.message:
+        if seg.type == "image":
+            await insert_image(seg)
 
-        await chat.learn()
+    await chat.learn()
 
     if not answers:
         return
