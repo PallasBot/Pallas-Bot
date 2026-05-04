@@ -60,10 +60,10 @@ PALLAS_PROTOCOL_TOKEN=你的管理口令
 
 ### 场景 C：Windows
 
-通常无需额外配置，按管理页下载并创建实例即可；如有自定义运行目录，再设置：
+通常无需额外配置，按管理页下载并创建实例即可；如有自定义协议端程序目录，再设置：
 
 ```env
-PALLAS_PROTOCOL_PROGRAM_DIR=你的运行时目录
+PALLAS_PROTOCOL_PROGRAM_DIR=你的协议端发行包目录
 ```
 
 ## WS 地址到底从哪来
@@ -89,16 +89,16 @@ PALLAS_PROTOCOL_PROGRAM_DIR=你的运行时目录
 只有下面这些场景，更像是需要你手动配置：
 
 - 你想给管理页/API 单独加口令：`PALLAS_PROTOCOL_TOKEN`
-- 你想固定运行时目录：`PALLAS_PROTOCOL_PROGRAM_DIR`
-- 你想让启动时缺失运行时就自动下载：`PALLAS_PROTOCOL_AUTO_DOWNLOAD_RUNTIME`
+- 你想固定协议端发行包目录：`PALLAS_PROTOCOL_PROGRAM_DIR`
+- 你想让启动时缺少本地发行包就自动下载：`PALLAS_PROTOCOL_AUTO_DOWNLOAD_RUNTIME`
 - 你是 Docker 部署，且容器访问 Bot 需要指定宿主机地址：`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`
 - 你想手动写死完整 WS 地址：`PALLAS_PROTOCOL_ONEBOT_WS_URL`
 
 ## 常见的进阶配置项
 
 - `PALLAS_PROTOCOL_TOKEN`：管理页/API 鉴权（纯数字可不写引号，加载时转为字符串）
-- `PALLAS_PROTOCOL_PROGRAM_DIR`：运行时目录（手动模式常用）
-- `PALLAS_PROTOCOL_AUTO_DOWNLOAD_RUNTIME`：无运行时时自动下载
+- `PALLAS_PROTOCOL_PROGRAM_DIR`：协议端发行包目录（手动模式常用）
+- `PALLAS_PROTOCOL_AUTO_DOWNLOAD_RUNTIME`：无本地发行包时自动下载
 - `PALLAS_PROTOCOL_DOCKER_IMAGE`：Docker 模式镜像版本
 - `PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`：容器访问 Bot 的地址
 - `PALLAS_PROTOCOL_ONEBOT_WS_URL`：一条完整 WS 地址（最直接）
@@ -106,7 +106,7 @@ PALLAS_PROTOCOL_PROGRAM_DIR=你的运行时目录
 ## 排障速查
 
 - `PALLAS_PROTOCOL_TOKEN` 为纯数字时：`.env` 可不写引号（插件加载时会转为字符串）
-- 创建/启动时报 `program_dir 为空`：先在「更新/下载」页下载运行时，或设置 `PALLAS_PROTOCOL_PROGRAM_DIR`
+- 创建/启动时报 `program_dir 为空`：先在「更新/下载」页下载协议端发行包，或设置 `PALLAS_PROTOCOL_PROGRAM_DIR`
 - Docker 启动失败并提示端口冲突：当前版本会自动换可用端口；若仍失败，检查是否有外部服务长期占用端口段
 - 重启后镜像版本变回 `latest`：确认你在「更新/下载」页点过「保存设置」，并检查 `data/pallas_protocol/runtime_profile.json`
 - 页面改了设置但没生效：确认右上角「保存设置」已点击（页面会显示“有未保存修改”提示）

@@ -62,7 +62,7 @@
 
 4. **QQ / NapCat 与协议端管理**
 
-    默认 **不再** 在 Compose 中编排独立 **`napcat`** 容器；请在浏览器打开 **`http://<宿主机>:8088/protocol/napcat/`**（端口随映射变化），在 **协议端管理** 中创建实例并登录。管理页会按当前 Bot 的运行方式（本机进程或 Docker 等）自动填写 OneBot WebSocket 等连接信息，一般无需手动改；自管 NapCat 或网络异常时再查 [`pallas_protocol` 说明](plugins/pallas_protocol/README.md)。
+    默认 **不再** 在 Compose 中编排独立 **`napcat`** 容器；请在浏览器打开 **`http://<宿主机>:8088/protocol/console/`**（端口随映射变化），在 **协议端管理** 中创建实例并登录。管理页会按当前 Bot 的运行方式（本机进程或 Docker 等）自动填写 OneBot WebSocket 等连接信息，一般无需手动改；自管 NapCat 或网络异常时再查 [`pallas_protocol` 说明](plugins/pallas_protocol/README.md)。
 
     - **Linux** 且管理页里使用 **Docker 模式** 拉起 NapCat：需在 `pallasbot` 服务上挂载 **`/var/run/docker.sock`**（`docker-compose.yml` 内已用注释标出；有安全风险，生产环境请加固）。
     - 若仍希望 **单独** 起一个 NapCat 容器，可自行写 compose 并做好与 Bot 的网络互通；注意与协议端管理不要 **重复登录同一账号**。
@@ -92,7 +92,7 @@ docker compose logs -f pallasbot
 （默认映射宿主机 `8088`，若已修改 `ports` 请替换。）
 
 - **Web 控制台**：`http://<宿主机ip>:8088/pallas/`（HTTP API 一般为 `http://<宿主机ip>:8088/pallas/api`）
-- **协议端管理**：`http://<宿主机ip>:8088/protocol/napcat/`（需配置 `PALLAS_PROTOCOL_TOKEN`；详见 [`pallas_protocol`](plugins/pallas_protocol/README.md)）
+- **协议端管理**：`http://<宿主机ip>:8088/protocol/console/`（需配置 `PALLAS_PROTOCOL_TOKEN`；详见 [`pallas_protocol`](plugins/pallas_protocol/README.md)）
 
 写操作与敏感接口需配置 `PALLAS_WEBUI_API_TOKEN` / `PALLAS_PROTOCOL_TOKEN`（纯数字可不写引号）。
 

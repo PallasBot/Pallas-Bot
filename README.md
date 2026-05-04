@@ -35,9 +35,9 @@
 
 <p align="center">面向群聊场景的学习型机器人：会复读、会整活、可管理、可扩展。</p>
 
-> 🚀 当前主线：**Pallas-Bot 3.0**  
-> 仍希望沿用 MongoDB-only 的老版本？完全兼容的 2.0 代码保留在 [`archive/v2`](https://github.com/PallasBot/Pallas-Bot/tree/archive/v2) 分支。  
-> 从旧版本迁移到 `PG`：使用项目提供的 [Mongo -> PG 迁移脚本](tools/migrate_mongo_to_pg.py)。    
+> 🚀 当前主线：**Pallas-Bot 3.0**
+> 仍希望沿用 MongoDB-only 的老版本？完全兼容的 2.0 代码保留在 [`archive/v2`](https://github.com/PallasBot/Pallas-Bot/tree/archive/v2) 分支。
+> 从旧版本迁移到 `PG`：使用项目提供的 [Mongo -> PG 迁移脚本](tools/migrate_mongo_to_pg.py)。
 > 查看主线更新明细：[`版本更新`](#版本更新)
 <!-- Copy-paste in your Readme.md file -->
 
@@ -75,7 +75,7 @@
 <a id="关于项目"></a>
 ## 📖 关于项目
 
-牛牛的功能就是废话和复读。可以认为是高级版的复读机。  
+牛牛的功能就是废话和复读。可以认为是高级版的复读机。
 发现牛牛学了一些不合适的话及时帮忙[删除](docs/FAQ.md#使用与管理)。
 大家一起教出更棒更聪明的牛牛！✿✿ヽ(°▽°)ノ✿
 <a id="项目特点"></a>
@@ -123,8 +123,8 @@ uv sync                 # 安装依赖
 # 开始运行
 uv run nb run
 ```
-> 完整部署细节请查看 [部署教程](docs/Deployment.md) 和 [Docker 部署](docs/DockerDeployment.md)。  
-> **Docker Compose**：默认只起 **MongoDB + Bot**；需要本编排内的 **PostgreSQL** 时在 **`pallas-bot/.env`** 配好 **`PG_*`** 与 **`DB_BACKEND=postgres`**，再执行 **`docker compose --env-file ./pallas-bot/.env --profile postgres up -d`**（compose 会把 **`PG_USER`/`PG_PASSWORD`/`PG_DB`** 映射进 postgres 镜像，无需另写 **`POSTGRES_*`**）。**NapCat** 不在默认 Compose 里单独起容器，请在 **`/protocol/napcat/`** 协议端管理页创建实例（见 Docker 部署文档）。  
+> 完整部署细节请查看 [部署教程](docs/Deployment.md) 和 [Docker 部署](docs/DockerDeployment.md)。
+> **Docker Compose**：默认只起 **MongoDB + Bot**；需要本编排内的 **PostgreSQL** 时在 **`pallas-bot/.env`** 配好 **`PG_*`** 与 **`DB_BACKEND=postgres`**，再执行 **`docker compose --env-file ./pallas-bot/.env --profile postgres up -d`**（compose 会把 **`PG_USER`/`PG_PASSWORD`/`PG_DB`** 映射进 postgres 镜像，无需另写 **`POSTGRES_*`**）。**NapCat** 不在默认 Compose 里单独起容器，请在 **`/protocol/console/`** 协议端管理页创建实例（见 Docker 部署文档）。
 > 部署好自己牛牛之后，如果托管别人的账号成为你的牛牛，别忘记将他设置为牛牛的管理员!号主们都应该有控制自己牛牛的权力。
 
 <a id="使用指南"></a>
@@ -151,7 +151,7 @@ uv run nb run
 #### 管理功能
 
 - `pallas_webui`:Web 控制台，提供可视化管理界面（需部署前端，启动时自动下载）。
-- `pallas_protocol`:协议端管理，支持多账号运行、运行时自动下载与状态管理。
+- `pallas_protocol`:协议端管理，支持多账号运行、协议端发行包自动下载与状态管理。
 #### 群管理员功能
 
 - 管理员可以查看帮助并管理功能开关（按功能名/序号启用或禁用，支持`牛牛开启/关闭全部功能`）。
@@ -213,7 +213,7 @@ uv run nb run
   - 重构并修复 `roulette`
   - 新增 `drink` 完全醒酒能力
   - 新增 `pallas_webui`：Web 控制台，可视化管理界面，启动时自动下载前端产物
-  - 新增 `pallas_protocol`：协议端管理，支持多账号、多平台运行时自动下载
+  - 新增 `pallas_protocol`：协议端管理，支持多账号、多平台协议端发行包自动下载
   - 新增 `relogin_bot`：重新登录与创建新牛牛
   - 修复 `sing` 未处理消息响应
 - 稳定性：修复 `Bot` 关闭时的 `RuntimeError`，移除冗余导入的 `Event`
@@ -242,7 +242,7 @@ uv run nb run
 <a id="开发与贡献指南"></a>
 ## 💻 开发与贡献指南
 
-欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。  
+欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。
 查看我们的 [贡献指南](CONTRIBUTING.md)，了解如何参与贡献。
 
 
@@ -267,7 +267,7 @@ uv run nb run
 <a id="打赏"></a>
 ### 💝 打赏
 
-请作者喝杯咖啡吧（请备注牛牛项目，感谢你的支持 ✿✿ヽ(°▽°)ノ✿）：  
+请作者喝杯咖啡吧（请备注牛牛项目，感谢你的支持 ✿✿ヽ(°▽°)ノ✿）：
 
 <a href="https://afdian.com/a/misteo">
   <img width="200" src="https://pic1.afdiancdn.com/static/img/welcome/button-sponsorme.png">
@@ -276,13 +276,13 @@ uv run nb run
 <a id="致谢"></a>
 ## 🙏 致谢
 
-- [`NoneBot2`](https://github.com/nonebot/nonebot2)：跨平台 Python 异步聊天机器人框架 
+- [`NoneBot2`](https://github.com/nonebot/nonebot2)：跨平台 Python 异步聊天机器人框架
 - [`jieba_next`](https://github.com/mxcoras/jieba-next)：Use Rust to Speed up jieba 高效、现代的中文分词库
 - [`beanie`](https://github.com/BeanieODM/beanie)：Asynchronous Python ODM for MongoDB
 - [`NapCat`](https://github.com/NapNeko/NapCatQQ)：现代化的基于 NTQQ 的 Bot 协议端实现
 - [`zhenxun_bot`](https://github.com/zhenxun-org/zhenxun_bot.git)：非常可爱的绪山真寻Bot
 - [`Amiya-bot`](https://github.com/AmiyaBot/Amiya-Bot.git)：基于 AmiyaBot 框架的 QQ 聊天机器人
-- [`CustomMarkdownImage`](https://github.com/Monody-S/CustomMarkdownImage.git)：基于pillow的可自定义markdown渲染器 
+- [`CustomMarkdownImage`](https://github.com/Monody-S/CustomMarkdownImage.git)：基于pillow的可自定义markdown渲染器
 ## 📊 统计
 <!-- Copy-paste in your Readme.md file -->
 

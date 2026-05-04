@@ -1,4 +1,4 @@
-# 默认：Pallas-Bot + MongoDB；NapCat 由 3.0 协议端管理（/protocol/napcat/）在宿主机或容器内拉起，不再单独编排 napcat 服务。
+# 默认：Pallas-Bot + MongoDB；NapCat 由 3.0 协议端管理（/protocol/console/）在宿主机或容器内拉起，不再单独编排 napcat 服务。
 # 使用 PostgreSQL：在 pallas-bot/.env 配好 PG_* 与 DB_BACKEND=postgres 后执行：
 #   docker compose --env-file ./pallas-bot/.env --profile postgres up -d
 #（postgres 服务从 PG_USER / PG_PASSWORD / PG_DB 映射 POSTGRES_*，无需再维护两套数据库账号变量；若不用 --env-file，插值会回落到下方默认值，可能与 Bot 读到的 .env 不一致。）
