@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from html import escape as html_escape
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse, urlunparse
 
+import httpx
 from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 if TYPE_CHECKING:
     from ..config import Config
@@ -51,11 +54,31 @@ def register_pallas_protocol_routes(
         render_dashboard,
         render_import_page,
         render_new_account_page,
-        render_runtime_page,
+        render_protocol_assets_page,
+        shell_font_stylesheet_link,
     )
 
     base = resolve_protocol_webui_base_path(plugin_config)
     page_cookie_name = "pallas_protocol_page_token"
+
+    b_norm = base.rstrip("/")
+    if b_norm != "/protocol/napcat":
+
+        def _redirect_protocol_napcat_bookmark(request: Request, rest: str) -> RedirectResponse:
+            """旧默认 ``/protocol/napcat`` 书签 → 当前协议管理基路径。"""
+            parsed = urlparse(str(request.url))
+            suffix = ("/" + rest.lstrip("/")) if (rest or "").strip() else "/"
+            new_path = b_norm + suffix
+            dest = urlunparse((parsed.scheme, parsed.netloc, new_path, "", parsed.query, parsed.fragment))
+            return RedirectResponse(url=dest, status_code=307)
+
+        @app.get("/protocol/napcat")
+        async def _legacy_protocol_napcat_root(request: Request) -> RedirectResponse:
+            return _redirect_protocol_napcat_bookmark(request, "")
+
+        @app.get("/protocol/napcat/{rest:path}")
+        async def _legacy_protocol_napcat_subpath(request: Request, rest: str) -> RedirectResponse:
+            return _redirect_protocol_napcat_bookmark(request, rest)
 
     def _auth(h: str | None, q: str | None, c: str | None = None) -> None:
         _check_pallas_protocol_token(plugin_config, h, q, c)
@@ -94,26 +117,32 @@ def register_pallas_protocol_routes(
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Pallas 协议端登录</title>
+{shell_font_stylesheet_link(base)}  <title>Pallas 协议端登录</title>
   <style>
     :root {{
-      --bg0: #f2f6fc;
-      --card: #ffffff;
-      --bd: rgba(22, 100, 196, 0.14);
-      --txt: #1f2a44;
-      --muted: #5c6e8f;
-      --accent: #1664c4;
-      --radius: 14px;
-      --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      --bg0: #f8fafc;
+      --card: rgba(255, 255, 255, 0.92);
+      --bd: rgba(15, 23, 42, 0.09);
+      --txt: #0f172a;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --accent-strong: #1d4ed8;
+      --radius: 18px;
+      --radius-xl: 22px;
+      --glass-hi: rgba(255, 255, 255, 0.38);
+      --font: "Pallas UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+        system-ui, -apple-system, "Segoe UI", sans-serif;
     }}
     @media (prefers-color-scheme: dark) {{
       :root {{
-        --bg0: #070a0f;
-        --card: #121a28;
-        --bd: rgba(148, 163, 184, 0.16);
-        --txt: #e8edf7;
-        --muted: #8b9bb8;
-        --accent: #38bdf8;
+        --bg0: #080b12;
+        --card: rgba(20, 26, 38, 0.9);
+        --bd: rgba(255, 255, 255, 0.09);
+        --txt: #f1f5f9;
+        --muted: #94a3b8;
+        --accent: #60a5fa;
+        --accent-strong: #3b82f6;
+        --glass-hi: rgba(255, 255, 255, 0.14);
       }}
     }}
     * {{ box-sizing: border-box; }}
@@ -121,7 +150,10 @@ def register_pallas_protocol_routes(
       margin: 0;
       min-height: 100vh;
       font-family: var(--font);
-      background: radial-gradient(1200px 600px at 10% -10%, rgba(22,100,196,0.10), transparent), var(--bg0);
+      -webkit-font-smoothing: antialiased;
+      background:
+        radial-gradient(1100px 520px at 12% -12%, rgba(37, 99, 235, 0.12), transparent 58%),
+        var(--bg0);
       color: var(--txt);
       display: grid;
       place-items: center;
@@ -131,9 +163,10 @@ def register_pallas_protocol_routes(
       width: min(520px, 100%);
       background: var(--card);
       border: 1px solid var(--bd);
-      border-radius: var(--radius);
+      border-radius: var(--radius-xl);
       padding: 22px;
-      box-shadow: 0 12px 28px rgba(15, 35, 65, 0.16);
+      box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+      backdrop-filter: blur(12px);
     }}
     h2 {{ margin: 0 0 8px; }}
     p {{ margin: 0; color: var(--muted); line-height: 1.6; }}
@@ -144,22 +177,34 @@ def register_pallas_protocol_routes(
     .hint {{ margin-top: 8px; font-size: 13px; color: var(--muted); }}
     input {{
       width: 100%;
-      border-radius: 10px;
+      border-radius: var(--radius);
       border: 1px solid var(--bd);
-      background: transparent;
+      background: rgba(241, 245, 249, 0.55);
       color: var(--txt);
       padding: 11px 12px;
       font: inherit;
+      backdrop-filter: blur(6px);
+    }}
+    @media (prefers-color-scheme: dark) {{
+      input {{ background: rgba(15, 23, 42, 0.35); }}
     }}
     button {{
-      border: none;
-      border-radius: 10px;
+      border: 1px solid color-mix(in srgb, #ffffff 42%, var(--accent));
+      border-radius: var(--radius);
       padding: 11px 14px;
       font: inherit;
       font-weight: 600;
       color: #fff;
-      background: linear-gradient(135deg, var(--accent), #2b78d6);
       cursor: pointer;
+      background: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--accent) 88%, #ffffff) 0%,
+        color-mix(in srgb, var(--accent-strong) 92%, #0f172a) 100%
+      );
+      box-shadow:
+        inset 0 1px 0 var(--glass-hi),
+        0 6px 20px rgba(37, 99, 235, 0.28);
+      backdrop-filter: blur(12px);
     }}
   </style>
 </head>
@@ -352,8 +397,18 @@ def register_pallas_protocol_routes(
             "failed": result.failed,
         }
 
-    @app.get(f"{base}/runtime", response_class=HTMLResponse)
-    async def napcat_runtime_page(
+    def _redirect_legacy_runtime_path(request: Request) -> RedirectResponse:
+        parsed = urlparse(str(request.url))
+        path = parsed.path
+        if path.endswith("/runtime"):
+            new_path = path[: -len("/runtime")] + "/assets"
+        else:
+            new_path = path.replace("/runtime", "/assets", 1)
+        dest = urlunparse((parsed.scheme, parsed.netloc, new_path, "", parsed.query, parsed.fragment))
+        return RedirectResponse(url=dest, status_code=307)
+
+    @app.get(f"{base}/assets", response_class=HTMLResponse)
+    async def protocol_assets_page(
         request: Request,
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
@@ -368,7 +423,12 @@ def register_pallas_protocol_routes(
         )
         if redirect is not None:
             return redirect
-        return HTMLResponse(render_runtime_page(resolve_protocol_webui_base_path(plugin_config)))
+        return HTMLResponse(render_protocol_assets_page(resolve_protocol_webui_base_path(plugin_config)))
+
+    @app.get(f"{base}/runtime")
+    async def legacy_runtime_page_redirect(request: Request):
+        """旧书签 ``…/runtime`` → ``…/assets``。"""
+        return _redirect_legacy_runtime_path(request)
 
     @app.get(f"{base}/account/{{account_id}}/edit")
     async def napcat_edit_redirect(
@@ -536,6 +596,36 @@ def register_pallas_protocol_routes(
         _auth(x_pallas_protocol_token, token)
         return manager.rescan_runtime_extract()
 
+    @app.get(f"{base}/api/snowluma/runtime/overview")
+    async def snowluma_runtime_overview(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        return manager.snowluma_runtime_overview()
+
+    @app.post(f"{base}/api/snowluma/runtime/download")
+    async def snowluma_runtime_download(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+        tag: str | None = Query(default=None),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        try:
+            return manager.start_snowluma_runtime_download(tag=tag or None)
+        except RuntimeError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+
+    @app.get(f"{base}/api/snowluma/runtime/releases")
+    async def snowluma_runtime_releases(
+        limit: int = Query(default=10, ge=1, le=200),
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        releases = await manager.fetch_snowluma_runtime_releases(limit=limit)
+        return {"releases": releases}
+
     @app.get(f"{base}/api/accounts")
     async def list_accounts(
         token: str | None = Query(default=None),
@@ -641,6 +731,22 @@ def register_pallas_protocol_routes(
             raise HTTPException(status_code=400, detail=str(e)) from e
         return {"account": account}
 
+    @app.post(f"{base}/api/accounts/{{account_id}}/snowluma/inject-hook")
+    async def snowluma_inject_hook(
+        account_id: str,
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        try:
+            return await manager.snowluma_inject_hook_via_webui(account_id)
+        except KeyError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"连接 SnowLuma WebUI 失败: {e}") from e
+
     @app.get(f"{base}/api/accounts/{{account_id}}/logs")
     async def account_logs(
         account_id: str,
@@ -681,3 +787,11 @@ def register_pallas_protocol_routes(
             raise HTTPException(status_code=404, detail=str(e)) from e
         except RuntimeError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+
+    _pallas_ui_static = Path(__file__).resolve().parent / "static" / "pallas_ui"
+    if _pallas_ui_static.is_dir():
+        app.mount(
+            f"{b_norm}/_pallas_ui",
+            StaticFiles(directory=str(_pallas_ui_static)),
+            name="pallas_protocol_shell_ui",
+        )
