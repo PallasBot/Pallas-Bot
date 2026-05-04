@@ -17,7 +17,9 @@ class Config(BaseModel):
     pallas_protocol_webui_enabled: bool = True
     pallas_protocol_web_implementation: str = Field(
         default="",
-        description="HTTP 第二路径段：挂载为 /protocol/<本字段>；空则使用 DEFAULT_PROTOCOL_BACKEND（见 contract）",
+        description=(
+            "HTTP 第二路径段：/protocol/<本字段>；空则使用 contract.DEFAULT_PROTOCOL_WEB_MOUNT_SLUG（console）"
+        ),
     )
     pallas_protocol_webui_path: str = Field(
         default="",
@@ -42,6 +44,22 @@ class Config(BaseModel):
     pallas_protocol_default_command: str = "node"
     pallas_protocol_default_args: list[str] = ["napcat.mjs"]
     pallas_protocol_program_dir: str = ""
+    pallas_protocol_snowluma_program_dir: str = Field(
+        default="",
+        description="SnowLuma 发行根（含 index.mjs、native/）；空则回退资源目录下的 snowluma/ 或账号自填 program_dir",
+    )
+    pallas_protocol_snowluma_github_repo: str = Field(
+        default="SnowLuma/SnowLuma",
+        description="SnowLuma GitHub 仓库（Owner/Name）；用于 Release 下载与列表 API",
+    )
+    pallas_protocol_snowluma_release_tag: str = Field(
+        default="",
+        description="SnowLuma Release tag；空则下载时使用 latest 或由接口参数指定",
+    )
+    pallas_protocol_snowluma_release_asset: str = Field(
+        default="",
+        description=("SnowLuma 资产文件名或直链 URL；空则按平台自动选择（如 SnowLuma-v1.6.4-win-x64.zip）"),
+    )
     pallas_protocol_default_working_dir: str = ""
     pallas_protocol_shell_template_dir: str = ""
     pallas_protocol_instances_root: str = Field(

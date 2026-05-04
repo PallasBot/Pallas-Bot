@@ -4,6 +4,12 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+from .contract import (
+    ACCOUNT_PROTOCOL_BACKEND_KEY,
+    DEFAULT_PROTOCOL_BACKEND,
+    SNOWLUMA_PROTOCOL_BACKEND,
+    resolve_default_account_data_dir,
+)
 from .platform import get_napcat_platform
 from .platform import windows as _win
 from .platform.base import NapcatPlatform
@@ -18,6 +24,7 @@ class LaunchManager:
         *,
         instances_root: Path,
         runtime_dir_provider: Callable[[], Path | None] | None = None,
+        snowluma_runtime_dir_provider: Callable[[], Path | None] | None = None,
         runtime_profile_provider: Callable[[], dict] | None = None,
         platform: NapcatPlatform | None = None,
     ) -> None:
@@ -26,13 +33,23 @@ class LaunchManager:
         self._config = config
         self._instances_root = instances_root
         self._runtime_dir_provider = runtime_dir_provider
+        self._snowluma_runtime_dir_provider = snowluma_runtime_dir_provider
         self._runtime_profile_provider = runtime_profile_provider
         self._platform = platform or get_napcat_platform()
 
     def _managed_runtime_extract_root(self) -> Path:
+        """NapCat 托管解压根目录（新版：<data>/runtime_extract/napcat）。"""
+        return (self._plugin_data_dir / "runtime_extract" / "napcat").resolve()
+
+    def _legacy_flat_runtime_extract_root(self) -> Path:
+        """旧版扁平目录：<data>/runtime_extract（与 snowluma 子目录并列）。"""
         return (self._plugin_data_dir / "runtime_extract").resolve()
 
+    def _snowluma_runtime_extract_root(self) -> Path:
+        return (self._plugin_data_dir / "runtime_extract" / "snowluma").resolve()
+
     def _is_managed_runtime_path(self, raw: str) -> bool:
+        """是否为 NapCat 自动托管的解压路径（用于 runtime 更新后刷新账号引用）。"""
         s = str(raw or "").strip()
         if not s:
             return False
@@ -41,8 +58,20 @@ class LaunchManager:
             rp = p.resolve()
         except OSError:
             return False
-        root = self._managed_runtime_extract_root()
-        return rp == root or root in rp.parents
+        napcat_root = self._managed_runtime_extract_root()
+        snow_root = self._snowluma_runtime_extract_root()
+        legacy_root = self._legacy_flat_runtime_extract_root()
+        if rp == napcat_root or napcat_root in rp.parents:
+            return True
+        if rp == snow_root or snow_root in rp.parents:
+            return False
+        if rp == legacy_root or legacy_root in rp.parents:
+            try:
+                rp.relative_to(snow_root)
+                return False
+            except ValueError:
+                return True
+        return False
 
     def _refresh_managed_runtime_refs(self, account: dict, runtime_path: str) -> None:
         """runtime 更新后，自动把账号内指向旧 runtime_extract 的路径切到最新。"""
@@ -81,6 +110,11 @@ class LaunchManager:
         qq = resolve_qq(account)
         if qq:
             account["qq"] = qq
+        bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
+        if bk == SNOWLUMA_PROTOCOL_BACKEND:
+            self._apply_snowluma_defaults(account, resolve_qq)
+            return
+
         raw_command = account.get("command", "")
         command = "" if raw_command is None else str(raw_command).strip()
         args = account.get("args")
@@ -115,7 +149,8 @@ class LaunchManager:
         account_id = str(account.get("id", "")).strip()
         aid = account_id or qq
         if not account_data_dir and aid:
-            account_data_dir = str((self._instances_root / aid).resolve())
+            bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip() or DEFAULT_PROTOCOL_BACKEND
+            account_data_dir = str(resolve_default_account_data_dir(self._instances_root, aid, bk).resolve())
         account["account_data_dir"] = account_data_dir
 
         cmd_raw = str(account.get("command", "") or "").strip()
@@ -128,6 +163,63 @@ class LaunchManager:
         self._apply_linux_docker_profile(account, resolve_qq)
         self._apply_linux_local_appimage_profile(account)
         self._apply_linux_local_xvfb_profile(account)
+
+    def _apply_snowluma_defaults(self, account: dict, resolve_qq) -> None:
+        """SnowLuma：program_dir 为发行根（index.mjs）；cwd 为账号目录（config/）。"""
+        qq = resolve_qq(account)
+        if qq:
+            account["qq"] = qq
+
+        raw_command = account.get("command", "")
+        command = "" if raw_command is None else str(raw_command).strip()
+        args = account.get("args")
+        if not command:
+            dc = getattr(self._config, "pallas_protocol_default_command", "node")
+            account["command"] = self._platform.resolve_default_command(dc)
+            account["args"] = []
+        elif args is None:
+            account["args"] = []
+
+        configured_sd = str(getattr(self._config, "pallas_protocol_snowluma_program_dir", "") or "").strip()
+        lazy_sl = ""
+        if self._snowluma_runtime_dir_provider:
+            try:
+                p = self._snowluma_runtime_dir_provider()
+                if p is not None and p.is_dir():
+                    lazy_sl = str(p.resolve())
+            except Exception:
+                lazy_sl = ""
+        program_dir_raw = str(account.get("program_dir", "") or "").strip()
+        if not program_dir_raw:
+            if configured_sd:
+                program_dir_raw = configured_sd
+            elif lazy_sl:
+                program_dir_raw = lazy_sl
+            else:
+                fb = self._resource_root / "snowluma"
+                program_dir_raw = str(fb) if fb.is_dir() else ""
+        account["program_dir"] = program_dir_raw
+
+        account_data_dir = str(account.get("account_data_dir", "") or "").strip()
+        account_id = str(account.get("id", "") or "").strip()
+        aid = account_id or qq
+        if not account_data_dir and aid:
+            bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip() or DEFAULT_PROTOCOL_BACKEND
+            account_data_dir = str(resolve_default_account_data_dir(self._instances_root, aid, bk).resolve())
+        account["account_data_dir"] = account_data_dir
+
+        account["working_dir"] = account_data_dir or program_dir_raw
+
+        pd = Path(program_dir_raw) if program_dir_raw else Path()
+        idx = pd / "index.mjs"
+        cmd_raw = str(account.get("command", "") or "").strip()
+        if cmd_raw and Path(cmd_raw).name.lower() in ("node", "node.exe"):
+            if idx.is_file():
+                account["args"] = [str(idx.resolve())]
+            elif program_dir_raw:
+                account["args"] = ["index.mjs"]
+
+        account.pop("napcat_linux_docker", None)
 
     def _apply_linux_docker_profile(self, account: dict, resolve_qq) -> None:
         from .linux_docker import build_docker_run_argv, is_linux
@@ -295,6 +387,10 @@ class LaunchManager:
 
     def check_launch_issues(self, account: dict, resolve_qq) -> list[str]:
         issues: list[str] = []
+        bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
+        if bk == SNOWLUMA_PROTOCOL_BACKEND:
+            return self._check_snowluma_launch_issues(account, resolve_qq)
+
         profile_mode = ""
         if self._runtime_profile_provider is not None:
             try:
@@ -366,7 +462,7 @@ class LaunchManager:
         if not program_dir_raw:
             if profile_mode == "docker" and not sys.platform.startswith("linux"):
                 return ["当前为 Docker 模式，但 Docker 模式仅支持 Linux 主机，请切换为 shell"]
-            return ["program_dir 为空：请先在「更新/下载」页面下载运行时，或配置 PALLAS_PROTOCOL_PROGRAM_DIR"]
+            return ["program_dir 为空：请先在「协议资产」页下载 NapCat 发行包，或配置 PALLAS_PROTOCOL_PROGRAM_DIR"]
         workdir = Path(program_dir_raw)
         # 规范工作目录路径
         if (workdir.exists() and workdir.is_file()) or workdir.suffix == ".AppImage":
@@ -389,6 +485,44 @@ class LaunchManager:
             issues.append("account_data_dir 为空")
         return issues
 
+    def _check_snowluma_launch_issues(self, account: dict, _resolve_qq) -> list[str]:
+        issues: list[str] = []
+        command = str(account.get("command", "") or "").strip()
+        if not command:
+            return ["启动命令为空"]
+        if Path(command).is_absolute():
+            if not Path(command).exists():
+                issues.append(f"启动命令不存在: {command}")
+        elif shutil.which(command) is None:
+            issues.append(f"系统找不到命令: {command}")
+
+        pd_raw = str(account.get("program_dir", "") or "").strip()
+        pd = Path(pd_raw) if pd_raw else Path()
+        if pd_raw and not (pd / "index.mjs").is_file():
+            issues.append(
+                "未找到 SnowLuma 入口 index.mjs（请配置 program_dir 或 PALLAS_PROTOCOL_SNOWLUMA_PROGRAM_DIR）"
+            )
+
+        wd_raw = str(account.get("working_dir", "") or "").strip()
+        if wd_raw and not Path(wd_raw).exists():
+            issues.append(f"工作目录不存在: {wd_raw}")
+
+        args = [str(item) for item in (account.get("args") or [])]
+        script_like = next((arg for arg in args if arg.endswith((".mjs", ".js", ".cjs"))), None)
+        if script_like:
+            sp = Path(script_like)
+            if not sp.is_absolute() and wd_raw:
+                sp = Path(wd_raw) / sp
+            if not sp.is_file():
+                issues.append(f"脚本不存在: {sp}")
+        elif not (pd_raw and (pd / "index.mjs").is_file()):
+            if not issues:
+                issues.append("缺少入口脚本（请配置 program_dir 或账号 program_dir 字段）")
+
+        if not str(account.get("account_data_dir", "") or "").strip():
+            issues.append("account_data_dir 为空")
+        return issues
+
     def resolve_boot_launch(
         self,
         account: dict,
@@ -401,6 +535,9 @@ class LaunchManager:
 
     def describe_account_data_paths(self, account: dict) -> dict[str, object]:
         """NapCat 写入路径与 QQ NT 常见落点（启发式）。"""
+        bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
+        if bk == SNOWLUMA_PROTOCOL_BACKEND:
+            return self._describe_snowluma_account_paths(account)
 
         def dedupe(xs: list[str]) -> list[str]:
             seen: set[str] = set()
@@ -437,6 +574,40 @@ class LaunchManager:
             "napcat_paths": dedupe(napcat),
             "qq_nt_candidate_dirs": dedupe(qq_nt),
             "note": base_note,
+        }
+
+    def _describe_snowluma_account_paths(self, account: dict) -> dict[str, object]:
+        def dedupe(xs: list[str]) -> list[str]:
+            seen: set[str] = set()
+            out: list[str] = []
+            for x in xs:
+                if x and x not in seen:
+                    seen.add(x)
+                    out.append(x)
+            return out
+
+        paths: list[str] = []
+        ad = str(account.get("account_data_dir", "") or "").strip()
+        qq = str(account.get("qq", "") or "").strip()
+        if ad:
+            root = Path(ad).resolve()
+            cfg = root / "config"
+            paths = [
+                str(root),
+                str(cfg),
+                str(cfg / "runtime.json"),
+                str(cfg / (f"onebot_{qq}.json" if qq else "onebot.json")),
+            ]
+        qq_nt = self._platform.collect_qq_nt_hints(account)
+        note = (
+            "SnowLuma：需先启动桌面 QQ；在 SnowLuma WebUI/API 中对 QQ 进程注入。"
+            " 账号目录为进程 cwd，config/ 下为 runtime.json 与 onebot_<uin>.json；"
+            "program_dir 指向含 index.mjs、native/ 的发行根。"
+        )
+        return {
+            "snowluma_paths": dedupe(paths),
+            "qq_nt_candidate_dirs": dedupe(qq_nt),
+            "note": note,
         }
 
     def creation_flags(self) -> int:

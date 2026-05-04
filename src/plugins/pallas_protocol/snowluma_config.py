@@ -1,0 +1,227 @@
+"""SnowLuma 配置：扁平 OneBot（与 NapCat 嵌套 network 不同）与 runtime.json。"""
+
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+# SnowLuma packages/core/src/webui/server.ts：log.info(`临时密码: ${randomPassword}`)
+_SNOWLUMA_TEMP_PASSWORD_LOG_RE = re.compile(r"临时密码[:：]\s*([0-9a-fA-F]{8,64})")
+
+
+def snowluma_onebot_path(config_dir: Path, qq: str) -> Path:
+    return config_dir / f"onebot_{qq}.json"
+
+
+def sync_snowluma_runtime_json(
+    account: dict,
+    *,
+    webui_port_fallback_min: int,
+) -> None:
+    account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+    if not str(account_data_dir):
+        return
+    config_dir = account_data_dir / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    path = config_dir / "runtime.json"
+    data: dict[str, Any] = {}
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                data = raw
+        except Exception:
+            data = {}
+    port_raw = account.get("webui_port")
+    try:
+        port = int(port_raw) if port_raw is not None and str(port_raw).strip() != "" else 0
+    except (TypeError, ValueError):
+        port = 0
+    if not (1 <= port <= 65535):
+        tail = 0
+        q = str(account.get("qq", "")).strip()
+        if q.isdigit() and len(q) >= 3:
+            tail = int(q[-3:])
+        port = webui_port_fallback_min + (tail % 1000)
+    data["webuiPort"] = port
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def sync_snowluma_onebot(
+    cfg: Any,
+    account: dict,
+    resolve_qq: Any,
+) -> None:
+    account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+    if not str(account_data_dir):
+        return
+    qq = resolve_qq(account)
+    if not qq:
+        return
+    config_dir = account_data_dir / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    path = snowluma_onebot_path(config_dir, qq)
+    data = cfg.safe_read_json(path)
+    data.setdefault("httpServers", [{"host": "127.0.0.1", "port": 3000, "path": "/", "accessToken": ""}])
+    data.setdefault("httpPostEndpoints", [])
+    _ws = {"host": "127.0.0.1", "port": 3001, "path": "/", "role": "universal", "accessToken": ""}
+    data.setdefault("wsServers", [_ws])
+    ws_clients = data.get("wsClients")
+    if not isinstance(ws_clients, list):
+        ws_clients = []
+    if not ws_clients:
+        ws_clients.append({})
+    client = ws_clients[0]
+    if not isinstance(client, dict):
+        client = {}
+        ws_clients[0] = client
+    ws_url = str(account.get("ws_url", "")).strip()
+    client["url"] = ws_url or "ws://127.0.0.1:8088/onebot/v11/ws"
+    client["name"] = str(account.get("ws_name", "pallas")).strip() or "pallas"
+    client["accessToken"] = str(account.get("ws_token", "")).strip()
+    client.setdefault("role", "universal")
+    client.setdefault("reconnectIntervalMs", 3000)
+    data["wsClients"] = ws_clients
+    data.setdefault("musicSignUrl", "")
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    account["onebot_config_path"] = str(path)
+
+
+_RUNTIME_WEBUI_SECRET_KEYS: tuple[str, ...] = (
+    "webuiPassword",
+    "webUiPassword",
+    "adminPassword",
+    "webuiToken",
+    "password",
+)
+
+
+def read_snowluma_runtime_webui_password(account: dict) -> str | None:
+    """若 ``config/runtime.json`` 中存在常见 WebUI 凭据字段，返回其字符串值（供管理页展示）。"""
+    account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+    path = account_data_dir / "config" / "runtime.json"
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    for k in _RUNTIME_WEBUI_SECRET_KEYS:
+        v = raw.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def extract_snowluma_webui_temp_password_from_log_lines(lines: list[str] | None) -> str | None:
+    """从 SnowLuma 进程日志（含 ANSI）中解析最近一次打印的「临时密码」十六进制串。"""
+    if not lines:
+        return None
+    for line in reversed(lines):
+        m = _SNOWLUMA_TEMP_PASSWORD_LOG_RE.search(line)
+        if m:
+            return m.group(1).lower()
+    return None
+
+
+def resolve_snowluma_webui_temp_password(account: dict, log_lines: list[str] | None) -> str | None:
+    """优先使用进程日志中的临时密码（重启后会更新）；其次 ``runtime.json`` 中的手写凭据。"""
+    hit = extract_snowluma_webui_temp_password_from_log_lines(log_lines)
+    if hit:
+        return hit
+    return read_snowluma_runtime_webui_password(account)
+
+
+def read_snowluma_runtime_into_account(account: dict) -> bool:
+    """从 ``config/runtime.json`` 同步 ``webui_port``（SnowLuma 无 NapCat 式 webui.json）。"""
+    account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+    if not account_data_dir.is_dir():
+        return False
+    path = account_data_dir / "config" / "runtime.json"
+    if not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    if not isinstance(data, dict):
+        return False
+    try:
+        p = int(data.get("webuiPort"))
+        if not (1 <= p <= 65535):
+            raise ValueError
+    except (TypeError, ValueError):
+        return False
+    try:
+        cur = int(account.get("webui_port")) if account.get("webui_port") is not None else None
+    except (TypeError, ValueError):
+        cur = None
+    if cur == p:
+        return False
+    account["webui_port"] = p
+    return True
+
+
+def get_snowluma_account_configs(cfg: Any, account: dict, resolve_qq: Any) -> dict:
+    qq = resolve_qq(account)
+    account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+    config_dir = account_data_dir / "config"
+    ob_path = snowluma_onebot_path(config_dir, qq) if qq else config_dir / "onebot_unknown.json"
+    rt_path = config_dir / "runtime.json"
+    return {
+        "paths": {
+            "onebot": str(ob_path),
+            "runtime": str(rt_path),
+        },
+        "onebot": cfg.safe_read_json(ob_path),
+        "runtime": cfg.safe_read_json(rt_path),
+    }
+
+
+def update_snowluma_account_configs(
+    cfg: Any,
+    account: dict,
+    payload: dict,
+    resolve_qq: Any,
+) -> dict:
+    qq = resolve_qq(account)
+    account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
+    config_dir = account_data_dir / "config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+
+    if "onebot" in payload and isinstance(payload["onebot"], dict):
+        ob_path = snowluma_onebot_path(config_dir, qq) if qq else config_dir / "onebot_unknown.json"
+        current = cfg.safe_read_json(ob_path)
+        merged = {**current, **payload["onebot"]}
+        ob_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    if "runtime" in payload and isinstance(payload["runtime"], dict):
+        rt_path = config_dir / "runtime.json"
+        current = cfg.safe_read_json(rt_path)
+        merged = {**current, **payload["runtime"]}
+        rt_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            wp = int(merged.get("webuiPort"))
+            if 1 <= wp <= 65535:
+                account["webui_port"] = wp
+        except (TypeError, ValueError):
+            pass
+
+    return get_snowluma_account_configs(cfg, account, resolve_qq)
+
+
+__all__ = [
+    "extract_snowluma_webui_temp_password_from_log_lines",
+    "get_snowluma_account_configs",
+    "read_snowluma_runtime_webui_password",
+    "resolve_snowluma_webui_temp_password",
+    "read_snowluma_runtime_into_account",
+    "snowluma_onebot_path",
+    "sync_snowluma_onebot",
+    "sync_snowluma_runtime_json",
+    "update_snowluma_account_configs",
+]

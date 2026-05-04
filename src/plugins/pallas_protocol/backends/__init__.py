@@ -10,6 +10,7 @@ from typing import Any
 from ..contract import DEFAULT_PROTOCOL_BACKEND
 from .napcat import NapcatRuntimeBackend
 from .protocol import ProtocolRuntimeBackend
+from .snowluma import SnowlumaRuntimeBackend
 
 ProtocolRuntimeBackendFactory = Callable[[Any], ProtocolRuntimeBackend]
 
@@ -42,9 +43,11 @@ def make_protocol_runtime_backend(service: Any, kind: str) -> ProtocolRuntimeBac
 
 # 内置：与 DEFAULT_PROTOCOL_BACKEND 一致
 register_protocol_runtime_backend("napcat", lambda s: NapcatRuntimeBackend(s))
+register_protocol_runtime_backend("snowluma", lambda s: SnowlumaRuntimeBackend(s))
 
 __all__ = [
     "NapcatRuntimeBackend",
+    "SnowlumaRuntimeBackend",
     "ProtocolRuntimeBackend",
     "make_protocol_runtime_backend",
     "register_protocol_runtime_backend",

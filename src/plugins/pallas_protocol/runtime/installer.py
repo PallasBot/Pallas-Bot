@@ -334,8 +334,8 @@ class NapCatRuntimeStore:
     def __init__(self, data_dir: Path, config: Any) -> None:
         self._data_dir = data_dir
         self._config = config
-        self._dist_dir = self._data_dir / "runtime_dist"
-        self._extract_root = self._data_dir / "runtime_extract"
+        self._dist_dir = self._data_dir / "runtime_dist" / "napcat"
+        self._extract_root = self._data_dir / "runtime_extract" / "napcat"
         self._manifest_path = self._data_dir / "runtime_manifest.json"
         self._lock = asyncio.Lock()
         self._job_status: JobStatus = "idle"
@@ -589,7 +589,8 @@ class NapCatRuntimeStore:
                     await hc.aclose()
 
             self._set_job("extracting", "安装中…")
-            stage = Path(tempfile.mkdtemp(prefix="napcat_extract_", dir=str(self._data_dir)))
+            self._extract_root.mkdir(parents=True, exist_ok=True)
+            stage = Path(tempfile.mkdtemp(prefix="napcat_extract_", dir=str(self._extract_root)))
             try:
                 is_appimage = asset_is_linux_appimage(asset_name)
                 if is_appimage:

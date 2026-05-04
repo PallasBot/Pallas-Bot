@@ -16,7 +16,7 @@ __plugin_meta__ = PluginMetadata(
     description="提供协议端账号管理与启动控制页面。",
     usage="""
 默认挂载：
-/protocol/napcat
+/protocol/console
 
 常用能力：
 新增账号、启动/停止/重启账号、查看日志、同步配置
@@ -33,7 +33,7 @@ X-Pallas-Protocol-Token 或 ?token=
             {
                 "func": "协议端管理页",
                 "trigger_method": "http",
-                "trigger_condition": "/protocol/napcat",
+                "trigger_condition": "/protocol/console",
                 "brief_des": "管理协议账号与进程",
                 "detail_des": "可在页面执行创建账号、启动、停止、重启与日志查看。",
             },
@@ -42,7 +42,7 @@ X-Pallas-Protocol-Token 或 ?token=
                 "trigger_method": "http",
                 "trigger_condition": "/protocol/*",
                 "brief_des": "提供协议管理接口",
-                "detail_des": "提供账号、配置、运行时下载与状态查询接口。",
+                "detail_des": "提供账号、配置、协议端发行包下载与状态查询接口。",
             },
         ],
     },

@@ -12,6 +12,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import quote
 
+import httpx
+
 from src.common.paths import resource_dir
 
 from .backends import ProtocolRuntimeBackend, make_protocol_runtime_backend
@@ -22,9 +24,11 @@ from .config import (
     resolve_onebot_ws_settings,
 )
 from .config_manager import AccountConfigManager
-from .contract import ACCOUNT_PROTOCOL_BACKEND_KEY, DEFAULT_PROTOCOL_BACKEND
+from .contract import ACCOUNT_PROTOCOL_BACKEND_KEY, DEFAULT_PROTOCOL_BACKEND, SNOWLUMA_PROTOCOL_BACKEND
 from .launch_manager import LaunchManager
 from .runtime.installer import NapCatRuntimeStore, default_release_asset_for_platform, default_release_repo_for_platform
+from .runtime.snowluma_installer import SnowLumaRuntimeStore, default_snowluma_asset_name_for_tag
+from .snowluma_config import resolve_snowluma_webui_temp_password
 
 
 def _realpath_sync(path: str) -> str:
@@ -54,6 +58,7 @@ class PallasProtocolService:
         self._accounts: dict[str, dict] = {}
         self._runtimes: dict[str, NapCatRuntime] = {}
         self._runtime_store = NapCatRuntimeStore(data_dir, config)
+        self._snowluma_store = SnowLumaRuntimeStore(data_dir, config)
         self._runtime_profile_path = self._data_dir / "runtime_profile.json"
         self._launch = LaunchManager(
             self._data_dir,
@@ -61,6 +66,7 @@ class PallasProtocolService:
             self._config,
             instances_root=self._instances_root,
             runtime_dir_provider=self._runtime_store.resolved_program_dir,
+            snowluma_runtime_dir_provider=self._snowluma_store.resolved_program_dir,
             runtime_profile_provider=self.runtime_profile,
         )
         self._configs = AccountConfigManager(
@@ -209,7 +215,43 @@ class PallasProtocolService:
                 "asset": resolved_asset,
                 "tag": self._config.pallas_protocol_release_tag.strip() or "latest",
             },
+            "snowluma": self.snowluma_runtime_overview(),
         }
+
+    def effective_snowluma_program_dir(self) -> Path | None:
+        configured = str(getattr(self._config, "pallas_protocol_snowluma_program_dir", "") or "").strip()
+        if configured:
+            p = Path(configured)
+            return p if p.is_dir() else None
+        return self._snowluma_store.resolved_program_dir()
+
+    def snowluma_runtime_overview(self) -> dict[str, object]:
+        manifest = self._snowluma_store.read_manifest()
+        eff = self.effective_snowluma_program_dir()
+        raw_repo = (
+            str(getattr(self._config, "pallas_protocol_snowluma_github_repo", "") or "").strip() or "SnowLuma/SnowLuma"
+        )
+        raw_asset = str(getattr(self._config, "pallas_protocol_snowluma_release_asset", "") or "").strip()
+        raw_tag = str(getattr(self._config, "pallas_protocol_snowluma_release_tag", "") or "").strip()
+        auto_name = default_snowluma_asset_name_for_tag(raw_tag) if raw_tag else ""
+        resolved_asset = raw_asset or auto_name
+        return {
+            "job": self._snowluma_store.job_snapshot(),
+            "manifest": manifest.to_json() if manifest else None,
+            "effective_program_dir": str(eff) if eff else None,
+            "download": {
+                "repo": raw_repo,
+                "asset": resolved_asset or None,
+                "tag": raw_tag or "latest",
+            },
+        }
+
+    def start_snowluma_runtime_download(self, *, tag: str | None = None) -> dict[str, object]:
+        self._snowluma_store.start_background_download(tag=tag or None)
+        return self.snowluma_runtime_overview()
+
+    async def fetch_snowluma_runtime_releases(self, *, limit: int = 10) -> list[dict]:
+        return await self._snowluma_store.fetch_releases(limit=limit)
 
     def start_runtime_download(
         self, *, tag: str | None = None, target_platform: str | None = None, runtime_mode: str | None = None
@@ -217,7 +259,7 @@ class PallasProtocolService:
         profile = self.runtime_profile()
         mode = str(runtime_mode or profile.get("runtime_mode", "")).strip().lower()
         if mode == "docker":
-            raise ValueError("Docker 模式请使用镜像拉取，不支持运行时资产下载")
+            raise ValueError("Docker 模式请使用镜像拉取，无需通过本页下载 NapCat 发行包")
         platform_hint = str(target_platform or profile.get("target_platform", "auto")).strip().lower()
         self._runtime_store.start_background_download(tag=tag, target_platform=platform_hint)
         return self.runtime_overview()
@@ -580,6 +622,80 @@ class PallasProtocolService:
             return None
         return self._compose_account_state(account_id, account)
 
+    def snowluma_webui_http_base(self, account: dict) -> str:
+        """SnowLuma WebUI HTTP 根地址（本机访问注入 API）。"""
+        h = str(getattr(self._config, "pallas_protocol_bind_host", "127.0.0.1") or "127.0.0.1").strip()
+        if h in ("0.0.0.0", "::", "[::]"):
+            h = "127.0.0.1"
+        wp = account.get("webui_port")
+        try:
+            p = int(wp) if wp is not None and str(wp).strip() != "" else 0
+        except (TypeError, ValueError):
+            p = 0
+        if not (1 <= p <= 65535):
+            raise ValueError("账号未设置有效的内置 WebUI 端口 webui_port")
+        return f"http://{h}:{p}"
+
+    async def snowluma_inject_hook_via_webui(self, account_id: str) -> dict[str, object]:
+        """调用 SnowLuma 内置 WebUI API：登录 → 列出 QQ 进程 → 按实例 QQ（UIN）匹配并 load。"""
+        account = self._accounts.get(account_id)
+        if not account:
+            raise KeyError("账号不存在")
+        bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
+        bk = bk or DEFAULT_PROTOCOL_BACKEND
+        if bk != SNOWLUMA_PROTOCOL_BACKEND:
+            raise ValueError("仅 SnowLuma 协议端支持通过 WebUI 自动注入 Hook")
+        qq = str(self._resolve_qq(account) or "").strip()
+        if not qq.isdigit() or len(qq) < 5:
+            raise ValueError("账号 QQ 无效")
+        pwd = resolve_snowluma_webui_temp_password(account, self.tail_logs(account_id, 900))
+        if not pwd:
+            raise ValueError(
+                "无法获取 WebUI 临时密码：请先启动本实例 SnowLuma 进程，或在 config/runtime.json 写入密码字段"
+            )
+        base = self.snowluma_webui_http_base(account).rstrip("/")
+        timeout = httpx.Timeout(25.0, connect=8.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            lr = await client.post(f"{base}/api/login", json={"password": pwd})
+            lr.raise_for_status()
+            login_body = lr.json()
+            if not isinstance(login_body, dict) or not login_body.get("success"):
+                msg = ""
+                if isinstance(login_body, dict):
+                    msg = str(login_body.get("message") or login_body.get("status") or "")
+                raise ValueError(f"SnowLuma WebUI 登录失败: {msg or lr.text}")
+            token = str(login_body.get("token") or "").strip()
+            if not token:
+                raise ValueError("SnowLuma WebUI 未返回登录 token")
+            headers = {"Authorization": f"Bearer {token}"}
+            pr = await client.get(f"{base}/api/processes", headers=headers)
+            pr.raise_for_status()
+            plist_raw = pr.json()
+            procs: list = []
+            if isinstance(plist_raw, dict):
+                procs = plist_raw.get("list") or []
+            if not isinstance(procs, list):
+                procs = []
+            hit: dict | None = None
+            for item in procs:
+                if isinstance(item, dict) and str(item.get("uin") or "").strip() == qq:
+                    hit = item
+                    break
+            if hit is None:
+                preview = [f"PID={p.get('pid')} UIN={p.get('uin')}" for p in procs[:12] if isinstance(p, dict)]
+                hint = "；".join(preview) if preview else "（列表为空，请先在本机启动并登录 NTQQ）"
+                raise ValueError(f"未找到已登录且 UIN 为 {qq} 的 QQ 进程。当前摘要：{hint}")
+            pid = hit.get("pid")
+            if not isinstance(pid, int) or pid <= 0:
+                raise ValueError("SnowLuma 返回了无效的进程 PID")
+            ur = await client.post(f"{base}/api/processes/{pid}/load", headers=headers)
+            ur.raise_for_status()
+            try:
+                load_body = ur.json()
+            except Exception:
+                load_body = {"raw": ur.text}
+        return {"ok": True, "pid": pid, "uin": qq, "snowluma": load_body}
+
     def create_account(self, payload: dict) -> dict:
         qq = str(payload.get("qq", "")).strip() or str(payload.get("id", "")).strip()
         if not qq:
@@ -654,6 +770,8 @@ class PallasProtocolService:
         account = self._accounts.get(account_id)
         if not account:
             raise KeyError("账号不存在")
+        old_backend = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
+        old_backend = old_backend or DEFAULT_PROTOCOL_BACKEND
         need_restart = self._napcat_core_running(account_id, account)
         editable_keys = (
             "display_name",
@@ -677,6 +795,15 @@ class PallasProtocolService:
         if ACCOUNT_PROTOCOL_BACKEND_KEY in account:
             v = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or "").strip()
             account[ACCOUNT_PROTOCOL_BACKEND_KEY] = v or DEFAULT_PROTOCOL_BACKEND
+        new_backend = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
+        new_backend = new_backend or DEFAULT_PROTOCOL_BACKEND
+        if ACCOUNT_PROTOCOL_BACKEND_KEY in payload and new_backend != old_backend:
+            account["program_dir"] = ""
+            account["command"] = ""
+            account["args"] = []
+            account["account_data_dir"] = ""
+            account["working_dir"] = ""
+            account.pop("napcat_linux_docker", None)
         if "webui_port" in payload:
             try:
                 wp = int(str(payload["webui_port"]).strip())
@@ -791,10 +918,13 @@ class PallasProtocolService:
             account_data_dir = str(account.get("account_data_dir", "")).strip()
             if account_data_dir:
                 ad_abs = await asyncio.to_thread(_realpath_sync, account_data_dir)
-                # 设置 NapCat 工作目录
-                env_map["NAPCAT_WORKDIR"] = ad_abs
-                if self._launch.should_set_home_to_workdir():
-                    env_map["HOME"] = ad_abs
+                raw_pb = account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or ""
+                bk = str(raw_pb).strip().lower() or DEFAULT_PROTOCOL_BACKEND
+                if bk != SNOWLUMA_PROTOCOL_BACKEND:
+                    # 设置 NapCat 工作目录（SnowLuma 使用 cwd，不依赖 NAPCAT_WORKDIR）
+                    env_map["NAPCAT_WORKDIR"] = ad_abs
+                    if self._launch.should_set_home_to_workdir():
+                        env_map["HOME"] = ad_abs
             env_map.update({str(k): str(v) for k, v in (account.get("env") or {}).items()})
             command, args, env_map, cwd_quick = self._launch.resolve_boot_launch(
                 account, command, args, env_map, self._resolve_qq
@@ -1192,12 +1322,28 @@ class PallasProtocolService:
         wport = account.get("webui_port", "")
         wtok = str(account.get("webui_token", "")).strip()
         native_webui = ""
+        native_webui_auth_note = ""
+        snowluma_runtime_webui_password: str | None = None
+        snowluma_webui_default_user: str | None = None
+        bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
+        bk = bk or DEFAULT_PROTOCOL_BACKEND
         try:
             if str(wport).strip():
                 p = int(wport)
-                # 生成内嵌 WebUI 地址
-                base = f"http://{bind}:{p}/webui/"
-                native_webui = f"{base}?token={quote(wtok, safe='')}" if wtok else base
+                if bk == SNOWLUMA_PROTOCOL_BACKEND:
+                    # SnowLuma 仅使用根地址（无 /webui/、无 ?token=）；临时密码见日志或由下方字段解析
+                    native_webui = f"http://{bind}:{p}/"
+                    snowluma_webui_default_user = "admin"
+                    tail_logs = self.tail_logs(account_id, 900)
+                    snowluma_runtime_webui_password = resolve_snowluma_webui_temp_password(account, tail_logs)
+                    native_webui_auth_note = ""
+                    if not snowluma_runtime_webui_password:
+                        native_webui_auth_note = (
+                            "未解析到临时密码：请先启动协议端，或在本页「协议端进程」日志中搜索「临时密码」。"
+                        )
+                else:
+                    base = f"http://{bind}:{p}/webui/"
+                    native_webui = f"{base}?token={quote(wtok, safe='')}" if wtok else base
         except (TypeError, ValueError):
             pass
         runtime_version = self._resolve_account_runtime_version(account)
@@ -1213,12 +1359,19 @@ class PallasProtocolService:
             "started_at": started_at,
             "data_path_hints": be.describe_account_data_paths(account),
             "native_webui_url": native_webui,
+            "native_webui_auth_note": native_webui_auth_note,
+            "snowluma_runtime_webui_password": snowluma_runtime_webui_password,
+            "snowluma_webui_default_user": snowluma_webui_default_user,
             "runtime_version": runtime_version,
             "runtime_source": runtime_source,
         }
 
     def _resolve_account_runtime_version(self, account: dict) -> str:
-        """为账号推导当前运行时版本显示值。"""
+        """为账号推导当前协议端发行版本显示值。"""
+        bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
+        bk = bk or DEFAULT_PROTOCOL_BACKEND
+        if bk == SNOWLUMA_PROTOCOL_BACKEND:
+            return self._resolve_snowluma_account_runtime_version(account)
         if account.get("napcat_linux_docker"):
             image = str(account.get("program_dir", "") or "").strip()
             if image.startswith("docker:"):
@@ -1249,8 +1402,34 @@ class PallasProtocolService:
             return tag
         return "自定义"
 
+    def _resolve_snowluma_account_runtime_version(self, account: dict) -> str:
+        manifest = self._snowluma_store.read_manifest()
+        if manifest is None:
+            return "未知"
+        tag = str(manifest.release_tag or "").strip() or "latest"
+
+        acc_program = str(account.get("program_dir", "") or "").strip()
+        if not acc_program:
+            return tag
+        try:
+            acc_path = Path(acc_program).resolve()
+            manifest_program = Path(manifest.program_dir).resolve()
+            manifest_extract = Path(manifest.extract_root).resolve()
+        except OSError:
+            return "自定义"
+
+        if acc_path == manifest_program:
+            return tag
+        if acc_path == manifest_extract or manifest_extract in acc_path.parents:
+            return tag
+        return "自定义"
+
     def _resolve_account_runtime_source(self, account: dict) -> str:
         """为账号推导版本归属来源。"""
+        bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
+        bk = bk or DEFAULT_PROTOCOL_BACKEND
+        if bk == SNOWLUMA_PROTOCOL_BACKEND:
+            return self._resolve_snowluma_account_runtime_source(account)
         if account.get("napcat_linux_docker"):
             image = str(account.get("program_dir", "") or "").strip()
             if image.startswith("docker:"):
@@ -1263,7 +1442,7 @@ class PallasProtocolService:
 
         acc_program = str(account.get("program_dir", "") or "").strip()
         if not acc_program:
-            return "托管运行时"
+            return "托管发行包"
         try:
             acc_path = Path(acc_program).resolve()
             manifest_program = Path(manifest.program_dir).resolve()
@@ -1272,7 +1451,28 @@ class PallasProtocolService:
             return "自定义路径"
 
         if acc_path == manifest_program:
-            return "托管运行时"
+            return "托管发行包"
         if acc_path == manifest_extract or manifest_extract in acc_path.parents:
-            return "托管运行时"
+            return "托管发行包"
+        return "自定义路径"
+
+    def _resolve_snowluma_account_runtime_source(self, account: dict) -> str:
+        manifest = self._snowluma_store.read_manifest()
+        if manifest is None:
+            return "未知来源"
+
+        acc_program = str(account.get("program_dir", "") or "").strip()
+        if not acc_program:
+            return "SnowLuma 托管发行包"
+        try:
+            acc_path = Path(acc_program).resolve()
+            manifest_program = Path(manifest.program_dir).resolve()
+            manifest_extract = Path(manifest.extract_root).resolve()
+        except OSError:
+            return "自定义路径"
+
+        if acc_path == manifest_program:
+            return "SnowLuma 托管发行包"
+        if acc_path == manifest_extract or manifest_extract in acc_path.parents:
+            return "SnowLuma 托管发行包"
         return "自定义路径"

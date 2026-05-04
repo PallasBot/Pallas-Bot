@@ -9,6 +9,8 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path  # noqa: TC003
 
+from .contract import normalize_instance_folder_segment
+
 
 @dataclass
 class ImportResult:
@@ -146,7 +148,7 @@ def run_import(
     扫描 source_dir，返回 (ImportResult, new_accounts_dict)。
     new_accounts_dict 是合并后的完整账号字典（dry_run 时与 existing_accounts 相同）。
 
-    instances_root: 若提供，则将账号数据复制到 instances_root/<qq>/ 并以此作为
+    instances_root: 若提供，则将账号数据复制到 instances_root/<qq>/<napcat>/ 并以此作为
                     account_data_dir；否则原地注册（account_data_dir = source folder）。
     """
     result = ImportResult()
@@ -171,9 +173,9 @@ def run_import(
         webui_port = _next_port(accounts)
         webui_token = secrets.token_hex(6)
 
-        # 决定 account_data_dir：优先使用 instances_root/<qq>，否则原地注册
+        # 决定 account_data_dir：优先使用 instances_root/<qq>/napcat/，否则原地注册
         if instances_root is not None:
-            account_data_dir = str((instances_root / qq).resolve())
+            account_data_dir = str((instances_root / qq / normalize_instance_folder_segment("napcat")).resolve())
         else:
             account_data_dir = str(folder.resolve())
 
@@ -199,8 +201,8 @@ def run_import(
         qq_copied: str | None = None
         if not dry_run:
             if instances_root is not None:
-                # 将数据复制到 instances_root/<qq>/
-                inst_dir = instances_root / qq
+                # 将数据复制到 instances_root/<qq>/<napcat>/
+                inst_dir = instances_root / qq / normalize_instance_folder_segment("napcat")
                 inst_config_dir = inst_dir / "config"
                 inst_config_dir.mkdir(parents=True, exist_ok=True)
                 # 复制 config/ 下的所有文件
