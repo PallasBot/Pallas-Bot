@@ -14,6 +14,7 @@ from urllib.parse import quote
 
 from src.common.paths import resource_dir
 
+from .backends import ProtocolRuntimeBackend, make_protocol_runtime_backend
 from .config import (
     Config,
     instances_root_for,
@@ -66,6 +67,13 @@ class PallasProtocolService:
             self._config.pallas_protocol_bind_host,
             webui_port_fallback_min=int(getattr(self._config, "pallas_protocol_webui_port_min", 6099)),
         )
+
+    def _protocol_runtime_backend(
+        self, account: dict | None = None, *, kind: str | None = None
+    ) -> ProtocolRuntimeBackend:
+        raw = kind if kind is not None else (account or {}).get(ACCOUNT_PROTOCOL_BACKEND_KEY, "")
+        slug = (str(raw).strip() if raw is not None else "") or DEFAULT_PROTOCOL_BACKEND
+        return make_protocol_runtime_backend(self, slug)
 
     def effective_runtime_program_dir(self) -> Path | None:
         configured = str(getattr(self._config, "pallas_protocol_program_dir", "")).strip()
@@ -345,13 +353,14 @@ class PallasProtocolService:
     def _rewrite_webui_for_all_accounts(self) -> None:
         """修正历史 webui.json（例如 NapCat 首次生成的 host='::'），避免 Windows 上绑定 UNKNOWN。"""
         for account in self._accounts.values():
-            self._launch.apply_defaults(account, self._resolve_qq)
-            self._configs.sync_webui(account, self._resolve_qq)
+            be = self._protocol_runtime_backend(account)
+            be.apply_defaults(account, self._resolve_qq)
+            be.sync_webui(account, self._resolve_qq)
 
     def _pull_all_webui_from_disk(self) -> None:
         changed = False
         for account in self._accounts.values():
-            if self._configs.read_webui_into_account(account):
+            if self._protocol_runtime_backend(account).read_webui_into_account(account):
                 changed = True
         if changed:
             self._save_accounts()
@@ -414,10 +423,10 @@ class PallasProtocolService:
         self._load_accounts()
         self._pull_all_webui_from_disk()
         for account in self._accounts.values():
-            self._launch.apply_defaults(account, self._resolve_qq)
+            self._protocol_runtime_backend(account).apply_defaults(account, self._resolve_qq)
         self._apply_onebot_ws_to_all_accounts()
         for account in self._accounts.values():
-            self._configs.sync_onebot(account, self._resolve_qq)
+            self._protocol_runtime_backend(account).sync_onebot(account, self._resolve_qq)
         self._rewrite_webui_for_all_accounts()
         if self._config.pallas_protocol_auto_download_runtime and self.effective_runtime_program_dir() is None:
             if not self._runtime_store.is_busy():
@@ -432,7 +441,7 @@ class PallasProtocolService:
         for account_id, account in list(self._accounts.items()):
             if not bool(account.get("enabled", True)):
                 continue
-            self._launch.apply_defaults(account, self._resolve_qq)
+            self._protocol_runtime_backend(account).apply_defaults(account, self._resolve_qq)
             if account.get("napcat_linux_docker"):
                 from .linux_docker import docker_container_name, docker_container_running_sync
 
@@ -537,7 +546,7 @@ class PallasProtocolService:
             changed = False
             for account_id, account in self._accounts.items():
                 before = json.dumps(account, ensure_ascii=False, sort_keys=True)
-                self._launch.apply_defaults(account, self._resolve_qq)
+                self._protocol_runtime_backend(account).apply_defaults(account, self._resolve_qq)
                 if self._migrate_account_webui_fields(account_id, account):
                     changed = True
                 after = json.dumps(account, ensure_ascii=False, sort_keys=True)
@@ -626,7 +635,8 @@ class PallasProtocolService:
             v = str(payload.get(ws_key, "")).strip() if ws_key != "ws_token" else payload.get(ws_key, "")
             if v:
                 account[ws_key] = v
-        self._launch.apply_defaults(account, self._resolve_qq)
+        be = self._protocol_runtime_backend(account)
+        be.apply_defaults(account, self._resolve_qq)
         if "webui_port" not in account:
             account["webui_port"] = self._next_free_webui_port()
         if "webui_token" not in account:
@@ -634,10 +644,8 @@ class PallasProtocolService:
         # 仅在 payload 未提供 ws_url 时才用 env 默认值补填
         if not str(payload.get("ws_url", "")).strip():
             self._merge_onebot_ws_from_env(account)
-        self._launch.prepare_dirs(account)
-        self._configs.sync_onebot(account, self._resolve_qq)
-        self._configs.sync_napcat_core(account, self._resolve_qq)
-        self._configs.sync_webui(account, self._resolve_qq)
+        be.prepare_dirs(account)
+        be.sync_all_configs(account, self._resolve_qq)
         self._accounts[account_id] = account
         self._save_accounts()
         return self._compose_account_state(account_id, account)
@@ -685,14 +693,13 @@ class PallasProtocolService:
                 if isinstance(op, int) and op == wp:
                     raise ValueError("WebUI 端口已被其他账号占用")
             account["webui_port"] = wp
-        self._launch.apply_defaults(account, self._resolve_qq)
+        be = self._protocol_runtime_backend(account)
+        be.apply_defaults(account, self._resolve_qq)
         # 仅在 payload 未显式提供 ws_url 时才用 env 默认值补填
         if "ws_url" not in payload:
             self._merge_onebot_ws_from_env(account)
-        self._launch.prepare_dirs(account)
-        self._configs.sync_onebot(account, self._resolve_qq)
-        self._configs.sync_napcat_core(account, self._resolve_qq)
-        self._configs.sync_webui(account, self._resolve_qq)
+        be.prepare_dirs(account)
+        be.sync_all_configs(account, self._resolve_qq)
         account["updated_at"] = datetime.now(UTC).isoformat()
         self._save_accounts()
         restarted = bool(need_restart and restart)
@@ -757,15 +764,14 @@ class PallasProtocolService:
         account = self._accounts.get(account_id)
         if not account:
             raise KeyError("账号不存在")
-        disk_changed = self._configs.read_webui_into_account(account)
+        disk_changed = self._protocol_runtime_backend(account).read_webui_into_account(account)
         env_changed = self._merge_onebot_ws_from_env(account)
         if disk_changed or env_changed:
             self._save_accounts()
-        self._launch.apply_defaults(account, self._resolve_qq)
-        self._launch.prepare_dirs(account)
-        self._configs.sync_onebot(account, self._resolve_qq)
-        self._configs.sync_napcat_core(account, self._resolve_qq)
-        self._configs.sync_webui(account, self._resolve_qq)
+        be = self._protocol_runtime_backend(account)
+        be.apply_defaults(account, self._resolve_qq)
+        be.prepare_dirs(account)
+        be.sync_all_configs(account, self._resolve_qq)
         runtime = self._runtime(account_id)
         async with runtime.lock:
             if account.get("napcat_linux_docker"):
@@ -801,7 +807,7 @@ class PallasProtocolService:
             ):
                 # 追加 no-sandbox 参数
                 args.append("--no-sandbox")
-            launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
+            launch_issues = be.check_launch_issues(account, self._resolve_qq)
             if launch_issues:
                 raise ValueError("; ".join(launch_issues))
             # 读取工作目录
@@ -835,7 +841,7 @@ class PallasProtocolService:
         account = self._accounts.get(account_id)
         if not account or not account.get("napcat_linux_docker"):
             return
-        self._launch.apply_defaults(account, self._resolve_qq)
+        self._protocol_runtime_backend(account).apply_defaults(account, self._resolve_qq)
         runtime = self._runtime(account_id)
         async with runtime.lock:
             await self._ensure_docker_logs_follower_locked(account_id, account, runtime)
@@ -903,6 +909,7 @@ class PallasProtocolService:
         runtime.drain_task = asyncio.create_task(self._drain_logs(account_id))
 
     async def _start_account_linux_docker(self, account_id: str, account: dict, runtime: NapCatRuntime) -> dict:
+        be = self._protocol_runtime_backend(account)
         from .linux_docker import (
             build_docker_run_argv,
             docker_container_name,
@@ -916,11 +923,11 @@ class PallasProtocolService:
             current_port = 0
         if current_port <= 0 or not self._is_host_port_available(current_port):
             account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
-            self._configs.sync_webui(account, self._resolve_qq)
+            be.sync_webui(account, self._resolve_qq)
             self._save_accounts()
         account["args"] = build_docker_run_argv(account, self._config, self._resolve_qq)
         args = [str(x) for x in (account.get("args") or [])]
-        launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
+        launch_issues = be.check_launch_issues(account, self._resolve_qq)
         if launch_issues:
             raise ValueError("; ".join(launch_issues))
         name = docker_container_name(account)
@@ -946,7 +953,7 @@ class PallasProtocolService:
                 break
             if attempt == 0 and "port is already allocated" in text.lower():
                 account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
-                self._configs.sync_webui(account, self._resolve_qq)
+                be.sync_webui(account, self._resolve_qq)
                 self._save_accounts()
                 account["args"] = build_docker_run_argv(account, self._config, self._resolve_qq)
                 args = [str(x) for x in (account.get("args") or [])]
@@ -1050,16 +1057,18 @@ class PallasProtocolService:
         account = self._accounts.get(account_id)
         if not account:
             raise KeyError("账号不存在")
-        self._launch.apply_defaults(account, self._resolve_qq)
-        return self._configs.get_account_configs(account, self._resolve_qq)
+        be = self._protocol_runtime_backend(account)
+        be.apply_defaults(account, self._resolve_qq)
+        return be.get_account_configs(account, self._resolve_qq)
 
     async def update_account_configs(self, account_id: str, payload: dict, *, restart: bool = True) -> dict:
         account = self._accounts.get(account_id)
         if not account:
             raise KeyError("账号不存在")
         need_restart = self._napcat_core_running(account_id, account)
-        self._launch.apply_defaults(account, self._resolve_qq)
-        merged = self._configs.update_account_configs(account, payload, self._resolve_qq)
+        be = self._protocol_runtime_backend(account)
+        be.apply_defaults(account, self._resolve_qq)
+        merged = be.update_account_configs(account, payload, self._resolve_qq)
         account["updated_at"] = datetime.now(UTC).isoformat()
         self._save_accounts()
         restarted = bool(need_restart and restart)
@@ -1074,12 +1083,11 @@ class PallasProtocolService:
         for account_id, account in accounts.items():
             if account_id in self._accounts:
                 continue
-            self._launch.apply_defaults(account, self._resolve_qq)
+            be = self._protocol_runtime_backend(account)
+            be.apply_defaults(account, self._resolve_qq)
             self._migrate_account_webui_fields(account_id, account)
-            self._launch.prepare_dirs(account)
-            self._configs.sync_onebot(account, self._resolve_qq)
-            self._configs.sync_napcat_core(account, self._resolve_qq)
-            self._configs.sync_webui(account, self._resolve_qq)
+            be.prepare_dirs(account)
+            be.sync_all_configs(account, self._resolve_qq)
             self._accounts[account_id] = account
             changed = True
         if changed:
@@ -1163,7 +1171,8 @@ class PallasProtocolService:
                 runtime.process = None
 
     def _compose_account_state(self, account_id: str, account: dict) -> dict:
-        self._launch.apply_defaults(account, self._resolve_qq)
+        be = self._protocol_runtime_backend(account)
+        be.apply_defaults(account, self._resolve_qq)
         runtime = self._runtimes.get(account_id)
         process_running = False
         pid = None
@@ -1178,7 +1187,7 @@ class PallasProtocolService:
             pid = runtime.process.pid
             started_at = runtime.started_at.isoformat() if runtime.started_at else None
         connected = self._is_bot_connected(account)
-        launch_issues = self._launch.check_launch_issues(account, self._resolve_qq)
+        launch_issues = be.check_launch_issues(account, self._resolve_qq)
         bind = str(getattr(self._config, "pallas_protocol_bind_host", "127.0.0.1") or "127.0.0.1").strip()
         wport = account.get("webui_port", "")
         wtok = str(account.get("webui_token", "")).strip()
@@ -1202,7 +1211,7 @@ class PallasProtocolService:
             "launch_issues": launch_issues,
             "pid": pid,
             "started_at": started_at,
-            "data_path_hints": self._launch.describe_account_data_paths(account),
+            "data_path_hints": be.describe_account_data_paths(account),
             "native_webui_url": native_webui,
             "runtime_version": runtime_version,
             "runtime_source": runtime_source,
