@@ -495,9 +495,9 @@ class PallasProtocolService:
             try:
                 await self.start_account(account_id)
             except ValueError as e:
-                logger.warning(f"NapCat: 自动启动账号 {account_id} 失败：{e}")
+                logger.warning(f"Pallas 协议端: 自动启动账号 {account_id} 失败：{e}")
             except Exception:
-                logger.exception(f"NapCat: 自动启动账号 {account_id} 出现未预期异常")
+                logger.exception(f"Pallas 协议端: 自动启动账号 {account_id} 出现未预期异常")
 
     async def stop_all_enabled_accounts(self) -> None:
         from nonebot import logger
@@ -510,7 +510,7 @@ class PallasProtocolService:
             try:
                 await self.stop_account(account_id)
             except Exception:
-                logger.exception(f"NapCat: 自动停止账号 {account_id} 出现未预期异常")
+                logger.exception(f"Pallas 协议端: 自动停止账号 {account_id} 出现未预期异常")
 
     def _used_webui_ports(self, exclude_account_id: str | None = None) -> set[int]:
         used: set[int] = set()
