@@ -4,7 +4,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from nonebot import get_driver, on_command, on_message, on_request
+from nonebot import get_bots, get_driver, logger, on_command, on_message, on_request
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -19,6 +19,7 @@ from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER, Permission
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
+from nonebot_plugin_apscheduler import scheduler
 
 from src.common.config import BotConfig, GroupConfig, UserConfig
 from src.common.paths import plugin_data_dir
@@ -27,7 +28,10 @@ from src.plugins.request_handler.config import Config
 
 __plugin_meta__ = PluginMetadata(
     name="申请管理",
-    description="处理好友申请与入群邀请：通知管理员，支持命令审批或引用牛牛发出的提醒消息审批",
+    description=(
+        "处理好友申请与入群邀请：通知管理员，支持命令审批或引用牛牛发出的提醒消息审批；"
+        "被过滤好友申请每 4 小时轮询并提醒"
+    ),
     usage="""
 查看好友申请 — 列出待处理好友（含需单独看的可疑申请）
 同意 — 同意最新一条提醒，或引用某条提醒后发送「同意」「好」或留空
@@ -107,6 +111,7 @@ FRIEND_REQ_FILE = DATA_DIR / "pending_friend_requests.json"
 GROUP_REQ_FILE = DATA_DIR / "pending_group_requests.json"
 LAST_NOTIFIED_FILE = DATA_DIR / "last_notified_request.json"
 APPROVAL_NOTICE_FILE = DATA_DIR / "approval_notice_messages.json"
+DOUBT_POLL_STATE_FILE = DATA_DIR / "doubt_friend_poll_state.json"
 
 PLUGIN_NAME = "request_handler"
 
@@ -160,6 +165,33 @@ def save_json(path: Path, data: dict) -> None:
         except OSError:
             pass
         raise
+
+
+def load_doubt_poll_state() -> tuple[set[str], dict[str, set[str]]]:
+    raw = load_json(DOUBT_POLL_STATE_FILE)
+    if not isinstance(raw, dict):
+        return set(), {}
+    primed: set[str] = set()
+    for x in raw.get("primed_bots", []):
+        if x is not None:
+            primed.add(str(x))
+    notified: dict[str, set[str]] = {}
+    nr = raw.get("notified")
+    if isinstance(nr, dict):
+        for bk, uids in nr.items():
+            if not isinstance(uids, list):
+                continue
+            s = {str(u) for u in uids if u is not None and str(u).isdigit()}
+            notified[str(bk)] = s
+    return primed, notified
+
+
+def save_doubt_poll_state(primed: set[str], notified: dict[str, set[str]]) -> None:
+    payload = {
+        "primed_bots": sorted(primed),
+        "notified": {k: sorted(v) for k, v in sorted(notified.items())},
+    }
+    save_json(DOUBT_POLL_STATE_FILE, payload)
 
 
 def notify_ts_expired(ts: float, now: float | None = None) -> bool:
@@ -539,6 +571,66 @@ async def notify_admins(bot: Bot, msg: str, *, kind: str, target_id: str) -> boo
     if registered:
         persist_approval_notice_map()
     return delivered_any
+
+
+@scheduler.scheduled_job(
+    "interval",
+    hours=4,
+    id="request_handler_poll_doubt_friends",
+    coalesce=True,
+    max_instances=1,
+)
+async def poll_doubt_friends_job() -> None:
+    if not plugin_config().request_handler_poll_doubt_friends:
+        return
+    primed_bots, notified_map = load_doubt_poll_state()
+    state_updated = False
+    for bot in get_bots().values():
+        if not isinstance(bot, Bot):
+            continue
+        bot_id = int(bot.self_id)
+        bot_key = str(bot_id)
+        if await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
+            continue
+        try:
+            doubts = await fetch_doubt_friends(bot)
+        except Exception as e:
+            logger.debug(f"poll doubt friends call_api failed bot={bot_key}: {e}")
+            continue
+        cached_doubt_friend[bot_key] = doubts
+        current_uids = set(doubts.keys())
+        pending_keys = pending_friend.get(bot_key, {})
+
+        if bot_key not in primed_bots:
+            notified_map[bot_key] = set(current_uids)
+            primed_bots.add(bot_key)
+            state_updated = True
+            continue
+
+        notified_set = notified_map.setdefault(bot_key, set())
+        before_prune = frozenset(notified_set)
+        notified_set &= current_uids
+        if before_prune != frozenset(notified_set):
+            state_updated = True
+
+        for uid in sorted(current_uids):
+            if uid in pending_keys:
+                continue
+            if uid in notified_set:
+                continue
+            nickname = await get_nickname(bot, int(uid))
+            msg = f"[好友申请·被过滤]\n申请人：{nickname}（{uid}）\n{RH_APPROVE_HINT}\n{RH_HELP_HINT}"
+            if await notify_admins(bot, msg, kind="friend", target_id=uid):
+                set_last_notified(bot_key, "friend", uid)
+                notified_set.add(uid)
+                state_updated = True
+            else:
+                logger.warning(f"未能推送被过滤好友提醒 bot={bot_key} uid={uid}")
+
+        notified_map[bot_key] = notified_set
+
+    if state_updated:
+        save_doubt_poll_state(primed_bots, notified_map)
 
 
 async def approval_reply_rule(bot: Bot, event: Event) -> bool:
