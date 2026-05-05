@@ -9,8 +9,10 @@ from .markdown_generator import (
 )
 from .plugin_manager import (
     fill_plugin_status,
+    find_plugin,
     find_plugin_by_identifier,
     is_plugin_disabled,
+    plugin_display_name,
     toggle_plugin,
 )
 from .renderer import send_markdown_as_image
@@ -24,6 +26,11 @@ def get_context_info(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
         group_id = event.group_id
 
     return bot_id, group_id
+
+
+def resolved_plugin_display(internal_name: str) -> str:
+    p = find_plugin(internal_name)
+    return plugin_display_name(p) if p else internal_name
 
 
 async def handle_help_command(
@@ -73,7 +80,7 @@ async def handle_help_command(
     # 验证插件是否存在
     markdown_content = generate_plugin_functions_markdown(plugin_config, plugin_name)
     if "未找到插件" in markdown_content:
-        await matcher.finish(f"博士，你说的'{plugin_name}'是什么呀？")
+        await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
         return
 
     if len(args) == 1:
@@ -91,9 +98,9 @@ async def handle_help_command(
 
         # 处理可能的错误
         if "未找到功能" in markdown_content:
-            await matcher.finish(f"博士，我在'{plugin_name}'中没有找到这个功能哦")
+            await matcher.finish(f"博士，我在'{resolved_plugin_display(plugin_name)}'中没有找到这个功能哦")
         elif "错误" in markdown_content:
-            await matcher.finish(f"博士，'{plugin_name}'只有这么多信息了")
+            await matcher.finish(f"博士，'{resolved_plugin_display(plugin_name)}'只有这么多信息了")
 
         await send_markdown_as_image(markdown_content, style_name, available_styles, matcher, group_id)
         return

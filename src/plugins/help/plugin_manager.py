@@ -19,6 +19,16 @@ ignored_plugins = plugin_config.ignored_plugins if plugin_config else []
 CORE_PLUGINS = ["help"]
 
 
+def plugin_display_name(plugin: Any) -> str:
+    """用户可见的插件名：优先 PluginMetadata.name，否则回退包名。"""
+    meta = getattr(plugin, "metadata", None)
+    if meta is not None:
+        n = getattr(meta, "name", None)
+        if isinstance(n, str) and n.strip():
+            return n.strip()
+    return plugin.name or "未命名插件"
+
+
 def clear_help_cache(group_id: int | None = None):
     """清理本地帮助缓存"""
     cache_base_dir = plugin_data_dir("help")
@@ -138,16 +148,28 @@ async def update_group_config(group_id: int, disabled_plugins: list[str]) -> Gro
 
 def find_plugin(plugin_name: str) -> Any | None:
     """
-    查找插件对象
+    查找插件对象：支持英文包名或 PluginMetadata.name（中文展示名），以及模糊匹配。
     """
     plugins = get_loaded_plugins()
+    key = plugin_name.strip()
+    if not key:
+        return None
+    key_lower = key.lower()
 
     for plugin in plugins:
-        if plugin.name and plugin.name.lower() == plugin_name.lower():
+        if plugin.name and plugin.name.lower() == key_lower:
             return plugin
 
     for plugin in plugins:
-        if plugin.name and plugin_name.lower() in plugin.name.lower():
+        if plugin_display_name(plugin).lower() == key_lower:
+            return plugin
+
+    for plugin in plugins:
+        if plugin.name and key_lower in plugin.name.lower():
+            return plugin
+
+    for plugin in plugins:
+        if key_lower in plugin_display_name(plugin).lower():
             return plugin
 
     return None
@@ -217,20 +239,23 @@ async def toggle_plugin(
             return False, f"博士，你说的'{plugin_name}'是什么呀？"
 
     plugin_name = target_plugin.name
+    user_visible_name = plugin_display_name(target_plugin)
     logger.debug(f"操作插件: {plugin_name}, 操作类型: {action}, 群ID: {group_id}, BotID: {bot_id}")
 
     if plugin_name in ignored_plugins:
         pass
 
     if bot_id and not group_id:
-        return await _handle_global_plugin_operation(plugin_name, bot_id, action)
+        return await _handle_global_plugin_operation(plugin_name, user_visible_name, bot_id, action)
     elif bot_id and group_id:
-        return await _handle_group_plugin_operation(plugin_name, group_id, bot_id, action)
+        return await _handle_group_plugin_operation(plugin_name, user_visible_name, group_id, bot_id, action)
     else:
         return False, None
 
 
-async def _handle_global_plugin_operation(plugin_name: str, bot_id: int, action: str) -> tuple[bool, str]:
+async def _handle_global_plugin_operation(
+    plugin_name: str, user_visible_name: str, bot_id: int, action: str
+) -> tuple[bool, str]:
     """处理全局插件操作"""
 
     bot_config, _ = await get_bot_config(bot_id)
@@ -245,20 +270,22 @@ async def _handle_global_plugin_operation(plugin_name: str, bot_id: int, action:
     is_disabled = plugin_name in current_disabled
     if should_disable == is_disabled:
         status = "禁用" if is_disabled else "启用"  # 超管私聊就不用搞什么七七八八的回复了吧(
-        return True, f"{plugin_name} 已经 {status}"
+        return True, f"{user_visible_name} 已经 {status}"
 
     new_disabled = await modify_disabled_list(current_disabled, plugin_name, should_disable)
 
     success, _ = await update_config_and_cache("bot", bot_id, new_disabled, plugin_name, should_disable)
     if not success:
         action_name = "禁用" if should_disable else "启用"
-        return False, f"{action_name} {plugin_name}失败"
+        return False, f"{action_name} {user_visible_name}失败"
 
     action_name = "禁止" if should_disable else "启用"
-    return True, f"{plugin_name} 已经 {action_name}"
+    return True, f"{user_visible_name} 已经 {action_name}"
 
 
-async def _handle_group_plugin_operation(plugin_name: str, group_id: int, bot_id: int, action: str) -> tuple[bool, str]:
+async def _handle_group_plugin_operation(
+    plugin_name: str, user_visible_name: str, group_id: int, bot_id: int, action: str
+) -> tuple[bool, str]:
     """处理群级插件操作"""
 
     group_config, _ = await get_group_config(group_id)
@@ -275,20 +302,23 @@ async def _handle_group_plugin_operation(plugin_name: str, group_id: int, bot_id
     if should_disable == is_disabled:
         status = "停止" if is_disabled else "启用"
         if not is_disabled and is_globally_disabled:
-            return True, f"博士,我在{scope_info}已经{status}了 {plugin_name}，但我同时受到了米诺斯的制约..."
-        return True, f"听你的，博士。{scope_info}我为你{status}了{plugin_name}"
+            return True, f"博士,我在{scope_info}已经{status}了 {user_visible_name}，但我同时受到了米诺斯的制约..."
+        return True, f"听你的，博士。{scope_info}我为你{status}了{user_visible_name}"
 
     new_disabled = await modify_disabled_list(current_disabled, plugin_name, should_disable)
 
     success, _ = await update_config_and_cache("group", group_id, new_disabled, plugin_name, should_disable)
     if not success:
         action_name = "停止" if should_disable else "启用"
-        return False, f"呜...看来是喝多了...无法感受到米诺斯的联系，{scope_info}{action_name} {plugin_name}失败了..."
+        return (
+            False,
+            f"呜...看来是喝多了...无法感受到米诺斯的联系，{scope_info}{action_name} {user_visible_name}失败了...",
+        )
     action_name = "停止" if should_disable else "启用"
     if not should_disable and is_globally_disabled:
-        return True, f"博士,我在{scope_info}已经{action_name}了 {plugin_name}，但我同时受到了米诺斯的制约..."
+        return True, f"博士,我在{scope_info}已经{action_name}了 {user_visible_name}，但我同时受到了米诺斯的制约..."
 
-    return True, f"听你的，博士。{scope_info}我为你{action_name}了{plugin_name}"
+    return True, f"听你的，博士。{scope_info}我为你{action_name}了{user_visible_name}"
 
 
 async def find_plugin_by_identifier(plugin_identifier: str, ignored_plugins: list | None = None):
@@ -301,22 +331,35 @@ async def find_plugin_by_identifier(plugin_identifier: str, ignored_plugins: lis
     # 如果不是数字，直接返回插件名称
     if not plugin_identifier.isdigit():
         plugin = find_plugin(plugin_identifier)
-        if not plugin:
-            # 增强模糊匹配
-            plugins = get_loaded_plugins()
-            matched_plugins = [p for p in plugins if p.name and plugin_identifier.lower() in p.name.lower()]
+        if plugin:
+            return plugin.name or "", None
 
-            if len(matched_plugins) == 1:
-                return matched_plugins[0].name, None
-            elif len(matched_plugins) > 1:
-                plugin_names = [p.name for p in matched_plugins]
-                return (
-                    None,
-                    f"博士，你说的'{plugin_identifier}'有多个可能：{'、'.join(plugin_names)}，请说得更具体一些哦",
-                )
-            else:
-                return None, f"博士，你说的'{plugin_identifier}'是什么呀？"
-        return plugin_identifier, None
+        plugins = get_loaded_plugins()
+        pid_lower = plugin_identifier.lower()
+        matched_plugins: list[Any] = []
+        for p in plugins:
+            if not p.name:
+                continue
+            if pid_lower in p.name.lower() or pid_lower in plugin_display_name(p).lower():
+                matched_plugins.append(p)
+
+        seen: set[str] = set()
+        unique: list[Any] = []
+        for p in matched_plugins:
+            pn = p.name or ""
+            if pn and pn not in seen:
+                seen.add(pn)
+                unique.append(p)
+
+        if len(unique) == 1:
+            return unique[0].name or "", None
+        if len(unique) > 1:
+            plugin_names = [plugin_display_name(p) for p in unique]
+            return (
+                None,
+                f"博士，你说的'{plugin_identifier}'有多个可能：{'、'.join(plugin_names)}，请说得更具体一些哦",
+            )
+        return None, f"博士，你说的'{plugin_identifier}'是什么呀？"
 
     # 获取插件配置
     if ignored_plugins is None:
@@ -332,7 +375,7 @@ async def find_plugin_by_identifier(plugin_identifier: str, ignored_plugins: lis
         for p in get_loaded_plugins()
         if p.name and (ignored_plugins is None or p.name not in ignored_plugins) and (p.name not in hidden_plugins)
     ]
-    sorted_plugins = sorted(filtered_plugins, key=lambda p: p.name or "")
+    sorted_plugins = sorted(filtered_plugins, key=lambda p: plugin_display_name(p))
 
     # 检查序号是否有效
     index = int(plugin_identifier) - 1
@@ -367,7 +410,7 @@ async def fill_plugin_status(
             p for p in get_loaded_plugins() if p.name and p.name not in ignored_plugins and p.name not in hidden_plugins
         ]
 
-    sorted_plugins = sorted(filtered_plugins, key=lambda p: p.name or "")
+    sorted_plugins = sorted(filtered_plugins, key=lambda p: plugin_display_name(p))
     logger.debug(f"已排序的插件列表 (共{len(sorted_plugins)}个)")
 
     result_content = markdown_content
