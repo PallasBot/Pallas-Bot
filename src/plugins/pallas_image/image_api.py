@@ -344,9 +344,15 @@ async def bytes_from_image_reference(client: httpx.AsyncClient, url: str) -> byt
         r = await client.get(u)
         if r.status_code == 200:
             return r.content
-    except Exception:
-        logger.debug("download ref image failed: {}", u[:160])
-    return None
+        logger.debug(
+            "download ref image non-200: url={}, status={}",
+            u[:160],
+            r.status_code,
+        )
+        return None
+    except Exception as exc:
+        logger.debug("download ref image error: url={}, exc={!r}", u[:160], exc)
+        return None
 
 
 def generations_payload(prompt: str, ref_urls: list[str]) -> dict[str, object]:
@@ -412,7 +418,7 @@ async def reply_from_image_api_json(
 
     remote_url, raw = extract_image_from_generation_payload(data)
     if raw:
-        await matcher.send(MessageSegment.image(raw))
+        await matcher.send(optional_message_at_user(at_user_id, MessageSegment.image(raw)))
         return
     if remote_url:
         try:

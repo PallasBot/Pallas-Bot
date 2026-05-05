@@ -39,10 +39,20 @@ _raw = get_plugin_config(Config)
 
 
 class ImageGenSettings:
-    __slots__ = ("_c",)
+    __slots__ = ("_c", "_draw_unlimited_groups", "_draw_unlimited_users")
 
     def __init__(self, c: Config) -> None:
         object.__setattr__(self, "_c", c)
+        object.__setattr__(
+            self,
+            "_draw_unlimited_groups",
+            frozenset(c.pallas_image_draw_unlimited_group_ids),
+        )
+        object.__setattr__(
+            self,
+            "_draw_unlimited_users",
+            frozenset(c.pallas_image_draw_unlimited_user_ids),
+        )
 
     @property
     def min_priority(self) -> int:
@@ -123,6 +133,14 @@ class ImageGenSettings:
     @property
     def draw_unlimited_user_ids(self) -> list[int]:
         return self._c.pallas_image_draw_unlimited_user_ids
+
+    @property
+    def draw_unlimited_group_ids_set(self) -> frozenset[int]:
+        return self._draw_unlimited_groups
+
+    @property
+    def draw_unlimited_user_ids_set(self) -> frozenset[int]:
+        return self._draw_unlimited_users
 
     @property
     def draw_command_cooldown(self) -> int:

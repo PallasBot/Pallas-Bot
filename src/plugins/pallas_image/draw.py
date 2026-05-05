@@ -55,11 +55,19 @@ def dedupe_urls(urls: list[str]) -> list[str]:
     return out
 
 
+_MAX_PALLAS_DRAW_USER_LOCKS = 8192
 pallas_draw_user_locks: dict[tuple[int, int], asyncio.Lock] = {}
 
 
 def get_pallas_draw_user_lock(group_id: int, user_id: int) -> asyncio.Lock:
     key = (group_id, user_id)
+    if len(pallas_draw_user_locks) > _MAX_PALLAS_DRAW_USER_LOCKS:
+        for k in list(pallas_draw_user_locks.keys()):
+            if len(pallas_draw_user_locks) <= _MAX_PALLAS_DRAW_USER_LOCKS:
+                break
+            lock = pallas_draw_user_locks.get(k)
+            if lock is not None and not lock.locked():
+                del pallas_draw_user_locks[k]
     if key not in pallas_draw_user_locks:
         pallas_draw_user_locks[key] = asyncio.Lock()
     return pallas_draw_user_locks[key]
@@ -74,9 +82,9 @@ def draw_should_count_usage(group_id: int, user_id: int) -> bool:
     cfg = image_gen_config
     if cfg.draw_per_user_limit <= 0:
         return False
-    if group_id in set(cfg.draw_unlimited_group_ids):
+    if group_id in cfg.draw_unlimited_group_ids_set:
         return False
-    if user_id in set(cfg.draw_unlimited_user_ids):
+    if user_id in cfg.draw_unlimited_user_ids_set:
         return False
     return True
 
