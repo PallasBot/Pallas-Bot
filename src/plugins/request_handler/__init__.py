@@ -550,12 +550,15 @@ def plugin_config() -> Config:
 
 async def notify_admins(bot: Bot, msg: str, *, kind: str, target_id: str) -> bool:
     bot_key = str(bot.self_id)
-    admins = await BotConfig(int(bot.self_id))._find("admins")
+    admins = await BotConfig(int(bot.self_id))._find("admins") or []
     plugin_cfg = plugin_config()
     if not plugin_cfg.request_handler_notify_superusers:
         superusers = {int(uid) for uid in get_driver().config.superusers}
         # 过滤掉 SUPERUSER，若全部都是 SUPERUSER 则发送给SUPERUSER
         admins = [uid for uid in admins if uid not in superusers] or admins
+    # Bot 未配置 admins 时仍通知 SUPERUSER，避免无人收件
+    if not admins:
+        admins = [int(uid) for uid in get_driver().config.superusers]
     registered = False
     delivered_any = False
     for admin_id in admins:
