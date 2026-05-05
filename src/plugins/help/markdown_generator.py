@@ -116,6 +116,7 @@ def generate_plugin_functions_markdown(
                     brief_des = item.get("brief_des", "暂无简介")
                     markdown_content += f"| {i} | {func_name} | {brief_des} |\n"
                 markdown_content += "\n使用方法: 使用 `牛牛帮助 <插件名> <功能序号或名称>` 查看功能详情\n\n"
+                markdown_content += "\n示例: 牛牛帮助 1 2 或牛牛帮助 repeater 1 \n\n"
             else:
                 markdown_content += "该插件未定义功能列表。\n\n"
         else:
