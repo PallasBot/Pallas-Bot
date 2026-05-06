@@ -440,14 +440,48 @@ if _approval_notice_dirty:
 _APPROVE_REPLY_TEXT = frozenset({"", "同意", "好", "yes", "y", "ok"})
 
 
+def rows_from_doubt_friends_api(result: object) -> list[dict]:
+    if isinstance(result, list):
+        return [x for x in result if isinstance(x, dict)]
+    if isinstance(result, dict):
+        data = result.get("data")
+        if isinstance(data, list):
+            return [x for x in data if isinstance(x, dict)]
+    return []
+
+
+def uid_flag_from_doubt_friend_row(item: dict) -> tuple[str, str] | None:
+    flag = item.get("flag")
+    if flag is None:
+        return None
+    flag_str = str(flag).strip()
+    if not flag_str:
+        return None
+    uid_raw = item.get("user_id")
+    if uid_raw is None:
+        uid_raw = item.get("uin")
+    if uid_raw is None:
+        return None
+    uid_str = str(uid_raw).strip()
+    if not uid_str:
+        return None
+    return uid_str, flag_str
+
+
 async def fetch_doubt_friends(bot: Bot) -> dict[str, str]:
     """获取被过滤的好友申请"""
     try:
         result = await bot.call_api("get_doubt_friends_add_request", count=50)
-        if isinstance(result, list):
-            return {str(item["user_id"]): item["flag"] for item in result}
-    except Exception:
-        pass
+        out: dict[str, str] = {}
+        for item in rows_from_doubt_friends_api(result):
+            pair = uid_flag_from_doubt_friend_row(item)
+            if pair is None:
+                continue
+            uid_str, flag_str = pair
+            out[uid_str] = flag_str
+        return out
+    except Exception as e:
+        logger.debug("get_doubt_friends_add_request 调用异常: {}", e)
     return {}
 
 

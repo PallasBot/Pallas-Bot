@@ -639,22 +639,40 @@ async def _call_get_friend_list(
     return out, None, truncated
 
 
+def _rows_from_doubt_friends_api(raw: object) -> list[dict[str, Any]]:
+    if isinstance(raw, list):
+        return [x for x in raw if isinstance(x, dict)]
+    if isinstance(raw, dict):
+        data = raw.get("data")
+        if isinstance(data, list):
+            return [x for x in data if isinstance(x, dict)]
+    return []
+
+
 async def _call_get_doubt_friends(bot: object) -> list[dict[str, Any]]:
     try:
         raw = await bot.call_api("get_doubt_friends_add_request", count=50)  # type: ignore[union-attr]
     except Exception:  # noqa: BLE001
         return []
-    if not isinstance(raw, list):
-        return []
+    rows = _rows_from_doubt_friends_api(raw)
     out: list[dict[str, Any]] = []
-    for x in raw:
-        if not isinstance(x, dict) or "user_id" not in x:
+    for x in rows:
+        uid_raw = x.get("user_id")
+        if uid_raw is None:
+            uid_raw = x.get("uin")
+        if uid_raw is None:
             continue
         try:
-            uid = int(x["user_id"])
+            uid = int(uid_raw)
         except (TypeError, ValueError):
             continue
-        out.append({"user_id": uid, "flag": str(x.get("flag", ""))})
+        flag = x.get("flag")
+        if flag is None:
+            continue
+        flag_str = str(flag).strip()
+        if not flag_str:
+            continue
+        out.append({"user_id": uid, "flag": flag_str})
     return out
 
 
