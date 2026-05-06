@@ -38,6 +38,7 @@ __plugin_meta__ = PluginMetadata(
 同意好友 <QQ> — 同意指定 QQ 的好友申请
 拒绝好友 <QQ> — 拒绝指定 QQ 的好友申请
 同意所有好友 — 同意当前全部好友申请
+拒绝所有好友 — 拒绝当前全部好友申请
 查看入群邀请 — 列出待处理入群邀请
 同意入群 <群号> — 同意指定群的邀请
 同意所有入群 — 同意当前全部入群邀请
@@ -83,9 +84,9 @@ __plugin_meta__ = PluginMetadata(
             {
                 "func": "批量审批",
                 "trigger_method": "on_cmd",
-                "trigger_condition": "同意所有好友 / 同意所有入群",
-                "brief_des": "一次性全部同意",
-                "detail_des": "同意当前所有待处理好友申请，或所有待处理入群邀请",
+                "trigger_condition": "同意所有好友 / 拒绝所有好友 / 同意所有入群",
+                "brief_des": "好友或入群批量同意/拒绝",
+                "detail_des": "一次性同意或拒绝当前全部待处理好友申请，或同意全部入群邀请",
             },
             {
                 "func": "入群邀请审批",
@@ -134,7 +135,7 @@ RH_LIST_TAIL_FRIEND = (
     "• 私聊只发「同意」→ 处理牛牛最新一条好友审批提醒；\n"
     "• 引用某条审批消息后再发 同意 → 只处理那条对应的申请；\n"
     "• 「同意好友 <QQ号>」→ 按号码同意、「拒绝好友 <QQ号>」→ 按号码拒绝；\n"
-    "• 「同意所有好友」→ 当前表里剩余的全部同意。"
+    "• 「同意所有好友」→ 全部同意、「拒绝所有好友」→ 全部拒绝。"
 )
 RH_LIST_TAIL_GROUP = (
     "怎么操作：\n"
@@ -606,6 +607,7 @@ list_friends_cmd = on_command("查看好友申请", priority=5, block=True)
 approve_latest_cmd = on_command("同意", priority=5, block=True)
 approve_friend_cmd = on_command("同意好友", priority=5, block=True)
 approve_all_friends_cmd = on_command("同意所有好友", priority=5, block=True)
+reject_all_friends_cmd = on_command("拒绝所有好友", priority=5, block=True)
 list_groups_cmd = on_command("查看入群邀请", priority=5, block=True)
 approve_group_cmd = on_command("同意入群", priority=5, block=True)
 approve_all_groups_cmd = on_command("同意所有入群", priority=5, block=True)
@@ -976,6 +978,45 @@ async def handle_approve_all_friends(bot: Bot, event: MessageEvent):
         clear_quick_approve_state(bot_key, "friend", uid)
 
     await approve_all_friends_cmd.finish(f"已同意 {ok} 条好友申请" + (f"，{fail} 条失败" if fail else ""))
+
+
+@reject_all_friends_cmd.handle()
+async def handle_reject_all_friends(bot: Bot, event: MessageEvent):
+    if not await PERM(bot, event):
+        return
+    bot_key = str(bot.self_id)
+    bot_pending = pending_friend.get(bot_key, {})
+    doubt_requests = await fetch_doubt_friends(bot)
+    cached_doubt_friend[bot_key] = doubt_requests
+
+    if not bot_pending and not doubt_requests:
+        await reject_all_friends_cmd.finish("暂无待处理好友申请")
+
+    ok, fail = 0, 0
+    cleared_friend_ids: set[str] = set()
+    for uid, flag in list(bot_pending.items()):
+        try:
+            await bot.set_friend_add_request(flag=flag, approve=False)
+            bot_pending.pop(uid, None)
+            ok += 1
+            cleared_friend_ids.add(uid)
+        except Exception:
+            fail += 1
+    save_json(FRIEND_REQ_FILE, pending_friend)
+
+    for uid, flag in list(doubt_requests.items()):
+        try:
+            await bot.call_api("set_doubt_friends_add_request", flag=flag, approve=False)
+            cached_doubt_friend[bot_key].pop(uid, None)
+            ok += 1
+            cleared_friend_ids.add(uid)
+        except Exception:
+            fail += 1
+
+    for uid in cleared_friend_ids:
+        clear_quick_approve_state(bot_key, "friend", uid)
+
+    await reject_all_friends_cmd.finish(f"已拒绝 {ok} 条好友申请" + (f"，{fail} 条失败" if fail else ""))
 
 
 @approve_all_groups_cmd.handle()
