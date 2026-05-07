@@ -10,7 +10,7 @@ db.getCollection(collection)
     .updateOne(
         {
             "account": 1234567          // 牛牛的账号
-        }, 
+        },
         {
             "$set": {
                 "security": false,      // 牛牛账号是否安全
@@ -21,7 +21,7 @@ db.getCollection(collection)
                     111111              // 管理员账号，数组，可以设置多个
                 ]
             }
-        }, 
+        },
         {
             "upsert": true
         }

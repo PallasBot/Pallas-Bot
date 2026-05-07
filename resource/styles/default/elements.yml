@@ -29,7 +29,7 @@ background: # 背景配置
 
   # 当mode=1时，以下配置生效
 
-  # data: 
+  # data:
 
   #   # 图片元素配置
   #   left-up: "_01.png" # 左上角图片
@@ -87,22 +87,22 @@ decorates: # 装饰配置
       #   xlimit: 0.5 # x轴拉伸限制，0.2表示拉伸后x,y轴不会超过整张markdown图的20%
       #   ylimit: 0.5 # y轴拉伸限制，0.2表示拉伸后x,y轴不会超过整张markdown图的20%
       #   min: # 最小缩放大小（优先级比limit更高）
-      #   max: # 最大缩放大小 
-    
+      #   max: # 最大缩放大小
+
     left: [] # 左侧装饰图片
 
     left-down: [] # 左下角装饰图片
-    
+
     up: [] # 上侧装饰图片
-    
+
     down: [] # 下侧装饰图片
 
     right-up: [] # 右上角装饰图片
-    
+
     right: [] # 右侧装饰图片
-    
+
     right-down: [] # 右下角装饰图片
-    
+
     middle: [] # 中间装饰图片
 
   bottom: # 渲染在底部图层（背景之上，文本之下）
@@ -120,20 +120,20 @@ decorates: # 装饰配置
       #   xlimit: 0.5 # x轴拉伸限制，0.2表示拉伸后x,y轴不会超过整张markdown图的20%
       #   ylimit: 0.5 # y轴拉伸限制，0.2表示拉伸后x,y轴不会超过整张markdown图的20%
       #   min: # 最小缩放大小（优先级比limit更高）
-      #   max: # 最大缩放大小 
-    
+      #   max: # 最大缩放大小
+
     left: [] # 左侧装饰图片
 
     left-down: [] # 左下角装饰图片
-    
+
     up: [] # 上侧装饰图片
-    
+
     down: [] # 下侧装饰图片
 
     right-up: [] # 右上角装饰图片
-    
+
     right: [] # 右侧装饰图片
-    
+
     right-down: [] # 右下角装饰图片
-    
+
     middle: [] # 中间装饰图片

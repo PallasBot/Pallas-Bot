@@ -1,6 +1,6 @@
 #!/bin/shell
 
-working_path=$(cd "$(dirname "$0")""/../.."; pwd) 
+working_path=$(cd "$(dirname "$0")""/../.."; pwd)
 echo working path: $working_path
 
 usage() {
@@ -48,12 +48,12 @@ backup_session() {
         target=$output/accounts/$account
         mkdir -p $target
         cp $path $target
-        
+
         target_latest=$output_latest/accounts/$account
         mkdir -p $target_latest
         cp $path $target_latest
     done
-    
+
     mkdir -p $output/accounts/binary
     cp $working_path/accounts/binary/accounts.* $output/accounts/binary/
 
