@@ -55,6 +55,7 @@ def register_pallas_protocol_routes(
         render_import_page,
         render_new_account_page,
         render_protocol_assets_page,
+        shell_favicon_link,
         shell_font_stylesheet_link,
     )
 
@@ -117,7 +118,7 @@ def register_pallas_protocol_routes(
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-{shell_font_stylesheet_link(base)}  <title>Pallas 协议端登录</title>
+{shell_favicon_link(base)}{shell_font_stylesheet_link(base)}  <title>Pallas 协议端登录</title>
   <style>
     :root {{
       --bg0: #f8fafc;

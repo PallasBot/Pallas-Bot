@@ -5,9 +5,12 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+import os
 import platform
 import re
 import shutil
+import socket
+import sys
 import time
 import typing
 from pathlib import Path
@@ -1077,9 +1080,37 @@ def _runtime_metrics() -> dict[str, Any]:
     except Exception:  # noqa: BLE001
         pass
 
+    hostname_s = (platform.node() or "").strip()
+    if not hostname_s:
+        try:
+            hostname_s = (socket.gethostname() or "").strip()
+        except Exception:  # noqa: BLE001
+            hostname_s = ""
+    if not hostname_s:
+        hostname_s = (os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "").strip()
+
+    boot_time: float | None = None
+    try:
+        import psutil as _psutil_boot  # type: ignore
+
+        boot_time = float(_psutil_boot.boot_time())
+    except Exception as e:  # noqa: BLE001
+        logger.debug("Pallas 控制台: psutil.boot_time 不可用，将尝试其它方式 err={}", e)
+
+    if boot_time is None and sys.platform == "win32":
+        try:
+            import ctypes
+
+            ms = int(ctypes.windll.kernel32.GetTickCount64())
+            boot_time = float(time.time() - ms / 1000.0)
+        except Exception as e:  # noqa: BLE001
+            logger.debug("Pallas 控制台: Windows GetTickCount64 推算启动时间失败 err={}", e)
+
     return {
         "platform": platform.platform(),
         "python": platform.python_version(),
+        "hostname": hostname_s or None,
+        "boot_time": boot_time,
         "cpu_percent": cpu_percent,
         "memory": mem,
         "disk": disk,
