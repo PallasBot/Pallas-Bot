@@ -9,8 +9,15 @@ from html import escape as html_escape
 from ..contract import resolve_public_mount_path
 
 
+def shell_favicon_link(public_base_path: str) -> str:
+    """favicon：静态目录 ``pallas-priest.png``。"""
+    p = (public_base_path or "").strip().rstrip("/")
+    href = f"{p}/_pallas_ui/pallas-priest.png" if p else "/_pallas_ui/pallas-priest.png"
+    return f'  <link rel="icon" type="image/png" href="{html_escape(href, quote=True)}" />\n'
+
+
 def shell_font_stylesheet_link(public_base_path: str) -> str:
-    """fonts.css 与 Google Fonts 链接。"""
+    """fonts.css + Google Fonts。"""
     p = (public_base_path or "").strip().rstrip("/")
     href = f"{p}/_pallas_ui/fonts.css" if p else "/_pallas_ui/fonts.css"
     gfont = (
@@ -29,15 +36,16 @@ def shell_font_stylesheet_link(public_base_path: str) -> str:
 
 NAPCAT_SHELL_CSS = """
 :root {
-  --font-sans: "Pallas UI", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "JetBrains Mono", "Cascadia Code", SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: "Pallas UI", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Cascadia Code", "Consolas", "Sarasa Mono SC", monospace;
   --font: var(--font-sans);
-  --bg0: #f8fafc;
-  --bg1: #f1f5f9;
-  --card: rgba(255, 255, 255, 0.92);
-  --bd: rgba(15, 23, 42, 0.09);
-  --txt: #0f172a;
-  --muted: #64748b;
+  /* 浅色页面对齐 WebUI pallas-theme（--el-bg-color-page / --el-bg-color） */
+  --bg0: #e4e9f2;
+  --bg1: #f1f4fa;
+  --card: rgba(255, 255, 255, 0.94);
+  --bd: rgba(22, 100, 196, 0.14);
+  --txt: #303133;
+  --muted: #606266;
   --accent: #2563eb;
   --accent-strong: #1d4ed8;
   --accent-subtle: rgba(37, 99, 235, 0.14);
@@ -50,7 +58,9 @@ NAPCAT_SHELL_CSS = """
   --radius-md: 14px;
   --radius-lg: 18px;
   --radius-xl: 22px;
-  --shadow-card: 0 8px 28px rgba(15, 23, 42, 0.07);
+  --pallas-elev-1: 0 10px 24px rgba(15, 35, 65, 0.08);
+  --pallas-elev-2: 0 16px 34px rgba(10, 30, 56, 0.14);
+  --shadow-card: var(--pallas-elev-1);
   --glass-highlight: rgba(255, 255, 255, 0.42);
   --glass-edge: rgba(255, 255, 255, 0.55);
   --pallas-text-xs: 0.75rem;
@@ -72,30 +82,32 @@ body {
   margin: 0; min-height: 100vh; font-family: var(--font);
   font-size: var(--pallas-text-base);
   font-weight: var(--pallas-weight-body);
-  line-height: 1.58;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background:
     radial-gradient(1100px 520px at 12% -12%, var(--accent-glow), transparent 58%),
-    radial-gradient(880px 420px at 98% 0%, rgba(37, 99, 235, 0.05), transparent 52%),
+    radial-gradient(880px 420px at 98% 0%, rgba(37, 99, 235, 0.06), transparent 52%),
     var(--bg0);
   color: var(--txt);
 }
 body[data-theme="dark"] {
-  --bg0: #080b12;
-  --bg1: rgba(12, 16, 24, 0.92);
-  --card: rgba(20, 26, 38, 0.85);
-  --bd: rgba(255, 255, 255, 0.09);
-  --txt: #f1f5f9;
-  --muted: #94a3b8;
+  --bg0: #0a0a0b;
+  --bg1: #141414;
+  --card: rgba(20, 26, 38, 0.92);
+  --bd: rgba(255, 255, 255, 0.1);
+  --txt: #e5eaf3;
+  --muted: #a3a6ad;
   --accent: #60a5fa;
   --accent-strong: #3b82f6;
-  --accent-subtle: rgba(59, 130, 246, 0.22);
-  --accent-glow: rgba(59, 130, 246, 0.14);
+  --accent-subtle: rgba(96, 165, 250, 0.22);
+  --accent-glow: rgba(96, 165, 250, 0.14);
   --ok: #34d399;
   --warn: #fbbf24;
   --err: #f87171;
-  --shadow-card: 0 16px 48px rgba(0, 0, 0, 0.42);
+  --pallas-elev-1: 0 10px 28px rgba(0, 0, 0, 0.45);
+  --pallas-elev-2: 0 16px 40px rgba(0, 0, 0, 0.5);
+  --shadow-card: var(--pallas-elev-1);
   --glass-highlight: rgba(255, 255, 255, 0.14);
   --glass-edge: rgba(255, 255, 255, 0.22);
   background:
@@ -878,8 +890,44 @@ textarea.cfg { min-height: 220px; }
 """
 
 
-def _render_common_api_js() -> str:
+def _pallas_theme_bridge_js() -> str:
+    """与 Pallas-Bot-WebUI src/utils/theme.ts 共用 localStorage 键，深浅色与控制台一致。"""
     return """
+    const PALLAS_THEME_KEY = "pallas-webui-theme";
+    const PALLAS_PROTOCOL_THEME_LEGACY = "pallas_protocol_theme";
+    function resolvePallasThemePreference() {
+      try {
+        const w = localStorage.getItem(PALLAS_THEME_KEY);
+        if (w === "dark" || w === "light") return w;
+      } catch (e) {}
+      try {
+        const p = localStorage.getItem(PALLAS_PROTOCOL_THEME_LEGACY);
+        if (p === "dark" || p === "light") return p;
+      } catch (e) {}
+      try {
+        if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+      } catch (e) {}
+      return "light";
+    }
+    function applyPallasShellTheme(mode) {
+      const next = mode === "dark" ? "dark" : "light";
+      document.body.setAttribute("data-theme", next);
+      document.documentElement.classList.toggle("dark", next === "dark");
+      try {
+        localStorage.setItem(PALLAS_THEME_KEY, next);
+        localStorage.setItem(PALLAS_PROTOCOL_THEME_LEGACY, next);
+      } catch (e) {}
+    }
+    function initPallasShellThemeFromStorage() {
+      applyPallasShellTheme(resolvePallasThemePreference());
+    }
+"""
+
+
+def _render_common_api_js() -> str:
+    return (
+        _pallas_theme_bridge_js()
+        + """
     function getSessionToken() {
       return (sessionStorage.getItem("pallas_protocol_token_session") || "").trim();
     }
@@ -898,6 +946,13 @@ def _render_common_api_js() -> str:
       const headers = options.headers || {};
       if (token) headers["X-Pallas-Protocol-Token"] = token;
       const res = await fetch(`${basePath}${path}`, { ...options, headers });
+      if (res.status === 401) {
+        sessionStorage.removeItem("pallas_protocol_token_session");
+        const loc = location.pathname + location.search + location.hash;
+        const next = encodeURIComponent(loc || `${basePath}/`);
+        location.href = `${basePath}/login?next=${next}&reason=${encodeURIComponent("登录已失效或 Token 无效，请重新登录")}`;
+        throw new Error("Unauthorized");
+      }
       if (!res.ok) throw new Error((await res.text()) || res.status);
       return res.json();
     }
@@ -1089,6 +1144,7 @@ def _render_common_api_js() -> str:
       initShellPrettySelects();
     }
 """
+    )
 
 
 def _render_hidden_token_sync_js(back_button_id: str = "backDash") -> str:
@@ -1117,7 +1173,7 @@ def render_dashboard(base_path: str) -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-{shell_font_stylesheet_link(path)}  <title>Pallas · 协议端仪表盘</title>
+{shell_favicon_link(path)}{shell_font_stylesheet_link(path)}  <title>Pallas · 协议端仪表盘</title>
   <style>{NAPCAT_SHELL_CSS}</style>
 </head>
 <body data-base-path="{html_escape(path, quote=True)}">
@@ -1166,14 +1222,14 @@ def render_dashboard(base_path: str) -> str:
   </div>
   <script>
     const basePath = {p};
+{common_api_js}
     let accountRows = [];
     let viewMode = "card";
-    function applyTheme(theme) {{
-      const next = theme === "dark" ? "dark" : "light";
-      document.body.setAttribute("data-theme", next);
-      localStorage.setItem("pallas_protocol_theme", next);
+    function syncThemeToggleLabel() {{
       const b = document.getElementById("btnTheme");
-      if (b) b.textContent = next === "dark" ? "切换浅色" : "切换深色";
+      if (!b) return;
+      const next = document.body.getAttribute("data-theme") === "dark" ? "dark" : "light";
+      b.textContent = next === "dark" ? "切换浅色" : "切换深色";
     }}
     function setBusy(el, busy, idleText = "刷新", busyText = "刷新中...") {{
       if (!el) return;
@@ -1182,10 +1238,12 @@ def render_dashboard(base_path: str) -> str:
       if (typeof el.textContent === "string") el.textContent = busy ? busyText : idleText;
     }}
     (function initPagePrefs() {{
-      applyTheme(localStorage.getItem("pallas_protocol_theme") || "light");
+      initPallasShellThemeFromStorage();
+      syncThemeToggleLabel();
       document.getElementById("btnTheme").addEventListener("click", () => {{
         const now = document.body.getAttribute("data-theme") === "dark" ? "dark" : "light";
-        applyTheme(now === "dark" ? "light" : "dark");
+        applyPallasShellTheme(now === "dark" ? "light" : "dark");
+        syncThemeToggleLabel();
       }});
     }})();
     function notify(msg, level = "ok") {{
@@ -1203,7 +1261,6 @@ def render_dashboard(base_path: str) -> str:
       navigator.clipboard.writeText(t).then(() => notify("已复制到剪贴板", "ok"))
         .catch((e) => notify(String(e.message || e), "err"));
     }}
-{common_api_js}
     document.getElementById("linkNewAccount").addEventListener("click", (e) => {{
       e.preventDefault();
       location.href = `${{basePath}}/new`;
@@ -1496,7 +1553,7 @@ def render_import_page(base_path: str) -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-{shell_font_stylesheet_link(path)}  <title>导入账号</title>
+{shell_favicon_link(path)}{shell_font_stylesheet_link(path)}  <title>导入账号</title>
   <style>{NAPCAT_SHELL_CSS}
 .result-row {{ display:flex; gap:8px; align-items:baseline; padding:6px 0; border-bottom:1px solid var(--bd); font-size:0.88rem; }}
 .result-row:last-child {{ border-bottom:none; }}
@@ -1565,9 +1622,9 @@ def render_import_page(base_path: str) -> str:
 
   <script>
     const basePath = {p};
-    document.body.setAttribute("data-theme", localStorage.getItem("pallas_protocol_theme") || "light");
 {token_sync_js}
 {common_api_js}
+    initPallasShellThemeFromStorage();
 
     function renderRows(containerId, items, labelFn, cls) {{
       const el = document.getElementById(containerId);
@@ -1640,7 +1697,7 @@ def render_new_account_page(base_path: str) -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-{shell_font_stylesheet_link(path)}  <title>新建账号</title>
+{shell_favicon_link(path)}{shell_font_stylesheet_link(path)}  <title>新建账号</title>
   <style>{NAPCAT_SHELL_CSS}</style>
 </head>
 <body data-base-path="{html_escape(path, quote=True)}">
@@ -1695,9 +1752,9 @@ def render_new_account_page(base_path: str) -> str:
   </div>
   <script>
     const basePath = {p};
-    document.body.setAttribute("data-theme", localStorage.getItem("pallas_protocol_theme") || "light");
 {token_sync_js}
 {common_api_js}
+    initPallasShellThemeFromStorage();
     function applyNewAccountWebuiTokenRow() {{
       const isSl = (document.getElementById("protocol_backend").value || "napcat").trim().toLowerCase() === "snowluma";
       const row = document.getElementById("rowNewWebuiToken");
@@ -1750,7 +1807,7 @@ def render_protocol_assets_page(base_path: str) -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-{shell_font_stylesheet_link(path)}  <title>协议资产</title>
+{shell_favicon_link(path)}{shell_font_stylesheet_link(path)}  <title>协议资产</title>
   <style>{NAPCAT_SHELL_CSS}</style>
 </head>
 <body>
@@ -1943,7 +2000,13 @@ def render_protocol_assets_page(base_path: str) -> str:
   </div>
   <script>
     const basePath = {p};
-    document.body.setAttribute("data-theme", localStorage.getItem("pallas_protocol_theme") || "light");
+{common_api_js}
+    initPallasShellThemeFromStorage();
+    let runtimeRefreshing = false;
+    let runtimeProfileSnapshot = null;
+    let runtimeProfileWatchBound = false;
+    let pendingTag = null;
+    let pendingSnowlumaTag = null;
     function setAssetsProtocolPane(which, pushUrl) {{
       const nap = which === "napcat";
       const paneN = document.getElementById("assetsPaneNapcat");
@@ -2022,10 +2085,6 @@ def render_protocol_assets_page(base_path: str) -> str:
       }}
       el.scrollTop = el.scrollHeight;
     }}
-{common_api_js}
-    let runtimeRefreshing = false;
-    let runtimeProfileSnapshot = null;
-    let runtimeProfileWatchBound = false;
     function normalizeRuntimeProfile(p) {{
       const mode = ["docker", "appimage", "shell"].includes(String(p.runtime_mode || "")) ? String(p.runtime_mode) : "shell";
       const platform = ["auto", "linux-amd64", "linux-arm64", "windows-amd64"].includes(String(p.target_platform || ""))
@@ -2334,8 +2393,6 @@ def render_protocol_assets_page(base_path: str) -> str:
       if (r.assets && r.assets.length) parts.push("资产: " + r.assets.map((a) => a.name).join(", "));
       el.textContent = parts.join(" · ");
     }}
-    let pendingTag = null;
-    let pendingSnowlumaTag = null;
     function fillSnowlumaFromData(sl) {{
       if (!sl) sl = {{}};
       const job = sl.job || {{}};
@@ -2507,7 +2564,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-{shell_font_stylesheet_link(path)}  <title>账号 {aid_h}</title>
+{shell_favicon_link(path)}{shell_font_stylesheet_link(path)}  <title>账号 {aid_h}</title>
   <style>{NAPCAT_SHELL_CSS}</style>
 </head>
 <body>
@@ -2614,8 +2671,8 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
     const basePath = {p};
     const accountId = {aid};
     let accountProcessRunning = false;
-    document.body.setAttribute("data-theme", localStorage.getItem("pallas_protocol_theme") || "light");
 {common_api_js}
+    initPallasShellThemeFromStorage();
     let activeTab = "overview";
     function tab(name) {{
       activeTab = name;
