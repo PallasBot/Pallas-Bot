@@ -7,6 +7,7 @@ from pathlib import Path
 from .contract import (
     ACCOUNT_PROTOCOL_BACKEND_KEY,
     DEFAULT_PROTOCOL_BACKEND,
+    MANAGED_RUNTIME_TAG_KEY,
     SNOWLUMA_PROTOCOL_BACKEND,
     resolve_default_account_data_dir,
 )
@@ -25,6 +26,8 @@ class LaunchManager:
         instances_root: Path,
         runtime_dir_provider: Callable[[], Path | None] | None = None,
         snowluma_runtime_dir_provider: Callable[[], Path | None] | None = None,
+        runtime_dir_for_account: Callable[[dict], Path | None] | None = None,
+        snowluma_runtime_dir_for_account: Callable[[dict], Path | None] | None = None,
         runtime_profile_provider: Callable[[], dict] | None = None,
         platform: NapcatPlatform | None = None,
     ) -> None:
@@ -34,6 +37,8 @@ class LaunchManager:
         self._instances_root = instances_root
         self._runtime_dir_provider = runtime_dir_provider
         self._snowluma_runtime_dir_provider = snowluma_runtime_dir_provider
+        self._runtime_dir_for_account = runtime_dir_for_account
+        self._snowluma_runtime_dir_for_account = snowluma_runtime_dir_for_account
         self._runtime_profile_provider = runtime_profile_provider
         self._platform = platform or get_napcat_platform()
 
@@ -126,11 +131,21 @@ class LaunchManager:
         elif args is None:
             account["args"] = []
 
+        managed_tag = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
+        acc_rt: Path | None = None
+        if managed_tag and self._runtime_dir_for_account:
+            try:
+                acc_rt = self._runtime_dir_for_account(account)
+            except Exception:
+                acc_rt = None
+
         program_dir_raw = str(account.get("program_dir", "")).strip()
         lazy_rt = self._runtime_dir_provider() if self._runtime_dir_provider else None
         runtime_str = str(lazy_rt).strip() if lazy_rt else ""
         configured_program_dir = str(getattr(self._config, "pallas_protocol_program_dir", "")).strip()
-        if not program_dir_raw:
+        if acc_rt is not None and acc_rt.is_dir():
+            program_dir_raw = str(acc_rt.resolve())
+        elif not program_dir_raw:
             if configured_program_dir:
                 program_dir_raw = configured_program_dir
             elif runtime_str:
@@ -139,8 +154,8 @@ class LaunchManager:
                 fallback = self._resource_root / "napcat"
                 program_dir_raw = str(fallback) if fallback.is_dir() else ""
         elif not configured_program_dir:
-            # 同步运行时目录
-            self._refresh_managed_runtime_refs(account, runtime_str)
+            if not managed_tag:
+                self._refresh_managed_runtime_refs(account, runtime_str)
             program_dir_raw = str(account.get("program_dir", "")).strip() or program_dir_raw
         account["program_dir"] = program_dir_raw
         account["working_dir"] = program_dir_raw
@@ -180,6 +195,14 @@ class LaunchManager:
         elif args is None:
             account["args"] = []
 
+        managed_tag = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
+        acc_sl: Path | None = None
+        if managed_tag and self._snowluma_runtime_dir_for_account:
+            try:
+                acc_sl = self._snowluma_runtime_dir_for_account(account)
+            except Exception:
+                acc_sl = None
+
         configured_sd = str(getattr(self._config, "pallas_protocol_snowluma_program_dir", "") or "").strip()
         lazy_sl = ""
         if self._snowluma_runtime_dir_provider:
@@ -190,7 +213,9 @@ class LaunchManager:
             except Exception:
                 lazy_sl = ""
         program_dir_raw = str(account.get("program_dir", "") or "").strip()
-        if not program_dir_raw:
+        if acc_sl is not None and acc_sl.is_dir():
+            program_dir_raw = str(acc_sl.resolve())
+        elif not program_dir_raw:
             if configured_sd:
                 program_dir_raw = configured_sd
             elif lazy_sl:

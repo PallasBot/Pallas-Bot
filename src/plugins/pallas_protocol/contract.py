@@ -12,6 +12,8 @@ SNOWLUMA_PROTOCOL_BACKEND: str = "snowluma"
 DEFAULT_PROTOCOL_WEB_MOUNT_SLUG: str = "console"
 # 账号协议字段名；取值对应运行时注册表中的 kind
 ACCOUNT_PROTOCOL_BACKEND_KEY: str = "protocol_backend"
+# 账号选用托管解压子目录对应的 Release 标记（与 runtime_extract 下目录名经 sanitize 对齐；空则跟随全局 manifest）
+MANAGED_RUNTIME_TAG_KEY: str = "managed_runtime_tag"
 
 # 协议页面前缀
 PROTOCOL_HTTP_PREFIX: str = "/protocol"

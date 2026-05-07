@@ -24,7 +24,12 @@ from .config import (
     resolve_onebot_ws_settings,
 )
 from .config_manager import AccountConfigManager
-from .contract import ACCOUNT_PROTOCOL_BACKEND_KEY, DEFAULT_PROTOCOL_BACKEND, SNOWLUMA_PROTOCOL_BACKEND
+from .contract import (
+    ACCOUNT_PROTOCOL_BACKEND_KEY,
+    DEFAULT_PROTOCOL_BACKEND,
+    MANAGED_RUNTIME_TAG_KEY,
+    SNOWLUMA_PROTOCOL_BACKEND,
+)
 from .launch_manager import LaunchManager
 from .runtime.installer import NapCatRuntimeStore, default_release_asset_for_platform, default_release_repo_for_platform
 from .runtime.snowluma_installer import SnowLumaRuntimeStore, default_snowluma_asset_name_for_tag
@@ -67,6 +72,8 @@ class PallasProtocolService:
             instances_root=self._instances_root,
             runtime_dir_provider=self._runtime_store.resolved_program_dir,
             snowluma_runtime_dir_provider=self._snowluma_store.resolved_program_dir,
+            runtime_dir_for_account=self._napcat_runtime_dir_for_account,
+            snowluma_runtime_dir_for_account=self._snowluma_runtime_dir_for_account,
             runtime_profile_provider=self.runtime_profile,
         )
         self._configs = AccountConfigManager(
@@ -391,6 +398,55 @@ class PallasProtocolService:
     def rescan_runtime_extract(self) -> dict:
         m = self._runtime_store.rescan_existing_extract()
         return {**self.runtime_overview(), "rescanned": m is not None}
+
+    def cleanup_runtime_dist_caches(self) -> dict[str, object]:
+        """删除 ``runtime_dist`` 下已下载的压缩包缓存，不删除 ``runtime_extract`` 与 manifest。"""
+        n_nc = self._runtime_store.clear_dist_file_cache()
+        n_sl = self._snowluma_store.clear_dist_file_cache()
+        return {
+            "ok": True,
+            "napcat_files_removed": n_nc,
+            "snowluma_files_removed": n_sl,
+        }
+
+    def napcat_local_inventory(self) -> dict[str, object]:
+        """``runtime_dist`` / ``runtime_extract`` 本机列表（用于切换托管解压目录）。"""
+        return self._runtime_store.list_local_inventory()
+
+    def _napcat_runtime_dir_for_account(self, account: dict) -> Path | None:
+        mode = str(self.runtime_profile().get("runtime_mode", "") or "").strip().lower()
+        if mode == "docker":
+            return None
+        tag = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
+        if not tag:
+            return None
+        return self._runtime_store.resolve_program_dir_for_tag_slug(tag)
+
+    def _snowluma_runtime_dir_for_account(self, account: dict) -> Path | None:
+        tag = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
+        if not tag:
+            return None
+        return self._snowluma_store.resolve_program_dir_for_tag_slug(tag)
+
+    def activate_napcat_extract(self, folder_name: str) -> dict[str, object]:
+        """将 NapCat manifest 指向已有解压子目录（无需重新下载）。"""
+        self._runtime_store.activate_extract_folder(folder_name)
+        return self.runtime_overview()
+
+    def activate_napcat_by_tag(self, tag: str) -> dict[str, object]:
+        self._runtime_store.activate_extract_by_tag(tag)
+        return self.runtime_overview()
+
+    def snowluma_local_inventory(self) -> dict[str, object]:
+        return self._snowluma_store.list_local_inventory()
+
+    def activate_snowluma_extract(self, folder_name: str) -> dict[str, object]:
+        self._snowluma_store.activate_extract_folder(folder_name)
+        return self.snowluma_runtime_overview()
+
+    def activate_snowluma_by_tag(self, tag: str) -> dict[str, object]:
+        self._snowluma_store.activate_extract_by_tag(tag)
+        return self.snowluma_runtime_overview()
 
     def _rewrite_webui_for_all_accounts(self) -> None:
         """修正历史 webui.json（例如 NapCat 首次生成的 host='::'），避免 Windows 上绑定 UNKNOWN。"""
@@ -731,6 +787,7 @@ class PallasProtocolService:
             "account_data_dir": str(payload.get("account_data_dir", "")).strip(),
             "created_at": datetime.now(UTC).isoformat(),
             "updated_at": datetime.now(UTC).isoformat(),
+            MANAGED_RUNTIME_TAG_KEY: str(payload.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip(),
         }
         wport_raw = payload.get("webui_port")
         if wport_raw is not None and str(wport_raw).strip() != "":
@@ -788,6 +845,7 @@ class PallasProtocolService:
             "ws_name",
             "ws_token",
             ACCOUNT_PROTOCOL_BACKEND_KEY,
+            MANAGED_RUNTIME_TAG_KEY,
         )
         for key in editable_keys:
             if key in payload:
@@ -803,6 +861,7 @@ class PallasProtocolService:
             account["args"] = []
             account["account_data_dir"] = ""
             account["working_dir"] = ""
+            account[MANAGED_RUNTIME_TAG_KEY] = ""
             account.pop("napcat_linux_docker", None)
         if "webui_port" in payload:
             try:
@@ -1372,6 +1431,9 @@ class PallasProtocolService:
         bk = bk or DEFAULT_PROTOCOL_BACKEND
         if bk == SNOWLUMA_PROTOCOL_BACKEND:
             return self._resolve_snowluma_account_runtime_version(account)
+        pinned = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
+        if pinned:
+            return pinned
         if account.get("napcat_linux_docker"):
             image = str(account.get("program_dir", "") or "").strip()
             if image.startswith("docker:"):
@@ -1403,6 +1465,9 @@ class PallasProtocolService:
         return "自定义"
 
     def _resolve_snowluma_account_runtime_version(self, account: dict) -> str:
+        pinned = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
+        if pinned:
+            return pinned
         manifest = self._snowluma_store.read_manifest()
         if manifest is None:
             return "未知"
@@ -1430,6 +1495,9 @@ class PallasProtocolService:
         bk = bk or DEFAULT_PROTOCOL_BACKEND
         if bk == SNOWLUMA_PROTOCOL_BACKEND:
             return self._resolve_snowluma_account_runtime_source(account)
+        pinned = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
+        if pinned:
+            return "实例选用托管版本（个别版本）"
         if account.get("napcat_linux_docker"):
             image = str(account.get("program_dir", "") or "").strip()
             if image.startswith("docker:"):
@@ -1457,6 +1525,9 @@ class PallasProtocolService:
         return "自定义路径"
 
     def _resolve_snowluma_account_runtime_source(self, account: dict) -> str:
+        pinned = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
+        if pinned:
+            return "SnowLuma 实例选用托管版本（个别版本）"
         manifest = self._snowluma_store.read_manifest()
         if manifest is None:
             return "未知来源"

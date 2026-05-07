@@ -27,7 +27,14 @@ from src.common.utils.stream_download import (
     sync_stream_download_to_file,
 )
 
-from .installer import JobStatus, RuntimeManifest, _pick_release_asset_generic, _safe_extract_zip
+from .installer import (
+    JobStatus,
+    RuntimeManifest,
+    _pick_release_asset_generic,
+    _safe_extract_zip,
+    unlink_files_in_dir,
+)
+from .tag_paths import sanitize_release_tag_for_path
 
 
 def find_snowluma_program_dir(search_root: Path) -> Path | None:
@@ -124,6 +131,10 @@ class SnowLumaRuntimeStore:
 
     def manifest_path(self) -> Path:
         return self._manifest_path
+
+    def clear_dist_file_cache(self) -> int:
+        """删除已下载的发行包文件，不删 runtime_extract 与 manifest。"""
+        return unlink_files_in_dir(self._dist_dir)
 
     def read_manifest(self) -> RuntimeManifest | None:
         if not self._manifest_path.exists():
@@ -310,23 +321,29 @@ class SnowLumaRuntimeStore:
                         msg = f"不支持的 SnowLuma 资产格式: {asset_name}"
                         raise RuntimeError(msg)
 
-                    program_dir = find_snowluma_program_dir(stage)
-                    if program_dir is None:
+                    if find_snowluma_program_dir(stage) is None:
                         msg = "解压完成但未找到 index.mjs，请确认资产为官方 SnowLuma 发行包"
                         raise RuntimeError(msg)
 
                     self._extract_root.mkdir(parents=True, exist_ok=True)
-                    final_root = self._extract_root / datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+                    tag_written = resolved_tag_for_manifest or self._job_tag or release_tag
+                    tw = (str(tag_written).strip() if tag_written is not None else "") or "latest"
+                    slug = sanitize_release_tag_for_path(tw)
+                    final_root = self._extract_root / slug
                     if await asyncio.to_thread(final_root.exists):
                         shutil.rmtree(final_root, ignore_errors=True)
                     await asyncio.to_thread(shutil.move, str(stage), str(final_root))
 
-                    tag_written = resolved_tag_for_manifest or self._job_tag or release_tag
+                    program_dir = find_snowluma_program_dir(final_root)
+                    if program_dir is None:
+                        msg = "解压目录异常：未找到 index.mjs"
+                        raise RuntimeError(msg)
+
                     manifest = RuntimeManifest(
                         program_dir=str(program_dir.resolve()),
                         extract_root=str(final_root.resolve()),
                         asset_name=asset_name,
-                        release_tag=tag_written,
+                        release_tag=tw,
                         source_url=url,
                     )
                     self._manifest_path.write_text(
@@ -355,6 +372,108 @@ class SnowLumaRuntimeStore:
                 self._set_job("error", str(e))
 
         self._job_task = asyncio.create_task(_run())
+
+    def _safe_extract_child_folder(self, folder_name: str) -> Path:
+        raw = (folder_name or "").strip()
+        if not raw or ".." in raw.replace("\\", "/"):
+            raise ValueError("无效的解压目录名")
+        safe = raw.replace("\\", "/").split("/")[-1]
+        if not safe or safe in (".", ".."):
+            raise ValueError("无效的解压目录名")
+        folder = (self._extract_root / safe).resolve()
+        eroot = self._extract_root.resolve()
+        if folder.parent != eroot:
+            raise ValueError("仅能选择解压根目录下的一级子目录")
+        return folder
+
+    def list_local_inventory(self) -> dict[str, Any]:
+        """列出 ``runtime_dist`` 与 ``runtime_extract`` 下的本机缓存（供切换托管版本）。"""
+        dist_files: list[dict[str, Any]] = []
+        if self._dist_dir.is_dir():
+            for p in sorted(self._dist_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+                if not p.is_file():
+                    continue
+                st = p.stat()
+                dist_files.append({
+                    "name": p.name,
+                    "size_bytes": st.st_size,
+                    "mtime_iso": datetime.fromtimestamp(st.st_mtime, tz=UTC).isoformat(),
+                })
+        extract_dirs: list[dict[str, Any]] = []
+        cur = ""
+        m = self.read_manifest()
+        if m and m.extract_root:
+            cur = str(Path(m.extract_root).resolve())
+        if self._extract_root.is_dir():
+            for p in sorted(self._extract_root.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+                if not p.is_dir():
+                    continue
+                st = p.stat()
+                pr = str(p.resolve())
+                extract_dirs.append({
+                    "name": p.name,
+                    "mtime_iso": datetime.fromtimestamp(st.st_mtime, tz=UTC).isoformat(),
+                    "is_active": bool(cur and pr == cur),
+                })
+        return {"dist_files": dist_files, "extract_dirs": extract_dirs}
+
+    def resolve_program_dir_for_tag_slug(self, slug: str) -> Path | None:
+        safe = sanitize_release_tag_for_path(slug)
+        folder = (self._extract_root / safe).resolve()
+        eroot = self._extract_root.resolve()
+        if folder.parent != eroot or not folder.is_dir():
+            return None
+        hit = find_snowluma_program_dir(folder)
+        return hit.resolve() if hit else None
+
+    def activate_extract_by_tag(self, tag: str) -> RuntimeManifest:
+        raw = (tag or "").strip()
+        if not raw:
+            raise ValueError("缺少版本标签")
+        slug = sanitize_release_tag_for_path(raw)
+        folder = self._safe_extract_child_folder(slug)
+        if not folder.is_dir():
+            raise ValueError(f"未找到该版本的解压目录（请先下载对应 Release）：{slug}")
+        program_dir = find_snowluma_program_dir(folder)
+        if program_dir is None:
+            raise ValueError("该目录中未找到 SnowLuma 发行根（index.mjs）")
+        prev = self.read_manifest()
+        manifest = RuntimeManifest(
+            program_dir=str(program_dir.resolve()),
+            extract_root=str(folder.resolve()),
+            asset_name=(prev.asset_name if prev and prev.asset_name else ""),
+            release_tag=raw,
+            source_url=(prev.source_url if prev else ""),
+        )
+        self._manifest_path.write_text(
+            json.dumps(manifest.to_json(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        self._set_job("done", f"已切换到版本 {raw}: {manifest.program_dir}")
+        return manifest
+
+    def activate_extract_folder(self, folder_name: str) -> RuntimeManifest:
+        """将 manifest 指向已有解压子目录（回退到旧版解压结果，不重新下载）。"""
+        folder = self._safe_extract_child_folder(folder_name)
+        if not folder.is_dir():
+            raise ValueError("解压目录不存在")
+        program_dir = find_snowluma_program_dir(folder)
+        if program_dir is None:
+            raise ValueError("该目录中未找到 SnowLuma 发行根（index.mjs）")
+        prev = self.read_manifest()
+        manifest = RuntimeManifest(
+            program_dir=str(program_dir.resolve()),
+            extract_root=str(folder.resolve()),
+            asset_name=(prev.asset_name if prev and prev.asset_name else ""),
+            release_tag=f"local:{folder.name}",
+            source_url=(prev.source_url if prev else ""),
+        )
+        self._manifest_path.write_text(
+            json.dumps(manifest.to_json(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        self._set_job("done", f"已切换到本地解压: {manifest.program_dir}")
+        return manifest
 
     async def fetch_releases(self, *, limit: int = 10) -> list[dict[str, Any]]:
         """获取 SnowLuma 仓库的 release 列表。"""

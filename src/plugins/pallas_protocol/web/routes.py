@@ -9,7 +9,7 @@ from urllib.parse import quote, urlparse, urlunparse
 
 import httpx
 from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 if TYPE_CHECKING:
@@ -55,6 +55,7 @@ def register_pallas_protocol_routes(
         render_import_page,
         render_new_account_page,
         render_protocol_assets_page,
+        render_settings_page,
         shell_favicon_link,
         shell_font_stylesheet_link,
     )
@@ -322,6 +323,24 @@ def register_pallas_protocol_routes(
             return redirect
         return HTMLResponse(render_dashboard(resolve_protocol_webui_base_path(plugin_config)))
 
+    @app.get(f"{base}/settings", response_class=HTMLResponse)
+    async def napcat_settings_page(
+        request: Request,
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        if not plugin_config.pallas_protocol_webui_enabled:
+            raise HTTPException(status_code=404, detail="Pallas 协议端管理页已关闭")
+        redirect = _ensure_page_auth(
+            request=request,
+            token=token,
+            x_pallas_protocol_token=x_pallas_protocol_token,
+            next_path=str(request.url.path),
+        )
+        if redirect is not None:
+            return redirect
+        return HTMLResponse(render_settings_page(resolve_protocol_webui_base_path(plugin_config)))
+
     @app.get(f"{base}/new", response_class=HTMLResponse)
     async def napcat_new_account(
         request: Request,
@@ -495,13 +514,46 @@ def register_pallas_protocol_routes(
     @app.get(f"{base}/api/nonebot-logs")
     async def nonebot_log_tail(
         lines: int = Query(default=400, ge=1, le=2000),
+        scope: str = Query(default="all"),
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
     ):
         _auth(x_pallas_protocol_token, token)
-        from src.common.web import tail_nonebot_log_lines
+        from src.common.web import (
+            install_nonebot_log_sink,
+            tail_nonebot_log_entries_scoped,
+            tail_nonebot_log_lines_scoped,
+        )
 
-        return {"logs": tail_nonebot_log_lines(lines)}
+        install_nonebot_log_sink()
+
+        sc = scope if scope in ("all", "webui", "protocol") else "all"
+        return {
+            "logs": tail_nonebot_log_lines_scoped(lines, sc),
+            "entries": tail_nonebot_log_entries_scoped(lines, sc),
+            "scope": sc,
+        }
+
+    @app.get(f"{base}/api/nonebot-logs/stream")
+    async def nonebot_logs_stream(
+        scope: str = Query(default="all"),
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        from src.common.web import install_nonebot_log_sink, iter_nonebot_log_sse
+
+        install_nonebot_log_sink()
+        sc = scope if scope in ("all", "webui", "protocol") else "all"
+        return StreamingResponse(
+            iter_nonebot_log_sse(sc),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.post(f"{base}/api/runtime/download")
     async def runtime_download(
@@ -597,6 +649,54 @@ def register_pallas_protocol_routes(
         _auth(x_pallas_protocol_token, token)
         return manager.rescan_runtime_extract()
 
+    @app.post(f"{base}/api/runtime/cleanup-dist")
+    async def runtime_cleanup_dist(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        return manager.cleanup_runtime_dist_caches()
+
+    @app.get(f"{base}/api/runtime/local-inventory")
+    async def runtime_local_inventory(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        return manager.napcat_local_inventory()
+
+    @app.post(f"{base}/api/runtime/activate-extract")
+    async def runtime_activate_extract(
+        payload: dict[str, Any] | None = None,
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        body = payload if isinstance(payload, dict) else {}
+        folder = str(body.get("folder", "") or "").strip()
+        if not folder:
+            raise HTTPException(status_code=400, detail="缺少 folder")
+        try:
+            return manager.activate_napcat_extract(folder)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post(f"{base}/api/runtime/activate-tag")
+    async def runtime_activate_tag(
+        payload: dict[str, Any] | None = None,
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        body = payload if isinstance(payload, dict) else {}
+        tag = str(body.get("tag", "") or "").strip()
+        if not tag:
+            raise HTTPException(status_code=400, detail="缺少 tag")
+        try:
+            return manager.activate_napcat_by_tag(tag)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     @app.get(f"{base}/api/snowluma/runtime/overview")
     async def snowluma_runtime_overview(
         token: str | None = Query(default=None),
@@ -626,6 +726,46 @@ def register_pallas_protocol_routes(
         _auth(x_pallas_protocol_token, token)
         releases = await manager.fetch_snowluma_runtime_releases(limit=limit)
         return {"releases": releases}
+
+    @app.get(f"{base}/api/snowluma/runtime/local-inventory")
+    async def snowluma_runtime_local_inventory(
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        return manager.snowluma_local_inventory()
+
+    @app.post(f"{base}/api/snowluma/runtime/activate-extract")
+    async def snowluma_runtime_activate_extract(
+        payload: dict[str, Any] | None = None,
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        body = payload if isinstance(payload, dict) else {}
+        folder = str(body.get("folder", "") or "").strip()
+        if not folder:
+            raise HTTPException(status_code=400, detail="缺少 folder")
+        try:
+            return manager.activate_snowluma_extract(folder)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+    @app.post(f"{base}/api/snowluma/runtime/activate-tag")
+    async def snowluma_runtime_activate_tag(
+        payload: dict[str, Any] | None = None,
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ):
+        _auth(x_pallas_protocol_token, token)
+        body = payload if isinstance(payload, dict) else {}
+        tag = str(body.get("tag", "") or "").strip()
+        if not tag:
+            raise HTTPException(status_code=400, detail="缺少 tag")
+        try:
+            return manager.activate_snowluma_by_tag(tag)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     @app.get(f"{base}/api/accounts")
     async def list_accounts(

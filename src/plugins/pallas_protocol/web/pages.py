@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from html import escape as html_escape
 
 from ..contract import resolve_public_mount_path
@@ -14,6 +15,11 @@ def shell_favicon_link(public_base_path: str) -> str:
     p = (public_base_path or "").strip().rstrip("/")
     href = f"{p}/_pallas_ui/pallas-priest.png" if p else "/_pallas_ui/pallas-priest.png"
     return f'  <link rel="icon" type="image/png" href="{html_escape(href, quote=True)}" />\n'
+
+
+def shell_footer_html() -> str:
+    y = datetime.now().year
+    return f'    <footer class="shell-footer" role="contentinfo">© {y} Pallas-Bot</footer>\n'
 
 
 def shell_font_stylesheet_link(public_base_path: str) -> str:
@@ -139,6 +145,15 @@ body[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; color: var(--accent-strong); }
 .shell { max-width: 1280px; margin: 0 auto; padding: 28px 20px 48px; }
+.shell-footer {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--bd);
+  font-size: var(--pallas-text-xs);
+  color: var(--muted);
+  text-align: center;
+  font-weight: var(--pallas-weight-medium);
+}
 .topbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 14px 20px;
   margin-bottom: 28px;
@@ -887,6 +902,138 @@ textarea.cfg { min-height: 220px; }
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   font-weight: 600;
 }
+.sl-runlog {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--card);
+  border: 1px solid var(--bd);
+  border-radius: var(--radius-xl);
+  padding: 16px 18px 14px;
+  box-shadow: var(--shadow-card);
+  max-height: min(calc(100vh - 14rem), 720px);
+  min-height: 280px;
+}
+.sl-runlog-hd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.sl-runlog-titles h2 { margin: 0 0 4px; font-size: 1.05rem; }
+.sl-runlog-titles p { margin: 0; font-size: 0.78rem; color: var(--muted); }
+.sl-runlog-bad {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-left: 8px;
+  border: 1px solid var(--bd);
+  background: color-mix(in srgb, var(--bg1) 90%, transparent);
+}
+.sl-runlog-bad.ok { color: var(--ok); border-color: rgba(52, 211, 153, 0.35); }
+.sl-runlog-bad.wait { color: var(--muted); }
+.sl-runlog-bad.err { color: var(--warn); }
+.sl-runlog-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.sl-runlog-tools input[type="search"] {
+  min-width: 160px;
+  flex: 1;
+  max-width: 240px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bd);
+  background: color-mix(in srgb, var(--bg1) 92%, transparent);
+  color: var(--txt);
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+}
+.sl-runlog-scope {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--bd);
+  background: color-mix(in srgb, var(--bg1) 92%, transparent);
+  color: var(--txt);
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.78rem;
+}
+.sl-runlog-levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sl-runlog-levels button {
+  border-radius: 999px;
+  border: 1px solid var(--bd);
+  padding: 3px 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted);
+}
+.sl-runlog-levels button.on { border-color: transparent; background: color-mix(in srgb, var(--bg1) 94%, transparent); }
+.sl-runlog-levels button.off { opacity: 0.45; text-decoration: line-through; }
+.sl-runlog-viewport {
+  flex: 1;
+  min-height: 200px;
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--bd);
+  background: color-mix(in srgb, var(--bg1) 94%, transparent);
+}
+.sl-runlog-inner {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 6px 4px 10px;
+}
+.sl-runlog-row {
+  display: flex;
+  gap: 8px;
+  padding: 2px 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.sl-runlog-row:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.sl-runlog-t { flex: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sl-runlog-lv {
+  flex: none;
+  width: 3.2rem;
+  font-weight: 700;
+  font-size: 10px;
+}
+.sl-lv-debug { color: var(--muted); }
+.sl-lv-info { color: var(--accent); }
+.sl-lv-success { color: var(--ok); }
+.sl-lv-warn { color: var(--warn); }
+.sl-lv-error { color: var(--err); font-weight: 800; }
+.sl-runlog-sc { flex: none; width: 7rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.sl-runlog-msg { flex: 1; min-width: 0; }
+.sl-runlog-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+html.pallas-density-compact .shell {
+  --pallas-text-base: 0.875rem;
+  --pallas-text-sm: 0.8125rem;
+  --pallas-text-md: 0.9375rem;
+}
+html.pallas-density-compact .shell .topbar,
+html.pallas-density-compact .shell .brand span {
+  font-size: 0.92rem;
+}
 """
 
 
@@ -895,7 +1042,17 @@ def _pallas_theme_bridge_js() -> str:
     return """
     const PALLAS_THEME_KEY = "pallas-webui-theme";
     const PALLAS_PROTOCOL_THEME_LEGACY = "pallas_protocol_theme";
+    const PALLAS_THEME_MODE_KEY = "pallas-theme-mode";
     function resolvePallasThemePreference() {
+      try {
+        const mode = localStorage.getItem(PALLAS_THEME_MODE_KEY);
+        if (mode === "system") {
+          try {
+            return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          } catch (e) { return "light"; }
+        }
+        if (mode === "dark" || mode === "light") return mode;
+      } catch (e) {}
       try {
         const w = localStorage.getItem(PALLAS_THEME_KEY);
         if (w === "dark" || w === "light") return w;
@@ -924,9 +1081,95 @@ def _pallas_theme_bridge_js() -> str:
 """
 
 
+def _shell_prefs_js() -> str:
+    """与 WebUI ``pallasUiPrefs.ts`` 相同键：强调色、圆角、密度作用于协议壳 CSS 变量。"""
+    return """
+    const __SHELL_PREF = { ACCENT: "pallas-accent-hex", RADIUS: "pallas-radius-rem", DENSITY: "pallas-density" };
+    function __shellRgb(hex) {
+      const m = /^#?([a-fA-F\\d]{2})([a-fA-F\\d]{2})([a-fA-F\\d]{2})$/.exec(String(hex || "").trim());
+      if (!m) return [37, 99, 235];
+      return [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)];
+    }
+    function __shellToHex(r, g, b) {
+      const c = (x) => {
+        const t = Math.max(0, Math.min(255, x | 0)).toString(16);
+        return t.length === 1 ? "0" + t : t;
+      };
+      return "#" + c(r) + c(g) + c(b);
+    }
+    function __shellRgba(hex, a) {
+      const [r, g, b] = __shellRgb(hex);
+      return "rgba(" + r + "," + g + "," + b + "," + a + ")";
+    }
+    function __shellDarkenHex(hex, factor) {
+      const [r, g, b] = __shellRgb(hex);
+      return __shellToHex(Math.round(r * factor), Math.round(g * factor), Math.round(b * factor));
+    }
+    function applyShellAccentFromStorage() {
+      let hex = "#2563eb";
+      try {
+        const v = (localStorage.getItem(__SHELL_PREF.ACCENT) || "").trim();
+        if (/^#[0-9A-Fa-f]{6}$/.test(v)) hex = v;
+      } catch (e) {}
+      const strong = __shellDarkenHex(hex, 0.88);
+      const subtle = __shellRgba(hex, 0.14);
+      const glow = __shellRgba(hex, 0.1);
+      [document.documentElement, document.body].forEach((el) => {
+        if (!el) return;
+        el.style.setProperty("--accent", hex);
+        el.style.setProperty("--accent-strong", strong);
+        el.style.setProperty("--accent-subtle", subtle);
+        el.style.setProperty("--accent-glow", glow);
+      });
+    }
+    function applyShellRadiusFromStorage() {
+      let rem = 0.75;
+      try {
+        const x = parseFloat(localStorage.getItem(__SHELL_PREF.RADIUS) || "");
+        if (Number.isFinite(x)) rem = x;
+      } catch (e) {}
+      const k = rem / 0.75;
+      const px = (n) => Math.round(n * k) + "px";
+      const root = document.documentElement;
+      root.style.setProperty("--radius", px(14));
+      root.style.setProperty("--radius-sm", px(10));
+      root.style.setProperty("--radius-md", px(14));
+      root.style.setProperty("--radius-lg", px(18));
+      root.style.setProperty("--radius-xl", px(22));
+    }
+    function applyShellDensityFromStorage() {
+      let compact = false;
+      try {
+        compact = localStorage.getItem(__SHELL_PREF.DENSITY) === "compact";
+      } catch (e) {}
+      document.documentElement.classList.toggle("pallas-density-compact", compact);
+    }
+    function applyShellUiPrefsFromStorage() {
+      applyShellAccentFromStorage();
+      applyShellRadiusFromStorage();
+      applyShellDensityFromStorage();
+    }
+    try {
+      window.addEventListener("storage", (e) => {
+        if (!e || !e.key) return;
+        if ([__SHELL_PREF.ACCENT, __SHELL_PREF.RADIUS, __SHELL_PREF.DENSITY, "pallas-theme-mode", "pallas-webui-theme"].includes(e.key)) {
+          applyShellUiPrefsFromStorage();
+          if (e.key === "pallas-theme-mode" || e.key === "pallas-webui-theme") {
+            applyPallasShellTheme(resolvePallasThemePreference());
+          }
+        }
+      });
+    } catch (e) {}
+    try {
+      applyShellUiPrefsFromStorage();
+    } catch (e) {}
+"""
+
+
 def _render_common_api_js() -> str:
     return (
         _pallas_theme_bridge_js()
+        + _shell_prefs_js()
         + """
     function getSessionToken() {
       return (sessionStorage.getItem("pallas_protocol_token_session") || "").trim();
@@ -1164,6 +1407,237 @@ def _render_hidden_token_sync_js(back_button_id: str = "backDash") -> str:
 """
 
 
+def render_settings_page(base_path: str) -> str:
+    """协议端偏好设置：与 WebUI 共用 localStorage（外观 + 仪表盘轮询间隔）。"""
+    path = base_path.rstrip("/") or resolve_public_mount_path(path_override="", implementation_slug="")
+    p = json.dumps(path)
+    common_api_js = _render_common_api_js()
+    token_sync_js = _render_hidden_token_sync_js("backDash")
+    back_href = html_escape(f"{path}/", quote=True)
+    return f"""<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+{shell_favicon_link(path)}{shell_font_stylesheet_link(path)}  <title>Pallas-Bot · 协议端偏好设置</title>
+  <style>{NAPCAT_SHELL_CSS}
+.pref-card {{ margin-bottom: 14px; }}
+.pref-title {{ margin: 0 0 6px; font-size: 1rem; }}
+.pref-desc {{ margin: 0 0 12px; font-size: 0.82rem; color: var(--muted); line-height: 1.45; }}
+.pref-row {{ display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }}
+.pref-chip {{
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: 10px; border: 1px solid var(--bd); padding: 9px 14px;
+  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  background: color-mix(in srgb, var(--bg1) 88%, transparent); color: var(--txt);
+}}
+.pref-chip.on {{ border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-strong); }}
+.pref-swatch {{
+  width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--bd); cursor: pointer; padding: 0;
+}}
+.pref-swatch.on {{ border-color: var(--txt); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }}
+.pref-dens {{
+  display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}}
+.pref-dens button {{
+  text-align: left; border-radius: 12px; border: 1px solid var(--bd); padding: 14px 16px;
+  cursor: pointer; background: var(--card); color: var(--txt); font: inherit;
+}}
+.pref-dens button.on {{ border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }}
+.pref-dens .t {{ font-weight: 650; font-size: 0.88rem; display: block; margin-bottom: 4px; }}
+.pref-dens .d {{ font-size: 0.72rem; color: var(--muted); line-height: 1.4; }}
+  </style>
+</head>
+<body>
+  <input type="hidden" id="token" value="" autocomplete="off" />
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">Pallas-Bot <span>偏好设置</span></div>
+      <div class="row" style="margin-left:auto;align-items:center;gap:8px">
+        <a class="btn secondary" href="{back_href}">← 返回仪表盘</a>
+        <button class="btn secondary" type="button" data-action="logout">退出登录</button>
+      </div>
+    </header>
+    <div class="section" style="max-width:52rem;margin:0 auto;padding-bottom:48px">
+      <div class="card pref-card">
+        <h3 class="pref-title">显示模式</h3>
+        <p class="pref-desc">浅色 / 深色 / 跟随系统；与 Pallas-Bot 控制台、顶部栏切换共用存储键。</p>
+        <div class="pref-row" id="prefThemeRow"></div>
+      </div>
+      <div class="card pref-card">
+        <h3 class="pref-title">强调色</h3>
+        <p class="pref-desc">作用于协议壳按钮高亮与渐变（与控制台 Element Plus 主色同源键）。</p>
+        <div class="pref-row" id="prefAccentRow"></div>
+        <p class="muted" style="margin:10px 0 0;font-size:0.78rem" id="prefAccentHint"></p>
+      </div>
+      <div class="card pref-card">
+        <h3 class="pref-title">圆角</h3>
+        <div class="pref-row" id="prefRadiusRow"></div>
+      </div>
+      <div class="card pref-card">
+        <h3 class="pref-title">显示密度</h3>
+        <div class="pref-dens" id="prefDensityRow"></div>
+      </div>
+      <div class="card pref-card">
+        <h3 class="pref-title">仪表盘轮询</h3>
+        <p class="pref-desc">协议仪表盘「自动刷新日志」等定时拉取间隔（毫秒）；暂停即不后台拉取。</p>
+        <div class="pref-row" id="prefPollRow"></div>
+        <p class="muted" style="margin:10px 0 0;font-size:0.78rem" id="prefPollHint"></p>
+      </div>
+    </div>
+{shell_footer_html()}  </div>
+  <script>
+    const basePath = {p};
+{common_api_js}
+{token_sync_js}
+    initPallasShellThemeFromStorage();
+    applyShellUiPrefsFromStorage();
+    const ACCENTS = [
+      {{ id: "blue", label: "蓝", hex: "#2563eb" }},
+      {{ id: "emerald", label: "翠", hex: "#059669" }},
+      {{ id: "violet", label: "紫", hex: "#7c3aed" }},
+      {{ id: "rose", label: "玫", hex: "#e11d48" }},
+      {{ id: "amber", label: "琥珀", hex: "#d97706" }},
+      {{ id: "cyan", label: "青", hex: "#0891b2" }},
+    ];
+    const RADII = [
+      {{ value: 0.5, label: "较小" }},
+      {{ value: 0.75, label: "默认" }},
+      {{ value: 1, label: "更圆" }},
+    ];
+    const POLLS = [
+      {{ value: 0, label: "暂停" }},
+      {{ value: 1500, label: "1.5 秒" }},
+      {{ value: 3000, label: "3 秒" }},
+      {{ value: 5000, label: "5 秒" }},
+      {{ value: 10000, label: "10 秒" }},
+      {{ value: 30000, label: "30 秒" }},
+    ];
+    function syncPrefsUi() {{
+      try {{
+        const mode = localStorage.getItem(PALLAS_THEME_MODE_KEY) || "system";
+        document.querySelectorAll("#prefThemeRow .pref-chip").forEach((b) => {{
+          b.classList.toggle("on", b.dataset.mode === mode);
+        }});
+      }} catch (e) {{}}
+      try {{
+        const hex = (localStorage.getItem(__SHELL_PREF.ACCENT) || "#2563eb").trim();
+        document.querySelectorAll("#prefAccentRow .pref-swatch").forEach((b) => {{
+          b.classList.toggle("on", (b.dataset.hex || "").toLowerCase() === hex.toLowerCase());
+        }});
+        const lab = ACCENTS.find((a) => a.hex.toLowerCase() === hex.toLowerCase());
+        document.getElementById("prefAccentHint").textContent = "当前：" + (lab ? lab.label : "自定义") + "（" + hex + "）";
+      }} catch (e) {{}}
+      try {{
+        const rem = parseFloat(localStorage.getItem(__SHELL_PREF.RADIUS) || "0.75");
+        const r = Number.isFinite(rem) ? rem : 0.75;
+        document.querySelectorAll("#prefRadiusRow .pref-chip").forEach((b) => {{
+          const v = parseFloat(b.dataset.rem || "0");
+          b.classList.toggle("on", Math.abs(v - r) < 0.001);
+        }});
+      }} catch (e) {{}}
+      try {{
+        const d = localStorage.getItem(__SHELL_PREF.DENSITY) === "compact" ? "compact" : "cozy";
+        document.querySelectorAll("#prefDensityRow button").forEach((b) => {{
+          b.classList.toggle("on", b.dataset.density === d);
+        }});
+      }} catch (e) {{}}
+      try {{
+        const poll = parseInt(localStorage.getItem("pallas-dashboard-poll-ms") || "3000", 10);
+        const pv = Number.isFinite(poll) ? poll : 3000;
+        document.querySelectorAll("#prefPollRow .pref-chip").forEach((b) => {{
+          b.classList.toggle("on", parseInt(b.dataset.ms || "0", 10) === pv);
+        }});
+        const hint = document.getElementById("prefPollHint");
+        if (hint) hint.textContent = pv === 0 ? "当前：已暂停轮询" : ("当前：" + pv + " 毫秒");
+      }} catch (e) {{}}
+    }}
+    function wirePrefsPage() {{
+      const tr = document.getElementById("prefThemeRow");
+      [["light","浅色"],["dark","深色"],["system","跟随系统"]].forEach(([m, lab]) => {{
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "pref-chip";
+        b.dataset.mode = m;
+        b.textContent = lab;
+        b.addEventListener("click", () => {{
+          try {{ localStorage.setItem(PALLAS_THEME_MODE_KEY, m); }} catch (e) {{}}
+          applyPallasShellTheme(resolvePallasThemePreference());
+          applyShellUiPrefsFromStorage();
+          syncPrefsUi();
+        }});
+        tr.appendChild(b);
+      }});
+      const ar = document.getElementById("prefAccentRow");
+      ACCENTS.forEach((a) => {{
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "pref-swatch";
+        b.dataset.hex = a.hex;
+        b.title = a.label;
+        b.style.backgroundColor = a.hex;
+        b.addEventListener("click", () => {{
+          try {{ localStorage.setItem(__SHELL_PREF.ACCENT, a.hex); }} catch (e) {{}}
+          applyShellUiPrefsFromStorage();
+          syncPrefsUi();
+        }});
+        ar.appendChild(b);
+      }});
+      const rr = document.getElementById("prefRadiusRow");
+      RADII.forEach((r) => {{
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "pref-chip";
+        b.dataset.rem = String(r.value);
+        b.textContent = r.label + "（" + r.value + "rem）";
+        b.addEventListener("click", () => {{
+          try {{ localStorage.setItem(__SHELL_PREF.RADIUS, String(r.value)); }} catch (e) {{}}
+          applyShellUiPrefsFromStorage();
+          syncPrefsUi();
+        }});
+        rr.appendChild(b);
+      }});
+      const dr = document.getElementById("prefDensityRow");
+      [
+        {{ key: "cozy", title: "舒适", desc: "默认间距，阅读更轻松" }},
+        {{ key: "compact", title: "紧凑", desc: "更小字号与行距，单屏更多信息" }},
+      ].forEach((x) => {{
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.density = x.key;
+        b.innerHTML = "<span class=\\"t\\">" + x.title + "</span><span class=\\"d\\">" + x.desc + "</span>";
+        b.addEventListener("click", () => {{
+          try {{ localStorage.setItem(__SHELL_PREF.DENSITY, x.key); }} catch (e) {{}}
+          applyShellUiPrefsFromStorage();
+          syncPrefsUi();
+        }});
+        dr.appendChild(b);
+      }});
+      const pr = document.getElementById("prefPollRow");
+      POLLS.forEach((p) => {{
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "pref-chip";
+        b.dataset.ms = String(p.value);
+        b.textContent = p.label;
+        b.addEventListener("click", () => {{
+          try {{
+            localStorage.setItem("pallas-dashboard-poll-ms", String(p.value));
+            window.dispatchEvent(new Event("pallas-dashboard-poll-changed"));
+          }} catch (e) {{}}
+          syncPrefsUi();
+        }});
+        pr.appendChild(b);
+      }});
+      syncPrefsUi();
+    }}
+    wirePrefsPage();
+  </script>
+</body>
+</html>
+"""
+
+
 def render_dashboard(base_path: str) -> str:
     path = base_path.rstrip("/") or resolve_public_mount_path(path_override="", implementation_slug="")
     p = json.dumps(path)
@@ -1173,14 +1647,15 @@ def render_dashboard(base_path: str) -> str:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-{shell_favicon_link(path)}{shell_font_stylesheet_link(path)}  <title>Pallas · 协议端仪表盘</title>
+{shell_favicon_link(path)}{shell_font_stylesheet_link(path)}  <title>Pallas-Bot · 协议端仪表盘</title>
   <style>{NAPCAT_SHELL_CSS}</style>
 </head>
 <body data-base-path="{html_escape(path, quote=True)}">
   <div class="shell">
     <header class="topbar">
-      <div class="brand">Pallas <span>协议端仪表盘</span></div>
+      <div class="brand">Pallas-Bot <span>协议端仪表盘</span></div>
       <div class="row" style="margin-left:auto;align-items:center;flex-wrap:wrap;gap:8px">
+        <a href="{html_escape(path + "/settings", quote=True)}" class="btn secondary">偏好设置</a>
         <a href="#" class="btn secondary" id="linkRuntime">协议资产</a>
         <a href="#" class="btn secondary" id="linkImport">导入账号</a>
         <button class="btn secondary" type="button" data-action="logout">退出登录</button>
@@ -1213,13 +1688,34 @@ def render_dashboard(base_path: str) -> str:
     </div>
 
     <div class="section">
-      <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <h2 style="margin:0">日志输出</h2>
-        <button class="btn secondary" type="button" onclick="copyLogText('nbLogs')">复制全文</button>
+      <div class="sl-runlog" id="nbLogCard">
+        <div class="sl-runlog-hd">
+          <div class="sl-runlog-titles">
+            <h2 style="margin:0;font-size:1.05rem">运行日志<span class="sl-runlog-bad wait" id="nbLogStreamBadge">连接中</span></h2>
+            <p style="margin:4px 0 0;font-size:0.78rem;color:var(--muted)" id="nbLogSubLine">
+              最近 <span id="nbLogFilteredN">0</span> / <span id="nbLogTotalN">0</span> 条 · SSE 推送
+            </p>
+          </div>
+          <div class="sl-runlog-tools">
+            <input type="search" id="nbLogFilter" class="grow" placeholder="搜索消息 / 模块 / 级别" />
+            <select id="nbLogScope" class="sl-runlog-scope" title="范围">
+              <option value="all">全部</option>
+              <option value="webui">控制台</option>
+              <option value="protocol">协议</option>
+            </select>
+            <button type="button" class="btn secondary" id="nbLogPauseBtn">暂停</button>
+            <button type="button" class="btn secondary" id="nbLogRefreshBtn">刷新</button>
+            <button type="button" class="btn secondary" id="nbLogClearBtn">清空视图</button>
+            <button type="button" class="btn secondary" id="nbLogCopyBtn">复制</button>
+          </div>
+        </div>
+        <div class="sl-runlog-levels" id="nbLogLevels"></div>
+        <div class="sl-runlog-viewport" id="nbLogViewport" tabindex="0" title="可框选复制；框选或聚焦时暂停自动滚动">
+          <div class="sl-runlog-inner" id="nbLogRows"></div>
+        </div>
       </div>
-      <pre class="logs" id="nbLogs" tabindex="0" title="可鼠标框选复制；框选或聚焦本区域时暂停自动刷新"></pre>
     </div>
-  </div>
+{shell_footer_html()}  </div>
   <script>
     const basePath = {p};
 {common_api_js}
@@ -1239,6 +1735,7 @@ def render_dashboard(base_path: str) -> str:
     }}
     (function initPagePrefs() {{
       initPallasShellThemeFromStorage();
+      applyShellUiPrefsFromStorage();
       syncThemeToggleLabel();
       document.getElementById("btnTheme").addEventListener("click", () => {{
         const now = document.body.getAttribute("data-theme") === "dark" ? "dark" : "light";
@@ -1254,12 +1751,167 @@ def render_dashboard(base_path: str) -> str:
       host.appendChild(el);
       setTimeout(() => el.remove(), 4200);
     }}
-    function copyLogText(id) {{
-      const el = document.getElementById(id);
-      const t = (el && el.textContent) ? el.textContent : "";
-      if (!String(t).trim()) {{ notify("当前无内容可复制", "warn"); return; }}
-      navigator.clipboard.writeText(t).then(() => notify("已复制到剪贴板", "ok"))
-        .catch((e) => notify(String(e.message || e), "err"));
+    function nbFormatTime(iso) {{
+      try {{
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return String(iso || "");
+        return d.toLocaleTimeString();
+      }} catch (e) {{ return String(iso || ""); }}
+    }}
+    const NB_LEVELS = ["debug", "info", "success", "warn", "error"];
+    let nbLogEntries = [];
+    let nbLogPaused = false;
+    let nbLogFilter = "";
+    let nbLogLevels = new Set(NB_LEVELS);
+    let nbLogEs = null;
+    function nbStreamBadge(text, kind) {{
+      const el = document.getElementById("nbLogStreamBadge");
+      if (!el) return;
+      el.textContent = text;
+      el.className = "sl-runlog-bad " + (kind === "ok" ? "ok" : kind === "err" ? "err" : "wait");
+    }}
+    function nbLevelUiClass(lv) {{
+      const u = String(lv || "").toLowerCase();
+      if (u === "debug") return "sl-lv-debug";
+      if (u === "success") return "sl-lv-success";
+      if (u === "warn") return "sl-lv-warn";
+      if (u === "error") return "sl-lv-error";
+      return "sl-lv-info";
+    }}
+    function nbFiltered() {{
+      const f = (nbLogFilter || "").trim().toLowerCase();
+      return nbLogEntries.filter((x) => {{
+        if (!nbLogLevels.has(String(x.level || "").toLowerCase())) return false;
+        if (!f) return true;
+        const m = String(x.message || "").toLowerCase();
+        const sc = String(x.scope || "").toLowerCase();
+        const lv = String(x.level || "").toLowerCase();
+        return m.includes(f) || sc.includes(f) || lv.includes(f);
+      }});
+    }}
+    function nbShouldPauseDom() {{
+      const vp = document.getElementById("nbLogViewport");
+      if (!vp) return false;
+      return shouldPauseLiveLogDomWrite(vp);
+    }}
+    function nbRender() {{
+      const rows = document.getElementById("nbLogRows");
+      const sub = document.getElementById("nbLogFilteredN");
+      const tot = document.getElementById("nbLogTotalN");
+      if (tot) tot.textContent = String(nbLogEntries.length);
+      const list = nbFiltered();
+      if (sub) sub.textContent = String(list.length);
+      if (!rows) return;
+      if (!list.length) {{
+        rows.innerHTML = '<div class="sl-runlog-empty">暂无日志</div>';
+        return;
+      }}
+      rows.innerHTML = list.map((x) => {{
+        const lv = String(x.level || "").toUpperCase();
+        const t = nbFormatTime(x.time);
+        const sc = escHtmlDash(x.scope || "");
+        const msg = escHtmlDash(x.message || "");
+        const lc = nbLevelUiClass(x.level);
+        return `<div class="sl-runlog-row"><span class="sl-runlog-t">${{t}}</span><span class="sl-runlog-lv ${{lc}}">${{lv}}</span><span class="sl-runlog-sc">[${{sc}}]</span><span class="sl-runlog-msg">${{msg}}</span></div>`;
+      }}).join("");
+    }}
+    function nbScrollToEnd() {{
+      if (nbLogPaused) return;
+      if (nbShouldPauseDom()) return;
+      const vp = document.getElementById("nbLogViewport");
+      if (vp) vp.scrollTop = vp.scrollHeight;
+    }}
+    function nbInitLevelPills() {{
+      const host = document.getElementById("nbLogLevels");
+      if (!host) return;
+      host.innerHTML = NB_LEVELS.map((lv) =>
+        `<button type="button" data-nb-lv="${{lv}}" class="on">${{String(lv).toUpperCase()}}</button>`
+      ).join("");
+      host.querySelectorAll("[data-nb-lv]").forEach((btn) => {{
+        btn.addEventListener("click", () => {{
+          const lv = btn.getAttribute("data-nb-lv");
+          if (nbLogLevels.has(lv)) nbLogLevels.delete(lv);
+          else nbLogLevels.add(lv);
+          btn.classList.toggle("on", nbLogLevels.has(lv));
+          btn.classList.toggle("off", !nbLogLevels.has(lv));
+          nbRender();
+        }});
+      }});
+    }}
+    async function nbLoadInitial() {{
+      const scopeEl = document.getElementById("nbLogScope");
+      const sc = scopeEl ? scopeEl.value : "all";
+      const data = await api(`/api/nonebot-logs?lines=500&scope=${{encodeURIComponent(sc)}}`);
+      nbLogEntries = Array.isArray(data.entries) ? data.entries.slice() : [];
+      nbRender();
+      nbScrollToEnd();
+    }}
+    function nbClear() {{
+      if (!confirm("清空当前日志视图？仅影响浏览器展示，不清服务端缓冲。")) return;
+      nbLogEntries = [];
+      nbRender();
+    }}
+    function nbCopy() {{
+      const lines = nbFiltered().map((x) =>
+        `${{nbFormatTime(x.time)}} ${{String(x.level || "").toUpperCase()}} [${{x.scope}}] ${{x.message}}`
+      );
+      const t = lines.join("\\n");
+      if (!String(t).trim()) {{ notify("当前无可复制内容", "warn"); return; }}
+      navigator.clipboard.writeText(t).then(() => notify("已复制", "ok")).catch((e) => notify(String(e.message || e), "err"));
+    }}
+    function nbStopSse() {{
+      if (nbLogEs) {{
+        try {{ nbLogEs.close(); }} catch (e) {{}}
+        nbLogEs = null;
+      }}
+    }}
+    function nbStartSse() {{
+      nbStopSse();
+      const tok = getSessionToken();
+      if (!tok) {{
+        nbStreamBadge("未登录", "err");
+        return;
+      }}
+      const scopeEl = document.getElementById("nbLogScope");
+      const sc = scopeEl ? scopeEl.value : "all";
+      const url = `${{basePath}}/api/nonebot-logs/stream?token=${{encodeURIComponent(tok)}}&scope=${{encodeURIComponent(sc)}}`;
+      const es = new EventSource(url);
+      nbLogEs = es;
+      es.onopen = () => nbStreamBadge("实时", "ok");
+      es.onerror = () => nbStreamBadge("重连中", "err");
+      es.onmessage = (ev) => {{
+        try {{
+          const row = JSON.parse(ev.data);
+          if (row && row.type === "ready") return;
+          if (!row || typeof row.id !== "number") return;
+          if (nbLogPaused) return;
+          nbLogEntries = [...nbLogEntries.filter((it) => it.id !== row.id), row].slice(-1000);
+          nbRender();
+          nbScrollToEnd();
+        }} catch (e) {{}}
+      }};
+    }}
+    function nbWireRunlogUi() {{
+      nbInitLevelPills();
+      document.getElementById("nbLogFilter")?.addEventListener("input", (e) => {{
+        nbLogFilter = (e.target && e.target.value) || "";
+        nbRender();
+      }});
+      document.getElementById("nbLogPauseBtn")?.addEventListener("click", () => {{
+        nbLogPaused = !nbLogPaused;
+        const b = document.getElementById("nbLogPauseBtn");
+        if (b) b.textContent = nbLogPaused ? "继续" : "暂停";
+        if (!nbLogPaused) nbScrollToEnd();
+      }});
+      document.getElementById("nbLogRefreshBtn")?.addEventListener("click", () => {{
+        nbLoadInitial().catch((e) => notify(e.message || e, "err"));
+      }});
+      document.getElementById("nbLogClearBtn")?.addEventListener("click", nbClear);
+      document.getElementById("nbLogCopyBtn")?.addEventListener("click", nbCopy);
+      document.getElementById("nbLogScope")?.addEventListener("change", () => {{
+        nbLoadInitial().catch(() => {{}});
+        nbStartSse();
+      }});
     }}
     document.getElementById("linkNewAccount").addEventListener("click", (e) => {{
       e.preventDefault();
@@ -1418,19 +2070,6 @@ def render_dashboard(base_path: str) -> str:
         if (!silent) setBusy(btn, false, "刷新", "刷新中...");
       }}
     }}
-    async function pollNbLogs() {{
-      try {{
-        const data = await api("/api/nonebot-logs?lines=800");
-        const el = document.getElementById("nbLogs");
-        if (shouldPauseLiveLogDomWrite(el)) return;
-        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-        el.textContent = (data.logs || []).join("\\n");
-        if (atBottom) el.scrollTop = el.scrollHeight;
-      }} catch (e) {{
-        const el = document.getElementById("nbLogs");
-        if (!shouldPauseLiveLogDomWrite(el)) el.textContent = String(e.message || e);
-      }}
-    }}
     function btnLoad(btn, text) {{
       if (!btn) return;
       btn.disabled = true;
@@ -1530,12 +2169,12 @@ def render_dashboard(base_path: str) -> str:
       }}
     }}
     refreshAccounts({{ silent: true }}).catch((e) => notify(e.message || e, "err"));
-    pollNbLogs();
+    nbWireRunlogUi();
+    nbLoadInitial().then(() => nbStartSse()).catch((e) => notify(e.message || e, "err"));
     setInterval(() => {{
-      if (document.getElementById("autoRefresh").checked) {{
-        pollNbLogs();
-      }}
-    }}, 2000);
+      if (!document.getElementById("autoRefresh").checked) return;
+      nbLoadInitial().catch(() => {{}});
+    }}, 8000);
   </script>
   <div id="statusbar" class="statusbar"></div>
 </body>
@@ -1565,7 +2204,7 @@ def render_import_page(base_path: str) -> str:
   <input type="hidden" id="token" value="" autocomplete="off" />
   <div class="shell">
     <header class="topbar">
-      <div class="brand">Pallas <span>导入账号</span></div>
+      <div class="brand">Pallas-Bot <span>导入账号</span></div>
       <div class="row" style="margin-left:auto;align-items:center;gap:8px">
         <button class="btn secondary" type="button" data-action="logout">退出登录</button>
         <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="display:inline-flex;align-items:center">← 返回仪表盘</a>
@@ -1618,7 +2257,7 @@ def render_import_page(base_path: str) -> str:
         <div id="resultFailed" style="margin-top:10px"></div>
       </div>
     </div>
-  </div>
+{shell_footer_html()}  </div>
 
   <script>
     const basePath = {p};
@@ -1723,10 +2362,6 @@ def render_new_account_page(base_path: str) -> str:
           <option value="snowluma">SnowLuma</option>
         </select>
       </div>
-      <p class="muted" style="margin:-6px 0 10px;font-size:0.82rem">
-        选 SnowLuma 前请在「协议资产」下载发行包或配置 <code>PALLAS_PROTOCOL_SNOWLUMA_PROGRAM_DIR</code>；
-        实例目录为 <code>instances/&lt;QQ&gt;/snowluma/</code>（NapCat 为 <code>…/napcat/</code> 或旧版扁平路径）。
-      </p>
       <div class="field"><label>内置 WebUI 端口（可选）</label>
         <input id="webui_port" type="number" placeholder="留空则自动分配" />
       </div>
@@ -1749,7 +2384,7 @@ def render_new_account_page(base_path: str) -> str:
         <button class="btn" type="button" onclick="createAccount()">创建</button>
       </div>
     </div>
-  </div>
+{shell_footer_html()}  </div>
   <script>
     const basePath = {p};
 {token_sync_js}
@@ -1814,7 +2449,7 @@ def render_protocol_assets_page(base_path: str) -> str:
   <input type="hidden" id="token" value="" autocomplete="off" />
   <div class="shell">
     <header class="topbar">
-      <div class="brand">Pallas <span>协议资产</span></div>
+      <div class="brand">Pallas-Bot <span>协议资产</span></div>
       <div class="row" style="margin-left:auto;align-items:center;gap:8px">
         <button class="btn secondary" type="button" data-action="logout">退出登录</button>
         <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="display:inline-flex;align-items:center">← 返回仪表盘</a>
@@ -1828,6 +2463,15 @@ def render_protocol_assets_page(base_path: str) -> str:
         默认会自动从 release 选择可用包；固定版本可配置
         <code>pallas_protocol_release_tag</code> / <code>pallas_protocol_snowluma_release_tag</code>。
       </p>
+      <p class="muted" style="margin:12px 0;font-size:0.82rem;line-height:1.5">
+        <strong style="color:var(--txt)">版本与实例：</strong>每种协议在插件数据目录各维护<strong>一份当前托管发行</strong>（manifest 指向的解压目录）。
+        下方选择 tag 并下载可<strong>统一升级或回退</strong>全局托管包；多数实例随 manifest 使用同一目录。
+        若个别实例需<strong>固定其它路径或版本</strong>，可在该账号「设置」中填写 <code>program_dir</code>（或等价字段）指向自定义解压位置，保存并重启该实例进程。
+      </p>
+      <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
+        <button class="btn secondary" type="button" id="btnCleanupDist" onclick="cleanupRuntimeDistCaches()">清理下载缓存（runtime_dist）</button>
+        <span class="muted" style="font-size:0.78rem">仅删除已下载的压缩包文件，不删除 <code>runtime_extract</code> 与 manifest。</span>
+      </div>
       <div class="proto-switch-toolbar">
         <div class="proto-switch" role="tablist" aria-label="协议发行包类型">
           <button type="button" class="active" id="btnAssetsProtoNapcat">NapCat</button>
@@ -1942,6 +2586,31 @@ def render_protocol_assets_page(base_path: str) -> str:
         </div>
         <p id="releasesPlaceholder" class="muted" style="margin:0;font-size:0.82rem">点击「加载版本列表」从 GitHub 获取可用版本。</p>
       </div>
+      <div style="margin-top:18px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">本机解压目录（切换托管版本）</span>
+          <button class="btn secondary" type="button" id="btnNcInvRefresh" onclick="loadNapcatLocalInventory()">刷新列表</button>
+        </div>
+        <p class="muted" style="margin:0 0 10px;font-size:0.82rem;line-height:1.5">
+          每次安装会在 <code>runtime_extract/napcat</code> 下以<strong>Release 标签</strong>为子目录名（与所选版本对应），旧目录默认<strong>保留</strong>。
+          若 GitHub 资产<strong>文件名相同</strong>（如 Windows 一键包常为固定名），再次下载会<strong>覆盖</strong>
+          <code>runtime_dist/napcat</code> 中同名文件；文件名含版本号的资产则会<strong>并存</strong>。
+          上方「选择版本」若本地已有对应解压目录会直接切换托管；否则请先下载。下方表格亦可切换已存在的版本目录。
+        </p>
+        <p id="ncDistFilesHint" class="muted" style="font-size:0.78rem;margin:0 0 8px"></p>
+        <div id="ncLocalInvPlaceholder" class="muted" style="font-size:0.82rem">点击「刷新列表」加载。</div>
+        <div id="ncLocalInvTable" style="display:none;margin-top:8px;overflow:auto;border:1px solid var(--bd);border-radius:var(--radius-sm);max-height:min(36vh,320px)">
+          <table class="acc-table" style="width:100%;border-collapse:collapse;font-size:0.84rem">
+            <thead><tr>
+              <th style="text-align:left;padding:8px">版本（目录）</th>
+              <th style="text-align:left;padding:8px">修改时间</th>
+              <th style="text-align:left;padding:8px">托管</th>
+              <th style="text-align:right;padding:8px">操作</th>
+            </tr></thead>
+            <tbody id="ncLocalInvBody"></tbody>
+          </table>
+        </div>
+      </div>
       <details style="margin-top:14px">
         <summary class="muted" style="cursor:pointer">查看 NapCat 完整 JSON（排障）</summary>
         <pre class="mono muted" id="runtimeStatus" tabindex="0" title="可鼠标框选复制；框选或聚焦本区域时暂停自动刷新" style="max-height:min(70vh,720px);overflow:auto;margin-top:8px;font-size:12px"></pre>
@@ -1991,13 +2660,36 @@ def render_protocol_assets_page(base_path: str) -> str:
         </div>
         <p id="slReleasesPlaceholder" class="muted" style="margin:0;font-size:0.82rem">点击「加载版本列表」从 GitHub 获取 SnowLuma 版本。</p>
       </div>
+      <div style="margin-top:18px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">本机解压目录（切换托管版本）</span>
+          <button class="btn secondary" type="button" id="btnSlInvRefresh" onclick="loadSnowlumaLocalInventory()">刷新列表</button>
+        </div>
+        <p class="muted" style="margin:0 0 10px;font-size:0.82rem;line-height:1.5">
+          SnowLuma 资产通常按版本命名，<code>runtime_dist/snowluma</code> 内<strong>不同文件名可并存</strong>；
+          解压目录名为 Release 标签（路径安全处理），可在上方选用版本自动切换托管，或在下方表格操作。
+        </p>
+        <p id="slDistFilesHint" class="muted" style="font-size:0.78rem;margin:0 0 8px"></p>
+        <div id="slLocalInvPlaceholder" class="muted" style="font-size:0.82rem">点击「刷新列表」加载。</div>
+        <div id="slLocalInvTable" style="display:none;margin-top:8px;overflow:auto;border:1px solid var(--bd);border-radius:var(--radius-sm);max-height:min(36vh,320px)">
+          <table class="acc-table" style="width:100%;border-collapse:collapse;font-size:0.84rem">
+            <thead><tr>
+              <th style="text-align:left;padding:8px">版本（目录）</th>
+              <th style="text-align:left;padding:8px">修改时间</th>
+              <th style="text-align:left;padding:8px">托管</th>
+              <th style="text-align:right;padding:8px">操作</th>
+            </tr></thead>
+            <tbody id="slLocalInvBody"></tbody>
+          </table>
+        </div>
+      </div>
       <details style="margin-top:14px">
         <summary class="muted" style="cursor:pointer">查看 SnowLuma 状态 JSON</summary>
         <pre class="mono muted" id="snowlumaRuntimeStatus" tabindex="0" title="可鼠标框选复制；框选或聚焦本区域时暂停自动刷新" style="max-height:min(50vh,480px);overflow:auto;margin-top:8px;font-size:12px"></pre>
       </details>
       </div>
     </div>
-  </div>
+{shell_footer_html()}  </div>
   <script>
     const basePath = {p};
 {common_api_js}
@@ -2026,6 +2718,8 @@ def render_protocol_assets_page(base_path: str) -> str:
         history.replaceState(null, "", u.pathname + u.search);
       }}
       syncAssetsSaveButton();
+      if (nap) void loadNapcatLocalInventory();
+      else void loadSnowlumaLocalInventory();
     }}
     function initAssetsProtocolPane() {{
       const u = new URL(location.href);
@@ -2043,6 +2737,144 @@ def render_protocol_assets_page(base_path: str) -> str:
       el.disabled = !!busy;
       el.textContent = busy ? busyText : idleText;
       el.classList.toggle("busy", !!busy);
+    }}
+    async function cleanupRuntimeDistCaches() {{
+      if (!confirm(
+        "将删除插件数据目录下 runtime_dist/napcat 与 runtime_dist/snowluma 中的已下载文件（zip/tar 等），"
+        + "不会删除 runtime_extract 解压目录与 manifest。确定？"
+      )) return;
+      const btn = document.getElementById("btnCleanupDist");
+      setBtnBusy(btn, true, "清理下载缓存（runtime_dist）", "清理中...");
+      try {{
+        const r = await api("/api/runtime/cleanup-dist", {{ method: "POST" }});
+        const nc = r.napcat_files_removed ?? 0;
+        const sl = r.snowluma_files_removed ?? 0;
+        alert("已清理：NapCat " + nc + " 个文件，SnowLuma " + sl + " 个文件。");
+      }} catch (e) {{
+        alert(e.message || e);
+      }} finally {{
+        setBtnBusy(btn, false, "清理下载缓存（runtime_dist）", "清理中...");
+      }}
+      void loadNapcatLocalInventory();
+      void loadSnowlumaLocalInventory();
+    }}
+    function invEsc(t) {{
+      return String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }}
+    async function loadNapcatLocalInventory() {{
+      const ph = document.getElementById("ncLocalInvPlaceholder");
+      const tb = document.getElementById("ncLocalInvTable");
+      const body = document.getElementById("ncLocalInvBody");
+      const distEl = document.getElementById("ncDistFilesHint");
+      if (!ph || !tb || !body) return;
+      ph.style.display = "block";
+      ph.textContent = "加载中…";
+      try {{
+        const data = await api("/api/runtime/local-inventory");
+        const dirs = Array.isArray(data.extract_dirs) ? data.extract_dirs : [];
+        const files = Array.isArray(data.dist_files) ? data.dist_files : [];
+        if (distEl) {{
+          distEl.textContent = files.length
+            ? ("runtime_dist 中现有文件（" + files.length + "）：" + files.map((f) => f.name).join(" · "))
+            : "runtime_dist 目录暂无文件。";
+        }}
+        if (!dirs.length) {{
+          ph.textContent = "暂无解压子目录（成功安装至少一次后会出现对应 Release 标签目录）。";
+          tb.style.display = "none";
+          body.innerHTML = "";
+          return;
+        }}
+        ph.style.display = "none";
+        tb.style.display = "block";
+        body.innerHTML = dirs.map((d) => {{
+          const active = !!d.is_active;
+          const mt = d.mtime_iso ? new Date(d.mtime_iso).toLocaleString("zh-CN") : "-";
+          const btn = active
+            ? '<span class="muted">当前托管</span>'
+            : ("<button type=\\"button\\" class=\\"btn secondary\\" onclick='activateNapcatExtract(" + JSON.stringify(d.name) + ")'>托管使用此目录</button>");
+          return "<tr><td style=\\"padding:8px;font-family:var(--font-mono,monospace);font-size:0.8rem\\">" + invEsc(d.name) + "</td>"
+            + "<td style=\\"padding:8px\\">" + invEsc(mt) + "</td>"
+            + "<td style=\\"padding:8px\\">" + (active ? "当前" : "—") + "</td>"
+            + "<td style=\\"padding:8px;text-align:right\\">" + btn + "</td></tr>";
+        }}).join("");
+      }} catch (e) {{
+        ph.textContent = "加载失败：" + (e.message || e);
+        tb.style.display = "none";
+      }}
+    }}
+    async function activateNapcatExtract(folderName) {{
+      if (!folderName) return;
+      if (!confirm("将当前托管的 NapCat 切换到解压版本：\\n" + folderName + "\\n（不重新下载）")) return;
+      try {{
+        await api("/api/runtime/activate-tag", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify({{ tag: folderName }}),
+        }});
+        await refreshRuntime({{ silent: true }});
+        await loadNapcatLocalInventory();
+        alert("已切换托管目录。使用此托管的账号请重启协议端进程后生效。");
+      }} catch (e) {{
+        alert(e.message || e);
+      }}
+    }}
+    async function loadSnowlumaLocalInventory() {{
+      const ph = document.getElementById("slLocalInvPlaceholder");
+      const tb = document.getElementById("slLocalInvTable");
+      const body = document.getElementById("slLocalInvBody");
+      const distEl = document.getElementById("slDistFilesHint");
+      if (!ph || !tb || !body) return;
+      ph.style.display = "block";
+      ph.textContent = "加载中…";
+      try {{
+        const data = await api("/api/snowluma/runtime/local-inventory");
+        const dirs = Array.isArray(data.extract_dirs) ? data.extract_dirs : [];
+        const files = Array.isArray(data.dist_files) ? data.dist_files : [];
+        if (distEl) {{
+          distEl.textContent = files.length
+            ? ("runtime_dist 中现有文件（" + files.length + "）：" + files.map((f) => f.name).join(" · "))
+            : "runtime_dist 目录暂无文件。";
+        }}
+        if (!dirs.length) {{
+          ph.textContent = "暂无解压子目录（成功安装至少一次后会出现对应 Release 标签目录）。";
+          tb.style.display = "none";
+          body.innerHTML = "";
+          return;
+        }}
+        ph.style.display = "none";
+        tb.style.display = "block";
+        body.innerHTML = dirs.map((d) => {{
+          const active = !!d.is_active;
+          const mt = d.mtime_iso ? new Date(d.mtime_iso).toLocaleString("zh-CN") : "-";
+          const btn = active
+            ? '<span class="muted">当前托管</span>'
+            : ("<button type=\\"button\\" class=\\"btn secondary\\" onclick='activateSnowlumaExtract(" + JSON.stringify(d.name) + ")'>托管使用此目录</button>");
+          return "<tr><td style=\\"padding:8px;font-family:var(--font-mono,monospace);font-size:0.8rem\\">" + invEsc(d.name) + "</td>"
+            + "<td style=\\"padding:8px\\">" + invEsc(mt) + "</td>"
+            + "<td style=\\"padding:8px\\">" + (active ? "当前" : "—") + "</td>"
+            + "<td style=\\"padding:8px;text-align:right\\">" + btn + "</td></tr>";
+        }}).join("");
+      }} catch (e) {{
+        ph.textContent = "加载失败：" + (e.message || e);
+        tb.style.display = "none";
+      }}
+    }}
+    async function activateSnowlumaExtract(folderName) {{
+      if (!folderName) return;
+      if (!confirm("将当前托管的 SnowLuma 切换到解压版本：\\n" + folderName + "\\n（不重新下载）")) return;
+      try {{
+        await api("/api/snowluma/runtime/activate-tag", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify({{ tag: folderName }}),
+        }});
+        const slo = await api("/api/snowluma/runtime/overview");
+        fillSnowlumaFromData(slo);
+        await loadSnowlumaLocalInventory();
+        alert("已切换托管目录。相关实例请重启协议端进程后生效。");
+      }} catch (e) {{
+        alert(e.message || e);
+      }}
     }}
     function statusText(s) {{
       if (!s) return "未知";
@@ -2413,23 +3245,40 @@ def render_protocol_assets_page(base_path: str) -> str:
       const pre = document.getElementById("snowlumaRuntimeStatus");
       if (pre && !shouldPauseLiveLogDomWrite(pre)) pre.textContent = JSON.stringify(sl, null, 2);
     }}
-    function downloadSelectedTag() {{
+    async function downloadSelectedTag() {{
       const sel = document.getElementById("releaseSelect");
       const tag = sel.value;
       if (!tag) {{ alert("请先选择版本"); return; }}
-      pendingTag = tag;
-      const detailEl = document.getElementById("releaseDetail");
-      const assetHint = detailEl ? detailEl.textContent : "";
-      setText("rtAsset", tag);
-      setText("rtSource", assetHint ? "待下载: " + assetHint : "待下载: " + tag);
-      setText("rtStatus", "待更新");
-      setText("rtStage", "已选择");
-      setText("rtMessage", "已选择版本 " + tag + "，点击「立即更新」开始下载");
-      setText("rtTime", new Date().toLocaleTimeString());
-      const btn = document.getElementById("btnDownloadTag");
-      const prev = btn.textContent;
-      btn.textContent = "✓ 已选择";
-      setTimeout(() => {{ btn.textContent = prev; }}, 1500);
+      try {{
+        await api("/api/runtime/activate-tag", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify({{ tag }}),
+        }});
+        pendingTag = null;
+        await refreshRuntime({{ silent: true }});
+        await loadNapcatLocalInventory();
+        alert("已将托管切换到版本 " + tag + "。");
+      }} catch (e) {{
+        const msg = String(e.message || e);
+        if (msg.includes("未找到") && msg.includes("解压")) {{
+          pendingTag = tag;
+          const detailEl = document.getElementById("releaseDetail");
+          const assetHint = detailEl ? detailEl.textContent : "";
+          setText("rtAsset", tag);
+          setText("rtSource", assetHint ? "待下载: " + assetHint : "待下载: " + tag);
+          setText("rtStatus", "待更新");
+          setText("rtStage", "已选择");
+          setText("rtMessage", "本地尚无该版本解压目录，已选中 " + tag + "，请点击「立即更新」下载");
+          setText("rtTime", new Date().toLocaleTimeString());
+          const btn = document.getElementById("btnDownloadTag");
+          const prev = btn.textContent;
+          btn.textContent = "✓ 待下载";
+          setTimeout(() => {{ btn.textContent = prev; }}, 1500);
+        }} else {{
+          alert(msg);
+        }}
+      }}
     }}
     async function downloadRuntime() {{
       const mode = String(document.getElementById("runtimeMode")?.value || "");
@@ -2450,6 +3299,7 @@ def render_protocol_assets_page(base_path: str) -> str:
         await api(url, {{ method: "POST" }});
         pendingTag = null;
         await refreshRuntime();
+        void loadNapcatLocalInventory();
       }} catch (e) {{ alert(e.message); }}
       finally {{
         setBtnBusy(document.getElementById("btnUpdate"), false, "立即更新", "更新中...");
@@ -2460,6 +3310,7 @@ def render_protocol_assets_page(base_path: str) -> str:
       try {{
         await api("/api/runtime/rescan", {{ method: "POST" }});
         await refreshRuntime();
+        void loadNapcatLocalInventory();
       }} catch (e) {{ alert(e.message); }}
       finally {{
         setBtnBusy(document.getElementById("btnRescan"), false, "刷新检测", "检测中...");
@@ -2511,20 +3362,38 @@ def render_protocol_assets_page(base_path: str) -> str:
       if (r.assets && r.assets.length) parts.push("资产: " + r.assets.map((a) => a.name).join(", "));
       el.textContent = parts.join(" · ");
     }}
-    function snowlumaDownloadSelectedTag() {{
+    async function snowlumaDownloadSelectedTag() {{
       const sel = document.getElementById("slReleaseSelect");
       const tag = sel.value;
       if (!tag) {{ alert("请先选择版本"); return; }}
-      pendingSnowlumaTag = tag;
-      setText("slRtAsset", tag);
-      setText("slRtStatus", "待更新");
-      setText("slRtStage", "已选择");
-      setText("slRtMessage", "已选择 " + tag + "，点击「下载 / 更新 SnowLuma」开始");
-      setText("slRtTime", new Date().toLocaleTimeString());
-      const btn = document.getElementById("btnSlDownloadTag");
-      const prev = btn.textContent;
-      btn.textContent = "✓ 已选";
-      setTimeout(() => {{ btn.textContent = prev; }}, 1500);
+      try {{
+        await api("/api/snowluma/runtime/activate-tag", {{
+          method: "POST",
+          headers: {{ "Content-Type": "application/json" }},
+          body: JSON.stringify({{ tag }}),
+        }});
+        pendingSnowlumaTag = null;
+        const slo = await api("/api/snowluma/runtime/overview");
+        fillSnowlumaFromData(slo);
+        await loadSnowlumaLocalInventory();
+        alert("已将托管切换到版本 " + tag + "。");
+      }} catch (e) {{
+        const msg = String(e.message || e);
+        if (msg.includes("未找到") && msg.includes("解压")) {{
+          pendingSnowlumaTag = tag;
+          setText("slRtAsset", tag);
+          setText("slRtStatus", "待更新");
+          setText("slRtStage", "已选择");
+          setText("slRtMessage", "本地尚无该版本解压目录，已选中 " + tag + "，请点击「下载 / 更新 SnowLuma」");
+          setText("slRtTime", new Date().toLocaleTimeString());
+          const btn = document.getElementById("btnSlDownloadTag");
+          const prev = btn.textContent;
+          btn.textContent = "✓ 待下载";
+          setTimeout(() => {{ btn.textContent = prev; }}, 1500);
+        }} else {{
+          alert(msg);
+        }}
+      }}
     }}
     async function downloadSnowlumaRuntime() {{
       setBtnBusy(document.getElementById("btnSlUpdate"), true, "下载 / 更新 SnowLuma", "处理中...");
@@ -2534,6 +3403,7 @@ def render_protocol_assets_page(base_path: str) -> str:
         pendingSnowlumaTag = null;
         const slo = await api("/api/snowluma/runtime/overview");
         fillSnowlumaFromData(slo);
+        void loadSnowlumaLocalInventory();
       }} catch (e) {{ alert(e.message || e); }}
       finally {{
         setBtnBusy(document.getElementById("btnSlUpdate"), false, "下载 / 更新 SnowLuma", "处理中...");
@@ -2557,6 +3427,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
     p = json.dumps(path)
     aid = json.dumps(account_id)
     aid_h = html_escape(account_id, quote=True)
+    acc_settings_href = html_escape(f"{path}/settings", quote=True)
     common_api_js = _render_common_api_js()
     token_sync_js = _render_hidden_token_sync_js("backDash")
     return f"""<!doctype html>
@@ -2574,6 +3445,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       <div class="brand">账号 <span>{aid_h}</span></div>
       <div class="row" style="margin-left:auto;align-items:center;gap:8px">
         <button class="btn secondary" type="button" data-action="logout">退出登录</button>
+        <a class="btn secondary" href="{acc_settings_href}" style="display:inline-flex;align-items:center">偏好设置</a>
         <a class="btn secondary" id="backDash" href="{html_escape(path, quote=True)}" style="display:inline-flex;align-items:center">← 返回仪表盘</a>
       </div>
     </header>
@@ -2607,12 +3479,33 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
             <pre class="logs logs-protocol" id="accLogs" tabindex="0" title="可鼠标框选复制；框选或聚焦本区域时暂停自动刷新"></pre>
           </div>
           <div class="card" style="margin-top:12px">
-            <div class="row" style="justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-              <h3 style="margin:0">日志输出</h3>
-              <button class="btn secondary" type="button" onclick="copyLogText('accNbLogs')">复制</button>
+            <p class="muted" style="margin:0 0 10px">与仪表盘同源（结构化 + SSE），NoneBot 主进程日志。</p>
+            <div class="sl-runlog" id="accNbLogCard" style="max-height:min(40vh,520px);min-height:220px">
+              <div class="sl-runlog-hd">
+                <div class="sl-runlog-titles">
+                  <h2 style="margin:0;font-size:1.05rem">运行日志<span class="sl-runlog-bad wait" id="accNbLogStreamBadge">连接中</span></h2>
+                  <p style="margin:4px 0 0;font-size:0.78rem;color:var(--muted)" id="accNbLogSubLine">
+                    最近 <span id="accNbLogFilteredN">0</span> / <span id="accNbLogTotalN">0</span> 条 · SSE
+                  </p>
+                </div>
+                <div class="sl-runlog-tools">
+                  <input type="search" id="accNbLogFilter" class="grow" placeholder="搜索消息 / 模块 / 级别" />
+                  <select id="accNbLogScope" class="sl-runlog-scope" title="范围">
+                    <option value="all">全部</option>
+                    <option value="webui">控制台</option>
+                    <option value="protocol">协议</option>
+                  </select>
+                  <button type="button" class="btn secondary" id="accNbLogPauseBtn">暂停</button>
+                  <button type="button" class="btn secondary" id="accNbLogRefreshBtn">刷新</button>
+                  <button type="button" class="btn secondary" id="accNbLogClearBtn">清空视图</button>
+                  <button type="button" class="btn secondary" id="accNbLogCopyBtn">复制</button>
+                </div>
+              </div>
+              <div class="sl-runlog-levels" id="accNbLogLevels"></div>
+              <div class="sl-runlog-viewport" id="accNbLogViewport" tabindex="0" title="可框选复制；框选或聚焦时暂停自动滚动">
+                <div class="sl-runlog-inner" id="accNbLogRows"></div>
+              </div>
             </div>
-            <p class="muted" style="margin-top:0">与仪表盘同源，为当前进程 Bot 主日志。</p>
-            <pre class="logs" id="accNbLogs" style="max-height:min(32vh,360px)" tabindex="0" title="可鼠标框选复制；框选或聚焦本区域时暂停自动刷新"></pre>
           </div>
         </section>
         <section class="panel" id="panel-settings">
@@ -2630,6 +3523,14 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
             </div>
             <p class="muted" style="margin:-6px 0 10px;font-size:0.82rem">
               切换后启动命令与数据子目录会按后端调整；建议在进程已停止时修改并保存。
+            </p>
+            <div class="field" id="rowManagedRuntimeTag"><label>托管运行时版本</label>
+              <select id="managed_runtime_tag" class="shell-pretty-select">
+                <option value="">跟随全局默认（仪表盘当前托管）</option>
+              </select>
+            </div>
+            <p class="muted" style="margin:-6px 0 10px;font-size:0.82rem;line-height:1.45">
+              与协议资产页 <code>runtime_extract</code> 下子目录（Release 标签）一致；留空则跟随仪表盘全局托管。保存后需重启本账号协议进程。
             </p>
             <div class="field"><label>内置 WebUI 端口</label><input id="webui_port" type="number" /></div>
             <p id="webuiTokenHint" class="muted" style="display:none;margin:-4px 0 8px;font-size:0.82rem;white-space:pre-wrap"></p>
@@ -2666,13 +3567,176 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
         </section>
       </div>
     </div>
-  </div>
+{shell_footer_html()}  </div>
   <script>
     const basePath = {p};
     const accountId = {aid};
     let accountProcessRunning = false;
 {common_api_js}
     initPallasShellThemeFromStorage();
+    applyShellUiPrefsFromStorage();
+    const ACC_NB_LEVELS = ["debug", "info", "success", "warn", "error"];
+    let accNbLogEntries = [];
+    let accNbLogPaused = false;
+    let accNbLogFilter = "";
+    let accNbLogLevels = new Set(ACC_NB_LEVELS);
+    let accNbLogEs = null;
+    function accNbFormatTime(iso) {{
+      try {{
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return String(iso || "");
+        return d.toLocaleTimeString();
+      }} catch (e) {{ return String(iso || ""); }}
+    }}
+    function accNbStreamBadge(text, kind) {{
+      const el = document.getElementById("accNbLogStreamBadge");
+      if (!el) return;
+      el.textContent = text;
+      el.className = "sl-runlog-bad " + (kind === "ok" ? "ok" : kind === "err" ? "err" : "wait");
+    }}
+    function accNbLevelUiClass(lv) {{
+      const u = String(lv || "").toLowerCase();
+      if (u === "debug") return "sl-lv-debug";
+      if (u === "success") return "sl-lv-success";
+      if (u === "warn") return "sl-lv-warn";
+      if (u === "error") return "sl-lv-error";
+      return "sl-lv-info";
+    }}
+    function accNbFiltered() {{
+      const f = (accNbLogFilter || "").trim().toLowerCase();
+      return accNbLogEntries.filter((x) => {{
+        if (!accNbLogLevels.has(String(x.level || "").toLowerCase())) return false;
+        if (!f) return true;
+        const m = String(x.message || "").toLowerCase();
+        const sc = String(x.scope || "").toLowerCase();
+        const lv = String(x.level || "").toLowerCase();
+        return m.includes(f) || sc.includes(f) || lv.includes(f);
+      }});
+    }}
+    function accNbShouldPauseDom() {{
+      const vp = document.getElementById("accNbLogViewport");
+      if (!vp) return false;
+      return shouldPauseLiveLogDomWrite(vp);
+    }}
+    function accNbRender() {{
+      const rows = document.getElementById("accNbLogRows");
+      const sub = document.getElementById("accNbLogFilteredN");
+      const tot = document.getElementById("accNbLogTotalN");
+      if (tot) tot.textContent = String(accNbLogEntries.length);
+      const list = accNbFiltered();
+      if (sub) sub.textContent = String(list.length);
+      if (!rows) return;
+      if (!list.length) {{
+        rows.innerHTML = '<div class="sl-runlog-empty">暂无日志</div>';
+        return;
+      }}
+      rows.innerHTML = list.map((x) => {{
+        const lv = String(x.level || "").toUpperCase();
+        const t = accNbFormatTime(x.time);
+        const sc = escHtml(x.scope || "");
+        const msg = escHtml(x.message || "");
+        const lc = accNbLevelUiClass(x.level);
+        return `<div class="sl-runlog-row"><span class="sl-runlog-t">${{t}}</span><span class="sl-runlog-lv ${{lc}}">${{lv}}</span><span class="sl-runlog-sc">[${{sc}}]</span><span class="sl-runlog-msg">${{msg}}</span></div>`;
+      }}).join("");
+    }}
+    function accNbScrollToEnd() {{
+      if (accNbLogPaused) return;
+      if (accNbShouldPauseDom()) return;
+      const vp = document.getElementById("accNbLogViewport");
+      if (vp) vp.scrollTop = vp.scrollHeight;
+    }}
+    function accNbInitLevelPills() {{
+      const host = document.getElementById("accNbLogLevels");
+      if (!host) return;
+      host.innerHTML = ACC_NB_LEVELS.map((lv) =>
+        `<button type="button" data-acc-nb-lv="${{lv}}" class="on">${{String(lv).toUpperCase()}}</button>`
+      ).join("");
+      host.querySelectorAll("[data-acc-nb-lv]").forEach((btn) => {{
+        btn.addEventListener("click", () => {{
+          const lv = btn.getAttribute("data-acc-nb-lv");
+          if (accNbLogLevels.has(lv)) accNbLogLevels.delete(lv);
+          else accNbLogLevels.add(lv);
+          btn.classList.toggle("on", accNbLogLevels.has(lv));
+          btn.classList.toggle("off", !accNbLogLevels.has(lv));
+          accNbRender();
+        }});
+      }});
+    }}
+    async function accNbLoadInitial() {{
+      const scopeEl = document.getElementById("accNbLogScope");
+      const sc = scopeEl ? scopeEl.value : "all";
+      const data = await api(`/api/nonebot-logs?lines=500&scope=${{encodeURIComponent(sc)}}`);
+      accNbLogEntries = Array.isArray(data.entries) ? data.entries.slice() : [];
+      accNbRender();
+      accNbScrollToEnd();
+    }}
+    function accNbClear() {{
+      if (!confirm("清空当前日志视图？仅影响浏览器展示，不清服务端缓冲。")) return;
+      accNbLogEntries = [];
+      accNbRender();
+    }}
+    function accNbCopy() {{
+      const lines = accNbFiltered().map((x) =>
+        `${{accNbFormatTime(x.time)}} ${{String(x.level || "").toUpperCase()}} [${{x.scope}}] ${{x.message}}`
+      );
+      const t = lines.join("\\n");
+      if (!String(t).trim()) {{ notify("当前无可复制内容", "warn"); return; }}
+      navigator.clipboard.writeText(t).then(() => notify("已复制", "ok")).catch((e) => notify(String(e.message || e), "err"));
+    }}
+    function accNbStopSse() {{
+      if (accNbLogEs) {{
+        try {{ accNbLogEs.close(); }} catch (e) {{}}
+        accNbLogEs = null;
+      }}
+    }}
+    function accNbStartSse() {{
+      accNbStopSse();
+      const tok = getSessionToken();
+      if (!tok) {{
+        accNbStreamBadge("未登录", "err");
+        return;
+      }}
+      const scopeEl = document.getElementById("accNbLogScope");
+      const sc = scopeEl ? scopeEl.value : "all";
+      const url = `${{basePath}}/api/nonebot-logs/stream?token=${{encodeURIComponent(tok)}}&scope=${{encodeURIComponent(sc)}}`;
+      const es = new EventSource(url);
+      accNbLogEs = es;
+      es.onopen = () => accNbStreamBadge("实时", "ok");
+      es.onerror = () => accNbStreamBadge("重连中", "err");
+      es.onmessage = (ev) => {{
+        try {{
+          const row = JSON.parse(ev.data);
+          if (row && row.type === "ready") return;
+          if (!row || typeof row.id !== "number") return;
+          if (accNbLogPaused) return;
+          accNbLogEntries = [...accNbLogEntries.filter((it) => it.id !== row.id), row].slice(-1000);
+          accNbRender();
+          accNbScrollToEnd();
+        }} catch (e) {{}}
+      }};
+    }}
+    function accNbWireRunlogUi() {{
+      accNbInitLevelPills();
+      document.getElementById("accNbLogFilter")?.addEventListener("input", (e) => {{
+        accNbLogFilter = (e.target && e.target.value) || "";
+        accNbRender();
+      }});
+      document.getElementById("accNbLogPauseBtn")?.addEventListener("click", () => {{
+        accNbLogPaused = !accNbLogPaused;
+        const b = document.getElementById("accNbLogPauseBtn");
+        if (b) b.textContent = accNbLogPaused ? "继续" : "暂停";
+        if (!accNbLogPaused) accNbScrollToEnd();
+      }});
+      document.getElementById("accNbLogRefreshBtn")?.addEventListener("click", () => {{
+        accNbLoadInitial().catch((e) => notify(e.message || e, "err"));
+      }});
+      document.getElementById("accNbLogClearBtn")?.addEventListener("click", accNbClear);
+      document.getElementById("accNbLogCopyBtn")?.addEventListener("click", accNbCopy);
+      document.getElementById("accNbLogScope")?.addEventListener("change", () => {{
+        accNbLoadInitial().catch(() => {{}});
+        accNbStartSse();
+      }});
+    }}
     let activeTab = "overview";
     function tab(name) {{
       activeTab = name;
@@ -2681,6 +3745,12 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       document.querySelectorAll(".side a[data-tab]").forEach((a) => a.classList.toggle("active", a.dataset.tab === name));
       const q = "tab=" + encodeURIComponent(name);
       history.replaceState(null, "", `${{basePath}}/account/${{encodeURIComponent(accountId)}}?${{q}}`);
+      if (name === "overview") {{
+        accNbLoadInitial().catch(() => {{}});
+        accNbStartSse();
+      }} else {{
+        accNbStopSse();
+      }}
       if (name === "settings") loadHints();
       if (name === "configs") {{
         loadJsonCfgs().catch(() => {{}});
@@ -2705,6 +3775,30 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }}
     let __savedAccountBackend = "napcat";
+    window.__managedTagSaved = "";
+    async function fillManagedRuntimeTagSelect() {{
+      const sel = document.getElementById("managed_runtime_tag");
+      if (!sel) return;
+      const saved = window.__managedTagSaved || "";
+      try {{
+        const path = currentProtocolSelect() === "snowluma"
+          ? "/api/snowluma/runtime/local-inventory"
+          : "/api/runtime/local-inventory";
+        const data = await api(path);
+        const dirs = Array.isArray(data.extract_dirs) ? data.extract_dirs : [];
+        const names = dirs.map((d) => d.name).filter(Boolean);
+        const parts = ['<option value="">跟随全局默认（仪表盘当前托管）</option>'];
+        for (const n of names) {{
+          const enc = String(n).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+          parts.push(`<option value="${{enc}}">${{escHtml(n)}}</option>`);
+        }}
+        sel.innerHTML = parts.join("");
+        sel.value = saved && names.includes(saved) ? saved : "";
+      }} catch (e) {{
+        sel.innerHTML = '<option value="">（加载失败）</option>';
+      }}
+      if (typeof shellPrettySyncSelect === "function") shellPrettySyncSelect(sel);
+    }}
     function currentProtocolSelect() {{
       return (document.getElementById("protocol_backend").value || "napcat").trim().toLowerCase() === "snowluma" ? "snowluma" : "napcat";
     }}
@@ -2713,6 +3807,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       const row = document.getElementById("rowWebuiToken");
       if (row) row.style.display = isSl ? "none" : "";
       updateCfgDirtyHint();
+      void fillManagedRuntimeTagSelect();
     }}
     function applyConfigsPanelForSavedBackend() {{
       const isSl = __savedAccountBackend === "snowluma";
@@ -2785,6 +3880,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
           if (s) shellPrettySyncSelect(s);
         }}
       }}
+      window.__managedTagSaved = (a.managed_runtime_tag || "").trim();
       applySettingsForProtocolSelect();
       applyConfigsPanelForSavedBackend();
       document.getElementById("webui_port").value = a.webui_port != null ? String(a.webui_port) : "";
@@ -2831,19 +3927,6 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
         if (!shouldPauseLiveLogDomWrite(el)) el.textContent = String(e.message || e);
       }}
     }}
-    async function pollAccNbLogs() {{
-      try {{
-        const data = await api("/api/nonebot-logs?lines=500");
-        const el = document.getElementById("accNbLogs");
-        if (shouldPauseLiveLogDomWrite(el)) return;
-        const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-        el.textContent = (data.logs || []).join("\\n");
-        if (atBottom) el.scrollTop = el.scrollHeight;
-      }} catch (e) {{
-        const el = document.getElementById("accNbLogs");
-        if (!shouldPauseLiveLogDomWrite(el)) el.textContent = String(e.message || e);
-      }}
-    }}
     async function loadJsonCfgs() {{
       const c = await api(`/api/accounts/${{encodeURIComponent(accountId)}}/configs`);
       document.getElementById("tj_onebot").value = JSON.stringify(c.onebot || {{}}, null, 2);
@@ -2865,6 +3948,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
         const body = {{
           display_name: document.getElementById("display_name").value.trim(),
           protocol_backend: pbSave === "snowluma" ? "snowluma" : "napcat",
+          managed_runtime_tag: (document.getElementById("managed_runtime_tag") || {{}}).value || "",
           ws_url: document.getElementById("ws_url").value.trim(),
           ws_name: document.getElementById("ws_name").value.trim(),
           ws_token: document.getElementById("ws_token").value,
@@ -3014,6 +4098,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
         accBtnReset(btn);
       }}
     }}
+    accNbWireRunlogUi();
     (function init() {{
 {token_sync_js}
       const u = new URL(location.href);
@@ -3029,9 +4114,6 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
     setInterval(() => {{
       if (activeTab === "overview") pollAccLogs();
     }}, 1800);
-    setInterval(() => {{
-      if (activeTab === "overview") pollAccNbLogs();
-    }}, 2000);
   </script>
   <div id="pageOverlay" class="page-overlay">
     <div class="page-overlay-inner">

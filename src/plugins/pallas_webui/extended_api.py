@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from nonebot import get_bots, get_driver, get_loaded_plugins, get_plugin_config, logger
 from nonebot.adapters import Bot as BaseBot  # noqa: TC002
 from nonebot.adapters import Event  # noqa: TC002
@@ -1556,16 +1556,42 @@ def register_extended_api(
         ] = "all",
     ) -> JSONResponse:
         _ensure_log_sink()
-        from src.common.web import tail_nonebot_log_lines_scoped
+        from src.common.web import tail_nonebot_log_entries_scoped, tail_nonebot_log_lines_scoped
 
         return JSONResponse({
             "ok": True,
             "data": {
                 "lines": tail_nonebot_log_lines_scoped(n, scope),
+                "entries": tail_nonebot_log_entries_scoped(n, scope),
                 "max": plugin_config.pallas_webui_log_lines_max,
                 "scope": scope,
             },
         })
+
+    @router.get(
+        f"{x}/logs/stream",
+        include_in_schema=True,
+    )
+    async def _logs_stream(
+        scope: Annotated[
+            LogScope,
+            Query(
+                description=("all=全部；webui=仅 pallas_webui 相关；protocol=仅 pallas_protocol 相关"),
+            ),
+        ] = "all",
+    ) -> StreamingResponse:
+        _ensure_log_sink()
+        from src.common.web import iter_nonebot_log_sse
+
+        return StreamingResponse(
+            iter_nonebot_log_sse(scope),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @router.get(
         f"{x}/plugin-config-hint",
