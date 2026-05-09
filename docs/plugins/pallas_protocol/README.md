@@ -9,7 +9,7 @@
 | `service.py` | 账号 CRUD、进程/Docker 启停、runtime profile、API 用例 |
 | `launch_manager.py` | 按平台与 runtime 填充 `command`/`args`/`program_dir` |
 | `linux_docker.py` / `snowluma_docker.py` | 各协议 `docker run` 参数；共用 `docker_cli.py`（inspect/rm/stop、镜像仓库解析） |
-| `docker_onebot_host.py` | 容器访问宿主机 Bot 的 WS 主机名（`host.docker.internal` / `127.0.0.1` 等） |
+| `docker_onebot_host.py` | 容器访问宿主机 Bot 时，反向 WebSocket 应写的主机名（`host.docker.internal` / `127.0.0.1` 等） |
 | `backends/` | 协议后端抽象（NapCat / SnowLuma） |
 | `config.py` | 环境变量与默认值（Pydantic） |
 | `web/` | 管理页与路由 |
@@ -23,8 +23,8 @@
 | `PALLAS_PROTOCOL_ENABLED` | 是否加载插件 |
 | `PALLAS_PROTOCOL_WEBUI_ENABLED` | 是否挂载管理页 |
 | `PALLAS_PROTOCOL_GITHUB_TOKEN` | 拉 Release 时限额（可选） |
-| `PALLAS_PROTOCOL_ONEBOT_WS_URL` | 完整反向 WS（最高优先级） |
-| `PALLAS_PROTOCOL_ONEBOT_WS_HOST` / `_PORT` / `_PATH` | 未设 URL 时拼接 WS |
+| `PALLAS_PROTOCOL_ONEBOT_WS_URL` | 完整反向 WebSocket 地址（最高优先级；常见为明文 `ws`，见下节） |
+| `PALLAS_PROTOCOL_ONEBOT_WS_HOST` / `_PORT` / `_PATH` | 未设 URL 时按主机、端口、路径拼接反向 WebSocket 地址 |
 | `PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST` | NapCat/SnowLuma 容器访问宿主机 Bot；**留空或 `auto`**：`bridge` 在 **Linux** 下为默认路由网关（读 `/proc/net/route`）或回退 `172.17.0.1`；**非 Linux** 常为 `host.docker.internal`；`host` 网络为 `127.0.0.1`；仍会在 `docker run` 加 `host.docker.internal:host-gateway`（Docker 20.10+）作辅助解析 |
 | `PALLAS_PROTOCOL_AUTO_DOWNLOAD_RUNTIME` | 无本地运行时是否后台下载 |
 | `PALLAS_PROTOCOL_PROGRAM_DIR` | 手动指定 NapCat 发行根 |
@@ -33,9 +33,11 @@
 
 鉴权与 Pallas 控制台共用会话（`data/pallas_console/auth_state.json`），不再从 `.env` 读控制台口令。
 
-## Docker 与 WS
+## Docker 与反向 WebSocket（OneBot）
 
-Linux 上 NapCat 以 **bridge** 跑容器时，容器内解析不到 compose 自定义主机名；写入 `onebot*.json` 的 WS 主机会替换为解析后的 **`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`**（默认可留空，Linux 一般为**网关 IP**），或直接使用 **`PALLAS_PROTOCOL_ONEBOT_WS_URL`**。
+OneBot v11 **反向 WebSocket** 在本项目文档与默认占位里多为 **明文 `ws` 方案**（与常见 NoneBot / NapCat 教程一致）；若你已在 Bot 与客户端两侧启用 TLS，再改用 **`wss://`** 并自行保证证书与端口。
+
+Linux 上 NapCat 以 **bridge** 跑容器时，容器内往往解析不到 Compose 里的自定义主机名；写入 **`onebot*.json`** 时会把 **主机** 调整为解析后的 **`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`**（默认可留空，Linux 一般为**宿主机网关 IP**），也可在 `.env` 里直接写完整 **`PALLAS_PROTOCOL_ONEBOT_WS_URL`** 覆盖。
 
 ## 数据路径
 

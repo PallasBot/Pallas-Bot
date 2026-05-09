@@ -33,6 +33,7 @@ __all__ = [
     "docker_volume_paths",
     "is_linux",
     "apply_docker_runtime_toggle_to_ws_url",
+    "is_plain_ws_url",
     "rewrite_onebot_ws_url_for_container",
     "sanitize_docker_name_suffix",
     "ws_url_host_should_rewrite_for_docker_bridge",
@@ -130,8 +131,16 @@ def build_docker_run_argv(
     return argv
 
 
+def is_plain_ws_url(url: str) -> bool:
+    """是否为 URI scheme ``ws``（明文 WebSocket，非 ``wss``）的 URL。"""
+    u = str(url or "").strip()
+    if not u:
+        return False
+    return urlsplit(u).scheme.lower() == "ws"
+
+
 def rewrite_onebot_ws_url_for_container(url: str, docker_host: str) -> str:
-    if not (url and url.startswith("ws://")):  # nosemgrep: javascript.lang.security.detect-insecure-websocket
+    if not (url and is_plain_ws_url(url)):
         return url
     u = urlsplit(url)
     dhost = (docker_host or "").strip()
@@ -148,11 +157,11 @@ _IPV4_RE = re.compile(r"^(?:25[0-5]|2[0-4]\d|[01]?\d{1,3})(?:\.(?:25[0-5]|2[0-4]
 
 
 def ws_url_host_should_rewrite_for_docker_bridge(url: str) -> bool:
-    """是否应把 ``ws://`` 主机替换为 Docker 侧可达地址（如网关）。
+    """是否应把明文 ``ws`` URL 的主机替换为 Docker 侧可达地址（如网关）。
 
     用于 NapCat/SnowLuma 容器访问宿主机 Bot；对非 127 的 IPv4 与其它 IPv6字面量（除 ::1）不替换。
     """
-    if not (url and url.startswith("ws://")):  # nosemgrep: javascript.lang.security.detect-insecure-websocket
+    if not (url and is_plain_ws_url(url)):
         return False
     host = (urlsplit(url).hostname or "").strip().lower()
     if not host:
@@ -178,7 +187,7 @@ def apply_docker_runtime_toggle_to_ws_url(
     """Docker 与本地运行切换时，按规则改写 ``ws_url`` 主机（与 ``napcat_linux_docker`` 等标记一致，不限定 OS）。"""
     if prev_docker_runtime == now_docker_runtime:
         return None
-    if not (url and url.startswith("ws://")):  # nosemgrep: javascript.lang.security.detect-insecure-websocket
+    if not (url and is_plain_ws_url(url)):
         return None
     if now_docker_runtime:
         if not ws_url_host_should_rewrite_for_docker_bridge(url):

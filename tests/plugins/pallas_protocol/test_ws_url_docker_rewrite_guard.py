@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.plugins.pallas_protocol.linux_docker import ws_url_host_should_rewrite_for_docker_bridge
+from src.plugins.pallas_protocol.linux_docker import is_plain_ws_url, ws_url_host_should_rewrite_for_docker_bridge
 
 
 @pytest.mark.parametrize(
@@ -22,3 +22,9 @@ from src.plugins.pallas_protocol.linux_docker import ws_url_host_should_rewrite_
 )
 def test_ws_url_host_should_rewrite_for_docker_bridge(url: str, expected: bool) -> None:
     assert ws_url_host_should_rewrite_for_docker_bridge(url) is expected
+
+
+def test_is_plain_ws_url_scheme_only() -> None:
+    assert is_plain_ws_url("ws://127.0.0.1:8088/x") is True
+    assert is_plain_ws_url("wss://127.0.0.1:8088/x") is False
+    assert is_plain_ws_url("") is False

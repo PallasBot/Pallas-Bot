@@ -111,7 +111,7 @@
     若你已在机器上单独安装了 `NapCat`，可继续用手动配 WS 的方式接入，无需强制使用方式 A。
 
     - 部署步骤参照 [NapCat](https://napneko.github.io/) 官方文档；Windows 可选用 [NapCat.Win.一键版本](https://napneko.github.io/guide/boot/Shell#napcat-win-%E4%B8%80%E9%94%AE%E7%89%88%E6%9C%AC)。
-    - 运行 `NapCat` 后访问 `http://localhost:6099/webui`（默认 `token`：`napcat`），在 `网络配置` → `新建` → `WebSocket 客户端` 中启用，**URL** 填 **`ws`** + **`://`** + **`localhost:8088/onebot/v11/ws`**（远程部署时把 `localhost` 换成 Bot 所在机器 IP）。
+    - 运行 `NapCat` 后访问 `http://localhost:6099/webui`（默认 `token`：`napcat`），在 `网络配置` → `新建` → `WebSocket 客户端` 中启用，**URL** 填 **`ws://localhost:8088/onebot/v11/ws`**（明文 WebSocket；远程部署时把 `localhost` 换成 Bot 所在机器 IP）。
     - 其他客户端示例：[Lagrange.OneBot](https://lagrangedev.github.io/Lagrange.Doc/v1/Lagrange.OneBot/)、[AstralGocq](https://github.com/ProtocolScience/AstralGocq) 等，`WebSocket` 目标路径同上。
 
 6. （可选）配置 `.env` 文件
