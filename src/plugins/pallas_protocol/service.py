@@ -254,7 +254,10 @@ class PallasProtocolService:
         }
 
     def start_snowluma_runtime_download(self, *, tag: str | None = None) -> dict[str, object]:
-        self._snowluma_store.start_background_download(tag=tag or None)
+        self._snowluma_store.start_background_download(
+            tag=tag or None,
+            on_success=lambda: self.sync_follow_global_runtime_paths_after_manifest_change(backend="snowluma"),
+        )
         return self.snowluma_runtime_overview()
 
     async def fetch_snowluma_runtime_releases(self, *, limit: int = 10) -> list[dict]:
@@ -268,7 +271,11 @@ class PallasProtocolService:
         if mode == "docker":
             raise ValueError("Docker 模式请使用镜像拉取，无需通过本页下载 NapCat 发行包")
         platform_hint = str(target_platform or profile.get("target_platform", "auto")).strip().lower()
-        self._runtime_store.start_background_download(tag=tag, target_platform=platform_hint)
+        self._runtime_store.start_background_download(
+            tag=tag,
+            target_platform=platform_hint,
+            on_success=lambda: self.sync_follow_global_runtime_paths_after_manifest_change(backend="napcat"),
+        )
         return self.runtime_overview()
 
     async def pull_docker_image(self, image: str | None = None) -> dict[str, object]:
@@ -397,6 +404,8 @@ class PallasProtocolService:
 
     def rescan_runtime_extract(self) -> dict:
         m = self._runtime_store.rescan_existing_extract()
+        if m is not None:
+            self.sync_follow_global_runtime_paths_after_manifest_change(backend="napcat")
         return {**self.runtime_overview(), "rescanned": m is not None}
 
     def cleanup_runtime_dist_caches(self) -> dict[str, object]:
@@ -431,10 +440,12 @@ class PallasProtocolService:
     def activate_napcat_extract(self, folder_name: str) -> dict[str, object]:
         """将 NapCat manifest 指向已有解压子目录（无需重新下载）。"""
         self._runtime_store.activate_extract_folder(folder_name)
+        self.sync_follow_global_runtime_paths_after_manifest_change(backend="napcat")
         return self.runtime_overview()
 
     def activate_napcat_by_tag(self, tag: str) -> dict[str, object]:
         self._runtime_store.activate_extract_by_tag(tag)
+        self.sync_follow_global_runtime_paths_after_manifest_change(backend="napcat")
         return self.runtime_overview()
 
     def snowluma_local_inventory(self) -> dict[str, object]:
@@ -442,10 +453,12 @@ class PallasProtocolService:
 
     def activate_snowluma_extract(self, folder_name: str) -> dict[str, object]:
         self._snowluma_store.activate_extract_folder(folder_name)
+        self.sync_follow_global_runtime_paths_after_manifest_change(backend="snowluma")
         return self.snowluma_runtime_overview()
 
     def activate_snowluma_by_tag(self, tag: str) -> dict[str, object]:
         self._snowluma_store.activate_extract_by_tag(tag)
+        self.sync_follow_global_runtime_paths_after_manifest_change(backend="snowluma")
         return self.snowluma_runtime_overview()
 
     def _rewrite_webui_for_all_accounts(self) -> None:
@@ -529,7 +542,11 @@ class PallasProtocolService:
         if self._config.pallas_protocol_auto_download_runtime and self.effective_runtime_program_dir() is None:
             if not self._runtime_store.is_busy():
                 try:
-                    self._runtime_store.start_background_download()
+                    self._runtime_store.start_background_download(
+                        on_success=lambda: self.sync_follow_global_runtime_paths_after_manifest_change(
+                            backend="napcat"
+                        ),
+                    )
                 except RuntimeError:
                     pass
 
@@ -657,6 +674,51 @@ class PallasProtocolService:
 
     def _save_accounts(self) -> None:
         self._accounts_file.write_text(json.dumps(self._accounts, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def sync_follow_global_runtime_paths_after_manifest_change(self, *, backend: str = "both") -> None:
+        """全局托管 manifest 变更后，对齐「跟随全局」账号的 program_dir，避免实例版本误判为自定义。"""
+        changed = False
+        nap_rt_str = ""
+        if backend in ("napcat", "both"):
+            p = self._runtime_store.resolved_program_dir()
+            nap_rt_str = str(p).strip() if p else ""
+        sl_rt_str = ""
+        if backend in ("snowluma", "both"):
+            sp = self._snowluma_store.resolved_program_dir()
+            sl_rt_str = str(sp).strip() if sp else ""
+
+        for account in self._accounts.values():
+            if str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip():
+                continue
+            bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
+            bk = bk or DEFAULT_PROTOCOL_BACKEND
+            if bk == SNOWLUMA_PROTOCOL_BACKEND:
+                if backend not in ("snowluma", "both") or not sl_rt_str:
+                    continue
+                before_pd = str(account.get("program_dir", "") or "").strip()
+                self._launch._refresh_snowluma_managed_runtime_refs(account, sl_rt_str)
+                if str(account.get("program_dir", "") or "").strip() != before_pd:
+                    changed = True
+                continue
+            if backend not in ("napcat", "both") or account.get("napcat_linux_docker") or not nap_rt_str:
+                continue
+            before = (
+                str(account.get("program_dir", "") or "").strip(),
+                str(account.get("working_dir", "") or "").strip(),
+                str(account.get("command", "") or "").strip(),
+                json.dumps(account.get("args") or [], ensure_ascii=False),
+            )
+            self._launch._refresh_managed_runtime_refs(account, nap_rt_str)
+            after = (
+                str(account.get("program_dir", "") or "").strip(),
+                str(account.get("working_dir", "") or "").strip(),
+                str(account.get("command", "") or "").strip(),
+                json.dumps(account.get("args") or [], ensure_ascii=False),
+            )
+            if before != after:
+                changed = True
+        if changed:
+            self._save_accounts()
 
     def _runtime(self, account_id: str) -> NapCatRuntime:
         if account_id not in self._runtimes:

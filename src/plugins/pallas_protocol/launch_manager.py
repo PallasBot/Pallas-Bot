@@ -78,6 +78,18 @@ class LaunchManager:
                 return True
         return False
 
+    def _is_snowluma_managed_runtime_path(self, raw: str) -> bool:
+        """是否为 SnowLuma 托管解压目录下的路径（全局 manifest 切换后用于刷新 program_dir）。"""
+        s = str(raw or "").strip()
+        if not s:
+            return False
+        try:
+            rp = Path(s).resolve()
+        except OSError:
+            return False
+        snow_root = self._snowluma_runtime_extract_root()
+        return rp == snow_root or snow_root in rp.parents
+
     def _refresh_managed_runtime_refs(self, account: dict, runtime_path: str) -> None:
         """runtime 更新后，自动把账号内指向旧 runtime_extract 的路径切到最新。"""
         if not runtime_path:
@@ -110,6 +122,24 @@ class LaunchManager:
                 changed = True
         if changed:
             account["args"] = args
+
+    def _refresh_snowluma_managed_runtime_refs(self, account: dict, program_path: str) -> None:
+        """SnowLuma 全局托管目录切换后，将仍指向旧解压路径的账号 program_dir 对齐到当前托管根。"""
+        if not program_path:
+            return
+        try:
+            rt = Path(program_path).resolve()
+        except OSError:
+            return
+        cur_prog = str(account.get("program_dir", "") or "").strip()
+        if not cur_prog or not self._is_snowluma_managed_runtime_path(cur_prog):
+            return
+        try:
+            if Path(cur_prog).resolve() == rt:
+                return
+        except OSError:
+            return
+        account["program_dir"] = str(rt)
 
     def apply_defaults(self, account: dict, resolve_qq) -> None:
         qq = resolve_qq(account)

@@ -11,7 +11,10 @@ import tarfile
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 import httpx
 
@@ -359,7 +362,12 @@ class SnowLumaRuntimeStore:
                 if own_client:
                     await hc.aclose()
 
-    def start_background_download(self, *, tag: str | None = None) -> None:
+    def start_background_download(
+        self,
+        *,
+        tag: str | None = None,
+        on_success: Callable[[], None] | None = None,
+    ) -> None:
         if self.is_busy():
             msg = "已有 SnowLuma 下载或解压任务在执行"
             raise RuntimeError(msg)
@@ -368,6 +376,8 @@ class SnowLumaRuntimeStore:
         async def _run() -> None:
             try:
                 await self.download_and_install(tag=tag)
+                if on_success is not None:
+                    on_success()
             except Exception as e:
                 self._set_job("error", str(e))
 

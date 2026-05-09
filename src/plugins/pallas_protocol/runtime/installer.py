@@ -16,7 +16,10 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from stat import S_IXGRP, S_IXOTH, S_IXUSR
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 from urllib.parse import urlparse
 
 import httpx
@@ -707,7 +710,13 @@ class NapCatRuntimeStore:
                 if await asyncio.to_thread(stage.exists):
                     shutil.rmtree(stage, ignore_errors=True)
 
-    def start_background_download(self, *, tag: str | None = None, target_platform: str = "auto") -> None:
+    def start_background_download(
+        self,
+        *,
+        tag: str | None = None,
+        target_platform: str = "auto",
+        on_success: Callable[[], None] | None = None,
+    ) -> None:
         if self.is_busy():
             msg = "已有下载或解压任务在执行"
             raise RuntimeError(msg)
@@ -716,6 +725,8 @@ class NapCatRuntimeStore:
         async def _run() -> None:
             try:
                 await self.download_and_install(tag=tag, target_platform=target_platform)
+                if on_success is not None:
+                    on_success()
             except Exception as e:
                 self._set_job("error", str(e))
 

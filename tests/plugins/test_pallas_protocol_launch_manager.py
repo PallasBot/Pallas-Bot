@@ -128,3 +128,43 @@ def test_apply_defaults_linux_prefers_appimage_then_xvfb(tmp_path: Path) -> None
         mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
     assert account["command"] == "xvfb-run"
     assert account["args"] == ["--auto-servernum", str(runtime_file), "--appimage-extract-and-run", "-q", "10003"]
+
+
+def test_refresh_snowluma_managed_runtime_refs_updates_stale_dir(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    sl_v1 = data / "runtime_extract" / "snowluma" / "v1.0.0"
+    sl_v2 = data / "runtime_extract" / "snowluma" / "v2.0.0"
+    sl_v1.mkdir(parents=True)
+    sl_v2.mkdir(parents=True)
+    (sl_v1 / "index.mjs").write_text("//", encoding="utf-8")
+    (sl_v2 / "index.mjs").write_text("//", encoding="utf-8")
+    mgr = LaunchManager(
+        data,
+        tmp_path / "resource",
+        _cfg(),
+        instances_root=tmp_path / "instances",
+        platform=PosixNapcatPlatform(),
+    )
+    account = {"program_dir": str(sl_v1), "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND}
+    mgr._refresh_snowluma_managed_runtime_refs(account, str(sl_v2))
+    assert Path(account["program_dir"]).resolve() == sl_v2.resolve()
+
+
+def test_refresh_snowluma_managed_runtime_refs_skips_custom_dir(tmp_path: Path) -> None:
+    data = tmp_path / "data"
+    sl_v2 = data / "runtime_extract" / "snowluma" / "v2.0.0"
+    sl_v2.mkdir(parents=True)
+    (sl_v2 / "index.mjs").write_text("//", encoding="utf-8")
+    custom = tmp_path / "my_sl"
+    custom.mkdir()
+    (custom / "index.mjs").write_text("//", encoding="utf-8")
+    mgr = LaunchManager(
+        data,
+        tmp_path / "resource",
+        _cfg(),
+        instances_root=tmp_path / "instances",
+        platform=PosixNapcatPlatform(),
+    )
+    account = {"program_dir": str(custom), "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND}
+    mgr._refresh_snowluma_managed_runtime_refs(account, str(sl_v2))
+    assert account["program_dir"] == str(custom)
