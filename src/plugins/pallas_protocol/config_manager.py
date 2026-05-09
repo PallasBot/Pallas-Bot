@@ -92,10 +92,11 @@ class AccountConfigManager:
         client = ws_clients[0]
         client["enable"] = True
         client["name"] = str(account.get("ws_name", "pallas")).strip() or "pallas"
-        ws_url = str(account.get("ws_url", "")).strip()
+        ws_url = str(account.get("ws_url", "") or "").strip()
         if ws_url:
             client["url"] = ws_url
-        client.setdefault("url", "ws://127.0.0.1:8088/onebot/v11/ws")
+        elif not str(client.get("url") or "").strip():
+            client["url"] = "ws://127.0.0.1:8088/onebot/v11/ws"
         client["reportSelfMessage"] = False
         client["messagePostFormat"] = "array"
         client["token"] = str(account.get("ws_token", "")).strip()
@@ -266,6 +267,8 @@ class AccountConfigManager:
         token = str(first.get("token", "")).strip()
         if url:
             account["ws_url"] = url
+        else:
+            account["ws_url"] = ""
         if name:
             account["ws_name"] = name
         account["ws_token"] = token

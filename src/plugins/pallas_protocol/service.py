@@ -618,12 +618,18 @@ class PallasProtocolService:
             self._save_accounts()
 
     def _merge_onebot_ws_from_env(self, account: dict, *, force: bool = False) -> bool:
-        if account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"):
-            current = str(account.get("ws_url", "")).strip()
-            if current:
-                from .linux_docker import rewrite_onebot_ws_url_for_container
+        docker_linux = bool(account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"))
+        dh = ""
+        if docker_linux:
+            from .docker_onebot_host import resolve_docker_onebot_host_from_config
+            from .linux_docker import (
+                rewrite_onebot_ws_url_for_container,
+                ws_url_host_should_rewrite_for_linux_docker_bridge,
+            )
 
-                dh = str(getattr(self._config, "pallas_protocol_docker_onebot_host", "") or "").strip() or "172.17.0.1"
+            dh = resolve_docker_onebot_host_from_config(self._config)
+            current = str(account.get("ws_url", "")).strip()
+            if current and ws_url_host_should_rewrite_for_linux_docker_bridge(current):
                 rewritten = rewrite_onebot_ws_url_for_container(current, dh)
                 if rewritten and rewritten != current:
                     account["ws_url"] = rewritten
@@ -633,10 +639,7 @@ class PallasProtocolService:
         base_url, name, tok = resolve_onebot_ws_settings(self._config)
         if not base_url:
             return False
-        if account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"):
-            from .linux_docker import rewrite_onebot_ws_url_for_container
-
-            dh = str(getattr(self._config, "pallas_protocol_docker_onebot_host", "") or "").strip() or "172.17.0.1"
+        if docker_linux:
             url = rewrite_onebot_ws_url_for_container(base_url, dh)
         else:
             url = base_url
@@ -1177,9 +1180,8 @@ class PallasProtocolService:
         _bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
         if "webui_token" not in account and _bk != SNOWLUMA_PROTOCOL_BACKEND:
             account["webui_token"] = secrets.token_hex(6)
-        # 仅在 payload 未提供 ws_url 时才用 env 默认值补填
-        if not str(payload.get("ws_url", "")).strip():
-            self._merge_onebot_ws_from_env(account)
+        # 与 update_account 一致：合并 env / Docker 主机重写（payload 可省略或显式留空 ws_url）
+        self._merge_onebot_ws_from_env(account)
         be.prepare_dirs(account)
         be.sync_all_configs(account, self._resolve_qq)
         self._accounts[account_id] = account
@@ -1287,9 +1289,8 @@ class PallasProtocolService:
             account[vk] = pv
         be = self._protocol_runtime_backend(account)
         be.apply_defaults(account, self._resolve_qq)
-        # 仅在 payload 未显式提供 ws_url 时才用 env 默认值补填
-        if "ws_url" not in payload:
-            self._merge_onebot_ws_from_env(account)
+        # 前端会始终带上 ws_url（可为空）；仍需合并：Docker 下重写主机、留空时用 env 补全。
+        self._merge_onebot_ws_from_env(account)
         be.prepare_dirs(account)
         be.sync_all_configs(account, self._resolve_qq)
         self._refresh_linux_docker_run_argv(account)
@@ -1754,6 +1755,8 @@ class PallasProtocolService:
         be = self._protocol_runtime_backend(account)
         be.apply_defaults(account, self._resolve_qq)
         merged = be.update_account_configs(account, payload, self._resolve_qq)
+        self._merge_onebot_ws_from_env(account)
+        be.sync_all_configs(account, self._resolve_qq)
         account["updated_at"] = datetime.now(UTC).isoformat()
         self._save_accounts()
         restarted = bool(need_restart and restart)

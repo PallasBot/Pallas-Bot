@@ -150,12 +150,14 @@ class LaunchManager:
         account["program_dir"] = str(rt)
 
     def apply_defaults(self, account: dict, resolve_qq) -> None:
+        prev_docker_runtime = bool(account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"))
         qq = resolve_qq(account)
         if qq:
             account["qq"] = qq
         bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
         if bk == SNOWLUMA_PROTOCOL_BACKEND:
             self._apply_snowluma_defaults(account, resolve_qq)
+            self._maybe_adapt_ws_url_on_docker_runtime_toggle(account, prev_docker_runtime)
             return
 
         raw_command = account.get("command", "")
@@ -218,6 +220,23 @@ class LaunchManager:
         self._apply_linux_docker_profile(account, resolve_qq)
         self._apply_linux_local_appimage_profile(account)
         self._apply_linux_local_xvfb_profile(account)
+        self._maybe_adapt_ws_url_on_docker_runtime_toggle(account, prev_docker_runtime)
+
+    def _maybe_adapt_ws_url_on_docker_runtime_toggle(self, account: dict, prev_docker_runtime: bool) -> None:
+        from .linux_docker import apply_docker_runtime_toggle_to_ws_url
+
+        now = bool(account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"))
+        cur = str(account.get("ws_url", "")).strip()
+        if not cur:
+            return
+        new_url = apply_docker_runtime_toggle_to_ws_url(
+            cur,
+            prev_docker_runtime=prev_docker_runtime,
+            now_docker_runtime=now,
+            config=self._config,
+        )
+        if new_url:
+            account["ws_url"] = new_url
 
     def _tcp_bindable_on_host(self, port: int) -> bool:
         if not (1 <= int(port) <= 65535):

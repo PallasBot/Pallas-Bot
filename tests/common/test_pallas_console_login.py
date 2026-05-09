@@ -37,7 +37,8 @@ def test_get_shared_console_login_token_empty() -> None:
 
 
 def test_default_password_plain_file_and_clear_on_user_change(
-    monkeypatch: pytest.MonkeyPatch, tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
     from src.common import pallas_console_login as m
 
@@ -61,7 +62,8 @@ def test_default_password_plain_file_and_clear_on_user_change(
 
 
 def test_orphan_default_password_file_removed_when_mismatch(
-    monkeypatch: pytest.MonkeyPatch, tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
     from src.common import pallas_console_login as m
 
@@ -72,3 +74,24 @@ def test_orphan_default_password_file_removed_when_mismatch(
     plain_path.write_text("wrong-old\n", encoding="utf-8")
     m.prime_shared_console_login()
     assert not plain_path.is_file()
+
+
+def test_prime_shared_console_login_announces_default_password_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from src.common import pallas_console_login as m
+
+    root = tmp_path / "pc_once"
+    monkeypatch.setattr(m, "console_auth_dir", lambda: root)
+    writes: list[str] = []
+
+    def capture_write(s: str) -> int:
+        writes.append(s)
+        return len(s)
+
+    monkeypatch.setattr(m.sys.stderr, "write", capture_write)
+    m.prime_shared_console_login()
+    m.prime_shared_console_login()
+    hits = [w for w in writes if "[Pallas] 默认口令:" in w]
+    assert len(hits) == 1

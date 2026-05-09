@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import posixpath
+from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from fastapi import APIRouter, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from nonebot import logger
 from starlette import status
 
@@ -21,9 +23,11 @@ from src.common.pallas_console_login import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from .config import Config
+
+_LOGIN_REASON_MESSAGES: dict[str, str] = {
+    "password_changed": "登录口令已更新，请使用新口令重新登录。",
+}
 
 _PLACEHOLDER_HTML = """\
 <!DOCTYPE html>
@@ -120,10 +124,15 @@ def register_routes(
             target = f"{base}/"
         return target
 
+    shared_pallas_ui_dir = Path(__file__).resolve().parent.parent / "pallas_protocol" / "web" / "static" / "pallas_ui"
+    use_priest_avatar = shared_pallas_ui_dir.is_dir()
+
     def _render_login_page(*, target: str, reason: str | None, token_submitted: bool) -> HTMLResponse:
         from src.common.pallas_login_page import render_pallas_login_page_html
 
         err = (reason or "").strip()
+        if not token_submitted:
+            err = _LOGIN_REASON_MESSAGES.get(err, err)
         if token_submitted:
             err = "口令无效，请重试。"
         html = render_pallas_login_page_html(
@@ -135,7 +144,8 @@ def register_routes(
             error_message=err,
             head_extra_html="",
             footer_note="",
-            favicon_variant="console",
+            favicon_variant="protocol" if use_priest_avatar else "console",
+            shell_brand_icon_base=base if use_priest_avatar else None,
         )
         return HTMLResponse(html)
 
@@ -260,5 +270,11 @@ def register_routes(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    # 注册静态路由
+    if use_priest_avatar:
+        app.mount(
+            f"{base}/_pallas_ui",
+            StaticFiles(directory=str(shared_pallas_ui_dir)),
+            name="pallas_webui_pallas_ui",
+        )
+
     app.include_router(router)

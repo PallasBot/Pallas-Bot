@@ -26,6 +26,7 @@ _DEFAULT_LOGIN_PASSWORD_FILE = "default_login_password.txt"
 _SESSION_SECRET = "session_secret.bin"
 SESSION_COOKIE_NAME = "pallas_console_session"
 SESSION_TTL_SEC = 72 * 3600
+_announced_default_password_auth_path: str | None = None
 _SCRYPT_N = 2**14
 _SCRYPT_R = 8
 _SCRYPT_P = 1
@@ -185,8 +186,10 @@ def _materialize_auth_state() -> tuple[str | None, bool]:
 
 
 def prime_shared_console_login() -> None:
+    global _announced_default_password_auth_path
     _load_session_secret()
     plain, rnd = _materialize_auth_state()
+    auth_path = str(auth_state_path().resolve())
     if plain is not None and rnd:
         logger.info("Pallas 控制台鉴权已初始化，状态文件: {}", auth_state_path())
         logger.success("Pallas 默认口令: {}", plain)
@@ -195,17 +198,20 @@ def prime_shared_console_login() -> None:
             sys.stderr.flush()
         except OSError:
             pass
+        _announced_default_password_auth_path = auth_path
     else:
         boot = _read_default_login_password_plain()
         if boot and not verify_console_password(boot):
             _unlink_default_login_password_plain()
         elif boot:
-            logger.success("Pallas 默认口令: {}", boot)
-            try:
-                sys.stderr.write(f"[Pallas] 默认口令: {boot}\n")
-                sys.stderr.flush()
-            except OSError:
-                pass
+            if _announced_default_password_auth_path != auth_path:
+                logger.success("Pallas 默认口令: {}", boot)
+                try:
+                    sys.stderr.write(f"[Pallas] 默认口令: {boot}\n")
+                    sys.stderr.flush()
+                except OSError:
+                    pass
+            _announced_default_password_auth_path = auth_path
 
 
 def is_console_auth_configured() -> bool:

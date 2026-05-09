@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from . import docker_cli
+from .docker_onebot_host import docker_host_gateway_extra_args
 from .linux_docker import sanitize_docker_name_suffix
 
 snowluma_docker_container_running = docker_cli.docker_inspect_running_async
@@ -112,6 +113,7 @@ def build_snowluma_docker_run_argv(account: dict, config: Any, resolve_qq) -> li
         f"pallas.account_id={sanitize_docker_name_suffix(str(account.get('id', 'x')))}",
         "--restart",
         "unless-stopped",
+        *docker_host_gateway_extra_args(),
         "--shm-size",
         shm,
         "--cap-add",

@@ -121,8 +121,8 @@ class Config(BaseModel):
         description="NapCat 镜像",
     )
     pallas_protocol_docker_onebot_host: str = Field(
-        default="172.17.0.1",
-        description="容器访问宿主机 Bot",
+        default="",
+        description="容器访问宿主机 Bot 的主机名或 IP；空或 auto 为自动（bridge→host.docker.internal，host→127.0.0.1）",
     )
     pallas_protocol_docker_internal_webui_port: int = Field(
         default=6099,
