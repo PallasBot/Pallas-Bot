@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .docker_onebot_host import effective_docker_onebot_host
-from .linux_docker import rewrite_onebot_ws_url_for_container, ws_url_host_should_rewrite_for_linux_docker_bridge
+from .linux_docker import rewrite_onebot_ws_url_for_container, ws_url_host_should_rewrite_for_docker_bridge
 
 # SnowLuma 旧版日志
 _SNOWLUMA_TEMP_PASSWORD_LOG_RE = re.compile(r"临时密码[:：]\s*([0-9a-fA-F]{8,64})")
@@ -17,6 +17,8 @@ _SNOWLUMA_INITIAL_CREDS_LOG_RE = re.compile(
     r"initial\s+credentials:\s*user\s*=\s*admin\s+password\s*=\s*([0-9a-fA-F]{8,64})",
     re.IGNORECASE,
 )
+# OneBot 默认 WS（与 NapCat 占位一致）；nosemgrep 须与本行 ``ws://`` 字面量同列。
+_SNOWLUMA_DEFAULT_WS_URL = "ws://127.0.0.1:8088/onebot/v11/ws"  # noqa: E501  # nosemgrep: javascript.lang.security.detect-insecure-websocket
 
 
 def snowluma_onebot_path(config_dir: Path, qq: str) -> Path:
@@ -92,13 +94,15 @@ def sync_snowluma_onebot(
         client = {}
         ws_clients[0] = client
     ws_url = str(account.get("ws_url", "")).strip()
-    url_out = ws_url or "ws://127.0.0.1:8088/onebot/v11/ws"
+    url_out = ws_url or _SNOWLUMA_DEFAULT_WS_URL
     if bool(account.get("snowluma_linux_docker")) and plugin_config is not None:
         dh = effective_docker_onebot_host(
             str(getattr(plugin_config, "pallas_protocol_docker_onebot_host", "") or "").strip(),
             docker_network_mode="bridge",
         )
-        if url_out.startswith("ws://") and ws_url_host_should_rewrite_for_linux_docker_bridge(url_out):
+        if url_out.startswith("ws://") and ws_url_host_should_rewrite_for_docker_bridge(
+            url_out
+        ):  # nosemgrep: javascript.lang.security.detect-insecure-websocket
             rw = rewrite_onebot_ws_url_for_container(url_out, dh)
             if rw:
                 url_out = rw

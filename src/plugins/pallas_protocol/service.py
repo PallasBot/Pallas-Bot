@@ -624,12 +624,12 @@ class PallasProtocolService:
             from .docker_onebot_host import resolve_docker_onebot_host_from_config
             from .linux_docker import (
                 rewrite_onebot_ws_url_for_container,
-                ws_url_host_should_rewrite_for_linux_docker_bridge,
+                ws_url_host_should_rewrite_for_docker_bridge,
             )
 
             dh = resolve_docker_onebot_host_from_config(self._config)
             current = str(account.get("ws_url", "")).strip()
-            if current and ws_url_host_should_rewrite_for_linux_docker_bridge(current):
+            if current and ws_url_host_should_rewrite_for_docker_bridge(current):
                 rewritten = rewrite_onebot_ws_url_for_container(current, dh)
                 if rewritten and rewritten != current:
                     account["ws_url"] = rewritten

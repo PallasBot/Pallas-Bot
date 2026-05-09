@@ -1,6 +1,27 @@
 from __future__ import annotations
 
+import io
 from unittest.mock import MagicMock
+
+
+def test_linux_default_route_gateway_reads_proc_net_route(monkeypatch) -> None:
+    from src.plugins.pallas_protocol import docker_onebot_host as m
+
+    content = (
+        "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n"
+        "docker0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\n"
+        "eth0\t00000000\t010011AC\t0003\t0\t0\t100\t00000000\n"
+    )
+    real_open = m.Path.open
+
+    def fake_open(self, *args, **kwargs):
+        norm = str(self).replace("\\", "/")
+        if norm.endswith("/proc/net/route"):
+            return io.StringIO(content)
+        return real_open(self, *args, **kwargs)
+
+    monkeypatch.setattr(m.Path, "open", fake_open)
+    assert m.linux_default_route_gateway() == "172.17.0.1"
 
 
 def test_effective_docker_onebot_host_explicit_and_auto(monkeypatch) -> None:

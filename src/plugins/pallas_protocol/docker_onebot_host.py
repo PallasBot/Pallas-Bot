@@ -9,16 +9,16 @@ from typing import Any
 
 
 def linux_default_route_gateway() -> str | None:
-    """读取 Linux 默认路由网关（常为 docker0 对端），非 Linux 或失败时返回 None。"""
+    """读取 Linux 默认路由网关，非 Linux 或失败时返回 None。"""
     try:
         with Path("/proc/net/route").open(encoding="utf-8") as f:
             next(f, None)
             for line in f:
                 parts = line.split()
-                if len(parts) < 3:
+                if len(parts) < 8:
                     continue
-                dest, gateway_hex, mask = parts[0], parts[1], parts[2] if len(parts) > 2 else ""
-                if dest != "00000000" or mask == "00000000":
+                _iface, dest_hex, gateway_hex, _, _, _, _, mask_hex = parts[:8]
+                if dest_hex != "00000000" or mask_hex != "00000000":
                     continue
                 if not gateway_hex or gateway_hex == "00000000":
                     continue

@@ -35,7 +35,7 @@ __all__ = [
     "apply_docker_runtime_toggle_to_ws_url",
     "rewrite_onebot_ws_url_for_container",
     "sanitize_docker_name_suffix",
-    "ws_url_host_should_rewrite_for_linux_docker_bridge",
+    "ws_url_host_should_rewrite_for_docker_bridge",
 ]
 
 if TYPE_CHECKING:
@@ -147,10 +147,10 @@ def rewrite_onebot_ws_url_for_container(url: str, docker_host: str) -> str:
 _IPV4_RE = re.compile(r"^(?:25[0-5]|2[0-4]\d|[01]?\d{1,3})(?:\.(?:25[0-5]|2[0-4]\d|[01]?\d{1,3})){3}$")
 
 
-def ws_url_host_should_rewrite_for_linux_docker_bridge(url: str) -> bool:
-    """是否应在 Linux Docker bridge 下把 ws URL 的主机替换为宿主机网关。
+def ws_url_host_should_rewrite_for_docker_bridge(url: str) -> bool:
+    """是否应把 ``ws://`` 主机替换为 Docker 侧可达地址（如网关）。
 
-    对非 127 的 IPv4 与其它 IPv6字面量（除 ::1）不替换，避免用户保存的可达地址被覆盖。
+    用于 NapCat/SnowLuma 容器访问宿主机 Bot；对非 127 的 IPv4 与其它 IPv6字面量（除 ::1）不替换。
     """
     if not (url and url.startswith("ws://")):  # nosemgrep: javascript.lang.security.detect-insecure-websocket
         return False
@@ -181,7 +181,7 @@ def apply_docker_runtime_toggle_to_ws_url(
     if not (url and url.startswith("ws://")):  # nosemgrep: javascript.lang.security.detect-insecure-websocket
         return None
     if now_docker_runtime:
-        if not ws_url_host_should_rewrite_for_linux_docker_bridge(url):
+        if not ws_url_host_should_rewrite_for_docker_bridge(url):
             return None
         dh = resolve_docker_onebot_host_from_config(config)
         new_url = rewrite_onebot_ws_url_for_container(url, dh)
@@ -191,7 +191,7 @@ def apply_docker_runtime_toggle_to_ws_url(
     dh = (resolve_docker_onebot_host_from_config(config) or "").strip().lower()
     u = urlsplit(url)
     h = (u.hostname or "").strip().lower()
-    bridge_style = ws_url_host_should_rewrite_for_linux_docker_bridge(url)
+    bridge_style = ws_url_host_should_rewrite_for_docker_bridge(url)
     host_is_docker_target = h == "host.docker.internal" or (bool(dh) and h == dh) or bridge_style
     if not host_is_docker_target:
         return None
