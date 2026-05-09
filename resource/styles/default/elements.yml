@@ -1,71 +1,48 @@
 enable: true # 是否启用元素生成背景
 
-# GIF渲染配置
-# page: 10 # GIF渲染时的页数，不启用时为png渲染，启用时，所有图片都需要在文件名后加上“_编号”（1起步）
-# duration: 0.5 # GIF渲染时的每一帧的持续时间，单位为秒
-# # playbackSequence: "1 2 3 4 5 6 7 8 9 10" # （可选）GIF图片播放顺序，是一个以空格隔开的字符串，例“1 2 1 2 3 4 5”，默认为“1 2 …… 图片数”，注意数字量必须和图片数一致，否则将持续使用播放的最后一张
+# 多帧背景 GIF（pillowmd）：取消注释后为 GIF；imgs 内需有 nine_lu_1.png / nine_lu_2.png … 与 lock 规则，详见库 README
+# page: 3
+# duratio: 0.5
+# playbackSequence: "1 2 3"
 
 background: # 背景配置
 
-  mode: 0 # 0: 使用单张图片作为背景，1: 使用多张图片作为背景
-  # 请根据自己的mode，选择以下配置
-
-  # 当mode=0时，以下配置生效
+  # 1：九宫格；四边平铺/智能平铺，角不拉伸，中间可平铺，避免整张 background.png 拉伸导致边框与角色变形
+  mode: 1
 
   data:
+    left-up: "nine_lu.png"
+    up: "nine_u.png"
+    right-up: "nine_ru.png"
+    left: "nine_l.png"
+    middle: "nine_m.png"
+    right: "nine_r.png"
+    left-down: "nine_ld.png"
+    down: "nine_d.png"
+    right-down: "nine_rd.png"
 
-    img: "background.png" # 背景图片
-    lock: false # GIF锁定：GIF渲染时，该图片被固定，不随编号变化而变化
+    lu-lock: false
+    l-lock: false
+    ld-lock: false
+    u-lock: false
+    d-lock: false
+    ru-lock: false
+    r-lock: false
+    rd-lock: false
+    m-lock: false
 
-    # 填充模式
-    # 0：表示拉伸填充
-    # 1：表示填铺式填充
-    # 2：表示智能填铺式填充
-    # 3：表示先根据y轴拉伸填充后，再在x轴上填铺式填充
-    # 4：表示先根据x轴拉伸填充后，再在y轴上填铺式填充
-    # 5：表示先根据y轴拉伸填充后，再在x轴上智能填铺式填充
-    # 6：表示先根据x轴拉伸填充后，再在y轴上智能填铺式填充
-    mode: 0
+    # 左右 / 上下边条：2 智能填铺（花纹不随画布单向拉长）
+    lr-mode: 2
+    ud-mode: 2
+    # 中间为纯色块时：0 拉伸一块即可；若改回纹理 middle 可用 1/2
+    middle-mode: 0
 
-  # 当mode=1时，以下配置生效
-
+  # 以下为旧版单图拉伸（保留注释便于回退；使用 mode:1 时勿同时启用下方整块）
+  # mode: 0
   # data:
-
-  #   # 图片元素配置
-  #   left-up: "_01.png" # 左上角图片
-  #   left: "_04.png" # 左侧图片
-  #   left-down: "_07.png" # 左下角图片
-  #   up: "_02.png" # 上侧图片
-  #   down: "_08.png" # 下侧图片
-  #   right-up: "_03.png" # 右上角图片
-  #   right: "_06.png" # 右侧图片
-  #   right-down: "_09.png" # 右下角图片
-  #   middle: "_05.png" # 中间图片
-
-  #   # GIF锁定：GIF渲染时，该图片被固定，不随编号变化而变化
-  #   lu-lock: false # 左上角锁定
-  #   l-lock: false # 左侧锁定
-  #   ld-lock: false # 左下角锁定
-  #   u-lock: false # 上侧锁定
-  #   d-lock: false # 下侧锁定
-  #   ru-lock: false # 右上角锁定
-  #   r-lock: false # 右侧锁定
-  #   rd-lock: false # 右下角锁定
-  #   m-lock: false # 中间锁定
-
-  #   # 边缘填充模式：0: 拉伸填充，1: 平铺填充，2: 智能填铺式填充（不会因平铺而被裁剪）
-  #   lr-mode: 2 # 左右填充模式
-  #   ud-mode: 2 # 上下填充模式
-
-  #   # 中间填充模式
-  #   # 0：表示拉伸填充
-  #   # 1：表示填铺式填充
-  #   # 2：表示智能填铺式填充
-  #   # 3：表示先根据y轴拉伸填充后，再在x轴上填铺式填充
-  #   # 4：表示先根据x轴拉伸填充后，再在y轴上填铺式填充
-  #   # 5：表示先根据y轴拉伸填充后，再在x轴上智能填铺式填充
-  #   # 6：表示先根据x轴拉伸填充后，再在y轴上智能填铺式填充
-  #   middle-mode: 0
+  #   img: "background.png"
+  #   lock: false
+  #   mode: 0
 
 
 decorates: # 装饰配置
@@ -107,7 +84,7 @@ decorates: # 装饰配置
 
   bottom: # 渲染在底部图层（背景之上，文本之下）
 
-    # 装饰图片配置，9个部分的元素都是可选项
+    # 装饰图片配置，9个部分的元素都是可选项，每个部分可以有多个装饰
 
     left-up: [] # 左上角装饰图片
       # - img: "top-left-up.png" # 左上角装饰图片
@@ -134,6 +111,15 @@ decorates: # 装饰配置
 
     right: [] # 右侧装饰图片
 
-    right-down: [] # 右下角装饰图片
+    # 右下角人物（勿在下面再写一遍 right-down，YAML 重复键会覆盖成空）
+    # mode1：太小→略增大 xlimit/ylimit；与 paint 二选一时请注释本节并把 config side_paint_enabled 打开
+    right-down:
+      - img: "character.png"
+        mode: 1
+        xlimit: 0.28
+        ylimit: 0.25
+        include: true
+        lock: false
+    # right-down: []
 
     middle: [] # 中间装饰图片

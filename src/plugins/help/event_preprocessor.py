@@ -5,7 +5,7 @@ from nonebot.exception import IgnoredException
 from nonebot.internal.matcher import Matcher
 from nonebot.message import event_preprocessor, run_preprocessor
 
-from .plugin_manager import is_plugin_disabled
+from .plugin_manager import collect_disabled_plugin_names
 
 _blocked_events: dict[str, set[str]] = {}
 
@@ -37,11 +37,12 @@ async def block_disabled_plugins(bot: Bot, event: GroupMessageEvent):
 
     event_id = f"{bot.self_id}_{event.message_id}_{event.group_id}"
 
-    # 为每个新事件创建一个空集合
     _blocked_events[event_id] = set()
 
     bot_id = int(bot.self_id)
     group_id = event.group_id
+
+    disabled_names = await collect_disabled_plugin_names(bot_id, group_id)
 
     plugins = get_loaded_plugins()
 
@@ -54,9 +55,7 @@ async def block_disabled_plugins(bot: Bot, event: GroupMessageEvent):
         if plugin_name.lower() in IGNORED_PLUGINS:
             continue
 
-        is_disabled = await is_plugin_disabled(plugin_name, group_id, bot_id)
-
-        if is_disabled:
+        if plugin_name in disabled_names:
             _blocked_events[event_id].add(plugin_name)
             logger.debug(f"插件 {plugin_name} 在群 {group_id} 对Bot {bot_id} 处于禁用状态")
 
@@ -88,10 +87,9 @@ async def check_plugin_enabled(matcher: Matcher, bot: Bot, event: GroupMessageEv
         logger.debug(f"{plugin_name} 已禁用")
         raise IgnoredException(f"Plugin {plugin_name} is disabled")
 
-    # 如果事件ID不在缓存中，直接检查数据库（可能是预处理器没有运行）
     if event_id not in _blocked_events:
-        is_disabled = await is_plugin_disabled(plugin_name, group_id, bot_id)
-        if is_disabled:
+        disabled_names = await collect_disabled_plugin_names(bot_id, group_id)
+        if plugin_name in disabled_names:
             logger.debug(f"{plugin_name} 已禁用")
             raise IgnoredException(f"Plugin {plugin_name} is disabled")
 

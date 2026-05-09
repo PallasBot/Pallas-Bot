@@ -6,7 +6,9 @@ repos:
     rev: v5.0.0
     hooks:
       # 基础仓库卫生检查继续覆盖全仓。
+      # 默认 500KB；帮助页立绘等 PNG 常更大，仍用于拦截误提交超大二进制
       - id: check-added-large-files
+        args: [--maxkb=2048]
       - id: check-case-conflict
       - id: check-merge-conflict
       - id: check-toml

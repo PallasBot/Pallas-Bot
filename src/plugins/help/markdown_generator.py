@@ -1,23 +1,30 @@
-from nonebot import get_loaded_plugins, get_plugin_config, logger
+from enum import StrEnum
+
+from nonebot import get_loaded_plugins
 
 from .config import Config
-from .plugin_manager import plugin_display_name
+from .plugin_manager import find_plugin, plugin_display_name
 from .visibility import load_help_hidden_plugins
 
-plugin_config = get_plugin_config(Config)
+
+class HelpMarkdownIssue(StrEnum):
+    """帮助 Markdown 生成结果（供 handler 分支，避免解析正文）。"""
+
+    OK = "ok"
+    PLUGIN_NOT_FOUND = "plugin_not_found"
+    METADATA_MISSING = "metadata_missing"
+    FUNCTION_NOT_FOUND = "function_not_found"
 
 
 def generate_plugins_markdown(
-    plugin_config: Config, detail: bool = False, show_ignored: bool = False, ignored_plugins: list | None = None
+    plugin_config: Config, show_ignored: bool = False, ignored_plugins: list | None = None
 ) -> str:
-    """生成一级菜单"""
+    """生成一级菜单。"""
     plugins = get_loaded_plugins()
 
     if show_ignored:
-        # 超级用户在私聊时显示所有插件
         filtered_plugins = [plugin for plugin in plugins if plugin.name]
     else:
-        # 普通情况，过滤掉忽略的插件
         ignored_plugins = ignored_plugins or (plugin_config.ignored_plugins if plugin_config else [])
         hidden_plugins = set(load_help_hidden_plugins())
         filtered_plugins = [
@@ -26,154 +33,123 @@ def generate_plugins_markdown(
             if plugin.name and plugin.name not in ignored_plugins and plugin.name not in hidden_plugins
         ]
 
-    # 构建Markdown内容
-    title = "# 牛牛帮助" if not show_ignored else "# 牛牛帮助 - 超级用户"
+    n = len(filtered_plugins)
+    title = "# 牛牛帮助" if not show_ignored else "# 牛牛帮助（超级用户）"
     markdown_content = f"{title}\n\n"
-    markdown_content += f"总计加载插件数量: {len(filtered_plugins)}\n\n"
+    markdown_content += (
+        f"下面是当前已加载的 **{n}** 个插件，按展示名称排序。表格里「状态」表示在本群（或私聊）下是否可用。\n\n"
+    )
 
-    markdown_content += "| 序号 | 插件名称 | 状态 | 插件简介 |\n"
-    markdown_content += "|------|----------|------|----------|\n"
+    markdown_content += "| 序号 | 插件名称 | 状态 | 简介 |\n"
+    markdown_content += "|------|----------|------|------|\n"
 
     sorted_plugins = sorted(filtered_plugins, key=lambda p: plugin_display_name(p))
 
     for index, plugin in enumerate(sorted_plugins, 1):
         plugin_name = plugin_display_name(plugin)
 
-        # 添加插件简介
         if plugin.metadata:
             metadata = plugin.metadata
             description = metadata.description or "暂无描述"
         else:
             description = "暂无描述"
 
-        # 状态占位符
         status_placeholder = "{status}"
 
         markdown_content += f"| {index} | {plugin_name} | {status_placeholder} | {description} |\n"
 
     if show_ignored:
-        markdown_content += "\n> 超管视图：显示所有插件\n"
+        markdown_content += "\n> 本视图包含通常被隐藏的插件，仅超级用户在私聊下可见。\n"
 
-    markdown_content += "\n使用方法：\n"
-    markdown_content += "- 发送 `牛牛帮助 <序号或插件名>` 查看某插件的详细说明\n"
-    markdown_content += "- 发送 `牛牛开启 <序号或插件名>` 启用插件\n"
-    markdown_content += "- 发送 `牛牛关闭 <序号或插件名>` 禁用插件\n"
-    markdown_content += "\n示例：`牛牛帮助 1`、`牛牛帮助 帮助系统`。插件名也可使用与包名一致的英文标识。\n"
+    # 一律用「」表示命令，避免 pillowmd 行内代码与正文混排导致基线错位
+    markdown_content += "\n## 下一步怎么做\n\n"
+    markdown_content += (
+        "1. **看某个插件的详情**：发「牛牛帮助」，空一格后接 **序号** 或 **插件名**。\n"
+        "   （插件名可用中文展示名，或与包名一致的英文名。）\n"
+    )
+    markdown_content += (
+        "2. **开 / 关插件**（群里需要管理员或超管）：「牛牛开启 〈插件名或序号〉」「牛牛关闭 〈插件名或序号〉」。\n"
+    )
+    markdown_content += "3. **一次开关全部插件**（需管理员或超管）：「牛牛开启全部功能」「牛牛关闭全部功能」。\n\n"
+    markdown_content += "**示例**（数字表示上表序号，换成你的目标即可）\n\n"
+    markdown_content += "- 打开上表第 1 个插件：「牛牛帮助 1」\n"
+    markdown_content += "- 按中文名打开：「牛牛帮助 帮助系统」\n"
     return markdown_content
 
 
 def generate_plugin_functions_markdown(
-    plugin_config: Config, plugin_name: str, plugin_status: str | None = None
-) -> str:
-    """生成二级菜单"""
-    plugins = get_loaded_plugins()
-
-    target_plugin = None
-    for plugin in plugins:
-        if plugin.name and plugin.name.lower() == plugin_name.lower():
-            target_plugin = plugin
-            break
-
+    plugin_name: str, plugin_status: str | None = None
+) -> tuple[str, HelpMarkdownIssue]:
+    """生成二级菜单。"""
+    target_plugin = find_plugin(plugin_name)
     if not target_plugin:
-        for plugin in plugins:
-            if plugin_display_name(plugin).lower() == plugin_name.lower():
-                target_plugin = plugin
-                break
-
-    if not target_plugin:
-        for plugin in plugins:
-            if plugin.name and plugin_name.lower() in plugin.name.lower():
-                target_plugin = plugin
-                break
-
-    if not target_plugin:
-        for plugin in plugins:
-            if plugin.name and plugin_name.lower() in plugin_display_name(plugin).lower():
-                target_plugin = plugin
-                break
-
-    if not target_plugin:
-        return f"# 未找到插件\n\n未找到名为 '{plugin_name}' 的插件。\n\n使用 `牛牛帮助` 查看所有插件。"
+        text = (
+            f"# 未找到插件\n\n"
+            f"没有找到与「{plugin_name}」对应的插件。\n\n"
+            f"请发「牛牛帮助」回到总列表，核对序号或名称后再试。"
+        )
+        return text, HelpMarkdownIssue.PLUGIN_NOT_FOUND
 
     plugin_name_display = plugin_display_name(target_plugin)
     markdown_content = f"# {plugin_name_display}"
 
     if plugin_status:
         status_display = "✅ 已启用" if plugin_status == "✅ 启用" else "⛔ 已禁用"
-        markdown_content += f" ({status_display})\n\n"
+        markdown_content += f"（{status_display}）\n\n"
 
         action_hint = "关闭" if plugin_status == "✅ 启用" else "开启"
-        markdown_content += f"使用 `牛牛{action_hint} {plugin_name_display}` 可以{action_hint}此插件\n\n"
+        verb = "停用" if plugin_status == "✅ 启用" else "启用"
+        markdown_content += f"要{verb}本插件，可发：「牛牛{action_hint} {plugin_name_display}」\n\n"
     else:
-        markdown_content += " \n\n"
+        markdown_content += "\n\n"
 
     if target_plugin.metadata:
         metadata = target_plugin.metadata
         description = metadata.description or "暂无描述"
         usage = metadata.usage or "暂无说明"
-        markdown_content += f"**描述**: {description}\n\n"
-        markdown_content += f"**使用方法**: {usage}\n\n"
+        markdown_content += "## 说明\n\n"
+        markdown_content += f"{description}\n\n"
+        markdown_content += "## 插件内用法\n\n"
+        markdown_content += f"{usage}\n\n"
 
-        # 添加功能列表
         if hasattr(metadata, "extra") and metadata.extra:
             menu_data = metadata.extra.get("menu_data", [])
             if menu_data:
-                markdown_content += "## 功能列表\n\n"
-                markdown_content += "| 序号 | 功能名称 | 简要描述 |\n"
-                markdown_content += "|------|----------|----------|\n"
+                markdown_content += "## 本插件功能一览\n\n"
+                markdown_content += "| 序号 | 功能 | 简介 |\n"
+                markdown_content += "|------|------|------|\n"
                 for i, item in enumerate(menu_data, 1):
                     func_name = item.get("func", f"未命名功能 {i}")
                     brief_des = item.get("brief_des", "暂无简介")
                     markdown_content += f"| {i} | {func_name} | {brief_des} |\n"
-                markdown_content += (
-                    "\n使用方法：发送 `牛牛帮助 <插件名> <功能序号或名称>` 查看本条功能的详情。"
-                    "插件名可为中文展示名、序号或与包名一致的英文标识。\n\n"
-                )
-                markdown_content += "\n示例：`牛牛帮助 1 2`、`牛牛帮助 牛牛复读 1`\n\n"
+                markdown_content += "\n### 查看功能详情\n\n"
+                markdown_content += f"**示例**（当前插件为「{plugin_name_display}」）\n\n"
+                markdown_content += f"- 「牛牛帮助 {plugin_name_display} 1」→ 打开表中第 1 条功能的详情页\n"
+                if len(menu_data) > 1:
+                    markdown_content += f"- 「牛牛帮助 {plugin_name_display} 2」→ 第 2 条\n"
+
             else:
-                markdown_content += "该插件未定义功能列表。\n\n"
+                markdown_content += "本插件未在元数据里登记「功能列表」，只有上面的总说明。\n\n"
         else:
-            markdown_content += "该插件未定义功能列表。\n\n"
+            markdown_content += "本插件未在元数据里登记「功能列表」，只有上面的总说明。\n\n"
     else:
-        markdown_content += "该插件未定义元数据。\n\n"
+        markdown_content += "本插件没有可用的元数据说明。\n\n"
 
-    markdown_content += "---\n\n返回上一级：发送 `牛牛帮助` 回到插件列表\n"
-    return markdown_content
+    markdown_content += "---\n\n**返回总列表**：发「牛牛帮助」即可。\n"
+    return markdown_content, HelpMarkdownIssue.OK
 
 
-def generate_function_detail_markdown(plugin_config: Config, plugin_name: str, function_name: str) -> str:
-    """生成三级菜单"""
-    plugins = get_loaded_plugins()
-
-    target_plugin = None
-    for plugin in plugins:
-        if plugin.name and plugin.name.lower() == plugin_name.lower():
-            target_plugin = plugin
-            break
-
+def generate_function_detail_markdown(plugin_name: str, function_name: str) -> tuple[str, HelpMarkdownIssue]:
+    """生成三级菜单。"""
+    target_plugin = find_plugin(plugin_name)
     if not target_plugin:
-        for plugin in plugins:
-            if plugin_display_name(plugin).lower() == plugin_name.lower():
-                target_plugin = plugin
-                break
-
-    if not target_plugin:
-        for plugin in plugins:
-            if plugin.name and plugin_name.lower() in plugin.name.lower():
-                target_plugin = plugin
-                break
-
-    if not target_plugin:
-        for plugin in plugins:
-            if plugin.name and plugin_name.lower() in plugin_display_name(plugin).lower():
-                target_plugin = plugin
-                break
-
-    if not target_plugin:
-        return f"# 未找到插件\n\n未找到名为 '{plugin_name}' 的插件。\n\n使用 `牛牛帮助` 查看所有插件。"
+        text = f"# 未找到插件\n\n没有找到与「{plugin_name}」对应的插件。\n\n请发「牛牛帮助」回到总列表后再试。"
+        return text, HelpMarkdownIssue.PLUGIN_NOT_FOUND
 
     if not target_plugin.metadata or not hasattr(target_plugin.metadata, "extra"):
-        return f"# 错误\n\n插件 '{plugin_display_name(target_plugin)}' 未定义元数据。"
+        pd = plugin_display_name(target_plugin)
+        text = f"# 暂无详情\n\n插件「{pd}」没有可供展示的元数据，因此无法打开本条功能的详细页。"
+        return text, HelpMarkdownIssue.METADATA_MISSING
 
     metadata = target_plugin.metadata
     menu_data = metadata.extra.get("menu_data", []) if metadata.extra else []
@@ -181,14 +157,12 @@ def generate_function_detail_markdown(plugin_config: Config, plugin_name: str, f
     target_function = None
     target_index = -1
 
-    # 如果function_name是数字，则将其作为序号处理
     if function_name.isdigit():
         index = int(function_name) - 1
         if 0 <= index < len(menu_data):
             target_function = menu_data[index]
             target_index = index + 1
     else:
-        # 否则按名称匹配处理
         for index, item in enumerate(menu_data):
             func = item.get("func", "")
             if func.lower() == function_name.lower():
@@ -206,18 +180,23 @@ def generate_function_detail_markdown(plugin_config: Config, plugin_name: str, f
 
     if not target_function:
         pd = plugin_display_name(target_plugin)
-        return f"# 未找到功能\n\n在插件 '{pd}' 中未找到功能 '{function_name}'。\n\n使用 `牛牛帮助 {pd}` 查看功能列表。"
+        text = (
+            f"# 未找到该功能\n\n"
+            f"在插件「{pd}」下没有找到与「{function_name}」对应的功能项。\n\n"
+            f"请发「牛牛帮助 {pd}」先打开功能列表，确认序号或名称。"
+        )
+        return text, HelpMarkdownIssue.FUNCTION_NOT_FOUND
 
     func_name = target_function.get("func", "未命名功能")
     plugin_name_display = plugin_display_name(target_plugin)
-    markdown_content = f"# {plugin_name_display} - {func_name} 功能详情\n\n"
+    markdown_content = f"# {plugin_name_display} · {func_name}\n\n"
 
-    markdown_content += "| 属性 | 详情 |\n"
-    markdown_content += "|------|------|\n"
+    markdown_content += "| 项 | 内容 |\n"
+    markdown_content += "|----|------|\n"
 
     markdown_content += f"| 功能序号 | {target_index} |\n"
     markdown_content += f"| 功能名称 | {func_name} |\n"
-    markdown_content += f"| 简要描述 | {target_function.get('brief_des', '暂无简介') or '暂无简介'} |\n"
+    markdown_content += f"| 简介 | {target_function.get('brief_des', '暂无简介') or '暂无简介'} |\n"
 
     trigger_method = target_function.get("trigger_method", "未知")
     trigger_condition = target_function.get("trigger_condition", "未知")
@@ -228,63 +207,10 @@ def generate_function_detail_markdown(plugin_config: Config, plugin_name: str, f
 
     detail_des = target_function.get("detail_des", "")
     if detail_des:
-        markdown_content += f"## 详细描述\n\n{detail_des}\n\n"
+        markdown_content += f"## 补充说明\n\n{detail_des}\n\n"
 
     markdown_content += "---\n\n"
-    markdown_content += f"返回功能列表：`牛牛帮助 {plugin_name_display}`\n\n"
-    markdown_content += "返回插件列表：`牛牛帮助`\n"
+    markdown_content += f"- **回到本插件功能列表**：「牛牛帮助 {plugin_name_display}」\n"
+    markdown_content += "- **回到全部插件总列表**：「牛牛帮助」\n"
 
-    return markdown_content
-
-
-def generate_plugins_status_markdown(
-    plugin_config: Config, scope_info: str = "当前群", show_ignored: bool = False, ignored_plugins: list | None = None
-) -> str:
-    """生成插件状态"""
-    plugins = get_loaded_plugins()
-
-    if show_ignored:
-        filtered_plugins = [plugin for plugin in plugins if plugin.name]
-    else:
-        ignored_plugins = ignored_plugins or (plugin_config.ignored_plugins if plugin_config else [])
-        hidden_plugins = set(load_help_hidden_plugins())
-        filtered_plugins = [
-            plugin
-            for plugin in plugins
-            if plugin.name and plugin.name not in ignored_plugins and plugin.name not in hidden_plugins
-        ]
-
-    sorted_plugins = sorted(filtered_plugins, key=lambda p: plugin_display_name(p))
-    logger.debug(f"生成插件状态Markdown: 共{len(sorted_plugins)}个插件")
-
-    title = f"# 牛牛插件状态 ({scope_info})" if not show_ignored else f"# 牛牛插件状态 ({scope_info} - 超级用户)"
-    markdown_content = f"{title}\n\n"
-    markdown_content += f"总计加载插件数量: {len(sorted_plugins)}\n\n"
-
-    markdown_content += "| 序号 | 插件名称 | 状态 | 插件简介 |\n"
-    markdown_content += "|------|----------|------|----------|\n"
-
-    for index, plugin in enumerate(sorted_plugins, 1):
-        plugin_name = plugin_display_name(plugin)
-
-        if plugin.metadata:
-            metadata = plugin.metadata
-            description = metadata.description or "暂无描述"
-        else:
-            description = "暂无描述"
-
-        status_placeholder = "{status}"
-
-        markdown_content += f"| {index} | {plugin_name} | {status_placeholder} | {description} |\n"
-
-    if show_ignored:
-        markdown_content += "\n> 超管视图：显示所有插件\n"
-
-    markdown_content += "\n使用方法：\n"
-    markdown_content += "- 发送 `牛牛开启 <序号或插件名>` 启用插件\n"
-    markdown_content += "- 发送 `牛牛关闭 <序号或插件名>` 禁用插件\n"
-    markdown_content += "- 发送 `牛牛开启全部功能` 启用全部插件\n"
-    markdown_content += "- 发送 `牛牛关闭全部功能` 禁用全部插件\n"
-
-    markdown_content += "\n**说明：**仅群管理员与超级用户可更改插件开关状态\n"
-    return markdown_content
+    return markdown_content, HelpMarkdownIssue.OK

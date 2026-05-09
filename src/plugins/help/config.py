@@ -24,6 +24,14 @@ class Config(BaseModel, extra="ignore"):
     # 路径应指向包含elements.json/yml和setting.json/yml的目录
     custom_styles: list[StyleConfig] = []
 
+    # paint 立绘见 imgs；false 时用 elements 里 bottom.right-down 叠图
+    side_paint_enabled: bool = False
+    side_paint_filename: str = "character.png"
+    # 传入 MdToImage 前对立绘做像素倍率（库内还会按正文高度再缩一档，见 renderer 注释）
+    side_paint_scale: float = 1.25
+    # 是否自动分页以贴近黄金比例（长文会变宽，与 paint 联动）
+    side_paint_auto_page: bool = False
+
     # 忽略的插件列表
     ignored_plugins: list[str] = [
         "nonebot-plugin-alconna",

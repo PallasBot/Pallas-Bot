@@ -3,6 +3,7 @@ from nonebot.permission import SUPERUSER
 from nonebot.typing import T_State
 
 from .markdown_generator import (
+    HelpMarkdownIssue,
     generate_function_detail_markdown,
     generate_plugin_functions_markdown,
     generate_plugins_markdown,
@@ -53,7 +54,6 @@ async def handle_help_command(
     show_ignored = is_superuser and is_private
 
     if len(args) == 0:
-        # 一级菜单：显示所有插件列表（包含状态）
         markdown_content = generate_plugins_markdown(
             plugin_config,
             show_ignored=show_ignored,
@@ -63,7 +63,6 @@ async def handle_help_command(
         await send_markdown_as_image(markdown_content, style_name, available_styles, matcher, group_id)
         return
 
-    # 处理插件标识符（适用于二级和三级菜单）
     plugin_identifier = args[0]
     plugin_name, error_message = await find_plugin_by_identifier(
         plugin_identifier, [] if show_ignored else (plugin_config.ignored_plugins if plugin_config else [])
@@ -77,35 +76,37 @@ async def handle_help_command(
         await matcher.finish(f"博士，你说的'{plugin_identifier}'是什么呀？")
         return
 
-    # 验证插件是否存在
-    markdown_content = generate_plugin_functions_markdown(plugin_config, plugin_name)
-    if "未找到插件" in markdown_content:
+    if not find_plugin(plugin_name):
         await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
         return
 
     if len(args) == 1:
-        # 二级菜单：显示插件功能列表
         is_disabled = await is_plugin_disabled(plugin_name, group_id, bot_id)
         plugin_status = "⛔ 禁用" if is_disabled else "✅ 启用"
-        markdown_content = generate_plugin_functions_markdown(plugin_config, plugin_name, plugin_status)
+        markdown_content, issue = generate_plugin_functions_markdown(plugin_name, plugin_status)
+        if issue != HelpMarkdownIssue.OK:
+            await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
+            return
         await send_markdown_as_image(markdown_content, style_name, available_styles, matcher, group_id)
         return
 
     if len(args) == 2:
-        # 三级菜单：显示功能详情
         function_identifier = args[1]
-        markdown_content = generate_function_detail_markdown(plugin_config, plugin_name, function_identifier)
+        markdown_content, issue = generate_function_detail_markdown(plugin_name, function_identifier)
 
-        # 处理可能的错误
-        if "未找到功能" in markdown_content:
+        if issue is HelpMarkdownIssue.PLUGIN_NOT_FOUND:
+            await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
+            return
+        if issue is HelpMarkdownIssue.FUNCTION_NOT_FOUND:
             await matcher.finish(f"博士，我在'{resolved_plugin_display(plugin_name)}'中没有找到这个功能哦")
-        elif "错误" in markdown_content:
+            return
+        if issue is HelpMarkdownIssue.METADATA_MISSING:
             await matcher.finish(f"博士，'{resolved_plugin_display(plugin_name)}'只有这么多信息了")
+            return
 
         await send_markdown_as_image(markdown_content, style_name, available_styles, matcher, group_id)
         return
 
-    # 参数过多
     await matcher.finish("博士，你说的太多了，我跟不上了...")
 
 
@@ -113,7 +114,6 @@ async def handle_plugin_operation(
     bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State, action: str, matcher
 ):
     """处理插件操作命令，支持群聊和私聊"""
-    # 获取命令参数和上下文信息
     args = event.get_plaintext().strip().split()[1:] if event.get_plaintext() else []
     bot_id, group_id = get_context_info(bot, event)
 
@@ -132,12 +132,11 @@ async def handle_plugin_operation(
         await matcher.finish(error_message or f"博士，你说的'{plugin_identifier}'是什么呀？")
         return
 
-    # 超级用户可以指定全局操作或特定群:牛牛关闭 4 1234567
     if is_superuser and len(args) > 1:
         if args[1].lower() == "global":
-            group_id = None  # 全局操作
+            group_id = None
         elif args[1].isdigit():
-            group_id = int(args[1])  # 指定群
+            group_id = int(args[1])
 
     success, message = await toggle_plugin(plugin_name, group_id, bot_id, action)
     await matcher.finish(message)

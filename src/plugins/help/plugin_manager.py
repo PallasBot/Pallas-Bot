@@ -83,6 +83,26 @@ async def is_plugin_disabled(
         return False
 
 
+async def collect_disabled_plugin_names(
+    bot_id: int | None,
+    group_id: int | None,
+    *,
+    ignore_cache: bool = False,
+) -> frozenset[str]:
+    """合并 Bot 全局与群级的禁用插件名，供批量判断（与逐插件调用 is_plugin_disabled 语义一致）。"""
+    names: set[str] = set()
+    if bot_id:
+        bot_config = await bot_config_repo.get(bot_id, ignore_cache=ignore_cache)
+        if bot_config is None:
+            bot_config, _ = await bot_config_repo.get_or_create(bot_id, disabled_plugins=[])
+        names.update(bot_config.disabled_plugins)
+    if group_id:
+        group_config = await group_config_repo.get(group_id, ignore_cache=ignore_cache)
+        if group_config:
+            names.update(group_config.disabled_plugins)
+    return frozenset(names)
+
+
 async def is_plugin_globally_disabled(plugin_name: str, bot_id: int, ignore_cache: bool = False) -> bool:
     """
     检查插件是否在全局范围内被禁用
@@ -241,9 +261,6 @@ async def toggle_plugin(
     plugin_name = target_plugin.name
     user_visible_name = plugin_display_name(target_plugin)
     logger.debug(f"操作插件: {plugin_name}, 操作类型: {action}, 群ID: {group_id}, BotID: {bot_id}")
-
-    if plugin_name in ignored_plugins:
-        pass
 
     if bot_id and not group_id:
         return await _handle_global_plugin_operation(plugin_name, user_visible_name, bot_id, action)
@@ -416,13 +433,15 @@ async def fill_plugin_status(
     result_content = markdown_content
     placeholders_count = result_content.count("{status}")
 
+    disabled_names = await collect_disabled_plugin_names(bot_id, group_id, ignore_cache=True)
+
     for index, plugin in enumerate(sorted_plugins, 1):
         if index > placeholders_count:
             break
 
         plugin_name = plugin.name or "未命名插件"
 
-        is_disabled = await is_plugin_disabled(plugin_name, group_id, bot_id, ignore_cache=True)
+        is_disabled = plugin_name in disabled_names
         status = "⛔ 禁用" if is_disabled else "✅ 启用"
 
         result_content = result_content.replace("{status}", status, 1)

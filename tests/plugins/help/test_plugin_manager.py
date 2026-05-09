@@ -97,3 +97,25 @@ async def test_update_group_config_roundtrip(beanie_fixture, monkeypatch):
     await plugin_manager.get_group_config(321)
     updated = await plugin_manager.update_group_config(321, ["p3"])
     assert updated.disabled_plugins == ["p3"]
+
+
+@pytest.mark.asyncio
+async def test_collect_disabled_plugin_names_merges_bot_and_group(beanie_fixture):
+    from src.plugins.help import plugin_manager
+
+    await plugin_manager.bot_config_repo.upsert_field(10, "disabled_plugins", ["g"])
+    await plugin_manager.group_config_repo.upsert_field(2000, "disabled_plugins", ["c"])
+    merged = await plugin_manager.collect_disabled_plugin_names(10, 2000, ignore_cache=True)
+    assert merged == frozenset({"g", "c"})
+    for name in ("g", "c", "other"):
+        exp = await plugin_manager.is_plugin_disabled(name, group_id=2000, bot_id=10, ignore_cache=True)
+        assert (name in merged) is exp
+
+
+@pytest.mark.asyncio
+async def test_collect_disabled_plugin_names_bot_only(beanie_fixture):
+    from src.plugins.help import plugin_manager
+
+    merged = await plugin_manager.collect_disabled_plugin_names(30001, None, ignore_cache=True)
+    assert merged == frozenset()
+    assert await plugin_manager.is_plugin_disabled("x", group_id=None, bot_id=30001, ignore_cache=True) is False

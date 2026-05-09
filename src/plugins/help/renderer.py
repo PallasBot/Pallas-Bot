@@ -3,13 +3,25 @@ import io
 from pathlib import Path
 
 import pillowmd
+from nonebot import get_plugin_config
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 from PIL import Image
 
-from src.common.paths import plugin_data_dir
+from src.common.paths import plugin_data_dir, project_path
 
+from .config import Config
 from .styles import get_default_style
+
+
+def _help_image_cache_suffix() -> str:
+    cfg = get_plugin_config(Config)
+    return (
+        f"spaint={int(cfg.side_paint_enabled)}"
+        f"|fn={cfg.side_paint_filename}"
+        f"|sc={cfg.side_paint_scale:.4f}"
+        f"|ap={int(cfg.side_paint_auto_page)}"
+    )
 
 
 def resize_image_if_needed(image, max_width=1200, max_height=2000):
@@ -38,7 +50,7 @@ def get_cache_path(markdown_content: str, style_name: str, group_id: int | None 
 
     cache_dir.mkdir(parents=True, exist_ok=True)
 
-    content_hash = hashlib.md5(f"{markdown_content}_{style_name}".encode()).hexdigest()
+    content_hash = hashlib.md5(f"{markdown_content}_{style_name}_{_help_image_cache_suffix()}".encode()).hexdigest()
     return cache_dir / f"{content_hash}.png"
 
 
@@ -62,9 +74,33 @@ async def _render_markdown(
     """核心渲染函数"""
     default_style_name = get_default_style(None)
     style = available_styles.get(style_name, available_styles.get(default_style_name, pillowmd.MdStyle()))
+    help_cfg = get_plugin_config(Config)
 
-    # 获取渲染结果
-    render_result = await pillowmd.MdToImage(markdown_content, style=style)
+    paint_arg = None
+    auto_page = False
+    if help_cfg.side_paint_enabled:
+        paint_dir = project_path("resource", "styles", "default", "imgs")
+        pillowmd.Setting.PAINT_PATH = paint_dir
+        paint_path = paint_dir / help_cfg.side_paint_filename
+        if paint_path.is_file():
+            pil = Image.open(paint_path).convert("RGBA")
+            sc = help_cfg.side_paint_scale
+            if sc > 0 and sc != 1.0:
+                nw = max(1, int(pil.width * sc))
+                nh = max(1, int(pil.height * sc))
+                pil = pil.resize((nw, nh), Image.Resampling.LANCZOS)
+            # 传 Image 时库仍会在 tys>300 且 tys<txs*2.5 时按正文高度再缩放立绘
+            paint_arg = pil
+        else:
+            paint_arg = help_cfg.side_paint_filename
+        auto_page = help_cfg.side_paint_auto_page
+
+    render_result = await pillowmd.MdToImage(
+        markdown_content,
+        style=style,
+        paint=paint_arg,
+        autoPage=auto_page,
+    )
     image = render_result.image
 
     image = resize_image_if_needed(image)
