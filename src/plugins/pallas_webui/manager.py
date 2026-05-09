@@ -328,8 +328,8 @@ async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot", *, token:
                 token=token,
                 user_agent="Pallas-Bot-PallasWebUI/1.0",
             )
-            logger.info(
-                "Pallas 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底 tag={}",
+            logger.debug(
+                "Pallas 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底（Bot）tag={}",
                 fb["tag"],
             )
             return {"tag": fb["tag"], "html_url": fb["html_url"]}
@@ -356,8 +356,8 @@ async def fetch_latest_webui_release(repo: str, *, token: str = "", asset_name: 
             )
             tag_fb = fb["tag"]
             asset_url_fb = github_release_asset_url(repo, asset_clean, tag_fb)
-            logger.info(
-                "Pallas 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底 tag={}",
+            logger.debug(
+                "Pallas 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底（WebUI）tag={}",
                 tag_fb,
             )
             return {"tag": tag_fb, "html_url": fb["html_url"], "asset_url": asset_url_fb}

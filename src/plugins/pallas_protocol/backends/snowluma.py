@@ -27,19 +27,25 @@ class SnowlumaRuntimeBackend:
 
         cfg = self._service._configs
         wmin = int(getattr(self._service._config, "pallas_protocol_webui_port_min", 6099) or 6099)
-        sync_snowluma_runtime_json(account, webui_port_fallback_min=wmin)
-        sync_snowluma_onebot(cfg, account, resolve_qq)
+        pc = self._service._config
+        sync_snowluma_runtime_json(account, webui_port_fallback_min=wmin, plugin_config=pc)
+        sync_snowluma_onebot(cfg, account, resolve_qq, plugin_config=pc)
 
     def sync_onebot(self, account: dict, resolve_qq: Callable[[dict], str]) -> None:
         from ..snowluma_config import sync_snowluma_onebot
 
-        sync_snowluma_onebot(self._service._configs, account, resolve_qq)
+        sync_snowluma_onebot(
+            self._service._configs,
+            account,
+            resolve_qq,
+            plugin_config=self._service._config,
+        )
 
     def sync_webui(self, account: dict, resolve_qq: Callable[[dict], str]) -> None:
         from ..snowluma_config import sync_snowluma_runtime_json
 
         wmin = int(getattr(self._service._config, "pallas_protocol_webui_port_min", 6099) or 6099)
-        sync_snowluma_runtime_json(account, webui_port_fallback_min=wmin)
+        sync_snowluma_runtime_json(account, webui_port_fallback_min=wmin, plugin_config=self._service._config)
 
     def read_webui_into_account(self, account: dict) -> bool:
         from ..snowluma_config import read_snowluma_runtime_into_account

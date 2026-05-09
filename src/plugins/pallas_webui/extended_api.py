@@ -16,7 +16,7 @@ import typing
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from nonebot import get_bots, get_driver, get_loaded_plugins, get_plugin_config, logger
 from nonebot.adapters import Bot as BaseBot  # noqa: TC002
@@ -24,6 +24,14 @@ from nonebot.adapters import Event  # noqa: TC002
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_core import PydanticUndefined
 
+from src.common.pallas_console_login import (
+    current_http_request,
+    extract_session_from_request,
+    is_console_auth_configured,
+    mint_session_token,
+    set_shared_console_login_token,
+    verify_console_password,
+)
 from src.common.web.bot_web import LogScope  # noqa: TC001  # FastAPI/OpenAPI 需在运行时解析注解
 
 if typing.TYPE_CHECKING:
@@ -1124,18 +1132,26 @@ def _require_pallas_token_configured(
     x_pallas_token: str | None,
     token: str | None,
 ) -> None:
-    """所有控制台 API 共享的鉴权入口：未配置 token 时直接 403，避免匿名滥用。"""
-    need = (getattr(plugin_config, "pallas_webui_api_token", None) or "").strip()
-    if not need:
+    """所有控制台 API 共享的鉴权入口：与协议端共用会话（Cookie 或 X-Pallas-Token）。"""
+    if bool(getattr(plugin_config, "pallas_webui_dev_mode", False)):
+        return
+    req = current_http_request()
+    if req is None:
+        raise HTTPException(status_code=500, detail="控制台鉴权缺少请求上下文")
+    cookies = dict(req.cookies)
+    if extract_session_from_request(
+        cookies=cookies,
+        header_token=x_pallas_token,
+        query_token=token,
+        cookie_token=None,
+    ):
+        return
+    if not is_console_auth_configured():
         raise HTTPException(
-            status_code=403,
-            detail=(
-                "pallas_webui_api_token 未配置，控制台 API 已禁用；"
-                "请在 .env 中设置 PALLAS_WEBUI_API_TOKEN 并在控制台设置页填入后再试"
-            ),
+            status_code=503,
+            detail="统一控制台鉴权未初始化，请检查 data/pallas_console/",
         )
-    if (x_pallas_token or token or "").strip() != need:
-        raise HTTPException(status_code=401, detail="Invalid token")
+    raise HTTPException(status_code=401, detail="Invalid token")
 
 
 # 历史调用点保留同名别名，写操作与受保护读操作行为已统一
@@ -1218,6 +1234,12 @@ class _PluginConfigUpdateBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     values: dict[str, Any] = Field(default_factory=dict)
+
+
+class _ChangeConsoleLoginBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_password: str = Field(min_length=1, max_length=256)
 
 
 class _RequestActionBody(BaseModel):
@@ -1438,6 +1460,32 @@ def register_extended_api(
             token=token,
         )
 
+    class _AuthLoginBody(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        password: str = Field(min_length=1, max_length=512)
+
+    router_pub = APIRouter(tags=["Pallas 控制台"])
+
+    @router_pub.post(f"{x}/auth/login", include_in_schema=False)
+    async def _auth_login(request: Request, body: _AuthLoginBody) -> JSONResponse:
+        from src.common.pallas_console_login import SESSION_COOKIE_NAME, SESSION_TTL_SEC
+
+        if not verify_console_password(body.password):
+            raise HTTPException(status_code=401, detail="口令错误")
+        tok = mint_session_token()
+        resp = JSONResponse({"ok": True, "data": {"token": tok}})
+        resp.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=tok,
+            max_age=SESSION_TTL_SEC,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+            path="/",
+        )
+        return resp
+
     router = APIRouter(tags=["Pallas 控制台"], dependencies=[Depends(_pallas_token_dep)])
 
     @router.get(f"{x}/system", include_in_schema=True)
@@ -1627,7 +1675,7 @@ def register_extended_api(
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
-        """受限 MongoDB aggregate（只读阶段白名单 + 强制结果上限）；须配置并携带 pallas_webui_api_token。"""
+        """受限 MongoDB aggregate（只读阶段白名单 + 强制结果上限）；须携带有效控制台会话。"""
         _require_pallas_token_configured(
             plugin_config,
             x_pallas_token=x_pallas_token,
@@ -2466,4 +2514,18 @@ def register_extended_api(
             logger.exception("Pallas 控制台: WebUI 更新失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
+    @router.post(f"{x}/security/console-login", include_in_schema=False)
+    async def _security_console_login(
+        body: _ChangeConsoleLoginBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            set_shared_console_login_token(body.new_password)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": {"message": "已保存"}})
+
+    app.include_router(router_pub)
     app.include_router(router)

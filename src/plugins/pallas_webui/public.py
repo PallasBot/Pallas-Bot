@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import posixpath
-from html import escape as html_escape
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
@@ -12,8 +11,19 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from nonebot import logger
 from starlette import status
 
+from src.common.pallas_console_login import (
+    SESSION_COOKIE_NAME,
+    SESSION_TTL_SEC,
+    install_pallas_http_request_context_middleware,
+    mint_session_token,
+    verify_console_password,
+    verify_session_token,
+)
+
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from .config import Config
 
 _PLACEHOLDER_HTML = """\
 <!DOCTYPE html>
@@ -38,31 +48,38 @@ def register_routes(
     *,
     public_dir: Path,
     base: str,
-    api_token: str,
+    plugin_config: Config,
 ) -> None:
+    install_pallas_http_request_context_middleware(app)
     base = (base or "/pallas").strip()
     if not base.startswith("/"):
         base = "/" + base
     base = base.rstrip("/")
+    dev_mode = bool(getattr(plugin_config, "pallas_webui_dev_mode", False))
 
     root_resolved = public_dir.resolve()
-    required_token = (api_token or "").strip()
-    page_cookie_name = "pallas_webui_page_token"
+    legacy_page_cookie = "pallas_webui_page_token"
 
     def _is_token_valid(token: str | None) -> bool:
-        return bool(required_token) and (token or "").strip() == required_token
+        return bool((token or "").strip()) and verify_session_token(token)
 
     def _request_token(request: Request, query_token: str | None) -> str:
-        return (query_token or request.cookies.get(page_cookie_name) or "").strip()
+        c = (request.cookies.get(SESSION_COOKIE_NAME) or "").strip()
+        if c:
+            return c
+        return (query_token or request.cookies.get(legacy_page_cookie) or "").strip()
 
     def _refresh_page_cookie(response: FileResponse | RedirectResponse, request: Request, token: str) -> None:
+        if not verify_session_token(token):
+            return
         response.set_cookie(
-            key=page_cookie_name,
+            key=SESSION_COOKIE_NAME,
             value=token,
+            max_age=SESSION_TTL_SEC,
             httponly=True,
             samesite="lax",
             secure=request.url.scheme == "https",
-            path=base or "/",
+            path="/",
         )
 
     def _login_redirect(next_path: str, *, reason: str = "") -> RedirectResponse:
@@ -104,129 +121,23 @@ def register_routes(
         return target
 
     def _render_login_page(*, target: str, reason: str | None, token_submitted: bool) -> HTMLResponse:
-        detail = ""
-        if not required_token:
-            detail = "当前未配置 PALLAS_WEBUI_API_TOKEN，请先在 .env 中设置并重启 Bot。"
-        error = (reason or "").strip()
+        from src.common.pallas_login_page import render_pallas_login_page_html
+
+        err = (reason or "").strip()
         if token_submitted:
-            error = "Token 无效，请重试。"
-        return HTMLResponse(
-            f"""<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <title>Pallas 控制台登录</title>
-  <style>
-    :root {{
-      --bg0: #f2f6fc;
-      --card: #ffffff;
-      --bd: rgba(22, 100, 196, 0.14);
-      --txt: #1f2a44;
-      --muted: #5c6e8f;
-      --accent: #1664c4;
-      --radius: 14px;
-      --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
-    }}
-    @media (prefers-color-scheme: dark) {{
-      :root {{
-        --bg0: #070a0f;
-        --card: #121a28;
-        --bd: rgba(148, 163, 184, 0.16);
-        --txt: #e8edf7;
-        --muted: #8b9bb8;
-        --accent: #38bdf8;
-      }}
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
-      min-height: 100vh;
-      font-family: var(--font);
-      background: radial-gradient(1200px 600px at 10% -10%, rgba(22,100,196,0.10), transparent), var(--bg0);
-      color: var(--txt);
-      display: grid;
-      place-items: center;
-      padding: 20px;
-    }}
-    .card {{
-      width: min(520px, 100%);
-      background: var(--card);
-      border: 1px solid var(--bd);
-      border-radius: var(--radius);
-      padding: 22px;
-      box-shadow: 0 12px 28px rgba(15, 35, 65, 0.16);
-    }}
-    h2 {{ margin: 0 0 8px; }}
-    p {{ margin: 0; color: var(--muted); line-height: 1.6; }}
-    .msg {{ margin-top: 10px; font-size: 14px; }}
-    .msg.err {{ color: #d84a4a; }}
-    .msg.warn {{ color: #b45309; }}
-    form {{ margin-top: 14px; display: grid; gap: 10px; }}
-    .hint {{ margin-top: 8px; font-size: 13px; color: var(--muted); }}
-    input {{
-      width: 100%;
-      border-radius: 10px;
-      border: 1px solid var(--bd);
-      background: transparent;
-      color: var(--txt);
-      padding: 11px 12px;
-      font: inherit;
-    }}
-    button {{
-      border: none;
-      border-radius: 10px;
-      padding: 11px 14px;
-      font: inherit;
-      font-weight: 600;
-      color: #fff;
-      background: linear-gradient(135deg, var(--accent), #2b78d6);
-      cursor: pointer;
-    }}
-  </style>
-</head>
-<body>
-  <section class="card">
-    <h2>Pallas 控制台登录</h2>
-    <p>请输入控制台 Token 后进入 WebUI。</p>
-    {'<p class="msg warn">' + html_escape(detail) + "</p>" if detail else ""}
-    {'<p class="msg err">' + html_escape(error) + "</p>" if error else ""}
-    <form id="loginForm" method="post" action="{base}/login">
-      <input type="hidden" name="next" value="{html_escape(target, quote=True)}" />
-      <input
-        id="tokenInput"
-        name="token"
-        type="password"
-        placeholder="PALLAS_WEBUI_API_TOKEN"
-        autocomplete="off"
-        required
-      />
-      <button id="submitBtn" type="submit">进入控制台</button>
-    </form>
-    <p class="hint">可在当前浏览器会话内临时保存 Token（关闭页面后失效）。</p>
-  </section>
-  <script>
-    (function initLogin() {{
-      const KEY = "pallas_webui_login_token_session";
-      const form = document.getElementById("loginForm");
-      const input = document.getElementById("tokenInput");
-      const btn = document.getElementById("submitBtn");
-      const saved = (sessionStorage.getItem(KEY) || "").trim();
-      if (input && !input.value) input.value = saved || "";
-      if (form && input) {{
-        form.addEventListener("submit", () => {{
-          const t = (input.value || "").trim();
-          if (t) sessionStorage.setItem(KEY, t);
-          if (btn) {{
-            btn.textContent = "登录中...";
-            btn.setAttribute("disabled", "disabled");
-          }}
-        }});
-      }}
-    }})();
-  </script>
-</body>
-</html>"""
+            err = "口令无效，请重试。"
+        html = render_pallas_login_page_html(
+            document_title="控制台登录 · Pallas",
+            surface_label="控制台",
+            tagline="与协议端管理共用口令。",
+            form_action=f"{base}/login",
+            next_path=target,
+            error_message=err,
+            head_extra_html="",
+            footer_note="",
+            favicon_variant="console",
         )
+        return HTMLResponse(html)
 
     @router.get(f"{base}/login", include_in_schema=False, response_model=None)
     async def _login(
@@ -243,23 +154,27 @@ def register_routes(
         token: str = Form(...),
     ) -> RedirectResponse | HTMLResponse:
         target = _resolve_login_target(next_path)
-        if _is_token_valid(token):
+        if verify_console_password(token):
+            sess = mint_session_token()
             response = RedirectResponse(url=target, status_code=303)
             response.set_cookie(
-                key=page_cookie_name,
-                value=token,
+                key=SESSION_COOKIE_NAME,
+                value=sess,
+                max_age=SESSION_TTL_SEC,
                 httponly=True,
                 samesite="lax",
                 secure=request.url.scheme == "https",
-                path=base or "/",
+                path="/",
             )
+            response.delete_cookie(key=legacy_page_cookie, path=base or "/")
             return response
         return _render_login_page(target=target, reason=None, token_submitted=True)
 
     @router.post(f"{base}/logout", include_in_schema=False, response_model=None)
     async def _logout() -> RedirectResponse:
         response = RedirectResponse(url=f"{base}/login", status_code=303)
-        response.delete_cookie(key=page_cookie_name, path=base or "/")
+        response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+        response.delete_cookie(key=legacy_page_cookie, path=base or "/")
         return response
 
     @router.get(
@@ -272,23 +187,21 @@ def register_routes(
 
     @router.get(f"{base}/", include_in_schema=False, response_model=None)
     async def _index(request: Request, token: str | None = Query(default=None)) -> FileResponse | HTMLResponse:
-        if not required_token:
-            return _login_redirect(
-                str(request.url.path),
-                reason="当前未配置 PALLAS_WEBUI_API_TOKEN，请先在 .env 中设置并重启 Bot",
-            )
-        got = _request_token(request, token)
-        if not got:
-            return _login_redirect(str(request.url.path))
-        if not _is_token_valid(got):
-            return _login_redirect(
-                str(request.url.path),
-                reason="控制台 Token 不匹配，请确认与 .env 中 PALLAS_WEBUI_API_TOKEN 一致",
-            )
+        got = ""
+        if not dev_mode:
+            got = _request_token(request, token)
+            if not got:
+                return _login_redirect(str(request.url.path))
+            if not _is_token_valid(got):
+                return _login_redirect(
+                    str(request.url.path),
+                    reason="未登录或会话已失效，请重新登录",
+                )
         idx = public_dir / "index.html"
         if idx.is_file():
             response = FileResponse(idx)
-            _refresh_page_cookie(response, request, got)
+            if got and _is_token_valid(got):
+                _refresh_page_cookie(response, request, got)
             return response
         logger.warning(
             f"Pallas 控制台: 未找到 {public_dir / 'index.html'}，可设置 pallas_webui_dist_zip_url 或手动放置构建产物。",
@@ -323,6 +236,8 @@ def register_routes(
         target = _pick_static_target(path)
         if target is not None:
             if target.suffix.lower() == ".html":
+                if dev_mode:
+                    return FileResponse(target)
                 got = _request_token(request, token)
                 if _is_token_valid(got):
                     response = FileResponse(target)
@@ -332,6 +247,8 @@ def register_routes(
             return FileResponse(target)
         fallback = _pick_index_fallback()
         if fallback is not None:
+            if dev_mode:
+                return FileResponse(fallback)
             got = _request_token(request, token)
             if _is_token_valid(got):
                 response = FileResponse(fallback)

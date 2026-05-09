@@ -51,7 +51,7 @@
     - **`pallas-bot/data`** 映射到容器内 **`/app/data`**，用于持久化 **协议端管理**（`pallas_protocol`）的实例与 `runtime_profile.json` 等；不映射则容器删除后配置会丢。
     - **`postgres` 服务**默认带 **`profiles: ["postgres"]`**，只有加 `--profile postgres` 才会启动；默认栈里 **只有 MongoDB** 作为数据库容器。
 
-2. 复制 [`.env`](../.env) 到映射路径（如 `./pallas-bot/.env`），按注释填写。写接口需 `PALLAS_WEBUI_API_TOKEN`、协议端管理需 **`PALLAS_PROTOCOL_TOKEN`**（纯数字可不写引号）。
+2. 复制 [`.env`](../.env) 到映射路径（如 `./pallas-bot/.env`），按注释填写。控制台与协议端管理页使用浏览器登录（口令哈希持久化在 `data/pallas_console/`）。
 
 3. **数据后端二选一**
 
@@ -92,9 +92,9 @@ docker compose logs -f pallasbot
 （默认映射宿主机 `8088`，若已修改 `ports` 请替换。）
 
 - **Web 控制台**：`http://<宿主机ip>:8088/pallas/`（HTTP API 一般为 `http://<宿主机ip>:8088/pallas/api`）
-- **协议端管理**：`http://<宿主机ip>:8088/protocol/console/`（需配置 `PALLAS_PROTOCOL_TOKEN`；详见 [`pallas_protocol`](plugins/pallas_protocol/README.md)）
+- **协议端管理**：`http://<宿主机ip>:8088/protocol/console/`（与控制台共用登录；详见 [`pallas_protocol`](plugins/pallas_protocol/README.md)）
 
-写操作与敏感接口需配置 `PALLAS_WEBUI_API_TOKEN` / `PALLAS_PROTOCOL_TOKEN`（纯数字可不写引号）。
+写操作需先登录（会话 Cookie）；勿在生产环境开启 `pallas_webui_dev_mode`。
 
 ## 排障
 

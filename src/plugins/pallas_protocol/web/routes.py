@@ -2,44 +2,19 @@
 
 from __future__ import annotations
 
-from html import escape as html_escape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, urlparse, urlunparse
 
 import httpx
 from fastapi import FastAPI, Form, Header, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from ..config import Config
     from ..service import PallasProtocolService
-
-
-def _check_pallas_protocol_token(
-    plugin_config: Config,
-    x_pallas_protocol_token: str | None,
-    query_token: str | None,
-    cookie_token: str | None = None,
-) -> None:
-    need = (plugin_config.pallas_protocol_token or "").strip()
-    if not need:
-        raise HTTPException(
-            status_code=403,
-            detail="pallas_protocol_token 未配置，协议端管理 API 已禁用；请在 .env 中设置 PALLAS_PROTOCOL_TOKEN 后再试",
-        )
-    got = (x_pallas_protocol_token or query_token or cookie_token or "").strip()
-    if not got:
-        raise HTTPException(
-            status_code=401,
-            detail="未提供协议端管理 Token",
-        )
-    if got != need:
-        raise HTTPException(
-            status_code=401,
-            detail="协议端管理 Token 校验失败，请重新输入后登录",
-        )
 
 
 def register_pallas_protocol_routes(
@@ -56,12 +31,15 @@ def register_pallas_protocol_routes(
         render_new_account_page,
         render_protocol_assets_page,
         render_settings_page,
-        shell_favicon_link,
         shell_font_stylesheet_link,
     )
 
     base = resolve_protocol_webui_base_path(plugin_config)
     page_cookie_name = "pallas_protocol_page_token"
+
+    from src.common.pallas_console_login import install_pallas_http_request_context_middleware
+
+    install_pallas_http_request_context_middleware(app)
 
     b_norm = base.rstrip("/")
     if b_norm != "/protocol/napcat":
@@ -83,7 +61,31 @@ def register_pallas_protocol_routes(
             return _redirect_protocol_napcat_bookmark(request, rest)
 
     def _auth(h: str | None, q: str | None, c: str | None = None) -> None:
-        _check_pallas_protocol_token(plugin_config, h, q, c)
+        from src.common.pallas_console_login import (
+            current_http_request,
+            extract_session_from_request,
+            is_console_auth_configured,
+        )
+
+        _ = plugin_config
+        req = current_http_request()
+        if req is None:
+            raise HTTPException(status_code=500, detail="协议端鉴权缺少请求上下文")
+        cookies = dict(req.cookies)
+        legacy = req.cookies.get(page_cookie_name)
+        if extract_session_from_request(
+            cookies=cookies,
+            header_token=h,
+            query_token=q,
+            cookie_token=(c or legacy),
+        ):
+            return
+        if not is_console_auth_configured():
+            raise HTTPException(
+                status_code=503,
+                detail="统一控制台鉴权未初始化，请检查 data/pallas_console/",
+            )
+        raise HTTPException(status_code=401, detail="未登录或会话已失效，请重新登录")
 
     def _ensure_page_auth(
         *,
@@ -99,7 +101,7 @@ def register_pallas_protocol_routes(
         except HTTPException as e:
             encoded_next = quote(next_path, safe="/?=&-_.~")
             detail = str(getattr(e, "detail", "") or "鉴权失败")
-            if detail == "未提供协议端管理 Token":
+            if detail.startswith("未提供"):
                 return RedirectResponse(url=f"{base}/login?next={encoded_next}", status_code=307)
             reason = quote(detail, safe="")
             return RedirectResponse(url=f"{base}/login?next={encoded_next}&reason={reason}", status_code=307)
@@ -111,148 +113,23 @@ def register_pallas_protocol_routes(
         return target
 
     def _render_login_page(*, target: str, err: str, detail: str) -> HTMLResponse:
-        error_html = f"<p style='color:#c0392b;margin-top:8px'>{html_escape(err)}</p>" if err else ""
-        detail_html = f"<p style='color:#8a6d3b;margin-top:8px'>{html_escape(detail)}</p>" if detail else ""
-        return HTMLResponse(
-            f"""<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-{shell_favicon_link(base)}{shell_font_stylesheet_link(base)}  <title>Pallas 协议端登录</title>
-  <style>
-    :root {{
-      --bg0: #f8fafc;
-      --card: rgba(255, 255, 255, 0.92);
-      --bd: rgba(15, 23, 42, 0.09);
-      --txt: #0f172a;
-      --muted: #64748b;
-      --accent: #2563eb;
-      --accent-strong: #1d4ed8;
-      --radius: 18px;
-      --radius-xl: 22px;
-      --glass-hi: rgba(255, 255, 255, 0.38);
-      --font: "Pallas UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
-        system-ui, -apple-system, "Segoe UI", sans-serif;
-    }}
-    @media (prefers-color-scheme: dark) {{
-      :root {{
-        --bg0: #080b12;
-        --card: rgba(20, 26, 38, 0.9);
-        --bd: rgba(255, 255, 255, 0.09);
-        --txt: #f1f5f9;
-        --muted: #94a3b8;
-        --accent: #60a5fa;
-        --accent-strong: #3b82f6;
-        --glass-hi: rgba(255, 255, 255, 0.14);
-      }}
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
-      min-height: 100vh;
-      font-family: var(--font);
-      -webkit-font-smoothing: antialiased;
-      background:
-        radial-gradient(1100px 520px at 12% -12%, rgba(37, 99, 235, 0.12), transparent 58%),
-        var(--bg0);
-      color: var(--txt);
-      display: grid;
-      place-items: center;
-      padding: 20px;
-    }}
-    .card {{
-      width: min(520px, 100%);
-      background: var(--card);
-      border: 1px solid var(--bd);
-      border-radius: var(--radius-xl);
-      padding: 22px;
-      box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
-      backdrop-filter: blur(12px);
-    }}
-    h2 {{ margin: 0 0 8px; }}
-    p {{ margin: 0; color: var(--muted); line-height: 1.6; }}
-    .msg {{ margin-top: 10px; font-size: 14px; }}
-    .msg.err {{ color: #d84a4a; }}
-    .msg.warn {{ color: #b45309; }}
-    form {{ margin-top: 14px; display: grid; gap: 10px; }}
-    .hint {{ margin-top: 8px; font-size: 13px; color: var(--muted); }}
-    input {{
-      width: 100%;
-      border-radius: var(--radius);
-      border: 1px solid var(--bd);
-      background: rgba(241, 245, 249, 0.55);
-      color: var(--txt);
-      padding: 11px 12px;
-      font: inherit;
-      backdrop-filter: blur(6px);
-    }}
-    @media (prefers-color-scheme: dark) {{
-      input {{ background: rgba(15, 23, 42, 0.35); }}
-    }}
-    button {{
-      border: 1px solid color-mix(in srgb, #ffffff 42%, var(--accent));
-      border-radius: var(--radius);
-      padding: 11px 14px;
-      font: inherit;
-      font-weight: 600;
-      color: #fff;
-      cursor: pointer;
-      background: linear-gradient(
-        135deg,
-        color-mix(in srgb, var(--accent) 88%, #ffffff) 0%,
-        color-mix(in srgb, var(--accent-strong) 92%, #0f172a) 100%
-      );
-      box-shadow:
-        inset 0 1px 0 var(--glass-hi),
-        0 6px 20px rgba(37, 99, 235, 0.28);
-      backdrop-filter: blur(12px);
-    }}
-  </style>
-</head>
-<body>
-  <section class="card">
-    <h2>Pallas 协议端登录</h2>
-    <p>请输入协议端管理 Token 后进入控制台。</p>
-    {detail_html.replace("<p ", "<p class='msg warn' ")}
-    {error_html.replace("<p ", "<p class='msg err' ")}
-    <form method="post" action="{base}/login">
-      <input type="hidden" name="next" value="{html_escape(target, quote=True)}" />
-      <input
-        id="tokenInput"
-        name="token"
-        type="password"
-        placeholder="PALLAS_PROTOCOL_TOKEN"
-        autocomplete="off"
-        required
-      />
-      <button id="submitBtn" type="submit">进入控制台</button>
-    </form>
-    <p class="hint">可在当前浏览器会话内临时保存 Token（关闭页面后失效）。</p>
-  </section>
-  <script>
-    (function initLogin() {{
-      const KEY = "pallas_protocol_token_session";
-      const form = document.querySelector("form");
-      const input = document.getElementById("tokenInput");
-      const btn = document.getElementById("submitBtn");
-      const saved = (sessionStorage.getItem(KEY) || "").trim();
-      if (input && !input.value) input.value = saved;
-      if (form && input) {{
-        form.addEventListener("submit", () => {{
-          const t = (input.value || "").trim();
-          if (t) sessionStorage.setItem(KEY, t);
-          if (btn) {{
-            btn.textContent = "登录中...";
-            btn.setAttribute("disabled", "disabled");
-          }}
-        }});
-      }}
-    }})();
-  </script>
-</body>
-</html>"""
+        from src.common.pallas_login_page import render_pallas_login_page_html
+
+        head = shell_font_stylesheet_link(base)
+        footer_note = (detail or "").strip()
+        html = render_pallas_login_page_html(
+            document_title="协议端登录 · Pallas",
+            surface_label="协议端",
+            tagline="与 Web 控制台（/pallas）共用登录口令。",
+            form_action=f"{base}/login",
+            next_path=target,
+            error_message=(err or "").strip(),
+            head_extra_html=head,
+            footer_note=footer_note,
+            favicon_variant="protocol",
+            shell_brand_icon_base=base,
         )
+        return HTMLResponse(html)
 
     @app.get(f"{base}/login", response_class=HTMLResponse, response_model=None)
     async def napcat_login_page(
@@ -265,8 +142,6 @@ def register_pallas_protocol_routes(
         if default_reason:
             err = default_reason
         detail = ""
-        if not (plugin_config.pallas_protocol_token or "").strip():
-            detail = "当前未配置 PALLAS_PROTOCOL_TOKEN，请先在 .env 中设置并重启 Bot。"
         return _render_login_page(target=target, err=err, detail=detail)
 
     @app.post(f"{base}/login", response_class=HTMLResponse, response_model=None)
@@ -277,32 +152,63 @@ def register_pallas_protocol_routes(
     ) -> RedirectResponse | HTMLResponse:
         target = _resolve_login_target(next_path)
         detail = ""
-        if not (plugin_config.pallas_protocol_token or "").strip():
-            detail = "当前未配置 PALLAS_PROTOCOL_TOKEN，请先在 .env 中设置并重启 Bot。"
-        try:
-            _auth(None, token)
-        except HTTPException as e:
+        from src.common.pallas_console_login import (
+            SESSION_COOKIE_NAME,
+            SESSION_TTL_SEC,
+            mint_session_token,
+            verify_console_password,
+        )
+
+        if not verify_console_password(token):
             return _render_login_page(
                 target=target,
-                err=str(getattr(e, "detail", "") or "Token 校验失败"),
+                err="口令不正确",
                 detail=detail,
             )
+        sess = mint_session_token()
         response = RedirectResponse(url=target, status_code=303)
         response.set_cookie(
-            key=page_cookie_name,
-            value=token,
+            key=SESSION_COOKIE_NAME,
+            value=sess,
+            max_age=SESSION_TTL_SEC,
             httponly=True,
             samesite="lax",
             secure=request.url.scheme == "https",
-            path=base or "/",
+            path="/",
         )
+        response.delete_cookie(key=page_cookie_name, path=base or "/")
         return response
 
     @app.post(f"{base}/logout", response_model=None)
-    async def napcat_logout() -> RedirectResponse:
+    async def napcat_logout(request: Request) -> RedirectResponse:  # noqa: ARG001
+        from src.common.pallas_console_login import SESSION_COOKIE_NAME
+
         response = RedirectResponse(url=f"{base}/login", status_code=303)
+        response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
         response.delete_cookie(key=page_cookie_name, path=base or "/")
         return response
+
+    class _ChangeConsoleLoginBody(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        new_password: str = Field(min_length=1, max_length=256)
+
+    @app.post(f"{base}/api/security/console-login")
+    async def protocol_change_console_login(
+        body: _ChangeConsoleLoginBody,
+        request: Request,
+        token: str | None = Query(default=None),
+        x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
+    ) -> JSONResponse:
+        cookie_token = request.cookies.get(page_cookie_name)
+        _auth(x_pallas_protocol_token, token, cookie_token)
+        from src.common.pallas_console_login import set_shared_console_login_token
+
+        try:
+            set_shared_console_login_token(body.new_password)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return JSONResponse({"ok": True})
 
     @app.get(base, response_class=HTMLResponse)
     @app.get(f"{base}/", response_class=HTMLResponse)
@@ -591,7 +497,7 @@ def register_pallas_protocol_routes(
     ):
         _auth(x_pallas_protocol_token, token)
         try:
-            return {"profile": manager.update_runtime_profile(payload)}
+            return {"profile": await manager.update_runtime_profile(payload)}
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -609,11 +515,18 @@ def register_pallas_protocol_routes(
 
     @app.get(f"{base}/api/runtime/docker/images")
     async def runtime_docker_images(
+        protocol: str | None = Query(
+            default=None,
+            description="napcat / snowluma：仅列出当前全局配置对应仓库的本地镜像；不传则列出全部。",
+        ),
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
     ):
         _auth(x_pallas_protocol_token, token)
-        return await manager.list_local_docker_images()
+        p = str(protocol or "").strip().lower()
+        if p and p not in ("napcat", "snowluma"):
+            raise HTTPException(status_code=400, detail="protocol 仅支持 napcat、snowluma 或省略")
+        return await manager.list_local_docker_images(protocol=p or None)
 
     @app.post(f"{base}/api/runtime/docker/stop-all")
     async def runtime_docker_stop_all(
@@ -710,10 +623,11 @@ def register_pallas_protocol_routes(
         token: str | None = Query(default=None),
         x_pallas_protocol_token: str | None = Header(default=None, alias="X-Pallas-Protocol-Token"),
         tag: str | None = Query(default=None),
+        target_platform: str | None = Query(default=None),
     ):
         _auth(x_pallas_protocol_token, token)
         try:
-            return manager.start_snowluma_runtime_download(tag=tag or None)
+            return manager.start_snowluma_runtime_download(tag=tag or None, target_platform=target_platform)
         except RuntimeError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
 

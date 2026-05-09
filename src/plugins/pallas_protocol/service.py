@@ -30,6 +30,15 @@ from .contract import (
     MANAGED_RUNTIME_TAG_KEY,
     SNOWLUMA_PROTOCOL_BACKEND,
 )
+from .docker_cli import (
+    docker_repository_from_ref,
+)
+from .docker_cli import (
+    docker_stderr_suggests_container_name_conflict as _docker_stderr_suggests_container_name_conflict,
+)
+from .docker_cli import (
+    docker_stderr_suggests_host_port_bind_conflict as _docker_stderr_suggests_host_port_bind_conflict,
+)
 from .launch_manager import LaunchManager
 from .runtime.installer import NapCatRuntimeStore, default_release_asset_for_platform, default_release_repo_for_platform
 from .runtime.snowluma_installer import SnowLumaRuntimeStore, default_snowluma_asset_name_for_tag
@@ -47,7 +56,6 @@ class NapCatRuntime:
     logs: deque[str] = field(default_factory=deque)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     drain_task: asyncio.Task | None = None
-    # BootMain 状态字段
     expect_bootmain_detach: bool = False
     tracked_child_root_pid: int | None = None
     docker_container_name: str | None = None
@@ -105,11 +113,16 @@ class PallasProtocolService:
         return "shell"
 
     def runtime_profile(self) -> dict[str, object]:
+        default_sl_img = (
+            str(getattr(self._config, "pallas_protocol_snowluma_docker_image", "") or "").strip()
+            or "motricseven7/snowluma:latest"
+        )
         default = {
             "runtime_mode": self._default_runtime_mode(),
             "target_platform": "auto",
             "docker_image": str(getattr(self._config, "pallas_protocol_docker_image", "") or "").strip()
             or "mlikiowa/napcat-docker:latest",
+            "snowluma_docker_image": default_sl_img,
             "follow_bot_lifecycle": bool(getattr(self._config, "pallas_protocol_follow_bot_lifecycle", True)),
         }
         if not self._runtime_profile_path.exists():
@@ -127,6 +140,7 @@ class PallasProtocolService:
         if platform not in ("auto", "linux-amd64", "linux-arm64", "windows-amd64"):
             platform = "auto"
         image = str(raw.get("docker_image", "")).strip() or default["docker_image"]
+        sl_img = str(raw.get("snowluma_docker_image", "")).strip() or default["snowluma_docker_image"]
         follow = raw.get("follow_bot_lifecycle", default["follow_bot_lifecycle"])
         if isinstance(follow, str):
             follow = follow.strip().lower() in ("1", "true", "yes", "on")
@@ -136,14 +150,19 @@ class PallasProtocolService:
             "runtime_mode": mode,
             "target_platform": platform,
             "docker_image": image,
+            "snowluma_docker_image": sl_img,
             "follow_bot_lifecycle": follow,
         }
 
     def _apply_runtime_profile_to_config(self, profile: dict[str, object] | None = None) -> None:
-        """将 runtime_profile 持久化设置同步到当前进程配置。"""
         p = profile or self.runtime_profile()
         mode = str(p.get("runtime_mode", "")).strip().lower()
         image = str(p.get("docker_image", "")).strip() or "mlikiowa/napcat-docker:latest"
+        sl_img = (
+            str(p.get("snowluma_docker_image", "")).strip()
+            or str(getattr(self._config, "pallas_protocol_snowluma_docker_image", "") or "").strip()
+            or "motricseven7/snowluma:latest"
+        )
         follow = p.get("follow_bot_lifecycle", True)
         if isinstance(follow, str):
             follow = follow.strip().lower() in ("1", "true", "yes", "on")
@@ -154,19 +173,21 @@ class PallasProtocolService:
             self._config.pallas_protocol_docker_image = image
         elif mode in ("appimage", "shell"):
             self._config.pallas_protocol_linux_use_docker = False
+        self._config.pallas_protocol_snowluma_docker_image = sl_img
         self._config.pallas_protocol_follow_bot_lifecycle = bool(follow)
 
-    def update_runtime_profile(self, payload: dict) -> dict[str, object]:
+    async def update_runtime_profile(self, payload: dict) -> dict[str, object]:
         current = self.runtime_profile()
         mode = str(payload.get("runtime_mode", current["runtime_mode"])).strip().lower()
         if mode not in ("docker", "appimage", "shell"):
             raise ValueError("runtime_mode 仅支持 docker/appimage/shell")
-        if mode == "docker" and not sys.platform.startswith("linux"):
-            raise ValueError("Docker 模式仅支持 Linux 主机，请改用shell")
         platform = str(payload.get("target_platform", current["target_platform"])).strip().lower()
         if platform not in ("auto", "linux-amd64", "linux-arm64", "windows-amd64"):
             raise ValueError("target_platform 仅支持 auto/linux-amd64/linux-arm64/windows-amd64")
         image = str(payload.get("docker_image", current["docker_image"])).strip() or current["docker_image"]
+        sl_image = str(payload.get("snowluma_docker_image", current.get("snowluma_docker_image", ""))).strip()
+        if not sl_image:
+            sl_image = str(current.get("snowluma_docker_image", "") or "").strip() or "motricseven7/snowluma:latest"
         follow = payload.get("follow_bot_lifecycle", current["follow_bot_lifecycle"])
         if isinstance(follow, str):
             follow = follow.strip().lower() in ("1", "true", "yes", "on")
@@ -176,11 +197,36 @@ class PallasProtocolService:
             "runtime_mode": mode,
             "target_platform": platform,
             "docker_image": image,
+            "snowluma_docker_image": sl_image,
             "follow_bot_lifecycle": follow,
         }
         self._runtime_profile_path.write_text(json.dumps(updated, ensure_ascii=False, indent=2), encoding="utf-8")
         self._apply_runtime_profile_to_config(updated)
+        await self._prune_all_protocol_docker_containers_after_runtime_profile_change()
         return updated
+
+    async def _prune_all_protocol_docker_containers_after_runtime_profile_change(self) -> None:
+        from nonebot import logger
+
+        for account_id, account in list(self._accounts.items()):
+            if not (account.get("napcat_linux_docker") or account.get("snowluma_linux_docker")):
+                continue
+            try:
+                await self.stop_account(account_id)
+            except Exception:
+                logger.exception(f"Pallas 协议端: 全局 runtime 切换时停止账号 {account_id} 异常")
+            try:
+                await self._remove_both_linux_docker_container_names_for_account(account)
+            except Exception:
+                logger.exception(f"Pallas 协议端: 全局 runtime 切换时删除 Docker 容器 {account_id} 异常")
+        for account in self._accounts.values():
+            self._launch.apply_defaults(account, self._resolve_qq)
+            be = self._protocol_runtime_backend(account)
+            be.prepare_dirs(account)
+            be.sync_all_configs(account, self._resolve_qq)
+            self._refresh_linux_docker_run_argv(account)
+            account["updated_at"] = datetime.now(UTC).isoformat()
+        self._save_accounts()
 
     def runtime_overview(self) -> dict:
         manifest = self._runtime_store.read_manifest()
@@ -253,9 +299,12 @@ class PallasProtocolService:
             },
         }
 
-    def start_snowluma_runtime_download(self, *, tag: str | None = None) -> dict[str, object]:
+    def start_snowluma_runtime_download(
+        self, *, tag: str | None = None, target_platform: str | None = None
+    ) -> dict[str, object]:
         self._snowluma_store.start_background_download(
             tag=tag or None,
+            target_platform=target_platform,
             on_success=lambda: self.sync_follow_global_runtime_paths_after_manifest_change(backend="snowluma"),
         )
         return self.snowluma_runtime_overview()
@@ -297,10 +346,24 @@ class PallasProtocolService:
             "output": text[-4000:],
         }
 
-    async def list_local_docker_images(self) -> dict[str, object]:
-        """列出本机 Docker 镜像（仅用于 Docker 模式排障展示）。"""
+    async def list_local_docker_images(self, *, protocol: str | None = None) -> dict[str, object]:
         if not shutil.which("docker"):
             return {"ok": False, "detail": "未找到 docker 命令", "images": []}
+        proto = str(protocol or "").strip().lower()
+        want_repo = ""
+        if proto == "napcat":
+            p = self.runtime_profile()
+            ref = str(p.get("docker_image", "")).strip() or "mlikiowa/napcat-docker:latest"
+            want_repo = docker_repository_from_ref(ref)
+        elif proto == "snowluma":
+            p = self.runtime_profile()
+            ref = (
+                str(p.get("snowluma_docker_image", "")).strip()
+                or str(getattr(self._config, "pallas_protocol_snowluma_docker_image", "") or "").strip()
+                or "motricseven7/snowluma:latest"
+            )
+            want_repo = docker_repository_from_ref(ref)
+
         proc = await asyncio.create_subprocess_exec(
             "docker",
             "images",
@@ -319,8 +382,13 @@ class PallasProtocolService:
             parts = item.split("|", 3)
             while len(parts) < 4:
                 parts.append("")
+            name = parts[0]
+            if want_repo:
+                row_repo = docker_repository_from_ref(name)
+                if row_repo.lower() != want_repo.lower():
+                    continue
             rows.append({
-                "name": parts[0],
+                "name": name,
                 "id": parts[1],
                 "created_since": parts[2],
                 "size": parts[3],
@@ -329,11 +397,12 @@ class PallasProtocolService:
             "ok": proc.returncode == 0,
             "code": proc.returncode,
             "images": rows,
+            "protocol": proto or None,
+            "filter_repository": want_repo or None,
             "output": text[-4000:] if proc.returncode != 0 else "",
         }
 
     async def stop_all_labeled_docker_containers(self) -> dict[str, object]:
-        """停止所有 pallas protocol label 下运行中的容器。"""
         if not shutil.which("docker"):
             return {"ok": False, "detail": "未找到 docker 命令", "stopped": 0}
         ps = await asyncio.create_subprocess_exec(
@@ -365,7 +434,6 @@ class PallasProtocolService:
         }
 
     async def prune_stopped_labeled_docker_containers(self) -> dict[str, object]:
-        """清理所有 pallas protocol label 下已停止容器。"""
         if not shutil.which("docker"):
             return {"ok": False, "detail": "未找到 docker 命令", "removed": 0}
         ps = await asyncio.create_subprocess_exec(
@@ -399,7 +467,6 @@ class PallasProtocolService:
         }
 
     async def fetch_runtime_releases(self, *, limit: int = 10) -> list[dict]:
-        """获取 GitHub release 列表，供前端 tag 选择器使用。"""
         return await self._runtime_store.fetch_releases(limit=limit)
 
     def rescan_runtime_extract(self) -> dict:
@@ -409,7 +476,6 @@ class PallasProtocolService:
         return {**self.runtime_overview(), "rescanned": m is not None}
 
     def cleanup_runtime_dist_caches(self) -> dict[str, object]:
-        """删除 ``runtime_dist`` 下已下载的压缩包缓存，不删除 ``runtime_extract`` 与 manifest。"""
         n_nc = self._runtime_store.clear_dist_file_cache()
         n_sl = self._snowluma_store.clear_dist_file_cache()
         return {
@@ -419,7 +485,6 @@ class PallasProtocolService:
         }
 
     def napcat_local_inventory(self) -> dict[str, object]:
-        """``runtime_dist`` / ``runtime_extract`` 本机列表（用于切换托管解压目录）。"""
         return self._runtime_store.list_local_inventory()
 
     def _napcat_runtime_dir_for_account(self, account: dict) -> Path | None:
@@ -438,7 +503,6 @@ class PallasProtocolService:
         return self._snowluma_store.resolve_program_dir_for_tag_slug(tag)
 
     def activate_napcat_extract(self, folder_name: str) -> dict[str, object]:
-        """将 NapCat manifest 指向已有解压子目录（无需重新下载）。"""
         self._runtime_store.activate_extract_folder(folder_name)
         self.sync_follow_global_runtime_paths_after_manifest_change(backend="napcat")
         return self.runtime_overview()
@@ -462,7 +526,6 @@ class PallasProtocolService:
         return self.snowluma_runtime_overview()
 
     def _rewrite_webui_for_all_accounts(self) -> None:
-        """修正历史 webui.json（例如 NapCat 首次生成的 host='::'），避免 Windows 上绑定 UNKNOWN。"""
         for account in self._accounts.values():
             be = self._protocol_runtime_backend(account)
             be.apply_defaults(account, self._resolve_qq)
@@ -477,12 +540,7 @@ class PallasProtocolService:
             self._save_accounts()
 
     def _merge_onebot_ws_from_env(self, account: dict, *, force: bool = False) -> bool:
-        """将 env/配置中的 WS 设置同步到账号。
-
-        仅在账号尚未设置 ws_url（或 force=True）时才覆盖，
-        避免用户在 UI 手动填写的值被 env 默认值冲掉。
-        """
-        if account.get("napcat_linux_docker"):
+        if account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"):
             current = str(account.get("ws_url", "")).strip()
             if current:
                 from .linux_docker import rewrite_onebot_ws_url_for_container
@@ -492,13 +550,12 @@ class PallasProtocolService:
                 if rewritten and rewritten != current:
                     account["ws_url"] = rewritten
                     return True
-        # 账号已有用户自定义值时跳过（除非强制）
         if not force and str(account.get("ws_url", "")).strip():
             return False
         base_url, name, tok = resolve_onebot_ws_settings(self._config)
         if not base_url:
             return False
-        if account.get("napcat_linux_docker"):
+        if account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"):
             from .linux_docker import rewrite_onebot_ws_url_for_container
 
             dh = str(getattr(self._config, "pallas_protocol_docker_onebot_host", "") or "").strip() or "172.17.0.1"
@@ -518,7 +575,6 @@ class PallasProtocolService:
         return changed
 
     def _apply_onebot_ws_to_all_accounts(self) -> None:
-        """初始化时：仅对尚未设置 ws_url 的账号补填 env 默认值。"""
         c = False
         for acc in self._accounts.values():
             if self._merge_onebot_ws_from_env(acc, force=False):
@@ -557,10 +613,8 @@ class PallasProtocolService:
             if not bool(account.get("enabled", True)):
                 continue
             self._protocol_runtime_backend(account).apply_defaults(account, self._resolve_qq)
-            if account.get("napcat_linux_docker"):
-                from .linux_docker import docker_container_name, docker_container_running_sync
-
-                if docker_container_running_sync(docker_container_name(account)):
+            if account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"):
+                if self._linux_docker_container_running_sync(account):
                     await self.ensure_docker_logs_if_needed(account_id)
                     continue
             if self.is_running(account_id):
@@ -585,6 +639,29 @@ class PallasProtocolService:
             except Exception:
                 logger.exception(f"Pallas 协议端: 自动停止账号 {account_id} 出现未预期异常")
 
+    def _snowluma_docker_mapped_host_ports_on_account(self, account: dict) -> set[int]:
+        ports: set[int] = set()
+        if not account.get("snowluma_linux_docker"):
+            return ports
+        from .snowluma_docker import (
+            snowluma_docker_effective_host_novnc_port,
+            snowluma_docker_effective_host_vnc_port,
+        )
+
+        for key in ("snowluma_docker_host_onebot_http", "snowluma_docker_host_onebot_ws"):
+            raw = account.get(key)
+            try:
+                px = int(str(raw).strip()) if raw is not None and str(raw).strip() != "" else 0
+            except (TypeError, ValueError):
+                px = 0
+            if 1 <= px <= 65535:
+                ports.add(px)
+        for fn in (snowluma_docker_effective_host_novnc_port, snowluma_docker_effective_host_vnc_port):
+            v = fn(account, self._config)
+            if 1 <= v <= 65535:
+                ports.add(v)
+        return ports
+
     def _used_webui_ports(self, exclude_account_id: str | None = None) -> set[int]:
         used: set[int] = set()
         for aid, acc in self._accounts.items():
@@ -595,6 +672,26 @@ class PallasProtocolService:
                 used.add(p)
             elif isinstance(p, str) and str(p).strip().isdigit():
                 used.add(int(str(p).strip()))
+            for key in ("snowluma_docker_host_onebot_http", "snowluma_docker_host_onebot_ws"):
+                raw = acc.get(key)
+                try:
+                    px = int(str(raw).strip()) if raw is not None and str(raw).strip() != "" else 0
+                except (TypeError, ValueError):
+                    px = 0
+                if 1 <= px <= 65535:
+                    used.add(px)
+            if acc.get("snowluma_linux_docker"):
+                from .snowluma_docker import (
+                    snowluma_docker_effective_host_novnc_port,
+                    snowluma_docker_effective_host_vnc_port,
+                )
+
+                for eff in (
+                    snowluma_docker_effective_host_novnc_port(acc, self._config),
+                    snowluma_docker_effective_host_vnc_port(acc, self._config),
+                ):
+                    if 1 <= eff <= 65535:
+                        used.add(eff)
         return used
 
     def _next_free_webui_port(self, *, exclude_account_id: str | None = None) -> int:
@@ -636,6 +733,16 @@ class PallasProtocolService:
         msg = f"在 {lo}-{hi} 内无可绑定的 NapCat WebUI 端口"
         raise ValueError(msg)
 
+    def _refresh_linux_docker_run_argv(self, account: dict) -> None:
+        if account.get("napcat_linux_docker"):
+            from .linux_docker import build_docker_run_argv
+
+            account["args"] = build_docker_run_argv(account, self._config, self._resolve_qq)
+        elif account.get("snowluma_linux_docker"):
+            from .snowluma_docker import build_snowluma_docker_run_argv
+
+            account["args"] = build_snowluma_docker_run_argv(account, self._config, self._resolve_qq)
+
     def _migrate_account_webui_fields(self, account_id: str, account: dict) -> bool:
         changed = False
         if (
@@ -647,7 +754,9 @@ class PallasProtocolService:
         if "webui_port" not in account:
             account["webui_port"] = self._next_free_webui_port(exclude_account_id=account_id)
             changed = True
-        if "webui_token" not in account:
+        bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
+        bk = bk or DEFAULT_PROTOCOL_BACKEND
+        if "webui_token" not in account and bk != SNOWLUMA_PROTOCOL_BACKEND:
             account["webui_token"] = secrets.token_hex(6)
             changed = True
         return changed
@@ -675,8 +784,36 @@ class PallasProtocolService:
     def _save_accounts(self) -> None:
         self._accounts_file.write_text(json.dumps(self._accounts, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    def _linux_docker_container_name(self, account: dict) -> str:
+        if account.get("snowluma_linux_docker"):
+            from .snowluma_docker import snowluma_docker_container_name
+
+            return snowluma_docker_container_name(account)
+        from .linux_docker import docker_container_name
+
+        return docker_container_name(account)
+
+    def _linux_docker_container_running_sync(self, account: dict) -> bool:
+        if not (account.get("snowluma_linux_docker") or account.get("napcat_linux_docker")):
+            return False
+        name = self._linux_docker_container_name(account)
+        if account.get("snowluma_linux_docker"):
+            from .snowluma_docker import snowluma_docker_container_running_sync
+
+            return snowluma_docker_container_running_sync(name)
+        from .linux_docker import docker_container_running_sync
+
+        return docker_container_running_sync(name)
+
+    async def _remove_both_linux_docker_container_names_for_account(self, account: dict) -> None:
+        stub = {"id": str(account.get("id", "x")).strip() or "x"}
+        from .linux_docker import docker_container_name, docker_remove_force
+        from .snowluma_docker import snowluma_docker_container_name, snowluma_docker_remove_force
+
+        await docker_remove_force(docker_container_name(stub))
+        await snowluma_docker_remove_force(snowluma_docker_container_name(stub))
+
     def sync_follow_global_runtime_paths_after_manifest_change(self, *, backend: str = "both") -> None:
-        """全局托管 manifest 变更后，对齐「跟随全局」账号的 program_dir，避免实例版本误判为自定义。"""
         changed = False
         nap_rt_str = ""
         if backend in ("napcat", "both"):
@@ -693,7 +830,7 @@ class PallasProtocolService:
             bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
             bk = bk or DEFAULT_PROTOCOL_BACKEND
             if bk == SNOWLUMA_PROTOCOL_BACKEND:
-                if backend not in ("snowluma", "both") or not sl_rt_str:
+                if backend not in ("snowluma", "both") or not sl_rt_str or account.get("snowluma_linux_docker"):
                     continue
                 before_pd = str(account.get("program_dir", "") or "").strip()
                 self._launch._refresh_snowluma_managed_runtime_refs(account, sl_rt_str)
@@ -741,7 +878,6 @@ class PallasProtocolService:
         return self._compose_account_state(account_id, account)
 
     def snowluma_webui_http_base(self, account: dict) -> str:
-        """SnowLuma WebUI HTTP 根地址（本机访问注入 API）。"""
         h = str(getattr(self._config, "pallas_protocol_bind_host", "127.0.0.1") or "127.0.0.1").strip()
         if h in ("0.0.0.0", "::", "[::]"):
             h = "127.0.0.1"
@@ -755,7 +891,6 @@ class PallasProtocolService:
         return f"http://{h}:{p}"
 
     async def snowluma_inject_hook_via_webui(self, account_id: str) -> dict[str, object]:
-        """调用 SnowLuma 内置 WebUI API：登录 → 列出 QQ 进程 → 按实例 QQ（UIN）匹配并 load。"""
         account = self._accounts.get(account_id)
         if not account:
             raise KeyError("账号不存在")
@@ -769,7 +904,8 @@ class PallasProtocolService:
         pwd = resolve_snowluma_webui_temp_password(account, self.tail_logs(account_id, 900))
         if not pwd:
             raise ValueError(
-                "无法获取 WebUI 临时密码：请先启动本实例 SnowLuma 进程，或在 config/runtime.json 写入密码字段"
+                "无法获取 SnowLuma WebUI 登录口令：请先启动本实例并在进程日志中查找 "
+                "「initial credentials: user=admin password=…」（旧版为「临时密码」）。"
             )
         base = self.snowluma_webui_http_base(account).rstrip("/")
         timeout = httpx.Timeout(25.0, connect=8.0)
@@ -874,7 +1010,8 @@ class PallasProtocolService:
         be.apply_defaults(account, self._resolve_qq)
         if "webui_port" not in account:
             account["webui_port"] = self._next_free_webui_port()
-        if "webui_token" not in account:
+        _bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
+        if "webui_token" not in account and _bk != SNOWLUMA_PROTOCOL_BACKEND:
             account["webui_token"] = secrets.token_hex(6)
         # 仅在 payload 未提供 ws_url 时才用 env 默认值补填
         if not str(payload.get("ws_url", "")).strip():
@@ -908,6 +1045,8 @@ class PallasProtocolService:
             "ws_token",
             ACCOUNT_PROTOCOL_BACKEND_KEY,
             MANAGED_RUNTIME_TAG_KEY,
+            "snowluma_docker_host_onebot_http",
+            "snowluma_docker_host_onebot_ws",
         )
         for key in editable_keys:
             if key in payload:
@@ -918,6 +1057,9 @@ class PallasProtocolService:
         new_backend = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
         new_backend = new_backend or DEFAULT_PROTOCOL_BACKEND
         if ACCOUNT_PROTOCOL_BACKEND_KEY in payload and new_backend != old_backend:
+            if account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"):
+                await self.stop_account(account_id)
+                await self._remove_both_linux_docker_container_names_for_account(account)
             account["program_dir"] = ""
             account["command"] = ""
             account["args"] = []
@@ -925,6 +1067,11 @@ class PallasProtocolService:
             account["working_dir"] = ""
             account[MANAGED_RUNTIME_TAG_KEY] = ""
             account.pop("napcat_linux_docker", None)
+            account.pop("snowluma_linux_docker", None)
+            account.pop("snowluma_docker_host_onebot_http", None)
+            account.pop("snowluma_docker_host_onebot_ws", None)
+            account.pop("snowluma_docker_host_novnc_port", None)
+            account.pop("snowluma_docker_host_vnc_port", None)
         if "webui_port" in payload:
             try:
                 wp = int(str(payload["webui_port"]).strip())
@@ -932,15 +1079,48 @@ class PallasProtocolService:
                 raise ValueError("webui_port 必须为整数") from e
             if not (1 <= wp <= 65535):
                 raise ValueError("webui_port 必须在 1-65535 之间")
-            for oid, oacc in self._accounts.items():
-                if oid == account_id:
-                    continue
-                op = oacc.get("webui_port")
-                if isinstance(op, str) and str(op).strip().isdigit():
-                    op = int(str(op).strip())
-                if isinstance(op, int) and op == wp:
-                    raise ValueError("WebUI 端口已被其他账号占用")
+            if wp in self._snowluma_docker_mapped_host_ports_on_account(account):
+                raise ValueError("WebUI 端口与当前账号 SnowLuma Docker 其它映射端口冲突")
+            if wp in self._used_webui_ports(exclude_account_id=account_id):
+                raise ValueError("WebUI 端口已被其他账号占用")
             account["webui_port"] = wp
+        for vk in ("snowluma_docker_host_novnc_port", "snowluma_docker_host_vnc_port"):
+            if vk not in payload:
+                continue
+            raw = payload[vk]
+            if raw is None or (isinstance(raw, str) and not str(raw).strip()):
+                account.pop(vk, None)
+                continue
+            try:
+                pv = int(str(raw).strip())
+            except ValueError as e:
+                raise ValueError(f"{vk} 须为整数") from e
+            if not (0 <= pv <= 65535):
+                raise ValueError(f"{vk} 须在 0-65535 之间")
+            try:
+                same = vk in account and int(str(account[vk]).strip()) == pv
+            except (TypeError, ValueError):
+                same = False
+            if same:
+                account[vk] = pv
+                continue
+            if 1 <= pv <= 65535:
+                try:
+                    wpp = int(str(account.get("webui_port", "")).strip())
+                except (TypeError, ValueError):
+                    wpp = 0
+                if pv == wpp:
+                    raise ValueError(f"{vk} 不能与内置 WebUI 端口相同")
+                for ok in ("snowluma_docker_host_onebot_http", "snowluma_docker_host_onebot_ws"):
+                    try:
+                        op = int(str(account.get(ok, "")).strip())
+                    except (TypeError, ValueError):
+                        op = 0
+                    if op == pv:
+                        raise ValueError(f"{vk} 不能与当前账号 OneBot 映射端口相同")
+                if pv in self._used_webui_ports(exclude_account_id=account_id):
+                    raise ValueError(f"端口 {pv} 已被其他账号或映射占用")
+            account[vk] = pv
         be = self._protocol_runtime_backend(account)
         be.apply_defaults(account, self._resolve_qq)
         # 仅在 payload 未显式提供 ws_url 时才用 env 默认值补填
@@ -948,6 +1128,7 @@ class PallasProtocolService:
             self._merge_onebot_ws_from_env(account)
         be.prepare_dirs(account)
         be.sync_all_configs(account, self._resolve_qq)
+        self._refresh_linux_docker_run_argv(account)
         account["updated_at"] = datetime.now(UTC).isoformat()
         self._save_accounts()
         restarted = bool(need_restart and restart)
@@ -968,11 +1149,9 @@ class PallasProtocolService:
             await self.stop_account(account_id)
         except Exception:
             pass
-        if account.get("napcat_linux_docker"):
+        if account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"):
             try:
-                from .linux_docker import docker_container_name, docker_remove_force
-
-                await docker_remove_force(docker_container_name(account))
+                await self._remove_both_linux_docker_container_names_for_account(account)
             except Exception:
                 pass
         self._accounts.pop(account_id, None)
@@ -997,14 +1176,11 @@ class PallasProtocolService:
         return self._is_bot_connected(account)
 
     def _napcat_core_running(self, account_id: str, account: dict | None = None) -> bool:
-        """NapCat 子进程 / Docker 容器是否在跑（不含「仅 OneBot 已连接」）。"""
         acc = account if account is not None else self._accounts.get(account_id)
         if not acc:
             return False
-        if acc.get("napcat_linux_docker"):
-            from .linux_docker import docker_container_name, docker_container_running_sync
-
-            return docker_container_running_sync(docker_container_name(acc))
+        if acc.get("napcat_linux_docker") or acc.get("snowluma_linux_docker"):
+            return self._linux_docker_container_running_sync(acc)
         runtime = self._runtimes.get(account_id)
         return bool(runtime and runtime.process and runtime.process.returncode is None)
 
@@ -1023,12 +1199,15 @@ class PallasProtocolService:
         runtime = self._runtime(account_id)
         async with runtime.lock:
             if account.get("napcat_linux_docker"):
-                from .linux_docker import docker_container_name, docker_container_running_sync
-
-                if docker_container_running_sync(docker_container_name(account)):
+                if self._linux_docker_container_running_sync(account):
                     await self._ensure_docker_logs_follower_locked(account_id, account, runtime)
                     return self._compose_account_state(account_id, account)
                 return await self._start_account_linux_docker(account_id, account, runtime)
+            if account.get("snowluma_linux_docker"):
+                if self._linux_docker_container_running_sync(account):
+                    await self._ensure_docker_logs_if_needed(account_id)
+                    return self._compose_account_state(account_id, account)
+                return await self._start_account_snowluma_linux_docker(account_id, account, runtime)
             if runtime.process and runtime.process.returncode is None:
                 return self._compose_account_state(account_id, account)
             command = str(account.get("command", "")).strip()
@@ -1088,9 +1267,8 @@ class PallasProtocolService:
         return self._compose_account_state(account_id, account)
 
     async def ensure_docker_logs_if_needed(self, account_id: str) -> None:
-        """Docker 实例在容器已运行时仍可能没有附着 docker logs；按需拉起日志跟随。"""
         account = self._accounts.get(account_id)
-        if not account or not account.get("napcat_linux_docker"):
+        if not account or not (account.get("napcat_linux_docker") or account.get("snowluma_linux_docker")):
             return
         self._protocol_runtime_backend(account).apply_defaults(account, self._resolve_qq)
         runtime = self._runtime(account_id)
@@ -1098,13 +1276,10 @@ class PallasProtocolService:
             await self._ensure_docker_logs_follower_locked(account_id, account, runtime)
 
     async def _ensure_docker_logs_follower_locked(self, account_id: str, account: dict, runtime: NapCatRuntime) -> None:
-        """在已持有 runtime.lock 的前提下，确保对运行中容器附着 docker logs -f。"""
         from nonebot import logger
 
-        from .linux_docker import docker_container_name, docker_container_running_sync
-
-        name = docker_container_name(account)
-        if not docker_container_running_sync(name):
+        name = self._linux_docker_container_name(account)
+        if not self._linux_docker_container_running_sync(account):
             return
 
         following_ok = (
@@ -1161,13 +1336,11 @@ class PallasProtocolService:
 
     async def _start_account_linux_docker(self, account_id: str, account: dict, runtime: NapCatRuntime) -> dict:
         be = self._protocol_runtime_backend(account)
-        from .linux_docker import (
-            build_docker_run_argv,
-            docker_container_name,
-            docker_container_running_sync,
-            docker_remove_force,
-        )
+        from .linux_docker import build_docker_run_argv
 
+        await self._remove_both_linux_docker_container_names_for_account(account)
+        if os.name == "nt":
+            await asyncio.sleep(0.25)
         try:
             current_port = int(str(account.get("webui_port", "")).strip())
         except ValueError:
@@ -1181,14 +1354,14 @@ class PallasProtocolService:
         launch_issues = be.check_launch_issues(account, self._resolve_qq)
         if launch_issues:
             raise ValueError("; ".join(launch_issues))
-        name = docker_container_name(account)
-        await docker_remove_force(name)
+        name = self._linux_docker_container_name(account)
+        await self._remove_both_linux_docker_container_names_for_account(account)
         runtime.logs.clear()
         runtime.tracked_child_root_pid = None
         runtime.expect_bootmain_detach = False
         runtime.docker_container_name = name
         cwd_run = str(account.get("account_data_dir", "")).strip() or None
-        for attempt in range(2):
+        for attempt in range(3):
             proc = await asyncio.create_subprocess_exec(
                 "docker",
                 *args,
@@ -1202,10 +1375,15 @@ class PallasProtocolService:
                 runtime.logs.append(text.strip())
             if proc.returncode == 0:
                 break
-            if attempt == 0 and "port is already allocated" in text.lower():
-                account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
-                be.sync_webui(account, self._resolve_qq)
-                self._save_accounts()
+            if attempt < 2 and (
+                _docker_stderr_suggests_host_port_bind_conflict(text)
+                or _docker_stderr_suggests_container_name_conflict(text)
+            ):
+                await self._remove_both_linux_docker_container_names_for_account(account)
+                if _docker_stderr_suggests_host_port_bind_conflict(text):
+                    account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
+                    be.sync_webui(account, self._resolve_qq)
+                    self._save_accounts()
                 account["args"] = build_docker_run_argv(account, self._config, self._resolve_qq)
                 args = [str(x) for x in (account.get("args") or [])]
                 continue
@@ -1215,7 +1393,92 @@ class PallasProtocolService:
             raise ValueError(err)
         else:
             raise ValueError("docker run 启动失败")
-        if not docker_container_running_sync(name):
+        if not self._linux_docker_container_running_sync(account):
+            raise ValueError("容器已创建但未在运行，请检查: docker logs " + name)
+        runtime.started_at = datetime.now(UTC)
+        logp = await asyncio.create_subprocess_exec(
+            "docker",
+            "logs",
+            "-f",
+            "--since",
+            "0s",
+            name,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        runtime.process = logp
+        runtime.drain_task = asyncio.create_task(self._drain_logs(account_id))
+        return self._compose_account_state(account_id, account)
+
+    async def _start_account_snowluma_linux_docker(
+        self, account_id: str, account: dict, runtime: NapCatRuntime
+    ) -> dict:
+        be = self._protocol_runtime_backend(account)
+        from .snowluma_docker import (
+            build_snowluma_docker_run_argv,
+            snowluma_docker_container_running_sync,
+        )
+
+        await self._remove_both_linux_docker_container_names_for_account(account)
+        if os.name == "nt":
+            await asyncio.sleep(0.25)
+        try:
+            current_port = int(str(account.get("webui_port", "")).strip())
+        except ValueError:
+            current_port = 0
+        if current_port <= 0 or not self._is_host_port_available(current_port):
+            account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
+            be.sync_webui(account, self._resolve_qq)
+            self._save_accounts()
+        be.apply_defaults(account, self._resolve_qq)
+        account["args"] = build_snowluma_docker_run_argv(account, self._config, self._resolve_qq)
+        args = [str(x) for x in (account.get("args") or [])]
+        launch_issues = be.check_launch_issues(account, self._resolve_qq)
+        if launch_issues:
+            raise ValueError("; ".join(launch_issues))
+        name = self._linux_docker_container_name(account)
+        await self._remove_both_linux_docker_container_names_for_account(account)
+        runtime.logs.clear()
+        runtime.tracked_child_root_pid = None
+        runtime.expect_bootmain_detach = False
+        runtime.docker_container_name = name
+        cwd_run = str(account.get("account_data_dir", "")).strip() or None
+        for attempt in range(3):
+            proc = await asyncio.create_subprocess_exec(
+                "docker",
+                *args,
+                cwd=cwd_run,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            out, _ = await proc.communicate()
+            text = out.decode("utf-8", errors="replace") if out else ""
+            if text.strip():
+                runtime.logs.append(text.strip())
+            if proc.returncode == 0:
+                break
+            if attempt < 2 and (
+                _docker_stderr_suggests_host_port_bind_conflict(text)
+                or _docker_stderr_suggests_container_name_conflict(text)
+            ):
+                await self._remove_both_linux_docker_container_names_for_account(account)
+                if _docker_stderr_suggests_host_port_bind_conflict(text):
+                    account["webui_port"] = self._next_free_bindable_webui_port(exclude_account_id=account_id)
+                    account["snowluma_docker_host_onebot_http"] = 0
+                    account["snowluma_docker_host_onebot_ws"] = 0
+                    be.apply_defaults(account, self._resolve_qq)
+                    be.sync_all_configs(account, self._resolve_qq)
+                    self._save_accounts()
+                account["args"] = build_snowluma_docker_run_argv(account, self._config, self._resolve_qq)
+                args = [str(x) for x in (account.get("args") or [])]
+                continue
+            err = f"docker run 失败 (exit {proc.returncode})"
+            if text:
+                err += ": " + text[:1200]
+            raise ValueError(err)
+        else:
+            raise ValueError("docker run 启动失败")
+        if not snowluma_docker_container_running_sync(name):
             raise ValueError("容器已创建但未在运行，请检查: docker logs " + name)
         runtime.started_at = datetime.now(UTC)
         logp = await asyncio.create_subprocess_exec(
@@ -1233,9 +1496,7 @@ class PallasProtocolService:
         return self._compose_account_state(account_id, account)
 
     async def _stop_account_linux_docker(self, account_id: str, account: dict) -> dict | None:
-        from .linux_docker import docker_container_name, docker_stop
-
-        name = docker_container_name(account)
+        name = self._linux_docker_container_name(account)
         runtime = self._runtimes.get(account_id) or self._runtime(account_id)
         async with runtime.lock:
             if runtime.drain_task and not runtime.drain_task.done():
@@ -1255,7 +1516,14 @@ class PallasProtocolService:
                         pass
                     await proc.wait()
             runtime.process = None
-            await docker_stop(name)
+            if account.get("snowluma_linux_docker"):
+                from .snowluma_docker import snowluma_docker_stop
+
+                await snowluma_docker_stop(name)
+            else:
+                from .linux_docker import docker_stop
+
+                await docker_stop(name)
             runtime.docker_container_name = None
         return self._compose_account_state(account_id, account)
 
@@ -1264,7 +1532,7 @@ class PallasProtocolService:
         runtime = self._runtimes.get(account_id)
         if account is None:
             return None
-        if account.get("napcat_linux_docker"):
+        if account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"):
             return await self._stop_account_linux_docker(account_id, account)
         if not runtime:
             return self._compose_account_state(account_id, account)
@@ -1329,7 +1597,6 @@ class PallasProtocolService:
         return {**merged, "restarted": restarted, "needs_restart": bool(need_restart)}
 
     def bulk_register(self, accounts: dict[str, dict]) -> None:
-        """将 importer 产出的账号字典合并写入，跳过已存在的条目。"""
         changed = False
         for account_id, account in accounts.items():
             if account_id in self._accounts:
@@ -1406,7 +1673,7 @@ class PallasProtocolService:
                 await process.wait()
             code = process.returncode
             acc = self._accounts.get(account_id) or {}
-            if acc.get("napcat_linux_docker"):
+            if acc.get("napcat_linux_docker") or acc.get("snowluma_linux_docker"):
                 runtime.process = None
             elif runtime.expect_bootmain_detach:
                 if code == 0:
@@ -1428,10 +1695,8 @@ class PallasProtocolService:
         process_running = False
         pid = None
         started_at = None
-        if account.get("napcat_linux_docker"):
-            from .linux_docker import docker_container_name, docker_container_running_sync
-
-            process_running = docker_container_running_sync(docker_container_name(account))
+        if account.get("napcat_linux_docker") or account.get("snowluma_linux_docker"):
+            process_running = self._linux_docker_container_running_sync(account)
             started_at = runtime.started_at.isoformat() if runtime and runtime.started_at else None
         elif runtime and runtime.process and runtime.process.returncode is None:
             process_running = True
@@ -1452,7 +1717,7 @@ class PallasProtocolService:
             if str(wport).strip():
                 p = int(wport)
                 if bk == SNOWLUMA_PROTOCOL_BACKEND:
-                    # SnowLuma 仅使用根地址（无 /webui/、无 ?token=）；临时密码见日志或由下方字段解析
+                    # SnowLuma 仅使用根地址（无 /webui/、无 ?token=）；初始口令见日志或预置 webui.json
                     native_webui = f"http://{bind}:{p}/"
                     snowluma_webui_default_user = "admin"
                     tail_logs = self.tail_logs(account_id, 900)
@@ -1460,7 +1725,8 @@ class PallasProtocolService:
                     native_webui_auth_note = ""
                     if not snowluma_runtime_webui_password:
                         native_webui_auth_note = (
-                            "未解析到临时密码：请先启动协议端，或在本页「协议端进程」日志中搜索「临时密码」。"
+                            "未从日志解析到初始口令：请查看进程日志中的 "
+                            "「initial credentials: user=admin password=…」（旧版为「临时密码」）。"
                         )
                 else:
                     base = f"http://{bind}:{p}/webui/"
@@ -1488,7 +1754,6 @@ class PallasProtocolService:
         }
 
     def _resolve_account_runtime_version(self, account: dict) -> str:
-        """为账号推导当前协议端发行版本显示值。"""
         bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
         bk = bk or DEFAULT_PROTOCOL_BACKEND
         if bk == SNOWLUMA_PROTOCOL_BACKEND:
@@ -1530,6 +1795,16 @@ class PallasProtocolService:
         pinned = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
         if pinned:
             return pinned
+        if account.get("snowluma_linux_docker"):
+            image = str(account.get("program_dir", "") or "").strip()
+            if image.startswith("docker:snowluma:"):
+                image = image[len("docker:snowluma:") :].strip()
+            elif image.startswith("docker:"):
+                image = image[len("docker:") :].strip()
+            if ":" in image:
+                _, tag = image.rsplit(":", 1)
+                return tag.strip() or "latest"
+            return "latest" if image else "docker"
         manifest = self._snowluma_store.read_manifest()
         if manifest is None:
             return "未知"
@@ -1552,7 +1827,6 @@ class PallasProtocolService:
         return "自定义"
 
     def _resolve_account_runtime_source(self, account: dict) -> str:
-        """为账号推导版本归属来源。"""
         bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or DEFAULT_PROTOCOL_BACKEND).strip().lower()
         bk = bk or DEFAULT_PROTOCOL_BACKEND
         if bk == SNOWLUMA_PROTOCOL_BACKEND:
@@ -1590,6 +1864,13 @@ class PallasProtocolService:
         pinned = str(account.get(MANAGED_RUNTIME_TAG_KEY, "") or "").strip()
         if pinned:
             return "SnowLuma 实例选用托管版本（个别版本）"
+        if account.get("snowluma_linux_docker"):
+            image = str(account.get("program_dir", "") or "").strip()
+            if image.startswith("docker:snowluma:"):
+                image = image[len("docker:snowluma:") :].strip()
+            elif image.startswith("docker:"):
+                image = image[len("docker:") :].strip()
+            return f"SnowLuma Docker 镜像（{image or '未设置'}）"
         manifest = self._snowluma_store.read_manifest()
         if manifest is None:
             return "未知来源"

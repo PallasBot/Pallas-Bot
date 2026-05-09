@@ -4,11 +4,10 @@ from unittest.mock import patch
 from src.plugins.pallas_protocol.config import Config, onebot_connection_hints, resolve_onebot_ws_settings
 
 
-def test_pallas_protocol_token_coerces_numeric_to_str() -> None:
-    assert Config(pallas_protocol_token=1234).pallas_protocol_token == "1234"
-    assert Config(pallas_protocol_token=12.5).pallas_protocol_token == "12.5"
-    assert Config(pallas_protocol_token=None).pallas_protocol_token == ""
-    assert Config(pallas_protocol_token="abc").pallas_protocol_token == "abc"
+def test_pallas_protocol_config_defaults() -> None:
+    c = Config()
+    assert c.pallas_protocol_enabled is True
+    assert c.pallas_protocol_webui_enabled is True
 
 
 def test_resolve_onebot_ws_settings_fallback_to_driver_config() -> None:

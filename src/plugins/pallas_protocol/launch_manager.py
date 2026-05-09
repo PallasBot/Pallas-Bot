@@ -1,5 +1,6 @@
 import os
 import shutil
+import socket
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -43,18 +44,15 @@ class LaunchManager:
         self._platform = platform or get_napcat_platform()
 
     def _managed_runtime_extract_root(self) -> Path:
-        """NapCat 托管解压根目录（新版：<data>/runtime_extract/napcat）。"""
         return (self._plugin_data_dir / "runtime_extract" / "napcat").resolve()
 
     def _legacy_flat_runtime_extract_root(self) -> Path:
-        """旧版扁平目录：<data>/runtime_extract（与 snowluma 子目录并列）。"""
         return (self._plugin_data_dir / "runtime_extract").resolve()
 
     def _snowluma_runtime_extract_root(self) -> Path:
         return (self._plugin_data_dir / "runtime_extract" / "snowluma").resolve()
 
     def _is_managed_runtime_path(self, raw: str) -> bool:
-        """是否为 NapCat 自动托管的解压路径（用于 runtime 更新后刷新账号引用）。"""
         s = str(raw or "").strip()
         if not s:
             return False
@@ -79,7 +77,6 @@ class LaunchManager:
         return False
 
     def _is_snowluma_managed_runtime_path(self, raw: str) -> bool:
-        """是否为 SnowLuma 托管解压目录下的路径（全局 manifest 切换后用于刷新 program_dir）。"""
         s = str(raw or "").strip()
         if not s:
             return False
@@ -91,7 +88,6 @@ class LaunchManager:
         return rp == snow_root or snow_root in rp.parents
 
     def _refresh_managed_runtime_refs(self, account: dict, runtime_path: str) -> None:
-        """runtime 更新后，自动把账号内指向旧 runtime_extract 的路径切到最新。"""
         if not runtime_path:
             return
         rt = Path(runtime_path)
@@ -103,7 +99,6 @@ class LaunchManager:
 
         cur_work = str(account.get("working_dir", "")).strip()
         if cur_work and self._is_managed_runtime_path(cur_work):
-            # 更新工作目录
             account["working_dir"] = rt_parent
 
         cmd = str(account.get("command", "") or "").strip()
@@ -124,7 +119,6 @@ class LaunchManager:
             account["args"] = args
 
     def _refresh_snowluma_managed_runtime_refs(self, account: dict, program_path: str) -> None:
-        """SnowLuma 全局托管目录切换后，将仍指向旧解压路径的账号 program_dir 对齐到当前托管根。"""
         if not program_path:
             return
         try:
@@ -209,8 +203,117 @@ class LaunchManager:
         self._apply_linux_local_appimage_profile(account)
         self._apply_linux_local_xvfb_profile(account)
 
+    def _tcp_bindable_on_host(self, port: int) -> bool:
+        if not (1 <= int(port) <= 65535):
+            return False
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(("0.0.0.0", int(port)))
+        except OSError:
+            return False
+        finally:
+            sock.close()
+        return True
+
+    def _allocate_snowluma_docker_onebot_host_ports(self, account: dict) -> tuple[int, int]:
+        lo = int(getattr(self._config, "pallas_protocol_webui_port_min", 6099) or 6099)
+        hi = int(getattr(self._config, "pallas_protocol_webui_port_max", 7999) or 7999)
+        if hi < lo:
+            lo, hi = hi, lo
+        try:
+            ex_h = int(str(account.get("snowluma_docker_host_onebot_http", "")).strip())
+        except (TypeError, ValueError):
+            ex_h = 0
+        try:
+            ex_w = int(str(account.get("snowluma_docker_host_onebot_ws", "")).strip())
+        except (TypeError, ValueError):
+            ex_w = 0
+        try:
+            wui = int(str(account.get("webui_port", "")).strip())
+        except (TypeError, ValueError):
+            wui = 0
+        if 1 <= ex_h <= 65535 and 1 <= ex_w <= 65535 and ex_h != ex_w and ex_h != wui and ex_w != wui:
+            return ex_h, ex_w
+        exclude: set[int] = set()
+        if 1 <= wui <= 65535:
+            exclude.add(wui)
+
+        def pick() -> int:
+            for p in range(lo, hi + 1):
+                if p in exclude:
+                    continue
+                if self._tcp_bindable_on_host(p):
+                    exclude.add(p)
+                    return p
+            msg = f"在 {lo}-{hi} 内未找到可用于 SnowLuma Docker OneBot 映射的宿主机端口"
+            raise ValueError(msg)
+
+        return pick(), pick()
+
+    def _allocate_snowluma_docker_novnc_host_port(self, account: dict) -> int:
+        lo = int(getattr(self._config, "pallas_protocol_webui_port_min", 6099) or 6099)
+        hi = int(getattr(self._config, "pallas_protocol_webui_port_max", 7999) or 7999)
+        if hi < lo:
+            lo, hi = hi, lo
+        exclude: set[int] = set()
+        for k in (
+            "webui_port",
+            "snowluma_docker_host_onebot_http",
+            "snowluma_docker_host_onebot_ws",
+            "snowluma_docker_host_vnc_port",
+        ):
+            raw = account.get(k)
+            try:
+                v = int(str(raw).strip()) if raw is not None and str(raw).strip() != "" else 0
+            except (TypeError, ValueError):
+                v = 0
+            if 1 <= v <= 65535:
+                exclude.add(v)
+        for p in range(lo, hi + 1):
+            if p in exclude:
+                continue
+            if self._tcp_bindable_on_host(p):
+                return p
+        msg = f"在 {lo}-{hi} 内未找到可用于 SnowLuma Docker noVNC 映射的宿主机端口"
+        raise ValueError(msg)
+
+    def _apply_snowluma_linux_docker_profile(self, account: dict, resolve_qq) -> None:
+        from .snowluma_docker import build_snowluma_docker_run_argv, snowluma_docker_program_dir_marker
+
+        profile_mode = ""
+        if self._runtime_profile_provider is not None:
+            try:
+                profile_mode = str((self._runtime_profile_provider() or {}).get("runtime_mode", "")).strip().lower()
+            except Exception:
+                profile_mode = ""
+        docker_enabled = bool(getattr(self._config, "pallas_protocol_linux_use_docker", True))
+        if profile_mode == "docker":
+            docker_enabled = True
+        elif profile_mode in ("appimage", "shell"):
+            docker_enabled = False
+        if not docker_enabled:
+            return
+        if profile_mode != "docker" and account.get("snowluma_linux_docker") is False:
+            return
+        raw = str(account.get("command", "") or "").strip()
+        raw_name = Path(raw).name.lower() if raw else ""
+        if profile_mode != "docker" and raw and raw_name not in ("node", "node.exe", "docker", "docker.exe"):
+            return
+        h_http, h_ws = self._allocate_snowluma_docker_onebot_host_ports(account)
+        account["snowluma_docker_host_onebot_http"] = h_http
+        account["snowluma_docker_host_onebot_ws"] = h_ws
+        if "snowluma_docker_host_novnc_port" not in account:
+            account["snowluma_docker_host_novnc_port"] = self._allocate_snowluma_docker_novnc_host_port(account)
+        account["snowluma_linux_docker"] = True
+        account["command"] = "docker"
+        account["args"] = build_snowluma_docker_run_argv(account, self._config, resolve_qq)
+        ad = str(account.get("account_data_dir", "") or "").strip()
+        account["working_dir"] = ad or ("." if os.name == "nt" else "/")
+        account["program_dir"] = snowluma_docker_program_dir_marker(self._config)
+
     def _apply_snowluma_defaults(self, account: dict, resolve_qq) -> None:
-        """SnowLuma：program_dir 为发行根（index.mjs）；cwd 为账号目录（config/）。"""
+        account.pop("snowluma_linux_docker", None)
         qq = resolve_qq(account)
         if qq:
             account["qq"] = qq
@@ -275,13 +378,11 @@ class LaunchManager:
                 account["args"] = ["index.mjs"]
 
         account.pop("napcat_linux_docker", None)
+        self._apply_snowluma_linux_docker_profile(account, resolve_qq)
 
     def _apply_linux_docker_profile(self, account: dict, resolve_qq) -> None:
-        from .linux_docker import build_docker_run_argv, is_linux
+        from .linux_docker import build_docker_run_argv
 
-        if not is_linux():
-            account["napcat_linux_docker"] = False
-            return
         profile_mode = ""
         if self._runtime_profile_provider is not None:
             try:
@@ -309,7 +410,7 @@ class LaunchManager:
         in_p = int(getattr(self._config, "pallas_protocol_docker_internal_webui_port", 6099) or 6099)
         account["napcat_docker_internal_webui"] = in_p
         ad = str(account.get("account_data_dir", "")).strip()
-        account["working_dir"] = ad or "/"
+        account["working_dir"] = ad or ("." if os.name == "nt" else "/")
         img = (getattr(self._config, "pallas_protocol_docker_image", None) or "").strip() or (
             "mlikiowa/napcat-docker:latest"
         )
@@ -439,6 +540,15 @@ class LaunchManager:
                 cache.mkdir(parents=True, exist_ok=True)
             except OSError:
                 pass
+        bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
+        if bk == SNOWLUMA_PROTOCOL_BACKEND and account.get("snowluma_linux_docker"):
+            from .snowluma_docker import snowluma_docker_volume_paths
+
+            for p in snowluma_docker_volume_paths(account):
+                try:
+                    p.mkdir(parents=True, exist_ok=True)
+                except OSError:
+                    pass
 
     def check_launch_issues(self, account: dict, resolve_qq) -> list[str]:
         issues: list[str] = []
@@ -446,12 +556,6 @@ class LaunchManager:
         if bk == SNOWLUMA_PROTOCOL_BACKEND:
             return self._check_snowluma_launch_issues(account, resolve_qq)
 
-        profile_mode = ""
-        if self._runtime_profile_provider is not None:
-            try:
-                profile_mode = str((self._runtime_profile_provider() or {}).get("runtime_mode", "")).strip().lower()
-            except Exception:
-                profile_mode = ""
         program_dir = Path(str(account.get("program_dir", "")).strip())
         if os.name == "nt" and program_dir.exists():
             qq_path = self._platform.detect_qq_path(program_dir)
@@ -515,8 +619,6 @@ class LaunchManager:
 
         program_dir_raw = str(account.get("working_dir", "")).strip()
         if not program_dir_raw:
-            if profile_mode == "docker" and not sys.platform.startswith("linux"):
-                return ["当前为 Docker 模式，但 Docker 模式仅支持 Linux 主机，请切换为 shell"]
             return ["program_dir 为空：请先在「协议资产」页下载 NapCat 发行包，或配置 PALLAS_PROTOCOL_PROGRAM_DIR"]
         workdir = Path(program_dir_raw)
         # 规范工作目录路径
@@ -542,6 +644,19 @@ class LaunchManager:
 
     def _check_snowluma_launch_issues(self, account: dict, _resolve_qq) -> list[str]:
         issues: list[str] = []
+        if account.get("snowluma_linux_docker"):
+            if not shutil.which("docker"):
+                return ["未找到 docker，请安装 Docker Engine，或在「协议资产」将运行模式改为非 Docker"]
+            if not str(account.get("account_data_dir", "") or "").strip():
+                return ["account_data_dir 为空"]
+            from .snowluma_docker import snowluma_docker_volume_paths
+
+            for p in snowluma_docker_volume_paths(account):
+                try:
+                    p.mkdir(parents=True, exist_ok=True)
+                except OSError as e:
+                    return [f"无法创建 SnowLuma Docker 数据目录 {p}: {e}"]
+            return []
         command = str(account.get("command", "") or "").strip()
         if not command:
             return ["启动命令为空"]
@@ -589,7 +704,6 @@ class LaunchManager:
         return self._platform.resolve_boot_launch(account, command, args, env_map, resolve_qq)
 
     def describe_account_data_paths(self, account: dict) -> dict[str, object]:
-        """NapCat 写入路径与 QQ NT 常见落点（启发式）。"""
         bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
         if bk == SNOWLUMA_PROTOCOL_BACKEND:
             return self._describe_snowluma_account_paths(account)
@@ -659,6 +773,14 @@ class LaunchManager:
             " 账号目录为进程 cwd，config/ 下为 runtime.json 与 onebot_<uin>.json；"
             "program_dir 指向含 index.mjs、native/ 的发行根。"
         )
+        if account.get("snowluma_linux_docker"):
+            from .snowluma_docker import snowluma_docker_volume_paths
+
+            note += (
+                " Linux/Docker：数据绑定到容器 /app/snowluma-data、/app/.config、/app/.local/share；"
+                "宿主机目录见 instances/…/docker/snowluma/。"
+            )
+            paths.extend(str(p.resolve()) for p in snowluma_docker_volume_paths(account))
         return {
             "snowluma_paths": dedupe(paths),
             "qq_nt_candidate_dirs": dedupe(qq_nt),

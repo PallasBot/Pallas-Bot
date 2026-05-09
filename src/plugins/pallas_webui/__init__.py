@@ -4,6 +4,7 @@ import asyncio
 from nonebot import get_app, get_driver, get_plugin_config, logger
 from nonebot.plugin import PluginMetadata
 
+from src.common.pallas_console_login import install_pallas_http_request_context_middleware, prime_shared_console_login
 from src.common.utils.format_exception import format_exception_for_log
 from src.common.web import public_base_url
 
@@ -67,6 +68,7 @@ __plugin_meta__ = PluginMetadata(
 plugin_config = get_plugin_config(Config)
 app = get_app()
 driver = get_driver()
+install_pallas_http_request_context_middleware(app)
 
 # 启用控制台跨域访问：仅在显式列出来源时挂载，避免 ['*'] + credentials 的 CSRF 组合
 if plugin_config.pallas_webui_enabled and plugin_config.pallas_webui_cors:
@@ -92,11 +94,7 @@ if plugin_config.pallas_webui_enabled and plugin_config.pallas_webui_cors:
 async def _pallas_webui_startup() -> None:
     if not plugin_config.pallas_webui_enabled:
         return
-    if not (plugin_config.pallas_webui_api_token or "").strip():
-        logger.warning(
-            "Pallas 控制台: 未配置 PALLAS_WEBUI_API_TOKEN，所有 /pallas/api/* 已禁用（仅 /health 例外）；"
-            "请在 .env 中设置 PALLAS_WEBUI_API_TOKEN 后重启"
-        )
+    prime_shared_console_login()
     public = webui_public_path()
     base = (plugin_config.pallas_webui_http_base or "/pallas").strip()
     if not base.startswith("/"):
@@ -109,13 +107,20 @@ async def _pallas_webui_startup() -> None:
         extra_meta={"static_root": str(public), "http_base": base},
     )
     webui_version = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
-    set_console_meta({"static_root": str(public), "http_base": base, "version": webui_version})
+    if plugin_config.pallas_webui_dev_mode:
+        logger.warning("Pallas 控制台: 已关闭 API 与静态页鉴权（仅限本机开发）")
+    set_console_meta({
+        "static_root": str(public),
+        "http_base": base,
+        "version": webui_version,
+        "pallas_webui_dev_mode": bool(plugin_config.pallas_webui_dev_mode),
+    })
     register_extended_api(app, api_base=api_base, plugin_config=plugin_config)
     register_routes(
         app,
         public_dir=public,
         base=base,
-        api_token=str(getattr(plugin_config, "pallas_webui_api_token", "") or ""),
+        plugin_config=plugin_config,
     )
     dconf = get_driver().config
     open_base = public_base_url(

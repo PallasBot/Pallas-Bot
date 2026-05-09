@@ -150,6 +150,81 @@ def test_refresh_snowluma_managed_runtime_refs_updates_stale_dir(tmp_path: Path)
     assert Path(account["program_dir"]).resolve() == sl_v2.resolve()
 
 
+def test_apply_defaults_snowluma_linux_docker_allocator_callback(tmp_path: Path) -> None:
+    sl_root = tmp_path / "snowluma_dist"
+    sl_root.mkdir()
+    (sl_root / "index.mjs").write_text("//", encoding="utf-8")
+
+    def alloc(acc: dict) -> dict[str, int]:
+        _ = acc
+        return {
+            "onebot_http": 18110,
+            "onebot_ws": 18111,
+            "host_novnc": 23220,
+            "host_vnc": 23221,
+        }
+
+    mgr = LaunchManager(
+        tmp_path / "data",
+        tmp_path / "resource",
+        _cfg(
+            pallas_protocol_linux_use_docker=True,
+            pallas_protocol_snowluma_program_dir=str(sl_root),
+            pallas_protocol_webui_port_min=6200,
+            pallas_protocol_webui_port_max=6300,
+        ),
+        instances_root=tmp_path / "instances",
+        platform=PosixNapcatPlatform(),
+        runtime_profile_provider=lambda: {"runtime_mode": "docker"},
+        snowluma_docker_allocate_host_ports=alloc,
+    )
+    account = {
+        "id": "10007",
+        "qq": "10007",
+        "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND,
+        "webui_port": 6250,
+    }
+    with patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"):
+        mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
+    assert account.get("snowluma_linux_docker") is True
+    assert account["snowluma_docker_host_onebot_http"] == 18110
+    assert account["snowluma_docker_host_onebot_ws"] == 18111
+    assert account["snowluma_docker_host_novnc_port"] == 23220
+    assert account["snowluma_docker_host_vnc_port"] == 23221
+
+
+def test_apply_defaults_snowluma_linux_docker_default_ports_match_upstream(tmp_path: Path) -> None:
+    sl_root = tmp_path / "snowluma_dist"
+    sl_root.mkdir()
+    (sl_root / "index.mjs").write_text("//", encoding="utf-8")
+    mgr = LaunchManager(
+        tmp_path / "data",
+        tmp_path / "resource",
+        _cfg(
+            pallas_protocol_linux_use_docker=True,
+            pallas_protocol_snowluma_program_dir=str(sl_root),
+            pallas_protocol_webui_port_min=6200,
+            pallas_protocol_webui_port_max=6300,
+        ),
+        instances_root=tmp_path / "instances",
+        platform=PosixNapcatPlatform(),
+        runtime_profile_provider=lambda: {"runtime_mode": "docker"},
+    )
+    account = {
+        "id": "10007",
+        "qq": "10007",
+        "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND,
+        "webui_port": 6250,
+    }
+    with patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"):
+        mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
+    assert account.get("snowluma_linux_docker") is True
+    assert account["snowluma_docker_host_onebot_http"] == 3000
+    assert account["snowluma_docker_host_onebot_ws"] == 3001
+    assert account["snowluma_docker_host_novnc_port"] == 6081
+    assert account["snowluma_docker_host_vnc_port"] == 5900
+
+
 def test_refresh_snowluma_managed_runtime_refs_skips_custom_dir(tmp_path: Path) -> None:
     data = tmp_path / "data"
     sl_v2 = data / "runtime_extract" / "snowluma" / "v2.0.0"
@@ -168,3 +243,19 @@ def test_refresh_snowluma_managed_runtime_refs_skips_custom_dir(tmp_path: Path) 
     account = {"program_dir": str(custom), "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND}
     mgr._refresh_snowluma_managed_runtime_refs(account, str(sl_v2))
     assert account["program_dir"] == str(custom)
+
+
+def test_prepare_dirs_rewrites_docker_marker_working_dir(tmp_path: Path) -> None:
+    ad = tmp_path / "inst" / "acc1"
+    ad.mkdir(parents=True)
+    mgr = LaunchManager(
+        tmp_path / "data",
+        tmp_path / "resource",
+        _cfg(),
+        instances_root=tmp_path / "instances",
+        platform=PosixNapcatPlatform(),
+    )
+    account = {"working_dir": "docker:mlikiowa/napcat-docker:latest", "account_data_dir": str(ad)}
+    mgr.prepare_dirs(account)
+    assert account["working_dir"].replace("\\", "/") == str(ad).replace("\\", "/")
+    assert ad.is_dir()

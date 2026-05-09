@@ -282,11 +282,17 @@ def pallas_protocol_snapshot() -> dict[str, Any] | None:
             accounts = mgr.list_accounts()
         except Exception:  # noqa: BLE001
             accounts = []
+        try:
+            from src.common.pallas_console_login import is_console_auth_configured
+
+            auth_ok = is_console_auth_configured()
+        except Exception:  # noqa: BLE001
+            auth_ok = False
         return {
             "plugin": "pallas_protocol",
             "webui_enabled": bool(getattr(cfg, "pallas_protocol_webui_enabled", False)),
             "webui_path": path,
-            "has_token": bool((getattr(cfg, "pallas_protocol_token", None) or "").strip()),
+            "console_auth_configured": auth_ok,
             "accounts": accounts,
         }
     return None

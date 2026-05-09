@@ -1,6 +1,6 @@
 """Pallas 控制台：与主程序分离的 Web 前端，通过本插件挂载静态与 API；配置原因见主插件 __init__ 说明。"""
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 class Config(BaseModel):
@@ -44,17 +44,7 @@ class Config(BaseModel):
         le=5000,
         description="GET /pallas/api/logs 单次返回的最大行数上限",
     )
-    pallas_webui_api_token: str = Field(
-        default="",
-        description="控制台 API 鉴权 token；未配置时 /pallas/api/* 全部禁用（仅 /pallas/api/health 例外）",
+    pallas_webui_dev_mode: bool = Field(
+        default=False,
+        description="开发联调：跳过控制台 JSON API 与会话页鉴权（生产环境务必关闭）",
     )
-
-    @field_validator("pallas_webui_api_token", mode="before")
-    @classmethod
-    def coerce_pallas_webui_api_token(cls, value: object) -> str:
-        """env / 配置源可能把纯数字解析成 int/float，统一成字符串以免漏鉴权或校验失败。"""
-        if value is None:
-            return ""
-        if isinstance(value, str):
-            return value
-        return str(value)

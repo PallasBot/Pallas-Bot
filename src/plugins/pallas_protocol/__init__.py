@@ -4,6 +4,7 @@ import logging
 from nonebot import get_app, get_driver, get_plugin_config, logger
 from nonebot.plugin import PluginMetadata
 
+from src.common.pallas_console_login import prime_shared_console_login
 from src.common.paths import plugin_data_dir
 from src.common.web import public_base_url
 
@@ -57,6 +58,11 @@ register_pallas_protocol_routes(app, manager=manager, plugin_config=plugin_confi
 
 
 @driver.on_startup
+async def _pallas_protocol_prime_shared_console_login() -> None:
+    prime_shared_console_login()
+
+
+@driver.on_startup
 async def _startup() -> None:
     if not plugin_config.pallas_protocol_enabled:
         return
@@ -70,11 +76,6 @@ async def _startup() -> None:
         )
         path = resolve_protocol_webui_base_path(plugin_config)
         logger.info(f"Pallas 协议端 | WebUI={base_u}{path}/")
-        if not (plugin_config.pallas_protocol_token or "").strip():
-            logger.warning(
-                "Pallas 协议端: 未配置 PALLAS_PROTOCOL_TOKEN，协议端管理 API 已禁用；"
-                "请在 .env 中设置 PALLAS_PROTOCOL_TOKEN 后重启"
-            )
     profile = manager.runtime_profile()
     if bool(profile.get("follow_bot_lifecycle", True)):
         await manager.start_all_enabled_accounts()

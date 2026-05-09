@@ -102,7 +102,7 @@
     启动 `Pallas-Bot` 后，在浏览器打开 **协议端管理页**（默认与 Bot 同机同端口）：
 
     - 地址：`http://<主机IP>:8088/protocol/console/`（若改了 `HOST`/`PORT` 或插件里自定义了 `PALLAS_PROTOCOL_WEBUI_PATH`，请按实际为准）
-    - 在 `.env` 中设置 `PALLAS_PROTOCOL_TOKEN`（管理页与 API 鉴权；纯数字可不写引号）。可选：`PALLAS_PROTOCOL_ENABLED`、`PALLAS_PROTOCOL_WEBUI_ENABLED`（默认一般为开，详见 `.env` 注释）
+    - 管理页鉴权与 Pallas 控制台共用（浏览器登录，口令哈希在 `data/pallas_console/`）。可选：`PALLAS_PROTOCOL_ENABLED`、`PALLAS_PROTOCOL_WEBUI_ENABLED`（默认一般为开，详见 `.env` 注释）
 
     在页面内可完成 NapCat **运行模式**（如 Docker / AppImage / Shell）、**镜像或本地下载**、**实例创建与启停**、日志等；具体步骤与排障见 [`pallas_protocol` 插件说明](plugins/pallas_protocol/README.md)。
 
@@ -138,8 +138,8 @@ Linux 用户推荐使用 [Termux](https://termux.dev/) 或 [GNU Screen](https://
 
 若修改了 `HOST` / `PORT` 或 `pallas_webui_http_base`、协议端自定义路径，请按实际 URL 访问。
 
-- 控制台写操作需配置 `PALLAS_WEBUI_API_TOKEN`（与前端「偏好与连接 → 访问与鉴权」一致）。
-- 协议端管理页与对应 API 使用 **`PALLAS_PROTOCOL_TOKEN`**；未配置时管理 API 会受限，详见 [`pallas_protocol` 说明](plugins/pallas_protocol/README.md)。
+- 控制台与协议端写操作需先登录（同源 Cookie 会话）；仅本机开发可在 `pallas_webui` 中开启 `pallas_webui_dev_mode`。
+- 协议端管理页说明见 [`pallas_protocol` 说明](plugins/pallas_protocol/README.md)。
 
 ## 后续更新
 

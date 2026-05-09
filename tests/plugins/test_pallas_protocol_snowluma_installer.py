@@ -15,6 +15,11 @@ def test_default_snowluma_asset_name_for_tag() -> None:
         "SnowLuma-v1.6.4-win-x64.zip" if sys.platform == "win32" else "SnowLuma-v1.6.4-linux-x64.tar.gz"
     )
     assert default_snowluma_asset_name_for_tag("") == ""
+    win_name = default_snowluma_asset_name_for_tag("v1.0.0", target_platform="windows-amd64")
+    assert win_name == "SnowLuma-v1.0.0-win-x64.zip"
+    assert default_snowluma_asset_name_for_tag("v1.0.0", target_platform="linux-amd64") == (
+        "SnowLuma-v1.0.0-linux-x64.tar.gz"
+    )
 
 
 def test_pick_snowluma_asset_from_release_sample() -> None:
@@ -30,10 +35,7 @@ def test_pick_snowluma_asset_from_release_sample() -> None:
             },
         ],
     }
-    if sys.platform == "win32":
-        name, url = pick_snowluma_asset_from_release(release)
-        assert name == "SnowLuma-v1.6.4-win-x64.zip"
-        assert "x.zip" in url
-    else:
-        # 非 Windows 的样例未含 linux 包时返回 None
-        assert pick_snowluma_asset_from_release(release) is None
+    name, url = pick_snowluma_asset_from_release(release, target_platform="windows-amd64")
+    assert name == "SnowLuma-v1.6.4-win-x64.zip"
+    assert "x.zip" in url
+    assert pick_snowluma_asset_from_release(release, target_platform="linux-amd64") is None

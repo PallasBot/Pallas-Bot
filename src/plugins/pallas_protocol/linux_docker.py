@@ -1,18 +1,35 @@
-"""Linux：基于 mlikiowa/napcat-docker（NapCat-Docker）无头跑 NapCat。
-
-参考: https://github.com/NapNeko/NapCat-Docker
-"""
+"""Linux：NapCat Docker（mlikiowa/napcat-docker）。"""
 
 from __future__ import annotations
 
-import asyncio
 import os
 import re
-import shutil
-import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit, urlunsplit
+
+from . import docker_cli
+
+docker_container_running = docker_cli.docker_inspect_running_async
+docker_container_running_sync = docker_cli.docker_inspect_running_sync
+docker_remove_force = docker_cli.docker_rm_force_async
+docker_stop = docker_cli.docker_stop_async
+docker_stop_sync = docker_cli.docker_stop_sync
+
+__all__ = [
+    "build_docker_run_argv",
+    "docker_cache_path",
+    "docker_container_name",
+    "docker_container_running",
+    "docker_container_running_sync",
+    "docker_remove_force",
+    "docker_stop",
+    "docker_stop_sync",
+    "docker_volume_paths",
+    "is_linux",
+    "rewrite_onebot_ws_url_for_container",
+    "sanitize_docker_name_suffix",
+]
 
 if TYPE_CHECKING:
     from .config import Config
@@ -116,72 +133,3 @@ def rewrite_onebot_ws_url_for_container(url: str, docker_host: str) -> str:
     else:
         netloc = dhost
     return urlunsplit((u.scheme, netloc, u.path, u.query, u.fragment))
-
-
-async def docker_container_running(name: str) -> bool:
-    if not shutil.which("docker"):
-        return False
-    proc = await asyncio.create_subprocess_exec(
-        "docker",
-        "inspect",
-        "-f",
-        "{{.State.Running}}",
-        name,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
-    out, _ = await proc.communicate()
-    if proc.returncode != 0:
-        return False
-    return b"true" in (out or b"").lower()
-
-
-async def docker_remove_force(name: str) -> None:
-    if not shutil.which("docker"):
-        return
-    p = await asyncio.create_subprocess_exec("docker", "rm", "-f", name, stderr=asyncio.subprocess.DEVNULL)
-    await p.wait()
-
-
-async def docker_stop(name: str) -> None:
-    if not shutil.which("docker"):
-        return
-    proc = await asyncio.create_subprocess_exec(
-        "docker",
-        "stop",
-        name,
-        stdout=asyncio.subprocess.DEVNULL,
-        stderr=asyncio.subprocess.DEVNULL,
-    )
-    try:
-        await asyncio.wait_for(proc.wait(), timeout=60)
-    except TimeoutError:
-        proc.kill()
-        await proc.wait()
-
-
-def docker_container_running_sync(name: str) -> bool:
-    if not shutil.which("docker"):
-        return False
-    try:
-        r = subprocess.run(  # noqa: S603
-            ["docker", "inspect", "-f", "{{.State.Running}}", name],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=6,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    if r.returncode != 0:
-        return False
-    return "true" in (r.stdout or "").lower()
-
-
-def docker_stop_sync(name: str) -> None:
-    if not shutil.which("docker"):
-        return
-    try:
-        subprocess.run(["docker", "stop", name], check=False, capture_output=True, timeout=60)  # noqa: S603
-    except (OSError, subprocess.TimeoutExpired):
-        pass

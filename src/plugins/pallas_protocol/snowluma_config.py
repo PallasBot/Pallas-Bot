@@ -7,8 +7,13 @@ import re
 from pathlib import Path
 from typing import Any
 
-# SnowLuma packages/core/src/webui/server.ts：log.info(`临时密码: ${randomPassword}`)
+# SnowLuma 旧版日志
 _SNOWLUMA_TEMP_PASSWORD_LOG_RE = re.compile(r"临时密码[:：]\s*([0-9a-fA-F]{8,64})")
+# packages/core/src/webui/server.ts：log.info('initial credentials: user=admin password=%s', initialPassword)
+_SNOWLUMA_INITIAL_CREDS_LOG_RE = re.compile(
+    r"initial\s+credentials:\s*user\s*=\s*admin\s+password\s*=\s*([0-9a-fA-F]{8,64})",
+    re.IGNORECASE,
+)
 
 
 def snowluma_onebot_path(config_dir: Path, qq: str) -> Path:
@@ -19,6 +24,7 @@ def sync_snowluma_runtime_json(
     account: dict,
     *,
     webui_port_fallback_min: int,
+    plugin_config: Any | None = None,
 ) -> None:
     account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
     if not str(account_data_dir):
@@ -34,17 +40,20 @@ def sync_snowluma_runtime_json(
                 data = raw
         except Exception:
             data = {}
-    port_raw = account.get("webui_port")
-    try:
-        port = int(port_raw) if port_raw is not None and str(port_raw).strip() != "" else 0
-    except (TypeError, ValueError):
-        port = 0
-    if not (1 <= port <= 65535):
-        tail = 0
-        q = str(account.get("qq", "")).strip()
-        if q.isdigit() and len(q) >= 3:
-            tail = int(q[-3:])
-        port = webui_port_fallback_min + (tail % 1000)
+    if bool(account.get("snowluma_linux_docker")) and plugin_config is not None:
+        port = int(getattr(plugin_config, "pallas_protocol_snowluma_docker_internal_webui_port", 5099) or 5099)
+    else:
+        port_raw = account.get("webui_port")
+        try:
+            port = int(port_raw) if port_raw is not None and str(port_raw).strip() != "" else 0
+        except (TypeError, ValueError):
+            port = 0
+        if not (1 <= port <= 65535):
+            tail = 0
+            q = str(account.get("qq", "")).strip()
+            if q.isdigit() and len(q) >= 3:
+                tail = int(q[-3:])
+            port = webui_port_fallback_min + (tail % 1000)
     data["webuiPort"] = port
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -53,6 +62,8 @@ def sync_snowluma_onebot(
     cfg: Any,
     account: dict,
     resolve_qq: Any,
+    *,
+    plugin_config: Any | None = None,
 ) -> None:
     account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
     if not str(account_data_dir):
@@ -78,7 +89,16 @@ def sync_snowluma_onebot(
         client = {}
         ws_clients[0] = client
     ws_url = str(account.get("ws_url", "")).strip()
-    client["url"] = ws_url or "ws://127.0.0.1:8088/onebot/v11/ws"
+    url_out = ws_url or "ws://127.0.0.1:8088/onebot/v11/ws"
+    if bool(account.get("snowluma_linux_docker")) and plugin_config is not None:
+        from .linux_docker import rewrite_onebot_ws_url_for_container
+
+        dh = str(getattr(plugin_config, "pallas_protocol_docker_onebot_host", "") or "").strip() or "172.17.0.1"
+        if url_out.startswith("ws://"):
+            rw = rewrite_onebot_ws_url_for_container(url_out, dh)
+            if rw:
+                url_out = rw
+    client["url"] = url_out
     client["name"] = str(account.get("ws_name", "pallas")).strip() or "pallas"
     client["accessToken"] = str(account.get("ws_token", "")).strip()
     client.setdefault("role", "universal")
@@ -118,10 +138,13 @@ def read_snowluma_runtime_webui_password(account: dict) -> str | None:
 
 
 def extract_snowluma_webui_temp_password_from_log_lines(lines: list[str] | None) -> str | None:
-    """从 SnowLuma 进程日志（含 ANSI）中解析最近一次打印的「临时密码」十六进制串。"""
+    """从 SnowLuma 进程日志解析首次启动时打印的初始口令（十六进制串）。"""
     if not lines:
         return None
     for line in reversed(lines):
+        m = _SNOWLUMA_INITIAL_CREDS_LOG_RE.search(line)
+        if m:
+            return m.group(1).lower()
         m = _SNOWLUMA_TEMP_PASSWORD_LOG_RE.search(line)
         if m:
             return m.group(1).lower()
@@ -129,15 +152,17 @@ def extract_snowluma_webui_temp_password_from_log_lines(lines: list[str] | None)
 
 
 def resolve_snowluma_webui_temp_password(account: dict, log_lines: list[str] | None) -> str | None:
-    """优先使用进程日志中的临时密码（重启后会更新）；其次 ``runtime.json`` 中的手写凭据。"""
-    hit = extract_snowluma_webui_temp_password_from_log_lines(log_lines)
-    if hit:
-        return hit
-    return read_snowluma_runtime_webui_password(account)
+    """仅从进程日志解析初始口令（SnowLuma 官方将口令以 scrypt 写入 ``webui.json``，无明文可读）。
+
+    首次启动前可在协议页「一次性初始密码」写入 ``webui.json``（仅存哈希），则无需依赖日志。
+    """
+    return extract_snowluma_webui_temp_password_from_log_lines(log_lines)
 
 
 def read_snowluma_runtime_into_account(account: dict) -> bool:
     """从 ``config/runtime.json`` 同步 ``webui_port``（SnowLuma 无 NapCat 式 webui.json）。"""
+    if bool(account.get("snowluma_linux_docker")):
+        return False
     account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
     if not account_data_dir.is_dir():
         return False
@@ -204,12 +229,14 @@ def update_snowluma_account_configs(
         current = cfg.safe_read_json(rt_path)
         merged = {**current, **payload["runtime"]}
         rt_path.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
-        try:
-            wp = int(merged.get("webuiPort"))
-            if 1 <= wp <= 65535:
-                account["webui_port"] = wp
-        except (TypeError, ValueError):
-            pass
+        # Linux Docker：runtime.webuiPort 为容器内监听端口，账号 webui_port 为宿主机映射，勿混写。
+        if not bool(account.get("snowluma_linux_docker")):
+            try:
+                wp = int(merged.get("webuiPort"))
+                if 1 <= wp <= 65535:
+                    account["webui_port"] = wp
+            except (TypeError, ValueError):
+                pass
 
     return get_snowluma_account_configs(cfg, account, resolve_qq)
 

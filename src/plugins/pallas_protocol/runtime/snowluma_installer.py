@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import platform
 import shutil
 import sys
 import tarfile
@@ -72,25 +73,53 @@ def _asset_name_from_url(value: str) -> str:
     return Path(parsed.path).name.strip()
 
 
-def default_snowluma_asset_name_for_tag(tag: str) -> str:
-    """按平台与 tag 生成默认资产文件名（与 SnowLuma Release 命名一致）。"""
+def default_snowluma_asset_name_for_tag(tag: str, *, target_platform: str | None = None) -> str:
+    """按目标平台与 tag 生成默认资产文件名（与 SnowLuma Release 命名一致）。"""
     t = (tag or "").strip()
     if not t:
         return ""
-    if os.name == "nt":
+    plat = (target_platform or "auto").strip().lower()
+    if plat in ("windows-amd64", "windows"):
         return f"SnowLuma-{t}-win-x64.zip"
-    if sys.platform.startswith("linux"):
+    if plat == "linux-arm64":
+        return f"SnowLuma-{t}-linux-arm64.tar.gz"
+    if plat in ("linux-amd64", "linux"):
         return f"SnowLuma-{t}-linux-x64.tar.gz"
+    if plat in ("", "auto"):
+        if os.name == "nt":
+            return f"SnowLuma-{t}-win-x64.zip"
+        if sys.platform.startswith("linux"):
+            mach = (platform.machine() or "").lower()
+            if "arm" in mach or "aarch64" in mach:
+                return f"SnowLuma-{t}-linux-arm64.tar.gz"
+            return f"SnowLuma-{t}-linux-x64.tar.gz"
     return ""
 
 
-def pick_snowluma_asset_from_release(release_json: dict[str, Any]) -> tuple[str, str] | None:
-    """从 release JSON 中按当前平台选择完整包资产（排除名称中含 lite 的）。"""
+def pick_snowluma_asset_from_release(
+    release_json: dict[str, Any],
+    *,
+    target_platform: str | None = None,
+) -> tuple[str, str] | None:
+    """从 release JSON 中选择完整包资产（排除名称中含 lite 的）。"""
     assets = release_json.get("assets")
     if not isinstance(assets, list):
         return None
-    want_win = os.name == "nt"
-    want_linux = sys.platform.startswith("linux")
+    plat = (target_platform or "auto").strip().lower()
+    if plat in ("windows-amd64", "windows"):
+        want_win, want_linux_amd, want_linux_arm = True, False, False
+    elif plat == "linux-amd64":
+        want_win, want_linux_amd, want_linux_arm = False, True, False
+    elif plat == "linux-arm64":
+        want_win, want_linux_amd, want_linux_arm = False, False, True
+    else:
+        want_win = os.name == "nt"
+        want_linux_amd = sys.platform.startswith("linux")
+        want_linux_arm = want_linux_amd and (
+            "arm" in (platform.machine() or "").lower() or "aarch64" in (platform.machine() or "").lower()
+        )
+        if want_linux_arm:
+            want_linux_amd = False
     candidates: list[tuple[str, str]] = []
     for item in assets:
         if not isinstance(item, dict):
@@ -102,9 +131,16 @@ def pick_snowluma_asset_from_release(release_json: dict[str, Any]) -> tuple[str,
         low = name.lower()
         if "lite" in low:
             continue
+        ok = False
         if want_win and low.endswith(".zip") and "win-x64" in low:
-            candidates.append((name, url))
-        elif want_linux and low.endswith(".tar.gz") and "linux-x64" in low:
+            ok = True
+        elif (
+            want_linux_arm and low.endswith(".tar.gz") and ("arm64" in low or "aarch64" in low or "linux-arm64" in low)
+        ):
+            ok = True
+        elif want_linux_amd and low.endswith(".tar.gz") and "linux-x64" in low and "arm" not in low:
+            ok = True
+        if ok:
             candidates.append((name, url))
     if candidates:
         return candidates[0]
@@ -210,7 +246,11 @@ class SnowLumaRuntimeStore:
         self._job_message = message
 
     async def download_and_install(
-        self, *, client: httpx.AsyncClient | None = None, tag: str | None = None
+        self,
+        *,
+        client: httpx.AsyncClient | None = None,
+        tag: str | None = None,
+        target_platform: str | None = None,
     ) -> RuntimeManifest:
         async with self._lock:
             configured_asset = self._configured_asset()
@@ -264,10 +304,16 @@ class SnowLumaRuntimeStore:
                     resolved_tag_for_manifest = str(release_json.get("tag_name", "") or "").strip() or used_tag
 
                     if not asset_name:
-                        picked = pick_snowluma_asset_from_release(release_json)
+                        picked = pick_snowluma_asset_from_release(
+                            release_json,
+                            target_platform=target_platform,
+                        )
                         if picked is None:
                             pick = None
-                            guess = default_snowluma_asset_name_for_tag(used_tag or release_tag)
+                            guess = default_snowluma_asset_name_for_tag(
+                                used_tag or release_tag,
+                                target_platform=target_platform,
+                            )
                             if guess:
                                 pick = _pick_release_asset_generic(release_json, guess)
                             if pick is None:
@@ -366,6 +412,7 @@ class SnowLumaRuntimeStore:
         self,
         *,
         tag: str | None = None,
+        target_platform: str | None = None,
         on_success: Callable[[], None] | None = None,
     ) -> None:
         if self.is_busy():
@@ -375,7 +422,7 @@ class SnowLumaRuntimeStore:
 
         async def _run() -> None:
             try:
-                await self.download_and_install(tag=tag)
+                await self.download_and_install(tag=tag, target_platform=target_platform)
                 if on_success is not None:
                     on_success()
             except Exception as e:
