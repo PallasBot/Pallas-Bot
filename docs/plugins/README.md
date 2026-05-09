@@ -18,6 +18,7 @@
 - [`chat`](./chat/README.md)：酒后聊天（依赖 AI 服务与 callback）
 - [`roulette`](./roulette/README.md)：牛牛轮盘
 - [`drink`](./drink/README.md)：牛牛喝酒
+- [`dream`](./dream/README.md)：牛牛做梦（跨群漂流、历史梦、归档图）
 - [`greeting`](./greeting/README.md)：入群/好友欢迎与被踢处理
 - [`block`](./block/README.md)：其他牛牛与睡眠期消息拦截
 
