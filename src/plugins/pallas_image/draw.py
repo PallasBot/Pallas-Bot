@@ -223,7 +223,13 @@ async def pallas_draw_execute(
                                 body_text[:2000],
                             )
                             await matcher.finish(message_at_user(user_id, user_failure_reply(body_text)))
-                        await reply_from_image_api_json(matcher, http_client, body_text, at_user_id=user_id)
+                        await reply_from_image_api_json(
+                            matcher,
+                            http_client,
+                            body_text,
+                            at_user_id=user_id,
+                            persist_draw=(usage_key[0], usage_key[1]),
+                        )
                         bump_pallas_draw_usage(usage_key, count_usage)
                         return
 
@@ -249,7 +255,13 @@ async def pallas_draw_execute(
                         body_text[:2000],
                     )
                     await matcher.finish(message_at_user(user_id, user_failure_reply(body_text)))
-                await reply_from_image_api_json(matcher, http_client, body_text, at_user_id=user_id)
+                await reply_from_image_api_json(
+                    matcher,
+                    http_client,
+                    body_text,
+                    at_user_id=user_id,
+                    persist_draw=(usage_key[0], usage_key[1]),
+                )
                 bump_pallas_draw_usage(usage_key, count_usage)
         except FinishedException:
             raise

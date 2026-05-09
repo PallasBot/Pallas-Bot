@@ -207,6 +207,23 @@ class BotConfig(Config):
         """
         await self._update_in_memory(f"sleep{KEY_JOINER}{self.group_id}", time.time() + seconds)
 
+    async def dream_until(self) -> float:
+        """
+        做梦状态结束时间戳
+        """
+        v = await self._find_in_memory(f"dream{KEY_JOINER}{self.group_id}")
+        return float(v) if v else 0.0
+
+    async def is_dreaming(self) -> bool:
+        return await self.dream_until() > time.time()
+
+    async def start_dream(self, duration_sec: int) -> None:
+        sec = max(1, int(duration_sec))
+        await self._update_in_memory(f"dream{KEY_JOINER}{self.group_id}", time.time() + sec)
+
+    async def stop_dream(self) -> None:
+        await self._update_in_memory(f"dream{KEY_JOINER}{self.group_id}", 0.0)
+
     async def taken_name(self) -> int | None:
         """
         返回在该群夺舍的账号

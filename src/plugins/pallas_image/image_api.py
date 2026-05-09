@@ -411,6 +411,7 @@ async def reply_from_image_api_json(
     client: httpx.AsyncClient,
     body_text: str,
     at_user_id: int | None = None,
+    persist_draw: tuple[int, int] | None = None,
 ) -> None:
     try:
         data = json.loads(body_text)
@@ -427,12 +428,27 @@ async def reply_from_image_api_json(
     remote_url, raw = extract_image_from_generation_payload(data)
     if raw:
         await matcher.send(optional_message_at_user(at_user_id, MessageSegment.image(raw)))
+        if persist_draw:
+            try:
+                from .draw_archive import persist_generated_draw
+
+                await persist_generated_draw(raw, persist_draw[0], persist_draw[1])
+            except Exception as e:
+                logger.warning("persist draw archive failed: {}", e)
         return
     if remote_url:
         try:
             img_resp = await client.get(remote_url)
             if img_resp.status_code == 200:
-                await matcher.send(optional_message_at_user(at_user_id, MessageSegment.image(img_resp.content)))
+                content = img_resp.content
+                await matcher.send(optional_message_at_user(at_user_id, MessageSegment.image(content)))
+                if persist_draw:
+                    try:
+                        from .draw_archive import persist_generated_draw
+
+                        await persist_generated_draw(content, persist_draw[0], persist_draw[1])
+                    except Exception as e:
+                        logger.warning("persist draw archive failed: {}", e)
                 return
         except httpx.HTTPError:
             pass
