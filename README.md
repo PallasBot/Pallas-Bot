@@ -124,7 +124,6 @@ uv sync                 # 安装依赖
 uv run nb run
 ```
 > 完整部署细节请查看 [部署教程](docs/Deployment.md) 和 [Docker 部署](docs/DockerDeployment.md)。
-> **Docker Compose**：默认只起 **MongoDB + Bot**；需要本编排内的 **PostgreSQL** 时在 **`pallas-bot/.env`** 配好 **`PG_*`** 与 **`DB_BACKEND=postgres`**，再执行 **`docker compose --env-file ./pallas-bot/.env --profile postgres up -d`**（compose 会把 **`PG_USER`/`PG_PASSWORD`/`PG_DB`** 映射进 postgres 镜像，无需另写 **`POSTGRES_*`**）。**NapCat** 不在默认 Compose 里单独起容器，请在 **`/protocol/console/`** 协议端管理页创建实例（见 Docker 部署文档）。
 > 部署好自己牛牛之后，如果托管别人的账号成为你的牛牛，别忘记将他设置为牛牛的管理员!号主们都应该有控制自己牛牛的权力。
 
 <a id="使用指南"></a>

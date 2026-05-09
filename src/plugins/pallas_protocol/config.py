@@ -96,6 +96,10 @@ class Config(BaseModel):
         default=False,
         description="Linux 用 Docker 起 NapCat",
     )
+    pallas_protocol_snowluma_linux_use_docker: bool = Field(
+        default=False,
+        description="Linux 用 Docker 起 SnowLuma（可与 NapCat 独立）",
+    )
     pallas_protocol_linux_use_xvfb: bool = Field(
         default=True,
         description="Linux 非 Docker 时用 xvfb-run",
@@ -195,6 +199,31 @@ class Config(BaseModel):
         ge=1,
         le=65535,
         description="容器 VNC",
+    )
+    # SnowLuma Docker 多实例：自动挑选宿主机端口区间（与已登记账号及本机 bind 检测）
+    pallas_protocol_snowluma_docker_auto_bind_port_lo: int = Field(
+        default=17100,
+        ge=1024,
+        le=65533,
+        description="自动 OneBot HTTP/WS 宿主机端口扫描下限",
+    )
+    pallas_protocol_snowluma_docker_auto_bind_port_hi: int = Field(
+        default=19998,
+        ge=1026,
+        le=65535,
+        description="自动 OneBot 端口扫描上限（与 HTTP 成对占用 HTTP+1）",
+    )
+    pallas_protocol_snowluma_docker_auto_aux_bind_lo: int = Field(
+        default=23100,
+        ge=1024,
+        le=65534,
+        description="自动 noVNC/VNC 宿主机端口扫描下限",
+    )
+    pallas_protocol_snowluma_docker_auto_aux_bind_hi: int = Field(
+        default=29998,
+        ge=1026,
+        le=65535,
+        description="自动 noVNC/VNC 宿主机端口扫描上限",
     )
 
     def resolved_release_asset(self) -> str:

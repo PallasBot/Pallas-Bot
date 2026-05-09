@@ -14,6 +14,7 @@ def _cfg(**kwargs):
         "pallas_protocol_program_dir": "",
         "pallas_protocol_snowluma_program_dir": "",
         "pallas_protocol_linux_use_docker": False,
+        "pallas_protocol_snowluma_linux_use_docker": False,
         "pallas_protocol_docker_internal_webui_port": 6099,
         "pallas_protocol_docker_image": "mlikiowa/napcat-docker:latest",
         "pallas_protocol_linux_use_xvfb": True,
@@ -191,6 +192,45 @@ def test_apply_defaults_snowluma_linux_docker_allocator_callback(tmp_path: Path)
     assert account["snowluma_docker_host_onebot_ws"] == 18111
     assert account["snowluma_docker_host_novnc_port"] == 23220
     assert account["snowluma_docker_host_vnc_port"] == 23221
+
+
+def test_apply_defaults_snowluma_docker_when_profile_sl_docker_even_if_napcat_shell(tmp_path: Path) -> None:
+    sl_root = tmp_path / "snowluma_dist2"
+    sl_root.mkdir()
+    (sl_root / "index.mjs").write_text("//", encoding="utf-8")
+
+    def alloc(acc: dict) -> dict[str, int]:
+        _ = acc
+        return {"onebot_http": 18112, "onebot_ws": 18113, "host_novnc": 23230, "host_vnc": 23231}
+
+    mgr = LaunchManager(
+        tmp_path / "data",
+        tmp_path / "resource",
+        _cfg(
+            pallas_protocol_linux_use_docker=False,
+            pallas_protocol_snowluma_linux_use_docker=False,
+            pallas_protocol_snowluma_program_dir=str(sl_root),
+            pallas_protocol_webui_port_min=6200,
+            pallas_protocol_webui_port_max=6300,
+        ),
+        instances_root=tmp_path / "instances",
+        platform=PosixNapcatPlatform(),
+        runtime_profile_provider=lambda: {
+            "napcat_runtime_mode": "shell",
+            "snowluma_runtime_mode": "docker",
+            "runtime_mode": "shell",
+        },
+        snowluma_docker_allocate_host_ports=alloc,
+    )
+    account = {
+        "id": "10009",
+        "qq": "10009",
+        "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND,
+        "webui_port": 6251,
+    }
+    with patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"):
+        mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
+    assert account.get("snowluma_linux_docker") is True
 
 
 def test_apply_defaults_snowluma_linux_docker_default_ports_match_upstream(tmp_path: Path) -> None:

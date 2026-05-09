@@ -2007,14 +2007,14 @@ def render_dashboard(base_path: str) -> str:
           const webuiCell = a.native_webui_url
             ? (pb === "snowluma"
               ? `<div class="acc-card-webui" style="margin:0;padding:0;border:0"><div class="acc-card-webui-line" style="margin:0">`
-                + `<a href="${{a.native_webui_url}}" target="_blank" rel="noopener">SnowLuma</a></div>`
+                + `<a href="${{a.native_webui_url}}" target="_blank" rel="noopener">SnowLuma WebUI</a></div>`
                 + ((slPw
                   ? `<div class="acc-card-webui-line" style="margin-top:4px"><span class="muted">临时密码</span> <span class="mono">${{escHtmlDash(slPw)}}</span> `
                     + `<button type="button" class="btn secondary" style="font-size:0.72rem;padding:2px 6px" data-copy-plain="${{encodeURIComponent(slPw)}}">复制</button></div>`
                   : ""))
                 + `</div>`
               : `<div class="acc-card-webui" style="margin:0;padding:0;border:0"><div class="acc-card-webui-line" style="margin:0">`
-                + `<a href="${{a.native_webui_url}}" target="_blank" rel="noopener">NapCat</a></div>`
+                + `<a href="${{a.native_webui_url}}" target="_blank" rel="noopener">NapCat WebUI</a></div>`
                 + `<div class="acc-card-webui-line" style="margin-top:4px"><span class="muted">token</span> <span class="mono">${{escHtmlDash(wtok)}}</span></div></div>`)
             : "—";
           const running = !!a.process_running;
@@ -2056,7 +2056,7 @@ def render_dashboard(base_path: str) -> str:
           ? ""
           : (pb === "snowluma"
             ? (`<div class="acc-card-webui"><div class="acc-card-webui-hd">内置 WebUI</div>`
-              + `<div class="acc-card-webui-line"><a href="${{wu}}" target="_blank" rel="noopener">打开 SnowLuma 内嵌 WebUI</a></div>`
+              + `<div class="acc-card-webui-line"><a href="${{wu}}" target="_blank" rel="noopener">打开 SnowLuma 内置 WebUI</a></div>`
               + (slPw
                 ? (`<div class="acc-card-webui-line"><span class="muted">临时密码</span> <span class="mono">${{escHtmlDash(slPw)}}</span> `
                   + `<button type="button" class="btn secondary" style="font-size:0.78rem;padding:4px 8px;margin-left:6px;vertical-align:middle" data-copy-plain="${{encodeURIComponent(slPw)}}">复制</button></div>`)
@@ -2497,10 +2497,13 @@ def render_protocol_assets_page(base_path: str) -> str:
     </header>
     <div class="card">
       <p class="muted" style="margin:0 0 14px">
-        在此管理 NapCat / SnowLuma 发行包与全局运行方式；改完后点下方「保存设置」。
+        在此管理 NapCat / SnowLuma 发行包与全局运行方式；改完后点上方「保存设置」。
       </p>
       <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
         <button class="btn secondary" type="button" id="btnCleanupDist" onclick="cleanupRuntimeDistCaches()">清理下载缓存</button>
+        <span style="flex:1"></span>
+        <span id="saveProfileDirtyHint" class="muted" style="display:none;color:#b91c1c;font-weight:600">有未保存修改</span>
+        <button class="btn" id="btnSaveProfile" type="button" onclick="saveUnifiedRuntimeProfile()" style="font-size:0.92rem;padding:10px 18px;font-weight:700">保存设置</button>
       </div>
       <div style="margin:4px 0 14px;padding:14px 16px;border:1px solid var(--bd);border-radius:var(--radius-lg);background:var(--bg1)">
         <div class="row" style="align-items:center;gap:10px;flex-wrap:wrap">
@@ -2512,19 +2515,27 @@ def render_protocol_assets_page(base_path: str) -> str:
       </div>
       <div class="assets-napcat-global-card" style="margin:0 0 16px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">全局运行模式（NapCat / SnowLuma 共用）</span>
+          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">全局运行模式（NapCat / SnowLuma 分别配置）</span>
         </div>
-        <div class="row" style="gap:12px;align-items:flex-end">
+        <div class="row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
           <div class="field" style="margin:0;min-width:170px;flex:1">
-            <label>运行模式</label>
-            <select id="runtimeMode" class="shell-pretty-select" onchange="onRuntimeModeChanged()">
+            <label>NapCat 运行模式</label>
+            <select id="runtimeModeNapcat" class="shell-pretty-select" onchange="onRuntimeModeChanged()">
+              <option value="docker">Docker</option>
+              <option value="appimage">AppImage</option>
+              <option value="shell">Shell</option>
+            </select>
+          </div>
+          <div class="field" style="margin:0;min-width:170px;flex:1">
+            <label>SnowLuma 运行模式</label>
+            <select id="runtimeModeSnowluma" class="shell-pretty-select" onchange="onRuntimeModeChanged()">
               <option value="docker">Docker</option>
               <option value="appimage">AppImage</option>
               <option value="shell">Shell</option>
             </select>
           </div>
           <div class="field" style="margin:0;min-width:190px;flex:1">
-            <label>NapCat 下载平台</label>
+            <label>下载目标平台（NapCat）</label>
             <select id="targetPlatform" class="shell-pretty-select">
               <option value="auto">auto（跟随当前平台）</option>
               <option value="linux-amd64">linux-amd64</option>
@@ -2533,6 +2544,20 @@ def render_protocol_assets_page(base_path: str) -> str:
             </select>
           </div>
         </div>
+        <div class="row" style="gap:12px;align-items:flex-end;margin-top:10px">
+          <div class="field" style="margin:0;min-width:260px;flex:1;max-width:520px">
+            <label>保存全局运行配置时：对协议 Docker 容器的处理</label>
+            <select id="runtimeProfilePruneContainers" class="shell-pretty-select">
+              <option value="all">NapCat 与 SnowLuma 全部</option>
+              <option value="napcat">仅 NapCat</option>
+              <option value="snowluma">仅 SnowLuma</option>
+            </select>
+          </div>
+        </div>
+        <p class="muted" style="margin:8px 0 0;font-size:0.82rem;line-height:1.45">
+          点击本页「保存设置」并写入全局运行模式或镜像后，会按此处范围<strong>先停止</strong>对应协议账号进程，再<strong>删除已有 Docker 容器</strong>，避免旧容器继续占用旧镜像或端口。
+          只更新一侧镜像时可点「仅 NapCat / 仅 SnowLuma」；<strong>同一端</strong>在 Docker 与 AppImage/Shell 之间切换时须选对应该端的清理范围（或「全部」），否则无法一步清掉该端旧容器。
+        </p>
         <div id="dockerProfileArea" style="margin-top:10px;display:none">
           <div class="row" style="gap:8px;align-items:flex-end">
             <div class="field" style="margin:0;min-width:260px;flex:1">
@@ -2578,22 +2603,32 @@ def render_protocol_assets_page(base_path: str) -> str:
         </div>
       </div>
       <div class="proto-switch-toolbar">
-        <div class="proto-switch" role="tablist" aria-label="协议发行包类型">
-          <button type="button" class="active" id="btnAssetsProtoNapcat">NapCat</button>
-          <button type="button" id="btnAssetsProtoSnowluma">SnowLuma</button>
-        </div>
-        <div class="row" style="gap:10px;align-items:center">
-          <span id="saveProfileDirtyHint" class="muted" style="display:none;color:#b91c1c;font-weight:600">有未保存修改</span>
-          <button class="btn" id="btnSaveProfile" type="button" onclick="saveUnifiedRuntimeProfile()" style="font-size:0.92rem;padding:10px 18px;font-weight:700">保存设置</button>
+        <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+          <div class="field" style="margin:0;min-width:200px">
+            <label for="assetsProtoSelect">发行包</label>
+            <select id="assetsProtoSelect" class="shell-pretty-select" aria-label="协议发行包类型">
+              <option value="napcat">NapCat</option>
+              <option value="snowluma">SnowLuma</option>
+            </select>
+          </div>
         </div>
       </div>
-      <div id="assetsPaneNapcat">
-      <h2 class="section-title" style="margin:16px 0 8px;font-size:1.05rem;font-weight:700">NapCat</h2>
-      <p class="muted" style="margin:0 0 8px;font-size:0.86rem">非 Docker 时在此下载 NapCat；全局模式见上方。</p>
+      <div id="assetsPaneUnified">
+      <h2 id="assetsProtoHeading" class="section-title" style="margin:16px 0 8px;font-size:1.05rem;font-weight:700">发行包</h2>
+      <p id="assetsProtoHint" class="muted" style="margin:0 0 10px;font-size:0.86rem">在 NapCat 与 SnowLuma 间切换；全局运行模式与 Docker 镜像见上方。</p>
+      <div id="rowAssetsSlTargetPlatform" class="field" style="margin-bottom:12px;display:none">
+        <label>下载目标平台（SnowLuma）</label>
+        <select id="slTargetPlatform" class="shell-pretty-select">
+          <option value="auto">自动（按本机系统）</option>
+          <option value="windows-amd64">windows-amd64</option>
+          <option value="linux-amd64">linux-amd64</option>
+          <option value="linux-arm64">linux-arm64</option>
+        </select>
+      </div>
       <div class="kpi-grid">
         <div class="kpi"><div class="k">任务状态</div><div class="v" id="rtStatus">-</div></div>
         <div class="kpi"><div class="k">当前阶段</div><div class="v" id="rtStage">-</div></div>
-        <div class="kpi"><div class="k">目标版本</div><div class="v" id="rtAsset" title="">-</div></div>
+        <div class="kpi"><div class="k">目标 / 版本</div><div class="v" id="rtAsset" title="">-</div></div>
         <div class="kpi"><div class="k">最后刷新</div><div class="v" id="rtTime">-</div></div>
       </div>
       <div class="card" style="margin:10px 0 0;box-shadow:none">
@@ -2606,24 +2641,24 @@ def render_protocol_assets_page(base_path: str) -> str:
           <div class="mono" id="rtSource">-</div>
         </div>
         <div class="field" style="margin-bottom:0">
-          <label>运行目录</label>
+          <label id="lblRtProgramDir">运行目录</label>
           <div class="mono" id="rtProgramDir">-</div>
         </div>
       </div>
-      <div class="row" style="margin-top:12px">
-        <button class="btn" id="btnUpdate" type="button" onclick="downloadRuntime()">立即更新</button>
+      <div class="row" style="margin-top:12px;flex-wrap:wrap;gap:8px">
+        <button class="btn" id="btnAssetDownload" type="button" onclick="assetDownloadRuntime()">立即更新</button>
         <button class="btn secondary" id="btnRescan" type="button" onclick="rescanRuntime()">刷新检测</button>
-        <button class="btn secondary" id="btnRefreshRuntime" type="button" onclick="refreshRuntime()">刷新状态</button>
+        <button class="btn secondary" id="btnAssetRefresh" type="button" onclick="assetRefreshOverview()">刷新状态</button>
       </div>
       <div style="margin-top:18px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
           <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">选择版本</span>
-          <button class="btn secondary" id="btnLoadReleases" type="button" onclick="loadReleases()" style="font-size:0.82rem;padding:7px 14px">加载版本列表</button>
+          <button class="btn secondary" id="btnLoadReleases" type="button" onclick="loadAssetReleases()" style="font-size:0.82rem;padding:7px 14px">加载版本列表</button>
         </div>
         <div id="releasesArea" style="display:none">
           <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
             <select id="releaseSelect" class="shell-pretty-select" style="flex:1;min-width:200px;height:40px"></select>
-            <button class="btn secondary" id="btnDownloadTag" type="button" onclick="downloadSelectedTag()">选择此版本</button>
+            <button class="btn secondary" id="btnDownloadTag" type="button" onclick="assetActivateSelectedTag()">选择此版本</button>
           </div>
           <div id="releaseDetail" class="muted" style="font-size:0.78rem;min-height:1.4em"></div>
         </div>
@@ -2632,12 +2667,12 @@ def render_protocol_assets_page(base_path: str) -> str:
       <div style="margin-top:18px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
           <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">本机解压目录（切换托管版本）</span>
-          <button class="btn secondary" type="button" id="btnNcInvRefresh" onclick="loadNapcatLocalInventory()">刷新列表</button>
+          <button class="btn secondary" type="button" id="btnAssetInvRefresh" onclick="loadAssetLocalInventory()">刷新列表</button>
         </div>
-        <p class="muted" style="margin:0 0 10px;font-size:0.82rem">按标签分子目录；可在此切换已解压版本。</p>
-        <p id="ncDistFilesHint" class="muted" style="font-size:0.78rem;margin:0 0 8px"></p>
-        <div id="ncLocalInvPlaceholder" class="muted" style="font-size:0.82rem">点击「刷新列表」加载。</div>
-        <div id="ncLocalInvTable" style="display:none;margin-top:8px;overflow:auto;border:1px solid var(--bd);border-radius:var(--radius-sm);max-height:min(36vh,320px)">
+        <p class="muted" style="margin:0 0 10px;font-size:0.82rem">按 Release 标签分子目录；切换后使用对应托管的账号需重启协议进程。</p>
+        <p id="assetDistFilesHint" class="muted" style="font-size:0.78rem;margin:0 0 8px"></p>
+        <div id="assetLocalInvPlaceholder" class="muted" style="font-size:0.82rem">点击「刷新列表」加载。</div>
+        <div id="assetLocalInvTable" style="display:none;margin-top:8px;overflow:auto;border:1px solid var(--bd);border-radius:var(--radius-sm);max-height:min(36vh,320px)">
           <table class="acc-table" style="width:100%;border-collapse:collapse;font-size:0.84rem">
             <thead><tr>
               <th style="text-align:left;padding:8px">版本（目录）</th>
@@ -2645,88 +2680,13 @@ def render_protocol_assets_page(base_path: str) -> str:
               <th style="text-align:left;padding:8px">托管</th>
               <th style="text-align:right;padding:8px">操作</th>
             </tr></thead>
-            <tbody id="ncLocalInvBody"></tbody>
+            <tbody id="assetLocalInvBody"></tbody>
           </table>
         </div>
       </div>
       <details style="margin-top:14px">
-        <summary class="muted" style="cursor:pointer">NapCat 状态 JSON</summary>
+        <summary id="assetsRuntimeJsonSummary" class="muted" style="cursor:pointer">状态 JSON</summary>
         <pre class="mono muted" id="runtimeStatus" tabindex="0" title="框选复制；聚焦时暂停自动刷新" style="max-height:min(70vh,720px);overflow:auto;margin-top:8px;font-size:12px"></pre>
-      </details>
-      </div>
-      <div id="assetsPaneSnowluma" style="display:none">
-      <h2 class="section-title" style="margin:24px 0 8px;font-size:1.05rem;font-weight:700">SnowLuma</h2>
-      <p class="muted" style="margin:0 0 10px;font-size:0.86rem">SnowLuma 从 GitHub Release 下载；Docker 镜像见上方。</p>
-      <div class="field" style="margin-bottom:12px">
-        <label>下载目标平台</label>
-        <select id="slTargetPlatform" class="shell-pretty-select">
-          <option value="auto">自动（按本机系统）</option>
-          <option value="windows-amd64">windows-amd64</option>
-          <option value="linux-amd64">linux-amd64</option>
-          <option value="linux-arm64">linux-arm64</option>
-        </select>
-      </div>
-      <div class="kpi-grid">
-        <div class="kpi"><div class="k">任务状态</div><div class="v" id="slRtStatus">-</div></div>
-        <div class="kpi"><div class="k">当前阶段</div><div class="v" id="slRtStage">-</div></div>
-        <div class="kpi"><div class="k">目标 / 资产</div><div class="v" id="slRtAsset" title="">-</div></div>
-        <div class="kpi"><div class="k">最后刷新</div><div class="v" id="slRtTime">-</div></div>
-      </div>
-      <div class="card" style="margin:10px 0 0;box-shadow:none">
-        <div class="field" style="margin-bottom:10px">
-          <label>状态消息</label>
-          <div class="mono" id="slRtMessage">-</div>
-        </div>
-        <div class="field" style="margin-bottom:10px">
-          <label>下载来源</label>
-          <div class="mono" id="slRtSource">-</div>
-        </div>
-        <div class="field" style="margin-bottom:0">
-          <label>程序根目录（index.mjs）</label>
-          <div class="mono" id="slRtProgramDir">-</div>
-        </div>
-      </div>
-      <div class="row" style="margin-top:12px">
-        <button class="btn" id="btnSlUpdate" type="button" onclick="downloadSnowlumaRuntime()">下载 / 更新 SnowLuma</button>
-        <button class="btn secondary" id="btnSlRefresh" type="button" onclick="refreshSnowlumaOverview()">刷新 SnowLuma</button>
-      </div>
-      <div style="margin-top:18px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">SnowLuma 选择版本</span>
-          <button class="btn secondary" id="btnSlLoadReleases" type="button" onclick="loadSnowlumaReleases()" style="font-size:0.82rem;padding:7px 14px">加载版本列表</button>
-        </div>
-        <div id="slReleasesArea" style="display:none">
-          <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
-            <select id="slReleaseSelect" class="shell-pretty-select" style="flex:1;min-width:200px;height:40px"></select>
-            <button class="btn secondary" id="btnSlDownloadTag" type="button" onclick="snowlumaDownloadSelectedTag()">选用此版本</button>
-          </div>
-          <div id="slReleaseDetail" class="muted" style="font-size:0.78rem;min-height:1.4em"></div>
-        </div>
-        <p id="slReleasesPlaceholder" class="muted" style="margin:0;font-size:0.82rem">先点「加载版本列表」。</p>
-      </div>
-      <div style="margin-top:18px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px">
-          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">本机解压目录（切换托管版本）</span>
-          <button class="btn secondary" type="button" id="btnSlInvRefresh" onclick="loadSnowlumaLocalInventory()">刷新列表</button>
-        </div>
-        <p class="muted" style="margin:0 0 10px;font-size:0.82rem">可选用版本或在下表切换已解压目录。</p>
-        <p id="slDistFilesHint" class="muted" style="font-size:0.78rem;margin:0 0 8px"></p>
-        <div id="slLocalInvPlaceholder" class="muted" style="font-size:0.82rem">点击「刷新列表」加载。</div>
-        <div id="slLocalInvTable" style="display:none;margin-top:8px;overflow:auto;border:1px solid var(--bd);border-radius:var(--radius-sm);max-height:min(36vh,320px)">
-          <table class="acc-table" style="width:100%;border-collapse:collapse;font-size:0.84rem">
-            <thead><tr>
-              <th style="text-align:left;padding:8px">版本（目录）</th>
-              <th style="text-align:left;padding:8px">修改时间</th>
-              <th style="text-align:left;padding:8px">托管</th>
-              <th style="text-align:right;padding:8px">操作</th>
-            </tr></thead>
-            <tbody id="slLocalInvBody"></tbody>
-          </table>
-        </div>
-      </div>
-      <details style="margin-top:14px">
-        <summary class="muted" style="cursor:pointer">SnowLuma 状态 JSON</summary>
-        <pre class="mono muted" id="snowlumaRuntimeStatus" tabindex="0" title="框选复制；聚焦时暂停自动刷新" style="max-height:min(50vh,480px);overflow:auto;margin-top:8px;font-size:12px"></pre>
       </details>
       </div>
     </div>
@@ -2740,34 +2700,82 @@ def render_protocol_assets_page(base_path: str) -> str:
     let runtimeProfileWatchBound = false;
     let pendingTag = null;
     let pendingSnowlumaTag = null;
+    let _assetReleaseList = [];
+    function assetsProtoIsSl() {{
+      const s = document.getElementById("assetsProtoSelect");
+      return !!(s && String(s.value || "").toLowerCase() === "snowluma");
+    }}
+    async function assetRefreshOverview(opts = {{}}) {{
+      if (assetsProtoIsSl()) return await refreshSnowlumaOverview(opts);
+      return await refreshRuntime(opts);
+    }}
+    function assetDownloadRuntime() {{
+      void (assetsProtoIsSl() ? downloadSnowlumaRuntime() : downloadRuntime());
+    }}
+    function anyRuntimeDocker() {{
+      const a = String(document.getElementById("runtimeModeNapcat")?.value || "");
+      const b = String(document.getElementById("runtimeModeSnowluma")?.value || "");
+      return a === "docker" || b === "docker";
+    }}
+    function syncAssetDownloadButtonText() {{
+      const isDocker = anyRuntimeDocker();
+      const dlBtn = document.getElementById("btnAssetDownload");
+      if (!dlBtn) return;
+      if (assetsProtoIsSl()) {{
+        dlBtn.textContent = "下载 / 更新";
+      }} else {{
+        dlBtn.textContent = isDocker ? "Docker 模式无需下载" : "立即更新";
+      }}
+    }}
     function setAssetsProtocolPane(which, pushUrl) {{
-      const nap = which === "napcat";
-      const paneN = document.getElementById("assetsPaneNapcat");
-      const paneS = document.getElementById("assetsPaneSnowluma");
-      const bn = document.getElementById("btnAssetsProtoNapcat");
-      const bs = document.getElementById("btnAssetsProtoSnowluma");
-      if (paneN) paneN.style.display = nap ? "block" : "none";
-      if (paneS) paneS.style.display = nap ? "none" : "block";
-      if (bn) bn.classList.toggle("active", nap);
-      if (bs) bs.classList.toggle("active", !nap);
+      const sel = document.getElementById("assetsProtoSelect");
+      const v = (String(which || "napcat").toLowerCase() === "snowluma") ? "snowluma" : "napcat";
+      if (sel) sel.value = v;
+      const slRow = document.getElementById("rowAssetsSlTargetPlatform");
+      if (slRow) slRow.style.display = v === "snowluma" ? "block" : "none";
+      const rs = document.getElementById("btnRescan");
+      if (rs) rs.style.display = v === "snowluma" ? "none" : "";
+      const h = document.getElementById("assetsProtoHeading");
+      if (h) h.textContent = v === "snowluma" ? "SnowLuma 发行包" : "NapCat 发行包";
+      const hi = document.getElementById("assetsProtoHint");
+      if (hi) {{
+        hi.textContent = v === "snowluma"
+          ? "从 GitHub Release 下载；Docker 见上方「SnowLuma Docker 镜像」与「拉取镜像」。"
+          : "从官方渠道下载；Docker 见上方「NapCat Docker 镜像」与「拉取镜像」。";
+      }}
+      const lb = document.getElementById("lblRtProgramDir");
+      if (lb) lb.textContent = v === "snowluma" ? "程序根目录（index.mjs）" : "运行目录";
+      const rf = document.getElementById("btnAssetRefresh");
+      if (rf) rf.textContent = "刷新状态";
+      const sm = document.getElementById("assetsRuntimeJsonSummary");
+      if (sm) sm.textContent = v === "snowluma" ? "SnowLuma 状态 JSON" : "NapCat 状态 JSON";
       try {{
-        localStorage.setItem("pallas_protocol_assets_pane", which);
+        localStorage.setItem("pallas_protocol_assets_pane", v);
       }} catch (e) {{}}
       if (pushUrl !== false) {{
         const u = new URL(location.href);
-        u.searchParams.set("protocol", which);
+        u.searchParams.set("protocol", v);
         history.replaceState(null, "", u.pathname + u.search);
       }}
       syncAssetsSaveButton();
-      if (nap) void loadNapcatLocalInventory();
-      else {{
-        const slTp = document.getElementById("slTargetPlatform");
-        if (slTp) {{
+      syncAssetDownloadButtonText();
+      const ra = document.getElementById("releasesArea");
+      const rp = document.getElementById("releasesPlaceholder");
+      const rsel = document.getElementById("releaseSelect");
+      if (ra) ra.style.display = "none";
+      if (rp) rp.style.display = "block";
+      if (rsel) rsel.innerHTML = "";
+      _assetReleaseList = [];
+      if (v === "snowluma") {{
+        const slTpEl = document.getElementById("slTargetPlatform");
+        if (slTpEl) {{
           const sv = localStorage.getItem("pallas_protocol_sl_target_platform") || "";
-          if (["auto", "windows-amd64", "linux-amd64", "linux-arm64"].includes(sv)) slTp.value = sv;
+          if (["auto", "windows-amd64", "linux-amd64", "linux-arm64"].includes(sv)) slTpEl.value = sv;
+          if (typeof shellPrettySyncSelect === "function") shellPrettySyncSelect(slTpEl);
         }}
-        void loadSnowlumaLocalInventory();
       }}
+      if (typeof shellPrettySyncSelect === "function" && sel) shellPrettySyncSelect(sel);
+      void loadAssetLocalInventory();
     }}
     function initAssetsProtocolPane() {{
       const u = new URL(location.href);
@@ -2780,10 +2788,10 @@ def render_protocol_assets_page(base_path: str) -> str:
         if (["auto", "windows-amd64", "linux-amd64", "linux-arm64"].includes(sv)) slTp.value = sv;
       }}
     }}
-    const _btnApN = document.getElementById("btnAssetsProtoNapcat");
-    if (_btnApN) _btnApN.addEventListener("click", () => setAssetsProtocolPane("napcat"));
-    const _btnApS = document.getElementById("btnAssetsProtoSnowluma");
-    if (_btnApS) _btnApS.addEventListener("click", () => setAssetsProtocolPane("snowluma"));
+    const _assetsProtoSel = document.getElementById("assetsProtoSelect");
+    if (_assetsProtoSel) {{
+      _assetsProtoSel.addEventListener("change", () => setAssetsProtocolPane(_assetsProtoSel.value));
+    }}
     initAssetsProtocolPane();
     const _slTpCh = document.getElementById("slTargetPlatform");
     if (_slTpCh) {{
@@ -2811,22 +2819,23 @@ def render_protocol_assets_page(base_path: str) -> str:
       }} finally {{
         setBtnBusy(btn, false, "清理下载缓存", "清理中...");
       }}
-      void loadNapcatLocalInventory();
-      void loadSnowlumaLocalInventory();
+      void loadAssetLocalInventory();
     }}
     function invEsc(t) {{
       return String(t ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     }}
-    async function loadNapcatLocalInventory() {{
-      const ph = document.getElementById("ncLocalInvPlaceholder");
-      const tb = document.getElementById("ncLocalInvTable");
-      const body = document.getElementById("ncLocalInvBody");
-      const distEl = document.getElementById("ncDistFilesHint");
+    async function loadAssetLocalInventory() {{
+      const ph = document.getElementById("assetLocalInvPlaceholder");
+      const tb = document.getElementById("assetLocalInvTable");
+      const body = document.getElementById("assetLocalInvBody");
+      const distEl = document.getElementById("assetDistFilesHint");
       if (!ph || !tb || !body) return;
       ph.style.display = "block";
       ph.textContent = "加载中…";
+      const sl = assetsProtoIsSl();
+      const ep = sl ? "/api/snowluma/runtime/local-inventory" : "/api/runtime/local-inventory";
       try {{
-        const data = await api("/api/runtime/local-inventory");
+        const data = await api(ep);
         const dirs = Array.isArray(data.extract_dirs) ? data.extract_dirs : [];
         const files = Array.isArray(data.dist_files) ? data.dist_files : [];
         if (distEl) {{
@@ -2847,7 +2856,9 @@ def render_protocol_assets_page(base_path: str) -> str:
           const mt = d.mtime_iso ? new Date(d.mtime_iso).toLocaleString("zh-CN") : "-";
           const btn = active
             ? '<span class="muted">当前托管</span>'
-            : ("<button type=\\"button\\" class=\\"btn secondary\\" onclick='activateNapcatExtract(" + JSON.stringify(d.name) + ")'>托管使用此目录</button>");
+            : (sl
+              ? ("<button type=\\"button\\" class=\\"btn secondary\\" onclick='activateSnowlumaExtract(" + JSON.stringify(d.name) + ")'>托管使用此目录</button>")
+              : ("<button type=\\"button\\" class=\\"btn secondary\\" onclick='activateNapcatExtract(" + JSON.stringify(d.name) + ")'>托管使用此目录</button>"));
           return "<tr><td style=\\"padding:8px;font-family:var(--font-mono,monospace);font-size:0.8rem\\">" + invEsc(d.name) + "</td>"
             + "<td style=\\"padding:8px\\">" + invEsc(mt) + "</td>"
             + "<td style=\\"padding:8px\\">" + (active ? "当前" : "—") + "</td>"
@@ -2868,51 +2879,10 @@ def render_protocol_assets_page(base_path: str) -> str:
           body: JSON.stringify({{ tag: folderName }}),
         }});
         await refreshRuntime({{ silent: true }});
-        await loadNapcatLocalInventory();
+        await loadAssetLocalInventory();
         alert("已切换托管目录。使用此托管的账号请重启协议端进程后生效。");
       }} catch (e) {{
         alert(e.message || e);
-      }}
-    }}
-    async function loadSnowlumaLocalInventory() {{
-      const ph = document.getElementById("slLocalInvPlaceholder");
-      const tb = document.getElementById("slLocalInvTable");
-      const body = document.getElementById("slLocalInvBody");
-      const distEl = document.getElementById("slDistFilesHint");
-      if (!ph || !tb || !body) return;
-      ph.style.display = "block";
-      ph.textContent = "加载中…";
-      try {{
-        const data = await api("/api/snowluma/runtime/local-inventory");
-        const dirs = Array.isArray(data.extract_dirs) ? data.extract_dirs : [];
-        const files = Array.isArray(data.dist_files) ? data.dist_files : [];
-        if (distEl) {{
-          distEl.textContent = files.length
-            ? ("runtime_dist 中现有文件（" + files.length + "）：" + files.map((f) => f.name).join(" · "))
-            : "runtime_dist 目录暂无文件。";
-        }}
-        if (!dirs.length) {{
-          ph.textContent = "暂无解压子目录（成功安装至少一次后会出现对应 Release 标签目录）。";
-          tb.style.display = "none";
-          body.innerHTML = "";
-          return;
-        }}
-        ph.style.display = "none";
-        tb.style.display = "block";
-        body.innerHTML = dirs.map((d) => {{
-          const active = !!d.is_active;
-          const mt = d.mtime_iso ? new Date(d.mtime_iso).toLocaleString("zh-CN") : "-";
-          const btn = active
-            ? '<span class="muted">当前托管</span>'
-            : ("<button type=\\"button\\" class=\\"btn secondary\\" onclick='activateSnowlumaExtract(" + JSON.stringify(d.name) + ")'>托管使用此目录</button>");
-          return "<tr><td style=\\"padding:8px;font-family:var(--font-mono,monospace);font-size:0.8rem\\">" + invEsc(d.name) + "</td>"
-            + "<td style=\\"padding:8px\\">" + invEsc(mt) + "</td>"
-            + "<td style=\\"padding:8px\\">" + (active ? "当前" : "—") + "</td>"
-            + "<td style=\\"padding:8px;text-align:right\\">" + btn + "</td></tr>";
-        }}).join("");
-      }} catch (e) {{
-        ph.textContent = "加载失败：" + (e.message || e);
-        tb.style.display = "none";
       }}
     }}
     async function activateSnowlumaExtract(folderName) {{
@@ -2925,9 +2895,9 @@ def render_protocol_assets_page(base_path: str) -> str:
           body: JSON.stringify({{ tag: folderName }}),
         }});
         const slo = await api("/api/snowluma/runtime/overview");
-        fillSnowlumaFromData(slo);
-        await loadSnowlumaLocalInventory();
-        alert("已切换托管目录。相关实例请重启协议端进程后生效。");
+        fillRuntimeOverviewFromPayload(slo);
+        await loadAssetLocalInventory();
+        alert("已切换托管目录。使用此托管的账号请重启协议端进程后生效。");
       }} catch (e) {{
         alert(e.message || e);
       }}
@@ -2974,25 +2944,38 @@ def render_protocol_assets_page(base_path: str) -> str:
       el.scrollTop = el.scrollHeight;
     }}
     function normalizeRuntimeProfile(p) {{
-      const mode = ["docker", "appimage", "shell"].includes(String(p.runtime_mode || "")) ? String(p.runtime_mode) : "shell";
+      const leg = ["docker", "appimage", "shell"].includes(String(p.runtime_mode || "")) ? String(p.runtime_mode) : "shell";
+      const nap = ["docker", "appimage", "shell"].includes(String(p.napcat_runtime_mode || ""))
+        ? String(p.napcat_runtime_mode)
+        : leg;
+      const snow = ["docker", "appimage", "shell"].includes(String(p.snowluma_runtime_mode || ""))
+        ? String(p.snowluma_runtime_mode)
+        : leg;
       const platform = ["auto", "linux-amd64", "linux-arm64", "windows-amd64"].includes(String(p.target_platform || ""))
         ? String(p.target_platform)
         : "auto";
+      const pr = String(p.prune_containers || "all").toLowerCase();
+      const pruneOk = pr === "napcat" || pr === "snowluma" ? pr : "all";
       return {{
-        runtime_mode: mode,
+        runtime_mode: nap,
+        napcat_runtime_mode: nap,
+        snowluma_runtime_mode: snow,
         target_platform: platform,
         docker_image: String(p.docker_image || "").trim(),
         snowluma_docker_image: String(p.snowluma_docker_image || "").trim(),
         follow_bot_lifecycle: !!p.follow_bot_lifecycle,
+        prune_containers: pruneOk,
       }};
     }}
     function currentRuntimeProfileForm() {{
       return normalizeRuntimeProfile({{
-        runtime_mode: document.getElementById("runtimeMode")?.value || "shell",
+        napcat_runtime_mode: document.getElementById("runtimeModeNapcat")?.value || "shell",
+        snowluma_runtime_mode: document.getElementById("runtimeModeSnowluma")?.value || "shell",
         target_platform: document.getElementById("targetPlatform")?.value || "auto",
         docker_image: document.getElementById("dockerImage")?.value || "",
         snowluma_docker_image: document.getElementById("snowlumaDockerImage")?.value || "",
         follow_bot_lifecycle: !!document.getElementById("followBotLifecycle")?.checked,
+        prune_containers: (document.getElementById("runtimeProfilePruneContainers")?.value || "all"),
       }});
     }}
     function updateSaveProfileDirtyState() {{
@@ -3015,7 +2998,7 @@ def render_protocol_assets_page(base_path: str) -> str:
     function bindRuntimeProfileWatchers() {{
       if (runtimeProfileWatchBound) return;
       runtimeProfileWatchBound = true;
-      ["runtimeMode", "targetPlatform", "dockerImage", "snowlumaDockerImage", "followBotLifecycle"].forEach((id) => {{
+      ["runtimeModeNapcat", "runtimeModeSnowluma", "targetPlatform", "dockerImage", "snowlumaDockerImage", "followBotLifecycle", "runtimeProfilePruneContainers"].forEach((id) => {{
         const el = document.getElementById(id);
         if (!el) return;
         el.addEventListener("change", updateSaveProfileDirtyState);
@@ -3023,42 +3006,52 @@ def render_protocol_assets_page(base_path: str) -> str:
       }});
     }}
     function onRuntimeModeChanged() {{
-      const mode = String(document.getElementById("runtimeMode")?.value || "");
-      const isDocker = mode === "docker";
+      const isDocker = anyRuntimeDocker();
+      const napDocker = String(document.getElementById("runtimeModeNapcat")?.value || "") === "docker";
       const dockerArea = document.getElementById("dockerProfileArea");
       if (dockerArea) dockerArea.style.display = isDocker ? "block" : "none";
       const target = document.getElementById("targetPlatform");
-      if (target) target.disabled = isDocker;
+      if (target) target.disabled = napDocker;
       const dlTagBtn = document.getElementById("btnDownloadTag");
-      const dlBtn = document.getElementById("btnUpdate");
-      if (dlTagBtn) dlTagBtn.disabled = isDocker;
-      if (dlBtn) dlBtn.textContent = isDocker ? "Docker 模式无需下载" : "立即更新";
+      if (dlTagBtn) dlTagBtn.disabled = napDocker;
+      syncAssetDownloadButtonText();
       if (typeof shellPrettySyncSelect === "function") {{
-        const rm = document.getElementById("runtimeMode");
+        const r1 = document.getElementById("runtimeModeNapcat");
+        const r2 = document.getElementById("runtimeModeSnowluma");
         const tp = document.getElementById("targetPlatform");
-        if (rm) shellPrettySyncSelect(rm);
+        if (r1) shellPrettySyncSelect(r1);
+        if (r2) shellPrettySyncSelect(r2);
         if (tp) shellPrettySyncSelect(tp);
       }}
     }}
     async function loadRuntimeProfile() {{
       const data = await api("/api/runtime/profile");
       const p = data.profile || {{}};
-      const mode = ["docker", "appimage", "shell"].includes(String(p.runtime_mode || "")) ? p.runtime_mode : "shell";
+      const leg = ["docker", "appimage", "shell"].includes(String(p.runtime_mode || "")) ? p.runtime_mode : "shell";
+      const nap = ["docker", "appimage", "shell"].includes(String(p.napcat_runtime_mode || ""))
+        ? p.napcat_runtime_mode
+        : leg;
+      const snow = ["docker", "appimage", "shell"].includes(String(p.snowluma_runtime_mode || ""))
+        ? p.snowluma_runtime_mode
+        : leg;
       const platform = ["auto", "linux-amd64", "linux-arm64", "windows-amd64"].includes(String(p.target_platform || ""))
         ? p.target_platform
         : "auto";
-      document.getElementById("runtimeMode").value = mode;
+      document.getElementById("runtimeModeNapcat").value = nap;
+      document.getElementById("runtimeModeSnowluma").value = snow;
       document.getElementById("targetPlatform").value = platform;
       document.getElementById("dockerImage").value = String(p.docker_image || "");
       const sld = document.getElementById("snowlumaDockerImage");
       if (sld) sld.value = String(p.snowluma_docker_image || "");
       document.getElementById("followBotLifecycle").checked = !!p.follow_bot_lifecycle;
-      runtimeProfileSnapshot = normalizeRuntimeProfile(p);
+      const pc = document.getElementById("runtimeProfilePruneContainers");
+      if (pc) pc.value = "all";
+      runtimeProfileSnapshot = normalizeRuntimeProfile({{ ...p, prune_containers: "all" }});
       bindRuntimeProfileWatchers();
       updateSaveProfileDirtyState();
       onRuntimeModeChanged();
       if (typeof shellPrettySyncSelect === "function") {{
-        ["runtimeMode", "targetPlatform", "dockerImageSelect", "snowlumaDockerImageSelect"].forEach((id) => {{
+        ["runtimeModeNapcat", "runtimeModeSnowluma", "targetPlatform", "dockerImageSelect", "snowlumaDockerImageSelect", "runtimeProfilePruneContainers", "assetsProtoSelect"].forEach((id) => {{
           const el = document.getElementById(id);
           if (el) shellPrettySyncSelect(el);
         }});
@@ -3072,11 +3065,13 @@ def render_protocol_assets_page(base_path: str) -> str:
       setBtnBusy(btn, true, "保存设置", "保存中...");
       try {{
         const body = {{
-          runtime_mode: document.getElementById("runtimeMode").value,
+          napcat_runtime_mode: document.getElementById("runtimeModeNapcat").value,
+          snowluma_runtime_mode: document.getElementById("runtimeModeSnowluma").value,
           target_platform: document.getElementById("targetPlatform").value,
           docker_image: document.getElementById("dockerImage").value.trim(),
           snowluma_docker_image: (document.getElementById("snowlumaDockerImage")?.value || "").trim(),
           follow_bot_lifecycle: !!document.getElementById("followBotLifecycle").checked,
+          prune_containers: (document.getElementById("runtimeProfilePruneContainers")?.value || "all"),
         }};
         await api("/api/runtime/profile", {{
           method: "PUT",
@@ -3085,7 +3080,7 @@ def render_protocol_assets_page(base_path: str) -> str:
         }});
         runtimeProfileSnapshot = normalizeRuntimeProfile(body);
         updateSaveProfileDirtyState();
-        await refreshRuntime({{ silent: true }});
+        await assetRefreshOverview({{ silent: true }});
       }} catch (e) {{
         alert(e.message || e);
       }} finally {{
@@ -3122,7 +3117,7 @@ def render_protocol_assets_page(base_path: str) -> str:
       setBtnBusy(btn, true, "拉取镜像", "拉取中...");
       try {{
         const image = document.getElementById("dockerImage").value.trim();
-        appendDockerPullLog("开始拉取镜像: " + (image || "mlikiowa/napcat-docker:latest"));
+        appendDockerPullLog("开始拉取 NapCat 镜像: " + (image || "mlikiowa/napcat-docker:latest"));
         const body = {{ image }};
         const res = await api("/api/runtime/docker/pull", {{
           method: "POST",
@@ -3259,7 +3254,7 @@ def render_protocol_assets_page(base_path: str) -> str:
       if (runtimeRefreshing) return;
       runtimeRefreshing = true;
       if (!silent) {{
-        setBtnBusy(document.getElementById("btnRefreshRuntime"), true, "刷新状态", "刷新中...");
+        setBtnBusy(document.getElementById("btnAssetRefresh"), true, "刷新状态", "刷新中...");
       }}
       try {{
         const data = await api("/api/runtime");
@@ -3280,7 +3275,6 @@ def render_protocol_assets_page(base_path: str) -> str:
         setText("rtSource", manifest.source_url || `${{d.repo || "-"}} @ ${{tag || "latest"}}`);
         setText("rtProgramDir", data.effective_program_dir || manifest.program_dir || "-");
         setText("rtTime", new Date().toLocaleTimeString());
-        fillSnowlumaFromData(data.snowluma || {{}});
       }} catch (e) {{
         {{
           const rs = document.getElementById("runtimeStatus");
@@ -3292,18 +3286,46 @@ def render_protocol_assets_page(base_path: str) -> str:
         setText("rtTime", new Date().toLocaleTimeString());
       }} finally {{
         if (!silent) {{
-          setBtnBusy(document.getElementById("btnRefreshRuntime"), false, "刷新状态", "刷新中...");
+          setBtnBusy(document.getElementById("btnAssetRefresh"), false, "刷新状态", "刷新中...");
         }}
         runtimeRefreshing = false;
       }}
     }}
-    async function loadReleases() {{
+    async function refreshSnowlumaOverview(opts = {{}}) {{
+      const silent = !!opts.silent;
+      if (!silent) {{
+        setBtnBusy(document.getElementById("btnAssetRefresh"), true, "刷新状态", "刷新中...");
+      }}
+      try {{
+        const sl = await api("/api/snowluma/runtime/overview");
+        fillRuntimeOverviewFromPayload(sl);
+      }} catch (e) {{
+        {{
+          const rs = document.getElementById("runtimeStatus");
+          if (rs && !shouldPauseLiveLogDomWrite(rs)) rs.textContent = String(e.message || e);
+        }}
+        setText("rtStatus", "失败");
+        setText("rtStage", "错误");
+        setText("rtMessage", String(e.message || e));
+        setText("rtTime", new Date().toLocaleTimeString());
+        if (!silent) alert(String(e.message || e));
+      }} finally {{
+        if (!silent) {{
+          setBtnBusy(document.getElementById("btnAssetRefresh"), false, "刷新状态", "刷新中...");
+        }}
+      }}
+    }}
+    async function loadAssetReleases() {{
       const btn = document.getElementById("btnLoadReleases");
       btn.disabled = true;
       btn.textContent = "加载中…";
       try {{
-        const data = await api("/api/runtime/releases?limit=200");
+        const url = assetsProtoIsSl()
+          ? "/api/snowluma/runtime/releases?limit=200"
+          : "/api/runtime/releases?limit=200";
+        const data = await api(url);
         const releases = data.releases || [];
+        _assetReleaseList = releases;
         const sel = document.getElementById("releaseSelect");
         sel.innerHTML = releases.map((r) => {{
           const label = r.tag_name + (r.prerelease ? " (pre)" : "") + (r.name && r.name !== r.tag_name ? " · " + r.name : "");
@@ -3311,51 +3333,87 @@ def render_protocol_assets_page(base_path: str) -> str:
         }}).join("");
         document.getElementById("releasesArea").style.display = "block";
         document.getElementById("releasesPlaceholder").style.display = "none";
-        updateReleaseDetail(releases);
-        sel.addEventListener("change", () => updateReleaseDetail(releases));
+        updateAssetReleaseDetail();
+        sel.onchange = () => updateAssetReleaseDetail();
         if (typeof shellPrettySyncSelect === "function" && sel) shellPrettySyncSelect(sel);
       }} catch (e) {{
         alert("加载 release 列表失败: " + (e.message || e));
       }} finally {{
         btn.disabled = false;
-        btn.textContent = "刷新列表";
+        btn.textContent = "加载版本列表";
       }}
     }}
-    function updateReleaseDetail(releases) {{
+    function updateAssetReleaseDetail() {{
+      const releases = _assetReleaseList || [];
       const sel = document.getElementById("releaseSelect");
+      if (!sel) return;
       const tag = sel.value;
       const r = releases.find((x) => x.tag_name === tag);
       const el = document.getElementById("releaseDetail");
+      if (!el) return;
       if (!r) {{ el.textContent = ""; return; }}
       const parts = [];
       if (r.published_at) parts.push("发布于 " + new Date(r.published_at).toLocaleDateString("zh-CN"));
       if (r.assets && r.assets.length) parts.push("资产: " + r.assets.map((a) => a.name).join(", "));
       el.textContent = parts.join(" · ");
     }}
-    function fillSnowlumaFromData(sl) {{
+    function fillRuntimeOverviewFromPayload(sl) {{
       if (!sl) sl = {{}};
       const job = sl.job || {{}};
       const d = sl.download || {{}};
       const manifest = sl.manifest || {{}};
-      setText("slRtStatus", statusText(job.status));
-      setText("slRtStage", stageText(job.message));
+      setText("rtStatus", statusText(job.status));
+      setText("rtStage", stageText(job.message));
       const tag = pendingSnowlumaTag || job.tag || manifest.release_tag || d.tag || "";
-      const slAssetEl = document.getElementById("slRtAsset");
-      if (slAssetEl) slAssetEl.title = String(d.asset || manifest.asset_name || "");
-      setText("slRtAsset", tag || d.asset || manifest.asset_name || "-");
-      setText("slRtMessage", job.message || "-");
+      const assetEl = document.getElementById("rtAsset");
+      if (assetEl) assetEl.title = String(d.asset || manifest.asset_name || "");
+      setText("rtAsset", tag || d.asset || manifest.asset_name || "-");
+      setText("rtMessage", job.message || "-");
       const repo = d.repo || "-";
       const tagHint = tag || d.tag || "latest";
-      setText("slRtSource", manifest.source_url ? manifest.source_url : `${{repo}} @ ${{tagHint}}`);
-      setText("slRtProgramDir", sl.effective_program_dir || manifest.program_dir || "-");
-      setText("slRtTime", new Date().toLocaleTimeString());
-      const pre = document.getElementById("snowlumaRuntimeStatus");
+      setText("rtSource", manifest.source_url ? manifest.source_url : `${{repo}} @ ${{tagHint}}`);
+      setText("rtProgramDir", sl.effective_program_dir || manifest.program_dir || "-");
+      setText("rtTime", new Date().toLocaleTimeString());
+      const pre = document.getElementById("runtimeStatus");
       if (pre && !shouldPauseLiveLogDomWrite(pre)) pre.textContent = JSON.stringify(sl, null, 2);
     }}
-    async function downloadSelectedTag() {{
+    async function assetActivateSelectedTag() {{
       const sel = document.getElementById("releaseSelect");
-      const tag = sel.value;
+      const tag = sel ? sel.value : "";
       if (!tag) {{ alert("请先选择版本"); return; }}
+      if (assetsProtoIsSl()) {{
+        try {{
+          await api("/api/snowluma/runtime/activate-tag", {{
+            method: "POST",
+            headers: {{ "Content-Type": "application/json" }},
+            body: JSON.stringify({{ tag }}),
+          }});
+          pendingSnowlumaTag = null;
+          const slo = await api("/api/snowluma/runtime/overview");
+          fillRuntimeOverviewFromPayload(slo);
+          await loadAssetLocalInventory();
+          alert("已将托管切换到版本 " + tag + "。");
+        }} catch (e) {{
+          const msg = String(e.message || e);
+          if (msg.includes("未找到") && msg.includes("解压")) {{
+            pendingSnowlumaTag = tag;
+            setText("rtAsset", tag);
+            setText("rtStatus", "待更新");
+            setText("rtStage", "已选择");
+            setText("rtMessage", "本地尚无该版本解压目录，已选中 " + tag + "，请点击「下载 / 更新」");
+            setText("rtTime", new Date().toLocaleTimeString());
+            const btn = document.getElementById("btnDownloadTag");
+            if (btn) {{
+              const prev = btn.textContent;
+              btn.textContent = "✓ 待下载";
+              setTimeout(() => {{ btn.textContent = prev; }}, 1500);
+            }}
+          }} else {{
+            alert(msg);
+          }}
+        }}
+        return;
+      }}
       try {{
         await api("/api/runtime/activate-tag", {{
           method: "POST",
@@ -3364,7 +3422,7 @@ def render_protocol_assets_page(base_path: str) -> str:
         }});
         pendingTag = null;
         await refreshRuntime({{ silent: true }});
-        await loadNapcatLocalInventory();
+        await loadAssetLocalInventory();
         alert("已将托管切换到版本 " + tag + "。");
       }} catch (e) {{
         const msg = String(e.message || e);
@@ -3379,24 +3437,27 @@ def render_protocol_assets_page(base_path: str) -> str:
           setText("rtMessage", "本地尚无该版本解压目录，已选中 " + tag + "，请点击「立即更新」下载");
           setText("rtTime", new Date().toLocaleTimeString());
           const btn = document.getElementById("btnDownloadTag");
-          const prev = btn.textContent;
-          btn.textContent = "✓ 待下载";
-          setTimeout(() => {{ btn.textContent = prev; }}, 1500);
+          if (btn) {{
+            const prev = btn.textContent;
+            btn.textContent = "✓ 待下载";
+            setTimeout(() => {{ btn.textContent = prev; }}, 1500);
+          }}
         }} else {{
           alert(msg);
         }}
       }}
     }}
     async function downloadRuntime() {{
-      const mode = String(document.getElementById("runtimeMode")?.value || "");
+      const mode = String(document.getElementById("runtimeModeNapcat")?.value || "");
       if (mode === "docker") {{
-        alert("Docker 模式无需下载 NapCat 发行包，请使用上方对应输入框旁的「拉取镜像」。");
+        alert("Docker 模式无需下载发行包，请使用上方「NapCat Docker 镜像」旁的「拉取镜像」。");
         return;
       }}
-      setBtnBusy(document.getElementById("btnUpdate"), true, "立即更新", "更新中...");
+      const dl = document.getElementById("btnAssetDownload");
+      setBtnBusy(dl, true, "立即更新", "更新中...");
       try {{
         const tp = String(document.getElementById("targetPlatform")?.value || "auto");
-        const modeQ = String(document.getElementById("runtimeMode")?.value || "");
+        const modeQ = String(document.getElementById("runtimeModeNapcat")?.value || "");
         const qs = [];
         if (tp) qs.push("target_platform=" + encodeURIComponent(tp));
         if (modeQ) qs.push("runtime_mode=" + encodeURIComponent(modeQ));
@@ -3406,104 +3467,28 @@ def render_protocol_assets_page(base_path: str) -> str:
         await api(url, {{ method: "POST" }});
         pendingTag = null;
         await refreshRuntime();
-        void loadNapcatLocalInventory();
+        void loadAssetLocalInventory();
       }} catch (e) {{ alert(e.message); }}
       finally {{
-        setBtnBusy(document.getElementById("btnUpdate"), false, "立即更新", "更新中...");
+        setBtnBusy(dl, false, "立即更新", "更新中...");
+        syncAssetDownloadButtonText();
       }}
     }}
     async function rescanRuntime() {{
+      if (assetsProtoIsSl()) return;
       setBtnBusy(document.getElementById("btnRescan"), true, "刷新检测", "检测中...");
       try {{
         await api("/api/runtime/rescan", {{ method: "POST" }});
         await refreshRuntime();
-        void loadNapcatLocalInventory();
+        void loadAssetLocalInventory();
       }} catch (e) {{ alert(e.message); }}
       finally {{
         setBtnBusy(document.getElementById("btnRescan"), false, "刷新检测", "检测中...");
       }}
     }}
-    async function refreshSnowlumaOverview() {{
-      setBtnBusy(document.getElementById("btnSlRefresh"), true, "刷新 SnowLuma", "刷新中...");
-      try {{
-        const sl = await api("/api/snowluma/runtime/overview");
-        fillSnowlumaFromData(sl);
-      }} catch (e) {{
-        alert(String(e.message || e));
-      }} finally {{
-        setBtnBusy(document.getElementById("btnSlRefresh"), false, "刷新 SnowLuma", "刷新中...");
-      }}
-    }}
-    async function loadSnowlumaReleases() {{
-      const btn = document.getElementById("btnSlLoadReleases");
-      btn.disabled = true;
-      btn.textContent = "加载中…";
-      try {{
-        const data = await api("/api/snowluma/runtime/releases?limit=200");
-        const releases = data.releases || [];
-        const sel = document.getElementById("slReleaseSelect");
-        sel.innerHTML = releases.map((r) => {{
-          const label = r.tag_name + (r.prerelease ? " (pre)" : "") + (r.name && r.name !== r.tag_name ? " · " + r.name : "");
-          return `<option value="${{r.tag_name}}">${{label}}</option>`;
-        }}).join("");
-        document.getElementById("slReleasesArea").style.display = "block";
-        document.getElementById("slReleasesPlaceholder").style.display = "none";
-        updateSlReleaseDetail(releases);
-        sel.addEventListener("change", () => updateSlReleaseDetail(releases));
-        if (typeof shellPrettySyncSelect === "function" && sel) shellPrettySyncSelect(sel);
-      }} catch (e) {{
-        alert("加载 SnowLuma release 失败: " + (e.message || e));
-      }} finally {{
-        btn.disabled = false;
-        btn.textContent = "刷新列表";
-      }}
-    }}
-    function updateSlReleaseDetail(releases) {{
-      const sel = document.getElementById("slReleaseSelect");
-      const tag = sel.value;
-      const r = releases.find((x) => x.tag_name === tag);
-      const el = document.getElementById("slReleaseDetail");
-      if (!r) {{ el.textContent = ""; return; }}
-      const parts = [];
-      if (r.published_at) parts.push("发布于 " + new Date(r.published_at).toLocaleDateString("zh-CN"));
-      if (r.assets && r.assets.length) parts.push("资产: " + r.assets.map((a) => a.name).join(", "));
-      el.textContent = parts.join(" · ");
-    }}
-    async function snowlumaDownloadSelectedTag() {{
-      const sel = document.getElementById("slReleaseSelect");
-      const tag = sel.value;
-      if (!tag) {{ alert("请先选择版本"); return; }}
-      try {{
-        await api("/api/snowluma/runtime/activate-tag", {{
-          method: "POST",
-          headers: {{ "Content-Type": "application/json" }},
-          body: JSON.stringify({{ tag }}),
-        }});
-        pendingSnowlumaTag = null;
-        const slo = await api("/api/snowluma/runtime/overview");
-        fillSnowlumaFromData(slo);
-        await loadSnowlumaLocalInventory();
-        alert("已将托管切换到版本 " + tag + "。");
-      }} catch (e) {{
-        const msg = String(e.message || e);
-        if (msg.includes("未找到") && msg.includes("解压")) {{
-          pendingSnowlumaTag = tag;
-          setText("slRtAsset", tag);
-          setText("slRtStatus", "待更新");
-          setText("slRtStage", "已选择");
-          setText("slRtMessage", "本地尚无该版本解压目录，已选中 " + tag + "，请点击「下载 / 更新 SnowLuma」");
-          setText("slRtTime", new Date().toLocaleTimeString());
-          const btn = document.getElementById("btnSlDownloadTag");
-          const prev = btn.textContent;
-          btn.textContent = "✓ 待下载";
-          setTimeout(() => {{ btn.textContent = prev; }}, 1500);
-        }} else {{
-          alert(msg);
-        }}
-      }}
-    }}
     async function downloadSnowlumaRuntime() {{
-      setBtnBusy(document.getElementById("btnSlUpdate"), true, "下载 / 更新 SnowLuma", "处理中...");
+      const dl = document.getElementById("btnAssetDownload");
+      setBtnBusy(dl, true, "下载 / 更新", "处理中...");
       try {{
         const tp = String(document.getElementById("slTargetPlatform")?.value || "auto");
         try {{ localStorage.setItem("pallas_protocol_sl_target_platform", tp); }} catch (e) {{}}
@@ -3514,11 +3499,12 @@ def render_protocol_assets_page(base_path: str) -> str:
         await api("/api/snowluma/runtime/download" + q, {{ method: "POST" }});
         pendingSnowlumaTag = null;
         const slo = await api("/api/snowluma/runtime/overview");
-        fillSnowlumaFromData(slo);
-        void loadSnowlumaLocalInventory();
+        fillRuntimeOverviewFromPayload(slo);
+        void loadAssetLocalInventory();
       }} catch (e) {{ alert(e.message || e); }}
       finally {{
-        setBtnBusy(document.getElementById("btnSlUpdate"), false, "下载 / 更新 SnowLuma", "处理中...");
+        setBtnBusy(dl, false, "下载 / 更新", "处理中...");
+        syncAssetDownloadButtonText();
       }}
     }}
 {token_sync_js}
@@ -3526,8 +3512,8 @@ def render_protocol_assets_page(base_path: str) -> str:
       const rs = document.getElementById("runtimeStatus");
       if (rs && !shouldPauseLiveLogDomWrite(rs)) rs.textContent = "加载 profile 失败: " + String(e.message || e);
     }});
-    refreshRuntime({{ silent: true }});
-    setInterval(() => refreshRuntime({{ silent: true }}), 1200);
+    assetRefreshOverview({{ silent: true }}).catch(() => {{}});
+    setInterval(() => {{ void assetRefreshOverview({{ silent: true }}); }}, 1200);
   </script>
 </body>
 </html>
@@ -3649,13 +3635,28 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
             <div class="field" id="rowWebuiToken"><label>内置 WebUI token</label><input id="webui_token" autocomplete="off" /></div>
             <div id="rowSnowlumaDockerVnc" style="display:none;margin-top:4px">
               <p class="muted" style="margin:0 0 10px;font-size:0.82rem;line-height:1.45">
-                当前账号为 <strong>SnowLuma Linux Docker</strong> 时，可在此指定宿主机上的 <strong>noVNC</strong>（浏览器进桌面）与 <strong>VNC</strong> 映射端口；<strong>填 0</strong> 表示不发布该端口，<strong>留空并保存</strong>则跟随全局 <code>.env</code>。多实例须使用不同端口。
+                当前账号为 <strong>SnowLuma Linux Docker</strong> 时，<strong>OneBot HTTP/WS</strong> 与 <strong>noVNC / VNC</strong> 在留空时由服务端按已占用端口自动挑选宿主机端口（多实例互不冲突）。
+                亦可在此手动指定 <strong>noVNC</strong>（浏览器桌面）与 <strong>VNC</strong>：<strong>填 0</strong> 表示不发布该映射，<strong>留空并保存</strong>则走自动或全局 <code>.env</code>。
               </p>
               <div class="field"><label>宿主机 noVNC 端口</label>
-                <input id="snowluma_docker_host_novnc_port" type="number" min="0" max="65535" placeholder="留空=跟随全局" />
+                <input id="snowluma_docker_host_novnc_port" type="number" min="0" max="65535" placeholder="留空=自动或全局" />
               </div>
               <div class="field"><label>宿主机 VNC 端口</label>
-                <input id="snowluma_docker_host_vnc_port" type="number" min="0" max="65535" placeholder="留空=跟随全局" />
+                <input id="snowluma_docker_host_vnc_port" type="number" min="0" max="65535" placeholder="留空=自动或全局" />
+              </div>
+            </div>
+            <div id="snowlumaDockerPortMapCard" style="display:none;margin-top:12px;padding:12px 14px;border:1px solid var(--bd);border-radius:var(--radius);background:var(--bg1)">
+              <div style="font-size:0.88rem;font-weight:700;color:var(--txt);margin-bottom:8px">SnowLuma Docker 端口映射</div>
+              <p id="snowlumaDockerPortMapHint" class="muted" style="margin:0 0 8px;font-size:0.8rem;line-height:1.45"></p>
+              <div id="snowlumaDockerPortMapTableWrap" style="overflow:auto;max-height:220px">
+                <table class="acc-table" style="width:100%;border-collapse:collapse;font-size:0.82rem">
+                  <thead><tr>
+                    <th style="text-align:left;padding:6px 8px">服务</th>
+                    <th style="text-align:left;padding:6px 8px">宿主机</th>
+                    <th style="text-align:left;padding:6px 8px">容器内</th>
+                  </tr></thead>
+                  <tbody id="snowlumaDockerPortMapBody"></tbody>
+                </table>
               </div>
             </div>
             <hr style="border:none;border-top:1px solid var(--bd);margin:6px 0 14px" />
@@ -3945,10 +3946,33 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       if (nn) nn.value = (gn !== undefined && gn !== null && String(gn).trim() !== "") ? String(gn) : "";
       if (vv) vv.value = (gv !== undefined && gv !== null && String(gv).trim() !== "") ? String(gv) : "";
     }}
+    function syncSnowlumaDockerPortMapCard(account) {{
+      const card = document.getElementById("snowlumaDockerPortMapCard");
+      const hint = document.getElementById("snowlumaDockerPortMapHint");
+      const body = document.getElementById("snowlumaDockerPortMapBody");
+      if (!card || !body) return;
+      const sp = account && account.snowluma_publish_ports;
+      const items = sp && Array.isArray(sp.items) ? sp.items : [];
+      const show = !!(account && account.snowluma_linux_docker && items.length);
+      card.style.display = show ? "block" : "none";
+      if (!show) return;
+      const host = String((sp && sp.bind_host) || "127.0.0.1").trim() || "127.0.0.1";
+      if (hint) {{
+        hint.textContent = "宿主机 " + escHtml(host) + " 上映射到容器内端口如下；保存设置并重启本账号协议进程后生效。";
+      }}
+      body.innerHTML = items.map((row) => {{
+        const lab = escHtml(row.label || "");
+        const hp = escHtml(String(row.host ?? ""));
+        const cp = escHtml(String(row.container ?? ""));
+        return "<tr><td style=\\"padding:6px 8px\\">" + lab + "</td>"
+          + "<td style=\\"padding:6px 8px;font-family:var(--font-mono,monospace)\\">" + escHtml(host) + ":" + hp + "</td>"
+          + "<td style=\\"padding:6px 8px;font-family:var(--font-mono,monospace)\\">" + cp + "</td></tr>";
+      }}).join("");
+    }}
     function applyConfigsPanelForSavedBackend() {{
       const isSl = __savedAccountBackend === "snowluma";
       const lbl = document.getElementById("lblCfgMid");
-      if (lbl) lbl.textContent = isSl ? "runtime（SnowLuma）" : "napcat";
+      if (lbl) lbl.textContent = isSl ? "runtime（SnowLuma）" : "napcat（NapCat）";
       const rowW = document.getElementById("rowCfgWebui");
       if (rowW) rowW.style.display = isSl ? "none" : "";
     }}
@@ -3995,6 +4019,22 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       if (wu) {{
         html += '<div style="margin-top:8px"><a href="' + escHtml(wu) + '" target="_blank" rel="noopener">打开原生 WebUI</a></div>';
       }}
+      if (a.snowluma_linux_docker) {{
+        const nv = a.snowluma_docker_novnc;
+        if (nv && nv.url) {{
+          const defPw = !!nv.uses_default_vnc_password;
+          html += '<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--radius);background:var(--bg1);max-width:640px">';
+          html += '<div style="font-weight:700;font-size:0.92rem;margin-bottom:6px;color:var(--txt)">SnowLuma 桌面（noVNC）</div>';
+          html += '<p class="muted" style="margin:0 0 8px;font-size:0.82rem;line-height:1.5">请在容器<strong>启动后</strong>使用下方链接进入桌面；在 noVNC 中连接 VNC 时填写口令。'
+            + (defPw ? ' 未设置全局 <code>PALLAS_PROTOCOL_SNOWLUMA_DOCKER_VNC_PASSWD</code> 时，默认口令为 <span class="mono">vncpasswd</span>。' : ' 口令以服务端 <code>PALLAS_PROTOCOL_SNOWLUMA_DOCKER_VNC_PASSWD</code> 为准。')
+            + '</p>';
+          html += '<div style="margin-top:4px"><a class="btn secondary" href="' + escHtml(String(nv.url)) + '" target="_blank" rel="noopener">打开 noVNC</a>'
+            + '<span class="muted" style="margin-left:10px;font-size:0.78rem">无法打开时可尝试同端口根路径 <span class="mono">/</span></span></div>';
+          html += '</div>';
+        }} else {{
+          html += '<div class="muted" style="margin-top:8px;font-size:0.82rem;line-height:1.45">SnowLuma Docker：当前未发布 noVNC 宿主机端口，浏览器无法进桌面；请到「设置」填写或留空以自动分配端口。</div>';
+        }}
+      }}
       if (note) {{
         html += '<div class="muted" style="margin-top:8px;white-space:pre-wrap">' + escHtml(note) + "</div>";
       }}
@@ -4022,6 +4062,7 @@ def render_account_workspace(base_path: str, account_id: str) -> str:
       document.getElementById("webui_port").value = a.webui_port != null ? String(a.webui_port) : "";
       document.getElementById("webui_token").value = a.webui_token || "";
       syncSnowlumaDockerVncRow(a);
+      syncSnowlumaDockerPortMapCard(a);
       {{
         const hint = document.getElementById("webuiTokenHint");
         if (hint) {{

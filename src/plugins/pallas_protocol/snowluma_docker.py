@@ -118,6 +118,7 @@ def build_snowluma_docker_run_argv(account: dict, config: Any, resolve_qq) -> li
         "SYS_PTRACE",
         "--security-opt",
         "seccomp=unconfined",
+        # WebUI 以挂载 runtime.json 为准；env 供镜像入口可选。
         "-e",
         f"SNOWLUMA_WEBUI_PORT={in_webui}",
         "-v",

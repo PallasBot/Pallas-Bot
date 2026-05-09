@@ -2,7 +2,7 @@ import os
 import shutil
 import socket
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from .contract import (
@@ -15,6 +15,18 @@ from .contract import (
 from .platform import get_napcat_platform
 from .platform import windows as _win
 from .platform.base import NapcatPlatform
+
+_LINUX_RT_MODES = frozenset({"docker", "appimage", "shell"})
+
+
+def _profile_linux_runtime_mode(profile: dict | None, *, split_key: str) -> str:
+    if not isinstance(profile, dict):
+        return ""
+    for k in (split_key, "runtime_mode"):
+        m = str(profile.get(k, "") or "").strip().lower()
+        if m in _LINUX_RT_MODES:
+            return m
+    return ""
 
 
 class LaunchManager:
@@ -31,6 +43,7 @@ class LaunchManager:
         snowluma_runtime_dir_for_account: Callable[[dict], Path | None] | None = None,
         runtime_profile_provider: Callable[[], dict] | None = None,
         platform: NapcatPlatform | None = None,
+        snowluma_docker_allocate_host_ports: Callable[[dict], Mapping[str, int]] | None = None,
     ) -> None:
         self._plugin_data_dir = plugin_data_dir
         self._resource_root = resource_root
@@ -42,6 +55,7 @@ class LaunchManager:
         self._snowluma_runtime_dir_for_account = snowluma_runtime_dir_for_account
         self._runtime_profile_provider = runtime_profile_provider
         self._platform = platform or get_napcat_platform()
+        self._snowluma_docker_allocate_host_ports = snowluma_docker_allocate_host_ports
 
     def _managed_runtime_extract_root(self) -> Path:
         return (self._plugin_data_dir / "runtime_extract" / "napcat").resolve()
@@ -164,6 +178,8 @@ class LaunchManager:
                 acc_rt = None
 
         program_dir_raw = str(account.get("program_dir", "")).strip()
+        if program_dir_raw.lower().startswith("docker:"):
+            program_dir_raw = ""
         lazy_rt = self._runtime_dir_provider() if self._runtime_dir_provider else None
         runtime_str = str(lazy_rt).strip() if lazy_rt else ""
         configured_program_dir = str(getattr(self._config, "pallas_protocol_program_dir", "")).strip()
@@ -216,11 +232,38 @@ class LaunchManager:
             sock.close()
         return True
 
-    def _allocate_snowluma_docker_onebot_host_ports(self, account: dict) -> tuple[int, int]:
-        lo = int(getattr(self._config, "pallas_protocol_webui_port_min", 6099) or 6099)
-        hi = int(getattr(self._config, "pallas_protocol_webui_port_max", 7999) or 7999)
-        if hi < lo:
-            lo, hi = hi, lo
+    def _apply_snowluma_linux_docker_profile(self, account: dict, resolve_qq) -> None:
+        from .snowluma_docker import build_snowluma_docker_run_argv, snowluma_docker_program_dir_marker
+
+        profile_mode = ""
+        if self._runtime_profile_provider is not None:
+            try:
+                profile_mode = _profile_linux_runtime_mode(
+                    self._runtime_profile_provider(),
+                    split_key="snowluma_runtime_mode",
+                )
+            except Exception:
+                profile_mode = ""
+        docker_enabled = bool(getattr(self._config, "pallas_protocol_snowluma_linux_use_docker", False))
+        if profile_mode == "docker":
+            docker_enabled = True
+        elif profile_mode in ("appimage", "shell"):
+            docker_enabled = False
+        if not docker_enabled:
+            pd = str(account.get("program_dir", "") or "").strip()
+            if pd.lower().startswith("docker:"):
+                account["program_dir"] = ""
+            return
+        if profile_mode != "docker" and account.get("snowluma_linux_docker") is False:
+            return
+        raw = str(account.get("command", "") or "").strip()
+        raw_name = Path(raw).name.lower() if raw else ""
+        if profile_mode != "docker" and raw and raw_name not in ("node", "node.exe", "docker", "docker.exe"):
+            return
+        in_http = int(getattr(self._config, "pallas_protocol_snowluma_docker_internal_onebot_http_port", 3000) or 3000)
+        in_ws = int(getattr(self._config, "pallas_protocol_snowluma_docker_internal_onebot_ws_port", 3001) or 3001)
+        in_novnc = int(getattr(self._config, "pallas_protocol_snowluma_docker_internal_novnc_port", 6081) or 6081)
+        in_vnc = int(getattr(self._config, "pallas_protocol_snowluma_docker_internal_vnc_port", 5900) or 5900)
         try:
             ex_h = int(str(account.get("snowluma_docker_host_onebot_http", "")).strip())
         except (TypeError, ValueError):
@@ -233,78 +276,60 @@ class LaunchManager:
             wui = int(str(account.get("webui_port", "")).strip())
         except (TypeError, ValueError):
             wui = 0
-        if 1 <= ex_h <= 65535 and 1 <= ex_w <= 65535 and ex_h != ex_w and ex_h != wui and ex_w != wui:
-            return ex_h, ex_w
-        exclude: set[int] = set()
-        if 1 <= wui <= 65535:
-            exclude.add(wui)
-
-        def pick() -> int:
-            for p in range(lo, hi + 1):
-                if p in exclude:
-                    continue
-                if self._tcp_bindable_on_host(p):
-                    exclude.add(p)
-                    return p
-            msg = f"在 {lo}-{hi} 内未找到可用于 SnowLuma Docker OneBot 映射的宿主机端口"
-            raise ValueError(msg)
-
-        return pick(), pick()
-
-    def _allocate_snowluma_docker_novnc_host_port(self, account: dict) -> int:
-        lo = int(getattr(self._config, "pallas_protocol_webui_port_min", 6099) or 6099)
-        hi = int(getattr(self._config, "pallas_protocol_webui_port_max", 7999) or 7999)
-        if hi < lo:
-            lo, hi = hi, lo
-        exclude: set[int] = set()
-        for k in (
-            "webui_port",
-            "snowluma_docker_host_onebot_http",
-            "snowluma_docker_host_onebot_ws",
-            "snowluma_docker_host_vnc_port",
+        allocated: Mapping[str, int] | None = None
+        if (
+            1 <= ex_h <= 65535
+            and 1 <= ex_w <= 65535
+            and ex_h != ex_w
+            and (ex_h != in_http or ex_w != in_ws)
+            and (not (1 <= wui <= 65535) or (ex_h != wui and ex_w != wui))
         ):
-            raw = account.get(k)
-            try:
-                v = int(str(raw).strip()) if raw is not None and str(raw).strip() != "" else 0
-            except (TypeError, ValueError):
-                v = 0
-            if 1 <= v <= 65535:
-                exclude.add(v)
-        for p in range(lo, hi + 1):
-            if p in exclude:
-                continue
-            if self._tcp_bindable_on_host(p):
-                return p
-        msg = f"在 {lo}-{hi} 内未找到可用于 SnowLuma Docker noVNC 映射的宿主机端口"
-        raise ValueError(msg)
+            account["snowluma_docker_host_onebot_http"] = ex_h
+            account["snowluma_docker_host_onebot_ws"] = ex_w
+        else:
+            if self._snowluma_docker_allocate_host_ports is not None:
+                try:
+                    allocated = self._snowluma_docker_allocate_host_ports(account)
+                except Exception:
+                    from nonebot import logger
 
-    def _apply_snowluma_linux_docker_profile(self, account: dict, resolve_qq) -> None:
-        from .snowluma_docker import build_snowluma_docker_run_argv, snowluma_docker_program_dir_marker
+                    logger.exception("SnowLuma Docker 自动分配宿主机端口失败，回退为与容器内同号的宿主机端口")
+                    allocated = None
+            if allocated:
+                account["snowluma_docker_host_onebot_http"] = int(allocated["onebot_http"])
+                account["snowluma_docker_host_onebot_ws"] = int(allocated["onebot_ws"])
+            else:
+                account["snowluma_docker_host_onebot_http"] = in_http
+                account["snowluma_docker_host_onebot_ws"] = in_ws
 
-        profile_mode = ""
-        if self._runtime_profile_provider is not None:
-            try:
-                profile_mode = str((self._runtime_profile_provider() or {}).get("runtime_mode", "")).strip().lower()
-            except Exception:
-                profile_mode = ""
-        docker_enabled = bool(getattr(self._config, "pallas_protocol_linux_use_docker", True))
-        if profile_mode == "docker":
-            docker_enabled = True
-        elif profile_mode in ("appimage", "shell"):
-            docker_enabled = False
-        if not docker_enabled:
-            return
-        if profile_mode != "docker" and account.get("snowluma_linux_docker") is False:
-            return
-        raw = str(account.get("command", "") or "").strip()
-        raw_name = Path(raw).name.lower() if raw else ""
-        if profile_mode != "docker" and raw and raw_name not in ("node", "node.exe", "docker", "docker.exe"):
-            return
-        h_http, h_ws = self._allocate_snowluma_docker_onebot_host_ports(account)
-        account["snowluma_docker_host_onebot_http"] = h_http
-        account["snowluma_docker_host_onebot_ws"] = h_ws
-        if "snowluma_docker_host_novnc_port" not in account:
-            account["snowluma_docker_host_novnc_port"] = self._allocate_snowluma_docker_novnc_host_port(account)
+        try:
+            cur_nn = account.get("snowluma_docker_host_novnc_port")
+            cur_nn_i = int(str(cur_nn).strip()) if cur_nn is not None and str(cur_nn).strip() != "" else 0
+        except (TypeError, ValueError):
+            cur_nn_i = 0
+        if cur_nn_i >= 1:
+            account["snowluma_docker_host_novnc_port"] = cur_nn_i
+        else:
+            if allocated:
+                account["snowluma_docker_host_novnc_port"] = int(allocated["host_novnc"])
+            else:
+                gn = int(getattr(self._config, "pallas_protocol_snowluma_docker_host_novnc_port", 0) or 0)
+                account["snowluma_docker_host_novnc_port"] = gn if gn >= 1 else in_novnc
+
+        try:
+            cur_vc = account.get("snowluma_docker_host_vnc_port")
+            cur_vc_i = int(str(cur_vc).strip()) if cur_vc is not None and str(cur_vc).strip() != "" else 0
+        except (TypeError, ValueError):
+            cur_vc_i = 0
+        if cur_vc_i >= 1:
+            account["snowluma_docker_host_vnc_port"] = cur_vc_i
+        else:
+            if allocated:
+                account["snowluma_docker_host_vnc_port"] = int(allocated["host_vnc"])
+            else:
+                gv = int(getattr(self._config, "pallas_protocol_snowluma_docker_host_vnc_port", 0) or 0)
+                account["snowluma_docker_host_vnc_port"] = gv if gv >= 1 else in_vnc
+
         account["snowluma_linux_docker"] = True
         account["command"] = "docker"
         account["args"] = build_snowluma_docker_run_argv(account, self._config, resolve_qq)
@@ -346,6 +371,8 @@ class LaunchManager:
             except Exception:
                 lazy_sl = ""
         program_dir_raw = str(account.get("program_dir", "") or "").strip()
+        if program_dir_raw.lower().startswith("docker:"):
+            program_dir_raw = ""
         if acc_sl is not None and acc_sl.is_dir():
             program_dir_raw = str(acc_sl.resolve())
         elif not program_dir_raw:
@@ -386,8 +413,10 @@ class LaunchManager:
         profile_mode = ""
         if self._runtime_profile_provider is not None:
             try:
-                profile = self._runtime_profile_provider() or {}
-                profile_mode = str(profile.get("runtime_mode", "")).strip().lower()
+                profile_mode = _profile_linux_runtime_mode(
+                    self._runtime_profile_provider(),
+                    split_key="napcat_runtime_mode",
+                )
             except Exception:
                 profile_mode = ""
         docker_enabled = bool(getattr(self._config, "pallas_protocol_linux_use_docker", True))
@@ -397,6 +426,9 @@ class LaunchManager:
             docker_enabled = False
         if not docker_enabled:
             account["napcat_linux_docker"] = False
+            pd = str(account.get("program_dir", "") or "").strip()
+            if pd.lower().startswith("docker:"):
+                account["program_dir"] = ""
             return
         if profile_mode != "docker" and account.get("napcat_linux_docker") is False:
             return
@@ -468,7 +500,10 @@ class LaunchManager:
             return
         if self._runtime_profile_provider is not None:
             try:
-                mode = str((self._runtime_profile_provider() or {}).get("runtime_mode", "")).strip().lower()
+                mode = _profile_linux_runtime_mode(
+                    self._runtime_profile_provider(),
+                    split_key="napcat_runtime_mode",
+                )
             except Exception:
                 mode = ""
             if mode == "shell":
@@ -517,6 +552,10 @@ class LaunchManager:
 
     def prepare_dirs(self, account: dict) -> None:
         program_dir_raw = str(account.get("working_dir", "")).strip()
+        if program_dir_raw.lower().startswith("docker:"):
+            ad = str(account.get("account_data_dir", "") or "").strip()
+            program_dir_raw = ad or ("." if os.name == "nt" else "/")
+            account["working_dir"] = program_dir_raw
         if program_dir_raw:
             program_dir_path = Path(program_dir_raw)
             # 规范工作目录路径
