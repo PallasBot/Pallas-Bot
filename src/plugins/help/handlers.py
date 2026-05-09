@@ -76,15 +76,11 @@ async def handle_help_command(
         await matcher.finish(f"博士，你说的'{plugin_identifier}'是什么呀？")
         return
 
-    if not find_plugin(plugin_name):
-        await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
-        return
-
     if len(args) == 1:
         is_disabled = await is_plugin_disabled(plugin_name, group_id, bot_id)
         plugin_status = "⛔ 禁用" if is_disabled else "✅ 启用"
         markdown_content, issue = generate_plugin_functions_markdown(plugin_name, plugin_status)
-        if issue != HelpMarkdownIssue.OK:
+        if issue is HelpMarkdownIssue.PLUGIN_NOT_FOUND:
             await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
             return
         await send_markdown_as_image(markdown_content, style_name, available_styles, matcher, group_id)

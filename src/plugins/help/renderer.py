@@ -16,12 +16,22 @@ from .styles import get_default_style
 
 def _help_image_cache_suffix() -> str:
     cfg = get_plugin_config(Config)
-    return (
+    base = (
         f"spaint={int(cfg.side_paint_enabled)}"
         f"|fn={cfg.side_paint_filename}"
         f"|sc={cfg.side_paint_scale:.4f}"
         f"|ap={int(cfg.side_paint_auto_page)}"
     )
+    if not cfg.side_paint_enabled:
+        return base
+    paint_path = project_path("resource", "styles", "default", "imgs") / cfg.side_paint_filename
+    if not paint_path.is_file():
+        return base
+    try:
+        paint_mtime = int(paint_path.stat().st_mtime)
+    except OSError:
+        paint_mtime = 0
+    return f"{base}|pm={paint_mtime}"
 
 
 def resize_image_if_needed(image, max_width=1200, max_height=2000):
@@ -83,7 +93,8 @@ async def _render_markdown(
         pillowmd.Setting.PAINT_PATH = paint_dir
         paint_path = paint_dir / help_cfg.side_paint_filename
         if paint_path.is_file():
-            pil = Image.open(paint_path).convert("RGBA")
+            with Image.open(paint_path) as opened:
+                pil = opened.convert("RGBA")
             sc = help_cfg.side_paint_scale
             if sc > 0 and sc != 1.0:
                 nw = max(1, int(pil.width * sc))
