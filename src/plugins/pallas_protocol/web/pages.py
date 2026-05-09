@@ -2515,7 +2515,7 @@ def render_protocol_assets_page(base_path: str) -> str:
       </div>
       <div class="assets-napcat-global-card" style="margin:0 0 16px;border:1px solid var(--bd);border-radius:var(--radius);padding:16px 18px;background:var(--bg1)">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">全局运行模式（NapCat / SnowLuma 分别配置）</span>
+          <span style="font-size:0.95rem;font-weight:700;color:var(--txt)">全局运行模式</span>
         </div>
         <div class="row" style="gap:12px;align-items:flex-end;flex-wrap:wrap">
           <div class="field" style="margin:0;min-width:170px;flex:1">

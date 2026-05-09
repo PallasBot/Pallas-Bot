@@ -14,7 +14,7 @@ PALLAS_WEBUI_HTTP_BASE=/pallas
 
 说明：
 
-- 控制台与协议端管理页共用口令：哈希在 `data/pallas_console/auth_state.json`，首次启动见 Bot 日志；浏览器登录后使用 HttpOnly 会话 Cookie（同源下 SPA 与 `/pallas/api/*` 自动携带）。
+- 控制台与协议端管理页共用口令：哈希在 `data/pallas_console/auth_state.json`，首次启动见 Bot 日志；浏览器登录后使用 HttpOnly 会话 Cookie（同源下 SPA 与 `/pallas/api/*` 自动携带）。遗忘口令时的运维处理见 [FAQ：部署排障](../../FAQ.md#部署排障) 中「遗忘了控制台 / 协议端管理页的登录口令」一节。
 - `PALLAS_WEBUI_DEV_MODE=true`：仅本机开发联调时跳过控制台 JSON API 与静态入口鉴权，**生产务必关闭**。
 - 页面默认地址是 `/pallas/`，改了 `HTTP_BASE` 后地址会跟着变
 
@@ -38,3 +38,5 @@ PALLAS_WEBUI_HTTP_BASE=/pallas
 - 页面打不开：先确认 `PALLAS_WEBUI_ENABLED=true`，以及访问路径是否与 `PALLAS_WEBUI_HTTP_BASE` 一致
 - 接口提示未授权：先访问 `/pallas/login` 登录；跨域 Vite 开发可开 `PALLAS_WEBUI_CORS` 并配 `PALLAS_WEBUI_ALLOWED_ORIGINS`，或临时 `PALLAS_WEBUI_DEV_MODE=true`
 - 升级前端后没变化：检查 `data/pallas_webui/public/` 是否被旧文件覆盖，必要时删除后重启触发重拉
+
+实现见 [`src/plugins/pallas_webui/`](../../../src/plugins/pallas_webui/)。

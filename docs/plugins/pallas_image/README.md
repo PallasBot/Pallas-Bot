@@ -113,3 +113,5 @@
 
 3. **次数未重置**：
    - 插件基于本地日期 (`date.today()`) 判断。如果服务器跨天未重启，内存中的数据会在次日首次调用时自动清理过期条目并持久化。
+
+实现见 [`src/plugins/pallas_image/`](../../../src/plugins/pallas_image/)（请求与绘制主逻辑见 `image_api.py`、`draw.py` 等）。

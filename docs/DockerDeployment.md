@@ -1,4 +1,4 @@
-# Pallas-Bot 3.0 Docker 部署
+# Pallas-Bot Docker 部署
 
 > 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`3.0 迁移`](Migration-v3.md) · [`FAQ`](FAQ.md)
 
@@ -87,7 +87,7 @@ docker compose --env-file ./pallas-bot/.env --profile postgres up -d
 docker compose logs -f pallasbot
 ```
 
-### 访问 3.0 控制台与协议端管理
+### 访问 Web 控制台与协议端管理
 
 （默认映射宿主机 `8088`，若已修改 `ports` 请替换。）
 

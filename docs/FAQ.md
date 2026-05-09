@@ -3,7 +3,7 @@
 > 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`Docker 部署`](DockerDeployment.md)
 
 本页收录 `Pallas-Bot` 的常见问题与排查建议。
-若你是首次部署，建议先阅读 `README.md` 中的“快速开始”与“首次启动自检”。
+若你是首次部署，建议先阅读 `README.md` 中的「快速开始」；控制台与协议端管理页的口令说明、遗忘后的重置方式见本页「部署排障」。
 
 ## 学习机制
 
@@ -40,8 +40,55 @@ A: 这是主动发言功能，内容同样来源于学习到的群聊语料。
 
 ### Q: 管理员、牛牛管理员、号主、超管都是什么?
 
-A: 管理员指的是群管理，牛牛管理员是可以控制牛牛部分功能的人，一般号主都应该配置为牛牛管理，每个号主控制自己的牛牛，超管则是对所有牛牛拥有控制权。
-牛牛的管理员需要在数据库中为配置，可以通过脚本为牛牛进行配置
+A: **群管理员**指 QQ 群里的管理员。**牛牛管理员**（数据库里的 **`admins`**）是可以控制该牛牛部分能力的人（例如私聊「牛牛重新上号」）；一般应把**号主** QQ 配进 **`admins`**，便于号主控制自己的牛牛。**超管**即 `.env` 里 **`SUPERUSERS`**，对所有牛牛有最高权限。
+
+给牛牛增加/修改 **`admins`** 的方式见下文 [如何为牛牛添加管理员（`admins`）](#faq-bot-admins)。
+
+<a id="faq-bot-admins"></a>
+
+### Q: 如何为牛牛添加管理员（`admins`）？
+
+A: **`account`** 为该牛牛的 QQ 号；**`admins`** 为 **QQ 号组成的 JSON 数组**（整数）。**不能**在 `.env` 里配置；改库或改 Web 控制台里的数据后，权限会按 `BotConfig` 缓存规则生效（Mongo 侧文档缓存约 60 秒），未立刻生效时可稍等或重启 Bot。
+
+**新建牛牛时（自动写入 `admins`）**：由 **超管** 私聊发送 **「创建牛牛」**（插件 `relogin_bot`），在命令参数中带上 **号主 QQ**（可填多个）；插件在协议端创建账号并启动后，会把这些号主 **自动写入**该牛牛的 **`admins`**，通常不必再手动改库或进 Web「数据库管理」补一行。命令格式与流程见 [relogin_bot 说明](plugins/relogin_bot/README.md)。
+
+**方式一：Web 控制台（推荐，与前端「数据库管理」联动）**
+
+1. 浏览器登录 Pallas Web 控制台（路径前缀见 `pallas_webui` 的 `PALLAS_WEBUI_HTTP_BASE`，常见为 `/pallas/`）。
+2. 打开侧边栏 **「数据库管理」**（前端路由 `database`，完整路径形如 **`/pallas/database`**，随 HTTP 基路径变化）。
+3. 在表类型中选择 **`config (bot_config)`**，找到 **`account`** 等于目标牛牛 QQ 的行。
+4. 编辑 **`admins`** 为 JSON 数组（例如 `[123456789, 987654321]`）并保存。
+
+**方式二：MongoDB（`DB_BACKEND=mongodb`）**
+
+- 集合名：**`config`**（对应代码中的 `BotConfigModule`）。
+- 文档字段：**`account`**（牛牛 QQ，数值）、**`admins`**（QQ 号数组）。
+- 库名：与当前 Bot 使用的 Mongo **数据库名**一致（见 `.env` 中 **`MONGO_DB`** / 连接串说明）。
+
+在 **`mongosh`** 中示例（将数字换成实际 QQ）：
+
+```javascript
+db.config.updateOne(
+  { account: 3888888888 },
+  { $set: { admins: [2777777777, 2666666666] } }
+)
+```
+
+若该 `account` 尚无文档，需先有 Bot 运行产生的配置或自行插入完整结构；一般已有行时只更新 **`admins`** 即可。
+
+**方式三：PostgreSQL（`DB_BACKEND=postgresql`）**
+
+- 表名：**`bot_config`**。
+- 主键列：**`account`**（`bigint`，牛牛 QQ）。
+- **`admins`**：`jsonb`，内容为 JSON 数组。
+
+```sql
+UPDATE bot_config
+SET admins = '[2777777777, 2666666666]'::jsonb
+WHERE account = 3888888888;
+```
+
+命令行工具也可使用仓库提供的 [`tools/config/config.mongodb`](../tools/config/config.mongodb) 等脚本（若你环境已配置好）；与直接改库等价，择一即可。
 
 ## 部署排障
 
@@ -52,6 +99,14 @@ A: 先检查数据库连通性、`OneBot WebSocket` 是否已连上（Docker 默
 ### Q: 控制台 / 协议端管理页的口令在哪里配？
 
 A: 不再从 `.env` 读取口令。首次启动在日志里打印随机口令，哈希保存在 `data/pallas_console/auth_state.json`；浏览器访问 `/pallas/login` 或协议端登录页登录。仅本机开发可在 `pallas_webui` 配置中开启 `pallas_webui_dev_mode` 跳过控制台鉴权。
+
+### Q: 遗忘了控制台 / 协议端管理页的登录口令怎么办？
+
+A: 磁盘上只有哈希，**没有「忘记密码」邮件或在线找回**；需能访问 Bot 的数据目录或历史日志。
+
+- **从未在设置里改过口令**：可看同目录下的 **`data/pallas_console/default_login_password.txt`**（若仍存在）。
+- **仍保留首次启动时的终端 / 容器日志**：其中会有「Pallas 默认口令」一类输出。
+- **以上都没有**：停掉 Bot，删除或移走 **`data/pallas_console/auth_state.json`** 后重启；进程会重新生成随机口令并写入日志（必要时可一并删除 **`session_secret.bin`**，避免旧会话状态干扰）。**所有已登录会话会失效**，新口令请妥善保存。
 
 ### Q: 执行 `docker compose` 时报 `project name must not be empty` 怎么办？
 

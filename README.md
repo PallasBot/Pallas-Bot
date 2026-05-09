@@ -35,10 +35,9 @@
 
 <p align="center">面向群聊场景的学习型机器人：会复读、会整活、可管理、可扩展。</p>
 
-> 🚀 当前主线：**Pallas-Bot 3.0**
-> 仍希望沿用 MongoDB-only 的老版本？完全兼容的 2.0 代码保留在 [`archive/v2`](https://github.com/PallasBot/Pallas-Bot/tree/archive/v2) 分支。
-> 从旧版本迁移到 `PG`：使用项目提供的 [Mongo -> PG 迁移脚本](tools/migrate_mongo_to_pg.py)。
-> 查看主线更新明细：[`版本更新`](#版本更新)
+>牛牛 基于 **`NoneBot2`** 与 **`OneBot v11`**，数据层支持 **`MongoDB`** 或 **`PostgreSQL`**；自带运维面板 [**`Pallas-Bot-WebUI`**](https://github.com/PallasBot/Pallas-Bot-WebUI.git)。
+发版与变更说明见 [Releases](https://github.com/PallasBot/Pallas-Bot/releases)；若需参考仅 **`MongoDB`** 的历史实现，见分支 [`archive/v2`](https://github.com/PallasBot/Pallas-Bot/tree/archive/v2)；向 **`PostgreSQL`** 迁移可使用 [Mongo → PG 迁移脚本](tools/migrate_mongo_to_pg.py)。
+
 <!-- Copy-paste in your Readme.md file -->
 
 <a href="https://next.ossinsight.io/widgets/official/analyze-repo-stars-history?repo_id=425810267" target="_blank" style="display: block" align="center">
@@ -54,6 +53,7 @@
 
 - [关于项目](#关于项目)
   - [项目特点](#项目特点)
+- [运维入口](#运维入口)
 - [快速开始（部署）](#快速开始部署)
   - [部署方式](#部署方式)
   - [环境要求](#环境要求)
@@ -61,10 +61,8 @@
 - [使用指南](#使用指南)
   - [功能列表](#功能列表)
   - [AI 扩展](#ai-扩展)
-- [配置与后端](#配置与后端)
-- [版本更新](#版本更新)
-- [常见问题](#常见问题)
-- [插件文档索引](#插件文档索引)
+- [配置要点](#配置要点)
+- [文档与链接](#文档与链接)
 - [开发与贡献指南](#开发与贡献指南)
 - [社区与支持](#社区与支持)
   - [QQ 群](#qq-群)
@@ -83,10 +81,24 @@
 
 - 学习型复读，不依赖硬编码问答库
 - 支持跨群语料聚合与全局禁用
-- 牛牛玩法：喝酒、轮盘、唱歌、聊天、夺舍
+- 牛牛玩法：喝酒、轮盘、唱歌、聊天、生图、夺舍；
 - 管理能力：黑名单、好友欢迎、好友/入群申请管理
-- 数据后端支持 `MongoDB` 与 `PostgreSQL`
+- 数据后端：`MongoDB` 或 `PostgreSQL`
+- 运维：`pallas_webui` 控制台、`pallas_protocol` 协议端管理
 
+<a id="运维入口"></a>
+## 🗂️ 运维入口
+
+以下路径中的 **`HOST`**、**`PORT`** 以 `.env` 为准（默认常为本机 **`8088`**）。
+
+| 入口 | URL 示例 |
+| --- | --- |
+| Web 控制台 | `http://<HOST>:<PORT>/pallas/` |
+| 协议端管理 | `http://<HOST>:<PORT>/protocol/console/` |
+
+- **登录口令**：控制台与协议端管理**共用**；首次启动见 Bot 日志。遗忘后的处理见 [FAQ · 部署排障](docs/FAQ.md#部署排障)。
+- **Docker**：`pallasbot` 服务镜像见根目录 [`docker-compose.yml`](docker-compose.yml) 的 `image`；需对齐某次 Release 时请直接改为带 tag 的镜像名（或自建 override 文件）。
+- **排障与插件字段**：[FAQ](docs/FAQ.md)、[协议端（pallas_protocol）](docs/plugins/pallas_protocol/README.md)、[控制台（pallas_webui）](docs/plugins/pallas_webui/README.md)。
 
 <a id="快速开始部署"></a>
 ## 🚀 快速开始（部署）
@@ -124,7 +136,7 @@ uv sync                 # 安装依赖
 uv run nb run
 ```
 > 完整部署细节请查看 [部署教程](docs/Deployment.md) 和 [Docker 部署](docs/DockerDeployment.md)。
-> 部署好自己牛牛之后，如果托管别人的账号成为你的牛牛，别忘记将他设置为牛牛的管理员!号主们都应该有控制自己牛牛的权力。
+> 部署好自己牛牛之后，若将他人账号接为自己的牛牛，请把对方 QQ 写入该牛牛的 **`admins`**（牛牛管理员）；**新建牛牛**时也可由超管私聊 **「创建牛牛」** 并在命令里带上号主 QQ，**会自动写入** `admins`。详见 [FAQ：如何为牛牛添加管理员](docs/FAQ.md#faq-bot-admins)。
 
 <a id="使用指南"></a>
 ## 📚 使用指南
@@ -142,6 +154,7 @@ uv run nb run
 - `牛牛轮盘`:提供踢人/禁言轮盘玩法，支持`牛牛救一下`与`牛牛补一枪`。
 - `酒后聊天`:牛牛醉酒时启用 AI 对话能力，支持 @牛牛 或"牛牛 + 文本"触发。（依赖 AI 服务端）。
 - `牛牛唱歌`:提供 AI 唱歌、继续唱、点歌、查询歌名支持（依赖 AI 服务端）。
+- `牛牛画画`：让牛牛AI生图；可附图或回复图作参考
 
 #### 被动功能
 - `repeater`:牛牛复读的核心组件
@@ -185,64 +198,42 @@ uv run nb run
 
 </details>
 
-<a id="配置与后端"></a>
-## ⚙️ 配置与后端
+<a id="配置要点"></a>
+## ⚙️ 配置要点
 
-以下为常用配置项，完整说明请以 `.env` 文件注释为准：
+以下为常用项，**完整键名与默认值以仓库根目录 `.env` 注释为准**。
 
 
-| 配置项               | 默认/示例                               | 说明                    | 必填      |
-| ----------------- | ----------------------------------- | --------------------- | ------- |
-| `DB_BACKEND`      | `mongo` / `postgres`                | 选择数据后端                | 是       |
-| `PG_POOL_SIZE`    | `10`                                | PostgreSQL 连接池基础连接数   | 否 |
-| `PG_MAX_OVERFLOW` | `20`                                | PostgreSQL 连接池最大额外连接数 | 否 |
-| `PG_POOL_RECYCLE` | `1800`                              | PostgreSQL 连接回收时间（秒）  | 否 |
-| `OneBot WS URL`   | `ws` + `://` + `localhost:8088/onebot/v11/ws` | 协议端连接地址               | 是       |
+| 配置项 | 默认/示例 | 说明 | 必填 |
+| --- | --- | --- | --- |
+| `HOST` / `PORT` | `0.0.0.0` / `8088` | Bot HTTP 监听；控制台与协议管理页同源 | 是 |
+| `SUPERUSERS` | QQ 号列表 | 超管 QQ | 是 |
+| `DB_BACKEND` | `mongodb` / `postgresql` | 数据后端 | 是 |
+| `MONGO_*` / `PG_*` | 见 `.env` 注释 | 数据库地址与账号（与 `DB_BACKEND` 对应） | 是 |
+| `ACCESS_TOKEN` | 空 | 驱动层 HTTP 鉴权；公网暴露时建议填写 | 否 |
+| `PALLAS_PROTOCOL_ENABLED` / `PALLAS_PROTOCOL_WEBUI_ENABLED` | 默认开启 | 协议端插件与管理页 | 否 |
 
-Web 控制台与协议端管理页共用登录口令；说明见 [控制台（pallas_webui）](docs/plugins/pallas_webui/README.md)、[协议端管理（pallas_protocol）](docs/plugins/pallas_protocol/README.md)。
 
-<a id="版本更新"></a>
-## 📝 版本更新
+控制台与协议管理页为**浏览器登录**，口令在 `data/pallas_console/`；说明见 [pallas_webui](docs/plugins/pallas_webui/README.md)、[pallas_protocol](docs/plugins/pallas_protocol/README.md)，遗忘与排障见 [FAQ](docs/FAQ.md)。
 
-当前主线（`3.0`）简要更新：
+<a id="文档与链接"></a>
+## 📚 文档与链接
 
-- 数据层：新增 `PostgreSQL` 后端并支持 `Mongo -> PG` 迁移
-- 插件体验：
-  - 优化 `repeater`
-  - 重构并修复 `roulette`
-  - 新增 `drink` 完全醒酒能力
-  - 新增 `pallas_webui`：Web 控制台，可视化管理界面，启动时自动下载前端产物
-  - 新增 `pallas_protocol`：协议端管理，支持多账号、多平台协议端发行包自动下载
-  - 新增 `relogin_bot`：重新登录与创建新牛牛
-  - 修复 `sing` 未处理消息响应
-- 稳定性：修复 `Bot` 关闭时的 `RuntimeError`，移除冗余导入的 `Event`
-- 工程化：引入 `AGENTS.md` 与 `pre-commit` 规范，引入 `CONTRIBUTING` 及 `architecture` 文档，明确项目结构与插件约定
-
-更多版本详情请查看 [Releases](https://github.com/PallasBot/Pallas-Bot/releases)。
-
-<a id="常见问题"></a>
-## ❓ 常见问题
-
-[FAQ](docs/FAQ.md)
-
-快速入口：
-
-- [`学习机制`](docs/FAQ.md#学习机制)：跨群语料、训练方式
-- [`使用与管理`](docs/FAQ.md#使用与管理)：不当发言处理、主动发言机制
-- [`部署排障`](docs/FAQ.md#部署排障)：启动后不回复的优先排查顺序
-
-<a id="插件文档索引"></a>
-## 🧩 插件文档索引
-
-- [插件文档目录](docs/plugins/README.md)
-- [协议端管理（pallas_protocol）](docs/plugins/pallas_protocol/README.md)
-- [控制台（pallas_webui）](docs/plugins/pallas_webui/README.md)
+| 类型 | 链接 |
+| --- | --- |
+| 标准部署 | [docs/Deployment.md](docs/Deployment.md) |
+| Docker | [docs/DockerDeployment.md](docs/DockerDeployment.md) |
+| 常见问题 | [docs/FAQ.md](docs/FAQ.md)（[学习机制](docs/FAQ.md#学习机制)、[使用与管理](docs/FAQ.md#使用与管理)、[部署排障](docs/FAQ.md#部署排障)） |
+| 插件索引 | [docs/plugins/README.md](docs/plugins/README.md) |
+| 协议端 / 控制台 | [pallas_protocol](docs/plugins/pallas_protocol/README.md)、[pallas_webui](docs/plugins/pallas_webui/README.md) |
+| 变更记录 | [GitHub Releases](https://github.com/PallasBot/Pallas-Bot/releases) |
+| 数据迁移 | [Mongo → PG 脚本](tools/migrate_mongo_to_pg.py)、[迁移说明（v3）](docs/Migration-v3.md) |
+| 历史分支 | [`archive/v2`](https://github.com/PallasBot/Pallas-Bot/tree/archive/v2)（仅 MongoDB 旧版参考） |
 
 <a id="开发与贡献指南"></a>
 ## 💻 开发与贡献指南
 
-欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。
-查看我们的 [贡献指南](CONTRIBUTING.md)，了解如何参与贡献。
+欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。参与前请阅读 [贡献指南](CONTRIBUTING.md) 与仓库根目录 [AGENTS.md](AGENTS.md)（本地安装、Ruff、pytest、提交约定）。
 
 
 <a id="社区与支持"></a>

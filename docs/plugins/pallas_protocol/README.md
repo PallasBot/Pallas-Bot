@@ -43,4 +43,6 @@ Linux 上 NapCat 以 **bridge** 跑容器时，容器内解析不到 compose 自
 - NapCat 托管解压：`data/pallas_protocol/runtime_extract/napcat/`
 - SnowLuma 托管解压：`data/pallas_protocol/runtime_extract/snowluma/`
 
-完整字段见 `src/plugins/pallas_protocol/config.py`。
+完整字段见 [`src/plugins/pallas_protocol/config.py`](../../../src/plugins/pallas_protocol/config.py)。
+
+实现见 [`src/plugins/pallas_protocol/`](../../../src/plugins/pallas_protocol/)（上表所列模块均在目录内）。
