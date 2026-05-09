@@ -5,7 +5,7 @@ import re
 import time
 import urllib.parse
 
-from nonebot import logger
+from nonebot import get_bots, logger
 
 from src.common.db import get_db_backend
 
@@ -57,16 +57,29 @@ def first_http_image_url_from_cq_raw(raw: str) -> str | None:
     return None
 
 
+def dream_history_bot_ids(process_fallback_self_id: int) -> list[int]:
+    """同一进程内已连接账号的 self_id，用于共享历史梦库；无在线实例时退化为单号。"""
+    try:
+        ids = {int(b.self_id) for b in get_bots().values()}
+    except Exception:
+        ids = set()
+    if not ids:
+        return [process_fallback_self_id]
+    ids.add(process_fallback_self_id)
+    return sorted(ids)
+
+
 async def sample_historical_drift(*, bot_id: int, exclude_group_id: int | None = None) -> DriftPayload | None:
+    bot_ids = dream_history_bot_ids(bot_id)
     backend = get_db_backend()
     if backend == "mongodb":
-        return await _mongo_pick(bot_id, exclude_group_id)
+        return await _mongo_pick(bot_ids, exclude_group_id)
     if backend == "postgresql":
-        return await _pg_pick(bot_id, exclude_group_id)
+        return await _pg_pick(bot_ids, exclude_group_id)
     return None
 
 
-async def _mongo_pick(bot_id: int, exclude_gid: int | None) -> DriftPayload | None:
+async def _mongo_pick(bot_ids: list[int], exclude_gid: int | None) -> DriftPayload | None:
     from src.common.db.modules import Message
 
     coll = Message.get_pymongo_collection()
@@ -75,7 +88,7 @@ async def _mongo_pick(bot_id: int, exclude_gid: int | None) -> DriftPayload | No
     key_pat = f"^{re.escape(DREAM_KEY_PREFIX)}"
     match: dict = {
         "keywords": {"$regex": key_pat},
-        "bot_id": bot_id,
+        "bot_id": {"$in": bot_ids},
         "time": {"$gte": cutoff},
     }
     if exclude_gid is not None:
@@ -106,7 +119,7 @@ async def _mongo_pick(bot_id: int, exclude_gid: int | None) -> DriftPayload | No
     return None
 
 
-async def _pg_pick(bot_id: int, exclude_gid: int | None) -> DriftPayload | None:
+async def _pg_pick(bot_ids: list[int], exclude_gid: int | None) -> DriftPayload | None:
     from sqlalchemy import func, select
 
     from src.common.db.repository_pg import MessageRow, get_session
@@ -117,7 +130,7 @@ async def _pg_pick(bot_id: int, exclude_gid: int | None) -> DriftPayload | None:
         async with get_session() as session:
             stmt = (
                 select(MessageRow.plain_text, MessageRow.keywords, MessageRow.raw_message)
-                .where(MessageRow.bot_id == bot_id)
+                .where(MessageRow.bot_id.in_(bot_ids))
                 .where(MessageRow.time >= cutoff)
                 .where(MessageRow.keywords.startswith(DREAM_KEY_PREFIX))
             )

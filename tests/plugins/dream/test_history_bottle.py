@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from src.plugins.dream.history_bottle import (
     DREAM_KEY_PREFIX,
     DREAM_RECORD_SEP,
     dream_display_name_from_keywords,
+    dream_history_bot_ids,
     dream_keywords_for_insert,
     first_http_image_url_from_cq_raw,
 )
@@ -76,3 +79,18 @@ def test_first_http_image_url_no_http_returns_none() -> None:
 
 def test_first_http_image_url_plain_text() -> None:
     assert first_http_image_url_from_cq_raw("你好") is None
+
+
+def test_dream_history_bot_ids_fallback_when_no_bots() -> None:
+    with patch("src.plugins.dream.history_bottle.get_bots", return_value={}):
+        assert dream_history_bot_ids(12345) == [12345]
+
+
+def test_dream_history_bot_ids_unions_process_bots() -> None:
+    b1 = MagicMock()
+    b1.self_id = 111
+    b2 = MagicMock()
+    b2.self_id = 222
+    with patch("src.plugins.dream.history_bottle.get_bots", return_value={"a": b1, "b": b2}):
+        assert dream_history_bot_ids(111) == [111, 222]
+        assert dream_history_bot_ids(999) == [111, 222, 999]
