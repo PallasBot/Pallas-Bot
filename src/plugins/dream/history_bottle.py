@@ -5,18 +5,17 @@ import re
 import time
 import urllib.parse
 
-import httpx
 from nonebot import logger
 
 from src.common.db import get_db_backend
 
+from .http_utils import download_image_url
 from .payload import DriftPayload
 
 # 写入 message.keywords 的前缀（与复读侧 keywords 区分）
 DREAM_KEY_PREFIX = "is_dream"
 DREAM_RECORD_SEP = "\x1e"
 _HISTORY_MAX_AGE_SEC = 90 * 86400
-_MAX_IMAGE_BYTES = 6 * 1024 * 1024
 
 
 def _nickname_after_mark(keywords: str, mark: str) -> str:
@@ -56,23 +55,6 @@ def first_http_image_url_from_cq_raw(raw: str) -> str | None:
                 if u.startswith(("http://", "https://")):
                     return u
     return None
-
-
-async def download_image_url(url: str) -> bytes | None:
-    u = (url or "").strip()
-    if not u.startswith(("http://", "https://")):
-        return None
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), trust_env=True) as client:
-            r = await client.get(u)
-            if r.status_code != 200:
-                return None
-            if len(r.content) > _MAX_IMAGE_BYTES:
-                return None
-            return r.content
-    except Exception as e:
-        logger.debug("history_bottle image download failed: {}", e)
-        return None
 
 
 async def sample_historical_drift(*, bot_id: int, exclude_group_id: int | None = None) -> DriftPayload | None:

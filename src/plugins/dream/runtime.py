@@ -5,7 +5,6 @@ import random
 import time
 from typing import TYPE_CHECKING
 
-import httpx
 from nonebot import get_bot, logger
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, Message, MessageSegment
 from nonebot.exception import ActionFailed
@@ -25,7 +24,6 @@ if TYPE_CHECKING:
 message_repo = make_message_repository()
 
 _MAX_QUEUE = 800
-_MAX_IMAGE_BYTES = 6 * 1024 * 1024
 _dream_lock = asyncio.Lock()
 _dream_active: set[tuple[int, int]] = set()
 _dream_tasks: dict[tuple[int, int], asyncio.Task] = {}
@@ -98,7 +96,11 @@ async def _dream_worker_loop(bot_id: int, group_id: int) -> None:
             await asyncio.sleep(random.uniform(0.0, 15.0))
             if not await cfg.is_dreaming():
                 break
-            bot = get_bot(str(bot_id))
+            try:
+                bot = get_bot(str(bot_id))
+            except Exception as e:
+                logger.debug("dream worker get_bot failed: {}", e)
+                continue
             item: DriftPayload | None = None
             try:
                 item = q.get_nowait()
@@ -167,23 +169,6 @@ async def _send_group_archived_draw_image(bot: Bot, group_id: int, data: bytes) 
         group_id=group_id,
         message=MessageSegment.text(head) + MessageSegment.image(data),
     )
-
-
-async def download_image_url(url: str) -> bytes | None:
-    u = (url or "").strip()
-    if not u.startswith(("http://", "https://")):
-        return None
-    try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(30.0), trust_env=True) as client:
-            r = await client.get(u)
-            if r.status_code != 200:
-                return None
-            if len(r.content) > _MAX_IMAGE_BYTES:
-                return None
-            return r.content
-    except Exception as e:
-        logger.debug("dream image download failed: {}", e)
-        return None
 
 
 async def log_dream_chat_to_db(event: GroupMessageEvent) -> None:

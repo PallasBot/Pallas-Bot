@@ -9,10 +9,10 @@ from nonebot.rule import Rule
 
 from src.common.config import BotConfig
 
+from .http_utils import download_image_url
 from .payload import DriftPayload
 from .runtime import (
     broadcast_drift,
-    download_image_url,
     launch_dream_worker,
     log_dream_chat_to_db,
     stop_dream_worker,
