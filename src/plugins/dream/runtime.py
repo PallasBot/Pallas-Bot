@@ -16,6 +16,7 @@ from src.common.db import make_message_repository
 from src.plugins.pallas_image.draw_archive import random_archived_png_bytes
 
 from .dream_labels import pick_pseudo_sender_at
+from .drunk_synergy import send_one_random_history_line, try_drunk_dream_take_name
 from .echo_sample import random_echo_nickname, sample_learned_echo_line
 from .history_bottle import dream_keywords_for_insert, sample_historical_drift
 
@@ -27,6 +28,10 @@ message_repo = make_message_repository()
 _MAX_QUEUE = 800
 _SLEEP_MIN_SEC = 20.0
 _SLEEP_MAX_SEC = 45.0
+_DRUNK_DREAM_FAST_SLEEP_MIN = 5.0
+_DRUNK_DREAM_FAST_SLEEP_MAX = 20.0
+_DEFAULT_IMAGE_CAP = 3
+_DRUNK_DREAM_IMAGE_CAP = 5
 _HIST_RESAMPLE_ATTEMPTS = 12
 _ARCHIVE_RESAMPLE_ATTEMPTS = 6
 _ECHO_RESAMPLE_ATTEMPTS = 10
@@ -109,15 +114,34 @@ async def _dream_worker_loop(bot_id: int, group_id: int) -> None:
     sent_text_keys: set[str] = set()
     sent_image_keys: set[str] = set()
     q = get_drift_queue(key)
+    image_cap = _DEFAULT_IMAGE_CAP
+    drunk_synergy_used = False
     try:
         while await cfg.is_dreaming():
-            await asyncio.sleep(random.uniform(_SLEEP_MIN_SEC, _SLEEP_MAX_SEC))
+            drunk_now = await cfg.drunkenness() > 0
+            do_drunk_synergy = drunk_now and not drunk_synergy_used
+            if drunk_now:
+                await asyncio.sleep(random.uniform(_DRUNK_DREAM_FAST_SLEEP_MIN, _DRUNK_DREAM_FAST_SLEEP_MAX))
+            else:
+                await asyncio.sleep(random.uniform(_SLEEP_MIN_SEC, _SLEEP_MAX_SEC))
             if not await cfg.is_dreaming():
                 break
             try:
                 bot = get_bot(str(bot_id))
             except Exception as e:
                 logger.debug("dream worker get_bot failed: {}", e)
+                continue
+            if do_drunk_synergy:
+                drunk_synergy_used = True
+                image_cap = _DRUNK_DREAM_IMAGE_CAP
+                try:
+                    victim = await try_drunk_dream_take_name(bot=bot, bot_id=bot_id, group_id=group_id, cfg=cfg)
+                    if victim is not None:
+                        await send_one_random_history_line(bot, bot_id=bot_id, group_id=group_id, user_id=victim)
+                except ActionFailed as e:
+                    logger.debug("dream drunk synergy send failed: {}", e)
+                except Exception as e:
+                    logger.warning("dream drunk synergy error: {}", e)
                 continue
             item: DriftPayload | None = None
             try:
@@ -128,7 +152,7 @@ async def _dream_worker_loop(bot_id: int, group_id: int) -> None:
                 sent_queue_text = False
                 sent_queue_image = False
                 # 联机漂流优先：有队列则先发他群传来的内容；与本场已发去重
-                if item and item.image_bytes and sent_images < 3:
+                if item and item.image_bytes and sent_images < image_cap:
                     ik = dream_image_dedupe_key(item.image_bytes)
                     if ik not in sent_image_keys:
                         await _send_group_drift_image(bot, group_id, item.nickname, item.image_bytes)
@@ -152,7 +176,7 @@ async def _dream_worker_loop(bot_id: int, group_id: int) -> None:
                         hist = await sample_historical_drift(bot_id=bot_id, exclude_group_id=None)
                     if hist is None:
                         break
-                    if hist.image_bytes and sent_images < 3:
+                    if hist.image_bytes and sent_images < image_cap:
                         ik = dream_image_dedupe_key(hist.image_bytes)
                         if ik not in sent_image_keys:
                             await _send_group_drift_image(bot, group_id, hist.nickname, hist.image_bytes)
@@ -172,7 +196,7 @@ async def _dream_worker_loop(bot_id: int, group_id: int) -> None:
                     continue
 
                 sent_archive = False
-                if sent_images < 3 and random.random() < 0.38:
+                if sent_images < image_cap and random.random() < 0.38:
                     for _ in range(_ARCHIVE_RESAMPLE_ATTEMPTS):
                         data = await random_archived_png_bytes()
                         if not data:
