@@ -163,7 +163,7 @@ async def _pg_pick_plain_line(bot_id: int, group_id: int, user_id: int) -> str |
     return None
 
 
-async def try_drunk_dream_take_name(*, bot: Bot, bot_id: int, group_id: int, cfg: BotConfig) -> int | None:
+async def try_drunk_dream_take_name(*, bot: Bot, bot_id: int, group_id: int, cfg: BotConfig) -> tuple[int, str] | None:
     if not await is_bot_admin(bot_id, group_id, True):
         return None
     uid = await pick_random_member_user_id(bot_id=bot_id, group_id=group_id)
@@ -176,11 +176,11 @@ async def try_drunk_dream_take_name(*, bot: Bot, bot_id: int, group_id: int, cfg
         )
     except ActionFailed:
         return None
-    card = (info.get("card") or info.get("nickname") or "").strip() or str(uid)
+    victim_label = (info.get("card") or info.get("nickname") or str(uid)).strip() or str(uid)
     try:
         await bot.call_api(
             "set_group_card",
-            **{"group_id": group_id, "user_id": bot_id, "card": card[:60]},
+            **{"group_id": group_id, "user_id": bot_id, "card": victim_label[:60]},
         )
         await bot.call_api(
             "set_group_card",
@@ -190,21 +190,20 @@ async def try_drunk_dream_take_name(*, bot: Bot, bot_id: int, group_id: int, cfg
     except ActionFailed as e:
         logger.debug("try_drunk_dream_take_name ActionFailed: {}", e)
         return None
-    return uid
+    return (uid, victim_label)
 
 
-async def send_one_random_history_line(bot: Bot, *, bot_id: int, group_id: int, user_id: int) -> None:
+async def send_one_random_history_line(
+    bot: Bot,
+    *,
+    bot_id: int,
+    group_id: int,
+    user_id: int,
+    display_name: str | None = None,
+) -> None:
     line = await sample_user_non_dream_plain_line(bot_id=bot_id, group_id=group_id, user_id=user_id)
     if not line:
         return
-    nick = str(user_id)
-    try:
-        info = await bot.call_api(
-            "get_group_member_info",
-            **{"group_id": group_id, "user_id": user_id, "no_cache": True},
-        )
-        nick = (info.get("card") or info.get("nickname") or str(user_id)).strip() or str(user_id)
-    except ActionFailed:
-        pass
+    nick = (display_name or "").strip() or str(user_id)
     body = f"{drift_style_at(nick)}：{line}"
     await bot.send_group_msg(group_id=group_id, message=Message(MessageSegment.text(body)))

@@ -118,7 +118,7 @@ async def _dream_worker_loop(bot_id: int, group_id: int) -> None:
     drunk_synergy_used = False
     try:
         while await cfg.is_dreaming():
-            drunk_now = await cfg.drunkenness() > 0
+            drunk_now = (await cfg.drunkenness()) > 0
             do_drunk_synergy = drunk_now and not drunk_synergy_used
             if drunk_now:
                 await asyncio.sleep(random.uniform(_DRUNK_DREAM_FAST_SLEEP_MIN, _DRUNK_DREAM_FAST_SLEEP_MAX))
@@ -135,9 +135,16 @@ async def _dream_worker_loop(bot_id: int, group_id: int) -> None:
                 drunk_synergy_used = True
                 image_cap = _DRUNK_DREAM_IMAGE_CAP
                 try:
-                    victim = await try_drunk_dream_take_name(bot=bot, bot_id=bot_id, group_id=group_id, cfg=cfg)
-                    if victim is not None:
-                        await send_one_random_history_line(bot, bot_id=bot_id, group_id=group_id, user_id=victim)
+                    taken = await try_drunk_dream_take_name(bot=bot, bot_id=bot_id, group_id=group_id, cfg=cfg)
+                    if taken is not None:
+                        victim_id, victim_display = taken
+                        await send_one_random_history_line(
+                            bot,
+                            bot_id=bot_id,
+                            group_id=group_id,
+                            user_id=victim_id,
+                            display_name=victim_display,
+                        )
                 except ActionFailed as e:
                     logger.debug("dream drunk synergy send failed: {}", e)
                 except Exception as e:
