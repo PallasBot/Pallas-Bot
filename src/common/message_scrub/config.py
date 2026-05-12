@@ -6,6 +6,11 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.common.env_dotenv import (
+    merged_repo_dotenv_upper,
+    repo_layered_dotenv_files_exist,
+)
+
 _config_lock = Lock()
 _cached_message_scrub_config: MessageScrubConfig | None = None
 
@@ -41,17 +46,28 @@ def _nonebot_driver_config_str(name_upper: str) -> str | None:
     return str(val).strip()
 
 
-def _merged_env_str(name_upper: str, default: str = "") -> str:
+def _scrub_env_str(
+    name_upper: str,
+    *,
+    merged_dotenv: dict[str, str],
+    default: str = "",
+) -> str:
+    # 环境变量 > 仓库 .env 合并层；若仓库已有 dotenv 文件则不回退 driver.config（避免热重载仍读启动快照）。
     if name_upper in os.environ:
-        return os.environ.get(name_upper, default).strip()
-    nb = _nonebot_driver_config_str(name_upper)
-    if nb is not None:
-        return nb.strip()
+        return (os.environ.get(name_upper, default) or "").strip()
+    if name_upper in merged_dotenv:
+        return (merged_dotenv[name_upper] or "").strip()
+    if not repo_layered_dotenv_files_exist():
+        nb = _nonebot_driver_config_str(name_upper)
+        if nb is not None:
+            return nb.strip()
     return default
 
 
-def _scrub_review_providers_key_explicit() -> bool:
+def _scrub_review_providers_key_explicit(merged_dotenv: dict[str, str]) -> bool:
     if "PALLAS_SCRUB_REVIEW_PROVIDERS" in os.environ:
+        return True
+    if "PALLAS_SCRUB_REVIEW_PROVIDERS" in merged_dotenv:
         return True
     try:
         from nonebot import get_driver
@@ -59,7 +75,9 @@ def _scrub_review_providers_key_explicit() -> bool:
         cfg = get_driver().config
     except ValueError:
         return False
-    return "pallas_scrub_review_providers" in (getattr(cfg, "model_fields_set", None) or set())
+    if not repo_layered_dotenv_files_exist():
+        return "pallas_scrub_review_providers" in (getattr(cfg, "model_fields_set", None) or set())
+    return False
 
 
 class MessageScrubConfig(BaseModel):
@@ -109,32 +127,47 @@ class MessageScrubConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> Self:
-        has_rp = _scrub_review_providers_key_explicit()
-        rp_val = _merged_env_str("PALLAS_SCRUB_REVIEW_PROVIDERS", "")
+        merged_dotenv = merged_repo_dotenv_upper()
+        has_rp = _scrub_review_providers_key_explicit(merged_dotenv)
+        rp_val = _scrub_env_str("PALLAS_SCRUB_REVIEW_PROVIDERS", merged_dotenv=merged_dotenv, default="")
         try:
-            timeout_sec = float(_merged_env_str("PALLAS_INBOUND_FILTER_API_TIMEOUT_SEC", "2"))
+            timeout_sec = float(
+                _scrub_env_str(
+                    "PALLAS_INBOUND_FILTER_API_TIMEOUT_SEC",
+                    merged_dotenv=merged_dotenv,
+                    default="2",
+                )
+            )
         except ValueError:
             timeout_sec = 2.0
         timeout_sec = max(0.1, min(120.0, timeout_sec))
         return cls(
-            inbound_filter_substrings=_merged_env_str("PALLAS_INBOUND_FILTER_SUBSTRINGS"),
-            scrub_lexicon_path=_merged_env_str("PALLAS_SCRUB_LEXICON_PATH"),
-            scrub_lexicon_extra=_merged_env_str("PALLAS_SCRUB_LEXICON_EXTRA"),
+            inbound_filter_substrings=_scrub_env_str("PALLAS_INBOUND_FILTER_SUBSTRINGS", merged_dotenv=merged_dotenv),
+            scrub_lexicon_path=_scrub_env_str("PALLAS_SCRUB_LEXICON_PATH", merged_dotenv=merged_dotenv),
+            scrub_lexicon_extra=_scrub_env_str("PALLAS_SCRUB_LEXICON_EXTRA", merged_dotenv=merged_dotenv),
             scrub_review_providers_key_present=has_rp,
             scrub_review_providers=rp_val,
-            scrub_api_url=_merged_env_str("PALLAS_SCRUB_API_URL"),
-            inbound_filter_api_url=_merged_env_str("PALLAS_INBOUND_FILTER_API_URL"),
-            inbound_filter_api_key=_merged_env_str("PALLAS_INBOUND_FILTER_API_KEY"),
+            scrub_api_url=_scrub_env_str("PALLAS_SCRUB_API_URL", merged_dotenv=merged_dotenv),
+            inbound_filter_api_url=_scrub_env_str("PALLAS_INBOUND_FILTER_API_URL", merged_dotenv=merged_dotenv),
+            inbound_filter_api_key=_scrub_env_str("PALLAS_INBOUND_FILTER_API_KEY", merged_dotenv=merged_dotenv),
             inbound_filter_api_timeout_sec=timeout_sec,
             inbound_filter_api_fail_open=_fail_open_from_str(
-                _merged_env_str("PALLAS_INBOUND_FILTER_API_FAIL_OPEN", "1")
+                _scrub_env_str(
+                    "PALLAS_INBOUND_FILTER_API_FAIL_OPEN",
+                    merged_dotenv=merged_dotenv,
+                    default="1",
+                )
             ),
-            scrub_baidu_api_key=_merged_env_str("PALLAS_SCRUB_BAIDU_API_KEY"),
-            scrub_baidu_secret_key=_merged_env_str("PALLAS_SCRUB_BAIDU_SECRET_KEY"),
-            scrub_baidu_censor_url=_merged_env_str("PALLAS_SCRUB_BAIDU_CENSOR_URL"),
-            scrub_baidu_strategy_id=_merged_env_str("PALLAS_SCRUB_BAIDU_STRATEGY_ID"),
+            scrub_baidu_api_key=_scrub_env_str("PALLAS_SCRUB_BAIDU_API_KEY", merged_dotenv=merged_dotenv),
+            scrub_baidu_secret_key=_scrub_env_str("PALLAS_SCRUB_BAIDU_SECRET_KEY", merged_dotenv=merged_dotenv),
+            scrub_baidu_censor_url=_scrub_env_str("PALLAS_SCRUB_BAIDU_CENSOR_URL", merged_dotenv=merged_dotenv),
+            scrub_baidu_strategy_id=_scrub_env_str("PALLAS_SCRUB_BAIDU_STRATEGY_ID", merged_dotenv=merged_dotenv),
             scrub_baidu_block_suspected=_block_suspected_from_str(
-                _merged_env_str("PALLAS_SCRUB_BAIDU_BLOCK_SUSPECTED", "1")
+                _scrub_env_str(
+                    "PALLAS_SCRUB_BAIDU_BLOCK_SUSPECTED",
+                    merged_dotenv=merged_dotenv,
+                    default="1",
+                )
             ),
         )
 

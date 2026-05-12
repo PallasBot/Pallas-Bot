@@ -40,7 +40,7 @@ def test_scrub_intercept_log_preview_plain_then_raw() -> None:
     assert len(out) <= 49
 
 
-def test_config_merged_reads_nonebot_when_os_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_config_merged_reads_nonebot_when_os_absent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from src.common.message_scrub.config import MessageScrubConfig
 
     monkeypatch.delenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", raising=False)
@@ -49,12 +49,14 @@ def test_config_merged_reads_nonebot_when_os_absent(monkeypatch: pytest.MonkeyPa
         pallas_inbound_filter_substrings="from_nb",
     )
     fake_driver = SimpleNamespace(config=fake_cfg)
-    with patch("nonebot.get_driver", return_value=fake_driver):
-        c = MessageScrubConfig.from_env()
+    phantom = tmp_path / "no_dotenv_here.env"
+    with patch("src.common.env_dotenv.repo_env_path", return_value=phantom):
+        with patch("nonebot.get_driver", return_value=fake_driver):
+            c = MessageScrubConfig.from_env()
     assert c.inbound_filter_substrings == "from_nb"
 
 
-def test_config_merged_os_overrides_nonebot(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_config_merged_os_overrides_nonebot(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from src.common.message_scrub.config import MessageScrubConfig
 
     monkeypatch.setenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", "from_os")
@@ -63,12 +65,14 @@ def test_config_merged_os_overrides_nonebot(monkeypatch: pytest.MonkeyPatch) -> 
         pallas_inbound_filter_substrings="from_nb",
     )
     fake_driver = SimpleNamespace(config=fake_cfg)
-    with patch("nonebot.get_driver", return_value=fake_driver):
-        c = MessageScrubConfig.from_env()
+    phantom = tmp_path / "no_dotenv_here.env"
+    with patch("src.common.env_dotenv.repo_env_path", return_value=phantom):
+        with patch("nonebot.get_driver", return_value=fake_driver):
+            c = MessageScrubConfig.from_env()
     assert c.inbound_filter_substrings == "from_os"
 
 
-def test_config_review_providers_explicit_from_nonebot_only(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_config_review_providers_explicit_from_nonebot_only(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from src.common.message_scrub.config import MessageScrubConfig
 
     monkeypatch.delenv("PALLAS_SCRUB_REVIEW_PROVIDERS", raising=False)
@@ -77,10 +81,47 @@ def test_config_review_providers_explicit_from_nonebot_only(monkeypatch: pytest.
         pallas_scrub_review_providers="",
     )
     fake_driver = SimpleNamespace(config=fake_cfg)
-    with patch("nonebot.get_driver", return_value=fake_driver):
-        c = MessageScrubConfig.from_env()
+    phantom = tmp_path / "no_dotenv_here.env"
+    with patch("src.common.env_dotenv.repo_env_path", return_value=phantom):
+        with patch("nonebot.get_driver", return_value=fake_driver):
+            c = MessageScrubConfig.from_env()
     assert c.scrub_review_providers_key_present is True
     assert c.scrub_review_providers == ""
+
+
+def test_config_repo_dotenv_layer_overrides_stale_driver(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """仓库 .env 已存在时：磁盘上无该键则不再回退到启动时冻结的 driver.config。"""
+    from src.common.message_scrub.config import MessageScrubConfig
+
+    monkeypatch.delenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", raising=False)
+    p = tmp_path / ".env"
+    p.write_text("# PALLAS_INBOUND_FILTER_SUBSTRINGS=old\nFOO=1\n", encoding="utf-8")
+    fake_cfg = SimpleNamespace(
+        model_fields_set={"pallas_inbound_filter_substrings"},
+        pallas_inbound_filter_substrings="stale_driver",
+    )
+    fake_driver = SimpleNamespace(config=fake_cfg)
+    with patch("src.common.env_dotenv.repo_env_path", return_value=p):
+        with patch("nonebot.get_driver", return_value=fake_driver):
+            c = MessageScrubConfig.from_env()
+    assert c.inbound_filter_substrings == ""
+
+
+def test_config_repo_dotenv_file_value_used_when_os_absent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.common.message_scrub.config import MessageScrubConfig
+
+    monkeypatch.delenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", raising=False)
+    p = tmp_path / ".env"
+    p.write_text("PALLAS_INBOUND_FILTER_SUBSTRINGS=from_dotenv\n", encoding="utf-8")
+    fake_cfg = SimpleNamespace(
+        model_fields_set={"pallas_inbound_filter_substrings"},
+        pallas_inbound_filter_substrings="from_nb",
+    )
+    fake_driver = SimpleNamespace(config=fake_cfg)
+    with patch("src.common.env_dotenv.repo_env_path", return_value=p):
+        with patch("nonebot.get_driver", return_value=fake_driver):
+            c = MessageScrubConfig.from_env()
+    assert c.inbound_filter_substrings == "from_dotenv"
 
 
 @pytest.fixture
