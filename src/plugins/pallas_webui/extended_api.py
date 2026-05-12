@@ -7,7 +7,6 @@ import importlib
 import json
 import os
 import platform
-import re
 import shutil
 import socket
 import sys
@@ -24,6 +23,7 @@ from nonebot.adapters import Event  # noqa: TC002
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_core import PydanticUndefined
 
+from src.common.env_dotenv import env_value_to_str, upsert_env_dotenv_items
 from src.common.pallas_console_login import (
     current_http_request,
     extract_session_from_request,
@@ -167,10 +167,6 @@ def _jsonable_value(v: Any) -> Any:
     return v
 
 
-def _plugin_env_path() -> Path:
-    return Path(__file__).resolve().parents[3] / ".env"
-
-
 def _find_loaded_plugin(plugin_name: str):
     target = (plugin_name or "").strip()
     for p in get_loaded_plugins():
@@ -241,42 +237,6 @@ def _plugin_config_payload(plugin_name: str) -> dict[str, Any]:
     }
 
 
-def _to_env_value(v: Any) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, (dict, list)):
-        return json.dumps(v, ensure_ascii=False)
-    if v is None:
-        return ""
-    return str(v)
-
-
-def _upsert_env_items(items: dict[str, str]) -> None:
-    path = _plugin_env_path()
-    if path.exists():
-        lines = path.read_text(encoding="utf-8").splitlines()
-    else:
-        lines = []
-    remained = set(items.keys())
-    out: list[str] = []
-    for line in lines:
-        replaced = False
-        for k, v in items.items():
-            # 同名键若存在注释行，直接改写并取消注释
-            if re.match(rf"^\s*#?\s*{re.escape(k)}\s*=", line):
-                out.append(f"{k}={v}")
-                remained.discard(k)
-                replaced = True
-                break
-        if not replaced:
-            out.append(line)
-    if remained:
-        if out and out[-1].strip() != "":
-            out.append("")
-        out.extend(f"{k}={items[k]}" for k in sorted(remained))
-    path.write_text("\n".join(out) + "\n", encoding="utf-8")
-
-
 def _list_bots_dict() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for key, bot in get_bots().items():
@@ -321,7 +281,6 @@ def _is_onebot_v11_bot(bot: object) -> bool:
 
 def _read_pending_friend_requests_disk() -> dict[str, dict[str, str]]:
     """与 request_handler 插件写入的 JSON 结构一致：{ bot_id: { user_id: flag } }。"""
-    import json
 
     from src.common.paths import plugin_data_dir
 
@@ -344,8 +303,6 @@ def _read_pending_friend_requests_disk() -> dict[str, dict[str, str]]:
 
 
 def _save_pending_friend_requests_disk(data: dict[str, dict[str, str]]) -> None:
-    import json
-
     from src.common.paths import plugin_data_dir
 
     path = plugin_data_dir("request_handler") / "pending_friend_requests.json"
@@ -354,7 +311,6 @@ def _save_pending_friend_requests_disk(data: dict[str, dict[str, str]]) -> None:
 
 def _read_pending_group_requests_disk() -> dict[str, dict[str, dict[str, Any]]]:
     """与 request_handler 插件写入的 JSON 结构一致：{ bot_id: { group_id: request } }。"""
-    import json
 
     from src.common.paths import plugin_data_dir
 
@@ -397,8 +353,6 @@ def _read_pending_group_requests_disk() -> dict[str, dict[str, dict[str, Any]]]:
 
 
 def _save_pending_group_requests_disk(data: dict[str, dict[str, dict[str, Any]]]) -> None:
-    import json
-
     from src.common.paths import plugin_data_dir
 
     path = plugin_data_dir("request_handler") / "pending_group_requests.json"
@@ -479,8 +433,6 @@ def _normalize_ai_extension_config(raw: dict[str, Any] | None) -> dict[str, Any]
 
 
 def _load_ai_extension_config() -> dict[str, Any]:
-    import json
-
     path = _ai_extension_config_path()
     if not path.exists():
         return _normalize_ai_extension_config(None)
@@ -494,8 +446,6 @@ def _load_ai_extension_config() -> dict[str, Any]:
 
 
 def _save_ai_extension_config(data: dict[str, Any]) -> dict[str, Any]:
-    import json
-
     clean = _normalize_ai_extension_config(data)
     path = _ai_extension_config_path()
     path.write_text(json.dumps(clean, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1609,9 +1559,43 @@ def register_extended_api(
                     raise ValueError(f"未知配置项: {k}")
             merged = {**current, **patch}
             validated = cfg_cls(**merged).model_dump(mode="python")
-            env_items = {str(k).upper(): _to_env_value(validated[k]) for k in patch}
-            _upsert_env_items(env_items)
+            env_items = {str(k).upper(): env_value_to_str(validated[k]) for k in patch}
+            upsert_env_dotenv_items(env_items)
             data = _plugin_config_payload(plugin_name)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/common-config/sections", include_in_schema=True)
+    async def _common_config_sections_list() -> JSONResponse:
+        from src.common.webui_env_sections import list_webui_env_sections
+
+        return JSONResponse({"ok": True, "data": list_webui_env_sections()})
+
+    @router.get(f"{x}/common-config/{{section_id}}", include_in_schema=True)
+    async def _common_config_get(section_id: str) -> JSONResponse:
+        from src.common.webui_env_sections import webui_env_section_payload
+
+        try:
+            data = webui_env_section_payload(section_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(f"{x}/common-config/{{section_id}}", include_in_schema=True)
+    async def _common_config_put(
+        section_id: str,
+        body: _PluginConfigUpdateBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from src.common.webui_env_sections import apply_webui_env_section_patch
+
+        try:
+            data = apply_webui_env_section_patch(section_id, dict(body.values or {}))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
@@ -2079,7 +2063,6 @@ def register_extended_api(
         path: str,
         body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        import json
         import urllib.error
         import urllib.request
 
