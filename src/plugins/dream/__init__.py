@@ -10,6 +10,7 @@ from nonebot.rule import Rule
 
 from src.common.config import BotConfig, GroupConfig
 from src.common.message_scrub import is_message_scrub_blocked_async
+from src.common.message_scrub.log_preview import scrub_intercept_log_preview
 
 from . import ban_handlers as _dream_ban_handlers  # noqa: F401 — 注册梦库「不可以」/撤回清理
 from .capture_filter import dream_capture_blocked_by_substrings
@@ -101,11 +102,6 @@ DREAM_GROUP_COOLDOWN_KEY = "dream"
 DREAM_GROUP_COOLDOWN_SEC = 10
 
 
-def _message_scrub_log_preview(plain: str, limit: int = 48) -> str:
-    s = (plain or "").replace("\n", " ").strip()
-    return s if len(s) <= limit else f"{s[:limit]}…"
-
-
 async def is_dream_start(event: GroupMessageEvent) -> bool:
     return event.get_plaintext().strip() == "牛牛做梦"
 
@@ -189,7 +185,7 @@ async def _(event: GroupMessageEvent):
             event.group_id,
             event.user_id,
             event.message_id,
-            _message_scrub_log_preview(plain),
+            scrub_intercept_log_preview(plain, norm_raw),
         )
         return
 

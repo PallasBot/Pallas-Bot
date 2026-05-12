@@ -28,6 +28,17 @@ def test_ac_unicode() -> None:
     assert not ac.contains("正常")
 
 
+def test_scrub_intercept_log_preview_plain_then_raw() -> None:
+    from src.common.message_scrub.log_preview import scrub_intercept_log_preview
+
+    assert scrub_intercept_log_preview("  hello\n", "") == "hello"
+    assert scrub_intercept_log_preview("", "[CQ:image,file=abc]") == "[CQ:image,file=abc]"
+    long_b64 = "[CQ:image,file=base64://" + "a" * 120 + "]"
+    out = scrub_intercept_log_preview("", long_b64)
+    assert "base64://…" in out
+    assert len(out) <= 49
+
+
 def test_config_merged_reads_nonebot_when_os_absent(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.common.message_scrub.config import MessageScrubConfig
 

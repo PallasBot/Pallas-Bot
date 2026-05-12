@@ -16,6 +16,7 @@ from nonebot_plugin_apscheduler import scheduler
 
 from src.common.config import BotConfig
 from src.common.message_scrub import is_message_scrub_blocked_async
+from src.common.message_scrub.log_preview import scrub_intercept_log_preview
 from src.common.utils.array2cqcode import try_convert_to_cqcode
 from src.common.utils.media_cache import get_image, insert_image
 from src.plugins.dream.ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
@@ -122,11 +123,6 @@ _group_event_sig_set: set[tuple[int, int, str, int]] = set()
 def _normalize_group_raw_message(raw_message: str) -> str:
     # 与 ChatData / learn 侧一致，避免图片子类型差异导致去重失败
     return re.sub(r"\.image,.+?\]", ".image]", raw_message)
-
-
-def _message_scrub_log_preview(plain: str, limit: int = 48) -> str:
-    s = (plain or "").replace("\n", " ").strip()
-    return s if len(s) <= limit else f"{s[:limit]}…"
 
 
 async def _should_skip_duplicate_group_event(group_id: int, user_id: int, norm_raw: str, time: int) -> bool:
@@ -237,7 +233,7 @@ async def _(bot: Bot, event: GroupMessageEvent):
             event.group_id,
             event.user_id,
             event.message_id,
-            _message_scrub_log_preview(event.get_plaintext()),
+            scrub_intercept_log_preview(event.get_plaintext(), norm_raw),
         )
         return
 
