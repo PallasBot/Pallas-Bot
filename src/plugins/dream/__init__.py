@@ -1,5 +1,6 @@
 import asyncio
 import random
+import re
 
 from nonebot import logger, on_message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
@@ -8,6 +9,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
 from src.common.config import BotConfig, GroupConfig
+from src.common.message_scrub import is_message_scrub_blocked_async
 
 from . import ban_handlers as _dream_ban_handlers  # noqa: F401 — 注册梦库「不可以」/撤回清理
 from .capture_filter import dream_capture_blocked_by_substrings
@@ -173,6 +175,9 @@ async def _(event: GroupMessageEvent):
     if plain in _PLAIN_TRIGGERS:
         return
     if dream_capture_blocked_by_substrings(plain, event.raw_message):
+        return
+    norm_raw = re.sub(r"\.image,.+?\]", ".image]", event.raw_message)
+    if await is_message_scrub_blocked_async(plain_text=plain, raw_message=norm_raw):
         return
 
     async def job():
