@@ -124,6 +124,11 @@ def _normalize_group_raw_message(raw_message: str) -> str:
     return re.sub(r"\.image,.+?\]", ".image]", raw_message)
 
 
+def _message_scrub_log_preview(plain: str, limit: int = 48) -> str:
+    s = (plain or "").replace("\n", " ").strip()
+    return s if len(s) <= limit else f"{s[:limit]}…"
+
+
 async def _should_skip_duplicate_group_event(group_id: int, user_id: int, norm_raw: str, time: int) -> bool:
     sig = (group_id, user_id, norm_raw, time)
     async with _group_event_dedup_lock:
@@ -226,6 +231,14 @@ async def _(bot: Bot, event: GroupMessageEvent):
         return
 
     if await is_message_scrub_blocked_async(plain_text=event.get_plaintext(), raw_message=norm_raw):
+        logger.info(
+            "message_scrub 已拦截 bot={} group={} user={} msg_id={} plain_preview={}",
+            event.self_id,
+            event.group_id,
+            event.user_id,
+            event.message_id,
+            _message_scrub_log_preview(event.get_plaintext()),
+        )
         return
 
     chat: Chat = Chat(event)

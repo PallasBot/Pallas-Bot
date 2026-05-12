@@ -101,6 +101,11 @@ DREAM_GROUP_COOLDOWN_KEY = "dream"
 DREAM_GROUP_COOLDOWN_SEC = 10
 
 
+def _message_scrub_log_preview(plain: str, limit: int = 48) -> str:
+    s = (plain or "").replace("\n", " ").strip()
+    return s if len(s) <= limit else f"{s[:limit]}…"
+
+
 async def is_dream_start(event: GroupMessageEvent) -> bool:
     return event.get_plaintext().strip() == "牛牛做梦"
 
@@ -178,6 +183,14 @@ async def _(event: GroupMessageEvent):
         return
     norm_raw = re.sub(r"\.image,.+?\]", ".image]", event.raw_message)
     if await is_message_scrub_blocked_async(plain_text=plain, raw_message=norm_raw):
+        logger.info(
+            "message_scrub 已拦截 bot={} group={} user={} msg_id={} plain_preview={}",
+            event.self_id,
+            event.group_id,
+            event.user_id,
+            event.message_id,
+            _message_scrub_log_preview(plain),
+        )
         return
 
     async def job():
