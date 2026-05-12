@@ -345,7 +345,7 @@ async def apply_bot_repository_update(
         )
         try:
             out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=cmd_timeout_s)
-        except TimeoutError:
+        except asyncio.TimeoutError:  # noqa: UP041
             proc.kill()
             await proc.wait()
             msg = "git 操作超时，请检查网络或稍后在命令行重试"
@@ -365,7 +365,9 @@ async def apply_bot_repository_update(
 
     try:
         latest = await fetch_latest_bot_release(repo, token=github_token)
-    except Exception as e:
+    except asyncio.CancelledError:
+        raise
+    except (httpx.HTTPError, json.JSONDecodeError, TypeError, ValueError) as e:
         raise BotGitUpdateError(
             f"无法从 GitHub 获取最新发布信息：{format_exception_for_log(e)}",
             status_code=502,
