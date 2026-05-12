@@ -2467,6 +2467,32 @@ def register_extended_api(
             },
         })
 
+    @router.post(f"{x}/update/bot/apply", include_in_schema=True)
+    async def _bot_update_apply(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from src.common.utils.format_exception import format_exception_for_log
+
+        from .manager import BotGitUpdateError, apply_bot_repository_update
+
+        github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
+        try:
+            logger.info("Pallas-Bot 控制台: Bot 仓库在线更新（git）请求已接受")
+            data = await apply_bot_repository_update(
+                github_token=github_token,
+                repo="PallasBot/Pallas-Bot",
+            )
+            return JSONResponse({"ok": True, "data": data})
+        except BotGitUpdateError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: Bot 仓库更新失败")
+            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+
     @router.post(f"{x}/update/apply", include_in_schema=True)
     async def _update_apply(
         token: str | None = Query(default=None),

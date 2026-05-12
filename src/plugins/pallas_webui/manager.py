@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import tempfile
 import zipfile
@@ -310,6 +311,157 @@ def get_bot_current_version() -> dict:
     except Exception:  # noqa: BLE001
         pass
     return {"tag": tag, "commit": commit}
+
+
+class BotGitUpdateError(Exception):
+    """控制台 Bot git 更新失败，携带 HTTP 状态码供 API 层映射。"""
+
+    def __init__(self, detail: str, *, status_code: int = 400) -> None:
+        self.detail = detail
+        self.status_code = status_code
+        super().__init__(detail)
+
+
+async def apply_bot_repository_update(
+    *,
+    github_token: str = "",
+    repo: str = "PallasBot/Pallas-Bot",
+) -> dict[str, str]:
+    """在仓库根目录执行 git 更新：发布标签部署切到新 tag；开发克隆走 ff-only pull。
+
+    不在此函数内重启进程。标签切换要求工作区干净；分支拉取使用 --autostash。
+    """
+    root = _BOT_ROOT
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+
+    async def git(*args: str, cmd_timeout_s: float = 180.0) -> tuple[int, str, str]:
+        proc = await asyncio.create_subprocess_exec(
+            "git",
+            *args,
+            cwd=str(root),
+            env=env,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            out_b, err_b = await asyncio.wait_for(proc.communicate(), timeout=cmd_timeout_s)
+        except asyncio.TimeoutError:  # noqa: UP041
+            proc.kill()
+            await proc.wait()
+            msg = "git 操作超时，请检查网络或稍后在命令行重试"
+            raise BotGitUpdateError(msg, status_code=504) from None
+        out = out_b.decode(errors="replace").strip() if out_b else ""
+        err = err_b.decode(errors="replace").strip() if err_b else ""
+        code = int(proc.returncode or 0)
+        return code, out, err
+
+    rc, out, err = await git("rev-parse", "--is-inside-work-tree")
+    if rc != 0 or out != "true":
+        raise BotGitUpdateError(
+            "当前运行目录不是 git 工作副本（例如 Docker 仅含镜像内文件）。请使用 docker compose pull "
+            "或按文档手动部署更新。",
+            status_code=400,
+        )
+
+    try:
+        latest = await fetch_latest_bot_release(repo, token=github_token)
+    except asyncio.CancelledError:
+        raise
+    except (httpx.HTTPError, json.JSONDecodeError, TypeError, ValueError) as e:
+        raise BotGitUpdateError(
+            f"无法从 GitHub 获取最新发布信息：{format_exception_for_log(e)}",
+            status_code=502,
+        ) from e
+
+    latest_tag = str(latest.get("tag", "") or "").strip()
+    if not latest_tag:
+        raise BotGitUpdateError("GitHub 未返回可用的发布标签。", status_code=502)
+
+    logger.info("Pallas-Bot 控制台: Bot 仓库更新开始 repo={} target_tag={}", repo, latest_tag)
+
+    rc, _, fetch_err = await git("fetch", "origin", "--tags", cmd_timeout_s=300.0)
+    if rc != 0:
+        detail = fetch_err or "(无 stderr)"
+        raise BotGitUpdateError(f"git fetch 失败：{detail}", status_code=502)
+
+    tag_peel = f"{latest_tag}^{{}}"
+    rc_peel, _, _ = await git("rev-parse", "-q", "--verify", tag_peel)
+    rc_tag, _, _ = await git("rev-parse", "-q", "--verify", f"refs/tags/{latest_tag}")
+    if rc_peel != 0 and rc_tag != 0:
+        raise BotGitUpdateError(
+            f"fetch 后仍无法解析标签 {latest_tag}，请确认远端存在该发布。",
+            status_code=400,
+        )
+    detach_ref = tag_peel if rc_peel == 0 else f"refs/tags/{latest_tag}"
+
+    current = get_bot_current_version()
+    current_tag = str(current.get("tag", "") or "").strip()
+
+    if current_tag and current_tag == latest_tag:
+        commit = str(current.get("commit", "") or "").strip()
+        logger.info("Pallas-Bot 控制台: Bot 已处于目标标签 {}", latest_tag)
+        return {
+            "tag": latest_tag,
+            "message": f"已处于发布标签 {latest_tag}（{commit or 'commit 未知'}），无需更新。",
+        }
+
+    rc, porcelain, _ = await git("status", "--porcelain")
+    dirty = bool(porcelain.strip())
+
+    if current_tag:
+        if dirty:
+            raise BotGitUpdateError(
+                "工作区不干净（存在未提交修改或未跟踪冲突风险）。切换到新发布标签前请先处理本地改动，"
+                "或改用命令行按文档执行 git pull / stash。",
+                status_code=409,
+            )
+        rc_co, _, err_co = await git("checkout", "--detach", detach_ref)
+        if rc_co != 0:
+            raise BotGitUpdateError(
+                f"切换到标签 {latest_tag} 失败：{err_co or '(无 stderr)'}",
+                status_code=400,
+            )
+        logger.info("Pallas-Bot 控制台: Bot 已 checkout 至标签 {}", latest_tag)
+    else:
+        rc_u, upstream_out, _ = await git("rev-parse", "--abbrev-ref", "@{u}")
+        if rc_u == 0 and upstream_out:
+            rc_p, _, err_p = await git("pull", "--ff-only", "--autostash")
+            if rc_p != 0:
+                raise BotGitUpdateError(
+                    f"git pull --ff-only 失败（已配置上游 {upstream_out}）：{err_p or '(无 stderr)'}",
+                    status_code=400,
+                )
+            logger.info("Pallas-Bot 控制台: Bot 已通过 pull --ff-only 更新（上游 {}）", upstream_out)
+        else:
+            rc_sym, sym_out, _ = await git("symbolic-ref", "-q", "refs/remotes/origin/HEAD")
+            def_branch = "master"
+            if rc_sym == 0 and sym_out.startswith("refs/remotes/origin/"):
+                def_branch = sym_out.rsplit("/", maxsplit=1)[-1]
+            else:
+                for cand in ("master", "main"):
+                    rc_ob, _, _ = await git("rev-parse", "-q", "--verify", f"origin/{cand}")
+                    if rc_ob == 0:
+                        def_branch = cand
+                        break
+            rc_p, _, err_p = await git("pull", "--ff-only", "--autostash", "origin", def_branch)
+            if rc_p != 0:
+                raise BotGitUpdateError(
+                    f"git pull --ff-only --autostash origin {def_branch} 失败：{err_p or '(无 stderr)'}",
+                    status_code=400,
+                )
+            logger.info(
+                "Pallas-Bot 控制台: Bot 已通过 pull --ff-only 更新（origin/{}）",
+                def_branch,
+            )
+
+    after = get_bot_current_version()
+    new_tag = str(after.get("tag", "") or "").strip()
+    new_commit = str(after.get("commit", "") or "").strip()
+    display = new_tag or new_commit or latest_tag
+    return {
+        "tag": display,
+        "message": f"仓库已更新（{display}）。请重启 Bot 进程后加载新代码。",
+    }
 
 
 async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot", *, token: str = "") -> dict:

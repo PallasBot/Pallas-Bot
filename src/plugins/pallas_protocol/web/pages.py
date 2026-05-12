@@ -2750,6 +2750,18 @@ def render_protocol_assets_page(base_path: str, pallas_console_http_base: str = 
         dlBtn.textContent = isDocker ? "Docker 模式无需下载" : "立即更新";
       }}
     }}
+    function syncSelectVersionButtonState() {{
+      const dlTagBtn = document.getElementById("btnDownloadTag");
+      if (!dlTagBtn) return;
+      const napDocker = String(document.getElementById("runtimeModeNapcat")?.value || "") === "docker";
+      const slDocker = String(document.getElementById("runtimeModeSnowluma")?.value || "") === "docker";
+      const sl = assetsProtoIsSl();
+      const disable = sl ? slDocker : napDocker;
+      dlTagBtn.disabled = disable;
+      dlTagBtn.title = disable
+        ? (sl ? "SnowLuma 为 Docker 模式时无需选择本地发行包版本。" : "NapCat 为 Docker 模式时无需选择本地发行包版本。")
+        : "";
+    }}
     function setAssetsProtocolPane(which, pushUrl) {{
       const sel = document.getElementById("assetsProtoSelect");
       const v = (String(which || "napcat").toLowerCase() === "snowluma") ? "snowluma" : "napcat";
@@ -2782,6 +2794,7 @@ def render_protocol_assets_page(base_path: str, pallas_console_http_base: str = 
       }}
       syncAssetsSaveButton();
       syncAssetDownloadButtonText();
+      syncSelectVersionButtonState();
       const ra = document.getElementById("releasesArea");
       const rp = document.getElementById("releasesPlaceholder");
       const rsel = document.getElementById("releaseSelect");
@@ -3035,8 +3048,7 @@ def render_protocol_assets_page(base_path: str, pallas_console_http_base: str = 
       if (dockerArea) dockerArea.style.display = isDocker ? "block" : "none";
       const target = document.getElementById("targetPlatform");
       if (target) target.disabled = napDocker;
-      const dlTagBtn = document.getElementById("btnDownloadTag");
-      if (dlTagBtn) dlTagBtn.disabled = napDocker;
+      syncSelectVersionButtonState();
       syncAssetDownloadButtonText();
       if (typeof shellPrettySyncSelect === "function") {{
         const r1 = document.getElementById("runtimeModeNapcat");
