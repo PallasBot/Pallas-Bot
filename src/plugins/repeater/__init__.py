@@ -15,6 +15,8 @@ from nonebot.typing import T_State
 from nonebot_plugin_apscheduler import scheduler
 
 from src.common.config import BotConfig
+from src.common.message_scrub import is_message_scrub_blocked_async
+from src.common.message_scrub.log_preview import scrub_intercept_log_preview
 from src.common.utils.array2cqcode import try_convert_to_cqcode
 from src.common.utils.media_cache import get_image, insert_image
 from src.plugins.dream.ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
@@ -222,6 +224,17 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
     norm_raw = _normalize_group_raw_message(event.raw_message)
     if await _should_skip_duplicate_group_event(event.group_id, event.user_id, norm_raw, event.time):
+        return
+
+    if await is_message_scrub_blocked_async(plain_text=event.get_plaintext(), raw_message=norm_raw):
+        logger.info(
+            "message_scrub 已拦截 bot={} group={} user={} msg_id={} plain_preview={}",
+            event.self_id,
+            event.group_id,
+            event.user_id,
+            event.message_id,
+            scrub_intercept_log_preview(event.get_plaintext(), norm_raw),
+        )
         return
 
     chat: Chat = Chat(event)
