@@ -25,7 +25,7 @@
 | `PALLAS_PROTOCOL_GITHUB_TOKEN` | 拉 Release 时限额（可选） |
 | `PALLAS_PROTOCOL_ONEBOT_WS_URL` | 完整反向 WebSocket 地址（最高优先级；常见为明文 `ws`，见下节） |
 | `PALLAS_PROTOCOL_ONEBOT_WS_HOST` / `_PORT` / `_PATH` | 未设 URL 时按主机、端口、路径拼接反向 WebSocket 地址 |
-| `PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST` | NapCat/SnowLuma 容器访问宿主机 Bot；**留空或 `auto`**：`bridge` 在 **Linux** 下为默认路由网关（读 `/proc/net/route`）或回退 `172.17.0.1`；**非 Linux** 常为 `host.docker.internal`；`host` 网络为 `127.0.0.1`；仍会在 `docker run` 加 `host.docker.internal:host-gateway`（Docker 20.10+）作辅助解析 |
+| `PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST` | NapCat/SnowLuma 容器访问宿主机 Bot；**留空或 `auto`**：`bridge` 在 **Linux** 下为 `docker0` 网卡 IPv4（ioctl）或回退 `172.17.0.1`（不用系统默认路由网关，避免写成局域网路由器）；**非 Linux** 常为 `host.docker.internal`；`host` 网络为 `127.0.0.1`；仍会在 `docker run` 加 `host.docker.internal:host-gateway`（Docker 20.10+）作辅助解析 |
 | `PALLAS_PROTOCOL_AUTO_DOWNLOAD_RUNTIME` | 无本地运行时是否后台下载 |
 | `PALLAS_PROTOCOL_PROGRAM_DIR` | 手动指定 NapCat 发行根 |
 | `PALLAS_PROTOCOL_DOCKER_IMAGE` | NapCat 镜像（可被 profile 覆盖） |
