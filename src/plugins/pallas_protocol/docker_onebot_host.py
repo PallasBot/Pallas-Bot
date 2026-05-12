@@ -3,9 +3,44 @@
 from __future__ import annotations
 
 import socket
+import struct
 import sys
 from pathlib import Path
 from typing import Any
+
+
+def linux_interface_ipv4(ifname: str) -> str | None:
+    """读取指定网卡 IPv4；非 Linux 或失败时返回 None。"""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        import fcntl
+    except ImportError:
+        return None
+    name = (ifname or "").strip().encode("utf-8")[:15]
+    if not name:
+        return None
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # SIOCGIFADDR
+        ifreq = struct.pack("16sH14s", name, socket.AF_INET, b"\x00" * 14)
+        res = fcntl.ioctl(sock.fileno(), 0x8915, ifreq)
+    except OSError:
+        return None
+    finally:
+        sock.close()
+    fam = struct.unpack_from("H", res, 16)[0]
+    if fam != socket.AF_INET:
+        return None
+    ip = socket.inet_ntoa(res[20:24])
+    if ip == "0.0.0.0":
+        return None
+    return ip
+
+
+def linux_docker_bridge_host_ip() -> str | None:
+    """宿主机上默认 bridge（docker0）的 IPv4，即容器内访问宿主机常用地址。"""
+    return linux_interface_ipv4("docker0")
 
 
 def linux_default_route_gateway() -> str | None:
@@ -39,8 +74,8 @@ def effective_docker_onebot_host(raw: str | None, *, docker_network_mode: str) -
 
     - 非空且非 ``auto``：原样使用（便于 Compose 同网主机名等）。
     - ``host`` 网络：自动为 ``127.0.0.1``（与宿主机网络栈一致）。
-    - ``bridge`` 等且自动：**Linux** 优先默认路由网关（读 ``/proc/net/route``），失败则
-      ``172.17.0.1``；容器内不依赖 ``host.docker.internal`` 解析。**非 Linux**（如仅在本机
+    - ``bridge`` 等且自动：**Linux** 优先 ``docker0`` 网卡地址（ioctl），失败则 ``172.17.0.1``；
+      不用系统默认路由网关（常为局域网路由器，从容器内连 Bot 会错）。**非 Linux**（如仅在本机
       配协议端）仍可用 ``host.docker.internal``（通常配合 Docker Desktop）。
     - ``docker run`` 仍会加 ``--add-host=host.docker.internal:host-gateway``，便于镜像内其它逻辑解析。
     """
@@ -51,7 +86,7 @@ def effective_docker_onebot_host(raw: str | None, *, docker_network_mode: str) -
     if mode == "host":
         return "127.0.0.1"
     if sys.platform.startswith("linux"):
-        return linux_default_route_gateway() or "172.17.0.1"
+        return linux_docker_bridge_host_ip() or "172.17.0.1"
     return "host.docker.internal"
 
 
