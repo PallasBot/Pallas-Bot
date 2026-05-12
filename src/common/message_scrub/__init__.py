@@ -3,6 +3,9 @@ from __future__ import annotations
 from .api_chain import build_review_providers, clear_remote_review_caches, run_review_chain
 from .config import MessageScrubConfig, get_message_scrub_config
 from .local_lexicon import local_lexicon_hits, reload_local_lexicon_caches
+from .startup_log import install_message_scrub_startup_log
+
+install_message_scrub_startup_log()
 
 
 def reload_message_scrub_caches() -> None:
