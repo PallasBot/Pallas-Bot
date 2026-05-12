@@ -3352,30 +3352,55 @@ def render_protocol_assets_page(base_path: str, pallas_console_http_base: str = 
     }}
     async function loadAssetReleases() {{
       const btn = document.getElementById("btnLoadReleases");
-      btn.disabled = true;
-      btn.textContent = "加载中…";
+      const ra = document.getElementById("releasesArea");
+      const rp = document.getElementById("releasesPlaceholder");
+      const sel = document.getElementById("releaseSelect");
+      if (!sel || !ra || !rp) return;
+      if (btn) {{
+        btn.disabled = true;
+        btn.textContent = "加载中…";
+      }}
       try {{
         const url = assetsProtoIsSl()
           ? "/api/snowluma/runtime/releases?limit=200"
           : "/api/runtime/releases?limit=200";
         const data = await api(url);
-        const releases = data.releases || [];
-        _assetReleaseList = releases;
-        const sel = document.getElementById("releaseSelect");
-        sel.innerHTML = releases.map((r) => {{
-          const label = r.tag_name + (r.prerelease ? " (pre)" : "") + (r.name && r.name !== r.tag_name ? " · " + r.name : "");
-          return `<option value="${{r.tag_name}}">${{label}}</option>`;
+        const raw = Array.isArray(data.releases) ? data.releases : [];
+        _assetReleaseList = raw
+          .map((x) => {{
+            const tn = String(x.tag_name || x.tag || "").trim();
+            if (!tn) return null;
+            return {{ ...x, tag_name: tn }};
+          }})
+          .filter(Boolean);
+        if (!_assetReleaseList.length) {{
+          sel.innerHTML = "";
+          ra.style.display = "block";
+          rp.style.display = "block";
+          rp.textContent =
+            "未获取到版本列表（请检查仓库配置、网络或 GitHub API 限流；可在配置中设置 pallas_protocol_github_token）。";
+          const det = document.getElementById("releaseDetail");
+          if (det) det.textContent = "";
+          return;
+        }}
+        rp.style.display = "none";
+        sel.innerHTML = _assetReleaseList.map((r) => {{
+          const tag = r.tag_name;
+          const label = tag + (r.prerelease ? " (pre)" : "") + (r.name && r.name !== tag ? " · " + r.name : "");
+          return `<option value="${{invEsc(tag)}}">${{invEsc(label)}}</option>`;
         }}).join("");
-        document.getElementById("releasesArea").style.display = "block";
-        document.getElementById("releasesPlaceholder").style.display = "none";
+        ra.style.display = "block";
         updateAssetReleaseDetail();
         sel.onchange = () => updateAssetReleaseDetail();
-        if (typeof shellPrettySyncSelect === "function" && sel) shellPrettySyncSelect(sel);
+        if (typeof initShellPrettySelects === "function") initShellPrettySelects(ra);
+        if (typeof shellPrettySyncSelect === "function") shellPrettySyncSelect(sel);
       }} catch (e) {{
         alert("加载 release 列表失败: " + (e.message || e));
       }} finally {{
-        btn.disabled = false;
-        btn.textContent = "加载版本列表";
+        if (btn) {{
+          btn.disabled = false;
+          btn.textContent = "加载版本列表";
+        }}
       }}
     }}
     function updateAssetReleaseDetail() {{
