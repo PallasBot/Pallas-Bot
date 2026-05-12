@@ -8,6 +8,7 @@ import httpx
 from nonebot import logger
 
 from ..config import get_message_scrub_config
+from ..quiet_http_loggers import scrub_http_log_noise
 
 _TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token"
 _DEFAULT_CENSOR_URL = "https://aip.baidubce.com/rest/2.0/solution/v1/text_censor/v2/user_defined"
@@ -116,16 +117,19 @@ class BaiduTextReviewProvider:
 
         timeout_sec = get_message_scrub_config().inbound_filter_api_timeout_sec
 
-        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec), trust_env=True) as client:
-            token = await _ensure_token(client)
-            base = _censor_url()
-            sep = "&" if "?" in base else "?"
-            post_url = f"{base}{sep}access_token={token}"
-            form: dict[str, str] = {"text": text}
-            sid = _strategy_id()
-            if sid:
-                form["strategyId"] = sid
-            r = await client.post(post_url, data=form, headers={"Content-Type": "application/x-www-form-urlencoded"})
+        async with scrub_http_log_noise():
+            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec), trust_env=True) as client:
+                token = await _ensure_token(client)
+                base = _censor_url()
+                sep = "&" if "?" in base else "?"
+                post_url = f"{base}{sep}access_token={token}"
+                form: dict[str, str] = {"text": text}
+                sid = _strategy_id()
+                if sid:
+                    form["strategyId"] = sid
+                r = await client.post(
+                    post_url, data=form, headers={"Content-Type": "application/x-www-form-urlencoded"}
+                )
         if r.status_code != 200:
             logger.debug("baidu censor non-200: {} {}", r.status_code, r.text[:200] if r.text else "")
             raise RuntimeError("baidu censor http")

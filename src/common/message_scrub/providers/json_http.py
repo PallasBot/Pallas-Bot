@@ -6,6 +6,7 @@ import httpx
 from nonebot import logger
 
 from ..config import get_message_scrub_config
+from ..quiet_http_loggers import scrub_http_log_noise
 
 
 def _coerce_blocked(body: Any) -> bool | None:
@@ -44,8 +45,9 @@ class JsonHttpReviewProvider:
         cfg = get_message_scrub_config()
         timeout_sec = cfg.inbound_filter_api_timeout_sec
         payload = {"plain_text": plain_text or "", "raw_message": raw_message or ""}
-        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec), trust_env=True) as client:
-            r = await client.post(self._url, json=payload, headers=self._headers())
+        async with scrub_http_log_noise():
+            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec), trust_env=True) as client:
+                r = await client.post(self._url, json=payload, headers=self._headers())
         if r.status_code != 200:
             logger.debug("json_http review non-200: {} {}", r.status_code, r.text[:200] if r.text else "")
             raise RuntimeError("json_http non-200")
