@@ -1,6 +1,7 @@
 """message_scrub：Aho-Corasick 与入口行为。"""
 
 import os
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -139,6 +140,52 @@ def test_build_review_providers_default_baidu_before_json(
     monkeypatch.delenv("PALLAS_SCRUB_REVIEW_PROVIDERS", raising=False)
     ids = [p.id for p in build_review_providers()]
     assert ids == ["baidu", "json_http"]
+
+
+def test_get_message_scrub_config_cached_until_reload(
+    scrub_env_cleanup: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.common.message_scrub.config import get_message_scrub_config
+
+    monkeypatch.setenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", "alpha")
+    reload_message_scrub_caches()
+    c1 = get_message_scrub_config()
+    c2 = get_message_scrub_config()
+    assert c1 is c2
+    monkeypatch.setenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", "beta")
+    assert get_message_scrub_config() is c1
+    reload_message_scrub_caches()
+    c3 = get_message_scrub_config()
+    assert c3.inbound_filter_substrings == "beta"
+    assert c3 is not c1
+
+
+def test_lexicon_file_oserror_logs_warning(tmp_path: Path) -> None:
+    from src.common.message_scrub import local_lexicon
+
+    p = tmp_path / "lex.txt"
+    p.write_text("word", encoding="utf-8")
+
+    real_open = Path.open
+
+    def open_fail(self: Path, *args: object, **kwargs: object):
+        if str(self) == str(p):
+            raise OSError("eacces")
+        return real_open(self, *args, **kwargs)
+
+    with patch.object(Path, "open", open_fail):
+        with patch.object(local_lexicon.logger, "warning") as mock_warn:
+            assert local_lexicon._read_lexicon_file_lines(str(p)) == []
+    mock_warn.assert_called_once()
+
+
+def test_dream_cq_image_normalization_regex() -> None:
+    """与 dream 捕获路径一致：只折叠 [CQ:image,...] 段，不误伤其它文本。"""
+    pat = r"\[CQ:image,[^\]]*\]"
+    s = "hello[CQ:image,file=https://x/y?q=1]]tail"
+    assert re.sub(pat, "[CQ:image]", s) == "hello[CQ:image]]tail"
+    assert re.sub(pat, "[CQ:image]", "plain .image,foo]") == "plain .image,foo]"
 
 
 def test_build_review_providers_explicit_order(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .api_chain import build_review_providers, clear_remote_review_caches, run_review_chain
-from .config import MessageScrubConfig, get_message_scrub_config
+from .config import MessageScrubConfig, clear_message_scrub_config_cache, get_message_scrub_config
 from .local_lexicon import local_lexicon_hits, reload_local_lexicon_caches
 from .startup_log import install_message_scrub_startup_log
 
@@ -10,6 +10,7 @@ install_message_scrub_startup_log()
 
 def reload_message_scrub_caches() -> None:
     """热重载本地词库与远程审查缓存"""
+    clear_message_scrub_config_cache()
     reload_local_lexicon_caches()
     clear_remote_review_caches()
 

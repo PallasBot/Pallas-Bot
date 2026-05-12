@@ -177,7 +177,7 @@ async def _(event: GroupMessageEvent):
         return
     if dream_capture_blocked_by_substrings(plain, event.raw_message):
         return
-    norm_raw = re.sub(r"\.image,.+?\]", ".image]", event.raw_message)
+    norm_raw = re.sub(r"\[CQ:image,[^\]]*\]", "[CQ:image]", event.raw_message)
     if await is_message_scrub_blocked_async(plain_text=plain, raw_message=norm_raw):
         logger.info(
             "message_scrub 已拦截 bot={} group={} user={} msg_id={} plain_preview={}",

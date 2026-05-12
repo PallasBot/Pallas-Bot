@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from threading import Lock
 
+from nonebot import logger
+
 from .aho_corasick import AhoCorasick
 from .config import get_message_scrub_config
 
@@ -42,7 +44,8 @@ def _read_lexicon_file_lines(path: str) -> list[str]:
                     continue
                 lines.append(s.lower())
             return lines
-    except OSError:
+    except OSError as exc:
+        logger.warning("message_scrub: 读取词表文件失败 path={} err={}", path, exc)
         return []
 
 

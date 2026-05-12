@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import os
+from threading import Lock
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field
+
+_config_lock = Lock()
+_cached_message_scrub_config: MessageScrubConfig | None = None
 
 
 def _fail_open_from_str(raw: str) -> bool:
@@ -138,6 +142,17 @@ class MessageScrubConfig(BaseModel):
         return self.scrub_api_url or self.inbound_filter_api_url
 
 
+def clear_message_scrub_config_cache() -> None:
+    """供 ``reload_message_scrub_caches`` 等调用；环境或驱动配置变更后需失效缓存。"""
+    global _cached_message_scrub_config
+    with _config_lock:
+        _cached_message_scrub_config = None
+
+
 def get_message_scrub_config() -> MessageScrubConfig:
-    """每次读取当前环境（含 NoneBot 已从 .env 注入的自定义键）。"""
-    return MessageScrubConfig.from_env()
+    """读取当前环境（含 NoneBot 已从 .env 注入的自定义键）；缓存至 ``clear_message_scrub_config_cache``。"""
+    global _cached_message_scrub_config
+    with _config_lock:
+        if _cached_message_scrub_config is None:
+            _cached_message_scrub_config = MessageScrubConfig.from_env()
+        return _cached_message_scrub_config

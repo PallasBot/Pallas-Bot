@@ -9,6 +9,7 @@ from nonebot import logger
 
 from ..config import get_message_scrub_config
 from ..quiet_http_loggers import scrub_http_log_noise
+from ..shared_httpx import get_scrub_async_httpx_client
 
 _TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token"
 _DEFAULT_CENSOR_URL = "https://aip.baidubce.com/rest/2.0/solution/v1/text_censor/v2/user_defined"
@@ -42,7 +43,7 @@ def _combined_text(*, plain_text: str, raw_message: str) -> str:
     return (raw_message or "").strip()
 
 
-async def _ensure_token(client: httpx.AsyncClient) -> str:
+async def _ensure_token(client: httpx.AsyncClient, *, post_timeout: httpx.Timeout) -> str:
     global _token, _token_deadline
     async with _token_lock:
         now = time.time()
@@ -54,7 +55,7 @@ async def _ensure_token(client: httpx.AsyncClient) -> str:
             raise RuntimeError("baidu keys missing")
         q = urlencode({"grant_type": "client_credentials", "client_id": ak, "client_secret": sk})
         url = f"{_TOKEN_URL}?{q}"
-        r = await client.post(url)
+        r = await client.post(url, timeout=post_timeout)
         if r.status_code != 200:
             logger.debug("baidu token non-200: {} {}", r.status_code, r.text[:200] if r.text else "")
             raise RuntimeError("baidu token http")
@@ -116,20 +117,24 @@ class BaiduTextReviewProvider:
             text = encoded[:max_bytes].decode("utf-8", errors="ignore")
 
         timeout_sec = get_message_scrub_config().inbound_filter_api_timeout_sec
+        req_timeout = httpx.Timeout(timeout_sec)
 
         async with scrub_http_log_noise():
-            async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec), trust_env=True) as client:
-                token = await _ensure_token(client)
-                base = _censor_url()
-                sep = "&" if "?" in base else "?"
-                post_url = f"{base}{sep}access_token={token}"
-                form: dict[str, str] = {"text": text}
-                sid = _strategy_id()
-                if sid:
-                    form["strategyId"] = sid
-                r = await client.post(
-                    post_url, data=form, headers={"Content-Type": "application/x-www-form-urlencoded"}
-                )
+            client = await get_scrub_async_httpx_client()
+            token = await _ensure_token(client, post_timeout=req_timeout)
+            base = _censor_url()
+            sep = "&" if "?" in base else "?"
+            post_url = f"{base}{sep}access_token={token}"
+            form: dict[str, str] = {"text": text}
+            sid = _strategy_id()
+            if sid:
+                form["strategyId"] = sid
+            r = await client.post(
+                post_url,
+                data=form,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=req_timeout,
+            )
         if r.status_code != 200:
             logger.debug("baidu censor non-200: {} {}", r.status_code, r.text[:200] if r.text else "")
             raise RuntimeError("baidu censor http")
