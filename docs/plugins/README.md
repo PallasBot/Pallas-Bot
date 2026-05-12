@@ -2,6 +2,10 @@
 
 本目录用于存放插件专项说明，优先回答“这个插件要怎么配、怎么用、怎么排障”。
 
+## 通用能力（非单插件目录）
+
+- [`message_scrub`](../common/message_scrub/README.md)：复读 / 做梦等共用的消息清洗与审查（本地词库、百度、自建网关；环境变量见该页）
+
 ## 已有文档（按插件目录）
 
 - [`pallas_protocol`](./pallas_protocol/README.md)：NapCat/SnowLuma、Docker、`runtime_profile`、`.env` 速查

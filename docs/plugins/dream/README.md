@@ -52,7 +52,7 @@
 
 ### 入站过滤（与复读共用）
 
-环境变量 **`PALLAS_INBOUND_FILTER_SUBSTRINGS`**：英文逗号分隔的子串列表，不区分大小写；若命中，本消息**不会**写入做梦库、**不会**参与跨群漂流。规则与复读侧一致，见 [`src/common/inbound_filter.py`](../../../src/common/inbound_filter.py) 与 [`repeater` 文档](../repeater/README.md)。
+环境变量 **`PALLAS_INBOUND_FILTER_SUBSTRINGS`** 等：本地子串 / 词表与可选远程审查；若命中，本消息**不会**写入做梦库、**不会**参与跨群漂流。规则与复读侧一致，见 [`message_scrub` 说明](../../common/message_scrub/README.md) 与 [`repeater` 文档](../repeater/README.md)。
 
 ## 排障
 
