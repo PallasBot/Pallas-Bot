@@ -122,7 +122,8 @@ class Config(BaseModel):
     )
     pallas_protocol_docker_onebot_host: str = Field(
         default="",
-        description="容器访问宿主机 Bot 的主机名或 IP；空或 auto 为自动（bridge→host.docker.internal，host→127.0.0.1）",
+        description="容器访问宿主机 Bot 的主机名或 IP；"
+        "空或 auto：Linux bridge 为 docker0 地址或 172.17.0.1，host 为 127.0.0.1，其它常为 host.docker.internal",
     )
     pallas_protocol_docker_internal_webui_port: int = Field(
         default=6099,

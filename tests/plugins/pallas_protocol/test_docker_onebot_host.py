@@ -27,12 +27,12 @@ def test_linux_default_route_gateway_reads_proc_net_route(monkeypatch) -> None:
 def test_effective_docker_onebot_host_explicit_and_auto(monkeypatch) -> None:
     from src.plugins.pallas_protocol import docker_onebot_host as m
 
-    monkeypatch.setattr(m, "linux_default_route_gateway", lambda: "10.200.0.1")
+    monkeypatch.setattr(m, "linux_docker_bridge_host_ip", lambda: "10.5.0.1")
     monkeypatch.setattr(m.sys, "platform", "linux")
-    assert m.effective_docker_onebot_host("", docker_network_mode="bridge") == "10.200.0.1"
-    assert m.effective_docker_onebot_host("auto", docker_network_mode="bridge") == "10.200.0.1"
+    assert m.effective_docker_onebot_host("", docker_network_mode="bridge") == "10.5.0.1"
+    assert m.effective_docker_onebot_host("auto", docker_network_mode="bridge") == "10.5.0.1"
 
-    monkeypatch.setattr(m, "linux_default_route_gateway", lambda: None)
+    monkeypatch.setattr(m, "linux_docker_bridge_host_ip", lambda: None)
     assert m.effective_docker_onebot_host("", docker_network_mode="bridge") == "172.17.0.1"
 
     monkeypatch.setattr(m.sys, "platform", "win32")

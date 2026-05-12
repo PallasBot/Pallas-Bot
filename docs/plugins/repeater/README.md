@@ -13,6 +13,8 @@
 
 调参见 [`src/plugins/repeater/config.py`](../../../src/plugins/repeater/config.py)（如 `answer_threshold`、`repeat_threshold`、`speak_threshold`、持久化间隔与条数、`enable_reaction` 等）。
 
+入库前的消息清洗与远程审查（环境变量）见 [`message_scrub`](../../common/message_scrub/README.md)。
+
 ## 依赖与关联
 
 - **take_name** 依赖本插件的 `MessageStore` 从各群取随机消息；未加载复读时不应依赖夺舍相关能力。
