@@ -19,7 +19,7 @@
 |----------|-------------------|
 | 先不用审查 | 什么都不配即可。 |
 | 只拦少数固定说法 | 在 `.env` 里配 `PALLAS_INBOUND_FILTER_SUBSTRINGS`（英文逗号分隔，不区分大小写）。 |
-| 用一份自己的词表 | 准备一个 UTF-8 的 txt（见下文「词表文件」），配 `PALLAS_SCRUB_LEXICON_PATH` 指向它。 |
+| 用一份自己的词表 | 准备一个 UTF-8 的 txt（见下文「词表文件」），配 `PALLAS_SCRUB_LEXICON_PATH` 指向它；也可使用仓库 [`resource/message_scrub/politics.txt`](../../../resource/message_scrub/politics.txt) 例子。 |
 | 交给云端判断 | 配置百度 Key，或自建一个符合约定的 HTTP 接口地址（见下文「远程审查」）。 |
 | 本地 + 云端都要 | 可同时配词表/子串与百度或自建网关；会先跑本地，再按顺序跑远程。 |
 
