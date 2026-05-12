@@ -2,6 +2,8 @@
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -24,6 +26,49 @@ def test_ac_unicode() -> None:
     ac = AhoCorasick(["敏感词", "测试"])
     assert ac.contains("这是一段敏感词内容")
     assert not ac.contains("正常")
+
+
+def test_config_merged_reads_nonebot_when_os_absent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.common.message_scrub.config import MessageScrubConfig
+
+    monkeypatch.delenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", raising=False)
+    fake_cfg = SimpleNamespace(
+        model_fields_set={"pallas_inbound_filter_substrings"},
+        pallas_inbound_filter_substrings="from_nb",
+    )
+    fake_driver = SimpleNamespace(config=fake_cfg)
+    with patch("nonebot.get_driver", return_value=fake_driver):
+        c = MessageScrubConfig.from_env()
+    assert c.inbound_filter_substrings == "from_nb"
+
+
+def test_config_merged_os_overrides_nonebot(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.common.message_scrub.config import MessageScrubConfig
+
+    monkeypatch.setenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", "from_os")
+    fake_cfg = SimpleNamespace(
+        model_fields_set={"pallas_inbound_filter_substrings"},
+        pallas_inbound_filter_substrings="from_nb",
+    )
+    fake_driver = SimpleNamespace(config=fake_cfg)
+    with patch("nonebot.get_driver", return_value=fake_driver):
+        c = MessageScrubConfig.from_env()
+    assert c.inbound_filter_substrings == "from_os"
+
+
+def test_config_review_providers_explicit_from_nonebot_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.common.message_scrub.config import MessageScrubConfig
+
+    monkeypatch.delenv("PALLAS_SCRUB_REVIEW_PROVIDERS", raising=False)
+    fake_cfg = SimpleNamespace(
+        model_fields_set={"pallas_scrub_review_providers"},
+        pallas_scrub_review_providers="",
+    )
+    fake_driver = SimpleNamespace(config=fake_cfg)
+    with patch("nonebot.get_driver", return_value=fake_driver):
+        c = MessageScrubConfig.from_env()
+    assert c.scrub_review_providers_key_present is True
+    assert c.scrub_review_providers == ""
 
 
 @pytest.fixture

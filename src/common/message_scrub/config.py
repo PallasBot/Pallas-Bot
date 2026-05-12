@@ -6,10 +6,6 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field
 
 
-def _strip_env(name: str, default: str = "") -> str:
-    return os.environ.get(name, default).strip()
-
-
 def _fail_open_from_str(raw: str) -> bool:
     v = raw.strip().lower()
     return v in ("1", "true", "yes", "on", "")
@@ -18,6 +14,48 @@ def _fail_open_from_str(raw: str) -> bool:
 def _block_suspected_from_str(raw: str) -> bool:
     v = raw.strip().lower()
     return v in ("1", "true", "yes", "on", "")
+
+
+def _nonebot_driver_config_str(name_upper: str) -> str | None:
+    try:
+        from nonebot import get_driver
+
+        cfg = get_driver().config
+    except ValueError:
+        return None
+    attr = name_upper.lower()
+    fields_set = getattr(cfg, "model_fields_set", None) or set()
+    if attr not in fields_set:
+        return None
+    val = getattr(cfg, attr, None)
+    if val is None:
+        return ""
+    if isinstance(val, bool):
+        return "1" if val else "0"
+    if isinstance(val, int | float):
+        return str(val)
+    return str(val).strip()
+
+
+def _merged_env_str(name_upper: str, default: str = "") -> str:
+    if name_upper in os.environ:
+        return os.environ.get(name_upper, default).strip()
+    nb = _nonebot_driver_config_str(name_upper)
+    if nb is not None:
+        return nb.strip()
+    return default
+
+
+def _scrub_review_providers_key_explicit() -> bool:
+    if "PALLAS_SCRUB_REVIEW_PROVIDERS" in os.environ:
+        return True
+    try:
+        from nonebot import get_driver
+
+        cfg = get_driver().config
+    except ValueError:
+        return False
+    return "pallas_scrub_review_providers" in (getattr(cfg, "model_fields_set", None) or set())
 
 
 class MessageScrubConfig(BaseModel):
@@ -67,32 +105,32 @@ class MessageScrubConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> Self:
-        has_rp = "PALLAS_SCRUB_REVIEW_PROVIDERS" in os.environ
-        rp_val = os.environ.get("PALLAS_SCRUB_REVIEW_PROVIDERS", "")
+        has_rp = _scrub_review_providers_key_explicit()
+        rp_val = _merged_env_str("PALLAS_SCRUB_REVIEW_PROVIDERS", "")
         try:
-            timeout_sec = float(_strip_env("PALLAS_INBOUND_FILTER_API_TIMEOUT_SEC", "2"))
+            timeout_sec = float(_merged_env_str("PALLAS_INBOUND_FILTER_API_TIMEOUT_SEC", "2"))
         except ValueError:
             timeout_sec = 2.0
         timeout_sec = max(0.1, min(120.0, timeout_sec))
         return cls(
-            inbound_filter_substrings=_strip_env("PALLAS_INBOUND_FILTER_SUBSTRINGS"),
-            scrub_lexicon_path=_strip_env("PALLAS_SCRUB_LEXICON_PATH"),
-            scrub_lexicon_extra=_strip_env("PALLAS_SCRUB_LEXICON_EXTRA"),
+            inbound_filter_substrings=_merged_env_str("PALLAS_INBOUND_FILTER_SUBSTRINGS"),
+            scrub_lexicon_path=_merged_env_str("PALLAS_SCRUB_LEXICON_PATH"),
+            scrub_lexicon_extra=_merged_env_str("PALLAS_SCRUB_LEXICON_EXTRA"),
             scrub_review_providers_key_present=has_rp,
-            scrub_review_providers=rp_val.strip(),
-            scrub_api_url=_strip_env("PALLAS_SCRUB_API_URL"),
-            inbound_filter_api_url=_strip_env("PALLAS_INBOUND_FILTER_API_URL"),
-            inbound_filter_api_key=_strip_env("PALLAS_INBOUND_FILTER_API_KEY"),
+            scrub_review_providers=rp_val,
+            scrub_api_url=_merged_env_str("PALLAS_SCRUB_API_URL"),
+            inbound_filter_api_url=_merged_env_str("PALLAS_INBOUND_FILTER_API_URL"),
+            inbound_filter_api_key=_merged_env_str("PALLAS_INBOUND_FILTER_API_KEY"),
             inbound_filter_api_timeout_sec=timeout_sec,
             inbound_filter_api_fail_open=_fail_open_from_str(
-                os.environ.get("PALLAS_INBOUND_FILTER_API_FAIL_OPEN", "1")
+                _merged_env_str("PALLAS_INBOUND_FILTER_API_FAIL_OPEN", "1")
             ),
-            scrub_baidu_api_key=_strip_env("PALLAS_SCRUB_BAIDU_API_KEY"),
-            scrub_baidu_secret_key=_strip_env("PALLAS_SCRUB_BAIDU_SECRET_KEY"),
-            scrub_baidu_censor_url=_strip_env("PALLAS_SCRUB_BAIDU_CENSOR_URL"),
-            scrub_baidu_strategy_id=_strip_env("PALLAS_SCRUB_BAIDU_STRATEGY_ID"),
+            scrub_baidu_api_key=_merged_env_str("PALLAS_SCRUB_BAIDU_API_KEY"),
+            scrub_baidu_secret_key=_merged_env_str("PALLAS_SCRUB_BAIDU_SECRET_KEY"),
+            scrub_baidu_censor_url=_merged_env_str("PALLAS_SCRUB_BAIDU_CENSOR_URL"),
+            scrub_baidu_strategy_id=_merged_env_str("PALLAS_SCRUB_BAIDU_STRATEGY_ID"),
             scrub_baidu_block_suspected=_block_suspected_from_str(
-                os.environ.get("PALLAS_SCRUB_BAIDU_BLOCK_SUSPECTED", "1")
+                _merged_env_str("PALLAS_SCRUB_BAIDU_BLOCK_SUSPECTED", "1")
             ),
         )
 
@@ -101,5 +139,5 @@ class MessageScrubConfig(BaseModel):
 
 
 def get_message_scrub_config() -> MessageScrubConfig:
-    """每次读取当前环境"""
+    """每次读取当前环境（含 NoneBot 已从 .env 注入的自定义键）。"""
     return MessageScrubConfig.from_env()
