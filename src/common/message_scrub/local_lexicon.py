@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from threading import Lock
 
 from .aho_corasick import AhoCorasick
+from .config import get_message_scrub_config
 
 _lock = Lock()
 _ac: AhoCorasick | None = None
@@ -22,14 +22,14 @@ def reload_local_lexicon_caches() -> None:
 
 
 def _env_substrings_lower() -> list[str]:
-    raw = os.getenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", "").strip()
+    raw = get_message_scrub_config().inbound_filter_substrings
     if not raw:
         return []
     return [p.lower() for p in raw.split(",") if p.strip()]
 
 
 def _lexicon_path() -> str:
-    return os.getenv("PALLAS_SCRUB_LEXICON_PATH", "").strip()
+    return get_message_scrub_config().scrub_lexicon_path
 
 
 def _read_lexicon_file_lines(path: str) -> list[str]:
@@ -54,12 +54,13 @@ def _file_mtime(path: str) -> float | None:
 
 
 def _all_patterns_lower() -> list[str]:
+    cfg = get_message_scrub_config()
     merged: list[str] = []
     merged.extend(_env_substrings_lower())
-    path = _lexicon_path()
+    path = cfg.scrub_lexicon_path
     if path:
         merged.extend(_read_lexicon_file_lines(path))
-    extra = os.getenv("PALLAS_SCRUB_LEXICON_EXTRA", "").strip()
+    extra = cfg.scrub_lexicon_extra
     if extra:
         for part in extra.split(","):
             s = part.strip().lower()
@@ -76,11 +77,10 @@ def _all_patterns_lower() -> list[str]:
 
 
 def _current_cache_sig() -> tuple[float | None, str, str]:
-    path = _lexicon_path()
+    cfg = get_message_scrub_config()
+    path = cfg.scrub_lexicon_path
     mtime = _file_mtime(path) if path else None
-    env = os.getenv("PALLAS_INBOUND_FILTER_SUBSTRINGS", "")
-    extra = os.getenv("PALLAS_SCRUB_LEXICON_EXTRA", "")
-    return (mtime, env, extra)
+    return (mtime, cfg.inbound_filter_substrings, cfg.scrub_lexicon_extra)
 
 
 def _get_automaton() -> AhoCorasick | None:

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from .api_client import api_scrub_blocked
+from .api_chain import build_review_providers, clear_remote_review_caches, run_review_chain
+from .config import MessageScrubConfig, get_message_scrub_config
 from .local_lexicon import local_lexicon_hits, reload_local_lexicon_caches
 
 
 def reload_message_scrub_caches() -> None:
-    """热重载本地词库（环境变量、词表文件 mtime 变化会自动重建）。"""
+    """热重载本地词库与远程审查缓存"""
     reload_local_lexicon_caches()
+    clear_remote_review_caches()
 
 
 def is_message_scrub_blocked_sync(*, plain_text: str, raw_message: str) -> bool:
@@ -15,7 +17,17 @@ def is_message_scrub_blocked_sync(*, plain_text: str, raw_message: str) -> bool:
 
 
 async def is_message_scrub_blocked_async(*, plain_text: str, raw_message: str) -> bool:
-    """本地词库优先；未命中时再调用可选 API。"""
+    """本地词库优先；未命中后按审查链调用远程 API。"""
     if local_lexicon_hits(plain_text=plain_text, raw_message=raw_message):
         return True
-    return await api_scrub_blocked(plain_text=plain_text, raw_message=raw_message)
+    return await run_review_chain(plain_text=plain_text, raw_message=raw_message)
+
+
+__all__ = [
+    "MessageScrubConfig",
+    "build_review_providers",
+    "get_message_scrub_config",
+    "is_message_scrub_blocked_async",
+    "is_message_scrub_blocked_sync",
+    "reload_message_scrub_caches",
+]
