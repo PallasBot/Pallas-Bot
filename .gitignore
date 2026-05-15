@@ -208,7 +208,9 @@ __marimo__/
 
 # End of https://github.com/github/gitignore/blob/main/Python.gitignore
 
-resource
+resource/*
+!resource/arknights/
+!resource/arknights/**
 accounts
 mixed_data
 backups
