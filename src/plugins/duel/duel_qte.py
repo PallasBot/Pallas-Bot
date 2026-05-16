@@ -350,14 +350,22 @@ async def _run_operator_intrusion_qte(
         )
     prelude_block = duel_join_lines(*parts, sep="\n") if parts else Message()
     body = append_duel_message(prelude_block, prompt, sep="\n") if message_has_content(prelude_block) else prompt
-    avatar_ref: str | None = None
-    if spec.get("show_avatar"):
-        from src.plugins.duel.arknights_ops import resolve_operator_avatar_for_send
+    need_avatar = bool(spec.get("show_avatar"))
+    avatar_img: bytes | None = None
+    if need_avatar:
+        from src.plugins.duel.arknights_ops import resolve_operator_avatar_image
 
-        avatar_ref = await resolve_operator_avatar_for_send(str(intrusion_ctx.get("op_id", "")))
-        if not avatar_ref:
-            avatar_ref = str(intrusion_ctx.get("avatar_url", "") or "").strip() or None
-    if plugin_config.duel_compact_round:
+        avatar_img = await resolve_operator_avatar_image(str(intrusion_ctx.get("op_id", "")))
+        if not avatar_img:
+            logger.error(
+                f"operator_intrusion missing local avatar op_id={intrusion_ctx.get('op_id')} "
+                f"name={intrusion_ctx.get('name')}"
+            )
+    split_image = need_avatar and bool(avatar_img)
+    delivered = False
+    if need_avatar and not avatar_img:
+        pass
+    elif plugin_config.duel_compact_round:
         delivered = await send_duel_line_merge_buffer(
             group_id,
             body,
@@ -367,7 +375,8 @@ async def _run_operator_intrusion_qte(
             bot_mode=bot_mode,
             challenger_is_bot=challenger_is_bot,
             defender_is_bot=defender_is_bot,
-            image_url=avatar_ref,
+            image_bytes=avatar_img,
+            split_image_on_fail=split_image,
         )
     else:
         delivered = await send_duel_line(
@@ -380,7 +389,8 @@ async def _run_operator_intrusion_qte(
             challenger_is_bot=challenger_is_bot,
             defender_is_bot=defender_is_bot,
             immediate=True,
-            image_url=avatar_ref,
+            image_bytes=avatar_img,
+            split_image_on_fail=split_image,
         )
     if not delivered:
         logger.warning(f"operator_intrusion prompt undelivered group={group_id}")

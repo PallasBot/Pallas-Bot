@@ -69,11 +69,10 @@ uv run python scripts/fetch_arknights_duel_data.py --avatars-only
 | 配置键 | 默认 | 行为 |
 |--------|------|------|
 | `duel_auto_sync_operators` | `true` | 缺表或 `count=0` 时后台拉取 character/skill 表并写入 JSON |
-| `duel_avatar_local` | `true` | 乱入发图优先 `file://` 本地 PNG，避免 NapCat 拉 GitHub 超时 |
-| `duel_avatar_download_on_use` | `true` | 发乱入头像前本地无图则按需下载单张 |
-| `duel_avatar_download_on_startup` | `false` | 启动后后台批量补全缺失头像（约百张，仍占带宽，慎用） |
+| `duel_avatar_download_on_use` | `true` | 本地缺 PNG 时按需拉到 `resource/avatars`（发群用 **bytes**，同 greeting） |
+| `duel_avatar_download_on_startup` | `false` | 启动后后台批量补全缺失头像（仓库已带头像时通常不必开） |
 
-缺表时乱入 QTE 会降级，直至后台 JSON 写完（日志 `background resource sync finished`）；也可先跑同步脚本。开启 `duel_avatar_local` 且本地无图时，未开按需下载则回退 JSON 中的远程 `avatar_url`。
+乱入 `show_avatar` 仅读本地 PNG 并以 **bytes** 发图（与 greeting 一致，不用 `file://`/远程 URL）；合并失败时拆成「文本 + 头像」两条。缺表时乱入 QTE 会降级，直至后台 JSON 写完。
 
 ### 资源更新
 
@@ -97,7 +96,8 @@ uv run python scripts/fetch_arknights_duel_data.py
 | 提示剧目表读不出 | 检查 `event_packs/default/*.json` 是否为合法 JSON 数组 |
 | 重载无反应 | 确认发送者为群管/群主，或 WebUI 已将 `duel.reload_events` 放开给所有人 |
 | 乱入无干员 | 运行 `uv run python scripts/fetch_arknights_duel_data.py`，或确认 `duel_auto_sync_operators=true` 且机器可访问 GitHub |
-| 泰拉节庆/乱入发图卡住或 `send_msg timeout` | 预拉本地头像（见上脚本）；或保持 `duel_avatar_local=true` + `duel_avatar_download_on_use=true`；发送失败时会回退纯文本并继续对局 |
+| 泰拉节庆/乱入无头像 | 确认 `resource/arknights/avatars/` 齐全或开 `duel_avatar_download_on_use`；日志 `missing local avatar` 表示本地无图 |
+| 乱入 `send_msg timeout` | 头像已随仓库分发时应走本地 file；仍超时看 NapCat/合并消息体积，代码会尝试拆条发图 |
 | 八角笼无法开演 | 本群在线牛牛账号不足 2（`duel_bots` 配置集合） |
 
 ## 实现索引

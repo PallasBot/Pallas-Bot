@@ -295,23 +295,22 @@ def build_intrusion_ctx(op: dict[str, Any]) -> dict[str, str]:
     }
 
 
-async def resolve_operator_avatar_for_send(op_id: str) -> str | None:
-    """乱入发图：优先本地 PNG（file://），否则回退 JSON 内远程 URL。"""
+async def resolve_operator_avatar_image(op_id: str) -> bytes | None:
+    """乱入发图：仅 resource 本地 PNG 的 bytes，不回退远程 URL。"""
     cid = str(op_id or "").strip()
     if not cid:
         return None
+    from src.common.arknights.duel_sync import operator_avatar_bytes
     from src.plugins.duel.config import plugin_config
 
-    if plugin_config.duel_avatar_local:
+    data = operator_avatar_bytes(cid)
+    if data:
+        return data
+    if plugin_config.duel_avatar_download_on_use:
         from src.common.utils.arknights_duel_resource import ensure_duel_avatar
 
-        local = await ensure_duel_avatar(cid, allow_download=plugin_config.duel_avatar_download_on_use)
-        if local:
-            return local.resolve().as_uri()
-    op = find_operator_by_id(cid)
-    if op:
-        url = str(op.get("avatar_url", "") or "").strip()
-        return url or None
-    from src.common.arknights.duel_sync import avatar_remote_url
-
-    return avatar_remote_url(cid)
+        path = await ensure_duel_avatar(cid, allow_download=True)
+        if path:
+            return operator_avatar_bytes(cid)
+    logger.warning(f"duel arknights: no local avatar for {cid}")
+    return None

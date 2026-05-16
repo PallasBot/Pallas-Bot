@@ -70,6 +70,17 @@ def avatar_local_path(char_id: str) -> Path:
     return AVATARS_DIR / f"{char_id}.png"
 
 
+def operator_avatar_bytes(char_id: str) -> bytes | None:
+    """本地头像 PNG 二进制（与 greeting 等插件发图方式一致）。"""
+    path = avatar_local_path(char_id)
+    if not is_avatar_file_valid(path):
+        return None
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
 def avatar_relpath(char_id: str) -> str:
     return f"avatars/{char_id}.png"
 

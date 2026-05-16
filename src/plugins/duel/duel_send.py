@@ -123,7 +123,8 @@ async def send_duel_line_merge_buffer(
     speaker: Speaker = "neutral",
     challenger_is_bot: bool = False,
     defender_is_bot: bool = False,
-    image_url: str | None = None,
+    image_bytes: bytes | None = None,
+    split_image_on_fail: bool = False,
 ) -> bool:
     """将缓冲剧目与 text 合并为一条即时消息（紧凑幕 QTE 提示用）。返回是否成功发群。"""
     prefix = take_round_buffer_body()
@@ -132,7 +133,7 @@ async def send_duel_line_merge_buffer(
         body = append_duel_message(prefix, chunk, sep="\n\n")
     else:
         body = chunk if message_has_content(chunk) else prefix
-    if not message_has_content(body) and not image_url:
+    if not message_has_content(body) and not image_bytes:
         return False
     kwargs = build_duel_deliver_kwargs(
         group_id=group_id,
@@ -144,7 +145,12 @@ async def send_duel_line_merge_buffer(
         challenger_is_bot=challenger_is_bot,
         defender_is_bot=defender_is_bot,
     )
-    return await deliver_duel_line(body, image_url=image_url, **kwargs)
+    return await deliver_duel_line(
+        body,
+        image_bytes=image_bytes,
+        split_image_on_fail=split_image_on_fail,
+        **kwargs,
+    )
 
 
 async def release_round_line_buffer() -> None:
@@ -184,7 +190,8 @@ async def send_duel_line(
     challenger_is_bot: bool = False,
     defender_is_bot: bool = False,
     immediate: bool = False,
-    image_url: str | None = None,
+    image_bytes: bytes | None = None,
+    split_image_on_fail: bool = False,
 ) -> bool:
     """发送剧目。默认写入本幕缓冲；immediate 时立即发群。返回是否已发群或写入缓冲。"""
     kwargs = build_duel_deliver_kwargs(
@@ -198,22 +205,27 @@ async def send_duel_line(
         defender_is_bot=defender_is_bot,
     )
     chunk = coerce_duel_message(text)
-    if not message_has_content(chunk) and not image_url:
+    if not message_has_content(chunk) and not image_bytes:
         return False
     buf = _round_buffer.get()
-    if buf is not None and not immediate and not image_url:
+    if buf is not None and not immediate and not image_bytes:
         if message_has_content(chunk):
             buf.parts.append(chunk)
         buf.send_kwargs = kwargs
         return True
-    return await deliver_duel_line(chunk, image_url=image_url, **kwargs)
+    return await deliver_duel_line(
+        chunk,
+        image_bytes=image_bytes,
+        split_image_on_fail=split_image_on_fail,
+        **kwargs,
+    )
 
 
-def build_duel_outbound_message(body: Message, *, image_url: str | None = None) -> Message:
-    """剧目正文与可选头像合并为一条群消息。"""
+def build_duel_outbound_message(body: Message, *, image_bytes: bytes | None = None) -> Message:
+    """剧目正文与可选头像合并为一条群消息（头像为 PNG bytes，同 greeting）。"""
     msg = body if message_has_content(body) else Message()
-    if image_url:
-        msg = msg + Message(MessageSegment.image(file=image_url))
+    if image_bytes:
+        msg = msg + Message(MessageSegment.image(image_bytes))
     return msg
 
 
@@ -265,11 +277,12 @@ async def deliver_duel_line(
     speaker: Speaker = "neutral",
     challenger_is_bot: bool = False,
     defender_is_bot: bool = False,
-    image_url: str | None = None,
+    image_bytes: bytes | None = None,
+    split_image_on_fail: bool = False,
 ) -> bool:
-    """实际发群并登记复读忽略；头像失败时回退为纯文本，避免整局中断。"""
+    """实际发群并登记复读忽略。乱入可拆成文本+图片两条，保证头像发出。"""
     chunk = coerce_duel_message(text)
-    if not message_has_content(chunk) and not image_url:
+    if not message_has_content(chunk) and not image_bytes:
         return False
     if message_has_content(chunk):
         await register_duel_narrative_line(group_id, chunk)
@@ -286,11 +299,21 @@ async def deliver_duel_line(
         "challenger_id": challenger_id,
         "defender_id": defender_id,
     }
-    outbound = build_duel_outbound_message(chunk, image_url=image_url)
+    outbound = build_duel_outbound_message(chunk, image_bytes=image_bytes)
     if await _route_send_outbound(outbound, **send_kwargs):
         return True
-    if image_url and message_has_content(chunk):
-        text_only = build_duel_outbound_message(chunk, image_url=None)
+    if image_bytes and split_image_on_fail:
+        text_only = build_duel_outbound_message(chunk, image_bytes=None)
+        img_only = build_duel_outbound_message(Message(), image_bytes=image_bytes)
+        text_ok = message_has_content(text_only) and await _route_send_outbound(text_only, **send_kwargs)
+        img_ok = await _route_send_outbound(img_only, **send_kwargs)
+        if img_ok and (text_ok or not message_has_content(chunk)):
+            logger.info(f"duel send split text+image group={group_id}")
+            return True
+        logger.warning(f"duel intrusion image not sent group={group_id} text_ok={text_ok} img_ok={img_ok}")
+        return False
+    if image_bytes and message_has_content(chunk):
+        text_only = build_duel_outbound_message(chunk, image_bytes=None)
         if await _route_send_outbound(text_only, **send_kwargs):
             logger.info(f"duel send text-only fallback group={group_id} (avatar skipped)")
             return True

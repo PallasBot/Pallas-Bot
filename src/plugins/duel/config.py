@@ -130,13 +130,9 @@ class Config(BaseModel, extra="ignore"):
         default=True,
         description="缺 operators_6star.json 时启动自动拉取干员表（与 scripts/fetch_arknights_duel_data.py 同源）。",
     )
-    duel_avatar_local: bool = Field(
-        default=True,
-        description="乱入头像优先使用 resource/arknights/avatars 本地 PNG，避免 NapCat 拉 GitHub 超时。",
-    )
     duel_avatar_download_on_use: bool = Field(
         default=True,
-        description="发送乱入头像前若本地无图则按需下载单张。",
+        description="乱入发图仅走本地 PNG；缺文件时按需从上游拉一张到 resource（不用远程 URL 发群）。",
     )
     duel_avatar_download_on_startup: bool = Field(
         default=False,
