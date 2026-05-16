@@ -1,0 +1,3777 @@
+{
+  "source": "Kengxxiao/ArknightsGameData (skill text = levels[-1] + blackboard, 有专精时一般为专三) + yuanyan3060/ArknightsGameResource (avatar path only)",
+  "rarity_filter": "TIER_6",
+  "count": 140,
+  "operators": [
+    {
+      "id": "char_003_kalts",
+      "name": "凯尔希",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "physician",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_kalts_1",
+          "name": "指令：结构加固",
+          "description": "自身和Mon3tr的防御力+150%，且自身获得50%的物理格挡"
+        },
+        {
+          "skill_id": "skchr_kalts_2",
+          "name": "指令：战术协同",
+          "description": "自身的攻击速度+100，Mon3tr的攻击力+90%，Mon3tr可以攻击阻挡的所有敌人 该技能与Mon3tr绑定"
+        },
+        {
+          "skill_id": "skchr_kalts_3",
+          "name": "指令：熔毁",
+          "description": "Mon3tr的防御力+200%，技能期间攻击力从+260%逐渐降低至+0%且伤害类型变为真实，此期间如果未击杀任何敌人则技能结束后流失最大生命的50%。该技能与Mon3tr绑定"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_003_kalts.png"
+    },
+    {
+      "id": "char_010_chen",
+      "name": "陈",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "sword",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_chen_1",
+          "name": "鞘击",
+          "description": "下次攻击使用刀鞘砸向敌人，造成相当于攻击力320%的物理伤害，令命中目标晕眩1.5秒"
+        },
+        {
+          "skill_id": "skchr_chen_2",
+          "name": "赤霄·拔刀",
+          "description": "对前方范围内最多7名敌人造成相当于攻击力500%的物理和相当于攻击力500%的法术伤害"
+        },
+        {
+          "skill_id": "skchr_chen_3",
+          "name": "赤霄·绝影",
+          "description": "向周围寻找最近的敌方目标，对其发动10次连续斩击，每次造成相当于攻击力320%的物理伤害，并在最后一击时使目标晕眩4秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_010_chen.png"
+    },
+    {
+      "id": "char_017_huang",
+      "name": "煌",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "centurion",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_huang_1",
+          "name": "强力击·γ型",
+          "description": "下次攻击的攻击力提高至290%"
+        },
+        {
+          "skill_id": "skchr_huang_2",
+          "name": "链锯延伸模块",
+          "description": "攻击力+100%，防御力+35%，攻击距离加长 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_huang_3",
+          "name": "沸腾爆裂",
+          "description": "技能开启后，攻击力和防御力逐渐增至+80%并对前方一格内的敌方单位进行切割。技能结束时对附近所有敌人造成此时攻击力400%的物理伤害，自己流失25%的生命值"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_017_huang.png"
+    },
+    {
+      "id": "char_1012_skadi2",
+      "name": "浊心斯卡蒂",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "bard",
+      "nation_id": "egir",
+      "nation_cn": "阿戈尔",
+      "skills": [
+        {
+          "skill_id": "skchr_skadi2_1",
+          "name": "同归殊途之吟",
+          "description": "立即回复自身所有生命值且生命上限+170%，特性效果提高至80%，攻击范围内我方所有单位受到伤害的50%直接转移给浊心斯卡蒂承担（同类效果取最高）"
+        },
+        {
+          "skill_id": "skchr_skadi2_2",
+          "name": "同葬无光之愿",
+          "description": "攻击范围内所有其他友方单位获得相当于浊心斯卡蒂60%攻击力与防御力的鼓舞效果，自身特性效果提高至20% 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_skadi2_3",
+          "name": "\"潮涌，潮枯\"",
+          "description": "特性变为自身每秒流失5%生命，使范围内所有敌人每秒受到70%攻击力的真实伤害（自身与海嗣造成的伤害可叠加），范围内所有友方单位获得相当于浊心斯卡蒂110%攻击力的鼓舞效果"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1012_skadi2.png"
+    },
+    {
+      "id": "char_1013_chen2",
+      "name": "假日威龙陈",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "reaperrange",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_chen2_1",
+          "name": "高压冲击",
+          "description": "攻击力+100%，攻击时对攻击范围内的所有敌人应用特性加成 攻击装有4发弹药，打完后结束（可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_chen2_2",
+          "name": "“堇青之夜”",
+          "description": "攻击力+80%，每次攻击在范围内生成持续5秒的粘液，地面敌人经过时移动速度-35%、防御力-170（不叠加），蓄力额外效果：改为20发弹药 攻击装有8发弹药，打完后结束（可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_chen2_3",
+          "name": "“假日风暴”",
+          "description": "攻击范围扩大，攻击力+100%，攻击造成两次伤害，对攻击范围内的所有敌人应用特性加成，每次攻击在范围内生成持续5秒的粘液，地面敌人经过时移动速度-45%、防御力-220（不叠加） 攻击装有32发弹药，每次攻击消耗2发，打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1013_chen2.png"
+    },
+    {
+      "id": "char_1014_nearl2",
+      "name": "耀骑士临光",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "fearless",
+      "nation_id": "kazimierz",
+      "nation_cn": "卡西米尔",
+      "skills": [
+        {
+          "skill_id": "skchr_nearl2_1",
+          "name": "灿焰长刃",
+          "description": "攻击范围扩大，攻击力+70%，攻击速度+50 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_nearl2_2",
+          "name": "逐夜烁光",
+          "description": "被动效果：部署不消耗部署位。 部署后攻击力+160%，获得4层护盾。技能结束后自动撤退，本次再部署时间延长25%，上一名部署干员势力为【卡西米尔】时本次再部署时间不再延长"
+        },
+        {
+          "skill_id": "skchr_nearl2_3",
+          "name": "耀阳颔首",
+          "description": "在周围四格可部署地面召唤一把\"耀阳\"对周围敌人造成110%耀骑士临光攻击力的真实伤害并晕眩3秒，自身攻击范围扩大，攻击力+140%、防御力+100%，攻击自身与\"耀阳\"阻挡的单位时伤害类型变为真实"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1014_nearl2.png"
+    },
+    {
+      "id": "char_1016_agoat2",
+      "name": "纯烬艾雅法拉",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "wandermedic",
+      "nation_id": "leithanien",
+      "nation_cn": "莱塔尼亚",
+      "skills": [
+        {
+          "skill_id": "skchr_agoat2_1",
+          "name": "无声润物",
+          "description": "攻击力+40%，每次可额外治疗一名单位，攻击范围内所有友方单位每秒回复纯烬艾雅法拉攻击力8%的元素损伤 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_agoat2_2",
+          "name": "云霭荫佑",
+          "description": "立即对攻击范围内所有友方单位进行一次治疗，并生成一个持续20秒的范围损伤屏障，为范围内的友方单位吸收相当于攻击力900%的元素损伤"
+        },
+        {
+          "skill_id": "skchr_agoat2_3",
+          "name": "火山回响",
+          "description": "攻击范围扩大至整个战场，治疗变为60%治疗量和元素损伤回复量的5连发，优先治疗不同的目标，第二天赋的效果提升至5倍"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1016_agoat2.png"
+    },
+    {
+      "id": "char_1019_siege2",
+      "name": "维娜·维多利亚",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "artsfghter",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_siege2_1",
+          "name": "重铸晖光",
+          "description": "下次攻击对四周所有地面敌人额外造成相当于攻击力180%的真实伤害"
+        },
+        {
+          "skill_id": "skchr_siege2_2",
+          "name": "进赴故土",
+          "description": "被动效果：天赋一生效范围内若有2个及以上友方单位，维娜技力回复速度+0.5/秒 自动开启：攻击距离+1，攻击力+180%，攻击目标数+1 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_siege2_3",
+          "name": "俱以我之名",
+          "description": "立即在天赋一生效范围内可部署地面召唤“黄金盟誓”；技能期间可攻击被天赋一生效范围友方单位阻挡的敌人，攻击力+190%，攻击目标数+3，攻击间隔缩短，攻击时伤害类型变为真实"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1019_siege2.png"
+    },
+    {
+      "id": "char_1020_reed2",
+      "name": "焰影苇草",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "incantationmedic",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skcom_quickattack[3]",
+          "name": "迅捷打击·γ型",
+          "description": "攻击力+45%，攻击速度+45"
+        },
+        {
+          "skill_id": "skchr_reed2_2",
+          "name": "枯荣共息",
+          "description": "优先使两名部署在地面的干员获得三颗火球，效果如下：每1.5秒对一名敌人造成相当于焰影苇草240%攻击力的法术伤害并仅对该干员触发焰影苇草特性"
+        },
+        {
+          "skill_id": "skchr_reed2_3",
+          "name": "生命火种",
+          "description": "同时攻击两名敌人，攻击力+60%，第一天赋触发几率提升至100%，技能期间附带灼痕效果的敌人每秒受到60%焰影苇草攻击力的法术伤害、被击倒时对周围敌人造成140%焰影苇草攻击力的法术伤害并施加灼痕效果 灼痕效果持续至技能结束"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1020_reed2.png"
+    },
+    {
+      "id": "char_1023_ghost2",
+      "name": "归溟幽灵鲨",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "dollkeeper",
+      "nation_id": "egir",
+      "nation_cn": "阿戈尔",
+      "skills": [
+        {
+          "skill_id": "skchr_ghost2_1",
+          "name": "生存的技巧",
+          "description": "开启时立即与范围内生命上限比例最低的其他我方干员交换生命上限比例，自身攻击力+150%"
+        },
+        {
+          "skill_id": "skchr_ghost2_2",
+          "name": "生存的渴望",
+          "description": "攻击力+130%，攻击速度+50，技能持续期间内干员的生命值不会低于1 技能结束后视为被击倒"
+        },
+        {
+          "skill_id": "skchr_ghost2_3",
+          "name": "生存的重压",
+          "description": "攻击间隔延长，攻击所有阻挡的敌人，攻击力+260%，生命上限+200%，攻击生命比例高于或等于自身的敌人时额外造成一次攻击力70%的物理伤害，否则自身流失3%生命"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1023_ghost2.png"
+    },
+    {
+      "id": "char_1026_gvial2",
+      "name": "百炼嘉维尔",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "centurion",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_gvial2_1",
+          "name": "精准痛击",
+          "description": "攻击力+80%，每次攻击治疗自身相当于造成伤害40%的生命值"
+        },
+        {
+          "skill_id": "skchr_gvial2_2",
+          "name": "链锯强袭",
+          "description": "攻击范围扩大，攻击力+180%，防御力+50%；攻击到未被阻挡的敌人时，将其中等力度地拖拽至面前"
+        },
+        {
+          "skill_id": "skchr_gvial2_3",
+          "name": "丛林之魂",
+          "description": "攻击力+140%，攻击速度+100，阻挡数+2，技能期间暂时只受到50%的伤害，其余伤害延后至技能结束，变为持续20秒等量的生命流失效果"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1026_gvial2.png"
+    },
+    {
+      "id": "char_1028_texas2",
+      "name": "缄默德克萨斯",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "executor",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_texas2_1",
+          "name": "细雨无声",
+          "description": "部署后攻击力+70%，攻击使命中目标失去特殊能力10秒，期间目标每秒受到400点法术伤害"
+        },
+        {
+          "skill_id": "skchr_texas2_2",
+          "name": "阵雨连绵",
+          "description": "部署后立即对周围所有敌人造成相当于攻击力240%的法术伤害，并使命中目标在10秒内法术抗性-；攻击力+55%，攻击变为二连击并造成法术伤害"
+        },
+        {
+          "skill_id": "skchr_texas2_3",
+          "name": "剑雨滂沱",
+          "description": "部署后立即对周围所有敌人造成两次相当于攻击力165%的法术伤害并使目标晕眩2秒，之后每秒释放剑雨攻击范围内最多4个不同的目标，造成攻击力130%的法术伤害和0.2秒晕眩"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1028_texas2.png"
+    },
+    {
+      "id": "char_1029_yato2",
+      "name": "麒麟R夜刀",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "executor",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_yato2_1",
+          "name": "鬼人化",
+          "description": "攻击速度+100，攻击变为二连击，且技能期间对同一目标的第三次攻击变为六连击"
+        },
+        {
+          "skill_id": "skchr_yato2_2",
+          "name": "乱舞",
+          "description": "第一天赋效果提升至2.5倍，攻击力提升至150%并对前方一格的所有敌人发动16次斩击，期间更容易受到敌人的攻击"
+        },
+        {
+          "skill_id": "skchr_yato2_3",
+          "name": "空中回旋乱舞",
+          "description": "向前突进2格，每突进一段距离都会对周围所有敌人发动攻击力300%的斩击；期间每攻击到一个敌人都会使突进距离延长（最多延长至5格，可以攻击空中单位）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1029_yato2.png"
+    },
+    {
+      "id": "char_1031_slent2",
+      "name": "淬羽赫默",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "blessing",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_slent2_1",
+          "name": "进取之心",
+          "description": "攻击力+80%"
+        },
+        {
+          "skill_id": "skchr_slent2_2",
+          "name": "俯瞰视界",
+          "description": "攻击速度+60，技能期间可以使用一个辅助无人机 无人机投入战场后使周围友军享受3倍的第一天赋效果，技能结束或淬羽赫默离场时销毁"
+        },
+        {
+          "skill_id": "skchr_slent2_3",
+          "name": "无畏者协议",
+          "description": "攻击力+30%，第一天赋效果提升至1.8倍；技能期间仅一次，攻击范围内的一名干员受到致命伤时，使其生命值在10秒内不低于1 同一次作战中最多使用2次，可主动关闭（期间可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1031_slent2.png"
+    },
+    {
+      "id": "char_1032_excu2",
+      "name": "圣约送葬人",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "reaper",
+      "nation_id": "laterano",
+      "nation_cn": "拉特兰",
+      "skills": [
+        {
+          "skill_id": "skchr_excu2_1",
+          "name": "遗嘱执行",
+          "description": "攻击范围扩大，攻击力+50%，攻击时无视目标400的防御力 攻击装有8发弹药，打完后结束（可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_excu2_2",
+          "name": "近身铳斗",
+          "description": "攻击力+80%，防御力+80%，阻挡数+1，受到敌人的近战攻击时有40%几率闪避并补充1颗弹药 攻击装有12发弹药，打完后结束（可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_excu2_3",
+          "name": "圣约决裁",
+          "description": "攻击间隔略微增大，攻击范围扩大，攻击力+180%，每消耗1颗弹药攻击力额外+6%（最多30层），特性的回复生命效果提高至3倍；技能结束时，对技能期间攻击过的目标造成相当于攻击力250%的物理伤害 攻击装有16发弹药，打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1032_excu2.png"
+    },
+    {
+      "id": "char_1033_swire2",
+      "name": "琳琅诗怀雅",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "merchant",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_swire2_1",
+          "name": "仗义疏财",
+          "description": "消耗一枚金币，下一次攻击会为周围八格内血量不足70%的一名友方单位恢复相当于攻击力80%的生命 携带此技能时金币上限为3"
+        },
+        {
+          "skill_id": "skchr_swire2_2",
+          "name": "“见面礼”",
+          "description": "消耗一枚金币在范围内一个可放置且可通行的地面放置香槟炸弹，香槟炸弹会对触碰到的首个敌人造成相当于攻击力200%的物理伤害，并使目标停顿2秒 香槟炸弹在场3秒后可额外造成一次伤害；携带此技能时金币上限为5"
+        },
+        {
+          "skill_id": "skchr_swire2_3",
+          "name": "千金一掷",
+          "description": "攻击变为二连击，击倒敌人时获得一枚金币；主动关闭技能时消耗所有金币对前方范围内敌人随机攻击，每消耗一枚金币造成一次相当于攻击力150%的物理伤害，并将目标中等力度地向前推开 持续时间无限，可随时主动关闭技能；携带此技能时金币上限为10"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1033_swire2.png"
+    },
+    {
+      "id": "char_1034_jesca2",
+      "name": "涤火杰西卡",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "shotprotector",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_jesca2_1",
+          "name": "坚守阵线",
+          "description": "攻击力+70%，自身与机动盾牌防御力+70%，机动盾牌持续时间+30秒 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_jesca2_2",
+          "name": "掩蔽护卫",
+          "description": "攻击范围扩大，攻击力+75%，攻击间隔大幅缩小，获得75%的物理和法术闪避"
+        },
+        {
+          "skill_id": "skchr_jesca2_3",
+          "name": "饱和迸射",
+          "description": "攻击距离+1，攻击间隔增大，攻击力+310%，防御力+80%，机动盾牌防御力+170% 机动盾牌存在时，立刻向前发射一枚炮弹，命中或到达终点时对范围内所有敌人造成相当于攻击力250%的物理伤害，并使其晕眩6秒 攻击装有20发弹药，打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1034_jesca2.png"
+    },
+    {
+      "id": "char_1035_wisdel",
+      "name": "维什戴尔",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "bombarder",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_wisdel_1",
+          "name": "定点清算",
+          "description": "下次攻击额外造成2次余震并使所有目标晕眩1.5秒，此次攻击的溅射范围略微扩大且余震伤害变为攻击力的120%"
+        },
+        {
+          "skill_id": "skchr_wisdel_2",
+          "name": "饱和复仇",
+          "description": "攻击力+35%，攻击间隔缩短，可同时攻击3名敌人 过载：攻击改为攻击力80%的4连发，随机攻击范围内的目标 该技能可随时主动关闭"
+        },
+        {
+          "skill_id": "skchr_wisdel_3",
+          "name": "爆裂黎明",
+          "description": "立刻在攻击范围内召唤2个魂灵之影（最多存在3个，技能结束后保留），攻击力+180%，攻击间隔大幅增大，攻击时攻击力提升至220%，溅射范围大幅扩大且第一天赋的发动概率提高至100% 攻击装有6发弹药，打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1035_wisdel.png"
+    },
+    {
+      "id": "char_1038_whitw2",
+      "name": "荒芜拉普兰德",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "funnel",
+      "nation_id": "siracusa",
+      "nation_cn": "叙拉古",
+      "skills": [
+        {
+          "skill_id": "skchr_whitw2_1",
+          "name": "慵怠者悲鸣",
+          "description": "被动效果：浮游单元+1 主动触发可以在下列状态和初始状态间切换： 攻击力+35%，释放浮游单元随机锁定整个战场内的非移动敌人进行攻击，目标移动或倒下后重新索敌"
+        },
+        {
+          "skill_id": "skchr_whitw2_2",
+          "name": "逐猎狂飙",
+          "description": "浮游单元+3，攻击范围扩大，攻击力+120%，释放浮游单元随机锁定敌人攻击，浮游单元攻击时有10%几率使目标恐惧1秒 浮游单元在锁定目标倒下后重新索敌，直至技能结束后返回干员身边"
+        },
+        {
+          "skill_id": "skchr_whitw2_3",
+          "name": "终幕·浩劫",
+          "description": "浮游单元+2，攻击力+80%，释放特殊形态的浮游单元散开后在整个战场范围各自追逐较近的敌人，追上时使目标恐惧3秒并锁定其攻击，浮游单元周围的敌人移动速度-50%且每秒受到相当于攻击力120%的法术伤害（不叠加）；浮游单元在锁定目标倒下后重新索敌，直至技能结束后返回干员身边"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1038_whitw2.png"
+    },
+    {
+      "id": "char_1039_thorn2",
+      "name": "引星棘刺",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "alchemist",
+      "nation_id": "iberia",
+      "nation_cn": "伊比利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_thorn2_1",
+          "name": "度算浪波",
+          "description": "向友方单位投掷一个炼金单元，在8秒内使落点和周围8格的友方单位防御力+100，每秒回复相当于攻击力20%的生命值"
+        },
+        {
+          "skill_id": "skchr_thorn2_2",
+          "name": "解构涌潮",
+          "description": "投掷一个炼金单元，在15秒内使落点周围的地面敌人受到的治疗和回复效果降低50%，每秒受到相当于攻击力180%的法术伤害，友方单位每秒恢复相当于攻击力18%的生命；炼金单元能在15秒内缓慢沿投掷方向移动且影响范围持续扩大 可充能2次"
+        },
+        {
+          "skill_id": "skchr_thorn2_3",
+          "name": "“我的海疆”",
+          "description": "被动效果：攻击范围扩大 主动开启：向阻挡数最低的4名干员投掷炼金单元，在23秒内使围绕区域内的敌人攻击力-，防御力-，法术抗性-（不叠加），每秒受到攻击力210%的法术伤害，效果逐渐提升（15秒后达到最大，攻击力-，防御力-，法术抗性-，每秒伤害390%）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1039_thorn2.png"
+    },
+    {
+      "id": "char_103_angel",
+      "name": "能天使",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "fastshot",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_angel_1",
+          "name": "冲锋模式",
+          "description": "下次攻击变为3连射，每次射击造成相当于攻击力145%的伤害"
+        },
+        {
+          "skill_id": "skchr_angel_2",
+          "name": "扫射模式",
+          "description": "攻击变为4连射，每次射击造成相当于攻击力125%的伤害"
+        },
+        {
+          "skill_id": "skchr_angel_3",
+          "name": "过载模式",
+          "description": "攻击变为5连射，攻击间隔一定程度缩短，攻击力提升至110% 技能会自动开启"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_103_angel.png"
+    },
+    {
+      "id": "char_1040_blaze2",
+      "name": "烛煌",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "primcaster",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_blaze2_1",
+          "name": "炙手之援",
+          "description": "立即选择攻击范围内生命上限最高的一名干员，每秒对其周围所有敌人造成相当于攻击力70%的法术伤害和相当于法术伤害30%的灼燃损伤，持续20秒"
+        },
+        {
+          "skill_id": "skchr_blaze2_2",
+          "name": "沸血燎原",
+          "description": "攻击范围改变，攻击间隔增大，攻击力+150%，同时攻击3名敌人；攻击时流失5%的生命并在目标所在位置留下灼烧地段：经过的敌人移动速度-50%，每秒受到烛煌攻击力35%的法术伤害和相当于法术伤害30%的灼燃损伤"
+        },
+        {
+          "skill_id": "skchr_blaze2_3",
+          "name": "众恶的焚场",
+          "description": "攻击范围改变，攻击力+115%，攻击间隔大幅缩短，攻击变为群体攻击；若目标处于灼燃损伤爆发期间则额外造成攻击力80%的元素伤害 自身每秒流失最大生命的3%，攻击装有25发弹药，全场有敌人进入灼燃损伤爆发时获得2颗额外弹药，弹药打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1040_blaze2.png"
+    },
+    {
+      "id": "char_1041_angel2",
+      "name": "新约能天使",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "geek",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_angel2_1",
+          "name": "天空大扫除",
+          "description": "每次攻击造成攻击力250%的物理伤害，优先攻击空中单位，主动关闭时发射剩余所有弹药攻击范围内的随机敌人 攻击装有8发弹药，打完后结束（可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_angel2_2",
+          "name": "开火成瘾症",
+          "description": "立即偷取攻击范围内1名友方干员70点攻击速度（持续至技能结束或新约能天使离场），自身与其获得最大生命值250%的屏障，该屏障会持续衰减，攻击间隔降低，每次攻击造成攻击力300%的物理伤害 攻击装有35发弹药，打完后结束（可随时停止技能），如果成功偷取攻击速度则额外获得5发弹药"
+        },
+        {
+          "skill_id": "skchr_angel2_3",
+          "name": "使命必达！",
+          "description": "攻击力+30%，每次攻击变为相当于攻击力160%的5连击，若存在投递坐标，立即对该处造成一次相当于攻击力250%的物理溅射伤害并将一名再部署时间最长的地面干员部署至该处，使其获得6点技力 部署后获得投递坐标，攻击装有50发弹药，每次攻击消耗5发，打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1041_angel2.png"
+    },
+    {
+      "id": "char_1042_phatm2",
+      "name": "酒神",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "ritualist",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_phatm2_1",
+          "name": "暗夜回声",
+          "description": "下次攻击造成两次相当于攻击力150%的法术伤害并使目标束缚3秒，该次束缚期间目标受到的神经损伤提升至1.8倍，优先攻击未处于爆发期间的敌人"
+        },
+        {
+          "skill_id": "skchr_phatm2_2",
+          "name": "群体性谵妄",
+          "description": "攻击速度+35，第一天赋溅射范围扩大；期间可以使用一个本能的召唤，部署后诱导至多4名进入范围的可达敌人（优先精英或领袖）10秒，首个目标到达后撤退并使周围所有敌人在6秒内停顿、每0.5秒受到酒神攻击力150%的法术伤害和攻击力25%的神经损伤 持续时间无限，本能的召唤有独立再部署时间"
+        },
+        {
+          "skill_id": "skchr_phatm2_3",
+          "name": "空剧场",
+          "description": "攻击范围扩大，攻击力+125%，优先攻击未处于损伤爆发期间的敌人，技能期间酒神造成过神经损伤的敌人每秒受到攻击力10%的神经损伤直至爆发；范围内敌人神经损伤冷却恢复速度+50%，神经损伤爆发时在其地面位置生成/刷新一个迷狂牢笼"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1042_phatm2.png"
+    },
+    {
+      "id": "char_1043_leizi2",
+      "name": "司霆惊蛰",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "librator",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_leizi2_1",
+          "name": "浩气长存",
+          "description": "攻击范围朝前方和两侧扩大。对三个方向的地面敌人各造成相当于攻击力355%的物理伤害 可充能3次，充能耗尽前特性不重置"
+        },
+        {
+          "skill_id": "skchr_leizi2_2",
+          "name": "正霆摄威",
+          "description": "攻击范围沿地面地块扩展至最远三格，攻击对4个目标造成相当于攻击力150%的物理伤害。技能期间每次落雷使攻击力+10%（最多可叠加25次）"
+        },
+        {
+          "skill_id": "skchr_leizi2_3",
+          "name": "天地通明",
+          "description": "攻击范围扩大，攻击间隔大幅延长，攻击造成攻击力300%的范围物理伤害，目标位置产生朝四周流动三格的电流。电流碰到自身或高台时反弹，电流所在地块上所有敌人每0.6秒受到司霆惊蛰攻击力70%的法术伤害，且有15%概率战栗3秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1043_leizi2.png"
+    },
+    {
+      "id": "char_1044_hsgma2",
+      "name": "斩业星熊",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "artsprotector",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_hsgma2_1",
+          "name": "恶业苦果",
+          "description": "攻击力+70%，防御力+70%，每次受到攻击时对目标造成相当于斩业星熊攻击力175%的法术伤害 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_hsgma2_2",
+          "name": "无始无明",
+          "description": "投出盾牌并以攻击力90%的三连击攻击所有阻挡的敌人，盾牌会环绕斩业星熊飞行一圈；盾牌碰到敌人时使目标停顿，每0.5秒对其造成攻击力130%的法术伤害，自身回复盾牌造成伤害15%的生命"
+        },
+        {
+          "skill_id": "skchr_hsgma2_3",
+          "name": "地狱变相",
+          "description": "攻击范围扩大，生命上限+100%，攻击力+230%，以二连击攻击最多3名敌人；主动关闭技能后11秒内保留技能加成且不会被击倒，攻击变为四连击，承担攻击范围内我方干员受到的致命伤害，11秒后强制退出战场 可主动关闭（期间可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1044_hsgma2.png"
+    },
+    {
+      "id": "char_1045_svash2",
+      "name": "凛御银灰",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "counsellor",
+      "nation_id": "kjerag",
+      "nation_cn": "谢拉格",
+      "skills": [
+        {
+          "skill_id": "skchr_svash2_1",
+          "name": "周旋的谋略",
+          "description": "立刻获得10点部署费用。待部署区中距离“风雪之眼”最近的1名干员费用-5（优先选择右侧近卫/术师/狙击干员），且部署后获得相当于凛御银灰最大生命值50%的屏障"
+        },
+        {
+          "skill_id": "skchr_svash2_2",
+          "name": "御敌的锋锐",
+          "description": "对前方6名敌人造成攻击力380%的物理伤害，使其6秒内寒冷且隐匿失效；待部署区中距离“风雪之眼”最近的1名干员费用-11（优先选择右侧近卫/术师/狙击干员）；使“风雪之眼”左侧所有干员部署时以自身攻击力施放一次本技能的范围效果（最多叠加2次） 可充能2次"
+        },
+        {
+          "skill_id": "skchr_svash2_3",
+          "name": "变革已至",
+          "description": "攻击范围扩大并使敌人隐匿失效，攻击对直线范围造成攻击力200%的物理伤害和30%的脆弱；立即获得9点后持续获得24点部署费用 首次开启时交换待部署区中费用最高（优先选择近卫/术师/狙击干员）与最低干员的基础部署费用 技能期间“风雪之眼”变为可部署"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1045_svash2.png"
+    },
+    {
+      "id": "char_1046_sbell2",
+      "name": "圣聆初雪",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "phalanx",
+      "nation_id": "kjerag",
+      "nation_cn": "谢拉格",
+      "skills": [
+        {
+          "skill_id": "skchr_sbell2_1",
+          "name": "铃音吹雪",
+          "description": "立即对范围内所有敌人造成相当于攻击力520%的法术伤害及3.5秒寒冷并将其中等力度地朝部署方向推动，之后积雪向前方地面扩散（最多向前扩散5格） 可充能2次"
+        },
+        {
+          "skill_id": "skchr_sbell2_2",
+          "name": "霜涛覆岭",
+          "description": "每次攻击造成相当于攻击力380%的法术伤害，积雪超过5层时会向周围扩散一层（最多向外扩散20格），处于积雪上的地面敌人每秒受到攻击力20%的法术伤害，敌人离开积雪时获得5秒寒冷，积雪在目标点积累至5层时，使目标点变为冻结状态 持续时间无限，可主动关闭技能（期间可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_sbell2_3",
+          "name": "群山俯首",
+          "description": "攻击范围扩大，立即诱导攻击范围内的所有敌人至自身周围的可达地面，持续10秒，积雪生成速度加快，攻击力+100%，攻击速度+30，攻击无视目标10点法术抗性，每次攻击造成相当于攻击力260%的法术伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1046_sbell2.png"
+    },
+    {
+      "id": "char_1047_halo2",
+      "name": "溯光星源",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "slower",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_halo2_1",
+          "name": "星图闪烁",
+          "description": "攻击力+100%，攻击可在敌人间重复跳跃，最多跳跃3次"
+        },
+        {
+          "skill_id": "skchr_halo2_2",
+          "name": "星束引力",
+          "description": "下次攻击选择攻击范围内距离目标点最远的2个敌人为目标，造成相当于攻击力145%的法术伤害，攻击造成的停顿时间延长至3秒，并分别链接目标附近的最多3个敌人中等力度地拉向目标所在位置同时造成相同的法术伤害"
+        },
+        {
+          "skill_id": "skchr_halo2_3",
+          "name": "并流连锁",
+          "description": "攻击范围扩大，攻击力+70%，攻击间隔缩短，持续锁定2个敌人进行攻击，被锁定的敌人会互相链接；每个被链接的敌人会把即将受到法术伤害的25%额外传导给其他链接目标"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1047_halo2.png"
+    },
+    {
+      "id": "char_1050_chen3",
+      "name": "赤刃明霄陈",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "artsfghter",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_chen3_1",
+          "name": "赤霄·奔夜",
+          "description": "攻击力+120%，攻击变为二连击，攻击使目标敌人特殊能力失效持续至技能结束"
+        },
+        {
+          "skill_id": "skchr_chen3_2",
+          "name": "赤霄·绝影-驰",
+          "description": "对周围最近的1名敌人发动10次斩击，每次造成攻击力480%的法术伤害，敌人被击倒时转移至目标周围最近的其他敌人并使剩余攻击次数+1；斩击结束时，若目标未被击倒且其位置可部署则移动至该位置，否则返回原位置。接下来攻击力+300%，获得60%物理和法术闪避"
+        },
+        {
+          "skill_id": "skchr_chen3_3",
+          "name": "赤霄·天喟",
+          "description": "技能开启时向前释放一道可转向的剑气，对穿过的敌人造成相当于其当前生命值6%的法术伤害（至少造成自身攻击力580%的法术伤害）；攻击范围扩大，每次攻击对最多4名地面敌人造成3次攻击力210%的法术伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1050_chen3.png"
+    },
+    {
+      "id": "char_1051_headb2",
+      "name": "怒潮凛冬",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "hammer",
+      "nation_id": "ursus",
+      "nation_cn": "乌萨斯",
+      "skills": [
+        {
+          "skill_id": "skchr_headb2_1",
+          "name": "誓不低头",
+          "description": "攻击力+50%，攻击速度+50"
+        },
+        {
+          "skill_id": "skchr_headb2_2",
+          "name": "绝不罢休",
+          "description": "被动效果：每次有高台触发第一天赋的效果时，获得1点技力 自动开启：攻击范围扩大，攻击力+90%，防御力+60% 第二次及以后使用时能力加成变为最初的两倍，且持续时间无限"
+        },
+        {
+          "skill_id": "skchr_headb2_3",
+          "name": "无可抵挡",
+          "description": "攻击力+100%，对前方一格持续进行五次溅射范围更大的锤击，每次造成相当于攻击力240%的物理伤害并使攻击力额外+30%；技能期间触发第一天赋的高台会向四周高台扩散该效果（扩散次数随攻击次数递增），并使伤害效果提升至3.5倍，控制效果变为2秒束缚"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1051_headb2.png"
+    },
+    {
+      "id": "char_1052_kalts2",
+      "name": "凯尔希·思衡托",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "watchman",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_kalts2_1",
+          "name": "应急肃正防线",
+          "description": "攻击力+90%，攻击速度+50，所有其他起飞的友方干员阻挡范围扩大"
+        },
+        {
+          "skill_id": "skchr_kalts2_2",
+          "name": "保护性拒止",
+          "description": "攻击范围扩大，攻击力+150%，攻击变为射出医疗单元（优先选择敌人），击中时对目标周围所有敌人造成相当于攻击力380%的真实伤害，使其停顿5秒并回复目标周围所有友方干员相当于攻击力200%的生命 攻击装有10发弹药，可以随时停止技能"
+        },
+        {
+          "skill_id": "skchr_kalts2_3",
+          "name": "破梏重生",
+          "description": "立刻获得战术锚点，攻击力+150%，攻击间隔大幅缩小，额外治疗1个目标，部署战术锚点后，自身移动至该位置，并使攻击范围内最多2名友方干员可以部署至自身攻击范围的另一位置"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1052_kalts2.png"
+    },
+    {
+      "id": "char_112_siege",
+      "name": "推进之王",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "pioneer",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skcom_charge_cost[3]",
+          "name": "冲锋号令·γ型",
+          "description": "立即获得12点部署费用"
+        },
+        {
+          "skill_id": "skchr_siege_2",
+          "name": "跃空锤",
+          "description": "下次攻击对四周所有敌人造成相当于攻击力340%的物理伤害，并获得3点部署费用 可充能3次"
+        },
+        {
+          "skill_id": "skchr_siege_3",
+          "name": "碎颅击",
+          "description": "攻击间隔增大，攻击时攻击力提高至380%，并且有40%的概率晕眩目标1.5秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_112_siege.png"
+    },
+    {
+      "id": "char_113_cqbw",
+      "name": "W",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "aoesniper",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_cqbw_1",
+          "name": "红桃K",
+          "description": "立即发射一枚榴弹，造成相当于攻击力350%的物理伤害，并使命中目标晕眩3秒"
+        },
+        {
+          "skill_id": "skchr_cqbw_2",
+          "name": "惊吓盒子",
+          "description": "下次攻击变为在攻击范围内的一个可放置地块埋下地雷（持续120秒）；地雷在敌人经过时会爆炸，爆炸后对周围所有敌人造成相当于攻击力280%的物理伤害并令其晕眩2.2秒"
+        },
+        {
+          "skill_id": "skchr_cqbw_3",
+          "name": "D12",
+          "description": "在攻击范围内生命值最多的4个敌人身上放置一枚炸弹；炸弹会在一定延迟后引爆，每个对其周围的所有敌人造成相当于攻击力310%的物理伤害并令其晕眩5秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_113_cqbw.png"
+    },
+    {
+      "id": "char_134_ifrit",
+      "name": "伊芙利特",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "blastcaster",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_ifrit_1",
+          "name": "狂热",
+          "description": "攻击力+20%，攻击速度+80"
+        },
+        {
+          "skill_id": "skchr_ifrit_2",
+          "name": "炎爆",
+          "description": "下次攻击造成相当于攻击力250%的法术伤害，命中目标在3秒内防御力-并持续受到灼烧伤害 可充能3次"
+        },
+        {
+          "skill_id": "skchr_ifrit_3",
+          "name": "灼地",
+          "description": "对攻击范围内的地面敌人造成每秒相当于攻击力140%的法术伤害，命中目标的法术抗性- 自己每秒流失最大生命值的2%"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_134_ifrit.png"
+    },
+    {
+      "id": "char_136_hsguma",
+      "name": "星熊",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "protector",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_hsguma_1",
+          "name": "战意",
+          "description": "防御力+80%，攻击力+40%"
+        },
+        {
+          "skill_id": "skchr_hsguma_2",
+          "name": "荆棘",
+          "description": "防御力+30% 每次受到攻击时对目标造成相当于星熊攻击力100%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_hsguma_3",
+          "name": "力之锯",
+          "description": "攻击力+140%，防御力+90%，对前方一格的所有敌人使用盾牌进行切割"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_136_hsguma.png"
+    },
+    {
+      "id": "char_147_shining",
+      "name": "闪灵",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "physician",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_shining_1",
+          "name": "信条",
+          "description": "攻击力+80%，攻击速度+20"
+        },
+        {
+          "skill_id": "skchr_shining_2",
+          "name": "自动掩护",
+          "description": "下次治疗使目标获得一个持续3秒的屏障 屏障可以吸收相当于闪灵攻击力50%的伤害，同时使目标防御力+50%；可充能3次"
+        },
+        {
+          "skill_id": "skchr_shining_3",
+          "name": "教条力场",
+          "description": "攻击力+50% 攻击范围内的所有友方单位防御力+100%"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_147_shining.png"
+    },
+    {
+      "id": "char_1502_crosly",
+      "name": "弑君者",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "executor",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_crosly_1",
+          "name": "尘烟蔽目",
+          "description": "部署后攻击力+100%，并获得50%物理和法术闪避"
+        },
+        {
+          "skill_id": "skchr_crosly_2",
+          "name": "硝烟震爆",
+          "description": "部署后8秒内停止攻击，自身不容易成为敌人的攻击目标，第一天赋使地面敌人物理与法术命中率降低的效果提高至2.5倍，并在技能结束时对烟雾内的所有地面敌人造成相当于攻击力500%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_crosly_3",
+          "name": "烽烟行刑场",
+          "description": "部署后第一天赋的生效范围扩大，弑君者消失在烟雾中，获得隐匿且阻挡数变为0，每2秒现身对烟雾内的一名地面敌人造成两次相当于攻击力250%的物理伤害并使目标晕眩4秒（对同一目标6秒内只会触发一次）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1502_crosly.png"
+    },
+    {
+      "id": "char_172_svrash",
+      "name": "银灰",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "lord",
+      "nation_id": "kjerag",
+      "nation_cn": "谢拉格",
+      "skills": [
+        {
+          "skill_id": "skchr_svrash_1",
+          "name": "强力击·γ型",
+          "description": "下次攻击的攻击力提高至290%"
+        },
+        {
+          "skill_id": "skchr_svrash_2",
+          "name": "雪境生存法则",
+          "description": "可以在下列状态和初始状态间切换： 攻击范围缩小，防御力+100%，每秒恢复最大生命的"
+        },
+        {
+          "skill_id": "skchr_svrash_3",
+          "name": "真银斩",
+          "description": "防御力-，攻击力+200%，攻击范围扩大，同时攻击至多6个目标（视为近距离攻击）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_172_svrash.png"
+    },
+    {
+      "id": "char_179_cgbird",
+      "name": "夜莺",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "ringhealer",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skcom_heal_up[3]",
+          "name": "治疗强化·γ型",
+          "description": "攻击力+90%"
+        },
+        {
+          "skill_id": "skchr_cgbird_2",
+          "name": "法术护盾",
+          "description": "下次治疗使所有目标获得一个持续5秒的屏障 屏障能吸收相当于夜莺攻击力90%的法术伤害，同时使目标法术抗性+20；可充能3次"
+        },
+        {
+          "skill_id": "skchr_cgbird_3",
+          "name": "圣域",
+          "description": "攻击范围扩大，攻击力+80%，攻击范围内的友方单位法术抗性+150%并获得25%的法术闪避"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_179_cgbird.png"
+    },
+    {
+      "id": "char_180_amgoat",
+      "name": "艾雅法拉",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "corecaster",
+      "nation_id": "leithanien",
+      "nation_cn": "莱塔尼亚",
+      "skills": [
+        {
+          "skill_id": "skchr_amgoat_1",
+          "name": "二重咏唱",
+          "description": "攻击速度+60 第二次及以后使用时追加攻击力+60%的效果"
+        },
+        {
+          "skill_id": "skchr_amgoat_2",
+          "name": "点燃",
+          "description": "下次攻击造成相当于攻击力370%的法术伤害，命中目标周围的敌人受到一半的爆炸伤害且在6秒内法术抗性- 可充能3次"
+        },
+        {
+          "skill_id": "skchr_amgoat_3",
+          "name": "火山",
+          "description": "攻击力+130%，攻击范围增大，攻击间隔大幅度缩短，攻击变为随机对攻击范围内至多6个敌人发射熔岩"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_180_amgoat.png"
+    },
+    {
+      "id": "char_188_helage",
+      "name": "赫拉格",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "musha",
+      "nation_id": "ursus",
+      "nation_cn": "乌萨斯",
+      "skills": [
+        {
+          "skill_id": "skchr_helage_1",
+          "name": "新月",
+          "description": "下次攻击的攻击力提升至175%，并连续攻击两次"
+        },
+        {
+          "skill_id": "skchr_helage_2",
+          "name": "弦月",
+          "description": "攻击力+80%，攻击变为二连击，获得75%的物理闪避"
+        },
+        {
+          "skill_id": "skchr_helage_3",
+          "name": "满月",
+          "description": "攻击力+100%，攻击范围+2格，最多可以同时攻击3个目标"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_188_helage.png"
+    },
+    {
+      "id": "char_197_poca",
+      "name": "早露",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "siegesniper",
+      "nation_id": "ursus",
+      "nation_cn": "乌萨斯",
+      "skills": [
+        {
+          "skill_id": "skcom_atk_up[3]",
+          "name": "攻击力强化·γ型",
+          "description": "攻击力+100%"
+        },
+        {
+          "skill_id": "skchr_poca_2",
+          "name": "分裂射击",
+          "description": "攻击力+90%，可以额外攻击一个敌人"
+        },
+        {
+          "skill_id": "skchr_poca_3",
+          "name": "雪崩击",
+          "description": "攻击力+25%，立即向至多4个重量最重的敌人发射束缚叉枪；技能持续时间内所有目标受到束缚效果，每秒受到一次攻击"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_197_poca.png"
+    },
+    {
+      "id": "char_2012_typhon",
+      "name": "提丰",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "siegesniper",
+      "nation_id": "sami",
+      "nation_cn": "萨米",
+      "skills": [
+        {
+          "skill_id": "skcom_quickattack[3]",
+          "name": "迅捷打击·γ型",
+          "description": "攻击力+45%，攻击速度+45"
+        },
+        {
+          "skill_id": "skchr_typhon_2",
+          "name": "冰原秩序",
+          "description": "攻击力+50%，每次攻击发射两支箭矢（优先攻击不同目标），并有40%概率晕眩目标1秒 第二次及以后使用时持续时间无限"
+        },
+        {
+          "skill_id": "skchr_typhon_3",
+          "name": "“永恒狩猎”",
+          "description": "立刻标记攻击范围内的一名目标，攻击间隔大幅增大，攻击变为对标记目标发射一轮箭雨；箭雨会随机攻击标记目标周围的敌人，共造成5次相当于攻击力175%的物理伤害并使目标晕眩0.4秒 攻击装有10发弹药，打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2012_typhon.png"
+    },
+    {
+      "id": "char_2013_cerber",
+      "name": "刻俄柏",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "corecaster",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_cerber_1",
+          "name": "“很冰的斧”",
+          "description": "下次攻击的攻击力提升至210%，优先攻击没有被阻挡的目标，并令目标束缚3秒 可充能3次"
+        },
+        {
+          "skill_id": "skchr_cerber_2",
+          "name": "“很热的刀”",
+          "description": "攻击间隔超大幅度缩短，优先攻击防御力最高的目标"
+        },
+        {
+          "skill_id": "skchr_cerber_3",
+          "name": "“很重的枪”",
+          "description": "攻击范围扩大，攻击力+210%，伤害类型变为物理，优先攻击防御力最低的目标，并令其失去特殊能力5秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2013_cerber.png"
+    },
+    {
+      "id": "char_2014_nian",
+      "name": "年",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "protector",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_nian_1",
+          "name": "锡灼",
+          "description": "防御力+70%，攻击力+45%，普通攻击造成法术伤害"
+        },
+        {
+          "skill_id": "skchr_nian_2",
+          "name": "铜印",
+          "description": "停止攻击；防御力+130%，阻挡数+1，每次受到攻击时对目标造成相当于年攻击力90%的法术伤害并使其失去特殊能力5秒"
+        },
+        {
+          "skill_id": "skchr_nian_3",
+          "name": "铁御",
+          "description": "攻击力+120%；周围其他友方干员的防御力+80%，阻挡数+1，并获得抵抗"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2014_nian.png"
+    },
+    {
+      "id": "char_2015_dusk",
+      "name": "夕",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "splashcaster",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_dusk_1",
+          "name": "工笔入化",
+          "description": "下一次攻击溅射范围扩大，造成相当于攻击力250%的法术伤害 可充能3次"
+        },
+        {
+          "skill_id": "skchr_dusk_2",
+          "name": "泼墨淋漓",
+          "description": "攻击范围扩大，攻击力+55%，攻击速度+55，攻击范围内的所有敌人且对生命值低于一半的敌人造成的法术伤害提升至130%"
+        },
+        {
+          "skill_id": "skchr_dusk_3",
+          "name": "写意胜形",
+          "description": "攻击间隔增大，优先攻击未阻挡的敌人，攻击范围与溅射范围扩大，攻击力+120%，每次攻击时在目标位置（可部署地面）召唤/刷新一个\"小自在\"（持续25秒）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2015_dusk.png"
+    },
+    {
+      "id": "char_2023_ling",
+      "name": "令",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "summoner",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_ling_1",
+          "name": "重进酒",
+          "description": "被动：召唤物可部署在近战位 开启：自身与召唤物攻击力+50%，攻击速度+50，召唤物伤害类型变为法术 技能开启时获得1个召唤物"
+        },
+        {
+          "skill_id": "skchr_ling_2",
+          "name": "笑鸣瑟",
+          "description": "被动：召唤物可部署在远程位，攻击造成法术伤害 开启：令与召唤物对攻击范围内两名敌人造成450%攻击力的法术伤害并束缚3秒 技能结束时回收生命值低于一半的召唤物。可充能2次"
+        },
+        {
+          "skill_id": "skchr_ling_3",
+          "name": "宁作吾",
+          "description": "被动：召唤物可部署在近战位且攻击范围内存在其他召唤物时与其合并为高级形态 开启：自身与召唤物攻击力+100%，防御力+100%，召唤物每0.5秒对周围四格敌人造成20%令攻击力的法术伤害 技能结束时获得1个召唤物"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2023_ling.png"
+    },
+    {
+      "id": "char_2024_chyue",
+      "name": "重岳",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "fighter",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_chyue_1",
+          "name": "冲盈",
+          "description": "对目标造成相当于攻击力400%的物理伤害；技能达到最大充能层数时消耗所有充能，造成对应次数的伤害 可充能3次"
+        },
+        {
+          "skill_id": "skchr_chyue_2",
+          "name": "拂尘",
+          "description": "对周围至多4个敌人造成相当于攻击力450%的物理伤害并使其中第一天赋生效的目标浮空；之后使周围所有浮空敌人结束浮空状态，对其100%触发第一天赋并造成相当于攻击力650%的物理伤害 可充能2次"
+        },
+        {
+          "skill_id": "skchr_chyue_3",
+          "name": "我无",
+          "description": "对目标及其周围造成相当于攻击力380%的物理伤害；累计使用五次技能后：重岳攻击的范围扩大且攻击变为二连击，技能变为自动释放且造成额外一次伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2024_chyue.png"
+    },
+    {
+      "id": "char_2025_shu",
+      "name": "黍",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "guardian",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_shu_1",
+          "name": "化被草木",
+          "description": "下一次攻击会为周围血量不足一半的一名友方单位恢复相当于攻击力180%的生命 可充能3次"
+        },
+        {
+          "skill_id": "skchr_shu_2",
+          "name": "嘉禾盈仓",
+          "description": "停止攻击专注治疗范围内至多两名我方单位，攻击力+120%，阻挡数+1，第一天赋效果提升至1.5倍 治疗拥有特殊间隔"
+        },
+        {
+          "skill_id": "skchr_shu_3",
+          "name": "离离枯荣",
+          "description": "治疗范围扩大，攻击同时可治疗我方干员，攻击力+50%，有地面敌人处于播种地块时技能范围内的我方单位攻击力+25%、攻击速度+25，敌人经过播种地块时获得如下效果：当远离该地块超过2格时被传送回该地块"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2025_shu.png"
+    },
+    {
+      "id": "char_2026_yu",
+      "name": "余",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "primprotector",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_yu_1",
+          "name": "今日做东",
+          "description": "被动效果：自身更容易受到敌人攻击 生命上限+70%，防御力+70%，每次受到攻击对目标造成相当于余攻击力50%的灼燃损伤"
+        },
+        {
+          "skill_id": "skchr_yu_2",
+          "name": "厚礼上宾",
+          "description": "立即对周围所有敌人造成相当于攻击力100%的法术伤害并将其中的地面可达目标传送至自身位置，阻挡数+2，生命上限+160%，攻击力+290%，普通攻击造成法术伤害"
+        },
+        {
+          "skill_id": "skchr_yu_3",
+          "name": "灶里乾坤",
+          "description": "生命上限+110%，攻击力+110%，防御力+110%，将第二天赋效果赋予全场所有干员；生成一面跨越整个战场的火墙，其他友方穿过火墙造成法术伤害时附带相当于余攻击力10%的灼燃损伤，敌方子弹穿过火墙时有20%几率被清除"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2026_yu.png"
+    },
+    {
+      "id": "char_2027_wang",
+      "name": "望",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "traper",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_wang_1",
+          "name": "取势",
+          "description": "被动效果：棋子触发时使目标敌人停顿且每秒受到相当于望攻击力的135%的法术伤害，持续6.5秒 主动效果：立即获得两枚棋子"
+        },
+        {
+          "skill_id": "skchr_wang_2",
+          "name": "连星",
+          "description": "被动效果：棋子触发时，对连线方向上两侧3格范围内的敌人造成相当于攻击力的580%的法术伤害，并使其6秒内移动速度降低50% 主动效果：立即获得两枚棋子"
+        },
+        {
+          "skill_id": "skchr_wang_3",
+          "name": "天下劫",
+          "description": "被动效果：棋子的触发和伤害范围扩大，造成相当于攻击力380%的法术伤害 主动效果：停止攻击但攻击范围扩大；立即获得8枚棋子，然后将超出上限的棋子优先部署在范围内敌人所在位置；在攻击范围内手动部署棋子时可部署至敌人所在位置，且第一天赋额外至多部署3枚棋子并消耗等量弹药 装有20发弹药，手动停止或棋子耗尽后技能结束，剩余的弹药返还为棋子"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2027_wang.png"
+    },
+    {
+      "id": "char_202_demkni",
+      "name": "塞雷娅",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "guardian",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_demkni_1",
+          "name": "急救",
+          "description": "下一次攻击会为周围血量不足一半的一名友方单位恢复相当于攻击力180%的生命 可充能3次"
+        },
+        {
+          "skill_id": "skchr_demkni_2",
+          "name": "药物配置",
+          "description": "治疗附近一定范围内的所有友军相当于塞雷娅攻击力140%的生命"
+        },
+        {
+          "skill_id": "skchr_demkni_3",
+          "name": "钙质化",
+          "description": "附近所有友军每秒回复相当于塞雷娅攻击力35%的生命 附近所有敌军受到的法术伤害+55%，移动速度-"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_202_demkni.png"
+    },
+    {
+      "id": "char_206_gnosis",
+      "name": "灵知",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "underminer",
+      "nation_id": "kjerag",
+      "nation_cn": "谢拉格",
+      "skills": [
+        {
+          "skill_id": "skchr_gnosis_1",
+          "name": "高速思考",
+          "description": "下次攻击连续攻击两次，每次造成相当于攻击力170%的法术伤害"
+        },
+        {
+          "skill_id": "skchr_gnosis_2",
+          "name": "零度爆发",
+          "description": "对范围内所有敌人造成4秒寒冷和相当于攻击力200%的法术伤害；蓄力：额外造成一层寒冷"
+        },
+        {
+          "skill_id": "skchr_gnosis_3",
+          "name": "失温症",
+          "description": "攻击速度+130，同时攻击2个敌人；范围内所有敌人的冻结延长至技能结束，且技能结束时对所有冻结的敌人造成600%的法术伤害并结束冻结；优先攻击未冻结的单位"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_206_gnosis.png"
+    },
+    {
+      "id": "char_213_mostma",
+      "name": "莫斯提马",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "splashcaster",
+      "nation_id": "laterano",
+      "nation_cn": "拉特兰",
+      "skills": [
+        {
+          "skill_id": "skcom_atk_up[3]",
+          "name": "攻击力强化·γ型",
+          "description": "攻击力+100%"
+        },
+        {
+          "skill_id": "skchr_mostma_2",
+          "name": "荒时之锁",
+          "description": "攻击范围内的敌人全部晕眩，且每秒受到攻击力140%的法术伤害"
+        },
+        {
+          "skill_id": "skchr_mostma_3",
+          "name": "序时之匙",
+          "description": "攻击范围扩大，攻击变为向外扩散的波纹，攻击力+170%，第二天赋的效果提升至3倍，小力度地击退攻击目标"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_213_mostma.png"
+    },
+    {
+      "id": "char_222_bpipe",
+      "name": "风笛",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "charger",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skcom_quickattack[3]",
+          "name": "迅捷打击·γ型",
+          "description": "攻击力+45%，攻击速度+45"
+        },
+        {
+          "skill_id": "skchr_bpipe_2",
+          "name": "高效冲击",
+          "description": "下一次的攻击力提升至200%，且额外攻击一次 可充能3次"
+        },
+        {
+          "skill_id": "skchr_bpipe_3",
+          "name": "闭膛连发",
+          "description": "攻击间隔增大，阻挡数+1，攻击力和防御力+120%，攻击变为三连击"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_222_bpipe.png"
+    },
+    {
+      "id": "char_225_haak",
+      "name": "阿",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "geek",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_haak_1",
+          "name": "快速射击",
+          "description": "攻击速度+100"
+        },
+        {
+          "skill_id": "skchr_haak_2",
+          "name": "爆发剂·γ型",
+          "description": "立即对前方最近（优先选取正前方）的一名友方单位用500的攻击力攻击15次，之后持续时间内使自身和目标防御力和生命上限+80%"
+        },
+        {
+          "skill_id": "skchr_haak_3",
+          "name": "爆发剂·榴莲味",
+          "description": "立即对前方最近（优先选取正前方）的一名友方单位用500的攻击力攻击15次，之后持续时间内使自身和目标攻击力+50%，攻击速度+50"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_225_haak.png"
+    },
+    {
+      "id": "char_245_cello",
+      "name": "塑心",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "ritualist",
+      "nation_id": "laterano",
+      "nation_cn": "拉特兰",
+      "skills": [
+        {
+          "skill_id": "skchr_cello_1",
+          "name": "“黄金的狂喜”",
+          "description": "对一个未处于损伤爆发期间的敌人造成相当于攻击力300%的法术伤害并附带110%攻击力的凋亡损伤 可充能3次，技能未开启时无法普通攻击"
+        },
+        {
+          "skill_id": "skchr_cello_2",
+          "name": "“安魂的弥撒”",
+          "description": "攻击速度+60，额外攻击1个目标，自身和攻击范围内攻击力最高的另一名友方干员对敌人造成伤害时附带自身25%攻击力的凋亡损伤"
+        },
+        {
+          "skill_id": "skchr_cello_3",
+          "name": "“自由的探戈”",
+          "description": "停止攻击，攻击范围扩大，攻击力+180%，第二天赋效果提升至2.5倍；技能期间使攻击范围内其他干员生命上限最高的生命上限+30%、攻击力最高的攻击力+30%、防御力最高的防御力+30%"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_245_cello.png"
+    },
+    {
+      "id": "char_248_mgllan",
+      "name": "麦哲伦",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "summoner",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_mgllan_1",
+          "name": "高效制冷模块",
+          "description": "被动效果：使自身和无人机攻击范围内的敌方单位每3秒停顿1秒 主动开启：停顿变为束缚2.5秒，技能结束时回收所有无人机"
+        },
+        {
+          "skill_id": "skchr_mgllan_2",
+          "name": "激光开采模块",
+          "description": "被动效果：无人机可以部署在近战位，进行单体法术攻击 主动开启：麦哲伦和她的无人机攻击速度+150，无人机变为群体攻击，技能结束时回收所有无人机"
+        },
+        {
+          "skill_id": "skchr_mgllan_3",
+          "name": "武装打击模块",
+          "description": "被动效果：无人机可以部署在远程位，进行群体物理攻击 主动开启：麦哲伦和她的无人机攻击力+150%，无人机攻击的爆炸范围扩大，技能结束时回收所有无人机"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_248_mgllan.png"
+    },
+    {
+      "id": "char_249_mlyss",
+      "name": "缪尔赛思",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "tactician",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_mlyss_1",
+          "name": "渐进性润化",
+          "description": "期间逐渐回复13点费用，自身与流形攻击力+50%，攻击速度+50"
+        },
+        {
+          "skill_id": "skchr_mlyss_2",
+          "name": "生态耦合",
+          "description": "立即获得15点费用，自身与流形攻击力+50%，若流形为近战复制体时，每秒回复5%的生命值，获得25%的庇护，若为远程复制体时，攻击变为二连击，随机攻击范围内的目标"
+        },
+        {
+          "skill_id": "skchr_mlyss_3",
+          "name": "浅层非熵适应",
+          "description": "立即获得15点费用，自身与流形攻击力+50%，若流形为近战复制体时每2秒对周围八格敌人向自己中心小力度地拖拽并使所有阻挡的单位持续晕眩，若为远程复制体时刷新所有流形且攻击附带持续1.5秒的束缚"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_249_mlyss.png"
+    },
+    {
+      "id": "char_250_phatom",
+      "name": "傀影",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "executor",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_phatom_1",
+          "name": "暗夜魅影",
+          "description": "部署后立即获得50%的物理闪避和可吸收相当于自己最大生命80%物理伤害的屏障，持续10秒"
+        },
+        {
+          "skill_id": "skchr_phatom_2",
+          "name": "血色乐章",
+          "description": "部署后立即获得10层可叠加的攻击力+20%的增益（每攻击一次消耗一层）"
+        },
+        {
+          "skill_id": "skchr_phatom_3",
+          "name": "夜幕突袭",
+          "description": "部署后立即对周围所有敌人造成相当于攻击力300%的物理伤害，将其小力地推开并随机施加以下任意一个状态（停顿、束缚、晕眩）4.5秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_250_phatom.png"
+    },
+    {
+      "id": "char_263_skadi",
+      "name": "斯卡蒂",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "fearless",
+      "nation_id": "egir",
+      "nation_cn": "阿戈尔",
+      "skills": [
+        {
+          "skill_id": "skcom_quickattack[3]",
+          "name": "迅捷打击·γ型",
+          "description": "攻击力+45%，攻击速度+45"
+        },
+        {
+          "skill_id": "skchr_skadi_2",
+          "name": "跃浪击",
+          "description": "部署后30秒内攻击力+170%"
+        },
+        {
+          "skill_id": "skchr_skadi_3",
+          "name": "涌潮悲歌",
+          "description": "攻击力、防御力和生命上限各+130%"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_263_skadi.png"
+    },
+    {
+      "id": "char_264_f12yin",
+      "name": "山",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "fighter",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_f12yin_1",
+          "name": "左勾扫拳",
+          "description": "下次攻击的攻击力提升至230%，额外攻击一个目标"
+        },
+        {
+          "skill_id": "skchr_f12yin_2",
+          "name": "横扫架势",
+          "description": "可以在下列状态和初始状态间切换： 防御力-，攻击距离缩短，攻击力+80%，阻挡数+1，同时攻击阻挡的所有敌人，每秒恢复最大生命的"
+        },
+        {
+          "skill_id": "skchr_f12yin_3",
+          "name": "震地碎岩击",
+          "description": "攻击间隔增大，攻击力+100%，攻击变为2连击，第一天赋的发动几率提升至75%，每次攻击周围最多4个敌人并将其中等力度地推动"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_264_f12yin.png"
+    },
+    {
+      "id": "char_291_aglina",
+      "name": "安洁莉娜",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "slower",
+      "nation_id": "siracusa",
+      "nation_cn": "叙拉古",
+      "skills": [
+        {
+          "skill_id": "skchr_aglina_1",
+          "name": "秘杖·速充模式",
+          "description": "攻击力+110% 技能自动开启"
+        },
+        {
+          "skill_id": "skchr_aglina_2",
+          "name": "秘杖·微粒模式",
+          "description": "攻击间隔极大幅度缩短，但每次攻击只能造成相当于攻击力45%的法术伤害 技能未开启时无法普通攻击"
+        },
+        {
+          "skill_id": "skchr_aglina_3",
+          "name": "秘杖·反重力模式",
+          "description": "全场所有敌人失重，攻击范围扩大，攻击力+150%，可以攻击5个敌人 技能未开启时无法普通攻击"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_291_aglina.png"
+    },
+    {
+      "id": "char_293_thorns",
+      "name": "棘刺",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "lord",
+      "nation_id": "iberia",
+      "nation_cn": "伊比利亚",
+      "skills": [
+        {
+          "skill_id": "skcom_atk_up[3]",
+          "name": "攻击力强化·γ型",
+          "description": "攻击力+100%"
+        },
+        {
+          "skill_id": "skchr_thorns_2",
+          "name": "护身尖刺",
+          "description": "停止攻击，攻击力+60%，防御力+110%，受到敌人普通攻击时释放尖刺对前方最多4名敌人进行一次远程攻击（每0.6秒最多触发一次）"
+        },
+        {
+          "skill_id": "skchr_thorns_3",
+          "name": "至高之术",
+          "description": "攻击范围扩大，攻击力+60%，攻击速度+25，远程攻击不再降低攻击力 第二次及以后使用时能力加成变为最初的两倍，且持续时间无限"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_293_thorns.png"
+    },
+    {
+      "id": "char_300_phenxi",
+      "name": "菲亚梅塔",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "aoesniper",
+      "nation_id": "laterano",
+      "nation_cn": "拉特兰",
+      "skills": [
+        {
+          "skill_id": "skchr_phenxi_1",
+          "name": "“你须直面”",
+          "description": "攻击距离+1，攻击力+100%"
+        },
+        {
+          "skill_id": "skchr_phenxi_2",
+          "name": "“你须愧悔”",
+          "description": "向前发射灼痕弹且每飞行一段距离在弹道上留下灼痕，到达攻击范围最远距离时爆炸造成400%的物理伤害；之后灼痕依次爆炸造成200%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_phenxi_3",
+          "name": "“你须偿还”",
+          "description": "持续固定攻击范围内正前方最远一格，爆炸范围扩大，攻击力提升至125%，对目标位置附近小范围内的敌人攻击力额外提升至220% 持续时间无限，可主动关闭技能"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_300_phenxi.png"
+    },
+    {
+      "id": "char_311_mudrok",
+      "name": "泥岩",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "unyield",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skcom_def_up[3]",
+          "name": "防御力强化·γ型",
+          "description": "防御力+100%"
+        },
+        {
+          "skill_id": "skchr_mudrok_2",
+          "name": "岩崩锤",
+          "description": "下次攻击时回复自身6%的最大生命，对周围所有地面敌人造成相当于攻击力270%的物理伤害，并有30%的几率晕眩其1.2秒"
+        },
+        {
+          "skill_id": "skchr_mudrok_3",
+          "name": "秽壤的血脉",
+          "description": "技能开启后无法行动且不受到伤害10秒并使周围敌人移动速度-；该状态结束后晕眩周围地面敌人5秒，攻击间隔缩短，攻击力+140%，防御力+80%，攻击阻挡的所有敌人"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_311_mudrok.png"
+    },
+    {
+      "id": "char_322_lmlee",
+      "name": "老鲤",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "merchant",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_lmlee_1",
+          "name": "小惩大诫",
+          "description": "攻击力+60%，并获得40%的法术闪避 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_lmlee_2",
+          "name": "驱凶辟邪",
+          "description": "被动效果：攻击速度+30；主动开启：标记目标使其更易受我方攻击，5秒后标记爆炸对周围造成300%的法术伤害。期间我方每对目标造成一次伤害，爆炸伤害增加老鲤攻击力的20%（最多增加30次，达到上限或目标被击倒时提前爆炸）"
+        },
+        {
+          "skill_id": "skchr_lmlee_3",
+          "name": "贵客盈门",
+          "description": "攻击范围扩大，攻击力和防御力+50%；攻击小力度推开范围内除当前目标外的敌人。自身容易成为攻击目标，且有70%概率闪避来自范围外的物理或法术伤害 持续时间无限"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_322_lmlee.png"
+    },
+    {
+      "id": "char_332_archet",
+      "name": "空弦",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "fastshot",
+      "nation_id": "laterano",
+      "nation_cn": "拉特兰",
+      "skills": [
+        {
+          "skill_id": "skchr_archet_1",
+          "name": "箭矢·散逸",
+          "description": "下次攻击造成相当于攻击力230%的物理伤害，并额外选择目标周围最多3名其他敌人造成攻击力180%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_archet_2",
+          "name": "箭矢·追猎",
+          "description": "立即发射箭矢对目标进行攻击力140%的5次攻击，可弹射至目标周围的下一个未选择过的敌人（每次弹射减少1次攻击次数）；可充能3次"
+        },
+        {
+          "skill_id": "skchr_archet_3",
+          "name": "箭矢·暴风",
+          "description": "攻击力+30%，攻击距离+1，攻击变为3连击，每次可以攻击2个敌人"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_332_archet.png"
+    },
+    {
+      "id": "char_340_shwaz",
+      "name": "黑",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "closerange",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_shwaz_1",
+          "name": "强弩",
+          "description": "下一次攻击的攻击力提高至220%，且天赋发动概率提高至80%"
+        },
+        {
+          "skill_id": "skchr_shwaz_2",
+          "name": "暮眼锐瞳",
+          "description": "攻击力+130%，天赋的发动概率提高至50%"
+        },
+        {
+          "skill_id": "skchr_shwaz_3",
+          "name": "战术的终结",
+          "description": "攻击范围改为前方4格，攻击间隔略微增大，攻击力+180%，天赋的发动概率提高至100%"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_340_shwaz.png"
+    },
+    {
+      "id": "char_350_surtr",
+      "name": "史尔特尔",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "artsfghter",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_surtr_1",
+          "name": "烈焰魔剑",
+          "description": "下次攻击的攻击力提升至310%，如果将目标击倒则立即恢复所有技力"
+        },
+        {
+          "skill_id": "skchr_surtr_2",
+          "name": "熔核巨影",
+          "description": "攻击力+120%，攻击距离+1，攻击目标数+1，仅攻击到一个敌人时对其攻击力提升至160%"
+        },
+        {
+          "skill_id": "skchr_surtr_3",
+          "name": "黄昏",
+          "description": "立即恢复所有生命；攻击力+330%，攻击距离+2，攻击目标数+3，生命上限+5000，逐渐流失生命（60秒后到达最大生命20%/秒）；持续时间无限"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_350_surtr.png"
+    },
+    {
+      "id": "char_358_lisa",
+      "name": "铃兰",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "slower",
+      "nation_id": "siracusa",
+      "nation_cn": "叙拉古",
+      "skills": [
+        {
+          "skill_id": "skchr_lisa_1",
+          "name": "全力以赴",
+          "description": "攻击力+80%，攻击速度+30 技能自动开启"
+        },
+        {
+          "skill_id": "skchr_lisa_2",
+          "name": "儿时的舞乐",
+          "description": "攻击力+60%，可以同时攻击3个敌方单位 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_lisa_3",
+          "name": "狐火渺然",
+          "description": "停止攻击，攻击范围扩大，第二天赋效果提升至2倍，攻击范围内的所有敌人被停顿，且每秒回复范围内所有友方单位相当于攻击力20%的生命"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_358_lisa.png"
+    },
+    {
+      "id": "char_362_saga",
+      "name": "嵯峨",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "pioneer",
+      "nation_id": "higashi",
+      "nation_cn": "东",
+      "skills": [
+        {
+          "skill_id": "skcom_charge_cost[3]",
+          "name": "冲锋号令·γ型",
+          "description": "立即获得12点部署费用"
+        },
+        {
+          "skill_id": "skchr_saga_2",
+          "name": "除恶",
+          "description": "立即获得4点部署费用；对十字范围内最多6名地面敌人造成相当于攻击力400%的物理伤害，之后消灭其中重伤的敌方单位。可充能3次"
+        },
+        {
+          "skill_id": "skchr_saga_3",
+          "name": "怒目",
+          "description": "技能持续时间内逐渐获得20点部署费用，攻击间隔稍微增大，攻击距离+1，攻击力+130%，同时攻击阻挡的所有敌人，目标生命值低于一半时额外追加一次攻击"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_362_saga.png"
+    },
+    {
+      "id": "char_377_gdglow",
+      "name": "澄闪",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "funnel",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_gdglow_1",
+          "name": "火花四溅",
+          "description": "浮游单元+1，释放浮游单元锁定敌人攻击，攻击力+40%，攻击速度+50 浮游单元锁敌后直至敌人被击杀、自爆或技能结束后返回干员身边"
+        },
+        {
+          "skill_id": "skchr_gdglow_2",
+          "name": "电流翻涌",
+          "description": "浮游单元+1，释放浮游单元锁定敌人攻击，攻击范围扩大，攻击力+60% 浮游单元锁敌后直至敌人被击杀或自爆后返回干员身边 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_gdglow_3",
+          "name": "澄净闪耀",
+          "description": "停止攻击，浮游单元+2，释放浮游单元锁定敌人攻击，攻击范围扩大至整个战场，攻击力+80%，浮游单元攻击附带0.5秒停顿 浮游单元锁敌后直至敌人被击杀、自爆或技能结束后返回干员身边"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_377_gdglow.png"
+    },
+    {
+      "id": "char_391_rosmon",
+      "name": "迷迭香",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "bombarder",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_rosmon_1",
+          "name": "思维膨大",
+          "description": "下次攻击额外造成一次相当于攻击力180%的法术伤害"
+        },
+        {
+          "skill_id": "skchr_rosmon_2",
+          "name": "末梢阻断",
+          "description": "攻击间隔增大，攻击力+55%，溅射范围扩大，每次攻击额外造成2次余震；受到攻击和余震的目标有20%的几率晕眩1.5秒"
+        },
+        {
+          "skill_id": "skchr_rosmon_3",
+          "name": "“如你所愿”",
+          "description": "攻击间隔缩短，攻击力+75%，同时攻击2个敌人但仅选择被阻挡的敌人作为目标；立即在攻击范围内的近战位部署两个战术装备（部署后晕眩周围敌人3秒，阻挡的敌人防御力-160）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_391_rosmon.png"
+    },
+    {
+      "id": "char_4009_irene",
+      "name": "艾丽妮",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "sword",
+      "nation_id": "iberia",
+      "nation_cn": "伊比利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_irene_1",
+          "name": "起风",
+          "description": "下一次攻击对目标造成相当于攻击力200%的物理伤害并使其浮空1秒，再对其追加一次相当于攻击力200%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_irene_2",
+          "name": "裂潮",
+          "description": "对前方范围内最多6名地面敌人造成相当于攻击力400%的物理伤害并使其中重量小于等于3的目标浮空4秒 可充能2次"
+        },
+        {
+          "skill_id": "skchr_irene_3",
+          "name": "判决",
+          "description": "对周围所有地面敌人造成相当于攻击力300%的物理伤害并使其浮空4秒，然后快速轰击12次，每次对随机目标周围小范围内所有敌人造成相当于攻击力250%的物理伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4009_irene.png"
+    },
+    {
+      "id": "char_400_weedy",
+      "name": "温蒂",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "pusher",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_weedy_1",
+          "name": "炮管敲击",
+          "description": "下次攻击会把目标往攻击方向较大力地推开，造成相当于攻击力150%的物理伤害并令其晕眩1.2秒"
+        },
+        {
+          "skill_id": "skchr_weedy_2",
+          "name": "水炮模式",
+          "description": "攻击间隔增大，攻击力+200%，攻击距离+2格且切换为远程群体攻击，且会把击中目标中等力度地推开 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_weedy_3",
+          "name": "液氮大炮",
+          "description": "立即发射一个压缩液氮炮，造成相当于攻击力350%的群体法术伤害并将敌人大力地推开，令其8秒内移动时受到正比于距离的真实伤害；如果蓄水炮在周围4格内的话也会同样进行发射"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_400_weedy.png"
+    },
+    {
+      "id": "char_4010_etlchi",
+      "name": "隐德来希",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "reaper",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_etlchi_1",
+          "name": "玫影觅迹",
+          "description": "下次攻击的攻击力提升至175%，并连续攻击两次"
+        },
+        {
+          "skill_id": "skchr_etlchi_2",
+          "name": "绯红壁合",
+          "description": "停止攻击，在自身及1名其他地面单位处召唤血镰，对周围所有敌人进行切割，每0.5秒造成相当于攻击力195%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_etlchi_3",
+          "name": "灵与欲的惜别",
+          "description": "攻击范围扩大，攻击力+135%，攻击速度+100，立刻为攻击范围内最多3名生命值最高的地面敌人召唤对应的心烛，每次攻击对心烛至少造成35%攻击力的伤害，心烛继承原敌人当前60%的生命值，被攻击时原敌人也会流失同等生命值 心烛只受隐德来希攻击的影响"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4010_etlchi.png"
+    },
+    {
+      "id": "char_4011_lessng",
+      "name": "止颂",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "fearless",
+      "nation_id": "leithanien",
+      "nation_cn": "莱塔尼亚",
+      "skills": [
+        {
+          "skill_id": "skchr_lessng_1",
+          "name": "强力击·γ型",
+          "description": "下次攻击的攻击力提高至290%"
+        },
+        {
+          "skill_id": "skchr_lessng_2",
+          "name": "虔修对决",
+          "description": "部署后，第一天赋效果提升至2.2倍，攻击力+60%，攻击变为2连击"
+        },
+        {
+          "skill_id": "skchr_lessng_3",
+          "name": "苦修破誓",
+          "description": "自身免疫异常状态，生命值+110%，攻击被阻挡目标时，造成相当于攻击力220%的物理伤害 干员处于异常状态时可以释放技能并清除异常状态，但会对自身造成600点法术伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4011_lessng.png"
+    },
+    {
+      "id": "char_4026_vulpis",
+      "name": "忍冬",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "pioneer",
+      "nation_id": "siracusa",
+      "nation_cn": "叙拉古",
+      "skills": [
+        {
+          "skill_id": "skchr_vulpis_1",
+          "name": "小施惩戒",
+          "description": "下次攻击额外造成攻击力290%的法术伤害，并获得1点部署费用 可充能3次"
+        },
+        {
+          "skill_id": "skchr_vulpis_2",
+          "name": "坠刃拷问",
+          "description": "立即获得7点部署费用，对周围最多6名敌人造成相当于攻击力300%的法术伤害，并令击中目标停顿5秒；若敌人已经处于停顿状态，则额外使敌人晕眩5秒 可充能2次"
+        },
+        {
+          "skill_id": "skchr_vulpis_3",
+          "name": "隐狐之艺",
+          "description": "技能开启时立即获得9点部署费用，攻击距离+1，攻击力+110%，攻击速度从+180逐渐衰减至+0，同时攻击阻挡的所有敌人，每次攻击晕眩敌人0.2秒 若技能期间击倒敌人，则技能结束时进入迷彩状态，直至下一次开启技能"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4026_vulpis.png"
+    },
+    {
+      "id": "char_4027_heyak",
+      "name": "霍尔海雅",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "corecaster",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_heyak_1",
+          "name": "但为求索",
+          "description": "下次攻击额外攻击一个目标并造成相当于攻击力300%的法术伤害，仅攻击到1名目标时使其浮空4秒 可充能3次"
+        },
+        {
+          "skill_id": "skchr_heyak_2",
+          "name": "群星逶迤",
+          "description": "攻击变为攻击力45%的9连发，随机攻击范围内的目标，每发有15%的概率使目标浮空1秒"
+        },
+        {
+          "skill_id": "skchr_heyak_3",
+          "name": "博览者的狂语",
+          "description": "攻击范围扩大，攻击间隔延长，攻击变为向前吹出平行的旋风，旋风伤害随行进距离正比增强并在行进三格后达到最大，使命中的第一个目标浮空2.2秒，并造成最高420%攻击力的法术伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4027_heyak.png"
+    },
+    {
+      "id": "char_4037_demetr",
+      "name": "贝洛内",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "fighter",
+      "nation_id": "siracusa",
+      "nation_cn": "叙拉古",
+      "skills": [
+        {
+          "skill_id": "skchr_demetr_1",
+          "name": "家主的余裕",
+          "description": "下次攻击对目标造成两次相当于攻击力250%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_demetr_2",
+          "name": "军师的手段",
+          "description": "攻击范围扩大，攻击速度+80，每次攻击对3名目标造成相当于攻击力200%的物理伤害；技能期间第一天赋使目标防御力降低的效果改为最多叠加8次，并且叠满后对目标造成持续的停顿效果"
+        },
+        {
+          "skill_id": "skchr_demetr_3",
+          "name": "清算",
+          "description": "攻击力+170%，攻击速度+50，攻击时有50%的几率造成相当于攻击力185%的物理伤害；技能开启后立即选取自身周围一定范围内的一名地面目标，若其所在位置可部署，自身会移动至目标所在位置进行攻击；自身攻击的精英、领袖敌人被击倒，或自身持续1秒未进行攻击时，会立即重新选取目标 受到致命伤害时不撤退但会结束技能，技能结束后返回初始位置"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4037_demetr.png"
+    },
+    {
+      "id": "char_4039_horn",
+      "name": "号角",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "fortress",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_horn_1",
+          "name": "照明榴弹",
+          "description": "下次攻击时造成280%攻击力的物理伤害，若为远程攻击则溅射范围扩大且在周围产生一个持续8秒的照明区域使敌人隐匿失效 可充能2次"
+        },
+        {
+          "skill_id": "skchr_horn_2",
+          "name": "暴风号令",
+          "description": "每次攻击造成240%攻击力的物理溅射伤害 过载：每次攻击额外造成60%攻击力的法术溅射伤害，主动关闭时发射剩余全部弹药并流失60%生命值 技能拥有10枚弹药，可随时主动关闭"
+        },
+        {
+          "skill_id": "skchr_horn_3",
+          "name": "终极防线",
+          "description": "攻击力+70%，攻击间隔大幅缩短 过载：攻击力改为+140%，逐渐流失生命（12秒后到达最大生命12%/秒）该技能可随时主动关闭"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4039_horn.png"
+    },
+    {
+      "id": "char_4042_lumen",
+      "name": "流明",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "healer",
+      "nation_id": "iberia",
+      "nation_cn": "伊比利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_lumen_1",
+          "name": "沐雨",
+          "description": "下次攻击使目标和周围的友军每秒受到相当于55%流明攻击力的治疗效果，持续5秒"
+        },
+        {
+          "skill_id": "skchr_lumen_2",
+          "name": "沛霖",
+          "description": "立刻恢复攻击范围内最多3名友方单位相当于攻击力260%的生命； 蓄力额外效果：并解除目标所受的异常状态"
+        },
+        {
+          "skill_id": "skchr_lumen_3",
+          "name": "灯火不灭",
+          "description": "攻击力+55%，攻击速度+30，优先治疗处于异常状态中的单位；只在治疗异常状态中的单位时会消耗子弹，使该次治疗量提升至攻击力的200%并解除目标所受的异常状态 攻击装有8发子弹，打完后技能结束（期间可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4042_lumen.png"
+    },
+    {
+      "id": "char_4046_ebnhlz",
+      "name": "黑键",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "mystic",
+      "nation_id": "leithanien",
+      "nation_cn": "莱塔尼亚",
+      "skills": [
+        {
+          "skill_id": "skchr_ebnhlz_1",
+          "name": "渐快急板",
+          "description": "攻击范围改变，攻击间隔超大幅度缩短，每次攻击造成相当于攻击力50%的法术伤害"
+        },
+        {
+          "skill_id": "skchr_ebnhlz_2",
+          "name": "荒芜回响",
+          "description": "消耗所有攻击能量，在攻击范围内的可放置地块召唤消耗能量数+1个旧日残影（持续30秒），残影在敌人接近时激活，对周围的敌人造成攻击力245%的法术伤害并以中等力度拖拽敌人至自身中心"
+        },
+        {
+          "skill_id": "skchr_ebnhlz_3",
+          "name": "寂静之声",
+          "description": "攻击速度+80，攻击力+65%，只以精英或领袖敌人为攻击目标，第一天赋的伤害加成提升至原本的140% 可主动关闭技能（期间可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4046_ebnhlz.png"
+    },
+    {
+      "id": "char_4048_doroth",
+      "name": "多萝西",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "traper",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_doroth_1",
+          "name": "危险目标清除",
+          "description": "被动效果：陷阱触发时对目标造成相当于攻击力的450%的物理伤害，并使其防御力-，持续5秒 主动效果：立即获得一个陷阱"
+        },
+        {
+          "skill_id": "skchr_doroth_2",
+          "name": "流沙区域生成",
+          "description": "被动效果：陷阱触发时对周围所有目标造成相当于攻击力的300%的物理伤害，并使其束缚3.5秒,如果陷阱只命中1名敌人，则使其束缚6秒 主动效果：立即获得一个陷阱"
+        },
+        {
+          "skill_id": "skchr_doroth_3",
+          "name": "高速共振排障",
+          "description": "被动效果：陷阱触发时对范围内所有目标造成相当于攻击力350%的法术伤害，使其停顿5秒，并延迟触发范围内的其他共振装置 主动效果：立即获得一个陷阱"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4048_doroth.png"
+    },
+    {
+      "id": "char_4055_bgsnow",
+      "name": "鸿雪",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "closerange",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_bgsnow_1",
+          "name": "抑扬格",
+          "description": "攻击力+60%，攻击时，40%几率当次攻击的攻击力提升至225% 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_bgsnow_2",
+          "name": "点题",
+          "description": "被动效果：携带此技能时，“打字机”的再部署时间缩短至50% 主动开启：立即对前方进行3次攻击，每次造成自身攻击力230%的物理伤害 可充能2次"
+        },
+        {
+          "skill_id": "skchr_bgsnow_3",
+          "name": "锐笔速写",
+          "description": "攻击范围扩大，攻击间隔缩短，每次攻击的攻击力提升至200%（对正前方3格提升至255%）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4055_bgsnow.png"
+    },
+    {
+      "id": "char_4056_titi",
+      "name": "缇缇",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "incantationmedic",
+      "nation_id": "sargon",
+      "nation_cn": "萨尔贡",
+      "skills": [
+        {
+          "skill_id": "skchr_titi_1",
+          "name": "缓蚀",
+          "description": "攻击力+100%，每次攻击有50%概率使目标沉睡3秒"
+        },
+        {
+          "skill_id": "skchr_titi_2",
+          "name": "封护",
+          "description": "停止攻击，攻击力+180%，技能开启时使自身与攻击范围内生命比例最低的干员陷入沉睡直到技能结束，期间持续使自身与该目标周围的敌人陷入沉睡，第一天赋效果提升至3.3倍 可主动关闭技能（期间可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_titi_3",
+          "name": "旧日绽放",
+          "description": "攻击力+180%，同时攻击两名敌人，攻击非沉睡目标时使其沉睡5秒，技能期间，全场敌人从沉睡状态醒来或于沉睡中被击倒时，受到法术伤害（随沉睡时长提高至攻击力460%），并使周围一名其他敌人沉睡5秒，攻击范围内的其他友方干员受到致命伤害时，陷入沉睡至生命值完全恢复或技能结束"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4056_titi.png"
+    },
+    {
+      "id": "char_4058_pepe",
+      "name": "佩佩",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "hammer",
+      "nation_id": "sargon",
+      "nation_cn": "萨尔贡",
+      "skills": [
+        {
+          "skill_id": "skchr_pepe_1",
+          "name": "盖戳！",
+          "description": "下次攻击造成相当于攻击力290%的物理伤害，处于异常状态时可以释放技能并清除异常状态 可充能2次"
+        },
+        {
+          "skill_id": "skchr_pepe_2",
+          "name": "阻遏混乱锤",
+          "description": "攻击范围扩大，攻击力+90%，攻击速度+80，随机攻击范围内的目标 每次使用时，使后续开启技能的攻击速度额外+40，最多叠加2层"
+        },
+        {
+          "skill_id": "skchr_pepe_3",
+          "name": "时光震荡",
+          "description": "攻击间隔略微增大，攻击力+240%，攻击使命中的目标晕眩0.8秒，对主目标提升至1.5秒，每次攻击后使溅射范围扩大且攻击力额外+25%，最多叠加4层"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4058_pepe.png"
+    },
+    {
+      "id": "char_4064_mlynar",
+      "name": "玛恩纳",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "librator",
+      "nation_id": "kazimierz",
+      "nation_cn": "卡西米尔",
+      "skills": [
+        {
+          "skill_id": "skchr_mlynar_1",
+          "name": "未声张的怒火",
+          "description": "攻击造成相当于200%攻击力的物理伤害，防御力+60%"
+        },
+        {
+          "skill_id": "skchr_mlynar_2",
+          "name": "未宽解的悲哀",
+          "description": "攻击间隔延长，攻击范围扩大，攻击造成相当于190%攻击力的二连击。 技能期间若击倒敌人，技能结束时特性效果不重置，可主动关闭（期间可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_mlynar_3",
+          "name": "未照耀的荣光",
+          "description": "攻击范围扩大，特性提升至2倍（每击倒一名敌人时特性倍率-10%），攻击对5个目标造成相当于180%攻击力的物理伤害。范围内所有敌人受到卡西米尔干员攻击时额外附带玛恩纳12%攻击力的真实伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4064_mlynar.png"
+    },
+    {
+      "id": "char_4065_judge",
+      "name": "斥罪",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "unyield",
+      "nation_id": "siracusa",
+      "nation_cn": "叙拉古",
+      "skills": [
+        {
+          "skill_id": "skchr_judge_1",
+          "name": "一锤定音",
+          "description": "下次攻击额外造成相当于攻击力200%的法术伤害 蓄力额外效果：攻击时攻击力提升至200%并使目标晕眩5秒"
+        },
+        {
+          "skill_id": "skchr_judge_2",
+          "name": "坚心苦修",
+          "description": "停止攻击，获得60%的庇护，每秒对周围所有地面敌人造成相当于攻击力140%的法术伤害，技能期间第一天赋的屏障获取效果提升100%"
+        },
+        {
+          "skill_id": "skchr_judge_3",
+          "name": "披荆斩棘",
+          "description": "立即获得相当于生命上限130%的屏障，攻击间隔增大，攻击力+400%，自身更容易受到敌人攻击"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4065_judge.png"
+    },
+    {
+      "id": "char_4072_ironmn",
+      "name": "白铁",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "craftsman",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_ironmn_1",
+          "name": "极致火力",
+          "description": "携带此技能时：装置使一名我方干员的攻击力+12% 开启时立即获得一个装置，攻击造成相当于200%的物理伤害，装置效果提升至4倍 技能结束时所有场上的装置被销毁"
+        },
+        {
+          "skill_id": "skchr_ironmn_2",
+          "name": "高效补给",
+          "description": "携带此技能时：装置使一名我方干员每3.5秒获得1点技力 攻击力+60%，防御力+60%，攻击所有阻挡的敌人，装置强化为每2秒使目标获得1点技力但生命流失翻倍。 技能结束时获得一个装置"
+        },
+        {
+          "skill_id": "skchr_ironmn_3",
+          "name": "铁钳号·原型机",
+          "description": "携带此技能时：装置可被我方干员攻击但不会受伤，可通过技能造成群体物理伤害但会流失生命 开启时立即获得一个装置，攻击力+55%，攻击速度+55"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4072_ironmn.png"
+    },
+    {
+      "id": "char_4080_lin",
+      "name": "林",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "phalanx",
+      "nation_id": "lungmen",
+      "nation_cn": "龙门",
+      "skills": [
+        {
+          "skill_id": "skchr_lin_1",
+          "name": "玲珑",
+          "description": "可以在下列状态和初始状态间切换： 攻击间隔略微增大，攻击力+60%，攻击使目标停顿1秒"
+        },
+        {
+          "skill_id": "skchr_lin_2",
+          "name": "荫庇",
+          "description": "攻击速度+130，自身不容易受到敌人攻击，技能期间使攻击范围内所有友方单位享受第一天赋效果"
+        },
+        {
+          "skill_id": "skchr_lin_3",
+          "name": "流光乍裂",
+          "description": "攻击力+200%，攻击范围与琉璃璧的破碎伤害范围扩大，琉璃璧破碎的伤害阈值提升至3倍，每次攻击若击倒敌人则使身上的琉璃璧破碎并立刻生成 可主动关闭技能（期间可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4080_lin.png"
+    },
+    {
+      "id": "char_4082_qiubai",
+      "name": "仇白",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "lord",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_qiubai_1",
+          "name": "留羽",
+          "description": "下次攻击使目标束缚3秒，该次束缚结束时对目标和附近的所有敌人造成相当于攻击力300%的法术伤害"
+        },
+        {
+          "skill_id": "skchr_qiubai_2",
+          "name": "承影",
+          "description": "对前方范围内的地面敌人造成攻击力300%的法术伤害；攻击范围改变，攻击力+140%，攻击范围内的地面敌人停顿；技能结束时对范围内的地面敌人造成攻击力300%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_qiubai_3",
+          "name": "问雪",
+          "description": "攻击范围扩大，攻击力+55%，伤害类型变为法术，额外攻击2个目标，第一天赋的伤害提升至2倍，远程攻击不再降低伤害，每次攻击使自身攻击速度+13（最多叠加8次）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4082_qiubai.png"
+    },
+    {
+      "id": "char_4087_ines",
+      "name": "伊内丝",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "agent",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_ines_1",
+          "name": "淬影突袭",
+          "description": "下次攻击使目标3秒内每秒受到相当于伊内丝攻击力80%的法术伤害（不叠加），并获得2点部署费用"
+        },
+        {
+          "skill_id": "skchr_ines_2",
+          "name": "暗夜无明",
+          "description": "攻击范围扩大，攻击力+110%，自身获得隐匿，每次攻击获得1点部署费用并偷取目标7点攻击速度（最多70点，持续至技能结束或伊内丝离场）"
+        },
+        {
+          "skill_id": "skchr_ines_3",
+          "name": "独影归途",
+          "description": "首次部署时不消耗部署费用，放置一个影哨后离场并立刻刷新再部署时间 部署后攻击力+160%，立刻收回影哨对穿过的最多6名敌人造成相当于攻击力200%的物理伤害，技能期间每对一个敌人造成伤害就获得1点部署费用"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4087_ines.png"
+    },
+    {
+      "id": "char_4088_hodrer",
+      "name": "赫德雷",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "crusher",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_hodrer_1",
+          "name": "重锋不熄",
+          "description": "下次攻击造成相当于攻击力260%的物理伤害，并回复自身25%的生命"
+        },
+        {
+          "skill_id": "skchr_hodrer_2",
+          "name": "余烬重荷",
+          "description": "被动效果：攻击力+40% 主动触发可以在下列状态和初始状态间切换： 攻击间隔略微增大，阻挡数+1，攻击使目标晕眩1秒"
+        },
+        {
+          "skill_id": "skchr_hodrer_3",
+          "name": "死境硝烟",
+          "description": "每秒流失100点生命，并使自身攻击过和攻击过自身的敌人每秒受到200点真实伤害；攻击距离+1，生命上限+60%，攻击力+120%，每次攻击回复自身5%的生命且有25%概率使目标晕眩5秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4088_hodrer.png"
+    },
+    {
+      "id": "char_4098_vvana",
+      "name": "薇薇安娜",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "artsfghter",
+      "nation_id": "leithanien",
+      "nation_cn": "莱塔尼亚",
+      "skills": [
+        {
+          "skill_id": "skchr_vvana_1",
+          "name": "光影迅捷剑",
+          "description": "下次攻击的攻击力提高至200%，并连续攻击两次； 蓄力额外效果：攻击距离+2，改为连续攻击三次"
+        },
+        {
+          "skill_id": "skchr_vvana_2",
+          "name": "烛燃影息",
+          "description": "攻击力+40%，防御力+160%，阻挡数+1，同时攻击阻挡的所有敌人。每次攻击有20%的概率变为150%攻击力的二连击，并偷取目标40点攻击速度（最多40点，持续至技能结束或薇薇安娜离场）"
+        },
+        {
+          "skill_id": "skchr_vvana_3",
+          "name": "“明灭”",
+          "description": "攻击间隔延长，攻击力+110%，防御力+90%，法术抗性+25，攻击变为二连击，第二天赋的触发几率提升至2.5倍，优先攻击精英或领袖敌人 第二次及以后使用时，攻击距离+2，攻击变为三连击，持续时间延长至25秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4098_vvana.png"
+    },
+    {
+      "id": "char_4116_blkkgt",
+      "name": "锏",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "sword",
+      "nation_id": "kjerag",
+      "nation_cn": "谢拉格",
+      "skills": [
+        {
+          "skill_id": "skchr_blkkgt_1",
+          "name": "纯粹的武力",
+          "description": "下次攻击对周围最多6名地面敌人造成两次相当于攻击力220%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_blkkgt_2",
+          "name": "无声的嘲笑",
+          "description": "对前方范围内最多6名地面敌人发动2次斩击，攻击被阻挡的敌人时改为3次斩击，天赋的发动概率提升至100%，每次斩击造成相当于攻击力310%的物理伤害 可充能2次"
+        },
+        {
+          "skill_id": "skchr_blkkgt_3",
+          "name": "归于宁静",
+          "description": "持续发动总计10次斩击，每次斩击对最多6名敌人造成相当于攻击力235%的物理伤害，天赋的发动概率提升至100%，并持续将敌人中等力度地拖拽至自身中心，之后将造成一次相当于攻击力330%的物理伤害并将敌人较大力地拖拽至自身中心"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4116_blkkgt.png"
+    },
+    {
+      "id": "char_4117_ray",
+      "name": "莱伊",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "hunter",
+      "nation_id": "rim",
+      "nation_cn": "雷姆必拓",
+      "skills": [
+        {
+          "skill_id": "skchr_ray_1",
+          "name": "脱身矢",
+          "description": "立即用额外特殊子弹攻击目标，造成相当于攻击力450%的物理伤害并将其较大力地推开，若将其击倒则使下次装填额外加装2发子弹 可充能2次"
+        },
+        {
+          "skill_id": "skchr_ray_2",
+          "name": "广域警觉",
+          "description": "被动效果：沙地兽撤退时回收命中该区域的子弹 自动开启：攻击范围扩大，攻击力+120%，沙地兽的再部署时间-40% 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_ray_3",
+          "name": "“得见光芒”",
+          "description": "立即停止攻击直至子弹装满，装填间隔大幅缩短，攻击范围扩大，攻击造成相当于攻击力330%的物理伤害并使目标束缚2秒 技能期间若击倒敌人，技能结束时获得10点技力"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4117_ray.png"
+    },
+    {
+      "id": "char_4121_zuole",
+      "name": "左乐",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "musha",
+      "nation_id": "yan",
+      "nation_cn": "炎",
+      "skills": [
+        {
+          "skill_id": "skchr_zuole_1",
+          "name": "破虏",
+          "description": "下次攻击的攻击力提升至200%，自身生命低于80%时额外攻击1次，低于50%时额外攻击2次 可充能3次"
+        },
+        {
+          "skill_id": "skchr_zuole_2",
+          "name": "行险",
+          "description": "立即流失50%当前生命并获得相当于最大生命120%的屏障，攻击力+170%，阻挡数+1，同时攻击所有阻挡的敌人 屏障最高叠加至最大生命的2倍，技能结束后逐渐流失"
+        },
+        {
+          "skill_id": "skchr_zuole_3",
+          "name": "佑序有炎",
+          "description": "立刻对前方进行7次斩击，每次对最多3名敌人造成攻击力245%的物理伤害（最后一击系数加倍且使目标晕眩5秒），期间特性的生命回复改为获得相当于回复量3倍的屏障 屏障最高叠加至最大生命的2倍，持续15秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4121_zuole.png"
+    },
+    {
+      "id": "char_4123_ela",
+      "name": "艾拉",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "traper",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_ela_1",
+          "name": "眩目阻滞",
+          "description": "被动效果：陷阱触发时使周围所有目标停顿且物理与法术命中率-40%，持续10秒 主动效果：立即获得一个陷阱"
+        },
+        {
+          "skill_id": "skchr_ela_2",
+          "name": "震荡坚守",
+          "description": "被动效果：陷阱触发时使周围所有目标晕眩，持续5秒 主动效果：架设机动护盾使自身防御力+300%，攻击范围缩小，攻击对目标周围造成溅射物理伤害且无视其800的防御力 技能结束时获得一个陷阱"
+        },
+        {
+          "skill_id": "skchr_ela_3",
+          "name": "“博萨克风暴”",
+          "description": "被动效果：陷阱触发时使周围所有目标停顿并获得35%的脆弱效果，持续7秒 主动效果：攻击间隔缩短，攻击力+90%，优先攻击受到雷鸣地雷效果影响的敌人 攻击装有40发子弹，打完后技能结束（期间可随时停止技能），技能结束时获得两个陷阱"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4123_ela.png"
+    },
+    {
+      "id": "char_4132_ascln",
+      "name": "阿斯卡纶",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "stalker",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_ascln_1",
+          "name": "追袭",
+          "description": "下次攻击的攻击力提升至210%，并连续攻击两次 可充能3次"
+        },
+        {
+          "skill_id": "skchr_ascln_2",
+          "name": "恩赐",
+          "description": "攻击力+130%，使攻击范围内地面敌人移动速度-60%，并在其被击倒时对周围敌人施加一层第一天赋效果"
+        },
+        {
+          "skill_id": "skchr_ascln_3",
+          "name": "降临",
+          "description": "攻击范围扩大，攻击力+50%，攻击间隔较大幅度缩短，使攻击范围内的地面敌人物理与法术命中率-50%。自身更易受到敌人攻击，敌人未命中自身或自身闪避时回复8%最大生命值"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4132_ascln.png"
+    },
+    {
+      "id": "char_4133_logos",
+      "name": "逻各斯",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "corecaster",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_logos_1",
+          "name": "殁亡",
+          "description": "攻击范围扩大，攻击力+100%，使攻击范围内生命值低于逻各斯攻击力150%的敌人立刻倒下、并对另一个随机目标造成与倒下单位生命值相等的法术伤害 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_logos_2",
+          "name": "提喻",
+          "description": "法术抗性+70，攻击改为锁定一个目标对其每0.5秒造成一次相当于攻击力75%的法术伤害，对相同目标的伤害逐渐提高至3倍并使其移动速度逐渐降低至40%(锁定5秒后达到上限)，被打断或目标倒下时重新索敌且效果重置"
+        },
+        {
+          "skill_id": "skchr_logos_3",
+          "name": "延异视阈",
+          "description": "攻击范围扩大，攻击力+300%，同时攻击4个目标，使攻击范围内敌方子弹的飞行速度大幅降低、并在技能结束时将其全部清除"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4133_logos.png"
+    },
+    {
+      "id": "char_4134_cetsyr",
+      "name": "魔王",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "bard",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_cetsyr_1",
+          "name": "往昔萦绕身旁",
+          "description": "自身特性效果提高至35%，“微尘”的重生速度加快 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_cetsyr_2",
+          "name": "明日渺远不及",
+          "description": "“微尘”上限+3，立刻获得6枚“微尘”，“微尘”旋转半径扩大，攻击范围内所有其他友方单位获得相当于魔王100%攻击力的鼓舞效果，“微尘”不再碰撞友方干员，“微尘”碰撞敌方单位时造成相当于魔王攻击力275%的真实伤害，并使目标束缚3.5秒"
+        },
+        {
+          "skill_id": "skchr_cetsyr_3",
+          "name": "编织重构现世",
+          "description": "攻击范围扩大，自身特性效果提高至90%，“微尘”不再消失，攻击范围内所有其它友方单位获得相当于魔王100%的最大生命值的鼓舞效果，每隔2秒重新分配攻击范围内所有友方单位的生命"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4134_cetsyr.png"
+    },
+    {
+      "id": "char_4138_narant",
+      "name": "娜仁图亚",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "loopshooter",
+      "nation_id": "sargon",
+      "nation_cn": "萨尔贡",
+      "skills": [
+        {
+          "skill_id": "skchr_narant_1",
+          "name": "旋刃",
+          "description": "可以在下列状态和初始状态间切换： 攻击距离-1，回旋投射物造成相当于攻击力190%的物理伤害，并且可以在敌人间重复弹射（最多弹跳3次）"
+        },
+        {
+          "skill_id": "skchr_narant_2",
+          "name": "恶魇",
+          "description": "每次攻击造成相当于攻击力250%的物理伤害并使目标停顿1秒，投射物命中目标后会在短暂突进后折返，返回时对穿过的所有敌人造成一次相当于攻击力200%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_narant_3",
+          "name": "吞日",
+          "description": "每次攻击发射3个回旋投射物（每个造成相当于攻击力175%的物理伤害），投射物全部回收时娜仁图亚对周围8格内至多3名敌人造成一次相当于攻击力的物理伤害并使其停顿1秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4138_narant.png"
+    },
+    {
+      "id": "char_4141_marcil",
+      "name": "玛露西尔",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "splashcaster",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_marcil_1",
+          "name": "才女的实力",
+          "description": "短暂吟唱后开启技能，每次攻击消耗2点魔力，攻击力+140%，在找不到攻击目标时改为治疗友方干员 技能可随时主动关闭"
+        },
+        {
+          "skill_id": "skchr_marcil_2",
+          "name": "召唤使魔",
+          "description": "吟唱11秒后，消耗35点魔力制作并使用使魔攻击，攻击力+100%，攻击使所有命中目标停顿0.5秒 第二次使用时使魔升级，攻击距离+1，攻击速度+60，攻击晕眩主目标0.5秒 技能持续时间无限，第一次使用可随时停止"
+        },
+        {
+          "skill_id": "skchr_marcil_3",
+          "name": "爆破魔法",
+          "description": "吟唱5秒后，消耗8点魔力，在正前方位置造成爆炸，对周围敌人造成390%攻击力的法术伤害，炸到的高台会崩开碎片晕眩其周围敌人4秒 可追加吟唱10秒，完成后消耗剩余所有魔力，每额外消耗8点魔力，追加1次爆炸 追加吟唱可随时停止"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4141_marcil.png"
+    },
+    {
+      "id": "char_4145_ulpia",
+      "name": "乌尔比安",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "crusher",
+      "nation_id": "egir",
+      "nation_cn": "阿戈尔",
+      "skills": [
+        {
+          "skill_id": "skchr_ulpia_1",
+          "name": "必须促成的接触",
+          "description": "向前方扔出船锚，船锚会把目标地点周围的两名敌人中等力度地拖拽至面前，对其造成相当于攻击力270%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_ulpia_2",
+          "name": "必须维系的界限",
+          "description": "第一天赋的效果提升至2倍，阻挡数+1，生命上限+60%，攻击力+160% 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_ulpia_3",
+          "name": "必须开辟的通路",
+          "description": "最大生命值+80%，攻击力+260%，立即朝面前扔出一个船锚，撞击到目标或达到最远距离时停止，并对周围所有敌人造成攻击力160%的物理伤害和6秒晕眩。若船锚停留的位置可以部署，乌尔比安会移动到该位置 可以手动结束技能，技能结束时乌尔比安会返回到初始的位置"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4145_ulpia.png"
+    },
+    {
+      "id": "char_4146_nymph",
+      "name": "妮芙",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "primcaster",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_nymph_1",
+          "name": "笞心击",
+          "description": "攻击力+110%，攻击附带造成法术伤害15%的凋亡损伤，若目标处于凋亡损伤爆发期间则对其额外造成相当于攻击力50%的元素伤害"
+        },
+        {
+          "skill_id": "skchr_nymph_2",
+          "name": "怵然震爆",
+          "description": "对敌人造成一次相当于攻击力400%的法术伤害、使其恐惧5秒，并对目标周围造成一次等额法术溅射伤害，均附带造成法术伤害25%的凋亡损伤；若攻击到的单位处于凋亡损伤爆发期间，使第一天赋造成的伤害效果提高至攻击力的100% 可充能2次"
+        },
+        {
+          "skill_id": "skchr_nymph_3",
+          "name": "心防溃决",
+          "description": "攻击范围扩大，攻击力+220%，攻击速度+60，同时攻击2个目标，若目标处于凋亡损伤爆发期间，攻击造成元素伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4146_nymph.png"
+    },
+    {
+      "id": "char_416_zumama",
+      "name": "森蚺",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "duelist",
+      "nation_id": "sargon",
+      "nation_cn": "萨尔贡",
+      "skills": [
+        {
+          "skill_id": "skchr_zumama_1",
+          "name": "轻型挂斧",
+          "description": "攻击力+25%，防御力+25%"
+        },
+        {
+          "skill_id": "skchr_zumama_2",
+          "name": "震慑劈砍",
+          "description": "攻击间隔略微增大，攻击力+180%，技能期间持续使阻挡的敌人全部晕眩"
+        },
+        {
+          "skill_id": "skchr_zumama_3",
+          "name": "钢铁意志",
+          "description": "攻击力+230%，防御力+160%，阻挡数+2，每秒恢复6%生命 技能结束后自身晕眩5秒"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_416_zumama.png"
+    },
+    {
+      "id": "char_4179_monstr",
+      "name": "Mon3tr",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "chainhealer",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_monstr_1",
+          "name": "策略：超压链接",
+          "description": "下次治疗可以恢复相当于攻击力200%的生命，治疗的跳跃次数+1"
+        },
+        {
+          "skill_id": "skchr_monstr_2",
+          "name": "策略：超负荷",
+          "description": "技能期间优先治疗重构体，重构体每受到一次Mon3tr的治疗，就会进行一次跳跃治疗，第二天赋的效果提升至2.8倍"
+        },
+        {
+          "skill_id": "skchr_monstr_3",
+          "name": "策略：熔毁",
+          "description": "攻击范围改变，移动至重构体位置，攻击力+330%，攻击间隔降低，阻挡数+2，生命上限+5000，每秒流失80点生命值，同时攻击阻挡的所有敌人，伤害类型变为真实，攻击治疗自身相当于攻击力50%的生命值 技能结束或受到致命伤害时，返回初始位置"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4179_monstr.png"
+    },
+    {
+      "id": "char_4182_oblvns",
+      "name": "丰川祥子",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "lord",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_oblvns_1",
+          "name": "新月的苏醒",
+          "description": "演奏出8个音符。每个音符造成的法术伤害依次从攻击力的100%逐渐降低至5%。 可充能2次，充能至最大层数时自动释放一次"
+        },
+        {
+          "skill_id": "skchr_oblvns_2",
+          "name": "满月的舞会",
+          "description": "可以切换钢琴（初始）或风琴音色演奏： 钢琴：攻击力+110%，音符飞行速度加快，命中目标后穿过敌人造成物理伤害 风琴：攻击速度+140，音符造成法术伤害且飞行速度减缓 Fever期间变为当前音色的二连击"
+        },
+        {
+          "skill_id": "skchr_oblvns_3",
+          "name": "残月的余响",
+          "description": "攻击范围扩大，攻击同时使用钢琴和风琴音色演奏，各自演奏2个造成相当于攻击力220%物理和法术伤害的音符，且分别追踪法术抗性和防御力最高的敌人。 Fever期间Ave Mujica成员受到致命伤害时不撤退，Fever结束后退场"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4182_oblvns.png"
+    },
+    {
+      "id": "char_4193_lemuen",
+      "name": "蕾缪安",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "longrange",
+      "nation_id": "laterano",
+      "nation_cn": "拉特兰",
+      "skills": [
+        {
+          "skill_id": "skchr_lemuen_1",
+          "name": "重逢问候",
+          "description": "攻击时攻击力提升至210%，额外攻击1名敌人 攻击装有6发弹药，打完后结束（可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_lemuen_2",
+          "name": "归乡邀约",
+          "description": "攻击速度+80，攻击力+70%，场上有被通缉敌人时会消耗子弹对其瞄准最多3.5秒后进行无视闪避的狙击（期间攻击力从180%逐渐提升至425%，攻击力高于敌人剩余生命值和防御力之和时停止瞄准并立刻攻击） 攻击装有7发弹药，打完后结束（可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_lemuen_3",
+          "name": "礼炮·强制追思",
+          "description": "停止攻击，每0.5秒消耗1发子弹依次锁定敌人，技能结束时对每名被锁定的敌人所在位置进行轰炸，轰炸造成攻击力300%的范围物理伤害（中心伤害提升至攻击力的450%） 攻击装有5发弹药，打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4193_lemuen.png"
+    },
+    {
+      "id": "char_4194_rmixer",
+      "name": "信仰搅拌机",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "shotprotector",
+      "nation_id": "laterano",
+      "nation_cn": "拉特兰",
+      "skills": [
+        {
+          "skill_id": "skchr_rmixer_1",
+          "name": "铳骑主考官",
+          "description": "下次攻击变为三连击，每次造成相当于190%攻击力的物理伤害，并为自身周围另一名开启弹药类技能的【拉特兰】干员补弹1发"
+        },
+        {
+          "skill_id": "skchr_rmixer_2",
+          "name": "八臂电锯侠",
+          "description": "攻击力+150%，防御力+130%，技能期间若受到致命伤害，立即消耗20发弹药抵挡这次伤害 攻击装有50发弹药，打完后结束（可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_rmixer_3",
+          "name": "退休前布道",
+          "description": "技能开启时为所有其他【拉特兰】干员补弹4发；攻击范围扩大，生命上限+80%，攻击力+220%，防御力+80%，停止主动攻击敌人，受到攻击时立即向攻击范围内最多3个敌人进行1次反击，反击最小间隔为实际攻击间隔的10% 攻击装有30发弹药，打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4194_rmixer.png"
+    },
+    {
+      "id": "char_4195_radian",
+      "name": "电弧",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "summoner",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_radian_1",
+          "name": "律动线",
+          "description": "被动：召唤物可部署在近战位 开启：自身和召唤物防御力+80%并获得100%最大生命值的屏障，持续至技能结束 技能开启时获得1个召唤物"
+        },
+        {
+          "skill_id": "skchr_radian_2",
+          "name": "环形鳞地",
+          "description": "被动：召唤物可部署在近战位，会持续向前方发射子弹 开启：自身和召唤物攻击力+80%，召唤物攻击额外创造出2颗子弹且子弹飞行距离+2 技能开启时获得1个召唤物"
+        },
+        {
+          "skill_id": "skchr_radian_3",
+          "name": "手牵手",
+          "description": "被动：召唤物可部署在远程位，召唤物找不到攻击目标且可攻击时，可以与其自身范围内其他电弧的召唤物协同攻击 开启：自身和召唤物攻击力+150%，对敌人造成伤害时，使敌人受到停顿与35％法术脆弱效果，持续2秒 技能开启时获得1个召唤物"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4195_radian.png"
+    },
+    {
+      "id": "char_4202_haruka",
+      "name": "遥",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "blessing",
+      "nation_id": "higashi",
+      "nation_cn": "东",
+      "skills": [
+        {
+          "skill_id": "skchr_haruka_1",
+          "name": "夜啼彩羽",
+          "description": "攻击速度+60，技能期间浮泡破碎时，立即使周围8格一名没有浮泡的友方单位获得浮泡"
+        },
+        {
+          "skill_id": "skchr_haruka_2",
+          "name": "幽隙栖萤",
+          "description": "治疗目标数+1，浮光泡影的目标数+1；友方单位受到遥的治疗效果时，对周围3名敌人造成相当于治疗量200%的法术伤害 第二次及以后使用时攻击力+40%，且持续时间无限"
+        },
+        {
+          "skill_id": "skchr_haruka_3",
+          "name": "夏末游鳞",
+          "description": "攻击力+55%，攻击范围扩大，攻击间隔缩短，技能期间浮泡提供的庇护提升至2倍；攻击我方浮泡的敌人将浮空4秒，在此浮空期间每秒受到相当于遥攻击力80%的法术伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4202_haruka.png"
+    },
+    {
+      "id": "char_4204_mantra",
+      "name": "真言",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "primcaster",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_mantra_1",
+          "name": "共鸣溃缩",
+          "description": "下次攻击造成攻击力325%的法术伤害并附带伤害30%的神经损伤，若目标处于神经损伤爆发期间则额外造成200%攻击力的元素伤害"
+        },
+        {
+          "skill_id": "skchr_mantra_2",
+          "name": "意识联协",
+          "description": "攻击间隔缩短，攻击造成攻击力240%的法术伤害并以短暂间隔跳跃至其他3名敌人造成攻击力120%的法术伤害，均附带伤害18%的神经损伤，若目标处于神经损伤爆发期间附带25%攻击力的元素伤害"
+        },
+        {
+          "skill_id": "skchr_mantra_3",
+          "name": "无言为真",
+          "description": "攻击范围扩大，范围内敌人隐匿失效且麻痹层数上限降为2，攻击力+275%同时攻击2个目标，范围中干员开启技能时（包括自身）使范围内敌人获得2层麻痹（至多3次），范围内敌人麻痹层数每超过上限1层在目标及1名敌人间跳跃1次185%攻击力的元素伤害，跳跃间存在短暂间隔"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4204_mantra.png"
+    },
+    {
+      "id": "char_420_flamtl",
+      "name": "焰尾",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "pioneer",
+      "nation_id": "kazimierz",
+      "nation_cn": "卡西米尔",
+      "skills": [
+        {
+          "skill_id": "skchr_flamtl_1",
+          "name": "迅敏直觉",
+          "description": "立即获得6点部署费用，并闪避下次物理攻击"
+        },
+        {
+          "skill_id": "skchr_flamtl_2",
+          "name": "“红松林”",
+          "description": "立即获得13点部署费用；对周围最多6名敌人造成两次相当于攻击力240%的物理伤害，并令击中目标晕眩0.5秒；范围内友方单位获得50%的物理闪避，持续10秒"
+        },
+        {
+          "skill_id": "skchr_flamtl_3",
+          "name": "焰心",
+          "description": "技能持续时间内逐渐获得8点部署费用，攻击间隔缩短，攻击力+90%，阻挡数+1，获得80%的物理和法术闪避"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_420_flamtl.png"
+    },
+    {
+      "id": "char_4212_nasti",
+      "name": "娜斯提",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "craftsman",
+      "nation_id": "columbia",
+      "nation_cn": "哥伦比亚",
+      "skills": [
+        {
+          "skill_id": "skchr_nasti_1",
+          "name": "“拱卫”",
+          "description": "携带此技能时：装置使前方干员防御力提升 攻击力+80%，防御力+80%，同时攻击阻挡的所有敌人；装置效果改为使前方干员阻挡数+1，防御力+55%，装置每秒流失2%最大生命值 技能开启时获得一个装置"
+        },
+        {
+          "skill_id": "skchr_nasti_2",
+          "name": "“执行”",
+          "description": "携带此技能时：装置部署后逐渐回复自身生命值，激活后每0.5秒流失1点生命值，使前方干员获得1点技力和相当于娜斯提生命上限5%的屏障 立即激活场上装置，停止攻击，每0.5秒获得相当于生命上限10%的屏障（最多不超过生命上限80%） 技能结束时获得一个装置"
+        },
+        {
+          "skill_id": "skchr_nasti_3",
+          "name": "栖脚地",
+          "description": "携带此技能时：装置可建造并升级一个可以放置远程干员并为其提供增益的特殊高台 攻击力+160%，防御力+160%；小工程师装置为高台装置回复技力和生命的效果翻倍 技能开启时获得一个装置"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4212_nasti.png"
+    },
+    {
+      "id": "char_4226_veen",
+      "name": "维伊",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "mystic",
+      "nation_id": "ursus",
+      "nation_cn": "乌萨斯",
+      "skills": [
+        {
+          "skill_id": "skchr_veen_1",
+          "name": "“自呼号生发”",
+          "description": "攻击速度+100"
+        },
+        {
+          "skill_id": "skchr_veen_2",
+          "name": "“以鲜血洗去”",
+          "description": "攻击间隔小幅缩短，每次攻击或发射储存能量后，使自身后续攻击力+15%，攻击速度+8（至多叠加9层，发射转置能量可叠加3层），持续至技能结束"
+        },
+        {
+          "skill_id": "skchr_veen_3",
+          "name": "“用赤铁铭记”",
+          "description": "攻击速度+180，储存的能量发射后会在敌人间（优先不同目标）跳跃一次，并造成相当于165%攻击力的法术伤害，转置能量改为跳跃3次 攻击装有27发弹药，仅在发射每个储存能量时消耗1发弹药，发射转置能量消耗3发弹药，弹药打完后结束（可随时停止技能）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4226_veen.png"
+    },
+    {
+      "id": "char_4228_closur",
+      "name": "可露希尔",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "tactician",
+      "nation_id": "rhodes",
+      "nation_cn": "罗德岛",
+      "skills": [
+        {
+          "skill_id": "skchr_closur_1",
+          "name": "递归策略",
+          "description": "立即使自身的援军获得1层护盾（不叠加），技能持续时间内逐渐获得3点部署费用；部署后每使用过一次技能，获得的部署费用+1（最多提升至7点）"
+        },
+        {
+          "skill_id": "skchr_closur_2",
+          "name": "模型扩展",
+          "description": "立即获得10点部署费用，持续时间内逐渐获得15点部署费用，自身的援军防御力+60%，阻挡数+1，自身攻击力+80%，同时攻击2个目标且能攻击到自身援军阻挡的敌人；在战术点效果范围内部署干员时，立即返还部署费用的40%"
+        },
+        {
+          "skill_id": "skchr_closur_3",
+          "name": "Q.E.D.",
+          "description": "技能持续时间内逐渐获得18点部署费用，攻击间隔缩短，锁定自身和援军原本攻击范围内的敌人进行攻击，造成可露希尔250%攻击力的物理伤害并施加持续3秒的6%迟钝效果（可叠加，最高60%），每攻击9次后攻击目标数+1（最多触发6次）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4228_closur.png"
+    },
+    {
+      "id": "char_423_blemsh",
+      "name": "瑕光",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "guardian",
+      "nation_id": "kazimierz",
+      "nation_cn": "卡西米尔",
+      "skills": [
+        {
+          "skill_id": "skchr_blemsh_1",
+          "name": "光芒涌动",
+          "description": "下次攻击造成相当于攻击力260%的物理伤害，且恢复周围一名友方单位相当于攻击力150%的生命 可充能3次"
+        },
+        {
+          "skill_id": "skchr_blemsh_2",
+          "name": "慑敌辉光",
+          "description": "攻击力+110%，立即使自身这格内的所有地面敌人陷入沉睡，且周围的所有友方单位每秒恢复相当于攻击力20%的生命值"
+        },
+        {
+          "skill_id": "skchr_blemsh_3",
+          "name": "先贤化身",
+          "description": "攻击力+110%，防御力+60%，每次攻击额外造成相当于攻击力100%的法术伤害，并恢复周围一名其他友方单位相当于攻击力100%的生命"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_423_blemsh.png"
+    },
+    {
+      "id": "char_426_billro",
+      "name": "卡涅利安",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "phalanx",
+      "nation_id": "leithanien",
+      "nation_cn": "莱塔尼亚",
+      "skills": [
+        {
+          "skill_id": "skchr_billro_1",
+          "name": "沙暴守卫",
+          "description": "攻击力+60%，防御力+100%； 蓄力额外效果：特性效果在技能期间继续生效"
+        },
+        {
+          "skill_id": "skchr_billro_2",
+          "name": "沙缚镣锁",
+          "description": "攻击间隔大幅度缩短，每次攻击对目标造成0.3秒停顿； 蓄力额外效果：攻击力+20%且停顿变为束缚0.6秒"
+        },
+        {
+          "skill_id": "skchr_billro_3",
+          "name": "食噬之印",
+          "description": "攻击范围扩大，攻击力逐渐增至+280% 蓄力额外效果：每次攻击使目标受到来自卡涅利安的伤害提升20%（最多叠加5次），持续至技能结束"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_426_billro.png"
+    },
+    {
+      "id": "char_427_vigil",
+      "name": "伺夜",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "tactician",
+      "nation_id": "siracusa",
+      "nation_cn": "叙拉古",
+      "skills": [
+        {
+          "skill_id": "skchr_vigil_1",
+          "name": "领袖的呼唤",
+          "description": "立即获得7点部署费用，并增加一只“狼影”"
+        },
+        {
+          "skill_id": "skchr_vigil_2",
+          "name": "领袖的馈赠",
+          "description": "立即获得2点部署费用，并使狼群下次攻击的攻击力提升至200%且狼群恢复20%生命值；若狼群击倒敌人则额外获得1点部署费用"
+        },
+        {
+          "skill_id": "skchr_vigil_3",
+          "name": "领袖的尊严",
+          "description": "技能持续时间内逐渐获得12点部署费用，攻击变为三连击；狼群与伺夜攻击被狼群阻挡的单位造成伤害时，额外造成相当于伺夜攻击力50%的法术伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_427_vigil.png"
+    },
+    {
+      "id": "char_430_fartth",
+      "name": "远牙",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "longrange",
+      "nation_id": "kazimierz",
+      "nation_cn": "卡西米尔",
+      "skills": [
+        {
+          "skill_id": "skcom_quickattack[3]",
+          "name": "迅捷打击·γ型",
+          "description": "攻击力+45%，攻击速度+45"
+        },
+        {
+          "skill_id": "skchr_fartth_2",
+          "name": "同盟支援",
+          "description": "可以攻击到范围外被阻挡的敌方单位，攻击速度+110"
+        },
+        {
+          "skill_id": "skchr_fartth_3",
+          "name": "光羽箭",
+          "description": "攻击范围改为前方无限长的直线，攻击力+140%，攻击原本范围以外的目标时，造成的伤害提高至140%"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_430_fartth.png"
+    },
+    {
+      "id": "char_437_mizuki",
+      "name": "水月",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "stalker",
+      "nation_id": "higashi",
+      "nation_cn": "东",
+      "skills": [
+        {
+          "skill_id": "skchr_mizuki_1",
+          "name": "唤醒",
+          "description": "下次攻击造成相当于攻击力300%的物理伤害，且第一天赋伤害倍率提升至3倍 可充能3次"
+        },
+        {
+          "skill_id": "skchr_mizuki_2",
+          "name": "囚徒困境",
+          "description": "攻击间隔较大幅度缩短，攻击力+30%，第一天赋额外攻击1个目标并附加1.3秒束缚"
+        },
+        {
+          "skill_id": "skchr_mizuki_3",
+          "name": "镜花水月",
+          "description": "攻击范围扩大，攻击力+150%，第一天赋额外攻击2个目标并附加1秒晕眩；每次攻击命中目标少于3名敌人时，自身流失最大生命值的12%。"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_437_mizuki.png"
+    },
+    {
+      "id": "char_450_necras",
+      "name": "死芒",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "soulcaster",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skchr_necras_1",
+          "name": "噩愿",
+          "description": "被动：每个悲叹的仆役生成和升级时对周围所有敌人造成相当于死芒攻击力450%的法术伤害 开启：立刻重新召唤所有悲叹的仆役，若场上没有悲叹的仆役存在则召唤1个"
+        },
+        {
+          "skill_id": "skchr_necras_2",
+          "name": "折朽",
+          "description": "令最多2名攻击范围内的敌人陷入沉睡，每0.5秒对目标造成相当于攻击力160%的法术伤害；技能期间目标被击倒时额外召唤2个悲叹的仆役"
+        },
+        {
+          "skill_id": "skchr_necras_3",
+          "name": "冠死以冕",
+          "description": "被动：最多1名悲叹的仆役变为特殊形态，此形态下只能通过技能升级，最多升级6次 开启：立刻对范围内所有敌人造成攻击力800%的法术伤害，之后消耗一个悲叹的仆役使特殊仆役升级并回复20%生命（若悲叹的仆役已升级则翻倍），重复3次"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_450_necras.png"
+    },
+    {
+      "id": "char_456_ash",
+      "name": "灰烬",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "fastshot",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_ash_1",
+          "name": "支援射击",
+          "description": "攻击力+15%，攻击变为2连击 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_ash_2",
+          "name": "突击战术",
+          "description": "立即触发第一天赋，攻击间隔大幅度缩短，且攻击被晕眩目标时攻击力提高至250% 攻击装有31发子弹，打完后技能结束（期间可随时停止技能）"
+        },
+        {
+          "skill_id": "skchr_ash_3",
+          "name": "攻坚榴弹",
+          "description": "向前发射破墙弹，对沿途敌人造成300%的物理伤害并向后较大力度推动；爆炸对周围造成400%的物理伤害（从低地撞到高台直接爆炸且造成800%的物理伤害）；每次部署只能释放2次"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_456_ash.png"
+    },
+    {
+      "id": "char_472_pasngr",
+      "name": "异客",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "chain",
+      "nation_id": "sargon",
+      "nation_cn": "萨尔贡",
+      "skills": [
+        {
+          "skill_id": "skchr_pasngr_1",
+          "name": "电能之触",
+          "description": "下次攻击时攻击力提升至250%，最多在4个目标间跳跃，攻击造成的停顿时间延长至1.5秒"
+        },
+        {
+          "skill_id": "skchr_pasngr_2",
+          "name": "聚焦指令",
+          "description": "攻击距离+1，攻击力+30%，攻击间隔较大幅度缩短，攻击最大弹跳次数提升至5"
+        },
+        {
+          "skill_id": "skchr_pasngr_3",
+          "name": "辉煌裂片",
+          "description": "立即寻找大范围内生命值最高的目标，在其位置生成持续4秒的雷暴区域，期间每0.5秒以150%的攻击力对雷暴区域内的随机敌人进行一次额外攻击；可充能2次"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_472_pasngr.png"
+    },
+    {
+      "id": "char_474_glady",
+      "name": "歌蕾蒂娅",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "hookmaster",
+      "nation_id": "egir",
+      "nation_cn": "阿戈尔",
+      "skills": [
+        {
+          "skill_id": "skchr_glady_1",
+          "name": "缺水的大洋裂断",
+          "description": "下次攻击会将目标较大力度地拖拽至面前，并对其造成相当于攻击力210%的物理伤害 可充能3次"
+        },
+        {
+          "skill_id": "skchr_glady_2",
+          "name": "缺水的掌握怒海",
+          "description": "攻击间隔增大，攻击范围扩大，每次攻击优先对被阻挡的两个目标造成相当于攻击力180%的物理伤害且以较大力度地拖拽至自己面前"
+        },
+        {
+          "skill_id": "skchr_glady_3",
+          "name": "缺水的碎漩狂舞",
+          "description": "对一个远处目标束缚并制造一个龙卷风使周围敌人移动速度-，每1.5秒造成130%攻击力的法术伤害并较大力度地拖拽至中心。技能结束时把目标地点周围的敌人较大力度地拖拽至面前"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_474_glady.png"
+    },
+    {
+      "id": "char_479_sleach",
+      "name": "琴柳",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "bearer",
+      "nation_id": "victoria",
+      "nation_cn": "维多利亚",
+      "skills": [
+        {
+          "skill_id": "skcom_assist_cost[3]",
+          "name": "支援号令·γ型",
+          "description": "停止攻击，持续时间内回复总共18点部署费用"
+        },
+        {
+          "skill_id": "skchr_sleach_2",
+          "name": "信仰传承",
+          "description": "停止攻击，持续时间内回复总共20点部署费用；将军旗掷向范围内生命比例最低的干员所在位置，使其防御力+50%且每秒恢复相当于琴柳攻击力50%的生命值。技能结束时收回军旗。"
+        },
+        {
+          "skill_id": "skchr_sleach_3",
+          "name": "光辉旗帜",
+          "description": "停止攻击，立即回复10点部署费用，将军旗掷向地面敌人所在位置，并对周围造成300%的物理伤害和3.5秒晕眩；期间军旗周围8格敌人受到停顿和30%的脆弱效果。技能结束时收回军旗。"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_479_sleach.png"
+    },
+    {
+      "id": "char_485_pallas",
+      "name": "帕拉斯",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "instructor",
+      "nation_id": "minos",
+      "nation_cn": "米诺斯",
+      "skills": [
+        {
+          "skill_id": "skchr_pallas_1",
+          "name": "胜利的连击",
+          "description": "下次攻击造成相当于攻击力175%的物理伤害，并连续攻击两次"
+        },
+        {
+          "skill_id": "skchr_pallas_2",
+          "name": "信念的长鞭",
+          "description": "攻击范围向前延伸一格，攻击力+80%，每次攻击有85%几率使目标晕眩0.2秒"
+        },
+        {
+          "skill_id": "skchr_pallas_3",
+          "name": "英勇的祝福",
+          "description": "攻击力+100%，额外攻击两个目标，身前一格为近战位并部署我方干员时使其获得以下增益：生命值高于80%获得+50%攻击力的精力充沛、防御力+35%、阻挡数+1（若身前一格不存在干员或不为近战位时，该效果由自身获得）"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_485_pallas.png"
+    },
+    {
+      "id": "char_608_acpion",
+      "name": "郁金香",
+      "profession": "PIONEER",
+      "profession_cn": "PIONEER",
+      "sub_profession_id": "pioneer",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_acpion_1",
+          "name": "钻心",
+          "description": "立即获得6点部署费用，并对攻击范围至多2名敌人造成攻击力230%的物理伤害"
+        },
+        {
+          "skill_id": "skchr_acpion_2",
+          "name": "迅瞬",
+          "description": "技能持续时间内逐渐获得8点部署费用，攻击速度+125，并无视目标35%的防御力"
+        },
+        {
+          "skill_id": "skchr_acpion_3",
+          "name": "只余芬芳",
+          "description": "立即获得8点费用，对周围的敌人发动8次连续斩击，每次造成相当于攻击力200%的物理伤害，并无视目标50%防御力"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_608_acpion.png"
+    },
+    {
+      "id": "char_609_acguad",
+      "name": "Sharp",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "fearless",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_acguad_1",
+          "name": "快刀",
+          "description": "攻击力+70%，每次攻击有20%概率变成二连击"
+        },
+        {
+          "skill_id": "skchr_acguad_2",
+          "name": "亮剑",
+          "description": "防御力降至0，生命上限+50%，每次攻击的攻击力提升至220%"
+        },
+        {
+          "skill_id": "skchr_acguad_3",
+          "name": "力战不竭",
+          "description": "攻击力+60%；每次攻击时获得可叠加的攻击力+21%的增益（最多叠加8层），切换目标后层数清零，技能持续期间内干员的生命值始终不会低于1"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_609_acguad.png"
+    },
+    {
+      "id": "char_610_acfend",
+      "name": "Mechanist",
+      "profession": "TANK",
+      "profession_cn": "重装",
+      "sub_profession_id": "protector",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_acfend_1",
+          "name": "结构稳定",
+          "description": "最大生命值+55%，防御力+55%"
+        },
+        {
+          "skill_id": "skchr_acfend_2",
+          "name": "不变性原理",
+          "description": "防御力+80%，第二天赋的效果提升至3倍"
+        },
+        {
+          "skill_id": "skchr_acfend_3",
+          "name": "应力倒置",
+          "description": "技能持续时间内防御力+100%，阻挡数+1，每秒对自身阻挡的敌人造成相当于攻击力70%的法术伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_610_acfend.png"
+    },
+    {
+      "id": "char_611_acnipe",
+      "name": "Stormeye",
+      "profession": "SNIPER",
+      "profession_cn": "狙击",
+      "sub_profession_id": "fastshot",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_acnipe_1",
+          "name": "破空",
+          "description": "攻击力+20%，攻击速度+80，无视攻击目标100防御力"
+        },
+        {
+          "skill_id": "skchr_acnipe_2",
+          "name": "心手合一",
+          "description": "攻击力+15%，每次攻击额外攻击1个目标 持续时间无限"
+        },
+        {
+          "skill_id": "skchr_acnipe_3",
+          "name": "旋臂",
+          "description": "可以同时攻击3个目标，第一天赋的触发概率提高至50%，攻击变为二连击；攻击目标生命值高于80%时额外造成1次伤害"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_611_acnipe.png"
+    },
+    {
+      "id": "char_612_accast",
+      "name": "Pith",
+      "profession": "CASTER",
+      "profession_cn": "术师",
+      "sub_profession_id": "splashcaster",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_accast_1",
+          "name": "“书我所书”",
+          "description": "自身攻击速度+60，溅射范围扩大"
+        },
+        {
+          "skill_id": "skchr_accast_2",
+          "name": "“为我所为”",
+          "description": "自身攻击速度+80，所有【术师】干员攻击力+45%"
+        },
+        {
+          "skill_id": "skchr_accast_3",
+          "name": "“驭我所驭”",
+          "description": "开启技能时，立即对攻击范围内的所有敌人造成一次攻击力的法术伤害，之后攻击目标数+1，攻击速度+75，溅射范围略微扩大"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_612_accast.png"
+    },
+    {
+      "id": "char_613_acmedc",
+      "name": "Touch",
+      "profession": "MEDIC",
+      "profession_cn": "医疗",
+      "sub_profession_id": "physician",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_acmedc_1",
+          "name": "慨赠",
+          "description": "攻击力+60%，每次治疗有50%概率额外治疗一次"
+        },
+        {
+          "skill_id": "skchr_acmedc_2",
+          "name": "宛如天启",
+          "description": "自身攻击距离+1，每次治疗2个目标，所有医疗干员攻击力+40%"
+        },
+        {
+          "skill_id": "skchr_acmedc_3",
+          "name": "恳切福音",
+          "description": "自身攻击距离+2，攻击力+40%，每次治疗2个目标，并额外治疗一次目标或目标相邻1个友方单位，治疗量为主目标的30%。对生命值不高于一半的友方单位治疗量提高为原来的150%"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_613_acmedc.png"
+    },
+    {
+      "id": "char_614_acsupo",
+      "name": "Raidian",
+      "profession": "SUPPORT",
+      "profession_cn": "辅助",
+      "sub_profession_id": "slower",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_acsupo_1",
+          "name": "双声",
+          "description": "攻击力+60%，额外攻击一个目标"
+        },
+        {
+          "skill_id": "skchr_acsupo_2",
+          "name": "三形",
+          "description": "攻击间隔较大幅度缩短，同时攻击三个目标，攻击造成的停顿时间延长至1.25秒"
+        },
+        {
+          "skill_id": "skchr_acsupo_3",
+          "name": "信号跃动",
+          "description": "攻击范围扩大，攻击力+100%，第一天赋的效果提升至3倍，攻击范围内所有敌人受到25%的脆弱效果和25%的虚弱效果"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_614_acsupo.png"
+    },
+    {
+      "id": "char_615_acspec",
+      "name": "Misery",
+      "profession": "SPECIAL",
+      "profession_cn": "特种",
+      "sub_profession_id": "executor",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_acspec_1",
+          "name": "物理的服从",
+          "description": "部署后第一天赋触发概率提升至50%，获得75%物理闪避"
+        },
+        {
+          "skill_id": "skchr_acspec_2",
+          "name": "战争的恭顺",
+          "description": "部署后攻击力+60%，攻击速度+30"
+        },
+        {
+          "skill_id": "skchr_acspec_3",
+          "name": "空间的归依",
+          "description": "部署后立即对周围所有敌人造成相当于攻击力300%的物理伤害，开启空间源石技艺将所有未被阻挡的敌人小力地拖拽至面前并施加4秒停顿"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_615_acspec.png"
+    },
+    {
+      "id": "char_617_sharp2",
+      "name": "领主·Sharp",
+      "profession": "WARRIOR",
+      "profession_cn": "近卫",
+      "sub_profession_id": "lord",
+      "nation_id": "",
+      "nation_cn": "",
+      "skills": [
+        {
+          "skill_id": "skchr_sharp2_1",
+          "name": "沉默的爆发",
+          "description": "攻击力+225%，攻击速度+50，同时攻击2个目标，远程攻击不再降低攻击力"
+        }
+      ],
+      "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_617_sharp2.png"
+    }
+  ]
+}
