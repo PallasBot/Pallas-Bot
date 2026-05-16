@@ -8,17 +8,16 @@ from nonebot.rule import Rule
 from nonebot.typing import T_State
 
 from src.common.cmd_perm import group_message_permission_for_command
-from src.common.config import BotConfig
 from src.plugins.duel import duel_penalty  # noqa: F401 — 注册惩罚消息 matcher
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_bots import is_bot_qq, pick_random_duel_bot_pair
 from src.plugins.duel.duel_penalty import apply_duel_penalties
 from src.plugins.duel.duel_qte import complete_duel_qte, duel_qte_exact_rule
 from src.plugins.duel.duel_round_engine import (
+    begin_duel_command,
     end_duel_group,
     play_duel_rounds,
     reload_event_pools,
-    try_begin_duel_group,
 )
 from src.plugins.duel.duel_session import clear_duel_pair, start_duel_pair
 
@@ -105,8 +104,6 @@ __plugin_meta__ = PluginMetadata(
 
 BLOCK_LIST: list[int] = []
 
-DUEL_COOLDOWN_KEY = "duel"
-
 
 async def is_reload_duel_events(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
     if event.group_id in BLOCK_LIST:
@@ -158,32 +155,28 @@ def parse_at_qqs(event: GroupMessageEvent) -> list[str]:
 
 async def run_duel_match(
     matcher,
+    bot: Bot,
     event: GroupMessageEvent,
     challenger_id: str,
     defender_id: str,
     *,
     dual_bot: bool = False,
+    command_gate: str | None = None,  # "ok"：入口已 begin_duel_command
 ) -> None:
-    """开团：仅多 Bot 抢命令冷却，无重复开团群 CD。"""
+    """开团：群级占用与指令 CD（多 Bot 共用）；command_gate=ok 表示入口已抢占。"""
     challenger_is_bot = is_bot_qq(challenger_id)
     defender_is_bot = is_bot_qq(defender_id)
     bot_mode = dual_bot or (challenger_is_bot and defender_is_bot)
 
-    if not try_begin_duel_group(event.group_id):
+    if command_gate is None:
+        gate = await begin_duel_command(event.group_id)
+    else:
+        gate = command_gate
+    if gate == "busy":
         await matcher.send("此群台上正有决斗未散，且待战歌落幕。")
         return
-
-    bot_cfg = BotConfig(
-        int(event.self_id),
-        event.group_id,
-        cooldown=plugin_config.duel_bot_cooldown_sec,
-    )
-
-    if not await bot_cfg.is_cooldown(DUEL_COOLDOWN_KEY):
-        end_duel_group(event.group_id)
+    if gate == "cooldown":
         return
-
-    await bot_cfg.refresh_cooldown(DUEL_COOLDOWN_KEY)
 
     if bot_mode:
         await start_duel_pair(event.group_id, int(challenger_id), int(defender_id))
@@ -191,6 +184,7 @@ async def run_duel_match(
     try:
         stacks = await play_duel_rounds(
             matcher,
+            bot,
             event.group_id,
             challenger_id,
             defender_id,
@@ -228,7 +222,7 @@ async def duel_bot_pair(matcher, bot: Bot, event: GroupMessageEvent, a: str, b: 
         + MessageSegment.at(int(b))
         + MessageSegment.text(" 登台。")
     )
-    await run_duel_match(matcher, event, a, b, dual_bot=True)
+    await run_duel_match(matcher, bot, event, a, b, dual_bot=True)
 
 
 async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
@@ -260,7 +254,7 @@ async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> N
         await matcher.send("左脚踩右脚也不能上天哦。")
         return
 
-    await run_duel_match(matcher, event, challenger, defender)
+    await run_duel_match(matcher, bot, event, challenger, defender)
 
 
 @duel_msg.handle()
@@ -270,11 +264,36 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
 
 @cage_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
+    if event.group_id in BLOCK_LIST:
+        return
+    gate = await begin_duel_command(event.group_id)
+    if gate == "busy":
+        await cage_msg.send("此群台上正有决斗未散，且待战歌落幕。")
+        return
+    if gate == "cooldown":
+        return
     pair = await pick_random_duel_bot_pair(event.group_id)
     if not pair:
+        end_duel_group(event.group_id)
         await cage_msg.send("没有另一位对手呢，博士，八角笼无法开演……")
         return
-    await duel_bot_pair(cage_msg, bot, event, str(pair[0]), str(pair[1]))
+    a, b = str(pair[0]), str(pair[1])
+    await cage_msg.send(
+        MessageSegment.text("战斗开始！")
+        + MessageSegment.at(int(a))
+        + MessageSegment.text(" 与 ")
+        + MessageSegment.at(int(b))
+        + MessageSegment.text(" 登台。")
+    )
+    await run_duel_match(
+        cage_msg,
+        bot,
+        event,
+        a,
+        b,
+        dual_bot=True,
+        command_gate="ok",
+    )
 
 
 @duel_qte_msg.handle()

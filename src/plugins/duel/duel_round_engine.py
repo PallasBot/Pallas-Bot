@@ -8,9 +8,11 @@ from pathlib import Path
 from typing import Any, Literal
 
 from nonebot import logger
+from nonebot.adapters import Bot  # noqa: TC002
 from nonebot.adapters.onebot.v11 import Message
 from nonebot.matcher import Matcher  # noqa: TC002
 
+from src.common.config import GroupConfig
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_labels import bind_duel_labels, duel_label_for, reset_duel_labels, resolve_duel_labels
 from src.plugins.duel.duel_message import (
@@ -102,6 +104,9 @@ class LoadedEvent:
 
 _duel_busy_groups: set[int] = set()
 
+DUEL_GROUP_COOLDOWN_KEY = "duel"
+DuelCommandGate = Literal["ok", "busy", "cooldown"]
+
 
 def try_begin_duel_group(group_id: int) -> bool:
     """同群同时进行中的决斗至多一场。"""
@@ -114,6 +119,18 @@ def try_begin_duel_group(group_id: int) -> bool:
 def end_duel_group(group_id: int) -> None:
     """释放群决斗占用。"""
     _duel_busy_groups.discard(group_id)
+
+
+async def begin_duel_command(group_id: int) -> DuelCommandGate:
+    """群级互斥 + 群级指令 CD（多 Bot 共用）。"""
+    if not try_begin_duel_group(group_id):
+        return "busy"
+    group_cfg = GroupConfig(group_id, cooldown=plugin_config.duel_bot_cooldown_sec)
+    if not await group_cfg.is_cooldown(DUEL_GROUP_COOLDOWN_KEY):
+        end_duel_group(group_id)
+        return "cooldown"
+    await group_cfg.refresh_cooldown(DUEL_GROUP_COOLDOWN_KEY)
+    return "ok"
 
 
 def _event_pack_dir() -> Path:
@@ -1139,6 +1156,7 @@ async def play_clash_hero_events(
 
 async def play_duel_rounds(
     matcher: Matcher,
+    bot: Bot,
     group_id: int,
     challenger_id: str,
     defender_id: str,
@@ -1152,7 +1170,9 @@ async def play_duel_rounds(
     from src.plugins.duel.duel_qte import run_event_qte_if_any
     from src.plugins.duel.duel_send import (
         begin_round_line_buffer,
+        bind_duel_routing_bot,
         flush_round_line_buffer,
+        reset_duel_routing_bot,
         reset_round_line_buffer,
         send_duel_line,
     )
@@ -1164,7 +1184,8 @@ async def play_duel_rounds(
     if not pools["public"]:
         logger.warning("duel public pool empty, public rounds will skip")
 
-    labels = await resolve_duel_labels(matcher.bot, group_id, challenger_id, defender_id)
+    routing_token = bind_duel_routing_bot(bot)
+    labels = await resolve_duel_labels(bot, group_id, challenger_id, defender_id)
     labels_token = bind_duel_labels(labels)
 
     stacks = DuelStacks()
@@ -1365,4 +1386,5 @@ async def play_duel_rounds(
         )
     finally:
         reset_duel_labels(labels_token)
+        reset_duel_routing_bot(routing_token)
     return stacks

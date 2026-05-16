@@ -29,6 +29,22 @@ class RoundLineBuffer:
 
 
 _round_buffer: ContextVar[RoundLineBuffer | None] = ContextVar("_round_buffer", default=None)
+_routing_bot: ContextVar[Any] = ContextVar("_duel_routing_bot", default=None)
+
+
+def bind_duel_routing_bot(bot: Any) -> Token:
+    return _routing_bot.set(bot)
+
+
+def reset_duel_routing_bot(token: Token) -> None:
+    _routing_bot.reset(token)
+
+
+def duel_routing_bot() -> Any:
+    inst = _routing_bot.get()
+    if inst is None:
+        raise RuntimeError("duel routing bot 未绑定")
+    return inst
 
 
 def build_duel_deliver_kwargs(
@@ -225,11 +241,11 @@ async def deliver_duel_line(
     if not route_bot:
         await matcher.send(outbound)
         return
-    qq = _speaker_qq(speaker, challenger_id, defender_id, matcher)
+    qq = _speaker_qq(speaker, challenger_id, defender_id)
     bots = get_bots()
     inst = bots.get(str(qq))
     if inst is None:
-        inst = matcher.bot
+        inst = duel_routing_bot()
     try:
         await inst.send_group_msg(group_id=group_id, message=outbound)
     except ActionFailed as err:
@@ -241,10 +257,9 @@ def _speaker_qq(
     speaker: Speaker,
     challenger_id: str,
     defender_id: str,
-    matcher: Matcher,
 ) -> str:
     if speaker == "challenger":
         return challenger_id
     if speaker == "defender":
         return defender_id
-    return str(matcher.bot.self_id)
+    return str(duel_routing_bot().self_id)
