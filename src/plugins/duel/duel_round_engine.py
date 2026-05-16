@@ -17,6 +17,7 @@ from src.plugins.duel.duel_message import (
     append_duel_message,
     apply_ab_placeholders,
     coerce_duel_message,
+    duel_at,
     duel_join_blocks,
     duel_join_lines,
     duel_join_spaced,
@@ -1172,13 +1173,13 @@ async def play_duel_rounds(
     try:
         opener = (
             duel_text("擂台灯光压暗。")
-            + duel_text(duel_label_for(challenger_id))
+            + duel_at(challenger_id)
             + duel_text(" 与 ")
-            + duel_text(duel_label_for(defender_id))
+            + duel_at(defender_id)
             + duel_text(" 步入场心，对决开始。")
         )
         if bot_mode:
-            opener = append_duel_message(duel_plain("【牛斗】两头牛牛踏入光圈，刃鸣作响。"), opener)
+            opener = append_duel_message(duel_plain("不需畏惧，我会战胜那个鲁莽的家伙！"), opener)
         await send_duel_line(
             group_id,
             opener,
