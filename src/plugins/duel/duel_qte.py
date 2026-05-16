@@ -340,7 +340,7 @@ async def _run_operator_intrusion_qte(
             extra
             + duel_text(QTE_INTRUSION_TITLE + "请")
             + duel_at(responder)
-            + duel_text(f" {window_sec}秒内发送其游戏内干员名（一字不差）。")
+            + duel_text(f" {window_sec}秒内发送其游戏内干员名。")
         )
     else:
         prompt = (
@@ -467,7 +467,7 @@ async def _run_operator_intrusion_qte(
         post = str(spec.get(fail_key, "") or "").strip()
         if not post:
             post = default_intrusion_fail_post(kind, actor, is_pallas=is_pallas)
-        tail = duel_at(responder) + duel_text(f" 你没叫{required_key}的名字。")
+        tail = duel_at(responder) + duel_text(f" 没能认出{required_key}")
         body = append_combat_delta(
             append_duel_message(tail, format_describe(post, challenger_id, defender_id, intrusion_ctx)),
             challenger_id,
