@@ -62,13 +62,13 @@ class Config(BaseModel, extra="ignore"):
         default=10.0,
         ge=0.0,
         le=600.0,
-        description="每幕之间的最短停顿（秒），与最大值之间随机。",
+        description="第 2 幕起幕间最短停顿（秒）；与最大值相同则固定间隔。第 1 幕开演后无等待。",
     )
     duel_round_pause_max_sec: float = Field(
         default=15.0,
         ge=0.0,
         le=600.0,
-        description="每幕之间的最长停顿（秒），须不小于最短停顿。",
+        description="第 2 幕起幕间最长停顿（秒），须不小于最短；二者相等即为固定秒数。",
     )
     duel_compact_round: bool = Field(
         default=True,

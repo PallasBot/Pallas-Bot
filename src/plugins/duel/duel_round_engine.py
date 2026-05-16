@@ -1187,6 +1187,15 @@ async def play_clash_hero_events(
     )
 
 
+async def pause_between_duel_rounds(round_index: int, pause_lo: float, pause_hi: float) -> None:
+    """幕间停顿；第 1 幕前不等待（开演说明后立刻进入第一幕）。"""
+    if round_index <= 1:
+        return
+    if pause_lo <= 0 and pause_hi <= 0:
+        return
+    await asyncio.sleep(random.uniform(pause_lo, pause_hi))
+
+
 async def play_duel_rounds(
     matcher: Matcher,
     bot: Bot,
@@ -1254,7 +1263,7 @@ async def play_duel_rounds(
         for i, kind in enumerate(plan, start=1):
             if stacks.is_ko():
                 break
-            await asyncio.sleep(random.uniform(pause_lo, pause_hi))
+            await pause_between_duel_rounds(i, pause_lo, pause_hi)
             round_buf_token = begin_round_line_buffer(
                 group_id=group_id,
                 matcher=matcher,
