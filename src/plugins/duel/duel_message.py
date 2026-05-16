@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
+DuelContent = str | Message | MessageSegment
+
 
 def duel_at(qq: str | int) -> MessageSegment:
     """QTE 等需要 @ 提醒时使用。"""
@@ -24,13 +26,17 @@ def duel_plain(text: str) -> Message:
     return Message(t) if t else Message()
 
 
-def coerce_duel_message(value: str | Message) -> Message:
+def coerce_duel_message(value: DuelContent) -> Message:
     if isinstance(value, Message):
         return value
+    if isinstance(value, MessageSegment):
+        return Message(value)
     return duel_plain(value)
 
 
-def message_has_content(msg: Message) -> bool:
+def message_has_content(msg: DuelContent) -> bool:
+    if not isinstance(msg, Message):
+        msg = coerce_duel_message(msg)
     for seg in msg:
         if seg.type in ("at", "image", "face", "record", "video"):
             return True
@@ -56,12 +62,12 @@ def duel_join_blocks(blocks: list[Message], sep: str = "\n\n") -> Message:
     return out
 
 
-def duel_join_lines(*lines: str | Message, sep: str = "\n") -> Message:
+def duel_join_lines(*lines: DuelContent, sep: str = "\n") -> Message:
     return duel_join_blocks([coerce_duel_message(line) for line in lines], sep=sep)
 
 
-def duel_join_spaced(*parts: Message) -> Message:
-    kept = [p for p in parts if message_has_content(p)]
+def duel_join_spaced(*parts: DuelContent) -> Message:
+    kept = [coerce_duel_message(p) for p in parts if message_has_content(p)]
     if not kept:
         return Message()
     out = kept[0]
@@ -70,7 +76,7 @@ def duel_join_spaced(*parts: Message) -> Message:
     return out
 
 
-def append_duel_message(base: str | Message, extra: str | Message, sep: str = "\n") -> Message:
+def append_duel_message(base: DuelContent, extra: DuelContent, sep: str = "\n") -> Message:
     base_msg = coerce_duel_message(base)
     extra_msg = coerce_duel_message(extra)
     if not message_has_content(base_msg):

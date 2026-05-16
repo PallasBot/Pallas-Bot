@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -103,9 +104,20 @@ class LoadedEvent:
 
 
 _duel_busy_groups: set[int] = set()
+_duel_user_reply_until: dict[int, float] = {}
 
 DUEL_GROUP_COOLDOWN_KEY = "duel"
+DUEL_USER_REPLY_TTL_SEC = 3.0
 DuelCommandGate = Literal["ok", "busy", "cooldown"]
+
+
+def try_claim_duel_user_reply(group_id: int, *, ttl_sec: float | None = None) -> bool:
+    """多 Bot 同群：短时内仅一只牛发决斗入口类提示，避免复读。"""
+    now = time.time()
+    if now < _duel_user_reply_until.get(group_id, 0):
+        return False
+    _duel_user_reply_until[group_id] = now + (ttl_sec if ttl_sec is not None else DUEL_USER_REPLY_TTL_SEC)
+    return True
 
 
 def try_begin_duel_group(group_id: int) -> bool:
@@ -548,7 +560,7 @@ def format_player_stat_lines(
         dp_delta = dp - dp_before
         if dp_delta != 0:
             dp_part += f" ({dp_delta:+d})"
-    return duel_text(f"{duel_label_for(qq)} {hp_part} {dp_part}")
+    return Message(duel_text(f"{duel_label_for(qq)} {hp_part} {dp_part}"))
 
 
 def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: int) -> Message:
@@ -560,7 +572,7 @@ def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: 
             tokens.append(t)
     if not tokens:
         return Message()
-    return duel_text(f"{duel_label_for(qq)} " + " ".join(tokens))
+    return Message(duel_text(f"{duel_label_for(qq)} " + " ".join(tokens)))
 
 
 def player_stat_changed(
@@ -872,7 +884,7 @@ async def run_exchange_bout(
                     "target": qte_actor,
                     "keys": ["格挡", "盾反", "架开", "闪避"],
                     "window_sec": 10,
-                    "prompt": "（兵刃未止！受创方快拆招！）",
+                    "prompt": "兵刃未止！攻势仍在延续",
                     "on_success_effects": [{"type": "add_dp", "target": qte_actor, "value": 1}],
                     "on_fail_effects": [{"type": "deal_damage", "target": qte_actor, "value": 2}],
                 },

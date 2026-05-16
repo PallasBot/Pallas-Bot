@@ -572,10 +572,7 @@ async def run_event_qte_if_any(
     head = duel_plain(round_header.strip()) if round_header.strip() else Message()
     if plugin_config.duel_compact_round:
         prompt = (
-            extra
-            + duel_text("【拆招】请")
-            + duel_at(responder)
-            + duel_text(f" {window_sec}秒内发「{required_key}」（纯文本）。")
+            extra + duel_text("[QTE]请") + duel_at(responder) + duel_text(f" {window_sec}秒内发「{required_key}」。")
         )
         line = append_duel_message(head, prompt) if message_has_content(head) else prompt
         await send_duel_line_merge_buffer(

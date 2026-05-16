@@ -2,7 +2,7 @@ import re
 
 from nonebot import on_message
 from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment, permission
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageSegment, permission
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from nonebot.typing import T_State
@@ -18,6 +18,7 @@ from src.plugins.duel.duel_round_engine import (
     end_duel_group,
     play_duel_rounds,
     reload_event_pools,
+    try_claim_duel_user_reply,
 )
 from src.plugins.duel.duel_session import clear_duel_pair, start_duel_pair
 
@@ -117,10 +118,15 @@ async def is_duel_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> boo
     return event.get_plaintext().strip().startswith("牛牛决斗")
 
 
+def is_cage_plaintext(text: str) -> bool:
+    t = text.strip()
+    return t in ("八角笼牛", "八角笼斗")
+
+
 async def is_cage_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
     if event.group_id in BLOCK_LIST:
         return False
-    return event.get_plaintext().strip() == "八角笼牛"
+    return is_cage_plaintext(event.get_plaintext())
 
 
 duel_msg = on_message(
@@ -153,6 +159,22 @@ def parse_at_qqs(event: GroupMessageEvent) -> list[str]:
     return [str(seg.data["qq"]) for seg in event.message if seg.type == "at" and seg.data.get("qq") is not None]
 
 
+async def send_duel_user_reply(matcher, group_id: int, message: str | Message) -> None:
+    if not try_claim_duel_user_reply(group_id):
+        return
+    await matcher.send(message)
+
+
+def duel_fight_start_message(a: str, b: str) -> Message:
+    return (
+        MessageSegment.text("战斗开始！")
+        + MessageSegment.at(int(a))
+        + MessageSegment.text(" 与 ")
+        + MessageSegment.at(int(b))
+        + MessageSegment.text(" 登台。")
+    )
+
+
 async def run_duel_match(
     matcher,
     bot: Bot,
@@ -173,7 +195,7 @@ async def run_duel_match(
     else:
         gate = command_gate
     if gate == "busy":
-        await matcher.send("此群台上正有决斗未散，且待战歌落幕。")
+        await send_duel_user_reply(matcher, event.group_id, "此群台上正有决斗未散，且待战歌落幕。")
         return
     if gate == "cooldown":
         return
@@ -198,7 +220,11 @@ async def run_duel_match(
             await clear_duel_pair(event.group_id)
 
     if stacks is None:
-        await matcher.send("节庆剧目表读不出来……请检查插件内 event_packs/default 下 JSON。")
+        await send_duel_user_reply(
+            matcher,
+            event.group_id,
+            "节庆剧目表读不出来……请检查插件内 event_packs/default 下 JSON。",
+        )
         return
 
     await apply_duel_penalties(
@@ -213,16 +239,16 @@ async def run_duel_match(
 
 async def duel_bot_pair(matcher, bot: Bot, event: GroupMessageEvent, a: str, b: str) -> None:
     if a == b:
-        await matcher.send("同一头牛不能左右互搏哦。")
+        await send_duel_user_reply(matcher, event.group_id, "同一头牛不能左右互搏哦。")
         return
-    await matcher.send(
-        MessageSegment.text("战斗开始！")
-        + MessageSegment.at(int(a))
-        + MessageSegment.text(" 与 ")
-        + MessageSegment.at(int(b))
-        + MessageSegment.text(" 登台。")
-    )
-    await run_duel_match(matcher, bot, event, a, b, dual_bot=True)
+    gate = await begin_duel_command(event.group_id)
+    if gate == "busy":
+        await send_duel_user_reply(matcher, event.group_id, "此群台上正有决斗未散，且待战歌落幕。")
+        return
+    if gate == "cooldown":
+        return
+    await matcher.send(duel_fight_start_message(a, b))
+    await run_duel_match(matcher, bot, event, a, b, dual_bot=True, command_gate="ok")
 
 
 async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
@@ -230,28 +256,28 @@ async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> N
 
     if len(ats) >= 2:
         if not (is_bot_qq(ats[0]) and is_bot_qq(ats[1])):
-            await matcher.send("双 @ 决斗仅支持两名牛牛；人类请 @ 一名对手。")
+            await send_duel_user_reply(
+                matcher,
+                event.group_id,
+                "双 @ 决斗仅支持两名牛牛；人类请 @ 一名对手。",
+            )
             return
         await duel_bot_pair(matcher, bot, event, ats[0], ats[1])
         return
 
     if len(ats) == 0:
-        await matcher.send(
-            "台上还缺一位对手，无法开演。\n"
-            "请发送「牛牛决斗」并 @ 一名决斗者（群友或牛牛均可）。\n"
-            "双牛同台可 @ 两只牛牛，或发送「八角笼牛」随机抽选。"
-        )
+        await send_duel_user_reply(matcher, event.group_id, "台上还缺一位对手，无法开演。")
         return
 
     defender = ats[0]
     match = re.search(r"user_id=(\d+)", str(event.sender))
     if not match:
-        await matcher.send("无法识别挑战者。")
+        await send_duel_user_reply(matcher, event.group_id, "无法识别挑战者。")
         return
     challenger = match.group(1)
 
     if challenger == defender:
-        await matcher.send("左脚踩右脚也不能上天哦。")
+        await send_duel_user_reply(matcher, event.group_id, "左脚踩右脚也不能上天哦。")
         return
 
     await run_duel_match(matcher, bot, event, challenger, defender)
@@ -268,23 +294,21 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
         return
     gate = await begin_duel_command(event.group_id)
     if gate == "busy":
-        await cage_msg.send("此群台上正有决斗未散，且待战歌落幕。")
+        await send_duel_user_reply(cage_msg, event.group_id, "此群台上正有决斗未散，且待战歌落幕。")
         return
     if gate == "cooldown":
         return
     pair = await pick_random_duel_bot_pair(event.group_id)
     if not pair:
         end_duel_group(event.group_id)
-        await cage_msg.send("没有另一位对手呢，博士，八角笼无法开演……")
+        await send_duel_user_reply(
+            cage_msg,
+            event.group_id,
+            "没有另一位对手呢，博士，八角笼无法开演……",
+        )
         return
     a, b = str(pair[0]), str(pair[1])
-    await cage_msg.send(
-        MessageSegment.text("战斗开始！")
-        + MessageSegment.at(int(a))
-        + MessageSegment.text(" 与 ")
-        + MessageSegment.at(int(b))
-        + MessageSegment.text(" 登台。")
-    )
+    await cage_msg.send(duel_fight_start_message(a, b))
     await run_duel_match(
         cage_msg,
         bot,
