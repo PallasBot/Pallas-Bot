@@ -34,11 +34,25 @@ async def list_group_online_bot_ids(group_id: int) -> list[int]:
 
 
 async def pick_random_duel_bot_pair(group_id: int) -> tuple[int, int] | None:
-    """随机两只在线牛，用于八角笼。"""
+    """随机两只在线牛（非八角笼；各 Bot 实例勿共用）。"""
     ids = await list_group_online_bot_ids(group_id)
     if len(ids) < 2:
         return None
     a, b = random.sample(ids, 2)
+    return a, b
+
+
+def cage_pair_seed(group_id: int, message_id: int) -> int:
+    """同群同一条八角笼指令，各 Bot 算出相同配对。"""
+    return group_id * 1_000_000_007 + message_id
+
+
+async def pick_cage_duel_bot_pair(group_id: int, message_id: int) -> tuple[int, int] | None:
+    """八角笼：按群+消息种子固定配对，避免多 Bot 各抽一对。"""
+    ids = await list_group_online_bot_ids(group_id)
+    if len(ids) < 2:
+        return None
+    a, b = random.Random(cage_pair_seed(group_id, message_id)).sample(ids, 2)
     return a, b
 
 

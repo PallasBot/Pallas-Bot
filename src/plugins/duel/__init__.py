@@ -15,7 +15,7 @@ from src.plugins.duel.duel_bots import (
     infer_duel_defender_when_at_self_hidden,
     is_bot_qq,
     parse_duel_at_qqs,
-    pick_random_duel_bot_pair,
+    pick_cage_duel_bot_pair,
     raw_message_has_at,
     resolve_duel_round_count,
 )
@@ -357,6 +357,19 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
     if event.group_id in BLOCK_LIST:
         return
+    pair = await pick_cage_duel_bot_pair(event.group_id, int(event.message_id))
+    if not pair:
+        if not await try_claim_duel_message(event):
+            return
+        await send_duel_user_reply(
+            cage_msg,
+            event.group_id,
+            "没有另一位对手呢，博士，八角笼无法开演……",
+        )
+        return
+    a, b = str(pair[0]), str(pair[1])
+    if int(event.self_id) != min(int(a), int(b)):
+        return
     if not await try_claim_duel_message(event):
         return
     gate = await begin_duel_command(event.group_id)
@@ -365,16 +378,6 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
         return
     if gate == "cooldown":
         return
-    pair = await pick_random_duel_bot_pair(event.group_id)
-    if not pair:
-        end_duel_group(event.group_id)
-        await send_duel_user_reply(
-            cage_msg,
-            event.group_id,
-            "没有另一位对手呢，博士，八角笼无法开演……",
-        )
-        return
-    a, b = str(pair[0]), str(pair[1])
     await cage_msg.send(duel_fight_start_message(a, b))
     await run_duel_match(
         cage_msg,

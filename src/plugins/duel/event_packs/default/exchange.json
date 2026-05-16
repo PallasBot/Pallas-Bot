@@ -77,7 +77,7 @@
       "target": "defender",
       "keys": ["格挡", "闪避", "架开"],
       "window_sec": 8,
-      "prompt": "（追刺未止！）",
+      "prompt": "追刺未止！",
       "on_success_effects": [{ "type": "add_dp", "target": "defender", "value": 1 }],
       "on_fail_effects": [{ "type": "deal_damage", "target": "defender", "value": 2 }]
     }
@@ -170,7 +170,7 @@
       "target": "challenger",
       "keys": ["握紧", "回夺", "踩住"],
       "window_sec": 8,
-      "prompt": "（武器将脱！）",
+      "prompt": "武器将脱！",
       "on_success_effects": [{ "type": "add_self_buff", "target": "challenger", "value": 1 }],
       "on_fail_effects": [{ "type": "deal_damage", "target": "challenger", "value": 2 }]
     }
