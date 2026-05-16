@@ -45,7 +45,7 @@
 
 - 撰写约定：[event_packs/README.md](../../../src/plugins/duel/event_packs/README.md)
 - 六星表：`resource/arknights/operators_6star.json`
-- 乱入头像：`resource/arknights/avatars/{char_id}.png`（**不纳入 git**，体积约百张 PNG）
+- 乱入头像：`resource/arknights/avatars/{char_id}.png`（随仓库分发，全量约 **8MB** / 140 张）
 
 ### 同步脚本（推荐部署后执行一次）
 
@@ -75,17 +75,15 @@ uv run python scripts/fetch_arknights_duel_data.py --avatars-only
 
 缺表时乱入 QTE 会降级，直至后台 JSON 写完（日志 `background resource sync finished`）；也可先跑同步脚本。开启 `duel_avatar_local` 且本地无图时，未开按需下载则回退 JSON 中的远程 `avatar_url`。
 
-### 要不要把头像传进本仓库？
+### 资源更新
 
-**不必。** 六星表 `operators_6star.json` 已在仓库内（体积小）；头像约百张 PNG（合计约十余 MB）已 `.gitignore`，由脚本或启动/按需下载生成。
+头像与六星表已随仓库分发。若游戏侧新增六星或头像变更，维护者本地执行：
 
-| 方式 | 适用 |
-|------|------|
-| `uv run python scripts/fetch_arknights_duel_data.py` | 部署机可访问 GitHub 时，推荐一次性预拉 |
-| 启动/按需自动下载 | 零手工，首局乱入前可能尚未下完 |
-| 自建 zip 放 Release / HF（参考 `voices/Pallas.zip`） | 内网或 GitHub 很慢时，维护者可选提供离线包，解压到 `resource/arknights/avatars/` |
+```bash
+uv run python scripts/fetch_arknights_duel_data.py
+```
 
-未提供离线包不影响功能；仅影响「首次乱入是否要等待下载」。
+后提交 `operators_6star.json` 与 `avatars/` 即可。未拉全库时仍可由启动后台同步或 `duel_avatar_download_on_use` 按需补单张。
 
 ## 与其它插件
 
