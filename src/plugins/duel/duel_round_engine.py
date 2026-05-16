@@ -581,7 +581,7 @@ def format_player_stat_lines(
         dp_delta = dp - dp_before
         if dp_delta != 0:
             dp_part += f" ({dp_delta:+d})"
-    return Message(duel_text(f"{duel_label_for(qq)} {hp_part} {dp_part}"))
+    return duel_plain(f"{duel_label_for(qq)} {hp_part} {dp_part}")
 
 
 def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: int) -> Message:
@@ -593,7 +593,7 @@ def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: 
             tokens.append(t)
     if not tokens:
         return Message()
-    return Message(duel_text(f"{duel_label_for(qq)} " + " ".join(tokens)))
+    return duel_plain(f"{duel_label_for(qq)} " + " ".join(tokens))
 
 
 def player_stat_changed(

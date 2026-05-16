@@ -21,7 +21,17 @@ def duel_text(text: str) -> MessageSegment:
     return MessageSegment.text(text)
 
 
+def is_duel_message_segment(value: object) -> bool:
+    if isinstance(value, MessageSegment):
+        return True
+    return not isinstance(value, (str, bytes, Message)) and hasattr(value, "type") and hasattr(value, "data")
+
+
 def duel_plain(text: str) -> Message:
+    if is_duel_message_segment(text):
+        return Message(text)  # type: ignore[arg-type]
+    if isinstance(text, Message):
+        return text
     t = (text or "").strip()
     return Message(t) if t else Message()
 
@@ -29,9 +39,11 @@ def duel_plain(text: str) -> Message:
 def coerce_duel_message(value: DuelContent) -> Message:
     if isinstance(value, Message):
         return value
-    if isinstance(value, MessageSegment):
-        return Message(value)
-    return duel_plain(value)
+    if is_duel_message_segment(value):
+        return Message(value)  # type: ignore[arg-type]
+    if isinstance(value, str):
+        return duel_plain(value)
+    return duel_plain(str(value))
 
 
 def message_has_content(msg: DuelContent) -> bool:
