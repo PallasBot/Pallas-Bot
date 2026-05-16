@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+import os
+from threading import Lock
+from typing import Any, Self
+
+from nonebot import get_plugin_config
+from pydantic import BaseModel, Field, model_validator
+
+from src.common.env_dotenv import merged_repo_dotenv_upper, repo_layered_dotenv_files_exist
+
+
+class Config(BaseModel, extra="ignore"):
+    """决斗插件配置（WebUI 插件配置页可读写，写入 .env 大写键名）。"""
+
+    # —— 胜负惩罚 ——
+    duel_penalty_minutes: int = Field(
+        default=10,
+        ge=1,
+        le=1440,
+        description="败者惩罚时长（分钟）：群名片与消息规则，期满自动恢复原名片。",
+    )
+    duel_penalty_loser_card: str = Field(
+        default="THE LOSER",
+        min_length=1,
+        max_length=60,
+        description="败者群名片（双牛局与人类局败者；人类局须本牛为群管）。",
+    )
+    duel_penalty_winner_card: str = Field(
+        default="TRUE PALLAS",
+        min_length=1,
+        max_length=60,
+        description="胜者群名片（仅双牛对决的胜方牛）。",
+    )
+    duel_penalty_bot_fake_msg: str = Field(
+        default="唔....我是假的牛牛，不应与你说话...",
+        min_length=1,
+        max_length=200,
+        description="双牛对决败者牛随后续发言被替换的文案。",
+    )
+    duel_penalty_bot_sad_msg: str = Field(
+        default="牛牛输地很伤心，看起来决定不再讲话了...",
+        min_length=1,
+        max_length=200,
+        description="人类局中败者牛随后续发言被替换的文案。",
+    )
+    duel_penalty_human_noise_msg: str = Field(
+        default="有一点噪音产生了..",
+        min_length=1,
+        max_length=200,
+        description="人类局败者消息被撤回后，由处理决斗的牛代发的文案。",
+    )
+
+    # —— 流程与节奏 ——
+    duel_bot_cooldown_sec: int = Field(
+        default=5,
+        ge=0,
+        le=300,
+        description="同一群内两次「牛牛决斗/八角笼」类指令的最短间隔（秒），防多 Bot 抢答。",
+    )
+    duel_round_pause_min_sec: float = Field(
+        default=10.0,
+        ge=0.0,
+        le=600.0,
+        description="每幕之间的最短停顿（秒），与最大值之间随机。",
+    )
+    duel_round_pause_max_sec: float = Field(
+        default=15.0,
+        ge=0.0,
+        le=600.0,
+        description="每幕之间的最长停顿（秒），须不小于最短停顿。",
+    )
+    duel_compact_round: bool = Field(
+        default=True,
+        description="紧凑发群：幕内剧目合并、QTE 与上文同条提示、结算写入幕末；段末不重复 HP/DP 变动行。",
+    )
+    duel_total_rounds: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="单场决斗总幕数（歌咏/交锋随机序列长度）。",
+    )
+
+    # —— 事件与 QTE 权重 ——
+    duel_public_round_weight: float = Field(
+        default=0.28,
+        ge=0.0,
+        le=1.0,
+        description="每一幕抽中「公共场/使者」的概率；0 表示几乎不抽公共幕。",
+    )
+    duel_qte_event_weight_mult: float = Field(
+        default=1.6,
+        ge=0.1,
+        le=10.0,
+        description="带 QTE 事件在池中的权重倍率，越大越容易抽到乱入或拆招幕。",
+    )
+    duel_exchange_qte_chance: float = Field(
+        default=0.32,
+        ge=0.0,
+        le=1.0,
+        description="兵刃对击幕在无内置 QTE 时，额外触发关键词 QTE 的概率。",
+    )
+
+    # —— 牛自动咏名/拆招 ——
+    duel_bot_qte_intrusion_success_rate: float = Field(
+        default=0.68,
+        ge=0.0,
+        le=1.0,
+        description="应答方为牛时，干员唤名（咏名）QTE 自动答对概率。",
+    )
+    duel_bot_qte_keyword_success_rate: float = Field(
+        default=0.74,
+        ge=0.0,
+        le=1.0,
+        description="应答方为牛时，关键词拆招 QTE 自动答对概率。",
+    )
+    duel_bot_qte_fail_speak_wrong_chance: float = Field(
+        default=0.72,
+        ge=0.0,
+        le=1.0,
+        description="自动 QTE 失败时，仍发出错误答案（嘴瓢）的概率。",
+    )
+    duel_bot_qte_fail_silent_chance: float = Field(
+        default=0.18,
+        ge=0.0,
+        le=1.0,
+        description="自动 QTE 失败时，完全不发言的概率。",
+    )
+
+    @model_validator(mode="after")
+    def duel_round_pause_order(self) -> Self:
+        if self.duel_round_pause_max_sec < self.duel_round_pause_min_sec:
+            msg = "duel_round_pause_max_sec must be >= duel_round_pause_min_sec"
+            raise ValueError(msg)
+        return self
+
+    @classmethod
+    def from_env(cls) -> Self:
+        merged = merged_repo_dotenv_upper()
+        data: dict[str, Any] = {}
+        for name, field in cls.model_fields.items():
+            key = name.upper()
+            raw: str | None = None
+            if key in os.environ:
+                raw = os.environ.get(key)
+            elif key in merged:
+                raw = merged[key]
+            if raw is None:
+                continue
+            text = str(raw).strip()
+            ann_text = str(field.annotation).lower()
+            if "float" in ann_text:
+                data[name] = float(text)
+            elif "int" in ann_text:
+                data[name] = int(text)
+            else:
+                data[name] = text
+        return cls.model_validate(data)
+
+
+_config_lock = Lock()
+_cached_duel_config: Config | None = None
+
+
+def clear_duel_config_cache() -> None:
+    global _cached_duel_config
+    with _config_lock:
+        _cached_duel_config = None
+
+
+def get_duel_config() -> Config:
+    global _cached_duel_config
+    with _config_lock:
+        if _cached_duel_config is None:
+            if repo_layered_dotenv_files_exist():
+                _cached_duel_config = Config.from_env()
+            else:
+                _cached_duel_config = get_plugin_config(Config)
+        return _cached_duel_config
+
+
+def reload_duel_plugin_config() -> Config:
+    """WebUI 写入 .env 后调用，使惩罚/权重/幕间停顿等立即生效（不重载 JSON 剧目）。"""
+    clear_duel_config_cache()
+    return get_duel_config()
+
+
+class _DuelConfigProxy:
+    """兼容 ``plugin_config.xxx`` 写法，每次访问读取最新缓存。"""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_duel_config(), name)
+
+
+plugin_config = _DuelConfigProxy()

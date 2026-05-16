@@ -59,6 +59,10 @@ async def is_other_bot(event: GroupMessageEvent) -> bool:
         return False
     if await BotConfig(event.self_id, event.group_id).is_dreaming():
         return False
+    from src.plugins.duel.duel_session import is_duel_paired_bot_traffic
+
+    if await is_duel_paired_bot_traffic(event.group_id, int(event.user_id), int(event.self_id)):
+        return False
     return True
 
 

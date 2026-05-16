@@ -1,0 +1,1340 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import random
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Literal
+
+from nonebot import logger
+from nonebot.matcher import Matcher  # noqa: TC002
+
+from src.plugins.duel.config import plugin_config
+
+Actor = Literal["challenger", "defender"]
+PoolName = Literal["public", "challenger", "defender", "exchange"]
+
+STACK_CAP_SELF_BUFF = 4
+STACK_CAP_SELF_DEBUFF = 4
+STACK_CAP_FIELD = 3
+COMBAT_START_HP = 20
+COMBAT_MAX_DP = 5
+# 场地层数：双方 deal_damage 额外 +场；heal_hp 额外 +场；add_field 时双方各 +叠层 DP
+
+
+@dataclass
+class DuelStacks:
+    """双方 HP/DP、神恩损创与场地层数。"""
+
+    challenger_hp: int = COMBAT_START_HP
+    defender_hp: int = COMBAT_START_HP
+    challenger_dp: int = 0
+    defender_dp: int = 0
+    challenger_buff: int = 0
+    challenger_debuff: int = 0
+    defender_buff: int = 0
+    defender_debuff: int = 0
+    field: int = 0
+
+    def clamp(self) -> None:
+        """裁剪到各栈上限。"""
+        self.challenger_hp = max(0, self.challenger_hp)
+        self.defender_hp = max(0, self.defender_hp)
+        self.challenger_dp = max(0, min(COMBAT_MAX_DP, self.challenger_dp))
+        self.defender_dp = max(0, min(COMBAT_MAX_DP, self.defender_dp))
+        self.challenger_buff = max(0, min(STACK_CAP_SELF_BUFF, self.challenger_buff))
+        self.challenger_debuff = max(0, min(STACK_CAP_SELF_DEBUFF, self.challenger_debuff))
+        self.defender_buff = max(0, min(STACK_CAP_SELF_BUFF, self.defender_buff))
+        self.defender_debuff = max(0, min(STACK_CAP_SELF_DEBUFF, self.defender_debuff))
+        self.field = max(0, min(STACK_CAP_FIELD, self.field))
+
+    def is_ko(self) -> bool:
+        return self.challenger_hp <= 0 or self.defender_hp <= 0
+
+
+@dataclass
+class DuelNarrativeLog:
+    """整场短句提要，供终幕复盘。"""
+
+    lines: list[str] = field(default_factory=list)
+
+    def add(self, line: str, *, max_lines: int = 12, max_len: int = 48) -> None:
+        """追加一行，超长截断，条数过多时丢最旧。"""
+        t = " ".join(line.replace("\n", " ").split()).strip()
+        if not t:
+            return
+        if len(t) > max_len:
+            t = t[: max_len - 1] + "…"
+        self.lines.append(t)
+        while len(self.lines) > max_lines:
+            self.lines.pop(0)
+
+
+@dataclass
+class LoadedEvent:
+    """单条事件：文案、即时效果、可选 QTE、可选伤害骰。"""
+
+    event_id: str
+    weight: int
+    describe: str
+    effects: list[dict[str, Any]]
+    qte: dict[str, Any] | None = None
+    damage_min: int = 0
+    damage_max: int = 0
+    damage2_min: int = 0
+    damage2_max: int = 0
+
+
+_duel_busy_groups: set[int] = set()
+
+
+def try_begin_duel_group(group_id: int) -> bool:
+    """同群同时进行中的决斗至多一场。"""
+    if group_id in _duel_busy_groups:
+        return False
+    _duel_busy_groups.add(group_id)
+    return True
+
+
+def end_duel_group(group_id: int) -> None:
+    """释放群决斗占用。"""
+    _duel_busy_groups.discard(group_id)
+
+
+def _event_pack_dir() -> Path:
+    """默认事件包目录。"""
+    return Path(__file__).resolve().parent / "event_packs" / "default"
+
+
+def _pick_weighted(events: list[LoadedEvent], *, qte_mult: float = 1.0) -> LoadedEvent | None:
+    """按 weight 加权随机；带 qte 的事件可乘 qte_mult 提权。"""
+    if not events:
+        return None
+
+    def eff_weight(e: LoadedEvent) -> int:
+        w = max(0, e.weight)
+        if qte_mult > 1.0 and e.qte:
+            return int(w * qte_mult)
+        return w
+
+    total = sum(eff_weight(e) for e in events)
+    if total <= 0:
+        return random.choice(events)
+    r = random.randint(1, total)
+    acc = 0
+    for e in events:
+        acc += eff_weight(e)
+        if r <= acc:
+            return e
+    return events[-1]
+
+
+def apply_hp_damage(stacks: DuelStacks, target: Actor, raw: int) -> int:
+    """扣 HP，先扣 DP 再扣血；场地层数额外增加损创。"""
+    raw = max(0, int(raw)) + stacks.field
+    if target == "challenger":
+        dp = stacks.challenger_dp
+        if dp > 0 and raw > 0:
+            absorb = min(dp, raw)
+            stacks.challenger_dp -= absorb
+            raw -= absorb
+        stacks.challenger_hp -= raw
+        return raw
+    dp = stacks.defender_dp
+    if dp > 0 and raw > 0:
+        absorb = min(dp, raw)
+        stacks.defender_dp -= absorb
+        raw -= absorb
+    stacks.defender_hp -= raw
+    return raw
+
+
+def _parse_qte(raw: dict[str, Any] | None, eid: str) -> dict[str, Any] | None:
+    """解析 QTE 配置；干员乱入不要求 keys。"""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        logger.warning(f"duel event {eid} qte must be object, ignored")
+        return None
+    if raw.get("type") == "operator_intrusion":
+        return raw
+    keys = raw.get("keys")
+    if not isinstance(keys, list) or not keys:
+        logger.warning(f"duel event {eid} qte.keys missing or empty, ignored")
+        return None
+    if not all(isinstance(x, (str, int, float)) for x in keys):
+        logger.warning(f"duel event {eid} qte.keys invalid types, ignored")
+        return None
+    return raw
+
+
+def event_needs_ark_context(ev: LoadedEvent) -> bool:
+    """是否需要随机六星干员占位数据。"""
+    if ev.qte and ev.qte.get("type") == "operator_intrusion":
+        return True
+    if any(
+        x in ev.describe
+        for x in ("<O>", "<P>", "<S1>", "<S2>", "<S3>", "<S1D>", "<S2D>", "<S3D>", "<SK>", "<SKD>", "<SKL>")
+    ):
+        return True
+    q = ev.qte
+    if not q:
+        return False
+    ph = ("<O>", "<P>", "<S1>", "<S2>", "<S3>", "<S1D>", "<S2D>", "<S3D>", "<SK>", "<SKD>", "<SKL>")
+    for k in ("intrusion_prelude", "after_success_describe", "after_fail_describe"):
+        t = str(q.get(k, "") or "")
+        if any(x in t for x in ph):
+            return True
+    return False
+
+
+def _parse_damage_range(raw_val: Any) -> tuple[int, int]:
+    """解析 damage / damage2：整数或 [min, max]。"""
+    if isinstance(raw_val, list) and len(raw_val) >= 2:
+        lo, hi = int(raw_val[0]), int(raw_val[1])
+    elif isinstance(raw_val, int):
+        lo, hi = raw_val, raw_val
+    else:
+        return 0, 0
+    if lo > hi:
+        lo, hi = hi, lo
+    return max(0, lo), max(0, hi)
+
+
+def _parse_event(raw: dict[str, Any], pool: PoolName) -> LoadedEvent | None:
+    """单条 JSON 对象 → LoadedEvent。"""
+    try:
+        eid = str(raw["id"])
+        weight = int(raw.get("weight", 1))
+        desc = str(raw["describe"])
+        eff = raw.get("effects", [])
+        if not isinstance(eff, list):
+            return None
+        qte = _parse_qte(raw.get("qte"), eid)
+        d1_lo, d1_hi = _parse_damage_range(raw.get("damage", 0))
+        d2_lo, d2_hi = _parse_damage_range(raw.get("damage2", 0))
+        return LoadedEvent(
+            event_id=eid,
+            weight=max(0, weight),
+            describe=desc,
+            effects=eff,
+            qte=qte,
+            damage_min=d1_lo,
+            damage_max=d1_hi,
+            damage2_min=d2_lo,
+            damage2_max=d2_hi,
+        )
+    except (KeyError, TypeError, ValueError) as err:
+        logger.warning(f"duel event parse skip pool={pool}: {err}")
+        return None
+
+
+_pools_cache: dict[PoolName, list[LoadedEvent]] | None = None
+
+
+def _read_event_pools_from_disk() -> dict[PoolName, list[LoadedEvent]]:
+    """读入 public / challenger / defender / exchange 四个池。"""
+    base = _event_pack_dir()
+    pools: dict[PoolName, list[LoadedEvent]] = {
+        "public": [],
+        "challenger": [],
+        "defender": [],
+        "exchange": [],
+    }
+    mapping: list[tuple[PoolName, str]] = [
+        ("public", "public.json"),
+        ("challenger", "challenger.json"),
+        ("defender", "defender.json"),
+        ("exchange", "exchange.json"),
+    ]
+    for pool, fname in mapping:
+        path = base / fname
+        if not path.is_file():
+            logger.warning(f"duel event pack missing: {path}")
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as err:
+            logger.error(f"duel event pack load fail {path}: {err}")
+            continue
+        if not isinstance(data, list):
+            logger.warning(f"duel event pack not a list: {path}")
+            continue
+        for item in data:
+            if isinstance(item, dict):
+                parsed = _parse_event(item, pool)
+                if parsed:
+                    pools[pool].append(parsed)
+    return pools
+
+
+def get_event_pools() -> dict[PoolName, list[LoadedEvent]]:
+    """返回缓存的事件池（未加载则读盘）。"""
+    global _pools_cache
+    if _pools_cache is None:
+        _pools_cache = _read_event_pools_from_disk()
+    return _pools_cache
+
+
+def load_event_pools() -> dict[PoolName, list[LoadedEvent]]:
+    """同 get_event_pools（兼容旧名）。"""
+    return get_event_pools()
+
+
+def reload_event_pools() -> str:
+    """热重载事件池与干员表，并清空未决 QTE。"""
+    from src.plugins.duel.arknights_ops import get_operators_payload, reload_operators_cache
+    from src.plugins.duel.duel_qte import clear_all_duel_qte_sessions
+
+    clear_all_duel_qte_sessions()
+    reload_operators_cache()
+    global _pools_cache
+    _pools_cache = _read_event_pools_from_disk()
+    n = sum(len(v) for v in _pools_cache.values())
+    payload = get_operators_payload()
+    ops = payload.get("operators")
+    oc = len(ops) if isinstance(ops, list) else 0
+    return (
+        f"节庆剧目表已重载，共 {n} 条（歌咏 {len(_pools_cache['public'])} / "
+        f"兵刃 {len(_pools_cache['exchange'])} / "
+        f"攻方 {len(_pools_cache['challenger'])} / 守方 {len(_pools_cache['defender'])}）。\n"
+        f"异邦使者名录：{oc} 名（resource/arknights/operators_6star.json）。"
+    )
+
+
+def _resolve_subject(target: str, actor: Actor) -> list[Actor]:
+    """效果 target 字段 → 作用在哪些 side。"""
+    if target in ("actor", "self"):
+        return [actor]
+    if target == "challenger":
+        return ["challenger"]
+    if target == "defender":
+        return ["defender"]
+    if target == "both":
+        return ["challenger", "defender"]
+    if target == "other":
+        return ["defender"] if actor == "challenger" else ["challenger"]
+    logger.warning(f"duel unknown effect target={target!r}, ignored")
+    return []
+
+
+def _effect_value_from_damage(eff: dict[str, Any], dmg1: int | None, dmg2: int | None) -> int:
+    """use_damage 为 true 用 <DMG>，为 damage2 用 <DMG2>。"""
+    flag = eff.get("use_damage")
+    if not flag:
+        return int(eff.get("value", 0))
+    src = dmg2 if flag in ("damage2", "2", "DMG2") else dmg1
+    return max(1, int(src or 1))
+
+
+def _apply_effect(
+    stacks: DuelStacks,
+    eff: dict[str, Any],
+    actor: Actor,
+    *,
+    dmg1: int | None = None,
+    dmg2: int | None = None,
+) -> None:
+    """应用单条效果字典。"""
+    etype = eff.get("type")
+    value = _effect_value_from_damage(eff, dmg1, dmg2) if eff.get("use_damage") else int(eff.get("value", 0))
+    tgt = str(eff.get("target", "actor"))
+
+    if etype == "add_field":
+        stacks.field += value
+        stacks.challenger_dp = min(COMBAT_MAX_DP, stacks.challenger_dp + value)
+        stacks.defender_dp = min(COMBAT_MAX_DP, stacks.defender_dp + value)
+    elif etype == "add_self_buff":
+        for sub in _resolve_subject(tgt, actor):
+            if sub == "challenger":
+                stacks.challenger_buff += value
+            else:
+                stacks.defender_buff += value
+    elif etype == "add_self_debuff":
+        for sub in _resolve_subject(tgt, actor):
+            if sub == "challenger":
+                stacks.challenger_debuff += value
+            else:
+                stacks.defender_debuff += value
+    elif etype == "deal_damage":
+        dealt = max(1, value) if value > 0 else 0
+        for sub in _resolve_subject(tgt, actor):
+            apply_hp_damage(stacks, sub, dealt)
+    elif etype == "add_dp":
+        for sub in _resolve_subject(tgt, actor):
+            if sub == "challenger":
+                stacks.challenger_dp += value
+            else:
+                stacks.defender_dp += value
+    elif etype == "heal_hp":
+        heal = value + stacks.field
+        for sub in _resolve_subject(tgt, actor):
+            if sub == "challenger":
+                stacks.challenger_hp = min(COMBAT_START_HP, stacks.challenger_hp + heal)
+            else:
+                stacks.defender_hp = min(COMBAT_START_HP, stacks.defender_hp + heal)
+    else:
+        logger.warning(f"duel unknown effect type={etype!r}, ignored")
+
+    stacks.clamp()
+
+
+def apply_effect_dicts(
+    stacks: DuelStacks,
+    defs: list[Any],
+    actor: Actor,
+    *,
+    dmg1: int | None = None,
+    dmg2: int | None = None,
+) -> None:
+    """连续应用多条效果。"""
+    for eff in defs:
+        if isinstance(eff, dict):
+            _apply_effect(stacks, eff, actor, dmg1=dmg1, dmg2=dmg2)
+    stacks.clamp()
+
+
+def roll_event_damages(ev: LoadedEvent) -> tuple[int | None, int | None]:
+    """按事件配置掷 <DMG> / <DMG2>。"""
+    dmg1 = None
+    dmg2 = None
+    if ev.damage_max > 0 or ev.damage_min > 0:
+        lo = ev.damage_min or 1
+        hi = ev.damage_max or lo
+        dmg1 = random.randint(lo, hi)
+    if ev.damage2_max > 0 or ev.damage2_min > 0:
+        lo = ev.damage2_min or 1
+        hi = ev.damage2_max or lo
+        dmg2 = random.randint(lo, hi)
+    return dmg1, dmg2
+
+
+def damage_placeholders(dmg1: int | None, dmg2: int | None) -> dict[str, int]:
+    """format_describe 用的伤害占位。"""
+    out: dict[str, int] = {}
+    if dmg1 is not None:
+        out["DMG"] = dmg1
+    if dmg2 is not None:
+        out["DMG2"] = dmg2
+    return out
+
+
+def apply_event_effects(stacks: DuelStacks, event: LoadedEvent, actor: Actor) -> None:
+    """应用事件自带的 effects 列表。"""
+    apply_effect_dicts(stacks, event.effects, actor)
+
+
+@dataclass(frozen=True)
+class CombatSnapshot:
+    challenger_hp: int
+    defender_hp: int
+    challenger_dp: int
+    defender_dp: int
+    challenger_buff: int = 0
+    defender_buff: int = 0
+    challenger_debuff: int = 0
+    defender_debuff: int = 0
+    field: int = 0
+
+
+def snapshot_combat(stacks: DuelStacks) -> CombatSnapshot:
+    return CombatSnapshot(
+        challenger_hp=stacks.challenger_hp,
+        defender_hp=stacks.defender_hp,
+        challenger_dp=stacks.challenger_dp,
+        defender_dp=stacks.defender_dp,
+        challenger_buff=stacks.challenger_buff,
+        defender_buff=stacks.defender_buff,
+        challenger_debuff=stacks.challenger_debuff,
+        defender_debuff=stacks.defender_debuff,
+        field=stacks.field,
+    )
+
+
+def hp_dp_changed(before: CombatSnapshot, stacks: DuelStacks) -> bool:
+    """本段是否改动了双方 HP 或 DP（用于兵刃后是否省略交锋台词）。"""
+    return (
+        stacks.challenger_hp != before.challenger_hp
+        or stacks.defender_hp != before.defender_hp
+        or stacks.challenger_dp != before.challenger_dp
+        or stacks.defender_dp != before.defender_dp
+    )
+
+
+def primary_hp_loss_side(before: CombatSnapshot, stacks: DuelStacks) -> Actor | None:
+    """本段 HP 损失更多的一方（兵刃拆招的受击方）；双方无损创则 None。"""
+    ch_loss = before.challenger_hp - stacks.challenger_hp
+    def_loss = before.defender_hp - stacks.defender_hp
+    if ch_loss <= 0 and def_loss <= 0:
+        return None
+    if ch_loss > def_loss:
+        return "challenger"
+    if def_loss > ch_loss:
+        return "defender"
+    return random.choice(["challenger", "defender"])
+
+
+def qte_actor_from_target(spec: dict[str, Any], actor: Actor) -> Actor:
+    """将 qte.target 映射为效果里的 actor（challenger/defender）。"""
+    tgt = str(spec.get("target", "actor"))
+    if tgt == "challenger":
+        return "challenger"
+    if tgt == "defender":
+        return "defender"
+    if tgt in ("actor", "self"):
+        return actor
+    if tgt == "other":
+        return "defender" if actor == "challenger" else "challenger"
+    return actor
+
+
+def _delta_token(current: int, previous: int, label: str) -> str:
+    diff = current - previous
+    if diff == 0:
+        return ""
+    if diff > 0:
+        return f"{label}+{diff}"
+    return f"{label}{diff}"
+
+
+def format_player_stat_lines(
+    qq: str,
+    hp: int,
+    dp: int,
+    *,
+    hp_before: int | None = None,
+    dp_before: int | None = None,
+) -> str:
+    """单方 HP / DP；提供 hp_before/dp_before 时在括号内标本幕变动。"""
+    hp_part = f"HP {hp}"
+    if hp_before is not None:
+        hp_delta = hp - hp_before
+        if hp_delta != 0:
+            hp_part += f" ({hp_delta:+d})"
+    dp_part = f"DP {dp}"
+    if dp_before is not None:
+        dp_delta = dp - dp_before
+        if dp_delta != 0:
+            dp_part += f" ({dp_delta:+d})"
+    return f"[CQ:at,qq={qq}] {hp_part} {dp_part}"
+
+
+def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: int) -> str:
+    """单方本段神恩/损创层变动（HP/DP 由 format_combat_delta_block 另算）。"""
+    tokens: list[str] = []
+    for cur, prev, label in ((buff, buff0, "神恩"), (debuff, debuff0, "损创")):
+        t = _delta_token(cur, prev, label)
+        if t:
+            tokens.append(t)
+    if not tokens:
+        return ""
+    return f"[CQ:at,qq={qq}] " + " ".join(tokens)
+
+
+def player_stat_changed(
+    hp: int,
+    hp0: int,
+    dp: int,
+    dp0: int,
+    buff: int,
+    buff0: int,
+    debuff: int,
+    debuff0: int,
+) -> bool:
+    return hp != hp0 or dp != dp0 or buff != buff0 or debuff != debuff0
+
+
+def format_combat_delta_block(
+    challenger_id: str,
+    defender_id: str,
+    before: CombatSnapshot,
+    stacks: DuelStacks,
+) -> str:
+    """本段数值变动：HP/DP（当前值+括号变动）、神恩/损创。"""
+    parts: list[str] = []
+    ch_changed = player_stat_changed(
+        stacks.challenger_hp,
+        before.challenger_hp,
+        stacks.challenger_dp,
+        before.challenger_dp,
+        stacks.challenger_buff,
+        before.challenger_buff,
+        stacks.challenger_debuff,
+        before.challenger_debuff,
+    )
+    def_changed = player_stat_changed(
+        stacks.defender_hp,
+        before.defender_hp,
+        stacks.defender_dp,
+        before.defender_dp,
+        stacks.defender_buff,
+        before.defender_buff,
+        stacks.defender_debuff,
+        before.defender_debuff,
+    )
+    if ch_changed:
+        parts.append(
+            format_player_stat_lines(
+                challenger_id,
+                stacks.challenger_hp,
+                stacks.challenger_dp,
+                hp_before=before.challenger_hp,
+                dp_before=before.challenger_dp,
+            )
+        )
+    if def_changed:
+        parts.append(
+            format_player_stat_lines(
+                defender_id,
+                stacks.defender_hp,
+                stacks.defender_dp,
+                hp_before=before.defender_hp,
+                dp_before=before.defender_dp,
+            )
+        )
+
+    parts.extend(
+        line
+        for line in (
+            side_stack_delta_line(
+                challenger_id,
+                stacks.challenger_buff,
+                before.challenger_buff,
+                stacks.challenger_debuff,
+                before.challenger_debuff,
+            ),
+            side_stack_delta_line(
+                defender_id,
+                stacks.defender_buff,
+                before.defender_buff,
+                stacks.defender_debuff,
+                before.defender_debuff,
+            ),
+        )
+        if line
+    )
+
+    return " ".join(parts)
+
+
+def append_combat_delta(
+    narrative: str,
+    challenger_id: str,
+    defender_id: str,
+    before: CombatSnapshot,
+    stacks: DuelStacks,
+) -> str:
+    """在剧目文案后追加本段 HP/DP 变动（紧凑幕由幕末统一展示）。"""
+    if plugin_config.duel_compact_round:
+        return narrative
+    delta = format_combat_delta_block(challenger_id, defender_id, before, stacks)
+    if not delta:
+        return narrative
+    body = narrative.rstrip()
+    return f"{body}\n{delta}" if body else delta
+
+
+def format_describe(
+    template: str,
+    challenger_id: str,
+    defender_id: str,
+    ark: dict[str, str] | None = None,
+    *,
+    nums: dict[str, int] | None = None,
+) -> str:
+    """替换 <A><B>、<DMG> 与干员占位符。"""
+    t = template.replace("<A>", f"[CQ:at,qq={challenger_id}]").replace("<B>", f"[CQ:at,qq={defender_id}]")
+    if nums:
+        for key, val in nums.items():
+            t = t.replace(f"<{key}>", str(val))
+    if ark:
+        t = (
+            t.replace("<O>", ark.get("name", "？？？"))
+            .replace("<P>", ark.get("profession_cn", ""))
+            .replace("<S1>", ark.get("skill1_name", ""))
+            .replace("<S2>", ark.get("skill2_name", ""))
+            .replace("<S3>", ark.get("skill3_name", ""))
+            .replace("<S1D>", ark.get("skill1_desc", ""))
+            .replace("<S2D>", ark.get("skill2_desc", ""))
+            .replace("<S3D>", ark.get("skill3_desc", ""))
+            .replace("<SK>", ark.get("picked_skill_name", ""))
+            .replace("<SKD>", ark.get("picked_skill_desc", ""))
+            .replace("<SKL>", ark.get("picked_skill_label", ""))
+            .replace("<SKK>", ark.get("picked_skill_kind_cn", ""))
+        )
+    return t
+
+
+def format_describe_with_combat(
+    template: str,
+    challenger_id: str,
+    defender_id: str,
+    stacks: DuelStacks,
+    ark: dict[str, str] | None = None,
+    *,
+    nums: dict[str, int] | None = None,
+) -> str:
+    """替换 HP/DP 与伤害等占位。"""
+    combat_nums = {
+        "AHP": stacks.challenger_hp,
+        "BHP": stacks.defender_hp,
+        "ADP": stacks.challenger_dp,
+        "BDP": stacks.defender_dp,
+        "场": stacks.field,
+    }
+    if nums:
+        combat_nums.update(nums)
+    return format_describe(template, challenger_id, defender_id, ark, nums=combat_nums)
+
+
+def run_round_plan() -> list[Literal["public", "clash"]]:
+    """生成公共/交锋幕序列（长度见 duel_total_rounds）。"""
+    plan: list[Literal["public", "clash"]] = []
+    for _ in range(plugin_config.duel_total_rounds):
+        if random.random() < plugin_config.duel_public_round_weight:
+            plan.append("public")
+        else:
+            plan.append("clash")
+    return plan
+
+
+def format_round_status_line(
+    challenger_id: str,
+    defender_id: str,
+    stacks: DuelStacks,
+    *,
+    round_start: CombatSnapshot | None = None,
+) -> str:
+    """双方 HP/DP 简报（附在本幕 flush 末尾；round_start 用于括号标本幕变动）。"""
+    hp0_a = round_start.challenger_hp if round_start else None
+    dp0_a = round_start.challenger_dp if round_start else None
+    hp0_b = round_start.defender_hp if round_start else None
+    dp0_b = round_start.defender_dp if round_start else None
+    return "\n".join((
+        format_player_stat_lines(
+            challenger_id,
+            stacks.challenger_hp,
+            stacks.challenger_dp,
+            hp_before=hp0_a,
+            dp_before=dp0_a,
+        ),
+        format_player_stat_lines(
+            defender_id,
+            stacks.defender_hp,
+            stacks.defender_dp,
+            hp_before=hp0_b,
+            dp_before=dp0_b,
+        ),
+    ))
+
+
+def summarize_winner(
+    challenger_id: str,
+    defender_id: str,
+    stacks: DuelStacks,
+    *,
+    ko: bool = False,
+) -> str:
+    """终幕：以 HP 定胜负。"""
+    chp, dhp = stacks.challenger_hp, stacks.defender_hp
+    if chp <= 0 and dhp <= 0:
+        tag = "双方英雄"
+        tail = "双方力竭，同归沉寂。"
+    elif chp <= 0:
+        tag = f"[CQ:at,qq={defender_id}]"
+        tail = "令对手力竭倒地，胜局已定。" if ko else "战芒更盛。"
+    elif dhp <= 0:
+        tag = f"[CQ:at,qq={challenger_id}]"
+        tail = "令对手力竭倒地，胜局已定。" if ko else "战芒更盛。"
+    elif chp > dhp:
+        tag = f"[CQ:at,qq={challenger_id}]"
+        tail = "战芒更盛，双月似为其而明。"
+    elif dhp > chp:
+        tag = f"[CQ:at,qq={defender_id}]"
+        tail = "战芒更盛，双月似为其而明。"
+    else:
+        tag = "双方英雄"
+        tail = "势均力敌，撤出擂台。"
+    return f"第{plugin_config.duel_total_rounds}幕终。{tag}{tail}"
+
+
+def _maybe_pick_ark_ctx(ev: LoadedEvent) -> dict[str, str] | None:
+    """若本事件需要，则随机一名干员并生成占位上下文。"""
+    if not event_needs_ark_context(ev):
+        return None
+    from src.plugins.duel.arknights_ops import (
+        PALLAS_OPERATOR_NAME,
+        build_intrusion_ctx,
+        find_operator_by_name,
+        pick_operator_for_intrusion,
+    )
+
+    if ev.event_id == "public_pallas_intrusion":
+        op = find_operator_by_name(PALLAS_OPERATOR_NAME)
+    else:
+        op = pick_operator_for_intrusion()
+    if not op:
+        return None
+    return build_intrusion_ctx(op)
+
+
+async def run_exchange_bout(
+    matcher: Matcher,
+    group_id: int,
+    challenger_id: str,
+    defender_id: str,
+    stacks: DuelStacks,
+    exchange_pool: list[LoadedEvent],
+    narr: DuelNarrativeLog,
+    round_index: int,
+    *,
+    bot_mode: bool,
+    challenger_is_bot: bool,
+    defender_is_bot: bool,
+) -> bool:
+    """兵刃交锋：双方共用对击；可附带 QTE。若本段改动了 HP/DP 则返回 True。"""
+    from src.plugins.duel.duel_qte import run_event_qte_if_any
+    from src.plugins.duel.duel_send import send_duel_line
+
+    ev = _pick_weighted(exchange_pool, qte_mult=plugin_config.duel_qte_event_weight_mult)
+    if not ev:
+        return False
+    dmg1, dmg2 = roll_event_damages(ev)
+    snap = snapshot_combat(stacks)
+    apply_effect_dicts(stacks, ev.effects, "challenger", dmg1=dmg1, dmg2=dmg2)
+    exchange_changed_hp_dp = hp_dp_changed(snap, stacks)
+    line = append_combat_delta(
+        format_describe_with_combat(ev.describe, challenger_id, defender_id, stacks),
+        challenger_id,
+        defender_id,
+        snap,
+        stacks,
+    )
+    await send_duel_line(
+        group_id,
+        line,
+        matcher=matcher,
+        challenger_id=challenger_id,
+        defender_id=defender_id,
+        bot_mode=bot_mode,
+        challenger_is_bot=challenger_is_bot,
+        defender_is_bot=defender_is_bot,
+        speaker="neutral",
+    )
+    narr.add(f"第{round_index}幕·兵刃 {ev.event_id}")
+    victim = primary_hp_loss_side(snap, stacks)
+    run_qte = bool(ev.qte)
+    if not run_qte and victim and random.random() < plugin_config.duel_exchange_qte_chance:
+        run_qte = True
+    if run_qte:
+        qte_ev = ev
+        qte_actor = victim or "challenger"
+        if not qte_ev.qte:
+            qte_ev = LoadedEvent(
+                event_id=ev.event_id,
+                weight=ev.weight,
+                describe=ev.describe,
+                effects=[],
+                qte={
+                    "target": qte_actor,
+                    "keys": ["格挡", "盾反", "架开", "闪避"],
+                    "window_sec": 10,
+                    "prompt": "（兵刃未止！受创方快拆招！）",
+                    "on_success_effects": [{"type": "add_dp", "target": qte_actor, "value": 1}],
+                    "on_fail_effects": [{"type": "deal_damage", "target": qte_actor, "value": 2}],
+                },
+            )
+        else:
+            qte_actor = qte_actor_from_target(qte_ev.qte, qte_actor)
+        await run_event_qte_if_any(
+            matcher,
+            group_id,
+            challenger_id,
+            defender_id,
+            stacks,
+            qte_ev,
+            qte_actor,
+            narr_log=narr,
+            round_index=round_index,
+            round_tag="兵刃",
+            bot_mode=bot_mode,
+            challenger_is_bot=challenger_is_bot,
+            defender_is_bot=defender_is_bot,
+        )
+    return exchange_changed_hp_dp
+
+
+def _is_operator_intrusion(ev: LoadedEvent | None) -> bool:
+    return bool(ev and ev.qte and ev.qte.get("type") == "operator_intrusion")
+
+
+async def _play_clash_side(
+    matcher: Matcher,
+    group_id: int,
+    challenger_id: str,
+    defender_id: str,
+    stacks: DuelStacks,
+    ev: LoadedEvent | None,
+    actor: Actor,
+    narr: DuelNarrativeLog,
+    round_index: int,
+    *,
+    bot_mode: bool,
+    challenger_is_bot: bool,
+    defender_is_bot: bool,
+    intrusion_tag: str,
+    qte_tag: str,
+    silent_line: str,
+    narr_key: str,
+    skip_describe: bool = False,
+) -> None:
+    """单攻或单守台词（双牛分号、乱入专场）。"""
+    from src.plugins.duel.duel_qte import run_event_qte_if_any
+    from src.plugins.duel.duel_send import send_duel_line
+
+    speaker = "challenger" if actor == "challenger" else "defender"
+    if not ev:
+        if not skip_describe:
+            await send_duel_line(
+                group_id,
+                silent_line,
+                matcher=matcher,
+                challenger_id=challenger_id,
+                defender_id=defender_id,
+                bot_mode=bot_mode,
+                challenger_is_bot=challenger_is_bot,
+                defender_is_bot=defender_is_bot,
+                speaker=speaker,
+            )
+        return
+    ark = _maybe_pick_ark_ctx(ev)
+    if _is_operator_intrusion(ev):
+        await run_event_qte_if_any(
+            matcher,
+            group_id,
+            challenger_id,
+            defender_id,
+            stacks,
+            ev,
+            actor,
+            intrusion_ctx=ark,
+            scene_card=ev.describe,
+            narr_log=narr,
+            round_index=round_index,
+            round_tag=intrusion_tag,
+            bot_mode=bot_mode,
+            challenger_is_bot=challenger_is_bot,
+            defender_is_bot=defender_is_bot,
+        )
+        return
+    snap = snapshot_combat(stacks)
+    apply_event_effects(stacks, ev, actor)
+    if not skip_describe:
+        await send_duel_line(
+            group_id,
+            append_combat_delta(
+                format_describe_with_combat(ev.describe, challenger_id, defender_id, stacks, ark),
+                challenger_id,
+                defender_id,
+                snap,
+                stacks,
+            ),
+            matcher=matcher,
+            challenger_id=challenger_id,
+            defender_id=defender_id,
+            bot_mode=bot_mode,
+            challenger_is_bot=challenger_is_bot,
+            defender_is_bot=defender_is_bot,
+            speaker=speaker,
+        )
+    narr.add(f"第{round_index}幕·{narr_key} {ev.event_id}")
+    await run_event_qte_if_any(
+        matcher,
+        group_id,
+        challenger_id,
+        defender_id,
+        stacks,
+        ev,
+        actor,
+        intrusion_ctx=ark,
+        narr_log=narr,
+        round_index=round_index,
+        round_tag=qte_tag,
+        bot_mode=bot_mode,
+        challenger_is_bot=challenger_is_bot,
+        defender_is_bot=defender_is_bot,
+    )
+
+
+async def play_clash_hero_events(
+    matcher: Matcher,
+    group_id: int,
+    challenger_id: str,
+    defender_id: str,
+    stacks: DuelStacks,
+    pools: dict[PoolName, list[LoadedEvent]],
+    narr: DuelNarrativeLog,
+    round_index: int,
+    *,
+    bot_mode: bool,
+    challenger_is_bot: bool,
+    defender_is_bot: bool,
+    skip_describe: bool = False,
+) -> None:
+    """交锋攻守：人类局合并一段台词，双牛仍分开发。"""
+    from src.plugins.duel.duel_qte import run_event_qte_if_any
+    from src.plugins.duel.duel_send import send_duel_line
+
+    ce = _pick_weighted(pools["challenger"], qte_mult=plugin_config.duel_qte_event_weight_mult)
+    de = _pick_weighted(pools["defender"], qte_mult=plugin_config.duel_qte_event_weight_mult)
+
+    if not bot_mode and not _is_operator_intrusion(ce) and not _is_operator_intrusion(de):
+        ark_c: dict[str, str] | None = None
+        ark_d: dict[str, str] | None = None
+        if skip_describe:
+            if ce:
+                ark_c = _maybe_pick_ark_ctx(ce)
+                apply_event_effects(stacks, ce, "challenger")
+                narr.add(f"第{round_index}幕·交锋A {ce.event_id}")
+            if de:
+                ark_d = _maybe_pick_ark_ctx(de)
+                apply_event_effects(stacks, de, "defender")
+                narr.add(f"第{round_index}幕·交锋B {de.event_id}")
+        else:
+            chunks: list[str] = []
+            if ce:
+                ark_c = _maybe_pick_ark_ctx(ce)
+                snap = snapshot_combat(stacks)
+                apply_event_effects(stacks, ce, "challenger")
+                chunks.append(
+                    append_combat_delta(
+                        format_describe_with_combat(ce.describe, challenger_id, defender_id, stacks, ark_c),
+                        challenger_id,
+                        defender_id,
+                        snap,
+                        stacks,
+                    )
+                )
+                narr.add(f"第{round_index}幕·交锋A {ce.event_id}")
+            else:
+                chunks.append("（攻方英雄缄口，本段无词。）")
+            if de:
+                ark_d = _maybe_pick_ark_ctx(de)
+                snap = snapshot_combat(stacks)
+                apply_event_effects(stacks, de, "defender")
+                chunks.append(
+                    append_combat_delta(
+                        format_describe_with_combat(de.describe, challenger_id, defender_id, stacks, ark_d),
+                        challenger_id,
+                        defender_id,
+                        snap,
+                        stacks,
+                    )
+                )
+                narr.add(f"第{round_index}幕·交锋B {de.event_id}")
+            else:
+                chunks.append("（守方英雄缄口，本段无词。）")
+            await send_duel_line(
+                group_id,
+                "\n\n".join(chunks),
+                matcher=matcher,
+                challenger_id=challenger_id,
+                defender_id=defender_id,
+                bot_mode=False,
+                challenger_is_bot=challenger_is_bot,
+                defender_is_bot=defender_is_bot,
+                speaker="neutral",
+            )
+        if ce and ce.qte:
+            await run_event_qte_if_any(
+                matcher,
+                group_id,
+                challenger_id,
+                defender_id,
+                stacks,
+                ce,
+                "challenger",
+                intrusion_ctx=ark_c,
+                narr_log=narr,
+                round_index=round_index,
+                round_tag="交锋A",
+                bot_mode=False,
+                challenger_is_bot=challenger_is_bot,
+                defender_is_bot=defender_is_bot,
+            )
+        if de and de.qte:
+            await run_event_qte_if_any(
+                matcher,
+                group_id,
+                challenger_id,
+                defender_id,
+                stacks,
+                de,
+                "defender",
+                intrusion_ctx=ark_d,
+                narr_log=narr,
+                round_index=round_index,
+                round_tag="交锋B",
+                bot_mode=False,
+                challenger_is_bot=challenger_is_bot,
+                defender_is_bot=defender_is_bot,
+            )
+        return
+
+    await _play_clash_side(
+        matcher,
+        group_id,
+        challenger_id,
+        defender_id,
+        stacks,
+        ce,
+        "challenger",
+        narr,
+        round_index,
+        bot_mode=bot_mode,
+        challenger_is_bot=challenger_is_bot,
+        defender_is_bot=defender_is_bot,
+        intrusion_tag="交锋·攻方使者",
+        qte_tag="交锋A",
+        silent_line="（攻方英雄缄口，本段无词。）",
+        narr_key="交锋A",
+        skip_describe=skip_describe,
+    )
+    await _play_clash_side(
+        matcher,
+        group_id,
+        challenger_id,
+        defender_id,
+        stacks,
+        de,
+        "defender",
+        narr,
+        round_index,
+        bot_mode=bot_mode,
+        challenger_is_bot=challenger_is_bot,
+        defender_is_bot=defender_is_bot,
+        intrusion_tag="交锋·守方使者",
+        qte_tag="交锋B",
+        silent_line="（守方英雄缄口，本段无词。）",
+        narr_key="交锋B",
+        skip_describe=skip_describe,
+    )
+
+
+async def play_duel_rounds(
+    matcher: Matcher,
+    group_id: int,
+    challenger_id: str,
+    defender_id: str,
+    *,
+    bot_mode: bool = False,
+    challenger_is_bot: bool = False,
+    defender_is_bot: bool = False,
+    round_pause_sec: tuple[float, float] | None = None,
+) -> DuelStacks | None:
+    """主流程：开演说明 → 若干幕 → 终幕。干员乱入事件的顶层 effects 不生效，请写在 qte 的 on_*_effects。"""
+    from src.plugins.duel.duel_qte import run_event_qte_if_any
+    from src.plugins.duel.duel_send import (
+        begin_round_line_buffer,
+        flush_round_line_buffer,
+        reset_round_line_buffer,
+        send_duel_line,
+    )
+
+    pools = get_event_pools()
+    if not pools["challenger"] or not pools["defender"]:
+        logger.error("duel challenger/defender event pool empty")
+        return None
+    if not pools["public"]:
+        logger.warning("duel public pool empty, public rounds will skip")
+
+    stacks = DuelStacks()
+    plan = run_round_plan()
+    narr = DuelNarrativeLog()
+    opener = f"擂台灯光压暗。[CQ:at,qq={challenger_id}] 与 [CQ:at,qq={defender_id}] 步入场心，对决开始。"
+    if bot_mode:
+        opener = "【牛斗】两头牛牛踏入光圈，刃鸣作响。\n" + opener
+    await send_duel_line(
+        group_id,
+        opener,
+        matcher=matcher,
+        challenger_id=challenger_id,
+        defender_id=defender_id,
+        bot_mode=bot_mode,
+        challenger_is_bot=challenger_is_bot,
+        defender_is_bot=defender_is_bot,
+        speaker="neutral",
+    )
+
+    pause_lo, pause_hi = round_pause_sec or (
+        plugin_config.duel_round_pause_min_sec,
+        plugin_config.duel_round_pause_max_sec,
+    )
+
+    for i, kind in enumerate(plan, start=1):
+        if stacks.is_ko():
+            break
+        await asyncio.sleep(random.uniform(pause_lo, pause_hi))
+        round_buf_token = begin_round_line_buffer(
+            group_id=group_id,
+            matcher=matcher,
+            challenger_id=challenger_id,
+            defender_id=defender_id,
+            bot_mode=bot_mode,
+            challenger_is_bot=challenger_is_bot,
+            defender_is_bot=defender_is_bot,
+            speaker="neutral",
+        )
+        try:
+            round_start = snapshot_combat(stacks)
+            total_rounds = plugin_config.duel_total_rounds
+            hdr = f"第{i}/{total_rounds}幕 · "
+            if kind == "public":
+                hdr += "歌咏场"
+                ev = _pick_weighted(pools["public"], qte_mult=plugin_config.duel_qte_event_weight_mult)
+                if ev:
+                    ark = _maybe_pick_ark_ctx(ev)
+                    is_intrusion = bool(ev.qte and ev.qte.get("type") == "operator_intrusion")
+                    if is_intrusion:
+                        await run_event_qte_if_any(
+                            matcher,
+                            group_id,
+                            challenger_id,
+                            defender_id,
+                            stacks,
+                            ev,
+                            "challenger",
+                            intrusion_ctx=ark,
+                            round_header=hdr,
+                            scene_card=ev.describe,
+                            narr_log=narr,
+                            round_index=i,
+                            round_tag="歌咏·使者",
+                            bot_mode=bot_mode,
+                            challenger_is_bot=challenger_is_bot,
+                            defender_is_bot=defender_is_bot,
+                        )
+                    else:
+                        snap = snapshot_combat(stacks)
+                        apply_event_effects(stacks, ev, "challenger")
+                        line = append_combat_delta(
+                            hdr
+                            + "\n"
+                            + format_describe_with_combat(ev.describe, challenger_id, defender_id, stacks, ark),
+                            challenger_id,
+                            defender_id,
+                            snap,
+                            stacks,
+                        )
+                        await send_duel_line(
+                            group_id,
+                            line,
+                            matcher=matcher,
+                            challenger_id=challenger_id,
+                            defender_id=defender_id,
+                            bot_mode=bot_mode,
+                            challenger_is_bot=challenger_is_bot,
+                            defender_is_bot=defender_is_bot,
+                        )
+                        narr.add(f"第{i}幕·歌咏 {ev.event_id}")
+                        await run_event_qte_if_any(
+                            matcher,
+                            group_id,
+                            challenger_id,
+                            defender_id,
+                            stacks,
+                            ev,
+                            "challenger",
+                            intrusion_ctx=ark,
+                            narr_log=narr,
+                            round_index=i,
+                            round_tag="歌咏",
+                            bot_mode=bot_mode,
+                            challenger_is_bot=challenger_is_bot,
+                            defender_is_bot=defender_is_bot,
+                        )
+                else:
+                    await send_duel_line(
+                        group_id,
+                        hdr + "\n（歌咏场无词，本幕仅余风声。）",
+                        matcher=matcher,
+                        challenger_id=challenger_id,
+                        defender_id=defender_id,
+                        bot_mode=bot_mode,
+                        challenger_is_bot=challenger_is_bot,
+                        defender_is_bot=defender_is_bot,
+                    )
+            else:
+                hdr += "英雄交锋"
+                from src.plugins.duel.duel_send import round_buffer_prepend, send_duel_line
+
+                if plugin_config.duel_compact_round:
+                    round_buffer_prepend(hdr)
+                else:
+                    await send_duel_line(
+                        group_id,
+                        hdr,
+                        matcher=matcher,
+                        challenger_id=challenger_id,
+                        defender_id=defender_id,
+                        bot_mode=bot_mode,
+                        challenger_is_bot=challenger_is_bot,
+                        defender_is_bot=defender_is_bot,
+                    )
+                exchange_changed_hp_dp = False
+                if pools["exchange"]:
+                    exchange_changed_hp_dp = await run_exchange_bout(
+                        matcher,
+                        group_id,
+                        challenger_id,
+                        defender_id,
+                        stacks,
+                        pools["exchange"],
+                        narr,
+                        i,
+                        bot_mode=bot_mode,
+                        challenger_is_bot=challenger_is_bot,
+                        defender_is_bot=defender_is_bot,
+                    )
+                await play_clash_hero_events(
+                    matcher,
+                    group_id,
+                    challenger_id,
+                    defender_id,
+                    stacks,
+                    pools,
+                    narr,
+                    i,
+                    bot_mode=bot_mode,
+                    challenger_is_bot=challenger_is_bot,
+                    defender_is_bot=defender_is_bot,
+                    skip_describe=exchange_changed_hp_dp,
+                )
+            round_snap = round_start if plugin_config.duel_compact_round else None
+            await flush_round_line_buffer(
+                format_round_status_line(
+                    challenger_id,
+                    defender_id,
+                    stacks,
+                    round_start=round_snap,
+                )
+            )
+        finally:
+            reset_round_line_buffer(round_buf_token)
+        if stacks.is_ko():
+            break
+
+    await asyncio.sleep(random.uniform(pause_lo, pause_hi))
+    await send_duel_line(
+        group_id,
+        summarize_winner(challenger_id, defender_id, stacks, ko=stacks.is_ko()),
+        matcher=matcher,
+        challenger_id=challenger_id,
+        defender_id=defender_id,
+        bot_mode=bot_mode,
+        challenger_is_bot=challenger_is_bot,
+        defender_is_bot=defender_is_bot,
+        speaker="neutral",
+    )
+    return stacks
