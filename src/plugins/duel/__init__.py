@@ -2,7 +2,7 @@ import re
 
 from nonebot import on_message
 from nonebot.adapters import Bot
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, permission
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageSegment, permission
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from nonebot.typing import T_State
@@ -24,10 +24,7 @@ from src.plugins.duel.duel_session import clear_duel_pair, start_duel_pair
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛决斗",
-    description=(
-        "泰拉擂台多幕对决：炎国边塞与司岁台、维多利亚蒸汽与城防、"
-        "卡兹戴尔萨卡兹与军事委员会等风味幕面随机上演，穿插干员闯入与限时抢答。"
-    ),
+    description=("泰拉风味多幕擂台，与群友或牛牛对决"),
     usage="""
 1. 发起对决
     · 发送「牛牛决斗」并 @ 一名群友或牛牛
@@ -41,7 +38,7 @@ __plugin_meta__ = PluginMetadata(
     · 全部幕数演完或一方血量归零即分胜负；
 4. 维护
     · 「决斗事件重载」热更新剧情包与干员表
-所需权限以「牛牛帮助」本插件功能详情为准（可由 WebUI「命令权限」覆盖）。
+。
     """.strip(),
     type="application",
     homepage="https://github.com/PallasBot/Pallas-Bot",
@@ -50,7 +47,7 @@ __plugin_meta__ = PluginMetadata(
         "version": "3.0.0",
         "menu_template": "default",
         "command_permissions": [
-            {"id": "duel.duel", "label": "牛牛决斗（含双牛 @）", "default": "everyone"},
+            {"id": "duel.duel", "label": "牛牛决斗", "default": "everyone"},
             {"id": "duel.cage", "label": "八角笼牛", "default": "everyone"},
             {
                 "id": "duel.reload_events",
@@ -110,8 +107,6 @@ BLOCK_LIST: list[int] = []
 
 DUEL_COOLDOWN_KEY = "duel"
 
-_AT_PATTERN = re.compile(r"\[CQ:at,qq=(\d+)\]")
-
 
 async def is_reload_duel_events(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
     if event.group_id in BLOCK_LIST:
@@ -157,8 +152,8 @@ reload_duel_events_msg = on_message(
 )
 
 
-def parse_at_qqs(raw_message: str) -> list[str]:
-    return _AT_PATTERN.findall(raw_message)
+def parse_at_qqs(event: GroupMessageEvent) -> list[str]:
+    return [str(seg.data["qq"]) for seg in event.message if seg.type == "at" and seg.data.get("qq") is not None]
 
 
 async def run_duel_match(
@@ -227,14 +222,17 @@ async def duel_bot_pair(matcher, bot: Bot, event: GroupMessageEvent, a: str, b: 
         await matcher.send("同一头牛不能左右互搏哦。")
         return
     await matcher.send(
-        Message(f"【八角笼·牛斗】[CQ:at,qq={a}] 与 [CQ:at,qq={b}] 登台。其间两头牛互可见消息，剧目台词不入复读学习。")
+        MessageSegment.text("【八角笼·牛斗】")
+        + MessageSegment.at(int(a))
+        + MessageSegment.text(" 与 ")
+        + MessageSegment.at(int(b))
+        + MessageSegment.text(" 登台。其间两头牛互可见消息，剧目台词不入复读学习。")
     )
     await run_duel_match(matcher, event, a, b, dual_bot=True)
 
 
 async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
-    raw_message = event.raw_message
-    ats = parse_at_qqs(raw_message)
+    ats = parse_at_qqs(event)
 
     if len(ats) >= 2:
         if not (is_bot_qq(ats[0]) and is_bot_qq(ats[1])):

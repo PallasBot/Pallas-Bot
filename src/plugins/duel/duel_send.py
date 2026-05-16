@@ -9,6 +9,12 @@ from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from nonebot.exception import ActionFailed
 from nonebot.matcher import Matcher  # noqa: TC002
 
+from src.plugins.duel.duel_message import (
+    append_duel_message,
+    coerce_duel_message,
+    duel_join_blocks,
+    message_has_content,
+)
 from src.plugins.duel.duel_session import register_duel_narrative_line
 
 Speaker = Literal["neutral", "challenger", "defender"]
@@ -18,7 +24,7 @@ Speaker = Literal["neutral", "challenger", "defender"]
 class RoundLineBuffer:
     """本幕剧目片段缓冲，幕末与双方数值简报合并发送。"""
 
-    parts: list[str] = field(default_factory=list)
+    parts: list[Message] = field(default_factory=list)
     send_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
@@ -64,33 +70,33 @@ def buffer_can_deliver(buf: RoundLineBuffer) -> bool:
     return all(k in buf.send_kwargs for k in required)
 
 
-def round_buffer_prepend(text: str) -> None:
+def round_buffer_prepend(chunk: str | Message) -> None:
     """将文本接到本幕缓冲首部（用于幕标与首段剧目合一）。"""
     buf = _round_buffer.get()
     if buf is None:
         return
-    chunk = text.strip()
-    if not chunk:
+    msg = coerce_duel_message(chunk)
+    if not message_has_content(msg):
         return
     if buf.parts:
-        buf.parts[0] = f"{chunk}\n{buf.parts[0]}"
+        buf.parts[0] = append_duel_message(msg, buf.parts[0], sep="\n")
     else:
-        buf.parts.append(chunk)
+        buf.parts.append(msg)
 
 
-def take_round_buffer_body() -> str:
+def take_round_buffer_body() -> Message:
     """取出并清空本幕缓冲正文（不含 send_kwargs）。"""
     buf = _round_buffer.get()
     if buf is None or not buf.parts:
-        return ""
-    body = "\n\n".join(buf.parts)
+        return Message()
+    body = duel_join_blocks(buf.parts, sep="\n\n")
     buf.parts.clear()
     return body
 
 
 async def send_duel_line_merge_buffer(
     group_id: int,
-    text: str,
+    text: str | Message,
     *,
     matcher: Matcher,
     challenger_id: str,
@@ -103,12 +109,12 @@ async def send_duel_line_merge_buffer(
 ) -> None:
     """将缓冲剧目与 text 合并为一条即时消息（紧凑幕 QTE 提示用）。"""
     prefix = take_round_buffer_body()
-    chunk = text.strip()
-    if prefix and chunk:
-        body = f"{prefix}\n\n{chunk}"
+    chunk = coerce_duel_message(text)
+    if message_has_content(prefix) and message_has_content(chunk):
+        body = append_duel_message(prefix, chunk, sep="\n\n")
     else:
-        body = prefix or chunk
-    if not body and not image_url:
+        body = chunk if message_has_content(chunk) else prefix
+    if not message_has_content(body) and not image_url:
         return
     kwargs = build_duel_deliver_kwargs(
         group_id=group_id,
@@ -128,28 +134,29 @@ async def release_round_line_buffer() -> None:
     buf = _round_buffer.get()
     if buf is None or not buf.parts or not buffer_can_deliver(buf):
         return
-    body = "\n\n".join(buf.parts)
+    body = duel_join_blocks(buf.parts, sep="\n\n")
     await deliver_duel_line(body, **buf.send_kwargs)
     buf.parts.clear()
 
 
-async def flush_round_line_buffer(suffix: str) -> None:
+async def flush_round_line_buffer(suffix: str | Message) -> None:
     """将本幕已缓冲的剧目片段与幕末结算（suffix）合并发出。"""
     buf = _round_buffer.get()
     if buf is None or not buffer_can_deliver(buf):
         return
-    if not buf.parts and not suffix.strip():
+    suffix_msg = coerce_duel_message(suffix)
+    if not buf.parts and not message_has_content(suffix_msg):
         return
-    body = "\n\n".join(buf.parts)
-    if suffix.strip():
-        body = f"{body}\n\n{suffix.strip()}" if body else suffix.strip()
+    body = duel_join_blocks(buf.parts, sep="\n\n")
+    if message_has_content(suffix_msg):
+        body = append_duel_message(body, suffix_msg, sep="\n\n") if message_has_content(body) else suffix_msg
     await deliver_duel_line(body, **buf.send_kwargs)
     buf.parts.clear()
 
 
 async def send_duel_line(
     group_id: int,
-    text: str,
+    text: str | Message,
     *,
     matcher: Matcher,
     challenger_id: str,
@@ -172,29 +179,28 @@ async def send_duel_line(
         challenger_is_bot=challenger_is_bot,
         defender_is_bot=defender_is_bot,
     )
-    chunk = text.strip()
-    if not chunk and not image_url:
+    chunk = coerce_duel_message(text)
+    if not message_has_content(chunk) and not image_url:
         return
     buf = _round_buffer.get()
     if buf is not None and not immediate and not image_url:
-        if chunk:
+        if message_has_content(chunk):
             buf.parts.append(chunk)
         buf.send_kwargs = kwargs
         return
     await deliver_duel_line(chunk, image_url=image_url, **kwargs)
 
 
-def build_duel_outbound_message(text: str, *, image_url: str | None = None) -> Message:
+def build_duel_outbound_message(body: Message, *, image_url: str | None = None) -> Message:
     """剧目正文与可选头像合并为一条群消息。"""
-    chunk = text.strip()
-    msg = Message(chunk) if chunk else Message()
+    msg = body if message_has_content(body) else Message()
     if image_url:
         msg = msg + Message(MessageSegment.image(file=image_url))
     return msg
 
 
 async def deliver_duel_line(
-    text: str,
+    text: str | Message,
     *,
     group_id: int,
     matcher: Matcher,
@@ -207,8 +213,8 @@ async def deliver_duel_line(
     image_url: str | None = None,
 ) -> None:
     """实际发群并登记复读忽略。"""
-    chunk = text.strip()
-    if chunk:
+    chunk = coerce_duel_message(text)
+    if message_has_content(chunk):
         await register_duel_narrative_line(group_id, chunk)
     outbound = build_duel_outbound_message(chunk, image_url=image_url)
     route_bot = bot_mode

@@ -8,12 +8,20 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 from nonebot.adapters import Bot, Event  # noqa: TC002
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 from nonebot.matcher import Matcher  # noqa: TC002
 from nonebot.rule import Rule
 
 from src.plugins.block import plugin_config as block_plugin_config
 from src.plugins.duel.config import plugin_config
+from src.plugins.duel.duel_message import (
+    append_duel_message,
+    duel_at,
+    duel_join_lines,
+    duel_plain,
+    duel_text,
+    message_has_content,
+)
 
 if TYPE_CHECKING:
     from src.plugins.duel.duel_round_engine import LoadedEvent
@@ -300,8 +308,18 @@ async def _run_operator_intrusion_qte(
         else:
             prelude = "一名 <P> 的干员闯入，止步场中。"
     prelude_out = format_describe(prelude, challenger_id, defender_id, intrusion_ctx)
-    card = format_describe(scene_card.strip(), challenger_id, defender_id, intrusion_ctx) if scene_card.strip() else ""
-    parts = [p for p in (round_header.strip(), card, prelude_out) if p]
+    card = (
+        format_describe(scene_card.strip(), challenger_id, defender_id, intrusion_ctx)
+        if scene_card.strip()
+        else Message()
+    )
+    parts: list[Message] = []
+    if round_header.strip():
+        parts.append(duel_plain(round_header.strip()))
+    if message_has_content(card):
+        parts.append(card)
+    if message_has_content(prelude_out):
+        parts.append(prelude_out)
 
     loop = asyncio.get_running_loop()
     fut: asyncio.Future[bool] = loop.create_future()
@@ -309,16 +327,23 @@ async def _run_operator_intrusion_qte(
     deadline = time.time() + window_sec
     _sessions[sid] = _DuelQteSession(future=fut, required_key=required_key, deadline=deadline)
 
-    extra = f"{prompt_extra}\n" if prompt_extra else ""
+    extra = duel_text(f"{prompt_extra}\n") if prompt_extra else Message()
     if plugin_config.duel_compact_round:
-        prompt = f"{extra}【辨认闯入者】请[CQ:at,qq={responder}] {window_sec}秒内发送其游戏内干员名（一字不差）。"
+        prompt = (
+            extra
+            + duel_text("【辨认闯入者】请")
+            + duel_at(responder)
+            + duel_text(f" {window_sec}秒内发送其游戏内干员名（一字不差）。")
+        )
     else:
         prompt = (
-            f"{extra}【辨认闯入者】请[CQ:at,qq={responder}]在{window_sec}秒内发送闯入者的"
-            f"「游戏内战显示名」（须完全一致，勿夹他词）。"
+            extra
+            + duel_text("【辨认闯入者】请")
+            + duel_at(responder)
+            + duel_text(f"在{window_sec}秒内发送闯入者的「游戏内战显示名」（须完全一致，勿夹他词）。")
         )
-    prelude_block = "\n".join(parts)
-    body = f"{prelude_block}\n{prompt}" if prelude_block else prompt
+    prelude_block = duel_join_lines(*parts, sep="\n") if parts else Message()
+    body = append_duel_message(prelude_block, prompt, sep="\n") if message_has_content(prelude_block) else prompt
     avatar_url = (
         str(intrusion_ctx["avatar_url"]) if spec.get("show_avatar") and intrusion_ctx.get("avatar_url") else None
     )
@@ -384,14 +409,20 @@ async def _run_operator_intrusion_qte(
                 post = "<O> 似乎松了口气，对 <B> 释放「<SK>」：\n<SKD>\n转身离去。"
         body = format_describe(post, challenger_id, defender_id, intrusion_ctx)
         if isinstance(pb, dict) and prof in pb and isinstance(pb.get(prof), list) and pb[prof]:
-            body += format_describe(
-                f"\n<O> 似乎还记着你认得{intrusion_ctx.get('profession_cn', prof)}。",
-                challenger_id,
-                defender_id,
-                intrusion_ctx,
+            body = append_duel_message(
+                body,
+                format_describe(
+                    f"\n<O> 似乎还记着你认得{intrusion_ctx.get('profession_cn', prof)}。",
+                    challenger_id,
+                    defender_id,
+                    intrusion_ctx,
+                ),
             )
         if isinstance(spb, dict) and sub_id and sub_id in spb and isinstance(spb.get(sub_id), list) and spb[sub_id]:
-            body += format_describe("\n<O> 离去前又多施了一分力。", challenger_id, defender_id, intrusion_ctx)
+            body = append_duel_message(
+                body,
+                format_describe("\n<O> 离去前又多施了一分力。", challenger_id, defender_id, intrusion_ctx),
+            )
         await send_duel_line(
             group_id,
             append_combat_delta(
@@ -429,9 +460,9 @@ async def _run_operator_intrusion_qte(
         post = str(spec.get(fail_key, "") or "").strip()
         if not post:
             post = default_intrusion_fail_post(kind, actor, is_pallas=is_pallas)
-        tail = f"[CQ:at,qq={responder}] 你没叫{required_key}的名字。"
+        tail = duel_at(responder) + duel_text(f" 你没叫{required_key}的名字。")
         body = append_combat_delta(
-            f"{tail}\n{format_describe(post, challenger_id, defender_id, intrusion_ctx)}",
+            append_duel_message(tail, format_describe(post, challenger_id, defender_id, intrusion_ctx)),
             challenger_id,
             defender_id,
             snap,
@@ -537,13 +568,19 @@ async def run_event_qte_if_any(
     deadline = time.time() + window_sec
     _sessions[sid] = _DuelQteSession(future=fut, required_key=required_key, deadline=deadline)
 
-    extra = f"{prompt_extra}\n" if prompt_extra else ""
-    head = (round_header.strip() + "\n") if round_header.strip() else ""
+    extra = duel_text(f"{prompt_extra}\n") if prompt_extra else Message()
+    head = duel_plain(round_header.strip()) if round_header.strip() else Message()
     if plugin_config.duel_compact_round:
-        prompt = f"{extra}【拆招】请[CQ:at,qq={responder}] {window_sec}秒内发「{required_key}」（纯文本）。"
+        prompt = (
+            extra
+            + duel_text("【拆招】请")
+            + duel_at(responder)
+            + duel_text(f" {window_sec}秒内发「{required_key}」（纯文本）。")
+        )
+        line = append_duel_message(head, prompt) if message_has_content(head) else prompt
         await send_duel_line_merge_buffer(
             group_id,
-            f"{head}{prompt}".lstrip(),
+            line,
             matcher=matcher,
             challenger_id=challenger_id,
             defender_id=defender_id,
@@ -552,9 +589,16 @@ async def run_event_qte_if_any(
             defender_is_bot=defender_is_bot,
         )
     else:
+        prompt = (
+            extra
+            + duel_text("请")
+            + duel_at(responder)
+            + duel_text(f"在{window_sec}秒内发送「{required_key}」完成 QTE")
+        )
+        line = append_duel_message(head, prompt) if message_has_content(head) else prompt
         await send_duel_line(
             group_id,
-            f"{head}{extra}请[CQ:at,qq={responder}]在{window_sec}秒内发送「{required_key}」完成 QTE",
+            line,
             matcher=matcher,
             challenger_id=challenger_id,
             defender_id=defender_id,
@@ -584,7 +628,7 @@ async def run_event_qte_if_any(
     if ok:
         apply_effect_dicts(stacks, on_ok, actor)
         line = append_combat_delta(
-            f"[CQ:at,qq={responder}] QTE 成功！",
+            duel_at(responder) + duel_text(" QTE 成功！"),
             challenger_id,
             defender_id,
             snap,
@@ -593,7 +637,7 @@ async def run_event_qte_if_any(
     else:
         apply_effect_dicts(stacks, on_fail, actor)
         line = append_combat_delta(
-            f"[CQ:at,qq={responder}] QTE 未达成。",
+            duel_at(responder) + duel_text(" QTE 未达成。"),
             challenger_id,
             defender_id,
             snap,

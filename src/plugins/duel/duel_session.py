@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.common.config import GroupConfig
+
+if TYPE_CHECKING:
+    from nonebot.adapters.onebot.v11 import Message
+from src.plugins.duel.duel_message import message_plain_fingerprint
 
 _PAIR_KEY = "duel_pair"
 _IGNORE_KEY = "duel_narr_ignore"
@@ -55,9 +59,9 @@ async def is_duel_paired_bot_traffic(group_id: int, sender_id: int, receiver_bot
     return sender_id in (a, b) and receiver_bot_id in (a, b) and sender_id != receiver_bot_id
 
 
-async def register_duel_narrative_line(group_id: int, text: str) -> None:
+async def register_duel_narrative_line(group_id: int, message: Message) -> None:
     """记入本群不复读学习的剧目指纹。"""
-    fp = _plain_fingerprint(text)
+    fp = message_plain_fingerprint(message)
     if not fp:
         return
     gc = GroupConfig(group_id)

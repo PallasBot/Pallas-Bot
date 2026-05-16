@@ -8,9 +8,22 @@ from pathlib import Path
 from typing import Any, Literal
 
 from nonebot import logger
+from nonebot.adapters.onebot.v11 import Message
 from nonebot.matcher import Matcher  # noqa: TC002
 
 from src.plugins.duel.config import plugin_config
+from src.plugins.duel.duel_message import (
+    append_duel_message,
+    apply_ab_placeholders,
+    coerce_duel_message,
+    duel_at,
+    duel_join_blocks,
+    duel_join_lines,
+    duel_join_spaced,
+    duel_plain,
+    duel_text,
+    message_has_content,
+)
 
 Actor = Literal["challenger", "defender"]
 PoolName = Literal["public", "challenger", "defender", "exchange"]
@@ -505,7 +518,7 @@ def format_player_stat_lines(
     *,
     hp_before: int | None = None,
     dp_before: int | None = None,
-) -> str:
+) -> Message:
     """单方 HP / DP；提供 hp_before/dp_before 时在括号内标本幕变动。"""
     hp_part = f"HP {hp}"
     if hp_before is not None:
@@ -517,10 +530,10 @@ def format_player_stat_lines(
         dp_delta = dp - dp_before
         if dp_delta != 0:
             dp_part += f" ({dp_delta:+d})"
-    return f"[CQ:at,qq={qq}] {hp_part} {dp_part}"
+    return duel_at(qq) + duel_text(f" {hp_part} {dp_part}")
 
 
-def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: int) -> str:
+def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: int) -> Message:
     """单方本段神恩/损创层变动（HP/DP 由 format_combat_delta_block 另算）。"""
     tokens: list[str] = []
     for cur, prev, label in ((buff, buff0, "神恩"), (debuff, debuff0, "损创")):
@@ -528,8 +541,8 @@ def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: 
         if t:
             tokens.append(t)
     if not tokens:
-        return ""
-    return f"[CQ:at,qq={qq}] " + " ".join(tokens)
+        return Message()
+    return duel_at(qq) + duel_text(" " + " ".join(tokens))
 
 
 def player_stat_changed(
@@ -550,9 +563,9 @@ def format_combat_delta_block(
     defender_id: str,
     before: CombatSnapshot,
     stacks: DuelStacks,
-) -> str:
+) -> Message:
     """本段数值变动：HP/DP（当前值+括号变动）、神恩/损创。"""
-    parts: list[str] = []
+    parts: list[Message] = []
     ch_changed = player_stat_changed(
         stacks.challenger_hp,
         before.challenger_hp,
@@ -612,27 +625,27 @@ def format_combat_delta_block(
                 before.defender_debuff,
             ),
         )
-        if line
+        if message_has_content(line)
     )
 
-    return " ".join(parts)
+    return duel_join_spaced(*parts)
 
 
 def append_combat_delta(
-    narrative: str,
+    narrative: str | Message,
     challenger_id: str,
     defender_id: str,
     before: CombatSnapshot,
     stacks: DuelStacks,
-) -> str:
+) -> Message:
     """在剧目文案后追加本段 HP/DP 变动（紧凑幕由幕末统一展示）。"""
+    base = coerce_duel_message(narrative)
     if plugin_config.duel_compact_round:
-        return narrative
+        return base
     delta = format_combat_delta_block(challenger_id, defender_id, before, stacks)
-    if not delta:
-        return narrative
-    body = narrative.rstrip()
-    return f"{body}\n{delta}" if body else delta
+    if not message_has_content(delta):
+        return base
+    return append_duel_message(base, delta, sep="\n")
 
 
 def format_describe(
@@ -642,9 +655,9 @@ def format_describe(
     ark: dict[str, str] | None = None,
     *,
     nums: dict[str, int] | None = None,
-) -> str:
+) -> Message:
     """替换 <A><B>、<DMG> 与干员占位符。"""
-    t = template.replace("<A>", f"[CQ:at,qq={challenger_id}]").replace("<B>", f"[CQ:at,qq={defender_id}]")
+    t = template
     if nums:
         for key, val in nums.items():
             t = t.replace(f"<{key}>", str(val))
@@ -663,7 +676,7 @@ def format_describe(
             .replace("<SKL>", ark.get("picked_skill_label", ""))
             .replace("<SKK>", ark.get("picked_skill_kind_cn", ""))
         )
-    return t
+    return apply_ab_placeholders(t, challenger_id, defender_id)
 
 
 def format_describe_with_combat(
@@ -674,7 +687,7 @@ def format_describe_with_combat(
     ark: dict[str, str] | None = None,
     *,
     nums: dict[str, int] | None = None,
-) -> str:
+) -> Message:
     """替换 HP/DP 与伤害等占位。"""
     combat_nums = {
         "AHP": stacks.challenger_hp,
@@ -705,13 +718,13 @@ def format_round_status_line(
     stacks: DuelStacks,
     *,
     round_start: CombatSnapshot | None = None,
-) -> str:
+) -> Message:
     """双方 HP/DP 简报（附在本幕 flush 末尾；round_start 用于括号标本幕变动）。"""
     hp0_a = round_start.challenger_hp if round_start else None
     dp0_a = round_start.challenger_dp if round_start else None
     hp0_b = round_start.defender_hp if round_start else None
     dp0_b = round_start.defender_dp if round_start else None
-    return "\n".join((
+    return duel_join_lines(
         format_player_stat_lines(
             challenger_id,
             stacks.challenger_hp,
@@ -726,7 +739,7 @@ def format_round_status_line(
             hp_before=hp0_b,
             dp_before=dp0_b,
         ),
-    ))
+    )
 
 
 def summarize_winner(
@@ -735,28 +748,29 @@ def summarize_winner(
     stacks: DuelStacks,
     *,
     ko: bool = False,
-) -> str:
+) -> Message:
     """终幕：以 HP 定胜负。"""
     chp, dhp = stacks.challenger_hp, stacks.defender_hp
+    head = duel_text(f"第{plugin_config.duel_total_rounds}幕终。")
     if chp <= 0 and dhp <= 0:
-        tag = "双方英雄"
-        tail = "双方力竭，同归沉寂。"
+        tag = duel_text("双方英雄")
+        tail = duel_text("双方力竭，同归沉寂。")
     elif chp <= 0:
-        tag = f"[CQ:at,qq={defender_id}]"
-        tail = "令对手力竭倒地，胜局已定。" if ko else "战芒更盛。"
+        tag = duel_at(defender_id)
+        tail = duel_text("令对手力竭倒地，胜局已定。" if ko else "战芒更盛。")
     elif dhp <= 0:
-        tag = f"[CQ:at,qq={challenger_id}]"
-        tail = "令对手力竭倒地，胜局已定。" if ko else "战芒更盛。"
+        tag = duel_at(challenger_id)
+        tail = duel_text("令对手力竭倒地，胜局已定。" if ko else "战芒更盛。")
     elif chp > dhp:
-        tag = f"[CQ:at,qq={challenger_id}]"
-        tail = "战芒更盛，双月似为其而明。"
+        tag = duel_at(challenger_id)
+        tail = duel_text("战芒更盛，双月似为其而明。")
     elif dhp > chp:
-        tag = f"[CQ:at,qq={defender_id}]"
-        tail = "战芒更盛，双月似为其而明。"
+        tag = duel_at(defender_id)
+        tail = duel_text("战芒更盛，双月似为其而明。")
     else:
-        tag = "双方英雄"
-        tail = "势均力敌，撤出擂台。"
-    return f"第{plugin_config.duel_total_rounds}幕终。{tag}{tail}"
+        tag = duel_text("双方英雄")
+        tail = duel_text("势均力敌，撤出擂台。")
+    return head + tag + tail
 
 
 def _maybe_pick_ark_ctx(ev: LoadedEvent) -> dict[str, str] | None:
@@ -1002,7 +1016,7 @@ async def play_clash_hero_events(
                 apply_event_effects(stacks, de, "defender")
                 narr.add(f"第{round_index}幕·交锋B {de.event_id}")
         else:
-            chunks: list[str] = []
+            chunks: list[Message] = []
             if ce:
                 ark_c = _maybe_pick_ark_ctx(ce)
                 snap = snapshot_combat(stacks)
@@ -1018,7 +1032,7 @@ async def play_clash_hero_events(
                 )
                 narr.add(f"第{round_index}幕·交锋A {ce.event_id}")
             else:
-                chunks.append("（攻方英雄缄口，本段无词。）")
+                chunks.append(duel_plain("（攻方英雄缄口，本段无词。）"))
             if de:
                 ark_d = _maybe_pick_ark_ctx(de)
                 snap = snapshot_combat(stacks)
@@ -1034,10 +1048,10 @@ async def play_clash_hero_events(
                 )
                 narr.add(f"第{round_index}幕·交锋B {de.event_id}")
             else:
-                chunks.append("（守方英雄缄口，本段无词。）")
+                chunks.append(duel_plain("（守方英雄缄口，本段无词。）"))
             await send_duel_line(
                 group_id,
-                "\n\n".join(chunks),
+                duel_join_blocks(chunks, sep="\n\n"),
                 matcher=matcher,
                 challenger_id=challenger_id,
                 defender_id=defender_id,
@@ -1152,9 +1166,15 @@ async def play_duel_rounds(
     stacks = DuelStacks()
     plan = run_round_plan()
     narr = DuelNarrativeLog()
-    opener = f"擂台灯光压暗。[CQ:at,qq={challenger_id}] 与 [CQ:at,qq={defender_id}] 步入场心，对决开始。"
+    opener = (
+        duel_text("擂台灯光压暗。")
+        + duel_at(challenger_id)
+        + duel_text(" 与 ")
+        + duel_at(defender_id)
+        + duel_text(" 步入场心，对决开始。")
+    )
     if bot_mode:
-        opener = "【牛斗】两头牛牛踏入光圈，刃鸣作响。\n" + opener
+        opener = append_duel_message(duel_plain("【牛斗】两头牛牛踏入光圈，刃鸣作响。"), opener)
     await send_duel_line(
         group_id,
         opener,
@@ -1219,9 +1239,10 @@ async def play_duel_rounds(
                         snap = snapshot_combat(stacks)
                         apply_event_effects(stacks, ev, "challenger")
                         line = append_combat_delta(
-                            hdr
-                            + "\n"
-                            + format_describe_with_combat(ev.describe, challenger_id, defender_id, stacks, ark),
+                            duel_join_lines(
+                                hdr,
+                                format_describe_with_combat(ev.describe, challenger_id, defender_id, stacks, ark),
+                            ),
                             challenger_id,
                             defender_id,
                             snap,
