@@ -1,0 +1,46 @@
+[
+  {
+    "_本文件": "示范 public 池（歌咏场）。examples/ 不会被引擎加载；复制到 default/public.json 时请删除所有以 _ 开头的键。",
+    "_id": "必填。事件唯一英文标识，建议前缀 public_",
+    "id": "example_public_field",
+    "_weight": "整数权重，越大越容易被抽到",
+    "weight": 8,
+    "_describe": "主文案；支持 <A><B><场> 等，见 event_packs/README.md",
+    "describe": "源石粉尘混夜雾涌上台面，能见度骤降。",
+    "_effects": "效果数组；type 见 README",
+    "effects": [{ "type": "add_field", "value": 1 }]
+  },
+  {
+    "_本事件": "干员乱入完整字段示范（权重宜低）",
+    "id": "example_public_ark_intrusion",
+    "weight": 3,
+    "describe": "有人猛地闯入决斗场！",
+    "effects": [],
+    "qte": {
+      "type": "operator_intrusion",
+      "target": "challenger",
+      "window_sec": 14,
+      "prompt": "",
+      "show_avatar": true,
+      "intrusion_prelude": "一名 <P> 的干员闯入，止步场中。",
+      "after_success_describe": "<O> 似乎松了口气，对 <B> 释放「<SK>」：\n<SKD>\n转身离去。",
+      "after_fail_describe": "<O> 似乎极为恼火，对 <A> 释放「<SK>」：\n<SKD>\n头也不回地走了。",
+      "after_fail_describe_heal": "<O> 似乎极为恼火——本想拿认错的人出气，却把「<SK>」施在了 <B> 身上：\n<SKD>\n甩袖离去。",
+      "on_success_effects_heal": [
+        { "type": "heal_hp", "target": "challenger", "value": 2 }
+      ],
+      "on_success_effects_attack": [
+        { "type": "deal_damage", "target": "defender", "value": 3 }
+      ],
+      "on_success_effects_neutral": [{ "type": "add_field", "value": 1 }],
+      "on_success_effects": [],
+      "on_fail_effects": [{ "type": "deal_damage", "target": "challenger", "value": 3 }],
+      "profession_bonus": {
+        "MEDIC": [{ "type": "heal_hp", "target": "challenger", "value": 1 }]
+      },
+      "sub_profession_bonus": {
+        "physician": [{ "type": "add_self_buff", "target": "challenger", "value": 1 }]
+      }
+    }
+  }
+]

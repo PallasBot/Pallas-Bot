@@ -1,0 +1,34 @@
+[
+  {
+    "_本文件": "示范 challenger / defender 池。actor=本幕行动方。复制到 default 时删除 _ 键。",
+    "id": "example_ch_terrain",
+    "weight": 6,
+    "describe": "<A>踩住凸起的源石岩脊抢位，碎石在靴底打滑。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 1 },
+      { "type": "add_field", "value": 1 }
+    ]
+  },
+  {
+    "_本事件": "关键词 QTE（勿与 operator_intrusion 混用）",
+    "id": "example_ch_keyword_qte",
+    "weight": 4,
+    "describe": "<A>将武器横于胸前，锐势未收——下一瞬定生死。",
+    "effects": [{ "type": "add_self_buff", "target": "actor", "value": 1 }],
+    "qte": {
+      "target": "actor",
+      "keys": ["格挡", "盾反", "看破"],
+      "window_sec": 10,
+      "prompt": "（锐势未收！）",
+      "on_success_effects": [{ "type": "add_self_buff", "target": "actor", "value": 1 }],
+      "on_fail_effects": [{ "type": "add_self_debuff", "target": "actor", "value": 1 }]
+    }
+  },
+  {
+    "_本事件": "守方示例；复制到 defender.json 时改 id 前缀为 df_",
+    "id": "example_df_guard",
+    "weight": 8,
+    "describe": "<B>把重心沉进脚底，米诺斯式的誓言像钉在岩层里。",
+    "effects": [{ "type": "add_self_buff", "target": "actor", "value": 1 }]
+  }
+]

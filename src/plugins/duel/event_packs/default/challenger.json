@@ -1,0 +1,184 @@
+[
+  {
+    "id": "ch_press",
+    "weight": 10,
+    "describe": "<A>踏前压位，声线盖过风声，像米诺斯战士在阵列前点名。",
+    "effects": [{ "type": "add_self_buff", "target": "actor", "value": 1 }]
+  },
+  {
+    "id": "ch_feint",
+    "weight": 9,
+    "describe": "<A>以假刃诱敌，<B> 的重心被带偏半拍。",
+    "effects": [{ "type": "add_self_debuff", "target": "defender", "value": 1 }]
+  },
+  {
+    "id": "ch_overextend",
+    "weight": 7,
+    "describe": "<A>战意过盛，险些踏出安全线——裁判的哨声已经举起。",
+    "effects": [{ "type": "add_self_debuff", "target": "actor", "value": 1 }]
+  },
+  {
+    "id": "ch_terrain",
+    "weight": 6,
+    "describe": "<A>踩住一块凸起的源石岩脊抢位，碎石在靴底打滑。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 1 },
+      { "type": "add_field", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_rally",
+    "weight": 8,
+    "describe": "<A>退半步重整呼吸，再进时眼神亮了一档，护具卡扣重新扣紧。",
+    "effects": [{ "type": "add_self_buff", "target": "actor", "value": 2 }]
+  },
+  {
+    "id": "ch_harry",
+    "weight": 8,
+    "describe": "<A>以连珠话术缠住 <B>，对手每接一句都被打断半拍。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 1 },
+      { "type": "add_self_debuff", "target": "defender", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_arts_flare",
+    "weight": 7,
+    "describe": "<A>刃尖挑起一缕源石技艺，短促的光弧逼 <B> 后撤。",
+    "effects": [
+      { "type": "deal_damage", "target": "defender", "value": 1 },
+      { "type": "add_self_buff", "target": "actor", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_charge",
+    "weight": 7,
+    "describe": "<A>肩盾冲锋，<B> 被迫后退，尘线被推开三尺。",
+    "effects": [
+      { "type": "deal_damage", "target": "defender", "value": 2 },
+      { "type": "add_self_buff", "target": "actor", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_smoke_grenade",
+    "weight": 6,
+    "describe": "<A>掷出源石烟雾弹，视野里只剩彼此的轮廓。",
+    "effects": [
+      { "type": "add_field", "value": 1 },
+      { "type": "add_self_debuff", "target": "defender", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_reckless",
+    "weight": 5,
+    "describe": "<A>以伤换势抢攻，<B> 退后半步，自己空门也敞开了一瞬。",
+    "effects": [
+      { "type": "deal_damage", "target": "defender", "value": 2 },
+      { "type": "add_self_debuff", "target": "actor", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_sniper_mark",
+    "weight": 6,
+    "describe": "<A>抬手打出标记弹，下一击的落点已被锁死。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 2 },
+      { "type": "add_self_debuff", "target": "defender", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_vanguard_call",
+    "weight": 6,
+    "describe": "<A>以先锋号令切断 <B> 的节奏，像把战场按下暂停键。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 1 },
+      { "type": "add_dp", "target": "actor", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_yan_salute",
+    "weight": 6,
+    "describe": "<A>以炎国江湖礼抱拳致意，声线稳得像百灶城里的讼师在堂前落子。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 1 },
+      { "type": "add_dp", "target": "actor", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_sarkaz_blood_pledge",
+    "weight": 5,
+    "describe": "<A>划破掌缘以血立誓，卡兹戴尔式的战意让 <B> 下意识后撤半步。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 2 },
+      { "type": "add_self_debuff", "target": "actor", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_victoria_charge",
+    "weight": 6,
+    "describe": "<A>肩线压低如维多利亚先锋冲锋，靴底踏出的节奏像蒸汽活塞在推进。",
+    "effects": [
+      { "type": "deal_damage", "target": "defender", "value": 1 },
+      { "type": "add_self_buff", "target": "actor", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_kazimierz_duelist",
+    "weight": 6,
+    "describe": "<A>如焰尾骑士般突进，枪尖画圆封死 <B> 的退路。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 1 },
+      { "type": "add_self_debuff", "target": "defender", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_leithanien_tempo",
+    "weight": 5,
+    "describe": "<A>以烛骑士般的节拍牵引战局，言语束入剑刃，每一击都像踩在强拍上。",
+    "effects": [
+      { "type": "deal_damage", "target": "defender", "value": 1 },
+      { "type": "add_dp", "target": "actor", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_ursus_winter_will",
+    "weight": 6,
+    "describe": "<A>乌萨斯式的沉默压下来，下一记劈砍带着冻原的狠劲。",
+    "effects": [
+      { "type": "deal_damage", "target": "defender", "value": 2 },
+      { "type": "add_self_buff", "target": "actor", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_siracusa_smile",
+    "weight": 5,
+    "describe": "<A>叙拉古式的微笑未达眼底——家族浪潮里，刀已到 <B> 喉前三寸。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 1 },
+      { "type": "add_self_debuff", "target": "defender", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_sargon_sand_step",
+    "weight": 5,
+    "describe": "<A>踏萨尔贡沙步换位，像在发掘被黄沙掩埋的过往，<B> 的瞄准线落了空。",
+    "effects": [
+      { "type": "add_self_buff", "target": "actor", "value": 2 },
+      { "type": "add_field", "value": 1 }
+    ]
+  },
+  {
+    "id": "ch_qte_demo",
+    "weight": 4,
+    "describe": "<A>将武器横于胸前，锐势未收——下一瞬定生死。",
+    "effects": [{ "type": "add_self_buff", "target": "actor", "value": 1 }],
+    "qte": {
+      "target": "actor",
+      "keys": ["格挡", "盾反", "看破"],
+      "window_sec": 10,
+      "prompt": "（锐势未收！）",
+      "on_success_effects": [{ "type": "add_self_buff", "target": "actor", "value": 1 }],
+      "on_fail_effects": [{ "type": "add_self_debuff", "target": "actor", "value": 1 }]
+    }
+  }
+]
