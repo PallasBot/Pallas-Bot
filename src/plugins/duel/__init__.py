@@ -17,6 +17,7 @@ from src.plugins.duel.duel_bots import (
     parse_duel_at_qqs,
     pick_random_duel_bot_pair,
     raw_message_has_at,
+    resolve_duel_round_count,
 )
 from src.plugins.duel.duel_penalty import apply_duel_penalties
 from src.plugins.duel.duel_qte import complete_duel_qte, duel_qte_exact_rule
@@ -35,8 +36,8 @@ __plugin_meta__ = PluginMetadata(
     description=("泰拉风味多幕擂台，与群友或牛牛对决"),
     usage="""
 1. 发起对决
-    · 发送「牛牛决斗」并 @ 一名群友或牛牛
-    · 双牛：「牛牛决斗」@ 两只牛牛；或发送「八角笼牛」随机抽两只在线牛牛
+    · 发送「牛牛决斗」并 @ 一名群友或牛牛；可选在末尾写「N幕」或「N回合」指定本局幕数（不写则用默认）
+    · 双牛：「牛牛决斗」@ 两只牛牛，同样可加幕数；或发送「八角笼牛」随机抽两只在线牛牛
 2. 对战过程
     · 双方各有生命值
     · 部分幕面限时抢答：按提示发送干员全名或关键词；答对、答错、超时或乱入认错都会改血
@@ -67,18 +68,23 @@ __plugin_meta__ = PluginMetadata(
             {
                 "func": "牛牛决斗",
                 "trigger_method": "on_message",
-                "trigger_condition": "牛牛决斗 @一名对手",
+                "trigger_condition": "牛牛决斗 @一名对手 [N幕|N回合]",
                 "command_permission": "duel.duel",
                 "brief_des": "泰拉风味多幕擂台，与群友或牛牛对决",
-                "detail_des": ("挑战者 @ 一名决斗者即可开战，按终局血量判胜负，一方可先被 KO。"),
+                "detail_des": (
+                    "挑战者 @ 一名决斗者即可开战；可在指令中带「N幕」或「N回合」（如 牛牛决斗 @对手 7幕），"
+                    "不写幕数则使用插件默认场数；按终局血量判胜负，一方可先被 KO。"
+                ),
             },
             {
                 "func": "双牛决斗",
                 "trigger_method": "on_message",
-                "trigger_condition": "牛牛决斗 @牛A @牛B",
+                "trigger_condition": "牛牛决斗 @牛A @牛B [N幕|N回合]",
                 "command_permission": "duel.duel",
                 "brief_des": "指定两只牛牛同台对决",
-                "detail_des": ("两名被 @ 者须均为牛牛账号，规则与单人决斗相同。对战期间两头牛在本群互可见消息。"),
+                "detail_des": (
+                    "两名被 @ 者须均为牛牛账号，规则与单人决斗相同，可附带 N幕/N回合；对战期间两头牛在本群互可见消息。"
+                ),
             },
             {
                 "func": "八角笼牛",
@@ -200,6 +206,7 @@ async def run_duel_match(
     *,
     dual_bot: bool = False,
     command_gate: str | None = None,  # "ok"：入口已 begin_duel_command
+    total_rounds: int | None = None,
 ) -> None:
     """开团：群级占用与指令 CD（多 Bot 共用）；command_gate=ok 表示入口已抢占。"""
     if not duel_handler_is_narrator(event, challenger_id, defender_id, dual_bot=dual_bot):
@@ -235,6 +242,7 @@ async def run_duel_match(
             bot_mode=bot_mode,
             challenger_is_bot=challenger_is_bot,
             defender_is_bot=defender_is_bot,
+            total_rounds=total_rounds,
         )
     finally:
         end_duel_group(event.group_id)
@@ -259,9 +267,17 @@ async def run_duel_match(
     )
 
 
-async def duel_bot_pair(matcher, bot: Bot, event: GroupMessageEvent, a: str, b: str) -> None:
+async def duel_bot_pair(
+    matcher,
+    bot: Bot,
+    event: GroupMessageEvent,
+    a: str,
+    b: str,
+    *,
+    total_rounds: int | None = None,
+) -> None:
     if a == b:
-        await send_duel_user_reply(matcher, event.group_id, "同一头牛不能左右互搏哦。")
+        await send_duel_user_reply(matcher, event.group_id, "博士，我就是我自己啊")
         return
     if not duel_handler_is_narrator(event, a, b, dual_bot=True):
         return
@@ -272,10 +288,24 @@ async def duel_bot_pair(matcher, bot: Bot, event: GroupMessageEvent, a: str, b: 
     if gate == "cooldown":
         return
     await matcher.send(duel_fight_start_message(a, b))
-    await run_duel_match(matcher, bot, event, a, b, dual_bot=True, command_gate="ok")
+    await run_duel_match(
+        matcher,
+        bot,
+        event,
+        a,
+        b,
+        dual_bot=True,
+        command_gate="ok",
+        total_rounds=total_rounds,
+    )
 
 
 async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
+    total_rounds, round_err = resolve_duel_round_count(event)
+    if round_err:
+        await send_duel_user_reply(matcher, event.group_id, round_err)
+        return
+
     ats = parse_duel_at_qqs(event)
     if len(ats) == 0:
         inferred = infer_duel_defender_when_at_self_hidden(event)
@@ -290,7 +320,7 @@ async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> N
                 "双 @ 决斗仅支持两名牛牛；人类请 @ 一名对手。",
             )
             return
-        await duel_bot_pair(matcher, bot, event, ats[0], ats[1])
+        await duel_bot_pair(matcher, bot, event, ats[0], ats[1], total_rounds=total_rounds)
         return
 
     if len(ats) == 0:
@@ -315,7 +345,7 @@ async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> N
     if not duel_handler_is_narrator(event, challenger, defender, dual_bot=False):
         return
 
-    await run_duel_match(matcher, bot, event, challenger, defender)
+    await run_duel_match(matcher, bot, event, challenger, defender, total_rounds=total_rounds)
 
 
 @duel_msg.handle()

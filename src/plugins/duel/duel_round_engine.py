@@ -171,13 +171,18 @@ def _event_pack_dir() -> Path:
     return Path(__file__).resolve().parent / "event_packs" / "default"
 
 
-def _pick_weighted(events: list[LoadedEvent], *, qte_mult: float = 1.0) -> LoadedEvent | None:
-    """按 weight 加权随机；带 qte 的事件可乘 qte_mult 提权。"""
+def _pick_weighted(
+    events: list[LoadedEvent],
+    *,
+    qte_mult: float = 1.0,
+    weight_mult: float = 1.0,
+) -> LoadedEvent | None:
+    """按 weight 加权随机；带 qte 的事件可乘 qte_mult，全池可乘 weight_mult。"""
     if not events:
         return None
 
     def eff_weight(e: LoadedEvent) -> int:
-        w = max(0, e.weight)
+        w = max(0, int(e.weight * weight_mult))
         if qte_mult > 1.0 and e.qte:
             return int(w * qte_mult)
         return w
@@ -752,10 +757,10 @@ def format_describe_with_combat(
     return format_describe(template, challenger_id, defender_id, ark, nums=combat_nums)
 
 
-def run_round_plan() -> list[Literal["public", "clash"]]:
-    """生成公共/交锋幕序列（长度见 duel_total_rounds）。"""
+def run_round_plan(total_rounds: int) -> list[Literal["public", "clash"]]:
+    """生成公共/交锋幕序列。"""
     plan: list[Literal["public", "clash"]] = []
-    for _ in range(plugin_config.duel_total_rounds):
+    for _ in range(total_rounds):
         if random.random() < plugin_config.duel_public_round_weight:
             plan.append("public")
         else:
@@ -798,11 +803,12 @@ def summarize_winner(
     defender_id: str,
     stacks: DuelStacks,
     *,
+    total_rounds: int,
     ko: bool = False,
 ) -> Message:
     """终幕：以 HP 定胜负。"""
     chp, dhp = stacks.challenger_hp, stacks.defender_hp
-    head = duel_text(f"第{plugin_config.duel_total_rounds}幕终。")
+    head = duel_text(f"第{total_rounds}幕终。")
     if chp <= 0 and dhp <= 0:
         tag = duel_text("双方英雄")
         tail = duel_text("双方力竭，同归沉寂。")
@@ -838,7 +844,7 @@ def _maybe_pick_ark_ctx(ev: LoadedEvent) -> dict[str, str] | None:
     if ev.event_id == "public_pallas_intrusion":
         op = find_operator_by_name(PALLAS_OPERATOR_NAME)
     else:
-        op = pick_operator_for_intrusion()
+        op = pick_operator_for_intrusion(pallas_chance=plugin_config.duel_intrusion_pallas_roll_chance)
     if not op:
         return None
     return build_intrusion_ctx(op)
@@ -932,6 +938,23 @@ async def run_exchange_bout(
 
 def _is_operator_intrusion(ev: LoadedEvent | None) -> bool:
     return bool(ev and ev.qte and ev.qte.get("type") == "operator_intrusion")
+
+
+def pick_public_round_event(public_pool: list[LoadedEvent]) -> LoadedEvent | None:
+    """歌咏场：先按配置掷乱入概率，否则在泰拉公共池中加权抽取。"""
+    if not public_pool:
+        return None
+    intrusion = [e for e in public_pool if _is_operator_intrusion(e)]
+    terra = [e for e in public_pool if not _is_operator_intrusion(e)]
+    if intrusion and random.random() < plugin_config.duel_operator_intrusion_chance:
+        return _pick_weighted(intrusion)
+    if terra:
+        return _pick_weighted(
+            terra,
+            qte_mult=plugin_config.duel_qte_event_weight_mult,
+            weight_mult=plugin_config.duel_public_terra_weight_mult,
+        )
+    return _pick_weighted(intrusion)
 
 
 async def _play_clash_side(
@@ -1207,6 +1230,7 @@ async def play_duel_rounds(
     challenger_is_bot: bool = False,
     defender_is_bot: bool = False,
     round_pause_sec: tuple[float, float] | None = None,
+    total_rounds: int | None = None,
 ) -> DuelStacks | None:
     """主流程：开演说明 → 若干幕 → 终幕。干员乱入事件的顶层 effects 不生效，请写在 qte 的 on_*_effects。"""
     from src.plugins.duel.duel_qte import run_event_qte_if_any
@@ -1231,7 +1255,8 @@ async def play_duel_rounds(
     labels_token = bind_duel_labels(labels)
 
     stacks = DuelStacks()
-    plan = run_round_plan()
+    rounds = total_rounds if total_rounds is not None else plugin_config.duel_total_rounds
+    plan = run_round_plan(rounds)
     narr = DuelNarrativeLog()
     try:
         opener = (
@@ -1276,11 +1301,10 @@ async def play_duel_rounds(
             )
             try:
                 round_start = snapshot_combat(stacks)
-                total_rounds = plugin_config.duel_total_rounds
-                hdr = f"第{i}/{total_rounds}幕 · "
+                hdr = f"第{i}/{rounds}幕 · "
                 if kind == "public":
                     hdr += "歌咏场"
-                    ev = _pick_weighted(pools["public"], qte_mult=plugin_config.duel_qte_event_weight_mult)
+                    ev = pick_public_round_event(pools["public"])
                     if ev:
                         ark = _maybe_pick_ark_ctx(ev)
                         is_intrusion = bool(ev.qte and ev.qte.get("type") == "operator_intrusion")
@@ -1417,7 +1441,7 @@ async def play_duel_rounds(
         await asyncio.sleep(random.uniform(pause_lo, pause_hi))
         await send_duel_line(
             group_id,
-            summarize_winner(challenger_id, defender_id, stacks, ko=stacks.is_ko()),
+            summarize_winner(challenger_id, defender_id, stacks, total_rounds=rounds, ko=stacks.is_ko()),
             matcher=matcher,
             challenger_id=challenger_id,
             defender_id=defender_id,

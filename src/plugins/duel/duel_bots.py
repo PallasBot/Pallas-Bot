@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
 
 _AT_CQ_RE = re.compile(r"\[CQ:at,qq=(\d+)")
+_ROUND_COUNT_RE = re.compile(r"(\d{1,2})\s*(?:幕|回合)")
 
 
 async def list_group_online_bot_ids(group_id: int) -> list[int]:
@@ -61,6 +62,28 @@ def duel_narrator_bot_id(challenger_id: str, defender_id: str, *, dual_bot: bool
     if is_bot_qq(challenger_id):
         return int(challenger_id)
     return None
+
+
+def parse_duel_round_count_from_text(text: str) -> int | None:
+    """从纯文本解析「N幕」「N回合」；未写则 None。"""
+    m = _ROUND_COUNT_RE.search(text.strip())
+    if not m:
+        return None
+    return int(m.group(1))
+
+
+def resolve_duel_round_count(event: GroupMessageEvent) -> tuple[int, str | None]:
+    """(本局幕数, 错误提示)；未指定幕数时用配置默认。"""
+    from src.plugins.duel.config import plugin_config
+
+    specified = parse_duel_round_count_from_text(event.get_plaintext())
+    if specified is None:
+        return plugin_config.duel_total_rounds, None
+    lo = 1
+    hi = plugin_config.duel_player_rounds_max
+    if specified < lo or specified > hi:
+        return plugin_config.duel_total_rounds, f"博士，我只能组织{lo}～{hi} 幕的决斗"
+    return specified, None
 
 
 def parse_duel_at_qqs(event: GroupMessageEvent) -> list[str]:

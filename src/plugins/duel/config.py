@@ -78,21 +78,45 @@ class Config(BaseModel, extra="ignore"):
         default=5,
         ge=1,
         le=20,
-        description="单场决斗总幕数（歌咏/交锋随机序列长度）。",
+        description="单场决斗默认总幕数（指令未写 X幕/X回合 时使用）。",
+    )
+    duel_player_rounds_max: int = Field(
+        default=20,
+        ge=1,
+        le=20,
+        description="玩家指令「牛牛决斗 … N幕」可指定的幕数上限。",
     )
 
     # —— 事件与 QTE 权重 ——
     duel_public_round_weight: float = Field(
-        default=0.28,
+        default=0.32,
         ge=0.0,
         le=1.0,
-        description="每一幕抽中「公共场/使者」的概率；0 表示几乎不抽公共幕。",
+        description="每一幕抽中「歌咏场/泰拉公共」的概率；0 表示几乎不抽公共幕。",
+    )
+    duel_public_terra_weight_mult: float = Field(
+        default=1.5,
+        ge=0.1,
+        le=10.0,
+        description="歌咏场内泰拉公共事件（非乱入）权重倍率，相对 JSON weight 再抬高。",
+    )
+    duel_operator_intrusion_chance: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="进入歌咏场后，本幕改为干员乱入的概率（与泰拉公共互斥分支）。",
+    )
+    duel_intrusion_pallas_roll_chance: float = Field(
+        default=0.06,
+        ge=0.0,
+        le=1.0,
+        description="乱入事件 public_ark_intrusion 中，随机抽中帕拉斯而非其他干员的概率。",
     )
     duel_qte_event_weight_mult: float = Field(
         default=1.6,
         ge=0.1,
         le=10.0,
-        description="带 QTE 事件在池中的权重倍率，越大越容易抽到乱入或拆招幕。",
+        description="交锋/兵刃等池中「关键词 QTE」事件的权重倍率（不含歌咏乱入）。",
     )
     duel_exchange_qte_chance: float = Field(
         default=0.32,
