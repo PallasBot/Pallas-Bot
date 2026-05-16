@@ -6,7 +6,7 @@ import random
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from nonebot import logger
 from nonebot.adapters import Bot  # noqa: TC002
@@ -28,6 +28,9 @@ from src.plugins.duel.duel_message import (
     duel_text,
     message_has_content,
 )
+
+if TYPE_CHECKING:
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent
 
 Actor = Literal["challenger", "defender"]
 PoolName = Literal["public", "challenger", "defender", "exchange"]
@@ -105,10 +108,28 @@ class LoadedEvent:
 
 _duel_busy_groups: set[int] = set()
 _duel_user_reply_until: dict[int, float] = {}
+_duel_message_claim: dict[tuple[int, int], int] = {}
+_duel_claim_lock = asyncio.Lock()
 
 DUEL_GROUP_COOLDOWN_KEY = "duel"
 DUEL_USER_REPLY_TTL_SEC = 3.0
 DuelCommandGate = Literal["ok", "busy", "cooldown"]
+
+
+async def try_claim_duel_message(event: GroupMessageEvent) -> bool:
+    """同一条群消息仅一只牛走完整指令处理（人 vs 人等无固定主持牛时）。"""
+    key = (event.group_id, int(event.message_id))
+    bot_id = int(event.self_id)
+    async with _duel_claim_lock:
+        owner = _duel_message_claim.get(key)
+        if owner is None:
+            _duel_message_claim[key] = bot_id
+            if len(_duel_message_claim) > 400:
+                drop = list(_duel_message_claim.keys())[:200]
+                for k in drop:
+                    _duel_message_claim.pop(k, None)
+            return True
+        return owner == bot_id
 
 
 def try_claim_duel_user_reply(group_id: int, *, ttl_sec: float | None = None) -> bool:

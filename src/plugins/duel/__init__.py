@@ -10,7 +10,14 @@ from nonebot.typing import T_State
 from src.common.cmd_perm import group_message_permission_for_command
 from src.plugins.duel import duel_penalty  # noqa: F401 — 注册惩罚消息 matcher
 from src.plugins.duel.config import plugin_config
-from src.plugins.duel.duel_bots import is_bot_qq, pick_random_duel_bot_pair
+from src.plugins.duel.duel_bots import (
+    duel_narrator_bot_id,
+    infer_duel_defender_when_at_self_hidden,
+    is_bot_qq,
+    parse_duel_at_qqs,
+    pick_random_duel_bot_pair,
+    raw_message_has_at,
+)
 from src.plugins.duel.duel_penalty import apply_duel_penalties
 from src.plugins.duel.duel_qte import complete_duel_qte, duel_qte_exact_rule
 from src.plugins.duel.duel_round_engine import (
@@ -18,6 +25,7 @@ from src.plugins.duel.duel_round_engine import (
     end_duel_group,
     play_duel_rounds,
     reload_event_pools,
+    try_claim_duel_message,
     try_claim_duel_user_reply,
 )
 from src.plugins.duel.duel_session import clear_duel_pair, start_duel_pair
@@ -155,10 +163,6 @@ reload_duel_events_msg = on_message(
 )
 
 
-def parse_at_qqs(event: GroupMessageEvent) -> list[str]:
-    return [str(seg.data["qq"]) for seg in event.message if seg.type == "at" and seg.data.get("qq") is not None]
-
-
 async def send_duel_user_reply(matcher, group_id: int, message: str | Message) -> None:
     if not try_claim_duel_user_reply(group_id):
         return
@@ -175,6 +179,18 @@ def duel_fight_start_message(a: str, b: str) -> Message:
     )
 
 
+def duel_handler_is_narrator(
+    event: GroupMessageEvent,
+    challenger_id: str,
+    defender_id: str,
+    *,
+    dual_bot: bool,
+) -> bool:
+    """非主持牛不抢跑开团、不发幕。"""
+    narrator = duel_narrator_bot_id(challenger_id, defender_id, dual_bot=dual_bot)
+    return narrator is None or int(event.self_id) == narrator
+
+
 async def run_duel_match(
     matcher,
     bot: Bot,
@@ -186,6 +202,12 @@ async def run_duel_match(
     command_gate: str | None = None,  # "ok"：入口已 begin_duel_command
 ) -> None:
     """开团：群级占用与指令 CD（多 Bot 共用）；command_gate=ok 表示入口已抢占。"""
+    if not duel_handler_is_narrator(event, challenger_id, defender_id, dual_bot=dual_bot):
+        return
+    if duel_narrator_bot_id(challenger_id, defender_id, dual_bot=dual_bot) is None:
+        if not await try_claim_duel_message(event):
+            return
+
     challenger_is_bot = is_bot_qq(challenger_id)
     defender_is_bot = is_bot_qq(defender_id)
     bot_mode = dual_bot or (challenger_is_bot and defender_is_bot)
@@ -241,6 +263,8 @@ async def duel_bot_pair(matcher, bot: Bot, event: GroupMessageEvent, a: str, b: 
     if a == b:
         await send_duel_user_reply(matcher, event.group_id, "同一头牛不能左右互搏哦。")
         return
+    if not duel_handler_is_narrator(event, a, b, dual_bot=True):
+        return
     gate = await begin_duel_command(event.group_id)
     if gate == "busy":
         await send_duel_user_reply(matcher, event.group_id, "此群台上正有决斗未散，且待战歌落幕。")
@@ -252,7 +276,11 @@ async def duel_bot_pair(matcher, bot: Bot, event: GroupMessageEvent, a: str, b: 
 
 
 async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
-    ats = parse_at_qqs(event)
+    ats = parse_duel_at_qqs(event)
+    if len(ats) == 0:
+        inferred = infer_duel_defender_when_at_self_hidden(event)
+        if inferred:
+            ats = [inferred]
 
     if len(ats) >= 2:
         if not (is_bot_qq(ats[0]) and is_bot_qq(ats[1])):
@@ -266,6 +294,10 @@ async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> N
         return
 
     if len(ats) == 0:
+        if raw_message_has_at(event):
+            return
+        if not await try_claim_duel_message(event):
+            return
         await send_duel_user_reply(matcher, event.group_id, "台上还缺一位对手，无法开演。")
         return
 
@@ -280,6 +312,9 @@ async def duel(matcher, bot: Bot, event: GroupMessageEvent, state: T_State) -> N
         await send_duel_user_reply(matcher, event.group_id, "左脚踩右脚也不能上天哦。")
         return
 
+    if not duel_handler_is_narrator(event, challenger, defender, dual_bot=False):
+        return
+
     await run_duel_match(matcher, bot, event, challenger, defender)
 
 
@@ -291,6 +326,8 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
 @cage_msg.handle()
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
     if event.group_id in BLOCK_LIST:
+        return
+    if not await try_claim_duel_message(event):
         return
     gate = await begin_duel_command(event.group_id)
     if gate == "busy":

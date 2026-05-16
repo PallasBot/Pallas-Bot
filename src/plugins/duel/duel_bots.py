@@ -1,12 +1,19 @@
-"""群内在线牛牛探测。"""
+"""群内在线牛牛探测与决斗入口解析。"""
 
 from __future__ import annotations
 
 import random
+import re
+from typing import TYPE_CHECKING
 
 from nonebot import get_bots
 
 from src.plugins.block import plugin_config
+
+if TYPE_CHECKING:
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent
+
+_AT_CQ_RE = re.compile(r"\[CQ:at,qq=(\d+)")
 
 
 async def list_group_online_bot_ids(group_id: int) -> list[int]:
@@ -43,3 +50,56 @@ def is_bot_qq(qq: str) -> bool:
         return int(qq) in plugin_config.bots
     except ValueError:
         return False
+
+
+def duel_narrator_bot_id(challenger_id: str, defender_id: str, *, dual_bot: bool) -> int | None:
+    """应由哪只牛主持发幕；人 vs 人 返回 None，由消息抢占决定。"""
+    if dual_bot:
+        return min(int(challenger_id), int(defender_id))
+    if is_bot_qq(defender_id):
+        return int(defender_id)
+    if is_bot_qq(challenger_id):
+        return int(challenger_id)
+    return None
+
+
+def parse_duel_at_qqs(event: GroupMessageEvent) -> list[str]:
+    """解析 @ 列表；合并 message 段与 raw CQ，去重保序。"""
+    qqs: list[str] = []
+    seen: set[str] = set()
+    for seg in event.message:
+        if seg.type != "at":
+            continue
+        qq = seg.data.get("qq")
+        if qq is None:
+            continue
+        s = str(qq)
+        if s == "all" or s in seen:
+            continue
+        seen.add(s)
+        qqs.append(s)
+    raw = getattr(event, "raw_message", None) or ""
+    if raw:
+        for m in _AT_CQ_RE.finditer(raw):
+            s = m.group(1)
+            if s != "all" and s not in seen:
+                seen.add(s)
+                qqs.append(s)
+    return qqs
+
+
+def raw_message_has_at(event: GroupMessageEvent) -> bool:
+    """raw 中是否含 @（本牛看不到 message.at 时用于避免误报缺对手）。"""
+    raw = getattr(event, "raw_message", None) or ""
+    return bool(_AT_CQ_RE.search(raw))
+
+
+def infer_duel_defender_when_at_self_hidden(event: GroupMessageEvent) -> str | None:
+    """被 @ 的本牛有时收不到 at 段；raw 里仍有 CQ 时补全为防守方。"""
+    self_id = str(event.self_id)
+    if not is_bot_qq(self_id):
+        return None
+    raw = getattr(event, "raw_message", None) or ""
+    if f"[CQ:at,qq={self_id}" in raw or f"at,qq={self_id}" in raw:
+        return self_id
+    return None
