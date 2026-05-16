@@ -64,16 +64,28 @@ uv run python scripts/fetch_arknights_duel_data.py --avatars-only
 
 ### 启动时自动安装（类似语音 `ensure_voices`）
 
-插件 `on_startup` 调用 [`arknights_duel_resource.py`](../../../src/common/utils/arknights_duel_resource.py)：
+插件 `on_startup` 通过 `schedule_arknights_duel_resource_sync` **在后台任务中**拉取，**不阻塞** Bot 连接 QQ；表已存在且未开「启动批量头像」时不会发起同步。
 
 | 配置键 | 默认 | 行为 |
 |--------|------|------|
-| `duel_auto_sync_operators` | `true` | 缺表或 `count=0` 时拉取 character/skill 表并写入 JSON |
+| `duel_auto_sync_operators` | `true` | 缺表或 `count=0` 时后台拉取 character/skill 表并写入 JSON |
 | `duel_avatar_local` | `true` | 乱入发图优先 `file://` 本地 PNG，避免 NapCat 拉 GitHub 超时 |
 | `duel_avatar_download_on_use` | `true` | 发乱入头像前本地无图则按需下载单张 |
-| `duel_avatar_download_on_startup` | `false` | 启动批量补全缺失头像（约百张，耗时长，慎用） |
+| `duel_avatar_download_on_startup` | `false` | 启动后后台批量补全缺失头像（约百张，仍占带宽，慎用） |
 
-缺表时乱入 QTE 会降级；开启 `duel_avatar_local` 且本地无图时，未开按需下载则回退 JSON 中的远程 `avatar_url`。
+缺表时乱入 QTE 会降级，直至后台 JSON 写完（日志 `background resource sync finished`）；也可先跑同步脚本。开启 `duel_avatar_local` 且本地无图时，未开按需下载则回退 JSON 中的远程 `avatar_url`。
+
+### 要不要把头像传进本仓库？
+
+**不必。** 六星表 `operators_6star.json` 已在仓库内（体积小）；头像约百张 PNG（合计约十余 MB）已 `.gitignore`，由脚本或启动/按需下载生成。
+
+| 方式 | 适用 |
+|------|------|
+| `uv run python scripts/fetch_arknights_duel_data.py` | 部署机可访问 GitHub 时，推荐一次性预拉 |
+| 启动/按需自动下载 | 零手工，首局乱入前可能尚未下完 |
+| 自建 zip 放 Release / HF（参考 `voices/Pallas.zip`） | 内网或 GitHub 很慢时，维护者可选提供离线包，解压到 `resource/arknights/avatars/` |
+
+未提供离线包不影响功能；仅影响「首次乱入是否要等待下载」。
 
 ## 与其它插件
 

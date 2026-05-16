@@ -27,6 +27,7 @@ from src.common.arknights.duel_sync import (
 _json_lock = asyncio.Lock()
 _bulk_avatar_lock = asyncio.Lock()
 _avatar_locks: dict[str, asyncio.Lock] = {}
+_background_sync_task: asyncio.Task[None] | None = None
 
 
 def _avatar_lock(char_id: str) -> asyncio.Lock:
@@ -175,10 +176,49 @@ async def ensure_arknights_duel_resources(
     sync_json: bool = True,
     bulk_avatars: bool = False,
 ) -> bool:
-    """启动时：缺 JSON 则拉表；bulk_avatars 为 True 时批量补头像。"""
+    """缺 JSON 则拉表；bulk_avatars 为 True 时批量补头像。"""
     json_ok = True
     if sync_json:
         json_ok = await ensure_operators_json()
     if bulk_avatars and json_ok:
         await ensure_duel_avatars_bulk()
     return json_ok
+
+
+def needs_background_arknights_sync(*, sync_json: bool, bulk_avatars: bool) -> bool:
+    """是否需要在启动后后台拉取（表已齐且未开批量头像则跳过）。"""
+    if bulk_avatars:
+        return True
+    return sync_json and not operators_json_ready()
+
+
+async def _run_background_arknights_sync(*, sync_json: bool, bulk_avatars: bool) -> None:
+    try:
+        logger.info("arknights duel: background resource sync started")
+        ok = await ensure_arknights_duel_resources(sync_json=sync_json, bulk_avatars=bulk_avatars)
+        if ok and sync_json:
+            from src.plugins.duel.arknights_ops import reload_operators_cache
+
+            reload_operators_cache()
+        logger.info(f"arknights duel: background resource sync finished ok={ok}")
+    except Exception as err:
+        logger.error(f"arknights duel: background resource sync failed: {err}")
+
+
+def schedule_arknights_duel_resource_sync(
+    *,
+    sync_json: bool = True,
+    bulk_avatars: bool = False,
+) -> None:
+    """在事件循环中后台同步，不阻塞 NoneBot 启动。"""
+    global _background_sync_task
+    if not needs_background_arknights_sync(sync_json=sync_json, bulk_avatars=bulk_avatars):
+        return
+    if _background_sync_task is not None and not _background_sync_task.done():
+        logger.debug("arknights duel: background sync already running, skip")
+        return
+    loop = asyncio.get_running_loop()
+    _background_sync_task = loop.create_task(
+        _run_background_arknights_sync(sync_json=sync_json, bulk_avatars=bulk_avatars),
+        name="arknights_duel_resource_sync",
+    )

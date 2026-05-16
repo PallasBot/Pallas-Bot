@@ -34,15 +34,12 @@ from src.plugins.duel.duel_session import clear_duel_pair, start_duel_pair
 
 @get_driver().on_startup
 async def _ensure_duel_arknights_resources() -> None:
-    from src.common.utils.arknights_duel_resource import ensure_arknights_duel_resources
-    from src.plugins.duel.arknights_ops import reload_operators_cache
+    from src.common.utils.arknights_duel_resource import schedule_arknights_duel_resource_sync
 
-    ok = await ensure_arknights_duel_resources(
+    schedule_arknights_duel_resource_sync(
         sync_json=plugin_config.duel_auto_sync_operators,
         bulk_avatars=plugin_config.duel_avatar_download_on_startup,
     )
-    if ok:
-        reload_operators_cache()
 
 
 __plugin_meta__ = PluginMetadata(
