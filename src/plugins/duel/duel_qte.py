@@ -22,6 +22,13 @@ from src.plugins.duel.duel_message import (
     duel_text,
     message_has_content,
 )
+from src.plugins.duel.duel_terms import (
+    QTE_FAIL_TAIL,
+    QTE_INTRUSION_FAIL_STUB,
+    QTE_INTRUSION_TITLE,
+    QTE_KEYWORD_TITLE,
+    QTE_SUCCESS_TAIL,
+)
 
 if TYPE_CHECKING:
     from src.plugins.duel.duel_round_engine import LoadedEvent
@@ -272,7 +279,7 @@ async def _run_operator_intrusion_qte(
         await send_duel_line(
             group_id,
             append_combat_delta(
-                "（闯入者身份无法载入，这场乱入只能作罢。）",
+                QTE_INTRUSION_FAIL_STUB,
                 challenger_id,
                 defender_id,
                 snap,
@@ -331,14 +338,14 @@ async def _run_operator_intrusion_qte(
     if plugin_config.duel_compact_round:
         prompt = (
             extra
-            + duel_text("【辨认闯入者】请")
+            + duel_text(QTE_INTRUSION_TITLE + "请")
             + duel_at(responder)
             + duel_text(f" {window_sec}秒内发送其游戏内干员名（一字不差）。")
         )
     else:
         prompt = (
             extra
-            + duel_text("【辨认闯入者】请")
+            + duel_text(QTE_INTRUSION_TITLE + "请")
             + duel_at(responder)
             + duel_text(f"在{window_sec}秒内发送闯入者的「游戏内战显示名」（须完全一致，勿夹他词）。")
         )
@@ -572,7 +579,10 @@ async def run_event_qte_if_any(
     head = duel_plain(round_header.strip()) if round_header.strip() else Message()
     if plugin_config.duel_compact_round:
         prompt = (
-            extra + duel_text("[QTE]请") + duel_at(responder) + duel_text(f" {window_sec}秒内发「{required_key}」。")
+            extra
+            + duel_text(QTE_KEYWORD_TITLE + "请")
+            + duel_at(responder)
+            + duel_text(f" {window_sec}秒内发「{required_key}」。")
         )
         line = append_duel_message(head, prompt) if message_has_content(head) else prompt
         await send_duel_line_merge_buffer(
@@ -625,7 +635,7 @@ async def run_event_qte_if_any(
     if ok:
         apply_effect_dicts(stacks, on_ok, actor)
         line = append_combat_delta(
-            duel_at(responder) + duel_text(" QTE 成功！"),
+            duel_at(responder) + duel_text(QTE_SUCCESS_TAIL),
             challenger_id,
             defender_id,
             snap,
@@ -634,7 +644,7 @@ async def run_event_qte_if_any(
     else:
         apply_effect_dicts(stacks, on_fail, actor)
         line = append_combat_delta(
-            duel_at(responder) + duel_text(" QTE 未达成。"),
+            duel_at(responder) + duel_text(QTE_FAIL_TAIL),
             challenger_id,
             defender_id,
             snap,

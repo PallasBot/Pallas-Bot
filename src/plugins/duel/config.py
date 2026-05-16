@@ -92,7 +92,7 @@ class Config(BaseModel, extra="ignore"):
         default=0.32,
         ge=0.0,
         le=1.0,
-        description="每一幕抽中「歌咏场/泰拉公共」的概率；0 表示几乎不抽公共幕。",
+        description="每一幕抽中「泰拉节庆」公共场的概率；0 表示几乎不抽公共幕。",
     )
     duel_public_terra_weight_mult: float = Field(
         default=1.5,

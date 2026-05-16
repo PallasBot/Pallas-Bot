@@ -28,6 +28,26 @@ from src.plugins.duel.duel_message import (
     duel_text,
     message_has_content,
 )
+from src.plugins.duel.duel_terms import (
+    CLASH_SILENT_ATTACKER,
+    CLASH_SILENT_DEFENDER,
+    EXCHANGE_QTE_DEFAULT_PROMPT,
+    PUBLIC_ROUND_EMPTY,
+    ROUND_KIND_CLASH,
+    ROUND_KIND_PUBLIC,
+    STACK_BUFF,
+    STACK_DEBUFF,
+    STAT_DP,
+    STAT_HP,
+    TAG_CLASH_ATTACK,
+    TAG_CLASH_DEFEND,
+    TAG_CLASH_INTRUSION_ATTACK,
+    TAG_CLASH_INTRUSION_DEFEND,
+    TAG_EXCHANGE,
+    TAG_PUBLIC,
+    TAG_PUBLIC_INTRUSION,
+    round_finale_head,
+)
 
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
@@ -365,8 +385,8 @@ def reload_event_pools() -> str:
     ops = payload.get("operators")
     oc = len(ops) if isinstance(ops, list) else 0
     return (
-        f"节庆剧目表已重载，共 {n} 条（歌咏 {len(_pools_cache['public'])} / "
-        f"兵刃 {len(_pools_cache['exchange'])} / "
+        f"节庆剧目表已重载，共 {n} 条（{ROUND_KIND_PUBLIC} {len(_pools_cache['public'])} / "
+        f"{TAG_EXCHANGE} {len(_pools_cache['exchange'])} / "
         f"攻方 {len(_pools_cache['challenger'])} / 守方 {len(_pools_cache['defender'])}）。\n"
         f"异邦使者名录：{oc} 名（resource/arknights/operators_6star.json）。"
     )
@@ -576,12 +596,12 @@ def format_player_stat_lines(
     dp_before: int | None = None,
 ) -> Message:
     """单方 HP / DP；提供 hp_before/dp_before 时在括号内标本幕变动。"""
-    hp_part = f"HP {hp}"
+    hp_part = f"{STAT_HP} {hp}"
     if hp_before is not None:
         hp_delta = hp - hp_before
         if hp_delta != 0:
             hp_part += f" ({hp_delta:+d})"
-    dp_part = f"DP {dp}"
+    dp_part = f"{STAT_DP} {dp}"
     if dp_before is not None:
         dp_delta = dp - dp_before
         if dp_delta != 0:
@@ -590,9 +610,9 @@ def format_player_stat_lines(
 
 
 def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: int) -> Message:
-    """单方本段神恩/损创层变动（HP/DP 由 format_combat_delta_block 另算）。"""
+    """单方本段战意/蚀势层变动（生机/护幕由 format_combat_delta_block 另算）。"""
     tokens: list[str] = []
-    for cur, prev, label in ((buff, buff0, "神恩"), (debuff, debuff0, "损创")):
+    for cur, prev, label in ((buff, buff0, STACK_BUFF), (debuff, debuff0, STACK_DEBUFF)):
         t = _delta_token(cur, prev, label)
         if t:
             tokens.append(t)
@@ -808,9 +828,9 @@ def summarize_winner(
 ) -> Message:
     """终幕：以 HP 定胜负。"""
     chp, dhp = stacks.challenger_hp, stacks.defender_hp
-    head = duel_text(f"第{total_rounds}幕终。")
+    head = duel_text(f"{round_finale_head(total_rounds)}。")
     if chp <= 0 and dhp <= 0:
-        tag = duel_text("双方英雄")
+        tag = duel_text("双方斗士")
         tail = duel_text("双方力竭，同归沉寂。")
     elif chp <= 0:
         tag = duel_text(duel_label_for(defender_id))
@@ -825,7 +845,7 @@ def summarize_winner(
         tag = duel_text(duel_label_for(defender_id))
         tail = duel_text("战芒更盛，双月似为其而明。")
     else:
-        tag = duel_text("双方英雄")
+        tag = duel_text("双方斗士")
         tail = duel_text("势均力敌，撤出擂台。")
     return head + tag + tail
 
@@ -893,7 +913,7 @@ async def run_exchange_bout(
         defender_is_bot=defender_is_bot,
         speaker="neutral",
     )
-    narr.add(f"第{round_index}幕·兵刃 {ev.event_id}")
+    narr.add(f"第{round_index}幕·{TAG_EXCHANGE} {ev.event_id}")
     victim = primary_hp_loss_side(snap, stacks)
     run_qte = bool(ev.qte)
     if not run_qte and victim and random.random() < plugin_config.duel_exchange_qte_chance:
@@ -911,7 +931,7 @@ async def run_exchange_bout(
                     "target": qte_actor,
                     "keys": ["格挡", "盾反", "架开", "闪避"],
                     "window_sec": 10,
-                    "prompt": "兵刃未止！攻势仍在延续",
+                    "prompt": EXCHANGE_QTE_DEFAULT_PROMPT,
                     "on_success_effects": [{"type": "add_dp", "target": qte_actor, "value": 1}],
                     "on_fail_effects": [{"type": "deal_damage", "target": qte_actor, "value": 2}],
                 },
@@ -928,7 +948,7 @@ async def run_exchange_bout(
             qte_actor,
             narr_log=narr,
             round_index=round_index,
-            round_tag="兵刃",
+            round_tag=TAG_EXCHANGE,
             bot_mode=bot_mode,
             challenger_is_bot=challenger_is_bot,
             defender_is_bot=defender_is_bot,
@@ -1084,11 +1104,11 @@ async def play_clash_hero_events(
             if ce:
                 ark_c = _maybe_pick_ark_ctx(ce)
                 apply_event_effects(stacks, ce, "challenger")
-                narr.add(f"第{round_index}幕·交锋A {ce.event_id}")
+                narr.add(f"第{round_index}幕·{TAG_CLASH_ATTACK} {ce.event_id}")
             if de:
                 ark_d = _maybe_pick_ark_ctx(de)
                 apply_event_effects(stacks, de, "defender")
-                narr.add(f"第{round_index}幕·交锋B {de.event_id}")
+                narr.add(f"第{round_index}幕·{TAG_CLASH_DEFEND} {de.event_id}")
         else:
             chunks: list[Message] = []
             if ce:
@@ -1104,9 +1124,9 @@ async def play_clash_hero_events(
                         stacks,
                     )
                 )
-                narr.add(f"第{round_index}幕·交锋A {ce.event_id}")
+                narr.add(f"第{round_index}幕·{TAG_CLASH_ATTACK} {ce.event_id}")
             else:
-                chunks.append(duel_plain("（攻方英雄缄口，本段无词。）"))
+                chunks.append(duel_plain(CLASH_SILENT_ATTACKER))
             if de:
                 ark_d = _maybe_pick_ark_ctx(de)
                 snap = snapshot_combat(stacks)
@@ -1120,9 +1140,9 @@ async def play_clash_hero_events(
                         stacks,
                     )
                 )
-                narr.add(f"第{round_index}幕·交锋B {de.event_id}")
+                narr.add(f"第{round_index}幕·{TAG_CLASH_DEFEND} {de.event_id}")
             else:
-                chunks.append(duel_plain("（守方英雄缄口，本段无词。）"))
+                chunks.append(duel_plain(CLASH_SILENT_DEFENDER))
             await send_duel_line(
                 group_id,
                 duel_join_blocks(chunks, sep="\n\n"),
@@ -1146,7 +1166,7 @@ async def play_clash_hero_events(
                 intrusion_ctx=ark_c,
                 narr_log=narr,
                 round_index=round_index,
-                round_tag="交锋A",
+                round_tag=TAG_CLASH_ATTACK,
                 bot_mode=False,
                 challenger_is_bot=challenger_is_bot,
                 defender_is_bot=defender_is_bot,
@@ -1163,7 +1183,7 @@ async def play_clash_hero_events(
                 intrusion_ctx=ark_d,
                 narr_log=narr,
                 round_index=round_index,
-                round_tag="交锋B",
+                round_tag=TAG_CLASH_DEFEND,
                 bot_mode=False,
                 challenger_is_bot=challenger_is_bot,
                 defender_is_bot=defender_is_bot,
@@ -1183,10 +1203,10 @@ async def play_clash_hero_events(
         bot_mode=bot_mode,
         challenger_is_bot=challenger_is_bot,
         defender_is_bot=defender_is_bot,
-        intrusion_tag="交锋·攻方使者",
-        qte_tag="交锋A",
-        silent_line="（攻方英雄缄口，本段无词。）",
-        narr_key="交锋A",
+        intrusion_tag=TAG_CLASH_INTRUSION_ATTACK,
+        qte_tag=TAG_CLASH_ATTACK,
+        silent_line=CLASH_SILENT_ATTACKER,
+        narr_key=TAG_CLASH_ATTACK,
         skip_describe=skip_describe,
     )
     await _play_clash_side(
@@ -1202,10 +1222,10 @@ async def play_clash_hero_events(
         bot_mode=bot_mode,
         challenger_is_bot=challenger_is_bot,
         defender_is_bot=defender_is_bot,
-        intrusion_tag="交锋·守方使者",
-        qte_tag="交锋B",
-        silent_line="（守方英雄缄口，本段无词。）",
-        narr_key="交锋B",
+        intrusion_tag=TAG_CLASH_INTRUSION_DEFEND,
+        qte_tag=TAG_CLASH_DEFEND,
+        silent_line=CLASH_SILENT_DEFENDER,
+        narr_key=TAG_CLASH_DEFEND,
         skip_describe=skip_describe,
     )
 
@@ -1303,7 +1323,7 @@ async def play_duel_rounds(
                 round_start = snapshot_combat(stacks)
                 hdr = f"第{i}/{rounds}幕 · "
                 if kind == "public":
-                    hdr += "歌咏场"
+                    hdr += ROUND_KIND_PUBLIC
                     ev = pick_public_round_event(pools["public"])
                     if ev:
                         ark = _maybe_pick_ark_ctx(ev)
@@ -1322,7 +1342,7 @@ async def play_duel_rounds(
                                 scene_card=ev.describe,
                                 narr_log=narr,
                                 round_index=i,
-                                round_tag="歌咏·使者",
+                                round_tag=TAG_PUBLIC_INTRUSION,
                                 bot_mode=bot_mode,
                                 challenger_is_bot=challenger_is_bot,
                                 defender_is_bot=defender_is_bot,
@@ -1350,7 +1370,7 @@ async def play_duel_rounds(
                                 challenger_is_bot=challenger_is_bot,
                                 defender_is_bot=defender_is_bot,
                             )
-                            narr.add(f"第{i}幕·歌咏 {ev.event_id}")
+                            narr.add(f"第{i}幕·{TAG_PUBLIC} {ev.event_id}")
                             await run_event_qte_if_any(
                                 matcher,
                                 group_id,
@@ -1362,7 +1382,7 @@ async def play_duel_rounds(
                                 intrusion_ctx=ark,
                                 narr_log=narr,
                                 round_index=i,
-                                round_tag="歌咏",
+                                round_tag=TAG_PUBLIC,
                                 bot_mode=bot_mode,
                                 challenger_is_bot=challenger_is_bot,
                                 defender_is_bot=defender_is_bot,
@@ -1370,7 +1390,7 @@ async def play_duel_rounds(
                     else:
                         await send_duel_line(
                             group_id,
-                            hdr + "\n（歌咏场无词，本幕仅余风声。）",
+                            hdr + f"\n{PUBLIC_ROUND_EMPTY}",
                             matcher=matcher,
                             challenger_id=challenger_id,
                             defender_id=defender_id,
@@ -1379,7 +1399,7 @@ async def play_duel_rounds(
                             defender_is_bot=defender_is_bot,
                         )
                 else:
-                    hdr += "英雄交锋"
+                    hdr += ROUND_KIND_CLASH
                     from src.plugins.duel.duel_send import round_buffer_prepend, send_duel_line
 
                     if plugin_config.duel_compact_round:
