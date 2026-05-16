@@ -211,6 +211,10 @@ __marimo__/
 resource/*
 !resource/arknights/
 !resource/arknights/**
+# 头像体积大，由脚本或启动按需拉取；保留目录占位
+resource/arknights/avatars/*
+!resource/arknights/avatars/
+!resource/arknights/avatars/.gitkeep
 accounts
 mixed_data
 backups

@@ -25,6 +25,7 @@
 - **胜负惩罚**：时长、败/胜者名片、双牛/人类局消息替换与撤回文案
 - **流程**：总幕数（默认 5）、多 Bot 抢答冷却、幕间随机停顿、紧凑发群
 - **事件与 QTE**：公共幕权重、QTE 事件权重倍率、兵刃幕额外 QTE 概率
+- **泰拉干员资源**：缺表自动拉取、本地头像目录、按需/启动批量下载头像
 - **牛自动 QTE**：咏名/拆招成功率与失败时嘴瓢、沉默概率
 
 ## 胜负惩罚（非独立命令）
@@ -43,8 +44,36 @@
 ## 事件包与干员表
 
 - 撰写约定：[event_packs/README.md](../../../src/plugins/duel/event_packs/README.md)
-- 六星表：`resource/arknights/operators_6star.json`，由 `scripts/fetch_arknights_duel_data.py` 生成
-- 缺表时乱入 QTE 会降级，日志提示运行上述脚本
+- 六星表：`resource/arknights/operators_6star.json`
+- 乱入头像：`resource/arknights/avatars/{char_id}.png`（**不纳入 git**，体积约百张 PNG）
+
+### 同步脚本（推荐部署后执行一次）
+
+```bash
+# 干员表 + 补全缺失头像
+uv run python scripts/fetch_arknights_duel_data.py
+
+# 仅更新 JSON
+uv run python scripts/fetch_arknights_duel_data.py --no-avatars
+
+# 仅补头像（已有 JSON 时）
+uv run python scripts/fetch_arknights_duel_data.py --avatars-only
+```
+
+逻辑与运行时安装器共用 [`src/common/arknights/duel_sync.py`](../../../src/common/arknights/duel_sync.py)。
+
+### 启动时自动安装（类似语音 `ensure_voices`）
+
+插件 `on_startup` 调用 [`arknights_duel_resource.py`](../../../src/common/utils/arknights_duel_resource.py)：
+
+| 配置键 | 默认 | 行为 |
+|--------|------|------|
+| `duel_auto_sync_operators` | `true` | 缺表或 `count=0` 时拉取 character/skill 表并写入 JSON |
+| `duel_avatar_local` | `true` | 乱入发图优先 `file://` 本地 PNG，避免 NapCat 拉 GitHub 超时 |
+| `duel_avatar_download_on_use` | `true` | 发乱入头像前本地无图则按需下载单张 |
+| `duel_avatar_download_on_startup` | `false` | 启动批量补全缺失头像（约百张，耗时长，慎用） |
+
+缺表时乱入 QTE 会降级；开启 `duel_avatar_local` 且本地无图时，未开按需下载则回退 JSON 中的远程 `avatar_url`。
 
 ## 与其它插件
 
@@ -57,7 +86,8 @@
 |------|------|
 | 提示剧目表读不出 | 检查 `event_packs/default/*.json` 是否为合法 JSON 数组 |
 | 重载无反应 | 确认发送者为群管/群主，或 WebUI 已将 `duel.reload_events` 放开给所有人 |
-| 乱入无干员 | 运行 `uv run python scripts/fetch_arknights_duel_data.py` |
+| 乱入无干员 | 运行 `uv run python scripts/fetch_arknights_duel_data.py`，或确认 `duel_auto_sync_operators=true` 且机器可访问 GitHub |
+| 泰拉节庆/乱入发图卡住或 `send_msg timeout` | 预拉本地头像（见上脚本）；或保持 `duel_avatar_local=true` + `duel_avatar_download_on_use=true`；发送失败时会回退纯文本并继续对局 |
 | 八角笼无法开演 | 本群在线牛牛账号不足 2（`duel_bots` 配置集合） |
 
 ## 实现索引
@@ -68,7 +98,7 @@
 | [`duel_round_engine.py`](../../../src/plugins/duel/duel_round_engine.py) | 多幕流程、效果、重载池 |
 | [`duel_qte.py`](../../../src/plugins/duel/duel_qte.py) | QTE、牛自动应答 |
 | [`duel_penalty.py`](../../../src/plugins/duel/duel_penalty.py) | 胜负惩罚 |
-| [`duel_send.py`](../../../src/plugins/duel/duel_send.py) | 幕缓冲发送 |
+| [`duel_send.py`](../../../src/plugins/duel/duel_send.py) | 幕缓冲发送、发群失败回退 |
+| [`arknights_ops.py`](../../../src/plugins/duel/arknights_ops.py) | 六星表读取、乱入头像路径解析 |
 
 **刷屏**：默认 `duel_compact_round=true`（合并幕内消息、乱入头像与唤名同条、QTE 与上文同条）；双方 HP/DP 附在**本幕 flush 末尾**，括号内为本幕变动（场层加伤已计入 HP）。仍觉冗长可改 `event_packs` 或调低 QTE 权重。
-| [`arknights_ops.py`](../../../src/plugins/duel/arknights_ops.py) | 六星表读取 |

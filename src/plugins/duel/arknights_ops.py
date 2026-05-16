@@ -81,6 +81,18 @@ def operators_json_path():
     return resource_dir("arknights") / "operators_6star.json"
 
 
+def find_operator_by_id(op_id: str) -> dict[str, Any] | None:
+    data = get_operators_payload()
+    ops = data.get("operators")
+    if not isinstance(ops, list):
+        return None
+    needle = str(op_id).strip()
+    for op in ops:
+        if isinstance(op, dict) and str(op.get("id", "")).strip() == needle:
+            return op
+    return None
+
+
 _operators_payload: dict[str, Any] | None = None
 
 
@@ -96,7 +108,9 @@ def get_operators_payload() -> dict[str, Any]:
     if _operators_payload is None:
         path = operators_json_path()
         if not path.is_file():
-            logger.warning(f"duel arknights: missing {path}, run scripts/fetch_arknights_duel_data.py")
+            logger.warning(
+                f"duel arknights: missing {path}, will auto-sync if enabled or run scripts/fetch_arknights_duel_data.py"
+            )
             _operators_payload = {"operators": [], "count": 0}
         else:
             try:
@@ -279,3 +293,25 @@ def build_intrusion_ctx(op: dict[str, Any]) -> dict[str, str]:
         "avatar_url": str(op.get("avatar_url", "") or ""),
         "is_pallas": "1" if str(op.get("name", "") or "").strip() == PALLAS_OPERATOR_NAME else "",
     }
+
+
+async def resolve_operator_avatar_for_send(op_id: str) -> str | None:
+    """乱入发图：优先本地 PNG（file://），否则回退 JSON 内远程 URL。"""
+    cid = str(op_id or "").strip()
+    if not cid:
+        return None
+    from src.plugins.duel.config import plugin_config
+
+    if plugin_config.duel_avatar_local:
+        from src.common.utils.arknights_duel_resource import ensure_duel_avatar
+
+        local = await ensure_duel_avatar(cid, allow_download=plugin_config.duel_avatar_download_on_use)
+        if local:
+            return local.resolve().as_uri()
+    op = find_operator_by_id(cid)
+    if op:
+        url = str(op.get("avatar_url", "") or "").strip()
+        return url or None
+    from src.common.arknights.duel_sync import avatar_remote_url
+
+    return avatar_remote_url(cid)

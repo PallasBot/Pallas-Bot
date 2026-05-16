@@ -125,6 +125,24 @@ class Config(BaseModel, extra="ignore"):
         description="兵刃对击幕在无内置 QTE 时，额外触发关键词 QTE 的概率。",
     )
 
+    # —— 泰拉干员资源（resource/arknights） ——
+    duel_auto_sync_operators: bool = Field(
+        default=True,
+        description="缺 operators_6star.json 时启动自动拉取干员表（与 scripts/fetch_arknights_duel_data.py 同源）。",
+    )
+    duel_avatar_local: bool = Field(
+        default=True,
+        description="乱入头像优先使用 resource/arknights/avatars 本地 PNG，避免 NapCat 拉 GitHub 超时。",
+    )
+    duel_avatar_download_on_use: bool = Field(
+        default=True,
+        description="发送乱入头像前若本地无图则按需下载单张。",
+    )
+    duel_avatar_download_on_startup: bool = Field(
+        default=False,
+        description="启动时批量补全缺失头像（约百张，耗时长；建议用脚本预拉或仅开按需下载）。",
+    )
+
     # —— 牛自动咏名/拆招 ——
     duel_bot_qte_intrusion_success_rate: float = Field(
         default=0.68,

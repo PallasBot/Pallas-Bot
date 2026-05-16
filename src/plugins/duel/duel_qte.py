@@ -332,7 +332,6 @@ async def _run_operator_intrusion_qte(
     fut: asyncio.Future[bool] = loop.create_future()
     sid = qte_session_id(group_id, responder)
     deadline = time.time() + window_sec
-    _sessions[sid] = _DuelQteSession(future=fut, required_key=required_key, deadline=deadline)
 
     extra = duel_text(f"{prompt_extra}\n") if prompt_extra else Message()
     if plugin_config.duel_compact_round:
@@ -351,11 +350,15 @@ async def _run_operator_intrusion_qte(
         )
     prelude_block = duel_join_lines(*parts, sep="\n") if parts else Message()
     body = append_duel_message(prelude_block, prompt, sep="\n") if message_has_content(prelude_block) else prompt
-    avatar_url = (
-        str(intrusion_ctx["avatar_url"]) if spec.get("show_avatar") and intrusion_ctx.get("avatar_url") else None
-    )
+    avatar_ref: str | None = None
+    if spec.get("show_avatar"):
+        from src.plugins.duel.arknights_ops import resolve_operator_avatar_for_send
+
+        avatar_ref = await resolve_operator_avatar_for_send(str(intrusion_ctx.get("op_id", "")))
+        if not avatar_ref:
+            avatar_ref = str(intrusion_ctx.get("avatar_url", "") or "").strip() or None
     if plugin_config.duel_compact_round:
-        await send_duel_line_merge_buffer(
+        delivered = await send_duel_line_merge_buffer(
             group_id,
             body,
             matcher=matcher,
@@ -364,10 +367,10 @@ async def _run_operator_intrusion_qte(
             bot_mode=bot_mode,
             challenger_is_bot=challenger_is_bot,
             defender_is_bot=defender_is_bot,
-            image_url=avatar_url,
+            image_url=avatar_ref,
         )
     else:
-        await send_duel_line(
+        delivered = await send_duel_line(
             group_id,
             body,
             matcher=matcher,
@@ -377,8 +380,34 @@ async def _run_operator_intrusion_qte(
             challenger_is_bot=challenger_is_bot,
             defender_is_bot=defender_is_bot,
             immediate=True,
-            image_url=avatar_url,
+            image_url=avatar_ref,
         )
+    if not delivered:
+        logger.warning(f"operator_intrusion prompt undelivered group={group_id}")
+        snap = snapshot_combat(stacks)
+        apply_effect_dicts(stacks, on_fail, actor)
+        await send_duel_line(
+            group_id,
+            append_combat_delta(
+                QTE_INTRUSION_FAIL_STUB,
+                challenger_id,
+                defender_id,
+                snap,
+                stacks,
+            ),
+            matcher=matcher,
+            challenger_id=challenger_id,
+            defender_id=defender_id,
+            bot_mode=bot_mode,
+            challenger_is_bot=challenger_is_bot,
+            defender_is_bot=defender_is_bot,
+            immediate=not plugin_config.duel_compact_round,
+        )
+        if narr_log is not None:
+            narr_log.add(f"第{round_index}幕·{round_tag} 提示未发出")
+        return
+
+    _sessions[sid] = _DuelQteSession(future=fut, required_key=required_key, deadline=deadline)
     schedule_bot_qte_auto_answer(group_id, responder, required_key, fut, window_sec, qte_kind="intrusion")
     ok = False
     try:
@@ -573,7 +602,6 @@ async def run_event_qte_if_any(
     fut: asyncio.Future[bool] = loop.create_future()
     sid = qte_session_id(group_id, responder)
     deadline = time.time() + window_sec
-    _sessions[sid] = _DuelQteSession(future=fut, required_key=required_key, deadline=deadline)
 
     extra = duel_text(f"{prompt_extra}\n") if prompt_extra else Message()
     head = duel_plain(round_header.strip()) if round_header.strip() else Message()
@@ -585,7 +613,7 @@ async def run_event_qte_if_any(
             + duel_text(f" {window_sec}秒内发「{required_key}」。")
         )
         line = append_duel_message(head, prompt) if message_has_content(head) else prompt
-        await send_duel_line_merge_buffer(
+        delivered = await send_duel_line_merge_buffer(
             group_id,
             line,
             matcher=matcher,
@@ -603,7 +631,7 @@ async def run_event_qte_if_any(
             + duel_text(f"在{window_sec}秒内发送「{required_key}」完成 QTE")
         )
         line = append_duel_message(head, prompt) if message_has_content(head) else prompt
-        await send_duel_line(
+        delivered = await send_duel_line(
             group_id,
             line,
             matcher=matcher,
@@ -614,6 +642,32 @@ async def run_event_qte_if_any(
             defender_is_bot=defender_is_bot,
             immediate=True,
         )
+    if not delivered:
+        logger.warning(f"keyword qte prompt undelivered group={group_id} event={d_ev.event_id}")
+        snap = snapshot_combat(stacks)
+        apply_effect_dicts(stacks, on_fail, actor)
+        await send_duel_line(
+            group_id,
+            append_combat_delta(
+                duel_at(responder) + duel_text(QTE_FAIL_TAIL),
+                challenger_id,
+                defender_id,
+                snap,
+                stacks,
+            ),
+            matcher=matcher,
+            challenger_id=challenger_id,
+            defender_id=defender_id,
+            bot_mode=bot_mode,
+            challenger_is_bot=challenger_is_bot,
+            defender_is_bot=defender_is_bot,
+            immediate=not plugin_config.duel_compact_round,
+        )
+        if narr_log is not None and round_tag:
+            narr_log.add(f"第{round_index}幕·{round_tag} QTE提示未发出 {d_ev.event_id}")
+        return
+
+    _sessions[sid] = _DuelQteSession(future=fut, required_key=required_key, deadline=deadline)
     schedule_bot_qte_auto_answer(
         group_id,
         responder,
