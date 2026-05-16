@@ -1,5 +1,5 @@
 {
-  "source": "Kengxxiao/ArknightsGameData (skill text = levels[-1] + blackboard, 有专精时一般为专三) + yuanyan3060/ArknightsGameResource (avatar path only)",
+  "source": "Kengxxiao/ArknightsGameData (skill text = levels[-1] + blackboard, 有专精时一般为专三) + yuanyan3060/ArknightsGameResource (avatar)",
   "rarity_filter": "TIER_6",
   "count": 140,
   "operators": [
@@ -28,6 +28,7 @@
           "description": "Mon3tr的防御力+200%，技能期间攻击力从+260%逐渐降低至+0%且伤害类型变为真实，此期间如果未击杀任何敌人则技能结束后流失最大生命的50%。该技能与Mon3tr绑定"
         }
       ],
+      "avatar_relpath": "avatars/char_003_kalts.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_003_kalts.png"
     },
     {
@@ -55,6 +56,7 @@
           "description": "向周围寻找最近的敌方目标，对其发动10次连续斩击，每次造成相当于攻击力320%的物理伤害，并在最后一击时使目标晕眩4秒"
         }
       ],
+      "avatar_relpath": "avatars/char_010_chen.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_010_chen.png"
     },
     {
@@ -82,6 +84,7 @@
           "description": "技能开启后，攻击力和防御力逐渐增至+80%并对前方一格内的敌方单位进行切割。技能结束时对附近所有敌人造成此时攻击力400%的物理伤害，自己流失25%的生命值"
         }
       ],
+      "avatar_relpath": "avatars/char_017_huang.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_017_huang.png"
     },
     {
@@ -109,6 +112,7 @@
           "description": "特性变为自身每秒流失5%生命，使范围内所有敌人每秒受到70%攻击力的真实伤害（自身与海嗣造成的伤害可叠加），范围内所有友方单位获得相当于浊心斯卡蒂110%攻击力的鼓舞效果"
         }
       ],
+      "avatar_relpath": "avatars/char_1012_skadi2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1012_skadi2.png"
     },
     {
@@ -136,6 +140,7 @@
           "description": "攻击范围扩大，攻击力+100%，攻击造成两次伤害，对攻击范围内的所有敌人应用特性加成，每次攻击在范围内生成持续5秒的粘液，地面敌人经过时移动速度-45%、防御力-220（不叠加） 攻击装有32发弹药，每次攻击消耗2发，打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_1013_chen2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1013_chen2.png"
     },
     {
@@ -163,6 +168,7 @@
           "description": "在周围四格可部署地面召唤一把\"耀阳\"对周围敌人造成110%耀骑士临光攻击力的真实伤害并晕眩3秒，自身攻击范围扩大，攻击力+140%、防御力+100%，攻击自身与\"耀阳\"阻挡的单位时伤害类型变为真实"
         }
       ],
+      "avatar_relpath": "avatars/char_1014_nearl2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1014_nearl2.png"
     },
     {
@@ -190,6 +196,7 @@
           "description": "攻击范围扩大至整个战场，治疗变为60%治疗量和元素损伤回复量的5连发，优先治疗不同的目标，第二天赋的效果提升至5倍"
         }
       ],
+      "avatar_relpath": "avatars/char_1016_agoat2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1016_agoat2.png"
     },
     {
@@ -217,6 +224,7 @@
           "description": "立即在天赋一生效范围内可部署地面召唤“黄金盟誓”；技能期间可攻击被天赋一生效范围友方单位阻挡的敌人，攻击力+190%，攻击目标数+3，攻击间隔缩短，攻击时伤害类型变为真实"
         }
       ],
+      "avatar_relpath": "avatars/char_1019_siege2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1019_siege2.png"
     },
     {
@@ -244,6 +252,7 @@
           "description": "同时攻击两名敌人，攻击力+60%，第一天赋触发几率提升至100%，技能期间附带灼痕效果的敌人每秒受到60%焰影苇草攻击力的法术伤害、被击倒时对周围敌人造成140%焰影苇草攻击力的法术伤害并施加灼痕效果 灼痕效果持续至技能结束"
         }
       ],
+      "avatar_relpath": "avatars/char_1020_reed2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1020_reed2.png"
     },
     {
@@ -271,6 +280,7 @@
           "description": "攻击间隔延长，攻击所有阻挡的敌人，攻击力+260%，生命上限+200%，攻击生命比例高于或等于自身的敌人时额外造成一次攻击力70%的物理伤害，否则自身流失3%生命"
         }
       ],
+      "avatar_relpath": "avatars/char_1023_ghost2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1023_ghost2.png"
     },
     {
@@ -298,6 +308,7 @@
           "description": "攻击力+140%，攻击速度+100，阻挡数+2，技能期间暂时只受到50%的伤害，其余伤害延后至技能结束，变为持续20秒等量的生命流失效果"
         }
       ],
+      "avatar_relpath": "avatars/char_1026_gvial2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1026_gvial2.png"
     },
     {
@@ -325,6 +336,7 @@
           "description": "部署后立即对周围所有敌人造成两次相当于攻击力165%的法术伤害并使目标晕眩2秒，之后每秒释放剑雨攻击范围内最多4个不同的目标，造成攻击力130%的法术伤害和0.2秒晕眩"
         }
       ],
+      "avatar_relpath": "avatars/char_1028_texas2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1028_texas2.png"
     },
     {
@@ -352,6 +364,7 @@
           "description": "向前突进2格，每突进一段距离都会对周围所有敌人发动攻击力300%的斩击；期间每攻击到一个敌人都会使突进距离延长（最多延长至5格，可以攻击空中单位）"
         }
       ],
+      "avatar_relpath": "avatars/char_1029_yato2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1029_yato2.png"
     },
     {
@@ -379,6 +392,7 @@
           "description": "攻击力+30%，第一天赋效果提升至1.8倍；技能期间仅一次，攻击范围内的一名干员受到致命伤时，使其生命值在10秒内不低于1 同一次作战中最多使用2次，可主动关闭（期间可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_1031_slent2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1031_slent2.png"
     },
     {
@@ -406,6 +420,7 @@
           "description": "攻击间隔略微增大，攻击范围扩大，攻击力+180%，每消耗1颗弹药攻击力额外+6%（最多30层），特性的回复生命效果提高至3倍；技能结束时，对技能期间攻击过的目标造成相当于攻击力250%的物理伤害 攻击装有16发弹药，打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_1032_excu2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1032_excu2.png"
     },
     {
@@ -433,6 +448,7 @@
           "description": "攻击变为二连击，击倒敌人时获得一枚金币；主动关闭技能时消耗所有金币对前方范围内敌人随机攻击，每消耗一枚金币造成一次相当于攻击力150%的物理伤害，并将目标中等力度地向前推开 持续时间无限，可随时主动关闭技能；携带此技能时金币上限为10"
         }
       ],
+      "avatar_relpath": "avatars/char_1033_swire2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1033_swire2.png"
     },
     {
@@ -460,6 +476,7 @@
           "description": "攻击距离+1，攻击间隔增大，攻击力+310%，防御力+80%，机动盾牌防御力+170% 机动盾牌存在时，立刻向前发射一枚炮弹，命中或到达终点时对范围内所有敌人造成相当于攻击力250%的物理伤害，并使其晕眩6秒 攻击装有20发弹药，打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_1034_jesca2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1034_jesca2.png"
     },
     {
@@ -487,6 +504,7 @@
           "description": "立刻在攻击范围内召唤2个魂灵之影（最多存在3个，技能结束后保留），攻击力+180%，攻击间隔大幅增大，攻击时攻击力提升至220%，溅射范围大幅扩大且第一天赋的发动概率提高至100% 攻击装有6发弹药，打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_1035_wisdel.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1035_wisdel.png"
     },
     {
@@ -514,6 +532,7 @@
           "description": "浮游单元+2，攻击力+80%，释放特殊形态的浮游单元散开后在整个战场范围各自追逐较近的敌人，追上时使目标恐惧3秒并锁定其攻击，浮游单元周围的敌人移动速度-50%且每秒受到相当于攻击力120%的法术伤害（不叠加）；浮游单元在锁定目标倒下后重新索敌，直至技能结束后返回干员身边"
         }
       ],
+      "avatar_relpath": "avatars/char_1038_whitw2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1038_whitw2.png"
     },
     {
@@ -541,6 +560,7 @@
           "description": "被动效果：攻击范围扩大 主动开启：向阻挡数最低的4名干员投掷炼金单元，在23秒内使围绕区域内的敌人攻击力-，防御力-，法术抗性-（不叠加），每秒受到攻击力210%的法术伤害，效果逐渐提升（15秒后达到最大，攻击力-，防御力-，法术抗性-，每秒伤害390%）"
         }
       ],
+      "avatar_relpath": "avatars/char_1039_thorn2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1039_thorn2.png"
     },
     {
@@ -568,6 +588,7 @@
           "description": "攻击变为5连射，攻击间隔一定程度缩短，攻击力提升至110% 技能会自动开启"
         }
       ],
+      "avatar_relpath": "avatars/char_103_angel.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_103_angel.png"
     },
     {
@@ -595,6 +616,7 @@
           "description": "攻击范围改变，攻击力+115%，攻击间隔大幅缩短，攻击变为群体攻击；若目标处于灼燃损伤爆发期间则额外造成攻击力80%的元素伤害 自身每秒流失最大生命的3%，攻击装有25发弹药，全场有敌人进入灼燃损伤爆发时获得2颗额外弹药，弹药打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_1040_blaze2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1040_blaze2.png"
     },
     {
@@ -622,6 +644,7 @@
           "description": "攻击力+30%，每次攻击变为相当于攻击力160%的5连击，若存在投递坐标，立即对该处造成一次相当于攻击力250%的物理溅射伤害并将一名再部署时间最长的地面干员部署至该处，使其获得6点技力 部署后获得投递坐标，攻击装有50发弹药，每次攻击消耗5发，打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_1041_angel2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1041_angel2.png"
     },
     {
@@ -649,6 +672,7 @@
           "description": "攻击范围扩大，攻击力+125%，优先攻击未处于损伤爆发期间的敌人，技能期间酒神造成过神经损伤的敌人每秒受到攻击力10%的神经损伤直至爆发；范围内敌人神经损伤冷却恢复速度+50%，神经损伤爆发时在其地面位置生成/刷新一个迷狂牢笼"
         }
       ],
+      "avatar_relpath": "avatars/char_1042_phatm2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1042_phatm2.png"
     },
     {
@@ -676,6 +700,7 @@
           "description": "攻击范围扩大，攻击间隔大幅延长，攻击造成攻击力300%的范围物理伤害，目标位置产生朝四周流动三格的电流。电流碰到自身或高台时反弹，电流所在地块上所有敌人每0.6秒受到司霆惊蛰攻击力70%的法术伤害，且有15%概率战栗3秒"
         }
       ],
+      "avatar_relpath": "avatars/char_1043_leizi2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1043_leizi2.png"
     },
     {
@@ -703,13 +728,14 @@
           "description": "攻击范围扩大，生命上限+100%，攻击力+230%，以二连击攻击最多3名敌人；主动关闭技能后11秒内保留技能加成且不会被击倒，攻击变为四连击，承担攻击范围内我方干员受到的致命伤害，11秒后强制退出战场 可主动关闭（期间可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_1044_hsgma2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1044_hsgma2.png"
     },
     {
       "id": "char_1045_svash2",
       "name": "凛御银灰",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "counsellor",
       "nation_id": "kjerag",
       "nation_cn": "谢拉格",
@@ -730,6 +756,7 @@
           "description": "攻击范围扩大并使敌人隐匿失效，攻击对直线范围造成攻击力200%的物理伤害和30%的脆弱；立即获得9点后持续获得24点部署费用 首次开启时交换待部署区中费用最高（优先选择近卫/术师/狙击干员）与最低干员的基础部署费用 技能期间“风雪之眼”变为可部署"
         }
       ],
+      "avatar_relpath": "avatars/char_1045_svash2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1045_svash2.png"
     },
     {
@@ -757,6 +784,7 @@
           "description": "攻击范围扩大，立即诱导攻击范围内的所有敌人至自身周围的可达地面，持续10秒，积雪生成速度加快，攻击力+100%，攻击速度+30，攻击无视目标10点法术抗性，每次攻击造成相当于攻击力260%的法术伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_1046_sbell2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1046_sbell2.png"
     },
     {
@@ -784,6 +812,7 @@
           "description": "攻击范围扩大，攻击力+70%，攻击间隔缩短，持续锁定2个敌人进行攻击，被锁定的敌人会互相链接；每个被链接的敌人会把即将受到法术伤害的25%额外传导给其他链接目标"
         }
       ],
+      "avatar_relpath": "avatars/char_1047_halo2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1047_halo2.png"
     },
     {
@@ -811,6 +840,7 @@
           "description": "技能开启时向前释放一道可转向的剑气，对穿过的敌人造成相当于其当前生命值6%的法术伤害（至少造成自身攻击力580%的法术伤害）；攻击范围扩大，每次攻击对最多4名地面敌人造成3次攻击力210%的法术伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_1050_chen3.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1050_chen3.png"
     },
     {
@@ -838,6 +868,7 @@
           "description": "攻击力+100%，对前方一格持续进行五次溅射范围更大的锤击，每次造成相当于攻击力240%的物理伤害并使攻击力额外+30%；技能期间触发第一天赋的高台会向四周高台扩散该效果（扩散次数随攻击次数递增），并使伤害效果提升至3.5倍，控制效果变为2秒束缚"
         }
       ],
+      "avatar_relpath": "avatars/char_1051_headb2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1051_headb2.png"
     },
     {
@@ -865,13 +896,14 @@
           "description": "立刻获得战术锚点，攻击力+150%，攻击间隔大幅缩小，额外治疗1个目标，部署战术锚点后，自身移动至该位置，并使攻击范围内最多2名友方干员可以部署至自身攻击范围的另一位置"
         }
       ],
+      "avatar_relpath": "avatars/char_1052_kalts2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1052_kalts2.png"
     },
     {
       "id": "char_112_siege",
       "name": "推进之王",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "pioneer",
       "nation_id": "victoria",
       "nation_cn": "维多利亚",
@@ -892,6 +924,7 @@
           "description": "攻击间隔增大，攻击时攻击力提高至380%，并且有40%的概率晕眩目标1.5秒"
         }
       ],
+      "avatar_relpath": "avatars/char_112_siege.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_112_siege.png"
     },
     {
@@ -919,6 +952,7 @@
           "description": "在攻击范围内生命值最多的4个敌人身上放置一枚炸弹；炸弹会在一定延迟后引爆，每个对其周围的所有敌人造成相当于攻击力310%的物理伤害并令其晕眩5秒"
         }
       ],
+      "avatar_relpath": "avatars/char_113_cqbw.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_113_cqbw.png"
     },
     {
@@ -946,6 +980,7 @@
           "description": "对攻击范围内的地面敌人造成每秒相当于攻击力140%的法术伤害，命中目标的法术抗性- 自己每秒流失最大生命值的2%"
         }
       ],
+      "avatar_relpath": "avatars/char_134_ifrit.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_134_ifrit.png"
     },
     {
@@ -973,6 +1008,7 @@
           "description": "攻击力+140%，防御力+90%，对前方一格的所有敌人使用盾牌进行切割"
         }
       ],
+      "avatar_relpath": "avatars/char_136_hsguma.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_136_hsguma.png"
     },
     {
@@ -1000,6 +1036,7 @@
           "description": "攻击力+50% 攻击范围内的所有友方单位防御力+100%"
         }
       ],
+      "avatar_relpath": "avatars/char_147_shining.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_147_shining.png"
     },
     {
@@ -1027,6 +1064,7 @@
           "description": "部署后第一天赋的生效范围扩大，弑君者消失在烟雾中，获得隐匿且阻挡数变为0，每2秒现身对烟雾内的一名地面敌人造成两次相当于攻击力250%的物理伤害并使目标晕眩4秒（对同一目标6秒内只会触发一次）"
         }
       ],
+      "avatar_relpath": "avatars/char_1502_crosly.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_1502_crosly.png"
     },
     {
@@ -1054,6 +1092,7 @@
           "description": "防御力-，攻击力+200%，攻击范围扩大，同时攻击至多6个目标（视为近距离攻击）"
         }
       ],
+      "avatar_relpath": "avatars/char_172_svrash.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_172_svrash.png"
     },
     {
@@ -1081,6 +1120,7 @@
           "description": "攻击范围扩大，攻击力+80%，攻击范围内的友方单位法术抗性+150%并获得25%的法术闪避"
         }
       ],
+      "avatar_relpath": "avatars/char_179_cgbird.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_179_cgbird.png"
     },
     {
@@ -1108,6 +1148,7 @@
           "description": "攻击力+130%，攻击范围增大，攻击间隔大幅度缩短，攻击变为随机对攻击范围内至多6个敌人发射熔岩"
         }
       ],
+      "avatar_relpath": "avatars/char_180_amgoat.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_180_amgoat.png"
     },
     {
@@ -1135,6 +1176,7 @@
           "description": "攻击力+100%，攻击范围+2格，最多可以同时攻击3个目标"
         }
       ],
+      "avatar_relpath": "avatars/char_188_helage.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_188_helage.png"
     },
     {
@@ -1162,6 +1204,7 @@
           "description": "攻击力+25%，立即向至多4个重量最重的敌人发射束缚叉枪；技能持续时间内所有目标受到束缚效果，每秒受到一次攻击"
         }
       ],
+      "avatar_relpath": "avatars/char_197_poca.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_197_poca.png"
     },
     {
@@ -1189,6 +1232,7 @@
           "description": "立刻标记攻击范围内的一名目标，攻击间隔大幅增大，攻击变为对标记目标发射一轮箭雨；箭雨会随机攻击标记目标周围的敌人，共造成5次相当于攻击力175%的物理伤害并使目标晕眩0.4秒 攻击装有10发弹药，打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_2012_typhon.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2012_typhon.png"
     },
     {
@@ -1216,6 +1260,7 @@
           "description": "攻击范围扩大，攻击力+210%，伤害类型变为物理，优先攻击防御力最低的目标，并令其失去特殊能力5秒"
         }
       ],
+      "avatar_relpath": "avatars/char_2013_cerber.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2013_cerber.png"
     },
     {
@@ -1243,6 +1288,7 @@
           "description": "攻击力+120%；周围其他友方干员的防御力+80%，阻挡数+1，并获得抵抗"
         }
       ],
+      "avatar_relpath": "avatars/char_2014_nian.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2014_nian.png"
     },
     {
@@ -1270,6 +1316,7 @@
           "description": "攻击间隔增大，优先攻击未阻挡的敌人，攻击范围与溅射范围扩大，攻击力+120%，每次攻击时在目标位置（可部署地面）召唤/刷新一个\"小自在\"（持续25秒）"
         }
       ],
+      "avatar_relpath": "avatars/char_2015_dusk.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2015_dusk.png"
     },
     {
@@ -1297,6 +1344,7 @@
           "description": "被动：召唤物可部署在近战位且攻击范围内存在其他召唤物时与其合并为高级形态 开启：自身与召唤物攻击力+100%，防御力+100%，召唤物每0.5秒对周围四格敌人造成20%令攻击力的法术伤害 技能结束时获得1个召唤物"
         }
       ],
+      "avatar_relpath": "avatars/char_2023_ling.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2023_ling.png"
     },
     {
@@ -1324,6 +1372,7 @@
           "description": "对目标及其周围造成相当于攻击力380%的物理伤害；累计使用五次技能后：重岳攻击的范围扩大且攻击变为二连击，技能变为自动释放且造成额外一次伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_2024_chyue.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2024_chyue.png"
     },
     {
@@ -1351,6 +1400,7 @@
           "description": "治疗范围扩大，攻击同时可治疗我方干员，攻击力+50%，有地面敌人处于播种地块时技能范围内的我方单位攻击力+25%、攻击速度+25，敌人经过播种地块时获得如下效果：当远离该地块超过2格时被传送回该地块"
         }
       ],
+      "avatar_relpath": "avatars/char_2025_shu.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2025_shu.png"
     },
     {
@@ -1378,6 +1428,7 @@
           "description": "生命上限+110%，攻击力+110%，防御力+110%，将第二天赋效果赋予全场所有干员；生成一面跨越整个战场的火墙，其他友方穿过火墙造成法术伤害时附带相当于余攻击力10%的灼燃损伤，敌方子弹穿过火墙时有20%几率被清除"
         }
       ],
+      "avatar_relpath": "avatars/char_2026_yu.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2026_yu.png"
     },
     {
@@ -1405,6 +1456,7 @@
           "description": "被动效果：棋子的触发和伤害范围扩大，造成相当于攻击力380%的法术伤害 主动效果：停止攻击但攻击范围扩大；立即获得8枚棋子，然后将超出上限的棋子优先部署在范围内敌人所在位置；在攻击范围内手动部署棋子时可部署至敌人所在位置，且第一天赋额外至多部署3枚棋子并消耗等量弹药 装有20发弹药，手动停止或棋子耗尽后技能结束，剩余的弹药返还为棋子"
         }
       ],
+      "avatar_relpath": "avatars/char_2027_wang.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_2027_wang.png"
     },
     {
@@ -1432,6 +1484,7 @@
           "description": "附近所有友军每秒回复相当于塞雷娅攻击力35%的生命 附近所有敌军受到的法术伤害+55%，移动速度-"
         }
       ],
+      "avatar_relpath": "avatars/char_202_demkni.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_202_demkni.png"
     },
     {
@@ -1459,6 +1512,7 @@
           "description": "攻击速度+130，同时攻击2个敌人；范围内所有敌人的冻结延长至技能结束，且技能结束时对所有冻结的敌人造成600%的法术伤害并结束冻结；优先攻击未冻结的单位"
         }
       ],
+      "avatar_relpath": "avatars/char_206_gnosis.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_206_gnosis.png"
     },
     {
@@ -1486,13 +1540,14 @@
           "description": "攻击范围扩大，攻击变为向外扩散的波纹，攻击力+170%，第二天赋的效果提升至3倍，小力度地击退攻击目标"
         }
       ],
+      "avatar_relpath": "avatars/char_213_mostma.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_213_mostma.png"
     },
     {
       "id": "char_222_bpipe",
       "name": "风笛",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "charger",
       "nation_id": "victoria",
       "nation_cn": "维多利亚",
@@ -1513,6 +1568,7 @@
           "description": "攻击间隔增大，阻挡数+1，攻击力和防御力+120%，攻击变为三连击"
         }
       ],
+      "avatar_relpath": "avatars/char_222_bpipe.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_222_bpipe.png"
     },
     {
@@ -1540,6 +1596,7 @@
           "description": "立即对前方最近（优先选取正前方）的一名友方单位用500的攻击力攻击15次，之后持续时间内使自身和目标攻击力+50%，攻击速度+50"
         }
       ],
+      "avatar_relpath": "avatars/char_225_haak.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_225_haak.png"
     },
     {
@@ -1567,6 +1624,7 @@
           "description": "停止攻击，攻击范围扩大，攻击力+180%，第二天赋效果提升至2.5倍；技能期间使攻击范围内其他干员生命上限最高的生命上限+30%、攻击力最高的攻击力+30%、防御力最高的防御力+30%"
         }
       ],
+      "avatar_relpath": "avatars/char_245_cello.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_245_cello.png"
     },
     {
@@ -1594,13 +1652,14 @@
           "description": "被动效果：无人机可以部署在远程位，进行群体物理攻击 主动开启：麦哲伦和她的无人机攻击力+150%，无人机攻击的爆炸范围扩大，技能结束时回收所有无人机"
         }
       ],
+      "avatar_relpath": "avatars/char_248_mgllan.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_248_mgllan.png"
     },
     {
       "id": "char_249_mlyss",
       "name": "缪尔赛思",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "tactician",
       "nation_id": "columbia",
       "nation_cn": "哥伦比亚",
@@ -1621,6 +1680,7 @@
           "description": "立即获得15点费用，自身与流形攻击力+50%，若流形为近战复制体时每2秒对周围八格敌人向自己中心小力度地拖拽并使所有阻挡的单位持续晕眩，若为远程复制体时刷新所有流形且攻击附带持续1.5秒的束缚"
         }
       ],
+      "avatar_relpath": "avatars/char_249_mlyss.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_249_mlyss.png"
     },
     {
@@ -1648,6 +1708,7 @@
           "description": "部署后立即对周围所有敌人造成相当于攻击力300%的物理伤害，将其小力地推开并随机施加以下任意一个状态（停顿、束缚、晕眩）4.5秒"
         }
       ],
+      "avatar_relpath": "avatars/char_250_phatom.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_250_phatom.png"
     },
     {
@@ -1675,6 +1736,7 @@
           "description": "攻击力、防御力和生命上限各+130%"
         }
       ],
+      "avatar_relpath": "avatars/char_263_skadi.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_263_skadi.png"
     },
     {
@@ -1702,6 +1764,7 @@
           "description": "攻击间隔增大，攻击力+100%，攻击变为2连击，第一天赋的发动几率提升至75%，每次攻击周围最多4个敌人并将其中等力度地推动"
         }
       ],
+      "avatar_relpath": "avatars/char_264_f12yin.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_264_f12yin.png"
     },
     {
@@ -1729,6 +1792,7 @@
           "description": "全场所有敌人失重，攻击范围扩大，攻击力+150%，可以攻击5个敌人 技能未开启时无法普通攻击"
         }
       ],
+      "avatar_relpath": "avatars/char_291_aglina.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_291_aglina.png"
     },
     {
@@ -1756,6 +1820,7 @@
           "description": "攻击范围扩大，攻击力+60%，攻击速度+25，远程攻击不再降低攻击力 第二次及以后使用时能力加成变为最初的两倍，且持续时间无限"
         }
       ],
+      "avatar_relpath": "avatars/char_293_thorns.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_293_thorns.png"
     },
     {
@@ -1783,6 +1848,7 @@
           "description": "持续固定攻击范围内正前方最远一格，爆炸范围扩大，攻击力提升至125%，对目标位置附近小范围内的敌人攻击力额外提升至220% 持续时间无限，可主动关闭技能"
         }
       ],
+      "avatar_relpath": "avatars/char_300_phenxi.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_300_phenxi.png"
     },
     {
@@ -1810,6 +1876,7 @@
           "description": "技能开启后无法行动且不受到伤害10秒并使周围敌人移动速度-；该状态结束后晕眩周围地面敌人5秒，攻击间隔缩短，攻击力+140%，防御力+80%，攻击阻挡的所有敌人"
         }
       ],
+      "avatar_relpath": "avatars/char_311_mudrok.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_311_mudrok.png"
     },
     {
@@ -1837,6 +1904,7 @@
           "description": "攻击范围扩大，攻击力和防御力+50%；攻击小力度推开范围内除当前目标外的敌人。自身容易成为攻击目标，且有70%概率闪避来自范围外的物理或法术伤害 持续时间无限"
         }
       ],
+      "avatar_relpath": "avatars/char_322_lmlee.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_322_lmlee.png"
     },
     {
@@ -1864,6 +1932,7 @@
           "description": "攻击力+30%，攻击距离+1，攻击变为3连击，每次可以攻击2个敌人"
         }
       ],
+      "avatar_relpath": "avatars/char_332_archet.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_332_archet.png"
     },
     {
@@ -1891,6 +1960,7 @@
           "description": "攻击范围改为前方4格，攻击间隔略微增大，攻击力+180%，天赋的发动概率提高至100%"
         }
       ],
+      "avatar_relpath": "avatars/char_340_shwaz.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_340_shwaz.png"
     },
     {
@@ -1918,6 +1988,7 @@
           "description": "立即恢复所有生命；攻击力+330%，攻击距离+2，攻击目标数+3，生命上限+5000，逐渐流失生命（60秒后到达最大生命20%/秒）；持续时间无限"
         }
       ],
+      "avatar_relpath": "avatars/char_350_surtr.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_350_surtr.png"
     },
     {
@@ -1945,13 +2016,14 @@
           "description": "停止攻击，攻击范围扩大，第二天赋效果提升至2倍，攻击范围内的所有敌人被停顿，且每秒回复范围内所有友方单位相当于攻击力20%的生命"
         }
       ],
+      "avatar_relpath": "avatars/char_358_lisa.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_358_lisa.png"
     },
     {
       "id": "char_362_saga",
       "name": "嵯峨",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "pioneer",
       "nation_id": "higashi",
       "nation_cn": "东",
@@ -1972,6 +2044,7 @@
           "description": "技能持续时间内逐渐获得20点部署费用，攻击间隔稍微增大，攻击距离+1，攻击力+130%，同时攻击阻挡的所有敌人，目标生命值低于一半时额外追加一次攻击"
         }
       ],
+      "avatar_relpath": "avatars/char_362_saga.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_362_saga.png"
     },
     {
@@ -1999,6 +2072,7 @@
           "description": "停止攻击，浮游单元+2，释放浮游单元锁定敌人攻击，攻击范围扩大至整个战场，攻击力+80%，浮游单元攻击附带0.5秒停顿 浮游单元锁敌后直至敌人被击杀、自爆或技能结束后返回干员身边"
         }
       ],
+      "avatar_relpath": "avatars/char_377_gdglow.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_377_gdglow.png"
     },
     {
@@ -2026,6 +2100,7 @@
           "description": "攻击间隔缩短，攻击力+75%，同时攻击2个敌人但仅选择被阻挡的敌人作为目标；立即在攻击范围内的近战位部署两个战术装备（部署后晕眩周围敌人3秒，阻挡的敌人防御力-160）"
         }
       ],
+      "avatar_relpath": "avatars/char_391_rosmon.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_391_rosmon.png"
     },
     {
@@ -2053,6 +2128,7 @@
           "description": "对周围所有地面敌人造成相当于攻击力300%的物理伤害并使其浮空4秒，然后快速轰击12次，每次对随机目标周围小范围内所有敌人造成相当于攻击力250%的物理伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_4009_irene.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4009_irene.png"
     },
     {
@@ -2080,6 +2156,7 @@
           "description": "立即发射一个压缩液氮炮，造成相当于攻击力350%的群体法术伤害并将敌人大力地推开，令其8秒内移动时受到正比于距离的真实伤害；如果蓄水炮在周围4格内的话也会同样进行发射"
         }
       ],
+      "avatar_relpath": "avatars/char_400_weedy.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_400_weedy.png"
     },
     {
@@ -2107,6 +2184,7 @@
           "description": "攻击范围扩大，攻击力+135%，攻击速度+100，立刻为攻击范围内最多3名生命值最高的地面敌人召唤对应的心烛，每次攻击对心烛至少造成35%攻击力的伤害，心烛继承原敌人当前60%的生命值，被攻击时原敌人也会流失同等生命值 心烛只受隐德来希攻击的影响"
         }
       ],
+      "avatar_relpath": "avatars/char_4010_etlchi.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4010_etlchi.png"
     },
     {
@@ -2134,13 +2212,14 @@
           "description": "自身免疫异常状态，生命值+110%，攻击被阻挡目标时，造成相当于攻击力220%的物理伤害 干员处于异常状态时可以释放技能并清除异常状态，但会对自身造成600点法术伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_4011_lessng.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4011_lessng.png"
     },
     {
       "id": "char_4026_vulpis",
       "name": "忍冬",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "pioneer",
       "nation_id": "siracusa",
       "nation_cn": "叙拉古",
@@ -2161,6 +2240,7 @@
           "description": "技能开启时立即获得9点部署费用，攻击距离+1，攻击力+110%，攻击速度从+180逐渐衰减至+0，同时攻击阻挡的所有敌人，每次攻击晕眩敌人0.2秒 若技能期间击倒敌人，则技能结束时进入迷彩状态，直至下一次开启技能"
         }
       ],
+      "avatar_relpath": "avatars/char_4026_vulpis.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4026_vulpis.png"
     },
     {
@@ -2188,6 +2268,7 @@
           "description": "攻击范围扩大，攻击间隔延长，攻击变为向前吹出平行的旋风，旋风伤害随行进距离正比增强并在行进三格后达到最大，使命中的第一个目标浮空2.2秒，并造成最高420%攻击力的法术伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_4027_heyak.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4027_heyak.png"
     },
     {
@@ -2215,6 +2296,7 @@
           "description": "攻击力+170%，攻击速度+50，攻击时有50%的几率造成相当于攻击力185%的物理伤害；技能开启后立即选取自身周围一定范围内的一名地面目标，若其所在位置可部署，自身会移动至目标所在位置进行攻击；自身攻击的精英、领袖敌人被击倒，或自身持续1秒未进行攻击时，会立即重新选取目标 受到致命伤害时不撤退但会结束技能，技能结束后返回初始位置"
         }
       ],
+      "avatar_relpath": "avatars/char_4037_demetr.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4037_demetr.png"
     },
     {
@@ -2242,6 +2324,7 @@
           "description": "攻击力+70%，攻击间隔大幅缩短 过载：攻击力改为+140%，逐渐流失生命（12秒后到达最大生命12%/秒）该技能可随时主动关闭"
         }
       ],
+      "avatar_relpath": "avatars/char_4039_horn.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4039_horn.png"
     },
     {
@@ -2269,6 +2352,7 @@
           "description": "攻击力+55%，攻击速度+30，优先治疗处于异常状态中的单位；只在治疗异常状态中的单位时会消耗子弹，使该次治疗量提升至攻击力的200%并解除目标所受的异常状态 攻击装有8发子弹，打完后技能结束（期间可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_4042_lumen.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4042_lumen.png"
     },
     {
@@ -2296,6 +2380,7 @@
           "description": "攻击速度+80，攻击力+65%，只以精英或领袖敌人为攻击目标，第一天赋的伤害加成提升至原本的140% 可主动关闭技能（期间可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_4046_ebnhlz.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4046_ebnhlz.png"
     },
     {
@@ -2323,6 +2408,7 @@
           "description": "被动效果：陷阱触发时对范围内所有目标造成相当于攻击力350%的法术伤害，使其停顿5秒，并延迟触发范围内的其他共振装置 主动效果：立即获得一个陷阱"
         }
       ],
+      "avatar_relpath": "avatars/char_4048_doroth.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4048_doroth.png"
     },
     {
@@ -2350,6 +2436,7 @@
           "description": "攻击范围扩大，攻击间隔缩短，每次攻击的攻击力提升至200%（对正前方3格提升至255%）"
         }
       ],
+      "avatar_relpath": "avatars/char_4055_bgsnow.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4055_bgsnow.png"
     },
     {
@@ -2377,6 +2464,7 @@
           "description": "攻击力+180%，同时攻击两名敌人，攻击非沉睡目标时使其沉睡5秒，技能期间，全场敌人从沉睡状态醒来或于沉睡中被击倒时，受到法术伤害（随沉睡时长提高至攻击力460%），并使周围一名其他敌人沉睡5秒，攻击范围内的其他友方干员受到致命伤害时，陷入沉睡至生命值完全恢复或技能结束"
         }
       ],
+      "avatar_relpath": "avatars/char_4056_titi.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4056_titi.png"
     },
     {
@@ -2404,6 +2492,7 @@
           "description": "攻击间隔略微增大，攻击力+240%，攻击使命中的目标晕眩0.8秒，对主目标提升至1.5秒，每次攻击后使溅射范围扩大且攻击力额外+25%，最多叠加4层"
         }
       ],
+      "avatar_relpath": "avatars/char_4058_pepe.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4058_pepe.png"
     },
     {
@@ -2431,6 +2520,7 @@
           "description": "攻击范围扩大，特性提升至2倍（每击倒一名敌人时特性倍率-10%），攻击对5个目标造成相当于180%攻击力的物理伤害。范围内所有敌人受到卡西米尔干员攻击时额外附带玛恩纳12%攻击力的真实伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_4064_mlynar.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4064_mlynar.png"
     },
     {
@@ -2458,6 +2548,7 @@
           "description": "立即获得相当于生命上限130%的屏障，攻击间隔增大，攻击力+400%，自身更容易受到敌人攻击"
         }
       ],
+      "avatar_relpath": "avatars/char_4065_judge.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4065_judge.png"
     },
     {
@@ -2485,6 +2576,7 @@
           "description": "携带此技能时：装置可被我方干员攻击但不会受伤，可通过技能造成群体物理伤害但会流失生命 开启时立即获得一个装置，攻击力+55%，攻击速度+55"
         }
       ],
+      "avatar_relpath": "avatars/char_4072_ironmn.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4072_ironmn.png"
     },
     {
@@ -2512,6 +2604,7 @@
           "description": "攻击力+200%，攻击范围与琉璃璧的破碎伤害范围扩大，琉璃璧破碎的伤害阈值提升至3倍，每次攻击若击倒敌人则使身上的琉璃璧破碎并立刻生成 可主动关闭技能（期间可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_4080_lin.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4080_lin.png"
     },
     {
@@ -2539,13 +2632,14 @@
           "description": "攻击范围扩大，攻击力+55%，伤害类型变为法术，额外攻击2个目标，第一天赋的伤害提升至2倍，远程攻击不再降低伤害，每次攻击使自身攻击速度+13（最多叠加8次）"
         }
       ],
+      "avatar_relpath": "avatars/char_4082_qiubai.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4082_qiubai.png"
     },
     {
       "id": "char_4087_ines",
       "name": "伊内丝",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "agent",
       "nation_id": "",
       "nation_cn": "",
@@ -2566,6 +2660,7 @@
           "description": "首次部署时不消耗部署费用，放置一个影哨后离场并立刻刷新再部署时间 部署后攻击力+160%，立刻收回影哨对穿过的最多6名敌人造成相当于攻击力200%的物理伤害，技能期间每对一个敌人造成伤害就获得1点部署费用"
         }
       ],
+      "avatar_relpath": "avatars/char_4087_ines.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4087_ines.png"
     },
     {
@@ -2593,6 +2688,7 @@
           "description": "每秒流失100点生命，并使自身攻击过和攻击过自身的敌人每秒受到200点真实伤害；攻击距离+1，生命上限+60%，攻击力+120%，每次攻击回复自身5%的生命且有25%概率使目标晕眩5秒"
         }
       ],
+      "avatar_relpath": "avatars/char_4088_hodrer.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4088_hodrer.png"
     },
     {
@@ -2620,6 +2716,7 @@
           "description": "攻击间隔延长，攻击力+110%，防御力+90%，法术抗性+25，攻击变为二连击，第二天赋的触发几率提升至2.5倍，优先攻击精英或领袖敌人 第二次及以后使用时，攻击距离+2，攻击变为三连击，持续时间延长至25秒"
         }
       ],
+      "avatar_relpath": "avatars/char_4098_vvana.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4098_vvana.png"
     },
     {
@@ -2647,6 +2744,7 @@
           "description": "持续发动总计10次斩击，每次斩击对最多6名敌人造成相当于攻击力235%的物理伤害，天赋的发动概率提升至100%，并持续将敌人中等力度地拖拽至自身中心，之后将造成一次相当于攻击力330%的物理伤害并将敌人较大力地拖拽至自身中心"
         }
       ],
+      "avatar_relpath": "avatars/char_4116_blkkgt.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4116_blkkgt.png"
     },
     {
@@ -2674,6 +2772,7 @@
           "description": "立即停止攻击直至子弹装满，装填间隔大幅缩短，攻击范围扩大，攻击造成相当于攻击力330%的物理伤害并使目标束缚2秒 技能期间若击倒敌人，技能结束时获得10点技力"
         }
       ],
+      "avatar_relpath": "avatars/char_4117_ray.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4117_ray.png"
     },
     {
@@ -2701,6 +2800,7 @@
           "description": "立刻对前方进行7次斩击，每次对最多3名敌人造成攻击力245%的物理伤害（最后一击系数加倍且使目标晕眩5秒），期间特性的生命回复改为获得相当于回复量3倍的屏障 屏障最高叠加至最大生命的2倍，持续15秒"
         }
       ],
+      "avatar_relpath": "avatars/char_4121_zuole.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4121_zuole.png"
     },
     {
@@ -2728,6 +2828,7 @@
           "description": "被动效果：陷阱触发时使周围所有目标停顿并获得35%的脆弱效果，持续7秒 主动效果：攻击间隔缩短，攻击力+90%，优先攻击受到雷鸣地雷效果影响的敌人 攻击装有40发子弹，打完后技能结束（期间可随时停止技能），技能结束时获得两个陷阱"
         }
       ],
+      "avatar_relpath": "avatars/char_4123_ela.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4123_ela.png"
     },
     {
@@ -2755,6 +2856,7 @@
           "description": "攻击范围扩大，攻击力+50%，攻击间隔较大幅度缩短，使攻击范围内的地面敌人物理与法术命中率-50%。自身更易受到敌人攻击，敌人未命中自身或自身闪避时回复8%最大生命值"
         }
       ],
+      "avatar_relpath": "avatars/char_4132_ascln.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4132_ascln.png"
     },
     {
@@ -2782,6 +2884,7 @@
           "description": "攻击范围扩大，攻击力+300%，同时攻击4个目标，使攻击范围内敌方子弹的飞行速度大幅降低、并在技能结束时将其全部清除"
         }
       ],
+      "avatar_relpath": "avatars/char_4133_logos.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4133_logos.png"
     },
     {
@@ -2809,6 +2912,7 @@
           "description": "攻击范围扩大，自身特性效果提高至90%，“微尘”不再消失，攻击范围内所有其它友方单位获得相当于魔王100%的最大生命值的鼓舞效果，每隔2秒重新分配攻击范围内所有友方单位的生命"
         }
       ],
+      "avatar_relpath": "avatars/char_4134_cetsyr.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4134_cetsyr.png"
     },
     {
@@ -2836,6 +2940,7 @@
           "description": "每次攻击发射3个回旋投射物（每个造成相当于攻击力175%的物理伤害），投射物全部回收时娜仁图亚对周围8格内至多3名敌人造成一次相当于攻击力的物理伤害并使其停顿1秒"
         }
       ],
+      "avatar_relpath": "avatars/char_4138_narant.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4138_narant.png"
     },
     {
@@ -2863,6 +2968,7 @@
           "description": "吟唱5秒后，消耗8点魔力，在正前方位置造成爆炸，对周围敌人造成390%攻击力的法术伤害，炸到的高台会崩开碎片晕眩其周围敌人4秒 可追加吟唱10秒，完成后消耗剩余所有魔力，每额外消耗8点魔力，追加1次爆炸 追加吟唱可随时停止"
         }
       ],
+      "avatar_relpath": "avatars/char_4141_marcil.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4141_marcil.png"
     },
     {
@@ -2890,6 +2996,7 @@
           "description": "最大生命值+80%，攻击力+260%，立即朝面前扔出一个船锚，撞击到目标或达到最远距离时停止，并对周围所有敌人造成攻击力160%的物理伤害和6秒晕眩。若船锚停留的位置可以部署，乌尔比安会移动到该位置 可以手动结束技能，技能结束时乌尔比安会返回到初始的位置"
         }
       ],
+      "avatar_relpath": "avatars/char_4145_ulpia.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4145_ulpia.png"
     },
     {
@@ -2917,6 +3024,7 @@
           "description": "攻击范围扩大，攻击力+220%，攻击速度+60，同时攻击2个目标，若目标处于凋亡损伤爆发期间，攻击造成元素伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_4146_nymph.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4146_nymph.png"
     },
     {
@@ -2944,6 +3052,7 @@
           "description": "攻击力+230%，防御力+160%，阻挡数+2，每秒恢复6%生命 技能结束后自身晕眩5秒"
         }
       ],
+      "avatar_relpath": "avatars/char_416_zumama.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_416_zumama.png"
     },
     {
@@ -2971,6 +3080,7 @@
           "description": "攻击范围改变，移动至重构体位置，攻击力+330%，攻击间隔降低，阻挡数+2，生命上限+5000，每秒流失80点生命值，同时攻击阻挡的所有敌人，伤害类型变为真实，攻击治疗自身相当于攻击力50%的生命值 技能结束或受到致命伤害时，返回初始位置"
         }
       ],
+      "avatar_relpath": "avatars/char_4179_monstr.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4179_monstr.png"
     },
     {
@@ -2998,6 +3108,7 @@
           "description": "攻击范围扩大，攻击同时使用钢琴和风琴音色演奏，各自演奏2个造成相当于攻击力220%物理和法术伤害的音符，且分别追踪法术抗性和防御力最高的敌人。 Fever期间Ave Mujica成员受到致命伤害时不撤退，Fever结束后退场"
         }
       ],
+      "avatar_relpath": "avatars/char_4182_oblvns.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4182_oblvns.png"
     },
     {
@@ -3025,6 +3136,7 @@
           "description": "停止攻击，每0.5秒消耗1发子弹依次锁定敌人，技能结束时对每名被锁定的敌人所在位置进行轰炸，轰炸造成攻击力300%的范围物理伤害（中心伤害提升至攻击力的450%） 攻击装有5发弹药，打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_4193_lemuen.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4193_lemuen.png"
     },
     {
@@ -3052,6 +3164,7 @@
           "description": "技能开启时为所有其他【拉特兰】干员补弹4发；攻击范围扩大，生命上限+80%，攻击力+220%，防御力+80%，停止主动攻击敌人，受到攻击时立即向攻击范围内最多3个敌人进行1次反击，反击最小间隔为实际攻击间隔的10% 攻击装有30发弹药，打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_4194_rmixer.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4194_rmixer.png"
     },
     {
@@ -3079,6 +3192,7 @@
           "description": "被动：召唤物可部署在远程位，召唤物找不到攻击目标且可攻击时，可以与其自身范围内其他电弧的召唤物协同攻击 开启：自身和召唤物攻击力+150%，对敌人造成伤害时，使敌人受到停顿与35％法术脆弱效果，持续2秒 技能开启时获得1个召唤物"
         }
       ],
+      "avatar_relpath": "avatars/char_4195_radian.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4195_radian.png"
     },
     {
@@ -3106,6 +3220,7 @@
           "description": "攻击力+55%，攻击范围扩大，攻击间隔缩短，技能期间浮泡提供的庇护提升至2倍；攻击我方浮泡的敌人将浮空4秒，在此浮空期间每秒受到相当于遥攻击力80%的法术伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_4202_haruka.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4202_haruka.png"
     },
     {
@@ -3133,13 +3248,14 @@
           "description": "攻击范围扩大，范围内敌人隐匿失效且麻痹层数上限降为2，攻击力+275%同时攻击2个目标，范围中干员开启技能时（包括自身）使范围内敌人获得2层麻痹（至多3次），范围内敌人麻痹层数每超过上限1层在目标及1名敌人间跳跃1次185%攻击力的元素伤害，跳跃间存在短暂间隔"
         }
       ],
+      "avatar_relpath": "avatars/char_4204_mantra.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4204_mantra.png"
     },
     {
       "id": "char_420_flamtl",
       "name": "焰尾",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "pioneer",
       "nation_id": "kazimierz",
       "nation_cn": "卡西米尔",
@@ -3160,6 +3276,7 @@
           "description": "技能持续时间内逐渐获得8点部署费用，攻击间隔缩短，攻击力+90%，阻挡数+1，获得80%的物理和法术闪避"
         }
       ],
+      "avatar_relpath": "avatars/char_420_flamtl.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_420_flamtl.png"
     },
     {
@@ -3187,6 +3304,7 @@
           "description": "携带此技能时：装置可建造并升级一个可以放置远程干员并为其提供增益的特殊高台 攻击力+160%，防御力+160%；小工程师装置为高台装置回复技力和生命的效果翻倍 技能开启时获得一个装置"
         }
       ],
+      "avatar_relpath": "avatars/char_4212_nasti.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4212_nasti.png"
     },
     {
@@ -3214,13 +3332,14 @@
           "description": "攻击速度+180，储存的能量发射后会在敌人间（优先不同目标）跳跃一次，并造成相当于165%攻击力的法术伤害，转置能量改为跳跃3次 攻击装有27发弹药，仅在发射每个储存能量时消耗1发弹药，发射转置能量消耗3发弹药，弹药打完后结束（可随时停止技能）"
         }
       ],
+      "avatar_relpath": "avatars/char_4226_veen.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4226_veen.png"
     },
     {
       "id": "char_4228_closur",
       "name": "可露希尔",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "tactician",
       "nation_id": "rhodes",
       "nation_cn": "罗德岛",
@@ -3241,6 +3360,7 @@
           "description": "技能持续时间内逐渐获得18点部署费用，攻击间隔缩短，锁定自身和援军原本攻击范围内的敌人进行攻击，造成可露希尔250%攻击力的物理伤害并施加持续3秒的6%迟钝效果（可叠加，最高60%），每攻击9次后攻击目标数+1（最多触发6次）"
         }
       ],
+      "avatar_relpath": "avatars/char_4228_closur.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_4228_closur.png"
     },
     {
@@ -3268,6 +3388,7 @@
           "description": "攻击力+110%，防御力+60%，每次攻击额外造成相当于攻击力100%的法术伤害，并恢复周围一名其他友方单位相当于攻击力100%的生命"
         }
       ],
+      "avatar_relpath": "avatars/char_423_blemsh.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_423_blemsh.png"
     },
     {
@@ -3295,13 +3416,14 @@
           "description": "攻击范围扩大，攻击力逐渐增至+280% 蓄力额外效果：每次攻击使目标受到来自卡涅利安的伤害提升20%（最多叠加5次），持续至技能结束"
         }
       ],
+      "avatar_relpath": "avatars/char_426_billro.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_426_billro.png"
     },
     {
       "id": "char_427_vigil",
       "name": "伺夜",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "tactician",
       "nation_id": "siracusa",
       "nation_cn": "叙拉古",
@@ -3322,6 +3444,7 @@
           "description": "技能持续时间内逐渐获得12点部署费用，攻击变为三连击；狼群与伺夜攻击被狼群阻挡的单位造成伤害时，额外造成相当于伺夜攻击力50%的法术伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_427_vigil.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_427_vigil.png"
     },
     {
@@ -3349,6 +3472,7 @@
           "description": "攻击范围改为前方无限长的直线，攻击力+140%，攻击原本范围以外的目标时，造成的伤害提高至140%"
         }
       ],
+      "avatar_relpath": "avatars/char_430_fartth.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_430_fartth.png"
     },
     {
@@ -3376,6 +3500,7 @@
           "description": "攻击范围扩大，攻击力+150%，第一天赋额外攻击2个目标并附加1秒晕眩；每次攻击命中目标少于3名敌人时，自身流失最大生命值的12%。"
         }
       ],
+      "avatar_relpath": "avatars/char_437_mizuki.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_437_mizuki.png"
     },
     {
@@ -3403,6 +3528,7 @@
           "description": "被动：最多1名悲叹的仆役变为特殊形态，此形态下只能通过技能升级，最多升级6次 开启：立刻对范围内所有敌人造成攻击力800%的法术伤害，之后消耗一个悲叹的仆役使特殊仆役升级并回复20%生命（若悲叹的仆役已升级则翻倍），重复3次"
         }
       ],
+      "avatar_relpath": "avatars/char_450_necras.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_450_necras.png"
     },
     {
@@ -3430,6 +3556,7 @@
           "description": "向前发射破墙弹，对沿途敌人造成300%的物理伤害并向后较大力度推动；爆炸对周围造成400%的物理伤害（从低地撞到高台直接爆炸且造成800%的物理伤害）；每次部署只能释放2次"
         }
       ],
+      "avatar_relpath": "avatars/char_456_ash.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_456_ash.png"
     },
     {
@@ -3457,6 +3584,7 @@
           "description": "立即寻找大范围内生命值最高的目标，在其位置生成持续4秒的雷暴区域，期间每0.5秒以150%的攻击力对雷暴区域内的随机敌人进行一次额外攻击；可充能2次"
         }
       ],
+      "avatar_relpath": "avatars/char_472_pasngr.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_472_pasngr.png"
     },
     {
@@ -3484,13 +3612,14 @@
           "description": "对一个远处目标束缚并制造一个龙卷风使周围敌人移动速度-，每1.5秒造成130%攻击力的法术伤害并较大力度地拖拽至中心。技能结束时把目标地点周围的敌人较大力度地拖拽至面前"
         }
       ],
+      "avatar_relpath": "avatars/char_474_glady.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_474_glady.png"
     },
     {
       "id": "char_479_sleach",
       "name": "琴柳",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "bearer",
       "nation_id": "victoria",
       "nation_cn": "维多利亚",
@@ -3511,6 +3640,7 @@
           "description": "停止攻击，立即回复10点部署费用，将军旗掷向地面敌人所在位置，并对周围造成300%的物理伤害和3.5秒晕眩；期间军旗周围8格敌人受到停顿和30%的脆弱效果。技能结束时收回军旗。"
         }
       ],
+      "avatar_relpath": "avatars/char_479_sleach.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_479_sleach.png"
     },
     {
@@ -3538,13 +3668,14 @@
           "description": "攻击力+100%，额外攻击两个目标，身前一格为近战位并部署我方干员时使其获得以下增益：生命值高于80%获得+50%攻击力的精力充沛、防御力+35%、阻挡数+1（若身前一格不存在干员或不为近战位时，该效果由自身获得）"
         }
       ],
+      "avatar_relpath": "avatars/char_485_pallas.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_485_pallas.png"
     },
     {
       "id": "char_608_acpion",
       "name": "郁金香",
       "profession": "PIONEER",
-      "profession_cn": "先锋",
+      "profession_cn": "PIONEER",
       "sub_profession_id": "pioneer",
       "nation_id": "",
       "nation_cn": "",
@@ -3565,6 +3696,7 @@
           "description": "立即获得8点费用，对周围的敌人发动8次连续斩击，每次造成相当于攻击力200%的物理伤害，并无视目标50%防御力"
         }
       ],
+      "avatar_relpath": "avatars/char_608_acpion.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_608_acpion.png"
     },
     {
@@ -3592,6 +3724,7 @@
           "description": "攻击力+60%；每次攻击时获得可叠加的攻击力+21%的增益（最多叠加8层），切换目标后层数清零，技能持续期间内干员的生命值始终不会低于1"
         }
       ],
+      "avatar_relpath": "avatars/char_609_acguad.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_609_acguad.png"
     },
     {
@@ -3619,6 +3752,7 @@
           "description": "技能持续时间内防御力+100%，阻挡数+1，每秒对自身阻挡的敌人造成相当于攻击力70%的法术伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_610_acfend.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_610_acfend.png"
     },
     {
@@ -3646,6 +3780,7 @@
           "description": "可以同时攻击3个目标，第一天赋的触发概率提高至50%，攻击变为二连击；攻击目标生命值高于80%时额外造成1次伤害"
         }
       ],
+      "avatar_relpath": "avatars/char_611_acnipe.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_611_acnipe.png"
     },
     {
@@ -3673,6 +3808,7 @@
           "description": "开启技能时，立即对攻击范围内的所有敌人造成一次攻击力的法术伤害，之后攻击目标数+1，攻击速度+75，溅射范围略微扩大"
         }
       ],
+      "avatar_relpath": "avatars/char_612_accast.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_612_accast.png"
     },
     {
@@ -3700,6 +3836,7 @@
           "description": "自身攻击距离+2，攻击力+40%，每次治疗2个目标，并额外治疗一次目标或目标相邻1个友方单位，治疗量为主目标的30%。对生命值不高于一半的友方单位治疗量提高为原来的150%"
         }
       ],
+      "avatar_relpath": "avatars/char_613_acmedc.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_613_acmedc.png"
     },
     {
@@ -3727,6 +3864,7 @@
           "description": "攻击范围扩大，攻击力+100%，第一天赋的效果提升至3倍，攻击范围内所有敌人受到25%的脆弱效果和25%的虚弱效果"
         }
       ],
+      "avatar_relpath": "avatars/char_614_acsupo.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_614_acsupo.png"
     },
     {
@@ -3754,6 +3892,7 @@
           "description": "部署后立即对周围所有敌人造成相当于攻击力300%的物理伤害，开启空间源石技艺将所有未被阻挡的敌人小力地拖拽至面前并施加4秒停顿"
         }
       ],
+      "avatar_relpath": "avatars/char_615_acspec.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_615_acspec.png"
     },
     {
@@ -3771,6 +3910,7 @@
           "description": "攻击力+225%，攻击速度+50，同时攻击2个目标，远程攻击不再降低攻击力"
         }
       ],
+      "avatar_relpath": "avatars/char_617_sharp2.png",
       "avatar_url": "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/char_617_sharp2.png"
     }
   ]
