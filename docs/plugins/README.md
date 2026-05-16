@@ -27,6 +27,7 @@
 - [`dream`](./dream/README.md)：牛牛做梦（跨群漂流、历史梦、归档图）
 - [`greeting`](./greeting/README.md)：入群/好友欢迎与被踢处理
 - [`block`](./block/README.md)：其他牛牛与睡眠期消息拦截
+- [`duel`](./duel/README.md)：牛牛决斗（泰拉风味多幕、QTE、八角笼）
 - [`blacklist`](./blacklist/README.md)：全局用户拉黑（`UserConfig.banned`）与 OneBot V11 事件门禁
 
 ## 使用建议
