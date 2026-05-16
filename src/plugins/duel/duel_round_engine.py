@@ -12,11 +12,11 @@ from nonebot.adapters.onebot.v11 import Message
 from nonebot.matcher import Matcher  # noqa: TC002
 
 from src.plugins.duel.config import plugin_config
+from src.plugins.duel.duel_labels import bind_duel_labels, duel_label_for, reset_duel_labels, resolve_duel_labels
 from src.plugins.duel.duel_message import (
     append_duel_message,
     apply_ab_placeholders,
     coerce_duel_message,
-    duel_at,
     duel_join_blocks,
     duel_join_lines,
     duel_join_spaced,
@@ -530,7 +530,7 @@ def format_player_stat_lines(
         dp_delta = dp - dp_before
         if dp_delta != 0:
             dp_part += f" ({dp_delta:+d})"
-    return duel_at(qq) + duel_text(f" {hp_part} {dp_part}")
+    return duel_text(f"{duel_label_for(qq)} {hp_part} {dp_part}")
 
 
 def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: int) -> Message:
@@ -542,7 +542,7 @@ def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: 
             tokens.append(t)
     if not tokens:
         return Message()
-    return duel_at(qq) + duel_text(" " + " ".join(tokens))
+    return duel_text(f"{duel_label_for(qq)} " + " ".join(tokens))
 
 
 def player_stat_changed(
@@ -756,16 +756,16 @@ def summarize_winner(
         tag = duel_text("双方英雄")
         tail = duel_text("双方力竭，同归沉寂。")
     elif chp <= 0:
-        tag = duel_at(defender_id)
+        tag = duel_text(duel_label_for(defender_id))
         tail = duel_text("令对手力竭倒地，胜局已定。" if ko else "战芒更盛。")
     elif dhp <= 0:
-        tag = duel_at(challenger_id)
+        tag = duel_text(duel_label_for(challenger_id))
         tail = duel_text("令对手力竭倒地，胜局已定。" if ko else "战芒更盛。")
     elif chp > dhp:
-        tag = duel_at(challenger_id)
+        tag = duel_text(duel_label_for(challenger_id))
         tail = duel_text("战芒更盛，双月似为其而明。")
     elif dhp > chp:
-        tag = duel_at(defender_id)
+        tag = duel_text(duel_label_for(defender_id))
         tail = duel_text("战芒更盛，双月似为其而明。")
     else:
         tag = duel_text("双方英雄")
@@ -1163,41 +1163,25 @@ async def play_duel_rounds(
     if not pools["public"]:
         logger.warning("duel public pool empty, public rounds will skip")
 
+    labels = await resolve_duel_labels(matcher.bot, group_id, challenger_id, defender_id)
+    labels_token = bind_duel_labels(labels)
+
     stacks = DuelStacks()
     plan = run_round_plan()
     narr = DuelNarrativeLog()
-    opener = (
-        duel_text("擂台灯光压暗。")
-        + duel_at(challenger_id)
-        + duel_text(" 与 ")
-        + duel_at(defender_id)
-        + duel_text(" 步入场心，对决开始。")
-    )
-    if bot_mode:
-        opener = append_duel_message(duel_plain("【牛斗】两头牛牛踏入光圈，刃鸣作响。"), opener)
-    await send_duel_line(
-        group_id,
-        opener,
-        matcher=matcher,
-        challenger_id=challenger_id,
-        defender_id=defender_id,
-        bot_mode=bot_mode,
-        challenger_is_bot=challenger_is_bot,
-        defender_is_bot=defender_is_bot,
-        speaker="neutral",
-    )
-
-    pause_lo, pause_hi = round_pause_sec or (
-        plugin_config.duel_round_pause_min_sec,
-        plugin_config.duel_round_pause_max_sec,
-    )
-
-    for i, kind in enumerate(plan, start=1):
-        if stacks.is_ko():
-            break
-        await asyncio.sleep(random.uniform(pause_lo, pause_hi))
-        round_buf_token = begin_round_line_buffer(
-            group_id=group_id,
+    try:
+        opener = (
+            duel_text("擂台灯光压暗。")
+            + duel_text(duel_label_for(challenger_id))
+            + duel_text(" 与 ")
+            + duel_text(duel_label_for(defender_id))
+            + duel_text(" 步入场心，对决开始。")
+        )
+        if bot_mode:
+            opener = append_duel_message(duel_plain("【牛斗】两头牛牛踏入光圈，刃鸣作响。"), opener)
+        await send_duel_line(
+            group_id,
+            opener,
             matcher=matcher,
             challenger_id=challenger_id,
             defender_id=defender_id,
@@ -1206,51 +1190,99 @@ async def play_duel_rounds(
             defender_is_bot=defender_is_bot,
             speaker="neutral",
         )
-        try:
-            round_start = snapshot_combat(stacks)
-            total_rounds = plugin_config.duel_total_rounds
-            hdr = f"第{i}/{total_rounds}幕 · "
-            if kind == "public":
-                hdr += "歌咏场"
-                ev = _pick_weighted(pools["public"], qte_mult=plugin_config.duel_qte_event_weight_mult)
-                if ev:
-                    ark = _maybe_pick_ark_ctx(ev)
-                    is_intrusion = bool(ev.qte and ev.qte.get("type") == "operator_intrusion")
-                    if is_intrusion:
-                        await run_event_qte_if_any(
-                            matcher,
-                            group_id,
-                            challenger_id,
-                            defender_id,
-                            stacks,
-                            ev,
-                            "challenger",
-                            intrusion_ctx=ark,
-                            round_header=hdr,
-                            scene_card=ev.describe,
-                            narr_log=narr,
-                            round_index=i,
-                            round_tag="歌咏·使者",
-                            bot_mode=bot_mode,
-                            challenger_is_bot=challenger_is_bot,
-                            defender_is_bot=defender_is_bot,
-                        )
+
+        pause_lo, pause_hi = round_pause_sec or (
+            plugin_config.duel_round_pause_min_sec,
+            plugin_config.duel_round_pause_max_sec,
+        )
+
+        for i, kind in enumerate(plan, start=1):
+            if stacks.is_ko():
+                break
+            await asyncio.sleep(random.uniform(pause_lo, pause_hi))
+            round_buf_token = begin_round_line_buffer(
+                group_id=group_id,
+                matcher=matcher,
+                challenger_id=challenger_id,
+                defender_id=defender_id,
+                bot_mode=bot_mode,
+                challenger_is_bot=challenger_is_bot,
+                defender_is_bot=defender_is_bot,
+                speaker="neutral",
+            )
+            try:
+                round_start = snapshot_combat(stacks)
+                total_rounds = plugin_config.duel_total_rounds
+                hdr = f"第{i}/{total_rounds}幕 · "
+                if kind == "public":
+                    hdr += "歌咏场"
+                    ev = _pick_weighted(pools["public"], qte_mult=plugin_config.duel_qte_event_weight_mult)
+                    if ev:
+                        ark = _maybe_pick_ark_ctx(ev)
+                        is_intrusion = bool(ev.qte and ev.qte.get("type") == "operator_intrusion")
+                        if is_intrusion:
+                            await run_event_qte_if_any(
+                                matcher,
+                                group_id,
+                                challenger_id,
+                                defender_id,
+                                stacks,
+                                ev,
+                                "challenger",
+                                intrusion_ctx=ark,
+                                round_header=hdr,
+                                scene_card=ev.describe,
+                                narr_log=narr,
+                                round_index=i,
+                                round_tag="歌咏·使者",
+                                bot_mode=bot_mode,
+                                challenger_is_bot=challenger_is_bot,
+                                defender_is_bot=defender_is_bot,
+                            )
+                        else:
+                            snap = snapshot_combat(stacks)
+                            apply_event_effects(stacks, ev, "challenger")
+                            line = append_combat_delta(
+                                duel_join_lines(
+                                    hdr,
+                                    format_describe_with_combat(ev.describe, challenger_id, defender_id, stacks, ark),
+                                ),
+                                challenger_id,
+                                defender_id,
+                                snap,
+                                stacks,
+                            )
+                            await send_duel_line(
+                                group_id,
+                                line,
+                                matcher=matcher,
+                                challenger_id=challenger_id,
+                                defender_id=defender_id,
+                                bot_mode=bot_mode,
+                                challenger_is_bot=challenger_is_bot,
+                                defender_is_bot=defender_is_bot,
+                            )
+                            narr.add(f"第{i}幕·歌咏 {ev.event_id}")
+                            await run_event_qte_if_any(
+                                matcher,
+                                group_id,
+                                challenger_id,
+                                defender_id,
+                                stacks,
+                                ev,
+                                "challenger",
+                                intrusion_ctx=ark,
+                                narr_log=narr,
+                                round_index=i,
+                                round_tag="歌咏",
+                                bot_mode=bot_mode,
+                                challenger_is_bot=challenger_is_bot,
+                                defender_is_bot=defender_is_bot,
+                            )
                     else:
-                        snap = snapshot_combat(stacks)
-                        apply_event_effects(stacks, ev, "challenger")
-                        line = append_combat_delta(
-                            duel_join_lines(
-                                hdr,
-                                format_describe_with_combat(ev.describe, challenger_id, defender_id, stacks, ark),
-                            ),
-                            challenger_id,
-                            defender_id,
-                            snap,
-                            stacks,
-                        )
                         await send_duel_line(
                             group_id,
-                            line,
+                            hdr + "\n（歌咏场无词，本幕仅余风声。）",
                             matcher=matcher,
                             challenger_id=challenger_id,
                             defender_id=defender_id,
@@ -1258,104 +1290,78 @@ async def play_duel_rounds(
                             challenger_is_bot=challenger_is_bot,
                             defender_is_bot=defender_is_bot,
                         )
-                        narr.add(f"第{i}幕·歌咏 {ev.event_id}")
-                        await run_event_qte_if_any(
+                else:
+                    hdr += "英雄交锋"
+                    from src.plugins.duel.duel_send import round_buffer_prepend, send_duel_line
+
+                    if plugin_config.duel_compact_round:
+                        round_buffer_prepend(hdr)
+                    else:
+                        await send_duel_line(
+                            group_id,
+                            hdr,
+                            matcher=matcher,
+                            challenger_id=challenger_id,
+                            defender_id=defender_id,
+                            bot_mode=bot_mode,
+                            challenger_is_bot=challenger_is_bot,
+                            defender_is_bot=defender_is_bot,
+                        )
+                    exchange_changed_hp_dp = False
+                    if pools["exchange"]:
+                        exchange_changed_hp_dp = await run_exchange_bout(
                             matcher,
                             group_id,
                             challenger_id,
                             defender_id,
                             stacks,
-                            ev,
-                            "challenger",
-                            intrusion_ctx=ark,
-                            narr_log=narr,
-                            round_index=i,
-                            round_tag="歌咏",
+                            pools["exchange"],
+                            narr,
+                            i,
                             bot_mode=bot_mode,
                             challenger_is_bot=challenger_is_bot,
                             defender_is_bot=defender_is_bot,
                         )
-                else:
-                    await send_duel_line(
-                        group_id,
-                        hdr + "\n（歌咏场无词，本幕仅余风声。）",
-                        matcher=matcher,
-                        challenger_id=challenger_id,
-                        defender_id=defender_id,
-                        bot_mode=bot_mode,
-                        challenger_is_bot=challenger_is_bot,
-                        defender_is_bot=defender_is_bot,
-                    )
-            else:
-                hdr += "英雄交锋"
-                from src.plugins.duel.duel_send import round_buffer_prepend, send_duel_line
-
-                if plugin_config.duel_compact_round:
-                    round_buffer_prepend(hdr)
-                else:
-                    await send_duel_line(
-                        group_id,
-                        hdr,
-                        matcher=matcher,
-                        challenger_id=challenger_id,
-                        defender_id=defender_id,
-                        bot_mode=bot_mode,
-                        challenger_is_bot=challenger_is_bot,
-                        defender_is_bot=defender_is_bot,
-                    )
-                exchange_changed_hp_dp = False
-                if pools["exchange"]:
-                    exchange_changed_hp_dp = await run_exchange_bout(
+                    await play_clash_hero_events(
                         matcher,
                         group_id,
                         challenger_id,
                         defender_id,
                         stacks,
-                        pools["exchange"],
+                        pools,
                         narr,
                         i,
                         bot_mode=bot_mode,
                         challenger_is_bot=challenger_is_bot,
                         defender_is_bot=defender_is_bot,
+                        skip_describe=exchange_changed_hp_dp,
                     )
-                await play_clash_hero_events(
-                    matcher,
-                    group_id,
-                    challenger_id,
-                    defender_id,
-                    stacks,
-                    pools,
-                    narr,
-                    i,
-                    bot_mode=bot_mode,
-                    challenger_is_bot=challenger_is_bot,
-                    defender_is_bot=defender_is_bot,
-                    skip_describe=exchange_changed_hp_dp,
+                round_snap = round_start if plugin_config.duel_compact_round else None
+                await flush_round_line_buffer(
+                    format_round_status_line(
+                        challenger_id,
+                        defender_id,
+                        stacks,
+                        round_start=round_snap,
+                    )
                 )
-            round_snap = round_start if plugin_config.duel_compact_round else None
-            await flush_round_line_buffer(
-                format_round_status_line(
-                    challenger_id,
-                    defender_id,
-                    stacks,
-                    round_start=round_snap,
-                )
-            )
-        finally:
-            reset_round_line_buffer(round_buf_token)
-        if stacks.is_ko():
-            break
+            finally:
+                reset_round_line_buffer(round_buf_token)
+            if stacks.is_ko():
+                break
 
-    await asyncio.sleep(random.uniform(pause_lo, pause_hi))
-    await send_duel_line(
-        group_id,
-        summarize_winner(challenger_id, defender_id, stacks, ko=stacks.is_ko()),
-        matcher=matcher,
-        challenger_id=challenger_id,
-        defender_id=defender_id,
-        bot_mode=bot_mode,
-        challenger_is_bot=challenger_is_bot,
-        defender_is_bot=defender_is_bot,
-        speaker="neutral",
-    )
+        await asyncio.sleep(random.uniform(pause_lo, pause_hi))
+        await send_duel_line(
+            group_id,
+            summarize_winner(challenger_id, defender_id, stacks, ko=stacks.is_ko()),
+            matcher=matcher,
+            challenger_id=challenger_id,
+            defender_id=defender_id,
+            bot_mode=bot_mode,
+            challenger_is_bot=challenger_is_bot,
+            defender_is_bot=defender_is_bot,
+            speaker="neutral",
+        )
+    finally:
+        reset_duel_labels(labels_token)
     return stacks

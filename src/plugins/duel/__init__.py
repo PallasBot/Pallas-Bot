@@ -1,3 +1,4 @@
+import asyncio
 import re
 
 from nonebot import on_message
@@ -221,11 +222,17 @@ async def duel_bot_pair(matcher, bot: Bot, event: GroupMessageEvent, a: str, b: 
     if a == b:
         await matcher.send("同一头牛不能左右互搏哦。")
         return
+    from src.plugins.duel.duel_labels import fetch_group_member_display_name
+
+    ch_name, def_name = await asyncio.gather(
+        fetch_group_member_display_name(bot, event.group_id, a),
+        fetch_group_member_display_name(bot, event.group_id, b),
+    )
     await matcher.send(
         MessageSegment.text("【八角笼·牛斗】")
-        + MessageSegment.at(int(a))
+        + MessageSegment.text(ch_name)
         + MessageSegment.text(" 与 ")
-        + MessageSegment.at(int(b))
+        + MessageSegment.text(def_name)
         + MessageSegment.text(" 登台。其间两头牛互可见消息，剧目台词不入复读学习。")
     )
     await run_duel_match(matcher, event, a, b, dual_bot=True)

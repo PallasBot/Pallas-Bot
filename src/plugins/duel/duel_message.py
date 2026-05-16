@@ -4,7 +4,15 @@ from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
 
 def duel_at(qq: str | int) -> MessageSegment:
+    """QTE 等需要 @ 提醒时使用。"""
     return MessageSegment.at(int(qq))
+
+
+def duel_display(qq: str | int) -> MessageSegment:
+    """叙事、数值行等：展示开战时缓存的群昵称/名片。"""
+    from src.plugins.duel.duel_labels import duel_label_for
+
+    return duel_text(duel_label_for(qq))
 
 
 def duel_text(text: str) -> MessageSegment:
@@ -75,24 +83,29 @@ def append_duel_message(base: str | Message, extra: str | Message, sep: str = "\
 def apply_ab_placeholders(template: str, challenger_id: str, defender_id: str) -> Message:
     if not template:
         return Message()
-    markers: list[tuple[str, str]] = [("<A>", challenger_id), ("<B>", defender_id)]
+    from src.plugins.duel.duel_labels import duel_label_for
+
+    markers: list[tuple[str, str]] = [
+        ("<A>", duel_label_for(challenger_id)),
+        ("<B>", duel_label_for(defender_id)),
+    ]
     segments: list[MessageSegment] = []
     rest = template
     while rest:
         best_idx = -1
         best_marker = ""
-        best_qq = ""
-        for marker, qq in markers:
+        best_name = ""
+        for marker, name in markers:
             idx = rest.find(marker)
             if idx >= 0 and (best_idx < 0 or idx < best_idx):
                 best_idx = idx
                 best_marker = marker
-                best_qq = qq
+                best_name = name
         if best_idx < 0:
             segments.append(MessageSegment.text(rest))
             break
         if best_idx > 0:
             segments.append(MessageSegment.text(rest[:best_idx]))
-        segments.append(duel_at(best_qq))
+        segments.append(duel_text(best_name))
         rest = rest[best_idx + len(best_marker) :]
     return Message(segments)
