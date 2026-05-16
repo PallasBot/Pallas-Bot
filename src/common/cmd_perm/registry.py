@@ -55,6 +55,9 @@ DEFAULT_COMMAND_PERMISSIONS: dict[str, PermissionLevel] = {
     "repeater.ban_latest": "staff",
     "dream.ban_cleanup": "staff",
     "roulette.mode_switch": "staff",
+    "duel.duel": "everyone",
+    "duel.cage": "everyone",
+    "duel.reload_events": "group_moderator",
 }
 
 
