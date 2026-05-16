@@ -80,9 +80,15 @@ if not await satisfies_command_permission(bot, event, "my_plugin.do_something"):
 
 ### 写法约定
 
-1. **`trigger_condition`**：只描述**如何触发**（场景、私聊/群、关键词等），**不要**写死权限角色；权限单独由「何人可用」列展示。
-2. **`command_permission`**：字符串，单个命令 ID。
-3. **`command_permissions`**：字符串列表；多命令且当前生效等级不一致时，「何人可用」为「任一：…可用」。
+1. **`PluginMetadata.usage`**：只写**如何触发 / 做什么**；**不要**在各行说明里写「仅群管」「默认群主」等（WebUI 与 `.env` 覆盖后会与文案矛盾）。有独立命令权限的插件，可在 `usage` **末行**统一加一句（与 `greeting`、`duel` 一致）：
+   `所需权限以「牛牛帮助」本插件功能详情为准（可由 WebUI「命令权限」覆盖）。`
+2. **`trigger_condition`**：只描述**如何触发**（场景、私聊/群、关键词等），**不要**写死权限角色；权限单独由「何人可用」列展示。
+3. **`command_permission`**：字符串，单个命令 ID。
+4. **`command_permissions`**：字符串列表；多命令且当前生效等级不一致时，「何人可用」为「任一：…可用」。
+
+与 cmd_perm **无关**的业务前提（例如须**本 Bot 账号**为 QQ 群管才能执行某副作用）：写在 `detail_des` 或 `docs/plugins/<name>/README.md`，不要写进 `usage` / `trigger_condition`。
+
+`docs/plugins/*/README.md` 面向维护者，可用表格列出**代码默认等级**（如「群管/群主」），并注明实际以 WebUI / 本页覆盖配置为准。
 
 `trigger_condition_with_effective_perm` 仍导出，行为与 `raw_trigger_condition` 相同（兼容旧代码）。
 

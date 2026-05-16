@@ -56,8 +56,17 @@
 
 ## WebUI 配置与命令权限
 
-- 需在控制台保存 `.env` 后立即生效的插件配置：在 `config.py` 使用 `src.common.webui.install_hot_reload_config`（见 [WebUI 插件配置](../common/webui/README.md)）。
+- 需在控制台保存 `.env` 后立即生效的插件配置：在 `config.py` 使用 `src.common.webui.install_hot_reload_config`（见 [WebUI 插件配置](../common/webui/README.md)）；已有自定义缓存的插件可登记到 `plugin_webui_registry`（如决斗插件）。
 - 可配置命令权限：在 `PluginMetadata.extra` 声明 `command_permissions`，matcher 使用 `src.common.cmd_perm.permission_for_command`（见 [cmd_perm](../common/cmd_perm/README.md)）。
+
+### 命令权限与帮助文案（cmd_perm）
+
+新增或修改**可独立配置权限**的命令时：
+
+- 在 `PluginMetadata.extra["command_permissions"]` 和/或 `src/common/cmd_perm/registry.py` 声明默认等级；Matcher 使用 `permission_for_command` / `group_message_permission_for_command` 等同 ID。
+- **`usage`、`menu_data.trigger_condition` 不写死「群管/群主」等**；帮助二级/三级图的「何人可用」由 `command_permission(s)` 与运行中覆盖动态生成。
+- `usage` 末行可统一指向牛牛帮助（见 [cmd_perm 接入说明](../common/cmd_perm/README.md)）。
+- 与发送者权限无关的额外条件（如本 Bot 须为 QQ 群管）写在 `detail_des` 或 `docs/plugins/<name>/README.md`。
 
 ## 测试配套约定
 

@@ -43,6 +43,7 @@
 
 - [项目结构约定](docs/architecture/project-structure.md)
 - [插件目录约定](docs/architecture/plugin-convention.md)
+- [命令权限接入说明](docs/common/cmd_perm/README.md)
 - [Agent 协作约定](AGENTS.md)
 
 ### 本地开发环境
@@ -83,6 +84,16 @@ uv run pre-commit run -a
 - 一个 commit 聚焦一件事
 - 标题清晰表达意图
 - 推荐前缀：`feat:` `fix:` `docs:` `refactor:` `chore:`
+
+### 插件命令权限（PR 自检）
+
+若 PR 新增或修改可走 cmd_perm 的命令入口，请确认：
+
+- [ ] Matcher / 手动鉴权与 `extra["command_permissions"]`（或 `DEFAULT_COMMAND_PERMISSIONS`）使用**同一命令 ID**
+- [ ] `usage`、`menu_data.trigger_condition` **未写死**「群管/群主/仅管理员」等静态权限文案
+- [ ] 需要展示的权限已配置 `command_permission` / `command_permissions`，帮助图「何人可用」能反映当前生效等级
+
+详见 [cmd_perm 接入说明](docs/common/cmd_perm/README.md) 与 [AGENTS.md](AGENTS.md) 中「插件命令权限与帮助文案」。
 
 ## 沟通方式
 
