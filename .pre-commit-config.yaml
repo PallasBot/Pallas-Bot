@@ -18,7 +18,7 @@ repos:
       - id: trailing-whitespace
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.0
+    rev: v0.14.4
     hooks:
       - id: ruff
         # Python 代码质量检查仅针对主代码目录。

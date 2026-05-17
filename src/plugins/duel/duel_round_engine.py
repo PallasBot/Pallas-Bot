@@ -738,20 +738,22 @@ def format_describe(
         for key, val in nums.items():
             t = t.replace(f"<{key}>", str(val))
     if ark:
-        t = (
-            t.replace("<O>", ark.get("name", "？？？"))
-            .replace("<P>", ark.get("profession_cn", ""))
-            .replace("<S1>", ark.get("skill1_name", ""))
-            .replace("<S2>", ark.get("skill2_name", ""))
-            .replace("<S3>", ark.get("skill3_name", ""))
-            .replace("<S1D>", ark.get("skill1_desc", ""))
-            .replace("<S2D>", ark.get("skill2_desc", ""))
-            .replace("<S3D>", ark.get("skill3_desc", ""))
-            .replace("<SK>", ark.get("picked_skill_name", ""))
-            .replace("<SKD>", ark.get("picked_skill_desc", ""))
-            .replace("<SKL>", ark.get("picked_skill_label", ""))
-            .replace("<SKK>", ark.get("picked_skill_kind_cn", ""))
-        )
+        for token, field in (
+            ("<O>", "name"),
+            ("<P>", "profession_cn"),
+            ("<S1>", "skill1_name"),
+            ("<S2>", "skill2_name"),
+            ("<S3>", "skill3_name"),
+            ("<S1D>", "skill1_desc"),
+            ("<S2D>", "skill2_desc"),
+            ("<S3D>", "skill3_desc"),
+            ("<SK>", "picked_skill_name"),
+            ("<SKD>", "picked_skill_desc"),
+            ("<SKL>", "picked_skill_label"),
+            ("<SKK>", "picked_skill_kind_cn"),
+        ):
+            default = "？？？" if field == "name" else ""
+            t = t.replace(token, ark.get(field, default))
     return apply_ab_placeholders(t, challenger_id, defender_id)
 
 
