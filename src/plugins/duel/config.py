@@ -8,6 +8,7 @@ from nonebot import get_plugin_config
 from pydantic import BaseModel, Field, model_validator
 
 from src.common.env_dotenv import merged_repo_dotenv_upper, repo_layered_dotenv_files_exist
+from src.common.webui.registry import PluginWebuiConfigHooks, register_plugin_webui_config
 
 
 class Config(BaseModel, extra="ignore"):
@@ -231,3 +232,11 @@ class _DuelConfigProxy:
 
 
 plugin_config = _DuelConfigProxy()
+
+_duel_webui_hooks = PluginWebuiConfigHooks(
+    get=get_duel_config,
+    reload=reload_duel_plugin_config,
+    clear_cache=clear_duel_config_cache,
+)
+register_plugin_webui_config(__name__, _duel_webui_hooks)
+register_plugin_webui_config("src.plugins.duel", _duel_webui_hooks)
