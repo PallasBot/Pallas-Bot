@@ -43,22 +43,14 @@ async def pick_random_duel_bot_pair(group_id: int) -> tuple[int, int] | None:
     return a, b
 
 
-def list_connected_pallas_bot_ids() -> list[int]:
-    """当前进程已连接的牛牛 QQ（各 Bot 实例列表一致，供八角笼配对）。"""
-    bots = get_bots()
-    return sorted(int(bid) for bid in plugin_config.bots if str(bid) in bots)
-
-
 def cage_pair_seed(group_id: int, user_id: int, message_time: int) -> int:
     """同群同一条八角笼指令，各 Bot 算出相同配对（不依赖各端 message_id）。"""
     return group_id * 1_000_000_007 + user_id * 1_000_003 + int(message_time)
 
 
 async def pick_cage_duel_bot_pair(group_id: int, user_id: int, message_time: int) -> tuple[int, int] | None:
-    """八角笼：按群+发送者+时间种子固定配对；优先用已连接牛列表，避免各 Bot API 探测进度不同。"""
-    ids = list_connected_pallas_bot_ids()
-    if len(ids) < 2:
-        ids = await list_group_online_bot_ids(group_id)
+    """八角笼：从本群在线牛中按群+发送者+时间种子固定配对。"""
+    ids = await list_group_online_bot_ids(group_id)
     if len(ids) < 2:
         return None
     a, b = random.Random(cage_pair_seed(group_id, user_id, message_time)).sample(ids, 2)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 
-from src.plugins.duel.duel_bots import cage_pair_seed, list_connected_pallas_bot_ids, pick_cage_duel_bot_pair
+from src.plugins.duel.duel_bots import cage_pair_seed, pick_cage_duel_bot_pair
 
 
 def test_cage_pair_seed_same_across_message_ids() -> None:
@@ -19,32 +19,14 @@ def test_cage_pair_deterministic_on_same_population() -> None:
     assert p1 == p2
 
 
-async def test_pick_cage_uses_connected_list(monkeypatch) -> None:
-    from src.plugins.block import plugin_config as block_cfg
+async def test_pick_cage_uses_group_online_list(monkeypatch) -> None:
+    async def fake_online(group_id: int) -> list[int]:
+        assert group_id == 42
+        return [111, 222, 333]
 
-    monkeypatch.setattr(block_cfg, "bots", {111, 222, 333})
-    monkeypatch.setattr(
-        "src.plugins.duel.duel_bots.get_bots",
-        lambda: {"111": object(), "222": object(), "333": object()},
-    )
-
-    async def fail_probe(group_id: int) -> list[int]:
-        raise AssertionError("cage should not probe when >=2 connected")
-
-    monkeypatch.setattr("src.plugins.duel.duel_bots.list_group_online_bot_ids", fail_probe)
-    pair = await pick_cage_duel_bot_pair(1, 99, 1000)
+    monkeypatch.setattr("src.plugins.duel.duel_bots.list_group_online_bot_ids", fake_online)
+    pair = await pick_cage_duel_bot_pair(42, 99, 1000)
     assert pair is not None
     allowed = (111, 222, 333)
     assert pair[0] in allowed
     assert pair[1] in allowed
-
-
-def test_list_connected_pallas_bot_ids_sorted(monkeypatch) -> None:
-    from src.plugins.block import plugin_config as block_cfg
-
-    monkeypatch.setattr(block_cfg, "bots", {333, 111, 222})
-    monkeypatch.setattr(
-        "src.plugins.duel.duel_bots.get_bots",
-        lambda: {"222": object(), "111": object()},
-    )
-    assert list_connected_pallas_bot_ids() == [111, 222]
