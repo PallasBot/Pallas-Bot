@@ -368,7 +368,11 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
     if event.group_id in BLOCK_LIST:
         return
-    pair = await pick_cage_duel_bot_pair(event.group_id, int(event.message_id))
+    pair = await pick_cage_duel_bot_pair(
+        event.group_id,
+        int(event.user_id),
+        int(event.time),
+    )
     if not pair:
         if not await try_claim_duel_message(event):
             return
@@ -388,6 +392,11 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
         await send_duel_user_reply(cage_msg, event.group_id, "此群台上正有决斗未散，且待战歌落幕。")
         return
     if gate == "cooldown":
+        await send_duel_user_reply(
+            cage_msg,
+            event.group_id,
+            "博士，战鼓刚歇，稍待片刻再开八角笼。",
+        )
         return
     await cage_msg.send(duel_fight_start_message(a, b))
     await run_duel_match(
