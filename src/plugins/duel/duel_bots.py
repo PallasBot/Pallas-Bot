@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 _AT_CQ_RE = re.compile(r"\[CQ:at,qq=(\d+)")
 _ROUND_COUNT_RE = re.compile(r"(\d{1,2})\s*(?:幕|回合)")
+_CAGE_CMD_RE = re.compile(r"^八角笼(?:牛|斗)(?:\s*(\d{1,2}\s*(?:幕|回合)))?\s*$")
 
 
 async def list_group_online_bot_ids(group_id: int) -> list[int]:
@@ -84,6 +85,11 @@ def duel_narrator_bot_id(challenger_id: str, defender_id: str, *, dual_bot: bool
     if is_bot_qq(challenger_id):
         return int(challenger_id)
     return None
+
+
+def is_cage_plaintext(text: str) -> bool:
+    """八角笼牛/八角笼斗，可选末尾 N幕/N回合。"""
+    return bool(_CAGE_CMD_RE.match(text.strip()))
 
 
 def parse_duel_round_count_from_text(text: str) -> int | None:

@@ -14,6 +14,7 @@ from src.plugins.duel.duel_bots import (
     duel_narrator_bot_id,
     infer_duel_defender_when_at_self_hidden,
     is_bot_qq,
+    is_cage_plaintext,
     parse_duel_at_qqs,
     pick_cage_duel_bot_pair,
     raw_message_has_at,
@@ -48,7 +49,7 @@ __plugin_meta__ = PluginMetadata(
     usage="""
 1. 发起对决
     · 发送「牛牛决斗」并 @ 一名群友或牛牛；可选在末尾写「N幕」或「N回合」指定本局幕数（不写则用默认）
-    · 双牛：「牛牛决斗」@ 两只牛牛，同样可加幕数；或发送「八角笼牛」随机抽两只在线牛牛
+    · 双牛：「牛牛决斗」@ 两只牛牛，同样可加幕数；或发送「八角笼牛」随机抽两只在线牛牛（可加 N幕/N回合）
 2. 对战过程
     · 双方各有生机（HP）与护幕（DP），战意/蚀势层影响交锋
     · 部分幕面限时抢答：按提示发送干员全名或关键词；答对、答错、超时或乱入认错都会改血
@@ -100,10 +101,13 @@ __plugin_meta__ = PluginMetadata(
             {
                 "func": "八角笼牛",
                 "trigger_method": "on_message",
-                "trigger_condition": "八角笼牛",
+                "trigger_condition": "八角笼牛 [N幕|N回合]",
                 "command_permission": "duel.cage",
                 "brief_des": "随机抽两只在线牛牛对决",
-                "detail_des": "从本群当前在线的牛牛账号中随机配对开战，无需手动 @。",
+                "detail_des": (
+                    "从本群当前在线的牛牛账号中随机配对开战，无需手动 @；"
+                    "可在指令中带「N幕」或「N回合」（如 八角笼牛 7幕），不写则用默认场数。"
+                ),
             },
             {
                 "func": "决斗抢答",
@@ -141,11 +145,6 @@ async def is_duel_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> boo
     if event.group_id in BLOCK_LIST:
         return False
     return event.get_plaintext().strip().startswith("牛牛决斗")
-
-
-def is_cage_plaintext(text: str) -> bool:
-    t = text.strip()
-    return t in ("八角笼牛", "八角笼斗")
 
 
 async def is_cage_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
@@ -368,6 +367,11 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
 async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
     if event.group_id in BLOCK_LIST:
         return
+    total_rounds, round_err = resolve_duel_round_count(event)
+    if round_err:
+        await send_duel_user_reply(cage_msg, event.group_id, round_err)
+        return
+
     pair = await pick_cage_duel_bot_pair(
         event.group_id,
         int(event.user_id),
@@ -407,6 +411,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
         b,
         dual_bot=True,
         command_gate="ok",
+        total_rounds=total_rounds,
     )
 
 
