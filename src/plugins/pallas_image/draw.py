@@ -1,4 +1,5 @@
 import asyncio
+import re
 
 import httpx
 from nonebot import logger, on_command
@@ -64,6 +65,35 @@ def dedupe_urls(urls: list[str]) -> list[str]:
             seen.add(u)
             out.append(u)
     return out
+
+
+def extract_at_user_ids(msg: Message) -> list[int]:
+    """从消息中提取所有 at 段的用户 ID。"""
+    ids: list[int] = []
+    for seg in msg:
+        if seg.type == "at":
+            uid = seg.data.get("qq")
+            if uid is not None:
+                try:
+                    ids.append(int(uid))
+                except (TypeError, ValueError):
+                    pass
+    return ids
+
+
+_AT_QQ_RE = re.compile(r"@(\d{5,12})")
+
+
+def extract_at_qq_from_text(text: str) -> tuple[list[int], str]:
+    """从纯文本中提取 @QQ号，返回 (QQ号列表, 去除 @QQ 后的文本)。"""
+    ids = [int(m.group(1)) for m in _AT_QQ_RE.finditer(text)]
+    cleaned = _AT_QQ_RE.sub("", text).strip()
+    return ids, cleaned
+
+
+def qq_avatar_url(user_id: int) -> str:
+    """构造 QQ 头像 URL（用于作为参考图）。"""
+    return f"https://q.qlogo.cn/g?b=qq&nk={user_id}&s=0"
 
 
 def image_backends_with_endpoint(
@@ -177,6 +207,31 @@ async def pallas_draw_handle(bot: Bot, event: GroupMessageEvent, args: Message =
         extract_image_urls_from_message(args)
         + (extract_image_urls_from_message(event.reply.message) if event.reply else [])
     )
+
+    # 如果没有图片参考，尝试用 @ 或回复对象的头像作为参考图
+    if not ref_urls:
+        # 合并 at 段和纯文本 @QQ 号
+        at_ids = extract_at_user_ids(args)
+        text_qq_ids, cleaned_text = extract_at_qq_from_text(text)
+        all_at_ids = at_ids + text_qq_ids
+        if text_qq_ids:
+            text = cleaned_text  # 从提示词中去掉 @QQ 号
+
+        avatar_user_id: int | None = None
+        if all_at_ids:
+            # 取第一个不是 bot 自己的 @ 用户
+            bot_self = int(event.self_id)
+            for aid in all_at_ids:
+                if aid != bot_self:
+                    avatar_user_id = aid
+                    break
+        elif event.reply and event.reply.sender:
+            reply_uid = event.reply.sender.user_id
+            if reply_uid != int(event.self_id):
+                avatar_user_id = reply_uid
+        if avatar_user_id is not None:
+            ref_urls.append(qq_avatar_url(avatar_user_id))
+
     if not text and not ref_urls:
         await pallas_draw.finish(
             message_at_user(
