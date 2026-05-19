@@ -85,9 +85,14 @@ _AT_QQ_RE = re.compile(r"@(\d{5,12})")
 
 
 def extract_at_qq_from_text(text: str) -> tuple[list[int], str]:
-    """从纯文本中提取 @QQ号，返回 (QQ号列表, 去除 @QQ 后的文本)。"""
+    """从纯文本中提取 @QQ号，返回 (QQ号列表, 去除 @QQ 后的文本)。
+    为避免直接删除 @QQ 导致相邻词语黏连（如 foo@123bar -> foobar），
+    这里先用空格替换 @QQ，再对连续空白做一次折叠。
+    """
     ids = [int(m.group(1)) for m in _AT_QQ_RE.finditer(text)]
-    cleaned = _AT_QQ_RE.sub("", text).strip()
+    # 先用空格替换所有 @QQ，再将多余空白折叠为单个空格
+    cleaned = _AT_QQ_RE.sub(" ", text)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
     return ids, cleaned
 
 
@@ -225,7 +230,7 @@ async def pallas_draw_handle(bot: Bot, event: GroupMessageEvent, args: Message =
                 if aid != bot_self:
                     avatar_user_id = aid
                     break
-        elif event.reply and event.reply.sender:
+        if avatar_user_id is None and event.reply and event.reply.sender:
             reply_uid = event.reply.sender.user_id
             if reply_uid != int(event.self_id):
                 avatar_user_id = reply_uid
