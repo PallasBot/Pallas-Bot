@@ -13,6 +13,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
 from src.common.cmd_perm import permission_for_command, private_message_permission_for_command
+from src.common.multi_bot_group import claim_group_handler
 
 from .config import get_maa_config
 from .endpoints import resolve_maa_http_endpoints
@@ -146,6 +147,11 @@ def _notify_from_event(event: MessageEvent, bot: Bot) -> NotifyTarget:
     return NotifyTarget(bot_id=int(bot.self_id), user_id=int(event.get_user_id()), group_id=group_id)
 
 
+async def ensure_maa_group_message_owner(event: MessageEvent, bot: Bot) -> bool:
+    """群内同一条消息仅一只牛处理（防多 Bot 同群重复响应）。"""
+    return await claim_group_handler("maa", event, int(bot.self_id))
+
+
 def format_pending_type_counts(counts: dict[str, int]) -> str:
     if not counts:
         return ""
@@ -252,7 +258,9 @@ async def handle_bind(event: PrivateMessageEvent, args: Message = CommandArg()):
 
 
 @status_cmd.handle()
-async def handle_status(event: MessageEvent):
+async def handle_status(bot: Bot, event: MessageEvent):
+    if not await ensure_maa_group_message_owner(event, bot):
+        return
     qq = int(event.get_user_id())
     devices = await store.list_devices(qq)
     active = await store.get_active_device(qq)
@@ -293,7 +301,9 @@ async def handle_status(event: MessageEvent):
 
 
 @clear_queue_cmd.handle()
-async def handle_clear_queue(event: MessageEvent, args: Message = CommandArg()):  # noqa: B008
+async def handle_clear_queue(bot: Bot, event: MessageEvent, args: Message = CommandArg()):  # noqa: B008
+    if not await ensure_maa_group_message_owner(event, bot):
+        return
     qq = int(event.get_user_id())
     scope = args.extract_plain_text().strip()
     device: str | None = None
@@ -391,6 +401,8 @@ async def enqueue_and_reply(
 
 @maa_control_msg.handle()
 async def handle_control(bot: Bot, event: MessageEvent):
+    if not await ensure_maa_group_message_owner(event, bot):
+        return
     text = event.get_plaintext().strip()
     specs = parse_command_specs(text)
     if not specs:
@@ -404,6 +416,8 @@ async def handle_control(bot: Bot, event: MessageEvent):
 
 @maa_raw_task_cmd.handle()
 async def handle_raw_task(bot: Bot, event: MessageEvent, args: Message = CommandArg()):  # noqa: B008
+    if not await ensure_maa_group_message_owner(event, bot):
+        return
     arg_text = args.extract_plain_text().strip()
     line = f"{MAA_RAW_TASK_PREFIX} {arg_text}".strip() if arg_text else MAA_RAW_TASK_PREFIX
     spec, err = maa_raw_task_validate(line)

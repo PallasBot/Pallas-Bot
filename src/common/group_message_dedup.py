@@ -8,6 +8,8 @@ import re
 import time
 from collections import deque
 
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
+
 from src.common.multi_bot_message_claim import try_claim_message
 
 _GROUP_EVENT_DEDUP_MAX = 4000
@@ -151,23 +153,90 @@ async def should_skip_duplicate_group_event(
         return False
 
 
-_DRAW_CHEER_GATE_LOCK = asyncio.Lock()
-_draw_cheer_gate_until: dict[int, tuple[int, float]] = {}
+_GROUP_GATE_LOCK = asyncio.Lock()
+_owned_gate: dict[tuple[str, int], tuple[int, float]] = {}
+_broadcast_slot_until: dict[tuple[str, int], float] = {}
 
 
-async def try_begin_group_draw_cheer(group_id: int, bot_id: int, *, gate_sec: float) -> bool:
-    """同群「欢呼吧」占位：在锁内判定，避免多 Bot 同时通过冷却检查。"""
+async def try_begin_group_owned_gate(
+    plugin: str,
+    group_id: int,
+    bot_id: int,
+    *,
+    gate_sec: float,
+) -> bool:
+    """同群短时占位：窗口内仅已占位 bot 可再次通过，其它 bot 拒绝（如画图「欢呼吧」）。"""
     ttl = max(1.0, float(gate_sec))
     now = time.time()
-    async with _DRAW_CHEER_GATE_LOCK:
-        rec = _draw_cheer_gate_until.get(group_id)
+    key = (plugin, group_id)
+    async with _GROUP_GATE_LOCK:
+        rec = _owned_gate.get(key)
         if rec is not None:
             owner, until = rec
             if now < until:
                 return owner == bot_id
-        _draw_cheer_gate_until[group_id] = (bot_id, now + ttl)
-        if len(_draw_cheer_gate_until) > 2000:
-            expired = [g for g, (_, u) in _draw_cheer_gate_until.items() if u <= now]
-            for g in expired:
-                _draw_cheer_gate_until.pop(g, None)
+        _owned_gate[key] = (bot_id, now + ttl)
+        if len(_owned_gate) > 2000:
+            expired = [k for k, (_, u) in _owned_gate.items() if u <= now]
+            for k in expired:
+                _owned_gate.pop(k, None)
         return True
+
+
+async def try_acquire_group_broadcast_slot(
+    plugin: str,
+    group_id: int,
+    *,
+    ttl_sec: float = 3.0,
+) -> bool:
+    """同群短时广播占位：窗口内仅首次调用返回 True（不记 bot，用于避免多牛复读同条提示）。"""
+    ttl = max(0.1, float(ttl_sec))
+    now = time.time()
+    key = (plugin, group_id)
+    async with _GROUP_GATE_LOCK:
+        until = _broadcast_slot_until.get(key, 0.0)
+        if now < until:
+            return False
+        _broadcast_slot_until[key] = now + ttl
+        if len(_broadcast_slot_until) > 2000:
+            expired = [k for k, u in _broadcast_slot_until.items() if u <= now]
+            for k in expired:
+                _broadcast_slot_until.pop(k, None)
+        return True
+
+
+async def try_begin_group_draw_cheer(group_id: int, bot_id: int, *, gate_sec: float) -> bool:
+    """兼容：等同 try_begin_group_owned_gate(\"pallas_image\", ...)。"""
+    return await try_begin_group_owned_gate("pallas_image", group_id, bot_id, gate_sec=gate_sec)
+
+
+async def claim_group_message_event(
+    plugin: str,
+    group_event: GroupMessageEvent,
+    bot_id: int,
+    *,
+    use_plaintext: bool = True,
+) -> bool:
+    """本 Bot 是否应处理该条群消息（跨 Bot + 跨进程）。未抢占返回 False。"""
+    return await try_claim_cross_bot_message(
+        plugin,
+        group_event.group_id,
+        group_event.user_id,
+        group_event.get_plaintext(),
+        group_event.time,
+        bot_id,
+        use_plaintext=use_plaintext,
+    )
+
+
+async def claim_group_handler(
+    plugin: str,
+    event: MessageEvent,
+    bot_id: int,
+    *,
+    use_plaintext: bool = True,
+) -> bool:
+    """群消息走 claim_group_message_event；私聊恒为 True。"""
+    if not isinstance(event, GroupMessageEvent):
+        return True
+    return await claim_group_message_event(plugin, event, bot_id, use_plaintext=use_plaintext)

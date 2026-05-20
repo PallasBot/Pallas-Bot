@@ -76,6 +76,10 @@
 - `牛牛设置关卡`：最多 4 候选，仅下发 `Settings-Stage1`
 - `maa_combat_auto_prepare`：作战前可自动排队已保存主关卡
 
+### 多 Bot 同群
+
+群内远控口令与 `牛牛MAA状态` 等命令经 `claim_group_handler("maa", …)`（`src.common.multi_bot_group`），同一条群消息仅一只牛响应。私聊绑定/切换设备不受影响。
+
 ### 代码索引
 
 | 逻辑 | 位置 |

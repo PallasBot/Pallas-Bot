@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -14,6 +13,7 @@ from nonebot.adapters.onebot.v11 import Message
 from nonebot.matcher import Matcher  # noqa: TC002
 
 from src.common.config import GroupConfig
+from src.common.multi_bot_group import claim_group_message_event, try_acquire_group_broadcast_slot
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_labels import bind_duel_labels, duel_label_for, reset_duel_labels, resolve_duel_labels
 from src.plugins.duel.duel_message import (
@@ -126,9 +126,6 @@ class LoadedEvent:
 
 
 _duel_busy_groups: set[int] = set()
-_duel_user_reply_until: dict[int, float] = {}
-_duel_message_claim: dict[tuple[int, int], int] = {}
-_duel_claim_lock = asyncio.Lock()
 
 DUEL_GROUP_COOLDOWN_KEY = "duel"
 DUEL_USER_REPLY_TTL_SEC = 3.0
@@ -137,27 +134,13 @@ DuelCommandGate = Literal["ok", "busy", "cooldown"]
 
 async def try_claim_duel_message(event: GroupMessageEvent) -> bool:
     """同一条群消息仅一只牛走完整指令处理（人 vs 人等无固定主持牛时）。"""
-    key = (event.group_id, int(event.message_id))
-    bot_id = int(event.self_id)
-    async with _duel_claim_lock:
-        owner = _duel_message_claim.get(key)
-        if owner is None:
-            _duel_message_claim[key] = bot_id
-            if len(_duel_message_claim) > 400:
-                drop = list(_duel_message_claim.keys())[:200]
-                for k in drop:
-                    _duel_message_claim.pop(k, None)
-            return True
-        return owner == bot_id
+    return await claim_group_message_event("duel", event, int(event.self_id))
 
 
-def try_claim_duel_user_reply(group_id: int, *, ttl_sec: float | None = None) -> bool:
+async def try_claim_duel_user_reply(group_id: int, *, ttl_sec: float | None = None) -> bool:
     """多 Bot 同群：短时内仅一只牛发决斗入口类提示，避免复读。"""
-    now = time.time()
-    if now < _duel_user_reply_until.get(group_id, 0):
-        return False
-    _duel_user_reply_until[group_id] = now + (ttl_sec if ttl_sec is not None else DUEL_USER_REPLY_TTL_SEC)
-    return True
+    sec = ttl_sec if ttl_sec is not None else DUEL_USER_REPLY_TTL_SEC
+    return await try_acquire_group_broadcast_slot("duel", group_id, ttl_sec=sec)
 
 
 def try_begin_duel_group(group_id: int) -> bool:

@@ -182,7 +182,7 @@ reload_duel_events_msg = on_message(
 
 
 async def send_duel_user_reply(matcher, group_id: int, message: str | Message) -> None:
-    if not try_claim_duel_user_reply(group_id):
+    if not await try_claim_duel_user_reply(group_id):
         return
     await matcher.send(message)
 

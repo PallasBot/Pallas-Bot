@@ -14,9 +14,9 @@ from nonebot.permission import SUPERUSER
 
 from src.common.cmd_perm import group_message_permission_for_command
 from src.common.config import GroupConfig
-from src.common.group_message_dedup import (
-    try_begin_group_draw_cheer,
-    try_claim_cross_bot_message,
+from src.common.multi_bot_group import (
+    claim_group_message_event,
+    try_begin_group_owned_gate,
 )
 from src.common.utils.http_msg import PALLAS_VAGUE_REPLY
 
@@ -177,14 +177,7 @@ async def pallas_draw_handle(bot: Bot, event: GroupMessageEvent, args: Message =
         return
 
     bot_id = int(event.self_id)
-    if not await try_claim_cross_bot_message(
-        "pallas_image",
-        group_id,
-        user_id,
-        event.get_plaintext(),
-        event.time,
-        bot_id,
-    ):
+    if not await claim_group_message_event("pallas_image", event, bot_id):
         return
 
     if not await draw_group_cooldown_ready(group_id):
@@ -253,7 +246,7 @@ async def pallas_draw_handle(bot: Bot, event: GroupMessageEvent, args: Message =
         )
 
     cheer_gate = image_gen_config.draw_command_cooldown
-    if not await try_begin_group_draw_cheer(group_id, bot_id, gate_sec=cheer_gate):
+    if not await try_begin_group_owned_gate("pallas_image", group_id, bot_id, gate_sec=cheer_gate):
         return
     await consume_draw_group_cooldown(group_id)
 
