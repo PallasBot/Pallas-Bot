@@ -224,3 +224,4 @@ test.py
 
 # AI orchestration internal data
 .sisyphus/
+resource/styles/default/__pycache__/style.cpython-313.pyc

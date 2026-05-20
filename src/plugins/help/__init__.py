@@ -12,6 +12,7 @@ from src.common.cmd_perm.metadata_defaults import (
 from src.common.cmd_perm.metadata_text import SCENE_BOTH, SCENE_GROUP, join_usage, usage_line
 from src.common.config import BotConfig, GroupConfig
 
+from . import event_preprocessor  # noqa: F401  # 注册群禁用预处理器
 from .config import Config
 
 # 导入处理函数
