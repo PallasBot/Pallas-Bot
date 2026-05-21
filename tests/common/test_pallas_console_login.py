@@ -6,7 +6,7 @@ import pytest
 
 
 def test_empty_password_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    from src.common import pallas_console_login as m
+    from src.common.webui import console_login as m
 
     monkeypatch.setattr(m, "console_auth_dir", lambda: tmp_path / "pc")
     with pytest.raises(ValueError, match="口令不能为空"):
@@ -16,7 +16,7 @@ def test_empty_password_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
 
 
 def test_password_verify_and_session(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    from src.common import pallas_console_login as m
+    from src.common.webui import console_login as m
 
     monkeypatch.setattr(m, "console_auth_dir", lambda: tmp_path / "pc")
     m.set_console_password_plain("a")
@@ -33,7 +33,7 @@ def test_password_verify_and_session(monkeypatch: pytest.MonkeyPatch, tmp_path) 
 
 
 def test_get_shared_console_login_token_empty() -> None:
-    from src.common.pallas_console_login import get_shared_console_login_token
+    from src.common.webui.console_login import get_shared_console_login_token
 
     assert get_shared_console_login_token() == ""
 
@@ -42,7 +42,7 @@ def test_default_password_plain_file_and_clear_on_user_change(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    from src.common import pallas_console_login as m
+    from src.common.webui import console_login as m
 
     root = tmp_path / "pc"
     monkeypatch.setattr(m, "console_auth_dir", lambda: root)
@@ -67,7 +67,7 @@ def test_orphan_default_password_file_removed_when_mismatch(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    from src.common import pallas_console_login as m
+    from src.common.webui import console_login as m
 
     root = tmp_path / "pc"
     monkeypatch.setattr(m, "console_auth_dir", lambda: root)
@@ -82,7 +82,7 @@ def test_prime_shared_console_login_announces_default_password_once(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    from src.common import pallas_console_login as m
+    from src.common.webui import console_login as m
 
     root = tmp_path / "pc_once"
     monkeypatch.setattr(m, "console_auth_dir", lambda: root)
@@ -103,7 +103,7 @@ def test_prime_reannounces_default_password_when_auth_dir_changes(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
-    from src.common import pallas_console_login as m
+    from src.common.webui import console_login as m
 
     m._announced_default_password_auth_path = None
     root1 = tmp_path / "pc_a"

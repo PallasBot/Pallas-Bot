@@ -36,7 +36,6 @@ from src.common.config import BotConfig, GroupConfig, UserConfig
 from src.common.paths import plugin_data_dir
 from src.common.utils import HTTPXClient, is_bot_admin
 from src.plugins.blacklist import invalidate_user_ban_gate_cache
-from src.plugins.help.plugin_manager import is_plugin_disabled
 
 from .config import Config
 from .voice import get_random_voice, get_voice_filepath
@@ -414,11 +413,17 @@ async def handle_clear_group_welcome(bot: Bot, event: GroupMessageEvent):
         await clear_group_welcome.finish("未设置自定义本群入群欢迎")
 
 
+async def greeting_plugin_disabled(group_id: int | None, bot_id: int | str) -> bool:
+    from src.plugins.help.plugin_manager import is_plugin_disabled
+
+    return await is_plugin_disabled("greeting", group_id, bot_id)
+
+
 async def message_equal(event: GroupMessageEvent) -> bool:
     raw_msg = event.raw_message
     if raw_msg not in target_msgs:
         return False
-    return not await is_plugin_disabled("greeting", event.group_id, event.self_id)
+    return not await greeting_plugin_disabled(event.group_id, event.self_id)
 
 
 call_me_cmd = on_message(
@@ -451,7 +456,7 @@ to_me_cmd = on_message(
 
 @to_me_cmd.handle()
 async def handle_to_me(bot: Bot, event: GroupMessageEvent):
-    if await is_plugin_disabled("greeting", event.group_id, event.self_id):
+    if await greeting_plugin_disabled(event.group_id, event.self_id):
         return
 
     config = BotConfig(event.self_id, event.group_id)
@@ -479,7 +484,7 @@ _NoticeEvent = (
 
 @all_notice.handle()
 async def handle_notice(event: _NoticeEvent):
-    if await is_plugin_disabled("greeting", getattr(event, "group_id", None), event.self_id):
+    if await greeting_plugin_disabled(getattr(event, "group_id", None), event.self_id):
         return
 
     if event.notice_type == "notify" and event.sub_type == "poke" and event.target_id == event.self_id:

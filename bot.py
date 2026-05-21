@@ -1,7 +1,8 @@
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
 
-from src.common.ban_gate_snapshot import start_ban_gate_snapshot, stop_ban_gate_snapshot
+from src.common.ban_gate import start_ban_gate_snapshot, stop_ban_gate_snapshot
+from src.common.bot_runtime import load_plugins_for_role
 from src.common.db import init_db
 from src.common.logging import apply_stdlib_logging_channel_prefix
 from src.common.utils.voice_downloader import ensure_voices
@@ -27,7 +28,7 @@ async def shutdown():
     await stop_ban_gate_snapshot()
 
 
-nonebot.load_from_toml("pyproject.toml")
+load_plugins_for_role()
 
 if __name__ == "__main__":
     nonebot.run()

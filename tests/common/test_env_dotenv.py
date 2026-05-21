@@ -2,7 +2,7 @@ import os
 
 from pydantic import BaseModel, Field
 
-from src.common import env_dotenv as ed
+from src.common.config import dotenv as ed
 from src.common.webui.plugin_config import config_from_env
 
 

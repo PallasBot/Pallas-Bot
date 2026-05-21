@@ -6,7 +6,7 @@
 
 新增段：在 ``_registered_sections`` 中追加；插件段可用 ``_plugin_env_section_from_module``。
 已使用 ``install_hot_reload_config`` 的插件会通过注册表读取当前值。
-``ingress`` / ``repeater_learn`` 等 common 段保存后会清缓存并触发热重载钩子。
+``ingress_fanout`` / ``repeater_learn`` 等 common 段保存后会清缓存并触发热重载钩子。
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
-from src.common.env_dotenv import env_value_to_str, upsert_env_dotenv_items
+from src.common.config.dotenv import env_value_to_str, upsert_env_dotenv_items
 
 _COMMON_ROOT = Path(__file__).resolve().parent.parent
 
@@ -39,16 +39,9 @@ def _message_scrub_models() -> tuple[type[BaseModel], Any]:
 
 
 def _field_kind_from_annotation(ann: Any) -> str:
-    text = str(ann).lower()
-    if "list" in text or "dict" in text or "set" in text or "tuple" in text:
-        return "json"
-    if "bool" in text:
-        return "bool"
-    if "int" in text:
-        return "int"
-    if "float" in text:
-        return "float"
-    return "string"
+    from .field_meta import field_kind_from_annotation as kind_from_ann
+
+    return kind_from_ann(ann)
 
 
 def _jsonable_value(v: Any) -> Any:
@@ -159,6 +152,20 @@ def _plugin_env_section_from_module(
     )
 
 
+def _ingress_fanout_section() -> WebuiEnvSection:
+    from src.common.ingress.config import IngressFanoutConfig, get_ingress_fanout_config
+
+    return WebuiEnvSection(
+        id="ingress_fanout",
+        title="分片全员同响白名单",
+        module_label="src.common.ingress",
+        model_cls=IngressFanoutConfig,
+        read_current=get_ingress_fanout_config,
+        field_to_env={"greeting_fanout_texts": "PALLAS_INGRESS_FANOUT_GREETING"},
+        skip_fields=frozenset(),
+    )
+
+
 def _repeater_learn_section() -> WebuiEnvSection:
     from src.plugins.repeater.learn_runtime_config import (
         RepeaterLearnRuntimeConfig,
@@ -204,6 +211,8 @@ def _registered_sections() -> tuple[WebuiEnvSection, ...]:
     parts: list[WebuiEnvSection] = []
     if (_COMMON_ROOT / "message_scrub" / "config.py").is_file():
         parts.append(_message_scrub_section())
+    if (_COMMON_ROOT / "ingress" / "config.py").is_file():
+        parts.append(_ingress_fanout_section())
     repeater_learn_cfg = _COMMON_ROOT.parent / "plugins" / "repeater" / "learn_runtime_config.py"
     if repeater_learn_cfg.is_file():
         parts.append(_repeater_learn_section())
@@ -279,15 +288,17 @@ def webui_env_section_payload(
         else:
             cur = getattr(cfg_obj, key, f.default)
         default_value = None if f.default is PydanticUndefined else f.default
-        fields.append({
-            "name": key,
-            "kind": _field_kind_from_annotation(f.annotation),
-            "required": bool(f.is_required()),
-            "description": str(f.description or ""),
-            "env_key": env_key,
-            "default": _jsonable_value(default_value),
-            "current": _jsonable_value(cur),
-        })
+        from .field_meta import field_meta_for_model_field
+
+        fields.append(
+            field_meta_for_model_field(
+                key=key,
+                field=f,
+                env_key=env_key,
+                cur=cur,
+                default_value=default_value,
+            )
+        )
     base: dict[str, Any] = {
         "plugin": s.id,
         "module": s.module_label,
@@ -338,6 +349,13 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             from src.common.cmd_perm import clear_cmd_perm_cache
 
             clear_cmd_perm_cache()
+        except Exception:
+            pass
+    elif section_id == "ingress_fanout":
+        try:
+            from src.common.ingress.config import clear_ingress_fanout_config_cache
+
+            clear_ingress_fanout_config_cache()
         except Exception:
             pass
     elif section_id == "repeater_learn":

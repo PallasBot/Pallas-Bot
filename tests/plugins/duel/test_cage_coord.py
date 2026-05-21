@@ -11,6 +11,11 @@ def test_cage_pair_seed_same_across_message_ids() -> None:
     assert cage_pair_seed(gid, uid, t) != cage_pair_seed(gid, uid, t + 1)
 
 
+def test_cage_pair_seed_normalizes_millisecond_time() -> None:
+    gid, uid = 626266902, 3023094357
+    assert cage_pair_seed(gid, uid, 1779391924000) == cage_pair_seed(gid, uid, 1779391924)
+
+
 def test_cage_pair_deterministic_on_same_population() -> None:
     ids = [111, 222, 333, 923722427, 2927116873]
     seed = cage_pair_seed(626266902, 3415750178, 1715923490)

@@ -26,6 +26,9 @@ class ReportStatusRequest(BaseModel):
 
 
 async def maa_get_task(body: GetTaskRequest) -> GetTaskResponse:
+    from src.common.shard.coord.maa_route_registry import register_maa_user_route
+
+    register_maa_user_route(body.user)
     cfg = get_maa_config()
     await maa_store.touch_seen(body.user, body.device, cfg.maa_seen_ttl_seconds)
     if not await maa_store.is_device_verified(body.user, body.device):

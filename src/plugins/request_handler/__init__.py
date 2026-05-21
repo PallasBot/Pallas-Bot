@@ -29,8 +29,16 @@ from src.common.cmd_perm.metadata_defaults import (
 from src.common.cmd_perm.metadata_text import SCENE_GROUP, SCENE_PRIVATE, join_usage, usage_line
 from src.common.config import BotConfig, GroupConfig, UserConfig, get_bot_admins, user_is_bot_admin
 from src.common.paths import plugin_data_dir
-from src.plugins.help.plugin_manager import is_plugin_disabled
 from src.plugins.request_handler.config import Config
+
+PLUGIN_NAME = "request_handler"
+
+
+async def request_handler_plugin_disabled(*, bot_id: int) -> bool:
+    from src.plugins.help.plugin_manager import is_plugin_disabled
+
+    return await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id)
+
 
 __plugin_meta__ = PluginMetadata(
     name="申请管理",
@@ -173,8 +181,6 @@ GROUP_REQ_FILE = DATA_DIR / "pending_group_requests.json"
 LAST_NOTIFIED_FILE = DATA_DIR / "last_notified_request.json"
 APPROVAL_NOTICE_FILE = DATA_DIR / "approval_notice_messages.json"
 DOUBT_POLL_STATE_FILE = DATA_DIR / "doubt_friend_poll_state.json"
-
-PLUGIN_NAME = "request_handler"
 
 # 审批提醒元数据：超过此时长视为过期，不再用于「同意」与引用回复（秒）
 _NOTIFY_RECORD_MAX_AGE_SEC = 7 * 24 * 3600
@@ -751,7 +757,7 @@ async def poll_doubt_friends_job() -> None:
             continue
         bot_id = int(bot.self_id)
         bot_key = str(bot_id)
-        if await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
+        if await request_handler_plugin_disabled(bot_id=bot_id):
             continue
         try:
             doubts = await fetch_doubt_friends(bot)
@@ -855,7 +861,7 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
         save_json(FRIEND_REQ_FILE, pending_friend)
         return
 
-    if not await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
+    if not await request_handler_plugin_disabled(bot_id=bot_id):
         nickname = await get_nickname(bot, event.user_id)
         msg = f"[好友申请]\n申请人：{nickname}（{event.user_id}）\n验证：{event.comment or '-'}\n{RH_HELP_HINT}"
         if await notify_admins(bot, msg, kind="friend", target_id=str(event.user_id)):
@@ -987,7 +993,7 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
             save_json(GROUP_REQ_FILE, pending_group)
             return
 
-        if not await is_plugin_disabled(PLUGIN_NAME, bot_id=bot_id):
+        if not await request_handler_plugin_disabled(bot_id=bot_id):
             nickname = await get_nickname(bot, event.user_id)
             group_name = await get_group_name(bot, event.group_id)
             msg = (

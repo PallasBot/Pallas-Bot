@@ -7,7 +7,6 @@ from nonebot.permission import Permission
 from src.common.cmd_perm import satisfies_command_permission
 from src.common.config import GroupConfig
 from src.common.service_probe import format_probe_text
-from src.plugins.pallas_image.config import image_gen_config
 
 from .probe_collect import probe_all_connectivity
 
@@ -36,7 +35,7 @@ connectivity_probe = on_command(
 
 connectivity_gateway_alias = on_command(
     "牛牛网关",
-    priority=image_gen_config.min_priority,
+    priority=5,  # 与 pallas_image_min_priority 默认一致，避免加载期 import pallas_image
     block=True,
     permission=group_message_connectivity_permission(),
 )

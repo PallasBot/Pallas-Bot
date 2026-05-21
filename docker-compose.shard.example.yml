@@ -1,0 +1,65 @@
+# 示例：hub + 5 个 worker（每 worker 约 5 牛，22 牛约 5 进程）
+# 复制为 docker-compose.override 或单独 compose 时，与主线镜像、data 卷保持一致。
+name: pallas-bot-shard
+services:
+  pallas-hub:
+    image: pallasbot/pallas-bot:latest
+    container_name: pallas-hub
+    restart: always
+    ports:
+      - "8088:8088"
+    environment:
+      TZ: Asia/Shanghai
+      APP_MODULE: bot_hub:app
+      MAX_WORKERS: 1
+      PALLAS_SHARD_ENABLED: "true"
+      PALLAS_BOT_ROLE: hub
+      PORT: "8088"
+      PALLAS_SHARD_WORKER_BASE_PORT: "8090"
+      PALLAS_SHARD_BOTS_PER: "5"
+    volumes:
+      - ./pallas-bot/.env:/app/.env
+      - ./pallas-bot/data:/app/data
+    networks:
+      - pallasbot
+
+  pallas-worker-0:
+    image: pallasbot/pallas-bot:latest
+    container_name: pallas-worker-0
+    restart: always
+    ports:
+      - "8090:8090"
+    environment:
+      TZ: Asia/Shanghai
+      APP_MODULE: bot_worker:app
+      MAX_WORKERS: 1
+      PALLAS_SHARD_ENABLED: "true"
+      PALLAS_BOT_ROLE: worker
+      PALLAS_SHARD_ID: "0"
+      PORT: "8090"
+    volumes:
+      - ./pallas-bot/.env:/app/.env
+      - ./pallas-bot/data:/app/data
+    networks:
+      - pallasbot
+
+  pallas-worker-1:
+    image: pallasbot/pallas-bot:latest
+    container_name: pallas-worker-1
+    restart: always
+    ports:
+      - "8091:8091"
+    environment:
+      APP_MODULE: bot_worker:app
+      PALLAS_SHARD_ENABLED: "true"
+      PALLAS_BOT_ROLE: worker
+      PALLAS_SHARD_ID: "1"
+      PORT: "8091"
+    volumes:
+      - ./pallas-bot/.env:/app/.env
+      - ./pallas-bot/data:/app/data
+    networks:
+      - pallasbot
+
+networks:
+  pallasbot:

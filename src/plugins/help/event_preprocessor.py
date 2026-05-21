@@ -4,6 +4,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from nonebot.exception import IgnoredException
 from nonebot.internal.matcher import Matcher
 from nonebot.message import event_preprocessor, run_preprocessor
+from nonebot.utils import run_coro_with_shield
 
 from .plugin_manager import collect_disabled_plugin_names
 
@@ -40,7 +41,7 @@ async def block_disabled_plugins(bot: Bot, event: GroupMessageEvent):
     bot_id = int(bot.self_id)
     group_id = event.group_id
 
-    disabled_names = await collect_disabled_plugin_names(bot_id, group_id)
+    disabled_names = await run_coro_with_shield(collect_disabled_plugin_names(bot_id, group_id))
     _blocked_events[event_id] = disabled_names
     if disabled_names:
         logger.debug(f"bot [{bot_id}] help disabled plugins in group [{group_id}]: {', '.join(sorted(disabled_names))}")

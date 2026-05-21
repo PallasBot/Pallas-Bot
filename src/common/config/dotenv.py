@@ -10,7 +10,7 @@ from typing import Any
 
 
 def repo_env_path() -> Path:
-    return Path(__file__).resolve().parents[2] / ".env"
+    return Path(__file__).resolve().parents[3] / ".env"
 
 
 def nonebot_repo_dotenv_environment() -> str:

@@ -46,7 +46,13 @@ class Responder:
 
     @staticmethod
     def _repeat_ignore_user_ids() -> set[int]:
-        ids = {int(b.self_id) for b in get_bots().values()}
+        from src.common.multi_bot.fleet import get_catalog_bot_ids
+        from src.common.shard.registry.config import is_sharding_active
+
+        if is_sharding_active():
+            ids = set(get_catalog_bot_ids())
+        else:
+            ids = {int(b.self_id) for b in get_bots().values()}
         ids.update(plugin_config.repeat_ignore_user_ids)
         return ids
 

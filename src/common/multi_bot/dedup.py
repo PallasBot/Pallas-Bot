@@ -10,7 +10,7 @@ from collections import deque
 
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
 
-from src.common.multi_bot_message_claim import try_claim_message
+from src.common.multi_bot.claim import try_claim_message
 
 _GROUP_EVENT_DEDUP_MAX = 4000
 _group_event_dedup_lock = asyncio.Lock()
@@ -168,6 +168,18 @@ async def try_begin_group_owned_gate(
     gate_sec: float,
 ) -> bool:
     """同群短时占位：窗口内仅已占位 bot 可再次通过，其它 bot 拒绝（如画图「欢呼吧」）。"""
+    from src.common.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        from src.common.shard.coord.group_gate import try_begin_owned_gate_sync
+
+        return await asyncio.to_thread(
+            try_begin_owned_gate_sync,
+            plugin,
+            group_id,
+            bot_id,
+            gate_sec=gate_sec,
+        )
     ttl = max(1.0, float(gate_sec))
     now = time.time()
     key = (plugin, group_id)
@@ -192,6 +204,17 @@ async def try_acquire_group_broadcast_slot(
     ttl_sec: float = 3.0,
 ) -> bool:
     """同群短时广播占位：窗口内仅首次调用返回 True（不记 bot，用于避免多牛复读同条提示）。"""
+    from src.common.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        from src.common.shard.coord.group_gate import try_acquire_broadcast_slot_sync
+
+        return await asyncio.to_thread(
+            try_acquire_broadcast_slot_sync,
+            plugin,
+            group_id,
+            ttl_sec=ttl_sec,
+        )
     ttl = max(0.1, float(ttl_sec))
     now = time.time()
     key = (plugin, group_id)

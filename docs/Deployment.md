@@ -1,6 +1,6 @@
 # Pallas-Bot 3.0 部署教程
 
-> 导航：[`README`](../README.md) · [`Docker 部署`](DockerDeployment.md) · [`3.0 迁移`](Migration-v3.md) · [`FAQ`](FAQ.md)
+> 导航：[`README`](../README.md) · [`Docker 部署`](DockerDeployment.md) · [`多进程分片`](architecture/bot_process_sharding.md) · [`3.0 迁移`](Migration-v3.md) · [`FAQ`](FAQ.md)
 
 快来部署属于你自己的牛牛吧 (｡･∀･)ﾉﾞ
 
@@ -10,6 +10,7 @@
 - 你自己部署的牛牛与其他牛牛数据并不互通，是一张白纸，需要从头调教
 - **3.0** 起提供 **Web 控制台**（`/pallas/`）与 **协议端管理**（默认 `/protocol/console/`，由插件 `pallas_protocol` 提供），用于管理 NapCat 等协议端进程；数据后端可选 **MongoDB** 或 **PostgreSQL**
 - 牛牛支持使用 `Docker Compose` 一键部署，可以参考 [Docker 部署](DockerDeployment.md)；仓库自带 Compose **默认不编排独立 NapCat**，QQ 协议端由 **协议端管理**（`/protocol/console/`）统一创建与连接
+- **多牛生产环境**可选用 [多进程分片](architecture/bot_process_sharding.md)（hub + worker，共享 `data/`），见下文 [多进程分片（可选）](#多进程分片可选)
 - 以下内容适用于将牛牛作为一个独立 `Bot` 部署。如果你想将牛牛功能作为一组 `plugin` 添加到现有 `Bot`，请参照 [作为插件部署](#作为插件部署) 一节
 
 ## 基本环境配置
@@ -128,6 +129,18 @@ uv run nb run        # 运行
 **注意：请不要关闭这个命令行窗口！这会导致 `Pallas-Bot` 停止运行！**
 **同样请不要关闭 `NapCat` 的命令行窗口！**
 Linux 用户推荐使用 [Termux](https://termux.dev/) 或 [GNU Screen](https://zhuanlan.zhihu.com/p/405968623) 来保持 `Pallas-Bot` 和 QQ 客户端在后台运行，或者考虑使用 [Docker 部署](DockerDeployment.md)。
+
+## 多进程分片（可选）
+
+当同一台机器需要长期运行 **多只牛牛**（例如十余个 QQ 账号）且单进程出现卡顿、延迟堆积时，可启用 **hub + worker** 分片模式，而不是继续加大单进程负载。
+
+- **默认**：`uv run nb run`（单进程），适合牛数量较少或初次部署。
+- **分片**：1 个 **hub**（WebUI、协议端管理、注册表）+ 多个 **worker**（各接一部分牛牛的反向 WebSocket），**共用同一 `data/` 目录**与同一份 `.env`（数据库等全局配置一致）。
+- **启动**：在仓库根目录执行 `./scripts/run_sharded_bot.sh start`（详见 [多进程分片架构说明](architecture/bot_process_sharding.md)）。
+- **控制台**：仍只访问 hub 端口（默认 `http://<主机>:8088/pallas/`）；协议端管理也在 hub。
+- **注意**：worker 需额外监听端口（默认从 8090 起）；协议端各账号的 WebSocket 会指向对应 worker，变更端口后须在协议端 **重启** 账号。使用 PostgreSQL 时请预留足够 `max_connections`。
+
+从单进程切换到分片前请备份 `data/`。Docker 编排示例见 [Docker 部署 · 多进程分片](DockerDeployment.md#多进程分片可选)。
 
 ## 进程守护脚本
 

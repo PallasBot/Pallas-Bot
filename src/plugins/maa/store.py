@@ -276,6 +276,9 @@ class MaaStore:
         if not any(d.device == device and d.verified for d in devices):
             return [], "当前设备未绑定或已失效，请重新绑定。"
 
+        from src.common.shard.coord.maa_route_registry import register_maa_user_route
+
+        register_maa_user_route(user_key)
         task_ids: list[str] = []
         async with self._lock:
             for spec in specs:

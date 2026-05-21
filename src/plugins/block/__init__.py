@@ -11,6 +11,12 @@ from src.common.cmd_perm.metadata_defaults import (
 )
 from src.common.cmd_perm.metadata_text import join_usage, usage_line
 from src.common.config import BotConfig
+from src.common.multi_bot.fleet import (
+    fleet_bot_ids_contains,
+    note_fleet_bot_session_connected,
+)
+from src.common.shard.presence import note_worker_bot_connected, note_worker_bot_disconnected
+from src.common.shard.registry.config import is_sharding_active
 
 from .config import Config
 
@@ -47,7 +53,11 @@ driver = get_driver()
 async def bot_connect(bot: Bot) -> None:
     if bot.self_id.isnumeric() and bot.type == "OneBot V11":
         logger.info(f"Bot {bot.self_id} connected.")
-        plugin_config.bots.add(int(bot.self_id))
+        qq = int(bot.self_id)
+        plugin_config.bots.add(qq)
+        if is_sharding_active():
+            note_fleet_bot_session_connected(qq)
+            await note_worker_bot_connected(bot)
 
 
 @driver.on_bot_disconnect
@@ -59,10 +69,18 @@ async def bot_disconnect(bot: Bot) -> None:
             pass
         else:
             logger.info(f"Bot {bot.self_id} disconnected.")
+        if is_sharding_active():
+            await note_worker_bot_disconnected(int(bot.self_id))
+
+
+def is_fleet_bot_qq(qq: int) -> bool:
+    if is_sharding_active():
+        return fleet_bot_ids_contains(qq)
+    return qq in plugin_config.bots
 
 
 async def is_other_bot(event: GroupMessageEvent) -> bool:
-    if event.user_id not in plugin_config.bots:
+    if not is_fleet_bot_qq(int(event.user_id)):
         return False
     if await BotConfig(event.self_id, event.group_id).is_dreaming():
         return False

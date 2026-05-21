@@ -1,8 +1,13 @@
-from nonebot import get_driver, get_plugin_config
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
+from src.common.webui import install_hot_reload_config
 
-class Config(BaseModel):
+StatusListModeSetting = Literal["auto", "session", "fleet"]
+
+
+class Config(BaseModel, extra="ignore"):
     bot_status_smtp_user: str = Field(default="", description="SMTP 发信账号（通常与发件邮箱一致）。")
     bot_status_smtp_password: str = Field(default="", description="SMTP 密码或应用专用授权码。")
     bot_status_smtp_server: str = Field(default="", description="SMTP 服务器主机名，如 smtp.example.com。")
@@ -11,6 +16,13 @@ class Config(BaseModel):
     bot_status_offline_grace_time: int = Field(
         default=30,
         description="判定为离线并发送邮件通知前，允许无心跳的宽限时间（分钟）。",
+    )
+    bot_status_list_mode: StatusListModeSetting = Field(
+        default="auto",
+        description=(
+            "牛牛在吗名册：auto=分片用 fleet、单进程用 session；"
+            "session=本进程连接；fleet=协议端 enabled（分片含 registry）。"
+        ),
     )
 
 
@@ -23,13 +35,10 @@ class MailConfig:
         self.notice_email = notice_email
 
     def check_params(self) -> bool:
-        """检查参数是否填写完整"""
-        if self.user and self.password and self.server and self.port and self.notice_email:
-            return True
-        else:
-            return False
+        return bool(self.user and self.password and self.server and self.port and self.notice_email)
 
 
-driver = get_driver()
-global_config = driver.config
-plugin_config = get_plugin_config(Config)
+plugin_webui = install_hot_reload_config(Config, config_module=__name__)
+get_bot_status_config = plugin_webui.get
+reload_bot_status_config = plugin_webui.reload
+clear_bot_status_config_cache = plugin_webui.clear_cache

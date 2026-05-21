@@ -309,6 +309,9 @@ def install_pallas_http_request_context_middleware(app: Any) -> None:
     """每个请求绑定 Starlette Request，供协议端 / 控制台在无显式 Request 参数时做会话校验。"""
     if getattr(app.state, "_pallas_http_ctx_mw", False):
         return
+    if getattr(app, "middleware_stack", None) is not None:
+        logger.debug("pallas http request context middleware: app already started, skip")
+        return
     app.state._pallas_http_ctx_mw = True
     from starlette.requests import Request  # noqa: TC002
 

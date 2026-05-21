@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from nonebot import get_driver, logger
 
-from src.common.multi_bot_group import claim_group_message_event
+from src.common.multi_bot.group import claim_group_message_event
 
 from .learn_runtime_config import get_repeater_learn_runtime_config
 

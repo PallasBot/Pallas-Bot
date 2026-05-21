@@ -6,19 +6,51 @@ if TYPE_CHECKING:
     from .types import ServiceProbeResult
 
 
-def format_probe_line(result: ServiceProbeResult) -> str:
-    prefix = f"{result.category}：{result.site}"
+def format_probe_detail(result: ServiceProbeResult) -> str:
     if result.ok and result.latency_ms is not None:
-        return f"{prefix}：{result.latency_ms}ms"
+        line = f"{result.latency_ms}ms"
+        if result.error:
+            line += f"（{result.error}）"
+        return line
     if result.status_code is not None:
-        return f"{prefix}：HTTP {result.status_code}"
+        return f"HTTP {result.status_code}"
     if result.error:
-        return f"{prefix}：{result.error}"
-    return f"{prefix}：不可用"
+        return result.error
+    return "不可用"
+
+
+def category_site_indent(category: str) -> int:
+    """首行「类别 + 空格」宽度，备线等与主网关列对齐。"""
+    name = (category or "").strip()
+    return len(f"{name} ") if name else 0
+
+
+def format_probe_line(
+    result: ServiceProbeResult,
+    *,
+    show_category: bool = True,
+    indent: int = 0,
+) -> str:
+    detail = format_probe_detail(result)
+    site = (result.site or "").strip()
+    if show_category and (result.category or "").strip():
+        return f"{result.category.strip()} {site}：{detail}"
+    pad = " " * max(0, indent)
+    return f"{pad}{site}：{detail}"
 
 
 def format_probe_lines(results: list[ServiceProbeResult]) -> list[str]:
-    return [format_probe_line(r) for r in results]
+    lines: list[str] = []
+    prev_category: str | None = None
+    indent = 0
+    for result in results:
+        category = (result.category or "").strip()
+        show_category = category != prev_category
+        if show_category:
+            indent = category_site_indent(category)
+        lines.append(format_probe_line(result, show_category=show_category, indent=indent))
+        prev_category = category
+    return lines
 
 
 def format_probe_text(results: list[ServiceProbeResult]) -> str:

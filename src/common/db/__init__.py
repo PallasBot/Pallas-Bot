@@ -144,15 +144,37 @@ async def init_mongodb_db() -> None:
 
     host = _cfg("MONGO_HOST", "127.0.0.1")
     port = int(_cfg("MONGO_PORT", "27017"))
-    user = _cfg("MONGO_USER", "")
+    user = _cfg("MONGO_USER", "").strip()
     password = _cfg("MONGO_PASSWORD", "")
+    db_name = _cfg("MONGO_DB", "PallasBot")
+    auth_source = (_cfg("MONGO_AUTH_SOURCE", "") or db_name).strip() or db_name
+
     if user and password:
-        connection_string = f"mongodb://{quote_plus(user)}:{quote_plus(password)}@{host}:{port}"
+        connection_string = (
+            f"mongodb://{quote_plus(user)}:{quote_plus(password)}@{host}:{port}/?authSource={quote_plus(auth_source)}"
+        )
     else:
         connection_string = f"mongodb://{host}:{port}"
-    db_name = _cfg("MONGO_DB", "PallasBot")
+        if user or password:
+            logger.warning("MONGO_USER 与 MONGO_PASSWORD 须同时配置；当前将按无认证连接尝试")
+
     logger.info(f"正在尝试连接 MongoDB {host}:{port}，Database：{db_name}")
-    mongo_client = AsyncMongoClient(connection_string, unicode_decode_error_handler="ignore")
+    mongo_client = AsyncMongoClient(
+        connection_string,
+        unicode_decode_error_handler="ignore",
+        serverSelectionTimeoutMS=8000,
+    )
+    try:
+        await mongo_client.admin.command("ping")
+    except Exception as exc:
+        err = str(exc)
+        if "requires authentication" in err or "code': 13" in err or "Unauthorized" in err:
+            raise RuntimeError(
+                f"MongoDB {host}:{port} 需要认证：请在 .env 配置 MONGO_USER、MONGO_PASSWORD，"
+                f"必要时设置 MONGO_AUTH_SOURCE（当前默认 {auth_source}）；"
+                f"或改用 DB_BACKEND=postgresql。原始错误: {err}"
+            ) from exc
+        raise
     await init_beanie(
         database=mongo_client[db_name],
         document_models=[

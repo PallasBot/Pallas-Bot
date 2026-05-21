@@ -41,6 +41,24 @@ class MaaHttpEndpoints:
     inferred_base: bool
 
 
+def maa_public_http_base(cfg: Config) -> tuple[str, bool]:
+    """对外基址；分片未配置时回退 hub 端口（与单进程「一个入口」一致）。"""
+    configured = normalize_public_base_url(cfg.maa_public_base_url)
+    if configured:
+        return configured, False
+    from src.common.shard.registry.config import get_shard_registry_settings, is_sharding_active
+
+    if is_sharding_active():
+        s = get_shard_registry_settings()
+        host = (s.ws_host or "127.0.0.1").strip() or "127.0.0.1"
+        return nonebot_public_base_url(host=host, port=s.hub_port), True
+    dconf = get_driver().config
+    return (
+        nonebot_public_base_url(host=getattr(dconf, "host", None), port=getattr(dconf, "port", None)),
+        True,
+    )
+
+
 def resolve_maa_http_endpoints(cfg: Config | None = None) -> MaaHttpEndpoints:
     cfg = cfg if cfg is not None else get_maa_config()
     get_path = normalize_http_path(cfg.maa_get_task_path)
@@ -51,14 +69,7 @@ def resolve_maa_http_endpoints(cfg: Config | None = None) -> MaaHttpEndpoints:
     if get_override and report_override:
         return MaaHttpEndpoints(get_override, report_override, inferred_base=False)
 
-    configured_base = normalize_public_base_url(cfg.maa_public_base_url)
-    if configured_base:
-        base = configured_base
-        inferred = False
-    else:
-        dconf = get_driver().config
-        base = nonebot_public_base_url(host=getattr(dconf, "host", None), port=getattr(dconf, "port", None))
-        inferred = True
+    base, inferred = maa_public_http_base(cfg)
 
     if get_override:
         get_url = get_override
@@ -71,6 +82,37 @@ def resolve_maa_http_endpoints(cfg: Config | None = None) -> MaaHttpEndpoints:
     return MaaHttpEndpoints(get_url, report_url, inferred)
 
 
+def resolve_maa_process_http_endpoints(cfg: Config | None = None) -> MaaHttpEndpoints:
+    """本进程 NoneBot 监听地址 + 路径（分片 worker 连通性探测用，忽略 maa_public_base_url）。"""
+    cfg = cfg if cfg is not None else get_maa_config()
+    get_path = normalize_http_path(cfg.maa_get_task_path)
+    report_path = normalize_http_path(cfg.maa_report_status_path)
+
+    get_override = normalize_full_endpoint(cfg.maa_get_task_endpoint)
+    report_override = normalize_full_endpoint(cfg.maa_report_status_endpoint)
+    if get_override and report_override:
+        return MaaHttpEndpoints(get_override, report_override, inferred_base=False)
+
+    dconf = get_driver().config
+    base = nonebot_public_base_url(host=getattr(dconf, "host", None), port=getattr(dconf, "port", None))
+    get_url = get_override or f"{base}{get_path}"
+    report_url = report_override or f"{base}{report_path}"
+    return MaaHttpEndpoints(get_url, report_url, inferred_base=True)
+
+
+def resolve_maa_probe_http_endpoints(cfg: Config | None = None) -> MaaHttpEndpoints:
+    """连通性探测：分片 worker 测本机路由；hub / 单进程测对外 URL。"""
+    from src.common.bot_runtime.roles import is_sharded_hub, is_sharded_worker
+    from src.common.shard.registry.config import is_sharding_active
+
+    cfg = cfg if cfg is not None else get_maa_config()
+    if is_sharding_active() and is_sharded_worker():
+        return resolve_maa_process_http_endpoints(cfg)
+    if is_sharding_active() and is_sharded_hub():
+        return resolve_maa_http_endpoints(cfg)
+    return resolve_maa_http_endpoints(cfg)
+
+
 def format_maa_http_setup_help() -> str:
     ep = resolve_maa_http_endpoints()
     lines = [
@@ -80,9 +122,17 @@ def format_maa_http_setup_help() -> str:
         "用户标识符：你的 QQ 号（与绑定命令一致）。",
     ]
     if ep.inferred_base:
+        from src.common.shard.registry.config import is_sharding_active
+
+        shard_hint = (
+            "分片时请配置 maa_public_base_url 为 hub 对外地址（未填则按 hub 端口推断）。"
+            if is_sharding_active()
+            else ""
+        )
         lines.append(
             "当前地址由 NoneBot 的 host/port 推断，仅适合本机调试；"
             "对外部署一般只需配置 maa_public_base_url（与默认路径自动拼接）。"
+            f"{shard_hint}"
             "仅在特殊反代场景再单独填写 maa_get_task_endpoint、maa_report_status_endpoint。"
         )
     return "\n\n".join(lines)

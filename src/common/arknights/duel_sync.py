@@ -8,7 +8,7 @@ import urllib.request
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
-from src.common.arknights_skill_text import skill_last_level_plain
+from src.common.arknights.skill_text import skill_last_level_plain
 from src.common.paths import resource_dir
 
 ARKNIGHTS_DIR = resource_dir("arknights")

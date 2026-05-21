@@ -2,7 +2,7 @@
 
 典型用法（群内命令 / on_message）::
 
-    from src.common.multi_bot_group import claim_group_handler
+    from src.common.multi_bot.group import claim_group_handler
 
     @matcher.handle()
     async def handler(bot: Bot, event: MessageEvent):
@@ -14,7 +14,7 @@
 短时群级占位用 ``try_acquire_group_broadcast_slot`` / ``try_begin_group_owned_gate``。
 """
 
-from src.common.group_message_dedup import (
+from src.common.multi_bot.dedup import (
     claim_group_handler,
     claim_group_message_event,
     cross_bot_group_message_key,

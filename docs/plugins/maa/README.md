@@ -78,7 +78,7 @@
 
 ### 多 Bot 同群
 
-群内远控口令与 `牛牛MAA状态` 等命令经 `claim_group_handler("maa", …)`（`src.common.multi_bot_group`），同一条群消息仅一只牛响应。私聊绑定/切换设备不受影响。
+群内远控口令与 `牛牛MAA状态` 等命令经 `claim_group_handler("maa", …)`（`src.common.multi_bot.group`），同一条群消息仅一只牛响应。私聊绑定/切换设备不受影响。
 
 ### 代码索引
 

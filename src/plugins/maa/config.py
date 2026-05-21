@@ -9,7 +9,7 @@ class Config(BaseModel, extra="ignore"):
         description=(
             "MAA 客户端可访问的对外基址（含 http/https，末尾勿加斜杠），如 https://nb.example.com。"
             "一般仅配置此项即可：会与默认路径拼成 getTask / reportStatus 完整 URL（见帮助与绑定提示）。"
-            "未填时回退为 NoneBot 的 host/port 推断，仅适合本机调试。"
+            "分片时请填 hub 对外地址；未填时按 hub 端口推断。单进程未填则回退本机 host/port。"
         ),
     )
     maa_get_task_endpoint: str = Field(

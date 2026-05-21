@@ -312,7 +312,7 @@ def pallas_protocol_snapshot() -> dict[str, Any] | None:
         except Exception:  # noqa: BLE001
             accounts = []
         try:
-            from src.common.pallas_console_login import is_console_auth_configured
+            from src.common.webui.console_login import is_console_auth_configured
 
             auth_ok = is_console_auth_configured()
         except Exception:  # noqa: BLE001

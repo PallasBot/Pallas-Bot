@@ -12,7 +12,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 from nonebot.matcher import Matcher  # noqa: TC002
 from nonebot.rule import Rule
 
-from src.plugins.block import plugin_config as block_plugin_config
+from src.plugins.block import is_fleet_bot_qq
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_message import (
     append_duel_message,
@@ -112,6 +112,44 @@ def pick_bot_wrong_qte_reply(correct: str, qte_kind: str, *, decoy_keys: list[st
     return pick_wrong_keyword_reply(correct, decoy_keys)
 
 
+def should_schedule_bot_qte_auto_answer(responder: str) -> bool:
+    """fleet 牛牛且 WS 连在本进程时才在本进程调度自动 QTE。"""
+    try:
+        qq = int(responder)
+    except (TypeError, ValueError):
+        return False
+    if not is_fleet_bot_qq(qq):
+        return False
+    from src.common.shard.presence import bot_has_local_connection
+
+    return bot_has_local_connection(qq)
+
+
+def should_delegate_bot_qte_to_coord(responder: str) -> bool:
+    """分片且应答牛在其它 worker：走 data/coord/duel_qte 共享会话。"""
+    from src.common.shard.registry.config import is_sharding_active
+
+    if not is_sharding_active():
+        return False
+    try:
+        qq = int(responder)
+    except (TypeError, ValueError):
+        return False
+    if not is_fleet_bot_qq(qq):
+        return False
+    from src.common.shard.presence import bot_has_local_connection
+
+    return not bot_has_local_connection(qq)
+
+
+def race_qte_needs_coord(challenger_id: str, defender_id: str) -> bool:
+    from src.common.shard.registry.config import is_sharding_active
+
+    if not is_sharding_active():
+        return False
+    return should_delegate_bot_qte_to_coord(challenger_id) or should_delegate_bot_qte_to_coord(defender_id)
+
+
 def schedule_bot_qte_auto_answer(
     group_id: int,
     responder: str,
@@ -123,7 +161,20 @@ def schedule_bot_qte_auto_answer(
     decoy_keys: list[str] | None = None,
 ) -> None:
     """应答方为牛时自动咏名/拆招，按概率成功或嘴瓢失败。"""
-    if int(responder) not in block_plugin_config.bots:
+    if should_delegate_bot_qte_to_coord(responder):
+        from src.common.shard.coord.duel_qte import schedule_cross_shard_single_qte
+
+        schedule_cross_shard_single_qte(
+            group_id,
+            responder,
+            required_key,
+            fut,
+            window_sec,
+            qte_kind=qte_kind,
+            decoy_keys=decoy_keys,
+        )
+        return
+    if not should_schedule_bot_qte_auto_answer(responder):
         return
 
     async def job() -> None:
@@ -164,11 +215,32 @@ def schedule_bot_race_qte_auto_answer(
     decoy_keys: list[str] | None = None,
 ) -> None:
     """双方均为牛时各自自动抢答，先成功者写入 future。"""
+    coord_sid: str | None = None
+    if race_qte_needs_coord(challenger_id, defender_id):
+        from src.common.shard.coord.duel_qte import (
+            bridge_race_qte_coord,
+            schedule_cross_shard_race_qte,
+        )
+
+        coord_sid = schedule_cross_shard_race_qte(
+            group_id,
+            challenger_id,
+            defender_id,
+            required_key,
+            fut,
+            window_sec,
+            qte_kind=qte_kind,
+            decoy_keys=decoy_keys,
+        )
+        asyncio.create_task(bridge_race_qte_coord(coord_sid, fut, window_sec=window_sec))
+
     for responder in (challenger_id, defender_id):
-        if int(responder) not in block_plugin_config.bots:
+        if should_delegate_bot_qte_to_coord(responder):
+            continue
+        if not should_schedule_bot_qte_auto_answer(responder):
             continue
 
-        async def job(responder_id: str = responder) -> None:
+        async def job(responder_id: str = responder, race_coord_sid: str | None = coord_sid) -> None:
             from nonebot import get_bots
 
             delay = random.uniform(1.0, min(5.5, max(1.8, window_sec - 1.0)))
@@ -190,7 +262,13 @@ def schedule_bot_race_qte_auto_answer(
                         await inst.send_group_msg(group_id=group_id, message=outgoing)
                 except Exception as err:
                     logger.debug(f"duel bot race qte send failed: {err}")
-            if not fut.done() and success_roll and outgoing == required_key:
+            if not success_roll or outgoing != required_key:
+                return
+            if race_coord_sid:
+                from src.common.shard.coord.duel_qte import try_claim_race_coord_winner
+
+                await try_claim_race_coord_winner(race_coord_sid, responder_id)
+            elif not fut.done():
                 fut.set_result(responder_id)
 
         asyncio.create_task(job())

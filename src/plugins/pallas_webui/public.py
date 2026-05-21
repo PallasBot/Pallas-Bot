@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from nonebot import logger
 from starlette import status
 
-from src.common.pallas_console_login import (
+from src.common.webui.console_login import (
     SESSION_COOKIE_NAME,
     SESSION_TTL_SEC,
     install_pallas_http_request_context_middleware,
@@ -128,7 +128,7 @@ def register_routes(
     use_priest_avatar = shared_pallas_ui_dir.is_dir()
 
     def _render_login_page(*, target: str, reason: str | None, token_submitted: bool) -> HTMLResponse:
-        from src.common.pallas_login_page import render_pallas_login_page_html
+        from src.common.webui.login_page import render_pallas_login_page_html
 
         err = (reason or "").strip()
         if not token_submitted:

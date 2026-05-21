@@ -7,7 +7,7 @@ from typing import Any, Self
 from nonebot import get_plugin_config
 from pydantic import BaseModel, Field, model_validator
 
-from src.common.env_dotenv import merged_repo_dotenv_upper, repo_layered_dotenv_files_exist
+from src.common.config.dotenv import merged_repo_dotenv_upper, repo_layered_dotenv_files_exist
 from src.common.webui.registry import PluginWebuiConfigHooks, register_plugin_webui_config
 
 

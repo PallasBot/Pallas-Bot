@@ -22,14 +22,16 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from nonebot import get_bots, get_driver, get_loaded_plugins, get_plugin_config, logger
+from nonebot import get_bots, get_driver, get_plugin_config, logger
 from nonebot.adapters import Bot as BaseBot  # noqa: TC002
 from nonebot.adapters import Event  # noqa: TC002
 from nonebot.matcher import Matcher  # noqa: TC002
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_core import PydanticUndefined
 
-from src.common.pallas_console_login import (
+from src.common.web.bot_web import LogScope  # noqa: TC001  # FastAPI/OpenAPI 需在运行时解析注解
+from src.common.webui import apply_plugin_config_patch, plugin_config_payload
+from src.common.webui.console_login import (
     current_http_request,
     extract_session_from_request,
     is_console_auth_configured,
@@ -38,8 +40,6 @@ from src.common.pallas_console_login import (
     set_shared_console_login_token,
     verify_console_password,
 )
-from src.common.web.bot_web import LogScope  # noqa: TC001  # FastAPI/OpenAPI 需在运行时解析注解
-from src.common.webui import apply_plugin_config_patch, plugin_config_payload
 
 from .api import _merge_console_version_from_disk
 
@@ -129,7 +129,26 @@ def _hist_bucket_start_local(ts: int, bucket_sec: int) -> int:
 # self_id -> { day_key, by_plugin: { plugin: { runs, errors, day_runs, day_errors, duration_* } } }
 _PLUGIN_RUN_STATS: dict[str, dict[str, Any]] = {}
 _PLUGIN_RUN_TRACKING_INIT = False
-_EXCLUDED_PLUGIN_RUN_NAMES = frozenset({"pallas_webui"})
+_WORKER_STATS_SYNC_STARTED = False
+_WORKER_STATS_FAST_FLUSH_SEC = 3.0
+_WORKER_STATS_HIST_FLUSH_SEC = 30.0
+_EMPTY_MATCHER_HIST_SERIES: dict[str, list[Any]] = {
+    "matcher_runs_by_plugin": [],
+    "matcher_errors_by_plugin": [],
+}
+_EMPTY_MATCHER_DUR_HIST_SERIES: dict[str, list[Any]] = {
+    "matcher_duration_ms_by_plugin": [],
+    "matcher_avg_duration_ms_by_plugin": [],
+}
+
+
+def _is_console_stats_excluded_plugin(plugin: str) -> bool:
+    from src.plugins.help.visibility import resolve_console_stats_excluded_plugin_names
+
+    key = str(plugin or "").strip().lower()
+    return bool(key) and key in resolve_console_stats_excluded_plugin_names()
+
+
 _MATCHER_RUN_STARTED: contextvars.ContextVar[float | None] = contextvars.ContextVar(
     "matcher_run_started",
     default=None,
@@ -137,7 +156,7 @@ _MATCHER_RUN_STARTED: contextvars.ContextVar[float | None] = contextvars.Context
 _MATCHER_ERROR_LOG_CAP = 80
 _MATCHER_DURATION_LOG_CAP = 80
 _MATCHER_ERROR_MSG_MAX = 2000
-_MATCHER_ERROR_TB_MAX = 8000
+_MATCHER_ERROR_TB_MAX = 50_000
 _MATCHER_ERROR_JSONL_LOCK = threading.Lock()
 _MATCHER_DURATION_JSONL_LOCK = threading.Lock()
 _LOG_ERROR_LOG_CAP = _MATCHER_ERROR_LOG_CAP
@@ -248,25 +267,10 @@ def _help_menu_control() -> tuple[set[str], set[str]]:
 
 
 def _list_plugins_dict() -> list[dict[str, Any]]:
+    from src.common.webui.plugin_catalog import build_plugin_catalog_rows
+
     ignored, hidden = _help_menu_control()
-    out: list[dict[str, Any]] = []
-    for p in get_loaded_plugins():
-        if not p.name:
-            continue
-        mod = getattr(p, "module", None)
-        module_name = getattr(mod, "__name__", "") if mod is not None else ""
-        if not module_name:
-            module_name = str(getattr(p, "module_name", "") or "")
-        out.append({
-            "name": p.name,
-            "module": module_name,
-            "metadata": _metadata_to_dict(p.metadata),
-            "help_visible": p.name not in ignored and p.name not in hidden,
-            "help_ignored": p.name in ignored,
-            "help_hidden": p.name in hidden,
-        })
-    out.sort(key=lambda x: x["name"] or "")
-    return out
+    return build_plugin_catalog_rows(ignored=ignored, hidden=hidden)
 
 
 def _jsonable_value(v: Any) -> Any:
@@ -326,6 +330,14 @@ def _ensure_bot_session_hooks() -> None:
 
 
 def _list_bots_dict() -> list[dict[str, Any]]:
+    from src.common.bot_runtime.roles import is_sharded_hub
+    from src.common.shard.registry.config import is_sharding_active
+
+    if is_sharding_active() and is_sharded_hub():
+        from src.common.shard.presence import list_connected_bots_for_webui
+
+        return list_connected_bots_for_webui()
+
     rows: list[dict[str, Any]] = []
     for key, bot in get_bots().items():
         self_id: str
@@ -1008,6 +1020,177 @@ def _flush_today_console_daily_stats_disk() -> None:
         daily_stats_store.write_day_totals(today, sid, dr, ds, mr)
 
 
+def _serialize_bot_for_shard_stats(sid: str, *, include_hist: bool = False) -> dict[str, Any]:
+    sid = str(sid).strip()
+    pblock = _PLUGIN_RUN_STATS.get(sid)
+    mem = _MSG_STATS.get(sid)
+    by_plugin: dict[str, Any] = {}
+    if isinstance(pblock, dict):
+        raw_bp = pblock.get("by_plugin")
+        if isinstance(raw_bp, dict):
+            for pname, prow in raw_bp.items():
+                if not isinstance(prow, dict):
+                    continue
+                by_plugin[str(pname)] = {
+                    k: prow[k]
+                    for k in (
+                        "runs",
+                        "errors",
+                        "day_runs",
+                        "day_errors",
+                        "duration_ms_sum",
+                        "duration_count",
+                        "duration_ms_max",
+                        "day_duration_ms_sum",
+                        "day_duration_count",
+                        "day_duration_ms_max",
+                    )
+                    if k in prow
+                }
+    dur_log: list[dict[str, Any]] = []
+    if isinstance(pblock, dict):
+        raw_log = pblock.get("matcher_duration_log")
+        if isinstance(raw_log, list):
+            dur_log = [dict(x) for x in raw_log[-_MATCHER_DURATION_LOG_CAP:] if isinstance(x, dict)]
+    msg: dict[str, Any] = {}
+    if isinstance(mem, dict):
+        msg = {
+            "sent": int(mem.get("sent", 0)),
+            "received": int(mem.get("received", 0)),
+            "day_sent": int(mem.get("day_sent", 0)),
+            "day_received": int(mem.get("day_received", 0)),
+            "day_key": str(mem.get("day_key") or ""),
+        }
+    day_key = ""
+    if isinstance(pblock, dict):
+        day_key = str(pblock.get("day_key") or "")
+    if not day_key and isinstance(mem, dict):
+        day_key = str(mem.get("day_key") or "")
+    out: dict[str, Any] = {
+        "day_key": day_key,
+        "by_plugin": by_plugin,
+        "matcher_duration_log": dur_log,
+        "msg": msg,
+    }
+    if include_hist and isinstance(pblock, dict):
+        raw_hist = pblock.get("matcher_hist")
+        if isinstance(raw_hist, list):
+            out["matcher_hist"] = copy.deepcopy(raw_hist)
+    return out
+
+
+def _collect_worker_console_stats_snapshot(*, include_hist: bool = False) -> dict[str, Any]:
+    today = time.strftime("%Y-%m-%d", time.localtime())
+    sids = set(_MSG_STATS.keys()) | set(_PLUGIN_RUN_STATS.keys())
+    out: dict[str, Any] = {}
+    for sid in sids:
+        sid = str(sid).strip()
+        if not sid:
+            continue
+        _rollover_console_day_if_needed(sid, today)
+        out[sid] = _serialize_bot_for_shard_stats(sid, include_hist=include_hist)
+    return out
+
+
+def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None:
+    from src.common.bot_runtime.roles import is_sharded_worker
+    from src.common.shard.console_stats import write_worker_stats_sync
+    from src.common.shard.registry.config import get_shard_registry_settings
+
+    if not is_sharded_worker():
+        return
+    shard_id = int(get_shard_registry_settings().shard_id)
+    write_worker_stats_sync(
+        shard_id=shard_id,
+        bots=_collect_worker_console_stats_snapshot(include_hist=include_hist),
+        preserve_matcher_hist=not include_hist,
+    )
+
+
+def _restore_worker_console_stats_from_shard_file() -> None:
+    from src.common.bot_runtime.roles import is_sharded_worker
+    from src.common.shard.console_stats import load_worker_console_stats_for_boot
+    from src.common.shard.registry.config import get_shard_registry_settings
+
+    if not is_sharded_worker():
+        return
+    shard_id = int(get_shard_registry_settings().shard_id)
+    bots = load_worker_console_stats_for_boot(shard_id)
+    today = time.strftime("%Y-%m-%d", time.localtime())
+    for sid, rec in bots.items():
+        if not isinstance(rec, dict):
+            continue
+        sid = str(sid).strip()
+        if not sid:
+            continue
+        bp = rec.get("by_plugin")
+        bucket = _PLUGIN_RUN_STATS.setdefault(
+            sid,
+            {"day_key": str(rec.get("day_key") or today), "by_plugin": {}, "matcher_hist": []},
+        )
+        if isinstance(bp, dict):
+            bucket["by_plugin"] = copy.deepcopy(bp)
+        bucket["day_key"] = str(rec.get("day_key") or today)
+        hist = rec.get("matcher_hist")
+        if isinstance(hist, list):
+            bucket["matcher_hist"] = copy.deepcopy(hist)
+        log = rec.get("matcher_duration_log")
+        if isinstance(log, list):
+            bucket["matcher_duration_log"] = [dict(x) for x in log[-_MATCHER_DURATION_LOG_CAP:] if isinstance(x, dict)]
+        msg = rec.get("msg")
+        if isinstance(msg, dict):
+            _MSG_STATS[sid] = {
+                "sent": int(msg.get("sent", 0)),
+                "received": int(msg.get("received", 0)),
+                "day_sent": int(msg.get("day_sent", 0)),
+                "day_received": int(msg.get("day_received", 0)),
+                "day_key": str(msg.get("day_key") or today),
+                "day_api_total": 0,
+                "day_api_counts": {},
+                "api_call_buckets": [],
+                "msg_traffic_buckets": [],
+            }
+        _CONSOLE_CAL_DAY[sid] = str(bucket.get("day_key") or today)
+
+
+def start_worker_shard_console_stats_sync() -> None:
+    global _WORKER_STATS_SYNC_STARTED
+    if _WORKER_STATS_SYNC_STARTED:
+        return
+    from src.common.bot_runtime.roles import is_sharded_worker
+
+    if not is_sharded_worker():
+        return
+    _WORKER_STATS_SYNC_STARTED = True
+
+    async def _fast_loop() -> None:
+        while True:
+            try:
+                flush_worker_shard_console_stats_sync(include_hist=False)
+                _flush_today_console_daily_stats_disk()
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(_WORKER_STATS_FAST_FLUSH_SEC)
+
+    async def _hist_loop() -> None:
+        while True:
+            try:
+                flush_worker_shard_console_stats_sync(include_hist=True)
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(_WORKER_STATS_HIST_FLUSH_SEC)
+
+    asyncio.create_task(_fast_loop())
+    asyncio.create_task(_hist_loop())
+
+
+def ensure_console_metrics_hooks() -> None:
+    """单进程 / hub WebUI 与分片 worker（pallas_console_metrics）共用。"""
+    _ensure_bot_session_hooks()
+    _init_message_tracking()
+    _init_plugin_run_tracking()
+
+
 def _msg_stats_get_mut(sid: str) -> dict[str, Any]:
     """返回可写的内存统计行；跨本地自然日时清零当日计数（与 Matcher 日计数统一落盘）。"""
     today = time.strftime("%Y-%m-%d", time.localtime())
@@ -1352,57 +1535,136 @@ def _init_message_tracking() -> None:
             pass
 
 
+def _message_stats_row_from_mem(
+    *,
+    sid: str,
+    connection_key: str,
+    mem: dict[str, Any],
+) -> dict[str, Any]:
+    counts = mem.get("day_api_counts")
+    top_name, top_cnt = _top_api_call_today(counts)
+    return {
+        "self_id": sid,
+        "connection_key": connection_key,
+        "sent": int(mem.get("sent", 0)),
+        "received": int(mem.get("received", 0)),
+        "today_sent": int(mem.get("day_sent", 0)),
+        "today_received": int(mem.get("day_received", 0)),
+        "today_api_calls": int(mem.get("day_api_total", 0)),
+        "today_top_api": top_name,
+        "today_top_api_count": top_cnt,
+        "api_calls_history": _api_call_history_public(mem),
+        "api_calls_history_by_api": _api_call_history_by_api_series(mem),
+        "message_traffic_history": _msg_traffic_history_public(mem),
+    }
+
+
+def _message_stats_mem_from_shard_blob(rec: dict[str, Any]) -> dict[str, Any]:
+    msg = rec.get("msg")
+    if not isinstance(msg, dict):
+        msg = {}
+    return {
+        "sent": int(msg.get("sent", 0)),
+        "received": int(msg.get("received", 0)),
+        "day_sent": int(msg.get("day_sent", 0)),
+        "day_received": int(msg.get("day_received", 0)),
+        "day_key": str(msg.get("day_key") or ""),
+        "day_api_total": 0,
+        "day_api_counts": {},
+        "api_call_buckets": [],
+        "msg_traffic_buckets": [],
+    }
+
+
 async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     total_sent = 0
     total_received = 0
     total_today_sent = 0
     total_today_received = 0
-    for key, bot in get_bots().items():
-        sid = str(getattr(bot, "self_id", "") or "").strip()
-        if not sid:
-            continue
-        if self_id and sid != str(self_id).strip():
-            continue
-        if not _is_onebot_v11_bot(bot):
-            continue
+    want = str(self_id).strip() if self_id else None
 
-        # 优先使用内存计数器（兼容 NapCat 等 stat:{} 为空的实现）
-        mem = _msg_stats_get_mut(sid)
-        sent = int(mem["sent"])
-        received = int(mem["received"])
-        today_sent = int(mem["day_sent"])
-        today_received = int(mem["day_received"])
+    def _accum(row: dict[str, Any]) -> None:
+        nonlocal total_sent, total_received, total_today_sent, total_today_received
+        rows.append(row)
+        total_sent += int(row["sent"])
+        total_received += int(row["received"])
+        total_today_sent += int(row["today_sent"])
+        total_today_received += int(row["today_received"])
 
-        # 同时尝试 get_status（go-cqhttp 等会返回真实统计），取较大值
-        try:
-            status_raw = await bot.call_api("get_status")  # type: ignore[union-attr]
-            api_stats = _extract_message_stats(status_raw)
-            sent = max(sent, api_stats["sent"])
-            received = max(received, api_stats["received"])
-        except Exception:  # noqa: BLE001
-            pass
+    from src.common.bot_runtime.roles import is_sharded_hub
+    from src.common.shard.registry.config import is_sharding_active
 
-        total_sent += sent
-        total_received += received
-        total_today_sent += today_sent
-        total_today_received += today_received
-        counts = mem.get("day_api_counts")
-        top_name, top_cnt = _top_api_call_today(counts)
-        rows.append({
-            "self_id": sid,
-            "connection_key": str(key),
-            "sent": sent,
-            "received": received,
-            "today_sent": today_sent,
-            "today_received": today_received,
-            "today_api_calls": int(mem.get("day_api_total", 0)),
-            "today_top_api": top_name,
-            "today_top_api_count": top_cnt,
-            "api_calls_history": _api_call_history_public(mem),
-            "api_calls_history_by_api": _api_call_history_by_api_series(mem),
-            "message_traffic_history": _msg_traffic_history_public(mem),
-        })
+    if is_sharding_active() and is_sharded_hub():
+        from src.common.shard.console_stats import load_cluster_console_stats_by_sid
+        from src.common.shard.presence import read_presence_bots
+
+        cluster = load_cluster_console_stats_by_sid()
+        seen: set[str] = set()
+
+        def _sort_key(s: str) -> tuple[int, str]:
+            return (int(s), s) if s.isdigit() else (10**18, s)
+
+        for sid in sorted(read_presence_bots().keys(), key=_sort_key):
+            if want and sid != want:
+                continue
+            rec = read_presence_bots()[sid]
+            blob = cluster.get(sid, {})
+            mem = _message_stats_mem_from_shard_blob(blob if isinstance(blob, dict) else {})
+            _accum(
+                _message_stats_row_from_mem(
+                    sid=sid,
+                    connection_key=str(rec.get("connection_key") or sid),
+                    mem=mem,
+                )
+            )
+            seen.add(sid)
+        for key, bot in get_bots().items():
+            sid = str(getattr(bot, "self_id", "") or "").strip()
+            if not sid or sid in seen:
+                continue
+            if want and sid != want:
+                continue
+            if not _is_onebot_v11_bot(bot):
+                continue
+            mem = _msg_stats_get_mut(sid)
+            sent = int(mem["sent"])
+            received = int(mem["received"])
+            try:
+                status_raw = await bot.call_api("get_status")  # type: ignore[union-attr]
+                api_stats = _extract_message_stats(status_raw)
+                sent = max(sent, api_stats["sent"])
+                received = max(received, api_stats["received"])
+            except Exception:  # noqa: BLE001
+                pass
+            mem = dict(mem)
+            mem["sent"] = sent
+            mem["received"] = received
+            _accum(_message_stats_row_from_mem(sid=sid, connection_key=str(key), mem=mem))
+            seen.add(sid)
+    else:
+        for key, bot in get_bots().items():
+            sid = str(getattr(bot, "self_id", "") or "").strip()
+            if not sid:
+                continue
+            if want and sid != want:
+                continue
+            if not _is_onebot_v11_bot(bot):
+                continue
+            mem = _msg_stats_get_mut(sid)
+            sent = int(mem["sent"])
+            received = int(mem["received"])
+            try:
+                status_raw = await bot.call_api("get_status")  # type: ignore[union-attr]
+                api_stats = _extract_message_stats(status_raw)
+                sent = max(sent, api_stats["sent"])
+                received = max(received, api_stats["received"])
+            except Exception:  # noqa: BLE001
+                pass
+            mem = dict(mem)
+            mem["sent"] = sent
+            mem["received"] = received
+            _accum(_message_stats_row_from_mem(sid=sid, connection_key=str(key), mem=mem))
     return {
         "total_sent": total_sent,
         "total_received": total_received,
@@ -1616,7 +1878,9 @@ def _append_matcher_duration_log(
     *,
     had_error: bool,
 ) -> None:
-    """进程内环形缓冲 + jsonl（每账号最多 _MATCHER_DURATION_LOG_CAP 条，重启可恢复）。"""
+    """进程内环形缓冲；单进程/hub 另写 jsonl；分片 worker 由 stats 文件周期刷盘。"""
+    from src.common.bot_runtime.roles import is_sharded_worker
+
     entry: dict[str, Any] = {
         "at": int(time.time()),
         "plugin": plugin,
@@ -1624,15 +1888,17 @@ def _append_matcher_duration_log(
         "had_error": bool(had_error),
     }
     try:
+        rec = _plugin_run_bot_bucket(sid)
+        log = rec.setdefault("matcher_duration_log", [])
+        if not isinstance(log, list):
+            rec["matcher_duration_log"] = []
+            log = rec["matcher_duration_log"]
+        log.append(entry)
+        while len(log) > _MATCHER_DURATION_LOG_CAP:
+            log.pop(0)
+        if is_sharded_worker():
+            return
         with _MATCHER_DURATION_JSONL_LOCK:
-            rec = _plugin_run_bot_bucket(sid)
-            log = rec.setdefault("matcher_duration_log", [])
-            if not isinstance(log, list):
-                rec["matcher_duration_log"] = []
-                log = rec["matcher_duration_log"]
-            log.append(entry)
-            while len(log) > _MATCHER_DURATION_LOG_CAP:
-                log.pop(0)
             _rewrite_matcher_durations_jsonl()
     except Exception:  # noqa: BLE001
         pass
@@ -1779,32 +2045,103 @@ def _append_log_error_from_sink(text: str, record: Any) -> None:
         "raw_line": text,
     }
     _append_console_log_error(entry)
+    try:
+        from src.common.bot_runtime.roles import is_sharded_hub
+
+        if is_sharded_hub():
+            from src.common.shard.logs.errors import append_shard_log_error, log_stem_for_shard
+            from src.common.shard.registry.config import get_shard_registry_settings
+
+            s = get_shard_registry_settings()
+            stem = log_stem_for_shard(role=s.role, shard_id=s.shard_id)
+            shard_entry = {k: v for k, v in entry.items() if k != "raw_line"}
+            append_shard_log_error(shard_entry, stem=stem)
+    except Exception:
+        pass
 
 
-def _log_error_log_public(*, limit: int = 30, tb_limit: int = 4000) -> list[dict[str, Any]]:
+def _normalize_log_error_entry(it: dict[str, Any], *, tb_limit: int) -> dict[str, Any] | None:
+    if not isinstance(it, dict):
+        return None
+    tb = str(it.get("traceback") or "")
+    if tb_limit > 0 and len(tb) > tb_limit:
+        tb = tb[:tb_limit] + "\n…(truncated)"
+    try:
+        at = int(it.get("at") or 0)
+    except (TypeError, ValueError):
+        at = 0
+    return {
+        "at": at,
+        "plugin": str(it.get("plugin") or ""),
+        "exc_type": str(it.get("exc_type") or ""),
+        "message": str(it.get("message") or "")[:2000],
+        "traceback": tb,
+    }
+
+
+def _log_error_entry_matches_source(entry: dict[str, Any], source: str | None) -> bool:
+    want = (source or "all").strip() or "all"
+    if want == "all":
+        return True
+    plugin = str(entry.get("plugin") or "")
+    if want == "hub":
+        return not plugin.startswith("worker-")
+    if want.startswith("worker-"):
+        return plugin == want or plugin.startswith(f"{want}/")
+    return True
+
+
+def _log_error_log_meta() -> dict[str, Any]:
+    sharded = False
+    sources = ["hub"]
+    try:
+        from src.common.bot_runtime.roles import is_sharded_hub
+
+        if is_sharded_hub():
+            sharded = True
+            from src.common.shard.logs.view import list_shard_log_sources
+
+            sources = list_shard_log_sources()
+    except Exception:
+        pass
+    return {"sharded_log_errors": sharded, "log_error_sources": sources}
+
+
+def _log_error_log_public(
+    *,
+    limit: int = 30,
+    tb_limit: int = 0,
+    source: str | None = None,
+) -> list[dict[str, Any]]:
     with _LOG_ERROR_JSONL_LOCK:
         raw = list(_LOG_ERROR_BUFFER)
-    if not raw:
+    merged: list[dict[str, Any]] = [dict(it) for it in raw if isinstance(it, dict)]
+    try:
+        from src.common.bot_runtime.roles import is_sharded_hub
+
+        if is_sharded_hub():
+            from src.common.shard.logs.view import collect_cluster_log_errors
+
+            merged.extend(collect_cluster_log_errors(per_file=800, limit=max(limit * 4, 80)))
+    except Exception:
+        pass
+    if not merged:
         return []
-    out: list[dict[str, Any]] = []
-    for it in raw[-limit:]:
-        if not isinstance(it, dict):
+    seen: set[tuple[str, str, str]] = set()
+    bucket: list[dict[str, Any]] = []
+    for it in merged:
+        norm = _normalize_log_error_entry(it, tb_limit=tb_limit)
+        if norm is None:
             continue
-        tb = str(it.get("traceback") or "")
-        if len(tb) > tb_limit:
-            tb = tb[:tb_limit] + "\n…(truncated)"
-        try:
-            at = int(it.get("at") or 0)
-        except (TypeError, ValueError):
-            at = 0
-        out.append({
-            "at": at,
-            "plugin": str(it.get("plugin") or ""),
-            "exc_type": str(it.get("exc_type") or ""),
-            "message": str(it.get("message") or "")[:2000],
-            "traceback": tb,
-        })
-    return out
+        key = (norm["plugin"], norm["exc_type"], norm["message"][:300])
+        if key in seen:
+            continue
+        seen.add(key)
+        if not _log_error_entry_matches_source(norm, source):
+            continue
+        bucket.append(norm)
+    bucket.sort(key=lambda x: int(x.get("at") or 0))
+    return bucket[-limit:]
 
 
 def _cleanup_log_error_archives_sync() -> None:
@@ -1845,10 +2182,25 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
             if isinstance(rec, dict):
                 rec["matcher_duration_log"] = []
     _cleanup_log_error_archives_sync()
+    try:
+        from src.common.bot_runtime.roles import is_sharded_hub
+
+        if is_sharded_hub():
+            from src.common.shard.console_stats import iter_worker_shard_ids, trim_worker_duration_logs_sync
+            from src.common.shard.logs.errors import cleanup_shard_error_archives_sync
+
+            cleanup_shard_error_archives_sync()
+            from src.common.shard.logs.view import cleanup_stale_shard_log_files
+
+            cleanup_stale_shard_log_files()
+            for wid in iter_worker_shard_ids():
+                trim_worker_duration_logs_sync(shard_id=wid, cap=0)
+    except Exception:
+        pass
     _drop_read_cache(("plugin-run-stats:",))
     logger.info(
         "Pallas-Bot 控制台: 控制台异常记录已按计划清理（每日 4:00，"
-        "matcher_errors.jsonl、matcher_durations.jsonl、log_errors.jsonl 与进程内缓冲）"
+        "matcher_errors.jsonl、matcher_durations.jsonl、log_errors.jsonl、分片 errors/*.jsonl 与进程内缓冲）"
     )
 
 
@@ -1922,7 +2274,7 @@ def _matcher_hist_series_public(rec: dict[str, Any], *, limit: int = _HIST_PLUGI
                 -int((by_plugin.get(k) or {}).get("day_runs", 0) if isinstance(by_plugin.get(k), dict) else 0)
             ),
         )
-        ranked = [str(k) for k in ranked if str(k).strip()][:limit]
+        ranked = [str(k) for k in ranked if str(k).strip() and not _is_console_stats_excluded_plugin(str(k))][:limit]
     if not ranked and isinstance(raw, list):
         acc: set[str] = set()
         for it in raw:
@@ -1987,7 +2339,7 @@ def _matcher_duration_hist_series_public(
             return int(prow.get("day_duration_ms_sum", 0))
 
         ranked = sorted(by_plugin.keys(), key=lambda k: -_day_dur_sum(k))
-        ranked = [str(k) for k in ranked if str(k).strip()][:limit]
+        ranked = [str(k) for k in ranked if str(k).strip() and not _is_console_stats_excluded_plugin(str(k))][:limit]
     if not ranked and isinstance(raw, list):
         acc: set[str] = set()
         for it in raw:
@@ -2048,7 +2400,12 @@ def _init_plugin_run_tracking() -> None:
     if _PLUGIN_RUN_TRACKING_INIT:
         return
     _PLUGIN_RUN_TRACKING_INIT = True
-    _load_matcher_duration_logs_from_disk()
+    from src.common.bot_runtime.roles import is_sharded_worker
+
+    if is_sharded_worker():
+        _restore_worker_console_stats_from_shard_file()
+    else:
+        _load_matcher_duration_logs_from_disk()
 
     from nonebot.message import run_postprocessor, run_preprocessor
 
@@ -2059,7 +2416,7 @@ def _init_plugin_run_tracking() -> None:
         _event: Event,
     ) -> None:
         plugin = _plugin_short_name_from_matcher(matcher).strip()
-        if not plugin or plugin.lower() in _EXCLUDED_PLUGIN_RUN_NAMES:
+        if not plugin or _is_console_stats_excluded_plugin(plugin):
             return
         sid = str(getattr(bot, "self_id", "") or "").strip()
         if not sid:
@@ -2074,7 +2431,7 @@ def _init_plugin_run_tracking() -> None:
         _event: Event,
     ) -> None:
         plugin = _plugin_short_name_from_matcher(matcher).strip()
-        if not plugin or plugin.lower() in _EXCLUDED_PLUGIN_RUN_NAMES:
+        if not plugin or _is_console_stats_excluded_plugin(plugin):
             return
         sid = str(getattr(bot, "self_id", "") or "").strip()
         if not sid:
@@ -2109,78 +2466,169 @@ def _init_plugin_run_tracking() -> None:
             _MATCHER_RUN_STARTED.set(None)
 
 
-def _plugin_run_stats_overview(*, self_id: str | None) -> dict[str, Any]:
+def _plugin_run_stats_bot_row(
+    *,
+    sid: str,
+    connection_key: str,
+    bucket: dict[str, Any],
+    include_hist: bool,
+) -> dict[str, Any]:
+    by_plugin = bucket.get("by_plugin", {}) if isinstance(bucket, dict) else {}
+    plugins_list: list[dict[str, Any]] = []
+    br = be = brt = bet = 0
+    for pname, prow in by_plugin.items():
+        if not isinstance(prow, dict) or _is_console_stats_excluded_plugin(str(pname)):
+            continue
+        r = int(prow.get("runs", 0))
+        e = int(prow.get("errors", 0))
+        rt = int(prow.get("day_runs", 0))
+        et = int(prow.get("day_errors", 0))
+        dsum = int(prow.get("duration_ms_sum", 0))
+        dcnt = int(prow.get("duration_count", 0))
+        dmax = int(prow.get("duration_ms_max", 0))
+        dsum_t = int(prow.get("day_duration_ms_sum", 0))
+        dcnt_t = int(prow.get("day_duration_count", 0))
+        dmax_t = int(prow.get("day_duration_ms_max", 0))
+        plugins_list.append({
+            "name": str(pname),
+            "runs": r,
+            "runs_today": rt,
+            "errors": e,
+            "errors_today": et,
+            "avg_duration_ms": _avg_duration_ms(dsum, dcnt),
+            "max_duration_ms": dmax if dcnt > 0 else None,
+            "avg_duration_ms_today": _avg_duration_ms(dsum_t, dcnt_t),
+            "max_duration_ms_today": dmax_t if dcnt_t > 0 else None,
+        })
+        br += r
+        be += e
+        brt += rt
+        bet += et
+    plugins_list.sort(key=lambda x: (-int(x["runs_today"]), -int(x["runs"]), str(x["name"])))
+    if include_hist and isinstance(bucket, dict):
+        hist_pack = _matcher_hist_series_public(bucket)
+        dur_pack = _matcher_duration_hist_series_public(bucket)
+    else:
+        hist_pack = _EMPTY_MATCHER_HIST_SERIES
+        dur_pack = _EMPTY_MATCHER_DUR_HIST_SERIES
+    err_log = _matcher_error_log_public(bucket if isinstance(bucket, dict) else {})
+    dur_log = _matcher_duration_log_public(bucket if isinstance(bucket, dict) else {})
+    return {
+        "self_id": sid,
+        "connection_key": connection_key,
+        "runs": br,
+        "errors": be,
+        "runs_today": brt,
+        "errors_today": bet,
+        "plugins": plugins_list,
+        "matcher_runs_by_plugin": hist_pack["matcher_runs_by_plugin"],
+        "matcher_errors_by_plugin": hist_pack["matcher_errors_by_plugin"],
+        "matcher_duration_ms_by_plugin": dur_pack["matcher_duration_ms_by_plugin"],
+        "matcher_avg_duration_ms_by_plugin": dur_pack["matcher_avg_duration_ms_by_plugin"],
+        "matcher_error_log": err_log,
+        "matcher_duration_log": dur_log,
+        "matcher_duration_log_cap": _MATCHER_DURATION_LOG_CAP,
+    }
+
+
+def _plugin_run_stats_overview(
+    *,
+    self_id: str | None,
+    log_source: str | None = None,
+    tb_limit: int = 0,
+) -> dict[str, Any]:
     rows_out: list[dict[str, Any]] = []
     total_runs = 0
     total_errors = 0
     total_runs_today = 0
     total_errors_today = 0
-    for key, bot in get_bots().items():
-        sid = str(getattr(bot, "self_id", "") or "").strip()
-        if not sid:
-            continue
-        if self_id and sid != str(self_id).strip():
-            continue
-        if not _is_onebot_v11_bot(bot):
-            continue
-        _plugin_run_bot_bucket(sid)
-        bucket = _PLUGIN_RUN_STATS.get(sid, {})
-        by_plugin = bucket.get("by_plugin", {}) if isinstance(bucket, dict) else {}
-        plugins_list: list[dict[str, Any]] = []
-        br = be = brt = bet = 0
-        for pname, prow in by_plugin.items():
-            if not isinstance(prow, dict):
+    want = str(self_id).strip() if self_id else None
+
+    def _append_row(row: dict[str, Any]) -> None:
+        nonlocal total_runs, total_errors, total_runs_today, total_errors_today
+        rows_out.append(row)
+        total_runs += int(row.get("runs", 0))
+        total_errors += int(row.get("errors", 0))
+        total_runs_today += int(row.get("runs_today", 0))
+        total_errors_today += int(row.get("errors_today", 0))
+
+    from src.common.bot_runtime.roles import is_sharded_hub
+    from src.common.shard.registry.config import is_sharding_active
+
+    if is_sharding_active() and is_sharded_hub():
+        from src.common.shard.console_stats import load_cluster_console_stats_by_sid
+        from src.common.shard.presence import read_presence_bots
+
+        cluster = load_cluster_console_stats_by_sid()
+        seen: set[str] = set()
+
+        def _sort_key(s: str) -> tuple[int, str]:
+            return (int(s), s) if s.isdigit() else (10**18, s)
+
+        for sid in sorted(read_presence_bots().keys(), key=_sort_key):
+            if want and sid != want:
                 continue
-            r = int(prow.get("runs", 0))
-            e = int(prow.get("errors", 0))
-            rt = int(prow.get("day_runs", 0))
-            et = int(prow.get("day_errors", 0))
-            dsum = int(prow.get("duration_ms_sum", 0))
-            dcnt = int(prow.get("duration_count", 0))
-            dmax = int(prow.get("duration_ms_max", 0))
-            dsum_t = int(prow.get("day_duration_ms_sum", 0))
-            dcnt_t = int(prow.get("day_duration_count", 0))
-            dmax_t = int(prow.get("day_duration_ms_max", 0))
-            plugins_list.append({
-                "name": str(pname),
-                "runs": r,
-                "runs_today": rt,
-                "errors": e,
-                "errors_today": et,
-                "avg_duration_ms": _avg_duration_ms(dsum, dcnt),
-                "max_duration_ms": dmax if dcnt > 0 else None,
-                "avg_duration_ms_today": _avg_duration_ms(dsum_t, dcnt_t),
-                "max_duration_ms_today": dmax_t if dcnt_t > 0 else None,
-            })
-            br += r
-            be += e
-            brt += rt
-            bet += et
-        plugins_list.sort(key=lambda x: (-int(x["runs_today"]), -int(x["runs"]), str(x["name"])))
-        hist_pack = _matcher_hist_series_public(bucket if isinstance(bucket, dict) else {})
-        dur_pack = _matcher_duration_hist_series_public(bucket if isinstance(bucket, dict) else {})
-        err_log = _matcher_error_log_public(bucket if isinstance(bucket, dict) else {})
-        dur_log = _matcher_duration_log_public(bucket if isinstance(bucket, dict) else {})
-        rows_out.append({
-            "self_id": sid,
-            "connection_key": str(key),
-            "runs": br,
-            "errors": be,
-            "runs_today": brt,
-            "errors_today": bet,
-            "plugins": plugins_list,
-            "matcher_runs_by_plugin": hist_pack["matcher_runs_by_plugin"],
-            "matcher_errors_by_plugin": hist_pack["matcher_errors_by_plugin"],
-            "matcher_duration_ms_by_plugin": dur_pack["matcher_duration_ms_by_plugin"],
-            "matcher_avg_duration_ms_by_plugin": dur_pack["matcher_avg_duration_ms_by_plugin"],
-            "matcher_error_log": err_log,
-            "matcher_duration_log": dur_log,
-            "matcher_duration_log_cap": _MATCHER_DURATION_LOG_CAP,
-        })
-        total_runs += br
-        total_errors += be
-        total_runs_today += brt
-        total_errors_today += bet
+            rec = read_presence_bots()[sid]
+            bucket = cluster.get(sid, {})
+            if not isinstance(bucket, dict):
+                bucket = {}
+            _append_row(
+                _plugin_run_stats_bot_row(
+                    sid=sid,
+                    connection_key=str(rec.get("connection_key") or sid),
+                    bucket=bucket,
+                    include_hist=True,
+                )
+            )
+            seen.add(sid)
+        for key, bot in get_bots().items():
+            sid = str(getattr(bot, "self_id", "") or "").strip()
+            if not sid or sid in seen:
+                continue
+            if want and sid != want:
+                continue
+            if not _is_onebot_v11_bot(bot):
+                continue
+            _plugin_run_bot_bucket(sid)
+            bucket = _PLUGIN_RUN_STATS.get(sid, {})
+            _append_row(
+                _plugin_run_stats_bot_row(
+                    sid=sid,
+                    connection_key=str(key),
+                    bucket=bucket if isinstance(bucket, dict) else {},
+                    include_hist=True,
+                )
+            )
+            seen.add(sid)
+        if want and want not in seen:
+            bucket = cluster.get(want, {})
+            _append_row(
+                _plugin_run_stats_bot_row(
+                    sid=want,
+                    connection_key=want,
+                    bucket=bucket if isinstance(bucket, dict) else {},
+                    include_hist=True,
+                )
+            )
+    else:
+        for key, bot in get_bots().items():
+            sid = str(getattr(bot, "self_id", "") or "").strip()
+            if not sid:
+                continue
+            if want and sid != want:
+                continue
+            if not _is_onebot_v11_bot(bot):
+                continue
+            _plugin_run_bot_bucket(sid)
+            bucket = _PLUGIN_RUN_STATS.get(sid, {})
+            _append_row(
+                _plugin_run_stats_bot_row(
+                    sid=sid,
+                    connection_key=str(key),
+                    bucket=bucket if isinstance(bucket, dict) else {},
+                    include_hist=True,
+                )
+            )
     return {
         "total_runs": total_runs,
         "total_errors": total_errors,
@@ -2188,8 +2636,9 @@ def _plugin_run_stats_overview(*, self_id: str | None) -> dict[str, Any]:
         "total_errors_today": total_errors_today,
         "matcher_calls_history_bucket_sec": _API_HIST_BUCKET_SEC,
         "matcher_calls_history_max_buckets": _API_HIST_MAX_BUCKETS,
-        "log_error_log": _log_error_log_public(),
+        "log_error_log": _log_error_log_public(source=log_source, tb_limit=tb_limit),
         "bots": rows_out,
+        **_log_error_log_meta(),
     }
 
 
@@ -2230,6 +2679,40 @@ def _console_daily_stats_payload(
     )
     by_key: dict[tuple[str, str], dict[str, Any]] = {(r["date"], r["self_id"]): dict(r) for r in rows}
     live_out: dict[str, dict[str, int]] = {}
+    from src.common.bot_runtime.roles import is_sharded_hub
+    from src.common.shard.registry.config import is_sharding_active
+
+    if is_sharding_active() and is_sharded_hub():
+        from src.common.shard.console_stats import load_cluster_console_stats_by_sid
+
+        for sid, blob in load_cluster_console_stats_by_sid().items():
+            sid = str(sid).strip()
+            if not sid or (sid_f is not None and sid != sid_f):
+                continue
+            msg = blob.get("msg") if isinstance(blob, dict) else {}
+            dr = int(msg.get("day_received", 0)) if isinstance(msg, dict) else 0
+            ds = int(msg.get("day_sent", 0)) if isinstance(msg, dict) else 0
+            mr = 0
+            bp = blob.get("by_plugin") if isinstance(blob, dict) else {}
+            if isinstance(bp, dict):
+                for prow in bp.values():
+                    if isinstance(prow, dict):
+                        mr += int(prow.get("day_runs", 0))
+            live_out[sid] = {"received": dr, "sent": ds, "matcher_runs": mr}
+            if start_d <= today_d <= end_d:
+                k = (clock_today, sid)
+                if k in by_key:
+                    by_key[k]["received"] = dr
+                    by_key[k]["sent"] = ds
+                    by_key[k]["matcher_runs"] = mr
+                else:
+                    by_key[k] = {
+                        "date": clock_today,
+                        "self_id": sid,
+                        "received": dr,
+                        "sent": ds,
+                        "matcher_runs": mr,
+                    }
     for sid in set(_MSG_STATS.keys()) | set(_PLUGIN_RUN_STATS.keys()):
         sid = str(sid).strip()
         if not sid:
@@ -2329,6 +2812,50 @@ async def _call_get_message_history(
 
 async def _collect_online_bot_profiles() -> dict[str, dict[str, Any]]:
     """尽力读取在线 OneBot V11 账号资料，失败时忽略单个账号并保留其它结果。"""
+    from src.common.bot_runtime.roles import is_sharded_hub
+    from src.common.shard.registry.config import is_sharding_active
+
+    if is_sharding_active() and is_sharded_hub():
+        from src.common.shard.presence import read_presence_bots
+        from src.common.webui.protocol_accounts import protocol_account_display_names
+
+        names = protocol_account_display_names()
+        out: dict[str, dict[str, Any]] = {}
+        for qq, rec in read_presence_bots().items():
+            sid = str(rec.get("qq") or qq)
+            nick = str(rec.get("nickname") or "").strip() or names.get(sid, "")
+            out[sid] = {
+                "nickname": nick,
+                "user_id": int(sid) if sid.isdigit() else None,
+                "connection_key": str(rec.get("connection_key") or sid),
+                "adapter": str(rec.get("adapter") or ""),
+                "shard_id": rec.get("shard_id"),
+            }
+        from src.common.db.pallas_console_data import pallas_protocol_snapshot
+
+        snap = pallas_protocol_snapshot()
+        if snap and isinstance(snap.get("accounts"), list):
+            for acc in snap["accounts"]:
+                if not isinstance(acc, dict):
+                    continue
+                sid = str(acc.get("qq") or acc.get("id") or "").strip()
+                if not sid.isdigit():
+                    continue
+                disp = str(acc.get("display_name") or "").strip()
+                if sid in out:
+                    if disp and not out[sid].get("nickname"):
+                        out[sid]["nickname"] = disp
+                elif disp:
+                    out[sid] = {
+                        "nickname": disp,
+                        "user_id": int(sid),
+                        "connection_key": sid,
+                        "adapter": "",
+                        "shard_id": None,
+                        "online": False,
+                    }
+        return out
+
     out: dict[str, dict[str, Any]] = {}
     for key, bot in get_bots().items():
         self_id = str(getattr(bot, "self_id", "") or "").strip()
@@ -2361,10 +2888,21 @@ async def _friend_requests_overview(
 ) -> dict[str, Any]:
     disk = _read_pending_friend_requests_disk()
     online_by_self: dict[str, tuple[str, object]] = {}
-    for key, bot in get_bots().items():
-        sid = str(getattr(bot, "self_id", "") or "")
-        if sid:
-            online_by_self[sid] = (str(key), bot)
+    from src.common.bot_runtime.roles import is_sharded_hub
+    from src.common.shard.registry.config import is_sharding_active
+
+    if is_sharding_active() and is_sharded_hub():
+        from src.common.shard.presence import read_presence_bots
+
+        for key, rec in read_presence_bots().items():
+            sid = str(rec.get("qq") or key)
+            if sid:
+                online_by_self[sid] = (str(rec.get("connection_key") or sid), None)
+    else:
+        for key, bot in get_bots().items():
+            sid = str(getattr(bot, "self_id", "") or "")
+            if sid:
+                online_by_self[sid] = (str(key), bot)
 
     ids = set(disk.keys()) | set(online_by_self.keys())
     if self_id is not None and str(self_id).strip():
@@ -2430,7 +2968,7 @@ def _system_dict() -> dict[str, Any]:
         },
         "superuser_count": n_sup,
         "server_time": time.time(),
-        "plugin_count": len(_list_plugins_dict()),
+        "plugin_count": sum(1 for r in _list_plugins_dict() if r.get("help_visible")),
         "bot_count": len(get_bots()),
         "console": console,
         "runtime": _runtime_metrics(),
@@ -2915,9 +3453,7 @@ def register_extended_api(
     api_base: str,
     plugin_config: Config,
 ) -> None:
-    _ensure_bot_session_hooks()
-    _init_message_tracking()
-    _init_plugin_run_tracking()
+    ensure_console_metrics_hooks()
     x = (api_base or "/pallas/api").strip()
     if not x.startswith("/"):
         x = "/" + x
@@ -2943,7 +3479,7 @@ def register_extended_api(
 
     @router_pub.post(f"{x}/auth/login", include_in_schema=False)
     async def _auth_login(request: Request, body: _AuthLoginBody) -> JSONResponse:
-        from src.common.pallas_console_login import SESSION_COOKIE_NAME, SESSION_TTL_SEC
+        from src.common.webui.console_login import SESSION_COOKIE_NAME, SESSION_TTL_SEC
 
         if not verify_console_password(body.password):
             raise HTTPException(status_code=401, detail="口令错误")
@@ -2971,6 +3507,22 @@ def register_extended_api(
         data = await _cached_read(key="system", loader=_load, ttl_sec=0.8, stale_sec=8.0)
         return JSONResponse({"ok": True, "data": data})
 
+    @router.get(f"{x}/shard-registry", include_in_schema=True)
+    async def _shard_registry() -> JSONResponse:
+        from src.common.shard.registry import get_shard_registry, rebalance_hint
+        from src.common.shard.registry.config import get_shard_registry_settings
+
+        reg = get_shard_registry()
+        settings = get_shard_registry_settings()
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "settings": settings.model_dump(mode="json"),
+                "registry": reg.model_dump(mode="json"),
+                "summary": rebalance_hint(),
+            },
+        })
+
     @router.get(f"{x}/message-stats", include_in_schema=True)
     async def _message_stats(
         self_id: int | None = Query(default=None, ge=1),
@@ -2985,11 +3537,27 @@ def register_extended_api(
     @router.get(f"{x}/plugin-run-stats", include_in_schema=True)
     async def _plugin_run_stats(
         self_id: int | None = Query(default=None, ge=1),
+        log_source: str | None = Query(
+            default=None,
+            description="日志报错来源筛选：all|hub|worker-N",
+        ),
+        tb_limit: int = Query(
+            default=0,
+            ge=0,
+            le=200_000,
+            description="log_error_log 单条 traceback 最大字符数，0 表示不截断",
+        ),
     ) -> JSONResponse:
-        async def _load() -> dict[str, Any]:
-            return _plugin_run_stats_overview(self_id=str(self_id) if self_id is not None else None)
+        src = (log_source or "all").strip() or "all"
 
-        key = f"plugin-run-stats:{self_id or 'all'}"
+        async def _load() -> dict[str, Any]:
+            return _plugin_run_stats_overview(
+                self_id=str(self_id) if self_id is not None else None,
+                log_source=src,
+                tb_limit=tb_limit,
+            )
+
+        key = f"plugin-run-stats:{self_id or 'all'}:logsrc:{src}:tbl:{tb_limit}"
         data = await _cached_read(key=key, loader=_load, ttl_sec=2.0, stale_sec=10.0)
         return JSONResponse({"ok": True, "data": data})
 
@@ -3202,22 +3770,43 @@ def register_extended_api(
             LogScope,
             Query(
                 description=(
-                    "all=全部；webui=pallas_webui 插件或正文含 [pallas-webui]；"
+                    "all=全部（分片 hub 时合并 hub 环与各 worker 落盘日志）；"
+                    "webui=pallas_webui 或 [pallas-webui]；"
                     "protocol=pallas_protocol 或 [pallas-protocol]"
                 ),
             ),
         ] = "all",
+        source: str | None = Query(
+            default=None,
+            description="分片来源：all|hub|worker-0|worker-1…（默认 all，不含 bootstrap）",
+        ),
     ) -> JSONResponse:
         _ensure_log_sink()
         from src.common.web import tail_nonebot_log_entries_scoped, tail_nonebot_log_lines_scoped
 
+        sharded_logs = False
+        log_sources: list[str] = []
+        try:
+            from src.common.bot_runtime.roles import is_sharded_hub
+
+            if is_sharded_hub():
+                sharded_logs = True
+                from src.common.shard.logs.view import list_shard_log_sources
+
+                log_sources = list_shard_log_sources()
+        except Exception:
+            pass
+        src = (source or "all").strip() or "all"
         return JSONResponse({
             "ok": True,
             "data": {
-                "lines": tail_nonebot_log_lines_scoped(n, scope),
-                "entries": tail_nonebot_log_entries_scoped(n, scope),
+                "lines": tail_nonebot_log_lines_scoped(n, scope, source=src),
+                "entries": tail_nonebot_log_entries_scoped(n, scope, source=src),
                 "max": plugin_config.pallas_webui_log_lines_max,
                 "scope": scope,
+                "source": src,
+                "sharded_logs": sharded_logs,
+                "log_sources": log_sources,
             },
         })
 
@@ -3232,12 +3821,17 @@ def register_extended_api(
                 description=("all=全部；webui=仅 pallas_webui 相关；protocol=仅 pallas_protocol 相关"),
             ),
         ] = "all",
+        source: str | None = Query(
+            default=None,
+            description="分片来源：all|hub|worker-N（与 GET /logs 一致）",
+        ),
     ) -> StreamingResponse:
         _ensure_log_sink()
         from src.common.web import iter_nonebot_log_sse
 
+        src = (source or "all").strip() or "all"
         return StreamingResponse(
-            iter_nonebot_log_sse(scope),
+            iter_nonebot_log_sse(scope, source=src),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

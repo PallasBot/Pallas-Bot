@@ -134,7 +134,7 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-# .env
+.env
 .envrc
 .venv
 env/
@@ -219,6 +219,8 @@ mixed_data
 backups
 log
 data
+.shard_test_state/
+data.pre_shard_test.*
 
 test.py
 .env.dev

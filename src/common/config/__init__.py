@@ -417,6 +417,9 @@ class TaskManager:
         await cls.refresh()
         async with cls._lock:
             cls._tasks[task_id] = task_status
+        from src.common.shard.coord.ai_task_registry import register_ai_task
+
+        await asyncio.to_thread(register_ai_task, task_id, task_status)
 
     @classmethod
     async def get_task(cls, task_id: str) -> dict | None:
@@ -430,3 +433,6 @@ class TaskManager:
         async with cls._lock:
             if task_id in cls._tasks:
                 del cls._tasks[task_id]
+        from src.common.shard.coord.ai_task_registry import remove_ai_task
+
+        await asyncio.to_thread(remove_ai_task, task_id)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import os
 import time
@@ -238,8 +239,20 @@ def _ensure_pg_user_config_maa_devices(connection) -> None:
 async def get_session():
     if _session_factory is None:
         raise RuntimeError("PostgreSQL 尚未初始化，请先调用 init_pg()")
-    async with _session_factory() as session:
+    session = _session_factory()
+    try:
         yield session
+    except BaseException:
+        # CancelledError 非 Exception 子类；清理须 shield，避免 close/rollback 再被取消导致连接未归还池
+        with contextlib.suppress(BaseException):
+            await asyncio.shield(session.rollback())
+        raise
+    finally:
+        try:
+            await asyncio.shield(session.close())
+        except BaseException:
+            with contextlib.suppress(BaseException):
+                await asyncio.shield(session.invalidate())
 
 
 async def init_pg(engine: AsyncEngine) -> None:

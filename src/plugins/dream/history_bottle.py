@@ -182,11 +182,19 @@ def first_http_image_url_from_cq_raw(raw: str) -> str | None:
 
 
 def dream_history_bot_ids(process_fallback_self_id: int) -> list[int]:
-    """同一进程内已连接账号的 self_id，用于共享历史梦库；无在线实例时退化为单号。"""
-    try:
-        ids = {int(b.self_id) for b in get_bots().values()}
-    except Exception:
-        ids = set()
+    """参与历史梦库采样的牛牛 QQ；分片时为全集群在线 catalog，单进程为本进程连接。"""
+    from src.common.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        from src.common.multi_bot.fleet import get_catalog_bot_ids
+        from src.common.shard.presence import get_cluster_online_bot_ids
+
+        ids = set(get_catalog_bot_ids()) & set(get_cluster_online_bot_ids())
+    else:
+        try:
+            ids = {int(b.self_id) for b in get_bots().values()}
+        except Exception:
+            ids = set()
     if not ids:
         return [process_fallback_self_id]
     ids.add(process_fallback_self_id)

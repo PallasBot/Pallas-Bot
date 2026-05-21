@@ -151,7 +151,7 @@ async def _load_snapshot_postgresql() -> tuple[frozenset[int], dict[int, frozens
 
 async def _refresh_loop() -> None:
     while True:
-        await refresh_ban_gate_snapshot()
+        await asyncio.shield(refresh_ban_gate_snapshot())
         await asyncio.sleep(_SNAPSHOT_REFRESH_SEC)
 
 

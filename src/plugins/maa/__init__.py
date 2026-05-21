@@ -13,7 +13,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
 from src.common.cmd_perm import permission_for_command, private_message_permission_for_command
-from src.common.multi_bot_group import claim_group_handler
+from src.common.multi_bot.group import claim_group_handler
 
 from .config import get_maa_config
 from .endpoints import resolve_maa_http_endpoints
@@ -222,6 +222,9 @@ maa_raw_task_cmd = on_command(
 async def handle_bind(event: PrivateMessageEvent, args: Message = CommandArg()):  # noqa: B008
     raw_device, bind_alias = parse_bind_command_args(args.extract_plain_text())
     qq = str(event.get_user_id())
+    from src.common.shard.coord.maa_route_registry import register_maa_user_route
+
+    register_maa_user_route(qq)
     fmt_err = bind_device_id_error(raw_device, qq)
     if fmt_err:
         await bind_cmd.finish(fmt_err)

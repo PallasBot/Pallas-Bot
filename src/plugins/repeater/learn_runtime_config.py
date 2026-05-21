@@ -7,7 +7,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.common.env_dotenv import repo_env_raw_value, repo_layered_dotenv_files_exist
+from src.common.config.dotenv import repo_env_raw_value, repo_layered_dotenv_files_exist
 
 _config_lock = Lock()
 _cached: RepeaterLearnRuntimeConfig | None = None

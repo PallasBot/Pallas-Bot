@@ -44,9 +44,9 @@ def test_format_gateway_status_lines() -> None:
         ServiceProbeResult(IMAGE_PROBE_CATEGORY, "备线2", False, None, None, "超时"),
     ]
     lines = format_gateway_status_lines(results)
-    assert lines[0] == "牛牛画画：主站：120ms"
-    assert lines[1] == "牛牛画画：备线1：HTTP 401"
-    assert lines[2] == "牛牛画画：备线2：超时"
+    assert lines[0] == "牛牛画画 主站：120ms"
+    assert lines[1] == "     备线1：HTTP 401"
+    assert lines[2] == "     备线2：超时"
     assert format_gateway_status_text(results) == "\n".join(lines)
 
 

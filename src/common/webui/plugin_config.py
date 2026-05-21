@@ -11,7 +11,7 @@ from typing import Any, TypeVar
 from nonebot import get_plugin_config
 from pydantic import BaseModel
 
-from src.common.env_dotenv import repo_env_raw_value, repo_layered_dotenv_files_exist
+from src.common.config.dotenv import repo_env_raw_value, repo_layered_dotenv_files_exist
 
 from .registry import PluginWebuiConfigHooks, register_plugin_webui_config
 

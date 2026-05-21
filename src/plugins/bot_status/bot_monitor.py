@@ -5,13 +5,17 @@ from nonebot import get_bots, logger
 from nonebot.adapters.onebot.v11 import Bot
 from nonebot_plugin_apscheduler import scheduler
 
-from src.plugins.block import plugin_config as block_config
-
-from .config import plugin_config
+from .config import get_bot_status_config
+from .list_mode import cluster_online_bot_ids_for_status, status_inventory_bot_ids
 
 offline_bots: dict[int, dict[str, str]] = {}
 
 STATUS_COOLDOWN_KEY: str = "bot_status"
+
+
+def cluster_online_bot_ids(current_bots: dict | None = None) -> set[int]:
+    """在线集合（随 bot_status_list_mode；见 list_mode.py）。"""
+    return cluster_online_bot_ids_for_status(current_bots)
 
 
 async def get_bot_nickname(bot_id: int, current_bots: dict = None) -> str:
@@ -84,7 +88,7 @@ async def handle_bot_disconnect(bot: Bot) -> None:
         scheduler.remove_job(job_id)
 
     # 计算运行时间
-    run_time: datetime = datetime.now() + timedelta(seconds=plugin_config.bot_status_offline_grace_time)
+    run_time: datetime = datetime.now() + timedelta(seconds=get_bot_status_config().bot_status_offline_grace_time)
 
     scheduler.add_job(
         id=job_id,
@@ -103,6 +107,15 @@ async def handle_bot_disconnect(bot: Bot) -> None:
 
 async def check_bot_still_offline(bot_id: int, nickname: str) -> None:
     """检查牛牛是否真的离线"""
+    if bot_id in cluster_online_bot_ids():
+        if (
+            bot_id in offline_bots
+            and "source" in offline_bots[bot_id]
+            and offline_bots[bot_id]["source"] == "checked_offline"
+        ):
+            del offline_bots[bot_id]
+        return
+
     bots = get_bots()
     if str(bot_id) not in bots:
         logger.warning(f"bot [{bot_id}] still offline after grace, sending notification")
@@ -135,29 +148,43 @@ async def check_bot_still_offline(bot_id: int, nickname: str) -> None:
             pass
 
 
+async def list_connected_bots_in_group(group_id: int) -> list[int]:
+    """本进程已连接且能查到该群成员资料的牛牛 QQ。"""
+    bots = get_bots()
+    out: list[int] = []
+    for key in sorted(bots.keys(), key=lambda x: int(x) if str(x).isdigit() else 0):
+        try:
+            bid = int(key)
+        except ValueError:
+            continue
+        try:
+            await bots[key].get_group_member_info(group_id=group_id, user_id=bid, no_cache=True)
+        except Exception:
+            continue
+        out.append(bid)
+    return out
+
+
 async def get_bot_status_info() -> tuple[dict[int, str], dict[int, str]]:
     """获取牛牛状态信息"""
     # 获取当前在线的牛牛
     current_bots = get_bots()
 
-    all_bot_ids = set(block_config.bots) if block_config.bots else set()
-
-    if not all_bot_ids:
-        all_bot_ids.update(int(bot_id) for bot_id in current_bots.keys())
-
+    all_bot_ids = set(status_inventory_bot_ids())
+    all_bot_ids.update(int(bot_id) for bot_id in current_bots.keys())
     all_bot_ids.update(offline_bots.keys())
+
+    online_ids = cluster_online_bot_ids(current_bots)
 
     async def get_nickname_with_status(bot_id: int) -> tuple[int, str, bool]:
         """获取昵称和在线状态任务"""
-        if str(bot_id) in current_bots:
+        if bot_id in online_ids:
             nickname = await get_bot_nickname(bot_id, current_bots)
-            return bot_id, nickname, True  # 在线
-        else:
-            nickname = await get_bot_nickname(bot_id)
-            # 更新offline_bots中的昵称信息
-            if bot_id in offline_bots:
-                offline_bots[bot_id]["nickname"] = nickname
-            return bot_id, nickname, False  # 离线
+            return bot_id, nickname, True
+        nickname = await get_bot_nickname(bot_id, current_bots)
+        if bot_id in offline_bots:
+            offline_bots[bot_id]["nickname"] = nickname
+        return bot_id, nickname, False
 
     bot_info_tasks = [get_nickname_with_status(bot_id) for bot_id in all_bot_ids]
     bot_info_results = await asyncio.gather(*bot_info_tasks, return_exceptions=True)

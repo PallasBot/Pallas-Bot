@@ -25,7 +25,7 @@ def set_log_error_capture(cb: Callable[[str, Mapping[str, Any]], None] | None) -
     _LOG_ERROR_SINK_CB = cb
 
 
-_MAX = 2000
+_MAX = 20000
 _lines: deque[str] = deque(maxlen=_MAX)
 _lines_webui: deque[str] = deque(maxlen=_MAX)
 _lines_protocol: deque[str] = deque(maxlen=_MAX)
@@ -37,6 +37,16 @@ _stream_seq = 0
 
 _log_line_re = re.compile(
     r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \| (?P<lev>\S+)\s* \| (?P<scope>[^:]+):(?P<lineno>\d+) - (?P<msg>.*)$",
+)
+_shard_source_prefix_re = re.compile(r"^\[(?P<tag>[^\]]+)\] (?P<body>.+)$")
+_stdlib_log_re = re.compile(
+    r"^(?P<dt>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - (?P<lev>\w+) - (?P<msg>.*)$",
+)
+_nonebot_bracket_re = re.compile(
+    r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(?P<lev>\w+)\] (?P<scope>[^|]+) \| (?P<msg>.*)$",
+)
+_exc_line_re = re.compile(
+    r"^(?P<exc>[\w.]+(?:Error|Exception))(?:\s*:\s*(?P<msg>.*))?$",
 )
 
 _subscribers: list[queue.Queue[dict[str, Any]]] = []
@@ -60,20 +70,81 @@ def _next_stream_id() -> int:
         return _stream_seq
 
 
+def _strip_shard_log_prefix(raw: str) -> tuple[str, str]:
+    """去掉分片合并前缀 ``[worker-N]``（可重复多层），返回 (source_tag, body)。"""
+    tags: list[str] = []
+    body = raw.strip()
+    while True:
+        m = _shard_source_prefix_re.match(body)
+        if not m:
+            break
+        tags.append(m.group("tag"))
+        body = m.group("body").strip()
+    source_tag = tags[0] if len(tags) == 1 else "/".join(tags) if tags else ""
+    return source_tag, body
+
+
 def parse_nonebot_log_line(line: str, *, entry_id: int | None = None) -> dict[str, Any]:
     raw = line.rstrip("\n")
-    m = _log_line_re.match(raw.strip())
+    source_tag, body = _strip_shard_log_prefix(raw)
+    m = _log_line_re.match(body)
     if not m:
+        m2 = _stdlib_log_re.match(body)
+        if m2:
+            lev_raw = (m2.group("lev") or "").strip().upper()
+            scope = source_tag or "stdlib"
+            iso = m2.group("dt")
+            return {
+                "id": entry_id if entry_id is not None else _next_stream_id(),
+                "time": iso,
+                "level": LEVEL_TO_BUCKET.get(lev_raw, "info"),
+                "scope": scope,
+                "message": m2.group("msg") or "",
+            }
+        m3 = _nonebot_bracket_re.match(body)
+        if m3:
+            lev_raw = (m3.group("lev") or "").strip().upper()
+            scope = (m3.group("scope") or "").strip()[:120]
+            if source_tag:
+                scope = f"{source_tag}/{scope}" if scope else source_tag
+            return {
+                "id": entry_id if entry_id is not None else _next_stream_id(),
+                "time": _mmdd_hms_to_iso(m3.group("dt")),
+                "level": LEVEL_TO_BUCKET.get(lev_raw, "info"),
+                "scope": scope,
+                "message": m3.group("msg") or "",
+            }
+        m4 = _exc_line_re.match(body)
+        if m4:
+            msg = (m4.group("msg") or "").strip() or body
+            scope = source_tag or "raw"
+            return {
+                "id": entry_id if entry_id is not None else _next_stream_id(),
+                "time": "",
+                "level": "error",
+                "scope": scope,
+                "message": msg,
+            }
+        if body.startswith(("Traceback", "  File ")):
+            return {
+                "id": entry_id if entry_id is not None else _next_stream_id(),
+                "time": "",
+                "level": "error",
+                "scope": source_tag or "raw",
+                "message": body[:2000],
+            }
         return {
             "id": entry_id if entry_id is not None else _next_stream_id(),
-            "time": datetime.now().isoformat(timespec="seconds"),
+            "time": "",
             "level": "info",
-            "scope": "raw",
-            "message": raw,
+            "scope": source_tag or "raw",
+            "message": body or raw,
         }
     dt_part = m.group("dt")
     lev_raw = (m.group("lev") or "").strip().upper()
     scope = (m.group("scope") or "").strip()[:120]
+    if source_tag:
+        scope = f"{source_tag}/{scope}" if scope else source_tag
     msg = m.group("msg") or ""
     level = LEVEL_TO_BUCKET.get(lev_raw, "info")
     iso_time = _mmdd_hms_to_iso(dt_part)
@@ -99,13 +170,28 @@ def _mmdd_hms_to_iso(mmdd_hms: str) -> str:
         return datetime.now().isoformat(timespec="seconds")
 
 
-def tail_nonebot_log_entries_scoped(n: int, scope: LogScope) -> list[dict[str, Any]]:
-    lines = tail_nonebot_log_lines_scoped(n, scope)
+def fill_missing_log_entry_times(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    last_time = ""
+    for e in entries:
+        t = str(e.get("time") or "").strip()
+        if t:
+            last_time = t
+        elif last_time:
+            e["time"] = last_time
+    return entries
+
+
+def tail_nonebot_log_entries_scoped(
+    n: int,
+    scope: LogScope,
+    *,
+    source: str | None = None,
+) -> list[dict[str, Any]]:
+    lines = tail_nonebot_log_lines_scoped(n, scope, source=source)
     out: list[dict[str, Any]] = []
     for i, line in enumerate(lines):
-        e = parse_nonebot_log_line(line, entry_id=-(i + 1))
-        out.append(e)
-    return out
+        out.append(parse_nonebot_log_line(line, entry_id=-(i + 1)))
+    return fill_missing_log_entry_times(out)
 
 
 def subscribe_nonebot_log_stream(max_queue: int = 400) -> tuple[queue.Queue[dict[str, Any]], Callable[[], None]]:
@@ -124,31 +210,79 @@ def subscribe_nonebot_log_stream(max_queue: int = 400) -> tuple[queue.Queue[dict
     return q, unsub
 
 
-async def iter_nonebot_log_sse(scope: LogScope) -> AsyncIterator[str]:
-    """SSE：首包 ``ready``，随后 JSON 条目；心跳保持连接。"""
+def _entry_matches_log_source(entry: dict[str, Any], source: str | None) -> bool:
+    want = (source or "all").strip() or "all"
+    if want == "all":
+        return True
+    scope = str(entry.get("scope") or "")
+    if want == "hub":
+        return scope.startswith("hub/") or scope in ("hub", "hub-file")
+    return scope == want or scope.startswith(f"{want}/")
+
+
+async def iter_nonebot_log_sse(
+    scope: LogScope,
+    *,
+    source: str | None = None,
+) -> AsyncIterator[str]:
+    """SSE：首包 ``ready``，随后 JSON 条目；分片 hub 时轮询各 worker 落盘日志。"""
     q, unsub = subscribe_nonebot_log_stream()
+    shard_tailer = None
+    try:
+        from src.common.bot_runtime.roles import is_sharded_hub
+
+        if is_sharded_hub():
+            from src.common.shard.logs.view import ShardLogTailer
+
+            shard_tailer = ShardLogTailer(source=source)
+    except Exception:
+        shard_tailer = None
+
     try:
         yield f"data: {json.dumps({'type': 'ready'}, ensure_ascii=False)}\n\n"
         while True:
 
             def _pull() -> dict[str, Any] | None:
                 try:
-                    return q.get(timeout=22.0)
+                    return q.get(timeout=2.0)
                 except queue.Empty:
                     return None
 
             payload = await asyncio.to_thread(_pull)
-            if payload is None:
+            hub_sent = False
+            if payload is not None:
+                scopes = payload.get("scopes") or {}
+                if scope != "webui" or scopes.get("webui"):
+                    if scope != "protocol" or scopes.get("protocol"):
+                        entry = payload.get("entry")
+                        if isinstance(entry, dict) and _entry_matches_log_source(entry, source):
+                            filled = fill_missing_log_entry_times([dict(entry)])
+                            yield f"data: {json.dumps(filled[0], ensure_ascii=False)}\n\n"
+                            hub_sent = True
+
+            shard_sent = False
+            new_lines: list[str] = []
+            if shard_tailer is not None:
+
+                def _poll_shard() -> list[str]:
+                    return shard_tailer.poll_new_lines(scope=scope)
+
+                new_lines = await asyncio.to_thread(_poll_shard)
+                last_time = ""
+                for line in new_lines:
+                    e = parse_nonebot_log_line(line)
+                    if not _entry_matches_log_source(e, source):
+                        continue
+                    t = str(e.get("time") or "").strip()
+                    if t:
+                        last_time = t
+                    elif last_time:
+                        e["time"] = last_time
+                    yield f"data: {json.dumps(e, ensure_ascii=False)}\n\n"
+                    shard_sent = True
+
+            if not hub_sent and not shard_sent:
                 yield ": heartbeat\n\n"
-                continue
-            scopes = payload.get("scopes") or {}
-            if scope == "webui" and not scopes.get("webui"):
-                continue
-            if scope == "protocol" and not scopes.get("protocol"):
-                continue
-            entry = payload.get("entry")
-            if isinstance(entry, dict):
-                yield f"data: {json.dumps(entry, ensure_ascii=False)}\n\n"
     finally:
         unsub()
 
@@ -232,7 +366,8 @@ def install_nonebot_log_sink() -> None:
         level="INFO",
         format="{time:MM-DD HH:mm:ss} | {level:<8} | {name}:{line} - {message}",
         colorize=False,
-        enqueue=True,
+        # 分片多进程同时刷启动日志时，enqueue 可能阻塞 lifespan 导致 worker 永不 listen
+        enqueue=False,
     )
     _installed = True
 
@@ -258,9 +393,32 @@ def tail_nonebot_log_lines_protocol(n: int) -> list[str]:
         return list(_lines_protocol)[-n:]
 
 
-def tail_nonebot_log_lines_scoped(n: int, scope: LogScope) -> list[str]:
+def tail_nonebot_log_lines_scoped(
+    n: int,
+    scope: LogScope,
+    *,
+    source: str | None = None,
+) -> list[str]:
+    want = (source or "all").strip() or "all"
     if scope == "webui":
-        return tail_nonebot_log_lines_webui(n)
-    if scope == "protocol":
-        return tail_nonebot_log_lines_protocol(n)
-    return tail_nonebot_log_lines(n)
+        base = tail_nonebot_log_lines_webui(n)
+    elif scope == "protocol":
+        base = tail_nonebot_log_lines_protocol(n)
+    else:
+        base = tail_nonebot_log_lines(n)
+    try:
+        from src.common.bot_runtime.roles import is_sharded_hub
+
+        if is_sharded_hub():
+            from src.common.shard.logs.view import merge_cluster_log_lines
+
+            return merge_cluster_log_lines(n, scope, hub_ring_lines=base, source=source)
+    except Exception:
+        pass
+    if want == "all":
+        return base
+    from src.common.shard.logs.view import collect_shard_file_log_lines, prefix_log_source
+
+    if want == "hub":
+        return [prefix_log_source(line, "hub") for line in base]
+    return collect_shard_file_log_lines(per_file=n, scope=scope, source=source)[-n:]

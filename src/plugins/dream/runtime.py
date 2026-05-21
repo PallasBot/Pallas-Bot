@@ -12,7 +12,6 @@ from nonebot.exception import ActionFailed
 from src.common.config import BotConfig
 from src.common.db import Message as MessageModel
 from src.common.db import make_message_repository
-from src.plugins.pallas_image.draw_archive import random_archived_png_bytes
 
 from .config import plugin_config as dream_plugin_config
 from .dedupe_keys import dream_image_dedupe_key, dream_text_dedupe_key
@@ -212,6 +211,8 @@ async def _dream_worker_content_tick_once(
             return sent_images
 
     if sent_images < image_cap and random.random() < dream_plugin_config.dream_archive_image_probability:
+        from src.plugins.pallas_image.draw_archive import random_archived_png_bytes
+
         for _ in range(_ARCHIVE_RESAMPLE_ATTEMPTS):
             data = await random_archived_png_bytes()
             if not data:

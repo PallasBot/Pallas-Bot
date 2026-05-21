@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+import time
+
+from src.common.shard.coord import bot_count as mod
+
+
+def test_fanout_plaintext(monkeypatch):
+    from src.common.ingress.config import clear_ingress_fanout_config_cache
+
+    monkeypatch.setattr(
+        "src.common.ingress.config._ingress_env_str",
+        lambda name, default="": "牛牛,帕拉斯,牛牛报数,牛牛出列"
+        if name == "PALLAS_INGRESS_FANOUT_GREETING"
+        else default,
+    )
+    clear_ingress_fanout_config_cache()
+    assert mod.is_bot_count_fanout_plaintext("牛牛报数")
+    assert mod.is_bot_count_fanout_plaintext("牛牛出列")
+    assert not mod.is_bot_count_fanout_plaintext("牛牛喝酒")
+
+
+def test_bot_count_ingress_fanout_without_greeting_whitelist(monkeypatch):
+    from src.common.ingress.config import clear_ingress_fanout_config_cache
+
+    monkeypatch.setattr("src.common.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr(
+        "src.common.ingress.config._ingress_env_str",
+        lambda name, default="": "牛牛,帕拉斯,牛牛赞我,赞我"
+        if name == "PALLAS_INGRESS_FANOUT_GREETING"
+        else default,
+    )
+    clear_ingress_fanout_config_cache()
+    assert mod.should_skip_ingress_claim_for_shard_bot_count("牛牛报数")
+    assert mod.is_bot_count_fanout_plaintext("牛牛报数")
+    assert not mod.is_bot_count_fanout_plaintext("牛牛赞我")
+
+
+def test_cross_shard_order_finalize(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+    monkeypatch.setattr(
+        "src.common.shard.registry.config.get_shard_registry_settings",
+        lambda: type("S", (), {"shard_id": 0})(),
+    )
+
+    path = mod._session_path(10086, 999001)
+    mod._ensure_session(
+        path,
+        group_id=10086,
+        user_id=1,
+        message_time=1,
+        seed="2026-05-21:10086",
+    )
+    mod._register_shard_bots(path, 0, [300, 100])
+    monkeypatch.setattr(
+        "src.common.shard.registry.config.get_shard_registry_settings",
+        lambda: type("S", (), {"shard_id": 1})(),
+    )
+    mod._register_shard_bots(path, 1, [200])
+
+    data = mod._read_session(path)
+    assert data is not None
+    data["collect_until"] = time.time() - 0.01
+    mod._write_session_atomic(path, data)
+
+    mod._try_finalize_order(path, 100)
+    order = mod._read_session(path).get("order")
+    assert isinstance(order, list)
+    assert set(order) == {100, 200, 300}
+    assert len(order) == 3
+
+
+def test_finalize_reopens_order_when_registration_grows(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+    path = mod._session_path(10086, 999003)
+    mod._ensure_session(
+        path,
+        group_id=10086,
+        user_id=1,
+        message_time=1,
+        seed="2026-05-22:10086",
+    )
+    mod._register_shard_bots(path, 3, [100])
+    data = mod._read_session(path)
+    assert data is not None
+    data["collect_until"] = time.time() - 0.01
+    data["order"] = [100]
+    data["finalized_by"] = 100
+    mod._write_session_atomic(path, data)
+    mod._register_shard_bots(path, 5, [300])
+    data = mod._read_session(path)
+    assert data is not None
+    data["collect_until"] = time.time() - 0.01
+    mod._write_session_atomic(path, data)
+    mod._try_finalize_order(path, 100)
+    order = mod._read_session(path).get("order")
+    assert isinstance(order, list)
+    assert set(order) == {100, 300}
+
+
+def test_late_shard_extends_collect_window(tmp_path, monkeypatch):
+    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+    path = mod._session_path(10086, 999002)
+    mod._ensure_session(
+        path,
+        group_id=10086,
+        user_id=1,
+        message_time=1,
+        seed="2026-05-22:10086",
+    )
+    first_until = float(mod._read_session(path)["collect_until"])
+    time.sleep(0.05)
+    mod._register_shard_bots(path, 1, [200])
+    second_until = float(mod._read_session(path)["collect_until"])
+    assert second_until >= first_until

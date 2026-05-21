@@ -442,4 +442,11 @@ get_pallas_image_config = plugin_webui.get
 reload_image_gen_config = plugin_webui.reload
 clear_pallas_image_config_cache = plugin_webui.clear_cache
 
+
+def active_image_gen_settings() -> ImageGenSettings:
+    """刷新磁盘/环境配置并返回进程内 image_gen_config（与 WebUI 热重载一致）。"""
+    reload_image_gen_config()
+    return image_gen_config
+
+
 image_gen_config = ImageGenSettings(get_pallas_image_config())

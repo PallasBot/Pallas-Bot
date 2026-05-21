@@ -662,7 +662,8 @@ class PallasProtocolService:
                     return True
         if not force and str(account.get("ws_url", "")).strip():
             return False
-        base_url, name, tok = resolve_onebot_ws_settings(self._config)
+        qq = str(account.get("qq", "") or account.get("id", "")).strip()
+        base_url, name, tok = resolve_onebot_ws_settings(self._config, bot_id=qq)
         if not base_url:
             return False
         if docker_linux:
@@ -958,6 +959,12 @@ class PallasProtocolService:
 
     def _save_accounts(self) -> None:
         self._accounts_file.write_text(json.dumps(self._accounts, ensure_ascii=False, indent=2), encoding="utf-8")
+        try:
+            from src.common.multi_bot.fleet import invalidate_fleet_bot_cache
+
+            invalidate_fleet_bot_cache()
+        except Exception:
+            pass
 
     def _docker_logs_follow_tail(self) -> str:
         n = int(getattr(self._config, "pallas_protocol_max_log_lines", 500) or 500)
@@ -1157,11 +1164,16 @@ class PallasProtocolService:
         if account_id in self._accounts:
             raise ValueError("该 QQ 对应账号已存在")
 
-        url, name, tok = resolve_onebot_ws_settings(self._config)
+        from src.common.shard.registry.config import is_sharding_active
+        from src.common.shard.registry.store import assign_bot_to_shard
+
+        if is_sharding_active():
+            assign_bot_to_shard(qq)
+        url, name, tok = resolve_onebot_ws_settings(self._config, bot_id=qq)
         if not url:
             raise ValueError(
                 "未配置 OneBot：请在 .env 设置 PALLAS_PROTOCOL_ONEBOT_HOST/PORT 与 PALLAS_PROTOCOL_ACCESS_TOKEN，"
-                "或与 NoneBot 共用的 HOST、PORT、ACCESS_TOKEN。"
+                "或开启分片后配置 PALLAS_SHARD_WORKER_BASE_PORT / PALLAS_SHARD_WS_HOST。"
             )
         disp = str(payload.get("display_name", "")).strip()
         proto_backend = str(payload.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or "").strip() or DEFAULT_PROTOCOL_BACKEND

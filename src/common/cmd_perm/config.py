@@ -9,7 +9,7 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.common.env_dotenv import merged_repo_dotenv_upper, repo_layered_dotenv_files_exist
+from src.common.config.dotenv import merged_repo_dotenv_upper, repo_layered_dotenv_files_exist
 
 
 class CmdPermConfig(BaseModel):

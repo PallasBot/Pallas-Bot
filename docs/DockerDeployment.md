@@ -1,6 +1,6 @@
 # Pallas-Bot Docker 部署
 
-> 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`3.0 迁移`](Migration-v3.md) · [`FAQ`](FAQ.md)
+> 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`多进程分片`](architecture/bot_process_sharding.md) · [`3.0 迁移`](Migration-v3.md) · [`FAQ`](FAQ.md)
 
 如果你不想自己配置环境，可以使用 `Docker Compose` 一键部署已构建好的镜像。拉取镜像请优先使用与你的版本对应的 **Release** 标签。在 **`.env`** 里选择 **`DB_BACKEND=mongodb`** 或 **`DB_BACKEND=postgresql`** 并填写对应连接信息即可。你需要安装 `Docker` 与 `Docker Compose`（较新版本的 `Docker` 已集成 `Compose` 插件），镜像支持 `amd64` 与 `arm64`。
 
@@ -99,6 +99,18 @@ Bot 在容器内运行时，若希望在**宿主机**上定时探活、失败时
 - **协议端管理**：`http://<宿主机ip>:8088/protocol/console/`（与控制台共用登录；详见 [`pallas_protocol`](plugins/pallas_protocol/README.md)）
 
 写操作需先登录（会话 Cookie）；勿在生产环境开启 `pallas_webui_dev_mode`。
+
+## 多进程分片（可选）
+
+单容器 `pallasbot` 适合牛数量较少。若生产环境需 **十余只及以上** 牛牛且希望分摊事件循环压力，可使用仓库提供的分片编排示例 **[`docker-compose.shard.example.yml`](../docker-compose.shard.example.yml)**：
+
+- **`pallas-hub`**：`APP_MODULE=bot_hub:app`，映射 **8088**（WebUI、协议端管理、AI/MAA 回调入口）。
+- **`pallas-worker-N`**：`APP_MODULE=bot_worker:app`，各映射 **8090、8091…**，与 `PALLAS_SHARD_ID` 一致。
+- **必须** 为 hub 与所有 worker 挂载 **同一份** `./pallas-bot/.env` 与 `./pallas-bot/data`（注册表、协议端账号、协调状态均写在共享 `data/` 下）。
+
+用法示例：将示例复制为 `docker-compose.override.yml` 或独立 compose 文件，在原有 `.env` 中无需改数据库配置，仅需为分片进程设置 `PALLAS_SHARD_ENABLED=true` 等（示例 compose 已注入 hub/worker 角色变量）。worker 数量不足时参照示例增删 `pallas-worker-*` 服务，或在本机用 [`scripts/run_sharded_bot.sh`](../scripts/run_sharded_bot.sh) 自动按账号数计算。
+
+协议端在 Docker 模式下须能访问 **worker 容器端口**；`PALLAS_SHARD_WS_HOST` 或协议端插件中的 OneBot 主机应填容器网络可达地址。完整说明、端口同步与排障见 **[多进程分片架构说明](architecture/bot_process_sharding.md)** 与 [标准部署 · 多进程分片](Deployment.md#多进程分片可选)。
 
 ## 排障
 

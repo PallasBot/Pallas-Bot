@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import random
 from datetime import datetime
 
@@ -25,14 +26,15 @@ from src.common.cmd_perm.metadata_text import (
     join_usage,
     usage_line,
 )
+from src.common.shard.registry.config import is_sharding_active
 
 from .bot_monitor import (
     get_bot_status_info,
     handle_bot_connect,
     handle_bot_disconnect,
+    list_connected_bots_in_group,
     offline_bots,
 )
-from .config import plugin_config
 from .mail_notifier import handle_test_mail_command, notify_bot_offline
 
 __plugin_meta__ = PluginMetadata(
@@ -62,7 +64,10 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_condition": "牛牛在吗",
                 "command_permission": "bot_status.status",
                 "brief_des": "查看在线情况",
-                "detail_des": "列出当前进程内在线牛牛；离线超宽限期后向号主与配置邮箱发邮件。",
+                "detail_des": (
+                    "按 bot_status_list_mode 列出在线/离线（默认可配置：单进程为本进程连接，"
+                    "分片为协议端 enabled 全集群）；离线邮件另有宽限期。"
+                ),
             },
             {
                 "func": "发送测试邮件",
@@ -207,40 +212,74 @@ async def handle_bot_status(bot: Bot, event: MessageEvent) -> None:
 async def handle_bot_count(bot: Bot, event: MessageEvent) -> None:
     """处理牛牛报数命令"""
     from src.common.config import GroupConfig
+    from src.common.shard.coord.bot_count import STAGGER_SEC, run_shard_coordinated_bot_count
 
     if not isinstance(event, GroupMessageEvent):
         await bot_count_cmd.finish("牛牛报数仅支持群聊中使用")
+
+    group_bot_ids = await list_connected_bots_in_group(event.group_id)
+    if not group_bot_ids:
+        return
+
+    self_id = int(bot.self_id)
+
+    if is_sharding_active():
+        from src.common.shard.coord.bot_count import update_shard_bot_count_registration
+
+        coord_task = asyncio.create_task(
+            run_shard_coordinated_bot_count(
+                group_id=event.group_id,
+                user_id=int(event.user_id),
+                plaintext=(event.get_plaintext() or "").strip(),
+                message_time=event.time,
+                self_bot_id=self_id,
+                local_bot_ids=[self_id],
+            )
+        )
+        try:
+            if self_id not in group_bot_ids:
+                coord_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await coord_task
+                return
+            await update_shard_bot_count_registration(
+                group_id=event.group_id,
+                user_id=int(event.user_id),
+                plaintext=(event.get_plaintext() or "").strip(),
+                message_time=event.time,
+                bot_ids=group_bot_ids,
+            )
+            coord = await coord_task
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if not coord_task.done():
+                coord_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await coord_task
+        if coord is None:
+            return
+        index, total = coord
+        await asyncio.sleep((index - 1) * STAGGER_SEC)
+        try:
+            await bot.send_group_msg(group_id=event.group_id, message=f"牛牛{index}号报到！")
+        except Exception as e:
+            logger.warning(f"bot [{self_id}] shard bot_count send failed in group [{event.group_id}]: {e}")
+            return
+        if index == total:
+            await asyncio.sleep(0.3)
+            await bot_count_cmd.finish("牛牛们报数完毕！")
+        return
 
     config = GroupConfig(group_id=event.group_id, cooldown=10)
     if not await config.is_cooldown(COUNT_COOLDOWN_KEY):
         return
     await config.refresh_cooldown(COUNT_COOLDOWN_KEY)
 
-    online_bots, _ = await get_bot_status_info()
-
-    current_bots = get_bots()
-    group_bot_ids: list[int] = []
-    for bot_id in online_bots:
-        bot_key = str(bot_id)
-        if bot_key not in current_bots:
-            continue
-        bot_instance = current_bots[bot_key]
-        try:
-            await bot_instance.get_group_member_info(
-                group_id=event.group_id,
-                user_id=int(bot_id),
-                no_cache=True,
-            )
-            group_bot_ids.append(bot_id)
-        except Exception:
-            continue
-
-    if not group_bot_ids:
-        return
-
     seed_text = f"{datetime.now().strftime('%Y-%m-%d')}:{event.group_id}"
     random.Random(seed_text).shuffle(group_bot_ids)
     failed_bots: list[int] = []
+    current_bots = get_bots()
 
     for index, bot_id in enumerate(group_bot_ids, start=1):
         bot_instance = current_bots[str(bot_id)]
@@ -252,6 +291,7 @@ async def handle_bot_count(bot: Bot, event: MessageEvent) -> None:
             failed_bots.append(bot_id)
 
     if failed_bots:
+        online_bots, _ = await get_bot_status_info()
         failed_text = "、".join(online_bots.get(bot_id, str(bot_id)) for bot_id in failed_bots)
         await bot_count_cmd.finish(f"报数完成，以下牛牛没能报数：{failed_text}")
 

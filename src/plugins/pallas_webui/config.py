@@ -42,10 +42,10 @@ class Config(BaseModel):
         ),
     )
     pallas_webui_log_lines_max: int = Field(
-        default=2000,
+        default=20000,
         ge=50,
-        le=5000,
-        description="GET /pallas/api/logs 单次返回的最大行数上限",
+        le=20000,
+        description="GET /pallas/api/logs 单次返回的最大行数上限（含分片 worker 落盘合并）",
     )
     pallas_webui_dev_mode: bool = Field(
         default=False,

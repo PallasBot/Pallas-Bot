@@ -339,7 +339,25 @@ def _ob_normalize_target_host(raw_host: str) -> str:
     return h
 
 
-def resolve_onebot_ws_settings(config: Config) -> tuple[str, str, str]:
+def resolve_onebot_ws_settings(config: Config, *, bot_id: str = "") -> tuple[str, str, str]:
+    """默认返回 hub/全局 WS；分片开启且提供 ``bot_id`` 时返回该牛所在 worker 的 WS。"""
+    if bot_id:
+        try:
+            from src.common.shard.registry.config import is_sharding_active
+            from src.common.shard.registry.store import resolve_onebot_ws_url_for_bot
+
+            if is_sharding_active():
+                url, name, tok = resolve_onebot_ws_url_for_bot(
+                    bot_id,
+                    name=str(getattr(config, "pallas_protocol_onebot_client_name", "") or "").strip()
+                    or _ob_env_first("PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME", "ONEBOT_CLIENT_NAME")
+                    or "pallas",
+                    token=_ob_env_first("ACCESS_TOKEN") or _ob_driver_first("access_token"),
+                )
+                if url:
+                    return url, name, tok
+        except Exception:
+            pass
     cfg_name = str(getattr(config, "pallas_protocol_onebot_client_name", "") or "").strip()
     name = (
         cfg_name or _ob_env_first("PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME", "ONEBOT_CLIENT_NAME") or "pallas"

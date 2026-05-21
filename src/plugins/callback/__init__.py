@@ -1,19 +1,19 @@
-import base64
-
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from nonebot import get_app, get_bot
+from fastapi import File, Form, UploadFile
+from nonebot import get_app
 from nonebot.plugin import PluginMetadata
 
+from src.common.bot_runtime.roles import is_hub_role
 from src.common.cmd_perm.metadata_defaults import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
 )
 from src.common.cmd_perm.metadata_text import join_usage, usage_line
-from src.common.config import GroupConfig, TaskManager
-from src.common.db import SingProgress
+from src.common.shard.coord.ai_callback_forward import forward_ai_callback_to_worker
 
-app: FastAPI = get_app()
+from .handler import run_ai_callback
+
+app = get_app()
 
 __plugin_meta__ = PluginMetadata(
     name="任务回调",
@@ -51,58 +51,22 @@ async def callback(
     key: int | None = Form(None),
     file: UploadFile | None = File(None),  # noqa: B008
 ):
-    task = await TaskManager.get_task(task_id)
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-
-    bot_id = task.get("bot_id")
-    group_id = task.get("group_id")
-
-    try:
-        bot = get_bot(bot_id)
-    except Exception:
-        return {"message": "failed"}
-
-    # 只要有 song_id、chunk_index、key 就更新
-    if group_id and song_id is not None and chunk_index is not None and key is not None:
-        config = GroupConfig(group_id)
-        sing_progress = SingProgress(
-            song_id=str(song_id),
+    if is_hub_role():
+        return await forward_ai_callback_to_worker(
+            task_id,
+            status=status,
+            text=text,
+            song_id=song_id,
             chunk_index=chunk_index,
             key=key,
+            file=file,
         )
-        await config.update_sing_progress(sing_progress)
-
-    if status == "failed":
-        await TaskManager.remove_task(task_id)
-        await bot.call_api(
-            "send_group_msg",
-            **{
-                "message": "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。",
-                "group_id": group_id,
-            },
-        )
-        return {"message": "ok"}
-
-    elif status == "success":
-        if text:
-            await bot.call_api(
-                "send_group_msg",
-                **{
-                    "message": text,
-                    "group_id": group_id,
-                },
-            )
-        if file:
-            file_content = await file.read()
-            base64_file = base64.b64encode(file_content).decode()
-            await bot.call_api(
-                "send_group_msg",
-                **{
-                    "message": f"[CQ:record,file=base64://{base64_file}]",
-                    "group_id": group_id,
-                },
-            )
-
-        await TaskManager.remove_task(task_id)
-        return {"message": "ok"}
+    return await run_ai_callback(
+        task_id,
+        status=status,
+        text=text,
+        song_id=song_id,
+        chunk_index=chunk_index,
+        key=key,
+        file=file,
+    )

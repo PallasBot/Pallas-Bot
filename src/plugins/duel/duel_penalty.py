@@ -138,32 +138,42 @@ async def get_active_penalty_async(group_id: int, user_id: int) -> ActivePenalty
 
 
 async def fetch_member_card(bot_id: int, group_id: int, user_id: int) -> str:
-    bot = get_bots().get(str(bot_id))
-    if bot is None:
-        return ""
-    try:
-        info = await bot.call_api(
-            "get_group_member_info",
-            **{"group_id": group_id, "user_id": int(user_id), "no_cache": True},
-        )
-    except ActionFailed:
-        return ""
-    return str(info.get("card") or info.get("nickname") or "").strip()
+    from src.common.shard.coord.bot_action import get_member_card_as_bot
+    from src.common.shard.presence import bot_has_local_connection
+
+    if bot_has_local_connection(bot_id):
+        bot = get_bots().get(str(bot_id))
+        if bot is None:
+            return ""
+        try:
+            info = await bot.call_api(
+                "get_group_member_info",
+                **{"group_id": group_id, "user_id": int(user_id), "no_cache": True},
+            )
+        except ActionFailed:
+            return ""
+        return str(info.get("card") or info.get("nickname") or "").strip()
+    return await get_member_card_as_bot(bot_id, group_id, int(user_id))
 
 
 async def set_member_card(bot_id: int, group_id: int, user_id: int, card: str) -> bool:
-    bot = get_bots().get(str(bot_id))
-    if bot is None:
-        return False
-    try:
-        await bot.call_api(
-            "set_group_card",
-            **{"group_id": group_id, "user_id": int(user_id), "card": card[:60]},
-        )
-        return True
-    except ActionFailed as err:
-        logger.debug(f"duel penalty set_group_card failed gid={group_id} uid={user_id}: {err}")
-        return False
+    from src.common.shard.coord.bot_action import set_group_card_as_bot
+    from src.common.shard.presence import bot_has_local_connection
+
+    if bot_has_local_connection(bot_id):
+        bot = get_bots().get(str(bot_id))
+        if bot is None:
+            return False
+        try:
+            await bot.call_api(
+                "set_group_card",
+                **{"group_id": group_id, "user_id": int(user_id), "card": card[:60]},
+            )
+            return True
+        except ActionFailed as err:
+            logger.debug(f"duel penalty set_group_card failed gid={group_id} uid={user_id}: {err}")
+            return False
+    return await set_group_card_as_bot(bot_id, group_id, int(user_id), card)
 
 
 def _penalty_duration_sec() -> float:

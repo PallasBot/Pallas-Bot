@@ -11,7 +11,7 @@ def test_sing_probe_urls() -> None:
 
 def test_probe_sing_disabled(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.plugins.connectivity.probe_collect.get_sing_config",
+        "src.plugins.sing.config.get_sing_config",
         lambda: Config(sing_enable=False),
     )
     results = asyncio.run(probe_sing_server())

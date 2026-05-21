@@ -14,13 +14,13 @@ from nonebot.permission import SUPERUSER
 
 from src.common.cmd_perm import group_message_permission_for_command
 from src.common.config import GroupConfig
-from src.common.multi_bot_group import (
-    claim_group_message_event,
+from src.common.multi_bot.group import (
+    claim_group_handler,
     try_begin_group_owned_gate,
 )
 from src.common.utils.http_msg import PALLAS_VAGUE_REPLY
 
-from .config import ImageApiBackend, image_gen_config
+from .config import ImageApiBackend, active_image_gen_settings, image_gen_config
 from .draw_attempts import (
     DrawDeadline,
     DrawTotalTimeoutError,
@@ -177,13 +177,13 @@ async def pallas_draw_handle(bot: Bot, event: GroupMessageEvent, args: Message =
         return
 
     bot_id = int(event.self_id)
-    if not await claim_group_message_event("pallas_image", event, bot_id):
+    if not await claim_group_handler("pallas_image", event, bot_id):
         return
 
     if not await draw_group_cooldown_ready(group_id):
         return
 
-    backends = image_gen_config.api_backends()
+    backends = active_image_gen_settings().api_backends()
     if not backends or not any((b.model or "").strip() for b in backends):
         await pallas_draw.finish(
             message_at_user(

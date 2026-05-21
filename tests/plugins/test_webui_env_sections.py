@@ -60,7 +60,7 @@ def test_pallas_webui_section_payload_env_keys_uppercase():
 
 
 def test_pallas_webui_patch_writes_uppercase_env(tmp_path, monkeypatch):
-    from src.common import env_dotenv as ed
+    from src.common.config import dotenv as ed
     from src.common.webui import apply_webui_env_section_patch
 
     env_file = tmp_path / ".env"
@@ -87,7 +87,7 @@ def test_message_scrub_payload_shape():
 
 @skip_no_message_scrub
 def test_message_scrub_patch_roundtrip(tmp_path, monkeypatch):
-    from src.common import env_dotenv as ed
+    from src.common.config import dotenv as ed
     from src.common.webui import apply_webui_env_section_patch
 
     env_file = tmp_path / ".env"

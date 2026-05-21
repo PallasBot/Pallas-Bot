@@ -200,7 +200,7 @@ async def _await_disabled_plugins_deduped(
         else:
             task = asyncio.create_task(_runner())
             _disabled_fetch_tasks[key] = task
-    return await task
+    return await asyncio.shield(task)
 
 
 async def collect_disabled_plugin_names(

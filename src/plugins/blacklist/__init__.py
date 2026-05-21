@@ -18,8 +18,9 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot.exception import IgnoredException
 from nonebot.message import event_preprocessor
 from nonebot.plugin import PluginMetadata
+from nonebot.utils import run_coro_with_shield
 
-from src.common.ban_gate_snapshot import (
+from src.common.ban_gate.snapshot import (
     fallback_db_timeout_sec,
     is_user_blocked_in_group_fast,
     is_user_globally_banned_fast,
@@ -139,7 +140,7 @@ async def _await_user_ban_deduped(user_id: int) -> bool:
 
             task = asyncio.create_task(_runner())
             _user_fetch_tasks[user_id] = task
-    return await task
+    return await asyncio.shield(task)
 
 
 async def query_user_ban_status_for_gate(user_id: int) -> bool:
@@ -213,7 +214,7 @@ async def _await_group_blocked_deduped(group_id: int) -> frozenset[int]:
 
             task = asyncio.create_task(_runner())
             _group_fetch_tasks[group_id] = task
-    return await task
+    return await asyncio.shield(task)
 
 
 async def query_group_blocked_for_gate(group_id: int, user_id: int) -> bool:
@@ -345,9 +346,14 @@ async def block_globally_banned_users(bot: Bot, event: Event):
     if uid == int(bot.self_id):
         return
 
-    global_banned = await query_user_ban_status_for_gate(uid)
     gid = event_group_id(event)
-    group_blocked = await query_group_blocked_for_gate(gid, uid) if gid is not None else False
+
+    async def resolve_ban_gate() -> tuple[bool, bool]:
+        global_banned = await query_user_ban_status_for_gate(uid)
+        group_blocked = await query_group_blocked_for_gate(gid, uid) if gid is not None else False
+        return global_banned, group_blocked
+
+    global_banned, group_blocked = await run_coro_with_shield(resolve_ban_gate())
 
     if not global_banned and not group_blocked:
         return

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from nonebot import get_bots, logger
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
-from nonebot.adapters.onebot.v11.exception import ActionFailed, NetworkError
+from nonebot.adapters.onebot.v11.exception import ActionFailed, ApiNotAvailable, NetworkError
 from nonebot.matcher import Matcher  # noqa: TC002
 
+from src.common.bot_runtime.send_unavailable import is_bot_send_unavailable, log_bot_send_unavailable
 from src.plugins.duel.duel_message import (
     append_duel_message,
     coerce_duel_message,
@@ -17,7 +19,15 @@ from src.plugins.duel.duel_message import (
 )
 from src.plugins.duel.duel_session import register_duel_narrative_line
 
-_SEND_ERRORS = (ActionFailed, NetworkError)
+_SEND_ERRORS = (ActionFailed, NetworkError, ApiNotAvailable, asyncio.CancelledError)
+
+
+def log_duel_send_error(err: BaseException, *, group_id: int, detail: str) -> None:
+    if is_bot_send_unavailable(err):
+        log_bot_send_unavailable(err, context="duel", group=group_id)
+    else:
+        logger.warning(detail)
+
 
 Speaker = Literal["neutral", "challenger", "defender"]
 
@@ -238,31 +248,49 @@ async def _route_send_outbound(
     speaker: Speaker,
     challenger_id: str,
     defender_id: str,
+    image_bytes: bytes | None = None,
 ) -> bool:
-    if not message_has_content(outbound):
+    if not message_has_content(outbound) and not image_bytes:
         return False
     if not route_bot:
         try:
             await matcher.send(outbound)
             return True
         except _SEND_ERRORS as err:
-            logger.warning(f"duel matcher.send failed group={group_id}: {err}")
+            log_duel_send_error(err, group_id=group_id, detail=f"duel matcher.send failed group={group_id}: {err}")
             return False
     qq = _speaker_qq(speaker, challenger_id, defender_id)
     bots = get_bots()
     inst = bots.get(str(qq))
     if inst is None:
+        from src.common.shard.coord.bot_action import send_group_message_as_bot
+        from src.plugins.block import is_fleet_bot_qq
+
+        try:
+            qq_int = int(qq)
+        except (TypeError, ValueError):
+            qq_int = 0
+        if is_fleet_bot_qq(qq_int):
+            if await send_group_message_as_bot(
+                qq_int,
+                group_id,
+                outbound,
+                image_bytes=image_bytes,
+            ):
+                return True
         inst = duel_routing_bot()
     try:
         await inst.send_group_msg(group_id=group_id, message=outbound)
         return True
     except _SEND_ERRORS as err:
-        logger.warning(f"duel send_group_msg failed group={group_id} qq={qq}: {err}")
+        log_duel_send_error(
+            err, group_id=group_id, detail=f"duel send_group_msg failed group={group_id} qq={qq}: {err}"
+        )
     try:
         await matcher.send(outbound)
         return True
     except _SEND_ERRORS as err:
-        logger.warning(f"duel matcher.send fallback failed group={group_id}: {err}")
+        log_duel_send_error(err, group_id=group_id, detail=f"duel matcher.send fallback failed group={group_id}: {err}")
         return False
 
 
@@ -300,13 +328,16 @@ async def deliver_duel_line(
         "defender_id": defender_id,
     }
     outbound = build_duel_outbound_message(chunk, image_bytes=image_bytes)
+    send_kwargs["image_bytes"] = image_bytes
     if await _route_send_outbound(outbound, **send_kwargs):
         return True
     if image_bytes and split_image_on_fail:
         text_only = build_duel_outbound_message(chunk, image_bytes=None)
         img_only = build_duel_outbound_message(Message(), image_bytes=image_bytes)
-        text_ok = message_has_content(text_only) and await _route_send_outbound(text_only, **send_kwargs)
-        img_ok = await _route_send_outbound(img_only, **send_kwargs)
+        text_ok = message_has_content(text_only) and await _route_send_outbound(
+            text_only, **{**send_kwargs, "image_bytes": None}
+        )
+        img_ok = await _route_send_outbound(img_only, **{**send_kwargs, "image_bytes": image_bytes})
         if img_ok and (text_ok or not message_has_content(chunk)):
             logger.info(f"duel send split text+image group={group_id}")
             return True

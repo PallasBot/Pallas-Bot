@@ -10,9 +10,9 @@ from src.common.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.common.cmd_perm.metadata_text import join_usage, usage_line
-from src.common.pallas_console_login import prime_shared_console_login
 from src.common.paths import plugin_data_dir
 from src.common.web import public_base_url
+from src.common.webui.console_login import prime_shared_console_login
 
 from .config import Config, resolve_protocol_webui_base_path
 from .service import PallasProtocolService

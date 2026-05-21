@@ -7,7 +7,19 @@ from src.common.paths import plugin_data_dir
 _VISIBILITY_FILE = "help_visibility.json"
 
 # 始终不出现在普通帮助总览与「开启/关闭全部」范围内
-BUILTIN_HELP_HIDDEN_PLUGINS = frozenset({"pallas_webui", "pallas_protocol"})
+BUILTIN_HELP_HIDDEN_PLUGINS = frozenset({
+    "pallas_webui",
+    "pallas_protocol",
+    "_ingress_gate",
+    "pallas_console_metrics",
+})
+
+
+def resolve_console_stats_excluded_plugin_names() -> frozenset[str]:
+    """控制台 Matcher 插件次数统计排除名单（小写键名，含 claim 别名 ingress_gate）。"""
+    names = set(BUILTIN_HELP_HIDDEN_PLUGINS)
+    names.add("ingress_gate")
+    return frozenset(str(n).strip().lower() for n in names if str(n).strip())
 
 
 def _visibility_path():

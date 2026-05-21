@@ -52,7 +52,7 @@ def register_pallas_protocol_routes(
             raw = "/" + raw
         return raw.rstrip("/") or "/pallas"
 
-    from src.common.pallas_console_login import install_pallas_http_request_context_middleware
+    from src.common.webui.console_login import install_pallas_http_request_context_middleware
 
     install_pallas_http_request_context_middleware(app)
 
@@ -82,7 +82,7 @@ def register_pallas_protocol_routes(
         *,
         request: Request | None = None,
     ) -> None:
-        from src.common.pallas_console_login import (
+        from src.common.webui.console_login import (
             current_http_request,
             extract_session_from_request,
             is_console_auth_configured,
@@ -134,7 +134,7 @@ def register_pallas_protocol_routes(
         return target
 
     def _render_login_page(*, target: str, err: str, detail: str) -> HTMLResponse:
-        from src.common.pallas_login_page import render_pallas_login_page_html
+        from src.common.webui.login_page import render_pallas_login_page_html
 
         head = shell_font_stylesheet_link(base)
         footer_note = (detail or "").strip()
@@ -173,7 +173,7 @@ def register_pallas_protocol_routes(
     ) -> RedirectResponse | HTMLResponse:
         target = _resolve_login_target(next_path)
         detail = ""
-        from src.common.pallas_console_login import (
+        from src.common.webui.console_login import (
             SESSION_COOKIE_NAME,
             SESSION_TTL_SEC,
             mint_session_token,
@@ -202,7 +202,7 @@ def register_pallas_protocol_routes(
 
     @app.post(f"{base}/logout", response_model=None)
     async def napcat_logout(request: Request) -> RedirectResponse:  # noqa: ARG001
-        from src.common.pallas_console_login import SESSION_COOKIE_NAME
+        from src.common.webui.console_login import SESSION_COOKIE_NAME
 
         response = RedirectResponse(url=f"{base}/login", status_code=303)
         response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
@@ -223,7 +223,7 @@ def register_pallas_protocol_routes(
     ) -> JSONResponse:
         cookie_token = request.cookies.get(page_cookie_name)
         _auth(x_pallas_protocol_token, token, cookie_token, request=request)
-        from src.common.pallas_console_login import set_shared_console_login_token
+        from src.common.webui.console_login import set_shared_console_login_token
 
         try:
             set_shared_console_login_token(body.new_password)

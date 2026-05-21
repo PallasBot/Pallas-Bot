@@ -4,7 +4,7 @@ from nonebot import logger
 
 from src.common.config import get_bot_admins
 
-from .config import MailConfig, plugin_config
+from .config import MailConfig, get_bot_status_config
 from .utils import send_mail
 
 STATUS_COOLDOWN_KEY: str = "bot_status"
@@ -26,17 +26,15 @@ async def get_bot_admin_emails(bot_id: int) -> list[str]:
 
 async def notify_bot_offline(bot_id: int, nickname: str, offline_reason: str = "") -> None:
     """通知牛牛离线"""
-
-    # 获取admin邮箱列表
+    cfg = get_bot_status_config()
     admin_emails: list[str] = await get_bot_admin_emails(bot_id)
 
-    # 构建邮件配置
     mail_config: MailConfig = MailConfig(
-        user=plugin_config.bot_status_smtp_user,
-        password=plugin_config.bot_status_smtp_password,
-        server=plugin_config.bot_status_smtp_server,
-        port=plugin_config.bot_status_smtp_port,
-        notice_email=plugin_config.bot_status_notice_email,
+        user=cfg.bot_status_smtp_user,
+        password=cfg.bot_status_smtp_password,
+        server=cfg.bot_status_smtp_server,
+        port=cfg.bot_status_smtp_port,
+        notice_email=cfg.bot_status_notice_email,
     )
 
     # 发送邮件通知
@@ -68,10 +66,10 @@ async def notify_bot_offline(bot_id: int, nickname: str, offline_reason: str = "
         for email in admin_emails:
             try:
                 admin_mail_config: MailConfig = MailConfig(
-                    user=plugin_config.bot_status_smtp_user,
-                    password=plugin_config.bot_status_smtp_password,
-                    server=plugin_config.bot_status_smtp_server,
-                    port=plugin_config.bot_status_smtp_port,
+                    user=cfg.bot_status_smtp_user,
+                    password=cfg.bot_status_smtp_password,
+                    server=cfg.bot_status_smtp_server,
+                    port=cfg.bot_status_smtp_port,
                     notice_email=email,
                 )
                 result = await send_mail(title, content, admin_mail_config)
@@ -98,23 +96,24 @@ async def handle_test_mail_command(bot, event) -> None:
             return
         await config.refresh_cooldown(STATUS_COOLDOWN_KEY)
 
+    cfg = get_bot_status_config()
     mail_config: MailConfig = MailConfig(
-        user=plugin_config.bot_status_smtp_user,
-        password=plugin_config.bot_status_smtp_password,
-        server=plugin_config.bot_status_smtp_server,
-        port=plugin_config.bot_status_smtp_port,
-        notice_email=plugin_config.bot_status_notice_email,
+        user=cfg.bot_status_smtp_user,
+        password=cfg.bot_status_smtp_password,
+        server=cfg.bot_status_smtp_server,
+        port=cfg.bot_status_smtp_port,
+        notice_email=cfg.bot_status_notice_email,
     )
 
     if not mail_config.check_params():
         missing_params: list[str] = []
-        if not plugin_config.bot_status_smtp_user:
+        if not cfg.bot_status_smtp_user:
             missing_params.append("bot_status_smtp_user")
-        if not plugin_config.bot_status_smtp_password:
+        if not cfg.bot_status_smtp_password:
             missing_params.append("bot_status_smtp_password")
-        if not plugin_config.bot_status_smtp_server:
+        if not cfg.bot_status_smtp_server:
             missing_params.append("bot_status_smtp_server")
-        if not plugin_config.bot_status_notice_email:
+        if not cfg.bot_status_notice_email:
             missing_params.append("bot_status_notice_email")
 
         matcher = Matcher()

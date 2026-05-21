@@ -13,7 +13,7 @@ from nonebot.adapters.onebot.v11 import Message
 from nonebot.matcher import Matcher  # noqa: TC002
 
 from src.common.config import GroupConfig
-from src.common.multi_bot_group import claim_group_message_event, try_acquire_group_broadcast_slot
+from src.common.multi_bot.group import claim_group_message_event, try_acquire_group_broadcast_slot
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_labels import bind_duel_labels, duel_label_for, reset_duel_labels, resolve_duel_labels
 from src.plugins.duel.duel_message import (
@@ -125,8 +125,6 @@ class LoadedEvent:
     damage2_max: int = 0
 
 
-_duel_busy_groups: set[int] = set()
-
 DUEL_GROUP_COOLDOWN_KEY = "duel"
 DUEL_USER_REPLY_TTL_SEC = 3.0
 DuelCommandGate = Literal["ok", "busy", "cooldown"]
@@ -145,15 +143,16 @@ async def try_claim_duel_user_reply(group_id: int, *, ttl_sec: float | None = No
 
 def try_begin_duel_group(group_id: int) -> bool:
     """同群同时进行中的决斗至多一场。"""
-    if group_id in _duel_busy_groups:
-        return False
-    _duel_busy_groups.add(group_id)
-    return True
+    from src.common.shard.coord.duel_group import try_begin_duel_group as acquire
+
+    return acquire(group_id)
 
 
 def end_duel_group(group_id: int) -> None:
     """释放群决斗占用。"""
-    _duel_busy_groups.discard(group_id)
+    from src.common.shard.coord.duel_group import end_duel_group as release
+
+    release(group_id)
 
 
 async def begin_duel_command(group_id: int) -> DuelCommandGate:
