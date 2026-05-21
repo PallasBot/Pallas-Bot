@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.plugins.duel.duel_bots import is_cage_plaintext
+from src.common.ingress.cage_plaintext import is_cage_plaintext
 
 
 def test_cage_plaintext_variants() -> None:

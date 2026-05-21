@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 
 _AT_CQ_RE = re.compile(r"\[CQ:at,qq=(\d+)")
 _ROUND_COUNT_RE = re.compile(r"(\d{1,2})\s*(?:幕|回合)")
-_CAGE_CMD_RE = re.compile(r"^八角笼(?:牛|斗)(?:\s*(\d{1,2}\s*(?:幕|回合)))?\s*$")
 
 
 def normalize_onebot_api_payload(raw: Any) -> Any:
@@ -126,19 +125,34 @@ async def list_group_online_bot_ids(group_id: int) -> list[int]:
             list_empty = True
 
         if len(out) < 2:
+            probed = await probe_fleet_bots_in_group(caller, group_id, catalog)
+            if len(probed) >= 2:
+                if list_err:
+                    logger.warning(
+                        "duel: get_group_member_list failed group={} per-bot probe (found={}): {}",
+                        group_id,
+                        len(probed),
+                        list_err,
+                    )
+                elif list_empty or not member_ids:
+                    logger.warning(
+                        "duel: member list empty/unparsed group={} per-bot probe (found={})",
+                        group_id,
+                        len(probed),
+                    )
+                return probed
+
             from src.common.shard.presence import get_cluster_online_bot_ids
 
             relaxed = sorted(q for q in catalog if q in get_cluster_online_bot_ids())
             if len(relaxed) >= 2:
-                if list_empty or list_err or member_ids:
-                    logger.warning(
-                        "duel: group {} member API unusable, use presence-online fleet (n={})",
-                        group_id,
-                        len(relaxed),
-                    )
+                logger.warning(
+                    "duel: group {} member API unusable, use presence-online fleet (n={})",
+                    group_id,
+                    len(relaxed),
+                )
                 return relaxed
 
-            probed = await probe_fleet_bots_in_group(caller, group_id, catalog)
             if list_err:
                 logger.warning(
                     "duel: get_group_member_list failed group={} fallback per-bot probe (found={}): {}",
@@ -159,7 +173,7 @@ async def list_group_online_bot_ids(group_id: int) -> list[int]:
                 )
             else:
                 logger.warning(
-                    "duel: group {} fleet∩member_list={} catalog={} fallback per-bot probe (found={})",
+                    "duel: group {} fleet∩member_list={} catalog={} per-bot probe (found={})",
                     group_id,
                     len(out),
                     len(catalog),
@@ -175,6 +189,31 @@ async def list_group_online_bot_ids(group_id: int) -> list[int]:
                     len(relaxed),
                 )
         return out
+
+
+async def list_local_fleet_bots_in_group(group_id: int) -> list[int]:
+    """本 worker 已连接且能确认在本群的 fleet 牛（八角笼分片登记用）。"""
+    from src.common.multi_bot.fleet import get_catalog_bot_ids
+    from src.common.shard.presence import pick_local_query_bot
+
+    caller = pick_local_query_bot()
+    if caller is None:
+        return []
+    local = frozenset(int(k) for k in get_bots() if str(k).isdigit())
+    scope = local & frozenset(get_catalog_bot_ids())
+    if not scope:
+        return []
+    try:
+        raw = await caller.get_group_member_list(group_id=group_id, no_cache=True)  # type: ignore[union-attr]
+        member_ids = parse_group_member_list_user_ids(raw)
+        if member_ids:
+            return sorted(q for q in scope if q in member_ids)
+    except Exception:
+        pass
+    probed = await probe_fleet_bots_in_group(caller, group_id, scope)
+    if probed:
+        return probed
+    return sorted(scope)
 
     bots = get_bots()
     out: list[int] = []
@@ -205,8 +244,14 @@ def cage_pair_seed(group_id: int, user_id: int, message_time: int) -> int:
     return group_id * 1_000_000_007 + user_id * 1_000_003 + t
 
 
-async def pick_cage_duel_bot_pair(group_id: int, user_id: int, message_time: int) -> tuple[int, int] | None:
-    """八角笼：从本群在线牛中按群+发送者+时间种子固定配对。"""
+async def pick_cage_duel_bot_pair(
+    group_id: int,
+    user_id: int,
+    message_time: int,
+    *,
+    plaintext: str = "八角笼牛",
+) -> tuple[int, int] | None:
+    """八角笼（单进程）：从本群在线牛中按群+发送者+时间种子固定配对。"""
     ids = sorted(await list_group_online_bot_ids(group_id))
     if len(ids) < 2:
         return None
@@ -234,11 +279,6 @@ def duel_narrator_bot_id(challenger_id: str, defender_id: str, *, dual_bot: bool
     if is_bot_qq(challenger_id):
         return int(challenger_id)
     return None
-
-
-def is_cage_plaintext(text: str) -> bool:
-    """八角笼牛/八角笼斗，可选末尾 N幕/N回合。"""
-    return bool(_CAGE_CMD_RE.match(text.strip()))
 
 
 def parse_duel_round_count_from_text(text: str) -> int | None:

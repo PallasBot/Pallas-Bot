@@ -8,12 +8,12 @@ from nonebot.exception import IgnoredException
 from nonebot.message import event_preprocessor
 
 from src.common.bot_runtime.roles import is_hub_role
+from src.common.ingress.cage_plaintext import is_cage_plaintext
 from src.common.multi_bot.dedup import try_claim_cross_bot_message
 from src.common.multi_bot.fleet import fleet_bot_ids_contains, get_fleet_bot_ids
 from src.common.shard.coord.bot_count import should_skip_ingress_claim_for_shard_bot_count
 from src.common.shard.ingress_fanout import is_ingress_fanout_plaintext
 from src.common.shard.registry.config import is_sharding_active
-from src.plugins.duel.duel_bots import is_cage_plaintext
 
 INGRESS_CLAIM_PLUGIN = "ingress_gate"
 driver = get_driver()

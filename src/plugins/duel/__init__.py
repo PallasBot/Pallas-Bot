@@ -1,3 +1,5 @@
+import asyncio
+import contextlib
 import re
 
 from nonebot import get_driver, on_message
@@ -14,13 +16,14 @@ from src.common.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.common.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
+from src.common.ingress.cage_plaintext import is_cage_plaintext
 from src.plugins.duel import duel_penalty  # noqa: F401 — 注册惩罚消息 matcher
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_bots import (
     duel_narrator_bot_id,
     infer_duel_defender_when_at_self_hidden,
     is_bot_qq,
-    is_cage_plaintext,
+    list_local_fleet_bots_in_group,
     parse_duel_at_qqs,
     pick_cage_duel_bot_pair,
     raw_message_has_at,
@@ -374,11 +377,49 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
         await send_duel_user_reply(cage_msg, event.group_id, round_err)
         return
 
-    pair = await pick_cage_duel_bot_pair(
-        event.group_id,
-        int(event.user_id),
-        int(event.time),
-    )
+    plain = (event.get_plaintext() or "").strip() or "八角笼牛"
+    from src.common.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        from src.common.shard.coord.cage_duel import (
+            run_shard_cage_duel_coord,
+            update_shard_cage_duel_registration,
+        )
+
+        self_id = int(bot.self_id)
+        coord_task = asyncio.create_task(
+            run_shard_cage_duel_coord(
+                group_id=event.group_id,
+                user_id=int(event.user_id),
+                message_time=int(event.time),
+                plaintext=plain,
+                self_bot_id=self_id,
+            )
+        )
+        try:
+            probed = await list_local_fleet_bots_in_group(event.group_id)
+            await update_shard_cage_duel_registration(
+                group_id=event.group_id,
+                user_id=int(event.user_id),
+                message_time=int(event.time),
+                plaintext=plain,
+                bot_ids=sorted({self_id, *probed}),
+            )
+            pair = await coord_task
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if not coord_task.done():
+                coord_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await coord_task
+    else:
+        pair = await pick_cage_duel_bot_pair(
+            event.group_id,
+            int(event.user_id),
+            int(event.time),
+            plaintext=plain,
+        )
     if not pair:
         if not await try_claim_duel_message(event):
             return
@@ -389,7 +430,13 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
         )
         return
     a, b = str(pair[0]), str(pair[1])
-    if int(event.self_id) != min(int(a), int(b)):
+    narrator = min(int(a), int(b))
+    if is_sharding_active():
+        from src.common.shard.presence import bot_has_local_connection
+
+        if not bot_has_local_connection(narrator):
+            return
+    elif int(event.self_id) != narrator:
         return
     if not await try_claim_duel_message(event):
         return
