@@ -13,7 +13,8 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 
 from src.common.cmd_perm import permission_for_command, private_message_permission_for_command
-from src.common.multi_bot_group import claim_group_handler
+from src.common.ingress import FAST_LANE
+from src.common.multi_bot import claim_group_handler
 
 from .config import get_maa_config
 from .endpoints import resolve_maa_http_endpoints
@@ -162,35 +163,35 @@ def format_pending_type_counts(counts: dict[str, int]) -> str:
 bind_cmd = on_command(
     "牛牛绑定MAA",
     aliases={"牛牛绑定MAA设备"},
-    priority=5,
+    priority=FAST_LANE,
     block=True,
     permission=private_message_permission_for_command("maa.bind"),
 )
 
 status_cmd = on_command(
     "牛牛MAA状态",
-    priority=5,
+    priority=FAST_LANE,
     block=True,
     permission=permission_for_command("maa.status"),
 )
 
 clear_queue_cmd = on_command(
     "牛牛清空MAA队列",
-    priority=5,
+    priority=FAST_LANE,
     block=True,
     permission=permission_for_command("maa.control"),
 )
 
 switch_device_cmd = on_command(
     "牛牛切换MAA设备",
-    priority=5,
+    priority=FAST_LANE,
     block=True,
     permission=private_message_permission_for_command("maa.bind"),
 )
 
 device_alias_cmd = on_command(
     "牛牛MAA设备名",
-    priority=5,
+    priority=FAST_LANE,
     block=True,
     permission=private_message_permission_for_command("maa.bind"),
 )
@@ -205,14 +206,14 @@ async def is_maa_control_msg(event: MessageEvent) -> bool:
 
 maa_control_msg = on_message(
     Rule(is_maa_control_msg),
-    priority=5,
+    priority=FAST_LANE,
     block=True,
     permission=permission_for_command("maa.control"),
 )
 
 maa_raw_task_cmd = on_command(
     "牛牛MAA任务",
-    priority=5,
+    priority=FAST_LANE,
     block=True,
     permission=permission_for_command("maa.control"),
 )

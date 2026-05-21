@@ -19,7 +19,7 @@ from nonebot.exception import IgnoredException
 from nonebot.message import event_preprocessor
 from nonebot.plugin import PluginMetadata
 
-from src.common.ban_gate_snapshot import (
+from src.common.ban_gate import (
     fallback_db_timeout_sec,
     is_user_blocked_in_group_fast,
     is_user_globally_banned_fast,
@@ -35,8 +35,8 @@ from src.common.cmd_perm.metadata_defaults import (
 )
 from src.common.cmd_perm.metadata_text import SCENE_BOTH, join_usage, usage_line
 from src.common.config import GroupConfig, UserConfig
+from src.common.ingress import FAST_LANE
 
-_IS_BANNED_DB_TIMEOUT_SEC = fallback_db_timeout_sec()
 _BAN_GATE_CACHE_TTL_SEC = 45.0
 _BAN_GATE_CACHE_MAX = 50_000
 _ban_gate_cache: dict[int, tuple[float, bool]] = {}
@@ -108,7 +108,7 @@ async def _fetch_user_banned_db(user_id: int) -> bool:
     try:
         return await asyncio.wait_for(
             UserConfig(user_id).is_banned(),
-            timeout=_IS_BANNED_DB_TIMEOUT_SEC,
+            timeout=fallback_db_timeout_sec(),
         )
     except TimeoutError:
         logger.warning("user ban gate: is_banned timeout uid={}", user_id)
@@ -182,7 +182,7 @@ async def _fetch_group_blocked_ids_db(group_id: int) -> frozenset[int]:
     try:
         ids_list = await asyncio.wait_for(
             GroupConfig(group_id).blocked_user_ids(),
-            timeout=_IS_BANNED_DB_TIMEOUT_SEC,
+            timeout=fallback_db_timeout_sec(),
         )
         return frozenset(ids_list)
     except TimeoutError:
@@ -381,7 +381,7 @@ async def can_manage_blacklist(bot: Bot, event: Event) -> bool:
 blacklist_add_cmd = on_command(
     "牛牛拉黑",
     aliases={"牛牛屏蔽"},
-    priority=5,
+    priority=FAST_LANE,
     block=True,
     permission=permission_for_command("blacklist.add"),
 )
@@ -389,7 +389,7 @@ blacklist_add_cmd = on_command(
 blacklist_remove_cmd = on_command(
     "牛牛解禁",
     aliases={"牛牛取消屏蔽", "牛牛取消拉黑"},
-    priority=5,
+    priority=FAST_LANE,
     block=True,
     permission=permission_for_command("blacklist.remove"),
 )

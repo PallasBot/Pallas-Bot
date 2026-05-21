@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import random
 import re
+import time
 from typing import TYPE_CHECKING
 
 from nonebot import get_bots
@@ -17,9 +19,12 @@ _AT_CQ_RE = re.compile(r"\[CQ:at,qq=(\d+)")
 _ROUND_COUNT_RE = re.compile(r"(\d{1,2})\s*(?:幕|回合)")
 _CAGE_CMD_RE = re.compile(r"^八角笼(?:牛|斗)(?:\s*(\d{1,2}\s*(?:幕|回合)))?\s*$")
 
+_ONLINE_CACHE_SEC = 8.0
+_online_cache: dict[int, tuple[float, tuple[int, ...]]] = {}
+_online_inflight: dict[int, asyncio.Task[list[int]]] = {}
 
-async def list_group_online_bot_ids(group_id: int) -> list[int]:
-    """当前进程已连接、且能查到本群资料的牛牛 QQ。"""
+
+async def _fetch_group_online_bot_ids(group_id: int) -> list[int]:
     bots = get_bots()
     out: list[int] = []
     for bid in sorted(plugin_config.bots):
@@ -32,6 +37,27 @@ async def list_group_online_bot_ids(group_id: int) -> list[int]:
             continue
         out.append(int(bid))
     return out
+
+
+async def list_group_online_bot_ids(group_id: int) -> list[int]:
+    """当前进程已连接、且能查到本群资料的牛牛 QQ（短缓存 + 同群并发合并）。"""
+    now = time.monotonic()
+    cached = _online_cache.get(group_id)
+    if cached is not None and now - cached[0] < _ONLINE_CACHE_SEC:
+        return list(cached[1])
+
+    inflight = _online_inflight.get(group_id)
+    if inflight is not None:
+        return list(await asyncio.shield(inflight))
+
+    task = asyncio.create_task(_fetch_group_online_bot_ids(group_id))
+    _online_inflight[group_id] = task
+    try:
+        out = await task
+        _online_cache[group_id] = (time.monotonic(), tuple(out))
+        return out
+    finally:
+        _online_inflight.pop(group_id, None)
 
 
 async def pick_random_duel_bot_pair(group_id: int) -> tuple[int, int] | None:

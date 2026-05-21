@@ -159,6 +159,46 @@ def _plugin_env_section_from_module(
     )
 
 
+def _ban_gate_snapshot_section() -> WebuiEnvSection:
+    from src.common.ban_gate import BanGateSnapshotConfig, get_ban_gate_snapshot_config
+
+    field_to_env = {
+        "snapshot_refresh_sec": "PALLAS_BAN_SNAPSHOT_REFRESH_SEC",
+        "snapshot_stale_sec": "PALLAS_BAN_SNAPSHOT_STALE_SEC",
+        "gate_db_timeout_sec": "PALLAS_BAN_GATE_DB_TIMEOUT_SEC",
+    }
+    return WebuiEnvSection(
+        id="ban_gate_snapshot",
+        title="黑名单门禁快照",
+        module_label="src.common.ban_gate",
+        model_cls=BanGateSnapshotConfig,
+        read_current=get_ban_gate_snapshot_config,
+        field_to_env=field_to_env,
+        skip_fields=frozenset(),
+    )
+
+
+def _pg_runtime_section() -> WebuiEnvSection:
+    from src.common.db.pg_runtime_config import PgRuntimeConfig, get_pg_runtime_config
+
+    field_to_env = {
+        "pool_size": "PG_POOL_SIZE",
+        "max_overflow": "PG_MAX_OVERFLOW",
+        "pool_recycle": "PG_POOL_RECYCLE",
+        "config_cache_ttl": "PG_CONFIG_CACHE_TTL",
+        "config_cache_size": "PG_CONFIG_CACHE_SIZE",
+    }
+    return WebuiEnvSection(
+        id="pg_runtime",
+        title="PostgreSQL 连接池 / 配置缓存",
+        module_label="src.common.db.pg_runtime_config",
+        model_cls=PgRuntimeConfig,
+        read_current=get_pg_runtime_config,
+        field_to_env=field_to_env,
+        skip_fields=frozenset(),
+    )
+
+
 def _repeater_learn_section() -> WebuiEnvSection:
     from src.plugins.repeater.learn_runtime_config import (
         RepeaterLearnRuntimeConfig,
@@ -175,6 +215,35 @@ def _repeater_learn_section() -> WebuiEnvSection:
         module_label="src.plugins.repeater",
         model_cls=RepeaterLearnRuntimeConfig,
         read_current=get_repeater_learn_runtime_config,
+        field_to_env=field_to_env,
+        skip_fields=frozenset(),
+    )
+
+
+def _ingress_section() -> WebuiEnvSection:
+    from src.common.ingress.config import IngressConfig, get_ingress_config
+
+    field_to_env = {
+        "ingress_fast_lane_enabled": "PALLAS_INGRESS_FAST_LANE",
+        "ingress_slow_concurrency": "PALLAS_INGRESS_SLOW_CONCURRENCY",
+        "ingress_slow_acquire_sec": "PALLAS_INGRESS_SLOW_ACQUIRE_SEC",
+        "ingress_slow_drop_on_timeout": "PALLAS_INGRESS_SLOW_DROP",
+        "ingress_slow_overflow_concurrency": "PALLAS_INGRESS_SLOW_OVERFLOW",
+        "ingress_multi_bot_shard_enabled": "PALLAS_INGRESS_MULTI_BOT_SHARD",
+        "fast_lane_command_prefix": "PALLAS_INGRESS_FAST_LANE_PREFIX",
+        "greeting_fanout_texts": "PALLAS_INGRESS_FANOUT_GREETING",
+        "ingress_notice_gate_enabled": "PALLAS_INGRESS_NOTICE_GATE",
+        "notice_emoji_like_keep": "PALLAS_NOTICE_EMOJI_LIKE_KEEP",
+        "notice_poke_keep": "PALLAS_NOTICE_POKE_KEEP",
+        "notice_recall_keep": "PALLAS_NOTICE_RECALL_KEEP",
+        "notice_default_keep": "PALLAS_NOTICE_DEFAULT_KEEP",
+    }
+    return WebuiEnvSection(
+        id="ingress",
+        title="入站门控 / Fast Lane",
+        module_label="src.common.ingress",
+        model_cls=IngressConfig,
+        read_current=get_ingress_config,
         field_to_env=field_to_env,
         skip_fields=frozenset(),
     )
@@ -204,6 +273,12 @@ def _registered_sections() -> tuple[WebuiEnvSection, ...]:
     parts: list[WebuiEnvSection] = []
     if (_COMMON_ROOT / "message_scrub" / "config.py").is_file():
         parts.append(_message_scrub_section())
+    if (_COMMON_ROOT / "ingress" / "config.py").is_file():
+        parts.append(_ingress_section())
+    if (_COMMON_ROOT / "ban_gate" / "config.py").is_file():
+        parts.append(_ban_gate_snapshot_section())
+    if (_COMMON_ROOT / "db" / "pg_runtime_config.py").is_file():
+        parts.append(_pg_runtime_section())
     repeater_learn_cfg = _COMMON_ROOT.parent / "plugins" / "repeater" / "learn_runtime_config.py"
     if repeater_learn_cfg.is_file():
         parts.append(_repeater_learn_section())
@@ -333,11 +408,54 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             reload_message_scrub_caches()
         except Exception:
             pass
-    if section_id == "cmd_perm":
+    elif section_id == "cmd_perm":
         try:
             from src.common.cmd_perm import clear_cmd_perm_cache
 
             clear_cmd_perm_cache()
+        except Exception:
+            pass
+    elif section_id == "ingress":
+        try:
+            from src.common.ingress.config import clear_ingress_config_cache
+
+            clear_ingress_config_cache()
+        except Exception:
+            pass
+    elif section_id == "ban_gate_snapshot":
+        try:
+            from src.common.ban_gate import clear_ban_gate_snapshot_config_cache, refresh_ban_gate_snapshot
+
+            clear_ban_gate_snapshot_config_cache()
+            try:
+                import asyncio
+
+                asyncio.get_running_loop().create_task(refresh_ban_gate_snapshot())
+            except RuntimeError:
+                pass
+        except Exception:
+            pass
+    elif section_id == "pg_runtime":
+        try:
+            from nonebot import logger
+
+            from src.common.db.pg_runtime_config import (
+                clear_pg_config_row_caches,
+                clear_pg_runtime_config_cache,
+            )
+
+            clear_pg_runtime_config_cache()
+            if {"pool_size", "max_overflow", "pool_recycle"} & set(patch):
+                logger.info(
+                    "pg_runtime: 已写入 PG_POOL_*；连接池变更需重启 Bot 后生效，PG_CONFIG_CACHE_* 已清缓存可立即生效"
+                )
+            try:
+                import asyncio
+
+                loop = asyncio.get_running_loop()
+                loop.create_task(clear_pg_config_row_caches())
+            except RuntimeError:
+                pass
         except Exception:
             pass
     elif section_id == "repeater_learn":

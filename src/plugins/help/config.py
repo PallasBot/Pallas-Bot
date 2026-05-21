@@ -1,6 +1,8 @@
 # 参考https://github.com/Monody-S/CustomMarkdownImage
 from pydantic import BaseModel, Field
 
+from src.plugins.help.visibility import DEFAULT_HELP_IGNORED_PLUGINS
+
 
 class StyleConfig(BaseModel):
     """样式配置"""
@@ -45,13 +47,6 @@ class Config(BaseModel, extra="ignore"):
         description="是否按接近黄金比例自动分页长文（与立绘模式联动）。",
     )
     ignored_plugins: list[str] = Field(
-        default=[
-            "nonebot-plugin-alconna",
-            "nonebot_plugin_apscheduler",
-            "nonebot_plugin_waiter",
-            "uniseg",
-            "callback",
-            "block",
-        ],
+        default_factory=lambda: list(DEFAULT_HELP_IGNORED_PLUGINS),
         description="生成帮助菜单时忽略的插件模块名列表。",
     )

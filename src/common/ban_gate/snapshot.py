@@ -1,18 +1,18 @@
-"""黑名单门禁全量内存快照：周期性批量刷新 DB。"""
+"""黑名单门禁全量内存快照：周期性批量刷新 DB。
+
+一致性：本进程内 ``patch_*`` 立即生效；后台按 ``PALLAS_BAN_SNAPSHOT_REFRESH_SEC`` 全量对齐 DB。
+``snapshot_ready()`` 为 False 或超过 ``PALLAS_BAN_SNAPSHOT_STALE_SEC`` 时读路径回退短时 DB（最终一致）。
+"""
 
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 
 from nonebot import logger
 
+from src.common.ban_gate.config import get_ban_gate_snapshot_config
 from src.common.db import get_db_backend
-
-_SNAPSHOT_REFRESH_SEC = float(os.getenv("PALLAS_BAN_SNAPSHOT_REFRESH_SEC", "30"))
-_SNAPSHOT_STALE_SEC = float(os.getenv("PALLAS_BAN_SNAPSHOT_STALE_SEC", "120"))
-_FALLBACK_DB_TIMEOUT_SEC = float(os.getenv("PALLAS_BAN_GATE_DB_TIMEOUT_SEC", "0.8"))
 
 _global_banned: frozenset[int] = frozenset()
 _group_blocked: dict[int, frozenset[int]] = {}
@@ -25,7 +25,8 @@ _refresh_task: asyncio.Task[None] | None = None
 def snapshot_ready() -> bool:
     if not _ready:
         return False
-    return (time.monotonic() - _last_refresh_mono) <= _SNAPSHOT_STALE_SEC
+    stale = get_ban_gate_snapshot_config().snapshot_stale_sec
+    return (time.monotonic() - _last_refresh_mono) <= stale
 
 
 def is_user_globally_banned_fast(user_id: int) -> bool | None:
@@ -45,7 +46,7 @@ def is_user_blocked_in_group_fast(group_id: int, user_id: int) -> bool | None:
 
 
 def fallback_db_timeout_sec() -> float:
-    return _FALLBACK_DB_TIMEOUT_SEC
+    return get_ban_gate_snapshot_config().gate_db_timeout_sec
 
 
 async def patch_user_banned(user_id: int, banned: bool) -> None:
@@ -152,7 +153,7 @@ async def _load_snapshot_postgresql() -> tuple[frozenset[int], dict[int, frozens
 async def _refresh_loop() -> None:
     while True:
         await refresh_ban_gate_snapshot()
-        await asyncio.sleep(_SNAPSHOT_REFRESH_SEC)
+        await asyncio.sleep(get_ban_gate_snapshot_config().snapshot_refresh_sec)
 
 
 async def start_ban_gate_snapshot() -> None:

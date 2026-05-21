@@ -1,4 +1,4 @@
-"""多 Bot / 多进程：同一条群消息仅一只牛抢占处理权。"""
+"""多 Bot / 多进程：同一条群消息仅一只牛抢占处理权（文件 claim）。"""
 
 from __future__ import annotations
 

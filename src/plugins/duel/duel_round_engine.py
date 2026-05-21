@@ -13,7 +13,7 @@ from nonebot.adapters.onebot.v11 import Message
 from nonebot.matcher import Matcher  # noqa: TC002
 
 from src.common.config import GroupConfig
-from src.common.multi_bot_group import claim_group_message_event, try_acquire_group_broadcast_slot
+from src.common.multi_bot import claim_group_message_event, try_acquire_group_broadcast_slot
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_labels import bind_duel_labels, duel_label_for, reset_duel_labels, resolve_duel_labels
 from src.plugins.duel.duel_message import (

@@ -6,11 +6,9 @@ from nonebot.internal.matcher import Matcher
 from nonebot.message import event_preprocessor, run_preprocessor
 
 from .plugin_manager import collect_disabled_plugin_names
+from .visibility import PLUGIN_DISABLE_EXEMPT
 
 _blocked_events: dict[str, frozenset[str]] = {}
-
-
-IGNORED_PLUGINS = ["help"]
 
 
 def get_plugin_name_from_matcher(matcher: Matcher) -> str:
@@ -26,6 +24,19 @@ def get_plugin_name_from_matcher(matcher: Matcher) -> str:
     return module_name or "unknown"
 
 
+def group_message_needs_disabled_plugin_lookup(event: GroupMessageEvent) -> bool:
+    """仅对可能触发插件的群消息预取禁用列表，避免纯闲聊也打配置库。"""
+    plain = event.get_plaintext().strip()
+    if plain.startswith("牛牛"):
+        return True
+    try:
+        if event.is_tome():
+            return True
+    except Exception:
+        pass
+    return False
+
+
 @event_preprocessor
 async def block_disabled_plugins(bot: Bot, event: GroupMessageEvent):
     """
@@ -33,6 +44,9 @@ async def block_disabled_plugins(bot: Bot, event: GroupMessageEvent):
     """
 
     if not isinstance(event, GroupMessageEvent):
+        return
+
+    if not group_message_needs_disabled_plugin_lookup(event):
         return
 
     event_id = f"{bot.self_id}_{event.message_id}_{event.group_id}"
@@ -62,7 +76,7 @@ async def check_plugin_enabled(matcher: Matcher, bot: Bot, event: GroupMessageEv
     if not plugin_name:
         return
 
-    if plugin_name.lower() in IGNORED_PLUGINS:
+    if plugin_name.lower() in PLUGIN_DISABLE_EXEMPT:
         return
 
     event_id = f"{bot.self_id}_{event.message_id}_{event.group_id}"

@@ -1,6 +1,6 @@
 import pytest
 
-from src.common.multi_bot_group import (
+from src.common.multi_bot import (
     claim_group_handler,
     cross_bot_group_message_key,
     cross_bot_message_signature,

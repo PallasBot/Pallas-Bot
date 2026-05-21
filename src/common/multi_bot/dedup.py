@@ -1,4 +1,4 @@
-"""多 Bot 同群：协议可能对同一条群消息向每个连接各上报一次，用内容签名去重/抢占。"""
+"""? Bot ???????????????? claim ????????"""
 
 from __future__ import annotations
 
@@ -7,23 +7,47 @@ import hashlib
 import re
 import time
 from collections import deque
+from dataclasses import dataclass, field
 
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
 
-from src.common.multi_bot_message_claim import try_claim_message
+from src.common.multi_bot.claim import try_claim_message
 
+_DEDUP_SHARDS = 32
 _GROUP_EVENT_DEDUP_MAX = 4000
-_group_event_dedup_lock = asyncio.Lock()
-_group_event_sigs: deque[tuple[int, int, str, int]] = deque()
-_group_event_sig_set: set[tuple[int, int, str, int]] = set()
+_GROUP_EVENT_DEDUP_PER_SHARD = max(64, _GROUP_EVENT_DEDUP_MAX // _DEDUP_SHARDS)
 
 _CROSS_BOT_CLAIM_MAX = 4000
-_cross_bot_claim_lock = asyncio.Lock()
-_cross_bot_claim_owners: dict[tuple[str, tuple[int, int, str]], int] = {}
+_CROSS_BOT_CLAIM_PER_SHARD = max(64, _CROSS_BOT_CLAIM_MAX // _DEDUP_SHARDS)
+
+ClaimKey = tuple[str, tuple[int, int, str]]
+GroupEventSig = tuple[int, int, str, int]
+
+
+def _shard_index(group_id: int) -> int:
+    return int(group_id) % _DEDUP_SHARDS
+
+
+@dataclass
+class _GroupEventDedupShard:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    order: deque[GroupEventSig] = field(default_factory=deque)
+    sig_set: set[GroupEventSig] = field(default_factory=set)
+
+
+@dataclass
+class _CrossBotClaimShard:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    owners: dict[ClaimKey, int] = field(default_factory=dict)
+    order: deque[ClaimKey] = field(default_factory=deque)
+
+
+_group_event_shards = tuple(_GroupEventDedupShard() for _ in range(_DEDUP_SHARDS))
+_cross_bot_claim_shards = tuple(_CrossBotClaimShard() for _ in range(_DEDUP_SHARDS))
 
 
 def normalize_group_raw_message(raw_message: str) -> str:
-    # 与 ChatData / learn 侧一致，避免图片子类型差异导致去重失败
+    # ? ChatData / learn ????? image ???????????
     return re.sub(r"\.image,.+?\]", ".image]", raw_message)
 
 
@@ -46,7 +70,7 @@ def cross_bot_message_signature(
     *,
     use_plaintext: bool = True,
 ) -> tuple[int, int, str]:
-    """多牛抢占签名：群 + 用户 + 正文，不含 event.time。"""
+    """????????? + ?? + ???????? event.time??"""
     del message_time
     body = normalize_group_plaintext(message_body) if use_plaintext else normalize_group_raw_message(message_body)
     return (group_id, user_id, body)
@@ -60,7 +84,7 @@ def cross_bot_group_message_key(
     *,
     use_plaintext: bool = True,
 ) -> int:
-    """各 Bot 连接的 message_id 不同；同一条物理消息用此键做文件抢占。"""
+    """? Bot ??? message_id?? + ?? + ????????"""
     sig = cross_bot_message_signature(
         group_id,
         user_id,
@@ -72,11 +96,14 @@ def cross_bot_group_message_key(
     return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:15], 16)
 
 
-def _prune_cross_bot_claims() -> None:
-    if len(_cross_bot_claim_owners) <= _CROSS_BOT_CLAIM_MAX:
-        return
-    for key in list(_cross_bot_claim_owners.keys())[: _CROSS_BOT_CLAIM_MAX // 2]:
-        _cross_bot_claim_owners.pop(key, None)
+def _cross_bot_claim_touch(shard: _CrossBotClaimShard, key: ClaimKey, bot_id: int) -> None:
+    """????? shard????? LRU ??????"""
+    shard.owners[key] = bot_id
+    shard.order.append(key)
+    while len(shard.order) > _CROSS_BOT_CLAIM_PER_SHARD:
+        old = shard.order.popleft()
+        if shard.owners.get(old) is not None:
+            shard.owners.pop(old, None)
 
 
 async def try_claim_cross_bot_message_memory(
@@ -97,11 +124,11 @@ async def try_claim_cross_bot_message_memory(
         use_plaintext=use_plaintext,
     )
     key = (plugin, sig)
-    async with _cross_bot_claim_lock:
-        owner = _cross_bot_claim_owners.get(key)
+    shard = _cross_bot_claim_shards[_shard_index(group_id)]
+    async with shard.lock:
+        owner = shard.owners.get(key)
         if owner is None:
-            _cross_bot_claim_owners[key] = bot_id
-            _prune_cross_bot_claims()
+            _cross_bot_claim_touch(shard, key, bot_id)
             return True
         return owner == bot_id
 
@@ -116,7 +143,7 @@ async def try_claim_cross_bot_message(
     *,
     use_plaintext: bool = True,
 ) -> bool:
-    """同进程内存抢占 + 跨进程文件抢占（共享 data/ 时生效）。"""
+    """???? + ????? claim?data/ ? .claim??"""
     if not await try_claim_cross_bot_message_memory(
         plugin,
         group_id,
@@ -144,14 +171,15 @@ async def should_skip_duplicate_group_event(
     message_time: int,
 ) -> bool:
     sig = (group_id, user_id, norm_raw, normalize_message_time(message_time))
-    async with _group_event_dedup_lock:
-        if sig in _group_event_sig_set:
+    shard = _group_event_shards[_shard_index(group_id)]
+    async with shard.lock:
+        if sig in shard.sig_set:
             return True
-        while len(_group_event_sigs) >= _GROUP_EVENT_DEDUP_MAX:
-            old = _group_event_sigs.popleft()
-            _group_event_sig_set.discard(old)
-        _group_event_sigs.append(sig)
-        _group_event_sig_set.add(sig)
+        while len(shard.order) >= _GROUP_EVENT_DEDUP_PER_SHARD:
+            old = shard.order.popleft()
+            shard.sig_set.discard(old)
+        shard.order.append(sig)
+        shard.sig_set.add(sig)
         return False
 
 
@@ -167,7 +195,7 @@ async def try_begin_group_owned_gate(
     *,
     gate_sec: float,
 ) -> bool:
-    """同群短时占位：窗口内仅已占位 bot 可再次通过，其它 bot 拒绝（如画图「欢呼吧」）。"""
+    """????????? gate ? bot ? TTL ??????????? bot ???"""
     ttl = max(1.0, float(gate_sec))
     now = time.time()
     key = (plugin, group_id)
@@ -191,7 +219,7 @@ async def try_acquire_group_broadcast_slot(
     *,
     ttl_sec: float = 3.0,
 ) -> bool:
-    """同群短时广播占位：窗口内仅首次调用返回 True（不记 bot，用于避免多牛复读同条提示）。"""
+    """?????????????? True?TTL ??? bot ?? False?"""
     ttl = max(0.1, float(ttl_sec))
     now = time.time()
     key = (plugin, group_id)
@@ -208,7 +236,7 @@ async def try_acquire_group_broadcast_slot(
 
 
 async def try_begin_group_draw_cheer(group_id: int, bot_id: int, *, gate_sec: float) -> bool:
-    """兼容：等同 try_begin_group_owned_gate(\"pallas_image\", ...)。"""
+    """??????? try_begin_group_owned_gate("pallas_image", ...)?"""
     return await try_begin_group_owned_gate("pallas_image", group_id, bot_id, gate_sec=gate_sec)
 
 
@@ -219,7 +247,7 @@ async def claim_group_message_event(
     *,
     use_plaintext: bool = True,
 ) -> bool:
-    """本 Bot 是否应处理该条群消息（跨 Bot + 跨进程）。未抢占返回 False。"""
+    """? Bot ??????????????????? False?"""
     return await try_claim_cross_bot_message(
         plugin,
         group_event.group_id,
@@ -238,7 +266,7 @@ async def claim_group_handler(
     *,
     use_plaintext: bool = True,
 ) -> bool:
-    """群消息走 claim_group_message_event；私聊恒为 True。"""
+    """?????? True????? claim_group_message_event?"""
     if not isinstance(event, GroupMessageEvent):
         return True
     return await claim_group_message_event(plugin, event, bot_id, use_plaintext=use_plaintext)

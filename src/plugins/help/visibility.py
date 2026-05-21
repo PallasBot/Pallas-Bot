@@ -6,8 +6,26 @@ from src.common.paths import plugin_data_dir
 
 _VISIBILITY_FILE = "help_visibility.json"
 
+# 帮助菜单默认忽略（不出现在总览；与 Config.ignored_plugins 默认一致）
+DEFAULT_HELP_IGNORED_PLUGINS = [
+    "nonebot-plugin-alconna",
+    "nonebot_plugin_apscheduler",
+    "nonebot_plugin_waiter",
+    "uniseg",
+    "callback",
+    "block",
+    "_ingress_gate",
+]
+
 # 始终不出现在普通帮助总览与「开启/关闭全部」范围内
-BUILTIN_HELP_HIDDEN_PLUGINS = frozenset({"pallas_webui", "pallas_protocol"})
+BUILTIN_HELP_HIDDEN_PLUGINS = frozenset({
+    "pallas_webui",
+    "pallas_protocol",
+    "_ingress_gate",
+})
+
+# 群内「关闭插件」不影响以下模块（基础设施）
+PLUGIN_DISABLE_EXEMPT = frozenset({"help", "_ingress_gate"})
 
 
 def _visibility_path():

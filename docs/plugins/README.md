@@ -43,6 +43,7 @@
 
 | 文档 | 说明 |
 | --- | --- |
+| [common 总览](../common/README.md) | `src/common` 目录分类、WebUI 通用配置段与热重载 |
 | [cmd_perm](../common/cmd_perm/README.md) | 命令权限、帮助菜单动态「何人可用」 |
 | [message_scrub](../common/message_scrub/README.md) | 消息清洗（复读/做梦等共用） |
 | [webui](../common/webui/README.md) | 配置热重载、服务网关段 |

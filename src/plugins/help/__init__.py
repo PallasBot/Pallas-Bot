@@ -11,7 +11,9 @@ from src.common.cmd_perm.metadata_defaults import (
 )
 from src.common.cmd_perm.metadata_text import SCENE_BOTH, SCENE_GROUP, join_usage, usage_line
 from src.common.config import BotConfig, GroupConfig
+from src.common.ingress import FAST_LANE
 
+from . import event_preprocessor  # noqa: F401  # 注册群禁用预处理器
 from .config import Config
 from .event_preprocessor import IGNORED_PLUGINS  # noqa: F401
 
@@ -108,24 +110,24 @@ AVAILABLE_STYLES = load_custom_styles(plugin_config)
 DEFAULT_STYLE_NAME = get_default_style(plugin_config)
 
 
-help_cmd = on_command("牛牛帮助", priority=5, block=True, permission=permission_for_command("help.help"))
+help_cmd = on_command("牛牛帮助", priority=FAST_LANE, block=True, permission=permission_for_command("help.help"))
 
 HELP_COOLDOWN_KEY = "help"
 
 plugin_enable_cmd = on_command(
-    "牛牛开启", priority=5, block=True, permission=permission_for_command("help.plugin_enable")
+    "牛牛开启", priority=FAST_LANE, block=True, permission=permission_for_command("help.plugin_enable")
 )
 
 plugin_disable_cmd = on_command(
-    "牛牛关闭", priority=5, block=True, permission=permission_for_command("help.plugin_disable")
+    "牛牛关闭", priority=FAST_LANE, block=True, permission=permission_for_command("help.plugin_disable")
 )
 
 plugin_enable_all_cmd = on_command(
-    "牛牛开启全部功能", priority=5, block=True, permission=permission_for_command("help.plugin_enable_all")
+    "牛牛开启全部功能", priority=FAST_LANE, block=True, permission=permission_for_command("help.plugin_enable_all")
 )
 
 plugin_disable_all_cmd = on_command(
-    "牛牛关闭全部功能", priority=5, block=True, permission=permission_for_command("help.plugin_disable_all")
+    "牛牛关闭全部功能", priority=FAST_LANE, block=True, permission=permission_for_command("help.plugin_disable_all")
 )
 
 

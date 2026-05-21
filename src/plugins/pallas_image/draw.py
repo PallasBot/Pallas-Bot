@@ -14,7 +14,7 @@ from nonebot.permission import SUPERUSER
 
 from src.common.cmd_perm import group_message_permission_for_command
 from src.common.config import GroupConfig
-from src.common.multi_bot_group import (
+from src.common.multi_bot import (
     claim_group_message_event,
     try_begin_group_owned_gate,
 )

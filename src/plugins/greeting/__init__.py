@@ -22,6 +22,7 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule, to_me
 from nonebot.typing import T_State
 
+from src.common.ban_gate import patch_user_banned
 from src.common.cmd_perm import (
     group_message_permission_for_command,
     private_message_permission_for_command,
@@ -533,4 +534,5 @@ async def handle_notice(event: _NoticeEvent):
         if plugin_config.enable_kick_ban:
             await GroupConfig(event.group_id).ban()
             await UserConfig(event.operator_id).ban()
+            await patch_user_banned(event.operator_id, True)
             await invalidate_user_ban_gate_cache(event.operator_id)

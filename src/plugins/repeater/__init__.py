@@ -21,14 +21,14 @@ from src.common.cmd_perm.metadata_defaults import (
 )
 from src.common.cmd_perm.metadata_text import SCENE_AUTO, SCENE_GROUP, join_usage, usage_line
 from src.common.config import BotConfig
-from src.common.group_message_dedup import (
-    normalize_group_raw_message as _normalize_group_raw_message,
-)
-from src.common.group_message_dedup import (
-    should_skip_duplicate_group_event as _should_skip_duplicate_group_event,
-)
 from src.common.message_scrub import is_message_scrub_blocked_async
 from src.common.message_scrub.log_preview import scrub_intercept_log_preview
+from src.common.multi_bot import (
+    normalize_group_raw_message as _normalize_group_raw_message,
+)
+from src.common.multi_bot import (
+    should_skip_duplicate_group_event as _should_skip_duplicate_group_event,
+)
 from src.common.utils.array2cqcode import try_convert_to_cqcode
 from src.common.utils.media_cache import get_image, insert_image
 from src.plugins.dream.ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY

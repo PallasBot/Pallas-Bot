@@ -722,12 +722,19 @@ class _ConfigCache:
 _CONFIG_CACHES: dict[type, _ConfigCache] = {}
 
 
+async def clear_pg_config_caches() -> None:
+    for cache in _CONFIG_CACHES.values():
+        await cache.clear()
+    _CONFIG_CACHES.clear()
+
+
 def _get_config_cache(row_class: type) -> _ConfigCache:
+    from src.common.db.pg_runtime_config import get_pg_runtime_config
+
     cache = _CONFIG_CACHES.get(row_class)
     if cache is None:
-        ttl = float(_cfg_env("PG_CONFIG_CACHE_TTL", "60"))
-        capacity = int(_cfg_env("PG_CONFIG_CACHE_SIZE", "10000"))
-        cache = _ConfigCache(ttl=ttl, capacity=capacity)
+        cfg = get_pg_runtime_config()
+        cache = _ConfigCache(ttl=cfg.config_cache_ttl, capacity=cfg.config_cache_size)
         _CONFIG_CACHES[row_class] = cache
     return cache
 
