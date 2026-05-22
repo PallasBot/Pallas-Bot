@@ -17,7 +17,7 @@
 
 ## 配置
 
-地址写入各插件对应 `.env` 键（画画、MAA、唱歌），由 WebUI 通用配置段统一编辑。探测逻辑见 [`service_probe`](../../../src/common/service_probe/)。
+地址写入 `data/pallas_config/webui.json`（画画、MAA、唱歌等键），由 WebUI 通用配置段统一编辑。探测逻辑见 [`service_probe`](../../../src/common/service_probe/)。
 
 ## 排障
 

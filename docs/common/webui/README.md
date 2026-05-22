@@ -109,7 +109,7 @@ my_cmd = on_command("某命令", permission=permission_for_command("my_plugin.ac
 
 ### 服务网关 / 连通性（`service_gateways`）
 
-[`service_gateways_section.py`](../../../src/common/webui/service_gateways_section.py) 聚合 **牛牛画画** 网关字段、**MAA** 对外端点、**点歌** 主机与开关，对应键仍写入各插件 `.env` 项。WebUI 提供网关列表编辑器与 `POST /common-config/service_gateways/connectivity-check`（可按表单草稿探测，无需先保存）。各插件 **插件配置** 页保留完整参数与专用入口（如画画仅测画画网关）。
+[`service_gateways_section.py`](../../../src/common/webui/service_gateways_section.py) 聚合 **牛牛画画** 网关字段、**MAA** 对外端点、**点歌** 主机与开关，对应键写入 `webui.json` 的 `env`（按插件分组到 `sections`）。WebUI 提供网关列表编辑器与 `POST /common-config/service_gateways/connectivity-check`（可按表单草稿探测，无需先保存）。各插件 **插件配置** 页保留完整参数与专用入口（如画画仅测画画网关）。
 
 ## 实现参考
 

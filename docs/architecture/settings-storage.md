@@ -55,6 +55,8 @@ uv run python -c "from src.common.config.webui_export_toml import export_webui_i
 uv run python tools/migrate_env_to_pallas.py
 ```
 
+迁移后请检查根目录是否仍保留旧 **`.env`**：合并顺序中 `.env` **晚于** `webui.json`，残留同名键会导致 WebUI 保存不生效。可删除已迁入 `pallas.toml` / `webui.json` 的项，或整份备份后移除 `.env`。
+
 ## 实现
 
 - `src/common/config/repo_settings.py` — 读写与合并

@@ -30,9 +30,9 @@
 | `session` | 仅 `block` 维护的本进程已连接牛 | 仅**当前 worker** 已连接牛 |
 | `fleet` | 协议端 `accounts.json` 中 enabled 账号 | 全集群名册 + `worker_presence.json` 在线态 |
 
-`.env` 示例：`bot_status_list_mode=fleet`（单进程也想按配置账号列离线时）。
+配置示例：`BOT_STATUS_LIST_MODE=fleet`（单进程也想按配置账号列离线时）。
 
-WebUI：**插件配置 → 牛牛状态**，保存后写入 `.env` 并热重载（无需重启 Bot）。
+WebUI：**插件配置 → 牛牛状态**，保存后写入 `webui.json` 并热重载（无需重启 Bot）。
 
 ## 排障
 

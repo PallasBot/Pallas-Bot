@@ -40,7 +40,7 @@ A: 这是主动发言功能，内容同样来源于学习到的群聊语料。
 
 ### Q: 管理员、号主、超管都是什么?
 
-A: **群管理员**指 QQ 群里的管理员。**号主**在本项目文档与帮助里即原「牛牛管理员 / 牛牛管理」所指：数据库 **`admins`** 数组里的 QQ，可控制该牛牛的部分能力（例如私聊「牛牛重新上号」）；通常应把实际运维该牛的 QQ 配进 **`admins`**。**超管**即 `.env` 里 **`SUPERUSERS`**，对所有牛牛有最高权限。
+A: **群管理员**指 QQ 群里的管理员。**号主**在本项目文档与帮助里即原「牛牛管理员 / 牛牛管理」所指：数据库 **`admins`** 数组里的 QQ，可控制该牛牛的部分能力（例如私聊「牛牛重新上号」）；通常应把实际运维该牛的 QQ 配进 **`admins`**。**超管**即 `config/pallas.toml` 的 **`[bootstrap] superusers`**（或环境变量 **`SUPERUSERS`**），对所有牛牛有最高权限。
 
 给牛牛增加/修改 **`admins`** 的方式见下文 [如何为牛牛配置号主（`admins`）](#faq-bot-admins)。
 
@@ -63,7 +63,7 @@ A: **`account`** 为该牛牛的 QQ 号；**`admins`** 为 **QQ 号组成的 JSO
 
 - 集合名：**`config`**（对应代码中的 `BotConfigModule`）。
 - 文档字段：**`account`**（牛牛 QQ，数值）、**`admins`**（QQ 号数组）。
-- 库名：与当前 Bot 使用的 Mongo **数据库名**一致（见 `.env` 中 **`MONGO_DB`** / 连接串说明）。
+- 库名：与当前 Bot 使用的 Mongo **数据库名**一致（见 `config/pallas.toml` 的 **`[bootstrap.mongo] db`** 或连接串说明）。
 
 在 **`mongosh`** 中示例（将数字换成实际 QQ）：
 
@@ -94,7 +94,7 @@ WHERE account = 3888888888;
 
 ### Q: Docker 部署和 git clone 部署，更新方式有什么区别？
 
-A: **Docker**：应用代码在镜像里，更新主要是 **`docker compose pull`** 后重建容器，一般**没有**本机仓库的 git 冲突问题；数据与配置应在卷或 `.env` 中，与镜像代码分离。**git clone**：更新是 **`git pull`**（或控制台「Bot 更新」在检测到 git 工作副本时执行的等价操作），若你修改了与上游**同一已跟踪文件**，可能出现合并冲突，需要本地处理后再拉。详见 [标准部署 - 后续更新](Deployment.md) 与 [Docker 部署](DockerDeployment.md)。
+A: **Docker**：应用代码在镜像里，更新主要是 **`docker compose pull`** 后重建容器，一般**没有**本机仓库的 git 冲突问题；数据与配置应在卷（`data/`、`config/pallas.toml` 等）中，与镜像代码分离。**git clone**：更新是 **`git pull`**（或控制台「Bot 更新」在检测到 git 工作副本时执行的等价操作），若你修改了与上游**同一已跟踪文件**，可能出现合并冲突，需要本地处理后再拉。详见 [标准部署 - 后续更新](Deployment.md) 与 [Docker 部署](DockerDeployment.md)。
 
 ### Q: `git pull --autostash` 能避免所有冲突吗？
 
@@ -106,13 +106,13 @@ A: 典型于 **Docker 镜像内运行**：容器里没有完整 `.git` 目录，
 
 ### Q: 怎样减少以后 `git pull` 跟上游冲突？
 
-A: 尽量**不要**在仓库里直接改已跟踪源码；自定义用 **`.env`**、**`data/`**、以及文档允许的挂载路径。若必须改源码，建议 **fork** 后维护自己的分支，并清楚合并策略，避免与主线长期分叉。
+A: 尽量**不要**在仓库里直接改已跟踪源码；自定义用 **`config/pallas.toml`**、**`data/`**（含 WebUI 的 `webui.json`）、以及文档允许的挂载路径。若必须改源码，建议 **fork** 后维护自己的分支，并清楚合并策略，避免与主线长期分叉。
 
 ## 部署排障
 
 ### Q: 启动后不回复，应该先查什么？
 
-A: 先检查数据库连通性、`OneBot WebSocket` 是否已连上（Docker 默认 Compose 无独立 NapCat，需在 **`/protocol/console/`** 协议端管理里创建实例并配置 WS）、`.env` 是否生效，再看控制台是否有持续报错。
+A: 先检查数据库连通性、`OneBot WebSocket` 是否已连上（Docker 默认 Compose 无独立 NapCat，需在 **`/protocol/console/`** 协议端管理里创建实例并配置 WS）、`config/pallas.toml` 与 `data/pallas_config/webui.json` 是否生效，再看控制台是否有持续报错。
 
 ### Q: 控制台 / 协议端管理页的口令在哪里配？
 
