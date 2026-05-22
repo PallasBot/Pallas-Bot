@@ -131,15 +131,12 @@ def export_webui_inspection_toml(
                     env = {str(k).upper(): "" if v is None else str(v) for k, v in raw_env.items() if k}
                 raw_sec = data.get("sections")
                 if isinstance(raw_sec, dict):
-                    sections = {
-                        str(lab): {
-                            str(k).upper(): "" if v is None else str(v)
-                            for k, v in (bucket or {}).items()
-                            if k and isinstance(bucket, dict)
-                        }
-                        for lab, bucket in raw_sec.items()
-                        if lab
-                    }
+                    parsed: dict[str, dict[str, str]] = {}
+                    for lab, bucket in raw_sec.items():
+                        if not lab or not isinstance(bucket, dict):
+                            continue
+                        parsed[str(lab)] = {str(k).upper(): "" if v is None else str(v) for k, v in bucket.items() if k}
+                    sections = parsed
     text = render_webui_export_toml(env or {}, sections)
     out = repo_webui_export_toml_path()
     _atomic_write_text(out, text)

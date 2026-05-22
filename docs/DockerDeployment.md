@@ -2,7 +2,7 @@
 
 > 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`多进程分片`](architecture/bot_process_sharding.md) · [`3.0 迁移`](Migration-v3.md) · [`FAQ`](FAQ.md)
 
-如果你不想自己配置环境，可以使用 `Docker Compose` 一键部署已构建好的镜像。拉取镜像请优先使用与你的版本对应的 **Release** 标签。在宿主机 **`pallas-bot/config/pallas.toml`**（由仓库 [`config/pallas.example.toml`](../config/pallas.example.toml) 复制）里选择 **`DB_BACKEND=mongodb`** 或 **`postgresql`** 并填写对应连接信息即可；WebUI 保存的插件项写入 **`pallas-bot/data/pallas_config/webui.json`**（随 `data` 卷挂载）。详见 [配置存储](architecture/settings-storage.md)。你需要安装 `Docker` 与 `Docker Compose`（较新版本的 `Docker` 已集成 `Compose` 插件），镜像支持 `amd64` 与 `arm64`。
+如果你不想自己配置环境，可以使用 `Docker Compose` 一键部署已构建好的镜像。拉取镜像请优先使用与你的版本对应的 **Release** 标签。在宿主机 **`pallas-bot/config/pallas.toml`**（由仓库 [`config/pallas.example.toml`](../config/pallas.example.toml) 复制）的 **`[bootstrap]`** 中设置 **`db_backend = "mongodb"`** 或 **`"postgresql"`** 并填写对应连接信息；WebUI 保存的插件项写入 **`pallas-bot/data/pallas_config/webui.json`**（随 `data` 卷挂载）。详见 [配置存储](architecture/settings-storage.md)。你需要安装 `Docker` 与 `Docker Compose`（较新版本的 `Docker` 已集成 `Compose` 插件），镜像支持 `amd64` 与 `arm64`。
 
 ## 准备工作
 

@@ -34,3 +34,28 @@ def test_upsert_writes_sections_and_export_toml(tmp_path: Path, monkeypatch: pyt
     assert "请勿手动编辑" in text
     assert "[webui." in text
     assert "ANSWER_THRESHOLD" in text
+
+
+def test_export_toml_tolerates_malformed_sections_bucket(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    webui = tmp_path / "webui.json"
+    export_path = tmp_path / "export.toml"
+    webui.write_text(
+        json.dumps(
+            {
+                "env": {"FOO": "1", "BAR": "2"},
+                "sections": {"bad": "not-a-dict", "good": {"foo": "1"}},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(wet, "repo_webui_settings_path", lambda: webui)
+    monkeypatch.setattr(wet, "repo_webui_export_toml_path", lambda: export_path)
+
+    wet.export_webui_inspection_toml()
+
+    assert export_path.is_file()
+    text = export_path.read_text(encoding="utf-8")
+    assert "FOO" in text or "BAR" in text
