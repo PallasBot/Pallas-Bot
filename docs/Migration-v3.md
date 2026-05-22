@@ -14,7 +14,7 @@
 1. 停止 Bot 写入流量（避免迁移期间源数据持续变化）。
 2. 备份 MongoDB（至少包含业务库）。
 3. 准备 PostgreSQL 空库，并确保账号具备建表与写入权限。
-4. 确认 `.env` 中连接信息可用（`MONGO_*` / `PG_*`）。
+4. 确认 `config/pallas.toml` 中连接信息可用（`[bootstrap]` / `[bootstrap.mongo]` / `[bootstrap.postgres]`），或从旧 `.env` 运行 `tools/migrate_env_to_pallas.py`。
 
 ## 依赖安装
 

@@ -1,6 +1,6 @@
 import time
 
-from nonebot import get_plugin_config, logger, on_message
+from nonebot import logger, on_message
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 from nonebot.plugin import PluginMetadata
@@ -16,7 +16,7 @@ from src.common.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_lin
 from src.common.config import BotConfig, GroupConfig, TaskManager
 from src.common.utils import HTTPXClient
 
-from .config import Config
+from .config import Config, get_chat_config, plugin_config
 
 __plugin_meta__ = PluginMetadata(
     name="酒后聊天",
@@ -45,9 +45,13 @@ __plugin_meta__ = PluginMetadata(
 )
 
 
-plugin_config = get_plugin_config(Config)
+def refresh_server_url(cfg: Config | None = None) -> None:
+    global SERVER_URL
+    c = cfg or get_chat_config()
+    SERVER_URL = f"http://{c.ai_server_host}:{c.ai_server_port}"
 
-SERVER_URL = f"http://{plugin_config.ai_server_host}:{plugin_config.ai_server_port}"
+
+refresh_server_url()
 CHAT_COOLDOWN_KEY = "chat"
 
 if plugin_config.chat_enable:

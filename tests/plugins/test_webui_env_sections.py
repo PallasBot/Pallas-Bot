@@ -60,14 +60,16 @@ def test_pallas_webui_section_payload_env_keys_uppercase():
 
 
 def test_pallas_webui_patch_writes_uppercase_env(tmp_path, monkeypatch):
-    from src.common.config import dotenv as ed
+    import json
+
+    from src.common.config import repo_settings as rs
     from src.common.webui import apply_webui_env_section_patch
 
-    env_file = tmp_path / ".env"
-    monkeypatch.setattr(ed, "repo_env_path", lambda: env_file)
+    webui_file = tmp_path / "webui.json"
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui_file)
     apply_webui_env_section_patch("pallas_webui", {"pallas_webui_log_lines_max": 120})
-    text = env_file.read_text(encoding="utf-8")
-    assert "PALLAS_WEBUI_LOG_LINES_MAX=120" in text
+    data = json.loads(webui_file.read_text(encoding="utf-8"))
+    assert data["env"]["PALLAS_WEBUI_LOG_LINES_MAX"] == "120"
 
 
 @skip_no_message_scrub
@@ -87,11 +89,13 @@ def test_message_scrub_payload_shape():
 
 @skip_no_message_scrub
 def test_message_scrub_patch_roundtrip(tmp_path, monkeypatch):
-    from src.common.config import dotenv as ed
+    import json
+
+    from src.common.config import repo_settings as rs
     from src.common.webui import apply_webui_env_section_patch
 
-    env_file = tmp_path / ".env"
-    monkeypatch.setattr(ed, "repo_env_path", lambda: env_file)
+    webui_file = tmp_path / "webui.json"
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui_file)
     apply_webui_env_section_patch("message_scrub", {"inbound_filter_substrings": "a,b"})
-    text = env_file.read_text(encoding="utf-8")
-    assert "PALLAS_INBOUND_FILTER_SUBSTRINGS=a,b" in text
+    data = json.loads(webui_file.read_text(encoding="utf-8"))
+    assert data["env"]["PALLAS_INBOUND_FILTER_SUBSTRINGS"] == "a,b"

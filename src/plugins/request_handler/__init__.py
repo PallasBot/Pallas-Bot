@@ -709,7 +709,9 @@ disable_auto_group_cmd = on_command("关闭自动同意入群", priority=5, bloc
 
 
 def plugin_config() -> Config:
-    return Config.model_validate(get_driver().config.model_dump())
+    from .config import get_request_handler_config
+
+    return get_request_handler_config()
 
 
 async def notify_admins(bot: Bot, msg: str, *, kind: str, target_id: str) -> bool:

@@ -1,12 +1,12 @@
 # WebUI 插件配置与热重载
 
-控制台（`pallas_webui`）通过根目录 `.env` 读写插件配置。本包 `src/common/webui/` 供**插件作者**接入「保存后立即生效」，无需再改 `extended_api.py`。
+控制台（`pallas_webui`）通过统一 `data/pallas_config/webui.json` 读写插件配置（主配置见 `config/pallas.toml`）。本包 `src/common/webui/` 供**插件作者**接入「保存后立即生效」，无需再改 `extended_api.py`。
 
 ## 目录结构
 
 | 文件 | 职责 |
 |------|------|
-| `plugin_config.py` | `install_hot_reload_config`：缓存 + 从 `.env` 重读 + 注册热重载钩子 |
+| `plugin_config.py` | `install_hot_reload_config`：缓存 + 从磁盘配置重读 + 注册热重载钩子 |
 | `registry.py` | 按插件模块名查找 `get` / `reload` |
 | `plugin_api.py` | `GET/PUT /plugins/{name}/config` 的合并、落盘与 reload |
 | `env_sections.py` | 「通用配置」分段（`message_scrub`、`cmd_perm`、部分插件、`service_gateways`） |
@@ -33,9 +33,9 @@ reload_my_config = plugin_webui.reload
 
 业务代码统一使用 `get_my_config()`，不要缓存模块 import 时的配置快照。
 
-WebUI 在控制台「插件」页保存该插件配置后，会写入 `.env` 并自动调用 `reload`，**无需重启 Bot**。
+WebUI 在控制台「插件」页保存该插件配置后，会写入 `webui.json` 并自动调用 `reload`，**无需重启 Bot**。分片部署时 hub 与 worker 共用 `data/` 卷即可；worker 在下次 `get_*_config()` 时按磁盘 mtime 自动拾取新配置。
 
-### 自定义 `.env` 解析
+### 自定义环境值解析
 
 列表 / 字典 / 嵌套模型等若需特殊解析，传入 `parse_env_value`：
 
@@ -96,12 +96,12 @@ my_cmd = on_command("某命令", permission=permission_for_command("my_plugin.ac
 
 ## 环境变量命名
 
-- 控制台「插件」页 PUT：字段名 **大写** 写入 `.env`（如 `my_enable` → `MY_ENABLE`）。
-- 与 NoneBot 插件配置习惯一致；`install_hot_reload_config` 通过 `merged_repo_dotenv_upper()` 读盘。
+- 控制台「插件」页 PUT：字段名 **大写** 写入 `webui.json` 的 `env`（如 `my_enable` → `MY_ENABLE`）。
+- 与 NoneBot 插件配置习惯一致；`install_hot_reload_config` 通过 `merged_repo_settings_upper()` 读盘。
 
 ## 不需要热重载时
 
-仍可使用 `get_plugin_config(Config)`。WebUI 仍能改 `.env`，但进程内值需**重启 Bot** 后才与磁盘一致。
+仍可使用 `get_plugin_config(Config)`。WebUI 仍能改 `webui.json`，但进程内值需**重启 Bot** 后才与磁盘一致。
 
 ## 出现在「通用配置」页
 
@@ -123,4 +123,4 @@ my_cmd = on_command("某命令", permission=permission_for_command("my_plugin.ac
 
 - `src/common/webui/` — 本包
 - `src/plugins/pallas_webui/extended_api.py` — 路由注册（宜保持薄，逻辑放在 `webui` 包内）
-- `src/common/env_dotenv.py` — `.env` 合并读写
+- `src/common/config/repo_settings.py` — `pallas.toml` + `webui.json` 合并读写

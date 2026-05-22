@@ -1,4 +1,4 @@
-"""供插件 ``config.py`` 使用：``.env`` 热重载 + 自动注册 WebUI 钩子。"""
+"""供插件 ``config.py`` 使用：磁盘配置热重载 + 自动注册 WebUI 钩子（含分片共享 ``data/``）。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,8 @@ from typing import Any, TypeVar
 from nonebot import get_plugin_config
 from pydantic import BaseModel
 
-from src.common.config.dotenv import repo_env_raw_value, repo_layered_dotenv_files_exist
+from src.common.config.dotenv import repo_env_raw_value, repo_settings_files_exist
+from src.common.config.repo_settings import repo_settings_disk_revision
 
 from .registry import PluginWebuiConfigHooks, register_plugin_webui_config
 
@@ -59,6 +60,20 @@ def config_from_env[C: BaseModel](
     return config_cls.model_validate(data)
 
 
+class PluginConfigProxy[C: BaseModel]:
+    """兼容 ``plugin_config.xxx``；每次属性访问读取当前缓存配置。"""
+
+    def __init__(self, getter: Callable[[], C]) -> None:
+        self._getter = getter
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._getter(), name)
+
+
+def plugin_config_proxy[C: BaseModel](getter: Callable[[], C]) -> PluginConfigProxy[C]:
+    return PluginConfigProxy(getter)
+
+
 @dataclass(frozen=True)
 class PluginWebuiConfigHandle:
     get: Callable[[], Any]
@@ -78,18 +93,24 @@ def install_hot_reload_config[C: BaseModel](
     """创建带缓存的 get/reload，并登记到 ``registry``。"""
     lock = Lock()
     cached: C | None = None
+    disk_rev: float | None = None
     parse = parse_env_value or default_parse_env_value
 
     def clear_cache() -> None:
-        nonlocal cached
+        nonlocal cached, disk_rev
         with lock:
             cached = None
+            disk_rev = None
 
     def get() -> C:
-        nonlocal cached
+        nonlocal cached, disk_rev
+        rev = repo_settings_disk_revision()
         with lock:
+            if disk_rev is not None and rev != disk_rev:
+                cached = None
+            disk_rev = rev
             if cached is None:
-                if repo_layered_dotenv_files_exist():
+                if repo_settings_files_exist():
                     cached = config_from_env(
                         config_cls,
                         parse_env_value=parse,

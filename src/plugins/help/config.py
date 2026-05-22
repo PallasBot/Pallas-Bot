@@ -1,6 +1,8 @@
 # 参考https://github.com/Monody-S/CustomMarkdownImage
 from pydantic import BaseModel, Field
 
+from src.common.webui import install_hot_reload_config, plugin_config_proxy
+
 
 class StyleConfig(BaseModel):
     """样式配置"""
@@ -55,3 +57,19 @@ class Config(BaseModel, extra="ignore"):
         ],
         description="生成帮助菜单时忽略的插件模块名列表。",
     )
+
+
+def on_help_config_reload(cfg: Config) -> None:
+    import src.plugins.help as help_pkg
+
+    help_pkg.refresh_style_cache(cfg)
+
+
+plugin_webui = install_hot_reload_config(
+    Config,
+    config_module=__name__,
+    on_reload=on_help_config_reload,
+)
+get_help_config = plugin_webui.get
+reload_help_config = plugin_webui.reload
+plugin_config = plugin_config_proxy(get_help_config)

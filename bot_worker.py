@@ -13,6 +13,10 @@ import os
 os.environ.setdefault("PALLAS_SHARD_ENABLED", "true")
 os.environ.setdefault("PALLAS_BOT_ROLE", "worker")
 
+from src.common.config.dotenv import apply_repo_settings_to_environ
+
+apply_repo_settings_to_environ()
+
 
 def pin_worker_listen_port() -> None:
     """覆盖 .env 中 PORT，避免 getenv 读到首个 PORT 导致各 worker 抢同一端口。"""

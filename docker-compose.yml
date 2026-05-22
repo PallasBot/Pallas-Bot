@@ -1,7 +1,9 @@
 # 默认：Pallas-Bot + MongoDB；NapCat 等由协议端管理（/protocol/console/）在宿主机或容器内拉起，不再单独编排 napcat 服务。
-# 使用 PostgreSQL：在 pallas-bot/.env 配好 PG_* 与 DB_BACKEND=postgres 后执行：
-#   docker compose --env-file ./pallas-bot/.env --profile postgres up -d
-#（postgres 服务从 PG_USER / PG_PASSWORD / PG_DB 映射 POSTGRES_*，无需再维护两套数据库账号变量；若不用 --env-file，插值会回落到下方默认值，可能与 Bot 读到的 .env 不一致。）
+# Bot 主配置：挂载 pallas-bot/config/pallas.toml → /app/config/pallas.toml（见 config/pallas.example.toml）
+# WebUI 插件配置：随 pallas-bot/data 卷持久化（data/pallas_config/webui.json）
+# 使用内置 PostgreSQL：在 pallas.toml 配好 [bootstrap] / [bootstrap.postgres] 后执行：
+#   docker compose --env-file ./pallas-bot/config/compose.env --profile postgres up -d
+#（compose.env 由 config/compose.env.example 复制；postgres 从 PG_* 插值 POSTGRES_*）
 # 固定项目名：避免工作目录名为中文等时，Compose 推导出的项目名为空而报错「project name must not be empty」
 name: pallas-bot
 services:
@@ -19,7 +21,7 @@ services:
       # 与本 compose 内 mongodb 服务同网；容器内 127.0.0.1 不是宿主机也不是兄弟容器
       MONGO_HOST: mongodb
       MONGO_PORT: "27017"
-      # 使用 --profile postgres 且 DB_BACKEND=postgres 时连本编排内 postgres 服务；外置 PG 请删改这两项
+      # 使用 --profile postgres 且 DB_BACKEND=postgresql 时连本编排内 postgres 服务；外置 PG 请删改这两项
       PG_HOST: postgres
       PG_PORT: "5432"
     networks:
@@ -27,8 +29,8 @@ services:
     volumes:
       # 勿挂载整个 /app/resource，否则会盖住镜像内的 help 样式（resource/styles/default）；语音持久化只挂 voices
       - ./pallas-bot/resource/voices:/app/resource/voices
-      - ./pallas-bot/.env:/app/.env
-      # 协议端实例、runtime_profile 等（见 docs/plugins/pallas_protocol/README.md）
+      - ./pallas-bot/config/pallas.toml:/app/config/pallas.toml
+      # 协议端实例、WebUI 配置（webui.json）、控制台口令等（见 docs/architecture/settings-storage.md）
       - ./pallas-bot/data:/app/data
       # Linux 且协议端使用「Docker 模式」拉起 NapCat 时再取消注释（挂载 Docker socket 有安全风险，生产请加固）
       # - /var/run/docker.sock:/var/run/docker.sock
@@ -65,7 +67,7 @@ services:
     container_name: pallasbot_postgres
     image: postgres:16-alpine
     restart: always
-    # 与 Bot 共用 pallas-bot/.env 里的 PG_*：由 compose 插值写入镜像所需 POSTGRES_*（请配合文件首条注释使用 --env-file）
+    # 与 Bot 共用 compose.env 里的 PG_*：由 compose 插值写入镜像所需 POSTGRES_*（见文件首条注释）
     environment:
       TZ: Asia/Shanghai
       POSTGRES_USER: ${PG_USER:-pallas}

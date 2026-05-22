@@ -373,7 +373,7 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
                 import asyncio as aio
 
                 aio.run(reload_repeater_learn_worker_runtime())
-            logger.info("repeater_learn: WebUI 已写入 .env，learn 并发/队列已热重载")
+            logger.info("repeater_learn: WebUI 已写入配置，learn 并发/队列已热重载")
         except Exception as e:
             from nonebot import logger
 

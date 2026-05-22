@@ -1,4 +1,4 @@
-from nonebot import get_plugin_config, on_command
+from nonebot import on_command
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, PrivateMessageEvent
 from nonebot.plugin import PluginMetadata
 from nonebot.typing import T_State
@@ -12,7 +12,7 @@ from src.common.cmd_perm.metadata_defaults import (
 from src.common.cmd_perm.metadata_text import SCENE_BOTH, SCENE_GROUP, join_usage, usage_line
 from src.common.config import BotConfig, GroupConfig
 
-from .config import Config
+from .config import Config, get_help_config, plugin_config
 from .event_preprocessor import IGNORED_PLUGINS  # noqa: F401
 
 # 导入处理函数
@@ -101,11 +101,15 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 
-plugin_config = get_plugin_config(Config)
 
-# 初始化配置和样式
-AVAILABLE_STYLES = load_custom_styles(plugin_config)
-DEFAULT_STYLE_NAME = get_default_style(plugin_config)
+def refresh_style_cache(cfg: Config | None = None) -> None:
+    global AVAILABLE_STYLES, DEFAULT_STYLE_NAME
+    c = cfg or get_help_config()
+    AVAILABLE_STYLES = load_custom_styles(c)
+    DEFAULT_STYLE_NAME = get_default_style(c)
+
+
+refresh_style_cache()
 
 
 help_cmd = on_command("牛牛帮助", priority=5, block=True, permission=permission_for_command("help.help"))

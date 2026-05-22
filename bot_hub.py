@@ -12,6 +12,10 @@ import os
 os.environ.setdefault("PALLAS_SHARD_ENABLED", "true")
 os.environ.setdefault("PALLAS_BOT_ROLE", "hub")
 
+from src.common.config.dotenv import apply_repo_settings_to_environ
+
+apply_repo_settings_to_environ()
+
 
 def pin_hub_listen_port() -> None:
     """覆盖 .env 中 PORT，确保 hub 监听注册表 hub_port 而非统一进程 PORT。"""

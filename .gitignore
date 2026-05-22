@@ -136,6 +136,8 @@ celerybeat.pid
 # Environments
 .env
 .envrc
+config/pallas.toml
+config/compose.env
 .venv
 env/
 venv/

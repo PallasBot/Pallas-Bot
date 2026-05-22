@@ -28,11 +28,9 @@ def _visibility_path():
 
 def resolve_help_ignored_plugins() -> list[str]:
     try:
-        from nonebot import get_plugin_config
+        from .config import get_help_config
 
-        from .config import Config
-
-        cfg = get_plugin_config(Config)
+        cfg = get_help_config()
         vals = list(getattr(cfg, "ignored_plugins", []) or [])
     except Exception:
         vals = []

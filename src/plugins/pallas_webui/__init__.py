@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 import asyncio
 
-from nonebot import get_app, get_driver, get_plugin_config, logger
+from nonebot import get_app, get_driver, logger
 from nonebot.plugin import PluginMetadata
 
 from src.common.bot_runtime.roles import is_sharded_worker
@@ -16,7 +16,7 @@ from src.common.web import public_base_url
 from src.common.webui.console_login import install_pallas_http_request_context_middleware, prime_shared_console_login
 
 from .api import register_api
-from .config import Config
+from .config import Config, plugin_config
 from .extended_api import register_extended_api, set_console_meta
 from .manager import (
     check_webui_exists,
@@ -67,7 +67,6 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 
-plugin_config = get_plugin_config(Config)
 app = get_app()
 driver = get_driver()
 

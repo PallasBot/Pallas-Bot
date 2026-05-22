@@ -1,7 +1,7 @@
 # ruff: noqa: E501
 import logging
 
-from nonebot import get_app, get_driver, get_plugin_config, logger
+from nonebot import get_app, get_driver, logger
 from nonebot.plugin import PluginMetadata
 
 from src.common.cmd_perm.metadata_defaults import (
@@ -14,7 +14,7 @@ from src.common.paths import plugin_data_dir
 from src.common.web import public_base_url
 from src.common.webui.console_login import prime_shared_console_login
 
-from .config import Config, resolve_protocol_webui_base_path
+from .config import Config, get_pallas_protocol_config, plugin_config, resolve_protocol_webui_base_path
 from .service import PallasProtocolService
 from .web import register_pallas_protocol_routes
 
@@ -52,10 +52,9 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 
-plugin_config = get_plugin_config(Config)
 app = get_app()
 driver = get_driver()
-manager = PallasProtocolService(plugin_data_dir("pallas_protocol"), plugin_config)
+manager = PallasProtocolService(plugin_data_dir("pallas_protocol"), get_pallas_protocol_config())
 
 register_pallas_protocol_routes(app, manager=manager, plugin_config=plugin_config)
 

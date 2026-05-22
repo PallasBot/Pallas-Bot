@@ -1,4 +1,4 @@
-from nonebot import get_driver, get_plugin_config, logger, on_message, on_notice
+from nonebot import get_driver, logger, on_message, on_notice
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupIncreaseNoticeEvent, GroupMessageEvent, PokeNotifyEvent, permission
 from nonebot.plugin import PluginMetadata
@@ -18,7 +18,7 @@ from src.common.multi_bot.fleet import (
 from src.common.shard.presence import note_worker_bot_connected, note_worker_bot_disconnected
 from src.common.shard.registry.config import is_sharding_active
 
-from .config import Config
+from .config import Config, plugin_config
 
 __plugin_meta__ = PluginMetadata(
     name="其他牛牛拦截",
@@ -45,7 +45,6 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 
-plugin_config = get_plugin_config(Config)
 driver = get_driver()
 
 

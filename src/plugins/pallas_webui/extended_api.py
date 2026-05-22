@@ -22,7 +22,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
-from nonebot import get_bots, get_driver, get_plugin_config, logger
+from nonebot import get_bots, get_driver, logger
 from nonebot.adapters import Bot as BaseBot  # noqa: TC002
 from nonebot.adapters import Event  # noqa: TC002
 from nonebot.matcher import Matcher  # noqa: TC002
@@ -255,10 +255,10 @@ def _help_menu_control() -> tuple[set[str], set[str]]:
     ignored: set[str] = set()
     hidden: set[str] = set()
     try:
-        from src.plugins.help.config import Config as HelpConfig
+        from src.plugins.help.config import get_help_config
         from src.plugins.help.visibility import resolve_help_hidden_plugins
 
-        cfg = get_plugin_config(HelpConfig)
+        cfg = get_help_config()
         ignored = {str(x).strip() for x in list(getattr(cfg, "ignored_plugins", []) or []) if str(x).strip()}
         hidden = {str(x).strip() for x in resolve_help_hidden_plugins() if str(x).strip()}
     except Exception:

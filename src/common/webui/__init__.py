@@ -10,10 +10,12 @@ from .env_sections import (
 )
 from .plugin_api import apply_plugin_config_patch, plugin_config_payload
 from .plugin_config import (
+    PluginConfigProxy,
     PluginWebuiConfigHandle,
     config_from_env,
     default_parse_env_value,
     install_hot_reload_config,
+    plugin_config_proxy,
 )
 from .registry import (
     PluginWebuiConfigHooks,
@@ -25,6 +27,7 @@ from .registry import (
 )
 
 __all__ = [
+    "PluginConfigProxy",
     "PluginWebuiConfigHandle",
     "PluginWebuiConfigHooks",
     "apply_plugin_config_patch",
@@ -35,6 +38,7 @@ __all__ = [
     "field_to_env_uppercase_keys",
     "get_webui_env_section",
     "install_hot_reload_config",
+    "plugin_config_proxy",
     "list_webui_env_sections",
     "plugin_config_payload",
     "read_plugin_config",

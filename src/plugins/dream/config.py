@@ -1,7 +1,8 @@
 from typing import Self
 
-from nonebot import get_plugin_config
 from pydantic import BaseModel, Field, model_validator
+
+from src.common.webui import install_hot_reload_config, plugin_config_proxy
 
 
 class Config(BaseModel, extra="ignore"):
@@ -74,4 +75,6 @@ class Config(BaseModel, extra="ignore"):
         return self
 
 
-plugin_config = get_plugin_config(Config)
+plugin_webui = install_hot_reload_config(Config, config_module=__name__)
+get_dream_config = plugin_webui.get
+plugin_config = plugin_config_proxy(get_dream_config)

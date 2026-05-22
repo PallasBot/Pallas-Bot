@@ -115,9 +115,9 @@
     - 运行 `NapCat` 后访问 `http://localhost:6099/webui`（默认 `token`：`napcat`），在 `网络配置` → `新建` → `WebSocket 客户端` 中启用，**URL** 填 **`ws://localhost:8088/onebot/v11/ws`**（明文 WebSocket；远程部署时把 `localhost` 换成 Bot 所在机器 IP）。
     - 其他客户端示例：[Lagrange.OneBot](https://lagrangedev.github.io/Lagrange.Doc/v1/Lagrange.OneBot/)、[AstralGocq](https://github.com/ProtocolScience/AstralGocq) 等，`WebSocket` 目标路径同上。
 
-6. （可选）配置 `.env` 文件
+6. （可选）配置 `config/pallas.toml`
 
-    仓库根目录 `.env` 为精简模板（监听与数据库连接等）。其余项建议在启动后于控制台 **「插件」「通用配置」** 中编辑，或查阅 [插件文档索引](plugins/README.md) 手动追加。
+    复制 [`config/pallas.example.toml`](../config/pallas.example.toml) 为 **`config/pallas.toml`**（已 gitignore，勿提交密钥），填写 `[bootstrap]` 监听与数据库等。其余项建议在启动后于控制台 **「插件」「通用配置」** 中编辑（写入 `data/pallas_config/webui.json`），或查阅 [配置存储](architecture/settings-storage.md) 与 [插件文档索引](plugins/README.md)。从旧 `.env` 迁移：`uv run python tools/migrate_env_to_pallas.py`。
 
 ## 启动 Pallas-Bot
 
@@ -135,7 +135,7 @@ Linux 用户推荐使用 [Termux](https://termux.dev/) 或 [GNU Screen](https://
 当同一台机器需要长期运行 **多只牛牛**（例如十余个 QQ 账号）且单进程出现卡顿、延迟堆积时，可启用 **hub + worker** 分片模式，而不是继续加大单进程负载。
 
 - **默认**：`uv run nb run`（单进程），适合牛数量较少或初次部署。
-- **分片**：1 个 **hub**（WebUI、协议端管理、注册表）+ 多个 **worker**（各接一部分牛牛的反向 WebSocket），**共用同一 `data/` 目录**与同一份 `.env`（数据库等全局配置一致）。
+- **分片**：1 个 **hub**（WebUI、协议端管理、注册表）+ 多个 **worker**（各接一部分牛牛的反向 WebSocket），**共用同一 `data/` 目录**与同一份 **`config/pallas.toml`**（数据库等全局配置一致）。
 - **启动**：在仓库根目录执行 `./scripts/run_sharded_bot.sh start`（详见 [多进程分片架构说明](architecture/bot_process_sharding.md)）。
 - **控制台**：仍只访问 hub 端口（默认 `http://<主机>:8088/pallas/`）；协议端管理也在 hub。
 - **注意**：worker 需额外监听端口（默认从 8090 起）；协议端各账号的 WebSocket 会指向对应 worker，变更端口后须在协议端 **重启** 账号。使用 PostgreSQL 时请预留足够 `max_connections`。
@@ -146,7 +146,7 @@ Linux 用户推荐使用 [Termux](https://termux.dev/) 或 [GNU Screen](https://
 
 （可选）仓库提供 **`tools/scripts/bot_watchdog.py`**：按间隔请求 Web 控制台的 **`/pallas/api/health`**（需启用 **`pallas_webui`**），在进程连续无响应达到阈值后，**结束当前子进程并重新执行启动命令**，或（可选）在宿主机对指定容器执行 **`docker restart`**。适合「希望有一条常驻监护进程」而不只依赖手动重开终端的场景。
 
-**HOST / PORT 从哪来**：与 Bot 一致——当前 shell 的**环境变量优先**；未 `export` 时，脚本会从 **`--workdir` 目录下的 `.env`** 只读取 **`HOST`、`PORT`、`ONEBOT_PORT`** 三项（文件中每个键以首次出现为准），**不会**把整份 `.env` 注入进程环境。默认 `--workdir` 为仓库根，故在仓库根执行时一般可直接读到与 `uv run nb run` 相同的配置。
+**HOST / PORT 从哪来**：与 Bot 一致——当前 shell 的**环境变量优先**；未 `export` 时，脚本会从 **`--workdir` 目录下的 `.env`**（遗留）或 **`config/pallas.toml` 的 `[bootstrap]`** 读取 **`HOST`、`PORT`、`ONEBOT_PORT`**。默认 `--workdir` 为仓库根。
 
 **与「谁启动 Bot」配合**：
 
@@ -196,7 +196,7 @@ git pull origin main --autostash
 
 自 **3.0 控制台**起，在浏览器 **「版本与更新」** 页可对 **Web 控制台静态资源** 一键下载更新；若当前进程运行在 **git 工作副本** 内，同一页可对 **Bot 主仓** 发起在线更新（写操作需控制台鉴权）。控制台在 **发布标签** 部署下会 `fetch` 后 `checkout` 到 GitHub 最新 Release 标签（要求工作区干净）；在 **非标签**（开发克隆）下会对当前分支执行 **`git pull --ff-only --autostash`**（优先使用已配置的上游分支，否则回退到 `origin` 的默认分支）。**Docker 仅镜像文件树**时该按钮会提示改用镜像更新。无论哪种方式，**更新依赖或代码后请重启 Bot 进程**。
 
-为减少与上游冲突，自定义内容请尽量只放在 **`.env`**、**`data/`** 以及文档允许的挂载目录，避免直接修改 `src/` 下已纳入版本控制的文件。
+为减少与上游冲突，自定义内容请尽量只放在 **`config/pallas.toml`**、**`data/`** 以及文档允许的挂载目录，避免直接修改 `src/` 下已纳入版本控制的文件。
 
 ## AI 功能
 

@@ -1,18 +1,14 @@
 from __future__ import annotations
 
-import os
-from threading import Lock
-from typing import Any, Self
+from typing import Self
 
-from nonebot import get_plugin_config
 from pydantic import BaseModel, Field, model_validator
 
-from src.common.config.dotenv import merged_repo_dotenv_upper, repo_layered_dotenv_files_exist
-from src.common.webui.registry import PluginWebuiConfigHooks, register_plugin_webui_config
+from src.common.webui import install_hot_reload_config, plugin_config_proxy
 
 
 class Config(BaseModel, extra="ignore"):
-    """决斗插件配置（WebUI 插件配置页可读写，写入 .env 大写键名）。"""
+    """决斗插件配置（WebUI 插件配置页可读写，写入 webui.json 大写键名）。"""
 
     # —— 胜负惩罚 ——
     duel_penalty_minutes: int = Field(
@@ -185,70 +181,9 @@ class Config(BaseModel, extra="ignore"):
             raise ValueError(msg)
         return self
 
-    @classmethod
-    def from_env(cls) -> Self:
-        merged = merged_repo_dotenv_upper()
-        data: dict[str, Any] = {}
-        for name, field in cls.model_fields.items():
-            key = name.upper()
-            raw: str | None = None
-            if key in os.environ:
-                raw = os.environ.get(key)
-            elif key in merged:
-                raw = merged[key]
-            if raw is None:
-                continue
-            text = str(raw).strip()
-            ann_text = str(field.annotation).lower()
-            if "float" in ann_text:
-                data[name] = float(text)
-            elif "int" in ann_text:
-                data[name] = int(text)
-            else:
-                data[name] = text
-        return cls.model_validate(data)
 
-
-_config_lock = Lock()
-_cached_duel_config: Config | None = None
-
-
-def clear_duel_config_cache() -> None:
-    global _cached_duel_config
-    with _config_lock:
-        _cached_duel_config = None
-
-
-def get_duel_config() -> Config:
-    global _cached_duel_config
-    with _config_lock:
-        if _cached_duel_config is None:
-            if repo_layered_dotenv_files_exist():
-                _cached_duel_config = Config.from_env()
-            else:
-                _cached_duel_config = get_plugin_config(Config)
-        return _cached_duel_config
-
-
-def reload_duel_plugin_config() -> Config:
-    """WebUI 写入 .env 后调用，使惩罚/权重/幕间停顿等立即生效（不重载 JSON 剧目）。"""
-    clear_duel_config_cache()
-    return get_duel_config()
-
-
-class _DuelConfigProxy:
-    """兼容 ``plugin_config.xxx`` 写法，每次访问读取最新缓存。"""
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(get_duel_config(), name)
-
-
-plugin_config = _DuelConfigProxy()
-
-_duel_webui_hooks = PluginWebuiConfigHooks(
-    get=get_duel_config,
-    reload=reload_duel_plugin_config,
-    clear_cache=clear_duel_config_cache,
-)
-register_plugin_webui_config(__name__, _duel_webui_hooks)
-register_plugin_webui_config("src.plugins.duel", _duel_webui_hooks)
+plugin_webui = install_hot_reload_config(Config, config_module=__name__)
+get_duel_config = plugin_webui.get
+reload_duel_plugin_config = plugin_webui.reload
+clear_duel_config_cache = plugin_webui.clear_cache
+plugin_config = plugin_config_proxy(get_duel_config)

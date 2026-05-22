@@ -1,3 +1,8 @@
+from src.common.config.dotenv import apply_repo_settings_to_environ
+
+apply_repo_settings_to_environ()
+
+# ruff: noqa: E402
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
 

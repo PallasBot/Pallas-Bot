@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.common.webui import install_hot_reload_config, plugin_config_proxy
+
 from .contract import resolve_public_mount_path
 from .runtime.installer import default_release_asset_for_platform, default_release_repo_for_platform
 
@@ -271,6 +273,26 @@ class Config(BaseModel):
     def resolved_release_asset(self) -> str:
         asset = (self.pallas_protocol_release_asset or "").strip()
         return asset or default_release_asset_for_platform()
+
+
+def on_pallas_protocol_config_reload(cfg: Config) -> None:
+    try:
+        import src.plugins.pallas_protocol as pkg
+
+        mgr = getattr(pkg, "manager", None)
+        if mgr is not None:
+            mgr._config = cfg
+    except Exception:
+        pass
+
+
+plugin_webui = install_hot_reload_config(
+    Config,
+    config_module=__name__,
+    on_reload=on_pallas_protocol_config_reload,
+)
+get_pallas_protocol_config = plugin_webui.get
+plugin_config = plugin_config_proxy(get_pallas_protocol_config)
 
 
 def resolve_protocol_webui_base_path(config: Any) -> str:

@@ -39,11 +39,9 @@ def register_pallas_protocol_routes(
 
     def _pallas_console_http_base() -> str:
         try:
-            from nonebot import get_plugin_config
+            from src.plugins.pallas_webui.config import get_pallas_webui_config
 
-            from src.plugins.pallas_webui.config import Config as PallasWebuiConfig
-
-            raw = (get_plugin_config(PallasWebuiConfig).pallas_webui_http_base or "").strip()
+            raw = (get_pallas_webui_config().pallas_webui_http_base or "").strip()
         except Exception:
             raw = ""
         if not raw:

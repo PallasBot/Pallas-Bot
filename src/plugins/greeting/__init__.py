@@ -2,7 +2,7 @@ import asyncio
 import random
 from pathlib import Path
 
-from nonebot import get_bot, get_plugin_config, on_command, on_message, on_notice
+from nonebot import get_bot, on_command, on_message, on_notice
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import (
     FriendAddNoticeEvent,
@@ -37,7 +37,7 @@ from src.common.paths import plugin_data_dir
 from src.common.utils import HTTPXClient, is_bot_admin
 from src.plugins.blacklist import invalidate_user_ban_gate_cache
 
-from .config import Config
+from .config import Config, plugin_config
 from .voice import get_random_voice, get_voice_filepath
 
 __plugin_meta__ = PluginMetadata(
@@ -132,7 +132,6 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 
-plugin_config = get_plugin_config(Config)
 
 operator = "Pallas"
 greeting_voices = [

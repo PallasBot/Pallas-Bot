@@ -1,16 +1,15 @@
 from pathlib import Path
 
 import pillowmd
-from nonebot import get_plugin_config, logger
+from nonebot import logger
 
 from src.common.paths import project_path
 
-from .config import Config
+from .config import Config, get_help_config
 
 
 def load_config() -> Config:
-    """加载插件配置"""
-    return get_plugin_config(Config)
+    return get_help_config()
 
 
 def load_custom_styles(config) -> dict[str, object]:
@@ -62,8 +61,5 @@ def _load_user_defined_styles(custom_styles, styles_dict):
 def get_default_style(config) -> str:
     """获取默认样式名称"""
     if config is None:
-        config = get_plugin_config(Config)
+        config = get_help_config()
     return config.default_style
-
-
-HelpConfig = load_config()

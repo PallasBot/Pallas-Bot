@@ -3,14 +3,13 @@ import io
 from pathlib import Path
 
 import pillowmd
-from nonebot import get_plugin_config, logger
+from nonebot import logger
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.matcher import Matcher
 from PIL import Image
 
 from src.common.paths import plugin_data_dir, project_path
 
-from .config import Config
 from .pillowmd_bold import apply_help_light_bold_patch
 from .styles import get_default_style
 
@@ -19,7 +18,9 @@ apply_help_light_bold_patch()
 
 def _help_style_files_revision() -> str:
     """样式目录内 setting/elements 变更时使帮助图缓存失效。"""
-    cfg = get_plugin_config(Config)
+    from .config import get_help_config
+
+    cfg = get_help_config()
     parts: list[str] = []
     for style_cfg in cfg.default_styles or []:
         style_dir = project_path(style_cfg.path)
@@ -41,7 +42,9 @@ def _help_style_files_revision() -> str:
 
 
 def _help_image_cache_suffix() -> str:
-    cfg = get_plugin_config(Config)
+    from .config import get_help_config
+
+    cfg = get_help_config()
     base = (
         f"spaint={int(cfg.side_paint_enabled)}"
         f"|fn={cfg.side_paint_filename}"
@@ -172,7 +175,9 @@ async def _render_markdown(
     """核心渲染函数"""
     default_style_name = get_default_style(None)
     style = available_styles.get(style_name, available_styles.get(default_style_name, pillowmd.MdStyle()))
-    help_cfg = get_plugin_config(Config)
+    from .config import get_help_config
+
+    help_cfg = get_help_config()
 
     paint_arg = None
     auto_page = False

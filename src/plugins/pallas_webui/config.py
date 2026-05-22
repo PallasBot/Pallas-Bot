@@ -2,6 +2,8 @@
 
 from pydantic import BaseModel, Field
 
+from src.common.webui import install_hot_reload_config, plugin_config_proxy
+
 
 class Config(BaseModel):
     pallas_webui_enabled: bool = Field(
@@ -51,3 +53,8 @@ class Config(BaseModel):
         default=False,
         description="开发联调：跳过控制台 JSON API 与会话页鉴权（生产环境务必关闭）",
     )
+
+
+plugin_webui = install_hot_reload_config(Config, config_module=__name__)
+get_pallas_webui_config = plugin_webui.get
+plugin_config = plugin_config_proxy(get_pallas_webui_config)

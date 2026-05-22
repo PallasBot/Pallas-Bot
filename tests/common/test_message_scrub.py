@@ -50,9 +50,11 @@ def test_config_merged_reads_nonebot_when_os_absent(monkeypatch: pytest.MonkeyPa
     )
     fake_driver = SimpleNamespace(config=fake_cfg)
     phantom = tmp_path / "no_dotenv_here.env"
-    with patch("src.common.config.dotenv.repo_env_path", return_value=phantom):
-        with patch("nonebot.get_driver", return_value=fake_driver):
-            c = MessageScrubConfig.from_env()
+    with patch("src.common.config.repo_settings.repo_env_path", return_value=phantom):
+        with patch("src.common.config.repo_settings.repo_config_path", return_value=phantom):
+            with patch("src.common.config.repo_settings.repo_webui_settings_path", return_value=phantom):
+                with patch("nonebot.get_driver", return_value=fake_driver):
+                    c = MessageScrubConfig.from_env()
     assert c.inbound_filter_substrings == "from_nb"
 
 
@@ -66,9 +68,11 @@ def test_config_merged_os_overrides_nonebot(monkeypatch: pytest.MonkeyPatch, tmp
     )
     fake_driver = SimpleNamespace(config=fake_cfg)
     phantom = tmp_path / "no_dotenv_here.env"
-    with patch("src.common.config.dotenv.repo_env_path", return_value=phantom):
-        with patch("nonebot.get_driver", return_value=fake_driver):
-            c = MessageScrubConfig.from_env()
+    with patch("src.common.config.repo_settings.repo_env_path", return_value=phantom):
+        with patch("src.common.config.repo_settings.repo_config_path", return_value=phantom):
+            with patch("src.common.config.repo_settings.repo_webui_settings_path", return_value=phantom):
+                with patch("nonebot.get_driver", return_value=fake_driver):
+                    c = MessageScrubConfig.from_env()
     assert c.inbound_filter_substrings == "from_os"
 
 
@@ -82,9 +86,11 @@ def test_config_review_providers_explicit_from_nonebot_only(monkeypatch: pytest.
     )
     fake_driver = SimpleNamespace(config=fake_cfg)
     phantom = tmp_path / "no_dotenv_here.env"
-    with patch("src.common.config.dotenv.repo_env_path", return_value=phantom):
-        with patch("nonebot.get_driver", return_value=fake_driver):
-            c = MessageScrubConfig.from_env()
+    with patch("src.common.config.repo_settings.repo_env_path", return_value=phantom):
+        with patch("src.common.config.repo_settings.repo_config_path", return_value=phantom):
+            with patch("src.common.config.repo_settings.repo_webui_settings_path", return_value=phantom):
+                with patch("nonebot.get_driver", return_value=fake_driver):
+                    c = MessageScrubConfig.from_env()
     assert c.scrub_review_providers_key_present is True
     assert c.scrub_review_providers == ""
 
@@ -101,9 +107,14 @@ def test_config_repo_dotenv_layer_overrides_stale_driver(tmp_path: Path, monkeyp
         pallas_inbound_filter_substrings="stale_driver",
     )
     fake_driver = SimpleNamespace(config=fake_cfg)
-    with patch("src.common.config.dotenv.repo_env_path", return_value=p):
-        with patch("nonebot.get_driver", return_value=fake_driver):
-            c = MessageScrubConfig.from_env()
+    with patch("src.common.config.repo_settings.repo_env_path", return_value=p):
+        with patch("src.common.config.repo_settings.repo_config_path", return_value=tmp_path / "missing.toml"):
+            with patch(
+                "src.common.config.repo_settings.repo_webui_settings_path",
+                return_value=tmp_path / "missing.json",
+            ):
+                with patch("nonebot.get_driver", return_value=fake_driver):
+                    c = MessageScrubConfig.from_env()
     assert c.inbound_filter_substrings == ""
 
 
@@ -118,9 +129,14 @@ def test_config_repo_dotenv_file_value_used_when_os_absent(tmp_path: Path, monke
         pallas_inbound_filter_substrings="from_nb",
     )
     fake_driver = SimpleNamespace(config=fake_cfg)
-    with patch("src.common.config.dotenv.repo_env_path", return_value=p):
-        with patch("nonebot.get_driver", return_value=fake_driver):
-            c = MessageScrubConfig.from_env()
+    with patch("src.common.config.repo_settings.repo_env_path", return_value=p):
+        with patch("src.common.config.repo_settings.repo_config_path", return_value=tmp_path / "missing.toml"):
+            with patch(
+                "src.common.config.repo_settings.repo_webui_settings_path",
+                return_value=tmp_path / "missing.json",
+            ):
+                with patch("nonebot.get_driver", return_value=fake_driver):
+                    c = MessageScrubConfig.from_env()
     assert c.inbound_filter_substrings == "from_dotenv"
 
 

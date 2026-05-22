@@ -221,7 +221,7 @@ uv run nb run
 <a id="配置要点"></a>
 ## ⚙️ 配置要点
 
-以下为启动前最常见的几项；**更多键名与默认值以各插件 Pydantic 配置为准**，推荐在 Web 控制台 **「插件」「通用配置」** 中修改（写入根目录 `.env`），需要离线编辑时可查 [插件文档索引](docs/plugins/README.md)。
+以下为启动前最常见的几项；**更多键名与默认值以各插件 Pydantic 配置为准**，推荐在 Web 控制台 **「插件」「通用配置」** 中修改（写入 `data/pallas_config/webui.json`），离线编辑主配置见 `config/pallas.example.toml` → `config/pallas.toml`，说明见 [配置存储](docs/architecture/settings-storage.md)。
 
 
 | 配置项 | 默认/示例 | 说明 | 必填 |
@@ -229,7 +229,7 @@ uv run nb run
 | `HOST` / `PORT` | `0.0.0.0` / `8088` | Bot HTTP 监听；控制台与协议管理页同源 | 是 |
 | `SUPERUSERS` | QQ 号列表 | 超管 QQ | 是 |
 | `DB_BACKEND` | `mongodb` / `postgresql` | 数据后端 | 是 |
-| `MONGO_*` / `PG_*` | 见根目录 `.env` 模板 | 数据库地址与账号（与 `DB_BACKEND` 对应） | 是 |
+| `MONGO_*` / `PG_*` | 见 `config/pallas.example.toml` | 数据库地址与账号（与 `DB_BACKEND` 对应） | 是 |
 | `ACCESS_TOKEN` | 空 | 驱动层 HTTP 鉴权；公网暴露时建议填写 | 否 |
 | `PALLAS_PROTOCOL_ENABLED` / `PALLAS_PROTOCOL_WEBUI_ENABLED` | 默认开启 | 协议端插件与管理页 | 否 |
 | `maa_public_base_url` | （空） | MAA 远控对外 HTTP 基址；一般部署**只需此项**（见 [maa](docs/plugins/maa/README.md)） | 使用 MAA 时建议填 |
