@@ -31,6 +31,52 @@ class PendingTask:
     reported: bool = False
 
 
+def pending_task_to_dict(task: PendingTask) -> dict[str, Any]:
+    return {
+        "task_id": task.task_id,
+        "user": task.user,
+        "device": task.device,
+        "task_type": task.task_type,
+        "params": task.params,
+        "notify": {
+            "bot_id": int(task.notify.bot_id),
+            "user_id": int(task.notify.user_id),
+            "group_id": task.notify.group_id,
+        },
+        "created_at": float(task.created_at),
+        "reported": bool(task.reported),
+    }
+
+
+def pending_task_from_dict(data: dict[str, Any]) -> PendingTask | None:
+    if not isinstance(data, dict):
+        return None
+    raw_notify = data.get("notify")
+    if not isinstance(raw_notify, dict):
+        return None
+    try:
+        notify = NotifyTarget(
+            bot_id=int(raw_notify["bot_id"]),
+            user_id=int(raw_notify["user_id"]),
+            group_id=raw_notify.get("group_id"),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+    try:
+        return PendingTask(
+            task_id=str(data["task_id"]),
+            user=str(data["user"]),
+            device=str(data["device"]),
+            task_type=str(data["task_type"]),
+            params=data.get("params") if data.get("params") is None else str(data["params"]),
+            notify=notify,
+            created_at=float(data.get("created_at") or time.time()),
+            reported=bool(data.get("reported")),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 @dataclass(slots=True)
 class DeviceRecord:
     device: str
@@ -293,11 +339,15 @@ class MaaStore:
         from src.common.shard.coord.maa_route_registry import register_maa_user_route
 
         register_maa_user_route(user_key)
+        from src.common.shard.registry.config import is_sharding_active
+
+        shard_pending = is_sharding_active()
         task_ids: list[str] = []
+        to_enqueue: list[PendingTask] = []
         async with self._lock:
             for spec in specs:
                 task_id = str(ULID())
-                self._pending[task_id] = PendingTask(
+                rec = PendingTask(
                     task_id=task_id,
                     user=user_key,
                     device=device,
@@ -305,10 +355,13 @@ class MaaStore:
                     params=spec.params,
                     notify=notify,
                 )
+                if not shard_pending:
+                    self._pending[task_id] = rec
+                to_enqueue.append(rec)
                 task_ids.append(task_id)
             if attach_screenshot and specs and specs[-1].task_type not in {"CaptureImage", "CaptureImageNow"}:
                 shot_id = str(ULID())
-                self._pending[shot_id] = PendingTask(
+                rec = PendingTask(
                     task_id=shot_id,
                     user=user_key,
                     device=device,
@@ -316,24 +369,50 @@ class MaaStore:
                     params=None,
                     notify=notify,
                 )
+                if not shard_pending:
+                    self._pending[shot_id] = rec
+                to_enqueue.append(rec)
                 task_ids.append(shot_id)
+        if shard_pending:
+            from src.common.shard.coord.maa_pending_registry import enqueue_task_sync
+
+            for rec in to_enqueue:
+                await asyncio.to_thread(enqueue_task_sync, pending_task_to_dict(rec))
         return task_ids, None
 
     async def pending_tasks_for(self, user: str, device: str) -> list[dict[str, Any]]:
         norm = normalize_device_id(device)
         if not norm:
             return []
-        key_user, key_device = user.strip(), norm
-        async with self._lock:
-            items = [
-                t for t in self._pending.values() if t.user == key_user and t.device == key_device and not t.reported
-            ]
+        from src.common.shard.registry.config import is_sharding_active
+
+        if is_sharding_active():
+            from src.common.shard.coord.maa_pending_registry import list_pending_sync
+
+            raw = await asyncio.to_thread(list_pending_sync, user.strip(), norm)
+            items = [pending_task_from_dict(x) for x in raw]
+            items = [t for t in items if t is not None]
+        else:
+            key_user, key_device = user.strip(), norm
+            async with self._lock:
+                items = [
+                    t
+                    for t in self._pending.values()
+                    if t.user == key_user and t.device == key_device and not t.reported
+                ]
         return [
             build_task_payload(t.task_id, MaaTaskSpec(t.task_type, t.params))
             for t in sorted(items, key=lambda x: x.created_at)
         ]
 
     async def mark_reported(self, task_id: str) -> PendingTask | None:
+        from src.common.shard.registry.config import is_sharding_active
+
+        if is_sharding_active():
+            from src.common.shard.coord.maa_pending_registry import mark_reported_sync
+
+            raw = await asyncio.to_thread(mark_reported_sync, task_id)
+            return pending_task_from_dict(raw) if raw else None
         async with self._lock:
             task = self._pending.get(task_id)
             if not task:
@@ -343,6 +422,12 @@ class MaaStore:
 
     async def pending_count_for_user(self, qq_id: int) -> int:
         user_key = str(qq_id)
+        from src.common.shard.registry.config import is_sharding_active
+
+        if is_sharding_active():
+            from src.common.shard.coord.maa_pending_registry import pending_count_for_user_sync
+
+            return await asyncio.to_thread(pending_count_for_user_sync, user_key)
         async with self._lock:
             return sum(1 for t in self._pending.values() if t.user == user_key and not t.reported)
 
@@ -351,6 +436,12 @@ class MaaStore:
         if not norm:
             return 0
         user_key = str(qq_id)
+        from src.common.shard.registry.config import is_sharding_active
+
+        if is_sharding_active():
+            from src.common.shard.coord.maa_pending_registry import pending_count_for_device_sync
+
+            return await asyncio.to_thread(pending_count_for_device_sync, user_key, norm)
         async with self._lock:
             return sum(1 for t in self._pending.values() if t.user == user_key and t.device == norm and not t.reported)
 
@@ -358,6 +449,12 @@ class MaaStore:
         """移除未汇报任务；device 为 None 时清空该 QQ 全部待拉取任务。"""
         user_key = str(qq_id)
         norm = normalize_device_id(device) if device else None
+        from src.common.shard.registry.config import is_sharding_active
+
+        if is_sharding_active():
+            from src.common.shard.coord.maa_pending_registry import clear_pending_sync
+
+            return await asyncio.to_thread(clear_pending_sync, user_key, device=norm)
         async with self._lock:
             remove_ids = [
                 tid
@@ -371,6 +468,12 @@ class MaaStore:
     async def pending_type_counts(self, qq_id: int, *, device: str | None = None) -> dict[str, int]:
         user_key = str(qq_id)
         norm = normalize_device_id(device) if device else None
+        from src.common.shard.registry.config import is_sharding_active
+
+        if is_sharding_active():
+            from src.common.shard.coord.maa_pending_registry import pending_type_counts_sync
+
+            return await asyncio.to_thread(pending_type_counts_sync, user_key, device=norm)
         counts: dict[str, int] = {}
         async with self._lock:
             for t in self._pending.values():

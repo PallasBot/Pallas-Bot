@@ -315,6 +315,64 @@ def get_bot_current_version() -> dict:
     return {"tag": tag, "commit": commit}
 
 
+def bot_has_release_update(
+    *,
+    latest_tag: str,
+    current_tag: str = "",
+    current_commit: str = "",
+) -> bool:
+    """是否落后于 GitHub 最新 release（开发超前 commit 不视为可更新）。"""
+    from src.common.utils.github_release import release_tags_equivalent
+
+    tag = (latest_tag or "").strip()
+    if not tag:
+        return False
+    if release_tags_equivalent(current_tag, tag):
+        return False
+    root = _BOT_ROOT
+    git_dir = root / ".git"
+    if not git_dir.exists():
+        cur = (current_tag or "").strip()
+        return bool(cur) and not release_tags_equivalent(cur, tag)
+
+    def _git_rev_parse(ref: str) -> str:
+        import subprocess
+
+        return subprocess.check_output(
+            ["git", "rev-parse", ref],
+            cwd=root,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=8.0,
+        ).strip()
+
+    def _git_rev_list_count(revision_range: str) -> int:
+        import subprocess
+
+        out = subprocess.check_output(
+            ["git", "rev-list", "--count", revision_range],
+            cwd=root,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=8.0,
+        ).strip()
+        return int(out) if out.isdigit() else 0
+
+    try:
+        latest_sha = _git_rev_parse(f"{tag}^{{commit}}")
+        head_sha = _git_rev_parse("HEAD")
+    except Exception:  # noqa: BLE001
+        cur = (current_tag or "").strip()
+        return bool(cur) and not release_tags_equivalent(cur, tag)
+    if latest_sha == head_sha:
+        return False
+    try:
+        behind = _git_rev_list_count(f"{head_sha}..{latest_sha}")
+    except Exception:  # noqa: BLE001
+        return False
+    return behind > 0
+
+
 def get_pallas_bot_version_for_health() -> str:
     """供 ``/health`` 的 ``pallas_bot``：优先环境变量（镜像注入）、git describe，其次已安装发行版号，最后 pyproject。"""
     import importlib.metadata

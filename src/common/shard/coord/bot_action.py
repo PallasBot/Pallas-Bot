@@ -182,6 +182,13 @@ async def _execute_local(action: str, bot_qq: int, payload: dict[str, Any]) -> t
             msg = _message_from_payload(payload)
             await inst.send_group_msg(group_id=int(gid), message=msg)
             return True, None
+        if action == "send_private_msg":
+            uid = payload.get("user_id")
+            if uid is None:
+                return False, None
+            msg = _message_from_payload(payload)
+            await inst.send_private_msg(user_id=int(uid), message=msg)
+            return True, None
         if action == "set_group_card":
             uid = payload.get("user_id")
             card = str(payload.get("card") or "")
@@ -240,6 +247,30 @@ async def invoke_bot_action(
     )
     deadline = time.time() + timeout_sec + 2.0
     return await _wait_request(request_id, deadline=deadline)
+
+
+async def send_private_msg_as_bot(
+    bot_qq: int,
+    user_id: int,
+    message: Message | str,
+    *,
+    image_bytes: bytes | None = None,
+    timeout_sec: float = _DEFAULT_TIMEOUT,
+) -> bool:
+    payload: dict[str, Any] = {
+        "user_id": int(user_id),
+        "message_cq": str(message) if isinstance(message, Message) else "",
+        "message_text": str(message) if not isinstance(message, Message) else "",
+    }
+    if image_bytes:
+        payload["image_b64"] = base64.b64encode(image_bytes).decode("ascii")
+    ok, _ = await invoke_bot_action(
+        "send_private_msg",
+        bot_qq,
+        payload,
+        timeout_sec=timeout_sec,
+    )
+    return ok
 
 
 async def send_group_message_as_bot(

@@ -34,6 +34,13 @@ async def maa_get_task(body: GetTaskRequest) -> GetTaskResponse:
     if not await maa_store.is_device_verified(body.user, body.device):
         return GetTaskResponse(tasks=[])
     tasks = await maa_store.pending_tasks_for(body.user, body.device)
+    if tasks:
+        logger.info(
+            "maa getTask: user={} device={} tasks={}",
+            body.user,
+            (body.device or "")[:8],
+            len(tasks),
+        )
     return GetTaskResponse(tasks=tasks)
 
 
@@ -48,12 +55,6 @@ async def maa_report_status(body: ReportStatusRequest) -> dict[str, str]:
         return {"message": "ok"}
 
     notify = task.notify
-    try:
-        bot = get_bot(str(notify.bot_id))
-    except Exception:
-        logger.warning("maa reportStatus: bot {} offline, task={}", notify.bot_id, body.task)
-        return {"message": "ok"}
-
     lines = [f"MAA 任务 {body.task} 已结束：{body.status}"]
     if task.task_type == "HeartBeat":
         running = body.payload or "（当前无顺序任务）"
@@ -67,14 +68,67 @@ async def maa_report_status(body: ReportStatusRequest) -> dict[str, str]:
             lines.append(body.payload[:500])
         segments = [MessageSegment.text("\n".join(lines))]
 
+    image_bytes: bytes | None = None
+    if task.task_type in {"CaptureImage", "CaptureImageNow"} and body.payload:
+        import base64
+
+        try:
+            image_bytes = base64.b64decode(body.payload)
+        except Exception:
+            image_bytes = None
+
+    await deliver_maa_notify(notify, segments, image_bytes=image_bytes, task_id=body.task)
+    return {"message": "ok"}
+
+
+async def deliver_maa_notify(
+    notify,
+    segments,
+    *,
+    image_bytes: bytes | None = None,
+    task_id: str = "",
+) -> None:
+    from src.common.shard.presence import bot_has_local_connection
+    from src.common.shard.registry.config import is_sharding_active
+
+    bot_id = int(notify.bot_id)
+    if is_sharding_active() and not bot_has_local_connection(bot_id):
+        from src.common.shard.coord.bot_action import send_group_message_as_bot, send_private_msg_as_bot
+
+        try:
+            if notify.group_id:
+                ok = await send_group_message_as_bot(
+                    bot_id,
+                    int(notify.group_id),
+                    segments,
+                    image_bytes=image_bytes,
+                )
+            else:
+                ok = await send_private_msg_as_bot(
+                    bot_id,
+                    int(notify.user_id),
+                    segments,
+                    image_bytes=image_bytes,
+                )
+            if not ok:
+                logger.warning("maa reportStatus: shard notify failed bot={} task={}", bot_id, task_id)
+        except Exception as exc:
+            logger.warning("maa reportStatus: shard notify error task={}: {}", task_id, exc)
+        return
+
+    try:
+        bot = get_bot(str(bot_id))
+    except Exception:
+        logger.warning("maa reportStatus: bot {} offline, task={}", bot_id, task_id)
+        return
+
     try:
         if notify.group_id:
             await bot.send_group_msg(group_id=notify.group_id, message=segments)
         else:
             await bot.send_private_msg(user_id=notify.user_id, message=segments)
     except Exception as exc:
-        logger.warning("maa reportStatus notify failed task={}: {}", body.task, exc)
-    return {"message": "ok"}
+        logger.warning("maa reportStatus notify failed task={}: {}", task_id, exc)
 
 
 def current_maa_http_paths() -> tuple[str, str]:

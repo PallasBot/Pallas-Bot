@@ -4828,9 +4828,8 @@ def register_extended_api(
     @router.get(f"{x}/update/bot/check", include_in_schema=True)
     async def _bot_update_check() -> JSONResponse:
         from src.common.utils.format_exception import format_exception_for_log
-        from src.common.utils.github_release import release_tags_equivalent
 
-        from .manager import fetch_latest_bot_release, get_bot_current_version
+        from .manager import bot_has_release_update, fetch_latest_bot_release, get_bot_current_version
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         cache_key = f"update_check_bot:{bool(github_token)}"
@@ -4856,9 +4855,10 @@ def register_extended_api(
                     "error": err_msg,
                     "checked_at": time.time(),
                 }
-            has_update = bool(
-                latest_tag
-                and (not str(current_tag or "").strip() or not release_tags_equivalent(current_tag, latest_tag)),
+            has_update = bot_has_release_update(
+                latest_tag=latest_tag,
+                current_tag=str(current_tag or ""),
+                current_commit=str(current_commit or ""),
             )
             notes_raw = str(latest.get("body", "") or "").strip()
             notes_max = 40000
