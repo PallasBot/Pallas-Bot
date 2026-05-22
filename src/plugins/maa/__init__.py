@@ -265,6 +265,9 @@ async def handle_status(bot: Bot, event: MessageEvent):
     if not await ensure_maa_group_message_owner(event, bot):
         return
     qq = int(event.get_user_id())
+    from src.common.shard.coord.maa_route_registry import register_maa_user_route
+
+    register_maa_user_route(str(qq))
     devices = await store.list_devices(qq)
     active = await store.get_active_device(qq)
     verified = [d for d in devices if d.verified]

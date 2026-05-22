@@ -93,6 +93,12 @@ class MaaStore:
             self._seen[key] = now
             cutoff = now - ttl
             self._seen = {k: ts for k, ts in self._seen.items() if ts >= cutoff}
+        from src.common.shard.registry.config import is_sharding_active
+
+        if is_sharding_active():
+            from src.common.shard.coord.maa_seen_registry import touch_maa_seen_sync
+
+            await asyncio.to_thread(touch_maa_seen_sync, user, norm)
 
     async def was_seen(self, user: str, device: str, ttl: int) -> bool:
         norm = normalize_device_id(device)
@@ -102,7 +108,15 @@ class MaaStore:
         now = time.time()
         async with self._lock:
             ts = self._seen.get(key)
-            return ts is not None and now - ts <= ttl
+            if ts is not None and now - ts <= ttl:
+                return True
+        from src.common.shard.registry.config import is_sharding_active
+
+        if is_sharding_active():
+            from src.common.shard.coord.maa_seen_registry import was_maa_seen_sync
+
+            return await asyncio.to_thread(was_maa_seen_sync, user, norm, ttl)
+        return False
 
     def validate_new_alias(self, devices: dict[str, DeviceRecord], device: str, alias: str) -> str | None:
         name = (alias or "").strip()

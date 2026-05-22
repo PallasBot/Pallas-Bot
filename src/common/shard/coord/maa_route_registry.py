@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import time
@@ -151,6 +152,10 @@ def resolve_worker_port_for_maa_user(user: str) -> int | None:
                 pass
     reg = get_shard_registry()
     sid = reg.shard_for_bot(key)
+    if sid is None and reg.shards:
+        ordered = sorted(s.id for s in reg.shards)
+        pick = int(hashlib.sha256(key.encode()).hexdigest()[:12], 16) % len(ordered)
+        sid = ordered[pick]
     if sid is None:
         return None
     return int(worker_port_for_shard(int(sid), registry=reg))

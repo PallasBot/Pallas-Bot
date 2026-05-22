@@ -18,6 +18,7 @@ async def shard_coord_worker_poll_loop() -> None:
     from src.common.shard.coord.bot_action import poll_bot_action_pending, prune_stale_bot_action_files
     from src.common.shard.coord.cage_duel import prune_stale_cage_duel_files
     from src.common.shard.coord.duel_qte import poll_duel_qte_pending, prune_stale_duel_qte_files
+    from src.common.shard.coord.maa_seen_registry import prune_stale_maa_seen_files
 
     while True:
         try:
@@ -29,6 +30,7 @@ async def shard_coord_worker_poll_loop() -> None:
                 await prune_stale_duel_qte_files()
                 await prune_stale_bot_action_files()
                 await prune_stale_cage_duel_files()
+                await prune_stale_maa_seen_files()
         except Exception as err:
             logger.debug(f"shard_coord worker poll: {err}")
         await asyncio.sleep(_WATCH_SEC)

@@ -44,7 +44,7 @@
 
 | 现象 | 处理 |
 | --- | --- |
-| 未检测到轮询 | MAA 端点不可达或 URL 错误 |
+| 未检测到轮询 | MAA 端点不可达或 URL 错误；分片须 hub `maa_public_base_url` 且各 worker 共用 `data/` |
 | 下发后无任务 | 未绑定或用户标识符非 QQ；查 `牛牛MAA状态` |
 | 队列有、MAA 无 | 设备 id 与「当前选用」不一致；可清空队列重试 |
 | 截图失败 | 调大反代 `client_max_body_size` |
