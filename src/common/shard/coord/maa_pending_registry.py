@@ -8,10 +8,13 @@ import time
 from pathlib import Path
 from typing import Any
 
+from nonebot import logger
+
 from src.common.paths import plugin_data_dir
 from src.plugins.maa.tasks import normalize_device_id
 
 _PLUGIN = "pallas_shard"
+_LOCK_RETRIES = 5
 
 
 def _root() -> Path:
@@ -82,11 +85,11 @@ def _write_atomic(path: Path, data: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
-def _mutate_queue(path: Path, fn) -> dict[str, Any] | None:
+def _mutate_queue(path: Path, fn) -> dict[str, Any]:
     lk = _lock_path(path)
     fd = _acquire_lock(lk)
     if fd is None:
-        return _read_json(path)
+        raise TimeoutError(f"failed to acquire lock for pending queue: {path}")
     try:
         data = _read_json(path) or {"tasks": {}}
         tasks = data.get("tasks")
@@ -97,6 +100,25 @@ def _mutate_queue(path: Path, fn) -> dict[str, Any] | None:
         return data
     finally:
         _release_lock(fd, lk)
+
+
+def _mutate_queue_retry(path: Path, fn) -> dict[str, Any] | None:
+    last: TimeoutError | None = None
+    for attempt in range(_LOCK_RETRIES):
+        try:
+            return _mutate_queue(path, fn)
+        except TimeoutError as err:
+            last = err
+            if attempt + 1 < _LOCK_RETRIES:
+                time.sleep(0.05 * (attempt + 1))
+    logger.warning(
+        "maa pending queue lock timeout after {} tries: {}",
+        _LOCK_RETRIES,
+        path,
+    )
+    if last is not None:
+        logger.debug("maa pending queue lock last error: {}", last)
+    return None
 
 
 def enqueue_task_sync(task: dict[str, Any]) -> None:
@@ -113,7 +135,8 @@ def enqueue_task_sync(task: dict[str, Any]) -> None:
     def add(data: dict[str, Any]) -> None:
         data["tasks"][task_id] = task
 
-    _mutate_queue(path, add)
+    if _mutate_queue_retry(path, add) is None:
+        return
     idx = _index_path(task_id)
     _write_atomic(
         idx,
@@ -158,7 +181,8 @@ def mark_reported_sync(task_id: str) -> dict[str, Any] | None:
         rec["reported"] = True
         found = rec
 
-    _mutate_queue(path, mark)
+    if _mutate_queue_retry(path, mark) is None:
+        return None
     try:
         _index_path(task_id).unlink(missing_ok=True)
     except OSError:
@@ -218,7 +242,7 @@ def clear_pending_sync(user: str, *, device: str | None = None) -> int:
                     except OSError:
                         pass
 
-        _mutate_queue(path, clear)
+        _mutate_queue_retry(path, clear)
     return removed
 
 

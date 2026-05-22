@@ -68,7 +68,7 @@ def pending_task_from_dict(data: dict[str, Any]) -> PendingTask | None:
             user=str(data["user"]),
             device=str(data["device"]),
             task_type=str(data["task_type"]),
-            params=data.get("params") if data.get("params") is None else str(data["params"]),
+            params=data.get("params"),
             notify=notify,
             created_at=float(data.get("created_at") or time.time()),
             reported=bool(data.get("reported")),

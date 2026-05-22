@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from nonebot import get_bot, logger
-from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from pydantic import BaseModel, Field
 
 from .config import get_maa_config
@@ -95,19 +95,20 @@ async def deliver_maa_notify(
     if is_sharding_active() and not bot_has_local_connection(bot_id):
         from src.common.shard.coord.bot_action import send_group_message_as_bot, send_private_msg_as_bot
 
+        message = Message(segments)
         try:
             if notify.group_id:
                 ok = await send_group_message_as_bot(
                     bot_id,
                     int(notify.group_id),
-                    segments,
+                    message,
                     image_bytes=image_bytes,
                 )
             else:
                 ok = await send_private_msg_as_bot(
                     bot_id,
                     int(notify.user_id),
-                    segments,
+                    message,
                     image_bytes=image_bytes,
                 )
             if not ok:
