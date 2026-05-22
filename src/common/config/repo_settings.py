@@ -242,6 +242,8 @@ def _load_webui_json_document() -> dict[str, Any]:
 
 def upsert_repo_settings_items(items: dict[str, str]) -> None:
     """WebUI / 插件配置保存：写入统一 ``data/pallas_config/webui.json``。"""
+    from .webui_export_toml import export_webui_inspection_toml, rebuild_webui_json_sections
+
     doc = _load_webui_json_document()
     env = doc.setdefault("env", {})
     if not isinstance(env, dict):
@@ -252,10 +254,12 @@ def upsert_repo_settings_items(items: dict[str, str]) -> None:
         if not key:
             continue
         env[key] = v
+    doc["sections"] = rebuild_webui_json_sections(env)
     _atomic_write_text(
         repo_webui_settings_path(),
         json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
     )
+    export_webui_inspection_toml(env, doc["sections"])
     for k, v in items.items():
         key = (k or "").strip().upper()
         if key:

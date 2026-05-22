@@ -1,5 +1,5 @@
 # 复制为 config/pallas.toml 后填写（该文件已 gitignore，勿提交密钥）。
-# WebUI「插件 / 通用配置」保存项写入 data/pallas_config/webui.json，无需手改。
+# WebUI「插件 / 通用配置」保存项写入 data/pallas_config/webui.json；保存后会自动生成只读 config/pallas.webui.export.toml 供查阅。
 # 从旧 .env 迁移：uv run python tools/migrate_env_to_pallas.py
 
 [bootstrap]

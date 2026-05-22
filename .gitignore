@@ -138,6 +138,7 @@ celerybeat.pid
 .envrc
 config/pallas.toml
 config/compose.env
+config/pallas.webui.export.toml
 .venv
 env/
 venv/

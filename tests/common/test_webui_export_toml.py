@@ -1,0 +1,36 @@
+import json
+from pathlib import Path
+
+import pytest
+
+from src.common.config import webui_export_toml as wet
+from src.common.config.repo_settings import upsert_repo_settings_items
+
+
+def test_rebuild_sections_groups_known_plugin_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    wet.clear_env_key_section_cache()
+    index = wet.env_key_to_section_label()
+    assert "ANSWER_THRESHOLD" in index
+    assert index["ANSWER_THRESHOLD"].startswith("plugin.")
+
+    sections = wet.rebuild_webui_json_sections({"ANSWER_THRESHOLD": "2", "UNKNOWN_KEY_XYZ": "1"})
+    assert "other" in sections
+    assert sections[index["ANSWER_THRESHOLD"]]["ANSWER_THRESHOLD"] == "2"
+
+
+def test_upsert_writes_sections_and_export_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    webui = tmp_path / "webui.json"
+    export_path = tmp_path / "export.toml"
+    monkeypatch.setattr("src.common.config.repo_settings.repo_webui_settings_path", lambda: webui)
+    monkeypatch.setattr(wet, "repo_webui_export_toml_path", lambda: export_path)
+    wet.clear_env_key_section_cache()
+
+    upsert_repo_settings_items({"ANSWER_THRESHOLD": "3"})
+    data = json.loads(webui.read_text(encoding="utf-8"))
+    assert data["env"]["ANSWER_THRESHOLD"] == "3"
+    assert isinstance(data.get("sections"), dict)
+    assert export_path.is_file()
+    text = export_path.read_text(encoding="utf-8")
+    assert "请勿手动编辑" in text
+    assert "[webui." in text
+    assert "ANSWER_THRESHOLD" in text
