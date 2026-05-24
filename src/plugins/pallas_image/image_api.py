@@ -435,6 +435,24 @@ async def post_edits_with_transport(
         return await curl_post_edits(image_blobs, prompt, backend, options=options, req_timeout_cap=tcap)
 
 
+MIN_GENERATED_IMAGE_BYTES = 64
+
+
+def is_valid_generated_image(data: bytes) -> bool:
+    """校验上游返回的图片字节：magic + 最小长度，过滤 HTML/空包等伪 200。"""
+    if not data or len(data) < MIN_GENERATED_IMAGE_BYTES:
+        return False
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return True
+    if data.startswith(b"\xff\xd8\xff"):
+        return True
+    if data.startswith((b"GIF87a", b"GIF89a")):
+        return True
+    if len(data) >= 12 and data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+        return True
+    return False
+
+
 def strip_data_url_base64(value: str) -> str:
     """部分网关把 b64_json 填成 data:image/png;base64,...，需去掉前缀再解码。"""
     t = value.strip()
@@ -595,7 +613,9 @@ def image_api_body_issue_label(body_text: str) -> str | None:
     if data.get("error") is not None:
         return "upstream_error"
     remote_url, raw = extract_image_from_generation_payload(data)
-    if raw or remote_url:
+    if raw:
+        return None if is_valid_generated_image(raw) else "invalid_image"
+    if remote_url:
         return None
     return "no_image"
 
@@ -628,25 +648,35 @@ async def reply_from_image_api_json(
         return False
 
     remote_url, raw = extract_image_from_generation_payload(data)
-    if raw:
-        await matcher.send(optional_message_at_user(at_user_id, MessageSegment.image(raw)))
+
+    async def send_validated_image(image_bytes: bytes) -> bool:
+        if not is_valid_generated_image(image_bytes):
+            logger.warning(
+                f"pallas_image generated image rejected: len={len(image_bytes)} head={image_bytes[:16]!r}",
+            )
+            return False
+        await matcher.send(optional_message_at_user(at_user_id, MessageSegment.image(image_bytes)))
         if persist_draw:
-            schedule_persist_generated_draw(raw, persist_draw[0], persist_draw[1])
+            schedule_persist_generated_draw(image_bytes, persist_draw[0], persist_draw[1])
         return True
+
+    if raw:
+        if await send_validated_image(raw):
+            return True
+        if finish_on_error:
+            await matcher.finish(optional_message_at_user(at_user_id, PALLAS_VAGUE_REPLY))
+        return False
     if remote_url:
         inline = decode_inline_image_reference(remote_url)
         if inline is not None:
-            await matcher.send(optional_message_at_user(at_user_id, MessageSegment.image(inline)))
-            if persist_draw:
-                schedule_persist_generated_draw(inline, persist_draw[0], persist_draw[1])
-            return True
+            if await send_validated_image(inline):
+                return True
+            if finish_on_error:
+                await matcher.finish(optional_message_at_user(at_user_id, PALLAS_VAGUE_REPLY))
+            return False
         try:
             img_resp = await client.get(remote_url)
-            if img_resp.status_code == 200:
-                content = img_resp.content
-                await matcher.send(optional_message_at_user(at_user_id, MessageSegment.image(content)))
-                if persist_draw:
-                    schedule_persist_generated_draw(content, persist_draw[0], persist_draw[1])
+            if img_resp.status_code == 200 and await send_validated_image(img_resp.content):
                 return True
         except httpx.HTTPError:
             pass

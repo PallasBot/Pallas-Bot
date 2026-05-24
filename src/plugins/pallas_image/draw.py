@@ -160,6 +160,16 @@ async def consume_draw_group_cooldown(group_id: int) -> None:
     await gconf.refresh_cooldown(PALLAS_DRAW_COOLDOWN_KEY)
 
 
+async def refund_draw_group_cooldown(group_id: int) -> None:
+    """画画未成功出图时退还群冷却。"""
+    seconds = image_gen_config.draw_command_cooldown
+    if seconds <= 0:
+        return
+    gconf = GroupConfig(group_id, cooldown=seconds)
+    await gconf.reset_cooldown(PALLAS_DRAW_COOLDOWN_KEY)
+    logger.info(f"pallas_image draw cooldown refunded group={group_id}")
+
+
 pallas_draw = on_command(
     "牛牛画画",
     priority=image_gen_config.min_priority,
@@ -275,13 +285,14 @@ async def run_pallas_draw_queued(
     ref_urls: list[str],
 ) -> None:
     group_id, _ = usage_key
+    image_sent = False
     try:
         async with get_pallas_draw_user_lock(group_id, user_id):
             limit_n = image_gen_config.draw_per_user_limit
             if count_usage and pallas_draw_usage_today(usage_key) >= limit_n:
                 await matcher.send(message_at_user(user_id, f"你在本群今日的画画次数已达上限（{limit_n}）。"))
                 return
-            await pallas_draw_execute(matcher, bot_id, usage_key, count_usage, user_id, text, ref_urls)
+            image_sent = await pallas_draw_execute(matcher, bot_id, usage_key, count_usage, user_id, text, ref_urls)
     except FinishedException:
         raise
     except DrawTotalTimeoutError:
@@ -301,6 +312,8 @@ async def run_pallas_draw_queued(
         except Exception as send_err:
             logger.warning(f"bot [{bot_id}] pallas_image draw failure reply failed: {send_err}")
     finally:
+        if not image_sent:
+            await refund_draw_group_cooldown(group_id)
         await release_draw_pending_slot()
 
 
@@ -312,7 +325,7 @@ async def pallas_draw_execute(
     user_id: int,
     text: str,
     ref_urls: list[str],
-) -> None:
+) -> bool:
     cfg = image_gen_config
     group_id = usage_key[0]
     backends = cfg.api_backends()
@@ -383,7 +396,7 @@ async def pallas_draw_execute(
                         last_status_holder=last_status,
                         edits_abort_holder=edits_abort,
                     ):
-                        return
+                        return True
                     if edits_abort[0] or http_status_edits_unsupported(last_status[0]):
                         logger.info(
                             f"bot [{bot_id}] pallas_image edits unsupported status={last_status[0]} "
@@ -432,12 +445,13 @@ async def pallas_draw_execute(
                 last_body_holder=last_body,
                 last_status_holder=last_status,
             ):
-                return
+                return True
 
             logger.error(
                 f"bot [{bot_id}] pallas_image generations exhausted backends in group [{group_id}]",
             )
             await finish_draw_failure(matcher, user_id, last_body[0])
+            return False
     except FinishedException:
         raise
     except DrawTotalTimeoutError:
@@ -460,3 +474,4 @@ async def pallas_draw_execute(
     except Exception as e:
         logger.exception(f"bot [{bot_id}] pallas_image api exception in group [{group_id}]: {e}")
         await matcher.finish(PALLAS_VAGUE_REPLY)
+    return False

@@ -29,8 +29,9 @@
 | `auto`（默认） | 本进程连接（`session`） | 协议端 enabled + registry（`fleet`） |
 | `session` | 仅 `block` 维护的本进程已连接牛 | 仅**当前 worker** 已连接牛 |
 | `fleet` | 协议端 `accounts.json` 中 enabled 账号 | 全集群名册 + `worker_presence.json` 在线态 |
+| `connected` | 本进程曾连 WS 的牛 | 全集群曾连 WS + `worker_presence` 在线态（不含 registry 幽灵号） |
 
-配置示例：`BOT_STATUS_LIST_MODE=fleet`（单进程也想按配置账号列离线时）。
+配置示例：`BOT_STATUS_LIST_MODE=connected`（分片下列全集群实际连过的牛）；`fleet`（按协议/registry 名册列离线）。
 
 WebUI：**插件配置 → 牛牛状态**，保存后写入 `webui.json` 并热重载（无需重启 Bot）。
 

@@ -11,10 +11,8 @@ from src.common.cmd_perm.metadata_defaults import (
 )
 from src.common.cmd_perm.metadata_text import join_usage, usage_line
 from src.common.config import BotConfig
-from src.common.multi_bot.fleet import (
-    fleet_bot_ids_contains,
-    note_fleet_bot_session_connected,
-)
+from src.common.multi_bot.fleet import fleet_bot_ids_contains
+from src.common.multi_bot.session_seen import note_bot_session_seen
 from src.common.shard.presence import note_worker_bot_connected, note_worker_bot_disconnected
 from src.common.shard.registry.config import is_sharding_active
 
@@ -54,8 +52,8 @@ async def bot_connect(bot: Bot) -> None:
         logger.info(f"Bot {bot.self_id} connected.")
         qq = int(bot.self_id)
         plugin_config.bots.add(qq)
+        note_bot_session_seen(qq)
         if is_sharding_active():
-            note_fleet_bot_session_connected(qq)
             await note_worker_bot_connected(bot)
 
 

@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 from src.common.webui import install_hot_reload_config
 
-StatusListModeSetting = Literal["auto", "session", "fleet"]
+StatusListModeSetting = Literal["auto", "session", "fleet", "connected"]
 
 
 class Config(BaseModel, extra="ignore"):
@@ -20,8 +20,9 @@ class Config(BaseModel, extra="ignore"):
     bot_status_list_mode: StatusListModeSetting = Field(
         default="auto",
         description=(
-            "牛牛在吗名册：auto=分片用 fleet、单进程用 session；"
-            "session=本进程连接；fleet=协议端 enabled（分片含 registry）。"
+            "牛牛在吗名册：auto=分片 fleet、单进程 session；"
+            "session=本 worker 连接；fleet=协议 enabled+registry；"
+            "connected=全集群曾连 WS（不含 registry 幽灵号）。"
         ),
     )
 

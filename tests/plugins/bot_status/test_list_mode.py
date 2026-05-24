@@ -33,6 +33,31 @@ def test_resolve_explicit_fleet_unified(monkeypatch):
     assert mod.resolve_status_list_mode() == "fleet"
 
 
+def test_resolve_explicit_connected(monkeypatch):
+    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    patch_list_mode(monkeypatch, "connected")
+    assert mod.resolve_status_list_mode() == "connected"
+
+
+def test_status_inventory_connected_uses_session_seen(monkeypatch):
+    monkeypatch.setattr(mod, "get_session_seen_bot_ids", lambda: frozenset({222, 333}))
+    ids = mod.status_inventory_bot_ids(list_mode="connected")
+    assert ids == frozenset({222, 333})
+
+
+def test_cluster_online_connected_uses_presence_when_sharding(monkeypatch):
+    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+
+    def fake_presence():
+        return frozenset({100, 200})
+
+    import src.common.shard.presence as presence_mod
+
+    monkeypatch.setattr(presence_mod, "get_cluster_online_bot_ids", fake_presence)
+    online = mod.cluster_online_bot_ids_for_status(list_mode="connected")
+    assert online == {100, 200}
+
+
 def test_status_inventory_fleet_from_accounts(tmp_path, monkeypatch):
     proto = tmp_path / "pallas_protocol"
     proto.mkdir()

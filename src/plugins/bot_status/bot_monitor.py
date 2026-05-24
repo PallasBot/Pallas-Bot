@@ -6,7 +6,11 @@ from nonebot.adapters.onebot.v11 import Bot
 from nonebot_plugin_apscheduler import scheduler
 
 from .config import get_bot_status_config
-from .list_mode import cluster_online_bot_ids_for_status, status_inventory_bot_ids
+from .list_mode import (
+    cluster_online_bot_ids_for_status,
+    resolve_status_list_mode,
+    status_inventory_bot_ids,
+)
 
 offline_bots: dict[int, dict[str, str]] = {}
 
@@ -162,7 +166,8 @@ async def get_bot_status_info() -> tuple[dict[int, str], dict[int, str]]:
 
     all_bot_ids = set(status_inventory_bot_ids())
     all_bot_ids.update(int(bot_id) for bot_id in current_bots.keys())
-    all_bot_ids.update(offline_bots.keys())
+    if resolve_status_list_mode() != "connected":
+        all_bot_ids.update(offline_bots.keys())
 
     online_ids = cluster_online_bot_ids(current_bots)
 

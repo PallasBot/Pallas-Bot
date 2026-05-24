@@ -123,17 +123,24 @@ def pallas_draw_usage_today(usage_key: tuple[int, int]) -> int:
 def bump_pallas_draw_usage(usage_key: tuple[int, int], count_usage: bool) -> None:
     if not count_usage:
         return
+    group_id, user_id = usage_key
     with _lock:
         today = date.today()
         prev = _pallas_draw_usage.get(usage_key)
         if prev is None or prev[0] != today:
-            _pallas_draw_usage[usage_key] = (today, 1)
+            new_count = 1
+            _pallas_draw_usage[usage_key] = (today, new_count)
         else:
-            _pallas_draw_usage[usage_key] = (today, prev[1] + 1)
+            new_count = prev[1] + 1
+            _pallas_draw_usage[usage_key] = (today, new_count)
         try:
             _persist()
         except OSError as e:
             logger.error(f"pallas_image draw_usage persist failed: {e}")
+            return
+    logger.info(
+        f"pallas_image draw usage bumped group={group_id} user={user_id} count={new_count} day={today.isoformat()}",
+    )
 
 
 _load()

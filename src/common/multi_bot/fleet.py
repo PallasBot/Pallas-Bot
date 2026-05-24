@@ -31,6 +31,11 @@ def note_fleet_bot_session_connected(qq: int) -> None:
         _cached = None
 
 
+def get_process_session_connected_ids() -> frozenset[int]:
+    with _lock:
+        return frozenset(_session_connected)
+
+
 def get_catalog_bot_ids() -> frozenset[int]:
     """分片：全集群 catalog；单进程：block 维护的本进程已连接集合。"""
     if is_sharding_active():

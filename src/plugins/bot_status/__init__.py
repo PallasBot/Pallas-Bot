@@ -65,8 +65,8 @@ __plugin_meta__ = PluginMetadata(
                 "command_permission": "bot_status.status",
                 "brief_des": "查看在线情况",
                 "detail_des": (
-                    "按 bot_status_list_mode 列出在线/离线（默认可配置：单进程为本进程连接，"
-                    "分片为协议端 enabled 全集群）；离线邮件另有宽限期。"
+                    "按 bot_status_list_mode 列出在线/离线（connected=全集群曾连 WS；"
+                    "fleet=协议名册；session=本 worker）；离线邮件另有宽限期。"
                 ),
             },
             {
