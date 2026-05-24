@@ -22,7 +22,7 @@
 
 ## 配置
 
-[`config.py`](../../../src/plugins/greeting/config.py)（如 `enable_kick_ban`）。素材目录 `data/.../greeting/`。
+[`config.py`](../../../src/plugins/greeting/config.py)（如 `enable_kick_ban`）。素材与持久化目录 **`data/greeting/`**；语音资源 **`resource/voices/`**。
 
 ## 排障
 

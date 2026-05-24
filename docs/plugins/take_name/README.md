@@ -15,7 +15,7 @@
 
 ## 配置
 
-[`config.py`](../../../src/plugins/take_name/config.py)。依赖 `repeater` 的 `MessageStore` 取随机语料。
+无独立 `config.py`。行为由 `repeater` 的 `MessageStore` 取随机语料，可在 WebUI **插件** 中开关本插件。
 
 ## 排障
 

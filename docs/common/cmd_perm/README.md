@@ -115,10 +115,11 @@ if not await satisfies_command_permission(bot, event, "my_plugin.do_something"):
 
 `menu_data` 里填写的命令 ID 必须与 `permission_for_command(...)` / `satisfies_command_permission(..., "...")` 使用的 ID **一致**，否则帮助上的「何人可用」与实际鉴权不一致。
 
-## 运行中覆盖：`.env` 与 WebUI
+## 运行中覆盖：WebUI 与 webui.json
 
-- 环境变量：`PALLAS_COMMAND_PERMISSION_OVERRIDES`（JSON 对象：命令 ID → 等级字符串）。
-- WebUI：「通用配置」中的 **命令权限** 段会读写同一键，保存后会清理配置缓存，**覆盖值通常无需重启 Bot 即可生效**。
+- WebUI **「通用配置 → 命令权限」** 写入 `data/pallas_config/webui.json`（键 `PALLAS_COMMAND_PERMISSION_OVERRIDES`，JSON：命令 ID → 等级）。
+- 亦可通过环境变量或 `pallas.toml` `[env]` 注入同名键；**WebUI 落盘优先级最高**。
+- 保存后会清理配置缓存，**覆盖值通常无需重启 Bot 即可生效**。
 - 修改 **Python 中的默认等级或 `command_permissions` 列表**：需重新加载插件或重启进程。
 
 ## 相关源文件

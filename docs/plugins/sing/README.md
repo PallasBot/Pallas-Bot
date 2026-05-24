@@ -21,13 +21,13 @@ AI 翻唱、续唱、点歌与查歌名；依赖 [Pallas-Bot-AI](https://github.
 
 ## 配置
 
-[`config.py`](../../../src/plugins/sing/config.py)：`sing_enable`、AI 地址、`request_endpoint` 等。
+[`config.py`](../../../src/plugins/sing/config.py)：`sing_enable`、AI 地址、`request_endpoint` 等。推荐在 WebUI **插件 → sing** 或 **通用配置 → 服务网关** 修改（落盘 `data/pallas_config/webui.json`，保存后热重载）。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 无语音 | 查 AI 服务、`/callback` 可达性 |
+| 无语音 | 查 AI 服务、`/callback` 可达性；群内发 **牛牛连通** 测唱歌网关 |
 | 点歌失败 | 确认网易云登录状态 |
 
 ## 实现

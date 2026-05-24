@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | … | … | … |
 
-字段以 [`src/plugins/{包名}/config.py`](../../src/plugins/{包名}/config.py) 为准；可在 WebUI **插件** 或 **通用配置** 中修改。
+字段以 [`src/plugins/{包名}/config.py`](../../src/plugins/{包名}/config.py) 为准（**无 `config.py` 的插件删本节**）；可在 WebUI **插件** 或 **通用配置** 中修改，落盘 `data/pallas_config/webui.json`。
 
 ## 排障
 

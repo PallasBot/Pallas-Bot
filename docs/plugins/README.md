@@ -1,8 +1,8 @@
 # 插件文档索引
 
-各插件的「怎么配、怎么用、怎么排障」见子目录 `README.md`（统一结构见 [TEMPLATE.md](./TEMPLATE.md)）；`PluginMetadata` 约定见 [cmd_perm](../common/cmd_perm/README.md) 与 `src/common/cmd_perm/metadata_defaults.py`。
+各插件的「怎么配、怎么用、怎么排障」见子目录 `README.md`（统一结构见 [TEMPLATE.md](./TEMPLATE.md)）；`PluginMetadata` 约定见 [cmd_perm](../common/cmd_perm/README.md)。
 
-配置字段以各插件 `config.py` 为准，推荐在 WebUI **插件 / 通用配置** 中修改。
+**配置**：有 `config.py` 的插件以该文件字段为准；无独立配置的插件（如 `take_name`、`blacklist`）在文档中单独说明。推荐在 WebUI **插件 / 通用配置** 中修改，落盘 **`data/pallas_config/webui.json`**。
 
 ## 远控与运维
 

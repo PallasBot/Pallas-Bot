@@ -6,10 +6,13 @@
 
 - `src/`: 业务源码
 - `tests/`: 单元测试与集成测试
-- `docs/`: 面向开发与部署的文档
+- `docs/`: 面向开发与部署的文档（索引见 [docs/README.md](../README.md)）
+- `config/`: 主配置示例与 Compose 插值（`pallas.example.toml`、`compose.env.example`）
+- `scripts/`: 运维脚本（如 `run_sharded_bot.sh` 分片启动）
+- `local/plugins/`: 站点自有插件（`extra_plugin_dirs`，见 [站点定制](site-customization-and-updates.md)）
 - `tools/`: 维护脚本与辅助配置
 - `.github/workflows/`: CI/CD 流水线
-- `data/`: 运行期持久化数据（按插件分目录，如 `data/help/`）
+- `data/`: 运行期持久化数据（`pallas_config/webui.json`、各插件子目录等）
 - `resource/`: 项目静态资源（如语音、样式）
 
 ## 源码分层约定
@@ -59,9 +62,7 @@
 - 每个插件使用独立目录：`docs/plugins/<plugin_name>/README.md`
 - 插件文档总索引：`docs/plugins/README.md`
 
-当前已迁移示例：
-
-- `bot_status` 插件文档：`docs/plugins/bot_status/README.md`
+当前已迁移的插件文档见 [plugins/README.md](../plugins/README.md)（21 个用户向插件 + 通用能力文档）。
 
 ## tools 目录约定
 

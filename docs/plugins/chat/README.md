@@ -15,7 +15,7 @@
 
 ## 配置
 
-[`config.py`](../../../src/plugins/chat/config.py)：`chat_enable`、`ai_server_host`、`ai_server_port` 等。
+[`config.py`](../../../src/plugins/chat/config.py)：`chat_enable`、`ai_server_host`、`ai_server_port` 等。推荐在 WebUI **插件 → chat** 修改（落盘 `data/pallas_config/webui.json`）。
 
 ## 排障
 

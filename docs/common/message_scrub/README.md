@@ -4,7 +4,7 @@
 
 牛牛在**复读学习**和**做梦采集 / 漂流**之前，会先过一道「洗消息」：命中规则的内容**不会进学习库、也不会进梦库或往外漂**。你可以把它理解成：**不想让 Bot 记住或转述的话，在这里挡掉**。
 
-**当前版本里，这条链路已经接好、可以直接用。** 推荐在 Web 控制台 **「通用配置」** →「消息审查 / 入站过滤」中修改（写入根目录 `.env`）；亦可直接改 `.env`、环境变量，并重启 Bot（或按需刷新缓存），无需再改代码。已接入范围：
+**当前版本里，这条链路已经接好、可以直接用。** 推荐在 Web 控制台 **「通用配置」** →「消息审查 / 入站过滤」中修改（写入 **`data/pallas_config/webui.json`**）；亦可编辑 `config/pallas.toml` 的 `[env]` 或进程环境变量。保存后 hub 会热重载，分片 worker 会在磁盘变更后自动重读。已接入范围：
 
 - **牛牛复读**：群消息在去重之后，若被判定拦截，则整条不再参与学习与后续复读逻辑。
 - **牛牛做梦**：做梦采集里，除「不可以」等业务规则外，同样会走统一审查；拦截则不入库、不漂流。
@@ -18,7 +18,7 @@
 | 你的目标 | 你需要做的大致事情 |
 |----------|-------------------|
 | 先不用审查 | 什么都不配即可。 |
-| 只拦少数固定说法 | 在 `.env` 里配 `PALLAS_INBOUND_FILTER_SUBSTRINGS`（英文逗号分隔，不区分大小写）。 |
+| 只拦少数固定说法 | WebUI 或配置键 `PALLAS_INBOUND_FILTER_SUBSTRINGS`（英文逗号分隔，不区分大小写）。 |
 | 用一份自己的词表 | 准备一个 UTF-8 的 txt（见下文「词表文件」），配 `PALLAS_SCRUB_LEXICON_PATH` 指向它；也可使用仓库 [`resource/message_scrub/politics.txt`](../../../resource/message_scrub/politics.txt) 例子。 |
 | 交给云端判断 | 配置百度 Key，或自建一个符合约定的 HTTP 接口地址（见下文「远程审查」）。 |
 | 本地 + 云端都要 | 可同时配词表/子串与百度或自建网关；会先跑本地，再按顺序跑远程。 |
@@ -33,7 +33,7 @@
 
 1. 用编辑器保存为 **UTF-8**，**一行一个词**；以 `#` 开头的行当注释；空行忽略。
 2. 把文件放在 Bot 机器上任意可读路径（例如 `data/sensitive_lexicon.txt`）。
-3. 在 `.env` 里写一行（路径改成你的实际位置）：
+3. 在 WebUI **通用配置** 或 `data/pallas_config/webui.json` / `pallas.toml` `[env]` 中设置（路径改成你的实际位置）：
 
    ```env
    PALLAS_SCRUB_LEXICON_PATH=data/sensitive_lexicon.txt
@@ -42,7 +42,7 @@
    相对路径是相对于**启动 Bot 时的工作目录**；若你不确定工作目录，用**绝对路径**最省心。
 
 4. **只改词表内容并保存**：一般**不用重启**，下次处理消息时会按文件更新时间自动重建词库。
-5. **改了路径或改了 `.env` 里其它审查相关变量**：重启 Bot 最稳妥；若你在做二次开发，也可调用 `reload_message_scrub_caches()` 清本地缓存和百度 token 缓存。
+5. **改了路径或改了其它审查相关配置键**：WebUI 保存后通常立即生效；若未生效可重启 Bot，或调用 `reload_message_scrub_caches()`。
 
 从 [Sensitive-lexicon](https://github.com/konsheng/Sensitive-lexicon) 等仓库下载的多份 `.txt`，需要你在本机**先合并成一个**符合上面格式的文件，再把这个文件路径配进 `PALLAS_SCRUB_LEXICON_PATH`（合并方式由你自选脚本）。这类大词表在群聊里容易**误拦正常话**，建议先小范围试，再决定是否全量或搭配百度使用。
 
@@ -52,13 +52,13 @@
 
 ### 百度
 
-在 `.env` 里填写 **`PALLAS_SCRUB_BAIDU_API_KEY`** 和 **`PALLAS_SCRUB_BAIDU_SECRET_KEY`**（控制台里应用的 API Key / Secret Key）即可。**不用自己维护 `access_token`**，Bot 会自动换取并缓存。
+在 WebUI **通用配置** 或配置键中填写 **`PALLAS_SCRUB_BAIDU_API_KEY`** 和 **`PALLAS_SCRUB_BAIDU_SECRET_KEY`**（控制台里应用的 API Key / Secret Key）即可。**不用自己维护 `access_token`**，Bot 会自动换取并缓存。
 
 可选：`PALLAS_SCRUB_BAIDU_STRATEGY_ID`（策略中心里的策略）、`PALLAS_SCRUB_BAIDU_BLOCK_SUSPECTED`（是否把「疑似」也当拦截，默认要拦）。
 
 ### 自建 HTTP 网关
 
-适合：你们已有统一审核服务，或想用自己语言写逻辑。在 `.env` 里配置 **`PALLAS_SCRUB_API_URL`**（优先）或 **`PALLAS_INBOUND_FILTER_API_URL`**。
+适合：你们已有统一审核服务，或想用自己语言写逻辑。在 WebUI 或配置键中设置 **`PALLAS_SCRUB_API_URL`**（优先）或 **`PALLAS_INBOUND_FILTER_API_URL`**。
 
 对方接口约定：`POST`，JSON 里是 `plain_text`、`raw_message` 两段字符串；返回 JSON 里必须有 **`blocked`** 布尔值，`true` 表示这条消息要拦。若网关需要鉴权，可配 `PALLAS_INBOUND_FILTER_API_KEY`（会以 `Bearer` 形式带上）。
 
@@ -77,6 +77,8 @@
 ---
 
 ## 环境变量速查
+
+键名与 WebUI 表单项一致；落盘见 **`data/pallas_config/webui.json`** 的 `env` 段。下表便于检索与 Docker `[env]` 注入：
 
 | 变量 | 一句话说明 | 默认 |
 |------|------------|------|

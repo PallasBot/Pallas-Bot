@@ -7,8 +7,7 @@
 
   <p>
     <a href="https://github.com/PallasBot/Pallas-Bot/issues">报告 Bug</a> ·
-    <a href="https://github.com/PallasBot/Pallas-Bot/issues">提出新特性</a> ·
-    <a href="docs/Deployment.md">快速部署</a>
+    <a href="https://github.com/PallasBot/Pallas-Bot/issues">提出新特性</a>
   </p>
 
 </div>
@@ -23,7 +22,7 @@
 [![stars](https://img.shields.io/github/stars/PallasBot/Pallas-Bot?style=social)](https://github.com/PallasBot/Pallas-Bot/stargazers)
 [![ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/charliermarsh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-[![maa-remote](https://img.shields.io/badge/Feature-MAA%20%E8%BF%9C%E6%8E%A7-FE7D37)](docs/plugins/maa/README.md)
+[![maa-remote](https://img.shields.io/badge/Feature-MAA%20%E8%BF%9C%E6%8E%A7-FE7D37)](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/maa)
 ![learning-repeater](https://img.shields.io/badge/Feature-%E5%AD%A6%E4%B9%A0%E5%9E%8B%E5%A4%8D%E8%AF%BB-8A2BE2)
 ![plugin-system](https://img.shields.io/badge/Feature-%E6%8F%92%E4%BB%B6%E5%8C%96-00A3FF)
 [![ai-chat-sing-tts](https://img.shields.io/badge/AI-Chat%26Sing%26TTS-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI.git)
@@ -37,12 +36,7 @@
 </div>
 
 <p align="center">面向群聊场景的学习型机器人：会复读、会整活、可管理、可扩展。</p>
-<p align="center">亦可作为 <b>MAA（MaaAssistantArknights）</b> 的 QQ 侧远控：绑定设备后，在群聊或私聊用口令排队任务。</p>
-
->牛牛 基于 **`NoneBot2`** 与 **`OneBot v11`**，数据层支持 **`MongoDB`** 或 **`PostgreSQL`**；自带运维面板 [**`Pallas-Bot-WebUI`**](https://github.com/PallasBot/Pallas-Bot-WebUI.git)。使用 MAA 远控时，牛牛实现 [MAA 远程控制协议](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html)（详见 [MAA 远控](#maa-远控)）。
-发版与变更说明见 [Releases](https://github.com/PallasBot/Pallas-Bot/releases)；若需参考仅 **`MongoDB`** 的历史实现，见分支 [`archive/v2`](https://github.com/PallasBot/Pallas-Bot/tree/archive/v2)；向 **`PostgreSQL`** 迁移可使用 [Mongo → PG 迁移脚本](tools/migrate_mongo_to_pg.py)。
-
-<!-- Copy-paste in your Readme.md file -->
+<p align="center">基于 <b>NoneBot2</b> + <b>OneBot v11</b>，数据层 <b>MongoDB / PostgreSQL</b>，自带 Web 控制台与协议端管理；可选 <b>MAA</b> QQ 远控与 AI 扩展。</p>
 
 <a href="https://next.ossinsight.io/widgets/official/analyze-repo-stars-history?repo_id=425810267" target="_blank" style="display: block" align="center">
   <picture>
@@ -51,100 +45,9 @@
   </picture>
 </a>
 
-<!-- Made with [OSS Insight](https://ossinsight.io/) -->
->喜欢牛牛，就给牛牛点个 [**⭐**](https://github.com/PallasBot/Pallas-Bot/stargazers) 吧！
+> 喜欢牛牛，就给牛牛点个 [**⭐**](https://github.com/PallasBot/Pallas-Bot/stargazers) 吧！
 
-## 📑 目录
-
-- [关于项目](#关于项目)
-  - [项目特点](#项目特点)
-  - [MAA 远控](#maa-远控)
-- [运维入口](#运维入口)
-- [快速开始（部署）](#快速开始部署)
-  - [部署方式](#部署方式)
-  - [环境要求](#环境要求)
-  - [简单部署](#简单部署)
-- [使用指南](#使用指南)
-  - [功能列表](#功能列表)
-  - [AI 扩展](#ai-扩展)
-- [配置要点](#配置要点)
-  - [当前配置与文件](#当前配置与文件)
-  - [从 .env 迁移（旧用户）](#从-env-迁移旧用户)
-- [文档与链接](#文档与链接)
-- [开发与贡献指南](#开发与贡献指南)
-- [社区与支持](#社区与支持)
-  - [QQ 群](#qq-群)
-  - [打赏](#打赏)
-- [致谢](#致谢)
-- [许可证](#许可证)
-
-<a id="关于项目"></a>
-## 📖 关于项目
-
-牛牛的功能就是废话和复读。可以认为是高级版的复读机。
-发现牛牛学了一些不合适的话及时帮忙[删除](docs/FAQ.md#使用与管理)。
-大家一起教出更棒更聪明的牛牛！✿✿ヽ(°▽°)ノ✿
-
-若你使用 [**MaaAssistantArknights**](https://github.com/MaaAssistantArknights/MaaAssistantArknights)，牛牛还可作为其 QQ 侧远控：在 MAA 中配置远控地址并私聊绑定设备后，用「牛牛长草」「牛牛作战」等口令排队任务，执行结果与截图会回到 QQ（说明见下文 [MAA 远控](#maa-远控)）。
-
-<a id="项目特点"></a>
-### ✨ 项目特点
-
-- 学习型复读，不依赖硬编码问答库
-- 支持跨群语料聚合与全局禁用
-- 牛牛玩法：喝酒、轮盘、决斗、做梦、唱歌、聊天、生图、夺舍等；
-- 管理能力：黑名单、好友欢迎、好友/入群申请管理
-- 数据后端：`MongoDB` 或 `PostgreSQL`
-- 运维：`pallas_webui` 控制台、`pallas_protocol` 协议端管理
-- **MAA 远控**（可选）：与 MAA 客户端配合，在 QQ 绑定设备、下发口令、回传截图与状态（详见 [MAA 远控](#maa-远控)）
-- **牛牛帮助**：三级帮助图（总览 → 插件 → 功能详情）；群管可按插件开关功能
-- **牛牛连通**：探测画画网关、MAA 端点、唱歌 AI 等延迟（WebUI 可一键检测）
-
-<a id="maa-远控"></a>
-### 📡 MAA 远控
-
-与 [**MaaAssistantArknights**](https://github.com/MaaAssistantArknights/MaaAssistantArknights) 配套：MAA 在本地跑任务，牛牛在 QQ 侧**绑定设备、排队口令、回传截图与状态**（`getTask` / `reportStatus`）。
-
-1. 配置 `maa_public_base_url`（见 [maa 插件说明](docs/plugins/maa/README.md)）
-2. MAA「设置 → 远程控制」填入帮助页 URL，用户标识符填 QQ 号
-3. 私聊 `牛牛绑定MAA <设备标识符>`，群聊发 `牛牛长草`、`牛牛作战` 等
-
-口令一览、多设备与排障见 [docs/plugins/maa/README.md](docs/plugins/maa/README.md) 或 **牛牛帮助 → MAA 远控**；协议见 [MAA 远程控制文档](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html)。
-
-<a id="运维入口"></a>
-## 🗂️ 运维入口
-
-以下路径中的 **`HOST`**、**`PORT`** 以 **`config/pallas.toml`** 的 `[bootstrap]` 为准（默认常为本机 **`8088`**）。
-
-| 入口 | URL 示例 |
-| --- | --- |
-| Web 控制台 | `http://<HOST>:<PORT>/pallas/` |
-| 协议端管理 | `http://<HOST>:<PORT>/protocol/console/` |
-
-- **登录口令**：控制台与协议端管理**共用**；首次启动见 Bot 日志。遗忘后的处理见 [FAQ · 部署排障](docs/FAQ.md#部署排障)。
-- **Docker**：`pallasbot` 服务镜像见根目录 [`docker-compose.yml`](docker-compose.yml) 的 `image`；需对齐某次 Release 时请直接改为带 tag 的镜像名（或自建 override 文件）。
-- **排障与插件字段**：[FAQ](docs/FAQ.md)、[协议端（pallas_protocol）](docs/plugins/pallas_protocol/README.md)、[控制台（pallas_webui）](docs/plugins/pallas_webui/README.md)。
-
-<a id="快速开始部署"></a>
-## 🚀 快速开始（部署）
-
-<a id="部署方式"></a>
-### 📦 部署方式
-
-- **托管实例接入**：加入 [拉牛牛群](#qq-群) 获取可用实例
-- **标准部署**：按 [部署教程](docs/Deployment.md) 执行完整流程
-- **容器化部署**：使用 [Docker 部署](docs/DockerDeployment.md)
-
-<a id="环境要求"></a>
-### 📋 环境要求
-
-- `Python 3.12+`
-- `uv`
-- `MongoDB` 或 `PostgreSQL`（二选一）
-- `OneBot v11` 协议端
-
-<a id="简单部署"></a>
-### ⚡ 简单部署
+## 🚀 快速开始
 
 ```bash
 #获取代码
@@ -160,164 +63,30 @@ uv sync                 # 安装依赖
 # 主配置（首次部署）
 cp config/pallas.example.toml config/pallas.toml
 # 编辑 [bootstrap]：监听、SUPERUSERS、DB_BACKEND、MONGO_* 或 PG_*
-# 若仍使用根目录 .env，见下方「从 .env 迁移」
 
 # 开始运行（单进程）
 uv run nb run
 ```
-> 完整部署细节请查看 [部署教程](docs/Deployment.md) 和 [Docker 部署](docs/DockerDeployment.md)。
-> 部署好自己牛牛之后，若将他人账号接为自己的牛牛，请把对方 QQ 写入该牛牛的 **`admins`**（号主）；**新建牛牛**时也可由超管私聊 **「创建牛牛」** 并在命令里带上号主 QQ，**会自动写入** `admins`。详见 [FAQ：如何为牛牛配置号主（`admins`）](docs/FAQ.md#faq-bot-admins)。
 
-<a id="使用指南"></a>
-## 📚 使用指南
+浏览器打开 `http://<主机>:8088/pallas/`，使用启动日志中的口令登录。
 
-<a id="功能列表"></a>
-### 🎮 功能列表
+<a id="文档"></a>
+## 📖 文档
 
-<details>
-  <summary>忘记了就用牛牛帮助!</summary>
+部署、配置、插件、迁移与排障等完整说明见在线文档站。
 
-#### MAA 远控（[`maa`](docs/plugins/maa/README.md)）
-
-| 类型 | 口令示例 |
+| | |
 | --- | --- |
-| 绑定 / 设备 | `牛牛绑定MAA`、`牛牛MAA状态`、`牛牛切换MAA设备`、`牛牛MAA设备名`、`牛牛清空MAA队列` |
-| 任务 | `牛牛长草`、`牛牛作战`、`牛牛公招`、`牛牛基建`、`牛牛截图`、`牛牛停止` 等 |
-| 高级 | `牛牛MAA任务 <type> [params]`（协议原始 type） |
-
-#### 基础玩法
-
-| 口令 / 插件 | 说明 |
-| --- | --- |
-| `牛牛帮助` | 三级帮助图：总览 → 插件 → 功能；`牛牛开启` / `牛牛关闭` 管理本群插件 |
-| `牛牛喝酒` / `牛牛醒一醒` | 醉酒与醒酒，影响聊天、轮盘、夺舍、做梦等 |
-| `牛牛轮盘` | 踢人/禁言轮盘；`牛牛救一下`、`牛牛补一枪` |
-| `牛牛决斗` / `八角笼牛` | 泰拉风味多幕决斗、干员 QTE、双牛八角笼（[duel](docs/plugins/duel/README.md)） |
-| `牛牛做梦` / `牛牛醒梦` | 跨群梦话漂流、历史梦与画画归档图；醉酒联动夺舍（[dream](docs/plugins/dream/README.md)） |
-| 酒后聊天 | 醉酒时 @牛牛 或「牛牛 + 文本」（依赖 [AI 服务](https://github.com/PallasBot/Pallas-Bot-AI)） |
-| `牛牛唱歌` | 翻唱、继续唱、点歌、查歌名（依赖 AI 服务） |
-| `牛牛画画` | AI 生图，可附图或回复图作参考 |
-| `牛牛连通` / `牛牛网关` | 探测画画、MAA、唱歌等服务延迟（[connectivity](docs/plugins/connectivity/README.md)） |
-
-#### 被动与管理
-
-- **复读**（`repeater`）：学习型复读核心
-- **欢迎**（`greeting`）：入群/好友欢迎与部分群通知
-- **夺舍**（`take_name`）：定时改牛牛群名片；醉酒时可能同步改群友名片
-- **控制台**（`pallas_webui`）、**协议端**（`pallas_protocol`）：Web 运维与多账号协议端
-- **群管**：帮助与插件开关；轮盘禁言/踢人需群管权限
-- **号主**（`admins`）：`牛牛重新上号`、`设置好友欢迎`、`同意好友/入群`、`牛牛在吗`
-- **超管**：`创建牛牛`、隐藏功能开关、`牛牛在吗`（含邮件测试）
-</details>
-
-<a id="ai-扩展"></a>
-### 🤖 AI 扩展
-
-部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 并开启对应能力后可用：
-<details>
-  <summary>展开查看完整功能列表</summary>
-
-- `[角色名]唱歌 <歌曲名>`（指定翻唱，支持 `key=N` 调整音调）& `[角色名]唱歌`（播放唱过的歌曲）
-- `[角色名]继续唱` / `[角色名]接着唱`（继续上次未完成的歌曲）
-- `[角色名]什么歌` / `[角色名]哪首歌`（查询当前播放歌曲名）
-- `牛牛点歌 <歌曲名>`
-- `网易云登录` / `网易云登出`
-- 酒后聊天（ChatRWKV 模型）
-- 酒后聊天内容文本转语音（TTS）
-
-</details>
-
-<a id="配置要点"></a>
-## ⚙️ 配置要点
-
-<a id="当前配置与文件"></a>
-### 当前配置与文件
-
-自 v3 起，运行配置以 **`config/pallas.toml`** 与 WebUI 落盘的 **`data/pallas_config/webui.json`** 为主；根目录 **`.env` 仅作遗留只读合并**，新部署与文档不再以 `.env` 为准。
-
-| 文件 | 用途 | Git |
-| --- | --- | --- |
-| [`config/pallas.example.toml`](config/pallas.example.toml) | 示例与注释（可复制为 `pallas.toml`） | 跟踪 |
-| `config/pallas.toml` | **本地主配置**：`[bootstrap]` 监听、超管、数据库；`[env]` 分片/协议端等扁平键 | **忽略（勿提交密钥）** |
-| `data/pallas_config/webui.json` | 控制台 **「插件」「通用配置」** 保存项（`env` + `sections`） | 随 `data/` 部署 |
-| `config/pallas.webui.export.toml` | WebUI 保存后自动生成的只读快照，便于查阅 | 忽略 |
-| `.env` / `.env.prod` | 旧版键名；仍可被读取，但**优先级低于** `webui.json` | 建议迁移后删除或仅留备份 |
-
-**合并顺序**（后者覆盖前者）：`pallas.toml` → `.env` → `.env.{ENVIRONMENT}` → `webui.json`（WebUI 落盘最高）。细节见 [配置存储](docs/architecture/settings-storage.md)。
-
-- **单进程**：`uv run nb run`，改 `pallas.toml` 后重启进程。
-- **多进程分片**：`./scripts/run_sharded_bot.sh start`；`[env]` 可配 `REDIS_URL`（跨进程 claim，可选）、`PALLAS_SHARD_*` 等，见 [分片架构](docs/architecture/bot_process_sharding.md)。
-- **PostgreSQL**：`db_backend = "postgresql"` 时需 `uv sync --extra pg`；**Redis claim** 需 `uv sync --extra coord-redis`（可与 pg 同写：`uv sync --extra pg --extra coord-redis`）。
-
-<a id="从-env-迁移旧用户"></a>
-### 从 .env 迁移（旧用户）
-
-若你仍在使用仓库根目录的 **`.env`** / **`.env.prod`**，建议一次性迁入 TOML + WebUI JSON：
-
-```bash
-# 在仓库根目录
-uv run python tools/migrate_env_to_pallas.py
-# 已存在 pallas.toml / webui.json 时：加 --force 覆盖（请先备份）
-```
-
-脚本会把 **bootstrap 相关键**（`HOST`、`PORT`、`SUPERUSERS`、`DB_BACKEND`、`MONGO_*`、`PG_*` 等）写入 `config/pallas.toml`，其余写入 `data/pallas_config/webui.json`。
-
-迁移后请逐项确认：
-
-1. **TOML 字符串必须加双引号**（例如 `db_backend = "postgresql"`、`user = "postgres"`；`postgresql` 裸写会导致 `tomllib` 解析失败，Bot 读不到任何配置）。
-2. **分片 / Redis**（可选）在 `pallas.toml` 增加 **`[env]`** 段，例如 `REDIS_URL = "redis://127.0.0.1:6379/0"`（见 `pallas.example.toml` 注释）。
-3. **`.env` 与 nb 插件**：可复制 [`.env.example`](.env.example) 为 `.env`，专放 pip/nb 插件环境变量；与 `webui.json` 避免同名键重复（运行时以 `webui.json` 为准）。
-4. 校验：`uv run python -c "import tomllib; tomllib.load(open('config/pallas.toml','rb')); print('toml ok')"`。
-
-数据库从 Mongo 迁到 PostgreSQL 另见 [Migration-v3](docs/Migration-v3.md) 与 [`tools/migrate_mongo_to_pg.py`](tools/migrate_mongo_to_pg.py)（与 `.env` → TOML 迁移无关）。
-
----
-
-以下为启动前最常见的几项；**更多键名与默认值以各插件 Pydantic 配置为准**，推荐在 Web 控制台 **「插件」「通用配置」** 中修改（写入 `webui.json`），离线编辑 bootstrap / `[env]` 见 `config/pallas.toml`。
-
-| 配置项 | 默认/示例 | 说明 | 必填 |
-| --- | --- | --- | --- |
-| `HOST` / `PORT` | `0.0.0.0` / `8088` | Bot HTTP 监听；控制台与协议管理页同源 | 是 |
-| `SUPERUSERS` | QQ 号列表 | 超管 QQ | 是 |
-| `DB_BACKEND` | `mongodb` / `postgresql` | 数据后端 | 是 |
-| `MONGO_*` / `PG_*` | 见 `config/pallas.example.toml` | 数据库地址与账号（与 `DB_BACKEND` 对应） | 是 |
-| `ACCESS_TOKEN` | 空 | 驱动层 HTTP 鉴权；公网暴露时建议填写 | 否 |
-| `PALLAS_PROTOCOL_ENABLED` / `PALLAS_PROTOCOL_WEBUI_ENABLED` | 默认开启 | 协议端插件与管理页 | 否 |
-| `maa_public_base_url` | （空） | MAA 远控对外 HTTP 基址；一般部署**只需此项**（见 [maa](docs/plugins/maa/README.md)） | 使用 MAA 时建议填 |
-
-
-控制台与协议管理页为**浏览器登录**，口令在 `data/pallas_console/`；说明见 [pallas_webui](docs/plugins/pallas_webui/README.md)、[pallas_protocol](docs/plugins/pallas_protocol/README.md)，遗忘与排障见 [FAQ](docs/FAQ.md)。
-
-<a id="文档与链接"></a>
-## 📚 文档与链接
-
-| 类型 | 链接 |
-| --- | --- |
-| 标准部署 | [docs/Deployment.md](docs/Deployment.md) |
-| Docker | [docs/DockerDeployment.md](docs/DockerDeployment.md) |
-| 常见问题 | [docs/FAQ.md](docs/FAQ.md)（[学习机制](docs/FAQ.md#学习机制)、[使用与管理](docs/FAQ.md#使用与管理)、[部署排障](docs/FAQ.md#部署排障)） |
-| 插件索引 | [docs/plugins/README.md](docs/plugins/README.md) |
-| MAA 远控 | [docs/plugins/maa/README.md](docs/plugins/maa/README.md) |
-| 连通性检测 | [docs/plugins/connectivity/README.md](docs/plugins/connectivity/README.md) |
-| 命令权限 / 帮助菜单 | [docs/common/cmd_perm/README.md](docs/common/cmd_perm/README.md) |
-| 协议端 / 控制台 | [pallas_protocol](docs/plugins/pallas_protocol/README.md)、[pallas_webui](docs/plugins/pallas_webui/README.md) |
-| 变更记录 | [GitHub Releases](https://github.com/PallasBot/Pallas-Bot/releases) |
-| 配置存储 | [settings-storage](docs/architecture/settings-storage.md)、[pallas.example.toml](config/pallas.example.toml) |
-| `.env` → TOML | [`tools/migrate_env_to_pallas.py`](tools/migrate_env_to_pallas.py)（见 README [从 .env 迁移](#从-env-迁移旧用户)） |
-| 数据迁移 | [Mongo → PG 脚本](tools/migrate_mongo_to_pg.py)、[迁移说明（v3）](docs/Migration-v3.md) |
-| 多进程分片 | [bot_process_sharding](docs/architecture/bot_process_sharding.md)、[`run_sharded_bot.sh`](scripts/run_sharded_bot.sh) |
-| 历史分支 | [`archive/v2`](https://github.com/PallasBot/Pallas-Bot/tree/archive/v2)（仅 MongoDB 旧版参考） |
+| **文档** | [![docs on GitHub Pages](https://img.shields.io/badge/docs%20on-GitHub.Pages-FE7D37)](https://PallasBot.github.io/Pallas-Bot-Docs/) |
 
 <a id="开发与贡献指南"></a>
 ## 💻 开发与贡献指南
 
-欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。参与前请阅读 [贡献指南](CONTRIBUTING.md) 与仓库根目录 [AGENTS.md](AGENTS.md)（本地安装、Ruff、pytest、提交约定）。
-
+欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。参与前请阅读 [贡献指南](CONTRIBUTING.md) 与仓库根目录 [AGENTS.md](AGENTS.md)。
 
 <a id="社区与支持"></a>
 ## 🤝 社区与支持
 
-页顶徽章展示社区部署概况。`community_stats` 在 hub / 单进程**默认开启**；关闭见 [社区统计说明](docs/common/community_stats.md)。
 
 <a id="qq-群"></a>
 ### 💬 QQ 群
@@ -354,8 +123,6 @@ uv run python tools/migrate_env_to_pallas.py
 - [**zhenxun_bot**](https://github.com/zhenxun-org/zhenxun_bot.git)：非常可爱的绪山真寻Bot
 - [**Amiya-bot**](https://github.com/AmiyaBot/Amiya-Bot.git)：基于 AmiyaBot 框架的 QQ 聊天机器人
 - [**CustomMarkdownImage**](https://github.com/Monody-S/CustomMarkdownImage.git)：基于pillow的可自定义markdown渲染器
-## 📊 统计
-<!-- Copy-paste in your Readme.md file -->
 
 <a href="https://next.ossinsight.io/widgets/official/analyze-repo-pushes-and-commits-per-month?repo_id=425810267" target="_blank" style="display: block" align="center">
   <picture>
@@ -364,9 +131,6 @@ uv run python tools/migrate_env_to_pallas.py
   </picture>
 </a>
 
-<!-- Made with [OSS Insight](https://ossinsight.io/) -->
-<!-- Copy-paste in your Readme.md file -->
-
 <a href="https://next.ossinsight.io/widgets/official/compose-recent-active-contributors?repo_id=425810267&limit=30" target="_blank" style="display: block" align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://next.ossinsight.io/widgets/official/compose-recent-active-contributors/thumbnail.png?repo_id=425810267&limit=30&image_size=auto&color_scheme=dark" width="655" height="auto">
@@ -374,7 +138,6 @@ uv run python tools/migrate_env_to_pallas.py
   </picture>
 </a>
 
-<!-- Made with [OSS Insight](https://ossinsight.io/) -->
 ## 👥 贡献者
 
 感谢各位大佬！
