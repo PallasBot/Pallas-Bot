@@ -53,6 +53,7 @@
 - `docs/Deployment.md`、`docs/DockerDeployment.md`：部署类文档
 - `docs/FAQ.md`：常见问题
 - `docs/architecture/`：架构与约定文档（本文件所在目录）
+- `docs/develop/`：面向贡献者的开发指南（环境、工作流、插件与 WebUI）
 - `docs/plugins/`：插件专项说明（按插件目录组织）
 
 目录约定：
