@@ -388,3 +388,23 @@ async def test_send_heartbeat_fallback_after_primary_fails(monkeypatch, tmp_path
     assert calls[1] == FALLBACK_HEARTBEAT
     raw = json.loads(state_path.read_text(encoding="utf-8"))
     assert raw["heartbeat_endpoint"] == FALLBACK_HEARTBEAT
+
+
+@pytest.mark.asyncio
+async def test_worker_startup_skips_bootstrap_and_enroll(monkeypatch: pytest.MonkeyPatch) -> None:
+    import src.plugins.community_stats as plugin_mod
+
+    bootstrap = AsyncMock()
+    enroll = AsyncMock()
+    reporter = AsyncMock()
+
+    monkeypatch.setattr(plugin_mod, "is_sharded_worker", lambda: True)
+    monkeypatch.setattr(plugin_mod, "ensure_control_plane_bootstrap", bootstrap)
+    monkeypatch.setattr(plugin_mod, "ensure_corpus_community_enrolled", enroll)
+    monkeypatch.setattr(plugin_mod, "start_community_stats_reporter", reporter)
+
+    await plugin_mod.community_stats_startup()
+
+    bootstrap.assert_not_awaited()
+    enroll.assert_not_awaited()
+    reporter.assert_not_awaited()

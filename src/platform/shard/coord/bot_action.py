@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-import os
 import time
 import uuid
 from typing import Any
@@ -14,91 +13,33 @@ from nonebot import logger
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from nonebot.adapters.onebot.v11.exception import ActionFailed
 
-from src.foundation.paths import plugin_data_dir
+from src.platform.shard.coord.coord_redis_store import (
+    coord_key,
+    mutate_json_sync,
+    read_json_sync,
+    store_json_sync,
+)
 from src.platform.shard.registry.config import is_sharding_active
 
-_PLUGIN = "pallas_shard"
 _POLL_SEC = 0.08
 _STALE_SEC = 180.0
 _DONE_RETAIN_SEC = 45.0
 _OPEN_OVERDUE_GRACE_SEC = 5.0
 _DEFAULT_TIMEOUT = 18.0
+_WAKE_CHANNEL = "pallas:coord:bot_action:wake"
 _inflight: set[str] = set()
 _last_stale_open_warn_at = 0.0
+_wait_events: dict[str, asyncio.Event] = {}
+_listener_started = False
 
 
-def _coord_dir():
-    from pathlib import Path
-
-    root = Path(plugin_data_dir(_PLUGIN, create=True)) / "coord" / "bot_action"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+def _request_key(request_id: str) -> str:
+    return coord_key("bot_action", request_id)
 
 
-def _request_path(request_id: str):
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in request_id)
-    return _coord_dir() / f"{safe}.json"
-
-
-def _session_lock_path(path) -> Any:
-    return path.with_suffix(path.suffix + ".lock")
-
-
-def _acquire_lock(lock_path, *, timeout: float = 3.0) -> int | None:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            return os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            try:
-                if time.time() - lock_path.stat().st_mtime > 10.0:
-                    lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            time.sleep(0.02)
-    return None
-
-
-def _release_lock(fd: int | None, lock_path) -> None:
-    if fd is not None:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-    try:
-        lock_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-
-def _read(path) -> dict[str, Any] | None:
-    if not path.is_file():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return raw if isinstance(raw, dict) else None
-
-
-def _write_atomic(path, data: dict[str, Any]) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
-
-
-def _mutate(path, fn) -> dict[str, Any] | None:
-    lk = _session_lock_path(path)
-    fd = _acquire_lock(lk)
-    if fd is None:
-        return _read(path)
-    try:
-        data = _read(path) or {}
-        fn(data)
-        _write_atomic(path, data)
-        return data
-    finally:
-        _release_lock(fd, lk)
+def _request_ttl(data: dict[str, Any]) -> int:
+    deadline = float(data.get("deadline") or time.time() + 60)
+    return max(60, min(int(_STALE_SEC), int(deadline - time.time()) + 30))
 
 
 def _publish_request(
@@ -109,28 +50,29 @@ def _publish_request(
     timeout_sec: float,
 ) -> str:
     request_id = uuid.uuid4().hex
-    path = _request_path(request_id)
     now = time.time()
-
-    def init(data: dict[str, Any]) -> None:
-        data.clear()
-        data.update({
-            "request_id": request_id,
-            "action": action,
-            "bot_qq": int(bot_qq),
-            "payload": payload,
-            "deadline": now + timeout_sec,
-            "created_at": now,
-            "done": False,
-            "ok": None,
-            "result": None,
-        })
-
-    _mutate(path, init)
+    data = {
+        "request_id": request_id,
+        "action": action,
+        "bot_qq": int(bot_qq),
+        "payload": payload,
+        "deadline": now + timeout_sec,
+        "created_at": now,
+        "done": False,
+        "ok": None,
+        "result": None,
+    }
+    store_json_sync(
+        _request_key(request_id),
+        data,
+        ttl_sec=_request_ttl(data),
+        wake_channel=_WAKE_CHANNEL,
+        wake_body={"request_id": request_id},
+    )
     return request_id
 
 
-def _finish_request(path, *, ok: bool, result: Any = None) -> None:
+def _finish_request(request_id: str, *, ok: bool, result: Any = None) -> None:
     def finish(data: dict[str, Any]) -> None:
         if data.get("done"):
             return
@@ -138,16 +80,33 @@ def _finish_request(path, *, ok: bool, result: Any = None) -> None:
         data["ok"] = ok
         data["result"] = result
 
-    _mutate(path, finish)
+    mutate_json_sync(_request_key(request_id), finish, ttl_sec_fn=_request_ttl)
+    wake_bot_action_request(request_id)
+
+
+def wake_bot_action_request(request_id: str) -> None:
+    event = _wait_events.get(request_id)
+    if event is not None:
+        event.set()
 
 
 async def _wait_request(request_id: str, *, deadline: float) -> tuple[bool, Any]:
-    path = _request_path(request_id)
-    while time.time() < deadline:
-        data = await asyncio.to_thread(_read, path)
-        if data and data.get("done"):
-            return bool(data.get("ok")), data.get("result")
-        await asyncio.sleep(_POLL_SEC)
+    event = _wait_events.setdefault(request_id, asyncio.Event())
+    try:
+        while time.time() < deadline:
+            data = await asyncio.to_thread(read_json_sync, _request_key(request_id))
+            if data and data.get("done"):
+                return bool(data.get("ok")), data.get("result")
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                break
+            try:
+                await asyncio.wait_for(event.wait(), timeout=min(_POLL_SEC, remaining))
+            except TimeoutError:
+                pass
+            event.clear()
+    finally:
+        _wait_events.pop(request_id, None)
     return False, None
 
 
@@ -226,7 +185,6 @@ async def _execute_local(action: str, bot_qq: int, payload: dict[str, Any]) -> t
                 except Exception as err:
                     logger.warning("repeater_fanout remote bot={} failed: {}", int(bot_qq), err)
 
-            # Fanout 代发包含随机延迟与真实发送，不应阻塞 coord 请求直到整条发送链结束。
             asyncio.create_task(
                 repeater_job(),
                 name=f"repeater_fanout_reply_{int(bot_qq)}",
@@ -378,8 +336,8 @@ async def call_onebot_api_as_bot(
     )
 
 
-async def _run_pending_request(path, local_ids: frozenset[str]) -> None:
-    data = await asyncio.to_thread(_read, path)
+async def _run_pending_request(request_id: str, local_ids: frozenset[str]) -> None:
+    data = await asyncio.to_thread(read_json_sync, _request_key(request_id))
     if not data or data.get("done"):
         return
     if time.time() > float(data.get("deadline") or 0) + 1.0:
@@ -387,7 +345,7 @@ async def _run_pending_request(path, local_ids: frozenset[str]) -> None:
     bot_key = str(int(data.get("bot_qq") or 0))
     if bot_key not in local_ids:
         return
-    req_id = str(data.get("request_id") or path.stem)
+    req_id = str(data.get("request_id") or request_id)
     if req_id in _inflight:
         return
     _inflight.add(req_id)
@@ -397,9 +355,7 @@ async def _run_pending_request(path, local_ids: frozenset[str]) -> None:
 
     if action == "repeater_fanout_reply":
         try:
-            # 这类请求仅用于跨 worker 触发后台 fanout；识别到目标本地牛后立即 ack，
-            # 避免轮询 task 本身调度延迟又把请求留到过期窗口。
-            await asyncio.to_thread(_finish_request, path, ok=True, result=None)
+            await asyncio.to_thread(_finish_request, req_id, ok=True, result=None)
             await _execute_local(action, bot_qq, payload)
         finally:
             _inflight.discard(req_id)
@@ -408,7 +364,7 @@ async def _run_pending_request(path, local_ids: frozenset[str]) -> None:
     async def job() -> None:
         try:
             ok, result = await _execute_local(action, bot_qq, payload)
-            await asyncio.to_thread(_finish_request, path, ok=ok, result=result)
+            await asyncio.to_thread(_finish_request, req_id, ok=ok, result=result)
         finally:
             _inflight.discard(req_id)
 
@@ -416,35 +372,8 @@ async def _run_pending_request(path, local_ids: frozenset[str]) -> None:
 
 
 async def poll_bot_action_pending(local_ids: frozenset[str]) -> None:
-    if not local_ids:
-        return
-    coord = _coord_dir()
-    for path in coord.glob("*.json"):
-        if ".lock" in path.name:
-            continue
-        await _run_pending_request(path, local_ids)
-    now = time.time()
-    for path in coord.glob("*.json"):
-        row = await asyncio.to_thread(_read, path)
-        if not row:
-            continue
-        if not row.get("done"):
-            deadline = float(row.get("deadline") or 0)
-            if deadline > 0 and now > deadline + _OPEN_OVERDUE_GRACE_SEC:
-                _maybe_warn_stale_open(row, now=now)
-                try:
-                    path.unlink(missing_ok=True)
-                except OSError:
-                    pass
-            else:
-                _maybe_warn_stale_open(row, now=now)
-            continue
-        created = float(row.get("created_at") or 0)
-        if now - created > _DONE_RETAIN_SEC:
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                pass
+    """兼容旧轮询入口；Redis 模式下由 pub/sub 唤醒。"""
+    return None
 
 
 def _maybe_warn_stale_open(row: dict[str, Any], *, now: float) -> None:
@@ -463,48 +392,73 @@ def _maybe_warn_stale_open(row: dict[str, Any], *, now: float) -> None:
 
 
 async def prune_stale_bot_action_files() -> dict[str, int]:
-    """清理 done 陈旧文件、deadline 后仍未完成的 open 请求及超期残留。"""
-    stats = {"removed_done": 0, "removed_overdue_open": 0, "removed_expired": 0}
-    now = time.time()
-    for path in _coord_dir().glob("*.json"):
-        if ".lock" in path.name:
+    """Redis TTL 自动过期；保留空实现供运维脚本兼容。"""
+    return {"removed_done": 0, "removed_overdue_open": 0, "removed_expired": 0}
+
+
+async def bot_action_redis_listen_loop() -> None:
+    from nonebot import get_bots
+
+    from src.platform.coord.redis_claim import get_coord_redis_client
+    from src.platform.coord.redis_settings import coord_redis_enabled
+
+    while True:
+        if not coord_redis_enabled():
+            await asyncio.sleep(2.0)
             continue
-        row = await asyncio.to_thread(_read, path)
-        if row is None:
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            stats["removed_expired"] += 1
+        client = get_coord_redis_client()
+        if client is None:
+            await asyncio.sleep(2.0)
             continue
-        if row.get("done"):
-            created = float(row.get("created_at") or 0)
-            if now - created > _DONE_RETAIN_SEC:
+        pubsub = None
+        try:
+            pubsub = client.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(_WAKE_CHANNEL)
+            while True:
+                msg = await asyncio.to_thread(pubsub.get_message, timeout=1.0)
+                if not msg or msg.get("type") != "message":
+                    await asyncio.sleep(0)
+                    continue
+                data = msg.get("data")
+                if isinstance(data, bytes):
+                    data = data.decode("utf-8")
                 try:
-                    path.unlink(missing_ok=True)
-                except OSError:
+                    envelope = json.loads(data)
+                except (TypeError, json.JSONDecodeError):
+                    continue
+                if not isinstance(envelope, dict):
+                    continue
+                request_id = str(envelope.get("request_id") or "")
+                if not request_id:
+                    continue
+                wake_bot_action_request(request_id)
+                local_ids = frozenset(get_bots().keys())
+                if not local_ids:
+                    continue
+                try:
+                    await _run_pending_request(request_id, local_ids)
+                except Exception as err:
+                    logger.debug(f"bot_action wake: {err}")
+        except asyncio.CancelledError:
+            raise
+        except Exception as err:
+            logger.debug(f"bot_action redis listen: {err}")
+            await asyncio.sleep(1.0)
+        finally:
+            if pubsub is not None:
+                try:
+                    pubsub.unsubscribe(_WAKE_CHANNEL)
+                    pubsub.close()
+                except Exception:
                     pass
-                else:
-                    stats["removed_done"] += 1
-            continue
-        deadline = float(row.get("deadline") or 0)
-        if now > deadline + _OPEN_OVERDUE_GRACE_SEC:
-            _maybe_warn_stale_open(row, now=now)
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            else:
-                stats["removed_overdue_open"] += 1
-            continue
-        if now > deadline + _STALE_SEC:
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            else:
-                stats["removed_expired"] += 1
-    removed = sum(stats.values())
-    if removed:
-        logger.info(f"bot_action coord 清理: {stats}")
-    return stats
+
+
+def start_bot_action_redis_listener() -> None:
+    global _listener_started
+    from src.platform.coord.redis_settings import coord_redis_enabled
+    from src.platform.shard.registry.config import is_sharding_active
+
+    if _listener_started or not is_sharding_active() or not coord_redis_enabled():
+        return
+    _listener_started = True
+    asyncio.create_task(bot_action_redis_listen_loop())

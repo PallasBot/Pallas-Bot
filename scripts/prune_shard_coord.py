@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""一次性清理 coord 陈旧 JSON（bot_action / duel_qte 等）。分片运行时可在 hub 或运维机执行。"""
+"""coord 清理脚本（coord 已 Redis 化，本脚本仅输出快照供运维兼容）。"""
 
 from __future__ import annotations
 
@@ -14,51 +14,29 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-def prune_all_done_bot_action() -> int:
-    from src.platform.shard.coord.bot_action import _coord_dir, _read
-
-    removed = 0
-    for path in _coord_dir().glob("*.json"):
-        if ".lock" in path.name:
-            continue
-        row = _read(path)
-        if isinstance(row, dict) and row.get("done"):
-            try:
-                path.unlink(missing_ok=True)
-                removed += 1
-            except OSError:
-                pass
-    return removed
-
-
 async def main() -> int:
-    parser = argparse.ArgumentParser(description="清理 data/pallas_shard/coord 陈旧 JSON")
+    parser = argparse.ArgumentParser(description="coord Redis 模式快照（legacy 文件清理已停用）")
     parser.add_argument(
         "--purge-done",
         action="store_true",
-        help="删除全部 bot_action done 文件（运维一次性减压，不影响进行中的 open）",
+        help="兼容旧参数；Redis 模式下无文件可清理",
+    )
+    parser.add_argument(
+        "--live-scan",
+        action="store_true",
+        help="显式扫描 Redis 键空间；默认仅输出轻量快照",
     )
     args = parser.parse_args()
-    from src.platform.shard.coord.bot_action import prune_stale_bot_action_files
-    from src.platform.shard.coord.bot_count import prune_stale_bot_count_files
-    from src.platform.shard.coord.cage_duel import prune_stale_cage_duel_files
-    from src.platform.shard.coord.duel_group import prune_stale_duel_group_files
-    from src.platform.shard.coord.duel_qte import prune_stale_duel_qte_files
-    from src.platform.shard.coord.repeater_buffer import prune_stale_repeater_buffer_files
     from src.platform.shard.coord_pending import coord_pending_snapshot_sync
 
-    before = coord_pending_snapshot_sync()
-    purged_done = prune_all_done_bot_action() if args.purge_done else 0
-    bot_stats = await prune_stale_bot_action_files()
-    if purged_done:
-        bot_stats["purged_all_done"] = purged_done
-    await prune_stale_duel_qte_files()
-    await prune_stale_repeater_buffer_files()
-    await prune_stale_cage_duel_files()
-    await prune_stale_bot_count_files()
-    await prune_stale_duel_group_files()
-    after = coord_pending_snapshot_sync()
-    out = {"before": before, "bot_action": bot_stats, "after": after}
+    snap = coord_pending_snapshot_sync(live=bool(args.live_scan))
+    out = {
+        "storage": snap.get("storage"),
+        "snapshot": snap,
+        "purge_done_requested": bool(args.purge_done),
+        "live_scan_requested": bool(args.live_scan),
+        "note": "coord 数据存 Redis，无 JSON 文件轮询/prune",
+    }
     json.dump(out, sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0

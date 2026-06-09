@@ -36,6 +36,7 @@ from src.features.cmd_perm.metadata_text import SCENE_AUTO, SCENE_GROUP, SCENE_P
 from src.foundation.config import BotConfig, GroupConfig, UserConfig
 from src.foundation.paths import plugin_data_dir
 from src.plugins.blacklist import invalidate_group_ban_gate_cache, invalidate_user_ban_gate_cache
+from src.plugins.duel.duel_qte import duel_qte_blocks_greeting_user
 from src.shared.utils import HTTPXClient, is_bot_admin
 
 from .config import Config, plugin_config
@@ -420,7 +421,9 @@ async def greeting_plugin_disabled(group_id: int | None, bot_id: int | str) -> b
 
 
 def call_me_message_rule(event: GroupMessageEvent) -> bool:
-    return event.raw_message in target_msgs
+    if event.raw_message not in target_msgs:
+        return False
+    return not duel_qte_blocks_greeting_user(event.group_id, event.user_id)
 
 
 call_me_cmd = on_message(
@@ -484,6 +487,9 @@ _NoticeEvent = (
 
 @all_notice.handle()
 async def handle_notice(event: _NoticeEvent):
+    if event.notice_type == "group_msg_emoji_like":
+        return
+
     if await greeting_plugin_disabled(getattr(event, "group_id", None), event.self_id):
         return
 

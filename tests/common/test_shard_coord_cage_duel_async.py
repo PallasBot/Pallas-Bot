@@ -1,18 +1,17 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 
 import pytest
 
 from src.platform.multi_bot.dedup import cross_bot_group_message_key
 from src.platform.shard.coord import cage_duel as mod
+from src.platform.shard.coord.coord_redis_store import setex_json_sync
 
 
 @pytest.mark.asyncio
-async def test_run_shard_merges_self_across_workers(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+async def test_run_shard_merges_self_across_workers(fake_coord_redis, monkeypatch) -> None:
     monkeypatch.setattr(mod, "_COLLECT_SEC", 0.05)
     monkeypatch.setattr(mod, "_STABLE_SEC", 0.02)
     monkeypatch.setattr(mod, "_POST_COLLECT_GRACE_SEC", 0.05)
@@ -44,8 +43,7 @@ async def test_run_shard_merges_self_across_workers(tmp_path, monkeypatch) -> No
 
 
 @pytest.mark.asyncio
-async def test_cage_session_resets_after_completed_round(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+async def test_cage_session_resets_after_completed_round(fake_coord_redis, monkeypatch) -> None:
     monkeypatch.setattr(mod, "_COLLECT_SEC", 0.05)
     monkeypatch.setattr(mod, "_STABLE_SEC", 0.02)
     monkeypatch.setattr(mod, "_POST_COLLECT_GRACE_SEC", 0.05)
@@ -55,19 +53,17 @@ async def test_cage_session_resets_after_completed_round(tmp_path, monkeypatch) 
     claim_key = cross_bot_group_message_key(
         group_id, user_id, "八角笼牛", 1000, use_plaintext=True, include_message_time=True
     )
-    path = mod._session_path(group_id, claim_key)
-    path.write_text(
-        json.dumps({
-            "group_id": group_id,
-            "user_id": user_id,
-            "message_time": 1000,
-            "seed": "old",
-            "collect_until": time.time() - 60,
-            "shards": {"0": [111, 222]},
-            "pair": [111, 222],
-        }),
-        encoding="utf-8",
-    )
+    session_key = mod._session_path(group_id, claim_key)
+    stale = {
+        "group_id": group_id,
+        "user_id": user_id,
+        "message_time": 1000,
+        "seed": "old",
+        "collect_until": time.time() - 60,
+        "shards": {"0": [111, 222]},
+        "pair": [111, 222],
+    }
+    setex_json_sync(session_key, stale, mod._SESSION_TTL_SEC)
 
     monkeypatch.setattr(
         "src.platform.shard.registry.config.get_shard_registry_settings",
@@ -86,6 +82,7 @@ async def test_cage_session_resets_after_completed_round(tmp_path, monkeypatch) 
             group_id, user_id, "八角笼牛", 2000, use_plaintext=True, include_message_time=True
         ),
     )
-    data = json.loads(path_new.read_text(encoding="utf-8"))
+    data = mod._read_session(path_new)
+    assert data is not None
     assert data.get("message_time") == 2000
     assert data.get("pair") is None or pair is not None

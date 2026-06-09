@@ -50,3 +50,27 @@ def test_session_seen_intersects_enabled_protocol(monkeypatch):
 
     assert mod.get_session_seen_bot_ids() == frozenset({100})
     fleet_mod._session_connected.clear()
+
+
+def test_duplicate_cluster_seen_does_not_rewrite_file(tmp_path, monkeypatch):
+    shard_dir = tmp_path / "pallas_shard"
+    shard_dir.mkdir()
+    monkeypatch.setattr(
+        mod,
+        "plugin_data_dir",
+        lambda name, create=False: shard_dir if name == "pallas_shard" else tmp_path,
+    )
+
+    writes: list[dict[str, object]] = []
+    real_write = mod._write_seen_atomic
+
+    def wrapped(data):
+        writes.append(dict(data))
+        real_write(data)
+
+    monkeypatch.setattr(mod, "_write_seen_atomic", wrapped)
+
+    mod.note_cluster_session_seen_sync(qq=111)
+    mod.note_cluster_session_seen_sync(qq=111)
+
+    assert len(writes) == 1

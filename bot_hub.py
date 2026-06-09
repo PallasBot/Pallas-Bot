@@ -59,6 +59,9 @@ register_onebot_v11_custom_events()
 async def startup():
     await init_db()
     await start_ban_gate_snapshot()
+    from src.platform.coord.redis_settings import ensure_coord_redis_ready_for_sharding
+
+    ensure_coord_redis_ready_for_sharding()
     reg = get_shard_registry()
     nonebot.logger.info(
         "bot_hub: registry hub_port={} worker_base_port={} shards={}",

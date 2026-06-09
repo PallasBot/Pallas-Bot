@@ -86,8 +86,8 @@ def _mutate_file(fn) -> None:
         return
     try:
         data = _read_data()
-        fn(data)
-        _write_atomic(data)
+        if fn(data):
+            _write_atomic(data)
     finally:
         _release_lock(fd)
 
@@ -161,7 +161,8 @@ def note_worker_bot_connected_sync(
 
     def upd(data: dict[str, Any]) -> None:
         bots = data.setdefault("bots", {})
-        bots[key] = {
+        prev = bots.get(key)
+        next_rec = {
             "qq": int(qq),
             "shard_id": int(shard_id),
             "connection_key": connection_key,
@@ -170,6 +171,18 @@ def note_worker_bot_connected_sync(
             "last_seen_at": now,
             "nickname": nick,
         }
+        if (
+            isinstance(prev, dict)
+            and int(prev.get("qq") or 0) == int(qq)
+            and int(prev.get("shard_id") or -1) == int(shard_id)
+            and str(prev.get("connection_key") or "") == connection_key
+            and str(prev.get("adapter") or "") == adapter
+            and str(prev.get("nickname") or "") == nick
+        ):
+            prev["last_seen_at"] = now
+            return True
+        bots[key] = next_rec
+        return True
 
     _mutate_file(upd)
 
@@ -188,13 +201,15 @@ def touch_worker_bot_presence_sync(*, qq: int) -> None:
     key = str(int(qq))
     now = time.time()
 
-    def upd(data: dict[str, Any]) -> None:
+    def upd(data: dict[str, Any]) -> bool:
         bots = data.get("bots")
         if not isinstance(bots, dict):
-            return
+            return False
         rec = bots.get(key)
         if isinstance(rec, dict):
             rec["last_seen_at"] = now
+            return True
+        return False
 
     _mutate_file(upd)
 
@@ -214,8 +229,9 @@ def reconcile_local_worker_presence_sync(*, shard_id: int, local_qq_ids: set[int
     now = time.time()
     sid = int(shard_id)
 
-    def upd(data: dict[str, Any]) -> None:
+    def upd(data: dict[str, Any]) -> bool:
         bots = data.get("bots")
+        changed = False
         if not isinstance(bots, dict):
             bots = {}
             data["bots"] = bots
@@ -224,6 +240,7 @@ def reconcile_local_worker_presence_sync(*, shard_id: int, local_qq_ids: set[int
             rec = bots.get(key)
             if not isinstance(rec, dict):
                 bots.pop(key, None)
+                changed = True
                 continue
             if int(rec.get("shard_id") or -1) != sid:
                 continue
@@ -231,9 +248,11 @@ def reconcile_local_worker_presence_sync(*, shard_id: int, local_qq_ids: set[int
                 qq = int(rec.get("qq") or key)
             except (TypeError, ValueError):
                 bots.pop(key, None)
+                changed = True
                 continue
             if qq not in local_qq_ids:
                 bots.pop(key, None)
+                changed = True
             else:
                 present_for_shard.add(qq)
                 rec["last_seen_at"] = now
@@ -250,6 +269,8 @@ def reconcile_local_worker_presence_sync(*, shard_id: int, local_qq_ids: set[int
                 "last_seen_at": now,
                 "nickname": "",
             }
+            changed = True
+        return changed
 
     _mutate_file(upd)
 
@@ -270,21 +291,25 @@ def prune_stale_presence_entries_sync(*, max_age_sec: float = _PRESENCE_STALE_SE
     now = time.time()
     file_removed = 0
 
-    def upd(data: dict[str, Any]) -> None:
+    def upd(data: dict[str, Any]) -> bool:
         nonlocal file_removed
         bots = data.get("bots")
         if not isinstance(bots, dict):
-            return
+            return False
+        changed = False
         for key in list(bots.keys()):
             rec = bots.get(key)
             if not isinstance(rec, dict):
                 bots.pop(key, None)
                 file_removed += 1
+                changed = True
                 continue
             last = float(rec.get("last_seen_at") or rec.get("connected_at_unix") or 0)
             if last <= 0 or now - last > max_age_sec:
                 bots.pop(key, None)
                 file_removed += 1
+                changed = True
+        return changed
 
     _mutate_file(upd)
     return file_removed
@@ -350,10 +375,13 @@ def note_worker_bot_disconnected_sync(*, qq: int) -> None:
 
     key = str(int(qq))
 
-    def upd(data: dict[str, Any]) -> None:
+    def upd(data: dict[str, Any]) -> bool:
         bots = data.get("bots")
         if isinstance(bots, dict):
-            bots.pop(key, None)
+            if key in bots:
+                bots.pop(key, None)
+                return True
+        return False
 
     _mutate_file(upd)
 
@@ -376,20 +404,13 @@ async def note_worker_bot_connected(bot) -> None:
         pass
     sid = get_shard_registry_settings().shard_id
     conn_key = str(getattr(bot, "self_id", qq))
-    nickname = ""
-    try:
-        raw = await bot.call_api("get_login_info")
-        if isinstance(raw, dict):
-            nickname = str(raw.get("nickname") or "").strip()
-    except Exception:
-        pass
     await asyncio.to_thread(
         note_worker_bot_connected_sync,
         qq=qq,
         connection_key=conn_key,
         adapter=adapter,
         shard_id=sid,
-        nickname=nickname,
+        nickname="",
     )
 
 

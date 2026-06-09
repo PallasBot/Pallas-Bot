@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.platform.shard.registry.sync_protocol_ports import sync_accounts_ws_urls
+from src.platform.shard.registry.sync_protocol_ports import (
+    onebot_instance_ws_drifted,
+    sync_accounts_ws_urls,
+    sync_onebot_instances_from_accounts,
+)
 
 
 def test_sync_protocol_ports_no_change_when_already_aligned(tmp_path, monkeypatch):
@@ -104,3 +108,34 @@ def test_sync_protocol_ports_detects_port_drift(tmp_path, monkeypatch):
     result = sync_accounts_ws_urls(accounts_path, env_path=env_path, dry_run=True)
     assert result.changed_count == 1
     assert result.details[0].get("port") == 8091
+
+
+def test_sync_onebot_instances_detects_drift(tmp_path):
+    instance_dir = tmp_path / "instances" / "100"
+    config_dir = instance_dir / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "onebot11_100.json").write_text(
+        json.dumps(
+            {
+                "network": {
+                    "websocketClients": [{"enable": True, "url": "ws://172.17.0.1:8090/onebot/v11/ws"}],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    accounts = {
+        "a1": {
+            "qq": "100",
+            "enabled": True,
+            "ws_url": "ws://172.17.0.1:8091/onebot/v11/ws",
+            "account_data_dir": str(instance_dir),
+        }
+    }
+    assert onebot_instance_ws_drifted(accounts["a1"]) is True
+
+    synced, drift = sync_onebot_instances_from_accounts(accounts, dry_run=False)
+    assert synced == 1
+    assert drift == 1
+    data = json.loads((config_dir / "onebot11_100.json").read_text(encoding="utf-8"))
+    assert data["network"]["websocketClients"][0]["url"] == "ws://172.17.0.1:8091/onebot/v11/ws"

@@ -1,121 +1,52 @@
-"""分片：MAA 待拉取任务队列（hub/worker 共享 data，供 getTask / 状态统计）。"""
+"""分片：MAA 待拉取任务队列（hub/worker 共享，供 getTask / 状态统计）。"""
 
 from __future__ import annotations
 
-import json
-import os
 import time
-from pathlib import Path
 from typing import Any
 
 from nonebot import logger
 
-from src.foundation.paths import plugin_data_dir
+from src.platform.shard.coord.coord_redis_store import (
+    coord_key,
+    delete_key_sync,
+    mutate_json_sync,
+    read_json_sync,
+    scan_keys_sync,
+    setex_json_sync,
+)
 from src.plugins.maa.tasks import normalize_device_id
 
-_PLUGIN = "pallas_shard"
 _LOCK_RETRIES = 5
+_QUEUE_TTL_SEC = 86400
 
 
-def _root() -> Path:
-    root = Path(plugin_data_dir(_PLUGIN, create=True)) / "coord" / "maa_pending"
-    root.mkdir(parents=True, exist_ok=True)
-    (root / "queues").mkdir(parents=True, exist_ok=True)
-    (root / "task_index").mkdir(parents=True, exist_ok=True)
-    return root
-
-
-def _queue_path(user: str, device: str) -> Path | None:
+def _queue_key(user: str, device: str) -> str | None:
     u = (user or "").strip()
     norm = normalize_device_id(device)
     if not u or not norm:
         return None
-    return _root() / "queues" / f"{u}_{norm}.json"
+    return coord_key("maa_pending", "queue", f"{u}_{norm}")
 
 
-def _index_path(task_id: str) -> Path:
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in task_id)
-    return _root() / "task_index" / f"{safe}.json"
+def _index_key(task_id: str) -> str:
+    return coord_key("maa_pending", "idx", task_id)
 
 
-def _lock_path(path: Path) -> Path:
-    return path.with_suffix(path.suffix + ".lock")
+def _queue_ttl(_data: dict[str, Any]) -> int:
+    return _QUEUE_TTL_SEC
 
 
-def _acquire_lock(lock_path: Path, *, timeout: float = 3.0) -> int | None:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            return os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            try:
-                if time.time() - lock_path.stat().st_mtime > 10.0:
-                    lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            time.sleep(0.02)
-    return None
-
-
-def _release_lock(fd: int | None, lock_path: Path) -> None:
-    if fd is not None:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-    try:
-        lock_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-
-def _read_json(path: Path) -> dict[str, Any] | None:
-    if not path.is_file():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return raw if isinstance(raw, dict) else None
-
-
-def _write_atomic(path: Path, data: dict[str, Any]) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
-
-
-def _mutate_queue(path: Path, fn) -> dict[str, Any]:
-    lk = _lock_path(path)
-    fd = _acquire_lock(lk)
-    if fd is None:
-        raise TimeoutError(f"failed to acquire lock for pending queue: {path}")
-    try:
-        data = _read_json(path) or {"tasks": {}}
-        tasks = data.get("tasks")
-        if not isinstance(tasks, dict):
-            data["tasks"] = {}
-        fn(data)
-        _write_atomic(path, data)
-        return data
-    finally:
-        _release_lock(fd, lk)
-
-
-def _mutate_queue_retry(path: Path, fn) -> dict[str, Any] | None:
-    last: TimeoutError | None = None
+def _mutate_queue_retry(queue_key: str, fn) -> dict[str, Any] | None:
+    last: Exception | None = None
     for attempt in range(_LOCK_RETRIES):
-        try:
-            return _mutate_queue(path, fn)
-        except TimeoutError as err:
-            last = err
-            if attempt + 1 < _LOCK_RETRIES:
-                time.sleep(0.05 * (attempt + 1))
-    logger.warning(
-        "maa pending queue lock timeout after {} tries: {}",
-        _LOCK_RETRIES,
-        path,
-    )
+        result = mutate_json_sync(queue_key, fn, ttl_sec_fn=_queue_ttl, retries=3)
+        if result is not None:
+            return result
+        last = TimeoutError(f"failed to mutate pending queue: {queue_key}")
+        if attempt + 1 < _LOCK_RETRIES:
+            time.sleep(0.05 * (attempt + 1))
+    logger.warning("maa pending queue lock timeout after {} tries: {}", _LOCK_RETRIES, queue_key)
     if last is not None:
         logger.debug("maa pending queue lock last error: {}", last)
     return None
@@ -125,30 +56,34 @@ def enqueue_task_sync(task: dict[str, Any]) -> None:
     """task 须含 task_id、user、device 等字段。"""
     user = str(task.get("user") or "").strip()
     device = str(task.get("device") or "")
-    path = _queue_path(user, device)
-    if path is None:
+    queue_key = _queue_key(user, device)
+    if queue_key is None:
         return
     task_id = str(task.get("task_id") or "")
     if not task_id:
         return
 
     def add(data: dict[str, Any]) -> None:
-        data["tasks"][task_id] = task
+        tasks = data.setdefault("tasks", {})
+        if not isinstance(tasks, dict):
+            data["tasks"] = {}
+            tasks = data["tasks"]
+        tasks[task_id] = task
 
-    if _mutate_queue_retry(path, add) is None:
+    if _mutate_queue_retry(queue_key, add) is None:
         return
-    idx = _index_path(task_id)
-    _write_atomic(
-        idx,
+    setex_json_sync(
+        _index_key(task_id),
         {"task_id": task_id, "user": user, "device": normalize_device_id(device) or device},
+        _QUEUE_TTL_SEC,
     )
 
 
 def list_pending_sync(user: str, device: str) -> list[dict[str, Any]]:
-    path = _queue_path(user, device)
-    if path is None:
+    queue_key = _queue_key(user, device)
+    if queue_key is None:
         return []
-    data = _read_json(path)
+    data = read_json_sync(queue_key)
     if not data:
         return []
     tasks = data.get("tasks")
@@ -160,13 +95,13 @@ def list_pending_sync(user: str, device: str) -> list[dict[str, Any]]:
 
 
 def mark_reported_sync(task_id: str) -> dict[str, Any] | None:
-    idx = _read_json(_index_path(task_id))
+    idx = read_json_sync(_index_key(task_id))
     if not idx:
         return None
     user = str(idx.get("user") or "")
     device = str(idx.get("device") or "")
-    path = _queue_path(user, device)
-    if path is None:
+    queue_key = _queue_key(user, device)
+    if queue_key is None:
         return None
     found: dict[str, Any] | None = None
 
@@ -181,12 +116,9 @@ def mark_reported_sync(task_id: str) -> dict[str, Any] | None:
         rec["reported"] = True
         found = rec
 
-    if _mutate_queue_retry(path, mark) is None:
+    if _mutate_queue_retry(queue_key, mark) is None:
         return None
-    try:
-        _index_path(task_id).unlink(missing_ok=True)
-    except OSError:
-        pass
+    delete_key_sync(_index_key(task_id))
     return found
 
 
@@ -194,11 +126,10 @@ def pending_count_for_user_sync(user: str) -> int:
     u = (user or "").strip()
     if not u:
         return 0
+    prefix = coord_key("maa_pending", "queue", f"{u}_")
     total = 0
-    queues = _root() / "queues"
-    prefix = f"{u}_"
-    for path in queues.glob(f"{prefix}*.json"):
-        data = _read_json(path)
+    for key in scan_keys_sync(prefix):
+        data = read_json_sync(key)
         if not data:
             continue
         tasks = data.get("tasks")
@@ -217,15 +148,14 @@ def clear_pending_sync(user: str, *, device: str | None = None) -> int:
     if not u:
         return 0
     removed = 0
-    queues = _root() / "queues"
     if device is not None:
-        path = _queue_path(u, device)
-        paths = [path] if path is not None else []
+        keys = [_queue_key(u, device)]
     else:
-        paths = list(queues.glob(f"{u}_*.json"))
+        prefix = coord_key("maa_pending", "queue", f"{u}_")
+        keys = scan_keys_sync(prefix)
 
-    for path in paths:
-        if path is None or not path.is_file():
+    for queue_key in keys:
+        if queue_key is None:
             continue
 
         def clear(data: dict[str, Any]) -> None:
@@ -237,12 +167,9 @@ def clear_pending_sync(user: str, *, device: str | None = None) -> int:
                 if isinstance(rec, dict) and not rec.get("reported"):
                     del tasks[tid]
                     removed += 1
-                    try:
-                        _index_path(str(tid)).unlink(missing_ok=True)
-                    except OSError:
-                        pass
+                    delete_key_sync(_index_key(str(tid)))
 
-        _mutate_queue_retry(path, clear)
+        _mutate_queue_retry(queue_key, clear)
     return removed
 
 
@@ -251,16 +178,15 @@ def pending_type_counts_sync(user: str, *, device: str | None = None) -> dict[st
     if not u:
         return {}
     counts: dict[str, int] = {}
-    queues = _root() / "queues"
     if device is not None:
-        path = _queue_path(u, device)
-        paths = [path] if path is not None else []
+        keys = [_queue_key(u, device)]
     else:
-        paths = list(queues.glob(f"{u}_*.json"))
-    for path in paths:
-        if path is None or not path.is_file():
+        prefix = coord_key("maa_pending", "queue", f"{u}_")
+        keys = scan_keys_sync(prefix)
+    for queue_key in keys:
+        if queue_key is None:
             continue
-        data = _read_json(path)
+        data = read_json_sync(queue_key)
         if not data:
             continue
         tasks = data.get("tasks")
@@ -276,15 +202,5 @@ def pending_type_counts_sync(user: str, *, device: str | None = None) -> dict[st
 
 
 async def prune_stale_maa_pending_files(*, max_age_sec: float = 86400.0) -> None:
-    root = _root()
-    now = time.time()
-    for sub in ("queues", "task_index"):
-        dir_path = root / sub
-        if not dir_path.is_dir():
-            continue
-        for path in dir_path.glob("*.json"):
-            try:
-                if now - path.stat().st_mtime > max_age_sec:
-                    path.unlink(missing_ok=True)
-            except OSError:
-                pass
+    """Redis TTL 自动过期。"""
+    return None

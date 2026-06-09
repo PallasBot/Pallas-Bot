@@ -45,7 +45,7 @@
 | 现象 | 处理 |
 | --- | --- |
 | 未检测到轮询 | MAA 端点不可达或 URL 错误；分片须 hub `maa_public_base_url` 且各 worker 共用 `data/` |
-| 状态有待拉取、MAA 无任务 | 分片时队列在 `data/pallas_shard/coord/maa_pending/`；须 hub 能访问各 worker 端口 |
+| 状态有待拉取、MAA 无任务 | 分片时队列走 Redis `pallas:coord:maa_pending:*`；须 hub 能访问各 worker 端口并保证 Redis 可用 |
 | 下发后无任务 | 未绑定或用户标识符非 QQ；查 `牛牛MAA状态` |
 | 队列有、MAA 无 | 设备 id 与「当前选用」不一致；可清空队列重试 |
 | 截图失败 | 调大反代 `client_max_body_size` |

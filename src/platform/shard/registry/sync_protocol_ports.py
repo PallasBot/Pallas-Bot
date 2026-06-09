@@ -1,10 +1,14 @@
 """按分片注册表同步协议端 accounts.json 的 ws_url（指向各 worker 端口）。"""
 
+from __future__ import annotations
+
+import importlib.util
 import json
 import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from src.platform.shard.registry.store import (
@@ -15,6 +19,8 @@ from src.platform.shard.registry.store import (
     worker_port_for_shard,
 )
 
+_account_config_manager: Any | None = None
+
 
 @dataclass
 class ProtocolPortSyncResult:
@@ -22,6 +28,8 @@ class ProtocolPortSyncResult:
     details: list[dict[str, object]] = field(default_factory=list)
     skipped_disabled: int = 0
     skipped_invalid: int = 0
+    onebot_drift_count: int = 0
+    onebot_synced_count: int = 0
     dry_run: bool = False
 
 
@@ -97,6 +105,92 @@ def load_accounts(path: Path) -> dict:
     if not isinstance(raw, dict):
         raise ValueError("accounts.json 须为对象")
     return raw
+
+
+def resolve_account_qq(account: dict, account_id: str = "") -> str:
+    return str(account.get("qq") or account.get("id") or account_id).strip()
+
+
+def get_account_config_manager() -> Any:
+    global _account_config_manager
+    if _account_config_manager is not None:
+        return _account_config_manager
+    path = Path(__file__).resolve().parents[3] / "plugins" / "pallas_protocol" / "config_manager.py"
+    spec = importlib.util.spec_from_file_location("_pallas_account_config_manager", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"无法加载 AccountConfigManager: {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    _account_config_manager = mod.AccountConfigManager()
+    return _account_config_manager
+
+
+def read_onebot_instance_ws_url(account: dict) -> str:
+    qq = resolve_account_qq(account)
+    raw_dir = str(account.get("account_data_dir", "")).strip()
+    if not qq or not raw_dir:
+        return ""
+    config_dir = Path(raw_dir) / "config"
+    if not config_dir.is_dir():
+        return ""
+    mgr = get_account_config_manager()
+    config_path = mgr._resolve_onebot_config_path(config_dir, qq)
+    data = mgr.safe_read_json(config_path)
+    network = data.get("network")
+    if not isinstance(network, dict):
+        return ""
+    ws_clients = network.get("websocketClients")
+    if not isinstance(ws_clients, list) or not ws_clients:
+        return ""
+    client = ws_clients[0]
+    if not isinstance(client, dict):
+        return ""
+    return str(client.get("url") or "").strip()
+
+
+def onebot_instance_ws_drifted(account: dict) -> bool:
+    expected = str(account.get("ws_url") or "").strip()
+    if not expected:
+        return False
+    actual = read_onebot_instance_ws_url(account)
+    if not actual:
+        return False
+    parsed = parse_onebot_ws_url(expected)
+    if parsed is None:
+        return actual != expected
+    _host, port, path = parsed
+    return not ws_url_aligned_with_worker(actual, expected_port=port, expected_path=path)
+
+
+def make_resolve_account_qq(account_id: str):
+    def resolve_qq(account: dict) -> str:
+        return resolve_account_qq(account, account_id)
+
+    return resolve_qq
+
+
+def sync_onebot_instances_from_accounts(
+    accounts: dict,
+    *,
+    dry_run: bool = False,
+) -> tuple[int, int]:
+    """将 instances/<QQ>/config/onebot11_*.json 的 WS 与 accounts.json 对齐。"""
+    mgr = get_account_config_manager()
+    drift = 0
+    synced = 0
+    for account_id, account in accounts.items():
+        if not isinstance(account, dict) or not account.get("enabled", True):
+            continue
+        qq = resolve_account_qq(account, account_id)
+        if not qq.isdigit():
+            continue
+        if onebot_instance_ws_drifted(account):
+            drift += 1
+        if dry_run:
+            continue
+        mgr.sync_onebot(account, make_resolve_account_qq(account_id))
+        synced += 1
+    return synced, drift
 
 
 def sync_accounts_ws_urls(
@@ -176,35 +270,48 @@ def sync_accounts_ws_urls(
         skipped_invalid=skipped_invalid,
         dry_run=dry_run,
     )
-    if not changed or dry_run:
-        return result
+    if changed and not dry_run:
+        accounts_path.parent.mkdir(parents=True, exist_ok=True)
+        if backup_path is not None:
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(accounts_path, backup_path)
+        accounts_path.write_text(
+            json.dumps(accounts, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        save_shard_registry(reg)
 
-    accounts_path.parent.mkdir(parents=True, exist_ok=True)
-    if backup_path is not None:
-        backup_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(accounts_path, backup_path)
-    accounts_path.write_text(
-        json.dumps(accounts, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    save_shard_registry(reg)
+    onebot_synced, onebot_drift = sync_onebot_instances_from_accounts(accounts, dry_run=dry_run)
+    result.onebot_synced_count = onebot_synced
+    result.onebot_drift_count = onebot_drift
     return result
 
 
 def format_sync_user_message(result: ProtocolPortSyncResult, *, backup_path: Path | None) -> str:
-    lines = [
-        f"已更新 {result.changed_count} 个协议端账号 ws_url（指向分片 worker 端口）。",
-    ]
-    for row in result.details[:15]:
-        qq = row.get("qq")
-        port = row.get("port")
-        new = row.get("new")
-        lines.append(f"  · QQ {qq} -> 端口 {port}  {new}")
-    if len(result.details) > 15:
-        lines.append(f"  · … 另有 {len(result.details) - 15} 个账号")
-    if backup_path is not None:
+    lines: list[str] = []
+    if result.changed_count:
+        lines.append(f"已更新 {result.changed_count} 个协议端账号 ws_url（指向分片 worker 端口）。")
+        for row in result.details[:15]:
+            qq = row.get("qq")
+            port = row.get("port")
+            new = row.get("new")
+            lines.append(f"  · QQ {qq} -> 端口 {port}  {new}")
+        if len(result.details) > 15:
+            lines.append(f"  · … 另有 {len(result.details) - 15} 个账号")
+    if result.onebot_synced_count:
+        if result.onebot_drift_count:
+            lines.append(
+                f"已同步 {result.onebot_synced_count} 个 NapCat/SnowLuma 实例 onebot 配置"
+                f"（其中 {result.onebot_drift_count} 个与 accounts 不一致）。"
+            )
+        else:
+            lines.append(f"已刷新 {result.onebot_synced_count} 个 NapCat/SnowLuma 实例 onebot 配置。")
+    elif result.onebot_drift_count:
+        lines.append(f"检测到 {result.onebot_drift_count} 个实例 onebot WS 与 accounts 不一致。")
+    if backup_path is not None and result.changed_count:
         lines.append(f"备份: {backup_path}")
-    lines.append("请在协议端控制台对以上账号「重启」，使 NapCat / SnowLuma 使用新 ws_url。")
+    if result.changed_count or result.onebot_drift_count:
+        lines.append("请在协议端控制台对以上账号「重启」，使 NapCat / SnowLuma 使用新 ws_url。")
     return "\n".join(lines)
 
 

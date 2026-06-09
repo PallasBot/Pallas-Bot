@@ -7,11 +7,7 @@ from src.plugins.maa.store import NotifyTarget, PendingTask, pending_task_to_dic
 
 
 @pytest.mark.asyncio
-async def test_shard_pending_enqueue_and_list(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_root", lambda: tmp_path)
-    (tmp_path / "queues").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "task_index").mkdir(parents=True, exist_ok=True)
-
+async def test_shard_pending_enqueue_and_list(fake_coord_redis) -> None:
     task = PendingTask(
         task_id="01TASK",
         user="3023094357",
@@ -32,10 +28,7 @@ async def test_shard_pending_enqueue_and_list(tmp_path, monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_store_pending_count_uses_shard_file(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_root", lambda: tmp_path)
-    (tmp_path / "queues").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "task_index").mkdir(parents=True, exist_ok=True)
+async def test_store_pending_count_uses_shard_redis(fake_coord_redis, monkeypatch) -> None:
     monkeypatch.setattr(
         "src.platform.shard.registry.config.is_sharding_active",
         lambda: True,

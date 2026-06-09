@@ -1374,6 +1374,10 @@ def _flush_today_console_daily_stats_disk() -> None:
         daily_stats_store.write_batch_day_totals(entries)
 
 
+async def flush_today_console_daily_stats_disk_async() -> None:
+    await asyncio.to_thread(_flush_today_console_daily_stats_disk)
+
+
 def _msg_stats_shard_export(mem: dict[str, Any]) -> dict[str, Any]:
     counts = mem.get("day_api_counts")
     if not isinstance(counts, dict):
@@ -1515,9 +1519,13 @@ def flush_unified_console_live_stats_sync(*, include_hist: bool = False) -> None
     )
 
 
+async def flush_unified_console_live_stats_async(*, include_hist: bool = False) -> None:
+    await asyncio.to_thread(flush_unified_console_live_stats_sync, include_hist=include_hist)
+
+
 def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None:
     from src.platform.bot_runtime.roles import is_sharded_worker
-    from src.platform.shard.console_stats import write_worker_stats_sync
+    from src.platform.shard.console_stats import process_memory_snapshot, write_worker_stats_sync
     from src.platform.shard.coord_pending import coord_pending_snapshot_sync
     from src.platform.shard.ingress_metrics import ingress_metrics_snapshot
     from src.platform.shard.presence import filter_local_qq_ids_for_presence, reconcile_local_worker_presence_sync
@@ -1543,8 +1551,13 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
             "ingress": ingress_metrics_snapshot(),
             "repeater_ingress": repeater_ingress_metrics_snapshot(),
             "coord_pending": coord_pending_snapshot_sync(),
+            "process_memory": process_memory_snapshot(),
         },
     )
+
+
+async def flush_worker_shard_console_stats_async(*, include_hist: bool = False) -> None:
+    await asyncio.to_thread(flush_worker_shard_console_stats_sync, include_hist=include_hist)
 
 
 def _apply_console_stats_boot_snapshot(bots: dict[str, dict[str, Any]]) -> bool:
@@ -1653,8 +1666,8 @@ def start_worker_shard_console_stats_sync() -> None:
     async def _fast_loop() -> None:
         while True:
             try:
-                flush_worker_shard_console_stats_sync(include_hist=False)
-                _flush_today_console_daily_stats_disk()
+                await flush_worker_shard_console_stats_async(include_hist=False)
+                await flush_today_console_daily_stats_disk_async()
             except Exception:  # noqa: BLE001
                 pass
             await asyncio.sleep(_WORKER_STATS_FAST_FLUSH_SEC)
@@ -1662,7 +1675,7 @@ def start_worker_shard_console_stats_sync() -> None:
     async def _hist_loop() -> None:
         while True:
             try:
-                flush_worker_shard_console_stats_sync(include_hist=True)
+                await flush_worker_shard_console_stats_async(include_hist=True)
             except Exception:  # noqa: BLE001
                 pass
             await asyncio.sleep(_WORKER_STATS_HIST_FLUSH_SEC)
@@ -1682,8 +1695,8 @@ def start_unified_console_stats_sync() -> None:
     async def _fast_loop() -> None:
         while True:
             try:
-                flush_unified_console_live_stats_sync(include_hist=False)
-                _flush_today_console_daily_stats_disk()
+                await flush_unified_console_live_stats_async(include_hist=False)
+                await flush_today_console_daily_stats_disk_async()
             except Exception:  # noqa: BLE001
                 pass
             await asyncio.sleep(_WORKER_STATS_FAST_FLUSH_SEC)
@@ -1691,7 +1704,7 @@ def start_unified_console_stats_sync() -> None:
     async def _hist_loop() -> None:
         while True:
             try:
-                flush_unified_console_live_stats_sync(include_hist=True)
+                await flush_unified_console_live_stats_async(include_hist=True)
             except Exception:  # noqa: BLE001
                 pass
             await asyncio.sleep(_WORKER_STATS_HIST_FLUSH_SEC)

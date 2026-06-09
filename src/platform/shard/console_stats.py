@@ -8,6 +8,7 @@ import re
 import time
 from collections import defaultdict
 from operator import itemgetter
+from pathlib import Path
 from typing import Any
 
 from src.foundation.paths import plugin_data_dir
@@ -79,6 +80,24 @@ def _read_worker_file(shard_id: int) -> dict[str, Any]:
     raw.setdefault("v", _STORE_VER)
     raw["shard_id"] = int(shard_id)
     return raw
+
+
+def process_memory_snapshot() -> dict[str, int]:
+    try:
+        import psutil  # type: ignore
+
+        mem = psutil.Process().memory_info()
+        return {"rss": int(mem.rss), "vms": int(mem.vms)}
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        page_size = int(os.sysconf("SC_PAGE_SIZE"))
+        parts = Path("/proc/self/statm").read_text(encoding="utf-8").strip().split()
+        if len(parts) >= 2:
+            return {"rss": int(parts[1]) * page_size, "vms": int(parts[0]) * page_size}
+    except Exception:  # noqa: BLE001
+        pass
+    return {}
 
 
 def preserve_matcher_hist_from_file(shard_id: int, bots: dict[str, Any]) -> dict[str, Any]:

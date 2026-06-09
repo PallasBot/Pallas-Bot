@@ -1,32 +1,17 @@
-"""跨 worker 决斗 QTE：主持 worker 写共享会话，应答牛所在 worker 发群并回写结果。"""
+"""跨 worker 决斗 QTE：Redis 共享会话 + pub/sub 唤醒，应答牛所在 worker 发群并回写结果。"""
 
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 import random
 import time
 from typing import Any, Literal
 
 from nonebot import logger
 
-from src.foundation.paths import plugin_data_dir
-
-_PLUGIN = "pallas_shard"
 _POLL_SEC = 0.08
-_WATCH_SEC = 0.12
-_STALE_SEC = 120.0
 
 QteKind = Literal["single", "race"]
-
-
-def _coord_dir():
-    from pathlib import Path
-
-    root = Path(plugin_data_dir(_PLUGIN, create=True)) / "coord" / "duel_qte"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
 
 
 def single_qte_session_id(group_id: int, responder: str) -> str:
@@ -35,72 +20,6 @@ def single_qte_session_id(group_id: int, responder: str) -> str:
 
 def race_qte_session_id(group_id: int) -> str:
     return f"r_{group_id}"
-
-
-def _session_path(session_id: str):
-    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in session_id)
-    return _coord_dir() / f"{safe}.json"
-
-
-def _lock_path(session_path):
-    return session_path.with_suffix(session_path.suffix + ".lock")
-
-
-def _acquire_lock(lock_path, *, timeout: float = 3.0) -> int | None:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            return os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            try:
-                if time.time() - lock_path.stat().st_mtime > 10.0:
-                    lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            time.sleep(0.02)
-    return None
-
-
-def _release_lock(fd: int | None, lock_path) -> None:
-    if fd is not None:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-    try:
-        lock_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-
-def _read_session(path) -> dict[str, Any] | None:
-    if not path.is_file():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return raw if isinstance(raw, dict) else None
-
-
-def _write_session_atomic(path, data: dict[str, Any]) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
-
-
-def _mutate_session(path, fn) -> dict[str, Any] | None:
-    lock_path = _lock_path(path)
-    fd = _acquire_lock(lock_path)
-    if fd is None:
-        return _read_session(path)
-    try:
-        data = _read_session(path) or {}
-        fn(data)
-        _write_session_atomic(path, data)
-        return data
-    finally:
-        _release_lock(fd, lock_path)
 
 
 def publish_single_qte_request(
@@ -113,15 +32,22 @@ def publish_single_qte_request(
     decoy_keys: list[str] | None,
     deadline: float,
 ) -> str:
-    session_id = single_qte_session_id(group_id, responder)
-    path = _session_path(session_id)
-    now = time.time()
+    from src.platform.shard.coord.duel_qte_redis import read_session_redis_sync, store_session_redis_sync
 
-    def init(data: dict[str, Any]) -> None:
-        if data.get("kind") == "single" and data.get("responder") == responder and not data.get("done"):
-            return
-        data.clear()
-        data.update({
+    session_id = single_qte_session_id(group_id, responder)
+    existing = read_session_redis_sync(session_id)
+    if (
+        isinstance(existing, dict)
+        and existing.get("kind") == "single"
+        and str(existing.get("responder") or "") == responder
+        and not existing.get("done")
+    ):
+        return session_id
+
+    now = time.time()
+    store_session_redis_sync(
+        session_id,
+        {
             "kind": "single",
             "session_id": session_id,
             "group_id": group_id,
@@ -135,9 +61,8 @@ def publish_single_qte_request(
             "done": False,
             "success": None,
             "winner_uid": None,
-        })
-
-    _mutate_session(path, init)
+        },
+    )
     return session_id
 
 
@@ -152,15 +77,17 @@ def publish_race_qte_request(
     decoy_keys: list[str] | None,
     deadline: float,
 ) -> str:
-    session_id = race_qte_session_id(group_id)
-    path = _session_path(session_id)
-    now = time.time()
+    from src.platform.shard.coord.duel_qte_redis import read_session_redis_sync, store_session_redis_sync
 
-    def init(data: dict[str, Any]) -> None:
-        if data.get("kind") == "race" and not data.get("done"):
-            return
-        data.clear()
-        data.update({
+    session_id = race_qte_session_id(group_id)
+    existing = read_session_redis_sync(session_id)
+    if isinstance(existing, dict) and existing.get("kind") == "race" and not existing.get("done"):
+        return session_id
+
+    now = time.time()
+    store_session_redis_sync(
+        session_id,
+        {
             "kind": "race",
             "session_id": session_id,
             "group_id": group_id,
@@ -175,41 +102,18 @@ def publish_race_qte_request(
             "done": False,
             "success": None,
             "winner_uid": None,
-        })
-
-    _mutate_session(path, init)
+        },
+    )
     return session_id
-
-
-def _write_single_result(path, *, success: bool) -> None:
-    def finish(data: dict[str, Any]) -> None:
-        if data.get("done"):
-            return
-        data["done"] = True
-        data["success"] = success
-
-    _mutate_session(path, finish)
-
-
-def _try_write_race_winner(path, *, winner_uid: str) -> bool:
-    wrote = False
-
-    def finish(data: dict[str, Any]) -> None:
-        nonlocal wrote
-        if data.get("done") and data.get("winner_uid"):
-            return
-        data["done"] = True
-        data["winner_uid"] = winner_uid
-        wrote = True
-
-    _mutate_session(path, finish)
-    data = _read_session(path)
-    return wrote and data is not None and str(data.get("winner_uid")) == winner_uid
 
 
 async def _run_local_single_job(data: dict[str, Any]) -> None:
     from nonebot import get_bots
 
+    from src.platform.shard.coord.duel_qte_redis import (
+        read_session_redis_sync,
+        write_single_result_redis_sync,
+    )
     from src.plugins.duel.duel_qte import bot_qte_success_rate, pick_bot_wrong_qte_reply
 
     group_id = int(data["group_id"])
@@ -221,7 +125,7 @@ async def _run_local_single_job(data: dict[str, Any]) -> None:
     if decoy_keys is not None and not isinstance(decoy_keys, list):
         decoy_keys = None
     deadline = float(data.get("deadline") or 0)
-    path = _session_path(str(data.get("session_id") or single_qte_session_id(group_id, responder)))
+    session_id = str(data.get("session_id") or single_qte_session_id(group_id, responder))
 
     if time.time() > deadline:
         return
@@ -235,7 +139,7 @@ async def _run_local_single_job(data: dict[str, Any]) -> None:
         delay += random.uniform(0.4, 1.8)
     await asyncio.sleep(delay)
 
-    cur = await asyncio.to_thread(_read_session, path)
+    cur = await asyncio.to_thread(read_session_redis_sync, session_id)
     if not cur or cur.get("done") or time.time() > deadline:
         return
 
@@ -247,12 +151,16 @@ async def _run_local_single_job(data: dict[str, Any]) -> None:
         except Exception as err:
             logger.debug(f"shard duel qte single send failed: {err}")
             ok = False
-    await asyncio.to_thread(_write_single_result, path, success=ok)
+    await asyncio.to_thread(write_single_result_redis_sync, session_id, success=ok)
 
 
 async def _run_local_race_job(data: dict[str, Any], responder_id: str) -> None:
     from nonebot import get_bots
 
+    from src.platform.shard.coord.duel_qte_redis import (
+        read_session_redis_sync,
+        try_write_race_winner_redis_sync,
+    )
     from src.plugins.duel.duel_qte import bot_qte_success_rate, pick_bot_wrong_qte_reply
 
     group_id = int(data["group_id"])
@@ -264,7 +172,6 @@ async def _run_local_race_job(data: dict[str, Any], responder_id: str) -> None:
         decoy_keys = None
     deadline = float(data.get("deadline") or 0)
     session_id = str(data.get("session_id") or race_qte_session_id(group_id))
-    path = _session_path(session_id)
 
     if time.time() > deadline:
         return
@@ -278,7 +185,7 @@ async def _run_local_race_job(data: dict[str, Any], responder_id: str) -> None:
         delay += random.uniform(0.3, 1.5)
     await asyncio.sleep(delay)
 
-    cur = await asyncio.to_thread(_read_session, path)
+    cur = await asyncio.to_thread(read_session_redis_sync, session_id)
     if not cur or cur.get("done") or time.time() > deadline:
         return
 
@@ -290,23 +197,23 @@ async def _run_local_race_job(data: dict[str, Any], responder_id: str) -> None:
             logger.debug(f"shard duel qte race send failed: {err}")
             return
     if success_roll and outgoing == required_key:
-        await asyncio.to_thread(_try_write_race_winner, path, winner_uid=responder_id)
+        await asyncio.to_thread(try_write_race_winner_redis_sync, session_id, responder_id)
 
 
-async def _process_pending_file(path, local_ids: frozenset[str]) -> None:
-    data = await asyncio.to_thread(_read_session, path)
+async def _process_pending_session(data: dict[str, Any], local_ids: frozenset[str]) -> None:
     if not data or data.get("done"):
         return
     deadline = float(data.get("deadline") or 0)
     if time.time() > deadline + 1.0:
         return
 
+    session_id = str(data.get("session_id") or "")
     kind = data.get("kind")
     if kind == "single":
         responder = str(data.get("responder") or "")
         if responder not in local_ids:
             return
-        key = f"{path.name}:single:{responder}"
+        key = f"{session_id}:single:{responder}"
         if key in _inflight:
             return
         _inflight.add(key)
@@ -324,7 +231,7 @@ async def _process_pending_file(path, local_ids: frozenset[str]) -> None:
         for uid in (str(data.get("challenger_id") or ""), str(data.get("defender_id") or "")):
             if not uid or uid not in local_ids:
                 continue
-            key = f"{path.name}:race:{uid}"
+            key = f"{session_id}:race:{uid}"
             if key in _inflight:
                 continue
             _inflight.add(key)
@@ -338,29 +245,21 @@ async def _process_pending_file(path, local_ids: frozenset[str]) -> None:
             asyncio.create_task(run())
 
 
+async def wake_duel_qte_session(session_id: str, local_ids: frozenset[str]) -> None:
+    """Redis pub/sub：按 session_id 触发本 worker 上的 QTE 代答。"""
+    from src.platform.shard.coord.duel_qte_redis import read_session_redis_sync
+
+    data = await asyncio.to_thread(read_session_redis_sync, session_id)
+    if data:
+        await _process_pending_session(data, local_ids)
+
+
 async def poll_duel_qte_pending(local_ids: frozenset[str]) -> None:
-    """各 worker 扫描 QTE 共享会话，对本进程已连接牛执行远程应答。"""
-    coord = _coord_dir()
-    for path in coord.glob("*.json"):
-        if ".lock" in path.name:
-            continue
-        await _process_pending_file(path, local_ids)
+    """QTE 会话已迁 Redis；保留空实现以兼容旧调用。"""
 
 
 async def prune_stale_duel_qte_files() -> None:
-    now = time.time()
-    for path in _coord_dir().glob("*.json"):
-        if ".lock" in path.name:
-            continue
-        data = await asyncio.to_thread(_read_session, path)
-        if not data or not data.get("done"):
-            continue
-        created = float(data.get("created_at") or 0)
-        if now - created > _STALE_SEC:
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                pass
+    """QTE 会话由 Redis TTL 回收；保留空实现以兼容旧脚本。"""
 
 
 _inflight: set[str] = set()
@@ -378,9 +277,10 @@ async def wait_single_qte_coord_result(
     *,
     deadline: float,
 ) -> None:
-    path = _session_path(session_id)
+    from src.platform.shard.coord.duel_qte_redis import read_session_redis_sync
+
     while time.time() < deadline and not fut.done():
-        data = await asyncio.to_thread(_read_session, path)
+        data = await asyncio.to_thread(read_session_redis_sync, session_id)
         if data and data.get("done") and data.get("success") is not None:
             if not fut.done():
                 fut.set_result(bool(data.get("success")))
@@ -394,9 +294,10 @@ async def wait_race_qte_coord_result(
     *,
     deadline: float,
 ) -> None:
-    path = _session_path(session_id)
+    from src.platform.shard.coord.duel_qte_redis import read_session_redis_sync
+
     while time.time() < deadline and not fut.done():
-        data = await asyncio.to_thread(_read_session, path)
+        data = await asyncio.to_thread(read_session_redis_sync, session_id)
         if data and data.get("done"):
             winner = data.get("winner_uid")
             if winner is not None and not fut.done():
@@ -463,8 +364,6 @@ async def bridge_race_qte_coord(session_id: str, fut: asyncio.Future[str | None]
 
 
 async def try_claim_race_coord_winner(session_id: str, winner_uid: str) -> bool:
-    return await asyncio.to_thread(
-        _try_write_race_winner,
-        _session_path(session_id),
-        winner_uid=winner_uid,
-    )
+    from src.platform.shard.coord.duel_qte_redis import try_write_race_winner_redis_sync
+
+    return await asyncio.to_thread(try_write_race_winner_redis_sync, session_id, winner_uid)

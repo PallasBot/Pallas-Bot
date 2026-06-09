@@ -101,7 +101,7 @@ def main() -> int:
             backup_path=args.backup,
             dry_run=False,
         )
-        if sync_result.changed_count:
+        if sync_result.changed_count or sync_result.onebot_synced_count:
             print(format_sync_user_message(sync_result, backup_path=args.backup), file=sys.stderr)
 
     if proto_ev.skip_protocol_sync or args.skip_protocol_sync:

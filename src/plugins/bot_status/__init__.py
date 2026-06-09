@@ -124,6 +124,9 @@ async def _(bot: Bot) -> None:
 @offline_notice.handle()
 async def handle_bot_offline_events(event: NoticeEvent):
     """协议端离线事件"""
+    if event.notice_type == "group_msg_emoji_like":
+        return
+
     bot_id = 0
     offline_message = ""
     source = ""

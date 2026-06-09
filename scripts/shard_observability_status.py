@@ -50,15 +50,17 @@ def main() -> int:
         f"早丢弃={int(ing.get('early_fleet', 0)) + int(ing.get('early_not_at_target', 0))}"
     )
     print(
-        f"coord JSON                total={coord.get('total_json', 0)}  "
+        f"coord Redis              keys={coord.get('total_json', 0)}  "
         f"actionable={coord.get('actionable_total', coord.get('bot_action_open', 0))}  "
         f"historical={coord.get('historical_retained', 0)}  "
         f"bot_action_open={coord.get('bot_action_open', 0)}  "
         f"stale_open={coord.get('bot_action_stale_open', 0)}"
     )
+    if coord.get("scan_skipped"):
+        print("coord live scan          skipped（默认不扫 Redis，全量排查用 prune_shard_coord.py --live-scan）")
     ba = (coord.get("by_dir") or {}).get("bot_action", 0)
     if ba:
-        print(f"coord bot_action 文件     {ba}  （可 prune_shard_coord.py --purge-done）")
+        print(f"coord bot_action 键       {ba}  （prune_shard_coord.py 仅输出快照）")
 
     peak = pg.get("estimated_pg_connections_peak")
     proc = pg.get("estimated_processes")

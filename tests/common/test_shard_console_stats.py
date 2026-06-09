@@ -99,11 +99,26 @@ def test_preserve_matcher_hist_on_fast_flush(tmp_path, monkeypatch):
     hist = [{"at": 100, "plugins": {"duel": 1}}]
     mod.write_worker_stats_sync(
         shard_id=0,
-        bots={"111": {"day_key": "2026-05-22", "by_plugin": {}, "matcher_hist": hist, "matcher_duration_log": [], "msg": {}}},
+        bots={
+            "111": {
+                "day_key": "2026-05-22",
+                "by_plugin": {},
+                "matcher_hist": hist,
+                "matcher_duration_log": [],
+                "msg": {},
+            }
+        },
     )
     mod.write_worker_stats_sync(
         shard_id=0,
-        bots={"111": {"day_key": "2026-05-22", "by_plugin": {"duel": {"day_runs": 3}}, "matcher_duration_log": [], "msg": {}}},
+        bots={
+            "111": {
+                "day_key": "2026-05-22",
+                "by_plugin": {"duel": {"day_runs": 3}},
+                "matcher_duration_log": [],
+                "msg": {},
+            }
+        },
         preserve_matcher_hist=True,
     )
     row = mod.read_worker_stats(0)["111"]

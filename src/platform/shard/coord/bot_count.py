@@ -3,26 +3,27 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import os
 import random
 import time
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from nonebot import logger
 
-from src.foundation.paths import plugin_data_dir
 from src.platform.multi_bot.dedup import cross_bot_group_message_key
+from src.platform.shard.coord.coord_redis_store import (
+    coord_key,
+    mutate_json_sync,
+    read_json_sync,
+)
 from src.platform.shard.registry.config import get_shard_registry_settings
 
 _BOT_COUNT_TEXTS = frozenset({"牛牛报数", "牛牛出列"})
-_PLUGIN = "pallas_shard"
 _COLLECT_SEC = 3.0
 _POLL_SEC = 0.08
 _STABLE_SEC = 0.45
 _POST_COLLECT_GRACE_SEC = 2.5
+_SESSION_TTL_SEC = 3600
 STAGGER_SEC = 0.35
 
 
@@ -49,96 +50,40 @@ def is_bot_count_fanout_plaintext(plain: str) -> bool:
     return is_ingress_fanout_plaintext(text)
 
 
-def _coord_dir():
-    root = plugin_data_dir(_PLUGIN, create=True) / "coord" / "bot_count"
-    root.mkdir(parents=True, exist_ok=True)
-    return root
+def _session_key(group_id: int, claim_key: int) -> str:
+    return coord_key("bot_count", group_id, claim_key)
+
+
+def _session_path(group_id: int, claim_key: int) -> str:
+    return _session_key(group_id, claim_key)
+
+
+def _write_session_atomic(session_key: str, data: dict[str, Any]) -> None:
+    from src.platform.shard.coord.coord_redis_store import setex_json_sync
+
+    setex_json_sync(session_key, data, _session_ttl(data))
+
+
+def _session_ttl(data: dict[str, Any]) -> int:
+    until = float(data.get("collect_until") or 0)
+    return max(120, int(until - time.time()) + _SESSION_TTL_SEC)
 
 
 async def prune_stale_bot_count_files(*, max_age_sec: float = 3600.0) -> int:
-    root = _coord_dir()
-    if not root.is_dir():
-        return 0
-    now = time.time()
-    removed = 0
-    for path in root.glob("*.json"):
-        try:
-            if now - path.stat().st_mtime <= max_age_sec:
-                continue
-            path.unlink(missing_ok=True)
-            removed += 1
-        except OSError:
-            pass
-    return removed
+    """Redis TTL 自动过期。"""
+    return 0
 
 
-def _session_path(group_id: int, claim_key: int) -> Path:
-    return Path(_coord_dir()) / f"{group_id}_{claim_key}.json"
+def _read_session(session_key: str) -> dict[str, Any] | None:
+    return read_json_sync(session_key)
 
 
-def _lock_path(session_path: Path) -> Path:
-    return session_path.with_suffix(session_path.suffix + ".lock")
-
-
-def _acquire_lock(lock_path: Path, *, timeout: float = 3.0) -> int | None:
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        try:
-            return os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError:
-            try:
-                if time.time() - lock_path.stat().st_mtime > 10.0:
-                    lock_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            time.sleep(0.05)
-    return None
-
-
-def _release_lock(fd: int | None, lock_path: Path) -> None:
-    if fd is not None:
-        try:
-            os.close(fd)
-        except OSError:
-            pass
-    try:
-        lock_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-
-def _read_session(path: Path) -> dict[str, Any] | None:
-    if not path.is_file():
-        return None
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-    return raw if isinstance(raw, dict) else None
-
-
-def _write_session_atomic(path: Path, data: dict[str, Any]) -> None:
-    tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
-
-
-def _mutate_session(path: Path, fn) -> dict[str, Any] | None:
-    lock_path = _lock_path(path)
-    fd = _acquire_lock(lock_path)
-    if fd is None:
-        return _read_session(path)
-    try:
-        data = _read_session(path) or {}
-        fn(data)
-        _write_session_atomic(path, data)
-        return data
-    finally:
-        _release_lock(fd, lock_path)
+def _mutate_session(session_key: str, fn) -> dict[str, Any] | None:
+    return mutate_json_sync(session_key, fn, ttl_sec_fn=_session_ttl)
 
 
 def _ensure_session(
-    path: Path,
+    session_key: str,
     *,
     group_id: int,
     user_id: int,
@@ -161,11 +106,11 @@ def _ensure_session(
             "cancelled": False,
         })
 
-    out = _mutate_session(path, init)
+    out = _mutate_session(session_key, init)
     return out or {}
 
 
-def _register_shard_bots(path: Path, shard_id: int, bot_ids: list[int]) -> None:
+def _register_shard_bots(session_key: str, shard_id: int, bot_ids: list[int]) -> None:
     key = str(shard_id)
 
     def reg(data: dict[str, Any]) -> None:
@@ -177,7 +122,7 @@ def _register_shard_bots(path: Path, shard_id: int, bot_ids: list[int]) -> None:
         cur = float(data.get("collect_until") or 0)
         data["collect_until"] = max(cur, now + _COLLECT_SEC)
 
-    _mutate_session(path, reg)
+    _mutate_session(session_key, reg)
 
 
 def _all_registered_bots(data: dict[str, Any]) -> list[int]:
@@ -207,7 +152,7 @@ def _registration_fingerprint(data: dict[str, Any]) -> tuple[tuple[int, ...], tu
     return (tuple(_all_registered_bots(data)), _registered_shard_keys(data))
 
 
-def _try_finalize_order(path: Path, self_bot_id: int) -> dict[str, Any] | None:
+def _try_finalize_order(session_key: str, self_bot_id: int) -> dict[str, Any] | None:
     def finalize(data: dict[str, Any]) -> None:
         if data.get("cancelled"):
             return
@@ -230,12 +175,12 @@ def _try_finalize_order(path: Path, self_bot_id: int) -> dict[str, Any] | None:
         data["order"] = order
         data["finalized_by"] = self_bot_id
 
-    return _mutate_session(path, finalize)
+    return _mutate_session(session_key, finalize)
 
 
-async def _wait_collect_until(path: Path) -> None:
+async def _wait_collect_until(session_key: str) -> None:
     while True:
-        data = await asyncio.to_thread(_read_session, path)
+        data = await asyncio.to_thread(_read_session, session_key)
         if not data:
             return
         until = float(data.get("collect_until") or 0)
@@ -251,13 +196,13 @@ def _stable_deadline_from_session(data: dict[str, Any] | None, *, base: float) -
     return max(base, until + _POST_COLLECT_GRACE_SEC)
 
 
-async def _wait_registration_stable(path: Path, *, deadline: float) -> None:
+async def _wait_registration_stable(session_key: str, *, deadline: float) -> None:
     """收集截止后，等待各 worker 分片键与登记牛集合同时短暂稳定再 finalize。"""
     last_fp: tuple[tuple[int, ...], tuple[str, ...]] | None = None
     stable_since: float | None = None
     end = deadline
     while time.time() < end:
-        data = await asyncio.to_thread(_read_session, path)
+        data = await asyncio.to_thread(_read_session, session_key)
         end = _stable_deadline_from_session(data, base=deadline)
         if not data:
             await asyncio.sleep(_POLL_SEC)
@@ -283,10 +228,10 @@ def _order_matches_registration(order: list[int], registered: list[int]) -> bool
     return set(order) == set(registered)
 
 
-async def _wait_for_order(path: Path, *, deadline: float, self_bot_id: int) -> list[int] | None:
+async def _wait_for_order(session_key: str, *, deadline: float, self_bot_id: int) -> list[int] | None:
     end = deadline
     while time.time() < end:
-        data = await asyncio.to_thread(_read_session, path)
+        data = await asyncio.to_thread(_read_session, session_key)
         end = max(end, _stable_deadline_from_session(data, base=deadline) + 3.0)
         if not data:
             await asyncio.sleep(_POLL_SEC)
@@ -303,8 +248,8 @@ async def _wait_for_order(path: Path, *, deadline: float, self_bot_id: int) -> l
                 except (TypeError, ValueError):
                     stale = True
             if stale:
-                await asyncio.to_thread(_try_finalize_order, path, self_bot_id)
-                data = await asyncio.to_thread(_read_session, path) or data
+                await asyncio.to_thread(_try_finalize_order, session_key, self_bot_id)
+                data = await asyncio.to_thread(_read_session, session_key) or data
                 registered = _all_registered_bots(data)
         order = data.get("order")
         if isinstance(order, list) and order:
@@ -317,7 +262,7 @@ async def _wait_for_order(path: Path, *, deadline: float, self_bot_id: int) -> l
         if time.time() >= float(data.get("collect_until") or 0) and not registered:
             break
         await asyncio.sleep(_POLL_SEC)
-    data = await asyncio.to_thread(_read_session, path)
+    data = await asyncio.to_thread(_read_session, session_key)
     if not data or data.get("cancelled"):
         return None
     registered = _all_registered_bots(data)
@@ -348,9 +293,9 @@ async def update_shard_bot_count_registration(
         message_time,
         use_plaintext=True,
     )
-    path = _session_path(group_id, claim_key)
+    session_key = _session_key(group_id, claim_key)
     shard_id = get_shard_registry_settings().shard_id
-    await asyncio.to_thread(_register_shard_bots, path, shard_id, bot_ids)
+    await asyncio.to_thread(_register_shard_bots, session_key, shard_id, bot_ids)
 
 
 async def run_shard_coordinated_bot_count(
@@ -375,11 +320,11 @@ async def run_shard_coordinated_bot_count(
         message_time,
         use_plaintext=True,
     )
-    path = _session_path(group_id, claim_key)
+    session_key = _session_key(group_id, claim_key)
     seed = f"{datetime.now().strftime('%Y-%m-%d')}:{group_id}"
     await asyncio.to_thread(
         _ensure_session,
-        path,
+        session_key,
         group_id=group_id,
         user_id=user_id,
         message_time=message_time,
@@ -387,18 +332,18 @@ async def run_shard_coordinated_bot_count(
     )
 
     shard_id = get_shard_registry_settings().shard_id
-    await asyncio.to_thread(_register_shard_bots, path, shard_id, [self_bot_id])
+    await asyncio.to_thread(_register_shard_bots, session_key, shard_id, [self_bot_id])
     if local_bot_ids:
         ids = {int(x) for x in local_bot_ids}
         ids.add(self_bot_id)
-        await asyncio.to_thread(_register_shard_bots, path, shard_id, sorted(ids))
+        await asyncio.to_thread(_register_shard_bots, session_key, shard_id, sorted(ids))
 
-    await _wait_collect_until(path)
-    data_after_collect = await asyncio.to_thread(_read_session, path)
+    await _wait_collect_until(session_key)
+    data_after_collect = await asyncio.to_thread(_read_session, session_key)
     stable_deadline = _stable_deadline_from_session(data_after_collect, base=time.time() + _POST_COLLECT_GRACE_SEC)
-    await _wait_registration_stable(path, deadline=stable_deadline)
+    await _wait_registration_stable(session_key, deadline=stable_deadline)
 
-    registered = await asyncio.to_thread(lambda: _all_registered_bots(_read_session(path) or {}))
+    registered = await asyncio.to_thread(lambda: _all_registered_bots(_read_session(session_key) or {}))
     if registered and min(registered) == self_bot_id:
         from src.foundation.config import GroupConfig
 
@@ -409,15 +354,15 @@ async def run_shard_coordinated_bot_count(
             def cancel(data: dict[str, Any]) -> None:
                 data["cancelled"] = True
 
-            await asyncio.to_thread(_mutate_session, path, cancel)
+            await asyncio.to_thread(_mutate_session, session_key, cancel)
             return None
         await config.refresh_cooldown("bot_count")
 
-    await asyncio.to_thread(_try_finalize_order, path, self_bot_id)
+    await asyncio.to_thread(_try_finalize_order, session_key, self_bot_id)
 
-    data0 = await asyncio.to_thread(_read_session, path)
+    data0 = await asyncio.to_thread(_read_session, session_key)
     deadline = _stable_deadline_from_session(data0, base=time.time() + 1.0) + 3.0
-    order = await _wait_for_order(path, deadline=deadline, self_bot_id=self_bot_id)
+    order = await _wait_for_order(session_key, deadline=deadline, self_bot_id=self_bot_id)
     if not order or self_bot_id not in order:
         if data0 and not data0.get("cancelled"):
             shards = data0.get("shards") if isinstance(data0.get("shards"), dict) else {}

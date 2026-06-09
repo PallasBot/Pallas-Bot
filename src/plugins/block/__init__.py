@@ -73,13 +73,11 @@ async def bot_connect(bot: Bot) -> None:
 @driver.on_bot_disconnect
 async def bot_disconnect(bot: Bot) -> None:
     if bot.self_id.isnumeric() and bot.type == "OneBot V11":
-        try:
-            plugin_config.bots.remove(int(bot.self_id))
-        except ValueError:
-            pass
-        else:
-            logger.info(f"Bot {bot.self_id} disconnected.")
         qq = int(bot.self_id)
+        was_present = qq in plugin_config.bots
+        plugin_config.bots.discard(qq)
+        if was_present:
+            logger.info(f"Bot {bot.self_id} disconnected.")
         await clear_protocol_bot_offline(qq)
         if is_sharding_active():
             await note_worker_bot_disconnected(qq)

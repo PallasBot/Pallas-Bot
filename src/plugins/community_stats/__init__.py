@@ -9,6 +9,7 @@ from src.features.cmd_perm.metadata_defaults import (
 from src.features.community_stats.scheduler import start_community_stats_reporter
 from src.features.control_plane.bootstrap_client import ensure_control_plane_bootstrap
 from src.features.corpus.enroll import ensure_corpus_community_enrolled
+from src.platform.bot_runtime.roles import is_sharded_worker
 
 __plugin_meta__ = PluginMetadata(
     name="社区统计上报",
@@ -29,6 +30,8 @@ driver = get_driver()
 
 @driver.on_startup
 async def community_stats_startup() -> None:
+    if is_sharded_worker():
+        return
     try:
         await ensure_control_plane_bootstrap()
     except Exception as e:

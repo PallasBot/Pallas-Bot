@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+
+import pytest
+
 import src.plugins.pallas_webui.extended_api as ext
 from src.plugins.pallas_webui import console_live_stats, daily_stats_store
 
@@ -70,3 +74,60 @@ def test_restore_unified_fallback_daily_disk(tmp_path, monkeypatch) -> None:
     assert ext._restore_unified_console_stats_from_live_file() is True
     assert ext._MSG_STATS["10002"]["day_received"] == 50
     assert ext._MSG_STATS["10002"]["day_sent"] == 3
+
+
+def test_write_bots_sync_skips_rewrite_when_payload_unchanged(tmp_path, monkeypatch) -> None:
+    live = tmp_path / "console_live_stats.json"
+    monkeypatch.setattr(console_live_stats, "live_stats_path", lambda: live)
+
+    payload = {
+        "10001": {
+            "day_key": "2026-05-28",
+            "by_plugin": {"help": {"day_runs": 4}},
+            "matcher_duration_log": [],
+            "msg": {"day_key": "2026-05-28", "day_received": 12, "day_sent": 2},
+        },
+    }
+
+    assert console_live_stats.write_bots_sync(payload) is True
+    first = json.loads(live.read_text(encoding="utf-8"))
+    assert console_live_stats.write_bots_sync(payload) is False
+    second = json.loads(live.read_text(encoding="utf-8"))
+
+    assert first == second
+
+
+@pytest.mark.asyncio
+async def test_flush_worker_shard_console_stats_async_uses_to_thread(monkeypatch) -> None:
+    calls: list[tuple[object, tuple, dict]] = []
+
+    async def fake_to_thread(func, /, *args, **kwargs):
+        calls.append((func, args, kwargs))
+        return None
+
+    monkeypatch.setattr(ext.asyncio, "to_thread", fake_to_thread)
+
+    await ext.flush_worker_shard_console_stats_async(include_hist=True)
+
+    assert len(calls) == 1
+    assert calls[0][0] is ext.flush_worker_shard_console_stats_sync
+    assert calls[0][1] == ()
+    assert calls[0][2] == {"include_hist": True}
+
+
+@pytest.mark.asyncio
+async def test_flush_today_console_daily_stats_disk_async_uses_to_thread(monkeypatch) -> None:
+    calls: list[tuple[object, tuple, dict]] = []
+
+    async def fake_to_thread(func, /, *args, **kwargs):
+        calls.append((func, args, kwargs))
+        return None
+
+    monkeypatch.setattr(ext.asyncio, "to_thread", fake_to_thread)
+
+    await ext.flush_today_console_daily_stats_disk_async()
+
+    assert len(calls) == 1
+    assert calls[0][0] is ext._flush_today_console_daily_stats_disk
+    assert calls[0][1] == ()
+    assert calls[0][2] == {}

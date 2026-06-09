@@ -139,15 +139,20 @@ def write_batch_day_totals(entries: Iterable[tuple[str, str, int, int, int]]) ->
             if not isinstance(days, dict):
                 data["by_day"] = {}
                 days = data["by_day"]
+            changed = False
             for (day_key, sid), (dr, ds, mr) in pending.items():
                 bots = days.setdefault(day_key, {})
                 if not isinstance(bots, dict):
                     days[day_key] = {}
                     bots = days[day_key]
                 prev_rec = bots.get(sid) if isinstance(bots.get(sid), dict) else None
-                bots[sid] = merge_day_bot_record(prev_rec, dr, ds, mr)
+                merged = merge_day_bot_record(prev_rec, dr, ds, mr)
+                if prev_rec != merged:
+                    bots[sid] = merged
+                    changed = True
             _trim_old_days(days)
-            _atomic_write(data)
+            if changed:
+                _atomic_write(data)
 
 
 def _parse_iso_day(s: str) -> date | None:

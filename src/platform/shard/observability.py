@@ -100,6 +100,7 @@ def aggregate_shard_observability() -> dict[str, Any]:
             "ingress": ingress if isinstance(ingress, dict) else {},
             "repeater_ingress": repeater_ingress if isinstance(repeater_ingress, dict) else {},
             "coord_pending": blob.get("coord_pending") if isinstance(blob.get("coord_pending"), dict) else {},
+            "process_memory": blob.get("process_memory") if isinstance(blob.get("process_memory"), dict) else {},
         })
     coord_live = coord_pending_snapshot_sync()
     return {

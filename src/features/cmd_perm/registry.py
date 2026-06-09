@@ -33,6 +33,7 @@ DEFAULT_COMMAND_PERMISSIONS: dict[str, PermissionLevel] = {
     "relogin.create": "superuser",
     "request.list_friends": "bot_moderator",
     "request.approve_latest": "bot_moderator",
+    "request.reject_latest": "bot_moderator",
     "request.approve_friend": "bot_moderator",
     "request.approve_all_friends": "bot_moderator",
     "request.reject_all_friends": "bot_moderator",

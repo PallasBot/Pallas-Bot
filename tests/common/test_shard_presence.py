@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -201,3 +202,79 @@ def test_protocol_offline_clears_presence_and_blocks_reconcile(tmp_path, monkeyp
     mod.clear_protocol_bot_offline_sync(qq=111)
     mod.reconcile_local_worker_presence_sync(shard_id=0, local_qq_ids={111})
     assert 111 in mod.get_cluster_online_bot_ids()
+
+
+def test_touch_missing_presence_does_not_write_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mod, "plugin_data_dir", lambda name, create=True: tmp_path / name)
+    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+
+    writes: list[dict[str, object]] = []
+    real_write = mod._write_atomic
+
+    def wrapped(data):
+        writes.append(dict(data))
+        real_write(data)
+
+    monkeypatch.setattr(mod, "_write_atomic", wrapped)
+
+    mod.touch_worker_bot_presence_sync(qq=111)
+
+    assert writes == []
+    assert not mod._presence_path().exists()
+
+
+def test_disconnect_missing_presence_does_not_write_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mod, "plugin_data_dir", lambda name, create=True: tmp_path / name)
+    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+
+    writes: list[dict[str, object]] = []
+    real_write = mod._write_atomic
+
+    def wrapped(data):
+        writes.append(dict(data))
+        real_write(data)
+
+    monkeypatch.setattr(mod, "_write_atomic", wrapped)
+
+    mod.note_worker_bot_disconnected_sync(qq=111)
+
+    assert writes == []
+    assert not mod._presence_path().exists()
+
+
+@pytest.mark.asyncio
+async def test_note_worker_bot_connected_does_not_call_login_info(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod, "get_shard_registry_settings", lambda: SimpleNamespace(shard_id=7))
+
+    captured: dict[str, object] = {}
+
+    async def fake_to_thread(fn, /, *args, **kwargs):
+        captured["fn"] = fn
+        captured["kwargs"] = kwargs
+        return None
+
+    monkeypatch.setattr(mod.asyncio, "to_thread", fake_to_thread)
+
+    class _Adapter:
+        @staticmethod
+        def get_name() -> str:
+            return "OneBot V11"
+
+    class _Bot:
+        self_id = "123456"
+        adapter = _Adapter()
+
+        async def call_api(self, *_args, **_kwargs):
+            raise AssertionError("get_login_info should not be called during bot_connect")
+
+    await mod.note_worker_bot_connected(_Bot())
+
+    assert captured["fn"] is mod.note_worker_bot_connected_sync
+    assert captured["kwargs"] == {
+        "qq": 123456,
+        "connection_key": "123456",
+        "adapter": "OneBot V11",
+        "shard_id": 7,
+        "nickname": "",
+    }

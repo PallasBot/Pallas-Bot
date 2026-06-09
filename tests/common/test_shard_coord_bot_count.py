@@ -36,8 +36,7 @@ def test_bot_count_ingress_fanout_without_greeting_whitelist(monkeypatch):
     assert not mod.is_bot_count_fanout_plaintext("牛牛赞我")
 
 
-def test_cross_shard_order_finalize(tmp_path, monkeypatch):
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+def test_cross_shard_order_finalize(fake_coord_redis, monkeypatch):
     monkeypatch.setattr(
         "src.platform.shard.registry.config.get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
@@ -70,8 +69,7 @@ def test_cross_shard_order_finalize(tmp_path, monkeypatch):
     assert len(order) == 3
 
 
-def test_finalize_reopens_order_when_registration_grows(tmp_path, monkeypatch):
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+def test_finalize_reopens_order_when_registration_grows(fake_coord_redis):
     path = mod._session_path(10086, 999003)
     mod._ensure_session(
         path,
@@ -98,8 +96,7 @@ def test_finalize_reopens_order_when_registration_grows(tmp_path, monkeypatch):
     assert set(order) == {100, 300}
 
 
-def test_non_min_bot_can_rebuild_stale_order_after_registration_grows(tmp_path, monkeypatch):
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+def test_non_min_bot_can_rebuild_stale_order_after_registration_grows(fake_coord_redis):
     path = mod._session_path(10086, 999004)
     mod._ensure_session(
         path,
@@ -130,8 +127,7 @@ def test_non_min_bot_can_rebuild_stale_order_after_registration_grows(tmp_path, 
     assert data["finalized_by"] == 300
 
 
-def test_non_min_bot_does_not_clear_stale_order_without_rebuilding(tmp_path, monkeypatch):
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+def test_non_min_bot_does_not_clear_stale_order_without_rebuilding(fake_coord_redis):
     path = mod._session_path(10086, 999005)
     mod._ensure_session(
         path,
@@ -155,8 +151,7 @@ def test_non_min_bot_does_not_clear_stale_order_without_rebuilding(tmp_path, mon
     assert set(data["order"]) == {100, 200}
 
 
-def test_late_shard_extends_collect_window(tmp_path, monkeypatch):
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+def test_late_shard_extends_collect_window(fake_coord_redis):
     path = mod._session_path(10086, 999002)
     mod._ensure_session(
         path,

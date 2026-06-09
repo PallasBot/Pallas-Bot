@@ -104,9 +104,10 @@ def note_cluster_session_seen_sync(*, qq: int) -> None:
         if not isinstance(seen, list):
             seen = []
             data["seen"] = seen
-        if key not in seen:
-            seen.append(key)
-            seen.sort(key=lambda x: int(x) if str(x).isdigit() else 0)
+        if key in seen:
+            return
+        seen.append(key)
+        seen.sort(key=lambda x: int(x) if str(x).isdigit() else 0)
         _write_seen_atomic(data)
     finally:
         release_seen_lock(fd)

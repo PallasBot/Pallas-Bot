@@ -5,8 +5,7 @@ import time
 from src.platform.shard.coord import cage_duel as mod
 
 
-def test_cross_shard_pair_finalize(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+def test_cross_shard_pair_finalize(fake_coord_redis, monkeypatch) -> None:
     monkeypatch.setattr(
         "src.platform.shard.registry.config.get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 2})(),
@@ -38,8 +37,7 @@ def test_cross_shard_pair_finalize(tmp_path, monkeypatch) -> None:
     assert set(pair) <= {923722427, 3879348674, 2927116873}
 
 
-def test_finalize_only_by_min_registered_bot(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
+def test_finalize_only_by_min_registered_bot(fake_coord_redis) -> None:
     path = mod._session_path(100, 1)
     seed = "1"
 

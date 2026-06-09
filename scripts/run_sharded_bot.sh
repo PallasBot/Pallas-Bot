@@ -39,6 +39,7 @@ WAIT_PORTS_SCRIPT="${SCRIPT_DIR}/wait_shard_worker_ports.py"
 SHARD_TEST_SCRIPT="${SCRIPT_DIR}/shard_test_worker.py"
 DETECT_REDIS_SCRIPT="${SCRIPT_DIR}/detect_shard_redis.py"
 PORT_RELEASE_TIMEOUT="${PALLAS_SHARD_PORT_RELEASE_TIMEOUT:-60}"
+FORCE_STOP=0
 PID_WORKER_TEST="${RUN_DIR}/worker-test.pid"
 TEST_SHARD_ID="${PALLAS_SHARD_TEST_ID:-99}"
 
@@ -96,6 +97,7 @@ usage() {
   --workers-only       仅操作生产 worker（不停/不启 hub；start 时只拉起缺失进程，restart 时全量重启）
   --scale-only         扩容模式：不重分配端口、不同步协议端 ws_url（已有 worker 在跑时 start --workers-only 自动启用）
   --hub-only           仅操作 hub 控制台（不停/不启 worker；restart 时常用）
+  --force              stop/restart 时 SIGKILL 强杀并跳过端口长等待（加快重启）
   --dry-run            只显示将要执行的命令，不真正启动
   -h, --help           显示本帮助
 
@@ -109,7 +111,7 @@ EOF
 }
 
 load_shard_redis_env() {
-  # 与 Pallas-Bot-AI 共用 REDIS_URL 时自动启用跨进程 claim（不可达则回退文件）
+  # 与 Pallas-Bot-AI 共用 REDIS_URL 时自动启用跨进程 claim。
   if [[ ! -f "${DETECT_REDIS_SCRIPT}" ]]; then
     return 0
   fi
@@ -123,7 +125,7 @@ shard_coord_backend_hint() {
   if [[ "${PALLAS_COORD_REDIS_ENABLED:-}" == "true" && -n "${PALLAS_COORD_REDIS_URL:-}" ]]; then
     echo "跨进程 claim：Redis"
   else
-    echo "跨进程 claim：共享 data/ 文件"
+    echo "跨进程 claim：Redis 未就绪（分片 claim 不可用）"
   fi
 }
 
@@ -149,7 +151,7 @@ redis_status_get() {
 print_redis_status_block() {
   echo "  跨进程协调 (ingress claim)"
   if [[ ! -f "${DETECT_REDIS_SCRIPT}" ]]; then
-    echo "    后端     共享 data/ 文件（未找到探测脚本）"
+    echo "    状态     未找到探测脚本，无法确认 Redis"
     return
   fi
   load_redis_status_lines
@@ -164,13 +166,13 @@ print_redis_status_block() {
   backend="${backend:-file}"
   if [[ "${policy}" == "false" ]]; then
     echo "    策略     已禁用 (PALLAS_COORD_REDIS_ENABLED=false)"
-    echo "    后端     共享 data/ 文件"
+    echo "    状态     分片 claim 不可用"
     return
   fi
   if [[ -z "${url}" ]]; then
     echo "    策略     ${policy}"
     echo "    配置     未设置 REDIS_URL（pallas.toml [env] 或 webui.json）"
-    echo "    后端     共享 data/ 文件"
+    echo "    状态     分片 claim 不可用"
     return
   fi
   echo "    策略     ${policy}"
@@ -183,12 +185,12 @@ print_redis_status_block() {
   if [[ "${reachable}" == "yes" ]]; then
     echo "    连通     可达 → 启动 worker 时将使用 Redis"
   else
-    echo "    连通     不可达 → 回退共享 data/ 文件"
+    echo "    连通     不可达 → 分片 claim 不可用"
   fi
   if [[ "${active}" == "yes" ]]; then
     echo "    当前     Redis 已启用"
   else
-    echo "    当前     文件 claim"
+    echo "    当前     Redis 未启用"
   fi
 }
 
@@ -330,6 +332,13 @@ stop_one() {
   fi
   local pid
   pid="$(cat "${pidfile}")"
+  if [[ "${FORCE_STOP}" -eq 1 ]]; then
+    kill -KILL "${pid}" 2>/dev/null || true
+    pkill -KILL -P "${pid}" 2>/dev/null || true
+    rm -f "${pidfile}"
+    echo "  · ${label}：已强制停止"
+    return 0
+  fi
   kill -TERM "${pid}" 2>/dev/null || true
   local i=0
   while kill -0 "${pid}" 2>/dev/null && [[ "${i}" -lt 30 ]]; do
@@ -338,6 +347,7 @@ stop_one() {
   done
   if kill -0 "${pid}" 2>/dev/null; then
     kill -KILL "${pid}" 2>/dev/null || true
+    pkill -KILL -P "${pid}" 2>/dev/null || true
   fi
   rm -f "${pidfile}"
   echo "  · ${label}：已停止"
@@ -347,8 +357,15 @@ stop_one() {
 stop_orphan_shard_processes() {
   local pat
   for pat in "${REPO_ROOT}/.venv/bin/python3 bot_hub.py" "${REPO_ROOT}/.venv/bin/python3 bot_worker.py"; do
-    pkill -TERM -f "${pat}" 2>/dev/null || true
+    if [[ "${FORCE_STOP}" -eq 1 ]]; then
+      pkill -KILL -f "${pat}" 2>/dev/null || true
+    else
+      pkill -TERM -f "${pat}" 2>/dev/null || true
+    fi
   done
+  if [[ "${FORCE_STOP}" -eq 1 ]]; then
+    return 0
+  fi
   sleep 1
   for pat in "${REPO_ROOT}/.venv/bin/python3 bot_hub.py" "${REPO_ROOT}/.venv/bin/python3 bot_worker.py"; do
     pkill -KILL -f "${pat}" 2>/dev/null || true
@@ -357,6 +374,10 @@ stop_orphan_shard_processes() {
 
 stop_orphan_worker_processes() {
   local pat="${REPO_ROOT}/.venv/bin/python3 bot_worker.py"
+  if [[ "${FORCE_STOP}" -eq 1 ]]; then
+    pkill -KILL -f "${pat}" 2>/dev/null || true
+    return 0
+  fi
   pkill -TERM -f "${pat}" 2>/dev/null || true
   sleep 1
   pkill -KILL -f "${pat}" 2>/dev/null || true
@@ -364,6 +385,10 @@ stop_orphan_worker_processes() {
 
 stop_orphan_hub_processes() {
   local pat="${REPO_ROOT}/.venv/bin/python3 bot_hub.py"
+  if [[ "${FORCE_STOP}" -eq 1 ]]; then
+    pkill -KILL -f "${pat}" 2>/dev/null || true
+    return 0
+  fi
   pkill -TERM -f "${pat}" 2>/dev/null || true
   sleep 1
   pkill -KILL -f "${pat}" 2>/dev/null || true
@@ -482,6 +507,11 @@ count_running_production_worker_ids() {
 
 wait_worker_ports_released() {
   local workers="$1"
+  if [[ "${FORCE_STOP}" -eq 1 ]]; then
+    echo "  · worker 端口：强制模式，短等待 3s"
+    sleep 3
+    return 0
+  fi
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo "  · worker 端口：将等待释放后再启动（预览）"
     return 0
@@ -1024,7 +1054,7 @@ cmd_stop() {
     echo "  生产 worker 已处理完毕（测试 worker-test 未停止）。"
     return 0
   fi
-  print_title "Pallas-Bot 分片模式 · 停止"
+  print_title "Pallas-Bot 分片模式 · 停止$([[ "${FORCE_STOP}" -eq 1 ]] && echo '（强制）')"
   stop_one "worker-test" "测试 worker-test"
   stop_production_workers
   stop_hub_process
@@ -1343,6 +1373,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --hub-only)
       HUB_ONLY=1
+      shift
+      ;;
+    --force)
+      FORCE_STOP=1
       shift
       ;;
     -h|--help)

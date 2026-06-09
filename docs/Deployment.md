@@ -61,10 +61,10 @@ uv sync --extra perf
 
 | 场景 | 依赖 | 应用配置 |
 | --- | --- | --- |
-| 多进程分片 | `uv sync --extra deploy-shard` | `uv run python tools/apply_deploy_profile.py shard` → `./scripts/run_sharded_bot.sh start` |
+| 多进程分片 | `uv sync --extra deploy-shard` | `uv run python tools/apply_deploy_profile.py shard` → 在 `pallas.toml [env]` 配置 `REDIS_URL` → `./scripts/run_sharded_bot.sh start` |
 | 消息审查 | `uv sync --extra message-scrub` | `uv run python tools/apply_deploy_profile.py message-scrub` |
 
-分片仅用文件 claim、不装 Redis 时可 `uv sync --extra shard`（无额外包）。`deploy-shard` 与 `coord-redis` 均安装 `redis`。
+当前分片模式**依赖 Redis 协调 claim**。`deploy-shard` 与 `coord-redis` 均安装 `redis` 依赖；`shard` extra 不含 redis 客户端，不能单独满足当前分片运行要求。
 
 ---
 
@@ -232,6 +232,7 @@ WantedBy=multi-user.target
 同一台机器长期运行**多只牛牛**且单进程卡顿时，可使用 **hub + worker**，共用 **`data/`** 与同一份 **`config/pallas.toml`**。
 
 - 启动：`./scripts/run_sharded_bot.sh start`（详见 [多进程分片架构说明](architecture/bot_process_sharding.md)）。
+- Redis：**必需**；请先配置 `REDIS_URL` 并安装 `coord-redis` / `deploy-shard`，否则分片 claim 无法正常工作。
 - 控制台与协议端管理仅访问 **hub** 端口（默认 `8088`）。
 - 切换前请备份 `data/`；Docker 示例见 [Docker 部署 · 多进程分片](DockerDeployment.md#多进程分片可选)。
 

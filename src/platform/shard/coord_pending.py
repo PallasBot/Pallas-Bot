@@ -1,73 +1,81 @@
-"""coord 目录待处理 JSON 快照（运维 / WebUI 可观测）。"""
+"""coord 待处理快照（运维 / WebUI 可观测；基于 Redis 键空间统计）。"""
 
 from __future__ import annotations
 
-import json
 import time
-from pathlib import Path
 from typing import Any
 
-from src.foundation.paths import plugin_data_dir
+from src.platform.coord.redis_settings import coord_redis_enabled
+from src.platform.shard.coord.coord_redis_store import read_json_sync, scan_keys_sync
 
-_PLUGIN = "pallas_shard"
-_COORD_DIRS = (
-    "bot_action",
-    "duel_qte",
-    "repeater_buffer",
-    "repeater_reply_buffer",
-    "cage_duel",
-    "duel_group",
-    "bot_count",
-)
-
-
-def _coord_root() -> Path:
-    return Path(plugin_data_dir(_PLUGIN, create=False)) / "coord"
-
-
-def _json_files_in(dir_path: Path) -> list[Path]:
-    if not dir_path.is_dir():
-        return []
-    return [p for p in dir_path.glob("*.json") if ".lock" not in p.name]
+_COORD_PREFIXES = {
+    "bot_action": "pallas:coord:bot_action:",
+    "bot_count": "pallas:coord:bot_count:",
+    "cage_duel": "pallas:coord:cage_duel:",
+    "duel_group": "pallas:coord:duel_group:",
+    "group_gate": "pallas:coord:group_gate:",
+    "maa_pending": "pallas:coord:maa_pending:",
+    "maa_route": "pallas:coord:maa_route:",
+    "maa_seen": "pallas:coord:maa_seen:",
+    "repeater_buffer": "pallas:coord:repeater_buffer:",
+    "repeater_reply_buffer": "pallas:coord:repeater_reply_buffer:",
+    "duel_qte_session": "pallas:duel_qte:session:",
+    "duel_qte_greeting": "pallas:duel_qte:greeting_users:",
+    "ai_task": "pallas:ai_task:",
+}
 
 
-def _bot_action_open_counts(files: list[Path]) -> tuple[int, int]:
-    """返回 (进行中, 已过 deadline 仍未完成)。"""
-    open_n = 0
-    stale_open_n = 0
-    now = time.time()
-    for path in files:
-        try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not isinstance(raw, dict) or raw.get("done"):
-            continue
-        open_n += 1
-        deadline = float(raw.get("deadline") or 0)
-        if deadline > 0 and now > deadline:
-            stale_open_n += 1
-    return open_n, stale_open_n
-
-
-def coord_pending_snapshot_sync() -> dict[str, Any]:
-    root = _coord_root()
-    by_dir: dict[str, int] = {}
-    open_bot_action = 0
-    stale_bot_action = 0
-    total = 0
-    for name in _COORD_DIRS:
-        files = _json_files_in(root / name)
-        count = len(files)
-        by_dir[name] = count
-        total += count
-        if name == "bot_action":
-            open_bot_action, stale_bot_action = _bot_action_open_counts(files)
+def _empty_snapshot(*, scan_skipped: bool) -> dict[str, Any]:
     return {
-        "total_json": total,
-        "actionable_total": open_bot_action,
-        "historical_retained": by_dir.get("bot_count", 0) + by_dir.get("duel_group", 0),
+        "storage": "redis",
+        "total_json": 0,
+        "actionable_total": 0,
+        "historical_retained": 0,
+        "by_dir": dict.fromkeys(_COORD_PREFIXES, 0),
+        "bot_action_open": 0,
+        "bot_action_stale_open": 0,
+        "scan_skipped": scan_skipped,
+    }
+
+
+def coord_pending_snapshot_sync(*, live: bool = False) -> dict[str, Any]:
+    if not coord_redis_enabled():
+        return _empty_snapshot(scan_skipped=False)
+    if not live:
+        return _empty_snapshot(scan_skipped=True)
+
+    total_json = 0
+    actionable_total = 0
+    historical_retained = 0
+    bot_action_open = 0
+    bot_action_stale_open = 0
+    now = time.time()
+    by_dir = dict.fromkeys(_COORD_PREFIXES, 0)
+
+    for name, prefix in _COORD_PREFIXES.items():
+        keys = scan_keys_sync(prefix)
+        by_dir[name] = len(keys)
+        total_json += len(keys)
+        if name != "bot_action":
+            continue
+        for key in keys:
+            data = read_json_sync(key) or {}
+            if data.get("done"):
+                historical_retained += 1
+                continue
+            bot_action_open += 1
+            actionable_total += 1
+            deadline = float(data.get("deadline") or 0)
+            if deadline > 0 and deadline < now:
+                bot_action_stale_open += 1
+
+    return {
+        "storage": "redis",
+        "total_json": total_json,
+        "actionable_total": actionable_total,
+        "historical_retained": historical_retained,
         "by_dir": by_dir,
-        "bot_action_open": open_bot_action,
-        "bot_action_stale_open": stale_bot_action,
+        "bot_action_open": bot_action_open,
+        "bot_action_stale_open": bot_action_stale_open,
+        "scan_skipped": False,
     }

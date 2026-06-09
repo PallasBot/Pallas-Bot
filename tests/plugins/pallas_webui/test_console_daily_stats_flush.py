@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import src.plugins.pallas_webui.extended_api as ext
+from src.plugins.pallas_webui import daily_stats_store
 
 
 def test_collect_flush_entries_merges_cluster_and_local(monkeypatch) -> None:
@@ -57,3 +58,16 @@ def test_console_daily_stats_disk_disabled_on_worker(monkeypatch) -> None:
         lambda: False,
     )
     assert ext._console_daily_stats_disk_enabled() is True
+
+
+def test_daily_stats_store_skips_rewrite_when_batch_is_unchanged(tmp_path, monkeypatch) -> None:
+    stats = tmp_path / "console_daily_stats.json"
+    monkeypatch.setattr(daily_stats_store, "stats_file_path", lambda: stats)
+
+    daily_stats_store.write_batch_day_totals([("2026-05-24", "111", 40, 2, 5)])
+    first = stats.read_text(encoding="utf-8")
+
+    daily_stats_store.write_batch_day_totals([("2026-05-24", "111", 40, 2, 5)])
+    second = stats.read_text(encoding="utf-8")
+
+    assert first == second

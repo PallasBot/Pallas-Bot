@@ -1,4 +1,4 @@
-"""分片跨 worker 协调（共享 data/ 目录下的文件会话）。"""
+"""分片跨 worker 协调（Redis 共享状态 + pub/sub 唤醒）。"""
 
 from src.platform.shard.coord.bot_count import (
     is_bot_count_fanout_plaintext,

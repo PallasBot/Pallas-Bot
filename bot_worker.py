@@ -8,6 +8,7 @@
     PORT=8090
 """
 
+import asyncio
 import os
 
 os.environ.setdefault("PALLAS_SHARD_ENABLED", "true")
@@ -64,10 +65,27 @@ driver.register_adapter(ONEBOT_V11Adapter)
 register_onebot_v11_custom_events()
 
 
+async def _ensure_worker_voices_background() -> None:
+    try:
+        ok = await ensure_voices()
+        if not ok:
+            nonebot.logger.warning("bot_worker: voice ensure failed or incomplete")
+    except Exception as err:
+        nonebot.logger.warning("bot_worker: voice ensure failed: {}", err)
+
+
 @driver.on_startup
 async def startup():
     await init_db()
     await start_ban_gate_snapshot()
+    from src.platform.coord.redis_settings import (
+        coord_redis_enabled,
+        ensure_coord_redis_ready_for_sharding,
+        resolve_coord_redis_url,
+    )
+    from src.platform.shard.coord.worker_poll import start_shard_coord_worker_watcher
+
+    ensure_coord_redis_ready_for_sharding()
     s = get_shard_registry_settings()
     reg = get_shard_registry()
     port = worker_port_for_shard(s.shard_id, registry=reg)
@@ -85,13 +103,11 @@ async def startup():
             port,
             s.shard_id,
         )
-    from src.platform.coord.redis_settings import coord_redis_enabled, resolve_coord_redis_url
-    from src.platform.shard.coord.worker_poll import start_shard_coord_worker_watcher
 
     if coord_redis_enabled():
         nonebot.logger.info("bot_worker: cross-process claims via Redis ({})", resolve_coord_redis_url())
     start_shard_coord_worker_watcher()
-    await ensure_voices()
+    asyncio.create_task(_ensure_worker_voices_background(), name="worker_ensure_voices")
 
 
 @driver.on_shutdown

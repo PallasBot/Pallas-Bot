@@ -16,6 +16,9 @@ _LOG_DIR_NAME = "logs"
 _LOG_LINE_RE = re.compile(
     r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \| (?P<lev>\S+)\s* \| (?P<scope>[^:]+):(?P<lineno>\d+) - (?P<msg>.*)$",
 )
+_MERGE_DEDUPE_RE = re.compile(
+    r"^(?P<head>\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| \S+\s* \| )(?:\[[^\]]+\] )?(?P<tail>.+)$",
+)
 _TS_PIPE = re.compile(r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
 _TS_BRACKET = re.compile(r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\[")
 _TS_ISO = re.compile(r"^(?P<dt>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})")
@@ -279,6 +282,16 @@ def _line_body_without_shard_tag(line: str) -> str:
     return raw
 
 
+def _merge_dedupe_key(line: str) -> str:
+    body = _line_body_without_shard_tag(line).strip()
+    if not body:
+        return ""
+    m = _MERGE_DEDUPE_RE.match(body)
+    if m:
+        return m.group("head") + m.group("tail")
+    return body
+
+
 def _line_message_tail(body: str) -> str:
     m = _LOG_LINE_RE.match(body.strip())
     if m:
@@ -360,7 +373,7 @@ def merge_cluster_log_lines(
     seen: set[str] = set()
     deduped: list[tuple[str, tuple[str, str, int]]] = []
     for line, sort_key in keyed_bucket:
-        key = line.strip()
+        key = _merge_dedupe_key(line)
         if not key or key in seen:
             continue
         seen.add(key)

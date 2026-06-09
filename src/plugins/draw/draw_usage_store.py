@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import atexit
 import json
 import threading
 from datetime import date
@@ -14,9 +15,12 @@ from src.foundation.paths import plugin_data_dir
 
 _USAGE_FILE = "pallas_draw_daily_usage.json"
 _VERSION = 1
+_FLUSH_DELAY_SEC = 5.0
 
 _lock = threading.Lock()
 _pallas_draw_usage: dict[tuple[int, int], tuple[date, int]] = {}
+_flush_timer: threading.Timer | None = None
+_usage_dirty = False
 
 
 def usage_store_path() -> Path:
@@ -111,6 +115,33 @@ def _persist() -> None:
     _atomic_write(path, json.dumps(payload, ensure_ascii=False, indent=2))
 
 
+def _start_flush_timer() -> None:
+    global _flush_timer
+    if _flush_timer is not None:
+        return
+    timer = threading.Timer(_FLUSH_DELAY_SEC, flush_pending_draw_usage_sync)
+    timer.daemon = True
+    _flush_timer = timer
+    timer.start()
+
+
+def flush_pending_draw_usage_sync() -> None:
+    global _flush_timer, _usage_dirty
+    with _lock:
+        timer = _flush_timer
+        _flush_timer = None
+        if timer is not None:
+            timer.cancel()
+        if not _usage_dirty:
+            return
+        try:
+            _persist()
+        except OSError as e:
+            logger.error(f"draw draw_usage persist failed: {e}")
+            return
+        _usage_dirty = False
+
+
 def pallas_draw_usage_today(usage_key: tuple[int, int]) -> int:
     with _lock:
         today = date.today()
@@ -121,6 +152,7 @@ def pallas_draw_usage_today(usage_key: tuple[int, int]) -> int:
 
 
 def bump_pallas_draw_usage(usage_key: tuple[int, int], count_usage: bool) -> None:
+    global _usage_dirty
     if not count_usage:
         return
     group_id, user_id = usage_key
@@ -133,14 +165,12 @@ def bump_pallas_draw_usage(usage_key: tuple[int, int], count_usage: bool) -> Non
         else:
             new_count = prev[1] + 1
             _pallas_draw_usage[usage_key] = (today, new_count)
-        try:
-            _persist()
-        except OSError as e:
-            logger.error(f"draw draw_usage persist failed: {e}")
-            return
+        _usage_dirty = True
+        _start_flush_timer()
     logger.info(
         f"draw draw usage bumped group={group_id} user={user_id} count={new_count} day={today.isoformat()}",
     )
 
 
 _load()
+atexit.register(flush_pending_draw_usage_sync)

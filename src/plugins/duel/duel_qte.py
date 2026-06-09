@@ -62,6 +62,102 @@ class _DuelRaceQteSession:
 
 
 _race_sessions: dict[str, _DuelRaceQteSession] = {}
+_active_qte_groups: set[str] = set()
+_active_qte_users_by_group: dict[str, frozenset[str]] = {}
+_cluster_qte_users: dict[str, frozenset[str]] = {}
+_cluster_qte_deadline: dict[str, float] = {}
+_published_greeting_snapshot: dict[str, frozenset[str]] = {}
+
+
+def apply_cluster_qte_greeting(gid: str, users: frozenset[str] | None, deadline: float) -> None:
+    """各 worker 通过 Redis pub/sub 同步的 QTE 参与者（供 greeting 让路）。"""
+    if users:
+        _cluster_qte_users[gid] = users
+        _cluster_qte_deadline[gid] = deadline
+        return
+    _cluster_qte_users.pop(gid, None)
+    _cluster_qte_deadline.pop(gid, None)
+
+
+def publish_cluster_qte_greeting_if_changed(gid: str, users: frozenset[str], deadline: float) -> None:
+    from src.platform.shard.registry.config import is_sharding_active
+
+    if not is_sharding_active():
+        return
+    snapshot = users or frozenset()
+    if _published_greeting_snapshot.get(gid) == snapshot:
+        return
+    if snapshot:
+        _published_greeting_snapshot[gid] = snapshot
+    else:
+        _published_greeting_snapshot.pop(gid, None)
+    from src.platform.shard.coord.duel_qte_redis import (
+        clear_duel_qte_greeting_redis_sync,
+        publish_duel_qte_greeting_redis_sync,
+    )
+
+    if snapshot:
+        publish_duel_qte_greeting_redis_sync(gid, snapshot, deadline=deadline)
+    else:
+        clear_duel_qte_greeting_redis_sync(gid)
+
+
+def sync_active_qte_group(gid: str) -> None:
+    """会话增减后刷新群级活跃标记（供 greeting 热路径快速查询）。"""
+    now = time.time()
+    active_users: set[str] = set()
+    max_deadline = now
+    race = _race_sessions.get(gid)
+    if race is not None and not race.future.done() and now <= race.deadline:
+        active_users.update((str(race.challenger_id), str(race.defender_id)))
+        max_deadline = max(max_deadline, race.deadline)
+    for (g, uid), sess in _sessions.items():
+        if g == gid and not sess.future.done() and now <= sess.deadline:
+            active_users.add(str(uid))
+            max_deadline = max(max_deadline, sess.deadline)
+    if active_users:
+        user_frozen = frozenset(active_users)
+        _active_qte_groups.add(gid)
+        _active_qte_users_by_group[gid] = user_frozen
+        publish_cluster_qte_greeting_if_changed(gid, user_frozen, max_deadline)
+        return
+    _active_qte_groups.discard(gid)
+    _active_qte_users_by_group.pop(gid, None)
+    publish_cluster_qte_greeting_if_changed(gid, frozenset(), now)
+
+
+def duel_qte_active_in_group(group_id: int) -> bool:
+    """本群是否存在未过期且未完成的 QTE 会话（供 greeting 等让路）。"""
+    gid = str(group_id)
+    if gid not in _active_qte_groups:
+        return False
+    sync_active_qte_group(gid)
+    return gid in _active_qte_groups
+
+
+def duel_qte_blocks_greeting_user(group_id: int, user_id: str | int) -> bool:
+    """仅当该用户正参与本群 QTE 时，屏蔽 greeting 抢占。"""
+    gid = str(group_id)
+    uid = str(user_id)
+    if gid in _active_qte_groups:
+        sync_active_qte_group(gid)
+        users = _active_qte_users_by_group.get(gid)
+        if users and uid in users:
+            return True
+    cluster_users = _cluster_qte_users.get(gid)
+    if cluster_users and uid in cluster_users:
+        if time.time() <= _cluster_qte_deadline.get(gid, 0):
+            return True
+        _cluster_qte_users.pop(gid, None)
+        _cluster_qte_deadline.pop(gid, None)
+    from src.platform.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        from src.platform.shard.coord.duel_qte_redis import greeting_user_blocked_redis_sync
+
+        if greeting_user_blocked_redis_sync(gid, uid):
+            return True
+    return False
 
 
 def qte_session_id(group_id: int, user_id: str | int) -> tuple[str, str]:
@@ -126,7 +222,7 @@ def should_schedule_bot_qte_auto_answer(responder: str) -> bool:
 
 
 def should_delegate_bot_qte_to_coord(responder: str) -> bool:
-    """分片且应答牛在其它 worker：走 data/coord/duel_qte 共享会话。"""
+    """分片且应答牛在其它 worker：走 Redis 共享 QTE 会话。"""
     from src.platform.shard.registry.config import is_sharding_active
 
     if not is_sharding_active():
@@ -148,6 +244,22 @@ def race_qte_needs_coord(challenger_id: str, defender_id: str) -> bool:
     if not is_sharding_active():
         return False
     return should_delegate_bot_qte_to_coord(challenger_id) or should_delegate_bot_qte_to_coord(defender_id)
+
+
+def bot_race_qte_use_cluster_coord(challenger_id: str, defender_id: str) -> bool:
+    """分片下含 fleet 牛的抢答 QTE 统一走 coord，避免主持 worker 本地抢跑。"""
+    from src.platform.shard.registry.config import is_sharding_active
+
+    if not is_sharding_active():
+        return False
+
+    def fleet(uid: str) -> bool:
+        try:
+            return is_fleet_bot_qq(int(uid))
+        except (TypeError, ValueError):
+            return False
+
+    return fleet(challenger_id) or fleet(defender_id)
 
 
 def schedule_bot_qte_auto_answer(
@@ -199,6 +311,7 @@ def schedule_bot_qte_auto_answer(
                 logger.debug(f"duel bot qte send failed: {err}")
         if not fut.done():
             fut.set_result(bool(success_roll and outgoing == required_key))
+            sync_active_qte_group(str(group_id))
 
     asyncio.create_task(job())
 
@@ -215,6 +328,25 @@ def schedule_bot_race_qte_auto_answer(
     decoy_keys: list[str] | None = None,
 ) -> None:
     """双方均为牛时各自自动抢答，先成功者写入 future。"""
+    if bot_race_qte_use_cluster_coord(challenger_id, defender_id):
+        from src.platform.shard.coord.duel_qte import (
+            bridge_race_qte_coord,
+            schedule_cross_shard_race_qte,
+        )
+
+        coord_sid = schedule_cross_shard_race_qte(
+            group_id,
+            challenger_id,
+            defender_id,
+            required_key,
+            fut,
+            window_sec,
+            qte_kind=qte_kind,
+            decoy_keys=decoy_keys,
+        )
+        asyncio.create_task(bridge_race_qte_coord(coord_sid, fut, window_sec=window_sec))
+        return
+
     coord_sid: str | None = None
     if race_qte_needs_coord(challenger_id, defender_id):
         from src.platform.shard.coord.duel_qte import (
@@ -270,6 +402,7 @@ def schedule_bot_race_qte_auto_answer(
                 await try_claim_race_coord_winner(race_coord_sid, responder_id)
             elif not fut.done():
                 fut.set_result(responder_id)
+                sync_active_qte_group(str(group_id))
 
         asyncio.create_task(job())
 
@@ -397,12 +530,14 @@ def complete_duel_qte(event: GroupMessageEvent) -> None:
     if race is not None and not race.future.done() and uid in (race.challenger_id, race.defender_id):
         if event.get_plaintext().strip() == race.required_key:
             race.future.set_result(uid)
+            sync_active_qte_group(gid)
         return
     sid = qte_session_id(event.group_id, uid)
     sess = _sessions.get(sid)
     if sess is None or sess.future.done():
         return
     sess.future.set_result(True)
+    sync_active_qte_group(gid)
 
 
 def resolve_qte_responder_qq(target: str, actor: str, challenger_id: str, defender_id: str) -> str:
@@ -701,6 +836,7 @@ async def _run_operator_intrusion_race_qte(
         challenger_id=challenger_id,
         defender_id=defender_id,
     )
+    sync_active_qte_group(gid)
     schedule_bot_race_qte_auto_answer(
         group_id,
         challenger_id,
@@ -717,6 +853,7 @@ async def _run_operator_intrusion_race_qte(
         winner_uid = None
     finally:
         _race_sessions.pop(gid, None)
+        sync_active_qte_group(gid)
 
     if winner_uid:
         winner_actor = actor_from_user_id(winner_uid, challenger_id, defender_id)
@@ -1009,6 +1146,7 @@ async def _run_operator_intrusion_qte(
         return
 
     _sessions[sid] = _DuelQteSession(future=fut, required_key=required_key, deadline=deadline)
+    sync_active_qte_group(sid[0])
     schedule_bot_qte_auto_answer(group_id, responder, required_key, fut, window_sec, qte_kind="intrusion")
     ok = False
     try:
@@ -1017,6 +1155,7 @@ async def _run_operator_intrusion_qte(
         ok = False
     finally:
         _sessions.pop(sid, None)
+        sync_active_qte_group(sid[0])
 
     if ok:
         kind = str(intrusion_ctx.get("picked_skill_kind") or "neutral")
@@ -1253,6 +1392,7 @@ async def _run_keyword_race_qte(
         challenger_id=challenger_id,
         defender_id=defender_id,
     )
+    sync_active_qte_group(gid)
     schedule_bot_race_qte_auto_answer(
         group_id,
         challenger_id,
@@ -1269,6 +1409,7 @@ async def _run_keyword_race_qte(
         winner_uid = None
     finally:
         _race_sessions.pop(gid, None)
+        sync_active_qte_group(gid)
 
     snap = snapshot_combat(stacks)
     if winner_uid:
@@ -1478,6 +1619,7 @@ async def run_event_qte_if_any(
         return
 
     _sessions[sid] = _DuelQteSession(future=fut, required_key=required_key, deadline=deadline)
+    sync_active_qte_group(sid[0])
     schedule_bot_qte_auto_answer(
         group_id,
         responder,
@@ -1494,6 +1636,7 @@ async def run_event_qte_if_any(
         ok = False
     finally:
         _sessions.pop(sid, None)
+        sync_active_qte_group(sid[0])
 
     snap = snapshot_combat(stacks)
     if ok:
@@ -1532,6 +1675,13 @@ async def run_event_qte_if_any(
 def clear_all_duel_qte_sessions() -> int:
     """决斗中断或重载时清空未决 QTE，返回被关闭的会话数。"""
     n = 0
+    gids = (
+        set(_race_sessions.keys())
+        | {g for g, _ in _sessions}
+        | set(_active_qte_groups)
+        | set(_published_greeting_snapshot)
+        | set(_cluster_qte_users)
+    )
     for sid, sess in list(_sessions.items()):
         if not sess.future.done():
             sess.future.set_result(False)
@@ -1542,4 +1692,16 @@ def clear_all_duel_qte_sessions() -> int:
             race.future.set_result(None)
             n += 1
         _race_sessions.pop(gid, None)
+    _active_qte_groups.clear()
+    _active_qte_users_by_group.clear()
+    _cluster_qte_users.clear()
+    _cluster_qte_deadline.clear()
+    _published_greeting_snapshot.clear()
+    from src.platform.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        from src.platform.shard.coord.duel_qte_redis import clear_duel_qte_greeting_redis_sync
+
+        for gid in gids:
+            clear_duel_qte_greeting_redis_sync(str(gid))
     return n

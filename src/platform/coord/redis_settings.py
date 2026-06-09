@@ -74,6 +74,22 @@ def clear_coord_redis_settings_cache() -> None:
     coord_redis_enabled.cache_clear()
 
 
+def sharding_requires_coord_redis() -> bool:
+    from src.platform.shard.registry.config import is_sharding_active
+
+    return is_sharding_active()
+
+
+def ensure_coord_redis_ready_for_sharding() -> None:
+    if not sharding_requires_coord_redis():
+        return
+    if coord_redis_enabled():
+        return
+    url = resolve_coord_redis_url()
+    detail = f" (configured url: {url})" if url else ""
+    raise RuntimeError(f"Sharding requires coord Redis, but Redis is unavailable{detail}")
+
+
 @lru_cache(maxsize=1)
 def coord_redis_enabled() -> bool:
     mode = coord_redis_mode()

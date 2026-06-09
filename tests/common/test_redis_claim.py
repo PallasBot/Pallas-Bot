@@ -38,8 +38,36 @@ def test_try_claim_message_falls_back_to_file(tmp_path, monkeypatch):
     assert claim_mod.read_claim_owner_sync("p", 1, 2) == 100
 
 
+def test_try_claim_message_sharding_does_not_fall_back_to_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(rc, "try_claim_message_redis_sync", lambda *a, **k: None)
+    monkeypatch.setattr(claim_mod, "plugin_data_dir", lambda plugin, create=True: tmp_path / plugin)
+    monkeypatch.setattr(
+        "src.platform.shard.registry.config.is_sharding_active",
+        lambda: True,
+    )
+    assert claim_mod.try_claim_message_sync("p", 1, 2, 100) is False
+    assert claim_mod.read_claim_owner_sync("p", 1, 2) is None
+
+
+def test_coord_redis_required_when_sharding(monkeypatch):
+    monkeypatch.setattr(
+        "src.platform.shard.registry.config.is_sharding_active",
+        lambda: True,
+    )
+    monkeypatch.setattr(rs, "coord_redis_enabled", lambda: False)
+
+    with pytest.raises(RuntimeError, match="Redis"):
+        rs.ensure_coord_redis_ready_for_sharding()
+
+
 def test_coord_redis_enabled_respects_false(monkeypatch):
-    monkeypatch.setenv("PALLAS_COORD_REDIS_ENABLED", "false")
-    monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    monkeypatch.setattr(
+        rs,
+        "_setting",
+        lambda key: {
+            "PALLAS_COORD_REDIS_ENABLED": "false",
+            "REDIS_URL": "redis://127.0.0.1:6379/0",
+        }.get(key),
+    )
     rs.clear_coord_redis_settings_cache()
     assert rs.coord_redis_enabled() is False

@@ -32,6 +32,20 @@ def test_merge_dedupes_identical():
     assert len(merged) <= 10
 
 
+def test_merge_dedupes_same_body_across_shard_tags(tmp_path, monkeypatch):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "hub.log").write_text(
+        "05-21 12:00:00 | INFO | src:1 - message_scrub 启动配置 · ok\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    hub_ring = ["05-21 12:00:00 | INFO | src:1 - message_scrub 启动配置 · ok"]
+    merged = merge_cluster_log_lines(10, "all", hub_ring_lines=hub_ring)
+    scrub = [ln for ln in merged if "message_scrub 启动配置" in ln]
+    assert len(scrub) == 1
+
+
 def test_parse_nonebot_bracket_line():
     e = parse_nonebot_log_line(
         "[worker-2] 05-22 00:38:12 [SUCCESS] nonebot | Succeeded to load plugin",

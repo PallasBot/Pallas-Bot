@@ -48,7 +48,7 @@ def main() -> int:
     pkg = "yes" if redis_package_installed() else "no"
     reachable = "yes" if url and coord_redis_enabled() else "no"
     active = "yes" if reachable == "yes" else "no"
-    backend = "redis" if active == "yes" else "file"
+    backend = "redis" if active == "yes" else "unavailable"
 
     if args.status:
         print(f"policy={mode}")
@@ -81,7 +81,7 @@ def main() -> int:
 
     if mode == "true":
         if not args.quiet:
-            print("coord redis: forced on but unreachable, workers fall back to file claims", file=sys.stderr)
+            print("coord redis: forced on but unreachable; sharding claims will fail", file=sys.stderr)
         return 1
 
     if not args.quiet:
@@ -91,7 +91,7 @@ def main() -> int:
                 file=sys.stderr,
             )
         else:
-            print(f"coord redis: unreachable ({url}), using file claims", file=sys.stderr)
+            print(f"coord redis: unreachable ({url}); sharding claims will fail", file=sys.stderr)
     return 0
 
 

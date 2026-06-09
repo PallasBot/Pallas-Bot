@@ -270,3 +270,70 @@ def test_build_review_providers_explicit_order(
     monkeypatch.setenv("PALLAS_SCRUB_REVIEW_PROVIDERS", "json_http,baidu")
     ids = [p.id for p in build_review_providers()]
     assert ids == ["json_http", "baidu"]
+
+
+def test_startup_log_skips_sharded_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    import src.features.message_scrub.startup_log as startup_log
+
+    monkeypatch.setattr(startup_log, "_hook_installed", False)
+    callbacks: list = []
+
+    def on_startup(fn):
+        callbacks.append(fn)
+        return fn
+
+    monkeypatch.setattr(
+        "src.features.message_scrub.startup_log.get_driver",
+        lambda: SimpleNamespace(on_startup=on_startup),
+    )
+    monkeypatch.setattr(
+        "src.platform.bot_runtime.roles.is_sharded_worker",
+        lambda: True,
+    )
+    with patch.object(startup_log.logger, "info") as mock_info:
+        startup_log.install_message_scrub_startup_log()
+        assert callbacks
+        asyncio.run(callbacks[0]())
+    mock_info.assert_not_called()
+    monkeypatch.setattr(startup_log, "_hook_installed", False)
+
+
+def test_startup_log_format_helpers() -> None:
+    from src.features.message_scrub.startup_log import (
+        format_api_fail_behavior,
+        format_local_sources,
+        format_provider_chain,
+        format_remote_chain_summary,
+    )
+
+    assert format_local_sources([]) == "无"
+    assert format_local_sources(["env_substrings", "lexicon_file"]) == "环境变量子串、词表文件"
+    assert format_provider_chain(["baidu", "json_http"]) == "百度 → 自建 HTTP"
+    assert format_api_fail_behavior(True) == "放行"
+    assert format_api_fail_behavior(False) == "拦截"
+
+    mode, chain = format_remote_chain_summary(
+        key_present=False,
+        providers_raw="",
+        chain_ids=["baidu"],
+    )
+    assert mode == "自动推断"
+    assert chain == "百度"
+
+    mode, chain = format_remote_chain_summary(
+        key_present=True,
+        providers_raw="",
+        chain_ids=[],
+    )
+    assert mode == "显式配置"
+    assert chain == "无（已显式关闭远程审查）"
+
+    mode, chain = format_remote_chain_summary(
+        key_present=True,
+        providers_raw="baidu",
+        chain_ids=[],
+    )
+    assert mode == "显式配置"
+    assert "无可用提供者" in chain

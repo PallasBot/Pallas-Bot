@@ -113,7 +113,7 @@ curl -s http://127.0.0.1:8088/pallas/api/health   # 返回正常
 | 单进程 + MongoDB | `perf` | 默认 compose 栈；不含 PostgreSQL 驱动 |
 | 单进程 + PostgreSQL | `perf,pg` | **Dockerfile 默认值** |
 | 单进程 + 消息审查 | `perf,pg,message-scrub` | 无额外 pip 包；仍须在容器内 `apply_deploy_profile message-scrub` 或 WebUI 开启 |
-| 多进程分片 | `perf,pg,deploy-shard` | 额外安装 `redis`；运行时见 [多进程分片](#多进程分片可选) |
+| 多进程分片 | `perf,pg,deploy-shard` | 安装 `redis`；当前分片运行需在配置中提供 `REDIS_URL`，详见 [多进程分片](#多进程分片可选) |
 
 单进程镜像**不必**加 `deploy-shard`。分片专用插件（`relogin_forward`、`maa_hub` 等）仍在源码树中，单进程由 **`UNIFIED_SKIP_PLUGIN_NAMES`** 跳过加载，体积可忽略；精简镜像主要靠 **extras** 与 **`.dockerignore`**，而非删插件目录。
 

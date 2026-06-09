@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 
 import pytest
@@ -9,17 +8,14 @@ import pytest
 from src.platform.shard.coord import bot_action as mod
 
 
-def test_bot_action_request_roundtrip(tmp_path, monkeypatch):
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
-
+def test_bot_action_request_roundtrip(fake_coord_redis) -> None:
     request_id = mod._publish_request(
         action="set_group_card",
         bot_qq=300,
         payload={"group_id": 1, "user_id": 2, "card": "test"},
         timeout_sec=5.0,
     )
-    path = mod._request_path(request_id)
-    mod._finish_request(path, ok=True, result=None)
+    mod._finish_request(request_id, ok=True, result=None)
 
     async def run() -> None:
         ok, result = await mod._wait_request(request_id, deadline=time.time() + 2.0)
@@ -29,37 +25,10 @@ def test_bot_action_request_roundtrip(tmp_path, monkeypatch):
     asyncio.run(run())
 
 
-def test_prune_stale_bot_action_removes_overdue_open(tmp_path, monkeypatch):
-    monkeypatch.setattr(mod, "_coord_dir", lambda: tmp_path)
-    now = time.time()
-    path = tmp_path / "overdue.json"
-    path.write_text(
-        json.dumps({
-            "request_id": "overdue",
-            "action": "send_group_msg",
-            "bot_qq": 1,
-            "done": False,
-            "deadline": now - 30,
-            "created_at": now - 40,
-        }),
-        encoding="utf-8",
-    )
-    done_path = tmp_path / "old_done.json"
-    done_path.write_text(
-        json.dumps({
-            "request_id": "old",
-            "done": True,
-            "created_at": now - mod._DONE_RETAIN_SEC - 10,
-        }),
-        encoding="utf-8",
-    )
-
+def test_prune_stale_bot_action_noop(fake_coord_redis) -> None:
     async def run() -> None:
         stats = await mod.prune_stale_bot_action_files()
-        assert stats["removed_overdue_open"] == 1
-        assert stats["removed_done"] == 1
-        assert not path.is_file()
-        assert not done_path.is_file()
+        assert stats == {"removed_done": 0, "removed_overdue_open": 0, "removed_expired": 0}
 
     asyncio.run(run())
 
@@ -94,3 +63,45 @@ async def test_execute_local_repeater_fanout_reply_schedules_background_task(mon
     assert ok is True
     assert result is None
     assert scheduled == ["repeater_fanout_reply_300"]
+
+
+@pytest.mark.asyncio
+async def test_bot_action_listener_reads_messages_via_to_thread(monkeypatch):
+    seen: list[str] = []
+
+    class _PubSub:
+        def subscribe(self, _channel: str) -> None:
+            return None
+
+        def get_message(self, *, timeout: float):
+            seen.append(f"get:{timeout}")
+            return {"type": "message", "data": '{"request_id":"req-1"}'}
+
+        def unsubscribe(self, _channel: str) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    class _Client:
+        def pubsub(self, *, ignore_subscribe_messages: bool):
+            return _PubSub()
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        seen.append("to_thread")
+        return fn(*args, **kwargs)
+
+    async def fake_run_pending(request_id: str, local_ids: frozenset[str]) -> None:
+        seen.append(f"run:{request_id}:{sorted(local_ids)}")
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr("nonebot.get_bots", lambda: {"300": object()})
+    monkeypatch.setattr(mod.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr("src.platform.coord.redis_settings.coord_redis_enabled", lambda: True)
+    monkeypatch.setattr("src.platform.coord.redis_claim.get_coord_redis_client", lambda: _Client())
+    monkeypatch.setattr(mod, "_run_pending_request", fake_run_pending)
+
+    with pytest.raises(asyncio.CancelledError):
+        await mod.bot_action_redis_listen_loop()
+
+    assert seen[:2] == ["to_thread", "get:1.0"]

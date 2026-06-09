@@ -22,6 +22,12 @@ _last_prune_at: dict[str, float] = {}
 _claim_file_estimate: defaultdict[str, int] = defaultdict(int)
 
 
+def _sharding_requires_redis() -> bool:
+    from src.platform.coord.redis_settings import sharding_requires_coord_redis
+
+    return sharding_requires_coord_redis()
+
+
 def _claim_root(plugin: str) -> Path:
     root = plugin_data_dir(plugin) / "message_claims"
     if plugin not in _claim_roots_ready:
@@ -101,6 +107,8 @@ def read_claim_owner_sync(plugin: str, group_id: int, message_id: int) -> int | 
     owner = read_claim_owner_redis_sync(plugin, group_id, message_id)
     if owner is not None:
         return owner
+    if _sharding_requires_redis():
+        return None
     path = _claim_file_path(plugin, group_id, message_id)
     if not path.is_file():
         return None
@@ -116,6 +124,8 @@ def try_claim_message_sync(plugin: str, group_id: int, message_id: int, bot_id: 
     redis_result = try_claim_message_redis_sync(plugin, group_id, message_id, bot_id)
     if redis_result is not None:
         return redis_result
+    if _sharding_requires_redis():
+        return False
     path = _claim_path(plugin, group_id, message_id)
     if path.is_file():
         try:
@@ -144,6 +154,8 @@ def take_claim_message_sync(plugin: str, group_id: int, message_id: int, bot_id:
     redis_result = take_claim_message_redis_sync(plugin, group_id, message_id, bot_id)
     if redis_result is not None:
         return redis_result
+    if _sharding_requires_redis():
+        return False
     path = _claim_path(plugin, group_id, message_id)
     try:
         path.write_text(str(int(bot_id)), encoding="utf-8")

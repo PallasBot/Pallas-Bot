@@ -57,8 +57,11 @@ def preserve_matcher_hist_from_disk(bots: dict[str, Any]) -> dict[str, Any]:
     return merged
 
 
-def write_bots_sync(bots: dict[str, Any], *, preserve_matcher_hist: bool = False) -> None:
+def write_bots_sync(bots: dict[str, Any], *, preserve_matcher_hist: bool = False) -> bool:
     payload = preserve_matcher_hist_from_disk(bots) if preserve_matcher_hist else bots
+    current = _read_raw()
+    if current.get("bots") == payload:
+        return False
     data: dict[str, Any] = {
         "v": _STORE_VER,
         "updated_at": time.time(),
@@ -77,3 +80,4 @@ def write_bots_sync(bots: dict[str, Any], *, preserve_matcher_hist: bool = False
                 tmp.unlink(missing_ok=True)
             except OSError:
                 pass
+    return True

@@ -1,14 +1,11 @@
 from __future__ import annotations
 
-import time
-
 import pytest
 
 from src.platform.shard.coord import maa_seen_registry as mod
 
 
-def test_touch_and_was_seen(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_seen_dir", lambda: tmp_path)
+def test_touch_and_was_seen(fake_coord_redis) -> None:
     mod.clear_seen_cache_for_tests()
     user = "123456789"
     device = "42cfa6e9-dfa1-47d8-a7c1-d9a6d658b06d"
@@ -17,25 +14,21 @@ def test_touch_and_was_seen(tmp_path, monkeypatch) -> None:
     assert mod.was_maa_seen_sync(user, "42cfa6e9dfa147d8a7c1d9a6d658b06d", ttl=3600)
 
 
-def test_touch_debounces_disk_writes(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_seen_dir", lambda: tmp_path)
+def test_touch_updates_redis(fake_coord_redis) -> None:
     mod.clear_seen_cache_for_tests()
     user = "123456789"
     device = "42cfa6e9-dfa1-47d8-a7c1-d9a6d658b06d"
     mod.touch_maa_seen_sync(user, device)
-    path = mod._seen_path(user, device)
-    assert path is not None and path.is_file()
-    mtime1 = path.stat().st_mtime
+    key = mod._seen_redis_key(user, device)
+    assert key is not None
+    assert key in fake_coord_redis[0]
     mod.touch_maa_seen_sync(user, device)
-    assert path.stat().st_mtime == mtime1
     assert mod.was_maa_seen_sync(user, device, ttl=3600)
     mod.flush_dirty_maa_seen_sync()
-    assert path.stat().st_mtime >= mtime1
 
 
 @pytest.mark.asyncio
-async def test_store_was_seen_reads_cluster_file(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_seen_dir", lambda: tmp_path)
+async def test_store_was_seen_reads_cluster_redis(fake_coord_redis, monkeypatch) -> None:
     mod.clear_seen_cache_for_tests()
     monkeypatch.setattr(
         "src.platform.shard.registry.config.is_sharding_active",

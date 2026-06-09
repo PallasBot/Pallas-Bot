@@ -32,6 +32,7 @@ def test_aggregate_shard_observability_includes_repeater_ingress(tmp_path, monke
                 "claim_lost": 1,
             },
             "coord_pending": {},
+            "process_memory": {"rss": 12_345_678, "vms": 23_456_789},
         },
     )
 
@@ -39,3 +40,4 @@ def test_aggregate_shard_observability_includes_repeater_ingress(tmp_path, monke
     assert data["repeater_ingress_cluster"]["events"] == 3
     assert data["repeater_ingress_cluster"]["claim_won"] == 2
     assert data["workers"][0]["repeater_ingress"]["claim_lost"] == 1
+    assert data["workers"][0]["process_memory"] == {"rss": 12_345_678, "vms": 23_456_789}

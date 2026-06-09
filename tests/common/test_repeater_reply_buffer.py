@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections import defaultdict
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -93,3 +94,74 @@ async def test_ban_searches_other_bot_reply_cache():
     finally:
         BanManager._blacklist_answer.clear()
         BanManager._blacklist_answer_reserve.clear()
+
+
+@pytest.mark.asyncio
+async def test_schedule_publish_repeater_reply_record_does_not_drop_burst(monkeypatch):
+    from src.platform.shard.coord import repeater_reply_buffer as mod
+
+    published: list[dict[str, object]] = []
+
+    async def fake_to_thread(fn, *args, **kwargs):
+        await asyncio.sleep(0.002)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "publish_repeater_reply_record_sync",
+        lambda group_id, bot_id, record: published.append(
+            {
+                "group_id": group_id,
+                "bot_id": bot_id,
+                **dict(record),
+            }
+        ),
+    )
+    monkeypatch.setattr(mod.asyncio, "to_thread", fake_to_thread)
+
+    total = 700
+    for idx in range(total):
+        mod.schedule_publish_repeater_reply_record(
+            1,
+            2,
+            {
+                "time": idx,
+                "pre_raw_message": f"q{idx}",
+                "pre_keywords": f"qk{idx}",
+                "reply": f"a{idx}",
+                "reply_keywords": f"ak{idx}",
+            },
+        )
+
+    await asyncio.sleep(0.5)
+
+    assert [item["reply"] for item in published] == [f"a{idx}" for idx in range(total)]
+
+
+def test_publish_reply_record_sharding_without_redis_skips_publish(monkeypatch) -> None:
+    from src.platform.shard.coord import repeater_reply_buffer as mod
+
+    monkeypatch.setattr(mod, "publish_repeater_reply_buffer_redis_sync", lambda env: False)
+    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "get_shard_registry_settings",
+        lambda: type("S", (), {"role": "worker", "shard_id": 0, "enabled": True})(),
+    )
+    monkeypatch.setattr(
+        "src.platform.coord.redis_settings.coord_redis_enabled",
+        lambda: False,
+    )
+
+    mod.publish_repeater_reply_record_sync(
+        1,
+        2,
+        {
+            "time": 1,
+            "pre_raw_message": "q",
+            "pre_keywords": "qk",
+            "reply": "a",
+            "reply_keywords": "ak",
+        },
+    )

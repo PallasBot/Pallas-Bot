@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""分片模式：按注册表同步协议端 accounts.json 的 ws_url（无变更则静默）。"""
+"""分片模式：按注册表同步协议端 accounts.json 与 NapCat 实例 onebot 配置（无变更则静默）。"""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from src.platform.shard.registry.sync_protocol_ports import (  # noqa: E402
-    ProtocolPortSyncResult,
     format_sync_user_message,
     restore_accounts_file,
     sync_accounts_ws_urls,
@@ -21,7 +20,7 @@ from src.platform.shard.registry.sync_protocol_ports import (  # noqa: E402
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="分片：同步协议端 accounts.json 的 ws_url 到各 worker 端口（无变更不输出）",
+        description="分片：同步 accounts.json ws_url 与 instances onebot 配置到各 worker 端口",
     )
     parser.add_argument(
         "--accounts",
@@ -62,16 +61,20 @@ def main() -> int:
         print(f"协议端端口同步失败: {err}", file=sys.stderr)
         return 1
 
-    if result.dry_run and result.changed_count > 0:
-        print(format_sync_user_message(result, backup_path=None).replace("已更新", "[dry-run] 将更新"))
+    if result.dry_run and (result.changed_count > 0 or result.onebot_drift_count > 0):
+        msg = format_sync_user_message(result, backup_path=None)
+        msg = msg.replace("已更新", "[dry-run] 将更新")
+        msg = msg.replace("已同步", "[dry-run] 将同步")
+        msg = msg.replace("已刷新", "[dry-run] 将刷新")
+        print(msg)
         return 0
 
-    if result.changed_count == 0:
+    if result.changed_count == 0 and result.onebot_drift_count == 0:
         if args.verbose:
-            print("协议端 ws_url 已与分片注册表一致，无需修改。")
+            print("协议端 ws_url 与实例 onebot 均已与分片注册表一致，无需修改。")
         return 0
 
-    if not args.dry_run:
+    if not args.dry_run and (result.changed_count or result.onebot_synced_count):
         print(format_sync_user_message(result, backup_path=args.backup))
     return 0
 

@@ -76,7 +76,7 @@ db = "PallasBot"
 REDIS_URL = "redis://127.0.0.1:6379/0"
 ```
 
-多进程分片跨 worker 协调时使用；`run_sharded_bot.sh` 可自动探测。与 Pallas-Bot-AI 共用同一 Redis 时填相同 URL。
+当前多进程分片跨 worker claim **依赖 Redis**；请在分片部署时配置该项，并安装 `uv sync --extra coord-redis`（或 `deploy-shard`）。`run_sharded_bot.sh` 会自动探测；与 Pallas-Bot-AI 共用同一 Redis 时填相同 URL。
 
 ---
 
