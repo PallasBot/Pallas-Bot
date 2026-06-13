@@ -77,12 +77,16 @@ uv run nb run
 <a id="文档"></a>
 ## 📖 文档
 
-部署、配置、插件、迁移与排障等完整说明见在线文档站。
+部署、配置、插件、迁移与排障等完整说明见在线文档站；全网在线牛牛与社区概览见社区中心主站。
 
 <table>
 <tr>
 <td><strong>文档</strong></td>
 <td><a href="https://PallasBot.github.io/Pallas-Bot-Docs/"><img src="https://img.shields.io/badge/docs%20on-GitHub.Pages-FE7D37" alt="docs on GitHub Pages"></a></td>
+</tr>
+<tr>
+<td><strong>社区中心主站</strong></td>
+<td><a href="https://stats.pallasbot.top/"><img src="https://img.shields.io/badge/社区中心-stats.pallasbot.top-FE7D37" alt="Pallas 社区中心"></a></td>
 </tr>
 </table>
 

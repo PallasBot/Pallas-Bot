@@ -1,6 +1,6 @@
 # 语料联邦
 
-管理牛牛**接话素材从哪来**：默认只用**本机库**；可选接入**社区共享池**读写匿名短句。与**在线统计**（是否在线、全网套数）独立，后者默认开启，见 [社区在线统计](../community_stats.md)。
+管理牛牛**接话素材从哪来**：默认只用**本机库**；可选接入**社区共享池**读写匿名短句。与**在线统计**（是否在线、全网套数）独立，后者默认开启，见 [在线统计与社区主站](../community_stats.md)。
 
 ## 语料来源
 
@@ -20,7 +20,7 @@
 | 落盘 | `data/pallas_config/webui.json` |
 | 生效 | 保存后热重载，一般无需重启 |
 
-在线统计与名册公开见 [社区在线统计](../community_stats.md)（**通用配置 → 在线统计与社区主站**）。
+在线统计与名册公开见 [在线统计与社区主站](../community_stats.md)（**通用配置 → 在线统计与社区主站**）。
 
 ### 分组说明
 
@@ -39,7 +39,7 @@
 | `community_contribute` | `auto` | 上传本机新回复 |
 | `on_remote_failure` | `local_only` | 远端失败只用本机 |
 
-关闭在线统计：`[community_stats] enabled = false`（见 [社区在线统计](../community_stats.md)）。
+关闭在线统计：`[community_stats] enabled = false`（见 [在线统计与社区主站](../community_stats.md)）。
 
 ### 联邦控制（多套牛牛共池）
 

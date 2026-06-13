@@ -3,7 +3,7 @@
 本文面向**维护者**，说明 Bot 侧如何接入社区共享语料、联邦池与在线统计。用户向说明见：
 
 - [语料联邦](../common/corpus/README.md)
-- [社区在线统计](../common/community_stats.md)
+- [在线统计与社区主站](../common/community_stats.md)
 
 ## 当前阶段
 

@@ -90,10 +90,14 @@ def build_command_perm_ui(overrides: dict[str, str]) -> dict[str, Any]:
         if cid in meta_rows:
             pname, ptitle, label = meta_rows[cid]
         else:
-            pname = cid.split(".", 1)[0] if "." in cid else cid
-            ptitle = pname
-            label = cid
+            from .ui_labels import command_label_for_id, plugin_name_for_command_id, plugin_title_for_name
+
+            pname = plugin_name_for_command_id(cid)
+            ptitle = plugin_title_for_name(pname)
+            label = command_label_for_id(cid)
         g = groups.setdefault(pname, {"plugin": pname, "title": ptitle, "commands": []})
+        if cid in meta_rows and g["title"] == g["plugin"]:
+            g["title"] = ptitle
         g["commands"].append({
             "command_id": cid,
             "label": label,

@@ -11,7 +11,7 @@
 | [命令权限](cmd_perm/README.md) | 谁可用哪些口令；帮助图动态「何人可用」 |
 | [消息审查](message_scrub/README.md) | 入站过滤：复读学习、做梦采集前拦截 |
 | [语料联邦](corpus/README.md) | 本机 + 社区共享接话池 |
-| [社区在线统计](community_stats.md) | 向社区中心上报在线数据（默认开启） |
+| [在线统计与社区主站](community_stats.md) | 主站 [stats.pallasbot.top](https://stats.pallasbot.top/) 与上报配置（默认开启） |
 | [WebUI 配置热重载](webui/README.md) | 插件接入控制台、通用配置段（维护者） |
 
 ## 控制台入口对照

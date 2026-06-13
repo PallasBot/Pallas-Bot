@@ -22,6 +22,7 @@ __plugin_meta__ = PluginMetadata(
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "command_permissions": [
             {"id": "draw.draw", "label": "牛牛画画", "default": "everyone"},
+            {"id": "draw.gateway", "label": "牛牛网关", "default": "everyone"},
         ],
         "menu_data": [
             {
