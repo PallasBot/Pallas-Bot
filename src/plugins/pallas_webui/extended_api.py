@@ -3741,6 +3741,7 @@ class _BotConfigPatch(BaseModel):
     auto_accept_friend: bool | None = None
     auto_accept_group: bool | None = None
     security: bool | None = None
+    community_roster_show_qq: bool | None = None
 
 
 class _GroupConfigPatch(BaseModel):
@@ -4044,6 +4045,7 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
             "security",
             "taken_name",
             "drunk",
+            "community_roster_show_qq",
         }
         for k in payload:
             if k not in allowed:
@@ -4383,13 +4385,13 @@ def register_extended_api(
 
     @router.get(f"{x}/community-corpus-hot", include_in_schema=True)
     async def _community_corpus_hot(
-        mode: str = Query(default="pool"),
+        mode: str = Query(default="fleet"),
         period: str = Query(default="day"),
         limit: int = Query(default=40, ge=5, le=80),
     ) -> JSONResponse:
         from src.features.community_stats.public_stats import fetch_community_corpus_hot
 
-        mode_norm = mode if mode in {"pool", "recent", "fleet"} else "pool"
+        mode_norm = mode if mode in {"pool", "recent", "fleet"} else "fleet"
         period_norm = period if period in {"day", "week", "month"} else "day"
 
         async def _load() -> dict[str, Any]:
@@ -6018,6 +6020,9 @@ def register_extended_api(
                 dist_ver = ""
             effective_version = (dist_ver or "").strip() or new_tag or "unknown"
             set_console_meta({**get_console_meta(), "version": effective_version})
+            from src.plugins.pallas_webui.api import invalidate_health_snapshot
+
+            invalidate_health_snapshot()
             logger.info("Pallas-Bot 控制台: WebUI 已更新至 {}（发布 tag: {}）", effective_version, new_tag)
             _drop_read_cache(("update_check_webui:",))
             return JSONResponse({

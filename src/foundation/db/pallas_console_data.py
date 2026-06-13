@@ -34,7 +34,38 @@ def bot_config_to_public(doc_or_row: Any) -> dict[str, Any]:
         "taken_name": dict(doc_or_row.taken_name or {}),
         "drunk": dict(doc_or_row.drunk or {}),
         "disabled_plugins": list(doc_or_row.disabled_plugins or []),
+        "community_roster_show_qq": bool(getattr(doc_or_row, "community_roster_show_qq", True)),
     }
+
+
+async def bot_community_roster_show_qq_by_accounts(account_ids: list[int]) -> dict[int, bool]:
+    """批量读取牛牛是否允许在社区名册展示 QQ；未建配置行视为 True。"""
+    ids = sorted({int(x) for x in account_ids if int(x) > 0})
+    if not ids:
+        return {}
+    backend = (get_db_backend() or "").lower()
+    if _is_pg_backend(backend):
+        from sqlalchemy import select
+
+        from src.foundation.db.repository_pg import BotConfigRow, get_session
+
+        async with get_session(read_only=True) as session:
+            result = await session.execute(
+                select(BotConfigRow.account, BotConfigRow.community_roster_show_qq).where(BotConfigRow.account.in_(ids))
+            )
+            out = {int(a): True for a in ids}
+            for account, show_qq in result.all():
+                out[int(account)] = bool(show_qq)
+            return out
+    from beanie.operators import In
+
+    from src.foundation.db.modules import BotConfigModule
+
+    out = {int(a): True for a in ids}
+    docs = await BotConfigModule.find(In(BotConfigModule.account, ids)).to_list()
+    for doc in docs:
+        out[int(doc.account)] = bool(getattr(doc, "community_roster_show_qq", True))
+    return out
 
 
 def group_config_to_public(doc_or_row: Any) -> dict[str, Any]:

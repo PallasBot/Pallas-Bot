@@ -157,7 +157,22 @@ def _field_row(key: str, cur: Any, *, model_fields: dict) -> dict[str, Any]:
     elif key in ("auto_enroll", "community_contribute"):
         row["kind"] = "enum"
         row["choices"] = _TRI_CHOICES
+    elif key == "corpus_backfill_enabled":
+        row["kind"] = "bool"
+        row["current"] = cur is True or str(cur).strip().lower() in ("1", "true", "yes", "on")
     return row
+
+
+def schedule_corpus_backfill_reload() -> None:
+    import asyncio
+
+    from src.features.corpus.backfill_scheduler import reload_corpus_backfill_job
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    loop.create_task(reload_corpus_backfill_job())
 
 
 def corpus_federation_payload(*, current_values: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -299,14 +314,7 @@ def apply_corpus_federation_patch(patch: dict[str, Any]) -> dict[str, Any]:
             pass
     if set(_BACKFILL_FIELD_NAMES) & set(patch):
         try:
-            import asyncio
-
-            from src.features.corpus.backfill_scheduler import reload_corpus_backfill_job
-
-            try:
-                asyncio.get_running_loop().create_task(reload_corpus_backfill_job())
-            except RuntimeError:
-                asyncio.run(reload_corpus_backfill_job())
+            schedule_corpus_backfill_reload()
         except Exception:
             pass
     try:

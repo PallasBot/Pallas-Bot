@@ -178,6 +178,7 @@ class BotConfigRow(Base):
     taken_name: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
     drunk: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
     disabled_plugins: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
+    community_roster_show_qq: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class GroupConfigRow(Base):
@@ -233,6 +234,17 @@ def _ensure_pg_group_config_blocked_user_ids(connection) -> None:
     if "blocked_user_ids" in names:
         return
     connection.execute(text("ALTER TABLE group_config ADD COLUMN blocked_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb"))
+
+
+def _ensure_pg_bot_config_community_roster_show_qq(connection) -> None:
+    """旧库 bot_config 缺列时补列。"""
+    insp = inspect(connection)
+    if not insp.has_table("bot_config"):
+        return
+    names = {c["name"] for c in insp.get_columns("bot_config")}
+    if "community_roster_show_qq" in names:
+        return
+    connection.execute(text("ALTER TABLE bot_config ADD COLUMN community_roster_show_qq BOOLEAN NOT NULL DEFAULT true"))
 
 
 def _ensure_pg_user_config_maa_devices(connection) -> None:
@@ -368,6 +380,7 @@ async def init_pg(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_pg_group_config_blocked_user_ids)
+        await conn.run_sync(_ensure_pg_bot_config_community_roster_show_qq)
         await conn.run_sync(_ensure_pg_user_config_maa_devices)
         await conn.run_sync(_ensure_pg_message_group_time_index)
         await conn.run_sync(_ensure_pg_message_group_user_time_index)

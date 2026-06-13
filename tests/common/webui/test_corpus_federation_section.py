@@ -91,6 +91,7 @@ def test_apply_corpus_federation_patch_backfill(monkeypatch, tmp_path):
         "corpus_backfill_max_per_minute": 30,
     })
     enabled = next(f for f in out["fields"] if f["name"] == "corpus_backfill_enabled")
+    assert enabled["kind"] == "bool"
     assert enabled["current"] is True
     raw = webui.read_text(encoding="utf-8")
     assert "PALLAS_CORPUS_BACKFILL_ENABLED" in raw

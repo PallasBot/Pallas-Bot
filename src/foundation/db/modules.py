@@ -28,6 +28,7 @@ class BotConfigModule(Document):
     taken_name: dict[int, int] = Field(default_factory=dict)
     drunk: dict[int, float] = Field(default_factory=dict)
     disabled_plugins: list[str] = Field(default_factory=list)
+    community_roster_show_qq: bool = Field(default=True)
 
     class Settings:
         name = "config"

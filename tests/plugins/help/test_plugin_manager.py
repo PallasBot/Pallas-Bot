@@ -415,6 +415,105 @@ async def test_handle_global_plugin_operation_fleet_constraint_superuser_exempt(
     assert "制约" not in (msg or "")
 
 
+def test_resolve_plugin_disable_scope_request_handler(monkeypatch):
+    from src.plugins.help import plugin_manager
+
+    def fake_find(name: str):
+        if name == "request_handler":
+            return type(
+                "Plugin",
+                (),
+                {
+                    "name": "request_handler",
+                    "metadata": type("Meta", (), {"extra": {"disable_scope": "bot"}})(),
+                },
+            )()
+        if name == "repeater":
+            return type(
+                "Plugin",
+                (),
+                {"name": "repeater", "metadata": type("Meta", (), {"extra": {}})()},
+            )()
+        return None
+
+    monkeypatch.setattr(plugin_manager, "find_plugin", fake_find)
+
+    assert plugin_manager.resolve_plugin_disable_scope("request_handler") == "bot"
+    assert plugin_manager.resolve_plugin_disable_scope("repeater") == "group"
+    assert plugin_manager.resolve_plugin_disable_scope("no_such_plugin") == "group"
+
+
+@pytest.mark.asyncio
+async def test_toggle_plugin_rejects_bot_scoped_in_group(monkeypatch):
+    from src.plugins.help import plugin_manager
+
+    fake_plugin = type(
+        "Plugin",
+        (),
+        {
+            "name": "request_handler",
+            "metadata": type("Meta", (), {"name": "申请管理", "extra": {"disable_scope": "bot"}})(),
+        },
+    )()
+    monkeypatch.setattr(plugin_manager, "find_plugin", lambda _name: fake_plugin)
+    monkeypatch.setattr(plugin_manager, "plugin_display_name", lambda _plugin: "申请管理")
+
+    success, msg = await plugin_manager.toggle_plugin(
+        "request_handler",
+        group_id=12345,
+        bot_id=88001,
+        action="disable",
+    )
+
+    assert success is True
+    assert msg
+    assert "私聊" in msg
+
+
+@pytest.mark.asyncio
+async def test_fill_plugin_status_bot_scope_ignores_group_disable(monkeypatch):
+    from src.plugins.help import plugin_manager
+
+    await plugin_manager.reset_disabled_plugin_gate_cache()
+
+    async def scoped_collect(bot_id, group_id, *, ignore_cache=False):
+        assert bot_id == 1234
+        if group_id is None:
+            return frozenset()
+        assert group_id == 5678
+        return frozenset({"request_handler", "chat"})
+
+    marks: list[str] = []
+
+    monkeypatch.setattr(plugin_manager, "collect_disabled_plugin_names", scoped_collect)
+    monkeypatch.setattr(
+        plugin_manager,
+        "get_help_menu_plugins",
+        lambda **_kwargs: [
+            type("Plugin", (), {"name": "request_handler"})(),
+            type("Plugin", (), {"name": "chat"})(),
+        ],
+    )
+    monkeypatch.setattr(
+        plugin_manager,
+        "resolve_plugin_disable_scope",
+        lambda name: "bot" if name == "request_handler" else "group",
+    )
+    monkeypatch.setattr(
+        plugin_manager,
+        "apply_status_marks_to_plugin_table",
+        lambda content, new_marks: marks.extend(new_marks) or content,
+    )
+    monkeypatch.setattr(
+        "src.plugins.help.markdown_generator.help_list_status_mark",
+        lambda enabled: "Y" if enabled else "N",
+    )
+
+    await plugin_manager.fill_plugin_status("|1|?|request_handler|\n|2|?|chat|", bot_id=1234, group_id=5678)
+
+    assert marks == ["Y", "N"]
+
+
 @pytest.mark.asyncio
 async def test_handle_group_plugin_operation_bot_disable_superuser_exempt(monkeypatch):
     from src.plugins.help import plugin_manager

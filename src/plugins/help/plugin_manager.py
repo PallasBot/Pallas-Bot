@@ -478,6 +478,29 @@ def find_plugin(plugin_name: str, *, plugins: Iterable[Any] | None = None) -> An
     return None
 
 
+def resolve_plugin_disable_scope(plugin_name: str) -> str:
+    """插件禁用作用域：group=本群（默认）；bot=单牛全局（不受群级 disabled_plugins 影响）。"""
+    plugin = find_plugin(plugin_name)
+    if plugin is None:
+        return "group"
+    meta = getattr(plugin, "metadata", None)
+    extra = getattr(meta, "extra", None) or {}
+    scope = str(extra.get("disable_scope") or "group").strip().lower()
+    return "bot" if scope == "bot" else "group"
+
+
+async def is_plugin_disabled_for_help_display(
+    plugin_name: str,
+    group_id: int | None,
+    bot_id: int | None,
+    *,
+    bot: Bot | None = None,
+    event: Event | None = None,
+) -> bool:
+    eff_group_id = None if resolve_plugin_disable_scope(plugin_name) == "bot" else group_id
+    return await is_plugin_disabled(plugin_name, eff_group_id, bot_id, bot=bot, event=event)
+
+
 async def modify_disabled_list(disabled_list: list[str], plugin_name: str, should_disable: bool) -> list[str]:
     """
     修改禁用列表
@@ -547,6 +570,12 @@ async def toggle_plugin(
     plugin_name = target_plugin.name
     user_visible_name = plugin_display_name(target_plugin)
     logger.debug(f"help toggle_plugin plugin={plugin_name} action={action} group_id={group_id} bot_id={bot_id}")
+
+    if group_id and resolve_plugin_disable_scope(plugin_name) == "bot":
+        return (
+            True,
+            f"{user_visible_name} 为单牛全局功能，请在私聊发送 牛牛开启 / 牛牛关闭 {user_visible_name}",
+        )
 
     if bot_id and not group_id:
         return await _handle_global_plugin_operation(
@@ -763,11 +792,15 @@ async def fill_plugin_status(
     logger.debug(f"help fill_plugin_status sorted_plugins count={len(sorted_plugins)}")
 
     disabled_names = await collect_disabled_plugin_names(bot_id, group_id, ignore_cache=False)
+    bot_disabled_names = (
+        await collect_disabled_plugin_names(bot_id, None, ignore_cache=False) if group_id else disabled_names
+    )
 
     marks: list[str] = []
     for plugin in sorted_plugins:
         plugin_name = plugin.name or "未命名插件"
-        is_disabled = plugin_name in disabled_names
+        names = bot_disabled_names if resolve_plugin_disable_scope(plugin_name) == "bot" else disabled_names
+        is_disabled = plugin_name in names
         marks.append(help_list_status_mark(not is_disabled))
 
     result_content = apply_status_marks_to_plugin_table(markdown_content, marks)

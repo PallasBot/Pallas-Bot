@@ -20,13 +20,13 @@ from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
 from nonebot_plugin_apscheduler import scheduler
 
-from src.features.cmd_perm import satisfies_command_permission
+from src.features.cmd_perm import private_message_permission_for_command, satisfies_command_permission
 from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
 )
-from src.features.cmd_perm.metadata_text import SCENE_GROUP, SCENE_PRIVATE, join_usage, usage_line
+from src.features.cmd_perm.metadata_text import SCENE_PRIVATE, join_usage, usage_line
 from src.foundation.config import BotConfig, GroupConfig, UserConfig, get_bot_admins, user_is_bot_admin
 from src.foundation.paths import plugin_data_dir
 from src.plugins.request_handler.approval_notice_text import parse_approval_notice_meta
@@ -92,6 +92,7 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "disable_scope": "bot",
         "command_permissions": [
             {"id": "request.list_friends", "label": "查看好友申请", "default": "bot_moderator"},
             {"id": "request.list_groups", "label": "查看入群申请", "default": "bot_moderator"},
@@ -197,11 +198,11 @@ __plugin_meta__ = PluginMetadata(
             {
                 "func": "通知开关",
                 "trigger_method": "on_cmd",
-                "trigger_scene": SCENE_GROUP,
-                "trigger_condition": "牛牛开启 / 牛牛关闭 request_handler",
+                "trigger_scene": SCENE_PRIVATE,
+                "trigger_condition": "牛牛开启 / 牛牛关闭 申请管理",
                 "command_permissions": ["help.plugin_enable", "help.plugin_disable"],
                 "brief_des": "是否推送申请提醒",
-                "detail_des": "在帮助系统里开关本插件的好友/入群提醒推送",
+                "detail_des": "私聊切换本牛是否推送好友/入群申请提醒（单牛全局；审批口令亦在私聊使用）",
             },
             {
                 "func": "自动同意开关",
@@ -758,29 +759,113 @@ async def reject_group_invite_by_gid(bot: Bot, bot_key: str, group_key: str) -> 
 
 request_cmd = on_request(priority=14, block=False)
 
-list_friends_cmd = on_command(LIST_FRIEND_COMMAND, aliases=set(LIST_FRIEND_ALIASES), priority=5, block=True)
-approve_latest_cmd = on_command(APPROVE_LATEST_COMMAND, priority=5, block=True)
-reject_latest_cmd = on_command(REJECT_LATEST_COMMAND, priority=5, block=True)
-approve_friend_cmd = on_command(APPROVE_FRIEND_COMMAND, priority=5, block=True)
-approve_all_friends_cmd = on_command(APPROVE_ALL_FRIENDS_COMMAND, priority=5, block=True)
-reject_all_friends_cmd = on_command(REJECT_ALL_FRIENDS_COMMAND, priority=5, block=True)
-list_groups_cmd = on_command(LIST_GROUP_COMMAND, aliases=set(LIST_GROUP_ALIASES), priority=5, block=True)
-approve_group_cmd = on_command(APPROVE_GROUP_COMMAND, priority=5, block=True)
+list_friends_cmd = on_command(
+    LIST_FRIEND_COMMAND,
+    aliases=set(LIST_FRIEND_ALIASES),
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.list_friends"),
+)
+approve_latest_cmd = on_command(
+    APPROVE_LATEST_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.approve_latest"),
+)
+reject_latest_cmd = on_command(
+    REJECT_LATEST_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.reject_latest"),
+)
+approve_friend_cmd = on_command(
+    APPROVE_FRIEND_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.approve_friend"),
+)
+approve_all_friends_cmd = on_command(
+    APPROVE_ALL_FRIENDS_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.approve_all_friends"),
+)
+reject_all_friends_cmd = on_command(
+    REJECT_ALL_FRIENDS_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.reject_all_friends"),
+)
+list_groups_cmd = on_command(
+    LIST_GROUP_COMMAND,
+    aliases=set(LIST_GROUP_ALIASES),
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.list_groups"),
+)
+approve_group_cmd = on_command(
+    APPROVE_GROUP_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.approve_group"),
+)
 approve_all_groups_cmd = on_command(
-    APPROVE_ALL_GROUPS_COMMAND, aliases=set(APPROVE_ALL_GROUPS_ALIASES), priority=5, block=True
+    APPROVE_ALL_GROUPS_COMMAND,
+    aliases=set(APPROVE_ALL_GROUPS_ALIASES),
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.approve_all_groups"),
 )
 reject_all_groups_cmd = on_command(
-    REJECT_ALL_GROUPS_COMMAND, aliases=set(REJECT_ALL_GROUPS_ALIASES), priority=5, block=True
+    REJECT_ALL_GROUPS_COMMAND,
+    aliases=set(REJECT_ALL_GROUPS_ALIASES),
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.reject_all_groups"),
 )
-reject_friend_cmd = on_command(REJECT_FRIEND_COMMAND, priority=5, block=True)
-reject_group_cmd = on_command(REJECT_GROUP_COMMAND, priority=5, block=True)
+reject_friend_cmd = on_command(
+    REJECT_FRIEND_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.reject_friend"),
+)
+reject_group_cmd = on_command(
+    REJECT_GROUP_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.reject_group"),
+)
 auto_accept_status_cmd = on_command(
-    AUTO_ACCEPT_STATUS_COMMAND, aliases=set(AUTO_ACCEPT_STATUS_ALIASES), priority=5, block=True
+    AUTO_ACCEPT_STATUS_COMMAND,
+    aliases=set(AUTO_ACCEPT_STATUS_ALIASES),
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.auto_accept_status"),
 )
-enable_auto_friend_cmd = on_command(ENABLE_AUTO_FRIEND_COMMAND, priority=5, block=True)
-disable_auto_friend_cmd = on_command(DISABLE_AUTO_FRIEND_COMMAND, priority=5, block=True)
-enable_auto_group_cmd = on_command(ENABLE_AUTO_GROUP_COMMAND, priority=5, block=True)
-disable_auto_group_cmd = on_command(DISABLE_AUTO_GROUP_COMMAND, priority=5, block=True)
+enable_auto_friend_cmd = on_command(
+    ENABLE_AUTO_FRIEND_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.enable_auto_friend"),
+)
+disable_auto_friend_cmd = on_command(
+    DISABLE_AUTO_FRIEND_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.disable_auto_friend"),
+)
+enable_auto_group_cmd = on_command(
+    ENABLE_AUTO_GROUP_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.enable_auto_group"),
+)
+disable_auto_group_cmd = on_command(
+    DISABLE_AUTO_GROUP_COMMAND,
+    priority=5,
+    block=True,
+    permission=private_message_permission_for_command("request.disable_auto_group"),
+)
 
 
 def plugin_config() -> Config:

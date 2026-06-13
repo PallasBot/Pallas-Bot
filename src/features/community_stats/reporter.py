@@ -36,7 +36,7 @@ def should_run_community_stats_reporter() -> bool:
     return get_community_stats_config().enabled
 
 
-def build_heartbeat_payload() -> dict[str, object]:
+def build_heartbeat_payload(*, show_qq_by_account: dict[int, bool] | None = None) -> dict[str, object]:
     from src.platform.shard.presence import count_connected_bots_for_reporting
 
     cfg = get_community_stats_config()
@@ -62,7 +62,7 @@ def build_heartbeat_payload() -> dict[str, object]:
         payload["roster_public"] = True
         payload["roster_show_qq"] = cfg.roster_public_qq
         payload["roster_show_profile"] = cfg.roster_public_profile
-        payload["roster"] = build_public_roster_entries()
+        payload["roster"] = build_public_roster_entries(show_qq_by_account=show_qq_by_account)
     else:
         payload["roster_public"] = False
     return payload
@@ -131,7 +131,15 @@ async def send_community_stats_heartbeat() -> bool:
         return False
     if is_auto_endpoint_mode(cfg) and urls[0] == PRIMARY_HEARTBEAT:
         touch_primary_probe_unix()
-    payload = build_heartbeat_payload()
+    show_qq_by_account: dict[int, bool] | None = None
+    if cfg.roster_public:
+        from src.foundation.db.pallas_console_data import bot_community_roster_show_qq_by_accounts
+        from src.plugins.bot_status.list_mode import status_inventory_bot_ids
+
+        inventory = status_inventory_bot_ids()
+        if inventory:
+            show_qq_by_account = await bot_community_roster_show_qq_by_accounts(list(inventory))
+    payload = build_heartbeat_payload(show_qq_by_account=show_qq_by_account)
     snapshot = await maybe_build_corpus_hot_snapshot(cfg)
     if snapshot is not None:
         payload["corpus_hot_snapshot"] = snapshot

@@ -53,6 +53,12 @@ async def refresh_health_snapshot(
     return payload
 
 
+def invalidate_health_snapshot() -> None:
+    """WebUI 更新或 console 元信息变更后丢弃缓存，下次 /health 立即重读 dist。"""
+    global _health_snapshot
+    _health_snapshot = None
+
+
 def register_api(
     app,
     *,

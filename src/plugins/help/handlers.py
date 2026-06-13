@@ -14,7 +14,7 @@ from .plugin_manager import (
     find_plugin,
     find_plugin_by_identifier,
     get_help_menu_plugins,
-    is_plugin_disabled,
+    is_plugin_disabled_for_help_display,
     plugin_display_name,
     toggle_plugin,
 )
@@ -86,7 +86,13 @@ async def handle_help_command(
         return
 
     if len(args) == 1:
-        is_disabled = await is_plugin_disabled(plugin_name, group_id, bot_id, bot=bot, event=event)
+        is_disabled = await is_plugin_disabled_for_help_display(
+            plugin_name,
+            group_id,
+            bot_id,
+            bot=bot,
+            event=event,
+        )
         markdown_content, issue = generate_plugin_functions_markdown(plugin_name, plugin_enabled=not is_disabled)
         if issue is HelpMarkdownIssue.PLUGIN_NOT_FOUND:
             await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")

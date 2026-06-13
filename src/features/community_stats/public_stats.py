@@ -186,7 +186,7 @@ async def fetch_community_public_stats() -> dict[str, Any]:
 
 async def fetch_community_corpus_hot(
     *,
-    mode: str = "pool",
+    mode: str = "fleet",
     period: str = "day",
     limit: int = 40,
 ) -> dict[str, Any]:
@@ -196,7 +196,7 @@ async def fetch_community_corpus_hot(
     urls = corpus_hot_urls_for_config(cfg)
     if not urls:
         raise ValueError("no community stats URL configured")
-    mode_norm = mode if mode in {"pool", "recent", "fleet"} else "pool"
+    mode_norm = mode if mode in {"pool", "recent", "fleet"} else "fleet"
     period_norm = period if period in {"day", "week", "month"} else "day"
     limit_norm = max(5, min(int(limit), 80))
     scrub_http_log_noise()
