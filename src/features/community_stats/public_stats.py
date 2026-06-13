@@ -182,3 +182,38 @@ async def fetch_community_public_stats() -> dict[str, Any]:
         data.get("stats_url"),
     )
     return data
+
+
+async def fetch_community_corpus_hot(
+    *,
+    mode: str = "pool",
+    period: str = "day",
+    limit: int = 40,
+) -> dict[str, Any]:
+    from src.features.community_stats.endpoints import corpus_hot_urls_for_config
+
+    cfg = get_community_stats_config()
+    urls = corpus_hot_urls_for_config(cfg)
+    if not urls:
+        raise ValueError("no community stats URL configured")
+    mode_norm = mode if mode in {"pool", "recent", "fleet"} else "pool"
+    period_norm = period if period in {"day", "week", "month"} else "day"
+    limit_norm = max(5, min(int(limit), 80))
+    scrub_http_log_noise()
+    last_err: Exception | None = None
+    async with httpx.AsyncClient(timeout=_STATS_TIMEOUT_SEC) as client:
+        for base_url in urls:
+            url = f"{base_url}?mode={mode_norm}&period={period_norm}&limit={limit_norm}"
+            try:
+                resp = await client.get(url)
+                resp.raise_for_status()
+                body = resp.json()
+                if not isinstance(body, dict):
+                    raise ValueError("corpus hot response is not a JSON object")
+                return body
+            except (httpx.HTTPError, ValueError) as e:
+                last_err = e
+                logger.debug("community_stats: fetch corpus hot failed url={}: {}", url, e)
+    if last_err is not None:
+        raise last_err
+    raise ValueError("community corpus hot fetch failed")

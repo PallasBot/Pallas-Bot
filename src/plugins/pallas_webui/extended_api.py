@@ -4381,6 +4381,43 @@ def register_extended_api(
         data = await _cached_read(key="community-stats", loader=_load, ttl_sec=30.0, stale_sec=120.0)
         return JSONResponse({"ok": True, "data": data})
 
+    @router.get(f"{x}/community-corpus-hot", include_in_schema=True)
+    async def _community_corpus_hot(
+        mode: str = Query(default="pool"),
+        period: str = Query(default="day"),
+        limit: int = Query(default=40, ge=5, le=80),
+    ) -> JSONResponse:
+        from src.features.community_stats.public_stats import fetch_community_corpus_hot
+
+        mode_norm = mode if mode in {"pool", "recent", "fleet"} else "pool"
+        period_norm = period if period in {"day", "week", "month"} else "day"
+
+        async def _load() -> dict[str, Any]:
+            return await fetch_community_corpus_hot(mode=mode_norm, period=period_norm, limit=limit)
+
+        cache_key = f"community-corpus-hot:{mode_norm}:{period_norm}:{limit}"
+        data = await _cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=300.0)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/local-corpus-hot", include_in_schema=True)
+    async def _local_corpus_hot(
+        scope: str = Query(default="global"),
+        group_id: int | None = Query(default=None),
+        limit: int = Query(default=40, ge=5, le=80),
+    ) -> JSONResponse:
+        from src.features.corpus.local_hot import aggregate_local_hot_keywords, build_local_corpus_hot_payload
+
+        scope_norm = scope if scope in {"global", "group"} else "global"
+        gid = int(group_id) if scope_norm == "group" and group_id is not None else 0
+
+        async def _load() -> dict[str, Any]:
+            items = await aggregate_local_hot_keywords(scope=scope_norm, group_id=group_id, limit=limit)
+            return build_local_corpus_hot_payload(items)
+
+        cache_key = f"local-corpus-hot:{scope_norm}:{gid}:{limit}"
+        data = await _cached_read(key=cache_key, loader=_load, ttl_sec=60.0, stale_sec=180.0)
+        return JSONResponse({"ok": True, "data": data})
+
     @router.get(f"{x}/corpus-status", include_in_schema=True)
     async def _corpus_status() -> JSONResponse:
         from src.features.corpus.status import build_corpus_status_snapshot

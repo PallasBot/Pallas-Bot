@@ -9,10 +9,32 @@ from typing import TYPE_CHECKING, Any, Literal
 from nonebot import get_driver, logger
 
 from src.features.corpus.config import CorpusConfig, community_contribute_enabled
+from src.foundation.db.modules import Answer, Context
 
 if TYPE_CHECKING:
-    from src.foundation.db.modules import Context
     from src.foundation.db.repository import ContextRepository
+
+
+def community_mirror_context(context: Context) -> Context:
+
+    answers = [
+        Answer(
+            keywords=a.keywords,
+            group_id=0,
+            count=int(a.count),
+            time=int(a.time),
+            messages=list(a.messages),
+        )
+        for a in (context.answers or [])
+    ]
+    return Context.model_construct(
+        keywords=context.keywords,
+        time=int(context.time),
+        trigger_count=int(context.trigger_count),
+        answers=answers,
+        ban=list(context.ban or []),
+        clear_time=int(context.clear_time),
+    )
 
 
 _WRITE_QUEUE_MAX = 2048
@@ -146,7 +168,7 @@ async def mirror_insert(
     if cfg.fed_contribute and fed is not None:
         await fed.insert(context)
     if community_contribute_enabled(cfg) and community is not None:
-        await community.insert(context)
+        await community.insert(community_mirror_context(context))
 
 
 def _enqueue_corpus_write(op: _MirrorWriteOp) -> None:

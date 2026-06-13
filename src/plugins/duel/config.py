@@ -95,7 +95,7 @@ class Config(BaseModel, extra="ignore"):
         default=1.5,
         ge=0.1,
         le=10.0,
-        description="歌咏场内泰拉公共事件（非乱入）权重倍率，相对 JSON weight 再抬高。",
+        description="歌咏场内泰拉公共事件（非乱入）权重倍率",
     )
     duel_operator_intrusion_chance: float = Field(
         default=0.1,
@@ -107,13 +107,13 @@ class Config(BaseModel, extra="ignore"):
         default=0.06,
         ge=0.0,
         le=1.0,
-        description="乱入事件 public_ark_intrusion 中，随机抽中帕拉斯而非其他干员的概率。",
+        description="乱入事件中，随机抽中帕拉斯的概率。",
     )
     duel_qte_event_weight_mult: float = Field(
         default=1.6,
         ge=0.1,
         le=10.0,
-        description="交锋/兵刃等池中「关键词 QTE」事件的权重倍率（不含歌咏乱入）。",
+        description="交锋/兵刃等池中「关键词 QTE」事件的权重倍率（不含乱入）。",
     )
     duel_exchange_qte_chance: float = Field(
         default=0.32,
@@ -125,13 +125,13 @@ class Config(BaseModel, extra="ignore"):
         default=0.38,
         ge=0.0,
         le=1.0,
-        description="兵刃随机 QTE 中，生成双方抢攻（对对手造成伤害）而非受创方拆招的概率。",
+        description="兵刃随机 QTE 中，生成双方发生抢答事件的概率。",
     )
     duel_intrusion_race_chance: float = Field(
         default=0.45,
         ge=0.0,
         le=1.0,
-        description="干员乱入 QTE 中，双方抢先咏名（抢认）而非仅 target 指定单方应答的概率。",
+        description="干员乱入 QTE 中，双方抢先咏名而非仅 target 指定单方应答的概率。",
     )
 
     # —— 泰拉干员资源（resource/arknights） ——
@@ -153,7 +153,7 @@ class Config(BaseModel, extra="ignore"):
         default=0.68,
         ge=0.0,
         le=1.0,
-        description="应答方为牛时，干员唤名（咏名）QTE 自动答对概率。",
+        description="应答方为牛时，干员唤名QTE 自动答对概率。",
     )
     duel_bot_qte_keyword_success_rate: float = Field(
         default=0.74,
@@ -165,13 +165,13 @@ class Config(BaseModel, extra="ignore"):
         default=0.72,
         ge=0.0,
         le=1.0,
-        description="自动 QTE 失败时，仍发出错误答案（嘴瓢）的概率。",
+        description="自动 QTE 时嘴瓢的概率。",
     )
     duel_bot_qte_fail_silent_chance: float = Field(
         default=0.18,
         ge=0.0,
         le=1.0,
-        description="自动 QTE 失败时，完全不发言的概率。",
+        description="自动 QTE 时完全不发言的概率。",
     )
 
     @model_validator(mode="after")

@@ -68,6 +68,28 @@ def build_heartbeat_payload() -> dict[str, object]:
     return payload
 
 
+async def maybe_build_corpus_hot_snapshot(cfg: CommunityStatsConfig) -> dict[str, object] | None:
+    from src.features.community_stats.store import _read_state_raw, touch_corpus_hot_snapshot_unix
+    from src.features.corpus.config import community_contribute_enabled
+    from src.features.corpus.local_hot import build_corpus_hot_snapshot_items
+
+    if not community_contribute_enabled():
+        return None
+    now = int(time.time())
+    last = int(_read_state_raw().get("corpus_hot_snapshot_unix") or 0)
+    if now - last < max(300, int(cfg.corpus_hot_snapshot_interval_sec)):
+        return None
+    try:
+        items = await build_corpus_hot_snapshot_items()
+    except Exception as e:
+        logger.debug("community_stats: corpus hot snapshot build failed: {}", e)
+        return None
+    if not items:
+        return None
+    touch_corpus_hot_snapshot_unix(now)
+    return {"as_of": now, "items": items[:40]}
+
+
 def _headers(cfg: CommunityStatsConfig) -> dict[str, str]:
     headers = {"Content-Type": "application/json"}
     token = (cfg.token or "").strip()
@@ -110,6 +132,9 @@ async def send_community_stats_heartbeat() -> bool:
     if is_auto_endpoint_mode(cfg) and urls[0] == PRIMARY_HEARTBEAT:
         touch_primary_probe_unix()
     payload = build_heartbeat_payload()
+    snapshot = await maybe_build_corpus_hot_snapshot(cfg)
+    if snapshot is not None:
+        payload["corpus_hot_snapshot"] = snapshot
     try:
         async with scrub_http_log_noise():
             async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SEC) as client:

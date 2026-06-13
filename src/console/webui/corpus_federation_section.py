@@ -36,7 +36,14 @@ _REPLY_PERF_FIELD_NAMES: tuple[str, ...] = (
     "reply_snapshot_max",
 )
 
-_WEBUI_FIELD_NAMES: tuple[str, ...] = _PHASE1_FIELD_NAMES + _REPLY_PERF_FIELD_NAMES
+_BACKFILL_FIELD_NAMES: tuple[str, ...] = (
+    "corpus_backfill_enabled",
+    "corpus_backfill_batch_size",
+    "corpus_backfill_interval_sec",
+    "corpus_backfill_max_per_minute",
+)
+
+_WEBUI_FIELD_NAMES: tuple[str, ...] = _PHASE1_FIELD_NAMES + _BACKFILL_FIELD_NAMES + _REPLY_PERF_FIELD_NAMES
 
 _FIELD_TO_ENV: dict[str, str] = {
     "merge_order": "PALLAS_CORPUS_MERGE_ORDER",
@@ -44,6 +51,10 @@ _FIELD_TO_ENV: dict[str, str] = {
     "community_enabled": "PALLAS_CORPUS_COMMUNITY_ENABLED",
     "auto_enroll": "PALLAS_CORPUS_AUTO_ENROLL",
     "community_contribute": "PALLAS_CORPUS_COMMUNITY_CONTRIBUTE",
+    "corpus_backfill_enabled": "PALLAS_CORPUS_BACKFILL_ENABLED",
+    "corpus_backfill_batch_size": "PALLAS_CORPUS_BACKFILL_BATCH_SIZE",
+    "corpus_backfill_interval_sec": "PALLAS_CORPUS_BACKFILL_INTERVAL_SEC",
+    "corpus_backfill_max_per_minute": "PALLAS_CORPUS_BACKFILL_MAX_PER_MINUTE",
     "remote_find_enabled": "PALLAS_CORPUS_REMOTE_FIND_ENABLED",
     "community_api_base": "PALLAS_CORPUS_COMMUNITY_API_BASE",
     "community_token": "PALLAS_CORPUS_TOKEN",
@@ -70,6 +81,10 @@ _FIELD_LABELS: dict[str, str] = {
     "community_enabled": "使用共享语料",
     "auto_enroll": "自动登记语料凭证",
     "community_contribute": "上传本机新回复",
+    "corpus_backfill_enabled": "同步历史语料到共享池",
+    "corpus_backfill_batch_size": "每轮同步条数",
+    "corpus_backfill_interval_sec": "同步间隔（秒）",
+    "corpus_backfill_max_per_minute": "同步限速（次/分钟）",
     "remote_find_enabled": "本机未命中时查共享池",
     "community_api_base": "共享语料服务地址",
     "community_token": "共享语料访问口令",
@@ -155,6 +170,9 @@ def corpus_federation_payload(*, current_values: dict[str, Any] | None = None) -
         _field_row(k, data.get(k), model_fields=CorpusFederationWebuiConfig.model_fields) for k in _PHASE1_FIELD_NAMES
     ]
     fields.extend(
+        _field_row(k, data.get(k), model_fields=CorpusFederationWebuiConfig.model_fields) for k in _BACKFILL_FIELD_NAMES
+    )
+    fields.extend(
         _field_row(k, data.get(k), model_fields=CorpusReplyPerfConfig.model_fields) for k in _REPLY_PERF_FIELD_NAMES
     )
     return {
@@ -181,6 +199,11 @@ def corpus_federation_payload(*, current_values: dict[str, Any] | None = None) -
                 ],
             },
             {
+                "id": "backfill",
+                "title": "历史语料同步",
+                "field_names": list(_BACKFILL_FIELD_NAMES),
+            },
+            {
                 "id": "reply_perf",
                 "title": "接话性能（一般无需改）",
                 "field_names": list(_REPLY_PERF_FIELD_NAMES),
@@ -195,7 +218,11 @@ def _normalize_patch(patch: dict[str, Any]) -> dict[str, Any]:
         v = out["community_enabled"]
         if isinstance(v, bool):
             out["community_enabled"] = "true" if v else "false"
-    for key in _REPLY_PERF_FIELD_NAMES:
+    for key in _REPLY_PERF_FIELD_NAMES + (
+        "corpus_backfill_batch_size",
+        "corpus_backfill_interval_sec",
+        "corpus_backfill_max_per_minute",
+    ):
         if key in out:
             try:
                 out[key] = int(out[key])
@@ -213,7 +240,9 @@ def apply_corpus_federation_patch(patch: dict[str, Any]) -> dict[str, Any]:
         if k not in allowed:
             raise ValueError(f"未知配置项: {k}")
     merged = {**current, **current_perf, **patch}
-    validated = CorpusFederationWebuiConfig(**{k: merged[k] for k in _PHASE1_FIELD_NAMES}).model_dump(mode="python")
+    validated = CorpusFederationWebuiConfig(**{
+        k: merged[k] for k in _PHASE1_FIELD_NAMES + _BACKFILL_FIELD_NAMES
+    }).model_dump(mode="python")
     validated_perf = CorpusReplyPerfConfig(**{k: merged[k] for k in _REPLY_PERF_FIELD_NAMES}).model_dump(mode="python")
     items = {_FIELD_TO_ENV[k]: env_value_to_str(validated[k]) for k in patch if k in _FIELD_TO_ENV}
     items.update({_PERF_FIELD_TO_ENV[k]: env_value_to_str(validated_perf[k]) for k in patch if k in _PERF_FIELD_TO_ENV})
@@ -266,6 +295,18 @@ def apply_corpus_federation_patch(patch: dict[str, Any]) -> dict[str, Any]:
                 asyncio.get_running_loop().create_task(coro)
             except RuntimeError:
                 asyncio.run(coro)
+        except Exception:
+            pass
+    if set(_BACKFILL_FIELD_NAMES) & set(patch):
+        try:
+            import asyncio
+
+            from src.features.corpus.backfill_scheduler import reload_corpus_backfill_job
+
+            try:
+                asyncio.get_running_loop().create_task(reload_corpus_backfill_job())
+            except RuntimeError:
+                asyncio.run(reload_corpus_backfill_job())
         except Exception:
             pass
     try:

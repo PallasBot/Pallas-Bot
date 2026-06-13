@@ -112,7 +112,7 @@ class Config(BaseModel, extra="ignore"):
     )
     enable_face_reaction: bool = Field(
         default=False,
-        description="收到带「小黄脸」表情的消息时是否自动回应。",
+        description="收到带「QQ 小黄脸」表情的消息时是否自动回应。",
     )
     enable_auto_reply_on_reaction: bool = Field(
         default=True,

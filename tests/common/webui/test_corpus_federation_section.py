@@ -21,7 +21,10 @@ def test_corpus_federation_payload_phase1(monkeypatch):
     assert "find_cache_ttl_sec" in names
     assert "reply_snapshot_ttl_sec" in names
     assert "reply_snapshot_max" in names
-    assert len(data["field_groups"]) == 3
+    assert "corpus_backfill_enabled" in names
+    assert len(data["field_groups"]) == 4
+    backfill_group = next(g for g in data["field_groups"] if g["id"] == "backfill")
+    assert backfill_group["title"] == "历史语料同步"
     reply_perf_group = next(g for g in data["field_groups"] if g["id"] == "reply_perf")
     assert reply_perf_group["title"] == "接话性能（一般无需改）"
     community = next(f for f in data["fields"] if f["name"] == "community_enabled")
@@ -70,6 +73,28 @@ def test_apply_corpus_federation_patch_accepts_prefetch(monkeypatch, tmp_path):
     assert remote_find["current"] == "prefetch"
     raw = webui.read_text(encoding="utf-8")
     assert '"PALLAS_CORPUS_REMOTE_FIND_ENABLED": "prefetch"' in raw
+
+
+def test_apply_corpus_federation_patch_backfill(monkeypatch, tmp_path):
+    from src.foundation.config import repo_settings as rs
+
+    webui = tmp_path / "data" / "pallas_config" / "webui.json"
+    webui.parent.mkdir(parents=True, exist_ok=True)
+    webui.write_text('{"env": {}}', encoding="utf-8")
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui)
+    monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
+
+    out = apply_corpus_federation_patch({
+        "corpus_backfill_enabled": True,
+        "corpus_backfill_batch_size": 20,
+        "corpus_backfill_interval_sec": 1200,
+        "corpus_backfill_max_per_minute": 30,
+    })
+    enabled = next(f for f in out["fields"] if f["name"] == "corpus_backfill_enabled")
+    assert enabled["current"] is True
+    raw = webui.read_text(encoding="utf-8")
+    assert "PALLAS_CORPUS_BACKFILL_ENABLED" in raw
+    assert "PALLAS_CORPUS_BACKFILL_BATCH_SIZE" in raw
 
 
 def test_apply_corpus_federation_patch_reply_perf(monkeypatch, tmp_path):

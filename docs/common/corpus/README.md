@@ -58,8 +58,19 @@
 | 项 | 说明 |
 | --- | --- |
 | `GET /pallas/api/corpus-status` | 本部署状态 |
-| `GET /pallas/api/community-stats` | 社区聚合 |
+| `GET /pallas/api/local-corpus-hot` | 本机语料热词（`scope=global`） |
+| `GET /pallas/api/community-corpus-hot` | 社区热词（`mode=pool\|recent\|fleet`） |
 | `data/pallas_config/community_stats.json` | 部署编号、语料口令等 |
+
+### 热词与同步
+
+| 能力 | 说明 |
+| --- | --- |
+| 本机热词 | 控制台「本机语料热词」；累计本部署全部群学习语料 |
+| 社区高频池 | `mode=pool`，不按时间截断 |
+| 近期活跃 | `mode=recent` + 日/周/月 |
+| backfill | WebUI **通用配置 → 语料联邦 → 历史语料同步**，或 `PALLAS_CORPUS_BACKFILL_ENABLED=true` |
+| 机群快照 | 心跳可选附带本机 Top 词，中心 `mode=fleet` 叠加展示 |
 
 上传仅含关键词与短句，不含群号与 QQ。
 

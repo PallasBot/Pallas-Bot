@@ -19,6 +19,7 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_AUTO, SCENE_GROUP, join_usage, usage_line
+from src.features.corpus.backfill_scheduler import bind_corpus_backfill_lifecycle
 from src.features.corpus.prefetch import bind_corpus_prefetch_lifecycle
 from src.features.message_scrub import is_message_scrub_blocked_async
 from src.features.message_scrub.log_preview import scrub_intercept_log_preview
@@ -38,6 +39,7 @@ from .reply_gate import should_prepare_repeater_reply
 
 bind_repeater_learn_lifecycle()
 bind_corpus_prefetch_lifecycle()
+bind_corpus_backfill_lifecycle()
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛复读",

@@ -92,6 +92,41 @@ class CorpusFederationWebuiConfig(BaseModel):
             "仅上传关键词与短句，不含群号与 QQ",
         ),
     )
+    corpus_backfill_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "是否把本机历史语料渐进同步到共享池",
+            "开启后后台按批次上传已有词条，需同时开启「上传本机新回复」且已完成语料登记",
+            "默认关闭；与接话热路径无关，队列繁忙时会自动跳过",
+        ),
+    )
+    corpus_backfill_batch_size: int = Field(
+        default=30,
+        ge=1,
+        le=200,
+        description=field_help(
+            "每轮 backfill 最多处理多少条触发词",
+            "数值越大每轮越快，但对数据库与社区写入压力也更大",
+        ),
+    )
+    corpus_backfill_interval_sec: int = Field(
+        default=1800,
+        ge=300,
+        le=86400,
+        description=field_help(
+            "两轮 backfill 之间的间隔秒数",
+            "例如 1800 表示约 30 分钟跑一轮",
+        ),
+    )
+    corpus_backfill_max_per_minute: int = Field(
+        default=40,
+        ge=1,
+        le=500,
+        description=field_help(
+            "backfill 每分钟最多写入共享池多少次",
+            "与日常学习 mirror 共用 contribute 限速预算，避免打满社区接口",
+        ),
+    )
     remote_find_enabled: _REMOTE_FIND = Field(
         default="auto",
         description=field_help(
@@ -191,12 +226,30 @@ def get_corpus_federation_webui_config() -> CorpusFederationWebuiConfig:
     strategy = _str_read("PALLAS_CORPUS_MERGE_STRATEGY", "local_first")
     if strategy not in ("local_first", "merge_counts"):
         strategy = "local_first"
+
+    def _int_read(env_key: str, default: int, *, lo: int, hi: int) -> int:
+        raw = repo_env_raw_value(env_key)
+        try:
+            value = int(str(raw).strip()) if raw is not None else default
+        except ValueError:
+            value = default
+        return max(lo, min(hi, value))
+
+    backfill_enabled_raw = repo_env_raw_value("PALLAS_CORPUS_BACKFILL_ENABLED")
+    backfill_enabled = False
+    if backfill_enabled_raw is not None:
+        backfill_enabled = str(backfill_enabled_raw).strip().lower() in ("1", "true", "yes", "on")
+
     return CorpusFederationWebuiConfig(
         merge_order=_str_read("PALLAS_CORPUS_MERGE_ORDER", "local"),
         merge_strategy=strategy,  # type: ignore[arg-type]
         community_enabled=_tristate_read("PALLAS_CORPUS_COMMUNITY_ENABLED", default="false"),
         auto_enroll=_tristate_read("PALLAS_CORPUS_AUTO_ENROLL", default="false"),
         community_contribute=_tristate_read("PALLAS_CORPUS_COMMUNITY_CONTRIBUTE"),
+        corpus_backfill_enabled=backfill_enabled,
+        corpus_backfill_batch_size=_int_read("PALLAS_CORPUS_BACKFILL_BATCH_SIZE", 30, lo=1, hi=200),
+        corpus_backfill_interval_sec=_int_read("PALLAS_CORPUS_BACKFILL_INTERVAL_SEC", 1800, lo=300, hi=86400),
+        corpus_backfill_max_per_minute=_int_read("PALLAS_CORPUS_BACKFILL_MAX_PER_MINUTE", 40, lo=1, hi=500),
         remote_find_enabled=_remote_find_read("PALLAS_CORPUS_REMOTE_FIND_ENABLED"),
         fed_enabled=_tristate_read("PALLAS_CORPUS_FED_ENABLED"),
         fed_contribute=_tristate_read("PALLAS_CORPUS_FED_CONTRIBUTE", default="false") == "true",

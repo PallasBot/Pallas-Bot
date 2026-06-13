@@ -74,6 +74,12 @@ def monitor_overview_urls_for_config(cfg: CommunityStatsConfig) -> list[str]:
     return [monitor_overview_url_from_endpoint(u) for u in heartbeat_urls_for_config(cfg)]
 
 
+def corpus_hot_urls_for_config(cfg: CommunityStatsConfig) -> list[str]:
+    from src.features.community_stats.stats_url import corpus_hot_url_from_endpoint
+
+    return [corpus_hot_url_from_endpoint(u) for u in heartbeat_urls_for_config(cfg)]
+
+
 def corpus_api_base_from_heartbeat(heartbeat_url: str) -> str:
     url = normalize_heartbeat_url(heartbeat_url)
     if url.endswith("/heartbeat"):

@@ -101,6 +101,12 @@ def _is_uuid(value: str) -> bool:
     return True
 
 
+def touch_corpus_hot_snapshot_unix(seen_unix: int) -> None:
+    data = _read_state_raw()
+    data["corpus_hot_snapshot_unix"] = int(seen_unix)
+    _write_state(data)
+
+
 def load_or_create_deployment_id() -> str:
     data = _read_state_raw()
     dep = str(data.get("deployment_id") or "").strip().lower()

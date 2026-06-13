@@ -46,6 +46,12 @@ class CommunityStatsConfig(BaseModel):
         description="可选 Bearer；中心 HEARTBEAT_TOKEN 非空时填写。公开实例（token 未配置）可留空。",
     )
     interval_sec: int = Field(default=300, ge=60, le=3600, description="周期上报间隔（秒）。")
+    corpus_hot_snapshot_interval_sec: int = Field(
+        default=900,
+        ge=300,
+        le=86400,
+        description="心跳附带本机热词快照的最小间隔（秒）。",
+    )
     roster_public_qq: bool = Field(
         default=False,
         description="是否在社区主站公开牛牛 QQ 号（可点开 QQ 资料）。",
@@ -81,6 +87,7 @@ def get_community_stats_config() -> CommunityStatsConfig:
         endpoint=_setting_str(f"{_PREFIX}ENDPOINT", "https://stats.pallasbot.top/v1/heartbeat"),
         token=_setting_str(f"{_PREFIX}TOKEN", ""),
         interval_sec=_setting_int(f"{_PREFIX}INTERVAL_SEC", 300),
+        corpus_hot_snapshot_interval_sec=_setting_int(f"{_PREFIX}CORPUS_HOT_SNAPSHOT_INTERVAL_SEC", 900),
         roster_public_qq=roster_qq,
         roster_public_profile=roster_profile,
     )
