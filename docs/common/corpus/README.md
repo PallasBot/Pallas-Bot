@@ -1,47 +1,63 @@
-# 语料联邦（corpus）
+# 语料联邦
 
-自托管部署默认使用 **本地 PostgreSQL/Mongo 语料**（`local`）。可选接入 **stats 中心社区池**（`community`）作多读源 complement；**联邦 PG**（`fed`）为 Phase 2，当前未接入读写。
+管理牛牛**接话时从哪里找回复素材**：默认只用**本机数据库**；可选接入**社区共享池**，读取或上传大家贡献的短句接话。
 
-设计细节见 [控制面与语料联邦](../architecture/control-plane-corpus-federation.md)；中心服务见 [Pallas-Bot-Community-Stats](https://github.com/TogetsuDo/Pallas-Bot-Community-Stats)。
+> **在线统计**（是否在线、全网有多少套牛牛）是另一套能力，默认开启，见 [社区在线统计](../community_stats.md)。
 
-## 三档语料源
+## 三个语料来源
 
-| 源 | 存储 | 典型用途 | 当前状态 |
+| 来源 | 存在哪 | 典型用途 | 当前状态 |
 | --- | --- | --- | --- |
-| **local** | 本部署业务库 | 主读写、ban/清理 | ✅ 默认 |
-| **fed** | 第二 PG（`PG_CORPUS_FED_*`） | 同联邦多部署共享 | ⏳ Phase 2，未接第二连接 |
-| **community** | stats 中心 `/v1/corpus` | opt-in 公共池 | ✅ WebUI 开启后 auto enroll |
+| **本机** | 本部署业务库 | 日常接话、学习、清理 | ✅ 默认启用 |
+| **共享池** | 社区中心 | 读取/上传社区接话素材 | ✅ 需在 WebUI 手动开启 |
+| **联邦库** | 独立数据库 | 多套牛牛共用同一语料库 | ⏳ 进阶能力，多数部署尚未接入 |
 
-默认读顺序：`local → community`（Phase 1 WebUI 默认 `local,community`；未开 community 时仅 local）。远端失败时 `on_remote_failure = local_only`，不阻塞启动。
+默认查找顺序：**先本机，再共享池**（未开共享池时只查本机）。访问共享池失败时自动退回本机，不阻塞启动。
+
+架构细节见 [控制面与语料联邦](../../architecture/control-plane-corpus-federation.md)（维护者向）。中心服务见 [Pallas-Bot-Community-Stats](https://github.com/TogetsuDo/Pallas-Bot-Community-Stats)。
 
 ## 默认行为（升级后）
 
-- **[community_stats](../common/community_stats.md)** 默认开启：hub/单进程向 `stats.pallasbot.top` 上报心跳（备案前自动回退 `pallas.togetsudo.com`）；**不出现在用户帮助总览**。
-- **社区语料默认关闭**：需在 WebUI **语料联邦** 打开 `community_enabled` 后才会 auto enroll 与读 community 源。
-- 开启 community 后 **auto enroll** 默认 `auto`：向 stats `POST /v1/corpus/enroll`，token 落盘 `community_stats.json` 的 `corpus_community` 段。
-- **community_contribute** 默认 **auto（开）**：学习结果可异步 mirror 到社区池（`group_id=0`）；可显式 `false` 关闭写回。
-- 语料 HTTP 读路径与心跳共用主/备域名 **failover**。
+| 项目 | 默认 | 说明 |
+| --- | --- | --- |
+| 本机语料 | 开启 | 接话与学习始终写本机 |
+| 共享语料 | **关闭** | 需在 WebUI 打开「使用共享语料」 |
+| 在线统计 | 开启 | 与语料独立，见 [社区在线统计](../community_stats.md) |
+| 上传新回复 | 自动 | 接入共享池后，默认允许把本机新学到的回复同步上去 |
+| 自动登记 | 关闭 | 开启共享语料后，程序会向中心登记访问口令并保存在本机 |
 
-手动配置 `[corpus.community] token` + `api_base` 时跳过 auto enroll。
+主站不可用时，程序会自动尝试备站访问共享池（与在线统计相同策略）。
 
-## 配置
+## 怎么配置
 
-### WebUI（推荐）
+### 控制台（推荐）
 
-控制台 **数据与扩展 → 语料联邦**（`/pallas/corpus-config`）：多读源开关、merge、community、心跳 interval 等；保存写入 `webui.json`。
+1. 打开 **通用配置 → 语料联邦**（侧栏也可进 **统计与语料 → 语料设置**）。
+2. 按需修改各分组项，点 **保存配置**；写入 `webui.json` 并热重载，一般无需重启。
 
-首页 **社区与语料** 面板为只读状态；**语料配置** 链到上述页面。
+分组说明：
 
-### `config/pallas.toml`（可选）
+| 分组 | 做什么 |
+| --- | --- |
+| 接话时查哪些语料 | 查找顺序、重复句合并方式 |
+| 社区共享语料 | 开关、登记、上传、共享池地址与口令 |
+| 在线统计与社区主站 | 是否上报在线数据、是否公开牛牛名册 |
+| 接话性能 | 一般保持默认即可 |
+
+**统计与语料** 页只看状态，不改配置。
+
+### 配置文件（可选）
+
+`config/pallas.toml` 示例：
 
 ```toml
 [corpus]
-community_enabled = false       # 默认关；true 或在 WebUI 开启后接入 community
-auto_enroll = "auto"
-community_contribute = "auto"   # 开启 community 后默认允许写回；关闭写回：false
+community_enabled = false       # 共享语料：默认关
+auto_enroll = "false"
+community_contribute = "auto"   # 接入后默认允许上传；要关上传：false
 on_remote_failure = "local_only"
 
-# 手动 token（跳过 auto enroll）：
+# 手动填写口令（跳过自动登记）：
 # [corpus.community]
 # api_base = "https://stats.pallasbot.top/v1/corpus"
 # token = "pc_..."
@@ -49,46 +65,55 @@ on_remote_failure = "local_only"
 
 等价环境变量：`PALLAS_CORPUS_*`（见 `src/features/corpus/config.py`）。
 
-### 开启社区语料
+### 常见操作
 
-控制台 **语料联邦** 打开「社区语料」开关，或：
+**开启共享语料**
 
-```toml
-[corpus]
-community_enabled = true
-```
+- WebUI：语料联邦 → 社区共享语料 → 打开「使用共享语料」
+- 或配置：`community_enabled = true`
 
-### 关闭社区语料
+**关闭共享语料**
 
 ```toml
 [corpus]
 community_enabled = false
-# 或仅关写回：
-# community_contribute = false
 ```
 
-关闭心跳（同时不再有 auto enroll）：
+**只关上传、继续读取**
+
+```toml
+[corpus]
+community_contribute = false
+```
+
+**关闭在线统计**（同时不再有自动登记）
 
 ```toml
 [community_stats]
 enabled = false
 ```
 
-## 运维与 API
+## 联邦控制（多套牛牛共池）
+
+若多套牛牛加入同一**社区联邦池**，需要在 **通用配置 → 联邦控制** 填写入池密钥，并开启消息去重，避免对同一条群消息各回复一遍。
+
+入池密钥在 **统计与语料 → 社区联邦** 面板复制。与共享语料口令、在线统计无关。
+
+## 运维接口
 
 | 项 | 说明 |
 | --- | --- |
-| 状态 API | `GET /pallas/api/corpus-status`（含中心 `GET /v1/corpus/usage` 代理的本部署用量） |
-| 社区聚合 | `GET /pallas/api/community-stats`（含中心 `corpus.*` 计数） |
-| 预灌工具 | `uv run python tools/seed_community_corpus.py`（运维向中心贡献样本） |
-| 落盘 | `data/pallas_config/community_stats.json`（`deployment_id` + `corpus_community`） |
+| 本部署状态 | `GET /pallas/api/corpus-status` |
+| 社区聚合 | `GET /pallas/api/community-stats` |
+| 本地落盘 | `data/pallas_config/community_stats.json`（部署编号 + 语料口令等） |
+| 预灌样本 | `uv run python tools/seed_community_corpus.py`（运维向中心贡献测试语料） |
 
-## 隐私
+## 隐私说明
 
-- contribute 仅上传 `keywords` 与短句，匿名 `group_id=0`。
-- 中心不可达时接话/学习仍走 local；mirror 失败不 retry 风暴。
+- 上传到共享池的只有**关键词与短句回复**，匿名处理，不含群号与 QQ。
+- 社区中心不可达时，接话与学习仍走本机；上传失败不会造成反复重试风暴。
 
-## 相关
+## 相关文档
 
-- [社区统计 heartbeat](../common/community_stats.md)
-- [配置存储](../architecture/settings-storage.md)
+- [社区在线统计](../community_stats.md)
+- [配置存储](../../architecture/settings-storage.md)

@@ -12,7 +12,7 @@ from src.platform.ingress.plugin_command_plaintext import is_plugin_command_plai
 from src.platform.multi_bot.dedup import try_claim_cross_bot_message, try_claim_cross_bot_message_memory
 from src.platform.shard.registry.config import is_sharding_active
 
-from .plugin_manager import collect_disabled_plugin_names
+from .plugin_manager import collect_disabled_plugin_names, superuser_bypasses_plugin_disable
 
 _blocked_events: dict[str, frozenset[str]] = {}
 _COMMAND_INGRESS_PLUGIN = "command_ingress"
@@ -122,6 +122,8 @@ async def check_plugin_enabled(matcher: Matcher, bot: Bot, event: GroupMessageEv
         _blocked_events[event_id] = disabled_names
 
     if plugin_name in disabled_names:
+        if await superuser_bypasses_plugin_disable(bot, event):
+            return
         logger.debug(f"bot [{bot_id}] help plugin [{plugin_name}] blocked at matcher")
         raise IgnoredException(f"Plugin {plugin_name} is disabled")
 

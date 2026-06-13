@@ -47,8 +47,8 @@
 | [cmd_perm](../common/cmd_perm/README.md) | 命令权限、帮助菜单动态「何人可用」 |
 | [message_scrub](../common/message_scrub/README.md) | 消息清洗（复读/做梦等共用） |
 | [webui](../common/webui/README.md) | 配置热重载、服务网关段 |
-| [community_stats](../common/community_stats.md) | 社区部署统计 opt-in 心跳（默认开启） |
-| [语料联邦 corpus](../common/corpus/README.md) | 社区池多读源、auto enroll |
+| [社区在线统计](../common/community_stats.md) | 向社区中心上报在线数据（默认开启） |
+| [语料联邦](../common/corpus/README.md) | 本机 + 社区共享接话池 |
 
 ## 其它
 

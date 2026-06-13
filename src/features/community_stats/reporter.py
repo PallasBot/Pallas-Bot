@@ -39,6 +39,7 @@ def should_run_community_stats_reporter() -> bool:
 def build_heartbeat_payload() -> dict[str, object]:
     from src.platform.shard.presence import count_connected_bots_for_reporting
 
+    cfg = get_community_stats_config()
     online_bots = count_connected_bots_for_reporting()
     catalog_bots = len(get_catalog_bot_ids())
     sharded = is_sharding_active()
@@ -46,7 +47,7 @@ def build_heartbeat_payload() -> dict[str, object]:
     if sharded:
         reg = get_shard_registry()
         shard_workers = len([s for s in reg.shards if not is_test_shard_record(s, reg)])
-    return {
+    payload: dict[str, object] = {
         "deployment_id": load_or_create_deployment_id(),
         "ts": int(time.time()),
         "version": get_pallas_bot_version_for_reporting(),
@@ -55,6 +56,14 @@ def build_heartbeat_payload() -> dict[str, object]:
         "sharded": sharded,
         "shard_workers": shard_workers if sharded else None,
     }
+    if cfg.roster_public:
+        from src.features.community_stats.roster import build_public_roster_entries
+
+        payload["roster_public"] = True
+        payload["roster"] = build_public_roster_entries()
+    else:
+        payload["roster_public"] = False
+    return payload
 
 
 def _headers(cfg: CommunityStatsConfig) -> dict[str, str]:

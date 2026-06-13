@@ -7,6 +7,10 @@ from collections.abc import Iterable
 from typing import Any
 
 from nonebot import get_loaded_plugins, logger
+from nonebot.adapters import Bot
+from nonebot.adapters.onebot.v11 import MessageEvent
+from nonebot.internal.adapter import Event
+from nonebot.permission import SUPERUSER
 
 from src.features.cmd_perm.help_menu import is_user_help_plugin
 from src.foundation.db import make_bot_config_repository, make_group_config_repository
@@ -14,6 +18,11 @@ from src.foundation.db.modules import BotConfigModule, GroupConfigModule
 from src.foundation.paths import plugin_data_dir
 
 from .global_disable import resolve_global_disabled_plugin_names, sync_global_disable_remote_generation
+from .group_fleet_whitelist import (
+    add_group_fleet_whitelist_plugin,
+    resolve_group_fleet_whitelist_plugins,
+    sync_group_fleet_whitelist_remote_generation,
+)
 from .plugin_availability import is_plugin_help_available
 from .plugin_match import find_matching_plugins
 from .styles import load_config
@@ -105,11 +114,26 @@ def clear_help_cache(group_id: int | None = None):
             logger.warning(f"help cache clear all failed: {e}")
 
 
+async def superuser_bypasses_plugin_disable(bot: Bot | None, event: Event | None) -> bool:
+    """超管豁免所有层级的插件运行时禁用（全实例 / 单牛 / 单群）。"""
+    if bot is None or event is None or not isinstance(event, MessageEvent):
+        return False
+    return await SUPERUSER(bot, event)
+
+
 async def is_plugin_disabled(
-    plugin_name: str, group_id: int | None = None, bot_id: int | None = None, ignore_cache: bool = False
+    plugin_name: str,
+    group_id: int | None = None,
+    bot_id: int | None = None,
+    ignore_cache: bool = False,
+    *,
+    bot: Bot | None = None,
+    event: Event | None = None,
 ) -> bool:
     """检查插件是否被禁用（统一走 collect_disabled_plugin_names）。"""
     try:
+        if await superuser_bypasses_plugin_disable(bot, event):
+            return False
         if bot_id or group_id:
             disabled_names = await collect_disabled_plugin_names(bot_id, group_id, ignore_cache=ignore_cache)
             return plugin_name in disabled_names
@@ -128,6 +152,37 @@ def merge_global_disabled_plugin_names(names: frozenset[str]) -> frozenset[str]:
     return frozenset((*names, *global_names))
 
 
+def apply_group_fleet_whitelist(group_id: int | None, names: frozenset[str]) -> frozenset[str]:
+    """白名单群从 fleet 禁用集合中剔除对应插件（结果写入门禁缓存，热路径无额外开销）。"""
+    if not group_id or not names:
+        return names
+    exempt = resolve_group_fleet_whitelist_plugins(group_id)
+    if not exempt:
+        return names
+    filtered = names - exempt
+    return filtered or frozenset()
+
+
+async def load_scoped_disabled_plugin_names_from_db(
+    bot_id: int | None,
+    group_id: int | None,
+    *,
+    ignore_cache: bool = False,
+) -> frozenset[str]:
+    """合并单牛与单群禁用插件名（不含全实例禁用）。"""
+    if _pg_not_ready():
+        return frozenset()
+    bot_names = await load_disabled_bot_names_from_db(bot_id, ignore_cache=ignore_cache)
+    if not group_id:
+        return bot_names
+    group_names = await load_disabled_group_names_from_db(group_id, ignore_cache=ignore_cache)
+    if not bot_names:
+        return group_names
+    if not group_names:
+        return bot_names
+    return frozenset((*bot_names, *group_names))
+
+
 async def load_disabled_plugin_names_from_db(
     bot_id: int | None,
     group_id: int | None,
@@ -135,20 +190,10 @@ async def load_disabled_plugin_names_from_db(
     ignore_cache: bool = False,
 ) -> frozenset[str]:
     """合并 Bot 全局、群级与全实例禁用插件名（直读仓储，不经门禁 TTL）。"""
+    scoped = await load_scoped_disabled_plugin_names_from_db(bot_id, group_id, ignore_cache=ignore_cache)
     if _pg_not_ready():
-        return merge_global_disabled_plugin_names(frozenset())
-    bot_names = await load_disabled_bot_names_from_db(bot_id, ignore_cache=ignore_cache)
-    if not group_id:
-        scoped = bot_names
-    else:
-        group_names = await load_disabled_group_names_from_db(group_id, ignore_cache=ignore_cache)
-        if not bot_names:
-            scoped = group_names
-        elif not group_names:
-            scoped = bot_names
-        else:
-            scoped = frozenset((*bot_names, *group_names))
-    return merge_global_disabled_plugin_names(scoped)
+        return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(frozenset()))
+    return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(scoped))
 
 
 async def load_disabled_bot_names_from_db(bot_id: int | None, *, ignore_cache: bool = False) -> frozenset[str]:
@@ -286,11 +331,11 @@ async def collect_disabled_plugin_names(
 ) -> frozenset[str]:
     """合并 Bot 全局与群级的禁用插件名，供批量判断（与逐插件调用 is_plugin_disabled 语义一致）。"""
     if _pg_not_ready():
-        return merge_global_disabled_plugin_names(frozenset())
+        return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(frozenset()))
     if ignore_cache:
         return await load_disabled_plugin_names_from_db(bot_id, group_id, ignore_cache=True)
 
-    remote_changed = sync_global_disable_remote_generation()
+    remote_changed = sync_global_disable_remote_generation() or sync_group_fleet_whitelist_remote_generation()
     key = _disabled_gate_key(bot_id, group_id)
     while True:
         now = time.monotonic()
@@ -330,7 +375,7 @@ async def collect_disabled_plugin_names(
             scoped = bot_names
         else:
             scoped = frozenset((*bot_names, *group_names))
-        names = merge_global_disabled_plugin_names(scoped)
+        names = apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(scoped))
 
         expire_at = time.monotonic() + _DISABLED_GATE_CACHE_TTL_SEC
         async with _disabled_gate_lock:
@@ -351,6 +396,21 @@ async def is_plugin_globally_disabled(plugin_name: str, bot_id: int, ignore_cach
 
     bot_config = await bot_config_repo.get(bot_id, ignore_cache=ignore_cache)
     return bool(bot_config and plugin_name in bot_config.disabled_plugins)
+
+
+def is_fleet_runtime_disabled(plugin_name: str, *, group_id: int | None = None) -> bool:
+    """全实例运行时禁用（WebUI global-disable），优先于单牛/单群配置；群白名单可豁免。"""
+    if plugin_name not in resolve_global_disabled_plugin_names():
+        return False
+    if group_id is not None and plugin_name in resolve_group_fleet_whitelist_plugins(group_id):
+        return False
+    return True
+
+
+def runtime_constraint_message(user_visible_name: str, *, group: bool = False) -> str:
+    if group:
+        return f"博士，{user_visible_name} 受到了米诺斯的制约..."
+    return f"{user_visible_name} 受到了米诺斯的制约..."
 
 
 async def get_bot_config(bot_id: int) -> tuple[BotConfigModule, bool]:
@@ -457,7 +517,12 @@ async def update_config_and_cache(
 
 
 async def toggle_plugin(
-    plugin_name: str, group_id: int | None = None, bot_id: int | None = None, action: str = "toggle"
+    plugin_name: str,
+    group_id: int | None = None,
+    bot_id: int | None = None,
+    action: str = "toggle",
+    *,
+    is_superuser: bool = False,
 ) -> tuple[bool, str | None]:
     """
     切换插件启用/禁用状态
@@ -484,15 +549,24 @@ async def toggle_plugin(
     logger.debug(f"help toggle_plugin plugin={plugin_name} action={action} group_id={group_id} bot_id={bot_id}")
 
     if bot_id and not group_id:
-        return await _handle_global_plugin_operation(plugin_name, user_visible_name, bot_id, action)
+        return await _handle_global_plugin_operation(
+            plugin_name, user_visible_name, bot_id, action, is_superuser=is_superuser
+        )
     elif bot_id and group_id:
-        return await _handle_group_plugin_operation(plugin_name, user_visible_name, group_id, bot_id, action)
+        return await _handle_group_plugin_operation(
+            plugin_name, user_visible_name, group_id, bot_id, action, is_superuser=is_superuser
+        )
     else:
         return False, None
 
 
 async def _handle_global_plugin_operation(
-    plugin_name: str, user_visible_name: str, bot_id: int, action: str
+    plugin_name: str,
+    user_visible_name: str,
+    bot_id: int,
+    action: str,
+    *,
+    is_superuser: bool = False,
 ) -> tuple[bool, str]:
     """处理全局插件操作"""
 
@@ -503,6 +577,11 @@ async def _handle_global_plugin_operation(
     should_disable = (
         plugin_name not in current_disabled if action == "toggle" else True if action == "disable" else False
     )
+
+    fleet_disabled = is_fleet_runtime_disabled(plugin_name)
+
+    if not should_disable and fleet_disabled and not is_superuser:
+        return True, runtime_constraint_message(user_visible_name)
 
     # 检查是否已经处于目标状态
     is_disabled = plugin_name in current_disabled
@@ -521,8 +600,33 @@ async def _handle_global_plugin_operation(
     return True, f"{user_visible_name} 已经 {action_name}"
 
 
+async def ensure_superuser_group_fleet_whitelist(
+    plugin_name: str,
+    group_id: int,
+    *,
+    is_superuser: bool,
+    enabling: bool,
+) -> None:
+    """超管为指定群开启插件时，若该插件处于全实例禁用，自动写入群白名单。"""
+    if not is_superuser or not enabling:
+        return
+    if plugin_name not in resolve_global_disabled_plugin_names():
+        return
+    if plugin_name in resolve_group_fleet_whitelist_plugins(group_id):
+        return
+    if not add_group_fleet_whitelist_plugin(group_id, plugin_name):
+        return
+    await invalidate_disabled_plugin_gate_cache(clear_all=True)
+
+
 async def _handle_group_plugin_operation(
-    plugin_name: str, user_visible_name: str, group_id: int, bot_id: int, action: str
+    plugin_name: str,
+    user_visible_name: str,
+    group_id: int,
+    bot_id: int,
+    action: str,
+    *,
+    is_superuser: bool = False,
 ) -> tuple[bool, str]:
     """处理群级插件操作"""
 
@@ -530,17 +634,24 @@ async def _handle_group_plugin_operation(
     current_disabled = group_config.disabled_plugins
 
     is_globally_disabled = await is_plugin_globally_disabled(plugin_name, bot_id)
+    fleet_disabled = is_fleet_runtime_disabled(plugin_name, group_id=group_id)
+    runtime_constrained = not is_superuser and (is_globally_disabled or fleet_disabled)
     scope_info = f"在{group_id}这块地方"
 
     should_disable = (
         plugin_name not in current_disabled if action == "toggle" else True if action == "disable" else False
     )
+    enabling = not should_disable
+
+    if not should_disable and runtime_constrained:
+        return True, runtime_constraint_message(user_visible_name, group=True)
 
     is_disabled = plugin_name in current_disabled
     if should_disable == is_disabled:
+        await ensure_superuser_group_fleet_whitelist(
+            plugin_name, group_id, is_superuser=is_superuser, enabling=enabling
+        )
         status = "停止" if is_disabled else "启用"
-        if not is_disabled and is_globally_disabled:
-            return True, f"博士,我在{scope_info}已经{status}了 {user_visible_name}，但我同时受到了米诺斯的制约..."
         return True, f"听你的，博士。{scope_info}我为你{status}了{user_visible_name}"
 
     new_disabled = await modify_disabled_list(current_disabled, plugin_name, should_disable)
@@ -552,10 +663,8 @@ async def _handle_group_plugin_operation(
             False,
             f"呜...看来是喝多了...无法感受到米诺斯的联系，{scope_info}{action_name} {user_visible_name}失败了...",
         )
+    await ensure_superuser_group_fleet_whitelist(plugin_name, group_id, is_superuser=is_superuser, enabling=enabling)
     action_name = "停止" if should_disable else "启用"
-    if not should_disable and is_globally_disabled:
-        return True, f"博士,我在{scope_info}已经{action_name}了 {user_visible_name}，但我同时受到了米诺斯的制约..."
-
     return True, f"听你的，博士。{scope_info}我为你{action_name}了{user_visible_name}"
 
 

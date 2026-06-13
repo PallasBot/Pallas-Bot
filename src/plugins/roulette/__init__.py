@@ -207,7 +207,14 @@ async def roulette(messagae_handle, event: GroupMessageEvent, *, mode_override: 
         event.user_id,
         event.get_plaintext(),
         event.time,
+        include_message_time=True,
     ):
+        logger.debug(
+            "roulette: start once-claim lost bot={} group={} user={}",
+            event.self_id,
+            event.group_id,
+            event.user_id,
+        )
         return
     rand = random.randint(1, 6)
     logger.info(f"bot [{event.self_id}] roulette started roll={rand} in group [{event.group_id}]")

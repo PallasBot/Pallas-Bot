@@ -47,6 +47,18 @@ def test_level1_guide_before_plugin_table() -> None:
     assert "牛牛帮助 1 2" in text
     assert HELP_STATUS_ON in text
     assert HELP_STATUS_OFF in text
+    assert "超管·启停范围" not in text
+
+
+def test_superuser_help_includes_scope_toggle_guide() -> None:
+    text = generate_plugins_markdown(None, show_ignored=True)
+    assert "牛牛帮助（超级用户）" in text
+    assert "超管·启停范围" in text
+    assert "牛牛开启 MAA远控" in text
+    assert "牛牛关闭 MAA远控 123456789" in text
+    assert "global" in text
+    assert "群白名单" in text
+    assert "全实例禁用" in text
 
 
 def test_help_list_status_marks() -> None:

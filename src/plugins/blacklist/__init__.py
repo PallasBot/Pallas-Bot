@@ -366,6 +366,7 @@ __plugin_meta__ = PluginMetadata(
         usage_line("牛牛拉黑群 / 牛牛屏蔽群 + 群号", "私聊须写群号；群内可省略为本群"),
         usage_line("牛牛解禁 / 牛牛取消拉黑 + 目标", "解除用户拉黑"),
         usage_line("牛牛解禁群 / 牛牛取消拉黑群 + 群号", "解除群拉黑"),
+        usage_line("牛牛黑名单 / 牛牛查看黑名单", "查看全局或本群拉黑名单"),
     ),
     type="application",
     homepage=PLUGIN_HOMEPAGE,
@@ -376,8 +377,18 @@ __plugin_meta__ = PluginMetadata(
         "command_permissions": [
             {"id": "blacklist.add", "label": "牛牛拉黑 / 牛牛屏蔽 / 牛牛拉黑群", "default": "staff"},
             {"id": "blacklist.remove", "label": "牛牛解禁 / 牛牛解禁群", "default": "staff"},
+            {"id": "blacklist.list", "label": "牛牛黑名单 / 牛牛查看黑名单", "default": "staff"},
         ],
         "menu_data": [
+            {
+                "func": "查看名单",
+                "trigger_method": "on_cmd",
+                "trigger_scene": SCENE_BOTH,
+                "trigger_condition": "牛牛黑名单 / 牛牛查看黑名单",
+                "command_permission": "blacklist.list",
+                "brief_des": "查看拉黑名单",
+                "detail_des": "私聊列出全局用户/群拉黑；群内列出本群屏蔽用户与群封禁状态。",
+            },
             {
                 "func": "拉黑与解禁",
                 "trigger_method": "on_cmd",
@@ -440,6 +451,81 @@ def collect_group_ids_from_plain(plain_text: str) -> list[int]:
             seen.add(gid)
             out.append(gid)
     return out
+
+
+_LIST_DISPLAY_LIMIT = 50
+
+
+async def query_global_banned_user_ids() -> list[int]:
+    from src.foundation.db import get_db_backend
+
+    backend = get_db_backend()
+    if backend == "mongodb":
+        from src.foundation.db.modules import UserConfigModule
+
+        docs = await UserConfigModule.find(UserConfigModule.banned == True).to_list()  # noqa: E712
+        return sorted(int(d.user_id) for d in docs)
+    if backend == "postgresql":
+        from sqlalchemy import select
+
+        from src.foundation.db.repository_pg import UserConfigRow, get_session
+
+        async with get_session(read_only=True) as session:
+            result = await session.execute(select(UserConfigRow.user_id).where(UserConfigRow.banned.is_(True)))
+            return sorted(int(row[0]) for row in result.all())
+    return []
+
+
+async def query_global_banned_group_ids() -> list[int]:
+    from src.foundation.db import get_db_backend
+
+    backend = get_db_backend()
+    if backend == "mongodb":
+        from src.foundation.db.modules import GroupConfigModule
+
+        docs = await GroupConfigModule.find(GroupConfigModule.banned == True).to_list()  # noqa: E712
+        return sorted(int(d.group_id) for d in docs)
+    if backend == "postgresql":
+        from sqlalchemy import select
+
+        from src.foundation.db.repository_pg import GroupConfigRow, get_session
+
+        async with get_session(read_only=True) as session:
+            result = await session.execute(select(GroupConfigRow.group_id).where(GroupConfigRow.banned.is_(True)))
+            return sorted(int(row[0]) for row in result.all())
+    return []
+
+
+def format_id_list(ids: list[int], *, empty_hint: str) -> str:
+    if not ids:
+        return empty_hint
+    shown = ids[:_LIST_DISPLAY_LIMIT]
+    text = ", ".join(map(str, shown))
+    if len(ids) > _LIST_DISPLAY_LIMIT:
+        text += f" … 共 {len(ids)} 个"
+    return text
+
+
+async def build_blacklist_view_message(group_id: int | None) -> str:
+    if group_id is None:
+        users = await query_global_banned_user_ids()
+        groups = await query_global_banned_group_ids()
+        return "\n".join([
+            "博士，米诺斯在册名单如下：",
+            f"全局用户拉黑：{format_id_list(users, empty_hint='（无）')}",
+            f"全局群拉黑：{format_id_list(groups, empty_hint='（无）')}",
+        ])
+    blocked = await GroupConfig(group_id).blocked_user_ids()
+    group_banned = await GroupConfig(group_id).is_banned()
+    lines = [
+        f"博士，群 {group_id} 的名单如下：",
+        f"本群屏蔽用户：{format_id_list(blocked, empty_hint='（无）')}",
+    ]
+    if group_banned:
+        lines.append("本群状态：已被全局群拉黑")
+    else:
+        lines.append("本群状态：未被全局群拉黑")
+    return "\n".join(lines)
 
 
 def event_group_id(event: Event) -> int | None:
@@ -551,6 +637,21 @@ blacklist_remove_group_cmd = on_command(
     block=True,
     permission=permission_for_command("blacklist.remove"),
 )
+
+blacklist_list_cmd = on_command(
+    "牛牛黑名单",
+    aliases={"牛牛查看黑名单"},
+    priority=5,
+    block=True,
+    permission=permission_for_command("blacklist.list"),
+)
+
+
+@blacklist_list_cmd.handle()
+async def handle_blacklist_list(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
+    group_id = event.group_id if isinstance(event, GroupMessageEvent) else None
+    message = await build_blacklist_view_message(group_id)
+    await blacklist_list_cmd.finish(message)
 
 
 @blacklist_add_cmd.handle()

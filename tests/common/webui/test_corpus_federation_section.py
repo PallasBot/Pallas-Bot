@@ -23,7 +23,7 @@ def test_corpus_federation_payload_phase1(monkeypatch):
     assert "reply_snapshot_max" in names
     assert len(data["field_groups"]) == 4
     reply_perf_group = next(g for g in data["field_groups"] if g["id"] == "reply_perf")
-    assert reply_perf_group["title"] == "接话与查询性能"
+    assert reply_perf_group["title"] == "接话性能（一般无需改）"
     community = next(f for f in data["fields"] if f["name"] == "community_enabled")
     assert community["kind"] == "bool"
     assert isinstance(community["current"], bool)
@@ -37,6 +37,31 @@ def test_corpus_federation_payload_phase1(monkeypatch):
     remote_find = next(f for f in data["fields"] if f["name"] == "remote_find_enabled")
     assert remote_find["kind"] == "enum"
     assert remote_find["choices"] == ["auto", "false", "prefetch", "sync"]
+    roster_public = next(f for f in data["fields"] if f["name"] == "community_stats_roster_public")
+    assert roster_public["kind"] == "bool"
+    assert roster_public["current"] is False
+
+
+def test_apply_corpus_federation_patch_roster_public(monkeypatch, tmp_path):
+    from src.foundation.config import repo_settings as rs
+
+    webui = tmp_path / "data" / "pallas_config" / "webui.json"
+    webui.parent.mkdir(parents=True, exist_ok=True)
+    webui.write_text('{"env": {}}', encoding="utf-8")
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui)
+    monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr("src.features.corpus.webui_config.repo_env_raw_value", lambda _key: None)
+
+    out = apply_corpus_federation_patch({"community_stats_roster_public": True})
+    roster = next(f for f in out["fields"] if f["name"] == "community_stats_roster_public")
+    assert roster["kind"] == "bool"
+    assert roster["current"] is True
+    raw = webui.read_text(encoding="utf-8")
+    assert '"PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC": "true"' in raw
+
+    out2 = apply_corpus_federation_patch({"community_stats_roster_public": "false"})
+    roster2 = next(f for f in out2["fields"] if f["name"] == "community_stats_roster_public")
+    assert roster2["current"] is False
 
 
 def test_apply_corpus_federation_patch_writes_env(monkeypatch, tmp_path):

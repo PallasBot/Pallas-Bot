@@ -101,6 +101,20 @@ async def test_group_message_once_same_sig_only_first() -> None:
 
 
 @pytest.mark.asyncio
+async def test_roulette_start_once_same_user_different_message_time() -> None:
+    gid, uid, body = 733291779, 3385897861, "牛牛轮盘"
+    assert await try_claim_group_message_once(
+        "roulette_start", gid, uid, body, 100, include_message_time=True
+    ) is True
+    assert await try_claim_group_message_once(
+        "roulette_start", gid, uid, body, 100, include_message_time=True
+    ) is False
+    assert await try_claim_group_message_once(
+        "roulette_start", gid, uid, body, 101, include_message_time=True
+    ) is True
+
+
+@pytest.mark.asyncio
 async def test_cross_bot_memory_claim_only_one_bot() -> None:
     gid, uid, body, t = 12345, 999, "牛牛画画 测试", 100
     assert await try_claim_cross_bot_message_memory("draw", gid, uid, body, t, 111) is True

@@ -20,7 +20,7 @@ from src.shared.utils.format_exception import format_exception_for_log
 
 from .api import register_api
 from .config import Config, plugin_config
-from .extended_api import register_extended_api, set_console_meta
+from .extended_api import register_extended_api, set_console_meta, warm_console_read_caches
 from .manager import (
     bot_has_release_update,
     bot_is_development_build,
@@ -274,3 +274,4 @@ if not is_sharded_worker():
         if not check_webui_exists(public):
             asyncio.create_task(_guarded("webui-dist-bootstrap", _bootstrap_webui_dist))
         asyncio.create_task(_guarded("release-version-check", _background_release_checks))
+        asyncio.create_task(_guarded("console-read-cache-warm", warm_console_read_caches))

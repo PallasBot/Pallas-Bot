@@ -29,6 +29,7 @@ _PHASE1_FIELD_NAMES: tuple[str, ...] = (
     "community_stats_endpoint",
     "community_stats_token",
     "community_stats_interval_sec",
+    "community_stats_roster_public",
 )
 
 _REPLY_PERF_FIELD_NAMES: tuple[str, ...] = (
@@ -55,6 +56,7 @@ _FIELD_TO_ENV: dict[str, str] = {
     "community_stats_endpoint": "PALLAS_COMMUNITY_STATS_ENDPOINT",
     "community_stats_token": "PALLAS_COMMUNITY_STATS_TOKEN",
     "community_stats_interval_sec": "PALLAS_COMMUNITY_STATS_INTERVAL_SEC",
+    "community_stats_roster_public": "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC",
 }
 
 _PERF_FIELD_TO_ENV: dict[str, str] = {
@@ -73,6 +75,28 @@ _REMOTE_FIND_CHOICES = ["auto", "false", "prefetch", "sync"]
 _MERGE_ORDER_CHOICES = ["local,community", "local"]
 _INTERVAL_CHOICES = ["60", "120", "300", "600", "900", "1800", "3600"]
 
+_FIELD_LABELS: dict[str, str] = {
+    "merge_order": "接话查找顺序",
+    "merge_strategy": "重复句如何合并",
+    "community_enabled": "使用共享语料",
+    "auto_enroll": "自动登记语料凭证",
+    "community_contribute": "上传本机新回复",
+    "remote_find_enabled": "本机未命中时查共享池",
+    "community_api_base": "共享语料服务地址",
+    "community_token": "共享语料访问口令",
+    "community_stats_enabled": "上报在线统计",
+    "community_stats_endpoint": "统计上报地址",
+    "community_stats_token": "统计上报口令",
+    "community_stats_interval_sec": "上报间隔",
+    "community_stats_roster_public": "公开牛牛名册到社区主站",
+    "reply_messages_cap": "接话历史条数上限",
+    "reply_answers_cap": "接话候选条数上限",
+    "find_cache_ttl_sec": "查询缓存保留秒数",
+    "find_cache_max": "查询缓存条数上限",
+    "reply_snapshot_ttl_sec": "接话快照保留秒数",
+    "reply_snapshot_max": "接话快照条数上限",
+}
+
 
 def _jsonable(v: Any) -> Any:
     if v is PydanticUndefined:
@@ -88,6 +112,21 @@ def _community_enabled_bool(cur: Any) -> bool:
     return False
 
 
+def _coerce_bool(cur: Any, *, default: bool = False) -> bool:
+    if isinstance(cur, bool):
+        return cur
+    if cur is None:
+        return default
+    if isinstance(cur, (int, float)) and not isinstance(cur, bool):
+        return cur != 0
+    text = str(cur).strip().lower()
+    if text in ("1", "true", "yes", "on"):
+        return True
+    if text in ("0", "false", "no", "off", ""):
+        return False
+    return default
+
+
 def _field_row(key: str, cur: Any, *, model_fields: dict) -> dict[str, Any]:
     f = model_fields[key]
     default_value = None if f.default is PydanticUndefined else f.default
@@ -97,6 +136,7 @@ def _field_row(key: str, cur: Any, *, model_fields: dict) -> dict[str, Any]:
     choices = literal_choices(ann)
     row: dict[str, Any] = {
         "name": key,
+        "label": _FIELD_LABELS.get(key, ""),
         "kind": field_kind_from_annotation(ann),
         "required": bool(f.is_required()),
         "description": normalize_field_description(str(f.description or "")),
@@ -111,9 +151,9 @@ def _field_row(key: str, cur: Any, *, model_fields: dict) -> dict[str, Any]:
         from src.console.webui.field_help import field_help
 
         row["description"] = field_help(
-            "是否使用共享语料池",
-            "开启后除本机语料外还会读取共享池；关闭则只使用本机语料",
-            "与上方「读语料顺序」配合使用；首次使用请先填好共享池地址与令牌",
+            "是否从社区共享语料池读取回复",
+            "开启后接话时可查本机语料之外的共享池；关闭则只用本机语料",
+            "首次开启前请确认下方地址与口令已就绪",
         )
         row["current"] = _community_enabled_bool(cur)
     elif key == "merge_order":
@@ -137,6 +177,9 @@ def _field_row(key: str, cur: Any, *, model_fields: dict) -> dict[str, Any]:
         row["kind"] = "enum"
         row["choices"] = _INTERVAL_CHOICES
         row["current"] = str(int(cur)) if cur is not None else row["choices"][2]
+    elif key in ("community_stats_enabled", "community_stats_roster_public"):
+        row["kind"] = "bool"
+        row["current"] = _coerce_bool(cur)
     return row
 
 
@@ -160,12 +203,12 @@ def corpus_federation_payload(*, current_values: dict[str, Any] | None = None) -
         "field_groups": [
             {
                 "id": "merge",
-                "title": "语料来源与合并方式",
+                "title": "接话时查哪些语料",
                 "field_names": ["merge_order", "merge_strategy"],
             },
             {
                 "id": "community",
-                "title": "共享语料",
+                "title": "社区共享语料",
                 "field_names": [
                     "community_enabled",
                     "auto_enroll",
@@ -177,17 +220,18 @@ def corpus_federation_payload(*, current_values: dict[str, Any] | None = None) -
             },
             {
                 "id": "community_stats",
-                "title": "在线统计",
+                "title": "在线统计与社区主站",
                 "field_names": [
                     "community_stats_enabled",
                     "community_stats_endpoint",
                     "community_stats_token",
                     "community_stats_interval_sec",
+                    "community_stats_roster_public",
                 ],
             },
             {
                 "id": "reply_perf",
-                "title": "接话与查询性能",
+                "title": "接话性能（一般无需改）",
                 "field_names": list(_REPLY_PERF_FIELD_NAMES),
             },
         ],
@@ -205,6 +249,10 @@ def _normalize_patch(patch: dict[str, Any]) -> dict[str, Any]:
             out["community_stats_interval_sec"] = int(out["community_stats_interval_sec"])
         except (TypeError, ValueError) as e:
             raise ValueError("community_stats_interval_sec 须为整数秒") from e
+    if "community_stats_enabled" in out:
+        out["community_stats_enabled"] = _coerce_bool(out["community_stats_enabled"], default=True)
+    if "community_stats_roster_public" in out:
+        out["community_stats_roster_public"] = _coerce_bool(out["community_stats_roster_public"])
     for key in _REPLY_PERF_FIELD_NAMES:
         if key in out:
             try:

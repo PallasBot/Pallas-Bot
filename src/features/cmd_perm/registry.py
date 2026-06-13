@@ -22,6 +22,7 @@ DEFAULT_COMMAND_PERMISSIONS: dict[str, PermissionLevel] = {
     "help.plugin_disable_all": "staff",
     "blacklist.add": "staff",
     "blacklist.remove": "staff",
+    "blacklist.list": "staff",
     "bot_status.status": "bot_moderator",
     "bot_status.count": "everyone",
     "bot_status.test_mail": "superuser",

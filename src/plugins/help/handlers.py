@@ -86,7 +86,7 @@ async def handle_help_command(
         return
 
     if len(args) == 1:
-        is_disabled = await is_plugin_disabled(plugin_name, group_id, bot_id)
+        is_disabled = await is_plugin_disabled(plugin_name, group_id, bot_id, bot=bot, event=event)
         markdown_content, issue = generate_plugin_functions_markdown(plugin_name, plugin_enabled=not is_disabled)
         if issue is HelpMarkdownIssue.PLUGIN_NOT_FOUND:
             await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
@@ -148,5 +148,5 @@ async def handle_plugin_operation(
         elif args[1].isdigit():
             group_id = int(args[1])
 
-    success, message = await toggle_plugin(plugin_name, group_id, bot_id, action)
+    success, message = await toggle_plugin(plugin_name, group_id, bot_id, action, is_superuser=is_superuser)
     await matcher.finish(message)

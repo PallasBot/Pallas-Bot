@@ -155,7 +155,7 @@ def _control_plane_section() -> WebuiEnvSection:
 
     return WebuiEnvSection(
         id="control_plane",
-        title="联邦控制面",
+        title="联邦控制",
         module_label="src.features.control_plane",
         model_cls=ControlPlaneWebuiConfig,
         read_current=get_control_plane_webui_config,

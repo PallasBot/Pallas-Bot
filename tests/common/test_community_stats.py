@@ -318,13 +318,16 @@ def test_build_payload_sharded():
             "src.features.community_stats.reporter.load_or_create_deployment_id",
             return_value="550e8400-e29b-41d4-a716-446655440000",
         ),
+        patch("src.features.community_stats.reporter.get_community_stats_config") as mock_cfg,
     ):
+        mock_cfg.return_value.roster_public = False
         mock_reg.return_value.shards = [shard, shard]
         payload = build_heartbeat_payload()
         assert payload["sharded"] is True
         assert payload["online_bots"] == 2
         assert payload["catalog_bots"] == 3
         assert payload["shard_workers"] == 2
+        assert payload["roster_public"] is False
 
 
 def test_build_payload_non_sharded_catalog_from_block_bots(monkeypatch):
@@ -344,10 +347,47 @@ def test_build_payload_non_sharded_catalog_from_block_bots(monkeypatch):
             "src.features.community_stats.reporter.load_or_create_deployment_id",
             return_value="550e8400-e29b-41d4-a716-446655440000",
         ),
+        patch("src.features.community_stats.reporter.get_community_stats_config") as mock_cfg,
     ):
+        mock_cfg.return_value.roster_public = False
         payload = build_heartbeat_payload()
     assert payload["catalog_bots"] == 3
     assert payload["online_bots"] == 2
+    assert payload["roster_public"] is False
+
+
+def test_build_payload_roster_public(monkeypatch):
+    monkeypatch.setenv("PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC", "true")
+    cfg_mod.clear_community_stats_config_cache()
+    roster = [{"qq": 10001, "nickname": "测试牛", "online": True, "message_weight": 42}]
+    with (
+        patch("src.features.community_stats.reporter.is_sharding_active", return_value=False),
+        patch(
+            "src.platform.shard.presence.count_connected_bots_for_reporting",
+            return_value=1,
+        ),
+        patch("src.features.community_stats.reporter.get_catalog_bot_ids", return_value=frozenset({10001})),
+        patch(
+            "src.features.community_stats.reporter.load_or_create_deployment_id",
+            return_value="550e8400-e29b-41d4-a716-446655440000",
+        ),
+        patch("src.features.community_stats.roster.build_public_roster_entries", return_value=roster),
+    ):
+        payload = build_heartbeat_payload()
+    assert payload["roster_public"] is True
+    assert payload["roster"] == roster
+
+
+def test_config_roster_public_default_false(monkeypatch):
+    monkeypatch.delenv("PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC", raising=False)
+    cfg_mod.clear_community_stats_config_cache()
+    assert cfg_mod.get_community_stats_config().roster_public is False
+
+
+def test_config_roster_public_enabled(monkeypatch):
+    monkeypatch.setenv("PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC", "true")
+    cfg_mod.clear_community_stats_config_cache()
+    assert cfg_mod.get_community_stats_config().roster_public is True
 
 
 @pytest.mark.asyncio

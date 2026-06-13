@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from redis.exceptions import WatchError
-
 
 def safe_key_part(raw: str | int) -> str:
     s = str(raw)
@@ -94,6 +92,10 @@ def mutate_json_sync(
 ) -> dict[str, Any] | None:
     client = redis_client_or_none()
     if client is None:
+        return None
+    try:
+        from redis.exceptions import WatchError
+    except ImportError:
         return None
     for _ in range(max(1, retries)):
         try:

@@ -1,11 +1,16 @@
 # 控制面、联邦语料与外接语料
 
-本文描述 **全量 Provision（Tenant + Bootstrap + 联邦）** 与 **外接社区语料** 在同一控制面下的 Bot 侧接入方式。
+本文面向**维护者**，说明 Bot 侧如何接入社区共享语料、联邦池与在线统计。用户向说明见：
 
-> **Phase 1**：`local` + **community** 多读源、auto enroll、contribute 默认开、主/备语料读 failover、WebUI 语料联邦配置与 `/corpus-status`。  
-> **Phase 2（进行中）**：**ingress 去重**（`src/platform/federate/` + `ingress_gate`）已接入；**fed** 第二 PG、`bootstrap`、fleet 快照仍待交付。
+- [语料联邦](../common/corpus/README.md)
+- [社区在线统计](../common/community_stats.md)
 
-用户向说明见 [语料联邦（corpus）](../common/corpus/README.md)。
+## 当前阶段
+
+| 阶段 | 已交付 | 说明 |
+| --- | --- | --- |
+| **第一阶段** | 本机 + 社区共享池多读源、自动登记、WebUI「语料联邦」、统计与语料页 | 默认先查本机，可选查共享池 |
+| **第二阶段（进行中）** | 消息去重（联邦 ingress） | 联邦语料第二库、fleet 快照等待交付 |
 
 ## 域名与部署
 

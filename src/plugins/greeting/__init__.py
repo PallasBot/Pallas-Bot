@@ -3,7 +3,7 @@ import random
 from pathlib import Path
 
 from nonebot import get_bot, on_command, on_message, on_notice
-from nonebot.adapters import Bot
+from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import (
     FriendAddNoticeEvent,
     GroupAdminNoticeEvent,
@@ -414,10 +414,16 @@ async def handle_clear_group_welcome(bot: Bot, event: GroupMessageEvent):
         await clear_group_welcome.finish("未设置自定义本群入群欢迎")
 
 
-async def greeting_plugin_disabled(group_id: int | None, bot_id: int | str) -> bool:
+async def greeting_plugin_disabled(
+    group_id: int | None,
+    bot_id: int | str,
+    *,
+    bot: Bot | None = None,
+    event: Event | None = None,
+) -> bool:
     from src.plugins.help.plugin_manager import is_plugin_disabled
 
-    return await is_plugin_disabled("greeting", group_id, bot_id)
+    return await is_plugin_disabled("greeting", group_id, int(bot_id), bot=bot, event=event)
 
 
 def call_me_message_rule(event: GroupMessageEvent) -> bool:
@@ -436,7 +442,7 @@ call_me_cmd = on_message(
 
 @call_me_cmd.handle()
 async def handle_call_me(bot: Bot, event: GroupMessageEvent):
-    if await greeting_plugin_disabled(event.group_id, event.self_id):
+    if await greeting_plugin_disabled(event.group_id, event.self_id, bot=bot, event=event):
         return
     config = BotConfig(event.self_id, event.group_id)
     if not await config.is_cooldown("call_me"):
@@ -459,7 +465,7 @@ to_me_cmd = on_message(
 
 @to_me_cmd.handle()
 async def handle_to_me(bot: Bot, event: GroupMessageEvent):
-    if await greeting_plugin_disabled(event.group_id, event.self_id):
+    if await greeting_plugin_disabled(event.group_id, event.self_id, bot=bot, event=event):
         return
 
     config = BotConfig(event.self_id, event.group_id)

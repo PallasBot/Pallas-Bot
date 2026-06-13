@@ -323,3 +323,140 @@ async def test_load_disabled_group_names_returns_empty_when_repo_missing(beanie_
 
     got = await plugin_manager.load_disabled_group_names_from_db(4567)
     assert got == frozenset()
+
+
+class _FakeConfig:
+    def __init__(self, disabled_plugins: list[str] | None = None):
+        self.disabled_plugins = list(disabled_plugins or [])
+
+
+@pytest.mark.asyncio
+async def test_handle_global_plugin_operation_fleet_constraint(tmp_path, monkeypatch):
+    from src.plugins.help import global_disable, plugin_manager
+
+    monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
+    global_disable.save_global_disabled_plugins(["repeater"])
+
+    async def fake_get_bot_config(bot_id: int):
+        return _FakeConfig(), False
+
+    monkeypatch.setattr(plugin_manager, "get_bot_config", fake_get_bot_config)
+
+    success, msg = await plugin_manager._handle_global_plugin_operation("repeater", "牛牛复读", 88001, "enable")
+    assert success is True
+    assert msg == "牛牛复读 受到了米诺斯的制约..."
+
+
+@pytest.mark.asyncio
+async def test_handle_global_plugin_operation_fleet_constraint_skips_config_update(tmp_path, monkeypatch):
+    from src.plugins.help import global_disable, plugin_manager
+
+    monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
+    global_disable.save_global_disabled_plugins(["repeater"])
+
+    config = _FakeConfig(["repeater"])
+    updated = False
+
+    async def fake_get_bot_config(bot_id: int):
+        return config, False
+
+    async def fake_update_config_and_cache(*_args, **_kwargs):
+        nonlocal updated
+        updated = True
+        return True, config
+
+    monkeypatch.setattr(plugin_manager, "get_bot_config", fake_get_bot_config)
+    monkeypatch.setattr(plugin_manager, "update_config_and_cache", fake_update_config_and_cache)
+
+    await plugin_manager._handle_global_plugin_operation("repeater", "牛牛复读", 88001, "enable")
+    assert updated is False
+
+
+@pytest.mark.asyncio
+async def test_handle_group_plugin_operation_fleet_constraint(tmp_path, monkeypatch):
+    from src.plugins.help import global_disable, group_fleet_whitelist, plugin_manager
+
+    monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
+    monkeypatch.setattr(group_fleet_whitelist, "plugin_data_dir", lambda _name: tmp_path)
+    group_fleet_whitelist.invalidate_group_fleet_whitelist_cache()
+    global_disable.save_global_disabled_plugins(["repeater"])
+
+    async def fake_get_group_config(group_id: int):
+        return _FakeConfig(), False
+
+    monkeypatch.setattr(plugin_manager, "get_group_config", fake_get_group_config)
+
+    async def fake_is_plugin_globally_disabled(*_a, **_k):
+        return False
+
+    monkeypatch.setattr(plugin_manager, "is_plugin_globally_disabled", fake_is_plugin_globally_disabled)
+
+    success, msg = await plugin_manager._handle_group_plugin_operation("repeater", "牛牛复读", 12345, 88002, "enable")
+    assert success is True
+    assert msg == "博士，牛牛复读 受到了米诺斯的制约..."
+
+
+@pytest.mark.asyncio
+async def test_handle_global_plugin_operation_fleet_constraint_superuser_exempt(tmp_path, monkeypatch):
+    from src.plugins.help import global_disable, plugin_manager
+
+    monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
+    global_disable.save_global_disabled_plugins(["repeater"])
+
+    async def fake_get_bot_config(bot_id: int):
+        return _FakeConfig(), False
+
+    monkeypatch.setattr(plugin_manager, "get_bot_config", fake_get_bot_config)
+
+    success, msg = await plugin_manager._handle_global_plugin_operation(
+        "repeater", "牛牛复读", 88001, "enable", is_superuser=True
+    )
+    assert success is True
+    assert "制约" not in (msg or "")
+
+
+@pytest.mark.asyncio
+async def test_handle_group_plugin_operation_bot_disable_superuser_exempt(monkeypatch):
+    from src.plugins.help import plugin_manager
+
+    async def fake_get_group_config(group_id: int):
+        return _FakeConfig(), False
+
+    async def fake_is_plugin_globally_disabled(*_a, **_k):
+        return True
+
+    monkeypatch.setattr(plugin_manager, "get_group_config", fake_get_group_config)
+    monkeypatch.setattr(plugin_manager, "is_plugin_globally_disabled", fake_is_plugin_globally_disabled)
+    monkeypatch.setattr(plugin_manager, "is_fleet_runtime_disabled", lambda *_a, **_k: False)
+
+    success, msg = await plugin_manager._handle_group_plugin_operation(
+        "repeater", "牛牛复读", 12345, 88002, "enable", is_superuser=True
+    )
+    assert success is True
+    assert "制约" not in (msg or "")
+
+
+@pytest.mark.asyncio
+async def test_handle_group_plugin_operation_fleet_constraint_superuser_exempt(tmp_path, monkeypatch):
+    from src.plugins.help import global_disable, group_fleet_whitelist, plugin_manager
+
+    monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
+    monkeypatch.setattr(group_fleet_whitelist, "plugin_data_dir", lambda _name: tmp_path)
+    group_fleet_whitelist.invalidate_group_fleet_whitelist_cache()
+    global_disable.save_global_disabled_plugins(["repeater"])
+
+    async def fake_get_group_config(group_id: int):
+        return _FakeConfig(), False
+
+    monkeypatch.setattr(plugin_manager, "get_group_config", fake_get_group_config)
+
+    async def fake_is_plugin_globally_disabled(*_a, **_k):
+        return False
+
+    monkeypatch.setattr(plugin_manager, "is_plugin_globally_disabled", fake_is_plugin_globally_disabled)
+
+    success, msg = await plugin_manager._handle_group_plugin_operation(
+        "repeater", "牛牛复读", 12345, 88002, "enable", is_superuser=True
+    )
+    assert success is True
+    assert "制约" not in (msg or "")

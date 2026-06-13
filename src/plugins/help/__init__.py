@@ -210,10 +210,13 @@ async def handle_disable_command(bot: Bot, event: GroupMessageEvent | PrivateMes
 
 async def toggle_all_plugins(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, action: str, matcher):
     """处理启用/禁用所有功能的命令"""
+    from nonebot.permission import SUPERUSER
+
     from .handlers import get_context_info
     from .plugin_manager import get_help_menu_plugins, toggle_plugin
 
     bot_id, group_id = get_context_info(bot, event)
+    is_superuser = await SUPERUSER(bot, event)
     plugin_config = load_config()
     plugins = get_help_menu_plugins(
         show_ignored=False,
@@ -222,7 +225,7 @@ async def toggle_all_plugins(bot: Bot, event: GroupMessageEvent | PrivateMessage
 
     count = 0
     for plugin in plugins:
-        success, _ = await toggle_plugin(plugin.name or "", group_id, bot_id, action=action)
+        success, _ = await toggle_plugin(plugin.name or "", group_id, bot_id, action=action, is_superuser=is_superuser)
         if success:
             count += 1
 

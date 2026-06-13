@@ -3842,6 +3842,19 @@ class _GlobalPluginDisableBody(BaseModel):
     disabled_plugins: list[str] = Field(default_factory=list, max_length=2000)
 
 
+class _GroupFleetWhitelistEntryBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    group_id: int = Field(ge=1)
+    plugins: list[str] = Field(default_factory=list, max_length=2000)
+
+
+class _GroupFleetWhitelistBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entries: list[_GroupFleetWhitelistEntryBody] = Field(default_factory=list, max_length=5000)
+
+
 class _PluginConfigUpdateBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -4137,6 +4150,130 @@ async def _delete_db_table_row(table: str, row_id: int) -> bool:
     raise ValueError(f"不支持的 DB 后端: {backend}")
 
 
+_warm_console_read_caches_fn: typing.Callable[[], typing.Awaitable[None]] | None = None
+
+
+async def warm_console_read_caches() -> None:
+    """启动后后台预热首屏慢读接口的进程内缓存。"""
+    fn = _warm_console_read_caches_fn
+    if fn is not None:
+        await fn()
+
+
+async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, Any]:
+    from src.shared.utils.format_exception import format_exception_for_log
+    from src.shared.utils.github_release import release_tags_equivalent
+
+    from .manager import fetch_latest_webui_release, get_installed_webui_version
+
+    repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
+    asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
+    github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
+    installed = get_installed_webui_version()
+    current_tag = str(installed.get("tag", "") or "").strip()
+    try:
+        latest = await fetch_latest_webui_release(repo, token=github_token, asset_name=asset)
+        latest_tag = str(latest.get("tag", "") or "").strip()
+        release_url = str(latest.get("html_url", "") or "").strip()
+        asset_url = str(latest.get("asset_url", "") or "").strip()
+    except Exception as e:  # noqa: BLE001
+        err_msg = format_exception_for_log(e)
+        logger.warning("Pallas-Bot 控制台: WebUI 更新检查失败（GitHub），repo={} err={}", repo, err_msg)
+        return {
+            "current_tag": current_tag,
+            "latest_tag": None,
+            "has_update": False,
+            "release_url": "",
+            "asset_url": "",
+            "release_notes": "",
+            "error": err_msg,
+            "checked_at": time.time(),
+        }
+    has_update = bool(latest_tag and not release_tags_equivalent(current_tag, latest_tag))
+    notes_raw = str(latest.get("body", "") or "").strip()
+    notes_max = 40000
+    release_notes = (
+        notes_raw
+        if len(notes_raw) <= notes_max
+        else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+    )
+    return {
+        "current_tag": current_tag,
+        "latest_tag": latest_tag,
+        "has_update": has_update,
+        "release_url": release_url,
+        "asset_url": asset_url,
+        "release_notes": release_notes,
+        "error": None,
+        "checked_at": time.time(),
+    }
+
+
+async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any]:
+    from src.shared.utils.format_exception import format_exception_for_log
+
+    from .manager import (
+        bot_has_release_update,
+        bot_is_development_build,
+        fetch_latest_bot_release,
+        get_bot_current_version,
+        inspect_bot_deployment,
+    )
+
+    github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
+    current = get_bot_current_version()
+    current_tag = current.get("tag", "")
+    current_commit = current.get("commit", "")
+    try:
+        latest = await fetch_latest_bot_release("PallasBot/Pallas-Bot", token=github_token)
+        latest_tag = str(latest.get("tag", "") or "").strip()
+        release_url = str(latest.get("html_url", "") or "").strip()
+    except Exception as e:  # noqa: BLE001
+        err_msg = format_exception_for_log(e)
+        logger.warning("Pallas-Bot 控制台: Bot 版本更新检查失败（GitHub） err={}", err_msg)
+        return {
+            "current_tag": current_tag,
+            "current_commit": current_commit,
+            "latest_tag": None,
+            "has_update": False,
+            "development_build": False,
+            "release_url": "",
+            "release_notes": "",
+            "error": err_msg,
+            "checked_at": time.time(),
+            **inspect_bot_deployment(),
+        }
+    has_update = bot_has_release_update(
+        latest_tag=latest_tag,
+        current_tag=str(current_tag or ""),
+        current_commit=str(current_commit or ""),
+    )
+    development_build = bot_is_development_build(
+        latest_tag=latest_tag,
+        current_tag=str(current_tag or ""),
+        current_commit=str(current_commit or ""),
+    )
+    notes_raw = str(latest.get("body", "") or "").strip()
+    notes_max = 40000
+    release_notes = (
+        notes_raw
+        if len(notes_raw) <= notes_max
+        else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+    )
+    return {
+        "current_tag": current_tag,
+        "current_commit": current_commit,
+        "latest_tag": latest_tag,
+        "has_update": has_update,
+        "development_build": development_build,
+        "release_url": release_url,
+        "release_notes": release_notes,
+        "error": None,
+        "checked_at": time.time(),
+        **inspect_bot_deployment(),
+    }
+
+
 def register_extended_api(
     app,
     *,
@@ -4400,6 +4537,47 @@ def register_extended_api(
             "ok": True,
             "data": {
                 "disabled_plugins": disabled,
+                "protected_plugins": sorted(GLOBAL_DISABLE_PROTECTED_PLUGINS),
+            },
+        })
+
+    @router.get(f"{x}/plugins/group-fleet-whitelist", include_in_schema=True)
+    async def _plugins_group_fleet_whitelist_get() -> JSONResponse:
+        try:
+            from src.plugins.help.global_disable import GLOBAL_DISABLE_PROTECTED_PLUGINS
+            from src.plugins.help.group_fleet_whitelist import load_group_fleet_whitelist
+
+            data = {
+                "entries": load_group_fleet_whitelist(),
+                "protected_plugins": sorted(GLOBAL_DISABLE_PROTECTED_PLUGINS),
+            }
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(f"{x}/plugins/group-fleet-whitelist", include_in_schema=True)
+    async def _plugins_group_fleet_whitelist_put(
+        body: _GroupFleetWhitelistBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            from src.plugins.help.global_disable import GLOBAL_DISABLE_PROTECTED_PLUGINS
+            from src.plugins.help.group_fleet_whitelist import save_group_fleet_whitelist
+            from src.plugins.help.plugin_manager import invalidate_disabled_plugin_gate_cache
+
+            entries = save_group_fleet_whitelist([
+                {"group_id": item.group_id, "plugins": item.plugins} for item in body.entries
+            ])
+            await invalidate_disabled_plugin_gate_cache(clear_all=True)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        _drop_read_cache(("plugins",))
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "entries": entries,
                 "protected_plugins": sorted(GLOBAL_DISABLE_PROTECTED_PLUGINS),
             },
         })
@@ -5655,126 +5833,24 @@ def register_extended_api(
 
     @router.get(f"{x}/update/check", include_in_schema=True)
     async def _update_check() -> JSONResponse:
-        from src.shared.utils.format_exception import format_exception_for_log
-        from src.shared.utils.github_release import release_tags_equivalent
-
-        from .manager import fetch_latest_webui_release, get_installed_webui_version
-
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         cache_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
 
         async def _load() -> dict[str, Any]:
-            installed = get_installed_webui_version()
-            current_tag = str(installed.get("tag", "") or "").strip()
-            try:
-                latest = await fetch_latest_webui_release(repo, token=github_token, asset_name=asset)
-                latest_tag = str(latest.get("tag", "") or "").strip()
-                release_url = str(latest.get("html_url", "") or "").strip()
-                asset_url = str(latest.get("asset_url", "") or "").strip()
-            except Exception as e:  # noqa: BLE001
-                err_msg = format_exception_for_log(e)
-                logger.warning("Pallas-Bot 控制台: WebUI 更新检查失败（GitHub），repo={} err={}", repo, err_msg)
-                return {
-                    "current_tag": current_tag,
-                    "latest_tag": None,
-                    "has_update": False,
-                    "release_url": "",
-                    "asset_url": "",
-                    "release_notes": "",
-                    "error": err_msg,
-                    "checked_at": time.time(),
-                }
-            has_update = bool(latest_tag and not release_tags_equivalent(current_tag, latest_tag))
-            notes_raw = str(latest.get("body", "") or "").strip()
-            notes_max = 40000
-            release_notes = (
-                notes_raw
-                if len(notes_raw) <= notes_max
-                else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
-            )
-            return {
-                "current_tag": current_tag,
-                "latest_tag": latest_tag,
-                "has_update": has_update,
-                "release_url": release_url,
-                "asset_url": asset_url,
-                "release_notes": release_notes,
-                "error": None,
-                "checked_at": time.time(),
-            }
+            return await _load_webui_update_check_payload(plugin_config)
 
         data = await _cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=900.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/update/bot/check", include_in_schema=True)
     async def _bot_update_check() -> JSONResponse:
-        from src.shared.utils.format_exception import format_exception_for_log
-
-        from .manager import (
-            bot_has_release_update,
-            bot_is_development_build,
-            fetch_latest_bot_release,
-            get_bot_current_version,
-            inspect_bot_deployment,
-        )
-
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         cache_key = f"update_check_bot:{bool(github_token)}"
 
         async def _load() -> dict[str, Any]:
-            current = get_bot_current_version()
-            current_tag = current.get("tag", "")
-            current_commit = current.get("commit", "")
-            try:
-                latest = await fetch_latest_bot_release("PallasBot/Pallas-Bot", token=github_token)
-                latest_tag = str(latest.get("tag", "") or "").strip()
-                release_url = str(latest.get("html_url", "") or "").strip()
-            except Exception as e:  # noqa: BLE001
-                err_msg = format_exception_for_log(e)
-                logger.warning("Pallas-Bot 控制台: Bot 版本更新检查失败（GitHub） err={}", err_msg)
-                return {
-                    "current_tag": current_tag,
-                    "current_commit": current_commit,
-                    "latest_tag": None,
-                    "has_update": False,
-                    "development_build": False,
-                    "release_url": "",
-                    "release_notes": "",
-                    "error": err_msg,
-                    "checked_at": time.time(),
-                    **inspect_bot_deployment(),
-                }
-            has_update = bot_has_release_update(
-                latest_tag=latest_tag,
-                current_tag=str(current_tag or ""),
-                current_commit=str(current_commit or ""),
-            )
-            development_build = bot_is_development_build(
-                latest_tag=latest_tag,
-                current_tag=str(current_tag or ""),
-                current_commit=str(current_commit or ""),
-            )
-            notes_raw = str(latest.get("body", "") or "").strip()
-            notes_max = 40000
-            release_notes = (
-                notes_raw
-                if len(notes_raw) <= notes_max
-                else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
-            )
-            return {
-                "current_tag": current_tag,
-                "current_commit": current_commit,
-                "latest_tag": latest_tag,
-                "has_update": has_update,
-                "development_build": development_build,
-                "release_url": release_url,
-                "release_notes": release_notes,
-                "error": None,
-                "checked_at": time.time(),
-                **inspect_bot_deployment(),
-            }
+            return await _load_bot_update_check_payload(plugin_config)
 
         data = await _cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=900.0)
         return JSONResponse({"ok": True, "data": data})
@@ -5933,6 +6009,39 @@ def register_extended_api(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": {"message": "已保存"}})
+
+    async def _warm_console_read_caches_impl() -> None:
+        from src.features.community_stats.public_stats import fetch_community_public_stats
+
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
+        asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
+        github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
+        webui_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
+        bot_key = f"update_check_bot:{bool(github_token)}"
+
+        async def warm(key: str, loader, ttl: float, stale: float) -> None:
+            try:
+                await _cached_read(key=key, loader=loader, ttl_sec=ttl, stale_sec=stale)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("Pallas-Bot 控制台: 预热读缓存失败 key={} err={}", key, e)
+
+        async def load_webui() -> dict[str, Any]:
+            return await _load_webui_update_check_payload(plugin_config)
+
+        async def load_bot() -> dict[str, Any]:
+            return await _load_bot_update_check_payload(plugin_config)
+
+        async def load_community() -> dict[str, Any]:
+            return await fetch_community_public_stats()
+
+        await asyncio.gather(
+            warm(webui_key, load_webui, 120.0, 900.0),
+            warm(bot_key, load_bot, 120.0, 900.0),
+            warm("community-stats", load_community, 30.0, 120.0),
+        )
+
+    global _warm_console_read_caches_fn
+    _warm_console_read_caches_fn = _warm_console_read_caches_impl
 
     if not getattr(app.state, "_pallas_ext_read_cache_inv_hook", False):
         register_console_session_invalidation_hook(clear_extended_read_cache)

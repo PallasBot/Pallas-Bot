@@ -570,3 +570,69 @@ async def test_block_drops_message_in_banned_group(beanie_fixture):
         with pytest.raises(IgnoredException):
             await block_globally_banned_users(bot, event)
     mock_banned.assert_not_called()
+
+
+def test_format_id_list_empty_and_truncated():
+    from src.plugins.blacklist import format_id_list
+
+    assert format_id_list([], empty_hint="（无）") == "（无）"
+    long_ids = list(range(100001, 100001 + 60))
+    text = format_id_list(long_ids, empty_hint="（无）")
+    assert "… 共 60 个" in text
+    assert text.count(",") == 49
+
+
+@pytest.mark.asyncio
+async def test_build_blacklist_view_message_private(beanie_fixture):
+    from src.plugins.blacklist import build_blacklist_view_message
+
+    uid = 94001
+    gid = 94002
+    await UserConfig(uid).ban()
+    await GroupConfig(gid).ban()
+    text = await build_blacklist_view_message(None)
+    assert str(uid) in text
+    assert str(gid) in text
+    assert "全局用户拉黑" in text
+    assert "全局群拉黑" in text
+
+
+@pytest.mark.asyncio
+async def test_build_blacklist_view_message_group(beanie_fixture):
+    from src.plugins.blacklist import build_blacklist_view_message
+
+    gid = 94003
+    target = 94004
+    await GroupConfig(gid).add_blocked_users([target])
+    text = await build_blacklist_view_message(gid)
+    assert str(target) in text
+    assert "本群屏蔽用户" in text
+    assert "未被全局群拉黑" in text
+
+
+@pytest.mark.asyncio
+async def test_handle_blacklist_list_group(beanie_fixture):
+    from src.plugins.blacklist import blacklist_list_cmd, handle_blacklist_list
+
+    gid = 94005
+    target = 94006
+    await GroupConfig(gid).add_blocked_users([target])
+    event = GroupMessageEvent(
+        time=1,
+        self_id=1,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        message_id=1,
+        user_id=100,
+        message=Message("牛牛黑名单"),
+        raw_message="牛牛黑名单",
+        font=0,
+        sender={"user_id": 100, "nickname": "a", "card": "", "role": "owner"},
+        group_id=gid,
+    )
+    bot = SimpleNamespace(self_id="1")
+    with patch.object(blacklist_list_cmd, "finish", new_callable=AsyncMock) as mock_finish:
+        await handle_blacklist_list(bot, event)
+    mock_finish.assert_awaited_once()
+    assert str(target) in mock_finish.await_args.args[0]

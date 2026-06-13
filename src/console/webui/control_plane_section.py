@@ -1,4 +1,4 @@
-"""WebUI「通用配置 → 联邦控制面」：分组、三态选项与通俗说明。"""
+"""WebUI「通用配置 → 联邦控制」：分组、三态选项与说明文案。"""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from src.foundation.config.repo_settings import (
 )
 
 CONTROL_PLANE_SECTION_ID = "control_plane"
-CONTROL_PLANE_TITLE = "联邦控制面"
+CONTROL_PLANE_TITLE = "联邦控制"
 
 _TRI_CHOICES = ["auto", "true", "false"]
 
@@ -96,27 +96,27 @@ def _field_row(key: str, cur: Any) -> dict[str, Any]:
         row["choices"] = _TRI_CHOICES
         row["current"] = _enabled_raw()
         row["description"] = field_help(
-            "是否向中心自动领取联邦池与去重服务器配置",
-            "一般选「自动」或「开启」；关闭后不再拉取中心配置",
-            "默认已开启；入池密钥仍需填写",
+            "是否向社区中心自动领取联邦配置",
+            "一般选「自动」或「开启」；关闭后不再向中心拉取配置",
+            "默认已开启；仍需填写下方的入池密钥",
         )
     elif key == "instance_secret":
         row["description"] = field_help(
-            "加入社区联邦池的口令",
-            "从控制台「统计与语料」页复制，粘贴到此处",
-            "与共享语料口令、统计心跳无关；勿泄露",
+            "加入社区联邦池的密钥",
+            "打开控制台「统计与语料」，在「社区联邦」面板复制后粘贴到此处",
+            "与共享语料口令、在线统计无关；请勿泄露",
         )
     elif key == "bootstrap_url":
         row["description"] = field_help(
-            "向中心拉取配置的网址",
-            "留空即可，程序会按统计主站/备站自动选择",
-            "仅自建中心或特殊网络时填写完整地址",
+            "向中心拉取联邦配置的网址",
+            "留空即可，程序会按统计主站与备站自动选择",
+            "仅自建中心或特殊网络时再填写完整地址",
         )
     elif key == "federate_id":
         row["description"] = field_help(
             "所属联邦池编号",
-            "可留空，保存密钥后会由中心自动写入",
-            "多套自托管共用同一编号时，跨机去重才生效",
+            "可留空，填写密钥并由中心下发后会自动写入",
+            "多套牛牛要共用同一编号，跨机去重才会生效",
         )
     elif key == "federate_ingress_enabled":
         row["kind"] = "enum"
@@ -125,26 +125,26 @@ def _field_row(key: str, cur: Any) -> dict[str, Any]:
         row["current"] = raw if raw in _TRI_CHOICES else "auto"
         row["description"] = field_help(
             "避免多套牛牛对同一条群消息各回复一遍",
-            "选「自动」：有池编号且去重服务器可用时开启",
-            "分片与单进程均会经过此去重",
+            "选「自动」：已入池且去重服务可用时开启",
+            "单进程与分片模式都会经过此去重",
         )
     elif key == "ingress_bypass_unified":
         row["kind"] = "bool"
         row["current"] = bool(cur)
         row["description"] = field_help(
-            "单进程模式下插件命令是否直接绕过联邦 claim",
-            "开启后命令优先保响应速度；仅影响 unified/非分片场景",
-            "默认关闭；适合本地排障或你明确希望命令完全不走联邦门控时开启",
+            "单进程模式下命令是否跳过去重门控",
+            "开启后命令响应更快，但不再参与跨机去重",
+            "默认关闭；仅本地排障或你明确不需要去重时再开",
         )
     elif key == "coord_redis_url":
         row["description"] = field_help(
-            "各套牛牛共用的去重服务器（TCP，不是网页）",
-            "一般留空，由中心自动下发；仅调试时可手填",
+            "各套牛牛共用的去重服务器地址",
+            "一般留空，由中心自动下发；调试时可手填",
             _shard_redis_hint(),
         )
     elif key == "federate_redis_prefix":
         row["description"] = field_help(
-            "去重记录在服务器里的分类前缀",
+            "去重记录在服务器里的键名前缀",
             "一般留空，由中心或池编号自动生成",
             "与分片协调用的键前缀不是一回事",
         )
@@ -152,9 +152,9 @@ def _field_row(key: str, cur: Any) -> dict[str, Any]:
         row["kind"] = "number"
         row["current"] = int(cur or 86400)
         row["description"] = field_help(
-            "联邦去重 claim 在 Redis 中保留多少秒",
+            "去重标记在服务器上保留多少秒",
             "越长越能避免重复抢答；越短则旧记录释放更快",
-            "未手填时可跟随中心下发；常见值为 7200 或 86400",
+            "未手填时跟随中心下发；常见为 7200 或 86400 秒",
         )
     return row
 
@@ -174,17 +174,17 @@ def control_plane_payload(*, current_values: dict[str, Any] | None = None) -> di
         "field_groups": [
             {
                 "id": "join",
-                "title": "入池与自动配置",
+                "title": "入池与中心配置",
                 "field_names": ["enabled", "instance_secret", "bootstrap_url"],
             },
             {
                 "id": "pool",
-                "title": "联邦池与去重",
+                "title": "联邦池与消息去重",
                 "field_names": ["federate_id", "federate_ingress_enabled", "ingress_bypass_unified"],
             },
             {
                 "id": "redis",
-                "title": "去重服务器（高级）",
+                "title": "去重服务器（进阶）",
                 "field_names": ["coord_redis_url", "federate_redis_prefix", "claim_ttl_sec"],
             },
         ],

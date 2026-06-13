@@ -50,9 +50,9 @@ db = "PallasBot"
 # PG_IDLE_IN_TRANSACTION_TIMEOUT_MS = "15000"  # 默认 15s；防止异常只读事务长期占连接
 # PG_APPLICATION_NAME = "PallasBot"
 
-# 联邦控制面（Phase 2 ingress；协调 Redis 可手写或 bootstrap 下发）
+# 联邦控制（多套牛牛共池、消息去重；协调 Redis 可手写或由中心下发）
 # [control_plane]
-# enabled = true                  # 默认开；WebUI「通用配置 → 联邦控制面」可改
+# enabled = true                  # 默认开；WebUI「通用配置 → 联邦控制」可改
 # bootstrap_url = "https://stats.pallasbot.top/v1/bootstrap"  # 省略则从心跳域推导
 # instance_secret = ""   # 与中心 INSTANCE_SECRET 一致；亦可用环境变量 PALLAS_INSTANCE_SECRET
 # federate_id = ""       # 可省略，由 bootstrap 落盘到 community_stats.json

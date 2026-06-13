@@ -56,105 +56,106 @@ class CorpusFederationWebuiConfig(BaseModel):
     merge_order: str = Field(
         default="local",
         description=field_help(
-            "查找回复语料时先查哪几个来源",
-            "选 local,community 表示先本机再共享池；选 local 表示只用本机语料",
-            "关闭共享语料时建议选 local",
+            "接话时按什么顺序查找语料",
+            "选「先本机再共享池」时，本机没有合适回复才会查社区；选「只用本机」则完全不查共享池",
+            "关闭共享语料后建议改为「只用本机」",
         ),
     )
     merge_strategy: Literal["local_first", "merge_counts"] = Field(
         default="local_first",
         description=field_help(
-            "本机与共享池都有同一句时如何合并",
-            "local_first：优先用本机记录；merge_counts：把两边的使用次数加在一起再排序",
+            "本机与共享池都有同一句回复时怎么处理",
+            "本地优先：以本机记录为准；合并计数：把两边的使用次数加在一起再排序",
         ),
     )
     community_enabled: _TRI = Field(
         default="false",
         description=field_help(
-            "是否使用共享语料池",
-            "选 true 开启，false 关闭，auto 由程序按环境自动判断",
-            "默认关闭，确认已配置共享池地址与令牌后再开启",
+            "是否使用社区共享语料池",
+            "开启后可从社区读取大家贡献的接话素材；默认关闭，需手动开启",
+            "与上方「接话查找顺序」配合使用",
         ),
     )
     auto_enroll: _TRI = Field(
         default="false",
         description=field_help(
-            "是否自动向统计中心登记本机的语料访问凭证",
-            "选 false 默认不登记；true 强制登记；auto 仅用于兼容旧配置",
-            "登记成功后会把凭证保存在本机，无需每次手填",
+            "是否自动向社区登记本机语料访问凭证",
+            "开启共享语料后，程序会向社区中心登记并保存口令，一般无需手填",
+            "已有手动口令时可保持关闭",
         ),
     )
     community_contribute: _TRI = Field(
         default="auto",
         description=field_help(
-            "是否把本机新学到的回复同步到共享池",
-            "选 auto 由程序判断；true 总是上传，false 从不上传",
-            "上传前请确认符合共享语料规范",
+            "是否把本机新学到的回复上传到共享池",
+            "自动：在已接入共享语料时默认允许上传；也可强制开启或关闭",
+            "仅上传关键词与短句，不含群号与 QQ",
         ),
     )
     remote_find_enabled: _REMOTE_FIND = Field(
         default="auto",
         description=field_help(
-            "本机语料未命中时是否向共享池拉取",
-            "false/auto：不拉取；prefetch：后台写入本地、下次再接话（推荐）；sync：当场 HTTP 查社区",
-            "与「是否使用共享语料池」独立；仅影响读，不影响学习上传",
+            "本机语料没命中时，是否向共享池查询",
+            "后台预取（推荐）：查到后写入本机，下次接话即可用；当场查询：当次消息立刻联网查",
+            "与「是否使用共享语料」独立；只影响读取，不影响学习上传",
         ),
     )
     fed_enabled: _TRI = Field(
         default="auto",
         description=field_help(
-            "是否启用跨站联邦语料（高级功能）",
-            "当前多数部署尚未接入，保持 auto 或 false 即可",
+            "是否启用跨站联邦语料（进阶）",
+            "多数自托管部署用不到，保持关闭或自动即可",
         ),
     )
     fed_contribute: bool = Field(
         default=False,
         description=field_help(
-            "是否向联邦数据库回写学习结果",
-            "仅在你已部署联邦服务并知晓风险时开启",
+            "是否向联邦语料库回写学习结果",
+            "仅在你已部署联邦服务并了解风险时开启",
         ),
     )
     on_remote_failure: Literal["local_only"] = Field(
         default="local_only",
         description=field_help(
-            "拉取共享语料失败时的兜底方式",
-            "目前固定为仅使用本机语料，以保证牛牛仍能回复",
+            "访问共享语料失败时的兜底方式",
+            "目前固定为仅使用本机语料，保证牛牛仍能正常接话",
         ),
     )
     community_api_base: str = Field(
         default="",
         description=field_help(
-            "共享语料接口的根地址",
+            "共享语料服务的根地址",
             "填写形如 https://示例域名 的地址，末尾不要加斜杠",
-            "留空时程序会尝试用自动登记结果或统计心跳地址推导",
+            "留空时程序会按自动登记结果或统计上报地址推导",
         ),
     )
     community_token: str = Field(
         default="",
         description=field_help(
-            "访问共享语料用的令牌",
-            "一般以 pc_ 开头；留空则使用自动登记保存在本机的令牌",
+            "访问共享语料用的口令",
+            "一般以 pc_ 开头；留空则使用自动登记保存在本机的口令",
         ),
     )
     community_stats_enabled: bool = Field(
         default=True,
         description=field_help(
-            "是否向统计中心上报本机在线情况",
-            "开启后控制台「统计与语料」才能看到全网大致数据；关闭则只影响上报，不影响牛牛聊天",
+            "是否向社区中心上报本机在线情况",
+            "开启后「统计与语料」页才能看到全网大致数据；关闭不影响牛牛聊天",
+            "默认开启；单进程总机上报，分片 worker 不上报",
         ),
     )
     community_stats_endpoint: str = Field(
         default="https://stats.pallasbot.top/v1/heartbeat",
         description=field_help(
-            "统计心跳要提交到的网址",
-            "填完整 URL；官方地址一般无需修改，程序会在主站不可用时尝试备用域名",
+            "在线统计要提交到的网址",
+            "官方地址一般无需修改；主站不可用时程序会自动尝试备站",
         ),
     )
     community_stats_token: str = Field(
         default="",
         description=field_help(
-            "提交统计时附带的访问令牌",
-            "公开统计服务通常可留空；若运营方发了专用令牌再填写",
+            "提交统计时附带的访问口令",
+            "公开统计服务通常可留空；运营方发了专用口令再填写",
         ),
     )
     community_stats_interval_sec: int = Field(
@@ -162,9 +163,16 @@ class CorpusFederationWebuiConfig(BaseModel):
         ge=60,
         le=3600,
         description=field_help(
-            "每隔多少秒上报一次在线心跳",
-            "在下拉框中选秒数，例如 300 表示 5 分钟一次",
-            "间隔过短会增加请求次数；过长则在线统计数据更新变慢",
+            "每隔多少秒上报一次在线情况",
+            "例如 300 表示 5 分钟一次；间隔越短请求越频繁，越长则页面数据更新越慢",
+        ),
+    )
+    community_stats_roster_public: bool = Field(
+        default=False,
+        description=field_help(
+            "是否在社区主站公开本部署牛牛名册",
+            "开启后随统计上报 QQ、昵称、在线状态与近 7 日消息量；主站气泡墙可点击查看 QQ 资料",
+            "不上报群号与消息正文；默认关闭，可随时关掉",
         ),
     )
 
@@ -202,4 +210,6 @@ def get_corpus_federation_webui_config() -> CorpusFederationWebuiConfig:
         ),
         community_stats_token=_str_read("PALLAS_COMMUNITY_STATS_TOKEN"),
         community_stats_interval_sec=interval,
+        community_stats_roster_public=_str_read("PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC", "").lower()
+        in ("1", "true", "yes", "on"),
     )

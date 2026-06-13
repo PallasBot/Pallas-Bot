@@ -221,13 +221,15 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
         await TaskManager.remove_task(request_id)
         await sing_msg.finish("我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。")
 
-    sing_progress = SingProgress(
-        song_id=str(song_id),
-        chunk_index=chunk_index,
-        key=key,
-    )
+    if chunk_index == 0:
+        await config.update_sing_progress(
+            SingProgress(
+                song_id=str(song_id),
+                chunk_index=chunk_index,
+                key=key,
+            )
+        )
     await sing_msg.finish("欢呼吧！")
-    await config.update_sing_progress(sing_progress)
 
 
 async def is_play(bot: Bot, event: Event, state: T_State) -> bool:
