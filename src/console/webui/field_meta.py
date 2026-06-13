@@ -47,10 +47,12 @@ def field_meta_for_model_field(*, key: str, field: Any, env_key: str, cur: Any, 
     from pydantic_core import PydanticUndefined
 
     from src.console.webui.field_help import normalize_field_description
+    from src.console.webui.field_labels import webui_field_label
 
     ann = field.annotation
     choices = literal_choices(ann)
     default = None if default_value is PydanticUndefined else default_value
+    label = webui_field_label(key)
     row: dict[str, Any] = {
         "name": key,
         "kind": field_kind_from_annotation(ann),
@@ -60,6 +62,8 @@ def field_meta_for_model_field(*, key: str, field: Any, env_key: str, cur: Any, 
         "default": _jsonable_value(default),
         "current": _jsonable_value(cur),
     }
+    if label:
+        row["label"] = label
     if choices is not None:
         row["choices"] = choices
     return row

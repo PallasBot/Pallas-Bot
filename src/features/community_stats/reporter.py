@@ -60,6 +60,8 @@ def build_heartbeat_payload() -> dict[str, object]:
         from src.features.community_stats.roster import build_public_roster_entries
 
         payload["roster_public"] = True
+        payload["roster_show_qq"] = cfg.roster_public_qq
+        payload["roster_show_profile"] = cfg.roster_public_profile
         payload["roster"] = build_public_roster_entries()
     else:
         payload["roster_public"] = False

@@ -273,6 +273,7 @@ _COMMON_CONFIG_SECTION_ORDER: tuple[str, ...] = (
     "cmd_perm",
     "control_plane",
     "corpus_federation",
+    "community_stats",
     "ingress_fanout",
     "repeater_learn",
     "message_scrub",
@@ -284,6 +285,7 @@ _COMMON_CONFIG_SECTION_ORDER: tuple[str, ...] = (
 
 
 def list_webui_env_sections() -> list[dict[str, str]]:
+    from .community_stats_section import COMMUNITY_STATS_SECTION_ID, COMMUNITY_STATS_TITLE
     from .control_plane_section import CONTROL_PLANE_SECTION_ID, CONTROL_PLANE_TITLE
     from .corpus_federation_section import CORPUS_FEDERATION_SECTION_ID, CORPUS_FEDERATION_TITLE
     from .service_gateways_section import (
@@ -295,6 +297,10 @@ def list_webui_env_sections() -> list[dict[str, str]]:
     by_id[CORPUS_FEDERATION_SECTION_ID] = {
         "id": CORPUS_FEDERATION_SECTION_ID,
         "title": CORPUS_FEDERATION_TITLE,
+    }
+    by_id[COMMUNITY_STATS_SECTION_ID] = {
+        "id": COMMUNITY_STATS_SECTION_ID,
+        "title": COMMUNITY_STATS_TITLE,
     }
     by_id[SERVICE_GATEWAYS_SECTION_ID] = {
         "id": SERVICE_GATEWAYS_SECTION_ID,
@@ -318,10 +324,11 @@ def list_webui_env_sections() -> list[dict[str, str]]:
 
 
 def get_webui_env_section(section_id: str) -> WebuiEnvSection:
+    from .community_stats_section import COMMUNITY_STATS_SECTION_ID
     from .control_plane_section import CONTROL_PLANE_SECTION_ID
     from .corpus_federation_section import CORPUS_FEDERATION_SECTION_ID
 
-    if section_id in (CORPUS_FEDERATION_SECTION_ID, CONTROL_PLANE_SECTION_ID):
+    if section_id in (CORPUS_FEDERATION_SECTION_ID, CONTROL_PLANE_SECTION_ID, COMMUNITY_STATS_SECTION_ID):
         raise ValueError(f"{section_id} 使用专用 payload，勿走 WebuiEnvSection")
     sid = (section_id or "").strip()
     for s in _registered_sections():
@@ -336,6 +343,7 @@ def webui_env_section_payload(
     current_values: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """GET 默认读进程内配置；PUT 后应传 ``validated``，与刚写入 ``.env`` 的值一致。"""
+    from .community_stats_section import COMMUNITY_STATS_SECTION_ID, community_stats_payload
     from .control_plane_section import CONTROL_PLANE_SECTION_ID, control_plane_payload
     from .corpus_federation_section import CORPUS_FEDERATION_SECTION_ID, corpus_federation_payload
     from .service_gateways_section import SERVICE_GATEWAYS_SECTION_ID, service_gateways_payload
@@ -344,6 +352,8 @@ def webui_env_section_payload(
         return control_plane_payload(current_values=current_values)
     if section_id == CORPUS_FEDERATION_SECTION_ID:
         return corpus_federation_payload(current_values=current_values)
+    if section_id == COMMUNITY_STATS_SECTION_ID:
+        return community_stats_payload(current_values=current_values)
     if section_id == SERVICE_GATEWAYS_SECTION_ID:
         return service_gateways_payload(current_values=current_values)
     s = get_webui_env_section(section_id)
@@ -431,6 +441,7 @@ def _cmd_perm_payload_extras(cfg_obj: Any) -> dict[str, Any]:
 
 
 def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dict[str, Any]:
+    from .community_stats_section import COMMUNITY_STATS_SECTION_ID, apply_community_stats_patch
     from .control_plane_section import CONTROL_PLANE_SECTION_ID, apply_control_plane_patch
     from .corpus_federation_section import CORPUS_FEDERATION_SECTION_ID, apply_corpus_federation_patch
     from .service_gateways_section import (
@@ -442,6 +453,8 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
         return apply_control_plane_patch(patch)
     if section_id == CORPUS_FEDERATION_SECTION_ID:
         return apply_corpus_federation_patch(patch)
+    if section_id == COMMUNITY_STATS_SECTION_ID:
+        return apply_community_stats_patch(patch)
     if section_id == SERVICE_GATEWAYS_SECTION_ID:
         return apply_service_gateways_patch(patch)
     s = get_webui_env_section(section_id)

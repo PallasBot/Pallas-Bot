@@ -147,7 +147,7 @@ class MessageScrubConfig(BaseModel):
         default="",
         description=field_help(
             "按顺序调用哪些在线审查服务",
-            "多个服务名用英文逗号分隔，可选：baidu（百度）、json_http、generic、http",
+            "多个服务名用英文逗号分隔：baidu（百度）、json_http / generic / http（自建接口）",
             "留空表示不启用在线审查，仅使用本地词表与关键词",
         ),
     )
@@ -155,7 +155,7 @@ class MessageScrubConfig(BaseModel):
         default="",
         description=field_help(
             "使用你自己搭建的审查接口",
-            "填写完整网址（含 http 或 https）；若同时填了「备用审查网址」，以本项为准",
+            "填写完整网址（含 http 或 https）；若同时填了备用审查网址，以本项为准",
             "留空表示不使用自建接口",
         ),
     )
@@ -163,7 +163,7 @@ class MessageScrubConfig(BaseModel):
         default="",
         description=field_help(
             "审查接口网址（备用项）",
-            "与上一项作用相同，仅在没有填写「scrub_api_url」时才会使用",
+            "与「自建审查接口」作用相同，仅在前一项留空时才会使用",
             "留空表示不用此项",
         ),
     )

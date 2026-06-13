@@ -357,7 +357,12 @@ def test_build_payload_non_sharded_catalog_from_block_bots(monkeypatch):
 
 
 def test_build_payload_roster_public(monkeypatch):
-    monkeypatch.setenv("PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC", "true")
+    def fake_env(key: str):
+        if key == "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC":
+            return "true"
+        return None
+
+    monkeypatch.setattr("src.features.community_stats.config.repo_env_raw_value", fake_env)
     cfg_mod.clear_community_stats_config_cache()
     roster = [{"qq": 10001, "nickname": "测试牛", "online": True, "message_weight": 42}]
     with (
@@ -375,7 +380,38 @@ def test_build_payload_roster_public(monkeypatch):
     ):
         payload = build_heartbeat_payload()
     assert payload["roster_public"] is True
+    assert payload["roster_show_qq"] is True
+    assert payload["roster_show_profile"] is True
     assert payload["roster"] == roster
+
+
+def test_build_payload_roster_qq_only(monkeypatch):
+    def fake_env(key: str):
+        return {
+            "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC_QQ": "true",
+            "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC_PROFILE": "false",
+        }.get(key)
+
+    monkeypatch.setattr("src.features.community_stats.config.repo_env_raw_value", fake_env)
+    cfg_mod.clear_community_stats_config_cache()
+    roster = [{"qq": 10001, "nickname": "测试牛", "online": True, "message_weight": 42}]
+    with (
+        patch("src.features.community_stats.reporter.is_sharding_active", return_value=False),
+        patch(
+            "src.platform.shard.presence.count_connected_bots_for_reporting",
+            return_value=1,
+        ),
+        patch("src.features.community_stats.reporter.get_catalog_bot_ids", return_value=frozenset({10001})),
+        patch(
+            "src.features.community_stats.reporter.load_or_create_deployment_id",
+            return_value="550e8400-e29b-41d4-a716-446655440000",
+        ),
+        patch("src.features.community_stats.roster.build_public_roster_entries", return_value=roster),
+    ):
+        payload = build_heartbeat_payload()
+    assert payload["roster_public"] is True
+    assert payload["roster_show_qq"] is True
+    assert payload["roster_show_profile"] is False
 
 
 def test_config_roster_public_default_false(monkeypatch):
@@ -385,9 +421,30 @@ def test_config_roster_public_default_false(monkeypatch):
 
 
 def test_config_roster_public_enabled(monkeypatch):
-    monkeypatch.setenv("PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC", "true")
+    monkeypatch.setattr(
+        "src.features.community_stats.config.repo_env_raw_value",
+        lambda key: "true" if key == "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC" else None,
+    )
     cfg_mod.clear_community_stats_config_cache()
-    assert cfg_mod.get_community_stats_config().roster_public is True
+    cfg = cfg_mod.get_community_stats_config()
+    assert cfg.roster_public is True
+    assert cfg.roster_public_qq is True
+    assert cfg.roster_public_profile is True
+
+
+def test_config_roster_split_flags(monkeypatch):
+    def fake_env(key: str):
+        return {
+            "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC_QQ": "false",
+            "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC_PROFILE": "true",
+        }.get(key)
+
+    monkeypatch.setattr("src.features.community_stats.config.repo_env_raw_value", fake_env)
+    cfg_mod.clear_community_stats_config_cache()
+    cfg = cfg_mod.get_community_stats_config()
+    assert cfg.roster_public is True
+    assert cfg.roster_public_qq is False
+    assert cfg.roster_public_profile is True
 
 
 @pytest.mark.asyncio

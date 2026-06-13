@@ -42,6 +42,8 @@
 
 ## 通用能力（`docs/common/`）
 
+索引见 [common/README.md](../common/README.md)。
+
 | 文档 | 说明 |
 | --- | --- |
 | [cmd_perm](../common/cmd_perm/README.md) | 命令权限、帮助菜单动态「何人可用」 |

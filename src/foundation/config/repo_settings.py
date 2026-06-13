@@ -214,7 +214,8 @@ def _flatten_community_stats(section: Any) -> dict[str, str]:
         "endpoint": "PALLAS_COMMUNITY_STATS_ENDPOINT",
         "token": "PALLAS_COMMUNITY_STATS_TOKEN",
         "interval_sec": "PALLAS_COMMUNITY_STATS_INTERVAL_SEC",
-        "roster_public": "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC",
+        "roster_public_qq": "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC_QQ",
+        "roster_public_profile": "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC_PROFILE",
     }
     out: dict[str, str] = {}
     for k, env_key in key_map.items():

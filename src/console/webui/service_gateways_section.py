@@ -60,9 +60,11 @@ def _read_gateway_cfg(plugin_name: str, config_module: str) -> Any:
 
 
 def _field_row(cfg_cls: type[BaseModel], key: str, cur: Any) -> dict[str, Any]:
+    from src.console.webui.field_labels import webui_field_label
+
     f = cfg_cls.model_fields[key]
     default_value = None if f.default is PydanticUndefined else f.default
-    return {
+    row: dict[str, Any] = {
         "name": key,
         "kind": field_kind_from_annotation(f.annotation),
         "required": bool(f.is_required()),
@@ -71,6 +73,10 @@ def _field_row(cfg_cls: type[BaseModel], key: str, cur: Any) -> dict[str, Any]:
         "default": jsonable_value(default_value),
         "current": jsonable_value(cur),
     }
+    label = webui_field_label(key)
+    if label:
+        row["label"] = label
+    return row
 
 
 def service_gateways_payload(

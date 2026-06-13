@@ -25,11 +25,6 @@ _PHASE1_FIELD_NAMES: tuple[str, ...] = (
     "remote_find_enabled",
     "community_api_base",
     "community_token",
-    "community_stats_enabled",
-    "community_stats_endpoint",
-    "community_stats_token",
-    "community_stats_interval_sec",
-    "community_stats_roster_public",
 )
 
 _REPLY_PERF_FIELD_NAMES: tuple[str, ...] = (
@@ -52,11 +47,6 @@ _FIELD_TO_ENV: dict[str, str] = {
     "remote_find_enabled": "PALLAS_CORPUS_REMOTE_FIND_ENABLED",
     "community_api_base": "PALLAS_CORPUS_COMMUNITY_API_BASE",
     "community_token": "PALLAS_CORPUS_TOKEN",
-    "community_stats_enabled": "PALLAS_COMMUNITY_STATS_ENABLED",
-    "community_stats_endpoint": "PALLAS_COMMUNITY_STATS_ENDPOINT",
-    "community_stats_token": "PALLAS_COMMUNITY_STATS_TOKEN",
-    "community_stats_interval_sec": "PALLAS_COMMUNITY_STATS_INTERVAL_SEC",
-    "community_stats_roster_public": "PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC",
 }
 
 _PERF_FIELD_TO_ENV: dict[str, str] = {
@@ -73,7 +63,6 @@ _FIELD_TO_ENV_ALL: dict[str, str] = {**_FIELD_TO_ENV, **_PERF_FIELD_TO_ENV}
 _TRI_CHOICES = ["auto", "true", "false"]
 _REMOTE_FIND_CHOICES = ["auto", "false", "prefetch", "sync"]
 _MERGE_ORDER_CHOICES = ["local,community", "local"]
-_INTERVAL_CHOICES = ["60", "120", "300", "600", "900", "1800", "3600"]
 
 _FIELD_LABELS: dict[str, str] = {
     "merge_order": "接话查找顺序",
@@ -84,11 +73,6 @@ _FIELD_LABELS: dict[str, str] = {
     "remote_find_enabled": "本机未命中时查共享池",
     "community_api_base": "共享语料服务地址",
     "community_token": "共享语料访问口令",
-    "community_stats_enabled": "上报在线统计",
-    "community_stats_endpoint": "统计上报地址",
-    "community_stats_token": "统计上报口令",
-    "community_stats_interval_sec": "上报间隔",
-    "community_stats_roster_public": "公开牛牛名册到社区主站",
     "reply_messages_cap": "接话历史条数上限",
     "reply_answers_cap": "接话候选条数上限",
     "find_cache_ttl_sec": "查询缓存保留秒数",
@@ -110,21 +94,6 @@ def _community_enabled_bool(cur: Any) -> bool:
     if cur is False or cur == "false":
         return False
     return False
-
-
-def _coerce_bool(cur: Any, *, default: bool = False) -> bool:
-    if isinstance(cur, bool):
-        return cur
-    if cur is None:
-        return default
-    if isinstance(cur, (int, float)) and not isinstance(cur, bool):
-        return cur != 0
-    text = str(cur).strip().lower()
-    if text in ("1", "true", "yes", "on"):
-        return True
-    if text in ("0", "false", "no", "off", ""):
-        return False
-    return default
 
 
 def _field_row(key: str, cur: Any, *, model_fields: dict) -> dict[str, Any]:
@@ -173,13 +142,6 @@ def _field_row(key: str, cur: Any, *, model_fields: dict) -> dict[str, Any]:
     elif key in ("auto_enroll", "community_contribute"):
         row["kind"] = "enum"
         row["choices"] = _TRI_CHOICES
-    elif key == "community_stats_interval_sec":
-        row["kind"] = "enum"
-        row["choices"] = _INTERVAL_CHOICES
-        row["current"] = str(int(cur)) if cur is not None else row["choices"][2]
-    elif key in ("community_stats_enabled", "community_stats_roster_public"):
-        row["kind"] = "bool"
-        row["current"] = _coerce_bool(cur)
     return row
 
 
@@ -219,17 +181,6 @@ def corpus_federation_payload(*, current_values: dict[str, Any] | None = None) -
                 ],
             },
             {
-                "id": "community_stats",
-                "title": "在线统计与社区主站",
-                "field_names": [
-                    "community_stats_enabled",
-                    "community_stats_endpoint",
-                    "community_stats_token",
-                    "community_stats_interval_sec",
-                    "community_stats_roster_public",
-                ],
-            },
-            {
                 "id": "reply_perf",
                 "title": "接话性能（一般无需改）",
                 "field_names": list(_REPLY_PERF_FIELD_NAMES),
@@ -244,15 +195,6 @@ def _normalize_patch(patch: dict[str, Any]) -> dict[str, Any]:
         v = out["community_enabled"]
         if isinstance(v, bool):
             out["community_enabled"] = "true" if v else "false"
-    if "community_stats_interval_sec" in out:
-        try:
-            out["community_stats_interval_sec"] = int(out["community_stats_interval_sec"])
-        except (TypeError, ValueError) as e:
-            raise ValueError("community_stats_interval_sec 须为整数秒") from e
-    if "community_stats_enabled" in out:
-        out["community_stats_enabled"] = _coerce_bool(out["community_stats_enabled"], default=True)
-    if "community_stats_roster_public" in out:
-        out["community_stats_roster_public"] = _coerce_bool(out["community_stats_roster_public"])
     for key in _REPLY_PERF_FIELD_NAMES:
         if key in out:
             try:
@@ -276,12 +218,6 @@ def apply_corpus_federation_patch(patch: dict[str, Any]) -> dict[str, Any]:
     items = {_FIELD_TO_ENV[k]: env_value_to_str(validated[k]) for k in patch if k in _FIELD_TO_ENV}
     items.update({_PERF_FIELD_TO_ENV[k]: env_value_to_str(validated_perf[k]) for k in patch if k in _PERF_FIELD_TO_ENV})
     upsert_repo_settings_items(items)
-    try:
-        from src.features.community_stats.config import clear_community_stats_config_cache
-
-        clear_community_stats_config_cache()
-    except Exception:
-        pass
     try:
         from src.features.corpus.config import clear_corpus_config_cache
 
@@ -341,10 +277,7 @@ def apply_corpus_federation_patch(patch: dict[str, Any]) -> dict[str, Any]:
     try:
         from nonebot import logger
 
-        from src.features.community_stats.scheduler import schedule_reload_community_stats_reporter
-
-        schedule_reload_community_stats_reporter()
-        logger.info("corpus_federation: WebUI 已写入配置，语料与在线统计上报已热重载")
+        logger.info("corpus_federation: WebUI 已写入配置，语料相关项已热重载")
     except Exception as e:
         from nonebot import logger
 

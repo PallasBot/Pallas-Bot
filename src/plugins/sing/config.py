@@ -22,7 +22,7 @@ class Config(BaseModel, extra="ignore"):
     sing_enable: bool = Field(
         default=False,
         description=field_help(
-            "是否启用点歌、合成与播放相关命令",
+            "是否启用唱歌与播放相关命令",
             "开启前请确认后端服务已部署且地址正确",
         ),
     )
@@ -44,7 +44,7 @@ class Config(BaseModel, extra="ignore"):
     request_endpoint: str = Field(
         default="/api/request",
         description=field_help(
-            "点歌排队请求的接口路径",
+            "唱歌排队请求的接口路径",
             "通用配置页「服务网关」主要使用此项做连通检测",
         ),
     )
