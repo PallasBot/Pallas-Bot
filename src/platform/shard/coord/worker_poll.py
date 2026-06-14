@@ -14,6 +14,7 @@ def start_shard_coord_worker_watcher() -> None:
     if get_shard_registry_settings().role != "worker":
         return
     from src.platform.shard.coord.bot_action import start_bot_action_redis_listener
+    from src.platform.shard.coord.dream_drift import start_dream_drift_redis_listener
     from src.platform.shard.coord.duel_qte_redis import start_duel_qte_redis_listeners
     from src.platform.shard.coord.repeater_buffer import start_repeater_buffer_redis_listener
     from src.platform.shard.coord.repeater_reply_buffer import start_repeater_reply_buffer_redis_listener
@@ -21,6 +22,7 @@ def start_shard_coord_worker_watcher() -> None:
     _started = True
     start_repeater_buffer_redis_listener()
     start_repeater_reply_buffer_redis_listener()
+    start_dream_drift_redis_listener()
     start_duel_qte_redis_listeners()
     start_bot_action_redis_listener()
 

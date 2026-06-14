@@ -13,7 +13,16 @@ class Player:
     nickname: str
     is_alive: bool = True
     is_undercover: bool = False
+    is_blank: bool = False
     has_spoken_this_round: bool = False
+
+
+def player_role_label(player: Player) -> str:
+    if player.is_undercover:
+        return "卧底"
+    if player.is_blank:
+        return "白板"
+    return "平民"
 
 
 @dataclass
@@ -31,14 +40,25 @@ class Game:
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     expecting_pm_vote: set[int] = field(default_factory=set)
     vote_round_tag: int = 0
+    round_speeches: dict[int, str] = field(default_factory=dict)
 
     def reset_round_flags(self) -> None:
         for player in self.players.values():
             player.has_spoken_this_round = False
+        self.round_speeches.clear()
         self.votes.clear()
         self.vote_box.clear()
         self.expecting_pm_vote.clear()
         self.round_no += 1
+
+    def all_alive_have_spoken(self) -> bool:
+        alive = self.alive_ids()
+        if not alive:
+            return False
+        return all(self.players[uid].has_spoken_this_round for uid in alive)
+
+    def alive_not_spoken_count(self) -> int:
+        return sum(1 for uid in self.alive_ids() if not self.players[uid].has_spoken_this_round)
 
     def alive_players(self) -> list[Player]:
         return [player for player in self.players.values() if player.is_alive]
@@ -50,7 +70,12 @@ class Game:
         return sum(player.is_alive and player.is_undercover for player in self.players.values())
 
     def civilians_alive(self) -> int:
-        return sum(player.is_alive and not player.is_undercover for player in self.players.values())
+        return sum(
+            player.is_alive and not player.is_undercover and not player.is_blank for player in self.players.values()
+        )
+
+    def blanks_alive(self) -> int:
+        return sum(player.is_alive and player.is_blank for player in self.players.values())
 
     def is_game_over(self) -> str | None:
         undercover_count = self.undercovers_alive()

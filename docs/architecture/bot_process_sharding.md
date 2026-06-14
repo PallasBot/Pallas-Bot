@@ -247,8 +247,9 @@ lock.end(group_id)
 ## 多 Bot 同群行为摘要
 
 - **`ingress_gate`**（unified / worker）：fleet、@ 定向、ingress claim、greeting/报数 fanout。
-- **fanout 白名单**：WebUI「入站：全员同响口令」或 `PALLAS_INGRESS_FANOUT_GREETING`；**`牛牛报数` / `牛牛出列` 恒 fanout**；**喝酒酒/醒酒口令**（`牛牛喝酒` 等）见 `drink_plaintext` 恒 fanout。
+- **fanout 白名单**：WebUI「入站：全员同响口令」或 `PALLAS_INGRESS_FANOUT_GREETING`；**`牛牛报数` / `牛牛出列` 恒 fanout**；**喝酒/醒酒口令**（`牛牛喝酒` 等）见 `drink_plaintext` 恒 fanout。**做梦/醒梦口令不走 fanout**：经 ingress 跨牛 claim 仅一只牛开梦；做梦中由 **`dream_host_gate`**（`bind_group_owned_gate`）绑定主持牛，ingress 与采集/醒梦 matcher 仅主持牛通过。
 - **接话 / 主动发言**：ingress 为 **shard 级 claim**（每条消息一个 worker 片通过，该片上各牛可进 matcher）；复读由**本片代表牛**（最小 QQ）统一学习与接话判定；**近期群消息**经 `coord/repeater_buffer/`（可选 Redis Pub/Sub）同步到各 worker 内存；**learn 上下文**在内存链不足时回退 `MessageRepository.find_recent_in_group`；fanout 仅在群内 **≥2 只可复读在线牛** 时启用（与单进程一致），跨片经 `bot_action` 批量代发。主动发言定时任务仅代表牛 worker 执行。
+- **`dream` 跨群漂流**：各 worker 本地 `_dream_active` 仅本进程；分片下经 `coord/dream_drift`（Redis 登记做梦群 + `pallas:dream_drift` pub/sub）把梦话投到其它 worker 上同牛号的做梦群；**同群多牛仅主持牛执行做梦**（开梦 claim + owned gate），与喝酒等各牛独立 fanout 不同。
 - **`duel` / 八角笼**：跨片 `coord/duel_group`、`bot_action`、`duel_qte`。
 - **同群独占类插件**（如 **`who_is_spy`**）：`group_activity` + `begin_group_exclusive_activity`；在 `PluginMetadata.extra["hosted_activity_ingress"]` 声明 `plugin_key`、`activity_namespace`、口令前缀等，ingress 经通用 **`hosted_activity_ingress_passes`**（`src/platform/ingress/hosted_activity_gate.py`）按 **owned gate 主持牛** 路由局内口令与述词（**非 fanout**）。开/结束类口令可列在 `always_pass_prefixes` 始终放行。实现见 `src/platform/shard/coord/hosted_activity_coord.py`；卧底仍保留 `spy_activity.py` 供 prep 元数据读写。
 - **`repeater`**：忽略全 fleet QQ；**`bot_status`**：建议 `bot_status_list_mode=auto`。

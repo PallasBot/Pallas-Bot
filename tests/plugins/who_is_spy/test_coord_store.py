@@ -14,10 +14,11 @@ def test_game_snapshot_roundtrip() -> None:
     game.expecting_pm_vote = {10, 20}
     game.votes = {10: 20, 20: None}
     game.vote_box = {20: 1}
+    game.round_speeches = {10: "红色", 30: "甜的"}
     game.players = {
         10: Player(uid=10, nickname="甲", has_spoken_this_round=True),
         20: Player(uid=20, nickname="乙", is_undercover=True),
-        30: Player(uid=30, nickname="丙"),
+        30: Player(uid=30, nickname="丙", is_blank=True),
     }
 
     restored = game_from_snapshot(game_to_snapshot(game))
@@ -27,6 +28,8 @@ def test_game_snapshot_roundtrip() -> None:
     assert restored.word_civilian == "苹果"
     assert restored.alive_order == [10, 20, 30]
     assert restored.players[20].is_undercover is True
+    assert restored.players[30].is_blank is True
+    assert restored.round_speeches == {10: "红色", 30: "甜的"}
     assert restored.votes[20] is None
     assert restored.expecting_pm_vote == {10, 20}
 

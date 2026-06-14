@@ -46,6 +46,28 @@ def get_drift_queue(key: tuple[int, int]) -> asyncio.Queue[DriftPayload]:
     return _drift_queues[key]
 
 
+def enqueue_drift_payload(key: tuple[int, int], payload: DriftPayload) -> None:
+    q = get_drift_queue(key)
+    if q.full():
+        try:
+            q.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
+    try:
+        q.put_nowait(payload)
+    except asyncio.QueueFull:
+        pass
+
+
+async def deliver_drift_payload(bot_id: int, group_id: int, payload: DriftPayload) -> bool:
+    key = (bot_id, group_id)
+    async with _dream_lock:
+        if key not in _dream_active:
+            return False
+    enqueue_drift_payload(key, payload)
+    return True
+
+
 async def stop_dream_worker(bot_id: int, group_id: int) -> None:
     key = (bot_id, group_id)
     t = _dream_tasks.pop(key, None)
@@ -57,6 +79,13 @@ async def stop_dream_worker(bot_id: int, group_id: int) -> None:
             pass
     async with _dream_lock:
         _dream_active.discard(key)
+    from src.platform.ingress.dream_host_gate import DREAM_HOST_GATE_PLUGIN
+    from src.platform.multi_bot.dedup import needs_group_host_bot_gate, release_group_owned_gate_sync
+    from src.platform.shard.coord.dream_drift import schedule_unregister_dream_active
+
+    schedule_unregister_dream_active(bot_id, group_id)
+    if needs_group_host_bot_gate():
+        release_group_owned_gate_sync(DREAM_HOST_GATE_PLUGIN, group_id)
     q = _drift_queues.pop(key, None)
     if q is not None:
         while not q.empty():
@@ -68,22 +97,32 @@ async def stop_dream_worker(bot_id: int, group_id: int) -> None:
 
 async def broadcast_drift(bot_id: int, source_group_id: int, payload: DriftPayload) -> None:
     """联机梦：仅向「当前也在做梦的其它群」投递；多群时每条随机抽一个接收群（两群时自然一对一互传）。"""
+    from src.platform.shard.coord.dream_drift import (
+        list_peer_dream_groups_sync,
+        schedule_publish_dream_drift,
+    )
+    from src.platform.shard.registry.config import is_sharding_active
+
     async with _dream_lock:
-        targets = [gid for bid, gid in _dream_active if bid == bot_id and gid != source_group_id]
+        local_targets = [gid for bid, gid in _dream_active if bid == bot_id and gid != source_group_id]
+    targets = set(local_targets)
+    if is_sharding_active():
+        remote_targets = await asyncio.to_thread(
+            list_peer_dream_groups_sync,
+            bot_id,
+            exclude_group_id=source_group_id,
+        )
+        targets.update(remote_targets)
     if not targets:
         return
-    gid = random.choice(targets)
+    gid = random.choice(sorted(targets))
     key = (bot_id, gid)
-    q = get_drift_queue(key)
-    if q.full():
-        try:
-            q.get_nowait()
-        except asyncio.QueueEmpty:
-            pass
-    try:
-        q.put_nowait(payload)
-    except asyncio.QueueFull:
-        pass
+    async with _dream_lock:
+        local_hit = key in _dream_active
+    if local_hit:
+        enqueue_drift_payload(key, payload)
+        return
+    schedule_publish_dream_drift(bot_id, source_group_id, gid, payload)
 
 
 async def send_dream_wake_text(bot_id: int, group_id: int) -> None:
@@ -106,6 +145,14 @@ async def launch_dream_worker(bot_id: int, group_id: int, duration_sec: int) -> 
     await stop_dream_worker(bot_id, group_id)
     cfg = BotConfig(bot_id, group_id)
     await cfg.start_dream(duration_sec)
+    until_ts = time.time() + max(1, int(duration_sec))
+    from src.platform.ingress.dream_host_gate import DREAM_HOST_GATE_PLUGIN
+    from src.platform.multi_bot.dedup import bind_group_owned_gate_sync, needs_group_host_bot_gate
+    from src.platform.shard.coord.dream_drift import schedule_register_dream_active
+
+    schedule_register_dream_active(bot_id, group_id, until_ts)
+    if needs_group_host_bot_gate():
+        bind_group_owned_gate_sync(DREAM_HOST_GATE_PLUGIN, group_id, bot_id, gate_sec=float(duration_sec))
     async with _dream_lock:
         _dream_active.add(key)
     q = get_drift_queue(key)
@@ -298,6 +345,13 @@ async def _dream_worker_loop(
     finally:
         async with _dream_lock:
             _dream_active.discard(key)
+        from src.platform.ingress.dream_host_gate import DREAM_HOST_GATE_PLUGIN
+        from src.platform.multi_bot.dedup import needs_group_host_bot_gate, release_group_owned_gate_sync
+        from src.platform.shard.coord.dream_drift import schedule_unregister_dream_active
+
+        schedule_unregister_dream_active(bot_id, group_id)
+        if needs_group_host_bot_gate():
+            release_group_owned_gate_sync(DREAM_HOST_GATE_PLUGIN, group_id)
         _dream_tasks.pop(key, None)
 
 

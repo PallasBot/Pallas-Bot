@@ -21,6 +21,17 @@ def test_unified_drink_bypasses_once_claim() -> None:
     assert ingress_fanout_bypasses_claim("牛牛醒一醒")
 
 
+def test_dream_does_not_bypass_claim_when_sharded(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PALLAS_SHARD_ENABLED", "true")
+    monkeypatch.setenv("PALLAS_BOT_ROLE", "worker")
+    from src.platform.shard.registry.config import get_shard_registry_settings
+
+    get_shard_registry_settings.cache_clear()
+    assert not ingress_fanout_bypasses_claim("牛牛做梦")
+    assert not ingress_fanout_bypasses_claim("牛牛醒梦")
+    assert not ingress_fanout_bypasses_claim("牛牛别做梦")
+
+
 def test_greeting_fanout_texts_bypass_once_claim(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "src.platform.ingress.config._ingress_env_str",

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 
 from nonebot import get_driver, logger
 from nonebot.adapters.onebot.v11 import GroupMessageEvent
@@ -25,11 +24,12 @@ from src.platform.federate.peer_bots import (
     start_federate_peer_bot_sync_loop,
     sync_federate_peer_bot_roster,
 )
+from src.platform.ingress.dream_host_gate import dream_session_ingress_passes
 from src.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
 from src.platform.ingress.hosted_activity_gate import (
     hosted_activity_ingress_passes,
-    message_at_fleet_bot,
 )
+from src.platform.multi_bot.at_targets import group_at_qq_ids, message_at_fleet_bot
 from src.platform.multi_bot.dedup import (
     try_claim_cross_bot_message,
     try_claim_cross_shard_message,
@@ -71,29 +71,6 @@ def ingress_gate_active() -> bool:
     if is_hub_role():
         return False
     return True
-
-
-def group_at_qq_ids(event: GroupMessageEvent) -> frozenset[int]:
-    out: set[int] = set()
-    for seg in event.message:
-        if seg.type != "at":
-            continue
-        qq = seg.data.get("qq")
-        if qq is None or str(qq) in ("all", "0"):
-            continue
-        try:
-            out.add(int(qq))
-        except (TypeError, ValueError):
-            continue
-    if out:
-        return frozenset(out)
-    raw_message = event.raw_message or ""
-    for match in re.finditer(r"\[(?:CQ:)?at(?:,qq=|:qq=)(\d+)", raw_message):
-        try:
-            out.add(int(match.group(1)))
-        except (TypeError, ValueError):
-            continue
-    return frozenset(out)
 
 
 def pallas_at_targets(event: GroupMessageEvent) -> frozenset[int]:
@@ -186,6 +163,12 @@ async def ingress_group_message_gate(bot, event) -> None:
             if metrics:
                 record_ingress_early_discard("spy_host")
             raise IgnoredException("spy host gate")
+
+        if not await dream_session_ingress_passes(self_id, int(event.group_id)):
+            outcome = "dream_host_gate"
+            if metrics:
+                record_ingress_early_discard("dream_host")
+            raise IgnoredException("dream host gate")
 
         if not sharding_active:
             if not await try_claim_group_message_once(

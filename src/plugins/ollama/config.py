@@ -46,7 +46,15 @@ class Config(BaseModel, extra="ignore"):
             "留空使用插件内置 system_prompt.txt；可为相对仓库根的路径",
         ),
     )
-    ollama_min_priority: int = Field(default=5, ge=1, le=99)
+    ollama_min_priority: int = Field(
+        default=50,
+        ge=1,
+        le=99,
+        description=field_help(
+            "Ollama 指令优先级（数值越大越靠后）",
+            "群内 @ 闲聊默认 51；卧底述词等优先于 Ollama",
+        ),
+    )
 
 
 def on_ollama_config_reload(cfg: Config) -> None:

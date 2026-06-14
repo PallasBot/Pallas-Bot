@@ -41,6 +41,33 @@ def test_resolve_game_sync_prefers_ready_snapshot_over_prep_memory(monkeypatch) 
     games.clear()
 
 
+def test_resolve_game_sync_prefers_memory_ready_over_snapshot(monkeypatch) -> None:
+    from src.plugins.who_is_spy import session as session_mod
+
+    games.clear()
+    live = Game(group_id=400, owner_id=1, ready=True)
+    live.word_civilian = "新"
+    live.word_undercover = "旧"
+    live.players[1] = Player(uid=1, nickname="房主")
+    live.alive_order = [1]
+    live.round_no = 1
+    games[400] = live
+
+    stale = Game(group_id=400, owner_id=1, ready=True)
+    stale.players[1] = Player(uid=1, nickname="房主")
+    stale.alive_order = [1]
+    stale.expecting_pm_vote = {1}
+    stale.vote_round_tag = 1
+    stale.round_no = 1
+
+    monkeypatch.setattr(session_mod, "read_active_game_snapshot", lambda _gid: stale)
+
+    resolved = resolve_game_sync(400)
+    assert resolved is live
+    assert resolved.word_civilian == "新"
+    games.clear()
+
+
 def test_resolve_game_sync_ignores_stale_prep_when_session_active(monkeypatch) -> None:
     from src.plugins.who_is_spy import session as session_mod
 

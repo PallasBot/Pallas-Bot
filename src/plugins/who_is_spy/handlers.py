@@ -1,11 +1,12 @@
 from nonebot import logger, on_command, on_message
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, PrivateMessageEvent
-from nonebot.adapters.onebot.v11.permission import PRIVATE
+from nonebot.adapters.onebot.v11.permission import GROUP, PRIVATE
 from nonebot.params import CommandArg
 from nonebot.rule import Rule
 
 from src.features.cmd_perm import group_message_permission_for_command
+from src.platform.multi_bot.at_targets import message_at_fleet_bot
 from src.platform.multi_bot.group import (
     bind_group_owned_gate,
     claim_group_message_event,
@@ -15,8 +16,8 @@ from src.platform.multi_bot.group import (
 )
 from src.platform.shard.coord.spy_activity import SPY_OWNED_PLUGIN
 
-from .args import parse_undercover_count
-from .commands import CMD_END, CMD_JOIN, CMD_OPEN, CMD_QUIT, CMD_START, CMD_STATUS, CMD_VOTE
+from .args import parse_start_args
+from .commands import CMD_END, CMD_JOIN, CMD_OPEN, CMD_QUIT, CMD_START, CMD_STATUS, CMD_VOTE, is_spy_group_command
 from .config import get_spy_config
 from .copy import (
     delivery_report,
@@ -48,7 +49,9 @@ from .copy import (
     pm_target_gone,
     quit_ok,
     room_closed,
-    speak_round_to_vote,
+    speak_already,
+    speak_empty,
+    speak_recorded,
     start_game_hint,
     status_panel,
     vote_abstained,
@@ -59,11 +62,13 @@ from .logic import (
     assign_roles,
     build_index_map,
     deliver_role_words,
+    enter_voting_phase,
     get_nickname,
     is_voting_phase,
-    pm_invite_for_voting,
     render_alive_numbered,
     settle_and_announce,
+    sync_active_game,
+    truncate_speech,
 )
 from .models import Game, Player
 from .session import (
@@ -79,6 +84,7 @@ from .session import (
     persist_prep,
     resolve_game_sync,
 )
+from .speak import extract_at_speech_text
 from .store import WORD_BANK
 
 PLUGIN_KEY = SPY_OWNED_PLUGIN
@@ -87,6 +93,19 @@ JOIN_PERM = group_message_permission_for_command("who_is_spy.join")
 START_PERM = group_message_permission_for_command("who_is_spy.start")
 STATUS_PERM = group_message_permission_for_command("who_is_spy.status")
 END_PERM = group_message_permission_for_command("who_is_spy.end")
+
+
+def is_group_speaking(event: GroupMessageEvent) -> bool:
+    if not message_at_fleet_bot(event):
+        return False
+    if not extract_at_speech_text(event):
+        return False
+    plain = str(event.get_plaintext() or "").strip()
+    if is_spy_group_command(plain):
+        return False
+    game = resolve_game_sync(group_key(event.group_id))
+    return game is not None and game.ready and not is_voting_phase(game)
+
 
 cmd_open = on_command(
     CMD_OPEN,
@@ -101,6 +120,13 @@ cmd_start = on_command(CMD_START, aliases={"牛牛开始"}, block=True, priority
 cmd_vote = on_command(CMD_VOTE, block=True, priority=10, permission=START_PERM)
 cmd_status = on_command(CMD_STATUS, block=True, priority=10, permission=STATUS_PERM)
 cmd_end = on_command(CMD_END, block=True, priority=5, permission=END_PERM)
+
+group_speak = on_message(
+    rule=Rule(is_group_speaking),
+    priority=2,
+    block=True,
+    permission=GROUP,
+)
 
 
 async def claim_group_event(event: GroupMessageEvent) -> bool:
@@ -238,17 +264,28 @@ async def handle_start(bot: Bot, event: GroupMessageEvent, arg: Message = Comman
         await cmd_start.finish(err_empty_word_bank())
 
     text = arg.extract_plain_text().strip()
-    undercover_count = parse_undercover_count(text, default=cfg.spy_default_undercovers)
+    undercover_count, blank_count, show_role = parse_start_args(
+        text,
+        default_undercovers=cfg.spy_default_undercovers,
+        default_blanks=cfg.spy_default_blanks,
+        default_show_role=cfg.spy_show_role_default,
+    )
     if undercover_count >= player_count:
         undercover_count = max(1, player_count // 3)
+    max_blanks = max(0, player_count - undercover_count - 1)
+    blank_count = min(blank_count, max_blanks)
 
-    assign_roles(game, undercover_count)
+    assign_roles(
+        game,
+        undercover_count,
+        blank_count,
+        avoid_recent=cfg.spy_word_avoid_recent,
+    )
     game.ready = True
     game.reset_round_flags()
     mark_spy_room_active(gid)
     persist_game(game)
 
-    show_role = cfg.spy_show_role_default
     email_names, failed_names = await deliver_role_words(bot, game, show_role=show_role)
 
     msg = start_game_hint(numbered=render_alive_numbered(game), round_no=game.round_no)
@@ -256,6 +293,57 @@ async def handle_start(bot: Bot, event: GroupMessageEvent, arg: Message = Comman
     if extra:
         msg = f"{msg}\n{extra}"
     await cmd_start.finish(msg)
+
+
+@group_speak.handle()
+async def handle_group_speak(bot: Bot, event: GroupMessageEvent) -> None:
+    if not await claim_group_event(event):
+        return
+
+    cfg = get_spy_config()
+    gid = group_key(event.group_id)
+    user_id = event.user_id
+    game = await load_local_game(bot, gid)
+    if game is None or not game.ready or is_voting_phase(game):
+        return
+    if user_id not in game.players or not game.players[user_id].is_alive:
+        return
+
+    speech = extract_at_speech_text(event)
+    if not speech:
+        await group_speak.finish(speak_empty())
+        return
+
+    auto_vote = cfg.spy_auto_vote_when_all_spoken
+    max_len = cfg.spy_speak_max_len
+    recorded = truncate_speech(speech, max_len=max_len)
+
+    duplicate = False
+    all_spoken = False
+    pending = 0
+    async with game.lock:
+        if is_voting_phase(game):
+            return
+        player = game.players[user_id]
+        if player.has_spoken_this_round:
+            duplicate = True
+        else:
+            player.has_spoken_this_round = True
+            game.round_speeches[user_id] = recorded
+            pending = game.alive_not_spoken_count()
+            all_spoken = game.all_alive_have_spoken()
+            sync_active_game(game)
+
+    if duplicate:
+        await group_speak.finish(speak_already())
+        return
+
+    if auto_vote and all_spoken:
+        msg = await enter_voting_phase(bot, game, auto_triggered=True)
+        await group_speak.finish(msg)
+        return
+
+    await group_speak.finish(speak_recorded(pending_count=pending))
 
 
 @cmd_vote.handle()
@@ -273,14 +361,7 @@ async def handle_vote(bot: Bot, event: GroupMessageEvent) -> None:
     if is_voting_phase(game):
         await cmd_vote.finish(err_already_voting())
 
-    async with game.lock:
-        email_names, failed_names = await pm_invite_for_voting(bot, game)
-        persist_game(game)
-
-    msg = speak_round_to_vote()
-    extra = delivery_report(email_users=email_names, failed_users=failed_names)
-    if extra:
-        msg = f"{msg}\n{extra}"
+    msg = await enter_voting_phase(bot, game, auto_triggered=False)
     await cmd_vote.finish(msg)
 
 
@@ -313,7 +394,12 @@ async def handle_end(bot: Bot, event: GroupMessageEvent) -> None:
         if not await can_close_spy_room(bot, event, game):
             await cmd_end.finish(err_end_owner_only())
         close_spy_room(gid)
-        await cmd_end.finish(room_closed())
+        await cmd_end.finish(
+            room_closed(
+                civilian_word=game.word_civilian if game.ready else "",
+                undercover_word=game.word_undercover if game.ready else "",
+            )
+        )
         return
 
     lock = SPY_GROUP_LOCK.read(gid)
@@ -386,7 +472,7 @@ async def handle_pm_vote(bot: Bot, event: PrivateMessageEvent) -> None:
             if not is_voting_phase(game):
                 await pm_numeric_vote.finish(pm_cannot_abstain_yet())
             game.votes[user_id] = None
-            persist_game(game)
+            sync_active_game(game)
             all_done = set(game.votes.keys()) >= set(game.alive_ids())
         await pm_numeric_vote.send(vote_abstained())
         if all_done:

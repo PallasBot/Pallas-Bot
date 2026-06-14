@@ -22,7 +22,7 @@ def quit_ok(count: int) -> str:
 
 
 def speak_phase_hint(*, round_no: int) -> str:
-    return f"第 {round_no} 轮 · 自由描述，议完房主发「{CMD_VOTE}」开始投票。"
+    return f"第 {round_no} 轮 · @牛牛 发描述记为述词，全员述完后自动投票（或房主发「{CMD_VOTE}」）。"
 
 
 def start_game_hint(*, numbered: str, round_no: int = 1) -> str:
@@ -30,6 +30,10 @@ def start_game_hint(*, numbered: str, round_no: int = 1) -> str:
 
 
 def role_word_private(*, role: str, word: str, show_role: bool) -> str:
+    if role == "白板":
+        if show_role:
+            return "你是白板，没有词语。请听描述猜词并混过去。\n别在群里说。"
+        return "你没有词语（白板）。请听描述猜词并混过去。\n别在群里说。"
     if show_role:
         return f"你的词：{word}（{role}）\n别在群里说。"
     return f"你的词：{word}\n别在群里说。"
@@ -44,7 +48,12 @@ def vote_invite_email(*, numbered: str) -> str:
 
 
 def role_word_email(*, role: str, word: str, show_role: bool) -> str:
-    if show_role:
+    if role == "白板":
+        if show_role:
+            body = "你是白板，没有词语。请听描述猜词并混过去。\n"
+        else:
+            body = "你没有词语（白板）。请听描述猜词并混过去。\n"
+    elif show_role:
         body = f"你的词：{word}（{role}）\n"
     else:
         body = f"你的词：{word}\n"
@@ -60,8 +69,38 @@ def delivery_report(*, email_users: list[str], failed_users: list[str]) -> str:
     return "\n".join(lines)
 
 
-def speak_round_to_vote() -> str:
+def speak_round_to_vote(*, auto_triggered: bool = False) -> str:
+    if auto_triggered:
+        return "全员已述词，进入投票，请看私聊。"
     return "进入投票，请看私聊。"
+
+
+def speak_recap_header() -> str:
+    return "本轮述词："
+
+
+def speak_recorded(*, pending_count: int) -> str:
+    if pending_count <= 0:
+        return "述词已记录。"
+    return f"述词已记录，还有 {pending_count} 人未 @牛牛 述词。"
+
+
+def speak_already() -> str:
+    return "你这轮已经 @牛牛 述词过了。"
+
+
+def speak_empty() -> str:
+    return "@牛牛 后请写上描述，空消息不算述词。"
+
+
+def vote_phase_group_message(*, recap: str, vote_hint: str, delivery_extra: str) -> str:
+    lines: list[str] = []
+    if recap:
+        lines.append(recap)
+    lines.append(vote_hint)
+    if delivery_extra:
+        lines.append(delivery_extra)
+    return "\n".join(lines)
 
 
 def vote_recorded(name: str) -> str:
@@ -72,16 +111,28 @@ def vote_abstained() -> str:
     return "已弃权。"
 
 
-def game_over_tail() -> str:
-    return f"本局结束。再来一局发「{CMD_OPEN}」。"
+def word_pair_line(*, civilian_word: str, undercover_word: str) -> str:
+    civilian = (civilian_word or "").strip()
+    undercover = (undercover_word or "").strip()
+    if not civilian or not undercover:
+        return ""
+    return f"本局词对：平民「{civilian}」｜卧底「{undercover}」"
+
+
+def game_over_tail(*, civilian_word: str = "", undercover_word: str = "") -> str:
+    lines = [f"本局结束。再来一局发「{CMD_OPEN}」。"]
+    pair = word_pair_line(civilian_word=civilian_word, undercover_word=undercover_word)
+    if pair:
+        lines.append(pair)
+    return "\n".join(lines)
 
 
 def vote_all_abstain() -> str:
-    return f"全员弃权，重新讨论；房主发「{CMD_VOTE}」再投。"
+    return f"全员弃权，重新 @牛牛 述词；或房主发「{CMD_VOTE}」再投。"
 
 
 def vote_tie() -> str:
-    return f"最高票相同，重新讨论；房主发「{CMD_VOTE}」再投。"
+    return f"最高票相同，重新 @牛牛 述词；或房主发「{CMD_VOTE}」再投。"
 
 
 def vote_eliminated_hidden(name: str) -> str:
@@ -110,8 +161,16 @@ def game_win_summary(
     civilian_word: str,
     undercover_word: str,
     undercover_names: str,
+    blank_names: str = "",
 ) -> str:
-    return f"{headline}\n平民词：{civilian_word}｜卧底词：{undercover_word}\n卧底：{undercover_names}"
+    lines = [
+        headline,
+        f"平民词：{civilian_word}｜卧底词：{undercover_word}",
+        f"卧底：{undercover_names}",
+    ]
+    if blank_names:
+        lines.append(f"白板：{blank_names}")
+    return "\n".join(lines)
 
 
 def email_subject_words() -> str:
@@ -127,7 +186,7 @@ def status_panel(*, round_no: int, alive: int, numbered: str, voting: bool) -> s
     if voting:
         lines.append("投票：私聊回复序号，0 弃权。")
     else:
-        lines.append(f"讨论中：房主发「{CMD_VOTE}」开始投票。")
+        lines.append(f"讨论中：@牛牛 述词，或房主发「{CMD_VOTE}」开始投票。")
     return "\n".join(lines)
 
 
@@ -203,8 +262,12 @@ def err_end_owner_only() -> str:
     return f"只有房主或群管能结束，请发「{CMD_END}」。"
 
 
-def room_closed() -> str:
-    return "房间已关。"
+def room_closed(*, civilian_word: str = "", undercover_word: str = "") -> str:
+    lines = ["房间已关。"]
+    pair = word_pair_line(civilian_word=civilian_word, undercover_word=undercover_word)
+    if pair:
+        lines.append(pair)
+    return "\n".join(lines)
 
 
 def pm_no_vote_pending() -> str:

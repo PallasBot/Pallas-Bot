@@ -26,26 +26,6 @@ class HostedActivityIngressSpec:
     speak_at_fleet_bot_only: bool = True
 
 
-def message_at_fleet_bot(event) -> bool:
-    from src.platform.multi_bot.fleet import get_fleet_bot_ids
-
-    fleet = get_fleet_bot_ids()
-    if not fleet:
-        return False
-    for seg in event.message:
-        if seg.type != "at":
-            continue
-        qq = seg.data.get("qq")
-        if qq is None or str(qq) in ("all", "0"):
-            continue
-        try:
-            if int(qq) in fleet:
-                return True
-        except (TypeError, ValueError):
-            continue
-    return False
-
-
 def _matches_prefix(text: str, prefixes: tuple[str, ...]) -> bool:
     if not text:
         return False

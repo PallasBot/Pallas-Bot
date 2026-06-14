@@ -2,7 +2,7 @@ import time
 
 from nonebot import logger, on_message
 from nonebot.adapters import Bot, Event
-from nonebot.rule import to_me
+from nonebot.rule import Rule
 from ulid import ULID
 
 from src.features.cmd_perm import group_message_permission_for_command
@@ -21,10 +21,16 @@ def refresh_server_url(cfg: Config | None = None) -> None:
     SERVER_URL = ollama_server_url(cfg if isinstance(cfg, Config) else get_ollama_config())
 
 
+def ollama_chat_rule(event: Event) -> bool:
+    if not get_ollama_config().ollama_enable:
+        return False
+    return bool(getattr(event, "to_me", False))
+
+
 ollama_chat = on_message(
     priority=get_ollama_config().ollama_min_priority + 1,
     block=False,
-    rule=to_me(),
+    rule=Rule(ollama_chat_rule),
     permission=group_message_permission_for_command("ollama.chat"),
 )
 

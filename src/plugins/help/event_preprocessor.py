@@ -9,14 +9,13 @@ from nonebot.message import event_preprocessor, run_preprocessor
 
 from src.platform.ingress.help_plaintext import is_help_plaintext
 from src.platform.ingress.plugin_command_plaintext import is_plugin_command_plaintext
-from src.platform.multi_bot.dedup import try_claim_cross_bot_message, try_claim_cross_bot_message_memory
+from src.platform.multi_bot.dedup import try_claim_cross_bot_message_memory
 from src.platform.shard.registry.config import is_sharding_active
 
 from .plugin_manager import collect_disabled_plugin_names, superuser_bypasses_plugin_disable
 
 _blocked_events: dict[str, frozenset[str]] = {}
 _COMMAND_INGRESS_PLUGIN = "command_ingress"
-_SHARDED_COMMAND_INGRESS_PLUGIN = "ingress_gate"
 
 
 IGNORED_PLUGINS = ["help"]
@@ -53,17 +52,9 @@ async def command_cross_bot_claim_won(
 
     if ingress_fanout_bypasses_claim(text):
         return True
+    # 分片：ingress_gate 已做跨牛 claim，避免 run_preprocessor 二次抢占导致口令无响应。
     if is_sharding_active():
-        return await try_claim_cross_bot_message(
-            _SHARDED_COMMAND_INGRESS_PLUGIN,
-            group_id,
-            user_id,
-            text,
-            message_time,
-            bot_id,
-            use_plaintext=True,
-            include_message_time=True,
-        )
+        return True
     return await try_claim_cross_bot_message_memory(
         _COMMAND_INGRESS_PLUGIN,
         group_id,

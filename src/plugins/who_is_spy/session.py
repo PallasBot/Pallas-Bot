@@ -80,10 +80,12 @@ def read_active_game_snapshot(group_id: int) -> Game | None:
 def resolve_game_sync(group_id: int) -> Game | None:
     """内存无局或仅有筹备房时，优先用协调层已开局快照（供 Rule / ingress 使用）。"""
     gid = group_key(group_id)
+    cached = games.get(gid)
+    if cached is not None and cached.ready:
+        return cached
     active = read_active_game_snapshot(gid)
     if active is not None:
         return bind_local_game(active)
-    cached = games.get(gid)
     if cached is not None:
         if cached.ready or not spy_session_active(gid):
             return cached

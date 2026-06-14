@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from .group_lock import SPY_GROUP_LOCK
@@ -64,12 +65,14 @@ def game_to_snapshot(game: Game) -> dict[str, Any]:
         "expecting_pm_vote": [int(uid) for uid in game.expecting_pm_vote],
         "votes": {str(uid): vote for uid, vote in game.votes.items()},
         "vote_box": {str(uid): count for uid, count in game.vote_box.items()},
+        "round_speeches": {str(uid): text for uid, text in game.round_speeches.items()},
         "players": [
             {
                 "uid": int(player.uid),
                 "nickname": str(player.nickname),
                 "is_alive": bool(player.is_alive),
                 "is_undercover": bool(player.is_undercover),
+                "is_blank": bool(player.is_blank),
                 "has_spoken_this_round": bool(player.has_spoken_this_round),
             }
             for player in game.players.values()
@@ -119,6 +122,17 @@ def game_from_snapshot(raw: dict[str, Any]) -> Game | None:
             except (TypeError, ValueError):
                 continue
 
+    speeches_raw = raw.get("round_speeches")
+    if isinstance(speeches_raw, dict):
+        for key, value in speeches_raw.items():
+            try:
+                uid = int(key)
+            except (TypeError, ValueError):
+                continue
+            text = str(value or "").strip()
+            if text:
+                game.round_speeches[uid] = text
+
     players_raw = raw.get("players")
     if isinstance(players_raw, list):
         for row in players_raw:
@@ -133,6 +147,7 @@ def game_from_snapshot(raw: dict[str, Any]) -> Game | None:
                 nickname=str(row.get("nickname") or uid),
                 is_alive=bool(row.get("is_alive", True)),
                 is_undercover=bool(row.get("is_undercover")),
+                is_blank=bool(row.get("is_blank")),
                 has_spoken_this_round=bool(row.get("has_spoken_this_round")),
             )
 
@@ -147,6 +162,10 @@ def write_game_snapshot(game: Game) -> None:
 
     def stamp(data: dict[str, Any]) -> None:
         data[GAME_SNAPSHOT_KEY] = payload
+        if game.ready:
+            now = time.time()
+            data["session_active"] = True
+            data["session_until"] = now + SPY_GROUP_LOCK.busy_ttl_sec
 
     SPY_GROUP_LOCK._mutate(gid, stamp)
 

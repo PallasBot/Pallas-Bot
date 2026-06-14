@@ -34,12 +34,12 @@ def test_assign_roles_shuffles_seat_order(monkeypatch) -> None:
 
     monkeypatch.setattr("src.plugins.who_is_spy.logic.random.shuffle", fake_shuffle)
 
-    assign_roles(game, undercover_count=1)
+    assign_roles(game, undercover_count=1, blank_count=0, avoid_recent=0)
     first = list(game.alive_order)
     assert build_index_map(game)[1] == 10
 
     game.players = {uid: Player(uid=uid, nickname=str(uid)) for uid in (10, 20, 30, 40)}
-    assign_roles(game, undercover_count=1)
+    assign_roles(game, undercover_count=1, blank_count=0, avoid_recent=0)
     second = list(game.alive_order)
     assert build_index_map(game)[1] == 40
     assert first != second

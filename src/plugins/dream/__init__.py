@@ -17,6 +17,7 @@ from src.features.cmd_perm.metadata_text import SCENE_AUTO, SCENE_GROUP, join_us
 from src.features.message_scrub import is_message_scrub_blocked_async
 from src.features.message_scrub.log_preview import scrub_intercept_log_preview
 from src.foundation.config import BotConfig, GroupConfig
+from src.platform.ingress.dream_host_gate import dream_session_ingress_passes
 
 from . import ban_handlers as _dream_ban_handlers  # noqa: F401 — 注册梦库「不可以」/撤回清理
 from .capture_filter import dream_capture_blocked_by_substrings
@@ -126,7 +127,9 @@ async def _(event: GroupMessageEvent):
 
 
 async def is_dream_wake(event: GroupMessageEvent) -> bool:
-    return event.get_plaintext().strip() in {"牛牛醒梦", "牛牛别做梦"}
+    if event.get_plaintext().strip() not in {"牛牛醒梦", "牛牛别做梦"}:
+        return False
+    return await dream_session_ingress_passes(int(event.self_id), int(event.group_id))
 
 
 dream_wake = on_message(
@@ -151,7 +154,9 @@ async def is_dream_capture(event: GroupMessageEvent) -> bool:
     if event.user_id == event.self_id:
         return False
     cfg = BotConfig(event.self_id, event.group_id)
-    return await cfg.is_dreaming()
+    if not await cfg.is_dreaming():
+        return False
+    return await dream_session_ingress_passes(int(event.self_id), int(event.group_id))
 
 
 dream_capture = on_message(
