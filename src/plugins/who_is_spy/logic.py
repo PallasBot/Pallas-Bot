@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from src.platform.multi_bot.dedup import needs_group_host_bot_gate, release_group_owned_gate_sync
 
 from .config import get_spy_config
+from .coord_store import clear_game_snapshot, write_game_snapshot
 from .copy import (
     email_subject_vote,
     email_subject_words,
@@ -15,7 +16,6 @@ from .copy import (
     role_word_email,
     role_word_private,
     round_start,
-    speak_turn_prompt,
     vote_all_abstain,
     vote_eliminated_hidden,
     vote_eliminated_reveal,
@@ -26,7 +26,7 @@ from .copy import (
     vote_tie,
 )
 from .deliver import deliver_player_message
-from .group_lock import clear_spy_room_session, end_spy_room_lock
+from .group_lock import clear_spy_room_session
 from .store import WORD_BANK
 
 if TYPE_CHECKING:
@@ -35,6 +35,11 @@ if TYPE_CHECKING:
     from .models import Game
 
 games: dict[int, Game] = {}
+
+
+def sync_active_game(game: Game) -> None:
+    if game.ready:
+        write_game_snapshot(game)
 
 
 async def get_nickname(bot: Bot, group_id: int, user_id: int) -> str:
@@ -53,33 +58,33 @@ def current_alive_order(game: Game) -> list[int]:
     return [user_id for user_id in game.alive_order if game.players[user_id].is_alive]
 
 
+def player_seat_no(game: Game, user_id: int) -> int:
+    return game.alive_order.index(user_id) + 1
+
+
 def build_index_map(game: Game) -> dict[int, int]:
-    order = current_alive_order(game)
-    return dict(enumerate(order, start=1))
+    """本局固定座位号 → 玩家 uid（仅在场）。"""
+    out: dict[int, int] = {}
+    for user_id in game.alive_order:
+        player = game.players.get(user_id)
+        if player is None or not player.is_alive:
+            continue
+        out[player_seat_no(game, user_id)] = user_id
+    return out
 
 
 def render_alive_numbered(game: Game) -> str:
     index_map = build_index_map(game)
     lines = []
-    for index in sorted(index_map.keys()):
-        user_id = index_map[index]
+    for seat in sorted(index_map.keys()):
+        user_id = index_map[seat]
         player = game.players[user_id]
-        lines.append(f"{index}. {player.nickname}")
+        lines.append(f"{seat}. {player.nickname}")
     return "\n".join(lines)
 
 
 def is_voting_phase(game: Game) -> bool:
     return bool(game.expecting_pm_vote) and game.vote_round_tag == game.round_no
-
-
-def current_speaker_id(game: Game) -> int | None:
-    for user_id in game.alive_order:
-        player = game.players.get(user_id)
-        if player is None or not player.is_alive:
-            continue
-        if not player.has_spoken_this_round:
-            return user_id
-    return None
 
 
 def pick_words() -> tuple[str, str]:
@@ -163,14 +168,15 @@ async def pm_invite_for_voting(bot: Bot, game: Game) -> tuple[list[str], list[st
 
 async def schedule_cleanup(group_id: int, delay: int | None = None) -> None:
     cleanup_sec = delay if delay is not None else get_spy_config().spy_room_cleanup_sec
+    gid = int(group_id)
     try:
         await asyncio.sleep(cleanup_sec)
-        game = games.get(group_id)
+        game = games.get(gid)
         if game and not game.ready:
-            games.pop(group_id, None)
-            end_spy_room_lock(group_id)
+            games.pop(gid, None)
+            clear_game_snapshot(gid)
             if needs_group_host_bot_gate():
-                release_group_owned_gate_sync("who_is_spy", group_id)
+                release_group_owned_gate_sync("who_is_spy", gid)
     except Exception:
         pass
 
@@ -187,12 +193,11 @@ async def settle_and_announce(bot: Bot, game: Game) -> None:
     if not game.vote_box:
         await bot.send_group_msg(group_id=group_id, message=vote_all_abstain())
         game.reset_round_flags()
-        next_speaker = current_speaker_id(game)
-        if next_speaker is not None:
-            await bot.send_group_msg(
-                group_id=group_id,
-                message=speak_turn_prompt(user_id=next_speaker, round_no=game.round_no),
-            )
+        sync_active_game(game)
+        await bot.send_group_msg(
+            group_id=group_id,
+            message=round_start(round_no=game.round_no, numbered=render_alive_numbered(game)),
+        )
         return
 
     index_map = build_index_map(game)
@@ -217,12 +222,11 @@ async def settle_and_announce(bot: Bot, game: Game) -> None:
     if len(top) >= 2:
         await bot.send_group_msg(group_id=group_id, message=vote_tie())
         game.reset_round_flags()
-        next_speaker = current_speaker_id(game)
-        if next_speaker is not None:
-            await bot.send_group_msg(
-                group_id=group_id,
-                message=speak_turn_prompt(user_id=next_speaker, round_no=game.round_no),
-            )
+        sync_active_game(game)
+        await bot.send_group_msg(
+            group_id=group_id,
+            message=round_start(round_no=game.round_no, numbered=render_alive_numbered(game)),
+        )
         return
 
     eliminated = top[0]
@@ -252,6 +256,7 @@ async def settle_and_announce(bot: Bot, game: Game) -> None:
         game.votes.clear()
         game.vote_box.clear()
         clear_spy_room_session(group_id)
+        clear_game_snapshot(int(group_id))
 
         await bot.send_group_msg(group_id=group_id, message=game_over_tail())
         asyncio.create_task(schedule_cleanup(group_id))
@@ -262,11 +267,8 @@ async def settle_and_announce(bot: Bot, game: Game) -> None:
         message=vote_eliminated_hidden(eliminated_player.nickname),
     )
     game.reset_round_flags()
-
-    await bot.send_group_msg(group_id=group_id, message=round_start(game.round_no))
-    next_speaker = current_speaker_id(game)
-    if next_speaker is not None:
-        await bot.send_group_msg(
-            group_id=group_id,
-            message=speak_turn_prompt(user_id=next_speaker, round_no=game.round_no),
-        )
+    sync_active_game(game)
+    await bot.send_group_msg(
+        group_id=group_id,
+        message=round_start(round_no=game.round_no, numbered=render_alive_numbered(game)),
+    )

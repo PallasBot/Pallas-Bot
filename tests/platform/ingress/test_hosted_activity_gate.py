@@ -18,6 +18,7 @@ SPY_SPEC = HostedActivityIngressSpec(
         "牛牛退出",
         "牛牛发身份",
         "牛牛开始",
+        "牛牛投票",
         "牛牛局势",
         "牛牛结束",
     ),
@@ -45,7 +46,24 @@ def test_hosted_ingress_passes_when_no_host_gate(monkeypatch) -> None:
     assert hosted_activity_ingress_passes(1, 100, "牛牛加入") is True
 
 
-def test_hosted_ingress_open_always_passes(monkeypatch) -> None:
+def test_hosted_ingress_open_end_pass_without_room(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "src.platform.ingress.hosted_activity_gate.loaded_hosted_activity_specs",
+        lambda: (SPY_SPEC,),
+    )
+    monkeypatch.setattr(
+        "src.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "src.platform.ingress.hosted_activity_gate.hosted_activity_live",
+        lambda **_k: False,
+    )
+    assert hosted_activity_ingress_passes(999, 100, "牛牛卧底") is True
+    assert hosted_activity_ingress_passes(999, 100, "牛牛结束") is True
+
+
+def test_hosted_ingress_open_end_require_host_when_room_live(monkeypatch) -> None:
     monkeypatch.setattr(
         "src.platform.ingress.hosted_activity_gate.loaded_hosted_activity_specs",
         lambda: (SPY_SPEC,),
@@ -58,12 +76,19 @@ def test_hosted_ingress_open_always_passes(monkeypatch) -> None:
         "src.platform.ingress.hosted_activity_gate.hosted_activity_live",
         lambda **_k: True,
     )
+
+    def holder(plugin: str, group_id: int, bot_id: int) -> bool:
+        assert plugin == "who_is_spy"
+        return bot_id == 42
+
     monkeypatch.setattr(
         "src.platform.ingress.hosted_activity_gate.is_owned_gate_holder_sync",
-        lambda *_a, **_k: False,
+        holder,
     )
-    assert hosted_activity_ingress_passes(999, 100, "牛牛卧底") is True
-    assert hosted_activity_ingress_passes(999, 100, "牛牛结束") is True
+    assert hosted_activity_ingress_passes(42, 100, "牛牛卧底") is True
+    assert hosted_activity_ingress_passes(42, 100, "牛牛结束") is True
+    assert hosted_activity_ingress_passes(99, 100, "牛牛卧底") is False
+    assert hosted_activity_ingress_passes(99, 100, "牛牛结束") is False
 
 
 def test_hosted_ingress_in_room_requires_host(monkeypatch) -> None:

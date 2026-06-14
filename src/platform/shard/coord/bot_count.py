@@ -19,6 +19,7 @@ from src.platform.shard.coord.coord_redis_store import (
 from src.platform.shard.registry.config import get_shard_registry_settings
 
 _BOT_COUNT_TEXTS = frozenset({"牛牛报数", "牛牛出列"})
+_BOT_COUNT_TRAILING_PUNCT = "！!？?。.,…~～"
 _COLLECT_SEC = 3.0
 _POLL_SEC = 0.08
 _STABLE_SEC = 0.45
@@ -27,9 +28,25 @@ _SESSION_TTL_SEC = 3600
 STAGGER_SEC = 0.35
 
 
+def normalize_bot_count_command_plaintext(plain: str) -> str:
+    """去掉首尾空白与尾部常见标点，便于 fanout / 协调与 on_command 判定一致。"""
+    text = (plain or "").strip()
+    while text and text[-1] in _BOT_COUNT_TRAILING_PUNCT:
+        text = text[:-1]
+    return text
+
+
+def bot_count_coord_plaintext(plain: str) -> str:
+    """协调 claim_key 用：报数口令归一化，其它明文保持 strip 后原样。"""
+    normalized = normalize_bot_count_command_plaintext(plain)
+    if normalized in _BOT_COUNT_TEXTS:
+        return normalized
+    return (plain or "").strip()
+
+
 def is_shard_bot_count_command_plaintext(plain: str) -> bool:
     """牛牛报数 / 牛牛出列：分片协调依赖各 worker 同时进入 handler。"""
-    return (plain or "").strip() in _BOT_COUNT_TEXTS
+    return normalize_bot_count_command_plaintext(plain) in _BOT_COUNT_TEXTS
 
 
 def should_skip_ingress_claim_for_shard_bot_count(plain: str) -> bool:
@@ -42,12 +59,12 @@ def should_skip_ingress_claim_for_shard_bot_count(plain: str) -> bool:
 def is_bot_count_fanout_plaintext(plain: str) -> bool:
     if should_skip_ingress_claim_for_shard_bot_count(plain):
         return True
-    text = (plain or "").strip()
-    if text not in _BOT_COUNT_TEXTS:
+    normalized = normalize_bot_count_command_plaintext(plain)
+    if normalized not in _BOT_COUNT_TEXTS:
         return False
     from src.platform.shard.ingress_fanout import is_ingress_fanout_plaintext
 
-    return is_ingress_fanout_plaintext(text)
+    return is_ingress_fanout_plaintext(normalized)
 
 
 def _session_key(group_id: int, claim_key: int) -> str:
@@ -289,7 +306,7 @@ async def update_shard_bot_count_registration(
     claim_key = cross_bot_group_message_key(
         group_id,
         user_id,
-        plaintext,
+        bot_count_coord_plaintext(plaintext),
         message_time,
         use_plaintext=True,
     )
@@ -316,7 +333,7 @@ async def run_shard_coordinated_bot_count(
     claim_key = cross_bot_group_message_key(
         group_id,
         user_id,
-        plaintext,
+        bot_count_coord_plaintext(plaintext),
         message_time,
         use_plaintext=True,
     )

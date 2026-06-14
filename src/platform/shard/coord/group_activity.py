@@ -194,8 +194,7 @@ class GroupActivityLock:
         if self.try_begin(gid):
             return "ok"
         if not (
-            await self.try_reclaim_orphan(gid, has_local=has_local, local_alive=local_alive)
-            and self.try_begin(gid)
+            await self.try_reclaim_orphan(gid, has_local=has_local, local_alive=local_alive) and self.try_begin(gid)
         ):
             return "busy"
         return "ok"

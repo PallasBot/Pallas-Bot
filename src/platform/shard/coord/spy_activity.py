@@ -20,7 +20,13 @@ SPY_ACTIVITY_NS = "spy_group"
 
 SPY_ACTIVITY_LOCK = get_group_activity_lock(
     SPY_ACTIVITY_NS,
-    session_extra_keys=frozenset({"session_active", "prep_owner_id", "prep_host_bot_id"}),
+    session_extra_keys=frozenset({
+        "session_active",
+        "prep_owner_id",
+        "prep_host_bot_id",
+        "prep_players",
+        "game_snapshot",
+    }),
     is_live_session=lambda data: session_live_by_flag(data, flag_key="session_active"),
 )
 

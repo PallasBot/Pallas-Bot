@@ -10,6 +10,7 @@ from src.platform.shard.coord.spy_activity import (
     mark_spy_room_session,
     read_spy_prep_room,
     spy_room_coord_live,
+    spy_session_active,
 )
 
 SPY_GROUP_LOCK = SPY_ACTIVITY_LOCK
@@ -22,4 +23,5 @@ __all__ = [
     "mark_spy_room_session",
     "read_spy_prep_room",
     "spy_room_coord_live",
+    "spy_session_active",
 ]

@@ -7,7 +7,7 @@ from src.features.cmd_perm.metadata_defaults import (
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, SCENE_PRIVATE, join_usage, usage_line
 
-from .commands import CMD_END, CMD_JOIN, CMD_OPEN, CMD_QUIT, CMD_START, CMD_STATUS, SPY_GROUP_COMMAND_PREFIXES
+from .commands import CMD_END, CMD_JOIN, CMD_OPEN, CMD_QUIT, CMD_START, CMD_STATUS, CMD_VOTE, SPY_GROUP_COMMAND_PREFIXES
 from .config import Config
 from .store import init_store
 
@@ -18,15 +18,14 @@ from . import handlers as _handlers  # noqa: E402, F401
 __plugin_meta__ = PluginMetadata(
     name="牛牛卧底",
     description=(
-        "谁是卧底：房主开房、玩家加入，发词后按顺序 @牛牛 述词，"
-        "全员述毕私聊匿名投票，直至平民或卧底一方获胜。"
+        "谁是卧底：房主开房、玩家加入，发词后群内自由讨论，房主发「牛牛投票」后私聊匿名投票，直至平民或卧底一方获胜。"
     ),
     usage=join_usage(
         usage_line(CMD_OPEN, "房主开房间"),
         usage_line("牛牛谁是卧底", "同「牛牛卧底」"),
         usage_line(f"{CMD_JOIN} / {CMD_QUIT}", "加入或退出筹备中的房间"),
         usage_line(f"{CMD_START} / 牛牛开始 [潜藏人数]", "房主发词牌并开始"),
-        usage_line("按顺序 @牛牛", "述"),
+        usage_line(CMD_VOTE, "房主结束讨论、开始投票"),
         usage_line("私聊回复数字或 0", "投票"),
         usage_line(f"{CMD_STATUS} / {CMD_END}", "察看局势或结束房间"),
     ),
@@ -40,7 +39,7 @@ __plugin_meta__ = PluginMetadata(
         "command_permissions": [
             {"id": "who_is_spy.open", "label": CMD_OPEN, "default": "everyone"},
             {"id": "who_is_spy.join", "label": f"{CMD_JOIN}/{CMD_QUIT}", "default": "everyone"},
-            {"id": "who_is_spy.start", "label": CMD_START, "default": "everyone"},
+            {"id": "who_is_spy.start", "label": f"{CMD_START}/{CMD_VOTE}", "default": "everyone"},
             {"id": "who_is_spy.status", "label": CMD_STATUS, "default": "everyone"},
             {"id": "who_is_spy.end", "label": CMD_END, "default": "everyone"},
         ],
@@ -62,7 +61,7 @@ __plugin_meta__ = PluginMetadata(
                 "brief_des": "房主开房间",
                 "detail_des": (
                     f"房主开房后自动加入名册；其他人发「{CMD_JOIN}」加入、"
-                    f"「{CMD_QUIT}」退出。人数达下限后，房主发「{CMD_START}」或「牛牛开始」开局。"
+                    f"「{CMD_QUIT}」退出。至少满下限人数（默认 4 人）后，房主发「{CMD_START}」或「牛牛开始」开局。"
                 ),
             },
             {
@@ -86,19 +85,20 @@ __plugin_meta__ = PluginMetadata(
                 "brief_des": "房主发词牌并开始",
                 "detail_des": (
                     "须为房主且人数达本局下限。词牌私聊发送（好友优先，否则临时会话或邮箱）。"
-                    "开局后会 @ 第一位玩家；按名册顺序轮流 @牛牛 述词，群内可自由聊天。"
-                    "全员述毕后私聊投票；票型公布含弃权数。卧底尽退则平民胜，存活卧底不少于平民则卧底胜。"
+                    "开局后群内自由讨论，议完房主发「牛牛投票」进入私聊投票；票型公布含弃权数。"
+                    "卧底尽退则平民胜，存活卧底不少于平民则卧底胜。"
                 ),
             },
             {
-                "func": "述词",
-                "trigger_method": "on_message",
+                "func": CMD_VOTE,
+                "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_GROUP,
-                "trigger_condition": "述词阶段按顺序 @牛牛",
-                "brief_des": "轮到顺序时 @牛牛 述词",
+                "trigger_condition": CMD_VOTE,
+                "command_permission": "who_is_spy.start",
+                "brief_des": "房主结束讨论并开始投票",
                 "detail_des": (
-                    "仅 @牛牛 的消息计入述词，须轮到你的顺序；普通群聊不计入。"
-                    "牛牛会 @ 下一位提醒。每人每轮一次，不可重复述词。"
+                    "讨论阶段由房主发「牛牛投票」；牛牛私聊序次列表，全员投毕后群内公布票型。"
+                    "全员弃权或最高票相同时重新讨论，再由房主发「牛牛投票」。"
                 ),
             },
             {
@@ -109,8 +109,7 @@ __plugin_meta__ = PluginMetadata(
                 "command_permission": "who_is_spy.status",
                 "brief_des": "察看局势与序次",
                 "detail_des": (
-                    "显示轮次、在场人数与带序次的名单。"
-                    "述词阶段提示按顺序 @牛牛；投票阶段提示私聊数字与 0 弃权。"
+                    "显示轮次、在场人数与带序次的名单。讨论阶段提示房主发「牛牛投票」；投票阶段提示私聊数字与 0 弃权。"
                 ),
             },
             {
@@ -120,10 +119,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_condition": CMD_END,
                 "command_permission": "who_is_spy.end",
                 "brief_des": "结束房间",
-                "detail_des": (
-                    f"房主或群管可发「{CMD_END}」结束对局或清理占位房间。"
-                    "空房间一段时间后会自动清理。"
-                ),
+                "detail_des": (f"房主或群管可发「{CMD_END}」结束对局或清理占位房间。空房间一段时间后会自动清理。"),
             },
             {
                 "func": "私聊投票",
@@ -132,7 +128,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_condition": "投票阶段私聊回复数字序次（0=弃权）",
                 "brief_des": "匿名投票",
                 "detail_des": (
-                    f"述词结束后牛牛私聊序次列表；回复数字投对应玩家，0 为弃权。"
+                    f"房主发「{CMD_VOTE}」后牛牛私聊序次列表；回复数字投对应玩家，0 为弃权。"
                     f"全员投毕后群内公布票型（含弃权）。序次见「{CMD_STATUS}」。"
                 ),
             },

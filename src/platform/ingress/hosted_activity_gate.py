@@ -149,14 +149,13 @@ def spec_host_gate_passes(
 ) -> bool:
     in_room = spec_matches_in_room_command(spec, plain)
     speak = spec_matches_speak_traffic(spec, group_id, plain, at_fleet_bot=at_fleet_bot)
-    if not in_room and not speak:
+    text = (plain or "").strip()
+    open_or_end = _matches_prefix(text, spec.always_pass_prefixes)
+
+    if not in_room and not speak and not open_or_end:
         return True
 
     if not needs_group_host_bot_gate():
-        return True
-
-    text = (plain or "").strip()
-    if _matches_prefix(text, spec.always_pass_prefixes):
         return True
 
     if not hosted_activity_live(

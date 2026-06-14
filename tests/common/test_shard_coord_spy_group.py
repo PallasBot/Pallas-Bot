@@ -78,6 +78,37 @@ def test_spy_prep_room_metadata(fake_coord_redis, monkeypatch) -> None:
     assert read_spy_prep_room(9001) is None
 
 
+def test_spy_prep_players_and_snapshot(fake_coord_redis, monkeypatch) -> None:
+    from src.plugins.who_is_spy.coord_store import read_prep_players, write_game_snapshot, write_prep_players
+    from src.plugins.who_is_spy.models import Game, Player
+
+    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(
+        ga_mod,
+        "get_shard_registry_settings",
+        lambda: type("S", (), {"shard_id": 0})(),
+    )
+    lock = ga_mod.get_group_activity_lock(
+        "spy_group",
+        session_extra_keys=frozenset(
+            {"session_active", "prep_owner_id", "prep_host_bot_id", "prep_players", "game_snapshot"}
+        ),
+        is_live_session=lambda data: ga_mod.session_live_by_flag(data, flag_key="session_active"),
+    )
+    assert lock.try_begin(9002) is True
+
+    game = Game(group_id=9002, owner_id=1)
+    game.players[1] = Player(uid=1, nickname="A")
+    game.players[2] = Player(uid=2, nickname="B")
+    write_prep_players(9002, game)
+    assert read_prep_players(9002) == [(1, "A"), (2, "B")]
+
+    game.ready = True
+    game.alive_order = [1, 2]
+    write_game_snapshot(game)
+    lock.end(9002)
+
+
 @pytest.mark.asyncio
 async def test_reclaim_skips_live_session(fake_coord_redis, monkeypatch) -> None:
     monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)

@@ -6,6 +6,7 @@ CMD_OPEN = "牛牛卧底"
 CMD_JOIN = "牛牛加入"
 CMD_QUIT = "牛牛退出"
 CMD_START = "牛牛发身份"
+CMD_VOTE = "牛牛投票"
 CMD_STATUS = "牛牛局势"
 CMD_END = "牛牛结束"
 
@@ -16,6 +17,7 @@ SPY_GROUP_COMMAND_PREFIXES = (
     CMD_QUIT,
     CMD_START,
     "牛牛开始",
+    CMD_VOTE,
     CMD_STATUS,
     CMD_END,
 )

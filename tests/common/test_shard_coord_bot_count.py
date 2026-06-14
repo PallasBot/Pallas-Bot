@@ -17,7 +17,37 @@ def test_fanout_plaintext(monkeypatch):
     clear_ingress_fanout_config_cache()
     assert mod.is_bot_count_fanout_plaintext("牛牛报数")
     assert mod.is_bot_count_fanout_plaintext("牛牛出列")
+    assert mod.is_bot_count_fanout_plaintext("牛牛出列！")
     assert not mod.is_bot_count_fanout_plaintext("牛牛喝酒")
+
+
+def test_bot_count_plaintext_normalizes_trailing_punctuation(monkeypatch):
+    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
+    assert mod.normalize_bot_count_command_plaintext("牛牛出列！") == "牛牛出列"
+    assert mod.normalize_bot_count_command_plaintext("  牛牛报数!  ") == "牛牛报数"
+    assert mod.is_shard_bot_count_command_plaintext("牛牛出列！")
+    assert mod.should_skip_ingress_claim_for_shard_bot_count("牛牛出列！")
+
+
+def test_bot_count_coord_plaintext_unifies_claim_key():
+    from src.platform.multi_bot.dedup import cross_bot_group_message_key
+
+    gid, uid, t = 733291779, 2538527601, 1781407061
+    key_plain = cross_bot_group_message_key(
+        gid,
+        uid,
+        mod.bot_count_coord_plaintext("牛牛出列"),
+        t,
+        use_plaintext=True,
+    )
+    key_punct = cross_bot_group_message_key(
+        gid,
+        uid,
+        mod.bot_count_coord_plaintext("牛牛出列！"),
+        t,
+        use_plaintext=True,
+    )
+    assert key_plain == key_punct
 
 
 def test_bot_count_ingress_fanout_without_greeting_whitelist(monkeypatch):
