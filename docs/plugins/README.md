@@ -23,6 +23,7 @@
 | [drink](./drink/README.md) | 喝酒 / 醒酒 |
 | [roulette](./roulette/README.md) | 轮盘 |
 | [duel](./duel/README.md) | 决斗、八角笼牛 |
+| [who_is_spy](./who_is_spy/README.md) | 谁是卧底 |
 | [dream](./dream/README.md) | 做梦、跨群漂流、历史梦 |
 | [chat](./chat/README.md) | 酒后聊天（AI） |
 | [ollama](./ollama/README.md) | 随时闲聊（Ollama） |

@@ -10,6 +10,7 @@ _COUNTERS = (
     "early_fleet",
     "early_not_at_target",
     "early_federate",
+    "early_spy_host",
     "fanout_bypass",
     "claim_won",
     "claim_lost",
@@ -57,6 +58,8 @@ def record_ingress_early_discard(reason: str) -> None:
         key = "early_fleet"
     elif reason == "federate":
         key = "early_federate"
+    elif reason == "spy_host":
+        key = "early_spy_host"
     else:
         key = "early_not_at_target"
     _state[key] += 1

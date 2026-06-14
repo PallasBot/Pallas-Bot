@@ -162,11 +162,12 @@ def end_duel_group(group_id: int) -> None:
 
 async def begin_duel_command(group_id: int) -> DuelCommandGate:
     """群级互斥 + 群级指令 CD（多 Bot 共用）。"""
-    if not try_begin_duel_group(group_id):
-        from src.platform.shard.coord.duel_group import try_reclaim_orphan_duel_group
+    from src.platform.shard.coord.duel_group import _LOCK
+    from src.plugins.duel.duel_session import get_duel_pair
 
-        if not (await try_reclaim_orphan_duel_group(group_id) and try_begin_duel_group(group_id)):
-            return "busy"
+    gate = await _LOCK.begin(group_id, local_alive=lambda: get_duel_pair(group_id))
+    if gate == "busy":
+        return "busy"
     group_cfg = GroupConfig(group_id, cooldown=plugin_config.duel_bot_cooldown_sec)
     if not await group_cfg.is_cooldown(DUEL_GROUP_COOLDOWN_KEY):
         end_duel_group(group_id)

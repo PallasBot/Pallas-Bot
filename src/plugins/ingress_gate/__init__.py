@@ -26,6 +26,10 @@ from src.platform.federate.peer_bots import (
     sync_federate_peer_bot_roster,
 )
 from src.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
+from src.platform.ingress.hosted_activity_gate import (
+    hosted_activity_ingress_passes,
+    message_at_fleet_bot,
+)
 from src.platform.multi_bot.dedup import (
     try_claim_cross_bot_message,
     try_claim_cross_shard_message,
@@ -171,6 +175,17 @@ async def ingress_group_message_gate(bot, event) -> None:
             if metrics:
                 record_ingress_early_discard("federate")
             raise IgnoredException("federate group owner mismatch")
+
+        if not hosted_activity_ingress_passes(
+            self_id,
+            int(event.group_id),
+            plain,
+            at_fleet_bot=message_at_fleet_bot(event),
+        ):
+            outcome = "spy_host_gate"
+            if metrics:
+                record_ingress_early_discard("spy_host")
+            raise IgnoredException("spy host gate")
 
         if not sharding_active:
             if not await try_claim_group_message_once(

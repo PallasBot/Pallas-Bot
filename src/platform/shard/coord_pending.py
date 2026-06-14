@@ -13,6 +13,7 @@ _COORD_PREFIXES = {
     "bot_count": "pallas:coord:bot_count:",
     "cage_duel": "pallas:coord:cage_duel:",
     "duel_group": "pallas:coord:duel_group:",
+    "spy_group": "pallas:coord:spy_group:",
     "group_gate": "pallas:coord:group_gate:",
     "maa_pending": "pallas:coord:maa_pending:",
     "maa_route": "pallas:coord:maa_route:",

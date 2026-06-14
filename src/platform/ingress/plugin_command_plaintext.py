@@ -69,6 +69,9 @@ def clear_plugin_command_plaintext_cache() -> None:
 
     _PLUGIN_PREFIX_CACHE_VALUE = None
     is_plugin_command_plaintext.cache_clear()
+    from src.platform.ingress.hosted_activity_gate import clear_hosted_activity_ingress_cache
+
+    clear_hosted_activity_ingress_cache()
 
 
 @lru_cache(maxsize=2048)

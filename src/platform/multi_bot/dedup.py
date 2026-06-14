@@ -34,6 +34,17 @@ def needs_persistent_message_claim() -> bool:
     return is_sharding_active()
 
 
+def needs_group_host_bot_gate() -> bool:
+    """分片或同进程多牛时才需主持牛 owned gate；单牛单进程不启用。"""
+    from nonebot import get_bots
+
+    from src.platform.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        return True
+    return len(get_bots()) > 1
+
+
 def normalize_group_raw_message(raw_message: str) -> str:
     # 与 ChatData / learn 侧一致，避免图片子类型差异导致去重失败
     return re.sub(r"\.image,.+?\]", ".image]", raw_message)
@@ -421,9 +432,87 @@ async def try_acquire_group_broadcast_slot(
         return True
 
 
+async def bind_group_owned_gate(
+    plugin: str,
+    group_id: int,
+    bot_id: int,
+    *,
+    gate_sec: float,
+) -> None:
+    await asyncio.to_thread(bind_group_owned_gate_sync, plugin, group_id, bot_id, gate_sec=gate_sec)
+
+
+def bind_group_owned_gate_sync(plugin: str, group_id: int, bot_id: int, *, gate_sec: float) -> None:
+    """强制绑定同群主持牛（进程内 + 分片 Redis）。"""
+    from src.platform.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        from src.platform.shard.coord.group_gate import bind_owned_gate_sync
+
+        bind_owned_gate_sync(plugin, int(group_id), int(bot_id), gate_sec=gate_sec)
+    ttl = max(1.0, float(gate_sec))
+    _owned_gate[(plugin, int(group_id))] = (int(bot_id), time.time() + ttl)
+
+
+async def is_group_owned_gate_holder(plugin: str, group_id: int, bot_id: int) -> bool:
+    from src.platform.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        from src.platform.shard.coord.group_gate import is_owned_gate_holder_sync
+
+        return await asyncio.to_thread(
+            is_owned_gate_holder_sync,
+            plugin,
+            int(group_id),
+            int(bot_id),
+        )
+    now = time.time()
+    rec = _owned_gate.get((plugin, int(group_id)))
+    if rec is None:
+        return True
+    owner, until = rec
+    if now >= until:
+        return True
+    return owner == int(bot_id)
+
+
+def release_group_owned_gate_sync(plugin: str, group_id: int) -> None:
+    """释放同群主持牛占位（进程内 + 分片 Redis）。"""
+    from src.platform.shard.registry.config import is_sharding_active
+
+    if is_sharding_active():
+        from src.platform.shard.coord.group_gate import release_owned_gate_sync
+
+        release_owned_gate_sync(plugin, int(group_id))
+    _owned_gate.pop((plugin, int(group_id)), None)
+
+
+async def release_group_owned_gate(plugin: str, group_id: int) -> None:
+    await asyncio.to_thread(release_group_owned_gate_sync, plugin, int(group_id))
+
+
 async def try_begin_group_draw_cheer(group_id: int, bot_id: int, *, gate_sec: float) -> bool:
     """兼容：等同 try_begin_group_owned_gate(\"draw\", ...)。"""
     return await try_begin_group_owned_gate("draw", group_id, bot_id, gate_sec=gate_sec)
+
+
+async def begin_group_exclusive_activity(
+    namespace: str,
+    group_id: int,
+    *,
+    has_local: bool = False,
+    local_alive=None,
+) -> str:
+    """分片下同群独占活动开闸（如开房/开战）；namespace 即 Redis 协调键前缀。"""
+    from src.platform.shard.coord.group_activity import begin_group_activity, get_group_activity_lock
+
+    lock = get_group_activity_lock(namespace)
+    return await begin_group_activity(
+        lock,
+        group_id,
+        has_local=has_local,
+        local_alive=local_alive,
+    )
 
 
 async def claim_group_message_event(
