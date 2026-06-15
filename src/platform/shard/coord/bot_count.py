@@ -46,24 +46,6 @@ def is_shard_bot_count_command_plaintext(plain: str) -> bool:
     return normalize_bot_count_command_plaintext(plain) in _BOT_COUNT_TEXTS
 
 
-def should_skip_ingress_claim_for_shard_bot_count(plain: str) -> bool:
-    """分片 ingress 门控：报数类明文恒 fanout，不受 PALLAS_INGRESS_FANOUT_GREETING 限制。"""
-    from src.platform.shard.registry.config import is_sharding_active
-
-    return is_sharding_active() and is_shard_bot_count_command_plaintext(plain)
-
-
-def is_bot_count_fanout_plaintext(plain: str) -> bool:
-    if should_skip_ingress_claim_for_shard_bot_count(plain):
-        return True
-    normalized = normalize_bot_count_command_plaintext(plain)
-    if normalized not in _BOT_COUNT_TEXTS:
-        return False
-    from src.platform.shard.ingress_fanout import is_ingress_fanout_plaintext
-
-    return is_ingress_fanout_plaintext(normalized)
-
-
 def _session_key(group_id: int, claim_key: int) -> str:
     return coord_key("bot_count", group_id, claim_key)
 

@@ -24,7 +24,7 @@
 
 | 优先级 | 范围 | 方向 |
 | --- | --- | --- |
-| P0 | `help`、`repeater`、`bot_status` | 已部分元数据化；`help`/`repeater` 已迁 `shard.context`；继续删重复 preprocessor |
+| P0 | `help`、`repeater`、`bot_status` | `help`/`repeater`/`bot_status` 已迁 `shard.context`；报数逻辑抽出 `shard_count.py` |
 | P1 | `duel`、`dream`、`who_is_spy` | 统一走 `group_activity` / `hosted_activity`；删 per-game 薄封装 |
 | P2 | 其余含 `is_sharding_active` 的插件（约 30 处） | 迁到 `shard.context` + 少量 hook |
 | P3 | `ingress_gate` 插件本体 | 仅保留 worker/unified 必需逻辑；hub 路径再瘦身 |
