@@ -11,13 +11,14 @@
 | [插件开发入门](plugin/getting-started.md) | 新建插件、注册、最小示例 |
 | [插件结构与约定](plugin/structure.md) | 目录拆分、`data/` / `resource/`、文档与测试 |
 | [插件进阶能力](plugin/advanced.md) | cmd_perm、WebUI 热重载、消息审查、站点插件 |
+| [插件开发 Skill（Agent）](../skills/pallas-plugin-development/SKILL.md) | 分章手册，Cursor Agent 写插件时按需加载 |
 | [WebUI 前端开发](webui.md) | 独立仓库联调、窄屏与构建挂载 |
 
 ## 架构与通用能力（延伸阅读）
 
 | 文档 | 说明 |
 | --- | --- |
-| [项目结构](../architecture/project-structure.md) | 顶层目录与 `src/common` 分层 |
+| [项目结构](../architecture/project-structure.md) | 顶层目录与 `src/` 内核分层 |
 | [插件目录约定](../architecture/plugin-convention.md) | `src/plugins/*` 组织规范 |
 | [站点定制](../architecture/site-customization-and-updates.md) | `local/plugins`、更新策略 |
 | [命令权限 cmd_perm](../common/cmd_perm/README.md) | 帮助「何人可用」与 WebUI 覆盖 |

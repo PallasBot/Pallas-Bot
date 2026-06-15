@@ -21,6 +21,7 @@
 | [开发指南](develop/README.md) | 贡献者阅读顺序：环境、流程、插件与 WebUI |
 | [本地开发环境](develop/environment.md) | `uv`、配置、单进程 / 分片启动 |
 | [贡献与提交流程](develop/workflow.md) | Ruff、pre-commit、测试、PR 约定 |
+| [插件开发 Skill（Agent）](skills/pallas-plugin-development/SKILL.md) | 分章手册，写插件时按需加载 |
 
 ## 社区中心
 

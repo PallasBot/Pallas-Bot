@@ -23,19 +23,19 @@ src/plugins/my_plugin/
 
 ### 元数据与帮助文案
 
-使用 `src.common.cmd_perm.metadata_text` 统一 `usage` / `menu_data` 格式：
+使用 `src.features.cmd_perm.metadata_text` 统一 `usage` / `menu_data` 格式：
 
 ```python
 from nonebot import on_command
 from nonebot.plugin import PluginMetadata
 
-from src.common.cmd_perm import group_message_permission_for_command
-from src.common.cmd_perm.metadata_defaults import (
+from src.features.cmd_perm import group_message_permission_for_command
+from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
 )
-from src.common.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
+from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
 
 __plugin_meta__ = PluginMetadata(
     name="示例插件",
@@ -92,7 +92,7 @@ async def handle_demo():
 # config.py
 from pydantic import BaseModel, Field
 
-from src.common.webui import install_hot_reload_config
+from src.console.webui import install_hot_reload_config
 
 class Config(BaseModel, extra="ignore"):
     enable: bool = Field(default=True, description="是否启用。")
@@ -123,9 +123,10 @@ uv run pytest tests/plugins/my_plugin/
 
 - 目录拆分与路径约定：[插件结构与约定](structure.md)
 - cmd_perm、热重载、消息审查、跨插件能力：[插件进阶能力](advanced.md)
+- Agent 分章手册：[插件开发 Skill](../../skills/pallas-plugin-development/SKILL.md)
 - 规范总览：[插件目录约定](../../architecture/plugin-convention.md)
 
-## 外部参考
+## 延伸阅读
 
-- [NoneBot2 文档](https://nonebot.dev/)
-- [OneBot v11](https://github.com/botuniverse/onebot-11)
+- [NoneBot2 文档](https://nonebot.dev/)（Matcher 与事件模型）
+- [OneBot v11](https://github.com/botuniverse/onebot-11)（协议字段）
