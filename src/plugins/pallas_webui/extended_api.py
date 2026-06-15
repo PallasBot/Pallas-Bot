@@ -39,6 +39,7 @@ from src.console.webui.console_login import (
     set_shared_console_login_token,
     verify_console_password,
 )
+from src.platform.shard import context as shard_ctx
 
 from .console_meta_store import (
     get_console_meta,
@@ -48,6 +49,15 @@ from .console_meta_store import (
 
 if typing.TYPE_CHECKING:
     from .config import Config
+
+
+def _shard_hub_console() -> bool:
+    return shard_ctx.sharding_active() and shard_ctx.is_hub()
+
+
+def _shard_worker_console() -> bool:
+    return shard_ctx.sharding_active() and shard_ctx.is_worker()
+
 
 _INIT_LOG_SINK = False
 _READ_CACHE: dict[str, dict[str, Any]] = {}
@@ -355,10 +365,8 @@ def _ensure_bot_session_hooks() -> None:
 
 
 def _list_bots_dict() -> list[dict[str, Any]]:
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.presence import list_connected_bots_for_webui
 
         return list_connected_bots_for_webui()
@@ -590,10 +598,8 @@ def _find_online_onebot_v11_bot(self_id: str) -> tuple[str, object]:
 
 
 def _console_bot_online_in_cluster(self_id: str) -> bool:
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if not (is_sharding_active() and is_sharded_hub()):
+    if not _shard_hub_console():
         return False
     target = str(self_id).strip()
     if not target.isdigit():
@@ -1205,19 +1211,15 @@ def _sum_matcher_day_runs(sid: str) -> int:
 
 def _console_daily_stats_disk_enabled() -> bool:
     """分片 worker 不写 console_daily_stats.json，由 hub 合并 worker 快照落盘。"""
-    from src.platform.bot_runtime.roles import is_sharded_worker
-
-    return not is_sharded_worker()
+    return not _shard_worker_console()
 
 
 def _unified_console_live_stats_enabled() -> bool:
     """单进程（非 worker、非分片 hub）写 console_live_stats.json 并在启动时恢复。"""
-    from src.platform.bot_runtime.roles import is_sharded_hub, is_sharded_worker
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if is_sharded_worker():
+    if _shard_worker_console():
         return False
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         return False
     return True
 
@@ -1267,12 +1269,10 @@ def _merge_console_daily_flush_entry(
 
 def _collect_console_daily_flush_entries(today: str) -> list[tuple[str, str, int, int, int]]:
     """hub 定时刷盘：分片下合并各 worker stats 文件 + 本进程内存计数。"""
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
     bucket: dict[tuple[str, str], tuple[int, int, int]] = {}
 
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.console_stats import load_cluster_console_stats_by_sid
 
         for sid, blob in load_cluster_console_stats_by_sid().items():
@@ -1355,10 +1355,8 @@ def _rollover_console_day_if_needed(sid: str, today: str) -> None:
 def _flush_today_console_daily_stats_disk() -> None:
     """定时刷盘：当前自然日内累计值写入磁盘（不按桶）。"""
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-        from src.platform.shard.registry.config import is_sharding_active
 
-        if is_sharding_active() and is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.console_stats import prune_stale_worker_stats_bots_sync
 
             prune_stale_worker_stats_bots_sync()
@@ -1524,7 +1522,6 @@ async def flush_unified_console_live_stats_async(*, include_hist: bool = False) 
 
 
 def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None:
-    from src.platform.bot_runtime.roles import is_sharded_worker
     from src.platform.shard.console_stats import process_memory_snapshot, write_worker_stats_sync
     from src.platform.shard.coord_pending import coord_pending_snapshot_sync
     from src.platform.shard.ingress_metrics import ingress_metrics_snapshot
@@ -1532,7 +1529,7 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
     from src.platform.shard.registry.config import get_shard_registry_settings
     from src.platform.shard.repeater_ingress_metrics import repeater_ingress_metrics_snapshot
 
-    if not is_sharded_worker():
+    if not _shard_worker_console():
         return
     shard_id = int(get_shard_registry_settings().shard_id)
     try:
@@ -1592,11 +1589,10 @@ def _apply_console_stats_boot_snapshot(bots: dict[str, dict[str, Any]]) -> bool:
 
 
 def _restore_worker_console_stats_from_shard_file() -> None:
-    from src.platform.bot_runtime.roles import is_sharded_worker
     from src.platform.shard.console_stats import load_worker_console_stats_for_boot
     from src.platform.shard.registry.config import get_shard_registry_settings
 
-    if not is_sharded_worker():
+    if not _shard_worker_console():
         return
     shard_id = int(get_shard_registry_settings().shard_id)
     _apply_console_stats_boot_snapshot(load_worker_console_stats_for_boot(shard_id))
@@ -1657,9 +1653,8 @@ def start_worker_shard_console_stats_sync() -> None:
     global _WORKER_STATS_SYNC_STARTED
     if _WORKER_STATS_SYNC_STARTED:
         return
-    from src.platform.bot_runtime.roles import is_sharded_worker
 
-    if not is_sharded_worker():
+    if not _shard_worker_console():
         return
     _WORKER_STATS_SYNC_STARTED = True
 
@@ -2112,10 +2107,7 @@ async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
         total_today_sent += int(row["today_sent"])
         total_today_received += int(row["today_received"])
 
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.console_stats import load_cluster_console_stats_by_sid
         from src.platform.shard.presence import read_presence_bots
 
@@ -2412,10 +2404,8 @@ def _load_matcher_duration_logs_from_disk() -> None:
     cap = _MATCHER_DURATION_LOG_CAP
     worker_assigned: set[str] = set()
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-        from src.platform.shard.registry.config import is_sharding_active
 
-        if is_sharding_active() and is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.registry.store import get_shard_registry
 
             worker_assigned = {str(k).strip() for k in get_shard_registry().assignments if str(k).strip()}
@@ -2494,7 +2484,6 @@ def _append_matcher_duration_log(
     had_error: bool,
 ) -> None:
     """进程内环形缓冲；单进程/hub 另写 jsonl；分片 worker 由 stats 文件周期刷盘。"""
-    from src.platform.bot_runtime.roles import is_sharded_worker
 
     entry: dict[str, Any] = {
         "at": int(time.time()),
@@ -2510,7 +2499,7 @@ def _append_matcher_duration_log(
             log = rec["matcher_duration_log"]
         log.append(entry)
         enforce_matcher_duration_log_limits(log)
-        if is_sharded_worker():
+        if _shard_worker_console():
             return
         with _MATCHER_DURATION_JSONL_LOCK:
             _rewrite_matcher_durations_jsonl()
@@ -2528,10 +2517,8 @@ def _matcher_duration_log_public(
         return []
     day_filter = ""
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-        from src.platform.shard.registry.config import is_sharding_active
 
-        if is_sharding_active() and is_sharded_hub():
+        if _shard_hub_console():
             day_filter = time.strftime("%Y-%m-%d", time.localtime())
     except Exception:  # noqa: BLE001
         pass
@@ -2644,9 +2631,7 @@ def _append_log_error_from_sink(text: str, record: Any) -> None:
     }
     _append_console_log_error(entry)
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.logs.errors import append_shard_log_error, log_stem_for_shard
             from src.platform.shard.registry.config import get_shard_registry_settings
 
@@ -2693,9 +2678,7 @@ def _log_error_log_meta() -> dict[str, Any]:
     sharded = False
     sources = ["hub"]
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             sharded = True
             from src.platform.shard.logs.view import list_shard_log_sources
 
@@ -2715,9 +2698,7 @@ def _log_error_log_public(
         raw = list(_LOG_ERROR_BUFFER)
     merged: list[dict[str, Any]] = [dict(it) for it in raw if isinstance(it, dict)]
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.logs.view import collect_cluster_log_errors
 
             merged.extend(collect_cluster_log_errors(per_file=800, limit=max(limit * 4, 80)))
@@ -2760,9 +2741,7 @@ def _cleanup_log_errors_manual_sync() -> dict[str, Any]:
     _cleanup_log_error_archives_sync()
     sharded_errors = False
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.logs.errors import cleanup_shard_error_archives_sync
 
             cleanup_shard_error_archives_sync()
@@ -2799,9 +2778,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
                 rec["matcher_duration_log"] = []
     _cleanup_log_error_archives_sync()
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.console_stats import iter_worker_shard_ids, trim_worker_duration_logs_sync
             from src.platform.shard.logs.errors import cleanup_shard_error_archives_sync
 
@@ -3010,9 +2987,8 @@ def _init_plugin_run_tracking() -> None:
     if _PLUGIN_RUN_TRACKING_INIT:
         return
     _PLUGIN_RUN_TRACKING_INIT = True
-    from src.platform.bot_runtime.roles import is_sharded_worker
 
-    if is_sharded_worker():
+    if _shard_worker_console():
         _restore_worker_console_stats_from_shard_file()
     elif not _restore_unified_console_stats_from_live_file():
         _load_matcher_duration_logs_from_disk()
@@ -3160,10 +3136,7 @@ def _plugin_run_stats_overview(
         total_runs_today += int(row.get("runs_today", 0))
         total_errors_today += int(row.get("errors_today", 0))
 
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.console_stats import load_cluster_console_stats_by_sid
         from src.platform.shard.presence import read_presence_bots
 
@@ -3287,11 +3260,9 @@ def _console_daily_stats_payload(
     )
     by_key: dict[tuple[str, str], dict[str, Any]] = {(r["date"], r["self_id"]): dict(r) for r in rows}
     live_out: dict[str, dict[str, int]] = {}
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
     shard_cluster_sids: set[str] = set()
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.console_stats import load_cluster_console_stats_by_sid
 
         for sid, blob in load_cluster_console_stats_by_sid().items():
@@ -3324,7 +3295,7 @@ def _console_daily_stats_payload(
             continue
         if sid_f is not None and sid != sid_f:
             continue
-        if is_sharding_active() and is_sharded_hub() and sid in shard_cluster_sids:
+        if _shard_hub_console() and sid in shard_cluster_sids:
             continue
         _rollover_console_day_if_needed(sid, clock_today)
         mem = _MSG_STATS.get(sid)
@@ -3414,10 +3385,8 @@ async def _call_get_message_history(
 
 async def _collect_online_bot_profiles() -> dict[str, dict[str, Any]]:
     """尽力读取在线 OneBot V11 账号资料，失败时忽略单个账号并保留其它结果。"""
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.console.webui.protocol_accounts import protocol_account_display_names
         from src.platform.shard.presence import read_presence_bots
 
@@ -3498,10 +3467,8 @@ async def _friend_requests_overview(
 ) -> dict[str, Any]:
     disk = _read_pending_friend_requests_disk()
     online_by_self: dict[str, tuple[str, object]] = {}
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.presence import read_presence_bots
 
         for key, rec in read_presence_bots().items():
@@ -4793,9 +4760,7 @@ def register_extended_api(
         sharded_logs = False
         log_sources: list[str] = []
         try:
-            from src.platform.bot_runtime.roles import is_sharded_hub
-
-            if is_sharded_hub():
+            if _shard_hub_console():
                 sharded_logs = True
                 from src.platform.shard.logs.view import list_shard_log_sources
 

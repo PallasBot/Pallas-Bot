@@ -9,8 +9,7 @@ def test_collect_flush_entries_merges_cluster_and_local(monkeypatch) -> None:
     ext._PLUGIN_RUN_STATS.clear()
     ext._CONSOLE_CAL_DAY.clear()
 
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_hub", lambda: True)
+    monkeypatch.setattr(ext, "_shard_hub_console", lambda: True)
     monkeypatch.setattr(
         "src.platform.shard.console_stats.load_cluster_console_stats_by_sid",
         lambda: {
@@ -47,16 +46,10 @@ def test_collect_flush_entries_merges_cluster_and_local(monkeypatch) -> None:
 
 
 def test_console_daily_stats_disk_disabled_on_worker(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "src.platform.bot_runtime.roles.is_sharded_worker",
-        lambda: True,
-    )
+    monkeypatch.setattr(ext, "_shard_worker_console", lambda: True)
     assert ext._console_daily_stats_disk_enabled() is False
 
-    monkeypatch.setattr(
-        "src.platform.bot_runtime.roles.is_sharded_worker",
-        lambda: False,
-    )
+    monkeypatch.setattr(ext, "_shard_worker_console", lambda: False)
     assert ext._console_daily_stats_disk_enabled() is True
 
 
