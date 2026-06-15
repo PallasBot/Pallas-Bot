@@ -2,14 +2,29 @@ from pathlib import Path
 
 import pytest
 
-_MS_CFG = (
-    Path(__file__).resolve().parents[2]
-    / "src"
-    / "features"
-    / "message_scrub"
-    / "config.py"
-)
+_MS_CFG = Path(__file__).resolve().parents[2] / "src" / "features" / "message_scrub" / "config.py"
 skip_no_message_scrub = pytest.mark.skipif(not _MS_CFG.is_file(), reason="无 message_scrub 配置模块")
+
+
+def _import_command_limit_plugins() -> None:
+    import src.plugins.bot_status  # noqa: F401
+    import src.plugins.connectivity  # noqa: F401
+    import src.plugins.help  # noqa: F401
+
+
+def _patch_loaded_command_limit_plugins(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from src.plugins.bot_status import __plugin_meta__ as bot_status_meta
+    from src.plugins.connectivity import __plugin_meta__ as connectivity_meta
+    from src.plugins.help import __plugin_meta__ as help_meta
+
+    plugins = [
+        SimpleNamespace(name="bot_status", metadata=bot_status_meta),
+        SimpleNamespace(name="connectivity", metadata=connectivity_meta),
+        SimpleNamespace(name="help", metadata=help_meta),
+    ]
+    monkeypatch.setattr("src.features.command_limits.schema.get_loaded_plugins", lambda: plugins)
 
 
 def test_list_webui_env_sections_contains_ingress_dispatch():
@@ -80,14 +95,14 @@ def test_list_webui_env_sections_hides_message_scrub_by_default(monkeypatch: pyt
     )
     monkeypatch.setattr(
         "src.foundation.config.dotenv.merged_repo_dotenv_upper",
-        lambda: {},
+        dict,
     )
     monkeypatch.setattr(
         "src.foundation.config.dotenv.repo_layered_dotenv_files_exist",
         lambda: True,
     )
-    from src.foundation.deploy_profile import clear_deploy_profile_cache
     from src.features.message_scrub import reload_message_scrub_caches
+    from src.foundation.deploy_profile import clear_deploy_profile_cache
 
     clear_deploy_profile_cache()
     reload_message_scrub_caches()
@@ -103,6 +118,7 @@ def test_list_webui_env_sections_contains_plugin_common_sections():
 
     rows = list_webui_env_sections()
     ids = {r["id"] for r in rows}
+    assert "command_limits" in ids
     assert "pallas_webui" in ids
     assert "pallas_protocol" in ids
     assert "help" in ids
@@ -122,6 +138,31 @@ def test_service_gateways_payload_shape():
     assert "pallas_image_base_url" in names
     assert "maa_public_base_url" in names
     assert "sing_enable" in names
+
+
+def test_command_limits_section_payload_shape(monkeypatch: pytest.MonkeyPatch):
+    from src.console.webui import webui_env_section_payload
+
+    _import_command_limit_plugins()
+    _patch_loaded_command_limit_plugins(monkeypatch)
+    data = webui_env_section_payload("command_limits")
+    assert data["plugin"] == "command_limits"
+    assert data["module"] == "src.features.command_limits"
+    assert "command_limits_ui" in data
+    assert any(row["id"] == "help.help" for row in data["command_limits_ui"]["commands"])
+
+
+def test_command_limits_patch_writes_json_override(tmp_path, monkeypatch):
+    import json
+
+    from src.console.webui import apply_webui_env_section_patch
+    from src.foundation.config import repo_settings as rs
+
+    webui_file = tmp_path / "webui.json"
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui_file)
+    apply_webui_env_section_patch("command_limits", {"command_limit_overrides": {"help.help": 11}})
+    data = json.loads(webui_file.read_text(encoding="utf-8"))
+    assert json.loads(data["env"]["PALLAS_COMMAND_LIMIT_OVERRIDES"]) == {"help.help": 11}
 
 
 def test_field_to_env_uppercase_keys_matches_plugin_api():
@@ -150,8 +191,8 @@ def test_pallas_webui_section_payload_env_keys_uppercase():
 def test_pallas_webui_patch_writes_uppercase_env(tmp_path, monkeypatch):
     import json
 
-    from src.foundation.config import repo_settings as rs
     from src.console.webui import apply_webui_env_section_patch
+    from src.foundation.config import repo_settings as rs
 
     webui_file = tmp_path / "webui.json"
     monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui_file)

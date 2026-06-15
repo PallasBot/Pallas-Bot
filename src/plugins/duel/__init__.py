@@ -72,6 +72,10 @@ __plugin_meta__ = PluginMetadata(
                 "default": "group_moderator",
             },
         ],
+        "command_limits": [
+            {"id": "duel.duel", "cd_sec": 5},
+            {"id": "duel.cage", "cd_sec": 5},
+        ],
         "ingress_fanout": {
             "scope": "always",
             "regexes": [r"^八角笼(?:牛|斗)(?:\s*\d{1,2}\s*(?:幕|回合))?\s*$"],
@@ -251,7 +255,7 @@ async def run_duel_match(
     bot_mode = dual_bot or (challenger_is_bot and defender_is_bot)
 
     if command_gate is None:
-        gate = await begin_duel_command(event.group_id)
+        gate = await begin_duel_command(event.group_id, command_id="duel.duel")
     else:
         gate = command_gate
     if gate == "busy":
@@ -312,7 +316,7 @@ async def duel_bot_pair(
         return
     if not duel_handler_is_narrator(event, a, b, dual_bot=True):
         return
-    gate = await begin_duel_command(event.group_id)
+    gate = await begin_duel_command(event.group_id, command_id="duel.duel")
     if gate == "busy":
         await send_duel_user_reply(matcher, event.group_id, "此群台上正有决斗未散，且待战歌落幕。")
         return
@@ -433,7 +437,7 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
     from src.platform.shard.coord.duel_group import try_reclaim_orphan_duel_group
 
     await try_reclaim_orphan_duel_group(event.group_id)
-    gate = await begin_duel_command(event.group_id)
+    gate = await begin_duel_command(event.group_id, command_id="duel.cage")
     if gate == "busy":
         if not await send_duel_user_reply_owned(
             cage_msg,

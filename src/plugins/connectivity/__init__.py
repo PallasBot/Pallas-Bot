@@ -23,6 +23,9 @@ __plugin_meta__ = PluginMetadata(
         "command_permissions": [
             {"id": "connectivity.probe", "label": "牛牛连通", "default": "everyone"},
         ],
+        "command_limits": [
+            {"id": "connectivity.probe", "cd_sec": 3},
+        ],
         "menu_data": [
             {
                 "func": "牛牛连通",

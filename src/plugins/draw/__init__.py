@@ -25,6 +25,9 @@ __plugin_meta__ = PluginMetadata(
             {"id": "draw.draw", "label": "牛牛画画", "default": "everyone"},
             {"id": "draw.gateway", "label": "牛牛网关", "default": "everyone"},
         ],
+        "command_limits": [
+            {"id": "draw.draw", "cd_sec": 3},
+        ],
         "menu_data": [
             {
                 "func": "牛牛画画",

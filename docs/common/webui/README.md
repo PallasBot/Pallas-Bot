@@ -69,3 +69,7 @@ get_my_config = plugin_webui.get
 ## 实现
 
 [`src/console/webui/`](../../../src/console/webui/) · 路由薄层 [`extended_api.py`](../../../src/plugins/pallas_webui/extended_api.py)
+
+## API 契约（按域）
+
+REST 路径、鉴权、写操作与热重载行为见 [api/README.md](api/README.md)（与 WebUI `consoleApi.ts` / OpenAPI 对齐）。

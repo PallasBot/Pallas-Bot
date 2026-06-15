@@ -23,6 +23,7 @@ FIELD_LABELS: dict[str, str] = {
     "chat_enable": "启用 chat 服务",
     "chat_endpoint": "聊天接口路径",
     "claim_ttl_sec": "去重保留秒数",
+    "command_limit_overrides": "命令冷却覆盖",
     "command_permission_overrides": "命令权限覆盖",
     "community_api_base": "共享语料服务地址",
     "community_contribute": "上传本机新回复",

@@ -256,6 +256,20 @@ def _cmd_perm_section() -> WebuiEnvSection:
     )
 
 
+def _command_limits_section() -> WebuiEnvSection:
+    from src.features.command_limits.config import CommandLimitsConfig, get_command_limits_config
+
+    return WebuiEnvSection(
+        id="command_limits",
+        title="命令冷却",
+        module_label="src.features.command_limits",
+        model_cls=CommandLimitsConfig,
+        read_current=get_command_limits_config,
+        field_to_env={"command_limit_overrides": "PALLAS_COMMAND_LIMIT_OVERRIDES"},
+        skip_fields=frozenset(),
+    )
+
+
 _sections_cache: tuple[WebuiEnvSection, ...] | None = None
 
 
@@ -264,7 +278,7 @@ def _registered_sections() -> tuple[WebuiEnvSection, ...]:
     if _sections_cache is not None:
         return _sections_cache
     parts: list[WebuiEnvSection] = []
-    parts.append(_cmd_perm_section())
+    parts.extend((_cmd_perm_section(), _command_limits_section()))
     if (SRC_ROOT / "features" / "control_plane" / "webui_config.py").is_file():
         parts.append(_control_plane_section())
     if (SRC_ROOT / "platform" / "ingress" / "config.py").is_file():
@@ -308,6 +322,7 @@ def _registered_sections() -> tuple[WebuiEnvSection, ...]:
 
 _COMMON_CONFIG_SECTION_ORDER: tuple[str, ...] = (
     "cmd_perm",
+    "command_limits",
     "control_plane",
     "corpus_federation",
     "community_stats",
@@ -427,6 +442,9 @@ def webui_env_section_payload(
     if section_id == "cmd_perm":
         perm_src = s.model_cls.model_validate(current_values) if current_values is not None else cfg_obj
         base.update(_cmd_perm_payload_extras(perm_src))
+    elif section_id == "command_limits":
+        limit_src = s.model_cls.model_validate(current_values) if current_values is not None else cfg_obj
+        base.update(_command_limits_payload_extras(limit_src))
     elif section_id == "pallas_webui":
         base.update(_pallas_webui_payload_extras())
     elif section_id == "ingress_dispatch":
@@ -525,6 +543,27 @@ def _cmd_perm_payload_extras(cfg_obj: Any) -> dict[str, Any]:
     return {"command_perm_ui": build_command_perm_ui({str(k): str(v) for k, v in overrides.items()})}
 
 
+def _command_limits_payload_extras(cfg_obj: Any) -> dict[str, Any]:
+    from src.features.command_limits.schema import build_command_limits_ui
+
+    overrides = getattr(cfg_obj, "command_limit_overrides", None) or {}
+    if not isinstance(overrides, dict):
+        overrides = {}
+    clean: dict[str, int] = {}
+    for key, value in overrides.items():
+        cid = str(key).strip()
+        if not cid:
+            continue
+        try:
+            cd_sec = int(value)
+        except (TypeError, ValueError):
+            continue
+        if cd_sec < 1:
+            continue
+        clean[cid] = cd_sec
+    return {"command_limits_ui": build_command_limits_ui(clean)}
+
+
 def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dict[str, Any]:
     from .community_stats_section import COMMUNITY_STATS_SECTION_ID, apply_community_stats_patch
     from .control_plane_section import CONTROL_PLANE_SECTION_ID, apply_control_plane_patch
@@ -564,6 +603,13 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             from src.features.cmd_perm import clear_cmd_perm_cache
 
             clear_cmd_perm_cache()
+        except Exception:
+            pass
+    elif section_id == "command_limits":
+        try:
+            from src.features.command_limits import clear_command_limits_cache
+
+            clear_command_limits_cache()
         except Exception:
             pass
     elif section_id == "ingress_fanout":

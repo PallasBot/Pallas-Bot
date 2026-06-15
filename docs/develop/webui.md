@@ -2,7 +2,7 @@
 
 控制台 UI 由独立仓库 **[Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)** 构建，产物由主仓 `pallas_webui` 插件挂载，基址 **`/pallas/`**。
 
-后端 API 实现在主仓 `src/plugins/pallas_webui/`（如 `extended_api.py`）；**插件配置热重载**等通用能力在 `src/common/webui/`，一般无需改 API 层即可接入新插件配置（见 [WebUI 插件配置](../common/webui/README.md)）。
+后端 API 实现在主仓 `src/plugins/pallas_webui/`（如 `extended_api.py`）；**插件配置热重载**等通用能力在 `src/console/webui/`，一般无需改 API 层即可接入新插件配置（见 [WebUI 插件配置](../common/webui/README.md)）。
 
 ## 本地联调
 
