@@ -78,7 +78,7 @@ driver = get_driver()
 if not is_sharded_worker():
     install_pallas_http_request_context_middleware(app)
 
-# hub / unified：CORS（显式来源，避免 ['*'] + credentials）；worker 仅经 pallas_console_metrics 导入 extended_api
+# hub / unified：CORS；worker 仅经 pallas_console_metrics 导入 extended_api
 if not is_sharded_worker() and plugin_config.pallas_webui_enabled and plugin_config.pallas_webui_cors:
     _cors_origins = [str(o).strip() for o in (plugin_config.pallas_webui_allowed_origins or []) if str(o).strip()]
     if not _cors_origins:

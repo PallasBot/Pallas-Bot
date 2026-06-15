@@ -1,4 +1,4 @@
-"""NapCat 运行时下载与安装（Shell zip / Linux AppImage）。"""
+"""NapCat 运行时下载与安装。"""
 
 from __future__ import annotations
 
@@ -209,7 +209,7 @@ def find_appimage_under_dir(search_root: Path) -> Path | None:
 
 
 def find_onekey_post_install_program_dir(search_root: Path) -> Path | None:
-    """定位官方一键包安装完成后的目录（``NapCat.*.Shell`` 下的 ``bootmain`` 或含 mjs 的根）。"""
+    """定位官方一键包安装完成后的目录。"""
     root = search_root.resolve()
     if not root.is_dir():
         return None
@@ -273,9 +273,9 @@ def find_napcat_program_dir(
 ) -> Path | None:
     """在解压目录中定位「可启动」目录。
 
-    - NapCat.Shell.zip：以 napcat.mjs 为准（与 napcat-shell-loader 的 launcher 一致）。
-    - OneKey.zip：安装完成后应优先用 :func:`find_onekey_post_install_program_dir`；
-      本函数在无 ``NapCat.*.Shell`` 时作浅层回退（例如无安装器的旧布局）。
+    - NapCat.Shell.zip：以 napcat.mjs 为准。
+    - OneKey.zip：安装完成后应优先用 :func:`find_onekey_post_install_program_dir`
+      本函数在无 ``NapCat.*.Shell`` 时作浅层回退。
     """
     root = search_root.resolve()
     if not root.exists():
@@ -750,7 +750,7 @@ class NapCatRuntimeStore:
             return await fetch_github_releases(self._repo(), client=client, limit=limit, token=self._github_token())
 
     def _resolve_program_dir_in_extract_folder(self, folder: Path) -> Path | None:
-        """在单个子目录中解析 NapCat 程序根（与 :meth:`rescan_existing_extract` 规则一致）。"""
+        """在单个子目录中解析 NapCat 程序根。"""
         if not folder.is_dir():
             return None
         prefer_boot = asset_is_windows_onekey(self._asset_name())
@@ -782,7 +782,7 @@ class NapCatRuntimeStore:
         return folder
 
     def list_local_inventory(self) -> dict[str, Any]:
-        """列出 ``runtime_dist`` 与 ``runtime_extract`` 下的本机缓存（供切换托管版本）。"""
+        """列出 ``runtime_dist`` 与 ``runtime_extract`` 下的本机缓存。"""
         dist_files: list[dict[str, Any]] = []
         if self._dist_dir.is_dir():
             for p in sorted(self._dist_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -813,7 +813,7 @@ class NapCatRuntimeStore:
         return {"dist_files": dist_files, "extract_dirs": extract_dirs}
 
     def resolve_program_dir_for_tag_slug(self, slug: str) -> Path | None:
-        """解析 ``runtime_extract/napcat/<slug>`` 下的 NapCat 程序根（不存在则 ``None``）。"""
+        """解析 ``runtime_extract/napcat/<slug>`` 下的 NapCat 程序根。"""
         safe = sanitize_release_tag_for_path(slug)
         folder = (self._extract_root / safe).resolve()
         eroot = self._extract_root.resolve()
@@ -823,7 +823,7 @@ class NapCatRuntimeStore:
         return hit.resolve() if hit else None
 
     def activate_extract_by_tag(self, tag: str) -> RuntimeManifest:
-        """按 Release tag（或与其 sanitize 一致的目录名）切换托管 manifest。"""
+        """按 Release tag切换托管 manifest。"""
         raw = (tag or "").strip()
         if not raw:
             raise ValueError("缺少版本标签")
@@ -850,7 +850,7 @@ class NapCatRuntimeStore:
         return manifest
 
     def activate_extract_folder(self, folder_name: str) -> RuntimeManifest:
-        """将 manifest 指向已有解压子目录（回退到旧版解压结果，不重新下载）。"""
+        """将 manifest 指向已有解压子目录。"""
         folder = self._safe_extract_child_folder(folder_name)
         if not folder.is_dir():
             raise ValueError("解压目录不存在")
@@ -873,7 +873,7 @@ class NapCatRuntimeStore:
         return manifest
 
     def rescan_existing_extract(self) -> RuntimeManifest | None:
-        """不重新下载，仅在已有解压目录中查找 Shell 根（用于一键包安装器生成子目录后）。"""
+        """不重新下载，仅在已有解压目录中查找 Shell 根。"""
         if not self._extract_root.exists():
             return None
         candidates = sorted(self._extract_root.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -926,7 +926,7 @@ def default_release_asset_for_platform(tag: str = "", target_platform: str = "au
     """按平台选择默认 release 资产名（空配置时 `resolved_release_asset` 会调用）。
 
     - Windows：NapCatQQ 一键包 zip
-    - Linux：NapCatAppImageBuild 的 AppImage（按架构）；若提供 tag 则拼接为
+    - Linux：NapCatAppImageBuild 的 AppImage；若提供 tag 则拼接为
       ``NapCat-{tag}-{arch}.AppImage``，与实际资产命名后缀对齐，提升命中率
     - 其它 POSIX：保留 NapCat.Shell.zip
     """

@@ -247,7 +247,7 @@ lock.end(group_id)
 ## 多 Bot 同群行为摘要
 
 - **`ingress_gate`**（unified / worker）：fleet、@ 定向、ingress claim、greeting/报数 fanout。
-- **fanout 白名单**：WebUI「入站：全员同响口令」或 `PALLAS_INGRESS_FANOUT_GREETING`；**`牛牛报数` / `牛牛出列` 恒 fanout**；**喝酒/醒酒口令**（`牛牛喝酒` 等）见 `drink_plaintext` 恒 fanout。**做梦/醒梦口令不走 fanout**：经 ingress 跨牛 claim 仅一只牛开梦；做梦中由 **`dream_host_gate`**（`bind_group_owned_gate`）绑定主持牛，ingress 与采集/醒梦 matcher 仅主持牛通过。
+- **fanout 白名单**：WebUI「入站：全员同响口令」或 `PALLAS_INGRESS_FANOUT_GREETING`；**`牛牛报数` / `牛牛出列`**（`bot_status` 插件 `ingress_fanout`，`shard_only`）恒 fanout；**喝酒/醒酒、轮盘、八角笼**等口令由各插件 `PluginMetadata.extra["ingress_fanout"]` 声明，经 `policy_registry` 聚合（见 `src/platform/ingress/fanout_bypass.py`）。**做梦/醒梦口令不走 fanout**：经 ingress 跨牛 claim 仅一只牛开梦；做梦中由 **`dream_host_gate`**（`bind_group_owned_gate`）绑定主持牛，ingress 与采集/醒梦 matcher 仅主持牛通过。
 - **接话 / 主动发言**：ingress 为 **shard 级 claim**（每条消息一个 worker 片通过，该片上各牛可进 matcher）；复读由**本片代表牛**（最小 QQ）统一学习与接话判定；**近期群消息**经 `coord/repeater_buffer/`（可选 Redis Pub/Sub）同步到各 worker 内存；**learn 上下文**在内存链不足时回退 `MessageRepository.find_recent_in_group`；fanout 仅在群内 **≥2 只可复读在线牛** 时启用（与单进程一致），跨片经 `bot_action` 批量代发。主动发言定时任务仅代表牛 worker 执行。
 - **`dream` 跨群漂流**：各 worker 本地 `_dream_active` 仅本进程；分片下经 `coord/dream_drift`（Redis 登记做梦群 + `pallas:dream_drift` pub/sub）把梦话投到其它 worker 上同牛号的做梦群；**同群多牛仅主持牛执行做梦**（开梦 claim + owned gate），与喝酒等各牛独立 fanout 不同。
 - **`duel` / 八角笼**：跨片 `coord/duel_group`、`bot_action`、`duel_qte`。
@@ -255,6 +255,22 @@ lock.end(group_id)
 - **`repeater`**：忽略全 fleet QQ；**`bot_status`**：建议 `bot_status_list_mode=auto`。
 
 与单进程 `multi_bot_group` 文件 claim 机制同源；分片 worker 额外保留 ingress 预处理器，避免未改造插件在多 worker 下重复响应。
+
+### `ingress_fanout` 元数据（插件侧声明）
+
+需跳过 once-claim、全员同响的口令，在对应插件 `PluginMetadata.extra` 增加：
+
+```python
+"ingress_fanout": {
+    "scope": "always",          # always | unified_only | shard_only
+    "plaintexts": ["牛牛喝酒"],  # 精确匹配（可选）
+    "prefixes": ["牛牛帮助"],    # 命令前缀（可选）
+    "regexes": [r"^八角笼牛$"],  # 正则（可选）
+    "normalize_trailing_punct": False,  # 去尾标点后再匹配
+}
+```
+
+聚合逻辑见 `src/platform/ingress/policy_registry.py`；`fanout_bypass.py` 在 unified / 分片下按 `scope` 过滤。unified 下**未声明** `ingress_fanout` 的插件命令（如唱歌、画画）走 ingress **once-claim**，仅一只牛进 matcher；`plugin_command_plaintext` 仍供复读/帮助等旁路识别，不再整体跳过 claim。
 
 ## Hub 排障
 
@@ -285,3 +301,24 @@ uv sync --extra pg                   # 与主仓 DB 一致时
 ```
 
 状态在 `.shard_test_state/`（勿提交）。仅共用数据、不改端口：`shard_test_enter.sh --skip-port-migrate`。
+
+### 单进程 unified 压测 / 对照（可选）
+
+在**同一套 `data/`** 上临时切回单进程（例如对照 30+ 牛行为、验证 ingress fanout），可用迁移脚本与专用启停：
+
+```bash
+# 分片 → unified（停分片、写 PALLAS_SHARD_ENABLED=false、同步 ws_url 到单端口）
+uv run python scripts/migrate_shard_to_unified.py --dry-run   # 先预览
+uv run python scripts/migrate_shard_to_unified.py
+
+./scripts/run_unified_bot.sh start
+./scripts/run_unified_bot.sh status
+./scripts/run_unified_bot.sh stop
+
+# 测完回分片
+uv run python scripts/migrate_unified_to_shard.py --start
+```
+
+- `run_unified_bot.sh start` 默认会调用 `sync_unified_protocol_ports.py` 对齐协议端；跳过：`./scripts/run_unified_bot.sh start --skip-port-sync`。
+- 单独同步（不启停）：`uv run python scripts/sync_unified_protocol_ports.py` / `--dry-run`。
+- 备份落在 `.unified_test_state/`；协议端账号变更后须在控制台**重启**对应 NapCat。

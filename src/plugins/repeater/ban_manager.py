@@ -24,7 +24,7 @@ class BanManager:
 
     # Class variables
     _blacklist_answer = defaultdict(set)  # 每个群的封禁关键词
-    _blacklist_answer_reserve = defaultdict(set)  # 候选黑名单（再次触发才正式封禁）
+    _blacklist_answer_reserve = defaultdict(set)  # 候选黑名单
 
     @staticmethod
     def find_ban_reply(group_id: int, bot_id: int, ban_raw_message: str, reply_dict: dict) -> dict | None:
@@ -102,8 +102,8 @@ class BanManager:
         pre_keywords = ban_reply["pre_keywords"]
         keywords = ban_reply["reply_keywords"]
 
-        # 通过 append_ban 细粒度 API 原子追加，避免整文档读-改-写。
-        # 当 Context(keywords=pre_keywords) 不存在时为 no-op（Mongo update_one matched=0）。
+        # 通过 append_ban 原子追加
+        # Context 不存在时为 no-op
         ban_reason = Ban(keywords=keywords, group_id=group_id, reason=reason, time=int(time.time()))
         await context_repo.append_ban(pre_keywords, ban_reason)
 

@@ -11,7 +11,7 @@ from ..contract import resolve_public_mount_path
 
 
 def shell_brand_mark_src(public_base_path: str) -> str:
-    """侧栏品牌图（与 WebUI ``favicon.png`` 同源）。"""
+    """侧栏品牌图。"""
     p = (public_base_path or "").strip().rstrip("/")
     return f"{p}/_pallas_ui/favicon.png" if p else "/_pallas_ui/favicon.png"
 
@@ -44,7 +44,7 @@ def shell_font_stylesheet_link(public_base_path: str) -> str:
 
 
 def shell_stylesheet_link(public_base_path: str) -> str:
-    """协议壳主样式（static/pallas_ui/shell.css）。"""
+    """协议壳主样式。"""
     p = (public_base_path or "").strip().rstrip("/")
     href = f"{p}/_pallas_ui/shell.css" if p else "/_pallas_ui/shell.css"
     return f'  <link rel="stylesheet" href="{html_escape(href, quote=True)}" />\n'
@@ -265,7 +265,7 @@ def render_protocol_shell_close(
     pallas_console_http_base: str,
 ) -> str:
     mobile_nav = _render_protocol_mobile_nav(base_path, active, pallas_console_http_base)
-    return f"""{shell_footer_html()}      </div>
+    return f"""{shell_footer_html()} </div>
     </main>
   </div>
 {mobile_nav}
@@ -768,7 +768,7 @@ def _render_hidden_token_sync_js(back_button_id: str = "backDash", *, page_sessi
 
 
 def render_settings_page(base_path: str, pallas_console_http_base: str = "/pallas") -> str:
-    """协议端偏好设置：与 WebUI 共用 localStorage（外观 + 仪表盘轮询间隔）。"""
+    """协议端偏好设置：与 WebUI 共用 localStorage。"""
     path = base_path.rstrip("/") or resolve_public_mount_path(path_override="", implementation_slug="")
     p = json.dumps(path)
     common_api_js = _render_common_api_js()

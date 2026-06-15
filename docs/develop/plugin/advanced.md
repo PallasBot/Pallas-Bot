@@ -46,7 +46,7 @@ get_config = plugin_webui.get
 ```
 
 - 业务代码始终 `get_config()`，保存后自动 reload，**无需重启**
-- 复杂解析：传入 `parse_env_value`（参考 `pallas_image/config.py`）
+- 复杂解析：传入 `parse_env_value`（参考 `draw/config.py`）
 - 除 Config 外还有运行时单例：传入 `on_reload`
 - 已有自定义缓存逻辑：登记 `plugin_webui_registry`
 

@@ -153,7 +153,7 @@ def _notify_from_event(event: MessageEvent, bot: Bot) -> NotifyTarget:
 
 
 async def ensure_maa_group_message_owner(event: MessageEvent, bot: Bot) -> bool:
-    """群内同一条消息仅一只牛处理（防多 Bot 同群重复响应）。"""
+    """群内同一条消息仅一只牛处理。"""
     return await claim_group_handler("maa", event, int(bot.self_id))
 
 

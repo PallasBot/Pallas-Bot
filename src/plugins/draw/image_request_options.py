@@ -1,4 +1,4 @@
-"""生图请求参数组合与回退序列（兼容不同上游网关）。"""
+"""生图请求参数组合与回退序列。"""
 
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ def image_gen_slow_attempts(
     with_ref_urls: bool,
     omit_response_format: bool = False,
 ) -> list[ImageGenRequestOptions]:
-    """慢档：常见 quality / 尺寸 / 极简组合（快档全失败后再试）。"""
+    """慢档：常见 quality / 尺寸 / 极简组合。"""
     base = ImageGenRequestOptions.from_config()
     if omit_response_format:
         base = without_response_format(base)

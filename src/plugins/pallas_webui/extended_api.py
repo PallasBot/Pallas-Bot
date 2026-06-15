@@ -39,6 +39,7 @@ from src.console.webui.console_login import (
     set_shared_console_login_token,
     verify_console_password,
 )
+from src.platform.shard import context as shard_ctx
 
 from .console_meta_store import (
     get_console_meta,
@@ -49,13 +50,22 @@ from .console_meta_store import (
 if typing.TYPE_CHECKING:
     from .config import Config
 
+
+def _shard_hub_console() -> bool:
+    return shard_ctx.sharding_active() and shard_ctx.is_hub()
+
+
+def _shard_worker_console() -> bool:
+    return shard_ctx.sharding_active() and shard_ctx.is_worker()
+
+
 _INIT_LOG_SINK = False
 _READ_CACHE: dict[str, dict[str, Any]] = {}
 _READ_INFLIGHT: dict[str, asyncio.Task[Any]] = {}
 
 
 def clear_extended_read_cache() -> None:
-    """清空控制台扩展 JSON 的进程内读缓存（口令轮换或新登录后调用）。"""
+    """清空控制台扩展 JSON 的进程内读缓存。"""
     _READ_CACHE.clear()
     for task in list(_READ_INFLIGHT.values()):
         if not task.done():
@@ -75,15 +85,15 @@ def _cache_value_copy(data: Any) -> Any:
 
 _MSG_STATS: dict[str, dict[str, Any]] = {}  # self_id -> sent/received + 按本地日切片的 day_*
 _MSG_TRACKING_INIT = False
-# self_id -> 与 day_received / day_runs 等对齐的本地自然日（YYYY-MM-DD）；日切时落盘并清零当日字段
+# self_id -> 与 day_received / day_runs 等对齐的本地自然日；日切时落盘并清零当日字段
 _CONSOLE_CAL_DAY: dict[str, str] = {}
 
 
 def _parse_console_hist_params() -> tuple[int, int]:
     """协议 API / 消息吞吐 / Matcher 进程内时序桶（重启清空）。
 
-    默认 1 分钟桶、最多 1440 桶（约 24 小时滑动窗口）。环境变量：
-    - PALLAS_CONSOLE_HIST_BUCKET_SEC：桶宽（秒），建议能整除 86400（如 30、60、120、300）。
+    默认 1 分钟桶、最多 1440 桶。环境变量：
+    - PALLAS_CONSOLE_HIST_BUCKET_SEC：桶宽，建议能整除 86400。
     - PALLAS_CONSOLE_HIST_MAX_BUCKETS：最多保留桶数；覆盖时长 ≈ 二者乘积。
     """
     default_bucket, default_max = 60, 1440
@@ -110,7 +120,7 @@ _API_HIST_BUCKET_SEC, _API_HIST_MAX_BUCKETS = _parse_console_hist_params()
 def _hist_bucket_start_local(ts: int, bucket_sec: int) -> int:
     """将 Unix 时刻向下取整到 *bucket_sec* 对齐的「本地 wall-clock」桶起点。
 
-    使用进程所在主机的本地时区、以当地自然日 00:00 起算的秒偏移对齐（非 Unix 纪元对齐）。
+    使用进程所在主机的本地时区、以当地自然日 00:00 起算的秒偏移对齐。
     """
     if bucket_sec <= 0:
         return int(ts)
@@ -319,7 +329,7 @@ _BOT_SESSION_HOOKS_REGISTERED = False
 
 
 def _ensure_bot_session_hooks() -> None:
-    """进程内记录 Bot 接入时刻（连接时长展示）；WebUI 插件加载时注册一次。"""
+    """进程内记录 Bot 接入时刻"""
     global _BOT_SESSION_HOOKS_REGISTERED
     if _BOT_SESSION_HOOKS_REGISTERED:
         return
@@ -355,10 +365,8 @@ def _ensure_bot_session_hooks() -> None:
 
 
 def _list_bots_dict() -> list[dict[str, Any]]:
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.presence import list_connected_bots_for_webui
 
         return list_connected_bots_for_webui()
@@ -590,10 +598,8 @@ def _find_online_onebot_v11_bot(self_id: str) -> tuple[str, object]:
 
 
 def _console_bot_online_in_cluster(self_id: str) -> bool:
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if not (is_sharding_active() and is_sharded_hub()):
+    if not _shard_hub_console():
         return False
     target = str(self_id).strip()
     if not target.isdigit():
@@ -1095,7 +1101,7 @@ def _normalize_message_item(item: object) -> dict[str, Any] | None:
 
 
 def _gpu_metrics() -> dict[str, Any]:
-    """GPU 监控（可选）：优先 NVML，未安装时返回 unavailable。"""
+    """GPU 监控：优先 NVML，未安装时返回 unavailable。"""
     fallback = {"available": False, "reason": "pynvml not installed", "devices": []}
     try:
         import pynvml  # type: ignore
@@ -1205,19 +1211,15 @@ def _sum_matcher_day_runs(sid: str) -> int:
 
 def _console_daily_stats_disk_enabled() -> bool:
     """分片 worker 不写 console_daily_stats.json，由 hub 合并 worker 快照落盘。"""
-    from src.platform.bot_runtime.roles import is_sharded_worker
-
-    return not is_sharded_worker()
+    return not _shard_worker_console()
 
 
 def _unified_console_live_stats_enabled() -> bool:
-    """单进程（非 worker、非分片 hub）写 console_live_stats.json 并在启动时恢复。"""
-    from src.platform.bot_runtime.roles import is_sharded_hub, is_sharded_worker
-    from src.platform.shard.registry.config import is_sharding_active
+    """单进程写 console_live_stats.json 并在启动时恢复。"""
 
-    if is_sharded_worker():
+    if _shard_worker_console():
         return False
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         return False
     return True
 
@@ -1267,12 +1269,10 @@ def _merge_console_daily_flush_entry(
 
 def _collect_console_daily_flush_entries(today: str) -> list[tuple[str, str, int, int, int]]:
     """hub 定时刷盘：分片下合并各 worker stats 文件 + 本进程内存计数。"""
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
     bucket: dict[tuple[str, str], tuple[int, int, int]] = {}
 
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.console_stats import load_cluster_console_stats_by_sid
 
         for sid, blob in load_cluster_console_stats_by_sid().items():
@@ -1353,12 +1353,9 @@ def _rollover_console_day_if_needed(sid: str, today: str) -> None:
 
 
 def _flush_today_console_daily_stats_disk() -> None:
-    """定时刷盘：当前自然日内累计值写入磁盘（不按桶）。"""
+    """定时刷盘：当前自然日内累计值写入磁盘。"""
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active() and is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.console_stats import prune_stale_worker_stats_bots_sync
 
             prune_stale_worker_stats_bots_sync()
@@ -1524,7 +1521,6 @@ async def flush_unified_console_live_stats_async(*, include_hist: bool = False) 
 
 
 def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None:
-    from src.platform.bot_runtime.roles import is_sharded_worker
     from src.platform.shard.console_stats import process_memory_snapshot, write_worker_stats_sync
     from src.platform.shard.coord_pending import coord_pending_snapshot_sync
     from src.platform.shard.ingress_metrics import ingress_metrics_snapshot
@@ -1532,7 +1528,7 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
     from src.platform.shard.registry.config import get_shard_registry_settings
     from src.platform.shard.repeater_ingress_metrics import repeater_ingress_metrics_snapshot
 
-    if not is_sharded_worker():
+    if not _shard_worker_console():
         return
     shard_id = int(get_shard_registry_settings().shard_id)
     try:
@@ -1592,18 +1588,17 @@ def _apply_console_stats_boot_snapshot(bots: dict[str, dict[str, Any]]) -> bool:
 
 
 def _restore_worker_console_stats_from_shard_file() -> None:
-    from src.platform.bot_runtime.roles import is_sharded_worker
     from src.platform.shard.console_stats import load_worker_console_stats_for_boot
     from src.platform.shard.registry.config import get_shard_registry_settings
 
-    if not is_sharded_worker():
+    if not _shard_worker_console():
         return
     shard_id = int(get_shard_registry_settings().shard_id)
     _apply_console_stats_boot_snapshot(load_worker_console_stats_for_boot(shard_id))
 
 
 def _restore_unified_console_stats_from_daily_disk_fallback() -> bool:
-    """无 live 快照时，从已刷盘的按日汇总恢复当日收/发（升级兼容）。"""
+    """无 live 快照时，从已刷盘的按日汇总恢复当日收/发。"""
     from src.plugins.pallas_webui import daily_stats_store
 
     today = time.strftime("%Y-%m-%d", time.localtime())
@@ -1657,9 +1652,8 @@ def start_worker_shard_console_stats_sync() -> None:
     global _WORKER_STATS_SYNC_STARTED
     if _WORKER_STATS_SYNC_STARTED:
         return
-    from src.platform.bot_runtime.roles import is_sharded_worker
 
-    if not is_sharded_worker():
+    if not _shard_worker_console():
         return
     _WORKER_STATS_SYNC_STARTED = True
 
@@ -1714,7 +1708,7 @@ def start_unified_console_stats_sync() -> None:
 
 
 def ensure_console_metrics_hooks() -> None:
-    """单进程 / hub WebUI 与分片 worker（pallas_console_metrics）共用。"""
+    """单进程 / hub WebUI 与分片 worker共用。"""
     _ensure_bot_session_hooks()
     _init_message_tracking()
     _init_plugin_run_tracking()
@@ -1722,7 +1716,7 @@ def ensure_console_metrics_hooks() -> None:
 
 
 def _msg_stats_get_mut(sid: str) -> dict[str, Any]:
-    """返回可写的内存统计行；跨本地自然日时清零当日计数（与 Matcher 日计数统一落盘）。"""
+    """返回可写的内存统计行；跨本地自然日时清零当日计数。"""
     today = time.strftime("%Y-%m-%d", time.localtime())
     _rollover_console_day_if_needed(sid, today)
     rec = _MSG_STATS.setdefault(
@@ -1759,7 +1753,7 @@ _HIST_PLUGIN_SERIES_MAX = 20
 
 
 def _api_call_history_bump(row: dict[str, Any], api: str) -> None:
-    """按时间桶记录各接口成功调用次数（与 day_api_total 口径一致；桶按主机本地 wall-clock 对齐）。"""
+    """按时间桶记录各接口成功调用次数。"""
     api_key = str(api).strip() or "_"
     now = int(time.time())
     bucket = _hist_bucket_start_local(now, _API_HIST_BUCKET_SEC)
@@ -1799,7 +1793,7 @@ def _api_call_history_bump(row: dict[str, Any], api: str) -> None:
 
 
 def _msg_traffic_history_bump(row: dict[str, Any], *, recv_delta: int = 0, sent_delta: int = 0) -> None:
-    """按与协议 API 相同的时间桶记录消息收/发条数（进程内，重启丢失；桶按主机本地 wall-clock 对齐）。"""
+    """按与协议 API 相同的时间桶记录消息收/发条数。"""
     try:
         rd = int(recv_delta)
         sd = int(sent_delta)
@@ -1988,7 +1982,7 @@ def _top_api_call_today(counts: object) -> tuple[str, int]:
 
 
 def _init_message_tracking() -> None:
-    """注册 NoneBot2 钩子：消息收/发；协议 API 今日计数与按时间桶（见 _API_HIST_BUCKET_SEC）；消息收/发时间桶。"""
+    """注册 NoneBot2 钩子：消息收/发；协议 API 今日计数与按时间桶；消息收/发时间桶。"""
     global _MSG_TRACKING_INIT
     if _MSG_TRACKING_INIT:
         return
@@ -2112,10 +2106,7 @@ async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
         total_today_sent += int(row["today_sent"])
         total_today_received += int(row["today_received"])
 
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.console_stats import load_cluster_console_stats_by_sid
         from src.platform.shard.presence import read_presence_bots
 
@@ -2281,7 +2272,7 @@ def take_matcher_run_started(matcher: object) -> float | None:
 
 
 def _matcher_elapsed_ms(started: float | None) -> float:
-    """Matcher 墙钟耗时（毫秒，保留 _MATCHER_DURATION_MS_DECIMALS 位小数）。"""
+    """Matcher 墙钟耗时。"""
     if started is None:
         return 0.0
     return _round_duration_ms((time.perf_counter() - started) * 1000)
@@ -2342,7 +2333,7 @@ def _append_matcher_error_log(sid: str, plugin: str, exception: BaseException) -
 
 
 def _rewrite_matcher_durations_jsonl() -> None:
-    """用各账号进程内缓冲（每账号最多 _MATCHER_DURATION_LOG_CAP 条）覆写 jsonl。"""
+    """用各账号进程内缓冲覆写 jsonl。"""
     from src.foundation.paths import plugin_data_dir
 
     path = plugin_data_dir("pallas_webui") / "matcher_durations.jsonl"
@@ -2412,10 +2403,7 @@ def _load_matcher_duration_logs_from_disk() -> None:
     cap = _MATCHER_DURATION_LOG_CAP
     worker_assigned: set[str] = set()
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active() and is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.registry.store import get_shard_registry
 
             worker_assigned = {str(k).strip() for k in get_shard_registry().assignments if str(k).strip()}
@@ -2431,7 +2419,7 @@ def _load_matcher_duration_logs_from_disk() -> None:
 
 
 def trim_matcher_duration_log_to_local_day(log: list[dict[str, Any]], day: str) -> None:
-    """原地删除非 day 自然日的单次耗时（跨日 rollover 后避免旧分片/旧日日志仍出现在总览）。"""
+    """原地删除非 day 自然日的单次耗时。"""
     if not isinstance(log, list):
         return
     day_key = str(day).strip()[:10]
@@ -2454,7 +2442,7 @@ def trim_matcher_duration_log_to_local_day(log: list[dict[str, Any]], day: str) 
 
 
 def enforce_matcher_duration_log_limits(log: list[dict[str, Any]]) -> None:
-    """单账号缓冲：总条数与单插件条数上限（删最旧，避免高频插件占满环形缓冲）。"""
+    """单账号缓冲：总条数与单插件条数上限。"""
     if not isinstance(log, list):
         return
     while len(log) > _MATCHER_DURATION_LOG_CAP:
@@ -2494,7 +2482,6 @@ def _append_matcher_duration_log(
     had_error: bool,
 ) -> None:
     """进程内环形缓冲；单进程/hub 另写 jsonl；分片 worker 由 stats 文件周期刷盘。"""
-    from src.platform.bot_runtime.roles import is_sharded_worker
 
     entry: dict[str, Any] = {
         "at": int(time.time()),
@@ -2510,7 +2497,7 @@ def _append_matcher_duration_log(
             log = rec["matcher_duration_log"]
         log.append(entry)
         enforce_matcher_duration_log_limits(log)
-        if is_sharded_worker():
+        if _shard_worker_console():
             return
         with _MATCHER_DURATION_JSONL_LOCK:
             _rewrite_matcher_durations_jsonl()
@@ -2528,10 +2515,7 @@ def _matcher_duration_log_public(
         return []
     day_filter = ""
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active() and is_sharded_hub():
+        if _shard_hub_console():
             day_filter = time.strftime("%Y-%m-%d", time.localtime())
     except Exception:  # noqa: BLE001
         pass
@@ -2644,9 +2628,7 @@ def _append_log_error_from_sink(text: str, record: Any) -> None:
     }
     _append_console_log_error(entry)
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.logs.errors import append_shard_log_error, log_stem_for_shard
             from src.platform.shard.registry.config import get_shard_registry_settings
 
@@ -2693,9 +2675,7 @@ def _log_error_log_meta() -> dict[str, Any]:
     sharded = False
     sources = ["hub"]
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             sharded = True
             from src.platform.shard.logs.view import list_shard_log_sources
 
@@ -2715,9 +2695,7 @@ def _log_error_log_public(
         raw = list(_LOG_ERROR_BUFFER)
     merged: list[dict[str, Any]] = [dict(it) for it in raw if isinstance(it, dict)]
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.logs.view import collect_cluster_log_errors
 
             merged.extend(collect_cluster_log_errors(per_file=800, limit=max(limit * 4, 80)))
@@ -2756,13 +2734,11 @@ def _cleanup_log_error_archives_sync() -> None:
 
 
 def _cleanup_log_errors_manual_sync() -> dict[str, Any]:
-    """清空日志报错归档（log_errors.jsonl、进程内缓冲；分片 hub 另清 errors/*.jsonl）。"""
+    """清空日志报错归档。"""
     _cleanup_log_error_archives_sync()
     sharded_errors = False
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.logs.errors import cleanup_shard_error_archives_sync
 
             cleanup_shard_error_archives_sync()
@@ -2774,7 +2750,7 @@ def _cleanup_log_errors_manual_sync() -> dict[str, Any]:
 
 
 async def _scheduled_cleanup_matcher_error_logs() -> None:
-    """每日 4:00 清理 Matcher 异常与日志 ERROR 归档（jsonl + 进程内缓冲）。"""
+    """每日 4:00 清理 Matcher 异常与日志 ERROR 归档。"""
     from src.foundation.paths import plugin_data_dir
 
     err_path = plugin_data_dir("pallas_webui") / "matcher_errors.jsonl"
@@ -2799,9 +2775,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
                 rec["matcher_duration_log"] = []
     _cleanup_log_error_archives_sync()
     try:
-        from src.platform.bot_runtime.roles import is_sharded_hub
-
-        if is_sharded_hub():
+        if _shard_hub_console():
             from src.platform.shard.console_stats import iter_worker_shard_ids, trim_worker_duration_logs_sync
             from src.platform.shard.logs.errors import cleanup_shard_error_archives_sync
 
@@ -2821,7 +2795,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
 
 
 def _matcher_hist_bump(sid: str, plugin: str, had_error: bool, *, duration_ms: int | float = 0) -> None:
-    """Matcher 执行按时间桶、按插件名记录（与 plugin-run-stats 插件维度一致）。"""
+    """Matcher 执行按时间桶、按插件名记录。"""
     pname = str(plugin).strip() or "_"
     dur = _duration_ms_float(duration_ms)
     rec = _plugin_run_bot_bucket(sid)
@@ -2939,7 +2913,7 @@ def _matcher_duration_hist_series_public(
     *,
     limit: int = _HIST_PLUGIN_SERIES_MAX,
 ) -> dict[str, Any]:
-    """各插件 Matcher 耗时（毫秒）按时间桶累计；与 matcher_runs 同桶可算平均耗时。"""
+    """各插件 Matcher 耗时按时间桶累计；与 matcher_runs 同桶可算平均耗时。"""
     raw = rec.get("matcher_hist")
     ranked: list[str] = []
     by_plugin = rec.get("by_plugin")
@@ -3005,14 +2979,13 @@ def _matcher_duration_hist_series_public(
 
 
 def _init_plugin_run_tracking() -> None:
-    """run_pre/postprocessor：Matcher 墙钟耗时与次数（不含被 run_preprocessor 拦截的调度）。"""
+    """run_pre/postprocessor：Matcher 墙钟耗时与次数。"""
     global _PLUGIN_RUN_TRACKING_INIT
     if _PLUGIN_RUN_TRACKING_INIT:
         return
     _PLUGIN_RUN_TRACKING_INIT = True
-    from src.platform.bot_runtime.roles import is_sharded_worker
 
-    if is_sharded_worker():
+    if _shard_worker_console():
         _restore_worker_console_stats_from_shard_file()
     elif not _restore_unified_console_stats_from_live_file():
         _load_matcher_duration_logs_from_disk()
@@ -3160,10 +3133,7 @@ def _plugin_run_stats_overview(
         total_runs_today += int(row.get("runs_today", 0))
         total_errors_today += int(row.get("errors_today", 0))
 
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.console_stats import load_cluster_console_stats_by_sid
         from src.platform.shard.presence import read_presence_bots
 
@@ -3256,7 +3226,7 @@ def _console_daily_stats_payload(
     start: str | None,
     end: str | None,
 ) -> dict[str, Any]:
-    """按自然日汇总：消息收/发与 Matcher 次数（磁盘 + 当前日内存）。"""
+    """按自然日汇总：消息收/发与 Matcher 次数。"""
     from datetime import date, timedelta
 
     from src.plugins.pallas_webui import daily_stats_store
@@ -3287,11 +3257,9 @@ def _console_daily_stats_payload(
     )
     by_key: dict[tuple[str, str], dict[str, Any]] = {(r["date"], r["self_id"]): dict(r) for r in rows}
     live_out: dict[str, dict[str, int]] = {}
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
     shard_cluster_sids: set[str] = set()
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.console_stats import load_cluster_console_stats_by_sid
 
         for sid, blob in load_cluster_console_stats_by_sid().items():
@@ -3324,7 +3292,7 @@ def _console_daily_stats_payload(
             continue
         if sid_f is not None and sid != sid_f:
             continue
-        if is_sharding_active() and is_sharded_hub() and sid in shard_cluster_sids:
+        if _shard_hub_console() and sid in shard_cluster_sids:
             continue
         _rollover_console_day_if_needed(sid, clock_today)
         mem = _MSG_STATS.get(sid)
@@ -3414,10 +3382,8 @@ async def _call_get_message_history(
 
 async def _collect_online_bot_profiles() -> dict[str, dict[str, Any]]:
     """尽力读取在线 OneBot V11 账号资料，失败时忽略单个账号并保留其它结果。"""
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.console.webui.protocol_accounts import protocol_account_display_names
         from src.platform.shard.presence import read_presence_bots
 
@@ -3498,10 +3464,8 @@ async def _friend_requests_overview(
 ) -> dict[str, Any]:
     disk = _read_pending_friend_requests_disk()
     online_by_self: dict[str, tuple[str, object]] = {}
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if is_sharding_active() and is_sharded_hub():
+    if _shard_hub_console():
         from src.platform.shard.presence import read_presence_bots
 
         for key, rec in read_presence_bots().items():
@@ -3707,7 +3671,7 @@ def _require_pallas_token_configured(
     x_pallas_token: str | None,
     token: str | None,
 ) -> None:
-    """所有控制台 API 共享的鉴权入口：与协议端共用会话（Cookie 或 X-Pallas-Token）。"""
+    """所有控制台 API 共享的鉴权入口：与协议端共用会话。"""
     if bool(getattr(plugin_config, "pallas_webui_dev_mode", False)):
         return
     req = current_http_request()
@@ -3946,7 +3910,7 @@ async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> d
         elif field_name == "roulette_mode":
             fields[field_name] = 1 if int(raw) == 1 else 0
         elif field_name == "blocked_user_ids" and raw is not None:
-            # 与 bot_config.admins 一致：逐项 int()，非法项由请求体验证阶段报错
+            # blocked_user_ids 逐项 int 转换
             fields[field_name] = [int(x) for x in raw]
         else:
             fields[field_name] = raw
@@ -4292,7 +4256,7 @@ def register_extended_api(
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> None:
-        """全局依赖：所有控制台 API（除 /health 外）必须携带有效 token。"""
+        """全局依赖：所有控制台 API必须携带有效 token。"""
         _require_pallas_token_configured(
             plugin_config,
             x_pallas_token=x_pallas_token,
@@ -4474,7 +4438,7 @@ def register_extended_api(
 
     @router.post(f"{x}/log-errors/cleanup", include_in_schema=True)
     async def _log_errors_cleanup() -> JSONResponse:
-        """清空日志报错归档（与每日 4:00 任务中的 log_errors 部分一致，不含 Matcher 异常 jsonl）。"""
+        """清空日志报错归档。"""
         try:
             data = await asyncio.to_thread(_cleanup_log_errors_manual_sync)
         except Exception as e:  # noqa: BLE001
@@ -4793,9 +4757,7 @@ def register_extended_api(
         sharded_logs = False
         log_sources: list[str] = []
         try:
-            from src.platform.bot_runtime.roles import is_sharded_hub
-
-            if is_sharded_hub():
+            if _shard_hub_console():
                 sharded_logs = True
                 from src.platform.shard.logs.view import list_shard_log_sources
 
@@ -4986,7 +4948,7 @@ def register_extended_api(
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
-        """受限 MongoDB aggregate（只读阶段白名单 + 强制结果上限）；须携带有效控制台会话。"""
+        """受限 MongoDB aggregate"""
         _require_pallas_token_configured(
             plugin_config,
             x_pallas_token=x_pallas_token,
@@ -5153,7 +5115,7 @@ def register_extended_api(
             list_group_configs_public,
         )
 
-        # 按账号过滤：拉取 Bot 的群列表，再从 DB 取对应群配置并合并（走 OneBot，结果短时缓存）
+        # 按账号过滤：拉取 Bot 的群列表，再从 DB 取对应群配置并合并
         if self_id is not None:
             cache_key_bot = f"group_configs_bot:{int(self_id)}:{int(limit)}"
 
@@ -5525,7 +5487,7 @@ def register_extended_api(
         self_id: int | None = Query(default=None, description="仅查看指定 Bot QQ；不传则返回全部"),
         doubt: bool = Query(default=True, description="是否对在线 OneBot V11 号尝试拉取被过滤的可疑好友申请"),
     ) -> JSONResponse:
-        """只读：request_handler 落盘的待处理好友申请 +（可选）协议侧可疑申请。"""
+        """只读：request_handler 落盘的待处理好友申请 +协议侧可疑申请。"""
 
         async def _load() -> dict[str, Any]:
             sid = str(int(self_id)) if self_id is not None else None
@@ -5548,7 +5510,7 @@ def register_extended_api(
         self_id: int = Query(..., description="Bot QQ（须当前在 NoneBot 已连接）"),
         limit: int = Query(default=800, ge=1, le=8000),
     ) -> JSONResponse:
-        """只读：对在线 Bot 调用 OneBot `get_friend_list`（大列表时按 limit 截断并标记 truncated）。"""
+        """只读：对在线 Bot 调用 OneBot `get_friend_list`。"""
         cache_key = f"friend_list:{int(self_id)}:{int(limit)}"
 
         async def _load() -> dict[str, Any]:
@@ -5579,7 +5541,7 @@ def register_extended_api(
         self_id: int = Query(..., description="Bot QQ（须当前在 NoneBot 已连接）"),
         limit: int = Query(default=1000, ge=1, le=10000),
     ) -> JSONResponse:
-        """只读：对在线 Bot 调用 OneBot `get_group_list`（大列表时按 limit 截断并标记 truncated）。"""
+        """只读：对在线 Bot 调用 OneBot `get_group_list`。"""
         cache_key = f"group_list:{int(self_id)}:{int(limit)}"
 
         async def _load() -> dict[str, Any]:

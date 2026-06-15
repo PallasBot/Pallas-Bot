@@ -181,7 +181,7 @@ def _penalty_duration_sec() -> float:
 
 
 async def send_human_penalty_notice(group_id: int, handler_bot_id: int, user_id: int) -> None:
-    """败者惩罚文案仅发一次（不撤回消息；群管亦同）。"""
+    """败者惩罚文案仅发一次。"""
     bot = get_bots().get(str(handler_bot_id))
     if bot is None:
         return

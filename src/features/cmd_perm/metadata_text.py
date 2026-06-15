@@ -1,4 +1,4 @@
-"""PluginMetadata 用户向文案格式（见 docs/common/cmd_perm/README.md）。"""
+"""PluginMetadata 用户向文案格式。"""
 
 from __future__ import annotations
 
@@ -10,12 +10,12 @@ SCENE_AUTO = "自动"
 
 
 def usage_line(trigger: str, description: str) -> str:
-    """一行用法：口令 — 说明（多条时由 join_usage 统一加序号）。"""
+    """一行用法：口令 — 说明。"""
     return f"{trigger} — {description}"
 
 
 def join_usage(*lines: str, numbered: bool | None = None) -> str:
-    """拼接 usage 正文。默认：2 条及以上自动加 1. 2. 3.；仅 1 条时不编号。"""
+    """拼接 usage 正文。默认：2 条及以上自动加 1. 2. 3."""
     items = [line.strip() for line in lines if line.strip()]
     if not items:
         return ""

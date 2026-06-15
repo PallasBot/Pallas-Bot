@@ -121,7 +121,7 @@ def apply_worker_ports_to_registry(
     *,
     worker_base_port: int | None = None,
 ) -> None:
-    """将分配结果写入 registry.shards[].port（按 shard_id 下标对齐）。"""
+    """将分配结果写入 registry.shards[].port。"""
     if worker_base_port is not None:
         reg.worker_base_port = int(worker_base_port)
     by_id = {s.id: s for s in reg.shards}

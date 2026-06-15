@@ -19,7 +19,7 @@ BUILTIN_HELP_HIDDEN_PLUGINS = frozenset({
 
 
 def resolve_console_stats_excluded_plugin_names() -> frozenset[str]:
-    """控制台 Matcher 插件次数统计排除名单（小写键名，含 claim 别名 ingress_gate）。"""
+    """控制台 Matcher 插件次数统计排除名单。"""
     names = set(BUILTIN_HELP_HIDDEN_PLUGINS)
     names.add("ingress_gate")
     return frozenset(str(n).strip().lower() for n in names if str(n).strip())
@@ -41,7 +41,7 @@ def resolve_help_ignored_plugins() -> list[str]:
 
 
 def load_help_hidden_plugins() -> list[str]:
-    """从 data 读取的额外隐藏名单（WebUI 可编辑）；不含内置隐藏。"""
+    """从 data 读取的额外隐藏名单"""
     path = _visibility_path()
     if not path.exists():
         return []
@@ -59,7 +59,7 @@ def load_help_hidden_plugins() -> list[str]:
 
 
 def resolve_help_hidden_plugins() -> list[str]:
-    """帮助总览与批量开关使用的完整隐藏名单（内置 + 文件）。"""
+    """帮助总览与批量开关使用的完整隐藏名单。"""
     return sorted(BUILTIN_HELP_HIDDEN_PLUGINS | set(load_help_hidden_plugins()))
 
 

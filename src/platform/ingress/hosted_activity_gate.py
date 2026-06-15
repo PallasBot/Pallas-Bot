@@ -155,7 +155,7 @@ def hosted_activity_ingress_passes(
     *,
     at_fleet_bot: bool = False,
 ) -> bool:
-    """False → ingress 丢弃（非主持牛且已有同群独占活动）。"""
+    """False → ingress 丢弃。"""
     for spec in loaded_hosted_activity_specs():
         if not spec_host_gate_passes(spec, bot_id, group_id, plain, at_fleet_bot=at_fleet_bot):
             return False

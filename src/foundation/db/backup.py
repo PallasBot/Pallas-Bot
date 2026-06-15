@@ -1,4 +1,4 @@
-"""控制台 / CLI：MongoDB、PostgreSQL 逻辑备份（mongodump / pg_dump）。"""
+"""控制台 / CLI：MongoDB、PostgreSQL 逻辑备份。"""
 
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ def default_backup_parent() -> Path:
 
 
 def resolve_backup_parent(user_path: str | None) -> Path:
-    """解析用户指定的备份父目录（相对路径相对于仓库根）。"""
+    """解析用户指定的备份父目录。"""
     raw = (user_path or "").strip()
     if not raw:
         parent = default_backup_parent()
@@ -375,7 +375,7 @@ def prepare_database_backup_run_dir(
     output_parent: str | None = None,
     label: str = "",
 ) -> Path:
-    """创建本次备份输出目录（异步任务在 dump 前调用，便于轮询体积）。"""
+    """创建本次备份输出目录。"""
     backend = get_db_backend()
     parent = resolve_backup_parent(output_parent)
     backend_name = "postgres" if backend in ("postgres", "postgresql", "pg") else "mongodb"

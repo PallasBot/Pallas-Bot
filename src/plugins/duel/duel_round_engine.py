@@ -161,7 +161,7 @@ def end_duel_group(group_id: int) -> None:
 
 
 async def begin_duel_command(group_id: int) -> DuelCommandGate:
-    """群级互斥 + 群级指令 CD（多 Bot 共用）。"""
+    """群级互斥 + 群级指令 CD。"""
     from src.platform.shard.coord.duel_group import _LOCK
     from src.plugins.duel.duel_session import get_duel_pair
 
@@ -349,7 +349,7 @@ def _read_event_pools_from_disk() -> dict[PoolName, list[LoadedEvent]]:
 
 
 def get_event_pools() -> dict[PoolName, list[LoadedEvent]]:
-    """返回缓存的事件池（未加载则读盘）。"""
+    """返回缓存的事件池。"""
     global _pools_cache
     if _pools_cache is None:
         _pools_cache = _read_event_pools_from_disk()
@@ -357,7 +357,7 @@ def get_event_pools() -> dict[PoolName, list[LoadedEvent]]:
 
 
 def load_event_pools() -> dict[PoolName, list[LoadedEvent]]:
-    """同 get_event_pools（兼容旧名）。"""
+    """同 get_event_pools。"""
     return get_event_pools()
 
 
@@ -532,7 +532,7 @@ def snapshot_combat(stacks: DuelStacks) -> CombatSnapshot:
 
 
 def hp_dp_changed(before: CombatSnapshot, stacks: DuelStacks) -> bool:
-    """本段是否改动了双方 HP 或 DP（用于兵刃后是否省略交锋台词）。"""
+    """本段是否改动了双方 HP 或 DP。"""
     return (
         stacks.challenger_hp != before.challenger_hp
         or stacks.defender_hp != before.defender_hp
@@ -542,7 +542,7 @@ def hp_dp_changed(before: CombatSnapshot, stacks: DuelStacks) -> bool:
 
 
 def primary_hp_loss_side(before: CombatSnapshot, stacks: DuelStacks) -> Actor | None:
-    """本段 HP 损失更多的一方（兵刃拆招的受击方）；双方无损创则 None。"""
+    """本段 HP 损失更多的一方；双方无损创则 None。"""
     ch_loss = before.challenger_hp - stacks.challenger_hp
     def_loss = before.defender_hp - stacks.defender_hp
     if ch_loss <= 0 and def_loss <= 0:
@@ -555,7 +555,7 @@ def primary_hp_loss_side(before: CombatSnapshot, stacks: DuelStacks) -> Actor | 
 
 
 def qte_actor_from_target(spec: dict[str, Any], actor: Actor) -> Actor:
-    """将 qte.target 映射为效果里的 actor（challenger/defender）。"""
+    """将 qte.target 映射为效果里的 actor。"""
     tgt = str(spec.get("target", "actor"))
     if tgt == "challenger":
         return "challenger"
@@ -600,7 +600,7 @@ def format_player_stat_lines(
 
 
 def side_stack_delta_line(qq: str, buff: int, buff0: int, debuff: int, debuff0: int) -> Message:
-    """单方本段战意/蚀势层变动（生机/护幕由 format_combat_delta_block 另算）。"""
+    """单方本段战意/蚀势层变动。"""
     tokens: list[str] = []
     for cur, prev, label in ((buff, buff0, STACK_BUFF), (debuff, debuff0, STACK_DEBUFF)):
         t = _delta_token(cur, prev, label)
@@ -630,7 +630,7 @@ def format_combat_delta_block(
     before: CombatSnapshot,
     stacks: DuelStacks,
 ) -> Message:
-    """本段数值变动：HP/DP（当前值+括号变动）、神恩/损创。"""
+    """本段数值变动：HP/DP、神恩/损创。"""
     parts: list[Message] = []
     ch_changed = player_stat_changed(
         stacks.challenger_hp,
@@ -704,7 +704,7 @@ def append_combat_delta(
     before: CombatSnapshot,
     stacks: DuelStacks,
 ) -> Message:
-    """在剧目文案后追加本段 HP/DP 变动（紧凑幕由幕末统一展示）。"""
+    """在剧目文案后追加本段 HP/DP 变动。"""
     base = coerce_duel_message(narrative)
     if plugin_config.duel_compact_round:
         return base
@@ -787,7 +787,7 @@ def format_round_status_line(
     *,
     round_start: CombatSnapshot | None = None,
 ) -> Message:
-    """双方 HP/DP 简报（附在本幕 flush 末尾；round_start 用于括号标本幕变动）。"""
+    """双方 HP/DP 简报。"""
     hp0_a = round_start.challenger_hp if round_start else None
     dp0_a = round_start.challenger_dp if round_start else None
     hp0_b = round_start.defender_hp if round_start else None
@@ -982,7 +982,7 @@ async def _play_clash_side(
     narr_key: str,
     skip_describe: bool = False,
 ) -> None:
-    """单攻或单守台词（双牛分号、乱入专场）。"""
+    """单攻或单守台词。"""
     from src.plugins.duel.duel_qte import run_event_qte_if_any
     from src.plugins.duel.duel_send import send_duel_line
 
@@ -1216,7 +1216,7 @@ async def play_clash_hero_events(
 
 
 async def pause_between_duel_rounds(round_index: int, pause_lo: float, pause_hi: float) -> None:
-    """幕间停顿；第 1 幕前不等待（开演说明后立刻进入第一幕）。"""
+    """幕间停顿；第 1 幕前不等待。"""
     if round_index <= 1:
         return
     if pause_lo <= 0 and pause_hi <= 0:

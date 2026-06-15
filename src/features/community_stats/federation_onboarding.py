@@ -1,4 +1,4 @@
-"""拉取中心 GET /v1/federation/onboarding（供控制台展示 Phase 2 入池说明）。"""
+"""拉取中心 GET /v1/federation/onboarding。"""
 
 from __future__ import annotations
 

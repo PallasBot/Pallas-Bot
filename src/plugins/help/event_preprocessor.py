@@ -7,10 +7,10 @@ from nonebot.exception import IgnoredException
 from nonebot.internal.matcher import Matcher
 from nonebot.message import event_preprocessor, run_preprocessor
 
-from src.platform.ingress.help_plaintext import is_help_plaintext
 from src.platform.ingress.plugin_command_plaintext import is_plugin_command_plaintext
+from src.platform.ingress.policy_registry import text_matches_plugin_fanout
 from src.platform.multi_bot.dedup import try_claim_cross_bot_message_memory
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 from .plugin_manager import collect_disabled_plugin_names, superuser_bypasses_plugin_disable
 
@@ -46,14 +46,18 @@ async def command_cross_bot_claim_won(
     message_time: int,
 ) -> bool:
     text = (plain_text or "").strip()
-    if not text or not (is_plugin_command_plaintext(text) or is_help_plaintext(text)):
+    if not text or not (is_plugin_command_plaintext(text) or text_matches_plugin_fanout(text, "help")):
         return True
     from src.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
 
     if ingress_fanout_bypasses_claim(text):
         return True
-    # 分片：ingress_gate 已做跨牛 claim，避免 run_preprocessor 二次抢占导致口令无响应。
-    if is_sharding_active():
+    if not shard_ctx.sharding_active():
+        from src.platform.ingress.unified_pass import unified_ingress_once_won_for_text
+
+        if unified_ingress_once_won_for_text(group_id, user_id, text, message_time):
+            return True
+    if shard_ctx.sharding_active():
         return True
     return await try_claim_cross_bot_message_memory(
         _COMMAND_INGRESS_PLUGIN,

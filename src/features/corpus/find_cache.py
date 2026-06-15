@@ -1,4 +1,4 @@
-"""find_by_keywords 进程内 TTL 缓存（含负缓存），减轻复读热路径远程 HTTP。"""
+"""find_by_keywords 进程内 TTL 缓存，减轻复读热路径远程 HTTP。"""
 
 from __future__ import annotations
 

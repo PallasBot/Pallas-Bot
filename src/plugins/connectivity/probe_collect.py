@@ -97,8 +97,7 @@ async def probe_maa_endpoints(
     cfg: MaaConfig | None = None,
     timeout_sec: float = 15.0,
 ) -> list[ServiceProbeResult]:
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
+    from src.platform.shard import context as shard_ctx
     from src.plugins.maa.endpoints import resolve_maa_probe_http_endpoints
 
     ep = resolve_maa_probe_http_endpoints(cfg)
@@ -124,13 +123,13 @@ async def probe_maa_endpoints(
             ),
         )
     results = [get_r, report_r]
-    if is_sharding_active() and is_sharded_hub():
+    if shard_ctx.sharding_active() and shard_ctx.is_hub():
         return _maa_hub_probe_note(results)
     return results
 
 
 def sing_probe_urls(base: str, cfg: SingConfig | None = None) -> list[tuple[str, str]]:
-    """与 Pallas-Bot-AI 对齐：GET /health（勿 GET /api/request，该路径仅 POST …/request/{id}）。"""
+    """与 Pallas-Bot-AI 对齐：GET /health。"""
     _ = cfg
     root = base.rstrip("/")
     return [("健康检查", urljoin(f"{root}/", "health"))]

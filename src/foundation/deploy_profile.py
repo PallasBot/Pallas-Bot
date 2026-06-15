@@ -1,4 +1,4 @@
-"""可选部署模板：uv extra 与落盘标记（``data/pallas_config/deploy_profiles.json``）。"""
+"""可选部署模板：uv extra 与落盘标记。"""
 
 from __future__ import annotations
 

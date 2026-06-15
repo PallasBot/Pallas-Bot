@@ -231,7 +231,7 @@ LAST_NOTIFIED_FILE = DATA_DIR / "last_notified_request.json"
 APPROVAL_NOTICE_FILE = DATA_DIR / "approval_notice_messages.json"
 DOUBT_POLL_STATE_FILE = DATA_DIR / "doubt_friend_poll_state.json"
 
-# 审批提醒元数据：超过此时长视为过期，不再用于「同意/拒绝」与引用回复（秒）
+# 审批提醒元数据：超过此时长视为过期，不再用于「同意/拒绝」与引用回复
 _NOTIFY_RECORD_MAX_AGE_SEC = 7 * 24 * 3600
 
 
@@ -292,7 +292,7 @@ def notify_ts_expired(ts: float, now: float | None = None) -> bool:
 
 
 def api_failure_is_request_gone(exc: BaseException) -> bool:
-    """协议返回「请求已不存在 / 已失效」等（用于提示文案）。"""
+    """协议返回「请求已不存在 / 已失效」等。"""
     if not isinstance(exc, ActionFailed):
         return False
     for arg in exc.args:

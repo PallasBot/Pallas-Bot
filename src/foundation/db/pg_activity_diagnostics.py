@@ -268,7 +268,7 @@ def format_pg_activity_detail(snapshot: PgActivitySnapshot) -> str:
     if snapshot.error:
         lines.append(f"probe_error={snapshot.error}")
 
-    return "\n  ".join(lines)
+    return "\n ".join(lines)
 
 
 async def collect_pg_activity_snapshot() -> PgActivitySnapshot:
@@ -343,4 +343,4 @@ async def maybe_emit_pg_activity_diagnostics(
     ):
         return
     detail = format_pg_activity_detail(snapshot)
-    logger.debug("pg activity detail:\n  {}", detail)
+    logger.debug("pg activity detail:\n {}", detail)

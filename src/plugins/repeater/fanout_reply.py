@@ -1,4 +1,4 @@
-"""多牛同群：判定可接话时由舰队内各牛各自发送（分片跨 worker）；context 只查一次。"""
+"""多牛同群：判定可接话时由舰队内各牛各自发送；context 只查一次。"""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from itertools import starmap
 from src.foundation.config import BotConfig
 from src.platform.bot_runtime.send_unavailable import BOT_SEND_UNAVAILABLE_ERRORS, log_bot_send_unavailable
 from src.platform.multi_bot.dedup import try_claim_group_message_once
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 from .config import get_repeater_config
 from .model import Chat, ChatData
@@ -63,7 +63,7 @@ async def repeater_can_attempt_reply(bot_id: int, group_id: int) -> bool:
 def repeater_fanout_enabled() -> bool:
     if not get_repeater_config().fanout_enabled:
         return False
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return len(get_bots()) > 1
     return True
 
@@ -72,7 +72,7 @@ async def repeater_fanout_enabled_for_group(group_id: int) -> bool:
     """与单进程一致：仅当群内不少于 2 只可复读的在线牛时才 fanout。"""
     if not repeater_fanout_enabled():
         return False
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return len(get_bots()) > 1
     return await count_fanout_capable_bots(group_id) >= 2
 
@@ -162,7 +162,7 @@ async def list_fanout_bot_ids(group_id: int) -> list[int]:
     if not ids:
         return []
 
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         online = get_cluster_online_bot_ids()
         ids = [bid for bid in ids if bid in online]
 
@@ -331,7 +331,7 @@ async def dispatch_repeater_fanout(
         delay = i * stagger
         if bot_has_local_connection(bid):
             local.append((bid, delay))
-        elif is_sharding_active():
+        elif shard_ctx.sharding_active():
             remote.append((bid, delay))
 
     for bid, delay in local:

@@ -1,4 +1,4 @@
-"""做梦/醒梦入口明文（供 ingress 门控与 dream 共用，勿依赖 plugins）。"""
+"""做梦/醒梦入口明文。"""
 
 from __future__ import annotations
 

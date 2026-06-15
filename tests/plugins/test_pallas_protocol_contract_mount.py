@@ -1,4 +1,4 @@
-"""协议管理页默认挂载路径（与账号 protocol_backend 解耦）。"""
+"""协议管理页默认挂载路径。"""
 
 from src.plugins.pallas_protocol.contract import (
     DEFAULT_PROTOCOL_WEB_MOUNT_SLUG,

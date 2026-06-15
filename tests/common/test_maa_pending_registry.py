@@ -30,7 +30,7 @@ async def test_shard_pending_enqueue_and_list(fake_coord_redis) -> None:
 @pytest.mark.asyncio
 async def test_store_pending_count_uses_shard_redis(fake_coord_redis, monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.platform.shard.context.is_sharding_active",
         lambda: True,
     )
 

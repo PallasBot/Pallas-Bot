@@ -95,7 +95,7 @@ def resize_image_if_needed(image, max_width=1200, max_height=2800):
     return image
 
 
-# NapCat 等协议端对超大 base64 图片经 WS 发送不稳定；控制原始体积（约 2.5MiB，base64 后约 3.4MiB）
+# NapCat 等协议端对超大 base64 图片经 WS 发送不稳定；控制原始体积
 _HELP_IMAGE_MAX_SEND_BYTES = 2_500_000
 _HELP_IMAGE_MIN_SIDE = 360
 

@@ -416,7 +416,7 @@ async def test_context_insert_skip_none(beanie_fixture):
 @pytest.mark.asyncio
 async def test_context_insert_calls_upsert_answer_when_context_exists(beanie_fixture):
     """
-    Context 已存在时，_context_insert 应委托 upsert_answer（而非读-改-写 save），
+    Context 已存在时，_context_insert 应委托 upsert_answer，
     以便在拆表后具备原子 inc count 的能力。
     """
     from src.foundation.db import Message as MessageModel
@@ -524,7 +524,7 @@ async def test_context_insert_prefers_repo_learn_answer_fast_path(beanie_fixture
 @pytest.mark.asyncio
 async def test_context_insert_no_append_when_non_plain_text(beanie_fixture):
     """
-    非纯文本（含 CQ 码的）消息对已有 answer 不应 push message，
+    非纯文本消息对已有 answer 不应 push message，
     通过 upsert_answer 的 append_on_existing=False 表达。
     """
     from src.foundation.db import Message as MessageModel

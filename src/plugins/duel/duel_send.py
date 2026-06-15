@@ -99,7 +99,7 @@ def buffer_can_deliver(buf: RoundLineBuffer) -> bool:
 
 
 def round_buffer_prepend(chunk: str | Message) -> None:
-    """将文本接到本幕缓冲首部（用于幕标与首段剧目合一）。"""
+    """将文本接到本幕缓冲首部。"""
     buf = _round_buffer.get()
     if buf is None:
         return
@@ -113,7 +113,7 @@ def round_buffer_prepend(chunk: str | Message) -> None:
 
 
 def take_round_buffer_body() -> Message:
-    """取出并清空本幕缓冲正文（不含 send_kwargs）。"""
+    """取出并清空本幕缓冲正文。"""
     buf = _round_buffer.get()
     if buf is None or not buf.parts:
         return Message()
@@ -136,7 +136,7 @@ async def send_duel_line_merge_buffer(
     image_bytes: bytes | None = None,
     split_image_on_fail: bool = False,
 ) -> bool:
-    """将缓冲剧目与 text 合并为一条即时消息（紧凑幕 QTE 提示用）。返回是否成功发群。"""
+    """将缓冲剧目与 text 合并为一条即时消息。返回是否成功发群。"""
     prefix = take_round_buffer_body()
     chunk = coerce_duel_message(text)
     if message_has_content(prefix) and message_has_content(chunk):
@@ -164,7 +164,7 @@ async def send_duel_line_merge_buffer(
 
 
 async def release_round_line_buffer() -> None:
-    """发出本幕已缓冲的剧目（不含幕末数值行），便于紧接 QTE 提示或即时反馈。"""
+    """发出本幕已缓冲的剧目，便于紧接 QTE 提示或即时反馈。"""
     buf = _round_buffer.get()
     if buf is None or not buf.parts or not buffer_can_deliver(buf):
         return
@@ -174,7 +174,7 @@ async def release_round_line_buffer() -> None:
 
 
 async def flush_round_line_buffer(suffix: str | Message) -> None:
-    """将本幕已缓冲的剧目片段与幕末结算（suffix）合并发出。"""
+    """将本幕已缓冲的剧目片段与幕末结算合并发出。"""
     buf = _round_buffer.get()
     if buf is None or not buffer_can_deliver(buf):
         return
@@ -232,7 +232,7 @@ async def send_duel_line(
 
 
 def build_duel_outbound_message(body: Message, *, image_bytes: bytes | None = None) -> Message:
-    """剧目正文与可选头像合并为一条群消息（头像为 PNG bytes，同 greeting）。"""
+    """剧目正文与可选头像合并为一条群消息。"""
     msg = body if message_has_content(body) else Message()
     if image_bytes:
         msg = msg + Message(MessageSegment.image(image_bytes))

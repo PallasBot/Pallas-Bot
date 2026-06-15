@@ -1,4 +1,4 @@
-"""分片注册表环境配置（hub / worker 共用，读 .env）。"""
+"""分片注册表环境配置。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""语料多源配置（pallas.toml [corpus] / 环境变量）。"""
+"""语料多源配置。"""
 
 from __future__ import annotations
 
@@ -141,7 +141,7 @@ def resolved_community_token() -> str:
 
 
 def community_contribute_enabled(cfg: CorpusConfig | None = None) -> bool:
-    """是否向社区池 mirror 学习结果；默认 auto=开，enroll policy 或显式 false 可关。"""
+    """是否向社区池 mirror 学习结果"""
     flag = parse_tristate(setting_str(f"{_PREFIX}COMMUNITY_CONTRIBUTE", "auto"), default=True)
     if flag is True:
         return True
@@ -189,9 +189,9 @@ def corpus_composite_enabled(cfg: CorpusConfig | None = None) -> bool:
 def remote_corpus_find_mode(cfg: CorpusConfig | None = None) -> RemoteCorpusFindMode:
     """local 未命中时的远程语料策略（PALLAS_CORPUS_REMOTE_FIND_ENABLED）。
 
-    - off（false / auto / 空）：不拉远程
+    - off：不拉远程
     - sync：热路径同步 HTTP 查社区并当场接话
-    - prefetch（true / prefetch）：热路径仅本地；miss 时后台拉取并写入本地，下次再回
+    - prefetch：热路径仅本地；miss 时后台拉取并写入本地，下次再回
     """
     _ = cfg
     raw = setting_str(f"{_PREFIX}REMOTE_FIND_ENABLED", "auto").strip().lower()
@@ -203,5 +203,5 @@ def remote_corpus_find_mode(cfg: CorpusConfig | None = None) -> RemoteCorpusFind
 
 
 def remote_corpus_find_enabled(cfg: CorpusConfig | None = None) -> bool:
-    """是否在 local 未命中时访问远程语料（仅 sync 模式在热路径同步请求）。"""
+    """是否在 local 未命中时访问远程语料。"""
     return remote_corpus_find_mode(cfg) == "sync"

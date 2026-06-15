@@ -9,16 +9,17 @@ from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Literal
 
-from nonebot import get_bots, logger
+from nonebot import logger
 
 from src.foundation.db import get_db_backend
+from src.plugins.dream.shard_fleet import dream_history_bot_ids
 
 from .config import plugin_config
 from .dedupe_keys import dream_image_dedupe_key, dream_text_dedupe_key
 from .http_utils import download_image_url
 from .payload import DriftPayload
 
-# 写入 message.keywords 的前缀（与复读侧 keywords 区分）
+# 写入 message.keywords 的前缀
 DREAM_KEY_PREFIX = "is_dream"
 DREAM_RECORD_SEP = "\x1e"
 
@@ -179,26 +180,6 @@ def first_http_image_url_from_cq_raw(raw: str) -> str | None:
                 if u.startswith(("http://", "https://")):
                     return u
     return None
-
-
-def dream_history_bot_ids(process_fallback_self_id: int) -> list[int]:
-    """参与历史梦库采样的牛牛 QQ；分片时为全集群在线 catalog，单进程为本进程连接。"""
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if is_sharding_active():
-        from src.platform.multi_bot.fleet import get_catalog_bot_ids
-        from src.platform.shard.presence import get_cluster_online_bot_ids
-
-        ids = set(get_catalog_bot_ids()) & set(get_cluster_online_bot_ids())
-    else:
-        try:
-            ids = {int(b.self_id) for b in get_bots().values()}
-        except Exception:
-            ids = set()
-    if not ids:
-        return [process_fallback_self_id]
-    ids.add(process_fallback_self_id)
-    return sorted(ids)
 
 
 async def sample_historical_drift(

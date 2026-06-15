@@ -18,6 +18,16 @@
 
 [`config.py`](../../../src/plugins/draw/config.py) 与 WebUI **插件 → 牛牛画画**；网关亦可在 **服务网关 / 连通性** 配置。
 
+### 命名约定
+
+| 层面 | 名称 |
+| --- | --- |
+| 插件包名 / 命令 ID | `draw`（如 `draw.draw`） |
+| WebUI / 帮助展示 | 牛牛画画 |
+| 配置键 / 环境变量 | `pallas_image_*`（如 `pallas_image_base_url`、`pallas_image_draw_per_user_limit`） |
+
+历史原因：生图能力早于插件包统一命名，字段前缀沿用 `pallas_image_`；新增文档与 WebUI 文案以「牛牛画画 / draw」为准，勿再引入第二套别名。
+
 ## 排障
 
 | 现象 | 处理 |

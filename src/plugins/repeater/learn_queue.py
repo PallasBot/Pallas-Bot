@@ -46,7 +46,7 @@ async def wait_pg_pool_headroom_for_learn() -> None:
 
 def learn_queue_pressure_threshold() -> int:
     """队列到达该水位时优先保护接话，跳过新增 learn。"""
-    # learn 队列一旦堆高，后续还会连带压住 image cache / corpus prefetch；
+    # learn 队列一旦堆高，后续还会连带压住 image cache / corpus prefetch
     # 这里提前刹车，让主循环更快恢复，而不是把回填吞吐吃满。
     return max(64, learn_queue_max_size() // 16)
 
@@ -126,7 +126,7 @@ async def execute_repeater_learn(chat: Chat) -> None:
 
 
 async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
-    """仅抢占成功的牛入队；队列满则丢弃本条 learn（接话不受影响）。"""
+    """仅抢占成功的牛入队；队列满则丢弃本条 learn。"""
     global _dropped_full, _dropped_pressure
     if should_skip_repeater_learn_enqueue():
         _dropped_pressure += 1
@@ -193,7 +193,7 @@ async def stop_repeater_learn_worker() -> None:
 
 
 async def reload_repeater_learn_worker_runtime() -> None:
-    """WebUI 保存 learn 配置后：失效缓存并重启 worker（队列容量随之更新）。"""
+    """WebUI 保存 learn 配置后：失效缓存并重启 worker。"""
     from .learn_runtime_config import clear_repeater_learn_runtime_config_cache
 
     clear_repeater_learn_runtime_config_cache()

@@ -26,7 +26,7 @@ async def pg_engine():
     每个测试独占一个干净 schema。
 
     进入前：drop_all → init_pg，确保上一次遗留不影响当前用例。
-    退出后：drop_all → dispose_pg（顺便清 _CONFIG_CACHES），避免模块级缓存跨用例污染。
+    退出后：drop_all → dispose_pg，避免模块级缓存跨用例污染。
     """
     if not PG_TEST_DSN:
         pytest.skip("需要设置 PG_TEST_DSN 指向测试 PG 实例")
@@ -69,7 +69,7 @@ async def pg_env(pg_engine):
 
 
 def _load_migrate_module():
-    """动态加载 tools/migrate_mongo_to_pg.py（非 package，只能按路径 import）。"""
+    """动态加载 tools/migrate_mongo_to_pg.py。"""
     mod_name = "_pallas_migrate_mongo_to_pg"
     if mod_name in sys.modules:
         return sys.modules[mod_name]

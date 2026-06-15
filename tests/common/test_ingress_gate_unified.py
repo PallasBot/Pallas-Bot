@@ -87,7 +87,7 @@ async def test_unified_ingress_fanout_skips_federate_and_once_claim(monkeypatch:
     federate = AsyncMock(return_value=True)
     once = AsyncMock(return_value=True)
     monkeypatch.setattr("src.plugins.ingress_gate.claim_federate_group_message_ingress", federate)
-    monkeypatch.setattr("src.plugins.ingress_gate.try_claim_group_message_once", once)
+    monkeypatch.setattr("src.platform.ingress.claim_gate.try_claim_group_message_once", once)
     monkeypatch.setattr("src.plugins.ingress_gate.ingress_fanout_bypasses_claim", lambda _plain: True)
     from src.plugins.ingress_gate import ingress_group_message_gate
 
@@ -124,7 +124,7 @@ async def test_unified_ingress_bypass_skips_federate_claim(monkeypatch: pytest.M
     monkeypatch.setattr("src.platform.federate.ingress.federate_ingress_bypass_unified", lambda: True)
     federate = AsyncMock(return_value=True)
     monkeypatch.setattr("src.platform.federate.ingress.try_claim_cross_federate_message", federate)
-    monkeypatch.setattr("src.plugins.ingress_gate.try_claim_group_message_once", AsyncMock(return_value=True))
+    monkeypatch.setattr("src.platform.ingress.claim_gate.try_claim_group_message_once", AsyncMock(return_value=True))
     from src.plugins.ingress_gate import ingress_group_message_gate
 
     class FakeBot:
@@ -177,7 +177,7 @@ async def test_unified_ingress_discards_federate_peer_bot_before_claims(monkeypa
     federate = AsyncMock(return_value=True)
     once = AsyncMock(return_value=True)
     monkeypatch.setattr("src.plugins.ingress_gate.claim_federate_group_message_ingress", federate)
-    monkeypatch.setattr("src.plugins.ingress_gate.try_claim_group_message_once", once)
+    monkeypatch.setattr("src.platform.ingress.claim_gate.try_claim_group_message_once", once)
     from src.plugins.ingress_gate import ingress_group_message_gate
 
     class FakeBot:
@@ -219,7 +219,7 @@ async def test_unified_ingress_non_owner_deployment_skips_once_and_federate_clai
     federate = AsyncMock(return_value=True)
     once = AsyncMock(return_value=True)
     monkeypatch.setattr("src.plugins.ingress_gate.claim_federate_group_message_ingress", federate)
-    monkeypatch.setattr("src.plugins.ingress_gate.try_claim_group_message_once", once)
+    monkeypatch.setattr("src.platform.ingress.claim_gate.try_claim_group_message_once", once)
     from src.plugins.ingress_gate import ingress_group_message_gate
 
     class FakeBot:
@@ -253,7 +253,7 @@ async def test_unified_ingress_reuses_precomputed_plain_for_federate_claim(
     monkeypatch.setattr("src.plugins.ingress_gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("src.plugins.ingress_gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("src.plugins.ingress_gate.ingress_fanout_bypasses_claim", lambda _plain: False)
-    monkeypatch.setattr("src.plugins.ingress_gate.try_claim_group_message_once", AsyncMock(return_value=True))
+    monkeypatch.setattr("src.platform.ingress.claim_gate.try_claim_group_message_once", AsyncMock(return_value=True))
 
     async def fake_federate(event, **kwargs) -> bool:
         assert kwargs["plain"] == "测试 ingress"
@@ -290,7 +290,7 @@ async def test_unified_ingress_only_allows_at_target_bot(monkeypatch: pytest.Mon
     monkeypatch.setattr("src.plugins.ingress_gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("src.plugins.ingress_gate.get_fleet_bot_ids", lambda: frozenset({111, 222}))
     monkeypatch.setattr("src.plugins.ingress_gate.ingress_fanout_bypasses_claim", lambda _plain: False)
-    monkeypatch.setattr("src.plugins.ingress_gate.try_claim_group_message_once", AsyncMock(return_value=True))
+    monkeypatch.setattr("src.platform.ingress.claim_gate.try_claim_group_message_once", AsyncMock(return_value=True))
     monkeypatch.setattr(
         "src.plugins.ingress_gate.claim_federate_group_message_ingress",
         AsyncMock(return_value=True),

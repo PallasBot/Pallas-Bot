@@ -1,4 +1,4 @@
-"""控制台元信息（static_root、dev_mode 等），供 api / extended_api 共用，避免循环导入。"""
+"""控制台元信息，供 api / extended_api 共用，避免循环导入。"""
 
 from __future__ import annotations
 

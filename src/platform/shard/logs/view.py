@@ -43,7 +43,7 @@ def shard_logs_dir():
 
 
 def shard_log_stem_in_registry_use(reg: Any, shard: Any) -> bool:
-    """注册表内且已分配牛牛的 worker 分片（含 test）；hub 角色除外。"""
+    """注册表内且已分配牛牛的 worker 分片；hub 角色除外。"""
     role = (shard.role or "normal").strip().lower()
     if role == "hub":
         return False
@@ -51,7 +51,7 @@ def shard_log_stem_in_registry_use(reg: Any, shard: Any) -> bool:
 
 
 def registry_worker_log_stems() -> frozenset[str] | None:
-    """分片开启时：注册表内已挂牛的 worker 日志 stem（``worker-N``，含 test）；未开分片返回 None。"""
+    """分片开启时：注册表内已挂牛的 worker 日志 stem；未开分片返回 None。"""
     try:
         from src.platform.shard.registry.config import is_sharding_active
         from src.platform.shard.registry.store import get_shard_registry
@@ -70,7 +70,7 @@ def registry_worker_log_stems() -> frozenset[str] | None:
 
 
 def worker_log_stem_allowed(stem: str) -> bool:
-    """未在注册表在用列表中的 worker 落盘日志不参与合并/来源列表（遗留 worker-99.log 等）。"""
+    """未在注册表在用列表中的 worker 落盘日志不参与合并/来源列表。"""
     allowed = registry_worker_log_stems()
     if allowed is None:
         return True
@@ -78,7 +78,7 @@ def worker_log_stem_allowed(stem: str) -> bool:
 
 
 def list_shard_log_sources() -> list[str]:
-    """可供 WebUI 筛选的日志来源（hub + 注册表内各 worker 主日志）。"""
+    """可供 WebUI 筛选的日志来源。"""
     out = ["hub"]
     root = shard_logs_dir()
     if not root.is_dir():
@@ -306,7 +306,7 @@ def _line_message_tail(body: str) -> str:
 
 
 def dedupe_mirror_stdio_lines(lines: list[str]) -> list[str]:
-    """去掉 loguru 行后紧跟的 stdlib 镜像行（同一事件写两遍）。"""
+    """去掉 loguru 行后紧跟的 stdlib 镜像行。"""
     out: list[str] = []
     prev_tail = ""
     for line in lines:
@@ -321,7 +321,7 @@ def dedupe_mirror_stdio_lines(lines: list[str]) -> list[str]:
 
 
 def dedupe_log_lines_preserve_order(lines: list[str]) -> list[str]:
-    """去掉完全相同的行（多次启动失败会重复写入相同 traceback 行）。"""
+    """去掉完全相同的行。"""
     seen: set[str] = set()
     out: list[str] = []
     for line in lines:

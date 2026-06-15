@@ -1,4 +1,4 @@
-"""从 pyproject.toml 解析 NoneBot 外部插件（pip 包与额外 plugin_dirs）。"""
+"""从 pyproject.toml 解析 NoneBot 外部插件。"""
 
 from __future__ import annotations
 

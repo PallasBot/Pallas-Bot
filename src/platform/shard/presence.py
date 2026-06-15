@@ -276,7 +276,7 @@ def reconcile_local_worker_presence_sync(*, shard_id: int, local_qq_ids: set[int
 
 
 def prune_stale_presence_entries_sync(*, max_age_sec: float = _PRESENCE_STALE_SEC) -> int:
-    """移除长时间未刷新的 presence（worker 崩溃或未正常 disconnect 时兜底）。"""
+    """移除长时间未刷新的 presence。"""
     from src.platform.coord.redis_presence import (
         presence_uses_redis_only,
         prune_stale_presence_entries_redis_sync,
@@ -341,7 +341,7 @@ async def clear_protocol_bot_offline(qq: int) -> None:
 
 
 async def close_local_bot_connection(qq: int) -> bool:
-    """主动关闭本进程 WS，触发 on_bot_disconnect（协议已离线但连接未断时）。"""
+    """主动关闭本进程 WS，触发 on_bot_disconnect。"""
     from nonebot import get_bots
 
     key = str(int(qq))
@@ -450,7 +450,7 @@ def count_connected_bots_for_reporting() -> int:
 
 
 def list_connected_bots_for_webui() -> list[dict[str, Any]]:
-    """hub WebUI /bots：全 worker 已连接牛牛（不依赖 hub 进程 get_bots）。"""
+    """hub WebUI /bots：全 worker 已连接牛牛。"""
     from src.console.webui.protocol_accounts import protocol_account_display_names
 
     names = protocol_account_display_names()
@@ -473,7 +473,7 @@ def list_connected_bots_for_webui() -> list[dict[str, Any]]:
 
 
 def pick_local_query_bot():
-    """本 worker 用最小 QQ 的 Bot 查群成员（与 fanout 代表牛一致）。"""
+    """本 worker 用最小 QQ 的 Bot 查群成员。"""
     from nonebot import get_bots
 
     from src.platform.shard.local_representative import local_worker_representative_bot_id

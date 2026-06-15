@@ -10,7 +10,18 @@
 | 共享池 | 社区中心接话素材 | 关闭，需 WebUI 手动开 |
 | 联邦库 | 多套牛牛共用独立库 | 进阶，多数部署未接 |
 
-查找顺序默认**先本机再共享池**；远端失败自动退回本机。架构见 [控制面与语料联邦](../../architecture/control-plane-corpus-federation.md)。
+查找顺序默认**先本机再共享池**；远端失败自动退回本机。
+
+## 服务地址
+
+公网服务挂在 `*.pallasbot.top` 子域；主域备案即可，不必单独为控制面再占根域。
+
+| 用途 | 地址 |
+| --- | --- |
+| 在线统计与语料 API | `https://stats.pallasbot.top` |
+| 备案过渡期备用 | `https://pallas.togetsudo.com` |
+
+Bot 在 auto enroll 下会从心跳地址推导语料 URL；读路径按主/备顺序 failover，与在线统计一致。
 
 ## 配置
 
@@ -45,6 +56,12 @@
 
 **通用配置 → 联邦控制** 填入池密钥并开启去重，避免同一条群消息各回复一遍。密钥在 **统计与语料 → 社区联邦** 复制。
 
+## 隐私与降级
+
+- **contribute** 默认开启，可在 WebUI 关闭；上传仅含关键词与短句，`group_id=0`，不含 QQ/群号
+- 中心不可达：接话与学习仅走本机，不阻塞启动
+- 中心可对 contribute 先入队审核；Bot 侧 mirror 失败有退避与日配额
+
 ## 排障
 
 | 现象 | 处理 |
@@ -72,8 +89,8 @@
 | backfill | WebUI **通用配置 → 语料联邦 → 历史语料同步**，或 `PALLAS_CORPUS_BACKFILL_ENABLED=true` |
 | 机群快照 | 心跳可选附带本机 Top 词，中心 `mode=fleet` 叠加展示 |
 
-上传仅含关键词与短句，不含群号与 QQ。
-
 ## 实现
 
 [`src/features/corpus/`](../../../src/features/corpus/) · 中心服务 [Community-Stats](https://github.com/TogetsuDo/Pallas-Bot-Community-Stats)
+
+维护者向架构与 OpenAPI 见 [控制面与语料联邦](../../architecture/control-plane-corpus-federation.md)。

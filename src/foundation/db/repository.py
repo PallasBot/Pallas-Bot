@@ -16,7 +16,7 @@ class ContextRepository(Protocol):
         """是否已有 Context(keywords)；用于仅需分支判断时避免全量加载。
 
         自定义后端若暂无轻量查询，可混入 `ContextRepositoryExistenceMixin`，
-        由 `find_by_keywords` 推导存在性（仍会全量加载）。
+        由 `find_by_keywords` 推导存在性。
         """
         ...
 
@@ -37,7 +37,7 @@ class ContextRepository(Protocol):
         ...
 
     async def find_for_cleanup(self, trigger_threshold: int, expiration: int) -> list[Context]:
-        """查找需要清理的 Context 文档（trigger_count 过高或 clear_time 过旧）"""
+        """查找需要清理的 Context 文档"""
         ...
 
     async def upsert_answer(
@@ -57,7 +57,7 @@ class ContextRepository(Protocol):
         - 否则新建一条 Answer(count=1, time=answer_time, messages=[message])
         - 同时 Context.trigger_count += 1，Context.time=answer_time
 
-        要求实现具备并发原子性（Mongo 可用 $inc/$push + positional 更新；PG 用事务 + upsert）。
+        要求实现具备并发原子性。
         前置条件：Context(keywords=keywords) 必须已存在，否则行为未定义 —— 调用方
         应先 context_exists_by_keywords / find_by_keywords，不存在时走 insert(Context(...)) 路径。
         """
@@ -103,7 +103,7 @@ class MessageRepository(Protocol):
         user_id: int | None = None,
         limit: int = 8,
     ) -> list[Message]:
-        """群内近期消息，按 time 升序（供复读 learn 上下文链）。"""
+        """群内近期消息，按 time 升序。"""
         ...
 
 
@@ -125,7 +125,7 @@ class BlackListRepository(Protocol):
 @runtime_checkable
 class ConfigRepository(Protocol):
     """
-    通用配置 Repository（绑定到单一 Document/表）。
+    通用配置 Repository。
     供 BotConfig / GroupConfig / UserConfig / help plugin_manager 使用。
     """
 
@@ -135,7 +135,7 @@ class ConfigRepository(Protocol):
 
     async def get_or_create(self, key_id: int, **defaults: Any) -> tuple[Any, bool]:
         """
-        获取配置文档，若不存在则用 defaults 创建新文档（primary_key 由 repo 自动注入）。
+        获取配置文档，若不存在则用 defaults 创建新文档。
         返回 (document, created)。
         """
         ...
@@ -155,7 +155,7 @@ class ConfigRepository(Protocol):
 
     async def invalidate_cache(self) -> None:
         """
-        失效 Repository 级缓存（仅部分实现有意义，如 Beanie 的 model-level cache）。
+        失效 Repository 级缓存。
         默认实现为空。
         """
         ...
@@ -172,7 +172,7 @@ class ImageCacheRepository(Protocol):
         ...
 
     async def save(self, cache: ImageCache) -> None:
-        """保存/更新图片缓存（通常是 ref_times 变更）"""
+        """保存/更新图片缓存"""
         ...
 
     async def delete_old(self, before_date: int) -> None:

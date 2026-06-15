@@ -1,4 +1,4 @@
-"""曾建立过 WS 连接的牛牛（分片写入共享文件；单进程用 fleet 内存集合）。"""
+"""曾建立过 WS 连接的牛牛。"""
 
 from __future__ import annotations
 
@@ -88,7 +88,7 @@ def _load_cluster_seen_ids() -> set[int]:
 
 
 def load_cluster_session_seen_ids() -> frozenset[int]:
-    """分片共享文件中的曾连 WS QQ（不含本进程内存）。"""
+    """分片共享文件中的曾连 WS QQ。"""
     return frozenset(_load_cluster_seen_ids())
 
 
@@ -122,7 +122,7 @@ def note_bot_session_seen(qq: int) -> None:
 
 
 def get_session_seen_bot_ids() -> frozenset[int]:
-    """全集群/单进程：曾连 WS 且协议 enabled 的 QQ（无 accounts 时仅按 session）。"""
+    """全集群/单进程：曾连 WS 且协议 enabled 的 QQ。"""
     from src.platform.multi_bot.fleet import get_enabled_protocol_bot_ids, get_process_session_connected_ids
 
     ids = set(get_process_session_connected_ids())

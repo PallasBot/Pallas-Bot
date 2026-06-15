@@ -1,4 +1,4 @@
-"""跨 worker 同群独占活动（开房/开战等）的通用 Redis 互斥。"""
+"""跨 worker 同群独占活动的通用 Redis 互斥。"""
 
 from __future__ import annotations
 

@@ -198,7 +198,7 @@ def load_pyproject_extra_plugins(
     include_extra_dirs: bool,
     include_bootstrap_dirs: bool = True,
 ) -> int:
-    """加载 pyproject [tool.nonebot.plugins] 与（可选）额外 plugin_dirs。"""
+    """加载 pyproject [tool.nonebot.plugins] 与额外 plugin_dirs。"""
     module_paths, plugin_dirs = parse_nonebot_plugin_config(_PYPROJECT)
     module_paths = _prioritize_scheduler_modules(module_paths)
     total = 0

@@ -41,7 +41,7 @@ def _toml_key(name: str) -> str:
 
 @lru_cache(maxsize=1)
 def env_key_to_section_label() -> dict[str, str]:
-    """环境变量键 → 分组标签（``plugin.repeater`` / ``common.message_scrub``）。"""
+    """环境变量键 → 分组标签。"""
     index: dict[str, str] = {}
 
     def claim(env_key: str, label: str) -> None:
@@ -78,7 +78,7 @@ def env_key_to_section_label() -> dict[str, str]:
 
 
 def rebuild_webui_json_sections(env: dict[str, str]) -> dict[str, dict[str, str]]:
-    """由扁平 ``env`` 生成分组 ``sections``（仅用于 JSON 可读性，合并仍以 ``env`` 为准）。"""
+    """由扁平 ``env`` 生成分组 ``sections``。"""
     index = env_key_to_section_label()
     sections: dict[str, dict[str, str]] = {}
     for raw_k, raw_v in env.items():
@@ -100,7 +100,7 @@ def render_webui_export_toml(
     lines = [
         "# 本文件由 Pallas-Bot 根据 WebUI 保存自动生成，请勿手动编辑。",
         f"# 来源：{src.as_posix()}",
-        "# 基础设施（数据库、监听、超管等）见 config/pallas.toml 的 [bootstrap]。",
+        "# 基础设施见 config/pallas.toml [bootstrap]。",
         "# 修改配置请使用控制台「插件 / 通用配置」，或编辑 pallas.toml / webui.json。",
         "",
     ]
@@ -112,7 +112,7 @@ def render_webui_export_toml(
         lines.extend(f"{_toml_key(k)} = {_toml_quote(table[k])}" for k in sorted(table.keys()))
         lines.append("")
     if not grouped:
-        lines.extend(("# （当前 webui.json 尚无 WebUI 写入项）", ""))
+        lines.extend(("# 当前 webui.json 无写入项", ""))
     return "\n".join(lines)
 
 

@@ -1,4 +1,4 @@
-"""生产 worker 数量估算（启动脚本与 hub 自动扩容共用）。"""
+"""生产 worker 数量估算。"""
 
 from __future__ import annotations
 

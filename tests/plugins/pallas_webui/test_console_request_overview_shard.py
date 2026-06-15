@@ -15,8 +15,7 @@ async def test_friend_requests_overview_parallel_doubt(monkeypatch) -> None:
         "get_bots",
         dict,
     )
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_hub", lambda: True)
+    monkeypatch.setattr(mod, "_shard_hub_console", lambda: True)
     monkeypatch.setattr(
         "src.platform.shard.presence.read_presence_bots",
         lambda: {
@@ -54,7 +53,7 @@ async def test_friend_requests_overview_self_id_filter(monkeypatch) -> None:
         lambda: {"10001": {"9": "f1"}, "10002": {"8": "f2"}},
     )
     monkeypatch.setattr(mod, "get_bots", dict)
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: False)
+    monkeypatch.setattr(mod, "_shard_hub_console", lambda: False)
 
     out = await mod._friend_requests_overview(self_id="10001", include_doubt=False)
     assert [b["self_id"] for b in out["bots"]] == ["10001"]

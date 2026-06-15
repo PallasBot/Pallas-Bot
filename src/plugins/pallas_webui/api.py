@@ -1,4 +1,4 @@
-"""Pallas-Bot 控制台 JSON API 前缀（如 /pallas/api）；健康检查等轻量路由可在此注册或再拆子路由。"""
+"""Pallas-Bot 控制台 JSON API 前缀；健康检查等轻量路由可在此注册或再拆子路由。"""
 
 from __future__ import annotations
 

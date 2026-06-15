@@ -44,6 +44,18 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "ingress_fanout": {
+            "scope": "always",
+            "plaintexts": [
+                "牛牛轮盘",
+                "牛牛轮盘踢人",
+                "牛牛轮盘禁言",
+                "牛牛踢人轮盘",
+                "牛牛禁言轮盘",
+                "牛牛开枪",
+            ],
+            "prefixes": ["牛牛救一下", "牛牛补一枪"],
+        },
         "command_permissions": [
             {"id": "roulette.mode_switch", "label": "牛牛轮盘切换模式", "default": "staff"},
         ],
@@ -184,7 +196,7 @@ async def participate_in_roulette_mode(event: GroupMessageEvent, mode: int) -> b
         # 没法禁言自己
         return False
 
-    # 群主退不了群（除非解散），所以群主牛牛不参与游戏
+    # 群主退不了群，所以群主牛牛不参与游戏
     if role_cache[event.self_id][event.group_id] == "owner":
         return False
 
@@ -579,7 +591,7 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
             await bot.send(event, MessageSegment.text("").join(reply_segments))
         return
 
-    # 无@目标：对所有 ban_players 统一处理（duration=0 解禁，否则追加禁言）
+    # 无@目标：对所有 ban_players 统一处理
     affected_users = []
     for user_id in ban_players.get_user_ids(current_group_id):
         try:

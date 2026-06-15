@@ -1,4 +1,4 @@
-"""封禁门禁快照（启动时加载、周期刷新）。"""
+"""封禁门禁快照。"""
 
 from src.features.ban_gate.snapshot import (
     start_ban_gate_snapshot,

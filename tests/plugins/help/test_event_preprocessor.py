@@ -2,6 +2,16 @@ from __future__ import annotations
 
 import pytest
 
+from src.platform.ingress.unified_pass import (
+    mark_unified_ingress_once_won,
+    reset_unified_ingress_once_pass_for_tests,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_unified_ingress_pass() -> None:
+    reset_unified_ingress_once_pass_for_tests()
+
 
 @pytest.mark.asyncio
 async def test_command_cross_bot_claim_trusts_ingress_when_sharded(
@@ -14,7 +24,7 @@ async def test_command_cross_bot_claim_trusts_ingress_when_sharded(
 
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛MAA状态")
     monkeypatch.setattr("src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
-    monkeypatch.setattr(event_preprocessor, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message_memory", _memory_claim)
 
     won = await event_preprocessor.command_cross_bot_claim_won(
@@ -39,7 +49,7 @@ async def test_command_cross_bot_claim_trusts_ingress_for_dream_when_sharded(
 
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛做梦")
     monkeypatch.setattr("src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
-    monkeypatch.setattr(event_preprocessor, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message_memory", _memory_claim)
 
     won = await event_preprocessor.command_cross_bot_claim_won(
@@ -79,7 +89,7 @@ async def test_command_cross_bot_claim_uses_memory_claim_for_maa_status_when_uni
 
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛MAA状态")
     monkeypatch.setattr("src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
-    monkeypatch.setattr(event_preprocessor, "is_sharding_active", lambda: False)
+    monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message_memory", _memory_claim)
 
     won = await event_preprocessor.command_cross_bot_claim_won(
@@ -95,13 +105,47 @@ async def test_command_cross_bot_claim_uses_memory_claim_for_maa_status_when_uni
 
 
 @pytest.mark.asyncio
+async def test_command_cross_bot_claim_trusts_unified_ingress_once_won(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.plugins.help import event_preprocessor
+
+    async def _memory_claim(*_args, **_kwargs) -> bool:
+        raise AssertionError("unified ingress pass should skip memory claim")
+
+    monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛帮助")
+    monkeypatch.setattr("src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
+    monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message_memory", _memory_claim)
+
+    mark_unified_ingress_once_won(
+        type(
+            "E",
+            (),
+            {"group_id": 12345, "user_id": 999, "time": 100, "raw_message": "牛牛帮助", "get_plaintext": lambda self: "牛牛帮助"},
+        )(),
+        body="牛牛帮助",
+    )
+
+    won = await event_preprocessor.command_cross_bot_claim_won(
+        bot_id=222,
+        group_id=12345,
+        user_id=999,
+        plain_text="牛牛帮助",
+        message_time=100,
+    )
+
+    assert won is True
+
+
+@pytest.mark.asyncio
 async def test_command_cross_bot_claim_allows_only_one_bot(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.platform.multi_bot import dedup as dedup_mod
     from src.plugins.help import event_preprocessor
 
     dedup_mod._cross_bot_claim_owners.clear()
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛帮助")
-    monkeypatch.setattr(event_preprocessor, "is_sharding_active", lambda: False)
+    monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr(
         "src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim",
         lambda _text: False,

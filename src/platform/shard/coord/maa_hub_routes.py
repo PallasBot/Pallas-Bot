@@ -1,4 +1,4 @@
-"""分片 hub：挂载 MAA HTTP 转发路由（worker 仍保留本机真实处理）。"""
+"""分片 hub：挂载 MAA HTTP 转发路由。"""
 
 from __future__ import annotations
 

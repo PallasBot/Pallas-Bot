@@ -1,4 +1,4 @@
-"""社区语料 enroll 落盘（与 community_stats 共用 community_stats.json）。"""
+"""社区语料 enroll 落盘。"""
 
 from __future__ import annotations
 

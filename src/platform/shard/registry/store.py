@@ -1,4 +1,4 @@
-"""分片注册表持久化（``data/pallas_shard/registry.json``，hub/worker 共享 data 目录）。"""
+"""分片注册表持久化。"""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def _normalize_host(host: str) -> str:
 
 
 def apply_registry_settings_from_env(reg: ShardRegistry) -> bool:
-    """用 .env / 进程环境覆盖注册表顶层运行参数（bots_per_shard、端口、WS 等）。"""
+    """用 .env / 进程环境覆盖注册表顶层运行参数。"""
     settings = get_shard_registry_settings()
     changed = False
     pairs = (
@@ -99,7 +99,7 @@ def apply_registry_settings_from_env(reg: ShardRegistry) -> bool:
 
 
 def next_auto_assign_shard_id(reg: ShardRegistry) -> int:
-    """下一个可用于自动负载的生产分片 id（跳过 test 分片编号）。"""
+    """下一个可用于自动负载的生产分片 id。"""
     test_sid = get_test_shard_id(reg)
     normal_ids = [int(s.id) for s in reg.shards if not is_test_shard_record(s, reg)]
     picked = max(normal_ids, default=-1) + 1
@@ -162,7 +162,7 @@ def resolve_test_port(reg: ShardRegistry) -> int:
 
 
 def ensure_test_shard_row(reg: ShardRegistry) -> None:
-    """确保 test 分片在 shards 中有对应行（role=test，端口已解析）。"""
+    """确保 test 分片在 shards 中有对应行。"""
     tc = get_test_config(reg)
     if not tc.enabled and reg.count_on_shard(tc.shard_id) == 0:
         return
@@ -189,7 +189,7 @@ def init_test_shard(
     port: int = 0,
     shard_id: int | None = None,
 ) -> TestShardConfig:
-    """启用测试分片并写入注册表（不自动迁入任何账号）。"""
+    """启用测试分片并写入注册表。"""
     reg = registry or get_shard_registry()
     settings = get_shard_registry_settings()
     tc = get_test_config(reg)
@@ -281,7 +281,7 @@ def _auto_assign_shard_candidates(reg: ShardRegistry) -> list[ShardRecord]:
 
 
 def _ensure_shard_rows(reg: ShardRegistry) -> None:
-    """按 assignments 同步 shards[].bot_ids，并裁剪多余空分片（保留 test 行）。"""
+    """按 assignments 同步 shards[].bot_ids，并裁剪多余空分片。"""
     test_sid = get_test_shard_id(reg)
     by_id: dict[int, ShardRecord] = {int(s.id): s for s in reg.shards}
     need = _normal_worker_need(reg)
@@ -369,7 +369,7 @@ def clear_shard_registry_cache() -> None:
 
 
 def assign_bot_to_shard(bot_id: str, *, registry: ShardRegistry | None = None) -> int:
-    """将牛牛 QQ 登记到负载最轻的生产分片（跳过 test）；返回 shard_id。"""
+    """将牛牛 QQ 登记到负载最轻的生产分片；返回 shard_id。"""
     reg = registry or get_shard_registry()
     key = str(bot_id).strip()
     if not key:

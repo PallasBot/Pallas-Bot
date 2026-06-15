@@ -18,7 +18,7 @@ STATUS_COOLDOWN_KEY: str = "bot_status"
 
 
 def cluster_online_bot_ids(current_bots: dict | None = None) -> set[int]:
-    """在线集合（随 bot_status_list_mode；见 list_mode.py）。"""
+    """在线集合。"""
     return cluster_online_bot_ids_for_status(current_bots)
 
 

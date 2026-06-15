@@ -1,4 +1,4 @@
-"""群消息 @ 目标解析（message 段 + raw_message 回退，兼容 NapCat）。"""
+"""群消息 @ 目标解析。"""
 
 from __future__ import annotations
 

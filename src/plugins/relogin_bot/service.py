@@ -1,4 +1,4 @@
-"""牛牛重新上号 / 创建牛牛：无 NoneBot 依赖的核心流程（hub 分片 HTTP 与本地 matcher 共用）。"""
+"""牛牛重新上号 / 创建牛牛：无 NoneBot 依赖的核心流程。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""拉取中心 GET /v1/corpus/usage（本部署共享语料用量）。"""
+"""拉取中心 GET /v1/corpus/usage。"""
 
 from __future__ import annotations
 

@@ -86,7 +86,7 @@ async def _await_exists_deduped(keywords: str) -> bool:
 
 
 async def context_exists_for_learn(keywords: str) -> bool:
-    """带 TTL 与并发去重的 context 存在性查询（学习路径专用）。"""
+    """带 TTL 与并发去重的 context 存在性查询。"""
     if not keywords:
         return False
 

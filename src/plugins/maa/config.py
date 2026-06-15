@@ -68,8 +68,8 @@ class Config(BaseModel, extra="ignore"):
 def on_maa_config_reload(cfg: Config) -> None:  # noqa: ARG001
     from nonebot import get_app
 
-    from src.platform.bot_runtime.roles import is_hub_role, is_sharded_worker
-    from src.platform.shard.registry.config import is_sharding_active
+    from src.platform.bot_runtime.roles import is_hub_role
+    from src.platform.shard import context as shard_ctx
 
     app = get_app()
     if is_hub_role():
@@ -79,7 +79,7 @@ def on_maa_config_reload(cfg: Config) -> None:  # noqa: ARG001
 
         unmount_maa_http_routes(app)
         remount_maa_hub_forward_routes(app)
-    elif not is_sharding_active() or is_sharded_worker():
+    elif not shard_ctx.sharding_active() or shard_ctx.is_worker():
         from .http_routes import remount_maa_http_routes
 
         remount_maa_http_routes(app)

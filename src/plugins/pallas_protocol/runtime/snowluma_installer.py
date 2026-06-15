@@ -1,4 +1,4 @@
-"""SnowLuma 运行时下载与安装（GitHub Release zip / Linux tar.gz）。"""
+"""SnowLuma 运行时下载与安装。"""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ from .tag_paths import sanitize_release_tag_for_path
 
 
 def find_snowluma_program_dir(search_root: Path) -> Path | None:
-    """查找含 ``index.mjs`` 的 SnowLuma 发行根（顶层或一层子目录，必要时浅层 rglob）。"""
+    """查找含 ``index.mjs`` 的 SnowLuma 发行根。"""
     root = search_root.resolve()
     if not root.is_dir():
         return None
@@ -74,7 +74,7 @@ def _asset_name_from_url(value: str) -> str:
 
 
 def default_snowluma_asset_name_for_tag(tag: str, *, target_platform: str | None = None) -> str:
-    """按目标平台与 tag 生成默认资产文件名（与 SnowLuma Release 命名一致）。"""
+    """按目标平台与 tag 生成默认资产文件名。"""
     t = (tag or "").strip()
     if not t:
         return ""
@@ -101,7 +101,7 @@ def pick_snowluma_asset_from_release(
     *,
     target_platform: str | None = None,
 ) -> tuple[str, str] | None:
-    """从 release JSON 中选择完整包资产（排除名称中含 lite 的）。"""
+    """从 release JSON 中选择完整包资产。"""
     assets = release_json.get("assets")
     if not isinstance(assets, list):
         return None
@@ -154,7 +154,7 @@ def _safe_extract_tar_gz(tar_path: Path, dest_dir: Path) -> None:
 
 
 class SnowLumaRuntimeStore:
-    """管理插件数据目录下的 SnowLuma 分发包（与 NapCat 运行时分离）。"""
+    """管理插件数据目录下的 SnowLuma 分发包。"""
 
     def __init__(self, data_dir: Path, config: Any) -> None:
         self._data_dir = data_dir
@@ -444,7 +444,7 @@ class SnowLumaRuntimeStore:
         return folder
 
     def list_local_inventory(self) -> dict[str, Any]:
-        """列出 ``runtime_dist`` 与 ``runtime_extract`` 下的本机缓存（供切换托管版本）。"""
+        """列出 ``runtime_dist`` 与 ``runtime_extract`` 下的本机缓存。"""
         dist_files: list[dict[str, Any]] = []
         if self._dist_dir.is_dir():
             for p in sorted(self._dist_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -510,7 +510,7 @@ class SnowLumaRuntimeStore:
         return manifest
 
     def activate_extract_folder(self, folder_name: str) -> RuntimeManifest:
-        """将 manifest 指向已有解压子目录（回退到旧版解压结果，不重新下载）。"""
+        """将 manifest 指向已有解压子目录。"""
         folder = self._safe_extract_child_folder(folder_name)
         if not folder.is_dir():
             raise ValueError("解压目录不存在")

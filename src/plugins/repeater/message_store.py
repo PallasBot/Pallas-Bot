@@ -9,6 +9,7 @@ from nonebot import logger
 
 from src.foundation.db import Message as MessageModel
 from src.foundation.db import make_message_repository
+from src.platform.shard import context as shard_ctx
 
 from .config import get_repeater_config
 
@@ -79,16 +80,14 @@ class MessageStore:
                 ):
                     should_sync = True
 
-        # topics 回调可能较慢（含 IO），放在锁外执行
+        # topics 回调可能较慢，放在锁外执行
         if trigger_keywords is not None and topics_callback is not None:
             await topics_callback(group_id, trigger_keywords)
 
         if should_sync:
             await MessageStore._sync(cur_time)
 
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             from src.platform.shard.coord.repeater_buffer import schedule_publish_repeater_buffer
 
             schedule_publish_repeater_buffer(chat_data)
@@ -96,7 +95,7 @@ class MessageStore:
     @staticmethod
     async def _sync(cur_time: int | None = None):
         """
-        持久化：按身份（id(msg)）标记待同步消息，bulk_insert 成功后仅移除
+        持久化：按身份标记待同步消息，bulk_insert 成功后仅移除
         这些消息，避免把同步期间新到达的未同步消息截断丢弃。
         """
         if cur_time is None:
@@ -122,7 +121,7 @@ class MessageStore:
             return
 
         async with MessageStore._message_lock:
-            # 仅丢弃本轮真正已同步的消息（按 id 判定），
+            # 仅丢弃本轮真正已同步的消息，
             # 已同步的消息保留最后 SAVE_RESERVED_SIZE 条供随机采样，
             # 未同步的新消息全部保留，留给下一轮 _sync
             new_dict: dict[int, list[MessageModel]] = {}

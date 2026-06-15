@@ -1,8 +1,8 @@
-"""帮助口令解析用别名（包名 → 用户可能输入的简称）。"""
+"""帮助口令解析用别名。"""
 
 from __future__ import annotations
 
-# 键为插件包名（Plugin.name），值为额外可匹配字符串（不含包名与 metadata.name，由匹配逻辑自动纳入）
+# 键为插件包名，值为额外可匹配字符串
 PLUGIN_HELP_ALIASES: dict[str, tuple[str, ...]] = {
     "help": ("帮助", "菜单", "功能列表"),
     "maa": ("远控", "MAA", "明日方舟", "长草", "作战"),

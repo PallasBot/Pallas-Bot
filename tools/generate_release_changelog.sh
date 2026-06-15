@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 生成 GitHub Release 变更摘要（按 Conventional Commits 分组，空分组省略）。
+# 生成 GitHub Release 变更摘要。
 set -euo pipefail
 
 PREVIOUS_TAG="${1:-}"

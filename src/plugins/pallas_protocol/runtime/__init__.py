@@ -1,4 +1,4 @@
-"""NapCat Shell 运行时下载、解压与 manifest（与平台启动逻辑解耦）。"""
+"""NapCat Shell 运行时下载、解压与 manifest。"""
 
 from .installer import (
     JobStatus,

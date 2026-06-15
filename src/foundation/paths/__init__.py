@@ -1,4 +1,4 @@
-"""仓库根、data、resource 等路径锚点（与 NoneBot 工作目录无关）。"""
+"""仓库根、data、resource 等路径锚点。"""
 
 from pathlib import Path
 

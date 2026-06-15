@@ -1,4 +1,4 @@
-"""AI 任务 HTTP 回调执行（worker / unified 本进程）。"""
+"""AI 任务 HTTP 回调执行。"""
 
 from __future__ import annotations
 

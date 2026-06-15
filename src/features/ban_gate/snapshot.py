@@ -39,7 +39,7 @@ def bump_ban_gate_snapshot_remote_generation() -> None:
 
 
 def sync_ban_gate_snapshot_remote_generation() -> bool:
-    """对比 Redis 世代；变化时返回 True（调用方应触发 refresh）。"""
+    """对比 Redis 世代；变化时返回 True。"""
     global _synced_redis_gen, _remote_gen_checked_at
     now = time.monotonic()
     if _remote_gen_checked_at and now - _remote_gen_checked_at < _REMOTE_GEN_SYNC_TTL_SEC:
@@ -75,7 +75,7 @@ def snapshot_ready() -> bool:
 
 
 def is_user_globally_banned_fast(user_id: int) -> bool | None:
-    """命中快照返回 bool；快照未就绪返回 None（调用方回退 DB）。"""
+    """命中快照返回 bool；快照未就绪返回 None。"""
     if not snapshot_ready():
         return None
     return user_id in _global_banned

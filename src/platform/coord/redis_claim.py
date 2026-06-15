@@ -1,4 +1,4 @@
-"""跨进程 message claim：Redis SET NX（不可用时由 claim.py 回退文件）。"""
+"""跨进程 message claim：Redis SET NX。"""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def read_claim_owner_redis_sync(plugin: str, group_id: int, message_id: int) -> 
 
 
 def take_claim_message_redis_sync(plugin: str, group_id: int, message_id: int, bot_id: int) -> bool | None:
-    """覆盖 Redis claim（回收过期 owner 时用）。None 表示未走 Redis。"""
+    """覆盖 Redis claim。None 表示未走 Redis。"""
     client = get_coord_redis_client()
     if client is None:
         return None
@@ -74,7 +74,7 @@ def try_claim_message_redis_sync(plugin: str, group_id: int, message_id: int, bo
     """
     尝试 Redis 抢占。
 
-    返回 True/False 表示结果；None 表示未走 Redis（调用方回退文件）。
+    返回 True/False 表示结果；None 表示未走 Redis。
     """
     client = get_coord_redis_client()
     if client is None:

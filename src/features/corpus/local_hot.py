@@ -1,4 +1,4 @@
-"""本机语料热词聚合（与社区 pool 语义对齐）。"""
+"""本机语料热词聚合。"""
 
 from __future__ import annotations
 

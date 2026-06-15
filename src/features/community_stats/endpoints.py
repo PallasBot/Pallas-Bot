@@ -17,7 +17,7 @@ FALLBACK_CORPUS_API_BASE = "https://pallas.togetsudo.com/v1/corpus"
 
 _BUILTIN_HEARTBEATS: frozenset[str] = frozenset({PRIMARY_HEARTBEAT, FALLBACK_HEARTBEAT})
 
-# 走备用入口时，每隔若干秒再探测一次正式域名是否已可用（备案通过后可自动切回）
+# 走备用入口时，每隔若干秒再探测一次正式域名是否已可用
 _PRIMARY_REPROBE_SEC = 6 * 3600
 
 

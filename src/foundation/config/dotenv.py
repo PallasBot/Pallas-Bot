@@ -1,4 +1,4 @@
-"""兼容层：配置读写见 ``repo_settings``（``config/pallas.toml`` + ``data/pallas_config/webui.json``）。"""
+"""兼容层：配置读写见 ``repo_settings``。"""
 
 from __future__ import annotations
 

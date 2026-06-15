@@ -1,4 +1,4 @@
-"""控制台数据库备份异步任务（进程内单例，供 WebUI 轮询目录体积）。"""
+"""控制台数据库备份异步任务。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""dream 采集黑名单（如「不可以」）。"""
+"""dream 采集黑名单。"""
 
 from src.plugins.dream.capture_filter import dream_capture_blocked_by_substrings
 

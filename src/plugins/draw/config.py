@@ -166,7 +166,7 @@ class Config(BaseModel, extra="ignore"):
         le=3600,
         description="同一群两次「牛牛画画」的最短间隔（秒）；在真正开始调用上游时扣减，非发「欢呼吧」时。",
     )
-    # 画画重试与耗时：快档（换 response_format 等）优先，慢档（尺寸/quality 扫描）可关见下项
+    # 画画重试与耗时：快档优先，慢档可关见下项
     pallas_image_max_param_attempts: int = Field(
         default=6,
         ge=0,
@@ -473,7 +473,7 @@ clear_draw_config_cache = plugin_webui.clear_cache
 
 
 def active_image_gen_settings() -> ImageGenSettings:
-    """刷新磁盘/环境配置并返回进程内 image_gen_config（与 WebUI 热重载一致）。"""
+    """刷新磁盘/环境配置并返回进程内 image_gen_config。"""
     reload_image_gen_config()
     return image_gen_config
 

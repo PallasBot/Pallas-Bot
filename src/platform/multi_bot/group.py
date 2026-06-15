@@ -1,6 +1,6 @@
 """多 Bot 同群：插件侧统一入口（见 group_message_dedup 实现）。
 
-典型用法（群内命令 / on_message）::
+典型用法::
 
     from src.platform.multi_bot.group import claim_group_handler
 
@@ -10,9 +10,9 @@
             return
         ...
 
-协议重复上报（同连接、同内容签名，如复读学习）用 ``should_skip_duplicate_group_event``。
+协议重复上报用 ``should_skip_duplicate_group_event``。
 短时群级占位用 ``try_acquire_group_broadcast_slot`` / ``try_begin_group_owned_gate``。
-同群长时独占（分片开房/开战）用 ``begin_group_exclusive_activity``。
+同群长时独占用 ``begin_group_exclusive_activity``。
 """
 
 from src.platform.multi_bot.dedup import (

@@ -51,6 +51,14 @@ uv run python tools/migrate_env_to_pallas.py
 uv run nb run
 ```
 
+或使用专用启停脚本（对照测试、协议端口同步）：
+
+```bash
+./scripts/run_unified_bot.sh start
+./scripts/run_unified_bot.sh status
+./scripts/run_unified_bot.sh stop
+```
+
 浏览器打开 `http://127.0.0.1:8088/pallas/`，使用启动日志中的口令登录。
 
 ### 分片模式（可选）

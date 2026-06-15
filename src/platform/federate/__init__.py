@@ -1,4 +1,4 @@
-"""跨 deployment 联邦协调（Phase 2 ingress 去重等）。"""
+"""跨 deployment 联邦协调。"""
 
 from .config import (
     clear_federate_config_cache,

@@ -1,4 +1,4 @@
-"""coord 待处理快照（运维 / WebUI 可观测；基于 Redis 键空间统计）。"""
+"""coord 待处理快照。"""
 
 from __future__ import annotations
 

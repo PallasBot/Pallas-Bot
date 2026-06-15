@@ -1,4 +1,4 @@
-"""分片 worker：跨片同步 repeater 内存近期群消息（供 learn / 接话上下文）。"""
+"""分片 worker：跨片同步 repeater 内存近期群消息。"""
 
 from __future__ import annotations
 
@@ -169,11 +169,6 @@ async def apply_repeater_buffer_message(msg: dict[str, Any]) -> bool:
     return True
 
 
-async def poll_repeater_buffer_pending() -> None:
-    """兼容旧轮询入口；Redis pub/sub 模式下无需文件轮询。"""
-    return None
-
-
 async def repeater_buffer_redis_listen_loop() -> None:
     from src.platform.coord.redis_claim import get_coord_redis_client
     from src.platform.coord.redis_settings import coord_redis_enabled
@@ -230,8 +225,3 @@ def start_repeater_buffer_redis_listener() -> None:
         return
     _redis_listener_started = True
     asyncio.create_task(repeater_buffer_redis_listen_loop())
-
-
-async def prune_stale_repeater_buffer_files() -> None:
-    """Redis 模式下无文件可清理。"""
-    return None

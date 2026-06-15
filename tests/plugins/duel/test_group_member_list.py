@@ -43,7 +43,7 @@ async def test_shard_empty_member_list_prefers_presence(monkeypatch) -> None:
         async def get_group_member_list(self, *, group_id: int, no_cache: bool):
             return []
 
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr("src.platform.shard.context.is_sharding_active", lambda: True)
     monkeypatch.setattr("src.platform.multi_bot.fleet.get_catalog_bot_ids", lambda: frozenset({111, 222, 333}))
     monkeypatch.setattr("src.platform.shard.presence.pick_local_query_bot", lambda: FakeCaller())
     monkeypatch.setattr(
@@ -67,7 +67,7 @@ async def test_shard_empty_member_list_skips_fleet_probe(monkeypatch) -> None:
         probe_calls.append(group_id)
         return []
 
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr("src.platform.shard.context.is_sharding_active", lambda: True)
     monkeypatch.setattr("src.platform.multi_bot.fleet.get_catalog_bot_ids", lambda: frozenset({111, 222}))
     monkeypatch.setattr("src.platform.shard.presence.pick_local_query_bot", lambda: FakeCaller())
     monkeypatch.setattr(
@@ -90,7 +90,7 @@ async def test_list_group_online_bot_ids_uses_cache(monkeypatch) -> None:
             list_calls.append(group_id)
             return [{"user_id": 111}, {"user_id": 222}]
 
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr("src.platform.shard.context.is_sharding_active", lambda: True)
     monkeypatch.setattr("src.platform.multi_bot.fleet.get_catalog_bot_ids", lambda: frozenset({111, 222, 333}))
     monkeypatch.setattr("src.platform.shard.presence.pick_local_query_bot", lambda: FakeCaller())
 
@@ -118,7 +118,7 @@ async def test_unified_group_online_bot_ids(monkeypatch) -> None:
 
     bots = {str(qq): FakeBot(qq) for qq in (111, 222, 333)}
 
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: False)
+    monkeypatch.setattr("src.platform.shard.context.is_sharding_active", lambda: False)
     monkeypatch.setattr("src.platform.multi_bot.fleet.get_catalog_bot_ids", lambda: frozenset({111, 222, 333}))
     monkeypatch.setattr(mod, "get_bots", lambda: bots)
 

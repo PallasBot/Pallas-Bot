@@ -1,4 +1,4 @@
-"""按分片注册表同步协议端 accounts.json 的 ws_url（指向各 worker 端口）。"""
+"""按分片注册表同步协议端 accounts.json 的 ws_url。"""
 
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ def parse_onebot_ws_url(url: str) -> tuple[str, int, str] | None:
 
 
 def ws_url_aligned_with_worker(old_url: str, *, expected_port: int, expected_path: str) -> bool:
-    """端口与路径已与分片 worker 一致则视为对齐（主机名可不同，如 172.17.0.1 / 127.0.0.1）。"""
+    """端口与路径已与分片 worker 一致则视为对齐。"""
     parsed = parse_onebot_ws_url(old_url)
     if parsed is None:
         return False
@@ -89,7 +89,7 @@ def build_ws_url(host: str, port: int, path: str) -> str:
 
 
 def merge_ws_url_for_shard_update(old_url: str, template_url: str) -> str:
-    """写回时保留账号既有 host（Docker 常用 172.17.0.1），仅对齐端口与路径。"""
+    """写回时保留账号既有 host，仅对齐端口与路径。"""
     old = parse_onebot_ws_url(old_url)
     template = parse_onebot_ws_url(template_url)
     if template is None:

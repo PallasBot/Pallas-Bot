@@ -55,7 +55,7 @@ def extract_upstream_error_message(body: str) -> str | None:
 
 
 def extract_upstream_error_fields(body: str) -> tuple[str | None, str | None, str | None]:
-    """解析 error.message / error.code / error.type（OpenAI 兼容 JSON）。"""
+    """解析 error.message / error.code / error.type。"""
     try:
         data = json.loads(body)
     except Exception:
@@ -149,7 +149,7 @@ def http_body_rejects_response_format(body: str) -> bool:
 
 
 def upstream_error_visible_to_user(body_or_empty: str) -> bool:
-    """上游业务错误是否应对用户展示（非额度/账单类）。"""
+    """上游业务错误是否应对用户展示。"""
     if not body_or_empty:
         return False
     msg, code, err_type = extract_upstream_error_fields(body_or_empty)

@@ -1,4 +1,4 @@
-"""PG 连接池诊断：周期汇总 + 慢持连统计（健康态 DEBUG，异常态 INFO）。"""
+"""PG 连接池诊断：周期汇总 + 慢持连统计。"""
 
 from __future__ import annotations
 
@@ -105,7 +105,7 @@ def _pg_session_caller_hint_from_stack() -> str:
 
 
 def pg_session_caller_hint_entry() -> str:
-    """在 get_session 入口捕获调用方（避开 contextlib / repository_pg 包装帧）。"""
+    """在 get_session 入口捕获调用方。"""
     hint = _pg_session_caller_hint_from_frame()
     if hint is not None:
         return hint

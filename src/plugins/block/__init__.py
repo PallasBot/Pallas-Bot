@@ -15,12 +15,12 @@ from src.features.cmd_perm.metadata_text import join_usage, usage_line
 from src.foundation.config import BotConfig
 from src.platform.multi_bot.fleet import fleet_bot_ids_contains
 from src.platform.multi_bot.session_seen import note_bot_session_seen
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.presence import (
     clear_protocol_bot_offline,
     note_worker_bot_connected,
     note_worker_bot_disconnected,
 )
-from src.platform.shard.registry.config import is_sharding_active
 
 from .config import Config, plugin_config
 
@@ -60,7 +60,7 @@ async def bot_connect(bot: Bot) -> None:
         plugin_config.bots.add(qq)
         note_bot_session_seen(qq)
         await clear_protocol_bot_offline(qq)
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             await note_worker_bot_connected(bot)
         try:
             from src.platform.federate.peer_bots import sync_federate_peer_bot_roster
@@ -79,7 +79,7 @@ async def bot_disconnect(bot: Bot) -> None:
         if was_present:
             logger.info(f"Bot {bot.self_id} disconnected.")
         await clear_protocol_bot_offline(qq)
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             await note_worker_bot_disconnected(qq)
         try:
             from src.platform.federate.peer_bots import sync_federate_peer_bot_roster
@@ -95,7 +95,7 @@ async def bot_disconnect(bot: Bot) -> None:
 def is_fleet_bot_qq(qq: int) -> bool:
     from src.platform.federate.peer_bots import federate_peer_bot_ids_contains
 
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         return fleet_bot_ids_contains(qq) or federate_peer_bot_ids_contains(qq)
     return qq in plugin_config.bots or federate_peer_bot_ids_contains(qq)
 

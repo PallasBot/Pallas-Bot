@@ -28,7 +28,7 @@ def parse_command_args(
     解析命令参数。
 
     - 有空格：按空白拆分。
-    - 无空格：连写解析（序号、插件名；帮助命令下纯数字可拆为插件+功能序号）。
+    - 无空格：连写解析。
     """
     rest = extract_command_tail(plaintext, command)
     if not rest:

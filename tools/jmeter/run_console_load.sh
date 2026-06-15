@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 控制台只读 API JMeter 压测（非群消息路径；群消息见 tools/message_path_bench.py）
+# 控制台只读 API JMeter 压测
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
 PROP_FILE="${JMETER_PROP_FILE:-$ROOT/tools/jmeter/local.properties}"
 if [[ -f "$PROP_FILE" ]]; then
-  # shellcheck disable=SC1090
+# shellcheck disable=SC1090
   source "$PROP_FILE"
 fi
 

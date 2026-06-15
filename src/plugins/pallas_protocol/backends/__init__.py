@@ -1,6 +1,6 @@
-"""协议端运行时注册表：按账号 `protocol_backend` 字段分派（与 `contract.ACCOUNT_PROTOCOL_BACKEND_KEY` 一致）。"""
+"""协议端运行时注册表：按账号 `protocol_backend` 字段分派。"""
 
-# 新协议栈：实现 ProtocolRuntimeBackend 后在此 register；kind 与账号里存的字符串同形且小写匹配（如 napcat）。
+# 新协议栈：实现 ProtocolRuntimeBackend 后在此 register；kind 与账号里存的字符串同形且小写匹配。
 
 from __future__ import annotations
 

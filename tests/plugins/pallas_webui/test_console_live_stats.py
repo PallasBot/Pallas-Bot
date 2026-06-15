@@ -9,13 +9,11 @@ from src.plugins.pallas_webui import console_live_stats, daily_stats_store
 
 
 def test_unified_console_live_stats_enabled_single_process(monkeypatch) -> None:
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: False)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_worker", lambda: False)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_hub", lambda: False)
+    monkeypatch.setattr(ext, "_shard_worker_console", lambda: False)
+    monkeypatch.setattr(ext, "_shard_hub_console", lambda: False)
     assert ext._unified_console_live_stats_enabled() is True
 
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_hub", lambda: True)
+    monkeypatch.setattr(ext, "_shard_hub_console", lambda: True)
     assert ext._unified_console_live_stats_enabled() is False
 
 
@@ -26,9 +24,8 @@ def test_restore_unified_from_live_file(tmp_path, monkeypatch) -> None:
 
     live = tmp_path / "console_live_stats.json"
     monkeypatch.setattr(console_live_stats, "live_stats_path", lambda: live)
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: False)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_worker", lambda: False)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_hub", lambda: False)
+    monkeypatch.setattr(ext, "_shard_worker_console", lambda: False)
+    monkeypatch.setattr(ext, "_shard_hub_console", lambda: False)
 
     console_live_stats.write_bots_sync({
         "10001": {
@@ -64,9 +61,8 @@ def test_restore_unified_fallback_daily_disk(tmp_path, monkeypatch) -> None:
     stats = tmp_path / "console_daily_stats.json"
     monkeypatch.setattr(daily_stats_store, "stats_file_path", lambda: stats)
     monkeypatch.setattr(console_live_stats, "live_stats_path", lambda: tmp_path / "missing_live.json")
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: False)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_worker", lambda: False)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_hub", lambda: False)
+    monkeypatch.setattr(ext, "_shard_worker_console", lambda: False)
+    monkeypatch.setattr(ext, "_shard_hub_console", lambda: False)
 
     daily_stats_store.write_day_totals("2026-05-28", "10002", 50, 3, 0)
 

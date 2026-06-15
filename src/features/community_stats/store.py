@@ -1,4 +1,4 @@
-"""deployment_id 与心跳入口持久化（一户部署一个 UUID）。"""
+"""deployment_id 与心跳入口持久化。"""
 
 from __future__ import annotations
 

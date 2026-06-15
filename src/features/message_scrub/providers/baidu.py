@@ -103,7 +103,7 @@ def _parse_conclusion_blocked(data: dict[str, object]) -> bool | None:
 
 
 class BaiduTextReviewProvider:
-    """百度智能云文本审核（``text_censor`` v2 user_defined），以官方 ``conclusion`` / ``conclusionType`` 为准。"""
+    """百度智能云文本审核，以官方 ``conclusion`` / ``conclusionType`` 为准。"""
 
     id = "baidu"
 

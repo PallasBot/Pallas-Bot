@@ -35,7 +35,7 @@ def build_fed_repository() -> ContextRepository | None:
     cfg = get_corpus_config()
     if not resolve_enabled(cfg.fed_enabled, configured=fed_configured()):
         return None
-    # 联邦 PG 第二连接（PG_CORPUS_FED_*）在后续 Phase 接入
+    # 联邦 PG 第二连接在后续 Phase 接入
     return None
 
 

@@ -1,4 +1,4 @@
-"""Release tag → 解压目录名（路径安全、跨平台）。"""
+"""Release tag → 解压目录名。"""
 
 from __future__ import annotations
 

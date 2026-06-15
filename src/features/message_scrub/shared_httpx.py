@@ -1,4 +1,4 @@
-"""message_scrub 远程审查共用的 ``httpx.AsyncClient``（按请求传入 timeout）。"""
+"""message_scrub 远程审查共用的 ``httpx.AsyncClient``。"""
 
 from __future__ import annotations
 

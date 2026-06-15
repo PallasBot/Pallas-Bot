@@ -1,4 +1,4 @@
-"""控制面 bootstrap（联邦协调 Redis 等）。"""
+"""控制面 bootstrap。"""
 
 from .bootstrap_client import ensure_control_plane_bootstrap, refresh_control_plane_bootstrap
 from .config import clear_control_plane_config_cache, get_control_plane_config, should_run_bootstrap_refresh

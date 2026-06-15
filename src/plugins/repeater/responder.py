@@ -12,6 +12,7 @@ from src.foundation.config import BotConfig
 from src.foundation.db import Answer
 from src.foundation.db.context_repo_access import context_repo
 from src.foundation.db.pool_budget import is_pg_pool_timeout_error, pg_pool_under_pressure
+from src.platform.shard import context as shard_ctx
 
 from .ban_manager import BanManager
 from .config import get_repeater_config
@@ -60,9 +61,8 @@ class Responder:
     @staticmethod
     def _repeat_ignore_user_ids() -> set[int]:
         from src.platform.multi_bot.fleet import get_catalog_bot_ids
-        from src.platform.shard.registry.config import is_sharding_active
 
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             ids = set(get_catalog_bot_ids())
         else:
             ids = {int(b.self_id) for b in get_bots().values()}
@@ -77,12 +77,10 @@ class Responder:
     @staticmethod
     def should_skip_context_lookup(chat_data: "ChatData", keywords: str) -> bool:
         if getattr(chat_data, "is_plain_text", False):
-            from src.platform.shard.registry.config import is_sharding_active
-
             if getattr(chat_data, "to_me", False):
                 return False
             plain = str(getattr(chat_data, "plain_text", "") or "").strip()
-            if is_sharding_active():
+            if shard_ctx.sharding_active():
                 return not plain
             keywords_len = int(getattr(chat_data, "keywords_len", 0) or 0)
             if keywords_len == 0:
@@ -112,9 +110,7 @@ class Responder:
         """
         # 不回复太短的对话，大部分是“？”、“草”
         if chat_data.is_plain_text and len(chat_data.plain_text) < 2:
-            from src.platform.shard.registry.config import is_sharding_active
-
-            if not is_sharding_active():
+            if not shard_ctx.sharding_active():
                 return None
 
         from .message_store import MessageStore
@@ -187,9 +183,6 @@ class Responder:
                             recent_topics[group_id] += filtered_recent_topics(answer_keywords.split(" "))
                     async with topics_lock:
                         recent_topics[group_id] += filtered_recent_topics(chat_data._keywords_list)
-                    # if "[CQ:" not in item and len(item) > Chat.DRUNK_TTS_THRESHOLD and \
-                    #    await self.config.drunkenness():
-                    #     yield Message(Chat._text_to_speech(item))
                     yield Message(item)
             finally:
                 async with reply_lock:
@@ -264,7 +257,7 @@ class Responder:
         raw_message = chat_data.raw_message
         bot_id = chat_data.bot_id
 
-        # 复读！（只统计非本进程 Bot / 配置忽略账号，避免多 Bot 同句堆叠误判）
+        # 复读！
         rt = Responder.REPEAT_THRESHOLD
         if rt >= 2 and group_id in message_dict:
             group_msgs = message_dict[group_id]
@@ -386,7 +379,7 @@ class Responder:
                 continue
             if sample_msg.startswith("牛牛"):
                 if not chat_data.to_me or len(sample_msg) <= 6:
-                    # 这种一般是学反过来的，比如有人教“牛牛你好”——“你好”（反复发了好几次，互为上下文了）
+                    # 这种一般是学反过来的，比如有人教“牛牛你好”——“你好”
                     # 然后下次有人发“你好”，突然回个“牛牛你好”，有点莫名其妙的
                     continue
             if sample_msg.startswith("[CQ:xml"):
