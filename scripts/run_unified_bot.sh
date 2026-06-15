@@ -55,7 +55,10 @@ prepare_unified_ports() {
     [[ -n "${out}" ]] && echo "${out}" | sed 's/^/  /' >&2
     return "${rc}"
   fi
-  [[ -n "${out}" ]] && echo "${out}" | sed 's/^/  /'
+  if [[ -n "${out}" ]]; then
+    echo "${out}" | sed 's/^/  /'
+  fi
+  return 0
 }
 
 start_bot() {
