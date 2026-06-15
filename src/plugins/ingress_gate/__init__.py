@@ -15,7 +15,6 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
 )
-from src.platform.bot_runtime.roles import is_hub_role
 from src.platform.federate.config import federate_ingress_bypass_unified
 from src.platform.federate.ingress import claim_federate_group_message_ingress
 from src.platform.federate.peer_bots import (
@@ -24,18 +23,18 @@ from src.platform.federate.peer_bots import (
     start_federate_peer_bot_sync_loop,
     sync_federate_peer_bot_roster,
 )
+from src.platform.ingress.claim_gate import (
+    IngressClaimError,
+    ingress_gate_runtime_active,
+    shard_worker_ingress_claims,
+    unified_ingress_once_claim,
+)
 from src.platform.ingress.dream_host_gate import dream_session_ingress_passes
 from src.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
 from src.platform.ingress.hosted_activity_gate import (
     hosted_activity_ingress_passes,
 )
-from src.platform.ingress.unified_pass import mark_unified_ingress_once_won
 from src.platform.multi_bot.at_targets import group_at_qq_ids, message_at_fleet_bot
-from src.platform.multi_bot.dedup import (
-    try_claim_cross_bot_message,
-    try_claim_cross_shard_message,
-    try_claim_group_message_once,
-)
 from src.platform.multi_bot.fleet import fleet_bot_ids_contains, get_fleet_bot_ids
 from src.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from src.platform.shard import context as shard_ctx
@@ -47,8 +46,6 @@ from src.platform.shard.ingress_metrics import (
     should_record_ingress_metrics,
 )
 
-INGRESS_CLAIM_PLUGIN = "ingress_gate"
-INGRESS_SHARD_CLAIM_PLUGIN = "ingress_gate_shard"
 driver = get_driver()
 
 __plugin_meta__ = PluginMetadata(
@@ -69,9 +66,7 @@ __plugin_meta__ = PluginMetadata(
 
 
 def ingress_gate_active() -> bool:
-    if is_hub_role():
-        return False
-    return True
+    return ingress_gate_runtime_active()
 
 
 def pallas_at_targets(event: GroupMessageEvent) -> frozenset[int]:
@@ -171,22 +166,15 @@ async def ingress_group_message_gate(bot, event) -> None:
                 record_ingress_early_discard("dream_host")
             raise IgnoredException("dream host gate")
 
-        if not sharding_active:
-            if not await try_claim_group_message_once(
-                INGRESS_CLAIM_PLUGIN,
-                event.group_id,
-                user_id,
-                body,
-                event.time,
-                use_plaintext=True,
-                include_message_time=True,
-            ):
-                outcome = "once_claim_lost"
-                if metrics:
-                    record_ingress_claim(won=False)
-                raise IgnoredException("ingress unified once claim lost")
-            timer.mark("once_claim")
-            mark_unified_ingress_once_won(event, body=body)
+        try:
+            await unified_ingress_once_claim(event, body=body, user_id=user_id)
+            if not sharding_active:
+                timer.mark("once_claim")
+        except IngressClaimError as err:
+            outcome = err.outcome
+            if metrics and err.record_claim_lost:
+                record_ingress_claim(won=False)
+            raise IgnoredException(str(err)) from err
 
         if metrics:
             record_ingress_event()
@@ -205,38 +193,19 @@ async def ingress_group_message_gate(bot, event) -> None:
         timer.mark("federate")
 
         if sharding_active:
-            shard_id = shard_ctx.shard_id()
-            # 不传 bot_id：避免「代表牛」不在群内时非代表牛永远无法通过文件 claim（如群内发牛牛网关）
-            if not await try_claim_cross_shard_message(
-                INGRESS_SHARD_CLAIM_PLUGIN,
-                event.group_id,
-                user_id,
-                body,
-                event.time,
-                shard_id,
-                use_plaintext=True,
-                include_message_time=True,
-            ):
-                outcome = "shard_claim_lost"
-                if metrics:
+            try:
+                for mark in await shard_worker_ingress_claims(
+                    event,
+                    body=body,
+                    user_id=user_id,
+                    self_id=self_id,
+                ):
+                    timer.mark(mark)
+            except IngressClaimError as err:
+                outcome = err.outcome
+                if metrics and err.record_claim_lost:
                     record_ingress_claim(won=False)
-                raise IgnoredException("ingress shard claim lost")
-            timer.mark("shard_claim")
-            if not await try_claim_cross_bot_message(
-                INGRESS_CLAIM_PLUGIN,
-                event.group_id,
-                user_id,
-                body,
-                event.time,
-                self_id,
-                use_plaintext=True,
-                include_message_time=True,
-            ):
-                outcome = "bot_claim_lost"
-                if metrics:
-                    record_ingress_claim(won=False)
-                raise IgnoredException("ingress bot claim lost")
-            timer.mark("bot_claim")
+                raise IgnoredException(str(err)) from err
             if metrics:
                 record_ingress_claim(won=True)
             return
