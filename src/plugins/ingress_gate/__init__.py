@@ -29,6 +29,7 @@ from src.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
 from src.platform.ingress.hosted_activity_gate import (
     hosted_activity_ingress_passes,
 )
+from src.platform.ingress.unified_pass import mark_unified_ingress_once_won
 from src.platform.multi_bot.at_targets import group_at_qq_ids, message_at_fleet_bot
 from src.platform.multi_bot.dedup import (
     try_claim_cross_bot_message,
@@ -185,6 +186,7 @@ async def ingress_group_message_gate(bot, event) -> None:
                     record_ingress_claim(won=False)
                 raise IgnoredException("ingress unified once claim lost")
             timer.mark("once_claim")
+            mark_unified_ingress_once_won(event, body=body)
 
         if metrics:
             record_ingress_event()

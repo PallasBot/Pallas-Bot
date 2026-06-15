@@ -52,7 +52,11 @@ async def command_cross_bot_claim_won(
 
     if ingress_fanout_bypasses_claim(text):
         return True
-    # 显式 fanout / 分片：ingress_gate 已 claim，避免 run_preprocessor 二次抢占。
+    if not shard_ctx.sharding_active():
+        from src.platform.ingress.unified_pass import unified_ingress_once_won_for_text
+
+        if unified_ingress_once_won_for_text(group_id, user_id, text, message_time):
+            return True
     if shard_ctx.sharding_active():
         return True
     return await try_claim_cross_bot_message_memory(
