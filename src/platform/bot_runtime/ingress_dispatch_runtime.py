@@ -3,6 +3,10 @@ from __future__ import annotations
 from nonebot import get_driver, logger
 
 from src.platform.bot_runtime.roles import is_hub_role
+from src.platform.ingress.dispatch_stats_logger import (
+    start_dispatch_stats_logger,
+    stop_dispatch_stats_logger,
+)
 from src.platform.ingress.matcher_dispatch import (
     install_matcher_dispatch,
     matcher_dispatch_enabled,
@@ -42,9 +46,11 @@ def register_ingress_dispatch_runtime() -> None:
         install_send_queue()
         await start_send_queue_workers()
         install_matcher_dispatch()
+        start_dispatch_stats_logger()
 
     @driver.on_shutdown
     async def uninstall_ingress_dispatch_on_shutdown() -> None:
+        await stop_dispatch_stats_logger()
         uninstall_matcher_dispatch()
         await stop_send_queue_workers()
         uninstall_send_queue()

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from nonebot.internal.rule import Rule
 from nonebot.rule import command, to_me
 
+from src.platform.ingress import dispatch_lanes, message_load
 from src.platform.ingress import matcher_activation as activation
 from src.platform.ingress import matcher_dispatch as dispatch
-from src.platform.ingress import message_load
 
 
 class _CommandMatcher:
@@ -90,3 +90,128 @@ def test_event_command_traffic_uses_plaintext(monkeypatch: pytest.MonkeyPatch) -
     event.get_plaintext.return_value = "今天天气不错"
     monkeypatch.setattr(activation, "is_plugin_command_plaintext", lambda _text: False)
     assert activation.event_command_traffic(event, {}) is False
+
+
+@pytest.mark.asyncio
+async def test_patched_handle_event_skips_busy_reply_when_other_matcher_can_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGroupMessageEvent:
+        raw_message = "foo"
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "foo"
+
+    class BusyMatcher:
+        rule = Rule()
+
+    class ReadyMatcher:
+        rule = Rule()
+
+    bot = MagicMock()
+    bot.type = "OneBot V11"
+    bot.self_id = "10001"
+    event = FakeGroupMessageEvent()
+    pre_mock = AsyncMock(return_value=True)
+    post_mock = AsyncMock()
+    busy_reply_mock = AsyncMock(return_value=True)
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", post_mock)
+    monkeypatch.setattr("nonebot.message.check_and_run_matcher", AsyncMock())
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(dispatch, "select_priority_matchers", lambda priority_matchers, **_kwargs: priority_matchers)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "signal_overload", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
+    monkeypatch.setattr(dispatch, "matchers", {1: [BusyMatcher, ReadyMatcher]})
+    monkeypatch.setattr(
+        dispatch_lanes,
+        "lane_for_matcher",
+        lambda matcher: (
+            dispatch_lanes.DispatchLane.REMOTE if matcher is BusyMatcher else dispatch_lanes.DispatchLane.COMMAND
+        ),
+    )
+    monkeypatch.setattr(dispatch_lanes, "maybe_send_lane_busy_reply", busy_reply_mock)
+
+    dispatch_lanes.install_dispatch_lanes()
+    controller = dispatch_lanes.lane_controller(dispatch_lanes.DispatchLane.REMOTE)
+    assert controller is not None
+    for _ in range(controller.base_limit):
+        ok, _ = await controller.acquire(0.01)
+        assert ok is True
+
+    await dispatch.patched_handle_event(bot, event)
+
+    busy_reply_mock.assert_not_awaited()
+    pre_mock.assert_awaited_once()
+    post_mock.assert_awaited_once()
+
+    for _ in range(controller.base_limit):
+        await controller.release()
+    dispatch_lanes.uninstall_dispatch_lanes()
+
+
+@pytest.mark.asyncio
+async def test_patched_handle_event_sends_busy_reply_when_all_selected_matchers_are_busy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGroupMessageEvent:
+        raw_message = "foo"
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "foo"
+
+    class BusyMatcher:
+        rule = Rule()
+
+    bot = MagicMock()
+    bot.type = "OneBot V11"
+    bot.self_id = "10001"
+    event = FakeGroupMessageEvent()
+    pre_mock = AsyncMock(return_value=True)
+    post_mock = AsyncMock()
+    busy_reply_mock = AsyncMock(return_value=True)
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", post_mock)
+    monkeypatch.setattr("nonebot.message.check_and_run_matcher", AsyncMock())
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(dispatch, "select_priority_matchers", lambda priority_matchers, **_kwargs: priority_matchers)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "signal_overload", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
+    monkeypatch.setattr(dispatch, "matchers", {1: [BusyMatcher]})
+    monkeypatch.setattr(dispatch_lanes, "lane_for_matcher", lambda _matcher: dispatch_lanes.DispatchLane.REMOTE)
+    monkeypatch.setattr(dispatch, "maybe_send_lane_busy_reply", busy_reply_mock)
+
+    dispatch_lanes.install_dispatch_lanes()
+    controller = dispatch_lanes.lane_controller(dispatch_lanes.DispatchLane.REMOTE)
+    assert controller is not None
+    for _ in range(controller.base_limit):
+        ok, _ = await controller.acquire(0.01)
+        assert ok is True
+
+    await dispatch.patched_handle_event(bot, event)
+
+    busy_reply_mock.assert_awaited_once()
+    pre_mock.assert_awaited_once()
+    post_mock.assert_awaited_once()
+
+    for _ in range(controller.base_limit):
+        await controller.release()
+    dispatch_lanes.uninstall_dispatch_lanes()

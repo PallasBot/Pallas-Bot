@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from nonebot.internal.rule import Rule
 from nonebot.rule import command, to_me
 
-from src.platform.ingress import dispatch_lanes
-from src.platform.ingress import message_load
+from src.platform.ingress import dispatch_lanes, message_load
 from src.platform.ingress.dispatch_lanes import DispatchLane, LaneController
 
 
@@ -28,7 +26,11 @@ class _RegexMatcher:
 
 
 @pytest.fixture(autouse=True)
-def reset_lanes() -> None:
+def reset_lanes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "src.platform.ingress.fleet_dispatch_scale.connected_bot_count",
+        lambda: 1,
+    )
     dispatch_lanes.clear_dispatch_lanes_cache()
     dispatch_lanes.uninstall_dispatch_lanes()
     message_load.reset_message_load_for_tests()
@@ -103,7 +105,7 @@ async def test_check_and_run_matcher_with_lane_skips_when_busy(monkeypatch: pyte
     monkeypatch.setattr("nonebot.message.check_and_run_matcher", run_mock)
     monkeypatch.setattr(dispatch_lanes, "maybe_send_lane_busy_reply", busy_mock)
 
-    sent = await dispatch_lanes.check_and_run_matcher_with_lane(
+    result = await dispatch_lanes.check_and_run_matcher_with_lane(
         _AiMatcher,
         AsyncMock(),
         MagicMock(),
@@ -113,8 +115,9 @@ async def test_check_and_run_matcher_with_lane_skips_when_busy(monkeypatch: pyte
         command_traffic=True,
         busy_reply_sent=False,
     )
-    assert sent is True
-    busy_mock.assert_awaited_once()
+    assert result.acquired is False
+    assert result.lane_busy is True
+    busy_mock.assert_not_awaited()
     run_mock.assert_not_awaited()
     for _ in range(4):
         await controller.release()

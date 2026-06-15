@@ -108,7 +108,10 @@ class Speaker:
                 bot_ids = [bid for bid in bot_ids if bid in local_bots]
             if not bot_ids:
                 continue
-            bot_id = random.choice(bot_ids)
+            from src.platform.multi_bot.platform_utils import pick_connected_bot_id
+
+            picked = pick_connected_bot_id(bot_ids, log_tag="repeater.speak")
+            bot_id = picked if picked is not None else random.choice(bot_ids)
 
             ban_keywords = await BanManager.find_ban_keywords(context=None, group_id=group_id)
 

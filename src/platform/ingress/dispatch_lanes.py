@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from dataclasses import dataclass
 from enum import StrEnum
 from functools import lru_cache
 from typing import TYPE_CHECKING
@@ -11,6 +12,7 @@ from nonebot.log import logger
 
 from src.foundation.config.repo_settings import repo_env_raw_value
 from src.foundation.db.pool_budget import pg_pool_capacity, pg_pool_under_pressure
+from src.platform.ingress.fleet_dispatch_scale import scaled_dispatch_int
 from src.platform.ingress.matcher_activation import iter_matcher_checker_calls, matcher_is_command_only
 from src.platform.ingress.route_index import matcher_module_key, plugin_module_key_from_plugin
 
@@ -38,6 +40,12 @@ class DispatchLane(StrEnum):
     CHAT = "chat"
     STORAGE = "storage"
     REMOTE = "remote"
+
+
+@dataclass(frozen=True, slots=True)
+class MatcherLaneResult:
+    acquired: bool
+    lane_busy: bool
 
 
 class LaneController:
@@ -134,16 +142,21 @@ def default_lane_limits() -> dict[str, int]:
     except ValueError:
         pool_size = 10
     storage_default = min(8, pool_size)
+    command_default = scaled_dispatch_int(16, per_bot=2, cap=64)
+    chat_default = scaled_dispatch_int(32, per_bot=1, cap=48)
+    remote_default = scaled_dispatch_int(4, per_bot=1, cap=16)
     return {
-        DispatchLane.COMMAND: _env_lane_limit("PALLAS_LANE_COMMAND", "PALLAS_LANE_COMMAND_EXACT", default=16),
-        DispatchLane.CHAT: _env_lane_limit("PALLAS_LANE_CHAT", "PALLAS_LANE_PASSIVE_LIGHT", default=32),
+        DispatchLane.COMMAND: _env_lane_limit(
+            "PALLAS_LANE_COMMAND", "PALLAS_LANE_COMMAND_EXACT", default=command_default
+        ),
+        DispatchLane.CHAT: _env_lane_limit("PALLAS_LANE_CHAT", "PALLAS_LANE_PASSIVE_LIGHT", default=chat_default),
         DispatchLane.STORAGE: _env_lane_limit("PALLAS_LANE_STORAGE", "PALLAS_LANE_PASSIVE_DB", default=storage_default),
         DispatchLane.REMOTE: _env_lane_limit(
             "PALLAS_LANE_REMOTE",
             "PALLAS_LANE_PASSIVE_AI",
             "PALLAS_LANE_PASSIVE_RENDER",
             "PALLAS_LANE_PASSIVE_HTTP",
-            default=4,
+            default=remote_default,
         ),
     }
 
@@ -271,27 +284,22 @@ async def check_and_run_matcher_with_lane(
     *,
     command_traffic: bool,
     busy_reply_sent: bool,
-) -> bool:
+) -> MatcherLaneResult:
     import nonebot.message as nb_message
 
     from src.platform.ingress.message_load import record_lane_wait
 
     if not dispatch_lanes_enabled():
         await nb_message.check_and_run_matcher(matcher, bot, event, state, stack, dependency_cache)
-        return busy_reply_sent
+        return MatcherLaneResult(acquired=True, lane_busy=False)
 
     lane = lane_for_matcher(matcher)
     acquired, wait_ms = await acquire_lane(lane)
     record_lane_wait(wait_ms, busy=not acquired)
     if not acquired:
-        return await maybe_send_lane_busy_reply(
-            bot,
-            event,
-            command_traffic=command_traffic,
-            already_sent=busy_reply_sent,
-        )
+        return MatcherLaneResult(acquired=False, lane_busy=command_traffic and not busy_reply_sent)
     try:
         await nb_message.check_and_run_matcher(matcher, bot, event, state, stack, dependency_cache)
     finally:
         await release_lane(lane)
-    return busy_reply_sent
+    return MatcherLaneResult(acquired=True, lane_busy=False)

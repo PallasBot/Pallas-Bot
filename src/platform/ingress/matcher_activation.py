@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -7,6 +8,7 @@ from nonebot.consts import CMD_KEY
 from nonebot.rule import TrieRule
 
 from src.foundation.command_prefix import strip_leading_command_marks
+from src.platform.ingress.matcher_rule_prefilter import apply_matcher_rule_prefilter
 from src.platform.ingress.plugin_command_plaintext import is_plugin_command_plaintext
 from src.platform.ingress.route_index import (
     RouteIndexSnapshot,
@@ -24,6 +26,7 @@ if TYPE_CHECKING:
     from nonebot.matcher import Matcher
 
 _COMMAND_CHECKER_NAMES = frozenset({"CommandRule", "ShellCommandRule"})
+_LEADING_PLACEHOLDER_RE = re.compile(r"^(?:\s*(?:\[[^\]]*]|\<[^>]*>))+\s*")
 
 
 def iter_matcher_checker_calls(matcher: type[Matcher]):
@@ -57,6 +60,23 @@ def matcher_is_command_only(matcher: type[Matcher]) -> bool:
     return True
 
 
+def normalize_dispatch_plain_text(text: str) -> str:
+    normalized = (text or "").strip()
+    if not normalized:
+        return ""
+    normalized = _LEADING_PLACEHOLDER_RE.sub("", normalized).strip()
+    return strip_leading_command_marks(normalized)
+
+
+def event_dispatch_texts(event: Event) -> tuple[str, str]:
+    raw = getattr(event, "raw_message", None)
+    raw_text = normalize_dispatch_plain_text(raw) if isinstance(raw, str) else ""
+    plain = normalize_dispatch_plain_text((event.get_plaintext() or "").strip())
+    if not plain and raw_text:
+        plain = raw_text
+    return plain, raw_text
+
+
 def legacy_command_traffic(plain: str) -> bool:
     if TrieRule.prefix.longest_prefix(plain):
         return True
@@ -66,7 +86,7 @@ def legacy_command_traffic(plain: str) -> bool:
 def resolve_route_for_event(event: Event) -> RouteResolution | None:
     if not route_index_enabled():
         return None
-    plain = strip_leading_command_marks((event.get_plaintext() or "").strip())
+    plain, _ = event_dispatch_texts(event)
     return resolve_message_route(plain)
 
 
@@ -78,7 +98,7 @@ def event_command_traffic(
 ) -> bool:
     if state.get(CMD_KEY) is not None:
         return True
-    plain = strip_leading_command_marks((event.get_plaintext() or "").strip())
+    plain, _ = event_dispatch_texts(event)
     if not plain:
         return False
     if resolution is not None:
@@ -95,25 +115,33 @@ def select_priority_matchers(
     *,
     command_traffic: bool,
     resolution: RouteResolution | None = None,
+    event: Event | None = None,
 ) -> list[type[Matcher]]:
     if not priority_matchers:
         return priority_matchers
 
     if not route_index_enabled() or resolution is None:
         if command_traffic:
-            return priority_matchers
-        return [matcher for matcher in priority_matchers if not matcher_is_command_only(matcher)]
+            selected = priority_matchers
+        else:
+            selected = [matcher for matcher in priority_matchers if not matcher_is_command_only(matcher)]
+    else:
+        index = get_route_index()
+        apply_index_filter = resolution.index_hit or route_index_strict()
+        if not apply_index_filter:
+            if command_traffic:
+                selected = priority_matchers
+            else:
+                selected = [matcher for matcher in priority_matchers if not matcher_is_command_only(matcher)]
+        elif command_traffic:
+            selected = filter_command_matchers(priority_matchers, resolution, index)
+        else:
+            selected = filter_chatter_matchers(priority_matchers, resolution, index)
 
-    index = get_route_index()
-    apply_index_filter = resolution.index_hit or route_index_strict()
-    if not apply_index_filter:
-        if command_traffic:
-            return priority_matchers
-        return [matcher for matcher in priority_matchers if not matcher_is_command_only(matcher)]
-
-    if command_traffic:
-        return filter_command_matchers(priority_matchers, resolution, index)
-    return filter_chatter_matchers(priority_matchers, resolution, index)
+    if event is None:
+        return selected
+    plain, raw_text = event_dispatch_texts(event)
+    return apply_matcher_rule_prefilter(selected, event, plain, raw_text)
 
 
 def filter_chatter_matchers(

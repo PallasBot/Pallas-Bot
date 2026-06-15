@@ -18,6 +18,7 @@ __plugin_meta__ = PluginMetadata(
     supported_adapters={"~onebot.v11"},
     extra={
         "version": PLUGIN_EXTRA_VERSION,
+        "ingress_route": {"lane": "remote"},
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "command_permissions": [
             {"id": "connectivity.probe", "label": "牛牛连通", "default": "everyone"},

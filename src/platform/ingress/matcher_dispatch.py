@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import importlib
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -13,9 +14,11 @@ from src.foundation.config.repo_settings import repo_env_raw_value
 from src.platform.ingress.dispatch_lanes import (
     check_and_run_matcher_with_lane,
     install_dispatch_lanes,
+    maybe_send_lane_busy_reply,
     uninstall_dispatch_lanes,
 )
 from src.platform.ingress.dispatch_metrics import record_group_message_ingress, record_preprocessor_dropped
+from src.platform.ingress.fleet_dispatch_scale import scaled_dispatch_int
 from src.platform.ingress.matcher_activation import (
     event_command_traffic,
     resolve_route_for_event,
@@ -29,6 +32,7 @@ if TYPE_CHECKING:
 
 _PATCHED = False
 _ORIGINAL_HANDLE_EVENT = None
+_ORIGINAL_ADAPTER_HANDLE_EVENTS: dict[object, object] = {}
 _OVERLOAD_SELECTED_THRESHOLD = 24
 
 
@@ -45,11 +49,11 @@ def matcher_dispatch_enabled() -> bool:
 def overload_selected_threshold() -> int:
     raw = repo_env_raw_value("PALLAS_MATCHER_DISPATCH_OVERLOAD_THRESHOLD")
     if raw is None:
-        return _OVERLOAD_SELECTED_THRESHOLD
+        return scaled_dispatch_int(_OVERLOAD_SELECTED_THRESHOLD, per_bot=1, cap=48)
     try:
         return max(1, int(str(raw).strip()))
     except ValueError:
-        return _OVERLOAD_SELECTED_THRESHOLD
+        return scaled_dispatch_int(_OVERLOAD_SELECTED_THRESHOLD, per_bot=1, cap=48)
 
 
 async def patched_handle_event(bot: Bot, event: Event) -> None:
@@ -89,17 +93,15 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
         total_selected = 0
         total_considered = 0
         matchers_run = 0
+        any_matcher_executed = False
+        busy_reply_pending = False
 
         break_flag = False
-        lane_busy_sent = False
-        lane_busy_lock = nb_message.anyio.Lock()
 
         async def run_selected_matcher(matcher) -> None:
-            nonlocal lane_busy_sent, matchers_run
+            nonlocal any_matcher_executed, busy_reply_pending, matchers_run
             matchers_run += 1
-            async with lane_busy_lock:
-                already_sent = lane_busy_sent
-            sent = await check_and_run_matcher_with_lane(
+            result = await check_and_run_matcher_with_lane(
                 matcher,
                 bot,
                 event,
@@ -107,11 +109,13 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
                 stack,
                 dependency_cache,
                 command_traffic=command_traffic,
-                busy_reply_sent=already_sent,
+                busy_reply_sent=False,
             )
-            if sent:
-                async with lane_busy_lock:
-                    lane_busy_sent = True
+            if result.acquired:
+                any_matcher_executed = True
+                return
+            if result.lane_busy:
+                busy_reply_pending = True
 
         def handle_stop_propagation(_exc_group) -> None:
             nonlocal break_flag
@@ -133,6 +137,7 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
                     priority_matchers,
                     command_traffic=command_traffic,
                     resolution=resolution,
+                    event=event,
                 )
                 if apply_dispatch
                 else priority_matchers
@@ -155,6 +160,14 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
 
         if show_log:
             nb_message.logger.debug("Checking for matchers completed")
+
+        if busy_reply_pending and not any_matcher_executed:
+            await maybe_send_lane_busy_reply(
+                bot,
+                event,
+                command_traffic=command_traffic,
+                already_sent=False,
+            )
 
         if apply_dispatch:
             record_group_message_ingress(
@@ -179,11 +192,20 @@ def install_matcher_dispatch() -> None:
         await patched_handle_event(bot, event)
 
     nb_message.handle_event = wrapped  # type: ignore[assignment]
+    for module_name in ("nonebot.adapters.onebot.v11.bot", "nonebot.adapters.onebot.v12.bot"):
+        with contextlib.suppress(Exception):
+            module = importlib.import_module(module_name)
+            current = getattr(module, "handle_event", None)
+            if current is not None:
+                _ORIGINAL_ADAPTER_HANDLE_EVENTS[module] = current
+                module.handle_event = wrapped  # noqa: B010
+
     _PATCHED = True
     logger.info(
-        "matcher_dispatch: installed overload_threshold={} multi_bot={}",
+        "matcher_dispatch: installed overload_threshold={} multi_bot={} adapter_patches={}",
         overload_selected_threshold(),
         needs_group_host_bot_gate(),
+        len(_ORIGINAL_ADAPTER_HANDLE_EVENTS),
     )
 
 
@@ -192,6 +214,10 @@ def uninstall_matcher_dispatch() -> None:
     if not _PATCHED or _ORIGINAL_HANDLE_EVENT is None:
         return
     nb_message.handle_event = _ORIGINAL_HANDLE_EVENT  # type: ignore[assignment]
+    for module, original in list(_ORIGINAL_ADAPTER_HANDLE_EVENTS.items()):
+        with contextlib.suppress(Exception):
+            module.handle_event = original  # noqa: B010
+    _ORIGINAL_ADAPTER_HANDLE_EVENTS.clear()
     _PATCHED = False
     _ORIGINAL_HANDLE_EVENT = None
     uninstall_dispatch_lanes()

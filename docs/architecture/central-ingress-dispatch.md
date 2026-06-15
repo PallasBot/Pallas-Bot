@@ -73,6 +73,10 @@ flowchart TB
 | `src/platform/ingress/send_queue.py` | OneBot 出站 API 整形 |
 | `src/platform/ingress/message_load.py` | 过载信号 |
 | `src/platform/ingress/dispatch_metrics.py` | 进程内指标 |
+| `src/platform/ingress/fleet_dispatch_scale.py` | 按在线牛数缩放默认预算 |
+| `src/platform/ingress/matcher_rule_prefilter.py` | 确定性规则预筛 |
+| `src/platform/ingress/dispatch_stats_logger.py` | 周期 stats 日志 |
+| `src/platform/multi_bot/platform_utils.py` | 出站 V11 Bot 选择 |
 
 与 `multi_bot/`、`shard/` 并列，**不**放在 `plugins/`。
 
@@ -87,16 +91,17 @@ flowchart TB
 
 ## Matcher 预筛选
 
-**matcher_dispatch** 在 startup 时 patch `nonebot.message.handle_event`：
+**matcher_dispatch** 在 startup 时 patch `nonebot.message.handle_event`，并对 OneBot V11/V12 adapter 的 `handle_event` 做同样包装（避免协议层绕过中央分发）：
 
 - 群消息进入后先走 **matcher_activation**：闲聊流量跳过仅含 `CommandRule` 的 matcher。
+- **matcher_rule_prefilter** 在 `check_rule` 前按 Command/Startswith/Keywords 等确定性规则做 fail-open 预筛，进一步缩小候选集。
 - 选中 matcher 经 **dispatch_lanes**  acquire 后再执行 handler。
 - 选中 matcher 过多时 **message_load** 发出过载信号，后台任务让路。
 
 | 键 | 默认 |
 |----|------|
 | `PALLAS_MATCHER_DISPATCH_ENABLED` | 开 |
-| `PALLAS_MATCHER_DISPATCH_OVERLOAD_THRESHOLD` | `24` |
+| `PALLAS_MATCHER_DISPATCH_OVERLOAD_THRESHOLD` | `24`；未显式配置时按在线牛数缩放（`fleet_dispatch_scale`） |
 
 过载窗口内 **corpus prefetch** 会暂停，避免与热路径抢资源。
 
@@ -140,10 +145,10 @@ flowchart TB
 | `PALLAS_LANE_ACQUIRE_TIMEOUT_SEC` | `1.0` |
 | `PALLAS_LANE_WAIT_OVERLOAD_MS` | `250` |
 | `PALLAS_LANE_BUSY_REPLY` | 开 |
-| `PALLAS_LANE_COMMAND` | `16` |
-| `PALLAS_LANE_CHAT` | `32` |
+| `PALLAS_LANE_COMMAND` | `16`；未配置时按在线牛数缩放，上限 `64` |
+| `PALLAS_LANE_CHAT` | `32`；未配置时按在线牛数缩放，上限 `48` |
 | `PALLAS_LANE_STORAGE` | `min(8, PG_POOL_SIZE)` |
-| `PALLAS_LANE_REMOTE` | `4` |
+| `PALLAS_LANE_REMOTE` | `4`；未配置时按在线牛数缩放，上限 `16` |
 
 ## 出站整形
 
@@ -187,6 +192,18 @@ uv run python scripts/ingress_dispatch_status.py
 ```
 
 unified 进程须已运行；脚本读取当前进程内存指标，非分片聚合。
+
+周期日志：进程内每 `PALLAS_DISPATCH_STATS_LOG_INTERVAL_SEC`（默认 `60`）打一条 `ingress_dispatch: stats`，便于对照 matcher 漏斗与 lane 占用。
+
+## 出站 Bot 选择（platform_utils）
+
+主动出站未指定 `bot` 时，**platform/multi_bot/platform_utils** 仅支持 OneBot V11：
+
+- 恰好一只 V11 在线 → 自动选用
+- 多只 V11 或多协议并存 → **不猜测**，打 warning 并跳过（对齐真寻 fail-safe）
+- 候选牛号已知时可用 `pick_connected_bot_id`；唯一在线则确定，多个在线由调用方决定策略
+
+入站舰队路由仍由 **ingress_gate** 负责，不用 `bot_filter` 替代。
 
 分片下的跨 worker 指标见 [多进程分片 · WebUI 与日志](bot_process_sharding.md#webui-与日志hub) 中的 `shard-observability`。分片 hub 上 `GET /pallas/api/ingress-dispatch` 汇总各 worker 落盘的 dispatch 快照。
 
