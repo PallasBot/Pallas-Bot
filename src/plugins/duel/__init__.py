@@ -16,7 +16,7 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
-from src.platform.ingress.cage_plaintext import is_cage_plaintext
+from src.platform.ingress.policy_registry import text_matches_plugin_fanout
 from src.plugins.duel import duel_penalty  # noqa: F401 — 注册惩罚消息 matcher
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_bots import (
@@ -77,6 +77,10 @@ __plugin_meta__ = PluginMetadata(
                 "default": "group_moderator",
             },
         ],
+        "ingress_fanout": {
+            "scope": "always",
+            "regexes": [r"^八角笼(?:牛|斗)(?:\s*\d{1,2}\s*(?:幕|回合))?\s*$"],
+        },
         "menu_data": [
             {
                 "func": "牛牛决斗",
@@ -156,7 +160,7 @@ async def is_duel_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> boo
 async def is_cage_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
     if event.group_id in BLOCK_LIST:
         return False
-    return is_cage_plaintext(event.get_plaintext())
+    return text_matches_plugin_fanout(event.get_plaintext(), "duel")
 
 
 duel_msg = on_message(

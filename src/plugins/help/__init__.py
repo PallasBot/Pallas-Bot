@@ -48,6 +48,16 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "ingress_fanout": {
+            "scope": "unified_only",
+            "prefixes": [
+                "牛牛帮助",
+                "牛牛开启",
+                "牛牛关闭",
+                "牛牛开启全部功能",
+                "牛牛关闭全部功能",
+            ],
+        },
         "command_permissions": [
             {"id": "help.help", "label": "牛牛帮助", "default": "everyone"},
             {"id": "help.plugin_enable", "label": "牛牛开启（单插件）", "default": "staff"},

@@ -10,6 +10,7 @@ from typing import Any
 
 from nonebot import logger
 
+from src.platform.ingress.policy_registry import normalize_ingress_trailing_punct
 from src.platform.multi_bot.dedup import cross_bot_group_message_key
 from src.platform.shard.coord.coord_redis_store import (
     coord_key,
@@ -19,7 +20,6 @@ from src.platform.shard.coord.coord_redis_store import (
 from src.platform.shard.registry.config import get_shard_registry_settings
 
 _BOT_COUNT_TEXTS = frozenset({"牛牛报数", "牛牛出列"})
-_BOT_COUNT_TRAILING_PUNCT = "！!？?。.,…~～"
 _COLLECT_SEC = 3.0
 _POLL_SEC = 0.08
 _STABLE_SEC = 0.45
@@ -30,10 +30,7 @@ STAGGER_SEC = 0.35
 
 def normalize_bot_count_command_plaintext(plain: str) -> str:
     """去掉首尾空白与尾部常见标点，便于 fanout / 协调与 on_command 判定一致。"""
-    text = (plain or "").strip()
-    while text and text[-1] in _BOT_COUNT_TRAILING_PUNCT:
-        text = text[:-1]
-    return text
+    return normalize_ingress_trailing_punct(plain)
 
 
 def bot_count_coord_plaintext(plain: str) -> str:

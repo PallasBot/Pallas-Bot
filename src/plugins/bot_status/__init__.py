@@ -56,6 +56,11 @@ __plugin_meta__ = PluginMetadata(
             {"id": "bot_status.test_mail", "label": "测试邮件", "default": "superuser"},
             {"id": "bot_status.count", "label": "牛牛报数 / 牛牛出列", "default": "everyone"},
         ],
+        "ingress_fanout": {
+            "scope": "shard_only",
+            "plaintexts": ["牛牛报数", "牛牛出列"],
+            "normalize_trailing_punct": True,
+        },
         "menu_data": [
             {
                 "func": "牛牛在吗",

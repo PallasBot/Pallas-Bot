@@ -98,7 +98,10 @@ async def bench_ingress_fanout(
         "src.plugins.ingress_gate.claim_federate_group_message_ingress",
         AsyncMock(return_value=True),
     )
-    monkeypatch.setattr("src.plugins.ingress_gate.is_ingress_fanout_plaintext", lambda _p: True)
+    monkeypatch.setattr(
+        "src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim",
+        lambda _plain, **_: False,
+    )
 
     from src.plugins.ingress_gate import ingress_group_message_gate
 
