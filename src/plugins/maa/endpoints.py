@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from nonebot import get_driver
 
 from src.console.web import public_base_url as nonebot_public_base_url
+from src.platform.shard import context as shard_ctx
 
 from .config import Config, get_maa_config
 
@@ -46,9 +47,9 @@ def maa_public_http_base(cfg: Config) -> tuple[str, bool]:
     configured = normalize_public_base_url(cfg.maa_public_base_url)
     if configured:
         return configured, False
-    from src.platform.shard.registry.config import get_shard_registry_settings, is_sharding_active
+    from src.platform.shard.registry.config import get_shard_registry_settings
 
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         s = get_shard_registry_settings()
         host = (s.ws_host or "127.0.0.1").strip() or "127.0.0.1"
         return nonebot_public_base_url(host=host, port=s.hub_port), True
@@ -114,11 +115,9 @@ def format_maa_http_setup_help() -> str:
         "用户标识符：你的 QQ 号（与绑定命令一致）。",
     ]
     if ep.inferred_base:
-        from src.platform.shard.registry.config import is_sharding_active
-
         shard_hint = (
             "分片时请配置 maa_public_base_url 为 hub 对外地址（未填则按 hub 端口推断）。"
-            if is_sharding_active()
+            if shard_ctx.sharding_active()
             else ""
         )
         lines.append(

@@ -31,7 +31,7 @@ def test_touch_updates_redis(fake_coord_redis) -> None:
 async def test_store_was_seen_reads_cluster_redis(fake_coord_redis, monkeypatch) -> None:
     mod.clear_seen_cache_for_tests()
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.platform.shard.context.is_sharding_active",
         lambda: True,
     )
     from src.plugins.maa.store import MaaStore

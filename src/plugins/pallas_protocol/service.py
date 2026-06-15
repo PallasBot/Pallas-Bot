@@ -1164,10 +1164,10 @@ class PallasProtocolService:
         if account_id in self._accounts:
             raise ValueError("该 QQ 对应账号已存在")
 
-        from src.platform.shard.registry.config import is_sharding_active
+        from src.platform.shard import context as shard_ctx
         from src.platform.shard.registry.store import assign_bot_to_shard
 
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             assign_bot_to_shard(qq)
         url, name, tok = resolve_onebot_ws_settings(self._config, bot_id=qq)
         if not url:
@@ -1858,10 +1858,9 @@ class PallasProtocolService:
         if not qq or not qq.isdigit():
             return False
         try:
-            from src.platform.bot_runtime.roles import is_sharded_hub
-            from src.platform.shard.registry.config import is_sharding_active
+            from src.platform.shard import context as shard_ctx
 
-            if is_sharding_active() and is_sharded_hub():
+            if shard_ctx.sharding_active() and shard_ctx.is_hub():
                 from src.platform.shard.presence import get_cluster_online_bot_ids
 
                 return int(qq) in get_cluster_online_bot_ids()

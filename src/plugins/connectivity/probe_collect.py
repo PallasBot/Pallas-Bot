@@ -97,8 +97,7 @@ async def probe_maa_endpoints(
     cfg: MaaConfig | None = None,
     timeout_sec: float = 15.0,
 ) -> list[ServiceProbeResult]:
-    from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
+    from src.platform.shard import context as shard_ctx
     from src.plugins.maa.endpoints import resolve_maa_probe_http_endpoints
 
     ep = resolve_maa_probe_http_endpoints(cfg)
@@ -124,7 +123,7 @@ async def probe_maa_endpoints(
             ),
         )
     results = [get_r, report_r]
-    if is_sharding_active() and is_sharded_hub():
+    if shard_ctx.sharding_active() and shard_ctx.is_hub():
         return _maa_hub_probe_note(results)
     return results
 

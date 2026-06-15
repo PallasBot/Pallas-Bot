@@ -26,7 +26,7 @@
 | --- | --- | --- |
 | P0 | `help`、`repeater`、`bot_status` | 已迁 `shard.context`；`bot_status` 抽出 `shard_count.py` / `list_mode.py`；`repeater` 全模块完成 |
 | P1 | `duel`、`dream`、`who_is_spy` | `duel` 抽出 `shard_cage.py`；`dream` 抽出 `shard_fleet.py`；`who_is_spy` 已走 `hosted_activity_ingress` |
-| P2 | 其余含 `is_sharding_active` 的插件（约 30 处） | 待迁 `shard.context` + 少量 hook |
+| P2 | 其余含 `is_sharding_active` 的插件（约 30 处） | `block`/`maa`/`ingress_gate`/`connectivity`/`pallas_protocol`/`pallas_console_metrics` 已迁；待办 `pallas_webui` |
 | P3 | `ingress_gate` 插件本体 | 仅保留 worker/unified 必需逻辑；hub 路径再瘦身 |
 
 每插件 PR：**行为不变**为前提，先补/跑 shard 相关测试再删分支。

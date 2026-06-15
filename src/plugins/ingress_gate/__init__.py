@@ -37,6 +37,7 @@ from src.platform.multi_bot.dedup import (
 )
 from src.platform.multi_bot.fleet import fleet_bot_ids_contains, get_fleet_bot_ids
 from src.platform.observability import SlowPathTimer, slow_path_threshold_ms
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.ingress_metrics import (
     record_ingress_claim,
     record_ingress_early_discard,
@@ -44,7 +45,6 @@ from src.platform.shard.ingress_metrics import (
     record_ingress_fanout_bypass,
     should_record_ingress_metrics,
 )
-from src.platform.shard.registry.config import get_shard_registry_settings, is_sharding_active
 
 INGRESS_CLAIM_PLUGIN = "ingress_gate"
 INGRESS_SHARD_CLAIM_PLUGIN = "ingress_gate_shard"
@@ -116,7 +116,7 @@ async def ingress_group_message_gate(bot, event) -> None:
     self_id = int(bot.self_id)
     user_id = int(event.user_id)
     metrics = should_record_ingress_metrics(self_id)
-    sharding_active = is_sharding_active()
+    sharding_active = shard_ctx.sharding_active()
     timer = SlowPathTimer(
         "ingress_gate",
         threshold_ms=slow_path_threshold_ms("PALLAS_SLOW_INGRESS_GATE_MS", 20.0),
@@ -203,7 +203,7 @@ async def ingress_group_message_gate(bot, event) -> None:
         timer.mark("federate")
 
         if sharding_active:
-            shard_id = get_shard_registry_settings().shard_id
+            shard_id = shard_ctx.shard_id()
             # 不传 bot_id：避免「代表牛」不在群内时非代表牛永远无法通过文件 claim（如群内发牛牛网关）
             if not await try_claim_cross_shard_message(
                 INGRESS_SHARD_CLAIM_PLUGIN,
@@ -259,7 +259,7 @@ async def _log_ingress_gate() -> None:
     from src.platform.federate.config import federate_ingress_active, resolved_federate_id
 
     n = len(get_fleet_bot_ids())
-    mode = "shard" if is_sharding_active() else "unified"
+    mode = "shard" if shard_ctx.sharding_active() else "unified"
     fed = "on" if federate_ingress_active() else "off"
     unified_bypass = "on" if federate_ingress_bypass_unified() else "off"
     logger.info(
