@@ -42,6 +42,7 @@
 | [中央入站调度](architecture/central-ingress-dispatch.md) | unified / worker 内 matcher 预筛选、lane、出站整形 |
 | [控制面与语料联邦](architecture/control-plane-corpus-federation.md) | 维护者：Composite 语料、Bootstrap |
 | [站点定制与更新](architecture/site-customization-and-updates.md) | local/plugins、更新策略 |
+| [**4.0 本体瘦身**](architecture/pallas-4.0-slim.md) | core / 扩展分家、Docker 与 WebUI 协同（`feat/4.0-slim`） |
 
 ## 插件
 
