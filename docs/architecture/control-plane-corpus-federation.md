@@ -1,23 +1,21 @@
 # 控制面、联邦语料与外接语料
 
-本文描述 **全量 Provision（Tenant + Bootstrap + 联邦）** 与 **外接社区语料** 在同一控制面下的 Bot 侧接入方式（**维护者向**）。
+**维护者向**：Bot 侧 Composite 语料、Bootstrap、联邦 ingress 与中心 OpenAPI 设计说明。
+
+> 部署者与群管请读 [语料联邦](../common/corpus/README.md) 与 [在线统计](../common/community_stats.md)。
 
 > **Phase 1**：`local` + **community** 多读源、auto enroll、contribute 默认开、主/备语料读 failover、WebUI 语料联邦配置与 `/corpus-status`。  
-> **Phase 2（进行中）**：**ingress 去重**（`src/platform/federate/` + `ingress_gate`）已接入；**fed** 第二 PG、`bootstrap`、fleet 快照仍待交付。
-
-用户向说明见 [语料联邦（corpus）](../common/corpus/README.md) 与 [在线统计与社区主站](../common/community_stats.md)。
+> **Phase 2**：**ingress 去重**（`src/platform/federate/` + `ingress_gate`）已接入；**fed** 第二 PG、`bootstrap`、fleet 快照仍待交付。
 
 ## 域名与部署
 
-公网服务挂在 **`*.pallasbot.top` 子域名**下即可，**只需主域 `pallasbot.top` 备案/解析到位**，不必单独为「控制面」再占一个根域。
-
 | 阶段 | 示例子域 | 用途 |
 |------|----------|------|
-| **现已上线** | `stats.pallasbot.top` | 心跳、`/v1/stats`、**`/v1/corpus/*`**（语料 enroll / 读写） |
-| 备案过渡期 | `pallas.togetsudo.com` | Bot 自动回退（与 community_stats 相同） |
-| 后续扩展 | 如 `control.pallasbot.top` | Bootstrap、Tenant、联邦（尚未实现） |
+| **现已上线** | `stats.pallasbot.top` | 心跳、`/v1/stats`、**`/v1/corpus/*`** |
+| 备案过渡期 | `pallas.togetsudo.com` | Bot 自动回退 |
+| 后续扩展 | 如 `control.pallasbot.top` | Bootstrap、Tenant、联邦 |
 
-Bot **auto enroll** 从 `[community_stats]` 心跳地址推导语料 URL（`/v1/heartbeat` → `/v1/corpus/enroll`）。auto 模式下 enroll 落盘 **实际连上的** `api_base`；读路径按心跳主/备顺序 **failover**（与 `community_stats` 相同，备案过渡期逻辑；主域恢复后可删备域逻辑）。
+Bot **auto enroll** 从 `[community_stats]` 心跳地址推导语料 URL。auto 模式下 enroll 落盘**实际连上的** `api_base`；读路径按心跳主/备顺序 **failover**。
 
 ## 目标与档位
 
@@ -441,17 +439,9 @@ DbConn:
 
 ---
 
-## 隐私与降级
-
-- **contribute** 默认开启（可关）；上传仅 `keywords` + 短句，`group_id=0`，不含 QQ/群号
-- 中心不可达：接话/学习仅 local；debug 日志一条，不 raise  
-- **审核**：控制面对 `contribute` 可 202 入队，Bot 侧 mirror 失败不 retry 风暴（指数退避 + 日配额）
-
----
-
 ## 相关文档
 
-- [语料联邦（用户向）](../common/corpus/README.md)
-- [社区统计](../common/community_stats.md)（`deployment_id`、heartbeat）
-- [多进程分片](bot_process_sharding.md)（同集群内 coord；与跨租户联邦正交）
+- [语料联邦](../common/corpus/README.md)
+- [社区统计](../common/community_stats.md)
+- [多进程分片](bot_process_sharding.md)
 - [配置存储](settings-storage.md)

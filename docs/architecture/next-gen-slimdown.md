@@ -18,7 +18,7 @@
 | ai_task 单层 | `ai_task_registry_redis` 并入 `ai_task_registry` |
 | coord 快照脚本 | `prune_shard_coord.py` → `shard_coord_snapshot.py` |
 
-## Phase 3 — 插件代码瘦身（进行中）
+## Phase 3 — 插件代码瘦身（已完成）
 
 **原则**：unified 路径为默认实现；分片分支用薄适配层，避免每插件复制 ingress/coord 逻辑。
 
@@ -26,19 +26,18 @@
 | --- | --- | --- |
 | P0 | `help`、`repeater`、`bot_status` | 已迁 `shard.context`；`bot_status` 抽出 `shard_count.py` / `list_mode.py`；`repeater` 全模块完成 |
 | P1 | `duel`、`dream`、`who_is_spy` | `duel` 抽出 `shard_cage.py`；`dream` 抽出 `shard_fleet.py`；`who_is_spy` 已走 `hosted_activity_ingress` |
-| P2 | 其余含 `is_sharding_active` 的插件（约 30 处） | 已完成；`pallas_webui` 经 `_shard_hub_console` / `_shard_worker_console` 收敛 |
+| P2 | 其余含 `is_sharding_active` 的插件 | 已完成；`pallas_webui` 经 `_shard_hub_console` / `_shard_worker_console` 收敛 |
 | P3 | `ingress_gate` 插件本体 | 已完成；claim 迁入 `platform/ingress/claim_gate.py`，hub 经 `shard.context.is_hub()` 禁用 |
 
-每插件 PR：**行为不变**为前提，先补/跑 shard 相关测试再删分支。
+## Phase 4 — 文档与站点（进行中）
 
-## Phase 4 — 文档与站点
-
-| 任务 | 说明 |
+| 任务 | 状态 |
 | --- | --- |
-| `control-plane-corpus-federation.md` | 用户可见段落下沉 `corpus/README`；路线图降导航权重 |
-| `noobook/`（Docs 站） | 评审归档或迁独立分支（~2900 行） |
-| `docs` 分支 | 评估是否仍需要「冲突以 docs 为准」双分支 |
-| 插件文档 | 对外名 `draw` 与配置键 `pallas_image_*` 一次性说明，避免再漂移 |
+| `control-plane-corpus-federation.md` 用户段落下沉 | 已完成；用户向见 [语料联邦](../common/corpus/README.md) |
+| 路线图 / 控制面导航降权 | 已完成；主仓与 Docs 站侧栏调整 |
+| 插件 `draw` 与 `pallas_image_*` 命名说明 | 已完成；见 [draw 插件文档](../plugins/draw/README.md) |
+| `noobook/` Docs 站归档降权 | 已完成；移出顶栏，侧栏保留并标注 legacy |
+| `docs` 双分支策略 | 维持现状：`main` 为 `docs/` 权威来源；`docs` 分支仅 CI 合并缓冲，冲突时 `-X ours` 以 `docs` 为准 |
 
 ## 分支与提交约定
 
