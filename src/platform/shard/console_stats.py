@@ -1,4 +1,4 @@
-"""分片 worker 控制台指标落盘（今日次数、单次耗时、matcher 时间桶）；hub 读取合并。"""
+"""分片 worker 控制台指标落盘；hub 读取合并。"""
 
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ def write_worker_stats_sync(
     preserve_matcher_hist: bool = False,
     worker_meta: dict[str, Any] | None = None,
 ) -> None:
-    """整文件覆写本 worker 快照（含各 QQ 的 by_plugin / matcher_duration_log / msg / 可选 matcher_hist）。"""
+    """整文件覆写本 worker 快照。"""
     payload = preserve_matcher_hist_from_file(shard_id, bots) if preserve_matcher_hist else bots
     fd = _acquire_lock(shard_id)
     if fd is None:
@@ -232,7 +232,7 @@ def load_cluster_console_stats_by_sid() -> dict[str, dict[str, Any]]:
 
 
 def prune_stale_worker_stats_bots_sync() -> int:
-    """hub：从各 worker 文件移除注册表已迁走的牛牛快照（如 worker-99 遗留）。"""
+    """hub：从各 worker 文件移除注册表已迁走的牛牛快照。"""
     try:
         from src.platform.shard.registry.store import get_shard_registry
 
@@ -274,7 +274,7 @@ def load_worker_console_stats_for_boot(shard_id: int) -> dict[str, dict[str, Any
 
 
 def trim_worker_duration_logs_sync(*, shard_id: int, cap: int) -> None:
-    """hub 定时清理：截断各 worker 文件内 matcher_duration_log（worker 进程不跑 WebUI 调度）。"""
+    """hub 定时清理：截断各 worker 文件内 matcher_duration_log。"""
     fd = _acquire_lock(shard_id)
     if fd is None:
         return

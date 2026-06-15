@@ -337,8 +337,6 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 
 async def is_admin_recall_self_msg(bot: Bot, event: GroupRecallNoticeEvent):
     # 好像不需要这句
-    # if event.notice_type != "group_recall":
-    #     return False
     self_id = event.self_id
     user_id = event.user_id
     group_id = event.group_id

@@ -1,4 +1,4 @@
-"""分片 worker 下复读插件的运行时优化（代表牛、fanout 条件）。"""
+"""分片 worker 下复读插件的运行时优化。"""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ def repeater_scheduler_runs_on_worker() -> bool:
 
 
 def repeater_maintenance_runs_on_worker() -> bool:
-    """跨 worker 全局维护（sync / context 清理）：分片时仅 shard 0 执行。"""
+    """跨 worker 全局维护：分片时仅 shard 0 执行。"""
     if not shard_ctx.sharding_active():
         return True
     return shard_ctx.shard_id() == 0

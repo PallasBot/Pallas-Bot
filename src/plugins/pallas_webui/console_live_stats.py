@@ -1,4 +1,4 @@
-"""单进程控制台指标快照（重启恢复当日收/发、Matcher 分项与耗时日志）。"""
+"""单进程控制台指标快照。"""
 
 from __future__ import annotations
 

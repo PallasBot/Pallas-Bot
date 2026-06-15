@@ -1,4 +1,4 @@
-"""社区统计 opt-in 上报配置（pallas.toml [community_stats] 或环境变量）。"""
+"""社区统计 opt-in 上报配置。"""
 
 from __future__ import annotations
 

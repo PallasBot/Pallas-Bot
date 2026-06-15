@@ -35,7 +35,7 @@ backup_important_data_in_mongodb() {
     mongodump -d PallasBot -c group_config -o $output/mongodb
     mongodump -d PallasBot -c user_config -o $output/mongodb
     mongodump -d PallasBot -c context -o $output/mongodb
-    # mongodump -d PallasBot -c image_cache -o $output/mongodb
+# mongodump -d PallasBot -c image_cache -o $output/mongodb
 
     rm $output_latest/important_data_in_mongodb
     ln -s $output/mongodb $output_latest/important_data_in_mongodb

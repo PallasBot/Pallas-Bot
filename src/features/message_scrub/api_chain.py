@@ -35,7 +35,7 @@ def _configured_provider_order() -> list[str]:
 
 
 def build_review_providers() -> list[ReviewProvider]:
-    """按配置顺序构造审查实例（链式：任一返回 blocked 则拦截）。"""
+    """按配置顺序构造审查实例。"""
     out: list[ReviewProvider] = []
     seen: set[str] = set()
     for name in _configured_provider_order():

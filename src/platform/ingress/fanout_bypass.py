@@ -1,4 +1,4 @@
-"""入站门控：跳过跨 Bot / unified once-claim 的明文判定（仅显式 fanout 白名单）。"""
+"""入站门控：跳过跨 Bot / unified once-claim 的明文判定。"""
 
 from __future__ import annotations
 

@@ -276,7 +276,7 @@ async def update_shard_bot_count_registration(
     message_time: int,
     bot_ids: list[int],
 ) -> None:
-    """handler 在慢路径探测本群在线牛后补登记（须与 run_shard_coordinated_bot_count 同 claim_key）。"""
+    """handler 在慢路径探测本群在线牛后补登记。"""
     claim_key = cross_bot_group_message_key(
         group_id,
         user_id,
@@ -299,7 +299,7 @@ async def run_shard_coordinated_bot_count(
     local_bot_ids: list[int] | None = None,
 ) -> tuple[int, int] | None:
     """
-    返回 (1-based 序号, 参与总数)；None 表示不参与（冷却中、未入群、协调失败等）。
+    返回 (1-based 序号, 参与总数)；None 表示不参与。
 
     local_bot_ids 可仅含 self_bot_id：handler 应先 create_task 本协程，再探测本群在线牛并
     调用 update_shard_bot_count_registration 补全登记。

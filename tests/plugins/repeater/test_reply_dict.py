@@ -80,7 +80,7 @@ async def test_generator_cleanup(beanie_fixture):
     Test that truncation executes even if generator is closed early.
 
     Creates a generator, consumes 1 item, then calls aclose() to simulate
-    early termination (e.g., exception in caller). Verifies truncation still runs.
+    early termination . Verifies truncation still runs.
     """
     _reply_dict = defaultdict(lambda: defaultdict(list))
     _reply_lock = asyncio.Lock()

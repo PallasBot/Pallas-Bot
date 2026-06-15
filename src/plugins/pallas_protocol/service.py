@@ -1222,7 +1222,7 @@ class PallasProtocolService:
         _bk = str(account.get(ACCOUNT_PROTOCOL_BACKEND_KEY) or "").strip().lower() or DEFAULT_PROTOCOL_BACKEND
         if "webui_token" not in account and _bk != SNOWLUMA_PROTOCOL_BACKEND:
             account["webui_token"] = secrets.token_hex(6)
-        # 与 update_account 一致：合并 env / Docker 主机重写（payload 可省略或显式留空 ws_url）
+        # 与 update_account 一致：合并 env / Docker 主机重写
         self._merge_onebot_ws_from_env(account)
         be.prepare_dirs(account)
         be.sync_all_configs(account, self._resolve_qq)
@@ -1331,7 +1331,7 @@ class PallasProtocolService:
             account[vk] = pv
         be = self._protocol_runtime_backend(account)
         be.apply_defaults(account, self._resolve_qq)
-        # 前端会始终带上 ws_url（可为空）；仍需合并：Docker 下重写主机、留空时用 env 补全。
+        # 前端会始终带上 ws_url；仍需合并：Docker 下重写主机、留空时用 env 补全。
         self._merge_onebot_ws_from_env(account)
         be.prepare_dirs(account)
         be.sync_all_configs(account, self._resolve_qq)
@@ -1428,7 +1428,7 @@ class PallasProtocolService:
                 raw_pb = account.get(ACCOUNT_PROTOCOL_BACKEND_KEY, "") or ""
                 bk = str(raw_pb).strip().lower() or DEFAULT_PROTOCOL_BACKEND
                 if bk != SNOWLUMA_PROTOCOL_BACKEND:
-                    # 设置 NapCat 工作目录（SnowLuma 使用 cwd，不依赖 NAPCAT_WORKDIR）
+                    # 设置 NapCat 工作目录
                     env_map["NAPCAT_WORKDIR"] = ad_abs
                     if self._launch.should_set_home_to_workdir():
                         env_map["HOME"] = ad_abs
@@ -1759,7 +1759,6 @@ class PallasProtocolService:
                     proc.kill()
                     await proc.wait()
             # 无论 proc 是否存在，都尝试杀掉 BootMain 脱离后追踪到的子进程
-            # （Windows BootMain 场景：launcher 已退出但 QQ/NapCat 子进程仍在运行）
             if runtime.tracked_child_root_pid:
                 await asyncio.to_thread(
                     self._launch.kill_process_tree,
@@ -1958,7 +1957,7 @@ class PallasProtocolService:
             if str(wport).strip():
                 p = int(wport)
                 if bk == SNOWLUMA_PROTOCOL_BACKEND:
-                    # SnowLuma 仅使用根地址（无 /webui/、无 ?token=）；初始口令见日志或预置 webui.json
+                    # SnowLuma 仅使用根地址；初始口令见日志或预置 webui.json
                     native_webui = f"http://{bind}:{p}/"
                     snowluma_webui_default_user = "admin"
                     if brief:

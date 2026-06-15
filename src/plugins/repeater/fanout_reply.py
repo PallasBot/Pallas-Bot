@@ -1,4 +1,4 @@
-"""多牛同群：判定可接话时由舰队内各牛各自发送（分片跨 worker）；context 只查一次。"""
+"""多牛同群：判定可接话时由舰队内各牛各自发送；context 只查一次。"""
 
 from __future__ import annotations
 

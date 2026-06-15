@@ -88,7 +88,7 @@ def test_resolve_onekey_skips_root_bootmain_when_installer_present(tmp_path: Pat
 
 
 def test_resolve_onekey_without_installer_falls_back_to_bootmain(tmp_path: Path) -> None:
-    """无安装器的一键布局（旧包或测试）仍可从浅层 bootmain 解析。"""
+    """无安装器的一键布局仍可从浅层 bootmain 解析。"""
     root = tmp_path / "e"
     boot = root / "bootmain"
     boot.mkdir(parents=True)

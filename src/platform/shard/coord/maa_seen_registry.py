@@ -1,4 +1,4 @@
-"""分片：MAA getTask 轮询活跃时间（跨 worker 共享，供 was_seen / 绑定校验）。"""
+"""分片：MAA getTask 轮询活跃时间。"""
 
 from __future__ import annotations
 

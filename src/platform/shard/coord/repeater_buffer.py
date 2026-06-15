@@ -1,4 +1,4 @@
-"""分片 worker：跨片同步 repeater 内存近期群消息（供 learn / 接话上下文）。"""
+"""分片 worker：跨片同步 repeater 内存近期群消息。"""
 
 from __future__ import annotations
 

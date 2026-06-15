@@ -111,7 +111,7 @@ _AT_QQ_RE = re.compile(r"@(\d{5,12})")
 
 def extract_at_qq_from_text(text: str) -> tuple[list[int], str]:
     """从纯文本中提取 @QQ号，返回 (QQ号列表, 去除 @QQ 后的文本)。
-    为避免直接删除 @QQ 导致相邻词语黏连（如 foo@123bar -> foobar），
+    为避免直接删除 @QQ 导致相邻词语黏连，
     这里先用空格替换 @QQ，再对连续空白做一次折叠。
     """
     ids = [int(m.group(1)) for m in _AT_QQ_RE.finditer(text)]
@@ -122,7 +122,7 @@ def extract_at_qq_from_text(text: str) -> tuple[list[int], str]:
 
 
 def qq_avatar_url(user_id: int) -> str:
-    """构造 QQ 头像 URL（用于作为参考图）。"""
+    """构造 QQ 头像 URL。"""
     return f"https://q.qlogo.cn/g?b=qq&nk={user_id}&s=0"
 
 

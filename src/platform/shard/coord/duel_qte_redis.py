@@ -56,7 +56,7 @@ def read_session_redis_sync(session_id: str) -> dict[str, Any] | None:
 
 
 def store_session_redis_sync(session_id: str, data: dict[str, Any]) -> bool:
-    """写入 QTE 会话并 pub/sub 唤醒各 worker（SETEX + PUBLISH）。"""
+    """写入 QTE 会话并 pub/sub 唤醒各 worker。"""
     from src.platform.coord.redis_claim import get_coord_redis_client
     from src.platform.coord.redis_settings import coord_redis_enabled
 
@@ -201,7 +201,7 @@ def clear_duel_qte_greeting_redis_sync(group_id: str) -> bool:
 
 
 def greeting_user_blocked_redis_sync(group_id: str, user_id: str) -> bool:
-    """pub/sub 镜像未命中时的兜底（如 worker 刚启动）。"""
+    """pub/sub 镜像未命中时的兜底。"""
     from src.platform.coord.redis_claim import get_coord_redis_client
     from src.platform.coord.redis_settings import coord_redis_enabled
 

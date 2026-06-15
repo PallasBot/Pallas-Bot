@@ -1,4 +1,4 @@
-"""SnowLuma 配置：扁平 OneBot（与 NapCat 嵌套 network 不同）与 runtime.json。"""
+"""SnowLuma 配置：扁平 OneBot与 runtime.json。"""
 
 from __future__ import annotations
 
@@ -17,12 +17,12 @@ from .linux_docker import (
 
 # SnowLuma 旧版日志
 _SNOWLUMA_TEMP_PASSWORD_LOG_RE = re.compile(r"临时密码[:：]\s*([0-9a-fA-F]{8,64})")
-# packages/core/src/webui/server.ts：log.info('initial credentials: user=admin password=%s', initialPassword)
+# SnowLuma initial credentials 日志格式
 _SNOWLUMA_INITIAL_CREDS_LOG_RE = re.compile(
     r"initial\s+credentials:\s*user\s*=\s*admin\s+password\s*=\s*([0-9a-fA-F]{8,64})",
     re.IGNORECASE,
 )
-# OneBot 默认反向连接（明文 ws 方案，与 NapCat 占位一致；用 urlunsplit 避免源码中出现 ``ws://`` 字面量）
+# OneBot 默认反向连接
 _SNOWLUMA_DEFAULT_WS_URL = urlunsplit(("ws", "127.0.0.1:8088", "/onebot/v11/ws", "", ""))
 
 
@@ -130,7 +130,7 @@ _RUNTIME_WEBUI_SECRET_KEYS: tuple[str, ...] = (
 
 
 def read_snowluma_runtime_webui_password(account: dict) -> str | None:
-    """若 ``config/runtime.json`` 中存在常见 WebUI 凭据字段，返回其字符串值（供管理页展示）。"""
+    """若 ``config/runtime.json`` 中存在常见 WebUI 凭据字段，返回其字符串值。"""
     account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
     path = account_data_dir / "config" / "runtime.json"
     if not path.is_file():
@@ -149,7 +149,7 @@ def read_snowluma_runtime_webui_password(account: dict) -> str | None:
 
 
 def extract_snowluma_webui_temp_password_from_log_lines(lines: list[str] | None) -> str | None:
-    """从 SnowLuma 进程日志解析首次启动时打印的初始口令（十六进制串）。"""
+    """从 SnowLuma 进程日志解析首次启动时打印的初始口令。"""
     if not lines:
         return None
     for line in reversed(lines):
@@ -165,13 +165,13 @@ def extract_snowluma_webui_temp_password_from_log_lines(lines: list[str] | None)
 def resolve_snowluma_webui_temp_password(account: dict, log_lines: list[str] | None) -> str | None:
     """仅从进程日志解析初始口令（SnowLuma 官方将口令以 scrypt 写入 ``webui.json``，无明文可读）。
 
-    首次启动前可在协议页「一次性初始密码」写入 ``webui.json``（仅存哈希），则无需依赖日志。
+    首次启动前可在协议页「一次性初始密码」写入 ``webui.json``，则无需依赖日志。
     """
     return extract_snowluma_webui_temp_password_from_log_lines(log_lines)
 
 
 def read_snowluma_runtime_into_account(account: dict) -> bool:
-    """从 ``config/runtime.json`` 同步 ``webui_port``（SnowLuma 无 NapCat 式 webui.json）。"""
+    """从 ``config/runtime.json`` 同步 ``webui_port``。"""
     if bool(account.get("snowluma_linux_docker")):
         return False
     account_data_dir = Path(str(account.get("account_data_dir", "")).strip())

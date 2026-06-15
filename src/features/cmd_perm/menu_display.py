@@ -27,7 +27,7 @@ def _normalize_command_perm_ids(item: dict[str, Any]) -> list[str]:
 
 
 def raw_trigger_condition(item: dict[str, Any]) -> str:
-    """metadata 中的触发条件原文（不含权限后缀）。"""
+    """metadata 中的触发条件原文。"""
     return str(item.get("trigger_condition", "未知") or "未知").strip() or "未知"
 
 
@@ -50,5 +50,5 @@ def effective_permission_avail_text(item: dict[str, Any]) -> str:
 
 
 def trigger_condition_with_effective_perm(item: dict[str, Any]) -> str:
-    """兼容旧名：等价于 `raw_trigger_condition`（权限请用 `effective_permission_avail_text` 单独展示）。"""
+    """兼容旧名：等价于 `raw_trigger_condition`。"""
     return raw_trigger_condition(item)

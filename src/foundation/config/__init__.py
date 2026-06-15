@@ -71,7 +71,7 @@ class BotConfig(Config):
 
     async def security(self) -> bool:
         """
-        账号是否安全（不处于风控等异常状态）
+        账号是否安全
         """
         security = await self._find("security")
         return True if security else False
@@ -263,7 +263,7 @@ async def user_is_bot_admin(bot_id: int, user_id: int) -> bool:
 
 async def user_is_admin_of_any_bot(user_id: int) -> bool:
     """
-    判断 user_id 是否在任意已持久化的 BotConfig.admins 中（多实例下跨 Bot 管理员）。
+    判断 user_id 是否在任意已持久化的 BotConfig.admins 中。
     """
     from .bot_admins_cache import any_bot_admin_user_ids_cached
 

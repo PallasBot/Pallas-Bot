@@ -1,4 +1,4 @@
-"""帮助：按插件名 / 展示名 / 别名解析（含去空格与中文简称）。"""
+"""帮助：按插件名 / 展示名 / 别名解析。"""
 
 from __future__ import annotations
 
@@ -12,9 +12,9 @@ if TYPE_CHECKING:
 
 _WS_RE = re.compile(r"[\s\u3000]+")
 
-# 完全匹配（归一化后相等）
+# 完全匹配
 _SCORE_EXACT = 100
-# 子串匹配（归一化后的包含关系）
+# 子串匹配
 _SCORE_SUBSTRING = 50
 
 
@@ -24,7 +24,7 @@ def normalize_help_key(text: str) -> str:
 
 
 def iter_plugin_lookup_tokens(plugin: Any) -> list[str]:
-    """插件所有可检索名称（去重保序）。"""
+    """插件所有可检索名称。"""
     seen: set[str] = set()
     out: list[str] = []
 

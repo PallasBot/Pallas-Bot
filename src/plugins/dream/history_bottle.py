@@ -19,7 +19,7 @@ from .dedupe_keys import dream_image_dedupe_key, dream_text_dedupe_key
 from .http_utils import download_image_url
 from .payload import DriftPayload
 
-# 写入 message.keywords 的前缀（与复读侧 keywords 区分）
+# 写入 message.keywords 的前缀
 DREAM_KEY_PREFIX = "is_dream"
 DREAM_RECORD_SEP = "\x1e"
 

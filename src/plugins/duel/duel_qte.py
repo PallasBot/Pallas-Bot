@@ -71,7 +71,7 @@ _published_greeting_snapshot: dict[str, frozenset[str]] = {}
 
 
 def apply_cluster_qte_greeting(gid: str, users: frozenset[str] | None, deadline: float) -> None:
-    """各 worker 通过 Redis pub/sub 同步的 QTE 参与者（供 greeting 让路）。"""
+    """各 worker 通过 Redis pub/sub 同步的 QTE 参与者。"""
     if users:
         _cluster_qte_users[gid] = users
         _cluster_qte_deadline[gid] = deadline
@@ -102,7 +102,7 @@ def publish_cluster_qte_greeting_if_changed(gid: str, users: frozenset[str], dea
 
 
 def sync_active_qte_group(gid: str) -> None:
-    """会话增减后刷新群级活跃标记（供 greeting 热路径快速查询）。"""
+    """会话增减后刷新群级活跃标记。"""
     now = time.time()
     active_users: set[str] = set()
     max_deadline = now
@@ -126,7 +126,7 @@ def sync_active_qte_group(gid: str) -> None:
 
 
 def duel_qte_active_in_group(group_id: int) -> bool:
-    """本群是否存在未过期且未完成的 QTE 会话（供 greeting 等让路）。"""
+    """本群是否存在未过期且未完成的 QTE 会话。"""
     gid = str(group_id)
     if gid not in _active_qte_groups:
         return False
@@ -514,7 +514,7 @@ duel_qte_exact_rule = Rule(duel_qte_message_rule)
 
 
 def complete_duel_qte(event: GroupMessageEvent) -> None:
-    """将当前群的 QTE 标记为成功（单人应答或抢攻争先）。"""
+    """将当前群的 QTE 标记为成功。"""
     gid = str(event.group_id)
     uid = event.get_user_id()
     race = _race_sessions.get(gid)
@@ -571,7 +571,7 @@ def prepare_intrusion_fail_skill_effects(
     effects: list[Any],
     skill_kind: str,
 ) -> list[dict[str, Any]]:
-    """唤名失败仍施放本幕已抽技能；治疗向的 hp/dp 改落在决斗另一方（相对本幕 actor）。"""
+    """唤名失败仍施放本幕已抽技能；治疗向的 hp/dp 改落在决斗另一方。"""
     rows = [dict(e) for e in effects if isinstance(e, dict)]
     if skill_kind != "heal":
         return rows
@@ -683,7 +683,7 @@ async def _run_operator_intrusion_race_qte(
     challenger_is_bot: bool = False,
     defender_is_bot: bool = False,
 ) -> None:
-    """乱入抢认：双方抢先咏名，成功者按技能表结算（相对胜者 actor）。"""
+    """乱入抢认：双方抢先咏名，成功者按技能表结算。"""
     from src.plugins.duel.config import plugin_config
     from src.plugins.duel.duel_round_engine import (
         append_combat_delta,
@@ -1268,7 +1268,7 @@ async def _run_keyword_race_qte(
     challenger_is_bot: bool = False,
     defender_is_bot: bool = False,
 ) -> None:
-    """抢攻 QTE：双方抢先发送关键词，成功者结算 on_success（相对胜者 actor）。"""
+    """抢攻 QTE：双方抢先发送关键词，成功者结算 on_success。"""
     from src.plugins.duel.config import plugin_config
     from src.plugins.duel.duel_round_engine import (
         append_combat_delta,
@@ -1460,7 +1460,7 @@ async def run_event_qte_if_any(
     challenger_is_bot: bool = False,
     defender_is_bot: bool = False,
 ) -> None:
-    """若事件带 QTE：乱入走专场（round_header/scene_card 拼首条），抢攻或单人关键词 QTE。"""
+    """若事件带 QTE：乱入走专场，抢攻或单人关键词 QTE。"""
     from src.plugins.duel.config import plugin_config
     from src.plugins.duel.duel_round_engine import (
         append_combat_delta,

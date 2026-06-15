@@ -8,9 +8,9 @@ from src.console.webui import install_hot_reload_config, plugin_config_proxy
 
 
 class Config(BaseModel, extra="ignore"):
-    """决斗插件配置（WebUI 插件配置页可读写，写入 webui.json 大写键名）。"""
+    """决斗插件配置。"""
 
-    # —— 胜负惩罚 ——
+    # 胜负惩罚
     duel_penalty_minutes: int = Field(
         default=10,
         ge=1,
@@ -48,7 +48,7 @@ class Config(BaseModel, extra="ignore"):
         description="人类局败者惩罚开始时由处理决斗的牛在群内代发一次的文案（不撤回消息）。",
     )
 
-    # —— 流程与节奏 ——
+    # 流程与节奏
     duel_bot_cooldown_sec: int = Field(
         default=5,
         ge=0,
@@ -84,7 +84,7 @@ class Config(BaseModel, extra="ignore"):
         description="玩家指令「牛牛决斗 … N幕」可指定的幕数上限。",
     )
 
-    # —— 事件与 QTE 权重 ——
+    # 事件与 QTE 权重
     duel_public_round_weight: float = Field(
         default=0.32,
         ge=0.0,
@@ -134,7 +134,7 @@ class Config(BaseModel, extra="ignore"):
         description="干员乱入 QTE 中，双方抢先咏名而非仅 target 指定单方应答的概率。",
     )
 
-    # —— 泰拉干员资源（resource/arknights） ——
+    # 泰拉干员资源
     duel_auto_sync_operators: bool = Field(
         default=True,
         description="缺 operators_6star.json 时启动自动拉取干员表（与 scripts/fetch_arknights_duel_data.py 同源）。",
@@ -148,7 +148,7 @@ class Config(BaseModel, extra="ignore"):
         description="启动时批量补全缺失头像（约百张，耗时长；建议用脚本预拉或仅开按需下载）。",
     )
 
-    # —— 牛自动咏名/拆招 ——
+    # 牛自动咏名/拆招
     duel_bot_qte_intrusion_success_rate: float = Field(
         default=0.68,
         ge=0.0,

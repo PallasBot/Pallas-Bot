@@ -68,7 +68,7 @@ def player_seat_no(game: Game, user_id: int) -> int:
 
 
 def build_index_map(game: Game) -> dict[int, int]:
-    """本局固定座位号 → 玩家 uid（仅在场）。"""
+    """本局固定座位号 → 玩家 uid。"""
     out: dict[int, int] = {}
     for user_id in game.alive_order:
         player = game.players.get(user_id)

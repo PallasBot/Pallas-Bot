@@ -1,4 +1,4 @@
-"""skill_table 某一档（levels[-1]，常为专三）→ 纯文本说明。无 NoneBot 依赖，供脚本与插件共用。"""
+"""skill_table 某一档→ 纯文本说明。无 NoneBot 依赖，供脚本与插件共用。"""
 
 from __future__ import annotations
 
@@ -122,7 +122,7 @@ def render_skill_level_plain(
     *,
     max_len: int = 240,
 ) -> str:
-    """单档 description + blackboard → 一行纯文本（失败则空）。"""
+    """单档 description + blackboard → 一行纯文本。"""
     if not description or not isinstance(description, str):
         return ""
     bb = blackboard_list_to_dict(blackboard)

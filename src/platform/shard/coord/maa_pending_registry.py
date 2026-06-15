@@ -1,4 +1,4 @@
-"""分片：MAA 待拉取任务队列（hub/worker 共享，供 getTask / 状态统计）。"""
+"""分片：MAA 待拉取任务队列。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# Pallas-Bot 分片脚本库（由 run_sharded_bot.sh source）
+# Pallas-Bot 分片脚本库
 [[ -n "${_PALLAS_SHARD_LIB_LOADED:-}" ]] && return 0
 _PALLAS_SHARD_LIB_LOADED=1
 
@@ -70,7 +70,7 @@ EOF
 }
 
 load_shard_redis_env() {
-  # 与 Pallas-Bot-AI 共用 REDIS_URL 时自动启用跨进程 claim。
+# 与 Pallas-Bot-AI 共用 REDIS_URL 时自动启用跨进程 claim。
   if [[ ! -f "${DETECT_REDIS_SCRIPT}" ]]; then
     return 0
   fi
@@ -273,7 +273,7 @@ start_one() {
 
   mkdir -p "${RUN_DIR}" "${LOG_DIR}"
   rotate_bootstrap_log "${name}" "${bootstrap}"
-  # 主日志由进程内 loguru 写入 ${logfile}（每次启动归档旧会话）；bootstrap 仅捕获 init 前/崩溃输出
+# 主日志由进程内 loguru 写入 ${logfile}；bootstrap 仅捕获 init 前/崩溃输出
   nohup "$@" >>"${bootstrap}" 2>&1 &
   local pid=$!
   echo "${pid}" >"${pidfile}"
@@ -312,7 +312,7 @@ stop_one() {
   echo "  · ${label}：已停止"
 }
 
-# 清理无 pid 文件的孤儿进程（重复 start 或手工杀父进程后残留）
+# 清理无 pid 文件的孤儿进程
 stop_orphan_shard_processes() {
   local pat
   for pat in "${REPO_ROOT}/.venv/bin/python3 bot_hub.py" "${REPO_ROOT}/.venv/bin/python3 bot_worker.py"; do

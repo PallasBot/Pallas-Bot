@@ -1,4 +1,4 @@
-"""全集群牛牛 QQ 集合（分片时 block / ingress 须识别其它 worker 上的牛）。"""
+"""全集群牛牛 QQ 集合。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from src.platform.shard.registry.config import is_sharding_active
 
 _lock = threading.RLock()
 _cached: frozenset[int] | None = None
-# 本进程已连过 WS、但 accounts/registry 可能尚未刷新的 QQ（分片 reload 时并入）
+# 本进程已连过 WS、但 accounts/registry 可能尚未刷新的 QQ
 _session_connected: set[int] = set()
 
 _PROTOCOL_PLUGIN = "pallas_protocol"
@@ -24,7 +24,7 @@ def invalidate_fleet_bot_cache() -> None:
 
 
 def note_fleet_bot_session_connected(qq: int) -> None:
-    """记录本进程新连接的牛牛，并刷新 fleet 缓存（供 block / bot_status 等）。"""
+    """记录本进程新连接的牛牛，并刷新 fleet 缓存。"""
     global _cached
     with _lock:
         _session_connected.add(int(qq))

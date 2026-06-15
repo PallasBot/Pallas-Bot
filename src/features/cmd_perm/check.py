@@ -83,7 +83,7 @@ def group_message_permission_for_command(command_id: str) -> Permission:
 
 
 def group_or_private_message_permission_for_command(command_id: str) -> Permission:
-    """OneBot V11 群或私聊 + 可配置命令权限（单 checker，避免 Permission 组合）。"""
+    """OneBot V11 群或私聊 + 可配置命令权限。"""
     inner = permission_for_command(command_id)
 
     async def _checker(bot: Bot, event: Event) -> bool:

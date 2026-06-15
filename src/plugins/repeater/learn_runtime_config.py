@@ -1,4 +1,4 @@
-"""复读后台 learn：WebUI 通用配置 / .env 运行时（与 NoneBot 插件 Config 字段对齐）。"""
+"""复读后台 learn：WebUI 通用配置 / .env 运行时。"""
 
 from __future__ import annotations
 

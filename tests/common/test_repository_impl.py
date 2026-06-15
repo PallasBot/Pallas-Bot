@@ -238,7 +238,7 @@ async def test_upsert_answer_differentiates_by_group(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_upsert_answer_sequential_count_accuracy(beanie_fixture):
-    """多次顺序 upsert_answer 应精确累加 count（验证 $inc 语义，避免读-改-写丢更新）。"""
+    """多次顺序 upsert_answer 应精确累加 count。"""
     repo = MongoContextRepository()
     cur = int(time.time())
     await repo.insert(Context(keywords="kw", time=cur, trigger_count=1, answers=[]))  # type: ignore

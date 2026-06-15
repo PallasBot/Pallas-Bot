@@ -1,7 +1,7 @@
 """
 Mongo → PG 迁移脚本健壮性测试。
 
-fixture（``pg_env`` / 迁移模块加载）来自 ``tests/common/conftest.py``；未设置
+fixture来自 ``tests/common/conftest.py``；未设置
 ``PG_TEST_DSN`` 时依赖 pg_env 的用例自动 skip，纯函数用例（defensive helpers、
 去重聚合）无 DB 依赖、始终会跑。Mongo 侧以下方 ``_FakeDb`` 代替真实实例。
 """
@@ -73,7 +73,7 @@ class _FakeDb:
 
 
 # ---------------------------------------------------------------------------
-# Defensive helpers（纯函数测试，无需 DB）
+# Defensive helpers
 # ---------------------------------------------------------------------------
 
 
@@ -362,7 +362,7 @@ async def test_migrate_blacklist_rerun_idempotent(pg_env):
 
 
 async def test_migrate_bot_config_handles_auto_accept_legacy(pg_env):
-    """旧 schema 只有 auto_accept（仅对 group 生效），迁移要能 fallback；admins 里非法项直接跳过。"""
+    """旧 schema 只有 auto_accept，迁移要能 fallback；admins 里非法项直接跳过。"""
     from bson import ObjectId
     from sqlalchemy import select
 

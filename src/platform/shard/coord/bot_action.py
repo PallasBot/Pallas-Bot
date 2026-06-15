@@ -1,4 +1,4 @@
-"""跨 worker 代指定牛牛执行 OneBot 动作（发群消息、改群名片等）。"""
+"""跨 worker 代指定牛牛执行 OneBot 动作。"""
 
 from __future__ import annotations
 

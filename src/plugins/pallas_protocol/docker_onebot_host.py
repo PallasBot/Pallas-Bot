@@ -39,7 +39,7 @@ def linux_interface_ipv4(ifname: str) -> str | None:
 
 
 def linux_docker_bridge_host_ip() -> str | None:
-    """宿主机上默认 bridge（docker0）的 IPv4，即容器内访问宿主机常用地址。"""
+    """宿主机上默认 bridge的 IPv4，即容器内访问宿主机常用地址。"""
     return linux_interface_ipv4("docker0")
 
 
@@ -72,11 +72,11 @@ def linux_default_route_gateway() -> str | None:
 def effective_docker_onebot_host(raw: str | None, *, docker_network_mode: str) -> str:
     """返回写入 onebot 配置的主机名或 IP。
 
-    - 非空且非 ``auto``：原样使用（便于 Compose 同网主机名等）。
-    - ``host`` 网络：自动为 ``127.0.0.1``（与宿主机网络栈一致）。
-    - ``bridge`` 等且自动：**Linux** 优先 ``docker0`` 网卡地址（ioctl），失败则 ``172.17.0.1``；
-      不用系统默认路由网关（常为局域网路由器，从容器内连 Bot 会错）。**非 Linux**（如仅在本机
-      配协议端）仍可用 ``host.docker.internal``（通常配合 Docker Desktop）。
+    - 非空且非 ``auto``：原样使用。
+    - ``host`` 网络：自动为 ``127.0.0.1``。
+    - ``bridge`` 等且自动：**Linux** 优先 ``docker0`` 网卡地址，失败则 ``172.17.0.1``
+      不用系统默认路由网关。**非 Linux**（如仅在本机
+      配协议端）仍可用 ``host.docker.internal``。
     - ``docker run`` 仍会加 ``--add-host=host.docker.internal:host-gateway``，便于镜像内其它逻辑解析。
     """
     s = (raw or "").strip()
@@ -100,5 +100,5 @@ def resolve_docker_onebot_host_from_config(config: Any) -> str:
 
 
 def docker_host_gateway_extra_args() -> list[str]:
-    """bridge 时可选注入，便于容器内解析 ``host.docker.internal``（Docker 20.10+）。"""
+    """bridge 时可选注入，便于容器内解析 ``host.docker.internal``。"""
     return ["--add-host", "host.docker.internal:host-gateway"]

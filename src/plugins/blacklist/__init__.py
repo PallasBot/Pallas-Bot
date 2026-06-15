@@ -81,7 +81,7 @@ async def apply_group_blocked_users_change(group_id: int, user_ids: list[int]) -
 
 
 async def invalidate_user_ban_gate_cache(uids: int | Iterable[int]) -> None:
-    """使给定 QQ 的门禁缓存失效（拉黑/解禁或其它写入 banned 后应调用）。"""
+    """使给定 QQ 的门禁缓存失效。"""
     ids = [uids] if isinstance(uids, int) else list(uids)
     if not ids:
         return
@@ -93,7 +93,7 @@ async def invalidate_user_ban_gate_cache(uids: int | Iterable[int]) -> None:
 
 
 async def reset_user_ban_gate_cache() -> None:
-    """清空全局门禁内存缓存（供测试或热更新后手动调用）。"""
+    """清空全局门禁内存缓存。"""
     async with _user_fetch_tasks_lock:
         for t in list(_user_fetch_tasks.values()):
             if not t.done():
@@ -139,7 +139,7 @@ async def invalidate_group_ban_gate_cache(group_ids: int | Iterable[int] | None 
 
 
 async def reset_group_ban_gate_cache() -> None:
-    """清空本群拉黑门禁内存缓存（供测试调用）。"""
+    """清空本群拉黑门禁内存缓存。"""
     await invalidate_group_ban_gate_cache(None)
 
 
@@ -183,8 +183,8 @@ async def _await_user_ban_deduped(user_id: int) -> bool:
 
 async def query_user_ban_status_for_gate(user_id: int) -> bool:
     """
-    查询用户是否全局拉黑（带 TTL 缓存）。
-    数据库超时或异常时返回 False（不拦截），避免连接堆积或事件链卡死。
+    查询用户是否全局拉黑。
+    数据库超时或异常时返回 False，避免连接堆积或事件链卡死。
     """
     fast = is_user_globally_banned_fast(user_id)
     if fast is not None:
@@ -256,7 +256,7 @@ async def _await_group_blocked_deduped(group_id: int) -> frozenset[int]:
 
 
 async def query_group_blocked_for_gate(group_id: int, user_id: int) -> bool:
-    """本群拉黑名单（按群缓存 blocked_user_ids 集合）；超时/异常 fail-open。"""
+    """本群拉黑名单；超时/异常 fail-open。"""
     fast = is_user_blocked_in_group_fast(group_id, user_id)
     if fast is not None:
         return fast
@@ -326,7 +326,7 @@ async def _await_group_banned_deduped(group_id: int) -> bool:
 
 
 async def query_group_ban_status_for_gate(group_id: int) -> bool:
-    """群是否被全局拉黑（GroupConfig.banned）；超时/异常 fail-open。"""
+    """群是否被全局拉黑；超时/异常 fail-open。"""
     fast = is_group_banned_fast(group_id)
     if fast is not None:
         return fast

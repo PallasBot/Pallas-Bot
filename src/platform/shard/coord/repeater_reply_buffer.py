@@ -1,4 +1,4 @@
-"""分片 worker：跨片同步 repeater 牛牛回复缓存（供「不可以」等 ban 匹配）。"""
+"""分片 worker：跨片同步 repeater 牛牛回复缓存。"""
 
 from __future__ import annotations
 

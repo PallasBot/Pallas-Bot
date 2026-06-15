@@ -328,7 +328,7 @@ def schedule_cross_shard_race_qte(
     qte_kind: str = "keyword",
     decoy_keys: list[str] | None = None,
 ) -> str:
-    """发布抢答会话并返回 session_id（主持 worker 可轮询 winner）。"""
+    """发布抢答会话并返回 session_id。"""
     deadline = time.time() + window_sec
     return publish_race_qte_request(
         group_id=group_id,

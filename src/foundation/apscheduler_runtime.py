@@ -1,4 +1,4 @@
-"""APScheduler 在 APSCHEDULER_AUTOSTART=false 时仍由进程拉起（hub / worker / unified）。"""
+"""APScheduler 在 APSCHEDULER_AUTOSTART=false 时仍由进程拉起。"""
 
 from __future__ import annotations
 

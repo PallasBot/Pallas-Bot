@@ -59,7 +59,7 @@ async def store_cached_group_bot_ids(
 
 
 async def resolve_local_connected_bots_in_group(group_id: int) -> list[int]:
-    """本进程已连接且能查到该群成员资料的牛牛 QQ（带群级 TTL 缓存）。"""
+    """本进程已连接且能查到该群成员资料的牛牛 QQ。"""
     gid = int(group_id)
     cached = get_cached_group_bot_ids(gid, namespace=NS_LOCAL_CONNECTED)
     if cached is not None:

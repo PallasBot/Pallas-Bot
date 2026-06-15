@@ -240,7 +240,7 @@ async def update_shard_cage_duel_registration(
     plaintext: str,
     bot_ids: list[int],
 ) -> None:
-    """handler 在探测本群在线牛后补登记（须与 run_shard_cage_duel_coord 同 claim_key）。"""
+    """handler 在探测本群在线牛后补登记。"""
     claim_key = cross_bot_group_message_key(
         group_id,
         user_id,
@@ -263,7 +263,7 @@ async def run_shard_cage_duel_coord(
     self_bot_id: int,
 ) -> tuple[int, int] | None:
     """
-    各 worker 先登记收到指令的本牛，handler 可再补登记同分片探测到的牛；
+    各 worker 先登记收到指令的本牛，handler 可再补登记同分片探测到的牛
     汇总后由最小 QQ 牛 finalize 随机配对。
     """
     claim_key = cross_bot_group_message_key(

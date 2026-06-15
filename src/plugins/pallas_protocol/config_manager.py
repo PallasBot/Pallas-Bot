@@ -197,7 +197,7 @@ class AccountConfigManager:
         account["webui_config_path"] = str(webui_path)
 
     def read_webui_into_account(self, account: dict) -> bool:
-        """若 ``webui.json`` 中 port/token 与账号不一致，则更新内存中的 ``account``（是否落盘由调用方决定）。"""
+        """若 ``webui.json`` 中 port/token 与账号不一致，则更新内存中的 ``account``。"""
         if account.get("napcat_linux_docker"):
             return False
         account_data_dir = Path(str(account.get("account_data_dir", "")).strip())

@@ -95,7 +95,7 @@ def canvas_bg() -> Image.Image:
         outline=BORDER,
         width=2,
     )
-    # 左上角品牌点缀
+# 左上角品牌点缀
     draw.ellipse((margin + 16, margin + 16, margin + 28, margin + 28), fill=ACCENT)
     return img
 

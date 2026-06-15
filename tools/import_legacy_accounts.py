@@ -50,7 +50,7 @@ def _extract_qq_from_config_dir(config_dir: Path) -> str | None:
             m = re.fullmatch(pat, f.name)
             if m:
                 return m.group(1)
-    # 兜底：读取 webui.json 里的 autoLoginAccount
+# 兜底：读取 webui.json 里的 autoLoginAccount
     webui = config_dir / "webui.json"
     if webui.is_file():
         try:
@@ -186,7 +186,7 @@ def _sync_onebot(config_dir: Path, qq: str, ws_url: str, ws_name: str, ws_token:
         "timeout",
         {"baseTimeout": 10000, "uploadSpeedKBps": 256, "downloadSpeedKBps": 256, "maxTimeout": 1800000},
     )
-    # 同步写入所有目标文件
+# 同步写入所有目标文件
     targets = {onebot_path, config_dir / f"onebot11_{qq}.json", config_dir / "onebot11.json"}
     for p in targets:
         p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -219,7 +219,7 @@ def _load_env_ws_settings() -> tuple[str, str, str]:
     name = _get("PALLAS_PROTOCOL_ONEBOT_CLIENT_NAME", "ONEBOT_CLIENT_NAME") or "pallas"
 
     if host and port:
-        # 归一化监听地址
+# 归一化监听地址
         if host in ("0.0.0.0", "::", "[::]"):
             host = "127.0.0.1"
         ws_url = f"ws://{host}:{port}/onebot/v11/ws"
@@ -242,11 +242,11 @@ def import_accounts(
         print(f"[ERROR] 源目录不存在: {source_dir}")
         sys.exit(1)
 
-    # 默认使用 data/pallas_protocol/instances/ 作为实例根目录
+# 默认使用 data/pallas_protocol/instances/ 作为实例根目录
     if instances_root is None:
         instances_root = _DEFAULT_INSTANCES_ROOT
 
-    # 加载现有 accounts.json
+# 加载现有 accounts.json
     if accounts_file.is_file():
         try:
             accounts: dict = json.loads(accounts_file.read_text(encoding="utf-8"))
@@ -285,7 +285,7 @@ def import_accounts(
         webui_port = _next_free_port(accounts)
         webui_token = secrets.token_hex(6)
 
-        # 将数据复制到 instances_root/<qq>/<napcat>/
+# 将数据复制到 instances_root/<qq>/<napcat>/
         inst_dir = instances_root / qq / normalize_instance_folder_segment("napcat")
         account_data_dir = str(inst_dir.resolve())
 
@@ -309,19 +309,19 @@ def import_accounts(
         }
 
         if not dry_run:
-            # 创建实例目录并复制 config/
+# 创建实例目录并复制 config/
             inst_config_dir = inst_dir / "config"
             inst_config_dir.mkdir(parents=True, exist_ok=True)
             for f in config_dir.iterdir():
                 if f.is_file():
                     shutil.copy2(str(f), str(inst_config_dir / f.name))
 
-            # 写入最终配置到实例目录
+# 写入最终配置到实例目录
             _sync_onebot(inst_config_dir, qq, ws_url, ws_name, ws_token)
             _sync_napcat(inst_config_dir, qq)
             _sync_webui(inst_config_dir, qq, webui_port, webui_token)
 
-            # 复制 QQ NT 数据：优先 QQ/，其次 .config/QQ/
+# 复制 QQ NT 数据：优先 QQ/，其次 .config/QQ/
             qq_src = folder / "QQ"
             qq_src_legacy = folder / ".config" / "QQ"
             inst_qq_dst = inst_dir / ".config" / "QQ"

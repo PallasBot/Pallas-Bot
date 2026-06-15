@@ -1,4 +1,4 @@
-"""分片：AI 异步任务登记（Redis），供 hub 将 /callback 转发到对应 worker。"""
+"""分片：AI 异步任务登记，供 hub 将 /callback 转发到对应 worker。"""
 
 from __future__ import annotations
 

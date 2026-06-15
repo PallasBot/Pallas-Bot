@@ -28,7 +28,7 @@ def _stdlib_logger_channel_label(logger_name: str) -> str:
 
 
 class ChannelLoguruHandler(LoguruHandler):
-    """为经 stdlib logging 转发的日志行追加 ``[标签]`` 前缀（标签不等价于日志级别）。"""
+    """为经 stdlib logging 转发的日志行追加 ``[标签]`` 前缀。"""
 
     def emit(self, record: LogRecord) -> None:
         text = record.getMessage()
@@ -51,7 +51,7 @@ _VALID_LOG_LEVELS = frozenset({"TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "
 
 
 def resolve_repo_log_level(*, default: str = "INFO") -> str:
-    """读取 LOG_LEVEL（pallas.toml [bootstrap] / webui.json / 环境变量），默认 INFO。"""
+    """读取 LOG_LEVEL，默认 INFO。"""
     from src.foundation.config.repo_settings import repo_env_raw_value
 
     raw = repo_env_raw_value("LOG_LEVEL")

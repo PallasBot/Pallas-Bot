@@ -1,4 +1,4 @@
-# Pallas-Bot 分片命令实现（由 run_sharded_bot.sh source）
+# Pallas-Bot 分片命令实现
 [[ -n "${_PALLAS_SHARD_CMDS_LOADED:-}" ]] && return 0
 _PALLAS_SHARD_CMDS_LOADED=1
 

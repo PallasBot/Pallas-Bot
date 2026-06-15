@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PostgreSQL 逻辑备份（委托 backup_pg.py，使用仓库 PG_* / pallas.toml 配置）
+# PostgreSQL 逻辑备份
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"

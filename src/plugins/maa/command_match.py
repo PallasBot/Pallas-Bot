@@ -16,7 +16,7 @@ RAW_TASK_COMMAND = "牛牛MAA任务"
 
 
 def maa_command_rule(*commands: str) -> Rule:
-    """``on_message`` 用：任一命令前缀匹配（大小写不敏感）。"""
+    """``on_message`` 用：任一命令前缀匹配。"""
 
     cmds = tuple(c.strip() for c in commands if c and c.strip())
 

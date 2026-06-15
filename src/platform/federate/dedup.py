@@ -1,4 +1,4 @@
-"""跨 deployment 群消息 ingress 抢占（同 federate 池内仅一个 deployment 处理）。"""
+"""跨 deployment 群消息 ingress 抢占。"""
 
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ async def try_claim_cross_federate_message(
     use_plaintext: bool = True,
     include_message_time: bool = False,
 ) -> bool:
-    """同 federate 池跨 deployment：仅一个 deployment 通过 ingress（须 Redis，与 unified/分片无关）。"""
+    """同 federate 池跨 deployment：仅一个 deployment 通过 ingress。"""
     from src.platform.federate.config import federate_ingress_active
 
     if not federate_ingress_active():

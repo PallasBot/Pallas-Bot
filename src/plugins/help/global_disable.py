@@ -1,4 +1,4 @@
-"""全实例运行时禁用插件（所有 bot、所有群）；落盘 data/help/global_disabled_plugins.json。"""
+"""全实例运行时禁用插件；落盘 data/help/global_disabled_plugins.json。"""
 
 from __future__ import annotations
 

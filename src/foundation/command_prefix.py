@@ -24,7 +24,7 @@ def strip_leading_command_marks(text: str) -> str:
 
 
 def matches_command_prefix(plaintext: str, command: str) -> bool:
-    """命令前缀是否匹配（``casefold``）。"""
+    """命令前缀是否匹配。"""
     text = strip_leading_command_marks(plaintext)
     cmd = (command or "").strip()
     if not cmd or len(text) < len(cmd):
@@ -33,7 +33,7 @@ def matches_command_prefix(plaintext: str, command: str) -> bool:
 
 
 def matches_text_prefix(text: str, prefix: str) -> bool:
-    """行内固定前缀（非 command_start）是否匹配。"""
+    """行内固定前缀是否匹配。"""
     t = (text or "").strip()
     p = (prefix or "").strip()
     if not p or len(t) < len(p):
@@ -62,7 +62,7 @@ def extract_command_tail(plaintext: str, command: str) -> str:
 
 
 def extract_command_tail_any(plaintext: str, *commands: str) -> str:
-    """按长度优先匹配多条命令前缀之一（避免短前缀误匹配长命令）。"""
+    """按长度优先匹配多条命令前缀之一。"""
     text = strip_leading_command_marks(plaintext)
     for cmd in sorted((c.strip() for c in commands if c and c.strip()), key=len, reverse=True):
         if len(text) < len(cmd):

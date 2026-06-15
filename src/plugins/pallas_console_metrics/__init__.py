@@ -1,4 +1,4 @@
-"""分片 worker：注册 matcher/消息控制台指标并刷入共享 stats（hub WebUI 合并读取）。"""
+"""分片 worker：注册 matcher/消息控制台指标并刷入共享 stats。"""
 
 from __future__ import annotations
 

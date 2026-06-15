@@ -20,7 +20,7 @@ INGRESS_SHARD_CLAIM_PLUGIN = "ingress_gate_shard"
 
 
 class IngressClaimError(Exception):
-    """claim 未胜出；插件层映射为 IgnoredException 并写指标。"""
+    """ingress claim 未胜出。"""
 
     def __init__(self, outcome: str, *, message: str, record_claim_lost: bool = False) -> None:
         self.outcome = outcome
@@ -39,7 +39,7 @@ async def unified_ingress_once_claim(
     body: str,
     user_id: int,
 ) -> None:
-    """单进程 once claim；胜出后写入 unified_pass 供下游跳过二次抢占。"""
+    """单进程 once claim；胜出后写入 unified_pass。"""
     if shard_ctx.sharding_active():
         return
     if not await try_claim_group_message_once(

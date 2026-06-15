@@ -53,7 +53,7 @@ def _scrub_env_str(
     merged_dotenv: dict[str, str],
     default: str = "",
 ) -> str:
-    # 环境变量 > 仓库 .env 合并层；若仓库已有 dotenv 文件则不回退 driver.config（避免热重载仍读启动快照）。
+    # 环境变量 > 仓库 .env 合并层；若仓库已有 dotenv 文件则不回退 driver.config。
     if name_upper in os.environ:
         return (os.environ.get(name_upper, default) or "").strip()
     if name_upper in merged_dotenv:
@@ -82,7 +82,7 @@ def _scrub_review_providers_key_explicit(merged_dotenv: dict[str, str]) -> bool:
 
 
 def message_scrub_has_active_config(cfg: MessageScrubConfig | None = None) -> bool:
-    """未显式设置 ``PALLAS_MESSAGE_SCRUB_ENABLED`` 时，根据是否已有审查配置推断（兼容旧部署）。"""
+    """未显式设置 ``PALLAS_MESSAGE_SCRUB_ENABLED`` 时，根据是否已有审查配置推断。"""
     c = cfg or get_message_scrub_config()
     if (c.inbound_filter_substrings or "").strip():
         return True
@@ -290,7 +290,7 @@ def clear_message_scrub_config_cache() -> None:
 
 
 def get_message_scrub_config() -> MessageScrubConfig:
-    """读取当前环境（含 NoneBot 已从 .env 注入的自定义键）；缓存至 ``clear_message_scrub_config_cache``。"""
+    """读取当前环境；缓存至 ``clear_message_scrub_config_cache``。"""
     global _cached_message_scrub_config
     with _config_lock:
         if _cached_message_scrub_config is None:

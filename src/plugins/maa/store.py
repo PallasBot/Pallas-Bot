@@ -87,7 +87,7 @@ class DeviceRecord:
 
 
 def match_device_ref(ref: str, devices: dict[str, DeviceRecord]) -> tuple[str | None, str | None]:
-    """按完整 id、别名或 id 前缀（至少 8 位 hex）匹配已绑定设备。"""
+    """按完整 id、别名或 id 前缀匹配已绑定设备。"""
     text = (ref or "").strip()
     if not text:
         return None, "请提供设备标识符、别名或 id 前缀。"

@@ -166,7 +166,7 @@ plugin_disable_all_cmd = on_command(
 
 @help_cmd.handle()
 async def handle_help_cmd(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
-    """处理帮助命令（群聊和私聊）"""
+    """处理帮助命令"""
     if isinstance(event, GroupMessageEvent):
         config = GroupConfig(event.group_id, cooldown=3)
         if not await config.is_cooldown(HELP_COOLDOWN_KEY):

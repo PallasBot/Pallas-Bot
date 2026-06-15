@@ -217,7 +217,7 @@ async def list_group_configs_by_ids_public(group_ids: list[int]) -> dict[int, di
 
 
 async def database_overview() -> dict[str, Any]:
-    """只读元数据 + 行数估计，供管理页概览；不含任意 SQL/聚合管道。"""
+    """只读元数据 + 行数估计，供管理页概览"""
     backend = get_db_backend()
     if backend == "mongodb":
         from src.foundation.db.modules import (
@@ -344,7 +344,7 @@ def _validate_mongo_aggregate_pipeline(pipeline: list[Any]) -> None:
 
 
 async def mongo_aggregate_console(*, collection: str, pipeline: list[Any]) -> list[dict[str, Any]]:
-    """控制台用受限 aggregate；调用方须已通过 HTTP token 与后端非 Mongo 校验。"""
+    """控制台用受限 aggregate"""
     backend = get_db_backend()
     if backend != "mongodb":
         raise ValueError("当前数据库后端不是 MongoDB，不支持 aggregate 管道")

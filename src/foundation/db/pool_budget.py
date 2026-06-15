@@ -91,7 +91,7 @@ def is_pg_pool_timeout_error(exc: BaseException) -> bool:
 
 
 def cap_by_pg_pool(requested: int, *, workload_fraction: float = 0.30) -> int:
-    """按池容量上限裁剪后台并发（至少 1，不超过 requested）。"""
+    """按池容量上限裁剪后台并发。"""
     capacity = pg_pool_capacity()
     frac = max(0.05, min(0.90, float(workload_fraction)))
     ceiling = max(1, int(capacity * frac))

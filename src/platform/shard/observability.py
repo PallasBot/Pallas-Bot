@@ -1,4 +1,4 @@
-"""分片集群可观测性聚合（hub 读 worker stats + 本地 coord 扫描）。"""
+"""分片集群可观测性聚合。"""
 
 from __future__ import annotations
 

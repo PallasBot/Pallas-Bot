@@ -1,4 +1,4 @@
-"""跨 worker 同群决斗互斥（基于 group_activity）。"""
+"""跨 worker 同群决斗互斥。"""
 
 from __future__ import annotations
 

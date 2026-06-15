@@ -1,4 +1,4 @@
-"""供插件 ``config.py`` 使用：磁盘配置热重载 + 自动注册 WebUI 钩子（含分片共享 ``data/``）。"""
+"""供插件 ``config.py`` 使用：磁盘配置热重载 + 自动注册 WebUI 钩子。"""
 
 from __future__ import annotations
 

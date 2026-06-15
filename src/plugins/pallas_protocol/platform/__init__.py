@@ -1,4 +1,4 @@
-"""跨平台适配：下载/解压以外的差异集中在启动与进程控制（POSIX / Windows）。"""
+"""跨平台适配：下载/解压以外的差异集中在启动与进程控制。"""
 
 from __future__ import annotations
 

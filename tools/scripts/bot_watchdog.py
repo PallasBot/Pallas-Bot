@@ -26,22 +26,22 @@ TCP 与 HTTP
 
 用法示例（均在项目根目录，且已 uv sync）：
 
-  # 由守护进程启动 Bot；HOST/PORT 可读环境变量或 ./.env
+# 由守护进程启动 Bot；HOST/PORT 可读环境变量或 ./.env
   uv run python tools/scripts/bot_watchdog.py
 
-  # Bot 已在跑：只探活，不重复 uv run nb run
+# Bot 已在跑：只探活，不重复 uv run nb run
   uv run python tools/scripts/bot_watchdog.py --no-spawn
 
-  # .env 不在当前目录时，指向 Bot 工作目录（该目录下需有 .env）
+# .env 不在当前目录时，指向 Bot 工作目录
   uv run python tools/scripts/bot_watchdog.py --no-spawn --workdir /path/to/Pallas-Bot
 
-  # 自定义启动命令（须放在命令行最后）
+# 自定义启动命令
   uv run python tools/scripts/bot_watchdog.py --start sh -c "uv run nb run"
 
-  # 未启用 WebUI、只测端口是否监听
+# 未启用 WebUI、只测端口是否监听
   uv run python tools/scripts/bot_watchdog.py --tcp-only --tcp-probe 127.0.0.1:8088 --no-spawn
 
-  # Bot 在 Docker 内：宿主机探活，失败时 docker restart（容器名与 compose 一致）
+# Bot 在 Docker 内：宿主机探活，失败时 docker restart
   uv run python tools/scripts/bot_watchdog.py --docker-container pallasbot --no-spawn
 """
 

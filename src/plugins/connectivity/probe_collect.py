@@ -129,7 +129,7 @@ async def probe_maa_endpoints(
 
 
 def sing_probe_urls(base: str, cfg: SingConfig | None = None) -> list[tuple[str, str]]:
-    """与 Pallas-Bot-AI 对齐：GET /health（勿 GET /api/request，该路径仅 POST …/request/{id}）。"""
+    """与 Pallas-Bot-AI 对齐：GET /health。"""
     _ = cfg
     root = base.rstrip("/")
     return [("健康检查", urljoin(f"{root}/", "health"))]

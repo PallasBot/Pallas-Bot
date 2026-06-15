@@ -1,4 +1,4 @@
-"""牛牛在吗：名册与在线判定模式（session / fleet / connected / auto）。"""
+"""牛牛在吗：名册与在线判定模式。"""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def resolve_status_list_mode() -> ResolvedListMode:
 
 
 def status_inventory_bot_ids(*, list_mode: ResolvedListMode | None = None) -> frozenset[int]:
-    """名册 QQ：session=本进程；connected=曾连 WS；fleet=协议端 enabled（分片含 registry）。"""
+    """名册 QQ：session=本进程；connected=曾连 WS；fleet=协议端 enabled。"""
     mode = list_mode or resolve_status_list_mode()
     if mode == "fleet":
         return get_fleet_bot_ids()

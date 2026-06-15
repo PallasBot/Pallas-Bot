@@ -1,4 +1,4 @@
-"""联邦 ingress / 协调配置（pallas.toml [control_plane] / 环境变量）。"""
+"""联邦 ingress / 协调配置。"""
 
 from __future__ import annotations
 

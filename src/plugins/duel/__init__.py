@@ -237,7 +237,7 @@ async def run_duel_match(
     command_gate: str | None = None,  # "ok"：入口已 begin_duel_command
     total_rounds: int | None = None,
 ) -> None:
-    """开团：群级占用与指令 CD（多 Bot 共用）；command_gate=ok 表示入口已抢占。"""
+    """开团：群级占用与指令 CD；command_gate=ok 表示入口已抢占。"""
     if not duel_handler_is_narrator(event, challenger_id, defender_id, dual_bot=dual_bot):
         if command_gate == "ok":
             end_duel_group(event.group_id)

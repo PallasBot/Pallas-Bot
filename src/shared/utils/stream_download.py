@@ -1,4 +1,4 @@
-"""HTTP 流式下载与进度回调（同步 Client，供 asyncio.to_thread 或非异步场景复用）。"""
+"""HTTP 流式下载与进度回调。"""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ StreamDownloadProgress = (
 
 
 def format_download_byte_size(num_bytes: int) -> str:
-    """人类可读的字节大小（B / KiB / MiB）。"""
+    """人类可读的字节大小。"""
     if num_bytes < 1024:
         return f"{num_bytes} B"
     if num_bytes < 1024 * 1024:
@@ -68,7 +68,7 @@ def sync_stream_download_to_file(
     """同步流式 GET 写入 ``dest``；返回写入字节数。
 
     - 有 ``Content-Length``：按 ``progress_percent_step`` 汇报百分比里程碑
-      （不含 100% 里程碑，由 ``complete`` 事件收尾）。
+      。
     - 否则按 ``progress_bytes_step`` 汇报已下载量。
     """
     eff_timeout = timeout or DEFAULT_STREAM_DOWNLOAD_TIMEOUT

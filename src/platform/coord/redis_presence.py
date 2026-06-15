@@ -1,4 +1,4 @@
-"""分片 worker 在线状态：Redis HASH（单进程可回退文件）。"""
+"""分片 worker 在线状态：Redis HASH。"""
 
 from __future__ import annotations
 
@@ -76,7 +76,7 @@ def import_file_presence_to_redis_sync(file_bots: dict[str, dict[str, Any]]) -> 
 
 
 def read_presence_bots_redis_sync() -> dict[str, dict[str, Any]] | None:
-    """返回 None 表示未走 Redis（调用方回退文件）。"""
+    """返回 None 表示未走 Redis。"""
     client = get_presence_redis_client()
     if client is None:
         return None

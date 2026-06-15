@@ -85,7 +85,7 @@ def sync_accounts_ws_urls_unified(
     dry_run: bool = False,
     port: int | None = None,
 ) -> ProtocolPortSyncResult:
-    """将 enabled 账号 ws_url 对齐单进程监听端口（保留各账号既有 host）。"""
+    """将 enabled 账号 ws_url 对齐单进程监听端口。"""
     accounts = load_accounts(accounts_path)
     listen_port = int(port) if port is not None else resolve_unified_listen_port(env_path=env_path)
     ws_path = resolve_unified_ws_path(env_path=env_path)

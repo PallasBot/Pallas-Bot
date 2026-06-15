@@ -183,9 +183,6 @@ class Responder:
                             recent_topics[group_id] += filtered_recent_topics(answer_keywords.split(" "))
                     async with topics_lock:
                         recent_topics[group_id] += filtered_recent_topics(chat_data._keywords_list)
-                    # if "[CQ:" not in item and len(item) > Chat.DRUNK_TTS_THRESHOLD and \
-                    #    await self.config.drunkenness():
-                    #     yield Message(Chat._text_to_speech(item))
                     yield Message(item)
             finally:
                 async with reply_lock:
@@ -260,7 +257,7 @@ class Responder:
         raw_message = chat_data.raw_message
         bot_id = chat_data.bot_id
 
-        # 复读！（只统计非本进程 Bot / 配置忽略账号，避免多 Bot 同句堆叠误判）
+        # 复读！
         rt = Responder.REPEAT_THRESHOLD
         if rt >= 2 and group_id in message_dict:
             group_msgs = message_dict[group_id]
@@ -382,7 +379,7 @@ class Responder:
                 continue
             if sample_msg.startswith("牛牛"):
                 if not chat_data.to_me or len(sample_msg) <= 6:
-                    # 这种一般是学反过来的，比如有人教“牛牛你好”——“你好”（反复发了好几次，互为上下文了）
+                    # 这种一般是学反过来的，比如有人教“牛牛你好”——“你好”
                     # 然后下次有人发“你好”，突然回个“牛牛你好”，有点莫名其妙的
                     continue
             if sample_msg.startswith("[CQ:xml"):

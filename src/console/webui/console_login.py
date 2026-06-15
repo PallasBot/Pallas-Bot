@@ -1,4 +1,4 @@
-"""Pallas-Bot 控制台（/pallas）与协议端管理页共用的鉴权。"""
+"""Pallas-Bot 控制台与协议端管理页共用的鉴权。"""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from src.foundation.paths import plugin_data_dir
 
 _http_request_var: ContextVar[Any] = ContextVar("_pallas_http_request", default=None)
 
-# 会话密钥轮换（invalidate_console_sessions）后执行，例如清空控制台扩展 API 进程内读缓存
+# 会话密钥轮换后执行，例如清空控制台扩展 API 进程内读缓存
 _SESSION_INVALIDATION_HOOKS: list[Callable[[], None]] = []
 
 _AUTH_STATE = "auth_state.json"
@@ -55,7 +55,7 @@ def session_secret_path() -> Path:
 
 
 def invalidate_shared_console_login_token_cache() -> None:
-    """保留旧名：口令哈希变更后使内存缓存失效（当前无长期缓存）。"""
+    """保留旧名：口令哈希变更后使内存缓存失效。"""
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
@@ -223,7 +223,7 @@ def is_console_auth_configured() -> bool:
 
 
 def register_console_session_invalidation_hook(fn: Callable[[], None]) -> None:
-    """注册在 invalidate_console_sessions 之后调用的无参回调（幂等追加）。"""
+    """注册在 invalidate_console_sessions 之后调用的无参回调。"""
     if fn not in _SESSION_INVALIDATION_HOOKS:
         _SESSION_INVALIDATION_HOOKS.append(fn)
 
@@ -239,7 +239,7 @@ def invalidate_console_sessions() -> None:
 
 
 def mint_session_token() -> str:
-    """签发短期会话令牌（非 HttpOnly，可放 X-Pallas-Token）。"""
+    """签发短期会话令牌。"""
     secret = _load_session_secret()
     exp = int(time.time()) + SESSION_TTL_SEC
     payload = json.dumps({"v": 1, "exp": exp}, separators=(",", ":"), ensure_ascii=False).encode("utf-8")

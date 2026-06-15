@@ -1,8 +1,8 @@
-"""WebUI 命令权限矩阵：插件/命令中文名（metadata 未加载时的回退）。"""
+"""WebUI 命令权限矩阵：插件/命令中文名。"""
 
 from __future__ import annotations
 
-# 命令 ID 前缀 → 插件包名（与 NoneBot plugin.name 不一致时）
+# 命令 ID 前缀 → 插件包名
 PLUGIN_NAME_ALIASES: dict[str, str] = {
     "relogin": "relogin_bot",
     "request": "request_handler",
@@ -29,7 +29,7 @@ PLUGIN_TITLE_FALLBACKS: dict[str, str] = {
     "sing": "牛牛唱歌",
 }
 
-# 命令 ID → 矩阵行标题（与各插件 command_permissions.label 对齐）
+# 命令 ID → 矩阵行标题
 COMMAND_LABEL_FALLBACKS: dict[str, str] = {
     "blacklist.add": "牛牛拉黑 / 牛牛屏蔽 / 牛牛拉黑群",
     "blacklist.remove": "牛牛解禁 / 牛牛解禁群",

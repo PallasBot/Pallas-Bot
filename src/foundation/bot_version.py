@@ -1,4 +1,4 @@
-"""Pallas-Bot 运行版本探测（与控制台 /health、WebUI 展示链对齐）。"""
+"""Pallas-Bot 运行版本探测。"""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def get_bot_current_version() -> dict[str, str]:
 
 
 def get_pallas_bot_version_for_health() -> str:
-    """供 ``/health`` 的 ``pallas_bot``：优先环境变量（镜像注入）、git describe，其次已安装发行版号，最后 pyproject。"""
+    """供 ``/health`` 的 ``pallas_bot``：优先环境变量、git describe，其次已安装发行版号，最后 pyproject。"""
     env = (os.environ.get("PALLAS_BOT_VERSION") or os.environ.get("PALLAS_VERSION") or "").strip()
     if env:
         return env
@@ -96,7 +96,7 @@ def get_pallas_bot_version_for_health() -> str:
 
 
 def get_pallas_bot_version_for_reporting() -> str:
-    """社区心跳 / 对外聚合：与 WebUI ``pallasBotVersionLabel`` 同源（精确 tag 优先，否则 health 链）。"""
+    """社区心跳 / 对外聚合：与 WebUI ``pallasBotVersionLabel`` 同源。"""
     tag = str(get_bot_current_version().get("tag") or "").strip()
     if tag:
         cleaned = display_version_without_sha(tag)

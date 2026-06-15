@@ -1,4 +1,4 @@
-"""跨 worker 群级短占位（广播 slot / 插件 owned gate）。"""
+"""跨 worker 群级短占位。"""
 
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ def try_begin_owned_gate_sync(plugin: str, group_id: int, bot_id: int, *, gate_s
 
 
 def bind_owned_gate_sync(plugin: str, group_id: int, bot_id: int, *, gate_sec: float) -> None:
-    """强制绑定主持牛（开房成功后由开房 bot 占位）。"""
+    """强制绑定主持牛。"""
     now = time.time()
     ttl = max(1.0, float(gate_sec))
 
@@ -123,7 +123,7 @@ def is_owned_gate_holder_sync(plugin: str, group_id: int, bot_id: int) -> bool:
 
 
 def release_owned_gate_sync(plugin: str, group_id: int) -> None:
-    """释放群级 owned gate（房间收场后允许其它牛接手下一条指令）。"""
+    """释放群级 owned gate。"""
     from src.platform.shard.coord.coord_redis_store import delete_key_sync
 
     delete_key_sync(_gate_key("owned", plugin, int(group_id)))

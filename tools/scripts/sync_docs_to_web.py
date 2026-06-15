@@ -266,7 +266,7 @@ def transform_for_vitepress(text: str) -> str:
         rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
         text,
     )
-    # 去掉站内链接里的 .md 后缀
+# 去掉站内链接里的 .md 后缀
     text = re.sub(
         r"(\](/(?:deploy|plugins|architecture|common|about|guide)/[a-zA-Z0-9_./-]+)\.md)",
         r"\1",

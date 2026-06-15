@@ -1,4 +1,4 @@
-"""群内口令（牛牛 + 动词）。"""
+"""群内口令。"""
 
 from src.foundation.command_prefix import matches_command_prefix
 

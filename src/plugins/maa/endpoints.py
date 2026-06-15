@@ -43,7 +43,7 @@ class MaaHttpEndpoints:
 
 
 def maa_public_http_base(cfg: Config) -> tuple[str, bool]:
-    """对外基址；分片未配置时回退 hub 端口（与单进程「一个入口」一致）。"""
+    """对外基址；分片未配置时回退 hub 端口。"""
     configured = normalize_public_base_url(cfg.maa_public_base_url)
     if configured:
         return configured, False
@@ -84,7 +84,7 @@ def resolve_maa_http_endpoints(cfg: Config | None = None) -> MaaHttpEndpoints:
 
 
 def resolve_maa_process_http_endpoints(cfg: Config | None = None) -> MaaHttpEndpoints:
-    """本进程 NoneBot 监听地址 + 路径（分片 worker 连通性探测用，忽略 maa_public_base_url）。"""
+    """本进程 NoneBot 监听地址 + 路径。"""
     cfg = cfg if cfg is not None else get_maa_config()
     get_path = normalize_http_path(cfg.maa_get_task_path)
     report_path = normalize_http_path(cfg.maa_report_status_path)
@@ -102,7 +102,7 @@ def resolve_maa_process_http_endpoints(cfg: Config | None = None) -> MaaHttpEndp
 
 
 def resolve_maa_probe_http_endpoints(cfg: Config | None = None) -> MaaHttpEndpoints:
-    """连通性探测：与 MAA 客户端轮询地址一致（分片时为 hub 对外 URL，非 worker 本机端口）。"""
+    """连通性探测：与 MAA 客户端轮询地址一致。"""
     return resolve_maa_http_endpoints(cfg)
 
 
