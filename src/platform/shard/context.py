@@ -12,7 +12,10 @@ __all__ = [
     "BotRole",
     "is_hub",
     "is_local_representative",
+    "is_sharded_hub",
+    "is_sharded_worker",
     "is_unified",
+    "is_unified_role",
     "is_worker",
     "local_representative_bot_id",
     "role",
@@ -37,12 +40,26 @@ def is_unified() -> bool:
     return role() == "unified"
 
 
+def is_unified_role() -> bool:
+    """单进程或未开分片时为 True；与 plugin_loader 加载策略一致。"""
+    s = get_shard_registry_settings()
+    return not s.enabled or s.role == "unified"
+
+
 def is_hub() -> bool:
     return role() == "hub"
 
 
+def is_sharded_hub() -> bool:
+    return sharding_active() and is_hub()
+
+
 def is_worker() -> bool:
     return role() == "worker"
+
+
+def is_sharded_worker() -> bool:
+    return sharding_active() and is_worker()
 
 
 def local_representative_bot_id() -> int | None:

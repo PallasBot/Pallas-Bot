@@ -1,8 +1,13 @@
-"""进程角色：unified / hub / worker。"""
+"""进程角色常量与插件加载名单；角色判断委托 shard.context。"""
 
 from __future__ import annotations
 
-from src.platform.shard.registry.config import BotRole, get_shard_registry_settings, is_sharding_active
+from typing import TYPE_CHECKING
+
+from src.platform.shard import context as shard_ctx
+
+if TYPE_CHECKING:
+    from src.platform.shard.registry.config import BotRole
 
 # hub：控制台、协议端、建号/重登；不加载游戏插件
 HUB_PLUGIN_MODULES: tuple[str, ...] = (
@@ -31,29 +36,31 @@ UNIFIED_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
     "pallas_console_metrics",
 })
 
-# unified WebUI 插件目录不展示分片专用项
 UNIFIED_CATALOG_HIDDEN_PLUGIN_NAMES: frozenset[str] = UNIFIED_SKIP_PLUGIN_NAMES
 
 
 def bot_role() -> BotRole:
-    return get_shard_registry_settings().role
+    return shard_ctx.role()
+
+
+def is_sharding_active() -> bool:
+    return shard_ctx.sharding_active()
 
 
 def is_unified_role() -> bool:
-    s = get_shard_registry_settings()
-    return not s.enabled or s.role == "unified"
+    return shard_ctx.is_unified_role()
 
 
 def is_hub_role() -> bool:
-    return is_sharding_active() and get_shard_registry_settings().role == "hub"
+    return shard_ctx.is_sharded_hub()
 
 
 def is_sharded_hub() -> bool:
-    return is_hub_role()
+    return shard_ctx.is_sharded_hub()
 
 
 def is_sharded_worker() -> bool:
-    return is_sharding_active() and get_shard_registry_settings().role == "worker"
+    return shard_ctx.is_sharded_worker()
 
 
 def hub_plugin_modules() -> tuple[str, ...]:

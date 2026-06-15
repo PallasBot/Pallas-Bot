@@ -8,7 +8,7 @@
 - `tests/`: 单元测试与集成测试
 - `docs/`: 面向开发与部署的文档（索引见 [docs/README.md](../README.md)）
 - `config/`: 主配置示例与 Compose 插值（`pallas.example.toml`、`compose.env.example`）
-- `scripts/`: 运维脚本（如 `run_sharded_bot.sh` 分片启动）
+- `scripts/`: 运维脚本（索引见 [scripts/README.md](../scripts/README.md)）
 - `local/plugins/`: 站点自有插件（`extra_plugin_dirs`，见 [站点定制](site-customization-and-updates.md)）
 - `tools/`: 维护脚本与辅助配置
 - `.github/workflows/`: CI/CD 流水线

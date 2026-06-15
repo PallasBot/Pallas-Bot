@@ -24,7 +24,6 @@ FILE_MAP: dict[str, str] = {
     "architecture/site-customization-and-updates.md": "architecture/site-customization-and-updates.md",
     "architecture/control-plane-corpus-federation.md": "architecture/control-plane-corpus-federation.md",
     "architecture/common-layers.md": "architecture/common-layers.md",
-    "architecture/next-gen-slimdown.md": "architecture/next-gen-slimdown.md",
     "common/community_stats.md": "common/community_stats.md",
     "common/corpus/README.md": "common/corpus.md",
     "common/cmd_perm/README.md": "common/cmd_perm.md",

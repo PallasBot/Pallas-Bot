@@ -38,14 +38,8 @@
 | [插件规范](architecture/plugin-convention.md) | `src/plugins` 组织方式 |
 | [配置存储](architecture/settings-storage.md) | pallas.toml + webui.json |
 | [多进程分片](architecture/bot_process_sharding.md) | hub + worker，可选生产部署 |
+| [控制面与语料联邦](architecture/control-plane-corpus-federation.md) | 维护者：Composite 语料、Bootstrap |
 | [站点定制与更新](architecture/site-customization-and-updates.md) | local/plugins、更新策略 |
-
-### 维护者附录
-
-| 文档 | 说明 |
-| --- | --- |
-| [控制面与语料联邦](architecture/control-plane-corpus-federation.md) | Composite 语料、Bootstrap、OpenAPI |
-| [下一世代瘦身路线图](architecture/next-gen-slimdown.md) | unified 为主的分阶段减负 |
 
 ## 插件
 
