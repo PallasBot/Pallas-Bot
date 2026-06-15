@@ -10,7 +10,7 @@ from nonebot.message import event_preprocessor, run_preprocessor
 from src.platform.ingress.plugin_command_plaintext import is_plugin_command_plaintext
 from src.platform.ingress.policy_registry import text_matches_plugin_fanout
 from src.platform.multi_bot.dedup import try_claim_cross_bot_message_memory
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 from .plugin_manager import collect_disabled_plugin_names, superuser_bypasses_plugin_disable
 
@@ -53,7 +53,7 @@ async def command_cross_bot_claim_won(
     if ingress_fanout_bypasses_claim(text):
         return True
     # 显式 fanout / 分片：ingress_gate 已 claim，避免 run_preprocessor 二次抢占。
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         return True
     return await try_claim_cross_bot_message_memory(
         _COMMAND_INGRESS_PLUGIN,

@@ -20,7 +20,7 @@ from src.platform.multi_bot.dedup import (
     try_claim_cross_bot_message,
     try_claim_group_message_once,
 )
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.repeater_ingress_metrics import (
     record_repeater_ingress_claim,
     record_repeater_ingress_early_discard,
@@ -85,7 +85,7 @@ async def build_repeater_event_context(bot_id: int, event: GroupMessageEvent):
             record_repeater_ingress_early_discard("federate_claim")
             return None
 
-    sharding_active = is_sharding_active()
+    sharding_active = shard_ctx.sharding_active()
     if not sharding_active:
         won = await try_claim_group_message_once(
             "repeater_ingress",

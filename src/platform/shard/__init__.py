@@ -1,5 +1,10 @@
 """分片运行时：注册表、协调、在线态、日志与数据同步。"""
 
+from src.platform.shard.context import (
+    is_local_representative,
+    local_representative_bot_id,
+    sharding_active,
+)
 from src.platform.shard.coord import (
     is_bot_count_fanout_plaintext,
     publish_single_qte_request,
@@ -28,6 +33,9 @@ __all__ = [
     "clear_shard_registry_cache",
     "get_shard_registry",
     "get_shard_registry_settings",
+    "is_local_representative",
+    "local_representative_bot_id",
+    "sharding_active",
     "install_shard_process_logging",
     "is_bot_count_fanout_plaintext",
     "publish_single_qte_request",
