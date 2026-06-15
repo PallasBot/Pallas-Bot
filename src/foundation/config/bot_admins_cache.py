@@ -45,10 +45,10 @@ def bot_admins_db_fail_active(bot_id: int) -> bool:
 
 
 def _pg_not_ready() -> bool:
-    from src.foundation.db import get_db_backend
     from src.foundation.db.repository_pg import is_pg_initialized
+    from src.foundation.db.runtime import is_postgresql_backend
 
-    return get_db_backend() == "postgresql" and not is_pg_initialized()
+    return is_postgresql_backend() and not is_pg_initialized()
 
 
 async def invalidate_bot_admins_cache(bot_ids: int | Iterable[int] | None = None) -> None:

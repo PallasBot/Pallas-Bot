@@ -9,7 +9,8 @@ import time
 from typing import Any
 
 from src.foundation.paths import plugin_data_dir
-from src.platform.shard.registry.config import get_shard_registry_settings, is_sharding_active
+from src.platform.shard import context as shard_ctx
+from src.platform.shard.registry.config import get_shard_registry_settings
 
 _PLUGIN = "pallas_shard"
 _PRESENCE_FILE = "worker_presence.json"
@@ -387,7 +388,7 @@ def note_worker_bot_disconnected_sync(*, qq: int) -> None:
 
 
 async def note_worker_bot_connected(bot) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
     try:
         qq = int(bot.self_id)
@@ -415,13 +416,13 @@ async def note_worker_bot_connected(bot) -> None:
 
 
 async def note_worker_bot_disconnected(qq: int) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
     await asyncio.to_thread(note_worker_bot_disconnected_sync, qq=int(qq))
 
 
 def read_presence_bots() -> dict[str, dict[str, Any]]:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return {}
     prune_stale_presence_entries_sync()
     return _load_presence_bots()
@@ -440,9 +441,8 @@ def get_cluster_online_bot_ids() -> frozenset[int]:
 def count_connected_bots_for_reporting() -> int:
     """与控制台 /bots、社区统计心跳的 online_bots 口径一致。"""
     from src.platform.bot_runtime.roles import is_sharded_hub
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if is_sharding_active() and is_sharded_hub():
+    if shard_ctx.sharding_active() and is_sharded_hub():
         return len(get_cluster_online_bot_ids())
     from nonebot import get_bots
 
@@ -498,6 +498,6 @@ def bot_has_cluster_connection(qq: int) -> bool:
     bid = int(qq)
     if bot_has_local_connection(bid):
         return True
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return False
     return bid in get_cluster_online_bot_ids()

@@ -10,6 +10,7 @@ from nonebot import logger
 from src.foundation.apscheduler_runtime import register_apscheduler_startup_hook
 from src.foundation.config.repo_settings import read_bootstrap_extra_plugin_dirs
 from src.foundation.paths import PROJECT_ROOT
+from src.platform.bot_runtime.load_policy import merge_startup_skip_plugins
 from src.platform.bot_runtime.pyproject_plugins import (
     extra_plugin_dirs_for_role,
     parse_nonebot_plugin_config,
@@ -231,17 +232,18 @@ def load_plugins_for_role() -> None:
                 loaded_short=loaded_short,
             )
 
+        unified_skip = merge_startup_skip_plugins(UNIFIED_SKIP_PLUGIN_NAMES)
         loaded = _load_discovered_plugin_modules(
             role_label="unified",
             module_paths=_discover_plugin_modules(),
-            skip_short=UNIFIED_SKIP_PLUGIN_NAMES,
+            skip_short=unified_skip,
             skip_module_paths=frozenset({_INGRESS_GATE_MODULE}),
             loaded_short=loaded_short,
         )
 
         extra = load_pyproject_extra_plugins(
             role_label="unified",
-            skip_short=UNIFIED_SKIP_PLUGIN_NAMES,
+            skip_short=unified_skip,
             loaded_short=loaded_short,
             include_extra_dirs=True,
             include_bootstrap_dirs=False,
@@ -251,7 +253,7 @@ def load_plugins_for_role() -> None:
             bootstrap_loaded,
             loaded,
             extra,
-            sorted(UNIFIED_SKIP_PLUGIN_NAMES),
+            sorted(unified_skip),
         )
         return
 
@@ -281,7 +283,7 @@ def load_plugins_for_role() -> None:
         )
         extra = load_pyproject_extra_plugins(
             role_label="hub",
-            skip_short=WORKER_SKIP_PLUGIN_NAMES,
+            skip_short=merge_startup_skip_plugins(WORKER_SKIP_PLUGIN_NAMES),
             loaded_short=loaded_short,
             include_extra_dirs=False,
         )
@@ -307,17 +309,19 @@ def load_plugins_for_role() -> None:
             loaded_short=loaded_short,
         )
 
+    worker_skip = merge_startup_skip_plugins(WORKER_SKIP_PLUGIN_NAMES)
+
     loaded = _load_discovered_plugin_modules(
         role_label="worker",
         module_paths=_discover_plugin_modules(),
-        skip_short=WORKER_SKIP_PLUGIN_NAMES,
+        skip_short=worker_skip,
         skip_module_paths=frozenset({_INGRESS_GATE_MODULE}),
         loaded_short=loaded_short,
     )
 
     extra = load_pyproject_extra_plugins(
         role_label="worker",
-        skip_short=WORKER_SKIP_PLUGIN_NAMES,
+        skip_short=worker_skip,
         loaded_short=loaded_short,
         include_extra_dirs=True,
         include_bootstrap_dirs=False,
@@ -332,5 +336,5 @@ def load_plugins_for_role() -> None:
         bootstrap_loaded,
         loaded,
         extra,
-        sorted(WORKER_SKIP_PLUGIN_NAMES),
+        sorted(worker_skip),
     )

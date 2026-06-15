@@ -8,8 +8,9 @@ from typing import Any
 
 from nonebot import logger
 
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.coord.coord_redis_store import coord_key, read_json_sync, setex_json_sync
-from src.platform.shard.registry.config import get_shard_registry_settings, is_sharding_active
+from src.platform.shard.registry.config import get_shard_registry_settings
 from src.platform.shard.registry.store import get_shard_registry, worker_port_for_shard
 
 _TTL_SEC = 86400.0 * 7
@@ -35,7 +36,7 @@ def _is_stale(rec: dict[str, Any]) -> bool:
 
 
 def current_worker_port() -> int | None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return None
     s = get_shard_registry_settings()
     if s.role != "worker":
@@ -44,7 +45,7 @@ def current_worker_port() -> int | None:
 
 
 def register_maa_user_route(user: str, *, worker_port: int | None = None) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
     key = _user_key(user)
     if key is None:
@@ -71,7 +72,7 @@ def register_maa_user_route(user: str, *, worker_port: int | None = None) -> Non
 
 
 def resolve_worker_port_for_maa_user(user: str) -> int | None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return None
     key = _user_key(user)
     if key is None:

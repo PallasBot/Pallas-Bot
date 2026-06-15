@@ -46,6 +46,7 @@ from .console_meta_store import (
     merge_console_version_from_disk,
     set_console_meta,
 )
+from .console_read_cache import cached_read, clear_extended_read_cache, drop_read_cache
 
 if typing.TYPE_CHECKING:
     from .config import Config
@@ -60,28 +61,6 @@ def _shard_worker_console() -> bool:
 
 
 _INIT_LOG_SINK = False
-_READ_CACHE: dict[str, dict[str, Any]] = {}
-_READ_INFLIGHT: dict[str, asyncio.Task[Any]] = {}
-
-
-def clear_extended_read_cache() -> None:
-    """清空控制台扩展 JSON 的进程内读缓存。"""
-    _READ_CACHE.clear()
-    for task in list(_READ_INFLIGHT.values()):
-        if not task.done():
-            task.cancel()
-    _READ_INFLIGHT.clear()
-
-
-def _cache_value_copy(data: Any) -> Any:
-    """避免调用方就地修改 dict/list 污染缓存条目。"""
-    if isinstance(data, (dict, list)):
-        try:
-            return copy.deepcopy(data)
-        except Exception:  # noqa: BLE001
-            return data
-    return data
-
 
 _MSG_STATS: dict[str, dict[str, Any]] = {}  # self_id -> sent/received + 按本地日切片的 day_*
 _MSG_TRACKING_INIT = False
@@ -194,59 +173,6 @@ def _ensure_log_sink() -> None:
         return
     _INIT_LOG_SINK = True
     logger.info("Pallas-Bot 控制台: 已接入 NoneBot 日志环（/pallas/api/logs）")
-
-
-async def _cached_read(
-    *,
-    key: str,
-    loader: typing.Callable[[], typing.Awaitable[Any]],
-    ttl_sec: float = 1.0,
-    stale_sec: float = 20.0,
-) -> Any:
-    """读取接口防抖：短 TTL 复用；失败时回退最近成功快照，降低前端空白概率。
-
-    返回值对 dict/list 做拷贝，避免调用方修改污染缓存；口令轮换或新登录会清空整表。
-    """
-    now = time.monotonic()
-    hit = _READ_CACHE.get(key)
-    if hit and now < float(hit["exp"]):
-        return _cache_value_copy(hit["data"])
-
-    inflight = _READ_INFLIGHT.get(key)
-    if inflight is not None and not inflight.done():
-        return await inflight
-
-    async def run() -> Any:
-        t = time.monotonic()
-        stale_hit = _READ_CACHE.get(key)
-        try:
-            data = await loader()
-        except Exception:
-            if stale_hit and t < float(stale_hit["stale_exp"]):
-                logger.warning("Pallas-Bot 控制台: 使用缓存兜底 key={}", key)
-                return _cache_value_copy(stale_hit["data"])
-            raise
-        stored = _cache_value_copy(data)
-        _READ_CACHE[key] = {
-            "data": stored,
-            "exp": t + max(0.05, ttl_sec),
-            "stale_exp": t + max(ttl_sec, stale_sec),
-        }
-        return _cache_value_copy(stored)
-
-    task = asyncio.create_task(run())
-    _READ_INFLIGHT[key] = task
-    try:
-        return await task
-    finally:
-        _READ_INFLIGHT.pop(key, None)
-
-
-def _drop_read_cache(prefixes: tuple[str, ...]) -> None:
-    if not _READ_CACHE:
-        return
-    for k in [k for k in _READ_CACHE if any(k.startswith(p) for p in prefixes)]:
-        _READ_CACHE.pop(k, None)
 
 
 # 审批写操作后：好友/群 OneBot 列表与按 Bot 群配置合并视图一并失效
@@ -2745,7 +2671,7 @@ def _cleanup_log_errors_manual_sync() -> dict[str, Any]:
             sharded_errors = True
     except Exception:
         pass
-    _drop_read_cache(("plugin-run-stats:",))
+    drop_read_cache(("plugin-run-stats:",))
     return {"cleared": True, "sharded_errors": sharded_errors}
 
 
@@ -2787,7 +2713,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
                 trim_worker_duration_logs_sync(shard_id=wid, cap=0)
     except Exception:
         pass
-    _drop_read_cache(("plugin-run-stats:",))
+    drop_read_cache(("plugin-run-stats:",))
     logger.info(
         "Pallas-Bot 控制台: 控制台异常记录已按计划清理（每日 4:00，"
         "matcher_errors.jsonl、matcher_durations.jsonl、log_errors.jsonl、分片 errors/*.jsonl 与进程内缓冲）"
@@ -4297,7 +4223,7 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return _system_dict()
 
-        data = await _cached_read(key="system", loader=_load, ttl_sec=0.8, stale_sec=8.0)
+        data = await cached_read(key="system", loader=_load, ttl_sec=0.8, stale_sec=8.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/shard-registry", include_in_schema=True)
@@ -4323,7 +4249,7 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return aggregate_shard_observability()
 
-        data = await _cached_read(key="shard-observability", loader=_load, ttl_sec=2.0, stale_sec=8.0)
+        data = await cached_read(key="shard-observability", loader=_load, ttl_sec=2.0, stale_sec=8.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/message-stats", include_in_schema=True)
@@ -4334,7 +4260,7 @@ def register_extended_api(
             return await _message_stats_overview(self_id=str(self_id) if self_id is not None else None)
 
         key = f"message-stats:{self_id or 'all'}"
-        data = await _cached_read(key=key, loader=_load, ttl_sec=2.0, stale_sec=10.0)
+        data = await cached_read(key=key, loader=_load, ttl_sec=2.0, stale_sec=10.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/community-stats", include_in_schema=True)
@@ -4344,7 +4270,7 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return await fetch_community_public_stats()
 
-        data = await _cached_read(key="community-stats", loader=_load, ttl_sec=30.0, stale_sec=120.0)
+        data = await cached_read(key="community-stats", loader=_load, ttl_sec=30.0, stale_sec=120.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/community-corpus-hot", include_in_schema=True)
@@ -4362,7 +4288,7 @@ def register_extended_api(
             return await fetch_community_corpus_hot(mode=mode_norm, period=period_norm, limit=limit)
 
         cache_key = f"community-corpus-hot:{mode_norm}:{period_norm}:{limit}"
-        data = await _cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=300.0)
+        data = await cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=300.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/local-corpus-hot", include_in_schema=True)
@@ -4381,7 +4307,7 @@ def register_extended_api(
             return build_local_corpus_hot_payload(items)
 
         cache_key = f"local-corpus-hot:{scope_norm}:{gid}:{limit}"
-        data = await _cached_read(key=cache_key, loader=_load, ttl_sec=60.0, stale_sec=180.0)
+        data = await cached_read(key=cache_key, loader=_load, ttl_sec=60.0, stale_sec=180.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/corpus-status", include_in_schema=True)
@@ -4391,7 +4317,7 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return await build_corpus_status_snapshot()
 
-        data = await _cached_read(key="corpus-status", loader=_load, ttl_sec=15.0, stale_sec=90.0)
+        data = await cached_read(key="corpus-status", loader=_load, ttl_sec=15.0, stale_sec=90.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/federation-onboarding", include_in_schema=True)
@@ -4401,7 +4327,7 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return await fetch_federation_onboarding()
 
-        data = await _cached_read(
+        data = await cached_read(
             key="federation-onboarding",
             loader=_load,
             ttl_sec=120.0,
@@ -4433,7 +4359,7 @@ def register_extended_api(
             )
 
         key = f"plugin-run-stats:{self_id or 'all'}:logsrc:{src}:tbl:{tb_limit}"
-        data = await _cached_read(key=key, loader=_load, ttl_sec=2.0, stale_sec=10.0)
+        data = await cached_read(key=key, loader=_load, ttl_sec=2.0, stale_sec=10.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.post(f"{x}/log-errors/cleanup", include_in_schema=True)
@@ -4461,7 +4387,7 @@ def register_extended_api(
             )
 
         key = f"console-daily-stats:{self_id or 'all'}:{start or ''}:{end or ''}"
-        data = await _cached_read(key=key, loader=_load, ttl_sec=3.0, stale_sec=15.0)
+        data = await cached_read(key=key, loader=_load, ttl_sec=3.0, stale_sec=15.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/plugins", include_in_schema=True)
@@ -4469,7 +4395,7 @@ def register_extended_api(
         async def _load() -> list[dict[str, Any]]:
             return _list_plugins_dict()
 
-        data = await _cached_read(key="plugins", loader=_load, ttl_sec=1.6, stale_sec=25.0)
+        data = await cached_read(key="plugins", loader=_load, ttl_sec=1.6, stale_sec=25.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/plugins/help-menu-visibility", include_in_schema=True)
@@ -4498,7 +4424,7 @@ def register_extended_api(
             hidden = save_help_hidden_plugins(body.hidden_plugins)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        _drop_read_cache(("plugins",))
+        drop_read_cache(("plugins",))
         return JSONResponse({"ok": True, "data": {"hidden_plugins": hidden}})
 
     @router.get(f"{x}/plugins/global-disable", include_in_schema=True)
@@ -4535,7 +4461,7 @@ def register_extended_api(
             await invalidate_disabled_plugin_gate_cache(clear_all=True)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        _drop_read_cache(("plugins",))
+        drop_read_cache(("plugins",))
         return JSONResponse({
             "ok": True,
             "data": {
@@ -4576,7 +4502,7 @@ def register_extended_api(
             await invalidate_disabled_plugin_gate_cache(clear_all=True)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        _drop_read_cache(("plugins",))
+        drop_read_cache(("plugins",))
         return JSONResponse({
             "ok": True,
             "data": {
@@ -4730,7 +4656,7 @@ def register_extended_api(
         async def _load() -> list[dict[str, Any]]:
             return _list_bots_dict()
 
-        data = await _cached_read(key="bots", loader=_load, ttl_sec=0.9, stale_sec=15.0)
+        data = await cached_read(key="bots", loader=_load, ttl_sec=0.9, stale_sec=15.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/logs", include_in_schema=True)
@@ -4825,7 +4751,7 @@ def register_extended_api(
         from src.foundation.db.pallas_console_data import database_overview
 
         try:
-            data = await _cached_read(
+            data = await cached_read(
                 key="db_overview",
                 loader=database_overview,
                 ttl_sec=8.0,
@@ -5000,7 +4926,7 @@ def register_extended_api(
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas-Bot 控制台: 写入表行失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        _drop_read_cache(
+        drop_read_cache(
             ("db_overview", "bot_configs_list", "group_configs_list", "user_configs_list", "instances"),
         )
         return JSONResponse({"ok": True, "data": data})
@@ -5020,7 +4946,7 @@ def register_extended_api(
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas-Bot 控制台: 删除表行失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        _drop_read_cache(
+        drop_read_cache(
             ("db_overview", "bot_configs_list", "group_configs_list", "user_configs_list", "instances"),
         )
         if not deleted:
@@ -5046,7 +4972,7 @@ def register_extended_api(
             return payload
 
         try:
-            payload = await _cached_read(
+            payload = await cached_read(
                 key="instances",
                 loader=_load,
                 ttl_sec=1.0,
@@ -5062,7 +4988,7 @@ def register_extended_api(
         from src.foundation.db.pallas_console_data import list_all_bot_configs_public
 
         try:
-            rows = await _cached_read(
+            rows = await cached_read(
                 key="bot_configs_list",
                 loader=list_all_bot_configs_public,
                 ttl_sec=1.0,
@@ -5102,7 +5028,7 @@ def register_extended_api(
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas-Bot 控制台: 更新 Bot 配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        _drop_read_cache(("instances", "bot_configs_list", "db_overview"))
+        drop_read_cache(("instances", "bot_configs_list", "db_overview"))
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/group-configs", include_in_schema=True)
@@ -5164,7 +5090,7 @@ def register_extended_api(
                 }
 
             try:
-                packed = await _cached_read(
+                packed = await cached_read(
                     key=cache_key_bot,
                     loader=_load_bot_merge,
                     ttl_sec=2.0,
@@ -5189,7 +5115,7 @@ def register_extended_api(
             return await list_group_configs_public(limit)
 
         try:
-            rows = await _cached_read(key=cache_key, loader=_load, ttl_sec=1.0, stale_sec=20.0)
+            rows = await cached_read(key=cache_key, loader=_load, ttl_sec=1.0, stale_sec=20.0)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": rows, "meta": {"limit": limit}})
@@ -5222,7 +5148,7 @@ def register_extended_api(
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas-Bot 控制台: 更新群配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        _drop_read_cache(("group_configs_list", "db_overview", "group_configs_bot:"))
+        drop_read_cache(("group_configs_list", "db_overview", "group_configs_bot:"))
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/user-configs", include_in_schema=True)
@@ -5237,7 +5163,7 @@ def register_extended_api(
             return await list_user_configs_public(limit)
 
         try:
-            rows = await _cached_read(key=cache_key, loader=_load, ttl_sec=1.0, stale_sec=20.0)
+            rows = await cached_read(key=cache_key, loader=_load, ttl_sec=1.0, stale_sec=20.0)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": rows, "meta": {"limit": limit}})
@@ -5270,7 +5196,7 @@ def register_extended_api(
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas-Bot 控制台: 更新 User 配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        _drop_read_cache(("db_overview", "user_configs_list"))
+        drop_read_cache(("db_overview", "user_configs_list"))
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/ai-extension/config", include_in_schema=True)
@@ -5439,7 +5365,7 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return await _ai_extension_http_json(method="GET", path="/ncm/login/status")
 
-        d = await _cached_read(key="ai_extension_ncm_status", loader=_load, ttl_sec=3.0, stale_sec=30.0)
+        d = await cached_read(key="ai_extension_ncm_status", loader=_load, ttl_sec=3.0, stale_sec=30.0)
         return JSONResponse({"ok": True, "data": d})
 
     @router.post(f"{x}/ai-extension/ncm/send-sms", include_in_schema=True)
@@ -5454,7 +5380,7 @@ def register_extended_api(
             path="/ncm/login/cellphone/send-sms",
             body=body.model_dump(),
         )
-        _drop_read_cache(("ai_extension_ncm_status",))
+        drop_read_cache(("ai_extension_ncm_status",))
         return JSONResponse({"ok": True, "data": d})
 
     @router.post(f"{x}/ai-extension/ncm/verify-sms", include_in_schema=True)
@@ -5469,7 +5395,7 @@ def register_extended_api(
             path="/ncm/login/cellphone/verify-sms",
             body=body.model_dump(),
         )
-        _drop_read_cache(("ai_extension_ncm_status",))
+        drop_read_cache(("ai_extension_ncm_status",))
         return JSONResponse({"ok": True, "data": d})
 
     @router.post(f"{x}/ai-extension/ncm/logout", include_in_schema=True)
@@ -5479,7 +5405,7 @@ def register_extended_api(
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         d = await _ai_extension_http_json(method="POST", path="/ncm/login/logout", body={})
-        _drop_read_cache(("ai_extension_ncm_status",))
+        drop_read_cache(("ai_extension_ncm_status",))
         return JSONResponse({"ok": True, "data": d})
 
     @router.get(f"{x}/friend-requests", include_in_schema=True)
@@ -5494,7 +5420,7 @@ def register_extended_api(
             return await _friend_requests_overview(self_id=sid, include_doubt=bool(doubt))
 
         try:
-            data = await _cached_read(
+            data = await cached_read(
                 key=f"friend_requests:{self_id}:{int(doubt)}",
                 loader=_load,
                 ttl_sec=1.0,
@@ -5528,7 +5454,7 @@ def register_extended_api(
             }
 
         try:
-            payload = await _cached_read(key=cache_key, loader=_load, ttl_sec=2.5, stale_sec=25.0)
+            payload = await cached_read(key=cache_key, loader=_load, ttl_sec=2.5, stale_sec=25.0)
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
@@ -5559,7 +5485,7 @@ def register_extended_api(
             }
 
         try:
-            payload = await _cached_read(key=cache_key, loader=_load, ttl_sec=2.5, stale_sec=25.0)
+            payload = await cached_read(key=cache_key, loader=_load, ttl_sec=2.5, stale_sec=25.0)
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
@@ -5618,7 +5544,7 @@ def register_extended_api(
 
         cache_key = f"request_overview:{self_id or 'all'}:{int(doubt)}"
         try:
-            data = await _cached_read(key=cache_key, loader=_load, ttl_sec=1.2, stale_sec=15.0)
+            data = await cached_read(key=cache_key, loader=_load, ttl_sec=1.2, stale_sec=15.0)
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas-Bot 控制台: 读取审批总览失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
@@ -5644,7 +5570,7 @@ def register_extended_api(
                 if not flag:
                     raise HTTPException(status_code=404, detail="未找到可疑好友申请")
                 await _console_set_doubt_friend_add_request(sid_i, flag=flag, approve=approve)
-                _drop_read_cache(_CONSOLE_APPROVAL_RELATED_CACHE_PREFIXES)
+                drop_read_cache(_CONSOLE_APPROVAL_RELATED_CACHE_PREFIXES)
                 return JSONResponse({"ok": True, "data": {"handled": True}})
             pending = _read_pending_friend_requests_disk()
             by_bot = pending.get(str(body.self_id), {})
@@ -5655,7 +5581,7 @@ def register_extended_api(
             by_bot.pop(uid, None)
             pending[str(body.self_id)] = by_bot
             _save_pending_friend_requests_disk(pending)
-            _drop_read_cache(_CONSOLE_APPROVAL_RELATED_CACHE_PREFIXES)
+            drop_read_cache(_CONSOLE_APPROVAL_RELATED_CACHE_PREFIXES)
             return JSONResponse({"ok": True, "data": {"handled": True}})
 
         if body.group_id is None:
@@ -5674,7 +5600,7 @@ def register_extended_api(
         by_bot_g.pop(str(int(body.group_id)), None)
         pending_g[str(body.self_id)] = by_bot_g
         _save_pending_group_requests_disk(pending_g)
-        _drop_read_cache(_CONSOLE_APPROVAL_RELATED_CACHE_PREFIXES)
+        drop_read_cache(_CONSOLE_APPROVAL_RELATED_CACHE_PREFIXES)
         return JSONResponse({"ok": True, "data": {"handled": True}})
 
     @router.post(f"{x}/request-actions/batch", include_in_schema=True)
@@ -5818,7 +5744,7 @@ def register_extended_api(
 
         if body.groups:
             _save_pending_group_requests_disk(pending_group)
-        _drop_read_cache(_CONSOLE_APPROVAL_RELATED_CACHE_PREFIXES)
+        drop_read_cache(_CONSOLE_APPROVAL_RELATED_CACHE_PREFIXES)
 
         return JSONResponse({
             "ok": True,
@@ -5842,7 +5768,7 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return await _load_webui_update_check_payload(plugin_config)
 
-        data = await _cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=900.0)
+        data = await cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=900.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/update/bot/check", include_in_schema=True)
@@ -5853,7 +5779,7 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return await _load_bot_update_check_payload(plugin_config)
 
-        data = await _cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=900.0)
+        data = await cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=900.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/update/bot/config-migration/check", include_in_schema=True)
@@ -5904,7 +5830,7 @@ def register_extended_api(
                 github_token=github_token,
                 repo="PallasBot/Pallas-Bot",
             )
-            _drop_read_cache(("update_check_bot:",))
+            drop_read_cache(("update_check_bot:",))
             return JSONResponse({"ok": True, "data": data})
         except BotGitUpdateError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
@@ -5986,7 +5912,7 @@ def register_extended_api(
 
             invalidate_health_snapshot()
             logger.info("Pallas-Bot 控制台: WebUI 已更新至 {}（发布 tag: {}）", effective_version, new_tag)
-            _drop_read_cache(("update_check_webui:",))
+            drop_read_cache(("update_check_webui:",))
             return JSONResponse({
                 "ok": True,
                 "data": {
@@ -6025,7 +5951,7 @@ def register_extended_api(
 
         async def warm(key: str, loader, ttl: float, stale: float) -> None:
             try:
-                await _cached_read(key=key, loader=loader, ttl_sec=ttl, stale_sec=stale)
+                await cached_read(key=key, loader=loader, ttl_sec=ttl, stale_sec=stale)
             except Exception as e:  # noqa: BLE001
                 logger.debug("Pallas-Bot 控制台: 预热读缓存失败 key={} err={}", key, e)
 

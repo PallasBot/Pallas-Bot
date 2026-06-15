@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import time
 
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.coord.group_activity import (
     get_group_activity_lock,
     session_live_by_flag,
 )
 from src.platform.shard.coord.group_gate import read_owned_gate_bot_id_sync
-from src.platform.shard.registry.config import is_sharding_active
 
 
 def coord_room_live(activity_namespace: str, group_id: int) -> bool:
     gid = int(group_id)
     lock = get_group_activity_lock(activity_namespace)
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return gid in lock.local_busy
     data = lock.read(gid)
     if not data or not data.get("busy"):

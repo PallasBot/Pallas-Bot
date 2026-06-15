@@ -6,6 +6,8 @@ import json
 import time
 from typing import Any
 
+from src.platform.shard import context as shard_ctx
+
 _HASH_KEY = "pallas:presence:bots"
 _UPDATED_AT_KEY = "pallas:presence:updated_at"
 _FILE_IMPORTED_KEY = "pallas:presence:file_imported"
@@ -14,9 +16,8 @@ _FILE_IMPORTED_KEY = "pallas:presence:file_imported"
 def presence_uses_redis_only() -> bool:
     from src.platform.coord.redis_claim import get_coord_redis_client
     from src.platform.coord.redis_settings import coord_redis_enabled
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         return True
     return coord_redis_enabled() and get_coord_redis_client() is not None
 

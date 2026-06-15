@@ -47,7 +47,7 @@ def clear_corpus_prefetch_runtime_state() -> None:
 
 
 def prefetch_queue_pressure_threshold() -> int:
-    return max(64, _QUEUE_MAX // 32)
+    return max(32, _QUEUE_MAX // 64)
 
 
 def prefetch_queue_under_pressure() -> bool:
@@ -77,7 +77,7 @@ def should_skip_corpus_prefetch() -> bool:
     from src.foundation.db.pool_budget import pg_pool_under_pressure
     from src.plugins.repeater.learn_queue import learn_queue_under_pressure
 
-    if pg_pool_under_pressure(threshold=0.20):
+    if pg_pool_under_pressure(threshold=0.15):
         return True
     if learn_queue_under_pressure():
         return True

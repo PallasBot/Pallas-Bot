@@ -12,8 +12,9 @@ from typing import Any
 
 from nonebot import logger
 
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.coord.coord_redis_store import coord_key, mutate_json_sync, read_json_sync
-from src.platform.shard.registry.config import get_shard_registry_settings, is_sharding_active
+from src.platform.shard.registry.config import get_shard_registry_settings
 
 _REDIS_CHANNEL = "pallas:dream_drift"
 _seen_event_ids: deque[str] = deque(maxlen=8000)
@@ -189,7 +190,7 @@ def _warn_missing_redis_once() -> None:
 
 
 def schedule_register_dream_active(bot_id: int, group_id: int, until_ts: float) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
 
     async def job() -> None:
@@ -202,7 +203,7 @@ def schedule_register_dream_active(bot_id: int, group_id: int, until_ts: float) 
 
 
 def schedule_unregister_dream_active(bot_id: int, group_id: int) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
 
     async def job() -> None:
@@ -220,7 +221,7 @@ def schedule_publish_dream_drift(
     target_group_id: int,
     payload,
 ) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
     if get_shard_registry_settings().role != "worker":
         return
@@ -278,7 +279,7 @@ async def dream_drift_redis_listen_loop() -> None:
     from src.platform.coord.redis_settings import coord_redis_enabled
 
     while True:
-        if not is_sharding_active() or get_shard_registry_settings().role != "worker":
+        if not shard_ctx.sharding_active() or get_shard_registry_settings().role != "worker":
             return
         if not coord_redis_enabled():
             await asyncio.sleep(5.0)
@@ -291,7 +292,7 @@ async def dream_drift_redis_listen_loop() -> None:
         try:
             pubsub = client.pubsub(ignore_subscribe_messages=True)
             await asyncio.to_thread(pubsub.subscribe, _REDIS_CHANNEL)
-            while is_sharding_active():
+            while shard_ctx.sharding_active():
                 raw = await asyncio.to_thread(pubsub.get_message, timeout=1.0)
                 if not raw or raw.get("type") != "message":
                     continue
@@ -319,7 +320,7 @@ async def dream_drift_redis_listen_loop() -> None:
 
 def start_dream_drift_redis_listener() -> None:
     global _redis_listener_started
-    if _redis_listener_started or not is_sharding_active():
+    if _redis_listener_started or not shard_ctx.sharding_active():
         return
     if get_shard_registry_settings().role != "worker":
         return

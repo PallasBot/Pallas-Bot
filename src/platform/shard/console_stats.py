@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from src.foundation.paths import plugin_data_dir
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 _PLUGIN = "pallas_shard"
 _STATS_DIR = "stats"
@@ -151,7 +151,7 @@ def read_worker_stats_file(shard_id: int) -> dict[str, Any]:
 
 
 def read_worker_stats(shard_id: int) -> dict[str, Any]:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return {}
     data = _read_worker_file(shard_id)
     bots = data.get("bots")
@@ -205,7 +205,7 @@ def bot_authoritative_shard_map() -> dict[str, int]:
 
 def load_cluster_console_stats_by_sid() -> dict[str, dict[str, Any]]:
     """hub：按牛牛归属分片合并 worker stats，避免迁分片后旧 worker 快照覆盖/拼进总日志。"""
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return {}
     auth = bot_authoritative_shard_map()
     by_qq: dict[str, list[tuple[int, dict[str, Any], float]]] = defaultdict(list)

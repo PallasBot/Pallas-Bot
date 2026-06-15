@@ -27,7 +27,9 @@ def test_community_stats_payload(monkeypatch):
     assert roster_qq["kind"] == "bool"
     assert roster_qq["current"] is False
     assert roster_qq["label"] == "公开牛牛 QQ"
+    assert roster_profile["current"] is True
     assert roster_profile["label"] == "公开牛牛头像昵称"
+    assert "社区主站展示" in roster_profile["description"]
     assert "自愿" not in roster_qq["description"]
 
 

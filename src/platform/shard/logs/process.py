@@ -7,10 +7,11 @@ import pathlib
 from datetime import datetime
 from typing import Any
 
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.logs.errors import append_shard_log_error_from_sink, log_stem_for_shard
 from src.platform.shard.logs.session import maybe_rotate_logs_for_new_session
 from src.platform.shard.logs.view import shard_logs_dir
-from src.platform.shard.registry.config import get_shard_registry_settings, is_sharding_active
+from src.platform.shard.registry.config import get_shard_registry_settings
 
 _SHARD_LOG_FORMAT = "{time:MM-DD HH:mm:ss} | {level:<8} | {name}:{line} - {message}"
 _FILE_ROTATION = "30 MB"
@@ -28,7 +29,7 @@ def shard_log_file_path(*, role: str, shard_id: int) -> str:
 def install_shard_process_logging() -> str | None:
     """为当前分片进程挂载落盘 loguru sink；返回日志文件路径。"""
     global _INSTALLED
-    if _INSTALLED or not is_sharding_active():
+    if _INSTALLED or not shard_ctx.sharding_active():
         return None
     s = get_shard_registry_settings()
     role = s.role

@@ -8,7 +8,7 @@ import time
 from typing import Any
 
 from src.foundation.paths import plugin_data_dir
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 _PLUGIN = "pallas_shard"
 _SEEN_FILE = "cluster_session_seen.json"
@@ -117,7 +117,7 @@ def note_bot_session_seen(qq: int) -> None:
     from src.platform.multi_bot.fleet import note_fleet_bot_session_connected
 
     note_fleet_bot_session_connected(int(qq))
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         note_cluster_session_seen_sync(qq=int(qq))
 
 
@@ -126,7 +126,7 @@ def get_session_seen_bot_ids() -> frozenset[int]:
     from src.platform.multi_bot.fleet import get_enabled_protocol_bot_ids, get_process_session_connected_ids
 
     ids = set(get_process_session_connected_ids())
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         ids.update(_load_cluster_seen_ids())
     enabled = get_enabled_protocol_bot_ids()
     if enabled:

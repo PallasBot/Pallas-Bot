@@ -57,7 +57,7 @@ class CommunityStatsConfig(BaseModel):
         description="是否在社区主站公开牛牛 QQ 号（可点开 QQ 资料）。",
     )
     roster_public_profile: bool = Field(
-        default=False,
+        default=True,
         description="是否在社区主站公开牛牛昵称与头像。",
     )
 
@@ -75,7 +75,7 @@ def _read_roster_public_flags() -> tuple[bool, bool]:
         return legacy, legacy
     return (
         _setting_bool(f"{_PREFIX}ROSTER_PUBLIC_QQ", False),
-        _setting_bool(f"{_PREFIX}ROSTER_PUBLIC_PROFILE", False),
+        _setting_bool(f"{_PREFIX}ROSTER_PUBLIC_PROFILE", True),
     )
 
 

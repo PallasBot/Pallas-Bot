@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 
 from src.foundation.paths import plugin_data_dir
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 _lock = threading.Lock()
 _seen: tuple[float, float] | None = None
@@ -31,7 +31,7 @@ def _current_mtuples() -> tuple[float, float]:
 
 def refresh_shard_data_caches_if_stale() -> bool:
     """若共享 JSON 已变更则失效 fleet / registry 缓存；返回是否发生过失效。"""
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return False
     cur = _current_mtuples()
     global _seen

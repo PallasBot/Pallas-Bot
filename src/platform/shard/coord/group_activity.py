@@ -7,16 +7,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.coord.coord_redis_store import (
     coord_key,
     mutate_json_sync,
     read_json_sync,
     setex_json_sync,
 )
-from src.platform.shard.registry.config import (
-    get_shard_registry_settings,
-    is_sharding_active,
-)
+from src.platform.shard.registry.config import get_shard_registry_settings
 
 ActivityGate = Literal["ok", "busy"]
 
@@ -83,7 +81,7 @@ class GroupActivityLock:
         return not self.is_live_session(data)
 
     def mark_session(self, group_id: int, **fields: Any) -> None:
-        if not is_sharding_active():
+        if not shard_ctx.sharding_active():
             return
         now = time.time()
 
@@ -95,7 +93,7 @@ class GroupActivityLock:
         self._mutate(int(group_id), stamp)
 
     def clear_session(self, group_id: int) -> None:
-        if not is_sharding_active():
+        if not shard_ctx.sharding_active():
             return
 
         def stamp(data: dict[str, Any]) -> None:
@@ -107,7 +105,7 @@ class GroupActivityLock:
 
     def try_begin(self, group_id: int) -> bool:
         gid = int(group_id)
-        if not is_sharding_active():
+        if not shard_ctx.sharding_active():
             if gid in self.local_busy:
                 return False
             self.local_busy.add(gid)
@@ -140,7 +138,7 @@ class GroupActivityLock:
 
     def end(self, group_id: int) -> None:
         gid = int(group_id)
-        if not is_sharding_active():
+        if not shard_ctx.sharding_active():
             self.local_busy.discard(gid)
             return
 
@@ -161,7 +159,7 @@ class GroupActivityLock:
         local_alive: Callable[[], Any] | None = None,
     ) -> bool:
         gid = int(group_id)
-        if not is_sharding_active():
+        if not shard_ctx.sharding_active():
             if gid not in self.local_busy:
                 return False
             if has_local:

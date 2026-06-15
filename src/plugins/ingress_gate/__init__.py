@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 
 from nonebot import get_driver, logger
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, NoticeEvent
 from nonebot.exception import IgnoredException
 from nonebot.message import event_preprocessor
 from nonebot.plugin import PluginMetadata
@@ -31,9 +31,11 @@ from src.platform.ingress.claim_gate import (
 )
 from src.platform.ingress.dream_host_gate import dream_session_ingress_passes
 from src.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
+from src.platform.ingress.fast_path import ingress_once_claim_safe_before_host_gates
 from src.platform.ingress.hosted_activity_gate import (
     hosted_activity_ingress_passes,
 )
+from src.platform.ingress.notice_gate import ingress_notice_gate
 from src.platform.multi_bot.at_targets import group_at_qq_ids, message_at_fleet_bot
 from src.platform.multi_bot.fleet import fleet_bot_ids_contains, get_fleet_bot_ids
 from src.platform.observability import SlowPathTimer, slow_path_threshold_ms
@@ -103,6 +105,12 @@ def _known_bot_sender(*, user_id: int, self_id: int) -> bool:
 
 
 @event_preprocessor
+async def ingress_notice_preprocess(bot, event) -> None:
+    if isinstance(event, NoticeEvent):
+        await ingress_notice_gate(bot, event)
+
+
+@event_preprocessor
 async def ingress_group_message_gate(bot, event) -> None:
     if not ingress_gate_active():
         return
@@ -149,11 +157,28 @@ async def ingress_group_message_gate(bot, event) -> None:
                 record_ingress_early_discard("federate")
             raise IgnoredException("federate group owner mismatch")
 
+        at_fleet = message_at_fleet_bot(event)
+        early_once_done = False
+        if not sharding_active and ingress_once_claim_safe_before_host_gates(
+            int(event.group_id),
+            plain,
+            at_fleet_bot=at_fleet,
+        ):
+            try:
+                await unified_ingress_once_claim(event, body=body, user_id=user_id)
+                early_once_done = True
+                timer.mark("once_claim")
+            except IngressClaimError as err:
+                outcome = err.outcome
+                if metrics and err.record_claim_lost:
+                    record_ingress_claim(won=False)
+                raise IgnoredException(str(err)) from err
+
         if not hosted_activity_ingress_passes(
             self_id,
             int(event.group_id),
             plain,
-            at_fleet_bot=message_at_fleet_bot(event),
+            at_fleet_bot=at_fleet,
         ):
             outcome = "spy_host_gate"
             if metrics:
@@ -166,15 +191,16 @@ async def ingress_group_message_gate(bot, event) -> None:
                 record_ingress_early_discard("dream_host")
             raise IgnoredException("dream host gate")
 
-        try:
-            await unified_ingress_once_claim(event, body=body, user_id=user_id)
-            if not sharding_active:
-                timer.mark("once_claim")
-        except IngressClaimError as err:
-            outcome = err.outcome
-            if metrics and err.record_claim_lost:
-                record_ingress_claim(won=False)
-            raise IgnoredException(str(err)) from err
+        if not early_once_done:
+            try:
+                await unified_ingress_once_claim(event, body=body, user_id=user_id)
+                if not sharding_active:
+                    timer.mark("once_claim")
+            except IngressClaimError as err:
+                outcome = err.outcome
+                if metrics and err.record_claim_lost:
+                    record_ingress_claim(won=False)
+                raise IgnoredException(str(err)) from err
 
         if metrics:
             record_ingress_event()

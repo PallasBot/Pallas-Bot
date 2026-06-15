@@ -145,7 +145,7 @@ async def test_schedule_prefetch_skips_when_pg_under_light_pressure(monkeypatch:
 
     mod.clear_corpus_prefetch_runtime_state()
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda: "prefetch")
-    monkeypatch.setattr("src.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: threshold <= 0.2)
+    monkeypatch.setattr("src.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: threshold <= 0.15)
 
     schedule_corpus_prefetch("kw")
 

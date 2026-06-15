@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from src.foundation.config.repo_settings import repo_env_raw_value
 from src.platform.federate.redis_settings import federate_redis_available
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 _PREFIX = "PALLAS_FEDERATE_"
 
@@ -101,7 +101,7 @@ def federate_redis_prefix(cfg: FederateConfig | None = None) -> str:
 
 def federate_ingress_enabled(cfg: FederateConfig | None = None) -> bool:
     cfg = cfg or get_federate_config()
-    if not is_sharding_active() and cfg.ingress_enabled is not True:
+    if not shard_ctx.sharding_active() and cfg.ingress_enabled is not True:
         return False
     if cfg.control_plane_enabled is False and cfg.ingress_enabled is not True:
         return False

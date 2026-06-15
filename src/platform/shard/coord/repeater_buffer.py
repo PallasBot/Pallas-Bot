@@ -10,7 +10,8 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
-from src.platform.shard.registry.config import get_shard_registry_settings, is_sharding_active
+from src.platform.shard import context as shard_ctx
+from src.platform.shard.registry.config import get_shard_registry_settings
 
 if TYPE_CHECKING:
     from src.plugins.repeater.model import ChatData
@@ -87,7 +88,7 @@ def _warn_missing_redis_once() -> None:
 
 
 def publish_repeater_buffer_event_sync(chat_data: ChatData) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
     if get_shard_registry_settings().role != "worker":
         return
@@ -101,7 +102,7 @@ def publish_repeater_buffer_event_sync(chat_data: ChatData) -> None:
 
 
 def schedule_publish_repeater_buffer(chat_data: ChatData) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
 
     async def job() -> None:
@@ -174,7 +175,7 @@ async def repeater_buffer_redis_listen_loop() -> None:
     from src.platform.coord.redis_settings import coord_redis_enabled
 
     while True:
-        if not is_sharding_active() or get_shard_registry_settings().role != "worker":
+        if not shard_ctx.sharding_active() or get_shard_registry_settings().role != "worker":
             return
         if not coord_redis_enabled():
             await asyncio.sleep(5.0)
@@ -187,7 +188,7 @@ async def repeater_buffer_redis_listen_loop() -> None:
         try:
             pubsub = client.pubsub(ignore_subscribe_messages=True)
             await asyncio.to_thread(pubsub.subscribe, _REDIS_CHANNEL)
-            while is_sharding_active():
+            while shard_ctx.sharding_active():
                 raw = await asyncio.to_thread(pubsub.get_message, timeout=1.0)
                 if not raw or raw.get("type") != "message":
                     continue
@@ -215,7 +216,7 @@ async def repeater_buffer_redis_listen_loop() -> None:
 
 def start_repeater_buffer_redis_listener() -> None:
     global _redis_listener_started
-    if _redis_listener_started or not is_sharding_active():
+    if _redis_listener_started or not shard_ctx.sharding_active():
         return
     if get_shard_registry_settings().role != "worker":
         return

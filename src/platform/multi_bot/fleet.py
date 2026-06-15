@@ -6,7 +6,7 @@ import json
 import threading
 
 from src.foundation.paths import plugin_data_dir
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 _lock = threading.RLock()
 _cached: frozenset[int] | None = None
@@ -38,7 +38,7 @@ def get_process_session_connected_ids() -> frozenset[int]:
 
 def get_catalog_bot_ids() -> frozenset[int]:
     """分片：全集群 catalog；单进程：block 维护的本进程已连接集合。"""
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         return get_fleet_bot_ids()
     try:
         from src.plugins.block import plugin_config
@@ -82,7 +82,7 @@ def _registry_qq_allowed(qq: int, *, enabled: set[int], session_extra: set[int])
 def _load_fleet_bot_ids() -> set[int]:
     enabled = _load_enabled_account_qq()
     ids: set[int] = set(enabled)
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         try:
             from src.platform.multi_bot.session_seen import load_cluster_session_seen_ids
             from src.platform.shard.registry.store import get_shard_registry

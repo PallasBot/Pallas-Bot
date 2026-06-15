@@ -215,6 +215,8 @@ __marimo__/
 resource/*
 !resource/arknights/
 !resource/arknights/**
+!resource/who_is_spy/
+!resource/who_is_spy/**
 !resource/styles/
 !resource/styles/**
 resource/styles/**/__pycache__/

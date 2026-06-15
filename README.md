@@ -70,10 +70,6 @@ uv run nb run
 
 浏览器打开 `http://<主机>:8088/pallas/`，使用启动日志中的口令登录。
 
-需要 **hub + worker** 的多进程分片时，使用 `./scripts/run_sharded_bot.sh start`。**当前分片模式依赖 Redis 协调 claim**：请在 `config/pallas.toml` 的 `[env]` 配置 `REDIS_URL`，并安装 `uv sync --extra coord-redis`（或 `deploy-shard`）。详见 [多进程分片](docs/architecture/bot_process_sharding.md)。
-
-**社区语料**：牛牛默认只用你部署里的本地句子库。若在 Web 控制台 **语料联邦** 打开「社区语料」，还会从中心服务补充更多句子；也可选择把本机学到的好句匿名分享回社区（不含 QQ 号、群号或聊天原文）。默认关闭，随时可在控制台开关。详见 [语料联邦说明](docs/common/corpus/README.md)。
-
 <a id="文档"></a>
 ## 📖 文档
 

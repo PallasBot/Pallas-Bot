@@ -13,7 +13,7 @@ from src.platform.federate.config import (
     federate_ingress_bypass_unified,
 )
 from src.platform.observability import SlowPathTimer, slow_path_threshold_ms
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
@@ -37,7 +37,7 @@ def reset_federate_ingress_win_cache_for_tests() -> None:
 
 
 def bypass_federate_ingress_for_current_mode() -> bool:
-    return federate_ingress_bypass_unified() and not is_sharding_active()
+    return federate_ingress_bypass_unified() and not shard_ctx.sharding_active()
 
 
 def federate_ingress_cached_win(

@@ -107,13 +107,13 @@ def test_factories_switch_by_db_backend_env(monkeypatch, fake_backend):
     """当 DB_BACKEND=fake 时，所有 Repository 工厂应返回 fake 实例。"""
     from src.foundation.db import (
         make_blacklist_repository,
-        make_context_repository,
+        make_local_context_repository,
         make_message_repository,
     )
 
     _set_db_backend(monkeypatch, fake_backend)
 
-    ctx = make_context_repository()
+    ctx = make_local_context_repository()
     msg = make_message_repository()
     bl = make_blacklist_repository()
 

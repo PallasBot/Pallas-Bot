@@ -1,4 +1,4 @@
-"""做梦/醒梦入口明文。"""
+"""做梦插件口令明文。"""
 
 from __future__ import annotations
 

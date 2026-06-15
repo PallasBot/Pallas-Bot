@@ -9,6 +9,8 @@ from typing import Any
 
 from nonebot import logger
 
+from src.platform.shard import context as shard_ctx
+
 _SESSION_CHANNEL = "pallas:duel_qte:session"
 _GREETING_CHANNEL = "pallas:duel_qte:greeting"
 _SESSION_KEY_PREFIX = "pallas:duel_qte:session:"
@@ -340,9 +342,8 @@ async def duel_qte_greeting_redis_listen_loop() -> None:
 def start_duel_qte_redis_listeners() -> None:
     global _session_listener_started, _greeting_listener_started
     from src.platform.coord.redis_settings import coord_redis_enabled
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if not is_sharding_active() or not coord_redis_enabled():
+    if not shard_ctx.sharding_active() or not coord_redis_enabled():
         return
     if not _session_listener_started:
         _session_listener_started = True

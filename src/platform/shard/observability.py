@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.coord_pending import coord_pending_snapshot_sync
 from src.platform.shard.ingress_metrics import merge_ingress_metrics
-from src.platform.shard.registry.config import is_sharding_active
 from src.platform.shard.registry.store import get_shard_registry
 from src.platform.shard.repeater_ingress_metrics import merge_repeater_ingress_metrics
 
@@ -27,7 +27,7 @@ def pg_pool_estimate() -> dict[str, Any]:
     recommended_per_process = 32
     peak_warn_threshold = 500
     worker_count = 0
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         reg = get_shard_registry()
         worker_count = len(reg.shards)
         process_count = worker_count + 1  # workers + hub
@@ -67,7 +67,7 @@ def aggregate_shard_observability() -> dict[str, Any]:
     from src.platform.shard.ingress_metrics import ingress_metrics_snapshot
     from src.platform.shard.repeater_ingress_metrics import repeater_ingress_metrics_snapshot
 
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         snap = ingress_metrics_snapshot()
         repeater_snap = repeater_ingress_metrics_snapshot()
         return {
@@ -104,7 +104,7 @@ def aggregate_shard_observability() -> dict[str, Any]:
         })
     coord_live = coord_pending_snapshot_sync()
     return {
-        "sharded": is_sharding_active(),
+        "sharded": shard_ctx.sharding_active(),
         "ingress_cluster": merge_ingress_metrics(ingress_rows),
         "repeater_ingress_cluster": merge_repeater_ingress_metrics(repeater_rows),
         "coord_pending_live": coord_live,

@@ -130,9 +130,24 @@ def _field_row(key: str, cur: Any) -> dict[str, Any]:
             "每隔多久上报一次在线情况",
             "例如 5 分钟；间隔越短请求越频繁，越长则页面数据更新越慢",
         )
-    elif key in ("community_stats_roster_public_qq", "community_stats_roster_public_profile"):
+    elif key == "community_stats_roster_public_qq":
         row["kind"] = "bool"
-        row["current"] = _coerce_bool(cur)
+        qq_default = default_value if isinstance(default_value, bool) else False
+        row["current"] = _coerce_bool(cur, default=qq_default)
+        row["description"] = field_help(
+            "是否在社区主站气泡墙展示牛牛 QQ",
+            "在本页下方「社区主站展示」分组中开关",
+            "默认关闭；可与头像昵称分开控制",
+        )
+    elif key == "community_stats_roster_public_profile":
+        row["kind"] = "bool"
+        profile_default = default_value if isinstance(default_value, bool) else True
+        row["current"] = _coerce_bool(cur, default=profile_default)
+        row["description"] = field_help(
+            "是否在社区主站气泡墙展示牛牛昵称与头像",
+            "在本页下方「社区主站展示」分组中开关",
+            "默认开启，与在线统计上报一致；不需要展示时在此关闭",
+        )
     return row
 
 

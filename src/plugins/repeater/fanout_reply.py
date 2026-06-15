@@ -217,11 +217,14 @@ def dispatch_repeater_reply(bot_id: int, group_id: int, answers) -> None:
     )
 
 
-async def send_repeater_answers(bot_id: int, group_id: int, answers) -> None:
+async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: bool = False) -> None:
 
     from src.plugins.repeater import post_proc
 
     from .model import Chat
+
+    log_tag = "fanout" if fanout else "reply"
+    send_context = "repeater_fanout" if fanout else "repeater_reply"
 
     config = BotConfig(bot_id, group_id)
 
@@ -233,14 +236,14 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers) -> None:
         bot = get_bot(str(bot_id))
 
     except ValueError:
-        logger.warning("repeater_fanout: bot [{}] not connected on this worker", bot_id)
+        logger.warning("repeater{}: bot [{}] not connected on this worker", "_fanout" if fanout else "", bot_id)
 
         return
 
     async for item in answers:
         msg = await post_proc(item, bot_id, group_id)
 
-        logger.info(f"bot [{bot_id}] ready to send [{str(msg)[:30]}] to group [{group_id}] (fanout)")
+        logger.info(f"bot [{bot_id}] ready to send [{str(msg)[:30]}] to group [{group_id}] ({log_tag})")
 
         await asyncio.sleep(delay)
 
@@ -250,7 +253,7 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers) -> None:
             await bot.send_group_msg(group_id=group_id, message=msg)
 
         except BOT_SEND_UNAVAILABLE_ERRORS as e:
-            log_bot_send_unavailable(e, context="repeater_fanout", bot=bot_id, group=group_id)
+            log_bot_send_unavailable(e, context=send_context, bot=bot_id, group=group_id)
 
             return
 
@@ -263,7 +266,7 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers) -> None:
             shutup = await is_shutup(bot_id, group_id)
 
             if not shutup:
-                logger.info(f"bot [{bot_id}] ready to ban [{str(item)}] in group [{group_id}] (fanout)")
+                logger.info(f"bot [{bot_id}] ready to ban [{str(item)}] in group [{group_id}] ({log_tag})")
 
                 await Chat.ban(group_id, bot_id, str(item), "ActionFailed")
 
@@ -307,7 +310,7 @@ async def run_repeater_reply_for_bot(bot_id: int, payload: dict[str, Any]) -> No
     if answers is None:
         return
 
-    await send_repeater_answers(bot_id, group_id, answers)
+    await send_repeater_answers(bot_id, group_id, answers, fanout=True)
 
 
 async def dispatch_repeater_fanout(

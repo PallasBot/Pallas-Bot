@@ -1,7 +1,7 @@
 import pytest
 
 from src.platform.ingress.config import clear_ingress_fanout_config_cache
-from src.platform.shard.ingress_fanout import is_greeting_fanout_plaintext, is_ingress_fanout_plaintext
+from src.platform.ingress.fanout_bypass import is_greeting_fanout_plaintext, is_ingress_fanout_plaintext
 
 
 @pytest.fixture(autouse=True)

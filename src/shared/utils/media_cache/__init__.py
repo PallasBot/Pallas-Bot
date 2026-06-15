@@ -18,6 +18,19 @@ _IMAGE_CAPTURE_QUEUE_MAX = 1024
 _IMAGE_CAPTURE_BOUND = False
 
 
+def image_capture_worker_count() -> int:
+    from src.foundation.db.pool_budget import cap_by_pg_pool
+
+    return max(1, min(3, cap_by_pg_pool(2, workload_fraction=0.06)))
+
+
+def image_capture_under_load() -> bool:
+    from src.foundation.db.pool_budget import pg_pool_under_pressure
+    from src.plugins.repeater.learn_queue import learn_queue_under_pressure
+
+    return pg_pool_under_pressure(threshold=0.15) or learn_queue_under_pressure()
+
+
 def image_capture_queue() -> asyncio.Queue[MessageSegment]:
     global _image_capture_queue
     if _image_capture_queue is None:
@@ -39,14 +52,13 @@ async def _insert_image_io(image_seg: MessageSegment) -> None:
         await image_cache_repo.insert(cache)
         return
     cache.ref_times += 1
-    # 不是经常收到的图不缓存，不然会占用大量空间
-    if cache.ref_times > 2 and cache.base64_data is None:
-        url = image_seg.data["url"]
-        rsp = await HTTPXClient.get(url)
-        if not rsp or rsp.status_code != httpx.codes.OK:
-            return
-        base64_data = base64.b64encode(rsp.content).decode()
-        cache.base64_data = base64_data
+    under_load = image_capture_under_load()
+    if cache.ref_times > 2 and cache.base64_data is None and not under_load:
+        url = image_seg.data.get("url")
+        if url:
+            rsp = await HTTPXClient.get(url)
+            if rsp and rsp.status_code == httpx.codes.OK:
+                cache.base64_data = base64.b64encode(rsp.content).decode()
     await image_cache_repo.save(cache)
 
 
@@ -66,7 +78,10 @@ async def start_image_capture_workers() -> None:
     if _image_capture_workers_running():
         return
     await stop_image_capture_workers()
-    _image_capture_tasks = [asyncio.create_task(run_image_capture_consumer(), name="image_capture_consumer")]
+    count = image_capture_worker_count()
+    _image_capture_tasks = [
+        asyncio.create_task(run_image_capture_consumer(), name=f"image_capture_consumer_{idx}") for idx in range(count)
+    ]
 
 
 async def stop_image_capture_workers() -> None:
@@ -101,10 +116,7 @@ def bind_image_capture_lifecycle() -> None:
 
 async def insert_image(image_seg: MessageSegment):
     global _image_capture_dropped
-    from src.foundation.db.pool_budget import pg_pool_under_pressure
-    from src.plugins.repeater.learn_queue import learn_queue_under_pressure
-
-    if pg_pool_under_pressure(threshold=0.25) or learn_queue_under_pressure():
+    if image_capture_under_load():
         return
     ensure_image_capture_workers()
     try:

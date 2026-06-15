@@ -7,9 +7,10 @@ import os
 import time
 from typing import Any
 
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.coord.maa_route_registry import current_worker_port
 from src.platform.shard.registry import get_shard_registry, worker_port_for_shard
-from src.platform.shard.registry.config import get_shard_registry_settings, is_sharding_active
+from src.platform.shard.registry.config import get_shard_registry_settings
 from src.platform.shard.registry.store import assign_bot_to_shard
 
 _DEFAULT_TTL_SEC = 86400.0
@@ -122,7 +123,7 @@ def build_ai_task_record(task_id: str, task_status: dict[str, Any]) -> dict[str,
 
 
 def register_ai_task(task_id: str, task_status: dict[str, Any]) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
     rec = build_ai_task_record(task_id, task_status)
     if rec is None:
@@ -132,13 +133,13 @@ def register_ai_task(task_id: str, task_status: dict[str, Any]) -> None:
 
 
 def remove_ai_task(task_id: str) -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
     remove_ai_task_redis_sync(task_id)
 
 
 def get_ai_task_record(task_id: str) -> dict[str, Any] | None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return None
     rec = read_ai_task_redis_sync(task_id)
     if not rec or _is_stale(rec):

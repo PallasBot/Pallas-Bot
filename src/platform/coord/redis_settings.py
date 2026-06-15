@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from src.foundation.config.repo_settings import repo_env_raw_value, repo_root
+from src.platform.shard import context as shard_ctx
 
 _CLAIM_TTL_SEC = 86400
 
@@ -75,9 +76,8 @@ def clear_coord_redis_settings_cache() -> None:
 
 
 def sharding_requires_coord_redis() -> bool:
-    from src.platform.shard.registry.config import is_sharding_active
 
-    return is_sharding_active()
+    return shard_ctx.sharding_active()
 
 
 def ensure_coord_redis_ready_for_sharding() -> None:

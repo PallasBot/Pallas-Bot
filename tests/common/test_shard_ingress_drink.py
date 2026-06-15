@@ -42,7 +42,7 @@ def test_drink_fanout_policy_commands(monkeypatch) -> None:
 
 def test_ingress_fanout_whitelist_does_not_need_drink(monkeypatch) -> None:
     from src.platform.ingress.config import clear_ingress_fanout_config_cache
-    from src.platform.shard.ingress_fanout import is_ingress_fanout_plaintext
+    from src.platform.ingress.fanout_bypass import is_ingress_fanout_plaintext
 
     _stub_drink_plugin(monkeypatch)
     monkeypatch.setattr(

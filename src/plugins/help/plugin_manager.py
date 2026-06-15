@@ -53,10 +53,10 @@ def _disabled_gate_key(bot_id: int | None, group_id: int | None) -> tuple[int | 
 
 
 def _pg_not_ready() -> bool:
-    from src.foundation.db import get_db_backend
     from src.foundation.db.repository_pg import is_pg_initialized
+    from src.foundation.db.runtime import is_postgresql_backend
 
-    return get_db_backend() == "postgresql" and not is_pg_initialized()
+    return is_postgresql_backend() and not is_pg_initialized()
 
 
 def plugin_display_name(plugin: Any) -> str:

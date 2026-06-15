@@ -414,10 +414,13 @@ def test_build_payload_roster_qq_only(monkeypatch):
     assert payload["roster_show_profile"] is False
 
 
-def test_config_roster_public_default_false(monkeypatch):
-    monkeypatch.delenv("PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC", raising=False)
+def test_config_roster_public_default_profile_on(monkeypatch):
+    monkeypatch.setattr("src.features.community_stats.config.repo_env_raw_value", lambda _key: None)
     cfg_mod.clear_community_stats_config_cache()
-    assert cfg_mod.get_community_stats_config().roster_public is False
+    cfg = cfg_mod.get_community_stats_config()
+    assert cfg.roster_public_qq is False
+    assert cfg.roster_public_profile is True
+    assert cfg.roster_public is True
 
 
 def test_config_roster_public_enabled(monkeypatch):

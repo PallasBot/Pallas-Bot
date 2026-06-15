@@ -23,7 +23,7 @@ from src.features.message_scrub.quiet_http_loggers import scrub_http_log_noise
 from src.foundation.bot_version import get_pallas_bot_version_for_reporting
 from src.platform.bot_runtime.roles import is_sharded_worker
 from src.platform.multi_bot.fleet import get_catalog_bot_ids
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.registry.store import get_shard_registry, is_test_shard_record
 
 _HTTP_TIMEOUT_SEC = 15.0
@@ -42,7 +42,7 @@ def build_heartbeat_payload(*, show_qq_by_account: dict[int, bool] | None = None
     cfg = get_community_stats_config()
     online_bots = count_connected_bots_for_reporting()
     catalog_bots = len(get_catalog_bot_ids())
-    sharded = is_sharding_active()
+    sharded = shard_ctx.sharding_active()
     shard_workers = 0
     if sharded:
         reg = get_shard_registry()

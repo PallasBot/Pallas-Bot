@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from typing import Any
 
+from src.platform.shard import context as shard_ctx
+
 _COUNTERS = (
     "events",
     "early_fleet",
@@ -37,9 +39,8 @@ def should_record_ingress_metrics(bot_id: int) -> bool:
     """分片 worker 仅代表牛记数；unified 仅最小 QQ 记数，避免多连接重复放大。"""
     from src.platform.multi_bot.fleet import get_fleet_bot_ids
     from src.platform.shard.local_representative import is_local_worker_representative
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         fleet = get_fleet_bot_ids()
         if not fleet:
             return True

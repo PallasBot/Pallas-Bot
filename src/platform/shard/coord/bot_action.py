@@ -13,13 +13,13 @@ from nonebot import logger
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from nonebot.adapters.onebot.v11.exception import ActionFailed
 
+from src.platform.shard import context as shard_ctx
 from src.platform.shard.coord.coord_redis_store import (
     coord_key,
     mutate_json_sync,
     read_json_sync,
     store_json_sync,
 )
-from src.platform.shard.registry.config import is_sharding_active
 
 _POLL_SEC = 0.08
 _STALE_SEC = 180.0
@@ -221,7 +221,7 @@ async def invoke_bot_action(
     qq = int(bot_qq)
     if bot_has_local_connection(qq):
         return await _execute_local(action, qq, payload)
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return False, None
     if not bot_has_cluster_connection(qq):
         logger.debug(f"bot_action skip: qq={qq} action={action} not connected in cluster")
@@ -446,9 +446,8 @@ async def bot_action_redis_listen_loop() -> None:
 def start_bot_action_redis_listener() -> None:
     global _listener_started
     from src.platform.coord.redis_settings import coord_redis_enabled
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if _listener_started or not is_sharding_active() or not coord_redis_enabled():
+    if _listener_started or not shard_ctx.sharding_active() or not coord_redis_enabled():
         return
     _listener_started = True
     asyncio.create_task(bot_action_redis_listen_loop())

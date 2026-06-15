@@ -53,10 +53,10 @@ def shard_log_stem_in_registry_use(reg: Any, shard: Any) -> bool:
 def registry_worker_log_stems() -> frozenset[str] | None:
     """分片开启时：注册表内已挂牛的 worker 日志 stem；未开分片返回 None。"""
     try:
-        from src.platform.shard.registry.config import is_sharding_active
+        from src.platform.shard import context as shard_ctx
         from src.platform.shard.registry.store import get_shard_registry
 
-        if not is_sharding_active():
+        if not shard_ctx.sharding_active():
             return None
         reg = get_shard_registry()
         stems: set[str] = set()
