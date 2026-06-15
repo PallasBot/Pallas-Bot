@@ -13,6 +13,7 @@ from nonebot.params import CommandArg
 from nonebot.permission import SUPERUSER
 
 from src.features.cmd_perm import group_message_permission_for_command
+from src.features.command_limits import get_command_cooldown_sec
 from src.features.message_scrub import is_message_scrub_blocked_async
 from src.features.message_scrub.log_preview import scrub_intercept_log_preview
 from src.foundation.config import GroupConfig
@@ -169,7 +170,7 @@ def draw_should_count_usage(group_id: int, user_id: int) -> bool:
 
 async def draw_group_cooldown_ready(group_id: int) -> bool:
     """仅检查群冷却是否已过，不扣减。"""
-    seconds = image_gen_config.draw_command_cooldown
+    seconds = get_command_cooldown_sec("draw.draw", image_gen_config.draw_command_cooldown) or 0
     if seconds <= 0:
         return True
     gconf = GroupConfig(group_id, cooldown=seconds)
@@ -178,7 +179,7 @@ async def draw_group_cooldown_ready(group_id: int) -> bool:
 
 async def consume_draw_group_cooldown(group_id: int) -> None:
     """真正开始画画时扣减群冷却。"""
-    seconds = image_gen_config.draw_command_cooldown
+    seconds = get_command_cooldown_sec("draw.draw", image_gen_config.draw_command_cooldown) or 0
     if seconds <= 0:
         return
     gconf = GroupConfig(group_id, cooldown=seconds)
@@ -187,7 +188,7 @@ async def consume_draw_group_cooldown(group_id: int) -> None:
 
 async def refund_draw_group_cooldown(group_id: int) -> None:
     """画画未成功出图时退还群冷却。"""
-    seconds = image_gen_config.draw_command_cooldown
+    seconds = get_command_cooldown_sec("draw.draw", image_gen_config.draw_command_cooldown) or 0
     if seconds <= 0:
         return
     gconf = GroupConfig(group_id, cooldown=seconds)
@@ -297,7 +298,7 @@ async def pallas_draw_handle(bot: Bot, event: GroupMessageEvent, args: Message =
             message_at_user(user_id, "牛牛正在给其他小伙伴画画，请稍后再试。"),
         )
 
-    cheer_gate = image_gen_config.draw_command_cooldown
+    cheer_gate = get_command_cooldown_sec("draw.draw", image_gen_config.draw_command_cooldown) or 0
     if not await try_begin_group_owned_gate("draw", group_id, bot_id, gate_sec=cheer_gate):
         return
     await consume_draw_group_cooldown(group_id)

@@ -5,12 +5,10 @@ from nonebot.internal.adapter import Event
 from nonebot.permission import Permission
 
 from src.features.cmd_perm import satisfies_command_permission
-from src.foundation.config import GroupConfig
+from src.features.command_limits import is_command_cooldown_ready, refresh_command_cooldown
 from src.shared.service_probe import format_probe_text
 
 from .probe_collect import probe_all_connectivity
-
-CONNECTIVITY_COOLDOWN_KEY = "connectivity_probe_command"
 
 
 def connectivity_message_permission() -> Permission:
@@ -52,10 +50,9 @@ async def run_connectivity_probe(matcher) -> None:
 
 async def handle_connectivity_probe(event: MessageEvent, matcher) -> None:
     if isinstance(event, GroupMessageEvent):
-        config = GroupConfig(event.group_id, cooldown=3)
-        if not await config.is_cooldown(CONNECTIVITY_COOLDOWN_KEY):
+        if not await is_command_cooldown_ready(event, "connectivity.probe"):
             return
-        await config.refresh_cooldown(CONNECTIVITY_COOLDOWN_KEY)
+        await refresh_command_cooldown(event, "connectivity.probe")
     await run_connectivity_probe(matcher)
 
 

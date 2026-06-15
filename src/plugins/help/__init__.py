@@ -12,6 +12,7 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_BOTH, SCENE_GROUP, join_usage, usage_line
+from src.features.command_limits import is_command_cooldown_ready, refresh_command_cooldown
 from src.foundation.command_prefix import matches_command_prefix
 from src.foundation.config import BotConfig, GroupConfig
 
@@ -64,6 +65,9 @@ __plugin_meta__ = PluginMetadata(
             {"id": "help.plugin_disable", "label": "牛牛关闭（单插件）", "default": "staff"},
             {"id": "help.plugin_enable_all", "label": "牛牛开启全部功能", "default": "staff"},
             {"id": "help.plugin_disable_all", "label": "牛牛关闭全部功能", "default": "staff"},
+        ],
+        "command_limits": [
+            {"id": "help.help", "cd_sec": 3},
         ],
         "menu_data": [
             {
@@ -168,11 +172,10 @@ plugin_disable_all_cmd = on_command(
 async def handle_help_cmd(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
     """处理帮助命令"""
     if isinstance(event, GroupMessageEvent):
-        config = GroupConfig(event.group_id, cooldown=3)
-        if not await config.is_cooldown(HELP_COOLDOWN_KEY):
+        if not await is_command_cooldown_ready(event, "help.help"):
             await help_cmd.finish()
             return
-        await config.refresh_cooldown(HELP_COOLDOWN_KEY)
+        await refresh_command_cooldown(event, "help.help")
 
     await handle_help_command(bot, event, state, plugin_config, AVAILABLE_STYLES, DEFAULT_STYLE_NAME, help_cmd)
 

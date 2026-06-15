@@ -52,6 +52,7 @@
 | 文档 | 说明 |
 | --- | --- |
 | [命令权限 cmd_perm](common/cmd_perm/README.md) | 帮助菜单「何人可用」 |
+| [命令冷却 command_limits](common/command_limits/README.md) | 统一 CD helper |
 | [WebUI 配置热重载](common/webui/README.md) | `install_hot_reload_config` |
 | [WebUI API 契约](common/webui/api/README.md) | `/pallas/api` 分域说明 |
 | [消息审查 message_scrub](common/message_scrub/README.md) | 复读/做梦入站过滤 |

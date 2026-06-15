@@ -22,6 +22,7 @@
 | [插件目录约定](../architecture/plugin-convention.md) | `src/plugins/*` 组织规范 |
 | [站点定制](../architecture/site-customization-and-updates.md) | `local/plugins`、更新策略 |
 | [命令权限 cmd_perm](../common/cmd_perm/README.md) | 帮助「何人可用」与 WebUI 覆盖 |
+| [命令冷却 command_limits](../common/command_limits/README.md) | 统一 CD helper |
 | [WebUI 插件配置](../common/webui/README.md) | `install_hot_reload_config` |
 | [消息审查 message_scrub](../common/message_scrub/README.md) | 复读/做梦入站过滤 |
 

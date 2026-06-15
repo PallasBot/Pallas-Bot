@@ -46,7 +46,7 @@ my_plugin/
 | features | `src.features.cmd_perm` | 命令权限、帮助 metadata 工具 |
 | features | `src.features.message_scrub` | 复读/做梦等入站过滤登记 |
 | features | `src.features.community_stats` | 在线统计（按需） |
-| features | `src.features.corpus` | 语料联邦（按需） |
+| features | `src.features.command_limits` | 命令 CD（`cmd_limit:{id}`） |
 | console | `src.console.webui` | `install_hot_reload_config` |
 | foundation | `src.foundation.paths` | `plugin_data_dir`、`resource_dir` |
 | foundation | `src.foundation.config` | `BotConfig` / `GroupConfig`（群级冷却等） |

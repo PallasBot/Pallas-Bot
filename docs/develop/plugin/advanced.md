@@ -36,6 +36,20 @@ await satisfies_command_permission(bot, event, "my_plugin.action")
 
 完整字段与自检清单：[cmd_perm 接入说明](../../common/cmd_perm/README.md)
 
+## 命令冷却（command_limits）
+
+高频命令在 `cmd_perm` 通过后，用统一 helper 做群级 / 私聊级 CD，存储 key 为 `cmd_limit:{command_id}`：
+
+```python
+from src.features.command_limits import is_command_cooldown_ready, refresh_command_cooldown
+
+if not await is_command_cooldown_ready(event, "my_plugin.demo", 10):
+    return
+await refresh_command_cooldown(event, "my_plugin.demo", 10)
+```
+
+可在 `PluginMetadata.extra["command_limits"]` 声明默认 CD（与 `command_permissions` 并列）。详见 [command_limits](../../common/command_limits/README.md)。
+
 ## WebUI 配置热重载
 
 控制台通过 `data/pallas_config/webui.json` 统一读写插件配置。
@@ -72,6 +86,7 @@ get_config = plugin_webui.get
 | foundation | `src.foundation.paths` | `data/`、`resource/` 路径 |
 | foundation | `src.foundation.db` | 数据库 repository |
 | features | `src.features.cmd_perm` | 命令权限 |
+| features | `src.features.command_limits` | 命令冷却 |
 | features | `src.features.message_scrub` | 入站审查 |
 | console | `src.console.webui` | 控制台配置热重载 |
 | platform | `src.platform.shard` | 分片 presence、协调 |

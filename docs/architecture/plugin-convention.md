@@ -58,6 +58,7 @@
 
 - 需在 WebUI 保存 **`webui.json`** 后立即生效的插件配置：在 `config.py` 使用 `src.console.webui.install_hot_reload_config`（见 [WebUI 插件配置](../common/webui/README.md)）；已有自定义缓存的插件可登记到 `plugin_webui_registry`（如决斗插件）。
 - 可配置命令权限：在 `PluginMetadata.extra` 声明 `command_permissions`，matcher 使用 `src.features.cmd_perm.permission_for_command`（见 [cmd_perm](../common/cmd_perm/README.md)）。
+- 命令冷却：在 handler 内使用 `src.features.command_limits`（见 [command_limits](../common/command_limits/README.md)）；可在 `extra["command_limits"]` 声明默认 CD 供文档与后续扩展。
 
 ### 命令权限与帮助文案（cmd_perm）
 

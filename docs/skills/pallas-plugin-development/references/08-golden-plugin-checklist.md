@@ -35,5 +35,5 @@
 
 ## 可选增强
 
-- [ ] 需 CD 时已用 `GroupConfig` / `BotConfig`，`action_type` 命名清晰
+- [ ] 需 CD 时已用 `src.features.command_limits`（或 `GroupConfig` / `BotConfig`），key 与 `command_id` 一致
 - [ ] 多牛 / 分片部署已读 [central-ingress-dispatch](../../architecture/central-ingress-dispatch.md)、[bot_process_sharding](../../architecture/bot_process_sharding.md)

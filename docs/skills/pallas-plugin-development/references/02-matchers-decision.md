@@ -76,18 +76,32 @@ chat = on_message(rule=to_me(), priority=99, block=False)
 
 ## 2.6 冷却（CD）
 
-Pallas 在 `src.foundation.config` 提供 **`GroupConfig` / `BotConfig` 冷却**，在 handler 内显式检查：
+Pallas 提供 **`src.features.command_limits`**，在 `GroupConfig` / `BotConfig` 之上统一冷却 key（`cmd_limit:{command_id}`）。
+
+### metadata 声明（推荐）
 
 ```python
-from src.foundation.config import GroupConfig
-
-config = GroupConfig(group_id=event.group_id, cooldown=10)
-if not await config.is_cooldown("my_action"):
-    return
-await config.refresh_cooldown("my_action")
+extra={
+    "command_limits": [
+        {"id": "my_plugin.demo", "cd_sec": 10},
+    ],
+}
 ```
 
-仓库内示例：`chat`、`drink`、`bot_status`、`greeting`。`action_type` 建议用插件内语义化 key，避免与其它插件冲突。
+### handler 内检查
+
+```python
+from src.features.command_limits import is_command_cooldown_ready, refresh_command_cooldown
+
+if not await is_command_cooldown_ready(event, "my_plugin.demo", 10):
+    return
+await refresh_command_cooldown(event, "my_plugin.demo", 10)
+```
+
+- 群消息：按群冷却（`GroupConfig`）
+- 私聊：按 Bot + 用户（`BotConfig`）
+
+详见 [command_limits 说明](../../common/command_limits/README.md)。历史插件仍可直接用 `GroupConfig.is_cooldown`；新插件优先用上述 helper 保持 key 一致。
 
 ## 2.7 分片与多牛（进阶）
 
