@@ -2,6 +2,8 @@
 
 控制台插件页与通用配置写入 `data/pallas_config/webui.json`（**WebUI 落盘优先级最高**）。详情：[webui/README.md](../../common/webui/README.md)。
 
+后端 REST 契约（路径、鉴权、写操作）：[webui/api/README.md](../../common/webui/api/README.md) · 插件配置域 [02-plugins.md](../../common/webui/api/02-plugins.md)。
+
 ## 4.1 标准接入
 
 ```python
