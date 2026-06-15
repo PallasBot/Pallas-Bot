@@ -19,6 +19,7 @@ from src.platform.multi_bot.group_online_cache import (
     resolve_local_connected_bots_in_group,
     store_cached_group_bot_ids,
 )
+from src.platform.shard import context as shard_ctx
 from src.plugins.block import is_fleet_bot_qq
 
 if TYPE_CHECKING:
@@ -164,9 +165,8 @@ async def resolve_shard_group_online_bot_ids(group_id: int) -> list[int]:
     """分片：解析本群可用 fleet 牛（无进程内 TTL 缓存）。"""
     from src.platform.multi_bot.fleet import get_catalog_bot_ids
     from src.platform.shard.presence import get_cluster_online_bot_ids, pick_local_query_bot
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return await resolve_unified_group_online_bot_ids(group_id)
 
     caller = pick_local_query_bot()

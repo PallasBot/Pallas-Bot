@@ -12,6 +12,7 @@ from src.foundation.config import BotConfig
 from src.foundation.db import Answer
 from src.foundation.db.context_repo_access import context_repo
 from src.foundation.db.pool_budget import is_pg_pool_timeout_error, pg_pool_under_pressure
+from src.platform.shard import context as shard_ctx
 
 from .ban_manager import BanManager
 from .config import get_repeater_config
@@ -60,9 +61,8 @@ class Responder:
     @staticmethod
     def _repeat_ignore_user_ids() -> set[int]:
         from src.platform.multi_bot.fleet import get_catalog_bot_ids
-        from src.platform.shard.registry.config import is_sharding_active
 
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             ids = set(get_catalog_bot_ids())
         else:
             ids = {int(b.self_id) for b in get_bots().values()}
@@ -77,12 +77,10 @@ class Responder:
     @staticmethod
     def should_skip_context_lookup(chat_data: "ChatData", keywords: str) -> bool:
         if getattr(chat_data, "is_plain_text", False):
-            from src.platform.shard.registry.config import is_sharding_active
-
             if getattr(chat_data, "to_me", False):
                 return False
             plain = str(getattr(chat_data, "plain_text", "") or "").strip()
-            if is_sharding_active():
+            if shard_ctx.sharding_active():
                 return not plain
             keywords_len = int(getattr(chat_data, "keywords_len", 0) or 0)
             if keywords_len == 0:
@@ -112,9 +110,7 @@ class Responder:
         """
         # 不回复太短的对话，大部分是“？”、“草”
         if chat_data.is_plain_text and len(chat_data.plain_text) < 2:
-            from src.platform.shard.registry.config import is_sharding_active
-
-            if not is_sharding_active():
+            if not shard_ctx.sharding_active():
                 return None
 
         from .message_store import MessageStore

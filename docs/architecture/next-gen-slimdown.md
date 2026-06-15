@@ -18,15 +18,15 @@
 | ai_task 单层 | `ai_task_registry_redis` 并入 `ai_task_registry` |
 | coord 快照脚本 | `prune_shard_coord.py` → `shard_coord_snapshot.py` |
 
-## Phase 3 — 插件代码瘦身（当前可开工）
+## Phase 3 — 插件代码瘦身（进行中）
 
 **原则**：unified 路径为默认实现；分片分支用薄适配层，避免每插件复制 ingress/coord 逻辑。
 
-| 优先级 | 范围 | 方向 |
+| 优先级 | 范围 | 状态 |
 | --- | --- | --- |
-| P0 | `help`、`repeater`、`bot_status` | `help`/`repeater`/`bot_status` 已迁 `shard.context`；报数逻辑抽出 `shard_count.py` |
-| P1 | `duel`、`dream`、`who_is_spy` | 统一走 `group_activity` / `hosted_activity`；删 per-game 薄封装 |
-| P2 | 其余含 `is_sharding_active` 的插件（约 30 处） | 迁到 `shard.context` + 少量 hook |
+| P0 | `help`、`repeater`、`bot_status` | 已迁 `shard.context`；`bot_status` 抽出 `shard_count.py` / `list_mode.py`；`repeater` 全模块完成 |
+| P1 | `duel`、`dream`、`who_is_spy` | `duel` 抽出 `shard_cage.py`；`dream` 抽出 `shard_fleet.py`；`who_is_spy` 已走 `hosted_activity_ingress` |
+| P2 | 其余含 `is_sharding_active` 的插件（约 30 处） | 待迁 `shard.context` + 少量 hook |
 | P3 | `ingress_gate` 插件本体 | 仅保留 worker/unified 必需逻辑；hub 路径再瘦身 |
 
 每插件 PR：**行为不变**为前提，先补/跑 shard 相关测试再删分支。

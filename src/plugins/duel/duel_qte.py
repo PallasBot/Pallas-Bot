@@ -12,6 +12,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 from nonebot.matcher import Matcher  # noqa: TC002
 from nonebot.rule import Rule
 
+from src.platform.shard import context as shard_ctx
 from src.plugins.block import is_fleet_bot_qq
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_message import (
@@ -80,9 +81,7 @@ def apply_cluster_qte_greeting(gid: str, users: frozenset[str] | None, deadline:
 
 
 def publish_cluster_qte_greeting_if_changed(gid: str, users: frozenset[str], deadline: float) -> None:
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
     snapshot = users or frozenset()
     if _published_greeting_snapshot.get(gid) == snapshot:
@@ -150,9 +149,7 @@ def duel_qte_blocks_greeting_user(group_id: int, user_id: str | int) -> bool:
             return True
         _cluster_qte_users.pop(gid, None)
         _cluster_qte_deadline.pop(gid, None)
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         from src.platform.shard.coord.duel_qte_redis import greeting_user_blocked_redis_sync
 
         if greeting_user_blocked_redis_sync(gid, uid):
@@ -223,9 +220,7 @@ def should_schedule_bot_qte_auto_answer(responder: str) -> bool:
 
 def should_delegate_bot_qte_to_coord(responder: str) -> bool:
     """分片且应答牛在其它 worker：走 Redis 共享 QTE 会话。"""
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return False
     try:
         qq = int(responder)
@@ -239,18 +234,14 @@ def should_delegate_bot_qte_to_coord(responder: str) -> bool:
 
 
 def race_qte_needs_coord(challenger_id: str, defender_id: str) -> bool:
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return False
     return should_delegate_bot_qte_to_coord(challenger_id) or should_delegate_bot_qte_to_coord(defender_id)
 
 
 def bot_race_qte_use_cluster_coord(challenger_id: str, defender_id: str) -> bool:
     """分片下含 fleet 牛的抢答 QTE 统一走 coord，避免主持 worker 本地抢跑。"""
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return False
 
     def fleet(uid: str) -> bool:
@@ -1697,9 +1688,7 @@ def clear_all_duel_qte_sessions() -> int:
     _cluster_qte_users.clear()
     _cluster_qte_deadline.clear()
     _published_greeting_snapshot.clear()
-    from src.platform.shard.registry.config import is_sharding_active
-
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         from src.platform.shard.coord.duel_qte_redis import clear_duel_qte_greeting_redis_sync
 
         for gid in gids:

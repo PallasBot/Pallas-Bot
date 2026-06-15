@@ -139,7 +139,7 @@ def test_duel_qte_blocks_greeting_via_cluster_mirror(monkeypatch) -> None:
     qte_mod._active_qte_groups.clear()
     qte_mod._active_qte_users_by_group.clear()
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.platform.shard.context.is_sharding_active",
         lambda: True,
     )
     monkeypatch.setattr(
@@ -157,7 +157,7 @@ def test_duel_qte_blocks_greeting_via_cluster_mirror(monkeypatch) -> None:
 
 def test_bot_race_qte_use_cluster_coord_when_sharding(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.plugins.duel.duel_qte.shard_ctx.sharding_active",
         lambda: True,
     )
     monkeypatch.setattr(
@@ -168,7 +168,7 @@ def test_bot_race_qte_use_cluster_coord_when_sharding(monkeypatch) -> None:
     assert qte_mod.bot_race_qte_use_cluster_coord("2136204582", "3257801645") is True
     assert qte_mod.bot_race_qte_use_cluster_coord("2964163468", "2136204582") is True
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.plugins.duel.duel_qte.shard_ctx.sharding_active",
         lambda: False,
     )
     assert qte_mod.bot_race_qte_use_cluster_coord("2136204582", "3257801645") is False
