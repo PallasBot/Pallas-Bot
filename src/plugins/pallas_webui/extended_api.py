@@ -1447,6 +1447,7 @@ async def flush_unified_console_live_stats_async(*, include_hist: bool = False) 
 
 
 def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None:
+    from src.platform.ingress.dispatch_metrics import dispatch_metrics_snapshot as ingress_dispatch_metrics_snapshot
     from src.platform.shard.console_stats import process_memory_snapshot, write_worker_stats_sync
     from src.platform.shard.coord_pending import coord_pending_snapshot_sync
     from src.platform.shard.ingress_metrics import ingress_metrics_snapshot
@@ -1471,6 +1472,7 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
         preserve_matcher_hist=not include_hist,
         worker_meta={
             "ingress": ingress_metrics_snapshot(),
+            "ingress_dispatch": ingress_dispatch_metrics_snapshot(),
             "repeater_ingress": repeater_ingress_metrics_snapshot(),
             "coord_pending": coord_pending_snapshot_sync(),
             "process_memory": process_memory_snapshot(),
@@ -4250,6 +4252,16 @@ def register_extended_api(
             return aggregate_shard_observability()
 
         data = await cached_read(key="shard-observability", loader=_load, ttl_sec=2.0, stale_sec=8.0)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/ingress-dispatch", include_in_schema=True)
+    async def _ingress_dispatch_metrics() -> JSONResponse:
+        from src.platform.shard.dispatch_observability import aggregate_ingress_dispatch
+
+        async def _load() -> dict[str, Any]:
+            return aggregate_ingress_dispatch()
+
+        data = await cached_read(key="ingress-dispatch", loader=_load, ttl_sec=2.0, stale_sec=8.0)
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/message-stats", include_in_schema=True)

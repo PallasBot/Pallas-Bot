@@ -19,6 +19,7 @@ from src.platform.bot_runtime.roles import (
     HUB_PLUGIN_MODULES,
     UNIFIED_SKIP_PLUGIN_NAMES,
     WORKER_SKIP_PLUGIN_NAMES,
+    is_hub_role,
     is_unified_role,
 )
 
@@ -218,6 +219,11 @@ def load_pyproject_extra_plugins(
 
 
 def load_plugins_for_role() -> None:
+    from src.platform.bot_runtime.ingress_dispatch_runtime import register_ingress_dispatch_runtime
+
+    if not is_hub_role():
+        register_ingress_dispatch_runtime()
+
     if is_unified_role():
         loaded_short: set[str] = set()
         load_apscheduler_plugin_first(role_label="unified", loaded_short=loaded_short)
@@ -260,8 +266,6 @@ def load_plugins_for_role() -> None:
     if not _PLUGINS_ROOT.is_dir():
         nonebot.load_from_toml("pyproject.toml")
         return
-
-    from src.platform.bot_runtime.roles import is_hub_role
 
     loaded_short: set[str] = set()
 

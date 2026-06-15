@@ -186,6 +186,41 @@ def _ingress_fanout_section() -> WebuiEnvSection:
     )
 
 
+def _ingress_dispatch_section() -> WebuiEnvSection:
+    from src.platform.ingress.dispatch_runtime_config import (
+        IngressDispatchRuntimeConfig,
+        get_ingress_dispatch_runtime_config,
+    )
+
+    return WebuiEnvSection(
+        id="ingress_dispatch",
+        title="中央入站调度",
+        module_label="src.platform.ingress",
+        model_cls=IngressDispatchRuntimeConfig,
+        read_current=get_ingress_dispatch_runtime_config,
+        field_to_env={
+            "matcher_dispatch_enabled": "PALLAS_MATCHER_DISPATCH_ENABLED",
+            "matcher_dispatch_overload_threshold": "PALLAS_MATCHER_DISPATCH_OVERLOAD_THRESHOLD",
+            "route_index_enabled": "PALLAS_ROUTE_INDEX_ENABLED",
+            "route_index_strict": "PALLAS_ROUTE_INDEX_STRICT",
+            "dispatch_lanes_enabled": "PALLAS_DISPATCH_LANES_ENABLED",
+            "lane_acquire_timeout_sec": "PALLAS_LANE_ACQUIRE_TIMEOUT_SEC",
+            "lane_wait_overload_ms": "PALLAS_LANE_WAIT_OVERLOAD_MS",
+            "lane_busy_reply": "PALLAS_LANE_BUSY_REPLY",
+            "lane_command": "PALLAS_LANE_COMMAND",
+            "lane_chat": "PALLAS_LANE_CHAT",
+            "lane_storage": "PALLAS_LANE_STORAGE",
+            "lane_remote": "PALLAS_LANE_REMOTE",
+            "send_queue_enabled": "PALLAS_SEND_QUEUE_ENABLED",
+            "send_queue_workers": "PALLAS_SEND_QUEUE_WORKERS",
+            "send_queue_max_depth": "PALLAS_SEND_QUEUE_MAX_DEPTH",
+            "send_queue_min_interval_ms": "PALLAS_SEND_QUEUE_MIN_INTERVAL_MS",
+            "send_queue_enqueue_timeout_sec": "PALLAS_SEND_QUEUE_ENQUEUE_TIMEOUT_SEC",
+        },
+        skip_fields=frozenset(),
+    )
+
+
 def _repeater_learn_section() -> WebuiEnvSection:
     from src.plugins.repeater.learn_runtime_config import (
         RepeaterLearnRuntimeConfig,
@@ -234,6 +269,8 @@ def _registered_sections() -> tuple[WebuiEnvSection, ...]:
         parts.append(_control_plane_section())
     if (SRC_ROOT / "platform" / "ingress" / "config.py").is_file():
         parts.append(_ingress_fanout_section())
+    if (SRC_ROOT / "platform" / "ingress" / "dispatch_runtime_config.py").is_file():
+        parts.append(_ingress_dispatch_section())
     repeater_learn_cfg = PROJECT_ROOT / "src" / "plugins" / "repeater" / "learn_runtime_config.py"
     if repeater_learn_cfg.is_file():
         parts.append(_repeater_learn_section())
@@ -275,6 +312,7 @@ _COMMON_CONFIG_SECTION_ORDER: tuple[str, ...] = (
     "corpus_federation",
     "community_stats",
     "ingress_fanout",
+    "ingress_dispatch",
     "repeater_learn",
     "message_scrub",
     "service_gateways",
@@ -391,7 +429,54 @@ def webui_env_section_payload(
         base.update(_cmd_perm_payload_extras(perm_src))
     elif section_id == "pallas_webui":
         base.update(_pallas_webui_payload_extras())
+    elif section_id == "ingress_dispatch":
+        base.update(_ingress_dispatch_payload_extras())
     return base
+
+
+def _ingress_dispatch_payload_extras() -> dict[str, Any]:
+    return {
+        "field_groups": [
+            {
+                "id": "matcher",
+                "title": "消息预筛选",
+                "field_names": [
+                    "matcher_dispatch_enabled",
+                    "matcher_dispatch_overload_threshold",
+                ],
+            },
+            {
+                "id": "route_index",
+                "title": "口令路由索引",
+                "field_names": ["route_index_enabled", "route_index_strict"],
+            },
+            {
+                "id": "lanes",
+                "title": "并发档位限流",
+                "field_names": [
+                    "dispatch_lanes_enabled",
+                    "lane_acquire_timeout_sec",
+                    "lane_wait_overload_ms",
+                    "lane_busy_reply",
+                    "lane_command",
+                    "lane_chat",
+                    "lane_storage",
+                    "lane_remote",
+                ],
+            },
+            {
+                "id": "send_queue",
+                "title": "出站整形",
+                "field_names": [
+                    "send_queue_enabled",
+                    "send_queue_workers",
+                    "send_queue_max_depth",
+                    "send_queue_min_interval_ms",
+                    "send_queue_enqueue_timeout_sec",
+                ],
+            },
+        ],
+    }
 
 
 def _pallas_webui_payload_extras() -> dict[str, Any]:
@@ -486,6 +571,17 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             from src.platform.ingress.config import clear_ingress_fanout_config_cache
 
             clear_ingress_fanout_config_cache()
+        except Exception:
+            pass
+    elif section_id == "ingress_dispatch":
+        try:
+            from src.platform.ingress.dispatch_lanes import clear_dispatch_lanes_cache
+            from src.platform.ingress.dispatch_runtime_config import clear_ingress_dispatch_runtime_config_cache
+            from src.platform.ingress.route_index import clear_route_index_cache
+
+            clear_ingress_dispatch_runtime_config_cache()
+            clear_dispatch_lanes_cache()
+            clear_route_index_cache()
         except Exception:
             pass
     elif section_id == "repeater_learn":

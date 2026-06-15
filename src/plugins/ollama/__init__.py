@@ -22,6 +22,7 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "ingress_route": {"lane": "remote"},
         "help_aliases": ["牛牛聊天"],
         "command_permissions": [
             {"id": "ollama.chat", "label": "随时闲聊", "default": "everyone"},

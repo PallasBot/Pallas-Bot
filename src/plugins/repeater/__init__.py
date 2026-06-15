@@ -54,6 +54,7 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "ingress_route": {"lane": "storage", "passive": True},
         "command_permissions": [
             {"id": "repeater.ban", "label": "复读「不可以」", "default": "staff"},
             {"id": "repeater.ban_latest", "label": "复读「不可以发这个」", "default": "staff"},
@@ -418,8 +419,12 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 
 @scheduler.scheduled_job("interval", seconds=60)
 async def speak_up():
+    from src.platform.ingress.message_load import should_pause_tasks
+
     from .shard_opt import repeater_scheduler_runs_on_worker
 
+    if should_pause_tasks():
+        return
     if not repeater_scheduler_runs_on_worker():
         return
     ret = await Chat.speak()

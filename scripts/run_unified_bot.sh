@@ -121,9 +121,17 @@ status_bot() {
   echo "日志 ${LOG_FILE}"
 }
 
+observability_bot() {
+  if ! is_running; then
+    echo "unified 未运行，无法读取 dispatch 指标" >&2
+    return 1
+  fi
+  uv run python "${SCRIPT_DIR}/ingress_dispatch_status.py"
+}
+
 usage() {
   cat <<EOF
-用法: $0 {start|stop|restart|status} [选项]
+用法: $0 {start|stop|restart|status|observability} [选项]
 
 选项:
   --skip-port-sync   启动前不同步协议端 ws_url
@@ -134,7 +142,7 @@ EOF
 cmd=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    start|stop|restart|status) cmd="$1"; shift ;;
+    start|stop|restart|status|observability) cmd="$1"; shift ;;
     --skip-port-sync) SKIP_PORT_SYNC=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *)
@@ -151,8 +159,9 @@ case "${cmd}" in
   stop) stop_bot ;;
   restart) stop_bot; start_bot ;;
   status) status_bot ;;
+  observability) observability_bot ;;
   *)
-    echo "用法: $0 {start|stop|restart|status}" >&2
+    echo "用法: $0 {start|stop|restart|status|observability}" >&2
     exit 1
     ;;
 esac

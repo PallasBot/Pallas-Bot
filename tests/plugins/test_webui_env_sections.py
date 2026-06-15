@@ -12,6 +12,29 @@ _MS_CFG = (
 skip_no_message_scrub = pytest.mark.skipif(not _MS_CFG.is_file(), reason="无 message_scrub 配置模块")
 
 
+def test_list_webui_env_sections_contains_ingress_dispatch():
+    from src.console.webui import list_webui_env_sections
+    from src.console.webui.env_sections import clear_webui_env_sections_cache
+
+    clear_webui_env_sections_cache()
+    rows = list_webui_env_sections()
+    assert any(r["id"] == "ingress_dispatch" for r in rows)
+
+
+def test_ingress_dispatch_section_payload_has_field_groups():
+    from src.console.webui import webui_env_section_payload
+    from src.console.webui.env_sections import clear_webui_env_sections_cache
+
+    clear_webui_env_sections_cache()
+    data = webui_env_section_payload("ingress_dispatch")
+    assert data["plugin"] == "ingress_dispatch"
+    groups = data.get("field_groups") or []
+    assert len(groups) >= 4
+    field_names = {f["name"] for f in data["fields"]}
+    assert "matcher_dispatch_enabled" in field_names
+    assert "send_queue_max_depth" in field_names
+
+
 @skip_no_message_scrub
 def test_list_webui_env_sections_contains_control_plane():
     from src.console.webui import list_webui_env_sections

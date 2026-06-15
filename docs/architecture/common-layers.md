@@ -5,7 +5,7 @@
 | 层 | 路径 | 内容 |
 | --- | --- | --- |
 | foundation | `src/foundation/` | `config`、`paths`、`logging`、`db`；`bot_version`、`command_prefix`、`apscheduler_runtime` |
-| platform | `src/platform/` | `shard`、`multi_bot`、`coord`、`federate`、`ingress`、`bot_runtime` |
+| platform | `src/platform/` | `shard`、`multi_bot`、`ingress`（**入站调度基础设施**）、`bot_runtime`（含 `ingress_dispatch_runtime`）、`coord`、`federate` |
 | features | `src/features/` | `cmd_perm`、`message_scrub`、`community_stats`、`corpus`、`control_plane`、`ban_gate` |
 | console | `src/console/` | `webui`、`web` |
 | domain | `src/domain/` | `arknights` 等域共享 |
@@ -23,6 +23,7 @@
 
 ```python
 from src.foundation.config.repo_settings import repo_env_raw_value
+from src.platform.bot_runtime import register_ingress_dispatch_runtime
 from src.platform.multi_bot.dedup import should_skip_group_message
 from src.features.cmd_perm import check_command_permission
 ```

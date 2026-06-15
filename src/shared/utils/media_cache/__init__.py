@@ -26,9 +26,10 @@ def image_capture_worker_count() -> int:
 
 def image_capture_under_load() -> bool:
     from src.foundation.db.pool_budget import pg_pool_under_pressure
+    from src.platform.ingress.message_load import should_pause_tasks
     from src.plugins.repeater.learn_queue import learn_queue_under_pressure
 
-    return pg_pool_under_pressure(threshold=0.15) or learn_queue_under_pressure()
+    return pg_pool_under_pressure(threshold=0.15) or learn_queue_under_pressure() or should_pause_tasks()
 
 
 def image_capture_queue() -> asyncio.Queue[MessageSegment]:

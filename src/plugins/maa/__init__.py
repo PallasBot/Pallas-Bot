@@ -55,6 +55,7 @@ __plugin_meta__ = PluginMetadata(
     supported_adapters={"~onebot.v11"},
     extra={
         "version": "3.0.0",
+        "ingress_route": {"lane": "remote"},
         "command_permissions": [
             {"id": "maa.bind", "label": "牛牛绑定MAA", "default": "everyone"},
             {"id": "maa.control", "label": "MAA 远控指令", "default": "everyone"},
