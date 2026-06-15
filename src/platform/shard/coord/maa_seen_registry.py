@@ -99,8 +99,3 @@ def was_maa_seen_sync(user: str, device: str, ttl: int) -> bool:
         if seen_at > _local_seen.get(key, 0.0):
             _local_seen[key] = seen_at
     return True
-
-
-async def prune_stale_maa_seen_files(*, max_age_sec: float | None = None) -> None:
-    """Redis TTL 自动过期。"""
-    return None

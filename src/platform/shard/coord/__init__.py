@@ -11,8 +11,8 @@ from src.platform.shard.coord.duel_qte import (
     publish_single_qte_request,
     schedule_cross_shard_single_qte,
     single_qte_session_id,
-    start_duel_qte_coord_watcher,
 )
+from src.platform.shard.coord.worker_poll import start_duel_qte_coord_watcher
 
 __all__ = [
     "is_bot_count_fanout_plaintext",

@@ -83,11 +83,6 @@ def _session_ttl(data: dict[str, Any]) -> int:
     return max(120, int(until - time.time()) + _SESSION_TTL_SEC)
 
 
-async def prune_stale_bot_count_files(*, max_age_sec: float = 3600.0) -> int:
-    """Redis TTL 自动过期。"""
-    return 0
-
-
 def _read_session(session_key: str) -> dict[str, Any] | None:
     return read_json_sync(session_key)
 

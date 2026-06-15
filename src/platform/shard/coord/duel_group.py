@@ -56,10 +56,6 @@ def end_duel_group(group_id: int) -> None:
     _LOCK.end(group_id)
 
 
-async def prune_stale_duel_group_files(*, max_age_sec: float = 3600.0) -> int:
-    return 0
-
-
 async def try_reclaim_orphan_duel_group(group_id: int) -> bool:
     from src.plugins.duel.duel_session import get_duel_pair
 

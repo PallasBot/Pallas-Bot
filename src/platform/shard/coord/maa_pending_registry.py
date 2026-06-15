@@ -199,8 +199,3 @@ def pending_type_counts_sync(user: str, *, device: str | None = None) -> dict[st
             if name:
                 counts[name] = counts.get(name, 0) + 1
     return counts
-
-
-async def prune_stale_maa_pending_files(*, max_age_sec: float = 86400.0) -> None:
-    """Redis TTL 自动过期。"""
-    return None

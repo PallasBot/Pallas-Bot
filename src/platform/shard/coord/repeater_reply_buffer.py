@@ -161,11 +161,6 @@ async def ingest_repeater_reply_buffer_event(data: dict[str, Any]) -> None:
     _remember_event(event_id)
 
 
-async def poll_repeater_reply_buffer_pending() -> None:
-    """兼容旧轮询入口；Redis pub/sub 模式下无需文件轮询。"""
-    return None
-
-
 async def repeater_reply_buffer_redis_listen_loop() -> None:
     from src.platform.coord.redis_claim import get_coord_redis_client
     from src.platform.coord.redis_settings import coord_redis_enabled
@@ -222,8 +217,3 @@ def start_repeater_reply_buffer_redis_listener() -> None:
         return
     _redis_listener_started = True
     asyncio.create_task(repeater_reply_buffer_redis_listen_loop())
-
-
-async def prune_stale_repeater_reply_buffer_files() -> None:
-    """Redis 模式下无文件可清理。"""
-    return None

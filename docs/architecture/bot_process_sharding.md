@@ -270,7 +270,7 @@ lock.end(group_id)
 }
 ```
 
-聚合逻辑见 `src/platform/ingress/policy_registry.py`；`fanout_bypass.py` 在 unified / 分片下按 `scope` 过滤。unified 下插件命令（`menu_data.trigger_condition`）仍走 `plugin_command_plaintext`，与 `ingress_fanout` 互补。
+聚合逻辑见 `src/platform/ingress/policy_registry.py`；`fanout_bypass.py` 在 unified / 分片下按 `scope` 过滤。unified 下**未声明** `ingress_fanout` 的插件命令（如唱歌、画画）走 ingress **once-claim**，仅一只牛进 matcher；`plugin_command_plaintext` 仍供复读/帮助等旁路识别，不再整体跳过 claim。
 
 ## Hub 排障
 

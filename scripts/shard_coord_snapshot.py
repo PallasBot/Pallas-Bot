@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""coord 清理脚本（coord 已 Redis 化，本脚本仅输出快照供运维兼容）。"""
+"""coord Redis 键空间快照（coord 已 Redis 化，无文件可清理）。"""
 
 from __future__ import annotations
 

@@ -107,7 +107,7 @@ def test_help_commands_do_not_bypass_when_sharded(monkeypatch: pytest.MonkeyPatc
     assert not ingress_fanout_bypasses_claim("牛牛关闭全部功能")
 
 
-def test_plugin_commands_bypass_once_claim_when_unified(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_plugin_commands_do_not_bypass_once_claim_when_unified(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("PALLAS_SHARD_ENABLED", raising=False)
     monkeypatch.delenv("PALLAS_BOT_ROLE", raising=False)
     from src.platform.shard.registry.config import get_shard_registry_settings
@@ -144,10 +144,10 @@ def test_plugin_commands_bypass_once_claim_when_unified(monkeypatch: pytest.Monk
     )
     clear_plugin_command_plaintext_cache()
 
-    assert ingress_fanout_bypasses_claim("牛牛画画")
-    assert ingress_fanout_bypasses_claim("牛牛唱歌 海阔天空")
-    assert ingress_fanout_bypasses_claim("牛牛MAA状态")
-    assert ingress_fanout_bypasses_claim("牛牛在吗")
+    assert not ingress_fanout_bypasses_claim("牛牛画画")
+    assert not ingress_fanout_bypasses_claim("牛牛唱歌 海阔天空")
+    assert not ingress_fanout_bypasses_claim("牛牛MAA状态")
+    assert not ingress_fanout_bypasses_claim("牛牛在吗")
 
 
 def _stub_plugin_command_plaintext(monkeypatch: pytest.MonkeyPatch) -> None:

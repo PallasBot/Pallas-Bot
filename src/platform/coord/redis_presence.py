@@ -1,4 +1,4 @@
-"""分片 worker 在线状态：Redis HASH（不可用时由 presence.py 回退文件）。"""
+"""分片 worker 在线状态：Redis HASH（单进程可回退文件）。"""
 
 from __future__ import annotations
 
@@ -14,7 +14,10 @@ _FILE_IMPORTED_KEY = "pallas:presence:file_imported"
 def presence_uses_redis_only() -> bool:
     from src.platform.coord.redis_claim import get_coord_redis_client
     from src.platform.coord.redis_settings import coord_redis_enabled
+    from src.platform.shard.registry.config import is_sharding_active
 
+    if is_sharding_active():
+        return True
     return coord_redis_enabled() and get_coord_redis_client() is not None
 
 

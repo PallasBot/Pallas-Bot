@@ -40,6 +40,7 @@
 | [多进程分片](architecture/bot_process_sharding.md) | hub + worker（可选生产部署） |
 | [控制面与语料联邦](architecture/control-plane-corpus-federation.md) | 维护者：架构与阶段说明 |
 | [站点定制与更新](architecture/site-customization-and-updates.md) | local/plugins、更新策略 |
+| [下一世代瘦身路线图](architecture/next-gen-slimdown.md) | unified 为主的分阶段减负（维护者） |
 
 ## 插件
 

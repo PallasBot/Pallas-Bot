@@ -25,14 +25,6 @@ def test_bot_action_request_roundtrip(fake_coord_redis) -> None:
     asyncio.run(run())
 
 
-def test_prune_stale_bot_action_noop(fake_coord_redis) -> None:
-    async def run() -> None:
-        stats = await mod.prune_stale_bot_action_files()
-        assert stats == {"removed_done": 0, "removed_overdue_open": 0, "removed_expired": 0}
-
-    asyncio.run(run())
-
-
 @pytest.mark.asyncio
 async def test_execute_local_repeater_fanout_reply_schedules_background_task(monkeypatch):
     scheduled: list[str | None] = []

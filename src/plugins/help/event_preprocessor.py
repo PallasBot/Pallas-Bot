@@ -52,7 +52,7 @@ async def command_cross_bot_claim_won(
 
     if ingress_fanout_bypasses_claim(text):
         return True
-    # 分片：ingress_gate 已做跨牛 claim，避免 run_preprocessor 二次抢占导致口令无响应。
+    # 显式 fanout / 分片：ingress_gate 已 claim，避免 run_preprocessor 二次抢占。
     if is_sharding_active():
         return True
     return await try_claim_cross_bot_message_memory(

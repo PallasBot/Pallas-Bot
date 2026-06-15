@@ -122,11 +122,6 @@ def _ensure_cage_session(
     _mutate_session(session_key, init)
 
 
-async def prune_stale_cage_duel_files(*, max_age_sec: float = 3600.0) -> None:
-    """Redis TTL 自动过期。"""
-    return None
-
-
 def _register_shard_bots(session_key: str, shard_id: int, bot_ids: list[int]) -> None:
     key = str(shard_id)
 

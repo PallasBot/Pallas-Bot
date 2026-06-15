@@ -10,6 +10,7 @@ from typing import Any, Literal
 from nonebot import logger
 
 _POLL_SEC = 0.08
+_inflight: set[str] = set()
 
 QteKind = Literal["single", "race"]
 
@@ -252,23 +253,6 @@ async def wake_duel_qte_session(session_id: str, local_ids: frozenset[str]) -> N
     data = await asyncio.to_thread(read_session_redis_sync, session_id)
     if data:
         await _process_pending_session(data, local_ids)
-
-
-async def poll_duel_qte_pending(local_ids: frozenset[str]) -> None:
-    """QTE 会话已迁 Redis；保留空实现以兼容旧调用。"""
-
-
-async def prune_stale_duel_qte_files() -> None:
-    """QTE 会话由 Redis TTL 回收；保留空实现以兼容旧脚本。"""
-
-
-_inflight: set[str] = set()
-
-
-def start_duel_qte_coord_watcher() -> None:
-    from src.platform.shard.coord.worker_poll import start_shard_coord_worker_watcher
-
-    start_shard_coord_worker_watcher()
 
 
 async def wait_single_qte_coord_result(
