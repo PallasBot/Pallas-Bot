@@ -44,6 +44,15 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "exact_plaintexts": [
+            "牛牛轮盘",
+            "牛牛轮盘踢人",
+            "牛牛轮盘禁言",
+            "牛牛踢人轮盘",
+            "牛牛禁言轮盘",
+            "牛牛开枪",
+        ],
+        "command_prefixes": ["牛牛救一下", "牛牛补一枪"],
         "ingress_fanout": {
             "scope": "always",
             "plaintexts": [

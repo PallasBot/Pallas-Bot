@@ -25,6 +25,16 @@ class _RegexMatcher:
     rule = Rule(to_me())
 
 
+class _ChatMatcher:
+    plugin_name = "src.plugins.chat"
+    rule = Rule(to_me())
+
+
+class _SingMatcher:
+    plugin_name = "src.plugins.sing"
+    rule = Rule(to_me())
+
+
 @pytest.fixture(autouse=True)
 def reset_lanes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
@@ -59,6 +69,16 @@ def test_lane_for_matcher_uses_plugin_lane_override(monkeypatch: pytest.MonkeyPa
         lambda module: "remote" if module == "ollama" else None,
     )
     assert dispatch_lanes.lane_for_matcher(_AiMatcher) == DispatchLane.REMOTE
+
+
+def test_lane_for_matcher_marks_chat_and_sing_as_remote(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        dispatch_lanes,
+        "plugin_lane_override",
+        lambda module: "remote" if module in {"chat", "sing"} else None,
+    )
+    assert dispatch_lanes.lane_for_matcher(_ChatMatcher) == DispatchLane.REMOTE
+    assert dispatch_lanes.lane_for_matcher(_SingMatcher) == DispatchLane.REMOTE
 
 
 def test_storage_limit_tightens_under_pool_pressure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -100,10 +120,8 @@ async def test_check_and_run_matcher_with_lane_skips_when_busy(monkeypatch: pyte
     await controller.acquire(0.01)
 
     run_mock = AsyncMock()
-    busy_mock = AsyncMock(return_value=True)
     monkeypatch.setattr(dispatch_lanes, "plugin_lane_override", lambda module: "remote" if module == "ollama" else None)
     monkeypatch.setattr("nonebot.message.check_and_run_matcher", run_mock)
-    monkeypatch.setattr(dispatch_lanes, "maybe_send_lane_busy_reply", busy_mock)
 
     result = await dispatch_lanes.check_and_run_matcher_with_lane(
         _AiMatcher,
@@ -113,11 +131,9 @@ async def test_check_and_run_matcher_with_lane_skips_when_busy(monkeypatch: pyte
         MagicMock(),
         {},
         command_traffic=True,
-        busy_reply_sent=False,
     )
     assert result.acquired is False
     assert result.lane_busy is True
-    busy_mock.assert_not_awaited()
     run_mock.assert_not_awaited()
     for _ in range(4):
         await controller.release()

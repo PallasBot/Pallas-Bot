@@ -117,7 +117,6 @@ async def test_patched_handle_event_skips_busy_reply_when_other_matcher_can_run(
     event = FakeGroupMessageEvent()
     pre_mock = AsyncMock(return_value=True)
     post_mock = AsyncMock()
-    busy_reply_mock = AsyncMock(return_value=True)
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
     monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
@@ -139,7 +138,6 @@ async def test_patched_handle_event_skips_busy_reply_when_other_matcher_can_run(
             dispatch_lanes.DispatchLane.REMOTE if matcher is BusyMatcher else dispatch_lanes.DispatchLane.COMMAND
         ),
     )
-    monkeypatch.setattr(dispatch_lanes, "maybe_send_lane_busy_reply", busy_reply_mock)
 
     dispatch_lanes.install_dispatch_lanes()
     controller = dispatch_lanes.lane_controller(dispatch_lanes.DispatchLane.REMOTE)
@@ -150,7 +148,6 @@ async def test_patched_handle_event_skips_busy_reply_when_other_matcher_can_run(
 
     await dispatch.patched_handle_event(bot, event)
 
-    busy_reply_mock.assert_not_awaited()
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
 
@@ -160,7 +157,7 @@ async def test_patched_handle_event_skips_busy_reply_when_other_matcher_can_run(
 
 
 @pytest.mark.asyncio
-async def test_patched_handle_event_sends_busy_reply_when_all_selected_matchers_are_busy(
+async def test_patched_handle_event_stays_silent_when_all_selected_matchers_are_busy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class FakeGroupMessageEvent:
@@ -181,7 +178,6 @@ async def test_patched_handle_event_sends_busy_reply_when_all_selected_matchers_
     event = FakeGroupMessageEvent()
     pre_mock = AsyncMock(return_value=True)
     post_mock = AsyncMock()
-    busy_reply_mock = AsyncMock(return_value=True)
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
     monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
@@ -197,7 +193,6 @@ async def test_patched_handle_event_sends_busy_reply_when_all_selected_matchers_
     monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
     monkeypatch.setattr(dispatch, "matchers", {1: [BusyMatcher]})
     monkeypatch.setattr(dispatch_lanes, "lane_for_matcher", lambda _matcher: dispatch_lanes.DispatchLane.REMOTE)
-    monkeypatch.setattr(dispatch, "maybe_send_lane_busy_reply", busy_reply_mock)
 
     dispatch_lanes.install_dispatch_lanes()
     controller = dispatch_lanes.lane_controller(dispatch_lanes.DispatchLane.REMOTE)
@@ -208,7 +203,6 @@ async def test_patched_handle_event_sends_busy_reply_when_all_selected_matchers_
 
     await dispatch.patched_handle_event(bot, event)
 
-    busy_reply_mock.assert_awaited_once()
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
 

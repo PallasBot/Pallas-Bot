@@ -105,6 +105,64 @@ def test_build_route_index_from_menu_and_fanout(monkeypatch: pytest.MonkeyPatch)
     assert any(module == "duel" for module, _ in index.regex_entries)
 
 
+def test_build_route_index_prefers_explicit_command_prefixes_and_exacts(monkeypatch: pytest.MonkeyPatch) -> None:
+    plugins = [
+        _fake_plugin(
+            module_name="src.plugins.chat",
+            menu_data=[{"trigger_condition": "@牛牛 / 牛牛 + 文本"}],
+        ),
+        _fake_plugin(
+            module_name="src.plugins.sing",
+            menu_data=[{"trigger_condition": "牛牛唱歌 歌曲名 [key=±N]"}],
+        ),
+        _fake_plugin(
+            module_name="src.plugins.connectivity",
+            menu_data=[{"trigger_condition": "牛牛连通 / 牛牛网关"}],
+        ),
+    ]
+    plugins[0].metadata.extra["command_prefixes"] = ["牛牛"]
+    plugins[1].metadata.extra["command_prefixes"] = ["牛牛唱歌", "牛牛继续唱", "牛牛接着唱", "牛牛点歌"]
+    plugins[2].metadata.extra["exact_plaintexts"] = ["牛牛连通", "牛牛网关"]
+
+    monkeypatch.setattr(
+        route_index,
+        "get_loaded_plugins",
+        lambda: plugins,
+    )
+
+    index = route_index.build_route_index()
+
+    assert index.prefix_to_modules["牛牛"] == frozenset({"chat"})
+    assert index.prefix_to_modules["牛牛唱歌"] == frozenset({"sing"})
+    assert index.prefix_to_modules["牛牛点歌"] == frozenset({"sing"})
+    assert index.exact_to_modules["牛牛连通"] == frozenset({"connectivity"})
+    assert index.exact_to_modules["牛牛网关"] == frozenset({"connectivity"})
+
+
+def test_build_route_index_supports_multiple_explicit_plugin_routes(monkeypatch: pytest.MonkeyPatch) -> None:
+    plugins = [
+        _fake_plugin(module_name="src.plugins.draw", menu_data=[{"trigger_condition": "牛牛画画 …"}]),
+        _fake_plugin(module_name="src.plugins.help", menu_data=[{"trigger_condition": "牛牛帮助 〈插件名〉"}]),
+        _fake_plugin(module_name="src.plugins.bot_status", menu_data=[{"trigger_condition": "牛牛报数 / 牛牛出列"}]),
+        _fake_plugin(module_name="src.plugins.roulette", menu_data=[{"trigger_condition": "牛牛轮盘"}]),
+    ]
+    plugins[0].metadata.extra["command_prefixes"] = ["牛牛画画"]
+    plugins[1].metadata.extra["command_prefixes"] = ["牛牛帮助", "牛牛开启", "牛牛关闭"]
+    plugins[2].metadata.extra["exact_plaintexts"] = ["牛牛在吗", "测试邮件", "牛牛报数", "牛牛出列"]
+    plugins[3].metadata.extra["exact_plaintexts"] = ["牛牛轮盘", "牛牛开枪"]
+    plugins[3].metadata.extra["command_prefixes"] = ["牛牛救一下", "牛牛补一枪"]
+
+    monkeypatch.setattr(route_index, "get_loaded_plugins", lambda: plugins)
+
+    index = route_index.build_route_index()
+
+    assert index.prefix_to_modules["牛牛画画"] == frozenset({"draw"})
+    assert index.prefix_to_modules["牛牛帮助"] == frozenset({"help"})
+    assert index.prefix_to_modules["牛牛救一下"] == frozenset({"roulette"})
+    assert index.exact_to_modules["牛牛报数"] == frozenset({"bot_status"})
+    assert index.exact_to_modules["牛牛轮盘"] == frozenset({"roulette"})
+
+
 def test_resolve_message_route_prefix_and_exact(monkeypatch: pytest.MonkeyPatch) -> None:
     snapshot = route_index.RouteIndexSnapshot(
         prefix_to_modules={"牛牛帮助": frozenset({"help"})},

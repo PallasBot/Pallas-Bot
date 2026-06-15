@@ -13,11 +13,17 @@ def test_record_group_message_and_p95() -> None:
             matchers_selected=4,
             matchers_run=3,
         )
+    dispatch_metrics.record_route_index_decision(index_hit=True, fallback=False)
+    dispatch_metrics.record_route_index_decision(index_hit=False, fallback=True)
     snap = dispatch_metrics.dispatch_metrics_snapshot()
     assert snap["group_messages"] == 100
     assert snap["matchers_considered"] == 1000
     assert snap["ingress_duration_ms_p95"] == 96.0
     assert snap["matchers_selected_ratio"] == 0.4
+    assert snap["route_index_hits"] == 1
+    assert snap["route_index_fallbacks"] == 1
+    assert snap["route_index_hit_ratio"] == 0.01
+    assert snap["route_index_fallback_ratio"] == 0.01
 
 
 def test_lane_wait_and_alerts() -> None:

@@ -51,6 +51,7 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "exact_plaintexts": ["牛牛在吗", "测试邮件", "牛牛报数", "牛牛出列"],
         "command_permissions": [
             {"id": "bot_status.status", "label": "牛牛在吗", "default": "bot_moderator"},
             {"id": "bot_status.test_mail", "label": "测试邮件", "default": "superuser"},

@@ -31,6 +31,7 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "ingress_route": {"lane": "remote"},
         "menu_data": [
             {
                 "func": "酒后聊天",

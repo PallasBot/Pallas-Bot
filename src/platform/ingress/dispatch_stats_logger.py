@@ -32,12 +32,14 @@ async def dispatch_stats_log_loop() -> None:
         considered = int(snap.get("matchers_considered") or 0)
         selected = int(snap.get("matchers_selected") or 0)
         logger.info(
-            "ingress_dispatch: stats group_messages={} cmd={} chat={} "
+            "ingress_dispatch: stats group_messages={} cmd={} chat={} route_hit={} route_fallback={} "
             "matchers {}/{} run={} p95={}ms lane_wait_avg={} overload={} lane_busy={} "
             "send_q={}/{} dropped={}",
             group_messages,
             int(snap.get("command_traffic") or 0),
             int(snap.get("chatter_traffic") or 0),
+            int(snap.get("route_index_hits") or 0),
+            int(snap.get("route_index_fallbacks") or 0),
             selected,
             considered,
             int(snap.get("matchers_run") or 0),

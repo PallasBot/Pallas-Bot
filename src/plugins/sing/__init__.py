@@ -36,6 +36,16 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "ingress_route": {"lane": "remote"},
+        "command_prefixes": [
+            "牛牛唱歌",
+            "牛牛继续唱",
+            "牛牛接着唱",
+            "牛牛点歌",
+            "牛牛什么歌",
+            "牛牛哪首歌",
+            "牛牛啥歌",
+        ],
         "command_permissions": [
             {"id": "sing.ncm_login", "label": "网易云登录", "default": "superuser"},
             {"id": "sing.ncm_logout", "label": "网易云登出", "default": "superuser"},

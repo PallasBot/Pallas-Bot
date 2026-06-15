@@ -20,6 +20,7 @@ __plugin_meta__ = PluginMetadata(
         "version": PLUGIN_EXTRA_VERSION,
         "ingress_route": {"lane": "remote"},
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "exact_plaintexts": ["牛牛连通", "牛牛网关"],
         "command_permissions": [
             {"id": "connectivity.probe", "label": "牛牛连通", "default": "everyone"},
         ],

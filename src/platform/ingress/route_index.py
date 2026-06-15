@@ -101,6 +101,17 @@ def extract_exact_plaintexts_from_menu_data(menu_data: list[dict[str, Any]] | No
     return tuple(exacts)
 
 
+def extract_explicit_route_strings(raw: object) -> tuple[str, ...]:
+    if not isinstance(raw, (list, tuple, set, frozenset)):
+        return ()
+    seen: list[str] = []
+    for item in raw:
+        text = str(item).strip()
+        if text and text not in seen:
+            seen.append(text)
+    return tuple(seen)
+
+
 def _add_module_mapping(
     mapping: dict[str, set[str]],
     key: str,
@@ -136,11 +147,28 @@ def build_route_index() -> RouteIndexSnapshot:
                 passive.add(module_key)
 
         menu_data = extra.get("menu_data")
+        route_prefixes = extract_explicit_route_strings(extra.get("command_prefixes"))
+        route_exacts = extract_explicit_route_strings(extra.get("exact_plaintexts"))
+        if isinstance(menu_data, list):
+            if not route_prefixes:
+                route_prefixes = extract_command_prefixes_from_menu_data(menu_data)
+            if not route_exacts:
+                route_exacts = extract_exact_plaintexts_from_menu_data(menu_data)
+        for prefix in route_prefixes:
+            _add_module_mapping(prefix_map, prefix, module_key)
+            indexed.add(module_key)
+        for exact in route_exacts:
+            _add_module_mapping(exact_map, exact, module_key)
+            indexed.add(module_key)
         if isinstance(menu_data, list):
             for prefix in extract_command_prefixes_from_menu_data(menu_data):
+                if prefix in route_prefixes:
+                    continue
                 _add_module_mapping(prefix_map, prefix, module_key)
                 indexed.add(module_key)
             for exact in extract_exact_plaintexts_from_menu_data(menu_data):
+                if exact in route_exacts:
+                    continue
                 _add_module_mapping(exact_map, exact, module_key)
                 indexed.add(module_key)
 

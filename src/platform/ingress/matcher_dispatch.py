@@ -14,10 +14,13 @@ from src.foundation.config.repo_settings import repo_env_raw_value
 from src.platform.ingress.dispatch_lanes import (
     check_and_run_matcher_with_lane,
     install_dispatch_lanes,
-    maybe_send_lane_busy_reply,
     uninstall_dispatch_lanes,
 )
-from src.platform.ingress.dispatch_metrics import record_group_message_ingress, record_preprocessor_dropped
+from src.platform.ingress.dispatch_metrics import (
+    record_group_message_ingress,
+    record_preprocessor_dropped,
+    record_route_index_decision,
+)
 from src.platform.ingress.fleet_dispatch_scale import scaled_dispatch_int
 from src.platform.ingress.matcher_activation import (
     event_command_traffic,
@@ -89,17 +92,21 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
         apply_dispatch = isinstance(event, GroupMessageEvent)
         resolution = resolve_route_for_event(event) if apply_dispatch else None
         command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
+        if apply_dispatch and resolution is not None:
+            record_route_index_decision(
+                index_hit=resolution.index_hit,
+                fallback=command_traffic and not resolution.index_hit,
+            )
         threshold = overload_selected_threshold()
         total_selected = 0
         total_considered = 0
         matchers_run = 0
         any_matcher_executed = False
-        busy_reply_pending = False
 
         break_flag = False
 
         async def run_selected_matcher(matcher) -> None:
-            nonlocal any_matcher_executed, busy_reply_pending, matchers_run
+            nonlocal any_matcher_executed, matchers_run
             matchers_run += 1
             result = await check_and_run_matcher_with_lane(
                 matcher,
@@ -109,13 +116,10 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
                 stack,
                 dependency_cache,
                 command_traffic=command_traffic,
-                busy_reply_sent=False,
             )
             if result.acquired:
                 any_matcher_executed = True
-                return
-            if result.lane_busy:
-                busy_reply_pending = True
+            return
 
         def handle_stop_propagation(_exc_group) -> None:
             nonlocal break_flag
@@ -160,14 +164,6 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
 
         if show_log:
             nb_message.logger.debug("Checking for matchers completed")
-
-        if busy_reply_pending and not any_matcher_executed:
-            await maybe_send_lane_busy_reply(
-                bot,
-                event,
-                command_traffic=command_traffic,
-                already_sent=False,
-            )
 
         if apply_dispatch:
             record_group_message_ingress(

@@ -21,6 +21,7 @@ __plugin_meta__ = PluginMetadata(
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "ingress_route": {"lane": "remote"},
+        "command_prefixes": ["牛牛画画"],
         "command_permissions": [
             {"id": "draw.draw", "label": "牛牛画画", "default": "everyone"},
             {"id": "draw.gateway", "label": "牛牛网关", "default": "everyone"},

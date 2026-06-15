@@ -49,6 +49,13 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "command_prefixes": [
+            "牛牛帮助",
+            "牛牛开启",
+            "牛牛关闭",
+            "牛牛开启全部功能",
+            "牛牛关闭全部功能",
+        ],
         "ingress_fanout": {
             "scope": "unified_only",
             "prefixes": [

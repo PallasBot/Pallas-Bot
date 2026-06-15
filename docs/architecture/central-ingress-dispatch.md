@@ -107,7 +107,12 @@ flowchart TB
 
 ## 命令路由索引
 
-**route_index** 在启动时从 `PluginMetadata.extra` 的 `menu_data`、`ingress_fanout` 与既有口令明文表构建：
+**route_index** 在启动时优先读取 `PluginMetadata.extra` 中显式声明的：
+
+- `command_prefixes`
+- `exact_plaintexts`
+
+若插件未显式声明，再回退读取 `menu_data`、`ingress_fanout` 与既有口令明文表：
 
 - `prefix → plugin_module` 倒排
 - `exact_plaintext → plugin_module`
@@ -135,7 +140,7 @@ flowchart TB
 | **storage** | PG 密集，与 **pool_budget** 联动，高压时自动收紧 |
 | **remote** | HTTP、AI、渲染等外呼 |
 
-进入 handler 前 acquire；超时丢弃，命令流量可回复人设忙句。lane 等待超过阈值时 **message_load** 触发过载。
+进入 handler 前 acquire；超时后直接静默丢弃，不再发送忙回复。lane 等待超过阈值时 **message_load** 触发过载。
 
 插件可在 `extra["ingress_route"].lane` 声明档位；旧名如 `passive_ai` 会自动映射到 `remote`。
 
@@ -144,7 +149,6 @@ flowchart TB
 | `PALLAS_DISPATCH_LANES_ENABLED` | 开 |
 | `PALLAS_LANE_ACQUIRE_TIMEOUT_SEC` | `1.0` |
 | `PALLAS_LANE_WAIT_OVERLOAD_MS` | `250` |
-| `PALLAS_LANE_BUSY_REPLY` | 开 |
 | `PALLAS_LANE_COMMAND` | `16`；未配置时按在线牛数缩放，上限 `64` |
 | `PALLAS_LANE_CHAT` | `32`；未配置时按在线牛数缩放，上限 `48` |
 | `PALLAS_LANE_STORAGE` | `min(8, PG_POOL_SIZE)` |
@@ -174,6 +178,8 @@ flowchart TB
 |------|------|
 | `group_messages` | 群消息计数 |
 | `matchers_considered` / `matchers_selected` / `matchers_run` | matcher 漏斗 |
+| `route_index_hits` / `route_index_fallbacks` | route_index 命中 / 回退计数 |
+| `route_index_hit_ratio` / `route_index_fallback_ratio` | route_index 命中率 / 回退率 |
 | `ingress_duration_ms_p95` | 入站处理 P95 |
 | `lane_wait_ms_avg` / `lane_busy` | lane 等待 |
 | `overload_signals` / `prefetch_paused` | 过载与 prefetch 跳过 |
@@ -193,7 +199,7 @@ uv run python scripts/ingress_dispatch_status.py
 
 unified 进程须已运行；脚本读取当前进程内存指标，非分片聚合。
 
-周期日志：进程内每 `PALLAS_DISPATCH_STATS_LOG_INTERVAL_SEC`（默认 `60`）打一条 `ingress_dispatch: stats`，便于对照 matcher 漏斗与 lane 占用。
+周期日志：进程内每 `PALLAS_DISPATCH_STATS_LOG_INTERVAL_SEC`（默认 `60`）打一条 `ingress_dispatch: stats`，便于对照 matcher 漏斗、route_index 命中/回退与 lane 占用。
 
 ## 出站 Bot 选择（platform_utils）
 
@@ -228,7 +234,8 @@ flowchart TD
 
 ## 插件约定
 
-- 用户可见口令写入 `menu_data` 或 `ingress_fanout`，便于 route_index 收录。
+- 高流量或高价值命令优先在 `extra` 显式声明 `command_prefixes` / `exact_plaintexts`；`menu_data` 更适合作为帮助与文档面，不建议继续充当唯一的路由来源。
+- 用户可见口令仍应写入 `menu_data` 或 `ingress_fanout`，便于帮助展示与 route_index 补全收录。
 - 重命令在 `extra` 标注 `ingress_route.lane`，缺省按 matcher 规则推断。
 - fanout、主持牛、独占活动等行为仍由 **ingress_gate** 与各插件 metadata 决定，见 [多进程分片 · ingress_fanout](bot_process_sharding.md)。
 

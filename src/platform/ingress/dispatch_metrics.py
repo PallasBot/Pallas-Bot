@@ -9,6 +9,8 @@ _COUNTERS = (
     "command_traffic",
     "chatter_traffic",
     "preprocessor_dropped",
+    "route_index_hits",
+    "route_index_fallbacks",
     "matchers_considered",
     "matchers_selected",
     "matchers_run",
@@ -70,6 +72,14 @@ def record_group_message_ingress(
 def record_preprocessor_dropped() -> None:
     _rollover_if_needed()
     _state["preprocessor_dropped"] += 1
+
+
+def record_route_index_decision(*, index_hit: bool, fallback: bool) -> None:
+    _rollover_if_needed()
+    if index_hit:
+        _state["route_index_hits"] += 1
+    if fallback:
+        _state["route_index_fallbacks"] += 1
 
 
 def record_matcher_run() -> None:
@@ -151,6 +161,8 @@ def build_dispatch_metrics_payload(
     group_messages = int(counters.get("group_messages") or 0)
     considered = int(counters.get("matchers_considered") or 0)
     selected = int(counters.get("matchers_selected") or 0)
+    route_hits = int(counters.get("route_index_hits") or 0)
+    route_fallbacks = int(counters.get("route_index_fallbacks") or 0)
     lane_wait_count = int(counters.get("lane_wait_count") or 0)
     lane_wait_total = int(counters.get("lane_wait_ms_total") or 0)
     lane_wait_avg = round(float(lane_wait_total) / lane_wait_count, 2) if lane_wait_count > 0 else None
@@ -164,6 +176,8 @@ def build_dispatch_metrics_payload(
         "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util),
         "matchers_selected_ratio": round(selected / considered, 4) if considered else None,
         "avg_matchers_per_message": round(selected / group_messages, 2) if group_messages else None,
+        "route_index_hit_ratio": round(route_hits / group_messages, 4) if group_messages else None,
+        "route_index_fallback_ratio": round(route_fallbacks / group_messages, 4) if group_messages else None,
     }
 
 

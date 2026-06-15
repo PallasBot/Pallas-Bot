@@ -283,7 +283,6 @@ async def check_and_run_matcher_with_lane(
     dependency_cache: dict,
     *,
     command_traffic: bool,
-    busy_reply_sent: bool,
 ) -> MatcherLaneResult:
     import nonebot.message as nb_message
 
@@ -297,7 +296,7 @@ async def check_and_run_matcher_with_lane(
     acquired, wait_ms = await acquire_lane(lane)
     record_lane_wait(wait_ms, busy=not acquired)
     if not acquired:
-        return MatcherLaneResult(acquired=False, lane_busy=command_traffic and not busy_reply_sent)
+        return MatcherLaneResult(acquired=False, lane_busy=command_traffic)
     try:
         await nb_message.check_and_run_matcher(matcher, bot, event, state, stack, dependency_cache)
     finally:
