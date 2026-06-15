@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | foundation | `src/foundation/` | `config`、`paths`、`logging`、`db`；`bot_version`、`command_prefix`、`apscheduler_runtime` |
 | platform | `src/platform/` | `shard`、`multi_bot`、`ingress`（**入站调度基础设施**）、`bot_runtime`（含 `ingress_dispatch_runtime`）、`coord`、`federate` |
-| features | `src/features/` | `cmd_perm`、`message_scrub`、`community_stats`、`corpus`、`control_plane`、`ban_gate` |
+| features | `src/features/` | `cmd_perm`、`command_limits`、`message_scrub`、`community_stats`、`corpus`、`control_plane`、`ban_gate` |
 | console | `src/console/` | `webui`、`web` |
 | domain | `src/domain/` | `arknights` 等域共享 |
 | shared | `src/shared/` | `utils`、`adapters`、`service_probe` |

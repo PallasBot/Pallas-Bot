@@ -27,7 +27,7 @@ my_plugin/
 1. `__init__.py` 避免堆积大段实现
 2. 配置与默认值集中在 `config.py`
 3. 单文件过长时按职责拆分，避免「超大单文件」
-4. 插件内私有逻辑放插件目录；**跨插件复用**再提取到 `src/common/`
+4. 插件内私有逻辑放插件目录；**跨插件复用**再提取到 `src/foundation`、`src/features` 等内核层
 
 ## 路径与持久化
 
@@ -36,7 +36,7 @@ my_plugin/
 | 运行期数据 | `data/<plugin_name>/...` | `plugin_data_dir("my_plugin")` |
 | 静态资源 | `resource/...` | `resource_dir("subdir")` |
 
-使用 `src/common/paths/` 提供的 helper，**不要**硬编码相对路径字符串。
+使用 `src.foundation.paths` 提供的 helper，**不要**硬编码相对路径字符串。
 
 示例（仓库内）：
 
@@ -76,4 +76,4 @@ my_plugin/
 
 ## 下一步
 
-[插件进阶能力](advanced.md) · [插件开发入门](getting-started.md)
+[插件进阶能力](advanced.md) · [插件开发入门](getting-started.md) · [插件开发 Skill](../../skills/pallas-plugin-development/SKILL.md)

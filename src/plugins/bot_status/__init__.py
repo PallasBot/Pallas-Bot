@@ -25,6 +25,7 @@ from src.features.cmd_perm.metadata_text import (
     join_usage,
     usage_line,
 )
+from src.features.command_limits import is_command_cooldown_ready, refresh_command_cooldown
 from src.platform.shard import context as shard_ctx
 
 from .bot_monitor import (
@@ -54,6 +55,10 @@ __plugin_meta__ = PluginMetadata(
             {"id": "bot_status.status", "label": "牛牛在吗", "default": "bot_moderator"},
             {"id": "bot_status.test_mail", "label": "测试邮件", "default": "superuser"},
             {"id": "bot_status.count", "label": "牛牛报数 / 牛牛出列", "default": "everyone"},
+        ],
+        "command_limits": [
+            {"id": "bot_status.status", "cd_sec": 10},
+            {"id": "bot_status.count", "cd_sec": 10},
         ],
         "ingress_fanout": {
             "scope": "shard_only",
@@ -186,13 +191,10 @@ async def _(bot: Bot, event: MessageEvent) -> None:
 @bot_status_cmd.handle()
 async def handle_bot_status(bot: Bot, event: MessageEvent) -> None:
     """处理状态查询命令"""
-    from src.foundation.config import GroupConfig
-
     if isinstance(event, GroupMessageEvent):
-        config = GroupConfig(group_id=event.group_id, cooldown=10)
-        if not await config.is_cooldown(STATUS_COOLDOWN_KEY):
+        if not await is_command_cooldown_ready(event, "bot_status.status"):
             return
-        await config.refresh_cooldown(STATUS_COOLDOWN_KEY)
+        await refresh_command_cooldown(event, "bot_status.status")
 
     # 获取牛牛状态信息
     online_bots, offline_bots_filtered = await get_bot_status_info()
@@ -224,8 +226,6 @@ async def handle_bot_status(bot: Bot, event: MessageEvent) -> None:
 @bot_count_cmd.handle()
 async def handle_bot_count(bot: Bot, event: MessageEvent) -> None:
     """处理牛牛报数命令"""
-    from src.foundation.config import GroupConfig
-
     if not isinstance(event, GroupMessageEvent):
         await bot_count_cmd.finish("牛牛报数仅支持群聊中使用")
 
@@ -239,10 +239,9 @@ async def handle_bot_count(bot: Bot, event: MessageEvent) -> None:
     if not group_bot_ids:
         return
 
-    config = GroupConfig(group_id=event.group_id, cooldown=10)
-    if not await config.is_cooldown(COUNT_COOLDOWN_KEY):
+    if not await is_command_cooldown_ready(event, "bot_status.count"):
         return
-    await config.refresh_cooldown(COUNT_COOLDOWN_KEY)
+    await refresh_command_cooldown(event, "bot_status.count")
 
     seed_text = f"{datetime.now().strftime('%Y-%m-%d')}:{event.group_id}"
     random.Random(seed_text).shuffle(group_bot_ids)
