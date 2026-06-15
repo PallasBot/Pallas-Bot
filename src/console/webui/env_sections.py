@@ -544,24 +544,13 @@ def _cmd_perm_payload_extras(cfg_obj: Any) -> dict[str, Any]:
 
 
 def _command_limits_payload_extras(cfg_obj: Any) -> dict[str, Any]:
+    from src.features.command_limits.config import normalize_command_limit_overrides
     from src.features.command_limits.schema import build_command_limits_ui
 
     overrides = getattr(cfg_obj, "command_limit_overrides", None) or {}
     if not isinstance(overrides, dict):
         overrides = {}
-    clean: dict[str, int] = {}
-    for key, value in overrides.items():
-        cid = str(key).strip()
-        if not cid:
-            continue
-        try:
-            cd_sec = int(value)
-        except (TypeError, ValueError):
-            continue
-        if cd_sec < 1:
-            continue
-        clean[cid] = cd_sec
-    return {"command_limits_ui": build_command_limits_ui(clean)}
+    return {"command_limits_ui": build_command_limits_ui(normalize_command_limit_overrides(overrides))}
 
 
 def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dict[str, Any]:

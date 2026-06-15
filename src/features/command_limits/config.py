@@ -20,7 +20,7 @@ class CommandLimitsConfig(BaseModel):
         default_factory=dict,
         description=field_help(
             "覆盖各命令默认冷却秒数",
-            "JSON 对象：键为命令编号，值为正整数秒数",
+            "JSON 对象：键为命令编号，值为非负整数秒数（0 表示关闭冷却）",
             "未写的命令仍用插件默认；本页下方表格可图形化编辑",
         ),
     )
@@ -41,7 +41,7 @@ class CommandLimitsConfig(BaseModel):
                 if "pallas_command_limit_overrides" in (getattr(cfg, "model_fields_set", None) or set()):
                     v = getattr(cfg, "pallas_command_limit_overrides", None)
                     if isinstance(v, dict):
-                        return cls(command_limit_overrides=_normalize_overrides(v))
+                        return cls(command_limit_overrides=normalize_command_limit_overrides(v))
                     if isinstance(v, str) and v.strip():
                         raw = v.strip()
             except ValueError:
@@ -54,10 +54,10 @@ class CommandLimitsConfig(BaseModel):
             return cls()
         if not isinstance(data, dict):
             return cls()
-        return cls(command_limit_overrides=_normalize_overrides(data))
+        return cls(command_limit_overrides=normalize_command_limit_overrides(data))
 
 
-def _normalize_overrides(raw: dict[object, object]) -> dict[str, int]:
+def normalize_command_limit_overrides(raw: dict[object, object]) -> dict[str, int]:
     out: dict[str, int] = {}
     for key, value in raw.items():
         cid = str(key).strip()

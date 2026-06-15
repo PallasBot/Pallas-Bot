@@ -152,6 +152,19 @@ def test_command_limits_section_payload_shape(monkeypatch: pytest.MonkeyPatch):
     assert any(row["id"] == "help.help" for row in data["command_limits_ui"]["commands"])
 
 
+def test_command_limits_section_payload_keeps_zero_override(monkeypatch: pytest.MonkeyPatch):
+    from src.console.webui import webui_env_section_payload
+
+    _import_command_limit_plugins()
+    _patch_loaded_command_limit_plugins(monkeypatch)
+    data = webui_env_section_payload(
+        "command_limits",
+        current_values={"command_limit_overrides": {"help.help": 0}},
+    )
+    commands = {row["id"]: row for row in data["command_limits_ui"]["commands"]}
+    assert commands["help.help"]["effective_cd_sec"] == 0
+
+
 def test_command_limits_patch_writes_json_override(tmp_path, monkeypatch):
     import json
 
