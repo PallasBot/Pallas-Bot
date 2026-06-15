@@ -1,4 +1,4 @@
-"""命令 ID（插件前缀.动作）与默认权限等级；可被 PALLAS_COMMAND_PERMISSION_OVERRIDES 覆盖。"""
+"""命令 ID与默认权限等级；可被 PALLAS_COMMAND_PERMISSION_OVERRIDES 覆盖。"""
 
 from __future__ import annotations
 

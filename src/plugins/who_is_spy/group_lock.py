@@ -1,4 +1,4 @@
-"""卧底插件分片同群互斥（namespace=spy_group，实现见 platform spy_activity）。"""
+"""卧底插件分片同群互斥。"""
 
 from __future__ import annotations
 

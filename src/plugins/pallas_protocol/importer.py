@@ -146,10 +146,10 @@ def run_import(
 ) -> tuple[ImportResult, dict]:
     """
     扫描 source_dir，返回 (ImportResult, new_accounts_dict)。
-    new_accounts_dict 是合并后的完整账号字典（dry_run 时与 existing_accounts 相同）。
+    new_accounts_dict 是合并后的完整账号字典。
 
     instances_root: 若提供，则将账号数据复制到 instances_root/<qq>/<napcat>/ 并以此作为
-                    account_data_dir；否则原地注册（account_data_dir = source folder）。
+                    account_data_dir；否则原地注册。
     """
     result = ImportResult()
     accounts = dict(existing_accounts)

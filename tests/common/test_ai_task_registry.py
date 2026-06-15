@@ -6,7 +6,6 @@ import pytest
 
 from src.foundation.config import TaskManager
 from src.platform.shard.coord import ai_task_registry as mod
-from src.platform.shard.coord import ai_task_registry_redis as redis_mod
 
 
 @pytest.fixture(autouse=True)
@@ -76,7 +75,7 @@ def test_ai_task_registry_uses_redis(fake_coord_redis, monkeypatch) -> None:
     rec = mod.get_ai_task_record("task-redis")
     assert rec is not None
     assert rec["worker_port"] == 7973
-    assert redis_mod.ai_task_redis_key("task-redis") in fake_coord_redis[0]
+    assert mod.ai_task_redis_key("task-redis") in fake_coord_redis[0]
 
     mod.remove_ai_task("task-redis")
     assert mod.get_ai_task_record("task-redis") is None

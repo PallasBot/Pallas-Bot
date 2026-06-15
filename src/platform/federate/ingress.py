@@ -48,7 +48,7 @@ def federate_ingress_cached_win(
     plain: str | None = None,
     body: str | None = None,
 ) -> bool:
-    """本进程是否已缓存赢得联邦 ingress（供 repeater 跳过二次 Redis）。"""
+    """本进程是否已缓存赢得联邦 ingress。"""
     if bypass_federate_ingress_for_current_mode():
         return True
     if not federate_ingress_active():

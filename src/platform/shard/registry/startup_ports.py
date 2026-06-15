@@ -58,7 +58,7 @@ def evaluate_registry_worker_ports(
     env_path: Path | None = None,
     skip_occupied: bool = True,
 ) -> RegistryPortEvaluation:
-    """评估注册表 worker 端口是否需写回（不检查协议端）。"""
+    """评估注册表 worker 端口是否需写回。"""
     from src.platform.shard.registry.config import get_shard_registry_settings
 
     _apply_env_and_clear_cache(env_path)
@@ -101,7 +101,7 @@ def evaluate_protocol_port_sync(
     accounts_path: Path | None = None,
     env_path: Path | None = None,
 ) -> ProtocolPortEvaluation:
-    """对照**当前已落盘**的注册表检查协议端 ws_url（须在 registry 写回之后调用）。"""
+    """对照**当前已落盘**的注册表检查协议端 ws_url。"""
     from src.platform.shard.registry.config import get_shard_registry_settings
 
     _apply_env_and_clear_cache(env_path)
@@ -144,7 +144,7 @@ def evaluate_shard_startup_ports(
     env_path: Path | None = None,
     skip_occupied: bool = True,
 ) -> StartupPortEvaluation:
-    """判断可否跳过 registry 写回；协议端检查依赖当前 registry（完整启动请用 shard_startup_ports 脚本顺序）。"""
+    """判断可否跳过 registry 写回；协议端检查依赖当前 registry。"""
     reg_ev = evaluate_registry_worker_ports(
         worker_count,
         base_port,

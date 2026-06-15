@@ -1,4 +1,4 @@
-"""控制面 bootstrap 配置（pallas.toml [control_plane] / 环境变量）。"""
+"""控制面 bootstrap 配置。"""
 
 from __future__ import annotations
 

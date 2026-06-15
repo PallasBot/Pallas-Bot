@@ -10,10 +10,10 @@ if TYPE_CHECKING:
 
 from .menu_display import raw_trigger_condition
 
-# trigger_condition：用户要发送的口令或可见触发说明（不要写 on_message / on_cmd）
-# trigger_scene：私聊 / 群内 / 自动（可选；缺省时从括号或 trigger_method 推断）
+# trigger_condition：用户要发送的口令或可见触发说明
+# trigger_scene：私聊 / 群内 / 自动
 # trigger_method：实现方式，仅维护者对照代码，帮助图不展示
-# help_audience：maintainer 时不进入用户帮助图（如 HTTP 回调、WebUI）
+# help_audience：maintainer 时不进入用户帮助图
 
 _SCENE_IN_PAREN_RE = re.compile(r"[（(]\s*(私聊|群内|群聊)\s*[）)]")
 

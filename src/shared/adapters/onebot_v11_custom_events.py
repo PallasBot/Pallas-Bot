@@ -1,4 +1,4 @@
-"""OneBot V11 协议扩展事件（NapCat / go-cqhttp 非标准字段兼容）。"""
+"""OneBot V11 协议扩展事件。"""
 
 from __future__ import annotations
 

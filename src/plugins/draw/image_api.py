@@ -84,7 +84,7 @@ def cffi_error_is_timeout(exc: BaseException) -> bool:
 
 
 def httpx_cap_after_cffi_timeout(req_timeout_cap: float | None) -> float | None:
-    """cffi 读超时后若预算仍够，给 httpx 一段独立时间再试（优先出图）。"""
+    """cffi 读超时后若预算仍够，给 httpx 一段独立时间再试。"""
     budget = effective_request_timeout(req_timeout_cap)
     if budget < 50:
         return None
@@ -604,7 +604,7 @@ def optional_message_at_user(
 
 
 def image_api_body_issue_label(body_text: str) -> str | None:
-    """HTTP 200 时正文是否可发图；不可用时返回简短原因（供日志，不暴露给用户）。"""
+    """HTTP 200 时正文是否可发图；不可用时返回简短原因。"""
     try:
         data = json.loads(body_text)
     except Exception:

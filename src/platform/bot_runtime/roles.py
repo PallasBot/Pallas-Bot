@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from src.platform.shard.registry.config import BotRole, get_shard_registry_settings, is_sharding_active
 
-# hub：控制台、协议端、建号/重登；不加载游戏插件（无反向 WS 也可启动）
+# hub：控制台、协议端、建号/重登；不加载游戏插件
 HUB_PLUGIN_MODULES: tuple[str, ...] = (
     "src.plugins.pallas_webui",
     "src.plugins.pallas_protocol",
@@ -24,7 +24,7 @@ WORKER_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
     "maa_hub",
 })
 
-# unified：跳过仅分片 hub/worker 使用的插件（单进程指标由 pallas_webui 挂载）
+# unified：跳过仅分片 hub/worker 使用的插件
 UNIFIED_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
     "relogin_forward",
     "maa_hub",

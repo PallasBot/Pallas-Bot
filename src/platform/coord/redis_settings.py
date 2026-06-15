@@ -1,4 +1,4 @@
-"""分片跨进程 claim：Redis 配置（与 Pallas-Bot-AI 共用 REDIS_URL 时可复用）。"""
+"""分片跨进程 claim：Redis 配置。"""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def _setting(key: str) -> str | None:
 
 
 def resolve_coord_redis_url() -> str | None:
-    """PALLAS_COORD_REDIS_URL 优先，否则 REDIS_URL（pallas.toml / webui.json / 环境）。"""
+    """PALLAS_COORD_REDIS_URL 优先，否则 REDIS_URL。"""
     for key in ("PALLAS_COORD_REDIS_URL", "REDIS_URL"):
         val = _setting(key)
         if val:

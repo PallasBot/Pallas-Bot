@@ -22,7 +22,7 @@ async def test_bot_disconnect_is_idempotent(monkeypatch) -> None:
     monkeypatch.setattr(mod, "plugin_config", plugin_config)
     monkeypatch.setattr(mod, "clear_protocol_bot_offline", clear_protocol_bot_offline)
     monkeypatch.setattr(mod, "note_worker_bot_disconnected", note_worker_bot_disconnected)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(mod.logger, "info", lambda msg, *args: info_calls.append((msg, args)))
 
     bot = SimpleNamespace(self_id="1354970010", type="OneBot V11")

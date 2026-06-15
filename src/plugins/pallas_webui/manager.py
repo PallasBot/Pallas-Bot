@@ -403,7 +403,7 @@ def bot_has_release_update(
     current_tag: str = "",
     current_commit: str = "",
 ) -> bool:
-    """是否落后于 GitHub 最新 release（开发超前 commit 不视为可更新）。"""
+    """是否落后于 GitHub 最新 release。"""
     from src.shared.utils.github_release import release_tags_equivalent
 
     tag = (latest_tag or "").strip()
@@ -427,7 +427,7 @@ def bot_is_development_build(
     current_tag: str = "",
     current_commit: str = "",
 ) -> bool:
-    """是否相对最新 release 为开发构建（超前 commit 或未打发行 tag）。"""
+    """是否相对最新 release 为开发构建。"""
     from src.shared.utils.github_release import release_tags_equivalent
 
     tag = (latest_tag or "").strip()

@@ -78,10 +78,7 @@ class Base(DeclarativeBase):
 
 class ContextAnswerRow(Base):
     __tablename__ = "context_answer"
-    # 唯一性建在定长 md5(keywords_hash) 上：Mongo 侧 answer.keywords 最长可达
-    # 数 KB，直接把 TEXT 列塞进 btree 会超 2704 字节页上限（PG 报
-    # index row size ... exceeds btree version 4 maximum）。保留原 constraint
-    # 名便于 upsert 代码复用。
+    # keywords_hash 定长 md5 唯一索引
     __table_args__ = (
         UniqueConstraint("context_id", "group_id", "keywords_hash", name="uq_context_answer_ctx_group_kw"),
         Index("ix_context_answer_ctx_count_time", "context_id", "count", "time"),
@@ -226,7 +223,7 @@ _DELETE_ID_BATCH = 1000
 
 
 def _ensure_pg_group_config_blocked_user_ids(connection) -> None:
-    """旧库 group_config 缺列时补列（create_all 不会改已有表结构）。"""
+    """旧库 group_config 缺列时补列。"""
     insp = inspect(connection)
     if not insp.has_table("group_config"):
         return
@@ -303,7 +300,7 @@ def _ensure_pg_context_answer_message_reply_index(connection) -> None:
 
 
 def _ensure_pg_stat_statements_extension(connection) -> None:
-    """启用 pg_stat_statements（若服务端已预加载）。失败时降级为仅无该视图的诊断。"""
+    """启用 pg_stat_statements。失败时降级为仅无该视图的诊断。"""
     try:
         connection.execute(text("CREATE EXTENSION IF NOT EXISTS pg_stat_statements"))
     except Exception:
@@ -320,7 +317,7 @@ def pg_engine() -> AsyncEngine | None:
 
 
 def pg_pool_live_stats() -> dict[str, int] | None:
-    """运行时连接池占用（供背压与可观测性）。"""
+    """运行时连接池占用。"""
     if _engine is None:
         return None
     from src.foundation.db.pool_budget import pg_pool_capacity
@@ -395,11 +392,10 @@ async def dispose_pg() -> None:
     if _engine is not None:
         await _engine.dispose()
         _engine = None
-    # 同步清掉 session factory，避免后续 get_session() 拿到绑定在已释放 engine
-    # 上的 AsyncSession；正确行为是抛 "PostgreSQL 尚未初始化"。
+    # 释放 engine 后清空 session factory
     _session_factory = None
     await clear_reply_query_snapshot_cache(None)
-    # schema 重建后若保留旧 ORM 行，下一轮 get() 会命中已失效数据
+    # schema 重建后清空 ORM 缓存
     for cache in _CONFIG_CACHES.values():
         await cache.clear()
 
@@ -1314,8 +1310,8 @@ def _cfg_env(key: str, default: str) -> str:
 class _ConfigCache:
     """
     简单的容量 + TTL 缓存，对齐 Mongo Beanie 的 model-level cache 语义。
-    对每个 (row_class) 一个实例；key 是主键值，value 是 (row, expire_ts)；
-    None 也会被缓存（避免缓存击穿）。
+    对每个 (row_class) 一个实例；key 是主键值，value 是 (row, expire_ts)
+    None 也会被缓存。
     """
 
     def __init__(self, ttl: float, capacity: int) -> None:
@@ -1375,7 +1371,7 @@ class PgConfigRepository:
         if table not in _CONFIG_TABLE_MAP:
             raise ValueError(f"Unknown config table: {table}")
         row_class, pk_field = _CONFIG_TABLE_MAP[table]
-        # primary_key 由工厂函数传入（对齐 Mongo ConfigRepository 的构造签名），
+        # primary_key 由工厂函数传入，
         # 这里做一致性断言，避免静默与 _CONFIG_TABLE_MAP 失同步。
         if primary_key != pk_field:
             raise ValueError(f"primary_key {primary_key!r} 与 {table} 登记的主键 {pk_field!r} 不一致")

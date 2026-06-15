@@ -1,4 +1,4 @@
-"""WebUI「按插件名」配置读写（供 ``pallas_webui.extended_api`` 调用）。"""
+"""WebUI「按插件名」配置读写。"""
 
 from __future__ import annotations
 

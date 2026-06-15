@@ -1,4 +1,4 @@
-"""Linux：NapCat Docker（mlikiowa/napcat-docker）。"""
+"""Linux：NapCat Docker。"""
 
 from __future__ import annotations
 
@@ -146,7 +146,7 @@ def build_docker_run_argv(
 
 
 def is_plain_ws_url(url: str) -> bool:
-    """是否为 URI scheme ``ws``（明文 WebSocket，非 ``wss``）的 URL。"""
+    """是否为 URI scheme ``ws``的 URL。"""
     u = str(url or "").strip()
     if not u:
         return False
@@ -173,7 +173,7 @@ _IPV4_RE = re.compile(r"^(?:25[0-5]|2[0-4]\d|[01]?\d{1,3})(?:\.(?:25[0-5]|2[0-4]
 def ws_url_host_should_rewrite_for_docker_bridge(url: str) -> bool:
     """是否应把明文 ``ws`` URL 的主机替换为 Docker 侧可达地址（如网关）。
 
-    用于 NapCat/SnowLuma 容器访问宿主机 Bot；对非 127 的 IPv4 与其它 IPv6字面量（除 ::1）不替换。
+    用于 NapCat/SnowLuma 容器访问宿主机 Bot；对非 127 的 IPv4 与其它 IPv6字面量不替换。
     """
     if not (url and is_plain_ws_url(url)):
         return False
@@ -198,7 +198,7 @@ def apply_docker_runtime_toggle_to_ws_url(
     now_docker_runtime: bool,
     config: Any,
 ) -> str | None:
-    """Docker 与本地运行切换时，按规则改写 ``ws_url`` 主机（与 ``napcat_linux_docker`` 等标记一致，不限定 OS）。"""
+    """Docker 与本地运行切换时，按规则改写 ``ws_url`` 主机。"""
     if prev_docker_runtime == now_docker_runtime:
         return None
     if not (url and is_plain_ws_url(url)):

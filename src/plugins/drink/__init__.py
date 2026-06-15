@@ -31,6 +31,16 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "ingress_fanout": {
+            "scope": "always",
+            "plaintexts": [
+                "牛牛喝酒",
+                "牛牛干杯",
+                "牛牛继续喝",
+                "牛牛醒一醒",
+                "牛牛别喝了",
+            ],
+        },
         "menu_data": [
             {
                 "func": "牛牛喝酒",

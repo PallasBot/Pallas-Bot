@@ -96,23 +96,13 @@ async def stop_dream_worker(bot_id: int, group_id: int) -> None:
 
 
 async def broadcast_drift(bot_id: int, source_group_id: int, payload: DriftPayload) -> None:
-    """联机梦：仅向「当前也在做梦的其它群」投递；多群时每条随机抽一个接收群（两群时自然一对一互传）。"""
-    from src.platform.shard.coord.dream_drift import (
-        list_peer_dream_groups_sync,
-        schedule_publish_dream_drift,
-    )
-    from src.platform.shard.registry.config import is_sharding_active
+    """联机梦：仅向「当前也在做梦的其它群」投递；多群时每条随机抽一个接收群。"""
+    from src.platform.shard.coord.dream_drift import schedule_publish_dream_drift
+    from src.plugins.dream.shard_fleet import collect_drift_peer_group_ids
 
     async with _dream_lock:
         local_targets = [gid for bid, gid in _dream_active if bid == bot_id and gid != source_group_id]
-    targets = set(local_targets)
-    if is_sharding_active():
-        remote_targets = await asyncio.to_thread(
-            list_peer_dream_groups_sync,
-            bot_id,
-            exclude_group_id=source_group_id,
-        )
-        targets.update(remote_targets)
+    targets = await collect_drift_peer_group_ids(bot_id, source_group_id, local_targets)
     if not targets:
         return
     gid = random.choice(sorted(targets))
@@ -199,7 +189,7 @@ async def _dream_worker_content_tick_once(
     sent_images: int,
     image_cap: int,
 ) -> int:
-    """发一轮梦话（队列漂流 / 已学句 / 历史梦 / 归档图），与循环体内逻辑一致。返回更新后的 sent_images。"""
+    """发一轮梦话，与循环体内逻辑一致。返回更新后的 sent_images。"""
     item: DriftPayload | None = None
     if random.random() < dream_plugin_config.dream_drift_queue_tick_probability:
         try:

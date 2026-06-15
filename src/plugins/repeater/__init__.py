@@ -187,13 +187,12 @@ async def _(bot: Bot, event: GroupMessageEvent):
     config = BotConfig(event.self_id, event.group_id)
     from .fanout_reply import repeater_can_attempt_reply
 
+    chat = Chat(event)
     can_reply = await repeater_can_attempt_reply(int(event.self_id), int(event.group_id))
 
-    chat: Chat | None = None
     bundle = None
     fanout_gate = None
     if can_reply and should_prepare_repeater_reply(ctx.plain_body, sharding_active=ctx.sharding_active):
-        chat = Chat(event)
         from .fanout_reply import resolve_fanout_gate
 
         fanout_gate = await resolve_fanout_gate(event)
@@ -237,9 +236,6 @@ async def _(bot: Bot, event: GroupMessageEvent):
     for seg in event.message:
         if seg.type == "image":
             await insert_image(seg)
-
-    if chat is None:
-        chat = Chat(event)
 
     await enqueue_repeater_learn(chat, event)
 
@@ -341,8 +337,6 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State):
 
 async def is_admin_recall_self_msg(bot: Bot, event: GroupRecallNoticeEvent):
     # 好像不需要这句
-    # if event.notice_type != "group_recall":
-    #     return False
     self_id = event.self_id
     user_id = event.user_id
     group_id = event.group_id

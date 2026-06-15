@@ -1,4 +1,4 @@
-"""本机可打开的 http 基址、NoneBot 日志环（管理页用）；独立模块，避免在 NoneBot 初始化前 import 插件包。"""
+"""本机可打开的 http 基址、NoneBot 日志环；独立模块，避免在 NoneBot 初始化前 import 插件包。"""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def _next_stream_id() -> int:
 
 
 def _strip_shard_log_prefix(raw: str) -> tuple[str, str]:
-    """去掉分片合并前缀 ``[worker-N]``（可重复多层），返回 (source_tag, body)。"""
+    """去掉分片合并前缀 ``[worker-N]``，返回 (source_tag, body)。"""
     tags: list[str] = []
     body = raw.strip()
     while True:
@@ -232,7 +232,7 @@ def tail_nonebot_log_entries_scoped(
 
 
 def subscribe_nonebot_log_stream(max_queue: int = 400) -> tuple[queue.Queue[dict[str, Any]], Callable[[], None]]:
-    """订阅实时日志；队列元素含 entry 与 scopes（all/webui/protocol）。"""
+    """订阅实时日志；队列元素含 entry 与 scopes。"""
     q: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=max_queue)
     with _sub_lock:
         _subscribers.append(q)
@@ -262,7 +262,7 @@ async def iter_nonebot_log_sse(
     *,
     source: str | None = None,
 ) -> AsyncIterator[str]:
-    """SSE：首包 ``ready``，随后 JSON 条目；分片 hub 时轮询各 worker 落盘日志。"""
+    """SSE：首包 ``ready``，随后 JSON 条目"""
     q, unsub = subscribe_nonebot_log_stream()
     shard_tailer = None
     try:
@@ -339,7 +339,7 @@ def nonebot_log_record_matches_http_facet(
     record: Mapping[str, Any],
     facet: Literal["webui", "protocol"],
 ) -> bool:
-    """是否与控制台或协议端相关（独立日志环；匹配插件 id 或正文中的 realm 标记）。"""
+    """是否与控制台或协议端相关。"""
     name = str(record.get("name") or "")
     raw_msg = record.get("message")
     mstr = raw_msg if isinstance(raw_msg, str) else ""

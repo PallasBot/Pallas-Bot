@@ -1,4 +1,4 @@
-"""分片下筹备名册与局内状态落盘（spy_group 协调键）。"""
+"""分片下筹备名册与局内状态落盘。"""
 
 from __future__ import annotations
 

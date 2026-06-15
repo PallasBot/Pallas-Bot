@@ -4,6 +4,13 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.platform.ingress.unified_pass import reset_unified_ingress_once_pass_for_tests
+
+
+@pytest.fixture(autouse=True)
+def _reset_unified_ingress_pass() -> None:
+    reset_unified_ingress_once_pass_for_tests()
+
 
 class _FakeEvent:
     def __init__(
@@ -77,12 +84,16 @@ async def test_build_repeater_event_context_non_sharding_claims_once(monkeypatch
 
     monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
     monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(
+        "src.features.message_scrub.is_message_scrub_blocked_sync",
+        lambda **_: False,
+    )
     monkeypatch.setattr(event_gate, "remember_group_message_id", fake_true)
     monkeypatch.setattr(event_gate, "normalize_group_raw_message", lambda raw: f"norm:{raw}")
     monkeypatch.setattr(event_gate, "should_skip_duplicate_group_event", fake_false)
     monkeypatch.setattr(event_gate, "federate_ingress_cached_win", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(event_gate, "claim_federate_group_message_ingress", fake_true)
-    monkeypatch.setattr(event_gate, "is_sharding_active", lambda: False)
+    monkeypatch.setattr(event_gate.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr(event_gate, "repeater_fanout_enabled", lambda: True)
     monkeypatch.setattr(event_gate, "try_claim_group_message_once", fake_claim_once)
     monkeypatch.setattr(event_gate, "try_claim_cross_bot_message", fake_cross_bot)
@@ -120,12 +131,16 @@ async def test_build_repeater_event_context_sharded_without_fanout_uses_cross_bo
 
     monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
     monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(
+        "src.features.message_scrub.is_message_scrub_blocked_sync",
+        lambda **_: False,
+    )
     monkeypatch.setattr(event_gate, "remember_group_message_id", fake_true)
     monkeypatch.setattr(event_gate, "normalize_group_raw_message", lambda raw: raw)
     monkeypatch.setattr(event_gate, "should_skip_duplicate_group_event", fake_false)
     monkeypatch.setattr(event_gate, "federate_ingress_cached_win", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(event_gate, "claim_federate_group_message_ingress", fake_true)
-    monkeypatch.setattr(event_gate, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(event_gate.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(event_gate, "repeater_fanout_enabled", lambda: False)
     monkeypatch.setattr(event_gate, "try_claim_group_message_once", fake_claim_once)
     monkeypatch.setattr(event_gate, "try_claim_cross_bot_message", fake_cross_bot)
@@ -151,12 +166,16 @@ async def test_build_repeater_event_context_records_sharded_cross_bot_claim_loss
 
     monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
     monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(
+        "src.features.message_scrub.is_message_scrub_blocked_sync",
+        lambda **_: False,
+    )
     monkeypatch.setattr(event_gate, "remember_group_message_id", fake_true)
     monkeypatch.setattr(event_gate, "normalize_group_raw_message", lambda raw: raw)
     monkeypatch.setattr(event_gate, "should_skip_duplicate_group_event", fake_false)
     monkeypatch.setattr(event_gate, "federate_ingress_cached_win", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(event_gate, "claim_federate_group_message_ingress", fake_true)
-    monkeypatch.setattr(event_gate, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(event_gate.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(event_gate, "repeater_fanout_enabled", lambda: False)
     monkeypatch.setattr(event_gate, "try_claim_cross_bot_message", fake_false)
     monkeypatch.setattr(event_gate, "record_repeater_ingress_event", lambda: recorded.append("event"))
@@ -183,12 +202,16 @@ async def test_build_repeater_event_context_keeps_sharded_single_char_plaintext(
 
     monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
     monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(
+        "src.features.message_scrub.is_message_scrub_blocked_sync",
+        lambda **_: False,
+    )
     monkeypatch.setattr(event_gate, "remember_group_message_id", fake_true)
     monkeypatch.setattr(event_gate, "normalize_group_raw_message", lambda raw: raw)
     monkeypatch.setattr(event_gate, "should_skip_duplicate_group_event", fake_false)
     monkeypatch.setattr(event_gate, "federate_ingress_cached_win", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(event_gate, "claim_federate_group_message_ingress", fake_true)
-    monkeypatch.setattr(event_gate, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(event_gate.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(event_gate, "repeater_fanout_enabled", lambda: False)
     monkeypatch.setattr(event_gate, "try_claim_cross_bot_message", fake_true)
 

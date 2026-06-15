@@ -8,6 +8,7 @@ from typing import Any
 from ulid import ULID
 
 from src.foundation.config import UserConfig
+from src.platform.shard import context as shard_ctx
 
 from .tasks import MaaTaskSpec, build_task_payload, normalize_device_id
 
@@ -86,7 +87,7 @@ class DeviceRecord:
 
 
 def match_device_ref(ref: str, devices: dict[str, DeviceRecord]) -> tuple[str | None, str | None]:
-    """按完整 id、别名或 id 前缀（至少 8 位 hex）匹配已绑定设备。"""
+    """按完整 id、别名或 id 前缀匹配已绑定设备。"""
     text = (ref or "").strip()
     if not text:
         return None, "请提供设备标识符、别名或 id 前缀。"
@@ -139,9 +140,7 @@ class MaaStore:
             self._seen[key] = now
             cutoff = now - ttl
             self._seen = {k: ts for k, ts in self._seen.items() if ts >= cutoff}
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             from src.platform.shard.coord.maa_seen_registry import touch_maa_seen_sync
 
             await asyncio.to_thread(touch_maa_seen_sync, user, norm)
@@ -156,9 +155,7 @@ class MaaStore:
             ts = self._seen.get(key)
             if ts is not None and now - ts <= ttl:
                 return True
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             from src.platform.shard.coord.maa_seen_registry import was_maa_seen_sync
 
             return await asyncio.to_thread(was_maa_seen_sync, user, norm, ttl)
@@ -339,9 +336,7 @@ class MaaStore:
         from src.platform.shard.coord.maa_route_registry import register_maa_user_route
 
         register_maa_user_route(user_key)
-        from src.platform.shard.registry.config import is_sharding_active
-
-        shard_pending = is_sharding_active()
+        shard_pending = shard_ctx.sharding_active()
         task_ids: list[str] = []
         to_enqueue: list[PendingTask] = []
         async with self._lock:
@@ -384,9 +379,7 @@ class MaaStore:
         norm = normalize_device_id(device)
         if not norm:
             return []
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             from src.platform.shard.coord.maa_pending_registry import list_pending_sync
 
             raw = await asyncio.to_thread(list_pending_sync, user.strip(), norm)
@@ -406,9 +399,7 @@ class MaaStore:
         ]
 
     async def mark_reported(self, task_id: str) -> PendingTask | None:
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             from src.platform.shard.coord.maa_pending_registry import mark_reported_sync
 
             raw = await asyncio.to_thread(mark_reported_sync, task_id)
@@ -422,9 +413,7 @@ class MaaStore:
 
     async def pending_count_for_user(self, qq_id: int) -> int:
         user_key = str(qq_id)
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             from src.platform.shard.coord.maa_pending_registry import pending_count_for_user_sync
 
             return await asyncio.to_thread(pending_count_for_user_sync, user_key)
@@ -436,9 +425,7 @@ class MaaStore:
         if not norm:
             return 0
         user_key = str(qq_id)
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             from src.platform.shard.coord.maa_pending_registry import pending_count_for_device_sync
 
             return await asyncio.to_thread(pending_count_for_device_sync, user_key, norm)
@@ -449,9 +436,7 @@ class MaaStore:
         """移除未汇报任务；device 为 None 时清空该 QQ 全部待拉取任务。"""
         user_key = str(qq_id)
         norm = normalize_device_id(device) if device else None
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             from src.platform.shard.coord.maa_pending_registry import clear_pending_sync
 
             return await asyncio.to_thread(clear_pending_sync, user_key, device=norm)
@@ -468,9 +453,7 @@ class MaaStore:
     async def pending_type_counts(self, qq_id: int, *, device: str | None = None) -> dict[str, int]:
         user_key = str(qq_id)
         norm = normalize_device_id(device) if device else None
-        from src.platform.shard.registry.config import is_sharding_active
-
-        if is_sharding_active():
+        if shard_ctx.sharding_active():
             from src.platform.shard.coord.maa_pending_registry import pending_type_counts_sync
 
             return await asyncio.to_thread(pending_type_counts_sync, user_key, device=norm)

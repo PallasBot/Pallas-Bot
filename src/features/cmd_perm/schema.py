@@ -11,7 +11,7 @@ from .registry import DEFAULT_COMMAND_PERMISSIONS, VALID_LEVELS
 
 _merged_defaults_cache: dict[str, str] | None = None
 
-# WebUI 单选列（互斥等级）
+# WebUI 单选列
 UI_LEVELS: tuple[tuple[str, str], ...] = (
     ("everyone", "所有人"),
     ("bot_moderator", "号主"),
@@ -45,7 +45,7 @@ def _parse_command_permission_rows(raw: Any) -> list[dict[str, str]]:
 
 
 def merged_default_levels() -> dict[str, str]:
-    """命令 ID -> 默认等级（registry 底表 + 各插件 metadata 覆盖）。"""
+    """命令 ID -> 默认等级。"""
     global _merged_defaults_cache
     if _merged_defaults_cache is not None:
         return _merged_defaults_cache

@@ -1,4 +1,4 @@
-"""仓库插件目录：磁盘发现 + 分片加载角色（供 WebUI / 帮助）。"""
+"""仓库插件目录：磁盘发现 + 分片加载角色。"""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ def discover_plugin_packages() -> list[str]:
 
 
 def discover_pyproject_plugin_modules() -> list[str]:
-    """pyproject [tool.nonebot.plugins] 声明的 pip/外部模块（相对仓库根）。"""
+    """pyproject [tool.nonebot.plugins] 声明的 pip/外部模块。"""
     from src.platform.bot_runtime.pyproject_plugins import parse_nonebot_plugin_config
 
     modules, _dirs = parse_nonebot_plugin_config()
@@ -233,7 +233,7 @@ def _module_short_name(module_path: str) -> str:
 
 
 def _pip_plugin_metadata_stub(module_path: str) -> dict[str, Any] | None:
-    """未加载时从已安装包 __init__.py 解析 __plugin_meta__（不 import 插件模块）。"""
+    """未加载时从已安装包 __init__.py 解析 __plugin_meta__。"""
     try:
         spec = importlib.util.find_spec(module_path)
     except (ImportError, ModuleNotFoundError, ValueError):
@@ -255,7 +255,7 @@ def _pip_plugin_metadata_stub(module_path: str) -> dict[str, Any] | None:
 
 
 def resolve_catalog_process_role() -> str:
-    """当前响应插件目录的 NoneBot 进程角色（WebUI 分片下为 hub）。"""
+    """当前响应插件目录的 NoneBot 进程角色。"""
     from src.platform.bot_runtime.roles import is_sharded_hub, is_sharded_worker, is_unified_role
 
     if is_unified_role():
@@ -315,7 +315,7 @@ def build_plugin_catalog_rows(
     globally_disabled: set[str] | None = None,
     global_disable_protected: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """合并磁盘插件与当前进程已加载插件（含第三方基础设施）。"""
+    """合并磁盘插件与当前进程已加载插件。"""
     ignored = ignored or set()
     hidden = hidden or set()
     globally_disabled = globally_disabled or set()
@@ -475,7 +475,7 @@ def _package_dir_to_module_id(package_root: Path) -> str:
 
 
 def resolve_catalog_plugin_module(plugin_name: str) -> str | None:
-    """按目录名或 NoneBot 插件名解析插件模块路径（含 local/plugins 覆盖）。"""
+    """按目录名或 NoneBot 插件名解析插件模块路径。"""
     target = (plugin_name or "").strip()
     if not target:
         return None

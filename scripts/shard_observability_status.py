@@ -57,10 +57,10 @@ def main() -> int:
         f"stale_open={coord.get('bot_action_stale_open', 0)}"
     )
     if coord.get("scan_skipped"):
-        print("coord live scan          skipped（默认不扫 Redis，全量排查用 prune_shard_coord.py --live-scan）")
+        print("coord live scan          skipped（默认不扫 Redis；全量键空间见 shard_coord_snapshot.py --live-scan）")
     ba = (coord.get("by_dir") or {}).get("bot_action", 0)
     if ba:
-        print(f"coord bot_action 键       {ba}  （prune_shard_coord.py 仅输出快照）")
+        print(f"coord bot_action 键       {ba}  （shard_coord_snapshot.py 仅输出快照）")
 
     peak = pg.get("estimated_pg_connections_peak")
     proc = pg.get("estimated_processes")

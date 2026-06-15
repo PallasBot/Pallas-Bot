@@ -15,26 +15,30 @@ def patch_list_mode(monkeypatch, mode: str) -> None:
     monkeypatch.setattr(mod, "get_bot_status_config", lambda: _Cfg(mode))
 
 
+def patch_sharding(monkeypatch, active: bool) -> None:
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: active)
+
+
 def test_resolve_auto_session_when_unified(monkeypatch):
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: False)
+    patch_sharding(monkeypatch, False)
     patch_list_mode(monkeypatch, "auto")
     assert mod.resolve_status_list_mode() == "session"
 
 
 def test_resolve_auto_fleet_when_sharding(monkeypatch):
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    patch_sharding(monkeypatch, True)
     patch_list_mode(monkeypatch, "auto")
     assert mod.resolve_status_list_mode() == "fleet"
 
 
 def test_resolve_explicit_fleet_unified(monkeypatch):
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: False)
+    patch_sharding(monkeypatch, False)
     patch_list_mode(monkeypatch, "fleet")
     assert mod.resolve_status_list_mode() == "fleet"
 
 
 def test_resolve_explicit_connected(monkeypatch):
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    patch_sharding(monkeypatch, True)
     patch_list_mode(monkeypatch, "connected")
     assert mod.resolve_status_list_mode() == "connected"
 
@@ -46,7 +50,7 @@ def test_status_inventory_connected_uses_session_seen(monkeypatch):
 
 
 def test_cluster_online_connected_uses_presence_when_sharding(monkeypatch):
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    patch_sharding(monkeypatch, True)
 
     def fake_presence():
         return frozenset({100, 200})
@@ -71,7 +75,7 @@ def test_status_inventory_fleet_from_accounts(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(fleet_mod, "is_sharding_active", lambda: False)
     fleet_mod.invalidate_fleet_bot_cache()
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: False)
+    patch_sharding(monkeypatch, False)
 
     ids = mod.status_inventory_bot_ids(list_mode="fleet")
     assert 300 in ids
@@ -81,7 +85,7 @@ def test_status_inventory_session_uses_block(monkeypatch):
     class FakeCfg:
         bots = {111}
 
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: False)
+    patch_sharding(monkeypatch, False)
     import src.plugins.block as block_mod
 
     monkeypatch.setattr(block_mod, "plugin_config", FakeCfg())

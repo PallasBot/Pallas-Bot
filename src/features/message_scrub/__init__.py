@@ -25,7 +25,7 @@ def reload_message_scrub_caches() -> None:
 
 
 def is_message_scrub_blocked_sync(*, plain_text: str, raw_message: str) -> bool:
-    """仅本地词库（同步，无网络）。"""
+    """仅本地词库。"""
     if not is_message_scrub_enabled():
         return False
     return local_lexicon_hits(plain_text=plain_text, raw_message=raw_message)

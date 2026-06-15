@@ -98,7 +98,7 @@ if [[ -f "${REPO_ROOT}/.env" ]]; then
   run cp -a "${REPO_ROOT}/.env" "${BACKUP_DIR}/env.shard.orig"
 fi
 
-# 2) 使用主仓 .env，并追加分片开关（不覆盖主仓已有键）
+# 2) 使用主仓 .env，并追加分片开关
 run cp -a "${MAIN_REPO}/.env" "${REPO_ROOT}/.env"
 append_shard_env() {
   local key="$1" val="$2"
@@ -121,7 +121,7 @@ append_shard_env PALLAS_SHARD_HUB_PORT 8088
 append_shard_env PALLAS_SHARD_WORKER_BASE_PORT 8090
 append_shard_env PALLAS_SHARD_BOTS_PER 5
 
-# 3) data -> 主仓 data（符号链接）
+# 3) data -> 主仓 data
 DATA_BACKUP=""
 if [[ -L "${REPO_ROOT}/data" ]]; then
   echo "data 已是符号链接，将替换为指向主仓" >&2

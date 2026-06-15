@@ -1,4 +1,4 @@
-"""协议端 accounts.json 只读快照（hub WebUI 展示昵称等）。"""
+"""协议端 accounts.json 只读快照。"""
 
 from __future__ import annotations
 

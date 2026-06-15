@@ -23,12 +23,21 @@ FILE_MAP: dict[str, str] = {
     "architecture/bot_process_sharding.md": "architecture/bot-process-sharding.md",
     "architecture/site-customization-and-updates.md": "architecture/site-customization-and-updates.md",
     "architecture/control-plane-corpus-federation.md": "architecture/control-plane-corpus-federation.md",
+    "architecture/common-layers.md": "architecture/common-layers.md",
+    "architecture/next-gen-slimdown.md": "architecture/next-gen-slimdown.md",
     "common/community_stats.md": "common/community_stats.md",
     "common/corpus/README.md": "common/corpus.md",
     "common/cmd_perm/README.md": "common/cmd_perm.md",
     "common/webui/README.md": "common/webui.md",
     "common/message_scrub/README.md": "common/message_scrub.md",
     "plugins/README.md": "plugins/index.md",
+    "develop/README.md": "develop/index.md",
+    "develop/environment.md": "develop/environment.md",
+    "develop/workflow.md": "develop/workflow.md",
+    "develop/webui.md": "develop/webui.md",
+    "develop/plugin/getting-started.md": "develop/plugin/getting-started.md",
+    "develop/plugin/structure.md": "develop/plugin/structure.md",
+    "develop/plugin/advanced.md": "develop/plugin/advanced.md",
 }
 
 PLUGIN_NAMES = [
@@ -52,7 +61,8 @@ PLUGIN_NAMES = [
     "request_handler",
     "roulette",
     "sing",
-    "take_name",
+    "who_is_spy",
+    "ollama",
 ]
 
 for name in PLUGIN_NAMES:
@@ -256,7 +266,7 @@ def transform_for_vitepress(text: str) -> str:
         rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
         text,
     )
-    # 去掉站内链接里的 .md 后缀
+# 去掉站内链接里的 .md 后缀
     text = re.sub(
         r"(\](/(?:deploy|plugins|architecture|common|about|guide)/[a-zA-Z0-9_./-]+)\.md)",
         r"\1",

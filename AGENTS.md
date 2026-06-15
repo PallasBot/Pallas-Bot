@@ -10,76 +10,22 @@
 - **主要代码目录**：`src/`
 - **质量门禁（CI）**：Ruff lint/format + 依赖漏洞扫描 + Docker 构建校验（见 `.github/workflows/ci.yml`）
 
-## 本地开发快速开始
+## 本地开发与质量门禁
 
-安装依赖（含开发依赖）：
+人类贡献者的完整步骤见 [docs/develop/environment.md](docs/develop/environment.md) 与 [docs/develop/workflow.md](docs/develop/workflow.md)。
 
-```bash
-uv sync --dev
-```
-
-运行 Ruff（与 CI 保持一致）：
+Agent 提交前至少执行：
 
 ```bash
 uv run ruff check src/
 uv run ruff format --check src/
 ```
 
-可选执行与 CI 对齐的补充检查：
-
-```bash
-uv run pip-audit
-docker build -t test-build .
-```
-
-> 说明：`pip-audit` 在 CI 中采用“尽量报告不阻断”的策略（`|| true`），用于优先暴露风险而不是拦截合并；本地可先查看结果再决定修复节奏。
-
-如果需要自动修复与格式化：
-
-```bash
-uv run ruff check --fix src/
-uv run ruff format src/
-```
-
-运行测试（如仓库包含 `tests/`）：
-
-```bash
-uv run pytest
-```
-
-## pre-commit（提交前检查）
-
-本仓库提供 pre-commit hooks（见 `.pre-commit-config.yaml`），用于在提交前自动执行基础检查与 Ruff。
-
-当前策略采用**细颗粒度分层**：
-
-- **基础仓库检查覆盖全仓**：例如 YAML/TOML 语法、尾随空格、混合换行、文件结尾换行等。
-- **Ruff 仅检查 `src/`**：避免对文档、脚本、编辑器配置等非主代码目录施加 Python lint/format。
-- **`.env` 被全局排除**：避免本地敏感配置被 hooks 读取或改写。
-
-首次安装 hooks：
-
-```bash
-uv run pre-commit install
-```
-
-手动对全仓运行：
-
-```bash
-uv run pre-commit run -a
-```
-
-仅运行 `src/` 代码检查时，可直接执行：
-
-```bash
-uv run ruff check src/
-uv run ruff format --check src/
-```
-
-> 说明：如果你没有安装 `pre-commit`，可用 `uv add --dev pre-commit` 添加到开发依赖组后再运行。
+pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 仅 `src/`**；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
 
 ## 文档与排障入口
 
+- **开发指南**：[docs/develop/README.md](docs/develop/README.md)（环境、流程、插件与 WebUI）。
 - **插件专项说明**：[docs/plugins/README.md](docs/plugins/README.md)（各子目录 `README.md` 与 `src/plugins/<name>/` 对应）。
 - **命令权限（cmd_perm）**：[docs/common/cmd_perm/README.md](docs/common/cmd_perm/README.md)（可配置等级、WebUI 覆盖、帮助菜单「何人可用」）。
 - **运行配置存储**：[docs/architecture/settings-storage.md](docs/architecture/settings-storage.md)（`pallas.toml` + `webui.json`，勿再向根目录 `.env` 写入新项）。

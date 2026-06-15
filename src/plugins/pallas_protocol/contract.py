@@ -1,18 +1,18 @@
-"""协议端插件的公共约定：账号实现类型、HTTP 路径与扩展点（与具体进程启动细节解耦）。"""
+"""协议端插件的公共约定：账号实现类型、HTTP 路径与扩展点。"""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
 
-# 默认协议实现（须与 backends 中已注册名一致，见 register_protocol_runtime_backend）
+# 默认协议实现
 DEFAULT_PROTOCOL_BACKEND: str = "napcat"
 SNOWLUMA_PROTOCOL_BACKEND: str = "snowluma"
-# 未配置 pallas_protocol_web_implementation 时，管理页 URL 第二段（与协议实现名解耦，避免与 NapCat 品牌强绑定）
+# 未配置 pallas_protocol_web_implementation 时，管理页 URL 第二段
 DEFAULT_PROTOCOL_WEB_MOUNT_SLUG: str = "console"
 # 账号协议字段名；取值对应运行时注册表中的 kind
 ACCOUNT_PROTOCOL_BACKEND_KEY: str = "protocol_backend"
-# 账号选用托管解压子目录对应的 Release 标记（与 runtime_extract 下目录名经 sanitize 对齐；空则跟随全局 manifest）
+# 账号选用托管解压子目录对应的 Release 标记
 MANAGED_RUNTIME_TAG_KEY: str = "managed_runtime_tag"
 
 # 协议页面前缀
@@ -30,7 +30,7 @@ def protocol_web_mount_path(*, implementation_slug: str) -> str:
 def resolve_public_mount_path(*, path_override: str, implementation_slug: str) -> str:
     """解析管理页挂载基路径。
 
-    - ``path_override`` 非空：视为整段 URL（可指向任意路径，用于完全自定义）。
+    - ``path_override`` 非空：视为整段 URL。
     - 否则：``protocol_web_mount_path(implementation_slug=...)``；slug 空则用 DEFAULT_PROTOCOL_WEB_MOUNT_SLUG。
     """
     po = (path_override or "").strip()
@@ -52,7 +52,7 @@ def normalize_instance_folder_segment(kind: str) -> str:
 def resolve_default_account_data_dir(instances_root: Path, account_id: str, backend_kind: str) -> Path:
     """无显式 ``account_data_dir`` 时的默认数据目录：``instances/<id>/<backend>/``。
 
-    若磁盘上仍存在历史布局 ``instances/<id>/``（且含 ``config/``），且新布局目录尚不存在，
+    若磁盘上仍存在历史布局 ``instances/<id>/``，且新布局目录尚不存在，
     则继续沿用旧路径，避免破坏已有 NapCat 数据；否则使用新布局路径（可能尚不存在，由
     ``prepare_dirs`` 创建）。"""
     clean_id = (account_id or "").strip()

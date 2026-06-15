@@ -1,4 +1,4 @@
-"""决斗泰拉资源：缺表/缺头像时自动拉取（类似 ensure_voices）。"""
+"""决斗泰拉资源：缺表/缺头像时自动拉取。"""
 
 from __future__ import annotations
 
@@ -124,7 +124,7 @@ async def ensure_duel_avatars_bulk(
     *,
     min_ratio: float = 0.85,
 ) -> bool:
-    """批量补全缺失头像（启动可选，约百张图）。"""
+    """批量补全缺失头像。"""
     payload = load_operators_payload()
     if not payload:
         return False
@@ -186,7 +186,7 @@ async def ensure_arknights_duel_resources(
 
 
 def needs_background_arknights_sync(*, sync_json: bool, bulk_avatars: bool) -> bool:
-    """是否需要在启动后后台拉取（表已齐且未开批量头像则跳过）。"""
+    """是否需要在启动后后台拉取。"""
     if bulk_avatars:
         return True
     return sync_json and not operators_json_ready()

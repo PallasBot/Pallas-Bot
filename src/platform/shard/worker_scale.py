@@ -1,4 +1,4 @@
-"""Hub：注册表需要更多生产 worker 时，自动执行 start --workers-only（仅拉起缺失分片）。"""
+"""Hub：注册表需要更多生产 worker 时，自动执行 start --workers-only。"""
 
 from __future__ import annotations
 
@@ -121,7 +121,7 @@ def schedule_worker_scale_restart(*, reason: str = "", delay_sec: float = _DEBOU
 
 
 def run_worker_scale_restart(*, reason: str = "") -> bool:
-    """立即尝试扩容 worker（供测试或防抖回调）。"""
+    """立即尝试扩容 worker。"""
     settings = get_shard_registry_settings()
     if not settings.enabled or settings.role != "hub" or not auto_scale_workers_enabled():
         return False

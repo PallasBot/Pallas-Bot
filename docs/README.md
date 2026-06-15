@@ -14,6 +14,14 @@
 | [常见问题](FAQ.md) | 学习机制、号主、排障 |
 | [3.0 迁移](Migration-v3.md) | Mongo → PostgreSQL 等 |
 
+## 开发
+
+| 文档 | 说明 |
+| --- | --- |
+| [开发指南](develop/README.md) | 贡献者阅读顺序：环境、流程、插件与 WebUI |
+| [本地开发环境](develop/environment.md) | `uv`、配置、单进程 / 分片启动 |
+| [贡献与提交流程](develop/workflow.md) | Ruff、pre-commit、测试、PR 约定 |
+
 ## 社区中心
 
 | 链接 | 说明 |
@@ -26,11 +34,18 @@
 | 文档 | 说明 |
 | --- | --- |
 | [项目结构](architecture/project-structure.md) | 目录职责与分层 |
+| [内核分层](architecture/common-layers.md) | `foundation` / `platform` / `features` 等 |
 | [插件规范](architecture/plugin-convention.md) | `src/plugins` 组织方式 |
 | [配置存储](architecture/settings-storage.md) | pallas.toml + webui.json |
-| [多进程分片](architecture/bot_process_sharding.md) | hub + worker 生产部署 |
-| [控制面与语料联邦](architecture/control-plane-corpus-federation.md) | 维护者：架构与阶段说明 |
+| [多进程分片](architecture/bot_process_sharding.md) | hub + worker，可选生产部署 |
 | [站点定制与更新](architecture/site-customization-and-updates.md) | local/plugins、更新策略 |
+
+### 维护者附录
+
+| 文档 | 说明 |
+| --- | --- |
+| [控制面与语料联邦](architecture/control-plane-corpus-federation.md) | Composite 语料、Bootstrap、OpenAPI |
+| [下一世代瘦身路线图](architecture/next-gen-slimdown.md) | unified 为主的分阶段减负 |
 
 ## 插件
 
@@ -58,25 +73,9 @@
 2. 提交并 push 到 **Pallas-Bot-Docs `main`**（随后 GitHub Pages 自动部署）
 3. 若 push 来自 **`main`**，尝试将 `main` 合并进本仓 **`docs`** 分支；**同一文件冲突时以 `docs` 为准**（`-X ours`），无法自动合并时跳过推送、不覆盖 `docs`
 
-**维护者一次性配置**（见下方「如何启用自动更新」）：在 Pallas-Bot 仓库 Actions Secrets 添加 `DOCS_SYNC_TOKEN`。
+**维护者一次性配置**：在 Pallas-Bot 仓库 Actions Secrets 添加 `DOCS_SYNC_TOKEN`（PAT 需对 `PallasBot/Pallas-Bot-Docs` 有 Contents 写权限）。配置步骤见 [工作流文件](../.github/workflows/sync-docs-to-web.yml) 顶部注释。
 
 可在 Actions 页手动 **Run workflow** 触发全量同步。
-
-### 如何启用自动更新
-
-1. **创建 PAT**（Personal Access Token）
-   - GitHub → **Settings → Developer settings → Personal access tokens**
-   - Fine-grained：Resource owner 选组织/用户，Repository access 仅 **`PallasBot/Pallas-Bot-Docs`**，Permissions → **Contents: Read and write**
-   - 或 Classic：勾选 **`repo`**（若文档仓为 private 则必需；public 仓用 fine-grained 更稳妥）
-2. **写入 Secret**
-   - 打开 [PallasBot/Pallas-Bot](https://github.com/PallasBot/Pallas-Bot) → **Settings → Secrets and variables → Actions → New repository secret**
-   - Name：`DOCS_SYNC_TOKEN`
-   - Value：上一步生成的 token
-3. **推送工作流**（若尚未在远端 `main`）
-   - 将含 `.github/workflows/sync-docs-to-web.yml` 的 commit push 到 `origin/main`
-4. **验证**
-   - Actions → **Sync docs to Pallas-Bot-Docs** → **Run workflow** 手动跑一次
-   - 成功后在 [Pallas-Bot-Docs](https://github.com/PallasBot/Pallas-Bot-Docs/commits/main) 应出现 `docs: 同步主仓 Pallas-Bot@…` 提交，数分钟内 [GitHub Pages](https://PallasBot.github.io/Pallas-Bot-Docs/) 更新
 
 之后只需在主仓 **`docs/`** 改文档并合并到 **`main`**（或 **`docs`**），无需再手跑同步脚本。
 

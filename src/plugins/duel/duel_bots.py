@@ -19,6 +19,7 @@ from src.platform.multi_bot.group_online_cache import (
     resolve_local_connected_bots_in_group,
     store_cached_group_bot_ids,
 )
+from src.platform.shard import context as shard_ctx
 from src.plugins.block import is_fleet_bot_qq
 
 if TYPE_CHECKING:
@@ -69,7 +70,7 @@ def user_ids_from_member_rows(rows: Any) -> set[int]:
 
 
 def parse_group_member_list_user_ids(raw: Any) -> set[int]:
-    """从 get_group_member_list / call_api 返回值解析成员 QQ（兼容 NapCat / NoneBot 多种嵌套）。"""
+    """从 get_group_member_list / call_api 返回值解析成员 QQ。"""
     raw = normalize_onebot_api_payload(raw)
     if isinstance(raw, list):
         return user_ids_from_member_rows(raw)
@@ -161,12 +162,11 @@ async def resolve_unified_group_online_bot_ids(group_id: int) -> list[int]:
 
 
 async def resolve_shard_group_online_bot_ids(group_id: int) -> list[int]:
-    """分片：解析本群可用 fleet 牛（无进程内 TTL 缓存）。"""
+    """分片：解析本群可用 fleet 牛。"""
     from src.platform.multi_bot.fleet import get_catalog_bot_ids
     from src.platform.shard.presence import get_cluster_online_bot_ids, pick_local_query_bot
-    from src.platform.shard.registry.config import is_sharding_active
 
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return await resolve_unified_group_online_bot_ids(group_id)
 
     caller = pick_local_query_bot()
@@ -281,7 +281,7 @@ async def resolve_shard_group_online_bot_ids(group_id: int) -> list[int]:
 
 
 async def fleet_bot_confirmed_in_group(bot: Any, group_id: int) -> bool:
-    """当前牛牛账号是否在该群（成员列表失败时逐号探测）。"""
+    """当前牛牛账号是否在该群。"""
     try:
         bid = int(bot.self_id)
     except (AttributeError, TypeError, ValueError):
@@ -296,7 +296,7 @@ async def fleet_bot_confirmed_in_group(bot: Any, group_id: int) -> bool:
 
 
 async def list_local_fleet_bots_in_group(group_id: int) -> list[int]:
-    """本 worker 已连接且能确认在本群的 fleet 牛（八角笼分片登记用）。"""
+    """本 worker 已连接且能确认在本群的 fleet 牛。"""
     from src.platform.multi_bot.fleet import get_catalog_bot_ids
     from src.platform.shard.presence import pick_local_query_bot
 
@@ -328,7 +328,7 @@ async def list_local_fleet_bots_in_group(group_id: int) -> list[int]:
 
 
 async def pick_random_duel_bot_pair(group_id: int) -> tuple[int, int] | None:
-    """随机两只在线牛（非八角笼；各 Bot 实例勿共用）。"""
+    """随机两只在线牛。"""
     ids = await list_group_online_bot_ids(group_id)
     if len(ids) < 2:
         return None
@@ -337,7 +337,7 @@ async def pick_random_duel_bot_pair(group_id: int) -> tuple[int, int] | None:
 
 
 def cage_pair_seed(group_id: int, user_id: int, message_time: int) -> int:
-    """同群同一条八角笼指令，各 Bot 算出相同配对（不依赖各端 message_id）。"""
+    """同群同一条八角笼指令，各 Bot 算出相同配对。"""
     t = normalize_message_time(message_time)
     return group_id * 1_000_000_007 + user_id * 1_000_003 + t
 
@@ -349,7 +349,7 @@ async def pick_cage_duel_bot_pair(
     *,
     plaintext: str = "八角笼牛",
 ) -> tuple[int, int] | None:
-    """八角笼（单进程）：从本群在线牛中按群+发送者+时间种子固定配对。"""
+    """八角笼：从本群在线牛中按群+发送者+时间种子固定配对。"""
     ids = sorted(await list_group_online_bot_ids(group_id))
     if len(ids) < 2:
         return None
@@ -427,7 +427,7 @@ def parse_duel_at_qqs(event: GroupMessageEvent) -> list[str]:
 
 
 def raw_message_has_at(event: GroupMessageEvent) -> bool:
-    """raw 中是否含 @（本牛看不到 message.at 时用于避免误报缺对手）。"""
+    """raw 中是否含 @。"""
     raw = getattr(event, "raw_message", None) or ""
     if "[CQ:at," not in raw and "at,qq=" not in raw:
         return False

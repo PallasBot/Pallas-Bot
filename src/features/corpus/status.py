@@ -1,4 +1,4 @@
-"""本部署语料多源状态快照（供控制台 /corpus-status）。"""
+"""本部署语料多源状态快照。"""
 
 from __future__ import annotations
 

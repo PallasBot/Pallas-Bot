@@ -8,7 +8,7 @@ from typing import Any
 
 
 class NapcatPlatform(ABC):
-    """与操作系统相关的 NapCat 启动与进程行为（下载逻辑在 ``runtime`` 层）。"""
+    """与操作系统相关的 NapCat 启动与进程行为。"""
 
     @abstractmethod
     def creation_flags(self) -> int:
@@ -39,7 +39,7 @@ class NapcatPlatform(ABC):
 
     @abstractmethod
     def collect_qq_nt_hints(self, account: dict[str, Any]) -> list[str]:
-        """QQ NT 可能落点（启发式），用于管理页说明。"""
+        """QQ NT 可能落点，用于管理页说明。"""
 
     def should_set_home_to_workdir(self) -> bool:
         """是否在启动时为非 Windows 设置 ``HOME=NAPCAT_WORKDIR``。"""

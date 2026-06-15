@@ -1,5 +1,3 @@
-import asyncio
-import contextlib
 import re
 
 from nonebot import get_driver, logger, on_message
@@ -16,17 +14,14 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
-from src.platform.ingress.cage_plaintext import is_cage_plaintext
+from src.platform.ingress.policy_registry import text_matches_plugin_fanout
 from src.plugins.duel import duel_penalty  # noqa: F401 — 注册惩罚消息 matcher
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_bots import (
     duel_narrator_bot_id,
-    fleet_bot_confirmed_in_group,
     infer_duel_defender_when_at_self_hidden,
     is_bot_qq,
-    list_local_fleet_bots_in_group,
     parse_duel_at_qqs,
-    pick_cage_duel_bot_pair,
     raw_message_has_at,
     resolve_duel_round_count,
 )
@@ -77,6 +72,10 @@ __plugin_meta__ = PluginMetadata(
                 "default": "group_moderator",
             },
         ],
+        "ingress_fanout": {
+            "scope": "always",
+            "regexes": [r"^八角笼(?:牛|斗)(?:\s*\d{1,2}\s*(?:幕|回合))?\s*$"],
+        },
         "menu_data": [
             {
                 "func": "牛牛决斗",
@@ -156,7 +155,7 @@ async def is_duel_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> boo
 async def is_cage_msg(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
     if event.group_id in BLOCK_LIST:
         return False
-    return is_cage_plaintext(event.get_plaintext())
+    return text_matches_plugin_fanout(event.get_plaintext(), "duel")
 
 
 duel_msg = on_message(
@@ -238,7 +237,7 @@ async def run_duel_match(
     command_gate: str | None = None,  # "ok"：入口已 begin_duel_command
     total_rounds: int | None = None,
 ) -> None:
-    """开团：群级占用与指令 CD（多 Bot 共用）；command_gate=ok 表示入口已抢占。"""
+    """开团：群级占用与指令 CD；command_gate=ok 表示入口已抢占。"""
     if not duel_handler_is_narrator(event, challenger_id, defender_id, dual_bot=dual_bot):
         if command_gate == "ok":
             end_duel_group(event.group_id)
@@ -398,53 +397,9 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
         return
 
     plain = (event.get_plaintext() or "").strip() or "八角笼牛"
-    from src.platform.shard.registry.config import is_sharding_active
+    from src.plugins.duel.shard_cage import cage_narrator_offline_for_reply, resolve_cage_duel_pair
 
-    if is_sharding_active():
-        from src.platform.shard.local_representative import is_local_worker_representative
-
-        self_id = int(bot.self_id)
-        if not await fleet_bot_confirmed_in_group(bot, event.group_id):
-            return
-        from src.platform.shard.coord.cage_duel import (
-            run_shard_cage_duel_coord,
-            update_shard_cage_duel_registration,
-        )
-
-        coord_task = asyncio.create_task(
-            run_shard_cage_duel_coord(
-                group_id=event.group_id,
-                user_id=int(event.user_id),
-                message_time=int(event.time),
-                plaintext=plain,
-                self_bot_id=self_id,
-            )
-        )
-        try:
-            if is_local_worker_representative(self_id):
-                probed = await list_local_fleet_bots_in_group(event.group_id)
-                await update_shard_cage_duel_registration(
-                    group_id=event.group_id,
-                    user_id=int(event.user_id),
-                    message_time=int(event.time),
-                    plaintext=plain,
-                    bot_ids=sorted({self_id, *probed}),
-                )
-            pair = await coord_task
-        except asyncio.CancelledError:
-            raise
-        finally:
-            if not coord_task.done():
-                coord_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await coord_task
-    else:
-        pair = await pick_cage_duel_bot_pair(
-            event.group_id,
-            int(event.user_id),
-            int(event.time),
-            plaintext=plain,
-        )
+    pair = await resolve_cage_duel_pair(bot, event, plain=plain)
     if not pair:
         if not await try_claim_duel_message(event):
             return
@@ -456,19 +411,15 @@ async def _(bot: Bot, event: GroupMessageEvent, state: T_State) -> None:
         return
     a, b = str(pair[0]), str(pair[1])
     narrator = min(int(a), int(b))
-    if is_sharding_active():
-        from src.platform.shard.presence import bot_has_local_connection, get_cluster_online_bot_ids
-
-        if not bot_has_local_connection(narrator):
-            if narrator not in get_cluster_online_bot_ids():
-                if not await try_claim_duel_message(event):
-                    return
-                await send_duel_user_reply(
-                    cage_msg,
-                    event.group_id,
-                    "主持牛暂未连线，八角笼改日再战。",
-                )
+    if cage_narrator_offline_for_reply(narrator):
+        if not await try_claim_duel_message(event):
             return
+        await send_duel_user_reply(
+            cage_msg,
+            event.group_id,
+            "主持牛暂未连线，八角笼改日再战。",
+        )
+        return
     if int(event.self_id) != narrator:
         return
     if not await try_claim_duel_message(event):

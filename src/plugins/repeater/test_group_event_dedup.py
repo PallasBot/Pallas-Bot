@@ -23,6 +23,6 @@ async def test_should_skip_duplicate_group_event_different_time_not_skipped():
 def test_normalize_group_raw_message_matches_chatdata_pattern():
     import src.plugins.repeater as repeater_pkg
 
-    # 与 ChatData 一致：去掉 `.image,...]` 中的可变片段（若存在）
+    # 与 ChatData 一致：去掉 `.image,...]` 中的可变片段
     raw = "prefix.image,subtype=9]"
     assert repeater_pkg._normalize_group_raw_message(raw) == "prefix.image]"

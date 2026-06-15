@@ -1,4 +1,4 @@
-"""分片：MAA getTask 轮询活跃时间（跨 worker 共享，供 was_seen / 绑定校验）。"""
+"""分片：MAA getTask 轮询活跃时间。"""
 
 from __future__ import annotations
 
@@ -99,8 +99,3 @@ def was_maa_seen_sync(user: str, device: str, ttl: int) -> bool:
         if seen_at > _local_seen.get(key, 0.0):
             _local_seen[key] = seen_at
     return True
-
-
-async def prune_stale_maa_seen_files(*, max_age_sec: float | None = None) -> None:
-    """Redis TTL 自动过期。"""
-    return None

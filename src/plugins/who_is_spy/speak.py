@@ -12,7 +12,7 @@ class SpeechMessageEvent(Protocol):
 
 
 def extract_at_speech_text(event: SpeechMessageEvent) -> str:
-    """去掉 @ 段后取文本段拼接（述词正文）。"""
+    """去掉 @ 段后取文本段拼接。"""
     parts: list[str] = []
     for seg in event.message:
         if seg.type != "text":

@@ -1,7 +1,7 @@
 """在 WebUI「通用配置」中暴露的配置段：对应根目录 ``.env`` 的 Pydantic 模型。
 
-- ``message_scrub``：显式 ``field_to_env``（与历史 ``PALLAS_*`` 键名一致）。
-- ``cmd_perm``：命令权限覆盖（``PALLAS_COMMAND_PERMISSION_OVERRIDES``）。
+- ``message_scrub``：显式 ``field_to_env``。
+- ``cmd_perm``：命令权限覆盖。
 - 若干 NoneBot 插件：字段名大写写入 ``.env``。
 
 新增段：在 ``_registered_sections`` 中追加；插件段可用 ``_plugin_env_section_from_module``。

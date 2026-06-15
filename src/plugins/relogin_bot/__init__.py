@@ -133,7 +133,7 @@ async def _relogin_got_qq(bot: Bot, event: MessageEvent, state: T_State, qq_inpu
     if not qq:
         await relogin_cmd.reject("QQ号格式不正确，请重新输入：")
 
-    # 检查用户是否是目标 bot 的管理员（或超管）
+    # 检查用户是否是目标 bot 的管理员
     is_target_admin = await user_is_bot_admin(int(qq), int(event.get_user_id()))
     if not (is_target_admin or await SUPERUSER(bot, event)):
         await relogin_cmd.finish(f"你不是 {qq} 的管理员，无法执行重新上号。")

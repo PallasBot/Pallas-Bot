@@ -1,4 +1,4 @@
-"""OneBot 发消息在进程关闭或 WS 断开时的容错（避免 matcher ERROR 刷屏）。"""
+"""OneBot 发消息在进程关闭或 WS 断开时的容错。"""
 
 from __future__ import annotations
 

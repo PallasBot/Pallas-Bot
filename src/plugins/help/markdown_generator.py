@@ -133,7 +133,7 @@ def _wrap_paragraphs_for_help_page(text: str, width: int = _HELP_DETAIL_WRAP) ->
 
 
 class HelpMarkdownIssue(StrEnum):
-    """帮助 Markdown 生成结果（供 handler 分支，避免解析正文）。"""
+    """帮助 Markdown 生成结果。"""
 
     OK = "ok"
     PLUGIN_NOT_FOUND = "plugin_not_found"

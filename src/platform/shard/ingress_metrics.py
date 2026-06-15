@@ -1,4 +1,4 @@
-"""分片 worker ingress 门控计数（写入 worker stats，hub 合并算命中率）。"""
+"""分片 worker ingress 门控计数。"""
 
 from __future__ import annotations
 

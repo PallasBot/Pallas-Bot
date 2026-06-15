@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-# 「暗牌」= 私聊只发词、不标平民/卧底；与「白板」身份（无词）无关。
+# 「暗牌」= 私聊只发词、不标平民/卧底；与「白板」身份无关。
 _HIDE_ROLE_TOKENS = frozenset({"暗牌", "不标身份", "隐藏身份"})
 _SHOW_ROLE_TOKENS = frozenset({"明牌", "标身份", "附带身份"})
 _BLANK_TOKEN_RE = re.compile(r"^白板(\d*)$")

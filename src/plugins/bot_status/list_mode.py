@@ -1,4 +1,4 @@
-"""牛牛在吗：名册与在线判定模式（session / fleet / connected / auto）。"""
+"""牛牛在吗：名册与在线判定模式。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from nonebot import get_bots
 
 from src.platform.multi_bot.fleet import get_fleet_bot_ids
 from src.platform.multi_bot.session_seen import get_session_seen_bot_ids
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 from .config import get_bot_status_config
 
@@ -19,14 +19,14 @@ ResolvedListMode = StatusListMode
 def resolve_status_list_mode() -> ResolvedListMode:
     raw = (get_bot_status_config().bot_status_list_mode or "auto").strip().lower()
     if raw == "auto":
-        return "fleet" if is_sharding_active() else "session"
+        return "fleet" if shard_ctx.sharding_active() else "session"
     if raw in ("session", "fleet", "connected"):
         return raw  # type: ignore[return-value]
-    return "fleet" if is_sharding_active() else "session"
+    return "fleet" if shard_ctx.sharding_active() else "session"
 
 
 def status_inventory_bot_ids(*, list_mode: ResolvedListMode | None = None) -> frozenset[int]:
-    """名册 QQ：session=本进程；connected=曾连 WS；fleet=协议端 enabled（分片含 registry）。"""
+    """名册 QQ：session=本进程；connected=曾连 WS；fleet=协议端 enabled。"""
     mode = list_mode or resolve_status_list_mode()
     if mode == "fleet":
         return get_fleet_bot_ids()
@@ -38,7 +38,7 @@ def status_inventory_bot_ids(*, list_mode: ResolvedListMode | None = None) -> fr
         ids = {int(x) for x in block_cfg.bots}
     except Exception:
         ids = set()
-    if is_sharding_active():
+    if shard_ctx.sharding_active():
         for key in get_bots():
             try:
                 ids.add(int(key))
@@ -57,7 +57,7 @@ def cluster_online_bot_ids_for_status(
 
     mode = list_mode or resolve_status_list_mode()
     bots = current_bots if current_bots is not None else nb_get_bots()
-    if is_sharding_active() and mode in ("fleet", "connected"):
+    if shard_ctx.sharding_active() and mode in ("fleet", "connected"):
         from src.platform.shard.presence import get_cluster_online_bot_ids
 
         return set(get_cluster_online_bot_ids())

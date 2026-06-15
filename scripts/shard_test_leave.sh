@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 退出分片测试：恢复 .env、data 链接、协议端 accounts.json（及 registry）。
+# 退出分片测试：恢复 .env、data 链接、协议端 accounts.json。
 #
 #   ./scripts/shard_test_leave.sh
 # 建议先: ./scripts/run_sharded_bot.sh stop
@@ -34,7 +34,7 @@ PY
 
 echo "还原测试环境 (stamp=${stamp})"
 
-# 停分片进程（忽略失败）
+# 停分片进程
 if [[ -x "${REPO_ROOT}/scripts/run_sharded_bot.sh" ]]; then
   "${REPO_ROOT}/scripts/run_sharded_bot.sh" stop 2>/dev/null || true
 fi
@@ -49,7 +49,7 @@ if [[ -n "${accounts_backup}" && -f "${accounts_backup}" ]]; then
   echo "已恢复 accounts.json -> ${target}"
 fi
 
-# 2) 恢复 registry.json（若有备份）
+# 2) 恢复 registry.json
 if [[ -n "${registry_backup}" && -f "${registry_backup}" ]]; then
   reg_target="${REPO_ROOT}/data/pallas_shard/registry.json"
   if [[ -L "${REPO_ROOT}/data" ]]; then

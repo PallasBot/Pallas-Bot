@@ -1,4 +1,4 @@
-"""分片 hub：MAA getTask / reportStatus 统一入口（转发至登记 worker）。"""
+"""分片 hub：MAA getTask / reportStatus 统一入口。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""将异常格式化为单行摘要（日志 / API error 字段）。"""
+"""将异常格式化为单行摘要。"""
 
 from __future__ import annotations
 

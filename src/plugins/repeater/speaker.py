@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from nonebot.adapters.onebot.v11 import Message
 
 from src.foundation.config import BotConfig
+from src.platform.shard import context as shard_ctx
 
 from .ban_manager import BanManager
 from .message_store import MessageStore
@@ -99,12 +100,10 @@ class Speaker:
                     "reply_keywords": Speaker.SPEAK_FLAG,
                 })
 
-            from src.platform.shard.registry.config import is_sharding_active
-
             from .shard_opt import local_connected_bot_ids
 
             bot_ids = [bid for bid in group_replies.keys() if bid]
-            if is_sharding_active():
+            if shard_ctx.sharding_active():
                 local_bots = local_connected_bot_ids()
                 bot_ids = [bid for bid in bot_ids if bid in local_bots]
             if not bot_ids:

@@ -1,4 +1,4 @@
-"""分片 worker：注册 matcher/消息控制台指标并刷入共享 stats（hub WebUI 合并读取）。"""
+"""分片 worker：注册 matcher/消息控制台指标并刷入共享 stats。"""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
 )
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 __plugin_meta__ = PluginMetadata(
     name="控制台运行指标",
@@ -31,11 +31,9 @@ driver = get_driver()
 
 @driver.on_startup
 async def _boot_worker_console_metrics() -> None:
-    if not is_sharding_active():
+    if not shard_ctx.sharding_active():
         return
-    from src.platform.bot_runtime.roles import is_sharded_worker
-
-    if not is_sharded_worker():
+    if not shard_ctx.is_worker():
         return
     from src.plugins.pallas_webui.extended_api import (
         ensure_console_metrics_hooks,

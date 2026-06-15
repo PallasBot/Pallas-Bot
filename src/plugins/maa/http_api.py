@@ -78,11 +78,11 @@ async def deliver_maa_notify(
     *,
     task_id: str = "",
 ) -> None:
+    from src.platform.shard import context as shard_ctx
     from src.platform.shard.presence import bot_has_local_connection
-    from src.platform.shard.registry.config import is_sharding_active
 
     bot_id = int(notify.bot_id)
-    if is_sharding_active() and not bot_has_local_connection(bot_id):
+    if shard_ctx.sharding_active() and not bot_has_local_connection(bot_id):
         from src.platform.shard.coord.bot_action import send_group_message_as_bot, send_private_msg_as_bot
 
         message = Message(segments)

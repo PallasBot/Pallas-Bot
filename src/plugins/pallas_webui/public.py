@@ -1,4 +1,4 @@
-"""将构建产物（如 Vite dist）挂到 data/pallas_webui/public；子路径为文件时直出，否则回退 SPA。"""
+"""将构建产物挂到 data/pallas_webui/public；子路径为文件时直出，否则回退 SPA。"""
 
 from __future__ import annotations
 

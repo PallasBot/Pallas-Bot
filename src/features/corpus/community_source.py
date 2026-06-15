@@ -1,4 +1,4 @@
-"""社区语料 HTTP 仓储（控制面 Corpus API）。"""
+"""社区语料 HTTP 仓储。"""
 
 from __future__ import annotations
 

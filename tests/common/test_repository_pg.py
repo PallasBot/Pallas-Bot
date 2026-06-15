@@ -1,7 +1,7 @@
 """
 PostgreSQL Repository 集成测试。
 
-依赖：本地 PG 实例（通过 ``PG_TEST_DSN`` 注入）。fixture 定义在 ``conftest.py``，
+依赖：本地 PG 实例。fixture 定义在 ``conftest.py``，
 未设置 DSN 时整套用例自动 skip。
 
 覆盖矩阵：
@@ -24,7 +24,7 @@ from sqlalchemy.dialects import postgresql
 
 @pytest.mark.asyncio
 async def test_find_for_cleanup_or_semantics(pg_engine):
-    """trigger_count>threshold 与 clear_time<expiration 必须是 OR 关系（对齐 Mongo）。"""
+    """trigger_count>threshold 与 clear_time<expiration 必须是 OR 关系。"""
     from src.foundation.db.modules import Context
     from src.foundation.db.repository_pg import PgContextRepository
 
@@ -753,7 +753,7 @@ async def test_blacklist_answers_and_reserve_do_not_clobber(pg_engine):
 
 @pytest.mark.asyncio
 async def test_image_cache_save_is_upsert(pg_engine):
-    """PgImageCacheRepository.save 必须对齐 Mongo save() 的 upsert 语义（存在则更新、不存在则插入）。"""
+    """PgImageCacheRepository.save 必须对齐 Mongo save() 的 upsert 语义。"""
     from src.foundation.db.modules import ImageCache
     from src.foundation.db.repository_pg import PgImageCacheRepository
 
@@ -824,7 +824,7 @@ async def test_config_cache_ignore_cache_forces_db_read(pg_engine):
     await repo.upsert_field(2002, "security", True)
     assert (await repo.get(2002)).security is True
 
-    # 绕过 repo 直接 SQL 改库（不触发缓存失效）
+    # 绕过 repo 直接 SQL 改库
     async with get_session() as session:
         await session.execute(update(BotConfigRow).where(BotConfigRow.account == 2002).values(security=False))
         await session.commit()

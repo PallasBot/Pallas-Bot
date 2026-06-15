@@ -1,4 +1,4 @@
-"""WebUI 配置项展示用中文名（字段 name → label）。"""
+"""WebUI 配置项展示用中文名。"""
 
 from __future__ import annotations
 

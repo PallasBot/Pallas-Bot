@@ -7,13 +7,13 @@ from typing import Any
 
 from src.foundation.command_prefix import matches_text_prefix, peel_text_prefix
 
-# MAA 客户端常见为 32 位十六进制（无连字符）；协议示例亦可能出现标准 UUID
+# MAA 客户端常见为 32 位十六进制；协议示例亦可能出现标准 UUID
 _DEVICE_HEX32_RE = re.compile(r"^[0-9a-fA-F]{32}$")
 _DEVICE_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
 
 def normalize_device_id(raw: str) -> str | None:
-    """统一为 32 位小写 hex（去掉 UUID 连字符），便于与 MAA 轮询体对齐。"""
+    """统一为 32 位小写 hex，便于与 MAA 轮询体对齐。"""
     s = (raw or "").strip()
     if not s:
         return None
@@ -74,7 +74,7 @@ LINK_START_SUBTYPES = frozenset({
 
 STAGE_SETTING_MAX = 4
 
-# 远控仅文档化 Settings-Stage1；勿下发 Stage2~4 / FightEnable（6.10+ 易污染 StagePlan）
+# 远控仅文档化 Settings-Stage1；勿下发 Stage2~4 / FightEnable
 SETTINGS_STAGE_REMOTE = "Settings-Stage1"
 
 SETTINGS_TYPES = frozenset({
@@ -98,13 +98,13 @@ IMMEDIATE_TYPES = frozenset({
     "HeartBeat",
 })
 
-# 下发这些 type 时不再自动追加截图任务（Settings 改配置无需截图，减轻 reportStatus 体积）
+# 下发这些 type 时不再自动追加截图任务
 TASK_TYPES_WITHOUT_AUTO_SCREENSHOT = IMMEDIATE_TYPES | frozenset({"CaptureImage"}) | SETTINGS_TYPES
 
-# 维护者：LinkStart-* 子项（除 WakeUp/完整 LinkStart）不含唤醒；游戏未在主界面时 MAA 易 TaskChainError。
+# 维护者：LinkStart-* 子项不含唤醒；游戏未在主界面时 MAA 易 TaskChainError。
 # 牛牛不自动前置 LinkStart-WakeUp。截图/心跳/停止见 IMMEDIATE_TYPES。详见 docs/plugins/maa/README.md「维护者说明」。
 
-# 远程控制协议允许下发的 type（不含 params 的项不得带多余参数）
+# 远程控制协议允许下发的 type
 ALLOWED_REMOTE_TASK_TYPES: frozenset[str] = (
     frozenset({"LinkStart", "CaptureImage"})
     | frozenset(LINK_START_SUBTYPES)
@@ -123,7 +123,7 @@ class MaaControlCommandHelp:
     description: str
 
 
-# 口令、MAA type、用途说明（COMMAND_TASK_MAP 由此生成，避免与帮助文案脱节）
+# 口令、MAA type、用途说明
 MAA_CONTROL_COMMAND_HELPS: tuple[MaaControlCommandHelp, ...] = (
     MaaControlCommandHelp(
         "牛牛长草",
@@ -231,7 +231,7 @@ def _maa_help_table_section(title: str, items: tuple[MaaControlCommandHelp, ...]
 
 
 def format_maa_plugin_usage_brief() -> str:
-    """二级帮助页「插件内用法」简报（完整口令表见功能详情「MAA 远控」）。"""
+    """二级帮助页「插件内用法」简报。"""
     return "\n\n".join([
         "1. **私聊绑定**：牛牛绑定MAA <设备标识符> [别名]（设备 id 见 MAA「远程控制」）",
         "2. **MAA 配置**：「远程控制」填写上方对接地址；用户标识符填 QQ 号",
@@ -241,7 +241,7 @@ def format_maa_plugin_usage_brief() -> str:
 
 
 def format_maa_control_commands_help() -> str:
-    """三级「MAA 远控」详情：分组表格（与 COMMAND_TASK_MAP 同步）。"""
+    """三级「MAA 远控」详情：分组表格。"""
     sections = [
         _maa_help_table_section("长草", (MAA_CONTROL_COMMAND_HELPS[0],)),
         _maa_help_table_section(
@@ -302,7 +302,7 @@ def primary_stage_from_plan(stages: list[str]) -> str | None:
 
 
 def build_stage_setting_specs(stages: list[str]) -> list[MaaTaskSpec]:
-    """远控仅下发 Settings-Stage1（协议支持的主关卡位）。"""
+    """远控仅下发 Settings-Stage1。"""
     primary = primary_stage_from_plan(stages)
     if not primary:
         return []
@@ -373,7 +373,7 @@ def parse_command_line(text: str) -> MaaTaskSpec | None:
 
 
 def parse_command_specs(text: str) -> list[MaaTaskSpec] | None:
-    """解析「牛牛长草」或「牛牛设置连接 xxx」类口令，可能返回多项（如关卡候选）。"""
+    """解析「牛牛长草」或「牛牛设置连接 xxx」类口令，可能返回多项。"""
     line = (text or "").strip()
     if not line:
         return None

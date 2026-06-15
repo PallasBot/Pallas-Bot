@@ -1,4 +1,4 @@
-"""跨 worker 同群决斗互斥（基于 group_activity）。"""
+"""跨 worker 同群决斗互斥。"""
 
 from __future__ import annotations
 
@@ -54,10 +54,6 @@ def try_begin_duel_group(group_id: int) -> bool:
 
 def end_duel_group(group_id: int) -> None:
     _LOCK.end(group_id)
-
-
-async def prune_stale_duel_group_files(*, max_age_sec: float = 3600.0) -> int:
-    return 0
 
 
 async def try_reclaim_orphan_duel_group(group_id: int) -> bool:

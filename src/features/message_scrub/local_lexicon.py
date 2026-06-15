@@ -99,7 +99,7 @@ def _get_automaton() -> AhoCorasick | None:
 
 
 def local_lexicon_hits(*, plain_text: str, raw_message: str) -> bool:
-    """仅本地词库：明文或 raw（均转小写后扫描）任一命中即 True。"""
+    """仅本地词库：明文或 raw任一命中即 True。"""
     ac = _get_automaton()
     if ac is None:
         return False

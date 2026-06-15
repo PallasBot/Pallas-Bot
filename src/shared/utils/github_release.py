@@ -2,11 +2,11 @@
 
 提供：
 - :func:`github_release_api_url` — 构造 GitHub Releases API URL
-- :func:`github_auth_headers` — Bearer 鉴权头（API / 网页下载链可选）
+- :func:`github_auth_headers` — Bearer 鉴权头
 - :func:`github_release_asset_url` / :func:`github_release_asset_url_candidates` — releases/download 直链
 - :func:`release_tag_from_github_final_url` — 从 ``…/releases/tag/{tag}`` 解析 tag
 - :func:`fetch_latest_release_tag_via_github_web` — API 不可用时经 github.com 跳转解析最新 tag
-- :func:`fetch_github_releases` — 获取 release 列表（含 assets）
+- :func:`fetch_github_releases` — 获取 release 列表
 - :func:`fetch_latest_release` — 获取最新单条 release 摘要
 """
 
@@ -77,7 +77,7 @@ _github_auth_headers = github_auth_headers
 
 
 def github_release_asset_url(repo: str, asset_name: str, tag: str = "") -> str:
-    """GitHub Releases 网页直链（latest/download 或 tag/download）。"""
+    """GitHub Releases 网页直链。"""
     owner_part, _, name_part = (repo or "").strip().partition("/")
     if not owner_part or not name_part:
         msg = f"无效的 GitHub 仓库名: {repo!r}，应为 Owner/Repo"
@@ -108,7 +108,7 @@ def github_release_asset_url_candidates(repo: str, asset_name: str, tag: str = "
 
 
 def normalize_release_tag(tag: str) -> str:
-    """用于比对：去空白、小写，并去掉常见 semver 前导 ``v``（如 ``v1.2.0`` 与 ``1.2.0`` 视为一致）。"""
+    """用于比对：去空白、小写，并去掉常见 semver 前导 ``v``。"""
     t = (tag or "").strip().lower()
     if len(t) > 1 and t.startswith("v") and t[1].isdigit():
         return t[1:]
@@ -116,12 +116,12 @@ def normalize_release_tag(tag: str) -> str:
 
 
 def release_tags_equivalent(a: str, b: str) -> bool:
-    """两枚发行标签是否视为同一版本（忽略大小写及前导 v）。"""
+    """两枚发行标签是否视为同一版本。"""
     return normalize_release_tag(a) == normalize_release_tag(b)
 
 
 def release_tag_from_github_final_url(url: str) -> str:
-    """从跳转后的 GitHub releases 页 URL 解析 tag（``…/releases/tag/{tag}``）。"""
+    """从跳转后的 GitHub releases 页 URL 解析 tag。"""
     segments = [s for s in urlparse(url).path.split("/") if s]
     for i, seg in enumerate(segments):
         if seg == "tag" and i + 1 < len(segments):
@@ -218,9 +218,9 @@ async def fetch_latest_release(
 
     返回 ``{tag, html_url, asset_url, body}``。
 
-    - ``body``：Release 说明（Markdown），来自 API；可能为空串。
+    - ``body``：Release 说明，来自 API；可能为空串。
     - ``asset_url``：``include_asset_url=False`` 时恒为空字符串；否则优先匹配
-      ``preferred_asset_name``（忽略大小写），否则取第一个 ``.zip`` 资产。
+      ``preferred_asset_name``，否则取第一个 ``.zip`` 资产。
     """
     api_url = github_release_api_url(repo)
     headers: dict[str, str] = {"User-Agent": user_agent}

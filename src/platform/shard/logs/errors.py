@@ -1,4 +1,4 @@
-"""分片进程 ERROR/CRITICAL 结构化归档（hub + 各 worker 各一份 jsonl，hub WebUI 合并读取）。"""
+"""分片进程 ERROR/CRITICAL 结构化归档。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from typing import Any
 from src.platform.shard.logs.view import _exc_type_and_message_from_traceback, shard_logs_dir
 
 _ERRORS_DIR_NAME = "errors"
-# 存在时表示仅认 errors/*.jsonl，清空后勿再扫 hub.log / worker-*.log（避免 WebUI 清理后旧 ERROR 复现）
+# 存在时表示仅认 errors/*.jsonl，清空后勿再扫 hub.log / worker-*.log
 _JSONL_ARCHIVE_MARKER = ".jsonl_archive"
 _APPEND_LOCK = threading.Lock()
 _MSG_MAX = 2000
@@ -53,7 +53,7 @@ def _traceback_from_log_text(text: str) -> str:
 
 
 def parse_log_error_from_record(text: str, record: Any) -> tuple[str, str, str]:
-    """从 loguru record（及 sink 格式化行）取 (exc_type, message, traceback)。"""
+    """从 loguru record取 (exc_type, message, traceback)。"""
     try:
         msg = str(record["message"])
     except Exception:
@@ -179,7 +179,7 @@ def tail_errors_jsonl(path, *, limit: int) -> list[dict[str, Any]]:
 
 
 def collect_cluster_log_errors_from_jsonl(*, limit: int = 120) -> list[dict[str, Any]]:
-    """读取 errors/*.jsonl 合并排序（优先于扫大日志文件）。"""
+    """读取 errors/*.jsonl 合并排序。"""
     root = shard_errors_dir()
     if not root.is_dir():
         return []

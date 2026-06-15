@@ -75,7 +75,6 @@ class ChatData:
         if self.keywords_len == 0:
             return self.plain_text
         else:
-            # keywords_list.sort()
             return " ".join(self._keywords_list)  # type: ignore
 
     @cached_property
@@ -129,7 +128,7 @@ class Chat:
 
     _recent_topics = defaultdict(lambda: deque(maxlen=Chat.TOPICS_SIZE))
 
-    ###
+    # ##
 
     def __init__(self, data: ChatData | GroupMessageEvent):
         if isinstance(data, ChatData):

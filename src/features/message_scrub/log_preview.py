@@ -7,7 +7,7 @@ _BASE64_RE = re.compile(r"base64://[A-Za-z0-9+/=\s]{80,}", re.IGNORECASE)
 
 
 def scrub_intercept_log_preview(plain_text: str, raw_message: str = "", *, limit: int = 48) -> str:
-    """拦截日志用预览：优先纯文本；为空时用 CQ 原文（截断、折叠长 base64）。"""
+    """拦截日志用预览：优先纯文本；为空时用 CQ 原文。"""
     s = (plain_text or "").replace("\n", " ").strip()
     if not s:
         s = (raw_message or "").replace("\n", " ").strip()

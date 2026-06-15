@@ -1,4 +1,4 @@
-"""六星干员 JSON 与头像同步（脚本与运行时安装器共用）。"""
+"""六星干员 JSON 与头像同步。"""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def avatar_local_path(char_id: str) -> Path:
 
 
 def operator_avatar_bytes(char_id: str) -> bytes | None:
-    """本地头像 PNG 二进制（与 greeting 等插件发图方式一致）。"""
+    """本地头像 PNG 二进制。"""
     path = avatar_local_path(char_id)
     if not is_avatar_file_valid(path):
         return None

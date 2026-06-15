@@ -1,4 +1,4 @@
-"""入站门控：全员同响（跳过跨 Bot claim）明文白名单，单进程与分片 worker 均生效。"""
+"""入站门控：全员同响明文白名单，单进程与分片 worker 均生效。"""
 
 from __future__ import annotations
 

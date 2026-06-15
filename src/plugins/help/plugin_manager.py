@@ -74,7 +74,7 @@ def get_help_menu_plugins(
     show_ignored: bool = False,
     ignored_plugins: list[str] | None = None,
 ) -> list[Any]:
-    """与一级帮助总览相同的插件集合（已排序）。"""
+    """与一级帮助总览相同的插件集合。"""
     plugins = [p for p in get_loaded_plugins() if p.name]
     hidden = set(resolve_help_hidden_plugins())
     plugins = [p for p in plugins if p.name not in hidden]
@@ -115,7 +115,7 @@ def clear_help_cache(group_id: int | None = None):
 
 
 async def superuser_bypasses_plugin_disable(bot: Bot | None, event: Event | None) -> bool:
-    """超管豁免所有层级的插件运行时禁用（全实例 / 单牛 / 单群）。"""
+    """超管豁免所有层级的插件运行时禁用。"""
     if bot is None or event is None or not isinstance(event, MessageEvent):
         return False
     return await SUPERUSER(bot, event)
@@ -130,7 +130,7 @@ async def is_plugin_disabled(
     bot: Bot | None = None,
     event: Event | None = None,
 ) -> bool:
-    """检查插件是否被禁用（统一走 collect_disabled_plugin_names）。"""
+    """检查插件是否被禁用。"""
     try:
         if await superuser_bypasses_plugin_disable(bot, event):
             return False
@@ -153,7 +153,7 @@ def merge_global_disabled_plugin_names(names: frozenset[str]) -> frozenset[str]:
 
 
 def apply_group_fleet_whitelist(group_id: int | None, names: frozenset[str]) -> frozenset[str]:
-    """白名单群从 fleet 禁用集合中剔除对应插件（结果写入门禁缓存，热路径无额外开销）。"""
+    """白名单群从 fleet 禁用集合中剔除对应插件。"""
     if not group_id or not names:
         return names
     exempt = resolve_group_fleet_whitelist_plugins(group_id)
@@ -169,7 +169,7 @@ async def load_scoped_disabled_plugin_names_from_db(
     *,
     ignore_cache: bool = False,
 ) -> frozenset[str]:
-    """合并单牛与单群禁用插件名（不含全实例禁用）。"""
+    """合并单牛与单群禁用插件名。"""
     if _pg_not_ready():
         return frozenset()
     bot_names = await load_disabled_bot_names_from_db(bot_id, ignore_cache=ignore_cache)
@@ -189,7 +189,7 @@ async def load_disabled_plugin_names_from_db(
     *,
     ignore_cache: bool = False,
 ) -> frozenset[str]:
-    """合并 Bot 全局、群级与全实例禁用插件名（直读仓储，不经门禁 TTL）。"""
+    """合并 Bot 全局、群级与全实例禁用插件名。"""
     scoped = await load_scoped_disabled_plugin_names_from_db(bot_id, group_id, ignore_cache=ignore_cache)
     if _pg_not_ready():
         return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(frozenset()))
@@ -220,7 +220,7 @@ async def invalidate_disabled_plugin_gate_cache(
     group_id: int | None = None,
     clear_all: bool = False,
 ) -> None:
-    """使禁用插件门禁缓存失效（toggle / WebUI 改 disabled_plugins 后应调用）。"""
+    """使禁用插件门禁缓存失效。"""
     if clear_all:
         async with _disabled_fetch_tasks_lock:
             for t in [*_disabled_bot_fetch_tasks.values(), *_disabled_group_fetch_tasks.values()]:
@@ -250,7 +250,7 @@ async def invalidate_disabled_plugin_gate_cache(
 
 
 async def reset_disabled_plugin_gate_cache() -> None:
-    """清空禁用插件门禁内存缓存（供测试调用）。"""
+    """清空禁用插件门禁内存缓存。"""
     await invalidate_disabled_plugin_gate_cache(clear_all=True)
 
 
@@ -329,7 +329,7 @@ async def collect_disabled_plugin_names(
     *,
     ignore_cache: bool = False,
 ) -> frozenset[str]:
-    """合并 Bot 全局与群级的禁用插件名，供批量判断（与逐插件调用 is_plugin_disabled 语义一致）。"""
+    """合并 Bot 全局与群级的禁用插件名，供批量判断。"""
     if _pg_not_ready():
         return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(frozenset()))
     if ignore_cache:
@@ -399,7 +399,7 @@ async def is_plugin_globally_disabled(plugin_name: str, bot_id: int, ignore_cach
 
 
 def is_fleet_runtime_disabled(plugin_name: str, *, group_id: int | None = None) -> bool:
-    """全实例运行时禁用（WebUI global-disable），优先于单牛/单群配置；群白名单可豁免。"""
+    """全实例运行时禁用，优先于单牛/单群配置；群白名单可豁免。"""
     if plugin_name not in resolve_global_disabled_plugin_names():
         return False
     if group_id is not None and plugin_name in resolve_group_fleet_whitelist_plugins(group_id):
@@ -466,7 +466,7 @@ async def update_group_config(group_id: int, disabled_plugins: list[str]) -> Gro
 def find_plugin(plugin_name: str, *, plugins: Iterable[Any] | None = None) -> Any | None:
     """
     查找插件：包名、展示名、help_aliases 与 plugin_aliases 表；去空格后精确或子串匹配。
-    仅当唯一命中时返回，否则 None（由 find_plugin_by_identifier 提示歧义）。
+    仅当唯一命中时返回，否则 None。
     """
     key = (plugin_name or "").strip()
     if not key:
@@ -479,7 +479,7 @@ def find_plugin(plugin_name: str, *, plugins: Iterable[Any] | None = None) -> An
 
 
 def resolve_plugin_disable_scope(plugin_name: str) -> str:
-    """插件禁用作用域：group=本群（默认）；bot=单牛全局（不受群级 disabled_plugins 影响）。"""
+    """插件禁用作用域：group=本群；bot=单牛全局。"""
     plugin = find_plugin(plugin_name)
     if plugin is None:
         return "group"

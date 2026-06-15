@@ -8,7 +8,7 @@ import pillowmd.CustomMarkdownRenderer as cmr_mod  # noqa: N813
 
 _PATCHED = False
 
-# 帮助图加粗描边宽度（Pillow stroke_width；0 表示不加强调）
+# 帮助图加粗描边宽度
 HELP_BOLD_STROKE_WIDTH = 0.30
 
 

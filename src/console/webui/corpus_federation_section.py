@@ -1,4 +1,4 @@
-"""WebUI「通用配置 → 语料联邦」（Phase 1：local + community）。"""
+"""WebUI「通用配置 → 语料联邦」。"""
 
 from __future__ import annotations
 

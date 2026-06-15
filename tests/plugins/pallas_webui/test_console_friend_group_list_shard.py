@@ -11,8 +11,7 @@ def empty_bots():
 
 
 def test_console_bot_online_in_cluster(monkeypatch) -> None:
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_hub", lambda: True)
+    monkeypatch.setattr(mod, "_shard_hub_console", lambda: True)
     monkeypatch.setattr(
         "src.platform.shard.presence.get_cluster_online_bot_ids",
         lambda: frozenset({10001}),

@@ -1,4 +1,4 @@
-"""插件命令可配置权限（默认 + PALLAS_COMMAND_PERMISSION_OVERRIDES）。"""
+"""插件命令可配置权限。"""
 
 from .check import (
     group_message_permission_for_command,

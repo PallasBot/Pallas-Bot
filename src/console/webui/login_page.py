@@ -1,4 +1,4 @@
-"""Pallas-Bot 控制台与协议端管理共用的独立登录页 HTML（与 WebUI / 协议壳主题变量对齐）。"""
+"""Pallas-Bot 控制台与协议端管理共用的独立登录页 HTML。"""
 
 from __future__ import annotations
 

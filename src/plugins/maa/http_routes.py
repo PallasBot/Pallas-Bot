@@ -9,7 +9,7 @@ _mounted_paths: frozenset[str] = frozenset()
 
 
 def unmount_maa_http_routes(app: FastAPI) -> None:
-    """移除 worker 侧 MAA 路由（hub 重载配置时避免覆盖 maa_hub 转发）。"""
+    """移除 worker 侧 MAA 路由。"""
     global _mounted_paths
     if not _mounted_paths:
         return

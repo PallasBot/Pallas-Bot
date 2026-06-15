@@ -1,9 +1,9 @@
 """仓库配置：`config/pallas.toml` + WebUI 统一 `data/pallas_config/webui.json`。
 
-合并顺序（后者覆盖前者）：``pallas.toml`` → 遗留 ``.env`` → ``.env.{ENVIRONMENT}`` →
-``webui.json`` 的 ``env``（WebUI 落盘最高）。
+合并顺序：``pallas.toml`` → 遗留 ``.env`` → ``.env.{ENVIRONMENT}`` →
+``webui.json`` 的 ``env``。
 ``repo_env_raw_value`` 以磁盘合并结果优先于 ``os.environ``；``apply_repo_settings_to_environ`` 在
-``nonebot.init()`` 前把磁盘键写入环境变量，且不覆盖已存在的同名键（保留 Docker / 分片注入）。
+``nonebot.init()`` 前把磁盘键写入环境变量，且不覆盖已存在的同名键。
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ def repo_config_path() -> Path:
 
 
 def read_bootstrap_extra_plugin_dirs() -> list[str]:
-    """``[bootstrap].extra_plugin_dirs``：站点自有插件目录（相对仓库根，如 ``local/plugins``）。"""
+    """``[bootstrap].extra_plugin_dirs``：站点自有插件目录。"""
     data = _load_toml_file(repo_config_path())
     raw: object | None = None
     bootstrap = data.get("bootstrap")
@@ -63,7 +63,7 @@ def repo_webui_settings_path() -> Path:
 
 
 def repo_env_path() -> Path:
-    """遗留 ``.env`` 路径（兼容读取，WebUI 不再写入）。"""
+    """遗留 ``.env`` 路径。"""
     return _REPO_ROOT / ".env"
 
 
@@ -74,7 +74,7 @@ def nonebot_repo_dotenv_environment() -> str:
 
 
 def repo_layered_dotenv_files_exist() -> bool:
-    """是否存在任一磁盘配置源（供热重载判断是否回退 ``get_plugin_config``）。"""
+    """是否存在任一磁盘配置源。"""
     return repo_settings_files_exist()
 
 
@@ -335,7 +335,7 @@ def repo_env_raw_value(key_upper: str) -> str | None:
 
 
 def apply_repo_settings_to_environ() -> None:
-    """在 ``nonebot.init()`` 前调用：将磁盘配置写入 ``os.environ``（不覆盖已有键）。"""
+    """在 ``nonebot.init()`` 前调用：将磁盘配置写入 ``os.environ``。"""
     for k, v in merged_repo_settings_upper().items():
         if k not in os.environ:
             os.environ[k] = v
@@ -392,7 +392,7 @@ def upsert_repo_settings_items(items: dict[str, str]) -> None:
 
 
 def remove_repo_settings_keys(keys: list[str]) -> None:
-    """从 ``webui.json`` 的 ``env`` 删除键（用于纠正误写字段）。"""
+    """从 ``webui.json`` 的 ``env`` 删除键。"""
     from .webui_export_toml import export_webui_inspection_toml, rebuild_webui_json_sections
 
     doc = _load_webui_json_document()

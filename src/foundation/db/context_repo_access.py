@@ -1,4 +1,4 @@
-"""进程内共享 ContextRepository（enroll 后可失效重建）。"""
+"""进程内共享 ContextRepository。"""
 
 from __future__ import annotations
 

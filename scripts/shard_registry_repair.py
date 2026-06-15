@@ -26,7 +26,7 @@ from src.platform.shard.registry.store import (  # noqa: E402
     save_shard_registry,
 )
 
-# 生产环境基线归属（2026-05 分片部署，bots_per_shard=5，worker 0–6）
+# 生产环境基线归属
 PRODUCTION_ASSIGNMENTS: dict[str, int] = {
     "2868075548": 0,
     "3328656396": 0,

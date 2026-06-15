@@ -1,4 +1,4 @@
-"""dream.history_bottle 纯函数单测（不连库）。"""
+"""dream.history_bottle 纯函数单测。"""
 
 from __future__ import annotations
 

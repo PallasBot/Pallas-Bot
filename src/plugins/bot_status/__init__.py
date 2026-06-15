@@ -1,5 +1,4 @@
 import asyncio
-import contextlib
 import random
 from datetime import datetime
 
@@ -26,7 +25,7 @@ from src.features.cmd_perm.metadata_text import (
     join_usage,
     usage_line,
 )
-from src.platform.shard.registry.config import is_sharding_active
+from src.platform.shard import context as shard_ctx
 
 from .bot_monitor import (
     get_bot_status_info,
@@ -56,6 +55,11 @@ __plugin_meta__ = PluginMetadata(
             {"id": "bot_status.test_mail", "label": "测试邮件", "default": "superuser"},
             {"id": "bot_status.count", "label": "牛牛报数 / 牛牛出列", "default": "everyone"},
         ],
+        "ingress_fanout": {
+            "scope": "shard_only",
+            "plaintexts": ["牛牛报数", "牛牛出列"],
+            "normalize_trailing_punct": True,
+        },
         "menu_data": [
             {
                 "func": "牛牛在吗",
@@ -221,63 +225,14 @@ async def handle_bot_status(bot: Bot, event: MessageEvent) -> None:
 async def handle_bot_count(bot: Bot, event: MessageEvent) -> None:
     """处理牛牛报数命令"""
     from src.foundation.config import GroupConfig
-    from src.platform.shard.coord.bot_count import STAGGER_SEC, run_shard_coordinated_bot_count
 
     if not isinstance(event, GroupMessageEvent):
         await bot_count_cmd.finish("牛牛报数仅支持群聊中使用")
 
-    self_id = int(bot.self_id)
+    if shard_ctx.sharding_active():
+        from .shard_count import handle_shard_bot_count
 
-    if is_sharding_active():
-        from src.platform.shard.coord.bot_count import update_shard_bot_count_registration
-        from src.platform.shard.local_representative import is_local_worker_representative
-        from src.plugins.duel.duel_bots import list_local_fleet_bots_in_group
-
-        plain = (event.get_plaintext() or "").strip()
-        local_ids = [self_id]
-        if is_local_worker_representative(self_id):
-            probed = await list_local_fleet_bots_in_group(event.group_id)
-            local_ids = sorted({self_id, *probed})
-
-        coord_task = asyncio.create_task(
-            run_shard_coordinated_bot_count(
-                group_id=event.group_id,
-                user_id=int(event.user_id),
-                plaintext=plain,
-                message_time=event.time,
-                self_bot_id=self_id,
-                local_bot_ids=local_ids,
-            )
-        )
-        try:
-            if is_local_worker_representative(self_id) and local_ids:
-                await update_shard_bot_count_registration(
-                    group_id=event.group_id,
-                    user_id=int(event.user_id),
-                    plaintext=plain,
-                    message_time=event.time,
-                    bot_ids=local_ids,
-                )
-            coord = await coord_task
-        except asyncio.CancelledError:
-            raise
-        finally:
-            if not coord_task.done():
-                coord_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await coord_task
-        if coord is None:
-            return
-        index, total = coord
-        await asyncio.sleep((index - 1) * STAGGER_SEC)
-        try:
-            await bot.send_group_msg(group_id=event.group_id, message=f"牛牛{index}号报到！")
-        except Exception as e:
-            logger.warning(f"bot [{self_id}] shard bot_count send failed in group [{event.group_id}]: {e}")
-            return
-        if index == total:
-            await asyncio.sleep(0.3)
-            await bot_count_cmd.finish("牛牛们报数完毕！")
+        await handle_shard_bot_count(bot, event, finish=bot_count_cmd.finish)
         return
 
     group_bot_ids = await list_connected_bots_in_group(event.group_id)

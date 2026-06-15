@@ -1,4 +1,4 @@
-"""社区主站气泡墙 opt-in 名册（同步组装，供心跳 payload 使用）。"""
+"""社区主站气泡墙 opt-in 名册。"""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 
 def rolling_message_weight_by_self_id(*, days: int = 7) -> dict[str, int]:
-    """近 N 自然日每账号消息量（收+发），数据来自控制台按日统计落盘。"""
+    """近 N 自然日每账号消息量，数据来自控制台按日统计落盘。"""
     if days < 1:
         days = 1
     from src.plugins.pallas_webui import daily_stats_store

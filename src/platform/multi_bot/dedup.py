@@ -70,7 +70,7 @@ def cross_bot_message_signature(
     use_plaintext: bool = True,
     include_message_time: bool = False,
 ) -> CrossBotSig:
-    """多牛抢占签名：默认群+用户+正文（同条 fanout）；决斗/八角笼可含 message_time 区分场次。"""
+    """多牛抢占签名：默认群+用户+正文；决斗/八角笼可含 message_time 区分场次。"""
     body = normalize_group_plaintext(message_body) if use_plaintext else normalize_group_raw_message(message_body)
     if include_message_time:
         return (group_id, user_id, body, normalize_message_time(message_time))
@@ -369,7 +369,7 @@ async def try_begin_group_owned_gate(
     *,
     gate_sec: float,
 ) -> bool:
-    """同群短时占位：窗口内仅已占位 bot 可再次通过，其它 bot 拒绝（如画图「欢呼吧」）。"""
+    """同群短时占位：窗口内仅已占位 bot 可再次通过，其它 bot 拒绝。"""
     from src.platform.shard.registry.config import is_sharding_active
 
     if is_sharding_active():
@@ -405,7 +405,7 @@ async def try_acquire_group_broadcast_slot(
     *,
     ttl_sec: float = 3.0,
 ) -> bool:
-    """同群短时广播占位：窗口内仅首次调用返回 True（不记 bot，用于避免多牛复读同条提示）。"""
+    """同群短时广播占位：窗口内仅首次调用返回 True。"""
     from src.platform.shard.registry.config import is_sharding_active
 
     if is_sharding_active():
@@ -443,7 +443,7 @@ async def bind_group_owned_gate(
 
 
 def bind_group_owned_gate_sync(plugin: str, group_id: int, bot_id: int, *, gate_sec: float) -> None:
-    """强制绑定同群主持牛（进程内 + 分片 Redis）。"""
+    """强制绑定同群主持牛。"""
     from src.platform.shard.registry.config import is_sharding_active
 
     if is_sharding_active():
@@ -477,7 +477,7 @@ async def is_group_owned_gate_holder(plugin: str, group_id: int, bot_id: int) ->
 
 
 def release_group_owned_gate_sync(plugin: str, group_id: int) -> None:
-    """释放同群主持牛占位（进程内 + 分片 Redis）。"""
+    """释放同群主持牛占位。"""
     from src.platform.shard.registry.config import is_sharding_active
 
     if is_sharding_active():
@@ -503,7 +503,7 @@ async def begin_group_exclusive_activity(
     has_local: bool = False,
     local_alive=None,
 ) -> str:
-    """分片下同群独占活动开闸（如开房/开战）；namespace 即 Redis 协调键前缀。"""
+    """分片下同群独占活动开闸；namespace 即 Redis 协调键前缀。"""
     from src.platform.shard.coord.group_activity import begin_group_activity, get_group_activity_lock
 
     lock = get_group_activity_lock(namespace)
@@ -523,7 +523,7 @@ async def claim_group_message_event(
     use_plaintext: bool = True,
     include_message_time: bool = False,
 ) -> bool:
-    """本 Bot 是否应处理该条群消息（跨 Bot + 跨进程）。未抢占返回 False。"""
+    """本 Bot 是否应处理该条群消息。未抢占返回 False。"""
     return await try_claim_cross_bot_message(
         plugin,
         group_event.group_id,

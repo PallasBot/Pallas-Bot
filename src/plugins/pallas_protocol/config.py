@@ -551,10 +551,10 @@ def resolve_onebot_ws_settings(config: Config, *, bot_id: str = "") -> tuple[str
     """默认返回 hub/全局 WS；分片开启且提供 ``bot_id`` 时返回该牛所在 worker 的 WS。"""
     if bot_id:
         try:
-            from src.platform.shard.registry.config import is_sharding_active
+            from src.platform.shard import context as shard_ctx
             from src.platform.shard.registry.store import resolve_onebot_ws_url_for_bot
 
-            if is_sharding_active():
+            if shard_ctx.sharding_active():
                 url, name, tok = resolve_onebot_ws_url_for_bot(
                     bot_id,
                     name=str(getattr(config, "pallas_protocol_onebot_client_name", "") or "").strip()

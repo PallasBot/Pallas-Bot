@@ -1,4 +1,4 @@
-"""跨 worker 代指定牛牛执行 OneBot 动作（发群消息、改群名片等）。"""
+"""跨 worker 代指定牛牛执行 OneBot 动作。"""
 
 from __future__ import annotations
 
@@ -371,11 +371,6 @@ async def _run_pending_request(request_id: str, local_ids: frozenset[str]) -> No
     asyncio.create_task(job())
 
 
-async def poll_bot_action_pending(local_ids: frozenset[str]) -> None:
-    """兼容旧轮询入口；Redis 模式下由 pub/sub 唤醒。"""
-    return None
-
-
 def _maybe_warn_stale_open(row: dict[str, Any], *, now: float) -> None:
     global _last_stale_open_warn_at
     deadline = float(row.get("deadline") or 0)
@@ -389,11 +384,6 @@ def _maybe_warn_stale_open(row: dict[str, Any], *, now: float) -> None:
         f"request_id={row.get('request_id')} action={row.get('action')} "
         f"bot_qq={row.get('bot_qq')} overdue_s={now - deadline:.0f}"
     )
-
-
-async def prune_stale_bot_action_files() -> dict[str, int]:
-    """Redis TTL 自动过期；保留空实现供运维脚本兼容。"""
-    return {"removed_done": 0, "removed_overdue_open": 0, "removed_expired": 0}
 
 
 async def bot_action_redis_listen_loop() -> None:

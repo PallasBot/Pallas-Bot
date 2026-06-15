@@ -1,4 +1,4 @@
-"""联邦 ingress 专用 Redis（与分片 REDIS_URL / PALLAS_COORD_REDIS_URL 分离）。"""
+"""联邦 ingress 专用 Redis。"""
 
 from __future__ import annotations
 
