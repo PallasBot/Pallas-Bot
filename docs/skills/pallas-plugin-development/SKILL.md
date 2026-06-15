@@ -40,7 +40,7 @@ description: >
 - **技术栈**：NoneBot2 + OneBot v11；配置 `pallas.toml` + `webui.json`；控制台为 Pallas WebUI（`/pallas/`）。
 - **插件位置**：上游 `src/plugins/<name>/`；站点定制 `local/plugins/<name>/`（同名时 **local 优先**，需 `extra_plugin_dirs` + 重启）。
 - **多牛舰队**（进阶）：入站调度、进程分片见 [central-ingress-dispatch](../../architecture/central-ingress-dispatch.md)、[bot_process_sharding](../../architecture/bot_process_sharding.md)。
-- **导入分层**：业务插件优先 `src.features.*`、`src.foundation.*`、`src.console.webui`；跨插件能力不要深层 import 内核内部文件。见 [一、公开 API](./references/01-plugin-basics.md#公开-api允许-import)。
+- **导入分层**：业务插件优先 `src.features.*`、`src.foundation.*`、`src.console.webui`；跨插件能力不要深层 import 内核内部文件。见 [一、公开 API](./references/01-plugin-basics.md)。
 - **命令 ID**：`{插件}.{动作}` 须在 metadata、`permission_for_command`、matcher 中**完全一致**。
 - **帮助文案**：`usage` 不写死权限；`trigger_condition` 只写怎么说；权限绑 `command_permission` + WebUI 矩阵。
 - **配置读取**：WebUI 可调项用 `get_config()` / `get_my_config()`，**勿**在模块顶层缓存配置快照。

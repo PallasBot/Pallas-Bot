@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -15,7 +15,6 @@ class CommandLimitDecl(BaseModel):
 
     id: str = Field(min_length=1, description="与 command_permissions 相同的命令 ID")
     cd_sec: int = Field(ge=0, description="冷却秒数；0 表示关闭冷却")
-    scope: Literal["group", "private", "auto"] = "auto"
 
 
 def parse_command_limit_decl(raw: dict[str, Any]) -> CommandLimitDecl | None:
