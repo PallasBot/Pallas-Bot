@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.console.cli.bot_process import bot_lifecycle_available
 from src.console.webui.extension_install import (
     pip_package_installed,
     webui_extension_install_enabled,
@@ -60,6 +61,7 @@ def build_official_extension_rows() -> list[dict[str, Any]]:
         else:
             status = "external"
         webui_install = webui_extension_install_enabled()
+        restart_available = bot_lifecycle_available()
         rows.append({
             "package": package,
             "plugin_ids": plugin_ids,
@@ -74,6 +76,7 @@ def build_official_extension_rows() -> list[dict[str, Any]]:
             "pip_installed": pip_installed,
             "install_local_dir": "local/plugins/<插件名>/",
             "webui_install": webui_install,
+            "restart_available": restart_available,
             "can_install": webui_install and not pip_installed and not loaded,
             "can_uninstall": webui_install and pip_installed,
             "status": status,

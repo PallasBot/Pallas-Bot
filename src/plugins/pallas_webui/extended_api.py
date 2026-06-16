@@ -3733,6 +3733,7 @@ class _OfficialExtensionPackageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     package: str = Field(min_length=1, max_length=128)
+    restart: bool = False
 
 
 class _GlobalPluginDisableBody(BaseModel):
@@ -4433,11 +4434,17 @@ def register_extended_api(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from src.console.webui.extension_install import ExtensionInstallError, install_official_extension
+        from src.console.cli.extension_ops import (
+            ExtensionInstallError,
+            install_official_extension_with_options,
+        )
         from src.shared.utils.format_exception import format_exception_for_log
 
         try:
-            data = await install_official_extension(body.package)
+            data = await install_official_extension_with_options(
+                body.package,
+                restart=bool(body.restart),
+            )
             drop_read_cache(("plugins-official-extensions", "plugins"))
             return JSONResponse({"ok": True, "data": data})
         except ExtensionInstallError as e:
@@ -4453,11 +4460,17 @@ def register_extended_api(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from src.console.webui.extension_install import ExtensionInstallError, uninstall_official_extension
+        from src.console.cli.extension_ops import (
+            ExtensionInstallError,
+            uninstall_official_extension_with_options,
+        )
         from src.shared.utils.format_exception import format_exception_for_log
 
         try:
-            data = await uninstall_official_extension(body.package)
+            data = await uninstall_official_extension_with_options(
+                body.package,
+                restart=bool(body.restart),
+            )
             drop_read_cache(("plugins-official-extensions", "plugins"))
             return JSONResponse({"ok": True, "data": data})
         except ExtensionInstallError as e:
@@ -5891,15 +5904,13 @@ def register_extended_api(
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from src.shared.utils.format_exception import format_exception_for_log
 
-        from .manager import BotGitUpdateError, apply_bot_repository_update
+        from src.console.cli.update_ops import apply_bot_update
+        from src.plugins.pallas_webui.manager import BotGitUpdateError
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         try:
             logger.info("Pallas-Bot 控制台: Bot 仓库在线更新（git）请求已接受")
-            data = await apply_bot_repository_update(
-                github_token=github_token,
-                repo="PallasBot/Pallas-Bot",
-            )
+            data = await apply_bot_update(github_token=github_token, repo="PallasBot/Pallas-Bot")
             drop_read_cache(("update_check_bot:",))
             return JSONResponse({"ok": True, "data": data})
         except BotGitUpdateError as e:
@@ -5918,79 +5929,24 @@ def register_extended_api(
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from src.shared.utils.format_exception import format_exception_for_log
 
-        from .manager import (
-            download_and_extract_dist_zip,
-            fetch_latest_webui_release,
-            get_webui_dist_version,
-            resolve_github_release_asset_urls,
-            save_installed_webui_version,
-            webui_public_path,
-        )
+        from src.console.cli.update_ops import WebuiUpdateError, apply_webui_dist_update
 
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
-        public = webui_public_path()
         try:
-            logger.info(
-                "Pallas-Bot 控制台: WebUI 在线更新开始 repo={} asset={} tag={}",
-                repo,
-                asset,
-                tag or "(latest)",
+            data = await apply_webui_dist_update(
+                repo=repo,
+                asset=asset,
+                tag=tag,
+                github_token=github_token,
+                refresh_runtime_meta=True,
             )
-            url_candidates = await resolve_github_release_asset_urls(repo, asset, tag, token=github_token)
-            if not url_candidates:
-                logger.warning("Pallas-Bot 控制台: WebUI 更新未得到任何下载 URL（resolve 为空）")
-                raise ValueError("未找到可用的下载地址")
-            logger.info("Pallas-Bot 控制台: WebUI 更新候选地址 {} 条", len(url_candidates))
-            errors: list[str] = []
-            succeeded_url = ""
-            for i, candidate in enumerate(url_candidates, start=1):
-                short = candidate if len(candidate) <= 160 else candidate[:157] + "..."
-                logger.info("Pallas-Bot 控制台: WebUI 更新尝试 {}/{} {}", i, len(url_candidates), short)
-                try:
-                    await download_and_extract_dist_zip(public, candidate)
-                    succeeded_url = candidate
-                    errors.clear()
-                    break
-                except Exception as e:  # noqa: BLE001
-                    err_msg = format_exception_for_log(e)
-                    errors.append(f"{candidate} -> {err_msg}")
-                    logger.warning("Pallas-Bot 控制台: WebUI 下载/解压失败 {}", err_msg)
-            if errors:
-                raise ValueError("下载失败: " + " | ".join(errors))
-            try:
-                info = await fetch_latest_webui_release(repo, token=github_token, asset_name=asset)
-                new_tag = str(info.get("tag", "") or tag).strip()
-            except Exception as e:  # noqa: BLE001
-                logger.warning(
-                    "Pallas-Bot 控制台: 获取 WebUI release 元数据失败，使用配置 tag={} err={}",
-                    tag or "(空)",
-                    format_exception_for_log(e),
-                )
-                new_tag = tag
-            save_installed_webui_version(new_tag, succeeded_url)
-            # 更新成功后同步刷新内存里的 console 版本，避免必须重启后前端才显示新版本。
-            try:
-                dist_ver = get_webui_dist_version()
-            except Exception:  # noqa: BLE001
-                dist_ver = ""
-            effective_version = (dist_ver or "").strip() or new_tag or "unknown"
-            set_console_meta({**get_console_meta(), "version": effective_version})
-            from src.plugins.pallas_webui.api import invalidate_health_snapshot
-
-            invalidate_health_snapshot()
-            logger.info("Pallas-Bot 控制台: WebUI 已更新至 {}（发布 tag: {}）", effective_version, new_tag)
             drop_read_cache(("update_check_webui:",))
-            return JSONResponse({
-                "ok": True,
-                "data": {
-                    "tag": new_tag,
-                    "version": effective_version,
-                    "message": "更新成功",
-                },
-            })
+            return JSONResponse({"ok": True, "data": data})
+        except WebuiUpdateError as e:
+            raise HTTPException(status_code=500, detail=e.detail) from e
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001

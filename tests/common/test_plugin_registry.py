@@ -19,6 +19,7 @@ def test_build_official_extension_rows_groups_party():
     assert party["install_cli"] == "uv sync --extra plugins-party"
     assert party["webui_install"] is True
     assert isinstance(party["can_install"], bool)
+    assert isinstance(party["restart_available"], bool)
 
 
 def test_build_official_extension_rows_marks_bundled_duel():

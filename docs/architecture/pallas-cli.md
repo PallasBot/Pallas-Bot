@@ -60,11 +60,11 @@ pallas deploy apply <profile> # default | shard | message-scrub；包装 apply_d
 
 | 期 | 交付 | 说明 |
 | --- | --- | --- |
-| **A** | `docs` + `src/console/cli/` 骨架 | 本文档；`pallas --help`；子命令 stub |
-| **B** | `ext` / `sync` | 复用 `extension_install`、`pyproject` extras；单测 |
-| **C** | `run` / `stop` / `status` / `restart` | 先 subprocess 包装现有 `scripts/*.sh`，再逐步迁入 Python |
-| **D** | `update bot` / `update webui` | 从 `pallas_webui.manager` 抽出可导入函数，WebUI 改调库 |
-| **E** | WebUI 商店对接 | 安装/更新/重启按钮 → CLI 库；Docker/systemd 文档改推荐 `pallas run` |
+| **A** | `docs` + `src/console/cli/` 骨架 | 已完成 |
+| **B** | `ext` / `sync` | 已完成（复用 `extension_install`） |
+| **C** | `run` / `stop` / `status` / `restart` | 已完成（包装 `scripts/run_*_bot.sh`） |
+| **D** | `update bot` / `update webui` | 已完成（`update_ops`；WebUI API 已改调库） |
+| **E** | WebUI 商店对接 | 已完成（`restart` 参数与「安装并重启」按钮） |
 
 Bash 脚本在 **E 之前**保留为薄封装（内部转调 `pallas`），避免破坏现有部署；**E 之后**文档标记 `run_*_bot.sh` 为兼容别名。
 

@@ -4,6 +4,7 @@
 
 | 目录 | 用途 |
 | --- | --- |
+| `scripts/pallas` | **统一 CLI**（`./scripts/pallas doctor` 等；见 [pallas-cli.md](../docs/architecture/pallas-cli.md)） |
 | `scripts/` | 启停、分片迁移、端口同步 |
 | `tools/scripts/` | 备份、watchdog、文档同步 |
 

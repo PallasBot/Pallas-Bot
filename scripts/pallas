@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Pallas 统一 CLI 入口（包装 uv run python -m src.console.cli）
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+cd "${REPO_ROOT}"
+
+exec uv run python -m src.console.cli "$@"
