@@ -159,8 +159,8 @@ deploy-full = ["pallas-bot[plugins-game,plugins-maa,...]"]
 | 插件列表 | 展示 core / extra / local / pip 来源 |
 | 扩展说明 | 推荐 extras、迁移对照表 |
 | 主仓 API | `pallas_webui` 返回 `source`、`extra_package` |
-| **插件商店（S6）** | 浏览官方索引、安装/卸载 API；**安装后重启待 S7 CLI** |
-| **统一 CLI（S7）** | `pallas`：sync / ext / update / run（单进程·分片）/ restart；WebUI 与商店对接此入口 |
+| **插件商店** | 浏览、安装/卸载、安装并重启 |
+| **统一 CLI** | `pallas`：sync / ext / update / run / restart / maintenance；WebUI 已对接 |
 
 ## 实施阶段
 
@@ -171,8 +171,8 @@ deploy-full = ["pallas-bot[plugins-game,plugins-maa,...]"]
 | **S3** | pyproject extras | 已交付（占位 extras + 包名映射） |
 | **S4** | Docker / CI 分轨 |
 | **S5** | 迁移文档 + WebUI 插件列表 API | 已交付（`GET …/plugins/official-extensions`） |
-| **S6** | WebUI 插件商店：官方索引、安装/卸载 API 与面板 | 已交付（**重启编排留待 S7**） |
-| **S7** | 统一 CLI + WebUI/扩展安装对接重启 | 见 [pallas-cli.md](pallas-cli.md) |
+| **S6** | WebUI 插件商店 | 已交付 |
+| **S7** | 统一 CLI + WebUI 对接 | 已交付（见 [pallas-cli.md](pallas-cli.md)） |
 
 ## 3.x → 4.0 迁移（摘要）
 

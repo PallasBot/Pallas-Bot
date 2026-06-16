@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse  # noqa: TC003
+import os
 import shutil
 import sys
 
 from src.console.cli.bot_process import bot_lifecycle_available
-from src.console.cli.runtime_mode import detect_running_bot_mode
+from src.console.cli.runtime_mode import detect_running_bot_mode, resolve_bot_mode
+from src.console.cli.shard_redis_check import shard_redis_doctor_lines
 from src.foundation.config.repo_settings import repo_config_path
 from src.foundation.paths import PROJECT_ROOT
 
@@ -50,5 +52,13 @@ def run(_args: argparse.Namespace) -> int:
         print(f"bot runtime: 运行中 ({running})")
     else:
         print("bot runtime: 未运行")
+
+    resolved = resolve_bot_mode("auto")
+    shard_env = os.environ.get("PALLAS_SHARD_ENABLED", "").strip().lower() in ("1", "true", "yes", "on")
+    if resolved == "shard" or running == "shard" or shard_env:
+        for line in shard_redis_doctor_lines():
+            print(line)
+            if "不可达" in line or line.endswith("coord redis: 未配置 REDIS_URL"):
+                issues += 1
 
     return 1 if issues else 0

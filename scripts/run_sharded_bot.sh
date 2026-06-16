@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pallas-Bot 分片一键启停：1 个控制台 (hub) + 多个牛牛进程 (worker)
+# Pallas-Bot 分片一键启停（兼容入口；推荐 ./scripts/pallas run shard / stop / status / restart）
 #
 #   ./scripts/run_sharded_bot.sh start
 #   ./scripts/run_sharded_bot.sh status

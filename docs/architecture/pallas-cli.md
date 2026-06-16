@@ -37,6 +37,9 @@ pallas run shard [--hub-only|--workers-only] [--workers N] [--worker-base …]
 pallas stop|status|restart …  # 对齐 run_unified_bot / run_sharded_bot 语义
 
 pallas deploy apply <profile> # default | shard | message-scrub；包装 apply_deploy_profile
+
+pallas maintenance run [--sync-extra …] [--update-bot] [--no-restart]
+                       # 组合：sync → update bot（默认带 restart）
 ```
 
 **进程模型**：
@@ -54,7 +57,7 @@ pallas deploy apply <profile> # default | shard | message-scrub；包装 apply_d
 | 安装后重启 | 文案提示人工重启 | **`pallas ext install --restart`** 或商店按钮调 `pallas restart` |
 | Bot 仓库更新 | WebUI 独立 git 流程 | 收敛到 **`pallas update bot`** |
 
-**当前策略**：S6 商店 UI 与安装 API **可先合流**；**不在 WebUI 内单独实现重启编排**，等 S7 CLI 再对接。
+**当前策略（已落地）**：WebUI 商店与 Bot 更新页通过 `extension_ops` / `update_ops` 调用与 CLI 相同的 Python 模块；启停推荐 `pallas`，底层仍包装 `run_*_bot.sh`。
 
 ## 实现分期
 
@@ -64,9 +67,10 @@ pallas deploy apply <profile> # default | shard | message-scrub；包装 apply_d
 | **B** | `ext` / `sync` | 已完成（复用 `extension_install`） |
 | **C** | `run` / `stop` / `status` / `restart` | 已完成（包装 `scripts/run_*_bot.sh`） |
 | **D** | `update bot` / `update webui` | 已完成（`update_ops`；WebUI API 已改调库） |
-| **E** | WebUI 商店对接 | 已完成（`restart` 参数与「安装并重启」按钮） |
+| **E** | WebUI 商店与 Bot 更新对接 | 已完成（`restart` 参数、「安装/更新并重启」） |
+| **F** | 运维收尾 | 已完成：`maintenance run`、doctor 分片 Redis、`run_*_bot.sh` 标注兼容入口 |
 
-Bash 脚本在 **E 之前**保留为薄封装（内部转调 `pallas`），避免破坏现有部署；**E 之后**文档标记 `run_*_bot.sh` 为兼容别名。
+`run_unified_bot.sh` / `run_sharded_bot.sh` 仍为底层实现；**推荐** `./scripts/pallas run|stop|status|restart`，Bash 脚本作兼容别名。
 
 ## 非目标（4.0 slim 内不做）
 

@@ -53,6 +53,13 @@ def test_parse_update_bot_restart():
     assert args.restart is True
 
 
+def test_parse_maintenance_run():
+    parser = build_parser()
+    args = parser.parse_args(["maintenance", "run", "--update-bot"])
+    assert args.update_bot is True
+    assert args.no_restart is False
+
+
 def test_module_invocation():
     proc = subprocess.run(
         [sys.executable, "-m", "src.console.cli", "--version"],

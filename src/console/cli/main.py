@@ -4,7 +4,7 @@ import argparse  # noqa: TC003
 import sys
 
 from src.console.cli import CLI_VERSION
-from src.console.cli.commands import deploy_cmd, doctor, ext_cmd, lifecycle, sync_cmd, update_cmd
+from src.console.cli.commands import deploy_cmd, doctor, ext_cmd, lifecycle, maintenance_cmd, sync_cmd, update_cmd
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -26,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     update_cmd.register(sub)
     lifecycle.register_run(sub)
     lifecycle.register_lifecycle(sub)
+    maintenance_cmd.register(sub)
     deploy_cmd.register(sub)
 
     return parser

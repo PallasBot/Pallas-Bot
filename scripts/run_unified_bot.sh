@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 单进程 unified 启停
+# 单进程 unified 启停（兼容入口；推荐 ./scripts/pallas run unified / stop / status / restart）
 #
 #   ./scripts/run_unified_bot.sh start
 #   ./scripts/run_unified_bot.sh status

@@ -1,11 +1,12 @@
 # 运维脚本索引
 
-> **4.0 路线**：启停、更新、扩展安装将收敛到统一 CLI **`pallas`**（见 [pallas-cli.md](../docs/architecture/pallas-cli.md)）。在 CLI 落地前，以下 Bash/Python 脚本仍为权威入口。
+> **4.0 运维**：推荐统一 CLI **`./scripts/pallas`**（见 [pallas-cli.md](../docs/architecture/pallas-cli.md)）。`run_*_bot.sh` 为兼容入口，由 `pallas run|stop|restart` 内部调用。
 
 | 目录 | 用途 |
 | --- | --- |
-| `scripts/pallas` | **统一 CLI**（`./scripts/pallas doctor` 等；见 [pallas-cli.md](../docs/architecture/pallas-cli.md)） |
-| `scripts/` | 启停、分片迁移、端口同步 |
+| `scripts/pallas` | **统一 CLI**（推荐：`doctor`、`sync`、`ext`、`update`、`run`、`maintenance`） |
+| `scripts/run_unified_bot.sh` | 单进程启停（**兼容**；内部仍由 `pallas run unified` 调用） |
+| `scripts/run_sharded_bot.sh` | 分片启停（**兼容**） |
 | `tools/scripts/` | 备份、watchdog、文档同步 |
 
 ## 单进程 unified
