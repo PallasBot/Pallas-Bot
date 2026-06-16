@@ -55,6 +55,15 @@ def test_group_style_weight_decays_with_age() -> None:
     assert group_style_weight(fresh, now_ts=now) > group_style_weight(stale, now_ts=now)
 
 
+def test_group_style_weight_boosts_forced_teach() -> None:
+    now = int(time.time())
+    plain = _style_profile(answer_count=20, message_count=10)
+    taught = dict(plain)
+    taught["sample"] = dict(plain["sample"])
+    taught["sample"]["forced_teach_weight"] = 5.0
+    assert group_style_weight(taught, now_ts=now) > group_style_weight(plain, now_ts=now)
+
+
 def test_build_bot_cross_group_persona_requires_multiple_groups() -> None:
     profile = build_bot_cross_group_persona(
         bot_id=1001,

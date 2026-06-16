@@ -77,6 +77,9 @@ async def test_refresh_group_style_profile_writes_profile_and_invalidates_cache(
     written: list[tuple[int, dict]] = []
 
     class DummyGroupRepo:
+        async def get(self, key_id: int, ignore_cache=False):  # noqa: ARG002
+            return None
+
         async def upsert_field(self, key_id: int, field: str, value):
             assert field == "style_profile"
             written.append((key_id, value))

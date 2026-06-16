@@ -2,6 +2,7 @@ import time
 
 from src.foundation.db import make_bot_config_repository, make_group_config_repository
 
+from .affect_baseline import apply_affect_derived
 from .auto import derive_persona_from_bot_id
 from .model import ResolvedPersona
 
@@ -41,6 +42,14 @@ def _apply_group_style_profile(base: ResolvedPersona, style_profile: dict | None
     chaos_bias = derived.get("chaos_bias")
     if isinstance(chaos_bias, int | float):
         payload["chaos_bias"] = max(0.0, min(1.0, float(chaos_bias)))
+
+    warmth, assertiveness = apply_affect_derived(
+        float(payload.get("warmth") or 0.0),
+        float(payload.get("assertiveness") or 0.0),
+        derived,
+    )
+    payload["warmth"] = warmth
+    payload["assertiveness"] = assertiveness
 
     return ResolvedPersona(**payload)
 

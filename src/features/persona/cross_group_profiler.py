@@ -35,6 +35,10 @@ def group_style_weight(style_profile: dict[str, Any], *, now_ts: int) -> float:
     sample_weight = math.sqrt(float(answer_count)) * math.sqrt(float(message_count))
     sample_weight = min(sample_weight, MAX_GROUP_WEIGHT)
 
+    teach_weight = float(sample.get("forced_teach_weight") or 0.0)
+    if teach_weight > 0:
+        sample_weight *= 1.0 + min(0.5, teach_weight * 0.08)
+
     updated_at = int(style_profile.get("updated_at") or 0)
     if updated_at <= 0:
         decay = 1.0
@@ -91,12 +95,16 @@ def build_bot_cross_group_persona(
     reply_sum = 0.0
     speak_sum = 0.0
     chaos_sum = 0.0
+    warmth_sum = 0.0
+    assertiveness_sum = 0.0
     length_ord_sum = 0.0
 
     for weight, derived in weighted:
         reply_sum += weight * float(derived.get("reply_bias_mul") or 1.0)
         speak_sum += weight * float(derived.get("speak_bias_mul") or 1.0)
         chaos_sum += weight * float(derived.get("chaos_bias") or 0.0)
+        warmth_sum += weight * float(derived.get("warmth_bias") or 0.0)
+        assertiveness_sum += weight * float(derived.get("assertiveness_bias") or 0.0)
         length_key = str(derived.get("length_pref") or "medium").strip()
         length_ord_sum += weight * _LENGTH_ORD.get(length_key, 1.0)
 
@@ -109,5 +117,7 @@ def build_bot_cross_group_persona(
         "speak_bias_mul": round(_clamp(speak_sum * inv, 0.9, 1.1), 3),
         "length_pref": _LENGTH_FROM_ORD[length_idx],
         "chaos_bias": round(_clamp(chaos_sum * inv, 0.0, 0.25), 3),
+        "warmth_bias": round(_clamp(warmth_sum * inv, -0.35, 0.35), 3),
+        "assertiveness_bias": round(_clamp(assertiveness_sum * inv, -0.1, 0.4), 3),
     }
     return profile

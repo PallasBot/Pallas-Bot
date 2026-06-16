@@ -7,8 +7,8 @@ _LOW_INFO_RE = re.compile(r"^[\W_]+$", re.UNICODE)
 
 
 def scaled_answer_threshold(base_threshold: int, persona: ResolvedPersona, *, in_hosted_activity: bool) -> int:
-    """reply_bias 越高越容易接话（有效阈值越低）。"""
-    bias = persona.reply_bias
+    """reply_bias 越高越容易接话（有效阈值越低）；warmth 略放大 reply_bias。"""
+    bias = persona.reply_bias * (1.0 + max(-0.5, min(0.5, persona.warmth)) * 0.12)
     if in_hosted_activity:
         bias *= persona.activity_reply_bias
     if bias <= 0:
@@ -40,12 +40,18 @@ def chaos_message_multiplier(text: str, persona: ResolvedPersona) -> float:
 
 
 def answer_popularity_multiplier(count: int, persona: ResolvedPersona) -> float:
-    """chaos 越高越偏高频 answer；低 chaos 时略偏冷门句。"""
+    """chaos 越高越偏高频 answer；assertiveness 高时略偏冷门句。"""
     popularity = min(max(int(count), 0), 10) / 10.0
     chaos = float(persona.chaos_bias)
     if chaos >= 0.05:
-        return 1.0 + chaos * popularity * 0.6
-    return 1.0 + (1.0 - popularity) * 0.12
+        mul = 1.0 + chaos * popularity * 0.6
+    else:
+        mul = 1.0 + (1.0 - popularity) * 0.12
+    if persona.assertiveness >= 0.12:
+        mul *= 1.0 + persona.assertiveness * (1.0 - popularity) * 0.25
+    elif persona.assertiveness <= -0.12:
+        mul *= 1.0 + abs(persona.assertiveness) * popularity * 0.15
+    return mul
 
 
 def message_weight_multiplier(text: str, persona: ResolvedPersona) -> float:

@@ -5,6 +5,9 @@ import time
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING, Any
 
+from .affect_baseline import derive_group_affect_bias, merge_affect_refine_into_profile
+from .affect_tone_scan import summarize_group_message_tones
+
 if TYPE_CHECKING:
     from src.foundation.db.modules import Answer, Message
 
@@ -42,6 +45,7 @@ def build_group_style_profile(
     answers: list[Answer],
     now_ts: int | None = None,
     window_hours: int = DEFAULT_WINDOW_HOURS,
+    forced_teach_weight: float = 0.0,
 ) -> dict[str, Any]:
     now = int(now_ts or time.time())
     cutoff = now - int(window_hours) * 3600
@@ -87,6 +91,13 @@ def build_group_style_profile(
             4,
         )
 
+    plain_texts = [
+        str(getattr(m, "plain_text", "") or "").strip()
+        for m in recent_messages
+        if str(getattr(m, "plain_text", "") or "").strip()
+    ]
+    affect_tone = summarize_group_message_tones(plain_texts)
+
     profile: dict[str, Any] = {
         "version": 1,
         "updated_at": now,
@@ -95,6 +106,7 @@ def build_group_style_profile(
             "message_count": message_count,
             "answer_count": answer_count,
             "distinct_answer_keywords": distinct_answer_keywords,
+            "forced_teach_weight": round(max(0.0, float(forced_teach_weight)), 3),
         },
         "raw": {
             "avg_plain_len": avg_plain_len,
@@ -103,6 +115,7 @@ def build_group_style_profile(
             "msgs_per_hour_active": msgs_per_hour_active,
             "local_answer_ratio": local_answer_ratio,
             "repeat_chain_rate": repeat_chain_rate,
+            "affect_tone": affect_tone,
         },
     }
 
@@ -116,13 +129,32 @@ def build_group_style_profile(
         repeat_chain_rate * 0.45 + short_message_ratio * 0.15 + max(0.0, (1.0 - answer_diversity)) * 0.05, 0.0, 0.25
     )
 
+    teach_weight = max(0.0, float(forced_teach_weight))
+    if teach_weight > 0:
+        teach_mul = 1.0 + min(0.4, teach_weight * 0.06)
+        speak_bias_mul = _clamp(speak_bias_mul * teach_mul, 0.9, 1.1)
+        chaos_bias = _clamp(chaos_bias * teach_mul, 0.0, 0.25)
+
+    affect = derive_group_affect_bias(
+        repeat_chain_rate=repeat_chain_rate,
+        short_message_ratio=short_message_ratio,
+        local_answer_ratio=local_answer_ratio,
+        forced_teach_weight=teach_weight,
+        civility_score=float(affect_tone.get("civility_score") or 0.0),
+        harsh_msg_ratio=float(affect_tone.get("harsh_msg_ratio") or 0.0),
+        polite_msg_ratio=float(affect_tone.get("polite_msg_ratio") or 0.0),
+        punct_aggression_avg=float(affect_tone.get("punct_aggression_avg") or 0.0),
+    )
+
     profile["derived"] = {
         "reply_bias_mul": round(reply_bias_mul, 3),
         "speak_bias_mul": round(speak_bias_mul, 3),
         "length_pref": _length_pref(p50_plain_len, p90_plain_len),
         "chaos_bias": round(chaos_bias, 3),
+        "warmth_bias": affect["warmth_bias"],
+        "assertiveness_bias": affect["assertiveness_bias"],
     }
-    return profile
+    return merge_affect_refine_into_profile(profile, None)
 
 
 async def build_group_style_profile_from_recent_repos(
@@ -132,6 +164,7 @@ async def build_group_style_profile_from_recent_repos(
     context_repo,
     now_ts: int | None = None,
     window_hours: int = DEFAULT_WINDOW_HOURS,
+    forced_teach_weight: float = 0.0,
 ) -> dict[str, Any]:
     now = int(now_ts or time.time())
     cutoff = now - int(window_hours) * 3600
@@ -149,4 +182,5 @@ async def build_group_style_profile_from_recent_repos(
         answers=list(answers),
         now_ts=now,
         window_hours=window_hours,
+        forced_teach_weight=forced_teach_weight,
     )

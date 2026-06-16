@@ -109,6 +109,8 @@ async def test_resolve_persona_merges_group_style_profile(monkeypatch: pytest.Mo
                             "speak_bias_mul": 0.95,
                             "length_pref": "long",
                             "chaos_bias": 0.2,
+                            "warmth_bias": 0.1,
+                            "assertiveness_bias": 0.15,
                         }
                     }
                 },
@@ -120,7 +122,14 @@ async def test_resolve_persona_merges_group_style_profile(monkeypatch: pytest.Mo
 
     monkeypatch.setattr(
         "src.features.persona.loader.derive_persona_from_bot_id",
-        lambda _bid: ResolvedPersona(reply_bias=1.0, speak_bias=1.0, length_pref="short", chaos_bias=0.05),
+        lambda _bid: ResolvedPersona(
+            reply_bias=1.0,
+            speak_bias=1.0,
+            length_pref="short",
+            chaos_bias=0.05,
+            warmth=0.0,
+            assertiveness=0.0,
+        ),
     )
     monkeypatch.setattr("src.features.persona.loader.make_group_config_repository", lambda: DummyGroupRepo())
     monkeypatch.setattr("src.features.persona.loader.make_bot_config_repository", lambda: DummyBotRepo())
@@ -132,6 +141,8 @@ async def test_resolve_persona_merges_group_style_profile(monkeypatch: pytest.Mo
     assert resolved.speak_bias == pytest.approx(0.95)
     assert resolved.length_pref == "long"
     assert resolved.chaos_bias == pytest.approx(0.2)
+    assert resolved.warmth == pytest.approx(0.1)
+    assert resolved.assertiveness == pytest.approx(0.15)
 
 
 @pytest.mark.asyncio
@@ -149,7 +160,14 @@ async def test_resolve_persona_skips_group_style_when_disabled(monkeypatch: pyte
 
     monkeypatch.setattr(
         "src.features.persona.loader.derive_persona_from_bot_id",
-        lambda _bid: ResolvedPersona(reply_bias=1.0, speak_bias=1.0, length_pref="short", chaos_bias=0.05),
+        lambda _bid: ResolvedPersona(
+            reply_bias=1.0,
+            speak_bias=1.0,
+            length_pref="short",
+            chaos_bias=0.05,
+            warmth=0.0,
+            assertiveness=0.0,
+        ),
     )
     monkeypatch.setattr("src.features.persona.loader.make_group_config_repository", lambda: DummyGroupRepo())
     monkeypatch.setattr("src.features.persona.loader.make_bot_config_repository", lambda: DummyBotRepo())

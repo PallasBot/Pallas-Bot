@@ -116,6 +116,14 @@ def build_bot_behavior_prompt(persona: ResolvedPersona) -> str:
         lines.append("- 本群/本牛接话偏复读链与短句，回复宜更口语、更短促。")
     elif persona.chaos_bias > 0 and persona.chaos_bias < 0.08:
         lines.append("- 接话句型较分散，避免机械复读同一模板。")
+    if persona.warmth >= 0.15:
+        lines.append("- 态度偏温和，优先接住话题，少生硬拒绝。")
+    elif persona.warmth <= -0.15:
+        lines.append("- 态度偏冷，非必要不多接话。")
+    if persona.assertiveness >= 0.15:
+        lines.append("- 可适度接梗、反抛或短促顶一句，但保持帕拉斯身份。")
+    elif persona.assertiveness <= -0.15:
+        lines.append("- 少反呛，优先顺着群聊节奏。")
     return wrap_stats_block("bot_behavior", "\n".join(lines))
 
 

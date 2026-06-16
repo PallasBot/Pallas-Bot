@@ -20,4 +20,6 @@ class ResolvedPersona(BaseModel):
         description="同群独占活动进行中时，接话阈值额外倍率（越小越少插话）",
     )
     chaos_bias: float = Field(default=0.0, ge=0.0, le=1.0)
+    warmth: float = Field(default=0.0, ge=-1.0, le=1.0)
+    assertiveness: float = Field(default=0.0, ge=-1.0, le=1.0)
     cross_group_bias_mul: float = Field(default=1.0, ge=0.5, le=1.5)

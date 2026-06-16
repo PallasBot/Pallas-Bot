@@ -43,16 +43,23 @@ def compile_group_style_snapshot(style_profile: dict[str, Any] | None) -> dict[s
         return snapshot
 
     raw_dict = raw if isinstance(raw, dict) else {}
+    affect_tone = raw_dict.get("affect_tone") if isinstance(raw_dict.get("affect_tone"), dict) else {}
     snapshot["signals"] = {
         "reply_bias_mul": derived.get("reply_bias_mul"),
         "speak_bias_mul": derived.get("speak_bias_mul"),
         "length_pref": derived.get("length_pref"),
         "chaos_bias": derived.get("chaos_bias"),
+        "warmth_bias": derived.get("warmth_bias"),
+        "assertiveness_bias": derived.get("assertiveness_bias"),
         "avg_plain_len": raw_dict.get("avg_plain_len"),
         "p50_plain_len": raw_dict.get("p50_plain_len"),
         "msgs_per_hour_active": raw_dict.get("msgs_per_hour_active"),
         "local_answer_ratio": raw_dict.get("local_answer_ratio"),
         "repeat_chain_rate": raw_dict.get("repeat_chain_rate"),
+        "civility_score": affect_tone.get("civility_score"),
+        "harsh_msg_ratio": affect_tone.get("harsh_msg_ratio"),
+        "polite_msg_ratio": affect_tone.get("polite_msg_ratio"),
+        "punct_aggression_avg": affect_tone.get("punct_aggression_avg"),
     }
     snapshot["hints"] = build_group_style_hints(snapshot["signals"])
     return snapshot
@@ -88,6 +95,12 @@ def build_group_style_hints(signals: dict[str, Any] | None) -> list[str]:
         hints.append("适合更频繁接话")
     elif reply_mul <= 0.92:
         hints.append("适合更克制接话")
+
+    civility = float(signals.get("civility_score") or 0.0)
+    if civility >= 0.25:
+        hints.append("群聊语气偏文明客气")
+    elif civility <= -0.25:
+        hints.append("群聊语气偏直接或有冲突用语")
 
     return hints
 

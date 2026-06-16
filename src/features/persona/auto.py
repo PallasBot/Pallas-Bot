@@ -13,4 +13,6 @@ def derive_persona_from_bot_id(bot_id: int) -> ResolvedPersona:
         reply_bias=round(0.85 + (bid % 7) * 0.05, 2),
         speak_bias=round(0.90 + (bid % 5) * 0.04, 2),
         length_pref=_LENGTH_PREFS[bid % len(_LENGTH_PREFS)],
+        warmth=round(((bid % 7) - 3) * 0.08, 2),
+        assertiveness=round(((bid % 11) - 5) * 0.06, 2),
     )

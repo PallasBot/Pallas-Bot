@@ -10,13 +10,38 @@ from src.features.persona.loader import invalidate_persona_cache
 from src.foundation.db import make_group_config_repository, make_local_context_repository, make_message_repository
 
 _dirty_group_ids: set[int] = set()
+_pending_forced_teach: dict[int, int] = {}
 _LIFECYCLE_BOUND = False
 _DEFAULT_REFRESH_INTERVAL_SEC = 20 * 60
 _DEFAULT_REFRESH_BATCH_SIZE = 32
+_FORCED_TEACH_DECAY = 0.85
+_FORCED_TEACH_EVENT_WEIGHT = 1.0
+_FORCED_TEACH_WEIGHT_CAP = 10.0
 
 
 def mark_group_style_dirty(group_id: int) -> None:
     _dirty_group_ids.add(int(group_id))
+
+
+def mark_group_style_forced_teach(group_id: int, *, events: int = 1) -> None:
+    gid = int(group_id)
+    _dirty_group_ids.add(gid)
+    _pending_forced_teach[gid] = int(_pending_forced_teach.get(gid, 0)) + max(1, int(events))
+
+
+def pop_forced_teach_events(group_id: int) -> int:
+    return int(_pending_forced_teach.pop(int(group_id), 0))
+
+
+def merge_forced_teach_weight(previous_profile: dict | None, pending_events: int) -> float:
+    prev = 0.0
+    if isinstance(previous_profile, dict):
+        sample = previous_profile.get("sample")
+        if isinstance(sample, dict):
+            prev = float(sample.get("forced_teach_weight") or 0.0)
+    decayed = prev * _FORCED_TEACH_DECAY
+    added = max(0, int(pending_events)) * _FORCED_TEACH_EVENT_WEIGHT
+    return min(_FORCED_TEACH_WEIGHT_CAP, decayed + added)
 
 
 def pop_dirty_group_style_batch(limit: int) -> list[int]:
@@ -30,6 +55,7 @@ def pop_dirty_group_style_batch(limit: int) -> list[int]:
 
 def clear_group_style_dirty_state() -> None:
     _dirty_group_ids.clear()
+    _pending_forced_teach.clear()
 
 
 async def refresh_dirty_group_style_batch(
@@ -53,6 +79,15 @@ async def refresh_group_style_profile(group_id: int, *, window_hours: int = DEFA
     gid = int(group_id)
     now_ts = int(time.time())
 
+    repo = make_group_config_repository()
+    cfg = await repo.get(gid)
+    prev_profile = getattr(cfg, "style_profile", None) if cfg is not None else None
+    pending_teach = pop_forced_teach_events(gid)
+    forced_teach_weight = merge_forced_teach_weight(
+        prev_profile if isinstance(prev_profile, dict) else None,
+        pending_teach,
+    )
+
     message_repo = make_message_repository()
     context_repo = make_local_context_repository()
     profile = await build_group_style_profile_from_recent_repos(
@@ -61,9 +96,13 @@ async def refresh_group_style_profile(group_id: int, *, window_hours: int = DEFA
         context_repo=context_repo,
         now_ts=now_ts,
         window_hours=window_hours,
+        forced_teach_weight=forced_teach_weight,
     )
 
-    repo = make_group_config_repository()
+    from src.features.persona.affect_refine import refine_group_style_affect
+
+    profile = await refine_group_style_affect(profile, group_id=gid)
+
     await repo.upsert_field(gid, "style_profile", profile)
     invalidate_persona_cache()
 

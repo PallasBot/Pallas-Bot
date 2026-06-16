@@ -9,6 +9,7 @@ from src.foundation.db.context_repo_access import context_repo
 from .context_exists_cache import context_exists_for_learn, note_context_exists
 from .learner_context import group_messages_before
 from .message_store import MessageStore
+from .repeat_teach import is_forced_repeat_teaching
 from .topic_utils import filtered_recent_topics
 
 if TYPE_CHECKING:
@@ -44,6 +45,10 @@ class Learner:
             return False
 
         group_msgs = await group_messages_before(chat_data)
+        if is_forced_repeat_teaching(chat_data, group_msgs):
+            from src.features.persona.group_style_refresh import mark_group_style_forced_teach
+
+            mark_group_style_forced_teach(chat_data.group_id)
         if group_msgs:
             group_pre_msg = group_msgs[-1]
             await Learner._context_insert(chat_data, group_pre_msg)
