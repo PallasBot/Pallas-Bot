@@ -84,3 +84,4 @@ def test_build_plugin_capabilities_ui_groups(monkeypatch) -> None:
     assert draw["commands"][0]["effective_cd_sec"] == 3
     assert draw["llm_tools"][0]["name"] == "draw.image"
     assert draw["storage_keys"][0]["key"] == "daily_usage"
+    assert draw.get("reload_policy") in (None, "config_only")

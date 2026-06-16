@@ -286,8 +286,9 @@ src/plugins/pb_core/
 
 ## P6 · plugin_capabilities WebUI 一屏
 
-- 控制台新增「插件能力总览」：权限、CD、LLM tools、storage keys
-- 数据源：已有 `build_plugin_capabilities_ui()`
+- [x] 控制台「插件能力总览」面板（`PluginsPage` + `GET /plugins/capabilities`）
+- [x] 展示权限、CD、LLM tools、storage keys、`reload_policy`
+- 数据源：`build_plugin_capabilities_ui()`
 
 ---
 

@@ -9,6 +9,7 @@
 | PUT | `/plugins/help-menu-visibility` | 是 | 更新帮助可见性 |
 | GET | `/plugins/global-disable` | | 全局禁用插件名集合 |
 | PUT | `/plugins/global-disable` | 是 | 批量禁用/启用（保护核心插件） |
+| GET | `/plugins/capabilities` | | 插件能力聚合（命令权限/CD、LLM tools、storage keys、`reload_policy`） |
 | GET | `/plugins/group-fleet-whitelist` | | 群舰队白名单插件 |
 | PUT | `/plugins/group-fleet-whitelist` | 是 | 更新舰队白名单 |
 
@@ -49,6 +50,7 @@ PUT 成功后：
 ## 前端对应
 
 - `fetchPlugins`、`fetchPluginConfig`、`putPluginConfig`
+- `fetchPluginCapabilities`（插件页「能力总览」与卡片预览）
 - `fetchHelpMenuVisibility`、`putHelpMenuVisibility`
 - `fetchGlobalPluginDisable`、`putGlobalPluginDisable`
 - `fetchGroupFleetWhitelist`、`putGroupFleetWhitelist`
