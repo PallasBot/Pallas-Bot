@@ -144,6 +144,17 @@ class MongoContextRepository:
         doc = docs[0]
         return str(doc.get("keywords") or ""), str(doc.get("reply_keywords") or "")
 
+    async def list_answers_for_group_since(self, group_id: int, cutoff_time: int) -> list[Answer]:
+        contexts = await Context.find({"answers.group_id": int(group_id)}).to_list()
+        out: list[Answer] = []
+        for context in contexts:
+            out.extend(
+                answer
+                for answer in context.answers
+                if int(answer.group_id) == int(group_id) and int(answer.time) >= int(cutoff_time)
+            )
+        return out
+
 
 class MongoMessageRepository:
     """MongoDB 版 MessageRepository 实现"""
@@ -165,6 +176,40 @@ class MongoMessageRepository:
         docs = await Message.find(query).sort("-time").limit(cap).to_list()
         docs.reverse()
         return docs
+
+    async def list_recent_group_ids_for_bot(
+        self,
+        bot_id: int,
+        *,
+        since_time: int,
+        limit: int = 128,
+    ) -> list[int]:
+        cap = max(1, min(int(limit), 512))
+        pipeline = [
+            {"$match": {"bot_id": int(bot_id), "time": {"$gte": int(since_time)}}},
+            {"$group": {"_id": "$group_id"}},
+            {"$sort": {"_id": 1}},
+            {"$limit": cap},
+        ]
+        rows = await Message.aggregate(pipeline).to_list()
+        return [int(row["_id"]) for row in rows]
+
+    async def list_recent_bot_ids_for_group(
+        self,
+        group_id: int,
+        *,
+        since_time: int,
+        limit: int = 32,
+    ) -> list[int]:
+        cap = max(1, min(int(limit), 128))
+        pipeline = [
+            {"$match": {"group_id": int(group_id), "time": {"$gte": int(since_time)}}},
+            {"$group": {"_id": "$bot_id"}},
+            {"$sort": {"_id": 1}},
+            {"$limit": cap},
+        ]
+        rows = await Message.aggregate(pipeline).to_list()
+        return [int(row["_id"]) for row in rows]
 
     async def bulk_insert(self, messages: list[Message]) -> None:
         await Message.insert_many(messages)

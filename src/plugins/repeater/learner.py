@@ -53,6 +53,9 @@ class Learner:
                 recent_topics[group_id] += filtered_recent_topics(keywords_list)
 
         await MessageStore.message_insert(chat_data, topics_callback=_topics_callback)
+        from src.features.persona.group_style_refresh import mark_group_style_dirty
+
+        mark_group_style_dirty(chat_data.group_id)
         return True
 
     @staticmethod

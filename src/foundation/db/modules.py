@@ -29,6 +29,8 @@ class BotConfigModule(Document):
     drunk: dict[int, float] = Field(default_factory=dict)
     disabled_plugins: list[str] = Field(default_factory=list)
     community_roster_show_qq: bool = Field(default=True)
+    persona: dict | None = Field(default=None)
+    group_style_enabled: bool = Field(default=True)
 
     class Settings:
         name = "config"
@@ -45,6 +47,7 @@ class GroupConfigModule(Document):
     sing_progress: SingProgress | None = None
     disabled_plugins: list[str] = Field(default_factory=list)
     blocked_user_ids: list[int] = Field(default_factory=list)
+    style_profile: dict | None = Field(default=None)
 
     class Settings:
         name = "group_config"

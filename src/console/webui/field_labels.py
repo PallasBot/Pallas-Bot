@@ -93,6 +93,7 @@ FIELD_LABELS: dict[str, str] = {
     "enabled": "控制面总开关",
     "fanout_enabled": "多牛同群接话 fanout",
     "fanout_max_bots": "fanout 最多参与牛数",
+    "group_style_enabled": "启用群风格自动生长",
     "fed_contribute": "上传联邦语料",
     "fed_enabled": "联邦池接话",
     "federate_id": "联邦池编号",

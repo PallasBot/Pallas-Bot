@@ -5,6 +5,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 
+async def _default_resolve_persona(bot_id: int, group_id: int | None = None):
+    from src.features.persona.model import ResolvedPersona
+
+    return ResolvedPersona(speak_bias=2.0, chaos_bias=0.1, length_pref="short")
+
+
 def _build_message(group_id: int, user_id: int, raw_message: str, keywords: str, time_value: int):
     from src.foundation.db import Message as MessageModel
 
@@ -75,10 +81,9 @@ async def test_speak_filters_banned_keywords(beanie_fixture):
     try:
         with (
             patch("src.plugins.repeater.speaker.time.time", return_value=10000),
-            patch(
-                "src.plugins.repeater.speaker.random.choice",
-                side_effect=[bot_id, [allowed_msg], allowed_msg],
-            ),
+            patch("src.plugins.repeater.speaker.resolve_persona", _default_resolve_persona),
+            patch("src.plugins.repeater.speaker.random.choice", return_value=bot_id),
+            patch("src.plugins.repeater.speaker.Speaker._pick_speak_message", return_value=allowed_msg),
             patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
             patch(
                 "src.plugins.repeater.speaker.BanManager.find_ban_keywords",
@@ -124,10 +129,8 @@ async def test_speak_skips_remote_bot_when_sharded(beanie_fixture):
             patch("src.platform.shard.registry.config.is_sharding_active", return_value=True),
             patch("src.plugins.repeater.shard_opt.local_connected_bot_ids", return_value=frozenset({local_bot_id})),
             patch("src.plugins.repeater.speaker.time.time", return_value=10000),
-            patch(
-                "src.plugins.repeater.speaker.random.choice",
-                side_effect=[local_bot_id, [chosen_msg], chosen_msg],
-            ),
+            patch("src.plugins.repeater.speaker.resolve_persona", _default_resolve_persona),
+            patch("src.plugins.repeater.speaker.Speaker._pick_speak_message", return_value=chosen_msg),
             patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
             patch(
                 "src.plugins.repeater.speaker.BanManager.find_ban_keywords",
@@ -175,10 +178,9 @@ async def test_speak_recent_dedup_avoids_same_message_twice(beanie_fixture):
     try:
         with (
             patch("src.plugins.repeater.speaker.time.time", return_value=10000),
-            patch(
-                "src.plugins.repeater.speaker.random.choice",
-                side_effect=[bot_id, [dup_a_msg], dup_a_msg],
-            ),
+            patch("src.plugins.repeater.speaker.resolve_persona", _default_resolve_persona),
+            patch("src.plugins.repeater.speaker.random.choice", return_value=bot_id),
+            patch("src.plugins.repeater.speaker.Speaker._pick_speak_message", return_value=dup_a_msg),
             patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
             patch(
                 "src.plugins.repeater.speaker.BanManager.find_ban_keywords",
@@ -196,10 +198,9 @@ async def test_speak_recent_dedup_avoids_same_message_twice(beanie_fixture):
 
         with (
             patch("src.plugins.repeater.speaker.time.time", return_value=30000),
-            patch(
-                "src.plugins.repeater.speaker.random.choice",
-                side_effect=[bot_id, [dup_b_msg], dup_b_msg],
-            ),
+            patch("src.plugins.repeater.speaker.resolve_persona", _default_resolve_persona),
+            patch("src.plugins.repeater.speaker.random.choice", return_value=bot_id),
+            patch("src.plugins.repeater.speaker.Speaker._pick_speak_message", return_value=dup_b_msg),
             patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
             patch(
                 "src.plugins.repeater.speaker.BanManager.find_ban_keywords",

@@ -23,6 +23,7 @@ from src.features.corpus.backfill_scheduler import bind_corpus_backfill_lifecycl
 from src.features.corpus.prefetch import bind_corpus_prefetch_lifecycle
 from src.features.message_scrub import is_message_scrub_blocked_async
 from src.features.message_scrub.log_preview import scrub_intercept_log_preview
+from src.features.persona import bind_group_style_refresh_lifecycle
 from src.foundation.config import BotConfig
 from src.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from src.plugins.dream.ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
@@ -38,6 +39,7 @@ from .model import Chat
 from .reply_gate import should_prepare_repeater_reply
 
 bind_repeater_learn_lifecycle()
+bind_group_style_refresh_lifecycle()
 bind_corpus_prefetch_lifecycle()
 bind_corpus_backfill_lifecycle()
 

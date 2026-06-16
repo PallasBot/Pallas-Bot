@@ -35,6 +35,8 @@ def bot_config_to_public(doc_or_row: Any) -> dict[str, Any]:
         "drunk": dict(doc_or_row.drunk or {}),
         "disabled_plugins": list(doc_or_row.disabled_plugins or []),
         "community_roster_show_qq": bool(getattr(doc_or_row, "community_roster_show_qq", True)),
+        "persona": dict(doc_or_row.persona) if getattr(doc_or_row, "persona", None) else None,
+        "group_style_enabled": bool(getattr(doc_or_row, "group_style_enabled", True)),
     }
 
 

@@ -3634,6 +3634,8 @@ class _BotConfigPatch(BaseModel):
     auto_accept_group: bool | None = None
     security: bool | None = None
     community_roster_show_qq: bool | None = None
+    persona: dict | None = None
+    group_style_enabled: bool | None = None
 
 
 class _GroupConfigPatch(BaseModel):
@@ -3819,6 +3821,10 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
         from src.foundation.config.bot_admins_cache import invalidate_bot_admins_cache
 
         await invalidate_bot_admins_cache(account)
+    if "persona" in fields:
+        from src.features.persona import invalidate_persona_cache
+
+        invalidate_persona_cache(account)
     doc = await repo.get(account, ignore_cache=True)
     if doc is None:
         raise HTTPException(status_code=500, detail="config upsert 后回读失败")
@@ -3938,6 +3944,7 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
             "taken_name",
             "drunk",
             "community_roster_show_qq",
+            "persona",
         }
         for k in payload:
             if k not in allowed:

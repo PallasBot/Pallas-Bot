@@ -320,6 +320,19 @@ class Responder:
         if not context:
             return None
 
+        from src.features.persona import resolve_persona
+        from src.features.persona.scorer import (
+            answer_popularity_multiplier,
+            freshness_multiplier,
+            message_weight_multiplier,
+            scaled_answer_threshold,
+        )
+
+        from .activity_gate import group_has_hosted_activity
+
+        persona = await resolve_persona(bot_id, group_id)
+        in_hosted_activity = group_has_hosted_activity(group_id) and not chat_data.to_me
+
         is_drunk = await config.drunkenness() > 0
 
         if is_drunk:
@@ -333,6 +346,12 @@ class Responder:
             if chat_data.keywords_len == ChatData._keywords_size:
                 answer_count_threshold -= 1
 
+        answer_count_threshold = scaled_answer_threshold(
+            answer_count_threshold,
+            persona,
+            in_hosted_activity=in_hosted_activity,
+        )
+
         if chat_data.to_me:
             cross_group_threshold = 1
         else:
@@ -345,6 +364,11 @@ class Responder:
         answers_count = defaultdict(int)
         recent_replies = [r["reply_keywords"] for r in reply_dict[group_id][bot_id][-Responder.DUPLICATE_REPLY :]]
         recent_message = [m.raw_message for m in message_dict[group_id][-Responder.DUPLICATE_REPLY :]]
+        recent_sent = [
+            str(r.get("reply") or "")
+            for r in reply_dict[group_id][bot_id][-Responder.DUPLICATE_REPLY :]
+            if r.get("reply") and r["reply"] != Responder.REPLY_FLAG
+        ]
 
         def candidate_append(dst: dict[str, Answer], answer: Answer):
             answer_key = answer.keywords
@@ -418,10 +442,18 @@ class Responder:
                 if text and text not in message_pool:
                     message_pool.append(text)
 
-        weights = [
-            min(answer.count, 10) + answer._topical * Responder.TOPICS_IMPORTANCE
-            for answer in candidate_answers.values()
-        ]
+        weights = []
+        for answer in candidate_answers.values():
+            base = min(answer.count, 10) + answer._topical * Responder.TOPICS_IMPORTANCE
+            base *= answer_popularity_multiplier(answer.count, persona)
+            mults = []
+            for sample in answer.messages:
+                text = sample.removeprefix("牛牛")
+                mults.append(
+                    message_weight_multiplier(text, persona) * freshness_multiplier(text, recent_sent, persona=persona)
+                )
+            factor = max(mults) if mults else 1.0
+            weights.append(max(0.05, base * factor))
         final_answer = random.choices(list(candidate_answers.values()), weights=weights)[0]
         answer_str = random.choice(final_answer.messages)
         answer_keywords = final_answer.keywords
@@ -447,12 +479,13 @@ class Responder:
         return ([answer_str], answer_keywords)
 
     @staticmethod
-    def pick_fanout_plan(bundle: ReplyBundle) -> tuple[list[str], str]:
-        """各牛从共享候选池随机一句，不再重复 context 检索。"""
+    def pick_fanout_plan(bundle: ReplyBundle, bot_id: int) -> tuple[list[str], str]:
+        """各牛从共享候选池选句，按 bot_id 稳定分化，避免齐声。"""
         pool = bundle.message_pool
         if len(pool) <= 1:
             return bundle.answer_list, bundle.answer_keywords
-        text = random.choice(pool)
+        rng = random.Random(int(bot_id) ^ hash(bundle.answer_keywords))
+        text = rng.choice(pool)
         plan = Responder._plan_from_answer_text(text, bundle.answer_keywords)
         if plan is None:
             return bundle.answer_list, bundle.answer_keywords

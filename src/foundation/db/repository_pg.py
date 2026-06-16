@@ -176,6 +176,8 @@ class BotConfigRow(Base):
     drunk: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
     disabled_plugins: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
     community_roster_show_qq: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    persona: Mapped[Any] = mapped_column(_JsonB, nullable=True)
+    group_style_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
 class GroupConfigRow(Base):
@@ -187,6 +189,7 @@ class GroupConfigRow(Base):
     sing_progress: Mapped[Any] = mapped_column(_JsonB, nullable=True)
     disabled_plugins: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
     blocked_user_ids: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
+    style_profile: Mapped[Any] = mapped_column(_JsonB, nullable=True)
 
 
 class UserConfigRow(Base):
@@ -233,6 +236,28 @@ def _ensure_pg_group_config_blocked_user_ids(connection) -> None:
     connection.execute(text("ALTER TABLE group_config ADD COLUMN blocked_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb"))
 
 
+def _ensure_pg_group_config_style_profile(connection) -> None:
+    """旧库 group_config 缺列时补列。"""
+    insp = inspect(connection)
+    if not insp.has_table("group_config"):
+        return
+    names = {c["name"] for c in insp.get_columns("group_config")}
+    if "style_profile" in names:
+        return
+    connection.execute(text("ALTER TABLE group_config ADD COLUMN style_profile JSONB"))
+
+
+def _ensure_pg_bot_config_persona(connection) -> None:
+    """旧库 bot_config 缺列时补列。"""
+    insp = inspect(connection)
+    if not insp.has_table("bot_config"):
+        return
+    names = {c["name"] for c in insp.get_columns("bot_config")}
+    if "persona" in names:
+        return
+    connection.execute(text("ALTER TABLE bot_config ADD COLUMN persona JSONB"))
+
+
 def _ensure_pg_bot_config_community_roster_show_qq(connection) -> None:
     """旧库 bot_config 缺列时补列。"""
     insp = inspect(connection)
@@ -242,6 +267,17 @@ def _ensure_pg_bot_config_community_roster_show_qq(connection) -> None:
     if "community_roster_show_qq" in names:
         return
     connection.execute(text("ALTER TABLE bot_config ADD COLUMN community_roster_show_qq BOOLEAN NOT NULL DEFAULT true"))
+
+
+def _ensure_pg_bot_config_group_style_enabled(connection) -> None:
+    """旧库 bot_config 缺列时补列。"""
+    insp = inspect(connection)
+    if not insp.has_table("bot_config"):
+        return
+    names = {c["name"] for c in insp.get_columns("bot_config")}
+    if "group_style_enabled" in names:
+        return
+    connection.execute(text("ALTER TABLE bot_config ADD COLUMN group_style_enabled BOOLEAN NOT NULL DEFAULT true"))
 
 
 def _ensure_pg_user_config_maa_devices(connection) -> None:
@@ -377,7 +413,10 @@ async def init_pg(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_pg_group_config_blocked_user_ids)
+        await conn.run_sync(_ensure_pg_group_config_style_profile)
         await conn.run_sync(_ensure_pg_bot_config_community_roster_show_qq)
+        await conn.run_sync(_ensure_pg_bot_config_group_style_enabled)
+        await conn.run_sync(_ensure_pg_bot_config_persona)
         await conn.run_sync(_ensure_pg_user_config_maa_devices)
         await conn.run_sync(_ensure_pg_message_group_time_index)
         await conn.run_sync(_ensure_pg_message_group_user_time_index)
@@ -1187,6 +1226,30 @@ class PgContextRepository:
             pre_keywords, reply_keywords = row
             return str(pre_keywords), str(reply_keywords)
 
+    async def list_answers_for_group_since(self, group_id: int, cutoff_time: int) -> list[Answer]:
+        from src.foundation.db.modules import Answer
+
+        async with get_session(read_only=True) as session:
+            result = await session.execute(
+                select(ContextAnswerRow)
+                .where(
+                    ContextAnswerRow.group_id == int(group_id),
+                    ContextAnswerRow.time >= int(cutoff_time),
+                )
+                .options(selectinload(ContextAnswerRow.messages))
+            )
+            rows = list(result.scalars().all())
+        return [
+            Answer(
+                keywords=str(row.keywords),
+                group_id=int(row.group_id),
+                count=int(row.count),
+                time=int(row.time),
+                messages=[str(msg.message) for msg in row.messages],
+            )
+            for row in rows
+        ]
+
 
 def row_to_message(row: MessageRow) -> Message:
     from src.foundation.db.modules import Message
@@ -1227,6 +1290,46 @@ class PgMessageRepository:
             rows = list(result.scalars().all())
         rows.reverse()
         return [row_to_message(r) for r in rows]
+
+    async def list_recent_group_ids_for_bot(
+        self,
+        bot_id: int,
+        *,
+        since_time: int,
+        limit: int = 128,
+    ) -> list[int]:
+        cap = max(1, min(int(limit), 512))
+        stmt = (
+            select(MessageRow.group_id)
+            .where(MessageRow.bot_id == int(bot_id))
+            .where(MessageRow.time >= int(since_time))
+            .distinct()
+            .order_by(MessageRow.group_id)
+            .limit(cap)
+        )
+        async with get_session(read_only=True) as session:
+            result = await session.execute(stmt)
+            return [int(row[0]) for row in result.all()]
+
+    async def list_recent_bot_ids_for_group(
+        self,
+        group_id: int,
+        *,
+        since_time: int,
+        limit: int = 32,
+    ) -> list[int]:
+        cap = max(1, min(int(limit), 128))
+        stmt = (
+            select(MessageRow.bot_id)
+            .where(MessageRow.group_id == int(group_id))
+            .where(MessageRow.time >= int(since_time))
+            .distinct()
+            .order_by(MessageRow.bot_id)
+            .limit(cap)
+        )
+        async with get_session(read_only=True) as session:
+            result = await session.execute(stmt)
+            return [int(row[0]) for row in result.all()]
 
     async def bulk_insert(self, messages: list[Message]) -> None:
         if not messages:
