@@ -4110,6 +4110,12 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
     }
 
 
+def _bot_restart_available() -> bool:
+    from src.console.cli.bot_process import bot_lifecycle_available
+
+    return bot_lifecycle_available()
+
+
 async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any]:
     from src.shared.utils.format_exception import format_exception_for_log
 
@@ -4143,6 +4149,7 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
             "error": err_msg,
             "checked_at": time.time(),
             **inspect_bot_deployment(),
+            "restart_available": _bot_restart_available(),
         }
     has_update = bot_has_release_update(
         latest_tag=latest_tag,
@@ -4172,6 +4179,7 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
         "error": None,
         "checked_at": time.time(),
         **inspect_bot_deployment(),
+        "restart_available": _bot_restart_available(),
     }
 
 
@@ -5898,6 +5906,7 @@ def register_extended_api(
 
     @router.post(f"{x}/update/bot/apply", include_in_schema=True)
     async def _bot_update_apply(
+        restart: bool = Query(default=False),
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
@@ -5909,8 +5918,15 @@ def register_extended_api(
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         try:
-            logger.info("Pallas-Bot 控制台: Bot 仓库在线更新（git）请求已接受")
-            data = await apply_bot_update(github_token=github_token, repo="PallasBot/Pallas-Bot")
+            logger.info(
+                "Pallas-Bot 控制台: Bot 仓库在线更新（git）请求已接受 restart={}",
+                restart,
+            )
+            data = await apply_bot_update(
+                github_token=github_token,
+                repo="PallasBot/Pallas-Bot",
+                restart=restart,
+            )
             drop_read_cache(("update_check_bot:",))
             return JSONResponse({"ok": True, "data": data})
         except BotGitUpdateError as e:

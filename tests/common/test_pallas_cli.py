@@ -47,6 +47,12 @@ def test_main_deploy_apply_dry_run():
     assert code in (0, 1)
 
 
+def test_parse_update_bot_restart():
+    parser = build_parser()
+    args = parser.parse_args(["update", "bot", "--restart"])
+    assert args.restart is True
+
+
 def test_module_invocation():
     proc = subprocess.run(
         [sys.executable, "-m", "src.console.cli", "--version"],

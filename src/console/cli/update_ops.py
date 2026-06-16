@@ -117,12 +117,23 @@ async def apply_bot_update(
     *,
     github_token: str | None = None,
     repo: str = "PallasBot/Pallas-Bot",
-) -> dict[str, str]:
+    restart: bool = False,
+) -> dict[str, str | bool]:
+    from src.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
+    from src.console.cli.extension_ops import append_restart_note
     from src.plugins.pallas_webui.manager import BotGitUpdateError, apply_bot_repository_update
 
     defaults = webui_update_settings_from_repo()
     token = defaults["github_token"] if github_token is None else github_token
     try:
-        return await apply_bot_repository_update(github_token=token, repo=repo)
+        result = await apply_bot_repository_update(github_token=token, repo=repo)
     except BotGitUpdateError:
         raise
+    scheduled = False
+    if restart and bot_lifecycle_available():
+        scheduled = schedule_bot_restart(delay_s=3.0)
+    out = dict(result)
+    out["restart_scheduled"] = scheduled
+    if restart:
+        out["message"] = append_restart_note(str(out.get("message") or ""), scheduled=scheduled)
+    return out
