@@ -10,6 +10,7 @@ from src.features.cmd_perm.schema import build_command_perm_ui
 from src.features.command_limits.config import get_command_limits_config, normalize_command_limit_overrides
 from src.features.command_limits.schema import build_command_limits_ui
 from src.features.llm.tools.metadata import iter_loaded_plugin_llm_tools
+from src.features.plugin_reload import reload_policy_from_metadata
 from src.features.plugin_storage.schema import build_plugin_storage_ui
 
 
@@ -35,6 +36,7 @@ def build_plugin_capabilities_ui() -> dict[str, Any]:
                 "commands": {},
                 "llm_tools": [],
                 "storage_keys": [],
+                "reload_policy": None,
             }
             plugins[plugin] = bucket
         elif title and bucket["title"] == bucket["plugin"]:
@@ -81,6 +83,20 @@ def build_plugin_capabilities_ui() -> dict[str, Any]:
         bucket = ensure_plugin(str(row.get("plugin") or ""), str(row.get("title") or ""))
         bucket["storage_keys"] = list(row.get("keys") or [])
 
+    try:
+        from nonebot import get_loaded_plugins
+
+        for plugin in get_loaded_plugins():
+            name = str(getattr(plugin, "name", "") or "").strip()
+            if not name:
+                continue
+            meta = getattr(plugin, "metadata", None)
+            title = str(getattr(meta, "name", "") or name).strip() if meta else name
+            bucket = ensure_plugin(name, title)
+            bucket["reload_policy"] = reload_policy_from_metadata(meta)
+    except Exception:
+        pass
+
     rows_out: list[dict[str, Any]] = []
     for bucket in plugins.values():
         commands = list(bucket["commands"].values())
@@ -95,6 +111,7 @@ def build_plugin_capabilities_ui() -> dict[str, Any]:
             "commands": commands,
             "llm_tools": llm_tools,
             "storage_keys": storage_keys,
+            "reload_policy": bucket.get("reload_policy"),
         })
     rows_out.sort(key=itemgetter("plugin"))
     return {"plugins": rows_out, "levels": perm_ui.get("levels", [])}

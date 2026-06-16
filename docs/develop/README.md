@@ -23,6 +23,8 @@
 | [插件规范](../architecture/plugin-convention.md) | `src/plugins` 约定 |
 | [站点定制](../architecture/site-customization-and-updates.md) | `local/plugins`、官方扩展 |
 | [4.0 路线图](../architecture/pallas-4.0-roadmap.md) · [瘦身迁移](../architecture/pallas-4.0-slim.md) | core / extra |
+| [Core 开发体验路线](../architecture/core-devx-roadmap.md) | plugin_sdk、`pb_core`、M5 `pb_webui`/`pb_protocol` 改名 |
+| [热重载分级](../architecture/hot-reload-tiers.md) | L1 配置 / L2 元数据 / L3 代码 |
 | [Bot ↔ AI 仓](../architecture/pallas-ai-service.md) | LLM 协同 |
 | [cmd_perm](../common/cmd_perm/README.md) · [command_limits](../common/command_limits/README.md) | 权限与冷却 |
 | [WebUI 配置](../common/webui/README.md) · [message_scrub](../common/message_scrub/README.md) | 热重载与审查 |

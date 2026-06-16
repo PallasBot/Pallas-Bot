@@ -28,7 +28,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --dev
+          # core plugin matrix 测试会加载 kernel/LLM 与分片 coord（需 sqlalchemy、redis）
+          uv sync --dev --extra pg --extra coord-redis
 
       - name: Run Ruff linting
         run: |

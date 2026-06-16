@@ -6,7 +6,7 @@
 
 - [ ] `__init__.py` 轻量；业务已拆到语义化模块
 - [ ] `config.py` 存在；WebUI 可调项已接 `install_hot_reload_config`
-- [ ] 路径用 `plugin_data_dir` / `resource_dir`
+- [ ] 结构化状态：`extra["plugin_storage"]` + `GroupPluginStorage`（或 deploy 级声明）；大文件才用 `plugin_data_dir` / `resource_dir`
 - [ ] 导入来自 `src.features` / `src.foundation` / `src.console` 公开 API
 - [ ] `uv run ruff check src/` 与 `format --check` 通过
 

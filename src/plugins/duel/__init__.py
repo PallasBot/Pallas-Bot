@@ -16,8 +16,6 @@ from src.features.cmd_perm.metadata_defaults import (
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
 from src.features.plugin_storage import plugin_storage_list, plugin_storage_row
 from src.features.plugin_storage.startup import register_plugin_storage_startup_hook
-
-register_plugin_storage_startup_hook()
 from src.platform.ingress.policy_registry import text_matches_plugin_fanout
 from src.plugins.duel import duel_penalty  # noqa: F401 — 注册惩罚消息 matcher
 from src.plugins.duel.config import plugin_config
@@ -40,6 +38,8 @@ from src.plugins.duel.duel_round_engine import (
     try_claim_duel_user_reply,
 )
 from src.plugins.duel.duel_session import clear_duel_pair, start_duel_pair
+
+register_plugin_storage_startup_hook()
 
 
 @get_driver().on_startup

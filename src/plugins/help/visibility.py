@@ -5,10 +5,17 @@ from typing import Any
 
 from src.foundation.paths import plugin_data_dir
 
-from .visibility import BUILTIN_HELP_HIDDEN_PLUGINS
-
 _VISIBILITY_FILE = "help_visibility.json"
 _STORAGE_KEY = "hidden_plugins"
+
+BUILTIN_HELP_HIDDEN_PLUGINS = frozenset({
+    "pallas_webui",
+    "pallas_protocol",
+    "ingress_gate",
+    "community_stats",
+    "relogin_forward",
+    "maa_hub",
+})
 
 
 def _visibility_path():

@@ -23,6 +23,7 @@
 <NCard title="拉黑 blacklist" route="/plugins/blacklist">拉黑、屏蔽</NCard>
 <NCard title="申请 request_handler" route="/plugins/request_handler">好友 / 入群审批</NCard>
 <NCard title="闲聊 llm_chat" route="/plugins/llm_chat">随时 @ 智能闲聊（4.0 core）</NCard>
+<NCard title="牛牛核心 pb_core" route="/plugins/pb_core">进程摘要、控制台、插件概览与重启</NCard>
 <NCard title="控制台 pallas_webui" route="/plugins/pallas_webui">网页控制台与 API</NCard>
 
 </div>

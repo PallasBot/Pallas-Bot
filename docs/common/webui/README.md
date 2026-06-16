@@ -12,6 +12,8 @@
 
 命令权限说明见 [cmd_perm](../cmd_perm/README.md)。
 
+**热重载分级**（L1 配置 / L2 元数据 / L3 代码）：见 [hot-reload-tiers.md](../../architecture/hot-reload-tiers.md)。插件可在 `extra["reload_policy"]` 声明期望粒度（默认 `config_only`）。
+
 ## 插件接入热重载
 
 在 `config.py` 末尾：
