@@ -9,6 +9,7 @@ from src.console.web.bot_web import nonebot_log_record_matches_http_facet
         ("pallas_webui", "hello", True, False),
         ("other", "[pallas-webui] x", True, False),
         ("pb_protocol", "y", False, True),
+        ("pallas_protocol", "y", False, True),
         ("x", "[pallas-protocol] z", False, True),
         ("nonebot", "plain", False, False),
     ],

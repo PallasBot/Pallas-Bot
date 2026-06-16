@@ -14,12 +14,23 @@ _CURRENT_PLUGIN = "pb_protocol"
 _migrated = False
 
 
-def pb_protocol_data_dir(*, create: bool = True) -> Path:
+def migrate_pb_protocol_data_dir_if_needed() -> None:
     global _migrated
-    if create and not _migrated:
-        legacy = plugin_data_dir(_LEGACY_PLUGIN, create=False)
-        new_root = plugin_data_dir(_CURRENT_PLUGIN, create=False)
-        if legacy.is_dir() and not new_root.exists():
-            legacy.rename(new_root)
-        _migrated = True
+    if _migrated:
+        return
+    _migrated = True
+    legacy = plugin_data_dir(_LEGACY_PLUGIN, create=False)
+    new_root = plugin_data_dir(_CURRENT_PLUGIN, create=False)
+    if not legacy.is_dir() or new_root.exists():
+        return
+    try:
+        legacy.rename(new_root)
+    except (FileNotFoundError, OSError):
+        if new_root.exists() or not legacy.is_dir():
+            return
+        raise
+
+
+def pb_protocol_data_dir(*, create: bool = True) -> Path:
+    migrate_pb_protocol_data_dir_if_needed()
     return plugin_data_dir(_CURRENT_PLUGIN, create=create)
