@@ -376,13 +376,16 @@ def pallas_protocol_snapshot() -> dict[str, Any] | None:
     for p in get_loaded_plugins():
         mod = getattr(p, "module", None)
         mname = getattr(mod, "__name__", "")
-        if mname != "src.plugins.pallas_protocol":
+        if mname not in ("src.plugins.pallas_protocol", "pallas_plugin_protocol"):
             continue
         cfg = getattr(mod, "plugin_config", None)
         mgr = getattr(mod, "manager", None)
         if cfg is None or mgr is None:
             return None
-        from src.plugins.pallas_protocol.contract import resolve_public_mount_path
+        if mname == "pallas_plugin_protocol":
+            from pallas_plugin_protocol.contract import resolve_public_mount_path
+        else:
+            from src.plugins.pallas_protocol.contract import resolve_public_mount_path
 
         path = resolve_public_mount_path(
             path_override=str(getattr(cfg, "pallas_protocol_webui_path", "") or ""),

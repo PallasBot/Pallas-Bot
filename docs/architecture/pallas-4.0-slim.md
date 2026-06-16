@@ -69,31 +69,47 @@ flowchart LR
 | `repeater` | 核心接话（牛格由 persona 分支交付） |
 | `help` | 帮助与插件发现 |
 | `pallas_webui` | 控制台 API |
-| `pallas_protocol` | 协议端管理 |
 | `ingress_gate` | 入站配套 |
 | `bot_status` | 在线与通知 |
 | `callback` | 异步回调 |
 | `request_handler` | 审批 |
 | `blacklist` / `block` | 安全 |
-| `pallas_console_metrics` | 指标 |
-| `relogin_bot` / `relogin_forward` | 账号运维 |
-| `connectivity` | 轻量探针（依赖仍轻则保留；否则降为扩展） |
+| `connectivity` | 轻量探针 |
+
+### 分片内置（仍在 `src/plugins/`，非用户可选扩展）
+
+| 插件 | 说明 |
+| --- | --- |
+| `pallas_console_metrics` | worker 指标探针；**计划内核化**至 `platform/shard/`（见下） |
+| `ingress_gate` | worker 入站（亦在 core 默认加载） |
+| `relogin_forward` / `maa_hub` | 分片角色专用；随对应官方扩展 pip 包分发 |
 
 ### 迁出本体（官方扩展包）
 
 | 当前插件 | 建议包名 | 依赖特征 | 优先级 |
 | --- | --- | --- | --- |
+| `pallas_protocol` / `relogin_bot` / `relogin_forward` | `pallas-plugin-protocol` | 协议端 + 重登；三者同包 | P0 |
 | `duel` | `pallas-plugin-duel` | 玩法 + `domain/arknights` | P0 |
 | `who_is_spy` | `pallas-plugin-who-is-spy` | 玩法 + 协调存储 | P0 |
+| `maa` / `maa_hub` | `pallas-plugin-maa` | 远控、HTTP | P0 |
 | `roulette` / `drink` | `pallas-plugin-party` 或拆分 | 轻玩法 | P1 |
 | `dream` | `pallas-plugin-dream` | repeater 旁路 | P1 |
-| `maa` / `maa_hub` | `pallas-plugin-maa` | 远控、HTTP | P0 |
 | `draw` | `pallas-plugin-draw` | 图像 API | P1 |
 | `sing` / `chat` | `pallas-plugin-ai-media` | AI 仓媒体 | P1 |
 | `greeting` / `take_name` | `pallas-plugin-social` | 体验 | P2 |
 | `community_stats` | 扩展或保留 core | 上报；产品决策 | P2 |
 
 **留内核、不随插件迁出**：`src/domain/arknights/`、`src/features/*` 公开 API、分片与 ingress。
+
+### 分片指标内核化（架构路线）
+
+`pallas_console_metrics` 当前是 **worker 上的薄插件**，仅为了在「不加载 `pallas_webui`」时挂指标钩子。目标形态：
+
+1. 指标采集与刷盘迁入 `src/console/metrics/` 或 `src/platform/shard/worker_metrics.py`
+2. `bot_worker` / `plugin_loader` 在 worker 角色显式启动，**删除** `src/plugins/pallas_console_metrics/`
+3. hub / unified 仍由 `pallas_webui` 聚合展示
+
+未装 **`pallas-plugin-protocol`** 时：控制台 API 的 `protocol_extension.installed=false`；WebUI 协议页提示 `uv sync --extra plugins-protocol`（与插件是否 bundled 在仓库无关）。
 
 ### 加载优先级
 

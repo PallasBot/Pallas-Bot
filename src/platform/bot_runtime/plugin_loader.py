@@ -14,13 +14,16 @@ from src.foundation.config.repo_settings import (
 )
 from src.foundation.paths import PROJECT_ROOT
 from src.platform.bot_runtime.load_policy import merge_startup_skip_plugins
-from src.platform.bot_runtime.plugin_matrix import should_load_bundled_plugin
+from src.platform.bot_runtime.plugin_matrix import (
+    installed_extra_plugin_modules,
+    resolve_hub_bundled_module_paths,
+    should_load_bundled_plugin,
+)
 from src.platform.bot_runtime.pyproject_plugins import (
     extra_plugin_dirs_for_role,
     parse_nonebot_plugin_config,
 )
 from src.platform.bot_runtime.roles import (
-    HUB_PLUGIN_MODULES,
     UNIFIED_SKIP_PLUGIN_NAMES,
     WORKER_SKIP_PLUGIN_NAMES,
     is_hub_role,
@@ -262,10 +265,17 @@ def load_plugins_for_role() -> None:
             include_extra_dirs=True,
             include_bootstrap_dirs=False,
         )
+        pip_extra = _load_discovered_plugin_modules(
+            role_label="unified",
+            module_paths=installed_extra_plugin_modules(hub=None),
+            skip_short=unified_skip,
+            loaded_short=loaded_short,
+        )
         logger.info(
-            "bot_runtime: role=unified, local_plugins={} src_plugins={} pyproject_extra={} skip={}",
+            "bot_runtime: role=unified, local_plugins={} src_plugins={} pip_extra={} pyproject_extra={} skip={}",
             bootstrap_loaded,
             loaded,
+            pip_extra,
             extra,
             sorted(unified_skip),
         )
@@ -289,7 +299,13 @@ def load_plugins_for_role() -> None:
             )
         loaded = _load_discovered_plugin_modules(
             role_label="hub",
-            module_paths=HUB_PLUGIN_MODULES,
+            module_paths=resolve_hub_bundled_module_paths(),
+            skip_short=frozenset(),
+            loaded_short=loaded_short,
+        )
+        pip_extra = _load_discovered_plugin_modules(
+            role_label="hub",
+            module_paths=installed_extra_plugin_modules(hub=True),
             skip_short=frozenset(),
             loaded_short=loaded_short,
         )
@@ -300,10 +316,11 @@ def load_plugins_for_role() -> None:
             include_extra_dirs=False,
         )
         logger.info(
-            "bot_runtime: role=hub, local_plugins={} loaded {}/{} hub modules, +{} from pyproject.plugins",
+            "bot_runtime: role=hub, local_plugins={} hub_modules={}/{} pip_extra={} pyproject_extra={}",
             bootstrap_loaded,
             loaded,
-            len(HUB_PLUGIN_MODULES),
+            len(resolve_hub_bundled_module_paths()),
+            pip_extra,
             extra,
         )
         return
@@ -339,14 +356,22 @@ def load_plugins_for_role() -> None:
         include_bootstrap_dirs=False,
     )
 
+    pip_extra = _load_discovered_plugin_modules(
+        role_label="worker",
+        module_paths=installed_extra_plugin_modules(hub=False),
+        skip_short=worker_skip,
+        loaded_short=loaded_short,
+    )
+
     from src.platform.shard.registry.config import get_shard_registry_settings
 
     s = get_shard_registry_settings()
     logger.info(
-        "bot_runtime: role=worker shard_id={} local_plugins={} src_plugins={} pyproject_extra={} skip={}",
+        "bot_runtime: role=worker shard_id={} local_plugins={} src_plugins={} pip_extra={} pyproject_extra={} skip={}",
         s.shard_id,
         bootstrap_loaded,
         loaded,
+        pip_extra,
         extra,
         sorted(worker_skip),
     )

@@ -4978,6 +4978,7 @@ def register_extended_api(
     @router.get(f"{x}/instances", include_in_schema=True)
     async def _instances() -> JSONResponse:
         from src.foundation.db.pallas_console_data import list_all_bot_configs_public, pallas_protocol_snapshot
+        from src.platform.bot_runtime.plugin_matrix import protocol_extension_status
 
         async def _load() -> dict[str, Any]:
             db_bots = await list_all_bot_configs_public()
@@ -4987,6 +4988,7 @@ def register_extended_api(
                 "nonebot_bots": _list_bots_dict(),
                 "db_bot_configs": db_bots,
                 "pallas_protocol": snap,
+                "protocol_extension": protocol_extension_status(),
                 "bot_profiles": bot_profiles,
             }
             if snap is not None:

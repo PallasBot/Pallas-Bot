@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""从本体 src/plugins 生成 P0 官方扩展仓（首包实体迁出脚手架）。"""
+"""从本体 src/plugins 生成官方扩展仓（首包实体迁出脚手架）。"""
 
 from __future__ import annotations
 
@@ -50,6 +50,27 @@ REPOS: list[dict[str, object]] = [
         "nonebot_plugins": {"pallas-plugin-who-is-spy": ["pallas_plugin_who_is_spy"]},
         "readme_file": "pallas-plugin-who-is-spy.md",
     },
+    {
+        "dir": "Pallas-Plugin-Protocol",
+        "pip_name": "pallas-plugin-protocol",
+        "title": "协议端与重登",
+        "description": "Pallas-Bot 官方扩展：NapCat/SnowLuma 协议端管理、牛牛重新上号与分片转发。",
+        "uv_extra": "plugins-protocol",
+        "copies": [
+            ("pallas_protocol", "pallas_plugin_protocol"),
+            ("relogin_bot", "pallas_plugin_relogin_bot"),
+            ("relogin_forward", "pallas_plugin_relogin_forward"),
+        ],
+        "copy_overrides": {
+            "relogin_bot": {"src.plugins.pallas_protocol": "pallas_plugin_protocol"},
+        },
+        "nonebot_plugins": {
+            "pallas-plugin-protocol": ["pallas_plugin_protocol"],
+            "pallas-plugin-relogin-bot": ["pallas_plugin_relogin_bot"],
+            "pallas-plugin-relogin-forward": ["pallas_plugin_relogin_forward"],
+        },
+        "readme_file": "pallas-plugin-protocol.md",
+    },
 ]
 
 GITIGNORE = """.venv/
@@ -99,7 +120,14 @@ def rewrite_imports(text: str, src_plugin: str, pkg_module: str) -> str:
     return out
 
 
-def copy_plugin_tree(src_dir: Path, dst_dir: Path, src_plugin: str, pkg_module: str) -> None:
+def copy_plugin_tree(
+    src_dir: Path,
+    dst_dir: Path,
+    src_plugin: str,
+    pkg_module: str,
+    *,
+    import_replacements: dict[str, str] | None = None,
+) -> None:
     if dst_dir.exists():
         shutil.rmtree(dst_dir)
     for path in src_dir.rglob("*"):
@@ -108,13 +136,22 @@ def copy_plugin_tree(src_dir: Path, dst_dir: Path, src_plugin: str, pkg_module: 
         if path.is_dir():
             target.mkdir(parents=True, exist_ok=True)
             continue
-        if path.suffix in {".pyc"}:
+        if path.suffix == ".pyc":
             continue
-        content = path.read_text(encoding="utf-8")
-        if path.suffix == ".py":
-            content = rewrite_imports(content, src_plugin, pkg_module)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        if path.suffix == ".py":
+            content = path.read_text(encoding="utf-8")
+            content = rewrite_imports(content, src_plugin, pkg_module)
+            for old, new in (import_replacements or {}).items():
+                content = content.replace(old, new)
+            target.write_text(content, encoding="utf-8")
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            shutil.copy2(path, target)
+            continue
+        target.write_text(text, encoding="utf-8")
 
 
 def render_pyproject(meta: dict[str, object], package_modules: list[str]) -> str:
@@ -180,10 +217,24 @@ def bootstrap_repo(meta: dict[str, object]) -> Path:
 
     copies = meta["copies"]
     assert isinstance(copies, list)
+    copy_overrides = meta.get("copy_overrides", {})
+    assert isinstance(copy_overrides, dict)
     package_modules: list[str] = []
-    for src_name, pkg_module in copies:
+    for item in copies:
+        if isinstance(item, tuple) and len(item) == 2:
+            src_name, pkg_module = item
+        else:
+            raise ValueError(f"invalid copies entry: {item!r}")
         assert isinstance(src_name, str) and isinstance(pkg_module, str)
-        copy_plugin_tree(PLUGINS_ROOT / src_name, src_root / pkg_module, src_name, pkg_module)
+        overrides = copy_overrides.get(src_name, {})
+        assert isinstance(overrides, dict)
+        copy_plugin_tree(
+            PLUGINS_ROOT / src_name,
+            src_root / pkg_module,
+            src_name,
+            pkg_module,
+            import_replacements={str(k): str(v) for k, v in overrides.items()},
+        )
         package_modules.append(pkg_module)
 
     (repo_dir / "pyproject.toml").write_text(render_pyproject(meta, package_modules), encoding="utf-8")
