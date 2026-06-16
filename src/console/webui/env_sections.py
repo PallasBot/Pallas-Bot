@@ -314,6 +314,24 @@ def _llm_section() -> WebuiEnvSection:
             "llm_repeater_mode": "LLM_REPEATER_MODE",
             "llm_governance_enabled": "LLM_GOVERNANCE_ENABLED",
             "llm_session_enabled": "LLM_SESSION_ENABLED",
+            "llm_tools_enabled": "LLM_TOOLS_ENABLED",
+        },
+        skip_fields=frozenset(),
+    )
+
+
+def _arknights_kb_section() -> WebuiEnvSection:
+    from src.features.arknights_kb.config import ArknightsKbConfig, get_arknights_kb_config
+
+    return WebuiEnvSection(
+        id="arknights_kb",
+        title="方舟知识库",
+        module_label="src.features.arknights_kb",
+        model_cls=ArknightsKbConfig,
+        read_current=get_arknights_kb_config,
+        field_to_env={
+            "arknights_kb_enabled": "ARKNIGHTS_KB_ENABLED",
+            "arknights_kb_auto_sync": "ARKNIGHTS_KB_AUTO_SYNC",
         },
         skip_fields=frozenset(),
     )
@@ -327,7 +345,7 @@ def _registered_sections() -> tuple[WebuiEnvSection, ...]:
     if _sections_cache is not None:
         return _sections_cache
     parts: list[WebuiEnvSection] = []
-    parts.extend((_cmd_perm_section(), _command_limits_section(), _llm_section()))
+    parts.extend((_cmd_perm_section(), _command_limits_section(), _llm_section(), _arknights_kb_section()))
     if (SRC_ROOT / "features" / "control_plane" / "webui_config.py").is_file():
         parts.append(_control_plane_section())
     if (SRC_ROOT / "platform" / "ingress" / "config.py").is_file():
@@ -373,6 +391,7 @@ _COMMON_CONFIG_SECTION_ORDER: tuple[str, ...] = (
     "cmd_perm",
     "command_limits",
     "llm",
+    "arknights_kb",
     "control_plane",
     "corpus_federation",
     "community_stats",

@@ -23,8 +23,8 @@
 ```mermaid
 flowchart TB
     subgraph domain["domain/arknights（已有，待扩展）"]
-        SYNC["duel_sync / fetch 脚本\nArknightsGameData"]
-        RES["resource/arknights/\noperators_6star.json + 头像"]
+        SYNC["sync.py / sync_arknights_data.py\nArknightsGameData"]
+        RES["resource/arknights/\noperators_6star.json + enemies + 头像"]
         API["query_* 纯函数 API（待增）"]
     end
 
@@ -55,7 +55,8 @@ flowchart TB
 | 已有 | 说明 |
 | --- | --- |
 | `src/domain/arknights/` | 决斗用干员表同步、`skill_text` |
-| `resource/arknights/operators_6star.json` | 六星 subset；`scripts/fetch_arknights_duel_data.py` |
+| `resource/arknights/operators_6star.json` | 六星 subset；`scripts/sync_arknights_data.py` |
+| `resource/arknights/enemies_handbook.json` | 敌人图鉴；`--enemies` / `--kb` |
 | `src/plugins/duel/` | 消费干员 JSON + 头像 |
 | `src/plugins/ollama/` | 多轮闲聊；**尚无**游戏工具调用 |
 | `src/plugins/maa/` | 作战远控，与「资料查询」互补 |
@@ -66,7 +67,7 @@ flowchart TB
 
 | 待实现能力 | 可对齐的本仓模块 | 说明 |
 | --- | --- | --- |
-| K1 数据同步 | `src/domain/arknights/duel_sync.py`、`scripts/fetch_arknights_duel_data.py` | 已有 GameData 拉取与 JSON 落盘 |
+| K1 数据同步 | `src/domain/arknights/sync.py`、`scripts/sync_arknights_data.py` | GameData 拉取与 JSON 落盘（决斗/KB 共用） |
 | K1 后台 sync | `src/shared/utils/arknights_duel_resource.py`、`duel` 启动钩子 | 缺资源时 schedule 后台同步 |
 | K1 分片 sync 收敛 | `src/plugins/repeater/shard_opt.py` 的 `repeater_maintenance_runs_on_worker` | 全库维护仅 shard 0 |
 | K2 口令与帮助 | `src/plugins/help/`、`src/features/cmd_perm/` | 帮助图、权限等级、插件 metadata |
@@ -147,7 +148,7 @@ Tool 注册来源（扩展顺序）：
 | --- | --- | --- |
 | `arknights_kb_enabled` | `true` | 结构化查询总开关 |
 | `arknights_kb_auto_sync` | `true` | 缺数据时后台 sync（同 duel） |
-| `llm_tools_enabled` | `false` | LLM 是否可调用游戏 tools |
+| `llm_tools_enabled` | `true` | LLM 是否可调用游戏 tools |
 | `llm_tools_arknights_only` | `true` | 首版仅注入 arknights 域 tools |
 | `mcp_server_enabled` | `false` | 是否对外暴露 MCP Server |
 
@@ -184,7 +185,7 @@ flowchart LR
 1. **结构化优先**：干员名、数值、掉落表 → 必须走 domain 查询；LLM 禁止凭空编。
 2. **与语料/ persona 隔离**：游戏 KB 不进 `Context.answers`、不进 `style_profile`。
 3. **与 duel 解耦**：决斗继续用六星 subset；KB 可服务全星级，共享 sync 管道。
-4. **默认关 LLM tools**：和 `llm_fallback` 一样，避免误触发与 Token 暴涨。
+4. **默认关 LLM tools**：总闸 `LLM_CHAT_ENABLED` 关时不注入；子项 `LLM_TOOLS_ENABLED` 默认开。
 5. **版权与维护**：数据源版本 pinned；文档注明「非官方、随游戏更新需 sync」；不提供私服/破解向数据。
 6. **失败回退**：tool 超时 → 提示「数据暂不可用」+ 可选口令帮助；不 hallucinate。
 
@@ -216,5 +217,5 @@ flowchart LR
 - [plugins/duel](../plugins/duel/README.md) — 现有干员数据消费
 - [plugins/help](../plugins/help/README.md) — 帮助与插件展示
 - [cmd_perm](../common/cmd_perm/README.md) — 工具/命令 metadata 与权限
-- `scripts/fetch_arknights_duel_data.py` — 当前同步脚本
+- `scripts/sync_arknights_data.py` — 统一同步入口（`--kb` / `--all` / `--maintainer-lore`）
 - [pallas-4.0-roadmap.md](pallas-4.0-roadmap.md) — 4.0 插件分家与 domain 边界

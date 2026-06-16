@@ -33,6 +33,12 @@ def test_derive_llm_inference_params_polish_caps_tokens() -> None:
     assert token_count == 96
 
 
+def test_resolve_llm_repeater_mode_default_both(monkeypatch) -> None:
+    monkeypatch.setattr("src.features.llm.config.repo_env_raw_value", lambda key: None)
+    assert resolve_llm_repeater_mode() == "both"
+    assert resolve_llm_repeater_flags() == (True, True)
+
+
 def test_resolve_llm_repeater_mode_from_legacy_flags(monkeypatch) -> None:
     def fake_raw(key: str) -> str | None:
         values = {

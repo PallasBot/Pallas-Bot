@@ -109,7 +109,7 @@ def get_operators_payload() -> dict[str, Any]:
         path = operators_json_path()
         if not path.is_file():
             logger.warning(
-                f"duel arknights: missing {path}, will auto-sync if enabled or run scripts/fetch_arknights_duel_data.py"
+                f"duel arknights: missing {path}, will auto-sync if enabled or run scripts/sync_arknights_data.py"
             )
             _operators_payload = {"operators": [], "count": 0}
         else:

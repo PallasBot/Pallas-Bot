@@ -82,6 +82,9 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
             metadata["task"] = "drunk"
         else:
             metadata["task"] = "llm_chat"
+        from src.features.llm.tools.registry import tool_metadata_for_chat
+
+        metadata.update(tool_metadata_for_chat(task=str(metadata.get("task") or "")))
         if request.token_count is not None:
             metadata["token_count"] = int(request.token_count)
         if request.temperature is not None:

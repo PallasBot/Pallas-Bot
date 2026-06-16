@@ -9,20 +9,16 @@ import httpx
 from nonebot import logger
 
 from src.domain.arknights.duel_sync import (
-    AVATAR_URL_TEMPLATE,
-    CHAR_URL,
     MIN_AVATAR_BYTES,
-    OPERATORS_JSON,
-    SKILL_URL,
     avatar_local_path,
-    build_operators_payload,
     count_valid_avatars,
     download_avatar_sync,
     is_avatar_file_valid,
     load_operators_payload,
     operator_ids_from_payload,
-    write_operators_json,
 )
+from src.domain.arknights.sources import AVATAR_URL_TEMPLATE
+from src.domain.arknights.sync import duel_sync_plan, run_arknights_sync
 
 _json_lock = asyncio.Lock()
 _bulk_avatar_lock = asyncio.Lock()
@@ -34,16 +30,6 @@ def _avatar_lock(char_id: str) -> asyncio.Lock:
     if char_id not in _avatar_locks:
         _avatar_locks[char_id] = asyncio.Lock()
     return _avatar_locks[char_id]
-
-
-async def _fetch_json(client: httpx.AsyncClient, url: str) -> dict:
-    resp = await client.get(url)
-    resp.raise_for_status()
-    data = resp.json()
-    if not isinstance(data, dict):
-        msg = f"expected JSON object from {url}"
-        raise TypeError(msg)
-    return data
 
 
 async def _download_avatar_async(client: httpx.AsyncClient, char_id: str, dest: Path) -> bool:
@@ -63,14 +49,12 @@ async def _download_avatar_async(client: httpx.AsyncClient, char_id: str, dest: 
 
 
 async def sync_operators_json_async() -> bool:
-    timeout = httpx.Timeout(120.0)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        char_table = await _fetch_json(client, CHAR_URL)
-        skill_table = await _fetch_json(client, SKILL_URL)
-    payload = build_operators_payload(char_table, skill_table)
-    await asyncio.to_thread(write_operators_json, payload)
-    logger.info(f"arknights duel: wrote {OPERATORS_JSON} ({payload.get('count', 0)} operators)")
-    return True
+    plan = duel_sync_plan(avatars=False)
+    result = await asyncio.to_thread(run_arknights_sync, plan)
+    if result.operators_path and result.operators_count > 0:
+        logger.info(f"arknights duel: wrote {result.operators_path} ({result.operators_count} operators)")
+        return True
+    return False
 
 
 def operators_json_ready() -> bool:

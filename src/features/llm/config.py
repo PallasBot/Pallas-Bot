@@ -125,15 +125,15 @@ def resolve_llm_repeater_mode() -> str:
     raw = _env_str("LLM_REPEATER_MODE").strip().lower()
     if raw in ("off", "fallback", "polish", "both"):
         return raw
-    fallback = _env_bool("LLM_FALLBACK_ENABLED", False)
-    polish = _env_bool("LLM_POLISH_ENABLED", False)
+    fallback = _env_bool("LLM_FALLBACK_ENABLED", True)
+    polish = _env_bool("LLM_POLISH_ENABLED", True)
     if fallback and polish:
         return "both"
     if fallback:
         return "fallback"
     if polish:
         return "polish"
-    return "off"
+    return "both"
 
 
 def resolve_llm_repeater_flags() -> tuple[bool, bool]:
@@ -153,9 +153,9 @@ class LlmConfig(BaseModel):
     ai_server_host: str = Field(default="127.0.0.1")
     ai_server_port: int = Field(default=9099, ge=1, le=65535)
     llm_chat_enabled: bool = Field(default=False)
-    llm_repeater_mode: str = Field(default="off")
-    llm_fallback_enabled: bool = Field(default=False)
-    llm_polish_enabled: bool = Field(default=False)
+    llm_repeater_mode: str = Field(default="both")
+    llm_fallback_enabled: bool = Field(default=True)
+    llm_polish_enabled: bool = Field(default=True)
     use_unified_chat_api: bool = Field(default=True)
     legacy_chat_endpoint: str = Field(default="/api/llm/chat")
     legacy_del_session_endpoint: str = Field(default="/api/llm/del_session")
@@ -163,14 +163,15 @@ class LlmConfig(BaseModel):
     unified_del_session_endpoint: str = Field(default="/api/v1/chat/completions/session")
     user_message_max_len: int = Field(default=4000, ge=64, le=16000)
     chat_timeout_sec: float = Field(default=30.0, ge=1.0, le=300.0)
-    llm_session_enabled: bool = Field(default=False)
+    llm_session_enabled: bool = Field(default=True)
     llm_session_user_window: int = Field(default=18, ge=1, le=200)
     llm_session_group_window: int = Field(default=8, ge=0, le=100)
     llm_session_group_ambient_enabled: bool = Field(default=True)
     llm_session_user_ttl_sec: int = Field(default=86400, ge=0, le=2592000)
     llm_session_private_ttl_sec: int = Field(default=259200, ge=0, le=2592000)
     llm_session_max_content_len: int = Field(default=4000, ge=64, le=16000)
-    llm_governance_enabled: bool = Field(default=False)
+    llm_governance_enabled: bool = Field(default=True)
+    llm_tools_enabled: bool = Field(default=True)
     llm_chat_cooldown_sec: int = Field(default=3, ge=0, le=3600)
     llm_chat_max_concurrency: int = Field(default=4, ge=1, le=64)
     llm_chat_char_budget: int = Field(default=12000, ge=0, le=200000)
@@ -203,14 +204,15 @@ def get_llm_config() -> LlmConfig:
             ),
             user_message_max_len=_env_int("LLM_USER_MESSAGE_MAX_LEN", 4000),
             chat_timeout_sec=_env_float("LLM_CHAT_TIMEOUT_SEC", 30.0),
-            llm_session_enabled=_env_bool("LLM_SESSION_ENABLED", False),
+            llm_session_enabled=_env_bool("LLM_SESSION_ENABLED", True),
             llm_session_user_window=_env_int("LLM_SESSION_USER_WINDOW", 18),
             llm_session_group_window=_env_int("LLM_SESSION_GROUP_WINDOW", 8),
             llm_session_group_ambient_enabled=_env_bool("LLM_SESSION_GROUP_AMBIENT_ENABLED", True),
             llm_session_user_ttl_sec=_env_int("LLM_SESSION_USER_TTL_SEC", 86400),
             llm_session_private_ttl_sec=_env_int("LLM_SESSION_PRIVATE_TTL_SEC", 259200),
             llm_session_max_content_len=_env_int("LLM_SESSION_MAX_CONTENT_LEN", 4000),
-            llm_governance_enabled=_env_bool("LLM_GOVERNANCE_ENABLED", False),
+            llm_governance_enabled=_env_bool("LLM_GOVERNANCE_ENABLED", True),
+            llm_tools_enabled=_env_bool("LLM_TOOLS_ENABLED", True),
             llm_chat_cooldown_sec=_env_int("LLM_CHAT_COOLDOWN_SEC", 3),
             llm_chat_max_concurrency=_env_int("LLM_CHAT_MAX_CONCURRENCY", 4),
             llm_chat_char_budget=_env_int("LLM_CHAT_CHAR_BUDGET", 12000),

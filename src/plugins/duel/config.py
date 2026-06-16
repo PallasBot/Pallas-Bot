@@ -137,7 +137,7 @@ class Config(BaseModel, extra="ignore"):
     # 泰拉干员资源
     duel_auto_sync_operators: bool = Field(
         default=True,
-        description="缺 operators_6star.json 时启动自动拉取干员表（与 scripts/fetch_arknights_duel_data.py 同源）。",
+        description="缺 operators_6star.json 时启动自动拉取干员表（与 scripts/sync_arknights_data.py 同源）。",
     )
     duel_avatar_download_on_use: bool = Field(
         default=True,

@@ -54,12 +54,14 @@ repeater fallback / polish            # 骨架已实现，默认关（LLM_FALLBA
 
 | 环境变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `LLM_CHAT_ENABLED` | `false` | LLM 闲聊与接话 LLM **总闸** |
-| `LLM_REPEATER_MODE` | `off` | repeater 接话 LLM：`off` / `fallback` / `polish` / `both` |
-| `LLM_FALLBACK_ENABLED` / `LLM_POLISH_ENABLED` | `false` | **遗留**，未设 `LLM_REPEATER_MODE` 时仍可读 |
+| `LLM_CHAT_ENABLED` | `false` | LLM 闲聊与接话 LLM **总闸**（唯一需显式打开） |
+| `LLM_REPEATER_MODE` | `both` | repeater 接话 LLM：`off` / `fallback` / `polish` / `both` |
+| `LLM_FALLBACK_ENABLED` / `LLM_POLISH_ENABLED` | `true` | **遗留**，未设 `LLM_REPEATER_MODE` 时仍可读 |
 | `AI_SERVER_HOST` / `AI_SERVER_PORT` | `127.0.0.1:9099` | Pallas-Bot-AI 地址 |
-| `LLM_GOVERNANCE_ENABLED` | `false` | 闲聊 CD / 并发 / 字符预算 |
-| `LLM_SESSION_ENABLED` | `false` | 多轮会话存储 |
+| `LLM_GOVERNANCE_ENABLED` | `true` | 闲聊 CD / 并发 / 字符预算 |
+| `LLM_SESSION_ENABLED` | `true` | 多轮会话存储 |
+| `LLM_TOOLS_ENABLED` | `true` | LLM 注入方舟等 tool schema（总闸关时无效） |
+| `ARKNIGHTS_KB_ENABLED` | `true` | 方舟干员结构化查询 |
 
 遗留 `LLM_CHAT_ENABLE` / `OLLAMA_ENABLE` 仍可读为 LLM 总闸；`CHAT_ENABLE` 仅遗留酒后 RWKV。新用户优先配 `LLM_CHAT_ENABLED`。
 

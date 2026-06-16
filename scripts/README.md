@@ -48,8 +48,9 @@
 
 | 脚本 | 说明 |
 | --- | --- |
-| `fetch_arknights_duel_data.py` | 决斗泰拉干员资源 |
-| `cache_ark_lore_for_duel.py` | 决斗 lore 缓存 |
+| `sync_arknights_data.py` | 方舟数据同步（决斗六星表、头像、档案、敌人图鉴） |
+| `fetch_arknights_duel_data.py` | 兼容入口 → `sync_arknights_data.py` |
+| `cache_ark_lore_for_duel.py` | 兼容入口 → `sync_arknights_data.py --maintainer-lore` |
 | `generate_pallas_help_style.py` | 帮助图样式生成 |
 
 ## tools/scripts

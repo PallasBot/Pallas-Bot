@@ -15,6 +15,7 @@
 
 | 文档 | 说明 |
 | --- | --- |
+| **[4.0 启动说明](guide/4.0-start.md)** | 扩展安装、AI 仓、配置键与验收 |
 | **[五分钟跑起来](guide/quickstart.md)** | 最少步骤：克隆 → 配置 → 启动 → 连 QQ |
 | [使用指南](user/README.md) | 控制台入口、常用口令 |
 | [配置要点](Config.md) | `pallas.toml` 与 WebUI |

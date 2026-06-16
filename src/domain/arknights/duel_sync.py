@@ -1,4 +1,4 @@
-"""六星干员 JSON 与头像同步。"""
+"""六星干员 JSON 与头像读写（底层）。"""
 
 from __future__ import annotations
 
@@ -9,57 +9,18 @@ from pathlib import Path  # noqa: TC003
 from typing import Any
 
 from src.domain.arknights.skill_text import skill_last_level_plain
+from src.domain.arknights.sources import (
+    AVATAR_URL_TEMPLATE,
+    MIN_AVATAR_BYTES,
+    NATION_CN,
+    PAYLOAD_SOURCE,
+    PROFESSION_CN,
+)
 from src.foundation.paths import resource_dir
 
 ARKNIGHTS_DIR = resource_dir("arknights")
 OPERATORS_JSON = ARKNIGHTS_DIR / "operators_6star.json"
 AVATARS_DIR = ARKNIGHTS_DIR / "avatars"
-
-CHAR_URL = (
-    "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata/excel/character_table.json"
-)
-SKILL_URL = "https://raw.githubusercontent.com/Kengxxiao/ArknightsGameData/master/zh_CN/gamedata/excel/skill_table.json"
-AVATAR_URL_TEMPLATE = "https://raw.githubusercontent.com/yuanyan3060/ArknightsGameResource/main/avatar/{char_id}.png"
-
-NATION_CN: dict[str, str] = {
-    "yan": "炎",
-    "lungmen": "龙门",
-    "rhodes": "罗德岛",
-    "victoria": "维多利亚",
-    "columbia": "哥伦比亚",
-    "ursus": "乌萨斯",
-    "leithanien": "莱塔尼亚",
-    "kazimierz": "卡西米尔",
-    "kjerag": "谢拉格",
-    "sargon": "萨尔贡",
-    "siracusa": "叙拉古",
-    "laterano": "拉特兰",
-    "iberia": "伊比利亚",
-    "higashi": "东",
-    "sami": "萨米",
-    "egir": "阿戈尔",
-    "rim": "雷姆必拓",
-    "minos": "米诺斯",
-}
-
-PROFESSION_CN: dict[str, str] = {
-    "WARRIOR": "近卫",
-    "SNIPER": "狙击",
-    "TANK": "重装",
-    "MEDICINE": "医疗",
-    "MEDIC": "医疗",
-    "SUPPORT": "辅助",
-    "CASTER": "术师",
-    "SPECIAL": "特种",
-    "TOKEN": "傀儡",
-}
-
-PAYLOAD_SOURCE = (
-    "Kengxxiao/ArknightsGameData (skill text = levels[-1] + blackboard, 有专精时一般为专三) "
-    "+ yuanyan3060/ArknightsGameResource (avatar)"
-)
-
-MIN_AVATAR_BYTES = 512
 
 
 def avatar_remote_url(char_id: str) -> str:
@@ -210,14 +171,6 @@ def download_avatar_sync(char_id: str, dest: Path | None = None) -> bool:
         return False
     out.write_bytes(data)
     return True
-
-
-def sync_operators_json_sync(*, path: Path | None = None) -> dict[str, Any]:
-    char_table = fetch_json_sync(CHAR_URL)
-    skill_table = fetch_json_sync(SKILL_URL)
-    payload = build_operators_payload(char_table, skill_table)
-    write_operators_json(payload, path)
-    return payload
 
 
 def sync_avatars_sync(

@@ -1,6 +1,6 @@
 # 开发指南
 
-面向 **Pallas-Bot**、**Pallas-Bot-WebUI** 或站点插件维护者。部署见 [五分钟跑起来](../guide/quickstart.md)、[使用指南](../user/README.md)。
+面向 **Pallas-Bot**、**Pallas-Bot-WebUI** 或站点插件维护者。部署见 [五分钟跑起来](../guide/quickstart.md)、**[4.0 启动说明](../guide/4.0-start.md)**、[使用指南](../user/README.md)。
 
 ## 阅读顺序
 
