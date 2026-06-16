@@ -8,12 +8,12 @@
 flowchart LR
     BOT["Pallas-Bot\n主仓"]
     AI["Pallas-Bot-AI\n:9099"]
-    OLLAMA["Ollama"]
+    LOCAL["本地推理后端"]
     RWKV["RWKV 等"]
 
-    BOT -->|"ollama /api/ollama/*"| AI
+    BOT -->|"/api/v1/chat/completions\n/api/llm/*"| AI
     BOT -->|"chat / sing / draw …"| AI
-    AI --> OLLAMA
+    AI --> LOCAL
     AI --> RWKV
 ```
 
@@ -77,7 +77,7 @@ flowchart TB
 
 1. **主路径**：`features/llm` → AI 仓**统一 Chat API**（`/api/v1/chat/completions`）
 2. **`plugins/llm_chat`**：随时 @ 入口；酒后 `chat` 共用同一客户端
-3. **AI 仓**：legacy `/api/ollama/*` 兼容期保留；新能力走统一 API
+3. **AI 仓**：`/api/llm/*` 为 management canonical；legacy `/api/ollama/*` 兼容期保留
 4. **repeater**：`fallback.py` / `polish.py` 异步提交，callback `task_type=repeater_polish` 失败回退原句
 
 `chat` / `sing` / `draw` 仍可在 **瘦身分支**迁扩展包，但其 AI 调用也应逐步改用 AI 仓统一网关或专用子路由，避免主仓直连多套 URL 约定。
@@ -88,15 +88,28 @@ flowchart TB
 
 | 项 | AI 仓交付 | 主仓消费 |
 | --- | --- | --- |
-| **A1** 统一 Chat API | OpenAI 兼容 `POST /v1/chat/completions`（或 `/api/llm/chat`） | `features/llm.chat_complete()` |
+| **A1** 统一 Chat API | OpenAI 兼容 `POST /v1/chat/completions`；management `/api/llm/*` | `features/llm.chat_complete()` · **已交付** |
 | **A2** 会话 | `session_id` 创建/续聊/清除；与 Bot 业务 id 映射 | P3 会话存储或委托 AI 仓 |
 | **A3** system / metadata | 接受 Bot 下发的 `system`、persona 版本、群 id | `compile_persona_prompt` 输出 |
 | **A4** tool call | 请求带 tools；响应 `tool_calls`；Bot 执行后 submit 结果 | P9 + 方舟 KB |
-| **A5** 健康与版本 | `GET /health` 含 API 版本、支持的 features | WebUI 连通性、4.0 兼容检查 |
+| **A5** 健康与版本 | `GET /health` 含 `api_version`、llm 快照 | WebUI 连通性 · **已交付** |
 | **A6** 配置 | provider、模型、并发、超时；与 Bot WebUI 分工（Bot 显式开关，AI 仓管模型） | `pallas.toml` / WebUI `llm_*` |
 | **A7** 回调 | 异步任务仍走 `/callback`；分片 hub 转发不变 | 现有 `ai_callback_forward` |
 
-Legacy `/api/ollama/*`：**4.0 不删**则文档标 deprecated；新功能禁止再增 ollama 专用路径。
+Legacy `/api/ollama/*`：**deprecated**；新集成用 `/api/v1/chat/completions` 与 `/api/llm/*`。
+
+## AI 仓平台化路线
+
+AI 仓从「按能力分散的 HTTP 脚本集合」演进为 **Bot 侧车运行时**。详细阶段、验收与 4.0.1 backlog 见 AI 仓 [platform-roadmap.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/platform-roadmap.md)。
+
+| 支柱 | 4.0.0 现状 | 下一里程碑（4.0.1） |
+| --- | --- | --- |
+| **契约** | 统一 Chat API + health `api_version` | Bot 启动版本协商；跨仓 integration compose |
+| **可靠** | Celery + provider chain + callback | Redis session；remote_only 生产加固 |
+| **可观测** | 结构化日志 + `/health.llm` | task/provider 指标（可选 Prometheus） |
+| **配置** | AI 仓 `.env` 管密钥与 model | Deployment 双仓最低版本表 |
+
+**与主仓同步节奏**：主仓 `persona-llm-roadmap` P3–P6 联调项未勾前，AI 仓优先 **4.0.1 session + 契约测试**；P9 tool call 对应 AI **4.0.x**；P8 embedding 对应 **4.1**。
 
 ## Provider：本地 / 远端 / 备线
 
@@ -186,7 +199,8 @@ llm:
 
 | 发布 | 主仓 | AI 仓 |
 | --- | --- | --- |
-| 4.0.0 | `features/llm`、repeater fallback、牛格 prompt | 统一 LLM 网关 + 会话 A1–A3 最低集 |
+| 4.0.0 | `features/llm`、repeater fallback、牛格 prompt | 统一 LLM 网关 + provider · **已合流开发中** |
+| 4.0.1 | 分片会话验收、startup 版本协商 | Redis session + integration compose |
 | 4.0.x | tool call、方舟 KB tools | A4 完善 |
 | 4.1+ | MCP Server（可选） | embedding 长期记忆（可选） |
 
@@ -210,12 +224,13 @@ llm:
 
 ## 验收（跨仓）
 
-- [ ] 主仓 `features/llm` 对 AI 仓 mock 与真实 4.0 API 单测通过
+- [x] 主仓 `features/llm` 对 AI 仓 mock 与真实 4.0 API 单测通过
 - [x] `@牛牛` 闲聊经统一 Chat API，persona system 来自 `compile_persona_prompt`
 - [ ] repeater fallback（开）与 polish（开）联调；失败回退行为与文档一致
-- [ ] AI 仓 `/health` 暴露版本；主仓启动日志提示不兼容 AI 仓版本
+- [x] AI 仓 `/health` 暴露 `api_version` 与 llm 快照
 - [ ] 分片：AI 回调与 LLM 同步调用在 worker 行为一致
 - [ ] 文档：Deployment 双仓 4.0 最低版本表
+- [ ] AI 仓 [platform-roadmap](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/platform-roadmap.md) 4.0.1 项（Redis session、integration compose）
 
 ## 相关文档
 
@@ -224,4 +239,5 @@ llm:
 - [4.0-development.md](../develop/4.0-development.md)
 - [plugins/ollama](../plugins/ollama/README.md)（现状）
 - [Pallas-Bot-AI Deployment](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/Deployment.md)
-- [Pallas-Bot-AI · 4.0 本地模型栈评估（2026-06 基准）](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/4.0-local-models.md)
+- [Pallas-Bot-AI · platform-roadmap（4.0+）](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/platform-roadmap.md)
+- [Pallas-Bot-AI · 4.0 本地模型栈评估](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/4.0-local-models.md)
