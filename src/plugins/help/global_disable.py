@@ -17,6 +17,7 @@ _PROTECTED_EXTRA = frozenset({
 GLOBAL_DISABLE_PROTECTED_PLUGINS = frozenset(sorted(BUILTIN_HELP_HIDDEN_PLUGINS | _PROTECTED_EXTRA))
 
 _FILE = "global_disabled_plugins.json"
+_STORAGE_KEY = "global_disabled_plugins"
 _REDIS_GEN_KEY = "pallas:help:global_disable_gen"
 _REMOTE_GEN_SYNC_TTL_SEC = 2.0
 
@@ -27,6 +28,12 @@ _remote_gen_checked_at: float = 0.0
 
 
 def global_disabled_plugins_path():
+    from src.features.plugin_storage.deploy_store import deploy_storage_path
+
+    return deploy_storage_path("help")
+
+
+def _legacy_global_disable_path():
     return plugin_data_dir("help") / _FILE
 
 
@@ -47,7 +54,23 @@ def file_mtime_ns(path) -> int:
 
 
 def _read_disabled_names_from_disk() -> frozenset[str]:
-    path = global_disabled_plugins_path()
+    from src.features.plugin_storage.deploy_store import DeployPluginStorage
+
+    protected = GLOBAL_DISABLE_PROTECTED_PLUGINS
+    try:
+        store = DeployPluginStorage("help")
+        raw = store.get(_STORAGE_KEY)
+        if raw is None:
+            return _migrate_legacy_global_disabled()
+        if not isinstance(raw, list):
+            return frozenset()
+        return frozenset(str(x).strip() for x in raw if str(x).strip() and str(x).strip() not in protected)
+    except Exception:
+        return _read_legacy_global_disabled()
+
+
+def _read_legacy_global_disabled() -> frozenset[str]:
+    path = _legacy_global_disable_path()
     if not path.exists():
         return frozenset()
     try:
@@ -61,6 +84,21 @@ def _read_disabled_names_from_disk() -> frozenset[str]:
         return frozenset()
     protected = GLOBAL_DISABLE_PROTECTED_PLUGINS
     return frozenset(str(x).strip() for x in vals if str(x).strip() and str(x).strip() not in protected)
+
+
+def _migrate_legacy_global_disabled() -> frozenset[str]:
+    names = _read_legacy_global_disabled()
+    path = _legacy_global_disable_path()
+    if not names and not path.exists():
+        return frozenset()
+    from src.features.plugin_storage.deploy_store import DeployPluginStorage
+
+    DeployPluginStorage("help").set(_STORAGE_KEY, sorted(names))
+    if path.exists():
+        backup = path.with_suffix(path.suffix + ".migrated")
+        if not backup.exists():
+            path.replace(backup)
+    return names
 
 
 def bump_global_disable_remote_generation() -> None:
@@ -123,14 +161,11 @@ def save_global_disabled_plugins(disabled_plugins: list[str]) -> list[str]:
     global _cache_mtime_ns, _cache_names, _synced_redis_gen, _remote_gen_checked_at
     protected = GLOBAL_DISABLE_PROTECTED_PLUGINS
     out = sorted({str(x).strip() for x in disabled_plugins if str(x).strip() and str(x).strip() not in protected})
-    path = global_disabled_plugins_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({"disabled_plugins": out}, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    from src.features.plugin_storage.deploy_store import DeployPluginStorage
+
+    DeployPluginStorage("help").set(_STORAGE_KEY, out)
     names = frozenset(out)
-    _cache_mtime_ns = file_mtime_ns(path)
+    _cache_mtime_ns = file_mtime_ns(global_disabled_plugins_path())
     _cache_names = names
     bump_global_disable_remote_generation()
     try:

@@ -7,6 +7,10 @@ from src.features.cmd_perm.metadata_defaults import (
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
 from src.features.llm.tools.declare import llm_command_tool_row
+from src.features.plugin_storage.declare import plugin_storage_list, plugin_storage_row
+from src.features.plugin_storage.startup import register_plugin_storage_startup_hook
+
+register_plugin_storage_startup_hook()
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛画画",
@@ -48,6 +52,9 @@ __plugin_meta__ = PluginMetadata(
                 command_template="牛牛画画 {prompt}",
             ),
         ],
+        "plugin_storage": plugin_storage_list(
+            plugin_storage_row("daily_usage", scope="deploy", label="群内日用量"),
+        ),
         "menu_data": [
             {
                 "func": "牛牛画画",

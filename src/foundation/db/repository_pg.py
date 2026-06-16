@@ -178,6 +178,7 @@ class BotConfigRow(Base):
     community_roster_show_qq: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     persona: Mapped[Any] = mapped_column(_JsonB, nullable=True)
     group_style_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    plugin_storage: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
 
 
 class GroupConfigRow(Base):
@@ -190,6 +191,7 @@ class GroupConfigRow(Base):
     disabled_plugins: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
     blocked_user_ids: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
     style_profile: Mapped[Any] = mapped_column(_JsonB, nullable=True)
+    plugin_storage: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
 
 
 class UserConfigRow(Base):
@@ -200,6 +202,7 @@ class UserConfigRow(Base):
     maa_devices: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
     maa_active_device: Mapped[str] = mapped_column(Text, nullable=False, default="")
     maa_stage_plan: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
+    plugin_storage: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
 
 
 class ImageCacheRow(Base):
@@ -263,6 +266,16 @@ def _ensure_pg_group_config_style_profile(connection) -> None:
     connection.execute(text("ALTER TABLE group_config ADD COLUMN style_profile JSONB"))
 
 
+def _ensure_pg_group_config_plugin_storage(connection) -> None:
+    insp = inspect(connection)
+    if not insp.has_table("group_config"):
+        return
+    names = {c["name"] for c in insp.get_columns("group_config")}
+    if "plugin_storage" in names:
+        return
+    connection.execute(text("ALTER TABLE group_config ADD COLUMN plugin_storage JSONB NOT NULL DEFAULT '{}'::jsonb"))
+
+
 def _ensure_pg_bot_config_persona(connection) -> None:
     """旧库 bot_config 缺列时补列。"""
     insp = inspect(connection)
@@ -308,6 +321,18 @@ def _ensure_pg_user_config_maa_devices(connection) -> None:
         connection.execute(text("ALTER TABLE user_config ADD COLUMN maa_active_device TEXT NOT NULL DEFAULT ''"))
     if "maa_stage_plan" not in names:
         connection.execute(text("ALTER TABLE user_config ADD COLUMN maa_stage_plan JSONB NOT NULL DEFAULT '[]'::jsonb"))
+    if "plugin_storage" not in names:
+        connection.execute(text("ALTER TABLE user_config ADD COLUMN plugin_storage JSONB NOT NULL DEFAULT '{}'::jsonb"))
+
+
+def _ensure_pg_bot_config_plugin_storage(connection) -> None:
+    insp = inspect(connection)
+    if not insp.has_table("bot_config"):
+        return
+    names = {c["name"] for c in insp.get_columns("bot_config")}
+    if "plugin_storage" in names:
+        return
+    connection.execute(text("ALTER TABLE bot_config ADD COLUMN plugin_storage JSONB NOT NULL DEFAULT '{}'::jsonb"))
 
 
 def _ensure_pg_message_group_time_index(connection) -> None:
@@ -430,9 +455,11 @@ async def init_pg(engine: AsyncEngine) -> None:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_pg_group_config_blocked_user_ids)
         await conn.run_sync(_ensure_pg_group_config_style_profile)
+        await conn.run_sync(_ensure_pg_group_config_plugin_storage)
         await conn.run_sync(_ensure_pg_bot_config_community_roster_show_qq)
         await conn.run_sync(_ensure_pg_bot_config_group_style_enabled)
         await conn.run_sync(_ensure_pg_bot_config_persona)
+        await conn.run_sync(_ensure_pg_bot_config_plugin_storage)
         await conn.run_sync(_ensure_pg_user_config_maa_devices)
         await conn.run_sync(_ensure_pg_message_group_time_index)
         await conn.run_sync(_ensure_pg_message_group_user_time_index)

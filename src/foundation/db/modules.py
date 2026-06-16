@@ -31,6 +31,7 @@ class BotConfigModule(Document):
     community_roster_show_qq: bool = Field(default=True)
     persona: dict | None = Field(default=None)
     group_style_enabled: bool = Field(default=True)
+    plugin_storage: dict = Field(default_factory=dict)
 
     class Settings:
         name = "config"
@@ -48,6 +49,7 @@ class GroupConfigModule(Document):
     disabled_plugins: list[str] = Field(default_factory=list)
     blocked_user_ids: list[int] = Field(default_factory=list)
     style_profile: dict | None = Field(default=None)
+    plugin_storage: dict = Field(default_factory=dict)
 
     class Settings:
         name = "group_config"
@@ -63,6 +65,7 @@ class UserConfigModule(Document):
     maa_devices: dict = Field(default_factory=dict)
     maa_active_device: str = ""
     maa_stage_plan: list[str] = Field(default_factory=list)
+    plugin_storage: dict = Field(default_factory=dict)
 
     class Settings:
         name = "user_config"

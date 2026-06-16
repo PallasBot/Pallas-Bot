@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from src.foundation.paths import plugin_data_dir
 
 _USAGE_FILE = "pallas_draw_daily_usage.json"
+_STORAGE_KEY = "daily_usage"
 _VERSION = 1
 _FLUSH_DELAY_SEC = 5.0
 
@@ -41,13 +42,6 @@ def _parse_key(s: str) -> tuple[int, int] | None:
         return None
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)
-
-
 def _parse_entry(v: object) -> tuple[date, int] | None:
     day_s: object
     count_raw: object
@@ -68,21 +62,20 @@ def _parse_entry(v: object) -> tuple[date, int] | None:
     return d, c
 
 
-def _load() -> None:
-    global _pallas_draw_usage
-    path = usage_store_path()
-    if not path.is_file():
-        return
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
-        logger.warning(f"draw draw_usage file invalid, ignored: {e}")
-        return
-    if not isinstance(raw, dict):
-        return
+def _entries_from_usage_map() -> dict[str, dict[str, object]]:
+    today = date.today()
+    entries: dict[str, dict[str, object]] = {}
+    for (g, u), (d, c) in _pallas_draw_usage.items():
+        if d != today or c <= 0:
+            continue
+        entries[_key_str(g, u)] = {"day": d.isoformat(), "count": c}
+    return entries
+
+
+def _usage_map_from_payload(raw: dict) -> dict[tuple[int, int], tuple[date, int]]:
     entries = raw.get("entries")
     if not isinstance(entries, dict):
-        return
+        return {}
     out: dict[tuple[int, int], tuple[date, int]] = {}
     for k, v in entries.items():
         parsed_key = _parse_key(str(k))
@@ -92,7 +85,57 @@ def _load() -> None:
         if parsed_val is None:
             continue
         out[parsed_key] = parsed_val
-    _pallas_draw_usage = out
+    return out
+
+
+def _read_legacy_payload() -> dict | None:
+    path = usage_store_path()
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.warning(f"draw draw_usage file invalid, ignored: {e}")
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def _migrate_legacy_payload() -> dict[tuple[int, int], tuple[date, int]]:
+    raw = _read_legacy_payload()
+    path = usage_store_path()
+    if raw is None and not path.is_file():
+        return {}
+    payload = raw if isinstance(raw, dict) else {"version": _VERSION, "entries": {}}
+    from src.features.plugin_storage.deploy_store import DeployPluginStorage
+
+    DeployPluginStorage("draw").set(_STORAGE_KEY, payload)
+    if path.is_file():
+        backup = path.with_suffix(path.suffix + ".migrated")
+        if not backup.exists():
+            path.replace(backup)
+    return _usage_map_from_payload(payload)
+
+
+def _load_from_storage() -> dict[tuple[int, int], tuple[date, int]]:
+    try:
+        from src.features.plugin_storage.deploy_store import DeployPluginStorage
+
+        store = DeployPluginStorage("draw")
+        raw = store.get(_STORAGE_KEY)
+        if raw is None:
+            return _migrate_legacy_payload()
+        if not isinstance(raw, dict):
+            return {}
+        return _usage_map_from_payload(raw)
+    except Exception as e:
+        logger.warning(f"draw draw_usage storage read failed, fallback legacy: {e}")
+        raw = _read_legacy_payload()
+        return _usage_map_from_payload(raw) if isinstance(raw, dict) else {}
+
+
+def _load() -> None:
+    global _pallas_draw_usage
+    _pallas_draw_usage = _load_from_storage()
     _prune_stale_memory()
 
 
@@ -104,15 +147,10 @@ def _prune_stale_memory() -> None:
 
 def _persist() -> None:
     _prune_stale_memory()
-    path = usage_store_path()
-    today = date.today()
-    entries: dict[str, dict[str, object]] = {}
-    for (g, u), (d, c) in _pallas_draw_usage.items():
-        if d != today or c <= 0:
-            continue
-        entries[_key_str(g, u)] = {"day": d.isoformat(), "count": c}
-    payload = {"version": _VERSION, "entries": entries}
-    _atomic_write(path, json.dumps(payload, ensure_ascii=False, indent=2))
+    payload = {"version": _VERSION, "entries": _entries_from_usage_map()}
+    from src.features.plugin_storage.deploy_store import DeployPluginStorage
+
+    DeployPluginStorage("draw").set(_STORAGE_KEY, payload)
 
 
 def _start_flush_timer() -> None:

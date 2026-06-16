@@ -13,8 +13,9 @@ from src.features.cmd_perm.metadata_defaults import (
 )
 from src.features.cmd_perm.metadata_text import SCENE_BOTH, SCENE_GROUP, join_usage, usage_line
 from src.features.command_limits import is_command_cooldown_ready, refresh_command_cooldown
+from src.features.plugin_storage.declare import plugin_storage_list, plugin_storage_row
+from src.features.plugin_storage.startup import register_plugin_storage_startup_hook
 from src.foundation.command_prefix import matches_command_prefix
-from src.foundation.config import BotConfig, GroupConfig
 
 from .config import Config, get_help_config, plugin_config
 from .event_preprocessor import IGNORED_PLUGINS  # noqa: F401
@@ -123,6 +124,10 @@ __plugin_meta__ = PluginMetadata(
                 "detail_des": "仅切换帮助总览中列出的插件，与总览数量一致。",
             },
         ],
+        "plugin_storage": plugin_storage_list(
+            plugin_storage_row("hidden_plugins", scope="deploy", label="帮助总览隐藏名单"),
+            plugin_storage_row("global_disabled_plugins", scope="deploy", label="全实例禁用名单"),
+        ),
     },
 )
 
@@ -263,3 +268,6 @@ async def handle_enable_all_command(bot: Bot, event: GroupMessageEvent | Private
 async def handle_disable_all_command(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent, state: T_State):
     """处理禁用所有功能的命令"""
     await toggle_all_plugins(bot, event, "disable", plugin_disable_all_cmd)
+
+
+register_plugin_storage_startup_hook()

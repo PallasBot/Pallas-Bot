@@ -4431,6 +4431,16 @@ def register_extended_api(
         data = await cached_read(key="plugins", loader=_load, ttl_sec=1.6, stale_sec=25.0)
         return JSONResponse({"ok": True, "data": data})
 
+    @router.get(f"{x}/plugins/capabilities", include_in_schema=True)
+    async def _plugins_capabilities() -> JSONResponse:
+        from src.features.plugin_capabilities import build_plugin_capabilities_ui
+
+        async def _load() -> dict[str, Any]:
+            return build_plugin_capabilities_ui()
+
+        data = await cached_read(key="plugins-capabilities", loader=_load, ttl_sec=2.0, stale_sec=30.0)
+        return JSONResponse({"ok": True, "data": data})
+
     @router.get(f"{x}/plugins/official-extensions", include_in_schema=True)
     async def _plugins_official_extensions() -> JSONResponse:
         from src.console.webui.plugin_registry import build_official_extension_rows

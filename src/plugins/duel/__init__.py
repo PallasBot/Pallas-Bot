@@ -14,6 +14,10 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
+from src.features.plugin_storage import plugin_storage_list, plugin_storage_row
+from src.features.plugin_storage.startup import register_plugin_storage_startup_hook
+
+register_plugin_storage_startup_hook()
 from src.platform.ingress.policy_registry import text_matches_plugin_fanout
 from src.plugins.duel import duel_penalty  # noqa: F401 — 注册惩罚消息 matcher
 from src.plugins.duel.config import plugin_config
@@ -106,6 +110,10 @@ __plugin_meta__ = PluginMetadata(
             {"id": "duel.duel", "cd_sec": 5},
             {"id": "duel.cage", "cd_sec": 5},
         ],
+        "plugin_storage": plugin_storage_list(
+            plugin_storage_row("duel_pair", scope="group", label="决斗双牛配对", ephemeral=True),
+            plugin_storage_row("duel_narr_ignore", scope="group", label="决斗不复读指纹", ephemeral=True),
+        ),
         "ingress_fanout": {
             "scope": "always",
             "regexes": [r"^八角笼(?:牛|斗)(?:\s*\d{1,2}\s*(?:幕|回合))?\s*$"],

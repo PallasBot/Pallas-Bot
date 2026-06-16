@@ -34,9 +34,31 @@ my_plugin/
 | 类型 | 位置 | 访问方式 |
 | --- | --- | --- |
 | 运行期数据 | `data/<plugin_name>/...` | `plugin_data_dir("my_plugin")` |
+| 群/用户/牛结构化状态 | `GroupConfig` 等文档内 `plugin_storage` JSON | `GroupPluginStorage("my_plugin", group_id)` |
 | 静态资源 | `resource/...` | `resource_dir("subdir")` |
 
 使用 `src.foundation.paths` 提供的 helper，**不要**硬编码相对路径字符串。
+
+### 声明式 plugin_storage
+
+在 `PluginMetadata.extra` 中声明键，由内核校验并统一落盘：
+
+```python
+from src.features.plugin_storage import GroupPluginStorage, plugin_storage_list, plugin_storage_row
+
+extra={
+    "plugin_storage": plugin_storage_list(
+        plugin_storage_row("my_state", scope="group", label="群状态", ephemeral=False),
+    ),
+}
+
+store = GroupPluginStorage("my_plugin", group_id)
+await store.set("my_state", {"n": 1})
+```
+
+- `scope`：`group` / `user` / `bot`
+- `ephemeral=True`：仅进程内缓存，重启丢失（如决斗局内态）
+- 持久化数据写入对应配置文档的 `plugin_storage.<plugin>.<key>`
 
 示例（仓库内）：
 
