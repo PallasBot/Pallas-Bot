@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from nonebot import get_loaded_plugins, get_plugin_config
+from nonebot import get_loaded_plugins, get_plugin_config, logger
 from pydantic import BaseModel, ValidationError
 from pydantic_core import PydanticUndefined
 
@@ -216,6 +216,12 @@ def apply_plugin_config_patch(
         reload_plugin_config(module_name)
     except Exception:
         pass
+    try:
+        from src.features.plugin_reload.l2 import reload_metadata_after_plugin_config_save
+
+        reload_metadata_after_plugin_config_save(plugin_name)
+    except Exception:
+        logger.exception("plugin config save: L2 metadata reload failed plugin={}", plugin_name)
     if plugin_name == "repeater" and {"learn_concurrency", "learn_queue_max_size"} & normalized.keys():
         schedule_repeater_learn_reload()
     return plugin_config_payload(plugin_name, current_values=validated)

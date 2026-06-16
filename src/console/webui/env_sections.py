@@ -13,7 +13,6 @@ from pydantic_core import PydanticUndefined
 
 from src.foundation.config.dotenv import env_value_to_str, upsert_env_dotenv_items
 from src.foundation.paths import PROJECT_ROOT, SRC_ROOT
-from src.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 
 
 @lru_cache(maxsize=1)
@@ -453,6 +452,8 @@ def get_webui_env_section(section_id: str) -> WebuiEnvSection:
 
     if section_id in (CORPUS_FEDERATION_SECTION_ID, CONTROL_PLANE_SECTION_ID, COMMUNITY_STATS_SECTION_ID):
         raise ValueError(f"{section_id} 使用专用 payload，勿走 WebuiEnvSection")
+    from src.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
+
     sid = canonical_plugin_package((section_id or "").strip())
     for s in _registered_sections():
         if s.id == sid:

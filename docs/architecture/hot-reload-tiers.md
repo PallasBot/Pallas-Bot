@@ -8,7 +8,7 @@
 | 级别 | 名称 | 变更内容 | 生效方式 | 现状 |
 | --- | --- | --- | --- | --- |
 | **L1** | 配置 | `config.py` 字段 → `webui.json` | `install_hot_reload_config` 保存后立即 reload | ✅ 默认路径 |
-| **L2** | 元数据 | `PluginMetadata.extra`、help 索引、ingress route | 保存后重读声明 / 重建索引（**不**卸载 matcher） | 部分（save hook）；`reload_policy: metadata` 预留 |
+| **L2** | 元数据 | `PluginMetadata.extra`、help 索引、ingress route | 保存后重读声明 / 重建索引（**不**卸载 matcher） | ✅ `reload_plugin_metadata_l2()`；WebUI 插件配置保存对 `metadata`/`full` 策略触发 |
 | **L3** | 插件代码 | Python 模块变更 | 受控 reload 或提示进程重启 | ❌ 默认需重启 |
 
 ## 明确不做
@@ -43,7 +43,7 @@ extra={
 | --- | --- |
 | 改插件开关/阈值 | WebUI **插件** 页保存（L1） |
 | 改命令权限 / CD | WebUI **命令权限** / **命令冷却**（L1） |
-| 改 help / ingress 声明 | 暂需重启；L2 落地后按 `reload_policy` 提示 |
+| 改 help / ingress 声明 | 插件 `reload_policy: metadata` 时 WebUI 保存可触发 L2；否则重启 |
 | 改 Python 代码 | 重启 Bot；群内 **牛牛重启** 或 `pallas restart` |
 | 安装官方扩展 | WebUI 插件商店；勾选「安装并重启」或手动重启 |
 
