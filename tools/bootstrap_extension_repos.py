@@ -71,6 +71,35 @@ REPOS: list[dict[str, object]] = [
         },
         "readme_file": "pallas-plugin-protocol.md",
     },
+    {
+        "dir": "Pallas-Plugin-Dream",
+        "pip_name": "pallas-plugin-dream",
+        "title": "牛牛做梦",
+        "description": "Pallas-Bot 官方扩展：群内做梦与分片漂移。",
+        "uv_extra": "plugins-dream",
+        "copies": [("dream", "pallas_plugin_dream")],
+        "nonebot_plugins": {"pallas-plugin-dream": ["pallas_plugin_dream"]},
+        "readme_file": "pallas-plugin-dream.md",
+    },
+    {
+        "dir": "Pallas-Plugin-Party",
+        "pip_name": "pallas-plugin-party",
+        "title": "轻玩法",
+        "description": "Pallas-Bot 官方扩展：轮盘赌与喝酒。",
+        "uv_extra": "plugins-party",
+        "dependencies": ["pallas-plugin-dream>=4.0.0"],
+        "copies": [
+            ("roulette", "pallas_plugin_roulette"),
+            ("drink", "pallas_plugin_drink"),
+        ],
+        "copy_overrides": {
+            "drink": {"src.plugins.dream": "pallas_plugin_dream"},
+        },
+        "nonebot_plugins": {
+            "pallas-plugin-party": ["pallas_plugin_roulette", "pallas_plugin_drink"],
+        },
+        "readme_file": "pallas-plugin-party.md",
+    },
 ]
 
 GITIGNORE = """.venv/
@@ -157,6 +186,15 @@ def copy_plugin_tree(
 def render_pyproject(meta: dict[str, object], package_modules: list[str]) -> str:
     pip_name = str(meta["pip_name"])
     description = str(meta["description"])
+    extra_deps = meta.get("dependencies", [])
+    assert isinstance(extra_deps, list)
+    dep_lines = [
+        '    "nonebot2>=2.4.0",',
+        '    "nonebot-adapter-onebot>=2.4.6",',
+    ]
+    for dep in extra_deps:
+        dep_lines.append(f'    "{dep}",')
+    deps_block = "\n".join(dep_lines)
     nb_plugins = meta["nonebot_plugins"]
     assert isinstance(nb_plugins, dict)
     nb_lines = "\n".join(f'{k} = {v}' for k, v in nb_plugins.items())
@@ -169,8 +207,7 @@ readme = "README.md"
 license = {{ file = "LICENSE" }}
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "nonebot2>=2.4.0",
-    "nonebot-adapter-onebot>=2.4.6",
+{deps_block}
 ]
 
 [dependency-groups]
