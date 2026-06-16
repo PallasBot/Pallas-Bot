@@ -7,7 +7,7 @@ from src.platform.multi_bot import fleet as mod
 
 
 def test_load_enabled_account_qq(tmp_path, monkeypatch):
-    proto = tmp_path / "pallas_protocol"
+    proto = tmp_path / "pb_protocol"
     proto.mkdir()
     acc = {
         "100": {"qq": "100", "enabled": False},
@@ -15,11 +15,7 @@ def test_load_enabled_account_qq(tmp_path, monkeypatch):
     }
     (proto / "accounts.json").write_text(json.dumps(acc), encoding="utf-8")
 
-    monkeypatch.setattr(
-        mod,
-        "plugin_data_dir",
-        lambda name: proto if name == "pallas_protocol" else tmp_path,
-    )
+    monkeypatch.setattr(mod, "_accounts_path", lambda: proto / "accounts.json")
     monkeypatch.setattr(shard_ctx, "sharding_active", lambda: False)
     mod.invalidate_fleet_bot_cache()
     ids = mod._load_fleet_bot_ids()
@@ -50,7 +46,7 @@ def test_get_catalog_bot_ids_non_shard_uses_connected_roster(monkeypatch):
 
 def test_registry_ghost_excluded_without_account_or_session(tmp_path, monkeypatch):
     shard_dir = tmp_path / "pallas_shard"
-    proto = tmp_path / "pallas_protocol"
+    proto = tmp_path / "pb_protocol"
     shard_dir.mkdir()
     proto.mkdir()
     (proto / "accounts.json").write_text(
@@ -65,10 +61,13 @@ def test_registry_ghost_excluded_without_account_or_session(tmp_path, monkeypatc
         encoding="utf-8",
     )
 
+    monkeypatch.setattr(mod, "_accounts_path", lambda: proto / "accounts.json")
+    import src.platform.shard.registry.store as reg_mod
+
     monkeypatch.setattr(
-        mod,
+        reg_mod,
         "plugin_data_dir",
-        lambda name, create=False: proto if name == "pallas_protocol" else shard_dir if name == "pallas_shard" else tmp_path,
+        lambda name, create=False: shard_dir if name == "pallas_shard" else tmp_path,
     )
     monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     mod._session_connected.clear()

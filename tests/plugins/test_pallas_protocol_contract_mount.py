@@ -1,6 +1,6 @@
 """协议管理页默认挂载路径。"""
 
-from src.plugins.pallas_protocol.contract import (
+from src.plugins.pb_protocol.contract import (
     DEFAULT_PROTOCOL_WEB_MOUNT_SLUG,
     protocol_web_mount_path,
     resolve_public_mount_path,

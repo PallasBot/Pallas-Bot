@@ -115,7 +115,7 @@ def get_account_config_manager() -> Any:
     global _account_config_manager
     if _account_config_manager is not None:
         return _account_config_manager
-    path = Path(__file__).resolve().parents[3] / "plugins" / "pallas_protocol" / "config_manager.py"
+    path = Path(__file__).resolve().parents[3] / "plugins" / "pb_protocol" / "config_manager.py"
     spec = importlib.util.spec_from_file_location("_pallas_account_config_manager", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"无法加载 AccountConfigManager: {path}")

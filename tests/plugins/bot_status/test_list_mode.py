@@ -64,16 +64,12 @@ def test_cluster_online_connected_uses_presence_when_sharding(monkeypatch):
 
 
 def test_status_inventory_fleet_from_accounts(tmp_path, monkeypatch):
-    proto = tmp_path / "pallas_protocol"
+    proto = tmp_path / "pb_protocol"
     proto.mkdir()
     acc = {"300": {"qq": "300", "enabled": True}}
     (proto / "accounts.json").write_text(json.dumps(acc), encoding="utf-8")
 
-    monkeypatch.setattr(
-        fleet_mod,
-        "plugin_data_dir",
-        lambda name: proto if name == "pallas_protocol" else tmp_path,
-    )
+    monkeypatch.setattr(fleet_mod, "_accounts_path", lambda: proto / "accounts.json")
     monkeypatch.setattr(shard_ctx, "sharding_active", lambda: False)
     fleet_mod.invalidate_fleet_bot_cache()
     patch_sharding(monkeypatch, False)

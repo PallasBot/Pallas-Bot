@@ -5,16 +5,19 @@ from __future__ import annotations
 import json
 import threading
 
-from src.foundation.paths import plugin_data_dir
 from src.platform.shard import context as shard_ctx
+from src.plugins.pb_protocol.data_dir import pb_protocol_data_dir
 
 _lock = threading.RLock()
 _cached: frozenset[int] | None = None
 # 本进程已连过 WS、但 accounts/registry 可能尚未刷新的 QQ
 _session_connected: set[int] = set()
 
-_PROTOCOL_PLUGIN = "pallas_protocol"
 _ACCOUNTS_FILE = "accounts.json"
+
+
+def _accounts_path():
+    return pb_protocol_data_dir() / _ACCOUNTS_FILE
 
 
 def invalidate_fleet_bot_cache() -> None:
@@ -110,7 +113,7 @@ def _load_fleet_bot_ids() -> set[int]:
 
 
 def _load_enabled_account_qq() -> set[int]:
-    path = plugin_data_dir(_PROTOCOL_PLUGIN) / _ACCOUNTS_FILE
+    path = _accounts_path()
     if not path.is_file():
         return set()
     try:

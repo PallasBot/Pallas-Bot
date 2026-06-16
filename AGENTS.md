@@ -77,7 +77,7 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 仅 `src/`**；`
 
 ### WebUI 与控制台页面（窄屏）
 
-改动 **Pallas-Bot-WebUI** 或主仓内嵌控制台 HTML/CSS（如 `src/plugins/pallas_protocol/web/static/`）时：
+改动 **Pallas-Bot-WebUI** 或主仓内嵌控制台 HTML/CSS（如 `src/plugins/pb_protocol/web/static/`）时：
 
 - **必须考虑窄屏（≤560px）**：面板标题栏、「添加到侧栏」、表格与批量操作在窄屏下仍须可用、布局不杂乱。
 - WebUI 约定见 **Pallas-Bot-WebUI** 仓库根目录 `AGENTS.md`（窄屏自检清单与参考页面）；全局断点与 override 在 WebUI `src/styles/app.css` 的 `@media (max-width: 560px)`。

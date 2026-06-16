@@ -20,7 +20,7 @@
 
 ## 配置
 
-依赖 `pallas_protocol` 与协议端发行包；见 [pallas_protocol](../pallas_protocol/README.md)。
+依赖 `pb_protocol` 与协议端发行包；见 [pb_protocol](../pb_protocol/README.md)。
 
 ## 排障
 

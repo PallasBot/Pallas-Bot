@@ -345,7 +345,7 @@ def nonebot_log_record_matches_http_facet(
     mstr = raw_msg if isinstance(raw_msg, str) else ""
     if facet == "webui":
         return name in ("pb_webui", "pallas_webui") or "[pallas-webui]" in mstr
-    return name == "pallas_protocol" or "[pallas-protocol]" in mstr
+    return name in ("pb_protocol", "pallas_protocol") or "[pallas-protocol]" in mstr
 
 
 def _sink_dispatch(message: object) -> None:

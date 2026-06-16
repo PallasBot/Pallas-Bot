@@ -24,7 +24,7 @@ PLUGIN_HELP_ALIASES: dict[str, tuple[str, ...]] = {
     "connectivity": ("连通", "网络", "探测"),
     "request_handler": ("申请", "申请管理", "好友申请", "加群", "入群申请"),
     "pb_webui": ("控制台", "WebUI", "webui", "面板"),
-    "pallas_protocol": ("协议", "协议端", "NapCat", "SnowLuma"),
+    "pb_protocol": ("协议", "协议端", "NapCat", "SnowLuma"),
 }
 
 

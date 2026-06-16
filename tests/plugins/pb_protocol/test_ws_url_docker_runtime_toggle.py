@@ -4,7 +4,7 @@ import sys
 
 import pytest
 
-from src.plugins.pallas_protocol.linux_docker import apply_docker_runtime_toggle_to_ws_url
+from src.plugins.pb_protocol.linux_docker import apply_docker_runtime_toggle_to_ws_url
 
 
 @pytest.fixture
@@ -28,7 +28,7 @@ def test_shell_to_docker_rewrites_localhost_on_windows(monkeypatch: pytest.Monke
     """Windows 上 ``napcat_linux_docker`` 也可为真；切换时应把 127 等改写为 Docker Desktop 侧主机。"""
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.linux_docker.resolve_docker_onebot_host_from_config",
+        "src.plugins.pb_protocol.linux_docker.resolve_docker_onebot_host_from_config",
         lambda _c: "host.docker.internal",
     )
     out = apply_docker_runtime_toggle_to_ws_url(
@@ -42,7 +42,7 @@ def test_shell_to_docker_rewrites_localhost_on_windows(monkeypatch: pytest.Monke
 
 def test_shell_to_docker_rewrites_localhost(linux_platform: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.linux_docker.resolve_docker_onebot_host_from_config",
+        "src.plugins.pb_protocol.linux_docker.resolve_docker_onebot_host_from_config",
         lambda _c: "172.17.0.1",
     )
     out = apply_docker_runtime_toggle_to_ws_url(
@@ -57,11 +57,11 @@ def test_shell_to_docker_rewrites_localhost(linux_platform: None, monkeypatch: p
 def test_docker_to_shell_rewrites_host_docker_internal_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.linux_docker.resolve_docker_onebot_host_from_config",
+        "src.plugins.pb_protocol.linux_docker.resolve_docker_onebot_host_from_config",
         lambda _c: "host.docker.internal",
     )
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.config.resolve_onebot_ws_settings",
+        "src.plugins.pb_protocol.config.resolve_onebot_ws_settings",
         lambda _c: ("ws://127.0.0.1:9999/ignored", "pallas", ""),
     )
     out = apply_docker_runtime_toggle_to_ws_url(
@@ -75,11 +75,11 @@ def test_docker_to_shell_rewrites_host_docker_internal_on_windows(monkeypatch: p
 
 def test_docker_to_shell_rewrites_gateway_host(linux_platform: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.linux_docker.resolve_docker_onebot_host_from_config",
+        "src.plugins.pb_protocol.linux_docker.resolve_docker_onebot_host_from_config",
         lambda _c: "172.17.0.1",
     )
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.config.resolve_onebot_ws_settings",
+        "src.plugins.pb_protocol.config.resolve_onebot_ws_settings",
         lambda _c: ("ws://127.0.0.1:9999/ignored", "pallas", ""),
     )
     out = apply_docker_runtime_toggle_to_ws_url(
@@ -93,11 +93,11 @@ def test_docker_to_shell_rewrites_gateway_host(linux_platform: None, monkeypatch
 
 def test_docker_to_shell_keeps_custom_lan_ip(linux_platform: None, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.linux_docker.resolve_docker_onebot_host_from_config",
+        "src.plugins.pb_protocol.linux_docker.resolve_docker_onebot_host_from_config",
         lambda _c: "172.17.0.1",
     )
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.config.resolve_onebot_ws_settings",
+        "src.plugins.pb_protocol.config.resolve_onebot_ws_settings",
         lambda _c: ("ws://127.0.0.1:8088/x", "pallas", ""),
     )
     assert (

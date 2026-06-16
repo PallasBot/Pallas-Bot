@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from src.plugins.pallas_protocol.config_manager import AccountConfigManager
-from src.plugins.pallas_protocol.snowluma_config import (
+from src.plugins.pb_protocol.config_manager import AccountConfigManager
+from src.plugins.pb_protocol.snowluma_config import (
     extract_snowluma_webui_temp_password_from_log_lines,
     read_snowluma_runtime_webui_password,
     resolve_snowluma_webui_temp_password,

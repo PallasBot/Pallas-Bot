@@ -66,7 +66,7 @@ PLUGIN_NAMES = [
     "help",
     "maa",
     "draw",
-    "pallas_protocol",
+    "pb_protocol",
     "pb_webui",
     "relogin_bot",
     "repeater",
@@ -212,8 +212,8 @@ def transform_for_vitepress(text: str) -> str:
         text,
     )
     text = re.sub(
-        r"\]\(\.\./pallas_protocol/README\.md([^)]*)\)",
-        r"](/plugins/pallas_protocol\1)",
+        r"\]\(\.\./(?:pallas_protocol|pb_protocol)/README\.md([^)]*)\)",
+        r"](/plugins/pb_protocol\1)",
         text,
     )
     text = re.sub(r"\]\(Deployment\.md([^)]*)\)", r"](/deploy/deployment\1)", text)

@@ -40,7 +40,7 @@ def test_discover_plugin_modules_slim_skips_extra():
     assert "duel" not in names
     assert "draw" not in names
     assert "maa" not in names
-    assert "pallas_protocol" not in names
+    assert "pb_protocol" not in names
 
 
 def test_unified_role_skips_shard_only_plugins(monkeypatch: pytest.MonkeyPatch):

@@ -183,7 +183,7 @@ def test_list_webui_env_sections_contains_plugin_common_sections():
     ids = {r["id"] for r in rows}
     assert "command_limits" in ids
     assert "pb_webui" in ids
-    assert "pallas_protocol" in ids
+    assert "pb_protocol" in ids
     assert "help" in ids
     assert "service_gateways" in ids
 

@@ -3,14 +3,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.plugins.pallas_protocol.config import Config
-from src.plugins.pallas_protocol.docker_cli import docker_repository_from_ref
-from src.plugins.pallas_protocol.service import (
+from src.plugins.pb_protocol.config import Config
+from src.plugins.pb_protocol.docker_cli import docker_repository_from_ref
+from src.plugins.pb_protocol.service import (
     PallasProtocolService,
     _docker_stderr_suggests_container_name_conflict,
     _docker_stderr_suggests_host_port_bind_conflict,
 )
-from src.plugins.pallas_protocol.snowluma_docker import (
+from src.plugins.pb_protocol.snowluma_docker import (
     build_snowluma_docker_run_argv,
     snowluma_docker_program_dir_marker,
     snowluma_docker_volume_paths,

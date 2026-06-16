@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 HUB_PLUGIN_MODULES: tuple[str, ...] = (
     "src.plugins.pb_webui",
-    "src.plugins.pallas_protocol",
+    "src.plugins.pb_protocol",
     "src.plugins.relogin_bot",
     "src.plugins.maa_hub",
     "src.plugins.blacklist",
@@ -21,6 +21,7 @@ HUB_PLUGIN_MODULES: tuple[str, ...] = (
 
 WORKER_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
     "pb_webui",
+    "pb_protocol",
     "pallas_protocol",
     "relogin_bot",
     "maa_hub",

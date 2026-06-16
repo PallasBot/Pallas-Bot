@@ -85,7 +85,7 @@ def append_qrcode(result: ReloginHandleResult, qr_path: Path) -> None:
 
 
 async def run_relogin_restart(qq: str, result: ReloginHandleResult) -> None:
-    from src.plugins.pallas_protocol import manager as protocol_manager
+    from src.plugins.pb_protocol import manager as protocol_manager
 
     account = protocol_manager.get_account(qq) or {}
     account_data_dir = Path(str(account.get("account_data_dir", "")).strip())
@@ -200,7 +200,7 @@ async def handle_relogin_session(
         session.data["qq"] = qq
 
     if session.step == "validate_qq":
-        from src.plugins.pallas_protocol import manager as protocol_manager
+        from src.plugins.pb_protocol import manager as protocol_manager
 
         qq = str(session.data.get("qq", ""))
         is_target_admin = await user_is_bot_admin(int(qq), int(user_id))
@@ -231,7 +231,7 @@ async def handle_relogin_session(
             result.session_active = True
             return
         try:
-            from src.plugins.pallas_protocol import manager as protocol_manager
+            from src.plugins.pb_protocol import manager as protocol_manager
 
             protocol_manager.create_account({"qq": qq, "display_name": nickname, "enabled": True})
             append_text(result, f"已创建 {nickname} 并继续上号流程。")
@@ -306,7 +306,7 @@ async def handle_create_session(
     if session.step != "execute":
         return
 
-    from src.plugins.pallas_protocol import manager as protocol_manager
+    from src.plugins.pb_protocol import manager as protocol_manager
 
     display_name = str(session.data.get("display_name", "")).strip()
     qq = str(session.data.get("qq", "")).strip()

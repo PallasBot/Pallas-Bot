@@ -11,6 +11,7 @@ _STORAGE_KEY = "hidden_plugins"
 BUILTIN_HELP_HIDDEN_PLUGINS = frozenset({
     "pb_webui",
     "pallas_webui",
+    "pb_protocol",
     "pallas_protocol",
     "ingress_gate",
     "community_stats",

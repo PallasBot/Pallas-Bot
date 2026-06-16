@@ -4,6 +4,7 @@ from __future__ import annotations
 
 PLUGIN_PACKAGE_ALIASES: dict[str, str] = {
     "pallas_webui": "pb_webui",
+    "pallas_protocol": "pb_protocol",
 }
 
 

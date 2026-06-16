@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.plugins.pallas_protocol.service import PallasProtocolService
+from src.plugins.pb_protocol.service import PallasProtocolService
 
 
 def _service() -> PallasProtocolService:
@@ -9,11 +9,8 @@ def _service() -> PallasProtocolService:
 
 def test_is_bot_connected_hub_uses_cluster_presence(monkeypatch) -> None:
     svc = _service()
-    monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
-        lambda: True,
-    )
-    monkeypatch.setattr("src.platform.bot_runtime.roles.is_sharded_hub", lambda: True)
+    monkeypatch.setattr("src.platform.shard.context.sharding_active", lambda: True)
+    monkeypatch.setattr("src.platform.shard.context.is_hub", lambda: True)
     monkeypatch.setattr(
         "src.platform.shard.presence.get_cluster_online_bot_ids",
         lambda: frozenset({111, 222}),

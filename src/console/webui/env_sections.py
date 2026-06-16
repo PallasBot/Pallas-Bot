@@ -105,7 +105,7 @@ def _plugin_env_skip_fields(section_id: str, cfg_cls: type[BaseModel]) -> frozen
     if section_id == "pb_webui":
         keep = {"pallas_webui_enabled", "pallas_webui_http_base", "pallas_webui_dev_mode"}
         return frozenset(all_names - keep)
-    if section_id == "pallas_protocol":
+    if section_id == "pb_protocol":
         keep = {
             "pallas_protocol_enabled",
             "pallas_protocol_webui_enabled",
@@ -370,10 +370,10 @@ def _registered_sections() -> tuple[WebuiEnvSection, ...]:
                 config_module="src.plugins.pb_webui.config",
             ),
             _plugin_env_section_from_module(
-                section_id="pallas_protocol",
+                section_id="pb_protocol",
                 title="QQ 协议端（NapCat 等）",
-                module_label="src.plugins.pallas_protocol",
-                config_module="src.plugins.pallas_protocol.config",
+                module_label="src.plugins.pb_protocol",
+                config_module="src.plugins.pb_protocol.config",
             ),
             _plugin_env_section_from_module(
                 section_id="help",
@@ -402,7 +402,7 @@ _COMMON_CONFIG_SECTION_ORDER: tuple[str, ...] = (
     "message_scrub",
     "service_gateways",
     "pb_webui",
-    "pallas_protocol",
+    "pb_protocol",
     "help",
 )
 

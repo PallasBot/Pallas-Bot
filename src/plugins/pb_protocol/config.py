@@ -463,7 +463,7 @@ class Config(BaseModel):
 
 def on_pallas_protocol_config_reload(cfg: Config) -> None:
     try:
-        import src.plugins.pallas_protocol as pkg
+        import src.plugins.pb_protocol as pkg
 
         mgr = getattr(pkg, "manager", None)
         if mgr is not None:

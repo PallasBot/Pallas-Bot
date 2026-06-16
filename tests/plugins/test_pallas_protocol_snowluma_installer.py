@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from src.plugins.pallas_protocol.runtime.snowluma_installer import (
+from src.plugins.pb_protocol.runtime.snowluma_installer import (
     default_snowluma_asset_name_for_tag,
     pick_snowluma_asset_from_release,
 )

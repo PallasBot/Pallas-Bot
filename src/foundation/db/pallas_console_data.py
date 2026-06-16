@@ -383,7 +383,7 @@ def pallas_protocol_snapshot() -> dict[str, Any] | None:
     for p in get_loaded_plugins():
         mod = getattr(p, "module", None)
         mname = getattr(mod, "__name__", "")
-        if mname not in ("src.plugins.pallas_protocol", "pallas_plugin_protocol"):
+        if mname not in ("src.plugins.pb_protocol", "pallas_plugin_protocol"):
             continue
         cfg = getattr(mod, "plugin_config", None)
         mgr = getattr(mod, "manager", None)
@@ -392,7 +392,7 @@ def pallas_protocol_snapshot() -> dict[str, Any] | None:
         if mname == "pallas_plugin_protocol":
             from pallas_plugin_protocol.contract import resolve_public_mount_path
         else:
-            from src.plugins.pallas_protocol.contract import resolve_public_mount_path
+            from src.plugins.pb_protocol.contract import resolve_public_mount_path
 
         path = resolve_public_mount_path(
             path_override=str(getattr(cfg, "pallas_protocol_webui_path", "") or ""),
@@ -409,7 +409,7 @@ def pallas_protocol_snapshot() -> dict[str, Any] | None:
         except Exception:  # noqa: BLE001
             auth_ok = False
         return {
-            "plugin": "pallas_protocol",
+            "plugin": "pb_protocol",
             "webui_enabled": bool(getattr(cfg, "pallas_protocol_webui_enabled", False)),
             "webui_path": path,
             "console_auth_configured": auth_ok,

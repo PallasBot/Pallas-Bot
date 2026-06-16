@@ -41,7 +41,7 @@
 <NCard title="唱歌 sing" route="/plugins/sing">点歌 · pallas-plugin-ai-media</NCard>
 <NCard title="聊天 chat" route="/plugins/chat">酒后智能对话 · pallas-plugin-ai-media</NCard>
 <NCard title="MAA maa" route="/plugins/maa">远控排队回图 · pallas-plugin-maa</NCard>
-<NCard title="协议端" route="/plugins/pallas_protocol">NapCat / SnowLuma · pallas-plugin-protocol</NCard>
+<NCard title="协议端" route="/plugins/pb_protocol">NapCat / SnowLuma · pallas-plugin-protocol</NCard>
 <NCard title="上号 relogin_bot" route="/plugins/relogin_bot">重新登录 · pallas-plugin-protocol</NCard>
 <NCard title="状态 bot_status" route="/plugins/bot_status">在吗、报数 · pallas-plugin-bot-status</NCard>
 <NCard title="社区统计" route="/plugins/community_stats">匿名上报 · pallas-plugin-community-stats</NCard>

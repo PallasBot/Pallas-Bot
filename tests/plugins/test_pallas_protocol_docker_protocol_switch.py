@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from src.plugins.pallas_protocol.config import Config
-from src.plugins.pallas_protocol.service import PallasProtocolService
+from src.plugins.pb_protocol.config import Config
+from src.plugins.pb_protocol.service import PallasProtocolService
 
 
 @pytest.mark.asyncio
@@ -16,11 +16,11 @@ async def test_remove_linux_docker_containers_for_protocol_switch_calls_both_nam
         removed.append(name)
 
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.linux_docker.docker_remove_force",
+        "src.plugins.pb_protocol.linux_docker.docker_remove_force",
         capture_rm,
     )
     monkeypatch.setattr(
-        "src.plugins.pallas_protocol.snowluma_docker.snowluma_docker_remove_force",
+        "src.plugins.pb_protocol.snowluma_docker.snowluma_docker_remove_force",
         capture_rm,
     )
 

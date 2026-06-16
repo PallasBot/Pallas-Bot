@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from src.plugins.pallas_protocol.contract import (
+from src.plugins.pb_protocol.contract import (
     normalize_instance_folder_segment,
     resolve_default_account_data_dir,
 )
