@@ -21,11 +21,11 @@ from src.features.cmd_perm.metadata_defaults import (
 from src.features.cmd_perm.metadata_text import SCENE_AUTO, SCENE_GROUP, join_usage, usage_line
 from src.features.corpus.backfill_scheduler import bind_corpus_backfill_lifecycle
 from src.features.corpus.prefetch import bind_corpus_prefetch_lifecycle
+from src.features.dream_ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
 from src.features.message_scrub import is_message_scrub_blocked_async
 from src.features.message_scrub.log_preview import scrub_intercept_log_preview
 from src.foundation.config import BotConfig
 from src.platform.observability import SlowPathTimer, slow_path_threshold_ms
-from src.plugins.dream.ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
 from src.shared.reply_command_rule import event_has_reply_target, event_targets_self, extract_reply_id_from_raw_message
 from src.shared.utils.array2cqcode import try_convert_to_cqcode
 from src.shared.utils.media_cache import get_image, insert_image
