@@ -255,6 +255,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
         await dispatch_repeater_fanout(event, fanout_gate.bot_ids, bundle)
         return
 
+    candidate = next((item for item in bundle.answer_list if item and "[CQ:" not in item), "")
+    if candidate:
+        from src.features.llm.polish import maybe_submit_repeater_llm_polish
+
+        if await maybe_submit_repeater_llm_polish(event, candidate_text=candidate):
+            return
+
     answers = await chat.answer_from_bundle(bundle)
     if answers is None:
         return

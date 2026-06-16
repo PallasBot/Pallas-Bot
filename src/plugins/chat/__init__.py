@@ -13,7 +13,13 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
-from src.features.llm import ChatSubmitRequest, delete_llm_chat_session, get_llm_config, submit_chat_task
+from src.features.llm import (
+    ChatSubmitRequest,
+    delete_llm_chat_session,
+    get_llm_config,
+    is_llm_chat_service_enabled,
+    submit_chat_task,
+)
 from src.features.persona.compile_persona_prompt import compile_persona_prompt_for
 from src.foundation.config import BotConfig, GroupConfig, TaskManager
 
@@ -54,17 +60,18 @@ def refresh_server_url(cfg: Config | None = None) -> None:
 refresh_server_url()
 CHAT_COOLDOWN_KEY = "chat"
 
-if plugin_config.chat_enable:
 
-    @BotConfig.handle_sober_up
-    async def on_sober_up(bot_id, group_id, drunkenness) -> None:
-        session = f"{bot_id}_{group_id}"
-        logger.info(f"bot [{bot_id}] sober up in group [{group_id}], clear session [{session}]")
-        await delete_llm_chat_session(session, cfg=get_llm_config())
+@BotConfig.handle_sober_up
+async def on_sober_up(bot_id, group_id, drunkenness) -> None:
+    if not is_llm_chat_service_enabled():
+        return
+    session = f"{bot_id}_{group_id}"
+    logger.info(f"bot [{bot_id}] sober up in group [{group_id}], clear session [{session}]")
+    await delete_llm_chat_session(session, cfg=get_llm_config())
 
 
 async def is_to_chat(event: GroupMessageEvent) -> bool:
-    if plugin_config.chat_enable is False:
+    if not is_llm_chat_service_enabled():
         return False
     text = event.get_plaintext()
     if not text.startswith("牛牛") and not event.is_tome():

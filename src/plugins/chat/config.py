@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 from src.console.webui import install_hot_reload_config, plugin_config_proxy
 
@@ -12,7 +12,11 @@ class Config(BaseModel, extra="ignore"):
         default=9099,
         description="已弃用：请配置全局 AI_SERVER_PORT / LLM_AI_SERVER_PORT。",
     )
-    chat_enable: bool = Field(default=False, description="是否启用酒后聊天（须先醉酒；走统一 LLM 网关）。")
+    chat_enable: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("chat_enable", "llm_chat_enable"),
+        description="已弃用：请配置全局 LLM_CHAT_ENABLED。",
+    )
     chat_endpoint: str = Field(default="/api/chat", description="已弃用：请使用统一 /api/v1/chat/completions。")
     del_session_endpoint: str = Field(
         default="/api/del_session",

@@ -12,11 +12,29 @@ _cached_llm_config: LlmConfig | None = None
 
 
 def _env_bool_first(keys: tuple[str, ...], default: bool) -> bool:
+    resolved = _env_bool_first_optional(keys)
+    if resolved is not None:
+        return resolved
+    return default
+
+
+def _env_bool_first_optional(keys: tuple[str, ...]) -> bool | None:
     for key in keys:
         raw = repo_env_raw_value(key)
         if raw is not None:
             return raw.strip().lower() in ("1", "true", "yes", "on")
-    return default
+    return None
+
+
+def resolve_llm_chat_enabled() -> bool:
+    """全局 LLM 闲聊总闸：LLM_CHAT_ENABLED 优先，其次遗留 OLLAMA_ENABLE / 插件级 CHAT_ENABLE / LLM_CHAT_ENABLE。"""
+    primary = _env_bool_first_optional(("LLM_CHAT_ENABLED", "OLLAMA_ENABLE"))
+    if primary is not None:
+        return primary
+    legacy = _env_bool_first_optional(("LLM_CHAT_ENABLE", "CHAT_ENABLE"))
+    if legacy is not None:
+        return legacy
+    return False
 
 
 def _env_bool(key: str, default: bool = False) -> bool:
@@ -93,8 +111,9 @@ class LlmConfig(BaseModel):
 
     ai_server_host: str = Field(default="127.0.0.1")
     ai_server_port: int = Field(default=9099, ge=1, le=65535)
-    llm_chat_enabled: bool = Field(default=True)
+    llm_chat_enabled: bool = Field(default=False)
     llm_fallback_enabled: bool = Field(default=False)
+    llm_polish_enabled: bool = Field(default=False)
     use_unified_chat_api: bool = Field(default=True)
     legacy_chat_endpoint: str = Field(default="/api/ollama/chat")
     unified_chat_endpoint: str = Field(default="/api/v1/chat/completions")
@@ -125,8 +144,9 @@ def get_llm_config() -> LlmConfig:
         _cached_llm_config = LlmConfig(
             ai_server_host=host,
             ai_server_port=port,
-            llm_chat_enabled=_env_bool_first(("LLM_CHAT_ENABLED", "OLLAMA_ENABLE"), True),
+            llm_chat_enabled=resolve_llm_chat_enabled(),
             llm_fallback_enabled=_env_bool("LLM_FALLBACK_ENABLED", False),
+            llm_polish_enabled=_env_bool("LLM_POLISH_ENABLED", False),
             use_unified_chat_api=_env_bool("LLM_USE_UNIFIED_CHAT_API", True),
             legacy_chat_endpoint=_env_str("LLM_LEGACY_CHAT_ENDPOINT", "/api/ollama/chat"),
             unified_chat_endpoint=_env_str("LLM_UNIFIED_CHAT_ENDPOINT", "/api/v1/chat/completions"),

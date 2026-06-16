@@ -81,6 +81,11 @@ async def run_ai_callback(
                 from src.plugins.llm_chat.replies import LLM_CHAT_FAILED_REPLY
 
                 fail_msg = LLM_CHAT_FAILED_REPLY
+            elif task.get("task_type") == "repeater_polish":
+                fallback = str(task.get("fallback_text") or "").strip()
+                if fallback:
+                    await send_group_message(bot, group_id, fallback)
+                    return {"message": "ok"}
             await send_group_message(
                 bot,
                 group_id,

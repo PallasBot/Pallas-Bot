@@ -6,7 +6,7 @@ from nonebot.rule import Rule
 from ulid import ULID
 
 from src.features.cmd_perm import group_message_permission_for_command
-from src.features.llm import ChatSubmitRequest, submit_chat_task
+from src.features.llm import ChatSubmitRequest, is_llm_chat_service_enabled, submit_chat_task
 from src.features.llm.config import LlmConfig, get_llm_config
 from src.features.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
 from src.features.llm.session_store import append_llm_message
@@ -30,7 +30,7 @@ def refresh_server_url(cfg: Config | None = None) -> None:
 
 
 def llm_chat_rule(event: Event) -> bool:
-    if not get_llm_chat_config().llm_chat_enable:
+    if not is_llm_chat_service_enabled():
         return False
     return bool(getattr(event, "to_me", False))
 
@@ -45,10 +45,10 @@ llm_chat_msg = on_message(
 
 @llm_chat_msg.handle()
 async def handle_llm_chat(bot: Bot, event: Event):
-    cfg = get_llm_chat_config()
-    if not cfg.llm_chat_enable:
+    if not is_llm_chat_service_enabled():
         return
 
+    cfg = get_llm_chat_config()
     plain = event.get_plaintext().strip()
     if plain.casefold() in ("clear", "unload", "model"):
         return

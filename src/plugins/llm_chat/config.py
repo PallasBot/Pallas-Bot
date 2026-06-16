@@ -18,10 +18,10 @@ class Config(BaseModel, extra="ignore"):
     )
     llm_chat_enable: bool = Field(
         default=False,
-        validation_alias=AliasChoices("llm_chat_enable", "ollama_enable"),
+        validation_alias=AliasChoices("llm_chat_enable", "ollama_enable", "chat_enable"),
         description=field_help(
-            "是否启用 @牛牛 LLM 闲聊",
-            "开启前请确认 AI 服务已部署且 LLM 推理可用",
+            "已弃用",
+            "请配置全局 LLM_CHAT_ENABLED（酒后与随时 @ 共用）",
         ),
     )
     llm_chat_system_prompt_path: str = Field(

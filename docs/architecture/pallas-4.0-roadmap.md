@@ -123,7 +123,7 @@ Pallas 已有：`local/plugins/`、[site-customization-and-updates.md](site-cust
 ### 牛格（G1–G3）
 
 - [ ] 无扩展包时 repeater + persona 可运行
-- [ ] `features/llm` 对接 AI 仓 4.0 API；repeater fallback/polish（默认关）可测
+- [x] `features/llm` 对接 AI 仓 4.0 API；repeater fallback/polish **骨架**（默认关）可测
 - [ ] AI 仓与主仓版本兼容检查（见 [pallas-ai-service](pallas-ai-service.md)）
 - [ ] `ollama` legacy 路径文档化；新配置 `llm_*` 迁移说明
 - [ ] 干员口令查询与 LLM tool 结果一致

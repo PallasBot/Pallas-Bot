@@ -19,14 +19,15 @@ flowchart LR
 
 | 主仓消费方 | 典型路径 | 说明 |
 | --- | --- | --- |
-| `plugins/ollama` | `/api/ollama/chat`、会话删除、模型热更换 | 多轮闲聊；prompt 在主仓 `system_prompt.txt` |
-| `plugins/chat` | AI 仓 RWKV 接口 | 酒后聊天 |
+| `plugins/llm_chat` | `/api/v1/chat/completions`、会话删除、模型热更换 | 随时 @ 多轮闲聊 |
+| `plugins/chat` | 同上（`mode=drunk`） | 酒后聊天 |
+| `plugins/repeater` | 同上（fallback / polish 异步） | 语料 miss / 轻改写，默认关 |
 | `plugins/sing` | AI 仓唱歌接口 | |
 | `plugins/draw` | 图像生成 API | 可走 AI 仓或独立网关 |
 | `pallas_webui` | 日志目录、健康探测 | 默认同级 `../Pallas-Bot-AI` |
 | 分片 hub | `ai_callback_forward` | AI 回调转发 worker |
 
-配置：`ai_server_host` / `ai_server_port`（默认 `127.0.0.1:9099`），见各插件 WebUI 与 [ollama 插件文档](../plugins/ollama/README.md)。
+配置：`AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`），见 [persona-llm-roadmap · 全局 LLM 配置](persona-llm-roadmap.md#全局-llm-配置键主仓) 与各插件文档。
 
 **问题（4.0 前）**：按能力分散的 HTTP 路径；会话与 prompt 策略在主仓各插件重复；**无统一 Chat Completions / tool call** 供 repeater fallback 与方舟 KB 共用。
 
@@ -70,14 +71,14 @@ flowchart TB
 | 接话 LLM | repeater 触发条件、fallback/polish 开关 | 执行 completion 请求 |
 | ingress / 分片 | claim、fanout、CD | 无业务 ingress；回调走 hub 转发 |
 
-### 对 `ollama` 插件的定位（4.0）
+### 对 `llm_chat` 插件的定位（4.0）
 
 **不是**「薄包装收敛」为止，而是：
 
-1. **主路径**：`features/llm` → AI 仓**新统一 LLM API**（见下节）
-2. **`plugins/ollama`**：标记 legacy；兼容期可保留 `@牛牛` 入口，内部转调 `features/llm`
-3. **AI 仓**：原 `/api/ollama/*` 可保留一版兼容，但 4.0 新能力（tool call、统一 session、repeater 通道）走新 API
-4. **长期**：帮助菜单合并为「牛牛对话」类入口，配置项从 `ollama_*` 迁到 `llm_*`（breaking 在 4.0 迁移文档说明）
+1. **主路径**：`features/llm` → AI 仓**统一 Chat API**（`/api/v1/chat/completions`）
+2. **`plugins/llm_chat`**：随时 @ 入口；酒后 `chat` 共用同一客户端
+3. **AI 仓**：legacy `/api/ollama/*` 兼容期保留；新能力走统一 API
+4. **repeater**：`fallback.py` / `polish.py` 异步提交，callback `task_type=repeater_polish` 失败回退原句
 
 `chat` / `sing` / `draw` 仍可在 **瘦身分支**迁扩展包，但其 AI 调用也应逐步改用 AI 仓统一网关或专用子路由，避免主仓直连多套 URL 约定。
 
@@ -197,20 +198,21 @@ llm:
 
 ## 配置迁移（4.0 方向）
 
-| 现键（插件级） | 4.0 方向 |
+| 现键（插件级 / 遗留） | 4.0 方向 |
 | --- | --- |
-| `ai_server_host` / `ai_server_port` | 提升为全局 `[llm]` 或 WebUI 通用项（各插件只读引用） |
-| `ollama_enable` | `llm_chat_enabled`（或 repeater / 闲聊分开关） |
-| `ollama_*_endpoint` | 删除；改统一 base + OpenAI 路径 |
-| `ollama_system_prompt_path` | 迁 `compile_persona_prompt` + 可选文件 override |
+| `ai_server_host` / `ai_server_port` | 全局 `AI_SERVER_HOST` / `AI_SERVER_PORT` |
+| `chat_enable` / `llm_chat_enable` / `ollama_enable` | **`LLM_CHAT_ENABLED` 总闸**（酒后与随时 @ 共用） |
+| `LLM_FALLBACK_ENABLED` / `LLM_POLISH_ENABLED` | repeater 接话 LLM（默认关） |
+| `ollama_*_endpoint` | 删除；改 `/api/v1/chat/completions` |
+| `llm_chat_system_prompt_path` | 可选 override；默认 `compile_persona_prompt` |
 
 落盘仍遵循 [settings-storage](settings-storage.md)；AI 仓侧模型/provider 仍在 AI 仓 `.env` / compose。
 
 ## 验收（跨仓）
 
 - [ ] 主仓 `features/llm` 对 AI 仓 mock 与真实 4.0 API 单测通过
-- [ ] `@牛牛` 闲聊经新 API，persona system 来自 `compile_persona_prompt`
-- [ ] repeater fallback（开）与闲聊共用会话策略或文档明确分离策略
+- [x] `@牛牛` 闲聊经统一 Chat API，persona system 来自 `compile_persona_prompt`
+- [ ] repeater fallback（开）与 polish（开）联调；失败回退行为与文档一致
 - [ ] AI 仓 `/health` 暴露版本；主仓启动日志提示不兼容 AI 仓版本
 - [ ] 分片：AI 回调与 LLM 同步调用在 worker 行为一致
 - [ ] 文档：Deployment 双仓 4.0 最低版本表

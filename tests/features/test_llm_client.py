@@ -26,6 +26,7 @@ async def test_submit_chat_task_legacy_payload(monkeypatch: pytest.MonkeyPatch) 
     cfg = LlmConfig(
         ai_server_host="127.0.0.1",
         ai_server_port=9099,
+        llm_chat_enabled=True,
         legacy_chat_endpoint="/api/ollama/chat",
         use_unified_chat_api=False,
     )
@@ -65,7 +66,7 @@ async def test_submit_chat_task_unified_payload(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("src.features.llm.client.HTTPXClient.post", fake_post)
     monkeypatch.setattr("src.features.llm.client.is_llm_session_store_available", lambda: False)
 
-    cfg = LlmConfig(use_unified_chat_api=True)
+    cfg = LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True)
     result = await submit_chat_task(
         ChatSubmitRequest(
             request_id="req-u1",
@@ -133,6 +134,30 @@ async def test_submit_chat_task_rejects_empty_user_text() -> None:
             user_text="   ",
             system_prompt="system",
         ),
+        cfg=LlmConfig(llm_chat_enabled=True),
     )
     assert result.ok is False
     assert result.status == "empty_user_message"
+
+
+def test_resolve_llm_chat_enabled_priority(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.features.llm.config import clear_llm_config_cache, resolve_llm_chat_enabled
+
+    def set_env(values: dict[str, str | None]) -> None:
+        def fake_raw(key: str) -> str | None:
+            return values.get(key)
+
+        monkeypatch.setattr("src.features.llm.config.repo_env_raw_value", fake_raw)
+        clear_llm_config_cache()
+
+    set_env({"LLM_CHAT_ENABLED": "false", "CHAT_ENABLE": "true"})
+    assert resolve_llm_chat_enabled() is False
+
+    set_env({"CHAT_ENABLE": "true"})
+    assert resolve_llm_chat_enabled() is True
+
+    set_env({"LLM_CHAT_ENABLE": "false", "CHAT_ENABLE": "true"})
+    assert resolve_llm_chat_enabled() is False
+
+    set_env({})
+    assert resolve_llm_chat_enabled() is False
