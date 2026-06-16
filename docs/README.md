@@ -41,6 +41,10 @@
 | [多进程分片](architecture/bot_process_sharding.md) | hub + worker，可选生产部署 |
 | [中央入站调度](architecture/central-ingress-dispatch.md) | unified / worker 内 matcher 预筛选、lane、出站整形 |
 | [控制面与语料联邦](architecture/control-plane-corpus-federation.md) | 维护者：Composite 语料、Bootstrap |
+| [接话行为 persona](architecture/persona-reply-style.md) | 自动派生、群风格、选句；[LLM 路线图](architecture/persona-llm-roadmap.md) |
+| [Pallas 4.0 路线图](architecture/pallas-4.0-roadmap.md) | 牛格 + 瘦身；[分支约定](develop/4.0-development.md) |
+| [Bot ↔ AI 仓协同](architecture/pallas-ai-service.md) | LLM 运行时、AI 仓 4.0 重构 |
+| [明日方舟 KB / MCP](architecture/arknights-knowledge-mcp.md) | 游戏资料查询、工具调用、MCP |
 | [站点定制与更新](architecture/site-customization-and-updates.md) | local/plugins、更新策略 |
 
 ## 插件

@@ -28,6 +28,8 @@ extra_plugin_dirs = ["local/plugins"]
    - **hub / worker / unified** 均会加载 `extra_plugin_dirs`；与 `src/plugins/` 或 hub 内置模块**同名时优先 local**（如 `help`、`callback`）。
 4. **覆盖主仓同名插件**：若 `local/plugins/draw/` 与 `src/plugins/draw/` 同名，会**先加载 local**，再跳过 `src` 中同名项。适合「整包 fork 式定制」；只改少量核心文件见下文「改动主仓已有插件」。
 
+4.0 起官方玩法将迁入独立扩展仓，站点仍可通过 `extra_plugin_dirs` 或包管理器安装；见 [Pallas 4.0 路线图](architecture/pallas-4.0-roadmap.md)。
+
 也可在 `pyproject.toml` 的 `[tool.nonebot] plugin_dirs` 追加目录，但改 `pyproject.toml` 本身会被 git 跟踪；**推荐只用 `pallas.toml`**。
 
 ## 部署形态与更新方式

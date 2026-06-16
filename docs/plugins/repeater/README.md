@@ -22,6 +22,14 @@
 
 见 [`config.py`](../../../src/plugins/repeater/config.py)（`answer_threshold`、`repeat_threshold`、`speak_threshold`、`enable_reaction` 等）。多牛同群 fanout 默认关，分片/多牛需协调接话时在 WebUI **插件 → repeater** 开 `fanout_enabled` 或设 `fanout_max_bots`。入库前清洗见 [message_scrub](../../common/message_scrub/README.md)。
 
+### 群风格自动生长
+
+- 开关位置：WebUI **实例 / Bot 配置** 中的 `启用群风格自动生长`，默认开启。
+- 作用范围：按 bot 生效，不是全局 repeater 配置。
+- 数据来源：仅使用该群最近 7 天内、已经被 repeater 学会的语料。
+- 当前影响：自动调整该 bot 在该群的接话频率、主动发言频率，以及粗粒度长度偏好。
+- 无需手动调参：开启后由系统自动统计并写入 `group_config.style_profile`。
+
 ## 排障
 
 | 现象 | 处理 |
