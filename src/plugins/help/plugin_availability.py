@@ -7,7 +7,8 @@ import importlib
 _CONFIG_GATED: dict[str, tuple[str, str, str]] = {
     "chat": ("src.plugins.chat.config", "get_chat_config", "chat_enable"),
     "sing": ("src.plugins.sing.config", "get_sing_config", "sing_enable"),
-    "ollama": ("src.plugins.ollama.config", "get_ollama_config", "ollama_enable"),
+    "llm_chat": ("src.plugins.llm_chat.config", "get_llm_chat_config", "llm_chat_enable"),
+    "ollama": ("src.plugins.llm_chat.config", "get_llm_chat_config", "llm_chat_enable"),
 }
 
 _avail_cache: dict[str, bool] | None = None

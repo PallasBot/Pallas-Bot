@@ -109,6 +109,22 @@ async def test_delete_llm_chat_session_unified(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
+async def test_submit_chat_task_rejects_when_llm_chat_disabled() -> None:
+    cfg = LlmConfig(llm_chat_enabled=False)
+    result = await submit_chat_task(
+        ChatSubmitRequest(
+            request_id="req-off",
+            session_id="sess-off",
+            user_text="你好",
+            system_prompt="system",
+        ),
+        cfg=cfg,
+    )
+    assert result.ok is False
+    assert result.status == "llm_chat_disabled"
+
+
+@pytest.mark.asyncio
 async def test_submit_chat_task_rejects_empty_user_text() -> None:
     result = await submit_chat_task(
         ChatSubmitRequest(

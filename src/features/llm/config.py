@@ -11,6 +11,14 @@ _config_lock = Lock()
 _cached_llm_config: LlmConfig | None = None
 
 
+def _env_bool_first(keys: tuple[str, ...], default: bool) -> bool:
+    for key in keys:
+        raw = repo_env_raw_value(key)
+        if raw is not None:
+            return raw.strip().lower() in ("1", "true", "yes", "on")
+    return default
+
+
 def _env_bool(key: str, default: bool = False) -> bool:
     raw = repo_env_raw_value(key)
     if raw is None:
@@ -85,7 +93,8 @@ class LlmConfig(BaseModel):
 
     ai_server_host: str = Field(default="127.0.0.1")
     ai_server_port: int = Field(default=9099, ge=1, le=65535)
-    llm_chat_enabled: bool = Field(default=False)
+    llm_chat_enabled: bool = Field(default=True)
+    llm_fallback_enabled: bool = Field(default=False)
     use_unified_chat_api: bool = Field(default=True)
     legacy_chat_endpoint: str = Field(default="/api/ollama/chat")
     unified_chat_endpoint: str = Field(default="/api/v1/chat/completions")
@@ -116,7 +125,8 @@ def get_llm_config() -> LlmConfig:
         _cached_llm_config = LlmConfig(
             ai_server_host=host,
             ai_server_port=port,
-            llm_chat_enabled=_env_bool("LLM_CHAT_ENABLED", False),
+            llm_chat_enabled=_env_bool_first(("LLM_CHAT_ENABLED", "OLLAMA_ENABLE"), True),
+            llm_fallback_enabled=_env_bool("LLM_FALLBACK_ENABLED", False),
             use_unified_chat_api=_env_bool("LLM_USE_UNIFIED_CHAT_API", True),
             legacy_chat_endpoint=_env_str("LLM_LEGACY_CHAT_ENDPOINT", "/api/ollama/chat"),
             unified_chat_endpoint=_env_str("LLM_UNIFIED_CHAT_ENDPOINT", "/api/v1/chat/completions"),

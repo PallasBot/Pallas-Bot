@@ -243,6 +243,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
     await enqueue_repeater_learn(chat, event)
 
     if bundle is None:
+        if can_reply:
+            from src.features.llm.fallback import maybe_submit_repeater_llm_fallback
+
+            await maybe_submit_repeater_llm_fallback(event, user_text=ctx.plain_body)
         return
 
     if fanout_gate is not None and fanout_gate.won:

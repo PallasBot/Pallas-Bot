@@ -14,6 +14,32 @@ VALID_LEVELS: frozenset[str] = frozenset({
     "everyone",
 })
 
+COMMAND_ID_ALIASES: dict[str, str] = {
+    "ollama.chat": "llm_chat.chat",
+    "ollama.clear": "llm_chat.clear",
+    "ollama.unload": "llm_chat.unload",
+    "ollama.set_model": "llm_chat.set_model",
+}
+
+
+def canonical_command_id(command_id: str) -> str:
+    cid = (command_id or "").strip()
+    return COMMAND_ID_ALIASES.get(cid, cid)
+
+
+def command_override_keys(command_id: str) -> tuple[str, ...]:
+    cid = (command_id or "").strip()
+    canon = canonical_command_id(cid)
+    keys: list[str] = []
+    for key in (cid, canon):
+        if key and key not in keys:
+            keys.append(key)
+    for legacy, current in COMMAND_ID_ALIASES.items():
+        if current == canon and legacy not in keys:
+            keys.append(legacy)
+    return tuple(keys)
+
+
 DEFAULT_COMMAND_PERMISSIONS: dict[str, PermissionLevel] = {
     "help.help": "everyone",
     "help.plugin_enable": "staff",
@@ -62,10 +88,10 @@ DEFAULT_COMMAND_PERMISSIONS: dict[str, PermissionLevel] = {
     "duel.duel": "everyone",
     "duel.cage": "everyone",
     "duel.reload_events": "group_moderator",
-    "ollama.chat": "everyone",
-    "ollama.clear": "everyone",
-    "ollama.unload": "staff",
-    "ollama.set_model": "superuser",
+    "llm_chat.chat": "everyone",
+    "llm_chat.clear": "everyone",
+    "llm_chat.unload": "staff",
+    "llm_chat.set_model": "superuser",
     "maa.bind": "everyone",
     "maa.control": "everyone",
     "maa.status": "everyone",
@@ -82,10 +108,10 @@ def normalize_level(raw: str | None) -> PermissionLevel:
 def resolved_level(command_id: str, overrides: dict[str, str]) -> PermissionLevel:
     from .schema import default_level_for
 
-    cid = (command_id or "").strip()
-    if cid in overrides:
-        raw_o = (overrides[cid] or "").strip().lower()
-        if raw_o not in VALID_LEVELS:
-            return normalize_level(default_level_for(cid))
-        return raw_o  # type: ignore[return-value]
-    return normalize_level(default_level_for(cid))
+    for key in command_override_keys(command_id):
+        if key in overrides:
+            raw_o = (overrides[key] or "").strip().lower()
+            if raw_o not in VALID_LEVELS:
+                return normalize_level(default_level_for(canonical_command_id(command_id)))
+            return raw_o  # type: ignore[return-value]
+    return normalize_level(default_level_for(canonical_command_id(command_id)))

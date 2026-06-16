@@ -476,7 +476,9 @@ def _package_dir_to_module_id(package_root: Path) -> str:
 
 def resolve_catalog_plugin_module(plugin_name: str) -> str | None:
     """按目录名或 NoneBot 插件名解析插件模块路径。"""
-    target = (plugin_name or "").strip()
+    from src.plugins.help.plugin_legacy_names import canonical_plugin_name
+
+    target = canonical_plugin_name((plugin_name or "").strip())
     if not target:
         return None
     _, by_package = _loaded_plugin_index()

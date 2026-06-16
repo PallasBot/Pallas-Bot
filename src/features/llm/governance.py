@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 else:
     MessageEvent = object  # noqa: N806
 
-LLM_CHAT_COMMAND_ID = "ollama.chat"
+LLM_CHAT_COMMAND_ID = "llm_chat.chat"
 
 _chat_sem: asyncio.Semaphore | None = None
 _chat_sem_limit: int | None = None

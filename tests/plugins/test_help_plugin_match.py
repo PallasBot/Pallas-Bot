@@ -35,7 +35,7 @@ def test_ambiguous_substring():
 
 
 def test_casual_chat_vs_drunk_chat():
-    ollama = _plugin("ollama", "随时闲聊", extra_aliases=["牛牛聊天"])
+    ollama = _plugin("llm_chat", "随时闲聊", extra_aliases=["牛牛聊天"])
     chat = _plugin("chat", "酒后聊天")
     pool = [ollama, chat]
     assert find_matching_plugins("随时闲聊", pool) == [ollama]

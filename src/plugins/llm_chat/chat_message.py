@@ -13,39 +13,40 @@ from src.features.llm.session_store import append_llm_message
 from src.features.persona.compile_persona_prompt import compile_persona_prompt_for
 from src.foundation.config import TaskManager
 
-from .config import Config, get_ollama_config
+from .config import Config, get_llm_chat_config
 from .prompts import get_system_prompt
-from .replies import OLLAMA_VAGUE_REPLY
+from .replies import LLM_CHAT_VAGUE_REPLY
+
+LLM_CHAT_TASK_TYPE = "llm_chat"
 
 
-def ollama_llm_config(cfg: Config | None = None) -> LlmConfig:
+def llm_chat_runtime_config(cfg: Config | None = None) -> LlmConfig:
     _ = cfg
     return get_llm_config()
 
 
 def refresh_server_url(cfg: Config | None = None) -> None:
-    """配置热重载钩子；chat 请求经 features/llm 按次读取 server 配置。"""
     _ = cfg
 
 
-def ollama_chat_rule(event: Event) -> bool:
-    if not get_ollama_config().ollama_enable:
+def llm_chat_rule(event: Event) -> bool:
+    if not get_llm_chat_config().llm_chat_enable:
         return False
     return bool(getattr(event, "to_me", False))
 
 
-ollama_chat = on_message(
-    priority=get_ollama_config().ollama_min_priority + 1,
+llm_chat_msg = on_message(
+    priority=get_llm_chat_config().llm_chat_min_priority + 1,
     block=False,
-    rule=Rule(ollama_chat_rule),
-    permission=group_message_permission_for_command("ollama.chat"),
+    rule=Rule(llm_chat_rule),
+    permission=group_message_permission_for_command("llm_chat.chat"),
 )
 
 
-@ollama_chat.handle()
-async def handle_ollama_chat(bot: Bot, event: Event):
-    cfg = get_ollama_config()
-    if not cfg.ollama_enable:
+@llm_chat_msg.handle()
+async def handle_llm_chat(bot: Bot, event: Event):
+    cfg = get_llm_chat_config()
+    if not cfg.llm_chat_enable:
         return
 
     plain = event.get_plaintext().strip()
@@ -55,7 +56,7 @@ async def handle_ollama_chat(bot: Bot, event: Event):
     session_id = event.get_session_id()
     msg = str(event.get_message()).strip()
     if not msg:
-        await ollama_chat.send(OLLAMA_VAGUE_REPLY)
+        await llm_chat_msg.send(LLM_CHAT_VAGUE_REPLY)
         return
 
     system_prompt = ""
@@ -66,7 +67,7 @@ async def handle_ollama_chat(bot: Bot, event: Event):
         bundle = await compile_persona_prompt_for(
             int(bot.self_id),
             group_id,
-            base_system_path=cfg.ollama_system_prompt_path or None,
+            base_system_path=cfg.llm_chat_system_prompt_path or None,
         )
         system_prompt = bundle.system.strip()
     except Exception:
@@ -75,14 +76,14 @@ async def handle_ollama_chat(bot: Bot, event: Event):
     if not system_prompt:
         system_prompt = get_system_prompt()
     if not system_prompt:
-        logger.error("ollama system prompt file is missing or empty")
-        await ollama_chat.send(OLLAMA_VAGUE_REPLY)
+        logger.error("llm chat system prompt file is missing or empty")
+        await llm_chat_msg.send(LLM_CHAT_VAGUE_REPLY)
         return
 
-    llm_cfg = ollama_llm_config(cfg)
+    llm_cfg = llm_chat_runtime_config(cfg)
     gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
     if gate is not None:
-        logger.debug("ollama chat gated: reason={} group={} user={}", gate, group_id, user_id)
+        logger.debug("llm chat gated: reason={} group={} user={}", gate, group_id, user_id)
         return
 
     request_id = str(ULID())
@@ -92,7 +93,7 @@ async def handle_ollama_chat(bot: Bot, event: Event):
             "bot_id": bot.self_id,
             "group_id": getattr(event, "group_id", None),
             "user_id": user_id,
-            "task_type": "ollama",
+            "task_type": LLM_CHAT_TASK_TYPE,
             "start_time": time.time(),
         },
     )

@@ -42,6 +42,8 @@ async def resolve_chat_messages(
 
 async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None = None) -> ChatSubmitResult:
     c = cfg or get_llm_config()
+    if not c.llm_chat_enabled:
+        return ChatSubmitResult(status="llm_chat_disabled", ok=False)
     timer = SlowPathTimer(
         "llm.submit_chat_task",
         threshold_ms=slow_path_threshold_ms("LLM_CHAT_SLOW_PATH_MS", 500.0),

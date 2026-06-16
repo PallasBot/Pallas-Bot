@@ -24,6 +24,7 @@ from .group_fleet_whitelist import (
     sync_group_fleet_whitelist_remote_generation,
 )
 from .plugin_availability import is_plugin_help_available
+from .plugin_legacy_names import is_plugin_name_in_set
 from .plugin_match import find_matching_plugins
 from .styles import load_config
 from .visibility import resolve_help_hidden_plugins, resolve_help_ignored_plugins
@@ -136,8 +137,8 @@ async def is_plugin_disabled(
             return False
         if bot_id or group_id:
             disabled_names = await collect_disabled_plugin_names(bot_id, group_id, ignore_cache=ignore_cache)
-            return plugin_name in disabled_names
-        return plugin_name in merge_global_disabled_plugin_names(frozenset())
+            return is_plugin_name_in_set(plugin_name, disabled_names)
+        return is_plugin_name_in_set(plugin_name, merge_global_disabled_plugin_names(frozenset()))
     except Exception as e:
         logger.error(f"help is_plugin_disabled failed plugin={plugin_name}: {e}")
         return False
@@ -400,9 +401,9 @@ async def is_plugin_globally_disabled(plugin_name: str, bot_id: int, ignore_cach
 
 def is_fleet_runtime_disabled(plugin_name: str, *, group_id: int | None = None) -> bool:
     """全实例运行时禁用，优先于单牛/单群配置；群白名单可豁免。"""
-    if plugin_name not in resolve_global_disabled_plugin_names():
+    if not is_plugin_name_in_set(plugin_name, resolve_global_disabled_plugin_names()):
         return False
-    if group_id is not None and plugin_name in resolve_group_fleet_whitelist_plugins(group_id):
+    if group_id is not None and is_plugin_name_in_set(plugin_name, resolve_group_fleet_whitelist_plugins(group_id)):
         return False
     return True
 
