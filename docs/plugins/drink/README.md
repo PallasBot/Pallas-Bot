@@ -31,4 +31,4 @@
 
 ## 实现
 
-[`src/plugins/drink/`](../../../src/plugins/drink/)
+core 薄插件：[`src/plugins/drink/`](../../../src/plugins/drink/)。醒梦通过 [`features/plugin_coord/dream`](../../../src/features/plugin_coord/dream.py) 可选调用 `dream` 扩展，无扩展时仅清 `BotConfig` 做梦态。

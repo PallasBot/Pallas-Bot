@@ -8,19 +8,15 @@ CORE_PLUGIN_NAMES: frozenset[str] = frozenset({
     "repeater",
     "help",
     "pallas_webui",
-    "ingress_gate",
-    "bot_status",
-    "callback",
     "request_handler",
     "blacklist",
-    "block",
     "connectivity",
+    "drink",
 })
 
 SHARD_INTERNAL_PLUGIN_NAMES: frozenset[str] = frozenset({
     "relogin_forward",
     "maa_hub",
-    "ingress_gate",
 })
 
 EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
@@ -30,7 +26,6 @@ EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
     "duel": "pallas-plugin-duel",
     "who_is_spy": "pallas-plugin-who-is-spy",
     "roulette": "pallas-plugin-party",
-    "drink": "pallas-plugin-party",
     "dream": "pallas-plugin-dream",
     "maa": "pallas-plugin-maa",
     "maa_hub": "pallas-plugin-maa",
@@ -41,6 +36,7 @@ EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
     "take_name": "pallas-plugin-social",
     "community_stats": "pallas-plugin-community-stats",
     "llm_chat": "pallas-plugin-llm-chat",
+    "bot_status": "pallas-plugin-bot-status",
 }
 
 EXTRA_PACKAGE_MODULES: dict[str, tuple[str, ...]] = {
@@ -52,13 +48,14 @@ EXTRA_PACKAGE_MODULES: dict[str, tuple[str, ...]] = {
     "pallas-plugin-duel": ("pallas_plugin_duel",),
     "pallas-plugin-maa": ("pallas_plugin_maa", "pallas_plugin_maa_hub"),
     "pallas-plugin-who-is-spy": ("pallas_plugin_who_is_spy",),
-    "pallas-plugin-party": ("pallas_plugin_roulette", "pallas_plugin_drink"),
+    "pallas-plugin-party": ("pallas_plugin_roulette",),
     "pallas-plugin-dream": ("pallas_plugin_dream",),
     "pallas-plugin-draw": ("pallas_plugin_draw",),
     "pallas-plugin-ai-media": ("pallas_plugin_sing", "pallas_plugin_chat"),
     "pallas-plugin-social": ("pallas_plugin_greeting", "pallas_plugin_take_name"),
     "pallas-plugin-community-stats": ("pallas_plugin_community_stats",),
     "pallas-plugin-llm-chat": ("pallas_plugin_llm_chat",),
+    "pallas-plugin-bot-status": ("pallas_plugin_bot_status",),
 }
 
 EXTRA_PLUGIN_NAMES: frozenset[str] = frozenset(EXTRA_PLUGIN_PACKAGES.keys())
@@ -75,6 +72,7 @@ EXTRA_PACKAGE_PRIORITY: dict[str, str] = {
     "pallas-plugin-social": "P2",
     "pallas-plugin-community-stats": "P2",
     "pallas-plugin-llm-chat": "P2",
+    "pallas-plugin-bot-status": "P2",
 }
 
 OFFICIAL_EXTENSION_REPOS: dict[str, str] = {

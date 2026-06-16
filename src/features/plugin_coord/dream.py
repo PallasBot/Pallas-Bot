@@ -58,3 +58,17 @@ async def deliver_drift_payload(bot_id: int, target_group_id: int, payload: Any)
     if fn is None:
         return False
     return bool(await fn(bot_id, target_group_id, payload))
+
+
+async def stop_dream_worker(bot_id: int, group_id: int) -> None:
+    fn = import_symbol_any(_DREAM_RUNTIME, "stop_dream_worker")
+    if fn is None:
+        return
+    await fn(bot_id, group_id)
+
+
+async def send_dream_wake_text(bot_id: int, group_id: int) -> None:
+    fn = import_symbol_any(_DREAM_RUNTIME, "send_dream_wake_text")
+    if fn is None:
+        return
+    await fn(bot_id, group_id)

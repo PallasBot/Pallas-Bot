@@ -69,19 +69,26 @@ flowchart LR
 | `repeater` | 核心接话（牛格由 persona 分支交付） |
 | `help` | 帮助与插件发现 |
 | `pallas_webui` | 控制台 API |
-| `ingress_gate` | 入站配套 |
-| `bot_status` | 在线与通知 |
-| `callback` | 异步回调 |
 | `request_handler` | 审批 |
-| `blacklist` / `block` | 安全 |
+| `blacklist` | 用户/群拉黑 |
 | `connectivity` | 轻量探针 |
+| `drink` | 饮酒/醒酒口令（状态在 `BotConfig`） |
+
+**已内核化（非 `src/plugins/` 插件）**：`platform/ingress/gate`（原 `ingress_gate`）、`platform/multi_bot/bot_filter`（原 `block`）、`platform/ai_callback`（原 `callback` HTTP + 执行）。
+
+### 官方扩展（bundled 于 `src/plugins/`，默认 slim 不加载）
+
+| 插件 | 包名 |
+| --- | --- |
+| `bot_status` | `pallas-plugin-bot-status` |
 
 ### 分片内置（仍在 `src/plugins/`，非用户可选扩展）
 
 | 插件 | 说明 |
 | --- | --- |
-| `ingress_gate` | worker 入站（亦在 core 默认加载） |
 | `relogin_forward` / `maa_hub` | 分片角色专用；随对应官方扩展 pip 包分发 |
+
+worker 入站预处理（原 `ingress_gate`）已内核化至 `platform/ingress/gate.py`，由 `kernel_runtime` 在 worker/unified 注册。
 
 worker 控制台指标已内核化至 `src/platform/shard/worker_console_metrics.py`，由 `plugin_loader` 在 worker 角色注册 `on_startup`，不再占用 `src/plugins/`。
 
@@ -93,7 +100,7 @@ worker 控制台指标已内核化至 `src/platform/shard/worker_console_metrics
 | `duel` | `pallas-plugin-duel` | 玩法 + `domain/arknights` | P0 |
 | `who_is_spy` | `pallas-plugin-who-is-spy` | 玩法 + 协调存储 | P0 |
 | `maa` / `maa_hub` | `pallas-plugin-maa` | 远控、HTTP | P0 |
-| `roulette` / `drink` | `pallas-plugin-party` 或拆分 | 轻玩法 | P1 |
+| `roulette` | `pallas-plugin-party` | 轻玩法 | P1 |
 | `dream` | `pallas-plugin-dream` | repeater 旁路 | P1 |
 | `draw` | `pallas-plugin-draw` | 图像 API | P1 |
 | `sing` / `chat` | `pallas-plugin-ai-media` | AI 仓媒体 | P1 |

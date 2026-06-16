@@ -15,8 +15,8 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
+from src.features.plugin_coord import dream as dream_coord
 from src.foundation.config import BotConfig
-from src.plugins.dream.runtime import send_dream_wake_text, stop_dream_worker
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛喝酒",
@@ -155,14 +155,14 @@ async def _(event: GroupMessageEvent):
         await config.fully_sober_up_now()
     if had_dream:
         await config.stop_dream()
-        await stop_dream_worker(event.self_id, event.group_id)
+        await dream_coord.stop_dream_worker(event.self_id, event.group_id)
     if had_drunk:
         try:
             await sober_up_msg.send("呃......咳嗯，下次不能喝、喝这么多了......")
         except ActionFailed:
             pass
     if had_dream:
-        await send_dream_wake_text(event.self_id, event.group_id)
+        await dream_coord.send_dream_wake_text(event.self_id, event.group_id)
 
 
 @scheduler.scheduled_job("cron", hour=4)

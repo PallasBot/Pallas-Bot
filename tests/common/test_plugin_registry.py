@@ -13,7 +13,7 @@ def test_uv_extra_for_plugin_duel():
 def test_build_official_extension_rows_groups_party():
     rows = build_official_extension_rows()
     party = next(r for r in rows if r["package"] == "pallas-plugin-party")
-    assert set(party["plugin_ids"]) == {"drink", "roulette"}
+    assert set(party["plugin_ids"]) == {"roulette"}
     assert party["uv_extra"] == "plugins-party"
     assert party["install_cli"] == "uv sync --extra plugins-party"
     assert party["webui_install"] is True

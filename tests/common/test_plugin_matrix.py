@@ -14,19 +14,26 @@ def test_core_plugins_include_repeater_and_help():
     assert "repeater" in CORE_PLUGIN_NAMES
     assert "help" in CORE_PLUGIN_NAMES
     assert "pallas_webui" in CORE_PLUGIN_NAMES
+    assert "drink" in CORE_PLUGIN_NAMES
 
 
 def test_extra_plugins_include_duel_and_maa():
     assert "duel" in EXTRA_PLUGIN_NAMES
     assert "maa" in EXTRA_PLUGIN_NAMES
     assert "draw" in EXTRA_PLUGIN_NAMES
+    assert "bot_status" in EXTRA_PLUGIN_NAMES
     assert "pallas_protocol" in EXTRA_PLUGIN_NAMES
     assert "relogin_bot" in EXTRA_PLUGIN_NAMES
 
 
-def test_core_excludes_protocol():
+def test_core_excludes_migrated_plugins():
     assert "pallas_protocol" not in CORE_PLUGIN_NAMES
     assert "relogin_bot" not in CORE_PLUGIN_NAMES
+    assert "block" not in CORE_PLUGIN_NAMES
+    assert "callback" not in CORE_PLUGIN_NAMES
+    assert "ingress_gate" not in CORE_PLUGIN_NAMES
+    assert "bot_status" not in CORE_PLUGIN_NAMES
+    assert "roulette" not in CORE_PLUGIN_NAMES
     assert "pallas_webui" in CORE_PLUGIN_NAMES
 
 
@@ -37,6 +44,7 @@ def test_core_and_extra_disjoint():
 def test_extra_package_mapping():
     assert extra_package_for_plugin("duel") == "pallas-plugin-duel"
     assert extra_package_for_plugin("chat") == "pallas-plugin-ai-media"
+    assert extra_package_for_plugin("bot_status") == "pallas-plugin-bot-status"
     assert uv_extra_for_plugin("duel") == "plugins-duel"
 
 
