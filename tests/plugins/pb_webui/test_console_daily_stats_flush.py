@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import src.plugins.pallas_webui.extended_api as ext
-from src.plugins.pallas_webui import daily_stats_store
+import src.plugins.pb_webui.extended_api as ext
+from src.plugins.pb_webui import daily_stats_store
 
 
 def test_collect_flush_entries_merges_cluster_and_local(monkeypatch) -> None:

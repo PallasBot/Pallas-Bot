@@ -14,7 +14,7 @@ def test_core_plugins_include_repeater_and_help():
     assert "repeater" in CORE_PLUGIN_NAMES
     assert "llm_chat" in CORE_PLUGIN_NAMES
     assert "help" in CORE_PLUGIN_NAMES
-    assert "pallas_webui" in CORE_PLUGIN_NAMES
+    assert "pb_webui" in CORE_PLUGIN_NAMES
     assert "drink" in CORE_PLUGIN_NAMES
     assert "greeting" in CORE_PLUGIN_NAMES
     assert "roulette" in CORE_PLUGIN_NAMES
@@ -40,7 +40,7 @@ def test_core_excludes_migrated_plugins():
     assert "bot_status" not in CORE_PLUGIN_NAMES
     assert "duel" not in CORE_PLUGIN_NAMES
     assert "connectivity" not in CORE_PLUGIN_NAMES
-    assert "pallas_webui" in CORE_PLUGIN_NAMES
+    assert "pb_webui" in CORE_PLUGIN_NAMES
 
 
 def test_core_and_extra_disjoint():

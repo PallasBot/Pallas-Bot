@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from src.platform.shard.registry.config import BotRole
 
 HUB_PLUGIN_MODULES: tuple[str, ...] = (
-    "src.plugins.pallas_webui",
+    "src.plugins.pb_webui",
     "src.plugins.pallas_protocol",
     "src.plugins.relogin_bot",
     "src.plugins.maa_hub",
@@ -20,7 +20,7 @@ HUB_PLUGIN_MODULES: tuple[str, ...] = (
 )
 
 WORKER_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
-    "pallas_webui",
+    "pb_webui",
     "pallas_protocol",
     "relogin_bot",
     "maa_hub",

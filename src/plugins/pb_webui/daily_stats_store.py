@@ -62,9 +62,9 @@ def merge_day_bot_record(
 
 
 def stats_file_path() -> Path:
-    from src.foundation.paths import plugin_data_dir
+    from src.plugins.pb_webui.data_dir import pb_webui_data_dir
 
-    return plugin_data_dir("pallas_webui") / "console_daily_stats.json"
+    return pb_webui_data_dir() / "console_daily_stats.json"
 
 
 def _read_raw() -> dict[str, Any]:

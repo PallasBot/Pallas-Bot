@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any
 
+from src.platform.bot_runtime.plugin_package_aliases import PLUGIN_PACKAGE_ALIASES
+
 from .plugin_aliases import aliases_for_plugin
 
 if TYPE_CHECKING:
@@ -38,6 +40,10 @@ def iter_plugin_lookup_tokens(plugin: Any) -> list[str]:
         out.append(s)
 
     add(getattr(plugin, "name", None))
+    pkg_name = getattr(plugin, "name", None) or ""
+    for legacy, current in PLUGIN_PACKAGE_ALIASES.items():
+        if current == pkg_name:
+            add(legacy)
     meta = getattr(plugin, "metadata", None)
     if meta is not None:
         add(getattr(meta, "name", None))

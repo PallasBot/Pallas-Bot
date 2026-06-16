@@ -10,7 +10,7 @@ from src.console.cli.update_ops import apply_bot_update
 @pytest.mark.asyncio
 async def test_apply_bot_update_with_restart(monkeypatch):
     monkeypatch.setattr(
-        "src.plugins.pallas_webui.manager.apply_bot_repository_update",
+        "src.plugins.pb_webui.manager.apply_bot_repository_update",
         AsyncMock(return_value={"tag": "v4.0.0", "message": "仓库已更新。"}),
     )
     monkeypatch.setattr(

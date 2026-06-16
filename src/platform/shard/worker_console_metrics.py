@@ -20,7 +20,7 @@ def register_worker_console_metrics_startup() -> None:
 
     @driver.on_startup
     async def boot_worker_console_metrics() -> None:
-        from src.plugins.pallas_webui.extended_api import (
+        from src.plugins.pb_webui.extended_api import (
             ensure_console_metrics_hooks,
             start_worker_shard_console_stats_sync,
         )

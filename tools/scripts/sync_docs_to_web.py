@@ -67,7 +67,7 @@ PLUGIN_NAMES = [
     "maa",
     "draw",
     "pallas_protocol",
-    "pallas_webui",
+    "pb_webui",
     "relogin_bot",
     "repeater",
     "request_handler",

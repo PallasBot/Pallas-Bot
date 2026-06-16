@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from src.plugins.pallas_webui.config import Config, on_pallas_webui_config_reload
-from src.plugins.pallas_webui.console_meta_store import _CONSOLE_EXTRA, patch_console_meta
+from src.plugins.pb_webui.config import Config, on_pallas_webui_config_reload
+from src.plugins.pb_webui.console_meta_store import _CONSOLE_EXTRA, patch_console_meta
 
 
 def test_patch_console_meta_merges_without_clearing() -> None:

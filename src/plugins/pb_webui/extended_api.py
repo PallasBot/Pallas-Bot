@@ -46,6 +46,7 @@ from .console_meta_store import (
     merge_console_version_from_disk,
 )
 from .console_read_cache import cached_read, clear_extended_read_cache, drop_read_cache
+from .data_dir import pb_webui_data_dir
 
 if typing.TYPE_CHECKING:
     from .config import Config
@@ -419,9 +420,7 @@ def _save_pending_group_requests_disk(data: dict[str, dict[str, dict[str, Any]]]
 
 
 def _ai_extension_config_path():
-    from src.foundation.paths import plugin_data_dir
-
-    return plugin_data_dir("pallas_webui") / "ai_extension.json"
+    return pb_webui_data_dir() / "ai_extension.json"
 
 
 def _ai_extension_log_roots() -> list[Path]:
@@ -1236,7 +1235,7 @@ def _collect_console_daily_flush_entries(today: str) -> list[tuple[str, str, int
 
 def _rollover_console_day_if_needed(sid: str, today: str) -> None:
     """跨自然日时把上一日的消息收/发与 Matcher 当日计数写入磁盘并清零当日字段。"""
-    from src.plugins.pallas_webui import daily_stats_store
+    from src.plugins.pb_webui import daily_stats_store
 
     sid = str(sid).strip()
     if not sid:
@@ -1288,7 +1287,7 @@ def _flush_today_console_daily_stats_disk() -> None:
         pass
     if not _console_daily_stats_disk_enabled():
         return
-    from src.plugins.pallas_webui import daily_stats_store
+    from src.plugins.pb_webui import daily_stats_store
 
     today = time.strftime("%Y-%m-%d", time.localtime())
     entries = _collect_console_daily_flush_entries(today)
@@ -1433,7 +1432,7 @@ def _collect_worker_console_stats_snapshot(*, include_hist: bool = False) -> dic
 def flush_unified_console_live_stats_sync(*, include_hist: bool = False) -> None:
     if not _unified_console_live_stats_enabled():
         return
-    from src.plugins.pallas_webui import console_live_stats
+    from src.plugins.pb_webui import console_live_stats
 
     console_live_stats.write_bots_sync(
         _collect_worker_console_stats_snapshot(include_hist=include_hist),
@@ -1526,7 +1525,7 @@ def _restore_worker_console_stats_from_shard_file() -> None:
 
 def _restore_unified_console_stats_from_daily_disk_fallback() -> bool:
     """无 live 快照时，从已刷盘的按日汇总恢复当日收/发。"""
-    from src.plugins.pallas_webui import daily_stats_store
+    from src.plugins.pb_webui import daily_stats_store
 
     today = time.strftime("%Y-%m-%d", time.localtime())
     rows, _, _ = daily_stats_store.load_range(
@@ -1568,7 +1567,7 @@ def _restore_unified_console_stats_from_daily_disk_fallback() -> bool:
 def _restore_unified_console_stats_from_live_file() -> bool:
     if not _unified_console_live_stats_enabled():
         return False
-    from src.plugins.pallas_webui import console_live_stats
+    from src.plugins.pb_webui import console_live_stats
 
     if _apply_console_stats_boot_snapshot(console_live_stats.read_bots_for_boot()):
         return True
@@ -2218,7 +2217,6 @@ def _record_plugin_run_duration(sid: str, plugin: str, elapsed_ms: int | float) 
 
 def _append_matcher_error_log(sid: str, plugin: str, exception: BaseException) -> None:
     """进程内环形缓冲 + jsonl；与定时清理共用锁，避免与每日清空交错。"""
-    from src.foundation.paths import plugin_data_dir
 
     tb = "".join(
         traceback.format_exception(
@@ -2241,7 +2239,7 @@ def _append_matcher_error_log(sid: str, plugin: str, exception: BaseException) -
     }
     line_obj = {**entry, "self_id": sid}
     try:
-        path = plugin_data_dir("pallas_webui") / "matcher_errors.jsonl"
+        path = pb_webui_data_dir() / "matcher_errors.jsonl"
         line = json.dumps(line_obj, ensure_ascii=False) + "\n"
         with _MATCHER_ERROR_JSONL_LOCK:
             rec = _plugin_run_bot_bucket(sid)
@@ -2261,9 +2259,8 @@ def _append_matcher_error_log(sid: str, plugin: str, exception: BaseException) -
 
 def _rewrite_matcher_durations_jsonl() -> None:
     """用各账号进程内缓冲覆写 jsonl。"""
-    from src.foundation.paths import plugin_data_dir
 
-    path = plugin_data_dir("pallas_webui") / "matcher_durations.jsonl"
+    path = pb_webui_data_dir() / "matcher_durations.jsonl"
     lines: list[str] = []
     for sid, rec in _PLUGIN_RUN_STATS.items():
         if not isinstance(rec, dict):
@@ -2290,9 +2287,8 @@ def _rewrite_matcher_durations_jsonl() -> None:
 
 def _load_matcher_duration_logs_from_disk() -> None:
     """启动时从 jsonl 恢复各账号最近 _MATCHER_DURATION_LOG_CAP 条单次耗时。"""
-    from src.foundation.paths import plugin_data_dir
 
-    path = plugin_data_dir("pallas_webui") / "matcher_durations.jsonl"
+    path = pb_webui_data_dir() / "matcher_durations.jsonl"
     if not path.exists():
         return
     by_sid: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -2509,9 +2505,8 @@ def _tb_and_exc_type_from_log_record(record: Any) -> tuple[str, str, str]:
 
 
 def _append_console_log_error(entry: dict[str, Any]) -> None:
-    from src.foundation.paths import plugin_data_dir
 
-    path = plugin_data_dir("pallas_webui") / "log_errors.jsonl"
+    path = pb_webui_data_dir() / "log_errors.jsonl"
     line_obj = {k: v for k, v in entry.items() if k != "raw_line"}
     line = json.dumps(line_obj, ensure_ascii=False) + "\n"
     try:
@@ -2648,9 +2643,8 @@ def _log_error_log_public(
 
 
 def _cleanup_log_error_archives_sync() -> None:
-    from src.foundation.paths import plugin_data_dir
 
-    path = plugin_data_dir("pallas_webui") / "log_errors.jsonl"
+    path = pb_webui_data_dir() / "log_errors.jsonl"
     with _LOG_ERROR_JSONL_LOCK:
         try:
             if path.exists():
@@ -2678,10 +2672,9 @@ def _cleanup_log_errors_manual_sync() -> dict[str, Any]:
 
 async def _scheduled_cleanup_matcher_error_logs() -> None:
     """每日 4:00 清理 Matcher 异常与日志 ERROR 归档。"""
-    from src.foundation.paths import plugin_data_dir
 
-    err_path = plugin_data_dir("pallas_webui") / "matcher_errors.jsonl"
-    dur_path = plugin_data_dir("pallas_webui") / "matcher_durations.jsonl"
+    err_path = pb_webui_data_dir() / "matcher_errors.jsonl"
+    dur_path = pb_webui_data_dir() / "matcher_durations.jsonl"
     with _MATCHER_ERROR_JSONL_LOCK:
         try:
             if err_path.exists():
@@ -3156,7 +3149,7 @@ def _console_daily_stats_payload(
     """按自然日汇总：消息收/发与 Matcher 次数。"""
     from datetime import date, timedelta
 
-    from src.plugins.pallas_webui import daily_stats_store
+    from src.plugins.pb_webui import daily_stats_store
 
     clock_today = time.strftime("%Y-%m-%d", time.localtime())
     today_d = date.fromisoformat(clock_today)
@@ -5928,7 +5921,7 @@ def register_extended_api(
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from src.console.cli.update_ops import apply_bot_update
-        from src.plugins.pallas_webui.manager import BotGitUpdateError
+        from src.plugins.pb_webui.manager import BotGitUpdateError
         from src.shared.utils.format_exception import format_exception_for_log
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()

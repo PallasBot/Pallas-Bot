@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.plugins.pallas_webui.manager import bot_has_release_update, bot_is_development_build
+from src.plugins.pb_webui.manager import bot_has_release_update, bot_is_development_build
 
 
 def test_same_tag_no_update() -> None:
@@ -48,7 +48,7 @@ def test_git_behind_only(
 
     with (
         patch.object(Path, "exists", return_value=True),
-        patch("src.plugins.pallas_webui.manager._BOT_ROOT", root),
+        patch("src.plugins.pb_webui.manager._BOT_ROOT", root),
         patch("subprocess.check_output", side_effect=check_output),
     ):
         assert (
@@ -90,7 +90,7 @@ def test_development_build_ahead(
 
     with (
         patch.object(Path, "exists", return_value=True),
-        patch("src.plugins.pallas_webui.manager._BOT_ROOT", root),
+        patch("src.plugins.pb_webui.manager._BOT_ROOT", root),
         patch("subprocess.check_output", side_effect=check_output),
     ):
         assert (

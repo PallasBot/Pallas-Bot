@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from fastapi import HTTPException
 
-from src.plugins.pallas_webui import extended_api as mod
+from src.plugins.pb_webui import extended_api as mod
 
 
 def empty_bots():

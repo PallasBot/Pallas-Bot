@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from src.plugins.pallas_webui.manager import inspect_bot_deployment
+from src.plugins.pb_webui.manager import inspect_bot_deployment
 
 
 def test_inspect_bot_deployment_docker_when_not_git() -> None:

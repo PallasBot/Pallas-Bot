@@ -26,7 +26,7 @@ async def run_maintenance(
             return code
 
     if update_bot:
-        from src.plugins.pallas_webui.manager import BotGitUpdateError
+        from src.plugins.pb_webui.manager import BotGitUpdateError
 
         try:
             result = await apply_bot_update(restart=restart)

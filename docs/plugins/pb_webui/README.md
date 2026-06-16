@@ -1,4 +1,4 @@
-# pallas_webui（Web 控制台）
+# pb_webui（Web 控制台）
 
 浏览器运维：实例、日志、插件配置、数据库概览等。
 
@@ -25,4 +25,4 @@
 
 ## 实现
 
-[`src/plugins/pallas_webui/`](../../../src/plugins/pallas_webui/)
+[`src/plugins/pb_webui/`](../../../src/plugins/pb_webui/)

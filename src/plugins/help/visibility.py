@@ -9,6 +9,7 @@ _VISIBILITY_FILE = "help_visibility.json"
 _STORAGE_KEY = "hidden_plugins"
 
 BUILTIN_HELP_HIDDEN_PLUGINS = frozenset({
+    "pb_webui",
     "pallas_webui",
     "pallas_protocol",
     "ingress_gate",

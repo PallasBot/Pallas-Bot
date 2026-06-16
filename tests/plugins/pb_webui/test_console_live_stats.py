@@ -4,8 +4,8 @@ import json
 
 import pytest
 
-import src.plugins.pallas_webui.extended_api as ext
-from src.plugins.pallas_webui import console_live_stats, daily_stats_store
+import src.plugins.pb_webui.extended_api as ext
+from src.plugins.pb_webui import console_live_stats, daily_stats_store
 
 
 def test_unified_console_live_stats_enabled_single_process(monkeypatch) -> None:

@@ -20,7 +20,7 @@ def test_builtin_help_hidden_includes_infra_plugins():
 
 def test_console_stats_excluded_matches_help_hidden_infra():
     excluded = _visibility.resolve_console_stats_excluded_plugin_names()
-    assert "pallas_webui" in excluded
+    assert "pb_webui" in excluded
     assert "ingress_gate" in excluded
     assert "ingress_gate" in excluded
 
