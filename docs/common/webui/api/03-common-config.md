@@ -31,4 +31,4 @@ PUT 落盘 `webui.json`；各段 `apply_webui_env_section_patch` 内触发对应
 - `fetchCommonConfigSections`、`fetchCommonConfigSection`、`putCommonConfigSection`
 - `postServiceGatewaysConnectivityCheck`
 
-实现：`extended_api.py` + `env_sections.py`；网关探测 `src/plugins/connectivity/`、`service_gateways_section.py`。
+实现：`extended_api.py` + `env_sections.py`；网关探测 `src/features/service_gateways/`、`service_gateways_section.py`。

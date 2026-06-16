@@ -72,11 +72,9 @@ deploy-full = [
     "pallas-plugin-maa>=4.0.0",
     "pallas-plugin-who-is-spy>=4.0.0",
 ]
-plugins-party = ["pallas-plugin-party>=4.0.0"]
 plugins-dream = ["pallas-plugin-dream>=4.0.0"]
 plugins-draw = ["pallas-plugin-draw>=4.0.0"]
 plugins-ai-media = ["pallas-plugin-ai-media>=4.0.0"]
-plugins-social = ["pallas-plugin-social>=4.0.0"]
 plugins-community-stats = ["pallas-plugin-community-stats>=4.0.0"]
 plugins-llm-chat = ["pallas-plugin-llm-chat>=4.0.0"]
 deploy-all = [
@@ -85,10 +83,8 @@ deploy-all = [
     "pallas-plugin-maa>=4.0.0",
     "pallas-plugin-who-is-spy>=4.0.0",
     "pallas-plugin-dream>=4.0.0",
-    "pallas-plugin-party>=4.0.0",
     "pallas-plugin-draw>=4.0.0",
     "pallas-plugin-ai-media>=4.0.0",
-    "pallas-plugin-social>=4.0.0",
     "pallas-plugin-community-stats>=4.0.0",
     "pallas-plugin-llm-chat>=4.0.0",
 ]
@@ -99,10 +95,8 @@ pallas-plugin-maa = { git = "https://github.com/TogetsuDo/pallas-plugin-maa.git"
 pallas-plugin-who-is-spy = { git = "https://github.com/TogetsuDo/pallas-plugin-who-is-spy.git", rev = "main" }
 pallas-plugin-protocol = { git = "https://github.com/TogetsuDo/pallas-plugin-protocol.git", rev = "main" }
 pallas-plugin-dream = { git = "https://github.com/TogetsuDo/pallas-plugin-dream.git", rev = "main" }
-pallas-plugin-party = { git = "https://github.com/TogetsuDo/pallas-plugin-party.git", rev = "main" }
 pallas-plugin-draw = { git = "https://github.com/TogetsuDo/pallas-plugin-draw.git", rev = "main" }
 pallas-plugin-ai-media = { git = "https://github.com/TogetsuDo/pallas-plugin-ai-media.git", rev = "main" }
-pallas-plugin-social = { git = "https://github.com/TogetsuDo/pallas-plugin-social.git", rev = "main" }
 pallas-plugin-community-stats = { git = "https://github.com/TogetsuDo/pallas-plugin-community-stats.git", rev = "main" }
 pallas-plugin-llm-chat = { git = "https://github.com/TogetsuDo/pallas-plugin-llm-chat.git", rev = "main" }
 

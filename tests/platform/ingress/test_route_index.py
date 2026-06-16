@@ -116,7 +116,7 @@ def test_build_route_index_prefers_explicit_command_prefixes_and_exacts(monkeypa
             menu_data=[{"trigger_condition": "牛牛唱歌 歌曲名 [key=±N]"}],
         ),
         _fake_plugin(
-            module_name="src.plugins.connectivity",
+            module_name="src.features.service_gateways.connectivity",
             menu_data=[{"trigger_condition": "牛牛连通 / 牛牛网关"}],
         ),
     ]

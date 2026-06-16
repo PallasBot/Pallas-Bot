@@ -4730,7 +4730,7 @@ def register_extended_api(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from src.plugins.connectivity.probe_collect import probe_all_connectivity_from_draft
+        from src.features.service_gateways.collect import probe_all_connectivity_from_draft
         from src.shared.service_probe import format_probe_lines
 
         try:

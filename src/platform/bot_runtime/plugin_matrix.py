@@ -10,7 +10,6 @@ CORE_PLUGIN_NAMES: frozenset[str] = frozenset({
     "pallas_webui",
     "request_handler",
     "blacklist",
-    "connectivity",
     "drink",
     "greeting",
     "roulette",

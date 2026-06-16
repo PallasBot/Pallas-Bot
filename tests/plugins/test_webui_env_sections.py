@@ -8,7 +8,7 @@ skip_no_message_scrub = pytest.mark.skipif(not _MS_CFG.is_file(), reason="无 me
 
 def _import_command_limit_plugins() -> None:
     import src.plugins.bot_status  # noqa: F401
-    import src.plugins.connectivity  # noqa: F401
+    import src.features.service_gateways.connectivity  # noqa: F401
     import src.plugins.help  # noqa: F401
     import src.plugins.maa  # noqa: F401
     import src.plugins.sing  # noqa: F401
@@ -18,7 +18,7 @@ def _patch_loaded_command_limit_plugins(monkeypatch: pytest.MonkeyPatch) -> None
     from types import SimpleNamespace
 
     from src.plugins.bot_status import __plugin_meta__ as bot_status_meta
-    from src.plugins.connectivity import __plugin_meta__ as connectivity_meta
+    from src.features.service_gateways.connectivity import __plugin_meta__ as connectivity_meta
     from src.plugins.help import __plugin_meta__ as help_meta
     from src.plugins.maa import __plugin_meta__ as maa_meta
     from src.plugins.sing import __plugin_meta__ as sing_meta

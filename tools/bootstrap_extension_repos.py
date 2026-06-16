@@ -85,25 +85,6 @@ REPOS: list[dict[str, object]] = [
         "readme_file": "pallas-plugin-dream.md",
     },
     {
-        "dir": "Pallas-Plugin-Party",
-        "pip_name": "pallas-plugin-party",
-        "title": "轻玩法",
-        "description": "Pallas-Bot 官方扩展：轮盘赌与喝酒。",
-        "uv_extra": "plugins-party",
-        "dependencies": ["pallas-plugin-dream>=4.0.0"],
-        "copies": [
-            ("roulette", "pallas_plugin_roulette"),
-            ("drink", "pallas_plugin_drink"),
-        ],
-        "copy_overrides": {
-            "drink": {"src.plugins.dream": "pallas_plugin_dream"},
-        },
-        "nonebot_plugins": {
-            "pallas-plugin-party": ["pallas_plugin_roulette", "pallas_plugin_drink"],
-        },
-        "readme_file": "pallas-plugin-party.md",
-    },
-    {
         "dir": "Pallas-Plugin-Draw",
         "pip_name": "pallas-plugin-draw",
         "title": "牛牛画画",
@@ -127,21 +108,6 @@ REPOS: list[dict[str, object]] = [
             "pallas-plugin-ai-media": ["pallas_plugin_sing", "pallas_plugin_chat"],
         },
         "readme_file": "pallas-plugin-ai-media.md",
-    },
-    {
-        "dir": "Pallas-Plugin-Social",
-        "pip_name": "pallas-plugin-social",
-        "title": "社交体验",
-        "description": "Pallas-Bot 官方扩展：打招呼与取名。",
-        "uv_extra": "plugins-social",
-        "copies": [
-            ("greeting", "pallas_plugin_greeting"),
-            ("take_name", "pallas_plugin_take_name"),
-        ],
-        "nonebot_plugins": {
-            "pallas-plugin-social": ["pallas_plugin_greeting", "pallas_plugin_take_name"],
-        },
-        "readme_file": "pallas-plugin-social.md",
     },
     {
         "dir": "Pallas-Plugin-Community-Stats",

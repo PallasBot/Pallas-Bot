@@ -1,6 +1,6 @@
 import asyncio
 
-from src.plugins.connectivity.probe_collect import probe_sing_server, sing_probe_urls
+from src.features.service_gateways.media_probe import probe_sing_server, sing_probe_urls
 from src.plugins.sing.config import Config
 
 

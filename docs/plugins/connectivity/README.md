@@ -1,6 +1,6 @@
 # connectivity（牛牛连通）
 
-群内检测画画网关、MAA 端点、唱歌 AI 延迟；WebUI **通用配置 → 服务网关 / 连通性** 可编辑地址并一键检测。
+探测框架与「牛牛连通 / 牛牛网关」口令已内核化至 [`features/service_gateways`](../../../src/features/service_gateways/)；本目录仅保留文档索引。
 
 ## 用户命令
 
@@ -17,15 +17,10 @@
 
 ## 配置
 
-地址写入 `data/pallas_config/webui.json`（画画、MAA、唱歌等键），由 WebUI 通用配置段统一编辑。探测框架见 [`features/service_gateways`](../../../src/features/service_gateways/)，HTTP 工具见 [`service_probe`](../../../src/shared/service_probe/)。
-
-## 排障
-
-| 现象 | 处理 |
-| --- | --- |
-| MAA 超时 | 确认 `maa_public_base_url` 对外可达 |
-| 唱歌未测 | `sing_enable=false` 时仅提示未启用 |
+地址写入 `data/pallas_config/webui.json`（画画、MAA、唱歌等键），由 WebUI 通用配置段统一编辑。
 
 ## 实现
 
-[`src/plugins/connectivity/`](../../../src/plugins/connectivity/)（命令壳）；探测 provider 注册于 [`src/features/service_gateways/`](../../../src/features/service_gateways/)。
+- 探测注册表：[`src/features/service_gateways/`](../../../src/features/service_gateways/)
+- 口令与元数据：[`connectivity.py`](../../../src/features/service_gateways/connectivity.py)
+- 由 `kernel_runtime` 在 worker/unified 加载（hub 不挂 QQ 口令）

@@ -1,3 +1,5 @@
+"""牛牛连通口令（内核模块，非 src/plugins 插件）。"""
+
 from nonebot.plugin import PluginMetadata
 
 from src.features.cmd_perm.metadata_defaults import (
@@ -41,4 +43,4 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 
-from . import commands as _connectivity_commands  # noqa: E402, F401
+from src.features.service_gateways import commands as _connectivity_commands  # noqa: E402, F401

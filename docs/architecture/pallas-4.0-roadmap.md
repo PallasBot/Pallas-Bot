@@ -93,10 +93,12 @@ Pallas 已有：`local/plugins/`、[site-customization-and-updates.md](site-cust
 
 | 插件 | 扩展包方向 |
 | --- | --- |
-| `duel`、`who_is_spy`、`roulette`、`drink`、`dream` | 玩法包 |
+| `duel`、`who_is_spy`、`dream` | 玩法包 |
 | `maa`、`maa_hub` | 远控包 |
 | `draw`、`sing`、`chat` | AI 媒体包 |
-| `greeting`、`take_name`、`community_stats` | 体验 / 可选 |
+| `community_stats` | 体验 / 可选 |
+
+**已升格 core（不再迁出）**：`roulette`、`drink`、`greeting`、`take_name`；`connectivity` 已内核化至 `features/service_gateways`。
 
 **仍留本体**：`src/domain/arknights/`（牛格 KB 与扩展 duel 共用）。
 

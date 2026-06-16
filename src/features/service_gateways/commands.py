@@ -6,9 +6,8 @@ from nonebot.permission import Permission
 
 from src.features.cmd_perm import satisfies_command_permission
 from src.features.command_limits import is_command_cooldown_ready, refresh_command_cooldown
+from src.features.service_gateways.collect import probe_all_connectivity
 from src.shared.service_probe import format_probe_text
-
-from .probe_collect import probe_all_connectivity
 
 
 def connectivity_message_permission() -> Permission:
@@ -35,7 +34,7 @@ connectivity_probe = on_command(
 
 connectivity_gateway_alias = on_command(
     "牛牛网关",
-    priority=5,  # 与 pallas_image_min_priority 默认一致，避免加载期 import draw
+    priority=5,
     block=True,
     permission=connectivity_message_permission(),
 )

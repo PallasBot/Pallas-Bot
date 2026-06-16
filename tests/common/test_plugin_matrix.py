@@ -36,6 +36,7 @@ def test_core_excludes_migrated_plugins():
     assert "ingress_gate" not in CORE_PLUGIN_NAMES
     assert "bot_status" not in CORE_PLUGIN_NAMES
     assert "duel" not in CORE_PLUGIN_NAMES
+    assert "connectivity" not in CORE_PLUGIN_NAMES
     assert "pallas_webui" in CORE_PLUGIN_NAMES
 
 

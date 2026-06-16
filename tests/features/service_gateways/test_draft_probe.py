@@ -2,7 +2,7 @@ import asyncio
 
 import pytest
 
-from src.plugins.connectivity.probe_collect import probe_all_connectivity_from_draft
+from src.features.service_gateways.collect import probe_all_connectivity_from_draft
 
 
 @pytest.mark.asyncio

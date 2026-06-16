@@ -71,13 +71,12 @@ flowchart LR
 | `pallas_webui` | 控制台 API |
 | `request_handler` | 审批 |
 | `blacklist` | 用户/群拉黑 |
-| `connectivity` | 轻量探针 |
 | `drink` | 饮酒/醒酒口令（状态在 `BotConfig`） |
 | `greeting` | 入群/好友欢迎 |
 | `roulette` | 轮盘玩法 |
 | `take_name` | 自动夺舍（群名片） |
 
-**已内核化（非 `src/plugins/` 插件）**：`platform/ingress/gate`（原 `ingress_gate`）、`platform/multi_bot/bot_filter`（原 `block`）、`platform/ai_callback`（原 `callback` HTTP + 执行）。
+**已内核化（非 `src/plugins/` 插件）**：`platform/ingress/gate`（原 `ingress_gate`）、`platform/multi_bot/bot_filter`（原 `block`）、`platform/ai_callback`（原 `callback` HTTP + 执行）、`features/service_gateways`（原 `connectivity` 探测与「牛牛连通」口令）。
 
 ### 官方扩展（bundled 于 `src/plugins/`，默认 slim 不加载）
 
