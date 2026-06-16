@@ -68,7 +68,7 @@ Pallas 已有：`local/plugins/`、[site-customization-and-updates.md](site-cust
 | --- | --- |
 | `persona` | 行为层 + 群风格（牛格分支持续） |
 | `llm` | 4.0 新增：Chat、会话、tool registry |
-| `cmd_perm`、`corpus`、`message_scrub` 等 | 系统能力，保留 |
+| `cmd_perm`、`corpus`、`message_scrub` 等 | 系统能力，保留；**message_scrub 4.0 默认开启** |
 
 **核心插件**
 

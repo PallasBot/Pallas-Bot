@@ -90,7 +90,7 @@ def test_list_webui_env_sections_contains_message_scrub(monkeypatch: pytest.Monk
     clear_webui_env_sections_cache()
 
 
-def test_list_webui_env_sections_hides_message_scrub_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_list_webui_env_sections_contains_message_scrub_by_default(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     from src.console.webui import list_webui_env_sections
     from src.console.webui.env_sections import clear_webui_env_sections_cache
 
@@ -100,6 +100,49 @@ def test_list_webui_env_sections_hides_message_scrub_by_default(monkeypatch: pyt
         "PALLAS_SCRUB_LEXICON_PATH",
     ):
         monkeypatch.delenv(key, raising=False)
+    phantom = tmp_path / "missing.toml"
+    monkeypatch.setattr(
+        "src.foundation.config.repo_settings.repo_env_path",
+        lambda: phantom,
+    )
+    monkeypatch.setattr(
+        "src.foundation.config.repo_settings.repo_config_path",
+        lambda: phantom,
+    )
+    monkeypatch.setattr(
+        "src.foundation.config.repo_settings.repo_webui_settings_path",
+        lambda: tmp_path / "missing.json",
+    )
+    monkeypatch.setattr(
+        "src.foundation.config.dotenv.merged_repo_dotenv_upper",
+        dict,
+    )
+    monkeypatch.setattr(
+        "src.foundation.config.dotenv.repo_layered_dotenv_files_exist",
+        lambda: True,
+    )
+    from src.features.message_scrub import reload_message_scrub_caches
+    from src.foundation.deploy_profile import clear_deploy_profile_cache
+
+    clear_deploy_profile_cache()
+    reload_message_scrub_caches()
+    clear_webui_env_sections_cache()
+    rows = list_webui_env_sections()
+    ids = {r["id"] for r in rows}
+    assert "message_scrub" in ids
+    clear_webui_env_sections_cache()
+
+
+def test_list_webui_env_sections_hides_message_scrub_when_disabled(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    from src.console.webui import list_webui_env_sections
+    from src.console.webui.env_sections import clear_webui_env_sections_cache
+
+    for key in (
+        "PALLAS_INBOUND_FILTER_SUBSTRINGS",
+        "PALLAS_SCRUB_LEXICON_PATH",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("PALLAS_MESSAGE_SCRUB_ENABLED", "false")
     phantom = tmp_path / "missing.toml"
     monkeypatch.setattr(
         "src.foundation.config.repo_settings.repo_env_path",

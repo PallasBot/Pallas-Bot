@@ -57,12 +57,13 @@ uv sync --extra perf
 
 ### 可选部署模板
 
-除默认单进程外，可选用 [deploy/](deploy/README.md) 中的模板（**不默认启用**）：
+除默认单进程外，可选用 [deploy/](deploy/README.md) 中的**分片**模板：
 
 | 场景 | 依赖 | 应用配置 |
 | --- | --- | --- |
 | 多进程分片 | `uv sync --extra deploy-shard` | `uv run python tools/apply_deploy_profile.py shard` → 在 `pallas.toml [env]` 配置 `REDIS_URL` → `./scripts/run_sharded_bot.sh start` |
-| 消息审查 | `uv sync --extra message-scrub` | `uv run python tools/apply_deploy_profile.py message-scrub` |
+
+消息审查 4.0 默认开启，在 WebUI「通用配置 → 消息审查」配置即可，无需部署模板。
 
 当前分片模式**依赖 Redis 协调 claim**。`deploy-shard` 与 `coord-redis` 均安装 `redis` 依赖；`shard` extra 不含 redis 客户端，不能单独满足当前分片运行要求。
 

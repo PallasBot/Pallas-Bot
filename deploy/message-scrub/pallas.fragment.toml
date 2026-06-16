@@ -1,5 +1,0 @@
-# 由 apply_deploy_profile.py message-scrub 合并
-
-[env]
-PALLAS_MESSAGE_SCRUB_ENABLED = "true"
-# PALLAS_SCRUB_LEXICON_PATH = "resource/message_scrub/politics.txt"

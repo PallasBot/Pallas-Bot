@@ -29,7 +29,7 @@ DEPLOY_PROFILES: dict[str, DeployProfileSpec] = {
     "default": DeployProfileSpec(
         id="default",
         title="单进程（默认）",
-        description="``bot.py`` / ``nb run``；不启用分片与 message_scrub 模板。",
+        description="``bot.py`` / ``nb run``；消息审查默认开启，分片需另用 ``shard`` 模板。",
         uv_extras=(),
         fragment_relpath=None,
     ),
@@ -39,13 +39,6 @@ DEPLOY_PROFILES: dict[str, DeployProfileSpec] = {
         description="hub + worker；推荐 ``uv sync --extra deploy-shard`` 并配合 ``run_sharded_bot.sh``。",
         uv_extras=("deploy-shard",),
         fragment_relpath="shard/pallas.fragment.toml",
-    ),
-    "message-scrub": DeployProfileSpec(
-        id="message-scrub",
-        title="消息审查",
-        description="启用 ``PALLAS_MESSAGE_SCRUB_ENABLED``；``uv sync --extra message-scrub``。",
-        uv_extras=("message-scrub",),
-        fragment_relpath="message-scrub/pallas.fragment.toml",
     ),
 }
 
@@ -150,14 +143,6 @@ def merge_profile_env_into_webui(env_patch: dict[str, str]) -> Path:
     env.update(env_patch)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
-
-
-def message_scrub_webui_available() -> bool:
-    if is_deploy_profile_active("message-scrub"):
-        return True
-    from src.features.message_scrub.config import is_message_scrub_enabled
-
-    return is_message_scrub_enabled()
 
 
 def uv_sync_hint_for_profile(profile_id: str) -> str:

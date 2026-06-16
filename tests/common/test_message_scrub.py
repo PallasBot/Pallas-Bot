@@ -183,6 +183,13 @@ def test_blocked_false_when_no_config(scrub_env_cleanup: None) -> None:
     assert not is_message_scrub_blocked_sync(plain_text="anything", raw_message="")
 
 
+def test_enabled_by_default_without_explicit_flag(scrub_env_cleanup: None) -> None:
+    from src.features.message_scrub.config import is_message_scrub_enabled
+
+    reload_message_scrub_caches()
+    assert is_message_scrub_enabled() is True
+
+
 def test_sync_hits_lexicon_file(scrub_env_cleanup: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     p = tmp_path / "lex.txt"
     p.write_text("# c\nblockedline\n", encoding="utf-8")

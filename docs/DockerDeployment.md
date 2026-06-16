@@ -112,7 +112,7 @@ curl -s http://127.0.0.1:8088/pallas/api/health   # 返回正常
 | --- | --- | --- |
 | 单进程 + MongoDB | `perf` | 默认 compose 栈；不含 PostgreSQL 驱动 |
 | 单进程 + PostgreSQL | `perf,pg` | **Dockerfile 默认值** |
-| 单进程 + 消息审查 | `perf,pg,message-scrub` | 无额外 pip 包；仍须在容器内 `apply_deploy_profile message-scrub` 或 WebUI 开启 |
+| 单进程 + 消息审查 | `perf,pg`（按需） | 4.0 默认开启；在 WebUI「通用配置 → 消息审查」配置词表或 API |
 | 多进程分片 | `perf,pg,deploy-shard` | 安装 `redis`；当前分片运行需在配置中提供 `REDIS_URL`，详见 [多进程分片](#多进程分片可选) |
 | 4.0 core 仅接话 | `perf,pg` | 默认不装玩法扩展；`load_bundled_extra_plugins=false` |
 | 4.0 + 常用玩法 | `perf,pg,plugins-game` | 决斗 + 谁是卧底（Git 官方扩展仓） |

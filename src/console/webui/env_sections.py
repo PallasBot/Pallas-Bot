@@ -337,9 +337,9 @@ def _registered_sections() -> tuple[WebuiEnvSection, ...]:
     repeater_learn_cfg = PROJECT_ROOT / "src" / "plugins" / "repeater" / "learn_runtime_config.py"
     if repeater_learn_cfg.is_file():
         parts.append(_repeater_learn_section())
-    from src.foundation.deploy_profile import message_scrub_webui_available
+    from src.features.message_scrub.config import is_message_scrub_enabled
 
-    if (SRC_ROOT / "features" / "message_scrub" / "config.py").is_file() and message_scrub_webui_available():
+    if (SRC_ROOT / "features" / "message_scrub" / "config.py").is_file() and is_message_scrub_enabled():
         parts.append(_message_scrub_section())
     parts.extend(
         s

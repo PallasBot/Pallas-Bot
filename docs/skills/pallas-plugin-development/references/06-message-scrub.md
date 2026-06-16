@@ -19,7 +19,7 @@
 
 ## 6.3 运维配置
 
-WebUI：**通用配置 → 消息审查与入站过滤**。启用需 `message-scrub` deploy profile 或 `PALLAS_MESSAGE_SCRUB_ENABLED=true`。
+WebUI：**通用配置 → 消息审查与入站过滤**。**4.0 默认开启**；设 `PALLAS_MESSAGE_SCRUB_ENABLED=false` 可关闭。
 
 保存后 hub 热重载；分片 worker 按 mtime 重读。
 

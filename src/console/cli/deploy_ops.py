@@ -53,6 +53,4 @@ def apply_deploy_profile(profile: str, *, dry_run: bool = False) -> int:
 
     if name == "shard":
         print("下一步: pallas run shard  或  ./scripts/run_sharded_bot.sh start")
-    elif name == "message-scrub":
-        print("下一步: pallas restart；在 WebUI「通用配置 → 消息审查」填写词表或审查 API。")
     return 0

@@ -82,7 +82,7 @@ def _scrub_review_providers_key_explicit(merged_dotenv: dict[str, str]) -> bool:
 
 
 def message_scrub_has_active_config(cfg: MessageScrubConfig | None = None) -> bool:
-    """未显式设置 ``PALLAS_MESSAGE_SCRUB_ENABLED`` 时，根据是否已有审查配置推断。"""
+    """是否已配置本地词表、关键词或远程审查（与总开关独立）。"""
     c = cfg or get_message_scrub_config()
     if (c.inbound_filter_substrings or "").strip():
         return True
@@ -101,12 +101,12 @@ def message_scrub_has_active_config(cfg: MessageScrubConfig | None = None) -> bo
 
 
 def is_message_scrub_enabled() -> bool:
-    """运行时是否执行入站审查；显式 ``PALLAS_MESSAGE_SCRUB_ENABLED=false`` 可覆盖旧配置。"""
+    """运行时是否执行入站审查；显式 ``PALLAS_MESSAGE_SCRUB_ENABLED=false`` 可关闭。"""
     merged = merged_repo_dotenv_upper()
     raw = _scrub_env_str("PALLAS_MESSAGE_SCRUB_ENABLED", merged_dotenv=merged, default="")
     if raw:
         return raw.lower() not in ("0", "false", "no", "off")
-    return message_scrub_has_active_config()
+    return True
 
 
 class MessageScrubConfig(BaseModel):

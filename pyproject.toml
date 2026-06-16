@@ -51,7 +51,6 @@ coord-redis = [
 ]
 # 已弃用占位：分片运行请 uv sync --extra deploy-shard 并配置 REDIS_URL（见 deploy/README.md）
 shard = []
-message-scrub = []
 deploy-shard = [
     "redis>=5.2,<6",
 ]

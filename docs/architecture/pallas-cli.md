@@ -36,7 +36,7 @@ pallas run unified [--foreground] [--port …]
 pallas run shard [--hub-only|--workers-only] [--workers N] [--worker-base …]
 pallas stop|status|restart …  # 对齐 run_unified_bot / run_sharded_bot 语义
 
-pallas deploy apply <profile> # default | shard | message-scrub；包装 apply_deploy_profile
+pallas deploy apply <profile> # default | shard；包装 apply_deploy_profile
 
 pallas maintenance run [--sync-extra …] [--update-bot] [--no-restart]
                        # 组合：sync → update bot（默认带 restart）
