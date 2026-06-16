@@ -56,8 +56,11 @@ class LlmConfig(BaseModel):
     user_message_max_len: int = Field(default=4000, ge=64, le=16000)
     chat_timeout_sec: float = Field(default=30.0, ge=1.0, le=300.0)
     llm_session_enabled: bool = Field(default=False)
-    llm_session_group_window: int = Field(default=20, ge=1, le=200)
-    llm_session_user_ttl_sec: int = Field(default=604800, ge=0, le=2592000)
+    llm_session_user_window: int = Field(default=18, ge=1, le=200)
+    llm_session_group_window: int = Field(default=8, ge=0, le=100)
+    llm_session_group_ambient_enabled: bool = Field(default=True)
+    llm_session_user_ttl_sec: int = Field(default=86400, ge=0, le=2592000)
+    llm_session_private_ttl_sec: int = Field(default=259200, ge=0, le=2592000)
     llm_session_max_content_len: int = Field(default=4000, ge=64, le=16000)
 
 
@@ -78,8 +81,11 @@ def get_llm_config() -> LlmConfig:
             user_message_max_len=_env_int("LLM_USER_MESSAGE_MAX_LEN", 4000),
             chat_timeout_sec=_env_float("LLM_CHAT_TIMEOUT_SEC", 30.0),
             llm_session_enabled=_env_bool("LLM_SESSION_ENABLED", False),
-            llm_session_group_window=_env_int("LLM_SESSION_GROUP_WINDOW", 20),
-            llm_session_user_ttl_sec=_env_int("LLM_SESSION_USER_TTL_SEC", 604800),
+            llm_session_user_window=_env_int("LLM_SESSION_USER_WINDOW", 18),
+            llm_session_group_window=_env_int("LLM_SESSION_GROUP_WINDOW", 8),
+            llm_session_group_ambient_enabled=_env_bool("LLM_SESSION_GROUP_AMBIENT_ENABLED", True),
+            llm_session_user_ttl_sec=_env_int("LLM_SESSION_USER_TTL_SEC", 86400),
+            llm_session_private_ttl_sec=_env_int("LLM_SESSION_PRIVATE_TTL_SEC", 259200),
             llm_session_max_content_len=_env_int("LLM_SESSION_MAX_CONTENT_LEN", 4000),
         )
         return _cached_llm_config

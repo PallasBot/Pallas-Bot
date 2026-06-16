@@ -11,6 +11,7 @@ class ChatSubmitRequest(BaseModel):
     model: str | None = None
     bot_id: int | None = None
     group_id: int | None = None
+    user_id: int | None = None
 
 
 class ChatSubmitResult(BaseModel):

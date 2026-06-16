@@ -21,6 +21,7 @@ async def test_submit_chat_task_legacy_payload(monkeypatch: pytest.MonkeyPatch) 
         return FakeResponse()
 
     monkeypatch.setattr("src.features.llm.client.HTTPXClient.post", fake_post)
+    monkeypatch.setattr("src.features.llm.client.is_llm_session_store_available", lambda: False)
 
     cfg = LlmConfig(
         ai_server_host="127.0.0.1",
@@ -36,6 +37,7 @@ async def test_submit_chat_task_legacy_payload(monkeypatch: pytest.MonkeyPatch) 
             system_prompt="system",
             bot_id=10001,
             group_id=20002,
+            user_id=30003,
         ),
         cfg=cfg,
     )

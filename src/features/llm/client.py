@@ -7,6 +7,7 @@ from src.shared.utils import HTTPXClient
 from .config import LlmConfig, get_llm_config, llm_server_base_url
 from .message_guard import format_user_turn
 from .models import ChatCompletionMessage, ChatSubmitRequest, ChatSubmitResult
+from .session_store import build_llm_chat_messages, format_legacy_transcript, is_llm_session_store_available
 
 
 def chat_endpoint_path(cfg: LlmConfig | None = None) -> str:
@@ -16,11 +17,41 @@ def chat_endpoint_path(cfg: LlmConfig | None = None) -> str:
     return c.legacy_chat_endpoint
 
 
-async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None = None) -> ChatSubmitResult:
+async def resolve_chat_messages(
+    request: ChatSubmitRequest,
+    *,
+    cfg: LlmConfig | None = None,
+) -> list[ChatCompletionMessage]:
     c = cfg or get_llm_config()
+    if (
+        is_llm_session_store_available()
+        and request.bot_id is not None
+        and request.user_id is not None
+    ):
+        return await build_llm_chat_messages(
+            int(request.bot_id),
+            request.group_id,
+            int(request.user_id),
+            request.user_text,
+            cfg=c,
+        )
     user_turn = format_user_turn(request.user_text, max_len=c.user_message_max_len)
     if not user_turn:
+        return []
+    return [ChatCompletionMessage(role="user", content=user_turn)]
+
+
+async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None = None) -> ChatSubmitResult:
+    c = cfg or get_llm_config()
+    messages = await resolve_chat_messages(request, cfg=c)
+    if not messages:
         return ChatSubmitResult(status="empty_user_message", ok=False)
+
+    use_pg_session = (
+        is_llm_session_store_available()
+        and request.bot_id is not None
+        and request.user_id is not None
+    )
 
     base = llm_server_base_url(c)
     endpoint = chat_endpoint_path(c)
@@ -28,20 +59,23 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
 
     if c.use_unified_chat_api:
         payload = {
-            "session_id": request.session_id,
+            "session_id": request.session_id if not use_pg_session else request.request_id,
             "model": request.model,
             "system": request.system_prompt,
-            "messages": [{"role": "user", "content": user_turn}],
+            "messages": [{"role": item.role, "content": item.content} for item in messages],
             "metadata": {
                 "bot_id": request.bot_id,
                 "group_id": request.group_id,
+                "user_id": request.user_id,
                 "request_id": request.request_id,
+                "pg_session": use_pg_session,
             },
         }
     else:
+        legacy_text = format_legacy_transcript(messages) if use_pg_session else messages[-1].content
         payload = {
-            "session": request.session_id,
-            "text": user_turn,
+            "session": request.request_id if use_pg_session else request.session_id,
+            "text": legacy_text,
             "system_prompt": request.system_prompt,
             "model": request.model,
         }

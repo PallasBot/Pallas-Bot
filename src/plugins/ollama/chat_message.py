@@ -96,8 +96,6 @@ async def handle_ollama_chat(bot: Bot, event: Event):
         },
     )
 
-    await append_llm_message(int(bot.self_id), group_id, user_id, "user", msg)
-
     result = await submit_chat_task(
         ChatSubmitRequest(
             request_id=request_id,
@@ -106,12 +104,15 @@ async def handle_ollama_chat(bot: Bot, event: Event):
             system_prompt=system_prompt,
             bot_id=int(bot.self_id),
             group_id=group_id,
+            user_id=user_id,
         ),
         cfg=ollama_llm_config(cfg),
     )
     if not result.ok:
         await TaskManager.remove_task(request_id)
         return
+
+    await append_llm_message(int(bot.self_id), group_id, user_id, "user", msg)
 
     if not result.task_id:
         await TaskManager.remove_task(request_id)
