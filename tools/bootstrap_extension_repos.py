@@ -78,6 +78,9 @@ REPOS: list[dict[str, object]] = [
         "description": "Pallas-Bot 官方扩展：群内做梦与分片漂移。",
         "uv_extra": "plugins-dream",
         "copies": [("dream", "pallas_plugin_dream")],
+        "copy_overrides": {
+            "dream": {"src.plugins.draw": "pallas_plugin_draw"},
+        },
         "nonebot_plugins": {"pallas-plugin-dream": ["pallas_plugin_dream"]},
         "readme_file": "pallas-plugin-dream.md",
     },
@@ -99,6 +102,31 @@ REPOS: list[dict[str, object]] = [
             "pallas-plugin-party": ["pallas_plugin_roulette", "pallas_plugin_drink"],
         },
         "readme_file": "pallas-plugin-party.md",
+    },
+    {
+        "dir": "Pallas-Plugin-Draw",
+        "pip_name": "pallas-plugin-draw",
+        "title": "牛牛画画",
+        "description": "Pallas-Bot 官方扩展：图像生成网关与画画命令。",
+        "uv_extra": "plugins-draw",
+        "copies": [("draw", "pallas_plugin_draw")],
+        "nonebot_plugins": {"pallas-plugin-draw": ["pallas_plugin_draw"]},
+        "readme_file": "pallas-plugin-draw.md",
+    },
+    {
+        "dir": "Pallas-Plugin-Ai-Media",
+        "pip_name": "pallas-plugin-ai-media",
+        "title": "AI 媒体",
+        "description": "Pallas-Bot 官方扩展：唱歌与聊天。",
+        "uv_extra": "plugins-ai-media",
+        "copies": [
+            ("sing", "pallas_plugin_sing"),
+            ("chat", "pallas_plugin_chat"),
+        ],
+        "nonebot_plugins": {
+            "pallas-plugin-ai-media": ["pallas_plugin_sing", "pallas_plugin_chat"],
+        },
+        "readme_file": "pallas-plugin-ai-media.md",
     },
 ]
 

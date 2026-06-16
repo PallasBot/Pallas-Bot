@@ -72,10 +72,10 @@ deploy-full = [
     "pallas-plugin-maa>=4.0.0",
     "pallas-plugin-who-is-spy>=4.0.0",
 ]
-plugins-party = []
-plugins-dream = []
-plugins-draw = []
-plugins-ai-media = []
+plugins-party = ["pallas-plugin-party>=4.0.0"]
+plugins-dream = ["pallas-plugin-dream>=4.0.0"]
+plugins-draw = ["pallas-plugin-draw>=4.0.0"]
+plugins-ai-media = ["pallas-plugin-ai-media>=4.0.0"]
 plugins-social = []
 plugins-community-stats = []
 plugins-ollama = []
@@ -85,6 +85,10 @@ pallas-plugin-duel = { git = "https://github.com/TogetsuDo/pallas-plugin-duel.gi
 pallas-plugin-maa = { git = "https://github.com/TogetsuDo/pallas-plugin-maa.git", rev = "main" }
 pallas-plugin-who-is-spy = { git = "https://github.com/TogetsuDo/pallas-plugin-who-is-spy.git", rev = "main" }
 pallas-plugin-protocol = { git = "https://github.com/TogetsuDo/pallas-plugin-protocol.git", rev = "main" }
+pallas-plugin-dream = { git = "https://github.com/TogetsuDo/pallas-plugin-dream.git", rev = "main" }
+pallas-plugin-party = { git = "https://github.com/TogetsuDo/pallas-plugin-party.git", rev = "main" }
+pallas-plugin-draw = { git = "https://github.com/TogetsuDo/pallas-plugin-draw.git", rev = "main" }
+pallas-plugin-ai-media = { git = "https://github.com/TogetsuDo/pallas-plugin-ai-media.git", rev = "main" }
 
 [dependency-groups]
 dev = [

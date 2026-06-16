@@ -89,6 +89,10 @@ OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
     "pallas-plugin-duel": "https://github.com/TogetsuDo/pallas-plugin-duel",
     "pallas-plugin-maa": "https://github.com/TogetsuDo/pallas-plugin-maa",
     "pallas-plugin-who-is-spy": "https://github.com/TogetsuDo/pallas-plugin-who-is-spy",
+    "pallas-plugin-dream": "https://github.com/TogetsuDo/pallas-plugin-dream",
+    "pallas-plugin-party": "https://github.com/TogetsuDo/pallas-plugin-party",
+    "pallas-plugin-draw": "https://github.com/TogetsuDo/pallas-plugin-draw",
+    "pallas-plugin-ai-media": "https://github.com/TogetsuDo/pallas-plugin-ai-media",
 }
 
 _PROTOCOL_MODULE_NAMES: frozenset[str] = frozenset({
