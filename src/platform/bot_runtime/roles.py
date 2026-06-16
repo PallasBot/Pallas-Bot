@@ -33,7 +33,6 @@ WORKER_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
 UNIFIED_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
     "relogin_forward",
     "maa_hub",
-    "pallas_console_metrics",
 })
 
 UNIFIED_CATALOG_HIDDEN_PLUGIN_NAMES: frozenset[str] = UNIFIED_SKIP_PLUGIN_NAMES

@@ -80,9 +80,10 @@ flowchart LR
 
 | 插件 | 说明 |
 | --- | --- |
-| `pallas_console_metrics` | worker 指标探针；**计划内核化**至 `platform/shard/`（见下） |
 | `ingress_gate` | worker 入站（亦在 core 默认加载） |
 | `relogin_forward` / `maa_hub` | 分片角色专用；随对应官方扩展 pip 包分发 |
+
+worker 控制台指标已内核化至 `src/platform/shard/worker_console_metrics.py`，由 `plugin_loader` 在 worker 角色注册 `on_startup`，不再占用 `src/plugins/`。
 
 ### 迁出本体（官方扩展包）
 
@@ -101,13 +102,9 @@ flowchart LR
 
 **留内核、不随插件迁出**：`src/domain/arknights/`、`src/features/*` 公开 API、分片与 ingress。
 
-### 分片指标内核化（架构路线）
+### 分片指标内核化（已交付）
 
-`pallas_console_metrics` 当前是 **worker 上的薄插件**，仅为了在「不加载 `pallas_webui`」时挂指标钩子。目标形态：
-
-1. 指标采集与刷盘迁入 `src/console/metrics/` 或 `src/platform/shard/worker_metrics.py`
-2. `bot_worker` / `plugin_loader` 在 worker 角色显式启动，**删除** `src/plugins/pallas_console_metrics/`
-3. hub / unified 仍由 `pallas_webui` 聚合展示
+worker 指标采集与刷盘由 **`src/platform/shard/worker_console_metrics.py`** 在 `plugin_loader` worker 分支显式 `register_worker_console_metrics_startup()`；hub / unified 仍由 `pallas_webui` 聚合展示。已删除 `src/plugins/pallas_console_metrics/`。
 
 未装 **`pallas-plugin-protocol`** 时：控制台 API 的 `protocol_extension.installed=false`；WebUI 协议页提示 `uv sync --extra plugins-protocol`（与插件是否 bundled 在仓库无关）。
 

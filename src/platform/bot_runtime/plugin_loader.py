@@ -375,3 +375,6 @@ def load_plugins_for_role() -> None:
         extra,
         sorted(worker_skip),
     )
+    from src.platform.shard.worker_console_metrics import register_worker_console_metrics_startup
+
+    register_worker_console_metrics_startup()

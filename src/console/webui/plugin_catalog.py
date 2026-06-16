@@ -194,8 +194,6 @@ def package_load_role(package: str) -> str:
         return "worker"
     if package == "maa_hub":
         return "hub"
-    if package == "pallas_console_metrics":
-        return "internal"
     if is_unified_role() or not is_sharding_active():
         return "both"
     if package.startswith("_"):

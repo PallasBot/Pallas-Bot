@@ -16,7 +16,7 @@
 
 | 角色 | 来源 |
 |------|------|
-| **unified** | 显式加载 **`ingress_gate`**（联邦 + 跨 Bot claim）+ 扫描 **`src/plugins/`**（跳过 `relogin_forward`、`maa_hub`、`pallas_console_metrics` 等分片专用项）+ **`pyproject.toml` 里额外的 `plugin_dirs`** + **`[tool.nonebot.plugins]`** + **`extra_plugin_dirs`** |
+| **unified** | 显式加载 **`ingress_gate`**（联邦 + 跨 Bot claim）+ 扫描 **`src/plugins/`**（跳过 `relogin_forward`、`maa_hub` 等分片专用项）+ **`pyproject.toml` 里额外的 `plugin_dirs`** + **`[tool.nonebot.plugins]`** + **`extra_plugin_dirs`** |
 | **hub** | 代码白名单（WebUI、协议端、relogin 等）+ **`[tool.nonebot.plugins]`** 中的 pip 包（如 `nonebot-plugin-apscheduler`） |
 | **worker** | 扫描 **`src/plugins/`**（跳过 webui / protocol / relogin）+ 显式加载 **`ingress_gate`** + **`pyproject.toml` 里额外的 `plugin_dirs`** + **`[tool.nonebot.plugins]`** |
 

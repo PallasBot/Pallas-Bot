@@ -23,7 +23,6 @@ def test_unified_skip_plugin_names():
     assert UNIFIED_SKIP_PLUGIN_NAMES == frozenset({
         "relogin_forward",
         "maa_hub",
-        "pallas_console_metrics",
     })
 
 
@@ -56,7 +55,6 @@ def test_unified_role_skips_shard_only_plugins(monkeypatch: pytest.MonkeyPatch):
     loaded = {p.name for p in nonebot.get_loaded_plugins()}
     assert "relogin_forward" not in loaded
     assert "maa_hub" not in loaded
-    assert "pallas_console_metrics" not in loaded
     assert "relogin_bot" in loaded
     assert "maa" in loaded
     assert "ingress_gate" in loaded
@@ -82,3 +80,21 @@ def test_worker_role_skips_maa_hub(monkeypatch: pytest.MonkeyPatch):
     loaded = {p.name for p in nonebot.get_loaded_plugins()}
     assert "maa_hub" not in loaded
     assert "maa" in loaded
+
+
+def test_register_worker_console_metrics_only_on_worker(monkeypatch: pytest.MonkeyPatch):
+    from src.platform.shard import worker_console_metrics as wcm
+
+    monkeypatch.setenv("PALLAS_SHARD_ENABLED", "true")
+    monkeypatch.setenv("PALLAS_BOT_ROLE", "hub")
+    get_shard_registry_settings.cache_clear()
+    wcm._registered = False
+    wcm.register_worker_console_metrics_startup()
+    assert wcm._registered is False
+
+    monkeypatch.setenv("PALLAS_BOT_ROLE", "worker")
+    get_shard_registry_settings.cache_clear()
+    nonebot.init()
+    wcm._registered = False
+    wcm.register_worker_console_metrics_startup()
+    assert wcm._registered is True

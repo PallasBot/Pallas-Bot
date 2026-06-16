@@ -117,6 +117,7 @@ curl -s http://127.0.0.1:8088/pallas/api/health   # 返回正常
 | 4.0 core 仅接话 | `perf,pg` | 默认不装玩法扩展；`load_bundled_extra_plugins=false` |
 | 4.0 + 常用玩法 | `perf,pg,plugins-game` | 决斗 + 谁是卧底（Git 官方扩展仓） |
 | 4.0 全官方扩展 | `perf,pg,deploy-full` | 决斗 + MAA + 谁是卧底 |
+| 4.0 全部官方扩展 | `perf,pg,deploy-all` | 11 个官方扩展包（P0–P2） |
 
 单进程镜像**不必**加 `deploy-shard`。分片专用插件（`relogin_forward`、`maa_hub` 等）仍在源码树中，单进程由 **`UNIFIED_SKIP_PLUGIN_NAMES`** 跳过加载，体积可忽略；精简镜像主要靠 **extras** 与 **`.dockerignore`**，而非删插件目录。
 

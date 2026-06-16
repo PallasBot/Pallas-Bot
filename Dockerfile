@@ -21,7 +21,7 @@ COPY pyproject.toml ./
 
 # perf：jieba-next；pg：PostgreSQL 后端
 # deploy-shard / message-scrub：见 deploy/README.md
-# 4.0 官方扩展：plugins-duel / plugins-maa / plugins-game / deploy-full（见 docs/DockerDeployment.md）
+# 4.0 官方扩展：plugins-duel / plugins-game / deploy-full / deploy-all（见 docs/DockerDeployment.md）
 # 构建上下文排除见 .dockerignore；extras 对照见 docs/DockerDeployment.md
 ARG PALLAS_UV_EXTRAS=perf,pg
 RUN uv pip install --system ".[${PALLAS_UV_EXTRAS}]" --no-cache-dir && \

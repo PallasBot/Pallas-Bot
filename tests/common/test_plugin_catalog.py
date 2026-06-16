@@ -15,7 +15,6 @@ def test_discover_includes_draw():
     assert "draw" in pkgs
     assert "pallas_webui" in pkgs
     assert "ingress_gate" in pkgs
-    assert "pallas_console_metrics" in pkgs
 
 
 def test_package_load_role_sharded(monkeypatch):

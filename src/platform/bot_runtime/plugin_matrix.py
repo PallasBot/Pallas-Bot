@@ -15,13 +15,11 @@ CORE_PLUGIN_NAMES: frozenset[str] = frozenset({
     "request_handler",
     "blacklist",
     "block",
-    "pallas_console_metrics",
     "connectivity",
 })
 
-# 分片内置能力：仍在 src/plugins/，非用户可选扩展；后续内核化见 pallas-4.0-slim.md
+# 分片内置：由 loader / platform 显式启动，不在 src/plugins/ 维护
 SHARD_INTERNAL_PLUGIN_NAMES: frozenset[str] = frozenset({
-    "pallas_console_metrics",
     "relogin_forward",
     "maa_hub",
     "ingress_gate",
