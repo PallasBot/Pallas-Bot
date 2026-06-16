@@ -17,7 +17,6 @@ from src.foundation.bot_version import (
     get_bot_current_version,
     pallas_bot_repo_root,
 )
-from src.foundation.paths import plugin_data_dir
 from src.plugins.pb_webui.data_dir import pb_webui_data_dir
 from src.shared.utils.format_exception import format_exception_for_log
 from src.shared.utils.github_release import (

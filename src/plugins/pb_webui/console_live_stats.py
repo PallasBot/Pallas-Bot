@@ -7,8 +7,8 @@ import os
 import time
 from typing import Any
 
-from src.plugins.pb_webui.data_dir import pb_webui_data_dir
 from src.plugins.pb_webui.daily_stats_store import interprocess_stats_lock
+from src.plugins.pb_webui.data_dir import pb_webui_data_dir
 
 _STORE_VER = 1
 

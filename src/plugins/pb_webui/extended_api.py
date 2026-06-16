@@ -2217,7 +2217,6 @@ def _record_plugin_run_duration(sid: str, plugin: str, elapsed_ms: int | float) 
 
 def _append_matcher_error_log(sid: str, plugin: str, exception: BaseException) -> None:
     """进程内环形缓冲 + jsonl；与定时清理共用锁，避免与每日清空交错。"""
-    from src.foundation.paths import plugin_data_dir
 
     tb = "".join(
         traceback.format_exception(
@@ -2260,7 +2259,6 @@ def _append_matcher_error_log(sid: str, plugin: str, exception: BaseException) -
 
 def _rewrite_matcher_durations_jsonl() -> None:
     """用各账号进程内缓冲覆写 jsonl。"""
-    from src.foundation.paths import plugin_data_dir
 
     path = pb_webui_data_dir() / "matcher_durations.jsonl"
     lines: list[str] = []
@@ -2289,7 +2287,6 @@ def _rewrite_matcher_durations_jsonl() -> None:
 
 def _load_matcher_duration_logs_from_disk() -> None:
     """启动时从 jsonl 恢复各账号最近 _MATCHER_DURATION_LOG_CAP 条单次耗时。"""
-    from src.foundation.paths import plugin_data_dir
 
     path = pb_webui_data_dir() / "matcher_durations.jsonl"
     if not path.exists():
@@ -2508,7 +2505,6 @@ def _tb_and_exc_type_from_log_record(record: Any) -> tuple[str, str, str]:
 
 
 def _append_console_log_error(entry: dict[str, Any]) -> None:
-    from src.foundation.paths import plugin_data_dir
 
     path = pb_webui_data_dir() / "log_errors.jsonl"
     line_obj = {k: v for k, v in entry.items() if k != "raw_line"}
@@ -2647,7 +2643,6 @@ def _log_error_log_public(
 
 
 def _cleanup_log_error_archives_sync() -> None:
-    from src.foundation.paths import plugin_data_dir
 
     path = pb_webui_data_dir() / "log_errors.jsonl"
     with _LOG_ERROR_JSONL_LOCK:
@@ -2677,7 +2672,6 @@ def _cleanup_log_errors_manual_sync() -> dict[str, Any]:
 
 async def _scheduled_cleanup_matcher_error_logs() -> None:
     """每日 4:00 清理 Matcher 异常与日志 ERROR 归档。"""
-    from src.foundation.paths import plugin_data_dir
 
     err_path = pb_webui_data_dir() / "matcher_errors.jsonl"
     dur_path = pb_webui_data_dir() / "matcher_durations.jsonl"
