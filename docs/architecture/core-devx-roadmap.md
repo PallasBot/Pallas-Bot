@@ -221,9 +221,9 @@ extra={
 
 ### 验收
 
-- [ ] Cookbook「牛牛赞我」改写成 SDK 版
-- [ ] `tests/features/plugin_sdk/` 覆盖 perm/CD/前缀
-- [ ] Skill / getting-started 指向 SDK
+- [x] Cookbook「牛牛赞我」改写成 SDK 版
+- [x] `tests/features/plugin_sdk/` 覆盖 perm/CD/前缀
+- [x] Skill / getting-started 指向 SDK
 
 ---
 
@@ -249,9 +249,9 @@ src/plugins/pb_core/
 
 ### 验收
 
-- [ ] 五条 core 命令可触发且权限正确
-- [ ] 分片角色下 status 摘要含 hub/worker 提示
-- [ ] `docs/plugins/pb_core/README.md`
+- [x] 五条 core 命令可触发且权限正确
+- [x] 分片角色下 status 摘要含 hub/worker 提示
+- [x] `docs/plugins/pb_core/README.md`
 
 ---
 

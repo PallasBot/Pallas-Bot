@@ -42,6 +42,7 @@ description: >
 - **多牛舰队**（进阶）：入站调度、进程分片见 [central-ingress-dispatch](../../architecture/central-ingress-dispatch.md)、[bot_process_sharding](../../architecture/bot_process_sharding.md)。
 - **导入分层**：业务插件优先 `src.features.*`、`src.foundation.*`、`src.console.webui`；跨插件能力不要深层 import 内核内部文件。见 [一、公开 API](./references/01-plugin-basics.md)。
 - **命令 ID**：`{插件}.{动作}` 须在 metadata、`permission_for_command`、matcher 中**完全一致**。
+- **plugin_sdk**：口令型优先 `group_command` + `PluginHandlerContext`（见 [Cookbook](../../develop/plugin/cookbook.md) §4）。
 - **帮助文案**：`usage` 不写死权限；`trigger_condition` 只写怎么说；权限绑 `command_permission` + WebUI 矩阵。
 - **配置读取**：WebUI 可调项用 `get_config()` / `get_my_config()`，**勿**在模块顶层缓存配置快照。
 - **日志**：loguru 风格，占位用 `{}` 或 f-string，避免 `"%s"` 传统 logging 写法。

@@ -143,18 +143,26 @@ def top_praisers(counts: dict[str, int], limit: int = 5) -> list[tuple[str, int]
 
 在 `__init__.py` 声明 `PluginMetadata`。帮助图文案格式见 [cmd_perm](../../common/cmd_perm/README.md)。
 
+**推荐**用 [plugin_sdk](../../architecture/core-devx-roadmap.md#p1--plugin_sdk) 注册口令（权限 + 可选 CD 一次封装）：
+
 ```python
 # local/plugins/praise_me/__init__.py
-from nonebot import on_command
 from nonebot.plugin import PluginMetadata
 
-from src.features.cmd_perm import group_message_permission_for_command
 from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
+from src.features.plugin_sdk import (
+    bind_alias_handlers,
+    command_limit_list,
+    command_limit_row,
+    command_perm_list,
+    command_perm_row,
+    group_command,
+)
 
 from .handlers import handle_praise, handle_rank
 
@@ -171,13 +179,13 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
-        "command_permissions": [
-            {"id": "praise_me.praise", "label": "牛牛赞我", "default": "everyone"},
-            {"id": "praise_me.rank", "label": "牛牛赞榜", "default": "everyone"},
-        ],
-        "command_limits": [
-            {"id": "praise_me.praise", "cd_sec": 0},
-        ],
+        "command_permissions": command_perm_list(
+            command_perm_row("praise_me.praise", "牛牛赞我", "everyone"),
+            command_perm_row("praise_me.rank", "牛牛赞榜", "everyone"),
+        ),
+        "command_limits": command_limit_list(
+            command_limit_row("praise_me.praise", 0),
+        ),
         "menu_data": [
             {
                 "func": "牛牛赞我",
@@ -201,28 +209,20 @@ __plugin_meta__ = PluginMetadata(
     },
 )
 
-praise_cmd = on_command(
-    "牛牛赞我",
-    priority=5,
-    block=True,
-    permission=group_message_permission_for_command("praise_me.praise"),
-)
-rank_cmd = on_command(
-    "牛牛赞榜",
-    priority=5,
-    block=True,
-    permission=group_message_permission_for_command("praise_me.rank"),
-)
+praise_cmd = group_command("praise_me.praise", "牛牛赞我", cd_sec=0)
+rank_cmd = group_command("praise_me.rank", "牛牛赞榜", cd_sec=0)
 
-praise_cmd.handle()(handle_praise)
-rank_cmd.handle()(handle_rank)
+bind_alias_handlers(praise_cmd, handle_praise)
+bind_alias_handlers(rank_cmd, handle_rank)
 ```
+
+仍可直接 `on_command` + `group_message_permission_for_command`（见 [getting-started](getting-started.md)）；新插件优先 SDK。
 
 注意：
 
 - 命令 ID `praise_me.praise` 在 metadata、matcher、`command_limits` 里 **必须一致**。
 - `usage` / `trigger_condition` **不要**写「群管可用」——权限由 WebUI / cmd_perm 自动展示。
-- `command_limits` 里 `praise` 先填 `0`：冷却秒数改由配置驱动，在 handler 里用同一套 helper（下一节）。
+- `command_limits` 里 `praise` 填 `0`：默认 CD 由配置 `praise_cd_sec` 驱动，在 handler 里显式检查（下一节）。
 
 ---
 
@@ -232,55 +232,54 @@ rank_cmd.handle()(handle_rank)
 
 ```python
 # local/plugins/praise_me/handlers.py
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
-
 from src.features.command_limits import is_command_cooldown_ready, refresh_command_cooldown
+from src.features.plugin_sdk import PluginHandlerContext
 
 from .config import get_config
 from .store import add_praise, load_counts, save_counts, top_praisers
 
 
-async def handle_praise(event: GroupMessageEvent):
-    from . import praise_cmd
-
+async def handle_praise(ctx: PluginHandlerContext) -> None:
     cfg = get_config()
     if not cfg.enable:
-        await praise_cmd.finish("点赞功能已关闭。")
+        await ctx.finish("点赞功能已关闭。")
 
     cd = cfg.praise_cd_sec
-    if cd > 0 and not await is_command_cooldown_ready(event, "praise_me.praise", cd):
-        await praise_cmd.finish(f"点太快啦，{cd} 秒后再赞吧。")
+    if cd > 0 and not await is_command_cooldown_ready(ctx.event, "praise_me.praise", cd):
+        await ctx.finish(f"点太快啦，{cd} 秒后再赞吧。")
     if cd > 0:
-        await refresh_command_cooldown(event, "praise_me.praise", cd)
+        await refresh_command_cooldown(ctx.event, "praise_me.praise", cd)
 
-    gid = event.group_id
-    uid = str(event.user_id)
+    gid = ctx.group_id
+    if gid is None:
+        return
+    uid = ctx.user_id
     counts = load_counts(gid)
     total = add_praise(counts, uid)
     save_counts(gid, counts)
 
-    await praise_cmd.finish(cfg.praise_reply.format(total=total))
+    await ctx.finish(cfg.praise_reply.format(total=total))
 
 
-async def handle_rank(event: GroupMessageEvent):
-    from . import rank_cmd
-
+async def handle_rank(ctx: PluginHandlerContext) -> None:
     cfg = get_config()
     if not cfg.enable:
-        await rank_cmd.finish("点赞功能已关闭。")
+        await ctx.finish("点赞功能已关闭。")
 
-    gid = event.group_id
-    uid = str(event.user_id)
+    gid = ctx.group_id
+    if gid is None:
+        return
+    uid = ctx.user_id
     counts = load_counts(gid)
     mine = counts.get(uid, 0)
     top = top_praisers(counts, limit=5)
 
     if not top:
-        await rank_cmd.finish("还没有人赞过牛牛，发送「牛牛赞我」抢第一个吧。")
+        await ctx.finish("还没有人赞过牛牛，发送「牛牛赞我」抢第一个吧。")
 
     lines = [f"{i}. QQ {qq} — {n} 赞" for i, (qq, n) in enumerate(top, start=1)]
     body = "\n".join(lines)
-    await rank_cmd.finish(f"本群赞榜 Top {len(top)}：\n{body}\n\n你的赞数：{mine}")
+    await ctx.finish(f"本群赞榜 Top {len(top)}：\n{body}\n\n你的赞数：{mine}")
 ```
 
 说明：
@@ -301,10 +300,10 @@ async def handle_rank(event: GroupMessageEvent):
 
 ## 6、拆文件与注册方式（小结）
 
-上面把 handler 写在 `handlers.py`，`__init__.py` 里用 `praise_cmd.handle()(handle_praise)` 注册。  
+上面把 handler 写在 `handlers.py`，`__init__.py` 里用 `bind_alias_handlers` 注册。  
 也可以直接在 `__init__.py` 里 `@praise_cmd.handle()`，但教程刻意练习 **入口轻量、业务外置**，与 [插件结构](structure.md) 一致。
 
-Matcher 选型见 [Matcher 决策树](../../skills/pallas-plugin-development/references/02-matchers-decision.md)：口令型用 `on_command` + `group_message_permission_for_command`。
+口令型优先 [plugin_sdk](../../architecture/core-devx-roadmap.md#p1--plugin_sdk) 的 `group_command`；选型见 [Matcher 决策树](../../skills/pallas-plugin-development/references/02-matchers-decision.md)。
 
 ---
 

@@ -23,6 +23,8 @@ src/plugins/my_plugin/
 
 `__init__.py` 保持轻量：声明元数据、注册 handler，业务逻辑拆到同目录其它模块。
 
+口令型命令推荐 `src.features.plugin_sdk`（`group_command` / `PluginHandlerContext`）；见 [Cookbook](cookbook.md) 与 [core-devx-roadmap](../../architecture/core-devx-roadmap.md#p1--plugin_sdk)。
+
 ### 元数据与帮助文案
 
 使用 `src.features.cmd_perm.metadata_text` 统一 `usage` / `menu_data` 格式：
