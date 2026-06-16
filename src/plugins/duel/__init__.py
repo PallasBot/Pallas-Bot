@@ -39,6 +39,36 @@ from src.plugins.duel.duel_session import clear_duel_pair, start_duel_pair
 
 
 @get_driver().on_startup
+async def _register_duel_plugin_coord() -> None:
+    from src.features.plugin_coord.duel import register_duel_coord
+    from src.platform.multi_bot.group_fleet_probe import register_fleet_probe
+    from src.plugins.duel.arknights_ops import reload_operators_cache
+    from src.plugins.duel.duel_bots import list_group_online_bot_ids, list_local_fleet_bots_in_group
+    from src.plugins.duel.duel_qte import (
+        apply_cluster_qte_greeting,
+        bot_qte_success_rate,
+        duel_qte_blocks_greeting_user,
+        pick_bot_wrong_qte_reply,
+    )
+    from src.plugins.duel.duel_session import get_duel_pair, is_duel_paired_bot_traffic, should_skip_repeater_learn
+
+    register_duel_coord(
+        get_duel_pair=get_duel_pair,
+        should_skip_repeater_learn=should_skip_repeater_learn,
+        is_duel_paired_bot_traffic=is_duel_paired_bot_traffic,
+        duel_qte_blocks_greeting_user=duel_qte_blocks_greeting_user,
+        bot_qte_success_rate=bot_qte_success_rate,
+        pick_bot_wrong_qte_reply=pick_bot_wrong_qte_reply,
+        apply_cluster_qte_greeting=apply_cluster_qte_greeting,
+        reload_operators_cache=reload_operators_cache,
+    )
+    register_fleet_probe(
+        list_group_online_bot_ids=list_group_online_bot_ids,
+        list_local_fleet_bots_in_group=list_local_fleet_bots_in_group,
+    )
+
+
+@get_driver().on_startup
 async def _ensure_duel_arknights_resources() -> None:
     from src.shared.utils.arknights_duel_resource import schedule_arknights_duel_resource_sync
 

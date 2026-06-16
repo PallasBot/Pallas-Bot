@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from nonebot import get_app, get_bot, on_message
+from nonebot import get_app, get_bot, get_driver, on_message
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, MessageEvent, PrivateMessageEvent
 from nonebot.plugin import PluginMetadata
 from nonebot.rule import Rule
@@ -44,6 +44,19 @@ from .tasks import (
 
 app = get_app()
 store = maa_store
+
+
+@get_driver().on_startup
+async def _register_maa_plugin_coord() -> None:
+    from src.features.plugin_coord.maa import register_maa_coord
+    from src.plugins.maa.endpoints import normalize_http_path
+
+    register_maa_coord(
+        normalize_device_id=normalize_device_id,
+        get_maa_config=get_maa_config,
+        normalize_http_path=normalize_http_path,
+    )
+
 
 __plugin_meta__ = PluginMetadata(
     name="MAA 远控",

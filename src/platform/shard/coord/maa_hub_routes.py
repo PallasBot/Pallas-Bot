@@ -12,8 +12,7 @@ _mounted_paths: frozenset[str] = frozenset()
 
 
 def _maa_http_paths() -> tuple[str, str]:
-    from src.plugins.maa.config import get_maa_config
-    from src.plugins.maa.endpoints import normalize_http_path
+    from src.features.plugin_coord.maa import get_maa_config, normalize_http_path
 
     cfg = get_maa_config()
     return (

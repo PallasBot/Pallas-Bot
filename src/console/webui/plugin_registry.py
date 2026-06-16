@@ -9,6 +9,7 @@ from src.platform.bot_runtime.plugin_matrix import (
     EXTRA_PACKAGE_PRIORITY,
     EXTRA_PLUGIN_PACKAGES,
     extra_package_for_plugin,
+    official_extension_repo_url,
     uv_extra_for_package,
 )
 
@@ -26,17 +27,19 @@ def build_official_extension_rows() -> list[dict[str, Any]]:
         plugin_ids = sorted(by_package[package])
         uv_extra = uv_extra_for_package(package)
         bundled = [pid for pid in plugin_ids if (_PLUGINS_ROOT / pid).is_dir()]
+        repo_url = official_extension_repo_url(package)
         rows.append({
             "package": package,
             "plugin_ids": plugin_ids,
             "priority": EXTRA_PACKAGE_PRIORITY.get(package, "P2"),
             "uv_extra": uv_extra,
             "install_cli": f"uv sync --extra {uv_extra}" if uv_extra else None,
+            "repository_url": repo_url,
             "bundled_in_repo": bool(bundled),
             "bundled_plugin_ids": bundled,
             "install_local_dir": "local/plugins/<插件名>/",
             "webui_install": False,
-            "status": "bundled" if bundled else "external",
+            "status": "external" if repo_url and not bundled else ("bundled" if bundled else "external"),
         })
     return rows
 

@@ -111,11 +111,11 @@ def publish_race_qte_request(
 async def _run_local_single_job(data: dict[str, Any]) -> None:
     from nonebot import get_bots
 
+    from src.features.plugin_coord.duel import bot_qte_success_rate, pick_bot_wrong_qte_reply
     from src.platform.shard.coord.duel_qte_redis import (
         read_session_redis_sync,
         write_single_result_redis_sync,
     )
-    from src.plugins.duel.duel_qte import bot_qte_success_rate, pick_bot_wrong_qte_reply
 
     group_id = int(data["group_id"])
     responder = str(data["responder"])
@@ -158,11 +158,11 @@ async def _run_local_single_job(data: dict[str, Any]) -> None:
 async def _run_local_race_job(data: dict[str, Any], responder_id: str) -> None:
     from nonebot import get_bots
 
+    from src.features.plugin_coord.duel import bot_qte_success_rate, pick_bot_wrong_qte_reply
     from src.platform.shard.coord.duel_qte_redis import (
         read_session_redis_sync,
         try_write_race_winner_redis_sync,
     )
-    from src.plugins.duel.duel_qte import bot_qte_success_rate, pick_bot_wrong_qte_reply
 
     group_id = int(data["group_id"])
     required_key = str(data["required_key"])

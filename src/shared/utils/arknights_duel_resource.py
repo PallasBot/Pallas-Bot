@@ -197,7 +197,7 @@ async def _run_background_arknights_sync(*, sync_json: bool, bulk_avatars: bool)
         logger.info("arknights duel: background resource sync started")
         ok = await ensure_arknights_duel_resources(sync_json=sync_json, bulk_avatars=bulk_avatars)
         if ok and sync_json:
-            from src.plugins.duel.arknights_ops import reload_operators_cache
+            from src.features.plugin_coord.duel import reload_operators_cache
 
             reload_operators_cache()
         logger.info(f"arknights duel: background resource sync finished ok={ok}")

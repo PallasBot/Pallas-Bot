@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING
 
 from nonebot import logger
 
+from src.platform.multi_bot.group_fleet_probe import list_local_fleet_bots_in_group
 from src.platform.shard import context as shard_ctx
 from src.platform.shard.coord.bot_count import (
     STAGGER_SEC,
     run_shard_coordinated_bot_count,
     update_shard_bot_count_registration,
 )
-from src.plugins.duel.duel_bots import list_local_fleet_bots_in_group
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable

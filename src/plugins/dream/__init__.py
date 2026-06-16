@@ -2,7 +2,7 @@ import asyncio
 import random
 import re
 
-from nonebot import logger, on_message
+from nonebot import get_driver, logger, on_message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 from nonebot.exception import ActionFailed
 from nonebot.plugin import PluginMetadata
@@ -25,11 +25,25 @@ from .http_utils import download_image_url
 from .payload import DriftPayload
 from .runtime import (
     broadcast_drift,
+    deliver_drift_payload,
     launch_dream_worker,
     log_dream_chat_to_db,
     send_dream_wake_text,
     stop_dream_worker,
 )
+
+
+@get_driver().on_startup
+async def _register_dream_plugin_coord() -> None:
+    from src.features.plugin_coord.dream import register_dream_coord
+    from src.plugins.dream.payload import drift_payload_from_dict, drift_payload_to_dict
+
+    register_dream_coord(
+        drift_payload_to_dict=drift_payload_to_dict,
+        drift_payload_from_dict=drift_payload_from_dict,
+        deliver_drift_payload=deliver_drift_payload,
+    )
+
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛做梦",

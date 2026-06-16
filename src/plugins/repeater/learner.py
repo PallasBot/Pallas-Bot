@@ -38,7 +38,7 @@ class Learner:
         if chat_data.user_id in Responder._repeat_ignore_user_ids():
             return False
 
-        from src.plugins.duel.duel_session import should_skip_repeater_learn
+        from src.features.plugin_coord.duel import should_skip_repeater_learn
 
         if await should_skip_repeater_learn(chat_data.group_id, chat_data.user_id, chat_data.raw_message):
             return False

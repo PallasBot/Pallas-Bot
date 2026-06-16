@@ -7,6 +7,7 @@ from typing import Any
 
 from nonebot import logger
 
+from src.features.plugin_coord.maa import normalize_device_id
 from src.platform.shard.coord.coord_redis_store import (
     coord_key,
     delete_key_sync,
@@ -15,7 +16,6 @@ from src.platform.shard.coord.coord_redis_store import (
     scan_keys_sync,
     setex_json_sync,
 )
-from src.plugins.maa.tasks import normalize_device_id
 
 _LOCK_RETRIES = 5
 _QUEUE_TTL_SEC = 86400

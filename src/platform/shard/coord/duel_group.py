@@ -57,7 +57,7 @@ def end_duel_group(group_id: int) -> None:
 
 
 async def try_reclaim_orphan_duel_group(group_id: int) -> bool:
-    from src.plugins.duel.duel_session import get_duel_pair
+    from src.features.plugin_coord.duel import get_duel_pair
 
     return await _LOCK.try_reclaim_orphan(
         group_id,

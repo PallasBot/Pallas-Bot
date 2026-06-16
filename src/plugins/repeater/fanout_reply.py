@@ -154,8 +154,8 @@ async def list_fanout_bot_ids(group_id: int) -> list[int]:
     if cached is not None and cached[0] > now:
         return list(cached[1])
 
+    from src.platform.multi_bot.group_fleet_probe import list_group_online_bot_ids
     from src.platform.shard.presence import get_cluster_online_bot_ids
-    from src.plugins.duel.duel_bots import list_group_online_bot_ids
 
     ids = await list_group_online_bot_ids(group_id)
 

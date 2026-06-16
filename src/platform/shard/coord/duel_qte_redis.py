@@ -219,7 +219,7 @@ def greeting_user_blocked_redis_sync(group_id: str, user_id: str) -> bool:
 
 
 def apply_greeting_envelope(envelope: dict[str, Any]) -> None:
-    from src.plugins.duel.duel_qte import apply_cluster_qte_greeting
+    from src.features.plugin_coord.duel import apply_cluster_qte_greeting
 
     gid = str(envelope.get("gid") or "")
     if not gid:

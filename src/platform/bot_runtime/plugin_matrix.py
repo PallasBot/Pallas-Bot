@@ -53,6 +53,13 @@ EXTRA_PACKAGE_PRIORITY: dict[str, str] = {
     "pallas-plugin-ollama": "P2",
 }
 
+# 已迁出独立仓的官方扩展（pip 包名 → 仓库根 URL）
+OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
+    "pallas-plugin-duel": "https://github.com/TogetsuDo/pallas-plugin-duel",
+    "pallas-plugin-maa": "https://github.com/TogetsuDo/pallas-plugin-maa",
+    "pallas-plugin-who-is-spy": "https://github.com/TogetsuDo/pallas-plugin-who-is-spy",
+}
+
 
 def uv_extra_for_package(package: str) -> str:
     short = (package or "").strip().removeprefix("pallas-plugin-")
@@ -77,6 +84,10 @@ def is_extra_plugin(name: str) -> bool:
 
 def extra_package_for_plugin(name: str) -> str | None:
     return EXTRA_PLUGIN_PACKAGES.get((name or "").strip())
+
+
+def official_extension_repo_url(package: str) -> str | None:
+    return OFFICIAL_EXTENSION_REPOS.get((package or "").strip())
 
 
 def should_load_bundled_plugin(name: str, *, load_bundled_extra: bool) -> bool:

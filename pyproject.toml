@@ -29,8 +29,13 @@ dependencies = [
     "python-ulid>=3.1.0",
     "psutil>=6.1.0",
     "tenacity>=9.1.2",
+    "nonebot-plugin-status>=0.9.0",
     "curl-cffi>=0.9.0",
     "aiohttp>=3.13.5",
+    "nonebot-plugin-localstore>=0.7",
+    "nonebot-plugin-htmlrender>=0.7.0a2",
+    "githubkit>=0.13,<0.14",
+    "mdit-py-emoji>=0.1",
 ]
 
 [project.optional-dependencies]
@@ -44,7 +49,7 @@ pg = [
 coord-redis = [
     "redis>=5.2,<6",
 ]
-# 可选部署模板（见 deploy/README.md）
+# 已弃用占位：分片运行请 uv sync --extra deploy-shard 并配置 REDIS_URL（见 deploy/README.md）
 shard = []
 message-scrub = []
 deploy-shard = [
@@ -55,6 +60,22 @@ deploy-shard-pg = [
     "asyncpg>=0.29",
     "redis>=5.2,<6",
 ]
+# 4.0 官方扩展 extras（P0 已指向独立 Git 仓；本地联调可改 [tool.uv.sources] 为 path）
+plugins-duel = ["pallas-plugin-duel>=4.0.0"]
+plugins-who-is-spy = ["pallas-plugin-who-is-spy>=4.0.0"]
+plugins-maa = ["pallas-plugin-maa>=4.0.0"]
+plugins-party = []
+plugins-dream = []
+plugins-draw = []
+plugins-ai-media = []
+plugins-social = []
+plugins-community-stats = []
+plugins-ollama = []
+
+[tool.uv.sources]
+pallas-plugin-duel = { git = "https://github.com/TogetsuDo/pallas-plugin-duel.git", rev = "main" }
+pallas-plugin-maa = { git = "https://github.com/TogetsuDo/pallas-plugin-maa.git", rev = "main" }
+pallas-plugin-who-is-spy = { git = "https://github.com/TogetsuDo/pallas-plugin-who-is-spy.git", rev = "main" }
 
 [dependency-groups]
 dev = [
@@ -81,6 +102,7 @@ builtin_plugins = []
 [tool.nonebot.plugins]
 "@local" = []
 nonebot-plugin-apscheduler = ["nonebot_plugin_apscheduler"]
+nonebot-plugin-status = ["nonebot_plugin_status"]
 
 [tool.nonebot.adapters]
 "@local" = []

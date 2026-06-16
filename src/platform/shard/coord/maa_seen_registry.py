@@ -49,7 +49,7 @@ def _seen_redis_key(user: str, device: str) -> str | None:
 
 
 def _seen_ttl_sec() -> int:
-    from src.plugins.maa.config import get_maa_config
+    from src.features.plugin_coord.maa import get_maa_config
 
     return max(60, int(get_maa_config().maa_seen_ttl_seconds))
 

@@ -33,10 +33,10 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_AUTO, SCENE_GROUP, SCENE_PRIVATE, join_usage, usage_line
+from src.features.plugin_coord.duel import duel_qte_blocks_greeting_user
 from src.foundation.config import BotConfig, GroupConfig, UserConfig
 from src.foundation.paths import plugin_data_dir
 from src.plugins.blacklist import invalidate_group_ban_gate_cache, invalidate_user_ban_gate_cache
-from src.plugins.duel.duel_qte import duel_qte_blocks_greeting_user
 from src.shared.utils import HTTPXClient, is_bot_admin
 
 from .config import Config, plugin_config
