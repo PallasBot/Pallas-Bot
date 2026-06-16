@@ -1,5 +1,7 @@
 # 运维脚本索引
 
+> **4.0 路线**：启停、更新、扩展安装将收敛到统一 CLI **`pallas`**（见 [pallas-cli.md](../docs/architecture/pallas-cli.md)）。在 CLI 落地前，以下 Bash/Python 脚本仍为权威入口。
+
 | 目录 | 用途 |
 | --- | --- |
 | `scripts/` | 启停、分片迁移、端口同步 |
