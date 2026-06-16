@@ -126,7 +126,7 @@ def register_routes(
             target = f"{base}/"
         return target
 
-    shared_pallas_ui_dir = Path(__file__).resolve().parent.parent / "pallas_protocol" / "web" / "static" / "pallas_ui"
+    shared_pallas_ui_dir = Path(__file__).resolve().parent.parent / "pb_protocol" / "web" / "static" / "pallas_ui"
     use_priest_avatar = shared_pallas_ui_dir.is_dir()
 
     def _render_login_page(*, target: str, reason: str | None, token_submitted: bool) -> HTMLResponse:

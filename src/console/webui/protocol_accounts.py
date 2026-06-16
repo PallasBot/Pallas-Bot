@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from src.foundation.paths import plugin_data_dir
+from src.plugins.pb_protocol.data_dir import pb_protocol_data_dir
 
 _cached_mtime: float | None = None
 _cached_names: dict[str, str] | None = None
@@ -12,7 +12,7 @@ _cached_names: dict[str, str] | None = None
 
 def protocol_account_display_names() -> dict[str, str]:
     global _cached_mtime, _cached_names
-    path = plugin_data_dir("pallas_protocol") / "accounts.json"
+    path = pb_protocol_data_dir(create=False) / "accounts.json"
     if not path.is_file():
         return {}
     try:

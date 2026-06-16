@@ -1,4 +1,4 @@
-# pallas_protocol（协议端管理）
+# pb_protocol（协议端管理）
 
 > **官方扩展**：`pallas-plugin-protocol`（`uv sync --extra plugins-protocol`）
 
@@ -28,7 +28,7 @@ Docker 下 NapCat 默认不在 Compose 网络内，反向 WS 主机勿盲目填 
 
 ## 配置
 
-常用项（完整见 [`config.py`](../../../src/plugins/pallas_protocol/config.py)，WebUI **插件 → pallas_protocol**）：
+常用项（完整见 [`config.py`](../../../src/plugins/pb_protocol/config.py)，WebUI **插件 → pb_protocol**）：
 
 | 键 | 说明 |
 | --- | --- |
@@ -49,4 +49,4 @@ Docker 下 NapCat 默认不在 Compose 网络内，反向 WS 主机勿盲目填 
 
 ## 实现
 
-[`src/plugins/pallas_protocol/`](../../../src/plugins/pallas_protocol/)
+[`src/plugins/pb_protocol/`](../../../src/plugins/pb_protocol/)

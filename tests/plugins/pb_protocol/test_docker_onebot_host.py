@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 
 def test_linux_default_route_gateway_reads_proc_net_route(monkeypatch) -> None:
-    from src.plugins.pallas_protocol import docker_onebot_host as m
+    from src.plugins.pb_protocol import docker_onebot_host as m
 
     content = (
         "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n"
@@ -25,7 +25,7 @@ def test_linux_default_route_gateway_reads_proc_net_route(monkeypatch) -> None:
 
 
 def test_effective_docker_onebot_host_explicit_and_auto(monkeypatch) -> None:
-    from src.plugins.pallas_protocol import docker_onebot_host as m
+    from src.plugins.pb_protocol import docker_onebot_host as m
 
     monkeypatch.setattr(m, "linux_docker_bridge_host_ip", lambda: "10.5.0.1")
     monkeypatch.setattr(m.sys, "platform", "linux")
@@ -43,7 +43,7 @@ def test_effective_docker_onebot_host_explicit_and_auto(monkeypatch) -> None:
 
 
 def test_resolve_docker_onebot_host_from_config_reads_network_mode() -> None:
-    from src.plugins.pallas_protocol.docker_onebot_host import resolve_docker_onebot_host_from_config
+    from src.plugins.pb_protocol.docker_onebot_host import resolve_docker_onebot_host_from_config
 
     cfg = MagicMock()
     cfg.pallas_protocol_docker_onebot_host = ""
@@ -52,7 +52,7 @@ def test_resolve_docker_onebot_host_from_config_reads_network_mode() -> None:
 
 
 def test_build_napcat_docker_bridge_adds_host_gateway(tmp_path) -> None:
-    from src.plugins.pallas_protocol.linux_docker import build_docker_run_argv
+    from src.plugins.pb_protocol.linux_docker import build_docker_run_argv
 
     ad = tmp_path / "acct"
     (ad / "config").mkdir(parents=True)
@@ -83,7 +83,7 @@ def test_build_napcat_docker_bridge_adds_host_gateway(tmp_path) -> None:
 
 
 def test_build_napcat_docker_skips_empty_resource_limits(tmp_path) -> None:
-    from src.plugins.pallas_protocol.linux_docker import build_docker_run_argv
+    from src.plugins.pb_protocol.linux_docker import build_docker_run_argv
 
     ad = tmp_path / "acct3"
     (ad / "config").mkdir(parents=True)
@@ -109,7 +109,7 @@ def test_build_napcat_docker_skips_empty_resource_limits(tmp_path) -> None:
 
 
 def test_build_napcat_docker_host_network_skips_host_mapping(tmp_path) -> None:
-    from src.plugins.pallas_protocol.linux_docker import build_docker_run_argv
+    from src.plugins.pb_protocol.linux_docker import build_docker_run_argv
 
     ad = tmp_path / "acct2"
     (ad / "config").mkdir(parents=True)
@@ -129,7 +129,7 @@ def test_build_napcat_docker_host_network_skips_host_mapping(tmp_path) -> None:
 
 
 def test_build_snowluma_docker_adds_host_gateway(tmp_path) -> None:
-    from src.plugins.pallas_protocol.snowluma_docker import build_snowluma_docker_run_argv
+    from src.plugins.pb_protocol.snowluma_docker import build_snowluma_docker_run_argv
 
     ad = tmp_path / "sl"
     sl_base = ad / "docker" / "snowluma"

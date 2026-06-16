@@ -61,4 +61,4 @@
 3. 在本目录补充对应域文档或新增分域文件
 4. WebUI：在 `consoleApi.ts` + `pallasTypes.ts` 增加类型与请求函数
 
-协议端（NapCat/Snowluma）另有独立 HTTP API，由 `pallas_protocol` 挂载，不在 `/pallas/api` 下；见 [pallas_protocol 文档](../../../plugins/pallas_protocol/README.md)。
+协议端（NapCat/Snowluma）另有独立 HTTP API，由 `pallas_protocol` 挂载，不在 `/pallas/api` 下；见 [pallas_protocol 文档](../../../plugins/pb_protocol/README.md)。

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.plugins.pallas_protocol.linux_docker import is_plain_ws_url, ws_url_host_should_rewrite_for_docker_bridge
+from src.plugins.pb_protocol.linux_docker import is_plain_ws_url, ws_url_host_should_rewrite_for_docker_bridge
 
 
 @pytest.mark.parametrize(

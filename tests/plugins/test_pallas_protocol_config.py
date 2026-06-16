@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from src.plugins.pallas_protocol.config import Config, onebot_connection_hints, resolve_onebot_ws_settings
+from src.plugins.pb_protocol.config import Config, onebot_connection_hints, resolve_onebot_ws_settings
 
 
 def test_pallas_protocol_config_defaults() -> None:

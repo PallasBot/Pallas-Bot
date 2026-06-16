@@ -1,4 +1,4 @@
-"""pb_webui 数据目录；启动时从 pallas_webui 迁移一次。"""
+"""pb_protocol 数据目录；启动时从 pallas_protocol 迁移一次。"""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from src.foundation.paths import plugin_data_dir
 if TYPE_CHECKING:
     from pathlib import Path
 
-_LEGACY_PLUGIN = "pallas_webui"
-_CURRENT_PLUGIN = "pb_webui"
+_LEGACY_PLUGIN = "pallas_protocol"
+_CURRENT_PLUGIN = "pb_protocol"
 _migrated = False
 
 
-def migrate_pb_webui_data_dir_if_needed() -> None:
+def migrate_pb_protocol_data_dir_if_needed() -> None:
     global _migrated
     if _migrated:
         return
@@ -31,6 +31,6 @@ def migrate_pb_webui_data_dir_if_needed() -> None:
         raise
 
 
-def pb_webui_data_dir(*, create: bool = True) -> Path:
-    migrate_pb_webui_data_dir_if_needed()
+def pb_protocol_data_dir(*, create: bool = True) -> Path:
+    migrate_pb_protocol_data_dir_if_needed()
     return plugin_data_dir(_CURRENT_PLUGIN, create=create)

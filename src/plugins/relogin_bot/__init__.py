@@ -27,7 +27,7 @@ if is_hub_role():
 
     mount_relogin_hub_routes(get_app())
 
-from src.plugins.pallas_protocol import manager as protocol_manager
+from src.plugins.pb_protocol import manager as protocol_manager
 
 __all__ = ["relogin_cmd", "create_cmd"]
 

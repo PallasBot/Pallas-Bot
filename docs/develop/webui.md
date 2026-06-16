@@ -67,7 +67,7 @@ npm run build   # vue-tsc + vite build
 | --- | --- |
 | 新页面、样式、前端交互 | Pallas-Bot-WebUI |
 | 新 API、权限、配置落盘 | Pallas-Bot（`pallas_webui` / `common/webui`） |
-| 内嵌协议端静态页 | 主仓 `src/plugins/pallas_protocol/web/static/`（同样遵守窄屏） |
+| 内嵌协议端静态页 | 主仓 `src/plugins/pb_protocol/web/static/`（同样遵守窄屏） |
 
 PR 仍建议**单一主题**：前后端分拆为两个 PR 时，在描述中互相链接。
 

@@ -24,7 +24,7 @@ SHARD_INTERNAL_PLUGIN_NAMES: frozenset[str] = frozenset({
 })
 
 EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
-    "pallas_protocol": "pallas-plugin-protocol",
+    "pb_protocol": "pallas-plugin-protocol",
     "relogin_bot": "pallas-plugin-protocol",
     "relogin_forward": "pallas-plugin-protocol",
     "duel": "pallas-plugin-duel",
@@ -81,7 +81,7 @@ OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
 }
 
 _PROTOCOL_MODULE_NAMES: frozenset[str] = frozenset({
-    "src.plugins.pallas_protocol",
+    "src.plugins.pb_protocol",
     "pallas_plugin_protocol",
 })
 
@@ -104,7 +104,9 @@ def is_core_plugin(name: str) -> bool:
 
 
 def is_extra_plugin(name: str) -> bool:
-    return (name or "").strip() in EXTRA_PLUGIN_NAMES
+    from src.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
+
+    return canonical_plugin_package((name or "").strip()) in EXTRA_PLUGIN_NAMES
 
 
 def is_shard_internal_plugin(name: str) -> bool:
@@ -112,7 +114,9 @@ def is_shard_internal_plugin(name: str) -> bool:
 
 
 def extra_package_for_plugin(name: str) -> str | None:
-    return EXTRA_PLUGIN_PACKAGES.get((name or "").strip())
+    from src.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
+
+    return EXTRA_PLUGIN_PACKAGES.get(canonical_plugin_package((name or "").strip()))
 
 
 def official_extension_repo_url(package: str) -> str | None:
@@ -120,7 +124,9 @@ def official_extension_repo_url(package: str) -> str | None:
 
 
 def should_load_bundled_plugin(name: str, *, load_bundled_extra: bool) -> bool:
-    short = (name or "").strip()
+    from src.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
+
+    short = canonical_plugin_package((name or "").strip())
     if not short:
         return False
     if is_core_plugin(short):

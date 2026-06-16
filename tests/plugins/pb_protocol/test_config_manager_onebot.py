@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from src.plugins.pallas_protocol.config_manager import AccountConfigManager
+from src.plugins.pb_protocol.config_manager import AccountConfigManager
 
 
 def test_sync_onebot_sets_placeholder_only_when_no_url_anywhere(tmp_path) -> None:

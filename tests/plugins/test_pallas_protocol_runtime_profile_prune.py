@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from src.plugins.pallas_protocol.config import Config
-from src.plugins.pallas_protocol.service import PallasProtocolService
+from src.plugins.pb_protocol.config import Config
+from src.plugins.pb_protocol.service import PallasProtocolService
 
 
 @pytest.mark.asyncio

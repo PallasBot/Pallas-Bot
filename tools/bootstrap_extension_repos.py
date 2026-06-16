@@ -57,12 +57,12 @@ REPOS: list[dict[str, object]] = [
         "description": "Pallas-Bot 官方扩展：NapCat/SnowLuma 协议端管理、牛牛重新上号与分片转发。",
         "uv_extra": "plugins-protocol",
         "copies": [
-            ("pallas_protocol", "pallas_plugin_protocol"),
+            ("pb_protocol", "pallas_plugin_protocol"),
             ("relogin_bot", "pallas_plugin_relogin_bot"),
             ("relogin_forward", "pallas_plugin_relogin_forward"),
         ],
         "copy_overrides": {
-            "relogin_bot": {"src.plugins.pallas_protocol": "pallas_plugin_protocol"},
+            "relogin_bot": {"src.plugins.pb_protocol": "pallas_plugin_protocol"},
         },
         "nonebot_plugins": {
             "pallas-plugin-protocol": ["pallas_plugin_protocol"],

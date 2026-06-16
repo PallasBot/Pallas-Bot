@@ -2,9 +2,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from src.plugins.pallas_protocol.contract import SNOWLUMA_PROTOCOL_BACKEND
-from src.plugins.pallas_protocol.launch_manager import LaunchManager
-from src.plugins.pallas_protocol.platform.posix import PosixNapcatPlatform
+from src.plugins.pb_protocol.contract import SNOWLUMA_PROTOCOL_BACKEND
+from src.plugins.pb_protocol.launch_manager import LaunchManager
+from src.plugins.pb_protocol.platform.posix import PosixNapcatPlatform
 
 
 def _cfg(**kwargs):
@@ -35,7 +35,7 @@ def test_apply_defaults_linux_wraps_with_xvfb_when_non_docker(tmp_path: Path) ->
         platform=PosixNapcatPlatform(),
     )
     account = {"id": "10001", "qq": "10001"}
-    with patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"):
+    with patch("src.plugins.pb_protocol.launch_manager.sys.platform", "linux"):
         mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
     assert account["command"] == "xvfb-run"
     assert account["args"] == [
@@ -58,8 +58,8 @@ def test_apply_defaults_linux_docker_mode_keeps_docker_command(tmp_path: Path) -
     )
     account = {"id": "10002", "qq": "10002"}
     with (
-        patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"),
-        patch("src.plugins.pallas_protocol.linux_docker.is_linux", return_value=True),
+        patch("src.plugins.pb_protocol.launch_manager.sys.platform", "linux"),
+        patch("src.plugins.pb_protocol.linux_docker.is_linux", return_value=True),
     ):
         mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
     assert account["command"] == "docker"
@@ -125,7 +125,10 @@ def test_apply_defaults_linux_prefers_appimage_then_xvfb(tmp_path: Path) -> None
         platform=PosixNapcatPlatform(),
     )
     account = {"id": "10003", "qq": "10003"}
-    with patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"):
+    with patch("src.plugins.pb_protocol.launch_manager.sys.platform", "linux"), patch(
+        "src.plugins.pb_protocol.launch_manager.os.geteuid",
+        return_value=1000,
+    ):
         mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
     assert account["command"] == "xvfb-run"
     assert account["args"] == ["--auto-servernum", str(runtime_file), "--appimage-extract-and-run", "-q", "10003"]
@@ -185,7 +188,7 @@ def test_apply_defaults_snowluma_linux_docker_allocator_callback(tmp_path: Path)
         "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND,
         "webui_port": 6250,
     }
-    with patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"):
+    with patch("src.plugins.pb_protocol.launch_manager.sys.platform", "linux"):
         mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
     assert account.get("snowluma_linux_docker") is True
     assert account["snowluma_docker_host_onebot_http"] == 18110
@@ -228,7 +231,7 @@ def test_apply_defaults_snowluma_docker_when_profile_sl_docker_even_if_napcat_sh
         "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND,
         "webui_port": 6251,
     }
-    with patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"):
+    with patch("src.plugins.pb_protocol.launch_manager.sys.platform", "linux"):
         mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
     assert account.get("snowluma_linux_docker") is True
 
@@ -256,7 +259,7 @@ def test_apply_defaults_snowluma_linux_docker_default_ports_match_upstream(tmp_p
         "protocol_backend": SNOWLUMA_PROTOCOL_BACKEND,
         "webui_port": 6250,
     }
-    with patch("src.plugins.pallas_protocol.launch_manager.sys.platform", "linux"):
+    with patch("src.plugins.pb_protocol.launch_manager.sys.platform", "linux"):
         mgr.apply_defaults(account, lambda a: str(a.get("qq", "")))
     assert account.get("snowluma_linux_docker") is True
     assert account["snowluma_docker_host_onebot_http"] == 3000
