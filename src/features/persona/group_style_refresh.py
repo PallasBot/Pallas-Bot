@@ -100,8 +100,14 @@ async def refresh_group_style_profile(group_id: int, *, window_hours: int = DEFA
     )
 
     from src.features.persona.affect_refine import refine_group_style_affect
+    from src.features.persona.affect_refine_client import collect_affect_refine_samples
 
-    profile = await refine_group_style_affect(profile, group_id=gid)
+    recent_messages = await message_repo.find_recent_in_group(gid, before_time=now_ts + 1, limit=32)
+    profile = await refine_group_style_affect(
+        profile,
+        group_id=gid,
+        message_samples=collect_affect_refine_samples(list(recent_messages)),
+    )
 
     await repo.upsert_field(gid, "style_profile", profile)
     invalidate_persona_cache()

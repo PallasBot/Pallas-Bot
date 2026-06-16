@@ -54,6 +54,8 @@ def empty_affect_refine() -> dict[str, Any]:
         "source": AFFECT_REFINE_SOURCE_NONE,
         "warmth_delta": 0.0,
         "assertiveness_delta": 0.0,
+        "confidence": 0.0,
+        "summary": "",
         "updated_at": None,
     }
 
@@ -78,6 +80,8 @@ def merge_affect_refine_into_profile(profile: dict[str, Any], refine: dict[str, 
             clamp_affect(float(refine.get("assertiveness_delta") or 0.0), lower=-0.5, upper=0.5),
             3,
         ),
+        "confidence": round(clamp_affect(float(refine.get("confidence") or 0.0), lower=0.0, upper=1.0), 3),
+        "summary": str(refine.get("summary") or "")[:256],
         "updated_at": refine.get("updated_at"),
     }
     derived = profile.get("derived")
