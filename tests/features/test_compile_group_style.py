@@ -55,36 +55,34 @@ def test_compile_group_style_snapshot_ready_profile() -> None:
 
 
 def test_build_group_style_hints_calm_long_group() -> None:
-    hints = build_group_style_hints(
-        {
-            "length_pref": "long",
-            "msgs_per_hour_active": 2.0,
-            "chaos_bias": 0.05,
-            "reply_bias_mul": 0.9,
-        }
-    )
+    hints = build_group_style_hints({
+        "length_pref": "long",
+        "msgs_per_hour_active": 2.0,
+        "chaos_bias": 0.05,
+        "reply_bias_mul": 0.9,
+    })
     assert "群消息偏长" in hints
     assert "聊天较安静" in hints
     assert "适合更克制接话" in hints
 
 
 def test_compile_group_style_prompt_ready() -> None:
-    prompt = compile_group_style_prompt(
-        {
-            "sample": {"message_count": 100, "answer_count": 20},
-            "raw": {"msgs_per_hour_active": 6.0, "repeat_chain_rate": 0.1},
-            "derived": {
-                "reply_bias_mul": 1.05,
-                "speak_bias_mul": 1.0,
-                "length_pref": "medium",
-                "chaos_bias": 0.1,
-            },
-        }
-    )
-    assert prompt.startswith("【群风格】")
+    prompt = compile_group_style_prompt({
+        "sample": {"message_count": 100, "answer_count": 20},
+        "raw": {"msgs_per_hour_active": 6.0, "repeat_chain_rate": 0.1},
+        "derived": {
+            "reply_bias_mul": 1.05,
+            "speak_bias_mul": 1.0,
+            "length_pref": "medium",
+            "chaos_bias": 0.1,
+        },
+    })
+    assert prompt.startswith("<<STATS:group_style>>")
     assert "长度偏好=medium" in prompt
     assert "摘要：" in prompt
 
 
 def test_compile_group_style_prompt_not_ready() -> None:
-    assert compile_group_style_prompt(None) == "【群风格】样本不足，暂无可用画像。"
+    prompt = compile_group_style_prompt(None)
+    assert "<<STATS:group_style>>" in prompt
+    assert "样本不足" in prompt

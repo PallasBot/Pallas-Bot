@@ -6,6 +6,7 @@ from nonebot.rule import Rule
 from ulid import ULID
 
 from src.features.cmd_perm import group_message_permission_for_command
+from src.features.persona.compile_persona_prompt import compile_persona_prompt_for
 from src.foundation.config import TaskManager
 from src.shared.utils import HTTPXClient
 
@@ -51,7 +52,21 @@ async def handle_ollama_chat(bot: Bot, event: Event):
         await ollama_chat.send(OLLAMA_VAGUE_REPLY)
         return
 
-    system_prompt = get_system_prompt()
+    system_prompt = ""
+    raw_group_id = getattr(event, "group_id", None)
+    group_id = int(raw_group_id) if raw_group_id is not None else None
+    try:
+        bundle = await compile_persona_prompt_for(
+            int(bot.self_id),
+            group_id,
+            base_system_path=cfg.ollama_system_prompt_path or None,
+        )
+        system_prompt = bundle.system.strip()
+    except Exception:
+        logger.exception("compile_persona_prompt failed, falling back to static system prompt")
+
+    if not system_prompt:
+        system_prompt = get_system_prompt()
     if not system_prompt:
         logger.error("ollama system prompt file is missing or empty")
         await ollama_chat.send(OLLAMA_VAGUE_REPLY)

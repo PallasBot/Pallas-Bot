@@ -2,6 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
+from .prompt_guard import (
+    ALLOWED_LENGTH_PREFS,
+    format_safe_decimal,
+    normalize_enum,
+    sanitize_prompt_literal,
+    wrap_stats_block,
+)
+
 _SNAPSHOT_VERSION = 1
 
 
@@ -91,19 +99,22 @@ def compile_group_style_prompt(style_profile: dict[str, Any] | None, *, locale: 
         locale = "zh"
 
     if not snapshot["ready"]:
-        return "【群风格】样本不足，暂无可用画像。"
+        body = "样本不足，暂无可用画像。"
+        return wrap_stats_block("group_style", f"【群风格】{body}")
 
     signals = snapshot.get("signals") or {}
     hints = snapshot.get("hints") or []
     hint_text = "、".join(hints) if hints else "暂无显著特征"
+    length_pref = normalize_enum(str(signals.get("length_pref") or ""), ALLOWED_LENGTH_PREFS, "unknown")
 
-    return (
+    body = (
         "【群风格】"
-        f"长度偏好={signals.get('length_pref') or 'unknown'}；"
-        f"活跃={signals.get('msgs_per_hour_active')}条/活跃小时；"
-        f"复读倾向={signals.get('repeat_chain_rate')}；"
-        f"接话倍率={signals.get('reply_bias_mul')}；"
-        f"主动发言倍率={signals.get('speak_bias_mul')}；"
-        f"混沌={signals.get('chaos_bias')}。"
-        f"摘要：{hint_text}。"
+        f"长度偏好={length_pref}；"
+        f"活跃={format_safe_decimal(signals.get('msgs_per_hour_active'), default='0', min_value=0)}条/活跃小时；"
+        f"复读倾向={format_safe_decimal(signals.get('repeat_chain_rate'), default='0', min_value=0, max_value=1)}；"
+        f"接话倍率={format_safe_decimal(signals.get('reply_bias_mul'), default='1', min_value=0, max_value=3)}；"
+        f"主动发言倍率={format_safe_decimal(signals.get('speak_bias_mul'), default='1', min_value=0, max_value=3)}；"
+        f"混沌={format_safe_decimal(signals.get('chaos_bias'), default='0', min_value=0, max_value=1)}。"
+        f"摘要：{sanitize_prompt_literal(hint_text, max_len=256)}。"
     )
+    return wrap_stats_block("group_style", body)
