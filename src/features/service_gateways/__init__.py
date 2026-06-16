@@ -1,7 +1,8 @@
-"""兼容层：连通性探测已迁至 features/service_gateways。"""
+"""服务网关连通性探测（注册表 + LLM 内置 provider）。"""
 
 from src.features.service_gateways.collect import probe_all_connectivity, probe_all_connectivity_from_draft
 from src.features.service_gateways.draft import draw_draft_from_values, maa_cfg_from_draft, sing_cfg_from_draft
+from src.features.service_gateways.llm_probe import LLM_CATEGORY, probe_llm_service
 from src.features.service_gateways.media_probe import (
     IMAGE_CATEGORY,
     MAA_CATEGORY,
@@ -12,9 +13,15 @@ from src.features.service_gateways.media_probe import (
     probe_sing_server,
     sing_probe_urls,
 )
+from src.features.service_gateways.registry import (
+    register_service_probe_provider,
+    registered_service_probe_names,
+    run_service_probes,
+)
 
 __all__ = [
     "IMAGE_CATEGORY",
+    "LLM_CATEGORY",
     "MAA_CATEGORY",
     "SING_CATEGORY",
     "draw_draft_from_values",
@@ -23,8 +30,12 @@ __all__ = [
     "probe_all_connectivity",
     "probe_all_connectivity_from_draft",
     "probe_image_gateways",
+    "probe_llm_service",
     "probe_maa_endpoints",
     "probe_sing_server",
+    "register_service_probe_provider",
+    "registered_service_probe_names",
+    "run_service_probes",
     "sing_cfg_from_draft",
     "sing_probe_urls",
 ]

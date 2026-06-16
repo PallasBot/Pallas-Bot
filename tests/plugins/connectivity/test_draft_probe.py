@@ -15,7 +15,7 @@ async def test_probe_from_empty_draft_delegates(monkeypatch) -> None:
         return []
 
     monkeypatch.setattr(
-        "src.plugins.connectivity.probe_collect.probe_all_connectivity",
+        "src.features.service_gateways.collect.probe_all_connectivity",
         fake_all,
     )
     await probe_all_connectivity_from_draft({})

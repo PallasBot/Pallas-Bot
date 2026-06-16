@@ -6,7 +6,7 @@
 
 | 口令 | 场景 | 说明 |
 | --- | --- | --- |
-| 牛牛连通 | 群内或私聊 | 并行探测画画 / MAA / 唱歌 |
+| 牛牛连通 | 群内或私聊 | 并行探测 LLM / 画画 / MAA / 唱歌 |
 | 牛牛网关 | 群内或私聊 | 同 `牛牛连通`（兼容） |
 
 ## 命令权限
@@ -17,7 +17,7 @@
 
 ## 配置
 
-地址写入 `data/pallas_config/webui.json`（画画、MAA、唱歌等键），由 WebUI 通用配置段统一编辑。探测逻辑见 [`service_probe`](../../../src/shared/service_probe/)。
+地址写入 `data/pallas_config/webui.json`（画画、MAA、唱歌等键），由 WebUI 通用配置段统一编辑。探测框架见 [`features/service_gateways`](../../../src/features/service_gateways/)，HTTP 工具见 [`service_probe`](../../../src/shared/service_probe/)。
 
 ## 排障
 
@@ -28,4 +28,4 @@
 
 ## 实现
 
-[`src/plugins/connectivity/`](../../../src/plugins/connectivity/)
+[`src/plugins/connectivity/`](../../../src/plugins/connectivity/)（命令壳）；探测 provider 注册于 [`src/features/service_gateways/`](../../../src/features/service_gateways/)。
