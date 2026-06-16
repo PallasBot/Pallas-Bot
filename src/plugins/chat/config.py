@@ -15,12 +15,12 @@ class Config(BaseModel, extra="ignore"):
     chat_enable: bool = Field(
         default=False,
         validation_alias=AliasChoices("chat_enable", "llm_chat_enable"),
-        description="已弃用：请配置全局 LLM_CHAT_ENABLED。",
+        description="已弃用：未配置 LLM_CHAT_ENABLED 时启用遗留 RWKV 酒后聊天。",
     )
-    chat_endpoint: str = Field(default="/api/chat", description="已弃用：请使用统一 /api/v1/chat/completions。")
+    chat_endpoint: str = Field(default="/api/chat", description="遗留 RWKV 聊天接口路径。")
     del_session_endpoint: str = Field(
         default="/api/del_session",
-        description="已弃用：醒酒清会话走统一 LLM delete session。",
+        description="遗留 RWKV 醒酒清会话路径。",
     )
     tts_enable: bool = Field(default=False, description="酒后 TTS 暂未接入统一网关，保留配置占位。")
 

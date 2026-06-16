@@ -142,23 +142,42 @@ async def test_submit_chat_task_rejects_empty_user_text() -> None:
 
 
 def test_resolve_llm_chat_enabled_priority(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.llm.config import clear_llm_config_cache, resolve_llm_chat_enabled
+    from src.features.llm.config import (
+        clear_llm_config_cache,
+        resolve_legacy_rwkv_drunk_chat_enabled,
+        resolve_llm_chat_enabled,
+    )
+    from src.features.llm.availability import is_drunk_chat_enabled
 
     def set_env(values: dict[str, str | None]) -> None:
         def fake_raw(key: str) -> str | None:
             return values.get(key)
 
         monkeypatch.setattr("src.features.llm.config.repo_env_raw_value", fake_raw)
+        monkeypatch.setattr(
+            "src.plugins.chat.config.get_chat_config",
+            lambda: type("Cfg", (), {"chat_enable": False})(),
+        )
         clear_llm_config_cache()
 
     set_env({"LLM_CHAT_ENABLED": "false", "CHAT_ENABLE": "true"})
     assert resolve_llm_chat_enabled() is False
+    assert resolve_legacy_rwkv_drunk_chat_enabled() is False
+    assert is_drunk_chat_enabled() is False
 
     set_env({"CHAT_ENABLE": "true"})
-    assert resolve_llm_chat_enabled() is True
+    assert resolve_llm_chat_enabled() is False
+    assert resolve_legacy_rwkv_drunk_chat_enabled() is True
+    assert is_drunk_chat_enabled() is True
 
     set_env({"LLM_CHAT_ENABLE": "false", "CHAT_ENABLE": "true"})
     assert resolve_llm_chat_enabled() is False
+    assert resolve_legacy_rwkv_drunk_chat_enabled() is True
+
+    set_env({"LLM_CHAT_ENABLED": "true", "CHAT_ENABLE": "false"})
+    assert resolve_llm_chat_enabled() is True
+    assert resolve_legacy_rwkv_drunk_chat_enabled() is False
 
     set_env({})
     assert resolve_llm_chat_enabled() is False
+    assert resolve_legacy_rwkv_drunk_chat_enabled() is False

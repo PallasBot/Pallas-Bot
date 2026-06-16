@@ -20,7 +20,12 @@ def invalidate_plugin_help_availability_cache() -> None:
 
 
 def is_plugin_help_available(plugin_name: str) -> bool:
-    gate = _CONFIG_GATED.get((plugin_name or "").strip())
+    name = (plugin_name or "").strip()
+    if name == "chat":
+        from src.features.llm.availability import is_drunk_chat_enabled
+
+        return is_drunk_chat_enabled()
+    gate = _CONFIG_GATED.get(name)
     if gate is None:
         return True
     global _avail_cache

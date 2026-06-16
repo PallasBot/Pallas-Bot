@@ -27,14 +27,29 @@ def _env_bool_first_optional(keys: tuple[str, ...]) -> bool | None:
 
 
 def resolve_llm_chat_enabled() -> bool:
-    """全局 LLM 闲聊总闸：LLM_CHAT_ENABLED 优先，其次遗留 OLLAMA_ENABLE / 插件级 CHAT_ENABLE / LLM_CHAT_ENABLE。"""
+    """全局 LLM 闲聊总闸：LLM_CHAT_ENABLED 优先，其次遗留 OLLAMA_ENABLE / LLM_CHAT_ENABLE。"""
     primary = _env_bool_first_optional(("LLM_CHAT_ENABLED", "OLLAMA_ENABLE"))
     if primary is not None:
         return primary
-    legacy = _env_bool_first_optional(("LLM_CHAT_ENABLE", "CHAT_ENABLE"))
+    legacy = _env_bool_first_optional(("LLM_CHAT_ENABLE",))
     if legacy is not None:
         return legacy
     return False
+
+
+def resolve_legacy_rwkv_drunk_chat_enabled() -> bool:
+    """遗留酒后 RWKV：仅当未显式配置 LLM_CHAT_ENABLED 时读取 CHAT_ENABLE / 插件 chat_enable。"""
+    if _env_bool_first_optional(("LLM_CHAT_ENABLED",)) is not None:
+        return False
+    env_legacy = _env_bool_first_optional(("CHAT_ENABLE",))
+    if env_legacy is not None:
+        return env_legacy
+    try:
+        from src.plugins.chat.config import get_chat_config
+
+        return bool(get_chat_config().chat_enable)
+    except Exception:
+        return False
 
 
 def _env_bool(key: str, default: bool = False) -> bool:

@@ -20,7 +20,7 @@ FIELD_LABELS: dict[str, str] = {
     "bot_status_smtp_server": "SMTP 服务器",
     "bot_status_smtp_user": "SMTP 发信账号",
     "bots": "已连接牛牛 QQ 集合",
-    "chat_enable": "启用 LLM 闲聊（已弃用，请用 LLM_CHAT_ENABLED）",
+    "chat_enable": "启用酒后聊天（遗留 RWKV，请改用 LLM_CHAT_ENABLED）",
     "chat_endpoint": "聊天接口路径",
     "claim_ttl_sec": "去重保留秒数",
     "command_limit_overrides": "命令冷却覆盖",

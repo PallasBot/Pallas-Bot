@@ -50,7 +50,7 @@ repeater fallback / polish            # 骨架已实现，默认关（LLM_FALLBA
 
 ### 全局 LLM 配置键（主仓）
 
-**均需 `LLM_CHAT_ENABLED=true` 才生效**（酒后 `chat`、随时 @ `llm_chat`、repeater 挂钩共用总闸）。
+**`LLM_CHAT_ENABLED=true`** 时酒后 `chat`、随时 @ `llm_chat`、repeater 挂钩共用总闸。遗留 **`CHAT_ENABLE`** 仅在未显式配置 `LLM_CHAT_ENABLED` 时启用酒后 RWKV。
 
 | 环境变量 | 默认 | 说明 |
 | --- | --- | --- |
@@ -61,7 +61,7 @@ repeater fallback / polish            # 骨架已实现，默认关（LLM_FALLBA
 | `LLM_GOVERNANCE_ENABLED` | `false` | 闲聊 CD / 并发 / 字符预算 |
 | `LLM_SESSION_ENABLED` | `false` | 多轮会话存储 |
 
-遗留 `CHAT_ENABLE` / `LLM_CHAT_ENABLE` / `OLLAMA_ENABLE` 仍可读，优先改 `LLM_CHAT_ENABLED`。
+遗留 `LLM_CHAT_ENABLE` / `OLLAMA_ENABLE` 仍可读为 LLM 总闸；`CHAT_ENABLE` 仅遗留酒后 RWKV。新用户优先配 `LLM_CHAT_ENABLED`。
 
 联调（Bot 侧脚本，AI 需 `LLM_CHAT_ENABLED=true` 且 worker 在跑）：
 

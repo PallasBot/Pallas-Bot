@@ -17,9 +17,11 @@ from src.features.llm import (
     ChatSubmitRequest,
     delete_llm_chat_session,
     get_llm_config,
+    is_drunk_chat_enabled,
     is_llm_chat_service_enabled,
     submit_chat_task,
 )
+from src.features.llm.legacy_rwkv import delete_rwkv_chat_session, submit_rwkv_drunk_chat
 from src.features.llm.persona_context import build_persona_llm_context
 from src.foundation.config import BotConfig, GroupConfig, TaskManager
 
@@ -46,7 +48,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "@牛牛 / 牛牛 + 文本",
                 "brief_des": "醉酒时智能对话",
-                "detail_des": "须先「牛牛喝酒」；与随时闲聊共用同一智能对话服务。",
+                "detail_des": "须先「牛牛喝酒」；智能对话总闸开启时走 LLM，仅遗留 CHAT_ENABLE 时走 RWKV。",
             },
         ],
     },
@@ -63,15 +65,23 @@ CHAT_COOLDOWN_KEY = "chat"
 
 @BotConfig.handle_sober_up
 async def on_sober_up(bot_id, group_id, drunkenness) -> None:
-    if not is_llm_chat_service_enabled():
+    if not is_drunk_chat_enabled():
         return
     session = f"{bot_id}_{group_id}"
     logger.info(f"bot [{bot_id}] sober up in group [{group_id}], clear session [{session}]")
-    await delete_llm_chat_session(session, cfg=get_llm_config())
+    if is_llm_chat_service_enabled():
+        await delete_llm_chat_session(session, cfg=get_llm_config())
+        return
+    chat_cfg = get_chat_config()
+    await delete_rwkv_chat_session(
+        session,
+        del_session_endpoint=chat_cfg.del_session_endpoint,
+        timeout_sec=get_llm_config().chat_timeout_sec,
+    )
 
 
 async def is_to_chat(event: GroupMessageEvent) -> bool:
-    if not is_llm_chat_service_enabled():
+    if not is_drunk_chat_enabled():
         return False
     text = event.get_plaintext()
     if not text.startswith("牛牛") and not event.is_tome():
@@ -108,21 +118,6 @@ async def _(bot: Bot, event: GroupMessageEvent):
     group_id = int(event.group_id)
     user_id = int(event.user_id)
     session = f"{event.self_id}_{group_id}"
-    try:
-        bundle, temperature, token_count = await build_persona_llm_context(
-            int(bot.self_id),
-            group_id,
-            text,
-            mode="drunk",
-            purpose="chat",
-        )
-        system_prompt = bundle.system.strip()
-    except Exception:
-        logger.exception("compile_persona_prompt drunk mode failed")
-        return
-    if not system_prompt:
-        return
-
     request_id = str(ULID())
     await TaskManager.add_task(
         request_id,
@@ -134,6 +129,39 @@ async def _(bot: Bot, event: GroupMessageEvent):
             "start_time": time.time(),
         },
     )
+
+    if not is_llm_chat_service_enabled():
+        chat_cfg = get_chat_config()
+        llm_cfg = get_llm_config()
+        task_id, ok = await submit_rwkv_drunk_chat(
+            request_id=request_id,
+            session=session,
+            text=text,
+            tts=chat_cfg.tts_enable,
+            chat_endpoint=chat_cfg.chat_endpoint,
+            timeout_sec=llm_cfg.chat_timeout_sec,
+            cfg=llm_cfg,
+        )
+        if not ok:
+            await TaskManager.remove_task(request_id)
+        return
+
+    try:
+        bundle, temperature, token_count = await build_persona_llm_context(
+            int(bot.self_id),
+            group_id,
+            text,
+            mode="drunk",
+            purpose="chat",
+        )
+        system_prompt = bundle.system.strip()
+    except Exception:
+        logger.exception("compile_persona_prompt drunk mode failed")
+        await TaskManager.remove_task(request_id)
+        return
+    if not system_prompt:
+        await TaskManager.remove_task(request_id)
+        return
 
     result = await submit_chat_task(
         ChatSubmitRequest(

@@ -177,7 +177,7 @@ llm:
 | 现状 | 4.0 provider 策略 |
 | --- | --- |
 | `/api/ollama/*` | 归入 `local_ollama`；路径 deprecated，行为由统一 Chat API 代理 |
-| RWKV `chat`（酒后聊天） | **deprecated**（2026）；改统一 LLM + `compile_persona_prompt`（见 [AI 仓 2026 评估](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/4.0-local-models.md)） |
+| RWKV `chat`（酒后聊天） | 新装走统一 LLM + `compile_persona_prompt`；**遗留 `CHAT_ENABLE` 仍走 `/api/chat`**（零配置升级） |
 | TTS / sing | 非 Chat provider；**CosyVoice 3 / RVC + Seed-VC**（2026 media 路线），见 AI 仓评估文档 |
 
 主仓 repeater fallback/polish、闲聊、工具调用 **共用**上述 Chat provider chain；TTS/sing 继续走 Celery 异步与 `/callback`，不占用 Chat provider 队列。
@@ -201,7 +201,8 @@ llm:
 | 现键（插件级 / 遗留） | 4.0 方向 |
 | --- | --- |
 | `ai_server_host` / `ai_server_port` | 全局 `AI_SERVER_HOST` / `AI_SERVER_PORT` |
-| `chat_enable` / `llm_chat_enable` / `ollama_enable` | **`LLM_CHAT_ENABLED` 总闸**（酒后与随时 @ 共用） |
+| `chat_enable` | **遗留**：未配 `LLM_CHAT_ENABLED` 时启用酒后 RWKV |
+| `llm_chat_enable` / `ollama_enable` | **`LLM_CHAT_ENABLED` 总闸**（酒后 LLM 与随时 @ 共用） |
 | `LLM_FALLBACK_ENABLED` / `LLM_POLISH_ENABLED` | repeater 接话 LLM（默认关） |
 | `ollama_*_endpoint` | 删除；改 `/api/v1/chat/completions` |
 | `llm_chat_system_prompt_path` | 可选 override；默认 `compile_persona_prompt` |
