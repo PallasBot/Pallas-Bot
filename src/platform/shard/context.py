@@ -1,4 +1,4 @@
-"""分片运行时上下文：插件与 features 优先从此模块读取角色与代表牛，避免散落 import。"""
+"""分片运行时上下文，供插件与 features 读取角色。"""
 
 from __future__ import annotations
 

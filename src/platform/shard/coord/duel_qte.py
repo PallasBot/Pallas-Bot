@@ -1,4 +1,4 @@
-"""跨 worker 决斗 QTE：Redis 共享会话 + pub/sub 唤醒，应答牛所在 worker 发群并回写结果。"""
+"""决斗 QTE：Redis 会话与 pub/sub 跨 worker 同步。"""
 
 from __future__ import annotations
 

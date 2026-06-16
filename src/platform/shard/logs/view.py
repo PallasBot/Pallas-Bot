@@ -1,4 +1,4 @@
-"""分片 hub：合并各 worker/hub 落盘日志尾行，供 WebUI /pallas/api/logs 与 log_error_log 读取。"""
+"""hub 合并各进程日志尾行，供 WebUI 读取。"""
 
 from __future__ import annotations
 

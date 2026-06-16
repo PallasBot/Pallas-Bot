@@ -1,10 +1,4 @@
-"""仓库配置：`config/pallas.toml` + WebUI 统一 `data/pallas_config/webui.json`。
-
-合并顺序：``pallas.toml`` → 遗留 ``.env`` → ``.env.{ENVIRONMENT}`` →
-``webui.json`` 的 ``env``。
-``repo_env_raw_value`` 以磁盘合并结果优先于 ``os.environ``；``apply_repo_settings_to_environ`` 在
-``nonebot.init()`` 前把磁盘键写入环境变量，且不覆盖已存在的同名键。
-"""
+"""仓库配置：pallas.toml 与 webui.json 合并读写。"""
 
 from __future__ import annotations
 

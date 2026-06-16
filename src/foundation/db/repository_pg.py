@@ -311,7 +311,7 @@ def _ensure_pg_user_config_maa_devices(connection) -> None:
 
 
 def _ensure_pg_message_group_time_index(connection) -> None:
-    """旧库 message 补 (group_id, time) 复合索引，加速 find_recent_in_group。"""
+    """message 表补 group_id+time 索引。"""
     insp = inspect(connection)
     if not insp.has_table("message"):
         return
@@ -319,7 +319,7 @@ def _ensure_pg_message_group_time_index(connection) -> None:
 
 
 def _ensure_pg_message_group_user_time_index(connection) -> None:
-    """旧库 message 补 (group_id, user_id, time) 复合索引，加速按用户回查最近消息。"""
+    """message 表补 group_id+user_id+time 索引。"""
     insp = inspect(connection)
     if not insp.has_table("message"):
         return
@@ -329,7 +329,7 @@ def _ensure_pg_message_group_user_time_index(connection) -> None:
 
 
 def _ensure_pg_context_answer_reply_index(connection) -> None:
-    """旧库 context_answer 补 (context_id, count, time) 复合索引，加速接话热词 top-N answer。"""
+    """context_answer 表补 context_id+count+time 索引。"""
     insp = inspect(connection)
     if not insp.has_table("context_answer"):
         return
@@ -339,7 +339,7 @@ def _ensure_pg_context_answer_reply_index(connection) -> None:
 
 
 def _ensure_pg_context_answer_message_reply_index(connection) -> None:
-    """旧库 context_answer_message 补 (answer_id, id) 复合索引，加速按 answer 取最近消息。"""
+    """context_answer_message 表补 answer_id+id 索引。"""
     insp = inspect(connection)
     if not insp.has_table("context_answer_message"):
         return
@@ -1440,7 +1440,7 @@ class _ConfigCache:
         self._lock = asyncio.Lock()
 
     async def get(self, key: Any) -> tuple[bool, Any]:
-        """返回 (hit, value)。miss 时 value 未定义。"""
+        """TTL 缓存查询，返回 hit 与 value。"""
         if self._ttl <= 0 or self._capacity <= 0:
             return False, None
         async with self._lock:
@@ -1593,7 +1593,7 @@ class PgImageCacheRepository:
             await session.commit()
 
     async def save(self, cache: ImageCache) -> None:
-        """与 Mongo save() 语义一致：存在则更新，不存在则插入。"""
+        """upsert 语义：存在则更新，否则插入。"""
         async with get_session() as session:
             stmt = pg_insert(ImageCacheRow).values(
                 cq_code=_s(cache.cq_code) or "",

@@ -13,19 +13,11 @@ class ContextRepository(Protocol):
         ...
 
     async def context_exists_by_keywords(self, keywords: str) -> bool:
-        """是否已有 Context(keywords)；用于仅需分支判断时避免全量加载。
-
-        自定义后端若暂无轻量查询，可混入 `ContextRepositoryExistenceMixin`，
-        由 `find_by_keywords` 推导存在性。
-        """
+        """keywords 是否存在，避免全量加载。"""
         ...
 
     async def save(self, context: Context) -> None:
-        """保存/更新已有的 Context 文档（整文档覆盖写）
-
-        注意：新业务代码优先使用 upsert_answer / replace_answers / append_ban 等
-        细粒度 API；本方法保留用于未抽象出的特殊场景。
-        """
+        """覆盖写 Context；新业务优先细粒度 API。"""
         ...
 
     async def insert(self, context: Context) -> None:
@@ -49,36 +41,19 @@ class ContextRepository(Protocol):
         message: str,
         append_on_existing: bool,
     ) -> None:
-        """
-        原子 upsert 一条 Answer：
-        - 若 Context(keywords=keywords) 下已存在 (group_id, answer_keywords) 的 Answer，
-          则 count += 1、time=answer_time；当 append_on_existing=True 时额外把
-          message 追加到该 Answer 的 messages 列表
-        - 否则新建一条 Answer(count=1, time=answer_time, messages=[message])
-        - 同时 Context.trigger_count += 1，Context.time=answer_time
-
-        要求实现具备并发原子性。
-        前置条件：Context(keywords=keywords) 必须已存在，否则行为未定义 —— 调用方
-        应先 context_exists_by_keywords / find_by_keywords，不存在时走 insert(Context(...)) 路径。
-        """
+        """原子 upsert Answer 并递增 Context.trigger_count；Context 须已存在。"""
         ...
 
     async def replace_answers(self, keywords: str, answers: list[Answer], clear_time: int) -> None:
-        """
-        将指定 Context 的 answers 替换为给定列表，并更新 clear_time。
-        用于 clearup_context 的周期性清理。
-        """
+        """替换 Context.answers 并更新 clear_time。"""
         ...
 
     async def append_ban(self, keywords: str, ban: Ban) -> None:
-        """
-        向指定 Context 的 ban 列表追加一条 Ban 记录。
-        若 Context(keywords=keywords) 不存在，则应为 no-op。
-        """
+        """追加 Ban；Context 不存在则 no-op。"""
         ...
 
     async def find_ban_reply_target(self, group_id: int, reply_message: str) -> tuple[str, str] | None:
-        """按群号与 reply 原文精确反查 (pre_keywords, reply_keywords)。"""
+        """按群号与 reply 原文反查 pre/reply keywords。"""
         ...
 
     async def list_answers_for_group_since(self, group_id: int, cutoff_time: int) -> list[Answer]:
@@ -87,7 +62,7 @@ class ContextRepository(Protocol):
 
 
 class ContextRepositoryExistenceMixin:
-    """为已实现 `find_by_keywords` 的仓储提供 `context_exists_by_keywords` 默认实现。"""
+    """为已有 find_by_keywords 的仓储提供 exists 默认实现。"""
 
     async def context_exists_by_keywords(self, keywords: str) -> bool:
         return (await self.find_by_keywords(keywords)) is not None
@@ -117,7 +92,7 @@ class MessageRepository(Protocol):
         since_time: int,
         limit: int = 128,
     ) -> list[int]:
-        """列出 bot 在 since_time 之后发过消息的群号（去重）。"""
+        """since_time 后有发言的群号列表。"""
         ...
 
     async def list_recent_bot_ids_for_group(
@@ -127,7 +102,7 @@ class MessageRepository(Protocol):
         since_time: int,
         limit: int = 32,
     ) -> list[int]:
-        """列出群内在 since_time 之后发过消息的 bot 账号（去重）。"""
+        """since_time 后有发言的 bot 列表。"""
         ...
 
 

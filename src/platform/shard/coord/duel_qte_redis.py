@@ -1,4 +1,4 @@
-"""决斗 QTE：Redis 会话存储、pub/sub 唤醒与跨片 greeting 让路。"""
+"""决斗 QTE Redis 存储与 greeting 让路。"""
 
 from __future__ import annotations
 

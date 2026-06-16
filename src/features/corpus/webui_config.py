@@ -1,4 +1,4 @@
-"""WebUI「语料联邦」配置段读写。"""
+"""WebUI 社区共享接话库配置。"""
 
 from __future__ import annotations
 

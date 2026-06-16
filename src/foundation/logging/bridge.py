@@ -1,7 +1,4 @@
-"""替换 NoneBot 默认 ``LoguruHandler``：为 stdlib → loguru 的日志补充通道标签（如 ``[uvicorn]``）。
-
-须在 ``nonebot.init()`` 之前调用 ``apply_stdlib_logging_channel_prefix()``。
-"""
+"""stdlib 日志转 loguru 时补通道标签。"""
 
 from __future__ import annotations
 

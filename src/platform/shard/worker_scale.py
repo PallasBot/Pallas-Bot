@@ -81,7 +81,7 @@ def list_running_production_worker_shard_ids() -> set[int]:
 
 
 def workers_need_scale_up(reg: ShardRegistry | None = None) -> tuple[bool, int, int]:
-    """返回 (需要扩容, 应有 worker 数, 当前运行 worker 数)。"""
+    """返回是否需要扩容及 worker 数量。"""
     required = production_worker_count_required(reg)
     running_ids = list_running_production_worker_shard_ids()
     running_count = len(running_ids)
