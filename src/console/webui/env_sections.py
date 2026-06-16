@@ -98,6 +98,26 @@ def field_to_env_uppercase_keys(model_cls: type[BaseModel]) -> dict[str, str]:
     return {name: name.upper() for name in model_cls.model_fields}
 
 
+def _plugin_env_skip_fields(section_id: str, cfg_cls: type[BaseModel]) -> frozenset[str]:
+    """WebUI 通用配置默认隐藏进阶项（仍可通过 webui.json / 环境变量设置）。"""
+    all_names = set(cfg_cls.model_fields)
+    if section_id == "pallas_webui":
+        keep = {"pallas_webui_enabled", "pallas_webui_http_base", "pallas_webui_dev_mode"}
+        return frozenset(all_names - keep)
+    if section_id == "pallas_protocol":
+        keep = {
+            "pallas_protocol_enabled",
+            "pallas_protocol_webui_enabled",
+            "pallas_protocol_follow_bot_lifecycle",
+            "pallas_protocol_auto_download_runtime",
+        }
+        return frozenset(all_names - keep)
+    if section_id == "help":
+        keep = {"default_style", "ignored_plugins", "side_paint_enabled"}
+        return frozenset(all_names - keep)
+    return frozenset()
+
+
 def _plugin_env_section_from_module(
     *,
     section_id: str,
@@ -137,7 +157,7 @@ def _plugin_env_section_from_module(
         model_cls=cfg_cls,
         read_current=read_current,
         field_to_env=field_to_env_uppercase_keys(cfg_cls),
-        skip_fields=frozenset(),
+        skip_fields=_plugin_env_skip_fields(section_id, cfg_cls),
     )
 
 
@@ -177,6 +197,23 @@ def _ingress_fanout_section() -> WebuiEnvSection:
     )
 
 
+_INGRESS_DISPATCH_SKIP = frozenset({
+    "matcher_dispatch_overload_threshold",
+    "route_index_strict",
+    "lane_acquire_timeout_sec",
+    "lane_wait_overload_ms",
+    "lane_busy_reply",
+    "lane_command",
+    "lane_chat",
+    "lane_storage",
+    "lane_remote",
+    "send_queue_workers",
+    "send_queue_max_depth",
+    "send_queue_min_interval_ms",
+    "send_queue_enqueue_timeout_sec",
+})
+
+
 def _ingress_dispatch_section() -> WebuiEnvSection:
     from src.platform.ingress.dispatch_runtime_config import (
         IngressDispatchRuntimeConfig,
@@ -208,7 +245,7 @@ def _ingress_dispatch_section() -> WebuiEnvSection:
             "send_queue_min_interval_ms": "PALLAS_SEND_QUEUE_MIN_INTERVAL_MS",
             "send_queue_enqueue_timeout_sec": "PALLAS_SEND_QUEUE_ENQUEUE_TIMEOUT_SEC",
         },
-        skip_fields=frozenset(),
+        skip_fields=_INGRESS_DISPATCH_SKIP,
     )
 
 

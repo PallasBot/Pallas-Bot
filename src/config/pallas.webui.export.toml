@@ -1,9 +1,0 @@
-# 本文件由 Pallas-Bot 根据 WebUI 保存自动生成，请勿手动编辑。
-# 来源：/tmp/pytest-of-root/pytest-159/test_apply_corpus_federation_p0/data/pallas_config/webui.json
-# 基础设施（数据库、监听、超管等）见 config/pallas.toml 的 [bootstrap]。
-# 修改配置请使用控制台「插件 / 通用配置」，或编辑 pallas.toml / webui.json。
-
-[webui.other]
-# other
-PALLAS_CORPUS_COMMUNITY_CONTRIBUTE = false
-PALLAS_CORPUS_COMMUNITY_ENABLED = false

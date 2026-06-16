@@ -1,6 +1,25 @@
 # 配置要点（生产）
 
-启动与长期运行前，按本节核对 **`config/pallas.toml`** 与持久化目录。完整机制见 [配置存储](architecture/settings-storage.md)。
+启动前核对 **`config/pallas.toml`** 与 `data/` 持久化目录。机制见 [配置存储](architecture/settings-storage.md)。
+
+## 最少能跑
+
+复制 `config/pallas.example.toml` → `config/pallas.toml`，改 **`superusers`** 与 **`[bootstrap.mongo]`**（或 postgres）即可启动；其余在 WebUI 按需配置。
+
+```toml
+[bootstrap]
+host = "0.0.0.0"
+port = 8088
+superusers = ["你的QQ号"]
+db_backend = "mongodb"
+
+[bootstrap.mongo]
+host = "127.0.0.1"
+port = 27017
+db = "PallasBot"
+```
+
+启动后打开 `/pallas/`，用日志中的默认口令登录。
 
 ## 配置合并顺序（优先级从低到高）
 

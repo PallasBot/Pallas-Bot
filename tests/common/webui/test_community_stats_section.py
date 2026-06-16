@@ -19,7 +19,10 @@ def test_community_stats_payload(monkeypatch):
         "community_stats_roster_public_qq",
         "community_stats_roster_public_profile",
     }
-    assert len(data["field_groups"]) == 2
+    assert len(data["field_groups"]) == 3
+    reporting_group = next(g for g in data["field_groups"] if g["id"] == "reporting")
+    assert "community_stats_enabled" in reporting_group["field_names"]
+    assert "community_stats_endpoint" not in reporting_group["field_names"]
     roster_group = next(g for g in data["field_groups"] if g["id"] == "roster")
     assert roster_group["title"] == "社区主站展示"
     roster_qq = next(f for f in data["fields"] if f["name"] == "community_stats_roster_public_qq")

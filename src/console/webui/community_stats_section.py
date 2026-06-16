@@ -164,12 +164,18 @@ def community_stats_payload(*, current_values: dict[str, Any] | None = None) -> 
         "field_groups": [
             {
                 "id": "reporting",
-                "title": "在线统计上报",
+                "title": "在线统计",
                 "field_names": [
                     "community_stats_enabled",
+                    "community_stats_interval_sec",
+                ],
+            },
+            {
+                "id": "advanced",
+                "title": "自建中心（一般无需改）",
+                "field_names": [
                     "community_stats_endpoint",
                     "community_stats_token",
-                    "community_stats_interval_sec",
                 ],
             },
             {
@@ -222,7 +228,7 @@ def apply_community_stats_patch(patch: dict[str, Any]) -> dict[str, Any]:
         from src.features.community_stats.scheduler import schedule_reload_community_stats_reporter
 
         schedule_reload_community_stats_reporter()
-        logger.info("community_stats: WebUI 已写入配置，在线统计上报已热重载")
+        logger.info("community_stats: webui config saved, hot reloaded")
     except Exception as e:
         from nonebot import logger
 

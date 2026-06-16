@@ -66,7 +66,8 @@ def test_ingress_dispatch_section_payload_has_field_groups():
     assert len(groups) >= 4
     field_names = {f["name"] for f in data["fields"]}
     assert "matcher_dispatch_enabled" in field_names
-    assert "send_queue_max_depth" in field_names
+    assert "send_queue_enabled" in field_names
+    assert "send_queue_max_depth" not in field_names
 
 
 @skip_no_message_scrub
@@ -230,9 +231,9 @@ def test_pallas_webui_patch_writes_uppercase_env(tmp_path, monkeypatch):
 
     webui_file = tmp_path / "webui.json"
     monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui_file)
-    apply_webui_env_section_patch("pallas_webui", {"pallas_webui_log_lines_max": 120})
+    apply_webui_env_section_patch("pallas_webui", {"pallas_webui_http_base": "/pallas-test"})
     data = json.loads(webui_file.read_text(encoding="utf-8"))
-    assert data["env"]["PALLAS_WEBUI_LOG_LINES_MAX"] == "120"
+    assert data["env"]["PALLAS_WEBUI_HTTP_BASE"] == "/pallas-test"
 
 
 @skip_no_message_scrub

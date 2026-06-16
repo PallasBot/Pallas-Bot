@@ -31,9 +31,24 @@ uv sync --dev --extra coord-redis
 cp config/pallas.example.toml config/pallas.toml
 ```
 
-2. 编辑 `config/pallas.toml` 的 `[bootstrap]`：监听地址、`SUPERUSERS`、数据库后端（MongoDB / PostgreSQL）等。
+2. 编辑 `config/pallas.toml`：**至少**改 `superusers` 与数据库段（见示例内「最少配置」）。
 
-3. 插件与通用项可在启动后于 Web 控制台保存，落盘 **`data/pallas_config/webui.json`**（优先级高于 `pallas.toml` 与遗留 `.env`）。
+最少示例：
+
+```toml
+[bootstrap]
+host = "0.0.0.0"
+port = 8088
+superusers = ["你的QQ号"]
+db_backend = "mongodb"
+
+[bootstrap.mongo]
+host = "127.0.0.1"
+port = 27017
+db = "PallasBot"
+```
+
+3. 其余插件与通用项在 Web 控制台保存，落盘 **`data/pallas_config/webui.json`**。
 
 合并顺序与读取 API 见 [配置存储](../architecture/settings-storage.md)。从旧 `.env` 一次性迁移：
 
