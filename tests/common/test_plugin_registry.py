@@ -15,7 +15,6 @@ def test_build_official_extension_rows_groups_party():
     party = next(r for r in rows if r["package"] == "pallas-plugin-party")
     assert set(party["plugin_ids"]) == {"drink", "roulette"}
     assert party["uv_extra"] == "plugins-party"
-    assert party["priority"] == "P1"
     assert party["install_cli"] == "uv sync --extra plugins-party"
     assert party["webui_install"] is True
     assert isinstance(party["can_install"], bool)
@@ -40,7 +39,7 @@ def test_build_official_extension_rows_p0_repo_urls():
     assert by_pkg.get("pallas-plugin-draw") == "https://github.com/TogetsuDo/pallas-plugin-draw"
     assert by_pkg.get("pallas-plugin-dream") == "https://github.com/TogetsuDo/pallas-plugin-dream"
     assert by_pkg.get("pallas-plugin-social") == "https://github.com/TogetsuDo/pallas-plugin-social"
-    assert by_pkg.get("pallas-plugin-ollama") == "https://github.com/TogetsuDo/pallas-plugin-ollama"
+    assert by_pkg.get("pallas-plugin-llm-chat") == "https://github.com/TogetsuDo/pallas-plugin-llm-chat"
 
 
 def test_official_extension_for_plugin():

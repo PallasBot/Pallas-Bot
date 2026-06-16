@@ -154,14 +154,14 @@ REPOS: list[dict[str, object]] = [
         "readme_file": "pallas-plugin-community-stats.md",
     },
     {
-        "dir": "Pallas-Plugin-Ollama",
-        "pip_name": "pallas-plugin-ollama",
+        "dir": "Pallas-Plugin-Llm-Chat",
+        "pip_name": "pallas-plugin-llm-chat",
         "title": "随时闲聊",
-        "description": "Pallas-Bot 官方扩展：Ollama 多轮闲聊。",
-        "uv_extra": "plugins-ollama",
-        "copies": [("ollama", "pallas_plugin_ollama")],
-        "nonebot_plugins": {"pallas-plugin-ollama": ["pallas_plugin_ollama"]},
-        "readme_file": "pallas-plugin-ollama.md",
+        "description": "Pallas-Bot 官方扩展：LLM 多轮闲聊。",
+        "uv_extra": "plugins-llm-chat",
+        "copies": [("llm_chat", "pallas_plugin_llm_chat")],
+        "nonebot_plugins": {"pallas-plugin-llm-chat": ["pallas_plugin_llm_chat"]},
+        "readme_file": "pallas-plugin-llm-chat.md",
     },
 ]
 

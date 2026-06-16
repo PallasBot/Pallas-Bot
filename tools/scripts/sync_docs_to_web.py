@@ -61,7 +61,7 @@ PLUGIN_NAMES = [
     "roulette",
     "sing",
     "who_is_spy",
-    "ollama",
+    "llm_chat",
 ]
 
 for name in PLUGIN_NAMES:

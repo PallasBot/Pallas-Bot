@@ -40,7 +40,7 @@ EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
     "greeting": "pallas-plugin-social",
     "take_name": "pallas-plugin-social",
     "community_stats": "pallas-plugin-community-stats",
-    "ollama": "pallas-plugin-ollama",
+    "llm_chat": "pallas-plugin-llm-chat",
 }
 
 EXTRA_PACKAGE_MODULES: dict[str, tuple[str, ...]] = {
@@ -58,7 +58,7 @@ EXTRA_PACKAGE_MODULES: dict[str, tuple[str, ...]] = {
     "pallas-plugin-ai-media": ("pallas_plugin_sing", "pallas_plugin_chat"),
     "pallas-plugin-social": ("pallas_plugin_greeting", "pallas_plugin_take_name"),
     "pallas-plugin-community-stats": ("pallas_plugin_community_stats",),
-    "pallas-plugin-ollama": ("pallas_plugin_ollama",),
+    "pallas-plugin-llm-chat": ("pallas_plugin_llm_chat",),
 }
 
 EXTRA_PLUGIN_NAMES: frozenset[str] = frozenset(EXTRA_PLUGIN_PACKAGES.keys())
@@ -74,7 +74,7 @@ EXTRA_PACKAGE_PRIORITY: dict[str, str] = {
     "pallas-plugin-ai-media": "P1",
     "pallas-plugin-social": "P2",
     "pallas-plugin-community-stats": "P2",
-    "pallas-plugin-ollama": "P2",
+    "pallas-plugin-llm-chat": "P2",
 }
 
 OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
@@ -88,7 +88,7 @@ OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
     "pallas-plugin-ai-media": "https://github.com/TogetsuDo/pallas-plugin-ai-media",
     "pallas-plugin-social": "https://github.com/TogetsuDo/pallas-plugin-social",
     "pallas-plugin-community-stats": "https://github.com/TogetsuDo/pallas-plugin-community-stats",
-    "pallas-plugin-ollama": "https://github.com/TogetsuDo/pallas-plugin-ollama",
+    "pallas-plugin-llm-chat": "https://github.com/TogetsuDo/pallas-plugin-llm-chat",
 }
 
 _PROTOCOL_MODULE_NAMES: frozenset[str] = frozenset({

@@ -16,7 +16,7 @@ class _CommandMatcher:
 
 
 class _AiMatcher:
-    plugin_name = "src.plugins.ollama"
+    plugin_name = "src.plugins.llm_chat"
     rule = Rule(to_me())
 
 
@@ -66,7 +66,7 @@ def test_lane_for_matcher_uses_plugin_lane_override(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(
         dispatch_lanes,
         "plugin_lane_override",
-        lambda module: "remote" if module == "ollama" else None,
+        lambda module: "remote" if module == "llm_chat" else None,
     )
     assert dispatch_lanes.lane_for_matcher(_AiMatcher) == DispatchLane.REMOTE
 
@@ -120,7 +120,7 @@ async def test_check_and_run_matcher_with_lane_skips_when_busy(monkeypatch: pyte
     await controller.acquire(0.01)
 
     run_mock = AsyncMock()
-    monkeypatch.setattr(dispatch_lanes, "plugin_lane_override", lambda module: "remote" if module == "ollama" else None)
+    monkeypatch.setattr(dispatch_lanes, "plugin_lane_override", lambda module: "remote" if module == "llm_chat" else None)
     monkeypatch.setattr("nonebot.message.check_and_run_matcher", run_mock)
 
     result = await dispatch_lanes.check_and_run_matcher_with_lane(

@@ -76,10 +76,10 @@ async def run_ai_callback(
         remove_ai_task(task_id)
         if group_id:
             fail_msg = "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。"
-            if task.get("task_type") == "ollama":
-                from src.plugins.ollama.replies import OLLAMA_FAILED_REPLY
+            if task.get("task_type") in {"llm_chat", "ollama"}:
+                from src.plugins.llm_chat.replies import LLM_CHAT_FAILED_REPLY
 
-                fail_msg = OLLAMA_FAILED_REPLY
+                fail_msg = LLM_CHAT_FAILED_REPLY
             await send_group_message(
                 bot,
                 group_id,

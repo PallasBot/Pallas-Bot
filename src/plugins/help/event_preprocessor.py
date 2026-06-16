@@ -12,6 +12,7 @@ from src.platform.ingress.policy_registry import text_matches_plugin_fanout
 from src.platform.multi_bot.dedup import try_claim_cross_bot_message_memory
 from src.platform.shard import context as shard_ctx
 
+from .plugin_legacy_names import is_plugin_name_in_set
 from .plugin_manager import collect_disabled_plugin_names, superuser_bypasses_plugin_disable
 
 _blocked_events: dict[str, frozenset[str]] = {}
@@ -116,7 +117,7 @@ async def check_plugin_enabled(matcher: Matcher, bot: Bot, event: GroupMessageEv
         disabled_names = await collect_disabled_plugin_names(bot_id, group_id)
         _blocked_events[event_id] = disabled_names
 
-    if plugin_name in disabled_names:
+    if is_plugin_name_in_set(plugin_name, disabled_names):
         if await superuser_bypasses_plugin_disable(bot, event):
             return
         logger.debug(f"bot [{bot_id}] help plugin [{plugin_name}] blocked at matcher")

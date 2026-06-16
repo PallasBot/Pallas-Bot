@@ -65,7 +65,6 @@ def build_official_extension_rows() -> list[dict[str, Any]]:
         rows.append({
             "package": package,
             "plugin_ids": plugin_ids,
-            "priority": EXTRA_PACKAGE_PRIORITY.get(package, "P2"),
             "uv_extra": uv_extra,
             "install_cli": f"uv sync --extra {uv_extra}" if uv_extra else None,
             "repository_url": repo_url,

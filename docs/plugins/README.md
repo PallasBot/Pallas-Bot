@@ -26,7 +26,7 @@
 | [who_is_spy](./who_is_spy/README.md) | 谁是卧底 |
 | [dream](./dream/README.md) | 做梦、跨群漂流、历史梦 |
 | [chat](./chat/README.md) | 酒后聊天（AI） |
-| [ollama](./ollama/README.md) | 随时闲聊（Ollama） |
+| [llm_chat](./llm_chat/README.md) | 随时闲聊（LLM） |
 | [sing](./sing/README.md) | 唱歌（AI） |
 | [draw](./draw/README.md) | 画画（AI） |
 | [take_name](./take_name/README.md) | 自动夺舍（群名片） |

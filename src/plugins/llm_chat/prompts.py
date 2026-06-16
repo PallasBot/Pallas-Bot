@@ -5,7 +5,7 @@ from threading import Lock
 
 from src.foundation.config.repo_settings import repo_root
 
-from .config import get_ollama_config
+from .config import get_llm_chat_config
 
 _lock = Lock()
 _cached_path: Path | None = None
@@ -22,8 +22,8 @@ def clear_system_prompt_cache() -> None:
 
 
 def resolve_system_prompt_path() -> Path:
-    cfg = get_ollama_config()
-    custom = (cfg.ollama_system_prompt_path or "").strip()
+    cfg = get_llm_chat_config()
+    custom = (cfg.llm_chat_system_prompt_path or "").strip()
     if custom:
         path = Path(custom)
         if not path.is_absolute():

@@ -7,7 +7,7 @@ from typing import Any
 
 from nonebot import get_loaded_plugins
 
-from .registry import DEFAULT_COMMAND_PERMISSIONS, VALID_LEVELS
+from .registry import DEFAULT_COMMAND_PERMISSIONS, VALID_LEVELS, canonical_command_id
 
 _merged_defaults_cache: dict[str, str] | None = None
 
@@ -62,7 +62,7 @@ def merged_default_levels() -> dict[str, str]:
 
 
 def default_level_for(command_id: str) -> str:
-    cid = (command_id or "").strip()
+    cid = canonical_command_id((command_id or "").strip())
     return merged_default_levels().get(cid, "everyone")
 
 
