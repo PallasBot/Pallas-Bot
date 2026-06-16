@@ -8,6 +8,7 @@ from ulid import ULID
 from src.features.cmd_perm import group_message_permission_for_command
 from src.features.llm import ChatSubmitRequest, submit_chat_task
 from src.features.llm.config import LlmConfig, get_llm_config
+from src.features.llm.session_store import append_llm_message
 from src.features.persona.compile_persona_prompt import compile_persona_prompt_for
 from src.foundation.config import TaskManager
 
@@ -65,6 +66,7 @@ async def handle_ollama_chat(bot: Bot, event: Event):
     system_prompt = ""
     raw_group_id = getattr(event, "group_id", None)
     group_id = int(raw_group_id) if raw_group_id is not None else None
+    user_id = int(getattr(event, "user_id", 0) or 0)
     try:
         bundle = await compile_persona_prompt_for(
             int(bot.self_id),
@@ -88,10 +90,13 @@ async def handle_ollama_chat(bot: Bot, event: Event):
         {
             "bot_id": bot.self_id,
             "group_id": getattr(event, "group_id", None),
+            "user_id": user_id,
             "task_type": "ollama",
             "start_time": time.time(),
         },
     )
+
+    await append_llm_message(int(bot.self_id), group_id, user_id, "user", msg)
 
     result = await submit_chat_task(
         ChatSubmitRequest(

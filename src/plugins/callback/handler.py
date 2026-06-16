@@ -9,6 +9,7 @@ from nonebot import get_bot, logger
 from nonebot.adapters.onebot.v11.exception import NetworkError
 from nonebot.exception import ActionFailed
 
+from src.features.llm.session_store import append_llm_message
 from src.foundation.config import GroupConfig, TaskManager
 from src.foundation.db import SingProgress
 from src.platform.shard.coord.ai_task_registry import get_ai_task_record, remove_ai_task
@@ -91,6 +92,12 @@ async def run_ai_callback(
         delivered = True
         if text and group_id:
             delivered = await send_group_message(bot, group_id, text) and delivered
+        if task.get("task_type") == "ollama" and text:
+            raw_group_id = task.get("group_id")
+            scope_group = int(raw_group_id) if raw_group_id is not None else None
+            speaker_id = int(task.get("user_id") or 0)
+            if speaker_id:
+                await append_llm_message(int(bot_id), scope_group, speaker_id, "assistant", text)
         if file and group_id:
             file_content = await file.read()
             base64_file = base64.b64encode(file_content).decode()

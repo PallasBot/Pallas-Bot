@@ -55,6 +55,10 @@ class LlmConfig(BaseModel):
     unified_chat_endpoint: str = Field(default="/v1/chat/completions")
     user_message_max_len: int = Field(default=4000, ge=64, le=16000)
     chat_timeout_sec: float = Field(default=30.0, ge=1.0, le=300.0)
+    llm_session_enabled: bool = Field(default=False)
+    llm_session_group_window: int = Field(default=20, ge=1, le=200)
+    llm_session_user_ttl_sec: int = Field(default=604800, ge=0, le=2592000)
+    llm_session_max_content_len: int = Field(default=4000, ge=64, le=16000)
 
 
 def get_llm_config() -> LlmConfig:
@@ -73,6 +77,10 @@ def get_llm_config() -> LlmConfig:
             unified_chat_endpoint=_env_str("LLM_UNIFIED_CHAT_ENDPOINT", "/v1/chat/completions"),
             user_message_max_len=_env_int("LLM_USER_MESSAGE_MAX_LEN", 4000),
             chat_timeout_sec=_env_float("LLM_CHAT_TIMEOUT_SEC", 30.0),
+            llm_session_enabled=_env_bool("LLM_SESSION_ENABLED", False),
+            llm_session_group_window=_env_int("LLM_SESSION_GROUP_WINDOW", 20),
+            llm_session_user_ttl_sec=_env_int("LLM_SESSION_USER_TTL_SEC", 604800),
+            llm_session_max_content_len=_env_int("LLM_SESSION_MAX_CONTENT_LEN", 4000),
         )
         return _cached_llm_config
 

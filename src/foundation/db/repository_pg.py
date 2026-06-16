@@ -212,6 +212,22 @@ class ImageCacheRow(Base):
     date: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
 
 
+class LlmChatMessageRow(Base):
+    __tablename__ = "llm_chat_message"
+    __table_args__ = (
+        Index("ix_llm_chat_message_bot_group_time", "bot_id", "group_id", "created_at"),
+        Index("ix_llm_chat_message_bot_group_user_time", "bot_id", "group_id", "user_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    bot_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
 # ---------------------------------------------------------------------------
 # 引擎 / 会话
 # ---------------------------------------------------------------------------
