@@ -6,20 +6,30 @@ from nonebot.rule import Rule
 from ulid import ULID
 
 from src.features.cmd_perm import group_message_permission_for_command
+from src.features.llm import ChatSubmitRequest, submit_chat_task
+from src.features.llm.config import LlmConfig, get_llm_config
 from src.features.persona.compile_persona_prompt import compile_persona_prompt_for
 from src.foundation.config import TaskManager
-from src.shared.utils import HTTPXClient
 
-from .config import Config, get_ollama_config, ollama_server_url
+from .config import Config, get_ollama_config
 from .prompts import get_system_prompt
 from .replies import OLLAMA_VAGUE_REPLY
 
-SERVER_URL = ollama_server_url()
+
+def ollama_llm_config(cfg: Config) -> LlmConfig:
+    base = get_llm_config()
+    return base.model_copy(
+        update={
+            "ai_server_host": cfg.ai_server_host,
+            "ai_server_port": cfg.ai_server_port,
+            "legacy_chat_endpoint": cfg.ollama_chat_endpoint,
+        }
+    )
 
 
 def refresh_server_url(cfg: Config | None = None) -> None:
-    global SERVER_URL
-    SERVER_URL = ollama_server_url(cfg if isinstance(cfg, Config) else get_ollama_config())
+    """配置热重载钩子；chat 请求经 features/llm 按次读取 server 配置。"""
+    _ = cfg
 
 
 def ollama_chat_rule(event: Event) -> bool:
@@ -83,19 +93,20 @@ async def handle_ollama_chat(bot: Bot, event: Event):
         },
     )
 
-    url = f"{SERVER_URL}{cfg.ollama_chat_endpoint}/{request_id}"
-    response = await HTTPXClient.post(
-        url,
-        json={
-            "session": session_id,
-            "text": msg,
-            "system_prompt": system_prompt,
-        },
+    result = await submit_chat_task(
+        ChatSubmitRequest(
+            request_id=request_id,
+            session_id=session_id,
+            user_text=msg,
+            system_prompt=system_prompt,
+            bot_id=int(bot.self_id),
+            group_id=group_id,
+        ),
+        cfg=ollama_llm_config(cfg),
     )
-    if not response:
+    if not result.ok:
         await TaskManager.remove_task(request_id)
         return
 
-    task_id = response.json().get("task_id", "")
-    if not task_id:
+    if not result.task_id:
         await TaskManager.remove_task(request_id)
