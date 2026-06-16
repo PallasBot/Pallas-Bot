@@ -33,7 +33,7 @@ from .group_style_refresh import (
     pop_dirty_group_style_batch,
     refresh_dirty_group_style_batch,
 )
-from .loader import invalidate_persona_cache, resolve_persona
+from .loader import invalidate_persona_cache, resolve_persona, resolve_persona_for_message
 from .model import ResolvedPersona
 
 __all__ = [
@@ -66,4 +66,5 @@ __all__ = [
     "refresh_dirty_group_style_batch",
     "resolve_base_system_prompt_path",
     "resolve_persona",
+    "resolve_persona_for_message",
 ]

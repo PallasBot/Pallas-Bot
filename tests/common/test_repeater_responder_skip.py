@@ -295,12 +295,12 @@ async def test_context_find_passes_group_id_to_resolve_persona(monkeypatch) -> N
         async def drunkenness(self) -> int:
             return 1
 
-    seen: list[tuple[int, int | None]] = []
+    seen: list[tuple[int, int, str]] = []
 
-    async def fake_resolve_persona(bot_id: int, group_id: int | None = None):
+    async def fake_resolve_persona_for_message(bot_id: int, group_id: int, plain_text: str):
         from src.features.persona.model import ResolvedPersona
 
-        seen.append((bot_id, group_id))
+        seen.append((bot_id, group_id, plain_text))
         return ResolvedPersona()
 
     async def fake_find(_keywords: str):
@@ -314,7 +314,7 @@ async def test_context_find_passes_group_id_to_resolve_persona(monkeypatch) -> N
         )
 
     monkeypatch.setattr("src.plugins.repeater.responder.pg_pool_under_pressure", lambda threshold=0.55: False)
-    monkeypatch.setattr("src.features.persona.resolve_persona", fake_resolve_persona)
+    monkeypatch.setattr("src.features.persona.resolve_persona_for_message", fake_resolve_persona_for_message)
 
     class _Repo:
         async def find_by_keywords_for_reply(self, keywords: str):
@@ -337,4 +337,4 @@ async def test_context_find_passes_group_id_to_resolve_persona(monkeypatch) -> N
     )
 
     assert result is not None
-    assert seen == [(456, 123)]
+    assert seen == [(456, 123, "hello world")]

@@ -320,7 +320,7 @@ class Responder:
         if not context:
             return None
 
-        from src.features.persona import resolve_persona
+        from src.features.persona import resolve_persona_for_message
         from src.features.persona.scorer import (
             answer_popularity_multiplier,
             freshness_multiplier,
@@ -330,7 +330,11 @@ class Responder:
 
         from .activity_gate import group_has_hosted_activity
 
-        persona = await resolve_persona(bot_id, group_id)
+        persona = await resolve_persona_for_message(
+            bot_id,
+            group_id,
+            str(getattr(chat_data, "plain_text", "") or chat_data.raw_message or ""),
+        )
         in_hosted_activity = group_has_hosted_activity(group_id) and not chat_data.to_me
 
         is_drunk = await config.drunkenness() > 0

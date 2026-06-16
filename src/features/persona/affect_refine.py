@@ -16,6 +16,7 @@ from .affect_baseline import (
     merge_affect_refine_into_profile,
 )
 from .affect_refine_client import build_affect_refine_payload, post_affect_refine
+from .affect_triggers import apply_affect_refine_triggers_to_profile
 
 _config_lock = Lock()
 _cached_enabled: bool | None = None
@@ -89,12 +90,14 @@ async def refine_group_style_affect(
 ) -> dict[str, Any]:
     """批次 refresh 时可选调用 AI 仓；未启用或失败时保留 affect_refine 占位。"""
     if not llm_affect_refine_enabled():
-        return merge_affect_refine_into_profile(profile, empty_affect_refine())
+        profile = merge_affect_refine_into_profile(profile, empty_affect_refine())
+        return apply_affect_refine_triggers_to_profile(profile, None)
 
     payload = build_affect_refine_payload(profile, group_id=group_id, message_samples=message_samples)
     body = await post_affect_refine(payload)
     if not body:
-        return merge_affect_refine_into_profile(profile, empty_affect_refine())
+        profile = merge_affect_refine_into_profile(profile, empty_affect_refine())
+        return apply_affect_refine_triggers_to_profile(profile, None)
 
     refine = affect_refine_from_ai_response(body)
     logger.debug(
@@ -104,4 +107,5 @@ async def refine_group_style_affect(
         refine.get("warmth_delta"),
         refine.get("assertiveness_delta"),
     )
-    return merge_affect_refine_into_profile(profile, refine)
+    profile = merge_affect_refine_into_profile(profile, refine)
+    return apply_affect_refine_triggers_to_profile(profile, refine)
