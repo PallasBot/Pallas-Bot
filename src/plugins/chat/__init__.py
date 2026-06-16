@@ -13,8 +13,15 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
+from src.features.llm import (
+    ChatSubmitRequest,
+    delete_llm_chat_session,
+    get_llm_config,
+    is_llm_chat_service_enabled,
+    submit_chat_task,
+)
+from src.features.llm.persona_context import build_persona_llm_context
 from src.foundation.config import BotConfig, GroupConfig, TaskManager
-from src.shared.utils import HTTPXClient
 
 from .config import Config, get_chat_config, plugin_config
 
@@ -39,7 +46,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "@牛牛 / 牛牛 + 文本",
                 "brief_des": "醉酒时 AI 对话",
-                "detail_des": "须先「牛牛喝酒」；牛牛根据上下文回复，启用 TTS 时可能附带语音。",
+                "detail_des": "须先「牛牛喝酒」；与随时闲聊共用 AI 网关与牛格 prompt。",
             },
         ],
     },
@@ -47,26 +54,24 @@ __plugin_meta__ = PluginMetadata(
 
 
 def refresh_server_url(cfg: Config | None = None) -> None:
-    global SERVER_URL
-    c = cfg or get_chat_config()
-    SERVER_URL = f"http://{c.ai_server_host}:{c.ai_server_port}"
+    _ = cfg or get_chat_config()
 
 
 refresh_server_url()
 CHAT_COOLDOWN_KEY = "chat"
 
-if plugin_config.chat_enable:
 
-    @BotConfig.handle_sober_up
-    async def on_sober_up(bot_id, group_id, drunkenness) -> None:
-        session = f"{bot_id}_{group_id}"
-        logger.info(f"bot [{bot_id}] sober up in group [{group_id}], clear session [{session}]")
-        url = f"{SERVER_URL}{plugin_config.del_session_endpoint}/{session}"
-        await HTTPXClient.delete(url)
+@BotConfig.handle_sober_up
+async def on_sober_up(bot_id, group_id, drunkenness) -> None:
+    if not is_llm_chat_service_enabled():
+        return
+    session = f"{bot_id}_{group_id}"
+    logger.info(f"bot [{bot_id}] sober up in group [{group_id}], clear session [{session}]")
+    await delete_llm_chat_session(session, cfg=get_llm_config())
 
 
 async def is_to_chat(event: GroupMessageEvent) -> bool:
-    if plugin_config.chat_enable is False:
+    if not is_llm_chat_service_enabled():
         return False
     text = event.get_plaintext()
     if not text.startswith("牛牛") and not event.is_tome():
@@ -100,33 +105,51 @@ async def _(bot: Bot, event: GroupMessageEvent):
     if not text:
         return
 
-    session = f"{event.self_id}_{event.group_id}"
+    group_id = int(event.group_id)
+    user_id = int(event.user_id)
+    session = f"{event.self_id}_{group_id}"
+    try:
+        bundle, temperature, token_count = await build_persona_llm_context(
+            int(bot.self_id),
+            group_id,
+            text,
+            mode="drunk",
+            purpose="chat",
+        )
+        system_prompt = bundle.system.strip()
+    except Exception:
+        logger.exception("compile_persona_prompt drunk mode failed")
+        return
+    if not system_prompt:
+        return
+
     request_id = str(ULID())
     await TaskManager.add_task(
         request_id,
         {
             "bot_id": bot.self_id,
-            "group_id": event.group_id,
+            "group_id": group_id,
+            "user_id": user_id,
             "task_type": "chat",
             "start_time": time.time(),
         },
     )
 
-    url = f"{SERVER_URL}{plugin_config.chat_endpoint}/{request_id}"
-    response = await HTTPXClient.post(
-        url,
-        json={
-            "session": session,
-            "text": text,
-            "token_count": 50,
-            "tts": plugin_config.tts_enable,
-        },
+    result = await submit_chat_task(
+        ChatSubmitRequest(
+            request_id=request_id,
+            session_id=session,
+            user_text=text,
+            system_prompt=system_prompt,
+            bot_id=int(bot.self_id),
+            group_id=group_id,
+            user_id=user_id,
+            mode="drunk",
+            task="drunk",
+            token_count=token_count,
+            temperature=temperature,
+        ),
+        cfg=get_llm_config(),
     )
-    if not response:
+    if not result.ok:
         await TaskManager.remove_task(request_id)
-        return
-
-    task_id = response.json().get("task_id", "")
-    if not task_id:
-        await TaskManager.remove_task(request_id)
-        return

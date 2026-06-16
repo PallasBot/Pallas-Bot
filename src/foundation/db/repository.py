@@ -81,6 +81,10 @@ class ContextRepository(Protocol):
         """按群号与 reply 原文精确反查 (pre_keywords, reply_keywords)。"""
         ...
 
+    async def list_answers_for_group_since(self, group_id: int, cutoff_time: int) -> list[Answer]:
+        """列出指定群在 cutoff_time 之后的 Answer 样本，供画像/统计使用。"""
+        ...
+
 
 class ContextRepositoryExistenceMixin:
     """为已实现 `find_by_keywords` 的仓储提供 `context_exists_by_keywords` 默认实现。"""
@@ -104,6 +108,26 @@ class MessageRepository(Protocol):
         limit: int = 8,
     ) -> list[Message]:
         """群内近期消息，按 time 升序。"""
+        ...
+
+    async def list_recent_group_ids_for_bot(
+        self,
+        bot_id: int,
+        *,
+        since_time: int,
+        limit: int = 128,
+    ) -> list[int]:
+        """列出 bot 在 since_time 之后发过消息的群号（去重）。"""
+        ...
+
+    async def list_recent_bot_ids_for_group(
+        self,
+        group_id: int,
+        *,
+        since_time: int,
+        limit: int = 32,
+    ) -> list[int]:
+        """列出群内在 since_time 之后发过消息的 bot 账号（去重）。"""
         ...
 
 

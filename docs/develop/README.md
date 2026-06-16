@@ -8,6 +8,7 @@
 | --- | --- |
 | [本地开发环境](environment.md) | `uv`、配置、启动 Bot、分片与可选 Redis |
 | [贡献与提交流程](workflow.md) | Ruff、pre-commit、测试、PR 与 commit 约定 |
+| [**4.0 并行开发**](4.0-development.md) | `dev` 集成 + 牛格 / 瘦身子分支 |
 | [插件开发入门](plugin/getting-started.md) | 新建插件、注册、最小示例 |
 | [插件结构与约定](plugin/structure.md) | 目录拆分、`data/` / `resource/`、文档与测试 |
 | [插件进阶能力](plugin/advanced.md) | cmd_perm、WebUI 热重载、消息审查、站点插件 |
@@ -22,6 +23,8 @@
 | [项目结构](../architecture/project-structure.md) | 顶层目录与 `src/` 内核分层 |
 | [插件目录约定](../architecture/plugin-convention.md) | `src/plugins/*` 组织规范 |
 | [站点定制](../architecture/site-customization-and-updates.md) | `local/plugins`、更新策略 |
+| [Pallas 4.0 路线图](../architecture/pallas-4.0-roadmap.md) | 牛格 + 瘦身目标与验收 |
+| [Bot ↔ AI 仓](../architecture/pallas-ai-service.md) | LLM 运行时与 AI 仓 4.0 重构 |
 | [命令权限 cmd_perm](../common/cmd_perm/README.md) | 帮助「何人可用」与 WebUI 覆盖 |
 | [命令冷却 command_limits](../common/command_limits/README.md) | 统一 CD helper |
 | [WebUI 插件配置](../common/webui/README.md) | `install_hot_reload_config` |

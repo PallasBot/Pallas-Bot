@@ -76,6 +76,25 @@ async def test_bot_config_class_uses_repo(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_bot_config_group_style_enabled_defaults_to_true(beanie_fixture):
+    repo = MongoConfigRepository(BotConfigModule, "account")
+
+    doc, created = await repo.get_or_create(1000)
+    assert created is True
+    assert doc.group_style_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_bot_config_group_style_enabled_roundtrip(beanie_fixture):
+    repo = MongoConfigRepository(BotConfigModule, "account")
+
+    await repo.upsert_field(1001, "group_style_enabled", True)
+    doc = await repo.get(1001, ignore_cache=True)
+    assert doc is not None
+    assert doc.group_style_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_group_config_class_uses_repo(beanie_fixture):
     from src.foundation.config import GroupConfig
 
@@ -87,6 +106,24 @@ async def test_group_config_class_uses_repo(beanie_fixture):
     assert await group.roulette_mode() == 1
     await group.set_roulette_mode(0)
     assert await group.roulette_mode() == 0
+
+
+@pytest.mark.asyncio
+async def test_group_config_style_profile_roundtrip(beanie_fixture):
+    repo = MongoConfigRepository(GroupConfigModule, "group_id")
+
+    profile = {
+        "version": 1,
+        "updated_at": 1781568000,
+        "sample": {"window_hours": 168, "message_count": 30, "answer_count": 5, "distinct_answer_keywords": 4},
+        "raw": {"avg_plain_len": 8.5, "p50_plain_len": 6, "p90_plain_len": 18, "msgs_per_hour_active": 3.0},
+        "derived": {"reply_bias_mul": 1.05, "speak_bias_mul": 1.02, "length_pref": "short", "chaos_bias": 0.1},
+    }
+
+    await repo.upsert_field(501, "style_profile", profile)
+    doc = await repo.get(501, ignore_cache=True)
+    assert doc is not None
+    assert doc.style_profile == profile
 
 
 @pytest.mark.asyncio

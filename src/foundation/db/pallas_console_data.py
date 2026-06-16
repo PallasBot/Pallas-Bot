@@ -35,6 +35,8 @@ def bot_config_to_public(doc_or_row: Any) -> dict[str, Any]:
         "drunk": dict(doc_or_row.drunk or {}),
         "disabled_plugins": list(doc_or_row.disabled_plugins or []),
         "community_roster_show_qq": bool(getattr(doc_or_row, "community_roster_show_qq", True)),
+        "persona": dict(doc_or_row.persona) if getattr(doc_or_row, "persona", None) else None,
+        "group_style_enabled": bool(getattr(doc_or_row, "group_style_enabled", True)),
     }
 
 
@@ -69,7 +71,10 @@ async def bot_community_roster_show_qq_by_accounts(account_ids: list[int]) -> di
 
 
 def group_config_to_public(doc_or_row: Any) -> dict[str, Any]:
+    from src.features.persona.compile_group_style import compile_group_style_snapshot
+
     sp = getattr(doc_or_row, "sing_progress", None)
+    style_profile_raw = getattr(doc_or_row, "style_profile", None)
     bu = getattr(doc_or_row, "blocked_user_ids", None) or []
     blocked: list[int] = []
     for x in bu:
@@ -77,6 +82,7 @@ def group_config_to_public(doc_or_row: Any) -> dict[str, Any]:
             blocked.append(int(x))
         except (TypeError, ValueError):
             continue
+    snapshot = compile_group_style_snapshot(style_profile_raw if isinstance(style_profile_raw, dict) else None)
     return {
         "group_id": int(doc_or_row.group_id),
         "roulette_mode": int(getattr(doc_or_row, "roulette_mode", 1)),
@@ -84,6 +90,7 @@ def group_config_to_public(doc_or_row: Any) -> dict[str, Any]:
         "sing_progress": _jsonable_sing_progress(sp),
         "disabled_plugins": list(doc_or_row.disabled_plugins or []),
         "blocked_user_ids": sorted(set(blocked)),
+        "style_profile_snapshot": snapshot,
     }
 
 

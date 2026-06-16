@@ -44,7 +44,6 @@ from src.platform.shard import context as shard_ctx
 from .console_meta_store import (
     get_console_meta,
     merge_console_version_from_disk,
-    set_console_meta,
 )
 from .console_read_cache import cached_read, clear_extended_read_cache, drop_read_cache
 
@@ -3634,6 +3633,8 @@ class _BotConfigPatch(BaseModel):
     auto_accept_group: bool | None = None
     security: bool | None = None
     community_roster_show_qq: bool | None = None
+    persona: dict | None = None
+    group_style_enabled: bool | None = None
 
 
 class _GroupConfigPatch(BaseModel):
@@ -3826,6 +3827,10 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
         from src.foundation.config.bot_admins_cache import invalidate_bot_admins_cache
 
         await invalidate_bot_admins_cache(account)
+    if "persona" in fields:
+        from src.features.persona import invalidate_persona_cache
+
+        invalidate_persona_cache(account)
     doc = await repo.get(account, ignore_cache=True)
     if doc is None:
         raise HTTPException(status_code=500, detail="config upsert 后回读失败")
@@ -3945,6 +3950,7 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
             "taken_name",
             "drunk",
             "community_roster_show_qq",
+            "persona",
         }
         for k in payload:
             if k not in allowed:
@@ -5911,10 +5917,9 @@ def register_extended_api(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from src.shared.utils.format_exception import format_exception_for_log
-
         from src.console.cli.update_ops import apply_bot_update
         from src.plugins.pallas_webui.manager import BotGitUpdateError
+        from src.shared.utils.format_exception import format_exception_for_log
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         try:
@@ -5943,9 +5948,8 @@ def register_extended_api(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from src.shared.utils.format_exception import format_exception_for_log
-
         from src.console.cli.update_ops import WebuiUpdateError, apply_webui_dist_update
+        from src.shared.utils.format_exception import format_exception_for_log
 
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot-WebUI")
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")

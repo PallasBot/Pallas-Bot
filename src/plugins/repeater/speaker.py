@@ -4,13 +4,16 @@ import random
 import time
 from collections import defaultdict, deque
 from functools import cmp_to_key
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from nonebot.adapters.onebot.v11 import Message
 
+from src.features.persona import resolve_persona
+from src.features.persona.model import ResolvedPersona
+from src.features.persona.scorer import scaled_speak_threshold, speak_keyword_group_weight, speak_message_weight
 from src.foundation.config import BotConfig
-from src.platform.shard import context as shard_ctx
 
+from .activity_gate import blocks_proactive_speak
 from .ban_manager import BanManager
 from .message_store import MessageStore
 from .model import Chat, ChatData
@@ -34,6 +37,31 @@ class Speaker:
     REPLY_FLAG = Chat.REPLY_FLAG
 
     _recent_speak = defaultdict(lambda: deque(maxlen=Chat.DUPLICATE_REPLY))
+
+    @staticmethod
+    def _pick_speak_message(
+        persona: ResolvedPersona,
+        candidate_pool: list[Any],
+        recently: deque[str],
+    ) -> Any:
+        recent_list = list(recently)
+        keyword_groups: defaultdict[str, list[Any]] = defaultdict(list)
+        for msg in candidate_pool:
+            keyword_groups[msg.keywords].append(msg)
+
+        groups = list(keyword_groups.values())
+        group_weights = [speak_keyword_group_weight(group, persona, recent_speaks=recent_list) for group in groups]
+        chosen_group = random.choices(groups, weights=group_weights, k=1)[0]
+
+        msg_weights = [
+            speak_message_weight(
+                str(getattr(msg, "plain_text", None) or getattr(msg, "raw_message", "") or ""),
+                persona,
+                recent_speaks=recent_list,
+            )
+            for msg in chosen_group
+        ]
+        return random.choices(chosen_group, weights=msg_weights, k=1)[0]
 
     @staticmethod
     async def speak(
@@ -75,6 +103,9 @@ class Speaker:
 
         cur_time = time.time()
         for group_id, group_msgs in popularity:
+            if blocks_proactive_speak(group_id):
+                continue
+
             group_replies = reply_dict[group_id]
             if not len(group_replies) or len(group_msgs) < basic_msgs_len:
                 continue
@@ -88,7 +119,27 @@ class Speaker:
             duration = latest_time - group_msgs[0].time
             avg_interval = duration / msgs_len
 
-            if cur_time - latest_time < avg_interval * Speaker.SPEAK_THRESHOLD + basic_delay:
+            candidate_bot_ids = [bid for bid in group_replies.keys() if bid]
+            from src.platform.shard.registry.config import is_sharding_active
+
+            from .shard_opt import local_connected_bot_ids
+
+            if is_sharding_active():
+                local_bots = local_connected_bot_ids()
+                candidate_bot_ids = [bid for bid in candidate_bot_ids if bid in local_bots]
+            if not candidate_bot_ids:
+                continue
+            speak_bias = 1.0
+            for bid in candidate_bot_ids:
+                persona = await resolve_persona(bid, group_id)
+                speak_bias = max(speak_bias, persona.speak_bias)
+
+            eff_speak_threshold = scaled_speak_threshold(
+                Speaker.SPEAK_THRESHOLD,
+                ResolvedPersona(speak_bias=speak_bias),
+            )
+
+            if cur_time - latest_time < avg_interval * eff_speak_threshold + basic_delay:
                 continue
 
             async with reply_lock:
@@ -100,18 +151,10 @@ class Speaker:
                     "reply_keywords": Speaker.SPEAK_FLAG,
                 })
 
-            from .shard_opt import local_connected_bot_ids
-
-            bot_ids = [bid for bid in group_replies.keys() if bid]
-            if shard_ctx.sharding_active():
-                local_bots = local_connected_bot_ids()
-                bot_ids = [bid for bid in bot_ids if bid in local_bots]
-            if not bot_ids:
-                continue
             from src.platform.multi_bot.platform_utils import pick_connected_bot_id
 
-            picked = pick_connected_bot_id(bot_ids, log_tag="repeater.speak")
-            bot_id = picked if picked is not None else random.choice(bot_ids)
+            picked = pick_connected_bot_id(candidate_bot_ids, log_tag="repeater.speak")
+            bot_id = picked if picked is not None else random.choice(candidate_bot_ids)
 
             ban_keywords = await BanManager.find_ban_keywords(context=None, group_id=group_id)
 
@@ -136,12 +179,8 @@ class Speaker:
             pretend_msg = list(filter(lambda msg: msg.user_id == taken_name, available_messages))
             candidate_pool = pretend_msg or available_messages
 
-            # 按 keywords 分组后先随机选 topic，再从该 topic 中随机选消息
-            keyword_groups: defaultdict[str, list] = defaultdict(list)
-            for msg in candidate_pool:
-                keyword_groups[msg.keywords].append(msg)
-            chosen_group = random.choice(list(keyword_groups.values()))
-            first_message = random.choice(chosen_group)
+            speak_persona = await resolve_persona(bot_id, group_id)
+            first_message = Speaker._pick_speak_message(speak_persona, candidate_pool, recently)
             speak = first_message.raw_message
             Speaker._recent_speak[group_id].append(speak)
 

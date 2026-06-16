@@ -38,6 +38,7 @@
 - `data/request_handler/`：`request_handler` 插件的待处理申请缓存目录。
 - `resource/voices/`：`greeting` 使用的语音资源目录。
 - `resource/styles/`：`help` 插件的样式资源目录。
+- `resource/arknights/`：明日方舟干员表与头像（决斗 / 未来 KB 共用，见 [arknights-knowledge-mcp](architecture/arknights-knowledge-mcp.md)）。
 
 ## 测试目录约定
 

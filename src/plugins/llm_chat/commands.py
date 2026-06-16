@@ -8,6 +8,8 @@ from src.features.cmd_perm import (
     group_message_permission_for_command,
     group_or_private_message_permission_for_command,
 )
+from src.features.llm import delete_llm_chat_session, get_llm_config, is_llm_chat_service_enabled
+from src.features.llm.session_store import clear_llm_messages, clear_user_llm_messages
 from src.shared.utils import HTTPXClient
 from src.shared.utils.http_msg import user_failure_reply
 
@@ -25,10 +27,10 @@ llm_unload_cmd = on_command(
 
 @llm_unload_cmd.handle()
 async def handle_llm_unload(bot: Bot, event: Event):
-    cfg = get_llm_chat_config()
-    if not cfg.llm_chat_enable:
+    if not is_llm_chat_service_enabled():
         return
 
+    cfg = get_llm_chat_config()
     url = f"{llm_chat_server_url()}{cfg.llm_model_unload_endpoint}"
     logger.info("llm unload request sending: url={}", url)
     response = await HTTPXClient.post(url, json={})
@@ -50,13 +52,24 @@ llm_clear_cmd = on_command(
 
 @llm_clear_cmd.handle()
 async def handle_llm_clear(bot: Bot, event: Event):
-    cfg = get_llm_chat_config()
-    if not cfg.llm_chat_enable:
+    if not is_llm_chat_service_enabled():
         return
 
+    cfg = get_llm_chat_config()
     session_id = event.get_session_id()
-    url = f"{llm_chat_server_url()}{cfg.llm_del_session_endpoint}/{session_id}"
-    await HTTPXClient.delete(url)
+    llm_cfg = get_llm_config()
+    if llm_cfg.use_unified_chat_api:
+        await delete_llm_chat_session(session_id, cfg=llm_cfg)
+    else:
+        url = f"{llm_chat_server_url()}{cfg.llm_del_session_endpoint}/{session_id}"
+        await HTTPXClient.delete(url)
+    raw_group_id = getattr(event, "group_id", None)
+    group_id = int(raw_group_id) if raw_group_id is not None else None
+    user_id = int(getattr(event, "user_id", 0) or 0)
+    if user_id:
+        await clear_user_llm_messages(int(bot.self_id), group_id, user_id)
+    else:
+        await clear_llm_messages(int(bot.self_id), group_id)
     await llm_clear_cmd.send(LLM_CHAT_CLEAR_OK)
 
 
@@ -71,10 +84,10 @@ llm_model_cmd = on_command(
 
 @llm_model_cmd.handle()
 async def handle_llm_model(bot: Bot, event: Event, args: Message = CommandArg()):  # noqa: B008
-    cfg = get_llm_chat_config()
-    if not cfg.llm_chat_enable:
+    if not is_llm_chat_service_enabled():
         return
 
+    cfg = get_llm_chat_config()
     model_name = args.extract_plain_text().strip()
     url = f"{llm_chat_server_url()}{cfg.llm_model_endpoint}"
 

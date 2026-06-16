@@ -31,10 +31,7 @@ def _loaded_plugin_rows() -> list[tuple[str, str, list[Any]]]:
 def _disk_plugin_rows() -> list[tuple[str, str, list[Any]]]:
     loaded_names = {name for name, _title, _decls in _loaded_plugin_rows()}
     extra_pkgs = discover_extra_plugin_packages()
-    roots = [
-        (package, PROJECT_ROOT / "src" / "plugins" / package)
-        for package in discover_plugin_packages()
-    ]
+    roots = [(package, PROJECT_ROOT / "src" / "plugins" / package) for package in discover_plugin_packages()]
     roots.extend(extra_pkgs.items())
 
     rows: list[tuple[str, str, list[Any]]] = []

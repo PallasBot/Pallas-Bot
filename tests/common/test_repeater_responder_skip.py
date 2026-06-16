@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import defaultdict, deque
 from types import SimpleNamespace
 
 import pytest
@@ -32,7 +33,7 @@ def test_should_not_skip_context_lookup_for_non_plain_with_text() -> None:
 
 def test_should_skip_short_plain_text_in_unified_mode(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.plugins.repeater.responder.shard_ctx.sharding_active",
         lambda: False,
     )
     chat_data = SimpleNamespace(
@@ -47,7 +48,7 @@ def test_should_skip_short_plain_text_in_unified_mode(monkeypatch) -> None:
 
 def test_should_not_skip_short_plain_text_in_sharded_mode(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.plugins.repeater.responder.shard_ctx.sharding_active",
         lambda: True,
     )
     chat_data = SimpleNamespace(
@@ -62,7 +63,7 @@ def test_should_not_skip_short_plain_text_in_sharded_mode(monkeypatch) -> None:
 
 def test_should_not_skip_empty_keyword_plain_text_in_sharded_mode(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.plugins.repeater.responder.shard_ctx.sharding_active",
         lambda: True,
     )
     chat_data = SimpleNamespace(
@@ -117,7 +118,7 @@ async def test_answer_still_skips_one_char_plain_text_in_unified_mode(monkeypatc
     from collections import defaultdict, deque
 
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.plugins.repeater.responder.shard_ctx.sharding_active",
         lambda: False,
     )
 
@@ -145,7 +146,7 @@ async def test_answer_allows_one_char_plain_text_in_sharded_mode(monkeypatch) ->
     from collections import defaultdict, deque
 
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "src.plugins.repeater.responder.shard_ctx.sharding_active",
         lambda: True,
     )
 
@@ -226,8 +227,6 @@ async def test_context_find_skips_when_pg_pool_under_pressure(monkeypatch) -> No
 
 @pytest.mark.asyncio
 async def test_context_find_db_timeout_returns_none(monkeypatch) -> None:
-    from collections import defaultdict, deque
-
     from sqlalchemy.exc import TimeoutError as SATimeoutError
 
     class _ChatData:
@@ -255,10 +254,12 @@ async def test_context_find_db_timeout_returns_none(monkeypatch) -> None:
         "src.plugins.repeater.responder.pg_pool_under_pressure",
         lambda threshold=0.55: False,
     )
-    monkeypatch.setattr(
-        "src.plugins.repeater.responder.context_repo.find_by_keywords_for_reply",
-        timeout_find,
-    )
+
+    class _Repo:
+        async def find_by_keywords_for_reply(self, keywords: str):
+            return await timeout_find(keywords)
+
+    monkeypatch.setattr("src.plugins.repeater.responder.context_repo", _Repo())
 
     result = await Responder._context_find(
         _ChatData(),
@@ -269,3 +270,71 @@ async def test_context_find_db_timeout_returns_none(monkeypatch) -> None:
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_context_find_passes_group_id_to_resolve_persona(monkeypatch) -> None:
+    from src.foundation.db.modules import Answer, Context
+
+    class _ChatData:
+        group_id = 123
+        raw_message = "hello world"
+        plain_text = "hello world"
+        bot_id = 456
+        is_plain_text = True
+        is_image = False
+        to_me = False
+        keywords_len = 2
+        _keywords_list = ["hello", "world"]
+
+        @property
+        def keywords(self) -> str:
+            return "hello world"
+
+    class _Config:
+        async def drunkenness(self) -> int:
+            return 1
+
+    seen: list[tuple[int, int, str]] = []
+
+    async def fake_resolve_persona_for_message(bot_id: int, group_id: int, plain_text: str):
+        from src.features.persona.model import ResolvedPersona
+
+        seen.append((bot_id, group_id, plain_text))
+        return ResolvedPersona()
+
+    async def fake_find(_keywords: str):
+        return Context.model_construct(
+            keywords="hello world",
+            time=1,
+            trigger_count=1,
+            answers=[Answer(keywords="ans", group_id=123, count=2, time=1, messages=["收到"])],
+            ban=[],
+            clear_time=0,
+        )
+
+    monkeypatch.setattr("src.plugins.repeater.responder.pg_pool_under_pressure", lambda threshold=0.55: False)
+    monkeypatch.setattr("src.features.persona.resolve_persona_for_message", fake_resolve_persona_for_message)
+
+    class _Repo:
+        async def find_by_keywords_for_reply(self, keywords: str):
+            return await fake_find(keywords)
+
+    monkeypatch.setattr("src.plugins.repeater.responder.context_repo", _Repo())
+
+    async def fake_find_ban_keywords(**_kwargs):
+        return set()
+
+    monkeypatch.setattr("src.plugins.repeater.ban_manager.BanManager.find_ban_keywords", fake_find_ban_keywords)
+    monkeypatch.setattr("src.plugins.repeater.activity_gate.group_has_hosted_activity", lambda _gid: False)
+
+    result = await Responder._context_find(
+        _ChatData(),
+        _Config(),
+        defaultdict(lambda: defaultdict(list)),
+        defaultdict(list, {123: []}),
+        defaultdict(lambda: deque(maxlen=16)),
+    )
+
+    assert result is not None
+    assert seen == [(456, 123, "hello world")]

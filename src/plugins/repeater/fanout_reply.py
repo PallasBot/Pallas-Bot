@@ -301,7 +301,7 @@ async def run_repeater_reply_for_bot(bot_id: int, payload: dict[str, Any]) -> No
         bot_id=bot_id,
     )
 
-    plan = Responder.pick_fanout_plan(bundle)
+    plan = Responder.pick_fanout_plan(bundle, bot_id)
 
     chat = Chat(chat_data)
 

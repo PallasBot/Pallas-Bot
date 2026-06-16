@@ -36,6 +36,7 @@
 | 文档 | 说明 |
 | --- | --- |
 | [help](./help/README.md) | 三级帮助图、插件开关 |
+| [persona](./persona/README.md) | 接话行为（自动学习） |
 | [greeting](./greeting/README.md) | 入群/好友欢迎 |
 | [request_handler](./request_handler/README.md) | 好友/入群申请审批 |
 | [blacklist](./blacklist/README.md) | 全局拉黑 |

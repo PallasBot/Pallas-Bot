@@ -1,46 +1,33 @@
 from __future__ import annotations
 
-from pathlib import Path
 from threading import Lock
+from typing import TYPE_CHECKING
 
-from src.foundation.config.repo_settings import repo_root
+from src.features.persona.compile_persona_prompt import (
+    clear_base_system_prompt_cache,
+    load_base_system_prompt,
+    resolve_base_system_prompt_path,
+)
 
 from .config import get_llm_chat_config
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 _lock = Lock()
-_cached_path: Path | None = None
-_cached_mtime: float | None = None
-_cached_text: str = ""
 
 
 def clear_system_prompt_cache() -> None:
-    global _cached_path, _cached_mtime, _cached_text
     with _lock:
-        _cached_path = None
-        _cached_mtime = None
-        _cached_text = ""
+        clear_base_system_prompt_cache()
 
 
 def resolve_system_prompt_path() -> Path:
     cfg = get_llm_chat_config()
-    custom = (cfg.llm_chat_system_prompt_path or "").strip()
-    if custom:
-        path = Path(custom)
-        if not path.is_absolute():
-            path = repo_root() / custom
-        return path
-    return Path(__file__).resolve().parent / "system_prompt.txt"
+    return resolve_base_system_prompt_path(cfg.llm_chat_system_prompt_path or None)
 
 
 def get_system_prompt() -> str:
-    global _cached_path, _cached_mtime, _cached_text
-    path = resolve_system_prompt_path()
+    cfg = get_llm_chat_config()
     with _lock:
-        if not path.is_file():
-            return ""
-        mtime = path.stat().st_mtime
-        if path != _cached_path or mtime != _cached_mtime:
-            _cached_text = path.read_text(encoding="utf-8").strip()
-            _cached_path = path
-            _cached_mtime = mtime
-        return _cached_text
+        return load_base_system_prompt(custom_path=cfg.llm_chat_system_prompt_path or None)

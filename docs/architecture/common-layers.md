@@ -6,9 +6,9 @@
 | --- | --- | --- |
 | foundation | `src/foundation/` | `config`、`paths`、`logging`、`db`；`bot_version`、`command_prefix`、`apscheduler_runtime` |
 | platform | `src/platform/` | `shard`、`multi_bot`、`ingress`（**入站调度基础设施**）、`bot_runtime`（含 `ingress_dispatch_runtime`）、`coord`、`federate` |
-| features | `src/features/` | `cmd_perm`、`command_limits`、`message_scrub`、`community_stats`、`corpus`、`control_plane`、`ban_gate` |
+| features | `src/features/` | `cmd_perm`、`command_limits`、`message_scrub`、`community_stats`、`corpus`、`control_plane`、`ban_gate`、`persona`（接话行为；LLM 路线图见 [persona-llm-roadmap.md](persona-llm-roadmap.md)）、`llm` |
 | console | `src/console/` | `webui`、`web`、`cli` |
-| domain | `src/domain/` | `arknights` 等域共享 |
+| domain | `src/domain/` | `arknights` 等域共享（游戏数据见 [arknights-knowledge-mcp.md](arknights-knowledge-mcp.md)） |
 | shared | `src/shared/` | `utils`、`adapters`、`service_probe` |
 
 ## 依赖方向（建议）

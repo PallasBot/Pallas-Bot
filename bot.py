@@ -31,6 +31,9 @@ logger.add(
 )
 logger.info("bot file log dir: {} level={}", bot_log_dir, file_log_level)
 start_message_scrub_if_enabled()
+from src.features.llm.startup_probe import install_llm_startup_probe
+
+install_llm_startup_probe()
 install_nonebot_log_sink()
 driver = nonebot.get_driver()
 driver.register_adapter(ONEBOT_V11Adapter)

@@ -24,6 +24,7 @@ from src.features.corpus.prefetch import bind_corpus_prefetch_lifecycle
 from src.features.dream_ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
 from src.features.message_scrub import is_message_scrub_blocked_async
 from src.features.message_scrub.log_preview import scrub_intercept_log_preview
+from src.features.persona import bind_group_style_refresh_lifecycle
 from src.foundation.config import BotConfig
 from src.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from src.shared.reply_command_rule import event_has_reply_target, event_targets_self, extract_reply_id_from_raw_message
@@ -38,6 +39,7 @@ from .model import Chat
 from .reply_gate import should_prepare_repeater_reply
 
 bind_repeater_learn_lifecycle()
+bind_group_style_refresh_lifecycle()
 bind_corpus_prefetch_lifecycle()
 bind_corpus_backfill_lifecycle()
 
@@ -241,6 +243,10 @@ async def _(bot: Bot, event: GroupMessageEvent):
     await enqueue_repeater_learn(chat, event)
 
     if bundle is None:
+        if can_reply:
+            from src.features.llm.fallback import maybe_submit_repeater_llm_fallback
+
+            await maybe_submit_repeater_llm_fallback(event, user_text=ctx.plain_body)
         return
 
     if fanout_gate is not None and fanout_gate.won:
@@ -248,6 +254,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
 
         await dispatch_repeater_fanout(event, fanout_gate.bot_ids, bundle)
         return
+
+    candidate = next((item for item in bundle.answer_list if item and "[CQ:" not in item), "")
+    if candidate:
+        from src.features.llm.polish import maybe_submit_repeater_llm_polish
+
+        if await maybe_submit_repeater_llm_polish(event, candidate_text=candidate):
+            return
 
     answers = await chat.answer_from_bundle(bundle)
     if answers is None:

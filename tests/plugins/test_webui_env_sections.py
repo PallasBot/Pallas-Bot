@@ -33,6 +33,19 @@ def _patch_loaded_command_limit_plugins(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr("src.features.command_limits.schema.get_loaded_plugins", lambda: plugins)
 
 
+def test_list_webui_env_sections_contains_llm_section():
+    from src.console.webui import list_webui_env_sections, webui_env_section_payload
+    from src.console.webui.env_sections import clear_webui_env_sections_cache
+
+    clear_webui_env_sections_cache()
+    rows = list_webui_env_sections()
+    assert any(r["id"] == "llm" for r in rows)
+    data = webui_env_section_payload("llm")
+    env_keys = {f["env_key"] for f in data["fields"]}
+    assert "LLM_CHAT_ENABLED" in env_keys
+    assert "LLM_REPEATER_MODE" in env_keys
+
+
 def test_list_webui_env_sections_contains_ingress_dispatch():
     from src.console.webui import list_webui_env_sections
     from src.console.webui.env_sections import clear_webui_env_sections_cache

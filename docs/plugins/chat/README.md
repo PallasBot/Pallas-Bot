@@ -15,13 +15,15 @@
 
 ## 配置
 
-[`config.py`](../../../src/plugins/chat/config.py)：`chat_enable`、`ai_server_host`、`ai_server_port` 等。推荐在 WebUI **插件 → chat** 修改（落盘 `data/pallas_config/webui.json`）。
+酒后聊天与随时 @ 闲聊共用全局 **`LLM_CHAT_ENABLED`**（默认关）。遗留 WebUI 键 `chat_enable` 仍可读，但请改配 `LLM_CHAT_ENABLED`。
+
+[`config.py`](../../../src/plugins/chat/config.py) 中 `chat_enable`、`ai_server_host` 等已弃用，推荐在 WebUI **环境变量** 或 `pallas.toml` `[env]` 配置 `LLM_CHAT_ENABLED` 与 `AI_SERVER_*`。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 无回复 | 确认已喝酒、AI 服务可达、`chat_enable=true` |
+| 无回复 | 确认已喝酒、AI 服务可达、`LLM_CHAT_ENABLED=true` |
 | 冷却 | 群级冷却内可能静默 |
 
 ## 实现

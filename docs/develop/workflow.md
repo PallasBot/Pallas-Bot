@@ -12,7 +12,8 @@
 
 ## 分支与 PR
 
-- 从 `main` 拉功能分支，向 `main` 发起 PR
+- 日常 **3.x**：从 `main` 拉分支，向 `main` 提 PR
+- **4.0 并行开发**：见 [4.0 分支约定](4.0-development.md)（`dev` 集成 + `feat/4.0-persona` 牛格 + `feat/4.0-slim` 瘦身）
 - **一个 PR 只解决一类问题**（功能 / 修复 / 文档 / 重构勿混杂）
 - **最小必要改动**：避免无关格式化、大范围重排；历史问题在说明里标注「历史遗留」与「本次引入」
 
@@ -21,6 +22,7 @@
 | 主题 | 文档 |
 | --- | --- |
 | 目录与分层 | [项目结构](../architecture/project-structure.md) |
+| **4.0 开发** | [4.0 分支约定](4.0-development.md)、[4.0 路线图](../architecture/pallas-4.0-roadmap.md) |
 | 插件组织 | [插件目录约定](../architecture/plugin-convention.md) |
 | 命令权限 | [cmd_perm](../common/cmd_perm/README.md) |
 | 配置落盘 | [配置存储](../architecture/settings-storage.md) |
