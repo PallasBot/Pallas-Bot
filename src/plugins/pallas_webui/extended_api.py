@@ -3729,6 +3729,12 @@ class _HelpMenuVisibilityBody(BaseModel):
     hidden_plugins: list[str] = Field(default_factory=list, max_length=2000)
 
 
+class _OfficialExtensionPackageBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    package: str = Field(min_length=1, max_length=128)
+
+
 class _GlobalPluginDisableBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -4419,6 +4425,46 @@ def register_extended_api(
 
         data = await cached_read(key="plugins-official-extensions", loader=_load, ttl_sec=30.0, stale_sec=120.0)
         return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/plugins/official-extensions/install", include_in_schema=True)
+    async def _plugins_official_extensions_install(
+        body: _OfficialExtensionPackageBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from src.console.webui.extension_install import ExtensionInstallError, install_official_extension
+        from src.shared.utils.format_exception import format_exception_for_log
+
+        try:
+            data = await install_official_extension(body.package)
+            drop_read_cache(("plugins-official-extensions", "plugins"))
+            return JSONResponse({"ok": True, "data": data})
+        except ExtensionInstallError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 安装官方扩展失败")
+            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+
+    @router.post(f"{x}/plugins/official-extensions/uninstall", include_in_schema=True)
+    async def _plugins_official_extensions_uninstall(
+        body: _OfficialExtensionPackageBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from src.console.webui.extension_install import ExtensionInstallError, uninstall_official_extension
+        from src.shared.utils.format_exception import format_exception_for_log
+
+        try:
+            data = await uninstall_official_extension(body.package)
+            drop_read_cache(("plugins-official-extensions", "plugins"))
+            return JSONResponse({"ok": True, "data": data})
+        except ExtensionInstallError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 卸载官方扩展失败")
+            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.get(f"{x}/plugins/help-menu-visibility", include_in_schema=True)
     async def _plugins_help_menu_visibility() -> JSONResponse:

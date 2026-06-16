@@ -1,4 +1,4 @@
-"""分片 worker 控制台指标：不经过 NoneBot 插件表，由 plugin_loader 注册启动。"""
+"""分片 worker 控制台指标。"""
 
 from __future__ import annotations
 

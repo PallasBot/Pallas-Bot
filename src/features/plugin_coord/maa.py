@@ -1,4 +1,4 @@
-"""MAA 扩展与分片协调的桥接。"""
+"""MAA 扩展协调桥接。"""
 
 from __future__ import annotations
 

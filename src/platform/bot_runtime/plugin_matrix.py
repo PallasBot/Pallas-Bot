@@ -1,10 +1,9 @@
-"""4.0 core / extra 插件矩阵，见 docs/architecture/pallas-4.0-slim.md。"""
+"""core / extra 插件矩阵。"""
 
 from __future__ import annotations
 
 import importlib.util
 
-# core：保留在本体 src/plugins/（默认 slim 加载）
 CORE_PLUGIN_NAMES: frozenset[str] = frozenset({
     "repeater",
     "help",
@@ -18,14 +17,12 @@ CORE_PLUGIN_NAMES: frozenset[str] = frozenset({
     "connectivity",
 })
 
-# 分片内置：由 loader / platform 显式启动，不在 src/plugins/ 维护
 SHARD_INTERNAL_PLUGIN_NAMES: frozenset[str] = frozenset({
     "relogin_forward",
     "maa_hub",
     "ingress_gate",
 })
 
-# extra：迁出为 pip 扩展包
 EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
     "pallas_protocol": "pallas-plugin-protocol",
     "relogin_bot": "pallas-plugin-protocol",
@@ -46,7 +43,6 @@ EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
     "ollama": "pallas-plugin-ollama",
 }
 
-# pip 包 → NoneBot 模块（已安装时由 plugin_loader 按角色加载）
 EXTRA_PACKAGE_MODULES: dict[str, tuple[str, ...]] = {
     "pallas-plugin-protocol": (
         "pallas_plugin_protocol",
@@ -81,7 +77,6 @@ EXTRA_PACKAGE_PRIORITY: dict[str, str] = {
     "pallas-plugin-ollama": "P2",
 }
 
-# 已迁出独立仓的官方扩展（pip 包名 → 仓库根 URL）
 OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
     "pallas-plugin-protocol": "https://github.com/TogetsuDo/pallas-plugin-protocol",
     "pallas-plugin-duel": "https://github.com/TogetsuDo/pallas-plugin-duel",
@@ -163,7 +158,7 @@ PIP_MODULE_LOAD_ROLE: dict[str, str] = {
 
 
 def installed_extra_plugin_modules(*, hub: bool | None = None) -> list[str]:
-    """已安装的 pip 扩展模块。hub=True/False 按角色过滤；None 为 unified 加载全部已安装项。"""
+    """已安装的 pip 扩展模块；hub 为 None 时不按角色过滤。"""
     out: list[str] = []
     seen: set[str] = set()
     for modules in EXTRA_PACKAGE_MODULES.values():

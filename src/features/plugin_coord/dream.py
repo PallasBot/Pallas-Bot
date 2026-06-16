@@ -1,4 +1,4 @@
-"""做梦扩展与分片梦话漂流的桥接。"""
+"""做梦扩展协调桥接。"""
 
 from __future__ import annotations
 

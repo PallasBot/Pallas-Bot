@@ -1,4 +1,4 @@
-"""按 PALLAS_BOT_ROLE 加载插件：hub 保留 WebUI/协议端/relogin，worker 承载牛牛。"""
+"""按角色加载 NoneBot 插件。"""
 
 from src.platform.bot_runtime.ingress_dispatch_runtime import (
     ingress_dispatch_runtime_registered,

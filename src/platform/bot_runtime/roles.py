@@ -1,4 +1,4 @@
-"""进程角色常量与插件加载名单；角色判断委托 shard.context。"""
+"""进程角色与插件加载名单。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from src.platform.shard import context as shard_ctx
 if TYPE_CHECKING:
     from src.platform.shard.registry.config import BotRole
 
-# hub：控制台、协议端、建号/重登；不加载游戏插件
 HUB_PLUGIN_MODULES: tuple[str, ...] = (
     "src.plugins.pallas_webui",
     "src.plugins.pallas_protocol",
@@ -21,7 +20,6 @@ HUB_PLUGIN_MODULES: tuple[str, ...] = (
     "src.plugins.community_stats",
 )
 
-# worker：跳过 hub 独占插件
 WORKER_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
     "pallas_webui",
     "pallas_protocol",
@@ -29,7 +27,6 @@ WORKER_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
     "maa_hub",
 })
 
-# unified：跳过仅分片 hub/worker 使用的插件
 UNIFIED_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
     "relogin_forward",
     "maa_hub",

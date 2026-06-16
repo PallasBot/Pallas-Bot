@@ -17,14 +17,16 @@ def test_build_official_extension_rows_groups_party():
     assert party["uv_extra"] == "plugins-party"
     assert party["priority"] == "P1"
     assert party["install_cli"] == "uv sync --extra plugins-party"
-    assert party["webui_install"] is False
+    assert party["webui_install"] is True
+    assert isinstance(party["can_install"], bool)
 
 
 def test_build_official_extension_rows_marks_bundled_duel():
     rows = build_official_extension_rows()
     duel = next(r for r in rows if r["package"] == "pallas-plugin-duel")
     assert "duel" in duel["bundled_plugin_ids"]
-    assert duel["status"] == "bundled"
+    assert duel["status"] in ("bundled", "installed")
+    assert isinstance(duel["installed"], bool)
     assert duel["repository_url"] == "https://github.com/TogetsuDo/pallas-plugin-duel"
 
 

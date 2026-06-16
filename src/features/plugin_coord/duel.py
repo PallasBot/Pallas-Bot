@@ -1,4 +1,4 @@
-"""决斗扩展与内核/分片协调的桥接；未安装时安全 no-op。"""
+"""决斗扩展协调桥接。"""
 
 from __future__ import annotations
 
