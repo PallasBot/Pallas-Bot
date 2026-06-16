@@ -46,7 +46,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "@牛牛 / 牛牛 + 文本",
                 "brief_des": "醉酒时 AI 对话",
-                "detail_des": "须先「牛牛喝酒」；与随时闲聊共用 AI 网关与牛格 prompt。",
+                "detail_des": "须先「牛牛喝酒」；与随时闲聊共用同一智能对话服务。",
             },
         ],
     },

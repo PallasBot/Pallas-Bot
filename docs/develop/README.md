@@ -1,6 +1,6 @@
 # 开发指南
 
-面向参与 **Pallas-Bot**、**Pallas-Bot-WebUI** 或站点自有插件维护的贡献者。部署与运行配置见 [快速上手](../README.md) 与 [配置存储](../architecture/settings-storage.md)。
+面向参与 **Pallas-Bot**、**Pallas-Bot-WebUI** 或站点自有插件维护的贡献者。部署与运行配置见 [使用指南](../user/README.md)、[快速上手](../README.md) 与 [配置存储](../architecture/settings-storage.md)。
 
 ## 阅读顺序
 

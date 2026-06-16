@@ -11,7 +11,7 @@ from src.features.cmd_perm.metadata_text import SCENE_BOTH, join_usage, usage_li
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛连通",
-    description="群内或私聊检测 LLM、画画、MAA 与唱歌服务的连通性与延迟。",
+    description="群内或私聊检测智能对话、画画、远控与唱歌服务是否通畅。",
     usage=join_usage(
         usage_line("牛牛连通 / 牛牛网关", "并行探测上述服务并回报延迟"),
     ),
@@ -36,8 +36,8 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛连通 / 牛牛网关",
                 "command_permission": "connectivity.probe",
-                "brief_des": "检测画画、MAA 远控与唱歌服务延迟",
-                "detail_des": "并行探测 LLM 对话、画画 API 网关、MAA getTask/reportStatus 端点及唱歌 AI 服务。",
+                "brief_des": "检测外部服务是否通畅",
+                "detail_des": "并行检测智能对话、画画、MAA 远控与唱歌服务，并回报延迟。",
             },
         ],
     },

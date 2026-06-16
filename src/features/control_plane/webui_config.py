@@ -6,6 +6,7 @@ from functools import lru_cache
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.console.webui.field_help import field_help
 from src.features.corpus.config import parse_tristate
 from src.foundation.config.repo_settings import repo_env_raw_value, repo_webui_settings_path
 
@@ -23,15 +24,69 @@ def setting_str(name: str, default: str = "") -> str:
 class ControlPlaneWebuiConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    enabled: bool = Field(default=True, description="是否向中心自动领取联邦配置")
-    bootstrap_url: str = Field(default="", description="中心配置地址，留空则自动选择主站或备站")
-    instance_secret: str = Field(default="", description="入池密钥，与中心一致")
-    federate_id: str = Field(default="", description="联邦池编号，可留空由中心写入")
-    federate_ingress_enabled: str = Field(default="auto", description="重复消息去重：自动、开启或关闭")
-    ingress_bypass_unified: bool = Field(default=False, description="单进程插件命令是否跳过联邦 claim")
-    federate_redis_prefix: str = Field(default="", description="去重键前缀，一般留空")
-    coord_redis_url: str = Field(default="", description="去重服务器地址，一般留空由中心下发")
-    claim_ttl_sec: int = Field(default=86400, description="去重 claim 保留秒数")
+    enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "是否自动从社区中心拉取多机协同配置",
+            "开启后填写下方中心地址与密钥即可；关闭则完全本地运行",
+        ),
+    )
+    bootstrap_url: str = Field(
+        default="",
+        description=field_help(
+            "多机协同中心的网址",
+            "留空时程序自动选择官方主站或备站",
+        ),
+    )
+    instance_secret: str = Field(
+        default="",
+        description=field_help(
+            "加入协同时用的密钥",
+            "与中心分配的一致；多套牛牛共池时必填",
+        ),
+    )
+    federate_id: str = Field(
+        default="",
+        description=field_help(
+            "本站在社区中的编号",
+            "可留空，由中心在首次登记时写入",
+        ),
+    )
+    federate_ingress_enabled: str = Field(
+        default="auto",
+        description=field_help(
+            "多机部署时是否过滤重复群消息",
+            "选自动、开启或关闭；单进程一般保持自动",
+        ),
+    )
+    ingress_bypass_unified: bool = Field(
+        default=False,
+        description=field_help(
+            "单进程运行时是否跳过重复消息过滤",
+            "仅一只牛、一个进程时可开启；多 worker 勿开",
+        ),
+    )
+    federate_redis_prefix: str = Field(
+        default="",
+        description=field_help(
+            "去重记录在 Redis 中的键前缀",
+            "一般留空即可",
+        ),
+    )
+    coord_redis_url: str = Field(
+        default="",
+        description=field_help(
+            "多进程共用的去重服务地址",
+            "留空时由中心下发；与分片用的 Redis 不是同一项",
+        ),
+    )
+    claim_ttl_sec: int = Field(
+        default=86400,
+        description=field_help(
+            "一条群消息被某只牛认领后，记录保留多久（秒）",
+            "默认 86400（一天）；过期后其他牛可再次响应",
+        ),
+    )
 
 
 def repair_misplaced_federate_redis_env() -> bool:

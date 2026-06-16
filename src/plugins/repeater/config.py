@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 
 from src.console.webui import install_hot_reload_config
+from src.console.webui.field_help import field_help
 
 FIELD_TO_ENV: dict[str, str] = {
     "learn_concurrency": "PALLAS_REPEATER_LEARN_CONCURRENCY",
@@ -83,23 +84,35 @@ class Config(BaseModel, extra="ignore"):
         default=8,
         ge=1,
         le=128,
-        description=("后台 learn 并发；WebUI「通用配置 → 复读 / 后台 learn」或 PALLAS_REPEATER_LEARN_CONCURRENCY。"),
+        description=field_help(
+            "后台同时学多少条群消息语料",
+            "机器性能好可适当加大；在「通用配置 → 复读后台学习」也可改",
+        ),
     )
     learn_queue_max_size: int = Field(
         default=2048,
         ge=64,
         le=20000,
-        description="待 learn 队列长度；WebUI 同段或 PALLAS_REPEATER_LEARN_QUEUE_SIZE，满则只丢 learn。",
+        description=field_help(
+            "等待学习的消息最多排多少条",
+            "队列满时只跳过学习，不影响复读和口令回复",
+        ),
     )
     fanout_enabled: bool = Field(
         default=False,
-        description="多牛同群接话 fanout（分片/多牛部署可开）；默认关。环境变量 PALLAS_REPEATER_FANOUT_ENABLED。",
+        description=field_help(
+            "同群有多只牛时，是否让多只牛一起接话",
+            "分片或多牛部署可开；单牛单进程保持关闭",
+        ),
     )
     fanout_max_bots: int = Field(
         default=0,
         ge=0,
         le=64,
-        description="fanout 每消息最多参与牛数，0 表示不限制。PALLAS_REPEATER_FANOUT_MAX_BOTS。",
+        description=field_help(
+            "同群接话时最多几只牛一起响应",
+            "填 0 表示不限制；仅在开启「多只牛一起接话」时有效",
+        ),
     )
     enable_reaction: bool = Field(default=True, description="是否启用 QQ 表情回应（Reaction）能力。")
     enable_probability_reaction: bool = Field(

@@ -4,14 +4,21 @@
 
 面向部署者与插件维护者的文档索引。运行配置以 **`config/pallas.toml`** + **`data/pallas_config/webui.json`** 为主（见 [配置存储](architecture/settings-storage.md)）；遗留根目录 `.env` 只读合并，WebUI 保存不再写入 `.env`。
 
-## 快速上手
+## 使用指南（用户向）
 
 | 文档 | 说明 |
 | --- | --- |
+| [**使用指南**](user/README.md) | 快速开始、控制台入口、常用口令、排障 |
 | [配置要点](Config.md) | `pallas.toml` 与 WebUI |
 | [标准部署](Deployment.md) | git clone、uv、数据库、控制台 |
 | [Docker 部署](DockerDeployment.md) | Compose、卷挂载、内置 PG/Mongo |
 | [常见问题](FAQ.md) | 学习机制、号主、排障 |
+| [插件口令索引](plugins/README.md) | 各功能说明与配置 |
+
+## 快速上手（运维）
+
+| 文档 | 说明 |
+| --- | --- |
 | [3.0 迁移](Migration-v3.md) | Mongo → PostgreSQL 等 |
 
 ## 开发
@@ -39,8 +46,8 @@
 | [插件规范](architecture/plugin-convention.md) | `src/plugins` 组织方式 |
 | [配置存储](architecture/settings-storage.md) | pallas.toml + webui.json |
 | [多进程分片](architecture/bot_process_sharding.md) | hub + worker，可选生产部署 |
-| [中央入站调度](architecture/central-ingress-dispatch.md) | unified / worker 内 matcher 预筛选、lane、出站整形 |
-| [控制面与语料联邦](architecture/control-plane-corpus-federation.md) | 维护者：Composite 语料、Bootstrap |
+| [中央入站调度](architecture/central-ingress-dispatch.md) | 消息预筛、并发限制、发送排队（开发向） |
+| [控制面与语料联邦](architecture/control-plane-corpus-federation.md) | 多机协同与社区接话库（开发向） |
 | [接话行为 persona](architecture/persona-reply-style.md) | 自动派生、群风格、选句；[LLM 路线图](architecture/persona-llm-roadmap.md) |
 | [Pallas 4.0 路线图](architecture/pallas-4.0-roadmap.md) | 牛格 + 瘦身；[分支约定](develop/4.0-development.md) |
 | [Bot ↔ AI 仓协同](architecture/pallas-ai-service.md) | LLM 运行时、AI 仓 4.0 重构 |
@@ -62,7 +69,7 @@
 | [WebUI API 契约](common/webui/api/README.md) | `/pallas/api` 分域说明 |
 | [消息审查 message_scrub](common/message_scrub/README.md) | 复读/做梦入站过滤 |
 | [在线统计与社区主站](common/community_stats.md) | 见上方 [社区中心](#社区中心)；上报与主站名册 |
-| [语料联邦](common/corpus/README.md) | 本机 + 社区共享接话池；WebUI 配置 |
+| [语料联邦](common/corpus/README.md) | 社区共享接话库；WebUI「社区共享接话库」 |
 
 ## 同步 Web 文档
 
