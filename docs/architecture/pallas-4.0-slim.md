@@ -184,20 +184,23 @@ deploy-full = ["pallas-bot[plugins-game,plugins-maa,...]"]
 
 ## 验收清单
 
-- [ ] 默认 `uv sync` 后仅 core 插件树
-- [ ] `--extra plugins-duel` 后 duel 可用
-- [ ] 未装扩展时 help/命令行为符合文档
-- [ ] 分片 hub/worker 扩展一致
-- [ ] 默认 Docker 镜像无迁出插件代码
-- [ ] WebUI feat/4.0 可展示插件 source（或 API 就绪）
-- [ ] WebUI 可浏览官方扩展索引并安装/卸载（S6）
-- [ ] 一键安装与 `local/plugins` 手工投放可并存且 local 优先
-- [ ] `pallas` CLI 覆盖单进程/分片启停与扩展安装后重启（S7）
-- [ ] 迁移文档完整
+> 明细见 [4.0-acceptance.md](../develop/4.0-acceptance.md)（2026-06-16，**未 stop/restart/install**）。
+
+- [x] 默认 `uv sync` 后仅 core 插件树（单测 + 离线 discovery）
+- [~] `--extra plugins-duel` 后 duel 可用（映射单测通过；**未 live uv sync**，维护窗补）
+- [x] 未装扩展时 help/命令行为符合文档（help visibility 单测）
+- [x] 分片 hub/worker 扩展一致（矩阵/角色策略；运行时加载态待重启后对照）
+- [ ] 默认 Docker 镜像无迁出插件代码（**延后**：persona 合 `dev` 后改）
+- [x] WebUI feat/4.0 可展示插件 source（离线 catalog；运行中 hub 待重启后 HTTP 复验）
+- [x] WebUI 可浏览官方扩展索引并安装/卸载（代码/单测；**未 POST 安装**）
+- [x] 一键安装与 `local/plugins` 手工投放可并存且 local 优先（单测 + 本机 local 目录）
+- [x] `pallas` CLI 覆盖单进程/分片启停与扩展安装后重启（只读验收；未执行 restart）
+- [x] 迁移文档完整
 
 ## 相关文档
 
 - [pallas-cli.md](pallas-cli.md) — 统一 CLI 路线（S7）
+- [4.0-acceptance.md](../develop/4.0-acceptance.md) — 合流前验收记录
 - [4.0-development.md](../develop/4.0-development.md) — 分支约定与 `load_bundled_extra_plugins`
 - [site-customization-and-updates.md](site-customization-and-updates.md)
 - [plugin-convention.md](plugin-convention.md)
