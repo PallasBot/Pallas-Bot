@@ -13,7 +13,7 @@ from src.foundation.config.dotenv import env_value_to_str
 from src.foundation.config.repo_settings import upsert_repo_settings_items
 
 CORPUS_FEDERATION_SECTION_ID = "corpus_federation"
-CORPUS_FEDERATION_TITLE = "语料联邦"
+CORPUS_FEDERATION_TITLE = "社区共享接话库"
 
 # Phase 1 仅暴露已接入项；fed / on_remote_failure 等 Phase 2 不在 WebUI 展示。
 _PHASE1_FIELD_NAMES: tuple[str, ...] = (

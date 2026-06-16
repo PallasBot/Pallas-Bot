@@ -87,7 +87,7 @@ def _message_scrub_section() -> WebuiEnvSection:
     }
     return WebuiEnvSection(
         id="message_scrub",
-        title="消息审查与入站过滤",
+        title="消息审查",
         module_label="src.features.message_scrub",
         model_cls=msg_cfg_cls,
         read_current=get_msg_cfg,
@@ -155,7 +155,7 @@ def _control_plane_section() -> WebuiEnvSection:
 
     return WebuiEnvSection(
         id="control_plane",
-        title="联邦控制",
+        title="多机协同",
         module_label="src.features.control_plane",
         model_cls=ControlPlaneWebuiConfig,
         read_current=get_control_plane_webui_config,
@@ -177,7 +177,7 @@ def _ingress_fanout_section() -> WebuiEnvSection:
 
     return WebuiEnvSection(
         id="ingress_fanout",
-        title="入站：全员同响口令",
+        title="全员同响口令",
         module_label="src.platform.ingress",
         model_cls=IngressFanoutConfig,
         read_current=get_ingress_fanout_config,
@@ -194,7 +194,7 @@ def _ingress_dispatch_section() -> WebuiEnvSection:
 
     return WebuiEnvSection(
         id="ingress_dispatch",
-        title="中央入站调度",
+        title="消息处理与发送",
         module_label="src.platform.ingress",
         model_cls=IngressDispatchRuntimeConfig,
         read_current=get_ingress_dispatch_runtime_config,
@@ -233,7 +233,7 @@ def _repeater_learn_section() -> WebuiEnvSection:
     }
     return WebuiEnvSection(
         id="repeater_learn",
-        title="复读：后台语料学习",
+        title="复读后台学习",
         module_label="src.plugins.repeater",
         model_cls=RepeaterLearnRuntimeConfig,
         read_current=get_repeater_learn_runtime_config,
@@ -275,7 +275,7 @@ def _llm_section() -> WebuiEnvSection:
 
     return WebuiEnvSection(
         id="llm",
-        title="LLM 与 AI 服务",
+        title="智能对话与 AI 服务",
         module_label="src.features.llm",
         model_cls=LlmWebuiConfig,
         read_current=get_llm_webui_config,
@@ -479,7 +479,7 @@ def _ingress_dispatch_payload_extras() -> dict[str, Any]:
         "field_groups": [
             {
                 "id": "matcher",
-                "title": "消息预筛选",
+                "title": "无关消息预筛",
                 "field_names": [
                     "matcher_dispatch_enabled",
                     "matcher_dispatch_overload_threshold",
@@ -487,12 +487,12 @@ def _ingress_dispatch_payload_extras() -> dict[str, Any]:
             },
             {
                 "id": "route_index",
-                "title": "口令路由索引",
+                "title": "口令快速定位",
                 "field_names": ["route_index_enabled", "route_index_strict"],
             },
             {
                 "id": "lanes",
-                "title": "并发档位限流",
+                "title": "同时处理上限",
                 "field_names": [
                     "dispatch_lanes_enabled",
                     "lane_acquire_timeout_sec",
@@ -506,7 +506,7 @@ def _ingress_dispatch_payload_extras() -> dict[str, Any]:
             },
             {
                 "id": "send_queue",
-                "title": "出站整形",
+                "title": "发送排队",
                 "field_names": [
                     "send_queue_enabled",
                     "send_queue_workers",

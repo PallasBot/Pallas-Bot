@@ -22,7 +22,7 @@ from src.foundation.config.repo_settings import (
 )
 
 CONTROL_PLANE_SECTION_ID = "control_plane"
-CONTROL_PLANE_TITLE = "联邦控制"
+CONTROL_PLANE_TITLE = "多机协同"
 
 _TRI_CHOICES = ["auto", "true", "false"]
 
