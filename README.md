@@ -35,8 +35,8 @@
 
 </div>
 
-<p align="center">面向群聊场景的学习型机器人：会复读、会整活、可管理、可扩展。</p>
-<p align="center">基于 <b>NoneBot2</b> + <b>OneBot v11</b>，数据层 <b>MongoDB / PostgreSQL</b>，自带 Web 控制台与协议端管理；可选 <b>MAA</b> QQ 远控与 AI 扩展。</p>
+<p align="center">QQ 群帕拉斯机器人：学群风接话复读，多牛各有个性，按需扩展。</p>
+<p align="center"><b>NoneBot2</b> + <b>OneBot v11</b> · <b>MongoDB / PostgreSQL</b> · Web 控制台 · 扩展包 / <a href="https://github.com/PallasBot/Pallas-Bot-AI">AI</a> / <b>MAA</b> 可选</p>
 
 <a href="https://next.ossinsight.io/widgets/official/analyze-repo-stars-history?repo_id=425810267" target="_blank" style="display: block" align="center">
   <picture>

@@ -52,6 +52,32 @@ async def test_refine_group_style_affect_disabled() -> None:
     assert merged["sample"]["affect_refine"]["source"] == "none"
 
 
+def test_llm_affect_refine_enabled_follows_master_switch(monkeypatch) -> None:
+    from src.features.persona import affect_refine as mod
+
+    def env(raw_map: dict[str, str | None]):
+        def _getter(key: str) -> str | None:
+            return raw_map.get(key)
+
+        return _getter
+
+    mod.clear_affect_refine_config_cache()
+    monkeypatch.setattr(mod, "repo_env_raw_value", env({}))
+    monkeypatch.setattr("src.features.llm.config.resolve_llm_chat_enabled", lambda: False)
+    assert mod.llm_affect_refine_enabled() is False
+
+    mod.clear_affect_refine_config_cache()
+    monkeypatch.setattr(mod, "repo_env_raw_value", env({}))
+    monkeypatch.setattr("src.features.llm.config.resolve_llm_chat_enabled", lambda: True)
+    assert mod.llm_affect_refine_enabled() is True
+
+    mod.clear_affect_refine_config_cache()
+    monkeypatch.setattr(mod, "repo_env_raw_value", env({"LLM_AFFECT_REFINE_ENABLED": "false"}))
+    monkeypatch.setattr("src.features.llm.config.resolve_llm_chat_enabled", lambda: True)
+    assert mod.llm_affect_refine_enabled() is False
+    mod.clear_affect_refine_config_cache()
+
+
 @pytest.mark.asyncio
 async def test_refine_group_style_affect_calls_ai(monkeypatch) -> None:
     from src.features.persona import affect_refine as mod

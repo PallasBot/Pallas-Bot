@@ -1,4 +1,4 @@
-"""可选 LLM 情感 refinement：默认关闭，不参与接话热路径。"""
+"""可选 LLM 情感 refinement：随 LLM 总闸默认开启，不参与接话热路径。"""
 
 from __future__ import annotations
 
@@ -29,10 +29,16 @@ def llm_affect_refine_enabled() -> bool:
         if _cached_enabled is not None:
             return _cached_enabled
         raw = repo_env_raw_value("LLM_AFFECT_REFINE_ENABLED")
-        if raw is None:
+        if raw is not None:
+            sub_enabled = raw.strip().lower() in ("1", "true", "yes", "on")
+        else:
+            sub_enabled = True
+        if not sub_enabled:
             _cached_enabled = False
         else:
-            _cached_enabled = raw.strip().lower() in ("1", "true", "yes", "on")
+            from src.features.llm.config import resolve_llm_chat_enabled
+
+            _cached_enabled = resolve_llm_chat_enabled()
         return _cached_enabled
 
 
