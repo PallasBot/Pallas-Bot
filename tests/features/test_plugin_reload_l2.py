@@ -6,6 +6,7 @@ from nonebot.plugin import PluginMetadata
 from src.features.plugin_reload.l2 import (
     reload_metadata_after_plugin_config_save,
     reload_plugin_metadata_l2,
+    reload_policy_for_plugin_name,
 )
 
 
@@ -47,3 +48,14 @@ def test_reload_metadata_after_plugin_config_save_runs_for_metadata_policy():
     ):
         assert reload_metadata_after_plugin_config_save("help") is True
     l2.assert_called_once()
+
+
+def test_reload_policy_for_plugin_name_resolves_legacy_alias():
+    meta = PluginMetadata(name="t", description="t。", usage="", extra={"reload_policy": "metadata"})
+
+    class FakePlugin:
+        name = "pb_webui"
+        metadata = meta
+
+    with patch("src.features.plugin_reload.l2.get_loaded_plugins", return_value=[FakePlugin()]):
+        assert reload_policy_for_plugin_name("pallas_webui") == "metadata"

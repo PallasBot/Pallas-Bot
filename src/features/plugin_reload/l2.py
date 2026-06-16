@@ -23,11 +23,14 @@ def reload_plugin_metadata_l2() -> None:
 
 
 def reload_policy_for_plugin_name(plugin_name: str) -> ReloadPolicy:
-    name = (plugin_name or "").strip()
+    from src.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
+
+    name = canonical_plugin_package((plugin_name or "").strip())
     if not name:
         return "config_only"
     for plugin in get_loaded_plugins():
-        if str(getattr(plugin, "name", "") or "").strip() == name:
+        pkg = canonical_plugin_package(str(getattr(plugin, "name", "") or "").strip())
+        if pkg == name:
             meta = getattr(plugin, "metadata", None)
             if isinstance(meta, PluginMetadata):
                 return reload_policy_from_metadata(meta)

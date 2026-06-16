@@ -21,30 +21,28 @@ from src.shared.utils.array2cqcode import try_convert_to_cqcode
 from ..ban_state import REPEATER_BAN_ACK_SENT_STATE_KEY
 from ..model import Chat
 
+_CQ_URL_STRIP_RE = re.compile(r"(\[CQ\:.+)(?:,url=*)(\])")
+_RECALL_TOKEN_RE = re.compile(r"\[[^\]]*\]|\w+")
 
-async def is_reply(event: GroupMessageEvent) -> bool:
-    return event_has_reply_target(event)
 
-
-async def is_ban_reply_trigger(event: GroupMessageEvent) -> bool:
-    if "不可以" not in event.get_plaintext():
-        return False
-    if not await is_reply(event):
-        return False
-    return event_targets_self(event)
+def normalize_cq_ban_token(token: str) -> str:
+    return _CQ_URL_STRIP_RE.sub(r"\1\2", str(token))
 
 
 def extract_ban_reply_raw_from_message(message: Message | str) -> str:
     if isinstance(message, str):
         return message
 
-    raw_message = ""
-    for item in message:
-        raw_reply = str(item)
-        raw_message += re.sub(r"(\[CQ\:.+)(?:,url=*)(\])", r"\1\2", raw_reply)
+    raw_message = "".join(normalize_cq_ban_token(str(item)) for item in message)
     if not raw_message.strip():
         raw_message = message.extract_plain_text()
     return raw_message
+
+
+def ban_raw_from_recalled_api_payload(message_payload: str) -> str:
+    return "".join(
+        normalize_cq_ban_token(item) for item in _RECALL_TOKEN_RE.findall(try_convert_to_cqcode(message_payload))
+    )
 
 
 async def resolve_ban_reply_raw(bot: Bot, event: GroupMessageEvent) -> str:
@@ -62,6 +60,18 @@ async def resolve_ban_reply_raw(bot: Bot, event: GroupMessageEvent) -> str:
         return ""
 
     return extract_ban_reply_raw_from_message(Message(msg["message"]))
+
+
+async def is_reply(event: GroupMessageEvent) -> bool:
+    return event_has_reply_target(event)
+
+
+async def is_ban_reply_trigger(event: GroupMessageEvent) -> bool:
+    if "不可以" not in event.get_plaintext():
+        return False
+    if not await is_reply(event):
+        return False
+    return event_targets_self(event)
 
 
 async def is_admin_recall_self_msg(bot: Bot, event: GroupRecallNoticeEvent):
@@ -143,10 +153,7 @@ async def handle_ban_recalled(bot: Bot, event: GroupRecallNoticeEvent, state: T_
         logger.warning(f"bot [{event.self_id}] failed to get msg [{event.message_id}]")
         return
 
-    raw_message = ""
-    for item in re.compile(r"\[[^\]]*\]|\w+").findall(try_convert_to_cqcode(msg["message"])):
-        raw_reply = str(item)
-        raw_message += re.sub(r"(\[CQ\:.+)(?:,url=*)(\])", r"\1\2", raw_reply)
+    raw_message = ban_raw_from_recalled_api_payload(msg["message"])
 
     logger.info(f"bot [{event.self_id}] ready to ban [{raw_message}] in group [{event.group_id}]")
 
