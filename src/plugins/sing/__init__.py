@@ -23,7 +23,7 @@ from .ncm_login import get_song_id, get_song_title
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛唱歌",
-    description="群内 AI 翻唱、点歌与续唱。",
+    description="群内智能翻唱、点歌与续唱。",
     usage=join_usage(
         usage_line("牛牛唱歌 〈歌曲名〉 [key=±N]", "AI 翻唱，可调音调"),
         usage_line("牛牛继续唱 / 牛牛接着唱", "续唱上一首"),
@@ -62,7 +62,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛唱歌 歌曲名 [key=±N]",
-                "brief_des": "AI 翻唱指定歌曲",
+                "brief_des": "智能翻唱指定歌曲",
                 "detail_des": "按歌名搜索并翻唱，可用 key=±N 调音；每段约 120 秒。",
             },
             {
@@ -79,7 +79,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛点歌 歌曲名",
                 "brief_des": "播放网易云原曲",
-                "detail_des": "在vip有效的情况下优先播放vip歌曲",
+                "detail_des": "已登录网易云且会员有效时，可优先播放会员曲目。",
             },
             {
                 "func": "牛牛什么歌",

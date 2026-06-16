@@ -1,43 +1,41 @@
 # llm_chat（随时闲聊）
 
-群内 @牛牛 多轮 LLM 对话；推理后端由 Pallas-Bot-AI 提供（当前默认 Ollama，可换 vLLM 等）。
+> **官方扩展**：`pallas-plugin-llm-chat`（`uv sync --extra plugins-llm-chat`）
+
+群内 @牛牛 多轮智能对话；需部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 并在控制台开启智能对话。
+
+## 用户命令
+
+| 口令 | 场景 | 说明 |
+| --- | --- | --- |
+| @牛牛 + 消息 | 群内 | 多轮对话 |
+| @牛牛 clear | 群内 | 清空本会话记忆 |
+| @牛牛 unload | 群内 | 卸载当前模型（群管） |
+| @牛牛 model [名称] | 群内/私聊 | 查询或更换模型（超管） |
 
 ## 命令权限
 
-| 命令 ID | 默认等级 | 说明 |
-| --- | --- | --- |
-| `llm_chat.chat` | everyone | 群内 @牛牛 多轮对话 |
-| `llm_chat.clear` | everyone | `@牛牛 clear` 清空本会话记忆 |
-| `llm_chat.unload` | staff | `@牛牛 unload` 卸载模型（群管/号主） |
-| `llm_chat.set_model` | superuser | `@牛牛 model [模型名]` 查询或热更换模型 |
-
-遗留 ID `ollama.*` 仍可读权限覆盖。
+| 命令 ID | 默认等级 |
+| --- | --- |
+| `llm_chat.chat` | everyone |
+| `llm_chat.clear` | everyone |
+| `llm_chat.unload` | staff |
+| `llm_chat.set_model` | superuser |
 
 ## 配置
 
-全局 **`LLM_CHAT_ENABLED`**（默认关）同时控制本插件与酒后 `chat` 插件。遗留 WebUI 键 `llm_chat_enable` / `ollama_enable` 仍可读。
+1. **通用配置 → 智能对话与 AI 服务**：开启总开关，填写服务地址。
+2. **插件 → 随时闲聊**：可选自定义人设提示词文件。
 
-[`config.py`](../../../src/plugins/llm_chat/config.py) 其余字段以 WebUI **插件 → llm_chat** 为准（落盘 `data/pallas_config/webui.json`）。旧插件名 `ollama` 的配置键仍兼容读取。
-
-| 键 | 环境变量 | 说明 |
-| --- | --- | --- |
-| — | `LLM_CHAT_ENABLED` | **总闸**：酒后与随时 @ 共用，默认 `false` |
-| `llm_chat_enable` | `LLM_CHAT_ENABLE` | **已弃用**，请用 `LLM_CHAT_ENABLED` |
-| `ollama_enable` | `OLLAMA_ENABLE` | **已弃用**，等同 `LLM_CHAT_ENABLED` |
-| `llm_chat_system_prompt_path` | — | 可选自定义 prompt；留空用 `compile_persona_prompt` |
-
-全局 AI 地址：`AI_SERVER_HOST` / `AI_SERVER_PORT`（见 [settings-storage](../../architecture/settings-storage.md)）。
-
-模型、温度等推理参数仅在 **Pallas-Bot-AI** 侧配置。
+酒后 `chat` 插件与随时闲聊共用同一总开关。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 无回复 | `LLM_CHAT_ENABLED=true`（Bot 与 AI 侧均需） |
-| 人设不对 | 检查 `llm_chat_system_prompt_path` 或牛格 prompt |
-| 与酒后聊天混淆 | 本插件随时 @ 可用；`chat` 须先喝酒 |
+| 无回复 | 确认总开关已开、AI 服务在跑；发 `牛牛连通` 测延迟 |
+| 与酒后聊天混淆 | 随时 @ 即可；酒后须先「牛牛喝酒」 |
 
-## 源码
+## 实现
 
 [`src/plugins/llm_chat/`](../../../src/plugins/llm_chat/)

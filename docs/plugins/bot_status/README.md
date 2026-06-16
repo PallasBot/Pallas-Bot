@@ -1,16 +1,16 @@
 # bot_status（牛牛状态）
 
-> **4.0 起为官方扩展**：`pallas-plugin-bot-status`（bundled 于 `src/plugins/bot_status/`，slim 默认不加载；`uv sync --extra plugins-bot-status` 或 WebUI 安装）。
+> **官方扩展**：`pallas-plugin-bot-status`（`uv sync --extra plugins-bot-status`）
 
-查询在线/离线牛牛；断线宽限期后发邮件通知；群内报数。
+查询牛牛在线情况；断线过久可发邮件；群内报数、出列。
 
 ## 用户命令
 
 | 口令 | 场景 | 说明 |
 | --- | --- | --- |
-| 牛牛在吗 | 群内或私聊 | 号主查状态；超管可看隐藏项 |
+| 牛牛在吗 | 群内或私聊 | 号主查在线/离线 |
 | 牛牛报数 / 牛牛出列 | 群内 | 在线牛牛依次报到 |
-| 测试邮件 | 群内或私聊 | 超管测 SMTP |
+| 测试邮件 | 群内或私聊 | 超管测邮件通知 |
 
 ## 命令权限
 
@@ -22,27 +22,21 @@
 
 ## 配置
 
-[`config.py`](../../../src/plugins/bot_status/config.py)：`bot_status_smtp_*`、`bot_status_notice_email`、`bot_status_offline_grace_time`、`bot_status_list_mode`。
+WebUI **插件 → 牛牛状态**：SMTP、通知邮箱、离线多久算掉线、`在吗` 名册范围等。
 
-### `bot_status_list_mode`（牛牛在吗名册）
-
-| 值 | 单进程 | 分片 |
-| --- | --- | --- |
-| `auto`（默认） | 本进程连接（`session`） | 协议端 enabled + registry（`fleet`） |
-| `session` | 仅 `block` 维护的本进程已连接牛 | 仅**当前 worker** 已连接牛 |
-| `fleet` | 协议端 `accounts.json` 中 enabled 账号 | enabled + registry 交集（registry 纯幽灵号不列入）+ `worker_presence` 在线态 |
-| `connected` | 本进程曾连 WS 的牛 | 全集群曾连 WS + `worker_presence` 在线态（不含 registry 幽灵号） |
-
-配置示例：`BOT_STATUS_LIST_MODE=connected`（分片下列全集群实际连过的牛）；`fleet`（按协议/registry 名册列离线）。
-
-WebUI：**插件配置 → 牛牛状态**，保存后写入 `webui.json` 并热重载（无需重启 Bot）。
+| `bot_status_list_mode` | 通俗说明 |
+| --- | --- |
+| `auto`（默认） | 单牛看本机；多牛看协议端登记的名册 |
+| `session` | 只看当前进程连着的牛 |
+| `fleet` | 按协议端 enabled 账号列名册 |
+| `connected` | 列曾经连上过 WebSocket 的牛 |
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 收不到邮件 | 查 SMTP、号主 `@qq.com` 收件、固定通知邮箱 |
-| 误报离线 | 调大 `offline_grace_time` |
+| 收不到邮件 | 查 SMTP、收件邮箱 |
+| 误报离线 | 调大离线宽限时间 |
 
 ## 实现
 

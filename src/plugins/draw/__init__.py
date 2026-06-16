@@ -9,7 +9,7 @@ from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_l
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛画画",
-    description="群内 AI 生图，支持文字描述或参考图改图。",
+    description="群内按文字描述生图，支持参考图改图。",
     usage=join_usage(
         usage_line("牛牛画画 …", "按描述生图"),
         usage_line("牛牛画画 + 附图 / 回复图片", "以参考图改图，可多图"),

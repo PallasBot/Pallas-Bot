@@ -27,7 +27,7 @@ from .config import Config, get_chat_config, plugin_config
 
 __plugin_meta__ = PluginMetadata(
     name="酒后聊天",
-    description="牛牛醉酒时在群内进行 AI 对话。",
+    description="牛牛醉酒时在群内进行智能对话。",
     usage=join_usage(
         usage_line("@牛牛", "醉酒时与牛牛对话"),
         usage_line("牛牛 + 文本", "以「牛牛」开头的消息"),
@@ -45,7 +45,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "@牛牛 / 牛牛 + 文本",
-                "brief_des": "醉酒时 AI 对话",
+                "brief_des": "醉酒时智能对话",
                 "detail_des": "须先「牛牛喝酒」；与随时闲聊共用同一智能对话服务。",
             },
         ],

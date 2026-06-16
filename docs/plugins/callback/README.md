@@ -2,11 +2,11 @@
 
 > **4.0 起已收进内核**：HTTP 路由与执行分别在 [`platform/ai_callback/http.py`](../../../src/platform/ai_callback/http.py) 与 [`runner.py`](../../../src/platform/ai_callback/runner.py)。本目录插件已移除。
 
-接收 AI/唱歌等异步任务的 HTTP 回调，更新任务状态并向 QQ 推送结果。
+接收唱歌、智能对话等异步任务的 HTTP 回调，更新任务状态并向 QQ 推送结果。
 
 ## 用户命令
 
-无。端点：`POST /callback/{task_id}`（维护者配置 AI 服务回调地址）。
+无。端点：`POST /callback/{task_id}`（维护者配置智能对话等服务回调地址）。
 
 ## 排障
 

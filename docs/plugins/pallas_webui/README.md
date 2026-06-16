@@ -4,7 +4,7 @@
 
 ## 用户命令
 
-无。入口：`http://<HOST>:<PORT>/pallas/`（`help_audience: maintainer`）。
+无。入口：`http://<HOST>:<PORT>/pallas/`（维护者向）。
 
 ## 命令权限
 
@@ -14,7 +14,7 @@
 
 控制台口令在 `data/pallas_console/`；前端静态资源启动时下载。详见插件 `config` 与 [FAQ · 部署排障](../../FAQ.md#部署排障)。
 
-**统计与语料**：侧栏只读查看社区与本部署状态。**语料联邦**、**联邦控制** 在 **通用配置** 对应分区；也可从统计页上的链接进入。详见 [语料联邦](../../common/corpus/README.md) 与 [在线统计与社区主站](../../common/community_stats.md)。
+**统计与语料**：侧栏可查看社区与本部署状态。**社区共享接话库**、**多机协同** 等在 **通用配置** 对应分区；也可从统计页链接进入。详见 [社区共享接话库](../../common/corpus/README.md) 与 [在线统计与社区主站](../../common/community_stats.md)。
 
 ## 排障
 
