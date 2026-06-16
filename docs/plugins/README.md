@@ -1,41 +1,51 @@
 # 插件文档索引
 
-各插件的「怎么配、怎么用、怎么排障」见子目录 `README.md`（结构见 [TEMPLATE.md](./TEMPLATE.md)）。**群内怎么说、谁能用**以 **牛牛帮助** 为准；本文档面向部署者与群管。
+::: tip 群内怎么说
+**牛牛帮助** 是玩家看到的权威说明。本文档面向**部署者、群管与开发者**：怎么配、怎么排障。
 
-**配置**：有 `config.py` 的插件可在 WebUI **插件** 或 **通用配置** 中修改，落盘 `data/pallas_config/webui.json`。
+有 `config.py` 的插件可在 WebUI **插件** 或 **通用配置** 中修改，落盘 `data/pallas_config/webui.json`。
+:::
+
+::: info 官方扩展
+决斗、MAA、谁是卧底等玩法在 **官方扩展 pip 包** 中，默认 slim 不加载。安装见 [安装官方扩展](../guide/install-extensions.md) 或控制台 **插件商店**。
+:::
 
 ## 本体 core（默认加载）
 
-| 文档 | 说明 |
-| --- | --- |
-| [repeater](./repeater/README.md) | 学习群聊、接话、复读 |
-| [help](./help/README.md) | 帮助图、本群开关插件 |
-| [greeting](./greeting/README.md) | 入群/好友欢迎 |
-| [drink](./drink/README.md) | 喝酒 / 醒酒 |
-| [roulette](./roulette/README.md) | 轮盘 |
-| [take_name](./take_name/README.md) | 自动改名片（夺舍） |
-| [blacklist](./blacklist/README.md) | 拉黑 / 屏蔽 |
-| [request_handler](./request_handler/README.md) | 好友/入群申请 |
-| [llm_chat](./llm_chat/README.md) | 随时 @ 智能闲聊（4.0 core） |
-| [pallas_webui](./pallas_webui/README.md) | 网页控制台 |
+<div class="plugin-doc-grid">
 
-## 官方扩展（bundled，默认 slim 不加载）
+<NCard title="复读 repeater" route="/plugins/repeater">学习群聊、接话、复读</NCard>
+<NCard title="帮助 help" route="/plugins/help">帮助图、本群开关插件</NCard>
+<NCard title="欢迎 greeting" route="/plugins/greeting">入群 / 好友欢迎</NCard>
+<NCard title="喝酒 drink" route="/plugins/drink">喝酒、醒酒</NCard>
+<NCard title="轮盘 roulette" route="/plugins/roulette">轮盘赌</NCard>
+<NCard title="夺舍 take_name" route="/plugins/take_name">自动改名片</NCard>
+<NCard title="拉黑 blacklist" route="/plugins/blacklist">拉黑、屏蔽</NCard>
+<NCard title="申请 request_handler" route="/plugins/request_handler">好友 / 入群审批</NCard>
+<NCard title="闲聊 llm_chat" route="/plugins/llm_chat">随时 @ 智能闲聊（4.0 core）</NCard>
+<NCard title="控制台 pallas_webui" route="/plugins/pallas_webui">网页控制台与 API</NCard>
 
-安装：`uv sync --extra plugins-<名>` 或 WebUI **官方扩展**。源码仍在 `src/plugins/`。
+</div>
 
-| 文档 | 扩展包 | 说明 |
-| --- | --- | --- |
-| [duel](./duel/README.md) | `pallas-plugin-duel` | 决斗、八角笼 |
-| [who_is_spy](./who_is_spy/README.md) | `pallas-plugin-who-is-spy` | 谁是卧底 |
-| [dream](./dream/README.md) | `pallas-plugin-dream` | 做梦、跨群梦话 |
-| [draw](./draw/README.md) | `pallas-plugin-draw` | 画画 |
-| [sing](./sing/README.md) | `pallas-plugin-ai-media` | 唱歌、点歌 |
-| [chat](./chat/README.md) | `pallas-plugin-ai-media` | 酒后智能对话 |
-| [maa](./maa/README.md) | `pallas-plugin-maa` | MAA 远控 |
-| [pallas_protocol](./pallas_protocol/README.md) | `pallas-plugin-protocol` | NapCat/SnowLuma |
-| [relogin_bot](./relogin_bot/README.md) | `pallas-plugin-protocol` | 重新上号 |
-| [bot_status](./bot_status/README.md) | `pallas-plugin-bot-status` | 在吗、报数、邮件 |
-| [community_stats](./community_stats/README.md) | `pallas-plugin-community-stats` | 社区统计上报 |
+## 官方扩展（需安装）
+
+安装：`uv sync --extra plugins-<名>` 或 WebUI **插件商店**。源码仍在 `src/plugins/`。
+
+<div class="plugin-doc-grid">
+
+<NCard title="决斗 duel" route="/plugins/duel">决斗、八角笼 · pallas-plugin-duel</NCard>
+<NCard title="谁是卧底" route="/plugins/who_is_spy">派对游戏 · pallas-plugin-who-is-spy</NCard>
+<NCard title="做梦 dream" route="/plugins/dream">做梦、跨群梦话 · pallas-plugin-dream</NCard>
+<NCard title="画画 draw" route="/plugins/draw">文生图 · pallas-plugin-draw</NCard>
+<NCard title="唱歌 sing" route="/plugins/sing">点歌 · pallas-plugin-ai-media</NCard>
+<NCard title="聊天 chat" route="/plugins/chat">酒后智能对话 · pallas-plugin-ai-media</NCard>
+<NCard title="MAA maa" route="/plugins/maa">远控排队回图 · pallas-plugin-maa</NCard>
+<NCard title="协议端" route="/plugins/pallas_protocol">NapCat / SnowLuma · pallas-plugin-protocol</NCard>
+<NCard title="上号 relogin_bot" route="/plugins/relogin_bot">重新登录 · pallas-plugin-protocol</NCard>
+<NCard title="状态 bot_status" route="/plugins/bot_status">在吗、报数 · pallas-plugin-bot-status</NCard>
+<NCard title="社区统计" route="/plugins/community_stats">匿名上报 · pallas-plugin-community-stats</NCard>
+
+</div>
 
 ## 已内核化（无独立插件目录）
 
@@ -61,3 +71,4 @@
 
 - [persona](./persona/README.md)：接话行为（群风格等，开发向较多）
 - 控制台登录口令在 `data/pallas_console/`；遗忘见 [FAQ](../FAQ.md)
+- 文档结构模板：[TEMPLATE.md](./TEMPLATE.md)

@@ -39,8 +39,11 @@ FILE_MAP: dict[str, str] = {
     "develop/plugin/advanced.md": "develop/plugin/advanced.md",
     "develop/plugin/cookbook.md": "develop/plugin/cookbook.md",
     "guide/quickstart.md": "guide/quickstart.md",
+    "guide/connect-qq.md": "guide/connect-qq.md",
+    "guide/install-extensions.md": "guide/install-extensions.md",
     "guide/concepts.md": "guide/concepts.md",
     "guide/welcome.md": "guide/welcome.md",
+    "guide/4.0-start.md": "guide/4.0-start.md",
     "user/README.md": "guide/usage-admin.md",
 }
 
@@ -67,6 +70,7 @@ PLUGIN_NAMES = [
     "sing",
     "who_is_spy",
     "llm_chat",
+    "community_stats",
 ]
 
 for name in PLUGIN_NAMES:
@@ -315,6 +319,7 @@ def transform_for_vitepress(text: str) -> str:
         rf"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
         text,
     )
+    text = re.sub(r"\]\(4\.0-start\.md([^)]*)\)", r"](/guide/4.0-start\1)", text)
     text = re.sub(r"\]\(\.\./Config\.md([^)]*)\)", r"](/deploy/config\1)", text)
     text = re.sub(r"\]\(\.\./Deployment\.md([^)]*)\)", r"](/deploy/deployment\1)", text)
     text = re.sub(r"\]\(\.\./Migration-v3\.md([^)]*)\)", r"](/about/migration\1)", text)

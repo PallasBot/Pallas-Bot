@@ -2,7 +2,9 @@
 
 目标：本机或 VPS 上跑起一只牛，能登录控制台、连上 QQ、在群里回一句「牛牛帮助」。
 
-> **环境**：Python 3.12+、[uv](https://docs.astral.sh/uv/)、MongoDB 或 PostgreSQL。协议端（NapCat）可等 Bot 起来后再配。
+::: tip 环境要求
+Python **3.12+**、[uv](https://docs.astral.sh/uv/)、MongoDB **或** PostgreSQL。协议端可等 Bot 起来后再配。
+:::
 
 ## 核对清单
 
@@ -22,7 +24,11 @@ cd Pallas-Bot
 uv sync
 ```
 
-用 PostgreSQL 时：`uv sync --extra pg`
+::: details 使用 PostgreSQL
+```bash
+uv sync --extra pg
+```
+:::
 
 ---
 
@@ -47,7 +53,7 @@ port = 27017
 db = "PallasBot"
 ```
 
-勿将 `pallas.toml` 提交到公开仓库。
+勿将 `pallas.toml` 提交到公开仓库。更多项见 [配置要点](../Config.md)。
 
 ---
 
@@ -63,29 +69,28 @@ uv run nb run
 
 ## 4. 连接 QQ
 
-打开 `http://<主机>:8088/protocol/console/`，创建 NapCat 实例并扫码；或自管 NapCat 指向：
+打开 `http://<主机>:8088/protocol/console/`，创建 NapCat 实例并扫码。
 
-```text
-ws://<Bot主机>:8088/onebot/v11/ws
-```
-
-群内发 **牛牛帮助** 验收。
+群内发 **牛牛帮助** 验收。详细说明见 [连接 QQ / 协议端](connect-qq.md)。
 
 ---
 
-## 其它部署方式
+## 接下来
 
-| 场景 | 文档 |
+| 我想… | 文档 |
 | --- | --- |
+| 装决斗、MAA 等玩法 | [安装官方扩展](install-extensions.md) |
+| 用浏览器改配置 | [Web 控制台](../common/webui/README.md) |
 | VPS 长期运行 | [标准部署](../Deployment.md) |
 | Docker | [Docker 部署](../DockerDeployment.md) |
-| 多只牛 / 分片 | [多进程分片](../architecture/bot_process_sharding.md) |
-| 从旧版迁移 | [3.0 迁移](../Migration-v3.md) |
+| 排错 | [FAQ](../FAQ.md) |
 
-## 排障
+---
+
+## 排障速查
 
 | 现象 | 先看 |
 | --- | --- |
 | 数据库连不上 | [配置要点 · MongoDB](../Config.md#mongodb) |
 | 忘记控制台口令 | [FAQ](../FAQ.md) |
-| 更多 | [FAQ](../FAQ.md) |
+| 协议端连不上 | [连接 QQ](connect-qq.md) |

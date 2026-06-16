@@ -1,8 +1,10 @@
 # 标准部署
 
-> [五分钟跑起来](guide/quickstart.md) · [Docker](DockerDeployment.md) · [配置](Config.md) · [分片](architecture/bot_process_sharding.md) · [FAQ](FAQ.md)
-
 面向 **VPS / 本机长期运行**。只想先跑通请看 [五分钟跑起来](guide/quickstart.md)。
+
+::: tip 导航
+[五分钟跑起来](guide/quickstart.md) · [Docker](DockerDeployment.md) · [配置](Config.md) · [连接 QQ](guide/connect-qq.md) · [分片](architecture/bot_process_sharding.md) · [FAQ](FAQ.md)
+:::
 
 ## 部署前检查清单
 
@@ -41,22 +43,21 @@ cd Pallas-Bot
 uv sync
 ```
 
-若 `pallas.toml` 中计划使用 PostgreSQL：
-
+::: details PostgreSQL
 ```bash
 uv sync --extra pg
 ```
+:::
 
-消息量较大、希望加速分词时（可选）：
-
+::: details 可选：分词加速 perf
 ```bash
 uv sync --extra perf
 ```
+:::
 
 **如何确认成功**：命令退出码为 `0`，且 `.venv` 已创建；可执行 `uv run python -c "import nonebot"` 无报错。
 
-### 可选部署模板
-
+::: details 可选：多进程分片模板
 除默认单进程外，可选用 [deploy/](deploy/README.md) 中的**分片**模板：
 
 | 场景 | 依赖 | 应用配置 |
@@ -66,6 +67,7 @@ uv sync --extra perf
 消息审查 4.0 默认开启，在 WebUI「通用配置 → 消息审查」配置即可，无需部署模板。
 
 当前分片模式**依赖 Redis 协调 claim**。`deploy-shard` 与 `coord-redis` 均安装 `redis` 依赖；`shard` extra 不含 redis 客户端，不能单独满足当前分片运行要求。
+:::
 
 ---
 
@@ -126,11 +128,13 @@ uv run python tools/migrate_env_to_pallas.py
 
 ## 步骤 5：（可选）语音资源
 
-Pallas-Bot 启动时会尝试自动下载语音包。若需 FFmpeg（唱歌等）：
+Pallas-Bot 启动时会尝试自动下载语音包。
 
-- [安装 FFmpeg](https://napneko.github.io/config/advanced#%E5%AE%89%E8%A3%85-ffmpeg)
+::: details FFmpeg 与手动语音包
+若需 FFmpeg（唱歌等）：[安装 FFmpeg](https://napneko.github.io/config/advanced#%E5%AE%89%E8%A3%85-ffmpeg)
 
 自动下载失败时，可手动将 [Pallas.zip](https://huggingface.co/pallasbot/Pallas-Bot/blob/main/voices/Pallas.zip) 解压到 `resource/voices/`，结构见 [path_structure.txt](../resource/voices/path_structure.txt)。
+:::
 
 **如何确认成功**：启动日志无语音目录相关致命错误；`resource/voices/` 下存在预期文件。
 
@@ -155,30 +159,25 @@ uv run nb run
 
 ## 步骤 7：接入 QQ 协议端
 
+详见 [连接 QQ / 协议端](guide/connect-qq.md)。摘要：
+
 **方式 A：协议端管理（推荐）**
 
-1. 打开 `http://<主机IP>:8088/protocol/console/`（端口以 `pallas.toml` 为准）。
-2. 使用与控制台相同的登录方式鉴权。
-3. 在页面内创建 NapCat 实例、登录 QQ、确认 OneBot WebSocket 已指向 Bot（通常为 `ws://<Bot主机>:8088/onebot/v11/ws`）。
+1. 打开 `http://<主机IP>:8088/protocol/console/`
+2. 创建 NapCat 实例、扫码登录
+3. 确认 WebSocket 指向 `ws://<Bot主机>:8088/onebot/v11/ws`
 
-详见 [`pallas_protocol` 插件说明](plugins/pallas_protocol/README.md)。
+**方式 B：自管 NapCat**
 
-**方式 B：自管 NapCat / 其他 OneBot 客户端**
+按 [NapCat](https://napneko.github.io/) 文档安装，正向 WS 填上述地址。
 
-- 按 [NapCat](https://napneko.github.io/) 等官方文档安装。
-- 在协议端新建 **WebSocket 客户端**，URL：`ws://<Bot主机>:8088/onebot/v11/ws`（远程部署时将 `localhost` 换为 Bot 机器 IP）。
-
-**如何确认成功**：
-
-1. 控制台 **「在线 Bot」** 或协议端页显示账号已连接。
-2. 在 QQ 群 @ 牛牛或发送测试指令有正常回复。
+**如何确认成功**：控制台显示账号在线；群内发 **牛牛帮助** 有响应。
 
 ---
 
 ## 生产环境建议
 
-### 使用 systemd 守护（Linux）
-
+::: details systemd 守护（Linux）
 示例 unit（路径与用户按实际修改）：
 
 ```ini
@@ -200,31 +199,17 @@ WantedBy=multi-user.target
 
 启用：`sudo systemctl enable --now pallas-bot.service`。状态：`systemctl status pallas-bot`。
 
-也可使用仓库 **`tools/scripts/bot_watchdog.py`** 探活 `/pallas/api/health`；若 Bot 已由 systemd 启动，须加 **`--no-spawn`**，避免重复占用端口。详见 [进程守护脚本](#进程守护脚本可选)。
+也可使用仓库 **`tools/scripts/bot_watchdog.py`** 探活 `/pallas/api/health`；若 Bot 已由 systemd 启动，须加 **`--no-spawn`**，避免重复占用端口。
+:::
 
-### 备份 `data/` 目录
+::: details 备份与安全
+- **备份**：`data/pallas_config/webui.json`、`data/pallas_console/`、协议端实例数据
+- **防火墙**：仅对可信网络开放 `8088`
+- **生产**：勿长期开启 `pallas_webui_dev_mode`；公网访问请 HTTPS + 强口令
+- **更新**：`git pull` + `uv sync` + 重启；Docker 见 [Docker 部署](DockerDeployment.md)
+:::
 
-以下内容建议**定期备份**（停机或快照均可）：
-
-- `data/pallas_config/webui.json` — WebUI 配置
-- `data/pallas_console/` — 控制台口令哈希
-- `data/` 下协议端实例、注册表等（分片/多牛共用同一 `data/`）
-
-配置模板 `config/pallas.toml` 请单独版本管理或加密备份，勿与镜像混放密钥。
-
-### 防火墙与安全
-
-- 仅对**可信网络**开放 `8088`（控制台、协议端管理、OneBot HTTP/WS）。
-- 生产环境**不要**开启 `pallas_webui_dev_mode`。
-- 若必须公网访问控制台，请配合反向代理、HTTPS 与强口令；`ACCESS_TOKEN` 见 [配置要点](Config.md)。
-
-### 更新
-
-- **git 部署**：`git pull origin main --autostash` 后 `uv sync`（依赖变更时）并重启进程。
-- **Docker**：见 [Docker 部署 · 后续更新](DockerDeployment.md#后续更新)。
-- 控制台 **「版本与更新」** 可更新 Web 静态资源；git 工作副本内可在线拉主仓（Docker 纯镜像树除外）。**任何代码/依赖更新后须重启 Bot。**
-
-自定义请尽量只改 **`config/pallas.toml`**、**`data/`**、**`local/plugins/`**，避免直接改 `src/` 跟踪文件。见 [站点定制与更新](architecture/site-customization-and-updates.md)。
+自定义请尽量只改 **`config/pallas.toml`**、**`data/`**、**`local/plugins/`**。见 [站点定制与更新](architecture/site-customization-and-updates.md)。
 
 ---
 
@@ -300,3 +285,15 @@ WantedBy=multi-user.target
 
 - [`西海福牛养殖学院`](https://qm.qq.com/q/8P)
 - [`丽丽玛玛玛?`](https://qm.qq.com/q/Qgc6ir7Jk)
+
+---
+
+## 接下来
+
+| 我想… | 文档 |
+| --- | --- |
+| 装决斗、MAA 等 | [安装官方扩展](guide/install-extensions.md) |
+| 查插件口令 | [插件索引](plugins/README.md) |
+| 用控制台改配置 | [Web 控制台](common/webui/README.md) |
+| 排错 | [FAQ](FAQ.md) |
+| Docker 部署 | [Docker 部署](DockerDeployment.md) |

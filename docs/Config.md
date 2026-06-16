@@ -1,6 +1,10 @@
 # 配置要点（生产）
 
-启动前核对 **`config/pallas.toml`** 与 `data/` 持久化目录。机制见 [配置存储](architecture/settings-storage.md)。
+启动前核对 **`config/pallas.toml`** 与 `data/` 持久化目录。
+
+::: tip 导航
+[配置存储](architecture/settings-storage.md) · [标准部署](Deployment.md) · [Docker 部署](DockerDeployment.md) · [FAQ](FAQ.md)
+:::
 
 ## 最少能跑
 
@@ -52,8 +56,7 @@ db = "PallasBot"
 | `db_backend` | `mongodb` 或 `postgresql` | 与已安装/编排的数据库一致 |
 | `access_token` | HTTP API 鉴权 | 公网或不可信网络建议设置 |
 
-### MongoDB
-
+::: details MongoDB
 ```toml
 [bootstrap]
 db_backend = "mongodb"
@@ -67,9 +70,9 @@ db = "PallasBot"
 ```
 
 Docker Compose 默认栈中 Bot 容器内 host 为 **`mongodb`**（由 compose 注入），见 [Docker 部署](DockerDeployment.md)。
+:::
 
-### PostgreSQL
-
+::: details PostgreSQL
 ```toml
 [bootstrap]
 db_backend = "postgresql"
@@ -83,32 +86,9 @@ db = "PallasBot"
 ```
 
 需已执行 `uv sync --extra pg`。Docker 内置 Postgres 时另备 `config/compose.env`，且 **`PG_DB` 与数据卷初始化库名一致**。
+:::
 
 **如何确认数据库配置正确**：启动 Bot 无 `connection refused` / 认证失败；日志完成 `init_db`；控制台可打开且无持久 5xx。
-
----
-
-## `[env]` 与分片（按需）
-
-```toml
-[env]
-REDIS_URL = "redis://127.0.0.1:6379/0"
-```
-
-当前多进程分片跨 worker claim **依赖 Redis**；请在分片部署时配置该项，并安装 `uv sync --extra coord-redis`（或 `deploy-shard`）。`run_sharded_bot.sh` 会自动探测；与 Pallas-Bot-AI 共用同一 Redis 时填相同 URL。
-
----
-
-## `[community_stats]`（可选）
-
-默认**开启**，一般**无需**添加整段配置。关闭上报：
-
-```toml
-[community_stats]
-enabled = false
-```
-
-或环境变量 `PALLAS_COMMUNITY_STATS_ENABLED=false`。详见 [社区统计](common/community_stats.md)。
 
 ---
 
@@ -124,18 +104,35 @@ enabled = false
 
 ---
 
-## 从旧 `.env` 迁移
+::: details `[env]` 与分片（按需）
+```toml
+[env]
+REDIS_URL = "redis://127.0.0.1:6379/0"
+```
 
+当前多进程分片跨 worker claim **依赖 Redis**；请在分片部署时配置该项，并安装 `uv sync --extra coord-redis`（或 `deploy-shard`）。`run_sharded_bot.sh` 会自动探测；与 Pallas-Bot-AI 共用同一 Redis 时填相同 URL。
+:::
+
+::: details `[community_stats]`（可选）
+默认**开启**，一般**无需**添加整段配置。关闭上报：
+
+```toml
+[community_stats]
+enabled = false
+```
+
+或环境变量 `PALLAS_COMMUNITY_STATS_ENABLED=false`。详见 [社区统计](common/community_stats.md)。
+:::
+
+::: details 从旧 `.env` 迁移
 ```bash
 uv run python tools/migrate_env_to_pallas.py
 ```
 
 迁移后 `.env` 仍可保留 **nb/pip 插件专用** 项；与 `webui.json` **避免同名键重复**。
+:::
 
----
-
-## 生产备份建议
-
+::: details 生产备份建议
 定期备份（至少）：
 
 - `config/pallas.toml`
@@ -144,12 +141,15 @@ uv run python tools/migrate_env_to_pallas.py
 - 整个 `data/`（含协议端实例、分片状态）
 
 恢复时保持路径与挂载一致；Docker 见 [配置存储 · Docker 挂载](architecture/settings-storage.md)。
+:::
 
 ---
 
-## 相关文档
+## 接下来
 
-- [配置存储](architecture/settings-storage.md) — 合并顺序、热重载
-- [标准部署](Deployment.md) — 分步安装与验证
-- [Docker 部署](DockerDeployment.md) — Compose 与卷挂载
-- [站点定制与更新](architecture/site-customization-and-updates.md) — `local/plugins` 与更新策略
+| 我想… | 文档 |
+| --- | --- |
+| 分步部署验收 | [标准部署](Deployment.md) |
+| Docker 挂载与卷 | [Docker 部署](DockerDeployment.md) |
+| 合并顺序与热重载 | [配置存储](architecture/settings-storage.md) |
+| 站点插件与扩展 | [站点定制](architecture/site-customization-and-updates.md) |
