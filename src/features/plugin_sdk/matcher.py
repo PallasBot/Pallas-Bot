@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Literal
 
@@ -34,11 +35,13 @@ class PluginCommand:
         command_id: str,
         default_cd_sec: int | None,
         plugin_tag: str,
+        alias_bindings: list[PluginCommand] | None = None,
     ) -> None:
         self.matcher = matcher
         self.command_id = command_id
         self.default_cd_sec = default_cd_sec
         self.plugin_tag = plugin_tag
+        self.alias_bindings: list[PluginCommand] = list(alias_bindings or [])
 
     def handle(self, func: HandlerFunc | None = None) -> Callable[[HandlerFunc], HandlerFunc]:
         def decorator(handler: HandlerFunc) -> HandlerFunc:
@@ -65,7 +68,7 @@ class PluginCommand:
                 )
                 logger.debug("[plugin:{}] command={} user={}", self.plugin_tag, self.command_id, ctx.user_id)
                 result = handler(ctx)
-                if result is not None:
+                if inspect.isawaitable(result):
                     await result
 
             return handler
@@ -114,7 +117,6 @@ def message_command(
         default_cd_sec=cd_sec,
         plugin_tag=plugin_tag,
     )
-    binding._alias_matchers = []  # type: ignore[attr-defined]
     for alias in aliases:
         alias_name = (alias or "").strip()
         if not alias_name or alias_name.casefold() == primary.casefold():
@@ -125,7 +127,7 @@ def message_command(
             block=block,
             permission=_permission_for_scene(command_id, scene),
         )
-        binding._alias_matchers.append(  # type: ignore[attr-defined]
+        binding.alias_bindings.append(
             PluginCommand(
                 matcher=alias_matcher,
                 command_id=command_id,
@@ -179,5 +181,5 @@ def private_command(
 def bind_alias_handlers(primary: PluginCommand, handler: HandlerFunc) -> None:
     """主命令与别名 matcher 绑定同一 handler。"""
     primary.handle(handler)
-    for alias_binding in getattr(primary, "_alias_matchers", ()):
+    for alias_binding in primary.alias_bindings:
         alias_binding.handle(handler)

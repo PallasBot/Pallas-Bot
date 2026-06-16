@@ -5,6 +5,8 @@ from __future__ import annotations
 from operator import itemgetter
 from typing import Any
 
+from nonebot import logger
+
 from src.features.cmd_perm.config import get_cmd_perm_config
 from src.features.cmd_perm.schema import build_command_perm_ui
 from src.features.command_limits.config import get_command_limits_config, normalize_command_limit_overrides
@@ -94,8 +96,10 @@ def build_plugin_capabilities_ui() -> dict[str, Any]:
             title = str(getattr(meta, "name", "") or name).strip() if meta else name
             bucket = ensure_plugin(name, title)
             bucket["reload_policy"] = reload_policy_from_metadata(meta)
-    except Exception:
+    except ImportError:
         pass
+    except Exception:
+        logger.exception("build_plugin_capabilities_ui: 读取已加载插件 reload_policy 失败")
 
     rows_out: list[dict[str, Any]] = []
     for bucket in plugins.values():
