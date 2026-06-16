@@ -1,4 +1,4 @@
-"""Matcher 确定性规则预筛：在 check_rule 前跳过明显不匹配的 handler（fail-open）。"""
+"""插件规则预筛，失败时放行。"""
 
 from __future__ import annotations
 

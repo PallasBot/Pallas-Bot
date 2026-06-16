@@ -1,4 +1,4 @@
-"""本进程已连接牛牛 QQ 集合（随 WS 连接/断开维护）。"""
+"""本进程已连接牛牛 QQ 集合。"""
 
 from __future__ import annotations
 

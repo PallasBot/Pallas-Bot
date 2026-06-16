@@ -1,4 +1,4 @@
-"""官方扩展：WebUI 触发 uv 安装/卸载。安装后重启见 docs/architecture/pallas-cli.md。"""
+"""WebUI 官方扩展安装与卸载。"""
 
 from __future__ import annotations
 

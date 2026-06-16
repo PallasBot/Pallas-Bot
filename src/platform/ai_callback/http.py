@@ -1,4 +1,4 @@
-"""AI 异步任务 HTTP 回调路由（内核挂载，非插件）。"""
+"""异步任务 HTTP 回调路由。"""
 
 from __future__ import annotations
 

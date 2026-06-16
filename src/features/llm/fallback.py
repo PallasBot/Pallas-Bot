@@ -1,4 +1,4 @@
-"""接话语料 miss 时异步提交 LLM 生成（默认关）。"""
+"""接话语料未命中时异步智能生成，默认关。"""
 
 from __future__ import annotations
 

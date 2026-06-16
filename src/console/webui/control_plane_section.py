@@ -1,4 +1,4 @@
-"""WebUI「通用配置 → 多机协同」：分组、三态选项与说明文案。"""
+"""WebUI 多机协同配置段。"""
 
 from __future__ import annotations
 

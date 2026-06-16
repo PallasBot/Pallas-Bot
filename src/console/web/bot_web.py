@@ -1,4 +1,4 @@
-"""本机可打开的 http 基址、NoneBot 日志环；独立模块，避免在 NoneBot 初始化前 import 插件包。"""
+"""控制台 HTTP 基址与日志环。"""
 
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ def _next_stream_id() -> int:
 
 
 def _strip_shard_log_prefix(raw: str) -> tuple[str, str]:
-    """去掉分片合并前缀 ``[worker-N]``，返回 (source_tag, body)。"""
+    """去掉日志里的 worker 前缀，返回来源标签与正文。"""
     tags: list[str] = []
     body = raw.strip()
     while True:

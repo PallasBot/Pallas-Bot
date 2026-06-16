@@ -1,4 +1,4 @@
-"""内核运行时：Bot 互聊过滤、ingress gate、AI callback HTTP、服务网关口令等非插件能力。"""
+"""内核运行时：互聊过滤、入站门控、回调与服务网关口令。"""
 
 from __future__ import annotations
 

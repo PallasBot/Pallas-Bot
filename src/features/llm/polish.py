@@ -1,4 +1,4 @@
-"""接话命中语料时的 LLM 轻改写（默认关，异步 callback 回发）。"""
+"""接话命中语料时异步润色，默认关。"""
 
 from __future__ import annotations
 

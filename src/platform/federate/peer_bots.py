@@ -1,4 +1,4 @@
-"""联邦 peer bot 名册：用 Redis 轻量同步其它 deployment 的牛号，供 block / ingress 早退。"""
+"""协同池内其它部署牛牛名册。"""
 
 from __future__ import annotations
 

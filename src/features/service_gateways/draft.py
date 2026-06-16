@@ -1,4 +1,4 @@
-"""WebUI 草稿配置合并（连通性探测用）。"""
+"""连通探测用 WebUI 草稿合并。"""
 
 from __future__ import annotations
 

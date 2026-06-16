@@ -1,4 +1,4 @@
-"""帮助菜单：根据 metadata 中的 command_permission(s) 拼接当前生效权限文案。"""
+"""帮助菜单拼接命令权限文案。"""
 
 from __future__ import annotations
 
@@ -32,7 +32,7 @@ def raw_trigger_condition(item: dict[str, Any]) -> str:
 
 
 def effective_permission_avail_text(item: dict[str, Any]) -> str:
-    """何人可用：单档为「{等级}可用」，多档为「任一：a / b 可用」。无 command_permission(s) 时返回空串。"""
+    """拼接「何人可用」说明行。"""
     ids = _normalize_command_perm_ids(item)
     if not ids:
         return ""
@@ -50,5 +50,5 @@ def effective_permission_avail_text(item: dict[str, Any]) -> str:
 
 
 def trigger_condition_with_effective_perm(item: dict[str, Any]) -> str:
-    """兼容旧名：等价于 `raw_trigger_condition`。"""
+    """兼容旧接口，同 raw_trigger_condition。"""
     return raw_trigger_condition(item)

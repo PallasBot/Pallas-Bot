@@ -1,4 +1,4 @@
-"""联邦 ingress 专用 Redis。"""
+"""多机协同专用 Redis 配置。"""
 
 from __future__ import annotations
 

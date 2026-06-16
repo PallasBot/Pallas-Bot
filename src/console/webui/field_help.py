@@ -1,4 +1,4 @@
-"""通用配置 WebUI 字段说明：统一为「用途 / 填写 / 说明」三段。"""
+"""通用配置字段说明三段式拼接。"""
 
 from __future__ import annotations
 

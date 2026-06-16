@@ -1,4 +1,4 @@
-"""ingress / repeater 共用的联邦群消息抢占入口。"""
+"""群消息跨部署抢占入口。"""
 
 from __future__ import annotations
 

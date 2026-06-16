@@ -1,4 +1,4 @@
-"""群消息入站预处理器：fleet 识别、@ 定向、联邦/跨 Bot claim。"""
+"""群消息入站预处理与跨机去重。"""
 
 from __future__ import annotations
 

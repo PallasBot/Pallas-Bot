@@ -1,13 +1,4 @@
-"""在 WebUI「通用配置」中暴露的配置段：对应根目录 ``.env`` 的 Pydantic 模型。
-
-- ``message_scrub``：显式 ``field_to_env``。
-- ``cmd_perm``：命令权限覆盖。
-- 若干 NoneBot 插件：字段名大写写入 ``.env``。
-
-新增段：在 ``_registered_sections`` 中追加；插件段可用 ``_plugin_env_section_from_module``。
-已使用 ``install_hot_reload_config`` 的插件会通过注册表读取当前值。
-``ingress_fanout`` / ``repeater_learn`` 等 common 段保存后会清缓存并触发热重载钩子。
-"""
+"""WebUI 通用配置各段注册与读写。"""
 
 from __future__ import annotations
 

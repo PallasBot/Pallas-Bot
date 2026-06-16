@@ -1,4 +1,4 @@
-"""服务网关连通性探测（注册表 + LLM 内置 provider）。"""
+"""扩展服务连通探测注册表。"""
 
 from src.features.service_gateways.collect import probe_all_connectivity, probe_all_connectivity_from_draft
 from src.features.service_gateways.draft import draw_draft_from_values, maa_cfg_from_draft, sing_cfg_from_draft

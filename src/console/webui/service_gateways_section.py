@@ -1,4 +1,4 @@
-"""WebUI「通用配置 → 服务网关」：画画网关、MAA 端点、唱歌服务地址的集中编辑与连通检测。"""
+"""WebUI 外部服务地址与连通检测。"""
 
 from __future__ import annotations
 

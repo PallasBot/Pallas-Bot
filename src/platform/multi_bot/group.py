@@ -1,19 +1,4 @@
-"""多 Bot 同群：插件侧统一入口（见 group_message_dedup 实现）。
-
-典型用法::
-
-    from src.platform.multi_bot.group import claim_group_handler
-
-    @matcher.handle()
-    async def handler(bot: Bot, event: MessageEvent):
-        if not await claim_group_handler("my_plugin", event, int(bot.self_id)):
-            return
-        ...
-
-协议重复上报用 ``should_skip_duplicate_group_event``。
-短时群级占位用 ``try_acquire_group_broadcast_slot`` / ``try_begin_group_owned_gate``。
-同群长时独占用 ``begin_group_exclusive_activity``。
-"""
+"""多牛同群消息去重与占位。"""
 
 from src.platform.multi_bot.dedup import (
     begin_group_exclusive_activity,

@@ -1,4 +1,4 @@
-"""跨 deployment 联邦协调。"""
+"""跨部署多机协同。"""
 
 from .config import (
     clear_federate_config_cache,

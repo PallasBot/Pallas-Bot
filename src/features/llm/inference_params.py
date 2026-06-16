@@ -1,4 +1,4 @@
-"""由 ResolvedPersona 派生 LLM 推理参数（温度、句长预算）。"""
+"""由群风格画像派生温度与句长预算。"""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ def derive_llm_inference_params(
     mode: str = "normal",
     purpose: str = "chat",
 ) -> tuple[float | None, int | None]:
-    """返回 (temperature, token_count)。drunk 模式温度由 AI 仓 preset 决定，Bot 不传 temperature。"""
+    """返回温度与句长上限；醉酒模式不传温度。"""
     if str(mode or "normal").strip().lower() == "drunk":
         return None, token_count_for_persona(persona, purpose=purpose)
 

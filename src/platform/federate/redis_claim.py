@@ -1,4 +1,4 @@
-"""跨 deployment ingress claim：联邦 Redis 前缀 + SET NX。"""
+"""跨部署入站抢占 Redis 实现。"""
 
 from __future__ import annotations
 

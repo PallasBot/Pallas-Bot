@@ -1,4 +1,4 @@
-"""牛牛连通口令（内核模块，非 src/plugins 插件）。"""
+"""牛牛连通口令，内核模块。"""
 
 from nonebot.plugin import PluginMetadata
 

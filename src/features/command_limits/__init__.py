@@ -1,4 +1,4 @@
-"""插件命令冷却（CD）统一 helper。"""
+"""插件命令冷却 helper。"""
 
 from .config import CommandLimitsConfig, clear_command_limits_cache, get_command_limits_config
 from .cooldown import (

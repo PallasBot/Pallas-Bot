@@ -1,4 +1,4 @@
-"""联邦 ingress / 协调配置。"""
+"""多机协同入站与 Redis 配置。"""
 
 from __future__ import annotations
 

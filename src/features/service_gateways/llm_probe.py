@@ -1,4 +1,4 @@
-"""LLM / Pallas-Bot-AI 服务探测（4.0 内置 provider）。"""
+"""智能对话服务探测。"""
 
 from __future__ import annotations
 

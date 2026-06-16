@@ -1,4 +1,4 @@
-"""跨 deployment 群消息 ingress 抢占。"""
+"""跨部署群消息入站抢占。"""
 
 from __future__ import annotations
 

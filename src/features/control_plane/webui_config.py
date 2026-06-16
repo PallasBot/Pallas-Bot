@@ -1,4 +1,4 @@
-"""WebUI 通用配置：控制面 bootstrap 与联邦 ingress。"""
+"""WebUI 控制面与入站协同配置。"""
 
 from __future__ import annotations
 

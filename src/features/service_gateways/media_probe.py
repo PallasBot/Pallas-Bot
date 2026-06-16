@@ -1,4 +1,4 @@
-"""画画 / MAA / 唱歌等扩展服务探测（可选 provider）。"""
+"""画画、MAA、唱歌等服务探测。"""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""分片 Redis 探测（供 doctor / maintenance 复用）。"""
+"""分片 Redis 可达性探测。"""
 
 from __future__ import annotations
 
