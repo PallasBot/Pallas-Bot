@@ -22,7 +22,7 @@ def resolve_unique_onebot_v11_bot(log_tag: str = "platform_utils") -> OneBotV11B
     """未指定 Bot 时：仅当恰好一只 OneBot V11 在线则自动选用，否则跳过。"""
     bots = list_onebot_v11_bots()
     if not bots:
-        logger.warning("platform_utils: 无可用 OneBot V11 连接，已跳过 ({})", log_tag)
+        logger.warning("platform_utils: no OneBot V11 connection, skipped ({})", log_tag)
         return None
     if len(bots) == 1:
         if len(get_bots()) > 1:
@@ -49,7 +49,7 @@ def resolve_onebot_v11_bot(bot: Bot | None = None, bot_id: str | int | None = No
             try:
                 return get_bots()[key]
             except KeyError:
-                logger.warning("platform_utils: Bot {} 未连接 ({})", key, log_tag or "resolve")
+                logger.warning("platform_utils: bot {} not connected ({})", key, log_tag or "resolve")
                 return None
     return resolve_unique_onebot_v11_bot(log_tag or "resolve")
 

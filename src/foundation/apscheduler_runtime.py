@@ -15,7 +15,7 @@ def ensure_apscheduler_running() -> None:
     if scheduler.running:
         return
     scheduler.start()
-    logger.info("bot_runtime: 已拉起 APScheduler（不依赖 APSCHEDULER_AUTOSTART）")
+    logger.info("启动：定时任务调度器已就绪")
 
 
 def register_apscheduler_startup_hook() -> None:

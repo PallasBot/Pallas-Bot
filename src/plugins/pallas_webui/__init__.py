@@ -83,7 +83,7 @@ if not is_sharded_worker() and plugin_config.pallas_webui_enabled and plugin_con
     _cors_origins = [str(o).strip() for o in (plugin_config.pallas_webui_allowed_origins or []) if str(o).strip()]
     if not _cors_origins:
         logger.warning(
-            "Pallas-Bot 控制台: pallas_webui_cors=True 但 pallas_webui_allowed_origins 为空，未挂载 CORS 中间件"
+            "控制台：CORS 已启用但 allowed_origins 为空",
         )
     else:
         from fastapi.middleware.cors import CORSMiddleware
@@ -91,7 +91,7 @@ if not is_sharded_worker() and plugin_config.pallas_webui_enabled and plugin_con
         _has_wildcard = "*" in _cors_origins
         if _has_wildcard:
             logger.warning(
-                "Pallas-Bot 控制台: pallas_webui_allowed_origins 含 '*'，已强制关闭 allow_credentials 以防 CSRF"
+                "控制台：allowed_origins 含 '*'，已关闭 allow_credentials",
             )
         app.add_middleware(
             CORSMiddleware,
@@ -122,7 +122,7 @@ if not is_sharded_worker():
         )
         webui_version = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
         if plugin_config.pallas_webui_dev_mode:
-            logger.warning("Pallas-Bot 控制台: 已关闭 API 与静态页鉴权（仅限本机开发）")
+            logger.warning("控制台：开发模式，已关闭鉴权")
         set_console_meta({
             "static_root": str(public),
             "http_base": base,
@@ -144,12 +144,12 @@ if not is_sharded_worker():
             host=getattr(dconf, "host", None),
             port=getattr(dconf, "port", None),
         )
-        logger.info(f"Pallas-Bot 控制台 | WebUI={open_base}{base}/")
+        logger.info("控制台：{}{}/", open_base, base)
 
         async def _bootstrap_webui_dist() -> None:
             if check_webui_exists(public):
                 return
-            logger.info("Pallas-Bot 控制台: 首次部署，后台拉取 WebUI 静态资源；就绪后请刷新控制台")
+            logger.info("控制台：首次部署，后台拉取静态资源")
             tok = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
             url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
             url_candidates: list[str] = []
@@ -173,14 +173,9 @@ if not is_sharded_worker():
                 url_candidates = [url]
             if not url:
                 if resolve_err:
-                    logger.error(
-                        "Pallas-Bot 控制台: 无法解析 WebUI 下载地址（{}），请配置 dist zip 直链或手动放置构建产物到 data/pallas_webui/public",
-                        resolve_err,
-                    )
+                    logger.error("控制台：无法解析 WebUI 下载地址 ({})", resolve_err)
                 else:
-                    logger.error(
-                        "Pallas-Bot 控制台: 无法解析 WebUI 下载地址，请配置 dist zip 直链或手动放置构建产物到 data/pallas_webui/public"
-                    )
+                    logger.error("控制台：无法解析 WebUI 下载地址")
                 return
             errors: list[str] = []
             succeeded_url = ""
@@ -194,7 +189,7 @@ if not is_sharded_worker():
                     err_msg = format_exception_for_log(e)
                     errors.append(f"{candidate} -> {err_msg}")
             if errors:
-                logger.error("Pallas-Bot 控制台: 下载或解压 dist zip 失败，已尝试: {}", " | ".join(errors))
+                logger.error("控制台：dist 下载/解压失败: {}", " | ".join(errors))
             elif succeeded_url:
                 try:
                     tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "").strip()
@@ -209,7 +204,7 @@ if not is_sharded_worker():
                     save_installed_webui_version(tag, succeeded_url)
                 except Exception:
                     pass
-                logger.info("Pallas-Bot 控制台: WebUI 静态资源后台部署完成，请刷新控制台页面")
+                logger.info("控制台：静态资源就绪，请刷新页面")
             webui_ver = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
             set_console_meta({"static_root": str(public), "http_base": base, "version": webui_ver})
 
@@ -225,14 +220,15 @@ if not is_sharded_worker():
                 if latest_tag and current_tag != latest_tag:
                     release_url = str(latest_info.get("html_url", "") or "").strip()
                     logger.info(
-                        f"Pallas-Bot 控制台: 发现新版本 WebUI {latest_tag}（当前: {current_tag or '未知'}）"
-                        + (f" → {release_url}" if release_url else "")
-                        + "，可在控制台更新页面一键更新"
+                        "console: webui update available {} (current {}){}",
+                        latest_tag,
+                        current_tag or "-",
+                        f" → {release_url}" if release_url else "",
                     )
                 else:
-                    logger.info(f"Pallas-Bot 控制台: WebUI 已是最新版本（{current_tag or '未知'}）")
+                    logger.debug("console: webui up to date tag={}", current_tag or "-")
             except Exception as e:
-                logger.debug("Pallas-Bot 控制台: 检查 WebUI 更新失败: {}", format_exception_for_log(e))
+                logger.debug("console: webui update check failed: {}", format_exception_for_log(e))
             try:
                 bot_current = get_bot_current_version()
                 bot_current_tag = bot_current.get("tag", "")
@@ -246,30 +242,33 @@ if not is_sharded_worker():
                 ):
                     bot_release_url = str(bot_latest_info.get("html_url", "") or "").strip()
                     logger.info(
-                        f"Pallas-Bot 控制台: 发现新版本 Bot {bot_latest_tag}（当前: {bot_current_tag or bot_current_commit or '未知'}）"
-                        + (f" → {bot_release_url}" if bot_release_url else "")
-                        + "，可在控制台查看更新"
+                        "console: bot update available {} (current {}){}",
+                        bot_latest_tag,
+                        bot_current_tag or bot_current_commit or "-",
+                        f" → {bot_release_url}" if bot_release_url else "",
                     )
                 elif bot_is_development_build(
                     latest_tag=bot_latest_tag,
                     current_tag=str(bot_current_tag or ""),
                     current_commit=str(bot_current_commit or ""),
                 ):
-                    logger.info(
-                        f"Pallas-Bot 控制台: Bot 开发构建（超前于发行 {bot_latest_tag}），commit={bot_current_commit or '未知'}"
+                    logger.debug(
+                        "console: bot dev build ahead of release {} commit={}",
+                        bot_latest_tag,
+                        bot_current_commit or "-",
                     )
                 elif bot_current_tag:
-                    logger.info(f"Pallas-Bot 控制台: Bot 已是最新版本（{bot_current_tag}）")
+                    logger.debug("console: bot up to date tag={}", bot_current_tag)
                 else:
-                    logger.info(f"Pallas-Bot 控制台: Bot 版本 commit={bot_current_commit or '未知'}")
+                    logger.debug("console: bot commit={}", bot_current_commit or "-")
             except Exception as e:
-                logger.debug("Pallas-Bot 控制台: 检查 Bot 更新失败: {}", format_exception_for_log(e))
+                logger.debug("console: bot update check failed: {}", format_exception_for_log(e))
 
         async def _guarded(name: str, fn):
             try:
                 await fn()
             except Exception as e:
-                logger.error("Pallas-Bot 控制台: 后台任务「{}」异常: {}", name, format_exception_for_log(e))
+                logger.error("控制台：后台任务 {} 异常: {}", name, format_exception_for_log(e))
 
         if not check_webui_exists(public):
             asyncio.create_task(_guarded("webui-dist-bootstrap", _bootstrap_webui_dist))

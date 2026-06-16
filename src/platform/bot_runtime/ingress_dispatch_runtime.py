@@ -37,7 +37,7 @@ def register_ingress_dispatch_runtime() -> None:
         if route_index_enabled():
             index = build_route_index()
             logger.info(
-                "route_index: built prefixes={} exacts={} indexed_modules={} strict={}",
+                "入站路由：prefix={} exact={} modules={} strict={}",
                 len(index.prefix_to_modules),
                 len(index.exact_to_modules),
                 len(index.indexed_modules),

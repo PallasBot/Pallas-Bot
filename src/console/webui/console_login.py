@@ -195,7 +195,7 @@ def prime_shared_console_login() -> None:
     plain, rnd = _materialize_auth_state()
     auth_path = str(auth_state_path().resolve())
     if plain is not None and rnd:
-        logger.info("Pallas-Bot 控制台鉴权已初始化，状态文件: {}", auth_state_path())
+        logger.info("控制台：鉴权已初始化 {}", auth_state_path())
         logger.success("Pallas-Bot 默认口令: {}", plain)
         try:
             sys.stderr.write(f"[Pallas-Bot] 默认口令: {plain}\n")

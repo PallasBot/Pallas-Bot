@@ -37,7 +37,7 @@ VOICES = {
 
 async def download_voices() -> bool:
     try:
-        logger.info("开始下载语音文件...")
+        logger.info("语音资源：开始下载")
 
         RESOURCE_ROOT.mkdir(exist_ok=True)
         VOICES_DIR.mkdir(exist_ok=True)
@@ -47,22 +47,22 @@ async def download_voices() -> bool:
         download_success = False
         for source, url in VOICES_URLS.items():
             try:
-                logger.info(f"尝试从 {source} 下载")
+                logger.info("语音资源：从 {} 下载", source)
                 async with httpx.AsyncClient(timeout=timeout, limits=limits, follow_redirects=True) as client:
                     response = await client.get(url)
                     response.raise_for_status()
 
                     TEMP_ZIP_PATH.write_bytes(response.content)
-                    logger.info(f"下载完成，文件大小: {len(response.content) / 1024 / 1024:.2f} MB，开始解压...")
+                    logger.info("语音资源：已下载 {:.1f}MB，解压中", len(response.content) / 1024 / 1024)
                     download_success = True
                     break
 
             except (httpx.HTTPStatusError, httpx.RequestError, Exception) as e:
-                logger.warning(f"尝试从 {source} 下载失败: {e}")
+                logger.warning("voices: download failed source={} err={}", source, e)
                 continue
 
         if not download_success:
-            logger.error("语音文件下载失败")
+            logger.error("voices: all download sources failed")
             raise RuntimeError("all voice download sources failed")
 
         with zipfile.ZipFile(TEMP_ZIP_PATH, "r") as zip_ref:
@@ -70,11 +70,11 @@ async def download_voices() -> bool:
 
         TEMP_ZIP_PATH.unlink()
 
-        logger.info("语音文件下载解压完成")
+        logger.info("语音资源：就绪")
         return True
 
     except Exception as e:
-        logger.error(f"下载语音文件时发生错误: {e}")
+        logger.error("voices: download error: {}", e)
         if TEMP_ZIP_PATH.exists():
             try:
                 TEMP_ZIP_PATH.unlink()
@@ -90,9 +90,9 @@ async def ensure_voices() -> bool:
             if all((pallas_dir / f"{file}.wav").exists() for file in VOICES):
                 return True
 
-        logger.info("检测到语音文件缺失，开始下载...")
+        logger.info("语音资源：缺失，开始下载")
         return await download_voices()
 
     except Exception as e:
-        logger.error(f"检查语音文件时发生错误: {e}")
+        logger.error("voices: ensure failed: {}", e)
         return False

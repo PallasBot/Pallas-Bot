@@ -85,7 +85,7 @@ def _load_plugin_module(
         return False
     if importlib.util.find_spec(module_path) is None:
         logger.error(
-            "bot_runtime: {} skip {} (pip 包未安装，请在仓库根目录执行 uv sync)",
+            "启动：{} 跳过 {}（未安装，请 uv sync）",
             role_label,
             module_path,
         )
@@ -95,7 +95,7 @@ def _load_plugin_module(
         loaded_short.add(short)
         return True
     except Exception as e:
-        logger.warning("bot_runtime: {} failed to load {}: {}", role_label, module_path, e)
+        logger.warning("启动：{} 加载 {} 失败: {}", role_label, module_path, e)
         return False
 
 
@@ -142,7 +142,7 @@ def _load_toml_extra_plugin_dirs(
     for rel_dir in plugin_dirs:
         root = PROJECT_ROOT / rel_dir
         if not root.is_dir():
-            logger.warning("bot_runtime: {} plugin_dir missing: {}", role_label, rel_dir)
+            logger.warning("启动：{} 插件目录不存在: {}", role_label, rel_dir)
             continue
         dir_loaded = 0
         entries = sorted(root.iterdir(), key=lambda p: p.name)
@@ -158,7 +158,7 @@ def _load_toml_extra_plugin_dirs(
                 found = [plugin] if plugin is not None else []
             except Exception as e:
                 logger.warning(
-                    "bot_runtime: {} load_plugin({}) failed: {}",
+                    "启动：{} 加载 {} 失败: {}",
                     role_label,
                     sub_rel,
                     e,
@@ -173,8 +173,8 @@ def _load_toml_extra_plugin_dirs(
                     loaded_short.add(_short_name(name))
             dir_loaded += len(found)
             count += len(found)
-        logger.info(
-            "bot_runtime: {} load_plugins({}) -> {} plugin(s)",
+        logger.debug(
+            "启动：{} 目录 {} 加载 {} 个",
             role_label,
             rel_dir,
             dir_loaded,
@@ -259,7 +259,7 @@ def load_plugins_for_role() -> None:
             loaded_short=loaded_short,
         )
         logger.info(
-            "bot_runtime: role=unified, local_plugins={} src_plugins={} pip_extra={} pyproject_extra={} skip={}",
+            "启动：unified local={} src={} pip={} extra={} skip={}",
             bootstrap_loaded,
             loaded,
             pip_extra,
@@ -303,7 +303,7 @@ def load_plugins_for_role() -> None:
             include_extra_dirs=False,
         )
         logger.info(
-            "bot_runtime: role=hub, local_plugins={} hub_modules={}/{} pip_extra={} pyproject_extra={}",
+            "启动：hub local={} modules={}/{} pip={} extra={}",
             bootstrap_loaded,
             loaded,
             len(resolve_hub_bundled_module_paths()),
@@ -351,7 +351,7 @@ def load_plugins_for_role() -> None:
 
     s = get_shard_registry_settings()
     logger.info(
-        "bot_runtime: role=worker shard_id={} local_plugins={} src_plugins={} pip_extra={} pyproject_extra={} skip={}",
+        "启动：worker shard={} local={} src={} pip={} extra={} skip={}",
         s.shard_id,
         bootstrap_loaded,
         loaded,

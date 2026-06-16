@@ -111,7 +111,7 @@ def _plugin_env_section_from_module(
     except ModuleNotFoundError:
         from nonebot import logger
 
-        logger.warning("WebUI 通用配置段跳过：未找到配置模块 {}", config_module)
+        logger.warning("webui env section skipped: config module not found {}", config_module)
         return None
     cfg_cls = getattr(mod, "Config", None)
     if cfg_cls is None or not isinstance(cfg_cls, type) or not issubclass(cfg_cls, BaseModel):
@@ -647,7 +647,7 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
                 import asyncio as aio
 
                 aio.run(reload_repeater_learn_worker_runtime())
-            logger.info("repeater_learn: WebUI 已写入配置，learn 并发/队列已热重载")
+            logger.info("repeater_learn: webui config saved, hot reloaded")
         except Exception as e:
             from nonebot import logger
 

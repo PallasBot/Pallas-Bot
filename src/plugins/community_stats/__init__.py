@@ -39,8 +39,8 @@ async def community_stats_startup() -> None:
     try:
         await ensure_corpus_community_enrolled()
     except Exception as e:
-        logger.warning(f"corpus enroll: startup failed: {e}")
+        logger.warning("corpus enroll: startup failed: {}", e)
     try:
         await start_community_stats_reporter()
     except Exception as e:
-        logger.warning(f"community_stats: startup failed: {e}")
+        logger.warning("community_stats: startup failed: {}", e)

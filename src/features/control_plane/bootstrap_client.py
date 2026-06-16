@@ -66,7 +66,7 @@ async def refresh_control_plane_bootstrap(*, force: bool = False) -> bool:
     cfg = get_control_plane_config()
     urls = bootstrap_urls(cfg)
     if not urls:
-        logger.warning("control_plane bootstrap: 无可用 URL")
+        logger.warning("control_plane bootstrap: no URL configured")
         return bootstrap_state_valid()
 
     headers = bootstrap_headers(cfg)

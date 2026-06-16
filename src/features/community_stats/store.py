@@ -84,7 +84,7 @@ def save_heartbeat_endpoint(endpoint: str) -> None:
     if prev and prev != ep:
         from nonebot import logger
 
-        logger.info("community_stats: 心跳入口已切换为 {}", ep)
+        logger.info("community_stats: heartbeat endpoint switched to {}", ep)
 
 
 def touch_primary_probe_unix() -> None:

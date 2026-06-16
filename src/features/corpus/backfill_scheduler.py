@@ -34,7 +34,7 @@ async def start_corpus_backfill_job() -> None:
         misfire_grace_time=300,
         next_run_time=datetime.now() + timedelta(seconds=120),
     )
-    logger.info("corpus backfill: scheduled interval_sec={}", interval_sec)
+    logger.info("语料回填：周期 {}s", interval_sec)
 
 
 async def reload_corpus_backfill_job() -> None:

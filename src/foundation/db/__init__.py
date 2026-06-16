@@ -202,9 +202,9 @@ async def init_mongodb_db() -> None:
     else:
         connection_string = f"mongodb://{host}:{port}"
         if user or password:
-            logger.warning("MONGO_USER 与 MONGO_PASSWORD 须同时配置；当前将按无认证连接尝试")
+            logger.warning("数据库：MONGO 用户名与密码须同时配置，将尝试无认证连接")
 
-    logger.info(f"正在尝试连接 MongoDB {host}:{port}，Database：{db_name}")
+    logger.info("数据库：连接 MongoDB {}:{} db={}", host, port, db_name)
     mongo_client = AsyncMongoClient(
         connection_string,
         unicode_decode_error_handler="ignore",
@@ -233,7 +233,7 @@ async def init_mongodb_db() -> None:
             ImageCache,
         ],
     )
-    logger.info(f"{db_name} 连接成功！")
+    logger.info("数据库：MongoDB {} 已连接", db_name)
 
 
 def make_pg_context() -> ContextRepository:
@@ -294,7 +294,7 @@ async def init_postgresql_db() -> None:
     else:
         host = _cfg("MONGO_HOST", "127.0.0.1")
         if host != "127.0.0.1":
-            logger.warning(f"PG_HOST 未设置，已 fallback 到 MONGO_HOST={host}；如 PG/Mongo 不同机器请显式设置 PG_HOST")
+            logger.warning("数据库：PG_HOST 未设置，回退 MONGO_HOST={}", host)
     port = int(_cfg("PG_PORT", "5432"))
     user = _cfg("PG_USER", "")
     password = _cfg("PG_PASSWORD", "")
@@ -308,18 +308,18 @@ async def init_postgresql_db() -> None:
     max_overflow = int(_cfg("PG_MAX_OVERFLOW", "20"))
     pool_recycle = int(_cfg("PG_POOL_RECYCLE", "1800"))
 
-    logger.info(f"正在连接 PostgreSQL {host}:{port}，Database：{db_name}")
+    logger.info("数据库：连接 PostgreSQL {}:{} db={}", host, port, db_name)
 
     admin_engine = create_async_engine(f"{base_url}/postgres", isolation_level="AUTOCOMMIT")
     try:
         async with admin_engine.connect() as conn:
             result = await conn.execute(text("SELECT 1 FROM pg_database WHERE datname = :db"), {"db": db_name})
             if result.scalar() is None:
-                logger.info(f"{db_name} 不存在，正在自动创建...")
+                logger.info("数据库：PostgreSQL {} 不存在，正在创建", db_name)
                 # PG 不支持给 identifier 绑占位符，只能拼接；上面 [A-Za-z0-9_-]
                 # 的正则已保证 db_name 无注入风险。
                 await conn.execute(text(f'CREATE DATABASE "{db_name}"'))  # noqa: S608
-                logger.info(f"{db_name} 创建成功")
+                logger.info("数据库：PostgreSQL {} 已创建", db_name)
     finally:
         await admin_engine.dispose()
 
@@ -332,7 +332,13 @@ async def init_postgresql_db() -> None:
         connect_args={"server_settings": pg_session_server_settings()},
     )
     await init_pg(engine)
-    logger.info(f"{db_name} 连接成功！(pool={pool_size}+{max_overflow}, recycle={pool_recycle}s)")
+    logger.info(
+        "数据库：PostgreSQL {} 已连接 pool={}+{} recycle={}s",
+        db_name,
+        pool_size,
+        max_overflow,
+        pool_recycle,
+    )
     try:
         from src.platform.shard.observability import log_pg_pool_warning_if_needed
 

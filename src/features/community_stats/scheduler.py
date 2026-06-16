@@ -37,7 +37,7 @@ async def start_community_stats_reporter() -> None:
         next_run_time=datetime.now() + timedelta(seconds=_FIRST_HEARTBEAT_DELAY_SEC),
     )
     logger.info(
-        "community_stats: 已启用周期上报 interval_sec={} first_after_sec={} endpoint={}",
+        "社区统计：周期上报 {}s 首包延迟 {}s endpoint={}",
         interval_sec,
         _FIRST_HEARTBEAT_DELAY_SEC,
         (cfg.endpoint or "").strip(),
@@ -53,7 +53,7 @@ async def reload_community_stats_reporter() -> None:
     if should_run_community_stats_reporter():
         await start_community_stats_reporter()
     else:
-        logger.info("community_stats: 已关闭周期上报（配置热重载）")
+        logger.info("community_stats: periodic heartbeat disabled (hot reload)")
 
 
 def schedule_reload_community_stats_reporter() -> None:

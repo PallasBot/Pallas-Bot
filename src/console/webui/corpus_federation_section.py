@@ -326,7 +326,7 @@ def apply_corpus_federation_patch(patch: dict[str, Any]) -> dict[str, Any]:
     try:
         from nonebot import logger
 
-        logger.info("corpus_federation: WebUI 已写入配置，语料相关项已热重载")
+        logger.info("corpus_federation: webui config saved, hot reloaded")
     except Exception as e:
         from nonebot import logger
 

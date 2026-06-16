@@ -171,7 +171,7 @@ def _ensure_log_sink() -> None:
     if _INIT_LOG_SINK:
         return
     _INIT_LOG_SINK = True
-    logger.info("Pallas-Bot 控制台: 已接入 NoneBot 日志环（/pallas/api/logs）")
+    logger.info("控制台：日志环已接入 /pallas/api/logs")
 
 
 # 审批写操作后：好友/群 OneBot 列表与按 Bot 群配置合并视图一并失效

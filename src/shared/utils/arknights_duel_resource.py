@@ -139,7 +139,7 @@ async def ensure_duel_avatars_bulk(
         have = count_valid_avatars(ids)
         if have >= len(ids) * min_ratio:
             return True
-        logger.info(f"arknights duel: avatars {have}/{len(ids)}, downloading missing ...")
+        logger.info("决斗资源：头像 {}/{} 补全中", have, len(ids))
         ok, tried = await sync_missing_avatars_async(ids, missing_only=True)
         logger.info(f"arknights duel: avatar sync done ok={ok} tried={tried}")
         return (have + ok) >= len(ids) * min_ratio
@@ -194,13 +194,13 @@ def needs_background_arknights_sync(*, sync_json: bool, bulk_avatars: bool) -> b
 
 async def _run_background_arknights_sync(*, sync_json: bool, bulk_avatars: bool) -> None:
     try:
-        logger.info("arknights duel: background resource sync started")
+        logger.info("决斗资源：后台同步开始")
         ok = await ensure_arknights_duel_resources(sync_json=sync_json, bulk_avatars=bulk_avatars)
         if ok and sync_json:
             from src.features.plugin_coord.duel import reload_operators_cache
 
             reload_operators_cache()
-        logger.info(f"arknights duel: background resource sync finished ok={ok}")
+        logger.info("决斗资源：后台同步完成 ok={}", ok)
     except Exception as err:
         logger.error(f"arknights duel: background resource sync failed: {err}")
 

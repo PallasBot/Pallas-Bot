@@ -116,11 +116,6 @@ test_mail_cmd = on_command(
 driver = get_driver()
 
 
-@driver.on_startup
-async def startup() -> None:
-    logger.info("Bot_status plugin startup")
-
-
 @driver.on_bot_connect
 async def _(bot: Bot) -> None:
     await handle_bot_connect(bot)

@@ -127,7 +127,7 @@ async def send_community_stats_heartbeat() -> bool:
     cfg = get_community_stats_config()
     urls = heartbeat_urls_for_config(cfg)
     if not urls:
-        logger.warning("community_stats: 无可用 endpoint，跳过上报")
+        logger.warning("community_stats: no endpoint configured, skip heartbeat")
         return False
     if is_auto_endpoint_mode(cfg) and urls[0] == PRIMARY_HEARTBEAT:
         touch_primary_probe_unix()
@@ -151,7 +151,7 @@ async def send_community_stats_heartbeat() -> bool:
                     try:
                         if await _post_heartbeat(client, endpoint, payload=payload, cfg=cfg, timeout_sec=timeout):
                             if is_auto_endpoint_mode(cfg) and endpoint == FALLBACK_HEARTBEAT and i > 0:
-                                logger.info("community_stats: 正式域名暂不可用，已使用备用入口（备案通过后将自动切回）")
+                                logger.info("community_stats: primary endpoint unavailable, using fallback")
                             return True
                     except httpx.HTTPError as e:
                         logger.warning(f"community_stats: heartbeat failed endpoint={endpoint}: {e}")

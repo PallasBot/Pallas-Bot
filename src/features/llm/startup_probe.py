@@ -90,24 +90,24 @@ def install_llm_startup_probe() -> None:
                     provider_mode = str(llm_info.get("provider_mode") or "").strip()
             if version and provider_mode:
                 logger.info(
-                    "llm: AI 服务可达 {} version={} provider={} switches={}",
+                    "LLM：可达 {} v={} provider={} switches={}",
                     url,
                     version,
                     provider_mode,
                     flag_text,
                 )
             elif version:
-                logger.info("llm: AI 服务可达 {} version={} switches={}", url, version, flag_text)
+                logger.info("LLM：可达 {} v={} switches={}", url, version, flag_text)
             else:
-                logger.info("llm: AI 服务可达 {} switches={}", url, flag_text)
+                logger.info("LLM：可达 {} switches={}", url, flag_text)
             return
 
         if cfg.llm_chat_enabled or cfg.llm_fallback_enabled or cfg.llm_polish_enabled:
             logger.warning(
-                "llm: AI 服务不可达 {} error={}，但已开启 {}",
+                "LLM：不可达 {} err={} switches={}",
                 url,
                 result.get("error") or "unknown",
                 flag_text,
             )
         else:
-            logger.debug("llm: AI 服务未响应 {}（LLM 开关均为关）", url)
+            logger.debug("LLM：无响应 {}（开关均为关）", url)

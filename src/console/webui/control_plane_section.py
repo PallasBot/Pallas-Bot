@@ -290,7 +290,7 @@ def apply_control_plane_patch(patch: dict[str, Any]) -> dict[str, Any]:
             loop.create_task(refresh_control_plane_bootstrap(force=True))
         except RuntimeError:
             asyncio.run(refresh_control_plane_bootstrap(force=True))
-        logger.info("control_plane: WebUI 已热重载并刷新 bootstrap")
+        logger.info("control_plane: webui config saved, bootstrap refreshed")
     except Exception as e:
         from nonebot import logger
 
