@@ -6,6 +6,7 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
+from src.features.llm.tools.declare import llm_command_tool_row
 
 __plugin_meta__ = PluginMetadata(
     name="牛牛画画",
@@ -28,6 +29,24 @@ __plugin_meta__ = PluginMetadata(
         ],
         "command_limits": [
             {"id": "draw.draw", "cd_sec": 3},
+        ],
+        "llm_tools": [
+            llm_command_tool_row(
+                name="draw.image",
+                command_id="draw.draw",
+                description="根据文字描述生成或修改图片。用户想画画、生图、画图、改图时使用。",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "prompt": {
+                            "type": "string",
+                            "description": "画面描述，尽量保留用户原话",
+                        },
+                    },
+                    "required": ["prompt"],
+                },
+                command_template="牛牛画画 {prompt}",
+            ),
         ],
         "menu_data": [
             {

@@ -1,3 +1,3 @@
-from src.features.llm.tools.arknights import register_arknights_tools
+from src.features.llm.tools.bootstrap import ensure_llm_tools_bootstrapped
 
-register_arknights_tools()
+ensure_llm_tools_bootstrapped()

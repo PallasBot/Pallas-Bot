@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.domain.arknights import query as ark_query
 from src.features.llm.tools.registry import LlmToolSpec, register_tool
+
+if TYPE_CHECKING:
+    from src.features.llm.tools.context import ToolInvokeContext
 
 
 def register_arknights_tools() -> None:
@@ -58,7 +61,8 @@ def register_arknights_tools() -> None:
     )
 
 
-def handle_operator_get(args: dict[str, Any]) -> dict[str, Any]:
+def handle_operator_get(args: dict[str, Any], ctx: ToolInvokeContext | None = None) -> dict[str, Any]:
+    _ = ctx
     name = str(args.get("name", "")).strip()
     op = ark_query.query_operator(name)
     if not op:
@@ -66,14 +70,16 @@ def handle_operator_get(args: dict[str, Any]) -> dict[str, Any]:
     return {"found": True, "operator": op}
 
 
-def handle_operator_search(args: dict[str, Any]) -> dict[str, Any]:
+def handle_operator_search(args: dict[str, Any], ctx: ToolInvokeContext | None = None) -> dict[str, Any]:
+    _ = ctx
     query = str(args.get("query", "")).strip()
     limit = int(args.get("limit", 5) or 5)
     items = ark_query.search_operators(query, limit=max(1, min(limit, 10)))
     return {"query": query, "count": len(items), "operators": items}
 
 
-def handle_skill_get(args: dict[str, Any]) -> dict[str, Any]:
+def handle_skill_get(args: dict[str, Any], ctx: ToolInvokeContext | None = None) -> dict[str, Any]:
+    _ = ctx
     name = str(args.get("name", "")).strip()
     skill_index = int(args.get("skill_index", 0) or 0)
     skill = ark_query.query_operator_skill(name, skill_index)

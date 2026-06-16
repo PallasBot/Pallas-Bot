@@ -6,6 +6,10 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_MENU_TEMPLATE,
 )
 from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
+from src.features.llm.tools.declare import llm_command_tool_row
+from src.features.llm.tools.startup import register_llm_tools_startup_hook
+
+register_llm_tools_startup_hook()
 
 __plugin_meta__ = PluginMetadata(
     name="随时闲聊",
