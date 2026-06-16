@@ -1,4 +1,4 @@
-"""WebUI「通用配置 → 联邦控制」：分组、三态选项与说明文案。"""
+"""WebUI「通用配置 → 多机协同」：分组、三态选项与说明文案。"""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ _FIELD_LABELS: dict[str, str] = {
     "enabled": "控制面总开关",
     "instance_secret": "入池密钥",
     "bootstrap_url": "中心配置地址",
-    "federate_id": "联邦池编号",
+    "federate_id": "协同池编号",
     "federate_ingress_enabled": "重复消息去重",
     "ingress_bypass_unified": "单进程命令直通",
     "coord_redis_url": "去重服务器地址",
@@ -96,25 +96,25 @@ def _field_row(key: str, cur: Any) -> dict[str, Any]:
         row["choices"] = _TRI_CHOICES
         row["current"] = _enabled_raw()
         row["description"] = field_help(
-            "是否向社区中心自动领取联邦配置",
+            "是否向社区中心自动领取协同配置",
             "一般选「自动」或「开启」；关闭后不再向中心拉取配置",
             "默认已开启；仍需填写下方的入池密钥",
         )
     elif key == "instance_secret":
         row["description"] = field_help(
-            "加入社区联邦池的密钥",
-            "打开控制台「统计与语料」，在「社区联邦」面板复制后粘贴到此处",
+            "加入多机协同池的密钥",
+            "打开控制台「统计与语料」，在「多机协同」面板复制后粘贴到此处",
             "与共享语料口令、在线统计无关；请勿泄露",
         )
     elif key == "bootstrap_url":
         row["description"] = field_help(
-            "向中心拉取联邦配置的网址",
+            "向中心拉取协同配置的网址",
             "留空即可，程序会按统计主站与备站自动选择",
             "仅自建中心或特殊网络时再填写完整地址",
         )
     elif key == "federate_id":
         row["description"] = field_help(
-            "所属联邦池编号",
+            "所属协同池编号",
             "可留空，填写密钥并由中心下发后会自动写入",
             "多套牛牛要共用同一编号，跨机去重才会生效",
         )
@@ -179,7 +179,7 @@ def control_plane_payload(*, current_values: dict[str, Any] | None = None) -> di
             },
             {
                 "id": "pool",
-                "title": "联邦池与消息去重",
+                "title": "协同池与消息去重",
                 "field_names": ["federate_id", "federate_ingress_enabled", "ingress_bypass_unified"],
             },
             {
