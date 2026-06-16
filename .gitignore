@@ -219,6 +219,8 @@ resource/*
 !resource/who_is_spy/**
 !resource/styles/
 !resource/styles/**
+!resource/persona/
+!resource/persona/**
 resource/styles/**/__pycache__/
 accounts
 mixed_data

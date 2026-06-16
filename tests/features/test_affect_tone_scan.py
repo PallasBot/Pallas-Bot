@@ -1,12 +1,23 @@
 from __future__ import annotations
 
 from src.features.persona.affect_baseline import derive_group_affect_bias
-from src.features.persona.affect_lexicon import parse_lexicon_sections, punct_aggression_score
+from src.features.persona.affect_lexicon import parse_lexicon_sections, punct_aggression_score, resolve_lexicon_path
 from src.features.persona.affect_tone_scan import scan_plain_tone, summarize_group_message_tones
 from src.features.persona.compile_group_style import build_group_style_hints
+from src.foundation.paths import resource_dir
 
 
-def test_parse_lexicon_sections() -> None:
+def test_baseline_lexicon_path_under_resource() -> None:
+    path = resource_dir("persona", "affect_lexicon_baseline.txt")
+    assert path.is_file()
+    sections = parse_lexicon_sections(path.read_text(encoding="utf-8"))
+    assert "谢谢" in sections["polite"]
+    assert "离谱" in sections["harsh"]
+
+
+def test_resolve_lexicon_path_relative_to_repo_root() -> None:
+    resolved = resolve_lexicon_path("resource/persona/affect_lexicon_baseline.txt")
+    assert resolved.is_file()
     sections = parse_lexicon_sections(
         "# comment\n[polite]\n谢谢\n辛苦\n[harsh]\n离谱\n\n# tail\n"
     )

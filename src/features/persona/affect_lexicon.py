@@ -7,8 +7,9 @@ from functools import lru_cache
 from pathlib import Path
 
 from src.foundation.config.repo_settings import repo_env_raw_value
+from src.foundation.paths import project_path, resource_dir
 
-_BASELINE_PATH = Path(__file__).resolve().parent / "affect_lexicon_baseline.txt"
+_BASELINE_PATH = resource_dir("persona", "affect_lexicon_baseline.txt")
 _SECTION_RE = re.compile(r"^\[(polite|harsh)\]\s*$", re.IGNORECASE)
 _PUNCT_BURST_RE = re.compile(r"[!?！？]{2,}")
 _PUNCT_SINGLE_RE = re.compile(r"[!?！？]")
@@ -77,13 +78,20 @@ def try_load_scrub_lexicon_harsh() -> tuple[str, ...]:
         return ()
 
 
+def resolve_lexicon_path(raw_path: str) -> Path:
+    path = Path(raw_path.strip())
+    if not path.is_absolute():
+        path = project_path(path)
+    return path
+
+
 @lru_cache(maxsize=4)
 def load_affect_lexicon() -> dict[str, tuple[str, ...]]:
     baseline = read_lexicon_file(_BASELINE_PATH)
     extras: list[dict[str, list[str]]] = [baseline]
     extra_path = (repo_env_raw_value("PERSONA_AFFECT_LEXICON_EXTRA") or "").strip()
     if extra_path:
-        extras.append(read_lexicon_file(Path(extra_path)))
+        extras.append(read_lexicon_file(resolve_lexicon_path(extra_path)))
     merged = merge_lexicon_sections(*extras)
     scrub_harsh = try_load_scrub_lexicon_harsh()
     if scrub_harsh:
