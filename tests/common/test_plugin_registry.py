@@ -17,6 +17,7 @@ def test_build_official_extension_rows_excludes_core_social_party():
     assert official_extension_for_plugin("roulette") is None
     assert official_extension_for_plugin("greeting") is None
     assert official_extension_for_plugin("take_name") is None
+    assert official_extension_for_plugin("llm_chat") is None
 
 
 def test_build_official_extension_rows_marks_bundled_duel():
@@ -36,7 +37,7 @@ def test_build_official_extension_rows_p0_repo_urls():
     assert by_pkg["pallas-plugin-who-is-spy"] == "https://github.com/TogetsuDo/pallas-plugin-who-is-spy"
     assert by_pkg.get("pallas-plugin-draw") == "https://github.com/TogetsuDo/pallas-plugin-draw"
     assert by_pkg.get("pallas-plugin-dream") == "https://github.com/TogetsuDo/pallas-plugin-dream"
-    assert by_pkg.get("pallas-plugin-llm-chat") == "https://github.com/TogetsuDo/pallas-plugin-llm-chat"
+    assert "pallas-plugin-llm-chat" not in by_pkg
 
 
 def test_official_extension_for_plugin():

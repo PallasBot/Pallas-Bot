@@ -16,6 +16,7 @@
 | [take_name](./take_name/README.md) | 自动改名片（夺舍） |
 | [blacklist](./blacklist/README.md) | 拉黑 / 屏蔽 |
 | [request_handler](./request_handler/README.md) | 好友/入群申请 |
+| [llm_chat](./llm_chat/README.md) | 随时 @ 智能闲聊（4.0 core） |
 | [pallas_webui](./pallas_webui/README.md) | 网页控制台 |
 
 ## 官方扩展（bundled，默认 slim 不加载）
@@ -30,7 +31,6 @@
 | [draw](./draw/README.md) | `pallas-plugin-draw` | 画画 |
 | [sing](./sing/README.md) | `pallas-plugin-ai-media` | 唱歌、点歌 |
 | [chat](./chat/README.md) | `pallas-plugin-ai-media` | 酒后智能对话 |
-| [llm_chat](./llm_chat/README.md) | `pallas-plugin-llm-chat` | 随时闲聊 |
 | [maa](./maa/README.md) | `pallas-plugin-maa` | MAA 远控 |
 | [pallas_protocol](./pallas_protocol/README.md) | `pallas-plugin-protocol` | NapCat/SnowLuma |
 | [relogin_bot](./relogin_bot/README.md) | `pallas-plugin-protocol` | 重新上号 |

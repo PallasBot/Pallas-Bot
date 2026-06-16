@@ -75,6 +75,7 @@ Pallas 已有：`local/plugins/`、[site-customization-and-updates.md](site-cust
 | 插件 | 说明 |
 | --- | --- |
 | `repeater` | 核心接话；牛格全部接入点 |
+| `llm_chat` | 随时 @ 智能闲聊（`features/llm` 用户入口） |
 | `help`、`pallas_webui`、`pallas_protocol` | 系统 |
 | `request_handler`、`blacklist` | 系统 |
 | `platform/ingress/gate`、`platform/ai_callback`、`platform/multi_bot/bot_filter` | 内核（原 ingress_gate / callback / block） |

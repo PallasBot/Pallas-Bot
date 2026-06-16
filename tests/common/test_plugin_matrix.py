@@ -11,6 +11,7 @@ from src.platform.bot_runtime.plugin_matrix import (
 
 def test_core_plugins_include_repeater_and_help():
     assert "repeater" in CORE_PLUGIN_NAMES
+    assert "llm_chat" in CORE_PLUGIN_NAMES
     assert "help" in CORE_PLUGIN_NAMES
     assert "pallas_webui" in CORE_PLUGIN_NAMES
     assert "drink" in CORE_PLUGIN_NAMES
@@ -29,6 +30,7 @@ def test_extra_plugins_include_duel_and_maa():
 
 
 def test_core_excludes_migrated_plugins():
+    assert "llm_chat" not in EXTRA_PLUGIN_NAMES
     assert "pallas_protocol" not in CORE_PLUGIN_NAMES
     assert "relogin_bot" not in CORE_PLUGIN_NAMES
     assert "block" not in CORE_PLUGIN_NAMES
@@ -53,6 +55,7 @@ def test_extra_package_mapping():
 
 def test_should_load_bundled_plugin_slim_mode():
     assert should_load_bundled_plugin("repeater", load_bundled_extra=False) is True
+    assert should_load_bundled_plugin("llm_chat", load_bundled_extra=False) is True
     assert should_load_bundled_plugin("duel", load_bundled_extra=False) is False
     assert should_load_bundled_plugin("duel", load_bundled_extra=True) is True
     assert should_load_bundled_plugin("pallas_protocol", load_bundled_extra=False) is False

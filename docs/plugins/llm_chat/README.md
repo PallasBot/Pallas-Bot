@@ -1,8 +1,6 @@
 # llm_chat（随时闲聊）
 
-> **官方扩展**：`pallas-plugin-llm-chat`（`uv sync --extra plugins-llm-chat`）
-
-群内 @牛牛 多轮智能对话；需部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 并在控制台开启智能对话。
+群内 @牛牛 多轮智能对话；需部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 并在控制台开启智能对话（`LLM_CHAT_ENABLED`）。
 
 模型与人设由部署者在服务端配置，**不提供**群内更换模型或卸载模型的口令。
 

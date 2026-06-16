@@ -14,6 +14,7 @@ CORE_PLUGIN_NAMES: frozenset[str] = frozenset({
     "greeting",
     "roulette",
     "take_name",
+    "llm_chat",
 })
 
 SHARD_INTERNAL_PLUGIN_NAMES: frozenset[str] = frozenset({
@@ -34,7 +35,6 @@ EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
     "sing": "pallas-plugin-ai-media",
     "chat": "pallas-plugin-ai-media",
     "community_stats": "pallas-plugin-community-stats",
-    "llm_chat": "pallas-plugin-llm-chat",
     "bot_status": "pallas-plugin-bot-status",
 }
 
@@ -51,7 +51,6 @@ EXTRA_PACKAGE_MODULES: dict[str, tuple[str, ...]] = {
     "pallas-plugin-draw": ("pallas_plugin_draw",),
     "pallas-plugin-ai-media": ("pallas_plugin_sing", "pallas_plugin_chat"),
     "pallas-plugin-community-stats": ("pallas_plugin_community_stats",),
-    "pallas-plugin-llm-chat": ("pallas_plugin_llm_chat",),
     "pallas-plugin-bot-status": ("pallas_plugin_bot_status",),
 }
 
@@ -66,7 +65,6 @@ EXTRA_PACKAGE_PRIORITY: dict[str, str] = {
     "pallas-plugin-draw": "P1",
     "pallas-plugin-ai-media": "P1",
     "pallas-plugin-community-stats": "P2",
-    "pallas-plugin-llm-chat": "P2",
     "pallas-plugin-bot-status": "P2",
 }
 
@@ -79,7 +77,6 @@ OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
     "pallas-plugin-draw": "https://github.com/TogetsuDo/pallas-plugin-draw",
     "pallas-plugin-ai-media": "https://github.com/TogetsuDo/pallas-plugin-ai-media",
     "pallas-plugin-community-stats": "https://github.com/TogetsuDo/pallas-plugin-community-stats",
-    "pallas-plugin-llm-chat": "https://github.com/TogetsuDo/pallas-plugin-llm-chat",
 }
 
 _PROTOCOL_MODULE_NAMES: frozenset[str] = frozenset({

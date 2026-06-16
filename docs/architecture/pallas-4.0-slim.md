@@ -67,6 +67,7 @@ flowchart LR
 | 插件 | 类别 |
 | --- | --- |
 | `repeater` | 核心接话（牛格由 persona 分支交付） |
+| `llm_chat` | 随时 @ 智能闲聊（`features/llm` 用户入口） |
 | `help` | 帮助与插件发现 |
 | `pallas_webui` | 控制台 API |
 | `request_handler` | 审批 |
