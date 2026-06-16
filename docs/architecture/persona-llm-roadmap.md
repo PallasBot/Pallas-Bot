@@ -55,8 +55,8 @@ repeater fallback / polish            # 骨架已实现，默认关（LLM_FALLBA
 | 环境变量 | 默认 | 说明 |
 | --- | --- | --- |
 | `LLM_CHAT_ENABLED` | `false` | LLM 闲聊与接话 LLM **总闸** |
-| `LLM_FALLBACK_ENABLED` | `false` | repeater 语料 miss 时异步生成 |
-| `LLM_POLISH_ENABLED` | `false` | repeater 命中语料时异步轻改写 |
+| `LLM_REPEATER_MODE` | `off` | repeater 接话 LLM：`off` / `fallback` / `polish` / `both` |
+| `LLM_FALLBACK_ENABLED` / `LLM_POLISH_ENABLED` | `false` | **遗留**，未设 `LLM_REPEATER_MODE` 时仍可读 |
 | `AI_SERVER_HOST` / `AI_SERVER_PORT` | `127.0.0.1:9099` | Pallas-Bot-AI 地址 |
 | `LLM_GOVERNANCE_ENABLED` | `false` | 闲聊 CD / 并发 / 字符预算 |
 | `LLM_SESSION_ENABLED` | `false` | 多轮会话存储 |
@@ -170,7 +170,7 @@ flowchart TB
 - [x] 群风格 dirty 刷新 + `style_profile` 写库
 - [x] `resolve_persona` 合并群画像；`chaos_bias` 参与选句
 - [x] `compile_group_style_snapshot` / `compile_group_style_prompt` 契约稳定
-- [ ] WebUI 只读展示 `style_profile`（可与 P7 合并）
+- [x] WebUI 只读展示 `style_profile`（群配置弹窗 + `style_profile_snapshot`）
 
 ### LLM 基础设施（P1–P4）
 

@@ -43,7 +43,7 @@ def test_list_webui_env_sections_contains_llm_section():
     data = webui_env_section_payload("llm")
     env_keys = {f["env_key"] for f in data["fields"]}
     assert "LLM_CHAT_ENABLED" in env_keys
-    assert "LLM_POLISH_ENABLED" in env_keys
+    assert "LLM_REPEATER_MODE" in env_keys
 
 
 def test_list_webui_env_sections_contains_ingress_dispatch():

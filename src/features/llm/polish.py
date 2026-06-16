@@ -11,7 +11,7 @@ from ulid import ULID
 from src.features.llm.client import submit_chat_task
 from src.features.llm.config import get_llm_config
 from src.features.llm.models import ChatSubmitRequest
-from src.features.persona.compile_persona_prompt import compile_persona_prompt_for
+from src.features.llm.persona_context import build_persona_llm_context
 from src.foundation.config import TaskManager
 
 if TYPE_CHECKING:
@@ -87,7 +87,13 @@ async def maybe_submit_repeater_llm_polish(
     session_id = f"repeater_pl_{bot_id}_{group_id}_{user_id}"
 
     try:
-        bundle = await compile_persona_prompt_for(bot_id, group_id, mode="normal")
+        bundle, temperature, token_count = await build_persona_llm_context(
+            bot_id,
+            group_id,
+            candidate,
+            mode="normal",
+            purpose="polish",
+        )
         system_prompt = bundle.system.strip()
     except Exception:
         logger.exception("repeater llm polish compile_persona_prompt failed group={}", group_id)
@@ -117,7 +123,9 @@ async def maybe_submit_repeater_llm_polish(
             group_id=group_id,
             user_id=user_id,
             mode="normal",
-            token_count=120,
+            task="repeater_polish",
+            token_count=token_count,
+            temperature=temperature,
         ),
         cfg=cfg,
     )

@@ -82,9 +82,21 @@ def install_llm_startup_probe() -> None:
         if result.get("ok"):
             body = result.get("body")
             version = ""
+            provider_mode = ""
             if isinstance(body, dict):
                 version = str(body.get("version") or body.get("api_version") or "").strip()
-            if version:
+                llm_info = body.get("llm")
+                if isinstance(llm_info, dict):
+                    provider_mode = str(llm_info.get("provider_mode") or "").strip()
+            if version and provider_mode:
+                logger.info(
+                    "llm: AI 服务可达 {} version={} provider={} switches={}",
+                    url,
+                    version,
+                    provider_mode,
+                    flag_text,
+                )
+            elif version:
                 logger.info("llm: AI 服务可达 {} version={} switches={}", url, version, flag_text)
             else:
                 logger.info("llm: AI 服务可达 {} switches={}", url, flag_text)

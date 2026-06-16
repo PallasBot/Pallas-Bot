@@ -27,7 +27,7 @@ async def test_submit_chat_task_legacy_payload(monkeypatch: pytest.MonkeyPatch) 
         ai_server_host="127.0.0.1",
         ai_server_port=9099,
         llm_chat_enabled=True,
-        legacy_chat_endpoint="/api/ollama/chat",
+        legacy_chat_endpoint="/api/llm/chat",
         use_unified_chat_api=False,
     )
     result = await submit_chat_task(
@@ -44,7 +44,7 @@ async def test_submit_chat_task_legacy_payload(monkeypatch: pytest.MonkeyPatch) 
     )
     assert result.ok is True
     assert result.task_id == "task-1"
-    assert captured["url"] == "http://127.0.0.1:9099/api/ollama/chat/req-1"
+    assert captured["url"] == "http://127.0.0.1:9099/api/llm/chat/req-1"
     assert captured["json"]["session"] == "sess-1"
     assert captured["json"]["system_prompt"] == "system"
     assert captured["json"]["text"].startswith("【用户消息")
@@ -87,6 +87,7 @@ async def test_submit_chat_task_unified_payload(monkeypatch: pytest.MonkeyPatch)
     assert payload["session_id"] == "sess-u1"
     assert payload["system"] == "system"
     assert payload["metadata"]["mode"] == "drunk"
+    assert payload["metadata"]["task"] == "drunk"
     assert payload["metadata"]["token_count"] == 50
     assert payload["messages"][-1]["content"].startswith("【用户消息")
 

@@ -76,8 +76,16 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
             "pg_session": use_pg_session,
             "mode": str(request.mode or "normal"),
         }
+        if request.task:
+            metadata["task"] = str(request.task).strip().lower()
+        elif str(request.mode or "normal").strip().lower() == "drunk":
+            metadata["task"] = "drunk"
+        else:
+            metadata["task"] = "llm_chat"
         if request.token_count is not None:
             metadata["token_count"] = int(request.token_count)
+        if request.temperature is not None:
+            metadata["temperature"] = float(request.temperature)
         payload = {
             "session_id": request.session_id if not use_pg_session else request.request_id,
             "model": request.model,
@@ -137,7 +145,7 @@ async def delete_llm_chat_session(session_id: str, *, cfg: LlmConfig | None = No
     if c.use_unified_chat_api:
         url = f"{base}{c.unified_del_session_endpoint}/{session_id}"
     else:
-        url = f"{base}/api/ollama/del_session/{session_id}"
+        url = f"{base}{c.legacy_del_session_endpoint}/{session_id}"
     try:
         response = await HTTPXClient.delete(url, timeout=c.chat_timeout_sec)
     except Exception:

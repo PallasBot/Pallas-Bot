@@ -43,22 +43,22 @@ class Config(BaseModel, extra="ignore"):
         ),
     )
     llm_model_unload_endpoint: str = Field(
-        default="/api/ollama/unload",
+        default="/api/llm/unload",
         validation_alias=AliasChoices("llm_model_unload_endpoint", "ollama_unload_endpoint"),
         description="已弃用：模型管理仍走 AI 仓 legacy 路径。",
     )
     llm_model_endpoint: str = Field(
-        default="/api/ollama/model",
+        default="/api/llm/model",
         validation_alias=AliasChoices("llm_model_endpoint", "ollama_model_endpoint"),
         description="已弃用：模型管理仍走 AI 仓 legacy 路径。",
     )
     llm_chat_endpoint: str = Field(
-        default="/api/ollama/chat",
+        default="/api/llm/chat",
         validation_alias=AliasChoices("llm_chat_endpoint", "ollama_chat_endpoint"),
         description="已弃用：默认走 /api/v1/chat/completions。",
     )
     llm_del_session_endpoint: str = Field(
-        default="/api/ollama/del_session",
+        default="/api/llm/del_session",
         validation_alias=AliasChoices("llm_del_session_endpoint", "ollama_del_session_endpoint"),
         description="已弃用：默认走统一 LLM delete session。",
     )

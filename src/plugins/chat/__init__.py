@@ -20,7 +20,7 @@ from src.features.llm import (
     is_llm_chat_service_enabled,
     submit_chat_task,
 )
-from src.features.persona.compile_persona_prompt import compile_persona_prompt_for
+from src.features.llm.persona_context import build_persona_llm_context
 from src.foundation.config import BotConfig, GroupConfig, TaskManager
 
 from .config import Config, get_chat_config, plugin_config
@@ -109,7 +109,13 @@ async def _(bot: Bot, event: GroupMessageEvent):
     user_id = int(event.user_id)
     session = f"{event.self_id}_{group_id}"
     try:
-        bundle = await compile_persona_prompt_for(int(bot.self_id), group_id, mode="drunk")
+        bundle, temperature, token_count = await build_persona_llm_context(
+            int(bot.self_id),
+            group_id,
+            text,
+            mode="drunk",
+            purpose="chat",
+        )
         system_prompt = bundle.system.strip()
     except Exception:
         logger.exception("compile_persona_prompt drunk mode failed")
@@ -139,7 +145,9 @@ async def _(bot: Bot, event: GroupMessageEvent):
             group_id=group_id,
             user_id=user_id,
             mode="drunk",
-            token_count=50,
+            task="drunk",
+            token_count=token_count,
+            temperature=temperature,
         ),
         cfg=get_llm_config(),
     )

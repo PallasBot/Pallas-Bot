@@ -61,16 +61,21 @@ async def test_maybe_submit_repeater_llm_polish_queues_task(monkeypatch: pytest.
             PersonaPromptSections,
         )
 
-        return PersonaPromptBundle(
-            system="system",
-            metadata=PersonaPromptMetadata(bot_id=300, group_id=100, persona={}, group_style={}),
-            sections=PersonaPromptSections(base="system", bot_behavior="", group_style=""),
+        return (
+            PersonaPromptBundle(
+                system="system",
+                metadata=PersonaPromptMetadata(bot_id=300, group_id=100, persona={}, group_style={}),
+                sections=PersonaPromptSections(base="system", bot_behavior="", group_style=""),
+            ),
+            0.6,
+            96,
         )
 
     monkeypatch.setattr(
-        "src.features.llm.polish.compile_persona_prompt_for",
+        "src.features.llm.polish.build_persona_llm_context",
         fake_compile,
     )
+
     async def fake_style_suffix(bot_id, group_id):
         return ""
 

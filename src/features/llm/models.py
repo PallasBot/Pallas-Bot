@@ -14,6 +14,8 @@ class ChatSubmitRequest(BaseModel):
     user_id: int | None = None
     mode: str = "normal"
     token_count: int | None = None
+    temperature: float | None = None
+    task: str | None = None
 
 
 class ChatSubmitResult(BaseModel):

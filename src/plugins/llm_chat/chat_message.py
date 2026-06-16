@@ -9,8 +9,8 @@ from src.features.cmd_perm import group_message_permission_for_command
 from src.features.llm import ChatSubmitRequest, is_llm_chat_service_enabled, submit_chat_task
 from src.features.llm.config import LlmConfig, get_llm_config
 from src.features.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
+from src.features.llm.persona_context import build_persona_llm_context
 from src.features.llm.session_store import append_llm_message
-from src.features.persona.compile_persona_prompt import compile_persona_prompt_for
 from src.foundation.config import TaskManager
 
 from .config import Config, get_llm_chat_config
@@ -64,9 +64,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
     group_id = int(raw_group_id) if raw_group_id is not None else None
     user_id = int(getattr(event, "user_id", 0) or 0)
     try:
-        bundle = await compile_persona_prompt_for(
+        bundle, temperature, token_count = await build_persona_llm_context(
             int(bot.self_id),
             group_id,
+            plain or msg,
+            mode="normal",
+            purpose="chat",
             base_system_path=cfg.llm_chat_system_prompt_path or None,
         )
         system_prompt = bundle.system.strip()
@@ -107,6 +110,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
             bot_id=int(bot.self_id),
             group_id=group_id,
             user_id=user_id,
+            task="llm_chat",
+            token_count=token_count,
+            temperature=temperature,
         ),
         cfg=llm_cfg,
     )

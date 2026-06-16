@@ -10,7 +10,7 @@ from src.foundation.config.repo_settings import repo_root
 from src.foundation.db import make_group_config_repository
 
 from .compile_group_style import compile_group_style_prompt, compile_group_style_snapshot
-from .loader import resolve_persona
+from .loader import resolve_persona, resolve_persona_for_message
 from .prompt_guard import (
     ALLOWED_LENGTH_PREFS,
     ALLOWED_TONES,
@@ -188,13 +188,18 @@ async def compile_persona_prompt_for(
     bot_id: int,
     group_id: int | None = None,
     *,
+    plain_text: str | None = None,
     base_system: str | None = None,
     base_system_path: str | None = None,
     mode: str = "normal",
 ) -> PersonaPromptBundle:
     bid = int(bot_id)
     gid = int(group_id) if group_id is not None else None
-    persona = await resolve_persona(bid, gid)
+    message_text = (plain_text or "").strip()
+    if gid is not None and message_text:
+        persona = await resolve_persona_for_message(bid, gid, message_text)
+    else:
+        persona = await resolve_persona(bid, gid)
     style_profile: dict[str, Any] | None = None
     if gid is not None:
         group_config = await make_group_config_repository().get(gid)
