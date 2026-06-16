@@ -64,9 +64,10 @@ deploy-shard-pg = [
 plugins-duel = ["pallas-plugin-duel>=4.0.0"]
 plugins-who-is-spy = ["pallas-plugin-who-is-spy>=4.0.0"]
 plugins-maa = ["pallas-plugin-maa>=4.0.0"]
-plugins-protocol = []
+plugins-protocol = ["pallas-plugin-protocol>=4.0.0"]
 plugins-game = ["pallas-plugin-duel>=4.0.0", "pallas-plugin-who-is-spy>=4.0.0"]
 deploy-full = [
+    "pallas-plugin-protocol>=4.0.0",
     "pallas-plugin-duel>=4.0.0",
     "pallas-plugin-maa>=4.0.0",
     "pallas-plugin-who-is-spy>=4.0.0",
@@ -83,6 +84,7 @@ plugins-ollama = []
 pallas-plugin-duel = { git = "https://github.com/TogetsuDo/pallas-plugin-duel.git", rev = "main" }
 pallas-plugin-maa = { git = "https://github.com/TogetsuDo/pallas-plugin-maa.git", rev = "main" }
 pallas-plugin-who-is-spy = { git = "https://github.com/TogetsuDo/pallas-plugin-who-is-spy.git", rev = "main" }
+pallas-plugin-protocol = { git = "https://github.com/TogetsuDo/pallas-plugin-protocol.git", rev = "main" }
 
 [dependency-groups]
 dev = [

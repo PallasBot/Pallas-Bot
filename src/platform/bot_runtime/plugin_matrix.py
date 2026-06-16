@@ -85,6 +85,7 @@ EXTRA_PACKAGE_PRIORITY: dict[str, str] = {
 
 # 已迁出独立仓的官方扩展（pip 包名 → 仓库根 URL）
 OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
+    "pallas-plugin-protocol": "https://github.com/TogetsuDo/pallas-plugin-protocol",
     "pallas-plugin-duel": "https://github.com/TogetsuDo/pallas-plugin-duel",
     "pallas-plugin-maa": "https://github.com/TogetsuDo/pallas-plugin-maa",
     "pallas-plugin-who-is-spy": "https://github.com/TogetsuDo/pallas-plugin-who-is-spy",

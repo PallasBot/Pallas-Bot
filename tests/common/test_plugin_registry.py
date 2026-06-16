@@ -31,6 +31,7 @@ def test_build_official_extension_rows_marks_bundled_duel():
 def test_build_official_extension_rows_p0_repo_urls():
     rows = build_official_extension_rows()
     by_pkg = {r["package"]: r["repository_url"] for r in rows}
+    assert by_pkg["pallas-plugin-protocol"] == "https://github.com/TogetsuDo/pallas-plugin-protocol"
     assert by_pkg["pallas-plugin-maa"] == "https://github.com/TogetsuDo/pallas-plugin-maa"
     assert by_pkg["pallas-plugin-who-is-spy"] == "https://github.com/TogetsuDo/pallas-plugin-who-is-spy"
     assert by_pkg.get("pallas-plugin-draw") is None
