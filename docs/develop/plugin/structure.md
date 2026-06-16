@@ -33,8 +33,8 @@ my_plugin/
 
 | 类型 | 位置 | 访问方式 |
 | --- | --- | --- |
-| 运行期数据 | `data/<plugin_name>/...` | `plugin_data_dir("my_plugin")` |
-| 群/用户/牛结构化状态 | `GroupConfig` 等文档内 `plugin_storage` JSON | `GroupPluginStorage("my_plugin", group_id)` |
+| 群/用户/牛/部署级结构化状态 | `GroupConfig` 等文档内 `plugin_storage` JSON | `GroupPluginStorage("my_plugin", group_id)` + `extra["plugin_storage"]` 声明 |
+| 大文件、导出、缓存、非结构化文件 | `data/<plugin_name>/...` | `plugin_data_dir("my_plugin")` |
 | 静态资源 | `resource/...` | `resource_dir("subdir")` |
 
 使用 `src.foundation.paths` 提供的 helper，**不要**硬编码相对路径字符串。
@@ -60,11 +60,15 @@ await store.set("my_state", {"n": 1})
 - `ephemeral=True`：仅进程内缓存，重启丢失（如决斗局内态）
 - 持久化数据写入对应配置文档的 `plugin_storage.<plugin>.<key>`
 
+跟做示例：[Cookbook · 牛牛赞我 §3–§4](cookbook.md#3数据落盘按群计数)。
+
 示例（仓库内）：
 
-- `greeting`：`plugin_data_dir("greeting")`、`resource_dir("voices")`
-- `help`：`plugin_data_dir("help")`、样式在 `resource/styles/`
-- `request_handler`：申请缓存在 `data/request_handler/`
+- `duel`：`GroupPluginStorage` + `extra["plugin_storage"]`（局内 ephemeral 键）
+- `help` / `draw`：deploy 级 `plugin_storage` 声明
+- `greeting`：`plugin_data_dir("greeting")` 存欢迎图文；`resource_dir("voices")` 读语音
+- `help`：`plugin_data_dir("help")` 帮助图渲染缓存；样式在 `resource/styles/`
+- `request_handler`：申请缓存在 `data/request_handler/`（历史 JSON，改到再迁）
 
 ## 命名
 

@@ -46,8 +46,8 @@ extra_plugin_dirs = ["local/plugins"]
 local/plugins/praise_me/
 ├── __init__.py      # PluginMetadata + 注册 Matcher（保持短）
 ├── config.py        # Pydantic + WebUI 热重载
-├── store.py         # 读写 data/praise_me/ 下的 JSON（纯函数，便于测）
-└── handlers.py      # 三个命令的处理逻辑
+├── store.py         # 群级点赞计数（GroupPluginStorage + 纯函数，便于测）
+└── handlers.py      # 命令处理逻辑
 ```
 
 在仓库根执行：
@@ -95,34 +95,32 @@ get_config = plugin_webui.get
 
 ## 3、数据落盘（按群计数）
 
-点赞数按 **群** 存 JSON，路径用 `plugin_data_dir`，不要手写 `data/` 字符串。
+群级结构化状态优先走 **声明式 `plugin_storage` + `GroupPluginStorage`**（写入 `GroupConfig` 文档的 `plugin_storage` 字段，与 help / duel 等同源）。  
+**不要**再为这种小 JSON 手写 `data/<plugin>/groups/*.json`；`plugin_data_dir` 留给图片、导出、缓存等大文件（见 [插件结构 · 路径与持久化](structure.md)）。
+
+在 `store.py` 封装读写；纯函数 `add_praise` / `top_praisers` 便于单测：
 
 ```python
 # local/plugins/praise_me/store.py
 from __future__ import annotations
 
-import json
-from pathlib import Path
+from src.features.plugin_storage import GroupPluginStorage
 
-from src.foundation.paths import plugin_data_dir
-
-
-def counts_path(group_id: int) -> Path:
-    return plugin_data_dir("praise_me") / "groups" / f"{group_id}.json"
+PLUGIN_NAME = "praise_me"
+COUNTS_KEY = "praise_counts"
 
 
-def load_counts(group_id: int) -> dict[str, int]:
-    path = counts_path(group_id)
-    if not path.is_file():
+async def load_counts(group_id: int) -> dict[str, int]:
+    store = GroupPluginStorage(PLUGIN_NAME, group_id)
+    raw = await store.get(COUNTS_KEY)
+    if not isinstance(raw, dict):
         return {}
-    raw = json.loads(path.read_text(encoding="utf-8"))
     return {str(k): int(v) for k, v in raw.items()}
 
 
-def save_counts(group_id: int, counts: dict[str, int]) -> None:
-    path = counts_path(group_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(counts, ensure_ascii=False, indent=2), encoding="utf-8")
+async def save_counts(group_id: int, counts: dict[str, int]) -> None:
+    store = GroupPluginStorage(PLUGIN_NAME, group_id)
+    await store.set(COUNTS_KEY, counts)
 
 
 def add_praise(counts: dict[str, int], user_id: str) -> int:
@@ -135,7 +133,10 @@ def top_praisers(counts: dict[str, int], limit: int = 5) -> list[tuple[str, int]
     return pairs[:limit]
 ```
 
-文件会落在 `data/praise_me/groups/<群号>.json`，备份时整目录拷走即可。
+要点：
+
+- 存储键名 **`praise_counts`** 须在 `__init__.py` 的 `extra["plugin_storage"]` 声明（下一节一并写入）；未声明键在运行时会报 `PluginStorageKeyError`。
+- 备份/迁移时随群配置走库；WebUI **插件能力** API 可看到已声明的 storage keys。
 
 ---
 
@@ -163,6 +164,7 @@ from src.features.plugin_sdk import (
     command_perm_row,
     group_command,
 )
+from src.features.plugin_storage import plugin_storage_list, plugin_storage_row
 
 from .handlers import handle_praise, handle_rank
 
@@ -185,6 +187,9 @@ __plugin_meta__ = PluginMetadata(
         ),
         "command_limits": command_limit_list(
             command_limit_row("praise_me.praise", 0),
+        ),
+        "plugin_storage": plugin_storage_list(
+            plugin_storage_row("praise_counts", scope="group", label="群内点赞计数"),
         ),
         "menu_data": [
             {
@@ -254,9 +259,9 @@ async def handle_praise(ctx: PluginHandlerContext) -> None:
     if gid is None:
         return
     uid = ctx.user_id
-    counts = load_counts(gid)
+    counts = await load_counts(gid)
     total = add_praise(counts, uid)
-    save_counts(gid, counts)
+    await save_counts(gid, counts)
 
     await ctx.finish(cfg.praise_reply.format(total=total))
 
@@ -270,7 +275,7 @@ async def handle_rank(ctx: PluginHandlerContext) -> None:
     if gid is None:
         return
     uid = ctx.user_id
-    counts = load_counts(gid)
+    counts = await load_counts(gid)
     mine = counts.get(uid, 0)
     top = top_praisers(counts, limit=5)
 
@@ -284,7 +289,8 @@ async def handle_rank(ctx: PluginHandlerContext) -> None:
 
 说明：
 
-- **冷却**：`is_command_cooldown_ready` / `refresh_command_cooldown` 的 key 为 `cmd_limit:{command_id}`，与 [command_limits](../../common/command_limits/README.md) 一致。
+- **存储**：`GroupPluginStorage` 读写须在 metadata 声明键；与 [command_limits](../../common/command_limits/README.md) 一样纳入能力总览。
+- **冷却**：`is_command_cooldown_ready` / `refresh_command_cooldown` 的 key 为 `cmd_limit:{command_id}`。
 - 配置里的 `praise_cd_sec` 为 0 时不做 CD 检查。
 - 本插件只读用户口令，不接 [message_scrub](../../common/message_scrub/README.md)；复读/做梦类才需要。
 
@@ -309,7 +315,7 @@ async def handle_rank(ctx: PluginHandlerContext) -> None:
 
 ## 7、测试
 
-纯函数 `store.py` 最适合单测，不必每次起真 Bot。
+`store.py` 里的纯函数最适合单测，不必每次起真 Bot；`GroupPluginStorage` 集成测法见 `tests/features/test_plugin_storage.py`。
 
 在 `tests/plugins/praise_me/test_store.py`（贡献主仓时）：
 
@@ -387,9 +393,10 @@ uv run pytest tests/plugins/praise_me/
 - [ ] `__init__.py` 短；`config` / `store` / `handlers` 已拆分
 - [ ] WebUI 热重载；handler 内 `get_config()`
 - [ ] 命令 ID 与 cmd_perm、matcher、`command_limits` 一致
+- [ ] 群/用户结构化状态：`extra["plugin_storage"]` + `GroupPluginStorage`（Cookbook §3–§4）
 - [ ] `usage` / `trigger_condition` 无写死权限句
-- [ ] 路径用 `plugin_data_dir`
-- [ ] 有最小单测（至少 `store`）
+- [ ] 大文件/缓存才用 `plugin_data_dir` / `resource_dir`
+- [ ] 有最小单测（至少 `store` 纯函数）
 - [ ] `docs/plugins/praise_me/README.md` 已写
 
 提交流程：[贡献与提交流程](../workflow.md)。
@@ -403,7 +410,7 @@ uv run pytest tests/plugins/praise_me/
 | 方向 | 提示 |
 | --- | --- |
 | 私聊查赞 | 再加 `on_command` + `private_message_permission_for_command` |
-| 全服榜 | 用 `src.foundation.db` 做持久化，或汇总多群 JSON |
+| 全服榜 | 用 `src.foundation.db` 做持久化，或 deploy 级 `plugin_storage` |
 | 帮助图样式 | 保持 `menu_data` 与 metadata 同步即可 |
 | 贡献主仓 | 挪到 `src/plugins/praise_me/`，PR 附测试与插件文档 |
 | 官方扩展包 | 4.0 玩法类可走扩展仓 + `uv sync --extra plugins-*` |

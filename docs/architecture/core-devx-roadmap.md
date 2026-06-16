@@ -271,9 +271,9 @@ src/plugins/pb_core/
 
 ## P4 · 存储统一
 
-- Cookbook 默认改为 `plugin_storage` + `GroupPluginStorage`
-- `plugin_data_dir` 仅用于大文件、导出、缓存
-- `docs/develop/plugin/structure.md` 与 Cookbook 同步
+- [x] Cookbook 默认改为 `plugin_storage` + `GroupPluginStorage`
+- [x] `docs/develop/plugin/structure.md` 与 Cookbook 同步
+- `plugin_data_dir` 仅用于大文件、导出、缓存（文档已区分；legacy 插件渐进迁移）
 
 ---
 
