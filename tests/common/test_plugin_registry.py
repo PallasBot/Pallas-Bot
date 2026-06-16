@@ -2,23 +2,21 @@ from src.console.webui.plugin_registry import (
     build_official_extension_rows,
     official_extension_for_plugin,
 )
-from src.platform.bot_runtime.plugin_matrix import uv_extra_for_package, uv_extra_for_plugin
+from src.platform.bot_runtime.plugin_matrix import uv_extra_for_plugin
 
 
 def test_uv_extra_for_plugin_duel():
     assert uv_extra_for_plugin("duel") == "plugins-duel"
-    assert uv_extra_for_package("pallas-plugin-party") == "plugins-party"
 
 
-def test_build_official_extension_rows_groups_party():
+def test_build_official_extension_rows_excludes_core_social_party():
     rows = build_official_extension_rows()
-    party = next(r for r in rows if r["package"] == "pallas-plugin-party")
-    assert set(party["plugin_ids"]) == {"roulette"}
-    assert party["uv_extra"] == "plugins-party"
-    assert party["install_cli"] == "uv sync --extra plugins-party"
-    assert party["webui_install"] is True
-    assert isinstance(party["can_install"], bool)
-    assert isinstance(party["restart_available"], bool)
+    packages = {r["package"] for r in rows}
+    assert "pallas-plugin-party" not in packages
+    assert "pallas-plugin-social" not in packages
+    assert official_extension_for_plugin("roulette") is None
+    assert official_extension_for_plugin("greeting") is None
+    assert official_extension_for_plugin("take_name") is None
 
 
 def test_build_official_extension_rows_marks_bundled_duel():
@@ -38,7 +36,6 @@ def test_build_official_extension_rows_p0_repo_urls():
     assert by_pkg["pallas-plugin-who-is-spy"] == "https://github.com/TogetsuDo/pallas-plugin-who-is-spy"
     assert by_pkg.get("pallas-plugin-draw") == "https://github.com/TogetsuDo/pallas-plugin-draw"
     assert by_pkg.get("pallas-plugin-dream") == "https://github.com/TogetsuDo/pallas-plugin-dream"
-    assert by_pkg.get("pallas-plugin-social") == "https://github.com/TogetsuDo/pallas-plugin-social"
     assert by_pkg.get("pallas-plugin-llm-chat") == "https://github.com/TogetsuDo/pallas-plugin-llm-chat"
 
 

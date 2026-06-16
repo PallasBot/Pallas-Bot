@@ -1,7 +1,6 @@
 from src.platform.bot_runtime.plugin_matrix import (
     CORE_PLUGIN_NAMES,
     EXTRA_PLUGIN_NAMES,
-    EXTRA_PLUGIN_PACKAGES,
     extra_package_for_plugin,
     is_core_plugin,
     is_extra_plugin,
@@ -15,6 +14,9 @@ def test_core_plugins_include_repeater_and_help():
     assert "help" in CORE_PLUGIN_NAMES
     assert "pallas_webui" in CORE_PLUGIN_NAMES
     assert "drink" in CORE_PLUGIN_NAMES
+    assert "greeting" in CORE_PLUGIN_NAMES
+    assert "roulette" in CORE_PLUGIN_NAMES
+    assert "take_name" in CORE_PLUGIN_NAMES
 
 
 def test_extra_plugins_include_duel_and_maa():
@@ -33,7 +35,7 @@ def test_core_excludes_migrated_plugins():
     assert "callback" not in CORE_PLUGIN_NAMES
     assert "ingress_gate" not in CORE_PLUGIN_NAMES
     assert "bot_status" not in CORE_PLUGIN_NAMES
-    assert "roulette" not in CORE_PLUGIN_NAMES
+    assert "duel" not in CORE_PLUGIN_NAMES
     assert "pallas_webui" in CORE_PLUGIN_NAMES
 
 

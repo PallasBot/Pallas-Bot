@@ -73,6 +73,9 @@ flowchart LR
 | `blacklist` | 用户/群拉黑 |
 | `connectivity` | 轻量探针 |
 | `drink` | 饮酒/醒酒口令（状态在 `BotConfig`） |
+| `greeting` | 入群/好友欢迎 |
+| `roulette` | 轮盘玩法 |
+| `take_name` | 自动夺舍（群名片） |
 
 **已内核化（非 `src/plugins/` 插件）**：`platform/ingress/gate`（原 `ingress_gate`）、`platform/multi_bot/bot_filter`（原 `block`）、`platform/ai_callback`（原 `callback` HTTP + 执行）。
 
@@ -100,11 +103,9 @@ worker 控制台指标已内核化至 `src/platform/shard/worker_console_metrics
 | `duel` | `pallas-plugin-duel` | 玩法 + `domain/arknights` | P0 |
 | `who_is_spy` | `pallas-plugin-who-is-spy` | 玩法 + 协调存储 | P0 |
 | `maa` / `maa_hub` | `pallas-plugin-maa` | 远控、HTTP | P0 |
-| `roulette` | `pallas-plugin-party` | 轻玩法 | P1 |
 | `dream` | `pallas-plugin-dream` | repeater 旁路 | P1 |
 | `draw` | `pallas-plugin-draw` | 图像 API | P1 |
 | `sing` / `chat` | `pallas-plugin-ai-media` | AI 仓媒体 | P1 |
-| `greeting` / `take_name` | `pallas-plugin-social` | 体验 | P2 |
 | `community_stats` | 扩展或保留 core | 上报；产品决策 | P2 |
 
 **留内核、不随插件迁出**：`src/domain/arknights/`、`src/features/*` 公开 API、分片与 ingress。
