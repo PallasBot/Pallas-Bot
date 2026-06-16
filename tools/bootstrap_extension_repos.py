@@ -128,6 +128,41 @@ REPOS: list[dict[str, object]] = [
         },
         "readme_file": "pallas-plugin-ai-media.md",
     },
+    {
+        "dir": "Pallas-Plugin-Social",
+        "pip_name": "pallas-plugin-social",
+        "title": "社交体验",
+        "description": "Pallas-Bot 官方扩展：打招呼与取名。",
+        "uv_extra": "plugins-social",
+        "copies": [
+            ("greeting", "pallas_plugin_greeting"),
+            ("take_name", "pallas_plugin_take_name"),
+        ],
+        "nonebot_plugins": {
+            "pallas-plugin-social": ["pallas_plugin_greeting", "pallas_plugin_take_name"],
+        },
+        "readme_file": "pallas-plugin-social.md",
+    },
+    {
+        "dir": "Pallas-Plugin-Community-Stats",
+        "pip_name": "pallas-plugin-community-stats",
+        "title": "社区统计",
+        "description": "Pallas-Bot 官方扩展：社区统计心跳与语料登记。",
+        "uv_extra": "plugins-community-stats",
+        "copies": [("community_stats", "pallas_plugin_community_stats")],
+        "nonebot_plugins": {"pallas-plugin-community-stats": ["pallas_plugin_community_stats"]},
+        "readme_file": "pallas-plugin-community-stats.md",
+    },
+    {
+        "dir": "Pallas-Plugin-Ollama",
+        "pip_name": "pallas-plugin-ollama",
+        "title": "随时闲聊",
+        "description": "Pallas-Bot 官方扩展：Ollama 多轮闲聊。",
+        "uv_extra": "plugins-ollama",
+        "copies": [("ollama", "pallas_plugin_ollama")],
+        "nonebot_plugins": {"pallas-plugin-ollama": ["pallas_plugin_ollama"]},
+        "readme_file": "pallas-plugin-ollama.md",
+    },
 ]
 
 GITIGNORE = """.venv/

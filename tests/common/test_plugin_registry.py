@@ -36,6 +36,8 @@ def test_build_official_extension_rows_p0_repo_urls():
     assert by_pkg["pallas-plugin-who-is-spy"] == "https://github.com/TogetsuDo/pallas-plugin-who-is-spy"
     assert by_pkg.get("pallas-plugin-draw") == "https://github.com/TogetsuDo/pallas-plugin-draw"
     assert by_pkg.get("pallas-plugin-dream") == "https://github.com/TogetsuDo/pallas-plugin-dream"
+    assert by_pkg.get("pallas-plugin-social") == "https://github.com/TogetsuDo/pallas-plugin-social"
+    assert by_pkg.get("pallas-plugin-ollama") == "https://github.com/TogetsuDo/pallas-plugin-ollama"
 
 
 def test_official_extension_for_plugin():

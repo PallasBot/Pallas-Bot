@@ -93,6 +93,9 @@ OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
     "pallas-plugin-party": "https://github.com/TogetsuDo/pallas-plugin-party",
     "pallas-plugin-draw": "https://github.com/TogetsuDo/pallas-plugin-draw",
     "pallas-plugin-ai-media": "https://github.com/TogetsuDo/pallas-plugin-ai-media",
+    "pallas-plugin-social": "https://github.com/TogetsuDo/pallas-plugin-social",
+    "pallas-plugin-community-stats": "https://github.com/TogetsuDo/pallas-plugin-community-stats",
+    "pallas-plugin-ollama": "https://github.com/TogetsuDo/pallas-plugin-ollama",
 }
 
 _PROTOCOL_MODULE_NAMES: frozenset[str] = frozenset({
@@ -157,6 +160,7 @@ PIP_MODULE_LOAD_ROLE: dict[str, str] = {
     "pallas_plugin_relogin_bot": "hub",
     "pallas_plugin_relogin_forward": "worker",
     "pallas_plugin_maa_hub": "hub",
+    "pallas_plugin_community_stats": "hub",
 }
 
 
