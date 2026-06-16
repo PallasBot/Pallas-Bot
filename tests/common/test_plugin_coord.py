@@ -25,6 +25,8 @@ def test_maa_coord_stub_without_plugin(monkeypatch) -> None:
     cfg = maa.get_maa_config()
     assert cfg.maa_seen_ttl_seconds == 300
     assert maa.normalize_http_path("api/x") == "/api/x"
+    text = maa.format_maa_http_setup_help()
+    assert "尚未安装 MAA 扩展" in text
 
 
 def test_dream_coord_roundtrip_with_plugin() -> None:

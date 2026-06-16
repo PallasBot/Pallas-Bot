@@ -262,9 +262,9 @@ def generate_plugin_functions_markdown(
         markdown_content += f"{description}\n\n"
 
         if target_plugin.name == "maa":
-            from src.plugins.maa.endpoints import format_maa_http_setup_help
+            from src.features.plugin_coord import maa as maa_coord
 
-            maa_http = _wrap_paragraphs_for_help_page(format_maa_http_setup_help())
+            maa_http = _wrap_paragraphs_for_help_page(maa_coord.format_maa_http_setup_help())
             markdown_content += "## MAA 对接地址\n\n"
             markdown_content += f"{maa_http}\n\n"
 
@@ -357,9 +357,9 @@ def generate_function_detail_markdown(plugin_name: str, function_name: str) -> t
         markdown_content += f"## 怎么用\n\n{_wrap_paragraphs_for_help_page(str(detail_des))}\n\n"
 
     if target_plugin.name == "maa" and func_name in {"绑定设备", "绑定 MAA 设备", "MAA HTTP"}:
-        from src.plugins.maa.endpoints import format_maa_http_setup_help
+        from src.features.plugin_coord import maa as maa_coord
 
-        maa_http = _wrap_paragraphs_for_help_page(format_maa_http_setup_help())
+        maa_http = _wrap_paragraphs_for_help_page(maa_coord.format_maa_http_setup_help())
         markdown_content += f"## MAA 对接地址\n\n{maa_http}\n\n"
 
     return markdown_content, HelpMarkdownIssue.OK

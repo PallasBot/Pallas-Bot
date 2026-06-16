@@ -62,3 +62,10 @@ def normalize_http_path(path: str) -> str:
         p = (path or "").strip() or "/"
         return p if p.startswith("/") else f"/{p}"
     return fn(path)
+
+
+def format_maa_http_setup_help() -> str:
+    fn = import_symbol_any(_MAA_ENDPOINTS, "format_maa_http_setup_help")
+    if fn is None:
+        return "尚未安装 MAA 扩展（`uv sync --extra plugins-maa`），无法生成对接地址。"
+    return fn()
