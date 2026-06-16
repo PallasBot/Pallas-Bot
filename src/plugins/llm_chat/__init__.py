@@ -5,7 +5,7 @@ from src.features.cmd_perm.metadata_defaults import (
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
 )
-from src.features.cmd_perm.metadata_text import SCENE_BOTH, SCENE_GROUP, join_usage, usage_line
+from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
 
 __plugin_meta__ = PluginMetadata(
     name="随时闲聊",
@@ -13,8 +13,6 @@ __plugin_meta__ = PluginMetadata(
     usage=join_usage(
         usage_line("群内 @牛牛 + 消息", "与牛牛多轮对话"),
         usage_line("@牛牛 clear", "清空本群当前会话记忆"),
-        usage_line("@牛牛 unload", "卸载当前对话模型（群管）"),
-        usage_line("@牛牛 model [模型名]", "查询或更换模型（超管）"),
     ),
     type="application",
     homepage=PLUGIN_HOMEPAGE,
@@ -27,8 +25,6 @@ __plugin_meta__ = PluginMetadata(
         "command_permissions": [
             {"id": "llm_chat.chat", "label": "随时闲聊", "default": "everyone"},
             {"id": "llm_chat.clear", "label": "清空会话", "default": "everyone"},
-            {"id": "llm_chat.unload", "label": "卸载模型", "default": "staff"},
-            {"id": "llm_chat.set_model", "label": "更换模型", "default": "superuser"},
         ],
         "command_limits": [
             {"id": "llm_chat.chat", "cd_sec": 3},
@@ -51,24 +47,6 @@ __plugin_meta__ = PluginMetadata(
                 "command_permission": "llm_chat.clear",
                 "brief_des": "忘掉本轮聊天里说过的话",
                 "detail_des": "只清对话内容，牛牛该怎么说话的人设仍会保留。",
-            },
-            {
-                "func": "卸载对话模型",
-                "trigger_method": "on_cmd",
-                "trigger_scene": SCENE_GROUP,
-                "trigger_condition": "@牛牛 unload",
-                "command_permission": "llm_chat.unload",
-                "brief_des": "释放智能对话占用的资源",
-                "detail_des": "向智能对话服务请求卸载当前模型；下次对话会重新加载。",
-            },
-            {
-                "func": "更换对话模型",
-                "trigger_method": "on_cmd",
-                "trigger_scene": SCENE_BOTH,
-                "trigger_condition": "@牛牛 model [模型名]",
-                "command_permission": "llm_chat.set_model",
-                "brief_des": "查询或更换对话模型",
-                "detail_des": "不带模型名时返回当前模型；带上名称时会请求切换。",
             },
         ],
     },

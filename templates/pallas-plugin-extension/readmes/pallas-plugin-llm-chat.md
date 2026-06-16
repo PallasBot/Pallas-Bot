@@ -16,10 +16,8 @@ uv sync --extra plugins-llm-chat
 | --- | --- |
 | `llm_chat.chat` | everyone |
 | `llm_chat.clear` | everyone |
-| `llm_chat.unload` | staff |
-| `llm_chat.set_model` | superuser |
 
-遗留 `ollama.*` 命令 ID 仍可读 WebUI 覆盖。
+遗留 `ollama.chat` / `ollama.clear` 命令 ID 仍可读 WebUI 覆盖。
 
 ## 配置
 
@@ -39,7 +37,7 @@ WebUI **插件 → llm_chat** 或 `config/pallas.toml` `[env]`：
 - [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 推理服务
 - Bot 侧 `AI_SERVER_HOST` / `AI_SERVER_PORT`（或插件内 `ai_server_*`）
 
-模型热更换见 [Pallas-Bot-AI 部署文档](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/Deployment.md#ollama-配置参考)。
+模型与推理后端在 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 部署侧配置；Bot 不提供群内热更换模型口令。
 
 ## 文档
 

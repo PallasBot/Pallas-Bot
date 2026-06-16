@@ -42,16 +42,6 @@ class Config(BaseModel, extra="ignore"):
             "群内 @ 闲聊默认 51；卧底述词等优先于 LLM 闲聊",
         ),
     )
-    llm_model_unload_endpoint: str = Field(
-        default="/api/llm/unload",
-        validation_alias=AliasChoices("llm_model_unload_endpoint", "ollama_unload_endpoint"),
-        description="已弃用：模型管理仍走 AI 仓 legacy 路径。",
-    )
-    llm_model_endpoint: str = Field(
-        default="/api/llm/model",
-        validation_alias=AliasChoices("llm_model_endpoint", "ollama_model_endpoint"),
-        description="已弃用：模型管理仍走 AI 仓 legacy 路径。",
-    )
     llm_chat_endpoint: str = Field(
         default="/api/llm/chat",
         validation_alias=AliasChoices("llm_chat_endpoint", "ollama_chat_endpoint"),

@@ -17,8 +17,6 @@ VALID_LEVELS: frozenset[str] = frozenset({
 COMMAND_ID_ALIASES: dict[str, str] = {
     "ollama.chat": "llm_chat.chat",
     "ollama.clear": "llm_chat.clear",
-    "ollama.unload": "llm_chat.unload",
-    "ollama.set_model": "llm_chat.set_model",
 }
 
 
@@ -90,8 +88,6 @@ DEFAULT_COMMAND_PERMISSIONS: dict[str, PermissionLevel] = {
     "duel.reload_events": "group_moderator",
     "llm_chat.chat": "everyone",
     "llm_chat.clear": "everyone",
-    "llm_chat.unload": "staff",
-    "llm_chat.set_model": "superuser",
     "maa.bind": "everyone",
     "maa.control": "everyone",
     "maa.status": "everyone",
