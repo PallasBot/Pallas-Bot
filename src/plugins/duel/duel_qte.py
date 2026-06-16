@@ -12,8 +12,8 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 from nonebot.matcher import Matcher  # noqa: TC002
 from nonebot.rule import Rule
 
+from src.platform.multi_bot.bot_filter import is_fleet_bot_qq
 from src.platform.shard import context as shard_ctx
-from src.plugins.block import is_fleet_bot_qq
 from src.plugins.duel.config import plugin_config
 from src.plugins.duel.duel_message import (
     append_duel_message,

@@ -14,7 +14,7 @@ def test_discover_includes_draw():
     pkgs = discover_plugin_packages()
     assert "draw" in pkgs
     assert "pallas_webui" in pkgs
-    assert "ingress_gate" in pkgs
+    assert "ingress_gate" not in pkgs
 
 
 def test_package_load_role_sharded(monkeypatch):
@@ -26,7 +26,6 @@ def test_package_load_role_sharded(monkeypatch):
     assert package_load_role("draw") == "worker"
     assert package_load_role("ingress_gate") == "worker"
     assert package_load_role("pallas_webui") == "hub"
-    assert package_load_role("callback") == "hub"
 
 
 def test_expected_loaded_in_catalog_hub_vs_worker():
@@ -59,7 +58,7 @@ def test_catalog_hides_shard_only_in_unified(monkeypatch):
     names = {r["name"] for r in rows}
     assert "relogin_forward" not in names
     assert "maa_hub" not in names
-    assert "ingress_gate" in names
+    assert "ingress_gate" not in names
     assert "pallas_console_metrics" not in names
     assert "relogin_bot" in names
     assert "maa" in names
@@ -80,10 +79,7 @@ def test_catalog_shows_shard_only_on_sharded_hub(monkeypatch):
     names = {r["name"] for r in rows}
     assert "relogin_forward" in names
     assert "maa_hub" in names
-    assert "ingress_gate" in names
-    ingress = next(r for r in rows if r["name"] == "ingress_gate")
-    assert ingress["load_role"] == "worker"
-    assert ingress["expected_in_catalog_process"] is False
+    assert "ingress_gate" not in names
 
 
 def test_catalog_lists_worker_plugin(monkeypatch):
@@ -128,9 +124,9 @@ def test_infer_plugin_source_local_dir(tmp_path, monkeypatch) -> None:
 def test_plugin_source_from_core_path() -> None:
     from src.foundation.paths import PROJECT_ROOT
 
-    main_py = PROJECT_ROOT / "src" / "plugins" / "callback" / "handler.py"
-    if main_py.is_file():
-        assert plugin_source_from_module_path(str(main_py)) == "core"
+    main_py = PROJECT_ROOT / "src" / "plugins" / "help" / "__init__.py"
+    assert main_py.is_file()
+    assert plugin_source_from_module_path(str(main_py)) == "core"
 
 
 def test_discover_pyproject_includes_status():

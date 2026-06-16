@@ -17,13 +17,13 @@ def test_load_discovered_plugin_modules_applies_skip_rules(monkeypatch):
     count = plugin_loader._load_discovered_plugin_modules(
         role_label="worker",
         module_paths=[
-            "src.plugins.ingress_gate",
+            "src.plugins.skip_by_path",
             "src.plugins.keep",
             "src.plugins.skip_me",
             "src.plugins.already",
         ],
         skip_short=frozenset({"skip_me"}),
-        skip_module_paths=frozenset({"src.plugins.ingress_gate"}),
+        skip_module_paths=frozenset({"src.plugins.skip_by_path"}),
         loaded_short=loaded_short,
     )
 

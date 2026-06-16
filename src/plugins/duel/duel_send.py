@@ -263,8 +263,8 @@ async def _route_send_outbound(
     bots = get_bots()
     inst = bots.get(str(qq))
     if inst is None:
+        from src.platform.multi_bot.bot_filter import is_fleet_bot_qq
         from src.platform.shard.coord.bot_action import send_group_message_as_bot
-        from src.plugins.block import is_fleet_bot_qq
 
         try:
             qq_int = int(qq)

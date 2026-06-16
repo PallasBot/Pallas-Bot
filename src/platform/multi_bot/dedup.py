@@ -11,7 +11,6 @@ from collections import defaultdict, deque
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent
 
 from src.platform.multi_bot.claim import read_claim_owner_sync, try_claim_message
-from src.platform.shard import context as shard_ctx
 
 _GROUP_EVENT_DEDUP_MAX = 4000
 _group_event_dedup_lock = asyncio.Lock()
@@ -28,16 +27,22 @@ _group_message_once_keys: set[tuple[str, CrossBotSig]] = set()
 _group_message_once_order: deque[tuple[str, CrossBotSig]] = deque()
 
 
+def sharding_active() -> bool:
+    from src.platform.shard import context as shard_ctx
+
+    return shard_ctx.sharding_active()
+
+
 def needs_persistent_message_claim() -> bool:
     """分片等多进程场景才写 Redis/文件 claim；单进程仅用内存。"""
-    return shard_ctx.sharding_active()
+    return sharding_active()
 
 
 def needs_group_host_bot_gate() -> bool:
     """分片或同进程多牛时才需主持牛 owned gate；单牛单进程不启用。"""
     from nonebot import get_bots
 
-    if shard_ctx.sharding_active():
+    if sharding_active():
         return True
     return len(get_bots()) > 1
 
@@ -368,7 +373,7 @@ async def try_begin_group_owned_gate(
 ) -> bool:
     """同群短时占位：窗口内仅已占位 bot 可再次通过，其它 bot 拒绝。"""
 
-    if shard_ctx.sharding_active():
+    if sharding_active():
         from src.platform.shard.coord.group_gate import try_begin_owned_gate_sync
 
         return await asyncio.to_thread(
@@ -403,7 +408,7 @@ async def try_acquire_group_broadcast_slot(
 ) -> bool:
     """同群短时广播占位：窗口内仅首次调用返回 True。"""
 
-    if shard_ctx.sharding_active():
+    if sharding_active():
         from src.platform.shard.coord.group_gate import try_acquire_broadcast_slot_sync
 
         return await asyncio.to_thread(
@@ -440,7 +445,7 @@ async def bind_group_owned_gate(
 def bind_group_owned_gate_sync(plugin: str, group_id: int, bot_id: int, *, gate_sec: float) -> None:
     """强制绑定同群主持牛。"""
 
-    if shard_ctx.sharding_active():
+    if sharding_active():
         from src.platform.shard.coord.group_gate import bind_owned_gate_sync
 
         bind_owned_gate_sync(plugin, int(group_id), int(bot_id), gate_sec=gate_sec)
@@ -450,7 +455,7 @@ def bind_group_owned_gate_sync(plugin: str, group_id: int, bot_id: int, *, gate_
 
 async def is_group_owned_gate_holder(plugin: str, group_id: int, bot_id: int) -> bool:
 
-    if shard_ctx.sharding_active():
+    if sharding_active():
         from src.platform.shard.coord.group_gate import is_owned_gate_holder_sync
 
         return await asyncio.to_thread(
@@ -472,7 +477,7 @@ async def is_group_owned_gate_holder(plugin: str, group_id: int, bot_id: int) ->
 def release_group_owned_gate_sync(plugin: str, group_id: int) -> None:
     """释放同群主持牛占位。"""
 
-    if shard_ctx.sharding_active():
+    if sharding_active():
         from src.platform.shard.coord.group_gate import release_owned_gate_sync
 
         release_owned_gate_sync(plugin, int(group_id))

@@ -1,5 +1,7 @@
 # bot_status（牛牛状态）
 
+> **4.0 起为官方扩展**：`pallas-plugin-bot-status`（bundled 于 `src/plugins/bot_status/`，slim 默认不加载；`uv sync --extra plugins-bot-status` 或 WebUI 安装）。
+
 查询在线/离线牛牛；断线宽限期后发邮件通知；群内报数。
 
 ## 用户命令

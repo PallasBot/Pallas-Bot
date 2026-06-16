@@ -4,17 +4,10 @@ from __future__ import annotations
 
 import asyncio
 
-from nonebot import get_driver, logger
+from nonebot import logger
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, NoticeEvent
 from nonebot.exception import IgnoredException
-from nonebot.message import event_preprocessor
-from nonebot.plugin import PluginMetadata
 
-from src.features.cmd_perm.metadata_defaults import (
-    PLUGIN_EXTRA_VERSION,
-    PLUGIN_HOMEPAGE,
-    PLUGIN_MENU_TEMPLATE,
-)
 from src.platform.federate.config import federate_ingress_bypass_unified
 from src.platform.federate.ingress import claim_federate_group_message_ingress
 from src.platform.federate.peer_bots import (
@@ -32,9 +25,7 @@ from src.platform.ingress.claim_gate import (
 from src.platform.ingress.dream_host_gate import dream_session_ingress_passes
 from src.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
 from src.platform.ingress.fast_path import ingress_once_claim_safe_before_host_gates
-from src.platform.ingress.hosted_activity_gate import (
-    hosted_activity_ingress_passes,
-)
+from src.platform.ingress.hosted_activity_gate import hosted_activity_ingress_passes
 from src.platform.ingress.notice_gate import ingress_notice_gate
 from src.platform.multi_bot.at_targets import group_at_qq_ids, message_at_fleet_bot
 from src.platform.multi_bot.fleet import fleet_bot_ids_contains, get_fleet_bot_ids
@@ -48,23 +39,7 @@ from src.platform.shard.ingress_metrics import (
     should_record_ingress_metrics,
 )
 
-driver = get_driver()
-
-__plugin_meta__ = PluginMetadata(
-    name="入站网关",
-    description=(
-        "群消息预处理：牛牛舰队识别、@ 定向、联邦与跨 Bot claim；分片 worker 另含跨片 claim 与问候/报数 fanout。"
-    ),
-    usage="（内部）无用户命令；unified / worker 启动时自动注册 event_preprocessor。",
-    type="application",
-    homepage=PLUGIN_HOMEPAGE,
-    supported_adapters={"~onebot.v11"},
-    extra={
-        "version": PLUGIN_EXTRA_VERSION,
-        "menu_template": PLUGIN_MENU_TEMPLATE,
-        "help_audience": "maintainer",
-    },
-)
+_GATE_REGISTERED = False
 
 
 def ingress_gate_active() -> bool:
@@ -78,7 +53,7 @@ def pallas_at_targets(event: GroupMessageEvent) -> frozenset[int]:
     return ats & get_fleet_bot_ids()
 
 
-def _ingress_fanout_early_exit(
+def ingress_fanout_early_exit(
     *,
     self_id: int,
     metrics: bool,
@@ -100,17 +75,15 @@ def _ingress_fanout_early_exit(
         record_ingress_fanout_bypass()
 
 
-def _known_bot_sender(*, user_id: int, self_id: int) -> bool:
+def known_bot_sender(*, user_id: int, self_id: int) -> bool:
     return (fleet_bot_ids_contains(user_id) and user_id != self_id) or federate_peer_bot_ids_contains(user_id)
 
 
-@event_preprocessor
 async def ingress_notice_preprocess(bot, event) -> None:
     if isinstance(event, NoticeEvent):
         await ingress_notice_gate(bot, event)
 
 
-@event_preprocessor
 async def ingress_group_message_gate(bot, event) -> None:
     if not ingress_gate_active():
         return
@@ -132,20 +105,20 @@ async def ingress_group_message_gate(bot, event) -> None:
     try:
         plain = (event.get_plaintext() or "").strip()
         body = plain or event.raw_message
-        known_bot_sender = _known_bot_sender(user_id=user_id, self_id=self_id)
+        sender_is_fleet_bot = known_bot_sender(user_id=user_id, self_id=self_id)
         pallas_ats = pallas_at_targets(event)
         fanout_bypass = ingress_fanout_bypasses_claim(plain)
         if fanout_bypass:
-            _ingress_fanout_early_exit(
+            ingress_fanout_early_exit(
                 self_id=self_id,
                 metrics=metrics,
-                known_bot_sender=known_bot_sender,
+                known_bot_sender=sender_is_fleet_bot,
                 pallas_ats=pallas_ats,
             )
             outcome = "fanout_bypass"
             return
 
-        if known_bot_sender:
+        if sender_is_fleet_bot:
             outcome = "fleet_discard"
             if metrics:
                 record_ingress_early_discard("fleet")
@@ -249,8 +222,7 @@ async def ingress_group_message_gate(bot, event) -> None:
         )
 
 
-@driver.on_startup
-async def _log_ingress_gate() -> None:
+async def log_ingress_gate_startup() -> None:
     if not ingress_gate_active():
         return
     from src.platform.federate.config import federate_ingress_active, resolved_federate_id
@@ -272,3 +244,30 @@ async def _log_ingress_gate() -> None:
         asyncio.create_task(sync_federate_peer_bot_roster(), name="federate_peer_bot_initial_sync")
     except Exception as e:
         logger.debug("federate peer bots: startup sync skipped: {}", e)
+
+
+def register_ingress_gate_runtime() -> None:
+    global _GATE_REGISTERED
+    from nonebot import get_driver
+    from nonebot.message import event_preprocessor
+
+    from src.platform.bot_runtime.roles import is_hub_role
+
+    if _GATE_REGISTERED or is_hub_role():
+        return
+
+    driver = get_driver()
+
+    @event_preprocessor
+    async def ingress_notice_preprocess_hook(bot, event) -> None:
+        await ingress_notice_preprocess(bot, event)
+
+    @event_preprocessor
+    async def ingress_group_message_gate_hook(bot, event) -> None:
+        await ingress_group_message_gate(bot, event)
+
+    @driver.on_startup
+    async def ingress_gate_startup_log() -> None:
+        await log_ingress_gate_startup()
+
+    _GATE_REGISTERED = True

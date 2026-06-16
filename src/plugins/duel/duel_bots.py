@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import get_bots, logger
 
+from src.platform.multi_bot.bot_filter import is_fleet_bot_qq
 from src.platform.multi_bot.dedup import normalize_message_time
 from src.platform.multi_bot.group_online_cache import (
     GROUP_ONLINE_TTL_SEC,
@@ -20,7 +21,6 @@ from src.platform.multi_bot.group_online_cache import (
     store_cached_group_bot_ids,
 )
 from src.platform.shard import context as shard_ctx
-from src.plugins.block import is_fleet_bot_qq
 
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent

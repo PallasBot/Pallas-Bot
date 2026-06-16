@@ -43,7 +43,7 @@ STATIC_PATTERNS: dict[str, tuple[str, int]] = {
 
 # 插件名 -> (模块路径, 无参同步/异步探针；缺省为 import src.plugins.<name>)
 SPECIAL_PROBES: dict[str, tuple[str, str]] = {
-    "ingress_gate": ("src.plugins.ingress_gate", "ingress_gate_active"),
+    "ingress_gate": ("src.platform.ingress.gate", "ingress_gate_active"),
 }
 
 

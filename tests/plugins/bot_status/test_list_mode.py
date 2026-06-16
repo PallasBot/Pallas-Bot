@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import src.platform.shard.context as shard_ctx
 from src.platform.multi_bot import fleet as fleet_mod
 from src.plugins.bot_status import list_mode as mod
 
@@ -73,7 +74,7 @@ def test_status_inventory_fleet_from_accounts(tmp_path, monkeypatch):
         "plugin_data_dir",
         lambda name: proto if name == "pallas_protocol" else tmp_path,
     )
-    monkeypatch.setattr(fleet_mod, "is_sharding_active", lambda: False)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: False)
     fleet_mod.invalidate_fleet_bot_cache()
     patch_sharding(monkeypatch, False)
 
@@ -81,13 +82,8 @@ def test_status_inventory_fleet_from_accounts(tmp_path, monkeypatch):
     assert 300 in ids
 
 
-def test_status_inventory_session_uses_block(monkeypatch):
-    class FakeCfg:
-        bots = {111}
-
+def test_status_inventory_session_uses_connected_roster(monkeypatch):
     patch_sharding(monkeypatch, False)
-    import src.plugins.block as block_mod
-
-    monkeypatch.setattr(block_mod, "plugin_config", FakeCfg())
+    monkeypatch.setattr(mod, "connected_bot_ids", lambda: {111})
     ids = mod.status_inventory_bot_ids(list_mode="session")
     assert ids == frozenset({111})

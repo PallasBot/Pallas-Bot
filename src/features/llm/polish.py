@@ -13,11 +13,10 @@ from src.features.llm.config import get_llm_config
 from src.features.llm.models import ChatSubmitRequest
 from src.features.llm.persona_context import build_persona_llm_context
 from src.foundation.config import TaskManager
+from src.platform.ai_callback.task_types import REPEATER_POLISH_TASK_TYPE
 
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
-
-REPEATER_POLISH_TASK_TYPE = "repeater_polish"
 
 _POLISH_USER_PREFIX = "【候选回复】"
 _POLISH_USER_SUFFIX = "\n请按牛格轻改写以上回复，保持原意，只输出一句。"

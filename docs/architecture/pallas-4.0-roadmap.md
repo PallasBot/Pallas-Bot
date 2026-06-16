@@ -76,8 +76,9 @@ Pallas 已有：`local/plugins/`、[site-customization-and-updates.md](site-cust
 | --- | --- |
 | `repeater` | 核心接话；牛格全部接入点 |
 | `help`、`pallas_webui`、`pallas_protocol` | 系统 |
-| `ingress_gate`、`bot_status`、`callback` | 系统 |
-| `request_handler`、`blacklist`、`block` | 安全 |
+| `request_handler`、`blacklist` | 系统 |
+| `platform/ingress/gate`、`platform/ai_callback`、`platform/multi_bot/bot_filter` | 内核（原 ingress_gate / callback / block） |
+| `bot_status` | 运维展示（官方扩展 `pallas-plugin-bot-status`） |
 | `relogin_*`、`pallas_console_metrics` | 运维 |
 
 **牛格相关（4.0 交付，留本体）**

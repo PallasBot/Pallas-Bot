@@ -78,7 +78,7 @@ flowchart TB
 1. **主路径**：`features/llm` → AI 仓**统一 Chat API**（`/api/v1/chat/completions`）
 2. **`plugins/llm_chat`**：随时 @ 入口；酒后 `chat` 共用同一客户端
 3. **AI 仓**：legacy `/api/ollama/*` 兼容期保留；新能力走统一 API
-4. **repeater**：`fallback.py` / `polish.py` 异步提交，callback `task_type=repeater_polish` 失败回退原句
+4. **repeater**：`fallback.py` / `polish.py` 异步提交；callback `task_type=repeater_fallback` 失败静默、`repeater_polish` 失败回退原句
 
 `chat` / `sing` / `draw` 仍可在 **瘦身分支**迁扩展包，但其 AI 调用也应逐步改用 AI 仓统一网关或专用子路由，避免主仓直连多套 URL 约定。
 

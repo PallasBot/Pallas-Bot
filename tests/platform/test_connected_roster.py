@@ -4,12 +4,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from src.platform.multi_bot import connected_roster as mod
+
 
 @pytest.mark.asyncio
-async def test_bot_disconnect_is_idempotent(monkeypatch) -> None:
-    import src.plugins.block as mod
-
-    plugin_config = SimpleNamespace(bots=set())
+async def test_bot_disconnect_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+    mod._connected_bots.clear()
     disconnect_calls: list[int] = []
     info_calls: list[tuple[str, tuple[object, ...]]] = []
 
@@ -19,7 +19,6 @@ async def test_bot_disconnect_is_idempotent(monkeypatch) -> None:
     async def note_worker_bot_disconnected(qq: int) -> None:
         disconnect_calls.append(qq)
 
-    monkeypatch.setattr(mod, "plugin_config", plugin_config)
     monkeypatch.setattr(mod, "clear_protocol_bot_offline", clear_protocol_bot_offline)
     monkeypatch.setattr(mod, "note_worker_bot_disconnected", note_worker_bot_disconnected)
     monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
@@ -27,7 +26,7 @@ async def test_bot_disconnect_is_idempotent(monkeypatch) -> None:
 
     bot = SimpleNamespace(self_id="1354970010", type="OneBot V11")
 
-    await mod.bot_disconnect(bot)
+    await mod.on_bot_disconnect(bot)
 
     assert disconnect_calls == [1354970010]
     assert info_calls == []

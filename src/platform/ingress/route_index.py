@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
     from nonebot.matcher import Matcher
 
-_DEFAULT_PASSIVE_MODULES = frozenset({"repeater", "ingress_gate"})
+_DEFAULT_PASSIVE_MODULES = frozenset({"repeater"})
 _INDEX_CACHE: RouteIndexSnapshot | None = None
 
 

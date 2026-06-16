@@ -28,7 +28,7 @@ def test_unified_skip_plugin_names():
 
 def test_discover_plugin_modules_excludes_underscore_packages():
     names = {_short_name(m) for m in _discover_plugin_modules(load_bundled_extra=True)}
-    assert "ingress_gate" in names
+    assert "ingress_gate" not in names
     assert "relogin_forward" in names
     assert "maa_hub" in names
 
@@ -57,7 +57,7 @@ def test_unified_role_skips_shard_only_plugins(monkeypatch: pytest.MonkeyPatch):
     assert "maa_hub" not in loaded
     assert "relogin_bot" in loaded
     assert "maa" in loaded
-    assert "ingress_gate" in loaded
+    assert "ingress_gate" not in loaded
 
 
 def test_unified_role_slim_skips_bundled_extra(monkeypatch: pytest.MonkeyPatch):

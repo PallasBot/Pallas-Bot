@@ -306,7 +306,7 @@ def test_build_payload_sharded():
     shard = MagicMock()
     shard.id = 0
     with (
-        patch("src.features.community_stats.reporter.is_sharding_active", return_value=True),
+        patch("src.platform.shard.context.sharding_active", return_value=True),
         patch(
             "src.platform.shard.presence.count_connected_bots_for_reporting",
             return_value=2,
@@ -330,15 +330,12 @@ def test_build_payload_sharded():
         assert payload["roster_public"] is False
 
 
-def test_build_payload_non_sharded_catalog_from_block_bots(monkeypatch):
-    class FakeCfg:
-        bots = {111, 222, 333}
+def test_build_payload_non_sharded_catalog_from_connected_roster(monkeypatch):
+    import src.platform.multi_bot.connected_roster as roster_mod
 
-    import src.plugins.block as block_mod
-
-    monkeypatch.setattr(block_mod, "plugin_config", FakeCfg())
+    monkeypatch.setattr(roster_mod, "connected_bot_ids", lambda: {111, 222, 333})
     with (
-        patch("src.features.community_stats.reporter.is_sharding_active", return_value=False),
+        patch("src.platform.shard.context.sharding_active", return_value=False),
         patch(
             "src.platform.shard.presence.count_connected_bots_for_reporting",
             return_value=2,
@@ -366,7 +363,7 @@ def test_build_payload_roster_public(monkeypatch):
     cfg_mod.clear_community_stats_config_cache()
     roster = [{"qq": 10001, "nickname": "测试牛", "online": True, "message_weight": 42}]
     with (
-        patch("src.features.community_stats.reporter.is_sharding_active", return_value=False),
+        patch("src.platform.shard.context.sharding_active", return_value=False),
         patch(
             "src.platform.shard.presence.count_connected_bots_for_reporting",
             return_value=1,
@@ -396,7 +393,7 @@ def test_build_payload_roster_qq_only(monkeypatch):
     cfg_mod.clear_community_stats_config_cache()
     roster = [{"qq": 10001, "nickname": "测试牛", "online": True, "message_weight": 42}]
     with (
-        patch("src.features.community_stats.reporter.is_sharding_active", return_value=False),
+        patch("src.platform.shard.context.sharding_active", return_value=False),
         patch(
             "src.platform.shard.presence.count_connected_bots_for_reporting",
             return_value=1,

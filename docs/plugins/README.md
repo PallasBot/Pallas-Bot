@@ -13,7 +13,7 @@
 | [pallas_webui](./pallas_webui/README.md) | Web 控制台 |
 | [pallas_protocol](./pallas_protocol/README.md) | NapCat/SnowLuma 协议端管理 |
 | [relogin_bot](./relogin_bot/README.md) | 重新上号、创建牛牛 |
-| [bot_status](./bot_status/README.md) | 在线状态与通知 |
+| [bot_status](./bot_status/README.md) | 在线状态与通知（官方扩展） |
 
 ## 群聊玩法
 

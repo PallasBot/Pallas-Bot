@@ -92,10 +92,10 @@ async def bench_ingress_fanout(
     from nonebot.exception import IgnoredException
 
     monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: False)
-    monkeypatch.setattr("src.plugins.ingress_gate.ingress_gate_active", lambda: True)
-    monkeypatch.setattr("src.plugins.ingress_gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("src.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("src.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr(
-        "src.plugins.ingress_gate.claim_federate_group_message_ingress",
+        "src.platform.ingress.gate.claim_federate_group_message_ingress",
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
@@ -103,7 +103,7 @@ async def bench_ingress_fanout(
         lambda _plain, **_: False,
     )
 
-    from src.plugins.ingress_gate import ingress_group_message_gate
+    from src.platform.ingress.gate import ingress_group_message_gate
 
     class Bot:
         def __init__(self, self_id: int):
@@ -154,7 +154,7 @@ async def bench_unified_message_realistic(
         should_skip_duplicate_group_event,
         try_claim_group_message_once,
     )
-    from src.plugins.ingress_gate import ingress_group_message_gate
+    from src.platform.ingress.gate import ingress_group_message_gate
     from src.plugins.repeater import message_id_dict, message_id_lock
     from src.plugins.repeater.learner import Learner
     from src.plugins.repeater.model import Chat

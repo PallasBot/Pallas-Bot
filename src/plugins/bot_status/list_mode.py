@@ -6,6 +6,7 @@ from typing import Literal
 
 from nonebot import get_bots
 
+from src.platform.multi_bot.connected_roster import connected_bot_ids
 from src.platform.multi_bot.fleet import get_fleet_bot_ids
 from src.platform.multi_bot.session_seen import get_session_seen_bot_ids
 from src.platform.shard import context as shard_ctx
@@ -33,9 +34,7 @@ def status_inventory_bot_ids(*, list_mode: ResolvedListMode | None = None) -> fr
     if mode == "connected":
         return get_session_seen_bot_ids()
     try:
-        from src.plugins.block import plugin_config as block_cfg
-
-        ids = {int(x) for x in block_cfg.bots}
+        ids = {int(x) for x in connected_bot_ids()}
     except Exception:
         ids = set()
     if shard_ctx.sharding_active():

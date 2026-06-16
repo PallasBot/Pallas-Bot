@@ -60,22 +60,22 @@ def test_ingress_once_claim_unsafe_when_spy_live(monkeypatch: pytest.MonkeyPatch
 @pytest.mark.asyncio
 async def test_unified_ingress_early_once_claim_before_host_checks(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
-    monkeypatch.setattr("src.plugins.ingress_gate.ingress_gate_active", lambda: True)
-    monkeypatch.setattr("src.plugins.ingress_gate.fleet_bot_ids_contains", lambda _uid: False)
-    monkeypatch.setattr("src.plugins.ingress_gate.ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr("src.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("src.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("src.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
     monkeypatch.setattr(
-        "src.plugins.ingress_gate.ingress_once_claim_safe_before_host_gates",
+        "src.platform.ingress.gate.ingress_once_claim_safe_before_host_gates",
         lambda *_args, **_kwargs: True,
     )
     hosted = MagicMock(return_value=True)
     dream = AsyncMock(return_value=True)
-    monkeypatch.setattr("src.plugins.ingress_gate.hosted_activity_ingress_passes", hosted)
-    monkeypatch.setattr("src.plugins.ingress_gate.dream_session_ingress_passes", dream)
+    monkeypatch.setattr("src.platform.ingress.gate.hosted_activity_ingress_passes", hosted)
+    monkeypatch.setattr("src.platform.ingress.gate.dream_session_ingress_passes", dream)
     monkeypatch.setattr(
-        "src.plugins.ingress_gate.claim_federate_group_message_ingress",
+        "src.platform.ingress.gate.claim_federate_group_message_ingress",
         AsyncMock(return_value=True),
     )
-    from src.plugins.ingress_gate import ingress_group_message_gate
+    from src.platform.ingress.gate import ingress_group_message_gate
 
     class FakeBot:
         def __init__(self, self_id: int) -> None:

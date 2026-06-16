@@ -37,16 +37,14 @@ def get_process_session_connected_ids() -> frozenset[int]:
 
 
 def get_catalog_bot_ids() -> frozenset[int]:
-    """分片：全集群 catalog；单进程：block 维护的本进程已连接集合。"""
+    """分片：全集群 catalog；单进程：connected_roster 维护的本进程已连接集合。"""
     if shard_ctx.sharding_active():
         return get_fleet_bot_ids()
-    try:
-        from src.plugins.block import plugin_config
+    from src.platform.multi_bot.connected_roster import connected_bot_ids
 
-        if plugin_config.bots:
-            return frozenset(plugin_config.bots)
-    except Exception:
-        pass
+    bots = connected_bot_ids()
+    if bots:
+        return frozenset(bots)
     return frozenset()
 
 

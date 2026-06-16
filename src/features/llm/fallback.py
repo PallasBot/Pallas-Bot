@@ -13,6 +13,7 @@ from src.features.llm.config import get_llm_config
 from src.features.llm.models import ChatSubmitRequest
 from src.features.llm.persona_context import build_persona_llm_context
 from src.foundation.config import TaskManager
+from src.platform.ai_callback.task_types import REPEATER_FALLBACK_TASK_TYPE
 
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
@@ -58,7 +59,7 @@ async def maybe_submit_repeater_llm_fallback(event: GroupMessageEvent, *, user_t
             "bot_id": bot_id,
             "group_id": group_id,
             "user_id": user_id,
-            "task_type": "llm_chat",
+            "task_type": REPEATER_FALLBACK_TASK_TYPE,
             "start_time": time.time(),
         },
     )

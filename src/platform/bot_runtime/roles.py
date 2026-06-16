@@ -13,7 +13,6 @@ HUB_PLUGIN_MODULES: tuple[str, ...] = (
     "src.plugins.pallas_webui",
     "src.plugins.pallas_protocol",
     "src.plugins.relogin_bot",
-    "src.plugins.callback",
     "src.plugins.maa_hub",
     "src.plugins.blacklist",
     "src.plugins.help",

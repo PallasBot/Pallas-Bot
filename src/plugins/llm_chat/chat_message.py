@@ -12,12 +12,11 @@ from src.features.llm.governance import check_llm_chat_gate, refresh_llm_chat_co
 from src.features.llm.persona_context import build_persona_llm_context
 from src.features.llm.session_store import append_llm_message
 from src.foundation.config import TaskManager
+from src.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 
 from .config import Config, get_llm_chat_config
 from .prompts import get_system_prompt
 from .replies import LLM_CHAT_VAGUE_REPLY
-
-LLM_CHAT_TASK_TYPE = "llm_chat"
 
 
 def llm_chat_runtime_config(cfg: Config | None = None) -> LlmConfig:
