@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.features.llm.startup_probe import probe_ai_service_health
+from src.features.llm.startup_probe import ai_api_version_compatible, parse_api_version, probe_ai_service_health
 
 
 @pytest.mark.asyncio
@@ -51,3 +51,16 @@ async def test_probe_ai_service_health_unreachable(monkeypatch: pytest.MonkeyPat
     result = await probe_ai_service_health()
     assert result["ok"] is False
     assert "refused" in str(result.get("error", ""))
+
+
+def test_parse_api_version() -> None:
+    assert parse_api_version("4.0.0") == (4, 0, 0)
+    assert parse_api_version("4.0.0-beta") == (4, 0, 0)
+    assert parse_api_version("") is None
+
+
+def test_ai_api_version_compatible() -> None:
+    assert ai_api_version_compatible("4.0.0") is True
+    assert ai_api_version_compatible("4.1.0") is True
+    assert ai_api_version_compatible("3.9.9") is False
+    assert ai_api_version_compatible(None) is True

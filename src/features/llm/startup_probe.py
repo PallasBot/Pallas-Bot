@@ -5,6 +5,32 @@ from typing import Any
 from nonebot import get_driver, logger
 
 _hook_installed = False
+MIN_AI_API_VERSION = (4, 0, 0)
+
+
+def parse_api_version(raw: str | None) -> tuple[int, ...] | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    parts: list[int] = []
+    for segment in text.split("."):
+        chunk = ""
+        for ch in segment:
+            if ch.isdigit():
+                chunk += ch
+            else:
+                break
+        if not chunk:
+            break
+        parts.append(int(chunk))
+    return tuple(parts) if parts else None
+
+
+def ai_api_version_compatible(raw: str | None, *, minimum: tuple[int, ...] = MIN_AI_API_VERSION) -> bool:
+    parsed = parse_api_version(raw)
+    if parsed is None:
+        return True
+    return parsed >= minimum
 
 
 async def probe_ai_service_health(*, timeout_sec: float = 5.0) -> dict[str, Any]:
@@ -89,6 +115,14 @@ def install_llm_startup_probe() -> None:
                 if isinstance(llm_info, dict):
                     provider_mode = str(llm_info.get("provider_mode") or "").strip()
             if version and provider_mode:
+                if not ai_api_version_compatible(version):
+                    logger.warning(
+                        "llm: AI 服务 version={} 低于最低 {}.{}.{}, 部分 4.0 API 可能不可用",
+                        version,
+                        MIN_AI_API_VERSION[0],
+                        MIN_AI_API_VERSION[1],
+                        MIN_AI_API_VERSION[2],
+                    )
                 logger.info(
                     "llm: AI 服务可达 {} version={} provider={} switches={}",
                     url,
@@ -97,6 +131,14 @@ def install_llm_startup_probe() -> None:
                     flag_text,
                 )
             elif version:
+                if not ai_api_version_compatible(version):
+                    logger.warning(
+                        "llm: AI 服务 version={} 低于最低 {}.{}.{}",
+                        version,
+                        MIN_AI_API_VERSION[0],
+                        MIN_AI_API_VERSION[1],
+                        MIN_AI_API_VERSION[2],
+                    )
                 logger.info("llm: AI 服务可达 {} version={} switches={}", url, version, flag_text)
             else:
                 logger.info("llm: AI 服务可达 {} switches={}", url, flag_text)
