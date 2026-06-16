@@ -63,6 +63,13 @@ repeater fallback / polish            # 骨架已实现，默认关（LLM_FALLBA
 
 遗留 `CHAT_ENABLE` / `LLM_CHAT_ENABLE` / `OLLAMA_ENABLE` 仍可读，优先改 `LLM_CHAT_ENABLED`。
 
+联调（Bot 侧脚本，AI 需 `LLM_CHAT_ENABLED=true` 且 worker 在跑）：
+
+```bash
+uv run python tools/integration_llm_chat.py --ai-port 9199
+uv run python tools/integration_repeater_llm.py --scenario both --ai-port 9199
+```
+
 ## 本仓已有可对齐的实现
 
 实现新能力时优先复用下列模块，避免在插件内重复造轮子：

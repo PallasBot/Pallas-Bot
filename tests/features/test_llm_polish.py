@@ -7,9 +7,10 @@ from src.features.llm.polish import build_polish_user_text, maybe_submit_repeate
 
 
 def test_build_polish_user_text_wraps_candidate() -> None:
-    text = build_polish_user_text("  你好呀  ")
+    text = build_polish_user_text("  你好呀  ", style_suffix="\n【群风格参考】长度适中。")
     assert text.startswith("【候选回复】你好呀")
     assert "轻改写" in text
+    assert "群风格参考" in text
 
 
 def test_build_polish_user_text_rejects_empty() -> None:
@@ -69,6 +70,13 @@ async def test_maybe_submit_repeater_llm_polish_queues_task(monkeypatch: pytest.
     monkeypatch.setattr(
         "src.features.llm.polish.compile_persona_prompt_for",
         fake_compile,
+    )
+    async def fake_style_suffix(bot_id, group_id):
+        return ""
+
+    monkeypatch.setattr(
+        "src.features.llm.polish.build_polish_style_suffix",
+        fake_style_suffix,
     )
 
     added: list[str] = []

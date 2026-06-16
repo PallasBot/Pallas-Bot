@@ -52,6 +52,13 @@
 | 开了 LLM 仍像语料句 | 确认 `LLM_POLISH_ENABLED=true` 且 AI callback 可达 |
 | fallback 无回复 | 确认 `LLM_FALLBACK_ENABLED=true`、`LLM_CHAT_ENABLED=true`、AI worker 在跑 |
 
+联调脚本（独立栈，默认 AI `:9199`）：
+
+```bash
+uv run python tools/integration_repeater_llm.py --scenario both
+uv run python tools/integration_llm_chat.py --mode normal
+```
+
 ## 实现
 
 [`src/plugins/repeater/`](../../../src/plugins/repeater/)
