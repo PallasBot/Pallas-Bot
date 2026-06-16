@@ -12,6 +12,7 @@ db_backend = "mongodb"
 # access_token = ""
 # 站点自有 NoneBot 插件（相对仓库根；见 docs/architecture/site-customization-and-updates.md）
 # extra_plugin_dirs = ["local/plugins"]
+# load_bundled_extra_plugins = false
 
 [bootstrap.mongo]
 host = "127.0.0.1"

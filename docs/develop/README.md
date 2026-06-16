@@ -12,6 +12,7 @@
 | [插件结构与约定](plugin/structure.md) | 目录拆分、`data/` / `resource/`、文档与测试 |
 | [插件进阶能力](plugin/advanced.md) | cmd_perm、WebUI 热重载、消息审查、站点插件 |
 | [插件开发 Skill（Agent）](../skills/pallas-plugin-development/SKILL.md) | 分章手册，Cursor Agent 写插件时按需加载 |
+| [4.0 开发约定](4.0-development.md) | `feat/4.0-slim` 分支、core/extra 加载与扩展仓 |
 | [WebUI 前端开发](webui.md) | 独立仓库联调、窄屏与构建挂载 |
 
 ## 架构与通用能力（延伸阅读）

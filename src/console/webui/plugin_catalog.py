@@ -9,10 +9,15 @@ from pathlib import Path  # noqa: TC003
 from typing import Any
 
 from src.foundation.paths import PROJECT_ROOT
+from src.platform.bot_runtime.plugin_matrix import (
+    extra_package_for_plugin,
+    is_core_plugin,
+    is_extra_plugin,
+)
 
 _PLUGINS_ROOT = PROJECT_ROOT / "src" / "plugins"
 
-PluginSourceKind = str  # "main" | "local" | "pip"
+PluginSourceKind = str  # "core" | "extra" | "local" | "pip"
 
 _INFRA_NAME_PREFIXES = (
     "nonebot",
@@ -81,7 +86,12 @@ def plugin_source_from_module_path(mod_file: str) -> PluginSourceKind | None:
     if rel.startswith("local/"):
         return "local"
     if rel.startswith("src/plugins/"):
-        return "main"
+        package = rel.removeprefix("src/plugins/").split("/", 1)[0]
+        if is_core_plugin(package):
+            return "core"
+        if is_extra_plugin(package):
+            return "extra"
+        return "core"
     return "pip"
 
 
@@ -107,19 +117,23 @@ def infer_plugin_source(
         src = plugin_source_from_module_path(file_path)
         if src == "local":
             return "local", module_dir_rel(file_path) or _package_dir_posix(extra_pkgs.get(package))
-        if src == "main":
-            return "main", module_dir_rel(file_path) or f"src/plugins/{package}"
+        if src in ("core", "extra"):
+            return src, module_dir_rel(file_path) or f"src/plugins/{package}"
         if src == "pip":
             return "pip", None
         if module_name.startswith("src.plugins."):
-            return "main", f"src/plugins/{package}"
+            if is_extra_plugin(package):
+                return "extra", f"src/plugins/{package}"
+            return "core", f"src/plugins/{package}"
         if extra_pkgs.get(package) is not None:
             return "local", _package_dir_posix(extra_pkgs.get(package))
     local_root = extra_pkgs.get(package)
     if local_root is not None:
         return "local", _package_dir_posix(local_root)
     if (_PLUGINS_ROOT / package / "__init__.py").is_file():
-        return "main", f"src/plugins/{package}"
+        if is_extra_plugin(package):
+            return "extra", f"src/plugins/{package}"
+        return "core", f"src/plugins/{package}"
     return "pip", None
 
 
@@ -363,6 +377,7 @@ def build_plugin_catalog_rows(
             "global_disable_protected": g_protected,
             "plugin_source": plugin_source,
             "plugin_source_dir": plugin_source_dir,
+            "extra_package": extra_package_for_plugin(package) if plugin_source == "extra" else None,
         })
 
     all_packages = sorted(set(discover_plugin_packages()) | set(extra_pkgs.keys()))

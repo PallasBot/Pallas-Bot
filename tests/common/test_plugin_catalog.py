@@ -99,13 +99,13 @@ def test_catalog_lists_worker_plugin(monkeypatch):
     get_shard_registry_settings.cache_clear()
     rows = build_plugin_catalog_rows()
     by_name = {r["name"]: r for r in rows}
-    assert "draw" in by_name
-    assert by_name["draw"]["load_role"] == "worker"
-    assert by_name["draw"]["metadata"] is not None
-    assert by_name["draw"]["plugin_source"] == "main"
-    assert by_name["draw"]["catalog_process_role"] == "hub"
-    assert by_name["draw"]["expected_in_catalog_process"] is False
-    assert by_name["draw"]["loaded_in_process"] is False
+    assert "duel" in by_name
+    assert by_name["duel"]["load_role"] == "worker"
+    assert by_name["duel"]["metadata"] is not None
+    assert by_name["duel"]["plugin_source"] == "extra"
+    assert by_name["duel"].get("extra_package") == "pallas-plugin-duel"
+    assert by_name["duel"]["catalog_process_role"] == "hub"
+    assert by_name["duel"]["expected_in_catalog_process"] is False
     assert by_name["pallas_webui"]["expected_in_catalog_process"] is True
 
 
@@ -126,12 +126,12 @@ def test_infer_plugin_source_local_dir(tmp_path, monkeypatch) -> None:
     assert dir_posix == "local/plugins/demo"
 
 
-def test_plugin_source_from_main_path() -> None:
+def test_plugin_source_from_core_path() -> None:
     from src.foundation.paths import PROJECT_ROOT
 
     main_py = PROJECT_ROOT / "src" / "plugins" / "callback" / "handler.py"
     if main_py.is_file():
-        assert plugin_source_from_module_path(str(main_py)) == "main"
+        assert plugin_source_from_module_path(str(main_py)) == "core"
 
 
 def test_discover_pyproject_includes_status():

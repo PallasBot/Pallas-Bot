@@ -58,6 +58,25 @@ def read_bootstrap_extra_plugin_dirs() -> list[str]:
     return out
 
 
+def read_bootstrap_load_bundled_extra_plugins() -> bool:
+    """``[bootstrap].load_bundled_extra_plugins``，默认 false。"""
+    env = (os.environ.get("PALLAS_LOAD_BUNDLED_EXTRA") or "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if env in ("0", "false", "no", "off"):
+        return False
+    data = _load_toml_file(repo_config_path())
+    bootstrap = data.get("bootstrap")
+    if not isinstance(bootstrap, dict):
+        return False
+    raw = bootstrap.get("load_bundled_extra_plugins")
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return False
+    return str(raw).strip().lower() in ("1", "true", "yes", "on")
+
+
 def repo_webui_settings_path() -> Path:
     return _REPO_ROOT / "data" / "pallas_config" / "webui.json"
 

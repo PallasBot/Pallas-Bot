@@ -119,7 +119,7 @@ deploy-full = ["pallas-bot[plugins-game,plugins-maa,...]"]
 
 | 阶段 | 交付 |
 | --- | --- |
-| **S1** | 本文 + 矩阵冻结；扩展仓模板 |
+| **S1** | 本文 + 矩阵冻结；扩展仓模板 | 已交付（`plugin_matrix.py`、`templates/pallas-plugin-extension/`） |
 | **S2** | duel/maa 等首包迁出 |
 | **S3** | pyproject extras |
 | **S4** | Docker / CI 分轨 |
@@ -145,7 +145,7 @@ deploy-full = ["pallas-bot[plugins-game,plugins-maa,...]"]
 
 ## 相关文档
 
-- [4.0-development.md](../develop/4.0-development.md) — 分支约定（合流后）
+- [4.0-development.md](../develop/4.0-development.md) — 分支约定与 `load_bundled_extra_plugins`
 - [site-customization-and-updates.md](site-customization-and-updates.md)
 - [plugin-convention.md](plugin-convention.md)
 - [bot_process_sharding.md](bot_process_sharding.md)

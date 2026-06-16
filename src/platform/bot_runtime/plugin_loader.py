@@ -8,9 +8,13 @@ import nonebot
 from nonebot import logger
 
 from src.foundation.apscheduler_runtime import register_apscheduler_startup_hook
-from src.foundation.config.repo_settings import read_bootstrap_extra_plugin_dirs
+from src.foundation.config.repo_settings import (
+    read_bootstrap_extra_plugin_dirs,
+    read_bootstrap_load_bundled_extra_plugins,
+)
 from src.foundation.paths import PROJECT_ROOT
 from src.platform.bot_runtime.load_policy import merge_startup_skip_plugins
+from src.platform.bot_runtime.plugin_matrix import should_load_bundled_plugin
 from src.platform.bot_runtime.pyproject_plugins import (
     extra_plugin_dirs_for_role,
     parse_nonebot_plugin_config,
@@ -28,16 +32,20 @@ _PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 _APSCHEDULER_MODULE = "nonebot_plugin_apscheduler"
 
 
-def _discover_plugin_modules() -> list[str]:
+def _discover_plugin_modules(*, load_bundled_extra: bool | None = None) -> list[str]:
     names: list[str] = []
     if not _PLUGINS_ROOT.is_dir():
         return names
+    if load_bundled_extra is None:
+        load_bundled_extra = read_bootstrap_load_bundled_extra_plugins()
     for entry in sorted(_PLUGINS_ROOT.iterdir()):
         if not entry.is_dir():
             continue
         if entry.name.startswith("_"):
             continue
         if not (entry / "__init__.py").is_file():
+            continue
+        if not should_load_bundled_plugin(entry.name, load_bundled_extra=load_bundled_extra):
             continue
         names.append(f"src.plugins.{entry.name}")
     return names
