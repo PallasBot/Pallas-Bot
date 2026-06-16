@@ -38,6 +38,17 @@ jobs:
         run: |
           uv run ruff format --check src/
 
+      - name: Run core plugin matrix tests
+        run: |
+          uv run pytest \
+            tests/common/test_plugin_matrix.py \
+            tests/common/test_plugin_loader_unified.py \
+            tests/common/test_plugin_coord.py \
+            tests/common/test_plugin_registry.py \
+            tests/common/test_shard_coord_duel_group.py \
+            tests/common/test_shard_coord_spy_group.py \
+            -q
+
       - name: Type check with mypy
         run: |
           # uv run mypy src/
