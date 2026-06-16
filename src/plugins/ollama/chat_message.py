@@ -18,15 +18,9 @@ from .prompts import get_system_prompt
 from .replies import OLLAMA_VAGUE_REPLY
 
 
-def ollama_llm_config(cfg: Config) -> LlmConfig:
-    base = get_llm_config()
-    return base.model_copy(
-        update={
-            "ai_server_host": cfg.ai_server_host,
-            "ai_server_port": cfg.ai_server_port,
-            "legacy_chat_endpoint": cfg.ollama_chat_endpoint,
-        }
-    )
+def ollama_llm_config(cfg: Config | None = None) -> LlmConfig:
+    _ = cfg
+    return get_llm_config()
 
 
 def refresh_server_url(cfg: Config | None = None) -> None:

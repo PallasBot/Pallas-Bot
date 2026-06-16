@@ -86,9 +86,10 @@ class LlmConfig(BaseModel):
     ai_server_host: str = Field(default="127.0.0.1")
     ai_server_port: int = Field(default=9099, ge=1, le=65535)
     llm_chat_enabled: bool = Field(default=False)
-    use_unified_chat_api: bool = Field(default=False)
+    use_unified_chat_api: bool = Field(default=True)
     legacy_chat_endpoint: str = Field(default="/api/ollama/chat")
-    unified_chat_endpoint: str = Field(default="/v1/chat/completions")
+    unified_chat_endpoint: str = Field(default="/api/v1/chat/completions")
+    unified_del_session_endpoint: str = Field(default="/api/v1/chat/completions/session")
     user_message_max_len: int = Field(default=4000, ge=64, le=16000)
     chat_timeout_sec: float = Field(default=30.0, ge=1.0, le=300.0)
     llm_session_enabled: bool = Field(default=False)
@@ -116,9 +117,13 @@ def get_llm_config() -> LlmConfig:
             ai_server_host=host,
             ai_server_port=port,
             llm_chat_enabled=_env_bool("LLM_CHAT_ENABLED", False),
-            use_unified_chat_api=_env_bool("LLM_USE_UNIFIED_CHAT_API", False),
+            use_unified_chat_api=_env_bool("LLM_USE_UNIFIED_CHAT_API", True),
             legacy_chat_endpoint=_env_str("LLM_LEGACY_CHAT_ENDPOINT", "/api/ollama/chat"),
-            unified_chat_endpoint=_env_str("LLM_UNIFIED_CHAT_ENDPOINT", "/v1/chat/completions"),
+            unified_chat_endpoint=_env_str("LLM_UNIFIED_CHAT_ENDPOINT", "/api/v1/chat/completions"),
+            unified_del_session_endpoint=_env_str(
+                "LLM_UNIFIED_DEL_SESSION_ENDPOINT",
+                "/api/v1/chat/completions/session",
+            ),
             user_message_max_len=_env_int("LLM_USER_MESSAGE_MAX_LEN", 4000),
             chat_timeout_sec=_env_float("LLM_CHAT_TIMEOUT_SEC", 30.0),
             llm_session_enabled=_env_bool("LLM_SESSION_ENABLED", False),

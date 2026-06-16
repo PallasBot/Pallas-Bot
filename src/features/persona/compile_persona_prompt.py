@@ -46,6 +46,10 @@ _LENGTH_HINTS: dict[str, str] = {
     "long": "可稍详细展开，但仍保持口语",
 }
 
+_DRUNK_CHAT_OVERLAY = (
+    "【醉酒状态】你此刻微醺，语气更随意、更爱调侃与接梗，可略带庆典氛围，但仍保持帕拉斯身份，勿失分寸、勿冗长铺陈。"
+)
+
 
 class PersonaPromptSections(BaseModel):
     base: str
@@ -127,11 +131,23 @@ def build_bot_behavior_prompt(persona: ResolvedPersona) -> str:
     return wrap_stats_block("bot_behavior", "\n".join(lines))
 
 
-def assemble_persona_system(sections: PersonaPromptSections) -> str:
+def apply_drunk_chat_overlay(system: str) -> str:
+    core = (system or "").strip()
+    if not core:
+        return _DRUNK_CHAT_OVERLAY
+    if _DRUNK_CHAT_OVERLAY in core:
+        return core
+    return guard_system_prompt(f"{core}\n\n{_DRUNK_CHAT_OVERLAY}")
+
+
+def assemble_persona_system(sections: PersonaPromptSections, *, mode: str = "normal") -> str:
     section_values = (sections.base, sections.bot_behavior, sections.group_style)
     parts = [section.strip() for section in section_values if section.strip()]
     core = "\n\n".join(parts)
-    return guard_system_prompt(core)
+    system = guard_system_prompt(core)
+    if str(mode or "normal").strip().lower() == "drunk":
+        return apply_drunk_chat_overlay(system)
+    return system
 
 
 def compile_persona_prompt(
@@ -142,6 +158,7 @@ def compile_persona_prompt(
     group_id: int | None = None,
     base_system: str | None = None,
     base_system_path: str | None = None,
+    mode: str = "normal",
 ) -> PersonaPromptBundle:
     base = sanitize_prompt_block(
         (base_system or "").strip() or load_base_system_prompt(custom_path=base_system_path),
@@ -161,7 +178,7 @@ def compile_persona_prompt(
         group_style=compile_group_style_snapshot(style_profile),
     )
     return PersonaPromptBundle(
-        system=assemble_persona_system(sections),
+        system=assemble_persona_system(sections, mode=mode),
         metadata=metadata,
         sections=sections,
     )
@@ -173,6 +190,7 @@ async def compile_persona_prompt_for(
     *,
     base_system: str | None = None,
     base_system_path: str | None = None,
+    mode: str = "normal",
 ) -> PersonaPromptBundle:
     bid = int(bot_id)
     gid = int(group_id) if group_id is not None else None
@@ -191,4 +209,5 @@ async def compile_persona_prompt_for(
         group_id=gid,
         base_system=base_system,
         base_system_path=base_system_path,
+        mode=mode,
     )

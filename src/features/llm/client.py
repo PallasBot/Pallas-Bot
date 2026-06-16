@@ -66,18 +66,22 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
     url = f"{base}{endpoint}/{request.request_id}"
 
     if c.use_unified_chat_api:
+        metadata = {
+            "bot_id": request.bot_id,
+            "group_id": request.group_id,
+            "user_id": request.user_id,
+            "request_id": request.request_id,
+            "pg_session": use_pg_session,
+            "mode": str(request.mode or "normal"),
+        }
+        if request.token_count is not None:
+            metadata["token_count"] = int(request.token_count)
         payload = {
             "session_id": request.session_id if not use_pg_session else request.request_id,
             "model": request.model,
             "system": request.system_prompt,
             "messages": [{"role": item.role, "content": item.content} for item in messages],
-            "metadata": {
-                "bot_id": request.bot_id,
-                "group_id": request.group_id,
-                "user_id": request.user_id,
-                "request_id": request.request_id,
-                "pg_session": use_pg_session,
-            },
+            "metadata": metadata,
         }
     else:
         legacy_text = format_legacy_transcript(messages) if use_pg_session else messages[-1].content
@@ -123,3 +127,18 @@ def build_chat_messages(user_text: str, *, max_len: int = 4000) -> list[ChatComp
     if not user_turn:
         return []
     return [ChatCompletionMessage(role="user", content=user_turn)]
+
+
+async def delete_llm_chat_session(session_id: str, *, cfg: LlmConfig | None = None) -> bool:
+    c = cfg or get_llm_config()
+    base = llm_server_base_url(c)
+    if c.use_unified_chat_api:
+        url = f"{base}{c.unified_del_session_endpoint}/{session_id}"
+    else:
+        url = f"{base}/api/ollama/del_session/{session_id}"
+    try:
+        response = await HTTPXClient.delete(url, timeout=c.chat_timeout_sec)
+    except Exception:
+        logger.warning("delete_llm_chat_session failed: session={}", session_id)
+        return False
+    return bool(response) and response.status_code < 400

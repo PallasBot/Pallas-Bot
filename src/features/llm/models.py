@@ -12,6 +12,8 @@ class ChatSubmitRequest(BaseModel):
     bot_id: int | None = None
     group_id: int | None = None
     user_id: int | None = None
+    mode: str = "normal"
+    token_count: int | None = None
 
 
 class ChatSubmitResult(BaseModel):

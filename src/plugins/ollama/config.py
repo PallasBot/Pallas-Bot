@@ -8,13 +8,13 @@ class Config(BaseModel, extra="ignore"):
     ai_server_host: str = Field(
         default="127.0.0.1",
         description=field_help(
-            "Pallas-Bot-AI 服务地址",
-            "Docker 全栈填服务名 pallasbot-ai；本机填 127.0.0.1",
+            "已弃用",
+            "请配置全局 AI_SERVER_HOST / LLM_AI_SERVER_HOST",
         ),
     )
     ai_server_port: int = Field(
         default=9099,
-        description=field_help("AI 服务端口", "须与后端监听端口一致"),
+        description=field_help("已弃用", "请配置全局 AI_SERVER_PORT / LLM_AI_SERVER_PORT"),
     )
     ollama_enable: bool = Field(
         default=False,
@@ -25,11 +25,11 @@ class Config(BaseModel, extra="ignore"):
     )
     ollama_chat_endpoint: str = Field(
         default="/api/ollama/chat",
-        description="提交 Ollama 对话任务的 HTTP 路径。",
+        description="已弃用：默认走 /api/v1/chat/completions。",
     )
     ollama_del_session_endpoint: str = Field(
         default="/api/ollama/del_session",
-        description="清除 Ollama 会话记忆的 HTTP 路径。",
+        description="已弃用：默认走统一 LLM delete session。",
     )
     ollama_unload_endpoint: str = Field(
         default="/api/ollama/unload",
@@ -80,5 +80,7 @@ plugin_config = plugin_config_proxy(get_ollama_config)
 
 
 def ollama_server_url(cfg: Config | None = None) -> str:
-    c = cfg or get_ollama_config()
-    return f"http://{c.ai_server_host}:{c.ai_server_port}"
+    from src.features.llm.config import llm_server_base_url
+
+    _ = cfg
+    return llm_server_base_url()

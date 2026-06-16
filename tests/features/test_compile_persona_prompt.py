@@ -12,6 +12,23 @@ from src.features.persona.compile_persona_prompt import (
 from src.features.persona.model import ResolvedPersona
 
 
+def test_assemble_persona_system_drunk_mode_adds_overlay() -> None:
+    from src.features.persona.compile_persona_prompt import PersonaPromptSections
+
+    system = assemble_persona_system(
+        PersonaPromptSections(base="基础", bot_behavior="", group_style=""),
+        mode="drunk",
+    )
+    assert "【醉酒状态】" in system
+    assert "基础" in system
+
+
+def test_compile_persona_prompt_drunk_mode() -> None:
+    persona = derive_persona_from_bot_id(1)
+    bundle = compile_persona_prompt(persona, None, bot_id=1, base_system="基础", mode="drunk")
+    assert "【醉酒状态】" in bundle.system
+
+
 def test_load_base_system_prompt_default_file() -> None:
     text = load_base_system_prompt()
     assert "帕拉斯" in text

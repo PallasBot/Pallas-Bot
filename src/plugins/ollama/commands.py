@@ -8,6 +8,7 @@ from src.features.cmd_perm import (
     group_message_permission_for_command,
     group_or_private_message_permission_for_command,
 )
+from src.features.llm import delete_llm_chat_session, get_llm_config
 from src.features.llm.session_store import clear_llm_messages, clear_user_llm_messages
 from src.shared.utils import HTTPXClient
 from src.shared.utils.http_msg import user_failure_reply
@@ -56,8 +57,12 @@ async def handle_ollama_clear(bot: Bot, event: Event):
         return
 
     session_id = event.get_session_id()
-    url = f"{ollama_server_url()}{cfg.ollama_del_session_endpoint}/{session_id}"
-    await HTTPXClient.delete(url)
+    llm_cfg = get_llm_config()
+    if llm_cfg.use_unified_chat_api:
+        await delete_llm_chat_session(session_id, cfg=llm_cfg)
+    else:
+        url = f"{ollama_server_url()}{cfg.ollama_del_session_endpoint}/{session_id}"
+        await HTTPXClient.delete(url)
     raw_group_id = getattr(event, "group_id", None)
     group_id = int(raw_group_id) if raw_group_id is not None else None
     user_id = int(getattr(event, "user_id", 0) or 0)
