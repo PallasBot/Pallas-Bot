@@ -30,6 +30,9 @@ __plugin_meta__ = PluginMetadata(
             {"id": "ollama.unload", "label": "卸载模型", "default": "staff"},
             {"id": "ollama.set_model", "label": "更换模型", "default": "superuser"},
         ],
+        "command_limits": [
+            {"id": "ollama.chat", "cd_sec": 3},
+        ],
         "menu_data": [
             {
                 "func": "随时闲聊",

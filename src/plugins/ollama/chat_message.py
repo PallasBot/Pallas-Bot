@@ -8,6 +8,7 @@ from ulid import ULID
 from src.features.cmd_perm import group_message_permission_for_command
 from src.features.llm import ChatSubmitRequest, submit_chat_task
 from src.features.llm.config import LlmConfig, get_llm_config
+from src.features.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
 from src.features.llm.session_store import append_llm_message
 from src.features.persona.compile_persona_prompt import compile_persona_prompt_for
 from src.foundation.config import TaskManager
@@ -84,6 +85,12 @@ async def handle_ollama_chat(bot: Bot, event: Event):
         await ollama_chat.send(OLLAMA_VAGUE_REPLY)
         return
 
+    llm_cfg = ollama_llm_config(cfg)
+    gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
+    if gate is not None:
+        logger.debug("ollama chat gated: reason={} group={} user={}", gate, group_id, user_id)
+        return
+
     request_id = str(ULID())
     await TaskManager.add_task(
         request_id,
@@ -106,12 +113,13 @@ async def handle_ollama_chat(bot: Bot, event: Event):
             group_id=group_id,
             user_id=user_id,
         ),
-        cfg=ollama_llm_config(cfg),
+        cfg=llm_cfg,
     )
     if not result.ok:
         await TaskManager.remove_task(request_id)
         return
 
+    await refresh_llm_chat_cooldown(event, default_cd_sec=llm_cfg.llm_chat_cooldown_sec)
     await append_llm_message(int(bot.self_id), group_id, user_id, "user", msg)
 
     if not result.task_id:
