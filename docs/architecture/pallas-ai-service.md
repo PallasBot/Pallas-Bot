@@ -98,18 +98,7 @@ flowchart TB
 
 Legacy `/api/ollama/*`：**deprecated**；新集成用 `/api/v1/chat/completions` 与 `/api/llm/*`。
 
-## AI 仓平台化路线
-
-AI 仓从「按能力分散的 HTTP 脚本集合」演进为 **Bot 侧车运行时**。详细阶段、验收与 4.0.1 backlog 见 AI 仓 [platform-roadmap.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/platform-roadmap.md)。
-
-| 支柱 | 4.0.0 现状 | 下一里程碑（4.0.1） |
-| --- | --- | --- |
-| **契约** | 统一 Chat API + health `api_version` | Bot 启动版本协商；跨仓 integration compose |
-| **可靠** | Celery + provider chain + callback | Redis session；remote_only 生产加固 |
-| **可观测** | 结构化日志 + `/health.llm` | task/provider 指标（可选 Prometheus） |
-| **配置** | AI 仓 `.env` 管密钥与 model | Deployment 双仓最低版本表 |
-
-**与主仓同步节奏**：主仓 `persona-llm-roadmap` P3–P6 联调项未勾前，AI 仓优先 **4.0.1 session + 契约测试**；P9 tool call 对应 AI **4.0.x**；P8 embedding 对应 **4.1**。
+**AI 仓内部路线**（阶段、四支柱、4.0.1 backlog、AI 侧验收）见 AI 仓 [platform-roadmap.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/platform-roadmap.md)。下文仅描述 Bot 侧需知的 provider 与配置分工。
 
 ## Provider：本地 / 远端 / 备线
 
@@ -199,8 +188,8 @@ llm:
 
 | 发布 | 主仓 | AI 仓 |
 | --- | --- | --- |
-| 4.0.0 | `features/llm`、repeater fallback、牛格 prompt | 统一 LLM 网关 + provider · **已合流开发中** |
-| 4.0.1 | 分片会话验收、startup 版本协商 | Redis session + integration compose |
+| 4.0.0 | `features/llm`、repeater fallback、牛格 prompt | 见 AI 仓 platform-roadmap · **开发中** |
+| 4.0.1 | 分片会话验收、startup 版本协商 | 见 AI 仓 platform-roadmap |
 | 4.0.x | tool call、方舟 KB tools | A4 完善 |
 | 4.1+ | MCP Server（可选） | embedding 长期记忆（可选） |
 
@@ -229,8 +218,7 @@ llm:
 - [ ] repeater fallback（开）与 polish（开）联调；失败回退行为与文档一致
 - [x] AI 仓 `/health` 暴露 `api_version` 与 llm 快照
 - [ ] 分片：AI 回调与 LLM 同步调用在 worker 行为一致
-- [ ] 文档：Deployment 双仓 4.0 最低版本表
-- [ ] AI 仓 [platform-roadmap](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/platform-roadmap.md) 4.0.1 项（Redis session、integration compose）
+- [ ] 文档：Deployment 双仓 4.0 最低版本表（维护于 **AI 仓** Deployment + platform-roadmap）
 
 ## 相关文档
 
