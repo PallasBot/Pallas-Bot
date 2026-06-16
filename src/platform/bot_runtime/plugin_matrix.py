@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 
 CORE_PLUGIN_NAMES: frozenset[str] = frozenset({
+    "pb_core",
     "repeater",
     "help",
     "pallas_webui",

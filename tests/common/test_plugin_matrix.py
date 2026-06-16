@@ -10,6 +10,7 @@ from src.platform.bot_runtime.plugin_matrix import (
 
 
 def test_core_plugins_include_repeater_and_help():
+    assert "pb_core" in CORE_PLUGIN_NAMES
     assert "repeater" in CORE_PLUGIN_NAMES
     assert "llm_chat" in CORE_PLUGIN_NAMES
     assert "help" in CORE_PLUGIN_NAMES
