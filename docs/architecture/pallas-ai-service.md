@@ -222,7 +222,6 @@ llm:
 
 - [pallas-4.0-roadmap.md](pallas-4.0-roadmap.md)
 - [persona-llm-roadmap.md](persona-llm-roadmap.md)
-- [4.0-development.md](../develop/4.0-development.md)
 - [plugins/ollama](../plugins/ollama/README.md)（现状）
 - [Pallas-Bot-AI Deployment](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/Deployment.md)
 - [Pallas-Bot-AI · 4.0 本地模型栈评估（2026-06 基准）](https://github.com/PallasBot/Pallas-Bot-AI/blob/feat/4.0/docs/architecture/4.0-local-models.md)

@@ -11,7 +11,7 @@ description: >
 
 > 本 Skill **描述 Pallas-Bot 仓库约定**（内核分层、cmd_perm、WebUI、多牛分片等）
 > 章节拆在 `references/`；需要某专题时再读对应文件，**不要**把全部 references 塞进上下文。
-> 人类贡献者也可从 [develop/plugin/getting-started.md](../../develop/plugin/getting-started.md) 入门。
+> 人类贡献者请从 [Cookbook · 牛牛赞我](../../develop/plugin/cookbook.md) 跟做；速查见 [getting-started.md](../../develop/plugin/getting-started.md)。
 
 ## 章节索引
 

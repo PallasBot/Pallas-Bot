@@ -7,7 +7,7 @@
 | 版本 | 主题 | 状态 |
 | --- | --- | --- |
 | 3.x | 分片、ingress、语料联邦 | 当前 `main` 稳定线 |
-| **4.0** | **牛格** + **本体瘦身** + 插件分家 | **规划目标**；见 [4.0 分支约定](../develop/4.0-development.md) |
+| **4.0** | **牛格** + **本体瘦身** + 插件分家 | 见 [本体瘦身](pallas-4.0-slim.md) |
 
 4.0 = **发行形态**（瘦身、扩展包）+ **接话智能**（自动 persona、统一 LLM、可选游戏资料 tools）一并交付。
 
@@ -47,7 +47,7 @@ flowchart LR
     DEV --> REL
 ```
 
-分支流程详见 [4.0-development.md](../develop/4.0-development.md)。
+合流与迁移见 [pallas-4.0-slim.md](pallas-4.0-slim.md)、[workflow.md](../develop/workflow.md)。
 
 ## 设计参照（发行与分层）
 
@@ -112,7 +112,7 @@ Pallas 已有：`local/plugins/`、[site-customization-and-updates.md](site-cust
 | **S1** | 瘦身 | 本文 | 扩展插件迁出仓库默认树 |
 | **S2** | 瘦身 | 本文 | 依赖 optional 化、本体 CI |
 | **S3** | 瘦身 | 本文 | 官方扩展仓 + 安装/迁移文档 |
-| **I1** | 集成 | [4.0-development.md](../develop/4.0-development.md) | `dev` 两轨合流通过验收 |
+| **I1** | 集成 | [pallas-4.0-slim](pallas-4.0-slim.md) | `dev` 合流与迁移文档 |
 
 ## 本体瘦身原则
 
@@ -145,7 +145,7 @@ Pallas 已有：`local/plugins/`、[site-customization-and-updates.md](site-cust
 
 ## 相关文档
 
-- [4.0-development.md](../develop/4.0-development.md) — **分支与合流**
+- [pallas-4.0-slim.md](pallas-4.0-slim.md) — 瘦身与迁移
 - [persona-llm-roadmap.md](persona-llm-roadmap.md)
 - [arknights-knowledge-mcp.md](arknights-knowledge-mcp.md)
 - [persona-reply-style.md](persona-reply-style.md)

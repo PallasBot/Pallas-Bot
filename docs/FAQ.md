@@ -1,9 +1,8 @@
-# 常见问题（FAQ）
+# 常见问题
 
-> 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`Docker 部署`](DockerDeployment.md)
+> [五分钟跑起来](guide/quickstart.md) · [标准部署](Deployment.md) · [配置要点](Config.md)
 
-本页收录 `Pallas-Bot` 的常见问题与排查建议。
-若你是首次部署，建议先阅读 `README.md` 中的「快速开始」；控制台与协议端管理页的口令说明、遗忘后的重置方式见本页「部署排障」。
+部署与使用中的常见问题。首次部署请先完成 [五分钟跑起来](guide/quickstart.md)。
 
 ## 学习机制
 

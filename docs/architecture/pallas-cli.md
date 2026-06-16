@@ -80,7 +80,6 @@ pallas maintenance run [--sync-extra …] [--update-bot] [--no-restart]
 
 ## 相关文档
 
-- [pallas-4.0-slim.md](pallas-4.0-slim.md) — 4.0 阶段表（S6/S7）
-- [4.0-development.md](../develop/4.0-development.md) — 开发约定
+- [pallas-4.0-slim.md](pallas-4.0-slim.md) — 4.0 阶段表
 - [bot_process_sharding.md](bot_process_sharding.md) — 分片语义
 - [scripts/README.md](../../scripts/README.md) — 现有 Bash 索引

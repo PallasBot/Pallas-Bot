@@ -37,6 +37,11 @@ FILE_MAP: dict[str, str] = {
     "develop/plugin/getting-started.md": "develop/plugin/getting-started.md",
     "develop/plugin/structure.md": "develop/plugin/structure.md",
     "develop/plugin/advanced.md": "develop/plugin/advanced.md",
+    "develop/plugin/cookbook.md": "develop/plugin/cookbook.md",
+    "guide/quickstart.md": "guide/quickstart.md",
+    "guide/concepts.md": "guide/concepts.md",
+    "guide/welcome.md": "guide/welcome.md",
+    "user/README.md": "guide/usage-admin.md",
 }
 
 PLUGIN_NAMES = [
@@ -213,6 +218,11 @@ def transform_for_vitepress(text: str) -> str:
         text,
     )
     text = re.sub(
+        r"\]\(\.\./plugins/README\.md([^)]*)\)",
+        r"](/plugins/index\1)",
+        text,
+    )
+    text = re.sub(
         r"\]\(plugins/README\.md([^)]*)\)",
         r"](/plugins/index\1)",
         text,
@@ -265,7 +275,52 @@ def transform_for_vitepress(text: str) -> str:
         rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
         text,
     )
-# 去掉站内链接里的 .md 后缀
+    text = re.sub(r"\]\(guide/([a-z]+)\.md([^)]*)\)", r"](/guide/\1\2)", text)
+    text = re.sub(r"\]\(\.\./guide/([a-z]+)\.md([^)]*)\)", r"](/guide/\1\2)", text)
+    for guide_page in ("quickstart", "concepts", "welcome"):
+        text = re.sub(
+            rf"\]\({guide_page}\.md([^)]*)\)",
+            rf"](/guide/{guide_page}\1)",
+            text,
+        )
+    text = re.sub(r"\]\(\.\./user/README\.md([^)]*)\)", r"](/guide/usage-admin\1)", text)
+    text = re.sub(r"\]\(user/README\.md([^)]*)\)", r"](/guide/usage-admin\1)", text)
+    text = re.sub(
+        r"\]\(\.\./develop/README\.md([^)]*)\)",
+        r"](/develop/index\1)",
+        text,
+    )
+    text = re.sub(
+        r"\]\(\.\./architecture/bot_process_sharding\.md([^)]*)\)",
+        r"](/architecture/bot-process-sharding\1)",
+        text,
+    )
+    text = re.sub(
+        r"\]\(\.\./architecture/([a-z0-9_-]+)\.md([^)]*)\)",
+        r"](/architecture/\1\2)",
+        text,
+    )
+    text = re.sub(
+        r"\]\(\.\./common/community_stats\.md([^)]*)\)",
+        r"](/common/community_stats\1)",
+        text,
+    )
+    text = re.sub(
+        r"\]\(\.\./\.\./skills/([^)#]+)\)",
+        rf"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
+        text,
+    )
+    text = re.sub(
+        r"\]\(\.\./skills/([^)#]+)\)",
+        rf"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
+        text,
+    )
+    text = re.sub(r"\]\(\.\./Config\.md([^)]*)\)", r"](/deploy/config\1)", text)
+    text = re.sub(r"\]\(\.\./Deployment\.md([^)]*)\)", r"](/deploy/deployment\1)", text)
+    text = re.sub(r"\]\(\.\./Migration-v3\.md([^)]*)\)", r"](/about/migration\1)", text)
+    text = re.sub(r"\]\(develop/([a-z0-9_/-]+)\.md([^)]*)\)", r"](/develop/\1\2)", text)
+    text = re.sub(r"\]\(\.\./develop/([a-z0-9_/-]+)\.md([^)]*)\)", r"](/develop/\1\2)", text)
+    # 去掉站内链接里的 .md 后缀
     text = re.sub(
         r"(\](/(?:deploy|plugins|architecture|common|about|guide)/[a-zA-Z0-9_./-]+)\.md)",
         r"\1",

@@ -191,10 +191,10 @@ deploy-full = ["pallas-bot[plugins-game,plugins-maa,...]"]
 
 ## 验收清单
 
-> 明细见 [4.0-acceptance.md](../develop/4.0-acceptance.md)（2026-06-16，**未 stop/restart/install**）。
+维护者可在 PR / release 时对照：
 
 - [x] 默认 `uv sync` 后仅 core 插件树（单测 + 离线 discovery）
-- [~] `--extra plugins-duel` 后 duel 可用（映射单测通过；**未 live uv sync**，维护窗补）
+- [~] `--extra plugins-duel` 后 duel 可用（映射单测通过；维护窗可补 live 验证）
 - [x] 未装扩展时 help/命令行为符合文档（help visibility 单测）
 - [x] 分片 hub/worker 扩展一致（矩阵/角色策略；运行时加载态待重启后对照）
 - [ ] 默认 Docker 镜像无迁出插件代码（**延后**：persona 合 `dev` 后改）
@@ -206,9 +206,7 @@ deploy-full = ["pallas-bot[plugins-game,plugins-maa,...]"]
 
 ## 相关文档
 
-- [pallas-cli.md](pallas-cli.md) — 统一 CLI 路线（S7）
-- [4.0-acceptance.md](../develop/4.0-acceptance.md) — 合流前验收记录
-- [4.0-development.md](../develop/4.0-development.md) — 分支约定与 `load_bundled_extra_plugins`
+- [pallas-cli.md](pallas-cli.md) — 统一 CLI
 - [site-customization-and-updates.md](site-customization-and-updates.md)
 - [plugin-convention.md](plugin-convention.md)
 - [bot_process_sharding.md](bot_process_sharding.md)
