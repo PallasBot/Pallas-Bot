@@ -6,6 +6,7 @@ from src.platform.bot_runtime.plugin_matrix import (
     is_core_plugin,
     is_extra_plugin,
     should_load_bundled_plugin,
+    uv_extra_for_plugin,
 )
 
 
@@ -28,6 +29,7 @@ def test_core_and_extra_disjoint():
 def test_extra_package_mapping():
     assert extra_package_for_plugin("duel") == "pallas-plugin-duel"
     assert extra_package_for_plugin("chat") == "pallas-plugin-ai-media"
+    assert uv_extra_for_plugin("duel") == "plugins-duel"
 
 
 def test_should_load_bundled_plugin_slim_mode():

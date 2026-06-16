@@ -30,6 +30,8 @@ extra_plugin_dirs = ["local/plugins"]
 
 也可在 `pyproject.toml` 的 `[tool.nonebot] plugin_dirs` 追加目录，但改 `pyproject.toml` 本身会被 git 跟踪；**推荐只用 `pallas.toml`**。
 
+4.0 起另支持 **WebUI 官方插件商店一键安装**（与本文手工投放并存；同名时仍以 local 为准）。见 [4.0 本体瘦身](pallas-4.0-slim.md#扩展安装路径并存)。
+
 ## 部署形态与更新方式
 
 控制台 **「版本与更新 → Bot 本体」** 会检测 `deployment_mode`：

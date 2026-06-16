@@ -4410,6 +4410,16 @@ def register_extended_api(
         data = await cached_read(key="plugins", loader=_load, ttl_sec=1.6, stale_sec=25.0)
         return JSONResponse({"ok": True, "data": data})
 
+    @router.get(f"{x}/plugins/official-extensions", include_in_schema=True)
+    async def _plugins_official_extensions() -> JSONResponse:
+        from src.console.webui.plugin_registry import build_official_extension_rows
+
+        async def _load() -> list[dict[str, Any]]:
+            return build_official_extension_rows()
+
+        data = await cached_read(key="plugins-official-extensions", loader=_load, ttl_sec=30.0, stale_sec=120.0)
+        return JSONResponse({"ok": True, "data": data})
+
     @router.get(f"{x}/plugins/help-menu-visibility", include_in_schema=True)
     async def _plugins_help_menu_visibility() -> JSONResponse:
         try:

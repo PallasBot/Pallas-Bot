@@ -10,7 +10,8 @@
 | 缩小默认安装与 Docker 镜像 | 改动 persona / LLM / repeater 接话逻辑 |
 | 玩法与重依赖插件迁出官方扩展包 | 在本分支实现方舟 KB 或 AI 仓 API |
 | 明确 core / extra / local 加载与 WebUI 展示 | 一次性拆完所有历史插件（分 PR 迁移） |
-| 3.x → 4.0 迁移文档与 optional `uv` extras | 破坏 `local/plugins` 覆盖能力 |
+| WebUI 一键装扩展 + 真寻式 `local/plugins` 投放并存 | 破坏 `local/plugins` 覆盖能力 |
+| 3.x → 4.0 迁移文档与 optional `uv` extras | — |
 
 瘦身完成后：**不装扩展包** 仍可运行系统插件 + **repeater（含牛格）**；缺扩展包时对应命令/help 项明确不可用而非静默失败。
 
@@ -19,7 +20,10 @@
 | 参照 | 对齐点 |
 | --- | --- |
 | [GsUID Core](https://github.com/Genshin-bots/gsuid_core) | 核心仓 + 插件仓；控制台管配置与插件 |
-| [绪山真寻 Bot](https://github.com/zhenxun-org/zhenxun_bot) | 本体仅核心；[独立插件仓库](https://github.com/zhenxun-org/zhenxun_bot_plugins) + 插件索引 |
+| [绪山真寻 Bot](https://github.com/zhenxun-org/zhenxun_bot) | 本体仅核心；[独立插件仓库](https://github.com/zhenxun-org/zhenxun_bot_plugins) + 插件索引；**站点直接放本地目录** |
+| [Amiya-Bot](https://github.com/AmiyaBot/Amiya-Bot) | 控制台插件商店一键安装（参考交互，非照搬热载框架） |
+
+扩展安装**两条路径并存**（见「扩展安装路径」），不互斥。
 
 Pallas 已有机制（4.0 强化而非重造）：
 
@@ -27,6 +31,34 @@ Pallas 已有机制（4.0 强化而非重造）：
 - [plugin-convention.md](plugin-convention.md) — 插件目录约定
 - [bot_process_sharding.md](bot_process_sharding.md) — hub/worker 一致加载
 - **[Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)** — **`feat/4.0`** 分支承接控制台改造
+
+## 扩展安装路径（并存）
+
+| 路径 | 谁用 | 做法 | 落点 |
+| --- | --- | --- | --- |
+| **真寻式本地投放** | 运维 / 开发者 | 解压或 git clone 到 `local/plugins/<名>/` | `extra_plugin_dirs`，**最高优先级**覆盖同名 core/extra |
+| **WebUI 一键安装** | 站点管理员 | 控制台浏览官方索引 → 安装 / 卸载 | 官方包：`uv pip install` 或落到 `local/plugins/`（S6 定稿）；与上表共用加载链 |
+| **命令行 extras** | 部署 / CI | `uv sync --extra plugins-duel` 等 | venv pip 包，`pyproject` 声明 |
+
+三条路径**不互斥**：同一插件若同时存在 pip 包与 `local/plugins` 副本，以 **local 为准**（与现网一致）。WebUI 安装失败或未提供商店时，仍可手工投放目录。
+
+```mermaid
+flowchart LR
+    subgraph inputs [安装入口]
+        LOCAL_DROP["local/plugins 投放"]
+        WEBUI_BTN["WebUI 一键安装"]
+        UV_EXTRA["uv sync --extra"]
+    end
+    subgraph load [加载链]
+        NB["NoneBot 插件表"]
+    end
+    LOCAL_DROP --> NB
+    WEBUI_BTN --> LOCAL_DROP
+    WEBUI_BTN --> UV_EXTRA
+    UV_EXTRA --> NB
+```
+
+**S6（插件商店）** 依赖 S2 扩展仓与 S5 插件 API；索引源为官方扩展清单（版本、包名、兼容本体版本），非任意第三方市场（第三方仍走 local 投放）。
 
 ## 本体 vs 扩展边界
 
@@ -111,27 +143,29 @@ deploy-full = ["pallas-bot[plugins-game,plugins-maa,...]"]
 
 | 项 | 说明 |
 | --- | --- |
-| 插件列表 | 展示 core / extra / local 来源 |
+| 插件列表 | 展示 core / extra / local / pip 来源 |
 | 扩展说明 | 推荐 extras、迁移对照表 |
-| 主仓 API | `pallas_webui` 返回插件 `source` 字段 |
+| 主仓 API | `pallas_webui` 返回 `source`、`extra_package` |
+| **插件商店（S6）** | 浏览官方索引、一键安装/卸载；与 `local/plugins` 手工投放并存 |
 
 ## 实施阶段
 
 | 阶段 | 交付 |
 | --- | --- |
-| **S1** | 本文 + 矩阵冻结；扩展仓模板 | 已交付（`plugin_matrix.py`、`templates/pallas-plugin-extension/`） |
+| **S1** | 本文 + 矩阵冻结；扩展仓模板 | 已交付 |
 | **S2** | duel/maa 等首包迁出 |
-| **S3** | pyproject extras |
+| **S3** | pyproject extras | 已交付（占位 extras + 包名映射） |
 | **S4** | Docker / CI 分轨 |
-| **S5** | 迁移文档 + WebUI API |
+| **S5** | 迁移文档 + WebUI 插件列表 API | 已交付（`GET …/plugins/official-extensions`） |
+| **S6** | WebUI 插件商店：官方索引、一键安装/卸载；与 local 投放并存 |
 
 ## 3.x → 4.0 迁移（摘要）
 
 1. 升级本体 4.0.0  
-2. 按对照表 `uv sync --extra …`  
-3. `local/plugins` 不变  
+2. 按对照表 `uv sync --extra …`，或 WebUI 商店一键安装（S6），或继续 `local/plugins` 投放  
+3. `local/plugins` 不变，且覆盖 pip / 官方扩展同名插件  
 4. 分片各 worker 相同扩展集  
-5. 未装扩展：help 不展示；触发时提示安装扩展包  
+5. 未装扩展：help 不展示；触发时提示安装扩展包或打开 WebUI 商店  
 
 ## 验收清单
 
@@ -141,6 +175,8 @@ deploy-full = ["pallas-bot[plugins-game,plugins-maa,...]"]
 - [ ] 分片 hub/worker 扩展一致
 - [ ] 默认 Docker 镜像无迁出插件代码
 - [ ] WebUI feat/4.0 可展示插件 source（或 API 就绪）
+- [ ] WebUI 可浏览官方扩展索引并一键安装（S6）
+- [ ] 一键安装与 `local/plugins` 手工投放可并存且 local 优先
 - [ ] 迁移文档完整
 
 ## 相关文档

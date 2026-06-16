@@ -40,6 +40,32 @@ EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
 
 EXTRA_PLUGIN_NAMES: frozenset[str] = frozenset(EXTRA_PLUGIN_PACKAGES.keys())
 
+EXTRA_PACKAGE_PRIORITY: dict[str, str] = {
+    "pallas-plugin-duel": "P0",
+    "pallas-plugin-who-is-spy": "P0",
+    "pallas-plugin-maa": "P0",
+    "pallas-plugin-party": "P1",
+    "pallas-plugin-dream": "P1",
+    "pallas-plugin-draw": "P1",
+    "pallas-plugin-ai-media": "P1",
+    "pallas-plugin-social": "P2",
+    "pallas-plugin-community-stats": "P2",
+    "pallas-plugin-ollama": "P2",
+}
+
+
+def uv_extra_for_package(package: str) -> str:
+    short = (package or "").strip().removeprefix("pallas-plugin-")
+    return f"plugins-{short}" if short else ""
+
+
+def uv_extra_for_plugin(name: str) -> str | None:
+    pkg = extra_package_for_plugin(name)
+    if not pkg:
+        return None
+    extra = uv_extra_for_package(pkg)
+    return extra or None
+
 
 def is_core_plugin(name: str) -> bool:
     return (name or "").strip() in CORE_PLUGIN_NAMES
