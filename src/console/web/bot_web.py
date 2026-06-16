@@ -344,7 +344,7 @@ def nonebot_log_record_matches_http_facet(
     raw_msg = record.get("message")
     mstr = raw_msg if isinstance(raw_msg, str) else ""
     if facet == "webui":
-        return name == "pallas_webui" or "[pallas-webui]" in mstr
+        return name in ("pb_webui", "pallas_webui") or "[pallas-webui]" in mstr
     return name == "pallas_protocol" or "[pallas-protocol]" in mstr
 
 

@@ -40,7 +40,7 @@ def register_pallas_protocol_routes(
 
     def _pallas_console_http_base() -> str:
         try:
-            from src.plugins.pallas_webui.config import get_pallas_webui_config
+            from src.plugins.pb_webui.config import get_pallas_webui_config
 
             raw = (get_pallas_webui_config().pallas_webui_http_base or "").strip()
         except Exception:

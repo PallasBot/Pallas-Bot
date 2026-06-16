@@ -8,7 +8,7 @@ CORE_PLUGIN_NAMES: frozenset[str] = frozenset({
     "pb_core",
     "repeater",
     "help",
-    "pallas_webui",
+    "pb_webui",
     "request_handler",
     "blacklist",
     "drink",

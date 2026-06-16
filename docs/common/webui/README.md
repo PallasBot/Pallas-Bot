@@ -66,11 +66,11 @@ get_my_config = plugin_webui.get
 | --- | --- |
 | [sing](../../plugins/sing/README.md) | 标准热重载 |
 | [draw](../../plugins/draw/README.md) | 自定义解析 + `on_reload` |
-| [pallas_webui](../../plugins/pallas_webui/README.md) | HTTP 路由层 |
+| [pallas_webui](../../plugins/pb_webui/README.md) | HTTP 路由层 |
 
 ## 实现
 
-[`src/console/webui/`](../../../src/console/webui/) · 路由薄层 [`extended_api.py`](../../../src/plugins/pallas_webui/extended_api.py)
+[`src/console/webui/`](../../../src/console/webui/) · 路由薄层 [`extended_api.py`](../../../src/plugins/pb_webui/extended_api.py)
 
 ## API 契约（按域）
 

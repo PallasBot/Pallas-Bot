@@ -21,7 +21,7 @@ def register(sub: argparse._SubParsersAction) -> None:
 
 def run_bot(args: argparse.Namespace) -> int:
     async def work() -> int:
-        from src.plugins.pallas_webui.manager import BotGitUpdateError
+        from src.plugins.pb_webui.manager import BotGitUpdateError
 
         try:
             data = await apply_bot_update(restart=bool(args.restart))

@@ -112,7 +112,7 @@ def scan_plugin_static(name: str) -> StaticReport:
         rep.notes.append("热路径可能走 composite 语料远程 HTTP")
     if name == "ingress_gate":
         rep.notes.append("群消息 event_preprocessor；unified 已 once-claim")
-    if name == "pallas_webui":
+    if name == "pb_webui":
         rep.notes.append("控制台 API；非群消息热路径")
     if name == "community_stats":
         rep.notes.append("周期心跳；非 per-message")

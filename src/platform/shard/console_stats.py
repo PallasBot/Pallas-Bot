@@ -289,7 +289,7 @@ def trim_worker_duration_logs_sync(*, shard_id: int, cap: int) -> None:
                 continue
             log = rec.get("matcher_duration_log")
             if isinstance(log, list) and log:
-                from src.plugins.pallas_webui.extended_api import enforce_matcher_duration_log_limits
+                from src.plugins.pb_webui.extended_api import enforce_matcher_duration_log_limits
 
                 trimmed = log[-cap:]
                 enforce_matcher_duration_log_limits(trimmed)

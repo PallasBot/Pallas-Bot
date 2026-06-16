@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nonebot import get_driver
+from nonebot import get_driver, logger
 
 from src.console.web import public_base_url
 from src.platform.bot_runtime.plugin_matrix import (
@@ -15,12 +15,15 @@ from src.platform.bot_runtime.plugin_matrix import (
 
 def format_console_hint_text() -> str:
     try:
-        from src.plugins.pallas_webui.config import get_config as get_webui_config
+        from src.plugins.pb_webui.config import get_config as get_webui_config
 
         cfg = get_webui_config()
         if not cfg.pallas_webui_enabled:
             return "网页控制台已在本实例关闭（pallas_webui_enabled=false）。"
+    except ImportError:
+        cfg = None
     except Exception:
+        logger.exception("pb_core: 读取 WebUI 配置失败")
         cfg = None
 
     driver = get_driver()

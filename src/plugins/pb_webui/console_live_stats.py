@@ -7,14 +7,14 @@ import os
 import time
 from typing import Any
 
-from src.foundation.paths import plugin_data_dir
-from src.plugins.pallas_webui.daily_stats_store import interprocess_stats_lock
+from src.plugins.pb_webui.data_dir import pb_webui_data_dir
+from src.plugins.pb_webui.daily_stats_store import interprocess_stats_lock
 
 _STORE_VER = 1
 
 
 def live_stats_path():
-    return plugin_data_dir("pallas_webui") / "console_live_stats.json"
+    return pb_webui_data_dir() / "console_live_stats.json"
 
 
 def _read_raw() -> dict[str, Any]:

@@ -182,7 +182,7 @@ def test_list_webui_env_sections_contains_plugin_common_sections():
     rows = list_webui_env_sections()
     ids = {r["id"] for r in rows}
     assert "command_limits" in ids
-    assert "pallas_webui" in ids
+    assert "pb_webui" in ids
     assert "pallas_protocol" in ids
     assert "help" in ids
     assert "service_gateways" in ids
@@ -245,28 +245,28 @@ def test_command_limits_patch_writes_json_override(tmp_path, monkeypatch):
 
 def test_field_to_env_uppercase_keys_matches_plugin_api():
     from src.console.webui import field_to_env_uppercase_keys
-    from src.plugins.pallas_webui.config import Config
+    from src.plugins.pb_webui.config import Config
 
     m = field_to_env_uppercase_keys(Config)
     assert m["pallas_webui_enabled"] == "PALLAS_WEBUI_ENABLED"
 
 
-def test_pallas_webui_section_payload_env_keys_uppercase():
+def test_pb_webui_section_payload_env_keys_uppercase():
     from src.console.webui import webui_env_section_payload
 
-    data = webui_env_section_payload("pallas_webui")
-    assert data["plugin"] == "pallas_webui"
-    assert data["module"] == "src.plugins.pallas_webui"
+    data = webui_env_section_payload("pb_webui")
+    assert data["plugin"] == "pb_webui"
+    assert data["module"] == "src.plugins.pb_webui"
     assert data.get("dev_mode_hot_reload") is True
     groups = {g["id"]: g for g in data.get("field_groups") or []}
     assert "security" in groups
     assert "pallas_webui_dev_mode" in groups["security"]["field_names"]
-    assert groups["security"]["plugin_config_path"] == "/plugins/pallas_webui"
+    assert groups["security"]["plugin_config_path"] == "/plugins/pb_webui"
     for f in data["fields"]:
         assert f["env_key"] == f["name"].upper()
 
 
-def test_pallas_webui_patch_writes_uppercase_env(tmp_path, monkeypatch):
+def test_pb_webui_patch_writes_uppercase_env(tmp_path, monkeypatch):
     import json
 
     from src.console.webui import apply_webui_env_section_patch
@@ -274,7 +274,7 @@ def test_pallas_webui_patch_writes_uppercase_env(tmp_path, monkeypatch):
 
     webui_file = tmp_path / "webui.json"
     monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui_file)
-    apply_webui_env_section_patch("pallas_webui", {"pallas_webui_http_base": "/pallas-test"})
+    apply_webui_env_section_patch("pb_webui", {"pallas_webui_http_base": "/pallas-test"})
     data = json.loads(webui_file.read_text(encoding="utf-8"))
     assert data["env"]["PALLAS_WEBUI_HTTP_BASE"] == "/pallas-test"
 

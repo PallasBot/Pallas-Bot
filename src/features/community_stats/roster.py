@@ -9,7 +9,7 @@ def rolling_message_weight_by_self_id(*, days: int = 7) -> dict[str, int]:
     """近 N 自然日每账号消息量，数据来自控制台按日统计落盘。"""
     if days < 1:
         days = 1
-    from src.plugins.pallas_webui import daily_stats_store
+    from src.plugins.pb_webui import daily_stats_store
 
     today = date.today()
     start = today - timedelta(days=days - 1)

@@ -70,4 +70,4 @@ NoneBot **不能**两个目录各加载一半同名插件；要么整包 overrid
 
 - `read_bootstrap_extra_plugin_dirs()`：`src/foundation/config/repo_settings.py`
 - 插件加载：`src/bot_runtime/plugin_loader.py`
-- 更新与部署检测：`src/plugins/pallas_webui/manager.py`（`apply_bot_repository_update` / `inspect_bot_deployment`）
+- 更新与部署检测：`src/plugins/pb_webui/manager.py`（`apply_bot_repository_update` / `inspect_bot_deployment`）

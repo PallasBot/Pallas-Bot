@@ -84,7 +84,7 @@ def test_protected_plugins_cannot_be_disabled(tmp_path, monkeypatch):
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     global_disable.invalidate_global_disabled_cache()
 
-    saved = global_disable.save_global_disabled_plugins(["help", "chat", "pallas_webui"])
+    saved = global_disable.save_global_disabled_plugins(["help", "chat", "pb_webui"])
     assert saved == ["chat"]
     assert "help" not in global_disable.resolve_global_disabled_plugin_names()
 

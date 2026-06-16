@@ -6,8 +6,8 @@ from src.shared.utils.format_exception import format_exception_for_log
 
 
 async def format_update_check_text() -> str:
-    from src.plugins.pallas_webui.config import get_config as get_webui_config
-    from src.plugins.pallas_webui.manager import (
+    from src.plugins.pb_webui.config import get_config as get_webui_config
+    from src.plugins.pb_webui.manager import (
         bot_has_release_update,
         bot_is_development_build,
         fetch_latest_bot_release,

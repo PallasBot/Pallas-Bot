@@ -238,7 +238,7 @@ def _line_matches_scope(line: str, scope: str) -> bool:
         return True
     low = line.lower()
     if scope == "webui":
-        return "pallas_webui" in low or "[pallas-webui]" in low
+        return "pb_webui" in low or "pallas_webui" in low or "[pallas-webui]" in low
     if scope == "protocol":
         return "pallas_protocol" in low or "[pallas-protocol]" in low
     return True

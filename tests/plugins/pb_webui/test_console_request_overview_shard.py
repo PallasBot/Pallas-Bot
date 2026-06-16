@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from src.plugins.pallas_webui import extended_api as mod
+from src.plugins.pb_webui import extended_api as mod
 
 
 @pytest.mark.asyncio

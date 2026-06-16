@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from src.plugins.pallas_webui import daily_stats_store
+from src.plugins.pb_webui import daily_stats_store
 
 
 def test_write_day_and_load_range(monkeypatch, tmp_path) -> None:

@@ -18,6 +18,7 @@ from src.foundation.bot_version import (
     pallas_bot_repo_root,
 )
 from src.foundation.paths import plugin_data_dir
+from src.plugins.pb_webui.data_dir import pb_webui_data_dir
 from src.shared.utils.format_exception import format_exception_for_log
 from src.shared.utils.github_release import (
     fetch_latest_release,
@@ -108,7 +109,7 @@ async def resolve_github_release_asset_urls(
 
 
 def webui_public_path() -> Path:
-    return plugin_data_dir("pallas_webui") / "public"
+    return pb_webui_data_dir() / "public"
 
 
 def check_webui_exists(path: Path) -> bool:
@@ -237,7 +238,7 @@ async def download_and_extract_dist_zip(public_dir: Path, url: str, *, follow_re
 
 
 def webui_version_path() -> Path:
-    return plugin_data_dir("pallas_webui") / "version.json"
+    return pb_webui_data_dir() / "version.json"
 
 
 def get_webui_dist_version() -> str:

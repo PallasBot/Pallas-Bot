@@ -84,7 +84,7 @@ uv run python tools/integration_repeater_llm.py --scenario both --ai-port 9199
 | P4 慢路径观测 | `src/platform/observability/SlowPathTimer` | repeater / ingress 已在用 |
 | P4 配置热重载 | WebUI + `get_llm_config()` | `features/llm/config.py` |
 | P5–P6 repeater 挂钩 | `src/plugins/repeater/__init__.py`、`features/llm/fallback.py`、`polish.py` | miss / hit 分支异步提交；callback `task_type=repeater_polish` |
-| P7 WebUI | `src/plugins/pallas_webui/extended_api.py` | bot/group 配置 PATCH 与 cmd_perm 同路径 |
+| P7 WebUI | `src/plugins/pb_webui/extended_api.py` | bot/group 配置 PATCH 与 cmd_perm 同路径 |
 | P9 工具 metadata | `src/features/cmd_perm/`、`PluginMetadata.extra` | 与 `command_permissions` 类似声明 `llm_tools` |
 | P9 游戏 tools | [arknights-knowledge-mcp](arknights-knowledge-mcp.md) | `domain/arknights` + tool registry |
 | 分片 | [bot_process_sharding](bot_process_sharding.md)、`command_limits` hub | 会话共享 DB；调用收敛到 claim worker 或 hub |
@@ -156,7 +156,7 @@ flowchart TB
 | `Pallas-Bot-AI`（**并行仓库**） | 统一 LLM 网关、会话、provider；见 [pallas-ai-service](pallas-ai-service.md) |
 | `src/plugins/repeater/__init__.py` | fallback / polish 钩子（默认关） |
 | `src/platform/ingress/` | 可选：LLM 主动回复决策（后期） |
-| `src/plugins/pallas_webui/extended_api.py` | LLM 配置、只读 `style_profile` 展示 |
+| `src/plugins/pb_webui/extended_api.py` | LLM 配置、只读 `style_profile` 展示 |
 | `src/plugins/dream/` | 与 LLM 并存；dream 仍为非 LLM 漂移，不混用会话 |
 | `src/domain/arknights/` | 游戏结构化数据；见 [arknights-knowledge-mcp](arknights-knowledge-mcp.md) |
 | `src/features/llm/tools/`（新建） | Tool registry；MCP 与 `ollama` 共用 |

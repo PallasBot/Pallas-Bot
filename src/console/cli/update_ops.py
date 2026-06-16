@@ -32,7 +32,7 @@ async def apply_webui_dist_update(
     github_token: str | None = None,
     refresh_runtime_meta: bool = False,
 ) -> dict[str, str]:
-    from src.plugins.pallas_webui.manager import (
+    from src.plugins.pb_webui.manager import (
         download_and_extract_dist_zip,
         fetch_latest_webui_release,
         get_webui_dist_version,
@@ -99,8 +99,8 @@ async def apply_webui_dist_update(
     effective_version = (dist_ver or "").strip() or new_tag or "unknown"
 
     if refresh_runtime_meta:
-        from src.plugins.pallas_webui.api import invalidate_health_snapshot
-        from src.plugins.pallas_webui.console_meta_store import get_console_meta, set_console_meta
+        from src.plugins.pb_webui.api import invalidate_health_snapshot
+        from src.plugins.pb_webui.console_meta_store import get_console_meta, set_console_meta
 
         set_console_meta({**get_console_meta(), "version": effective_version})
         invalidate_health_snapshot()
@@ -121,7 +121,7 @@ async def apply_bot_update(
 ) -> dict[str, str | bool]:
     from src.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
     from src.console.cli.extension_ops import append_restart_note
-    from src.plugins.pallas_webui.manager import BotGitUpdateError, apply_bot_repository_update
+    from src.plugins.pb_webui.manager import BotGitUpdateError, apply_bot_repository_update
 
     defaults = webui_update_settings_from_repo()
     token = defaults["github_token"] if github_token is None else github_token

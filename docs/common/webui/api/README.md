@@ -2,9 +2,9 @@
 
 控制台 JSON API 由主仓 `pallas_webui` 插件提供；前端 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) 通过 Axios 调用。实现源码：
 
-- 路由注册：`src/plugins/pallas_webui/extended_api.py`（`register_extended_api`）
-- 轻量健康检查：`src/plugins/pallas_webui/api.py`
-- 登录与静态页：`src/plugins/pallas_webui/public.py`
+- 路由注册：`src/plugins/pb_webui/extended_api.py`（`register_extended_api`）
+- 轻量健康检查：`src/plugins/pb_webui/api.py`
+- 登录与静态页：`src/plugins/pb_webui/public.py`
 
 ## 基址与格式
 

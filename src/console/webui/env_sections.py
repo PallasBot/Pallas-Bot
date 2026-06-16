@@ -13,6 +13,7 @@ from pydantic_core import PydanticUndefined
 
 from src.foundation.config.dotenv import env_value_to_str, upsert_env_dotenv_items
 from src.foundation.paths import PROJECT_ROOT, SRC_ROOT
+from src.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 
 
 @lru_cache(maxsize=1)
@@ -101,7 +102,7 @@ def field_to_env_uppercase_keys(model_cls: type[BaseModel]) -> dict[str, str]:
 def _plugin_env_skip_fields(section_id: str, cfg_cls: type[BaseModel]) -> frozenset[str]:
     """WebUI 通用配置默认隐藏进阶项（仍可通过 webui.json / 环境变量设置）。"""
     all_names = set(cfg_cls.model_fields)
-    if section_id == "pallas_webui":
+    if section_id == "pb_webui":
         keep = {"pallas_webui_enabled", "pallas_webui_http_base", "pallas_webui_dev_mode"}
         return frozenset(all_names - keep)
     if section_id == "pallas_protocol":
@@ -363,10 +364,10 @@ def _registered_sections() -> tuple[WebuiEnvSection, ...]:
         s
         for s in (
             _plugin_env_section_from_module(
-                section_id="pallas_webui",
+                section_id="pb_webui",
                 title="网页控制台",
-                module_label="src.plugins.pallas_webui",
-                config_module="src.plugins.pallas_webui.config",
+                module_label="src.plugins.pb_webui",
+                config_module="src.plugins.pb_webui.config",
             ),
             _plugin_env_section_from_module(
                 section_id="pallas_protocol",
@@ -400,7 +401,7 @@ _COMMON_CONFIG_SECTION_ORDER: tuple[str, ...] = (
     "repeater_learn",
     "message_scrub",
     "service_gateways",
-    "pallas_webui",
+    "pb_webui",
     "pallas_protocol",
     "help",
 )
@@ -452,7 +453,7 @@ def get_webui_env_section(section_id: str) -> WebuiEnvSection:
 
     if section_id in (CORPUS_FEDERATION_SECTION_ID, CONTROL_PLANE_SECTION_ID, COMMUNITY_STATS_SECTION_ID):
         raise ValueError(f"{section_id} 使用专用 payload，勿走 WebuiEnvSection")
-    sid = (section_id or "").strip()
+    sid = canonical_plugin_package((section_id or "").strip())
     for s in _registered_sections():
         if s.id == sid:
             return s
@@ -514,7 +515,7 @@ def webui_env_section_payload(
     elif section_id == "command_limits":
         limit_src = s.model_cls.model_validate(current_values) if current_values is not None else cfg_obj
         base.update(_command_limits_payload_extras(limit_src))
-    elif section_id == "pallas_webui":
+    elif section_id == "pb_webui":
         base.update(_pallas_webui_payload_extras())
     elif section_id == "ingress_dispatch":
         base.update(_ingress_dispatch_payload_extras())
@@ -578,7 +579,7 @@ def _pallas_webui_payload_extras() -> dict[str, Any]:
                     "pallas_webui_cors",
                     "pallas_webui_allowed_origins",
                 ],
-                "plugin_config_path": "/plugins/pallas_webui",
+                "plugin_config_path": "/plugins/pb_webui",
             },
             {
                 "id": "deploy",
@@ -591,13 +592,13 @@ def _pallas_webui_payload_extras() -> dict[str, Any]:
                     "pallas_webui_dist_zip_tag",
                     "pallas_webui_dist_zip_asset",
                 ],
-                "plugin_config_path": "/plugins/pallas_webui",
+                "plugin_config_path": "/plugins/pb_webui",
             },
             {
                 "id": "runtime",
                 "title": "运行时",
                 "field_names": ["pallas_webui_log_lines_max"],
-                "plugin_config_path": "/plugins/pallas_webui",
+                "plugin_config_path": "/plugins/pb_webui",
             },
         ],
     }
