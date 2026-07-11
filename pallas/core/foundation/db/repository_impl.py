@@ -367,6 +367,20 @@ class MongoAdminRepository:
         ).delete()
         return int(getattr(result, "deleted_count", 0) or 0)
 
+    async def delete_member(self, member_id: Any) -> int:
+        # Mongo 端：主键是 str(ObjectId)；PG 端：Alembic-equivalent 是 int。
+        # 直接把成员 id 当 PydanticObjectId 解析后按 _id 删除，避免先 list 再 by-sig 删除的竞态。
+        from beanie import PydanticObjectId
+        from bson import ObjectId
+
+        oid: Any
+        try:
+            oid = ObjectId(str(member_id))
+        except Exception:
+            return 0
+        result = await AdminMember.find(PydanticObjectId == oid).delete()
+        return int(getattr(result, "deleted_count", 0) or 0)
+
     async def list_members(
         self,
         *,
@@ -379,6 +393,23 @@ class MongoAdminRepository:
         if bot_id is not None:
             query["bot_id"] = int(bot_id)
         return await AdminMember.find(query).to_list()
+
+    async def list_admin_user_ids(self, *, bot_id: int | None) -> list[int]:
+        # Mongo 端：$or(scope=='all', scope=='bot' AND bot_id==bot_id)；只返回 user_id
+        query: dict[str, Any] = {
+            "$or": [{"scope": "all"}, {"scope": "bot", "bot_id": int(bot_id) if bot_id is not None else None}],
+        }
+        coll = AdminMember.get_pymongo_collection()
+        cursor = coll.find(query, projection={"user_id": 1, "_id": 0})
+        out: list[int] = []
+        async for doc in cursor:
+            uid = doc.get("user_id")
+            if uid is not None:
+                try:
+                    out.append(int(uid))
+                except Exception:
+                    continue
+        return out
 
 
 class MongoAclRepository:
@@ -416,6 +447,19 @@ class MongoAclRepository:
 
     async def list_all(self) -> list[PallasACL]:
         return await PallasACL.find_all().to_list()
+
+    async def list_matching_rules(
+        self,
+        *,
+        action: str,
+        target: str | None = None,
+    ) -> list[PallasACL]:
+        # 库侧过滤：action 必填；target 为 None 时退化为 $or(target==*, target==target_value)
+        # 仍接受 target==通配与 target==specific 同时存在的高频查询。
+        query: dict[str, Any] = {"action": action}
+        if target is not None:
+            query["$or"] = [{"target": "*"}, {"target": target}]
+        return await PallasACL.find(query).to_list()
 
     async def upsert_rule(
         self,
@@ -463,8 +507,16 @@ class MongoAclRepository:
         )
         return doc
 
-    async def delete_rule(self, rule_id: int) -> int:
-        result = await PallasACL.find(PallasACL.id == int(rule_id)).delete()
+    async def delete_rule(self, rule_id: Any) -> int:
+        # PallasACL._id 在 Mongo 是 ObjectId。直接用 bson 解析。
+        from beanie import PydanticObjectId
+        from bson import ObjectId
+
+        try:
+            oid = ObjectId(str(rule_id))
+        except Exception:
+            return 0
+        result = await PallasACL.find(PydanticObjectId == oid).delete()
         return int(getattr(result, "deleted_count", 0) or 0)
 
     async def delete_by_signature(
@@ -486,6 +538,16 @@ class MongoAclRepository:
             }
         ).delete()
         return int(getattr(result, "deleted_count", 0) or 0)
+
+    async def list_group_block_targets(self) -> set[str]:
+        """只返回 ``target='group:<gid>'`` 的字符串集合。"""
+        out: set[str] = set()
+        docs = await PallasACL.find({"target": {"$regex": "^group:"}}).to_list()
+        for d in docs:
+            t = getattr(d, "target", "")
+            if t:
+                out.add(t)
+        return out
 
     async def has_run_step(self, step: str) -> bool:
         return (await SchemaMigration.find_one({"step": step})) is not None

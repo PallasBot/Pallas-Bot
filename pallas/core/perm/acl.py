@@ -6,9 +6,11 @@
 - 默认 allow（与原 cmd_perm 的 everyone 语义一致）。
 - 命中集合按 priority 取最大值；同 priority 内 deny > allow（保守）。
 - admin_bypass 层独立于 priority 排序，admin_members 表里的人永远 allow
-  （除非 ``pallas_admins_respect_blacklist=true`` 开关打开）。
+  （除非 ``PALLAS_ADMINS_RESPECT_BLACKLIST=true`` 开关打开）。
 - ``role=管理员`` 行 subject 可以是 ``"*"`` 或 ``"id:<uid>"``；
   评估期用 admin_members 表二次校验具体身份。
+- **库侧过滤**：每 (action, target) 元组的规则集合缓存至本地，缓存命中后才走
+  ``_rule_matches`` 二级匹配；缓存未命中时调 repo 的 ``list_matching_rules``。
 """
 
 from __future__ import annotations
@@ -35,18 +37,31 @@ class AclDecision(NamedTuple):
     rule_id: Any = None
 
 
-_ACL_CACHE: dict[tuple[str, str, int | None, int | None, int | None], tuple[float, AclDecision]] = {}
-_ACL_CACHE_TTL_SEC = 60.0
-_ACL_CACHE_MAX = 50_000
+# 决策结果缓存（按 action+target+subject）
+_DECISION_CACHE: dict[tuple[str, str, int | None, int | None, int | None], tuple[float, AclDecision]] = {}
+_DECISION_CACHE_TTL_SEC = 60.0
+_DECISION_CACHE_MAX = 50_000
+
+# 规则列表缓存（按 action+target，避免 list_all）
+_RULES_CACHE: dict[tuple[str, str | None], tuple[float, list[Any]]] = {}
+_RULES_CACHE_TTL_SEC = 30.0
+_RULES_CACHE_MAX = 1024
+
+# admin_members 的 user_id 缓存（按 bot_id 二元组缓存）
+_ADMIN_BOT_ID_CACHE: dict[tuple, tuple[float, set[int]]] = {}
+_CACHE_KEY_ALL = (None, "admin_user_ids_all")
+
 _ADMINS_RESPECT_BLACKLIST = os.getenv("PALLAS_ADMINS_RESPECT_BLACKLIST", "").lower() in ("1", "true", "yes")
 
 
-def _eval_cache_key(action: str, target: str, subject: AclSubject) -> tuple:
+def _decision_cache_key(action: str, target: str, subject: AclSubject) -> tuple:
     return (action, target, subject.user_id, subject.group_id, subject.bot_id)
 
 
 def clear_acl_cache() -> None:
-    _ACL_CACHE.clear()
+    _DECISION_CACHE.clear()
+    _RULES_CACHE.clear()
+    _ADMIN_BOT_ID_CACHE.clear()
 
 
 def _format_subject(role: str, subject: AclSubject) -> str | None:
@@ -75,7 +90,19 @@ def _role_matches(role: str, subject: AclSubject) -> bool:
 
 
 async def _load_admin_member_user_ids(bot_id: int | None) -> set[int]:
-    """读 admin_members 表，按 bot_id 过滤出 user_id 集合。"""
+    """库侧过滤 admin_members：仅查 (scope=='all' 或 scope=='bot' AND bot_id==bot_id) 的 user_id。
+
+    30s 进程内 TTL 缓存，避免每条消息都打库。
+    """
+    global _ADMIN_BOT_ID_CACHE  # noqa: F824
+    now = time.monotonic()
+    cached = _ADMIN_BOT_ID_CACHE.get(_CACHE_KEY_ALL)
+    if cached is not None and cached[0] > now and bot_id is None:
+        return cached[1]
+    cache_key = (bot_id, "admin_user_ids") if bot_id is not None else _CACHE_KEY_ALL
+    cached = _ADMIN_BOT_ID_CACHE.get(cache_key)
+    if cached is not None and cached[0] > now:
+        return cached[1]
     try:
         from pallas.core.foundation.db import make_admin_repository
 
@@ -83,23 +110,13 @@ async def _load_admin_member_user_ids(bot_id: int | None) -> set[int]:
     except Exception:
         return set()
     try:
-        members = await repo.list_members()
+        uids = await repo.list_admin_user_ids(bot_id=bot_id)
     except Exception:
         return set()
-    out: set[int] = set()
-    for m in members:
-        scope = getattr(m, "scope", "")
-        if scope == "all":
-            try:
-                out.add(int(m.user_id))
-            except Exception:
-                continue
-        elif scope == "bot":
-            if bot_id is not None and getattr(m, "bot_id", None) == int(bot_id):
-                try:
-                    out.add(int(m.user_id))
-                except Exception:
-                    continue
+    out = set(uids)
+    if len(_ADMIN_BOT_ID_CACHE) >= 64:
+        _ADMIN_BOT_ID_CACHE.clear()
+    _ADMIN_BOT_ID_CACHE[cache_key] = (now + 30.0, out)
     return out
 
 
@@ -111,8 +128,13 @@ async def acl_admin_bypass(user_id: int | None, *, bot_id: int | None = None) ->
     return int(user_id) in admin_ids
 
 
-async def _load_acl_rules() -> list[Any]:
-    """读全部 ACL 规则；调用方负责缓存层与失败安全。"""
+async def _load_rules_for(action: str, target: str | None) -> list[Any]:
+    """库侧过滤：按 (action, target) 调 repo.list_matching_rules。结果本地 TTL 缓存。"""
+    key = (action, target if target is not None else "")
+    now = time.monotonic()
+    cached = _RULES_CACHE.get(key)
+    if cached is not None and cached[0] > now:
+        return cached[1]
     try:
         from pallas.core.foundation.db import make_acl_repository
 
@@ -120,9 +142,19 @@ async def _load_acl_rules() -> list[Any]:
     except Exception:
         return []
     try:
-        return list(await repo.list_all())
+        rules = list(await repo.list_matching_rules(action=action, target=target))
     except Exception:
         return []
+    # 缓存写回
+    if len(_RULES_CACHE) >= _RULES_CACHE_MAX:
+        stale = [k for k, (exp, _) in _RULES_CACHE.items() if exp <= now]
+        for k in stale:
+            _RULES_CACHE.pop(k, None)
+        if len(_RULES_CACHE) >= _RULES_CACHE_MAX:
+            for k in list(_RULES_CACHE.keys())[: _RULES_CACHE_MAX // 2]:
+                _RULES_CACHE.pop(k, None)
+    _RULES_CACHE[key] = (now + _RULES_CACHE_TTL_SEC, rules)
+    return rules
 
 
 def _rule_matches(rule: Any, action: str, target: str, subject: AclSubject) -> bool:
@@ -158,16 +190,34 @@ def _rule_matches(rule: Any, action: str, target: str, subject: AclSubject) -> b
     return rule_subject == expected
 
 
+def _resolve_decision(matching: list[Any]) -> AclDecision:
+    """rule 命中后做 priority 排序与 deny>allow 表决。"""
+    max_pri = max(int(r.priority) for r in matching)
+    top = [r for r in matching if int(r.priority) == max_pri]
+    any_allow = any(r.effect == "allow" for r in top)
+    any_deny = any(r.effect == "deny" for r in top)
+    decided_allow = any_allow and not any_deny
+    return AclDecision(
+        allow=decided_allow,
+        priority=max_pri,
+        source="rule",
+        rule_id=getattr(matching[0], "id", None),
+    )
+
+
 async def evaluate_acl(
     *,
     action: str,
     target: str,
     subject: AclSubject,
 ) -> AclDecision:
-    """统一 ACL 决策。三层：admin_bypass / rule / fallback。"""
-    cache_key = _eval_cache_key(action, target, subject)
+    """统一 ACL 决策。三层：admin_bypass / rule / fallback。
+
+    ``target`` 传 ``None`` 时退化走 action-only 库侧过滤；通常业务方传具体值。
+    """
+    cache_key = _decision_cache_key(action, target, subject)
     now = time.monotonic()
-    cached = _ACL_CACHE.get(cache_key)
+    cached = _DECISION_CACHE.get(cache_key)
     if cached is not None and cached[0] > now:
         return cached[1]
 
@@ -176,43 +226,31 @@ async def evaluate_acl(
     if is_command_or_event:
         if not _ADMINS_RESPECT_BLACKLIST and await acl_admin_bypass(subject.user_id, bot_id=subject.bot_id):
             decision = AclDecision(allow=True, priority=10_000_000, source="admin_bypass")
-            _ACL_CACHE[cache_key] = (now + _ACL_CACHE_TTL_SEC, decision)
-            _maybe_trim_cache(now)
+            _cache_decision(cache_key, decision, now)
             return decision
 
     # Layer 2: rule
-    rules = await _load_acl_rules()
+    rules = await _load_rules_for(action, target)
     matching = [r for r in rules if _rule_matches(r, action, target, subject)]
-    if matching:
-        max_pri = max(int(r.priority) for r in matching)
-        top = [r for r in matching if int(r.priority) == max_pri]
-        any_allow = any(r.effect == "allow" for r in top)
-        any_deny = any(r.effect == "deny" for r in top)
-        decided_allow = any_allow and not any_deny
-        decision = AclDecision(
-            allow=decided_allow,
-            priority=max_pri,
-            source="rule",
-            rule_id=getattr(matching[0], "id", None),
-        )
-    else:
-        decision = AclDecision(allow=True, priority=-1, source="fallback")
-
-    _ACL_CACHE[cache_key] = (now + _ACL_CACHE_TTL_SEC, decision)
-    _maybe_trim_cache(now)
+    decision = _resolve_decision(matching) if matching else AclDecision(allow=True, priority=-1, source="fallback")
+    _cache_decision(cache_key, decision, now)
     return decision
 
 
-def _maybe_trim_cache(now: float) -> None:
-    if len(_ACL_CACHE) <= _ACL_CACHE_MAX:
-        return
-    # 1) 淘汰过期
-    stale = [k for k, (exp, _) in _ACL_CACHE.items() if exp <= now]
-    for k in stale:
-        _ACL_CACHE.pop(k, None)
-    # 2) 还超则按插入顺序淘汰一半
-    if len(_ACL_CACHE) > _ACL_CACHE_MAX:
-        # dict 是插入序；删除最旧一半
-        keys = list(_ACL_CACHE.keys())[: len(_ACL_CACHE) // 2]
-        for k in keys:
-            _ACL_CACHE.pop(k, None)
+def _cache_decision(cache_key: tuple, decision: AclDecision, now: float) -> None:
+    """写决策缓存，满则按插入序驱逐一半。"""
+    expire = now + _DECISION_CACHE_TTL_SEC
+    if len(_DECISION_CACHE) >= _DECISION_CACHE_MAX:
+        stale = [k for k, (exp, _) in _DECISION_CACHE.items() if exp <= now]
+        for k in stale:
+            _DECISION_CACHE.pop(k, None)
+        if len(_DECISION_CACHE) >= _DECISION_CACHE_MAX:
+            for k in list(_DECISION_CACHE.keys())[: _DECISION_CACHE_MAX // 2]:
+                _DECISION_CACHE.pop(k, None)
+    _DECISION_CACHE[cache_key] = (expire, decision)
+
+
+def invalidate_acl_rules_cache() -> None:
+    """外部 webhook（acl_api 写完后）只清规则缓存与 admin_members 缓存，决策缓存等 TTL 自然过期。"""
+    _RULES_CACHE.clear()
+    _ADMIN_BOT_ID_CACHE.clear()

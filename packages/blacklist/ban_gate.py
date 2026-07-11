@@ -131,23 +131,53 @@ async def _sync_acl_group_banned(group_id: int, banned: bool) -> None:
 
 
 async def _sync_acl_group_blocked_users(group_id: int, user_ids: list[int]) -> None:
+    """将 GroupConfig.blocked_user_ids 与 ACL 表 reconcile：
+    当前列表里的人在 ACL 中以 deny 形式存在；
+    不在列表里的历史 deny 行同步删除。
+    """
     try:
         from pallas.core.foundation.db import make_acl_repository
 
         repo = make_acl_repository()
     except Exception:
         return
+    target_prefix = f"group:{int(group_id)}"
+    new_uids = {int(u) for u in user_ids}
     try:
-        for uid in user_ids:
+        # 1) upsert 当前 uid 集合（命中即 priority=1000 deny）
+        for uid in new_uids:
             await repo.upsert_rule(
                 role="用户",
-                subject=f"u:{int(uid)}",
+                subject=f"u:{uid}",
                 action="event.receive",
                 target_scope="全局",
-                target=f"group:{int(group_id)}",
+                target=target_prefix,
                 effect="deny",
                 priority=1000,
                 source="system",
+            )
+        # 2) 列出该 group 全部历史 ACL 行，剔除仍存在于 new_uids 的，差集删除
+        all_rules = await repo.list_matching_rules(action="event.receive", target=target_prefix)
+        stale_uids: set[int] = set()
+        for r in all_rules:
+            if r.role != "用户":
+                continue
+            subj = getattr(r, "subject", "") or ""
+            if not subj.startswith("u:"):
+                continue
+            try:
+                rid = int(subj[2:])
+            except ValueError:
+                continue
+            if rid not in new_uids:
+                stale_uids.add(rid)
+        for rid in stale_uids:
+            await repo.delete_by_signature(
+                role="用户",
+                subject=f"u:{rid}",
+                action="event.receive",
+                target_scope="全局",
+                target=target_prefix,
             )
     except Exception:
         from nonebot import logger

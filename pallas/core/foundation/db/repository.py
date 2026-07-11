@@ -228,6 +228,10 @@ class AdminRepository(Protocol):
         """删除匹配行，返回被删除的行数。"""
         ...
 
+    async def delete_member(self, member_id: Any) -> int:
+        """按主键直接删除。Mongo 后端须接受 str(ObjectId)。"""
+        ...
+
     async def list_members(
         self,
         *,
@@ -235,6 +239,10 @@ class AdminRepository(Protocol):
         bot_id: int | None = None,
     ) -> list[AdminMember]:
         """按 scope/bot_id 过滤列出成员。"""
+        ...
+
+    async def list_admin_user_ids(self, *, bot_id: int | None) -> list[int]:
+        """只查 (bot_id 或 scope=all) 的 user_id 列表，给 acl_admin_bypass 做库侧过滤用。"""
         ...
 
 
@@ -256,6 +264,17 @@ class AclRepository(Protocol):
     async def list_all(self) -> list[PallasACL]:
         ...
 
+    async def list_matching_rules(
+        self,
+        *,
+        action: str,
+        target: str | None = None,
+    ) -> list[PallasACL]:
+        """按 action 必填、target 可选（target 在表里允许 "*" 通配）下推到库侧过滤，
+        主要给 ACL 引擎 fast-path 使用。返回的规则仍需引擎层做 role/subject 二级匹配。
+        """
+        ...
+
     async def upsert_rule(
         self,
         *,
@@ -271,8 +290,8 @@ class AclRepository(Protocol):
         """按 (role, subject, action, target_scope, target) 唯一键 upsert。"""
         ...
 
-    async def delete_rule(self, rule_id: int) -> int:
-        """按主键删除，返回被删行数。"""
+    async def delete_rule(self, rule_id: Any) -> int:
+        """按主键删除；Mongo 端 ``rule_id`` 是 ``str(ObjectId)``。"""
         ...
 
     async def delete_by_signature(
@@ -285,6 +304,10 @@ class AclRepository(Protocol):
         target: str,
     ) -> int:
         """按唯一键删除，返回被删行数。用于 unban 等动作。"""
+        ...
+
+    async def list_group_block_targets(self) -> set[str]:
+        """返回 ``target='group:<gid>'`` 的 target 集合，用于 ban_gate stale 清理。"""
         ...
 
     async def has_run_step(self, step: str) -> bool:

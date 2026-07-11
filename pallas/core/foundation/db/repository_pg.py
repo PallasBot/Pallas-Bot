@@ -1642,6 +1642,12 @@ class PgAdminRepository:
             await session.commit()
             return int(result.rowcount or 0)
 
+    async def delete_member(self, member_id: Any) -> int:
+        async with get_session() as session:
+            result = await session.execute(delete(AdminMemberRow).where(AdminMemberRow.id == int(member_id)))
+            await session.commit()
+            return int(result.rowcount or 0)
+
     async def list_members(
         self,
         *,
@@ -1685,6 +1691,24 @@ class PgAclRepository:
     async def list_all(self) -> list[Any]:
         async with get_session(read_only=True) as session:
             rows = (await session.execute(select(PallasACLRow))).scalars().all()
+            return [row_to_pallas_acl(r) for r in rows]
+
+    async def list_matching_rules(
+        self,
+        *,
+        action: str,
+        target: str | None = None,
+    ) -> list[Any]:
+        async with get_session(read_only=True) as session:
+            stmt = select(PallasACLRow).where(PallasACLRow.action == action)
+            if target is not None:
+                stmt = stmt.where(
+                    or_(
+                        PallasACLRow.target == "*",
+                        PallasACLRow.target == target,
+                    )
+                )
+            rows = (await session.execute(stmt)).scalars().all()
             return [row_to_pallas_acl(r) for r in rows]
 
     async def upsert_rule(
@@ -1732,10 +1756,14 @@ class PgAclRepository:
             await session.commit()
             return row_to_pallas_acl(row)
 
-    async def delete_rule(self, rule_id: int) -> int:
+    async def delete_rule(self, rule_id: Any) -> int:
+        try:
+            rid = int(rule_id)
+        except (TypeError, ValueError):
+            return 0
         async with get_session() as session:
             result = await session.execute(
-                delete(PallasACLRow).where(PallasACLRow.id == int(rule_id))
+                delete(PallasACLRow).where(PallasACLRow.id == rid)
             )
             await session.commit()
             return int(result.rowcount or 0)
@@ -1761,6 +1789,14 @@ class PgAclRepository:
             )
             await session.commit()
             return int(result.rowcount or 0)
+
+    async def list_group_block_targets(self) -> set[str]:
+        async with get_session(read_only=True) as session:
+            stmt = select(PallasACLRow.target).where(
+                PallasACLRow.target.like("group:%")
+            )
+            rows = (await session.execute(stmt)).scalars().all()
+            return {row for row in rows if row}
 
     async def has_run_step(self, step: str) -> bool:
         async with get_session(read_only=True) as session:
@@ -1945,6 +1981,24 @@ class PgConfigRepository:
 
     async def invalidate_cache(self) -> None:
         await self._cache.clear()
+
+    async def list_admin_user_ids(self, *, bot_id: int | None) -> list[int]:
+        async with get_session(read_only=True) as session:
+            stmt = select(AdminMemberRow.user_id).where(
+                or_(
+                    AdminMemberRow.scope == "all",
+                    AdminMemberRow.scope == "bot",
+                )
+            )
+            if bot_id is not None:
+                stmt = stmt.where(
+                    or_(
+                        AdminMemberRow.scope == "all",
+                        AdminMemberRow.bot_id == int(bot_id),
+                    )
+                )
+            rows = (await session.execute(stmt)).scalars().all()
+            return [int(r) for r in rows if r is not None]  # type: ignore[union-attr]  # noqa: E501
 
 
 class PgImageCacheRepository:

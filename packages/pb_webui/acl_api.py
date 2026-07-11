@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from pallas.core.perm.acl import clear_acl_cache
+from pallas.core.perm.acl import clear_acl_cache, invalidate_acl_rules_cache
 
 ACL_ROLES = {"用户", "群", "管理员", "所有"}
 ACL_SCOPES = {"全局", "插件", "指令"}
@@ -23,6 +23,19 @@ class _AclRuleBody(BaseModel):
     effect: str = Field(...)
     priority: int = 100
     source: str = "user"
+
+
+class _AclRuleDeleteBody(BaseModel):
+    """按自然键 (role, subject, action, target_scope, target) 删除，
+    比主键删除跨后端一致（Mongo ObjectId / PG int）；同时支持按主键。"""
+
+    by: str = Field(default="signature")  # "signature" 或 "id"
+    id: str | None = None
+    role: str | None = None
+    subject: str | None = None
+    action: str | None = None
+    target_scope: str | None = None
+    target: str | None = None
 
 
 class _AdminMemberBody(BaseModel):
@@ -135,12 +148,43 @@ def register_acl_router(router: APIRouter, x: str = "/pallas/api") -> None:
             },
         }
 
-    @router.delete(f"{x}/acl/rules/{{rule_id}}")
-    async def _delete_acl_rule(rule_id: int) -> dict[str, Any]:
+    @router.delete(f"{x}/acl/rules")
+    async def _delete_acl_rule(body: _AclRuleDeleteBody) -> dict[str, Any]:
+        """按自然键或主键删除；推荐 ``by=signature`` 以保证跨后端一致。"""
         from pallas.core.foundation.db import make_acl_repository
 
         repo = make_acl_repository()
-        deleted = await repo.delete_rule(int(rule_id))
+        deleted = 0
+        if body.by == "id" and body.id is not None:
+            deleted = await repo.delete_rule(body.id)
+        elif body.by == "signature":
+            for key in (body.role, body.action, body.target_scope, body.target):
+                if not key:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="by=signature 时必须提供 role / action / target_scope / target 四元组",
+                    )
+            deleted = await repo.delete_by_signature(
+                role=body.role,
+                subject=body.subject,
+                action=body.action,
+                target_scope=body.target_scope,
+                target=body.target,
+            )
+        else:
+            raise HTTPException(status_code=400, detail="by 必须是 'signature' 或 'id'")
+        invalidate_acl_rules_cache()
+        clear_acl_cache()
+        return {"ok": True, "data": {"deleted": deleted}}
+
+    # 旧路径：直接按 path param 删除（保留兼容，但默认走 signature 时建议走 body 版本）
+    @router.delete(f"{x}/acl/rules/{{rule_id}}")
+    async def _delete_acl_rule_by_id(rule_id: str) -> dict[str, Any]:
+        from pallas.core.foundation.db import make_acl_repository
+
+        repo = make_acl_repository()
+        deleted = await repo.delete_rule(rule_id)  # 接受 str（Mongo ObjectId）或 int（PG）
+        invalidate_acl_rules_cache()
         clear_acl_cache()
         return {"ok": True, "data": {"deleted": deleted}}
 
@@ -207,19 +251,11 @@ def register_acl_router(router: APIRouter, x: str = "/pallas/api") -> None:
         }
 
     @router.delete(f"{x}/admin_members/{{member_id}}")
-    async def _delete_admin_member(member_id: int) -> dict[str, Any]:
+    async def _delete_admin_member(member_id: str) -> dict[str, Any]:
+        """按主键直删，避免 list 后再按 scope/bot_id 删除的竞态。"""
         from pallas.core.foundation.db import make_admin_repository
 
         repo = make_admin_repository()
-        # member_id 来自 GET 列表；解析 scope/bot_id 再删除最简实现：先 list 再精确删除
-        members = await repo.list_members()
-        target = next((m for m in members if getattr(m, "id", None) == int(member_id)), None)
-        deleted = 0
-        if target is not None:
-            deleted = await repo.remove_member(
-                user_id=int(target.user_id),
-                scope=target.scope,
-                bot_id=getattr(target, "bot_id", None),
-            )
+        deleted = await repo.delete_member(member_id)
         clear_acl_cache()
         return {"ok": True, "data": {"deleted": deleted}}
