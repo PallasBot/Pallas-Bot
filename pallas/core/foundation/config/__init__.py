@@ -248,23 +248,47 @@ class BotConfig(Config):
 async def get_bot_admins(bot_id: int) -> list[int]:
     """
     返回 BotConfig 持久化字段 admins 中的管理员 QQ 列表；无配置或为空时返回 []。
+    启动期 admin_members 尚未迁移时回退到 BotConfig.admins。
     """
     from .bot_admins_cache import get_bot_admins_cached
 
-    return await get_bot_admins_cached(bot_id)
+    primary = await get_bot_admins_cached(bot_id)
+    if primary:
+        return primary
+    # 启动窗口期尚未迁移完成，回退
+    try:
+        from pallas.core.foundation.db import make_admin_repository
+
+        members = await make_admin_repository().list_members(scope="bot", bot_id=int(bot_id))
+        if members:
+            return sorted({int(m.user_id) for m in members})
+    except Exception:
+        pass
+    return primary
 
 
 async def user_is_bot_admin(bot_id: int, user_id: int) -> bool:
     """
-    根据 BotConfig 持久化字段 admins 判断 user_id 是否为该 bot 账号的管理员。
+    根据 admin_members 或 BotConfig.admins 判断 user_id 是否为该 bot 账号的管理员。
     """
-    return user_id in await get_bot_admins(bot_id)
+    if user_id in await get_bot_admins(bot_id):
+        return True
+    return False
 
 
 async def user_is_admin_of_any_bot(user_id: int) -> bool:
     """
-    判断 user_id 是否在任意已持久化的 BotConfig.admins 中。
+    判断 user_id 是否在 admin_members（scope=all 或任一 scope=bot）之中。
     """
+    try:
+        from pallas.core.foundation.db import make_admin_repository
+
+        members = await make_admin_repository().list_members()
+    except Exception:
+        members = []
+    if any(int(m.user_id) == int(user_id) for m in members):
+        return True
+    # bootstrap 回退到现有的跨 bot 缓存（BotConfig.admins）
     from .bot_admins_cache import any_bot_admin_user_ids_cached
 
     try:

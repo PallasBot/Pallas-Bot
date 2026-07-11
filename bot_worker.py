@@ -91,6 +91,12 @@ async def _ensure_worker_voices_background() -> None:
 @driver.on_startup
 async def startup():
     await init_db()
+    from pallas.core.perm.migration import run_acl_startup_migrations
+
+    try:
+        await run_acl_startup_migrations()
+    except Exception as e:
+        nonebot.logger.warning("bot_worker: ACL startup migration failed: {}", e)
     await start_ban_gate_snapshot()
     from pallas.core.platform.coord.redis_settings import (
         coord_redis_enabled,

@@ -3,7 +3,23 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from pallas.core.foundation.db.modules import Answer, Ban, BlackList, Context, ImageCache, Message
+    from pallas.core.foundation.db.modules import (
+        AdminMember,
+        Answer,
+        Ban,
+        BlackList,
+        Context,
+        ImageCache,
+        Message,
+        PallasACL,
+    )
+
+
+@runtime_checkable
+class AclDecisionLike(Protocol):
+    allow: bool
+    priority: int
+    source: str
 
 
 @runtime_checkable
@@ -180,4 +196,101 @@ class ImageCacheRepository(Protocol):
 
     async def delete_low_ref(self, ref_threshold: int) -> None:
         """删除 ref_times 低于阈值的记录"""
+        ...
+
+
+@runtime_checkable
+class AdminRepository(Protocol):
+    """管理员身份表：判断「谁是管理员」用，权限细节由 ACL 表表达。"""
+
+    async def is_admin(self, user_id: int, *, bot_id: int | None = None) -> bool:
+        """scope=all 时跨 bot 全平台；scope=bot 且 bot_id 匹配时本地；其他场景返回 False。"""
+        ...
+
+    async def upsert_member(
+        self,
+        *,
+        user_id: int,
+        scope: str,
+        bot_id: int | None = None,
+        note: str | None = None,
+    ) -> AdminMember:
+        """新增或更新一个 AdminMember 行，返回最新文档。"""
+        ...
+
+    async def remove_member(
+        self,
+        *,
+        user_id: int,
+        scope: str,
+        bot_id: int | None = None,
+    ) -> int:
+        """删除匹配行，返回被删除的行数。"""
+        ...
+
+    async def list_members(
+        self,
+        *,
+        scope: str | None = None,
+        bot_id: int | None = None,
+    ) -> list[AdminMember]:
+        """按 scope/bot_id 过滤列出成员。"""
+        ...
+
+
+@runtime_checkable
+class AclRepository(Protocol):
+    """ACL 规则表：负责 ACL 规则的 CRUD。"""
+
+    async def list_rules(
+        self,
+        *,
+        action: str | None = None,
+        target: str | None = None,
+        role: str | None = None,
+        subject: str | None = None,
+    ) -> list[PallasACL]:
+        """按可选过滤列出规则。"""
+        ...
+
+    async def list_all(self) -> list[PallasACL]:
+        ...
+
+    async def upsert_rule(
+        self,
+        *,
+        role: str,
+        subject: str | None,
+        action: str,
+        target_scope: str,
+        target: str,
+        effect: str,
+        priority: int,
+        source: str,
+    ) -> PallasACL:
+        """按 (role, subject, action, target_scope, target) 唯一键 upsert。"""
+        ...
+
+    async def delete_rule(self, rule_id: int) -> int:
+        """按主键删除，返回被删行数。"""
+        ...
+
+    async def delete_by_signature(
+        self,
+        *,
+        role: str,
+        subject: str | None,
+        action: str,
+        target_scope: str,
+        target: str,
+    ) -> int:
+        """按唯一键删除，返回被删行数。用于 unban 等动作。"""
+        ...
+
+    async def has_run_step(self, step: str) -> bool:
+        """SchemaMigration 步骤幂等登记。"""
+        ...
+
+    async def mark_run_step(self, step: str) -> None:
+        """登记一个 schema_migration 步骤，幂等。"""
         ...

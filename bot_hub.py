@@ -59,6 +59,12 @@ register_onebot_v11_custom_events()
 @driver.on_startup
 async def startup():
     await init_db()
+    from pallas.core.perm.migration import run_acl_startup_migrations
+
+    try:
+        await run_acl_startup_migrations()
+    except Exception as e:
+        nonebot.logger.warning("bot_hub: ACL startup migration failed: {}", e)
     await start_ban_gate_snapshot()
     from pallas.core.platform.coord.redis_settings import ensure_coord_redis_ready_for_sharding
 

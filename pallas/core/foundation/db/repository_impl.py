@@ -7,12 +7,15 @@ from typing import TYPE_CHECKING, Any
 from beanie.operators import Or
 
 from pallas.core.foundation.db.modules import (
+    AdminMember,
     Answer,
     Ban,
     BlackList,
     Context,
     ImageCache,
     Message,
+    PallasACL,
+    SchemaMigration,
 )
 from pallas.core.shared.utils.invalidate_cache import clear_model_cache
 
@@ -304,3 +307,193 @@ class MongoImageCacheRepository:
 
     async def delete_low_ref(self, ref_threshold: int) -> None:
         await ImageCache.find(ImageCache.ref_times < ref_threshold).delete()
+
+
+class MongoAdminRepository:
+    """MongoDB 版 AdminRepository。"""
+
+    async def is_admin(self, user_id: int, *, bot_id: int | None = None) -> bool:
+        if bot_id is not None:
+            hit = await AdminMember.find_one(
+                {"scope": "bot", "bot_id": int(bot_id), "user_id": int(user_id)}
+            )
+            if hit is not None:
+                return True
+        # scope=all 全平台
+        hit = await AdminMember.find_one({"scope": "all", "user_id": int(user_id)})
+        return hit is not None
+
+    async def upsert_member(
+        self,
+        *,
+        user_id: int,
+        scope: str,
+        bot_id: int | None = None,
+        note: str | None = None,
+    ) -> AdminMember:
+        now = int(__import__("time").time())
+        scope_norm = "bot" if scope not in ("bot", "all") else scope
+        bot_id_norm = int(bot_id) if scope_norm == "bot" and bot_id is not None else None
+        query = {"scope": scope_norm, "bot_id": bot_id_norm, "user_id": int(user_id)}
+        doc = await AdminMember.find_one(query)
+        if doc is None:
+            doc = AdminMember(
+                scope=scope_norm,
+                bot_id=bot_id_norm,
+                user_id=int(user_id),
+                note=note,
+                created_at=now,
+                updated_at=now,
+            )
+            await doc.insert()
+            return doc
+        set_fields: dict[str, Any] = {"updated_at": now}
+        if note is not None:
+            set_fields["note"] = note
+        await doc.set(set_fields)
+        return doc
+
+    async def remove_member(
+        self,
+        *,
+        user_id: int,
+        scope: str,
+        bot_id: int | None = None,
+    ) -> int:
+        scope_norm = "bot" if scope not in ("bot", "all") else scope
+        bot_id_norm = int(bot_id) if scope_norm == "bot" and bot_id is not None else None
+        result = await AdminMember.find(
+            {"scope": scope_norm, "bot_id": bot_id_norm, "user_id": int(user_id)}
+        ).delete()
+        return int(getattr(result, "deleted_count", 0) or 0)
+
+    async def list_members(
+        self,
+        *,
+        scope: str | None = None,
+        bot_id: int | None = None,
+    ) -> list[AdminMember]:
+        query: dict[str, Any] = {}
+        if scope is not None:
+            query["scope"] = scope
+        if bot_id is not None:
+            query["bot_id"] = int(bot_id)
+        return await AdminMember.find(query).to_list()
+
+
+class MongoAclRepository:
+    """MongoDB 版 AclRepository。"""
+
+    @staticmethod
+    def _match_query(
+        *,
+        action: str | None = None,
+        target: str | None = None,
+        role: str | None = None,
+        subject: str | None = None,
+    ) -> dict[str, Any]:
+        query: dict[str, Any] = {}
+        if action is not None:
+            query["action"] = action
+        if target is not None:
+            query["target"] = target
+        if role is not None:
+            query["role"] = role
+        if subject is not None:
+            query["subject"] = subject
+        return query
+
+    async def list_rules(
+        self,
+        *,
+        action: str | None = None,
+        target: str | None = None,
+        role: str | None = None,
+        subject: str | None = None,
+    ) -> list[PallasACL]:
+        q = self._match_query(action=action, target=target, role=role, subject=subject)
+        return await PallasACL.find(q).to_list()
+
+    async def list_all(self) -> list[PallasACL]:
+        return await PallasACL.find_all().to_list()
+
+    async def upsert_rule(
+        self,
+        *,
+        role: str,
+        subject: str | None,
+        action: str,
+        target_scope: str,
+        target: str,
+        effect: str,
+        priority: int,
+        source: str,
+    ) -> PallasACL:
+        now = int(__import__("time").time())
+        query = {
+            "role": role,
+            "subject": subject,
+            "action": action,
+            "target_scope": target_scope,
+            "target": target,
+        }
+        doc = await PallasACL.find_one(query)
+        if doc is None:
+            doc = PallasACL(
+                role=role,
+                subject=subject,
+                action=action,
+                target_scope=target_scope,
+                target=target,
+                effect=effect,
+                priority=int(priority),
+                source=source,
+                created_at=now,
+                updated_at=now,
+            )
+            await doc.insert()
+            return doc
+        await doc.set(
+            {
+                "effect": effect,
+                "priority": int(priority),
+                "source": source,
+                "updated_at": now,
+            }
+        )
+        return doc
+
+    async def delete_rule(self, rule_id: int) -> int:
+        result = await PallasACL.find(PallasACL.id == int(rule_id)).delete()
+        return int(getattr(result, "deleted_count", 0) or 0)
+
+    async def delete_by_signature(
+        self,
+        *,
+        role: str,
+        subject: str | None,
+        action: str,
+        target_scope: str,
+        target: str,
+    ) -> int:
+        result = await PallasACL.find(
+            {
+                "role": role,
+                "subject": subject,
+                "action": action,
+                "target_scope": target_scope,
+                "target": target,
+            }
+        ).delete()
+        return int(getattr(result, "deleted_count", 0) or 0)
+
+    async def has_run_step(self, step: str) -> bool:
+        return (await SchemaMigration.find_one({"step": step})) is not None
+
+    async def mark_run_step(self, step: str) -> None:
+        from pallas.core.foundation.db.modules import SchemaMigration as _Sm
+
+        existing = await _Sm.find_one({"step": step})
+        if existing is not None:
+            return
+        await _Sm(step=step).insert()

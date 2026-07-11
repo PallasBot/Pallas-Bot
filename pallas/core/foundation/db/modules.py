@@ -128,6 +128,13 @@ class Context(Document):
 
 
 class BlackList(Document):
+    """复读机回复黑名单。
+
+    与 ACL 黑名单（acl_rules / admin_members）是不同概念；命名同名是历史遗留。
+    别名 RepeaterReplyBan 已被引入用于去除歧义，使用方建议改用别名。Mongo collection 与 PG 表
+    重命名为 repeater_reply_ban 属于独立迁移工单，不在本次 ACL 任务内。
+    """
+
     group_id: int = Field(...)
     answers: list[str] = Field(default_factory=list)
     answers_reserve: list[str] = Field(default_factory=list)
@@ -136,6 +143,84 @@ class BlackList(Document):
         name = "blacklist"
         collection = "blacklist"
         indexes = [IndexModel([("group_id", pymongo.HASHED)], name="group_index")]
+
+
+RepeaterReplyBan = BlackList
+
+
+class SchemaMigration(Document):
+    """启动期幂等的 schema 迁移步骤登记表；已应用的步骤不再重复执行。"""
+
+    step: str = Field(..., unique=True)
+    applied_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "schema_migrations"
+        collection = "schema_migrations"
+        indexes = [IndexModel([("step", pymongo.HASHED)], name="step_index")]
+
+
+class AdminMember(Document):
+    """管理员身份表：与 ACL 引擎配合；ACL 表存规则、admin_members 表存身份。"""
+
+    scope: str = Field(...)  # "bot" | "all"
+    bot_id: int | None = Field(default=None)  # scope=="bot" 时必填
+    user_id: int = Field(...)
+    note: str | None = Field(default=None)
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    updated_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "admin_members"
+        collection = "admin_members"
+        indexes = [
+            IndexModel(
+                [
+                    ("scope", pymongo.HASHED),
+                    ("bot_id", pymongo.HASHED),
+                    ("user_id", pymongo.HASHED),
+                ],
+                name="scope_bot_user_unique",
+            ),
+        ]
+
+
+class PallasACL(Document):
+    """Pallas-Bot ACL 表。subject 单值字符串，role 决定前缀形态：
+
+    - role="用户"      → subject = "u:<user_id>"
+    - role="群"        → subject = "g:<group_id>"
+    - role="管理员"    → subject = "*" 或 "id:<user_id>"
+    - role="所有"      → subject = None
+    """
+
+    role: str = Field(...)
+    subject: str | None = Field(default=None)
+    action: str = Field(...)
+    target_scope: str = Field(...)
+    target: str = Field(...)
+    effect: str = Field(...)
+    priority: int = Field(default=100)
+    source: str = Field(default="user")  # "user" | "system"
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    updated_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "acl_rules"
+        collection = "acl_rules"
+        indexes = [
+            IndexModel(
+                [
+                    ("role", pymongo.HASHED),
+                    ("subject", pymongo.HASHED),
+                    ("action", pymongo.HASHED),
+                    ("target_scope", pymongo.HASHED),
+                    ("target", pymongo.HASHED),
+                ],
+                name="rule_signature_unique",
+            ),
+            IndexModel([("action", pymongo.HASHED)], name="action_index"),
+        ]
 
 
 class BaseImageCache(Document):
@@ -173,5 +258,9 @@ __all__ = [
     "Answer",
     "Context",
     "BlackList",
+    "RepeaterReplyBan",
+    "SchemaMigration",
+    "AdminMember",
+    "PallasACL",
     "ImageCache",
 ]

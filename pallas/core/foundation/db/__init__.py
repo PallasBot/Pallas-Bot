@@ -4,6 +4,7 @@ from collections.abc import Callable
 from urllib.parse import quote_plus
 
 from .modules import (
+    AdminMember,
     Answer,
     Ban,
     BlackList,
@@ -12,10 +13,14 @@ from .modules import (
     GroupConfigModule,
     ImageCache,
     Message,
+    PallasACL,
+    SchemaMigration,
     SingProgress,
     UserConfigModule,
 )
 from .repository import (
+    AclRepository,
+    AdminRepository,
     BlackListRepository,
     ConfigRepository,
     ContextRepository,
@@ -37,6 +42,8 @@ BOT_CONFIG_REPO_REGISTRY: dict[str, Callable[[], ConfigRepository]] = {}
 GROUP_CONFIG_REPO_REGISTRY: dict[str, Callable[[], ConfigRepository]] = {}
 USER_CONFIG_REPO_REGISTRY: dict[str, Callable[[], ConfigRepository]] = {}
 IMAGE_CACHE_REPO_REGISTRY: dict[str, Callable[[], ImageCacheRepository]] = {}
+ADMIN_REPO_REGISTRY: dict[str, Callable[[], AdminRepository]] = {}
+ACL_REPO_REGISTRY: dict[str, Callable[[], AclRepository]] = {}
 
 # 数据库初始化函数注册表：后端名称 → 异步初始化函数
 INIT_DB_REGISTRY: dict[str, Callable] = {}
@@ -57,6 +64,8 @@ def register_backend(
     group_config_factory: Callable[[], ConfigRepository] | None = None,
     user_config_factory: Callable[[], ConfigRepository] | None = None,
     image_cache_factory: Callable[[], ImageCacheRepository] | None = None,
+    admin_factory: Callable[[], AdminRepository] | None = None,
+    acl_factory: Callable[[], AclRepository] | None = None,
 ) -> None:
     """
     注册一个数据库后端。
@@ -76,6 +85,10 @@ def register_backend(
         USER_CONFIG_REPO_REGISTRY[backend] = user_config_factory
     if image_cache_factory is not None:
         IMAGE_CACHE_REPO_REGISTRY[backend] = image_cache_factory
+    if admin_factory is not None:
+        ADMIN_REPO_REGISTRY[backend] = admin_factory
+    if acl_factory is not None:
+        ACL_REPO_REGISTRY[backend] = acl_factory
     _backends_registered.add(backend)
 
 
@@ -95,6 +108,8 @@ def ensure_backend_registered(backend: str | None = None) -> str:
             group_config_factory=make_mongo_group_config,
             user_config_factory=make_mongo_user_config,
             image_cache_factory=make_mongo_image_cache,
+            admin_factory=make_mongo_admin,
+            acl_factory=make_mongo_acl,
         )
     elif name == "postgresql":
         register_backend(
@@ -107,6 +122,8 @@ def ensure_backend_registered(backend: str | None = None) -> str:
             group_config_factory=make_pg_group_config,
             user_config_factory=make_pg_user_config,
             image_cache_factory=make_pg_image_cache,
+            admin_factory=make_pg_admin,
+            acl_factory=make_pg_acl,
         )
     else:
         raise ValueError(f"不支持的数据库后端: {name}，已注册的后端: {sorted(_backends_registered)}")
@@ -153,6 +170,18 @@ def make_mongo_image_cache() -> ImageCacheRepository:
     from .repository_impl import MongoImageCacheRepository
 
     return MongoImageCacheRepository()
+
+
+def make_mongo_admin() -> AdminRepository:
+    from .repository_impl import MongoAdminRepository
+
+    return MongoAdminRepository()
+
+
+def make_mongo_acl() -> AclRepository:
+    from .repository_impl import MongoAclRepository
+
+    return MongoAclRepository()
 
 
 def _cfg(key: str, default: str = "") -> str:
@@ -235,6 +264,9 @@ async def init_mongodb_db() -> None:
             Context,
             BlackList,
             ImageCache,
+            SchemaMigration,
+            AdminMember,
+            PallasACL,
         ],
     )
     _mongodb_initialized = True
@@ -281,6 +313,18 @@ def make_pg_image_cache() -> ImageCacheRepository:
     from .repository_pg import PgImageCacheRepository
 
     return PgImageCacheRepository()
+
+
+def make_pg_admin() -> AdminRepository:
+    from .repository_pg import PgAdminRepository
+
+    return PgAdminRepository()
+
+
+def make_pg_acl() -> AclRepository:
+    from .repository_pg import PgAclRepository
+
+    return PgAclRepository()
 
 
 async def init_postgresql_db() -> None:
@@ -425,6 +469,22 @@ def make_image_cache_repository() -> ImageCacheRepository:
     """根据当前配置的后端，返回 ImageCache Repository 实例。"""
     backend = ensure_backend_registered()
     return IMAGE_CACHE_REPO_REGISTRY[backend]()
+
+
+def make_admin_repository() -> AdminRepository:
+    """根据当前配置的后端，返回 AdminRepository。"""
+    backend = ensure_backend_registered()
+    if backend not in ADMIN_REPO_REGISTRY:
+        raise ValueError(f"后端 {backend!r} 未注册 AdminRepository")
+    return ADMIN_REPO_REGISTRY[backend]()
+
+
+def make_acl_repository() -> AclRepository:
+    """根据当前配置的后端，返回 AclRepository。"""
+    backend = ensure_backend_registered()
+    if backend not in ACL_REPO_REGISTRY:
+        raise ValueError(f"后端 {backend!r} 未注册 AclRepository")
+    return ACL_REPO_REGISTRY[backend]()
 
 
 async def init_db(backend: str | None = None) -> None:

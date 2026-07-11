@@ -9,6 +9,7 @@ from nonebot.permission import SUPERUSER, Permission
 
 from pallas.core.foundation.config import user_is_admin_of_any_bot, user_is_bot_admin
 
+from .acl import AclSubject, evaluate_acl
 from .config import get_cmd_perm_config
 from .registry import resolved_level
 from .runtime_meta import mark_command_permission_meta
@@ -17,6 +18,36 @@ from .runtime_meta import mark_command_permission_meta
 async def satisfies_command_permission(bot: Bot, event: Event, command_id: str) -> bool:
     if not isinstance(event, MessageEvent):
         return False
+
+    try:
+        uid = int(event.get_user_id())
+    except Exception:
+        uid = None
+    try:
+        sid = int(event.self_id)
+    except Exception:
+        sid = None
+
+    gid: int | None
+    if isinstance(event, GroupMessageEvent):
+        try:
+            gid = int(getattr(event, "group_id", 0)) or None
+        except Exception:
+            gid = None
+    else:
+        gid = None
+
+    action = f"cmd.{command_id}"
+    subject = AclSubject(user_id=uid, group_id=gid, bot_id=sid)
+    try:
+        decision = await evaluate_acl(action=action, target=command_id, subject=subject)
+        if decision.source == "rule":
+            return decision.allow
+        if decision.source == "admin_bypass":
+            return True
+    except Exception:
+        decision = None  # 引擎异常时回到 legacy cmd_perm
+
     cfg = get_cmd_perm_config()
     level = resolved_level(command_id, cfg.command_permission_overrides)
     su = await SUPERUSER(bot, event)
@@ -26,10 +57,7 @@ async def satisfies_command_permission(bot: Bot, event: Event, command_id: str) 
         return su
     if su:
         return True
-    try:
-        uid = int(event.get_user_id())
-        sid = int(event.self_id)
-    except Exception:
+    if uid is None or sid is None:
         return False
 
     async def bot_ok() -> bool:

@@ -167,6 +167,57 @@ class BlackListRow(Base):
     answers_reserve: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
 
 
+class AdminMemberRow(Base):
+    __tablename__ = "admin_members"
+    __table_args__ = (
+        UniqueConstraint("scope", "bot_id", "user_id", name="uq_admin_members_scope_bot_user"),
+        Index("ix_admin_members_bot_user", "bot_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    scope: Mapped[str] = mapped_column(Text, nullable=False)
+    bot_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
+class PallasACLRow(Base):
+    __tablename__ = "acl_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "role",
+            "subject",
+            "action",
+            "target_scope",
+            "target",
+            name="uq_acl_rules_signature",
+        ),
+        Index("ix_acl_rules_action", "action"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    role: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str | None] = mapped_column(Text, nullable=True)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    target_scope: Mapped[str] = mapped_column(Text, nullable=False)
+    target: Mapped[str] = mapped_column(Text, nullable=False)
+    effect: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="user")
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
+class SchemaMigrationRow(Base):
+    __tablename__ = "schema_migrations"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    step: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    applied_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
 class BotConfigRow(Base):
     __tablename__ = "bot_config"
 
@@ -1483,6 +1534,253 @@ _CONFIG_TABLE_MAP: dict[str, tuple[type, str]] = {
     "group_config": (GroupConfigRow, "group_id"),
     "user_config": (UserConfigRow, "user_id"),
 }
+
+
+def row_to_admin_member(row: AdminMemberRow):
+    from pallas.core.foundation.db.modules import AdminMember
+
+    return AdminMember.model_construct(
+        id=row.id,
+        scope=row.scope,
+        bot_id=row.bot_id,
+        user_id=row.user_id,
+        note=row.note,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def row_to_pallas_acl(row: PallasACLRow):
+    from pallas.core.foundation.db.modules import PallasACL
+
+    return PallasACL.model_construct(
+        id=row.id,
+        role=row.role,
+        subject=row.subject,
+        action=row.action,
+        target_scope=row.target_scope,
+        target=row.target,
+        effect=row.effect,
+        priority=row.priority,
+        source=row.source,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+class PgAdminRepository:
+    """PG 版 AdminRepository。"""
+
+    async def is_admin(self, user_id: int, *, bot_id: int | None = None) -> bool:
+        async with get_session(read_only=True) as session:
+            stmt = select(AdminMemberRow.id).where(AdminMemberRow.user_id == int(user_id))
+            if bot_id is not None:
+                stmt = stmt.where(
+                    or_(
+                        AdminMemberRow.scope == "bot",
+                        AdminMemberRow.scope == "all",
+                    )
+                ).where(
+                    or_(
+                        AdminMemberRow.scope == "all",
+                        AdminMemberRow.bot_id == int(bot_id),
+                    )
+                )
+            else:
+                stmt = stmt.where(AdminMemberRow.scope == "all")
+            row = (await session.execute(stmt.limit(1))).scalar_one_or_none()
+            return row is not None
+
+    async def upsert_member(
+        self,
+        *,
+        user_id: int,
+        scope: str,
+        bot_id: int | None = None,
+        note: str | None = None,
+    ) -> Any:
+        now = int(time.time())
+        scope_norm = "bot" if scope not in ("bot", "all") else scope
+        bot_id_norm = int(bot_id) if scope_norm == "bot" and bot_id is not None else None
+        async with get_session() as session:
+            stmt = pg_insert(AdminMemberRow).values(
+                scope=scope_norm,
+                bot_id=bot_id_norm,
+                user_id=int(user_id),
+                note=note,
+                created_at=now,
+                updated_at=now,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["scope", "bot_id", "user_id"],
+                set_={
+                    "updated_at": stmt.excluded.updated_at,
+                    "note": stmt.excluded.note,
+                },
+            )
+            row = (await session.execute(stmt.returning(AdminMemberRow))).scalar_one()
+            await session.commit()
+            return row_to_admin_member(row)
+
+    async def remove_member(
+        self,
+        *,
+        user_id: int,
+        scope: str,
+        bot_id: int | None = None,
+    ) -> int:
+        scope_norm = "bot" if scope not in ("bot", "all") else scope
+        bot_id_norm = int(bot_id) if scope_norm == "bot" and bot_id is not None else None
+        async with get_session() as session:
+            result = await session.execute(
+                delete(AdminMemberRow).where(
+                    AdminMemberRow.scope == scope_norm,
+                    AdminMemberRow.bot_id == bot_id_norm,
+                    AdminMemberRow.user_id == int(user_id),
+                )
+            )
+            await session.commit()
+            return int(result.rowcount or 0)
+
+    async def list_members(
+        self,
+        *,
+        scope: str | None = None,
+        bot_id: int | None = None,
+    ) -> list[Any]:
+        async with get_session(read_only=True) as session:
+            stmt = select(AdminMemberRow)
+            if scope is not None:
+                stmt = stmt.where(AdminMemberRow.scope == scope)
+            if bot_id is not None:
+                stmt = stmt.where(AdminMemberRow.bot_id == int(bot_id))
+            rows = (await session.execute(stmt)).scalars().all()
+            return [row_to_admin_member(r) for r in rows]
+
+
+class PgAclRepository:
+    """PG 版 AclRepository。"""
+
+    async def list_rules(
+        self,
+        *,
+        action: str | None = None,
+        target: str | None = None,
+        role: str | None = None,
+        subject: str | None = None,
+    ) -> list[Any]:
+        async with get_session(read_only=True) as session:
+            stmt = select(PallasACLRow)
+            if action is not None:
+                stmt = stmt.where(PallasACLRow.action == action)
+            if target is not None:
+                stmt = stmt.where(PallasACLRow.target == target)
+            if role is not None:
+                stmt = stmt.where(PallasACLRow.role == role)
+            if subject is not None:
+                stmt = stmt.where(PallasACLRow.subject == subject)
+            rows = (await session.execute(stmt)).scalars().all()
+            return [row_to_pallas_acl(r) for r in rows]
+
+    async def list_all(self) -> list[Any]:
+        async with get_session(read_only=True) as session:
+            rows = (await session.execute(select(PallasACLRow))).scalars().all()
+            return [row_to_pallas_acl(r) for r in rows]
+
+    async def upsert_rule(
+        self,
+        *,
+        role: str,
+        subject: str | None,
+        action: str,
+        target_scope: str,
+        target: str,
+        effect: str,
+        priority: int,
+        source: str,
+    ) -> Any:
+        now = int(time.time())
+        async with get_session() as session:
+            stmt = pg_insert(PallasACLRow).values(
+                role=role,
+                subject=subject,
+                action=action,
+                target_scope=target_scope,
+                target=target,
+                effect=effect,
+                priority=int(priority),
+                source=source,
+                created_at=now,
+                updated_at=now,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[
+                    "role",
+                    "subject",
+                    "action",
+                    "target_scope",
+                    "target",
+                ],
+                set_={
+                    "effect": stmt.excluded.effect,
+                    "priority": stmt.excluded.priority,
+                    "source": stmt.excluded.source,
+                    "updated_at": stmt.excluded.updated_at,
+                },
+            )
+            row = (await session.execute(stmt.returning(PallasACLRow))).scalar_one()
+            await session.commit()
+            return row_to_pallas_acl(row)
+
+    async def delete_rule(self, rule_id: int) -> int:
+        async with get_session() as session:
+            result = await session.execute(
+                delete(PallasACLRow).where(PallasACLRow.id == int(rule_id))
+            )
+            await session.commit()
+            return int(result.rowcount or 0)
+
+    async def delete_by_signature(
+        self,
+        *,
+        role: str,
+        subject: str | None,
+        action: str,
+        target_scope: str,
+        target: str,
+    ) -> int:
+        async with get_session() as session:
+            result = await session.execute(
+                delete(PallasACLRow).where(
+                    PallasACLRow.role == role,
+                    PallasACLRow.subject == subject,
+                    PallasACLRow.action == action,
+                    PallasACLRow.target_scope == target_scope,
+                    PallasACLRow.target == target,
+                )
+            )
+            await session.commit()
+            return int(result.rowcount or 0)
+
+    async def has_run_step(self, step: str) -> bool:
+        async with get_session(read_only=True) as session:
+            row = (
+                await session.execute(
+                    select(SchemaMigrationRow.id).where(SchemaMigrationRow.step == step).limit(1)
+                )
+            ).scalar_one_or_none()
+            return row is not None
+
+    async def mark_run_step(self, step: str) -> None:
+        now = int(time.time())
+        async with get_session() as session:
+            stmt = pg_insert(SchemaMigrationRow).values(step=step, applied_at=now)
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["step"],
+                set_={"applied_at": stmt.excluded.applied_at},
+            )
+            await session.execute(stmt)
+            await session.commit()
 
 
 # ---------------------------------------------------------------------------

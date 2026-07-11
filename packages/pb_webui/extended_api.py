@@ -4982,6 +4982,10 @@ def register_extended_api(
 
     router = APIRouter(tags=["Pallas-Bot 控制台"], dependencies=[Depends(_pallas_token_dep)])
 
+    from .acl_api import register_acl_router
+
+    register_acl_router(router, x=x)
+
     @router.get(f"{x}/system", include_in_schema=True)
     async def _system() -> JSONResponse:
         async def _load() -> dict[str, Any]:
