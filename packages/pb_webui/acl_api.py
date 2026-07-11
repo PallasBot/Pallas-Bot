@@ -50,6 +50,22 @@ def register_acl_router(router: APIRouter, x: str = "/pallas/api") -> None:
             raise HTTPException(status_code=400, detail=f"effect 必须是 {sorted(ACL_EFFECTS)}")
         return effect
 
+    def _validate_subject(role: str, subject: str | None) -> None:
+        """role=管理员 的 subject 必须是 "*" 或 "id:<uid>"；其他 role 自由。"""
+        if role != "管理员":
+            return
+        ok = subject == "*" or (subject is not None and subject.startswith("id:"))
+        if not ok:
+            raise HTTPException(
+                status_code=400,
+                detail="role=管理员 时 subject 必须是 '*' 或 'id:<user_id>'",
+            )
+        if subject is not None and subject.startswith("id:"):
+            try:
+                int(subject[3:])
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="id: 后必须是数字") from exc
+
     @router.get(f"{x}/acl/rules")
     async def _list_acl_rules(
         action: str | None = None,
@@ -91,6 +107,7 @@ def register_acl_router(router: APIRouter, x: str = "/pallas/api") -> None:
         _require_role(body.role)
         _require_scope(body.target_scope)
         _require_effect(body.effect)
+        _validate_subject(body.role, body.subject)
         repo = make_acl_repository()
         rule = await repo.upsert_rule(
             role=body.role,

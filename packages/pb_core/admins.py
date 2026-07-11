@@ -93,16 +93,24 @@ async def add_bot_admins(bot_id: int, admin_ids: list[int]) -> tuple[bool, list[
                     scope="bot",
                     bot_id=int(bot_id),
                 )
-            except Exception:
-                # admin_members 写入失败不阻塞号主命令
-                pass
+            except Exception as exc:
+                from nonebot import logger
+
+                logger.warning(
+                    "add_bot_admins: 写入 admin_members 失败 bot_id={} uid={} err={}",
+                    bot_id,
+                    admin_id,
+                    exc,
+                )
         # ACL 引擎 cache 依赖 admin_members 变更需失效
         try:
             from pallas.core.perm.acl import clear_acl_cache
 
             clear_acl_cache()
         except Exception:
-            pass
+            from nonebot import logger
+
+            logger.warning("add_bot_admins: 失效 ACL 引擎 cache 失败", exc_info=True)
     return created, merged, added
 
 
