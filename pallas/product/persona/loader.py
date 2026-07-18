@@ -140,11 +140,14 @@ async def resolve_persona(bot_id: int, group_id: int | None = None) -> ResolvedP
     if cached is not None and now - cached[0] < _CACHE_TTL_SEC:
         return cached[1]
 
+    from .seed import apply_seed_prefs, resolve_effective_seed_prefs
+
     resolved = derive_persona_from_bot_id(bid, archetype_enabled=persona_archetype_enabled())
     bot_repo = make_bot_config_repository()
     bot_config = await bot_repo.get(bid)
+    persona_dict = getattr(bot_config, "persona", None) if bot_config is not None else None
     if bot_config is not None:
-        resolved = _apply_cross_group_persona(resolved, getattr(bot_config, "persona", None))
+        resolved = _apply_cross_group_persona(resolved, persona_dict)
         group_style_enabled = bool(getattr(bot_config, "group_style_enabled", True))
     else:
         group_style_enabled = True
@@ -154,6 +157,13 @@ async def resolve_persona(bot_id: int, group_id: int | None = None) -> ResolvedP
         group_config = await repo.get(gid)
         style_profile = getattr(group_config, "style_profile", None) if group_config is not None else None
         resolved = _apply_group_style_profile(resolved, style_profile)
+
+    # 账号种子最后叠加，避免群画像把多牛差异抹平
+    seed_prefs, _seed_source = resolve_effective_seed_prefs(
+        persona_dict if isinstance(persona_dict, dict) else None,
+        bid,
+    )
+    resolved = apply_seed_prefs(resolved, seed_prefs)
 
     _cache[cache_key] = (now, resolved)
     return resolved

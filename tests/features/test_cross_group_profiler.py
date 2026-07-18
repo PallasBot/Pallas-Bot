@@ -130,7 +130,13 @@ async def test_resolve_persona_applies_cross_group_before_group(monkeypatch: pyt
 
     monkeypatch.setattr(
         "pallas.product.persona.loader.derive_persona_from_bot_id",
-        lambda _bid: ResolvedPersona(reply_bias=1.0, speak_bias=1.0, length_pref="any", chaos_bias=0.0),
+        lambda _bid, archetype_enabled=True: ResolvedPersona(
+            reply_bias=1.0, speak_bias=1.0, length_pref="any", chaos_bias=0.0
+        ),
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.seed.apply_seed_prefs",
+        lambda persona, prefs: persona,
     )
     monkeypatch.setattr("pallas.product.persona.loader.make_group_config_repository", lambda: DummyGroupRepo())
     monkeypatch.setattr("pallas.product.persona.loader.make_bot_config_repository", lambda: DummyBotRepo())

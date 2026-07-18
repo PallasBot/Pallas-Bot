@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 
 _POLISH_USER_PREFIX = "【候选回复】"
 _POLISH_USER_SUFFIX = "\n请轻顺口气，像群友接话；保持原意，只输出一句。"
+_POLISH_MEDIUM_USER_SUFFIX = "\n可近义改写并微调长短，仍锚定原意；禁止另起话题、勿扩写成完整答复。只输出一句。"
 
 _LENGTH_POLISH_HINTS: dict[str, str] = {
     "short": "改写后保持短句（1-2 句）",
@@ -54,12 +55,13 @@ async def build_polish_style_suffix(bot_id: int, group_id: int) -> str:
     return "\n【群风格参考】" + "；".join(parts) + "。"
 
 
-def build_polish_user_text(candidate: str, *, style_suffix: str = "") -> str:
+def build_polish_user_text(candidate: str, *, style_suffix: str = "", intensity: str = "light") -> str:
     text = (candidate or "").strip()
     if not text:
         return ""
     suffix = (style_suffix or "").strip()
-    tail = f"{suffix}{_POLISH_USER_SUFFIX}" if suffix else _POLISH_USER_SUFFIX
+    instruction = _POLISH_MEDIUM_USER_SUFFIX if intensity == "medium" else _POLISH_USER_SUFFIX
+    tail = f"{suffix}{instruction}" if suffix else instruction
     return f"{_POLISH_USER_PREFIX}{text}{tail}"
 
 
@@ -69,12 +71,18 @@ async def maybe_submit_repeater_llm_polish(
     candidate_text: str,
     trigger_user_text: str = "",
     reply_mode: str = "normal",
+    force_for_cue: bool = False,
+    intensity: str = "light",
 ) -> bool:
     if event.is_tome():
         return False
 
     cfg = get_llm_config()
-    if not cfg.llm_polish_enabled or not cfg.llm_chat_enabled:
+    if not cfg.llm_chat_enabled:
+        return False
+    if not cfg.llm_polish_enabled and not force_for_cue:
+        return False
+    if force_for_cue and not (cfg.llm_polish_enabled or cfg.llm_select_enabled or cfg.llm_polish_lite_enabled):
         return False
 
     candidate = (candidate_text or "").strip()
@@ -87,7 +95,12 @@ async def maybe_submit_repeater_llm_polish(
     user_id = int(event.user_id)
     bot_id = int(event.self_id)
 
-    user_text = build_polish_user_text(candidate, style_suffix=await build_polish_style_suffix(bot_id, group_id))
+    polish_intensity = "medium" if force_for_cue or intensity == "medium" else "light"
+    user_text = build_polish_user_text(
+        candidate,
+        style_suffix=await build_polish_style_suffix(bot_id, group_id),
+        intensity=polish_intensity,
+    )
     if not user_text:
         return False
 

@@ -77,7 +77,25 @@ async def refresh_bot_cross_group_persona(
         window_hours=window_hours,
     )
     bot_repo = make_bot_config_repository()
-    await bot_repo.upsert_field(bid, "persona", persona)
+    existing = await bot_repo.get(bid)
+    existing_persona = getattr(existing, "persona", None) if existing is not None else None
+    merged = dict(persona)
+    if isinstance(existing_persona, dict):
+        for key in (
+            "seed",
+            "seed_override",
+            "self_aliases",
+            "alias_names",
+            "knowledges",
+            "relationships",
+            "layers",
+        ):
+            if key in existing_persona and key not in merged:
+                merged[key] = existing_persona[key]
+    from pallas.product.persona.seed import ensure_persona_auto_seed
+
+    merged = ensure_persona_auto_seed(merged, bid)
+    await bot_repo.upsert_field(bid, "persona", merged)
     invalidate_persona_cache(bid)
     return True
 

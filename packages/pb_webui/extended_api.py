@@ -64,7 +64,7 @@ from pallas.core.platform.shard import context as shard_ctx
 from pallas.product.llm.behavior import BehaviorPattern, BehaviorScene
 from pallas.product.llm.behavior_store import (
     delete_behavior_pattern,
-    list_behavior_patterns,
+    ensure_default_behavior_patterns,
     list_behavior_runs,
     upsert_behavior_pattern,
 )
@@ -4564,7 +4564,19 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
         await invalidate_bot_admins_cache(account)
     if "persona" in fields:
         from pallas.product.persona import invalidate_persona_cache
+        from pallas.product.persona.seed import merge_persona_with_seed_patch
 
+        incoming = fields.get("persona")
+        if isinstance(incoming, dict) and (
+            "seed_override" in incoming or "seed" in incoming
+        ) and not any(k in incoming for k in ("source", "derived", "version")):
+            current = await repo.get(account)
+            existing = getattr(current, "persona", None) if current is not None else None
+            fields["persona"] = merge_persona_with_seed_patch(
+                existing if isinstance(existing, dict) else None,
+                incoming,
+                bot_id=account,
+            )
         invalidate_persona_cache(account)
     doc = await repo.get(account, ignore_cache=True)
     if doc is None:
@@ -7005,7 +7017,7 @@ def register_extended_api(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"非法 scene: {scene}") from e
         try:
-            items = list_behavior_patterns()
+            items = ensure_default_behavior_patterns()
             if target_scene is not None:
                 items = [item for item in items if item.scene == target_scene]
             if group_id is not None:

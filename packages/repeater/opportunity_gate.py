@@ -69,11 +69,13 @@ def should_attempt_repeater_opportunity(
         return True
     if not plain:
         return False
-    if recent_message_count < 3:
-        return False
     if unique_users < 2:
         return False
     has_reply_cue = looks_like_reply_cue(plain)
+    cue_with_pool = bool(has_reply_cue and has_candidate_pool and candidate_pool_size >= 2)
+    # cue + 候选池：略放宽活跃度门槛（仍至少 2 条近期消息）
+    if recent_message_count < 3 and not (cue_with_pool and recent_message_count >= 2):
+        return False
     has_strong_pool = has_candidate_pool and candidate_pool_size >= 2
     if mode == "ghost":
         has_strong_pool = has_strong_pool or candidate_style_score >= 0.72
@@ -85,7 +87,7 @@ def should_attempt_repeater_opportunity(
         return has_recent_back_and_forth and has_reply_cue
     if not has_candidate_pool and not (has_recent_back_and_forth and has_reply_cue):
         return False
-    if bot_recently_replied and not (has_recent_back_and_forth and has_reply_cue):
+    if bot_recently_replied and not (has_recent_back_and_forth and has_reply_cue) and not cue_with_pool:
         return False
     if mode == "normal" and not has_recent_back_and_forth and not has_strong_pool:
         return False
@@ -125,4 +127,5 @@ def build_opportunity_trace_payload(
         "has_recent_back_and_forth": bool(has_recent_back_and_forth),
         "bot_recently_replied": bool(bot_recently_replied),
         "has_reply_cue": bool(looks_like_reply_cue(plain)),
+        "cue_with_pool": bool(looks_like_reply_cue(plain) and has_candidate_pool and candidate_pool_size >= 2),
     }

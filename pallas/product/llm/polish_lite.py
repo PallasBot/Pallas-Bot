@@ -172,14 +172,29 @@ async def maybe_submit_repeater_corpus_llm(
     candidate_text: str,
     reply_mode: str = "normal",
 ) -> bool:
-    """语料 hit：select 主路径；select_polish_lite 模式下按采样偶尔走 polish_lite。"""
+    """语料 hit：接话 cue 时优先中等润色；否则 select / lite / polish。"""
     cfg = get_llm_config()
+    from packages.repeater.opportunity_gate import looks_like_reply_cue
     from pallas.product.llm.corpus_contamination import is_llm_learning_safe
 
     pool = [str(item).strip() for item in candidates if str(item).strip() and is_llm_learning_safe(str(item))]
     candidate = str(candidate_text or "").strip()
     if not is_llm_learning_safe(candidate):
         candidate = ""
+
+    cue = looks_like_reply_cue(user_text)
+    if cue and candidate and len(pool) >= 2:
+        from pallas.product.llm.polish import maybe_submit_repeater_llm_polish
+
+        if await maybe_submit_repeater_llm_polish(
+            event,
+            candidate_text=candidate,
+            trigger_user_text=user_text,
+            reply_mode=reply_mode,
+            force_for_cue=True,
+            intensity="medium",
+        ):
+            return True
 
     if cfg.llm_polish_lite_enabled and candidate and pool:
         if should_polish_lite_sample(

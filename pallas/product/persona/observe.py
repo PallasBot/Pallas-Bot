@@ -135,9 +135,18 @@ async def build_persona_observe_payload(
         group_style_enabled = bool(row.get("group_style_enabled", True))
         base_persona = await resolve_persona(account, None)
         resolved_persona = await resolve_persona(account, gid) if gid is not None and group_style_enabled else None
+        from pallas.product.persona.seed import resolve_effective_seed_prefs
+
+        raw_persona = row.get("persona") if isinstance(row.get("persona"), dict) else None
+        seed_prefs, seed_source = resolve_effective_seed_prefs(
+            raw_persona if isinstance(raw_persona, dict) else None,
+            account,
+        )
         entry: dict[str, Any] = {
             "account": account,
             "group_style_enabled": group_style_enabled,
+            "seed_prefs": seed_prefs,
+            "seed_source": seed_source,
             "base": persona_axis_snapshot(base_persona),
             "base_hints": behavior_hint_lines(base_persona),
         }
