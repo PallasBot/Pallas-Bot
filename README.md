@@ -2,7 +2,8 @@
   <img alt="Pallas-Bot" src="docs/plugins/assets/brand-avatar.png" width="220" height="220" />
   <h1>Pallas-Bot</h1>
 
-  <pre><code>「我是来自米诺斯的祭司帕拉斯，会在罗德岛休息一段时间......」「虽然这么说，我渴望以美酒和戏剧被招待，更渴望走向战场。」</code></pre>
+  <pre><code>「我是来自米诺斯的祭司帕拉斯，会在罗德岛休息一段时间......
+虽然这么说，我渴望以美酒和戏剧被招待，更渴望走向战场。」</code></pre>
 
   <p>
     <a href="https://github.com/PallasBot/Pallas-Bot/issues/new/choose">报告 Bug</a> ·
@@ -33,9 +34,9 @@
 
 - **学习型复读**：记住群友说话，在合适时机复读出来
 - **复读优先**：可选接入 LLM 辅助，回复仍以群友语料为主
-- **插件化**：内置插件 + 本地扩展，按需启用
+- **插件化**：内置插件与本地扩展，按需启用
 - **WebUI 控制台**：浏览器管理配置、插件与权限
-- **可选能力**：AI 对话 / 唱歌 / TTS、[MAA 远控](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/maa)
+- **可选能力**：[![AI 对话](https://img.shields.io/badge/AI%20对话-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![唱歌](https://img.shields.io/badge/唱歌-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![TTS](https://img.shields.io/badge/TTS-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![MAA 远控](https://img.shields.io/badge/MAA%20远控-FE7D37)](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/maa)
 
 ## 🚀 快速开始
 
