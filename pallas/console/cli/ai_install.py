@@ -30,7 +30,10 @@ def default_ai_clone_target() -> Path:
 def docker_compose_hint() -> str:
     return (
         "Docker 部署请在宿主机执行（本控制台不代跑 docker）：\n"
-        "  docker compose --profile ai pull && docker compose --profile ai up -d\n"
+        "  # 仅 AI 栈（在 Pallas-Bot-AI 仓）\n"
+        "  docker compose -f docker-compose.llm.yml up -d\n"
+        "  # 或与 Bot 同编排（在 Pallas-Bot 仓）\n"
+        "  docker compose -f docker-compose.full.yml up -d\n"
         "详见文档：docs/maintainer/install/ai-runtime.md"
     )
 

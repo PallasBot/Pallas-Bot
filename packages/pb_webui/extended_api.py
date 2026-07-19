@@ -8130,8 +8130,13 @@ def register_extended_api(
                     if code != 0:
                         j.push("failed", error=f"bootstrap 退出码 {code}", result=j.result)
                         return
+                    from pallas.console.webui.ai_install_writeback import (
+                        apply_ai_install_connection_writeback,
+                    )
+
+                    writeback = apply_ai_install_connection_writeback()
+                    j.result = {**j.result, **writeback}
                     j.message = "bootstrap 完成"
-                    j.result = j.result
                 elif body.action == "clone":
                     j.result = {"ai_root": str(ai_root)}
                     j.message = "克隆完成"

@@ -1,10 +1,13 @@
-"""AI Runtime 安装状态与受控 clone 路径。"""
+"""AI Runtime 安装状态、受控 clone、连接写回。"""
 
 from __future__ import annotations
+
+import json
 
 import pytest
 
 from pallas.console.cli import ai_install
+from pallas.console.webui import ai_install_writeback as writeback
 
 
 def test_ai_install_status_shape(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
@@ -13,7 +16,9 @@ def test_ai_install_status_shape(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
     st = ai_install.ai_install_status()
     assert st["detected"] is False
     assert st["git_url"].endswith("Pallas-Bot-AI.git")
-    assert "docker" in st["docker_hint"].lower()
+    assert "docker-compose.llm.yml" in st["docker_hint"]
+    assert "docker-compose.full.yml" in st["docker_hint"]
+    assert "--profile ai" not in st["docker_hint"]
     assert st["clone_target"] == str((tmp_path / "missing").resolve())
 
 
@@ -32,3 +37,87 @@ def test_clone_ai_repo_rejects_existing(tmp_path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(ai_install, "default_ai_clone_target", lambda: allowed.resolve())
     with pytest.raises(FileExistsError):
         ai_install.clone_ai_repo()
+
+
+def test_writeback_ai_extension_creates_missing_file(tmp_path) -> None:
+    path = tmp_path / "ai_extension.json"
+    assert writeback.writeback_ai_extension_if_empty(path=path) is True
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["base_url"] == "http://127.0.0.1:9099"
+    assert data["api_prefix"] == "/api"
+
+
+def test_writeback_ai_extension_fills_empty_base_url(tmp_path) -> None:
+    path = tmp_path / "ai_extension.json"
+    path.write_text(
+        json.dumps({"base_url": "", "token": "keep-me", "api_prefix": "/api"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    assert writeback.writeback_ai_extension_if_empty(path=path) is True
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["base_url"] == "http://127.0.0.1:9099"
+    assert data["token"] == "keep-me"
+
+
+def test_writeback_ai_extension_preserves_custom_base_url(tmp_path) -> None:
+    path = tmp_path / "ai_extension.json"
+    path.write_text(
+        json.dumps({"base_url": "http://10.0.0.2:9199", "token": "x"}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    assert writeback.writeback_ai_extension_if_empty(path=path) is False
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["base_url"] == "http://10.0.0.2:9199"
+
+
+def test_writeback_ai_server_only_when_both_missing(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    webui = tmp_path / "webui.json"
+    webui.write_text(json.dumps({"env": {}}, ensure_ascii=False) + "\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_webui_settings_path",
+        lambda: webui,
+    )
+    # clear cache that may have loaded other paths
+    from pallas.core.foundation.config.repo_settings import clear_merged_repo_settings_cache
+
+    clear_merged_repo_settings_cache()
+    assert writeback.writeback_ai_server_if_missing() is True
+    env = json.loads(webui.read_text(encoding="utf-8"))["env"]
+    assert env["AI_SERVER_HOST"] == "127.0.0.1"
+    assert env["AI_SERVER_PORT"] == "9099"
+
+    assert writeback.writeback_ai_server_if_missing() is False
+
+
+def test_writeback_ai_server_skips_when_any_key_exists(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    webui = tmp_path / "webui.json"
+    webui.write_text(
+        json.dumps({"env": {"AI_SERVER_HOST": "10.0.0.9"}}, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_webui_settings_path",
+        lambda: webui,
+    )
+    from pallas.core.foundation.config.repo_settings import clear_merged_repo_settings_cache
+
+    clear_merged_repo_settings_cache()
+    assert writeback.writeback_ai_server_if_missing() is False
+    env = json.loads(webui.read_text(encoding="utf-8"))["env"]
+    assert env == {"AI_SERVER_HOST": "10.0.0.9"}
+
+
+def test_apply_ai_install_connection_writeback(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    ext = tmp_path / "ai_extension.json"
+    webui = tmp_path / "webui.json"
+    webui.write_text(json.dumps({"env": {}}, ensure_ascii=False) + "\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_webui_settings_path",
+        lambda: webui,
+    )
+    from pallas.core.foundation.config.repo_settings import clear_merged_repo_settings_cache
+
+    clear_merged_repo_settings_cache()
+    flags = writeback.apply_ai_install_connection_writeback(extension_path=ext)
+    assert flags == {"wrote_ai_extension": True, "wrote_ai_server": True}
+    assert ext.is_file()
