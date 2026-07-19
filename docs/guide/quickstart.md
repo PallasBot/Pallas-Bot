@@ -1,7 +1,7 @@
 # 快速开始
 
 ::: tip
-**源码 / Docker 二选一** 装好本体后，必须 [连接 QQ](connect-qq.md)，群里才会有反应。
+**源码 / Docker 二选一** 装好本体后，必须 [连接 QQ](connect-qq.md)，群里才会有反应。账号连上后配置 [号主](bot-owner.md)。改配置看 [配置从哪改](config.md)。
 :::
 
 ## 确认环境

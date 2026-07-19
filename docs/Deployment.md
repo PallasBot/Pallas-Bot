@@ -124,7 +124,7 @@ FFmpeg（唱歌等）：[安装 FFmpeg](https://napneko.github.io/config/advance
 ## 步骤 6：启动 Bot
 
 ```bash
-uv run nb run
+uv run pallas
 ```
 
 **验证**：
@@ -163,13 +163,13 @@ uv run nb run
 ```ini
 [Unit]
 Description=Pallas-Bot
-After=network.target mongod.service
+After=network.target postgresql.service
 
 [Service]
 Type=simple
 User=pallas
 WorkingDirectory=/opt/Pallas-Bot
-ExecStart=/home/pallas/.local/bin/uv run nb run
+ExecStart=/home/pallas/.local/bin/uv run pallas
 Restart=on-failure
 RestartSec=10
 

@@ -11,7 +11,7 @@ Pallas-Bot 由四块组成，各自职责如下：
 
 ## 通信路径
 
-![通信路径：QQ ↔ 协议端 ↔ Pallas-Bot ↔ 数据库，Web 控制台与 Bot 同进程](../assets/concepts-topology.png)
+![通信路径：QQ ↔ 协议端 ↔ Pallas-Bot ↔ 数据库，Web 控制台与 Bot 同进程](/assets/concepts-topology.png)
 
 - 协议端与 Pallas-Bot 通过 **OneBot WebSocket** 通信
 - Web 控制台与协议端管理页由 **同一 Bot 进程** 提供，无需另起服务

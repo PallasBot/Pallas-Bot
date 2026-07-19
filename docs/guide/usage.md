@@ -8,7 +8,7 @@
 | 词 | 意思 |
 | --- | --- |
 | 超管 | `pallas.toml` 里 `superusers` |
-| 号主 | 该牛 `admins` 列表里的 QQ |
+| 号主 | 该牛 `admins` 列表里的 QQ；配置见 [号主](bot-owner.md) |
 | 群管 | QQ 群管理员 |
 :::
 

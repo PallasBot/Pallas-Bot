@@ -27,25 +27,25 @@ uv sync
 ### 全量迁移
 
 ```bash
-uv run --extra pg python tools/migrate_mongo_to_pg.py
+uv run python tools/migrate_mongo_to_pg.py
 ```
 
 ### 指定库名
 
 ```bash
-uv run --extra pg python tools/migrate_mongo_to_pg.py --pg-db MyBot --mongo-db PallasBot
+uv run python tools/migrate_mongo_to_pg.py --pg-db MyBot --mongo-db PallasBot
 ```
 
 ### 仅迁移部分表
 
 ```bash
-uv run --extra pg python tools/migrate_mongo_to_pg.py --tables context message --batch 500
+uv run python tools/migrate_mongo_to_pg.py --tables context message --batch 500
 ```
 
 ### 仅演练（不写入目标库）
 
 ```bash
-uv run --extra pg python tools/migrate_mongo_to_pg.py --dry-run
+uv run python tools/migrate_mongo_to_pg.py --dry-run
 ```
 
 ## 验证清单

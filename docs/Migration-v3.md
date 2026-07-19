@@ -1,8 +1,8 @@
-# Pallas 3.0 迁移指南（MongoDB -> PostgreSQL）
+# 2.x → 3.0 数据迁移（归档）
 
-> 导航：[`README`](../README.md) · [`标准部署`](Deployment.md) · [`Docker 部署`](DockerDeployment.md) · [`FAQ`](FAQ.md)
+> 从 **3.x 升到 4.0** 请看 [从 3.x 迁到 4.0](/guide/4.0-migration)。本页仅保留 2.x → 3.0（MongoDB → PostgreSQL）步骤。
 
-本文用于从 2.x 升级到 3.0 时的数据迁移与验证。
+> 导航：[`README`](https://github.com/PallasBot/Pallas-Bot/blob/main/README.md) · [`标准部署`](/deploy/deployment) · [`Docker 部署`](/deploy/docker) · [`FAQ`](/deploy/faq)
 
 ## 适用范围
 
@@ -27,25 +27,25 @@ uv sync
 ### 全量迁移
 
 ```bash
-uv run --extra pg python tools/migrate_mongo_to_pg.py
+uv run python tools/migrate_mongo_to_pg.py
 ```
 
 ### 指定库名
 
 ```bash
-uv run --extra pg python tools/migrate_mongo_to_pg.py --pg-db MyBot --mongo-db PallasBot
+uv run python tools/migrate_mongo_to_pg.py --pg-db MyBot --mongo-db PallasBot
 ```
 
 ### 仅迁移部分表
 
 ```bash
-uv run --extra pg python tools/migrate_mongo_to_pg.py --tables context message --batch 500
+uv run python tools/migrate_mongo_to_pg.py --tables context message --batch 500
 ```
 
 ### 仅演练（不写入目标库）
 
 ```bash
-uv run --extra pg python tools/migrate_mongo_to_pg.py --dry-run
+uv run python tools/migrate_mongo_to_pg.py --dry-run
 ```
 
 ## 验证清单

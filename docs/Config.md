@@ -71,7 +71,7 @@ db = "PallasBot"
 # auto_create_db = true  # 可选：无库时自动 CREATE DATABASE（需 CREATEDB）
 ```
 
-驱动随 `uv sync` 安装。Docker 内置 Postgres 时另备 `config/compose.env`，**`PG_DB` 与数据卷初始化库名一致**。应用账号须能连目标库并建表，不必为超级用户。扩展见 [deploy/pg/README.md](../deploy/pg/README.md)。
+驱动随 `uv sync` 安装。Docker 内置 Postgres 时另备 `config/compose.env`，**`PG_DB` 与数据卷初始化库名一致**。应用账号须能连目标库并建表，不必为超级用户。扩展见 [deploy/pg/README.md](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)。
 
 ### MongoDB（3.x 升级沿用）
 

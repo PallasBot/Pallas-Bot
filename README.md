@@ -62,7 +62,7 @@ cp config/pallas.example.toml config/pallas.toml
 # 编辑 [bootstrap]：监听、superusers、[bootstrap.postgres]
 
 # 开始运行（单进程）
-uv run nb run
+uv run pallas
 ```
 
 浏览器打开 `http://<主机>:8088/pallas/`，使用启动日志中的口令登录。  

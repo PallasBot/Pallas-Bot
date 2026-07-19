@@ -9,7 +9,7 @@
 ```bash
 # 终端 1：主仓 Bot
 cd Pallas-Bot
-uv run nb run
+uv run pallas
 
 # 终端 2：WebUI 开发服务器
 cd Pallas-Bot-WebUI

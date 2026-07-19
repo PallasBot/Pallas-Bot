@@ -29,7 +29,7 @@ DEPLOY_PROFILES: dict[str, DeployProfileSpec] = {
     "default": DeployProfileSpec(
         id="default",
         title="单进程（默认）",
-        description="``bot.py`` / ``nb run``；消息审查默认开启，分片需另用 ``shard`` 模板。",
+        description="``uv run pallas``；消息审查默认开启，分片需另用 ``shard`` 模板。",
         uv_extras=(),
         fragment_relpath=None,
     ),

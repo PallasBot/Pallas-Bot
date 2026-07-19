@@ -13,7 +13,7 @@ MongoDB → PostgreSQL 迁移脚本
 - upsert 依赖 `repository_pg` 里定义的唯一约束（含复合 upsert_answer 约束），新字段自动加到 PG
 
 用法：
-    uv run --extra pg python tools/migrate_mongo_to_pg.py
+    uv run python tools/migrate_mongo_to_pg.py
 
 选项：
     --batch N       每批处理条数，默认 1000
@@ -25,19 +25,19 @@ MongoDB → PostgreSQL 迁移脚本
 
 示例：
 # 全量迁移
-    uv run --extra pg python tools/migrate_mongo_to_pg.py
+    uv run python tools/migrate_mongo_to_pg.py
 
 # 指定目标库
-    uv run --extra pg python tools/migrate_mongo_to_pg.py --pg-db MyBot --mongo-db PallasBot
+    uv run python tools/migrate_mongo_to_pg.py --pg-db MyBot --mongo-db PallasBot
 
 # 仅迁移 context 和 message，批量 500
-    uv run --extra pg python tools/migrate_mongo_to_pg.py --tables context message --batch 500
+    uv run python tools/migrate_mongo_to_pg.py --tables context message --batch 500
 
 # 预演
-    uv run --extra pg python tools/migrate_mongo_to_pg.py --dry-run
+    uv run python tools/migrate_mongo_to_pg.py --dry-run
 
 # 重新迁移
-    uv run --extra pg python tools/migrate_mongo_to_pg.py --restart
+    uv run python tools/migrate_mongo_to_pg.py --restart
 
 环境变量（从 .env 读取，也可手动设置）：
     MONGO_HOST / MONGO_PORT / MONGO_USER / MONGO_PASSWORD / MONGO_DB

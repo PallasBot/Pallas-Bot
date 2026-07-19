@@ -127,6 +127,8 @@ FILE_MAP: dict[str, str] = {
     "guide/web-console.md": "guide/web-console.md",
     "guide/ai.md": "guide/ai.md",
     "guide/usage.md": "guide/usage.md",
+    "guide/bot-owner.md": "guide/bot-owner.md",
+    "guide/config.md": "guide/config.md",
     "guide/concepts.md": "guide/concepts.md",
     "guide/4.0-start.md": "guide/4.0-start.md",
     "guide/4.0-migration.md": "guide/4.0-migration.md",
@@ -180,9 +182,6 @@ def transform_for_vitepress(text: str) -> str:
     text = text.replace("../assets/brand-avatar.png", "/assets/brand-avatar.png")
     text = text.replace("./assets/brand-avatar.png", "/assets/brand-avatar.png")
     text = re.sub(r"(?<![./])assets/brand-avatar\.png", "/assets/brand-avatar.png", text)
-    text = text.replace("../assets/niuniu-help.png", "/assets/niuniu-help.png")
-    text = text.replace("./assets/niuniu-help.png", "/assets/niuniu-help.png")
-    text = re.sub(r"(?<![./])assets/niuniu-help\.png", "/assets/niuniu-help.png", text)
     text = text.replace("../assets/concepts-topology.png", "/assets/concepts-topology.png")
     text = text.replace("./assets/concepts-topology.png", "/assets/concepts-topology.png")
     text = re.sub(r"(?<![./])assets/concepts-topology\.png", "/assets/concepts-topology.png", text)
@@ -528,12 +527,6 @@ def sync(dest_root: Path) -> int:
         avatar_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(avatar_src, avatar_dst)
         print("sync plugins/assets/brand-avatar.png -> src/public/assets/brand-avatar.png")
-    help_src = DOCS / "assets" / "niuniu-help.png"
-    help_dst = src_root / "public" / "assets" / "niuniu-help.png"
-    if help_src.is_file():
-        help_dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(help_src, help_dst)
-        print("sync assets/niuniu-help.png -> src/public/assets/niuniu-help.png")
     topo_src = DOCS / "assets" / "concepts-topology.png"
     topo_dst = src_root / "public" / "assets" / "concepts-topology.png"
     if topo_src.is_file():

@@ -21,13 +21,7 @@ uv sync --dev
 uv sync --dev --extra coord-redis
 ```
 
-使用 PostgreSQL 时一并带上 `pg`：
-
-```bash
-uv sync --dev --extra coord-redis
-```
-
-`uv sync` 会在虚拟环境中注册 **`pallas`** 命令（见下文「统一运维 CLI」）。
+`uv sync` 会在虚拟环境中注册 **`pallas`** 命令（见下文「统一运维 CLI」）。PostgreSQL 驱动已在主依赖，无需 `--extra pg`。
 
 ## uv sync 与官方插件
 
@@ -37,11 +31,11 @@ uv sync --dev --extra coord-redis
 | --- | --- | --- |
 | 官方插件（8 个） | `pallas-plugin-protocol`、`pallas-plugin-duel` 等 | `uv run pallas ext install <package>` 或 WebUI 插件商店 |
 | 分片 Redis 客户端 | `redis` | `uv sync --extra coord-redis` 或 `uv pip install 'redis>=5.2,<6'` |
-| PostgreSQL 驱动 | `sqlalchemy`、`asyncpg` | 已在主依赖；`uv sync` 即可（旧命令 `--extra pg` 仍兼容） |
+| PostgreSQL 驱动 | `sqlalchemy`、`asyncpg` | 已在主依赖；`uv sync` 即可 |
 
 约束：
 
-- 已装官方插件或已配分片/PostgreSQL 时，勿反复执行裸 `uv sync` / `uv sync --frozen`（须带实际用到的 `--extra`）。
+- 已装官方插件或已配分片 Redis 时，勿反复执行裸 `uv sync` / `uv sync --frozen`（须带实际用到的 `--extra`，如 `coord-redis`）。
 - 仅注册 `pallas` CLI、不动其它 pip 包：
   ```bash
   uv pip install -e . --no-deps
@@ -148,12 +142,12 @@ uv run python tools/migrate_env_to_pallas.py
 
 ## 启动 Bot
 
-除下述 `nb run` 与脚本外，**日常启停优先用 [统一运维 CLI](#统一运维-cli-pallas)**（`uv run pallas run unified` / `run shard`）。
-
-单进程（最常见本地调试）：
+**日常启停用 [统一运维 CLI](#统一运维-cli-pallas)**：
 
 ```bash
-uv run nb run
+uv run pallas                      # 单进程（等同 run unified）
+uv run pallas status --mode unified
+uv run pallas stop --mode unified
 ```
 
 或使用专用启停脚本（对照测试、协议端口同步）：
@@ -162,14 +156,6 @@ uv run nb run
 ./scripts/run_unified_bot.sh start
 ./scripts/run_unified_bot.sh status
 ./scripts/run_unified_bot.sh stop
-```
-
-等价 CLI：
-
-```bash
-uv run pallas run unified
-uv run pallas status --mode unified
-uv run pallas stop --mode unified
 ```
 
 浏览器打开 `http://127.0.0.1:8088/pallas/`，使用启动日志中的口令登录。

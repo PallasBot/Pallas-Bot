@@ -21,7 +21,7 @@
 
 ```bash
 cd /path/to/Pallas-Bot
-uv run nb run
+uv run pallas
 ```
 
 | 检查项 | 预期 |
