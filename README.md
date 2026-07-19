@@ -55,7 +55,7 @@ cd Pallas-Bot
 
 # 安装依赖（推荐 uv）
 pip install uv
-uv sync --extra pg
+uv sync
 
 # 主配置（首次部署）
 cp config/pallas.example.toml config/pallas.toml

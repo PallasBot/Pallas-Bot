@@ -891,7 +891,7 @@ async def migrate(
     try:
         from sqlalchemy.ext.asyncio import create_async_engine
     except ImportError:
-        print("❌ 缺少 SQLAlchemy/asyncpg，请执行：uv sync --extra pg")
+        print("❌ 缺少 SQLAlchemy/asyncpg，请执行：uv sync")
         sys.exit(1)
 
     from pymongo import AsyncMongoClient
