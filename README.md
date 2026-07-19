@@ -66,7 +66,7 @@ uv run pallas
 ```
 
 浏览器打开 `http://<主机>:8088/pallas/`，使用启动日志中的口令登录。  
-更完整的上手说明见文档站 [五分钟跑起来](https://PallasBot.github.io/Pallas-Bot-Docs/guide/quickstart)。
+更完整的上手说明见文档站 [快速开始](https://PallasBot.github.io/Pallas-Bot-Docs/guide/quickstart)。
 
 <a id="文档"></a>
 ## 📖 文档
@@ -79,7 +79,7 @@ uv run pallas
 <td><a href="https://PallasBot.github.io/Pallas-Bot-Docs/"><img src="https://img.shields.io/badge/docs-GitHub%20Pages-FE7D37" alt="docs on GitHub Pages"></a></td>
 </tr>
 <tr>
-<td><strong>五分钟跑起来</strong></td>
+<td><strong>快速开始</strong></td>
 <td><a href="https://PallasBot.github.io/Pallas-Bot-Docs/guide/quickstart"><img src="https://img.shields.io/badge/guide-quickstart-8A2BE2" alt="quickstart"></a></td>
 </tr>
 <tr>
@@ -108,7 +108,6 @@ uv run pallas
 </tr>
 </table>
 
-面向用户的当前工作与里程碑概览：[用户公开进展](https://pallasbot.notion.site/388943646d10813d9ff4dcb70d7c28e8?source=copy_link)。
 
 <a id="社区与支持"></a>
 ## 🤝 社区与支持

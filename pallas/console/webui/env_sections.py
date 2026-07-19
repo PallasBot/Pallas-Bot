@@ -502,6 +502,18 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             clear_llm_config_cache()
         except Exception:
             pass
+        if "ai_server_host" in patch or "ai_server_port" in patch:
+            try:
+                from pallas.console.webui.ai_install_writeback import (
+                    sync_extension_base_url_from_ai_server,
+                )
+
+                sync_extension_base_url_from_ai_server(
+                    str(validated.get("ai_server_host") or ""),
+                    validated.get("ai_server_port") or "",
+                )
+            except Exception:
+                pass
     else:
         plugin_module = s.module_label if s.module_label.startswith(("pallas.", "packages.")) else ""
         if plugin_module:

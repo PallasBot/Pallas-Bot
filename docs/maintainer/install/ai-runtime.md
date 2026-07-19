@@ -92,12 +92,14 @@ docker compose -f docker-compose.llm.yml up -d
 
 使用主仓 **`docker-compose.full.yml`**（PostgreSQL + Bot + Redis + Ollama + AI），见 [Docker 部署](/deploy/docker)。
 
+默认 AI 为 **slim** 镜像；Ollama 模型默认不预拉（`--profile pull-models` 可选）。在 WebUI「AI 配置 → 接入」保存基址时，会同步 Bot 侧 `AI_SERVER_HOST` / `AI_SERVER_PORT`；策略页不再单独填地址。
+
 ### Bot 侧最小配置
 
 `config/pallas.toml` 的 `[env]` 或 WebUI「智能对话与 AI 服务」：
 
 - `LLM_CHAT_ENABLED=true`
-- `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；全栈 compose 内由环境注入）
+- `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；全栈 compose 内由环境注入；也可由扩展基址同步）
 
 详细变量见 [Pallas-Bot-AI README](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/README.md) 与 [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)。
 

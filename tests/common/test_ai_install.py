@@ -121,3 +121,54 @@ def test_apply_ai_install_connection_writeback(monkeypatch: pytest.MonkeyPatch, 
     flags = writeback.apply_ai_install_connection_writeback(extension_path=ext)
     assert flags == {"wrote_ai_extension": True, "wrote_ai_server": True}
     assert ext.is_file()
+
+
+@pytest.mark.parametrize(
+    ("base_url", "expected"),
+    [
+        ("http://127.0.0.1:9099", ("127.0.0.1", "9099")),
+        ("https://ai.example.com", ("ai.example.com", "443")),
+        ("http://pallasbot-ai", ("pallasbot-ai", "9099")),
+        ("10.0.0.2:9199", ("10.0.0.2", "9199")),
+        ("", None),
+    ],
+)
+def test_parse_ai_server_from_base_url(base_url: str, expected: tuple[str, str] | None) -> None:
+    assert writeback.parse_ai_server_from_base_url(base_url) == expected
+
+
+def test_sync_ai_server_from_extension_base_url(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    webui = tmp_path / "webui.json"
+    webui.write_text(json.dumps({"env": {}}, ensure_ascii=False) + "\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_webui_settings_path",
+        lambda: webui,
+    )
+    from pallas.core.foundation.config.repo_settings import clear_merged_repo_settings_cache
+
+    clear_merged_repo_settings_cache()
+    assert writeback.sync_ai_server_from_extension_base_url("http://pallasbot-ai:9099") is True
+    env = json.loads(webui.read_text(encoding="utf-8"))["env"]
+    assert env["AI_SERVER_HOST"] == "pallasbot-ai"
+    assert env["AI_SERVER_PORT"] == "9099"
+
+
+def test_sync_extension_base_url_from_ai_server_preserves_token(tmp_path) -> None:
+    path = tmp_path / "ai_extension.json"
+    path.write_text(
+        json.dumps(
+            {
+                "base_url": "http://127.0.0.1:9099",
+                "token": "keep",
+                "api_prefix": "/api",
+                "health_paths": ["/health"],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    assert writeback.sync_extension_base_url_from_ai_server("pallasbot-ai", 9099, path=path) is True
+    data = json.loads(path.read_text(encoding="utf-8"))
+    assert data["base_url"] == "http://pallasbot-ai:9099"
+    assert data["token"] == "keep"
+    assert writeback.sync_extension_base_url_from_ai_server("pallasbot-ai", 9099, path=path) is False

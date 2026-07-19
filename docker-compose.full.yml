@@ -21,6 +21,10 @@
 # 端口: BOT_PORT=宿主机映射；BOT_LISTEN_PORT=容器内监听（默认皆 8088）。
 # AI 回调走 BOT_LISTEN_PORT，只改宿主机端口时勿动 BOT_LISTEN_PORT。
 #
+# 模型：默认不预拉 Ollama 权重；需要预拉时加 --profile pull-models。
+# 首次请在 WebUI「AI 配置 → 接入」选择/拉取模型。
+# AI 默认镜像为 slim（LLM-only）；GPU 全功能用 PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest
+#
 # AI 日志：pallasbot-ai 写入 ./pallas-bot-ai/logs/；pallasbot 只读挂到 /ai-logs 供 WebUI SSE。
 
 name: pallas-full
@@ -126,6 +130,7 @@ services:
       start_period: 30s
 
   ollama-init:
+    profiles: ["pull-models"]
     image: ollama/ollama:latest
     container_name: pallas-full-ollama-init
     networks:
@@ -147,7 +152,7 @@ services:
     restart: "no"
 
   pallasbot-ai:
-    image: pallasbot/pallas-bot-ai:latest
+    image: ${PALLAS_AI_IMAGE:-pallasbot/pallas-bot-ai:slim}
     container_name: pallasbot-ai
     ports:
       - "${AI_SERVER_PORT:-9099}:9099"
@@ -165,6 +170,7 @@ services:
       LLM_CATEGORIZER_MODEL: ${LLM_CATEGORIZER_MODEL:-qwen2.5:0.5b}
       LLM_AUTO_START: "false"
       CELERY_TASK_PACKAGES: llm
+      AI_ENABLE_MEDIA_WORKER: "0"
       # 与 Bot WebUI「AI 服务」Bearer Token 一致；见 config/compose.env.example
       PALLAS_AI_API_TOKEN: ${PALLAS_AI_API_TOKEN:-}
     networks:

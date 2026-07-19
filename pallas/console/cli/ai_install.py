@@ -34,6 +34,8 @@ def docker_compose_hint() -> str:
         "  docker compose -f docker-compose.llm.yml up -d\n"
         "  # 或与 Bot 同编排（在 Pallas-Bot 仓）\n"
         "  docker compose -f docker-compose.full.yml up -d\n"
+        "  # 默认 slim AI、不预拉模型；预拉可加 --profile pull-models\n"
+        "  # 模型：WebUI「AI 配置 → 接入」勾选切换时拉取\n"
         "详见文档：docs/maintainer/install/ai-runtime.md"
     )
 

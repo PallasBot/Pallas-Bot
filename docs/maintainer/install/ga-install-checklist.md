@@ -37,10 +37,12 @@
 cd ~/pallas-deploy
 docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose.env up -d
 # NVIDIA GPU: 追加 -f docker-compose.full.gpu.yml
+# 可选预拉 Ollama 模型: 追加 --profile pull-models（默认不预拉，改在 WebUI 拉）
 ```
 
-- [ ] `docker compose ... ps`：`pallasbot`、`postgres`、`redis`、`pallasbot-ai`、`ollama` 为 **running/healthy**（`ollama-init` 可 **exited 0**）
-- [ ] `docker compose ... logs ollama-init`：模型 pull 完成或进行中无持续报错
+- [ ] `docker compose ... ps`：`pallasbot`、`postgres`、`redis`、`pallasbot-ai`、`ollama` 为 **running/healthy**（默认无 `ollama-init`；仅加了 `--profile pull-models` 时可为 **exited 0**）
+- [ ] AI 默认镜像为 **`pallasbot/pallas-bot-ai:slim`**（LLM-only）；唱歌/TTS 等需在 `compose.env` 设 `PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest` 并叠加 GPU compose
+- [ ] 未用 `pull-models` 时：进 WebUI「AI 配置 → 接入 / 模型」配置 provider 并拉取模型（可勾选「切换时拉取」）
 
 **失败分支**：某服务非 healthy → `docker compose logs <服务名>`；PG 见 [Docker 部署 · PG 排障](/deploy/docker)。
 

@@ -7797,7 +7797,10 @@ def register_extended_api(
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         clean = _save_ai_extension_config(body.model_dump())
-        return JSONResponse({"ok": True, "data": clean})
+        from pallas.console.webui.ai_install_writeback import sync_ai_server_from_extension_base_url
+
+        synced = sync_ai_server_from_extension_base_url(str(clean.get("base_url") or ""))
+        return JSONResponse({"ok": True, "data": clean, "synced_ai_server": synced})
 
     @router.post(
         f"{x}/ai-extension/test",
