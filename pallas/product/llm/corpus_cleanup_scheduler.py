@@ -62,7 +62,7 @@ async def start_corpus_cleanup_job() -> None:
         misfire_grace_time=600,
         next_run_time=datetime.now() + timedelta(seconds=300),
     )
-    logger.info("语料污染扫库：周期 {}s", interval_sec)
+    logger.debug("语料污染扫库：周期 {}s", interval_sec)
 
 
 async def reload_corpus_cleanup_job() -> None:

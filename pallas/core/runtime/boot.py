@@ -12,13 +12,14 @@ from pallas.core.foundation.db import init_db
 from pallas.core.foundation.logging import (
     apply_stdlib_logging_channel_prefix,
     configure_quiet_library_loggers,
+    install_startup_log_noise_patcher,
     resolve_repo_log_level,
 )
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.core.foundation.startup_report import emit_startup_summary
 from pallas.core.platform.bot_runtime import load_plugins_for_role
 from pallas.core.shared.adapters import register_onebot_v11_custom_events
-from pallas.core.shared.utils.voice_downloader import ensure_voices
+from pallas.core.shared.utils.voice_downloader import schedule_ensure_voices
 from pallas.product.ban_gate import start_ban_gate_snapshot, stop_ban_gate_snapshot
 from pallas.product.llm.startup_probe import install_llm_startup_probe
 from pallas.product.message_scrub import start_message_scrub_if_enabled
@@ -33,6 +34,7 @@ def boot() -> nonebot.Driver:
     configure_quiet_library_loggers()
     file_log_level = resolve_repo_log_level()
     nonebot.init()
+    install_startup_log_noise_patcher()
     bot_log_dir = plugin_data_dir("bot", create=True)
     logger.add(
         bot_log_dir / "nonebot_{time:YYYY-MM-DD_HH-mm-ss_SSSSSS}.log",
@@ -54,7 +56,7 @@ def boot() -> nonebot.Driver:
     async def startup() -> None:
         await init_db()
         await start_ban_gate_snapshot()
-        await ensure_voices()
+        schedule_ensure_voices()
 
     @driver.on_shutdown
     async def shutdown() -> None:

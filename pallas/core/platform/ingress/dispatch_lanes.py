@@ -210,8 +210,8 @@ def install_dispatch_lanes() -> None:
         return
     limits = default_lane_limits()
     _LANES = {lane: LaneController(lane, limit) for lane, limit in limits.items()}
-    logger.info(
-        "[调度通道] 已启用 command={} chat={} storage={} remote={} pool_capacity={}",
+    logger.debug(
+        "[调度通道] command={} chat={} storage={} remote={} pool_capacity={}",
         limits[DispatchLane.COMMAND],
         limits[DispatchLane.CHAT],
         limits[DispatchLane.STORAGE],

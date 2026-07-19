@@ -8,6 +8,7 @@ from functools import cached_property
 from typing import cast
 
 import pypinyin
+from nonebot import logger
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from pallas.core.foundation.config import BotConfig
@@ -24,13 +25,13 @@ from .topic_utils import filtered_recent_topics
 try:
     import jieba_next.analyse as jieba_analyse
 
-    print("Using jieba_next for repeater")
+    logger.info("[复读] 分词引擎 jieba_next")
 except ImportError:
     import jieba
     import jieba.analyse as jieba_analyse
 
     jieba.disable_parallel()
-    print("Using jieba for repeater")
+    logger.info("[复读] 分词引擎 jieba")
 
 
 plugin_config = get_repeater_config()

@@ -410,7 +410,11 @@ def bot_has_release_update(
     current_tag: str = "",
     current_commit: str = "",
 ) -> bool:
-    """是否落后于 GitHub 最新 release。"""
+    """是否落后于 GitHub 最新 release。
+
+    当前 HEAD 相对 latest 有超前 commit（开发分支 / 分叉）时不提示「有更新」，
+    避免在 4.x 开发线上误报可升级到旧的 3.x release。
+    """
     from pallas.core.shared.utils.github_release import release_tags_equivalent
 
     tag = (latest_tag or "").strip()
@@ -425,7 +429,34 @@ def bot_has_release_update(
     head_sha, latest_sha = shas
     if head_sha == latest_sha:
         return False
+    ahead = bot_git_rev_list_count(f"{latest_sha}..{head_sha}")
+    if ahead > 0:
+        return False
     return bot_git_rev_list_count(f"{head_sha}..{latest_sha}") > 0
+
+
+def is_bot_release_style_tag(tag: str) -> bool:
+    """是否为 Bot Release 风格标签（``v1.2.3``），用于区分本地 npm 版号。"""
+    t = (tag or "").strip()
+    if len(t) < 2 or t[0] not in {"v", "V"}:
+        return False
+    return t[1].isdigit()
+
+
+def webui_has_release_update(*, latest_tag: str, current_tag: str) -> bool:
+    """WebUI dist 是否落后于 GitHub 最新带 dist 的 release。
+
+    dist 随 Bot Release tag 发布；本地 ``console-version.json`` 的 npm 版号（如 ``0.6.35``）不可比。
+    """
+    from pallas.core.shared.utils.github_release import release_tags_equivalent
+
+    latest = (latest_tag or "").strip()
+    current = (current_tag or "").strip()
+    if not latest or not current:
+        return False
+    if not is_bot_release_style_tag(latest) or not is_bot_release_style_tag(current):
+        return False
+    return not release_tags_equivalent(current, latest)
 
 
 def bot_is_development_build(

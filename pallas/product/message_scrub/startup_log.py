@@ -111,7 +111,8 @@ def install_message_scrub_startup_log() -> None:
         local_desc = format_local_sources(local_bits)
         fail_behavior = format_api_fail_behavior(cfg.inbound_filter_api_fail_open)
 
-        logger.info(
+        log = logger.info if intercept_on else logger.debug
+        log(
             "[消息过滤] {} | 本地={} | 远程={}/{} | 超时={}s | 失败{}",
             filter_status,
             local_desc,

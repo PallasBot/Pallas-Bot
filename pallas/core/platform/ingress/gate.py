@@ -235,7 +235,7 @@ async def log_ingress_gate_startup() -> None:
     mode = "shard" if shard_ctx.sharding_active() else "unified"
     fed = "on" if federate_ingress_active() else "off"
     unified_bypass = "on" if federate_ingress_bypass_unified() else "off"
-    logger.info(
+    logger.debug(
         "[入站门控] mode={} fleet={} federate={} bypass={} id={}",
         mode,
         n,

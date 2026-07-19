@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 from nonebot.log import LoguruHandler
 
 if TYPE_CHECKING:
     from logging import LogRecord
+    from typing import Any
 
 _TRANSIENT_UVICORN_MESSAGES = (
     "keepalive ping failed",
@@ -101,6 +103,34 @@ def configure_quiet_library_loggers() -> None:
     quiet_level = logging.WARNING
     for name in _QUIET_LIBRARY_LOGGER_NAMES:
         logging.getLogger(name).setLevel(quiet_level)
+
+
+_PLUGIN_LOAD_SUCCESS_RE = re.compile(r"Succeeded to load plugin", re.IGNORECASE)
+_COLOR_TAG_RE = re.compile(r"</?[a-zA-Z#][^>]*>")
+
+
+def install_startup_log_noise_patcher() -> None:
+    """在 ``nonebot.init()`` 之后调用：把插件逐条 SUCCESS 降为 DEBUG。
+
+    摘要已有多行 ``[启动] 就绪``；INFO 下不必再刷十余行 Succeeded。
+    """
+    from nonebot import _log_patcher
+    from nonebot.log import logger
+
+    level_name = resolve_repo_log_level()
+    if level_name in {"TRACE", "DEBUG"}:
+        return
+
+    debug_no = logger.level("DEBUG").no
+
+    def patcher(record: dict[str, Any]) -> None:
+        _log_patcher(record)
+        plain = _COLOR_TAG_RE.sub("", str(record.get("message", "")))
+        if _PLUGIN_LOAD_SUCCESS_RE.search(plain):
+            record["level"].name = "DEBUG"
+            record["level"].no = debug_no
+
+    logger.configure(patcher=patcher)
 
 
 _VALID_LOG_LEVELS = frozenset({"TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"})

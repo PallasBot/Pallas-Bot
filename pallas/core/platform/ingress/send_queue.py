@@ -262,8 +262,8 @@ def install_send_queue() -> None:
     _ORIGINAL_CALL_API = Adapter._call_api
     Adapter._call_api = patched_call_api  # type: ignore[method-assign,assignment]
     _PATCHED = True
-    logger.info(
-        "[发送队列] 已启用 workers={} max_depth={} min_interval_ms={}",
+    logger.debug(
+        "[发送队列] workers={} max_depth={} min_interval_ms={}",
         send_queue_worker_count(),
         send_queue_max_depth(),
         send_queue_min_interval_sec() * 1000.0,

@@ -7,7 +7,12 @@ from unittest.mock import patch
 
 import pytest
 
-from packages.pb_webui.manager import bot_has_release_update, bot_is_development_build
+from packages.pb_webui.manager import (
+    bot_has_release_update,
+    bot_is_development_build,
+    is_bot_release_style_tag,
+    webui_has_release_update,
+)
 
 
 def test_same_tag_no_update() -> None:
@@ -19,16 +24,18 @@ def test_no_latest_tag() -> None:
 
 
 @pytest.mark.parametrize(
-    ("head_sha", "latest_sha", "behind_count", "expected"),
+    ("head_sha", "latest_sha", "ahead_count", "behind_count", "expected"),
     [
-        ("aaa", "aaa", 0, False),
-        ("bbb", "aaa", 0, False),
-        ("aaa", "bbb", 2, True),
+        ("aaa", "aaa", 0, 0, False),
+        ("bbb", "aaa", 3, 0, False),  # 纯超前：开发构建
+        ("aaa", "bbb", 0, 2, True),  # 纯落后：可升级
+        ("ccc", "bbb", 190, 5, False),  # 分叉：不误报「有更新」
     ],
 )
 def test_git_behind_only(
     head_sha: str,
     latest_sha: str,
+    ahead_count: int,
     behind_count: int,
     expected: bool,
 ) -> None:
@@ -42,8 +49,11 @@ def test_git_behind_only(
             if ref.endswith("^{commit}"):
                 return latest_sha + "\n"
         if cmd[:3] == ["git", "rev-list", "--count"]:
-            assert cmd[3] == f"{head_sha}..{latest_sha}"
-            return f"{behind_count}\n"
+            r = cmd[3]
+            if r == f"{latest_sha}..{head_sha}":
+                return f"{ahead_count}\n"
+            if r == f"{head_sha}..{latest_sha}":
+                return f"{behind_count}\n"
         raise AssertionError(cmd)
 
     with (
@@ -52,6 +62,14 @@ def test_git_behind_only(
         patch("subprocess.check_output", side_effect=check_output),
     ):
         assert bot_has_release_update(latest_tag="v1.1.0", current_tag="v1.0.0-dev") is expected
+
+
+def test_webui_update_ignores_npm_version() -> None:
+    assert is_bot_release_style_tag("v3.9.3")
+    assert not is_bot_release_style_tag("0.6.35")
+    assert not webui_has_release_update(latest_tag="v3.9.3", current_tag="0.6.35")
+    assert webui_has_release_update(latest_tag="v3.9.3", current_tag="v3.9.0")
+    assert not webui_has_release_update(latest_tag="v3.9.3", current_tag="v3.9.3")
 
 
 @pytest.mark.parametrize(

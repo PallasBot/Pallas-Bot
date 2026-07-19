@@ -1,3 +1,4 @@
+import asyncio
 import zipfile
 
 import httpx
@@ -34,6 +35,18 @@ VOICES = {
     "问候",
 }
 
+# 单源超时：后台下载也不宜无限挂起
+_DOWNLOAD_TIMEOUT_SEC = 60.0
+
+_background_ensure_task: asyncio.Task[None] | None = None
+
+
+def voices_ready() -> bool:
+    pallas_dir = VOICES_DIR / "Pallas"
+    if not pallas_dir.is_dir():
+        return False
+    return all((pallas_dir / f"{file}.wav").is_file() for file in VOICES)
+
 
 async def download_voices() -> bool:
     try:
@@ -42,7 +55,7 @@ async def download_voices() -> bool:
         RESOURCE_ROOT.mkdir(exist_ok=True)
         VOICES_DIR.mkdir(exist_ok=True)
 
-        timeout = httpx.Timeout(300.0)
+        timeout = httpx.Timeout(_DOWNLOAD_TIMEOUT_SEC)
         limits = httpx.Limits(max_keepalive_connections=1, max_connections=1)
         download_success = False
         for source, url in VOICES_URLS.items():
@@ -58,23 +71,23 @@ async def download_voices() -> bool:
                     break
 
             except (httpx.HTTPStatusError, httpx.RequestError, Exception) as e:
-                logger.warning("voices: download failed source={} err={}", source, e)
+                logger.warning("[语音] 下载失败 source={} err={}", source, e)
                 continue
 
         if not download_success:
-            logger.error("voices: all download sources failed")
-            raise RuntimeError("all voice download sources failed")
+            logger.error("[语音] 所有下载源均失败")
+            return False
 
         with zipfile.ZipFile(TEMP_ZIP_PATH, "r") as zip_ref:
             zip_ref.extractall(VOICES_DIR)
 
-        TEMP_ZIP_PATH.unlink()
+        TEMP_ZIP_PATH.unlink(missing_ok=True)
 
         logger.info("[语音] 就绪")
         return True
 
     except Exception as e:
-        logger.error("voices: download error: {}", e)
+        logger.error("[语音] 下载异常: {}", e)
         if TEMP_ZIP_PATH.exists():
             try:
                 TEMP_ZIP_PATH.unlink()
@@ -83,16 +96,41 @@ async def download_voices() -> bool:
         return False
 
 
-async def ensure_voices() -> bool:
+async def ensure_voices(*, announce_missing: bool = True) -> bool:
     try:
-        pallas_dir = VOICES_DIR / "Pallas"
-        if pallas_dir.exists():
-            if all((pallas_dir / f"{file}.wav").exists() for file in VOICES):
-                return True
+        if voices_ready():
+            return True
 
-        logger.info("[语音] 缺失，开始下载")
+        if announce_missing:
+            logger.info("[语音] 缺失，开始下载")
         return await download_voices()
 
     except Exception as e:
-        logger.error("voices: ensure failed: {}", e)
+        logger.error("[语音] ensure 失败: {}", e)
         return False
+
+
+async def _run_background_ensure_voices() -> None:
+    try:
+        # schedule 已提示「缺失，已调度」；此处不再重复「缺失」语义
+        ok = await ensure_voices(announce_missing=False)
+        if not ok:
+            logger.warning("[语音] 后台就绪失败，相关功能将降级")
+    except Exception as err:
+        logger.warning("[语音] 后台就绪失败: {}", err)
+
+
+def schedule_ensure_voices() -> None:
+    """后台确保语音资源，不阻塞 NoneBot Application startup。"""
+    global _background_ensure_task
+    if voices_ready():
+        return
+    if _background_ensure_task is not None and not _background_ensure_task.done():
+        logger.debug("[语音] 后台下载已在进行，跳过")
+        return
+    logger.info("[语音] 缺失，已调度后台下载（不阻塞启动）")
+    loop = asyncio.get_running_loop()
+    _background_ensure_task = loop.create_task(
+        _run_background_ensure_voices(),
+        name="ensure_voices",
+    )

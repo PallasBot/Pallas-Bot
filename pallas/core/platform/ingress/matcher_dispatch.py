@@ -216,8 +216,8 @@ def install_matcher_dispatch() -> None:
                 module.handle_event = wrapped  # noqa: B010
 
     _PATCHED = True
-    logger.info(
-        "[消息预筛] 已启用 overload_threshold={} multi_bot={} adapter_patches={}",
+    logger.debug(
+        "[消息预筛] overload_threshold={} multi_bot={} adapter_patches={}",
         overload_selected_threshold(),
         needs_group_host_bot_gate(),
         len(_ORIGINAL_ADAPTER_HANDLE_EVENTS),

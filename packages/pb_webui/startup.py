@@ -30,6 +30,7 @@ from .manager import (
     github_release_asset_url,
     resolve_github_release_asset_urls,
     save_installed_webui_version,
+    webui_has_release_update,
     webui_public_path,
 )
 from .public import register_routes
@@ -181,7 +182,7 @@ if not is_sharded_worker():
                 current_tag = str(installed.get("tag", "") or "").strip()
                 latest_info = await fetch_latest_webui_release(repo, token=tok, asset_name=asset_chk)
                 latest_tag = str(latest_info.get("tag", "") or "").strip()
-                if latest_tag and current_tag != latest_tag:
+                if webui_has_release_update(latest_tag=latest_tag, current_tag=current_tag):
                     release_url = str(latest_info.get("html_url", "") or "").strip()
                     logger.info(
                         "console: webui update available {} (current {}){}",
@@ -190,7 +191,11 @@ if not is_sharded_worker():
                         f" → {release_url}" if release_url else "",
                     )
                 else:
-                    logger.debug("console: webui up to date tag={}", current_tag or "-")
+                    logger.debug(
+                        "console: webui up to date or incomparable tag={} latest={}",
+                        current_tag or "-",
+                        latest_tag or "-",
+                    )
             except Exception as e:
                 logger.debug("console: webui update check failed: {}", format_exception_for_log(e))
             try:

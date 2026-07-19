@@ -115,16 +115,15 @@ def test_prime_shared_console_login_announces_default_password_once(
 
     root = tmp_path / "pc_once"
     monkeypatch.setattr(m, "console_auth_dir", lambda: root)
-    writes: list[str] = []
+    success_msgs: list[str] = []
 
-    def capture_write(s: str) -> int:
-        writes.append(s)
-        return len(s)
+    def capture_success(fmt: str, *args: object) -> None:
+        success_msgs.append(fmt.format(*args) if args else fmt)
 
-    monkeypatch.setattr(m.sys.stderr, "write", capture_write)
+    monkeypatch.setattr(m.logger, "success", capture_success)
     m.prime_shared_console_login()
     m.prime_shared_console_login()
-    hits = [w for w in writes if "[Pallas-Bot] 默认口令:" in w]
+    hits = [w for w in success_msgs if "默认口令:" in w]
     assert len(hits) == 1
 
 
@@ -138,13 +137,12 @@ def test_prime_reannounces_default_password_when_auth_dir_changes(
     root1 = tmp_path / "pc_a"
     root1.mkdir()
     monkeypatch.setattr(m, "console_auth_dir", lambda: root1)
-    writes: list[str] = []
+    success_msgs: list[str] = []
 
-    def capture_write(s: str) -> int:
-        writes.append(s)
-        return len(s)
+    def capture_success(fmt: str, *args: object) -> None:
+        success_msgs.append(fmt.format(*args) if args else fmt)
 
-    monkeypatch.setattr(m.sys.stderr, "write", capture_write)
+    monkeypatch.setattr(m.logger, "success", capture_success)
     m.prime_shared_console_login()
     root2 = tmp_path / "pc_b"
     root2.mkdir()
@@ -154,5 +152,5 @@ def test_prime_reannounces_default_password_when_auth_dir_changes(
             shutil.copy2(src, root2 / name)
     monkeypatch.setattr(m, "console_auth_dir", lambda: root2)
     m.prime_shared_console_login()
-    hits = [w for w in writes if "[Pallas-Bot] 默认口令:" in w]
+    hits = [w for w in success_msgs if "默认口令:" in w]
     assert len(hits) == 2

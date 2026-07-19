@@ -9,7 +9,6 @@ import hmac
 import json
 import secrets
 import string
-import sys
 import time
 from collections.abc import Callable  # noqa: TC003
 from contextvars import ContextVar
@@ -228,12 +227,8 @@ def prime_shared_console_login() -> None:
     auth_path = str(auth_state_path().resolve())
     if plain is not None and rnd:
         logger.info("[控制台] 鉴权已初始化 {}", auth_state_path())
+        # 只走 logger（stdout sink），避免再写 stderr 造成双打
         logger.success("[控制台] 默认口令: {}", plain)
-        try:
-            sys.stderr.write(f"[控制台] 默认口令: {plain}\n")
-            sys.stderr.flush()
-        except OSError:
-            pass
         _announced_default_password_auth_path = auth_path
     else:
         boot = _read_default_login_password_plain()
@@ -242,11 +237,6 @@ def prime_shared_console_login() -> None:
         elif boot:
             if _announced_default_password_auth_path != auth_path:
                 logger.success("[控制台] 默认口令: {}", boot)
-                try:
-                    sys.stderr.write(f"[控制台] 默认口令: {boot}\n")
-                    sys.stderr.flush()
-                except OSError:
-                    pass
             _announced_default_password_auth_path = auth_path
 
 
