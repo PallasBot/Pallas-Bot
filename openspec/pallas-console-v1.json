@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v3.9.0-160-gd7ab374a-dirty",
+    "version": "v3.9.0-215-gfb26dd7f",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -5993,6 +5993,204 @@
         }
       }
     },
+    "/pallas/api/common-config/llm/media-assets/status": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Media Assets Status Get",
+        "operationId": "_llm_media_assets_status_get_pallas_api_common_config_llm_media_assets_status_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/media-assets/download": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Media Assets Download Post",
+        "operationId": "_llm_media_assets_download_post_pallas_api_common_config_llm_media_assets_download_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/media-assets/download/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Media Assets Download Job Get",
+        "operationId": "_llm_media_assets_download_job_get_pallas_api_common_config_llm_media_assets_download_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/common-config/llm/runtime-overview": {
       "get": {
         "tags": [
@@ -10785,7 +10983,8 @@
             "schema": {
               "enum": [
                 "uvicorn",
-                "celery"
+                "celery",
+                "celery-media"
               ],
               "type": "string",
               "default": "uvicorn",
@@ -10802,6 +11001,326 @@
               "minimum": 1,
               "default": 200,
               "title": "N"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/ai-extension/logs/stream": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Ai Extension Logs Stream",
+        "operationId": "_ai_extension_logs_stream_pallas_api_ai_extension_logs_stream_get",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "uvicorn",
+                "celery",
+                "celery-media"
+              ],
+              "type": "string",
+              "default": "uvicorn",
+              "title": "Kind"
+            }
+          },
+          {
+            "name": "last_event_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "断点续传：仅发送字节偏移大于该值的新行",
+              "title": "Last Event Id"
+            },
+            "description": "断点续传：仅发送字节偏移大于该值的新行"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last-Event-Id"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/ai-extension/install/status": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Ai Extension Install Status",
+        "operationId": "_ai_extension_install_status_pallas_api_ai_extension_install_status_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/ai-extension/install": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Ai Extension Install",
+        "operationId": "_ai_extension_install_pallas_api_ai_extension_install_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_AiInstallBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/ai-extension/install/jobs/{job_id}/stream": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Ai Extension Install Job Stream",
+        "operationId": "_ai_extension_install_job_stream_pallas_api_ai_extension_install_jobs__job_id__stream_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
             }
           },
           {
@@ -12624,6 +13143,13 @@
             "type": "object",
             "title": "Limits Ui Filtered"
           },
+          "blocked_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Blocked User Ids"
+          },
           "reload_policy": {
             "anyOf": [
               {
@@ -13003,6 +13529,7 @@
             "type": "string",
             "maxLength": 300,
             "title": "Token",
+            "description": "Bearer Token；须与 AI 侧 PALLAS_AI_API_TOKEN 一致，供 /api/ops/logs 等 HTTP 回退鉴权",
             "default": ""
           },
           "health_paths": {
@@ -13023,6 +13550,12 @@
             "type": "string",
             "maxLength": 500,
             "title": "Celery Log File",
+            "default": ""
+          },
+          "celery_media_log_file": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Celery Media Log File",
             "default": ""
           },
           "timeout_sec": {
@@ -13137,6 +13670,43 @@
           "ok"
         ],
         "title": "_AiExtensionTestData"
+      },
+      "_AiInstallBody": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "clone",
+              "bootstrap",
+              "clone_and_bootstrap"
+            ],
+            "title": "Action",
+            "default": "clone_and_bootstrap"
+          },
+          "no_start": {
+            "type": "boolean",
+            "title": "No Start",
+            "default": false
+          },
+          "remote_only": {
+            "type": "boolean",
+            "title": "Remote Only",
+            "default": false
+          },
+          "with_media": {
+            "type": "boolean",
+            "title": "With Media",
+            "default": false
+          },
+          "use_gpu": {
+            "type": "boolean",
+            "title": "Use Gpu",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "_AiInstallBody"
       },
       "_AiNcmSendSmsBody": {
         "properties": {
@@ -14986,6 +15556,13 @@
             "type": "boolean",
             "title": "Help Hidden",
             "default": false
+          },
+          "blocked_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Blocked User Ids"
           }
         },
         "additionalProperties": false,
