@@ -2,8 +2,7 @@
   <img alt="Pallas-Bot" src="docs/plugins/assets/brand-avatar.png" width="220" height="220" />
   <h1>Pallas-Bot</h1>
 
-  <pre><code>「我是来自米诺斯的祭司帕拉斯，会在罗德岛休息一段时间......
-虽然这么说，我渴望以美酒和戏剧被招待，更渴望走向战场。」</code></pre>
+  <pre><code>「我是来自米诺斯的祭司帕拉斯，会在罗德岛休息一段时间......虽然这么说，我渴望以美酒和戏剧被招待，更渴望走向战场。」</code></pre>
 
   <p>
     <a href="https://github.com/PallasBot/Pallas-Bot/issues/new/choose">报告 Bug</a> ·
