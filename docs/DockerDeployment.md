@@ -100,9 +100,10 @@ docker compose --env-file ./pallas-bot/config/compose.env --profile postgres dow
 curl -fsSL -o docker-compose.full.yml \
   https://raw.githubusercontent.com/PallasBot/Pallas-Bot/main/docker-compose.full.yml
 docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose.env up -d
+# 可选预拉 Ollama 模型: 追加 --profile pull-models
 ```
 
-有 NVIDIA GPU 时可叠加 `docker-compose.full.gpu.yml`。`8088` 与 `9099` 的 health 都正常即可。
+默认 AI 镜像为 **`pallasbot/pallas-bot-ai:slim`**（LLM-only，不预拉模型）；模型可在 WebUI「AI 配置」拉取。有 NVIDIA GPU 且需唱歌/TTS 时，在 `compose.env` 设 `PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest` 并叠加 `docker-compose.full.gpu.yml`。`8088` 与 `9099` 的 health 都正常即可。
 :::
 
 ::: details MongoDB（3.x 升级沿用）

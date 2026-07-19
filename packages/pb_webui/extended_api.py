@@ -6516,6 +6516,46 @@ def register_extended_api(
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(
+        f"{x}/common-config/llm/media-assets/status",
+        include_in_schema=True,
+    )
+    async def _llm_media_assets_status_get() -> JSONResponse:
+        from pallas.product.llm.media_assets import fetch_media_assets_status
+
+        data = await fetch_media_assets_status()
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(
+        f"{x}/common-config/llm/media-assets/download",
+        include_in_schema=True,
+    )
+    async def _llm_media_assets_download_post() -> JSONResponse:
+        from pallas.product.llm.media_assets import start_media_assets_download
+
+        try:
+            data = await start_media_assets_download()
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-assets/download/jobs/{{job_id}}",
+        include_in_schema=True,
+    )
+    async def _llm_media_assets_download_job_get(job_id: str) -> JSONResponse:
+        from pallas.product.llm.media_assets import fetch_media_assets_download_job
+
+        try:
+            data = await fetch_media_assets_download_job(job_id)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
         f"{x}/common-config/llm/runtime-overview",
         include_in_schema=True,
         response_model=_ApiOkResponse[_LlmRuntimeOverviewData],

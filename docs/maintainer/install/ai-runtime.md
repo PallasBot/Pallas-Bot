@@ -56,7 +56,9 @@ cp .env.example .env
 uv run pallas ai setup
 ```
 
-也可在控制台 **AI 配置 · 连接** 使用「安装 AI Runtime（源码）」：克隆同级 `Pallas-Bot-AI` 并跑 `ai_bootstrap.sh`；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
+也可在控制台 **AI 配置 · AI 服务** 使用「安装 AI Runtime（源码）」：克隆同级 `Pallas-Bot-AI` 并跑 `ai_bootstrap.sh`（可选「含唱歌/TTS」）；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
+
+用户向手把手与 **能力包**（对话模型拉取、媒体权重 / Docker 换 `latest`）见 [AI 扩展](/guide/ai)。
 
 | 场景 | 命令 |
 | --- | --- |
