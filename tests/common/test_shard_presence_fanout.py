@@ -5,15 +5,13 @@ from types import SimpleNamespace
 
 from packages.repeater import fanout_reply as fanout_mod
 from pallas.core.platform.shard import presence as presence_mod
+from pallas.core.platform.shard.coord import bot_action as ba_mod
 
 
 def test_presence_api_exports_cluster_connection_check() -> None:
     from pallas.api.presence import bot_has_cluster_connection
 
     assert bot_has_cluster_connection is presence_mod.bot_has_cluster_connection
-
-
-from pallas.core.platform.shard.coord import bot_action as ba_mod
 
 
 def test_bot_has_cluster_connection_local(monkeypatch):

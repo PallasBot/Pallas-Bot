@@ -95,11 +95,12 @@ async def test_enroll_prefers_derived_api_base_in_auto_mode(tmp_path, monkeypatc
 
 @pytest.mark.asyncio
 async def test_ensure_corpus_skips_when_manual_configured(monkeypatch):
-    monkeypatch.setenv("PALLAS_CORPUS_TOKEN", "pc_manual")
-    monkeypatch.setenv("PALLAS_CORPUS_COMMUNITY_API_BASE", "https://stats.example/v1/corpus")
-    from pallas.product.corpus.config import clear_corpus_config_cache
-
-    clear_corpus_config_cache()
+    monkeypatch.setattr("pallas.product.corpus.enroll.community_manual_configured", lambda: True)
+    monkeypatch.setattr("pallas.product.corpus.enroll.should_run_corpus_auto_enroll", lambda: False)
+    monkeypatch.setattr(
+        "pallas.product.corpus.config.community_configured",
+        lambda: True,
+    )
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         ok = await ensure_corpus_community_enrolled(force=True)
     assert ok is True

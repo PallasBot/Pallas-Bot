@@ -134,8 +134,10 @@ def test_field_meta_int_bounds_are_int():
         cur=9099,
         default_value=9099,
     )
-    assert row["min_value"] == 1 and isinstance(row["min_value"], int)
-    assert row["max_value"] == 65535 and isinstance(row["max_value"], int)
+    assert row["min_value"] == 1
+    assert isinstance(row["min_value"], int)
+    assert row["max_value"] == 65535
+    assert isinstance(row["max_value"], int)
 
 
 def test_field_meta_float_bounds_are_float():
@@ -146,7 +148,8 @@ def test_field_meta_float_bounds_are_float():
         cur=0.5,
         default_value=0.5,
     )
-    assert row["min_value"] == 0.0 and isinstance(row["min_value"], float)
+    assert row["min_value"] == 0.0
+    assert isinstance(row["min_value"], float)
     assert row["max_value"] == 1.0
 
 
@@ -158,7 +161,8 @@ def test_field_meta_no_bounds_key_when_absent():
         cur=3,
         default_value=3,
     )
-    assert "min_value" not in row and "max_value" not in row
+    assert "min_value" not in row
+    assert "max_value" not in row
 
 
 class _Secret(BaseModel):

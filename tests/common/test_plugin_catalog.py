@@ -345,13 +345,15 @@ def test_catalog_row_reuses_official_extension_visuals(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "pallas.console.webui.plugin_catalog._resolve_remote_catalog_visuals",
-        lambda plugin_id: {
-            "avatar": None,
-            "icon": "https://raw.githubusercontent.com/TogetsuDo/pallas-plugin-draw/main/assets/brand-avatar.png",
-            "cover": "https://raw.githubusercontent.com/TogetsuDo/pallas-plugin-draw/main/assets/brand-avatar.png",
-        }
-        if plugin_id == "draw"
-        else {"avatar": None, "icon": None, "cover": None},
+        lambda plugin_id: (
+            {
+                "avatar": None,
+                "icon": "https://raw.githubusercontent.com/TogetsuDo/pallas-plugin-draw/main/assets/brand-avatar.png",
+                "cover": "https://raw.githubusercontent.com/TogetsuDo/pallas-plugin-draw/main/assets/brand-avatar.png",
+            }
+            if plugin_id == "draw"
+            else {"avatar": None, "icon": None, "cover": None}
+        ),
     )
 
     rows = build_plugin_catalog_rows()
@@ -403,9 +405,9 @@ def test_catalog_row_reuses_community_plugin_visuals(monkeypatch) -> None:
     monkeypatch.setattr(
         "pallas.console.webui.plugin_catalog.Path.is_file",
         lambda self: (
-            self.name == "__init__.py" and self.parent.name == "demo_local"
-        )
-        or self.as_posix().endswith("community_plugin_index.json"),
+            (self.name == "__init__.py" and self.parent.name == "demo_local")
+            or self.as_posix().endswith("community_plugin_index.json")
+        ),
     )
     monkeypatch.setattr(
         "pallas.console.webui.plugin_catalog.Path.is_dir",

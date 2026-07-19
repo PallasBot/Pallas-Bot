@@ -59,23 +59,31 @@ def test_sing_probe_urls() -> None:
 def test_probe_sing_disabled(monkeypatch) -> None:
     monkeypatch.setattr(
         "pallas.product.service_gateways.media_probe.import_plugin_submodule",
-        lambda plugin_id, submodule: SimpleNamespace(
-            get_sing_config=lambda: _SingConfig(sing_enable=False),
-            sing_runtime_mode=lambda cfg: "plugin",
-            sing_server_url=lambda cfg: "http://127.0.0.1:9099",
-        )
-        if plugin_id == "sing" and submodule == "config"
-        else (_ for _ in ()).throw(AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")),
+        lambda plugin_id, submodule: (
+            SimpleNamespace(
+                get_sing_config=lambda: _SingConfig(sing_enable=False),
+                sing_runtime_mode=lambda cfg: "plugin",
+                sing_server_url=lambda cfg: "http://127.0.0.1:9099",
+            )
+            if plugin_id == "sing" and submodule == "config"
+            else (_ for _ in ()).throw(
+                AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")
+            )
+        ),
     )
     monkeypatch.setattr(
         "pallas.core.platform.plugin_runtime.resolve.import_plugin_submodule",
-        lambda plugin_id, submodule: SimpleNamespace(
-            get_sing_config=lambda: _SingConfig(sing_enable=False),
-            sing_runtime_mode=lambda cfg: "plugin",
-            sing_server_url=lambda cfg: "http://127.0.0.1:9099",
-        )
-        if plugin_id == "sing" and submodule == "config"
-        else (_ for _ in ()).throw(AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")),
+        lambda plugin_id, submodule: (
+            SimpleNamespace(
+                get_sing_config=lambda: _SingConfig(sing_enable=False),
+                sing_runtime_mode=lambda cfg: "plugin",
+                sing_server_url=lambda cfg: "http://127.0.0.1:9099",
+            )
+            if plugin_id == "sing" and submodule == "config"
+            else (_ for _ in ()).throw(
+                AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")
+            )
+        ),
     )
     results = asyncio.run(probe_sing_server())
     assert len(results) == 1
@@ -111,23 +119,31 @@ def test_probe_sing_success_sets_runtime_state(monkeypatch) -> None:
     cfg = _SingConfig(sing_enable=True)
     monkeypatch.setattr(
         "pallas.product.service_gateways.media_probe.import_plugin_submodule",
-        lambda plugin_id, submodule: SimpleNamespace(
-            get_sing_config=lambda: cfg,
-            sing_runtime_mode=lambda _cfg: "plugin",
-            sing_server_url=lambda _cfg: "http://127.0.0.1:9099",
-        )
-        if plugin_id == "sing" and submodule == "config"
-        else (_ for _ in ()).throw(AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")),
+        lambda plugin_id, submodule: (
+            SimpleNamespace(
+                get_sing_config=lambda: cfg,
+                sing_runtime_mode=lambda _cfg: "plugin",
+                sing_server_url=lambda _cfg: "http://127.0.0.1:9099",
+            )
+            if plugin_id == "sing" and submodule == "config"
+            else (_ for _ in ()).throw(
+                AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")
+            )
+        ),
     )
     monkeypatch.setattr(
         "pallas.core.platform.plugin_runtime.resolve.import_plugin_submodule",
-        lambda plugin_id, submodule: SimpleNamespace(
-            get_sing_config=lambda: cfg,
-            sing_runtime_mode=lambda _cfg: "plugin",
-            sing_server_url=lambda _cfg: "http://127.0.0.1:9099",
-        )
-        if plugin_id == "sing" and submodule == "config"
-        else (_ for _ in ()).throw(AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")),
+        lambda plugin_id, submodule: (
+            SimpleNamespace(
+                get_sing_config=lambda: cfg,
+                sing_runtime_mode=lambda _cfg: "plugin",
+                sing_server_url=lambda _cfg: "http://127.0.0.1:9099",
+            )
+            if plugin_id == "sing" and submodule == "config"
+            else (_ for _ in ()).throw(
+                AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")
+            )
+        ),
     )
     results = asyncio.run(probe_sing_server(cfg=cfg))
     assert len(results) == 1
@@ -314,15 +330,23 @@ def test_probe_maa_endpoints_sets_runtime_state(monkeypatch) -> None:
     fake_endpoints_mod = SimpleNamespace(resolve_maa_probe_http_endpoints=lambda cfg=None: _Endpoints())
     monkeypatch.setattr(
         "pallas.product.service_gateways.media_probe.import_plugin_submodule",
-        lambda plugin_id, submodule: fake_endpoints_mod
-        if plugin_id == "maa" and submodule == "endpoints"
-        else (_ for _ in ()).throw(AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")),
+        lambda plugin_id, submodule: (
+            fake_endpoints_mod
+            if plugin_id == "maa" and submodule == "endpoints"
+            else (_ for _ in ()).throw(
+                AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")
+            )
+        ),
     )
     monkeypatch.setattr(
         "pallas.core.platform.plugin_runtime.resolve.import_plugin_submodule",
-        lambda plugin_id, submodule: fake_endpoints_mod
-        if plugin_id == "maa" and submodule == "endpoints"
-        else (_ for _ in ()).throw(AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")),
+        lambda plugin_id, submodule: (
+            fake_endpoints_mod
+            if plugin_id == "maa" and submodule == "endpoints"
+            else (_ for _ in ()).throw(
+                AssertionError(f"unexpected import_plugin_submodule({plugin_id!r}, {submodule!r})")
+            )
+        ),
     )
     monkeypatch.setattr(
         "pallas.product.service_gateways.media_probe.probe_http_post_json",

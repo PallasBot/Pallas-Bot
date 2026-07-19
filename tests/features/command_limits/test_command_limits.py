@@ -14,9 +14,19 @@ def _plugin_meta(name: str, command_ids: list[str]) -> PluginMetadata:
     )
 
 
-def _import_command_limit_plugins() -> None:
-    import pallas_plugin_bot_status  # noqa: F401
+def _bot_status_meta() -> PluginMetadata:
+    return _plugin_meta(
+        "bot_status",
+        [
+            "bot_status.status",
+            "bot_status.count",
+            "bot_status.test_mail",
+            "bot_status.offline_mail",
+        ],
+    )
 
+
+def _import_command_limit_plugins() -> None:
     import packages.help  # noqa: F401
     import pallas.product.service_gateways.connectivity  # noqa: F401
 
@@ -24,11 +34,11 @@ def _import_command_limit_plugins() -> None:
 def _patch_loaded_plugins(monkeypatch):
     from types import SimpleNamespace
 
-    from pallas_plugin_bot_status import __plugin_meta__ as bot_status_meta
-
     from packages.help import __plugin_meta__ as help_meta
+    from pallas.core.limits.schema import clear_merged_command_limits_cache
     from pallas.product.service_gateways.connectivity import __plugin_meta__ as connectivity_meta
 
+    bot_status_meta = _bot_status_meta()
     maa_meta = _plugin_meta(
         "maa",
         ["maa.status", "maa.clear_queue", "maa.switch_device", "maa.raw_task", "maa.control"],
@@ -37,7 +47,6 @@ def _patch_loaded_plugins(monkeypatch):
         "sing",
         ["sing.sing", "sing.play", "sing.request_song", "sing.song_title"],
     )
-    from pallas.core.limits.schema import clear_merged_command_limits_cache
 
     clear_merged_command_limits_cache()
 
@@ -78,11 +87,10 @@ def test_command_limit_action_key():
 
 
 def test_existing_plugin_metadata_declares_command_limits():
-    from pallas_plugin_bot_status import __plugin_meta__ as bot_status_meta
-
     from packages.help import __plugin_meta__ as help_meta
     from pallas.product.service_gateways.connectivity import __plugin_meta__ as connectivity_meta
 
+    bot_status_meta = _bot_status_meta()
     maa_meta = _plugin_meta(
         "maa",
         ["maa.status", "maa.clear_queue", "maa.switch_device", "maa.raw_task", "maa.control"],

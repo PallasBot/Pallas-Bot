@@ -192,6 +192,7 @@ def test_llm_runtime_overview_returns_aggregated_fields(monkeypatch) -> None:
     monkeypatch.setattr("pallas.product.llm.startup_probe.probe_ai_service_health", fake_health)
     monkeypatch.setattr("pallas.product.llm.model_admin.fetch_model_admin_status", fake_model_admin)
     monkeypatch.setattr("pallas.product.llm.model_admin.fetch_llm_task_stats", fake_task_stats)
+
     async def fake_task_routing_preview():
         return {
             "llm_chat": {

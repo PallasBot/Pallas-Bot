@@ -42,12 +42,8 @@ def test_apply_seed_prefs_changes_message_weights() -> None:
     long_persona = apply_seed_prefs(base, ["long"])
     short_text = "草"
     long_text = "今天这件事其实挺复杂的，我觉得还是再想想比较好吧。"
-    assert message_weight_multiplier(short_text, short_persona) > message_weight_multiplier(
-        short_text, long_persona
-    )
-    assert message_weight_multiplier(long_text, long_persona) > message_weight_multiplier(
-        long_text, short_persona
-    )
+    assert message_weight_multiplier(short_text, short_persona) > message_weight_multiplier(short_text, long_persona)
+    assert message_weight_multiplier(long_text, long_persona) > message_weight_multiplier(long_text, short_persona)
 
 
 def test_merge_persona_with_seed_patch_preserves_cross_group() -> None:

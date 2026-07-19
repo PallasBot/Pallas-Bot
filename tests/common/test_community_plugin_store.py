@@ -157,13 +157,14 @@ async def test_build_community_plugin_store_prefers_author_avatar_over_plugin_av
 def test_resolve_community_plugin_avatar_uses_author_avatar(monkeypatch) -> None:
     from pallas.console.webui.community_plugin_registry import resolve_community_plugin_avatar
 
-    assert resolve_community_plugin_avatar(
-        {
+    assert (
+        resolve_community_plugin_avatar({
             "author": "acme",
             "repository_url": "https://github.com/acme/demo",
             "ref": "main",
-        }
-    ) == "https://avatars.githubusercontent.com/acme?s=64"
+        })
+        == "https://avatars.githubusercontent.com/acme?s=64"
+    )
 
 
 async def test_build_community_plugin_store_falls_back_to_author_avatar_when_no_explicit_avatar(monkeypatch) -> None:
@@ -316,7 +317,9 @@ async def test_build_community_plugin_store_prefers_cached_asset_urls(monkeypatc
     )
     monkeypatch.setattr(
         "pallas.console.webui.plugin_store_assets.apply_asset_snapshot_to_rows",
-        lambda kind, rows: [{**rows[0], "icon": "/pallas/store-assets/icon/community-demo.png"}] if kind == "community" else rows,
+        lambda kind, rows: (
+            [{**rows[0], "icon": "/pallas/store-assets/icon/community-demo.png"}] if kind == "community" else rows
+        ),
     )
 
     store = await build_community_plugin_store()

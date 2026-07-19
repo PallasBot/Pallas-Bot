@@ -39,16 +39,22 @@ def test_relationship_teach_likely_skips_casual_chat() -> None:
 
 
 def test_resolve_relationship_teach_target_id_ignores_at_bot() -> None:
-    assert resolve_relationship_teach_target_id(
-        "[CQ:at,qq=111] 记住关系：群主",
-        speaker_id=222,
-        bot_self_id=111,
-    ) == 222
-    assert resolve_relationship_teach_target_id(
-        "[CQ:at,qq=333] 记住关系：发小",
-        speaker_id=222,
-        bot_self_id=111,
-    ) == 333
+    assert (
+        resolve_relationship_teach_target_id(
+            "[CQ:at,qq=111] 记住关系：群主",
+            speaker_id=222,
+            bot_self_id=111,
+        )
+        == 222
+    )
+    assert (
+        resolve_relationship_teach_target_id(
+            "[CQ:at,qq=333] 记住关系：发小",
+            speaker_id=222,
+            bot_self_id=111,
+        )
+        == 333
+    )
 
 
 def test_relationship_note_has_value() -> None:

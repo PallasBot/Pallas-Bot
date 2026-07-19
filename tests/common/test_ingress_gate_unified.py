@@ -338,8 +338,16 @@ async def test_unified_ingress_discards_self_sent_message_before_claims(monkeypa
         self_id = "111"
 
     event = GroupMessageEvent.model_construct(
-        time=100, self_id=111, post_type="message", message_type="group", sub_type="normal",
-        user_id=111, group_id=12345, message_id=1, message=Message("插件回包"), raw_message="插件回包",
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=111,
+        group_id=12345,
+        message_id=1,
+        message=Message("插件回包"),
+        raw_message="插件回包",
     )
 
     with pytest.raises(IgnoredException, match="self-sent"):

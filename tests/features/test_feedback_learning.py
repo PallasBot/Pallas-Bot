@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from pallas.product.llm.feedback_learning import (
     compute_penalized_replies,
     feedback_bias_multiplier_for_text,

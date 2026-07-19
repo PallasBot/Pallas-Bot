@@ -42,6 +42,7 @@ async def test_build_drunk_chat_system_prompt_applies_drunk_overlay(monkeypatch:
         "pallas.product.llm.drunk_chat_context.enrich_system_with_relationship_context",
         noop_relationship,
     )
+
     async def noop_expression(_group_id):
         return ""
 

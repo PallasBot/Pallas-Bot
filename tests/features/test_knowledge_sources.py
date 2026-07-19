@@ -122,9 +122,7 @@ def load_plugin_meta_from_init(init_path: Path, *, cut_before: str):
     code = init_path.read_text(encoding="utf-8")
     if cut_before in code:
         code = code.split(cut_before, 1)[0]
-    code = "\n".join(
-        line for line in code.splitlines() if not line.lstrip().startswith("from .")
-    )
+    code = "\n".join(line for line in code.splitlines() if not line.lstrip().startswith("from ."))
     exec(compile(code, str(init_path), "exec"), module.__dict__)  # noqa: S102
     return module.__plugin_meta__
 
@@ -144,9 +142,7 @@ def load_plugin_meta_from_init(init_path: Path, *, cut_before: str):
         ),
     ],
 )
-def test_extension_plugins_declare_knowledge_sources(
-    rel_path: str, source_id: str, cut_before: str
-) -> None:
+def test_extension_plugins_declare_knowledge_sources(rel_path: str, source_id: str, cut_before: str) -> None:
     from pallas.product.llm.knowledge.metadata import knowledge_sources_from_metadata
 
     init_path = (Path(__file__).resolve().parents[2] / rel_path).resolve()

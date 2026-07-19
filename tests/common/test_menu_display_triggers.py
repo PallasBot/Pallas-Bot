@@ -46,7 +46,10 @@ def test_enrich_commands_with_menu_triggers_adds_field() -> None:
     by_id = {row["command_id"]: row for row in enriched}
     assert by_id["blacklist.list"]["trigger_condition"] == "牛牛黑名单 / 牛牛查看黑名单"
     assert by_id["blacklist.add"]["trigger_condition"] == "牛牛拉黑 / 牛牛屏蔽 + QQ 或 @"
-    assert "trigger_condition" not in enrich_commands_with_menu_triggers(
-        [{"command_id": "x.y", "label": "示例"}],
-        [],
-    )[0]
+    assert (
+        "trigger_condition"
+        not in enrich_commands_with_menu_triggers(
+            [{"command_id": "x.y", "label": "示例"}],
+            [],
+        )[0]
+    )

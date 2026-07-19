@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from types import SimpleNamespace
 
 import pytest
@@ -100,7 +99,9 @@ def test_ai_task_registry_requires_redis_when_sharding(monkeypatch) -> None:
     assert mod.get_ai_task_record("task-none") is None
 
 
-def test_ai_task_registry_routes_by_bot_shard_even_when_registered_on_other_worker(fake_coord_redis, monkeypatch) -> None:
+def test_ai_task_registry_routes_by_bot_shard_even_when_registered_on_other_worker(
+    fake_coord_redis, monkeypatch
+) -> None:
     now = 3000.0
     monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(mod, "current_worker_port", lambda: 7976)

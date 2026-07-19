@@ -805,10 +805,10 @@ async def test_context_find_applies_llm_feedback_bias_only_when_enabled():
                 return_value=[],
             ),
             patch("packages.repeater.activity_gate.group_has_hosted_activity", return_value=False),
-                patch(
-                    "packages.repeater.responder.can_apply_feedback_bias",
-                    return_value=bias_enabled,
-                ),
+            patch(
+                "packages.repeater.responder.can_apply_feedback_bias",
+                return_value=bias_enabled,
+            ),
             patch(
                 "packages.repeater.responder.group_feedback_bias_snapshot",
                 return_value={"count": 5, "top_replies": ["少来。"], "scenes": ["banter"]},

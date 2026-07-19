@@ -50,7 +50,7 @@ def test_logs_stream_accepts_last_event_id_header(monkeypatch) -> None:
     def fake_iter(_scope, *, source=None, last_event_id=None):
         _ = source
         captured.append(last_event_id)
-        yield 'id: 1\ndata: {}\n\n'
+        yield "id: 1\ndata: {}\n\n"
 
     monkeypatch.setattr("pallas.console.web.iter_nonebot_log_sse", fake_iter)
     client = _build_client(monkeypatch)

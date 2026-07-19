@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-import os
 import socket
 import subprocess
 import sys
@@ -14,7 +13,8 @@ GUARD = REPO_ROOT / "scripts" / "shard_process_guard.py"
 
 def load_guard_module():
     spec = importlib.util.spec_from_file_location("shard_process_guard", GUARD)
-    assert spec and spec.loader
+    assert spec is not None
+    assert spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

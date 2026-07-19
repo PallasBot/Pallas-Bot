@@ -51,10 +51,13 @@ def test_apply_pb_stats_plugin_config_patch(monkeypatch, tmp_path):
     monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
     monkeypatch.setattr("pallas.product.community_stats.config.repo_env_raw_value", lambda _key: None)
 
-    out = apply_plugin_config_patch("pb_stats", {
-        "roster_public_qq": True,
-        "roster_public_profile": False,
-    })
+    out = apply_plugin_config_patch(
+        "pb_stats",
+        {
+            "roster_public_qq": True,
+            "roster_public_profile": False,
+        },
+    )
     roster_qq = next(f for f in out["fields"] if f["name"] == "roster_public_qq")
     roster_profile = next(f for f in out["fields"] if f["name"] == "roster_public_profile")
     assert roster_qq["current"] is True

@@ -4567,9 +4567,11 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
         from pallas.product.persona.seed import merge_persona_with_seed_patch
 
         incoming = fields.get("persona")
-        if isinstance(incoming, dict) and (
-            "seed_override" in incoming or "seed" in incoming
-        ) and not any(k in incoming for k in ("source", "derived", "version")):
+        if (
+            isinstance(incoming, dict)
+            and ("seed_override" in incoming or "seed" in incoming)
+            and not any(k in incoming for k in ("source", "derived", "version"))
+        ):
             current = await repo.get(account)
             existing = getattr(current, "persona", None) if current is not None else None
             fields["persona"] = merge_persona_with_seed_patch(

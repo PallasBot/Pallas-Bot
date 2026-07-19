@@ -56,7 +56,12 @@ def test_build_official_extension_rows_ai_media_cover():
 def test_build_official_extension_rows_prefers_cached_asset_urls(monkeypatch):
     def fake_apply(kind, rows):
         assert kind == "official"
-        return [{**row, "cover": "/pallas/store-assets/cover/official-draw.webp"} if row["package"] == "pallas-plugin-draw" else row for row in rows]
+        return [
+            {**row, "cover": "/pallas/store-assets/cover/official-draw.webp"}
+            if row["package"] == "pallas-plugin-draw"
+            else row
+            for row in rows
+        ]
 
     monkeypatch.setattr("pallas.console.webui.plugin_store_assets.apply_asset_snapshot_to_rows", fake_apply)
 

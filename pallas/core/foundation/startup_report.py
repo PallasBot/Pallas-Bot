@@ -210,16 +210,11 @@ def build_startup_summary_lines(
     info_lines = [
         "[启动] 就绪",
         *[f"[启动] {line}" for line in runtime],
-        *[
-            f"[启动] {_FACT_LABELS.get(key, key)}：{_format_fact(key, value)}"
-            for key, value in fact_map.items()
-        ],
+        *[f"[启动] {_FACT_LABELS.get(key, key)}：{_format_fact(key, value)}" for key, value in fact_map.items()],
     ]
 
     warn_map = warnings if warnings is not None else dict(_collector.warnings)
-    warning_lines = [
-        f"[启动] 降级 · {_WARNING_LABELS.get(key, key)}：{value}" for key, value in warn_map.items()
-    ]
+    warning_lines = [f"[启动] 降级 · {_WARNING_LABELS.get(key, key)}：{value}" for key, value in warn_map.items()]
     return info_lines, warning_lines
 
 
