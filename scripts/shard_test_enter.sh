@@ -151,10 +151,10 @@ if [[ "${SKIP_MIGRATE}" -eq 0 ]]; then
   if [[ ! -f "${ACCOUNTS_JSON}" ]]; then
     echo "警告: 未找到 ${ACCOUNTS_JSON}，跳过端口迁移" >&2
   elif [[ "${DRY_RUN}" -eq 1 ]]; then
-    echo "[dry-run] uv run python scripts/shard_test_migrate_ports.py --apply --backup ${ACCOUNTS_BACKUP}"
+    echo "[dry-run] uv run --no-sync python scripts/shard_test_migrate_ports.py --apply --backup ${ACCOUNTS_BACKUP}"
   else
-    echo "正在迁移协议端 accounts.json 端口（uv run，首次可能需数秒）…"
-    uv run python scripts/shard_test_migrate_ports.py \
+    echo "正在迁移协议端 accounts.json 端口（uv run --no-sync，首次可能需数秒）…"
+    uv run --no-sync python scripts/shard_test_migrate_ports.py \
       --apply \
       --accounts "${ACCOUNTS_JSON}" \
       --backup "${ACCOUNTS_BACKUP}" \
@@ -188,7 +188,7 @@ echo "  .env <- ${MAIN_REPO}/.env（已追加分片变量）"
 echo "  状态: ${STATE_FILE}"
 echo ""
 echo "下一步:"
-echo "  uv sync --extra pg   # 若用 PostgreSQL 且尚未安装"
+echo "  uv sync              # PG 驱动已在主依赖"
 echo "  ./scripts/run_sharded_bot.sh start"
 echo "  协议端账号需在控制台「重启」使新 ws_url 生效"
 echo ""

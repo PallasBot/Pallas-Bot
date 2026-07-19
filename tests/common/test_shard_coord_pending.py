@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from src.platform.shard.coord_pending import coord_pending_snapshot_sync
+from pallas.core.platform.shard.coord_pending import coord_pending_snapshot_sync
 
 
 def test_coord_pending_redis_snapshot(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.shard.coord_pending.coord_redis_enabled",
+        "pallas.core.platform.shard.coord_pending.coord_redis_enabled",
         lambda: False,
     )
     snap = coord_pending_snapshot_sync()
@@ -19,7 +19,7 @@ def test_coord_pending_redis_snapshot(monkeypatch) -> None:
 
 def test_coord_pending_redis_snapshot_skips_live_scan_by_default(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.shard.coord_pending.coord_redis_enabled",
+        "pallas.core.platform.shard.coord_pending.coord_redis_enabled",
         lambda: True,
     )
 
@@ -27,7 +27,7 @@ def test_coord_pending_redis_snapshot_skips_live_scan_by_default(monkeypatch) ->
         raise AssertionError("scan_keys_sync should not run on default fast path")
 
     monkeypatch.setattr(
-        "src.platform.shard.coord_pending.scan_keys_sync",
+        "pallas.core.platform.shard.coord_pending.scan_keys_sync",
         fail_scan,
     )
 
@@ -68,15 +68,15 @@ def test_coord_pending_redis_snapshot_counts_known_namespaces(monkeypatch) -> No
     }
 
     monkeypatch.setattr(
-        "src.platform.shard.coord_pending.coord_redis_enabled",
+        "pallas.core.platform.shard.coord_pending.coord_redis_enabled",
         lambda: True,
     )
     monkeypatch.setattr(
-        "src.platform.shard.coord_pending.scan_keys_sync",
+        "pallas.core.platform.shard.coord_pending.scan_keys_sync",
         lambda prefix: list(keys_by_prefix.get(prefix, [])),
     )
     monkeypatch.setattr(
-        "src.platform.shard.coord_pending.read_json_sync",
+        "pallas.core.platform.shard.coord_pending.read_json_sync",
         lambda key: payloads.get(key),
     )
 

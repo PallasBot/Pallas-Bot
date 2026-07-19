@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
-from src.platform.multi_bot import platform_utils as pu
+from pallas.core.platform.multi_bot import platform_utils as pu
 
 if TYPE_CHECKING:
     import pytest

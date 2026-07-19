@@ -27,11 +27,29 @@ Pallas 插件在 `__init__.py` 用 **NoneBot2 Matcher**（`on_command` / `on_mes
 | `on_request` | 加群/好友申请 | `request_handler` | 按业务 |
 | `on_metaevent` / 适配器事件 | 戳一戳、特殊 meta | `greeting`（poke） | 按业务 |
 
-## 2.3 `on_command` 要点
+## 2.3 口令型：`plugin_sdk`（推荐）
+
+新插件优先 [`pallas.api.commands`](../../../pallas/api/commands/__init__.py) 组合 API，避免手写 perm/CD：
+
+```python
+from pallas.api.commands import bind_alias_handlers, group_command
+
+praise = group_command("praise_me.praise", "牛牛赞我", cd_sec=0)
+
+@praise.handle()
+async def handle_praise(ctx):
+    await ctx.finish("...")
+```
+
+- 群内 / 私聊 / 两者：``group_command`` / ``private_command`` / ``message_command(scene="both")``。
+- 别名：``bind_alias_handlers(primary, handler)``。
+- 仍可直接 ``on_command`` + ``group_message_permission_for_command``（legacy 与被动场景）。
+
+## 2.4 `on_command` 要点（裸写时）
 
 ```python
 from nonebot import on_command
-from src.features.cmd_perm import group_message_permission_for_command
+from pallas.api.perm import group_message_permission_for_command
 
 cmd = on_command(
     "帮助",
@@ -46,7 +64,7 @@ cmd = on_command(
 - **`block=True`**：命令型功能默认 `True`；被动监听常用 `False`。
 - **aliases**：与主命令共享同一 matcher 与权限 ID。
 
-## 2.4 `on_message` 要点
+## 2.5 `on_message` 要点
 
 用于**无固定口令**或**每条消息都要看**的逻辑：
 
@@ -65,7 +83,7 @@ chat = on_message(rule=to_me(), priority=99, block=False)
 
 **慎用**：`on_message` 无过滤时会增加每条消息的 CPU；应用 `rule`（`to_me`、自定义 rule）收窄范围。
 
-## 2.5 入站审查（message_scrub）
+## 2.6 入站审查（message_scrub）
 
 复读、做梦等插件在消费用户文本前，应登记 [message_scrub](../../common/message_scrub/README.md) hook，统一过滤广告/风控，而不是每个插件各自写正则。
 
@@ -74,9 +92,9 @@ chat = on_message(rule=to_me(), priority=99, block=False)
 - 插件会**大量读用户原文**并学习/生成 → **应接** message_scrub
 - 纯 `on_command` 且只解析命令参数 → 通常不必
 
-## 2.6 冷却（CD）
+## 2.7 冷却（CD）
 
-Pallas 提供 **`src.features.command_limits`**，在 `GroupConfig` / `BotConfig` 之上统一冷却 key（`cmd_limit:{command_id}`）。
+Pallas 提供 **`pallas.api.limits`**，在 `GroupConfig` / `BotConfig` 之上统一冷却 key（`cmd_limit:{command_id}`）。
 
 ### metadata 声明（推荐）
 
@@ -91,7 +109,7 @@ extra={
 ### handler 内检查
 
 ```python
-from src.features.command_limits import is_command_cooldown_ready, refresh_command_cooldown
+from pallas.api.limits import is_command_cooldown_ready, refresh_command_cooldown
 
 if not await is_command_cooldown_ready(event, "my_plugin.demo", 10):
     return
@@ -103,17 +121,17 @@ await refresh_command_cooldown(event, "my_plugin.demo", 10)
 
 详见 [command_limits 说明](../../common/command_limits/README.md)。历史插件仍可直接用 `GroupConfig.is_cooldown`；新插件优先用上述 helper 保持 key 一致。
 
-## 2.7 分片与多牛（进阶）
+## 2.8 分片与多牛（进阶）
 
 多进程分片或中央入站调度下，部分插件需声明 shard 行为或走 ingress gate。涉及：
 
 - `ingress_gate` 插件
-- `docs/architecture/central-ingress-dispatch.md`
-- `docs/architecture/bot_process_sharding.md`
+- `docs/developer/architecture/shard-runtime.md`
+- `docs/maintainer/deploy/sharded.md`
 
 **默认新插件**按单 matcher 编写即可；只有「全群消息洪峰」「多牛同群」类功能才需提前读上述文档。
 
-## 2.8 自检
+## 2.9 自检
 
 - [ ] 能用 `on_command` 的口令型功能没有用宽泛 `on_message`
 - [ ] `on_message` 已设合理 `priority` / `block` / `rule`
@@ -121,7 +139,7 @@ await refresh_command_cooldown(event, "my_plugin.demo", 10)
 - [ ] 被动文本类已评估 message_scrub
 - [ ] 高频路径避免同步阻塞与巨型 handler
 
-## 2.9 下一步
+## 2.10 下一步
 
 - 权限与帮助文案 → [三、cmd_perm](./03-cmd-perm-and-help.md)
 - WebUI 配置 → [四、WebUI 配置](./04-webui-config.md)

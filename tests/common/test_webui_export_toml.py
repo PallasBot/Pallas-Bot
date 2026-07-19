@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from src.foundation.config import webui_export_toml as wet
-from src.foundation.config.repo_settings import upsert_repo_settings_items
+from pallas.core.foundation.config import webui_export_toml as wet
+from pallas.core.foundation.config.repo_settings import upsert_repo_settings_items
 
 
 def test_rebuild_sections_groups_known_plugin_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -21,7 +21,7 @@ def test_rebuild_sections_groups_known_plugin_key(monkeypatch: pytest.MonkeyPatc
 def test_upsert_writes_sections_and_export_toml(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     webui = tmp_path / "webui.json"
     export_path = tmp_path / "export.toml"
-    monkeypatch.setattr("src.foundation.config.repo_settings.repo_webui_settings_path", lambda: webui)
+    monkeypatch.setattr("pallas.core.foundation.config.repo_settings.repo_webui_settings_path", lambda: webui)
     monkeypatch.setattr(wet, "repo_webui_export_toml_path", lambda: export_path)
     wet.clear_env_key_section_cache()
 

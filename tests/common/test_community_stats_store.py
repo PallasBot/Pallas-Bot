@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from src.features.community_stats import store as stats_store
+from pallas.product.community_stats import store as stats_store
 
 
 @pytest.fixture

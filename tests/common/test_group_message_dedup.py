@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from src.platform.multi_bot import claim as claim_mod
-from src.platform.multi_bot.group import (
+from pallas.core.platform.multi_bot import claim as claim_mod
+from pallas.core.platform.multi_bot.group import (
     claim_group_handler,
     cross_bot_group_message_key,
     cross_bot_message_signature,
@@ -16,7 +16,7 @@ from src.platform.multi_bot.group import (
     try_claim_cross_bot_message_memory,
     try_claim_group_message_once,
 )
-from src.platform.shard.registry import config as shard_cfg
+from pallas.core.platform.shard.registry import config as shard_cfg
 
 
 def test_normalize_group_raw_message_matches_chatdata_pattern() -> None:

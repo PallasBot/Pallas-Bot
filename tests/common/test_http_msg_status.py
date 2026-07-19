@@ -1,4 +1,4 @@
-from src.shared.utils.http_msg import (
+from pallas.core.shared.utils.http_msg import (
     http_status_should_skip_backend,
     http_status_should_try_next_param,
 )

@@ -1,0 +1,20 @@
+# GPU 覆盖层：为 Ollama 启用 NVIDIA runtime（需 container toolkit）
+#   docker compose -f docker-compose.full.yml -f docker-compose.full.gpu.yml \
+#     --env-file ./pallas-bot/config/compose.env up -d
+
+services:
+  ollama:
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1"]
+      interval: 5m
+      timeout: 15s
+      retries: 2
+      start_period: 60s

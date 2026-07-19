@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from src.features.corpus.merge import merge_contexts
-from src.foundation.db.modules import Answer, Context
+from pallas.core.foundation.db.modules import Answer, Context
+from pallas.product.corpus.merge import merge_contexts
 
 
 def test_merge_contexts_none_extra():

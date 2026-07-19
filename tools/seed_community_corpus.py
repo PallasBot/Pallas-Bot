@@ -51,9 +51,9 @@ async def main() -> int:
 
     from sqlalchemy import select
 
-    from src.foundation.config.repo_settings import apply_repo_settings_to_environ
-    from src.foundation.db import init_postgresql_db
-    from src.foundation.db.repository_pg import _LOAD_RELATED, ContextRow, dispose_pg, get_session, row_to_context
+    from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
+    from pallas.core.foundation.db import init_postgresql_db
+    from pallas.core.foundation.db.repository_pg import _LOAD_RELATED, ContextRow, dispose_pg, get_session, row_to_context
 
     apply_repo_settings_to_environ()
     await init_postgresql_db()

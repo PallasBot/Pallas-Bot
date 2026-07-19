@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.foundation.db import backup_jobs as jobs
+from pallas.core.foundation.db import backup_jobs as jobs
 
 
 @pytest.fixture(autouse=True)

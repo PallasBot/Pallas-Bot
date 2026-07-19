@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from src.foundation.db.modules import Answer, Context
+from pallas.core.foundation.db.modules import Answer, Context
 
 
 @pytest.mark.asyncio
 async def test_backfill_cursor_advances(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    from src.features.corpus import backfill as mod
-    from src.features.corpus.backfill_store import load_backfill_state
+    from pallas.product.corpus import backfill as mod
+    from pallas.product.corpus.backfill_store import load_backfill_state
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(mod, "corpus_backfill_enabled", lambda: True)

@@ -1,5 +1,5 @@
-from src.plugins.help.plugin_aliases import aliases_for_plugin
-from src.plugins.request_handler.texts import (
+from packages.help.plugin_aliases import aliases_for_plugin
+from packages.request_handler.texts import (
     QUICK_APPROVE_ACTIONS,
     build_list_tail,
     build_quick_action_arg_hint,

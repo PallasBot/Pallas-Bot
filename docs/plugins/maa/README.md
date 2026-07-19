@@ -1,16 +1,35 @@
-# maa（MAA 远控）
+<p align="center">
+  <img src="../assets/brand-avatar.png" width="220" height="220" alt="MAA 远控">
+</p>
 
-[MAA 远程控制协议](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html)：`getTask` / `reportStatus` + QQ 绑定、口令排队、结果回传。
+<h1 align="center">MAA 远控 maa</h1>
 
-## 用户命令
+<p align="center">在 QQ 里给已绑定的 MAA 设备下发任务并接收结果。</p>
 
-| 类型 | 口令示例 |
-| --- | --- |
-| 绑定 | `牛牛绑定MAA`、`牛牛MAA状态`、`牛牛切换MAA设备`、`牛牛MAA设备名`、`牛牛清空MAA队列` |
-| 任务 | `牛牛长草`、`牛牛作战`、`牛牛公招`、`牛牛基建`、`牛牛截图`、`牛牛停止` 等 |
-| 高级 | `牛牛MAA任务 <type> [params]` |
+<p align="center">
+  <img alt="官方插件" src="https://img.shields.io/badge/%E5%AE%98%E6%96%B9%E6%8F%92%E4%BB%B6-FE7D37">
+  <img alt="WebUI 插件商店" src="https://img.shields.io/badge/WebUI-%E6%8F%92%E4%BB%B6%E5%95%86%E5%BA%97-4EA94B">
+  <img alt="安装命令" src="https://img.shields.io/badge/uv%20run%20pallas%20ext%20install%20pallas--plugin--maa-586069">
+  <img alt="版本 4.0.0" src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-4.0.0-2563EB">
+</p>
 
-**上手**：配置 `maa_public_base_url` → MAA 填帮助页 URL（用户标识符 = QQ）→ 私聊绑定设备 → 群聊发口令。完整表见 **牛牛帮助 → MAA 远控**。
+## 安装方式
+
+可在控制台插件商店安装，或执行 `uv run pallas ext install pallas-plugin-maa`。
+
+## 怎么使用
+
+| 口令 / 触发 | 场景 | 说明 |
+| --- | --- | --- |
+| `牛牛绑定MAA` | 私聊 | 绑定当前 QQ 到自己的 MAA 设备。 |
+| `牛牛MAA状态` | 私聊 / 群内 | 查看绑定情况、当前设备与队列状态。 |
+| `牛牛切换MAA设备` | 私聊 | 在多台设备之间切换远控目标。 |
+| `牛牛长草`、`牛牛作战`、`牛牛公招`、`牛牛基建`、`牛牛截图`、`牛牛停止` | 群内 | 下发常用远控任务。 |
+| `牛牛MAA任务 <type> [params]` | 群内 | 手动指定任务类型和参数。 |
+
+> 详细用法、限制条件和可用范围以帮助为主。
+
+上手顺序：先配置对外访问地址，再在 MAA 中填写帮助页 URL 和 QQ 标识，之后私聊绑定设备、在群里发任务口令。
 
 ### 多台设备
 
@@ -19,18 +38,25 @@
 | `牛牛MAA状态` | 列表与当前选用 |
 | `牛牛切换MAA设备` | 改远控目标 |
 | `牛牛MAA设备名` | 设置别名 |
-
 ## 命令权限
 
-| 命令 ID | 默认等级 |
-| --- | --- |
-| `maa.bind` | everyone |
-| `maa.control` | everyone |
-| `maa.status` | everyone |
+| 命令 ID | 默认等级 | 说明 |
+| --- | --- | --- |
+| `maa.bind` | 所有人 | 牛牛绑定MAA |
+| `maa.switch_device` | 所有人 | 牛牛切换MAA设备 |
+| `maa.device_alias` | 所有人 | 牛牛MAA设备名 |
+| `maa.control` | 所有人 | 牛牛长草 / 牛牛作战等远控口令 |
+| `maa.raw_task` | 所有人 | 牛牛MAA任务 |
+| `maa.clear_queue` | 所有人 | 牛牛清空MAA队列 |
+| `maa.status` | 所有人 | 牛牛MAA状态 |
 
-## 配置
+可在 WebUI 插件页或「通用配置 → 命令权限」覆盖。
 
-一般只需 **`maa_public_base_url`**（WebUI **服务网关 / 连通性** 亦可编辑）。
+## 配置项
+
+> 可在控制台对应插件页中修改。
+
+一般只需 **对外访问地址**（WebUI **通用配置 → 外部服务地址** 或插件配置）。
 
 | 键 | 默认 | 说明 |
 | --- | --- | --- |
@@ -38,53 +64,37 @@
 | `maa_attach_screenshot` | true | 指令后附加截图 |
 | `maa_combat_auto_prepare` | true | 作战前自动排队关卡设置 |
 
-完整键见 [`config.py`](../../../src/plugins/maa/config.py)。改 `maa_get_task_path` 等会重挂路由并清帮助缓存。
+完整键以扩展仓 `pallas-plugin-maa` 的 `config.py` 为准。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 未检测到轮询 | MAA 端点不可达或 URL 错误；分片须 hub `maa_public_base_url` 且各 worker 共用 `data/` |
-| 状态有待拉取、MAA 无任务 | 分片时队列走 Redis `pallas:coord:maa_pending:*`；须 hub 能访问各 worker 端口并保证 Redis 可用 |
+| 未检测到轮询 | MAA 端点不可达或 URL 错误；多机部署须各实例共用 `data/` |
 | 下发后无任务 | 未绑定或用户标识符非 QQ；查 `牛牛MAA状态` |
 | 队列有、MAA 无 | 设备 id 与「当前选用」不一致；可清空队列重试 |
-| 截图失败 | 调大反代 `client_max_body_size` |
+| 截图失败 | 调大反代上传大小限制 |
 
 ## 实现
 
-[`src/plugins/maa/`](../../../src/plugins/maa/)
+源码位置：扩展仓 `pallas-plugin-maa`
 
-## 维护者说明
+关键文件：
 
-以下内容勿写入 `PluginMetadata.usage` / `menu_data.detail_des` / 帮助用户文案。
+- 扩展仓 `src/pallas_plugin_maa/__init__.py`：注册口令、权限与帮助元数据。
+- 扩展仓 `src/pallas_plugin_maa/tasks.py`：把群内口令映射成具体任务类型与参数。
+- 扩展仓 `src/pallas_plugin_maa/http_api.py`、`http_routes.py`：实现与 MAA 设备的 HTTP 协议交互。
+- 扩展仓 `src/pallas_plugin_maa/store.py`：保存绑定关系、设备选择和任务队列。
 
-### 任务分类
+实现要点：
 
-| 分类 | type 示例 | MAA 行为 |
-| --- | --- | --- |
-| 顺序任务 | `LinkStart`、`CaptureImage`、`Settings-*` | 按队列顺序执行 |
-| 立即任务 | `CaptureImageNow`、`StopTask`、`HeartBeat` | 可插队 |
+- 插件通过 HTTP 协议和 MAA 设备通信，设备轮询取任务，Bot 再接收执行状态与截图等结果。
+- 顺序任务会排队执行，截图、停止等即时任务可以插队，所以同一设备上的任务顺序是可控的。
+- 群内远控命令会做同群 claim，避免多牛部署时同一条消息被多只牛同时接单；私聊绑定和切换设备不受这个限制。
 
-### 唤醒与子项
+## 相关链接
 
-- `LinkStart`（牛牛长草）：含唤醒 + 按勾选跑子模块
-- `LinkStart-WakeUp`：仅唤醒
-- 其它 `LinkStart-*`：不含唤醒；游戏需已在主界面
-- 牛牛作战当前临时下发 `LinkStart`（`COMBAT_COMMAND_TASK_TYPE`），上游修复后改回 `LinkStart-Combat`
-
-### 作战与关卡
-
-- `牛牛设置关卡`：最多 4 候选，仅下发 `Settings-Stage1`
-- `maa_combat_auto_prepare`：作战前可自动排队已保存主关卡
-
-### 多 Bot 同群
-
-群内远控口令与 `牛牛MAA状态` 等命令经 `claim_group_handler("maa", …)`（`src.platform.multi_bot.group`），同一条群消息仅一只牛响应。私聊绑定/切换设备不受影响。
-
-### 代码索引
-
-| 逻辑 | 位置 |
-| --- | --- |
-| 口令 → type | `tasks.py` |
-| HTTP | `http_api.py`、`http_routes.py` |
-| 队列/绑定 | `store.py` |
+- [插件文档索引](../README.md)
+- [命令权限说明](../common/cmd_perm/README.md)
+- [MAA 插件仓库](https://github.com/TogetsuDo/pallas-plugin-maa)
+- [MAA 远程控制协议](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html)

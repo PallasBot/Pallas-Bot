@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.foundation.db import backup as mod
+from pallas.core.foundation.db import backup as mod
 
 
 def test_resolve_backup_parent_default(tmp_path, monkeypatch) -> None:
@@ -67,3 +67,18 @@ def test_delete_backup_runs_rejects_outside_parent(tmp_path, monkeypatch) -> Non
     (outside / "postgres_evil").mkdir()
     with pytest.raises(ValueError, match="不在允许"):
         mod.delete_backup_runs([str(outside / "postgres_evil")], output_parent=str(parent))
+
+
+def test_browse_backup_directories(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(mod, "PROJECT_ROOT", tmp_path)
+    child = mod.resolve_backup_parent(None)
+    nested = child / "nested"
+    nested.mkdir()
+    data = mod.browse_backup_directories(path=str(child))
+    assert data["current"] == str(child.resolve())
+    assert any(entry["name"] == "nested" for entry in data["entries"])
+
+
+def test_normalize_pg_tables_rejects_invalid() -> None:
+    with pytest.raises(ValueError, match="无效"):
+        mod.normalize_pg_tables(["bad-name"])

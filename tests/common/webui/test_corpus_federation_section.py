@@ -1,4 +1,4 @@
-from src.console.webui.corpus_federation_section import (
+from pallas.console.webui.corpus_federation_section import (
     CORPUS_FEDERATION_SECTION_ID,
     apply_corpus_federation_patch,
     corpus_federation_payload,
@@ -6,7 +6,7 @@ from src.console.webui.corpus_federation_section import (
 
 
 def test_corpus_federation_payload_phase1(monkeypatch):
-    monkeypatch.setattr("src.features.corpus.webui_config.repo_env_raw_value", lambda _key: None)
+    monkeypatch.setattr("pallas.product.corpus.webui_config.repo_env_raw_value", lambda _key: None)
     data = corpus_federation_payload()
     assert data["plugin"] == CORPUS_FEDERATION_SECTION_ID
     assert data.get("hot_reload") is True
@@ -43,7 +43,7 @@ def test_corpus_federation_payload_phase1(monkeypatch):
 
 
 def test_apply_corpus_federation_patch_writes_env(monkeypatch, tmp_path):
-    from src.foundation.config import repo_settings as rs
+    from pallas.core.foundation.config import repo_settings as rs
 
     webui = tmp_path / "data" / "pallas_config" / "webui.json"
     webui.parent.mkdir(parents=True, exist_ok=True)
@@ -59,7 +59,7 @@ def test_apply_corpus_federation_patch_writes_env(monkeypatch, tmp_path):
 
 
 def test_apply_corpus_federation_patch_accepts_prefetch(monkeypatch, tmp_path):
-    from src.foundation.config import repo_settings as rs
+    from pallas.core.foundation.config import repo_settings as rs
 
     webui = tmp_path / "data" / "pallas_config" / "webui.json"
     webui.parent.mkdir(parents=True, exist_ok=True)
@@ -76,7 +76,7 @@ def test_apply_corpus_federation_patch_accepts_prefetch(monkeypatch, tmp_path):
 
 
 def test_apply_corpus_federation_patch_backfill(monkeypatch, tmp_path):
-    from src.foundation.config import repo_settings as rs
+    from pallas.core.foundation.config import repo_settings as rs
 
     webui = tmp_path / "data" / "pallas_config" / "webui.json"
     webui.parent.mkdir(parents=True, exist_ok=True)
@@ -99,7 +99,7 @@ def test_apply_corpus_federation_patch_backfill(monkeypatch, tmp_path):
 
 
 def test_apply_corpus_federation_patch_reply_perf(monkeypatch, tmp_path):
-    from src.foundation.config import repo_settings as rs
+    from pallas.core.foundation.config import repo_settings as rs
 
     webui = tmp_path / "data" / "pallas_config" / "webui.json"
     webui.parent.mkdir(parents=True, exist_ok=True)
@@ -130,13 +130,13 @@ def test_apply_corpus_federation_patch_rejects_unknown():
 
 
 def test_corpus_reply_perf_default_answers_cap_is_128(monkeypatch):
-    from src.features.corpus.reply_perf_config import (
+    from pallas.product.corpus.reply_perf_config import (
         clear_corpus_reply_perf_config_cache,
         get_corpus_reply_perf_config,
     )
 
     monkeypatch.setattr(
-        "src.features.corpus.reply_perf_config.repo_env_raw_value",
+        "pallas.product.corpus.reply_perf_config.repo_env_raw_value",
         lambda _key: None,
     )
     clear_corpus_reply_perf_config_cache()

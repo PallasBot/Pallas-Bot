@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.platform.bot_runtime import ingress_dispatch_runtime as runtime
+from pallas.core.platform.bot_runtime import ingress_dispatch_runtime as runtime
 
 
 def test_register_skips_hub(monkeypatch) -> None:

@@ -4,10 +4,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.features.corpus.composite_repo import CompositeContextRepository
-from src.features.corpus.config import CorpusConfig
-from src.foundation.db.modules import Answer, Context
-from src.foundation.db.repository import ContextRepositoryExistenceMixin
+from pallas.core.foundation.db.modules import Answer, Context
+from pallas.core.foundation.db.repository import ContextRepositoryExistenceMixin
+from pallas.product.corpus.composite_repo import CompositeContextRepository
+from pallas.product.corpus.config import CorpusConfig
 
 
 class FakeContextRepo(ContextRepositoryExistenceMixin):
@@ -64,7 +64,7 @@ def corpus_cfg() -> CorpusConfig:
 
 @pytest.mark.asyncio
 async def test_composite_find_merges_sources(corpus_cfg: CorpusConfig):
-    from src.features.corpus.find_cache import reset_find_cache_for_tests
+    from pallas.product.corpus.find_cache import reset_find_cache_for_tests
 
     await reset_find_cache_for_tests()
     local = FakeContextRepo(
@@ -98,8 +98,8 @@ async def test_composite_find_merges_sources(corpus_cfg: CorpusConfig):
     )
     repo = CompositeContextRepository(local, community=remote, cfg=corpus_cfg)
     with (
-        patch("src.features.corpus.composite_repo.remote_corpus_find_mode", lambda _cfg=None: "sync"),
-        patch("src.features.corpus.remote_budget.should_skip_remote_corpus", return_value=False),
+        patch("pallas.product.corpus.composite_repo.remote_corpus_find_mode", lambda _cfg=None: "sync"),
+        patch("pallas.product.corpus.remote_budget.should_skip_remote_corpus", return_value=False),
     ):
         ctx = await repo.find_by_keywords("kw")
     assert ctx is not None
@@ -113,7 +113,7 @@ async def test_composite_upsert_writes_local_and_schedules_mirror(corpus_cfg: Co
     local = FakeContextRepo(label="local")
     remote = FakeContextRepo(label="community")
     repo = CompositeContextRepository(local, community=remote, cfg=corpus_cfg)
-    with patch("src.features.corpus.composite_repo.schedule_mirror_upsert_answer") as mock_schedule:
+    with patch("pallas.product.corpus.composite_repo.schedule_mirror_upsert_answer") as mock_schedule:
         await repo.upsert_answer("kw", 1, "ans", 99, "msg", True)
     assert len(local.upsert_calls) == 1
     mock_schedule.assert_called_once()
@@ -156,7 +156,7 @@ async def test_local_context_exists_does_not_hit_remote():
 
 @pytest.mark.asyncio
 async def test_composite_remote_find_failure_degrades(corpus_cfg: CorpusConfig):
-    from src.features.corpus.find_cache import reset_find_cache_for_tests
+    from pallas.product.corpus.find_cache import reset_find_cache_for_tests
 
     await reset_find_cache_for_tests()
     local = FakeContextRepo(
@@ -176,8 +176,8 @@ async def test_composite_remote_find_failure_degrades(corpus_cfg: CorpusConfig):
     remote.find_by_keywords = AsyncMock(side_effect=RuntimeError("network"))  # type: ignore[method-assign]
     repo = CompositeContextRepository(local, community=remote, cfg=corpus_cfg)
     with (
-        patch("src.features.corpus.composite_repo.remote_corpus_find_mode", lambda _cfg=None: "sync"),
-        patch("src.features.corpus.remote_budget.should_skip_remote_corpus", return_value=False),
+        patch("pallas.product.corpus.composite_repo.remote_corpus_find_mode", lambda _cfg=None: "sync"),
+        patch("pallas.product.corpus.remote_budget.should_skip_remote_corpus", return_value=False),
     ):
         ctx = await repo.find_by_keywords("kw")
     assert ctx is not None
@@ -186,7 +186,7 @@ async def test_composite_remote_find_failure_degrades(corpus_cfg: CorpusConfig):
 
 @pytest.mark.asyncio
 async def test_maybe_wrap_composite_disabled(monkeypatch):
-    from src.features.corpus import factory as factory_mod
+    from pallas.product.corpus import factory as factory_mod
 
     monkeypatch.setattr(factory_mod, "corpus_composite_enabled", lambda: False)
     local = FakeContextRepo(label="local")

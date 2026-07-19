@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.platform.ingress.unified_pass import (
+from pallas.core.platform.ingress.unified_pass import (
     mark_unified_ingress_once_won,
     reset_unified_ingress_once_pass_for_tests,
     unified_ingress_once_won,
@@ -47,7 +47,7 @@ def test_mark_and_check_unified_ingress_once_won() -> None:
 
 @pytest.mark.asyncio
 async def test_build_repeater_event_context_skips_claim_when_ingress_once_won(monkeypatch) -> None:
-    from src.plugins.repeater import event_gate
+    from packages.repeater import event_gate
 
     event = _FakeEvent(plain_text="hello")
     mark_unified_ingress_once_won(event, body="hello")
@@ -67,7 +67,7 @@ async def test_build_repeater_event_context_skips_claim_when_ingress_once_won(mo
     monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
     monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
     monkeypatch.setattr(
-        "src.features.message_scrub.is_message_scrub_blocked_sync",
+        "pallas.product.message_scrub.is_message_scrub_blocked_sync",
         lambda **_: False,
     )
     monkeypatch.setattr(event_gate, "remember_group_message_id", fake_true)

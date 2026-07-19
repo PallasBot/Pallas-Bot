@@ -4,13 +4,13 @@ import asyncio
 
 import pytest
 
-from src.features.corpus.config import CorpusConfig
-from src.foundation.db.modules import Answer, Context
+from pallas.core.foundation.db.modules import Answer, Context
+from pallas.product.corpus.config import CorpusConfig
 
 
 @pytest.mark.asyncio
 async def test_schedule_mirror_upsert_answer_uses_background_queue(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import write_fanout as mod
+    from pallas.product.corpus import write_fanout as mod
 
     await mod.reset_corpus_write_runtime_state_for_tests()
     called: list[tuple[str, str]] = []
@@ -20,7 +20,7 @@ async def test_schedule_mirror_upsert_answer_uses_background_queue(monkeypatch: 
 
     monkeypatch.setattr(mod, "mirror_upsert_answer", fake_mirror_upsert_answer)
     monkeypatch.setattr(mod, "community_contribute_enabled", lambda cfg: True)
-    monkeypatch.setattr("src.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: False)
+    monkeypatch.setattr("pallas.core.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: False)
 
     cfg = CorpusConfig(community_contribute=True)
     mod.schedule_mirror_upsert_answer(
@@ -43,7 +43,7 @@ async def test_schedule_mirror_upsert_answer_uses_background_queue(monkeypatch: 
 
 @pytest.mark.asyncio
 async def test_schedule_mirror_insert_uses_background_queue(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import write_fanout as mod
+    from pallas.product.corpus import write_fanout as mod
 
     await mod.reset_corpus_write_runtime_state_for_tests()
     called: list[str] = []
@@ -53,7 +53,7 @@ async def test_schedule_mirror_insert_uses_background_queue(monkeypatch: pytest.
 
     monkeypatch.setattr(mod, "mirror_insert", fake_mirror_insert)
     monkeypatch.setattr(mod, "community_contribute_enabled", lambda cfg: True)
-    monkeypatch.setattr("src.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: False)
+    monkeypatch.setattr("pallas.core.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: False)
 
     cfg = CorpusConfig(community_contribute=True)
     ctx = Context.model_construct(

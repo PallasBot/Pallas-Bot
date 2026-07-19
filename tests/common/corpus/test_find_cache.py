@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from src.features.corpus.find_cache import (
+from pallas.product.corpus.find_cache import (
     cached_find_by_keywords,
     cached_find_by_keywords_for_reply,
     reset_find_cache_for_tests,

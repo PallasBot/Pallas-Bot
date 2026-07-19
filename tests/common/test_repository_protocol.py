@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.foundation.db.repository import (
+from pallas.core.foundation.db.repository import (
     BlackListRepository,
     ContextRepository,
     ContextRepositoryExistenceMixin,

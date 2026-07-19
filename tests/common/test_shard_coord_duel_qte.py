@@ -6,8 +6,8 @@ from typing import Any
 
 import pytest
 
-from src.platform.shard.coord import duel_qte as mod
-from src.platform.shard.coord import duel_qte_redis as redis_mod
+from pallas.core.platform.shard.coord import duel_qte as mod
+from pallas.core.platform.shard.coord import duel_qte_redis as redis_mod
 
 
 @pytest.fixture
@@ -79,8 +79,8 @@ def fake_redis(monkeypatch):
             return FakePipeline(self, transaction=transaction)
 
     client = FakeRedis()
-    monkeypatch.setattr("src.platform.coord.redis_settings.coord_redis_enabled", lambda: True)
-    monkeypatch.setattr("src.platform.coord.redis_claim.get_coord_redis_client", lambda: client)
+    monkeypatch.setattr("pallas.core.platform.coord.redis_settings.coord_redis_enabled", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.coord.redis_claim.get_coord_redis_client", lambda: client)
     return store, pub
 
 

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import pytest
 
-from src.foundation.config import migrate_env_to_pallas as mig
+from pallas.core.foundation.config import migrate_env_to_pallas as mig
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
-def test_inspect_no_legacy_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_inspect_no_legacy_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mig, "repo_root", lambda: tmp_path)
     monkeypatch.setattr(mig, "repo_env_path", lambda: tmp_path / ".env")
     monkeypatch.setattr(mig, "repo_config_path", lambda: tmp_path / "config" / "pallas.toml")
@@ -17,7 +22,7 @@ def test_inspect_no_legacy_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert data["can_migrate"] is False
 
 
-def test_apply_migrate_writes_files(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_apply_migrate_writes_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mig, "repo_root", lambda: tmp_path)
     monkeypatch.setattr(mig, "repo_env_path", lambda: tmp_path / ".env")
     monkeypatch.setattr(mig, "repo_config_path", lambda: tmp_path / "config" / "pallas.toml")
@@ -42,7 +47,7 @@ def test_apply_migrate_writes_files(tmp_path, monkeypatch: pytest.MonkeyPatch) -
     assert "FOO" in webui
 
 
-def test_apply_requires_force_when_targets_exist(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_apply_requires_force_when_targets_exist(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mig, "repo_root", lambda: tmp_path)
     monkeypatch.setattr(mig, "repo_env_path", lambda: tmp_path / ".env")
     monkeypatch.setattr(mig, "repo_config_path", lambda: tmp_path / "config" / "pallas.toml")

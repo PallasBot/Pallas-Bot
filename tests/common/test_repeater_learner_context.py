@@ -7,8 +7,8 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_group_messages_before_returns_empty_without_db_fallback() -> None:
-    from src.plugins.repeater import learner_context as mod
-    from src.plugins.repeater.message_store import MessageStore
+    from packages.repeater import learner_context as mod
+    from packages.repeater.message_store import MessageStore
 
     chat_data = SimpleNamespace(group_id=123, time=100)
     MessageStore._message_dict.clear()
@@ -20,7 +20,7 @@ async def test_group_messages_before_returns_empty_without_db_fallback() -> None
         called = True
         return []
 
-    from src.plugins.repeater import message_store as message_store_mod
+    from packages.repeater import message_store as message_store_mod
 
     original_repo = message_store_mod.message_repo
     message_store_mod.message_repo = SimpleNamespace(find_recent_in_group=fake_find_recent_in_group)
@@ -35,7 +35,7 @@ async def test_group_messages_before_returns_empty_without_db_fallback() -> None
 
 @pytest.mark.asyncio
 async def test_user_message_before_in_group_returns_none_without_db_fallback() -> None:
-    from src.plugins.repeater import learner_context as mod
+    from packages.repeater import learner_context as mod
 
     chat_data = SimpleNamespace(group_id=123, user_id=456, time=100)
     group_msgs = [SimpleNamespace(user_id=789), SimpleNamespace(user_id=999)]
@@ -47,7 +47,7 @@ async def test_user_message_before_in_group_returns_none_without_db_fallback() -
         called = True
         return []
 
-    from src.plugins.repeater import message_store as message_store_mod
+    from packages.repeater import message_store as message_store_mod
 
     original_repo = message_store_mod.message_repo
     message_store_mod.message_repo = SimpleNamespace(find_recent_in_group=fake_find_recent_in_group)

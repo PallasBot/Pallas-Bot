@@ -9,7 +9,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, PrivateMessa
 
 @pytest.mark.asyncio
 async def test_group_moderator_group_event_skips_bot_admin_queries():
-    from src.features.cmd_perm.check import satisfies_command_permission
+    from pallas.core.perm.check import satisfies_command_permission
 
     event = GroupMessageEvent(
         time=1,
@@ -27,10 +27,10 @@ async def test_group_moderator_group_event_skips_bot_admin_queries():
     )
     bot = SimpleNamespace()
     with (
-        patch("src.features.cmd_perm.check.resolved_level", return_value="group_moderator"),
-        patch("src.features.cmd_perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
-        patch("src.features.cmd_perm.check.user_is_bot_admin", new_callable=AsyncMock) as bot_admin,
-        patch("src.features.cmd_perm.check.user_is_admin_of_any_bot", new_callable=AsyncMock) as any_bot_admin,
+        patch("pallas.core.perm.check.resolved_level", return_value="group_moderator"),
+        patch("pallas.core.perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
+        patch("pallas.core.perm.check.user_is_bot_admin", new_callable=AsyncMock) as bot_admin,
+        patch("pallas.core.perm.check.user_is_admin_of_any_bot", new_callable=AsyncMock) as any_bot_admin,
     ):
         assert await satisfies_command_permission(bot, event, "dummy.command") is True
     bot_admin.assert_not_awaited()
@@ -39,7 +39,7 @@ async def test_group_moderator_group_event_skips_bot_admin_queries():
 
 @pytest.mark.asyncio
 async def test_staff_group_admin_skips_bot_admin_queries():
-    from src.features.cmd_perm.check import satisfies_command_permission
+    from pallas.core.perm.check import satisfies_command_permission
 
     event = GroupMessageEvent(
         time=1,
@@ -57,10 +57,10 @@ async def test_staff_group_admin_skips_bot_admin_queries():
     )
     bot = SimpleNamespace()
     with (
-        patch("src.features.cmd_perm.check.resolved_level", return_value="staff"),
-        patch("src.features.cmd_perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
-        patch("src.features.cmd_perm.check.user_is_bot_admin", new_callable=AsyncMock) as bot_admin,
-        patch("src.features.cmd_perm.check.user_is_admin_of_any_bot", new_callable=AsyncMock) as any_bot_admin,
+        patch("pallas.core.perm.check.resolved_level", return_value="staff"),
+        patch("pallas.core.perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
+        patch("pallas.core.perm.check.user_is_bot_admin", new_callable=AsyncMock) as bot_admin,
+        patch("pallas.core.perm.check.user_is_admin_of_any_bot", new_callable=AsyncMock) as any_bot_admin,
     ):
         assert await satisfies_command_permission(bot, event, "dummy.command") is True
     bot_admin.assert_not_awaited()
@@ -69,7 +69,7 @@ async def test_staff_group_admin_skips_bot_admin_queries():
 
 @pytest.mark.asyncio
 async def test_group_moderator_private_event_still_checks_bot_admin():
-    from src.features.cmd_perm.check import satisfies_command_permission
+    from pallas.core.perm.check import satisfies_command_permission
 
     event = PrivateMessageEvent(
         time=1,
@@ -86,10 +86,10 @@ async def test_group_moderator_private_event_still_checks_bot_admin():
     )
     bot = SimpleNamespace()
     with (
-        patch("src.features.cmd_perm.check.resolved_level", return_value="group_moderator"),
-        patch("src.features.cmd_perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
-        patch("src.features.cmd_perm.check.user_is_bot_admin", new_callable=AsyncMock, return_value=True) as bot_admin,
-        patch("src.features.cmd_perm.check.user_is_admin_of_any_bot", new_callable=AsyncMock) as any_bot_admin,
+        patch("pallas.core.perm.check.resolved_level", return_value="group_moderator"),
+        patch("pallas.core.perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
+        patch("pallas.core.perm.check.user_is_bot_admin", new_callable=AsyncMock, return_value=True) as bot_admin,
+        patch("pallas.core.perm.check.user_is_admin_of_any_bot", new_callable=AsyncMock) as any_bot_admin,
     ):
         assert await satisfies_command_permission(bot, event, "dummy.command") is True
     bot_admin.assert_awaited_once()

@@ -29,7 +29,7 @@ def main() -> int:
         help="pg_dump 格式：custom=.dump，plain=.sql，directory=目录格式",
     )
     args = parser.parse_args()
-    from src.foundation.db.backup import run_postgres_backup
+    from pallas.core.foundation.db.backup import run_postgres_backup
 
     parent = args.output_parent.strip() or None
     try:

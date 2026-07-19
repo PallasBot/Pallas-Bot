@@ -4,7 +4,7 @@ import time
 
 import pytest
 
-from src.features.ban_gate import snapshot
+from pallas.product.ban_gate import snapshot
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +30,7 @@ def test_sync_remote_generation_detects_bump(monkeypatch):
 
     fake = FakeRedis()
     monkeypatch.setattr(
-        "src.platform.coord.redis_claim.get_coord_redis_client",
+        "pallas.core.platform.coord.redis_claim.get_coord_redis_client",
         lambda: fake,
     )
     snapshot._synced_redis_gen = 0
@@ -51,7 +51,7 @@ def mark_snapshot_ready() -> None:
 
 @pytest.mark.asyncio
 async def test_apply_user_banned_change_updates_fast_path(monkeypatch):
-    from src.plugins.blacklist import apply_user_banned_change, reset_user_ban_gate_cache
+    from packages.blacklist import apply_user_banned_change, reset_user_ban_gate_cache
 
     monkeypatch.setattr(snapshot, "schedule_ban_gate_snapshot_refresh", lambda: None)
     await reset_user_ban_gate_cache()
@@ -66,7 +66,7 @@ async def test_apply_user_banned_change_updates_fast_path(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_apply_group_blocked_users_change_updates_fast_path(monkeypatch):
-    from src.plugins.blacklist import apply_group_blocked_users_change, reset_group_ban_gate_cache
+    from packages.blacklist import apply_group_blocked_users_change, reset_group_ban_gate_cache
 
     monkeypatch.setattr(snapshot, "schedule_ban_gate_snapshot_refresh", lambda: None)
     await reset_group_ban_gate_cache()
@@ -82,7 +82,7 @@ async def test_apply_group_blocked_users_change_updates_fast_path(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_apply_group_banned_change_updates_fast_path(monkeypatch):
-    from src.plugins.blacklist import apply_group_banned_change, reset_group_ban_gate_cache
+    from packages.blacklist import apply_group_banned_change, reset_group_ban_gate_cache
 
     monkeypatch.setattr(snapshot, "schedule_ban_gate_snapshot_refresh", lambda: None)
     await reset_group_ban_gate_cache()

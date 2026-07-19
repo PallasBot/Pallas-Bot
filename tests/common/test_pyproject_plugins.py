@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path  # noqa: TC003
 
-from src.platform.bot_runtime.pyproject_plugins import (
+from pallas.core.platform.bot_runtime.pyproject_plugins import (
     extra_plugin_dirs_for_role,
     parse_nonebot_plugin_config,
 )
@@ -13,7 +13,7 @@ def test_parse_nonebot_plugin_config_new_format(tmp_path: Path):
     toml.write_text(
         """
 [tool.nonebot]
-plugin_dirs = ["src/plugins", "extra_plugins"]
+plugin_dirs = ["packages", "extra_plugins"]
 
 [tool.nonebot.plugins]
 "@local" = []
@@ -25,7 +25,7 @@ my-pack = ["my_pack_plugin"]
     modules, dirs = parse_nonebot_plugin_config(toml)
     assert "nonebot_plugin_apscheduler" in modules
     assert "my_pack_plugin" in modules
-    assert dirs == ["src/plugins", "extra_plugins"]
+    assert dirs == ["packages", "extra_plugins"]
 
 
 def test_parse_nonebot_plugin_config_legacy_list(tmp_path: Path):
@@ -44,4 +44,4 @@ plugin_dirs = []
 
 
 def test_extra_plugin_dirs_skips_default():
-    assert extra_plugin_dirs_for_role(["src/plugins", "./extra"]) == ["./extra"]
+    assert extra_plugin_dirs_for_role(["packages", "./extra"]) == ["./extra"]

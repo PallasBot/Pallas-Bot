@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-17",
+  "description": "本地覆盖示例。日常策展在 https://github.com/PallasBot/community-plugin-index ；复制到 data/pallas_config/community_plugin_index.json 可离线覆盖。",
+  "plugins": [
+    {
+      "id": "my_plugin",
+      "name": "示例社区插件",
+      "description": "NoneBot 插件目录，含 __init__.py 与 __plugin_meta__。",
+      "repository": "https://github.com/ORG/REPO.git",
+      "ref": "main",
+      "author": "作者",
+      "tags": ["示例"],
+      "min_pallas_version": "4.0.0",
+      "icon": "https://raw.githubusercontent.com/ORG/REPO/main/assets/icon.png"
+    }
+  ]
+}

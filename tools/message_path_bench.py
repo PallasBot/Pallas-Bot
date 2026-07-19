@@ -47,7 +47,7 @@ _REALISTIC_BODIES = (
 
 def resolve_bench_bot_ids(n: int) -> list[int]:
     try:
-        from src.platform.multi_bot.fleet import get_fleet_bot_ids
+        from pallas.core.platform.multi_bot.fleet import get_fleet_bot_ids
 
         fleet = sorted(int(x) for x in get_fleet_bot_ids())
         if len(fleet) >= n:
@@ -91,19 +91,19 @@ async def bench_ingress_fanout(
 ) -> BenchRow:
     from nonebot.exception import IgnoredException
 
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: False)
-    monkeypatch.setattr("src.plugins.ingress_gate.ingress_gate_active", lambda: True)
-    monkeypatch.setattr("src.plugins.ingress_gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("pallas.core.platform.shard.registry.config.is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr(
-        "src.plugins.ingress_gate.claim_federate_group_message_ingress",
+        "pallas.core.platform.ingress.gate.claim_federate_group_message_ingress",
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
-        "src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim",
+        "pallas.core.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim",
         lambda _plain, **_: False,
     )
 
-    from src.plugins.ingress_gate import ingress_group_message_gate
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
 
     class Bot:
         def __init__(self, self_id: int):
@@ -143,28 +143,28 @@ async def bench_unified_message_realistic(
     """30 牛 ingress + 胜牛走复读：真实 scrub/语料/学习（无发消息）。"""
     from nonebot.exception import IgnoredException
 
-    from src.foundation.config import BotConfig
-    from src.features.message_scrub import is_message_scrub_blocked_async
-    from src.platform.federate.ingress import (
+    from pallas.core.foundation.config import BotConfig
+    from pallas.product.message_scrub import is_message_scrub_blocked_async
+    from pallas.core.platform.federate.ingress import (
         claim_federate_group_message_ingress,
         federate_ingress_cached_win,
     )
-    from src.platform.multi_bot.dedup import (
+    from pallas.core.platform.multi_bot.dedup import (
         normalize_group_raw_message,
         should_skip_duplicate_group_event,
         try_claim_group_message_once,
     )
-    from src.plugins.ingress_gate import ingress_group_message_gate
-    from src.plugins.repeater import message_id_dict, message_id_lock
-    from src.plugins.repeater.learner import Learner
-    from src.plugins.repeater.model import Chat
-    from src.plugins.repeater.shard_opt import repeater_worker_handles_message
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+    from packages.repeater import message_id_dict, message_id_lock
+    from packages.repeater.learner import Learner
+    from packages.repeater.model import Chat
+    from packages.repeater.shard_opt import repeater_worker_handles_message
 
     monkeypatch.setattr(
-        "src.plugins.repeater.learn_queue.enqueue_repeater_learn",
+        "packages.repeater.learn_queue.enqueue_repeater_learn",
         AsyncMock(return_value=True),
     )
-    monkeypatch.setattr("src.plugins.repeater.insert_image", AsyncMock(return_value=None))
+    monkeypatch.setattr("packages.repeater.insert_image", AsyncMock(return_value=None))
 
     class BenchBot:
         def __init__(self, self_id: int):
@@ -266,12 +266,12 @@ async def bench_federate_double_claim(
     rounds: int,
     monkeypatch,
 ) -> BenchRow:
-    from src.platform.federate import ingress as fed_ingress
+    from pallas.core.platform.federate import ingress as fed_ingress
 
     fed_ingress.reset_federate_ingress_win_cache_for_tests()
-    monkeypatch.setattr("src.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
     monkeypatch.setattr(
-        "src.platform.federate.ingress.load_or_create_deployment_id",
+        "pallas.core.platform.federate.ingress.load_or_create_deployment_id",
         lambda: "bench-deploy",
     )
     claim = AsyncMock(return_value=True)
@@ -299,7 +299,7 @@ async def bench_federate_double_claim(
 
 
 async def main_async(args: argparse.Namespace) -> int:
-    from src.foundation.config.dotenv import apply_repo_settings_to_environ
+    from pallas.core.foundation.config.dotenv import apply_repo_settings_to_environ
 
     apply_repo_settings_to_environ()
     import nonebot
@@ -310,7 +310,7 @@ async def main_async(args: argparse.Namespace) -> int:
         nonebot.init()
 
     if args.realistic:
-        from src.foundation.db import init_db
+        from pallas.core.foundation.db import init_db
 
         await init_db()
 

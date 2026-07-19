@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pallas-Bot 分片一键启停：1 个控制台 (hub) + 多个牛牛进程 (worker)
+# Pallas-Bot 分片一键启停（兼容入口；推荐 ./scripts/pallas run shard / stop / status / restart）
 #
 #   ./scripts/run_sharded_bot.sh start
 #   ./scripts/run_sharded_bot.sh status
@@ -21,7 +21,7 @@ PID_HUB="${RUN_DIR}/hub.pid"
 ACCOUNTS_JSON="${REPO_ROOT}/data/pallas_protocol/accounts.json"
 REGISTRY_JSON="${REPO_ROOT}/data/pallas_shard/registry.json"
 
-BOTS_PER_SHARD="${PALLAS_SHARD_BOTS_PER:-5}"
+BOTS_PER_SHARD="${PALLAS_SHARD_BOTS_PER:-7}"
 HUB_PORT="${PALLAS_SHARD_HUB_PORT:-${PORT:-8088}}"
 WORKER_BASE_PORT="${PALLAS_SHARD_WORKER_BASE_PORT:-8090}"
 WORKER_COUNT_OVERRIDE=""
@@ -31,7 +31,8 @@ SCALE_ONLY=0
 DRY_RUN=0
 SKIP_PORT_SYNC=0
 SKIP_OCCUPIED_PORTS=1
-START_CMD=(uv run python)
+# 启停与辅助脚本使用已安装 .venv，不在 uv run 时自动 sync（避免重解析 deploy-all 等 extras）
+START_CMD=(uv run --no-sync python)
 SYNC_PORTS_SCRIPT="${SCRIPT_DIR}/sync_shard_protocol_ports.py"
 ALLOC_PORTS_SCRIPT="${SCRIPT_DIR}/apply_shard_worker_ports.py"
 STARTUP_PORTS_SCRIPT="${SCRIPT_DIR}/shard_startup_ports.py"
@@ -41,7 +42,9 @@ DETECT_REDIS_SCRIPT="${SCRIPT_DIR}/detect_shard_redis.py"
 PORT_RELEASE_TIMEOUT="${PALLAS_SHARD_PORT_RELEASE_TIMEOUT:-60}"
 FORCE_STOP=0
 PID_WORKER_TEST="${RUN_DIR}/worker-test.pid"
+PID_WORKER_TEST2="${RUN_DIR}/worker-test2.pid"
 TEST_SHARD_ID="${PALLAS_SHARD_TEST_ID:-99}"
+TEST2_SHARD_ID="${PALLAS_SHARD_TEST2_ID:-98}"
 CALC_WORKERS_SCRIPT="${SCRIPT_DIR}/calc_worker_count.py"
 
 # shellcheck source=lib/shard_lib.sh
@@ -62,6 +65,18 @@ while [[ $# -gt 0 ]]; do
       ACTION="test"
       shift
       TEST_ARGS=("$@")
+      break
+      ;;
+    test2)
+      ACTION="test2"
+      shift
+      TEST2_ARGS=("$@")
+      break
+      ;;
+    test2-start|test2-stop|test2-status|test2-restart)
+      ACTION="test2"
+      sub="${1#test2-}"
+      TEST2_ARGS=("${sub}" "${@:2}")
       break
       ;;
     test-init|test-add|test-remove|test-list|test-sync|test-sync-ws|test-start|test-stop|test-status|test-restart)
@@ -163,4 +178,5 @@ case "${ACTION}" in
   status) cmd_status ;;
   restart) cmd_restart ;;
   test) dispatch_test_subcmd "${TEST_ARGS[@]}" ;;
+  test2) dispatch_test2_subcmd "${TEST2_ARGS[@]}" ;;
 esac

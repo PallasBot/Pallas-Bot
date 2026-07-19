@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.platform.ingress.policy_registry import clear_ingress_policy_cache, text_matches_plugin_fanout
+from pallas.core.platform.ingress.policy_registry import clear_ingress_policy_cache, text_matches_plugin_fanout
 
 
 def _stub_roulette_plugin(monkeypatch) -> None:
@@ -27,7 +27,7 @@ def _stub_roulette_plugin(monkeypatch) -> None:
             ),
         )
     ]
-    monkeypatch.setattr("src.platform.ingress.policy_registry.get_loaded_plugins", lambda: plugins)
+    monkeypatch.setattr("pallas.core.platform.ingress.policy_registry.get_loaded_plugins", lambda: plugins)
     clear_ingress_policy_cache()
 
 

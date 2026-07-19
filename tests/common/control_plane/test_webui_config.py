@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from src.features.control_plane.webui_config import (
+from pallas.product.control_plane.webui_config import (
     get_control_plane_webui_config,
     repair_misplaced_federate_redis_env,
 )
@@ -16,12 +16,12 @@ def test_coord_redis_url_does_not_fallback_to_shard_redis(monkeypatch, tmp_path)
         encoding="utf-8",
     )
     for mod in (
-        "src.features.control_plane.webui_config",
-        "src.foundation.config.repo_settings",
+        "pallas.product.control_plane.webui_config",
+        "pallas.core.foundation.config.repo_settings",
     ):
         monkeypatch.setattr(f"{mod}.repo_webui_settings_path", lambda: path)
     monkeypatch.setattr(
-        "src.features.community_stats.store.community_stats_state_path",
+        "pallas.product.community_stats.store.community_stats_state_path",
         lambda: tmp_path / "community_stats.json",
     )
     get_control_plane_webui_config.cache_clear()
@@ -45,8 +45,8 @@ def test_repair_removes_duplicate_coord_key(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     for mod in (
-        "src.features.control_plane.webui_config",
-        "src.foundation.config.repo_settings",
+        "pallas.product.control_plane.webui_config",
+        "pallas.core.foundation.config.repo_settings",
     ):
         monkeypatch.setattr(f"{mod}.repo_webui_settings_path", lambda: path)
     assert repair_misplaced_federate_redis_env() is True
@@ -57,17 +57,17 @@ def test_repair_removes_duplicate_coord_key(monkeypatch, tmp_path):
 
 def test_control_plane_webui_config_exposes_low_risk_federate_fields(monkeypatch):
     monkeypatch.setattr(
-        "src.features.control_plane.webui_config.repo_env_raw_value",
+        "pallas.product.control_plane.webui_config.repo_env_raw_value",
         lambda key: {
             "PALLAS_FEDERATE_CLAIM_TTL_SEC": "7200",
             "PALLAS_FEDERATE_INGRESS_BYPASS_UNIFIED": "true",
         }.get(key),
     )
     monkeypatch.setattr(
-        "src.features.community_stats.store.load_community_stats_state",
+        "pallas.product.community_stats.store.load_community_stats_state",
         dict,
     )
-    from src.features.control_plane.webui_config import clear_control_plane_webui_config_cache
+    from pallas.product.control_plane.webui_config import clear_control_plane_webui_config_cache
 
     clear_control_plane_webui_config_cache()
     cfg = get_control_plane_webui_config()

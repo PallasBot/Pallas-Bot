@@ -6,7 +6,7 @@ import pytest
 
 
 def test_sent_reactions_bounded():
-    from src.plugins.repeater.emoji_reaction import (
+    from packages.repeater.emoji_reaction import (
         SENT_REACTIONS_MAX_SIZE,
         mark_reaction_sent,
         sent_reactions,
@@ -23,7 +23,7 @@ def test_sent_reactions_bounded():
 
 
 def test_sent_reactions_keeps_recent():
-    from src.plugins.repeater.emoji_reaction import (
+    from packages.repeater.emoji_reaction import (
         mark_reaction_sent,
         sent_reactions,
     )
@@ -42,7 +42,7 @@ def test_sent_reactions_keeps_recent():
 
 @pytest.mark.asyncio
 async def test_handle_auto_reaction_dispatches_background_send(monkeypatch):
-    import src.plugins.repeater.emoji_reaction as mod
+    import packages.repeater.emoji_reaction as mod
 
     event = SimpleNamespace(
         message_id=123,
@@ -88,7 +88,7 @@ async def test_handle_auto_reaction_dispatches_background_send(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_background_auto_reaction_send_swallows_timeout(monkeypatch):
-    import src.plugins.repeater.emoji_reaction as mod
+    import packages.repeater.emoji_reaction as mod
 
     event = SimpleNamespace(message_id=123, group_id=456, self_id="10001")
     bot = SimpleNamespace(self_id="10001")
@@ -108,7 +108,7 @@ async def test_background_auto_reaction_send_swallows_timeout(monkeypatch):
 
 
 def test_dispatch_auto_reaction_send_skips_when_too_many_pending(monkeypatch):
-    import src.plugins.repeater.emoji_reaction as mod
+    import packages.repeater.emoji_reaction as mod
 
     bot = SimpleNamespace(self_id="10001")
     event = SimpleNamespace(message_id=123, group_id=456, self_id="10001")

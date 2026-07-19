@@ -7,7 +7,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_fetch_corpus_community_usage_does_not_raise_unbound_local(monkeypatch):
-    from src.features.corpus import usage as mod
+    from pallas.product.corpus import usage as mod
 
     mod._usage_cache = None
     mod._usage_inflight = None

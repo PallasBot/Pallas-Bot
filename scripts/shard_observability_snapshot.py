@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.platform.shard.observability import aggregate_shard_observability  # noqa: E402
+from pallas.core.platform.shard.observability import aggregate_shard_observability  # noqa: E402
 
 
 def main() -> int:

@@ -22,11 +22,12 @@ async def test_no_data_loss_on_failure(beanie_fixture):
     - _late_save_time should NOT be updated
     - _sync should log the error and return gracefully
     """
-    from src.plugins.repeater.message_store import MessageStore
+    from packages.repeater.message_store import MessageStore
 
     # Setup: Initialize MessageStore state
     MessageStore._message_lock = asyncio.Lock()
     MessageStore._message_dict = defaultdict(list)
+    MessageStore._synced_prefix_counts = {}
     MessageStore._late_save_time = 0
     MessageStore.SAVE_RESERVED_SIZE = 100
 
@@ -47,7 +48,7 @@ async def test_no_data_loss_on_failure(beanie_fixture):
     assert initial_message_count == 10
 
     # Mock insert_many to raise an exception
-    with patch("src.plugins.repeater.message_store.message_repo.bulk_insert") as mock_insert:
+    with patch("packages.repeater.message_store.message_repo.bulk_insert") as mock_insert:
         mock_insert.side_effect = Exception("Database connection failed")
 
         # Call _sync - it should fail gracefully
@@ -74,11 +75,12 @@ async def test_cleanup_after_success(beanie_fixture):
     - _message_dict should be truncated to SAVE_RESERVED_SIZE per group
     - _late_save_time should be updated to cur_time
     """
-    from src.plugins.repeater.message_store import MessageStore
+    from packages.repeater.message_store import MessageStore
 
     # Setup: Initialize MessageStore state
     MessageStore._message_lock = asyncio.Lock()
     MessageStore._message_dict = defaultdict(list)
+    MessageStore._synced_prefix_counts = {}
     MessageStore._late_save_time = 0
     MessageStore.SAVE_RESERVED_SIZE = 100
 
@@ -100,7 +102,7 @@ async def test_cleanup_after_success(beanie_fixture):
     assert initial_message_count == 150, f"Expected 150 messages, got {initial_message_count}"
 
     # Mock insert_many to succeed
-    with patch("src.plugins.repeater.message_store.message_repo.bulk_insert") as mock_insert:
+    with patch("packages.repeater.message_store.message_repo.bulk_insert") as mock_insert:
         mock_insert.return_value = AsyncMock(return_value=None)()
 
         # Call _sync
@@ -126,3 +128,37 @@ async def test_cleanup_after_success(beanie_fixture):
     assert mock_insert.call_count == 1, (
         f"insert_many should be called once, but was called {mock_insert.call_count} times"
     )
+
+
+@pytest.mark.asyncio
+async def test_sync_flushes_messages_arriving_with_same_timestamp_after_previous_sync(beanie_fixture):
+    from packages.repeater.message_store import MessageStore
+
+    MessageStore._message_lock = asyncio.Lock()
+    MessageStore._message_dict = defaultdict(list)
+    MessageStore._synced_prefix_counts = {}
+    MessageStore._late_save_time = 100
+    MessageStore.SAVE_RESERVED_SIZE = 2
+
+    group_id = 67890
+
+    first_batch = [type("Message", (), {"time": 101, "label": f"first-{i}"})() for i in range(3)]
+    second_batch = [type("Message", (), {"time": 101, "label": f"second-{i}"})() for i in range(2)]
+
+    async with MessageStore._message_lock:
+        MessageStore._message_dict[group_id] = first_batch.copy()
+
+    with patch("packages.repeater.message_store.message_repo.bulk_insert") as mock_insert:
+        mock_insert.return_value = AsyncMock(return_value=None)()
+
+        await MessageStore._sync(cur_time=101)
+
+        async with MessageStore._message_lock:
+            MessageStore._message_dict[group_id].extend(second_batch)
+
+        await MessageStore._sync(cur_time=101)
+
+    assert mock_insert.call_count == 2, "same-timestamp messages appended after a sync should still be flushed"
+    final_messages = MessageStore._message_dict[group_id]
+    assert len(final_messages) == MessageStore.SAVE_RESERVED_SIZE
+    assert [msg.label for msg in final_messages] == ["second-0", "second-1"]

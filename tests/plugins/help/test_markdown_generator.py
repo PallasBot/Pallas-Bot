@@ -1,5 +1,5 @@
-from src.plugins.help.help_constants import HELP_STATUS_OFF, HELP_STATUS_ON
-from src.plugins.help.markdown_generator import (
+from packages.help.help_constants import HELP_STATUS_OFF, HELP_STATUS_ON
+from packages.help.markdown_generator import (
     _is_numbered_list_block,
     _plugin_page_status_banner,
     _wrap_paragraphs_for_help_page,
@@ -95,7 +95,7 @@ def test_generate_plugins_markdown_reuses_filtered_plugins(monkeypatch) -> None:
     )()
 
     monkeypatch.setattr(
-        "src.plugins.help.markdown_generator.get_help_menu_plugins",
+        "packages.help.markdown_generator.get_help_menu_plugins",
         fail_get_help_menu_plugins,
     )
 

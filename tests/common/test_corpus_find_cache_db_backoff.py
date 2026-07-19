@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.exc import TimeoutError as SATimeoutError
 
-from src.features.corpus import find_cache as mod
+from pallas.product.corpus import find_cache as mod
 
 
 @pytest.mark.asyncio

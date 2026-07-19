@@ -1,11 +1,26 @@
-from src.foundation.command_prefix import matches_command_prefix
-from src.plugins.help.help_args import (
+from packages.help.help_args import (
+    PLUGIN_DISABLE_ALL_COMMAND,
     PLUGIN_DISABLE_COMMAND,
+    PLUGIN_ENABLE_ALL_COMMAND,
     PLUGIN_ENABLE_COMMAND,
     extract_help_tail,
     parse_help_args,
     parse_plugin_toggle_args,
 )
+from pallas.core.foundation.command_prefix import matches_command_prefix
+
+
+def matches_toggle_prefix(
+    plaintext: str,
+    command: str,
+    *,
+    exclude_prefixes: tuple[str, ...] = (),
+) -> bool:
+    text = plaintext or ""
+    for excluded in exclude_prefixes:
+        if matches_command_prefix(text, excluded):
+            return False
+    return matches_command_prefix(text, command)
 
 
 def test_extract_help_tail_strips_slash_prefix() -> None:
@@ -78,3 +93,19 @@ def test_parse_toggle_compact_with_global_suffix() -> None:
         "1",
         "global",
     ]
+
+
+def test_toggle_all_commands_do_not_match_single_toggle_prefix() -> None:
+    assert matches_toggle_prefix("牛牛开启全部功能", PLUGIN_ENABLE_ALL_COMMAND)
+    assert not matches_toggle_prefix(
+        "牛牛开启全部功能",
+        PLUGIN_ENABLE_COMMAND,
+        exclude_prefixes=(PLUGIN_ENABLE_ALL_COMMAND,),
+    )
+    assert matches_toggle_prefix("牛牛开启 复读", PLUGIN_ENABLE_COMMAND, exclude_prefixes=(PLUGIN_ENABLE_ALL_COMMAND,))
+    assert matches_toggle_prefix("牛牛关闭全部功能", PLUGIN_DISABLE_ALL_COMMAND)
+    assert not matches_toggle_prefix(
+        "牛牛关闭全部功能",
+        PLUGIN_DISABLE_COMMAND,
+        exclude_prefixes=(PLUGIN_DISABLE_ALL_COMMAND,),
+    )

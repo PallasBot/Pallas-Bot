@@ -10,7 +10,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_reply_post_proc_replaces_match():
     """Verify reply_post_proc replaces the matching reply entry."""
-    from src.plugins.repeater.model import Chat
+    from packages.repeater.model import Chat
 
     group_id = 11111
     bot_id = 22222
@@ -61,7 +61,7 @@ async def test_reply_post_proc_replaces_match():
 @pytest.mark.asyncio
 async def test_reply_post_proc_no_match():
     """Verify reply_post_proc returns False when no match is found."""
-    from src.plugins.repeater.model import Chat
+    from packages.repeater.model import Chat
 
     group_id = 33333
     bot_id = 44444
@@ -92,7 +92,7 @@ async def test_reply_post_proc_no_match():
 @pytest.mark.asyncio
 async def test_reply_post_proc_same_message():
     """Verify reply_post_proc returns True immediately when raw == new."""
-    from src.plugins.repeater.model import Chat
+    from packages.repeater.model import Chat
 
     result = await Chat.reply_post_proc(
         raw_message="same",

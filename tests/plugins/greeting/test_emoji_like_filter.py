@@ -7,7 +7,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_greeting_ignores_group_msg_emoji_like(monkeypatch) -> None:
-    import src.plugins.greeting as mod
+    import packages.greeting as mod
 
     monkeypatch.setattr(mod, "greeting_plugin_disabled", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(

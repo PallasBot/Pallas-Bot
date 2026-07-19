@@ -2,11 +2,11 @@
 
 from unittest.mock import patch
 
-from src.platform.shard.registry.port_alloc import (
+from pallas.core.platform.shard.registry.port_alloc import (
     allocate_worker_ports,
     apply_worker_ports_to_registry,
 )
-from src.platform.shard.registry.store import ShardRegistry
+from pallas.core.platform.shard.registry.store import ShardRegistry
 
 
 def test_allocate_strict_base_plus_index():
@@ -21,7 +21,7 @@ def test_allocate_skips_occupied():
     def fake_in_use(port: int, *, host: str = "0.0.0.0") -> bool:
         return port in used
 
-    with patch("src.platform.shard.registry.port_alloc.is_tcp_port_in_use", side_effect=fake_in_use):
+    with patch("pallas.core.platform.shard.registry.port_alloc.is_tcp_port_in_use", side_effect=fake_in_use):
         result = allocate_worker_ports(3, 8090, skip_occupied=True)
     assert result.ports == [8091, 8093, 8094]
 

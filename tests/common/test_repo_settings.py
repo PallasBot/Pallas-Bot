@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.foundation.config import repo_settings as rs
+from pallas.core.foundation.config import repo_settings as rs
 
 
 @pytest.fixture(autouse=True)
@@ -110,7 +110,7 @@ db = "MyDb"
 def test_get_invalidates_cache_when_webui_json_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from pydantic import BaseModel, Field
 
-    from src.console.webui.plugin_config import install_hot_reload_config
+    from pallas.console.webui.plugin_config import install_hot_reload_config
 
     class Cfg(BaseModel):
         flag: bool = Field(default=False)

@@ -166,7 +166,7 @@ jobs:
 
             ## WebUI
 
-            附件 **`dist.zip`**（WebUI `${{ needs.build-webui-dist.outputs.webui_git_ref }}` / console `${{ needs.build-webui-dist.outputs.webui_console_version }}`）。启动后通常自动部署；手动解压到 **`data/pallas_webui`** 见 [pallas_webui 插件说明](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/plugins/pallas_webui/README.md#配置)。
+            附件 **`dist.zip`**（WebUI `${{ needs.build-webui-dist.outputs.webui_git_ref }}` / console `${{ needs.build-webui-dist.outputs.webui_console_version }}`）。启动后通常自动部署；手动解压到 **`data/pallas_webui`** 见 [pallas_webui 插件说明](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/plugins/pb_webui/README.md#配置)。
           files: |
             dist.zip
           draft: false

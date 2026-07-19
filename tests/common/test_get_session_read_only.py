@@ -18,7 +18,7 @@ class _FakeSession:
 
 @pytest.mark.asyncio
 async def test_get_session_read_only_uses_autocommit(monkeypatch):
-    from src.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db import repository_pg as mod
 
     fake = _FakeSession()
     monkeypatch.setattr(mod, "_session_factory", lambda: fake)
@@ -34,7 +34,7 @@ async def test_get_session_read_only_uses_autocommit(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_session_write_rolls_back_on_exit(monkeypatch):
-    from src.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db import repository_pg as mod
 
     fake = _FakeSession()
     monkeypatch.setattr(mod, "_session_factory", lambda: fake)
@@ -49,7 +49,7 @@ async def test_get_session_write_rolls_back_on_exit(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_session_write_rolls_back_on_error(monkeypatch):
-    from src.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db import repository_pg as mod
 
     fake = _FakeSession()
     monkeypatch.setattr(mod, "_session_factory", lambda: fake)
@@ -63,7 +63,7 @@ async def test_get_session_write_rolls_back_on_error(monkeypatch):
 
 
 def test_pg_session_server_settings_defaults(monkeypatch):
-    from src.foundation.db import pg_session_server_settings
+    from pallas.core.foundation.db import pg_session_server_settings
 
     monkeypatch.delenv("PG_IDLE_IN_TRANSACTION_TIMEOUT_MS", raising=False)
     monkeypatch.delenv("PG_APPLICATION_NAME", raising=False)
@@ -77,7 +77,7 @@ def test_pg_session_server_settings_defaults(monkeypatch):
 
 
 def test_pg_session_server_settings_respects_env(monkeypatch):
-    from src.foundation.db import pg_session_server_settings
+    from pallas.core.foundation.db import pg_session_server_settings
 
     monkeypatch.setenv("PG_IDLE_IN_TRANSACTION_TIMEOUT_MS", "25000")
     monkeypatch.setenv("PG_APPLICATION_NAME", "PallasBot-Worker")

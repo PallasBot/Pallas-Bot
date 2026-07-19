@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from src.plugins.repeater.reply_gate import should_prepare_repeater_reply
+from packages.repeater.reply_gate import should_prepare_repeater_reply
 
 
 def test_should_prepare_repeater_reply_skips_plugin_commands(monkeypatch):
     monkeypatch.setattr(
-        "src.plugins.repeater.reply_gate.is_plugin_command_plaintext",
+        "packages.repeater.reply_gate.is_plugin_command_plaintext",
         lambda _text: True,
     )
     plain_text = "牛牛帮助"

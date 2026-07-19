@@ -3,8 +3,35 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from src.features.community_stats.endpoints import FALLBACK_CORPUS_API_BASE, PRIMARY_CORPUS_API_BASE
-from src.features.corpus.community_source import RemoteCorpusRepository
+from pallas.product.community_stats.endpoints import FALLBACK_CORPUS_API_BASE, PRIMARY_CORPUS_API_BASE
+from pallas.product.corpus.community_source import RemoteCorpusRepository
+
+
+@pytest.fixture(autouse=True)
+def open_remote_corpus_budget(monkeypatch):
+    from pallas.product.corpus import community_source as mod
+    from pallas.product.corpus.remote_budget import clear_remote_corpus_budget_state
+
+    class _OpenBudget:
+        skipped = False
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc: object) -> None:
+            return None
+
+    clear_remote_corpus_budget_state()
+    monkeypatch.setattr(
+        "pallas.product.corpus.remote_budget.RemoteCorpusBudget",
+        lambda **kwargs: _OpenBudget(),
+    )
+    mod._shared_client = None
+    mod._shared_client_timeout = None
+    yield
+    mod._shared_client = None
+    mod._shared_client_timeout = None
+    clear_remote_corpus_budget_state()
 
 
 @pytest.mark.asyncio

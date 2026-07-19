@@ -1,82 +1,45 @@
-# 复制为 config/pallas.toml 后填写（该文件已 gitignore，勿提交密钥）。
-# WebUI「插件 / 通用配置」保存项写入 data/pallas_config/webui.json；保存后会自动生成只读 config/pallas.webui.export.toml 供查阅。
-# 从旧 .env 迁移：uv run python tools/migrate_env_to_pallas.py
-# nb/pip 插件环境变量：复制 .env.example 为 .env
+# 复制为 config/pallas.toml 后填写（勿提交密钥）。
+# 插件与通用项在 WebUI 保存 → data/pallas_config/webui.json（优先级最高）。
+# 说明：docs/developer/architecture/config-storage.md · 从旧 .env 迁移：uv run python tools/migrate_env_to_pallas.py
 
+# ── 最少配置（改 superusers + 数据库即可启动）────────────────────────
 [bootstrap]
 host = "0.0.0.0"
 port = 8088
-# log_level = "INFO"   # 文件落盘与 NoneBot 默认过滤；排障时改为 DEBUG
-# superusers = ["123456789"]
-db_backend = "mongodb"
-# access_token = ""
-# 站点自有 NoneBot 插件（相对仓库根；见 docs/architecture/site-customization-and-updates.md）
-# extra_plugin_dirs = ["local/plugins"]
+superusers = ["你的QQ号"]
+# 新装默认 PostgreSQL；从 3.x MongoDB 升级请改为 mongodb 并改用 [bootstrap.mongo]
+db_backend = "postgresql"
 
-[bootstrap.mongo]
-host = "127.0.0.1"
-port = 27017
-user = ""
-password = ""
+[bootstrap.postgres]
+host = "127.0.0.1"   # docker-compose.full.yml 容器内为 postgres
+port = 5432
+user = "pallas"
+password = "pallas"
 db = "PallasBot"
-# auth_source = ""
+# auto_create_db = true   # 仅本地：库不存在时 CREATE DATABASE（需 CREATEDB；Compose/托管勿开）
 
-# [bootstrap.postgres]
-# host = "127.0.0.1"
-# port = 5432
-# user = "postgres"
-# password = ""
+# [bootstrap.mongo]  # 3.x 升级沿用 Mongo 时取消注释，并设 db_backend = "mongodb"
+# host = "127.0.0.1"   # 根目录 docker-compose.yml 容器内为 mongodb
+# port = 27017
 # db = "PallasBot"
+# user / password / auth_source 有认证时再填
 
-# 社区统计：升级含 community_stats 的 release 后默认自动上报，无需复制本段。
-# 正式域名为 stats.pallasbot.top；备案前自动回退 pallas.togetsudo.com，备案通过后自动切回，无需改 endpoint。
-# 仅关闭时取消注释并设 enabled = false（或环境变量 PALLAS_COMMUNITY_STATS_ENABLED=false）。
-# [community_stats]
-# enabled = false
-# endpoint = "https://stats.pallasbot.top/v1/heartbeat"  # 仅自建/特殊地址时改；默认勿填
-# token = ""  # 公开中心可省略；自建中心若启用 HEARTBEAT_TOKEN 再填写
-# interval_sec = 300
+# ── 按需取消注释 ────────────────────────────────────────────────────
+# log_level = "INFO"
+# access_token = ""              # 公网暴露 HTTP 时建议设置
+# extra_plugin_dirs = ["local/plugins"]   # 未配置时，local/plugins 有有效插件包会自动纳入
+# load_bundled_extra_plugins = "auto"      # true | false | auto（默认 auto：pip 未装时用仓库内副本）
 
-# 与历史 .env 同名的扁平项（键名大写）；也可只放 bootstrap，其余交给 WebUI。
 # [env]
-# PALLAS_PROTOCOL_ENABLED = true
-# 分片跨进程 claim（与 Pallas-Bot-AI 共用时可填同一 REDIS_URL；run_sharded_bot.sh 自动探测）
-# REDIS_URL = "redis://127.0.0.1:6379/0"
-# PALLAS_COORD_REDIS_ENABLED = "auto"
-# PALLAS_COORD_REDIS_URL = "redis://127.0.0.1:6379/0"
-# PostgreSQL（db_backend=postgresql 时）：分片约 (worker+hub) 进程 × (pool+overflow)，建议单进程 ≤20
-# PG_POOL_SIZE = "12"
-# PG_MAX_OVERFLOW = "8"
-# PG_IDLE_IN_TRANSACTION_TIMEOUT_MS = "15000"  # 默认 15s；防止异常只读事务长期占连接
-# PG_APPLICATION_NAME = "PallasBot"
+# AI_SERVER_HOST = "127.0.0.1"   # 全栈 Docker 内由 compose 注入 pallasbot-ai，本地开发可写这里
+# AI_SERVER_PORT = "9099"
+# AI 扩展连接（WebUI 保存 → data/pb_webui/ai_extension.json；示例见 config/ai_extension.example.json）
+# 「AI 服务」Bearer Token 须与 Pallas-Bot-AI 的 PALLAS_AI_API_TOKEN 一致，否则运维日志 HTTP 拉取会 401。
+# LLM_CHAT_ENABLED = "true"
+# REDIS_URL = "redis://127.0.0.1:6379/0"   # 分片多进程 claim；需 uv sync --extra coord-redis
+# PALLAS_DUPLICATE_PREFIX_STRICT = "true"  # 生产推荐：重复命令 prefix 冲突时阻断启动
 
-# 联邦控制（多套牛牛共池、消息去重；协调 Redis 可手写或由中心下发）
-# [control_plane]
-# enabled = true                  # 默认开；WebUI「通用配置 → 联邦控制」可改
-# bootstrap_url = "https://stats.pallasbot.top/v1/bootstrap"  # 省略则从心跳域推导
-# instance_secret = ""   # 与中心 INSTANCE_SECRET 一致；亦可用环境变量 PALLAS_INSTANCE_SECRET
-# federate_id = ""       # 可省略，由 bootstrap 落盘到 community_stats.json
-# ingress_enabled = "auto"
-# [control_plane.coord]
-# redis_url = "redis://127.0.0.1:6379/2"
-# redis_prefix = "pallas:fed:my_pool"
-# claim_ttl_sec = 86400
+# [community_stats]
+# enabled = false                # 默认开启；仅关闭上报时取消注释
 
-# 语料多源（local + 可选 community）；社区语料默认关，见 WebUI「语料联邦」
-# [corpus]
-# community_enabled = false       # 默认关；true 后配合 auto_enroll 接入 stats 中心
-# auto_enroll = "auto"            # community 开启时默认向 stats enroll
-# community_contribute = "auto"   # 默认开；写回社区池（group_id=0 匿名）
-# 显式关闭：community_contribute = false
-# on_remote_failure = "local_only"
-# 接话/查询性能（亦可在 WebUI「通用配置 → 语料联邦 → 接话与查询性能」）
-# PALLAS_CORPUS_REPLY_MESSAGES_CAP = "16"
-# PALLAS_CORPUS_REPLY_ANSWERS_CAP = "128"
-# PALLAS_CORPUS_FIND_CACHE_SEC = "45"
-# PALLAS_CORPUS_FIND_CACHE_MAX = "50000"
-# PALLAS_CORPUS_REPLY_SNAPSHOT_SEC = "5"
-# PALLAS_CORPUS_REPLY_SNAPSHOT_MAX = "20000"
-# 手动指定时跳过 auto enroll：
-# [corpus.community]
-# api_base = "https://stats.pallasbot.top/v1/corpus"
-# token = "pc_..."
+# 多机协同、语料联邦、PG 连接池等进阶项见 docs/Config.md，一般无需写进 pallas.toml。

@@ -35,4 +35,4 @@
 
 实现：`extended_api.py`；社区 `src/features/community_stats/`、语料 `src/features/corpus/`、分片 `src/platform/shard/`。
 
-架构说明：[中央入站调度](../../../architecture/central-ingress-dispatch.md)、[多进程分片](../../../architecture/bot_process_sharding.md)。
+架构说明：[分片运行时](../../../developer/architecture/shard-runtime.md)、[分片部署](../../../maintainer/deploy/sharded.md)。

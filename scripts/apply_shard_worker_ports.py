@@ -11,10 +11,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.platform.shard.registry.port_alloc import (  # noqa: E402
+from pallas.core.platform.shard.registry.port_alloc import (  # noqa: E402
     sync_registry_worker_ports,
 )
-from src.platform.shard.registry.sync_protocol_ports import (  # noqa: E402
+from pallas.core.platform.shard.registry.sync_protocol_ports import (  # noqa: E402
     apply_env_for_shard_sync,
     read_dotenv,
 )
@@ -36,10 +36,10 @@ def main() -> int:
     if args.env.is_file():
         apply_env_for_shard_sync(read_dotenv(args.env))
 
-    from src.platform.shard.registry.config import get_shard_registry_settings
+    from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
     get_shard_registry_settings.cache_clear()
-    from src.platform.shard.registry.store import clear_shard_registry_cache
+    from pallas.core.platform.shard.registry.store import clear_shard_registry_cache
 
     clear_shard_registry_cache()
     settings = get_shard_registry_settings()

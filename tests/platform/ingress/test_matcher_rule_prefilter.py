@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 from nonebot.internal.rule import Rule
 from nonebot.rule import command, startswith
 
-from src.platform.ingress import matcher_rule_prefilter as prefilter
+from pallas.core.platform.ingress import matcher_rule_prefilter as prefilter
 
 
 class _FooCommandMatcher:

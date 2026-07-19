@@ -6,7 +6,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 @pytest.mark.asyncio
 async def test_resolve_ban_reply_raw_uses_reply_payload_when_present():
-    from src.plugins.repeater import resolve_ban_reply_raw
+    from packages.repeater import resolve_ban_reply_raw
 
     message = MagicMock()
     message.__iter__.return_value = [MagicMock(__str__=lambda _: "目标消息")]
@@ -23,7 +23,7 @@ async def test_resolve_ban_reply_raw_uses_reply_payload_when_present():
 
 @pytest.mark.asyncio
 async def test_resolve_ban_reply_raw_falls_back_to_get_msg_when_reply_missing():
-    from src.plugins.repeater import resolve_ban_reply_raw
+    from packages.repeater import resolve_ban_reply_raw
 
     event = MagicMock()
     event.reply = None
@@ -61,7 +61,7 @@ def _make_group_event(
 
 @pytest.mark.asyncio
 async def test_is_ban_reply_trigger_matches_raw_at_self_when_to_me_false():
-    from src.plugins.repeater import is_ban_reply_trigger
+    from packages.repeater import is_ban_reply_trigger
 
     event = _make_group_event()
 
@@ -70,7 +70,7 @@ async def test_is_ban_reply_trigger_matches_raw_at_self_when_to_me_false():
 
 @pytest.mark.asyncio
 async def test_is_ban_latest_trigger_matches_raw_at_self_when_to_me_false():
-    from src.plugins.repeater import is_ban_latest_trigger
+    from packages.repeater import is_ban_latest_trigger
 
     event = _make_group_event(
         body="不可以发这个",

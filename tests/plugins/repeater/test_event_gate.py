@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.platform.ingress.unified_pass import reset_unified_ingress_once_pass_for_tests
+from pallas.core.platform.ingress.unified_pass import reset_unified_ingress_once_pass_for_tests
 
 
 @pytest.fixture(autouse=True)
@@ -36,7 +36,7 @@ class _FakeEvent:
 
 @pytest.mark.asyncio
 async def test_build_repeater_event_context_bypasses_command_before_message_tracking(monkeypatch):
-    from src.plugins.repeater import event_gate
+    from packages.repeater import event_gate
 
     event = _FakeEvent(plain_text="牛牛帮助")
     tracked = False
@@ -62,8 +62,38 @@ async def test_build_repeater_event_context_bypasses_command_before_message_trac
 
 
 @pytest.mark.asyncio
+async def test_build_repeater_event_context_bypasses_disabled_plugin_before_message_tracking(monkeypatch):
+    from packages.repeater import event_gate
+
+    event = _FakeEvent(plain_text="hello")
+    tracked = False
+    recorded: list[str] = []
+
+    async def fake_remember(*_args, **_kwargs) -> bool:
+        nonlocal tracked
+        tracked = True
+        return True
+
+    async def fake_disabled(*_args, **_kwargs) -> bool:
+        return True
+
+    monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
+    monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(event_gate, "remember_group_message_id", fake_remember)
+    monkeypatch.setattr(event_gate, "record_repeater_ingress_event", lambda: recorded.append("event"))
+    monkeypatch.setattr(event_gate, "record_repeater_ingress_early_discard", lambda reason: recorded.append(reason))
+    monkeypatch.setattr("packages.help.plugin_manager.is_plugin_disabled", fake_disabled)
+
+    result = await event_gate.build_repeater_event_context(100, event)
+
+    assert result is None
+    assert tracked is False
+    assert recorded == ["event", "plugin_disabled"]
+
+
+@pytest.mark.asyncio
 async def test_build_repeater_event_context_non_sharding_claims_once(monkeypatch):
-    from src.plugins.repeater import event_gate
+    from packages.repeater import event_gate
 
     event = _FakeEvent(raw_message="[CQ:image,file=x,subType=1]", plain_text="hello")
     calls: list[str] = []
@@ -85,7 +115,7 @@ async def test_build_repeater_event_context_non_sharding_claims_once(monkeypatch
     monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
     monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
     monkeypatch.setattr(
-        "src.features.message_scrub.is_message_scrub_blocked_sync",
+        "pallas.product.message_scrub.is_message_scrub_blocked_sync",
         lambda **_: False,
     )
     monkeypatch.setattr(event_gate, "remember_group_message_id", fake_true)
@@ -110,7 +140,7 @@ async def test_build_repeater_event_context_non_sharding_claims_once(monkeypatch
 
 @pytest.mark.asyncio
 async def test_build_repeater_event_context_sharded_without_fanout_uses_cross_bot_claim(monkeypatch):
-    from src.plugins.repeater import event_gate
+    from packages.repeater import event_gate
 
     event = _FakeEvent(plain_text="hello")
     calls: list[str] = []
@@ -132,7 +162,7 @@ async def test_build_repeater_event_context_sharded_without_fanout_uses_cross_bo
     monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
     monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
     monkeypatch.setattr(
-        "src.features.message_scrub.is_message_scrub_blocked_sync",
+        "pallas.product.message_scrub.is_message_scrub_blocked_sync",
         lambda **_: False,
     )
     monkeypatch.setattr(event_gate, "remember_group_message_id", fake_true)
@@ -153,7 +183,7 @@ async def test_build_repeater_event_context_sharded_without_fanout_uses_cross_bo
 
 @pytest.mark.asyncio
 async def test_build_repeater_event_context_records_sharded_cross_bot_claim_loss(monkeypatch):
-    from src.plugins.repeater import event_gate
+    from packages.repeater import event_gate
 
     event = _FakeEvent(plain_text="hello")
     recorded: list[object] = []
@@ -167,7 +197,7 @@ async def test_build_repeater_event_context_records_sharded_cross_bot_claim_loss
     monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
     monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
     monkeypatch.setattr(
-        "src.features.message_scrub.is_message_scrub_blocked_sync",
+        "pallas.product.message_scrub.is_message_scrub_blocked_sync",
         lambda **_: False,
     )
     monkeypatch.setattr(event_gate, "remember_group_message_id", fake_true)
@@ -190,7 +220,7 @@ async def test_build_repeater_event_context_records_sharded_cross_bot_claim_loss
 
 @pytest.mark.asyncio
 async def test_build_repeater_event_context_keeps_sharded_single_char_plaintext(monkeypatch):
-    from src.plugins.repeater import event_gate
+    from packages.repeater import event_gate
 
     event = _FakeEvent(plain_text="草", raw_message="草")
 
@@ -203,7 +233,7 @@ async def test_build_repeater_event_context_keeps_sharded_single_char_plaintext(
     monkeypatch.setattr(event_gate, "repeater_worker_handles_message", lambda _bot_id: True)
     monkeypatch.setattr(event_gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
     monkeypatch.setattr(
-        "src.features.message_scrub.is_message_scrub_blocked_sync",
+        "pallas.product.message_scrub.is_message_scrub_blocked_sync",
         lambda **_: False,
     )
     monkeypatch.setattr(event_gate, "remember_group_message_id", fake_true)
@@ -218,3 +248,25 @@ async def test_build_repeater_event_context_keeps_sharded_single_char_plaintext(
     result = await event_gate.build_repeater_event_context(100, event)
 
     assert result == SimpleNamespace(plain_body="草", norm_raw="草", sharding_active=True)
+
+
+@pytest.mark.asyncio
+async def test_build_repeater_event_context_discards_self_sent_before_tracking(monkeypatch):
+    from packages.repeater import event_gate
+
+    event = _FakeEvent(user_id=100)
+    tracked = False
+    recorded: list[str] = []
+
+    async def fake_remember(*_args, **_kwargs) -> bool:
+        nonlocal tracked
+        tracked = True
+        return True
+
+    monkeypatch.setattr(event_gate, "remember_group_message_id", fake_remember)
+    monkeypatch.setattr(event_gate, "record_repeater_ingress_event", lambda: recorded.append("event"))
+    monkeypatch.setattr(event_gate, "record_repeater_ingress_early_discard", lambda reason: recorded.append(reason))
+
+    assert await event_gate.build_repeater_event_context(100, event) is None
+    assert tracked is False
+    assert recorded == ["event", "self_sent"]

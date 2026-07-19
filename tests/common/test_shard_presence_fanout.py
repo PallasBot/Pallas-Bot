@@ -3,14 +3,20 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from src.platform.shard import presence as presence_mod
-from src.platform.shard.coord import bot_action as ba_mod
-from src.plugins.repeater import fanout_reply as fanout_mod
+from packages.repeater import fanout_reply as fanout_mod
+from pallas.core.platform.shard import presence as presence_mod
+from pallas.core.platform.shard.coord import bot_action as ba_mod
+
+
+def test_presence_api_exports_cluster_connection_check() -> None:
+    from pallas.api.presence import bot_has_cluster_connection
+
+    assert bot_has_cluster_connection is presence_mod.bot_has_cluster_connection
 
 
 def test_bot_has_cluster_connection_local(monkeypatch):
     monkeypatch.setattr(presence_mod, "bot_has_local_connection", lambda qq: qq == 100)
-    monkeypatch.setattr(presence_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(presence_mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(presence_mod, "get_cluster_online_bot_ids", lambda: frozenset({200}))
     assert presence_mod.bot_has_cluster_connection(100) is True
     assert presence_mod.bot_has_cluster_connection(200) is True
@@ -18,7 +24,7 @@ def test_bot_has_cluster_connection_local(monkeypatch):
 
 
 def test_invoke_bot_action_skips_offline_remote(monkeypatch):
-    monkeypatch.setattr(ba_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(ba_mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(presence_mod, "bot_has_local_connection", lambda qq: False)
     monkeypatch.setattr(presence_mod, "bot_has_cluster_connection", lambda qq: False)
 
@@ -36,10 +42,10 @@ def test_list_fanout_bot_ids_filters_offline(monkeypatch):
     async def fake_list(group_id: int) -> list[int]:
         return [100, 200, 300]
 
-    monkeypatch.setattr(fanout_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(fanout_mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(presence_mod, "get_cluster_online_bot_ids", lambda: frozenset({100, 200}))
     monkeypatch.setattr(
-        "src.plugins.duel.duel_bots.list_group_online_bot_ids",
+        "pallas.core.platform.multi_bot.group_fleet_probe.list_group_online_bot_ids",
         fake_list,
     )
 
@@ -65,10 +71,10 @@ def test_list_fanout_bot_ids_uses_short_ttl_cache(monkeypatch):
         calls += 1
         return [100, 200]
 
-    monkeypatch.setattr(fanout_mod, "is_sharding_active", lambda: False)
+    monkeypatch.setattr(fanout_mod.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr(fanout_mod.time, "monotonic", lambda: now)
     monkeypatch.setattr(
-        "src.plugins.duel.duel_bots.list_group_online_bot_ids",
+        "pallas.core.platform.multi_bot.group_fleet_probe.list_group_online_bot_ids",
         fake_list,
     )
 
@@ -126,9 +132,10 @@ def test_repeater_can_attempt_reply_uses_any_ready_fanout_bot(monkeypatch):
     cooldowns = {100: False, 200: True}
 
     class _FakeBotConfig:
-        def __init__(self, bot_id: int, group_id: int = 0) -> None:
+        def __init__(self, bot_id: int, group_id: int = 0, cooldown: int = 5) -> None:
             self.bot_id = bot_id
             self.group_id = group_id
+            self.cooldown = cooldown
 
         async def is_cooldown(self, action_type: str) -> bool:
             assert action_type == "repeat"
@@ -147,9 +154,10 @@ def test_repeater_can_attempt_reply_rejects_when_no_fanout_bot_ready(monkeypatch
     monkeypatch.setattr(fanout_mod, "list_fanout_bot_ids", lambda _gid: asyncio.sleep(0, result=[100, 200]))
 
     class _FakeBotConfig:
-        def __init__(self, bot_id: int, group_id: int = 0) -> None:
+        def __init__(self, bot_id: int, group_id: int = 0, cooldown: int = 5) -> None:
             self.bot_id = bot_id
             self.group_id = group_id
+            self.cooldown = cooldown
 
         async def is_cooldown(self, action_type: str) -> bool:
             assert action_type == "repeat"

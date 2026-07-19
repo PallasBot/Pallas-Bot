@@ -1,5 +1,5 @@
-from src.plugins.help.help_constants import HELP_STATUS_OFF, HELP_STATUS_ON, HELP_STATUS_PLACEHOLDER
-from src.plugins.help.plugin_manager import apply_status_marks_to_plugin_table
+from packages.help.help_constants import HELP_STATUS_OFF, HELP_STATUS_ON, HELP_STATUS_PLACEHOLDER
+from packages.help.plugin_manager import apply_status_marks_to_plugin_table
 
 
 def test_apply_status_marks_row_order_and_description_safe() -> None:

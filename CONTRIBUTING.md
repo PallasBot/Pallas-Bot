@@ -44,8 +44,8 @@
 - [开发指南总览](docs/develop/README.md)
 - [本地开发环境](docs/develop/environment.md)
 - [贡献与提交流程](docs/develop/workflow.md)
-- [项目结构约定](docs/architecture/project-structure.md)
-- [插件目录约定](docs/architecture/plugin-convention.md)
+- [项目结构约定](docs/developer/reference/repo-layout.md)
+- [Golden Plugin / 插件目录约定](docs/developer/plugin-development/golden-plugin.md)
 - [命令权限接入说明](docs/common/cmd_perm/README.md)
 - [Agent 协作约定](AGENTS.md)
 
@@ -62,7 +62,7 @@ cp config/pallas.example.toml config/pallas.toml
 # 填写 [bootstrap] 与数据库；其余可在启动后于 WebUI「插件 / 通用配置」中保存到 data/pallas_config/webui.json
 ```
 
-说明见 [运行配置存储](docs/architecture/settings-storage.md)。从旧 `.env` 迁移：`uv run python tools/migrate_env_to_pallas.py`。
+说明见 [运行配置存储](docs/developer/architecture/config-storage.md)。从旧 `.env` 迁移：`uv run python tools/migrate_env_to_pallas.py`。
 
 分片部署且与 Pallas-Bot-AI 共用 Redis 时，在 `pallas.toml` 的 `[env]` 中设置 `REDIS_URL`，并执行 `uv sync --extra coord-redis`；`./scripts/run_sharded_bot.sh start` 会自动探测。
 

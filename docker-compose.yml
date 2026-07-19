@@ -1,4 +1,6 @@
-# 默认：Pallas-Bot + MongoDB；NapCat 等由协议端管理（/protocol/console/）在宿主机或容器内拉起，不再单独编排 napcat 服务。
+# 默认：Pallas-Bot + MongoDB（3.x 升级用户沿用此栈）。
+# 新装推荐 PostgreSQL + AI 全栈：docker-compose.full.yml（见 DockerDeployment.md）。
+# NapCat 等由协议端管理（/protocol/console/）在宿主机或容器内拉起。
 # Bot 主配置：挂载 pallas-bot/config/pallas.toml → /app/config/pallas.toml（见 config/pallas.example.toml）
 # WebUI 插件配置：随 pallas-bot/data 卷持久化（data/pallas_config/webui.json）
 # 使用内置 PostgreSQL：在 pallas.toml 配好 [bootstrap] / [bootstrap.postgres] 后执行：
@@ -30,9 +32,9 @@ services:
       # 勿挂载整个 /app/resource，否则会盖住镜像内的 help 样式（resource/styles/default）；语音持久化只挂 voices
       - ./pallas-bot/resource/voices:/app/resource/voices
       - ./pallas-bot/config/pallas.toml:/app/config/pallas.toml
-      # 协议端实例、WebUI 配置（webui.json）、控制台口令等（见 docs/architecture/settings-storage.md）
+      # 协议端实例、WebUI 配置（webui.json）、控制台口令等（见 docs/developer/architecture/config-storage.md）
       - ./pallas-bot/data:/app/data
-      # 站点自有插件（见 local/README.md、docs/architecture/site-customization-and-updates.md）
+      # 站点自有插件（见 local/README.md、docs/maintainer/deploy/upgrade.md）
       - ./pallas-bot/local/plugins:/app/local/plugins
       # Linux 且协议端使用「Docker 模式」拉起 NapCat 时再取消注释（挂载 Docker socket 有安全风险，生产请加固）
       # - /var/run/docker.sock:/var/run/docker.sock

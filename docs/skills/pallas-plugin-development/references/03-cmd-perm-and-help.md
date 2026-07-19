@@ -1,6 +1,6 @@
 # 三、cmd_perm 与帮助文案
 
-实现包：`src/features/cmd_perm/`。人类向细则：[cmd_perm/README.md](../../common/cmd_perm/README.md)。
+实现包：`pallas/core/perm/`。人类向细则：[cmd_perm/README.md](../../common/cmd_perm/README.md)。
 
 ## 3.1 命令 ID 规则
 
@@ -35,7 +35,7 @@
 ## 3.3 Matcher 权限 helper
 
 ```python
-from src.features.cmd_perm import (
+from pallas.api.perm import (
     group_message_permission_for_command,
     private_message_permission_for_command,
     permission_for_command,
@@ -58,7 +58,7 @@ on_command("通用", permission=permission_for_command("my_plugin.any"))
 Matcher 无法表达时（例如一条 handler 内分支）：
 
 ```python
-from src.features.cmd_perm import satisfies_command_permission
+from pallas.api.perm import satisfies_command_permission
 
 if not await satisfies_command_permission(bot, event, "my_plugin.action"):
     return
@@ -69,7 +69,7 @@ if not await satisfies_command_permission(bot, event, "my_plugin.action"):
 ### `usage`（PluginMetadata.usage）
 
 ```python
-from src.features.cmd_perm.metadata_text import SCENE_GROUP, join_usage, usage_line
+from pallas.api.metadata import SCENE_GROUP, join_usage, usage_line
 
 usage=join_usage(
     usage_line("牛牛帮助", "查看帮助"),
@@ -108,7 +108,7 @@ usage=join_usage(
 与仓库其它插件对齐：
 
 ```python
-from src.features.cmd_perm.metadata_defaults import (
+from pallas.api.metadata import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,

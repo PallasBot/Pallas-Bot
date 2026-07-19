@@ -3,6 +3,8 @@
 _PALLAS_SHARD_CMDS_LOADED=1
 
 cmd_start_hub_only() {
+  require_coord_redis_for_shard_start || return 1
+
   local hub_url="http://127.0.0.1:${HUB_PORT}"
   local worker_counts
   worker_counts="$(count_running_production_workers)"
@@ -16,7 +18,6 @@ cmd_start_hub_only() {
   else
     echo "  worker     本次不启动（需单独 start 或 restart --workers-only）"
   fi
-  load_shard_redis_env
   echo "  $(shard_coord_backend_hint)"
   echo ""
   echo "  正在启动 hub…"
@@ -42,7 +43,7 @@ cmd_start_hub_only() {
   echo "  汇总       hub $([[ "${hub_ok}" -eq 1 ]] && echo 运行中 || echo 未就绪)"
   if [[ "${hub_ok}" -eq 1 ]]; then
     echo "  WebUI      ${hub_url}/pallas/"
-    echo "  协议端     ${hub_url}/protocol/console/"
+    echo "  协议端     ${hub_url}/pallas/protocol/"
   fi
   echo ""
   echo "  常用命令"
@@ -56,11 +57,30 @@ cmd_start_hub_only() {
 }
 
 cmd_start_workers_only() {
+  require_coord_redis_for_shard_start || return 1
+
   local workers="${WORKER_COUNT_OVERRIDE:-$(calc_worker_count)}"
-  local running_before
+  local running_before worker_mode
   running_before="$(count_running_production_worker_ids)"
-  if [[ "${SCALE_ONLY}" -eq 0 && "${running_before}" -gt 0 ]]; then
+  worker_mode="$(resolve_production_worker_start_mode "${workers}")"
+  if [[ "${SCALE_ONLY}" -eq 0 && "${worker_mode}" == "scale" ]]; then
     SCALE_ONLY=1
+  fi
+
+  if [[ "${SCALE_ONLY}" -eq 0 && "${worker_mode}" == "skip" ]]; then
+    print_title "Pallas-Bot 分片模式 · 启动缺失 worker（保留已运行进程）"
+    print_config_summary "${workers}"
+    if is_running "${PID_HUB}"; then
+      echo "  hub        保持运行（:${HUB_PORT}）"
+    else
+      echo "  hub        未运行（本次不启动 hub）"
+    fi
+    echo "  worker     已全部运行（${running_before}/${workers}），跳过启动与端口重分配"
+    echo "  $(shard_coord_backend_hint)"
+    print_title "worker 无需启动"
+    echo "  汇总       worker ${running_before}/${workers} 运行 · $(shard_coord_backend_hint)"
+    echo "  提示       需全量重启时请执行 restart --workers-only"
+    return 0
   fi
 
   print_title "Pallas-Bot 分片模式 · 启动缺失 worker（保留已运行进程）"
@@ -71,11 +91,11 @@ cmd_start_workers_only() {
     echo "  hub        未运行（本次不启动 hub）"
   fi
   if [[ "${SCALE_ONLY}" -eq 1 ]]; then
+    echo "  worker     部分运行（${running_before}/${workers}），仅启动缺失 worker"
     echo "  端口策略   扩容模式（registry 端口，不重分配、不同步协议端）"
   else
     echo "  端口策略   冷启动（评估端口并同步协议端 ws_url）"
   fi
-  load_shard_redis_env
   echo "  $(shard_coord_backend_hint)"
   echo ""
 
@@ -103,7 +123,7 @@ cmd_start_workers_only() {
   local f
   for f in "${RUN_DIR}"/worker-*.pid; do
     [[ -e "${f}" ]] || continue
-    [[ "$(basename "${f}" .pid)" == "worker-test" ]] && continue
+    case "$(basename "${f}" .pid)" in worker-test|worker-test2) continue ;; esac
     if is_running "${f}"; then
       worker_running=$((worker_running + 1))
     else
@@ -136,39 +156,61 @@ cmd_start() {
     cmd_start_workers_only
     return
   fi
+  require_coord_redis_for_shard_start || return 1
+
   local workers="${WORKER_COUNT_OVERRIDE:-$(calc_worker_count)}"
   local hub_url="http://127.0.0.1:${HUB_PORT}"
+  local worker_mode running_before
+  worker_mode="$(resolve_production_worker_start_mode "${workers}")"
+  running_before="$(count_running_production_worker_ids)"
 
   print_title "Pallas-Bot 分片模式 · 启动"
   print_config_summary "${workers}"
-  if [[ "${SKIP_OCCUPIED_PORTS}" -eq 1 ]]; then
-    echo "  端口策略   自动跳过占用"
-  else
-    echo "  端口策略   严格 起点+分片号"
-  fi
-  load_shard_redis_env
+  case "${worker_mode}" in
+    skip)
+      echo "  worker     已全部运行（${running_before}/${workers}），跳过 worker 启动与端口重分配"
+      ;;
+    scale)
+      echo "  worker     部分运行（${running_before}/${workers}），仅启动缺失 worker"
+      echo "  端口策略   扩容模式（registry 端口，不重分配、不同步协议端）"
+      ;;
+    cold)
+      if [[ "${SKIP_OCCUPIED_PORTS}" -eq 1 ]]; then
+        echo "  端口策略   自动跳过占用"
+      else
+        echo "  端口策略   严格 起点+分片号"
+      fi
+      ;;
+  esac
   echo "  $(shard_coord_backend_hint)"
-  if [[ "${PALLAS_COORD_REDIS_ENABLED:-}" == "true" ]]; then
-    if ! uv run python -c "import redis" 2>/dev/null; then
-      echo "  提示       请执行 uv sync --extra coord-redis 以安装 redis 客户端" >&2
-    fi
-  fi
   echo ""
 
-  wait_worker_ports_released "${workers}" || true
-  echo ""
-  prepare_shard_ports "${workers}" || return 1
-  workers="$(calc_worker_count)"
+  if [[ "${worker_mode}" == "cold" ]]; then
+    wait_worker_ports_released "${workers}" || true
+    echo ""
+    prepare_shard_ports "${workers}" || return 1
+    workers="$(calc_worker_count)"
+  fi
   echo ""
   echo "  正在启动进程…"
 
   start_hub_process
 
-  if [[ "${DRY_RUN}" -eq 0 ]]; then
+  if [[ "${DRY_RUN}" -eq 0 && "${worker_mode}" == "cold" ]]; then
     sleep 1
   fi
 
-  start_production_workers "${workers}"
+  case "${worker_mode}" in
+    skip)
+      ;;
+    scale)
+      workers="$(calc_worker_count)"
+      start_missing_production_workers "${workers}"
+      ;;
+    cold)
+      start_production_workers "${workers}"
+      ;;
+  esac
 
   if [[ "${DRY_RUN}" -eq 1 ]]; then
     echo ""
@@ -187,7 +229,7 @@ cmd_start() {
   local f
   for f in "${RUN_DIR}"/worker-*.pid; do
     [[ -e "${f}" ]] || continue
-    [[ "$(basename "${f}" .pid)" == "worker-test" ]] && continue
+    case "$(basename "${f}" .pid)" in worker-test|worker-test2) continue ;; esac
     if is_running "${f}"; then
       worker_running=$((worker_running + 1))
     else
@@ -202,7 +244,7 @@ cmd_start() {
   echo "  汇总       hub $([[ "${hub_ok}" -eq 1 ]] && echo 运行中 || echo 未就绪) · worker ${worker_running}/${workers} 运行"
   if [[ "${hub_ok}" -eq 1 ]]; then
     echo "  WebUI      ${hub_url}/pallas/"
-    echo "  协议端     ${hub_url}/protocol/console/"
+    echo "  协议端     ${hub_url}/pallas/protocol/"
   fi
   echo ""
   echo "  常用命令"
@@ -217,6 +259,9 @@ cmd_start() {
   elif [[ "${hub_ok}" -eq 1 ]] && [[ "${worker_running}" -eq "${workers}" ]]; then
     echo ""
     echo "  全部进程已就绪。"
+  elif [[ "${worker_mode}" == "skip" && "${worker_running}" -eq "${workers}" ]]; then
+    echo ""
+    echo "  worker 已在运行，本次未重复启动；需全量重启请执行 restart --workers-only。"
   fi
 }
 
@@ -306,7 +351,7 @@ cmd_status() {
   local f
   for f in "${RUN_DIR}"/worker-*.pid; do
     [[ -e "${f}" ]] || continue
-    [[ "$(basename "${f}" .pid)" == "worker-test" ]] && continue
+    case "$(basename "${f}" .pid)" in worker-test|worker-test2) continue ;; esac
     workers=$((workers + 1))
     local name port state
     name="$(basename "${f}" .pid)"
@@ -386,6 +431,8 @@ cmd_status() {
 }
 
 cmd_restart_hub_only() {
+  require_coord_redis_for_shard_start || return 1
+
   print_title "Pallas-Bot 分片模式 · 重启 hub（保留 worker）"
   echo "  hub 端口   ${HUB_PORT}"
   local worker_counts
@@ -431,6 +478,8 @@ cmd_restart_hub_only() {
 }
 
 cmd_restart_workers_only() {
+  require_coord_redis_for_shard_start || return 1
+
   local workers="${WORKER_COUNT_OVERRIDE:-$(calc_worker_count)}"
 
   print_title "Pallas-Bot 分片模式 · 重启 worker（保留 hub）"
@@ -464,7 +513,7 @@ cmd_restart_workers_only() {
   local f
   for f in "${RUN_DIR}"/worker-*.pid; do
     [[ -e "${f}" ]] || continue
-    [[ "$(basename "${f}" .pid)" == "worker-test" ]] && continue
+    case "$(basename "${f}" .pid)" in worker-test|worker-test2) continue ;; esac
     if is_running "${f}"; then
       worker_running=$((worker_running + 1))
     else
@@ -476,7 +525,6 @@ cmd_restart_workers_only() {
   done
 
   print_title "worker 重启完成"
-  load_shard_redis_env
   echo "  汇总       worker ${worker_running}/${workers} 运行 · $(shard_coord_backend_hint)"
   if [[ "${worker_fail}" -gt 0 ]]; then
     echo "  提示       部分 worker 未保持运行，请检查端口与日志"

@@ -21,4 +21,4 @@ uv run python tools/apply_deploy_profile.py shard
 
 `PALLAS_BOT_ROLE` / `PORT` 由 `run_sharded_bot.sh` 注入，勿在片段里写死。
 
-完整说明：[多进程分片](../../docs/architecture/bot_process_sharding.md)
+完整说明：[多进程分片](../../docs/maintainer/deploy/sharded.md)

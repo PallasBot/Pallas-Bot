@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 
 def test_bind_repeater_learn_lifecycle_idempotent():
-    import src.plugins.repeater.learn_queue as mod
+    import packages.repeater.learn_queue as mod
 
     mod._LIFECYCLE_BOUND = False
     mock_driver = MagicMock()
@@ -17,7 +17,7 @@ def test_bind_repeater_learn_lifecycle_idempotent():
 
 
 def test_bind_corpus_prefetch_lifecycle_idempotent():
-    import src.features.corpus.prefetch as mod
+    import pallas.product.corpus.prefetch as mod
 
     mod._LIFECYCLE_BOUND = False
     mock_driver = MagicMock()

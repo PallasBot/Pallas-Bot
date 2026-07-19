@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import src.foundation.db.pool_diagnostics as pool_diagnostics
+import pallas.core.foundation.db.pool_diagnostics as pool_diagnostics
 
 
 def test_pg_session_caller_hint_entry_avoids_inspect_stack(monkeypatch) -> None:

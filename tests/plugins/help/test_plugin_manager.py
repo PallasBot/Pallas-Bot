@@ -1,5 +1,5 @@
 """
-Tests for src/plugins/help/plugin_manager.py after refactor to Repository.
+Tests for packages/help/plugin_manager.py after refactor to Repository.
 
 覆盖 BotConfig/GroupConfig 的读写是否全部走 repo，不再直调 Beanie Document。
 """
@@ -19,7 +19,7 @@ async def beanie_fixture():
 
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    from src.foundation.db.repository_pg import Base, dispose_pg, init_pg
+    from pallas.core.foundation.db.repository_pg import Base, dispose_pg, init_pg
 
     engine = create_async_engine(dsn)
     async with engine.begin() as conn:
@@ -35,7 +35,7 @@ async def beanie_fixture():
 
 @pytest.mark.asyncio
 async def test_is_plugin_disabled_does_not_create_bot_config(beanie_fixture):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     result = await plugin_manager.is_plugin_disabled("foo", bot_id=12345)
     assert result is False
@@ -46,7 +46,7 @@ async def test_is_plugin_disabled_does_not_create_bot_config(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_is_plugin_disabled_globally_disabled(beanie_fixture):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     await plugin_manager.bot_config_repo.upsert_field(99, "disabled_plugins", ["bad_plugin"])
     assert await plugin_manager.is_plugin_disabled("bad_plugin", bot_id=99) is True
@@ -55,7 +55,7 @@ async def test_is_plugin_disabled_globally_disabled(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_is_plugin_disabled_group_level(beanie_fixture):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     await plugin_manager.group_config_repo.upsert_field(101, "disabled_plugins", ["chat"])
     assert await plugin_manager.is_plugin_disabled("chat", group_id=101, bot_id=1) is True
@@ -64,7 +64,7 @@ async def test_is_plugin_disabled_group_level(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_is_plugin_globally_disabled(beanie_fixture):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     assert await plugin_manager.is_plugin_globally_disabled("x", bot_id=500) is False
     await plugin_manager.bot_config_repo.upsert_field(500, "disabled_plugins", ["x"])
@@ -73,7 +73,7 @@ async def test_is_plugin_globally_disabled(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_get_bot_config_creates_if_missing(beanie_fixture):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     cfg, created = await plugin_manager.get_bot_config(777)
     assert created is True
@@ -86,7 +86,7 @@ async def test_get_bot_config_creates_if_missing(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_get_group_config_creates_if_missing(beanie_fixture):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     cfg, created = await plugin_manager.get_group_config(8888)
     assert created is True
@@ -95,7 +95,7 @@ async def test_get_group_config_creates_if_missing(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_update_bot_config_roundtrip(beanie_fixture, tmp_path, monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     # 避免真实改 help 缓存目录
     monkeypatch.setattr(plugin_manager, "clear_help_cache", lambda *a, **k: None)
@@ -112,7 +112,7 @@ async def test_update_bot_config_roundtrip(beanie_fixture, tmp_path, monkeypatch
 
 @pytest.mark.asyncio
 async def test_update_group_config_roundtrip(beanie_fixture, monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     monkeypatch.setattr(plugin_manager, "clear_help_cache", lambda *a, **k: None)
 
@@ -123,7 +123,7 @@ async def test_update_group_config_roundtrip(beanie_fixture, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_merges_bot_and_group(beanie_fixture, tmp_path, monkeypatch):
-    from src.plugins.help import global_disable, plugin_manager
+    from packages.help import global_disable, plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
 
@@ -138,7 +138,7 @@ async def test_collect_disabled_plugin_names_merges_bot_and_group(beanie_fixture
 
 @pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_merges_global(beanie_fixture, tmp_path, monkeypatch):
-    from src.plugins.help import global_disable, plugin_manager
+    from packages.help import global_disable, plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     global_disable.save_global_disabled_plugins(["ollama"])
@@ -151,7 +151,7 @@ async def test_collect_disabled_plugin_names_merges_global(beanie_fixture, tmp_p
 
 @pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_bot_only(beanie_fixture):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     merged = await plugin_manager.collect_disabled_plugin_names(30001, None, ignore_cache=True)
     assert merged == frozenset()
@@ -160,7 +160,7 @@ async def test_collect_disabled_plugin_names_bot_only(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_gate_cache(beanie_fixture, monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     await plugin_manager.reset_disabled_plugin_gate_cache()
     bot_calls: list[int] = []
@@ -198,7 +198,7 @@ async def test_collect_disabled_plugin_names_gate_cache(beanie_fixture, monkeypa
 
 @pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_reuses_bot_scope_across_groups(beanie_fixture, monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     await plugin_manager.reset_disabled_plugin_gate_cache()
     await plugin_manager.bot_config_repo.upsert_field(901, "disabled_plugins", ["a"])
@@ -224,7 +224,7 @@ async def test_collect_disabled_plugin_names_reuses_bot_scope_across_groups(bean
 
 @pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_does_not_create_empty_bot_config(beanie_fixture):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     await plugin_manager.reset_disabled_plugin_gate_cache()
 
@@ -237,7 +237,7 @@ async def test_collect_disabled_plugin_names_does_not_create_empty_bot_config(be
 
 @pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_short_circuits_when_pg_not_ready(monkeypatch, tmp_path):
-    from src.plugins.help import global_disable, plugin_manager
+    from packages.help import global_disable, plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     global_disable.save_global_disabled_plugins(["chat"])
@@ -247,8 +247,8 @@ async def test_collect_disabled_plugin_names_short_circuits_when_pg_not_ready(mo
         raise AssertionError("should not load disabled plugin names when PG is not ready")
 
     monkeypatch.setattr(plugin_manager, "load_disabled_plugin_names_from_db", fail_load)
-    monkeypatch.setattr("src.foundation.db.get_db_backend", lambda: "postgresql")
-    monkeypatch.setattr("src.foundation.db.repository_pg.is_pg_initialized", lambda: False)
+    monkeypatch.setattr("pallas.core.foundation.db.get_db_backend", lambda: "postgresql")
+    monkeypatch.setattr("pallas.core.foundation.db.repository_pg.is_pg_initialized", lambda: False)
 
     merged = await plugin_manager.collect_disabled_plugin_names(77, 5001)
     assert merged == frozenset({"chat"})
@@ -256,7 +256,7 @@ async def test_collect_disabled_plugin_names_short_circuits_when_pg_not_ready(mo
 
 @pytest.mark.asyncio
 async def test_fill_plugin_status_reuses_disabled_plugin_gate_cache(beanie_fixture, monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     await plugin_manager.reset_disabled_plugin_gate_cache()
 
@@ -279,7 +279,7 @@ async def test_fill_plugin_status_reuses_disabled_plugin_gate_cache(beanie_fixtu
     )
     monkeypatch.setattr(plugin_manager, "apply_status_marks_to_plugin_table", lambda content, _marks: content)
     monkeypatch.setattr(
-        "src.plugins.help.markdown_generator.help_list_status_mark",
+        "packages.help.markdown_generator.help_list_status_mark",
         lambda enabled: "Y" if enabled else "N",
     )
 
@@ -290,7 +290,7 @@ async def test_fill_plugin_status_reuses_disabled_plugin_gate_cache(beanie_fixtu
 
 @pytest.mark.asyncio
 async def test_load_disabled_group_names_reads_repo_directly(beanie_fixture, monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     await plugin_manager.reset_disabled_plugin_gate_cache()
 
@@ -310,7 +310,7 @@ async def test_load_disabled_group_names_reads_repo_directly(beanie_fixture, mon
 
 @pytest.mark.asyncio
 async def test_load_disabled_group_names_returns_empty_when_repo_missing(beanie_fixture, monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     await plugin_manager.reset_disabled_plugin_gate_cache()
 
@@ -332,7 +332,7 @@ class _FakeConfig:
 
 @pytest.mark.asyncio
 async def test_handle_global_plugin_operation_fleet_constraint(tmp_path, monkeypatch):
-    from src.plugins.help import global_disable, plugin_manager
+    from packages.help import global_disable, plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     global_disable.save_global_disabled_plugins(["repeater"])
@@ -349,7 +349,7 @@ async def test_handle_global_plugin_operation_fleet_constraint(tmp_path, monkeyp
 
 @pytest.mark.asyncio
 async def test_handle_global_plugin_operation_fleet_constraint_skips_config_update(tmp_path, monkeypatch):
-    from src.plugins.help import global_disable, plugin_manager
+    from packages.help import global_disable, plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     global_disable.save_global_disabled_plugins(["repeater"])
@@ -374,7 +374,7 @@ async def test_handle_global_plugin_operation_fleet_constraint_skips_config_upda
 
 @pytest.mark.asyncio
 async def test_handle_group_plugin_operation_fleet_constraint(tmp_path, monkeypatch):
-    from src.plugins.help import global_disable, group_fleet_whitelist, plugin_manager
+    from packages.help import global_disable, group_fleet_whitelist, plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     monkeypatch.setattr(group_fleet_whitelist, "plugin_data_dir", lambda _name: tmp_path)
@@ -398,7 +398,7 @@ async def test_handle_group_plugin_operation_fleet_constraint(tmp_path, monkeypa
 
 @pytest.mark.asyncio
 async def test_handle_global_plugin_operation_fleet_constraint_superuser_exempt(tmp_path, monkeypatch):
-    from src.plugins.help import global_disable, plugin_manager
+    from packages.help import global_disable, plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     global_disable.save_global_disabled_plugins(["repeater"])
@@ -416,7 +416,7 @@ async def test_handle_global_plugin_operation_fleet_constraint_superuser_exempt(
 
 
 def test_resolve_plugin_disable_scope_request_handler(monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     def fake_find(name: str):
         if name == "request_handler":
@@ -445,7 +445,7 @@ def test_resolve_plugin_disable_scope_request_handler(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_toggle_plugin_rejects_bot_scoped_in_group(monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     fake_plugin = type(
         "Plugin",
@@ -472,7 +472,7 @@ async def test_toggle_plugin_rejects_bot_scoped_in_group(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_fill_plugin_status_bot_scope_ignores_group_disable(monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     await plugin_manager.reset_disabled_plugin_gate_cache()
 
@@ -505,7 +505,7 @@ async def test_fill_plugin_status_bot_scope_ignores_group_disable(monkeypatch):
         lambda content, new_marks: marks.extend(new_marks) or content,
     )
     monkeypatch.setattr(
-        "src.plugins.help.markdown_generator.help_list_status_mark",
+        "packages.help.markdown_generator.help_list_status_mark",
         lambda enabled: "Y" if enabled else "N",
     )
 
@@ -516,7 +516,7 @@ async def test_fill_plugin_status_bot_scope_ignores_group_disable(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_handle_group_plugin_operation_bot_disable_superuser_exempt(monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     async def fake_get_group_config(group_id: int):
         return _FakeConfig(), False
@@ -537,7 +537,7 @@ async def test_handle_group_plugin_operation_bot_disable_superuser_exempt(monkey
 
 @pytest.mark.asyncio
 async def test_handle_group_plugin_operation_fleet_constraint_superuser_exempt(tmp_path, monkeypatch):
-    from src.plugins.help import global_disable, group_fleet_whitelist, plugin_manager
+    from packages.help import global_disable, group_fleet_whitelist, plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     monkeypatch.setattr(group_fleet_whitelist, "plugin_data_dir", lambda _name: tmp_path)

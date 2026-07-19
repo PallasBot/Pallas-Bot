@@ -13,7 +13,7 @@ MongoDB → PostgreSQL 迁移脚本
 - upsert 依赖 `repository_pg` 里定义的唯一约束（含复合 upsert_answer 约束），新字段自动加到 PG
 
 用法：
-    uv run --extra pg python tools/migrate_mongo_to_pg.py
+    uv run python tools/migrate_mongo_to_pg.py
 
 选项：
     --batch N       每批处理条数，默认 1000
@@ -25,19 +25,19 @@ MongoDB → PostgreSQL 迁移脚本
 
 示例：
 # 全量迁移
-    uv run --extra pg python tools/migrate_mongo_to_pg.py
+    uv run python tools/migrate_mongo_to_pg.py
 
 # 指定目标库
-    uv run --extra pg python tools/migrate_mongo_to_pg.py --pg-db MyBot --mongo-db PallasBot
+    uv run python tools/migrate_mongo_to_pg.py --pg-db MyBot --mongo-db PallasBot
 
 # 仅迁移 context 和 message，批量 500
-    uv run --extra pg python tools/migrate_mongo_to_pg.py --tables context message --batch 500
+    uv run python tools/migrate_mongo_to_pg.py --tables context message --batch 500
 
 # 预演
-    uv run --extra pg python tools/migrate_mongo_to_pg.py --dry-run
+    uv run python tools/migrate_mongo_to_pg.py --dry-run
 
 # 重新迁移
-    uv run --extra pg python tools/migrate_mongo_to_pg.py --restart
+    uv run python tools/migrate_mongo_to_pg.py --restart
 
 环境变量（从 .env 读取，也可手动设置）：
     MONGO_HOST / MONGO_PORT / MONGO_USER / MONGO_PASSWORD / MONGO_DB
@@ -141,7 +141,7 @@ def _as_list(x: Any) -> list:
         return x
     if x is None:
         return []
-# tuple / set 也视为可迭代
+    # tuple / set 也视为可迭代
     if isinstance(x, (tuple, set)):
         return list(x)
     return []
@@ -163,7 +163,7 @@ def _strip_null(obj: Any) -> Any:
 
 
 def _kw_hash(keywords: str) -> str:
-# 与 repository_pg.keywords_hash 保持一致：先 strip \x00 再哈希
+    # 与 repository_pg.keywords_hash 保持一致：先 strip \x00 再哈希
     clean = keywords.replace("\x00", "") if keywords and "\x00" in keywords else keywords
     return hashlib.md5((clean or "").encode("utf-8", errors="replace")).hexdigest()
 
@@ -196,9 +196,9 @@ async def _ensure_db() -> None:
     db = os.getenv("PG_DB", "PallasBot")
     if not re.match(r"^[A-Za-z0-9_\-]+$", db):
         raise ValueError(f"非法数据库名: {db!r}")
-# 未显式指定 PG_USER/PG_PASSWORD 时省掉这两个参数，让 libpq 走默认用户
-# 和 .pgpass，否则很多本地 trust / peer 鉴权环境
-# 会因为 user=None 直接连不上。
+    # 未显式指定 PG_USER/PG_PASSWORD 时省掉这两个参数，让 libpq 走默认用户
+    # 和 .pgpass，否则很多本地 trust / peer 鉴权环境
+    # 会因为 user=None 直接连不上。
     conn_kwargs: dict[str, object] = {"host": h, "port": p, "database": "postgres"}
     if u is not None:
         conn_kwargs["user"] = u
@@ -207,8 +207,8 @@ async def _ensure_db() -> None:
     conn = await asyncpg.connect(**conn_kwargs)
     try:
         if not await conn.fetchval("SELECT 1 FROM pg_database WHERE datname=$1", db):
-# PG 不支持用占位符绑定 identifier，只能拼接；上面的正则已保证 db 仅含
-# [A-Za-z0-9_-]，不存在注入风险。
+            # PG 不支持用占位符绑定 identifier，只能拼接；上面的正则已保证 db 仅含
+            # [A-Za-z0-9_-]，不存在注入风险。
             await conn.execute(f'CREATE DATABASE "{db}"')  # noqa: S608
             print(f"已创建数据库 {db}")
         else:
@@ -255,9 +255,7 @@ async def _reset_state(engine) -> None:
 async def _get_state(session, table: str) -> str | None:
     from sqlalchemy import text as T
 
-    result = await session.execute(
-        T(f"SELECT last_id FROM {_STATE_TABLE} WHERE table_name = :t"), {"t": table}
-    )
+    result = await session.execute(T(f"SELECT last_id FROM {_STATE_TABLE} WHERE table_name = :t"), {"t": table})
     return result.scalar_one_or_none()
 
 
@@ -327,7 +325,7 @@ def _prepare_context_batch(docs: list[dict], stats: _TableStats) -> dict[str, di
                 continue
             h = _kw_hash(kw)
             time_v = _as_int(doc.get("time"))
-# 兼容 Beanie alias："count" 或 "trigger_count" 都可能写到文档里
+            # 兼容 Beanie alias："count" 或 "trigger_count" 都可能写到文档里
             trigger_v = _as_int(doc.get("trigger_count", doc.get("count", 1)), 1)
             clear_v = _as_int(doc.get("clear_time"))
 
@@ -433,9 +431,13 @@ async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, b
 
         if not dry_run:
             async with sf() as session:
-# 1. upsert context rows
+                # 1. upsert context rows
                 ctx_values = [
-                    {k: v for k, v in g.items() if k in ("keywords", "keywords_hash", "time", "trigger_count", "clear_time")}
+                    {
+                        k: v
+                        for k, v in g.items()
+                        if k in ("keywords", "keywords_hash", "time", "trigger_count", "clear_time")
+                    }
                     for g in merged.values()
                 ]
                 stmt = ins(ContextRow).values(ctx_values)
@@ -450,16 +452,14 @@ async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, b
                         },
                     )
                 )
-# 2. 拿回 context_id
+                # 2. 拿回 context_id
                 result = await session.execute(
-                    S(ContextRow.id, ContextRow.keywords_hash).where(
-                        ContextRow.keywords_hash.in_(list(merged.keys()))
-                    )
+                    S(ContextRow.id, ContextRow.keywords_hash).where(ContextRow.keywords_hash.in_(list(merged.keys())))
                 )
                 h2id: dict[str, int] = {r.keywords_hash: r.id for r in result}
                 ctx_ids = [cid for cid in h2id.values() if cid is not None]
 
-# 3. 重写 answers / bans：先删再插
+                # 3. 重写 answers / bans：先删再插
                 if ctx_ids:
                     await session.execute(D(AnsRow).where(AnsRow.context_id.in_(ctx_ids)))
                     await session.execute(D(BanRow).where(BanRow.context_id.in_(ctx_ids)))
@@ -484,9 +484,7 @@ async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, b
                             "time": a["time"],
                         })
                         if a["messages"]:
-                            ans_msg_pending.append(
-                                (cid, (cid, a["group_id"], kh), a["messages"])
-                            )
+                            ans_msg_pending.append((cid, (cid, a["group_id"], kh), a["messages"]))
                     for b in g["bans"]:
                         ban_rows.append({
                             "context_id": cid,
@@ -496,9 +494,9 @@ async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, b
                             "time": b["time"],
                         })
 
-# 4. 批量插 answer 并拿回 id
-# 键 = (context_id, group_id, keywords_hash) 对齐 UNIQUE 约束，
-# 避免用 TEXT keywords 作 key 时超长字符串带来的内存开销
+                # 4. 批量插 answer 并拿回 id
+                # 键 = (context_id, group_id, keywords_hash) 对齐 UNIQUE 约束，
+                # 避免用 TEXT keywords 作 key 时超长字符串带来的内存开销
                 key2aid: dict[tuple[int, int, str], int] = {}
                 for i in range(0, len(ans_rows), _ANS_BATCH):
                     ret = await session.execute(
@@ -509,7 +507,7 @@ async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, b
                     for r in ret.fetchall():
                         key2aid[(r.context_id, r.group_id, r.keywords_hash)] = int(r.id)
 
-# 5. 关联 messages
+                # 5. 关联 messages
                 msg_rows: list[dict] = []
                 for _cid, key, messages in ans_msg_pending:
                     aid = key2aid.get(key)
@@ -519,11 +517,11 @@ async def _migrate_context(db, sf, ContextRow, AnsRow, AnsMsgRow, BanRow, ins, b
                 for i in range(0, len(msg_rows), _MSG_BATCH):
                     await session.execute(ins(AnsMsgRow).values(msg_rows[i : i + _MSG_BATCH]))
 
-# 6. 插 bans
+                # 6. 插 bans
                 for i in range(0, len(ban_rows), _BAN_BATCH):
                     await session.execute(ins(BanRow).values(ban_rows[i : i + _BAN_BATCH]))
 
-# 7. 更新 pallas_migration_state 并一并 commit
+                # 7. 更新 pallas_migration_state 并一并 commit
                 await _set_state(session, "context", str(batch[-1]["_id"]))
                 await session.commit()
 
@@ -576,7 +574,7 @@ async def _migrate_message(db, sf, MsgRow, ins, batch_size, dry_run) -> _TableSt
 
         if rows and not dry_run:
             async with sf() as session:
-# 分批插入避免超出 asyncpg 参数上限
+                # 分批插入避免超出 asyncpg 参数上限
                 for i in range(0, len(rows), _MSG_ROW_BATCH):
                     await session.execute(ins(MsgRow), rows[i : i + _MSG_ROW_BATCH])
                 await _set_state(session, "message", str(batch[-1]["_id"]))
@@ -654,7 +652,7 @@ async def _migrate_bot_config(db, sf, BCRow, ins, batch_size, dry_run) -> _Table
         rows: list[dict] = []
         for raw in batch:
             try:
-# 兼容旧字段：auto_accept 仅对 group 生效
+                # 兼容旧字段：auto_accept 仅对 group 生效
                 if "auto_accept" in raw and "auto_accept_group" not in raw:
                     ag, af = _as_bool(raw.get("auto_accept")), False
                 else:
@@ -804,6 +802,14 @@ async def _migrate_user_config(db, sf, UCRow, ins, batch_size, dry_run) -> _Tabl
 
 
 async def _migrate_image_cache(db, sf, ICRow, ins, batch_size, dry_run) -> _TableStats:
+    """mongo image_cache → pg image_cache.blob_data (BYTEA)。
+
+    兼容两种 mongo 历史形态：
+      - 旧字段 base64_data (str)：base64 字符串 → base64.b64decode → bytes
+      - 新字段 blob_data (bson.Binary)：直接当 bytes 用
+    """
+    import base64 as _b64
+
     col = db["image_cache"]
     stats = _TableStats()
     stats.total = await col.count_documents({})
@@ -822,9 +828,23 @@ async def _migrate_image_cache(db, sf, ICRow, ins, batch_size, dry_run) -> _Tabl
                 if not cq:
                     stats.warn(f"imagecache empty cq_code _id={doc.get('_id')}")
                     continue
+                # blob_data 优先（新代码写入的）；回退 base64_data 字符串
+                raw_blob = doc.get("blob_data")
+                if raw_blob is not None:
+                    blob = bytes(raw_blob) if not isinstance(raw_blob, (bytes, bytearray)) else bytes(raw_blob)
+                else:
+                    raw_b64 = doc.get("base64_data")
+                    if raw_b64:
+                        try:
+                            blob = _b64.b64decode(_strip_null(raw_b64) or "", validate=True)
+                        except Exception as decode_err:
+                            stats.warn(f"imagecache base64 decode failed _id={doc.get('_id')}: {decode_err}")
+                            blob = None
+                    else:
+                        blob = None
                 rows.append({
                     "cq_code": _strip_null(cq),
-                    "base64_data": _strip_null(doc.get("base64_data")) if doc.get("base64_data") else None,
+                    "blob_data": blob,
                     "ref_times": _as_int(doc.get("ref_times"), 1),
                     "date": _as_int(doc.get("date")),
                 })
@@ -839,7 +859,7 @@ async def _migrate_image_cache(db, sf, ICRow, ins, batch_size, dry_run) -> _Tabl
                     await session.execute(
                         stmt.on_conflict_do_update(
                             index_elements=["cq_code"],
-                            set_={f: getattr(stmt.excluded, f) for f in ("base64_data", "ref_times", "date")},
+                            set_={f: getattr(stmt.excluded, f) for f in ("blob_data", "ref_times", "date")},
                         )
                     )
                 await _set_state(session, "imagecache", str(batch[-1]["_id"]))
@@ -871,14 +891,14 @@ async def migrate(
     try:
         from sqlalchemy.ext.asyncio import create_async_engine
     except ImportError:
-        print("❌ 缺少 SQLAlchemy/asyncpg，请执行：uv sync --extra pg")
+        print("❌ 缺少 SQLAlchemy/asyncpg，请执行：uv sync")
         sys.exit(1)
 
     from pymongo import AsyncMongoClient
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
-    from src.foundation.db.repository_pg import (
+    from pallas.core.foundation.db.repository_pg import (
         BlackListRow,
         BotConfigRow,
         ContextAnswerMessageRow,
@@ -937,7 +957,7 @@ async def migrate(
 
     await engine.dispose()
 
-# 汇总
+    # 汇总
     print("\n========== 迁移摘要 ==========")
     total_failed = 0
     for name, s in summaries:

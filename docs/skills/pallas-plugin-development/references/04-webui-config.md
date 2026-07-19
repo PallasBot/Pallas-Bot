@@ -8,7 +8,7 @@
 
 ```python
 from pydantic import BaseModel, Field
-from src.console.webui import install_hot_reload_config
+from pallas.api.config import install_hot_reload_config
 
 class Config(BaseModel, extra="ignore"):
     threshold: int = Field(default=3, description="触发阈值。")
@@ -38,17 +38,41 @@ get_config = plugin_webui.get
 
 仍可用 `get_plugin_config(Config)`，但**保存后需重启**进程才与磁盘一致。新插件默认应接热重载。
 
-## 4.5 通用配置段（非单插件页）
+## 4.5 元数据级：`reload_policy`
 
-横切能力在 WebUI「通用配置」注册段，见 `src/console/webui/env_sections.py`：cmd_perm、message_scrub、ingress_fanout 等。插件作者扩展新**全局段**需改内核并同步 WebUI 前端——一般优先用插件自己的 `config.py` + 热重载。
+`install_hot_reload_config` 只管 **配置级**。改 `extra` 里的 help、ingress、`command_permissions` 等声明时：
 
-## 4.6 自检
+- **默认**（不写或 `config_only`）：WebUI 保存后 extra 变更**需重启**才进 help/ingress 索引。
+- **`metadata`**：WebUI 插件页保存时额外重建 help、ingress、cmd_perm 默认、plugin_storage 注册表等索引（不卸载 matcher）。
+
+```python
+extra={
+    ...
+    "reload_policy": "metadata",
+}
+```
+
+改 Python 代码仍须重启；`full` 目前行为同 `metadata`。详见 [Reload 与 Activation](../../developer/plugin-development/reload-and-activation.md)。
+
+## 4.6 通用配置段（非单插件页）
+
+横切能力在 WebUI「通用配置」注册段，见 `pallas/console/webui/env_sections.py`。
+
+| 场景 | 做法 |
+| --- | --- |
+| 插件自有开关/阈值 | 插件 `config.py` + `install_hot_reload_config` |
+| 跨插件/维护者向 | 在 `env_sections.py` 注册段 + 专用 payload（如 `community_stats_section` 供 **`pb_stats`**） |
+
+段 ID 可与插件包名不同（兼容已保存配置）；文档与 `menu_data` 写用户可见路径即可。
+
+## 4.7 自检
 
 - [ ] 所有可调项在 Pydantic `Config` 中有 `Field(description=...)`
 - [ ] handler 内 `get_config()` 而非读缓存
 - [ ] 复杂解析已测 WebUI 保存 → 行为立即变化
+- [ ] 若会改 help/ingress 声明且不想重启，已设 `reload_policy: metadata`
 
-## 4.7 下一步
+## 4.8 下一步
 
 - 路径与数据 → [五、路径与数据](./05-paths-and-data.md)
 - message_scrub → [六、message_scrub](./06-message-scrub.md)

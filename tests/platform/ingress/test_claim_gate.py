@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock
 import pytest
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
-from src.platform.ingress.claim_gate import (
+from pallas.core.platform.ingress.claim_gate import (
     IngressClaimError,
     ingress_gate_runtime_active,
     shard_worker_ingress_claims,
     unified_ingress_once_claim,
 )
-from src.platform.ingress.unified_pass import reset_unified_ingress_once_pass_for_tests
-from src.platform.shard import context as shard_ctx
+from pallas.core.platform.ingress.unified_pass import reset_unified_ingress_once_pass_for_tests
+from pallas.core.platform.shard import context as shard_ctx
 
 
 def test_ingress_gate_runtime_active_false_on_hub(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -29,7 +29,7 @@ def test_ingress_gate_runtime_active_true_when_not_hub(monkeypatch: pytest.Monke
 async def test_unified_ingress_once_claim_skips_when_sharding(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     once = AsyncMock(return_value=True)
-    monkeypatch.setattr("src.platform.ingress.claim_gate.try_claim_group_message_once", once)
+    monkeypatch.setattr("pallas.core.platform.ingress.claim_gate.try_claim_group_message_once", once)
     event = GroupMessageEvent.model_construct(
         time=100,
         self_id=111,
@@ -51,7 +51,7 @@ async def test_unified_ingress_once_claim_raises_when_lost(monkeypatch: pytest.M
     reset_unified_ingress_once_pass_for_tests()
     monkeypatch.setattr(shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr(
-        "src.platform.ingress.claim_gate.try_claim_group_message_once",
+        "pallas.core.platform.ingress.claim_gate.try_claim_group_message_once",
         AsyncMock(return_value=False),
     )
     event = GroupMessageEvent.model_construct(
@@ -97,11 +97,11 @@ async def test_shard_worker_ingress_claims_returns_marks(monkeypatch: pytest.Mon
     monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(shard_ctx, "shard_id", lambda: 2)
     monkeypatch.setattr(
-        "src.platform.ingress.claim_gate.try_claim_cross_shard_message",
+        "pallas.core.platform.ingress.claim_gate.try_claim_cross_shard_message",
         AsyncMock(return_value=True),
     )
     monkeypatch.setattr(
-        "src.platform.ingress.claim_gate.try_claim_cross_bot_message",
+        "pallas.core.platform.ingress.claim_gate.try_claim_cross_bot_message",
         AsyncMock(return_value=True),
     )
     event = GroupMessageEvent.model_construct(
@@ -125,7 +125,7 @@ async def test_shard_worker_ingress_claims_raises_on_shard_loss(monkeypatch: pyt
     monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(shard_ctx, "shard_id", lambda: 2)
     monkeypatch.setattr(
-        "src.platform.ingress.claim_gate.try_claim_cross_shard_message",
+        "pallas.core.platform.ingress.claim_gate.try_claim_cross_shard_message",
         AsyncMock(return_value=False),
     )
     event = GroupMessageEvent.model_construct(

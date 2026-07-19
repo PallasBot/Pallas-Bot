@@ -1,0 +1,5 @@
+{
+  "arknights.operator.get": {
+    "description": "按干员名查询明日方舟干员档案（职业、技能、天赋等）。"
+  }
+}

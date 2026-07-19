@@ -5,8 +5,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 
+async def _default_resolve_persona(bot_id: int, group_id: int | None = None):
+    from pallas.product.persona.model import ResolvedPersona
+
+    return ResolvedPersona(speak_bias=2.0, chaos_bias=0.1, length_pref="short")
+
+
 def _build_message(group_id: int, user_id: int, raw_message: str, keywords: str, time_value: int):
-    from src.foundation.db import Message as MessageModel
+    from pallas.core.foundation.db import Message as MessageModel
 
     return MessageModel(
         group_id=group_id,
@@ -22,8 +28,8 @@ def _build_message(group_id: int, user_id: int, raw_message: str, keywords: str,
 
 @pytest.mark.asyncio
 async def test_speak_returns_none_when_no_group_has_enough_messages(beanie_fixture):
-    from src.plugins.repeater.message_store import MessageStore
-    from src.plugins.repeater.speaker import Speaker
+    from packages.repeater.message_store import MessageStore
+    from packages.repeater.speaker import Speaker
 
     MessageStore._message_dict = defaultdict(list)
     Speaker._recent_speak = defaultdict(lambda: deque(maxlen=Speaker.DUPLICATE_REPLY))
@@ -38,7 +44,7 @@ async def test_speak_returns_none_when_no_group_has_enough_messages(beanie_fixtu
     reply_dict[group_id][10001] = [{"time": 1, "reply": "x", "reply_keywords": "x"}]
 
     try:
-        with patch("src.plugins.repeater.speaker.time.time", return_value=10000):
+        with patch("packages.repeater.speaker.time.time", return_value=10000):
             result = await Speaker.speak(reply_dict, reply_lock, recent_topics, topics_lock)
             assert result is None
     finally:
@@ -49,8 +55,8 @@ async def test_speak_returns_none_when_no_group_has_enough_messages(beanie_fixtu
 
 @pytest.mark.asyncio
 async def test_speak_filters_banned_keywords(beanie_fixture):
-    from src.plugins.repeater.message_store import MessageStore
-    from src.plugins.repeater.speaker import Speaker
+    from packages.repeater.message_store import MessageStore
+    from packages.repeater.speaker import Speaker
 
     MessageStore._message_dict = defaultdict(list)
     Speaker._recent_speak = defaultdict(lambda: deque(maxlen=Speaker.DUPLICATE_REPLY))
@@ -74,18 +80,17 @@ async def test_speak_filters_banned_keywords(beanie_fixture):
     allowed_msg = msg_list[-1]
     try:
         with (
-            patch("src.plugins.repeater.speaker.time.time", return_value=10000),
+            patch("packages.repeater.speaker.time.time", return_value=10000),
+            patch("packages.repeater.speaker.resolve_persona", _default_resolve_persona),
+            patch("packages.repeater.speaker.random.choice", return_value=bot_id),
+            patch("packages.repeater.speaker.Speaker._pick_speak_message", return_value=allowed_msg),
+            patch("packages.repeater.speaker.random.random", return_value=1.0),
             patch(
-                "src.plugins.repeater.speaker.random.choice",
-                side_effect=[bot_id, [allowed_msg], allowed_msg],
-            ),
-            patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
-            patch(
-                "src.plugins.repeater.speaker.BanManager.find_ban_keywords",
+                "packages.repeater.speaker.BanManager.find_ban_keywords",
                 new_callable=AsyncMock,
                 return_value={"ban_kw"},
             ),
-            patch("src.plugins.repeater.speaker.BotConfig.taken_name", new_callable=AsyncMock, return_value=-1),
+            patch("packages.repeater.speaker.BotConfig.taken_name", new_callable=AsyncMock, return_value=-1),
         ):
             result = await Speaker.speak(reply_dict, reply_lock, recent_topics, topics_lock)
             assert result is not None
@@ -99,8 +104,8 @@ async def test_speak_filters_banned_keywords(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_speak_skips_remote_bot_when_sharded(beanie_fixture):
-    from src.plugins.repeater.message_store import MessageStore
-    from src.plugins.repeater.speaker import Speaker
+    from packages.repeater.message_store import MessageStore
+    from packages.repeater.speaker import Speaker
 
     MessageStore._message_dict = defaultdict(list)
     Speaker._recent_speak = defaultdict(lambda: deque(maxlen=Speaker.DUPLICATE_REPLY))
@@ -121,21 +126,19 @@ async def test_speak_skips_remote_bot_when_sharded(beanie_fixture):
     chosen_msg = msg_list[-1]
     try:
         with (
-            patch("src.platform.shard.registry.config.is_sharding_active", return_value=True),
-            patch("src.plugins.repeater.shard_opt.local_connected_bot_ids", return_value=frozenset({local_bot_id})),
-            patch("src.plugins.repeater.speaker.time.time", return_value=10000),
+            patch("pallas.core.platform.shard.registry.config.is_sharding_active", return_value=True),
+            patch("packages.repeater.shard_opt.local_connected_bot_ids", return_value=frozenset({local_bot_id})),
+            patch("packages.repeater.speaker.time.time", return_value=10000),
+            patch("packages.repeater.speaker.resolve_persona", _default_resolve_persona),
+            patch("packages.repeater.speaker.Speaker._pick_speak_message", return_value=chosen_msg),
+            patch("packages.repeater.speaker.random.random", return_value=1.0),
             patch(
-                "src.plugins.repeater.speaker.random.choice",
-                side_effect=[local_bot_id, [chosen_msg], chosen_msg],
-            ),
-            patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
-            patch(
-                "src.plugins.repeater.speaker.BanManager.find_ban_keywords",
+                "packages.repeater.speaker.BanManager.find_ban_keywords",
                 new_callable=AsyncMock,
                 return_value=set(),
             ),
-            patch("src.plugins.repeater.speaker.BotConfig.taken_name", new_callable=AsyncMock, return_value=-1),
-            patch("src.plugins.repeater.reply_record_sync.publish_reply_record"),
+            patch("packages.repeater.speaker.BotConfig.taken_name", new_callable=AsyncMock, return_value=-1),
+            patch("packages.repeater.reply_record_sync.publish_reply_record"),
         ):
             result = await Speaker.speak(reply_dict, reply_lock, recent_topics, topics_lock)
             assert result is not None
@@ -148,8 +151,8 @@ async def test_speak_skips_remote_bot_when_sharded(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_speak_recent_dedup_avoids_same_message_twice(beanie_fixture):
-    from src.plugins.repeater.message_store import MessageStore
-    from src.plugins.repeater.speaker import Speaker
+    from packages.repeater.message_store import MessageStore
+    from packages.repeater.speaker import Speaker
 
     MessageStore._message_dict = defaultdict(list)
     Speaker._recent_speak = defaultdict(lambda: deque(maxlen=Speaker.DUPLICATE_REPLY))
@@ -174,18 +177,17 @@ async def test_speak_recent_dedup_avoids_same_message_twice(beanie_fixture):
     dup_b_msg = msg_list[-1]
     try:
         with (
-            patch("src.plugins.repeater.speaker.time.time", return_value=10000),
+            patch("packages.repeater.speaker.time.time", return_value=10000),
+            patch("packages.repeater.speaker.resolve_persona", _default_resolve_persona),
+            patch("packages.repeater.speaker.random.choice", return_value=bot_id),
+            patch("packages.repeater.speaker.Speaker._pick_speak_message", return_value=dup_a_msg),
+            patch("packages.repeater.speaker.random.random", return_value=1.0),
             patch(
-                "src.plugins.repeater.speaker.random.choice",
-                side_effect=[bot_id, [dup_a_msg], dup_a_msg],
-            ),
-            patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
-            patch(
-                "src.plugins.repeater.speaker.BanManager.find_ban_keywords",
+                "packages.repeater.speaker.BanManager.find_ban_keywords",
                 new_callable=AsyncMock,
                 return_value=set(),
             ),
-            patch("src.plugins.repeater.speaker.BotConfig.taken_name", new_callable=AsyncMock, return_value=-1),
+            patch("packages.repeater.speaker.BotConfig.taken_name", new_callable=AsyncMock, return_value=-1),
         ):
             first = await Speaker.speak(reply_dict, reply_lock, recent_topics, topics_lock)
             assert first is not None
@@ -195,18 +197,17 @@ async def test_speak_recent_dedup_avoids_same_message_twice(beanie_fixture):
             msg.time = idx
 
         with (
-            patch("src.plugins.repeater.speaker.time.time", return_value=30000),
+            patch("packages.repeater.speaker.time.time", return_value=30000),
+            patch("packages.repeater.speaker.resolve_persona", _default_resolve_persona),
+            patch("packages.repeater.speaker.random.choice", return_value=bot_id),
+            patch("packages.repeater.speaker.Speaker._pick_speak_message", return_value=dup_b_msg),
+            patch("packages.repeater.speaker.random.random", return_value=1.0),
             patch(
-                "src.plugins.repeater.speaker.random.choice",
-                side_effect=[bot_id, [dup_b_msg], dup_b_msg],
-            ),
-            patch("src.plugins.repeater.speaker.random.random", return_value=1.0),
-            patch(
-                "src.plugins.repeater.speaker.BanManager.find_ban_keywords",
+                "packages.repeater.speaker.BanManager.find_ban_keywords",
                 new_callable=AsyncMock,
                 return_value=set(),
             ),
-            patch("src.plugins.repeater.speaker.BotConfig.taken_name", new_callable=AsyncMock, return_value=-1),
+            patch("packages.repeater.speaker.BotConfig.taken_name", new_callable=AsyncMock, return_value=-1),
         ):
             second = await Speaker.speak(reply_dict, reply_lock, recent_topics, topics_lock)
             assert second is not None

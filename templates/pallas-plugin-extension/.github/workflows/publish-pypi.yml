@@ -1,0 +1,52 @@
+name: Publish PyPI
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Verify tag matches pyproject version
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/v}"
+          VER="$(uv run python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")"
+          if [ "${TAG}" != "${VER}" ]; then
+            echo "::error::tag v${TAG} 与 pyproject.toml version ${VER} 不一致"
+            exit 1
+          fi
+
+      - name: Build
+        run: uv build
+
+      - name: Verify wheel contains Python packages
+        run: |
+          set -euo pipefail
+          if ! unzip -l dist/*.whl | grep -q '__init__\.py'; then
+            echo "::error::wheel 无 Python 包（检查 hatch src layout）"
+            exit 1
+          fi
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, dev, dev-v2 ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, dev, dev-v2 ]
   workflow_dispatch:
 
 jobs:
@@ -28,15 +28,42 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --dev
+          # core plugin matrix 测试会加载 kernel/LLM 与分片 coord（需 sqlalchemy、redis）
+          uv sync --dev --extra coord-redis
 
       - name: Run Ruff linting
         run: |
-          uv run ruff check --output-format=github src/
+          uv run ruff check --output-format=github pallas/ packages/
 
       - name: Run Ruff formatting check
         run: |
-          uv run ruff format --check src/
+          uv run ruff format --check pallas/ packages/
+
+      - name: Check plugin imports (packages)
+        run: |
+          uv run python tools/check_plugin_imports.py --scope packages
+
+      - name: Build pallas-core wheel
+        run: |
+          ./scripts/build_core.sh
+          test -f build/pallas-core/dist/pallas_core-*.whl
+
+      - name: Run core plugin matrix tests
+        run: |
+          # registry / coord 与 loader 分进程：loader 会 nonebot.load_plugin，
+          # 同进程内再 import packages.* 或二次 load 易触发插件槽冲突
+          uv run pytest \
+            tests/common/test_plugin_matrix.py \
+            tests/common/test_plugin_registry.py \
+            tests/common/test_plugin_coord.py \
+            tests/common/test_shard_coord_duel_group.py \
+            tests/common/test_shard_coord_spy_group.py \
+            -q
+          uv run pytest tests/common/test_plugin_loader_unified.py -q
+
+      - name: Check console OpenAPI spec drift
+        run: |
+          uv run python tools/check_console_openapi_drift.py
 
       - name: Type check with mypy
         run: |

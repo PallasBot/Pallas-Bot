@@ -33,7 +33,7 @@ async def pg_engine():
 
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    from src.foundation.db.repository_pg import Base, dispose_pg, init_pg
+    from pallas.core.foundation.db.repository_pg import Base, dispose_pg, init_pg
 
     engine = create_async_engine(PG_TEST_DSN)
     async with engine.begin() as conn:
@@ -171,6 +171,6 @@ def fake_coord_redis(monkeypatch):
             return True
 
     client = FakeRedis()
-    monkeypatch.setattr("src.platform.coord.redis_settings.coord_redis_enabled", lambda: True)
-    monkeypatch.setattr("src.platform.coord.redis_claim.get_coord_redis_client", lambda: client)
+    monkeypatch.setattr("pallas.core.platform.coord.redis_settings.coord_redis_enabled", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.coord.redis_claim.get_coord_redis_client", lambda: client)
     return store, client

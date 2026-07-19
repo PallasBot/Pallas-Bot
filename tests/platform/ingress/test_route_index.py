@@ -6,36 +6,36 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.platform.ingress import matcher_activation as activation
-from src.platform.ingress import route_index
+from pallas.core.platform.ingress import matcher_activation as activation
+from pallas.core.platform.ingress import route_index
 
 
 class _CommandMatcher:
-    plugin_name = "src.plugins.help"
+    plugin_name = "packages.help"
     block = False
     rule = MagicMock()
 
 
 class _PassiveMatcher:
-    plugin_name = "src.plugins.repeater"
+    plugin_name = "packages.repeater"
     block = False
     rule = MagicMock()
 
 
 class _BlockMatcher:
-    plugin_name = "src.plugins.duel"
+    plugin_name = "packages.duel"
     block = True
     rule = MagicMock()
 
 
 class _HelpMatcher:
-    plugin_name = "src.plugins.help"
+    plugin_name = "packages.help"
     block = False
     rule = MagicMock()
 
 
 class _DuelMatcher:
-    plugin_name = "src.plugins.duel"
+    plugin_name = "packages.duel"
     block = False
     rule = MagicMock()
 
@@ -77,18 +77,18 @@ def test_build_route_index_from_menu_and_fanout(monkeypatch: pytest.MonkeyPatch)
         "get_loaded_plugins",
         lambda: [
             _fake_plugin(
-                module_name="src.plugins.help",
+                module_name="packages.help",
                 menu_data=[{"trigger_condition": "牛牛帮助 〈插件名〉"}],
             ),
             _fake_plugin(
-                module_name="src.plugins.roulette",
+                module_name="packages.roulette",
                 ingress_fanout={
                     "plaintexts": ["牛牛轮盘"],
                     "prefixes": ["牛牛救一下"],
                 },
             ),
             _fake_plugin(
-                module_name="src.plugins.duel",
+                module_name="packages.duel",
                 ingress_fanout={
                     "regexes": [r"^八角笼牛\s*$"],
                 },
@@ -108,15 +108,15 @@ def test_build_route_index_from_menu_and_fanout(monkeypatch: pytest.MonkeyPatch)
 def test_build_route_index_prefers_explicit_command_prefixes_and_exacts(monkeypatch: pytest.MonkeyPatch) -> None:
     plugins = [
         _fake_plugin(
-            module_name="src.plugins.chat",
+            module_name="packages.chat",
             menu_data=[{"trigger_condition": "@牛牛 / 牛牛 + 文本"}],
         ),
         _fake_plugin(
-            module_name="src.plugins.sing",
+            module_name="packages.sing",
             menu_data=[{"trigger_condition": "牛牛唱歌 歌曲名 [key=±N]"}],
         ),
         _fake_plugin(
-            module_name="src.plugins.connectivity",
+            module_name="pallas.product.service_gateways.connectivity",
             menu_data=[{"trigger_condition": "牛牛连通 / 牛牛网关"}],
         ),
     ]
@@ -141,10 +141,10 @@ def test_build_route_index_prefers_explicit_command_prefixes_and_exacts(monkeypa
 
 def test_build_route_index_supports_multiple_explicit_plugin_routes(monkeypatch: pytest.MonkeyPatch) -> None:
     plugins = [
-        _fake_plugin(module_name="src.plugins.draw", menu_data=[{"trigger_condition": "牛牛画画 …"}]),
-        _fake_plugin(module_name="src.plugins.help", menu_data=[{"trigger_condition": "牛牛帮助 〈插件名〉"}]),
-        _fake_plugin(module_name="src.plugins.bot_status", menu_data=[{"trigger_condition": "牛牛报数 / 牛牛出列"}]),
-        _fake_plugin(module_name="src.plugins.roulette", menu_data=[{"trigger_condition": "牛牛轮盘"}]),
+        _fake_plugin(module_name="pallas_plugin_draw", menu_data=[{"trigger_condition": "牛牛画画 …"}]),
+        _fake_plugin(module_name="packages.help", menu_data=[{"trigger_condition": "牛牛帮助 〈插件名〉"}]),
+        _fake_plugin(module_name="pallas_plugin_bot_status", menu_data=[{"trigger_condition": "牛牛报数 / 牛牛出列"}]),
+        _fake_plugin(module_name="packages.roulette", menu_data=[{"trigger_condition": "牛牛轮盘"}]),
     ]
     plugins[0].metadata.extra["command_prefixes"] = ["牛牛画画"]
     plugins[1].metadata.extra["command_prefixes"] = ["牛牛帮助", "牛牛开启", "牛牛关闭"]

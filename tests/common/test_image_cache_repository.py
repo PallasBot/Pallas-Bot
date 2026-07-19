@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import pytest
 
-from src.foundation.db.modules import ImageCache
-from src.foundation.db.repository import ImageCacheRepository
-from src.foundation.db.repository_impl import MongoImageCacheRepository
+from pallas.core.foundation.db.modules import ImageCache
+from pallas.core.foundation.db.repository import ImageCacheRepository
+from pallas.core.foundation.db.repository_impl import MongoImageCacheRepository
 
 
 def test_mongo_image_cache_satisfies_protocol():

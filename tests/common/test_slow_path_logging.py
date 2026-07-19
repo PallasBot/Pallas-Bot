@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.platform.observability import slow_path
+from pallas.core.platform.observability import slow_path
 
 
 def test_slow_path_logs_stages_when_threshold_exceeded(monkeypatch) -> None:

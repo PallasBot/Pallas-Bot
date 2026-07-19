@@ -84,7 +84,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    from src.platform.shard.registry.sync_unified_protocol_ports import (
+    from pallas.core.platform.shard.registry.sync_unified_protocol_ports import (
         format_unified_sync_user_message,
         resolve_unified_listen_port,
         sync_accounts_ws_urls_unified,

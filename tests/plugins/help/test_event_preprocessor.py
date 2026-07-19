@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.platform.ingress.unified_pass import (
+from pallas.core.platform.ingress.unified_pass import (
     mark_unified_ingress_once_won,
     reset_unified_ingress_once_pass_for_tests,
 )
@@ -14,18 +14,33 @@ def _reset_unified_ingress_pass() -> None:
 
 
 @pytest.mark.asyncio
-async def test_command_cross_bot_claim_trusts_ingress_when_sharded(
+async def test_command_cross_bot_claim_uses_persistent_claim_when_sharded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.plugins.help import event_preprocessor
+    from packages.help import event_preprocessor
 
-    async def _memory_claim(*_args, **_kwargs) -> bool:
-        raise AssertionError("shard mode should not use in-process memory claim")
+    called: list[tuple[str, int, int, str, int, int]] = []
+
+    async def _claim(
+        plugin: str,
+        group_id: int,
+        user_id: int,
+        message_body: str,
+        message_time: int,
+        bot_id: int,
+        *,
+        use_plaintext: bool = True,
+        include_message_time: bool = False,
+    ) -> bool:
+        assert use_plaintext is True
+        assert include_message_time is True
+        called.append((plugin, group_id, user_id, message_body, message_time, bot_id))
+        return True
 
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛MAA状态")
-    monkeypatch.setattr("src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
     monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: True)
-    monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message_memory", _memory_claim)
+    monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message", _claim)
 
     won = await event_preprocessor.command_cross_bot_claim_won(
         bot_id=111,
@@ -36,21 +51,37 @@ async def test_command_cross_bot_claim_trusts_ingress_when_sharded(
     )
 
     assert won is True
+    assert called == [("command_ingress", 12345, 999, "牛牛MAA状态", 100, 111)]
 
 
 @pytest.mark.asyncio
-async def test_command_cross_bot_claim_trusts_ingress_for_dream_when_sharded(
+async def test_command_cross_bot_claim_uses_persistent_claim_for_dream_when_sharded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.plugins.help import event_preprocessor
+    from packages.help import event_preprocessor
 
-    async def _memory_claim(*_args, **_kwargs) -> bool:
-        raise AssertionError("shard mode should not use in-process memory claim")
+    called: list[tuple[str, int, int, str, int, int]] = []
+
+    async def _claim(
+        plugin: str,
+        group_id: int,
+        user_id: int,
+        message_body: str,
+        message_time: int,
+        bot_id: int,
+        *,
+        use_plaintext: bool = True,
+        include_message_time: bool = False,
+    ) -> bool:
+        assert use_plaintext is True
+        assert include_message_time is True
+        called.append((plugin, group_id, user_id, message_body, message_time, bot_id))
+        return True
 
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛做梦")
-    monkeypatch.setattr("src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
     monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: True)
-    monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message_memory", _memory_claim)
+    monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message", _claim)
 
     won = await event_preprocessor.command_cross_bot_claim_won(
         bot_id=111,
@@ -61,13 +92,14 @@ async def test_command_cross_bot_claim_trusts_ingress_for_dream_when_sharded(
     )
 
     assert won is True
+    assert called == [("command_ingress", 12345, 999, "牛牛做梦", 100, 111)]
 
 
 @pytest.mark.asyncio
 async def test_command_cross_bot_claim_uses_memory_claim_for_maa_status_when_unified(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.plugins.help import event_preprocessor
+    from packages.help import event_preprocessor
 
     called: list[tuple[str, int, int, str, int, int]] = []
 
@@ -88,9 +120,9 @@ async def test_command_cross_bot_claim_uses_memory_claim_for_maa_status_when_uni
         return True
 
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛MAA状态")
-    monkeypatch.setattr("src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
     monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: False)
-    monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message_memory", _memory_claim)
+    monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message", _memory_claim)
 
     won = await event_preprocessor.command_cross_bot_claim_won(
         bot_id=111,
@@ -108,15 +140,15 @@ async def test_command_cross_bot_claim_uses_memory_claim_for_maa_status_when_uni
 async def test_command_cross_bot_claim_trusts_unified_ingress_once_won(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.plugins.help import event_preprocessor
+    from packages.help import event_preprocessor
 
     async def _memory_claim(*_args, **_kwargs) -> bool:
         raise AssertionError("unified ingress pass should skip memory claim")
 
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛帮助")
-    monkeypatch.setattr("src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim", lambda _text: False)
     monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: False)
-    monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message_memory", _memory_claim)
+    monkeypatch.setattr(event_preprocessor, "try_claim_cross_bot_message", _memory_claim)
 
     mark_unified_ingress_once_won(
         type(
@@ -127,7 +159,7 @@ async def test_command_cross_bot_claim_trusts_unified_ingress_once_won(
                 "user_id": 999,
                 "time": 100,
                 "raw_message": "牛牛帮助",
-                "get_plaintext": (lambda self: "牛牛帮助"),
+                "get_plaintext": lambda self: "牛牛帮助",
             },
         )(),
         body="牛牛帮助",
@@ -146,14 +178,14 @@ async def test_command_cross_bot_claim_trusts_unified_ingress_once_won(
 
 @pytest.mark.asyncio
 async def test_command_cross_bot_claim_allows_only_one_bot(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.platform.multi_bot import dedup as dedup_mod
-    from src.plugins.help import event_preprocessor
+    from packages.help import event_preprocessor
+    from pallas.core.platform.multi_bot import dedup as dedup_mod
 
     dedup_mod._cross_bot_claim_owners.clear()
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛帮助")
     monkeypatch.setattr(event_preprocessor.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr(
-        "src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim",
+        "pallas.core.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim",
         lambda _text: False,
     )
 
@@ -186,8 +218,8 @@ async def test_command_cross_bot_claim_allows_only_one_bot(monkeypatch: pytest.M
 
 @pytest.mark.asyncio
 async def test_command_cross_bot_claim_skips_non_commands(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.platform.multi_bot import dedup as dedup_mod
-    from src.plugins.help import event_preprocessor
+    from packages.help import event_preprocessor
+    from pallas.core.platform.multi_bot import dedup as dedup_mod
 
     dedup_mod._cross_bot_claim_owners.clear()
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda _text: False)
@@ -213,13 +245,13 @@ async def test_command_cross_bot_claim_skips_non_commands(monkeypatch: pytest.Mo
 
 @pytest.mark.asyncio
 async def test_command_cross_bot_claim_skips_ingress_fanout_bypass(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.platform.multi_bot import dedup as dedup_mod
-    from src.plugins.help import event_preprocessor
+    from packages.help import event_preprocessor
+    from pallas.core.platform.multi_bot import dedup as dedup_mod
 
     dedup_mod._cross_bot_claim_owners.clear()
     monkeypatch.setattr(event_preprocessor, "is_plugin_command_plaintext", lambda text: text == "牛牛赞我")
     monkeypatch.setattr(
-        "src.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim",
+        "pallas.core.platform.ingress.fanout_bypass.ingress_fanout_bypasses_claim",
         lambda text: text == "牛牛赞我",
     )
 
@@ -244,7 +276,7 @@ async def test_command_cross_bot_claim_skips_ingress_fanout_bypass(monkeypatch: 
 
 @pytest.mark.asyncio
 async def test_check_plugin_enabled_skips_claim_for_help_plugin(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.plugins.help import event_preprocessor
+    from packages.help import event_preprocessor
 
     called = False
 
@@ -255,7 +287,7 @@ async def test_check_plugin_enabled_skips_claim_for_help_plugin(monkeypatch: pyt
 
     monkeypatch.setattr(event_preprocessor, "command_cross_bot_claim_won", fake_claim)
 
-    matcher = type("M", (), {"plugin_name": "src.plugins.help"})()
+    matcher = type("M", (), {"plugin_name": "packages.help"})()
     bot = type("B", (), {"self_id": "123"})()
     event = type(
         "E",

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
-from src.platform.shard.registry.sync_unified_protocol_ports import (
+from pallas.core.platform.shard.registry.sync_unified_protocol_ports import (
     resolve_unified_listen_port,
     sync_accounts_ws_urls_unified,
 )

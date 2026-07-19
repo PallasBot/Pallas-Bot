@@ -11,12 +11,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.foundation.config.repo_settings import apply_repo_settings_to_environ  # noqa: E402
+from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ  # noqa: E402
 
 apply_repo_settings_to_environ()
 
-from src.platform.shard.presence import read_presence_bots  # noqa: E402
-from src.platform.shard.registry.store import get_shard_registry  # noqa: E402
+from pallas.core.platform.shard.presence import read_presence_bots  # noqa: E402
+from pallas.core.platform.shard.registry.store import get_shard_registry  # noqa: E402
 
 
 def main() -> int:

@@ -5,22 +5,22 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.features.corpus.composite_repo import CompositeContextRepository
-from src.features.corpus.config import CorpusConfig, remote_corpus_find_mode
-from src.features.corpus.prefetch import (
+from pallas.core.foundation.db.modules import Answer, Context
+from pallas.product.corpus.composite_repo import CompositeContextRepository
+from pallas.product.corpus.config import CorpusConfig, remote_corpus_find_mode
+from pallas.product.corpus.prefetch import (
     import_remote_context_to_local,
     prefetch_concurrency,
     schedule_corpus_prefetch,
 )
-from src.foundation.db.modules import Answer, Context
 
 
 def test_remote_find_true_maps_to_prefetch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "src.features.corpus.config.setting_str",
+        "pallas.product.corpus.config.setting_str",
         lambda name, default="": "true" if name == "PALLAS_CORPUS_REMOTE_FIND_ENABLED" else default,
     )
-    from src.features.corpus.config import clear_corpus_config_cache
+    from pallas.product.corpus.config import clear_corpus_config_cache
 
     clear_corpus_config_cache()
     assert remote_corpus_find_mode() == "prefetch"
@@ -28,10 +28,10 @@ def test_remote_find_true_maps_to_prefetch(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_remote_find_sync_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "src.features.corpus.config.setting_str",
+        "pallas.product.corpus.config.setting_str",
         lambda name, default="": "sync" if name == "PALLAS_CORPUS_REMOTE_FIND_ENABLED" else default,
     )
-    from src.features.corpus.config import clear_corpus_config_cache
+    from pallas.product.corpus.config import clear_corpus_config_cache
 
     clear_corpus_config_cache()
     assert remote_corpus_find_mode() == "sync"
@@ -39,7 +39,7 @@ def test_remote_find_sync_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.asyncio
 async def test_find_for_reply_prefetch_schedules_on_local_miss(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus.find_cache import reset_find_cache_for_tests
+    from pallas.product.corpus.find_cache import reset_find_cache_for_tests
 
     await reset_find_cache_for_tests()
     scheduled: list[str] = []
@@ -53,10 +53,10 @@ async def test_find_for_reply_prefetch_schedules_on_local_miss(monkeypatch: pyte
     cfg = CorpusConfig(merge_order=["local", "community"], merge_strategy="local_first")
     repo = CompositeContextRepository(local, community=community, cfg=cfg)
 
-    import src.features.corpus.composite_repo as mod
+    import pallas.product.corpus.composite_repo as mod
 
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda _cfg=None: "prefetch")
-    monkeypatch.setattr("src.features.corpus.prefetch.schedule_corpus_prefetch", capture_schedule)
+    monkeypatch.setattr("pallas.product.corpus.prefetch.schedule_corpus_prefetch", capture_schedule)
 
     assert await repo.find_by_keywords_for_reply("你好") is None
     assert scheduled == ["你好"]
@@ -65,7 +65,7 @@ async def test_find_for_reply_prefetch_schedules_on_local_miss(monkeypatch: pyte
 
 @pytest.mark.asyncio
 async def test_find_for_reply_prefetch_returns_local_hit(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus.find_cache import reset_find_cache_for_tests
+    from pallas.product.corpus.find_cache import reset_find_cache_for_tests
 
     await reset_find_cache_for_tests()
     ctx = Context.model_construct(
@@ -81,7 +81,7 @@ async def test_find_for_reply_prefetch_returns_local_hit(monkeypatch: pytest.Mon
     cfg = CorpusConfig(merge_order=["local"], merge_strategy="local_first")
     repo = CompositeContextRepository(local, cfg=cfg)
 
-    import src.features.corpus.composite_repo as mod
+    import pallas.product.corpus.composite_repo as mod
 
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda _cfg=None: "prefetch")
 
@@ -91,7 +91,7 @@ async def test_find_for_reply_prefetch_returns_local_hit(monkeypatch: pytest.Mon
 
 @pytest.mark.asyncio
 async def test_find_for_reply_prefetch_uses_cache_on_repeat(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus.find_cache import reset_find_cache_for_tests
+    from pallas.product.corpus.find_cache import reset_find_cache_for_tests
 
     await reset_find_cache_for_tests()
     ctx = Context.model_construct(
@@ -107,7 +107,7 @@ async def test_find_for_reply_prefetch_uses_cache_on_repeat(monkeypatch: pytest.
     cfg = CorpusConfig(merge_order=["local"], merge_strategy="local_first")
     repo = CompositeContextRepository(local, cfg=cfg)
 
-    import src.features.corpus.composite_repo as mod
+    import pallas.product.corpus.composite_repo as mod
 
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda _cfg=None: "prefetch")
 
@@ -118,7 +118,7 @@ async def test_find_for_reply_prefetch_uses_cache_on_repeat(monkeypatch: pytest.
 
 @pytest.mark.asyncio
 async def test_schedule_prefetch_noop_when_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import prefetch as mod
+    from pallas.product.corpus import prefetch as mod
 
     mod.clear_corpus_prefetch_runtime_state()
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda: "off")
@@ -128,11 +128,11 @@ async def test_schedule_prefetch_noop_when_off(monkeypatch: pytest.MonkeyPatch) 
 
 @pytest.mark.asyncio
 async def test_schedule_prefetch_skips_when_learn_queue_under_pressure(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import prefetch as mod
+    from pallas.product.corpus import prefetch as mod
 
     mod.clear_corpus_prefetch_runtime_state()
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda: "prefetch")
-    monkeypatch.setattr("src.plugins.repeater.learn_queue.learn_queue_under_pressure", lambda: True)
+    monkeypatch.setattr("packages.repeater.learn_queue.learn_queue_under_pressure", lambda: True)
 
     schedule_corpus_prefetch("kw")
 
@@ -141,12 +141,12 @@ async def test_schedule_prefetch_skips_when_learn_queue_under_pressure(monkeypat
 
 @pytest.mark.asyncio
 async def test_schedule_prefetch_skips_when_pg_under_light_pressure(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import prefetch as mod
+    from pallas.product.corpus import prefetch as mod
 
     mod.clear_corpus_prefetch_runtime_state()
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda: "prefetch")
     monkeypatch.setattr(
-        "src.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: threshold <= 0.15
+        "pallas.core.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: threshold <= 0.15
     )
 
     schedule_corpus_prefetch("kw")
@@ -158,7 +158,7 @@ async def test_schedule_prefetch_skips_when_pg_under_light_pressure(monkeypatch:
 async def test_schedule_prefetch_short_keyword_requires_repeat_before_enqueue(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from src.features.corpus import prefetch as mod
+    from pallas.product.corpus import prefetch as mod
 
     mod.clear_corpus_prefetch_runtime_state()
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda: "prefetch")
@@ -173,7 +173,7 @@ async def test_schedule_prefetch_short_keyword_requires_repeat_before_enqueue(
 
 @pytest.mark.asyncio
 async def test_schedule_prefetch_long_keyword_enqueues_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import prefetch as mod
+    from pallas.product.corpus import prefetch as mod
 
     mod.clear_corpus_prefetch_runtime_state()
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda: "prefetch")
@@ -186,7 +186,7 @@ async def test_schedule_prefetch_long_keyword_enqueues_immediately(monkeypatch: 
 
 @pytest.mark.asyncio
 async def test_prefetch_consumer_keeps_keyword_deduped_while_running(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import prefetch as mod
+    from pallas.product.corpus import prefetch as mod
 
     mod.clear_corpus_prefetch_runtime_state()
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda: "prefetch")
@@ -220,7 +220,7 @@ async def test_prefetch_consumer_keeps_keyword_deduped_while_running(monkeypatch
 
 @pytest.mark.asyncio
 async def test_prefetch_recently_finished_keyword_enters_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import prefetch as mod
+    from pallas.product.corpus import prefetch as mod
 
     mod.clear_corpus_prefetch_runtime_state()
     monkeypatch.setattr(mod, "remote_corpus_find_mode", lambda: "prefetch")
@@ -258,7 +258,7 @@ async def test_import_remote_context_inserts_when_missing() -> None:
         ban=[],
         clear_time=0,
     )
-    with patch("src.features.corpus.prefetch.invalidate_find_cache", new_callable=AsyncMock) as inv:
+    with patch("pallas.product.corpus.prefetch.invalidate_find_cache", new_callable=AsyncMock) as inv:
         ok = await import_remote_context_to_local(local, ctx)
     assert ok is True
     local.insert.assert_awaited_once()
@@ -266,7 +266,9 @@ async def test_import_remote_context_inserts_when_missing() -> None:
 
 
 def test_prefetch_concurrency_keeps_background_single_worker_on_small_budget(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("src.foundation.db.pool_budget.remote_corpus_concurrency_limit", lambda: 3)
-    monkeypatch.setattr("src.foundation.db.pool_budget.cap_by_pg_pool", lambda requested, workload_fraction=0.3: 1)
+    monkeypatch.setattr("pallas.core.foundation.db.pool_budget.remote_corpus_concurrency_limit", lambda: 3)
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.pool_budget.cap_by_pg_pool", lambda requested, workload_fraction=0.3: 1
+    )
 
     assert prefetch_concurrency() == 1

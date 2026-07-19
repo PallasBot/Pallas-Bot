@@ -2,12 +2,12 @@ import asyncio
 
 import pytest
 
-from src.plugins.repeater.learn_queue import learn_concurrency, learn_queue_max_size
+from packages.repeater.learn_queue import learn_concurrency, learn_queue_max_size
 
 
 def test_learn_defaults_reasonable():
-    from src.plugins.repeater.config import Config
-    from src.plugins.repeater.learn_runtime_config import RepeaterLearnRuntimeConfig
+    from packages.repeater.config import Config
+    from packages.repeater.learn_runtime_config import RepeaterLearnRuntimeConfig
 
     assert Config.model_fields["learn_concurrency"].default == 8
     assert RepeaterLearnRuntimeConfig().learn_concurrency == 8
@@ -16,7 +16,7 @@ def test_learn_defaults_reasonable():
 
 @pytest.mark.asyncio
 async def test_learn_sem_limits_parallel(monkeypatch):
-    from src.plugins.repeater import learn_queue as lq
+    from packages.repeater import learn_queue as lq
 
     monkeypatch.setattr(lq, "learn_concurrency", lambda: 2)
     lq.clear_repeater_learn_runtime_state()
@@ -30,7 +30,7 @@ async def test_learn_sem_limits_parallel(monkeypatch):
 
 
 def test_learn_concurrency_caps_more_conservatively_for_write_heavy_queue(monkeypatch):
-    from src.plugins.repeater import learn_queue as lq
+    from packages.repeater import learn_queue as lq
 
     monkeypatch.setattr(
         lq,
@@ -42,7 +42,7 @@ def test_learn_concurrency_caps_more_conservatively_for_write_heavy_queue(monkey
         return {"PG_POOL_SIZE": "48", "PG_MAX_OVERFLOW": "24"}.get(key)
 
     monkeypatch.setattr(
-        "src.foundation.config.repo_settings.repo_env_raw_value",
+        "pallas.core.foundation.config.repo_settings.repo_env_raw_value",
         fake_env,
     )
 
@@ -50,7 +50,7 @@ def test_learn_concurrency_caps_more_conservatively_for_write_heavy_queue(monkey
 
 
 def test_learn_queue_pressure_threshold_scales_with_queue_size(monkeypatch):
-    from src.plugins.repeater import learn_queue as lq
+    from packages.repeater import learn_queue as lq
 
     monkeypatch.setattr(lq, "learn_queue_max_size", lambda: 200)
     assert lq.learn_queue_pressure_threshold() == 64
@@ -60,10 +60,10 @@ def test_learn_queue_pressure_threshold_scales_with_queue_size(monkeypatch):
 
 
 def test_should_skip_repeater_learn_enqueue_prefers_pg_pressure(monkeypatch):
-    from src.plugins.repeater import learn_queue as lq
+    from packages.repeater import learn_queue as lq
 
     monkeypatch.setattr(
-        "src.foundation.db.pool_budget.pg_pool_under_pressure",
+        "pallas.core.foundation.db.pool_budget.pg_pool_under_pressure",
         lambda threshold=0.75: threshold <= 0.25,
     )
     monkeypatch.setattr(lq, "learn_queue_under_pressure", lambda: False)
@@ -72,9 +72,9 @@ def test_should_skip_repeater_learn_enqueue_prefers_pg_pressure(monkeypatch):
 
 
 def test_should_skip_repeater_learn_enqueue_uses_queue_pressure(monkeypatch):
-    from src.plugins.repeater import learn_queue as lq
+    from packages.repeater import learn_queue as lq
 
-    monkeypatch.setattr("src.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: False)
+    monkeypatch.setattr("pallas.core.foundation.db.pool_budget.pg_pool_under_pressure", lambda threshold=0.75: False)
     monkeypatch.setattr(lq, "learn_queue_under_pressure", lambda: True)
 
     assert lq.should_skip_repeater_learn_enqueue() is True
@@ -82,7 +82,7 @@ def test_should_skip_repeater_learn_enqueue_uses_queue_pressure(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_wait_pg_pool_headroom_for_learn_uses_more_conservative_pressure_threshold(monkeypatch):
-    from src.plugins.repeater import learn_queue as lq
+    from packages.repeater import learn_queue as lq
 
     seen: list[float] = []
 
@@ -90,7 +90,7 @@ async def test_wait_pg_pool_headroom_for_learn_uses_more_conservative_pressure_t
         seen.append(threshold)
         return False
 
-    monkeypatch.setattr("src.foundation.db.pool_budget.pg_pool_under_pressure", fake_under_pressure)
+    monkeypatch.setattr("pallas.core.foundation.db.pool_budget.pg_pool_under_pressure", fake_under_pressure)
 
     await lq.wait_pg_pool_headroom_for_learn()
 

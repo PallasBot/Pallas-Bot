@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.platform.shard.ingress_metrics import (
+from pallas.core.platform.shard.ingress_metrics import (
     ingress_metrics_snapshot,
     merge_ingress_metrics,
     record_ingress_claim,
@@ -35,11 +35,11 @@ def test_ingress_metrics_snapshot_and_merge():
 
 def test_should_record_ingress_metrics_unified(monkeypatch):
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "pallas.core.platform.shard.registry.config.is_sharding_active",
         lambda: False,
     )
     monkeypatch.setattr(
-        "src.platform.multi_bot.fleet.get_fleet_bot_ids",
+        "pallas.core.platform.multi_bot.fleet.get_fleet_bot_ids",
         lambda: frozenset({10002, 10001}),
     )
     assert should_record_ingress_metrics(10001) is True
@@ -48,11 +48,11 @@ def test_should_record_ingress_metrics_unified(monkeypatch):
 
 def test_should_record_ingress_metrics_unified_empty_fleet(monkeypatch):
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "pallas.core.platform.shard.registry.config.is_sharding_active",
         lambda: False,
     )
     monkeypatch.setattr(
-        "src.platform.multi_bot.fleet.get_fleet_bot_ids",
+        "pallas.core.platform.multi_bot.fleet.get_fleet_bot_ids",
         lambda: frozenset(),
     )
     assert should_record_ingress_metrics(12345) is True
@@ -60,11 +60,11 @@ def test_should_record_ingress_metrics_unified_empty_fleet(monkeypatch):
 
 def test_should_record_ingress_metrics_shard_rep(monkeypatch):
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.is_sharding_active",
+        "pallas.core.platform.shard.registry.config.is_sharding_active",
         lambda: True,
     )
     monkeypatch.setattr(
-        "src.platform.shard.local_representative.is_local_worker_representative",
+        "pallas.core.platform.shard.local_representative.is_local_worker_representative",
         lambda bot_id: bot_id == 10001,
     )
     assert should_record_ingress_metrics(10001) is True

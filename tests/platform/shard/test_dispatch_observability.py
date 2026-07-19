@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.platform.ingress import dispatch_metrics
+from pallas.core.platform.ingress import dispatch_metrics
 
 
 def test_merge_dispatch_metrics_sums_counters() -> None:
@@ -42,9 +42,9 @@ def test_merge_dispatch_metrics_sums_counters() -> None:
 
 
 def test_aggregate_ingress_dispatch_unified(monkeypatch) -> None:
-    from src.platform.shard import dispatch_observability
+    from pallas.core.platform.shard import dispatch_observability
 
-    monkeypatch.setattr("src.platform.shard.context.sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     dispatch_metrics.clear_dispatch_metrics_for_tests()
     dispatch_metrics.record_group_message_ingress(
         duration_ms=10.0,

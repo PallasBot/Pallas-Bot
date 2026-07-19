@@ -4,25 +4,41 @@
 
 | 类型 | 位置 | Helper |
 | --- | --- | --- |
-| 运行期数据 | `data/<plugin_name>/` | `plugin_data_dir("my_plugin")` |
+| 群/用户/牛/部署级结构化状态 | DB 内 `plugin_storage` 字段 | `GroupPluginStorage("my_plugin", group_id)` + `extra["plugin_storage"]` |
+| 大文件、缓存、导出 | `data/<plugin_name>/` | `plugin_data_dir("my_plugin")` |
 | 静态资源 | `resource/<subdir>/` | `resource_dir("voices")` 等 |
 
 ```python
-from src.foundation.paths import plugin_data_dir, resource_dir
+from pallas.api.storage import GroupPluginStorage, plugin_storage_list, plugin_storage_row
+from pallas.api.paths import plugin_data_dir, resource_dir
 
-DATA = plugin_data_dir("my_plugin")
+# 结构化群状态（须在 PluginMetadata.extra 声明键）
+store = GroupPluginStorage("my_plugin", group_id)
+await store.set("my_state", {"n": 1})
+
+# 非结构化文件
+CACHE = plugin_data_dir("my_plugin")
 VOICES = resource_dir("voices")
 ```
 
 **不要**硬编码 `data/`、`resource/` 相对路径字符串；工作目录变化会导致漂移。
 
-## 5.2 备份与排障
+现行说明优先看 [配置与 WebUI](../../developer/plugin-development/config-and-webui.md) 与 [Golden Plugin](../../developer/plugin-development/golden-plugin.md)。
 
-`data/<plugin_name>/` 按插件隔离，便于备份与按插件清理。大文件、缓存、下载物放数据目录；可复用静态素材放 `resource/`。
+## 5.2 何时用哪种
+
+| 场景 | 推荐 |
+| --- | --- |
+| 群开关、计数、小 JSON 状态 | `plugin_storage` + `GroupPluginStorage` |
+| 图片/语音文件、日志、导出 zip | `plugin_data_dir` |
+| 只读素材 | `resource_dir` |
+| 跨群关系、审计、复杂查询 | `pallas.core.foundation.db` repository（内置插件用） |
+
+`data/<plugin_name>/` 仍按插件隔离，便于备份与清理。
 
 ## 5.3 数据库
 
-持久化优先走 `src.foundation.db` repository 模式；表结构与迁移遵循仓库现有插件（如 blacklist、request_handler）。新表需考虑 PostgreSQL 与 CI。
+持久化优先走 `pallas.core.foundation.db` repository 模式；表结构与迁移遵循仓库现有插件（如 blacklist、request_handler）。新表需考虑 PostgreSQL 与 CI。
 
 ## 5.4 测试中的路径
 

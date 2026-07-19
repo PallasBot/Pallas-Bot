@@ -7,7 +7,7 @@
 - **项目名**：Pallas-Bot
 - **语言/运行时**：Python **3.12**
 - **依赖管理**：`uv`
-- **主要代码目录**：`src/`
+- **主要代码目录**：`pallas/`（内核）、`packages/`（内置插件）
 - **质量门禁（CI）**：Ruff lint/format + 依赖漏洞扫描 + Docker 构建校验（见 `.github/workflows/ci.yml`）
 
 ## 本地开发与质量门禁
@@ -17,19 +17,21 @@
 Agent 提交前至少执行：
 
 ```bash
-uv run ruff check src/
-uv run ruff format --check src/
+uv run ruff check pallas/ packages/
+uv run ruff format --check pallas/ packages/
 ```
 
-pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 仅 `src/`**；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
+pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
 
 ## 文档与排障入口
 
 - **开发指南**：[docs/develop/README.md](docs/develop/README.md)（环境、流程、插件与 WebUI）。
-- **插件专项说明**：[docs/plugins/README.md](docs/plugins/README.md)（各子目录 `README.md` 与 `src/plugins/<name>/` 对应）。
+- **插件专项说明**：[docs/plugins/README.md](docs/plugins/README.md)（各子目录 `README.md` 与 `packages/<name>/` 对应）。
 - **命令权限（cmd_perm）**：[docs/common/cmd_perm/README.md](docs/common/cmd_perm/README.md)（可配置等级、WebUI 覆盖、帮助菜单「何人可用」）。
-- **运行配置存储**：[docs/architecture/settings-storage.md](docs/architecture/settings-storage.md)（`pallas.toml` + `webui.json`，勿再向根目录 `.env` 写入新项）。
-- **`src/` 内核分层**：[docs/architecture/common-layers.md](docs/architecture/common-layers.md)（`foundation` / `platform` / `features` / `console` / `domain` / `shared`）。
+- **运行配置存储**：[docs/developer/architecture/config-storage.md](docs/developer/architecture/config-storage.md)（`pallas.toml` + `webui.json`，勿再向根目录 `.env` 写入新项）。
+- **`pallas/` 内核分层**：[docs/developer/architecture/overview.md](docs/developer/architecture/overview.md)（3.x 历史对照 → 现行 `pallas/core`）
+- **内核插件统一化**：[docs/developer/plugin-development/golden-plugin.md](docs/developer/plugin-development/golden-plugin.md)（core golden 模板、`pb_*` 命名、分期 PR）。
+- **热重载分级**：[docs/developer/plugin-development/reload-and-activation.md](docs/developer/plugin-development/reload-and-activation.md)（配置 / 元数据 / 代码；`reload_policy`）。
 - **常见问题与部署排障**：[docs/FAQ.md](docs/FAQ.md)。
 
 ## 运行配置（Agent 必读）
@@ -37,17 +39,17 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 仅 `src/`**；`
 - **主配置**：复制 [`config/pallas.example.toml`](config/pallas.example.toml) 为 **`config/pallas.toml`**（已 gitignore），填写 `[bootstrap]`（监听、数据库等）。
 - **WebUI 落盘**：插件与通用项写入 **`data/pallas_config/webui.json`**；只读快照 **`config/pallas.webui.export.toml`** 由保存自动生成。
 - **合并顺序**：`pallas.toml` → 遗留 `.env` / `.env.{ENVIRONMENT}` → `webui.json`（后者覆盖前者；**WebUI 落盘最高**）。
-- **读取 API**：`src/foundation/config/repo_settings.py` 的 `repo_env_raw_value()` / `merged_repo_settings_upper()`；启动前 `apply_repo_settings_to_environ()`。
+- **读取 API**：`pallas/core/foundation/config/repo_settings.py` 的 `repo_env_raw_value()` / `merged_repo_settings_upper()`；启动前 `apply_repo_settings_to_environ()`。
 - **从旧 `.env` 迁移**：`uv run python tools/migrate_env_to_pallas.py`（一次性）；**`.env` 仍可保留**专放 nb/pip 插件项（见 `.env.example`），与 `webui.json` 避免同名键重复。
 - **分片可选 Redis**：在 `pallas.toml` 的 `[env]` 配置 `REDIS_URL`；`run_sharded_bot.sh` 自动探测。依赖：`uv sync --extra coord-redis` 或 `uv sync --extra deploy-shard`。
-- **可选部署模板**：`deploy/` 目录 + `uv sync --extra deploy-shard|message-scrub`；应用 `uv run python tools/apply_deploy_profile.py <profile>`。
+- **可选部署模板**：`deploy/` 目录 + `uv sync --extra deploy-shard`；应用 `uv run python tools/apply_deploy_profile.py shard`（分片）。消息审查 4.0 默认开启，无需模板。
 - **Docker Compose 数据库**：仍可用 [`config/compose.env.example`](config/compose.env.example)（仅编排插值，非 Bot 主配置）。
 
 ## Agent 工作约定
 
 ### 修改范围
 
-- **优先修改 `src/` 与 `tests/`**，避免无意义的重排/大范围格式变化。
+- **优先修改 `pallas/`、`packages/` 与 `tests/`**，避免无意义的重排/大范围格式变化。
 - **不提交密钥与私密配置**：例如 `config/pallas.toml`、`data/`、`webui.json`、token、私钥、访问凭据等。
 - **依赖变更需谨慎**：新增依赖优先走 `pyproject.toml`（`uv` 工作流），并确保 CI 仍能通过。
 - **最小必要改动**：只改完成任务所需的代码与文件；避免「顺手」重构无关模块、扩大 diff。
@@ -57,10 +59,7 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 仅 `src/`**；`
 ### 代码质量与风格
 
 - **Ruff 是唯一强制的 lint/format 工具**（与 CI/预提交一致）。
-- **pre-commit 的基础文件卫生检查覆盖全仓，但 Ruff 只针对 `src/`。**
-- 提交前确保：
-  - `uv run ruff check src/` 通过
-  - `uv run ruff format --check src/` 通过
+- **Ruff 仅 `pallas/`、`packages/`**；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
 - **与周边代码一致**：命名、类型、抽象层次、导入风格、注释密度与文件内既有写法对齐；优先复用已有函数。
 - **新增函数**：非必要**不要**以下划线 `_` 作为前缀。
 - **注释**：保持精简；obvious 逻辑不必长段 docstring。
@@ -77,7 +76,7 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 仅 `src/`**；`
 
 ### WebUI 与控制台页面（窄屏）
 
-改动 **Pallas-Bot-WebUI** 或主仓内嵌控制台 HTML/CSS（如 `src/plugins/pallas_protocol/web/static/`）时：
+改动 **Pallas-Bot-WebUI** 或主仓内嵌控制台 HTML/CSS（如 `packages/pb_protocol/web/static/`）时：
 
 - **必须考虑窄屏（≤560px）**：面板标题栏、「添加到侧栏」、表格与批量操作在窄屏下仍须可用、布局不杂乱。
 - WebUI 约定见 **Pallas-Bot-WebUI** 仓库根目录 `AGENTS.md`（窄屏自检清单与参考页面）；全局断点与 override 在 WebUI `src/styles/app.css` 的 `@media (max-width: 560px)`。
@@ -95,6 +94,28 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 仅 `src/`**；`
 - 开发者向 `docs/plugins/*/README.md` 可用表格列出**代码默认等级**（如「群管/群主」），并注明以 WebUI / cmd_perm 为准。
 
 细则与自检清单见 [docs/common/cmd_perm/README.md](docs/common/cmd_perm/README.md)。
+
+### 内核插件（core）与 golden 模板
+
+`CORE_PLUGIN_NAMES` 见 `src/platform/bot_runtime/plugin_matrix.py`（含 `pb_core`、`pb_stats`、`pb_webui` 等）。维护者向内核插件包名优先 **`pb_*`**；历史名经 `plugin_package_aliases.py` / `plugin_legacy_names.py` 别名兼容（如 `community_stats` → `pb_stats`）。
+
+**标准目录**（参考 `pb_core`、`pb_stats`）：
+
+```text
+packages/<name>/
+├── __init__.py    # PluginMetadata + matcher/路由注册（薄，目标 ≤120 行）
+├── config.py      # Pydantic + install_hot_reload_config（有插件页配置时）
+├── handlers.py    # 口令 handler（优先 plugin_sdk）
+└── startup.py     # 可选：@driver.on_startup、HTTP 挂载
+```
+
+- **口令型**：`plugin_sdk.message_command` + `bind_alias_handlers`；`command_permissions` / `command_limits` / `menu_data` 与命令 ID 一致。
+- **维护者向、无群口令**：`help_audience: maintainer`；说明写在 `menu_data` 或 WebUI 通用配置段（如 `pb_stats` → 段 ID `community_stats`）。
+- **配置热载**：插件页用 `install_hot_reload_config`；横切项在 `env_sections.py` 注册通用段。
+- **元数据热载**：频繁改 help/ingress 声明时设 `extra["reload_policy"]: "metadata"`（见 [hot-reload-tiers.md](docs/developer/plugin-development/reload-and-activation.md)）。
+- **分片**：hub-only 逻辑在 `startup.py` 用 `is_sharded_worker()` 守卫；hub 显式名单见 `roles.HUB_PLUGIN_MODULES`。
+
+完整 checklist：[docs/skills/pallas-plugin-development/references/08-golden-plugin-checklist.md](docs/skills/pallas-plugin-development/references/08-golden-plugin-checklist.md)。
 
 ### 提交与 PR
 

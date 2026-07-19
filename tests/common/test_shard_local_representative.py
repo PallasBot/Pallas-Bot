@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.platform.shard.local_representative import (
+from pallas.core.platform.shard.local_representative import (
     is_local_worker_representative,
     local_worker_representative_bot_id,
 )
@@ -31,7 +31,7 @@ async def test_cross_shard_claim_one_file_claim_per_worker(monkeypatch) -> None:
         "nonebot.get_bots",
         lambda: {"100": object(), "200": object()},
     )
-    from src.platform.multi_bot import dedup as mod
+    from pallas.core.platform.multi_bot import dedup as mod
 
     mod._shard_ingress_file_locks.clear()
     mod._cross_bot_claim_owners.clear()

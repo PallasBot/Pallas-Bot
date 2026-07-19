@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.features.corpus.text_util import plain_message_text
+from pallas.product.corpus.text_util import plain_message_text
 
 
 def test_plain_message_text_strips_cq() -> None:
@@ -11,7 +11,7 @@ def test_plain_message_text_strips_cq() -> None:
 
 @pytest.mark.asyncio
 async def test_aggregate_local_hot_keywords_empty_without_db(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import local_hot as mod
+    from pallas.product.corpus import local_hot as mod
 
     monkeypatch.setattr(mod, "get_db_backend", lambda: "unknown")
     rows = await mod.aggregate_local_hot_keywords()
@@ -20,7 +20,7 @@ async def test_aggregate_local_hot_keywords_empty_without_db(monkeypatch: pytest
 
 @pytest.mark.asyncio
 async def test_build_local_corpus_hot_payload_shape() -> None:
-    from src.features.corpus.local_hot import build_local_corpus_hot_payload
+    from pallas.product.corpus.local_hot import build_local_corpus_hot_payload
 
     payload = build_local_corpus_hot_payload(
         [{"keywords": "你好", "score": 3, "answers": [{"answer_keywords": "早", "message": "早", "count": 3}]}],
@@ -36,8 +36,8 @@ async def test_aggregate_local_hot_keywords_mongo_uses_single_projection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Beanie 2.x project() 只接受一个 projection model（issue #227）。"""
-    import src.foundation.db.modules as modules
-    from src.features.corpus import local_hot as mod
+    import pallas.core.foundation.db.modules as modules
+    from pallas.product.corpus import local_hot as mod
 
     calls: list[object] = []
 

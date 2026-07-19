@@ -1,4 +1,4 @@
-from src.plugins.pallas_webui.extended_api import _log_error_entry_matches_source
+from packages.pb_webui.extended_api import _log_error_entry_matches_source
 
 
 def test_log_error_source_worker():

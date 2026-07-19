@@ -1,4 +1,4 @@
-from src.plugins.request_handler.approval_notice_text import parse_approval_notice_meta
+from packages.request_handler.approval_notice_text import parse_approval_notice_meta
 
 
 def test_parse_friend_approval_notice_meta() -> None:

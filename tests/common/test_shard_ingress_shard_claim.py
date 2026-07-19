@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.platform.multi_bot.dedup import (
+from pallas.core.platform.multi_bot.dedup import (
     ingress_shard_claim_owner_obsolete,
     try_claim_cross_bot_message_memory,
     try_claim_cross_shard_message,
@@ -38,7 +38,7 @@ async def test_ingress_bot_claim_scoped_by_message_time() -> None:
 
 @pytest.mark.asyncio
 async def test_ingress_shard_claim_reclaims_obsolete_owner(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.platform.multi_bot import dedup as mod
+    from pallas.core.platform.multi_bot import dedup as mod
 
     mod._shard_ingress_file_locks.clear()
     mod._cross_bot_claim_owners.clear()
@@ -52,7 +52,27 @@ async def test_ingress_shard_claim_reclaims_obsolete_owner(monkeypatch: pytest.M
     class FakeReg:
         shards = [FakeShard()]
 
-    monkeypatch.setattr("src.platform.shard.registry.get_shard_registry", lambda: FakeReg())
+    owner_by_key: dict[tuple[str, int, int], int] = {}
+
+    def fake_read_claim_owner_sync(plugin: str, group_id: int, message_id: int) -> int | None:
+        return owner_by_key.get((plugin, group_id, message_id))
+
+    async def fake_try_claim_message(plugin: str, group_id: int, message_id: int, bot_id: int) -> bool:
+        key = (plugin, group_id, message_id)
+        owner = owner_by_key.get(key)
+        if owner is None:
+            owner_by_key[key] = int(bot_id)
+            return True
+        return owner == int(bot_id)
+
+    async def fake_take_claim_message(plugin: str, group_id: int, message_id: int, bot_id: int) -> bool:
+        owner_by_key[(plugin, group_id, message_id)] = int(bot_id)
+        return True
+
+    monkeypatch.setattr("pallas.core.platform.shard.registry.get_shard_registry", lambda: FakeReg())
+    monkeypatch.setattr("pallas.core.platform.multi_bot.dedup.read_claim_owner_sync", fake_read_claim_owner_sync)
+    monkeypatch.setattr("pallas.core.platform.multi_bot.dedup.try_claim_message", fake_try_claim_message)
+    monkeypatch.setattr("pallas.core.platform.multi_bot.claim.take_claim_message", fake_take_claim_message)
     assert ingress_shard_claim_owner_obsolete(99)
     assert not ingress_shard_claim_owner_obsolete(0)
 

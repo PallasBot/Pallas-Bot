@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from src.platform.shard import context as ctx
+from pallas.core.platform.shard import context as ctx
 
 
 def test_sharding_active_false_when_unified(monkeypatch) -> None:
     monkeypatch.delenv("PALLAS_SHARD_ENABLED", raising=False)
     monkeypatch.setenv("PALLAS_BOT_ROLE", "unified")
-    from src.platform.shard.registry.config import get_shard_registry_settings
+    from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
     get_shard_registry_settings.cache_clear()
     assert not ctx.sharding_active()
@@ -18,7 +18,7 @@ def test_sharding_active_true_for_worker(monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_SHARD_ENABLED", "true")
     monkeypatch.setenv("PALLAS_BOT_ROLE", "worker")
     monkeypatch.setenv("PALLAS_SHARD_ID", "2")
-    from src.platform.shard.registry.config import get_shard_registry_settings
+    from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
     get_shard_registry_settings.cache_clear()
     assert ctx.sharding_active()

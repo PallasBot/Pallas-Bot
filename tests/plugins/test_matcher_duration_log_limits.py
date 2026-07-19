@@ -1,4 +1,4 @@
-from src.plugins.pallas_webui.extended_api import (
+from packages.pb_webui.extended_api import (
     _MATCHER_DURATION_LOG_CAP,
     _MATCHER_DURATION_LOG_PER_PLUGIN_CAP,
     enforce_matcher_duration_log_limits,

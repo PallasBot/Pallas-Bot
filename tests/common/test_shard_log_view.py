@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.platform.shard.logs.view import (
+from pallas.core.platform.shard.logs.view import (
     collect_cluster_log_errors,
     list_shard_log_sources,
     merge_cluster_log_lines,
     prefix_log_source,
     tail_log_file,
 )
-from src.platform.shard.registry.store import ShardRecord, ShardRegistry, TestShardConfig
+from pallas.core.platform.shard.registry.store import ShardRecord, ShardRegistry, TestShardConfig
 
 
 def test_prefix_log_source():
@@ -36,9 +36,9 @@ def test_list_shard_log_sources_skips_orphan_worker_log(tmp_path, monkeypatch):
         ],
         assignments={"111": 0},
     )
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
-    monkeypatch.setattr("src.platform.shard.registry.store.get_shard_registry", lambda: reg)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.registry.store.get_shard_registry", lambda: reg)
 
     sources = list_shard_log_sources()
     assert sources == ["hub", "worker-0"]
@@ -66,9 +66,9 @@ def test_list_shard_log_sources_includes_test_shard_with_bots(tmp_path, monkeypa
         assignments={"111": 0, "222": 99},
         test=TestShardConfig(enabled=True, shard_id=99, port=8199),
     )
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
-    monkeypatch.setattr("src.platform.shard.registry.store.get_shard_registry", lambda: reg)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.registry.store.get_shard_registry", lambda: reg)
 
     sources = list_shard_log_sources()
     assert sources == ["hub", "worker-0", "worker-99"]
@@ -87,9 +87,9 @@ def test_list_shard_log_sources_skips_test_shard_without_bots(tmp_path, monkeypa
         shards=[ShardRecord(id=99, port=8199, role="test", bot_ids=[])],
         test=TestShardConfig(enabled=True, shard_id=99, port=8199),
     )
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("src.platform.shard.registry.config.is_sharding_active", lambda: True)
-    monkeypatch.setattr("src.platform.shard.registry.store.get_shard_registry", lambda: reg)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.registry.store.get_shard_registry", lambda: reg)
 
     assert list_shard_log_sources() == ["hub"]
     merged = merge_cluster_log_lines(20, "all", hub_ring_lines=[])
@@ -103,7 +103,7 @@ def test_merge_cluster_sorts_and_limits(tmp_path, monkeypatch):
         "05-21 10:00:00 | INFO     | a:1 - early worker\n05-21 12:00:00 | INFO     | a:1 - late worker\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
 
     hub = [
         "05-21 11:00:00 | INFO     | hub:1 - mid hub",
@@ -131,7 +131,7 @@ def test_worker_glob_excludes_bootstrap(tmp_path, monkeypatch):
         "asyncio.exceptions.CancelledError: x\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
     merged = merge_cluster_log_lines(20, "all", hub_ring_lines=[])
     assert any("main" in row for row in merged)
     assert not any("CancelledError" in row for row in merged)
@@ -145,9 +145,9 @@ def test_collect_cluster_log_errors_no_log_rescan_after_cleanup(tmp_path, monkey
         "05-23 04:25:47 | ERROR    | nonebot:1 - stale hub error\nModuleNotFoundError: nope\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("src.platform.shard.logs.errors.shard_errors_dir", lambda: err_dir)
-    from src.platform.shard.logs.errors import cleanup_shard_error_archives_sync
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.errors.shard_errors_dir", lambda: err_dir)
+    from pallas.core.platform.shard.logs.errors import cleanup_shard_error_archives_sync
 
     cleanup_shard_error_archives_sync()
     rows = collect_cluster_log_errors(per_file=50, limit=10)
@@ -164,8 +164,8 @@ def test_collect_cluster_log_errors(tmp_path, monkeypatch):
         "ValueError: bad\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("src.platform.shard.logs.errors.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.errors.shard_logs_dir", lambda: log_dir)
     rows = collect_cluster_log_errors(per_file=50, limit=10)
     assert len(rows) >= 1
     assert any("worker-2" in str(r.get("plugin")) for r in rows)
@@ -185,8 +185,8 @@ def test_exc_type_from_traceback_ignores_stack_frames(tmp_path, monkeypatch):
         "ModuleNotFoundError: No module named 'nonebot_plugin_apscheduler'\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("src.platform.shard.logs.errors.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.errors.shard_logs_dir", lambda: log_dir)
     rows = collect_cluster_log_errors(per_file=80, limit=10)
     assert len(rows) >= 1
     row = next(r for r in rows if "worker-99" in str(r.get("plugin")))
@@ -205,8 +205,8 @@ def test_exc_type_from_loguru_style_traceback(tmp_path, monkeypatch):
         "ModuleNotFoundError: No module named 'nonebot_plugin_apscheduler'\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("src.platform.shard.logs.errors.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.errors.shard_logs_dir", lambda: log_dir)
     rows = collect_cluster_log_errors(per_file=50, limit=10)
     assert rows
     assert rows[-1].get("exc_type") == "ModuleNotFoundError"

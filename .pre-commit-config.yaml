@@ -21,9 +21,28 @@ repos:
     rev: v0.14.4
     hooks:
       - id: ruff
-        # Python 代码质量检查仅针对主代码目录。
-        files: ^src/
+        # Python 代码质量检查覆盖 pallas/、packages/、local/plugins/
+        files: ^(pallas|packages|local/plugins)/
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
-        # 代码格式化同样只处理 src 下的 Python 文件。
-        files: ^src/
+        # 代码格式化覆盖 pallas/、packages/、local/plugins/
+        files: ^(pallas|packages|local/plugins)/
+
+  - repo: local
+    hooks:
+      - id: check-plugin-imports
+        name: 检查插件 import 规则
+        description: "local/plugins 仅允许 pallas.api.*；packages 禁止 src.*"
+        entry: python3 tools/check_plugin_imports.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
+      - id: check-plugin-identity-imports
+        name: 检查插件身份路径漂移
+        description: "主仓业务代码不得直接把 extra 插件模块路径当业务真相"
+        entry: python3 tools/check_plugin_identity_imports.py
+        language: system
+        files: ^(pallas|packages|tests|tools)/
+        pass_filenames: true
+        verbose: true

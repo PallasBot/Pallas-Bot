@@ -5,9 +5,9 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_get_bot_admins_gate_cache(beanie_fixture, monkeypatch):
-    from src.foundation.config import bot_admins_cache as cache
-    from src.foundation.config import get_bot_admins
-    from src.foundation.db import make_bot_config_repository
+    from pallas.core.foundation.config import bot_admins_cache as cache
+    from pallas.core.foundation.config import get_bot_admins
+    from pallas.core.foundation.db import make_bot_config_repository
 
     await cache.reset_bot_admins_cache()
     repo = make_bot_config_repository()
@@ -38,7 +38,7 @@ async def test_get_bot_admins_gate_cache(beanie_fixture, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_bot_admins_cached_short_circuits_when_pg_not_ready(monkeypatch):
-    from src.foundation.config import bot_admins_cache as cache
+    from pallas.core.foundation.config import bot_admins_cache as cache
 
     await cache.reset_bot_admins_cache()
 
@@ -46,8 +46,8 @@ async def test_get_bot_admins_cached_short_circuits_when_pg_not_ready(monkeypatc
         raise AssertionError("should not hit bot_admins db load when PG is not ready")
 
     monkeypatch.setattr(cache, "_load_admins_db", fail_load)
-    monkeypatch.setattr("src.foundation.db.get_db_backend", lambda: "postgresql")
-    monkeypatch.setattr("src.foundation.db.repository_pg.is_pg_initialized", lambda: False)
+    monkeypatch.setattr("pallas.core.foundation.db.get_db_backend", lambda: "postgresql")
+    monkeypatch.setattr("pallas.core.foundation.db.repository_pg.is_pg_initialized", lambda: False)
 
     admins = await cache.get_bot_admins_cached(123456)
     assert admins == []
@@ -55,7 +55,7 @@ async def test_get_bot_admins_cached_short_circuits_when_pg_not_ready(monkeypatc
 
 @pytest.mark.asyncio
 async def test_any_bot_admin_user_ids_cached_short_circuits_when_pg_not_ready(monkeypatch):
-    from src.foundation.config import bot_admins_cache as cache
+    from pallas.core.foundation.config import bot_admins_cache as cache
 
     await cache.reset_bot_admins_cache()
 
@@ -63,8 +63,8 @@ async def test_any_bot_admin_user_ids_cached_short_circuits_when_pg_not_ready(mo
         raise AssertionError("should not hit cross-bot admins load when PG is not ready")
 
     monkeypatch.setattr(cache, "_load_any_bot_admin_user_ids", fail_load)
-    monkeypatch.setattr("src.foundation.db.get_db_backend", lambda: "postgresql")
-    monkeypatch.setattr("src.foundation.db.repository_pg.is_pg_initialized", lambda: False)
+    monkeypatch.setattr("pallas.core.foundation.db.get_db_backend", lambda: "postgresql")
+    monkeypatch.setattr("pallas.core.foundation.db.repository_pg.is_pg_initialized", lambda: False)
 
     admins = await cache.any_bot_admin_user_ids_cached()
     assert admins == frozenset()
@@ -72,7 +72,7 @@ async def test_any_bot_admin_user_ids_cached_short_circuits_when_pg_not_ready(mo
 
 @pytest.mark.asyncio
 async def test_get_bot_admins_skips_db_when_pool_under_pressure(monkeypatch):
-    from src.foundation.config import bot_admins_cache as cache
+    from pallas.core.foundation.config import bot_admins_cache as cache
 
     await cache.reset_bot_admins_cache()
 
@@ -81,7 +81,7 @@ async def test_get_bot_admins_skips_db_when_pool_under_pressure(monkeypatch):
 
     monkeypatch.setattr(cache, "_load_admins_db", fail_load)
     monkeypatch.setattr(
-        "src.foundation.db.pool_budget.pg_pool_under_pressure",
+        "pallas.core.foundation.db.pool_budget.pg_pool_under_pressure",
         lambda threshold=0.55: True,
     )
 

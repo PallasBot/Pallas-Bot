@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | GET | `/health` | 无 | Bot 与控制台版本、NoneBot 版本 |
 | POST | `/auth/login` | 无 | Body `{"password": "..."}` → 设置会话 Cookie |
+| GET | `/auth/setup-status` | 无 | 返回是否仍处于默认口令 / 首次引导阶段 |
 
 ## 需 token / 会话
 
@@ -30,6 +31,25 @@
 ### `/system` 响应
 
 `data` 为系统资源快照；首页轮询约 5s，服务端有约 0.8s 读缓存。
+
+### `/auth/setup-status` 响应要点
+
+```json
+{
+  "ok": true,
+  "data": {
+    "auth_configured": true,
+    "setup_completed": false,
+    "default_password_active": true,
+    "requires_setup": true
+  }
+}
+```
+
+含义：
+
+- `default_password_active=true`：仍在使用自动生成的默认口令
+- `requires_setup=true`：前端应引导用户先改密，再继续其他配置
 
 ## 前端对应
 

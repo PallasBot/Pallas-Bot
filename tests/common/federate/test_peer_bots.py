@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock
 
-from src.platform.federate import peer_bots as mod
+from pallas.core.platform.federate import peer_bots as mod
 
 
 def test_publish_local_federate_peer_bot_ids_sync_writes_current_catalog(monkeypatch):

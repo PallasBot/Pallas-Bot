@@ -4,7 +4,7 @@ import pytest
 from nonebot.adapters.onebot.v11 import GroupRecallNoticeEvent, NoticeEvent
 from nonebot.exception import IgnoredException
 
-from src.platform.ingress.notice_gate import ingress_notice_gate
+from pallas.core.platform.ingress.notice_gate import ingress_notice_gate
 
 
 class FakeBot:
@@ -14,7 +14,7 @@ class FakeBot:
 
 @pytest.mark.asyncio
 async def test_ingress_notice_discards_emoji_like(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("src.platform.ingress.notice_gate.ingress_gate_runtime_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.notice_gate.ingress_gate_runtime_active", lambda: True)
     event = NoticeEvent.model_construct(
         time=100,
         self_id=111,
@@ -30,7 +30,7 @@ async def test_ingress_notice_discards_emoji_like(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.asyncio
 async def test_ingress_notice_discards_poke_not_for_self(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("src.platform.ingress.notice_gate.ingress_gate_runtime_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.notice_gate.ingress_gate_runtime_active", lambda: True)
     event = NoticeEvent.model_construct(
         time=100,
         self_id=111,
@@ -47,7 +47,7 @@ async def test_ingress_notice_discards_poke_not_for_self(monkeypatch: pytest.Mon
 
 @pytest.mark.asyncio
 async def test_ingress_notice_recall_once_claim(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("src.platform.ingress.notice_gate.ingress_gate_runtime_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.notice_gate.ingress_gate_runtime_active", lambda: True)
     event = GroupRecallNoticeEvent.model_construct(
         time=100,
         self_id=111,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.plugins.roulette import parse_roulette_start_command
+from packages.roulette import parse_roulette_start_command
 
 
 def test_parse_roulette_start_command_default():

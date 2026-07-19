@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.foundation.db.pg_activity_diagnostics import (
+from pallas.core.foundation.db.pg_activity_diagnostics import (
     PgActivitySnapshot,
     classify_pg_bottleneck,
     format_pg_activity_detail,
@@ -45,8 +45,8 @@ def test_classify_slow_query_when_active_not_waiting():
 
 
 def test_should_emit_auto_on_pressure(monkeypatch):
-    monkeypatch.setattr("src.foundation.db.pg_activity_diagnostics.pg_activity_diag_mode", lambda: "auto")
-    monkeypatch.setattr("src.foundation.db.pg_activity_diagnostics.pg_activity_diag_always", lambda: False)
+    monkeypatch.setattr("pallas.core.foundation.db.pg_activity_diagnostics.pg_activity_diag_mode", lambda: "auto")
+    monkeypatch.setattr("pallas.core.foundation.db.pg_activity_diagnostics.pg_activity_diag_always", lambda: False)
     snap = PgActivitySnapshot()
     assert should_emit_pg_activity_detail(
         snap,
@@ -59,7 +59,7 @@ def test_should_emit_auto_on_pressure(monkeypatch):
 
 def test_should_emit_off(monkeypatch):
     snap = PgActivitySnapshot(blockers=[{"blocked_pid": 1}])
-    monkeypatch.setattr("src.foundation.db.pg_activity_diagnostics.pg_activity_diag_mode", lambda: "off")
+    monkeypatch.setattr("pallas.core.foundation.db.pg_activity_diagnostics.pg_activity_diag_mode", lambda: "off")
     assert not should_emit_pg_activity_detail(
         snap,
         under_pressure=True,

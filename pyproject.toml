@@ -1,6 +1,6 @@
 [project]
 name = "pallas-bot"
-version = "3.0.0"
+version = "4.0.0"
 description = "《明日方舟》帕拉斯 Bot"
 authors = [{ name = "MistEO" }]
 maintainers = [
@@ -9,7 +9,7 @@ maintainers = [
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "aiosmtplib>=5.0.0",
     "beanie>=2.0.0",
@@ -22,7 +22,6 @@ dependencies = [
     "nonebot2[fastapi]>=2.4.4",
     "nvidia-ml-py>=13.595.45",
     "pillowmd>=0.7.3",
-    # PyPI/镜像常不可解析该包；直链 + sha256 片段（PEP 508）保证可复现与完整性（issue #166）
     "pyncm-async @ https://files.pythonhosted.org/packages/52/14/8892c8bef54293eaf13c3ff95685a097d8a48272ce07b8600138f5c24d3e/pyncm_async-1.8.2.tar.gz#sha256=3ea9914f3fbcd4a76ef1d34a4681cff3733507b54caa9aa79f1d04f0e8cd27a7",
     "pypinyin>=0.55.0",
     "python-multipart>=0.0.20",
@@ -31,30 +30,35 @@ dependencies = [
     "tenacity>=9.1.2",
     "curl-cffi>=0.9.0",
     "aiohttp>=3.13.5",
+    "nonebot-plugin-localstore>=0.7",
+    "nonebot-plugin-htmlrender>=0.7.0a2",
+    "githubkit>=0.13,<0.14",
+    "mdit-py-emoji>=0.1",
+    # 4.0 默认 PostgreSQL；Mongo 站点仍可用 beanie，多装这两项无害
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
 ]
 
 [project.optional-dependencies]
 perf = [
     "jieba-next>=1.0.0a5"
 ]
-pg = [
-    "sqlalchemy[asyncio]>=2.0",
-    "asyncpg>=0.29",
-]
+# 兼容旧文档/脚本的 `uv sync --extra pg`；驱动已在主依赖
+pg = []
 coord-redis = [
     "redis>=5.2,<6",
 ]
-# 可选部署模板（见 deploy/README.md）
 shard = []
-message-scrub = []
 deploy-shard = [
     "redis>=5.2,<6",
 ]
+# 兼容旧构建参数；PG 驱动已在主依赖，此处仅 Redis
 deploy-shard-pg = [
-    "sqlalchemy[asyncio]>=2.0",
-    "asyncpg>=0.29",
     "redis>=5.2,<6",
 ]
+
+[project.scripts]
+pallas = "pallas.console.cli.main:main"
 
 [dependency-groups]
 dev = [
@@ -75,7 +79,7 @@ name = "pypi"
 url = "https://pypi.org/simple"
 
 [tool.nonebot]
-plugin_dirs = ["src/plugins"]
+plugin_dirs = ["packages"]
 builtin_plugins = []
 
 [tool.nonebot.plugins]
@@ -85,6 +89,16 @@ nonebot-plugin-apscheduler = ["nonebot_plugin_apscheduler"]
 [tool.nonebot.adapters]
 "@local" = []
 nonebot-adapter-onebot = [{name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11"}]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["pallas"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -17,10 +17,13 @@ RUN apt-get update && \
     pip install uv && \
     rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
+COPY pyproject.toml LICENSE ./
+# .dockerignore 排除了 *.md；给 hatchling 提供最小 README 以满足 pyproject readme=
+RUN printf '%s\n' '# Pallas-Bot' > README.md
 
 # perf：jieba-next；pg：PostgreSQL 后端
-# deploy-shard / message-scrub：见 deploy/README.md
+# deploy-shard：见 deploy/README.md
+# 4.0 官方扩展：plugins-duel / plugins-game / deploy-full / deploy-all（见 docs/DockerDeployment.md）
 # 构建上下文排除见 .dockerignore；extras 对照见 docs/DockerDeployment.md
 ARG PALLAS_UV_EXTRAS=perf,pg
 RUN uv pip install --system ".[${PALLAS_UV_EXTRAS}]" --no-cache-dir && \

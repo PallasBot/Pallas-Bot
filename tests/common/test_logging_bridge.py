@@ -1,6 +1,6 @@
 import logging
 
-from src.foundation.logging.bridge import ChannelLoguruHandler
+from pallas.core.foundation.logging.bridge import ChannelLoguruHandler, _stdlib_logger_channel_label
 
 
 def test_channel_handler_downgrades_transient_uvicorn_errors() -> None:
@@ -17,3 +17,9 @@ def test_channel_handler_downgrades_transient_uvicorn_errors() -> None:
     handler.emit(record)
     assert record.levelno == logging.WARNING
     assert record.levelname == "WARNING"
+
+
+def test_stdlib_logger_channel_label_uses_repo_aliases() -> None:
+    assert _stdlib_logger_channel_label("pallas.product.llm.client") == "功能"
+    assert _stdlib_logger_channel_label("packages.repeater.learner") == "复读"
+    assert _stdlib_logger_channel_label("uvicorn.error") == "服务"

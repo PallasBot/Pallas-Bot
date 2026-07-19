@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 单进程 unified 启停
+# 单进程 unified 启停（兼容入口；推荐 ./scripts/pallas run unified / stop / status / restart）
 #
 #   ./scripts/run_unified_bot.sh start
 #   ./scripts/run_unified_bot.sh status
@@ -17,7 +17,7 @@ LOG_DIR="${REPO_ROOT}/data/pallas_unified/logs"
 ACCOUNTS_JSON="${REPO_ROOT}/data/pallas_protocol/accounts.json"
 PID_FILE="${RUN_DIR}/bot.pid"
 LOG_FILE="${LOG_DIR}/bot.log"
-START_CMD=(uv run python bot.py)
+START_CMD=(uv run --no-sync python bot.py)
 SYNC_PORTS_SCRIPT="${SCRIPT_DIR}/sync_unified_protocol_ports.py"
 SKIP_PORT_SYNC=0
 
@@ -26,8 +26,8 @@ read_listen_port() {
     echo "${PORT}"
     return
   fi
-  uv run python - <<'PY'
-from src.platform.shard.registry.sync_unified_protocol_ports import resolve_unified_listen_port
+  uv run --no-sync python - <<'PY'
+from pallas.core.platform.shard.registry.sync_unified_protocol_ports import resolve_unified_listen_port
 from pathlib import Path
 print(resolve_unified_listen_port(env_path=Path(".env")))
 PY
@@ -49,7 +49,7 @@ prepare_unified_ports() {
   local backup="${RUN_DIR}/accounts.json.pre_sync"
   mkdir -p "${RUN_DIR}"
   local out rc=0
-  out="$(uv run python "${SYNC_PORTS_SCRIPT}" --port "${port}" --backup "${backup}" 2>&1)" || rc=$?
+  out="$(uv run --no-sync python "${SYNC_PORTS_SCRIPT}" --port "${port}" --backup "${backup}" 2>&1)" || rc=$?
   if [[ "${rc}" -ne 0 ]]; then
     echo "unified 协议端端口同步失败" >&2
     [[ -n "${out}" ]] && echo "${out}" | sed 's/^/  /' >&2
@@ -126,7 +126,7 @@ observability_bot() {
     echo "unified 未运行，无法读取 dispatch 指标" >&2
     return 1
   fi
-  uv run python "${SCRIPT_DIR}/ingress_dispatch_status.py"
+  uv run --no-sync python "${SCRIPT_DIR}/ingress_dispatch_status.py"
 }
 
 usage() {

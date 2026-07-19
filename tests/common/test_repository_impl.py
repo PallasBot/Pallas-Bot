@@ -4,13 +4,13 @@ import time
 
 import pytest
 
-from src.foundation.db.modules import Answer, Ban, Context, Message
-from src.foundation.db.repository import (
+from pallas.core.foundation.db.modules import Answer, Ban, Context, Message
+from pallas.core.foundation.db.repository import (
     BlackListRepository,
     ContextRepository,
     MessageRepository,
 )
-from src.foundation.db.repository_impl import (
+from pallas.core.foundation.db.repository_impl import (
     MongoBlackListRepository,
     MongoContextRepository,
     MongoMessageRepository,

@@ -1,4 +1,4 @@
-from src.plugins.request_handler.approval_reply_text import (
+from packages.request_handler.approval_reply_text import (
     classify_approval_reply_text,
     extract_approval_reply_text_from_body,
 )

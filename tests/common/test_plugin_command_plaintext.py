@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.platform.ingress.plugin_command_plaintext import (
+from pallas.core.platform.ingress.plugin_command_plaintext import (
     clear_plugin_command_plaintext_cache,
     extract_command_prefixes_from_menu_data,
     is_plugin_command_plaintext,
@@ -41,11 +41,11 @@ def test_is_plugin_command_plaintext_uses_trie_and_menu_prefixes(monkeypatch) ->
         )
     ]
     monkeypatch.setattr(
-        "src.platform.ingress.plugin_command_plaintext.get_loaded_plugins",
+        "pallas.core.platform.ingress.plugin_command_plaintext.get_loaded_plugins",
         lambda: fake_plugins,
     )
     monkeypatch.setattr(
-        "src.platform.ingress.plugin_command_plaintext.TrieRule.prefix.longest_prefix",
+        "pallas.core.platform.ingress.plugin_command_plaintext.TrieRule.prefix.longest_prefix",
         lambda text: SimpleNamespace(key="牛牛画画") if text.startswith("牛牛画画") else None,
     )
     clear_plugin_command_plaintext_cache()
@@ -77,11 +77,11 @@ def test_is_plugin_command_plaintext_builds_plugin_prefix_cache_once(monkeypatch
         return fake_plugins
 
     monkeypatch.setattr(
-        "src.platform.ingress.plugin_command_plaintext.get_loaded_plugins",
+        "pallas.core.platform.ingress.plugin_command_plaintext.get_loaded_plugins",
         fake_loaded_plugins,
     )
     monkeypatch.setattr(
-        "src.platform.ingress.plugin_command_plaintext.TrieRule.prefix.longest_prefix",
+        "pallas.core.platform.ingress.plugin_command_plaintext.TrieRule.prefix.longest_prefix",
         lambda _text: None,
     )
     clear_plugin_command_plaintext_cache()

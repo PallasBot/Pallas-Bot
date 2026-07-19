@@ -7,8 +7,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.platform.coord import redis_presence as rp
-from src.platform.shard import presence as mod
+from pallas.core.platform.coord import redis_presence as rp
+from pallas.core.platform.shard import presence as mod
 
 
 @pytest.fixture(autouse=True)

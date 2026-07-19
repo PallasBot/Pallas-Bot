@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
-from src.platform.multi_bot.at_targets import group_at_qq_ids, message_at_fleet_bot
+from pallas.core.platform.multi_bot.at_targets import group_at_qq_ids, message_at_fleet_bot
 
 
 def test_group_at_qq_ids_falls_back_to_raw_message(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.multi_bot.at_targets.get_fleet_bot_ids",
+        "pallas.core.platform.multi_bot.at_targets.get_fleet_bot_ids",
         lambda: frozenset({3599334092}),
     )
     event = GroupMessageEvent.model_construct(

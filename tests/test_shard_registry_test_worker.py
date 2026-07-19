@@ -1,7 +1,7 @@
 import pytest
 
-from src.platform.shard.registry.config import get_shard_registry_settings
-from src.platform.shard.registry.store import (
+from pallas.core.platform.shard.registry.config import get_shard_registry_settings
+from pallas.core.platform.shard.registry.store import (
     ShardRecord,
     ShardRegistry,
     TestShardConfig,

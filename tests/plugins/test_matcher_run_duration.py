@@ -3,7 +3,7 @@ import time
 
 import anyio
 
-from src.plugins.pallas_webui.extended_api import (
+from packages.pb_webui.extended_api import (
     _matcher_elapsed_ms,
     mark_matcher_run_started,
     take_matcher_run_started,

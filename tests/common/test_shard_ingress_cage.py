@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.platform.ingress.policy_registry import clear_ingress_policy_cache, text_matches_plugin_fanout
+from pallas.core.platform.ingress.policy_registry import clear_ingress_policy_cache, text_matches_plugin_fanout
 
 
 def _stub_duel_plugin(monkeypatch) -> None:
@@ -19,7 +19,7 @@ def _stub_duel_plugin(monkeypatch) -> None:
             ),
         )
     ]
-    monkeypatch.setattr("src.platform.ingress.policy_registry.get_loaded_plugins", lambda: plugins)
+    monkeypatch.setattr("pallas.core.platform.ingress.policy_registry.get_loaded_plugins", lambda: plugins)
     clear_ingress_policy_cache()
 
 
@@ -33,12 +33,12 @@ def test_cage_fanout_policy_variants(monkeypatch) -> None:
 
 
 def test_ingress_fanout_whitelist_does_not_need_cage(monkeypatch) -> None:
-    from src.platform.ingress.config import clear_ingress_fanout_config_cache
-    from src.platform.ingress.fanout_bypass import is_ingress_fanout_plaintext
+    from pallas.core.platform.ingress.config import clear_ingress_fanout_config_cache
+    from pallas.core.platform.ingress.fanout_bypass import is_ingress_fanout_plaintext
 
     _stub_duel_plugin(monkeypatch)
     monkeypatch.setattr(
-        "src.platform.ingress.config._ingress_env_str",
+        "pallas.core.platform.ingress.config._ingress_env_str",
         lambda name, default="": "牛牛,帕拉斯" if name == "PALLAS_INGRESS_FANOUT_GREETING" else default,
     )
     clear_ingress_fanout_config_cache()

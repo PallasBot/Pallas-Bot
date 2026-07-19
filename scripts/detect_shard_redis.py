@@ -31,11 +31,11 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    from src.foundation.config.dotenv import apply_repo_settings_to_environ
+    from pallas.core.foundation.config.dotenv import apply_repo_settings_to_environ
 
     apply_repo_settings_to_environ()
 
-    from src.platform.coord.redis_settings import (
+    from pallas.core.platform.coord.redis_settings import (
         clear_coord_redis_settings_cache,
         coord_redis_enabled,
         coord_redis_mode,
@@ -92,7 +92,7 @@ def main() -> int:
             )
         else:
             print(f"coord redis: unreachable ({url}); sharding claims will fail", file=sys.stderr)
-    return 0
+    return 1
 
 
 if __name__ == "__main__":

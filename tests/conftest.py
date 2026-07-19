@@ -17,7 +17,7 @@ async def beanie_fixture():
     from beanie import init_beanie
     from mongomock_motor import AsyncMongoMockClient
 
-    from src.foundation.db.modules import (
+    from pallas.core.foundation.db.modules import (
         BlackList,
         BotConfigModule,
         Context,

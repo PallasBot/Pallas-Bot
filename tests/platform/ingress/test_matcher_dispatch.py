@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from nonebot.internal.rule import Rule
 from nonebot.rule import command, to_me
 
-from src.platform.ingress import dispatch_lanes, message_load
-from src.platform.ingress import matcher_activation as activation
-from src.platform.ingress import matcher_dispatch as dispatch
+from pallas.core.perm import group_message_permission_for_command
+from pallas.core.platform.ingress import dispatch_lanes, message_load
+from pallas.core.platform.ingress import matcher_activation as activation
+from pallas.core.platform.ingress import matcher_dispatch as dispatch
 
 
 class _CommandMatcher:
@@ -43,6 +45,29 @@ def test_select_priority_matchers_keeps_all_on_command_traffic():
     pool = [_CommandMatcher, _PassiveMatcher]
     selected = activation.select_priority_matchers(pool, command_traffic=True)
     assert selected == pool
+
+
+class _GroupModeratorCommandMatcher:
+    rule = Rule(command("牛牛进群欢迎"))
+    permission = group_message_permission_for_command("greeting.set_group_welcome")
+
+
+def test_select_priority_matchers_skips_group_moderator_command_for_normal_member() -> None:
+    event = MagicMock()
+    event.get_plaintext.return_value = "牛牛进群欢迎"
+    event.raw_message = "牛牛进群欢迎"
+    event.to_me = False
+    event.get_type.return_value = "message"
+    event.sender = MagicMock(role="member")
+
+    selected = activation.select_priority_matchers(
+        [_GroupModeratorCommandMatcher, _EmptyMatcher],
+        command_traffic=True,
+        event=event,
+    )
+
+    assert _GroupModeratorCommandMatcher not in selected
+    assert _EmptyMatcher in selected
 
 
 def test_message_load_overload_window():
@@ -209,3 +234,74 @@ async def test_patched_handle_event_stays_silent_when_all_selected_matchers_are_
     for _ in range(controller.base_limit):
         await controller.release()
     dispatch_lanes.uninstall_dispatch_lanes()
+
+
+@pytest.mark.asyncio
+async def test_patched_handle_event_batches_selected_matchers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeGroupMessageEvent:
+        raw_message = "foo"
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "foo"
+
+    class MatcherA:
+        rule = Rule()
+
+    class MatcherB:
+        rule = Rule()
+
+    class MatcherC:
+        rule = Rule()
+
+    class MatcherD:
+        rule = Rule()
+
+    class MatcherE:
+        rule = Rule()
+
+    bot = MagicMock()
+    bot.type = "OneBot V11"
+    bot.self_id = "10001"
+    event = FakeGroupMessageEvent()
+    pre_mock = AsyncMock(return_value=True)
+    post_mock = AsyncMock()
+    active = 0
+    max_active = 0
+
+    async def fake_run_selected_matcher(*_args, **_kwargs):
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.02)
+        active -= 1
+        return dispatch_lanes.MatcherLaneResult(acquired=True, lane_busy=False)
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", post_mock)
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(dispatch, "select_priority_matchers", lambda priority_matchers, **_kwargs: priority_matchers)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "signal_overload", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
+    monkeypatch.setattr(
+        dispatch,
+        "repo_env_raw_value",
+        lambda key: "2" if key == "PALLAS_MATCHER_DISPATCH_BATCH" else None,
+    )
+    monkeypatch.setattr(dispatch, "check_and_run_matcher_with_lane", fake_run_selected_matcher)
+    monkeypatch.setattr(dispatch, "matchers", {1: [MatcherA, MatcherB, MatcherC, MatcherD, MatcherE]})
+
+    await dispatch.patched_handle_event(bot, event)
+
+    pre_mock.assert_awaited_once()
+    post_mock.assert_awaited_once()
+    assert max_active <= 2

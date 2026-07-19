@@ -7,15 +7,15 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from src.features.community_stats.endpoints import FALLBACK_HEARTBEAT, PRIMARY_HEARTBEAT
-from src.features.community_stats.store import community_stats_state_path
-from src.features.corpus.enroll import enroll_url_from_heartbeat, ensure_corpus_community_enrolled
-from src.features.corpus.store import load_corpus_community_state
+from pallas.product.community_stats.endpoints import FALLBACK_HEARTBEAT, PRIMARY_HEARTBEAT
+from pallas.product.community_stats.store import community_stats_state_path
+from pallas.product.corpus.enroll import enroll_url_from_heartbeat, ensure_corpus_community_enrolled
+from pallas.product.corpus.store import load_corpus_community_state
 
 
 @pytest.fixture(autouse=True)
 def clear_corpus_config():
-    from src.features.corpus.config import clear_corpus_config_cache
+    from pallas.product.corpus.config import clear_corpus_config_cache
 
     clear_corpus_config_cache()
     yield
@@ -32,14 +32,14 @@ async def test_ensure_corpus_community_enrolled_persists_token(tmp_path, monkeyp
     dep = str(uuid.uuid4())
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"deployment_id": dep}), encoding="utf-8")
-    monkeypatch.setattr("src.features.community_stats.store.community_stats_state_path", lambda: state_path)
+    monkeypatch.setattr("pallas.product.community_stats.store.community_stats_state_path", lambda: state_path)
 
     monkeypatch.setattr(
-        "src.features.corpus.enroll.should_run_corpus_auto_enroll",
+        "pallas.product.corpus.enroll.should_run_corpus_auto_enroll",
         lambda: True,
     )
     monkeypatch.setattr(
-        "src.features.corpus.enroll.corpus_enroll_urls",
+        "pallas.product.corpus.enroll.corpus_enroll_urls",
         lambda: ["https://stats.example/v1/corpus/enroll"],
     )
 
@@ -68,11 +68,11 @@ async def test_enroll_prefers_derived_api_base_in_auto_mode(tmp_path, monkeypatc
     dep = str(uuid.uuid4())
     state_path.parent.mkdir(parents=True, exist_ok=True)
     state_path.write_text(json.dumps({"deployment_id": dep}), encoding="utf-8")
-    monkeypatch.setattr("src.features.community_stats.store.community_stats_state_path", lambda: state_path)
+    monkeypatch.setattr("pallas.product.community_stats.store.community_stats_state_path", lambda: state_path)
     monkeypatch.delenv("PALLAS_COMMUNITY_STATS_ENDPOINT", raising=False)
-    monkeypatch.setattr("src.features.corpus.enroll.should_run_corpus_auto_enroll", lambda: True)
+    monkeypatch.setattr("pallas.product.corpus.enroll.should_run_corpus_auto_enroll", lambda: True)
     monkeypatch.setattr(
-        "src.features.corpus.enroll.corpus_enroll_urls",
+        "pallas.product.corpus.enroll.corpus_enroll_urls",
         lambda: [f"{FALLBACK_HEARTBEAT.replace('/heartbeat', '/corpus/enroll')}"],
     )
 
@@ -95,11 +95,12 @@ async def test_enroll_prefers_derived_api_base_in_auto_mode(tmp_path, monkeypatc
 
 @pytest.mark.asyncio
 async def test_ensure_corpus_skips_when_manual_configured(monkeypatch):
-    monkeypatch.setenv("PALLAS_CORPUS_TOKEN", "pc_manual")
-    monkeypatch.setenv("PALLAS_CORPUS_COMMUNITY_API_BASE", "https://stats.example/v1/corpus")
-    from src.features.corpus.config import clear_corpus_config_cache
-
-    clear_corpus_config_cache()
+    monkeypatch.setattr("pallas.product.corpus.enroll.community_manual_configured", lambda: True)
+    monkeypatch.setattr("pallas.product.corpus.enroll.should_run_corpus_auto_enroll", lambda: False)
+    monkeypatch.setattr(
+        "pallas.product.corpus.config.community_configured",
+        lambda: True,
+    )
     with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
         ok = await ensure_corpus_community_enrolled(force=True)
     assert ok is True

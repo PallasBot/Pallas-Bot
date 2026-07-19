@@ -1,0 +1,198 @@
+# 4.0 全栈：Bot + PostgreSQL + Redis + Ollama + AI Runtime
+# 新装默认 PostgreSQL；从 3.x 沿用 MongoDB 请用根目录 docker-compose.yml + --profile mongo（见 DockerDeployment.md）
+#
+# 准备:
+#   mkdir -p pallas-bot/config pallas-bot/data
+#   cp config/pallas.example.toml pallas-bot/config/pallas.toml   # 示例已默认 postgresql
+#   cp config/compose.env.example pallas-bot/config/compose.env
+#   # 编辑 pallas.toml：superusers、[bootstrap.postgres] 与 compose.env 的 PG_* 一致
+#
+# 启动:
+#   docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose.env up -d
+#
+# GPU（需 NVIDIA container toolkit）:
+#   docker compose -f docker-compose.full.yml -f docker-compose.full.gpu.yml \
+#     --env-file ./pallas-bot/config/compose.env up -d
+#
+# 验证:
+#   curl -s http://127.0.0.1:8088/pallas/api/health
+#   curl -s http://127.0.0.1:9099/health
+#
+# 端口: BOT_PORT=宿主机映射；BOT_LISTEN_PORT=容器内监听（默认皆 8088）。
+# AI 回调走 BOT_LISTEN_PORT，只改宿主机端口时勿动 BOT_LISTEN_PORT。
+#
+# 模型：默认不预拉 Ollama 权重；需要预拉时加 --profile pull-models。
+# 首次请在 WebUI「AI 配置 → 接入」选择/拉取模型。
+# AI 默认镜像为 slim（LLM-only）；GPU 全功能用 PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest
+#
+# AI 日志：pallasbot-ai 写入 ./pallas-bot-ai/logs/；pallasbot 只读挂到 /ai-logs 供 WebUI SSE。
+
+name: pallas-full
+
+services:
+  pallasbot:
+    container_name: pallasbot
+    image: pallasbot/pallas-bot:latest
+    restart: always
+    ports:
+      # 左：宿主机访问端口 BOT_PORT；右：容器内 Bot 监听 BOT_LISTEN_PORT（须与 pallas.toml port / PORT 一致）
+      - "${BOT_PORT:-8088}:${BOT_LISTEN_PORT:-8088}"
+    environment:
+      TZ: Asia/Shanghai
+      ENVIRONMENT: prod
+      APP_MODULE: bot:app
+      MAX_WORKERS: 1
+      # 与右侧端口映射、AI CALLBACK_PORT 对齐；改监听端口时同时改 BOT_LISTEN_PORT
+      PORT: ${BOT_LISTEN_PORT:-8088}
+      DB_BACKEND: postgresql
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_USER: ${PG_USER:-pallas}
+      PG_PASSWORD: ${PG_PASSWORD:-pallas}
+      PG_DB: ${PG_DB:-PallasBot}
+      AI_SERVER_HOST: pallasbot-ai
+      AI_SERVER_PORT: "9099"
+      LLM_CHAT_ENABLED: "true"
+    networks:
+      - pallas-full
+    volumes:
+      - ./pallas-bot/resource/voices:/app/resource/voices
+      - ./pallas-bot/config/pallas.toml:/app/config/pallas.toml
+      - ./pallas-bot/data:/app/data
+      - ./pallas-bot/local/plugins:/app/local/plugins
+      # 与 pallasbot-ai 共享 AI 服务落盘日志，供 WebUI SSE 跟读（挂载点为 /ai-logs）
+      - ./pallas-bot-ai/logs:/ai-logs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pallasbot-ai:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    container_name: pallasbot_postgres
+    image: postgres:16-alpine
+    restart: always
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - track_io_timing=on
+      - -c
+      - idle_in_transaction_session_timeout=15s
+    environment:
+      TZ: Asia/Shanghai
+      POSTGRES_USER: ${PG_USER:-pallas}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-pallas}
+      POSTGRES_DB: ${PG_DB:-PallasBot}
+    networks:
+      - pallas-full
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    container_name: pallas-full-redis
+    command: redis-server --appendonly yes
+    networks:
+      - pallas-full
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: pallas-full-ollama
+    networks:
+      - pallas-full
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  ollama-init:
+    profiles: ["pull-models"]
+    image: ollama/ollama:latest
+    container_name: pallas-full-ollama-init
+    networks:
+      - pallas-full
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      OLLAMA_CATEGORIZER_MODEL: ${LLM_CATEGORIZER_MODEL:-qwen2.5:0.5b}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until wget -q -O- http://ollama:11434/api/tags >/dev/null 2>&1; do sleep 2; done
+        ollama pull "$${OLLAMA_MODEL:-qwen2.5:7b}"
+        ollama pull "$${OLLAMA_CATEGORIZER_MODEL:-qwen2.5:0.5b}"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  pallasbot-ai:
+    image: ${PALLAS_AI_IMAGE:-pallasbot/pallas-bot-ai:slim}
+    container_name: pallasbot-ai
+    ports:
+      - "${AI_SERVER_PORT:-9099}:9099"
+    environment:
+      TZ: Asia/Shanghai
+      REDIS_URL: redis://redis:6379/0
+      LLM_SESSION_BACKEND: redis
+      CALLBACK_HOST: pallasbot
+      # Docker 网络内访问 Bot 的端口 = 容器内监听端口（BOT_LISTEN_PORT），不是宿主机 BOT_PORT
+      CALLBACK_PORT: ${BOT_LISTEN_PORT:-8088}
+      LLM_CHAT_ENABLED: "true"
+      LLM_PROVIDER_MODE: ${LLM_PROVIDER_MODE:-local_only}
+      LLM_BACKEND_URL: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      LLM_CATEGORIZER_MODEL: ${LLM_CATEGORIZER_MODEL:-qwen2.5:0.5b}
+      LLM_AUTO_START: "false"
+      CELERY_TASK_PACKAGES: llm
+      AI_ENABLE_MEDIA_WORKER: "0"
+      # 与 Bot WebUI「AI 服务」Bearer Token 一致；见 config/compose.env.example
+      PALLAS_AI_API_TOKEN: ${PALLAS_AI_API_TOKEN:-}
+    networks:
+      - pallas-full
+    volumes:
+      - ./pallas-bot-ai/logs:/server/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9099/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+networks:
+  pallas-full:
+
+volumes:
+  redis_data:
+  ollama_data:

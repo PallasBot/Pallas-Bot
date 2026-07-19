@@ -1,4 +1,4 @@
-from src.plugins.request_handler.texts import REQUEST_HANDLER_USAGE_LINES
+from packages.request_handler.texts import REQUEST_HANDLER_USAGE_LINES
 
 
 def test_request_handler_usage_lines_are_grouped_by_task() -> None:

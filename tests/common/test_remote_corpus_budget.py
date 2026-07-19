@@ -1,6 +1,6 @@
 import pytest
 
-from src.features.corpus.remote_budget import (
+from pallas.product.corpus.remote_budget import (
     RemoteCorpusBudget,
     clear_remote_corpus_budget_state,
     should_skip_remote_corpus,
@@ -11,7 +11,7 @@ from src.features.corpus.remote_budget import (
 async def test_remote_corpus_budget_skips_under_pressure(monkeypatch):
     clear_remote_corpus_budget_state()
     monkeypatch.setattr(
-        "src.features.corpus.remote_budget.pg_pool_under_pressure",
+        "pallas.product.corpus.remote_budget.pg_pool_under_pressure",
         lambda threshold=0.75: True,
     )
     assert should_skip_remote_corpus(hot_path=True) is True
@@ -23,11 +23,11 @@ async def test_remote_corpus_budget_skips_under_pressure(monkeypatch):
 async def test_remote_corpus_budget_acquires_when_healthy(monkeypatch):
     clear_remote_corpus_budget_state()
     monkeypatch.setattr(
-        "src.features.corpus.remote_budget.pg_pool_under_pressure",
+        "pallas.product.corpus.remote_budget.pg_pool_under_pressure",
         lambda threshold=0.75: False,
     )
     monkeypatch.setattr(
-        "src.features.corpus.remote_budget.remote_corpus_concurrency_limit",
+        "pallas.product.corpus.remote_budget.remote_corpus_concurrency_limit",
         lambda: 2,
     )
     async with RemoteCorpusBudget(hot_path=False, wait=True) as budget:
@@ -42,7 +42,7 @@ def test_remote_corpus_background_threshold_more_conservative(monkeypatch):
         seen.append(threshold)
         return False
 
-    monkeypatch.setattr("src.features.corpus.remote_budget.pg_pool_under_pressure", fake_under_pressure)
+    monkeypatch.setattr("pallas.product.corpus.remote_budget.pg_pool_under_pressure", fake_under_pressure)
 
     assert should_skip_remote_corpus(hot_path=False) is False
     assert seen == [0.55]

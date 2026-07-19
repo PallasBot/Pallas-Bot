@@ -5,10 +5,10 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_dream_session_ingress_passes_without_gate(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.platform.ingress.dream_host_gate import dream_session_ingress_passes
+    from pallas.core.platform.ingress.dream_host_gate import dream_session_ingress_passes
 
     monkeypatch.setattr(
-        "src.platform.multi_bot.dedup.needs_group_host_bot_gate",
+        "pallas.core.platform.multi_bot.dedup.needs_group_host_bot_gate",
         lambda: True,
     )
 
@@ -16,7 +16,7 @@ async def test_dream_session_ingress_passes_without_gate(monkeypatch: pytest.Mon
         return True
 
     monkeypatch.setattr(
-        "src.platform.multi_bot.dedup.is_group_owned_gate_holder",
+        "pallas.core.platform.multi_bot.dedup.is_group_owned_gate_holder",
         _holder,
     )
 
@@ -25,7 +25,7 @@ async def test_dream_session_ingress_passes_without_gate(monkeypatch: pytest.Mon
 
 @pytest.mark.asyncio
 async def test_dream_session_ingress_blocks_non_host(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.platform.ingress.dream_host_gate import dream_session_ingress_passes
+    from pallas.core.platform.ingress.dream_host_gate import dream_session_ingress_passes
 
     async def _holder(plugin: str, group_id: int, bot_id: int) -> bool:
         assert plugin == "dream"
@@ -33,11 +33,11 @@ async def test_dream_session_ingress_blocks_non_host(monkeypatch: pytest.MonkeyP
         return bot_id == 111
 
     monkeypatch.setattr(
-        "src.platform.multi_bot.dedup.needs_group_host_bot_gate",
+        "pallas.core.platform.multi_bot.dedup.needs_group_host_bot_gate",
         lambda: True,
     )
     monkeypatch.setattr(
-        "src.platform.multi_bot.dedup.is_group_owned_gate_holder",
+        "pallas.core.platform.multi_bot.dedup.is_group_owned_gate_holder",
         _holder,
     )
 

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from src.platform.shard.coord import group_activity as ga_mod
+from pallas.core.platform.shard import context as shard_ctx
+from pallas.core.platform.shard.coord import group_activity as ga_mod
+from pallas.core.platform.shard.registry import config as shard_cfg
 
 
 def spy_lock() -> ga_mod.GroupActivityLock:
@@ -14,9 +16,9 @@ def spy_lock() -> ga_mod.GroupActivityLock:
 
 
 def test_spy_group_lock_exclusive(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
-        ga_mod,
+        shard_cfg,
         "get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )
@@ -28,7 +30,7 @@ def test_spy_group_lock_exclusive(fake_coord_redis, monkeypatch) -> None:
 
 
 def test_spy_group_local_fallback(monkeypatch) -> None:
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: False)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: False)
     lock = spy_lock()
     lock.local_busy.clear()
     assert lock.try_begin(1) is True
@@ -40,9 +42,9 @@ def test_spy_group_local_fallback(monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_reclaim_orphan_spy_group_without_session(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
-        ga_mod,
+        shard_cfg,
         "get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )
@@ -61,11 +63,12 @@ async def test_reclaim_orphan_spy_group_without_session(fake_coord_redis, monkey
 
 
 def test_spy_prep_room_metadata(fake_coord_redis, monkeypatch) -> None:
-    from src.plugins.who_is_spy.group_lock import mark_spy_prep_room, read_spy_prep_room
+    pytest.importorskip("packages.who_is_spy.group_lock")
+    from packages.who_is_spy.group_lock import mark_spy_prep_room, read_spy_prep_room
 
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
-        ga_mod,
+        shard_cfg,
         "get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )
@@ -79,12 +82,13 @@ def test_spy_prep_room_metadata(fake_coord_redis, monkeypatch) -> None:
 
 
 def test_spy_prep_players_and_snapshot(fake_coord_redis, monkeypatch) -> None:
-    from src.plugins.who_is_spy.coord_store import read_prep_players, write_game_snapshot, write_prep_players
-    from src.plugins.who_is_spy.models import Game, Player
+    pytest.importorskip("packages.who_is_spy.coord_store")
+    from packages.who_is_spy.coord_store import read_prep_players, write_game_snapshot, write_prep_players
+    from packages.who_is_spy.models import Game, Player
 
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
-        ga_mod,
+        shard_cfg,
         "get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )
@@ -115,9 +119,9 @@ def test_spy_prep_players_and_snapshot(fake_coord_redis, monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_reclaim_skips_live_session(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
-        ga_mod,
+        shard_cfg,
         "get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )

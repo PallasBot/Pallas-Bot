@@ -6,39 +6,39 @@ import pytest
 from nonebot.internal.rule import Rule
 from nonebot.rule import command, to_me
 
-from src.platform.ingress import dispatch_lanes, message_load
-from src.platform.ingress.dispatch_lanes import DispatchLane, LaneController
+from pallas.core.platform.ingress import dispatch_lanes, message_load
+from pallas.core.platform.ingress.dispatch_lanes import DispatchLane, LaneController
 
 
 class _CommandMatcher:
-    plugin_name = "src.plugins.help"
+    plugin_name = "packages.help"
     rule = Rule(command("foo"))
 
 
 class _AiMatcher:
-    plugin_name = "src.plugins.ollama"
+    plugin_name = "packages.llm_chat"
     rule = Rule(to_me())
 
 
 class _RegexMatcher:
-    plugin_name = "src.plugins.duel"
+    plugin_name = "packages.duel"
     rule = Rule(to_me())
 
 
 class _ChatMatcher:
-    plugin_name = "src.plugins.chat"
+    plugin_name = "packages.chat"
     rule = Rule(to_me())
 
 
 class _SingMatcher:
-    plugin_name = "src.plugins.sing"
+    plugin_name = "packages.sing"
     rule = Rule(to_me())
 
 
 @pytest.fixture(autouse=True)
 def reset_lanes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "src.platform.ingress.fleet_dispatch_scale.connected_bot_count",
+        "pallas.core.platform.ingress.fleet_dispatch_scale.connected_bot_count",
         lambda: 1,
     )
     dispatch_lanes.clear_dispatch_lanes_cache()
@@ -66,7 +66,7 @@ def test_lane_for_matcher_uses_plugin_lane_override(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(
         dispatch_lanes,
         "plugin_lane_override",
-        lambda module: "remote" if module == "ollama" else None,
+        lambda module: "remote" if module in {"llm_chat", "ollama"} else None,
     )
     assert dispatch_lanes.lane_for_matcher(_AiMatcher) == DispatchLane.REMOTE
 
@@ -120,7 +120,11 @@ async def test_check_and_run_matcher_with_lane_skips_when_busy(monkeypatch: pyte
     await controller.acquire(0.01)
 
     run_mock = AsyncMock()
-    monkeypatch.setattr(dispatch_lanes, "plugin_lane_override", lambda module: "remote" if module == "ollama" else None)
+    monkeypatch.setattr(
+        dispatch_lanes,
+        "plugin_lane_override",
+        lambda module: "remote" if module in {"llm_chat", "ollama"} else None,
+    )
     monkeypatch.setattr("nonebot.message.check_and_run_matcher", run_mock)
 
     result = await dispatch_lanes.check_and_run_matcher_with_lane(

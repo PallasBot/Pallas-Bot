@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from src.plugins.request_handler.storage import merge_write_bot_entry, merge_write_bot_nested_entries
+from packages.request_handler.storage import merge_write_bot_entry, merge_write_bot_nested_entries
 
 
 def test_merge_write_bot_nested_entries_preserves_other_bot_updates(tmp_path: Path) -> None:

@@ -25,8 +25,8 @@ from sqlalchemy.dialects import postgresql
 @pytest.mark.asyncio
 async def test_find_for_cleanup_or_semantics(pg_engine):
     """trigger_count>threshold 与 clear_time<expiration 必须是 OR 关系。"""
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     await repo.insert(
@@ -49,8 +49,8 @@ async def test_find_for_cleanup_or_semantics(pg_engine):
 @pytest.mark.asyncio
 async def test_context_exists_by_keywords(pg_engine):
     """Learner仅需分支判断时应只查 id，避免误用全量 find_by_keywords。"""
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     assert await repo.context_exists_by_keywords("absent_kw") is False
@@ -63,8 +63,8 @@ async def test_context_exists_by_keywords(pg_engine):
 @pytest.mark.asyncio
 async def test_upsert_answer_is_atomic(pg_engine):
     """并发 50 次 upsert_answer 只产生 1 条 Answer、count=50、trigger_count 精确累加。"""
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     await repo.insert(Context.model_construct(keywords="kw", time=0, trigger_count=1, answers=[], ban=[], clear_time=0))
@@ -91,8 +91,8 @@ async def test_upsert_answer_is_atomic(pg_engine):
 
 @pytest.mark.asyncio
 async def test_replace_answers_upserts_and_drops_orphans(pg_engine):
-    from src.foundation.db.modules import Answer, Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Answer, Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     await repo.insert(
@@ -156,9 +156,9 @@ async def test_replace_answers_upserts_and_drops_orphans(pg_engine):
 @pytest.mark.asyncio
 async def test_find_by_keywords_for_reply_caps_messages(pg_engine, monkeypatch):
     """接话 find 仅加载最近 N 条 message，全量 find 不受影响。"""
-    from src.features.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
-    from src.foundation.db import repository_pg as pg_mod
-    from src.foundation.db.modules import Context
+    from pallas.core.foundation.db import repository_pg as pg_mod
+    from pallas.core.foundation.db.modules import Context
+    from pallas.product.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
 
     monkeypatch.setenv("PALLAS_CORPUS_REPLY_MESSAGES_CAP", "8")
     clear_corpus_reply_perf_config_cache()
@@ -189,8 +189,8 @@ async def test_find_by_keywords_for_reply_caps_messages(pg_engine, monkeypatch):
 @pytest.mark.asyncio
 async def test_find_by_keywords_for_reply_keeps_bans(pg_engine):
     """接话轻量查询仍需保留 ban 信息，避免提速后放松禁言过滤。"""
-    from src.foundation.db.modules import Ban, Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Ban, Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     await repo.insert(
@@ -216,7 +216,7 @@ async def test_find_by_keywords_for_reply_keeps_bans(pg_engine):
 
 def test_reply_message_query_limits_to_selected_answer_ids():
     """接话消息查询必须只扫描已入选的 answer_id，不能退回按整个 context 扫描。"""
-    from src.foundation.db import repository_pg as pg_mod
+    from pallas.core.foundation.db import repository_pg as pg_mod
 
     stmt = pg_mod.build_reply_message_query(answer_ids=[11, 22], msg_cap=8)
     sql = str(stmt.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
@@ -227,14 +227,14 @@ def test_reply_message_query_limits_to_selected_answer_ids():
 
 
 def test_message_row_has_group_user_time_index():
-    from src.foundation.db.repository_pg import MessageRow
+    from pallas.core.foundation.db.repository_pg import MessageRow
 
     index_names = {idx.name for idx in MessageRow.__table__.indexes}
     assert "ix_message_group_user_time" in index_names
 
 
 def test_context_answer_rows_have_reply_indexes():
-    from src.foundation.db.repository_pg import ContextAnswerMessageRow, ContextAnswerRow
+    from pallas.core.foundation.db.repository_pg import ContextAnswerMessageRow, ContextAnswerRow
 
     answer_index_names = {idx.name for idx in ContextAnswerRow.__table__.indexes}
     message_index_names = {idx.name for idx in ContextAnswerMessageRow.__table__.indexes}
@@ -245,7 +245,7 @@ def test_context_answer_rows_have_reply_indexes():
 
 @pytest.mark.asyncio
 async def test_delete_context_answer_orphans_chunks_large_deletes():
-    from src.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db import repository_pg as mod
 
     deleted_chunks: list[list[int]] = []
 
@@ -283,70 +283,161 @@ async def test_delete_context_answer_orphans_chunks_large_deletes():
 
 
 def test_ensure_pg_message_group_user_time_index_creates_missing_index(monkeypatch):
-    from src.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db import repository_pg as mod
 
-    created: list[str] = []
+    executed: list[str] = []
 
     class FakeInspector:
         def has_table(self, name: str) -> bool:
             return name == "message"
 
-        def get_indexes(self, name: str) -> list[dict[str, str]]:
-            assert name == "message"
-            return [{"name": "ix_message_group_time"}]
-
-    class FakeIndex:
-        def __init__(self, name: str, *_cols) -> None:
-            self.name = name
-
-        def create(self, _connection) -> None:
-            created.append(self.name)
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
 
     monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
-    monkeypatch.setattr(mod, "Index", FakeIndex)
 
-    mod._ensure_pg_message_group_user_time_index(object())
+    mod._ensure_pg_message_group_user_time_index(FakeConnection())
 
-    assert created == ["ix_message_group_user_time"]
+    assert executed == ["CREATE INDEX IF NOT EXISTS ix_message_group_user_time ON message (group_id, user_id, time)"]
+
+
+@pytest.mark.parametrize(
+    ("existing_columns", "expected"),
+    [
+        (
+            [],
+            [
+                "ALTER TABLE llm_memory_entry ADD COLUMN embedding_json TEXT",
+                "ALTER TABLE llm_memory_entry ADD COLUMN embedding_model TEXT",
+            ],
+        ),
+        (["embedding_model"], ["ALTER TABLE llm_memory_entry ADD COLUMN embedding_json TEXT"]),
+        (["embedding_json", "embedding_model"], []),
+    ],
+)
+def test_ensure_pg_llm_memory_embedding_columns_adds_only_missing_columns(monkeypatch, existing_columns, expected):
+    from pallas.core.foundation.db import repository_pg as mod
+
+    executed: list[str] = []
+
+    class FakeInspector:
+        def has_table(self, name: str) -> bool:
+            return name == "llm_memory_entry"
+
+        def get_columns(self, name: str) -> list[dict[str, str]]:
+            assert name == "llm_memory_entry"
+            return [{"name": column} for column in existing_columns]
+
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
+
+    monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
+
+    mod._ensure_pg_llm_memory_embedding_columns(FakeConnection())
+
+    assert executed == expected
+
+
+@pytest.mark.parametrize(
+    ("existing_columns", "expected_substrings"),
+    [
+        (["blob_data"], []),
+        (
+            ["base64_data"],
+            [
+                "ADD COLUMN blob_data BYTEA",
+                "decode(base64_data, 'base64')",
+                "DROP COLUMN base64_data",
+            ],
+        ),
+        (
+            ["base64_data", "blob_data"],
+            [
+                "decode(base64_data, 'base64')",
+                "DROP COLUMN base64_data",
+            ],
+        ),
+        ([], ["ADD COLUMN blob_data BYTEA"]),
+    ],
+)
+def test_ensure_pg_image_cache_blob_data_migrates_base64(monkeypatch, existing_columns, expected_substrings):
+    from pallas.core.foundation.db import repository_pg as mod
+
+    executed: list[str] = []
+
+    class FakeInspector:
+        def has_table(self, name: str) -> bool:
+            return name == "image_cache"
+
+        def get_columns(self, name: str) -> list[dict[str, str]]:
+            assert name == "image_cache"
+            return [{"name": column} for column in existing_columns]
+
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
+
+    monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
+
+    mod._ensure_pg_image_cache_blob_data(FakeConnection())
+
+    assert len(executed) == len(expected_substrings)
+    for sql, needle in zip(executed, expected_substrings, strict=True):
+        assert needle in sql
+
+
+def test_ensure_pg_image_cache_blob_data_skips_missing_table(monkeypatch):
+    from pallas.core.foundation.db import repository_pg as mod
+
+    executed: list[str] = []
+
+    class FakeInspector:
+        def has_table(self, name: str) -> bool:
+            return False
+
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
+
+    monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
+
+    mod._ensure_pg_image_cache_blob_data(FakeConnection())
+    assert executed == []
 
 
 def test_ensure_pg_context_answer_reply_indexes_create_missing_indexes(monkeypatch):
-    from src.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db import repository_pg as mod
 
-    created: list[str] = []
+    executed: list[str] = []
 
     class FakeInspector:
         def has_table(self, name: str) -> bool:
             return name in {"context_answer", "context_answer_message"}
 
-        def get_indexes(self, name: str) -> list[dict[str, str]]:
-            return []
-
-    class FakeIndex:
-        def __init__(self, name: str, *_cols) -> None:
-            self.name = name
-
-        def create(self, _connection) -> None:
-            created.append(self.name)
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
 
     monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
-    monkeypatch.setattr(mod, "Index", FakeIndex)
 
-    mod._ensure_pg_context_answer_reply_index(object())
-    mod._ensure_pg_context_answer_message_reply_index(object())
+    connection = FakeConnection()
+    mod._ensure_pg_context_answer_reply_index(connection)
+    mod._ensure_pg_context_answer_message_reply_index(connection)
 
-    assert created == [
-        "ix_context_answer_ctx_count_time",
-        "ix_context_answer_message_answer_id_id",
+    assert executed == [
+        "CREATE INDEX IF NOT EXISTS ix_context_answer_ctx_count_time ON context_answer (context_id, count, time)",
+        "CREATE INDEX IF NOT EXISTS ix_context_answer_message_answer_id_id ON context_answer_message (answer_id, id)",
     ]
 
 
 @pytest.mark.asyncio
 async def test_find_by_keywords_for_reply_many_answers_no_in_overflow(pg_engine, monkeypatch):
     """热词大量 Answer 时不得用超大 IN (...)，接话 find 应成功且受 reply_answers_cap 限制。"""
-    from src.features.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
-    from src.foundation.db import repository_pg as pg_mod
-    from src.foundation.db.modules import Context
+    from pallas.core.foundation.db import repository_pg as pg_mod
+    from pallas.core.foundation.db.modules import Context
+    from pallas.product.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
 
     monkeypatch.setenv("PALLAS_CORPUS_REPLY_ANSWERS_CAP", "64")
     clear_corpus_reply_perf_config_cache()
@@ -373,9 +464,9 @@ async def test_find_by_keywords_for_reply_many_answers_no_in_overflow(pg_engine,
 @pytest.mark.asyncio
 async def test_find_by_keywords_for_reply_tightens_caps_for_short_keywords(pg_engine, monkeypatch):
     """超短关键词应进一步收紧候选窗口，避免热点短词把热路径拖长。"""
-    from src.features.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
-    from src.foundation.db import repository_pg as pg_mod
-    from src.foundation.db.modules import Context
+    from pallas.core.foundation.db import repository_pg as pg_mod
+    from pallas.core.foundation.db.modules import Context
+    from pallas.product.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
 
     monkeypatch.setenv("PALLAS_CORPUS_REPLY_ANSWERS_CAP", "128")
     clear_corpus_reply_perf_config_cache()
@@ -400,9 +491,9 @@ async def test_find_by_keywords_for_reply_tightens_caps_for_short_keywords(pg_en
 @pytest.mark.asyncio
 async def test_find_by_keywords_for_reply_reuses_recent_snapshot_during_hot_upsert(pg_engine, monkeypatch):
     """高频 learn 写同一关键词时，接话查询应短暂复用最近快照，避免每条消息都重查。"""
-    from src.features.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
+    from pallas.product.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
 
     monkeypatch.setenv("PALLAS_CORPUS_REPLY_SNAPSHOT_SEC", "30")
     clear_corpus_reply_perf_config_cache()
@@ -426,9 +517,9 @@ async def test_find_by_keywords_for_reply_reuses_recent_snapshot_during_hot_upse
 @pytest.mark.asyncio
 async def test_find_by_keywords_for_reply_insert_invalidates_recent_miss_snapshot(pg_engine, monkeypatch):
     """新建 Context 后必须能立即打破最近 miss 快照，避免社区回填后仍短暂看不到。"""
-    from src.features.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
+    from pallas.product.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
 
     monkeypatch.setenv("PALLAS_CORPUS_REPLY_SNAPSHOT_SEC", "30")
     clear_corpus_reply_perf_config_cache()
@@ -449,9 +540,9 @@ async def test_find_by_keywords_for_reply_insert_invalidates_recent_miss_snapsho
 @pytest.mark.asyncio
 async def test_append_ban_invalidates_recent_reply_snapshot(pg_engine, monkeypatch):
     """ban 追加后应立即刷新快照，不能让旧快照继续放行刚禁掉的答案。"""
-    from src.features.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
-    from src.foundation.db.modules import Ban, Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Ban, Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
+    from pallas.product.corpus.reply_perf_config import clear_corpus_reply_perf_config_cache
 
     monkeypatch.setenv("PALLAS_CORPUS_REPLY_SNAPSHOT_SEC", "30")
     clear_corpus_reply_perf_config_cache()
@@ -474,8 +565,8 @@ async def test_append_ban_invalidates_recent_reply_snapshot(pg_engine, monkeypat
 @pytest.mark.asyncio
 async def test_find_ban_reply_target(pg_engine):
     """按 group_id + reply 原文应能精确反查 ban 目标。"""
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     await repo.insert(
@@ -505,8 +596,8 @@ async def test_find_ban_reply_target(pg_engine):
 @pytest.mark.asyncio
 async def test_upsert_answer_append_flag(pg_engine):
     """append_on_existing=False 时 count 仍 +1，但不把新 message 追加到已有 Answer。"""
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     await repo.insert(Context.model_construct(keywords="k", time=0, trigger_count=1, answers=[], ban=[], clear_time=0))
@@ -524,7 +615,7 @@ async def test_upsert_answer_append_flag(pg_engine):
 @pytest.mark.asyncio
 async def test_upsert_answer_context_missing(pg_engine):
     """Context 不存在时 upsert_answer 必须 no-op，不得凭空造 Context。"""
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     await repo.upsert_answer("absent", 1, "a", 100, "m", append_on_existing=True)
@@ -535,7 +626,7 @@ async def test_upsert_answer_context_missing(pg_engine):
 @pytest.mark.asyncio
 async def test_learn_answer_creates_context_when_missing(pg_engine):
     """learn_answer 缺 Context 时应直接建 Context + 首条 Answer，避免先 exists 再 insert。"""
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     created = await repo.learn_answer(
@@ -558,10 +649,32 @@ async def test_learn_answer_creates_context_when_missing(pg_engine):
 
 
 @pytest.mark.asyncio
+async def test_learn_answer_blocks_contaminated_message(pg_engine, monkeypatch) -> None:
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
+    from pallas.product.llm.config import LlmConfig
+
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: LlmConfig(llm_corpus_learn_guard_enabled=True),
+    )
+    repo = PgContextRepository()
+    created = await repo.learn_answer(
+        keywords="learn-blocked",
+        group_id=1,
+        answer_keywords="ans",
+        answer_time=100,
+        message="希望每个庆典都能顺利举行",
+        append_on_existing=False,
+    )
+    assert created is False
+    assert await repo.find_by_keywords("learn-blocked") is None
+
+
+@pytest.mark.asyncio
 async def test_learn_answer_updates_existing_context(pg_engine):
     """learn_answer 命中已存在 Context 时应原子累加 trigger_count / answer.count。"""
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     await repo.insert(
@@ -599,8 +712,8 @@ async def test_learn_answer_updates_existing_context(pg_engine):
 @pytest.mark.asyncio
 async def test_delete_expired_chunked(pg_engine):
     """delete_expired 分块模式下应清掉所有过期行、保留未过期行。"""
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     for i in range(100):
@@ -620,8 +733,8 @@ async def test_delete_expired_chunked(pg_engine):
 @pytest.mark.asyncio
 async def test_null_byte_stripping(pg_engine):
     """Context / Answer / Ban / Message 全链路入库前都剥除 \\x00，PG 不得因此报错。"""
-    from src.foundation.db.modules import Answer, Ban, Context, Message
-    from src.foundation.db.repository_pg import PgContextRepository, PgMessageRepository
+    from pallas.core.foundation.db.modules import Answer, Ban, Context, Message
+    from pallas.core.foundation.db.repository_pg import PgContextRepository, PgMessageRepository
 
     ctx_repo = PgContextRepository()
     msg_repo = PgMessageRepository()
@@ -661,8 +774,8 @@ async def test_null_byte_stripping(pg_engine):
 
 @pytest.mark.asyncio
 async def test_message_find_recent_in_group(pg_engine):
-    from src.foundation.db.modules import Message
-    from src.foundation.db.repository_pg import PgMessageRepository
+    from pallas.core.foundation.db.modules import Message
+    from pallas.core.foundation.db.repository_pg import PgMessageRepository
 
     repo = PgMessageRepository()
     gid = 88001
@@ -698,8 +811,8 @@ async def test_message_find_recent_in_group(pg_engine):
 @pytest.mark.asyncio
 async def test_upsert_answer_handles_long_keywords(pg_engine):
     """answer.keywords 超出 btree 2704 字节上限时，UNIQUE 约束走 keywords_hash，不应触发 ProgramLimitExceededError。"""
-    from src.foundation.db.modules import Context
-    from src.foundation.db.repository_pg import PgContextRepository
+    from pallas.core.foundation.db.modules import Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository
 
     repo = PgContextRepository()
     await repo.insert(
@@ -719,7 +832,7 @@ async def test_upsert_answer_handles_long_keywords(pg_engine):
 @pytest.mark.asyncio
 async def test_blacklist_upsert_is_atomic(pg_engine):
     """并发 upsert_answers 到同一 group_id 不会炸库、最终只剩 1 行。"""
-    from src.foundation.db.repository_pg import PgBlackListRepository
+    from pallas.core.foundation.db.repository_pg import PgBlackListRepository
 
     repo = PgBlackListRepository()
     await asyncio.gather(*[repo.upsert_answers(1, [f"a{i}"]) for i in range(20)])
@@ -731,7 +844,7 @@ async def test_blacklist_upsert_is_atomic(pg_engine):
 @pytest.mark.asyncio
 async def test_blacklist_answers_and_reserve_do_not_clobber(pg_engine):
     """同一 group_id 下 upsert_answers 与 upsert_answers_reserve 各管各的列，互不覆盖。"""
-    from src.foundation.db.repository_pg import PgBlackListRepository
+    from pallas.core.foundation.db.repository_pg import PgBlackListRepository
 
     repo = PgBlackListRepository()
     # 先写 answers，再写 reserve；reserve 分支不应把 answers 清空
@@ -753,45 +866,46 @@ async def test_blacklist_answers_and_reserve_do_not_clobber(pg_engine):
 
 @pytest.mark.asyncio
 async def test_image_cache_save_is_upsert(pg_engine):
-    """PgImageCacheRepository.save 必须对齐 Mongo save() 的 upsert 语义。"""
-    from src.foundation.db.modules import ImageCache
-    from src.foundation.db.repository_pg import PgImageCacheRepository
+    """PgImageCacheRepository.save 必须对齐 Mongo save() 的 upsert 语义。
+
+    字段名变更（base64_data → blob_data）+ 类型变 BYTEA（issue #223）。
+    """
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
 
     repo = PgImageCacheRepository()
-    ic = ImageCache.model_construct(cq_code="[CQ:image,file=x.image]", base64_data=None, ref_times=1, date=20250419)
+    ic = ImageCache.model_construct(cq_code="[CQ:image,file=x.image]", blob_data=None, ref_times=1, date=20250419)
     await repo.save(ic)
     assert await repo.find_by_cq_code("[CQ:image,file=x.image]") is not None
 
     ic.ref_times = 5
-    ic.base64_data = "b64"
+    ic.blob_data = b"\x89PNG\r\n\x1a\n"
     await repo.save(ic)
     got = await repo.find_by_cq_code("[CQ:image,file=x.image]")
     assert got is not None
     assert got.ref_times == 5
-    assert got.base64_data == "b64"
+    assert got.blob_data == b"\x89PNG\r\n\x1a\n"
 
 
 @pytest.mark.asyncio
 async def test_image_cache_insert_is_no_op_on_duplicate(pg_engine):
     """insert() 的契约是并发下同 cq_code 第二次写等价 no-op，原行不得被覆盖。"""
-    from src.foundation.db.modules import ImageCache
-    from src.foundation.db.repository_pg import PgImageCacheRepository
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
 
     repo = PgImageCacheRepository()
-    first = ImageCache.model_construct(
-        cq_code="[CQ:image,file=dup.image]", base64_data="v1", ref_times=1, date=20250419
-    )
+    first = ImageCache.model_construct(cq_code="[CQ:image,file=dup.image]", blob_data=b"v1", ref_times=1, date=20250419)
     await repo.insert(first)
 
     # 第二次 insert 应被 ON CONFLICT DO NOTHING 吃掉，原有值保持不变
     second = ImageCache.model_construct(
-        cq_code="[CQ:image,file=dup.image]", base64_data="v2", ref_times=99, date=20260101
+        cq_code="[CQ:image,file=dup.image]", blob_data=b"v2", ref_times=99, date=20260101
     )
     await repo.insert(second)
 
     got = await repo.find_by_cq_code("[CQ:image,file=dup.image]")
     assert got is not None
-    assert got.base64_data == "v1"
+    assert got.blob_data == b"v1"
     assert got.ref_times == 1
     assert got.date == 20250419
 
@@ -799,7 +913,7 @@ async def test_image_cache_insert_is_no_op_on_duplicate(pg_engine):
 @pytest.mark.asyncio
 async def test_config_cache_hit_and_invalidate_on_write(pg_engine):
     """读后走 TTL 缓存；一旦 upsert_field 写入必须让缓存失效，下次读能拿到新值。"""
-    from src.foundation.db.repository_pg import PgConfigRepository
+    from pallas.core.foundation.db.repository_pg import PgConfigRepository
 
     repo = PgConfigRepository("bot_config", "account")
     await repo.upsert_field(1001, "security", True)
@@ -818,7 +932,7 @@ async def test_config_cache_ignore_cache_forces_db_read(pg_engine):
     """ignore_cache=True 必须绕过缓存直接回源，不受外部 SQL 旁路改库影响。"""
     from sqlalchemy import update
 
-    from src.foundation.db.repository_pg import BotConfigRow, PgConfigRepository, get_session
+    from pallas.core.foundation.db.repository_pg import BotConfigRow, PgConfigRepository, get_session
 
     repo = PgConfigRepository("bot_config", "account")
     await repo.upsert_field(2002, "security", True)
@@ -838,7 +952,7 @@ async def test_config_cache_ignore_cache_forces_db_read(pg_engine):
 @pytest.mark.asyncio
 async def test_config_invalidate_all(pg_engine):
     """invalidate_cache() 必须能全量清空该 row_class 的缓存条目。"""
-    from src.foundation.db.repository_pg import PgConfigRepository
+    from pallas.core.foundation.db.repository_pg import PgConfigRepository
 
     repo = PgConfigRepository("bot_config", "account")
     await repo.upsert_field(3003, "security", True)
@@ -850,7 +964,7 @@ async def test_config_invalidate_all(pg_engine):
 @pytest.mark.asyncio
 async def test_config_get_or_create_concurrent(pg_engine):
     """并发 get_or_create 同一 key 必须只有一次 created=True，不得出现 IntegrityError 冒泡。"""
-    from src.foundation.db.repository_pg import PgConfigRepository
+    from pallas.core.foundation.db.repository_pg import PgConfigRepository
 
     repo = PgConfigRepository("bot_config", "account")
     key = int(uuid.uuid4().int & 0x7FFFFFFF)

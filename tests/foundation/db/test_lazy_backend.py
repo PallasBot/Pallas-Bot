@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.foundation.db import (
+from pallas.core.foundation.db import (
     CONTEXT_REPO_REGISTRY,
     ensure_backend_registered,
 )
@@ -10,7 +10,7 @@ from src.foundation.db import (
 
 @pytest.fixture(autouse=True)
 def clear_registered_backends(monkeypatch: pytest.MonkeyPatch) -> None:
-    import src.foundation.db as db_mod
+    import pallas.core.foundation.db as db_mod
 
     monkeypatch.setattr(db_mod, "_backends_registered", set())
     CONTEXT_REPO_REGISTRY.clear()

@@ -19,13 +19,13 @@
 
 ## 6.3 运维配置
 
-WebUI：**通用配置 → 消息审查与入站过滤**。启用需 `message-scrub` deploy profile 或 `PALLAS_MESSAGE_SCRUB_ENABLED=true`。
+WebUI：**通用配置 → 消息审查与入站过滤**。**4.0 默认开启**；设 `PALLAS_MESSAGE_SCRUB_ENABLED=false` 可关闭。
 
 保存后 hub 热重载；分片 worker 按 mtime 重读。
 
 ## 6.4 与 ingress / 分片
 
-多进程部署时审查配置需在各 worker 一致；见架构文档 [bot_process_sharding](../../architecture/bot_process_sharding.md)。
+多进程部署时审查配置需在各 worker 一致；见 [分片部署](../../maintainer/deploy/sharded.md)。
 
 ## 6.5 下一步
 

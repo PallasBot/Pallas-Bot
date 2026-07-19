@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.plugins.help import global_disable, group_fleet_whitelist, plugin_manager
+from packages.help import global_disable, group_fleet_whitelist, plugin_manager
 
 
 def test_save_and_load_group_fleet_whitelist(tmp_path, monkeypatch):
@@ -80,7 +80,7 @@ def test_sync_remote_generation_invalidates_local_cache(tmp_path, monkeypatch):
 
     fake = FakeRedis()
     monkeypatch.setattr(
-        "src.platform.coord.redis_claim.get_coord_redis_client",
+        "pallas.core.platform.coord.redis_claim.get_coord_redis_client",
         lambda: fake,
     )
     group_fleet_whitelist.invalidate_group_fleet_whitelist_cache()
@@ -125,7 +125,7 @@ async def test_is_fleet_runtime_disabled_respects_group_whitelist(tmp_path, monk
 
 @pytest.mark.asyncio
 async def test_superuser_group_enable_adds_fleet_whitelist(tmp_path, monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     monkeypatch.setattr(group_fleet_whitelist, "plugin_data_dir", lambda _name: tmp_path)
@@ -158,7 +158,7 @@ async def test_superuser_group_enable_adds_fleet_whitelist(tmp_path, monkeypatch
 
 @pytest.mark.asyncio
 async def test_handle_group_plugin_operation_whitelist_allows_enable(tmp_path, monkeypatch):
-    from src.plugins.help import plugin_manager
+    from packages.help import plugin_manager
 
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     monkeypatch.setattr(group_fleet_whitelist, "plugin_data_dir", lambda _name: tmp_path)

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.platform.ingress import message_load, send_queue
+from pallas.core.platform.ingress import message_load, send_queue
 
 
 @pytest.fixture(autouse=True)

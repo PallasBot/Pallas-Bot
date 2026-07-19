@@ -12,6 +12,27 @@
 
 命令权限说明见 [cmd_perm](../cmd_perm/README.md)。
 
+**热重载分级**（配置 / 元数据 / 代码）：见 [Reload 与 Activation](../../developer/plugin-development/reload-and-activation.md)。插件可在 `extra["reload_policy"]` 声明期望粒度（默认 `config_only`）。
+
+### 三级与插件作者
+
+| 级别 | 改什么 | 要不要适配 | 生效方式 |
+| --- | --- | --- | --- |
+| **配置** | `config.py` 字段 | 接 `install_hot_reload_config`（见下） | WebUI 插件页保存后立即 reload |
+| **元数据** | `extra` 内 help、ingress、`command_permissions` 等声明 | 可选：设 `reload_policy: metadata` | 同上保存时重建 help/ingress 等索引（不卸载 matcher） |
+| **代码** | Python 模块 | 无热载 | 须重启 Bot |
+
+未声明 `reload_policy` 时等价于 `config_only`：只热载 `config.py`，**改 extra 声明后仍须重启**。
+
+```python
+extra={
+    ...
+    "reload_policy": "metadata",  # 频繁改 help/ingress 声明且不想重启时
+}
+```
+
+`full` 表示期望代码级重载；当前实现仍只做到元数据索引重建，改代码请重启。
+
 ## 插件接入热重载
 
 在 `config.py` 末尾：
@@ -40,10 +61,10 @@ get_my_config = plugin_webui.get
 | `cmd_perm` | 命令权限 | 覆盖矩阵 |
 | `control_plane` | 联邦控制 | 专用 payload |
 | `corpus_federation` | 语料联邦 | 专用 payload |
-| `community_stats` | 在线统计与社区主站 | 专用 payload |
+| `community_stats` | 在线统计与社区主站（插件 `pb_stats`） | 专用 payload |
 | `ingress_fanout` | 入站：全员同响口令 | |
 | `repeater_learn` | 复读：后台语料学习 | |
-| `message_scrub` | 消息审查与入站过滤 | 需 deploy profile |
+| `message_scrub` | 消息审查与入站过滤 | 4.0 默认开启 |
 | `service_gateways` | 外部服务地址 | 画画 / MAA / 点歌 + 连通检测 |
 | `pallas_webui` / `pallas_protocol` / `help` | 各插件子集 | |
 
@@ -64,11 +85,11 @@ get_my_config = plugin_webui.get
 | --- | --- |
 | [sing](../../plugins/sing/README.md) | 标准热重载 |
 | [draw](../../plugins/draw/README.md) | 自定义解析 + `on_reload` |
-| [pallas_webui](../../plugins/pallas_webui/README.md) | HTTP 路由层 |
+| [pallas_webui](../../plugins/pb_webui/README.md) | HTTP 路由层 |
 
 ## 实现
 
-[`src/console/webui/`](../../../src/console/webui/) · 路由薄层 [`extended_api.py`](../../../src/plugins/pallas_webui/extended_api.py)
+[`src/console/webui/`](../../../src/console/webui/) · 路由薄层 [`extended_api.py`](../../../src/plugins/pb_webui/extended_api.py)
 
 ## API 契约（按域）
 

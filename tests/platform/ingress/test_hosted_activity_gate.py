@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.platform.ingress.hosted_activity_gate import (
+from pallas.core.platform.ingress.hosted_activity_gate import (
     HostedActivityIngressSpec,
     hosted_activity_ingress_passes,
     spec_host_gate_passes,
@@ -36,11 +36,11 @@ def test_spec_command_prefixes() -> None:
 
 def test_hosted_ingress_passes_when_no_host_gate(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.loaded_hosted_activity_specs",
+        "pallas.core.platform.ingress.hosted_activity_gate.loaded_hosted_activity_specs",
         lambda: (SPY_SPEC,),
     )
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
+        "pallas.core.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
         lambda: False,
     )
     assert hosted_activity_ingress_passes(1, 100, "牛牛加入") is True
@@ -48,15 +48,15 @@ def test_hosted_ingress_passes_when_no_host_gate(monkeypatch) -> None:
 
 def test_hosted_ingress_open_end_pass_without_room(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.loaded_hosted_activity_specs",
+        "pallas.core.platform.ingress.hosted_activity_gate.loaded_hosted_activity_specs",
         lambda: (SPY_SPEC,),
     )
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
+        "pallas.core.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
         lambda: True,
     )
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.hosted_activity_live",
+        "pallas.core.platform.ingress.hosted_activity_gate.hosted_activity_live",
         lambda **_k: False,
     )
     assert hosted_activity_ingress_passes(999, 100, "牛牛卧底") is True
@@ -65,15 +65,15 @@ def test_hosted_ingress_open_end_pass_without_room(monkeypatch) -> None:
 
 def test_hosted_ingress_open_end_require_host_when_room_live(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.loaded_hosted_activity_specs",
+        "pallas.core.platform.ingress.hosted_activity_gate.loaded_hosted_activity_specs",
         lambda: (SPY_SPEC,),
     )
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
+        "pallas.core.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
         lambda: True,
     )
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.hosted_activity_live",
+        "pallas.core.platform.ingress.hosted_activity_gate.hosted_activity_live",
         lambda **_k: True,
     )
 
@@ -82,7 +82,7 @@ def test_hosted_ingress_open_end_require_host_when_room_live(monkeypatch) -> Non
         return bot_id == 42
 
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.is_owned_gate_holder_sync",
+        "pallas.core.platform.ingress.hosted_activity_gate.is_owned_gate_holder_sync",
         holder,
     )
     assert hosted_activity_ingress_passes(42, 100, "牛牛卧底") is True
@@ -93,11 +93,11 @@ def test_hosted_ingress_open_end_require_host_when_room_live(monkeypatch) -> Non
 
 def test_hosted_ingress_in_room_requires_host(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
+        "pallas.core.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
         lambda: True,
     )
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.hosted_activity_live",
+        "pallas.core.platform.ingress.hosted_activity_gate.hosted_activity_live",
         lambda **_k: True,
     )
 
@@ -106,7 +106,7 @@ def test_hosted_ingress_in_room_requires_host(monkeypatch) -> None:
         return bot_id == 42
 
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.is_owned_gate_holder_sync",
+        "pallas.core.platform.ingress.hosted_activity_gate.is_owned_gate_holder_sync",
         holder,
     )
     assert spec_host_gate_passes(SPY_SPEC, 42, 100, "牛牛加入", at_fleet_bot=False) is True
@@ -115,11 +115,11 @@ def test_hosted_ingress_in_room_requires_host(monkeypatch) -> None:
 
 def test_hosted_ingress_no_room_passes_join(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
+        "pallas.core.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
         lambda: True,
     )
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.hosted_activity_live",
+        "pallas.core.platform.ingress.hosted_activity_gate.hosted_activity_live",
         lambda **_k: False,
     )
     assert spec_host_gate_passes(SPY_SPEC, 99, 100, "牛牛加入", at_fleet_bot=False) is True
@@ -127,7 +127,7 @@ def test_hosted_ingress_no_room_passes_join(monkeypatch) -> None:
 
 def test_spec_speak_traffic_at_bot_only(monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.ingress.hosted_activity_gate.coord_session_active",
+        "pallas.core.platform.ingress.hosted_activity_gate.coord_session_active",
         lambda ns, gid, **_: gid == 7,
     )
     assert spec_matches_speak_traffic(SPY_SPEC, 7, "随便说说", at_fleet_bot=True) is True

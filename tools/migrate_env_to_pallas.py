@@ -11,7 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.foundation.config.migrate_env_to_pallas import (  # noqa: E402
+from pallas.core.foundation.config.migrate_env_to_pallas import (  # noqa: E402
     EnvToPallasMigrationError,
     apply_env_to_pallas_migration,
     bootstrap_from_env,

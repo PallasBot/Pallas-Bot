@@ -1,60 +1,80 @@
-# who_is_spy（牛牛卧底）
+<p align="center">
+  <img src="../assets/brand-avatar.png" width="220" height="220" alt="牛牛卧底">
+</p>
 
-群内谁是卧底：开房、自由讨论、房主发起投票、私聊匿名投票，直至一方阵营获胜。
+<h1 align="center">牛牛卧底 who_is_spy</h1>
 
-## 用户命令
+<p align="center">群内发起谁是卧底，支持讨论、匿名投票和复盘。</p>
+
+<p align="center">
+  <img alt="官方插件" src="https://img.shields.io/badge/%E5%AE%98%E6%96%B9%E6%8F%92%E4%BB%B6-FE7D37">
+  <img alt="控制台插件商店" src="https://img.shields.io/badge/%E6%8E%A7%E5%88%B6%E5%8F%B0-%E6%8F%92%E4%BB%B6%E5%95%86%E5%BA%97-4EA94B">
+  <img alt="安装命令" src="https://img.shields.io/badge/uv%20run%20pallas%20ext%20install%20pallas--plugin--who--is--spy-586069">
+  <img alt="版本 4.0.0" src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-4.0.0-2563EB">
+</p>
+
+## 安装方式
+
+可在控制台插件商店安装，或执行 `uv run pallas ext install pallas-plugin-who-is-spy`。
+
+## 怎么使用
 
 | 口令 / 触发 | 场景 | 说明 |
 | --- | --- | --- |
-| 牛牛卧底 | 群内 | 开房 |
-| 牛牛加入 / 牛牛退出 | 群内 | 筹备阶段进出 |
-| 牛牛发身份 [潜藏人数] [白板] [暗牌\|明牌] | 群内 | 房主开局并下发词语 |
-| @牛牛 + 描述 | 群内 | 讨论阶段记为述词 |
-| 牛牛投票 | 群内 | 房主提前开始投票（先发复盘） |
-| 私聊回复数字序号或 0 | 私聊 | 投票（0=弃权） |
-| 牛牛局势 / 牛牛结束 | 群内 | 察看局势、结束房间 |
+| `牛牛卧底` | 群内 | 创建房间。 |
+| `牛牛加入` / `牛牛退出` | 群内 | 在筹备阶段加入或退出。 |
+| `牛牛发身份 [潜藏人数] [白板] [暗牌\|明牌]` | 群内 | 房主开局并下发词语。 |
+| `@牛牛 + 描述` | 群内 | 讨论阶段记为述词。 |
+| `牛牛投票` | 群内 | 房主提前开始投票。 |
+| 私聊回复数字序号或 `0` | 私聊 | 进行匿名投票，`0` 表示弃权。 |
+| `牛牛局势` / `牛牛结束` | 群内 | 查看局势或结束房间。 |
+
+> 详细用法、限制条件和可用范围以帮助为主。
 
 ## 命令权限
 
 | 命令 ID | 默认等级 |
 | --- | --- |
-| `who_is_spy.open` | everyone |
-| `who_is_spy.join` | everyone |
-| `who_is_spy.start` | everyone（含牛牛投票） |
-| `who_is_spy.status` | everyone |
-| `who_is_spy.end` | everyone |
+| `who_is_spy.open` | 所有人 |
+| `who_is_spy.join` | 所有人 |
+| `who_is_spy.start` | 所有人 |
+| `who_is_spy.status` | 所有人 |
+| `who_is_spy.end` | 所有人 |
 
-## 配置
+## 配置项
 
-| 键 | 默认 | 说明 |
-| --- | --- | --- |
-| `spy_min_players` | 4 | 最少开局人数 |
-| `spy_max_players` | 12 | 房间上限 |
-| `spy_default_undercovers` | 1 | 默认卧底数 |
-| `spy_default_blanks` | 0 | 默认白板数（无词，不计入胜负比较） |
-| `spy_show_role_default` | false | 私聊是否附带身份（false=暗牌，只发词） |
-| `spy_word_avoid_recent` | 10 | 同群最近 N 局词对不重复，0 关闭 |
-| `spy_auto_vote_when_all_spoken` | true | 全员 @牛牛 述词后自动投票 |
-| `spy_speak_max_len` | 120 | 复盘单条述词最大字数 |
-| `spy_room_cleanup_sec` | 600 | 局结束后空房清理秒数 |
-| `spy_email_fallback` | true | 私聊失败时改发玩家 QQ 邮箱 |
+> 可在控制台对应插件页中修改。
 
-字段以 [`config.py`](../../../src/plugins/who_is_spy/config.py) 为准；WebUI **插件 → 牛牛卧底** 修改。
+牛牛卧底的常用配置包括最少/最多人数、默认卧底和白板数量、是否暗牌、述词字数上限等。
 
-**私聊与邮箱**：发词/投票说明优先好友私聊；失败时尝试带 `group_id` 的临时会话；仍失败且 `spy_email_fallback=true` 时，复用 **bot_status** 的 SMTP 向 `{QQ号}@qq.com` 发信。
-
-词库内置 `resource/who_is_spy/undercover_words.json`；运行期使用 `data/who_is_spy/undercover_words.json`（首次启动从 resource 复制，之后启动自动合并 resource 新增词对）。编辑 JSON 后重启 Bot 生效。
+词库文件默认保存在 `data/who_is_spy/undercover_words.json`，首次会从内置资源复制，后续可自行增补。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 收不到词语/投票私聊 | 加牛牛好友；或查 QQ 邮箱；确认 bot_status SMTP 已配置 |
-| 私聊「你的词：」后无字 | 非白板玩法，属投递失败；加好友、查邮箱或看开局提示里的未达名单 |
-| 本群已有房间 | 分片下同群互斥；「牛牛结束」或等局后自动清理 |
-| @牛牛 述词无回复 | 分片多牛须 @ **本局主持牛**（发「词已私聊」的那只）；述词优先于 Ollama；协调层未同步时主持牛内存局仍可述词 |
-| 词库为空 | 检查 `data/who_is_spy/undercover_words.json` 或内置 `resource/who_is_spy/` |
+| 收不到词语或投票私聊 | 先加牛牛好友；如开启邮箱兜底，也可检查 QQ 邮箱。 |
+| 本群已有房间 | 同群只允许一局进行中，可发送 `牛牛结束` 或等待自动清理。 |
+| 述词无回复 | 多牛同群时，需要 `@` 本局主持牛。 |
+| 词库为空 | 检查 `data/who_is_spy/undercover_words.json` 或内置 `resource/who_is_spy/`。 |
 
 ## 实现
 
-[`src/plugins/who_is_spy/`](../../../src/plugins/who_is_spy/)
+源码位置：官方插件扩展仓 `pallas-plugin-who-is-spy`
+
+关键文件：
+
+- 扩展仓 `src/pallas_plugin_who_is_spy/__init__.py`：注册命令与帮助元数据。
+- 扩展仓房间与回合逻辑文件：管理玩家列表、回合推进、投票与结算。
+- 词库资源与存储文件：负责默认词对初始化和持久化。
+
+实现要点：
+
+- 这是一个群内长流程游戏，房间状态会跨多条消息持续存在。
+- 讨论阶段和投票阶段都依赖主持牛，因此多牛同群时会有明确归属。
+- 发词和投票说明优先私聊投递，必要时可退回到邮箱兜底。
+
+## 相关链接
+
+- [命令权限说明](../common/cmd_perm/README.md)
+- [牛牛卧底插件仓库](https://github.com/TogetsuDo/pallas-plugin-who-is-spy)

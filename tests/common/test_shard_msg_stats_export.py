@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.plugins.pallas_webui.extended_api import (
+from packages.pb_webui.extended_api import (
     _message_stats_mem_from_shard_blob,
     _msg_stats_shard_export,
     _msg_stats_shard_import,

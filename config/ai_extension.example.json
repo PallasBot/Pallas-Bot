@@ -1,0 +1,10 @@
+{
+  "base_url": "http://127.0.0.1:9099",
+  "api_prefix": "/api",
+  "token": "",
+  "health_paths": ["/health", "/api/health"],
+  "uvicorn_log_file": "",
+  "celery_log_file": "",
+  "celery_media_log_file": "",
+  "timeout_sec": 8
+}

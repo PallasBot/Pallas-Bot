@@ -5,7 +5,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_database_overview_pg_uses_estimates_for_large_tables(monkeypatch):
-    from src.foundation.db import pallas_console_data as mod
+    from pallas.core.foundation.db import pallas_console_data as mod
 
     exact_models: list[type] = []
     estimated_models: list[type] = []
@@ -54,7 +54,7 @@ async def test_database_overview_pg_uses_estimates_for_large_tables(monkeypatch)
     monkeypatch.setattr(mod, "_pg_estimate_row_count", fake_pg_estimate_row_count)
     monkeypatch.setattr(mod, "_pg_exact_row_count", fake_pg_exact_row_count)
 
-    import src.foundation.db.repository_pg as repo_pg
+    import pallas.core.foundation.db.repository_pg as repo_pg
 
     monkeypatch.setattr(repo_pg, "BotConfigRow", BotConfigRow)
     monkeypatch.setattr(repo_pg, "GroupConfigRow", GroupConfigRow)
@@ -78,3 +78,33 @@ async def test_database_overview_pg_uses_estimates_for_large_tables(monkeypatch)
     ]
     assert exact_models == [BotConfigRow, GroupConfigRow, UserConfigRow, BlackListRow]
     assert estimated_models == [MessageRow, ContextRow, ImageCacheRow]
+
+
+def test_group_config_to_public_includes_style_profile_snapshot() -> None:
+    from types import SimpleNamespace
+
+    from pallas.core.foundation.db.pallas_console_data import group_config_to_public
+
+    row = SimpleNamespace(
+        group_id=12345,
+        roulette_mode=1,
+        banned=False,
+        sing_progress=None,
+        disabled_plugins=[],
+        blocked_user_ids=[],
+        style_profile={
+            "updated_at": 1_700_000_000,
+            "derived": {
+                "length_pref": "short",
+                "reply_bias_mul": 1.05,
+                "chaos_bias": 0.12,
+            },
+            "raw": {"avg_plain_len": 8.0},
+            "sample": {"message_count": 40},
+        },
+    )
+    payload = group_config_to_public(row)
+    snapshot = payload["style_profile_snapshot"]
+    assert snapshot["ready"] is True
+    assert snapshot["signals"]["length_pref"] == "short"
+    assert snapshot["hints"]

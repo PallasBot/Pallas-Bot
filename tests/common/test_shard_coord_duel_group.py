@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from src.platform.shard.coord import duel_group as mod
-from src.platform.shard.coord import group_activity as ga_mod
+from pallas.core.platform.shard import context as shard_ctx
+from pallas.core.platform.shard.coord import duel_group as mod
+from pallas.core.platform.shard.registry import config as shard_cfg
 
 
 def test_duel_group_lock_exclusive(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
-        ga_mod,
+        shard_cfg,
         "get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )
@@ -20,7 +21,7 @@ def test_duel_group_lock_exclusive(fake_coord_redis, monkeypatch) -> None:
 
 
 def test_duel_group_local_fallback(monkeypatch):
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: False)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: False)
     mod._local_busy.clear()
     assert mod.try_begin_duel_group(1) is True
     assert mod.try_begin_duel_group(1) is False
@@ -31,9 +32,9 @@ def test_duel_group_local_fallback(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_reclaim_orphan_duel_group_without_session(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
-        ga_mod,
+        shard_cfg,
         "get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )
@@ -52,9 +53,9 @@ async def test_reclaim_orphan_duel_group_without_session(fake_coord_redis, monke
 
 @pytest.mark.asyncio
 async def test_reclaim_skips_live_session(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(ga_mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
-        ga_mod,
+        shard_cfg,
         "get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )

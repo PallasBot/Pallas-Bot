@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from src.platform.shard.coord import bot_action as mod
+from pallas.core.platform.shard.coord import bot_action as mod
 
 
 def test_bot_action_request_roundtrip(fake_coord_redis) -> None:
@@ -41,7 +41,7 @@ async def test_execute_local_repeater_fanout_reply_schedules_background_task(mon
     async def fake_run_repeater_reply_for_bot(_bot_id: int, _payload: dict[str, object]) -> None:
         await asyncio.sleep(3600)
 
-    from src.plugins.repeater import fanout_reply as fanout_mod
+    from packages.repeater import fanout_reply as fanout_mod
 
     monkeypatch.setattr(mod.asyncio, "create_task", fake_create_task)
     monkeypatch.setattr("nonebot.get_bots", lambda: {"300": object()})
@@ -89,8 +89,8 @@ async def test_bot_action_listener_reads_messages_via_to_thread(monkeypatch):
 
     monkeypatch.setattr("nonebot.get_bots", lambda: {"300": object()})
     monkeypatch.setattr(mod.asyncio, "to_thread", fake_to_thread)
-    monkeypatch.setattr("src.platform.coord.redis_settings.coord_redis_enabled", lambda: True)
-    monkeypatch.setattr("src.platform.coord.redis_claim.get_coord_redis_client", lambda: _Client())
+    monkeypatch.setattr("pallas.core.platform.coord.redis_settings.coord_redis_enabled", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.coord.redis_claim.get_coord_redis_client", lambda: _Client())
     monkeypatch.setattr(mod, "_run_pending_request", fake_run_pending)
 
     with pytest.raises(asyncio.CancelledError):

@@ -11,16 +11,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.platform.shard.registry.port_alloc import (  # noqa: E402
+from pallas.core.platform.shard.registry.port_alloc import (  # noqa: E402
     sync_registry_worker_ports,
     worker_ports_from_registry,
 )
-from src.platform.shard.registry.startup_ports import (  # noqa: E402
+from pallas.core.platform.shard.registry.startup_ports import (  # noqa: E402
     evaluate_protocol_port_sync,
     evaluate_registry_worker_ports,
 )
-from src.platform.shard.registry.store import clear_shard_registry_cache, get_shard_registry  # noqa: E402
-from src.platform.shard.registry.sync_protocol_ports import (  # noqa: E402
+from pallas.core.platform.shard.registry.store import clear_shard_registry_cache, get_shard_registry  # noqa: E402
+from pallas.core.platform.shard.registry.sync_protocol_ports import (  # noqa: E402
     format_sync_user_message,
     sync_accounts_ws_urls,
 )
@@ -49,10 +49,10 @@ def main() -> int:
     env_path = args.env if args.env.is_file() else None
     accounts_path = args.accounts if args.accounts.is_file() else None
 
-    from src.platform.shard.registry.config import get_shard_registry_settings
+    from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
     if env_path is not None:
-        from src.platform.shard.registry.sync_protocol_ports import apply_env_for_shard_sync, read_dotenv
+        from pallas.core.platform.shard.registry.sync_protocol_ports import apply_env_for_shard_sync, read_dotenv
 
         apply_env_for_shard_sync(read_dotenv(env_path))
         get_shard_registry_settings.cache_clear()

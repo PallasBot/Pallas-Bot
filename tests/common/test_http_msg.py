@@ -1,4 +1,4 @@
-from src.shared.utils.http_msg import (
+from pallas.core.shared.utils.http_msg import (
     PALLAS_VAGUE_REPLY,
     upstream_error_visible_to_user,
     user_failure_reply,

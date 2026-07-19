@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from src.platform.shard.logs.errors import (
+from pallas.core.platform.shard.logs.errors import (
     append_shard_log_error,
     collect_cluster_log_errors_from_jsonl,
     errors_jsonl_path,
 )
-from src.platform.shard.logs.view import dedupe_mirror_stdio_lines
+from pallas.core.platform.shard.logs.view import dedupe_mirror_stdio_lines
 
 
 def test_append_and_collect_errors(tmp_path, monkeypatch):
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
-    monkeypatch.setattr("src.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
     monkeypatch.setattr(
-        "src.platform.shard.logs.errors.shard_errors_dir",
+        "pallas.core.platform.shard.logs.errors.shard_errors_dir",
         lambda: log_dir / "errors",
     )
 

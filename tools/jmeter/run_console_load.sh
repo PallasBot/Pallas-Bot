@@ -23,7 +23,7 @@ LOG="$OUT_DIR/jmeter_${STAMP}.log"
 
 if [[ -z "${PALLAS_TOKEN:-}" ]]; then
   if [[ "${PALLAS_BENCH_DEV_TOKEN:-}" == "1" ]]; then
-  PALLAS_TOKEN="$(cd "$ROOT" && uv run python -c "from src.console.webui.console_login import mint_session_token; print(mint_session_token())")"
+  PALLAS_TOKEN="$(cd "$ROOT" && uv run python -c "from pallas.console.webui.console_login import mint_session_token; print(mint_session_token())")"
   export PALLAS_TOKEN
   elif [[ -z "${PALLAS_CONSOLE_PASSWORD:-}" ]]; then
     echo "请设置 PALLAS_TOKEN、PALLAS_CONSOLE_PASSWORD，或本地压测 PALLAS_BENCH_DEV_TOKEN=1" >&2

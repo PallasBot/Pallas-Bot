@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "updated_at": "2026-06-17",
+  "description": "内置兜底索引；联网默认拉取 PallasBot/community-plugin-index。含社区插件示范条目。",
+  "plugins": [
+    {
+      "id": "interact",
+      "name": "牛牛互动",
+      "description": "名片点赞、戳一戳回图与群主设置专属头衔。社区插件开发示范。",
+      "repository": "https://github.com/TogetsuDo/pallas-community-plugin-interact.git",
+      "ref": "main",
+      "author": "TogetsuDo",
+      "homepage": "https://github.com/TogetsuDo/pallas-community-plugin-interact",
+      "icon": "https://raw.githubusercontent.com/TogetsuDo/pallas-community-plugin-interact/main/assets/icon.png",
+      "cover": "https://raw.githubusercontent.com/TogetsuDo/pallas-community-plugin-interact/main/assets/cover.png",
+      "avatar": "https://raw.githubusercontent.com/TogetsuDo/pallas-community-plugin-interact/main/assets/brand-avatar.png",
+      "tags": ["示范", "社交", "工具"],
+      "min_pallas_version": "4.0.0"
+    }
+  ]
+}

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import time
 
-from src.platform.shard.coord import cage_duel as mod
+from pallas.core.platform.shard.coord import cage_duel as mod
 
 
 def test_cross_shard_pair_finalize(fake_coord_redis, monkeypatch) -> None:
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.get_shard_registry_settings",
+        "pallas.core.platform.shard.registry.config.get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 2})(),
     )
 

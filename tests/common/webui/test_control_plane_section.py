@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from src.console.webui.control_plane_section import (
+from pallas.console.webui.control_plane_section import (
     CONTROL_PLANE_SECTION_ID,
     apply_control_plane_patch,
     control_plane_payload,
@@ -10,8 +10,8 @@ from src.console.webui.control_plane_section import (
 
 
 def test_control_plane_payload_exposes_low_risk_fields(monkeypatch):
-    monkeypatch.setattr("src.features.control_plane.webui_config.repo_env_raw_value", lambda _key: None)
-    monkeypatch.setattr("src.console.webui.control_plane_section.repo_env_raw_value", lambda _key: None)
+    monkeypatch.setattr("pallas.product.control_plane.webui_config.repo_env_raw_value", lambda _key: None)
+    monkeypatch.setattr("pallas.console.webui.control_plane_section.repo_env_raw_value", lambda _key: None)
     data = control_plane_payload()
     assert data["plugin"] == CONTROL_PLANE_SECTION_ID
     names = {f["name"] for f in data["fields"]}
@@ -28,15 +28,15 @@ def test_control_plane_payload_exposes_low_risk_fields(monkeypatch):
 
 
 def test_apply_control_plane_patch_writes_low_risk_fields(monkeypatch, tmp_path):
-    from src.foundation.config import repo_settings as rs
+    from pallas.core.foundation.config import repo_settings as rs
 
     webui = tmp_path / "data" / "pallas_config" / "webui.json"
     webui.parent.mkdir(parents=True, exist_ok=True)
     webui.write_text(json.dumps({"env": {}}, ensure_ascii=False), encoding="utf-8")
     monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui)
     monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
-    monkeypatch.setattr("src.features.control_plane.webui_config.repo_env_raw_value", lambda _key: None)
-    monkeypatch.setattr("src.console.webui.control_plane_section.repo_env_raw_value", lambda _key: None)
+    monkeypatch.setattr("pallas.product.control_plane.webui_config.repo_env_raw_value", lambda _key: None)
+    monkeypatch.setattr("pallas.console.webui.control_plane_section.repo_env_raw_value", lambda _key: None)
 
     out = apply_control_plane_patch({"claim_ttl_sec": 7200, "ingress_bypass_unified": True})
     assert out["fields"]

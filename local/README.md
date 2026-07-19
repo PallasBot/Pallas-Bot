@@ -21,4 +21,4 @@ Docker 可选挂载见 [`docker-compose.yml`](../docker-compose.yml) 与 [Docker
 
 必须改 `bot.py`、`src/*` 等已跟踪文件时，在此保留 `.patch` 与说明（见 [`patches/README.md`](patches/README.md)）。Bot **不会**自动应用补丁。
 
-完整说明：[站点定制与更新](../docs/architecture/site-customization-and-updates.md)。
+完整说明：[站点定制与更新](../docs/maintainer/deploy/upgrade.md)。

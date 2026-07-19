@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from src.platform.shard.registry.startup_ports import evaluate_protocol_port_sync
+from pallas.core.platform.shard.registry.startup_ports import evaluate_protocol_port_sync
 
 
 def test_protocol_eval_after_registry_change(tmp_path, monkeypatch):
@@ -40,7 +40,7 @@ def test_protocol_eval_after_registry_change(tmp_path, monkeypatch):
     )
     monkeypatch.setenv("PALLAS_SHARD_ENABLED", "true")
     monkeypatch.setattr(
-        "src.platform.shard.registry.store._registry_path",
+        "pallas.core.platform.shard.registry.store._registry_path",
         lambda: reg_dir / "registry.json",
     )
 
@@ -57,7 +57,7 @@ def test_protocol_eval_after_registry_change(tmp_path, monkeypatch):
         }),
         encoding="utf-8",
     )
-    from src.platform.shard.registry.store import clear_shard_registry_cache
+    from pallas.core.platform.shard.registry.store import clear_shard_registry_cache
 
     clear_shard_registry_cache()
 

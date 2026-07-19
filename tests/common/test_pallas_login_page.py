@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.console.webui.login_page import render_pallas_login_page_html
+from pallas.console.webui.login_page import render_pallas_login_page_html
 
 
 def test_render_pallas_login_page_contains_branding_and_form() -> None:

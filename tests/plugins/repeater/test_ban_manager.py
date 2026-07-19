@@ -15,7 +15,7 @@ async def test_ban_with_reply_dict():
     Test BanManager.ban() with reply_dict parameter.
     Verify that ban is applied via context_repo.append_ban.
     """
-    from src.plugins.repeater.ban_manager import BanManager
+    from packages.repeater.ban_manager import BanManager
 
     group_id = 10001
     bot_id = 20001
@@ -35,7 +35,7 @@ async def test_ban_with_reply_dict():
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.append_ban",
+            "packages.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
         ) as mock_append:
             result = await BanManager.ban(group_id, bot_id, "test output", "test reason", reply_dict)
@@ -59,8 +59,8 @@ async def test_find_ban_keywords_aggregation():
     Test BanManager.find_ban_keywords() aggregates group-specific and global bans.
     Verify that it correctly combines blacklist from multiple sources.
     """
-    from src.foundation.db import Ban
-    from src.plugins.repeater.ban_manager import BanManager
+    from packages.repeater.ban_manager import BanManager
+    from pallas.core.foundation.db import Ban
 
     group_id = 10002
 
@@ -105,7 +105,7 @@ async def test_find_ban_keywords_no_context():
     Test BanManager.find_ban_keywords() with None context.
     Should only return global and group-specific bans.
     """
-    from src.plugins.repeater.ban_manager import BanManager
+    from packages.repeater.ban_manager import BanManager
 
     group_id = 10003
 
@@ -137,7 +137,7 @@ async def test_update_global_blacklist():
     Test BanManager.update_global_blacklist() creates global bans when threshold is met.
     Verify that keywords banned in multiple groups become global bans.
     """
-    from src.plugins.repeater.ban_manager import BanManager
+    from packages.repeater.ban_manager import BanManager
 
     # Clean state
     BanManager._blacklist_answer.clear()
@@ -169,7 +169,7 @@ async def test_ban_second_offense():
     """
     Test that second ban offense moves keyword from reserve to active blacklist.
     """
-    from src.plugins.repeater.ban_manager import BanManager
+    from packages.repeater.ban_manager import BanManager
 
     group_id = 10004
     bot_id = 20004
@@ -190,7 +190,7 @@ async def test_ban_second_offense():
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.append_ban",
+            "packages.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
         ):
             await BanManager.ban(group_id, bot_id, "bad_reply", "first offense", reply_dict)
@@ -207,7 +207,7 @@ async def test_ban_second_offense():
         })
 
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.append_ban",
+            "packages.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
         ):
             await BanManager.ban(group_id, bot_id, "bad_reply_again", "second offense", reply_dict)
@@ -221,7 +221,7 @@ async def test_ban_second_offense():
 
 @pytest.mark.asyncio
 async def test_ban_falls_back_when_reply_cache_missing():
-    from src.plugins.repeater.ban_manager import BanManager
+    from packages.repeater.ban_manager import BanManager
 
     group_id = 733291779
     bot_id = 2927116873
@@ -243,7 +243,7 @@ async def test_ban_falls_back_when_reply_cache_missing():
                 ),
             ) as mock_fallback,
             patch(
-                "src.plugins.repeater.ban_manager.context_repo.append_ban",
+                "packages.repeater.ban_manager.context_repo.append_ban",
                 new_callable=AsyncMock,
             ) as mock_append,
         ):
@@ -271,7 +271,7 @@ async def test_select_blacklist():
     """
     Test BanManager._select_blacklist() loads data from database.
     """
-    from src.plugins.repeater.ban_manager import BanManager
+    from packages.repeater.ban_manager import BanManager
 
     # Clean state
     BanManager._blacklist_answer.clear()
@@ -285,7 +285,7 @@ async def test_select_blacklist():
         ]
 
         with patch(
-            "src.plugins.repeater.ban_manager.blacklist_repo.find_all",
+            "packages.repeater.ban_manager.blacklist_repo.find_all",
             new_callable=AsyncMock,
             return_value=mock_blacklist_items,
         ):

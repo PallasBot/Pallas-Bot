@@ -1,8 +1,12 @@
 # 运维脚本索引
 
+> **4.0 运维**：在 Bot 仓库根目录执行 **`uv run pallas`**（或 `./scripts/pallas`）。`run_*_bot.sh` 为兼容入口，由 `pallas run|stop|restart` 内部调用。需先 `uv sync` 以注册 `pallas` 命令。
+
 | 目录 | 用途 |
 | --- | --- |
-| `scripts/` | 启停、分片迁移、端口同步 |
+| `scripts/pallas` | **统一 CLI**（推荐：`doctor`、`sync`、`ext`、`update`、`run`、`maintenance`） |
+| `scripts/run_unified_bot.sh` | 单进程启停（**兼容**；内部仍由 `pallas run unified` 调用） |
+| `scripts/run_sharded_bot.sh` | 分片启停（**兼容**） |
 | `tools/scripts/` | 备份、watchdog、文档同步 |
 
 ## 单进程 unified
@@ -44,8 +48,9 @@
 
 | 脚本 | 说明 |
 | --- | --- |
-| `fetch_arknights_duel_data.py` | 决斗泰拉干员资源 |
-| `cache_ark_lore_for_duel.py` | 决斗 lore 缓存 |
+| `sync_arknights_data.py` | 方舟数据同步（决斗六星表、头像、档案、敌人图鉴） |
+| `fetch_arknights_duel_data.py` | 兼容入口 → `sync_arknights_data.py` |
+| `cache_ark_lore_for_duel.py` | 兼容入口 → `sync_arknights_data.py --maintainer-lore` |
 | `generate_pallas_help_style.py` | 帮助图样式生成 |
 
 ## tools/scripts
@@ -58,4 +63,4 @@
 | `backup.sh` / `backup_pg.sh` | shell 备份入口 |
 | `clear_old_image.py` | 清理旧画图缓存 |
 
-分片详情见 [多进程分片](../docs/architecture/bot_process_sharding.md)。
+分片详情见 [多进程分片](../docs/maintainer/deploy/sharded.md)。

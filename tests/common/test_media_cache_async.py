@@ -8,7 +8,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_insert_image_only_enqueues_capture(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.shared.utils import media_cache as mod
+    from pallas.core.shared.utils import media_cache as mod
 
     await mod.reset_image_cache_runtime_state_for_tests()
     seg = SimpleNamespace(data={"url": "http://example.com/x.png"})
@@ -31,7 +31,7 @@ async def test_insert_image_only_enqueues_capture(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.asyncio
 async def test_image_capture_consumer_processes_queue(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.shared.utils import media_cache as mod
+    from pallas.core.shared.utils import media_cache as mod
 
     await mod.reset_image_cache_runtime_state_for_tests()
     seen: list[object] = []

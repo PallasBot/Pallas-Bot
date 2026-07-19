@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.platform.ingress import dispatch_metrics
+from pallas.core.platform.ingress import dispatch_metrics
 
 
 def test_record_group_message_and_p95() -> None:

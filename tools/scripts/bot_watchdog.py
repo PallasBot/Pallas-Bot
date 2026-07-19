@@ -13,7 +13,7 @@ HOST / PORT 从哪来
   未设置 PORT 时可读 ONEBOT_PORT（与协议插件习惯一致）。
 
 谁负责启动 Bot
-  · 由本脚本拉起：在仓库根执行，不要加 --no-spawn（默认子进程为 uv run nb run，可用 --start 改）。
+  · 由本脚本拉起：在仓库根执行，不要加 --no-spawn（默认子进程为 uv run pallas，可用 --start 改）。
   · Bot 已由 systemd、screen、Docker、另一终端等启动：必须加 --no-spawn，否则会双开端口。
   · Bot 在容器内、在宿主机上监护：--docker-container <名> --no-spawn（宿主机需能 docker restart）。
 
@@ -29,14 +29,14 @@ TCP 与 HTTP
 # 由守护进程启动 Bot；HOST/PORT 可读环境变量或 ./.env
   uv run python tools/scripts/bot_watchdog.py
 
-# Bot 已在跑：只探活，不重复 uv run nb run
+# Bot 已在跑：只探活，不重复 uv run pallas
   uv run python tools/scripts/bot_watchdog.py --no-spawn
 
 # .env 不在当前目录时，指向 Bot 工作目录
   uv run python tools/scripts/bot_watchdog.py --no-spawn --workdir /path/to/Pallas-Bot
 
 # 自定义启动命令
-  uv run python tools/scripts/bot_watchdog.py --start sh -c "uv run nb run"
+  uv run python tools/scripts/bot_watchdog.py --start sh -c "uv run pallas"
 
 # 未启用 WebUI、只测端口是否监听
   uv run python tools/scripts/bot_watchdog.py --tcp-only --tcp-probe 127.0.0.1:8088 --no-spawn
@@ -214,7 +214,7 @@ def build_parser(repo_root: Path) -> argparse.ArgumentParser:
         "--start",
         nargs=argparse.REMAINDER,
         default=None,
-        help="启动 Bot 的完整命令，必须放在命令行最后；默认 uv run nb run",
+        help="启动 Bot 的完整命令，必须放在命令行最后；默认 uv run pallas",
     )
     p.add_argument(
         "--docker-container",
@@ -248,7 +248,7 @@ def resolve_defaults(args: argparse.Namespace) -> tuple[list[str], list[str], tu
     if args.start is not None and len(args.start) > 0:
         start_argv = list(args.start)
     else:
-        start_argv = ["uv", "run", "nb", "run"]
+        start_argv = ["uv", "run", "pallas"]
 
     return urls, start_argv, tcp_probe
 
@@ -308,7 +308,7 @@ def main() -> int:
 
     if not docker_container and not args.no_spawn:
         logger.info(
-            "将立即拉起子进程（默认 uv run nb run）。若 Bot 已在其它终端或 systemd 中运行，请中断后改用 --no-spawn",
+            "将立即拉起子进程（默认 uv run pallas）。若 Bot 已在其它终端或 systemd 中运行，请中断后改用 --no-spawn",
         )
         child = spawn_child()
     elif not docker_container and args.no_spawn:

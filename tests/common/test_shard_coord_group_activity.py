@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.platform.shard.coord import group_activity as mod
+from pallas.core.platform.shard.coord import group_activity as mod
 
 
 def test_group_activity_lock_exclusive(fake_coord_redis, monkeypatch) -> None:

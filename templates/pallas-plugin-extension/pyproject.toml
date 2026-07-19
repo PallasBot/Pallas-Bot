@@ -1,0 +1,35 @@
+[project]
+name = "pallas-plugin-TEMPLATE"
+version = "4.0.1"
+description = "Pallas-Bot 官方扩展插件模板"
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "nonebot2[fastapi]>=2.4.4",
+    "nonebot-adapter-onebot>=2.4.6",
+    "nonebot-plugin-alconna>=0.60.3",
+    "nonebot-plugin-apscheduler>=0.5.0",
+    "nonebot-plugin-localstore>=0.7",
+    "httpx[socks]>=0.28.1",
+    "pydantic>=2.0",
+    "tenacity>=9.1.2",
+    "pallas-core>=4.0.0,<5.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pallas_plugin_TEMPLATE"]
+
+[tool.nonebot]
+plugin_dirs = []
+builtin_plugins = []
+
+[tool.nonebot.plugins]
+"@local" = []
+pallas-plugin-template = ["pallas_plugin_TEMPLATE"]
+
+[tool.nonebot.adapters]
+"@local" = []
+nonebot-adapter-onebot = [{ name = "OneBot V11", module_name = "nonebot.adapters.onebot.v11" }]

@@ -5,9 +5,9 @@ import time
 
 import pytest
 
-from src.platform.multi_bot.dedup import cross_bot_group_message_key
-from src.platform.shard.coord import cage_duel as mod
-from src.platform.shard.coord.coord_redis_store import setex_json_sync
+from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
+from pallas.core.platform.shard.coord import cage_duel as mod
+from pallas.core.platform.shard.coord.coord_redis_store import setex_json_sync
 
 
 @pytest.mark.asyncio
@@ -18,7 +18,7 @@ async def test_run_shard_merges_self_across_workers(fake_coord_redis, monkeypatc
 
     async def shard_run(shard_id: int, self_bot: int) -> tuple[int, int] | None:
         monkeypatch.setattr(
-            "src.platform.shard.registry.config.get_shard_registry_settings",
+            "pallas.core.platform.shard.registry.config.get_shard_registry_settings",
             lambda: type("S", (), {"shard_id": shard_id})(),
         )
         return await mod.run_shard_cage_duel_coord(
@@ -66,7 +66,7 @@ async def test_cage_session_resets_after_completed_round(fake_coord_redis, monke
     setex_json_sync(session_key, stale, mod._SESSION_TTL_SEC)
 
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.get_shard_registry_settings",
+        "pallas.core.platform.shard.registry.config.get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )
     pair = await mod.run_shard_cage_duel_coord(

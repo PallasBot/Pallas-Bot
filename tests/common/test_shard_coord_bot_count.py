@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 
-from src.platform.shard.coord import bot_count as mod
+from pallas.core.platform.shard.coord import bot_count as mod
 
 
 def test_bot_count_plaintext_normalizes_trailing_punctuation() -> None:
@@ -12,7 +12,7 @@ def test_bot_count_plaintext_normalizes_trailing_punctuation() -> None:
 
 
 def test_bot_count_coord_plaintext_unifies_claim_key():
-    from src.platform.multi_bot.dedup import cross_bot_group_message_key
+    from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
 
     gid, uid, t = 733291779, 2538527601, 1781407061
     key_plain = cross_bot_group_message_key(
@@ -34,7 +34,7 @@ def test_bot_count_coord_plaintext_unifies_claim_key():
 
 def test_cross_shard_order_finalize(fake_coord_redis, monkeypatch):
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.get_shard_registry_settings",
+        "pallas.core.platform.shard.registry.config.get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 0})(),
     )
 
@@ -48,7 +48,7 @@ def test_cross_shard_order_finalize(fake_coord_redis, monkeypatch):
     )
     mod._register_shard_bots(path, 0, [300, 100])
     monkeypatch.setattr(
-        "src.platform.shard.registry.config.get_shard_registry_settings",
+        "pallas.core.platform.shard.registry.config.get_shard_registry_settings",
         lambda: type("S", (), {"shard_id": 1})(),
     )
     mod._register_shard_bots(path, 1, [200])

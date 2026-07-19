@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-PLUGINS_ROOT = ROOT / "src" / "plugins"
+PLUGINS_ROOT = ROOT / "packages"
 
 STATIC_PATTERNS: dict[str, tuple[str, int]] = {
     "event_preprocessor": (r"@event_preprocessor", 8),
@@ -41,9 +41,9 @@ STATIC_PATTERNS: dict[str, tuple[str, int]] = {
     "redis": (r"redis\.|Redis\s*\(", 5),
 }
 
-# 插件名 -> (模块路径, 无参同步/异步探针；缺省为 import src.plugins.<name>)
+# 插件名 -> (模块路径, 无参同步/异步探针；缺省为 import packages.<name>)
 SPECIAL_PROBES: dict[str, tuple[str, str]] = {
-    "ingress_gate": ("src.plugins.ingress_gate", "ingress_gate_active"),
+    "ingress_gate": ("pallas.core.platform.ingress.gate", "ingress_gate_active"),
 }
 
 
@@ -72,7 +72,7 @@ class DynamicReport:
 
 
 def unified_plugin_names() -> list[str]:
-    from src.platform.bot_runtime.roles import unified_skip_plugin_names
+    from pallas.core.platform.bot_runtime.roles import unified_skip_plugin_names
 
     skip = unified_skip_plugin_names()
     names: list[str] = []
@@ -112,9 +112,9 @@ def scan_plugin_static(name: str) -> StaticReport:
         rep.notes.append("热路径可能走 composite 语料远程 HTTP")
     if name == "ingress_gate":
         rep.notes.append("群消息 event_preprocessor；unified 已 once-claim")
-    if name == "pallas_webui":
+    if name == "pb_webui":
         rep.notes.append("控制台 API；非群消息热路径")
-    if name == "community_stats":
+    if name == "pb_stats":
         rep.notes.append("周期心跳；非 per-message")
     return rep
 
@@ -192,7 +192,7 @@ async def run_dynamic_for_plugin(
     if name in SPECIAL_PROBES:
         mod_path, func = SPECIAL_PROBES[name]
     else:
-        mod_path, func = f"src.plugins.{name}", "__name__"
+        mod_path, func = f"packages.{name}", "__name__"
     return await run_probe_bench(name, mod_path, func, concurrency=concurrency, iterations=iterations)
 
 
@@ -235,7 +235,7 @@ def render_markdown(static_rows: list[StaticReport], dynamic_rows: list[DynamicR
 
 def ensure_nonebot_for_import_probe() -> None:
     """动态探针需 import 插件包；最小化 init 避免 NoneBot has not been initialized。"""
-    from src.foundation.config.dotenv import apply_repo_settings_to_environ
+    from pallas.core.foundation.config.dotenv import apply_repo_settings_to_environ
 
     apply_repo_settings_to_environ()
     import nonebot

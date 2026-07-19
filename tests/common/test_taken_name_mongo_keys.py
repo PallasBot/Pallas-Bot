@@ -7,7 +7,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_update_taken_name_uses_string_keys(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.foundation.config import BotConfig
+    from pallas.core.foundation.config import BotConfig
 
     stored: dict[str, object] = {}
 
@@ -30,7 +30,7 @@ async def test_update_taken_name_uses_string_keys(monkeypatch: pytest.MonkeyPatc
 
 @pytest.mark.asyncio
 async def test_taken_name_reads_str_or_int_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.foundation.config import BotConfig
+    from pallas.core.foundation.config import BotConfig
 
     async def fake_find_str(self, key: str):  # noqa: ANN001
         return {"42": 1001}

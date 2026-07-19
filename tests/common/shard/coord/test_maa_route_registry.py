@@ -1,4 +1,4 @@
-from src.platform.shard.coord import maa_route_registry as reg
+from pallas.core.platform.shard.coord import maa_route_registry as reg
 
 
 def test_register_and_resolve_user_route(fake_coord_redis, monkeypatch) -> None:

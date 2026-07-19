@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-from src.foundation.db.modules import BotConfigModule, GroupConfigModule, UserConfigModule
-from src.foundation.db.repository import ConfigRepository
-from src.foundation.db.repository_impl import MongoConfigRepository
+from pallas.core.foundation.db.modules import BotConfigModule, GroupConfigModule, UserConfigModule
+from pallas.core.foundation.db.repository import ConfigRepository
+from pallas.core.foundation.db.repository_impl import MongoConfigRepository
 
 
 def test_mongo_config_repo_satisfies_protocol():
@@ -67,7 +67,7 @@ async def test_invalidate_cache_is_safe(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_bot_config_class_uses_repo(beanie_fixture):
-    from src.foundation.config import BotConfig
+    from pallas.core.foundation.config import BotConfig
 
     bot = BotConfig(bot_id=999)
     assert await bot.security() is False  # default
@@ -76,8 +76,27 @@ async def test_bot_config_class_uses_repo(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_bot_config_group_style_enabled_defaults_to_true(beanie_fixture):
+    repo = MongoConfigRepository(BotConfigModule, "account")
+
+    doc, created = await repo.get_or_create(1000)
+    assert created is True
+    assert doc.group_style_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_bot_config_group_style_enabled_roundtrip(beanie_fixture):
+    repo = MongoConfigRepository(BotConfigModule, "account")
+
+    await repo.upsert_field(1001, "group_style_enabled", True)
+    doc = await repo.get(1001, ignore_cache=True)
+    assert doc is not None
+    assert doc.group_style_enabled is True
+
+
+@pytest.mark.asyncio
 async def test_group_config_class_uses_repo(beanie_fixture):
-    from src.foundation.config import GroupConfig
+    from pallas.core.foundation.config import GroupConfig
 
     group = GroupConfig(group_id=500)
     assert await group.is_banned() is False
@@ -90,8 +109,26 @@ async def test_group_config_class_uses_repo(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_group_config_style_profile_roundtrip(beanie_fixture):
+    repo = MongoConfigRepository(GroupConfigModule, "group_id")
+
+    profile = {
+        "version": 1,
+        "updated_at": 1781568000,
+        "sample": {"window_hours": 168, "message_count": 30, "answer_count": 5, "distinct_answer_keywords": 4},
+        "raw": {"avg_plain_len": 8.5, "p50_plain_len": 6, "p90_plain_len": 18, "msgs_per_hour_active": 3.0},
+        "derived": {"reply_bias_mul": 1.05, "speak_bias_mul": 1.02, "length_pref": "short", "chaos_bias": 0.1},
+    }
+
+    await repo.upsert_field(501, "style_profile", profile)
+    doc = await repo.get(501, ignore_cache=True)
+    assert doc is not None
+    assert doc.style_profile == profile
+
+
+@pytest.mark.asyncio
 async def test_user_config_class_uses_repo(beanie_fixture):
-    from src.foundation.config import UserConfig
+    from pallas.core.foundation.config import UserConfig
 
     user = UserConfig(user_id=700)
     assert await user.is_banned() is False

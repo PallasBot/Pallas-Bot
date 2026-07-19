@@ -14,12 +14,12 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot.adapters.onebot.v11.message import MessageSegment
 from nonebot.exception import IgnoredException
 
-from src.foundation.config import GroupConfig, UserConfig
+from pallas.core.foundation.config import GroupConfig, UserConfig
 
 
 @pytest.fixture(autouse=True)
 async def reset_blacklist_gate_cache():
-    from src.plugins.blacklist import reset_group_ban_gate_cache, reset_user_ban_gate_cache
+    from packages.blacklist import reset_group_ban_gate_cache, reset_user_ban_gate_cache
 
     await reset_user_ban_gate_cache()
     await reset_group_ban_gate_cache()
@@ -29,7 +29,7 @@ async def reset_blacklist_gate_cache():
 
 
 def test_collect_target_qqs_at_plain_and_dedup():
-    from src.plugins.blacklist import collect_target_qqs_from_plain_and_message
+    from packages.blacklist import collect_target_qqs_from_plain_and_message
 
     msg = Message([MessageSegment.at(10001), MessageSegment.at(10001), MessageSegment.text(" tail 10002 ")])
     got = collect_target_qqs_from_plain_and_message("also 10003 and 10002", msg)
@@ -37,7 +37,7 @@ def test_collect_target_qqs_at_plain_and_dedup():
 
 
 def test_collect_target_qqs_skips_special_at():
-    from src.plugins.blacklist import collect_target_qqs_from_plain_and_message
+    from packages.blacklist import collect_target_qqs_from_plain_and_message
 
     msg = Message([
         MessageSegment.at("all"),
@@ -49,7 +49,7 @@ def test_collect_target_qqs_skips_special_at():
 
 def test_collect_target_qqs_plain_min_digits():
     """Regex requires 5–15 digit QQ (first digit 1–9)."""
-    from src.plugins.blacklist import collect_target_qqs_from_plain_and_message
+    from packages.blacklist import collect_target_qqs_from_plain_and_message
 
     msg = Message()
     assert collect_target_qqs_from_plain_and_message("id 1234 only", msg) == []
@@ -57,7 +57,7 @@ def test_collect_target_qqs_plain_min_digits():
 
 
 def test_collect_target_qqs_not_inside_long_number():
-    from src.plugins.blacklist import collect_target_qqs_from_plain_and_message
+    from packages.blacklist import collect_target_qqs_from_plain_and_message
 
     msg = Message()
     plain = "x1000010000100001x"
@@ -65,7 +65,7 @@ def test_collect_target_qqs_not_inside_long_number():
 
 
 def test_event_actor_group_message_and_recall():
-    from src.plugins.blacklist import event_actor_user_id
+    from packages.blacklist import event_actor_user_id
 
     gm = GroupMessageEvent(
         time=1,
@@ -98,7 +98,7 @@ def test_event_actor_group_message_and_recall():
 
 @pytest.mark.asyncio
 async def test_query_user_ban_status_for_gate_uses_cache(beanie_fixture):
-    from src.plugins.blacklist import query_user_ban_status_for_gate
+    from packages.blacklist import query_user_ban_status_for_gate
 
     uid = 880_001
     await UserConfig(uid).ban()
@@ -114,7 +114,7 @@ async def test_query_user_ban_status_for_gate_uses_cache(beanie_fixture):
 async def test_query_user_ban_status_for_gate_coalesces_concurrent_same_uid(beanie_fixture):
     import asyncio
 
-    from src.plugins.blacklist import query_user_ban_status_for_gate, reset_user_ban_gate_cache
+    from packages.blacklist import query_user_ban_status_for_gate, reset_user_ban_gate_cache
 
     uid = 880_010
     calls = 0
@@ -136,7 +136,7 @@ async def test_query_user_ban_status_for_gate_coalesces_concurrent_same_uid(bean
 async def test_query_user_ban_status_for_gate_timeout_fail_open(beanie_fixture):
     import asyncio
 
-    from src.plugins.blacklist import query_user_ban_status_for_gate
+    from packages.blacklist import query_user_ban_status_for_gate
 
     async def slow_is_banned():
         await asyncio.sleep(1.0)
@@ -144,7 +144,7 @@ async def test_query_user_ban_status_for_gate_timeout_fail_open(beanie_fixture):
 
     uid = 880_002
     with (
-        patch("src.plugins.blacklist._IS_BANNED_DB_TIMEOUT_SEC", 0.05),
+        patch("packages.blacklist._IS_BANNED_DB_TIMEOUT_SEC", 0.05),
         patch.object(UserConfig, "is_banned", side_effect=slow_is_banned),
     ):
         out = await query_user_ban_status_for_gate(uid)
@@ -153,7 +153,7 @@ async def test_query_user_ban_status_for_gate_timeout_fail_open(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_invalidate_user_ban_gate_cache_forces_refetch(beanie_fixture):
-    from src.plugins.blacklist import invalidate_user_ban_gate_cache, query_user_ban_status_for_gate
+    from packages.blacklist import invalidate_user_ban_gate_cache, query_user_ban_status_for_gate
 
     uid = 880_003
     await UserConfig(uid).ban()
@@ -166,7 +166,7 @@ async def test_invalidate_user_ban_gate_cache_forces_refetch(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_block_skips_non_onebot_event_module():
-    from src.plugins.blacklist import block_globally_banned_users
+    from packages.blacklist import block_globally_banned_users
 
     class OtherEvent:
         user_id = 1
@@ -181,7 +181,7 @@ async def test_block_skips_non_onebot_event_module():
 
 @pytest.mark.asyncio
 async def test_block_skips_bot_self_uid():
-    from src.plugins.blacklist import block_globally_banned_users
+    from packages.blacklist import block_globally_banned_users
 
     class V11Event:
         user_id = 10
@@ -196,7 +196,7 @@ async def test_block_skips_bot_self_uid():
 
 @pytest.mark.asyncio
 async def test_block_skips_when_not_banned():
-    from src.plugins.blacklist import block_globally_banned_users
+    from packages.blacklist import block_globally_banned_users
 
     class V11Event:
         user_id = 20
@@ -210,7 +210,7 @@ async def test_block_skips_when_not_banned():
 
 @pytest.mark.asyncio
 async def test_block_raises_ignored_for_banned_generic():
-    from src.plugins.blacklist import block_globally_banned_users
+    from packages.blacklist import block_globally_banned_users
 
     class V11Event:
         user_id = 30
@@ -225,7 +225,7 @@ async def test_block_raises_ignored_for_banned_generic():
 
 @pytest.mark.asyncio
 async def test_block_friend_request_rejects_then_ignores():
-    from src.plugins.blacklist import block_globally_banned_users
+    from packages.blacklist import block_globally_banned_users
 
     ev = FriendRequestEvent(
         time=1,
@@ -248,7 +248,7 @@ async def test_block_friend_request_rejects_then_ignores():
 
 @pytest.mark.asyncio
 async def test_can_manage_superuser():
-    from src.plugins.blacklist import can_manage_blacklist
+    from packages.blacklist import can_manage_blacklist
 
     event = GroupMessageEvent(
         time=1,
@@ -265,13 +265,13 @@ async def test_can_manage_superuser():
         group_id=1,
     )
     bot = SimpleNamespace()
-    with patch("src.features.cmd_perm.check.SUPERUSER", new_callable=AsyncMock, return_value=True):
+    with patch("pallas.core.perm.check.SUPERUSER", new_callable=AsyncMock, return_value=True):
         assert await can_manage_blacklist(bot, event) is True
 
 
 @pytest.mark.asyncio
 async def test_can_manage_group_owner_without_superuser():
-    from src.plugins.blacklist import can_manage_blacklist
+    from packages.blacklist import can_manage_blacklist
 
     event = GroupMessageEvent(
         time=1,
@@ -289,15 +289,15 @@ async def test_can_manage_group_owner_without_superuser():
     )
     bot = SimpleNamespace()
     with (
-        patch("src.features.cmd_perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
-        patch("src.features.cmd_perm.check.user_is_bot_admin", new_callable=AsyncMock, return_value=False),
+        patch("pallas.core.perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
+        patch("pallas.core.perm.check.user_is_bot_admin", new_callable=AsyncMock, return_value=False),
     ):
         assert await can_manage_blacklist(bot, event) is True
 
 
 @pytest.mark.asyncio
 async def test_can_manage_private_requires_bot_admin():
-    from src.plugins.blacklist import can_manage_blacklist
+    from packages.blacklist import can_manage_blacklist
 
     event = PrivateMessageEvent(
         time=1,
@@ -314,15 +314,15 @@ async def test_can_manage_private_requires_bot_admin():
     )
     bot = SimpleNamespace()
     with (
-        patch("src.features.cmd_perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
-        patch("src.features.cmd_perm.check.user_is_bot_admin", new_callable=AsyncMock, return_value=False),
+        patch("pallas.core.perm.check.SUPERUSER", new_callable=AsyncMock, return_value=False),
+        patch("pallas.core.perm.check.user_is_bot_admin", new_callable=AsyncMock, return_value=False),
     ):
         assert await can_manage_blacklist(bot, event) is False
 
 
 @pytest.mark.asyncio
 async def test_handle_blacklist_add_bans_targets(beanie_fixture):
-    from src.plugins.blacklist import blacklist_add_cmd, handle_blacklist_add
+    from packages.blacklist import blacklist_add_cmd, handle_blacklist_add
 
     target = 91001
     event = GroupMessageEvent(
@@ -351,7 +351,7 @@ async def test_handle_blacklist_add_bans_targets(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_handle_blacklist_add_no_targets_prompt(beanie_fixture):
-    from src.plugins.blacklist import blacklist_add_cmd, handle_blacklist_add
+    from packages.blacklist import blacklist_add_cmd, handle_blacklist_add
 
     event = GroupMessageEvent(
         time=1,
@@ -376,7 +376,7 @@ async def test_handle_blacklist_add_no_targets_prompt(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_handle_blacklist_remove_unbans(beanie_fixture):
-    from src.plugins.blacklist import blacklist_remove_cmd, handle_blacklist_remove
+    from packages.blacklist import blacklist_remove_cmd, handle_blacklist_remove
 
     target = 92002
     await GroupConfig(1).add_blocked_users([target])
@@ -405,7 +405,7 @@ async def test_handle_blacklist_remove_unbans(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_handle_blacklist_add_private_global_bans(beanie_fixture):
-    from src.plugins.blacklist import blacklist_add_cmd, handle_blacklist_add
+    from packages.blacklist import blacklist_add_cmd, handle_blacklist_add
 
     target = 91003
     event = PrivateMessageEvent(
@@ -431,7 +431,7 @@ async def test_handle_blacklist_add_private_global_bans(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_block_group_only_does_not_block_friend_request(beanie_fixture):
-    from src.plugins.blacklist import block_globally_banned_users
+    from packages.blacklist import block_globally_banned_users
 
     await GroupConfig(10).add_blocked_users([22])
     ev = FriendRequestEvent(
@@ -450,7 +450,7 @@ async def test_block_group_only_does_not_block_friend_request(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_block_group_recall_when_operator_group_blocked(beanie_fixture):
-    from src.plugins.blacklist import block_globally_banned_users
+    from packages.blacklist import block_globally_banned_users
 
     await GroupConfig(10).add_blocked_users([503])
     gr = GroupRecallNoticeEvent(
@@ -471,7 +471,7 @@ async def test_block_group_recall_when_operator_group_blocked(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_handle_blacklist_add_group_private(beanie_fixture):
-    from src.plugins.blacklist import blacklist_add_group_cmd, handle_blacklist_add_group
+    from packages.blacklist import blacklist_add_group_cmd, handle_blacklist_add_group
 
     gid = 93001
     event = PrivateMessageEvent(
@@ -497,7 +497,7 @@ async def test_handle_blacklist_add_group_private(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_handle_blacklist_add_group_in_group_defaults_current(beanie_fixture):
-    from src.plugins.blacklist import blacklist_add_group_cmd, handle_blacklist_add_group
+    from packages.blacklist import blacklist_add_group_cmd, handle_blacklist_add_group
 
     gid = 93002
     event = GroupMessageEvent(
@@ -522,7 +522,7 @@ async def test_handle_blacklist_add_group_in_group_defaults_current(beanie_fixtu
 
 @pytest.mark.asyncio
 async def test_handle_blacklist_remove_group_unbans(beanie_fixture):
-    from src.plugins.blacklist import blacklist_remove_group_cmd, handle_blacklist_remove_group
+    from packages.blacklist import blacklist_remove_group_cmd, handle_blacklist_remove_group
 
     gid = 93003
     await GroupConfig(gid).ban()
@@ -547,7 +547,7 @@ async def test_handle_blacklist_remove_group_unbans(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_block_drops_message_in_banned_group(beanie_fixture):
-    from src.plugins.blacklist import block_globally_banned_users
+    from packages.blacklist import block_globally_banned_users
 
     gid = 93004
     await GroupConfig(gid).ban()
@@ -573,7 +573,7 @@ async def test_block_drops_message_in_banned_group(beanie_fixture):
 
 
 def test_format_id_list_empty_and_truncated():
-    from src.plugins.blacklist import format_id_list
+    from packages.blacklist import format_id_list
 
     assert format_id_list([], empty_hint="（无）") == "（无）"
     long_ids = list(range(100001, 100001 + 60))
@@ -584,7 +584,7 @@ def test_format_id_list_empty_and_truncated():
 
 @pytest.mark.asyncio
 async def test_build_blacklist_view_message_private(beanie_fixture):
-    from src.plugins.blacklist import build_blacklist_view_message
+    from packages.blacklist import build_blacklist_view_message
 
     uid = 94001
     gid = 94002
@@ -599,7 +599,7 @@ async def test_build_blacklist_view_message_private(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_build_blacklist_view_message_group(beanie_fixture):
-    from src.plugins.blacklist import build_blacklist_view_message
+    from packages.blacklist import build_blacklist_view_message
 
     gid = 94003
     target = 94004
@@ -612,7 +612,7 @@ async def test_build_blacklist_view_message_group(beanie_fixture):
 
 @pytest.mark.asyncio
 async def test_handle_blacklist_list_group(beanie_fixture):
-    from src.plugins.blacklist import blacklist_list_cmd, handle_blacklist_list
+    from packages.blacklist import blacklist_list_cmd, handle_blacklist_list
 
     gid = 94005
     target = 94006

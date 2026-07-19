@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.platform.ingress import fleet_dispatch_scale as scale
+from pallas.core.platform.ingress import fleet_dispatch_scale as scale
 
 if TYPE_CHECKING:
     import pytest
@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 def test_connected_bot_count_prefers_fleet_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "src.platform.multi_bot.fleet.get_fleet_bot_ids",
+        "pallas.core.platform.multi_bot.fleet.get_fleet_bot_ids",
         lambda: frozenset(range(100, 139)),
     )
 
@@ -27,7 +27,7 @@ def test_connected_bot_count_prefers_fleet_catalog(monkeypatch: pytest.MonkeyPat
 
 def test_connected_bot_count_falls_back_to_online_bots(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        "src.platform.multi_bot.fleet.get_fleet_bot_ids",
+        "pallas.core.platform.multi_bot.fleet.get_fleet_bot_ids",
         lambda: frozenset(),
     )
 

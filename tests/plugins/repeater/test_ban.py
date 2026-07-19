@@ -16,7 +16,7 @@ async def test_ban_correct_keywords():
     Verify that ban() extracts keywords from the CORRECT reply (ban_reply),
     not from the loop variable (reply). 通过 append_ban 细粒度 API 的调用参数验证。
     """
-    from src.plugins.repeater.model import Chat
+    from packages.repeater.model import Chat
 
     group_id = 12345
     bot_id = 67890
@@ -51,7 +51,7 @@ async def test_ban_correct_keywords():
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.append_ban",
+            "packages.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
         ) as mock_append:
             result = await Chat.ban(group_id, bot_id, ban_raw_message, "test reason")
@@ -73,7 +73,7 @@ async def test_ban_latest():
     """
     Verify that ban() bans the LATEST reply when ban_raw_message is empty.
     """
-    from src.plugins.repeater.model import Chat
+    from packages.repeater.model import Chat
 
     group_id = 22222
     bot_id = 33333
@@ -106,7 +106,7 @@ async def test_ban_latest():
 
     try:
         with patch(
-            "src.plugins.repeater.ban_manager.context_repo.append_ban",
+            "packages.repeater.ban_manager.context_repo.append_ban",
             new_callable=AsyncMock,
         ) as mock_append:
             result = await Chat.ban(group_id, bot_id, ban_raw_message, "test reason")
@@ -126,7 +126,7 @@ async def test_ban_no_match():
     """
     Verify that ban() returns False when no matching reply is found.
     """
-    from src.plugins.repeater.model import Chat
+    from packages.repeater.model import Chat
 
     group_id = 44444
     bot_id = 55555
@@ -160,7 +160,7 @@ async def test_ban_group_not_found():
     """
     Verify that ban() returns False when group_id doesn't exist.
     """
-    from src.plugins.repeater.model import Chat
+    from packages.repeater.model import Chat
 
     group_id = 99999  # Non-existent group
     bot_id = 11111

@@ -1,0 +1,5 @@
+from pallas.product.arknights_kb.startup import register_arknights_kb_startup_hook
+from pallas.product.llm.tools.startup import register_llm_tools_startup_hook
+
+register_llm_tools_startup_hook()
+register_arknights_kb_startup_hook()

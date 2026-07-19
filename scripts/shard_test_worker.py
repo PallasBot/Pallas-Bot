@@ -12,8 +12,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from src.platform.shard.registry.config import get_shard_registry_settings  # noqa: E402
-from src.platform.shard.registry.store import (  # noqa: E402
+from pallas.core.platform.shard.registry.config import get_shard_registry_settings  # noqa: E402
+from pallas.core.platform.shard.registry.store import (  # noqa: E402
     assign_bot_to_test_shard,
     clear_shard_registry_cache,
     get_shard_registry,
@@ -24,7 +24,7 @@ from src.platform.shard.registry.store import (  # noqa: E402
     remove_bot_from_test_shard,
     resolve_test_port,
 )
-from src.platform.shard.registry.sync_protocol_ports import (  # noqa: E402
+from pallas.core.platform.shard.registry.sync_protocol_ports import (  # noqa: E402
     apply_env_for_shard_sync,
     format_sync_user_message,
     read_dotenv,

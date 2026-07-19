@@ -16,10 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.features.corpus.composite_repo import CompositeContextRepository
-from src.features.corpus.config import CorpusConfig
-from src.features.corpus.find_cache import reset_find_cache_for_tests
-from src.foundation.db.modules import Answer, Context
+from pallas.product.corpus.composite_repo import CompositeContextRepository
+from pallas.product.corpus.config import CorpusConfig
+from pallas.product.corpus.find_cache import reset_find_cache_for_tests
+from pallas.core.foundation.db.modules import Answer, Context
 from tests.common.corpus.test_composite_repo import FakeContextRepo
 
 

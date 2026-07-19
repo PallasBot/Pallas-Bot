@@ -27,7 +27,7 @@ async def main() -> int:
         help="显式扫描 Redis 键空间；默认仅输出轻量快照",
     )
     args = parser.parse_args()
-    from src.platform.shard.coord_pending import coord_pending_snapshot_sync
+    from pallas.core.platform.shard.coord_pending import coord_pending_snapshot_sync
 
     snap = coord_pending_snapshot_sync(live=bool(args.live_scan))
     out = {

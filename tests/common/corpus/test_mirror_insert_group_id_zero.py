@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from src.features.corpus.config import CorpusConfig
-from src.foundation.db.modules import Answer, Context
+from pallas.core.foundation.db.modules import Answer, Context
+from pallas.product.corpus.config import CorpusConfig
 
 
 @pytest.mark.asyncio
 async def test_mirror_insert_forces_community_group_id_zero(monkeypatch: pytest.MonkeyPatch) -> None:
-    from src.features.corpus import write_fanout as mod
+    from pallas.product.corpus import write_fanout as mod
 
     inserted: list[int] = []
 

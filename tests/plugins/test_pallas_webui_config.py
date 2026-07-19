@@ -1,4 +1,4 @@
-from src.plugins.pallas_webui.config import Config
+from packages.pb_webui.config import Config
 
 
 def test_pallas_webui_dev_mode() -> None:
