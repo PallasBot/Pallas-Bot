@@ -91,7 +91,8 @@ uv run pallas
 | [Pallas-Bot-Community-Stats](https://github.com/PallasBot/Pallas-Bot-Community-Stats) | 社区统计与语料中心服务 |
 | [community-plugin-index](https://github.com/PallasBot/community-plugin-index) | 社区插件商店索引 |
 
-## 💭 碎碎念
+<details>
+<summary><strong>💭 碎碎念</strong></summary>
 
 > V3 走到后来，市面上那些 Bot 已经能接话、能记上下文、能把模型用得很顺；牛牛多半还是群里那台搞怪用的复读机，冷不丁冒出一句，把气氛带歪一点点。
 >
@@ -106,6 +107,8 @@ uv run pallas
 > V3 的内核已经有点撑不住了——配置散、约定乱、控制台和运行时也对不太齐，继续堆只会越来越累。于是 V4 把内核与扩展、配置与控制台重新理了一遍；文档站、WebUI、AI、社区统计、插件索引也各自成仓。生态才刚起了个头，后面怎么长，还盼着大家一起养。
 >
 > 一路走来，我更盼的是：维护的人更好配一点，写插件的人更好下手一点；群里那台复读机还在，只是脚下的地，终于更踏实了一些。
+
+</details>
 
 ## 💻 开发与贡献
 
