@@ -97,13 +97,15 @@ uv run pallas                       # 或 uv run nb run
 # Pallas-Bot-AI 与 Pallas-Bot 同级目录
 cd /path/to/Pallas-Bot
 uv run pallas ai path               # 应打印 ../Pallas-Bot-AI
-uv run pallas ai setup              # 或进 AI 仓 ./scripts/ai_bootstrap.sh
+uv run pallas ai setup              # LLM-only（不装 torch）；或进 AI 仓 ./scripts/ai_bootstrap.sh
+# 需要唱歌/TTS 时：uv run pallas ai setup --with-media
 ```
 
 - [ ] Redis 可达（脚本可自动 `docker compose -f docker-compose.4.0-ci.yml up -d`）
 - [ ] Ollama 或远端 LLM 配置正确（`--remote-only` 时跳过 Ollama）
 - [ ] `curl -s http://127.0.0.1:9099/health` 正常
 - [ ] Bot `pallas.toml` 或 WebUI：`LLM_CHAT_ENABLED=true`，`AI_SERVER_HOST`/`PORT` 指向 AI
+- [ ] （可选）媒体能力：`--with-media` 后 media worker 与子模块就绪
 
 ### B3. LLM 联调（可选）
 

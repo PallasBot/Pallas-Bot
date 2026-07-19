@@ -14,9 +14,13 @@ def register(sub: argparse._SubParsersAction) -> None:
     setup = ai_sub.add_parser("setup", help="调用 AI 仓 ai_bootstrap.sh（依赖、Redis、Ollama、启停）")
     setup.add_argument("--check-only", action="store_true", help="仅体检")
     setup.add_argument("--no-start", action="store_true", help="安装配置但不启动服务")
-    setup.add_argument("--with-media", action="store_true", help="含 sing/tts/chat 媒体 worker")
+    setup.add_argument("--with-media", action="store_true", help="含 sing/tts/chat 媒体依赖与 worker（会装 torch）")
     setup.add_argument("--remote-only", action="store_true", help="跳过 Ollama（远端 LLM）")
-    setup.add_argument("--gpu", action="store_true", help="uv sync 使用 --extra gpu")
+    setup.add_argument(
+        "--gpu",
+        action="store_true",
+        help="仅配合 --with-media：uv sync 使用 --extra gpu（LLM-only 不需要）",
+    )
     setup.add_argument("--bot-host", default=None, help="Bot callback 主机（默认 127.0.0.1）")
     setup.add_argument("--bot-port", type=int, default=None, help="Bot 端口（默认读 pallas.toml bootstrap.port）")
     setup.add_argument(

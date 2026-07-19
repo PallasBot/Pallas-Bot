@@ -54,17 +54,27 @@ cp .env.example .env
 ./scripts/ai_bootstrap.sh --bot-host 127.0.0.1 --bot-port 8088
 ```
 
+默认只装 **LLM 栈**（不装 torch），启动 llm worker + API，够用 @ 闲聊 / 接话。
+
 或在 **Pallas-Bot** 仓库（同级已克隆 AI 仓时）：
 
 ```bash
 uv run pallas ai setup
 ```
 
-Bot 已跑在其它端口时用 `--bot-port`；仅体检用 `--check-only`。
+| 场景 | 命令 |
+| --- | --- |
+| 仅体检 | `uv run pallas ai setup --check-only` |
+| Bot 非默认端口 | `--bot-port <port>` |
+| 远端 API、不用 Ollama | `--remote-only` |
+| 唱歌 / TTS / 醉聊 RWKV | `--with-media`（装 torch CPU） |
+| 媒体 + NVIDIA torch | `--with-media --gpu` |
+
+本地 Ollama 推理用 Ollama 自带 GPU，与 `--gpu`（本仓 PyTorch）无关。
 
 ### 无 GPU / 纯第三方 API（remote-only）
 
-服务器跑不动 Ollama 时，仍可用 DeepSeek、OpenAI 等 OpenAI 兼容 API 驱动 @ 闲聊与接话 LLM。需轻量 AI 仓（Redis + API + Celery），**不需要**本地模型。
+服务器跑不动 Ollama 时，仍可用 DeepSeek、OpenAI 等 OpenAI 兼容 API 驱动 @ 闲聊与接话 LLM。需轻量 AI 仓（Redis + API + Celery），**不需要**本地模型，也**不需要** torch。
 
 ```bash
 # AI 仓：编辑 .env 填入 LLM_REMOTE_* 后

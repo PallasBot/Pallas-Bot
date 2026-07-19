@@ -66,10 +66,14 @@ uv run pallas plugin list
 
 ```bash
 uv run pallas ai path
-uv run pallas ai setup
+uv run pallas ai setup                 # LLM-only（不装 torch）
 uv run pallas ai setup --check-only
 uv run pallas ai setup --remote-only
+uv run pallas ai setup --with-media    # 唱歌/TTS（装 torch CPU）
+uv run pallas ai setup --with-media --gpu
 ```
+
+详见 [AI Runtime 安装](../install/ai-runtime.md)。
 
 ## 体检
 
