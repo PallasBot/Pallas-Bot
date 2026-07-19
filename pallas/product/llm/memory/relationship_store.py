@@ -166,19 +166,18 @@ async def list_relationship_notes(
 ) -> list[dict[str, object]]:
     if not is_relationship_store_available():
         return []
-    scope_gid = normalize_group_scope(group_id)
     max_limit = max(1, min(int(limit), 200))
     async with get_session(read_only=True) as session:
+        stmt = select(LlmRelationshipNoteRow).where(LlmRelationshipNoteRow.bot_id == int(bot_id))
+        if group_id is not None:
+            stmt = stmt.where(LlmRelationshipNoteRow.group_id == normalize_group_scope(group_id))
         rows = (
             (
                 await session.execute(
-                    select(LlmRelationshipNoteRow)
-                    .where(
-                        LlmRelationshipNoteRow.bot_id == int(bot_id),
-                        LlmRelationshipNoteRow.group_id == scope_gid,
-                    )
-                    .order_by(LlmRelationshipNoteRow.updated_at.desc(), LlmRelationshipNoteRow.id.desc())
-                    .limit(max_limit * 4)
+                    stmt.order_by(
+                        LlmRelationshipNoteRow.updated_at.desc(),
+                        LlmRelationshipNoteRow.id.desc(),
+                    ).limit(max_limit * 4)
                 )
             )
             .scalars()

@@ -88,6 +88,76 @@ _ACTION_HINTS: dict[BehaviorAction, str] = {
 }
 
 
+def default_behavior_pattern_seeds() -> list[BehaviorPattern]:
+    """全局默认行为规则（无群限定）；仅在 patterns.json 不存在时落盘。"""
+    return [
+        BehaviorPattern(
+            pattern_id="seed-provocation-tease",
+            scene=BehaviorScene.PROVOCATION,
+            action=BehaviorAction.LIGHT_TEASE_AND_CLOSE,
+            manual_score=2,
+            trigger_features=["provocation", "weird_demand"],
+            reference_examples=["快说誓死效忠××", "你表个态"],
+        ),
+        BehaviorPattern(
+            pattern_id="seed-banter-follow-once",
+            scene=BehaviorScene.BANTER,
+            action=BehaviorAction.FOLLOW_JOKE_ONCE,
+            manual_score=2,
+            trigger_features=["joke", "meme"],
+            reference_examples=["哈哈笑死", "这个梗典"],
+        ),
+        BehaviorPattern(
+            pattern_id="seed-smalltalk-ack-short",
+            scene=BehaviorScene.SMALLTALK,
+            action=BehaviorAction.ACK_THEN_SHORT_REPLY,
+            manual_score=2,
+            trigger_features=["chitchat"],
+            reference_examples=["今天好闲", "随便聊聊"],
+        ),
+        BehaviorPattern(
+            pattern_id="seed-smalltalk-no-topic-shift",
+            scene=BehaviorScene.SMALLTALK,
+            action=BehaviorAction.AVOID_FORCED_TOPIC_SHIFT,
+            manual_score=1,
+            trigger_features=["stay_topic"],
+            reference_examples=["就这个事", "别扯远"],
+        ),
+        BehaviorPattern(
+            pattern_id="seed-venting-ack-emotion",
+            scene=BehaviorScene.VENTING,
+            action=BehaviorAction.ACK_EMOTION_NO_LECTURE,
+            manual_score=2,
+            trigger_features=["vent", "emotion"],
+            reference_examples=["烦死了", "真的绷不住"],
+        ),
+        BehaviorPattern(
+            pattern_id="seed-group-threading-anchor",
+            scene=BehaviorScene.GROUP_THREADING,
+            action=BehaviorAction.BRIEF_MULTI_PARTY_ANCHOR,
+            manual_score=2,
+            trigger_features=["multi_party", "overlap"],
+            reference_examples=["你们先等等我问牛牛", "A B C 一起插话"],
+        ),
+        BehaviorPattern(
+            pattern_id="seed-group-threading-stay",
+            scene=BehaviorScene.GROUP_THREADING,
+            action=BehaviorAction.STAY_ON_CURRENT_TOPIC,
+            manual_score=1,
+            trigger_features=["current_turn"],
+            reference_examples=["你先回我这个"],
+        ),
+        BehaviorPattern(
+            pattern_id="seed-light-help-short",
+            scene=BehaviorScene.LIGHT_HELP,
+            action=BehaviorAction.SHORT_HELP_THEN_STOP,
+            manual_score=2,
+            trigger_features=["question", "how_to"],
+            reference_examples=["这怎么弄", "为啥不行啊"],
+        ),
+    ]
+
+
 def classify_behavior_scene(*, user_text: str, recent_texts: list[str], has_multi_party_overlap: bool) -> BehaviorScene:
     text = str(user_text or "").strip()
     if not text:

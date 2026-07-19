@@ -17,7 +17,7 @@ from pallas.product.llm.behavior import (
     default_group_chat_behavior_hint,
     select_behavior_patterns,
 )
-from pallas.product.llm.behavior_store import list_behavior_patterns
+from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
 from pallas.product.llm.chat_queue import merge_queued_chat, stash_chat_during_cooldown
 from pallas.product.llm.dynamic_expression_context import (
     build_dynamic_expression_hint as build_llm_chat_dynamic_expression_hint,
@@ -451,7 +451,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
     behavior_patterns = select_behavior_patterns(
         scene=behavior_scene,
         group_id=group_id,
-        patterns=list_behavior_patterns(),
+        patterns=ensure_default_behavior_patterns(),
         limit=2,
     )
     behavior_actions = [item.action for item in behavior_patterns]

@@ -17,6 +17,7 @@ from pallas.product.llm.behavior import (
 from pallas.product.llm.behavior_store import (
     append_behavior_run,
     delete_behavior_pattern,
+    ensure_default_behavior_patterns,
     list_behavior_patterns,
     list_behavior_runs,
     save_behavior_patterns,
@@ -221,6 +222,24 @@ def test_behavior_store_round_trip(tmp_path, monkeypatch) -> None:
     ])
     rows = list_behavior_patterns()
     assert rows[0].pattern_id == "p1"
+
+
+def test_ensure_default_behavior_patterns_seeds_once(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    first = ensure_default_behavior_patterns()
+    assert len(first) >= 6
+    assert all(item.pattern_id.startswith("seed-") for item in first)
+    # 已有文件后再次 ensure 不覆盖
+    upsert_behavior_pattern(
+        BehaviorPattern(
+            pattern_id="custom-1",
+            scene=BehaviorScene.SMALLTALK,
+            action=BehaviorAction.ACK_THEN_SHORT_REPLY,
+        )
+    )
+    second = ensure_default_behavior_patterns()
+    assert any(item.pattern_id == "custom-1" for item in second)
+    assert len(second) == len(first) + 1
 
 
 def test_behavior_pattern_upsert_and_delete(tmp_path, monkeypatch) -> None:

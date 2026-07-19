@@ -311,19 +311,16 @@ async def list_memory_entries(
 ) -> list[dict[str, Any]]:
     if not is_llm_memory_store_available():
         return []
-    scope_gid = normalize_group_scope(group_id)
     max_limit = max(1, min(int(limit), 200))
     async with get_session(read_only=True) as session:
+        stmt = select(LlmMemoryEntryRow).where(LlmMemoryEntryRow.bot_id == int(bot_id))
+        # group_id 未传：按 Bot 全量（与控制台「全部范围」一致）；传入则限定该群
+        if group_id is not None:
+            stmt = stmt.where(LlmMemoryEntryRow.group_id == normalize_group_scope(group_id))
         rows = (
             (
                 await session.execute(
-                    select(LlmMemoryEntryRow)
-                    .where(
-                        LlmMemoryEntryRow.bot_id == int(bot_id),
-                        LlmMemoryEntryRow.group_id == scope_gid,
-                    )
-                    .order_by(LlmMemoryEntryRow.updated_at.desc(), LlmMemoryEntryRow.id.desc())
-                    .limit(max_limit * 4)
+                    stmt.order_by(LlmMemoryEntryRow.updated_at.desc(), LlmMemoryEntryRow.id.desc()).limit(max_limit * 4)
                 )
             )
             .scalars()

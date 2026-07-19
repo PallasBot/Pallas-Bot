@@ -8,7 +8,13 @@ from typing import Any
 
 from pallas.core.foundation.paths import plugin_data_dir
 
-from .behavior import BehaviorOutcome, BehaviorPattern, BehaviorRun, map_behavior_outcome_score
+from .behavior import (
+    BehaviorOutcome,
+    BehaviorPattern,
+    BehaviorRun,
+    default_behavior_pattern_seeds,
+    map_behavior_outcome_score,
+)
 
 
 def _base_dir() -> Path:
@@ -39,6 +45,16 @@ def save_behavior_patterns(patterns: list[BehaviorPattern]) -> None:
     body = json.dumps([item.model_dump(mode="json") for item in patterns], ensure_ascii=False, indent=2)
     with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
         atomic_write_text(path, body)
+
+
+def ensure_default_behavior_patterns() -> list[BehaviorPattern]:
+    """patterns.json 不存在时写入全局默认种子；已有文件（含空列表）不覆盖。"""
+    path = _patterns_path()
+    if path.exists():
+        return list_behavior_patterns()
+    seeds = default_behavior_pattern_seeds()
+    save_behavior_patterns(seeds)
+    return seeds
 
 
 def list_behavior_patterns() -> list[BehaviorPattern]:
