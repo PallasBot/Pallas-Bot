@@ -4969,7 +4969,10 @@ def register_extended_api(
     router_pub = APIRouter(tags=["Pallas-Bot 控制台"])
 
     @router_pub.post(f"{x}/auth/login", include_in_schema=False)
-    async def _auth_login(request: Request, body: _AuthLoginBody) -> JSONResponse:
+    async def _auth_login(
+        request: Request,
+        body: Annotated[_AuthLoginBody, Body()],
+    ) -> JSONResponse:
         from pallas.console.webui.console_login import SESSION_COOKIE_NAME, SESSION_TTL_SEC
 
         if not verify_console_password(body.password):

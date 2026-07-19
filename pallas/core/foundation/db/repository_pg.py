@@ -265,9 +265,8 @@ class ImageCacheRow(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     cq_code: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
-    # 改为原生二进制：PG DDL 为 BYTEA。Text → LargeBinary 是一次性破坏性变更，
-    # 历史数据由 tools/migrate_image_cache_to_bytea.py 负责（PG 侧执行
-    # ALTER TABLE ... TYPE BYTEA USING decode(base64_data, 'base64')）。
+    # 原生二进制 BYTEA。旧库 base64_data 由 init_pg → _ensure_pg_image_cache_blob_data
+    # 幂等迁移；离线脚本 tools/migrate_image_cache_to_bytea.py 语义相同。
     blob_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     ref_times: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     date: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
@@ -341,6 +340,35 @@ _reply_query_snapshot_cache: OrderedDict[str, tuple[float, Context | None]] = Or
 _reply_query_snapshot_inflight: dict[str, asyncio.Task[Context | None]] = {}
 _reply_query_snapshot_lock = asyncio.Lock()
 _DELETE_ID_BATCH = 1000
+
+
+def _ensure_pg_image_cache_blob_data(connection) -> None:
+    """旧库 image_cache 仍为 base64_data(TEXT) 时迁到 blob_data(BYTEA)。
+
+    与 ``tools/migrate_image_cache_to_bytea.py`` 同语义；幂等，可重复调用。
+    ``create_all`` 不会改已有表列，故升级路径必须走这里。
+    """
+    insp = inspect(connection)
+    if not insp.has_table("image_cache"):
+        return
+    names = {c["name"] for c in insp.get_columns("image_cache")}
+    if "blob_data" in names and "base64_data" not in names:
+        return
+    if "blob_data" not in names and "base64_data" not in names:
+        connection.execute(text("ALTER TABLE image_cache ADD COLUMN blob_data BYTEA"))
+        return
+    if "blob_data" not in names:
+        connection.execute(text("ALTER TABLE image_cache ADD COLUMN blob_data BYTEA"))
+        logger.info("image_cache: 已添加 blob_data 列，开始从 base64_data 迁移")
+    if "base64_data" in names:
+        connection.execute(
+            text(
+                "UPDATE image_cache SET blob_data = decode(base64_data, 'base64') "
+                "WHERE base64_data IS NOT NULL AND blob_data IS NULL"
+            )
+        )
+        connection.execute(text("ALTER TABLE image_cache DROP COLUMN base64_data"))
+        logger.info("image_cache: base64_data → blob_data 迁移完成")
 
 
 def _ensure_pg_group_config_blocked_user_ids(connection) -> None:
@@ -577,6 +605,7 @@ async def init_pg(engine: AsyncEngine) -> None:
     _session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_ensure_pg_image_cache_blob_data)
         await conn.run_sync(_ensure_pg_group_config_blocked_user_ids)
         await conn.run_sync(_ensure_pg_group_config_style_profile)
         await conn.run_sync(_ensure_pg_group_config_plugin_storage)

@@ -14,16 +14,17 @@
 
 用法：
     # 1. 预览：探测当前 schema、报告将要做的事
-    uv run --extra pg python tools/migrate_image_cache_to_bytea.py
+    uv run python tools/migrate_image_cache_to_bytea.py
 
     # 2. 真实执行
-    uv run --extra pg python tools/migrate_image_cache_to_bytea.py --apply
+    uv run python tools/migrate_image_cache_to_bytea.py --apply
 
     # 3. 校验：抽 5 行确认 blob_data 已落盘 + cq_code 完整
-    uv run --extra pg python tools/migrate_image_cache_to_bytea.py --verify
+    uv run python tools/migrate_image_cache_to_bytea.py --verify
 
-环境变量（与 migrate_mongo_to_pg.py 一致）：
-    PG_HOST / PG_PORT / PG_USER / PG_PASSWORD / PG_DB
+连接（优先级）：
+    1. 已导出的 PG_HOST / PG_PORT / PG_USER / PG_PASSWORD / PG_DB
+    2. 否则从 config/pallas.toml（及遗留 .env / webui.json）合并读取
 """
 
 from __future__ import annotations
@@ -33,6 +34,11 @@ import asyncio
 import os
 import re
 import sys
+from pathlib import Path
+
+_REPO = Path(__file__).resolve().parents[1]
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
 
 # ---------------------------------------------------------------------------
 # CLI
@@ -69,6 +75,11 @@ def _pg_conn_kwargs() -> tuple[dict[str, object], str]:
         (conn_kwargs, db_name)：conn_kwargs 给 ``asyncpg.connect(**conn_kwargs)``，
         db_name 单独返回（不在 kwargs 里，因为 asyncpg 把它当 key 不能轻易替换）。
     """
+    # 补齐未导出的 PG_*（不覆盖已有环境变量）
+    from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
+
+    apply_repo_settings_to_environ()
+
     h = os.getenv("PG_HOST") or os.getenv("MONGO_HOST", "127.0.0.1")
     p_port = int(os.getenv("PG_PORT", "5432"))
     u = os.getenv("PG_USER", "") or None

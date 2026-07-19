@@ -340,6 +340,73 @@ def test_ensure_pg_llm_memory_embedding_columns_adds_only_missing_columns(monkey
     assert executed == expected
 
 
+@pytest.mark.parametrize(
+    ("existing_columns", "expected_substrings"),
+    [
+        (["blob_data"], []),
+        (
+            ["base64_data"],
+            [
+                "ADD COLUMN blob_data BYTEA",
+                "decode(base64_data, 'base64')",
+                "DROP COLUMN base64_data",
+            ],
+        ),
+        (
+            ["base64_data", "blob_data"],
+            [
+                "decode(base64_data, 'base64')",
+                "DROP COLUMN base64_data",
+            ],
+        ),
+        ([], ["ADD COLUMN blob_data BYTEA"]),
+    ],
+)
+def test_ensure_pg_image_cache_blob_data_migrates_base64(monkeypatch, existing_columns, expected_substrings):
+    from pallas.core.foundation.db import repository_pg as mod
+
+    executed: list[str] = []
+
+    class FakeInspector:
+        def has_table(self, name: str) -> bool:
+            return name == "image_cache"
+
+        def get_columns(self, name: str) -> list[dict[str, str]]:
+            assert name == "image_cache"
+            return [{"name": column} for column in existing_columns]
+
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
+
+    monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
+
+    mod._ensure_pg_image_cache_blob_data(FakeConnection())
+
+    assert len(executed) == len(expected_substrings)
+    for sql, needle in zip(executed, expected_substrings, strict=True):
+        assert needle in sql
+
+
+def test_ensure_pg_image_cache_blob_data_skips_missing_table(monkeypatch):
+    from pallas.core.foundation.db import repository_pg as mod
+
+    executed: list[str] = []
+
+    class FakeInspector:
+        def has_table(self, name: str) -> bool:
+            return False
+
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
+
+    monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
+
+    mod._ensure_pg_image_cache_blob_data(FakeConnection())
+    assert executed == []
+
+
 def test_ensure_pg_context_answer_reply_indexes_create_missing_indexes(monkeypatch):
     from pallas.core.foundation.db import repository_pg as mod
 

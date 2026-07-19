@@ -18,6 +18,9 @@
 #   curl -s http://127.0.0.1:8088/pallas/api/health
 #   curl -s http://127.0.0.1:9099/health
 #
+# 端口: BOT_PORT=宿主机映射；BOT_LISTEN_PORT=容器内监听（默认皆 8088）。
+# AI 回调走 BOT_LISTEN_PORT，只改宿主机端口时勿动 BOT_LISTEN_PORT。
+#
 # AI 日志：pallasbot-ai 写入 ./pallas-bot-ai/logs/；pallasbot 只读挂到 /ai-logs 供 WebUI SSE。
 
 name: pallas-full
@@ -28,12 +31,15 @@ services:
     image: pallasbot/pallas-bot:latest
     restart: always
     ports:
-      - "${BOT_PORT:-8088}:8088"
+      # 左：宿主机访问端口 BOT_PORT；右：容器内 Bot 监听 BOT_LISTEN_PORT（须与 pallas.toml port / PORT 一致）
+      - "${BOT_PORT:-8088}:${BOT_LISTEN_PORT:-8088}"
     environment:
       TZ: Asia/Shanghai
       ENVIRONMENT: prod
       APP_MODULE: bot:app
       MAX_WORKERS: 1
+      # 与右侧端口映射、AI CALLBACK_PORT 对齐；改监听端口时同时改 BOT_LISTEN_PORT
+      PORT: ${BOT_LISTEN_PORT:-8088}
       DB_BACKEND: postgresql
       PG_HOST: postgres
       PG_PORT: "5432"
@@ -150,7 +156,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       LLM_SESSION_BACKEND: redis
       CALLBACK_HOST: pallasbot
-      CALLBACK_PORT: ${BOT_PORT:-8088}
+      # Docker 网络内访问 Bot 的端口 = 容器内监听端口（BOT_LISTEN_PORT），不是宿主机 BOT_PORT
+      CALLBACK_PORT: ${BOT_LISTEN_PORT:-8088}
       LLM_CHAT_ENABLED: "true"
       LLM_PROVIDER_MODE: ${LLM_PROVIDER_MODE:-local_only}
       LLM_BACKEND_URL: http://ollama:11434
