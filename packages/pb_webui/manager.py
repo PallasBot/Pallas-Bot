@@ -188,26 +188,26 @@ def _unlink_ignore_missing(path: Path) -> None:
 def _webui_download_progress_log(ev: StreamDownloadProgress) -> None:
     if ev["event"] == "percent":
         logger.info(
-            "Pallas-Bot 控制台: WebUI dist 下载进度 {}%（{}/{}）",
+            "[控制台] WebUI dist 下载进度 {}%（{}/{}）",
             ev["milestone_percent"],
             format_download_byte_size(ev["received"]),
             format_download_byte_size(ev["total"]),
         )
     elif ev["event"] == "unknown_step":
         logger.info(
-            "Pallas-Bot 控制台: WebUI dist 已下载 {}（服务器未提供文件大小）",
+            "[控制台] WebUI dist 已下载 {}（服务器未提供文件大小）",
             format_download_byte_size(ev["received"]),
         )
     elif ev["event"] == "complete":
         if ev["total"] is not None:
             logger.info(
-                "Pallas-Bot 控制台: WebUI dist 下载完成 {} / {}",
+                "[控制台] WebUI dist 下载完成 {} / {}",
                 format_download_byte_size(ev["received"]),
                 format_download_byte_size(ev["total"]),
             )
         elif ev["received"] > 0:
             logger.info(
-                "Pallas-Bot 控制台: WebUI dist 下载完成 {}",
+                "[控制台] WebUI dist 下载完成 {}",
                 format_download_byte_size(ev["received"]),
             )
 
@@ -227,7 +227,7 @@ async def download_and_extract_dist_zip(public_dir: Path, url: str, *, follow_re
     if not url:
         return False
     preview = url if len(url) <= 200 else url[:197] + "..."
-    logger.info("Pallas-Bot 控制台: 正在下载 WebUI dist {}", preview)
+    logger.info("[控制台] 正在下载 WebUI dist {}", preview)
 
     tmp_zip = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
     zip_path = Path(tmp_zip.name)
@@ -236,7 +236,7 @@ async def download_and_extract_dist_zip(public_dir: Path, url: str, *, follow_re
     try:
         await asyncio.to_thread(_sync_download_webui_zip, url, zip_path, follow_redirects=follow_redirects)
         await asyncio.to_thread(_sync_extract_dist_zip_file, zip_path, public_dir)
-        logger.info("Pallas-Bot 控制台: 已解压 dist 到 data/pb_webui/public")
+        logger.info("[控制台] 已解压 dist 到 data/pb_webui/public")
     finally:
         await asyncio.to_thread(_unlink_ignore_missing, zip_path)
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal, override
 
 from nonebot import get_driver
+from nonebot.adapters.onebot.v11 import Event  # noqa: TC002 — preprocessor 运行时解析注解需要
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent, NoticeEvent, PrivateMessageEvent
 from nonebot.compat import model_dump, model_validator
 from nonebot.message import event_preprocessor
@@ -65,7 +66,7 @@ def install_group_temp_private_hooks() -> None:
         return
     _hooks_installed = True
 
-    from nonebot.adapters.onebot.v11 import Bot, Event
+    from nonebot.adapters.onebot.v11 import Bot
     from nonebot.adapters.onebot.v11 import bot as ob_bot
     from nonebot.adapters.onebot.v11.message import Message, MessageSegment
 

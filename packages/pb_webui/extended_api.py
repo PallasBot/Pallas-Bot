@@ -233,7 +233,7 @@ def _ensure_log_sink() -> None:
     if _INIT_LOG_SINK:
         return
     _INIT_LOG_SINK = True
-    logger.info("控制台：日志环已接入 /pallas/api/logs")
+    logger.info("[控制台] 日志环已接入 /pallas/api/logs")
 
 
 def build_console_openapi_schema(app: Any, *, api_base: str) -> dict[str, Any]:

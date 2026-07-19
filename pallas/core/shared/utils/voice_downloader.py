@@ -37,7 +37,7 @@ VOICES = {
 
 async def download_voices() -> bool:
     try:
-        logger.info("语音资源：开始下载")
+        logger.info("[语音] 开始下载")
 
         RESOURCE_ROOT.mkdir(exist_ok=True)
         VOICES_DIR.mkdir(exist_ok=True)
@@ -47,13 +47,13 @@ async def download_voices() -> bool:
         download_success = False
         for source, url in VOICES_URLS.items():
             try:
-                logger.info("语音资源：从 {} 下载", source)
+                logger.info("[语音] 从 {} 下载", source)
                 async with httpx.AsyncClient(timeout=timeout, limits=limits, follow_redirects=True) as client:
                     response = await client.get(url)
                     response.raise_for_status()
 
                     TEMP_ZIP_PATH.write_bytes(response.content)
-                    logger.info("语音资源：已下载 {:.1f}MB，解压中", len(response.content) / 1024 / 1024)
+                    logger.info("[语音] 已下载 {:.1f}MB，解压中", len(response.content) / 1024 / 1024)
                     download_success = True
                     break
 
@@ -70,7 +70,7 @@ async def download_voices() -> bool:
 
         TEMP_ZIP_PATH.unlink()
 
-        logger.info("语音资源：就绪")
+        logger.info("[语音] 就绪")
         return True
 
     except Exception as e:
@@ -90,7 +90,7 @@ async def ensure_voices() -> bool:
             if all((pallas_dir / f"{file}.wav").exists() for file in VOICES):
                 return True
 
-        logger.info("语音资源：缺失，开始下载")
+        logger.info("[语音] 缺失，开始下载")
         return await download_voices()
 
     except Exception as e:

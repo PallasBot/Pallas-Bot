@@ -20,5 +20,6 @@ def test_channel_handler_downgrades_transient_uvicorn_errors() -> None:
 
 
 def test_stdlib_logger_channel_label_uses_repo_aliases() -> None:
-    assert _stdlib_logger_channel_label("pallas.product.llm.client") == "pallas.product"
-    assert _stdlib_logger_channel_label("packages.repeater.learner") == "repeater"
+    assert _stdlib_logger_channel_label("pallas.product.llm.client") == "功能"
+    assert _stdlib_logger_channel_label("packages.repeater.learner") == "复读"
+    assert _stdlib_logger_channel_label("uvicorn.error") == "服务"

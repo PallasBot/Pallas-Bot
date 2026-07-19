@@ -84,8 +84,8 @@ def emit_startup_summary() -> None:
 
     parts = _runtime_base_fields()
     parts.extend(f"{key}={value}" for key, value in _collector.facts.items())
-    logger.info("启动摘要：{}", " | ".join(parts))
+    logger.info("[启动] {}", " | ".join(parts))
 
     if _collector.warnings:
         warning_text = " | ".join(f"{key}={value}" for key, value in _collector.warnings.items())
-        logger.warning("启动降级：{}", warning_text)
+        logger.warning("[启动] 降级：{}", warning_text)

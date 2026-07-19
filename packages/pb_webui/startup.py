@@ -112,7 +112,7 @@ if not is_sharded_worker():
         async def bootstrap_webui_dist() -> None:
             if check_webui_exists(public):
                 return
-            logger.info("控制台：首次部署，后台拉取静态资源")
+            logger.info("[控制台] 首次部署，后台拉取静态资源")
             tok = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
             url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
             url_candidates: list[str] = []
@@ -168,7 +168,7 @@ if not is_sharded_worker():
                     save_installed_webui_version(tag, succeeded_url)
                 except Exception:
                     pass
-                logger.info("控制台：静态资源就绪，请刷新页面")
+                logger.info("[控制台] 静态资源就绪，请刷新页面")
             webui_ver = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
             set_console_meta({"static_root": str(public), "http_base": base, "version": webui_ver})
 

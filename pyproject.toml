@@ -9,7 +9,7 @@ maintainers = [
 ]
 license = { file = "LICENSE" }
 readme = "README.md"
-requires-python = ">=3.12,<4.0"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "aiosmtplib>=5.0.0",
     "beanie>=2.0.0",

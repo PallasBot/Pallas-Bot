@@ -146,4 +146,4 @@ driver = get_driver()
 
 @driver.on_startup
 async def register_plugin_manager():
-    logger.info("帮助：插件禁用预处理已注册")
+    logger.info("[帮助] 插件禁用预处理已注册")

@@ -227,10 +227,10 @@ def prime_shared_console_login() -> None:
     plain, rnd = _materialize_auth_state()
     auth_path = str(auth_state_path().resolve())
     if plain is not None and rnd:
-        logger.info("控制台：鉴权已初始化 {}", auth_state_path())
-        logger.success("Pallas-Bot 默认口令: {}", plain)
+        logger.info("[控制台] 鉴权已初始化 {}", auth_state_path())
+        logger.success("[控制台] 默认口令: {}", plain)
         try:
-            sys.stderr.write(f"[Pallas-Bot] 默认口令: {plain}\n")
+            sys.stderr.write(f"[控制台] 默认口令: {plain}\n")
             sys.stderr.flush()
         except OSError:
             pass
@@ -241,9 +241,9 @@ def prime_shared_console_login() -> None:
             _unlink_default_login_password_plain()
         elif boot:
             if _announced_default_password_auth_path != auth_path:
-                logger.success("Pallas-Bot 默认口令: {}", boot)
+                logger.success("[控制台] 默认口令: {}", boot)
                 try:
-                    sys.stderr.write(f"[Pallas-Bot] 默认口令: {boot}\n")
+                    sys.stderr.write(f"[控制台] 默认口令: {boot}\n")
                     sys.stderr.flush()
                 except OSError:
                     pass

@@ -217,7 +217,7 @@ def install_matcher_dispatch() -> None:
 
     _PATCHED = True
     logger.info(
-        "matcher_dispatch: installed overload_threshold={} multi_bot={} adapter_patches={}",
+        "[消息预筛] 已启用 overload_threshold={} multi_bot={} adapter_patches={}",
         overload_selected_threshold(),
         needs_group_host_bot_gate(),
         len(_ORIGINAL_ADAPTER_HANDLE_EVENTS),

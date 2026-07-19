@@ -37,7 +37,7 @@ async def start_community_stats_reporter() -> None:
         next_run_time=datetime.now() + timedelta(seconds=_FIRST_HEARTBEAT_DELAY_SEC),
     )
     logger.info(
-        "社区统计：周期上报 {}s 首包延迟 {}s endpoint={}",
+        "[社区统计] 周期上报 {}s 首包延迟 {}s endpoint={}",
         interval_sec,
         _FIRST_HEARTBEAT_DELAY_SEC,
         (cfg.endpoint or "").strip(),

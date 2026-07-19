@@ -145,7 +145,7 @@ def install_llm_startup_probe() -> None:
                         f"version<{MIN_AI_API_VERSION[0]}.{MIN_AI_API_VERSION[1]}.{MIN_AI_API_VERSION[2]}",
                     )
                     logger.warning(
-                        "LLM：v={} 低于最低 {}.{}.{}, 部分 4.0 API 可能不可用",
+                        "[LLM] v={} 低于最低 {}.{}.{}, 部分 4.0 API 可能不可用",
                         version,
                         MIN_AI_API_VERSION[0],
                         MIN_AI_API_VERSION[1],
@@ -162,7 +162,7 @@ def install_llm_startup_probe() -> None:
                         f"version<{MIN_AI_API_VERSION[0]}.{MIN_AI_API_VERSION[1]}.{MIN_AI_API_VERSION[2]}",
                     )
                     logger.warning(
-                        "LLM：v={} 低于最低 {}.{}.{}",
+                        "[LLM] v={} 低于最低 {}.{}.{}",
                         version,
                         MIN_AI_API_VERSION[0],
                         MIN_AI_API_VERSION[1],
@@ -186,10 +186,10 @@ def install_llm_startup_probe() -> None:
                 f"unreachable err={result.get('error') or 'unknown'} switches={flag_text}",
             )
             logger.warning(
-                "LLM：不可达 {} err={} switches={}",
+                "[LLM] 不可达 {} err={} switches={}",
                 url,
                 result.get("error") or "unknown",
                 flag_text,
             )
         else:
-            logger.debug("LLM：无响应 {}（开关均为关）", url)
+            logger.debug("[LLM] 无响应 {}（开关均为关）", url)
