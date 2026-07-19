@@ -1,10 +1,10 @@
 # DynamicConfigPanel
 
-WebUI 组件 `DynamicConfigPanel.vue` 根据 Bot 返回的 `fields[]` 渲染插件/通用配置，并展示 unexpected keys 兜底区。
+`DynamicConfigPanel.vue` 按 Bot 返回的 `fields[]` 渲染插件/通用配置，并展示 unexpected keys 兜底区。
 
 ## Pydantic `json_schema_extra`
 
-在插件 `config.py` 的 `Field` 上声明 UI 元数据：
+插件 `config.py` 的 `Field` 上声明 UI 元数据：
 
 ```python
 from pydantic import BaseModel, Field

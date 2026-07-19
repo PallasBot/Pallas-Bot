@@ -1,6 +1,6 @@
 # Core 与扩展
 
-能力归属合同：决定放进 core、官方插件还是社区插件。禁止以「写起来方便」决定归属。
+能力归属：core、官方插件或社区插件。不以「写起来方便」决定归属。
 
 ## 三层
 
@@ -61,10 +61,10 @@
 | Official | 元数据 + `activation_policy` + PyPI | 独立仓 |
 | Community | 公开 `pallas.api.*` + README / 索引 | Git / 本地 / 商店 |
 
-设计顺序：先定归属层 → 再定目录与发布路径 → 再写代码。
+顺序：归属层 → 目录与发布路径 → 代码。
 
 ## 相关
 
 - [架构总览](overview.md)
-- [发布](../plugin-development/publishing.md)
-- [Golden Plugin](../plugin-development/golden-plugin.md)
+- [发布](/developer/plugin-development/publishing)
+- [Golden Plugin](/developer/plugin-development/golden-plugin)

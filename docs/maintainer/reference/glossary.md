@@ -1,6 +1,6 @@
 # 术语表
 
-文档站里高频、又容易混淆的术语。
+运维文档高频术语。
 
 ## Core
 
@@ -44,6 +44,6 @@
 
 ## 相关阅读
 
-- [Core 与扩展](../../developer/architecture/core-vs-extensions.md)
-- [分片部署](../deploy/sharded.md)
-- [Reload 与 Activation](../../developer/plugin-development/reload-and-activation.md)
+- [Core 与扩展](/developer/architecture/core-vs-extensions)
+- [分片部署](/maintainer/deploy/sharded)
+- [Reload 与 Activation](/developer/plugin-development/reload-and-activation)

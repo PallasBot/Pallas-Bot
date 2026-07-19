@@ -2,25 +2,27 @@
 
 部署、更新和排查 WebUI。
 
-4.0 的 WebUI 是“独立前端仓库 + 主仓运行产物”的组合。最容易踩的坑不是页面功能，而是搞错“源码在哪”和“线上实际加载的是哪份资源”。
+## 三层结构
 
-## 先记住这个边界
+| 层 | 路径 |
+| --- | --- |
+| 前端源码 | `Pallas-Bot-WebUI` |
+| 运行产物 | `data/pb_webui/public/` |
+| 后端 | `pb_webui` · `/pallas/api` |
 
-- 前端源码仓：`Pallas-Bot-WebUI`
-- 主仓运行产物目录：`data/pb_webui/public/`
-- Bot 挂载静态资源时，读的是主仓运行产物，不是源码仓
+Bot 挂载静态资源时读的是运行产物，不是源码仓。
 
-所以：
+| 操作 | 结果 |
+| --- | --- |
+| 改前端页面 / 样式 | 在 `Pallas-Bot-WebUI` 改 → build → 同步产物 |
+| 只改主仓 `data/pb_webui/public/` | 下次构建同步会被覆盖 |
+| 只改源码仓、未 build / 同步 | 线上页面不变 |
 
-- 想改前端页面或样式，得去 `Pallas-Bot-WebUI`。
-- 只改主仓 `data/pb_webui/public/`，下次重新构建同步时会被覆盖。
-- 只改源码仓但没重新构建并同步，线上页面不会变。
+## 适用场景
 
-## 什么时候需要
-
-- 你需要部署、更新或排查 WebUI。
-- 你发现页面和源码不一致，怀疑资源没有同步。
-- 你要判断某个问题属于前端仓、主仓 API，还是静态产物部署问题。
+- 部署、更新或排查 WebUI
+- 页面与源码不一致，怀疑资源未同步
+- 区分前端仓、主仓 API、静态产物问题
 
 ## 运行链路
 
@@ -36,13 +38,13 @@ flowchart LR
     Source --> Build --> Dist --> Runtime --> Bot --> Browser
 ```
 
-这条链路任何一步没走完，用户看到的页面都可能不是你以为的那一版。
+链路任一步未完成，浏览器看到的版本可能与预期不符。
 
-## 维护者最常见的三类操作
+## 常用操作
 
-### 1. 正常使用控制台
+### 1. 使用控制台
 
-保证主仓里已经有可用的 `data/pb_webui/public/`，且 Bot 已正常启动就行。访问入口通常是：
+确保 `data/pb_webui/public/` 可用且 Bot 已启动：
 
 ```text
 http://<host>:8088/pallas/
@@ -50,76 +52,70 @@ http://<host>:8088/pallas/
 
 ### 2. 更新 WebUI 资源
 
-拿到新的 `dist.zip` 或新构建产物后：
+拿到新的 `dist.zip` 或构建产物后：
 
-1. 停止或避开当前写入过程。
-2. 把产物解压或覆盖到 `data/pb_webui/public/`。
-3. 重启 Bot 或刷新静态资源缓存。
-4. 浏览器里强制刷新，确认版本已变化。
+1. 停止或避开当前写入过程
+2. 解压或覆盖到 `data/pb_webui/public/`
+3. 重启 Bot 或刷新静态资源缓存
+4. 浏览器强制刷新，确认版本已变
 
 ### 3. 修改前端源码并上线
 
-正确流程：
+1. 在 `Pallas-Bot-WebUI` 改源码
+2. 执行 `npm run build`
+3. 将 `dist` 同步到主仓 `data/pb_webui/public/`
+4. 用实际运行中的 Bot 页面验证
 
-1. 在 `Pallas-Bot-WebUI` 仓库改源码。
-2. 执行 `npm run build`。
-3. 把生成的 `dist` 同步到主仓 `data/pb_webui/public/`。
-4. 用实际运行中的 Bot 页面验证。
+## 按现象检查
 
-## 如何判断问题出在哪一层
+### 页面内容旧，后端接口是新的
 
-### 页面内容旧了，但后端接口是新的
+静态资源未同步，或浏览器缓存未刷新。
 
-优先怀疑静态资源没同步，或者浏览器缓存没刷新。
+### 前端改了，线上无变化
 
-### 前端代码改了，但线上毫无变化
-
-优先检查：
-
-- 改的是不是 `Pallas-Bot-WebUI` 而不是主仓运行目录
+- 是否改的是 `Pallas-Bot-WebUI`（而非主仓运行目录）
 - `npm run build` 是否成功
-- 构建后的资源是否真的同步到了 `data/pb_webui/public/`
+- 产物是否同步到 `data/pb_webui/public/`
 
-### API 返回是对的，但 UI 没展示
+### API 正确，UI 未展示
 
-这通常是前端渲染问题或契约字段不匹配，不是静态资源挂载问题。
+前端渲染或契约字段不匹配；通常不是静态资源挂载问题。
 
-### 页面直接 404 或空白
+### 页面 404 或空白
 
-优先检查：
-
-- `data/pb_webui/public/` 是否存在完整资源
+- `data/pb_webui/public/` 是否完整
 - Bot 是否挂载了 `pb_webui`
-- 基础路径是不是 `/pallas/`
+- 路径是否为 `/pallas/`
 
-## 部署与更新建议
+## 部署要点
 
-- 把 WebUI 当成一份独立产物管理，别和普通 Python 插件混为一谈。
-- 走 Release 包，优先用已经构建好的 `dist.zip`。
-- 走源码部署，把“源码修改”和“产物同步”当成两个独立步骤。
+- WebUI 按独立产物管理，与普通 Python 插件分开
+- Release 优先用已构建的 `dist.zip`
+- 源码部署：「改源码」与「同步产物」分两步
 
-## 与主仓 API 的关系
+## 与主仓 API
 
-WebUI 前端和后端不在同一个仓库的同一层：
+| 侧 | 仓库 / 路径 |
+| --- | --- |
+| 页面、路由、样式、交互 | `Pallas-Bot-WebUI` |
+| API、配置落盘、热重载 | 主仓 `pb_webui`、`src/console/webui/` |
 
-- 前端页面、路由、样式、交互：`Pallas-Bot-WebUI`
-- 后端 API、配置落盘、热重载接口：主仓 `pb_webui` 和 `src/console/webui/`
-
-::: tip 怎么快速分流
-按钮点了没反应、展示错了、布局炸了，先看前端。
-保存失败、返回 500、接口数据不对、配置没落盘，先看主仓后端。
+::: tip
+按钮无响应、展示错、布局异常 → 前端。  
+保存失败、500、数据不对、配置未落盘 → 主仓后端。
 :::
 
-## 维护者排障顺序
+## 排障顺序
 
-1. 确认访问的是正确路径 `/pallas/`。
-2. 看 `data/pb_webui/public/` 是否有完整资源。
-3. 强制刷新浏览器缓存。
-4. 看 Bot 日志里 `pb_webui` 是否正常挂载。
-5. 再判断是前端问题还是 API 问题。
+1. 访问路径 `/pallas/`
+2. `data/pb_webui/public/` 是否完整
+3. 强制刷新浏览器缓存
+4. Bot 日志中 `pb_webui` 是否挂载
+5. 区分前端与 API
 
-## 延伸阅读
+## 相关阅读
 
-- [维护者排障](../operate/troubleshooting.md)
-- [WebUI 后端配置与热重载](../../common/webui/README.md)
-- [WebUI 前端开发](../../develop/webui.md)
+- [维护者排障](/maintainer/operate/troubleshooting)
+- [WebUI 后端配置与热重载](/common/webui)
+- [WebUI 前端开发](/developer/webui)

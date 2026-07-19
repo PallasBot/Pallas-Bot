@@ -1,6 +1,6 @@
 # 配置与 WebUI
 
-插件侧配置接入合同。合并顺序与读取 API 见 [配置存储](../architecture/config-storage.md)。
+插件侧配置接入：热载模型、通用段与仓边界。合并顺序与读取 API 见 [配置存储](/developer/architecture/config-storage)。
 
 ## 事实
 
@@ -74,7 +74,7 @@ UI 字段元数据见 [DynamicConfigPanel](dynamic-config-panel.md)。
 
 ## 相关
 
-- [配置存储](../architecture/config-storage.md)
+- [配置存储](/developer/architecture/config-storage)
 - [Golden Plugin](golden-plugin.md)
 - [Reload 与 Activation](reload-and-activation.md)
-- [WebUI 底层](../../common/webui/README.md)
+- [WebUI 底层](/common/webui)

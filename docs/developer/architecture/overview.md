@@ -1,6 +1,6 @@
 # 架构总览
 
-Pallas-Bot 现行可执行边界：主仓提供运行时与产品语义；WebUI / AI / 官方插件为协作仓；玩法不回流成大一统 core。
+Pallas-Bot 可执行边界：主仓承载运行时与产品语义；WebUI、AI、官方插件为独立协作仓；玩法能力不默认回流进 core。
 
 ## 拓扑
 
@@ -57,19 +57,21 @@ flowchart LR
 | --- | --- |
 | 把 `data/pb_webui/public/` 当前端源码 | 改 `Pallas-Bot-WebUI` 后同步产物 |
 | 把 AI runtime 当产品语义层 | 牛格 / 语料 / 人格边界留在主仓 |
-| 新玩法默认进 core | 先按 [Core vs 扩展](core-vs-extensions.md) 判定 |
+| 新玩法默认进 core | 按 [Core vs 扩展](core-vs-extensions.md) 判定 |
 | 社区插件 import `pallas.core.*` | 只用 `pallas.api.*` |
 
-## 阅读顺序
+## 子页索引
 
-1. [Core 与扩展](core-vs-extensions.md)
-2. [分片运行时](shard-runtime.md)
-3. [配置存储](config-storage.md)
-4. [插件治理](plugin-governance.md)
-5. [Golden Plugin](../plugin-development/golden-plugin.md)
+| 主题 | 文档 |
+| --- | --- |
+| Core 与扩展判定 | [core-vs-extensions.md](core-vs-extensions.md) |
+| 分片运行时 | [shard-runtime.md](shard-runtime.md) |
+| 配置存储 | [config-storage.md](config-storage.md) |
+| 插件治理 | [plugin-governance.md](plugin-governance.md) |
+| 插件骨架 | [Golden Plugin](/developer/plugin-development/golden-plugin) |
 
-延伸：
+参考：
 
-- [仓库布局](../reference/repo-layout.md)
-- [Platform API](../reference/platform-api.md)
-- [Reload 与 Activation](../plugin-development/reload-and-activation.md)
+- [仓库布局](/developer/reference/repo-layout)
+- [Platform API](/developer/reference/platform-api)
+- [Reload 与 Activation](/developer/plugin-development/reload-and-activation)

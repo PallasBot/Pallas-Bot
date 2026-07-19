@@ -1,20 +1,18 @@
 # LLM 与 AI 运维
 
-只看运行中的 AI 链路是否正常，不讲插件开发与架构。
-
-::: tip 先别慌
-@ 牛没回、记不住旧事，九成不是「模型坏了」，而是总闸没开、AI 仓没起来，或 embeddings / PG 还没通。先按下面三样查。
+::: warning
+`@` 无回复或记不住旧事时，优先查：`LLM_CHAT_ENABLED`、AI Runtime 可达性、callback 是否回到 Bot。
 :::
 
-## 先查这三样
+## 优先确认
 
-1. **`LLM_CHAT_ENABLED`** 是否为开（总闸关着，后端再健康也不闲聊）
+1. **`LLM_CHAT_ENABLED`** 是否为开（总闸关闭时，后端健康也不会闲聊）
 2. **AI runtime** 是否可达（`AI_SERVER_HOST` / `AI_SERVER_PORT`，默认 `9099`）
 3. **callback** 是否回到 Bot（AI 任务成功 ≠ 群里一定有字）
 
-然后再看任务与会话状态是否可观察。
+再查任务与会话状态是否可观察。
 
-## 闲聊 / 记忆不生效时怎么走
+## 闲聊 / 记忆不生效
 
 ```mermaid
 flowchart TD
@@ -31,69 +29,56 @@ flowchart TD
   Store -->|是| Deeper[再查 callback 与 runtime-overview]
 ```
 
-## 先分清 Bot 和 AI Runtime
+## Bot 与 AI Runtime
 
-- `Pallas-Bot` 负责产品侧触发、权限、消息发送与 callback 接收
-- `Pallas-Bot-AI` 负责具体 AI / 媒体任务执行
+| 组件 | 职责 |
+| --- | --- |
+| `Pallas-Bot` | 触发、权限、发消息、接收 callback |
+| `Pallas-Bot-AI` | AI / 媒体任务执行 |
 
-所以「AI 相关功能不可用」时，问题可能在任一侧。
+功能不可用时，两侧都可能出错。
 
-## 先看哪些配置
-
-优先确认：
+## 相关配置
 
 - `LLM_CHAT_ENABLED`
 - `AI_SERVER_HOST`
 - `AI_SERVER_PORT`
 
-::: warning 总开关没开，后端在线也白搭
-如果 `LLM_CHAT_ENABLED` 没开，很多 AI 功能即使后端在线也不会触发。
+::: warning
+`LLM_CHAT_ENABLED` 未开时，即使 AI 后端在线也不会触发多数闲聊能力。
 :::
 
-## 先看哪些现象
+## 按现象检查
 
-### @ 牛闲聊无响应
-
-优先检查：
+### `@` 闲聊无响应
 
 - LLM 总开关
 - AI runtime 连通性
-- 相关日志里是否有请求发出
+- 日志中是否有请求发出
 
-### 媒体任务发出但没有结果
+### 媒体任务发出但无结果
 
-优先检查：
-
-- AI runtime 任务是否已接收
+- AI runtime 是否已接收任务
 - callback 是否打回 Bot
 - Bot 是否成功处理 callback
 
 ### 页面显示 AI 离线
 
-优先检查：
-
 - AI runtime 进程是否运行
-- Bot 到 AI 的地址配置是否正确
-- 网络和端口是否可达
+- Bot 到 AI 的地址配置
+- 网络与端口是否可达
 
-## 控制台里先看哪几个接口
+## 控制台接口
 
-如果你在排前端或反代问题，也可以直接访问控制台 API：
+排前端或反代问题时可直接访问：
 
-- `/pallas/api/auth/setup-status`
-  - 看是否还停留在默认口令 / 首次引导阶段
-- `/pallas/api/common-config/llm/wizard/status`
-  - 看 AI 服务、provider、LLM 总闸哪个环节还没就绪
-- `/pallas/api/common-config/llm/runtime-overview`
-  - 一屏看 health、模型、任务统计、conversation kernel
+| 接口 | 用途 |
+| --- | --- |
+| `/pallas/api/auth/setup-status` | 是否仍处默认口令 / 首次引导 |
+| `/pallas/api/common-config/llm/wizard/status` | AI 服务、provider、总闸哪一步未就绪 |
+| `/pallas/api/common-config/llm/runtime-overview` | health、模型、任务统计、conversation kernel |
 
-这三者的关系：
-
-- `setup-status` 解决“控制台是否该先引导改密”
-- `wizard/status` 解决“AI 配置还差哪一步”
-- `runtime-overview` 解决“现在到底是哪一层在异常”
-
-## 记忆与 session 分层
+## 记忆与 session
 
 运行时 **session / task state** 以 **Pallas-Bot-AI** 为执行面；Bot 负责产品侧记忆策略与注入。
 
@@ -105,7 +90,7 @@ flowchart TD
 | 关系便签 | Bot PG | 对用户的稳定关系备注 |
 | 知识源 | 插件声明 + `data/pallas_knowledge/` | FAQ / 本地文档块注入 |
 
-### 群记忆 / RAG 常用开关
+### 群记忆 / RAG 开关
 
 | 变量 | 默认 | 说明 |
 |------|------|------|
@@ -121,23 +106,19 @@ flowchart TD
 
 排障：会话「记不住」先查 AI 任务与 callback；群记忆不生效再查 PG、上述开关与 embeddings 连通性。
 
-## callback 的判断思路
+## callback
 
-你不用搞懂所有内部实现，但要记住一件事：
+AI runtime 任务成功，不等于群里一定能收到结果。中间还经过：
 
-- AI runtime 任务成功，不等于群里一定能收到结果
+1. callback 回到 Bot
+2. Bot 路由到正确上下文
+3. 最终消息发送
 
-中间还经过：
-
-- callback 回到 Bot
-- Bot 路由到正确上下文
-- 最终消息发送
-
-所以看到「AI 端执行成功但群里没消息」，别只盯着 AI 仓。
+「AI 端执行成功但群里没消息」时，同时查 Bot 侧路由与发送。
 
 ## Ollama GPU 回退 CPU（推理极慢）
 
-Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 200 但推理回退 CPU。探活与 cron 见 **Pallas-Bot-AI** 仓：[docs/operate/ollama-gpu-watchdog.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/operate/ollama-gpu-watchdog.md)（`scripts/ollama_gpu_watchdog.sh --fix`）。
+Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 200 但推理回退 CPU。探活与 cron 见 **Pallas-Bot-AI**：[docs/operate/ollama-gpu-watchdog.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/operate/ollama-gpu-watchdog.md)（`scripts/ollama_gpu_watchdog.sh --fix`）。
 
 ## 纯远端 API（无 Ollama）
 
@@ -145,6 +126,6 @@ Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 20
 
 ## 相关阅读
 
-- [AI Runtime 安装](../install/ai-runtime.md)
+- [AI Runtime 安装](/maintainer/install/ai-runtime)
 - [排障](troubleshooting.md)
-- [架构总览](../../developer/architecture/overview.md)
+- [架构总览](/developer/architecture/overview)

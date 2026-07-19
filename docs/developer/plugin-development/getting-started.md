@@ -1,6 +1,6 @@
 # 插件开发入门
 
-先跑通再读契约。推荐顺序对齐 NoneBot「创建插件 → 元数据 → 发布」路径。
+推荐顺序：创建插件 → 元数据 → 发布（对齐 NoneBot 路径）。
 
 ## 路径
 
@@ -42,4 +42,4 @@
 
 - [写第一个插件](first-plugin.md)
 - [Golden Plugin](golden-plugin.md)
-- [Developer 入口](../index.md)
+- [Developer 入口](/developer/index)

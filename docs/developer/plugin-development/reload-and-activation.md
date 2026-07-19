@@ -1,6 +1,6 @@
 # Reload 与 Activation
 
-两个正交策略，禁止混用。
+`reload_policy` 与 `activation_policy` 正交，不可混用。
 
 | | `reload_policy` | `activation_policy` |
 | --- | --- | --- |
@@ -98,6 +98,6 @@ activation_policy = workers-restart
 ## 相关
 
 - [元数据](metadata.md)
-- [插件治理](../architecture/plugin-governance.md)
-- [热重载前检查清单](../../maintainer/operate/hot-reload-pre-reload-checklist.md)
-- [配置存储](../architecture/config-storage.md)
+- [插件治理](/developer/architecture/plugin-governance)
+- [热重载前检查清单](/maintainer/operate/hot-reload-pre-reload-checklist)
+- [配置存储](/developer/architecture/config-storage)

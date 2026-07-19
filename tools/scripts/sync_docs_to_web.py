@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""将主仓 docs/ 同步到 Pallas-Bot-Docs 的 VitePress src/。"""
+"""将主仓 docs/ 同步到 Pallas-Bot-Docs 的 VitePress src/。
+
+插件页约定：
+- 主仓权威正文：`docs/plugins/<name>/README.md`（相对链接，便于 GitHub 浏览）
+- 文档站呈现：`src/plugins/<name>.md`（由本脚本变换链接后写出）
+- 勿在 Docs 仓长期手改扁平插件页后再拷回主仓；改插件说明请改 README 再 sync
+- `docs/plugins/*.md` 扁平副本仅保留归档 stub（ollama / pallas_* 等），正式插件勿双份维护
+"""
 
 from __future__ import annotations
 
@@ -89,15 +96,30 @@ FILE_MAP: dict[str, str] = {
     "common/cmd_perm/README.md": "common/cmd_perm.md",
     "common/command_limits/README.md": "common/command_limits.md",
     "common/webui/README.md": "common/webui.md",
+    "common/webui/api/README.md": "common/webui/api/index.md",
+    "common/webui/api/01-auth-health.md": "common/webui/api/01-auth-health.md",
+    "common/webui/api/02-plugins.md": "common/webui/api/02-plugins.md",
+    "common/webui/api/03-common-config.md": "common/webui/api/03-common-config.md",
+    "common/webui/api/04-stats-dashboard.md": "common/webui/api/04-stats-dashboard.md",
+    "common/webui/api/05-social.md": "common/webui/api/05-social.md",
+    "common/webui/api/06-database.md": "common/webui/api/06-database.md",
+    "common/webui/api/07-instances-configs.md": "common/webui/api/07-instances-configs.md",
+    "common/webui/api/08-update-ai.md": "common/webui/api/08-update-ai.md",
     "common/message_scrub/README.md": "common/message_scrub.md",
     "plugins/README.md": "plugins/index.md",
     "develop/README.md": "develop/index.md",
+    # 现行正文在 developer/；develop/ 仅 stub，由 Docs 仓维护
+    "developer/environment.md": "developer/environment.md",
+    "developer/workflow.md": "developer/workflow.md",
+    "developer/webui.md": "developer/webui.md",
+    "developer/extension-pypi-publish.md": "developer/extension-pypi-publish.md",
     "develop/environment.md": "develop/environment.md",
     "develop/workflow.md": "develop/workflow.md",
     "develop/webui.md": "develop/webui.md",
     "develop/knowledge-sources.md": "develop/knowledge-sources.md",
     # --- Guide 上手 ---
     "guide/quickstart.md": "guide/quickstart.md",
+    "guide/install-source.md": "guide/install-source.md",
     "guide/connect-qq.md": "guide/connect-qq.md",
     "guide/install-extensions.md": "guide/install-extensions.md",
     "guide/install-plugins.md": "guide/install-plugins.md",
@@ -106,7 +128,6 @@ FILE_MAP: dict[str, str] = {
     "guide/ai.md": "guide/ai.md",
     "guide/usage.md": "guide/usage.md",
     "guide/concepts.md": "guide/concepts.md",
-    "guide/welcome.md": "guide/welcome.md",
     "guide/4.0-start.md": "guide/4.0-start.md",
     "guide/4.0-migration.md": "guide/4.0-migration.md",
     "guide/community-plugin-store.md": "guide/community-plugin-store.md",
@@ -159,6 +180,12 @@ def transform_for_vitepress(text: str) -> str:
     text = text.replace("../assets/brand-avatar.png", "/assets/brand-avatar.png")
     text = text.replace("./assets/brand-avatar.png", "/assets/brand-avatar.png")
     text = re.sub(r"(?<![./])assets/brand-avatar\.png", "/assets/brand-avatar.png", text)
+    text = text.replace("../assets/niuniu-help.png", "/assets/niuniu-help.png")
+    text = text.replace("./assets/niuniu-help.png", "/assets/niuniu-help.png")
+    text = re.sub(r"(?<![./])assets/niuniu-help\.png", "/assets/niuniu-help.png", text)
+    text = text.replace("../assets/concepts-topology.png", "/assets/concepts-topology.png")
+    text = text.replace("./assets/concepts-topology.png", "/assets/concepts-topology.png")
+    text = re.sub(r"(?<![./])assets/concepts-topology\.png", "/assets/concepts-topology.png", text)
     # 技能 / 源码：站内或 GitHub，避免相对路径 404
     text = re.sub(
         r"\]\((?:\.\./)*common/command_limits/README\.md([^)]*)\)",
@@ -208,6 +235,17 @@ def transform_for_vitepress(text: str) -> str:
     text = re.sub(
         r"\]\(plugins/([a-z0-9_]+)/README\.md([^)]*)\)",
         r"](/plugins/\1\2)",
+        text,
+    )
+    # plugins/<name>/README.md 内互链：../peer/README.md（须在 ../common/... 之后）
+    text = re.sub(
+        r"\]\(\.\./([a-z0-9_]+)/README\.md([^)]*)\)",
+        r"](/plugins/\1\2)",
+        text,
+    )
+    text = re.sub(
+        r"\]\(\.\./TEMPLATE\.md([^)]*)\)",
+        r"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/plugins/TEMPLATE.md\1)",
         text,
     )
     text = re.sub(
@@ -311,6 +349,16 @@ def transform_for_vitepress(text: str) -> str:
         text,
     )
     text = re.sub(
+        r"\]\(\.\./\.\./DockerDeployment\.md([^)]*)\)",
+        r"](/deploy/docker\1)",
+        text,
+    )
+    text = re.sub(
+        r"\]\(\.\./\.\./Deployment\.md([^)]*)\)",
+        r"](/deploy/deployment\1)",
+        text,
+    )
+    text = re.sub(
         r"\]\(\.\./(?:pallas_protocol|pb_protocol)/README\.md([^)]*)\)",
         r"](/plugins/pb_protocol\1)",
         text,
@@ -385,7 +433,13 @@ def transform_for_vitepress(text: str) -> str:
     )
     text = re.sub(r"\]\(guide/([a-z0-9.-]+)\.md([^)]*)\)", r"](/guide/\1\2)", text)
     text = re.sub(r"\]\(\.\./guide/([a-z0-9.-]+)\.md([^)]*)\)", r"](/guide/\1\2)", text)
-    for guide_page in ("quickstart", "concepts", "welcome"):
+    text = re.sub(r"\]\(\.\./\.\./guide/([a-z0-9.-]+)\.md([^)]*)\)", r"](/guide/\1\2)", text)
+    text = re.sub(
+        r"\]\(\.\./\.\./scripts/([^)#]+)\)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
+        text,
+    )
+    for guide_page in ("quickstart", "concepts", "install-source"):
         text = re.sub(
             rf"\]\({guide_page}\.md([^)]*)\)",
             rf"](/guide/{guide_page}\1)",
@@ -474,6 +528,18 @@ def sync(dest_root: Path) -> int:
         avatar_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(avatar_src, avatar_dst)
         print("sync plugins/assets/brand-avatar.png -> src/public/assets/brand-avatar.png")
+    help_src = DOCS / "assets" / "niuniu-help.png"
+    help_dst = src_root / "public" / "assets" / "niuniu-help.png"
+    if help_src.is_file():
+        help_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(help_src, help_dst)
+        print("sync assets/niuniu-help.png -> src/public/assets/niuniu-help.png")
+    topo_src = DOCS / "assets" / "concepts-topology.png"
+    topo_dst = src_root / "public" / "assets" / "concepts-topology.png"
+    if topo_src.is_file():
+        topo_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(topo_src, topo_dst)
+        print("sync assets/concepts-topology.png -> src/public/assets/concepts-topology.png")
     for rel_src, rel_dst in FILE_MAP.items():
         source = DOCS / rel_src
         if not source.is_file():
@@ -489,6 +555,34 @@ def sync(dest_root: Path) -> int:
     return count
 
 
+def sync_plugins_only(dest_root: Path) -> int:
+    """只同步 plugins/<name>/README.md → src/plugins/<name>.md。"""
+    src_root = dest_root / "src"
+    count = 0
+    for name in PLUGIN_NAMES:
+        rel_src = f"plugins/{name}/README.md"
+        rel_dst = f"plugins/{name}.md"
+        source = DOCS / rel_src
+        if not source.is_file():
+            print(f"skip missing: {rel_src}")
+            continue
+        body = source.read_text(encoding="utf-8")
+        body = rewrite_tree_relative_links(body, rel_src=rel_src)
+        out = src_root / rel_dst
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(transform_for_vitepress(body), encoding="utf-8")
+        count += 1
+        print(f"sync {rel_src} -> src/{rel_dst}")
+    # 插件索引
+    index_src = DOCS / "plugins" / "README.md"
+    if index_src.is_file():
+        body = transform_for_vitepress(index_src.read_text(encoding="utf-8"))
+        (src_root / "plugins" / "index.md").write_text(body, encoding="utf-8")
+        count += 1
+        print("sync plugins/README.md -> src/plugins/index.md")
+    return count
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Sync docs/ to Pallas-Bot-Docs VitePress src/")
     parser.add_argument(
@@ -497,10 +591,15 @@ def main() -> None:
         default=REPO_ROOT.parent / "Pallas-Bot-Docs",
         help="Pallas-Bot-Docs 仓库根目录",
     )
+    parser.add_argument(
+        "--plugins-only",
+        action="store_true",
+        help="仅同步 plugins/<name>/README.md 与插件索引",
+    )
     args = parser.parse_args()
     if not args.dest.is_dir():
         raise SystemExit(f"dest not found: {args.dest}")
-    n = sync(args.dest)
+    n = sync_plugins_only(args.dest) if args.plugins_only else sync(args.dest)
     print(f"done: {n} files")
 
 

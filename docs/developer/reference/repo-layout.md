@@ -1,6 +1,6 @@
 # 仓库结构
 
-Pallas-Bot 多仓与主仓目录合同。
+Pallas-Bot 多仓分工与主仓目录。
 
 ## 仓库
 
@@ -43,6 +43,6 @@ Pallas-Bot 多仓与主仓目录合同。
 
 ## 相关
 
-- [架构总览](../architecture/overview.md)
-- [Core 与扩展](../architecture/core-vs-extensions.md)
+- [架构总览](/developer/architecture/overview)
+- [Core 与扩展](/developer/architecture/core-vs-extensions)
 - [Platform API](platform-api.md)

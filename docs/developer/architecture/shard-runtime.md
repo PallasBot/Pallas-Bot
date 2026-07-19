@@ -1,6 +1,6 @@
 # 分片运行时
 
-分片编码合同。部署与启停见 [分片部署](../../maintainer/deploy/sharded.md)。
+分片下的进程角色、编码约束与跨进程能力。部署与启停见 [分片部署](/maintainer/deploy/sharded)。
 
 ## 何时用分片
 
@@ -11,7 +11,7 @@
 | Hub | WebUI、协议端管理、注册表、AI/MAA 回调入口；不接牛牛反向 WebSocket |
 | Worker | 群消息与玩法主路径；每进程约 `PALLAS_SHARD_BOTS_PER` 只账号 |
 
-跨进程 claim 依赖 Redis（`REDIS_URL` / `PALLAS_COORD_REDIS_URL`）；与 AI 仓可共用。详见 [分片部署](../../maintainer/deploy/sharded.md)。
+跨进程 claim 依赖 Redis（`REDIS_URL` / `PALLAS_COORD_REDIS_URL`）；与 AI 仓可共用。详见 [分片部署](/maintainer/deploy/sharded)。
 
 ## 拓扑
 
@@ -56,7 +56,7 @@ flowchart LR
 
 ## 高频能力
 
-| 能力 | 合同 | API（`pallas.api.platform`） |
+| 能力 | 约束 | API（`pallas.api.platform`） |
 | --- | --- | --- |
 | 消息去重 / claim | 同条消息不可多 worker 重复响应 | `try_claim_group_message_once`、`claim_group_message_event`、`claim_group_handler` |
 | 群独占活动 | 同群同时一场 | `begin_group_exclusive_activity`、`try_begin_group_owned_gate` |
@@ -87,4 +87,4 @@ flowchart LR
 
 - [架构总览](overview.md)
 - [Core 与扩展](core-vs-extensions.md)
-- [Platform API](../reference/platform-api.md)
+- [Platform API](/developer/reference/platform-api)

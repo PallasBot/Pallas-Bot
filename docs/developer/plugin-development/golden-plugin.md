@@ -1,8 +1,10 @@
 # Golden Plugin
 
-现行插件默认骨架与接入合同。新增 core 插件或回迁旧插件时按本页执行。完整 checklist：[08-golden-plugin-checklist](../../skills/pallas-plugin-development/references/08-golden-plugin-checklist.md)。
+Pallas-Bot 插件默认骨架与接入约定。新增 core 插件或回迁旧插件时按本页执行。
 
-## 目录合同
+完整 checklist（主仓）：[08-golden-plugin-checklist](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/pallas-plugin-development/references/08-golden-plugin-checklist.md)。
+
+## 目录结构
 
 ```text
 packages/<name>/
@@ -19,7 +21,7 @@ packages/<name>/
 | `handlers.py` | 口令实现 | 重复声明权限默认值导致漂移 |
 | `startup.py` | 仅在需要时存在 | 无守卫的 hub 侧消息逻辑 |
 
-## 命令型默认写法
+## 命令接入
 
 优先 `pallas.api.commands`（与 `plugin_sdk` 同源出口）。
 
@@ -83,13 +85,13 @@ plugin_webui = install_hot_reload_config(Config, config_module=__name__)
 get_config = plugin_webui.get
 ```
 
-业务侧每次调用 `get_config()`，禁止模块级长期快照。
+业务侧每次调用 `get_config()`；禁止模块级长期快照。
 
 ## 维护者向 vs 群口令
 
 | 类型 | 约定 |
 | --- | --- |
-| 维护者向（如 `pb_webui`、`pb_protocol`、`pb_stats`） | 可无群口令；`help_audience: maintainer`；说明落在 WebUI / 通用配置段 |
+| 维护者向（`pb_webui`、`pb_protocol`、`pb_stats` 等） | 可无群口令；`help_audience: maintainer`；说明落在 WebUI / 通用配置段 |
 | 群口令插件 | `handlers.py` + 完整 `menu_data` / 权限 / 冷却 |
 
 ## 存储与路径
@@ -102,11 +104,11 @@ get_config = plugin_webui.get
 
 禁止硬编码散落相对路径与私有 JSON 布局。数据落 `data/<plugin_name>/`，资源落 `resource/`。
 
-复杂度上升时优先按业务能力拆文件（如 `renderer.py`、`ban_manager.py`）；边界清晰后再引入 `services/`、`repositories.py`。
+复杂度上升时按业务能力拆文件（`renderer.py`、`ban_manager.py` 等）；边界清晰后再引入 `services/`、`repositories.py`。
 
 ## 包内视觉资源（assets）
 
-控制台插件列表、商店与帮助图共用 `resolve_catalog_visuals()`。优先在包内放置：
+控制台插件列表、商店与帮助图共用 `resolve_catalog_visuals()`。
 
 | 角色 | 推荐路径 |
 | --- | --- |
@@ -118,10 +120,10 @@ get_config = plugin_webui.get
 
 ## 命令权限文案
 
-- `usage`、`menu_data.trigger_condition` **不写死**「群管 / 群主」等角色；「何人可用」由 `command_permission(s)` 与 WebUI 覆盖生成
+- `usage`、`menu_data.trigger_condition` 不写死「群管 / 群主」等角色；「何人可用」由 `command_permission(s)` 与 WebUI 覆盖生成
 - 与发送者权限无关的条件（如本 Bot 须为 QQ 群管）写在 `detail_des` 或插件 README
 
-详见 [cmd_perm](../../common/cmd_perm/README.md)。
+详见 [cmd_perm](/common/cmd_perm)。
 
 ## 交付物
 
@@ -140,9 +142,9 @@ get_config = plugin_webui.get
 
 ## 相关
 
-- [入门](getting-started.md)
+- [写第一个插件](first-plugin.md)
 - [配置与 WebUI](config-and-webui.md)
 - [元数据](metadata.md)
 - [Reload 与 Activation](reload-and-activation.md)
 - [测试](testing.md)
-- [插件治理](../architecture/plugin-governance.md)
+- [插件治理](/developer/architecture/plugin-governance)

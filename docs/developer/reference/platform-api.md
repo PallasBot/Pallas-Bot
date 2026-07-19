@@ -1,6 +1,6 @@
 # Platform API
 
-`pallas.api.platform`：官方插件与内置插件的平台协作钩子。稳定性高于随意 `pallas.core.*` import，但仍次于面向社区的 `pallas.api.*` 其它子包。
+`pallas.api.platform`：官方插件与内置插件的平台协作钩子。稳定面高于随意 `pallas.core.*` import，次于面向社区的 `pallas.api.*` 其它子包。
 
 模块文档串：`pallas/api/platform/__init__.py`。
 
@@ -44,6 +44,6 @@
 ## 相关
 
 - [Internal API](internal-api.md)
-- [pallas.api Cookbook](../plugin-development/pallas-api-cookbook.md)
-- [分片运行时](../architecture/shard-runtime.md)
-- [包布局](../../developer/reference/repo-layout.md)
+- [pallas.api Cookbook](/developer/plugin-development/pallas-api-cookbook)
+- [分片运行时](/developer/architecture/shard-runtime)
+- [包布局](/developer/reference/repo-layout)

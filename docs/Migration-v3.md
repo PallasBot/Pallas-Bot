@@ -19,7 +19,7 @@
 ## 依赖安装
 
 ```bash
-uv sync --extra pg
+uv sync
 ```
 
 ## 迁移命令

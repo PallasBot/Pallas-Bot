@@ -1,6 +1,6 @@
 # 元数据
 
-`PluginMetadata` / `extra` 是插件对平台的声明契约：帮助、权限、冷却、热载与装包生效都依赖它。
+`PluginMetadata` / `extra` 声明帮助、权限、冷却、热载与装包生效；平台按此消费。
 
 ## 必填面
 
@@ -20,7 +20,7 @@
 | `usage` | 口令展示；用 `usage_line` + `join_usage` |
 | `menu_data` | `func` / `trigger_*` / `brief_des` / `detail_des`；权限绑 `command_permission(s)` |
 
-MUST NOT：在 `usage` 或 `trigger_condition` 写死权限角色。细则：[cmd_perm](../../common/cmd_perm/README.md)。
+MUST NOT：在 `usage` 或 `trigger_condition` 写死权限角色。细则：[cmd_perm](/common/cmd_perm)。
 
 ## `command_permissions`
 
@@ -40,7 +40,7 @@ MUST NOT：在 `usage` 或 `trigger_condition` 写死权限角色。细则：[cm
 ]
 ```
 
-即使 handler 内自行判断冷却，也 MUST 声明默认值。见 [command_limits](../../common/command_limits/README.md)。
+即使 handler 内自行判断冷却，也 MUST 声明默认值。见 [command_limits](/common/command_limits)。
 
 ## `reload_policy`
 
@@ -98,4 +98,4 @@ extra={
 
 - [Golden Plugin](golden-plugin.md)
 - [Reload 与 Activation](reload-and-activation.md)
-- [cmd_perm](../../common/cmd_perm/README.md)
+- [cmd_perm](/common/cmd_perm)

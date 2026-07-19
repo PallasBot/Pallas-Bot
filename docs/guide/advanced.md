@@ -1,53 +1,34 @@
-# 进阶介绍
+# 进阶查阅
 
-已经能 `uv run nb run`，群里 **牛牛帮助** 有回复，就可以按需往下查。不用从头读到尾。
+按主题检索，无需顺序阅读。
 
-## 想搞懂原理
+## 日常使用
 
-| 文档 | 你会搞懂 |
+| 主题 | 文档 |
 | --- | --- |
-| [理解架构](concepts.md) | 协议端、Pallas-Bot、库、控制台怎么串 |
-| [配置存储](../developer/architecture/config-storage.md) | `pallas.toml` 和 `webui.json` 谁覆盖谁 |
-| [运维入口](../maintainer/quickstart.md) / [开发](../developer/index.md) | 正式文档主线 |
+| 连接 QQ | [连接 QQ](connect-qq.md) |
+| 安装官方 / 社区插件 | [安装插件](install-plugins.md) |
+| 控制台改配置、看日志 | [网页控制台](web-console.md) |
+| 群里口令一览 | [命令与功能](usage.md) |
+| 日常管理 | [日常管理](usage-admin.md) |
+| 唱歌 / 画画 / 闲聊 | [AI 扩展](ai.md) |
+| `@牛牛` 与复读 | [@牛牛与复读](llm-and-repeater.md) |
+| 排障 | [FAQ](/deploy/faq) · [排障](/maintainer/operate/troubleshooting) |
 
-## 要上 VPS / 生产
+## 部署与运维
 
-| 文档 | 你会搞懂 |
+| 主题 | 文档 |
 | --- | --- |
-| [配置要点](../Config.md) | 生产环境检查项 |
-| [标准部署](../Deployment.md) | systemd、备份 |
-| [Docker](../DockerDeployment.md) | Compose、卷、镜像带哪些扩展 |
+| 配置要点 | [配置要点](/deploy/config) |
+| systemd / 备份 | [标准部署](/deploy/deployment) |
+| Compose 镜像 | [Docker](/deploy/docker) |
+| 运维总入口 | [运维入口](/maintainer/quickstart) |
 
-::: tip 数据库
-默认用 **PostgreSQL**。表结构首次启动自动建；先准备好空库。  
-从 3.x 升级的站可继续用 MongoDB。
-:::
+## 原理与开发
 
-## 连 QQ、装插件、改配置
-
-| 文档 | 你会搞懂 |
+| 主题 | 文档 |
 | --- | --- |
-| [连接 QQ](connect-qq.md) | NapCat、WS、验收口令 |
-| [安装插件](install-plugins.md) | core / 官方插件 / local |
-| [使用指南](../user/README.md) | 日常网页操作 |
-| [网页控制台](web-console.md) | `/pallas/` 各面板 |
-
-## 多只牛 / 高级玩法
-
-| 文档 | 你会搞懂 |
-| --- | --- |
-| [多进程分片](../maintainer/deploy/sharded.md) | hub、worker、Redis |
-| [站点定制](../maintainer/deploy/upgrade.md) | 更新时不弄丢自己的插件 |
-| [AI 扩展](ai.md) | 怎么接 Pallas-Bot-AI |
-| [语料联邦](../common/corpus/README.md) | 跨群接话库（多数站可跳过） |
-
-## 出问题了
-
-| 文档 | 你会搞懂 |
-| --- | --- |
-| [FAQ](../FAQ.md) | 口令忘了、没反应、升级 |
-| [命令权限](../common/cmd_perm/README.md) | 谁能用某口令 |
-
-## 要写代码
-
-看 [写第一个插件](../developer/plugin-development/first-plugin.md) 和 [Developer](../developer/index.md)。
+| 组件结构 | [牛是怎么拼起来的](/guide/concepts) |
+| 配置存储 | [配置存储](/developer/architecture/config-storage) |
+| 分片部署 | [分片部署](/maintainer/deploy/sharded) |
+| 写第一个插件 | [写第一个插件](/developer/plugin-development/first-plugin) |

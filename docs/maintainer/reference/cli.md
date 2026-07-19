@@ -2,19 +2,21 @@
 
 维护者在 **Pallas-Bot 仓库根**用的命令行入口：`uv run pallas <子命令>`（无子命令时默认启动单进程 Bot）。
 
-**分工约定**：CLI 侧重 **拉代码、同步依赖、启停、升级 Bot/WebUI**；**官方插件的装/卸/更新、运行中配置** 优先在 [网页控制台](../../guide/web-console.md) 完成。
+| 场景 | 入口 |
+| --- | --- |
+| 拉代码、同步依赖、启停、升级 Bot / WebUI | CLI |
+| 官方插件装 / 卸 / 更新、运行中配置 | [网页控制台](../../guide/web-console.md) |
 
 完整子命令：`uv run pallas --help`。
 
-## 升级与维护（CLI 主战场）
+## 升级与维护
 
-### 无痛升级（3.x → 4.0 或版本对齐）
+### 版本对齐（3.x → 4.0 或日常升级）
 
 ```bash
 uv run pallas maintenance run \
   --update-bot \
   --update-webui \
-  --sync-extra pg \
   --dev
 ```
 
@@ -23,7 +25,7 @@ uv run pallas maintenance run \
 ```bash
 uv run pallas update bot
 uv run pallas update webui
-uv run pallas sync --dev --extra pg
+uv run pallas sync --dev
 uv run pallas restart
 ```
 
@@ -32,7 +34,7 @@ uv run pallas restart
 ### 依赖同步
 
 ```bash
-uv run pallas sync --extra pg --extra coord-redis
+uv run pallas sync --extra coord-redis
 ```
 
 ### 启停
@@ -73,7 +75,7 @@ uv run pallas ai setup --with-media    # 唱歌/TTS（装 torch CPU）
 uv run pallas ai setup --with-media --gpu
 ```
 
-详见 [AI Runtime 安装](../install/ai-runtime.md)。
+详见 [AI Runtime 安装](/maintainer/install/ai-runtime)。
 
 ## 体检
 
@@ -93,19 +95,19 @@ uv run pallas doctor
 | 无 `uv`、无 SSH，只有浏览器 | **WebUI** |
 | 批量脚本、CI、Docker 构建期 | CLI |
 
-## 后续可聚合的方向
+## 缺口与现状
 
 | 缺口 | 现状 | 说明 |
 | --- | --- | --- |
-| 官方插件更新 | 商店已有「更新」 | CLI 不必重复造轮子；缺省留给 WebUI |
+| 官方插件更新 | 商店已有「更新」 | 缺省留给 WebUI |
 | AI 仓 git 对齐 | `pallas ai setup` | 升级时 AI 仓手动 `git pull` 或待 `pallas update ai` |
 | `.env` 迁移 | 独立脚本 | 待 `pallas config migrate` |
 | 全栈一键升级 | `maintenance` + 控制台 | Bot 侧 CLI，插件侧 WebUI |
 
-维护者清单：[升级](../deploy/upgrade.md)、[4.0 迁移指南](../../guide/4.0-migration.md)。
+维护者清单：[升级](/maintainer/deploy/upgrade)、[4.0 迁移指南](../../guide/4.0-migration.md)。
 
 ## 相关阅读
 
-- [安装官方插件](../install/official-extensions.md)
+- [安装官方插件](/maintainer/install/official-extensions)
 - [网页控制台](../../guide/web-console.md)
-- [分片部署](../deploy/sharded.md)
+- [分片部署](/maintainer/deploy/sharded)

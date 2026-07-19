@@ -1,23 +1,25 @@
 # 本体安装
 
-把 `Pallas-Bot` 本体装上并跑起来。
+安装 Pallas-Bot 本体并完成首次启动。
 
-## 依赖与基础步骤
+## 前置条件
 
-- Python 3.12
-- `uv`
-- 数据库：**PostgreSQL**（4.0 默认），见 [配置参考](../reference/config.md)；3.x 升级可继续 MongoDB
-- Redis：仅分片 / AI 等场景需要
+| 项 | 要求 |
+| --- | --- |
+| Python | 3.12 |
+| 包管理 | `uv` |
+| 数据库 | PostgreSQL（4.0 默认）；3.x 升级可沿用 MongoDB，见 [配置参考](/maintainer/reference/config) |
+| Redis | 仅分片、AI 等场景需要 |
 
-想直接动手，看这几篇：
+## 安装入口
 
-- [五分钟跑起来](../../guide/quickstart.md)
-- [把玩法 / AI 也装上](../../guide/4.0-start.md)
-- [本地开发环境](../../develop/environment.md)
+| 场景 | 文档 |
+| --- | --- |
+| 快速跑通 | [快速开始](/guide/quickstart) |
+| 插件与扩展 | [安装插件](/guide/install-plugins) · [AI 扩展](/guide/ai) |
+| 本地开发 | [开发环境](/developer/environment) |
 
-## 4.0 本体的角色
-
-本体负责这些事：
+## 4.0 本体职责
 
 - 消息入口
 - 插件加载
@@ -26,6 +28,4 @@
 - 分片协调
 - AI callback 落地
 
-::: tip
-4.0 之后，很多玩法不再内置在本体里，而是拆成了官方插件。本体跑起来后，还想要决斗、MAA 这类能力，去看 [安装官方插件](official-extensions.md)。
-:::
+决斗、MAA 等由官方插件提供，见 [安装官方插件](official-extensions.md)。

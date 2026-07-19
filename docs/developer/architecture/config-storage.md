@@ -1,6 +1,6 @@
 # 配置存储
 
-运行时配置事实源与读取合同。插件接法见 [配置与 WebUI](../plugin-development/config-and-webui.md)。运维排障见 [配置参考](../../maintainer/reference/config.md)。
+运行时配置事实源、合并顺序与读取入口。插件接法见 [配置与 WebUI](/developer/plugin-development/config-and-webui)。运维排障见 [配置参考](/maintainer/reference/config)。
 
 ## 事实源
 
@@ -89,7 +89,7 @@ uv run python tools/migrate_env_to_pallas.py
 
 ## 相关
 
-- [配置与 WebUI](../plugin-development/config-and-webui.md)
-- [配置参考](../../maintainer/reference/config.md)
+- [配置与 WebUI](/developer/plugin-development/config-and-webui)
+- [配置参考](/maintainer/reference/config)
 - [分片运行时](shard-runtime.md)
-- [站点定制与升级](../../maintainer/deploy/upgrade.md)
+- [站点定制与升级](/maintainer/deploy/upgrade)

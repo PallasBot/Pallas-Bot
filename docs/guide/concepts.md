@@ -1,66 +1,21 @@
-# 理解 Pallas-Bot 怎么拼起来
+# 牛是怎么拼起来的
 
-先跑起来？看 [五分钟跑起来](quickstart.md)。  
-排错时可以按下面四块对号入座。
+Pallas-Bot 由四块组成，各自职责如下：
 
-::: tip 可跳过
-已经跑通、只想装扩展？可以先不看，用到再回来。
-:::
+| 组件 | 职责 |
+| --- | --- |
+| **协议端** | 替 QQ 登录、收发消息（如 NapCat） |
+| **Pallas-Bot** | 处理消息：复读、帮助、插件玩法等 |
+| **数据库** | 存储语料、群配置、`bot_config` 等 |
+| **Web 控制台** | 改配置、看日志、装插件（路径 `/pallas/`） |
 
-## 一条消息怎么走
+## 通信路径
 
-```text
-QQ 用户
-  → NapCat 等协议端（OneBot v11）
-  → WebSocket
-  → Pallas-Bot（插件）
-  → PostgreSQL（默认）
-```
+![通信路径：QQ ↔ 协议端 ↔ Pallas-Bot ↔ 数据库，Web 控制台与 Bot 同进程](../assets/concepts-topology.png)
 
-浏览器里的 **Web 控制台**、**协议端管理页**，和上面是**同一个 Bot 进程**提供的。
+- 协议端与 Pallas-Bot 通过 **OneBot WebSocket** 通信
+- Web 控制台与协议端管理页由 **同一 Bot 进程** 提供，无需另起服务
+- 日常改插件配置：控制台保存即可；装/卸官方扩展需重启 Bot
+- 端口、超管、数据库连接写在 `config/pallas.toml`；插件项写入 `data/pallas_config/webui.json`
 
-## 四块各干什么
-
-| 块 | 干什么 | 你要不要先管 |
-| --- | --- | --- |
-| 协议端 | 替 QQ 登录、收发 | 要，至少扫码一次 |
-| Pallas-Bot | 复读、帮助、扩展玩法 | `uv run nb run` |
-| 数据库 | 语料、群配置、用户数据 | 先起 PostgreSQL |
-| Web 控制台 | 改配置、看日志、装扩展 | `/pallas/` + 启动口令 |
-
-## 配置写哪
-
-日常改插件：网页里保存即可。
-
-| 优先级 | 路径 | 写什么 |
-| --- | --- | --- |
-| 低 | `config/pallas.toml` | 端口、超管、数据库 |
-| 中 | `.env`（可选） | 老式 nb/pip 项 |
-| **高** | `data/pallas_config/webui.json` | 控制台保存的配置 |
-
-详见 [配置存储](../developer/architecture/config-storage.md)。
-
-## 插件从哪来
-
-```text
-本体 core（默认有）     → repeater、help、drink …
-官方插件（要装）       → duel、maa、who_is_spy …
-站点 local             → local/plugins/<名>/
-```
-
-- 装官方插件：[安装插件](install-plugins.md)
-- AI 另仓：[AI 扩展](ai.md)
-
-## 和 AI 的关系
-
-```text
-Pallas-Bot  ←HTTP→  Pallas-Bot-AI（可选）
-```
-
-唱歌、画画、随时闲聊要另起 AI。不玩 AI 可以不装，复读 / 喝酒 / 轮盘不受影响。
-
-## 多只牛（进阶）
-
-很多 QQ 号时可开 **hub + worker 分片**。见 [多进程分片](../maintainer/deploy/sharded.md)。
-
-▶ [五分钟跑起来](quickstart.md) · [使用指南](../user/README.md) · [进阶介绍](advanced.md)
+▶ [快速开始](/guide/quickstart)

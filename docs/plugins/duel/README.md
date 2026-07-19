@@ -75,5 +75,5 @@ uv run python scripts/fetch_arknights_duel_data.py
 ## 相关链接
 
 - [命令权限说明](../common/cmd_perm/README.md)
-- [安装官方插件](../guide/install-extensions.md)
+- [安装插件](../guide/install-plugins.md)
 - [牛牛决斗插件仓库](https://github.com/TogetsuDo/pallas-plugin-duel)

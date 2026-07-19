@@ -5,11 +5,11 @@
 | 插件声明 | `PluginMetadata.extra['knowledge_sources']` |
 | 本地目录 | `data/pallas_knowledge/**/*.md` / `.jsonl` |
 
-Bot 在 LLM 闲聊前统一检索并注入 system prompt。AI 为可选能力；无 LLM 时本页不生效。
+Bot 在 LLM 闲聊前统一检索并注入 system prompt。无 LLM 时知识源不参与注入。
 
 ## 官方参考
 
-本体 [`packages/llm_chat`](../../packages/llm_chat/__init__.py) 与内置 FAQ（`pallas.bot_faq`）可作为对照。
+本体 [`packages/llm_chat`](https://github.com/PallasBot/Pallas-Bot/tree/main/packages/llm_chat/__init__.py) 与内置 FAQ（`pallas.bot_faq`）可作为对照。
 
 ## 插件声明示例
 
@@ -66,4 +66,4 @@ extra={
 | `LLM_EMBEDDING_MODEL` | `stub` | 对齐 AI 仓 embeddings |
 | `LLM_KNOWLEDGE_TOP_K` | `3` | 注入块数上限 |
 
-读取受 `memory_governance.can_read_generic_knowledge()` 门控。运维视角见 [LLM 与 AI](../../maintainer/operate/llm-and-ai.md)。
+读取受 `memory_governance.can_read_generic_knowledge()` 门控。运维视角见 [LLM 与 AI](/maintainer/operate/llm-and-ai)。

@@ -1,6 +1,6 @@
 # 热重载 pre-reload 清理清单
 
-> 配合 [Reload 与 Activation](../../developer/plugin-development/reload-and-activation.md) 与官方插件 `activation_policy`。WebUI 保存插件配置或执行 `POST /plugins/{name}/reload` 前，维护者按本清单自检。
+> 配合 [Reload 与 Activation](/developer/plugin-development/reload-and-activation) 与官方插件 `activation_policy`。WebUI 保存插件配置或 `POST /plugins/{name}/reload` 前按本清单自检。
 
 ## 1. 配置级（`reload_policy: config_only`，默认）
 
@@ -59,5 +59,5 @@
 
 ## 相关
 
-- [Reload 与 Activation](../../developer/plugin-development/reload-and-activation.md)
-- [Golden Plugin](../../developer/plugin-development/golden-plugin.md)
+- [Reload 与 Activation](/developer/plugin-development/reload-and-activation)
+- [Golden Plugin](/developer/plugin-development/golden-plugin)

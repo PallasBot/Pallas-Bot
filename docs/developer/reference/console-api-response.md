@@ -1,10 +1,10 @@
 # 控制台 API 响应约定
 
-实现：`pallas.console.webui.api_response`。
+实现：`pallas.console.webui.api_response`。新路由与 OpenAPI 导出路由默认采用信封格式。
 
 ## 信封格式
 
-新路由与 OpenAPI 导出路由默认采用：
+成功：
 
 ```json
 {
@@ -13,7 +13,7 @@
 }
 ```
 
-错误时 HTTP 状态码非 2xx，body 仍为：
+错误（HTTP 非 2xx）：
 
 ```json
 {

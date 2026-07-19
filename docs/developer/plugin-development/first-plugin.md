@@ -1,29 +1,40 @@
 # 写第一个插件
 
-对标 NoneBot「创建插件」教程：一步可跑通，再接到权限 / 帮助 / 配置。完整骨架见 [Golden Plugin](golden-plugin.md)；社区规范见 [社区插件作者](/guide/community-plugin-author)。
+在 `local/plugins/` 里做一个能跑的群口令插件：含权限声明、帮助菜单与冷却。
 
-## 你要达成什么
+完整骨架见 [Golden Plugin](golden-plugin.md)；要上架社区商店见 [社区插件作者](/guide/community-plugin-author)。
 
-在 `local/plugins/hello_pallas/` 放一个群口令插件：发「牛牛你好」→ 回复一句；权限、帮助、冷却声明齐全。
+## 验收目标
+
+群内发送 **牛牛你好** → Bot 回复一句问候；**牛牛帮助** 里出现本插件，且「何人可用」与代码声明一致。
+
+<ChatPanel title="验收时的群聊示意">
+<ChatMessage nickname="群友">牛牛你好</ChatMessage>
+<ChatMessage nickname="牛牛">你好，这里是 hello_pallas 示例插件。</ChatMessage>
+<ChatMessage nickname="群友">牛牛帮助</ChatMessage>
+<ChatMessage nickname="牛牛">（帮助图里出现「你好牛牛」，并展示何人可用）</ChatMessage>
+</ChatPanel>
 
 ## 前置
 
 | 项 | 要求 |
 | --- | --- |
-| 主仓可跑 | [五分钟跑起来](/guide/quickstart) |
-| 目录 | 仓库根下已有或将创建 `local/plugins/` |
-| API | 只用 `pallas.api.*` |
+| 环境 | 本机已能运行 Pallas-Bot（见 [五分钟跑起来](/guide/quickstart)） |
+| 目录 | 仓库根下存在或将创建 `local/plugins/` |
+| API | 只 import `pallas.api.*`；勿用 `pallas.core.*` 或旧 `src.*` |
 
-`config/pallas.toml`：
+`config/pallas.toml` 显式声明插件目录（未配置时主线也会扫描 `local/plugins/`）：
 
 ```toml
 [bootstrap]
 extra_plugin_dirs = ["local/plugins"]
 ```
 
-未配置时，现行主线也会自动扫描 `local/plugins/`；仍建议写上。
+---
 
-## 1. 建目录
+## 步骤 1：创建插件目录
+
+在仓库根下建立如下结构。目录名 `hello_pallas` 即包名，后续 import 与命令 ID 前缀都与之对齐。
 
 ```text
 local/plugins/hello_pallas/
@@ -32,7 +43,9 @@ local/plugins/hello_pallas/
 └── README.md
 ```
 
-## 2. `__init__.py`
+## 步骤 2：编写 `__init__.py`
+
+声明 `PluginMetadata`（权限、冷却、帮助菜单）、注册群命令 matcher、绑定 handler。写入 `local/plugins/hello_pallas/__init__.py`：
 
 ```python
 from nonebot.plugin import PluginMetadata
@@ -76,7 +89,11 @@ cmd = group_command("hello_pallas.hello", "牛牛你好")
 bind_alias_handlers(cmd, handle_hello)
 ```
 
-## 3. `handlers.py`
+要点：`hello_pallas.hello` 在 `command_permissions`、`command_limits`、`menu_data.command_permission` 与 `group_command` 四处必须一致，帮助图才会正确展示「何人可用」。
+
+## 步骤 3：编写 `handlers.py`
+
+handler 里处理冷却与回复正文。冷却秒数与 `command_limits` 中的 `3` 对应。
 
 ```python
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
@@ -95,38 +112,33 @@ async def handle_hello(matcher: Matcher, event: GroupMessageEvent) -> None:
     await matcher.finish(Message("你好，这里是 hello_pallas 示例插件。"))
 ```
 
-## 4. README（最小）
+## 步骤 4：写 README（最小）
 
-写清：做什么、口令、是否需单独安装、默认权限以 WebUI 为准。
+`README.md`：用途、口令、额外依赖、默认权限以 WebUI「命令权限」为准。社区商店详情页也会读此文件。
 
-## 5. 加载与验收
+## 步骤 5：加载并验收
 
-1. 重启 Bot（或按站点 activation 策略热载）
-2. 群内发 **牛牛你好** → 有回复
-3. **牛牛帮助** 能看到本插件，且「何人可用」与声明一致
-4. WebUI **命令权限** 矩阵出现 `hello_pallas.hello`
+1. 重启 Bot（或按站点 activation 策略热载代码）。
+2. 测试群发送 **牛牛你好** → 问候回复。
+3. 发送 **牛牛帮助** → 帮助图出现「你好牛牛」，「何人可用」与 `everyone` 一致。
+4. WebUI **命令权限** → 矩阵出现 `hello_pallas.hello`。
 
 ## 常见失败
 
-| 现象 | 原因 |
+| 现象 | 可能原因 |
 | --- | --- |
-| 无响应 | 未进 `extra_plugin_dirs` / 目录名与包不一致 / 未重启 |
-| import 错 | 写了 `pallas.core.*` 或旧 `src.*` |
-| 帮助无「何人可用」 | 未绑 `command_permission` 或 ID 不一致 |
-| 权限文案写死 | 违反 cmd_perm；改走 metadata |
-
-## 下一步
-
-| 目标 | 文档 |
-| --- | --- |
-| 配置页 + 热载 | [配置与 WebUI](config-and-webui.md) |
-| 正式骨架 | [Golden Plugin](golden-plugin.md) |
-| 权限细则 | [cmd_perm](/common/cmd_perm) |
-| 独立仓 / PyPI | [发布](publishing.md)、扩展模板 `templates/pallas-plugin-extension/` |
-| 社区商店示例 | [pallas-community-plugin-interact](https://github.com/TogetsuDo/pallas-community-plugin-interact) |
+| 发口令无响应 | 目录未在 `extra_plugin_dirs`、包名与目录不一致、或改代码后未重启 |
+| 启动报 import 错 | 写了 `pallas.core.*` 或历史 `src.*` 路径 |
+| 帮助图无「何人可用」 | `menu_data` 未绑 `command_permission`，或 ID 与 matcher 不一致 |
+| 帮助里写死了「仅群管」等 | 违反 cmd_perm 约定；权限只走 metadata，文案勿写死角色 |
 
 ## 相关
 
-- [入门](getting-started.md)
-- [Cookbook](pallas-api-cookbook.md)
-- [测试](testing.md)
+| 目标 | 文档 |
+| --- | --- |
+| 配置页与热载 | [配置与 WebUI](config-and-webui.md) |
+| 正式目录骨架 | [Golden Plugin](golden-plugin.md) |
+| 权限细则 | [cmd_perm](/common/cmd_perm) |
+| 独立仓 / PyPI | [发布](publishing.md)、扩展模板 `templates/pallas-plugin-extension/` |
+| 社区商店示例 | [pallas-community-plugin-interact](https://github.com/TogetsuDo/pallas-community-plugin-interact) |
+| 入门 / Cookbook / 测试 | [入门](getting-started.md) · [Cookbook](pallas-api-cookbook.md) · [测试](testing.md) |

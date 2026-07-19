@@ -1,16 +1,14 @@
-# 连接 QQ / 协议端
-
-**Pallas-Bot 不直接登录 QQ。** 路径是：
+# 连接 QQ
 
 ```text
-QQ  ←→  NapCat（协议端）  ←→  Pallas-Bot  ←→  数据库
+QQ  ←→  NapCat  ←→  Pallas-Bot  ←→  数据库
 ```
 
-牛「在线但不说话」，多半是协议端没连上，或 WebSocket 指错了主机。
+::: tip
+先保证 Pallas-Bot 已经在跑，并能打开网页控制台。端口以 `pallas.toml` 的 `[bootstrap] port` 为准，默认 **8088**。
+:::
 
-## 默认地址
-
-端口以 `config/pallas.toml` 的 `[bootstrap] port` 为准，默认 **8088**。
+## 1. 打开协议端管理
 
 | 页面 | 地址 |
 | --- | --- |
@@ -20,51 +18,49 @@ QQ  ←→  NapCat（协议端）  ←→  Pallas-Bot  ←→  数据库
 
 本机 `<主机>` 填 `127.0.0.1`；远程填服务器 IP 或域名。
 
-## 方式一：控制台管 NapCat（推荐）
+## 2. 【推荐】控制台新建 NapCat
 
-前提：`uv run nb run` 已起来，能打开 `/pallas/`。
+1. 打开协议端页，用和控制台**同一密码**登录
+2. 点 **新建实例** → 选 **NapCat** → 扫码
+3. 等实例变成 **在线**（WS 一般是 `ws://127.0.0.1:8088/onebot/v11/ws`）
 
-1. 打开协议端页，用和控制台**同一口令**登录
-2. **新建实例** → 选 **NapCat** → 扫码
-3. 实例列表变成 **在线**（WS 一般指向 `ws://127.0.0.1:8088/onebot/v11/ws`）
-
-验收（三项都过才算通）：
-
-- 协议端页：**在线**
-- 控制台首页：能看到在线 Bot
-- 群里发 `牛牛帮助`：**有图**
+协议端显示在线、控制台能看到 Bot、群里能收到消息——就连上了。
 
 ::: details Docker 里用「Docker 模式」拉 NapCat
 需给 `pallasbot` 挂载 `/var/run/docker.sock`（见 compose 注释）。挂载 sock 有安全风险，仅建议可信内网。
 :::
 
-## 方式二：自己装 NapCat
+## 3. 自己装 NapCat（备选）
 
-1. 按 [NapCat 文档](https://napneko.github.io/) 安装并登录
-2. 添加 **正向 WebSocket 客户端**
-3. URL：`ws://<Bot主机>:8088/onebot/v11/ws`
+按 [NapCat 文档](https://napneko.github.io/) 安装并登录，添加 **反向 WebSocket**（由 NapCat 连到 Bot），URL 填：
 
-::: tip Bot 和 NapCat 不在同一台？
-不要写 `127.0.0.1`，写 Bot 那台机器能从 NapCat 访问到的地址。
+```text
+ws://<Bot主机>:8088/onebot/v11/ws
+```
+
+::: tip
+Bot 和 NapCat 不在同一台时，**不要**写 `127.0.0.1`，写 Bot 那台对 NapCat 可达的地址。
 :::
 
-## 群里怎么验
+## 4. 群里试一下
 
-牛已进群后发：
+牛进群后发：
 
 ```text
 牛牛帮助
 ```
 
-也可发 `牛牛` 测打招呼（多只牛同群可能齐回）。
+能出帮助图就说明 Pallas-Bot 已在群里正常工作。也可以发 `牛牛` 测打招呼（多只牛同群可能齐回）。
 
 ## 常见问题
 
-| 现象 | 处理 |
+| 现象 | 先看 |
 | --- | --- |
 | 打不开协议端页 | Bot 是否在跑、端口是否放行 |
-| 协议端离线 | 看 NapCat 日志；重启实例 |
-| 在线但群无反应 | 确认牛在群；看运行日志有没有进消息 |
+| 协议端离线 | NapCat 日志；重启实例 |
+| 在线但群无反应 | 牛是否在群；运行日志有没有进消息 |
 | 要多只 QQ | 再建实例，或部署多只牛 |
 
-▶ [安装官方插件](install-extensions.md) · [网页控制台](web-console.md) · [排障](../maintainer/operate/troubleshooting.md)
+## 你已经连上 QQ
+
+▶ [安装插件](install-plugins.md)

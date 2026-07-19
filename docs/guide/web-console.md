@@ -1,6 +1,8 @@
 # 网页控制台
 
-登录之后去哪点、配置落哪。Pallas-Bot 启动后控制台会跟着起来，不用单独开关。
+::: tip
+控制台**不用单独开服务**——Pallas-Bot 一启动就会挂上 `/pallas/`。
+:::
 
 ## 打开与登录
 
@@ -8,14 +10,14 @@
 | --- | --- |
 | 地址 | `http://<主机>:8088/pallas/` |
 | 端口 | `pallas.toml` → `[bootstrap] port`，默认 **8088** |
-| 首次口令 | 启动日志，或 `data/pallas_console/` |
+| 首次密码 | 启动日志，或 `data/pallas_console/` |
 
-1. 打开 `/pallas/`
-2. 输入日志里的控制台口令
-3. 能看到首页运行概览、侧栏有「插件」「运行日志」= **登录成功**
+1. 浏览器打开 `/pallas/`
+2. 输入日志里的控制台密码
+3. 能看到首页运行概览、侧栏有「插件」「运行日志」= 登录成功
 
-::: warning 生产环境
-不要长期开开发模式（会跳过登录）。公网请配 HTTPS + 强口令。
+::: warning
+不要长期开开发模式（会跳过登录）。公网请配 HTTPS + 强密码。
 :::
 
 ## 常去哪些页
@@ -31,27 +33,20 @@
 | 改 AI / 外部服务 | **通用配置** |
 | 备份库 | **数据库** |
 
-::: tip 要不要重启？
-保存插件配置写入 `webui.json`，**一般不用重启**。  
-装 / 卸 pip 扩展 **必须重启 Bot**。
+::: tip
+保存插件配置一般**不用重启**。装 / 卸官方扩展 **必须重启 Bot**。
 :::
 
-## 和协议端页的区别
-
-| 页面 | 地址 | 干什么 |
-| --- | --- | --- |
-| Web 控制台 | `/pallas/` | 配置、日志、商店 |
-| 协议端管理 | `/pallas/protocol` | 建 NapCat、扫码 |
-
-两页用**同一套口令**。
-
-## 配置落在哪
-
+::: details 配置写到哪了
 | 你怎么改 | 落哪 |
 | --- | --- |
 | 网页点保存 | `data/pallas_config/webui.json` |
 | 改端口 / 库 / 超管 | `config/pallas.toml`，然后 **重启** |
 
-详见 [配置存储](../developer/architecture/config-storage.md)。
+谁覆盖谁见 [配置存储](/developer/architecture/config-storage)。
+:::
 
-▶ [使用指南](../user/README.md) · [安装插件](install-plugins.md) · [连接 QQ](connect-qq.md)
+## 相关
+
+- 协议端扫码 / 上号 → [连接 QQ](connect-qq.md)
+- 商店装扩展 → [安装插件](install-plugins.md)

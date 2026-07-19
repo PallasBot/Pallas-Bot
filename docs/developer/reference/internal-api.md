@@ -1,6 +1,6 @@
 # Internal API
 
-可 import ≠ 对外契约。内部路径不承诺稳定，可在重构中移动或删除。
+可 import ≠ 对外稳定面。内部路径可在重构中移动或删除。
 
 ## 默认内部
 
@@ -26,7 +26,7 @@
 主仓内部  →  L1/L2/L3；对外传播前先提升边界
 ```
 
-缺口流程：文档/设计提出需求 → 提升为 `pallas.api.*` 或 Platform → 再依赖。禁止先耦合再逼平台冻结布局。
+缺口：文档/设计提出需求 → 提升为 `pallas.api.*` 或 Platform → 再依赖。禁止先耦合再逼平台冻结布局。
 
 ## 禁止误用
 
@@ -43,5 +43,5 @@
 ## 相关
 
 - [Platform API](platform-api.md)
-- [pallas.api Cookbook](../plugin-development/pallas-api-cookbook.md)
-- [仓库布局](../../developer/reference/repo-layout.md)
+- [pallas.api Cookbook](/developer/plugin-development/pallas-api-cookbook)
+- [仓库布局](/developer/reference/repo-layout)

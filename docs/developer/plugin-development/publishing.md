@@ -1,6 +1,6 @@
 # 发布
 
-三条分发路径。先定归属层（[Core vs 扩展](../architecture/core-vs-extensions.md)），再选路径。
+三条分发路径；归属层见 [Core vs 扩展](/developer/architecture/core-vs-extensions)。
 
 ## 路径矩阵
 
@@ -36,7 +36,7 @@ Core 不按独立插件发行，随主仓版本。
 
 | MUST | MUST NOT |
 | --- | --- |
-| 目录清晰、最小 README | 依赖 `pallas.core.*` 作为长期契约 |
+| 目录清晰、最小 README | 依赖 `pallas.core.*` 作为长期稳定面 |
 | 基本 metadata | 以「本机能跑」替代可维护结构 |
 
 ## 通用发布前检查
@@ -52,5 +52,5 @@ Core 不按独立插件发行，随主仓版本。
 
 ## 相关
 
-- [Core 与扩展](../architecture/core-vs-extensions.md)
-- [仓库结构](../reference/repo-layout.md)
+- [Core 与扩展](/developer/architecture/core-vs-extensions)
+- [仓库结构](/developer/reference/repo-layout)

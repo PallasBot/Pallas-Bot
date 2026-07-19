@@ -1,174 +1,137 @@
 # 排障
 
-Pallas-Bot 出问题时，先看什么、后看什么。
+排查顺序：部署形态 → 配置来源 → 角色与连接 → 日志 → WebUI 聚合。运行时问题多归入：配置未生效、角色判断错误、协议端连接错误、WebUI 资源或聚合异常、扩展未加载。
 
-::: tip 先别慌
-别一上来就全仓搜索、重装依赖或怀疑某个插件源码。先认路：问题多半落在配置、角色、协议、WebUI、扩展五类之一。
-:::
-
-## 遇到什么问题？
-
-按图走到对应小节，再动手：
+## 问题分类索引
 
 ```mermaid
 flowchart TD
-  Start[出问题了] --> Kind{更像哪一类?}
-  Kind -->|改了配置没生效| Config[第二节配置来源]
-  Kind -->|单进程或分片搞混| Role[第三步角色与连接]
-  Kind -->|QQ在线但不回| Proto[协议端连不上]
-  Kind -->|页面旧或数据怪| WebUI[WebUI资源或聚合]
-  Kind -->|商店已装但没功能| Ext[扩展装了但没反应]
-  Kind -->|不确定| Order[先按建议排障顺序走一遍]
+  Start[故障] --> Kind{类别}
+  Kind -->|配置未生效| Config[配置来源]
+  Kind -->|单进程/分片混淆| Role[角色与连接]
+  Kind -->|QQ在线无回复| Proto[协议端]
+  Kind -->|页面旧或数据异常| WebUI[WebUI资源/聚合]
+  Kind -->|商店已装无功能| Ext[扩展加载]
+  Kind -->|未归类| Order[按排障顺序]
 ```
 
-大部分运行时问题，都能先归到下面五类之一：
+## 排障顺序
 
-- 配置没生效
-- 角色判断错了
-- 协议端没有连上正确目标
-- WebUI 资源或聚合状态不对
-- 扩展存在，但没有真正加载或生效
-
-## 建议排障顺序
-
-1. 确认部署形态
-2. 确认配置来源
+1. 确认部署形态（单进程 / 分片；源码 / Docker / 混合）
+2. 确认配置来源与覆盖关系
 3. 确认运行角色与连接路径
-4. 看对应日志
-5. 再看 WebUI 聚合状态与插件状态
+4. 查看对应日志
+5. 核对 WebUI 聚合状态与插件状态
 
-## 第一步：先分清你在查哪种部署
+## 1. 部署形态
 
-先回答几个问题：
+| 问题 | 记录项 |
+| --- | --- |
+| 进程模型 | 单进程或分片（hub + worker） |
+| 部署方式 | 源码、`docker compose`、混合目录 |
+| 故障层 | core、官方插件、协议端、WebUI |
 
-- 这是单进程还是分片部署
-- 是主仓源码部署、Docker 部署，还是混合目录部署
-- 问题发生在 core、官方插件、协议端，还是 WebUI
+部署形态未确认前，后续日志与端口判断无效。
 
-::: warning 部署形态没分清，后面全白费
-连部署形态都没分清，后面大概率会看错日志、看错端口、看错仓库。
-:::
+## 2. 配置来源
 
-## 第二步：确认配置到底从哪来
-
-4.0 配置优先级是：
+合并优先级（低 → 高）：
 
 1. `config/pallas.toml`
 2. 遗留 `.env`
-3. `data/pallas_config/webui.json`
+3. `data/pallas_config/webui.json`（WebUI 落盘覆盖同名键）
 
-最终以 WebUI 落盘覆盖前面的同名项。
+| 现象 | 原因 |
+| --- | --- |
+| 修改 `pallas.toml` 不生效 | 同名键被 `webui.json` 覆盖 |
 
-::: warning 最常见的误判
-你改了 `pallas.toml`，但运行中仍被 `webui.json` 覆盖，看起来就像「改了没用」。
-:::
+## 3. 角色与连接
 
-## 第三步：看对角色和连接路径
+### 单进程
 
-::: details 单进程：优先确认这些
 - Bot 是否成功启动
-- 协议端是否连接到当前进程
-- 扩展是否在当前进程中加载
-:::
+- 协议端是否连到当前进程
+- 扩展是否在当前进程加载
 
-::: details 分片：优先确认这些
-- 问题发生在 hub 还是 worker
-- 协议端连接的是不是目标 worker
+### 分片
+
+- 故障在 hub 还是 worker
+- 协议端是否连到目标 worker
 - Redis 是否可达
-- hub 聚合到的 worker 状态是否正常
+- hub 聚合的 worker 状态是否正常
 
-分片排障默认先看这两个日志，不要优先翻单进程日志：
+分片默认日志（优先于单进程日志）：
 
 - `data/pallas_shard/logs/hub.log`
 - `data/pallas_shard/logs/worker-*.log`
-:::
 
-## 第四步：按问题类型看日志
+## 4. 按现象查日志
 
-::: details WebUI 页面旧了或和源码不一致
-- `data/pb_webui/public/` 是否是新产物
-- 浏览器缓存是否刷新
-- 你改的是不是 `Pallas-Bot-WebUI` 源码仓
-:::
+### WebUI 页面旧或与源码不一致
 
-::: details 协议端连不上
-- 协议端实例里的 `ws_url`
-- 分片下 `registry.json` 的端口映射
-- 对应 worker 是否真的在监听那个端口
-:::
+- `data/pb_webui/public/` 是否为当前版本产物
+- 浏览器缓存
+- 修改的是否为 Pallas-Bot-WebUI 源码仓（与运行产物不同）
 
-::: details 扩展装了但没反应
-- 是否已经重启
+### 协议端连不上
+
+- 协议端实例 `ws_url`
+- 分片下 `registry.json` 端口映射
+- 目标 worker 是否在监听对应端口
+
+### 扩展已装无反应
+
+- 是否已重启
 - 是否安装到当前运行环境
-- 是否被 `local/plugins/` 同名插件覆盖
-- 分片下是不是只看了 hub，没有看 worker
-:::
+- `local/plugins/` 同名覆盖
+- 分片下是否只查了 hub、未查 worker
 
-::: details AI 任务发出了，但没有回执
-- AI runtime 回调是否打到 hub
-- hub 是否成功路由到目标 worker
-- 目标 worker 是否仍在线
-- 也可对照 [LLM 与 AI](llm-and-ai.md)
-:::
+### AI 任务无回执
 
-::: details 命令权限或 cooldown 不符合预期
+- AI callback 是否到达 hub
+- hub 是否路由到目标 worker
+- 目标 worker 是否在线
+- 参见 [LLM 与 AI](llm-and-ai.md)
+
+### 命令权限或 cooldown 异常
+
 - 代码默认值
 - WebUI 命令权限覆盖
-- 分片下 hub 聚合到的 worker 插件元数据是否完整
-:::
+- 分片下 hub 聚合的 worker 插件元数据是否完整
 
-## 常看的关键路径
+## 关键路径
 
-配置：
+| 类型 | 路径 |
+| --- | --- |
+| 配置 | `config/pallas.toml`、`data/pallas_config/webui.json` |
+| 单进程日志 | 当前 Bot 进程 stdout / 配置的日志输出 |
+| 分片日志 | `data/pallas_shard/logs/hub.log`、`worker-*.log` |
+| 分片状态 | `data/pallas_shard/registry.json`、`stats/worker-*.json` |
+| WebUI 资源 | `data/pb_webui/public/` |
 
-- `config/pallas.toml`
-- `data/pallas_config/webui.json`
-
-单进程日志：
-
-- 当前 Bot 进程日志
-
-分片日志：
-
-- `data/pallas_shard/logs/hub.log`
-- `data/pallas_shard/logs/worker-*.log`
-- `data/pallas_shard/registry.json`
-- `data/pallas_shard/stats/worker-*.json`
-
-WebUI 运行资源：
-
-- `data/pb_webui/public/`
-
-## 看到现象后，先做哪个判断
+## 现象速查
 
 | 现象 | 第一判断 |
 | --- | --- |
-| 页面没更新 | 资源同步或缓存问题 |
-| 页面能开但数据错 | API 契约或 worker 聚合问题 |
-| QQ 在线但不回复 | 协议端连接、worker 日志、Redis |
-| 商店显示已安装但功能没生效 | 进程未重启或加载路径冲突 |
-| 只有某只 Bot 或某个群异常 | 先定位对应 worker，不要全局扫 |
+| 页面未更新 | 资源同步或浏览器缓存 |
+| 页面可开、数据错 | API 契约或 worker 聚合 |
+| QQ 在线无回复 | 协议端连接、worker 日志、Redis |
+| 商店已安装无功能 | 未重启或加载路径冲突 |
+| 单 Bot 或单群异常 | 定位对应 worker，勿全局扫描 |
 
-## 不要这样排
+## 无效操作
 
-- 不要在分片问题里先看单进程日志。
-- 不要把 WebUI 源码仓和主仓运行产物当成同一份东西。
-- 不要只看到「命令匹配了」就当成功，还要区分是否真的执行成功。
-- 不要因为页面缺数据就默认是前端 bug，很多时候是 worker 元数据没聚合上来。
+- 分片故障优先查单进程日志
+- 将 WebUI 源码仓与主仓运行产物视为同一目录
+- 仅凭「命令匹配」判定执行成功
+- 页面缺数据即假定前端 bug（常见为 worker 元数据未聚合）
 
-## 还是定位不到？
+## 专题文档
 
-走完上面的顺序仍无法确定问题，再按专题深挖：
-
-- 协议端与账号管理：看 [协议端安装与管理](../install/protocol.md)
-- 分片连接与协调：看 [分片部署](../deploy/sharded.md)
-- WebUI 资源与控制台：看 [WebUI](../install/webui.md)
-- 常见环境问题：看 [FAQ](../../FAQ.md)
-- AI / 闲聊：看 [LLM 与 AI](llm-and-ai.md)
-
-## 延伸阅读
-
-- [FAQ](../../FAQ.md)
-- [协议端](../install/protocol.md)
-- [分片部署](../deploy/sharded.md)
-- [官方插件安装](../install/official-extensions.md)
+| 主题 | 文档 |
+| --- | --- |
+| 协议端与账号 | [协议端](/maintainer/install/protocol) |
+| 分片连接 | [分片部署](/maintainer/deploy/sharded) |
+| WebUI 资源 | [WebUI](/maintainer/install/webui) |
+| 环境问题 | [FAQ](/deploy/faq) |
+| AI / 闲聊 | [LLM 与 AI](llm-and-ai.md) |
