@@ -150,12 +150,18 @@ def resolved_community_token() -> str:
     return str(load_corpus_community_state().get("corpus_token") or "").strip()
 
 
-def community_contribute_enabled(cfg: CorpusConfig | None = None) -> bool:
-    """是否向社区池 mirror 学习结果"""
+def community_contribute_wanted() -> bool:
+    """本机是否希望向社区贡献（忽略中心 token 策略）。
+
+    ``true`` / ``auto``（默认）为希望开启；仅显式 ``false`` 关闭。
+    """
     flag = parse_tristate(setting_str(f"{_PREFIX}COMMUNITY_CONTRIBUTE", "auto"), default=True)
-    if flag is True:
-        return True
-    if flag is False:
+    return flag is not False
+
+
+def community_contribute_enabled(cfg: CorpusConfig | None = None) -> bool:
+    """是否向社区池 mirror 学习结果（本机意图 ∧ 中心 enroll 策略）。"""
+    if not community_contribute_wanted():
         return False
     from pallas.product.corpus.store import load_corpus_community_state
 

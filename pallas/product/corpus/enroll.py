@@ -20,6 +20,7 @@ from pallas.product.community_stats.store import load_or_create_deployment_id
 from pallas.product.corpus.config import (
     auto_enroll_enabled,
     clear_corpus_config_cache,
+    community_contribute_wanted,
     community_manual_configured,
     is_community_corpus_wanted,
 )
@@ -68,7 +69,11 @@ async def ensure_corpus_community_enrolled(*, force: bool = False) -> bool:
 
     state = load_corpus_community_state()
     if not force and corpus_community_enrollment_valid(state):
-        return True
+        # 中心曾默认 contribute=false 时落盘会锁死；本机希望贡献则强制重登记
+        if community_contribute_wanted() and state.get("contribute") is False:
+            logger.info("corpus enroll: local wants contribute but policy false, re-enrolling")
+        else:
+            return True
 
     deployment_id = load_or_create_deployment_id()
     cfg = get_community_stats_config()

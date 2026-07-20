@@ -105,3 +105,47 @@ async def test_ensure_corpus_skips_when_manual_configured(monkeypatch):
         ok = await ensure_corpus_community_enrolled(force=True)
     assert ok is True
     mock_post.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ensure_reenrolls_when_contribute_policy_false(tmp_path, monkeypatch):
+    state_path = tmp_path / "data" / "pallas_config" / "community_stats.json"
+    dep = str(uuid.uuid4())
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps({
+            "deployment_id": dep,
+            "corpus_community": {
+                "api_base": "https://stats.example/v1/corpus",
+                "corpus_token": "pc_old",
+                "contribute": False,
+                "enrolled_at": 1,
+            },
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("pallas.product.community_stats.store.community_stats_state_path", lambda: state_path)
+    monkeypatch.setattr("pallas.product.corpus.enroll.should_run_corpus_auto_enroll", lambda: True)
+    monkeypatch.setattr(
+        "pallas.product.corpus.enroll.corpus_enroll_urls",
+        lambda: ["https://stats.example/v1/corpus/enroll"],
+    )
+    monkeypatch.setattr("pallas.product.corpus.enroll.community_contribute_wanted", lambda: True)
+
+    response = httpx.Response(
+        200,
+        json={
+            "corpus_token": "pc_newtoken",
+            "api_base": "https://stats.example/v1/corpus",
+            "policy": {"read": True, "contribute": True},
+        },
+    )
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=response) as mock_post:
+        ok = await ensure_corpus_community_enrolled()
+
+    assert ok is True
+    mock_post.assert_called_once()
+    saved = load_corpus_community_state()
+    assert saved["corpus_token"] == "pc_newtoken"
+    assert saved["contribute"] is True
