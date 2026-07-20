@@ -114,6 +114,7 @@ class LlmRuntimeOverviewHealthData(BaseModel):
     llm_health: LlmHealthSummaryData | None = None
     llm_circuit: dict[str, Any] | None = None
     image_health: LlmImageHealthData | None = None
+    draw_runtime_mode: str | None = None
     tts_health: LlmTtsHealthData | None = None
     media_tasks: LlmMediaTasksHealthData | None = None
     submit_gate: dict[str, Any] | None = None

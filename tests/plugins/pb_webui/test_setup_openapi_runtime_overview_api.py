@@ -222,6 +222,8 @@ def test_llm_runtime_overview_returns_aggregated_fields(monkeypatch) -> None:
     assert data["health"]["ok"] is True
     assert data["health"]["llm_health"]["health_state"] == "healthy"
     assert data["health"]["image_health"]["circuit_state"] == "closed"
+    assert "draw_runtime_mode" in data["health"]
+    assert data["health"]["draw_runtime_mode"] in (None, "plugin_runtime", "ai_service_runtime")
     assert data["health"]["media_tasks"]["queue_depth"] == 1
     assert data["model_admin"]["model"] == "qwen"
     assert data["task_stats"]["ai_reachable"] is True

@@ -4338,6 +4338,8 @@ class _LlmRuntimeOverviewHealthData(BaseModel):
     llm_health: _LlmHealthSummaryData | None = None
     llm_circuit: dict[str, Any] | None = None
     image_health: _LlmImageHealthData | None = None
+    # plugin_runtime | ai_service_runtime；画画插件未装时为 null
+    draw_runtime_mode: str | None = None
     tts_health: _LlmTtsHealthData | None = None
     media_tasks: _LlmMediaTasksHealthData | None = None
     submit_gate: dict[str, Any] | None = None
@@ -6790,6 +6792,16 @@ def register_extended_api(
         from pallas.product.llm.submit_gate import assess_llm_submit_gate_from_body
         from pallas.product.llm.task_routing import build_task_routing_preview
 
+        def _draw_runtime_mode() -> str | None:
+            try:
+                from pallas.core.platform.plugin_runtime.resolve import import_plugin_submodule
+
+                draw_config = import_plugin_submodule("draw", "config")
+                mode = str(draw_config.active_image_gen_settings().runtime_mode or "").strip()
+                return mode or None
+            except Exception:  # noqa: BLE001
+                return None
+
         async def _load() -> dict[str, Any]:
             health, model_admin, task_stats = await asyncio.gather(
                 probe_ai_service_health(timeout_sec=8.0),
@@ -6808,6 +6820,7 @@ def register_extended_api(
                     "llm_health": llm_health_summary(body),
                     "llm_circuit": llm_health_circuit(body),
                     "image_health": image_health_circuit(body),
+                    "draw_runtime_mode": _draw_runtime_mode(),
                     "tts_health": tts_health_summary(body),
                     "media_tasks": parse_media_tasks(body),
                     "submit_gate": {
