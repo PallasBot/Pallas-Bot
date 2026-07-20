@@ -11,6 +11,11 @@ from nonebot import logger
 
 from pallas.console.cli.bot_process import bot_lifecycle_available
 from pallas.core.foundation.paths import PROJECT_ROOT
+from pallas.core.shared.utils.git_mirror import (
+    git_instead_of_args,
+    iter_mirrors_for_failover,
+    rewrite_github_url,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -136,21 +141,32 @@ async def install_community_plugin(
         repo,
         branch,
     )
-    code, out, err = await run_git_command(
-        INSTALL_TIMEOUT_S,
-        "clone",
-        "--depth",
-        "1",
-        "--branch",
-        branch,
-        repo,
-        str(dest),
-    )
-    if code != 0:
+    last_detail = ""
+    clone_ok = False
+    out = ""
+    for mirror in iter_mirrors_for_failover():
+        clone_url = rewrite_github_url(repo, mirror)
+        code, out, err = await run_git_command(
+            INSTALL_TIMEOUT_S,
+            "clone",
+            "--depth",
+            "1",
+            "--branch",
+            branch,
+            clone_url,
+            str(dest),
+        )
+        if code == 0:
+            clone_ok = True
+            break
+        last_detail = err or out or "(无输出)"
         if dest.exists():
             shutil.rmtree(dest, ignore_errors=True)
-        detail = err or out or "(无输出)"
-        raise CommunityPluginInstallError(f"git clone 失败：{tail_output(detail)}", status_code=502)
+    if not clone_ok:
+        raise CommunityPluginInstallError(
+            f"git clone 失败：{tail_output(last_detail)}",
+            status_code=502,
+        )
     if not (dest / "__init__.py").is_file():
         shutil.rmtree(dest, ignore_errors=True)
         raise CommunityPluginInstallError(
@@ -184,35 +200,57 @@ async def update_community_plugin(
     if not local_plugin_installed(pid):
         raise CommunityPluginInstallError(f"local/plugins/{pid} 未安装，无法更新")
     logger.info("Pallas-Bot 控制台: 更新社区插件 id={} ref={}", pid, branch)
-    code, out, err = await run_git_command(
-        INSTALL_TIMEOUT_S,
-        "fetch",
-        "origin",
-        branch,
-        cwd=str(dest),
-    )
-    if code != 0:
-        detail = err or out or "(无输出)"
-        raise CommunityPluginInstallError(f"git fetch 失败：{tail_output(detail)}", status_code=502)
-    code, out, err = await run_git_command(
-        INSTALL_TIMEOUT_S,
-        "reset",
-        "--hard",
-        f"origin/{branch}",
-        cwd=str(dest),
-    )
-    if code != 0:
+    last_detail = ""
+    last_stage = "fetch"
+    update_ok = False
+    out = ""
+    for mirror in iter_mirrors_for_failover():
+        extra = git_instead_of_args(mirror)
         code, out, err = await run_git_command(
             INSTALL_TIMEOUT_S,
-            "pull",
-            "--ff-only",
+            *extra,
+            "fetch",
             "origin",
             branch,
             cwd=str(dest),
         )
-    if code != 0:
-        detail = err or out or "(无输出)"
-        raise CommunityPluginInstallError(f"git 更新失败：{tail_output(detail)}", status_code=502)
+        if code != 0:
+            last_detail = err or out or "(无输出)"
+            last_stage = "fetch"
+            continue
+        code, out, err = await run_git_command(
+            INSTALL_TIMEOUT_S,
+            *extra,
+            "reset",
+            "--hard",
+            f"origin/{branch}",
+            cwd=str(dest),
+        )
+        if code != 0:
+            code, out, err = await run_git_command(
+                INSTALL_TIMEOUT_S,
+                *extra,
+                "pull",
+                "--ff-only",
+                "origin",
+                branch,
+                cwd=str(dest),
+            )
+        if code == 0:
+            update_ok = True
+            break
+        last_detail = err or out or "(无输出)"
+        last_stage = "update"
+    if not update_ok:
+        if last_stage == "fetch":
+            raise CommunityPluginInstallError(
+                f"git fetch 失败：{tail_output(last_detail)}",
+                status_code=502,
+            )
+        raise CommunityPluginInstallError(
+            f"git 更新失败：{tail_output(last_detail)}",
+            status_code=502,
+        )
     if not (dest / "__init__.py").is_file():
         raise CommunityPluginInstallError(
             "更新后目录缺少 __init__.py，不是有效 NoneBot 插件包",

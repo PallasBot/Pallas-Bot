@@ -19,6 +19,12 @@ from pallas.core.foundation.bot_version import (
     pallas_bot_repo_root,
 )
 from pallas.core.shared.utils.format_exception import format_exception_for_log
+from pallas.core.shared.utils.git_mirror import (
+    MirrorSpec,
+    git_instead_of_args,
+    iter_mirrors_for_failover,
+    rewrite_github_url,
+)
 from pallas.core.shared.utils.github_release import (
     fetch_latest_release,
     fetch_latest_release_tag_via_github_web,
@@ -212,14 +218,36 @@ def _webui_download_progress_log(ev: StreamDownloadProgress) -> None:
             )
 
 
+def build_git_argv_with_mirror(mirror: MirrorSpec, *args: str) -> list[str]:
+    return [*git_instead_of_args(mirror), *args]
+
+
+def iter_failover_download_urls(url: str):
+    u = (url or "").strip()
+    if not u:
+        return
+    for mirror in iter_mirrors_for_failover():
+        yield rewrite_github_url(u, mirror)
+
+
 def _sync_download_webui_zip(url: str, dest: Path, *, follow_redirects: bool) -> None:
-    sync_stream_download_to_file(
-        url,
-        dest,
-        follow_redirects=follow_redirects,
-        timeout=httpx.Timeout(300.0, connect=60.0),
-        on_progress=_webui_download_progress_log,
-    )
+    last_exc: Exception | None = None
+    for attempt_url in iter_failover_download_urls(url):
+        try:
+            sync_stream_download_to_file(
+                attempt_url,
+                dest,
+                follow_redirects=follow_redirects,
+                timeout=httpx.Timeout(300.0, connect=60.0),
+                on_progress=_webui_download_progress_log,
+            )
+            return
+        except Exception as e:  # noqa: BLE001
+            last_exc = e
+            continue
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("无可用镜像源")
 
 
 async def download_and_extract_dist_zip(public_dir: Path, url: str, *, follow_redirects: bool = True) -> bool:
@@ -509,9 +537,15 @@ async def apply_bot_repository_update(
     root = _BOT_ROOT
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
 
-    async def git(*args: str, cmd_timeout_s: float = 180.0) -> tuple[int, str, str]:
+    async def git(
+        *args: str,
+        cmd_timeout_s: float = 180.0,
+        mirror: MirrorSpec | None = None,
+    ) -> tuple[int, str, str]:
+        prefix = git_instead_of_args(mirror) if mirror is not None else []
         proc = await asyncio.create_subprocess_exec(
             "git",
+            *prefix,
             *args,
             cwd=str(root),
             env=env,
@@ -529,6 +563,17 @@ async def apply_bot_repository_update(
         err = err_b.decode(errors="replace").strip() if err_b else ""
         code = int(proc.returncode or 0)
         return code, out, err
+
+    async def git_remote(*args: str, cmd_timeout_s: float = 180.0) -> tuple[int, str, str]:
+        last_code = 1
+        last_out = ""
+        last_err = ""
+        for mirror in iter_mirrors_for_failover():
+            code, out, err = await git(*args, cmd_timeout_s=cmd_timeout_s, mirror=mirror)
+            if code == 0:
+                return code, out, err
+            last_code, last_out, last_err = code, out, err
+        return last_code, last_out, last_err
 
     rc, out, err = await git("rev-parse", "--is-inside-work-tree")
     if rc != 0 or out != "true":
@@ -554,7 +599,7 @@ async def apply_bot_repository_update(
 
     logger.info("Pallas-Bot 控制台: Bot 仓库更新开始 repo={} target_tag={}", repo, latest_tag)
 
-    rc, _, fetch_err = await git("fetch", "origin", "--tags", cmd_timeout_s=300.0)
+    rc, _, fetch_err = await git_remote("fetch", "origin", "--tags", cmd_timeout_s=300.0)
     if rc != 0:
         detail = fetch_err or "(无 stderr)"
         raise BotGitUpdateError(f"git fetch 失败：{detail}", status_code=502)
@@ -625,7 +670,7 @@ async def apply_bot_repository_update(
     else:
         rc_u, upstream_out, _ = await git("rev-parse", "--abbrev-ref", "@{u}")
         if rc_u == 0 and upstream_out:
-            rc_p, _, err_p = await git("pull", "--ff-only", "--autostash")
+            rc_p, _, err_p = await git_remote("pull", "--ff-only", "--autostash")
             if rc_p != 0:
                 raise BotGitUpdateError(
                     f"git pull --ff-only 失败（已配置上游 {upstream_out}）：{err_p or '(无 stderr)'}",
@@ -643,7 +688,7 @@ async def apply_bot_repository_update(
                     if rc_ob == 0:
                         def_branch = cand
                         break
-            rc_p, _, err_p = await git("pull", "--ff-only", "--autostash", "origin", def_branch)
+            rc_p, _, err_p = await git_remote("pull", "--ff-only", "--autostash", "origin", def_branch)
             if rc_p != 0:
                 raise BotGitUpdateError(
                     f"git pull --ff-only --autostash origin {def_branch} 失败：{err_p or '(无 stderr)'}",

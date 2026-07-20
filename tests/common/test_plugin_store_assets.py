@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 from pallas.console.webui import plugin_store_assets as mod
 
 if TYPE_CHECKING:
@@ -156,3 +158,78 @@ def test_collect_store_asset_targets_uses_author_avatar_for_community(monkeypatc
     community = targets["community"][0]
 
     assert community["assets"]["avatar"] == "https://avatars.githubusercontent.com/acme?s=64"
+
+
+@pytest.mark.asyncio
+async def test_download_binary_uses_mirror_failover(monkeypatch) -> None:
+    import httpx
+
+    from pallas.core.shared.utils import git_mirror as gm
+
+    ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
+
+    def fake_iter_mirrors():
+        yield ghproxy_mirror
+
+    monkeypatch.setattr(mod, "iter_mirrors_for_failover", fake_iter_mirrors)
+
+    calls: list[str] = []
+
+    async def fake_get(self, url: str, **kwargs):
+        calls.append(url)
+        return httpx.Response(
+            200,
+            content=b"png-bytes",
+            headers={"content-type": "image/png"},
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    content, content_type = await mod._download_binary(
+        "https://raw.githubusercontent.com/acme/demo/main/icon.png",
+    )
+
+    assert content == b"png-bytes"
+    assert content_type == "image/png"
+    assert len(calls) == 1
+    assert calls[0].startswith("https://ghproxy.vip/https://raw.githubusercontent.com/")
+
+
+@pytest.mark.asyncio
+async def test_download_text_first_tries_mirrors_before_next_url(monkeypatch) -> None:
+    import httpx
+
+    from pallas.core.shared.utils import git_mirror as gm
+
+    ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
+    github_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "github")
+
+    def fake_iter_mirrors():
+        yield ghproxy_mirror
+        yield github_mirror
+
+    monkeypatch.setattr(mod, "iter_mirrors_for_failover", fake_iter_mirrors)
+
+    calls: list[str] = []
+
+    async def fake_get(self, url: str, **kwargs):
+        calls.append(url)
+        if "ghproxy.vip" in url:
+            raise httpx.ConnectError("down", request=httpx.Request("GET", url))
+        return httpx.Response(
+            200,
+            text="# Readme\n",
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx.AsyncClient, "get", fake_get)
+
+    text, source_url = await mod._download_text_first([
+        "https://raw.githubusercontent.com/acme/demo/main/README.md",
+    ])
+
+    assert text == "# Readme\n"
+    assert source_url == "https://raw.githubusercontent.com/acme/demo/main/README.md"
+    assert any("ghproxy.vip" in u for u in calls)
+    assert any(u.startswith("https://raw.githubusercontent.com/") for u in calls)
