@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -20,6 +21,36 @@ def test_ai_install_status_shape(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
     assert "docker-compose.full.yml" in st["docker_hint"]
     assert "--profile ai" not in st["docker_hint"]
     assert st["clone_target"] == str((tmp_path / "missing").resolve())
+    assert st["layout"] == "missing"
+    assert st["is_managed"] is False
+    assert st["runtime"]["can_manage"] is False
+    assert st["runtime"]["running"] is False
+    assert "managed_root" in st
+    assert "sibling_root" in st
+
+
+def test_default_clone_target_is_managed_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.delenv("PALLAS_AI_ROOT", raising=False)
+    managed = tmp_path / "runtimes" / "pallas-bot-ai"
+    monkeypatch.setattr(ai_install, "managed_ai_root", lambda: managed.resolve())
+    assert ai_install.default_ai_clone_target() == managed.resolve()
+
+
+def test_clone_ai_repo_marks_managed(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    allowed = tmp_path / "pallas-bot-ai"
+    monkeypatch.setattr(ai_install, "default_ai_clone_target", lambda: allowed.resolve())
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001, ANN003
+        dest = Path(cmd[-1])
+        (dest / "scripts").mkdir(parents=True)
+        (dest / "scripts" / "ai_bootstrap.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        return type("R", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    monkeypatch.setattr(ai_install.subprocess, "run", fake_run)
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    out = ai_install.clone_ai_repo()
+    assert out == allowed.resolve()
+    assert (out / ".pallas-managed").is_file()
 
 
 def test_clone_ai_repo_rejects_foreign_path(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

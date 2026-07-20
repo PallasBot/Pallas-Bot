@@ -7,19 +7,37 @@ import tomllib
 from pathlib import Path
 
 from pallas.core.foundation.config.repo_settings import repo_config_path
-from pallas.core.foundation.paths import PROJECT_ROOT
+from pallas.core.foundation.paths import DATA_ROOT, PROJECT_ROOT
 
 _AI_BOOTSTRAP = "scripts/ai_bootstrap.sh"
+AI_REPO_DIR_NAME = "Pallas-Bot-AI"
+AI_RUNTIME_DIR_NAME = "pallas-bot-ai"
+
+
+def managed_ai_root() -> Path:
+    """Bot 托管安装默认路径：data/runtimes/pallas-bot-ai。"""
+    return (DATA_ROOT / "runtimes" / AI_RUNTIME_DIR_NAME).resolve()
+
+
+def sibling_ai_root() -> Path:
+    return (PROJECT_ROOT.parent / AI_REPO_DIR_NAME).resolve()
 
 
 def resolve_ai_repo_root() -> Path | None:
+    """解析已安装的 AI Runtime 根目录。
+
+    优先级：PALLAS_AI_ROOT → data/runtimes/pallas-bot-ai → 同级 Pallas-Bot-AI。
+    """
     override = os.environ.get("PALLAS_AI_ROOT", "").strip()
     if override:
         root = Path(override).expanduser().resolve()
         if (root / _AI_BOOTSTRAP).is_file():
             return root
         return None
-    sibling = (PROJECT_ROOT.parent / "Pallas-Bot-AI").resolve()
+    managed = managed_ai_root()
+    if (managed / _AI_BOOTSTRAP).is_file():
+        return managed
+    sibling = sibling_ai_root()
     if (sibling / _AI_BOOTSTRAP).is_file():
         return sibling
     return None

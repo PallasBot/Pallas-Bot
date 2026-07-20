@@ -4163,6 +4163,12 @@ class _AiInstallBody(BaseModel):
     use_gpu: bool = False
 
 
+class _AiRuntimeControlBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    with_media: bool = False
+
+
 class _HelpMenuVisibilityBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -8256,7 +8262,13 @@ def register_extended_api(
                     )
 
                     writeback = apply_ai_install_connection_writeback()
-                    j.result = {**j.result, **writeback}
+                    from pallas.console.cli.ai_supervisor import ai_runtime_status
+
+                    j.result = {
+                        **j.result,
+                        **writeback,
+                        "runtime": ai_runtime_status(ai_root=ai_root),
+                    }
                     j.message = "bootstrap 完成"
                 elif body.action == "clone":
                     j.result = {"ai_root": str(ai_root)}
@@ -8280,6 +8292,38 @@ def register_extended_api(
                 "X-Accel-Buffering": "no",
             },
         )
+
+    @router.get(f"{x}/ai-extension/runtime/status", include_in_schema=True)
+    async def _ai_extension_runtime_status() -> JSONResponse:
+        from pallas.console.cli.ai_supervisor import ai_runtime_status
+
+        data = await asyncio.to_thread(ai_runtime_status)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/ai-extension/runtime/start", include_in_schema=True)
+    async def _ai_extension_runtime_start(
+        body: _AiRuntimeControlBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.console.cli.ai_supervisor import start_ai_runtime
+
+        data = await asyncio.to_thread(start_ai_runtime, with_media=body.with_media)
+        status = 200 if data.get("ok") else 400
+        return JSONResponse({"ok": bool(data.get("ok")), "data": data}, status_code=status)
+
+    @router.post(f"{x}/ai-extension/runtime/stop", include_in_schema=True)
+    async def _ai_extension_runtime_stop(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.console.cli.ai_supervisor import stop_ai_runtime
+
+        data = await asyncio.to_thread(stop_ai_runtime)
+        status = 200 if data.get("ok") else 400
+        return JSONResponse({"ok": bool(data.get("ok")), "data": data}, status_code=status)
 
     @router.get(f"{x}/ai-extension/ncm/status", include_in_schema=True)
     async def _ai_extension_ncm_status() -> JSONResponse:
