@@ -86,22 +86,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Sync docs branch from main
+      - name: Mirror docs branch to main tip
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main docs
-          git switch -C docs origin/docs
-          if git merge origin/main -X theirs -m "chore(docs): 同步 main 文档变更 (${GITHUB_SHA:0:7})"; then
-            echo "merged main into docs (-X theirs)"
-          else
-            echo "merge conflict; fallback to checkout docs paths from main"
-            git merge --abort
-            git checkout origin/main -- docs/ tools/scripts/sync_docs_to_web.py .github/workflows/sync-docs-to-web.yml
-            if git diff --quiet && git diff --cached --quiet; then
-              echo "docs branch already up to date"
-              exit 0
-            fi
-            git commit -m "chore(docs): 同步 main 文档变更 (${GITHUB_SHA:0:7})"
+          if git rev-parse --verify origin/docs >/dev/null 2>&1 \
+            && [ "$(git rev-parse origin/docs)" = "$(git rev-parse origin/main)" ]; then
+            echo "docs branch already points at main (${GITHUB_SHA:0:7})"
+            exit 0
           fi
-          git push origin HEAD:refs/heads/docs
+          # Keep docs as a tip mirror of main — no merge commits / parallel history.
+          git push --force origin "refs/remotes/origin/main:refs/heads/docs"
