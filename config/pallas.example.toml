@@ -31,12 +31,12 @@ db = "PallasBot"
 # load_bundled_extra_plugins = "auto"      # true | false | auto（默认 auto：pip 未装时用仓库内副本）
 
 # [env]
-# 闲聊默认 bot_kernel：配置 Provider 后开 LLM_CHAT_ENABLED 即可，无需 AI Runtime / 9099
+# LLM 聊天默认 bot_kernel：配置 Provider 后开 LLM_CHAT_ENABLED 即可，无需 AI Runtime / 9099
 # LLM_RUNTIME = "bot_kernel"          # 或 ai_service（旧路径，依赖下方 AI_SERVER_*）
 # LLM_BASE_URL = "http://127.0.0.1:11434/v1"   # 兼容 LLM_REMOTE_BASE_URL
 # LLM_API_KEY = ""                    # 兼容 LLM_REMOTE_API_KEY；Ollama 可空
 # LLM_MODEL = "qwen2.5:7b"            # 兼容 LLM_REMOTE_MODEL
-# AI_SERVER_HOST = "127.0.0.1"   # 媒体 / ai_service 路径；全栈 Docker 由 compose 注入
+# AI_SERVER_HOST = "127.0.0.1"   # 媒体 / ai_service 路径；全栈 Docker 由 compose 注入 pallasbot-ai
 # AI_SERVER_PORT = "9099"
 # AI 扩展连接（WebUI 保存 → data/pb_webui/ai_extension.json；示例见 config/ai_extension.example.json）
 # 「AI 服务」Bearer Token 须与 Pallas-Bot-AI 的 PALLAS_AI_API_TOKEN 一致，否则运维日志 HTTP 拉取会 401。

@@ -1,19 +1,19 @@
 # AI 扩展
 
 ::: tip
-不启用 AI 时，复读、喝酒、轮盘等核心玩法照常可用。**@ 闲聊** 默认在 Bot 内核直连 OpenAI 兼容 Provider，不必再起 Pallas-Bot-AI。唱歌 / 画画等媒体能力仍可选部署 **AI Runtime**。
+不启用 AI Runtime 时，复读、喝酒、轮盘等核心玩法照常可用。**LLM 聊天**（@ 对话）默认在 Bot 内核直连 OpenAI 兼容 Provider，不必再起 Pallas-Bot-AI。唱歌等媒体能力仍可选部署 **AI Runtime**。
 :::
 
-本文按控制台点击顺序，带你把 **@ 闲聊** 跑通；唱歌 / TTS 见文末进阶。
+本文按控制台点击顺序，带你把 **LLM 聊天** 跑通；唱歌 / TTS 见文末进阶。
 
 ## 能力对照
 
 | 能力 | 群里口令（示例） |
 | --- | --- |
-| 随时闲聊 | @ 牛；见 [@牛牛与复读](llm-and-repeater.md) |
+| LLM 聊天 | @ 牛；见 [@牛牛与复读](llm-and-repeater.md) |
 | 翻唱 / 点歌 | `牛牛唱歌 …`、`牛牛点歌 …`（需媒体能力包 + 插件） |
 | 酒后对话 | 喝酒状态下的智能聊天 |
-| 文生图 | `牛牛画画 …`（需 draw 扩展） |
+| 文生图 | `牛牛画画 …`（插件直连网关，见画画插件） |
 
 精确口令以 **牛牛帮助** 为准。
 
@@ -21,13 +21,13 @@
 
 | 方案 | 说明 |
 | --- | --- |
-| 仅闲聊（云端 API） | 在 Bot 配置 Provider（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`）即可；无需 9099 / Redis / Celery |
-| 仅闲聊（本机 Ollama） | 将 `LLM_BASE_URL` 指到 `http://127.0.0.1:11434/v1`；CPU 可跑但较慢；内存建议 ≥8GB |
+| 仅 LLM 聊天（云端 API） | 在 Bot 配置 Provider（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`）即可；无需 9099 / Redis / Celery |
+| 仅 LLM 聊天（本机 Ollama） | 将 `LLM_BASE_URL` 指到 `http://127.0.0.1:11434/v1`；CPU 可跑但较慢；内存建议 ≥8GB |
 | 唱歌 / TTS | 建议 **NVIDIA ≥6GB** 显存；需可选 AI Runtime，Docker 用 **`pallas-bot-ai:latest`**（非默认 slim） |
 
 ---
 
-## 主路径：先让 @ 能聊
+## 主路径：先让 LLM 聊天可用
 
 ### 1. 打开控制台
 
@@ -51,11 +51,13 @@
 
 | 键 | 说明 |
 | --- | --- |
-| **`LLM_CHAT_ENABLED`** | 总闸，默认关；打开后 @ / 接话 AI 才生效 |
+| **`LLM_CHAT_ENABLED`** | 总闸，默认关；打开后 @ / 接话 LLM 才生效 |
 
 ### 4. （可选）AI Runtime 仅媒体
 
-唱歌 / 画画仍走 **AI 配置 → AI 服务** 安装或连接 Runtime。闲聊不依赖此项；连接页保存后扩展基址会同步 `AI_SERVER_*`（供媒体与兼容路径）。
+唱歌等仍走 **AI 配置 → AI 服务** 安装或连接 Runtime。LLM 聊天不依赖此项；连接页保存后扩展基址会同步 `AI_SERVER_*`（供媒体与兼容路径）。
+
+**Docker 全栈**：`docker-compose.full.yml` 已注入 `AI_SERVER_HOST=pallasbot-ai`；控制台探测该地址，**不会在 Bot 容器内 clone** AI 仓。
 
 ### 5. 验收
 
@@ -76,7 +78,7 @@
 1. **AI 配置 → 能力包 → 唱歌 · TTS · 媒体权重**  
 2. **源码**：若任务包未开 →「重新安装（含媒体）」；权重缺失 →「下载默认媒体权重」  
 3. **Docker slim**：按页内说明把 `PALLAS_AI_IMAGE` 改为 `pallasbot/pallas-bot-ai:latest`（可选叠 GPU compose），重启后看启动日志解压；**不要**指望 Ollama 拉取唱歌权重  
-4. 插件商店安装 **`pallas-plugin-ai-media`**（画画另装 `pallas-plugin-draw`）
+4. 插件商店安装 **`pallas-plugin-ai-media`**（画画用 `pallas-plugin-draw` 直连网关）
 
 插件安装步骤 → [安装插件](install-plugins.md)
 

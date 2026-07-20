@@ -14,19 +14,86 @@ from pallas.console.webui import ai_install_writeback as writeback
 def test_ai_install_status_shape(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("PALLAS_AI_ROOT", str(tmp_path / "missing"))
     monkeypatch.setattr(ai_install, "resolve_ai_repo_root", lambda: None)
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.probe_ai_health_at",
+        lambda host, port, timeout_sec=3.0: {
+            "ok": False,
+            "url": f"http://{host}:{port}/health",
+            "status_code": None,
+            "body_preview": None,
+            "error": "down",
+        },
+    )
+    monkeypatch.setattr("pallas.console.cli.ai_supervisor.running_in_docker", lambda: False)
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.resolve_configured_ai_endpoint",
+        lambda: ("127.0.0.1", 9099),
+    )
     st = ai_install.ai_install_status()
     assert st["detected"] is False
     assert st["git_url"].endswith("Pallas-Bot-AI.git")
-    assert "docker-compose.llm.yml" in st["docker_hint"]
     assert "docker-compose.full.yml" in st["docker_hint"]
-    assert "--profile ai" not in st["docker_hint"]
+    assert "pallasbot-ai" in st["docker_hint"]
     assert st["clone_target"] == str((tmp_path / "missing").resolve())
     assert st["layout"] == "missing"
     assert st["is_managed"] is False
     assert st["runtime"]["can_manage"] is False
     assert st["runtime"]["running"] is False
+    assert st["can_clone"] is True or st["git_available"] is False
     assert "managed_root" in st
     assert "sibling_root" in st
+
+
+def test_ai_install_status_docker_remote_healthy(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("PALLAS_AI_ROOT", str(tmp_path / "missing"))
+    monkeypatch.setattr(ai_install, "resolve_ai_repo_root", lambda: None)
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr("pallas.console.cli.ai_supervisor.running_in_docker", lambda: True)
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.resolve_configured_ai_endpoint",
+        lambda: ("pallasbot-ai", 9099),
+    )
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.probe_ai_health_at",
+        lambda host, port, timeout_sec=3.0: {
+            "ok": True,
+            "url": f"http://{host}:{port}/health",
+            "status_code": 200,
+            "body_preview": '{"status":"ok"}',
+            "error": None,
+        },
+    )
+    st = ai_install.ai_install_status()
+    assert st["detected"] is True
+    assert st["can_clone"] is False
+    assert st["layout"] == "docker"
+    assert st["runtime"]["running"] is True
+    assert st["runtime"]["can_manage"] is False
+    assert st["endpoint"]["host"] == "pallasbot-ai"
+
+
+def test_ai_install_status_forbids_clone_when_compose_host(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setenv("PALLAS_AI_ROOT", str(tmp_path / "missing"))
+    monkeypatch.setattr(ai_install, "resolve_ai_repo_root", lambda: None)
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr("pallas.console.cli.ai_supervisor.running_in_docker", lambda: False)
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.resolve_configured_ai_endpoint",
+        lambda: ("pallasbot-ai", 9099),
+    )
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.probe_ai_health_at",
+        lambda host, port, timeout_sec=3.0: {
+            "ok": False,
+            "url": f"http://{host}:{port}/health",
+            "status_code": None,
+            "body_preview": None,
+            "error": "down",
+        },
+    )
+    st = ai_install.ai_install_status()
+    assert st["can_clone"] is False
+    assert st["layout"] == "docker"
 
 
 def test_default_clone_target_is_managed_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

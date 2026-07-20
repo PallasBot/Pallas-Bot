@@ -61,7 +61,7 @@ class LlmWebuiConfig(BaseModel):
     llm_runtime: LlmRuntime = Field(
         default="bot_kernel",
         description=field_help(
-            "闲聊推理运行位置",
+            "LLM 聊天推理运行位置",
             "bot_kernel=Bot 进程内直连 OpenAI 兼容 Provider（默认）；ai_service=经 Pallas-Bot-AI（兼容旧部署）",
         ),
     )
@@ -90,7 +90,7 @@ class LlmWebuiConfig(BaseModel):
         default="127.0.0.1",
         description=field_help(
             "AI Runtime 主机地址（媒体 / 旧路径）",
-            "唱歌/画画或 llm_runtime=ai_service 时使用；本机填 127.0.0.1",
+            "唱歌等媒体或 llm_runtime=ai_service 时使用；本机填 127.0.0.1；Docker 全栈多为 pallasbot-ai",
         ),
     )
     ai_server_port: int = Field(

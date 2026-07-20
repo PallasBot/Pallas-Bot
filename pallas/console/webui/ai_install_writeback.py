@@ -14,6 +14,33 @@ DEFAULT_AI_SERVER_HOST = "127.0.0.1"
 DEFAULT_AI_SERVER_PORT = "9099"
 
 
+def default_ai_extension_base_url() -> str:
+    """优先用已配置的 AI_SERVER_*（compose 注入 pallasbot-ai），否则本机默认。"""
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+
+    host = (repo_env_raw_value("AI_SERVER_HOST") or "").strip() or DEFAULT_AI_SERVER_HOST
+    port_raw = (repo_env_raw_value("AI_SERVER_PORT") or "").strip() or DEFAULT_AI_SERVER_PORT
+    try:
+        port = int(port_raw)
+    except ValueError:
+        port = int(DEFAULT_AI_SERVER_PORT)
+    if not 1 <= port <= 65535:
+        port = int(DEFAULT_AI_SERVER_PORT)
+    return f"http://{host}:{port}"
+
+
+def default_ai_server_host_port() -> tuple[str, str]:
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+
+    host = (repo_env_raw_value("AI_SERVER_HOST") or "").strip()
+    port = (repo_env_raw_value("AI_SERVER_PORT") or "").strip()
+    if host and port:
+        return host, port
+    if host:
+        return host, DEFAULT_AI_SERVER_PORT
+    return DEFAULT_AI_SERVER_HOST, DEFAULT_AI_SERVER_PORT
+
+
 def ai_extension_config_path() -> Path:
     from packages.pb_webui.data_dir import pb_webui_data_dir
 
@@ -88,7 +115,7 @@ def sync_extension_base_url_from_ai_server(
         if isinstance(loaded, dict):
             raw = loaded
 
-    existing = str(raw.get("base_url", "")).strip() or DEFAULT_AI_EXTENSION_BASE_URL
+    existing = str(raw.get("base_url", "")).strip() or default_ai_extension_base_url()
     if "://" not in existing:
         existing = f"http://{existing}"
     parsed = urlparse(existing)
@@ -148,7 +175,7 @@ def writeback_ai_extension_if_empty(*, path: Path | None = None) -> bool:
         if existing:
             return False
 
-    base_url = str(raw.get("base_url", "")).strip() or DEFAULT_AI_EXTENSION_BASE_URL
+    base_url = str(raw.get("base_url", "")).strip() or default_ai_extension_base_url()
     api_prefix = str(raw.get("api_prefix", "")).strip() or "/api"
     if not api_prefix.startswith("/"):
         api_prefix = "/" + api_prefix
@@ -192,9 +219,19 @@ def writeback_ai_server_if_missing() -> bool:
     env = _load_webui_json_upper()
     if "AI_SERVER_HOST" in env or "AI_SERVER_PORT" in env:
         return False
+    host, port = default_ai_server_host_port()
+    # 若进程环境已有非本机（如 compose），落盘与之一致
+    import os
+
+    env_host = (os.environ.get("AI_SERVER_HOST") or "").strip()
+    env_port = (os.environ.get("AI_SERVER_PORT") or "").strip()
+    if env_host:
+        host = env_host
+    if env_port:
+        port = env_port
     upsert_repo_settings_items({
-        "AI_SERVER_HOST": DEFAULT_AI_SERVER_HOST,
-        "AI_SERVER_PORT": DEFAULT_AI_SERVER_PORT,
+        "AI_SERVER_HOST": host,
+        "AI_SERVER_PORT": port,
     })
     return True
 
