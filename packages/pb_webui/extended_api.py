@@ -4370,6 +4370,34 @@ class _ServiceGatewaysConnectivityCheckData(BaseModel):
     results: list[_ServiceProbeResultData] = Field(default_factory=list)
 
 
+class _CommunityConnectivityProbeRow(BaseModel):
+    url: str
+    ok: bool
+    latency_ms: int | None = None
+    http_status: int | None = None
+    error: str | None = None
+
+
+class _CommunityConnectivityReporting(BaseModel):
+    enabled: bool = True
+    endpoint: str = ""
+    active_heartbeat_endpoint: str | None = None
+    deployment_id: str | None = None
+    last_heartbeat_ok_unix: int | None = None
+    last_primary_probe_unix: int | None = None
+
+
+class _CommunityConnectivitySummary(BaseModel):
+    any_ok: bool = False
+    hint: str = ""
+
+
+class _CommunityConnectivityCheckData(BaseModel):
+    probes: list[_CommunityConnectivityProbeRow] = Field(default_factory=list)
+    reporting: _CommunityConnectivityReporting = Field(default_factory=_CommunityConnectivityReporting)
+    summary: _CommunityConnectivitySummary = Field(default_factory=_CommunityConnectivitySummary)
+
+
 class _LlmProviderConfigRowData(BaseModel):
     id: str
     kind: str
@@ -5150,6 +5178,24 @@ def register_extended_api(
 
         data = await cached_read(key="community-stats", loader=_load, ttl_sec=30.0, stale_sec=120.0)
         return JSONResponse({"ok": True, "data": data})
+
+    @router.post(
+        f"{x}/community-stats/connectivity-check",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_CommunityConnectivityCheckData],
+    )
+    async def _community_stats_connectivity_check(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> dict[str, Any]:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.community_stats.connectivity_probe import probe_community_connectivity
+
+        try:
+            data = await probe_community_connectivity()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return {"ok": True, "data": data}
 
     @router.get(f"{x}/community-corpus-hot", include_in_schema=True)
     async def _community_corpus_hot(
