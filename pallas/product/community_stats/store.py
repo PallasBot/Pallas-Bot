@@ -93,6 +93,12 @@ def touch_primary_probe_unix() -> None:
     _write_state(data)
 
 
+def touch_last_heartbeat_ok_unix(seen_unix: int | None = None) -> None:
+    data = _read_state_raw()
+    data["last_heartbeat_ok_unix"] = int(time.time() if seen_unix is None else seen_unix)
+    _write_state(data)
+
+
 def _is_uuid(value: str) -> bool:
     try:
         uuid.UUID(value)

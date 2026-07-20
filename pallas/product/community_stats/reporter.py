@@ -22,6 +22,7 @@ from pallas.product.community_stats.endpoints import (
 from pallas.product.community_stats.store import (
     load_or_create_deployment_id,
     save_heartbeat_endpoint,
+    touch_last_heartbeat_ok_unix,
     touch_primary_probe_unix,
 )
 from pallas.product.message_scrub.quiet_http_loggers import scrub_http_log_noise
@@ -109,6 +110,7 @@ async def _post_heartbeat(
     resp = await client.post(endpoint, json=payload, headers=_headers(cfg), timeout=timeout_sec)
     if resp.status_code == 200:
         save_heartbeat_endpoint(endpoint)
+        touch_last_heartbeat_ok_unix()
         logger.debug("community_stats: heartbeat ok deployment_id={} endpoint={}", payload["deployment_id"], endpoint)
         return True
     if resp.status_code == 429:
