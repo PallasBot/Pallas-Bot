@@ -10,7 +10,7 @@ async def test_fetch_latest_release_tries_proxy_before_github(monkeypatch):
     ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
     github_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "github")
 
-    def fake_iter_mirrors():
+    def fake_iter_mirrors(*_args):
         yield ghproxy_mirror
         yield github_mirror
 
@@ -50,7 +50,7 @@ async def test_fetch_github_releases_failover_proxy_then_github(monkeypatch):
     ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
     github_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "github")
 
-    def fake_iter_mirrors():
+    def fake_iter_mirrors(*_args):
         yield ghproxy_mirror
         yield github_mirror
 
@@ -101,7 +101,7 @@ async def test_fetch_github_releases_all_mirrors_fail_returns_empty(monkeypatch)
     ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
     github_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "github")
 
-    def fake_iter_mirrors():
+    def fake_iter_mirrors(*_args):
         yield ghproxy_mirror
         yield github_mirror
 
@@ -126,7 +126,7 @@ async def test_fetch_latest_release_tag_via_github_web_failover(monkeypatch):
     ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
     github_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "github")
 
-    def fake_iter_mirrors():
+    def fake_iter_mirrors(*_args):
         yield ghproxy_mirror
         yield github_mirror
 

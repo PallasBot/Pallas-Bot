@@ -168,7 +168,7 @@ async def test_download_binary_uses_mirror_failover(monkeypatch) -> None:
 
     ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
 
-    def fake_iter_mirrors():
+    def fake_iter_mirrors(*_args):
         yield ghproxy_mirror
 
     monkeypatch.setattr(mod, "iter_mirrors_for_failover", fake_iter_mirrors)
@@ -205,7 +205,7 @@ async def test_download_text_first_tries_mirrors_before_next_url(monkeypatch) ->
     ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
     github_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "github")
 
-    def fake_iter_mirrors():
+    def fake_iter_mirrors(*_args):
         yield ghproxy_mirror
         yield github_mirror
 

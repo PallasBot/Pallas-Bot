@@ -28,12 +28,13 @@
 
 ## 能力范围
 
-- **@ 对话、接话 LLM、醉聊**（可选；默认也可走 Bot 内核 Provider）
-- 绘图与媒体生成（唱歌 / TTS 等）
+- 绘图与媒体生成
+- 唱歌、音频、工具类异步任务
 - 任务状态回调与结果回传
+- 遗留路径：`LLM_RUNTIME=ai_service` 时的聊天任务（默认聊天走 Bot 内核 Provider，不必装 Runtime）
 
 ::: tip
-可选。不接 AI Runtime 也能跑复读与官方插件。**LLM 聊天**默认在 Bot 内核配 Provider 即可；仅在需要唱歌 / TTS 等媒体，或显式 `LLM_RUNTIME=ai_service` 时再接 AI Runtime。
+普通复读、帮助、权限、扩展玩法：本体 + 扩展即可。默认 LLM 聊天只配 **接入** Provider；唱歌 / TTS 等媒体再接 AI Runtime。
 :::
 
 ## 安装（维护者）
@@ -47,7 +48,7 @@ cp .env.example .env
 ./scripts/ai_bootstrap.sh --bot-host 127.0.0.1 --bot-port 8088
 ```
 
-默认只装 **LLM 栈**（不装 torch），启动 llm worker + API（兼容 `LLM_RUNTIME=ai_service`）。日常 LLM 聊天更推荐 Bot 内核 Provider。
+默认只装 **LLM 栈**（不装 torch），启动 llm worker + API，够用 @ 闲聊 / 接话。
 
 或在 **Pallas-Bot** 仓库（同级已克隆 AI 仓时）：
 
@@ -55,7 +56,7 @@ cp .env.example .env
 uv run pallas ai setup
 ```
 
-也可在控制台 **AI 配置 · AI 服务** 安装本机 Runtime，或连接 Docker 已起的 `pallasbot-ai`（探测 `AI_SERVER_*`，不在 Bot 容器内 clone）。成功且连接配置为空时会按 `AI_SERVER_*` 写入默认基址。
+也可在控制台 **AI 配置 · AI 服务** 使用「安装 AI Runtime（源码）」：克隆同级 `Pallas-Bot-AI` 并跑 `ai_bootstrap.sh`（可选「含唱歌/TTS」）；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
 
 用户向手把手与 **能力包**（对话模型拉取、媒体权重 / Docker 换 `latest`）见 [AI 扩展](/guide/ai)。
 
@@ -93,20 +94,23 @@ docker compose -f docker-compose.llm.yml up -d
 
 使用主仓 **`docker-compose.full.yml`**（PostgreSQL + Bot + Redis + Ollama + AI），见 [Docker 部署](/deploy/docker)。
 
-默认 AI 为 **slim** 镜像；Ollama 模型默认不预拉（`--profile pull-models` 可选）。在 WebUI「AI 配置 → 接入」保存基址时，会同步 Bot 侧 `AI_SERVER_HOST` / `AI_SERVER_PORT`；策略页不再单独填地址。
+默认 AI 为 **slim** 镜像；Ollama 模型默认不预拉（`--profile pull-models` 可选）。在 WebUI「AI 配置 → 媒体服务」保存基址时，会同步 Bot 侧 `AI_SERVER_HOST` / `AI_SERVER_PORT`；策略页不再单独填地址。
 
 ### Bot 侧最小配置
 
-`config/pallas.toml` 的 `[env]` 或 WebUI「智能对话与 AI 服务」：
+`config/pallas.toml` 的 `[env]` 或 WebUI「智能对话与媒体服务」：
 
 - `LLM_CHAT_ENABLED=true`
-- `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；全栈 compose 内由环境注入；也可由扩展基址同步）
+- Provider（**接入**页）；默认 `LLM_RUNTIME=bot_kernel`
+- 媒体 / 遗留 `ai_service` 时再配 `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；也可由扩展基址同步）
 
 详细变量见 [Pallas-Bot-AI README](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/README.md) 与 [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)。
 
 从 0 安装验收见 [安装验收 Checklist](ga-install-checklist.md)。
 
-## 接入前核对
+## 接入前核对（媒体 / 遗留 ai_service）
+
+默认 LLM 聊天只核对 Provider。下列项针对 **媒体任务** 或 `LLM_RUNTIME=ai_service`。
 
 ### 1. 地址与可达性
 

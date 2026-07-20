@@ -11,7 +11,6 @@ from pallas.product.llm.config import get_llm_config
 
 VectorRetrieveMode = Literal["keyword", "embedding", "hybrid", "vector"]
 RepeaterMode = Literal["off", "select", "select_polish_lite", "select_fallback", "fallback"]
-LlmRuntime = Literal["bot_kernel", "ai_service"]
 
 _LEGACY_REPEATER_MODE_TO_WEBUI: dict[str, RepeaterMode] = {
     "polish": "select_polish_lite",
@@ -58,46 +57,21 @@ def default_output_filter_polish_lite_soft_phrases() -> list[str]:
 class LlmWebuiConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    llm_runtime: LlmRuntime = Field(
-        default="bot_kernel",
-        description=field_help(
-            "LLM 聊天推理运行位置",
-            "bot_kernel=Bot 进程内直连 OpenAI 兼容 Provider（默认）；ai_service=经 Pallas-Bot-AI（兼容旧部署）",
-        ),
-    )
-    llm_base_url: str = Field(
-        default="",
-        description=field_help(
-            "OpenAI 兼容 API 基址",
-            "内核模式必填，如 https://api.openai.com/v1 或 http://127.0.0.1:11434/v1；兼容 LLM_REMOTE_BASE_URL",
-        ),
-    )
-    llm_api_key: str = Field(
-        default="",
-        description=field_help(
-            "Provider API Key",
-            "本地 Ollama 可留空；云端必填。兼容 LLM_REMOTE_API_KEY",
-        ),
-    )
-    llm_model: str = Field(
-        default="",
-        description=field_help(
-            "默认对话模型名",
-            "内核模式必填，如 gpt-4o-mini / qwen2.5:7b。兼容 LLM_REMOTE_MODEL",
-        ),
-    )
     ai_server_host: str = Field(
         default="127.0.0.1",
         description=field_help(
-            "AI Runtime 主机地址（媒体 / 旧路径）",
-            "唱歌等媒体或 llm_runtime=ai_service 时使用；本机填 127.0.0.1；Docker 全栈多为 pallasbot-ai",
+            "AI Runtime（媒体服务）所在主机",
+            "唱歌/TTS 等媒体任务用；默认 LLM 聊天走 Bot 内核 Provider，不依赖此项",
         ),
     )
     ai_server_port: int = Field(
         default=9099,
         ge=1,
         le=65535,
-        description=field_help("AI Runtime 端口（媒体 / 旧路径）", "与 Pallas-Bot-AI 的 .env 中端口一致"),
+        description=field_help(
+            "AI Runtime 监听端口",
+            "与 Pallas-Bot-AI 的端口一致；推荐在「媒体服务」页修改并同步",
+        ),
     )
     llm_chat_enabled: bool = Field(
         default=False,
@@ -145,7 +119,7 @@ class LlmWebuiConfig(BaseModel):
         default=True,
         description=field_help(
             "是否允许智能对话调用方舟等资料工具",
-            "需同时开启智能对话总闸；内核模式在 Bot 进程内执行工具",
+            "需同时开启智能对话总闸与 AI 仓 LLM_TOOLS_ENABLED",
         ),
     )
     llm_chat_max_concurrency: int = Field(
@@ -295,10 +269,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
     cfg = get_llm_config()
     mode = normalize_repeater_mode_for_webui(cfg.llm_repeater_mode)
     return LlmWebuiConfig(
-        llm_runtime=cfg.llm_runtime,  # type: ignore[arg-type]
-        llm_base_url=cfg.llm_base_url,
-        llm_api_key=cfg.llm_api_key,
-        llm_model=cfg.llm_model,
         ai_server_host=cfg.ai_server_host,
         ai_server_port=cfg.ai_server_port,
         llm_chat_enabled=cfg.llm_chat_enabled,

@@ -273,6 +273,7 @@ async def fetch_latest_release_tag_via_github_web(
     token: str = "",
     user_agent: str = "Pallas-Bot/1.0",
     client_timeout: httpx.Timeout | None = None,
+    mirror_scope: str | None = None,
 ) -> dict[str, str]:
     """GET ``github.com/{owner}/{repo}/releases/latest`` 并跟随跳转，解析当前最新 tag。"""
     owner_part, _, name_part = (repo or "").strip().partition("/")
@@ -283,7 +284,7 @@ async def fetch_latest_release_tag_via_github_web(
     eff_timeout = client_timeout or httpx.Timeout(15.0, connect=8.0)
     headers: dict[str, str] = {"User-Agent": user_agent}
     headers.update(github_auth_headers(token))
-    mirrors = list(iter_mirrors_for_failover())
+    mirrors = list(iter_mirrors_for_failover(mirror_scope))
 
     async def getter(url: str) -> dict[str, str]:
         resp = await client.get(url)
@@ -316,7 +317,7 @@ async def fetch_github_releases(
         return []
     api_url = f"https://api.github.com/repos/{owner}/{name}/releases?per_page={limit}"
     auth_headers = github_auth_headers(token)
-    mirrors = list(iter_mirrors_for_failover())
+    mirrors = list(iter_mirrors_for_failover("bot"))
 
     async def getter(url: str) -> httpx.Response:
         resp = await client.get(url, headers=auth_headers)
@@ -363,6 +364,7 @@ async def fetch_latest_release(
     token: str = "",
     preferred_asset_name: str | None = None,
     include_asset_url: bool = True,
+    mirror_scope: str | None = None,
 ) -> dict[str, Any]:
     """获取指定仓库最新 release 的摘要信息。
 
@@ -375,7 +377,7 @@ async def fetch_latest_release(
     api_url = github_release_api_url(repo)
     headers: dict[str, str] = {"User-Agent": user_agent}
     headers.update(github_auth_headers(token))
-    mirrors = list(iter_mirrors_for_failover())
+    mirrors = list(iter_mirrors_for_failover(mirror_scope))
 
     async def getter(url: str) -> httpx.Response:
         resp = await client.get(url)

@@ -203,7 +203,7 @@ def _llm_section() -> WebuiEnvSection:
 
     return WebuiEnvSection(
         id="llm",
-        title="智能对话与 AI 服务",
+        title="智能对话与媒体服务",
         module_label="pallas.product.llm",
         model_cls=LlmWebuiConfig,
         read_current=get_llm_webui_config,

@@ -145,7 +145,25 @@ def test_github_preferred_failover_order(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     ids = [m.id for m in gm.iter_mirrors_for_failover()]
-    assert ids == ["github", "ghproxy-vip"]
+    assert ids[0] == "github"
+    assert "ghproxy-vip" in ids
+    assert "ghproxy-net" in ids
+    assert len(ids) == len(set(ids))
+
+
+def test_scope_override_failover(monkeypatch, tmp_path):
+    from pallas.core.shared.utils import git_mirror as gm
+
+    monkeypatch.setattr(gm, "repo_webui_settings_path", lambda: tmp_path / "webui.json")
+    (tmp_path / "webui.json").write_text(
+        '{"env":{},"git_mirror":{"preferred_id":"github","custom_proxy_prefix":"",'
+        '"scopes":{"webui":"ghproxy-net","bot":"","community":""}}}\n',
+        encoding="utf-8",
+    )
+    assert gm.resolve_mirror_for_scope("webui").id == "ghproxy-net"
+    assert gm.resolve_mirror_for_scope("bot").id == "github"
+    ids = [m.id for m in gm.iter_mirrors_for_failover("webui")]
+    assert ids[0] == "ghproxy-net"
 
 
 def test_git_instead_of_args_github_is_empty():

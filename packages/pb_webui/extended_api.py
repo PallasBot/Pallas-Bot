@@ -6618,13 +6618,38 @@ def register_extended_api(
         f"{x}/common-config/llm/media-assets/download",
         include_in_schema=True,
     )
-    async def _llm_media_assets_download_post() -> JSONResponse:
+    async def _llm_media_assets_download_post(body: dict[str, Any] | None = None) -> JSONResponse:
         from pallas.product.llm.media_assets import start_media_assets_download
 
+        assets = None
+        if isinstance(body, dict) and isinstance(body.get("assets"), list):
+            assets = [str(a) for a in body["assets"]]
         try:
-            data = await start_media_assets_download()
+            data = await start_media_assets_download(assets=assets)
         except PermissionError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(
+        f"{x}/common-config/llm/media-assets/delete",
+        include_in_schema=True,
+    )
+    async def _llm_media_assets_delete_post(body: dict[str, Any]) -> JSONResponse:
+        from pallas.product.llm.media_assets import delete_media_assets
+
+        assets = body.get("assets") if isinstance(body, dict) else None
+        if not isinstance(assets, list) or not assets:
+            raise HTTPException(status_code=400, detail="assets 不能为空")
+        try:
+            data = await delete_media_assets(assets=[str(a) for a in assets])
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
@@ -6640,6 +6665,108 @@ def register_extended_api(
             data = await fetch_media_assets_download_job(job_id)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/sing/speakers",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_sing_speakers_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_sing_speakers
+
+        try:
+            data = await fetch_sing_speakers()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/sing/backends",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_sing_backends_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_sing_backends
+
+        try:
+            data = await fetch_sing_backends()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/sing/defaults",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_sing_defaults_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_sing_defaults
+
+        try:
+            data = await fetch_sing_defaults()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(
+        f"{x}/common-config/llm/media-models/sing/defaults",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_sing_defaults_put(body: dict[str, Any]) -> JSONResponse:
+        from pallas.product.llm.media_models import put_sing_defaults
+
+        payload = body if isinstance(body, dict) else {}
+        if payload.get("default_speaker") is None and payload.get("preferred_backend") is None:
+            raise HTTPException(status_code=400, detail="至少提供 default_speaker 或 preferred_backend")
+        try:
+            data = await put_sing_defaults(payload)
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/tts/voices",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_voices_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_tts_voices
+
+        try:
+            data = await fetch_tts_voices()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/tts/defaults",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_defaults_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_tts_defaults
+
+        try:
+            data = await fetch_tts_defaults()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(
+        f"{x}/common-config/llm/media-models/tts/defaults",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_defaults_put(body: dict[str, Any]) -> JSONResponse:
+        from pallas.product.llm.media_models import put_tts_defaults
+
+        try:
+            data = await put_tts_defaults(body if isinstance(body, dict) else {})
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
