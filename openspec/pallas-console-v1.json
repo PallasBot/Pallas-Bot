@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v3.9.0-215-gfb26dd7f",
+    "version": "v4.0.0-4-g0f6b25c7-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -1316,6 +1316,71 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/community-stats/connectivity-check": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Community Stats Connectivity Check",
+        "operationId": "_community_stats_connectivity_check_pallas_api_community_stats_connectivity_check_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__CommunityConnectivityCheckData_"
+                }
               }
             }
           },
@@ -13887,6 +13952,24 @@
         ],
         "title": "_ApiOkResponse[_AiExtensionTestData]"
       },
+      "_ApiOkResponse__CommunityConnectivityCheckData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_CommunityConnectivityCheckData"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_CommunityConnectivityCheckData]"
+      },
       "_ApiOkResponse__ConsoleLoginChangeData_": {
         "properties": {
           "ok": {
@@ -14130,6 +14213,157 @@
           "new_password"
         ],
         "title": "_ChangeConsoleLoginBody"
+      },
+      "_CommunityConnectivityCheckData": {
+        "properties": {
+          "probes": {
+            "items": {
+              "$ref": "#/components/schemas/_CommunityConnectivityProbeRow"
+            },
+            "type": "array",
+            "title": "Probes"
+          },
+          "reporting": {
+            "$ref": "#/components/schemas/_CommunityConnectivityReporting"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/_CommunityConnectivitySummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "probes",
+          "reporting",
+          "summary"
+        ],
+        "title": "_CommunityConnectivityCheckData"
+      },
+      "_CommunityConnectivityProbeRow": {
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "Url"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "http_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Http Status"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "url",
+          "ok"
+        ],
+        "title": "_CommunityConnectivityProbeRow"
+      },
+      "_CommunityConnectivityReporting": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "default": ""
+          },
+          "active_heartbeat_endpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Heartbeat Endpoint"
+          },
+          "deployment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deployment Id"
+          },
+          "last_heartbeat_ok_unix": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Heartbeat Ok Unix"
+          },
+          "last_primary_probe_unix": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Primary Probe Unix"
+          }
+        },
+        "type": "object",
+        "title": "_CommunityConnectivityReporting"
+      },
+      "_CommunityConnectivitySummary": {
+        "properties": {
+          "any_ok": {
+            "type": "boolean",
+            "title": "Any Ok",
+            "default": false
+          },
+          "hint": {
+            "type": "string",
+            "title": "Hint",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "_CommunityConnectivitySummary"
       },
       "_CommunityPluginActionBody": {
         "properties": {

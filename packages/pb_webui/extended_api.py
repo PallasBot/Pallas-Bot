@@ -4393,9 +4393,9 @@ class _CommunityConnectivitySummary(BaseModel):
 
 
 class _CommunityConnectivityCheckData(BaseModel):
-    probes: list[_CommunityConnectivityProbeRow] = Field(default_factory=list)
-    reporting: _CommunityConnectivityReporting = Field(default_factory=_CommunityConnectivityReporting)
-    summary: _CommunityConnectivitySummary = Field(default_factory=_CommunityConnectivitySummary)
+    probes: list[_CommunityConnectivityProbeRow]
+    reporting: _CommunityConnectivityReporting
+    summary: _CommunityConnectivitySummary
 
 
 class _LlmProviderConfigRowData(BaseModel):
@@ -5194,7 +5194,8 @@ def register_extended_api(
         try:
             data = await probe_community_connectivity()
         except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=500, detail=str(e)) from e
+            logger.exception("Pallas-Bot 控制台: 社区连通检测失败")
+            raise HTTPException(status_code=500, detail="社区连通检测失败") from e
         return {"ok": True, "data": data}
 
     @router.get(f"{x}/community-corpus-hot", include_in_schema=True)

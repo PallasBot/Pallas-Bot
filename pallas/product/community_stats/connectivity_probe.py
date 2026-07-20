@@ -128,7 +128,11 @@ async def probe_community_connectivity() -> dict[str, Any]:
     last_probe = state.get("last_primary_probe_unix")
     try:
         deployment_id = load_or_create_deployment_id()
-    except Exception:  # noqa: BLE001
+    except OSError as e:
+        logger.warning(
+            "community_stats: load_or_create_deployment_id failed, fallback to state: {}",
+            e,
+        )
         deployment_id = str(state.get("deployment_id") or "").strip() or None
 
     any_ok = any(bool(p.get("ok")) for p in probes)
