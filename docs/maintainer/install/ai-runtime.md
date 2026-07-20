@@ -82,7 +82,7 @@ uv run pallas ai setup
 uv run pallas ai setup --remote-only --bot-port 8088
 ```
 
-完整配置、Docker 仅起 `redis`+`pallasbot-ai`、验收与排障见 **[Pallas-Bot-AI · remote-only 部署](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/deploy/remote-only.md)**。
+完整配置、Docker 仅起 `redis`+`pallasbot-ai`、验收与排障见 **[Pallas-Bot-AI · remote-only 部署](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/deploy/remote-only.md)**。
 
 ### Docker（仅 AI 栈）
 
@@ -103,7 +103,7 @@ docker compose -f docker-compose.llm.yml up -d
 - `LLM_CHAT_ENABLED=true`
 - `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；全栈 compose 内由环境注入；也可由扩展基址同步）
 
-详细变量见 [Pallas-Bot-AI README](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/README.md) 与 [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)。
+详细变量见 [Pallas-Bot-AI README](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/README.md) 与 [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)。
 
 从 0 安装验收见 [安装验收 Checklist](ga-install-checklist.md)。
 

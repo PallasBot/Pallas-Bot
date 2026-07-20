@@ -118,11 +118,11 @@ AI runtime 任务成功，不等于群里一定能收到结果。中间还经过
 
 ## Ollama GPU 回退 CPU（推理极慢）
 
-Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 200 但推理回退 CPU。探活与 cron 见 **Pallas-Bot-AI**：[docs/operate/ollama-gpu-watchdog.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/operate/ollama-gpu-watchdog.md)（`scripts/ollama_gpu_watchdog.sh --fix`）。
+Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 200 但推理回退 CPU。探活与 cron 见 **Pallas-Bot-AI**：[docs/operate/ollama-gpu-watchdog.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/operate/ollama-gpu-watchdog.md)（`scripts/ollama_gpu_watchdog.sh --fix`）。
 
 ## 纯远端 API（无 Ollama）
 
-未部署本地模型、仅用第三方 OpenAI 兼容 API 时，见 **Pallas-Bot-AI**：[docs/deploy/remote-only.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/deploy/remote-only.md)。`/health.llm.provider_mode` 应为 `remote_only`。
+未部署本地模型、仅用第三方 OpenAI 兼容 API 时，见 **Pallas-Bot-AI**：[docs/deploy/remote-only.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/deploy/remote-only.md)。`/health.llm.provider_mode` 应为 `remote_only`。
 
 ## 相关阅读
 

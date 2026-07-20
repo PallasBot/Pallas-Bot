@@ -21,7 +21,7 @@
 
 | 方案 | 说明 |
 | --- | --- |
-| 仅闲聊（云端 API） | 可不跑本地大模型；仍须轻量 AI 服务，见 [remote-only](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/deploy/remote-only.md) |
+| 仅闲聊（云端 API） | 可不跑本地大模型；仍须轻量 AI 服务，见 [remote-only](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/deploy/remote-only.md) |
 | 仅闲聊（本机 Ollama） | CPU 可跑但较慢；内存建议 ≥8GB |
 | 唱歌 / TTS | 建议 **NVIDIA ≥6GB** 显存；Docker 需 **`pallas-bot-ai:latest`**（非默认 slim） |
 
