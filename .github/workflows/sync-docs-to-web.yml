@@ -91,10 +91,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git fetch origin main docs
+          git switch -C main origin/main
+          main_sha="$(git rev-parse --short main)"
           if git rev-parse --verify origin/docs >/dev/null 2>&1 \
-            && [ "$(git rev-parse origin/docs)" = "$(git rev-parse origin/main)" ]; then
-            echo "docs branch already points at main (${GITHUB_SHA:0:7})"
+            && [ "$(git rev-parse origin/docs)" = "$(git rev-parse main)" ]; then
+            echo "docs branch already points at main (${main_sha})"
             exit 0
           fi
           # Keep docs as a tip mirror of main — no merge commits / parallel history.
-          git push --force origin "refs/remotes/origin/main:refs/heads/docs"
+          git push --force origin main:docs
