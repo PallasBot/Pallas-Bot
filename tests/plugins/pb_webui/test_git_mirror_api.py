@@ -25,7 +25,7 @@ def test_git_mirror_info_returns_payload(monkeypatch) -> None:
         lambda: {
             "preferred_id": "github",
             "custom_proxy_prefix": "",
-            "available_mirrors": [{"id": "github", "label": "GitHub 官方", "type": "default"}],
+            "available_mirrors": [{"id": "github", "label": "GitHub（默认）", "type": "default"}],
             "plugins": [],
         },
     )

@@ -13,6 +13,7 @@ from pallas.core.shared.utils.git_mirror import (
     apply_mirror_to_all_targets,
     apply_mirror_to_bot,
     apply_mirror_to_community_plugins,
+    apply_mirror_to_official_extension,
     apply_mirror_to_plugin,
     build_git_mirror_info,
     load_git_mirror_config,
@@ -124,6 +125,17 @@ def apply_git_mirror_to_plugin(plugin_id: str, body: GitMirrorApplyPluginBody) -
     return apply_mirror_to_plugin(plugin_id, mirror=mirror)
 
 
+def apply_git_mirror_to_official(package: str, body: GitMirrorApplyPluginBody) -> dict[str, Any]:
+    mirror = None
+    if (body.preferred_id or "").strip():
+        cfg = load_git_mirror_config()
+        mirror = resolve_mirror_by_preferred_id(
+            body.preferred_id or "",
+            custom_proxy_prefix=str(cfg.get("custom_proxy_prefix") or ""),
+        )
+    return apply_mirror_to_official_extension(package, mirror=mirror)
+
+
 def apply_git_mirror_to_bot(body: GitMirrorApplyTargetBody | None = None) -> dict[str, Any]:
     mirror = None
     if body and (body.preferred_id or "").strip():
@@ -199,6 +211,17 @@ def register_git_mirror_router(
     ) -> JSONResponse:
         check_write_token(x_pallas_token=x_pallas_token, token=token)
         data = apply_git_mirror_to_all(body)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/git-mirror/apply-official/{{package}}", include_in_schema=True)
+    async def _git_mirror_apply_official(
+        package: str,
+        body: GitMirrorApplyPluginBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(x_pallas_token=x_pallas_token, token=token)
+        data = apply_git_mirror_to_official(package, body)
         return JSONResponse({"ok": True, "data": data})
 
     @router.post(f"{x}/git-mirror/apply-plugin/{{plugin_id}}", include_in_schema=True)

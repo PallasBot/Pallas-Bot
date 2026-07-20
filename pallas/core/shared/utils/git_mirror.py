@@ -51,7 +51,7 @@ def _proxy_mirror(mirror_id: str, label: str, proxy_base: str) -> MirrorSpec:
 BUILTIN_MIRRORS: tuple[MirrorSpec, ...] = (
     MirrorSpec(
         id="github",
-        label="GitHub 官方",
+        label="GitHub（默认）",
         type="default",
         clone_prefix="https://github.com",
         raw_prefix="https://raw.githubusercontent.com",
@@ -112,6 +112,18 @@ def _normalize_scopes(raw: object) -> dict[str, str]:
     return out
 
 
+def _normalize_plugin_overrides(raw: object) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, value in raw.items():
+        pkg = str(key).strip()
+        mid = str(value or "").strip()
+        if pkg and mid:
+            out[pkg] = mid
+    return out
+
+
 def load_git_mirror_config() -> dict[str, object]:
     path = repo_webui_settings_path()
     if not path.is_file():
@@ -119,6 +131,7 @@ def load_git_mirror_config() -> dict[str, object]:
             "preferred_id": _DEFAULT_GIT_MIRROR_CONFIG["preferred_id"],
             "custom_proxy_prefix": _DEFAULT_GIT_MIRROR_CONFIG["custom_proxy_prefix"],
             "scopes": dict(_DEFAULT_SCOPES),
+            "plugin_overrides": {},
         }
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -127,12 +140,14 @@ def load_git_mirror_config() -> dict[str, object]:
             "preferred_id": _DEFAULT_GIT_MIRROR_CONFIG["preferred_id"],
             "custom_proxy_prefix": _DEFAULT_GIT_MIRROR_CONFIG["custom_proxy_prefix"],
             "scopes": dict(_DEFAULT_SCOPES),
+            "plugin_overrides": {},
         }
     if not isinstance(data, dict):
         return {
             "preferred_id": _DEFAULT_GIT_MIRROR_CONFIG["preferred_id"],
             "custom_proxy_prefix": _DEFAULT_GIT_MIRROR_CONFIG["custom_proxy_prefix"],
             "scopes": dict(_DEFAULT_SCOPES),
+            "plugin_overrides": {},
         }
     section = data.get("git_mirror")
     if not isinstance(section, dict):
@@ -140,11 +155,13 @@ def load_git_mirror_config() -> dict[str, object]:
             "preferred_id": _DEFAULT_GIT_MIRROR_CONFIG["preferred_id"],
             "custom_proxy_prefix": _DEFAULT_GIT_MIRROR_CONFIG["custom_proxy_prefix"],
             "scopes": dict(_DEFAULT_SCOPES),
+            "plugin_overrides": {},
         }
     return {
         "preferred_id": str(section.get("preferred_id") or _DEFAULT_GIT_MIRROR_CONFIG["preferred_id"]),
         "custom_proxy_prefix": str(section.get("custom_proxy_prefix") or ""),
         "scopes": _normalize_scopes(section.get("scopes")),
+        "plugin_overrides": _normalize_plugin_overrides(section.get("plugin_overrides")),
     }
 
 
@@ -172,6 +189,35 @@ def save_git_mirror_config(
         "preferred_id": preferred_id,
         "custom_proxy_prefix": custom_proxy_prefix,
         "scopes": merged_scopes,
+        "plugin_overrides": _normalize_plugin_overrides(existing.get("plugin_overrides")),
+    }
+    _atomic_write_text(path, json.dumps(doc, ensure_ascii=False, indent=2) + "\n")
+
+
+def save_official_plugin_mirror_override(package: str, mirror_id: str) -> None:
+    pkg = (package or "").strip()
+    mid = (mirror_id or "").strip()
+    if not pkg or not mid:
+        return
+    path = repo_webui_settings_path()
+    doc: dict = {"env": {}}
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                doc = data
+        except (json.JSONDecodeError, OSError):
+            pass
+    if not isinstance(doc.get("env"), dict):
+        doc["env"] = {}
+    section = doc.get("git_mirror") if isinstance(doc.get("git_mirror"), dict) else {}
+    overrides = _normalize_plugin_overrides(section.get("plugin_overrides"))
+    overrides[pkg] = mid
+    doc["git_mirror"] = {
+        "preferred_id": str(section.get("preferred_id") or _DEFAULT_GIT_MIRROR_CONFIG["preferred_id"]),
+        "custom_proxy_prefix": str(section.get("custom_proxy_prefix") or ""),
+        "scopes": _normalize_scopes(section.get("scopes")),
+        "plugin_overrides": overrides,
     }
     _atomic_write_text(path, json.dumps(doc, ensure_ascii=False, indent=2) + "\n")
 
@@ -404,6 +450,97 @@ def list_community_plugin_git_info() -> list[dict[str, object]]:
     return rows
 
 
+def resolve_mirror_for_official_package(package: str) -> MirrorSpec:
+    cfg = load_git_mirror_config()
+    overrides = _normalize_plugin_overrides(cfg.get("plugin_overrides"))
+    override_id = (overrides.get((package or "").strip()) or "").strip()
+    if override_id:
+        return resolve_mirror_by_preferred_id(
+            override_id,
+            custom_proxy_prefix=str(cfg.get("custom_proxy_prefix") or ""),
+        )
+    return resolve_mirror_for_scope("community")
+
+
+def _find_local_git_for_official_repo(package: str) -> tuple[str, str] | None:
+    from pallas.console.webui.community_plugin_install import community_plugins_root
+    from pallas.core.platform.bot_runtime.plugin_matrix import EXTRA_PLUGIN_PACKAGES, OFFICIAL_EXTENSION_REPOS
+
+    pkg = (package or "").strip()
+    repo_url = OFFICIAL_EXTENSION_REPOS.get(pkg)
+    if not repo_url:
+        return None
+    repo_canonical = canonical_github_https_url(repo_url)
+    if not repo_canonical:
+        return None
+    root = community_plugins_root()
+    if not root.is_dir() or shutil.which("git") is None:
+        return None
+    plugin_ids = sorted(pid for pid, mapped in EXTRA_PLUGIN_PACKAGES.items() if mapped == pkg)
+    for plugin_id in plugin_ids:
+        plugin_path = root / plugin_id
+        if not plugin_path.is_dir():
+            continue
+        code, out, _ = run_git_command_sync("rev-parse", "--is-inside-work-tree", cwd=str(plugin_path))
+        if code != 0 or out.lower() != "true":
+            continue
+        code2, origin, _ = run_git_command_sync("remote", "get-url", "origin", cwd=str(plugin_path))
+        if code2 != 0 or not origin:
+            continue
+        canonical = canonical_github_https_url(origin)
+        if canonical and canonical.rstrip("/") == repo_canonical.rstrip("/"):
+            return plugin_id, origin
+    return None
+
+
+def list_official_extension_mirror_rows() -> list[dict[str, object]]:
+    from pallas.console.webui.extension_install import pip_package_installed
+    from pallas.core.platform.bot_runtime.plugin_matrix import (
+        OFFICIAL_EXTENSION_REPOS,
+        official_extension_display_name,
+    )
+
+    cfg = load_git_mirror_config()
+    overrides = _normalize_plugin_overrides(cfg.get("plugin_overrides"))
+    default_mirror = resolve_mirror_for_scope("community")
+    rows: list[dict[str, object]] = []
+    for package in sorted(OFFICIAL_EXTENSION_REPOS.keys()):
+        repo_url = OFFICIAL_EXTENSION_REPOS[package]
+        pip_installed = pip_package_installed(package)
+        local_git = _find_local_git_for_official_repo(package)
+        local_remote = local_git[1] if local_git else ""
+        override_id = (overrides.get(package) or "").strip()
+        if override_id:
+            mirror_id = override_id
+        elif local_remote:
+            mirror_id = detect_mirror_id(local_remote)
+        else:
+            mirror_id = default_mirror.id
+        if pip_installed and local_git:
+            note = "pip + local/plugins git；可改写 origin"
+        elif pip_installed:
+            note = "pip 安装；切换写入偏好，影响 GitHub 资源拉取"
+        elif local_git:
+            note = "local/plugins git 安装"
+        else:
+            note = "未安装；切换仅写入偏好"
+        rows.append({
+            "id": package,
+            "kind": "official",
+            "label": official_extension_display_name(package),
+            "path": package,
+            "remote_url": local_remote or repo_url,
+            "is_git_repo": bool(local_git),
+            "mirror": mirror_id,
+            "can_apply_remote": True,
+            "scope_id": default_mirror.id,
+            "note": note,
+            "pip_installed": pip_installed,
+            "local_plugin_id": local_git[0] if local_git else "",
+        })
+    return rows
+
+
 def bot_git_info() -> dict[str, object]:
     from pallas.core.foundation.bot_version import pallas_bot_repo_root
 
@@ -419,7 +556,7 @@ def bot_git_info() -> dict[str, object]:
         "mirror": scope_mirror.id,
         "can_apply_remote": False,
         "scope_id": scope_mirror.id,
-        "note": "Docker / 非 git 部署请用镜像更新；含 packages/ 官方插件",
+        "note": "Docker / 非 git 部署请用镜像更新",
     }
     if shutil.which("git") is None:
         return row
@@ -428,28 +565,12 @@ def bot_git_info() -> dict[str, object]:
         return row
     row["is_git_repo"] = True
     row["can_apply_remote"] = True
-    row["note"] = "git 工作副本；packages/ 官方插件随本仓库更新，无独立 remote"
+    row["note"] = "git 工作副本；packages/ 内核插件随本仓库更新"
     code2, origin, _ = run_git_command_sync("remote", "get-url", "origin", cwd=str(root))
     if code2 == 0 and origin:
         row["remote_url"] = origin
         row["mirror"] = detect_mirror_id(origin)
     return row
-
-
-def official_plugins_target_info() -> dict[str, object]:
-    scope_mirror = resolve_mirror_for_scope("bot")
-    return {
-        "id": "official_plugins",
-        "kind": "official",
-        "label": "官方插件",
-        "path": "packages/（pb_* 等内核插件）",
-        "remote_url": "",
-        "is_git_repo": False,
-        "mirror": scope_mirror.id,
-        "can_apply_remote": False,
-        "scope_id": scope_mirror.id,
-        "note": "随 Bot 仓库 / Docker 镜像更新，使用上方「Bot 更新」scope，无独立 git remote",
-    }
 
 
 def webui_target_info() -> dict[str, object]:
@@ -471,13 +592,15 @@ def webui_target_info() -> dict[str, object]:
 def build_git_mirror_info() -> dict[str, object]:
     cfg = load_git_mirror_config()
     scopes = _normalize_scopes(cfg.get("scopes"))
+    community_rows = list_community_plugin_git_info()
+    official_rows = list_official_extension_mirror_rows()
     return {
         "preferred_id": cfg["preferred_id"],
         "custom_proxy_prefix": cfg["custom_proxy_prefix"],
         "scopes": scopes,
         "available_mirrors": available_mirrors_for_config(),
-        "targets": [bot_git_info(), official_plugins_target_info(), webui_target_info()],
-        "plugins": list_community_plugin_git_info(),
+        "targets": [bot_git_info(), webui_target_info()],
+        "plugins": community_rows + official_rows,
     }
 
 
@@ -532,6 +655,34 @@ def apply_mirror_to_plugin(plugin_id: str, mirror: MirrorSpec | None = None) -> 
         return {"id": pid, "success": False, "message": detail}
 
     return {"id": pid, "success": True, "message": "已更新 origin", "remote_url": new_url}
+
+
+def apply_mirror_to_official_extension(package: str, mirror: MirrorSpec | None = None) -> dict[str, object]:
+    from pallas.core.platform.bot_runtime.plugin_matrix import OFFICIAL_EXTENSION_REPOS
+
+    pkg = (package or "").strip()
+    if pkg not in OFFICIAL_EXTENSION_REPOS:
+        return {"id": pkg, "success": False, "message": "非官方扩展包"}
+
+    mirror = mirror or resolve_mirror_for_official_package(pkg)
+    local_git = _find_local_git_for_official_repo(pkg)
+    if local_git:
+        plugin_id, _ = local_git
+        result = apply_mirror_to_plugin(plugin_id, mirror=mirror)
+        if result.get("success"):
+            save_official_plugin_mirror_override(pkg, mirror.id)
+        return {
+            **result,
+            "id": pkg,
+        }
+
+    save_official_plugin_mirror_override(pkg, mirror.id)
+    return {
+        "id": pkg,
+        "success": True,
+        "message": f"已设为 {mirror.label}（pip 安装，影响 GitHub 资源拉取）",
+        "mirror_id": mirror.id,
+    }
 
 
 def apply_mirror_to_bot(mirror: MirrorSpec | None = None) -> dict[str, object]:
