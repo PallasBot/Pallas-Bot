@@ -105,13 +105,13 @@ def sync_extension_base_url_from_ai_server(
     api_prefix = str(raw.get("api_prefix", "")).strip() or "/api"
     if not api_prefix.startswith("/"):
         api_prefix = "/" + api_prefix
-    health_paths_raw = raw.get("health_paths", ["/health", "/api/health"])
+    health_paths_raw = raw.get("health_paths", ["/health"])
     if isinstance(health_paths_raw, list):
         health_paths = [str(x).strip() for x in health_paths_raw if str(x).strip()]
     else:
-        health_paths = ["/health", "/api/health"]
+        health_paths = ["/health"]
     if not health_paths:
-        health_paths = ["/health", "/api/health"]
+        health_paths = ["/health"]
     timeout_sec = raw.get("timeout_sec", 8)
     try:
         timeout_i = max(2, min(int(timeout_sec), 30))
@@ -152,13 +152,13 @@ def writeback_ai_extension_if_empty(*, path: Path | None = None) -> bool:
     api_prefix = str(raw.get("api_prefix", "")).strip() or "/api"
     if not api_prefix.startswith("/"):
         api_prefix = "/" + api_prefix
-    health_paths_raw = raw.get("health_paths", ["/health", "/api/health"])
+    health_paths_raw = raw.get("health_paths", ["/health"])
     if isinstance(health_paths_raw, list):
         health_paths = [str(x).strip() for x in health_paths_raw if str(x).strip()]
     else:
-        health_paths = ["/health", "/api/health"]
+        health_paths = ["/health"]
     if not health_paths:
-        health_paths = ["/health", "/api/health"]
+        health_paths = ["/health"]
     timeout_sec = raw.get("timeout_sec", 8)
     try:
         timeout_i = max(2, min(int(timeout_sec), 30))

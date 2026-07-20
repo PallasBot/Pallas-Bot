@@ -527,13 +527,13 @@ def _normalize_ai_extension_config(raw: dict[str, Any] | None) -> dict[str, Any]
     if not api_prefix.startswith("/"):
         api_prefix = "/" + api_prefix
     token = str(d.get("token", "")).strip()
-    health_paths_raw = d.get("health_paths", ["/health", "/api/health"])
+    health_paths_raw = d.get("health_paths", ["/health"])
     if isinstance(health_paths_raw, list):
         health_paths = [str(x).strip() for x in health_paths_raw if str(x).strip()]
     else:
-        health_paths = ["/health", "/api/health"]
+        health_paths = ["/health"]
     if not health_paths:
-        health_paths = ["/health", "/api/health"]
+        health_paths = ["/health"]
     from pallas.console.web.ai_extension_logs import normalize_ai_extension_log_paths
 
     root = pallas_bot_repo_root()
@@ -4131,7 +4131,7 @@ class _AiExtensionConfigBody(BaseModel):
         max_length=300,
         description="Bearer Token；须与 AI 侧 PALLAS_AI_API_TOKEN 一致，供 /api/ops/logs 等 HTTP 回退鉴权",
     )
-    health_paths: list[str] = Field(default_factory=lambda: ["/health", "/api/health"], max_length=8)
+    health_paths: list[str] = Field(default_factory=lambda: ["/health"], max_length=8)
     uvicorn_log_file: str = Field(default="", max_length=500)
     celery_log_file: str = Field(default="", max_length=500)
     celery_media_log_file: str = Field(default="", max_length=500)
@@ -7986,25 +7986,36 @@ def register_extended_api(
                     llm_health,
                     tts_health,
                 ) = await asyncio.to_thread(_do_request)
-                return {
-                    "ok": True,
-                    "data": {
-                        "ok": 200 <= status_code < 300,
-                        "status_code": status_code,
-                        "health_url": health_url,
-                        "tried_urls": tried_urls,
-                        "error": None,
-                        "media_tasks": media_tasks,
-                        "llm_detail": llm_detail,
-                        "image_circuit": image_circuit,
-                        "llm_health": llm_health,
-                        "tts_health": tts_health,
-                    },
-                }
+                if 200 <= status_code < 300:
+                    return {
+                        "ok": True,
+                        "data": {
+                            "ok": True,
+                            "status_code": status_code,
+                            "health_url": health_url,
+                            "tried_urls": tried_urls,
+                            "error": None,
+                            "media_tasks": media_tasks,
+                            "llm_detail": llm_detail,
+                            "image_circuit": image_circuit,
+                            "llm_health": llm_health,
+                            "tts_health": tts_health,
+                        },
+                    }
+                last_status = status_code
+                last_error = f"HTTP {status_code}"
+                last_url = health_url
+                last_media_tasks = media_tasks
+                last_llm_detail = llm_detail
+                last_image_circuit = image_circuit
+                last_llm_health = llm_health
+                last_tts_health = tts_health
             except urllib.error.HTTPError as e:
                 last_status = int(getattr(e, "code", 0) or 0)
                 last_error = str(e)
-                last_url = health_url
+                # 失败时保留首次尝试地址，避免末尾兼容路径（如 /api/health）掩盖规范 /health
+                if not last_url:
+                    last_url = health_url
                 try:
                     body_text = e.read().decode("utf-8", errors="replace")
                     (
@@ -8023,7 +8034,10 @@ def register_extended_api(
             except Exception as e:  # noqa: BLE001
                 last_status = None
                 last_error = str(e)
-                last_url = health_url
+                if not last_url:
+                    last_url = health_url
+        if not last_url and tried_urls:
+            last_url = tried_urls[0]
         return {
             "ok": True,
             "data": {
