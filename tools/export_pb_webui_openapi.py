@@ -1,11 +1,22 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from pathlib import Path
+from typing import Any
 
 import nonebot
 from fastapi import FastAPI
+
+
+def openapi_for_compare(spec: dict[str, Any]) -> dict[str, Any]:
+    """忽略随 git describe 变动的 info.version，避免假漂移。"""
+    data = copy.deepcopy(spec)
+    info = data.get("info")
+    if isinstance(info, dict):
+        info.pop("version", None)
+    return data
 
 
 def export_console_openapi(*, api_base: str = "/pallas/api") -> dict:

@@ -1,6 +1,9 @@
 # 避免 pre-commit 触碰本地敏感配置文件。
 exclude: ^\.env$
 
+# 不启用 pre-commit.ci 自动升级 hooks（需 org 安装 App；本仓改为手动更新）。
+# 若日后启用 pre-commit.ci，请把 skip 等写回本文件的 ci: 段（勿再用单独 .pre-commit-ci.yaml）。
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
@@ -45,4 +48,12 @@ repos:
         language: system
         files: ^(pallas|packages|tests|tools)/
         pass_filenames: true
+        verbose: true
+      - id: sync-console-openapi
+        name: 同步控制台 OpenAPI
+        description: "导出 openspec；同级有 WebUI 仓时一并 gen 类型"
+        entry: uv run python tools/sync_console_openapi.py --pre-commit
+        language: system
+        files: ^(packages/pb_webui/|tools/(export_pb_webui_openapi|sync_console_openapi|check_console_openapi_drift)\.py|openspec/pallas-console-v1\.json)
+        pass_filenames: false
         verbose: true

@@ -21,7 +21,7 @@ uv run ruff check pallas/ packages/
 uv run ruff format --check pallas/ packages/
 ```
 
-pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
+pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；改 `packages/pb_webui/` 等时 **`sync-console-openapi`** 自动导出 `openspec`（同级有 WebUI 仓则 gen 类型）；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
 
 ## 文档与排障入口
 
@@ -134,18 +134,18 @@ packages/<name>/
 - **不要**擅自 `git push`、修改 `git config`，或进行重置/强推等**破坏性**操作，除非维护者在任务中明确要求。
 - 需要分支、合并、提交等操作时，以维护者指示为准；敏感操作先确认再执行。
 
-## pre-commit.ci
+## pre-commit hooks
 
-仓库包含 `.pre-commit-ci.yaml`，用于开启 pre-commit.ci：
+本地安装：`uvx pre-commit install`（或系统/venv 中的 `pre-commit install`）。
 
-- 按较低频率自动更新 hooks 版本（当前为 `quarterly`）
-- 在 PR 上自动应用可自动修复的变更（例如格式化、部分 lint autofix）
-- 使用中文自动更新提交信息，便于与仓库日常提交风格保持一致
-- 与本仓库 pre-commit 约定对齐：基础文件卫生检查覆盖全仓，Ruff 仅作用于 `src/`（避免无关目录被 Python 工具链改写）
+- 基础文件卫生检查覆盖全仓；Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`
+- 改 `packages/pb_webui/` 等时会跑 `sync-console-openapi`（导出 openspec，同级有 WebUI 则 gen 类型）
 
-启用方式：
+**hooks 版本手动更新**（不启 pre-commit.ci 自动升级；默认会 weekly，且需 org 装 App）：
 
-1. 在 GitHub 上安装/启用 pre-commit.ci（对该仓库授权）
-2. 确保仓库根目录包含：
-   - `.pre-commit-config.yaml`
-   - `.pre-commit-ci.yaml`
+```bash
+uvx pre-commit autoupdate
+# 建议将 ruff-pre-commit 的 rev 与 `uv run ruff --version` / uv.lock 对齐后再提交
+uv run ruff check pallas/ packages/
+uv run ruff format --check pallas/ packages/
+```
