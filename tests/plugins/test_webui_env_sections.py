@@ -32,6 +32,10 @@ def test_list_webui_env_sections_is_empty():
     data = webui_env_section_payload("llm")
     env_keys = {f["env_key"] for f in data["fields"]}
     assert "LLM_CHAT_ENABLED" in env_keys
+    assert "LLM_RUNTIME" in env_keys
+    assert "LLM_BASE_URL" in env_keys
+    assert "LLM_API_KEY" in env_keys
+    assert "LLM_MODEL" in env_keys
     assert "LLM_REPEATER_MODE" in env_keys
     assert "LLM_REPEATER_FEEDBACK_ENABLED" in env_keys
     assert "LLM_REPEATER_BIAS_ENABLED" in env_keys

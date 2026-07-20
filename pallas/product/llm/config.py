@@ -168,6 +168,26 @@ def resolve_conversation_feature_level_raw() -> str:
 
 
 VectorRetrieveMode = Literal["keyword", "embedding", "hybrid", "vector"]
+LlmRuntime = Literal["bot_kernel", "ai_service"]
+
+
+def resolve_llm_runtime() -> LlmRuntime:
+    raw = _env_str("LLM_RUNTIME", "bot_kernel").strip().lower()
+    if raw in ("bot_kernel", "ai_service"):
+        return raw  # type: ignore[return-value]
+    return "bot_kernel"
+
+
+def resolve_llm_base_url() -> str:
+    return _env_str("LLM_BASE_URL") or _env_str("LLM_REMOTE_BASE_URL") or ""
+
+
+def resolve_llm_api_key() -> str:
+    return _env_str("LLM_API_KEY") or _env_str("LLM_REMOTE_API_KEY") or ""
+
+
+def resolve_llm_model() -> str:
+    return _env_str("LLM_MODEL") or _env_str("LLM_REMOTE_MODEL") or ""
 
 
 def resolve_llm_vector_retrieve() -> VectorRetrieveMode:
@@ -198,6 +218,11 @@ class LlmMcpServerConfig(BaseModel):
 class LlmConfig(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
+    llm_runtime: LlmRuntime = Field(default="bot_kernel")
+    llm_base_url: str = Field(default="")
+    llm_api_key: str = Field(default="")
+    llm_model: str = Field(default="")
+    llm_tools_max_rounds: int = Field(default=4, ge=1, le=16)
     ai_server_host: str = Field(default="127.0.0.1")
     ai_server_port: int = Field(default=9099, ge=1, le=65535)
     llm_chat_enabled: bool = Field(default=False)
@@ -335,6 +360,11 @@ def get_llm_config() -> LlmConfig:
         )
 
         _cached_llm_config = LlmConfig(
+            llm_runtime=resolve_llm_runtime(),
+            llm_base_url=resolve_llm_base_url(),
+            llm_api_key=resolve_llm_api_key(),
+            llm_model=resolve_llm_model(),
+            llm_tools_max_rounds=_env_int("LLM_TOOLS_MAX_ROUNDS", 4),
             ai_server_host=host,
             ai_server_port=port,
             llm_chat_enabled=resolve_llm_chat_enabled(),
@@ -452,3 +482,12 @@ def clear_llm_config_cache() -> None:
 def llm_server_base_url(cfg: LlmConfig | None = None) -> str:
     c = cfg or get_llm_config()
     return f"http://{c.ai_server_host}:{c.ai_server_port}"
+
+
+def is_llm_bot_kernel_runtime(cfg: LlmConfig | None = None) -> bool:
+    return (cfg or get_llm_config()).llm_runtime == "bot_kernel"
+
+
+def llm_provider_configured(cfg: LlmConfig | None = None) -> bool:
+    c = cfg or get_llm_config()
+    return bool(str(c.llm_base_url or "").strip() and str(c.llm_model or "").strip())

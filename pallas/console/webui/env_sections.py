@@ -208,6 +208,10 @@ def _llm_section() -> WebuiEnvSection:
         model_cls=LlmWebuiConfig,
         read_current=get_llm_webui_config,
         field_to_env={
+            "llm_runtime": "LLM_RUNTIME",
+            "llm_base_url": "LLM_BASE_URL",
+            "llm_api_key": "LLM_API_KEY",
+            "llm_model": "LLM_MODEL",
             "ai_server_host": "AI_SERVER_HOST",
             "ai_server_port": "AI_SERVER_PORT",
             "llm_chat_enabled": "LLM_CHAT_ENABLED",

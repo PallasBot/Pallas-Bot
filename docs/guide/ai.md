@@ -1,7 +1,7 @@
 # AI 扩展
 
 ::: tip
-不启用 AI 时，复读、喝酒、轮盘等核心玩法照常可用。**Pallas-Bot** 管 QQ 消息；**Pallas-Bot-AI** 管唱歌、画画、部分对话。两边均需运行。
+不启用 AI 时，复读、喝酒、轮盘等核心玩法照常可用。**@ 闲聊** 默认在 Bot 内核直连 OpenAI 兼容 Provider，不必再起 Pallas-Bot-AI。唱歌 / 画画等媒体能力仍可选部署 **AI Runtime**。
 :::
 
 本文按控制台点击顺序，带你把 **@ 闲聊** 跑通；唱歌 / TTS 见文末进阶。
@@ -21,9 +21,9 @@
 
 | 方案 | 说明 |
 | --- | --- |
-| 仅闲聊（云端 API） | 可不跑本地大模型；仍须轻量 AI 服务，见 [remote-only](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/deploy/remote-only.md) |
-| 仅闲聊（本机 Ollama） | CPU 可跑但较慢；内存建议 ≥8GB |
-| 唱歌 / TTS | 建议 **NVIDIA ≥6GB** 显存；Docker 需 **`pallas-bot-ai:latest`**（非默认 slim） |
+| 仅闲聊（云端 API） | 在 Bot 配置 Provider（`LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL`）即可；无需 9099 / Redis / Celery |
+| 仅闲聊（本机 Ollama） | 将 `LLM_BASE_URL` 指到 `http://127.0.0.1:11434/v1`；CPU 可跑但较慢；内存建议 ≥8GB |
+| 唱歌 / TTS | 建议 **NVIDIA ≥6GB** 显存；需可选 AI Runtime，Docker 用 **`pallas-bot-ai:latest`**（非默认 slim） |
 
 ---
 
@@ -31,18 +31,19 @@
 
 ### 1. 打开控制台
 
-浏览器进入 `http://<主机>:8088/pallas/`，登录后侧栏进入 **AI 配置**。不确定缺什么时点 **体检向导**。
+浏览器进入 `http://<主机>:8088/pallas/`，登录后侧栏进入 **AI 配置** 或通用配置中的智能对话段。不确定缺什么时点 **体检向导**。
 
-### 2. 安装 / 连接 AI Runtime
+### 2. 配置 Provider（内核默认）
 
-在 **AI 配置 → AI 服务**：
+默认 **`LLM_RUNTIME=bot_kernel`**。在通用配置 / 环境变量填写：
 
-| 方式 | 做法 |
+| 键 | 说明 |
 | --- | --- |
-| **源码（推荐本机开发）** | 「安装 AI Runtime（源码）」：克隆同级 `Pallas-Bot-AI` 并 bootstrap。仅闲聊可勾 **remote-only**；要唱歌再勾 **含唱歌/TTS**。 |
-| **Docker 全栈** | 用主仓 `docker-compose.full.yml` 一次拉起 Bot + AI + Ollama。默认 AI 镜像为 **slim**（LLM-only）。见 [Docker 部署](/deploy/docker)。 |
+| **`LLM_BASE_URL`** | OpenAI 兼容基址（兼容别名 `LLM_REMOTE_BASE_URL`） |
+| **`LLM_API_KEY`** | 云端 Key；本地 Ollama 可留空（别名 `LLM_REMOTE_API_KEY`） |
+| **`LLM_MODEL`** | 模型名，如 `gpt-4o-mini` / `qwen2.5:7b`（别名 `LLM_REMOTE_MODEL`） |
 
-控制台**不代跑** Docker。保存连接后，扩展基址会同步 Bot 侧 `AI_SERVER_*`。
+显式设 `LLM_RUNTIME=ai_service` 时，才走旧的 Pallas-Bot-AI HTTP + Celery 路径，并需配置 `AI_SERVER_*`。
 
 ### 3. 打开对话总闸
 
@@ -52,15 +53,9 @@
 | --- | --- |
 | **`LLM_CHAT_ENABLED`** | 总闸，默认关；打开后 @ / 接话 AI 才生效 |
 
-### 4. 拉取对话模型
+### 4. （可选）AI Runtime 仅媒体
 
-**AI 配置 → 能力包** 或 **接入**：
-
-1. 确认 AI 服务可达  
-2. 在本地模型区选择 `qwen2.5:7b`（或云端 Provider 的模型）  
-3. 勾选 **切换时拉取** 并切换  
-
-全栈默认**不**预拉 Ollama 模型。可选：compose 加 `--profile pull-models`。
+唱歌 / 画画仍走 **AI 配置 → AI 服务** 安装或连接 Runtime。闲聊不依赖此项；连接页保存后扩展基址会同步 `AI_SERVER_*`（供媒体与兼容路径）。
 
 ### 5. 验收
 
@@ -70,7 +65,7 @@
 牛牛连通
 ```
 
-或 `@牛牛` 试一句。失败时回到体检向导看哪一步红灯。
+或 `@牛牛` 试一句。失败时检查 Provider 与 `LLM_CHAT_ENABLED`，或回到体检向导。
 
 ---
 

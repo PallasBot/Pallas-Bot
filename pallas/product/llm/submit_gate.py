@@ -1,4 +1,8 @@
-"""LLM 提交前健康/熔断门禁（事实源 = AI /health 缓存）。"""
+"""LLM 提交前健康/熔断门禁。
+
+ai_service：事实源 = AI /health 缓存。
+bot_kernel：校验 Provider（base_url + model），不依赖 AI Runtime。
+"""
 
 from __future__ import annotations
 
@@ -12,12 +16,18 @@ from pallas.product.llm.startup_probe import probe_ai_service_health
 
 LLM_SUBMIT_REJECT_FAILURE_THRESHOLD = 3
 
-LlmSubmitRejectReason = Literal["ai_unreachable", "ai_circuit_open", "ai_unhealthy"]
+LlmSubmitRejectReason = Literal[
+    "ai_unreachable",
+    "ai_circuit_open",
+    "ai_unhealthy",
+    "provider_not_configured",
+]
 
 LLM_SUBMIT_USER_MESSAGE_BY_STATUS: dict[str, str] = {
     "ai_unreachable": "这会儿连不上推理服务，稍后再戳戳我吧。",
     "ai_circuit_open": "推理服务刚连续出错，我先缓一缓，过几分钟再试试。",
     "ai_unhealthy": "推理服务状态不佳，我先不接新对话了，稍后再来。",
+    "provider_not_configured": "还没配好对话模型，先让维护者填好 Provider 再聊吧。",
     "busy": "此刻思绪有些拥挤，稍后再戳戳我吧。",
     "request_failed": "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。",
     "empty_response": "我习惯了站着不动思考。有时候啊，也会被大家突然戳一戳，看看睡着了没有。",
@@ -60,10 +70,22 @@ def assess_llm_submit_gate_from_body(body: object | None) -> LlmSubmitGateResult
     return LlmSubmitGateResult(allowed=True)
 
 
+def assess_llm_kernel_submit_gate(cfg=None) -> LlmSubmitGateResult:
+    from pallas.product.llm.config import get_llm_config, llm_provider_configured
+
+    c = cfg or get_llm_config()
+    if not llm_provider_configured(c):
+        return LlmSubmitGateResult(allowed=False, status="provider_not_configured")
+    return LlmSubmitGateResult(allowed=True)
+
+
 async def assess_llm_submit_gate() -> LlmSubmitGateResult:
-    from pallas.product.llm.config import get_llm_config
+    from pallas.product.llm.config import get_llm_config, is_llm_bot_kernel_runtime
 
     cfg = get_llm_config()
+    if is_llm_bot_kernel_runtime(cfg):
+        return assess_llm_kernel_submit_gate(cfg)
+
     if not cfg.use_unified_chat_api:
         return LlmSubmitGateResult(allowed=True)
 

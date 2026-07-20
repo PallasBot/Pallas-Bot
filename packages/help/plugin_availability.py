@@ -43,10 +43,22 @@ def is_plugin_help_available(plugin_name: str) -> bool:
     except Exception:
         result = False
     if result and name in {"llm_chat", "ollama"}:
-        from pallas.product.llm.startup_probe import llm_ai_service_reachable
+        from pallas.product.llm.config import get_llm_config, is_llm_bot_kernel_runtime, llm_provider_configured
 
-        reachable = llm_ai_service_reachable()
-        if reachable is False:
-            result = False
+        llm_cfg = get_llm_config()
+        if is_llm_bot_kernel_runtime(llm_cfg):
+            from pallas.product.llm.startup_probe import llm_provider_ready
+
+            ready = llm_provider_ready()
+            if ready is False:
+                result = False
+            elif ready is None and not llm_provider_configured(llm_cfg):
+                result = False
+        else:
+            from pallas.product.llm.startup_probe import llm_ai_service_reachable
+
+            reachable = llm_ai_service_reachable()
+            if reachable is False:
+                result = False
     _avail_cache[plugin_name] = result
     return result

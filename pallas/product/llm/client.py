@@ -7,7 +7,7 @@ from pallas.core.shared.ai_capability_request import build_llm_chat_capability_b
 from pallas.core.shared.utils import HTTPXClient
 
 from .budget import trim_messages_to_char_budget
-from .config import LlmConfig, get_llm_config, llm_server_base_url
+from .config import LlmConfig, get_llm_config, is_llm_bot_kernel_runtime, llm_server_base_url
 from .governance import LlmChatGovernance
 from .kernel.memory_governance import can_write_runtime_state_summary, runtime_state_summary_metadata
 from .legacy_guard import assess_legacy_chat_submit
@@ -78,6 +78,7 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
 
     use_pg_session = is_llm_session_store_available() and request.bot_id is not None and request.user_id is not None
     task_name = resolve_submit_task_name(request.task, request.mode)
+    kernel_runtime = is_llm_bot_kernel_runtime(c)
 
     base = llm_server_base_url(c)
     endpoint = chat_endpoint_path(c)
@@ -88,7 +89,7 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
         timer.finish(status=legacy_reject, request_id=request.request_id)
         return ChatSubmitResult(status=legacy_reject, ok=False)
 
-    if c.use_unified_chat_api:
+    if c.use_unified_chat_api or kernel_runtime:
         gate = await assess_llm_submit_gate()
         if not gate.allowed:
             timer.finish(status=gate.status, request_id=request.request_id)
@@ -152,22 +153,48 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
             metadata.update({key: value for key, value in rewrite_meta.items() if value is not None and value != ""})
         from pallas.product.llm.runtime_debug import append_request_snapshot
 
+        message_dicts = [{"role": item.role, "content": item.content} for item in messages]
         snapshot_id = append_request_snapshot(
             request_id=request.request_id,
             task=task_name,
             system_prompt=request.system_prompt,
-            messages=[{"role": item.role, "content": item.content} for item in messages],
+            messages=message_dicts,
             metadata=metadata,
         )
         metadata.setdefault("runtime_debug", {})
         metadata["runtime_debug"]["request_snapshot_id"] = snapshot_id
         metadata["runtime_debug"]["replay_enabled"] = True
         metadata["runtime_debug"]["trace_level"] = "standard"
+        if kernel_runtime:
+            from pallas.product.llm.kernel_runner import (
+                submit_kernel_llm_chat_task,
+                submit_kernel_repeater_chat_task,
+            )
+
+            if is_repeater_llm_task(task_name):
+                return await submit_kernel_repeater_chat_task(
+                    request,
+                    system_prompt=request.system_prompt,
+                    messages=message_dicts,
+                    metadata=metadata,
+                    timer=timer,
+                    message_count=len(messages),
+                    cfg=c,
+                )
+            return await submit_kernel_llm_chat_task(
+                request,
+                system_prompt=request.system_prompt,
+                messages=message_dicts,
+                metadata=metadata,
+                timer=timer,
+                message_count=len(messages),
+                cfg=c,
+            )
         chat_payload = {
             "session_id": request.session_id if not use_pg_session else request.request_id,
             "model": request.model,
             "system": request.system_prompt,
-            "messages": [{"role": item.role, "content": item.content} for item in messages],
+            "messages": message_dicts,
             "metadata": metadata,
         }
         payload = build_llm_chat_capability_body(

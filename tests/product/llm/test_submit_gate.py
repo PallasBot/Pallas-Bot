@@ -75,6 +75,7 @@ async def test_submit_chat_task_rejects_when_circuit_open(monkeypatch: pytest.Mo
     monkeypatch.setattr("pallas.product.llm.client.assess_llm_submit_gate", reject_gate)
 
     cfg = LlmConfig(
+        llm_runtime="ai_service",
         ai_server_host="127.0.0.1",
         ai_server_port=9099,
         llm_chat_enabled=True,

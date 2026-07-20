@@ -172,6 +172,26 @@ async def resolve_callback_task(task_id: str) -> dict | None:
     }
 
 
+async def deliver_llm_chat_result(
+    task_id: str,
+    *,
+    status: str,
+    text: str | None = None,
+    agent_trace: str | None = None,
+    history_summary: str | None = None,
+    history_keep_messages: int | None = None,
+) -> dict[str, str]:
+    """闲聊结果投递（内核直连与 AI HTTP 回调共用）。"""
+    return await run_ai_callback(
+        task_id,
+        status=status,
+        text=text,
+        agent_trace=agent_trace,
+        history_summary=history_summary,
+        history_keep_messages=history_keep_messages,
+    )
+
+
 async def run_ai_callback(
     task_id: str,
     *,

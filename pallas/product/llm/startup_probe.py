@@ -8,12 +8,18 @@ from pallas.core.foundation.startup_report import register_startup_fact, registe
 
 _hook_installed = False
 _ai_service_reachable: bool | None = None
+_llm_provider_ready: bool | None = None
 MIN_AI_API_VERSION = (4, 0, 0)
 
 
 def llm_ai_service_reachable() -> bool | None:
     """启动探针结果；None 表示尚未探测。"""
     return _ai_service_reachable
+
+
+def llm_provider_ready() -> bool | None:
+    """内核 Provider 配置/探活结果；None 表示尚未探测。"""
+    return _llm_provider_ready
 
 
 def parse_api_version(raw: str | None) -> tuple[int, ...] | None:
@@ -86,6 +92,23 @@ async def probe_ai_service_health(*, timeout_sec: float = 5.0) -> dict[str, Any]
     }
 
 
+async def probe_llm_provider(*, timeout_sec: float = 3.0) -> dict[str, Any]:
+    from pallas.product.llm.config import get_llm_config, llm_provider_configured
+    from pallas.product.llm.provider_client import probe_provider_models
+
+    cfg = get_llm_config()
+    if not llm_provider_configured(cfg):
+        return {
+            "ok": False,
+            "configured": False,
+            "url": "",
+            "error": "llm_base_url or llm_model missing",
+        }
+    result = await probe_provider_models(timeout_sec=timeout_sec, cfg=cfg)
+    result["configured"] = True
+    return result
+
+
 def install_llm_startup_probe() -> None:
     global _hook_installed
     if _hook_installed:
@@ -98,12 +121,13 @@ def install_llm_startup_probe() -> None:
 
     @driver.on_startup
     async def _llm_probe_ai_service_on_startup() -> None:
+        global _ai_service_reachable, _llm_provider_ready
         from pallas.core.platform.bot_runtime.roles import is_sharded_worker
 
         if is_sharded_worker():
             return
 
-        from pallas.product.llm.config import get_llm_config
+        from pallas.product.llm.config import get_llm_config, is_llm_bot_kernel_runtime
 
         cfg = get_llm_config()
         from pallas.product.llm.legacy_guard import log_legacy_chat_config_warnings
@@ -121,9 +145,54 @@ def install_llm_startup_probe() -> None:
         if cfg.llm_polish_enabled:
             flags.append("POLISH")
         flag_text = ",".join(flags) if flags else "off"
+        llm_switches_on = (
+            cfg.llm_chat_enabled
+            or cfg.llm_fallback_enabled
+            or cfg.llm_polish_enabled
+            or cfg.llm_select_enabled
+            or cfg.llm_polish_lite_enabled
+        )
+
+        if is_llm_bot_kernel_runtime(cfg):
+            _ai_service_reachable = None
+            result = await probe_llm_provider()
+            _llm_provider_ready = bool(result.get("ok"))
+            from packages.help.plugin_availability import invalidate_plugin_help_availability_cache
+
+            invalidate_plugin_help_availability_cache()
+            model = str(cfg.llm_model or "").strip() or "?"
+            if result.get("ok"):
+                register_startup_fact(
+                    "llm",
+                    f"kernel ok model={model} switches={flag_text}",
+                )
+                return
+            if not result.get("configured"):
+                if llm_switches_on:
+                    register_startup_warning(
+                        "llm",
+                        f"provider_not_configured switches={flag_text}",
+                    )
+                    logger.warning("[LLM] 内核模式未配置 Provider（LLM_BASE_URL + LLM_MODEL） switches={}", flag_text)
+                else:
+                    logger.debug("[LLM] 内核模式未配置 Provider（开关均为关）")
+                return
+            if llm_switches_on:
+                register_startup_warning(
+                    "llm",
+                    f"provider_unreachable err={result.get('error') or 'unknown'} switches={flag_text}",
+                )
+                logger.warning(
+                    "[LLM] Provider 不可达 {} err={} switches={}",
+                    result.get("url") or "",
+                    result.get("error") or "unknown",
+                    flag_text,
+                )
+            else:
+                logger.debug("[LLM] Provider 无响应（开关均为关）")
+            return
 
         result = await probe_ai_service_health()
-        global _ai_service_reachable
         _ai_service_reachable = bool(result.get("ok"))
         from packages.help.plugin_availability import invalidate_plugin_help_availability_cache
 
@@ -173,13 +242,6 @@ def install_llm_startup_probe() -> None:
                 register_startup_fact("llm", f"ok switches={flag_text}")
             return
 
-        llm_switches_on = (
-            cfg.llm_chat_enabled
-            or cfg.llm_fallback_enabled
-            or cfg.llm_polish_enabled
-            or cfg.llm_select_enabled
-            or cfg.llm_polish_lite_enabled
-        )
         if llm_switches_on:
             register_startup_warning(
                 "llm",
