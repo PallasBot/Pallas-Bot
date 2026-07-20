@@ -190,6 +190,19 @@ async def resolve_task_route(task: str, *, explicit_model: str | None = None) ->
             fallback_models=(),
         )
 
+    from pallas.product.llm.config import get_llm_config, is_llm_bot_kernel_runtime
+
+    cfg = get_llm_config()
+    if is_llm_bot_kernel_runtime(cfg):
+        model = str(cfg.llm_model or "").strip() or None
+        return TaskRouteSpec(
+            task=normalized_task,
+            resolved_model=model,
+            provider_hint="bot_kernel",
+            source="config",
+            fallback_models=(),
+        )
+
     health_payload = await _cached_ai_health_payload()
     llm_info = health_payload.get("llm") if isinstance(health_payload.get("llm"), dict) else {}
     provider_mode = str(llm_info.get("provider_mode") or "").strip() or None

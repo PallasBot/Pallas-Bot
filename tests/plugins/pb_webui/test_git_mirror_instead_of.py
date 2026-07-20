@@ -59,7 +59,7 @@ def test_iter_failover_download_urls_rewrites_release_asset(monkeypatch, tmp_pat
 async def test_apply_bot_repository_update_fetch_uses_instead_of(monkeypatch, tmp_path):
     ghproxy_mirror = next(m for m in BUILTIN_MIRRORS if m.id == "ghproxy-vip")
 
-    def fake_iter_mirrors():
+    def fake_iter_mirrors(*_args):
         yield ghproxy_mirror
 
     monkeypatch.setattr("packages.pb_webui.manager.iter_mirrors_for_failover", fake_iter_mirrors)

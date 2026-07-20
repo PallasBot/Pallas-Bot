@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import pytest
 
+from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.task_routing import (
     TaskRouteSpec,
     clear_task_route_cache,
     resolve_submit_task_name,
     resolve_task_route,
 )
+
+
+def _force_ai_service_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = LlmConfig(llm_runtime="ai_service", llm_chat_enabled=True)
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.config.is_llm_bot_kernel_runtime", lambda _cfg=None: False)
 
 
 def test_resolve_submit_task_name_defaults() -> None:
@@ -37,8 +44,30 @@ async def test_resolve_task_route_explicit_model_wins(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
+async def test_resolve_task_route_bot_kernel_uses_config_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_task_route_cache()
+    cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="kernel-demo", llm_base_url="http://x/v1")
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
+
+    async def fail_health(**_kwargs):
+        raise AssertionError("kernel route should not probe AI health")
+
+    monkeypatch.setattr("pallas.product.llm.task_routing.probe_ai_service_health", fail_health)
+
+    route = await resolve_task_route("llm_chat")
+    assert route == TaskRouteSpec(
+        task="llm_chat",
+        resolved_model="kernel-demo",
+        provider_hint="bot_kernel",
+        source="config",
+        fallback_models=(),
+    )
+
+
+@pytest.mark.asyncio
 async def test_resolve_task_route_prefers_ai_health_task_routing_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_task_route_cache()
+    _force_ai_service_runtime(monkeypatch)
 
     async def fake_health(**_kwargs):
         return {
@@ -100,6 +129,7 @@ async def test_resolve_task_route_prefers_ai_health_task_routing_provider(monkey
 @pytest.mark.asyncio
 async def test_resolve_task_route_prefers_ai_health_local_task_models(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_task_route_cache()
+    _force_ai_service_runtime(monkeypatch)
 
     async def fake_health(**_kwargs):
         return {
@@ -132,6 +162,7 @@ async def test_resolve_task_route_prefers_ai_health_local_task_models(monkeypatc
 @pytest.mark.asyncio
 async def test_resolve_task_route_falls_back_to_local_config(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_task_route_cache()
+    _force_ai_service_runtime(monkeypatch)
 
     async def fake_health(**_kwargs):
         return {"ok": False, "body": None}
@@ -169,6 +200,7 @@ async def test_resolve_task_route_falls_back_to_local_config(monkeypatch: pytest
 @pytest.mark.asyncio
 async def test_resolve_task_route_chain_expands_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_task_route_cache()
+    _force_ai_service_runtime(monkeypatch)
 
     async def fake_health(**_kwargs):
         return {"ok": False, "body": None}

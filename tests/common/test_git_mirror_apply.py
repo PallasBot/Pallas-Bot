@@ -74,7 +74,7 @@ def test_apply_mirror_to_plugin_sets_proxy_then_github(plugins_root, monkeypatch
     monkeypatch.setattr(
         gm,
         "load_git_mirror_config",
-        lambda: {"preferred_id": "github", "custom_proxy_prefix": ""},
+        lambda: {"preferred_id": "github", "custom_proxy_prefix": "", "scopes": {}},
     )
     result2 = gm.apply_mirror_to_plugin("demo_plugin")
     assert result2["success"] is True

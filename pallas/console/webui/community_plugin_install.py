@@ -144,7 +144,7 @@ async def install_community_plugin(
     last_detail = ""
     clone_ok = False
     out = ""
-    for mirror in iter_mirrors_for_failover():
+    for mirror in iter_mirrors_for_failover("community"):
         clone_url = rewrite_github_url(repo, mirror)
         code, out, err = await run_git_command(
             INSTALL_TIMEOUT_S,
@@ -204,7 +204,7 @@ async def update_community_plugin(
     last_stage = "fetch"
     update_ok = False
     out = ""
-    for mirror in iter_mirrors_for_failover():
+    for mirror in iter_mirrors_for_failover("community"):
         extra = git_instead_of_args(mirror)
         code, out, err = await run_git_command(
             INSTALL_TIMEOUT_S,

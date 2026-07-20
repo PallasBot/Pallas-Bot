@@ -4163,6 +4163,12 @@ class _AiInstallBody(BaseModel):
     use_gpu: bool = False
 
 
+class _AiRuntimeControlBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    with_media: bool = False
+
+
 class _HelpMenuVisibilityBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -4846,7 +4852,7 @@ async def warm_console_read_caches() -> None:
 
 async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, Any]:
     from pallas.core.shared.utils.format_exception import format_exception_for_log
-    from pallas.core.shared.utils.github_release import release_tags_equivalent
+    from pallas.core.shared.utils.github_release import fetch_release_notes_range, release_tags_equivalent
 
     from .manager import fetch_latest_webui_release, get_installed_webui_version
 
@@ -4874,13 +4880,24 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
             "checked_at": time.time(),
         }
     has_update = bool(latest_tag and not release_tags_equivalent(current_tag, latest_tag))
-    notes_raw = str(latest.get("body", "") or "").strip()
-    notes_max = 40000
-    release_notes = (
-        notes_raw
-        if len(notes_raw) <= notes_max
-        else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+    # dist 资产可能来自主仓 Release，产品变更史写在 WebUI 仓 CHANGELOG
+    changelog_url = "https://github.com/PallasBot/Pallas-Bot-WebUI/blob/main/CHANGELOG.md"
+    release_notes = await fetch_release_notes_range(
+        repo,
+        current_tag=current_tag,
+        latest_tag=latest_tag,
+        token=github_token,
+        user_agent="Pallas-Bot-PallasWebUI/1.0",
+        changelog_url=changelog_url,
     )
+    if not release_notes:
+        notes_raw = str(latest.get("body", "") or "").strip()
+        notes_max = 12000
+        release_notes = (
+            notes_raw
+            if len(notes_raw) <= notes_max
+            else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+        )
     return {
         "current_tag": current_tag,
         "latest_tag": latest_tag,
@@ -4901,6 +4918,7 @@ def _bot_restart_available() -> bool:
 
 async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any]:
     from pallas.core.shared.utils.format_exception import format_exception_for_log
+    from pallas.core.shared.utils.github_release import fetch_release_notes_range
 
     from .manager import (
         bot_has_release_update,
@@ -4914,8 +4932,9 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
     current = get_bot_current_version()
     current_tag = current.get("tag", "")
     current_commit = current.get("commit", "")
+    bot_repo = "PallasBot/Pallas-Bot"
     try:
-        latest = await fetch_latest_bot_release("PallasBot/Pallas-Bot", token=github_token)
+        latest = await fetch_latest_bot_release(bot_repo, token=github_token)
         latest_tag = str(latest.get("tag", "") or "").strip()
         release_url = str(latest.get("html_url", "") or "").strip()
     except Exception as e:  # noqa: BLE001
@@ -4944,13 +4963,22 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
         current_tag=str(current_tag or ""),
         current_commit=str(current_commit or ""),
     )
-    notes_raw = str(latest.get("body", "") or "").strip()
-    notes_max = 40000
-    release_notes = (
-        notes_raw
-        if len(notes_raw) <= notes_max
-        else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+    release_notes = await fetch_release_notes_range(
+        bot_repo,
+        current_tag=str(current_tag or ""),
+        latest_tag=latest_tag,
+        token=github_token,
+        user_agent="Pallas-Bot/1.0",
+        changelog_url="",
     )
+    if not release_notes:
+        notes_raw = str(latest.get("body", "") or "").strip()
+        notes_max = 12000
+        release_notes = (
+            notes_raw
+            if len(notes_raw) <= notes_max
+            else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+        )
     return {
         "current_tag": current_tag,
         "current_commit": current_commit,
@@ -6590,13 +6618,38 @@ def register_extended_api(
         f"{x}/common-config/llm/media-assets/download",
         include_in_schema=True,
     )
-    async def _llm_media_assets_download_post() -> JSONResponse:
+    async def _llm_media_assets_download_post(body: dict[str, Any] | None = None) -> JSONResponse:
         from pallas.product.llm.media_assets import start_media_assets_download
 
+        assets = None
+        if isinstance(body, dict) and isinstance(body.get("assets"), list):
+            assets = [str(a) for a in body["assets"]]
         try:
-            data = await start_media_assets_download()
+            data = await start_media_assets_download(assets=assets)
         except PermissionError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(
+        f"{x}/common-config/llm/media-assets/delete",
+        include_in_schema=True,
+    )
+    async def _llm_media_assets_delete_post(body: dict[str, Any]) -> JSONResponse:
+        from pallas.product.llm.media_assets import delete_media_assets
+
+        assets = body.get("assets") if isinstance(body, dict) else None
+        if not isinstance(assets, list) or not assets:
+            raise HTTPException(status_code=400, detail="assets 不能为空")
+        try:
+            data = await delete_media_assets(assets=[str(a) for a in assets])
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
@@ -6612,6 +6665,108 @@ def register_extended_api(
             data = await fetch_media_assets_download_job(job_id)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/sing/speakers",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_sing_speakers_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_sing_speakers
+
+        try:
+            data = await fetch_sing_speakers()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/sing/backends",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_sing_backends_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_sing_backends
+
+        try:
+            data = await fetch_sing_backends()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/sing/defaults",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_sing_defaults_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_sing_defaults
+
+        try:
+            data = await fetch_sing_defaults()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(
+        f"{x}/common-config/llm/media-models/sing/defaults",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_sing_defaults_put(body: dict[str, Any]) -> JSONResponse:
+        from pallas.product.llm.media_models import put_sing_defaults
+
+        payload = body if isinstance(body, dict) else {}
+        if payload.get("default_speaker") is None and payload.get("preferred_backend") is None:
+            raise HTTPException(status_code=400, detail="至少提供 default_speaker 或 preferred_backend")
+        try:
+            data = await put_sing_defaults(payload)
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/tts/voices",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_voices_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_tts_voices
+
+        try:
+            data = await fetch_tts_voices()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/tts/defaults",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_defaults_get() -> JSONResponse:
+        from pallas.product.llm.media_models import fetch_tts_defaults
+
+        try:
+            data = await fetch_tts_defaults()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(
+        f"{x}/common-config/llm/media-models/tts/defaults",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_defaults_put(body: dict[str, Any]) -> JSONResponse:
+        from pallas.product.llm.media_models import put_tts_defaults
+
+        try:
+            data = await put_tts_defaults(body if isinstance(body, dict) else {})
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
@@ -8256,7 +8411,13 @@ def register_extended_api(
                     )
 
                     writeback = apply_ai_install_connection_writeback()
-                    j.result = {**j.result, **writeback}
+                    from pallas.console.cli.ai_supervisor import ai_runtime_status
+
+                    j.result = {
+                        **j.result,
+                        **writeback,
+                        "runtime": ai_runtime_status(ai_root=ai_root),
+                    }
                     j.message = "bootstrap 完成"
                 elif body.action == "clone":
                     j.result = {"ai_root": str(ai_root)}
@@ -8280,6 +8441,38 @@ def register_extended_api(
                 "X-Accel-Buffering": "no",
             },
         )
+
+    @router.get(f"{x}/ai-extension/runtime/status", include_in_schema=True)
+    async def _ai_extension_runtime_status() -> JSONResponse:
+        from pallas.console.cli.ai_supervisor import ai_runtime_status
+
+        data = await asyncio.to_thread(ai_runtime_status)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/ai-extension/runtime/start", include_in_schema=True)
+    async def _ai_extension_runtime_start(
+        body: _AiRuntimeControlBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.console.cli.ai_supervisor import start_ai_runtime
+
+        data = await asyncio.to_thread(start_ai_runtime, with_media=body.with_media)
+        status = 200 if data.get("ok") else 400
+        return JSONResponse({"ok": bool(data.get("ok")), "data": data}, status_code=status)
+
+    @router.post(f"{x}/ai-extension/runtime/stop", include_in_schema=True)
+    async def _ai_extension_runtime_stop(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.console.cli.ai_supervisor import stop_ai_runtime
+
+        data = await asyncio.to_thread(stop_ai_runtime)
+        status = 200 if data.get("ok") else 400
+        return JSONResponse({"ok": bool(data.get("ok")), "data": data}, status_code=status)
 
     @router.get(f"{x}/ai-extension/ncm/status", include_in_schema=True)
     async def _ai_extension_ncm_status() -> JSONResponse:

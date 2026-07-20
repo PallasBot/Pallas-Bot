@@ -226,7 +226,7 @@ def iter_failover_download_urls(url: str):
     u = (url or "").strip()
     if not u:
         return
-    for mirror in iter_mirrors_for_failover():
+    for mirror in iter_mirrors_for_failover("webui"):
         yield rewrite_github_url(u, mirror)
 
 
@@ -568,7 +568,7 @@ async def apply_bot_repository_update(
         last_code = 1
         last_out = ""
         last_err = ""
-        for mirror in iter_mirrors_for_failover():
+        for mirror in iter_mirrors_for_failover("bot"):
             code, out, err = await git(*args, cmd_timeout_s=cmd_timeout_s, mirror=mirror)
             if code == 0:
                 return code, out, err
@@ -716,6 +716,7 @@ async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot", *, token:
             user_agent="Pallas-Bot-PallasWebUI/1.0",
             token=token,
             include_asset_url=False,
+            mirror_scope="bot",
         )
         return {"tag": data["tag"], "html_url": data["html_url"], "body": str(data.get("body", "") or "").strip()}
     except (httpx.HTTPError, json.JSONDecodeError, TypeError, ValueError) as first_err:
@@ -724,6 +725,7 @@ async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot", *, token:
                 repo,
                 token=token,
                 user_agent="Pallas-Bot-PallasWebUI/1.0",
+                mirror_scope="bot",
             )
             logger.debug(
                 "Pallas-Bot 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底（Bot）tag={}",
@@ -743,6 +745,7 @@ async def fetch_latest_webui_release(repo: str, *, token: str = "", asset_name: 
             token=token,
             preferred_asset_name=asset_clean,
             include_asset_url=True,
+            mirror_scope="webui",
         )
     except (httpx.HTTPError, json.JSONDecodeError, TypeError, ValueError) as first_err:
         try:
@@ -750,6 +753,7 @@ async def fetch_latest_webui_release(repo: str, *, token: str = "", asset_name: 
                 repo,
                 token=token,
                 user_agent="Pallas-Bot-PallasWebUI/1.0",
+                mirror_scope="webui",
             )
             tag_fb = fb["tag"]
             asset_url_fb = github_release_asset_url(repo, asset_clean, tag_fb)

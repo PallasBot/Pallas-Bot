@@ -59,13 +59,19 @@ class LlmWebuiConfig(BaseModel):
 
     ai_server_host: str = Field(
         default="127.0.0.1",
-        description=field_help("智能对话服务所在主机的地址", "本机部署填 127.0.0.1；远程填 IP 或域名"),
+        description=field_help(
+            "AI Runtime（媒体服务）所在主机",
+            "唱歌/TTS 等媒体任务用；默认 LLM 聊天走 Bot 内核 Provider，不依赖此项",
+        ),
     )
     ai_server_port: int = Field(
         default=9099,
         ge=1,
         le=65535,
-        description=field_help("智能对话服务监听的端口", "与 Pallas-Bot-AI 的 .env 中端口一致"),
+        description=field_help(
+            "AI Runtime 监听端口",
+            "与 Pallas-Bot-AI 的端口一致；推荐在「媒体服务」页修改并同步",
+        ),
     )
     llm_chat_enabled: bool = Field(
         default=False,

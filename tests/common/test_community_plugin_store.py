@@ -337,7 +337,7 @@ async def test_install_community_plugin_uses_rewritten_clone_url(monkeypatch, tm
 
     ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
 
-    def fake_iter_mirrors():
+    def fake_iter_mirrors(*_args):
         yield ghproxy_mirror
 
     monkeypatch.setattr(cpi, "iter_mirrors_for_failover", fake_iter_mirrors)
@@ -377,7 +377,7 @@ async def test_update_community_plugin_uses_git_instead_of_for_proxy(monkeypatch
 
     ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
 
-    def fake_iter_mirrors():
+    def fake_iter_mirrors(*_args):
         yield ghproxy_mirror
 
     monkeypatch.setattr(cpi, "iter_mirrors_for_failover", fake_iter_mirrors)

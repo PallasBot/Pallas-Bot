@@ -1,19 +1,19 @@
 # AI 扩展
 
 ::: tip
-不启用 AI 时，复读、喝酒、轮盘等核心玩法照常可用。**Pallas-Bot** 管 QQ 消息；**Pallas-Bot-AI** 管唱歌、画画、部分对话。两边均需运行。
+不启用 AI Runtime 时，复读、喝酒、轮盘等核心玩法照常可用。**默认 LLM 聊天**由 Bot 内核直连 Provider，**不必**安装 Pallas-Bot-AI。唱歌 / TTS 等媒体能力才需要 AI Runtime。
 :::
 
-本文按控制台点击顺序，带你把 **@ 闲聊** 跑通；唱歌 / TTS 见文末进阶。
+本文按控制台点击顺序，带你把 **@ LLM 聊天** 跑通；唱歌 / TTS 见文末进阶。
 
 ## 能力对照
 
-| 能力 | 群里口令（示例） |
-| --- | --- |
-| 随时闲聊 | @ 牛；见 [@牛牛与复读](llm-and-repeater.md) |
-| 翻唱 / 点歌 | `牛牛唱歌 …`、`牛牛点歌 …`（需媒体能力包 + 插件） |
-| 酒后对话 | 喝酒状态下的智能聊天 |
-| 文生图 | `牛牛画画 …`（需 draw 扩展） |
+| 能力 | 群里口令（示例） | 依赖 |
+| --- | --- | --- |
+| LLM 聊天 | @ 牛；见 [@牛牛与复读](llm-and-repeater.md) | Bot 内核 + Provider（默认） |
+| 翻唱 / 点歌 | `牛牛唱歌 …`、`牛牛点歌 …` | 媒体能力包 + AI Runtime + 插件 |
+| 酒后对话 | 喝酒状态下的智能聊天 | 同 LLM 聊天 |
+| 文生图 | `牛牛画画 …` | 画画插件网关（默认不经 AI Runtime） |
 
 精确口令以 **牛牛帮助** 为准。
 
@@ -21,9 +21,9 @@
 
 | 方案 | 说明 |
 | --- | --- |
-| 仅闲聊（云端 API） | 可不跑本地大模型；仍须轻量 AI 服务，见 [remote-only](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/deploy/remote-only.md) |
-| 仅闲聊（本机 Ollama） | CPU 可跑但较慢；内存建议 ≥8GB |
-| 唱歌 / TTS | 建议 **NVIDIA ≥6GB** 显存；Docker 需 **`pallas-bot-ai:latest`**（非默认 slim） |
+| 仅聊天（云端 API） | 配好 Provider 即可；**无需** AI Runtime |
+| 仅聊天（本机 Ollama） | CPU 可跑但较慢；内存建议 ≥8GB；Bot 直连 Ollama |
+| 唱歌 / TTS | 建议 **NVIDIA ≥6GB** 显存；需 AI Runtime（`pallas-bot-ai:latest`） |
 
 ---
 
@@ -33,16 +33,15 @@
 
 浏览器进入 `http://<主机>:8088/pallas/`，登录后侧栏进入 **AI 配置**。不确定缺什么时点 **体检向导**。
 
-### 2. 安装 / 连接 AI Runtime
+### 2. 配置 Provider（接入）
 
-在 **AI 配置 → AI 服务**：
+在 **AI 配置 → 接入**：
 
-| 方式 | 做法 |
-| --- | --- |
-| **源码（推荐本机开发）** | 「安装 AI Runtime（源码）」：克隆同级 `Pallas-Bot-AI` 并 bootstrap。仅闲聊可勾 **remote-only**；要唱歌再勾 **含唱歌/TTS**。 |
-| **Docker 全栈** | 用主仓 `docker-compose.full.yml` 一次拉起 Bot + AI + Ollama。默认 AI 镜像为 **slim**（LLM-only）。见 [Docker 部署](/deploy/docker)。 |
+1. 选择云端服务商或本地 Ollama  
+2. 填写密钥 / Base URL 与模型  
+3. **测通 Provider 并保存**（不要求 AI Runtime / `:9099` 可达）
 
-控制台**不代跑** Docker。保存连接后，扩展基址会同步 Bot 侧 `AI_SERVER_*`。
+遗留路径：若显式设置 `LLM_RUNTIME=ai_service`，聊天仍走 AI 扩展，此时才需 **媒体服务** 页测通。
 
 ### 3. 打开对话总闸
 
@@ -52,17 +51,7 @@
 | --- | --- |
 | **`LLM_CHAT_ENABLED`** | 总闸，默认关；打开后 @ / 接话 AI 才生效 |
 
-### 4. 拉取对话模型
-
-**AI 配置 → 能力包** 或 **接入**：
-
-1. 确认 AI 服务可达  
-2. 在本地模型区选择 `qwen2.5:7b`（或云端 Provider 的模型）  
-3. 勾选 **切换时拉取** 并切换  
-
-全栈默认**不**预拉 Ollama 模型。可选：compose 加 `--profile pull-models`。
-
-### 5. 验收
+### 4. 验收
 
 群里发：
 
@@ -70,17 +59,33 @@
 牛牛连通
 ```
 
-或 `@牛牛` 试一句。失败时回到体检向导看哪一步红灯。
+或 `@牛牛` 试一句。失败时回到体检向导看哪一步红灯；聊天问题优先查 **接入** 的 Provider，不要被媒体服务红灯误导。
 
 ---
 
-## 进阶：唱歌 / TTS
+## 进阶：唱歌 / TTS（媒体服务）
 
-对话模型就绪后，再开媒体：
+需要媒体时再装 AI Runtime：
 
-1. **AI 配置 → 能力包 → 唱歌 · TTS · 媒体权重**  
-2. **源码**：若任务包未开 →「重新安装（含媒体）」；权重缺失 →「下载默认媒体权重」  
-3. **Docker slim**：按页内说明把 `PALLAS_AI_IMAGE` 改为 `pallasbot/pallas-bot-ai:latest`（可选叠 GPU compose），重启后看启动日志解压；**不要**指望 Ollama 拉取唱歌权重  
+### 连接 AI Runtime
+
+在 **AI 配置 → 媒体服务**：
+
+| 方式 | 做法 |
+| --- | --- |
+| **源码（推荐本机开发）** | 「安装 AI Runtime」：克隆同级 `Pallas-Bot-AI` 并 bootstrap；勾 **含唱歌/TTS**。 |
+| **Docker 全栈** | 用主仓 compose 起 `pallasbot-ai`。见 [Docker 部署](/deploy/docker)。 |
+
+控制台**不代跑** Docker。保存连接后，扩展基址会同步 Bot 侧 `AI_SERVER_*`。
+
+然后：
+
+1. **AI 配置 → 能力包 → 唱歌 · TTS · 媒体模型**
+2. **源码**：
+   - 任务包未开 →「重新安装（含媒体）」
+   - 资源包可**分项下载 / 删除**（`sing_pallas` / `sing_pretrain` / `tts` 等）
+   - 在同页选择**默认说话人**、**优先 SVC backend**（失败仍按 registry 回退）与 **TTS 参考音色**
+3. **Docker**：页内只读就绪状态；下载请换 `pallas-bot-ai:latest` 并由启动脚本拉取；若 `data/` 卷可写，仍可切换默认说话人 / backend / 音色
 4. 插件商店安装 **`pallas-plugin-ai-media`**（画画另装 `pallas-plugin-draw`）
 
 插件安装步骤 → [安装插件](install-plugins.md)

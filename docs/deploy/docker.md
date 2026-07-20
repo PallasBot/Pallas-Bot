@@ -103,7 +103,7 @@ docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose
 # 可选预拉 Ollama 模型: 追加 --profile pull-models
 ```
 
-默认 AI 镜像为 **`pallasbot/pallas-bot-ai:slim`**（LLM-only，不预拉模型）；模型可在 WebUI「AI 配置」拉取。有 NVIDIA GPU 且需唱歌/TTS 时，在 `compose.env` 设 `PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest` 并叠加 `docker-compose.full.gpu.yml`。`8088` 与 `9099` 的 health 都正常即可。
+默认 AI 镜像为 **`pallasbot/pallas-bot-ai:slim`**（媒体 / 旧 LLM 路径；不预拉模型）。Bot 容器通过 **`AI_SERVER_HOST=pallasbot-ai`** 探测已有 AI 服务，**不会在容器内 clone** AI 仓。LLM 聊天默认走 Bot 内核 Provider，不必依赖 9099。有 NVIDIA GPU 且需唱歌/TTS 时，在 `compose.env` 设 `PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest` 并叠加 `docker-compose.full.gpu.yml`。`8088` 与（若启 AI）`9099` 的 health 都正常即可。
 :::
 
 ::: details MongoDB（3.x 升级沿用）

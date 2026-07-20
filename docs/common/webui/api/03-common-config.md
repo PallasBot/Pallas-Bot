@@ -87,6 +87,24 @@ PUT 落盘 `webui.json`；各段 `apply_webui_env_section_patch` 内触发对应
 - `providers_configured`
 - `providers_reachable`
 - `checks[]`
+
+## 媒体权重与模型管理
+
+Bot 代理 AI Runtime（需媒体服务可达）：
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/common-config/llm/media-assets/status` | 资源包就绪 / 大小 / download_allowed / delete_allowed |
+| POST | `/common-config/llm/media-assets/download` | Body 可选 `{ "assets": ["tts", ...] }`；缺省下全部缺失 |
+| POST | `/common-config/llm/media-assets/delete` | Body `{ "assets": [...] }`（仅源码可写） |
+| GET | `/common-config/llm/media-assets/download/jobs/{job_id}` | 下载任务进度 |
+| GET | `/common-config/llm/media-models/sing/speakers` | 说话人清单 |
+| GET | `/common-config/llm/media-models/sing/backends` | SVC backend 清单与 preferred |
+| PUT | `/common-config/llm/media-models/sing/defaults` | `{ "default_speaker" }` 和/或 `{ "preferred_backend" }`（空串=自动 fallback） |
+| GET | `/common-config/llm/media-models/tts/voices` | TTS 参考音频清单 |
+| PUT | `/common-config/llm/media-models/tts/defaults` | `ref_audio_path` / `prompt_text` 等 |
+
+WebUI「能力包」页消费上述接口。默认配置落在 AI 侧 `data/media_models.json`。
 - `next_step`
 
 其中 `checks[]` 每项包含：

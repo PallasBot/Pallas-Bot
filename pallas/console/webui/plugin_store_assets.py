@@ -342,7 +342,7 @@ def _github_changelog_urls(repository_url: str | None) -> list[str]:
 
 
 async def _download_binary(url: str) -> tuple[bytes, str]:
-    mirrors = list(iter_mirrors_for_failover())
+    mirrors = list(iter_mirrors_for_failover("community"))
 
     async def getter(rewritten_url: str) -> tuple[bytes, str]:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, follow_redirects=True) as client:
@@ -355,7 +355,7 @@ async def _download_binary(url: str) -> tuple[bytes, str]:
 
 async def _download_text_first(urls: list[str]) -> tuple[str, str]:
     last_exc: Exception | None = None
-    mirrors = list(iter_mirrors_for_failover())
+    mirrors = list(iter_mirrors_for_failover("community"))
     for url in urls:
         raw = str(url or "").strip()
         if not raw:

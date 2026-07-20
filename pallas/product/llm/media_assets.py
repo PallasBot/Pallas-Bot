@@ -1,4 +1,4 @@
-"""代理 Pallas-Bot-AI 媒体权重 status / download。"""
+"""代理 Pallas-Bot-AI 媒体权重 status / download / delete。"""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ async def fetch_media_assets_status(*, cfg: LlmConfig | None = None, timeout_sec
             "media_packages_enabled": {},
             "all_media_assets_ready": False,
             "download_allowed": False,
+            "delete_allowed": False,
             "hints": ["ai_unreachable"],
         }
     if response is None or response.status_code != 200:
@@ -37,6 +38,7 @@ async def fetch_media_assets_status(*, cfg: LlmConfig | None = None, timeout_sec
             "media_packages_enabled": {},
             "all_media_assets_ready": False,
             "download_allowed": False,
+            "delete_allowed": False,
             "hints": ["ai_status_http_error"],
         }
     try:
@@ -50,6 +52,7 @@ async def fetch_media_assets_status(*, cfg: LlmConfig | None = None, timeout_sec
             "media_packages_enabled": {},
             "all_media_assets_ready": False,
             "download_allowed": False,
+            "delete_allowed": False,
             "hints": ["ai_status_invalid"],
         }
     if not isinstance(payload, dict):
@@ -61,15 +64,24 @@ async def fetch_media_assets_status(*, cfg: LlmConfig | None = None, timeout_sec
             "media_packages_enabled": {},
             "all_media_assets_ready": False,
             "download_allowed": False,
+            "delete_allowed": False,
             "hints": ["ai_status_invalid"],
         }
     return {"ok": True, "error": "", **payload}
 
 
-async def start_media_assets_download(*, cfg: LlmConfig | None = None, timeout_sec: float = 30.0) -> dict[str, Any]:
+async def start_media_assets_download(
+    *,
+    assets: list[str] | None = None,
+    cfg: LlmConfig | None = None,
+    timeout_sec: float = 30.0,
+) -> dict[str, Any]:
     url = f"{ai_media_assets_base(cfg)}/download"
+    body: dict[str, Any] = {}
+    if assets is not None:
+        body["assets"] = assets
     try:
-        response = await HTTPXClient.post(url, json={}, timeout=timeout_sec)
+        response = await HTTPXClient.post(url, json=body, timeout=timeout_sec)
     except Exception as exc:
         raise RuntimeError(str(exc)) from exc
     if response is None:
@@ -77,11 +89,19 @@ async def start_media_assets_download(*, cfg: LlmConfig | None = None, timeout_s
     if response.status_code == 409:
         detail = ""
         try:
-            body = response.json()
-            detail = str(body.get("detail") or body)
+            body_json = response.json()
+            detail = str(body_json.get("detail") or body_json)
         except Exception:
             detail = response.text or "当前部署不允许下载"
         raise PermissionError(detail)
+    if response.status_code == 400:
+        detail = ""
+        try:
+            body_json = response.json()
+            detail = str(body_json.get("detail") or body_json)
+        except Exception:
+            detail = response.text or "参数无效"
+        raise ValueError(detail)
     if response.status_code != 200:
         raise RuntimeError(f"启动下载失败 HTTP {response.status_code}")
     try:
@@ -90,6 +110,43 @@ async def start_media_assets_download(*, cfg: LlmConfig | None = None, timeout_s
         raise RuntimeError("下载任务响应无效") from exc
     if not isinstance(payload, dict):
         raise RuntimeError("下载任务响应格式无效")
+    return payload
+
+
+async def delete_media_assets(
+    *,
+    assets: list[str],
+    cfg: LlmConfig | None = None,
+    timeout_sec: float = 30.0,
+) -> dict[str, Any]:
+    url = f"{ai_media_assets_base(cfg)}/delete"
+    try:
+        response = await HTTPXClient.post(url, json={"assets": assets}, timeout=timeout_sec)
+    except Exception as exc:
+        raise RuntimeError(str(exc)) from exc
+    if response is None:
+        raise RuntimeError("AI 服务无响应")
+    if response.status_code == 409:
+        detail = ""
+        try:
+            body_json = response.json()
+            detail = str(body_json.get("detail") or body_json)
+        except Exception:
+            detail = response.text or "当前部署不允许删除"
+        raise PermissionError(detail)
+    if response.status_code == 400:
+        detail = ""
+        try:
+            body_json = response.json()
+            detail = str(body_json.get("detail") or body_json)
+        except Exception:
+            detail = response.text or "参数无效"
+        raise ValueError(detail)
+    if response.status_code != 200:
+        raise RuntimeError(f"删除失败 HTTP {response.status_code}")
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError("删除响应格式无效")
     return payload
 
 
