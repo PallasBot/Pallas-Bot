@@ -138,7 +138,10 @@ uv run pallas
 <table>
 <tr>
 <td><strong>开发者</strong></td>
-<td><a href="https://qm.qq.com/q/yIiAajYwms"><img src="https://img.shields.io/badge/群-牛牛听话!-red?logo=tencent-qq" alt="开发者群"></a></td>
+<td>
+<a href="https://qm.qq.com/q/yIiAajYwms"><img src="https://img.shields.io/badge/群-牛牛听话!-red?logo=tencent-qq" alt="开发者群"></a>
+<a href="https://app.notion.com/invite/620c7eed0a3087b751896407b8dc8cbf915f3a22"><img src="https://img.shields.io/badge/Notion-牛牛协作区-000000?logo=notion&logoColor=white" alt="Notion 牛牛协作区"></a>
+</td>
 </tr>
 <tr>
 <td><strong>拉牛牛</strong></td>
