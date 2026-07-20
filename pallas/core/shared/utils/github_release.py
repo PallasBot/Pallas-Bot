@@ -8,12 +8,14 @@
 - :func:`fetch_latest_release_tag_via_github_web` — API 不可用时经 github.com 跳转解析最新 tag
 - :func:`fetch_github_releases` — 获取 release 列表
 - :func:`fetch_latest_release` — 获取最新单条 release 摘要
+- :func:`aggregate_release_notes` — 将 current→latest 区间说明拼成更新页用 markdown
 """
 
 from __future__ import annotations
 
 import contextlib
 import os
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, unquote, urlparse
@@ -24,6 +26,11 @@ from pallas.core.shared.utils.git_mirror import iter_mirrors_for_failover, reque
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+_RELEASE_TYPE_FOOTER_RE = re.compile(r"^>\s*\*\*类型\*\*[：:].*$", re.MULTILINE)
+_DEFAULT_NOTES_MAX = 12000
+_DEFAULT_MAX_RELEASES = 10
+_DEFAULT_RELEASES_FETCH_LIMIT = 30
 
 
 @contextlib.contextmanager
@@ -122,6 +129,135 @@ def release_tags_equivalent(a: str, b: str) -> bool:
     return normalize_release_tag(a) == normalize_release_tag(b)
 
 
+def clean_release_notes_body(body: str) -> str:
+    """去掉历史 Release 脚注中的「类型」行，并压缩首尾空白。"""
+    text = _RELEASE_TYPE_FOOTER_RE.sub("", body or "")
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def aggregate_release_notes(
+    releases: list[dict[str, Any]],
+    *,
+    current_tag: str,
+    latest_tag: str,
+    max_releases: int = _DEFAULT_MAX_RELEASES,
+    notes_max: int = _DEFAULT_NOTES_MAX,
+    changelog_url: str = "",
+    releases_url: str = "",
+) -> str:
+    """将 GitHub releases（新→旧）拼成 current→latest 的累加说明。
+
+    - 跳过预发布（除非该 tag 即 ``latest_tag``）
+    - 遇到 ``current_tag`` 停止（不含当前已安装版）
+    - 最多 ``max_releases`` 条；总长超过 ``notes_max`` 时截断并附链接
+    - 若区间为空（已最新），回退为仅 latest 一条（有 body 时）
+    """
+    current = (current_tag or "").strip()
+    latest = (latest_tag or "").strip()
+    if not latest:
+        return ""
+
+    selected: list[dict[str, Any]] = []
+    hit_current = False
+    truncated_by_count = False
+    for rel in releases:
+        if not isinstance(rel, dict):
+            continue
+        tag = str(rel.get("tag") or rel.get("tag_name") or "").strip()
+        if not tag:
+            continue
+        if bool(rel.get("prerelease")) and not release_tags_equivalent(tag, latest):
+            continue
+        if current and release_tags_equivalent(tag, current):
+            hit_current = True
+            break
+        selected.append(rel)
+        if len(selected) >= max(1, int(max_releases)):
+            truncated_by_count = True
+            break
+
+    if not selected:
+        for rel in releases:
+            if not isinstance(rel, dict):
+                continue
+            tag = str(rel.get("tag") or rel.get("tag_name") or "").strip()
+            if tag and release_tags_equivalent(tag, latest):
+                selected = [rel]
+                truncated_by_count = False
+                hit_current = True
+                break
+
+    blocks: list[str] = []
+    for rel in selected:
+        tag = str(rel.get("tag") or rel.get("tag_name") or "").strip()
+        body = clean_release_notes_body(str(rel.get("body") or ""))
+        if body:
+            blocks.append(f"## {tag}\n\n{body}")
+        else:
+            blocks.append(f"## {tag}\n\n（无发行说明正文）")
+
+    text = "\n\n".join(blocks).strip()
+    foot_parts: list[str] = []
+    if truncated_by_count or not hit_current:
+        if changelog_url:
+            foot_parts.append(f"[CHANGELOG.md]({changelog_url})")
+        if releases_url:
+            foot_parts.append(f"[GitHub Releases]({releases_url})")
+        if foot_parts:
+            reason = "仅展示最近若干版本" if truncated_by_count else "未在列表中定位当前版本"
+            text = f"{text}\n\n…（{reason}，完整历史见 {' · '.join(foot_parts)}）".strip()
+
+    limit = max(512, int(notes_max))
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rstrip()
+    more: list[str] = []
+    if changelog_url:
+        more.append(f"[CHANGELOG.md]({changelog_url})")
+    if releases_url:
+        more.append(f"[GitHub Releases]({releases_url})")
+    suffix = " · ".join(more) if more else "Release 页面"
+    return f"{cut}\n\n…（已截断，完整内容见 {suffix}）"
+
+
+async def fetch_release_notes_range(
+    repo: str,
+    *,
+    current_tag: str,
+    latest_tag: str,
+    token: str = "",
+    user_agent: str = "Pallas-Bot/1.0",
+    limit: int = _DEFAULT_RELEASES_FETCH_LIMIT,
+    max_releases: int = _DEFAULT_MAX_RELEASES,
+    notes_max: int = _DEFAULT_NOTES_MAX,
+    changelog_url: str = "",
+) -> str:
+    """拉取仓库最近 releases 并拼成更新说明。失败时返回空串。"""
+    owner, _, name = (repo or "").strip().partition("/")
+    if not owner or not name:
+        return ""
+    releases_url = f"https://github.com/{owner}/{name}/releases"
+    headers: dict[str, str] = {"User-Agent": user_agent}
+    headers.update(github_auth_headers(token))
+    with github_request_ssl_env():
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=httpx.Timeout(15.0, connect=8.0),
+            headers=headers,
+        ) as client:
+            releases = await fetch_github_releases(repo, client=client, limit=limit, token=token)
+    return aggregate_release_notes(
+        releases,
+        current_tag=current_tag,
+        latest_tag=latest_tag,
+        max_releases=max_releases,
+        notes_max=notes_max,
+        changelog_url=changelog_url,
+        releases_url=releases_url,
+    )
+
+
 def release_tag_from_github_final_url(url: str) -> str:
     """从跳转后的 GitHub releases 页 URL 解析 tag。"""
     segments = [s for s in urlparse(url).path.split("/") if s]
@@ -173,8 +309,7 @@ async def fetch_github_releases(
 ) -> list[dict[str, Any]]:
     """从 GitHub API 获取最近的 release 列表。
 
-    返回 ``[{tag, assets: [{name, url}]}]``，每个 asset 仅保留
-    ``name`` 与 ``browser_download_url``，调用方按平台自行过滤。
+    返回 ``[{tag, body, html_url, assets: [{name, url}], ...}]``。
     """
     owner, _, name = (repo or "").strip().partition("/")
     if not owner or not name:
@@ -214,6 +349,8 @@ async def fetch_github_releases(
             "name": str(rel.get("name") or tag).strip(),
             "prerelease": bool(rel.get("prerelease", False)),
             "published_at": str(rel.get("published_at") or ""),
+            "html_url": str(rel.get("html_url") or "").strip(),
+            "body": str(rel.get("body") or "").strip(),
             "assets": assets,
         })
     return out

@@ -4852,7 +4852,7 @@ async def warm_console_read_caches() -> None:
 
 async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, Any]:
     from pallas.core.shared.utils.format_exception import format_exception_for_log
-    from pallas.core.shared.utils.github_release import release_tags_equivalent
+    from pallas.core.shared.utils.github_release import fetch_release_notes_range, release_tags_equivalent
 
     from .manager import fetch_latest_webui_release, get_installed_webui_version
 
@@ -4880,13 +4880,24 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
             "checked_at": time.time(),
         }
     has_update = bool(latest_tag and not release_tags_equivalent(current_tag, latest_tag))
-    notes_raw = str(latest.get("body", "") or "").strip()
-    notes_max = 40000
-    release_notes = (
-        notes_raw
-        if len(notes_raw) <= notes_max
-        else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+    # dist 资产可能来自主仓 Release，产品变更史写在 WebUI 仓 CHANGELOG
+    changelog_url = "https://github.com/PallasBot/Pallas-Bot-WebUI/blob/main/CHANGELOG.md"
+    release_notes = await fetch_release_notes_range(
+        repo,
+        current_tag=current_tag,
+        latest_tag=latest_tag,
+        token=github_token,
+        user_agent="Pallas-Bot-PallasWebUI/1.0",
+        changelog_url=changelog_url,
     )
+    if not release_notes:
+        notes_raw = str(latest.get("body", "") or "").strip()
+        notes_max = 12000
+        release_notes = (
+            notes_raw
+            if len(notes_raw) <= notes_max
+            else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+        )
     return {
         "current_tag": current_tag,
         "latest_tag": latest_tag,
@@ -4907,6 +4918,7 @@ def _bot_restart_available() -> bool:
 
 async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any]:
     from pallas.core.shared.utils.format_exception import format_exception_for_log
+    from pallas.core.shared.utils.github_release import fetch_release_notes_range
 
     from .manager import (
         bot_has_release_update,
@@ -4920,8 +4932,9 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
     current = get_bot_current_version()
     current_tag = current.get("tag", "")
     current_commit = current.get("commit", "")
+    bot_repo = "PallasBot/Pallas-Bot"
     try:
-        latest = await fetch_latest_bot_release("PallasBot/Pallas-Bot", token=github_token)
+        latest = await fetch_latest_bot_release(bot_repo, token=github_token)
         latest_tag = str(latest.get("tag", "") or "").strip()
         release_url = str(latest.get("html_url", "") or "").strip()
     except Exception as e:  # noqa: BLE001
@@ -4950,13 +4963,22 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
         current_tag=str(current_tag or ""),
         current_commit=str(current_commit or ""),
     )
-    notes_raw = str(latest.get("body", "") or "").strip()
-    notes_max = 40000
-    release_notes = (
-        notes_raw
-        if len(notes_raw) <= notes_max
-        else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+    release_notes = await fetch_release_notes_range(
+        bot_repo,
+        current_tag=str(current_tag or ""),
+        latest_tag=latest_tag,
+        token=github_token,
+        user_agent="Pallas-Bot/1.0",
+        changelog_url="",
     )
+    if not release_notes:
+        notes_raw = str(latest.get("body", "") or "").strip()
+        notes_max = 12000
+        release_notes = (
+            notes_raw
+            if len(notes_raw) <= notes_max
+            else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+        )
     return {
         "current_tag": current_tag,
         "current_commit": current_commit,
