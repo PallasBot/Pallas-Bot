@@ -43,5 +43,6 @@ async def example_fail():
 
 ## 相关
 
-- `openspec/pallas-console-v1.json`
-- WebUI `src/api/http.ts` · `unwrap()`
+- `openspec/pallas-console-v1.json`（`uv run python tools/sync_console_openapi.py`）
+- WebUI `src/api/generated/pallasConsoleOpenapi.ts` · `src/api/http.ts` · `unwrap()`
+- [OpenAPI 双仓同步](../webui.md#openapi-契约)

@@ -50,41 +50,32 @@ unzip -d data/pb_webui dist.zip
 /pallas/api/openapi.json
 ```
 
-如需离线导出给前端 codegen 或评审：
+离线 schema 与 WebUI 生成类型（推荐一条命令）：
 
 ```bash
-cd Pallas-Bot
-uv run python tools/export_pb_webui_openapi.py
-```
-
-默认输出到：
-
-```text
-openspec/pallas-console-v1.json
-```
-
-双仓同步与 drift 门禁：
-
-```bash
-# 推荐：一次导出 Bot openspec，并在同级 WebUI 仓生成类型
 cd Pallas-Bot
 uv run python tools/sync_console_openapi.py
-# 等价分步：
-# uv run python tools/export_pb_webui_openapi.py
-# uv run python tools/check_console_openapi_drift.py
-# cd ../Pallas-Bot-WebUI && npm run gen:console-openapi-types
+# 写出 openspec/pallas-console-v1.json
+# 同级存在 Pallas-Bot-WebUI 且已 npm ci 时，一并 gen 类型
+```
 
-# WebUI 仅校验（相对同级或 --input 指定的 openspec）
-cd Pallas-Bot-WebUI
+仅导出 / 仅校验：
+
+```bash
+uv run python tools/export_pb_webui_openapi.py
+uv run python tools/check_console_openapi_drift.py
+
+cd ../Pallas-Bot-WebUI
+npm run sync:console-openapi-types   # 或 gen / check
 npm run check:console-openapi-types
 ```
 
-- Bot pre-commit：改 `packages/pb_webui/` 等会跑 `sync-console-openapi`（openspec 有改动时自动改写并要求重新 stage）
-- WebUI pre-commit：提交前从同级 Bot `openspec` 生成类型（有改动则 exit 1 以便 stage）
-- WebUI 仓路径可用环境变量 `PALLAS_WEBUI_ROOT`；默认 `../Pallas-Bot-WebUI`
-- CI：Bot 跑 drift check；WebUI CI 对照主仓 `main` 的 openspec 校验已提交类型
+- Bot pre-commit：改 `packages/pb_webui/` 等会跑 `sync-console-openapi`（openspec 有实质变更时改写并要求重新 stage）
+- WebUI pre-commit：从同级 Bot `openspec` gen 类型（有改动则 exit 1 以便 stage）
+- 路径：`PALLAS_WEBUI_ROOT` / `PALLAS_BOT_ROOT`；默认互为同级目录
+- CI：Bot drift check；WebUI 对照主仓 `main` 的 openspec 校验已提交类型
 
-合并顺序建议：先合 Bot（含 openspec）→ 再合 WebUI（含生成类型）。
+合并顺序：先合 Bot（含 openspec）→ 再合 WebUI（含生成类型）。
 
 ### DynamicConfigPanel（插件 config 元数据）
 

@@ -1,10 +1,10 @@
 # Pallas WebUI API 契约
 
-控制台 JSON API 由主仓 `pallas_webui` 插件提供；前端 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) 通过 Axios 调用。实现源码：
+控制台 JSON API 由主仓 `pb_webui` 插件提供；前端 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) 通过 Axios 调用。实现源码：
 
-- 路由注册：`src/plugins/pb_webui/extended_api.py`（`register_extended_api`）
-- 轻量健康检查：`src/plugins/pb_webui/api.py`
-- 登录与静态页：`src/plugins/pb_webui/public.py`
+- 路由注册：`packages/pb_webui/extended_api.py`（`register_extended_api`）
+- 轻量健康检查：`packages/pb_webui/api.py`
+- 登录与静态页：`packages/pb_webui/public.py`
 
 ## 基址与格式
 
@@ -14,9 +14,9 @@
 | API 前缀 | `/pallas/api`（与 `pallas.toml` / WebUI 配置中的 `base` 一致时为 `{base}/api`） |
 | 响应信封 | `{"ok": true, "data": ...}` 或 HTTP 4xx/5xx + `detail` |
 | 在线 Schema | Bot 运行时可访问 `/pallas/api/openapi.json`（仅控制台前缀下接口） |
-| 离线导出 | `uv run python tools/export_pb_webui_openapi.py` → 默认生成 `openspec/pallas-console-v1.json` |
+| 离线导出 | `uv run python tools/sync_console_openapi.py` → `openspec/pallas-console-v1.json`（同级有 WebUI 仓时一并 gen 类型） |
 
-前端类型定义见 WebUI 仓库 `src/api/pallasTypes.ts`；请求封装见 `src/api/consoleApi.ts`。
+前端类型：WebUI 仓 `src/api/generated/pallasConsoleOpenapi.ts`（由 openspec 生成）与 `src/api/pallasTypes.ts`；请求封装见 `src/api/consoleApi.ts`。更完整的双仓流程见 [WebUI 前端开发 · OpenAPI 契约](../../../developer/webui.md#openapi-契约)。
 
 ## 鉴权
 
@@ -27,7 +27,7 @@
 | Query | `?token=<token>`（部分写操作兼容） |
 
 - **读接口**：`router` 全局依赖 `_pallas_token_dep`（有效 token 或会话）
-- **写接口**（PUT/POST 改配置、备份、申请处理等）：额外 `_check_pallas_write_token`（写 token 可与读 token 相同，由 `pallas_webui` 配置决定）
+- **写接口**（PUT/POST 改配置、备份、申请处理等）：额外 `_check_pallas_write_token`（写 token 可与读 token 相同，由 `pb_webui` 配置决定）
 
 登录页：`GET/POST /pallas/login`（`public.py`，非 JSON API）。
 
@@ -60,12 +60,17 @@
 1. 在 `extended_api.py` 的 `register_extended_api` 内增加路由（`include_in_schema=True` 便于 OpenAPI）
 2. 写操作使用 `_check_pallas_write_token`
 3. 在本目录补充对应域文档或新增分域文件
-4. WebUI：在 `consoleApi.ts` + `pallasTypes.ts` 增加类型与请求函数
-
-如需更新离线 schema：
+4. 更新 OpenAPI 与 WebUI 类型（见下），再在 `consoleApi.ts` 增加请求函数
 
 ```bash
-uv run python tools/export_pb_webui_openapi.py
+# Bot：导出 openspec（同级 WebUI 可一并 gen）
+uv run python tools/sync_console_openapi.py
+
+# 或仅 WebUI（同级需有 Pallas-Bot）
+cd ../Pallas-Bot-WebUI
+npm run sync:console-openapi-types
 ```
 
-协议端（NapCat/Snowluma）另有独立 HTTP API，由 `pallas_protocol` 挂载，不在 `/pallas/api` 下；见 [pallas_protocol 文档](../../../plugins/pb_protocol/README.md)。
+改 `packages/pb_webui/` 时 Bot pre-commit 会跑同步；合并建议先合 Bot（含 openspec）再合 WebUI。细则见 [webui.md](../../../developer/webui.md#openapi-契约)。
+
+协议端（NapCat/Snowluma）另有独立 HTTP API，由 `pb_protocol` 挂载，不在 `/pallas/api` 下；见 [pb_protocol 文档](../../../plugins/pb_protocol/README.md)。
