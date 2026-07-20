@@ -6063,6 +6063,18 @@ def register_extended_api(
             logger.exception("Pallas-Bot 控制台: 更新社区插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
+    from pallas.console.webui.git_mirror_api import register_git_mirror_router
+
+    register_git_mirror_router(
+        router,
+        x=x,
+        check_write_token=lambda *, x_pallas_token=None, token=None: _check_pallas_write_token(
+            plugin_config,
+            x_pallas_token=x_pallas_token,
+            token=token,
+        ),
+    )
+
     @router.get(f"{x}/plugins/help-menu-visibility", include_in_schema=True)
     async def _plugins_help_menu_visibility() -> JSONResponse:
         try:

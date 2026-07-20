@@ -15,6 +15,7 @@ import httpx
 from nonebot import logger
 
 from pallas.core.foundation.paths import plugin_data_dir
+from pallas.core.shared.utils.git_mirror import iter_mirrors_for_failover, request_with_mirrors
 
 _SNAPSHOT_FILENAME = "plugin_store_assets_snapshot.json"
 _PUBLIC_PREFIX = "/pallas/store-assets"
@@ -341,23 +342,33 @@ def _github_changelog_urls(repository_url: str | None) -> list[str]:
 
 
 async def _download_binary(url: str) -> tuple[bytes, str]:
-    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, follow_redirects=True) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
-        return resp.content, str(resp.headers.get("content-type") or "")
+    mirrors = list(iter_mirrors_for_failover())
+
+    async def getter(rewritten_url: str) -> tuple[bytes, str]:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, follow_redirects=True) as client:
+            resp = await client.get(rewritten_url)
+            resp.raise_for_status()
+            return resp.content, str(resp.headers.get("content-type") or "")
+
+    return await request_with_mirrors(url, mirrors, getter)
 
 
 async def _download_text_first(urls: list[str]) -> tuple[str, str]:
     last_exc: Exception | None = None
+    mirrors = list(iter_mirrors_for_failover())
     for url in urls:
         raw = str(url or "").strip()
         if not raw:
             continue
         try:
-            async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, follow_redirects=True) as client:
-                resp = await client.get(raw)
-                resp.raise_for_status()
-                return resp.text, raw
+
+            async def getter(rewritten_url: str, *, source_url: str = raw) -> tuple[str, str]:
+                async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT, follow_redirects=True) as client:
+                    resp = await client.get(rewritten_url)
+                    resp.raise_for_status()
+                    return resp.text, source_url
+
+            return await request_with_mirrors(raw, mirrors, getter)
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             continue

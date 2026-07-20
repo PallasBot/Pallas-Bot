@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from pallas.console.webui.community_plugin_registry import build_community_plugin_store
 
 
@@ -326,3 +328,83 @@ async def test_build_community_plugin_store_prefers_cached_asset_urls(monkeypatc
     row = store["plugins"][0]
 
     assert row["icon"] == "/pallas/store-assets/icon/community-demo.png"
+
+
+@pytest.mark.asyncio
+async def test_install_community_plugin_uses_rewritten_clone_url(monkeypatch, tmp_path) -> None:
+    from pallas.console.webui import community_plugin_install as cpi
+    from pallas.core.shared.utils import git_mirror as gm
+
+    ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
+
+    def fake_iter_mirrors():
+        yield ghproxy_mirror
+
+    monkeypatch.setattr(cpi, "iter_mirrors_for_failover", fake_iter_mirrors)
+    monkeypatch.setattr(cpi, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(cpi, "extra_plugin_dirs_ready", lambda: True)
+    monkeypatch.setattr(cpi, "bot_lifecycle_available", lambda: True)
+    monkeypatch.setattr(cpi.shutil, "which", lambda _cmd: "/usr/bin/git")
+
+    clone_urls: list[str] = []
+
+    async def fake_run_git_command(_timeout_s: float, *args: str, cwd: str | None = None):
+        if args and args[0] == "clone":
+            clone_urls.append(args[5])
+            dest = tmp_path / cpi.COMMUNITY_PLUGINS_DIR / "demo"
+            dest.mkdir(parents=True, exist_ok=True)
+            (dest / "__init__.py").write_text("# demo\n", encoding="utf-8")
+            return 0, "cloned", ""
+        return 1, "", "unexpected git args"
+
+    monkeypatch.setattr(cpi, "run_git_command", fake_run_git_command)
+
+    result = await cpi.install_community_plugin(
+        "demo",
+        repository_url="https://github.com/acme/demo",
+        ref="main",
+    )
+
+    assert result["installed"] is True
+    assert len(clone_urls) == 1
+    assert clone_urls[0] == "https://ghproxy.vip/https://github.com/acme/demo"
+
+
+@pytest.mark.asyncio
+async def test_update_community_plugin_uses_git_instead_of_for_proxy(monkeypatch, tmp_path) -> None:
+    from pallas.console.webui import community_plugin_install as cpi
+    from pallas.core.shared.utils import git_mirror as gm
+
+    ghproxy_mirror = next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip")
+
+    def fake_iter_mirrors():
+        yield ghproxy_mirror
+
+    monkeypatch.setattr(cpi, "iter_mirrors_for_failover", fake_iter_mirrors)
+    monkeypatch.setattr(cpi, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(cpi, "extra_plugin_dirs_ready", lambda: True)
+    monkeypatch.setattr(cpi, "bot_lifecycle_available", lambda: True)
+
+    dest = tmp_path / cpi.COMMUNITY_PLUGINS_DIR / "demo"
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "__init__.py").write_text("# demo\n", encoding="utf-8")
+
+    git_calls: list[tuple[str, ...]] = []
+
+    async def fake_run_git_command(_timeout_s: float, *args: str, cwd: str | None = None):
+        git_calls.append(args)
+        if args[-3:] == ("reset", "--hard", "origin/main"):
+            return 0, "reset ok", ""
+        if args[-3:] == ("fetch", "origin", "main"):
+            return 0, "fetched", ""
+        return 1, "", "fail"
+
+    monkeypatch.setattr(cpi, "run_git_command", fake_run_git_command)
+
+    result = await cpi.update_community_plugin("demo", ref="main")
+
+    assert result["installed"] is True
+    assert any(
+        args[:2] == ("-c", "url.https://ghproxy.vip/https://github.com/.insteadOf=https://github.com/")
+        for args in git_calls
+    )

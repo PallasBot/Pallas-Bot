@@ -20,6 +20,8 @@ from urllib.parse import quote, unquote, urlparse
 
 import httpx
 
+from pallas.core.shared.utils.git_mirror import iter_mirrors_for_failover, request_with_mirrors
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -145,16 +147,21 @@ async def fetch_latest_release_tag_via_github_web(
     eff_timeout = client_timeout or httpx.Timeout(15.0, connect=8.0)
     headers: dict[str, str] = {"User-Agent": user_agent}
     headers.update(github_auth_headers(token))
+    mirrors = list(iter_mirrors_for_failover())
+
+    async def getter(url: str) -> dict[str, str]:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        final_url = str(resp.url)
+        tag = release_tag_from_github_final_url(final_url)
+        if not tag:
+            msg = f"无法从 GitHub 网页解析 release tag: {final_url!r}"
+            raise ValueError(msg)
+        return {"tag": tag, "html_url": final_url}
+
     with github_request_ssl_env():
         async with httpx.AsyncClient(follow_redirects=True, timeout=eff_timeout, headers=headers) as client:
-            resp = await client.get(page_url)
-            resp.raise_for_status()
-            final_url = str(resp.url)
-    tag = release_tag_from_github_final_url(final_url)
-    if not tag:
-        msg = f"无法从 GitHub 网页解析 release tag: {final_url!r}"
-        raise ValueError(msg)
-    return {"tag": tag, "html_url": final_url}
+            return await request_with_mirrors(page_url, mirrors, getter)
 
 
 async def fetch_github_releases(
@@ -174,11 +181,17 @@ async def fetch_github_releases(
         return []
     api_url = f"https://api.github.com/repos/{owner}/{name}/releases?per_page={limit}"
     auth_headers = github_auth_headers(token)
+    mirrors = list(iter_mirrors_for_failover())
+
+    async def getter(url: str) -> httpx.Response:
+        resp = await client.get(url, headers=auth_headers)
+        if resp.status_code != 200:
+            resp.raise_for_status()
+        return resp
+
     try:
-        resp = await client.get(api_url, headers=auth_headers)
+        resp = await request_with_mirrors(api_url, mirrors, getter)
     except Exception:  # noqa: BLE001
-        return []
-    if resp.status_code != 200:
         return []
     data = resp.json()
     if not isinstance(data, list):
@@ -225,14 +238,20 @@ async def fetch_latest_release(
     api_url = github_release_api_url(repo)
     headers: dict[str, str] = {"User-Agent": user_agent}
     headers.update(github_auth_headers(token))
+    mirrors = list(iter_mirrors_for_failover())
+
+    async def getter(url: str) -> httpx.Response:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        return resp
+
     with github_request_ssl_env():
         async with httpx.AsyncClient(
             follow_redirects=True,
             timeout=httpx.Timeout(15.0, connect=8.0),
             headers=headers,
         ) as client:
-            resp = await client.get(api_url)
-            resp.raise_for_status()
+            resp = await request_with_mirrors(api_url, mirrors, getter)
             data = resp.json()
     tag = str(data.get("tag_name") or "").strip()
     html_url = str(data.get("html_url") or "").strip()
