@@ -128,7 +128,9 @@ def register_routes(
         return target
 
     shared_pallas_ui_dir = Path(__file__).resolve().parent.parent / "pb_protocol" / "web" / "static" / "pallas_ui"
+    # 须在 warm_plugin_store_assets 之前挂载：目录可能尚未存在，否则 SPA catch-all 会吞掉图片 URL。
     plugin_store_assets_dir = pb_webui_data_dir(create=True) / "store-assets"
+    plugin_store_assets_dir.mkdir(parents=True, exist_ok=True)
     use_priest_avatar = shared_pallas_ui_dir.is_dir()
 
     def _render_login_page(*, target: str, reason: str | None, token_submitted: bool) -> HTMLResponse:
@@ -302,11 +304,10 @@ def register_routes(
             name="pallas_webui_pallas_ui",
         )
 
-    if plugin_store_assets_dir.is_dir():
-        app.mount(
-            f"{base}/store-assets",
-            StaticFiles(directory=str(plugin_store_assets_dir)),
-            name="pallas_webui_store_assets",
-        )
+    app.mount(
+        f"{base}/store-assets",
+        StaticFiles(directory=str(plugin_store_assets_dir)),
+        name="pallas_webui_store_assets",
+    )
 
     app.include_router(router)
