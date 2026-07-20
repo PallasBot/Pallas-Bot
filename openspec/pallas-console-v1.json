@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.0.0-21-g5857c566",
+    "version": "v4.0.0-17-gee273306",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -16987,6 +16987,17 @@
                 "type": "null"
               }
             ]
+          },
+          "draw_runtime_mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draw Runtime Mode"
           },
           "tts_health": {
             "anyOf": [
