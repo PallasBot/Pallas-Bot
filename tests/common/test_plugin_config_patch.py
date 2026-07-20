@@ -1,3 +1,5 @@
+from typing import Literal
+
 import pytest
 from pydantic import BaseModel, Field, ValidationError
 
@@ -13,11 +15,25 @@ from pallas.console.webui.plugin_api import (
 class SampleConfig(BaseModel):
     tags: list[int] = Field(default_factory=list)
     ratio: float = Field(default=1.0, ge=0.0)
+    interval_sec: Literal[60, 120, 300, 600, 900, 1800, 3600] = 300
+    mode: Literal["auto", "session"] = "auto"
 
 
 def test_normalize_patch_null_list_uses_empty_list() -> None:
     field = SampleConfig.model_fields["tags"]
     assert normalize_patch_value(field, None) == []
+
+
+def test_normalize_patch_coerces_numeric_literal_string() -> None:
+    field = SampleConfig.model_fields["interval_sec"]
+    assert normalize_patch_value(field, "1800") == 1800
+    assert normalize_patch_value(field, 1800) == 1800
+    assert normalize_patch_value(field, 1800.0) == 1800
+
+
+def test_normalize_patch_keeps_string_literal() -> None:
+    field = SampleConfig.model_fields["mode"]
+    assert normalize_patch_value(field, "session") == "session"
 
 
 def test_plugin_field_env_key_repeater_learn() -> None:

@@ -56,15 +56,20 @@ def test_apply_pb_stats_plugin_config_patch(monkeypatch, tmp_path):
         {
             "roster_public_qq": True,
             "roster_public_profile": False,
+            # WebUI 数字 enum 常以字符串提交
+            "interval_sec": "1800",
         },
     )
     roster_qq = next(f for f in out["fields"] if f["name"] == "roster_public_qq")
     roster_profile = next(f for f in out["fields"] if f["name"] == "roster_public_profile")
+    interval = next(f for f in out["fields"] if f["name"] == "interval_sec")
     assert roster_qq["current"] is True
     assert roster_profile["current"] is False
+    assert interval["current"] == 1800
     raw = webui.read_text(encoding="utf-8")
     assert '"PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC_QQ": "true"' in raw
     assert '"PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC_PROFILE": "false"' in raw
+    assert '"PALLAS_COMMUNITY_STATS_INTERVAL_SEC": "1800"' in raw
 
 
 def test_community_stats_config_delegates_to_pb_stats(monkeypatch):

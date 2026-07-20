@@ -184,10 +184,36 @@ def format_validation_error(exc: ValidationError) -> str:
     return text[:2000]
 
 
+def coerce_literal_int_value(annotation: Any, value: Any) -> Any:
+    """表单常把数字 Literal 选项以字符串提交；Pydantic Literal[int] 不接受 str。"""
+    from typing import Literal, get_args, get_origin
+
+    if get_origin(annotation) is not Literal:
+        return value
+    args = get_args(annotation)
+    if not args or not all(isinstance(a, int) and not isinstance(a, bool) for a in args):
+        return value
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return value
+        try:
+            return int(text, 10)
+        except ValueError:
+            return value
+    return value
+
+
 def normalize_patch_value(field: Any, value: Any) -> Any:
     """WebUI 空 JSON / null 时对齐 Pydantic 默认值，避免保存 400。"""
     if value is not None:
-        return value
+        return coerce_literal_int_value(field.annotation, value)
     factory = getattr(field, "default_factory", None)
     if factory is not None:
         return factory() if callable(factory) else factory
