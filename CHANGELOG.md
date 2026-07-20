@@ -1,10 +1,32 @@
 # Changelog
 
-本文件记录 Pallas-Bot **面向站点维护者与扩展作者** 的显著变更。细粒度提交见 Git history。
+## [4.0.1] - 2026-07-20
 
-格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+### Added
 
-## [4.0.0] - 未发布（`dev-v2` 集成线）
+- Git 镜像：支持 GitHub 镜像源，并在控制台可配置
+- 社区中心：WebUI 连通检测 API（含 OpenAPI 导出）
+- WebUI BFF：媒体模型与 LLM 配置分家；Git 镜像相关增强
+- AI Runtime 总览：上报画画 `draw_runtime_mode`（区分插件直通与 AI 绘图队列）
+
+### Fixed
+
+- 语料贡献时强制 re-enroll，避免贡献后未重新入队
+- WebUI 启动时预创建并挂载 `store-assets`，避免官方插件封面被 SPA catch-all 当成 HTML
+- AI 扩展默认健康路径改为 `/health`
+- WebUI 保存 Literal 数字枚举时，字符串（如 `"1800"`）coerce 为 int，避免 400
+- docs 分支 CI：改为 tip 镜像，避免反复 merge 分叉
+
+### Changed
+
+- 同步控制台 OpenAPI（含 git-mirror 等）
+
+### 文档
+
+- README 补充 Notion 牛牛协作区邀请链接
+- 修正 Pallas-Bot-AI 外链分支为 `master`
+
+## [4.0.0] - 2026-07-19
 
 ### Added
 
@@ -35,4 +57,5 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
-[4.0.0]: https://github.com/PallasBot/Pallas-Bot/compare/v3.x...dev-v2
+[4.0.1]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.0...v4.0.1
+[4.0.0]: https://github.com/PallasBot/Pallas-Bot/compare/v3.9.3...v4.0.0
