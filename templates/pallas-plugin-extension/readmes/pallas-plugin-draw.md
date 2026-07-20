@@ -4,7 +4,7 @@
 
 # pallas-plugin-draw
 
-Pallas-Bot 4.0 官方扩展：**牛牛画画**（AI 生图网关）。
+Pallas-Bot 4.0 官方扩展：**牛牛画画**（直连生图网关）。
 
 ## 安装
 
