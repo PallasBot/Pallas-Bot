@@ -55,6 +55,38 @@ def correction_matches_query(user_text: str, query_text: str) -> bool:
     return False
 
 
+def _build_matched_contrast_pairs(rows: list, *, query: str, limit: int = 2) -> list[str]:
+    """相近触发下拼 BAD/OK 对照，便于 few-shot 避雷。"""
+    matched = [item for item in rows if correction_matches_query(item.user_text, query)]
+    if not matched:
+        return []
+    bad_by_trigger: dict[str, str] = {}
+    good_by_trigger: dict[str, str] = {}
+    for item in reversed(matched):
+        trigger = summarize_user_trigger(item.user_text)
+        if not trigger:
+            continue
+        bad = ""
+        if not item.eligible_for_bias:
+            bad = summarize_reply_snippet(item.reply_text)
+        good = summarize_reply_snippet(item.corrected_reply_text) or (
+            summarize_reply_snippet(item.reply_text) if item.eligible_for_bias else ""
+        )
+        if bad and trigger not in bad_by_trigger:
+            bad_by_trigger[trigger] = bad
+        if good and trigger not in good_by_trigger:
+            good_by_trigger[trigger] = good
+    pairs: list[str] = []
+    for trigger, bad in bad_by_trigger.items():
+        good = good_by_trigger.get(trigger, "")
+        if not good or good == bad:
+            continue
+        pairs.append(f"类似「{trigger}」时：别写「{bad}」；可写「{good}」")
+        if len(pairs) >= max(1, int(limit)):
+            break
+    return pairs
+
+
 def build_group_feedback_chat_hint(*, group_id: int, user_text: str = "", limit: int = 40) -> str:
     if not can_read_behavioral_learning() or int(group_id) <= 0:
         return ""
@@ -84,6 +116,10 @@ def build_group_feedback_chat_hint(*, group_id: int, user_text: str = "", limit:
     hints: list[str] = list(matched_corrections[:_CORRECTION_MATCH_LIMIT])
     remaining = max(0, _CORRECTION_LIMIT - len(hints))
     hints.extend(general_corrections[:remaining])
+
+    if query:
+        pair_hints = _build_matched_contrast_pairs(rows, query=query, limit=2)
+        hints[0:0] = pair_hints
 
     good_rows = [item for item in rows if item.eligible_for_bias and str(item.reply_text or "").strip()]
     bad_rows = [item for item in rows if not item.eligible_for_bias and str(item.reply_text or "").strip()]

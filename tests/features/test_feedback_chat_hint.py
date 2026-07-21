@@ -85,6 +85,44 @@ def test_build_group_feedback_chat_hint_includes_maintainer_correction(tmp_path,
     assert correction_matches_query("牛牛真棒", "牛牛真棒啊") is True
 
 
+def test_build_group_feedback_chat_hint_contrast_pair(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("LLM_REPEATER_FEEDBACK_ENABLED", "true")
+    monkeypatch.setenv("LLM_CHAT_ENABLED", "true")
+    monkeypatch.setenv("LLM_REPEATER_BIAS_ENABLED", "true")
+    from pallas.product.llm.config import clear_llm_config_cache
+
+    clear_llm_config_cache()
+
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=1,
+            group_id=55,
+            user_id=1,
+            request_id="pair-bad",
+            user_text="今天好闲",
+            reply_text="您好，很高兴为您服务",
+        )
+    )
+    set_feedback_entry_eligibility(request_id="pair-bad", eligible_for_bias=False)
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=1,
+            group_id=55,
+            user_id=1,
+            request_id="pair-good",
+            user_text="今天好闲",
+            reply_text="那确实闲",
+            corrected_reply_text="那确实闲",
+            corrected_at=1718700002,
+        )
+    )
+
+    hint = build_group_feedback_chat_hint(group_id=55, user_text="今天好闲啊")
+    assert "别写「您好，很高兴为您服务」" in hint or "别写" in hint
+    assert "可写「那确实闲」" in hint
+
+
 def test_build_group_feedback_chat_hint_empty_when_bias_disabled(monkeypatch) -> None:
     monkeypatch.setenv("LLM_CHAT_ENABLED", "true")
     monkeypatch.delenv("LLM_REPEATER_BIAS_ENABLED", raising=False)
