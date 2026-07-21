@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 构建 Pallas-Bot-WebUI 并打包 dist.zip（zip 根为 public/，解压到 data/pallas_webui 后即为 public/index.html）。
+# 构建 Pallas-Bot-WebUI 并打包 dist.zip（zip 根为 public/，解压到 data/pb_webui 后即为 public/index.html）。
 set -euo pipefail
 
 WEBUI_DIR="${1:?用法: build_webui_dist.sh <webui-src-dir> [out.zip]}"

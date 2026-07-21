@@ -85,7 +85,7 @@ jobs:
           export BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           npm run build:ci
 
-      # zip 根目录为 public/，在 Bot 侧解压到 data/pallas_webui 即得到 public/index.html（与插件默认路径一致）。
+      # zip 根为 public/：解压到 data/pb_webui → data/pb_webui/public/index.html（webui_public_path）。
       - name: Pack dist artifact
         run: |
           mkdir -p webui-zip-root/public
@@ -166,7 +166,19 @@ jobs:
 
             ## WebUI
 
-            附件 **`dist.zip`**（WebUI `${{ needs.build-webui-dist.outputs.webui_git_ref }}` / console `${{ needs.build-webui-dist.outputs.webui_console_version }}`）。启动后通常自动部署；手动解压到 **`data/pallas_webui`** 见 [pallas_webui 插件说明](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/plugins/pb_webui/README.md#配置)。
+            附件 **`dist.zip`**：控制台前端静态资源（来自 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) `${{ needs.build-webui-dist.outputs.webui_git_ref }}`，console `${{ needs.build-webui-dist.outputs.webui_console_version }}`）。
+
+            | 方式 | 说明 |
+            | --- | --- |
+            | 自动 | 本地尚无 `data/pb_webui/public` 时，启动会从本仓库 Release 拉取并解压 |
+            | 手动 | 将本附件解压到仓库根下的 `data/pb_webui/`|
+            | 控制台 | 「更新」页可检查并应用同名 `dist.zip` |
+
+            ```bash
+            unzip -d data/pb_webui dist.zip
+            ```
+
+            访问：`http://<host>:<port>/pallas/` · 说明见 [WebUI 部署](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/maintainer/install/webui.md) / [开发者文档](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/developer/webui.md)。
           files: |
             dist.zip
           draft: false
