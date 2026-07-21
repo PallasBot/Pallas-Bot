@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.0.0-17-gee273306",
+    "version": "v4.0.2-5-g12fb41c7",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -6483,6 +6483,93 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Provider Models Post",
+        "operationId": "_llm_provider_models_post_pallas_api_common_config_llm_providers__provider_id__models_post",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/_LlmProviderModelsDiscoverBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -16709,6 +16796,34 @@
           "kind"
         ],
         "title": "_LlmProviderConfigRowData"
+      },
+      "_LlmProviderModelsDiscoverBody": {
+        "properties": {
+          "base_url": {
+            "type": "string",
+            "title": "Base Url",
+            "default": ""
+          },
+          "api_key": {
+            "type": "string",
+            "title": "Api Key",
+            "default": ""
+          },
+          "api_key_env": {
+            "type": "string",
+            "title": "Api Key Env",
+            "default": ""
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "_LlmProviderModelsDiscoverBody",
+        "description": "Bot 直连发现模型：由控制台传入草稿凭证，不经 AI Runtime。"
       },
       "_LlmProviderRowBody": {
         "properties": {
