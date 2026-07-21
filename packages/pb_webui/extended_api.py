@@ -4522,6 +4522,17 @@ class _LlmProvidersDocumentBody(BaseModel):
     routing: _LlmProvidersRoutingBody = Field(default_factory=_LlmProvidersRoutingBody)
 
 
+class _LlmProviderModelsDiscoverBody(BaseModel):
+    """Bot 直连发现模型：由控制台传入草稿凭证，不经 AI Runtime。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    base_url: str = ""
+    api_key: str = ""
+    api_key_env: str = ""
+    kind: str = ""
+
+
 class _LlmLocalRoutingModelsBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -6570,6 +6581,32 @@ def register_extended_api(
 
         try:
             data = await fetch_provider_models(provider_id)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(
+        f"{x}/common-config/llm/providers/{{provider_id}}/models",
+        include_in_schema=True,
+    )
+    async def _llm_provider_models_post(
+        provider_id: str,
+        body: _LlmProviderModelsDiscoverBody | None = None,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm.model_admin import fetch_provider_models
+
+        payload = body or _LlmProviderModelsDiscoverBody()
+        try:
+            data = await fetch_provider_models(
+                provider_id,
+                base_url=payload.base_url,
+                api_key=payload.api_key,
+                api_key_env=payload.api_key_env,
+                kind=payload.kind,
+            )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})

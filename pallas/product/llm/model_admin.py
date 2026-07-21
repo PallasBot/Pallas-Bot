@@ -1,4 +1,4 @@
-"""代理 AI 服务模型管理 API，供 WebUI 与超管口令使用。"""
+"""模型管理：多数仍代理 AI Runtime；Provider 模型列表由 Bot 直连上游。"""
 
 from __future__ import annotations
 
@@ -343,26 +343,112 @@ async def save_providers_config(
     return payload
 
 
+def _resolve_local_ollama_base_url(base_url: str = "", *, cfg: LlmConfig | None = None) -> str:
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+
+    raw = (base_url or "").strip()
+    if raw:
+        return raw
+    for key in ("LLM_BACKEND_URL", "OLLAMA_URL", "OLLAMA_HOST"):
+        val = str(repo_env_raw_value(key) or "").strip()
+        if val:
+            return val
+    c = cfg or get_llm_config()
+    kernel = str(c.llm_base_url or "").strip()
+    if kernel:
+        return kernel
+    return "http://127.0.0.1:11434"
+
+
 async def fetch_provider_models(
     provider_id: str,
     *,
+    base_url: str = "",
+    api_key: str = "",
+    api_key_env: str = "",
+    kind: str = "",
     cfg: LlmConfig | None = None,
     timeout_sec: float = 15.0,
 ) -> dict[str, Any]:
-    from urllib.parse import quote
+    """Bot 直连上游发现模型列表，不经 AI Runtime。"""
+    import os
+
+    from pallas.product.llm.provider_client import (
+        LlmProviderError,
+        list_ollama_tag_models,
+        list_openai_compatible_models,
+    )
 
     c = cfg or get_llm_config()
-    pid = quote(str(provider_id), safe="")
-    response = await HTTPXClient.get(f"{ai_llm_api_base(c)}/providers/{pid}/models", timeout=timeout_sec)
-    if response is None:
-        raise RuntimeError("拉取模型列表失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"拉取模型列表失败 HTTP {response.status_code}: {detail}")
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise RuntimeError("模型列表响应无效")
-    return payload
+    pid = str(provider_id or "").strip() or "remote"
+    kind_norm = (kind or "").strip().lower()
+    if not kind_norm:
+        kind_norm = "local" if pid == "local" else "remote"
+
+    key = (api_key or "").strip()
+    env_name = (api_key_env or "").strip()
+    if not key and env_name:
+        key = str(os.environ.get(env_name) or "").strip()
+
+    url = (base_url or "").strip()
+    if kind_norm == "local":
+        url = _resolve_local_ollama_base_url(url, cfg=c)
+        try:
+            models = await list_ollama_tag_models(url, timeout_sec=timeout_sec)
+        except LlmProviderError as exc:
+            return {
+                "provider_id": pid,
+                "ok": False,
+                "models": [],
+                "source": "ollama",
+                "error": str(exc),
+            }
+        return {
+            "provider_id": pid,
+            "ok": True,
+            "models": models,
+            "source": "ollama",
+            "error": "",
+        }
+
+    if not url:
+        url = str(c.llm_base_url or "").strip()
+        if not key:
+            key = str(c.llm_api_key or "").strip()
+    if not url:
+        return {
+            "provider_id": pid,
+            "ok": False,
+            "models": [],
+            "source": "openai",
+            "error": "缺少 Base URL，请填写后刷新",
+        }
+    if not key:
+        return {
+            "provider_id": pid,
+            "ok": False,
+            "models": [],
+            "source": "openai",
+            "error": "缺少 API Key，请填写后刷新（已保存密钥时请重新输入一次）",
+        }
+
+    try:
+        models = await list_openai_compatible_models(url, key, timeout_sec=timeout_sec)
+    except LlmProviderError as exc:
+        return {
+            "provider_id": pid,
+            "ok": False,
+            "models": [],
+            "source": "openai",
+            "error": str(exc),
+        }
+    return {
+        "provider_id": pid,
+        "ok": True,
+        "models": models,
+        "source": "openai",
+        "error": "",
+    }
 
 
 async def fetch_local_routing_config(

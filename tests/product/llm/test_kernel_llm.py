@@ -6,12 +6,85 @@ import asyncio
 from typing import Any
 
 import pytest
-from pallas.product.llm.provider_client import chat_completions_url, complete_chat_message
-from pallas.product.llm.tool_loop import complete_with_tool_loop, parse_tool_arguments
 
 from pallas.product.llm.config import LlmConfig, clear_llm_config_cache
 from pallas.product.llm.models import ChatSubmitRequest
+from pallas.product.llm.provider_client import chat_completions_url, complete_chat_message
 from pallas.product.llm.submit_gate import assess_llm_kernel_submit_gate, user_message_for_submit_status
+from pallas.product.llm.tool_loop import complete_with_tool_loop, parse_tool_arguments
+
+
+@pytest.mark.asyncio
+async def test_list_openai_compatible_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.provider_client import list_openai_compatible_models, parse_openai_models_payload
+
+    assert parse_openai_models_payload({"data": [{"id": "a"}, {"id": "b"}]}) == ["a", "b"]
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {"data": [{"id": "deepseek-chat"}]}
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args) -> None:
+            return None
+
+        async def get(self, url: str, headers: dict | None = None):
+            assert url.endswith("/models")
+            assert headers is not None
+            assert "Authorization" in headers
+            return FakeResponse()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.httpx.AsyncClient", FakeClient)
+    models = await list_openai_compatible_models("https://api.example.com/v1", "sk-test")
+    assert models == ["deepseek-chat"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_provider_models_bot_direct(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.model_admin import fetch_provider_models
+
+    async def fake_list(base_url: str, api_key: str = "", *, timeout_sec: float = 15.0):
+        assert base_url.startswith("https://api.siliconflow.cn")
+        assert api_key == "sk-x"
+        return ["Qwen/Qwen2.5-7B-Instruct"]
+
+    monkeypatch.setattr(
+        "pallas.product.llm.provider_client.list_openai_compatible_models",
+        fake_list,
+    )
+    result = await fetch_provider_models(
+        "siliconflow",
+        base_url="https://api.siliconflow.cn/v1",
+        api_key="sk-x",
+        kind="openai-compatible",
+    )
+    assert result["ok"] is True
+    assert result["source"] == "openai"
+    assert result["models"] == ["Qwen/Qwen2.5-7B-Instruct"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_provider_models_requires_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.config import LlmConfig
+    from pallas.product.llm.model_admin import fetch_provider_models
+
+    result = await fetch_provider_models(
+        "siliconflow",
+        base_url="https://api.siliconflow.cn/v1",
+        api_key="",
+        kind="openai-compatible",
+        cfg=LlmConfig(llm_base_url="", llm_api_key=""),
+    )
+    assert result["ok"] is False
+    assert "API Key" in result["error"]
 
 
 def test_chat_completions_url_normalizes_v1() -> None:

@@ -103,6 +103,84 @@ async def complete_chat_message(
     return message_obj
 
 
+def parse_openai_models_payload(payload: Any) -> list[str]:
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, list):
+        return []
+    out: list[str] = []
+    for item in data:
+        mid = item.get("id") if isinstance(item, dict) else None
+        if isinstance(mid, str) and mid.strip():
+            out.append(mid.strip())
+    return out
+
+
+def parse_ollama_tags_payload(payload: Any) -> list[str]:
+    models = payload.get("models") if isinstance(payload, dict) else None
+    if not isinstance(models, list):
+        return []
+    out: list[str] = []
+    for item in models:
+        name = item.get("name") if isinstance(item, dict) else None
+        if isinstance(name, str) and name.strip():
+            out.append(name.strip())
+    return out
+
+
+def ollama_tags_url(base_url: str) -> str:
+    base = normalize_openai_base_url(base_url)
+    if not base:
+        raise LlmProviderError("ollama base url not configured")
+    base = base.removesuffix("/v1")
+    return f"{base.rstrip('/')}/api/tags"
+
+
+async def list_openai_compatible_models(
+    base_url: str,
+    api_key: str = "",
+    *,
+    timeout_sec: float = 15.0,
+) -> list[str]:
+    url = models_url(base_url)
+    headers = auth_headers(api_key)
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
+            response = await client.get(url, headers=headers)
+    except Exception as exc:
+        raise LlmProviderError(str(exc)) from exc
+    if response.status_code != 200:
+        detail = (response.text or "")[:200]
+        raise LlmProviderError(
+            f"HTTP {response.status_code}" + (f": {detail}" if detail else ""),
+            status=response.status_code,
+        )
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise LlmProviderError("invalid models response") from exc
+    return parse_openai_models_payload(payload)
+
+
+async def list_ollama_tag_models(
+    base_url: str,
+    *,
+    timeout_sec: float = 15.0,
+) -> list[str]:
+    url = ollama_tags_url(base_url)
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
+            response = await client.get(url)
+    except Exception as exc:
+        raise LlmProviderError(str(exc)) from exc
+    if response.status_code != 200:
+        raise LlmProviderError(f"HTTP {response.status_code}", status=response.status_code)
+    try:
+        payload = response.json()
+    except Exception as exc:
+        raise LlmProviderError("invalid ollama tags response") from exc
+    return parse_ollama_tags_payload(payload)
+
+
 async def probe_provider_models(*, timeout_sec: float = 3.0, cfg: LlmConfig | None = None) -> dict[str, Any]:
     c = cfg or get_llm_config()
     try:
