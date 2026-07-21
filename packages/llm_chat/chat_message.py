@@ -324,7 +324,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
         except Exception:
             persona_for_gate = None
 
-    gate_decision = evaluate_llm_reply_gate(plain or msg, cfg=llm_cfg, persona=persona_for_gate)
+    gate_decision = evaluate_llm_reply_gate(
+        plain or msg,
+        cfg=llm_cfg,
+        persona=persona_for_gate,
+        bot_id=int(bot.self_id),
+    )
     if gate_decision == "skip":
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_skip")
         logger.debug("llm chat reply gate skip group={} user={}", group_id, user_id)

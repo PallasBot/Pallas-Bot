@@ -99,3 +99,19 @@ def test_resolve_output_filtered_reply_blocks_attack_or_plugin_reply() -> None:
     task = {"task_type": LLM_CHAT_TASK_TYPE}
     assert resolve_output_filtered_reply(task, "我操你妈。群里最近有啥新鲜事儿吗？") == ""
     assert resolve_output_filtered_reply(task, "匹配失败，积分不足18点") == ""
+
+
+def test_resolve_output_filtered_reply_pass_is_silent() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, '{"reply":"PASS"}') == ""
+    assert resolve_output_filtered_reply(task, "PASS") == ""
+
+
+def test_resolve_output_filtered_reply_extracts_json_reply() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, '{"reply":"在的，咋了","intent":"chat"}') == "在的，咋了"
+
+
+def test_resolve_output_filtered_reply_drops_token_leak() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, "你好 <thinking>x</thinking>") == ""

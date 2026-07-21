@@ -84,27 +84,51 @@ def match_output_filter(text: str, profile: OutputFilterProfile) -> OutputFilter
     return None
 
 
+def _normalize_and_guard_reply(text: str, *, task_type: str) -> str:
+    from pallas.product.llm.structured_reply import normalize_model_reply, validate_reply_chars
+
+    normalized = normalize_model_reply(text)
+    if not normalized:
+        if str(text or "").strip():
+            logger.info("LLM structured reply empty task_type={}", task_type)
+        return ""
+    ok, reason = validate_reply_chars(normalized)
+    if not ok:
+        logger.info(
+            "LLM reply char guard reject task_type={} reason={}",
+            task_type,
+            reason,
+        )
+        return ""
+    return normalized
+
+
 def resolve_output_filtered_reply(task: dict, reply_text: str) -> str:
     """返回可投递文本；空串表示静默不发。"""
-    text = str(reply_text or "").strip()
-    if not text or not output_filter_enabled():
-        return text
+    raw = str(reply_text or "").strip()
     task_type = str(task.get("task_type") or "").strip()
     profile = profile_for_task_type(task_type)
     if profile is None:
+        return raw
+    text = _normalize_and_guard_reply(raw, task_type=task_type) if raw else ""
+    if not text:
+        return ""
+    if not output_filter_enabled():
         return text
     hit = match_output_filter(text, profile)
     if hit is None:
         return text
     fallback = str(task.get("fallback_text") or "").strip()
-    if fallback and fallback != text and match_output_filter(fallback, profile) is None:
-        logger.info(
-            "LLM output filter {} task_type={} phrase={} -> fallback",
-            hit.tier,
-            task_type,
-            hit.phrase,
-        )
-        return fallback
+    if fallback and fallback != text:
+        guarded_fallback = _normalize_and_guard_reply(fallback, task_type=task_type)
+        if guarded_fallback and match_output_filter(guarded_fallback, profile) is None:
+            logger.info(
+                "LLM output filter {} task_type={} phrase={} -> fallback",
+                hit.tier,
+                task_type,
+                hit.phrase,
+            )
+            return guarded_fallback
     logger.info(
         "LLM output filter {} task_type={} phrase={} -> silent",
         hit.tier,

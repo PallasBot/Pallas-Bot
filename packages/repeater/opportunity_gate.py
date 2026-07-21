@@ -62,12 +62,31 @@ def should_attempt_repeater_opportunity(
     bot_recently_replied: bool,
     reply_mode: str = "normal",
     is_to_me: bool = False,
+    bot_id: int | None = None,
 ) -> bool:
+    from pallas.product.llm.reply_necessity import (
+        is_bystander_plain_text,
+        score_reply_necessity,
+    )
+
     plain = str(plain_text or "").strip()
     mode = str(reply_mode or "normal").strip().lower()
     if is_to_me:
         return True
     if not plain:
+        return False
+    if is_bystander_plain_text(plain, bot_id=bot_id):
+        return False
+    necessity = score_reply_necessity(
+        text=plain,
+        is_to_me=False,
+        bot_id=bot_id,
+        bot_recently_replied=bot_recently_replied,
+        has_recent_back_and_forth=has_recent_back_and_forth,
+        has_candidate_pool=has_candidate_pool,
+    )
+    # 仅拦截明显不该抢话的低分；其余仍走原有活跃度 / 候选池规则
+    if necessity.score < 0 and not looks_like_reply_cue(plain):
         return False
     if unique_users < 2:
         return False
@@ -109,9 +128,20 @@ def build_opportunity_trace_payload(
     reply_mode: str = "normal",
     is_to_me: bool = False,
     accepted: bool,
+    bot_id: int | None = None,
 ) -> dict[str, object]:
+    from pallas.product.llm.reply_necessity import is_bystander_plain_text, score_reply_necessity
+
     plain = str(plain_text or "").strip()
     mode = str(reply_mode or "normal").strip().lower()
+    necessity = score_reply_necessity(
+        text=plain,
+        is_to_me=is_to_me,
+        bot_id=bot_id,
+        bot_recently_replied=bot_recently_replied,
+        has_recent_back_and_forth=has_recent_back_and_forth,
+        has_candidate_pool=has_candidate_pool,
+    )
     return {
         "kind": "llm_opportunity_gate",
         "reply_mode": mode or "normal",
@@ -128,4 +158,7 @@ def build_opportunity_trace_payload(
         "bot_recently_replied": bool(bot_recently_replied),
         "has_reply_cue": bool(looks_like_reply_cue(plain)),
         "cue_with_pool": bool(looks_like_reply_cue(plain) and has_candidate_pool and candidate_pool_size >= 2),
+        "bystander": bool(is_bystander_plain_text(plain, bot_id=bot_id)),
+        "necessity_score": int(necessity.score),
+        "necessity_detail": necessity.detail,
     }

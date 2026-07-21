@@ -50,7 +50,10 @@ def evaluate_llm_reply_gate(
     *,
     cfg: LlmConfig | None = None,
     persona: ResolvedPersona | None = None,
+    bot_id: int | None = None,
 ) -> ReplyGateDecision:
+    from pallas.product.llm.reply_necessity import is_bystander_plain_text, is_noise_fragment
+
     c = cfg or get_llm_config()
     if not c.llm_reply_gate_enabled:
         return "proceed"
@@ -58,6 +61,10 @@ def evaluate_llm_reply_gate(
     if not plain and is_mostly_face_or_emoji(user_text):
         return "skip"
     if is_mostly_face_or_emoji(user_text):
+        return "skip"
+    if is_noise_fragment(plain):
+        return "skip"
+    if is_bystander_plain_text(user_text, bot_id=bot_id):
         return "skip"
     min_chars = persona_adjusted_min_chars(max(0, int(c.llm_reply_gate_min_chars)), persona)
     if min_chars > 0 and len(plain) < min_chars:

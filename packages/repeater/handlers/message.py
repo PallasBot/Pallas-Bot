@@ -192,6 +192,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
         bot_recently_replied=bot_recently_replied,
         reply_mode=bundle.reply_mode,
         is_to_me=bool(event.is_tome()),
+        bot_id=int(event.self_id),
     )
     decision = decide_repeater_action(
         decision_ctx,
@@ -213,6 +214,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
             reply_mode=bundle.reply_mode,
             is_to_me=bool(event.is_tome()),
             accepted=opportunity_accepted,
+            bot_id=int(event.self_id),
         ),
         feature_level=feature_level,
     )
