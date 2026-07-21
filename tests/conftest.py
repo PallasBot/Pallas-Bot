@@ -23,6 +23,9 @@ async def beanie_fixture():
         Context,
         GroupConfigModule,
         ImageCache,
+        LlmChatMessage,
+        LlmMemoryEntry,
+        LlmRelationshipNote,
         Message,
         UserConfigModule,
     )
@@ -49,6 +52,9 @@ async def beanie_fixture():
             Context,
             BlackList,
             ImageCache,
+            LlmChatMessage,
+            LlmMemoryEntry,
+            LlmRelationshipNote,
         ],
         allow_index_dropping=True,
     )
@@ -62,6 +68,9 @@ async def beanie_fixture():
     await motor_db.drop_collection("context")
     await motor_db.drop_collection("blacklist")
     await motor_db.drop_collection("image_cache")
+    await motor_db.drop_collection("llm_chat_message")
+    await motor_db.drop_collection("llm_memory_entry")
+    await motor_db.drop_collection("llm_relationship_note")
     motor_client.close()
 
 

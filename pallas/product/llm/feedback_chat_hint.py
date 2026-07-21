@@ -16,6 +16,28 @@ _MAX_REPLY_SNIPPET = 28
 _MAX_USER_SNIPPET = 24
 _MAX_CORRECTION_REPLY = 48
 _KAOMOJI_SUFFIX_RE = re.compile(r"\(\*[^)]{1,16}\*\)\s*$")
+# 弱「好样本」：垫词/客服腔/英文泄漏（不特判本机趣味语料）
+_WEAK_GOOD_EXACT = frozenset({"还行吧", "还行吧。", "why", "why？", "why???", "牛牛还行吧"})
+_WEAK_GOOD_SUBSTR = (
+    "随时找我",
+    "要帮忙吗",
+    "别这么说嘛",
+    "我们还是好朋友",
+    "为您服务",
+    "Jest",
+    "有什么可以",
+)
+
+
+def is_weak_good_feedback_snippet(text: str) -> bool:
+    """不宜作为 few-shot 正例的回复。"""
+    plain = str(text or "").strip()
+    if not plain:
+        return True
+    compact = plain.strip("，,。！!？?~～ ")
+    if plain in _WEAK_GOOD_EXACT or compact in _WEAK_GOOD_EXACT:
+        return True
+    return any(token in plain for token in _WEAK_GOOD_SUBSTR)
 
 
 def summarize_reply_snippet(text: str, *, max_len: int = _MAX_REPLY_SNIPPET) -> str:
@@ -55,6 +77,38 @@ def correction_matches_query(user_text: str, query_text: str) -> bool:
     return False
 
 
+def _build_matched_contrast_pairs(rows: list, *, query: str, limit: int = 2) -> list[str]:
+    """相近触发下拼 BAD/OK 对照，便于 few-shot 避雷。"""
+    matched = [item for item in rows if correction_matches_query(item.user_text, query)]
+    if not matched:
+        return []
+    bad_by_trigger: dict[str, str] = {}
+    good_by_trigger: dict[str, str] = {}
+    for item in reversed(matched):
+        trigger = summarize_user_trigger(item.user_text)
+        if not trigger:
+            continue
+        bad = ""
+        if not item.eligible_for_bias:
+            bad = summarize_reply_snippet(item.reply_text)
+        good = summarize_reply_snippet(item.corrected_reply_text) or (
+            summarize_reply_snippet(item.reply_text) if item.eligible_for_bias else ""
+        )
+        if bad and trigger not in bad_by_trigger:
+            bad_by_trigger[trigger] = bad
+        if good and trigger not in good_by_trigger:
+            good_by_trigger[trigger] = good
+    pairs: list[str] = []
+    for trigger, bad in bad_by_trigger.items():
+        good = good_by_trigger.get(trigger, "")
+        if not good or good == bad:
+            continue
+        pairs.append(f"类似「{trigger}」时：别写「{bad}」；可写「{good}」")
+        if len(pairs) >= max(1, int(limit)):
+            break
+    return pairs
+
+
 def build_group_feedback_chat_hint(*, group_id: int, user_text: str = "", limit: int = 40) -> str:
     if not can_read_behavioral_learning() or int(group_id) <= 0:
         return ""
@@ -85,14 +139,20 @@ def build_group_feedback_chat_hint(*, group_id: int, user_text: str = "", limit:
     remaining = max(0, _CORRECTION_LIMIT - len(hints))
     hints.extend(general_corrections[:remaining])
 
+    if query:
+        pair_hints = _build_matched_contrast_pairs(rows, query=query, limit=2)
+        hints[0:0] = pair_hints
+
     good_rows = [item for item in rows if item.eligible_for_bias and str(item.reply_text or "").strip()]
     bad_rows = [item for item in rows if not item.eligible_for_bias and str(item.reply_text or "").strip()]
 
     good_snippets: list[str] = []
     seen_good: set[str] = set()
     for item in reversed(good_rows):
+        if is_weak_good_feedback_snippet(item.reply_text):
+            continue
         snippet = summarize_reply_snippet(item.reply_text)
-        if not snippet or snippet in seen_good:
+        if not snippet or snippet in seen_good or is_weak_good_feedback_snippet(snippet):
             continue
         seen_good.add(snippet)
         good_snippets.append(snippet)

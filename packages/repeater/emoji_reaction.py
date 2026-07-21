@@ -185,7 +185,39 @@ EMOJI_IDS = (
 
 
 def get_random_emoji() -> str:
-    return str(random.choice(EMOJI_IDS))
+    emoji = str(random.choice(EMOJI_IDS))
+    _maybe_register_emoji_fit(emoji)
+    return emoji
+
+
+def _maybe_register_emoji_fit(emoji_code: str) -> None:
+    try:
+        from pallas.product.llm.config import get_llm_config
+        from pallas.product.llm.sticker_fit import StickerFitStore, upsert_sticker_candidate
+
+        if not bool(get_llm_config().llm_sticker_fit_enabled):
+            return
+        store = StickerFitStore()
+        upsert_sticker_candidate(
+            store,
+            sticker_id=f"face:{emoji_code}",
+            tags=[str(emoji_code), "reaction"],
+            persona_fit=True,
+        )
+    except Exception:
+        logger.debug("sticker fit register skipped emoji={}", emoji_code)
+
+
+def _maybe_feedback_emoji_fit(emoji_code: str, *, score: int) -> None:
+    try:
+        from pallas.product.llm.config import get_llm_config
+        from pallas.product.llm.sticker_fit import StickerFitStore, record_sticker_feedback
+
+        if not bool(get_llm_config().llm_sticker_fit_enabled):
+            return
+        record_sticker_feedback(StickerFitStore(), sticker_id=f"face:{emoji_code}", score=score)
+    except Exception:
+        logger.debug("sticker fit feedback skipped emoji={}", emoji_code)
 
 
 sent_reactions: dict[str, dict[int, float]] = {}
@@ -229,6 +261,7 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
     try:
         await message_reaction(emoji_code, str(message_id), event, bot, delete=False)
         mark_reaction_sent(bot_id, message_id)
+        _maybe_feedback_emoji_fit(emoji_code, score=3)
         logger.debug(f"[Reaction] Bot {bot_id} successfully sent emoji {emoji_code} in group {event.group_id}")  # type: ignore[attr-defined]
     except ActionFailed as e:
         logger.debug(

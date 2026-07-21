@@ -43,17 +43,13 @@ def build_polish_lite_user_text(user_text: str, candidate_text: str) -> str:
 
 
 def build_polish_lite_user_text_with_suffix(user_text: str, candidate_text: str, *, style_suffix: str = "") -> str:
-    message = str(user_text or "").strip()
-    candidate = str(candidate_text or "").strip()
-    if not message or not candidate or "[CQ:" in message or "[CQ:" in candidate:
-        return ""
-    suffix = str(style_suffix or "").strip()
-    suffix_block = f"\n{suffix}" if suffix else ""
-    return (
-        f"【用户消息】{message}\n"
-        f"【候选回复】{candidate}\n"
-        f"{suffix_block}\n"
-        "请在不改变原意的前提下轻顺口气；勿扩写、勿加设定词、勿加「继续聊/换个话题」类尾缀。只输出一句，长度接近候选。"
+    from pallas.product.llm.expressor import build_expressor_user_text
+
+    return build_expressor_user_text(
+        user_text=user_text,
+        raw_reply=candidate_text,
+        reason="",
+        style_suffix=style_suffix,
     )
 
 
@@ -122,6 +118,7 @@ async def maybe_submit_repeater_llm_polish_lite(
             "user_text": plain,
             "fallback_text": candidate,
             "reply_mode": str(reply_mode or "normal"),
+            "reply_max_length": 36,
             "start_time": time.time(),
         },
     )

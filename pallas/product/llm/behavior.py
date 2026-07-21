@@ -159,8 +159,13 @@ def default_behavior_pattern_seeds() -> list[BehaviorPattern]:
 
 
 def classify_behavior_scene(*, user_text: str, recent_texts: list[str], has_multi_party_overlap: bool) -> BehaviorScene:
+    from pallas.product.llm.shut_up import is_shut_up_text
+
     text = str(user_text or "").strip()
     if not text:
+        return BehaviorScene.SMALLTALK
+    if is_shut_up_text(text):
+        # 闭嘴指令勿误判成求助
         return BehaviorScene.SMALLTALK
     if any(token in text for token in _PROVOCATION_TOKENS):
         return BehaviorScene.PROVOCATION

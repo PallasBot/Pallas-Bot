@@ -321,16 +321,35 @@ async def run_ai_callback(
                     reply_text = fallback
                 else:
                     reply_text = ""
-        if reply_text and group_id and bot is not None:
+        reply_segments = [reply_text] if reply_text else []
+        if reply_text:
+            from pallas.product.llm.config import get_llm_config
+            from pallas.product.llm.reply_postprocess import apply_reply_postprocess
+
+            cfg = get_llm_config()
+            reply_segments = apply_reply_postprocess(
+                reply_text,
+                enabled=bool(cfg.llm_reply_postprocess_enabled),
+                typo_enabled=bool(cfg.llm_reply_typo_enabled),
+                typo_rate=float(cfg.llm_reply_typo_rate),
+                split_enabled=bool(cfg.llm_reply_split_enabled),
+                split_max_chars=int(cfg.llm_reply_split_max_chars),
+            )
+            reply_text = "".join(reply_segments)
+        if reply_segments and group_id and bot is not None:
             logger.info(
-                "AI callback delivering text task={} bot_id={} group_id={} length={} task_type={}",
+                "AI callback delivering text task={} bot_id={} group_id={} length={} segments={} task_type={}",
                 task_id,
                 getattr(bot, "self_id", bot_id_str or "<missing>"),
                 group_id,
                 len(reply_text),
+                len(reply_segments),
                 task_type,
             )
-            text_delivered = await send_group_message(bot, group_id, reply_text)
+            text_delivered = True
+            for segment in reply_segments:
+                ok = await send_group_message(bot, group_id, segment)
+                text_delivered = bool(ok) and text_delivered
             delivered = text_delivered and delivered
         if should_append_llm_session(task) and reply_text:
             raw_group_id = task.get("group_id")
@@ -353,6 +372,21 @@ async def run_ai_callback(
 
         if is_feedback_task_type(task_type) and reply_text and text_delivered:
             maybe_append_llm_repeater_feedback(task_id, task, reply_text)
+        if reply_text and text_delivered:
+            from pallas.product.llm.config import get_llm_config
+
+            if bool(get_llm_config().llm_reply_effect_eval_enabled):
+                from pallas.product.llm.reply_effect import evaluate_and_record_reply_effect
+
+                try:
+                    evaluate_and_record_reply_effect(
+                        reply_text,
+                        task_type=task_type,
+                        group_id=int(group_id) if group_id is not None else None,
+                        user_id=int(task.get("user_id") or 0) or None,
+                    )
+                except Exception:
+                    logger.debug("reply effect eval skipped task={}", task_id)
         behavior_scene = str(task.get("behavior_scene") or "").strip()
         if task_type == LLM_CHAT_TASK_TYPE and behavior_scene:
             append_behavior_run(

@@ -1,0 +1,3 @@
+{"user_text":"在吗","model_output":"{\"reply\":\"在的，咋了\",\"intent\":\"chat\"}","scene":"smalltalk"}
+{"user_text":"你是不是AI","model_output":"您好，我是智能助手，有什么可以帮您？","scene":"provocation"}
+{"user_text":"笑死","model_output":"PASS","scene":"banter"}

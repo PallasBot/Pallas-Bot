@@ -62,17 +62,48 @@ def should_attempt_repeater_opportunity(
     bot_recently_replied: bool,
     reply_mode: str = "normal",
     is_to_me: bool = False,
+    bot_id: int | None = None,
 ) -> bool:
+    from pallas.product.llm.reply_necessity import (
+        REPLY_NECESSITY_NO_CUE_FLOOR,
+        is_bystander_plain_text,
+        is_noise_fragment,
+        looks_like_spam_or_promo,
+        score_reply_necessity,
+    )
+
     plain = str(plain_text or "").strip()
     mode = str(reply_mode or "normal").strip().lower()
     if is_to_me:
         return True
     if not plain:
         return False
-    if unique_users < 2:
+    if is_bystander_plain_text(plain, bot_id=bot_id):
+        return False
+    if looks_like_spam_or_promo(plain):
         return False
     has_reply_cue = looks_like_reply_cue(plain)
     cue_with_pool = bool(has_reply_cue and has_candidate_pool and candidate_pool_size >= 2)
+    # 纯表情 / 噪声：无强 cue+池时不抢话
+    if is_noise_fragment(plain) and not cue_with_pool:
+        return False
+    necessity = score_reply_necessity(
+        text=plain,
+        is_to_me=False,
+        bot_id=bot_id,
+        bot_recently_replied=bot_recently_replied,
+        has_recent_back_and_forth=has_recent_back_and_forth,
+        has_candidate_pool=has_candidate_pool,
+    )
+    if necessity.score < 0 and not has_reply_cue:
+        return False
+    # 无 cue 时要求更高必要性，避免仅靠 back_forth+pool 刷进 LLM
+    if not has_reply_cue and necessity.score < REPLY_NECESSITY_NO_CUE_FLOOR:
+        ghost_stylish = mode == "ghost" and has_candidate_pool and candidate_style_score >= 0.72
+        if not ghost_stylish:
+            return False
+    if unique_users < 2:
+        return False
     # cue + 候选池：略放宽活跃度门槛（仍至少 2 条近期消息）
     if recent_message_count < 3 and not (cue_with_pool and recent_message_count >= 2):
         return False
@@ -109,9 +140,20 @@ def build_opportunity_trace_payload(
     reply_mode: str = "normal",
     is_to_me: bool = False,
     accepted: bool,
+    bot_id: int | None = None,
 ) -> dict[str, object]:
+    from pallas.product.llm.reply_necessity import is_bystander_plain_text, score_reply_necessity
+
     plain = str(plain_text or "").strip()
     mode = str(reply_mode or "normal").strip().lower()
+    necessity = score_reply_necessity(
+        text=plain,
+        is_to_me=is_to_me,
+        bot_id=bot_id,
+        bot_recently_replied=bot_recently_replied,
+        has_recent_back_and_forth=has_recent_back_and_forth,
+        has_candidate_pool=has_candidate_pool,
+    )
     return {
         "kind": "llm_opportunity_gate",
         "reply_mode": mode or "normal",
@@ -128,4 +170,7 @@ def build_opportunity_trace_payload(
         "bot_recently_replied": bool(bot_recently_replied),
         "has_reply_cue": bool(looks_like_reply_cue(plain)),
         "cue_with_pool": bool(looks_like_reply_cue(plain) and has_candidate_pool and candidate_pool_size >= 2),
+        "bystander": bool(is_bystander_plain_text(plain, bot_id=bot_id)),
+        "necessity_score": int(necessity.score),
+        "necessity_detail": necessity.detail,
     }

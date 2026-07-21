@@ -99,6 +99,8 @@ def affect_contract_to_constraints(contract: PersonaAffectContract) -> DecisionC
         min_length=contract.preferred_length_min,
         disallow_drift=True,
         disallow_service_tone=True,
+        drift_level="strict",
+        style_hint="",
     )
 
 

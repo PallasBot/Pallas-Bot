@@ -324,7 +324,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
         except Exception:
             persona_for_gate = None
 
-    gate_decision = evaluate_llm_reply_gate(plain or msg, cfg=llm_cfg, persona=persona_for_gate)
+    gate_decision = evaluate_llm_reply_gate(
+        plain or msg,
+        cfg=llm_cfg,
+        persona=persona_for_gate,
+        bot_id=int(bot.self_id),
+    )
     if gate_decision == "skip":
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_skip")
         logger.debug("llm chat reply gate skip group={} user={}", group_id, user_id)
@@ -383,6 +388,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
 
     request_id = str(ULID())
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
+    from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
+
+    system_prompt = enrich_system_with_situational_rules(
+        system_prompt,
+        focus_text=plain or msg,
+        recent_texts=[str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]],
+    )
     variation_hint = build_recent_reply_variation_hint(recent_turns)
     affect_system_block = ""
     if persona_for_gate is not None:
@@ -455,6 +467,17 @@ async def handle_llm_chat(bot: Bot, event: Event):
         limit=2,
     )
     behavior_actions = [item.action for item in behavior_patterns]
+    from pallas.product.llm.kernel.models import ConversationMode
+    from pallas.product.llm.scene_style import format_scene_style_block, resolve_scene_style_constraints
+
+    scene_constraints = resolve_scene_style_constraints(
+        behavior_scene,
+        ConversationMode.NORMAL,
+        direct_chat=True,
+    )
+    scene_style_block = format_scene_style_block(scene_constraints)
+    if scene_style_block:
+        system_prompt = f"{system_prompt.rstrip()}\n{scene_style_block}"
     if can_read_behavioral_learning(llm_cfg):
         group_behavior_hint = default_group_chat_behavior_hint()
         if group_behavior_hint:
@@ -525,6 +548,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "behavior_pattern_ids": [item.pattern_id for item in behavior_patterns],
             "behavior_actions": [str(item.action) for item in behavior_patterns],
             "behavior_hint": behavior_hint,
+            "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
         },

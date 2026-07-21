@@ -3,7 +3,24 @@ from __future__ import annotations
 from packages.repeater.opportunity_gate import should_attempt_repeater_opportunity
 
 
-def test_should_attempt_repeater_opportunity_accepts_to_me() -> None:
+def test_should_attempt_repeater_opportunity_rejects_bystander_at_other() -> None:
+    assert (
+        should_attempt_repeater_opportunity(
+            "[CQ:at,qq=1001] 今晚开黑",
+            unique_users=3,
+            recent_message_count=6,
+            has_candidate_pool=True,
+            candidate_pool_size=3,
+            candidate_style_score=0.9,
+            has_recent_back_and_forth=True,
+            bot_recently_replied=False,
+            reply_mode="normal",
+            is_to_me=False,
+            bot_id=2002,
+        )
+        is False
+    )
+
     assert (
         should_attempt_repeater_opportunity(
             "？",
@@ -211,6 +228,60 @@ def test_should_attempt_repeater_opportunity_normal_rejects_low_style_single_can
             candidate_pool_size=1,
             candidate_style_score=0.35,
             has_recent_back_and_forth=False,
+            bot_recently_replied=False,
+            reply_mode="normal",
+            is_to_me=False,
+        )
+        is False
+    )
+
+
+def test_should_attempt_repeater_opportunity_rejects_emoji_noise_even_with_pool() -> None:
+    assert (
+        should_attempt_repeater_opportunity(
+            "🤔",
+            unique_users=4,
+            recent_message_count=8,
+            has_candidate_pool=True,
+            candidate_pool_size=3,
+            candidate_style_score=0.9,
+            has_recent_back_and_forth=True,
+            bot_recently_replied=False,
+            reply_mode="normal",
+            is_to_me=False,
+        )
+        is False
+    )
+
+
+def test_should_attempt_repeater_opportunity_rejects_mid_score_without_cue() -> None:
+    assert (
+        should_attempt_repeater_opportunity(
+            "拉满了",
+            unique_users=4,
+            recent_message_count=8,
+            has_candidate_pool=True,
+            candidate_pool_size=3,
+            candidate_style_score=0.4,
+            has_recent_back_and_forth=True,
+            bot_recently_replied=False,
+            reply_mode="normal",
+            is_to_me=False,
+        )
+        is False
+    )
+
+
+def test_should_attempt_repeater_opportunity_rejects_promo_link() -> None:
+    assert (
+        should_attempt_repeater_opportunity(
+            "⚡️不用下载点击即玩⚡️：https://www.bilibili.com/toy/Dagou-Tap/index.html",
+            unique_users=4,
+            recent_message_count=8,
+            has_candidate_pool=True,
+            candidate_pool_size=2,
+            candidate_style_score=0.9,
+            has_recent_back_and_forth=True,
             bot_recently_replied=False,
             reply_mode="normal",
             is_to_me=False,

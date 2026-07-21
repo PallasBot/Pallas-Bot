@@ -6,6 +6,7 @@ import re
 from typing import TYPE_CHECKING, Literal
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
+from pallas.product.llm.shut_up import is_shut_up_text
 from pallas.product.persona.config import persona_affect_gate_enabled
 
 if TYPE_CHECKING:
@@ -38,6 +39,10 @@ def is_mostly_face_or_emoji(text: str) -> bool:
     return not without_emoji
 
 
+def is_shut_up_request(text: str) -> bool:
+    return is_shut_up_text(strip_cq_codes(text))
+
+
 def persona_adjusted_min_chars(base_min: int, persona: ResolvedPersona | None) -> int:
     if persona is None or not persona_affect_gate_enabled():
         return base_min
@@ -50,14 +55,29 @@ def evaluate_llm_reply_gate(
     *,
     cfg: LlmConfig | None = None,
     persona: ResolvedPersona | None = None,
+    bot_id: int | None = None,
 ) -> ReplyGateDecision:
+    from pallas.product.llm.reply_necessity import (
+        is_bystander_plain_text,
+        is_incomplete_utterance,
+        is_noise_fragment,
+    )
+
     c = cfg or get_llm_config()
     if not c.llm_reply_gate_enabled:
         return "proceed"
     plain = strip_cq_codes(user_text)
+    if is_shut_up_request(user_text):
+        return "skip"
     if not plain and is_mostly_face_or_emoji(user_text):
         return "skip"
     if is_mostly_face_or_emoji(user_text):
+        return "skip"
+    if is_noise_fragment(plain):
+        return "skip"
+    if is_incomplete_utterance(plain):
+        return "skip"
+    if is_bystander_plain_text(user_text, bot_id=bot_id):
         return "skip"
     min_chars = persona_adjusted_min_chars(max(0, int(c.llm_reply_gate_min_chars)), persona)
     if min_chars > 0 and len(plain) < min_chars:

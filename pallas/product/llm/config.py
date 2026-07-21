@@ -271,6 +271,13 @@ class LlmConfig(BaseModel):
     llm_output_filter_chat_soft_phrases: list[str] = Field(default_factory=list)
     llm_output_filter_polish_lite_hard_phrases: list[str] = Field(default_factory=list)
     llm_output_filter_polish_lite_soft_phrases: list[str] = Field(default_factory=list)
+    llm_reply_postprocess_enabled: bool = Field(default=False)
+    llm_reply_typo_enabled: bool = Field(default=False)
+    llm_reply_typo_rate: float = Field(default=0.01, ge=0.0, le=1.0)
+    llm_reply_split_enabled: bool = Field(default=False)
+    llm_reply_split_max_chars: int = Field(default=36, ge=8, le=120)
+    llm_sticker_fit_enabled: bool = Field(default=False)
+    llm_reply_effect_eval_enabled: bool = Field(default=False)
     llm_corpus_learn_guard_enabled: bool = Field(default=True)
     llm_corpus_cleanup_scheduled_enabled: bool = Field(default=True)
     llm_corpus_cleanup_interval_sec: int = Field(default=86400, ge=3600, le=604800)
@@ -428,6 +435,13 @@ def get_llm_config() -> LlmConfig:
                 "LLM_OUTPUT_FILTER_POLISH_LITE_SOFT_PHRASES",
                 POLISH_LITE_SOFT_RETRY_PHRASES,
             ),
+            llm_reply_postprocess_enabled=_env_bool("LLM_REPLY_POSTPROCESS_ENABLED", False),
+            llm_reply_typo_enabled=_env_bool("LLM_REPLY_TYPO_ENABLED", False),
+            llm_reply_typo_rate=_env_float("LLM_REPLY_TYPO_RATE", 0.01),
+            llm_reply_split_enabled=_env_bool("LLM_REPLY_SPLIT_ENABLED", False),
+            llm_reply_split_max_chars=_env_int("LLM_REPLY_SPLIT_MAX_CHARS", 36),
+            llm_sticker_fit_enabled=_env_bool("LLM_STICKER_FIT_ENABLED", False),
+            llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
             llm_corpus_learn_guard_enabled=_env_bool("LLM_CORPUS_LEARN_GUARD_ENABLED", True),
             llm_corpus_cleanup_scheduled_enabled=_env_bool("LLM_CORPUS_CLEANUP_SCHEDULED", True),
             llm_corpus_cleanup_interval_sec=_env_int("LLM_CORPUS_CLEANUP_INTERVAL_SEC", 86400),

@@ -99,3 +99,38 @@ def test_resolve_output_filtered_reply_blocks_attack_or_plugin_reply() -> None:
     task = {"task_type": LLM_CHAT_TASK_TYPE}
     assert resolve_output_filtered_reply(task, "我操你妈。群里最近有啥新鲜事儿吗？") == ""
     assert resolve_output_filtered_reply(task, "匹配失败，积分不足18点") == ""
+
+
+def test_resolve_output_filtered_reply_pass_is_silent() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, '{"reply":"PASS"}') == ""
+    assert resolve_output_filtered_reply(task, "PASS") == ""
+
+
+def test_resolve_output_filtered_reply_extracts_json_reply() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, '{"reply":"在的，咋了","intent":"chat"}') == "在的，咋了"
+
+
+def test_resolve_output_filtered_reply_drops_token_leak() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, "你好 <thinking>x</thinking>") == ""
+
+
+def test_resolve_output_filtered_reply_blocks_filler_and_soft_refuse() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, "还行吧") == ""
+    assert resolve_output_filtered_reply(task, "哞~ 别这么说嘛，我们还是好朋友呢。还行吧。") == ""
+    assert resolve_output_filtered_reply(task, "哈哈 Jest~") == ""
+    # 口语里带「还行吧」但非整句垫词：允许
+    assert resolve_output_filtered_reply(task, "谢谢，还行吧") == "谢谢，还行吧"
+
+
+def test_resolve_output_filtered_reply_enforces_max_length() -> None:
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "reply_max_length": 20,
+        "fallback_text": "行",
+    }
+    long = "听说你对科目录得挺全的，我这记性就没那么好啦。对了，你喜欢哪种动物啊？"
+    assert resolve_output_filtered_reply(task, long) == "行"
