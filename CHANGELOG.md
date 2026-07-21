@@ -1,5 +1,30 @@
 # Changelog
 
+## [4.0.2] - 2026-07-21
+
+### Added
+
+- LLM：结构化回复 PASS 与接话必要性门控，减少垫话与元问题胡编
+- LLM：场景口气、注意力漂移约束；接话轻润色改用口语 expressor
+- LLM：情境规则关键词热注入；反馈样本 BAD/OK 对照 few-shot
+- LLM：可选错别字拆条、表情 fit 与回复效果评审
+- LLM：`session_store` / 群记忆 / 关系便签支持 Mongo 后端
+
+### Fixed
+
+- LLM：Mongo 记忆与关系 ID 原子分配，并缓存 session 后端选择
+- LLM：收紧接话门控，拦截垫词与元问题胡编
+
+### Changed
+
+- LLM：闭嘴关键词收敛到 `shut_up` 共用定义
+- 同步控制台 OpenAPI；预提交可自动导出并联动 WebUI 类型
+
+### 文档
+
+- 补充 OpenAPI 双仓同步说明
+- Release / 构建脚本：WebUI 解压路径改为 `data/pb_webui`，完善发版说明
+
 ## [4.0.1] - 2026-07-20
 
 ### Added
@@ -57,5 +82,6 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
+[4.0.2]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/PallasBot/Pallas-Bot/compare/v3.9.3...v4.0.0
