@@ -278,6 +278,62 @@ class LlmChatMessage(Document):
         ]
 
 
+class LlmMemoryEntry(Document):
+    entry_id: int = Field(...)
+    bot_id: int = Field(...)
+    group_id: int = Field(default=0)
+    keywords: str = Field(default="")
+    content: str = Field(...)
+    source: str = Field(default="teach")
+    embedding_json: str | None = Field(default=None)
+    embedding_model: str | None = Field(default=None)
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    updated_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "llm_memory_entry"
+        collection = "llm_memory_entry"
+        indexes = [
+            IndexModel([("entry_id", pymongo.ASCENDING)], name="entry_id_unique", unique=True),
+            IndexModel(
+                [
+                    ("bot_id", pymongo.ASCENDING),
+                    ("group_id", pymongo.ASCENDING),
+                    ("updated_at", pymongo.ASCENDING),
+                ],
+                name="bot_group_time",
+            ),
+        ]
+
+
+class LlmRelationshipNote(Document):
+    note_id: int = Field(...)
+    bot_id: int = Field(...)
+    group_id: int = Field(default=0)
+    user_id: int = Field(...)
+    content: str = Field(...)
+    source: str = Field(default="teach")
+    weight: float = Field(default=1.0)
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    updated_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "llm_relationship_note"
+        collection = "llm_relationship_note"
+        indexes = [
+            IndexModel([("note_id", pymongo.ASCENDING)], name="note_id_unique", unique=True),
+            IndexModel(
+                [
+                    ("bot_id", pymongo.ASCENDING),
+                    ("group_id", pymongo.ASCENDING),
+                    ("user_id", pymongo.ASCENDING),
+                ],
+                name="scope_unique",
+                unique=True,
+            ),
+        ]
+
+
 __all__ = [
     "SingProgress",
     "BotConfigModule",
@@ -294,4 +350,6 @@ __all__ = [
     "PallasACL",
     "ImageCache",
     "LlmChatMessage",
+    "LlmMemoryEntry",
+    "LlmRelationshipNote",
 ]

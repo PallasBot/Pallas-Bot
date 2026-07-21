@@ -11,10 +11,10 @@ import time
 
 from sqlalchemy import delete, select
 
-from pallas.core.foundation.db.repository_pg import LlmRelationshipNoteRow, get_session, is_pg_initialized
-from pallas.core.foundation.db.runtime import is_postgresql_backend
+from pallas.core.foundation.db.repository_pg import LlmRelationshipNoteRow, get_session
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.memory.relationship import normalize_relationship_note
+from pallas.product.llm.session_backend import llm_product_storage_ready
 from pallas.product.llm.session_store import normalize_group_scope
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 
@@ -23,7 +23,19 @@ _DAY_SEC = 86400.0
 
 def is_relationship_store_available() -> bool:
     cfg = get_llm_config()
-    return cfg.llm_relationship_notes_enabled and is_postgresql_backend() and is_pg_initialized()
+    return cfg.llm_relationship_notes_enabled and llm_product_storage_ready()
+
+
+def _use_mongodb_backend() -> bool:
+    from pallas.core.foundation.db.runtime import is_mongodb_backend
+
+    return is_mongodb_backend()
+
+
+def _use_postgresql_backend() -> bool:
+    from pallas.core.foundation.db.runtime import is_postgresql_backend
+
+    return is_postgresql_backend()
 
 
 def decayed_weight(weight: float, updated_at: int, *, half_life_days: float, now: int | None = None) -> float:
@@ -44,6 +56,12 @@ async def save_relationship_note(
     cfg: LlmConfig | None = None,
 ) -> bool:
     if not is_relationship_store_available() or not user_id:
+        return False
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.relationship_store_mongo import save_relationship_note_mongo
+
+        return await save_relationship_note_mongo(bot_id, group_id, user_id, content, source=source, cfg=cfg)
+    if not _use_postgresql_backend():
         return False
     c = cfg or get_llm_config()
     safe_content = normalize_relationship_note(content, max_len=c.llm_relationship_content_max_len)
@@ -94,6 +112,12 @@ async def retrieve_relationship_note(
     """取当前对象的关系备注；权重衰减到阈值以下则视为过期，返回 None。"""
     if not is_relationship_store_available() or not user_id:
         return None
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.relationship_store_mongo import retrieve_relationship_note_mongo
+
+        return await retrieve_relationship_note_mongo(bot_id, group_id, user_id, cfg=cfg)
+    if not _use_postgresql_backend():
+        return None
     c = cfg or get_llm_config()
     scope_gid = normalize_group_scope(group_id)
     now = int(time.time())
@@ -124,6 +148,12 @@ async def retrieve_relationship_note(
 async def trim_relationship_notes(bot_id: int, group_id: int | None, *, cfg: LlmConfig | None = None) -> int:
     """惰性裁剪：删除衰减到阈值以下的过期关系备注，返回删除条数。"""
     if not is_relationship_store_available():
+        return 0
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.relationship_store_mongo import trim_relationship_notes_mongo
+
+        return await trim_relationship_notes_mongo(bot_id, group_id, cfg=cfg)
+    if not _use_postgresql_backend():
         return 0
     c = cfg or get_llm_config()
     scope_gid = normalize_group_scope(group_id)
@@ -165,6 +195,12 @@ async def list_relationship_notes(
     limit: int = 50,
 ) -> list[dict[str, object]]:
     if not is_relationship_store_available():
+        return []
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.relationship_store_mongo import list_relationship_notes_mongo
+
+        return await list_relationship_notes_mongo(bot_id, group_id, query=query, limit=limit)
+    if not _use_postgresql_backend():
         return []
     max_limit = max(1, min(int(limit), 200))
     async with get_session(read_only=True) as session:
@@ -208,6 +244,12 @@ async def list_relationship_notes(
 
 async def delete_relationship_note(note_id: int, *, bot_id: int | None = None) -> bool:
     if not is_relationship_store_available():
+        return False
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.relationship_store_mongo import delete_relationship_note_mongo
+
+        return await delete_relationship_note_mongo(note_id, bot_id=bot_id)
+    if not _use_postgresql_backend():
         return False
     async with get_session() as session:
         row = (

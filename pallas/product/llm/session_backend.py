@@ -77,6 +77,7 @@ def resolve_session_backend() -> LlmSessionMessageBackend:
 
 
 def session_store_backend_ready() -> bool:
+    """当前 db_backend 的持久化存储是否已就绪（PG 或 Mongo）。"""
     from pallas.core.foundation.db import runtime_storage_ready
     from pallas.core.foundation.db.repository_pg import is_pg_initialized
     from pallas.core.foundation.db.runtime import is_mongodb_backend, is_postgresql_backend
@@ -86,3 +87,7 @@ def session_store_backend_ready() -> bool:
     if is_mongodb_backend():
         return runtime_storage_ready("mongodb")
     return False
+
+
+# 记忆 / 关系便签等产品侧存储共用同一就绪判断。
+llm_product_storage_ready = session_store_backend_ready

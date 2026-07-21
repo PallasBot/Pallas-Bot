@@ -13,6 +13,8 @@ from .modules import (
     GroupConfigModule,
     ImageCache,
     LlmChatMessage,
+    LlmMemoryEntry,
+    LlmRelationshipNote,
     Message,
     PallasACL,
     SchemaMigration,
@@ -269,6 +271,8 @@ async def init_mongodb_db() -> None:
             AdminMember,
             PallasACL,
             LlmChatMessage,
+            LlmMemoryEntry,
+            LlmRelationshipNote,
         ],
     )
     _mongodb_initialized = True
