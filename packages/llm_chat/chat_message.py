@@ -388,6 +388,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
 
     request_id = str(ULID())
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
+    from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
+
+    system_prompt = enrich_system_with_situational_rules(
+        system_prompt,
+        focus_text=plain or msg,
+        recent_texts=[str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]],
+    )
     variation_hint = build_recent_reply_variation_hint(recent_turns)
     affect_system_block = ""
     if persona_for_gate is not None:
