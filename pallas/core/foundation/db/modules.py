@@ -246,6 +246,38 @@ class ImageCache(BaseImageCache):
         indexes = [IndexModel([("cq_code", pymongo.HASHED)], name="cq_code_index")]
 
 
+class LlmChatMessage(Document):
+    bot_id: int = Field(...)
+    group_id: int = Field(default=0)
+    user_id: int = Field(...)
+    role: str = Field(...)
+    content: str = Field(...)
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "llm_chat_message"
+        collection = "llm_chat_message"
+        indexes = [
+            IndexModel(
+                [
+                    ("bot_id", pymongo.ASCENDING),
+                    ("group_id", pymongo.ASCENDING),
+                    ("created_at", pymongo.ASCENDING),
+                ],
+                name="bot_group_time",
+            ),
+            IndexModel(
+                [
+                    ("bot_id", pymongo.ASCENDING),
+                    ("group_id", pymongo.ASCENDING),
+                    ("user_id", pymongo.ASCENDING),
+                    ("created_at", pymongo.ASCENDING),
+                ],
+                name="bot_group_user_time",
+            ),
+        ]
+
+
 __all__ = [
     "SingProgress",
     "BotConfigModule",
@@ -261,4 +293,5 @@ __all__ = [
     "AdminMember",
     "PallasACL",
     "ImageCache",
+    "LlmChatMessage",
 ]

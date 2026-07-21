@@ -84,7 +84,7 @@ flowchart TD
 
 | 层级 | 位置 | 用途 |
 |------|------|------|
-| 会话窗口 | Bot `session_store` + AI 回调 | 群内多轮可见历史 |
+| 会话窗口 | Bot `session_store`（PG / Mongo）+ AI 回调 | 群内多轮可见历史 |
 | 超长摘要 | metadata `session_summary` → AI | 窗口外压缩上下文 |
 | 群记忆（teach / auto_episode） | Bot PG `llm_memory_entry` | 「记住：」与启发式旧事；默认 **hybrid** 检索（`LLM_VECTOR_RETRIEVE`） |
 | 关系便签 | Bot PG | 对用户的稳定关系备注 |
@@ -104,7 +104,7 @@ flowchart TD
 
 模型也可通过 tools `memory.search` / `memory.save` 主动检索与写入。控制台：`GET/POST /pallas/api/llm/conversation-kernel/memory`、`GET /pallas/api/llm/knowledge/sources`。
 
-排障：会话「记不住」先查 AI 任务与 callback；群记忆不生效再查 PG、上述开关与 embeddings 连通性。
+排障：会话「记不住」先查 AI 任务与 callback；确认 `LLM_SESSION_ENABLED` 且数据库已初始化（PG 或 Mongo 均可；群记忆仍仅 PG）。群记忆不生效再查上述开关与 embeddings 连通性。
 
 ## callback
 

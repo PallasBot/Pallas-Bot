@@ -12,6 +12,7 @@ from .modules import (
     Context,
     GroupConfigModule,
     ImageCache,
+    LlmChatMessage,
     Message,
     PallasACL,
     SchemaMigration,
@@ -267,6 +268,7 @@ async def init_mongodb_db() -> None:
             SchemaMigration,
             AdminMember,
             PallasACL,
+            LlmChatMessage,
         ],
     )
     _mongodb_initialized = True
