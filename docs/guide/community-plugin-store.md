@@ -51,6 +51,8 @@ extra_plugin_dirs = ["local/plugins"]
 向 [**community-plugin-index**](https://github.com/PallasBot/community-plugin-index) 提 PR，在 `index.json` 追加条目。  
 索引只存元数据，不托管源码。未收录仍可用 **从 Git 安装** 或手工目录。
 
+已收录插件发版后，请改索引里同 `id` 条目的 `version`（勿重复追加），步骤见 [写社区插件并上架 · 发版后同步索引](community-plugin-author.md#步骤-6发版后同步索引)。
+
 作者自检：[写社区插件并上架](community-plugin-author.md)。
 
 ::: details 索引从哪来（一般不用管）
