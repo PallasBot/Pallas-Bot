@@ -221,13 +221,9 @@ def transform_for_vitepress(text: str) -> str:
         rf"]({GITHUB_SRC}\1)",
         text,
     )
+    # 任意深度相对路径 → 站内插件页（含 common/webui/api 的 ../../../plugins/...）
     text = re.sub(
-        r"\]\(\.\./\.\./plugins/([a-z0-9_]+)/README\.md([^)]*)\)",
-        r"](/plugins/\1\2)",
-        text,
-    )
-    text = re.sub(
-        r"\]\(\.\./plugins/([a-z0-9_]+)/README\.md([^)]*)\)",
+        r"\]\((?:\.\./)+plugins/([a-z0-9_]+)/README\.md([^)]*)\)",
         r"](/plugins/\1\2)",
         text,
     )
@@ -236,7 +232,25 @@ def transform_for_vitepress(text: str) -> str:
         r"](/plugins/\1\2)",
         text,
     )
-    # plugins/<name>/README.md 内互链：../peer/README.md（须在 ../common/... 之后）
+    # common/webui 等指向同级 common 文档（须在下方 ../name → plugins 之前）
+    text = re.sub(
+        r"\]\(\.\./(cmd_perm|command_limits|message_scrub|corpus|webui)/README\.md([^)]*)\)",
+        r"](/common/\1\2)",
+        text,
+    )
+    text = re.sub(
+        r"\]\(\.\./community_stats\.md([^)]*)\)",
+        r"](/common/community_stats\1)",
+        text,
+    )
+    text = re.sub(
+        r"\]\((?:\./)?api/README\.md([^)]*)\)",
+        r"](/common/webui/api/\1)",
+        text,
+    )
+    # 误写的绝对路径兜底（cmd_perm 在 common，不在 plugins）
+    text = re.sub(r"\]\(/plugins/cmd_perm([^)]*)\)", r"](/common/cmd_perm\1)", text)
+    # plugins/<name>/README.md 内互链：../peer/README.md（须在 common 同级变换之后）
     text = re.sub(
         r"\]\(\.\./([a-z0-9_]+)/README\.md([^)]*)\)",
         r"](/plugins/\1\2)",
@@ -323,13 +337,23 @@ def transform_for_vitepress(text: str) -> str:
         text,
     )
     text = re.sub(
-        r"\]\(\.\./DockerDeployment\.md([^)]*)\)",
+        r"\]\((?:\.\./)+DockerDeployment\.md([^)]*)\)",
         r"](/deploy/docker\1)",
         text,
     )
     text = re.sub(
-        r"\]\(\.\./Deployment\.md([^)]*)\)",
+        r"\]\((?:\.\./)+Deployment\.md([^)]*)\)",
         r"](/deploy/deployment\1)",
+        text,
+    )
+    text = re.sub(
+        r"\]\((?:\.\./)+FAQ\.md([^)]*)\)",
+        r"](/deploy/faq\1)",
+        text,
+    )
+    text = re.sub(
+        r"\]\((?:\.\./)+Config\.md([^)]*)\)",
+        r"](/deploy/config\1)",
         text,
     )
     text = re.sub(
@@ -340,21 +364,6 @@ def transform_for_vitepress(text: str) -> str:
     text = re.sub(
         r"\]\(\./VISUAL\.md([^)]*)\)",
         r"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/plugins/help/VISUAL.md\1)",
-        text,
-    )
-    text = re.sub(
-        r"\]\(\.\./\.\./FAQ\.md([^)]*)\)",
-        r"](/deploy/faq\1)",
-        text,
-    )
-    text = re.sub(
-        r"\]\(\.\./\.\./DockerDeployment\.md([^)]*)\)",
-        r"](/deploy/docker\1)",
-        text,
-    )
-    text = re.sub(
-        r"\]\(\.\./\.\./Deployment\.md([^)]*)\)",
-        r"](/deploy/deployment\1)",
         text,
     )
     text = re.sub(

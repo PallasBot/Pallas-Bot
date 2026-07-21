@@ -33,6 +33,31 @@ jobs:
           mkdir -p /tmp/pallas-bot-docs
           python3 tools/scripts/sync_docs_to_web.py --dest /tmp/pallas-bot-docs
 
+      - name: Smoke-check VitePress link transforms
+        run: |
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          spec = importlib.util.spec_from_file_location(
+              "sync_docs_to_web",
+              Path("tools/scripts/sync_docs_to_web.py"),
+          )
+          assert spec and spec.loader
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          cases = {
+              "[x](../../../plugins/pb_protocol/README.md)": "[x](/plugins/pb_protocol)",
+              "[x](../../../DockerDeployment.md)": "[x](/deploy/docker)",
+              "[x](../community_stats.md)": "[x](/common/community_stats)",
+              "[x](../cmd_perm/README.md)": "[x](/common/cmd_perm)",
+              "[x](api/README.md)": "[x](/common/webui/api/)",
+          }
+          for src, expected in cases.items():
+              got = mod.transform_for_vitepress(src)
+              assert got == expected, (src, got, expected)
+          print("link transform smoke ok")
+          PY
+
   sync-to-docs-repo:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
