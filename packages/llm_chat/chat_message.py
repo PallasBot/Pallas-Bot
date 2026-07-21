@@ -460,6 +460,17 @@ async def handle_llm_chat(bot: Bot, event: Event):
         limit=2,
     )
     behavior_actions = [item.action for item in behavior_patterns]
+    from pallas.product.llm.kernel.models import ConversationMode
+    from pallas.product.llm.scene_style import format_scene_style_block, resolve_scene_style_constraints
+
+    scene_constraints = resolve_scene_style_constraints(
+        behavior_scene,
+        ConversationMode.NORMAL,
+        direct_chat=True,
+    )
+    scene_style_block = format_scene_style_block(scene_constraints)
+    if scene_style_block:
+        system_prompt = f"{system_prompt.rstrip()}\n{scene_style_block}"
     if can_read_behavioral_learning(llm_cfg):
         group_behavior_hint = default_group_chat_behavior_hint()
         if group_behavior_hint:

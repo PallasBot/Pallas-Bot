@@ -89,6 +89,25 @@ async def maybe_submit_repeater_llm_fallback(
     if not system_prompt:
         return False
 
+    from pallas.product.llm.behavior import classify_behavior_scene
+    from pallas.product.llm.kernel.models import normalize_conversation_mode
+    from pallas.product.llm.scene_style import format_scene_style_block, resolve_scene_style_constraints
+
+    fallback_scene = classify_behavior_scene(
+        user_text=text,
+        recent_texts=[],
+        has_multi_party_overlap=False,
+    )
+    scene_block = format_scene_style_block(
+        resolve_scene_style_constraints(
+            fallback_scene,
+            normalize_conversation_mode(reply_mode),
+            direct_chat=False,
+        )
+    )
+    if scene_block:
+        system_prompt = f"{system_prompt.rstrip()}\n{scene_block}"
+
     prompt_user = text
     if expression_suffix:
         prompt_user = f"{text}\n{expression_suffix}"

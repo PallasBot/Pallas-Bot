@@ -59,6 +59,8 @@ class DecisionConstraints(BaseModel):
     topic_anchor: str = ""
     disallow_drift: bool = True
     disallow_service_tone: bool = True
+    drift_level: str = "strict"
+    style_hint: str = ""
 
 
 class DecisionTrace(BaseModel):

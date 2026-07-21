@@ -14,6 +14,7 @@ from .models import (
     ConversationFeatureLevel,
     ConversationMode,
     ConversationPath,
+    ConversationScene,
     DecisionConstraints,
     DecisionTrace,
     GenerationStage,
@@ -82,7 +83,7 @@ def decide_repeater_action(
         trace_reason = "no_candidate"
         stages = []
 
-    constraints = build_mode_constraints(ctx.reply_mode)
+    constraints = build_mode_constraints(ctx.reply_mode, scene=ctx.scene)
     trace = DecisionTrace(
         path=ConversationPath.REPEATER_ASSIST,
         scene=ctx.scene,
@@ -114,7 +115,7 @@ def decide_direct_chat_action(
     if feature_level == ConversationFeatureLevel.LEGACY_REPEATER:
         action = ConversationAction.REPLY_GENERATE
     agent_stages = plan_direct_chat_stages(tools_enabled=tools_enabled)
-    constraints = build_mode_constraints(ConversationMode.NORMAL, direct_chat=True)
+    constraints = build_mode_constraints(ConversationMode.NORMAL, scene=ctx.scene, direct_chat=True)
     trace = DecisionTrace(
         path=ConversationPath.LLM_CHAT_DIRECT,
         scene=ctx.scene,
@@ -172,11 +173,12 @@ def stages_to_primary_action(stages: list[GenerationStage]) -> ConversationActio
     return ConversationAction.REPLY_GENERATE
 
 
-def build_mode_constraints(mode: ConversationMode, *, direct_chat: bool = False) -> DecisionConstraints:
-    if direct_chat:
-        return DecisionConstraints(max_length=120, min_length=1, disallow_drift=False)
-    if mode == ConversationMode.GHOST:
-        return DecisionConstraints(max_length=18, min_length=1, disallow_drift=True)
-    if mode == ConversationMode.GOD:
-        return DecisionConstraints(max_length=48, min_length=2, disallow_drift=True)
-    return DecisionConstraints(max_length=36, min_length=1, disallow_drift=True)
+def build_mode_constraints(
+    mode: ConversationMode,
+    *,
+    scene: ConversationScene | str | None = None,
+    direct_chat: bool = False,
+) -> DecisionConstraints:
+    from pallas.product.llm.scene_style import resolve_scene_style_constraints
+
+    return resolve_scene_style_constraints(scene, mode, direct_chat=direct_chat)
