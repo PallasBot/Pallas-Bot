@@ -173,9 +173,13 @@ def _is_log_continuation_body(body: str) -> bool:
         return False
     if s.startswith("Traceback"):
         return True
-    if s.startswith(("  File ", "    ", "\t")):
+    if body.startswith("  File ") or s.startswith('File "'):
         return True
-    if re.match(r"^[A-Z][a-zA-Z0-9_]*(?:Error|Exception):", s):
+    if body.startswith(("    ", "\t")):
+        return True
+    if re.match(r"^raise\s+[\w.]*(?:Error|Exception)\b", s):
+        return True
+    if re.match(r"^[A-Z][a-zA-Z0-9_.]*(?:Error|Exception):", s):
         return True
     if s.startswith("During handling of the above exception"):
         return True
@@ -185,7 +189,7 @@ def _is_log_continuation_body(body: str) -> bool:
         return True
     if s.startswith("..."):
         return True
-    if re.match(r"^\s+\S", s):
+    if re.match(r"^\s+\S", body):
         return True
     return False
 
@@ -333,6 +337,21 @@ def dedupe_log_lines_preserve_order(lines: list[str]) -> list[str]:
     return out
 
 
+def _merge_same_source_continuations(lines: list[str]) -> list[str]:
+    """单文件（同 tag）内合并 traceback / 树形续行，再参与跨文件时间排序。"""
+    out: list[str] = []
+    for line in lines:
+        raw = line.rstrip("\n")
+        if not raw.strip():
+            continue
+        body = _line_body_without_shard_tag(raw)
+        if out and _is_log_continuation_body(body):
+            out[-1] = f"{out[-1]}\n{raw}"
+        else:
+            out.append(raw)
+    return out
+
+
 def merge_cluster_log_lines(
     n: int,
     scope: str,
@@ -358,7 +377,7 @@ def merge_cluster_log_lines(
             if want != "all" and not _line_matches_source(prefix_log_source(line, "hub"), source):
                 continue
             hub_lines.append(prefix_log_source(line, "hub"))
-        hub_lines = dedupe_mirror_stdio_lines(hub_lines)
+        hub_lines = _merge_same_source_continuations(dedupe_mirror_stdio_lines(hub_lines))
         keyed_bucket.extend(_lines_with_sort_keys(hub_lines))
     for path, tag in _iter_shard_log_paths(source):
         file_lines: list[str] = []
@@ -366,7 +385,7 @@ def merge_cluster_log_lines(
             if not _line_matches_scope(line, scope):
                 continue
             file_lines.append(prefix_log_source(line, tag))
-        file_lines = dedupe_mirror_stdio_lines(file_lines)
+        file_lines = _merge_same_source_continuations(dedupe_mirror_stdio_lines(file_lines))
         keyed_bucket.extend(_lines_with_sort_keys(file_lines))
     if not keyed_bucket:
         return []

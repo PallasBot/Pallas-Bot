@@ -24,6 +24,43 @@ def test_parse_raw_line_no_fake_now_time():
     e = parse_nonebot_log_line("[worker-6] RuntimeError: Module src.plugins.sing is not loaded")
     assert e["time"] == ""
     assert e["scope"] == "worker-6"
+    assert e["level"] == "error"
+
+
+def test_parse_multiline_error_keeps_error_level():
+    text = (
+        '07-21 14:30:00 | ERROR    | nonebot:123 - Failed to load plugin "foo"\n'
+        "Traceback (most recent call last):\n"
+        '  File "/path/load.py", line 50, in load_plugin\n'
+        '    raise RuntimeError(f"Cannot load plugin {name}")\n'
+        "RuntimeError: Cannot load plugin foo"
+    )
+    e = parse_nonebot_log_line(text)
+    assert e["level"] == "error"
+    assert "Failed to load" in e["message"]
+    assert "Traceback" in e["message"]
+
+
+def test_parse_file_and_raise_continuation_as_error():
+    assert parse_nonebot_log_line('  File "/path/load.py", line 50, in load_plugin')["level"] == "error"
+    assert parse_nonebot_log_line('    raise RuntimeError(f"Cannot load plugin {name}")')["level"] == "error"
+
+
+def test_merge_traceback_block_into_single_error_line():
+    from pallas.console.web.bot_web import merge_log_line_continuations
+
+    lines = [
+        '07-21 14:30:00 | ERROR    | nonebot:123 - Failed to load plugin "foo"',
+        "Traceback (most recent call last):",
+        '  File "/path/load.py", line 50, in load_plugin',
+        '    raise RuntimeError(f"Cannot load plugin {name}")',
+        "RuntimeError: Cannot load plugin foo",
+    ]
+    merged = merge_log_line_continuations(lines)
+    assert len(merged) == 1
+    e = parse_nonebot_log_line(merged[0])
+    assert e["level"] == "error"
+    assert "Cannot load plugin foo" in e["message"]
 
 
 def test_merge_dedupes_identical():
@@ -126,3 +163,55 @@ def test_merge_log_entry_continuations():
     assert len(merged) == 1
     assert "|  L {'k': 1}" in merged[0]["message"]
     assert "|  L {'k': 2}" in merged[0]["message"]
+
+
+def test_merge_does_not_glue_cross_worker_traceback():
+    from pallas.console.web.bot_web import merge_log_line_continuations
+
+    lines = [
+        "[worker-1] 05-21 22:44:15 | ERROR    | load:50 - Failed to load plugin",
+        "[worker-5] 05-21 22:44:15 | INFO     | nonebot:1 - Succeeded to load plugin foo",
+        "[worker-1] Traceback (most recent call last):",
+        '[worker-1]   File "/path/load.py", line 50, in load_plugin',
+        "[worker-6] 05-21 22:44:15 | INFO     | nonebot:1 - bot_worker ready",
+        "[worker-1] RuntimeError: Module src.plugins.sing is not loaded",
+    ]
+    merged = merge_log_line_continuations(lines)
+    assert len(merged) == 3
+    assert merged[0].startswith("[worker-1]")
+    assert "Traceback" in merged[0]
+    assert "RuntimeError" in merged[0]
+    assert "Succeeded to load" in merged[1]
+    assert "bot_worker ready" in merged[2]
+    assert "Traceback" not in merged[1]
+    assert "RuntimeError" not in merged[1]
+
+
+def test_merge_entry_does_not_glue_cross_worker_traceback():
+    from pallas.console.web.bot_web import merge_log_entry_continuations
+
+    rows = [
+        parse_nonebot_log_line("[worker-1] 05-21 22:44:15 | ERROR    | load:50 - Failed"),
+        parse_nonebot_log_line("[worker-5] 05-21 22:44:15 | INFO     | nonebot:1 - ok"),
+        parse_nonebot_log_line("[worker-1] Traceback (most recent call last):"),
+        parse_nonebot_log_line('[worker-1]   File "/x.py", line 1, in f'),
+        parse_nonebot_log_line("[worker-1] RuntimeError: boom"),
+    ]
+    merged = merge_log_entry_continuations(rows)
+    assert len(merged) == 2
+    assert merged[0]["scope"].startswith("worker-1")
+    assert "Traceback" in merged[0]["message"]
+    assert "boom" in merged[0]["message"]
+    assert merged[1]["scope"].startswith("worker-5")
+    assert "Traceback" not in merged[1]["message"]
+
+
+def test_fill_missing_times_isolated_by_worker():
+    rows = [
+        parse_nonebot_log_line("[worker-1] 05-21 22:44:15 | ERROR    | load:50 - Failed"),
+        parse_nonebot_log_line("[worker-5] 05-21 22:44:16 | INFO     | nonebot:1 - ok"),
+        parse_nonebot_log_line("[worker-1] RuntimeError: boom"),
+    ]
+    out = fill_missing_log_entry_times(rows)
+    assert "22:44:15" in out[2]["time"]
+    assert "22:44:16" not in out[2]["time"]

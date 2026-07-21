@@ -73,81 +73,112 @@ def _next_stream_id() -> int:
 
 
 def _strip_shard_log_prefix(raw: str) -> tuple[str, str]:
-    """去掉日志里的 worker 前缀，返回来源标签与正文。"""
+    """去掉日志里的 worker 前缀，返回来源标签与正文。
+
+    保留正文行首缩进（如 ``  File ``），避免 traceback 续行被误判为普通 info。
+    """
     tags: list[str] = []
-    body = raw.strip()
+    body = raw.rstrip("\n")
     while True:
         m = _shard_source_prefix_re.match(body)
         if not m:
             break
         tags.append(m.group("tag"))
-        body = m.group("body").strip()
+        body = m.group("body")
     source_tag = tags[0] if len(tags) == 1 else "/".join(tags) if tags else ""
     return source_tag, body
+
+
+def _is_traceback_body(body: str) -> bool:
+    s = body.lstrip()
+    if s.startswith("Traceback"):
+        return True
+    if body.startswith("  File ") or s.startswith('File "'):
+        return True
+    if s.startswith("During handling of the above exception"):
+        return True
+    if re.match(r"^raise\s+[\w.]*(?:Error|Exception)\b", s):
+        return True
+    if _exc_line_re.match(s):
+        return True
+    return False
+
+
+def _with_multiline_msg(msg: str, remainder: str) -> str:
+    if not remainder:
+        return msg
+    return f"{msg}\n{remainder}" if msg else remainder
 
 
 def parse_nonebot_log_line(line: str, *, entry_id: int | None = None) -> dict[str, Any]:
     raw = line.rstrip("\n")
     source_tag, body = _strip_shard_log_prefix(raw)
-    m = _log_line_re.match(body)
+    # loguru/sink 常把整段 traceback 放进同一条；只对首行做格式匹配
+    first, sep, remainder = body.partition("\n")
+    head = first if sep else body
+
+    m = _log_line_re.match(head)
     if not m:
-        m2 = _stdlib_log_re.match(body)
+        m2 = _stdlib_log_re.match(head)
         if m2:
             lev_raw = (m2.group("lev") or "").strip().upper()
             scope = source_tag or "stdlib"
             iso = m2.group("dt")
+            msg = _with_multiline_msg(m2.group("msg") or "", remainder)
             return {
                 "id": entry_id if entry_id is not None else _next_stream_id(),
                 "time": iso,
                 "level": LEVEL_TO_BUCKET.get(lev_raw, "info"),
                 "scope": scope,
-                "message": m2.group("msg") or "",
+                "message": msg,
             }
-        m3 = _nonebot_bracket_re.match(body)
+        m3 = _nonebot_bracket_re.match(head)
         if m3:
             lev_raw = (m3.group("lev") or "").strip().upper()
             scope = (m3.group("scope") or "").strip()[:120]
             if source_tag:
                 scope = f"{source_tag}/{scope}" if scope else source_tag
+            msg = _with_multiline_msg(m3.group("msg") or "", remainder)
             return {
                 "id": entry_id if entry_id is not None else _next_stream_id(),
                 "time": _mmdd_hms_to_iso(m3.group("dt")),
                 "level": LEVEL_TO_BUCKET.get(lev_raw, "info"),
                 "scope": scope,
-                "message": m3.group("msg") or "",
+                "message": msg,
             }
-        m4 = _exc_line_re.match(body)
+        head_l = head.lstrip()
+        m4 = _exc_line_re.match(head_l)
         if m4:
-            msg = (m4.group("msg") or "").strip() or body
+            msg = _with_multiline_msg((m4.group("msg") or "").strip() or head_l, remainder)
             scope = source_tag or "raw"
             return {
                 "id": entry_id if entry_id is not None else _next_stream_id(),
                 "time": "",
                 "level": "error",
                 "scope": scope,
-                "message": msg,
+                "message": msg[:2000],
             }
-        if body.startswith(("Traceback", "  File ")):
+        if _is_traceback_body(head):
             return {
                 "id": entry_id if entry_id is not None else _next_stream_id(),
                 "time": "",
                 "level": "error",
                 "scope": source_tag or "raw",
-                "message": body[:2000],
+                "message": (body if remainder else head)[:2000],
             }
         return {
             "id": entry_id if entry_id is not None else _next_stream_id(),
             "time": "",
             "level": "info",
             "scope": source_tag or "raw",
-            "message": body or raw,
+            "message": (body or raw)[:2000],
         }
     dt_part = m.group("dt")
     lev_raw = (m.group("lev") or "").strip().upper()
     scope = (m.group("scope") or "").strip()[:120]
     if source_tag:
         scope = f"{source_tag}/{scope}" if scope else source_tag
-    msg = m.group("msg") or ""
+    msg = _with_multiline_msg(m.group("msg") or "", remainder)
     level = LEVEL_TO_BUCKET.get(lev_raw, "info")
     iso_time = _mmdd_hms_to_iso(dt_part)
     return {
@@ -205,31 +236,134 @@ def replay_log_entries_after(
     return fill_missing_log_entry_times(out)
 
 
+def _normalize_log_source_key(tag: str) -> str:
+    """分片来源归一：仅 ``worker-N`` / ``hub``；其余视为无来源标签。"""
+    primary = (tag or "").strip().split("/", 1)[0]
+    if primary.startswith("worker-"):
+        return primary
+    if primary in ("hub", "hub-file"):
+        return "hub"
+    return ""
+
+
+def _log_source_key_from_raw_line(raw: str) -> str:
+    first = raw.split("\n", 1)[0]
+    tag, _ = _strip_shard_log_prefix(first)
+    return _normalize_log_source_key(tag)
+
+
+def _log_source_key_from_entry(entry: dict[str, Any]) -> str:
+    scope = str(entry.get("scope") or "").strip()
+    if scope:
+        key = _normalize_log_source_key(scope.split("/", 1)[0])
+        if key:
+            return key
+    msg = str(entry.get("message") or "")
+    return _log_source_key_from_raw_line(msg)
+
+
+def _raw_line_accepts_traceback_continuation(raw: str) -> bool:
+    """跨 worker 交错时，仅把 traceback 续行吸回同来源的 error / 已有栈块。"""
+    _, body = _strip_shard_log_prefix(raw)
+    head = body.split("\n", 1)[0]
+    if "Traceback" in body:
+        return True
+    if (
+        _is_traceback_body(head)
+        and not _log_line_re.match(head.lstrip())
+        and not _nonebot_bracket_re.match(head.lstrip())
+    ):
+        # 已是栈帧/异常行块
+        return True
+    m = _log_line_re.match(head)
+    if m and (m.group("lev") or "").strip().upper() in ("ERROR", "CRITICAL"):
+        return True
+    m3 = _nonebot_bracket_re.match(head)
+    if m3 and (m3.group("lev") or "").strip().upper() in ("ERROR", "CRITICAL"):
+        return True
+    m2 = _stdlib_log_re.match(head)
+    if m2 and (m2.group("lev") or "").strip().upper() in ("ERROR", "CRITICAL"):
+        return True
+    return False
+
+
+def _entry_accepts_traceback_continuation(entry: dict[str, Any]) -> bool:
+    if str(entry.get("level") or "") == "error":
+        return True
+    msg = str(entry.get("message") or "")
+    return "Traceback" in msg or _is_traceback_body(msg)
+
+
+def _entry_is_traceback_fragment(entry: dict[str, Any], msg: str) -> bool:
+    """解析后异常行正文可能只剩消息（如 boom），仍视为 traceback 碎片。"""
+    if _is_traceback_body(msg):
+        return True
+    if str(entry.get("level") or "") != "error":
+        return False
+    if str(entry.get("time") or "").strip():
+        return False
+    from pallas.core.platform.shard.logs.view import _is_log_header_body
+
+    return not _is_log_header_body(msg)
+
+
 def fill_missing_log_entry_times(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    last_time = ""
+    """无时间戳续行继承同来源上一条时间，避免多 worker 交错串台。"""
+    last_by_source: dict[str, str] = {}
+    last_any = ""
     for e in entries:
+        key = _log_source_key_from_entry(e)
         t = str(e.get("time") or "").strip()
         if t:
-            last_time = t
-        elif last_time:
-            e["time"] = last_time
+            last_any = t
+            if key:
+                last_by_source[key] = t
+        else:
+            inherit = last_by_source.get(key) if key else last_any
+            if inherit:
+                e["time"] = inherit
     return entries
 
 
 def merge_log_line_continuations(lines: list[str]) -> list[str]:
-    """合并 traceback / pretty-print 等多行续行，避免结构化视图拆成多条 info。"""
+    """合并 traceback / pretty-print 等多行续行，避免结构化视图拆成多条 info。
+
+    同来源相邻续行照常合并；``source=all`` 下多 worker 时间交错时，traceback 续行
+    会吸回该 worker 最近一条 error/栈块，而不会粘到其他 worker 的 info。
+    """
     from pallas.core.platform.shard.logs.view import _is_log_continuation_body
 
     out: list[str] = []
+    last_idx_by_source: dict[str, int] = {}
     for line in lines:
         raw = line.rstrip("\n")
         if not raw.strip():
             continue
-        _, body = _strip_shard_log_prefix(raw)
-        if out and _is_log_continuation_body(body):
-            out[-1] = f"{out[-1]}\n{raw}"
-        else:
+        tag, body = _strip_shard_log_prefix(raw)
+        key = _normalize_log_source_key(tag)
+        if not _is_log_continuation_body(body):
             out.append(raw)
+            if key:
+                last_idx_by_source[key] = len(out) - 1
+            continue
+        merged = False
+        if out:
+            prev_key = _log_source_key_from_raw_line(out[-1])
+            if key and prev_key == key:
+                out[-1] = f"{out[-1]}\n{raw}"
+                merged = True
+            elif not key and not prev_key:
+                out[-1] = f"{out[-1]}\n{raw}"
+                merged = True
+            elif key and _is_traceback_body(body):
+                idx = last_idx_by_source.get(key)
+                if idx is not None and _raw_line_accepts_traceback_continuation(out[idx]):
+                    out[idx] = f"{out[idx]}\n{raw}"
+                    merged = True
+        if not merged:
+            out.append(raw)
+            if key:
+                last_idx_by_source[key] = len(out) - 1
     return out
 
 
@@ -237,19 +371,47 @@ def merge_log_entry_continuations(entries: list[dict[str, Any]]) -> list[dict[st
     from pallas.core.platform.shard.logs.view import _is_log_continuation_body
 
     out: list[dict[str, Any]] = []
+    last_idx_by_source: dict[str, int] = {}
     rank = {"debug": 0, "info": 1, "success": 2, "warn": 3, "error": 4}
+
+    def absorb(prev: dict[str, Any], cur: dict[str, Any]) -> None:
+        prev_msg = str(prev.get("message") or "")
+        msg = str(cur.get("message") or "")
+        prev["message"] = f"{prev_msg}\n{msg}" if prev_msg else msg
+        pl = str(prev.get("level") or "info")
+        cl = str(cur.get("level") or "info")
+        if rank.get(cl, 1) > rank.get(pl, 1):
+            prev["level"] = cl
+
     for e in entries:
-        msg = str(e.get("message") or "")
-        if out and _is_log_continuation_body(msg):
-            prev = out[-1]
-            prev_msg = str(prev.get("message") or "")
-            prev["message"] = f"{prev_msg}\n{msg}" if prev_msg else msg
-            pl = str(prev.get("level") or "info")
-            cl = str(e.get("level") or "info")
-            if rank.get(cl, 1) > rank.get(pl, 1):
-                prev["level"] = cl
+        cur = dict(e)
+        msg = str(cur.get("message") or "")
+        key = _log_source_key_from_entry(cur)
+        is_cont = _is_log_continuation_body(msg) or _entry_is_traceback_fragment(cur, msg)
+        if not is_cont:
+            out.append(cur)
+            if key:
+                last_idx_by_source[key] = len(out) - 1
             continue
-        out.append(dict(e))
+        merged = False
+        if out:
+            prev = out[-1]
+            prev_key = _log_source_key_from_entry(prev)
+            if key and prev_key == key:
+                absorb(prev, cur)
+                merged = True
+            elif not key and not prev_key:
+                absorb(prev, cur)
+                merged = True
+            elif key and _entry_is_traceback_fragment(cur, msg):
+                idx = last_idx_by_source.get(key)
+                if idx is not None and _entry_accepts_traceback_continuation(out[idx]):
+                    absorb(out[idx], cur)
+                    merged = True
+        if not merged:
+            out.append(cur)
+            if key:
+                last_idx_by_source[key] = len(out) - 1
     return out
 
 
@@ -348,18 +510,28 @@ async def iter_nonebot_log_sse(
                     return shard_tailer.poll_new_lines(scope=scope)
 
                 new_lines = await asyncio.to_thread(_poll_shard)
-                last_time = ""
+                # 按来源缓冲本轮增量，先合并同 worker 续行再吐出，避免多 worker 交错串台
+                by_source: dict[str, list[str]] = {}
+                order: list[str] = []
                 for line in new_lines:
-                    e = parse_nonebot_log_line(line)
-                    if not _entry_matches_log_source(e, source):
-                        continue
-                    t = str(e.get("time") or "").strip()
-                    if t:
-                        last_time = t
-                    elif last_time:
-                        e["time"] = last_time
-                    yield f"id: {e.get('id')}\ndata: {json.dumps(e, ensure_ascii=False)}\n\n"
-                    shard_sent = True
+                    key = _log_source_key_from_raw_line(line) or "_untagged"
+                    if key not in by_source:
+                        by_source[key] = []
+                        order.append(key)
+                    by_source[key].append(line)
+                last_time_by_source: dict[str, str] = {}
+                for key in order:
+                    for merged_line in merge_log_line_continuations(by_source[key]):
+                        e = parse_nonebot_log_line(merged_line)
+                        if not _entry_matches_log_source(e, source):
+                            continue
+                        t = str(e.get("time") or "").strip()
+                        if t:
+                            last_time_by_source[key] = t
+                        elif last_time_by_source.get(key):
+                            e["time"] = last_time_by_source[key]
+                        yield f"id: {e.get('id')}\ndata: {json.dumps(e, ensure_ascii=False)}\n\n"
+                        shard_sent = True
 
             if not hub_sent and not shard_sent:
                 yield ": heartbeat\n\n"

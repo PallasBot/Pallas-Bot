@@ -33,6 +33,29 @@ def cache_value_copy(data: Any) -> Any:
     return data
 
 
+def format_stale_window(stale_sec: float) -> str:
+    """把 stale_sec 写成维护者可读的时间窗口。"""
+    if stale_sec >= 60:
+        minutes = stale_sec / 60.0
+        text = f"{minutes:.0f}" if minutes >= 10 else f"{minutes:.1f}".rstrip("0").rstrip(".")
+        return f"约 {text} 分钟"
+    return f"约 {stale_sec:.0f} 秒"
+
+
+def format_cache_fallback_warning(*, key: str, stale_sec: float, err: Exception) -> str:
+    """缓存兜底 warn 文案：说明失败与可用缓存窗口，并保留 key 便于排查。"""
+    window = format_stale_window(stale_sec)
+    if key.startswith("update_check_"):
+        if key.endswith(":False"):
+            token_hint = "；未配置 GitHub token"
+        elif key.endswith(":True"):
+            token_hint = "；已配置 GitHub token"
+        else:
+            token_hint = ""
+        return f"Pallas-Bot 控制台: 更新检查请求失败，已使用{window}内的缓存结果{token_hint}（key={key}）err={err}"
+    return f"Pallas-Bot 控制台: 读取失败，已使用{window}内的缓存结果（key={key}）err={err}"
+
+
 async def cached_read(
     *,
     key: str,
@@ -55,9 +78,9 @@ async def cached_read(
         stale_hit = _READ_CACHE.get(key)
         try:
             data = await loader()
-        except Exception:
+        except Exception as exc:
             if stale_hit and t < float(stale_hit["stale_exp"]):
-                logger.warning("Pallas-Bot 控制台: 使用缓存兜底 key={}", key)
+                logger.warning(format_cache_fallback_warning(key=key, stale_sec=stale_sec, err=exc))
                 return cache_value_copy(stale_hit["data"])
             raise
         stored = cache_value_copy(data)
