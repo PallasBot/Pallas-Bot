@@ -6,6 +6,7 @@ import re
 from typing import TYPE_CHECKING, Literal
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
+from pallas.product.llm.shut_up import is_shut_up_text
 from pallas.product.persona.config import persona_affect_gate_enabled
 
 if TYPE_CHECKING:
@@ -18,9 +19,6 @@ _CQ_FACE_RE = re.compile(r"\[CQ:(?:face|bface|sface|rps|dice)[^\]]*\]", re.IGNOR
 _EMOJI_RE = re.compile(
     r"[\U0001F300-\U0001FAFF\U00002600-\U000027BF\U0000FE00-\U0000FE0F\U0000200D]+",
     re.UNICODE,
-)
-_SHUT_UP_RE = re.compile(
-    r"(闭嘴|别说话|不要说话|别回我|别回了|别回复|少说话|别出声)",
 )
 
 
@@ -42,8 +40,7 @@ def is_mostly_face_or_emoji(text: str) -> bool:
 
 
 def is_shut_up_request(text: str) -> bool:
-    plain = strip_cq_codes(text)
-    return bool(plain and _SHUT_UP_RE.search(plain))
+    return is_shut_up_text(strip_cq_codes(text))
 
 
 def persona_adjusted_min_chars(base_min: int, persona: ResolvedPersona | None) -> int:
