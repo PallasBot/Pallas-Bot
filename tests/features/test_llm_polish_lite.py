@@ -15,7 +15,7 @@ from pallas.product.llm.polish_lite import (
 def test_build_polish_lite_user_text() -> None:
     text = build_polish_lite_user_text("夜宵吃什么", "小炒黄牛肉")
     assert "【用户消息】夜宵吃什么" in text
-    assert "【候选回复】小炒黄牛肉" in text
+    assert "【待改写】小炒黄牛肉" in text
     assert "勿加设定词" in text
     assert "继续聊" in text
 
