@@ -5,6 +5,7 @@ from typing import Any
 
 from beanie import SortDirection
 from nonebot import logger
+from pymongo.errors import DuplicateKeyError
 
 from pallas.core.foundation.db.modules import LlmMemoryEntry
 from pallas.product.llm.config import LlmConfig, get_llm_config
@@ -14,15 +15,22 @@ from pallas.product.llm.memory.store import (
     derive_memory_keywords,
     memory_entries_semantically_match,
 )
+from pallas.product.llm.mongo_id import allocate_mongo_int_id
 from pallas.product.llm.session_models import normalize_group_scope
 from pallas.product.persona.prompt_guard import sanitize_prompt_block, sanitize_prompt_literal
 
+_MEMORY_ID_INSERT_RETRIES = 8
 
-async def next_memory_entry_id() -> int:
+
+async def _peek_max_memory_entry_id() -> int:
     rows = await LlmMemoryEntry.find_all().sort([("entry_id", SortDirection.DESCENDING)]).limit(1).to_list()
     if not rows:
-        return 1
-    return int(rows[0].entry_id) + 1
+        return 0
+    return int(rows[0].entry_id or 0)
+
+
+async def next_memory_entry_id() -> int:
+    return await allocate_mongo_int_id("llm_memory_entry", peek_max=_peek_max_memory_entry_id)
 
 
 async def find_reusable_memory_entry_mongo(
@@ -133,18 +141,28 @@ async def save_memory_entry_mongo(
             existing.embedding_model = embedding_model
         await existing.save()
     else:
-        await LlmMemoryEntry(
-            entry_id=await next_memory_entry_id(),
-            bot_id=int(bot_id),
-            group_id=scope_gid,
-            keywords=keywords,
-            content=safe_content,
-            source=safe_source,
-            embedding_json=embedding_json,
-            embedding_model=embedding_model,
-            created_at=now,
-            updated_at=now,
-        ).insert()
+        inserted = False
+        for _ in range(_MEMORY_ID_INSERT_RETRIES):
+            try:
+                await LlmMemoryEntry(
+                    entry_id=await next_memory_entry_id(),
+                    bot_id=int(bot_id),
+                    group_id=scope_gid,
+                    keywords=keywords,
+                    content=safe_content,
+                    source=safe_source,
+                    embedding_json=embedding_json,
+                    embedding_model=embedding_model,
+                    created_at=now,
+                    updated_at=now,
+                ).insert()
+                inserted = True
+                break
+            except DuplicateKeyError:
+                continue
+        if not inserted:
+            logger.warning("llm memory insert failed after duplicate entry_id retries")
+            return False
     await trim_group_memory_entries_mongo(
         bot_id=int(bot_id),
         group_id=scope_gid,

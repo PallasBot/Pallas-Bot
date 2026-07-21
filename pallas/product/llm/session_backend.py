@@ -62,18 +62,34 @@ class LlmSessionMessageBackend(Protocol):
     ) -> bool: ...
 
 
-def resolve_session_backend() -> LlmSessionMessageBackend:
-    from pallas.core.foundation.db.runtime import is_mongodb_backend, is_postgresql_backend
+_session_backend_cache: dict[str, LlmSessionMessageBackend] = {}
 
-    if is_postgresql_backend():
+
+def clear_session_backend_cache() -> None:
+    """测试或热切换 db_backend 时清空进程内缓存。"""
+    _session_backend_cache.clear()
+
+
+def resolve_session_backend() -> LlmSessionMessageBackend:
+    from pallas.core.foundation.db.runtime import get_db_backend, is_mongodb_backend, is_postgresql_backend
+
+    backend_name = get_db_backend()
+    cached = _session_backend_cache.get(backend_name)
+    if cached is not None:
+        return cached
+
+    if is_postgresql_backend(backend_name):
         from pallas.product.llm.session_store_pg import PgLlmSessionMessageBackend
 
-        return PgLlmSessionMessageBackend()
-    if is_mongodb_backend():
+        instance: LlmSessionMessageBackend = PgLlmSessionMessageBackend()
+    elif is_mongodb_backend(backend_name):
         from pallas.product.llm.session_store_mongo import MongoLlmSessionMessageBackend
 
-        return MongoLlmSessionMessageBackend()
-    raise RuntimeError("no llm session backend for current db_backend")
+        instance = MongoLlmSessionMessageBackend()
+    else:
+        raise RuntimeError("no llm session backend for current db_backend")
+    _session_backend_cache[backend_name] = instance
+    return instance
 
 
 def session_store_backend_ready() -> bool:

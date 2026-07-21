@@ -3,20 +3,29 @@ from __future__ import annotations
 import time
 
 from beanie import SortDirection
+from nonebot import logger
+from pymongo.errors import DuplicateKeyError
 
 from pallas.core.foundation.db.modules import LlmRelationshipNote
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.memory.relationship import normalize_relationship_note
 from pallas.product.llm.memory.relationship_store import decayed_weight
+from pallas.product.llm.mongo_id import allocate_mongo_int_id
 from pallas.product.llm.session_models import normalize_group_scope
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 
+_RELATIONSHIP_ID_INSERT_RETRIES = 8
 
-async def next_relationship_note_id() -> int:
+
+async def _peek_max_relationship_note_id() -> int:
     rows = await LlmRelationshipNote.find_all().sort([("note_id", SortDirection.DESCENDING)]).limit(1).to_list()
     if not rows:
-        return 1
-    return int(rows[0].note_id) + 1
+        return 0
+    return int(rows[0].note_id or 0)
+
+
+async def next_relationship_note_id() -> int:
+    return await allocate_mongo_int_id("llm_relationship_note", peek_max=_peek_max_relationship_note_id)
 
 
 async def save_relationship_note_mongo(
@@ -49,17 +58,24 @@ async def save_relationship_note_mongo(
         existing.updated_at = now
         await existing.save()
     else:
-        await LlmRelationshipNote(
-            note_id=await next_relationship_note_id(),
-            bot_id=int(bot_id),
-            group_id=scope_gid,
-            user_id=int(user_id),
-            content=safe_content,
-            source=safe_source,
-            weight=1.0,
-            created_at=now,
-            updated_at=now,
-        ).insert()
+        for _ in range(_RELATIONSHIP_ID_INSERT_RETRIES):
+            try:
+                await LlmRelationshipNote(
+                    note_id=await next_relationship_note_id(),
+                    bot_id=int(bot_id),
+                    group_id=scope_gid,
+                    user_id=int(user_id),
+                    content=safe_content,
+                    source=safe_source,
+                    weight=1.0,
+                    created_at=now,
+                    updated_at=now,
+                ).insert()
+                return True
+            except DuplicateKeyError:
+                continue
+        logger.warning("llm relationship note insert failed after duplicate note_id retries")
+        return False
     return True
 
 

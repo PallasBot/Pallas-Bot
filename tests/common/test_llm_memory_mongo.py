@@ -35,6 +35,34 @@ def _patch_mongo_backend(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_mongo_allocate_int_id_monotonic_and_bootstraps(beanie_fixture) -> None:
+    from beanie import SortDirection
+
+    from pallas.core.foundation.db.modules import LlmMemoryEntry
+    from pallas.product.llm.mongo_id import allocate_mongo_int_id
+
+    await LlmMemoryEntry(
+        entry_id=7,
+        bot_id=1,
+        group_id=1,
+        keywords="k",
+        content="seed",
+        source="teach",
+        created_at=1,
+        updated_at=1,
+    ).insert()
+
+    async def peek_max() -> int:
+        rows = await LlmMemoryEntry.find_all().sort([("entry_id", SortDirection.DESCENDING)]).limit(1).to_list()
+        return int(rows[0].entry_id) if rows else 0
+
+    first = await allocate_mongo_int_id("llm_memory_entry_test", peek_max=peek_max)
+    second = await allocate_mongo_int_id("llm_memory_entry_test", peek_max=peek_max)
+    assert first == 8
+    assert second == 9
+
+
+@pytest.mark.asyncio
 async def test_mongo_memory_save_list_retrieve_delete(beanie_fixture, monkeypatch) -> None:
     clear_llm_config_cache()
     _patch_mongo_backend(monkeypatch)
