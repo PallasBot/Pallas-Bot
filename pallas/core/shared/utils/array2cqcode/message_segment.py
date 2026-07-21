@@ -6,13 +6,16 @@ class BaseMessageSegment:
     @property
     def cqcode(self):
         if self.type == "text":
-            return self.data.get("text")
+            text = (self.data or {}).get("text")
+            return "" if text is None else str(text)
         message = f"[CQ:{self.type}"
-        for k, v in self.__dict__.get("data").items():
+        data = self.__dict__.get("data") or {}
+        for k, v in data.items():
             message += f",{k}={self.escape(v)}"
         message += "]"
         return message
 
     @staticmethod
-    def escape(data: str) -> str:
-        return data.replace("&", "&amp;").replace("[", "&#91;").replace("]", "&#93;").replace(",", "&#44;")
+    def escape(data: object) -> str:
+        # OneBot 段字段常为 int（如 at.qq），须先转成 str 再做 CQ 转义
+        return str(data).replace("&", "&amp;").replace("[", "&#91;").replace("]", "&#93;").replace(",", "&#44;")
