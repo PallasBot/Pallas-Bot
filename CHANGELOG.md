@@ -1,5 +1,19 @@
 # Changelog
 
+## [4.0.3] - 2026-07-21
+
+### Fixed
+
+- LLM：Provider 模型列表改由 Bot 直连上游（不再经 AI 中转）
+- CQ 段字段转义兼容 int，避免撤回等链路因 `at.qq` 等为整型而报错
+- 分片日志：按 worker 隔离 traceback 合并；理清更新检查缓存兜底日志
+- Docs 同步：补齐 VitePress 链接变换，避免 Docs CI 死链
+- 同步控制台 OpenAPI，补齐 LLM Provider 模型发现接口
+
+### 文档
+
+- 补充社区插件发版后同步索引的步骤
+
 ## [4.0.2] - 2026-07-21
 
 ### Added
@@ -82,6 +96,7 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
+[4.0.3]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/PallasBot/Pallas-Bot/compare/v3.9.3...v4.0.0
