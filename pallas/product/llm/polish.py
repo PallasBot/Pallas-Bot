@@ -140,6 +140,7 @@ async def maybe_submit_repeater_llm_polish(
             "user_text": str(trigger_user_text or "").strip(),
             "fallback_text": candidate,
             "reply_mode": str(reply_mode or "normal"),
+            "reply_max_length": 48,
             "start_time": time.time(),
         },
     )

@@ -548,6 +548,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "behavior_pattern_ids": [item.pattern_id for item in behavior_patterns],
             "behavior_actions": [str(item.action) for item in behavior_patterns],
             "behavior_hint": behavior_hint,
+            "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
         },

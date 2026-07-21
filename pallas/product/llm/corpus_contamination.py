@@ -80,6 +80,14 @@ CHAT_HARD_BLOCK_PHRASES: tuple[str, ...] = (
     "庆典感满满",
     "为您服务",
     "谢谢您的陪伴",
+    "随时找我",
+    "要帮忙吗",
+    "别这么说嘛",
+    "我们还是好朋友",
+    "对了，你喜欢",
+    "最近任务多吗",
+    "Jest",
+    "jest~",
 )
 
 CHAT_SOFT_RETRY_PHRASES: tuple[str, ...] = (
@@ -88,6 +96,17 @@ CHAT_SOFT_RETRY_PHRASES: tuple[str, ...] = (
     "嘻嘻",
     "[嘻嘻]",
 )
+
+# 整句垫词：仅当回复几乎整句是这些时拦截（保留「谢谢，还行吧」类口语）
+FILLER_ONLY_REPLIES: frozenset[str] = frozenset({
+    "还行吧",
+    "还行吧。",
+    "牛牛还行吧",
+    "牛牛还行吧。",
+    "牛牛还好吧",
+    "牛牛还好吧。",
+    "还行吧。还行吧。",
+})
 
 POLISH_LITE_HARD_BLOCK_PHRASES: tuple[str, ...] = (
     "继续聊",

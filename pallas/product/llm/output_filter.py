@@ -19,6 +19,7 @@ CHAT_HARD_BLOCK_PHRASES = _corpus_contamination.CHAT_HARD_BLOCK_PHRASES
 CHAT_SOFT_RETRY_PHRASES = _corpus_contamination.CHAT_SOFT_RETRY_PHRASES
 POLISH_LITE_HARD_BLOCK_PHRASES = _corpus_contamination.POLISH_LITE_HARD_BLOCK_PHRASES
 POLISH_LITE_SOFT_RETRY_PHRASES = _corpus_contamination.POLISH_LITE_SOFT_RETRY_PHRASES
+FILLER_ONLY_REPLIES = _corpus_contamination.FILLER_ONLY_REPLIES
 
 OutputFilterProfile = Literal["chat", "polish_lite"]
 OutputFilterTier = Literal["hard_block", "soft_retry"]
@@ -49,6 +50,19 @@ def profile_for_task_type(task_type: str) -> OutputFilterProfile | None:
     return "chat"
 
 
+def _unique_phrases(*groups: tuple[str, ...]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for group in groups:
+        for phrase in group:
+            item = str(phrase or "").strip()
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            out.append(item)
+    return tuple(out)
+
+
 def phrases_for_profile(profile: OutputFilterProfile, tier: OutputFilterTier) -> tuple[str, ...]:
     from pallas.product.llm.config import get_llm_config
 
@@ -57,13 +71,27 @@ def phrases_for_profile(profile: OutputFilterProfile, tier: OutputFilterTier) ->
     chat_soft = tuple(phrase for phrase in cfg.llm_output_filter_chat_soft_phrases if phrase)
     polish_hard = tuple(phrase for phrase in cfg.llm_output_filter_polish_lite_hard_phrases if phrase)
     polish_soft = tuple(phrase for phrase in cfg.llm_output_filter_polish_lite_soft_phrases if phrase)
+    # 内置硬拦词与 WebUI 覆盖合并，避免落盘旧列表吃掉代码新增项
     if profile == "polish_lite":
         if tier == "hard_block":
-            return chat_hard + polish_hard
-        return chat_soft + polish_soft
+            return _unique_phrases(
+                CHAT_HARD_BLOCK_PHRASES,
+                POLISH_LITE_HARD_BLOCK_PHRASES,
+                chat_hard,
+                polish_hard,
+            )
+        return _unique_phrases(CHAT_SOFT_RETRY_PHRASES, POLISH_LITE_SOFT_RETRY_PHRASES, chat_soft, polish_soft)
     if tier == "hard_block":
-        return chat_hard
-    return chat_soft
+        return _unique_phrases(CHAT_HARD_BLOCK_PHRASES, chat_hard)
+    return _unique_phrases(CHAT_SOFT_RETRY_PHRASES, chat_soft)
+
+
+def is_filler_only_reply(text: str) -> bool:
+    plain = str(text or "").strip()
+    if not plain:
+        return False
+    compact = plain.strip("，,。！!？?~～ ")
+    return plain in FILLER_ONLY_REPLIES or compact in FILLER_ONLY_REPLIES
 
 
 def match_output_filter(text: str, profile: OutputFilterProfile) -> OutputFilterHit | None:
@@ -75,6 +103,8 @@ def match_output_filter(text: str, profile: OutputFilterProfile) -> OutputFilter
     unsafe_hit = match_unsafe_learn_text(plain)
     if unsafe_hit:
         return OutputFilterHit(tier="hard_block", phrase=unsafe_hit, profile=profile)
+    if is_filler_only_reply(plain):
+        return OutputFilterHit(tier="hard_block", phrase="filler_only", profile=profile)
     for phrase in phrases_for_profile(profile, "hard_block"):
         if phrase in plain:
             return OutputFilterHit(tier="hard_block", phrase=phrase, profile=profile)
@@ -103,6 +133,37 @@ def _normalize_and_guard_reply(text: str, *, task_type: str) -> str:
     return normalized
 
 
+def _enforce_max_length(text: str, *, task: dict, task_type: str) -> str:
+    """行为/场景长度违约：超上限过多则回落 fallback 或静默。"""
+    try:
+        max_len = int(task.get("reply_max_length") or 0)
+    except (TypeError, ValueError):
+        max_len = 0
+    if max_len <= 0 or not text:
+        return text
+    if len(text) <= max_len:
+        return text
+    # 轻微超长仍放行；明显违约才回落
+    if len(text) <= max_len + 12:
+        return text
+    fallback = str(task.get("fallback_text") or "").strip()
+    if fallback and fallback != text and len(fallback) <= max_len + 12:
+        logger.info(
+            "LLM reply length over cap task_type={} len={} max={} -> fallback",
+            task_type,
+            len(text),
+            max_len,
+        )
+        return fallback
+    logger.info(
+        "LLM reply length over cap task_type={} len={} max={} -> silent",
+        task_type,
+        len(text),
+        max_len,
+    )
+    return ""
+
+
 def resolve_output_filtered_reply(task: dict, reply_text: str) -> str:
     """返回可投递文本；空串表示静默不发。"""
     raw = str(reply_text or "").strip()
@@ -111,6 +172,9 @@ def resolve_output_filtered_reply(task: dict, reply_text: str) -> str:
     if profile is None:
         return raw
     text = _normalize_and_guard_reply(raw, task_type=task_type) if raw else ""
+    if not text:
+        return ""
+    text = _enforce_max_length(text, task=task, task_type=task_type)
     if not text:
         return ""
     if not output_filter_enabled():

@@ -19,6 +19,9 @@ _EMOJI_RE = re.compile(
     r"[\U0001F300-\U0001FAFF\U00002600-\U000027BF\U0000FE00-\U0000FE0F\U0000200D]+",
     re.UNICODE,
 )
+_SHUT_UP_RE = re.compile(
+    r"(闭嘴|别说话|不要说话|别回我|别回了|别回复|少说话|别出声)",
+)
 
 
 def strip_cq_codes(text: str) -> str:
@@ -38,6 +41,11 @@ def is_mostly_face_or_emoji(text: str) -> bool:
     return not without_emoji
 
 
+def is_shut_up_request(text: str) -> bool:
+    plain = strip_cq_codes(text)
+    return bool(plain and _SHUT_UP_RE.search(plain))
+
+
 def persona_adjusted_min_chars(base_min: int, persona: ResolvedPersona | None) -> int:
     if persona is None or not persona_affect_gate_enabled():
         return base_min
@@ -52,17 +60,25 @@ def evaluate_llm_reply_gate(
     persona: ResolvedPersona | None = None,
     bot_id: int | None = None,
 ) -> ReplyGateDecision:
-    from pallas.product.llm.reply_necessity import is_bystander_plain_text, is_noise_fragment
+    from pallas.product.llm.reply_necessity import (
+        is_bystander_plain_text,
+        is_incomplete_utterance,
+        is_noise_fragment,
+    )
 
     c = cfg or get_llm_config()
     if not c.llm_reply_gate_enabled:
         return "proceed"
     plain = strip_cq_codes(user_text)
+    if is_shut_up_request(user_text):
+        return "skip"
     if not plain and is_mostly_face_or_emoji(user_text):
         return "skip"
     if is_mostly_face_or_emoji(user_text):
         return "skip"
     if is_noise_fragment(plain):
+        return "skip"
+    if is_incomplete_utterance(plain):
         return "skip"
     if is_bystander_plain_text(user_text, bot_id=bot_id):
         return "skip"

@@ -72,6 +72,7 @@ _PROVOCATION_TOKENS = ("效忠", "反党", "走资派", "快说", "表态", "忠
 _VENTING_TOKENS = ("烦死", "气死", "无语", "沃日", "绷不住", "受不了")
 _BANTER_TOKENS = ("哈哈", "乐", "蚌", "绷", "典", "梗")
 _HELP_TOKENS = ("怎么", "为啥", "为什么", "咋", "能不能", "可以吗")
+_SHUT_UP_TOKENS = ("闭嘴", "别说话", "不要说话", "别回我", "别回了", "别回复", "少说话")
 _NEGATIVE_OUTCOME_TOKENS = ("答非所问", "没懂", "没看懂", "什么玩意", "你在说啥", "不是这个", "尬", "怪")
 _DERAILED_TOKENS = ("跑题", "别转", "扯远", "别岔开", "别拐", "不是在说这个")
 _ENGAGED_TOKENS = ("?", "？", "然后", "所以", "笑死", "哈哈", "确实", "行", "草")
@@ -161,6 +162,9 @@ def default_behavior_pattern_seeds() -> list[BehaviorPattern]:
 def classify_behavior_scene(*, user_text: str, recent_texts: list[str], has_multi_party_overlap: bool) -> BehaviorScene:
     text = str(user_text or "").strip()
     if not text:
+        return BehaviorScene.SMALLTALK
+    if any(token in text for token in _SHUT_UP_TOKENS):
+        # 闭嘴指令勿误判成求助
         return BehaviorScene.SMALLTALK
     if any(token in text for token in _PROVOCATION_TOKENS):
         return BehaviorScene.PROVOCATION
