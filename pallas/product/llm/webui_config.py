@@ -235,6 +235,43 @@ class LlmWebuiConfig(BaseModel):
             "与上方闲聊软拦截合并后用于 repeater_polish_lite",
         ),
     )
+    llm_reply_postprocess_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "是否启用回复后处理（错别字/拆条）",
+            "默认关闭；开启后才应用下方子开关，且不写回语料学习",
+        ),
+    )
+    llm_reply_typo_enabled: bool = Field(
+        default=False,
+        description=field_help("是否偶尔制造中文近音错别字", "需同时开启回复后处理"),
+    )
+    llm_reply_typo_rate: float = Field(
+        default=0.01,
+        description=field_help("单字错别字概率", "0~1，建议 ≤0.03"),
+    )
+    llm_reply_split_enabled: bool = Field(
+        default=False,
+        description=field_help("是否按句拆成多条发送", "需同时开启回复后处理"),
+    )
+    llm_reply_split_max_chars: int = Field(
+        default=36,
+        description=field_help("拆条单段建议字数上限", "过短会拆得太碎"),
+    )
+    llm_sticker_fit_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "是否启用表情 fit 登记与反馈",
+            "默认关闭；开启后记录表情反应并按反馈降级",
+        ),
+    )
+    llm_reply_effect_eval_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "是否异步记录回复效果启发式评分",
+            "默认关闭；落盘到 data 目录，不影响主路径延迟",
+        ),
+    )
     llm_memory_rag_enabled: bool = Field(
         default=True,
         description=field_help(
@@ -292,6 +329,13 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_output_filter_chat_soft_phrases=cfg.llm_output_filter_chat_soft_phrases,
         llm_output_filter_polish_lite_hard_phrases=cfg.llm_output_filter_polish_lite_hard_phrases,
         llm_output_filter_polish_lite_soft_phrases=cfg.llm_output_filter_polish_lite_soft_phrases,
+        llm_reply_postprocess_enabled=cfg.llm_reply_postprocess_enabled,
+        llm_reply_typo_enabled=cfg.llm_reply_typo_enabled,
+        llm_reply_typo_rate=cfg.llm_reply_typo_rate,
+        llm_reply_split_enabled=cfg.llm_reply_split_enabled,
+        llm_reply_split_max_chars=cfg.llm_reply_split_max_chars,
+        llm_sticker_fit_enabled=cfg.llm_sticker_fit_enabled,
+        llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
