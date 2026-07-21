@@ -1,4 +1,4 @@
-"""群梗/教导记忆：PG 存储与检索。"""
+"""群梗/教导记忆：PG / Mongo 存储与检索。"""
 
 from __future__ import annotations
 
@@ -8,17 +8,29 @@ from typing import Any
 from nonebot import logger
 from sqlalchemy import delete, func, select
 
-from pallas.core.foundation.db.repository_pg import LlmMemoryEntryRow, get_session, is_pg_initialized
-from pallas.core.foundation.db.runtime import is_postgresql_backend
+from pallas.core.foundation.db.repository_pg import LlmMemoryEntryRow, get_session
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.memory.policy import classify_memory_candidate, normalize_episode_note
+from pallas.product.llm.session_backend import llm_product_storage_ready
 from pallas.product.llm.session_store import normalize_group_scope
 from pallas.product.persona.prompt_guard import sanitize_prompt_block, sanitize_prompt_literal
 
 
 def is_llm_memory_store_available() -> bool:
     cfg = get_llm_config()
-    return cfg.llm_memory_rag_enabled and is_postgresql_backend() and is_pg_initialized()
+    return cfg.llm_memory_rag_enabled and llm_product_storage_ready()
+
+
+def _use_mongodb_backend() -> bool:
+    from pallas.core.foundation.db.runtime import is_mongodb_backend
+
+    return is_mongodb_backend()
+
+
+def _use_postgresql_backend() -> bool:
+    from pallas.core.foundation.db.runtime import is_postgresql_backend
+
+    return is_postgresql_backend()
 
 
 def derive_memory_keywords(content: str, *, max_len: int = 120) -> str:
@@ -102,6 +114,12 @@ async def save_memory_entry(
     cfg: LlmConfig | None = None,
 ) -> bool:
     if not is_llm_memory_store_available():
+        return False
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.store_mongo import save_memory_entry_mongo
+
+        return await save_memory_entry_mongo(bot_id, group_id, content, source=source, cfg=cfg)
+    if not _use_postgresql_backend():
         return False
     c = cfg or get_llm_config()
     safe_content = sanitize_prompt_block(content, max_len=c.llm_memory_content_max_len)
@@ -237,6 +255,12 @@ async def retrieve_memory_hits(
 ) -> list[dict[str, Any]]:
     if not is_llm_memory_store_available():
         return []
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.store_mongo import retrieve_memory_hits_mongo
+
+        return await retrieve_memory_hits_mongo(bot_id, group_id, query_text, cfg=cfg)
+    if not _use_postgresql_backend():
+        return []
     c = cfg or get_llm_config()
     scope_gid = normalize_group_scope(group_id)
     top_k = max(1, min(int(c.llm_memory_rag_top_k), 8))
@@ -311,6 +335,12 @@ async def list_memory_entries(
 ) -> list[dict[str, Any]]:
     if not is_llm_memory_store_available():
         return []
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.store_mongo import list_memory_entries_mongo
+
+        return await list_memory_entries_mongo(bot_id, group_id, query=query, limit=limit)
+    if not _use_postgresql_backend():
+        return []
     max_limit = max(1, min(int(limit), 200))
     async with get_session(read_only=True) as session:
         stmt = select(LlmMemoryEntryRow).where(LlmMemoryEntryRow.bot_id == int(bot_id))
@@ -350,6 +380,12 @@ async def list_memory_entries(
 
 async def delete_memory_entry(entry_id: int, *, bot_id: int | None = None) -> bool:
     if not is_llm_memory_store_available():
+        return False
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.store_mongo import delete_memory_entry_mongo
+
+        return await delete_memory_entry_mongo(entry_id, bot_id=bot_id)
+    if not _use_postgresql_backend():
         return False
     async with get_session() as session:
         row = (

@@ -1,13 +1,8 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Literal
+from typing import Any
 
-from pydantic import BaseModel, Field
-from sqlalchemy import delete, func, select
-
-from pallas.core.foundation.db.repository_pg import LlmChatMessageRow, get_session, is_pg_initialized
-from pallas.core.foundation.db.runtime import is_postgresql_backend
 from pallas.product.llm.behavior import infer_behavior_feedback
 from pallas.product.llm.behavior_store import (
     behavior_run_public_dict,
@@ -19,55 +14,26 @@ from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_read_runtime_state
 from pallas.product.llm.message_guard import format_user_turn
 from pallas.product.llm.models import ChatCompletionMessage
+from pallas.product.llm.session_backend import resolve_session_backend, session_store_backend_ready
+from pallas.product.llm.session_models import (
+    ALLOWED_ROLES,
+    LlmChatRole,
+    LlmChatTurn,
+    LlmHistorySessionDetail,
+    LlmHistorySessionSummary,
+    LlmSessionScope,
+    is_private_scope,
+    normalize_group_scope,
+)
 from pallas.product.persona.prompt_guard import normalize_enum, sanitize_prompt_block, sanitize_prompt_literal
 
-LlmChatRole = Literal["user", "assistant"]
-_ALLOWED_ROLES = frozenset({"user", "assistant"})
-
-
-class LlmChatTurn(BaseModel):
-    role: LlmChatRole
-    content: str
-    user_id: int
-    created_at: int
-
-
-class LlmSessionScope(BaseModel):
-    bot_id: int
-    group_id: int = 0
-    user_id: int | None = None
-
-
-class LlmHistorySessionSummary(BaseModel):
-    session_key: str
-    bot_id: int
-    group_id: int
-    user_id: int
-    turn_count: int
-    first_created_at: int
-    last_created_at: int
-    last_role: LlmChatRole
-    last_content: str
-
-
-class LlmHistorySessionDetail(BaseModel):
-    session: LlmHistorySessionSummary
-    turns: list[LlmChatTurn]
-    behavior_runs: list[dict[str, Any]] = Field(default_factory=list)
-    feedback_entries: list[dict[str, Any]] = Field(default_factory=list)
-
-
-def normalize_group_scope(group_id: int | None) -> int:
-    return int(group_id) if group_id is not None else 0
-
-
-def is_private_scope(group_id: int | None) -> bool:
-    return normalize_group_scope(group_id) == 0
+# Backward-compatible alias used by older imports/tests.
+_ALLOWED_ROLES = ALLOWED_ROLES
 
 
 def is_llm_session_store_available() -> bool:
     cfg = get_llm_config()
-    return cfg.llm_session_enabled and is_postgresql_backend() and is_pg_initialized()
+    return cfg.llm_session_enabled and session_store_backend_ready()
 
 
 def user_ttl_seconds(group_id: int | None, cfg: LlmConfig | None = None) -> int:
@@ -86,7 +52,7 @@ def session_scope(bot_id: int, group_id: int | None, user_id: int | None = None)
 
 
 def sanitize_stored_content(role: str, content: str, *, max_len: int) -> str:
-    role_key = normalize_enum(role, _ALLOWED_ROLES, "user")
+    role_key = normalize_enum(role, ALLOWED_ROLES, "user")
     raw = content
     if role_key == "user":
         cfg = get_llm_config()
@@ -99,92 +65,6 @@ def sanitize_stored_content(role: str, content: str, *, max_len: int) -> str:
     return sanitize_prompt_block(raw, max_len=max_len)
 
 
-async def purge_user_ttl(
-    session,
-    *,
-    bot_id: int,
-    group_id: int,
-    user_id: int,
-    ttl_sec: int,
-    now: int,
-) -> None:
-    if ttl_sec <= 0:
-        return
-    cutoff = now - ttl_sec
-    await session.execute(
-        delete(LlmChatMessageRow).where(
-            LlmChatMessageRow.bot_id == bot_id,
-            LlmChatMessageRow.group_id == group_id,
-            LlmChatMessageRow.user_id == user_id,
-            LlmChatMessageRow.created_at < cutoff,
-        )
-    )
-
-
-async def purge_group_ttl(
-    session,
-    *,
-    bot_id: int,
-    group_id: int,
-    ttl_sec: int,
-    now: int,
-) -> None:
-    if ttl_sec <= 0 or group_id == 0:
-        return
-    cutoff = now - ttl_sec
-    await session.execute(
-        delete(LlmChatMessageRow).where(
-            LlmChatMessageRow.bot_id == bot_id,
-            LlmChatMessageRow.group_id == group_id,
-            LlmChatMessageRow.created_at < cutoff,
-        )
-    )
-
-
-async def trim_user_window(
-    session,
-    *,
-    bot_id: int,
-    group_id: int,
-    user_id: int,
-    window: int,
-) -> None:
-    if window <= 0:
-        return
-    count = (
-        await session.execute(
-            select(func.count())
-            .select_from(LlmChatMessageRow)
-            .where(
-                LlmChatMessageRow.bot_id == bot_id,
-                LlmChatMessageRow.group_id == group_id,
-                LlmChatMessageRow.user_id == user_id,
-            )
-        )
-    ).scalar_one()
-    overflow = int(count) - window
-    if overflow <= 0:
-        return
-    stale_ids = (
-        (
-            await session.execute(
-                select(LlmChatMessageRow.id)
-                .where(
-                    LlmChatMessageRow.bot_id == bot_id,
-                    LlmChatMessageRow.group_id == group_id,
-                    LlmChatMessageRow.user_id == user_id,
-                )
-                .order_by(LlmChatMessageRow.created_at.asc(), LlmChatMessageRow.id.asc())
-                .limit(overflow)
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if stale_ids:
-        await session.execute(delete(LlmChatMessageRow).where(LlmChatMessageRow.id.in_(stale_ids)))
-
-
 async def append_llm_message(
     bot_id: int,
     group_id: int | None,
@@ -195,51 +75,22 @@ async def append_llm_message(
     if not is_llm_session_store_available():
         return False
     cfg = get_llm_config()
-    role_key = normalize_enum(role, _ALLOWED_ROLES, "user")
+    role_key = normalize_enum(role, ALLOWED_ROLES, "user")
     safe_content = sanitize_stored_content(role_key, content, max_len=cfg.llm_session_max_content_len)
     if not safe_content:
         return False
 
     scope_gid = normalize_group_scope(group_id)
-    now = int(time.time())
     ttl = user_ttl_seconds(scope_gid, cfg)
-    async with get_session() as session:
-        session.add(
-            LlmChatMessageRow(
-                bot_id=int(bot_id),
-                group_id=scope_gid,
-                user_id=int(user_id),
-                role=role_key,
-                content=safe_content,
-                created_at=now,
-            )
-        )
-        await session.flush()
-        await purge_user_ttl(
-            session,
-            bot_id=int(bot_id),
-            group_id=scope_gid,
-            user_id=int(user_id),
-            ttl_sec=ttl,
-            now=now,
-        )
-        await trim_user_window(
-            session,
-            bot_id=int(bot_id),
-            group_id=scope_gid,
-            user_id=int(user_id),
-            window=cfg.llm_session_user_window,
-        )
-        if scope_gid != 0:
-            await purge_group_ttl(
-                session,
-                bot_id=int(bot_id),
-                group_id=scope_gid,
-                ttl_sec=user_ttl_seconds(scope_gid, cfg),
-                now=now,
-            )
-        await session.commit()
-    return True
+    return await resolve_session_backend().append_message(
+        int(bot_id),
+        scope_gid,
+        int(user_id),
+        role_key,  # type: ignore[arg-type]
+        safe_content,
+        ttl_sec=ttl,
+        window=cfg.llm_session_user_window,
+    )
 
 
 async def list_user_llm_messages(
@@ -257,33 +108,13 @@ async def list_user_llm_messages(
     max_items = limit if limit is not None else c.llm_session_user_window
     max_items = max(1, min(max_items, c.llm_session_user_window))
     ttl = user_ttl_seconds(scope_gid, c)
-
-    stmt = (
-        select(LlmChatMessageRow)
-        .where(
-            LlmChatMessageRow.bot_id == int(bot_id),
-            LlmChatMessageRow.group_id == scope_gid,
-            LlmChatMessageRow.user_id == int(user_id),
-        )
-        .order_by(LlmChatMessageRow.created_at.desc(), LlmChatMessageRow.id.desc())
-        .limit(max_items)
+    return await resolve_session_backend().list_user_messages(
+        int(bot_id),
+        scope_gid,
+        int(user_id),
+        limit=max_items,
+        ttl_sec=ttl,
     )
-    if ttl > 0:
-        cutoff = int(time.time()) - ttl
-        stmt = stmt.where(LlmChatMessageRow.created_at >= cutoff)
-
-    async with get_session(read_only=True) as session:
-        rows = (await session.execute(stmt)).scalars().all()
-
-    return [
-        LlmChatTurn(
-            role=row.role if row.role in _ALLOWED_ROLES else "user",
-            content=row.content,
-            user_id=int(row.user_id),
-            created_at=int(row.created_at),
-        )
-        for row in reversed(rows)
-    ]
 
 
 async def list_group_ambient_messages(
@@ -304,32 +135,12 @@ async def list_group_ambient_messages(
     max_items = limit if limit is not None else c.llm_session_group_window
     max_items = max(1, min(max_items, c.llm_session_group_window))
     ttl = user_ttl_seconds(scope_gid, c)
-
-    stmt = (
-        select(LlmChatMessageRow)
-        .where(
-            LlmChatMessageRow.bot_id == int(bot_id),
-            LlmChatMessageRow.group_id == scope_gid,
-        )
-        .order_by(LlmChatMessageRow.created_at.desc(), LlmChatMessageRow.id.desc())
-        .limit(max_items)
+    return await resolve_session_backend().list_group_ambient(
+        int(bot_id),
+        scope_gid,
+        limit=max_items,
+        ttl_sec=ttl,
     )
-    if ttl > 0:
-        cutoff = int(time.time()) - ttl
-        stmt = stmt.where(LlmChatMessageRow.created_at >= cutoff)
-
-    async with get_session(read_only=True) as session:
-        rows = (await session.execute(stmt)).scalars().all()
-
-    return [
-        LlmChatTurn(
-            role=row.role if row.role in _ALLOWED_ROLES else "user",
-            content=row.content,
-            user_id=int(row.user_id),
-            created_at=int(row.created_at),
-        )
-        for row in reversed(rows)
-    ]
 
 
 async def list_llm_messages(
@@ -355,64 +166,12 @@ async def list_llm_history_sessions(
         return []
 
     max_items = max(1, min(int(limit), 200))
-    stmt = (
-        select(
-            LlmChatMessageRow.bot_id,
-            LlmChatMessageRow.group_id,
-            LlmChatMessageRow.user_id,
-            func.count().label("turn_count"),
-            func.min(LlmChatMessageRow.created_at).label("first_created_at"),
-            func.max(LlmChatMessageRow.created_at).label("last_created_at"),
-        )
-        .group_by(
-            LlmChatMessageRow.bot_id,
-            LlmChatMessageRow.group_id,
-            LlmChatMessageRow.user_id,
-        )
-        .order_by(func.max(LlmChatMessageRow.created_at).desc())
-        .limit(max_items)
+    return await resolve_session_backend().list_history_sessions(
+        bot_id=int(bot_id) if bot_id is not None else None,
+        group_id=normalize_group_scope(group_id) if group_id is not None else None,
+        user_id=int(user_id) if user_id is not None else None,
+        limit=max_items,
     )
-
-    if bot_id is not None:
-        stmt = stmt.where(LlmChatMessageRow.bot_id == int(bot_id))
-    if group_id is not None:
-        stmt = stmt.where(LlmChatMessageRow.group_id == normalize_group_scope(group_id))
-    if user_id is not None:
-        stmt = stmt.where(LlmChatMessageRow.user_id == int(user_id))
-
-    async with get_session(read_only=True) as session:
-        rows = (await session.execute(stmt)).all()
-
-        out: list[LlmHistorySessionSummary] = []
-        for row in rows:
-            latest_stmt = (
-                select(LlmChatMessageRow)
-                .where(
-                    LlmChatMessageRow.bot_id == int(row.bot_id),
-                    LlmChatMessageRow.group_id == int(row.group_id),
-                    LlmChatMessageRow.user_id == int(row.user_id),
-                )
-                .order_by(LlmChatMessageRow.created_at.desc(), LlmChatMessageRow.id.desc())
-                .limit(1)
-            )
-            latest = (await session.execute(latest_stmt)).scalars().first()
-            if latest is None:
-                continue
-            role = latest.role if latest.role in _ALLOWED_ROLES else "user"
-            out.append(
-                LlmHistorySessionSummary(
-                    session_key=f"{int(row.bot_id)}:{int(row.group_id)}:{int(row.user_id)}",
-                    bot_id=int(row.bot_id),
-                    group_id=int(row.group_id),
-                    user_id=int(row.user_id),
-                    turn_count=int(row.turn_count or 0),
-                    first_created_at=int(row.first_created_at or 0),
-                    last_created_at=int(row.last_created_at or 0),
-                    last_role=role,
-                    last_content=str(latest.content or ""),
-                )
-            )
-    return out
 
 
 async def get_llm_history_session_detail(
@@ -581,52 +340,14 @@ async def clear_llm_messages(bot_id: int, group_id: int | None) -> int:
     if not is_llm_session_store_available():
         return 0
     scope_gid = normalize_group_scope(group_id)
-    async with get_session() as session:
-        count = (
-            await session.execute(
-                select(func.count())
-                .select_from(LlmChatMessageRow)
-                .where(
-                    LlmChatMessageRow.bot_id == int(bot_id),
-                    LlmChatMessageRow.group_id == scope_gid,
-                )
-            )
-        ).scalar_one()
-        await session.execute(
-            delete(LlmChatMessageRow).where(
-                LlmChatMessageRow.bot_id == int(bot_id),
-                LlmChatMessageRow.group_id == scope_gid,
-            )
-        )
-        await session.commit()
-    return int(count)
+    return await resolve_session_backend().clear_group(int(bot_id), scope_gid)
 
 
 async def clear_user_llm_messages(bot_id: int, group_id: int | None, user_id: int) -> int:
     if not is_llm_session_store_available():
         return 0
     scope_gid = normalize_group_scope(group_id)
-    async with get_session() as session:
-        count = (
-            await session.execute(
-                select(func.count())
-                .select_from(LlmChatMessageRow)
-                .where(
-                    LlmChatMessageRow.bot_id == int(bot_id),
-                    LlmChatMessageRow.group_id == scope_gid,
-                    LlmChatMessageRow.user_id == int(user_id),
-                )
-            )
-        ).scalar_one()
-        await session.execute(
-            delete(LlmChatMessageRow).where(
-                LlmChatMessageRow.bot_id == int(bot_id),
-                LlmChatMessageRow.group_id == scope_gid,
-                LlmChatMessageRow.user_id == int(user_id),
-            )
-        )
-        await session.commit()
-    return int(count)
+    return await resolve_session_backend().clear_user(int(bot_id), scope_gid, int(user_id))
 
 
 async def compact_user_llm_history_with_summary(
@@ -644,46 +365,18 @@ async def compact_user_llm_history_with_summary(
     safe_summary = sanitize_prompt_block(summary, max_len=c.llm_session_max_content_len)
     if not safe_summary:
         return False
-    keep = max(2, int(keep_messages))
     scope_gid = normalize_group_scope(group_id)
-    now = int(time.time())
-    async with get_session() as session:
-        rows = (
-            (
-                await session.execute(
-                    select(LlmChatMessageRow)
-                    .where(
-                        LlmChatMessageRow.bot_id == int(bot_id),
-                        LlmChatMessageRow.group_id == scope_gid,
-                        LlmChatMessageRow.user_id == int(user_id),
-                    )
-                    .order_by(LlmChatMessageRow.created_at.asc(), LlmChatMessageRow.id.asc())
-                )
-            )
-            .scalars()
-            .all()
-        )
-        if len(rows) <= keep:
-            return False
-        keep_rows = rows[-keep:]
-        keep_ids = {row.id for row in keep_rows}
-        stale_ids = [row.id for row in rows if row.id not in keep_ids]
-        if stale_ids:
-            await session.execute(delete(LlmChatMessageRow).where(LlmChatMessageRow.id.in_(stale_ids)))
-        anchor_time = int(keep_rows[0].created_at) - 1 if keep_rows else now - 1
-        session.add(
-            LlmChatMessageRow(
-                bot_id=int(bot_id),
-                group_id=scope_gid,
-                user_id=int(user_id),
-                role="user",
-                content=sanitize_stored_content(
-                    "user",
-                    f"【此前对话摘要】\n{safe_summary}",
-                    max_len=c.llm_session_max_content_len,
-                ),
-                created_at=anchor_time,
-            )
-        )
-        await session.commit()
-    return True
+    summary_content = sanitize_stored_content(
+        "user",
+        f"【此前对话摘要】\n{safe_summary}",
+        max_len=c.llm_session_max_content_len,
+    )
+    if not summary_content:
+        return False
+    return await resolve_session_backend().compact_user_with_summary(
+        int(bot_id),
+        scope_gid,
+        int(user_id),
+        summary_content,
+        keep_messages=keep_messages,
+    )
