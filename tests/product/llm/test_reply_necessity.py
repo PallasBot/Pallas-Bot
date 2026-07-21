@@ -53,3 +53,23 @@ def test_necessity_low_for_bystander() -> None:
         has_candidate_pool=True,
     )
     assert hit.score < REPLY_NECESSITY_TRIGGER_SCORE
+
+
+def test_noise_fragment_treats_emoji_as_noise() -> None:
+    assert is_noise_fragment("🤔") is True
+    assert is_noise_fragment("🥰🥰") is True
+    assert is_noise_fragment("在吗") is False
+
+
+def test_spam_promo_and_incomplete() -> None:
+    from pallas.product.llm.reply_necessity import is_incomplete_utterance, looks_like_spam_or_promo
+
+    assert looks_like_spam_or_promo("⚡️不用下载点击即玩⚡️：https://www.bilibili.com/toy/x") is True
+    assert is_incomplete_utterance("你是") is True
+    hit = score_reply_necessity(
+        text="无聊妹子来",
+        is_to_me=False,
+        has_recent_back_and_forth=True,
+        has_candidate_pool=True,
+    )
+    assert hit.score < REPLY_NECESSITY_TRIGGER_SCORE

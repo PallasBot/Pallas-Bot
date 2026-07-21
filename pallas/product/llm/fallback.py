@@ -98,13 +98,12 @@ async def maybe_submit_repeater_llm_fallback(
         recent_texts=[],
         has_multi_party_overlap=False,
     )
-    scene_block = format_scene_style_block(
-        resolve_scene_style_constraints(
-            fallback_scene,
-            normalize_conversation_mode(reply_mode),
-            direct_chat=False,
-        )
+    scene_constraints = resolve_scene_style_constraints(
+        fallback_scene,
+        normalize_conversation_mode(reply_mode),
+        direct_chat=False,
     )
+    scene_block = format_scene_style_block(scene_constraints)
     if scene_block:
         system_prompt = f"{system_prompt.rstrip()}\n{scene_block}"
 
@@ -123,6 +122,7 @@ async def maybe_submit_repeater_llm_fallback(
             "task_type": REPEATER_FALLBACK_TASK_TYPE,
             "user_text": text,
             "reply_mode": str(reply_mode or "normal"),
+            "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
         },
     )

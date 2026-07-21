@@ -16,6 +16,28 @@ _MAX_REPLY_SNIPPET = 28
 _MAX_USER_SNIPPET = 24
 _MAX_CORRECTION_REPLY = 48
 _KAOMOJI_SUFFIX_RE = re.compile(r"\(\*[^)]{1,16}\*\)\s*$")
+# 弱「好样本」：垫词/客服腔/英文泄漏（不特判本机趣味语料）
+_WEAK_GOOD_EXACT = frozenset({"还行吧", "还行吧。", "why", "why？", "why???", "牛牛还行吧"})
+_WEAK_GOOD_SUBSTR = (
+    "随时找我",
+    "要帮忙吗",
+    "别这么说嘛",
+    "我们还是好朋友",
+    "为您服务",
+    "Jest",
+    "有什么可以",
+)
+
+
+def is_weak_good_feedback_snippet(text: str) -> bool:
+    """不宜作为 few-shot 正例的回复。"""
+    plain = str(text or "").strip()
+    if not plain:
+        return True
+    compact = plain.strip("，,。！!？?~～ ")
+    if plain in _WEAK_GOOD_EXACT or compact in _WEAK_GOOD_EXACT:
+        return True
+    return any(token in plain for token in _WEAK_GOOD_SUBSTR)
 
 
 def summarize_reply_snippet(text: str, *, max_len: int = _MAX_REPLY_SNIPPET) -> str:
@@ -127,8 +149,10 @@ def build_group_feedback_chat_hint(*, group_id: int, user_text: str = "", limit:
     good_snippets: list[str] = []
     seen_good: set[str] = set()
     for item in reversed(good_rows):
+        if is_weak_good_feedback_snippet(item.reply_text):
+            continue
         snippet = summarize_reply_snippet(item.reply_text)
-        if not snippet or snippet in seen_good:
+        if not snippet or snippet in seen_good or is_weak_good_feedback_snippet(snippet):
             continue
         seen_good.add(snippet)
         good_snippets.append(snippet)

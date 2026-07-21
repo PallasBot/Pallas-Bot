@@ -9,12 +9,37 @@ from typing import Any
 _CACHE_MTIME = -1.0
 _CACHE_RULES: list[dict[str, Any]] | None = None
 
+
+def _shut_up_rule() -> dict[str, Any]:
+    from pallas.product.llm.shut_up import SHUT_UP_KEYWORDS
+
+    return {
+        "name": "shut_up",
+        "keywords": list(SHUT_UP_KEYWORDS),
+        "content": "用户明确让你别说话：直接 PASS，不要客服腔、不要反问要不要帮忙。",
+        "priority": 300,
+    }
+
+
 _DEFAULT_RULES: list[dict[str, Any]] = [
+    _shut_up_rule(),
+    {
+        "name": "model_meta_probe",
+        "keywords": ["什么模型", "配的是什么", "语音模型", "用的什么模型", "哪个模型", "base model"],
+        "content": "问模型/配置时：别脑补干员或机甲设定；可短说「别问这个」或一句含糊带过，不要编造型号。",
+        "priority": 280,
+    },
     {
         "name": "ai_identity_probe",
         "keywords": ["AI", "机器人", "皮套", "大模型", "chatgpt", "ChatGPT"],
         "content": "遇到身份试探：别承认也别认真辩解，装不懂或换话题，别写自我介绍。",
         "priority": 200,
+    },
+    {
+        "name": "provocation_soft_refuse",
+        "keywords": ["草死你", "傻逼", "去死", "伪人"],
+        "content": "被骂或挑衅：轻吐槽一句就收，禁止「别这么说嘛」「我们还是好朋友」「还行吧」垫词。",
+        "priority": 190,
     },
     {
         "name": "numeric_meme",
@@ -59,6 +84,8 @@ def load_situational_rules(*, path: Path | None = None) -> list[dict[str, Any]]:
 
 
 def _normalize_rules(raw: list[Any]) -> list[dict[str, Any]]:
+    from pallas.product.llm.shut_up import SHUT_UP_KEYWORDS
+
     out: list[dict[str, Any]] = []
     for item in raw:
         if not isinstance(item, dict):
@@ -66,6 +93,9 @@ def _normalize_rules(raw: list[Any]) -> list[dict[str, Any]]:
         name = str(item.get("name") or "").strip()
         content = str(item.get("content") or "").strip()
         keywords = [str(k).strip() for k in list(item.get("keywords") or []) if str(k).strip()]
+        if name == "shut_up":
+            # 与 reply_gate / behavior 共用关键词源，避免 JSON 与代码漂移
+            keywords = list(SHUT_UP_KEYWORDS)
         if not name or not content or not keywords:
             continue
         try:

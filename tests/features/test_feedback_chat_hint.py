@@ -123,6 +123,48 @@ def test_build_group_feedback_chat_hint_contrast_pair(tmp_path, monkeypatch) -> 
     assert "可写「那确实闲」" in hint
 
 
+def test_build_group_feedback_chat_hint_skips_filler_good(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm.feedback_chat_hint import is_weak_good_feedback_snippet
+
+    assert is_weak_good_feedback_snippet("还行吧") is True
+    assert is_weak_good_feedback_snippet("那确实闲") is False
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("LLM_REPEATER_FEEDBACK_ENABLED", "true")
+    monkeypatch.setenv("LLM_CHAT_ENABLED", "true")
+    monkeypatch.setenv("LLM_REPEATER_BIAS_ENABLED", "true")
+    from pallas.product.llm.config import clear_llm_config_cache
+
+    clear_llm_config_cache()
+
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=1,
+            group_id=77,
+            user_id=1,
+            request_id="ok-good",
+            user_text="今天好闲",
+            reply_text="那确实闲",
+        )
+    )
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=1,
+            group_id=77,
+            user_id=1,
+            request_id="filler-good",
+            user_text="666",
+            reply_text="还行吧",
+        )
+    )
+
+    hint = build_group_feedback_chat_hint(group_id=77)
+    assert "那确实闲" in hint
+    if "较好的接话可参考" in hint:
+        good_part = hint.split("较好的接话可参考：", 1)[1].split("\n")[0]
+        assert "还行吧" not in good_part
+
+
 def test_build_group_feedback_chat_hint_empty_when_bias_disabled(monkeypatch) -> None:
     monkeypatch.setenv("LLM_CHAT_ENABLED", "true")
     monkeypatch.delenv("LLM_REPEATER_BIAS_ENABLED", raising=False)

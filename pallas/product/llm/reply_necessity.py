@@ -6,10 +6,28 @@ import re
 from dataclasses import dataclass
 
 REPLY_NECESSITY_TRIGGER_SCORE = 50
+# 无 reply cue 时，低于此分不抢话（避免仅靠 back_forth+pool 刷到 25~30）
+REPLY_NECESSITY_NO_CUE_FLOOR = 45
 
 _CQ_AT_RE = re.compile(r"\[CQ:at,qq=(\d+)\]", re.IGNORECASE)
+_URL_RE = re.compile(r"(https?://|www\.|b23\.tv|t\.cn/)", re.IGNORECASE)
+_EMOJI_ONLY_RE = re.compile(
+    r"^[\s\U0001F300-\U0001FAFF\U00002600-\U000027BF\U0000FE00-\U0000FE0F\U0000200D❤️🧡💛💚💙💜🖤🤍🤎💢]+$",
+    re.UNICODE,
+)
 _DIRECT_REQUEST_TERMS = ("帮我", "帮忙", "能不能", "可以吗", "要不要")
 _QUESTION_TERMS = ("怎么", "如何", "为什么", "有没有", "咋")
+_SPAM_PROMO_TERMS = (
+    "点击即玩",
+    "不用下载",
+    "加我微信",
+    "免费领",
+    "引流",
+    "扩列加",
+    "无聊妹子",
+    "陪聊",
+)
+_INCOMPLETE_UTTERANCES = frozenset({"你是", "我是", "那你", "然后", "所以", "因为"})
 _SHORT_REACTIONS = frozenset({
     "哈哈",
     "哈哈哈",
@@ -26,7 +44,7 @@ _SHORT_REACTIONS = frozenset({
     "！",
     "!",
 })
-_NOISE_RE = re.compile(r"^[\W_\d]{1,3}$", re.UNICODE)
+_NOISE_RE = re.compile(r"^[\W_\d]{1,6}$", re.UNICODE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +61,29 @@ def is_noise_fragment(text: str) -> bool:
         return True
     if plain in _SHORT_REACTIONS and len(plain) <= 1:
         return True
+    if _EMOJI_ONLY_RE.fullmatch(plain):
+        return True
     if _NOISE_RE.fullmatch(plain):
+        return True
+    return False
+
+
+def looks_like_spam_or_promo(text: str) -> bool:
+    plain = str(text or "").strip()
+    if not plain:
+        return False
+    if _URL_RE.search(plain) and len(plain) >= 24:
+        return True
+    return any(term in plain for term in _SPAM_PROMO_TERMS)
+
+
+def is_incomplete_utterance(text: str) -> bool:
+    plain = str(text or "").strip()
+    if not plain:
+        return False
+    if plain in _INCOMPLETE_UTTERANCES:
+        return True
+    if len(plain) <= 3 and plain.endswith(("是", "的", "了")) and "?" not in plain and "？" not in plain:
         return True
     return False
 
@@ -82,6 +122,12 @@ def score_reply_necessity(
     if is_noise_fragment(plain):
         score -= 40
         parts.append("noise-40")
+    if looks_like_spam_or_promo(plain):
+        score -= 50
+        parts.append("spam-50")
+    if is_incomplete_utterance(plain) and not is_to_me:
+        score -= 20
+        parts.append("incomplete-20")
     if plain in _SHORT_REACTIONS:
         score -= 25
         parts.append("short_reaction-25")
