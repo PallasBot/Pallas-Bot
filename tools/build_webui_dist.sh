@@ -10,7 +10,6 @@ if [[ ! -f "${WEBUI_DIR}/package.json" ]]; then
   exit 1
 fi
 
-export CONSOLE_VERSION="${CONSOLE_VERSION:-dev}"
 export GIT_COMMIT="${GIT_COMMIT:-$(git -C "${WEBUI_DIR}" rev-parse HEAD 2>/dev/null || echo unknown)}"
 export BUILD_TIME="${BUILD_TIME:-$(date -u +"%Y-%m-%dT%H:%M:%SZ")}"
 
