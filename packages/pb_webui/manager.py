@@ -117,7 +117,22 @@ DEFAULT_WEBUI_DIST_ZIP_REPO = "PallasBot/Pallas-Bot"
 DEFAULT_WEBUI_DIST_ZIP_ASSET = "dist.zip"
 
 
+def webui_frontend_stack() -> str:
+    """返回 vue|react；供静态目录与 console meta 共用。"""
+    try:
+        from .config import plugin_config
+
+        raw = str(getattr(plugin_config, "pallas_webui_frontend", "vue") or "vue")
+    except Exception:
+        raw = "vue"
+    stack = raw.strip().lower()
+    return "react" if stack == "react" else "vue"
+
+
 def webui_public_path() -> Path:
+    """Vue → public；React → public-react（见 pallas_webui_frontend）。"""
+    if webui_frontend_stack() == "react":
+        return pb_webui_data_dir() / "public-react"
     return pb_webui_data_dir() / "public"
 
 
