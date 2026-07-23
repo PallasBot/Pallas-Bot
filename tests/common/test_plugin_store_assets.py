@@ -161,6 +161,64 @@ def test_collect_store_asset_targets_uses_author_avatar_for_community(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_find_target_awaits_inside_running_event_loop(monkeypatch) -> None:
+    """回归：README/changelog API 在 event loop 内查找目标，不能走 run_async。"""
+
+    async def fake_collect_targets() -> dict[str, list[dict[str, object]]]:
+        return {
+            "official": [
+                {
+                    "id": "nonebot_plugin_apscheduler",
+                    "repository_url": "https://github.com/nonebot/plugin-apscheduler",
+                    "assets": {},
+                    "readme_urls": [
+                        "https://raw.githubusercontent.com/nonebot/plugin-apscheduler/main/README.md",
+                    ],
+                }
+            ],
+            "community": [],
+        }
+
+    monkeypatch.setattr(mod, "collect_store_asset_targets", fake_collect_targets)
+
+    target = await mod._find_target("official", "nonebot_plugin_apscheduler")
+
+    assert target is not None
+    assert target["id"] == "nonebot_plugin_apscheduler"
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_cache_readme_markdown_inside_event_loop(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(mod, "plugin_data_dir", lambda _name, create=True: tmp_path)
+
+    async def fake_collect_targets() -> dict[str, list[dict[str, object]]]:
+        return {
+            "official": [
+                {
+                    "id": "nonebot_plugin_apscheduler",
+                    "repository_url": "https://github.com/nonebot/plugin-apscheduler",
+                    "assets": {},
+                    "readme_urls": [
+                        "https://raw.githubusercontent.com/nonebot/plugin-apscheduler/main/README.md",
+                    ],
+                }
+            ],
+            "community": [],
+        }
+
+    async def fake_download_text_first(urls: list[str]) -> tuple[str, str]:
+        return "# Scheduler\n", urls[0]
+
+    monkeypatch.setattr(mod, "collect_store_asset_targets", fake_collect_targets)
+    monkeypatch.setattr(mod, "_download_text_first", fake_download_text_first)
+    monkeypatch.setattr(mod, "resolve_readme_request_id", lambda kind, target_id: target_id)
+
+    markdown = await mod.fetch_and_cache_readme_markdown("official", "nonebot_plugin_apscheduler")
+
+    assert markdown == "# Scheduler\n"
+
+
+@pytest.mark.asyncio
 async def test_download_binary_uses_mirror_failover(monkeypatch) -> None:
     import httpx
 
