@@ -1,4 +1,4 @@
-"""控制台静态资源：默认目录 data/pb_webui/public，可选 zip 直链下载解压。"""
+"""控制台静态资源：默认目录 data/pb_webui/public-react（React），可选 zip 直链下载解压。"""
 
 from __future__ import annotations
 
@@ -118,22 +118,22 @@ DEFAULT_WEBUI_DIST_ZIP_ASSET = "dist.zip"
 
 
 def webui_frontend_stack() -> str:
-    """返回 vue|react；供静态目录与 console meta 共用。"""
+    """返回 vue|react；供静态目录与 console meta 共用。默认 react。"""
     try:
         from .config import plugin_config
 
-        raw = str(getattr(plugin_config, "pallas_webui_frontend", "vue") or "vue")
+        raw = str(getattr(plugin_config, "pallas_webui_frontend", "react") or "react")
     except Exception:
-        raw = "vue"
+        raw = "react"
     stack = raw.strip().lower()
-    return "react" if stack == "react" else "vue"
+    return "vue" if stack == "vue" else "react"
 
 
 def webui_public_path() -> Path:
-    """Vue → public；React → public-react（见 pallas_webui_frontend）。"""
-    if webui_frontend_stack() == "react":
-        return pb_webui_data_dir() / "public-react"
-    return pb_webui_data_dir() / "public"
+    """React → public-react；Vue → public（见 pallas_webui_frontend）。"""
+    if webui_frontend_stack() == "vue":
+        return pb_webui_data_dir() / "public"
+    return pb_webui_data_dir() / "public-react"
 
 
 def check_webui_exists(path: Path) -> bool:
@@ -141,9 +141,10 @@ def check_webui_exists(path: Path) -> bool:
 
 
 def _resolved_extract_root(archive_dir: Path) -> Path:
-    public = archive_dir / "public"
-    if public.is_dir() and (public / "index.html").is_file():
-        return public
+    for name in ("public-react", "public"):
+        cand = archive_dir / name
+        if cand.is_dir() and (cand / "index.html").is_file():
+            return cand
     if (archive_dir / "index.html").is_file():
         return archive_dir
     subdirs = [d for d in archive_dir.iterdir() if d.is_dir()]
@@ -279,7 +280,7 @@ async def download_and_extract_dist_zip(public_dir: Path, url: str, *, follow_re
     try:
         await asyncio.to_thread(_sync_download_webui_zip, url, zip_path, follow_redirects=follow_redirects)
         await asyncio.to_thread(_sync_extract_dist_zip_file, zip_path, public_dir)
-        logger.info("[控制台] 已解压 dist 到 data/pb_webui/public")
+        logger.info("[控制台] 已解压 dist 到 {}", public_dir)
     finally:
         await asyncio.to_thread(_unlink_ignore_missing, zip_path)
 
