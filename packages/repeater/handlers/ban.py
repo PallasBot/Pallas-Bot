@@ -27,6 +27,20 @@ from ..model import Chat
 
 _CQ_URL_STRIP_RE = re.compile(r"(\[CQ\:.+)(?:,url=*)(\])")
 _RECALL_TOKEN_RE = re.compile(r"\[[^\]]*\]|\w+")
+_BAN_ACK_TEXT = "这对角可能会不小心撞倒些家具，我会尽量小心。"
+
+
+async def finish_ban_ack(finish, event: GroupMessageEvent | GroupRecallNoticeEvent) -> None:
+    """回执发送失败（如 QQ result=120）不影响已完成的 ban。"""
+    try:
+        await finish(_BAN_ACK_TEXT)
+    except ActionFailed as e:
+        logger.warning(
+            "bot [{}] ban ack send failed group [{}]: {}",
+            event.self_id,
+            event.group_id,
+            e,
+        )
 
 
 def normalize_cq_ban_token(token: str) -> str:
@@ -141,7 +155,7 @@ async def handle_ban_reply(bot: Bot, event: GroupMessageEvent, state: T_State):
     if banned:
         if not state.get(DREAM_BAN_ACK_SENT_STATE_KEY):
             state[REPEATER_BAN_ACK_SENT_STATE_KEY] = True
-            await ban_msg.finish("这对角可能会不小心撞倒些家具，我会尽量小心。")
+            await finish_ban_ack(ban_msg.finish, event)
     else:
         logger.info(
             f"bot [{event.self_id}] ban missed (no reply cache match) in group [{event.group_id}] "
@@ -165,7 +179,7 @@ async def handle_ban_recalled(bot: Bot, event: GroupRecallNoticeEvent, state: T_
     if banned:
         if not state.get(DREAM_BAN_ACK_SENT_STATE_KEY):
             state[REPEATER_BAN_ACK_SENT_STATE_KEY] = True
-            await ban_recalled_msg.finish("这对角可能会不小心撞倒些家具，我会尽量小心。")
+            await finish_ban_ack(ban_recalled_msg.finish, event)
     elif not state.get(DREAM_BAN_ACK_SENT_STATE_KEY):
         pass
 
@@ -182,4 +196,4 @@ async def handle_ban_latest(bot: Bot, event: GroupMessageEvent, state: T_State):
         )
 
     if await Chat.ban(event.group_id, event.self_id, "", str(event.user_id)):
-        await ban_msg_latest.finish("这对角可能会不小心撞倒些家具，我会尽量小心。")
+        await finish_ban_ack(ban_msg_latest.finish, event)
