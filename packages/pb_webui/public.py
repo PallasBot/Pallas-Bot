@@ -1,4 +1,4 @@
-"""将构建产物挂到 data/pb_webui/public；子路径为文件时直出，否则回退 SPA。"""
+"""将构建产物挂到 webui_public_path()（默认 public-react）；子路径为文件时直出，否则回退 SPA。"""
 
 from __future__ import annotations
 
@@ -39,7 +39,8 @@ _PLACEHOLDER_HTML = """\
 </head>
 <body style="font-family: system-ui, sans-serif; padding: 2rem">
   <h1>Pallas-Bot 控制台</h1>
-  <p>尚未部署前端资源。请将 Vite 等构建产物放入 <code>data/pb_webui/public</code>，
+  <p>尚未部署前端资源。请将构建产物放入 <code>data/pb_webui/public-react</code>（默认 React）
+  或 <code>data/pb_webui/public</code>（Vue），
   或设置 <code>pallas_webui_dist_zip_url</code> 为 dist 的 zip 直链，由插件在启动时自动解压。</p>
   <p>API 探测请访问 <a href="api/health">api/health</a>（相对本页，即
   控制台基址 + <code>/api/health</code>)。</p>

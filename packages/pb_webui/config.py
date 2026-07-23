@@ -26,11 +26,11 @@ class Config(BaseModel):
         ),
     )
     pallas_webui_frontend: Literal["vue", "react"] = Field(
-        default="vue",
+        default="react",
         description=field_help(
             "控制台前端栈（同路径整包切换）",
-            "vue=data/pb_webui/public；react=data/pb_webui/public-react",
-            "修改后需重启牛牛；迁移期默认保持 vue",
+            "react=data/pb_webui/public-react；vue=data/pb_webui/public",
+            "修改后需重启牛牛；默认 react",
         ),
     )
     pallas_webui_dist_zip_url: str = Field(
@@ -107,9 +107,9 @@ def on_pallas_webui_config_reload(cfg: Config) -> None:
     from .console_meta_store import patch_console_meta
 
     dev_mode = bool(cfg.pallas_webui_dev_mode)
-    frontend = str(cfg.pallas_webui_frontend or "vue").strip().lower()
+    frontend = str(cfg.pallas_webui_frontend or "react").strip().lower()
     if frontend not in ("vue", "react"):
-        frontend = "vue"
+        frontend = "react"
     patch_console_meta(pallas_webui_dev_mode=dev_mode, frontend=frontend)
     if dev_mode:
         logger.warning("Pallas-Bot 控制台: 已关闭 API 与静态页鉴权（仅限本机开发）")

@@ -11,6 +11,18 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def test_resolved_extract_root_prefers_public_react(tmp_path: Path) -> None:
+    archive = tmp_path / "extracted"
+    public_react = archive / "public-react"
+    public_react.mkdir(parents=True)
+    (public_react / "index.html").write_text("<html>react</html>", encoding="utf-8")
+    public = archive / "public"
+    public.mkdir(parents=True)
+    (public / "index.html").write_text("<html>vue</html>", encoding="utf-8")
+
+    assert _resolved_extract_root(archive) == public_react
+
+
 def test_resolved_extract_root_prefers_public_subdir(tmp_path: Path) -> None:
     archive = tmp_path / "extracted"
     public = archive / "public"
