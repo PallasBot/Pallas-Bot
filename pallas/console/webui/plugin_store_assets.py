@@ -299,13 +299,22 @@ async def collect_store_asset_targets() -> dict[str, list[dict[str, Any]]]:
     return {"official": official, "community": community}
 
 
-def _find_target(kind: str, target_id: str) -> dict[str, Any] | None:
-    targets = run_async(collect_store_asset_targets())
+async def _find_target(kind: str, *target_ids: str) -> dict[str, Any] | None:
+    ordered = [str(tid).strip() for tid in target_ids if str(tid).strip()]
+    if not ordered:
+        return None
+    targets = await collect_store_asset_targets()
+    by_id: dict[str, dict[str, Any]] = {}
     for target in targets.get(kind, []) or []:
         if not isinstance(target, dict):
             continue
-        if str(target.get("id") or "").strip() == target_id:
-            return target
+        tid = str(target.get("id") or "").strip()
+        if tid:
+            by_id[tid] = target
+    for tid in ordered:
+        found = by_id.get(tid)
+        if found is not None:
+            return found
     return None
 
 
@@ -567,7 +576,7 @@ async def fetch_and_cache_readme_markdown(
     resolved_id = resolve_readme_request_id(kind, target_id)
     if not resolved_id:
         return None
-    target = _find_target(kind, resolved_id) or _find_target(kind, target_id)
+    target = await _find_target(kind, resolved_id, target_id)
     if target is None and repository_url:
         target = {
             "id": resolved_id,
@@ -599,7 +608,7 @@ async def fetch_and_cache_changelog_markdown(
     resolved_id = resolve_readme_request_id(kind, target_id)
     if not resolved_id:
         return None
-    target = _find_target(kind, resolved_id) or _find_target(kind, target_id)
+    target = await _find_target(kind, resolved_id, target_id)
     if target is None and repository_url:
         target = {
             "id": resolved_id,
