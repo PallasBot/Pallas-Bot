@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.0.3-4-g953792c0-dirty",
+    "version": "v4.1.0",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -10539,6 +10539,89 @@
         }
       }
     },
+    "/pallas/api/common-config/llm/providers/{provider_id}": {
+      "put": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Provider Upsert Put",
+        "description": "只保存单个提供方，避免整表写回时误擦其他提供方密钥。",
+        "operationId": "_llm_provider_upsert_put_pallas_api_common_config_llm_providers__provider_id__put",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_LlmProviderRowBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/common-config/llm/providers/{provider_id}/models": {
       "get": {
         "tags": [
@@ -20571,8 +20654,8 @@
           "llm_model": {
             "type": "string",
             "maxLength": 200,
-            "minLength": 1,
-            "title": "Llm Model"
+            "title": "Llm Model",
+            "default": ""
           },
           "local_multi_model_enabled": {
             "type": "boolean",
@@ -20593,9 +20676,6 @@
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "llm_model"
-        ],
         "title": "_LlmLocalRoutingConfigBody"
       },
       "_LlmLocalRoutingModelsBody": {
@@ -20820,6 +20900,18 @@
             "title": "Base Url",
             "default": ""
           },
+          "api_key": {
+            "type": "string",
+            "title": "Api Key",
+            "default": ""
+          },
+          "api_keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Api Keys"
+          },
           "api_key_env": {
             "type": "string",
             "title": "Api Key Env",
@@ -20829,6 +20921,11 @@
             "type": "boolean",
             "title": "Api Key Set",
             "default": false
+          },
+          "api_keys_count": {
+            "type": "integer",
+            "title": "Api Keys Count",
+            "default": 0
           },
           "default_model": {
             "type": "string",
@@ -20846,6 +20943,23 @@
             },
             "type": "object",
             "title": "Task Models"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Capabilities"
+          },
+          "model_effort": {
+            "type": "string",
+            "title": "Model Effort",
+            "default": ""
+          },
+          "request_method": {
+            "type": "string",
+            "title": "Request Method",
+            "default": "chat_completions"
           }
         },
         "type": "object",
@@ -20922,6 +21036,11 @@
             "type": "string",
             "title": "Api Key Env",
             "default": ""
+          },
+          "clear_api_keys": {
+            "type": "boolean",
+            "title": "Clear Api Keys",
+            "default": false
           },
           "default_model": {
             "type": "string",
@@ -21062,6 +21181,20 @@
             },
             "type": "object",
             "title": "Tasks"
+          },
+          "tier_backups": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Tier Backups"
+          },
+          "tier_backup_models": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Tier Backup Models"
           }
         },
         "additionalProperties": false,
