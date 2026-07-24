@@ -21,6 +21,7 @@ class PromotionCandidate(BaseModel):
     writeback_message: str = ""
     writeback_at: int = 0
     behavior_scene: str = ""
+    scene_tier: str = ""
     source_request_id: str = ""
 
 

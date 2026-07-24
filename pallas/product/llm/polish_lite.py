@@ -68,6 +68,7 @@ async def maybe_submit_repeater_llm_polish_lite(
     user_text: str,
     candidate_text: str,
     reply_mode: str = "normal",
+    scene_tier: str = "weak",
 ) -> bool:
     cfg = get_llm_config()
     if not cfg.llm_polish_lite_enabled or not cfg.llm_chat_enabled:
@@ -118,6 +119,7 @@ async def maybe_submit_repeater_llm_polish_lite(
             "user_text": plain,
             "fallback_text": candidate,
             "reply_mode": str(reply_mode or "normal"),
+            "scene_tier": scene_tier,
             "reply_max_length": 36,
             "start_time": time.time(),
         },
@@ -133,6 +135,7 @@ async def maybe_submit_repeater_llm_polish_lite(
             user_id=user_id,
             mode="normal",
             task="repeater_polish_lite",
+            scene_tier=scene_tier,
             token_count=persona_bundle.token_count,
             temperature=persona_bundle.temperature,
             llm_rewrite_metadata=persona_bundle.llm_rewrite_metadata,
@@ -168,8 +171,9 @@ async def maybe_submit_repeater_corpus_llm(
     candidates: list[str],
     candidate_text: str,
     reply_mode: str = "normal",
+    scene_tier: str = "weak",
 ) -> bool:
-    """语料 hit：接话 cue 时优先中等润色；否则 select / lite / polish。"""
+    """语料 hit：强场景优先 select，弱场景按原顺序处理。"""
     cfg = get_llm_config()
     from packages.repeater.opportunity_gate import looks_like_reply_cue
     from pallas.product.llm.corpus_contamination import is_llm_learning_safe
@@ -180,6 +184,46 @@ async def maybe_submit_repeater_corpus_llm(
         candidate = ""
 
     cue = looks_like_reply_cue(user_text)
+    if scene_tier == "strong":
+        if len(pool) >= 2 and cfg.llm_select_enabled:
+            from pallas.product.llm.select import maybe_submit_repeater_llm_select
+
+            if await maybe_submit_repeater_llm_select(
+                event,
+                user_text=user_text,
+                candidates=pool,
+                fallback_text=candidate,
+                reply_mode=reply_mode,
+                scene_tier=scene_tier,
+            ):
+                return True
+
+        if cue and candidate and len(pool) >= 2:
+            from pallas.product.llm.polish import maybe_submit_repeater_llm_polish
+
+            if await maybe_submit_repeater_llm_polish(
+                event,
+                candidate_text=candidate,
+                trigger_user_text=user_text,
+                reply_mode=reply_mode,
+                force_for_cue=True,
+                intensity="medium",
+                scene_tier=scene_tier,
+            ):
+                return True
+
+        if cfg.llm_polish_lite_enabled and candidate and pool:
+            if await maybe_submit_repeater_llm_polish_lite(
+                event,
+                user_text=user_text,
+                candidate_text=candidate,
+                reply_mode=reply_mode,
+                scene_tier=scene_tier,
+            ):
+                return True
+
+        return False
+
     if cue and candidate and len(pool) >= 2:
         from pallas.product.llm.polish import maybe_submit_repeater_llm_polish
 
@@ -190,6 +234,7 @@ async def maybe_submit_repeater_corpus_llm(
             reply_mode=reply_mode,
             force_for_cue=True,
             intensity="medium",
+            scene_tier=scene_tier,
         ):
             return True
 
@@ -205,6 +250,7 @@ async def maybe_submit_repeater_corpus_llm(
                 user_text=user_text,
                 candidate_text=candidate,
                 reply_mode=reply_mode,
+                scene_tier=scene_tier,
             ):
                 return True
 
@@ -217,6 +263,7 @@ async def maybe_submit_repeater_corpus_llm(
             candidates=pool,
             fallback_text=candidate,
             reply_mode=reply_mode,
+            scene_tier=scene_tier,
         ):
             return True
 
@@ -228,6 +275,7 @@ async def maybe_submit_repeater_corpus_llm(
             candidate_text=candidate,
             trigger_user_text=user_text,
             reply_mode=reply_mode,
+            scene_tier=scene_tier,
         ):
             return True
 

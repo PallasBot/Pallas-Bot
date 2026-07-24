@@ -72,6 +72,7 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
             llm_select_enabled=True,
             llm_polish_enabled=True,
             llm_polish_lite_enabled=False,
+            llm_repeater_strong_attempt_rate=1,
         ),
     )
     monkeypatch.setattr(

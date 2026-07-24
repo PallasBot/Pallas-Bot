@@ -214,7 +214,13 @@ async def submit_repeater_chat_task(
         timer.finish(status="missing_group", request_id=request.request_id)
         return ChatSubmitResult(status="missing_group", ok=False)
 
-    skip_reason = await check_repeater_llm_allowed(int(request.bot_id), int(request.group_id), cfg=cfg)
+    tier = str(request.scene_tier or "weak").strip().lower() or "weak"
+    skip_reason = await check_repeater_llm_allowed(
+        int(request.bot_id),
+        int(request.group_id),
+        cfg=cfg,
+        scene_tier=tier,
+    )
     if skip_reason:
         timer.finish(status=skip_reason, request_id=request.request_id)
         return ChatSubmitResult(status=skip_reason, ok=False)
@@ -250,7 +256,7 @@ async def submit_repeater_chat_task(
     status = str(body.get("status") or ("processing" if task_id else "unknown"))
     ok = bool(task_id) or status in {"processing", "ok", "completed"}
     if ok:
-        await refresh_repeater_group_cooldown(int(request.bot_id), int(request.group_id))
+        await refresh_repeater_group_cooldown(int(request.bot_id), int(request.group_id), scene_tier=tier)
     timer.finish(status=status, request_id=request.request_id, message_count=message_count)
     return ChatSubmitResult(task_id=task_id, status=status, ok=ok)
 

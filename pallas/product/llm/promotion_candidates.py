@@ -109,6 +109,8 @@ def _aggregate_trigger_reply_support(
 
 
 def is_auto_promote_eligible(candidate: PromotionCandidate) -> bool:
+    if str(candidate.scene_tier or "").strip().lower() != "strong":
+        return False
     if candidate.promoted or str(candidate.rejected_reason or "").strip():
         return False
     if not is_reply_safe_for_auto_promote(
@@ -138,6 +140,11 @@ def refresh_promotion_candidates_for_group(*, group_id: int, limit: int = 200) -
             continue
         reply_entries.sort(key=lambda item: int(item.created_at))
         latest = reply_entries[-1]
+        scene_tier = (
+            "strong"
+            if any(str(item.scene_tier or "").strip().lower() == "strong" for item in reply_entries)
+            else str(latest.scene_tier or "").strip()
+        )
         candidate_id = build_candidate_id(
             group_id=int(group_id),
             trigger_text=str(latest.user_text or trigger_kw),
@@ -157,6 +164,7 @@ def refresh_promotion_candidates_for_group(*, group_id: int, limit: int = 200) -
             promoted=bool(existing.promoted) if existing is not None else False,
             rejected_reason=str(existing.rejected_reason or "") if existing is not None else "",
             behavior_scene=str(latest.behavior_scene or "").strip(),
+            scene_tier=scene_tier,
             source_request_id=str(latest.request_id or "").strip(),
         )
         if existing is None or candidate.model_dump() != existing.model_dump():

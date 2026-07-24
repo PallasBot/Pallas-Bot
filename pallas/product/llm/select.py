@@ -198,6 +198,7 @@ async def maybe_submit_repeater_llm_select(
     fallback_text: str,
     source: str = "repeater",
     reply_mode: str = "normal",
+    scene_tier: str = "weak",
 ) -> bool:
     cfg = get_llm_config()
     if not cfg.llm_select_enabled or not cfg.llm_chat_enabled:
@@ -314,6 +315,7 @@ async def maybe_submit_repeater_llm_select(
             "candidate_pool": list(ranked),
             "select_source": source,
             "reply_mode": str(reply_mode or "normal"),
+            "scene_tier": scene_tier,
             "start_time": time.time(),
         },
     )
@@ -328,6 +330,7 @@ async def maybe_submit_repeater_llm_select(
             user_id=user_id,
             mode="normal",
             task="repeater_select",
+            scene_tier=scene_tier,
             token_count=persona_bundle.token_count,
             temperature=persona_bundle.temperature,
             llm_rewrite_metadata=rewrite_metadata,

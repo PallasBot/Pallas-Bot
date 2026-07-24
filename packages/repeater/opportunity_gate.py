@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import random
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 _REPLY_CUE_TOKENS = (
     "?",
     "？",
@@ -15,6 +21,8 @@ _REPLY_CUE_TOKENS = (
     "怎么个事",
 )
 
+SceneTier = Literal["strong", "weak"]
+
 
 def looks_like_reply_cue(plain_text: str) -> bool:
     plain = str(plain_text or "").strip()
@@ -27,6 +35,23 @@ def looks_like_reply_cue(plain_text: str) -> bool:
     if len(plain) <= 10 and plain.startswith(("这也", "这就", "怎么", "咋", "什么")):
         return True
     return False
+
+
+def resolve_scene_tier(
+    plain_text: str,
+    *,
+    candidate_pool_size: int,
+    has_candidate_pool: bool,
+    has_recent_back_and_forth: bool,
+    is_to_me: bool,
+) -> SceneTier:
+    if bool(is_to_me):
+        return "strong"
+    if looks_like_reply_cue(plain_text) and bool(has_candidate_pool) and int(candidate_pool_size) >= 2:
+        return "strong"
+    if bool(has_recent_back_and_forth) and bool(has_candidate_pool):
+        return "strong"
+    return "weak"
 
 
 def estimate_candidate_style_score(candidate_pool: list[str], *, reply_mode: str = "normal") -> float:
@@ -50,6 +75,58 @@ def estimate_candidate_style_score(candidate_pool: list[str], *, reply_mode: str
     return round(score, 3)
 
 
+def passes_repeater_hard_bars(
+    plain_text: str,
+    *,
+    has_candidate_pool: bool,
+    candidate_pool_size: int,
+    has_recent_back_and_forth: bool,
+    bot_recently_replied: bool,
+    candidate_style_score: float = 0.0,
+    reply_mode: str = "normal",
+    is_to_me: bool = False,
+    bot_id: int | None = None,
+) -> bool:
+    from pallas.product.llm.reply_necessity import (
+        REPLY_NECESSITY_NO_CUE_FLOOR,
+        is_bystander_plain_text,
+        is_noise_fragment,
+        looks_like_spam_or_promo,
+        score_reply_necessity,
+    )
+
+    if is_to_me:
+        return True
+
+    plain = str(plain_text or "").strip()
+    if not plain:
+        return False
+    if is_bystander_plain_text(plain, bot_id=bot_id):
+        return False
+    if looks_like_spam_or_promo(plain):
+        return False
+
+    has_reply_cue = looks_like_reply_cue(plain)
+    cue_with_pool = bool(has_reply_cue and has_candidate_pool and candidate_pool_size >= 2)
+    if is_noise_fragment(plain) and not cue_with_pool:
+        return False
+
+    necessity = score_reply_necessity(
+        text=plain,
+        is_to_me=False,
+        bot_id=bot_id,
+        bot_recently_replied=bot_recently_replied,
+        has_recent_back_and_forth=has_recent_back_and_forth,
+        has_candidate_pool=has_candidate_pool,
+    )
+    if necessity.score < 0 and not has_reply_cue:
+        return False
+    if not has_reply_cue and necessity.score < REPLY_NECESSITY_NO_CUE_FLOOR:
+        mode = str(reply_mode or "normal").strip().lower()
+        return bool(mode == "ghost" and has_candidate_pool and candidate_style_score >= 0.72)
+    return True
+
+
 def should_attempt_repeater_opportunity(
     plain_text: str,
     *,
@@ -63,45 +140,29 @@ def should_attempt_repeater_opportunity(
     reply_mode: str = "normal",
     is_to_me: bool = False,
     bot_id: int | None = None,
+    scene_tier: SceneTier | None = None,
 ) -> bool:
-    from pallas.product.llm.reply_necessity import (
-        REPLY_NECESSITY_NO_CUE_FLOOR,
-        is_bystander_plain_text,
-        is_noise_fragment,
-        looks_like_spam_or_promo,
-        score_reply_necessity,
-    )
-
     plain = str(plain_text or "").strip()
     mode = str(reply_mode or "normal").strip().lower()
+    if not passes_repeater_hard_bars(
+        plain,
+        has_candidate_pool=has_candidate_pool,
+        candidate_pool_size=candidate_pool_size,
+        has_recent_back_and_forth=has_recent_back_and_forth,
+        bot_recently_replied=bot_recently_replied,
+        candidate_style_score=candidate_style_score,
+        reply_mode=mode,
+        is_to_me=is_to_me,
+        bot_id=bot_id,
+    ):
+        return False
     if is_to_me:
         return True
-    if not plain:
-        return False
-    if is_bystander_plain_text(plain, bot_id=bot_id):
-        return False
-    if looks_like_spam_or_promo(plain):
-        return False
+    if scene_tier == "strong":
+        return unique_users >= 2 and recent_message_count >= 2
+
     has_reply_cue = looks_like_reply_cue(plain)
     cue_with_pool = bool(has_reply_cue and has_candidate_pool and candidate_pool_size >= 2)
-    # 纯表情 / 噪声：无强 cue+池时不抢话
-    if is_noise_fragment(plain) and not cue_with_pool:
-        return False
-    necessity = score_reply_necessity(
-        text=plain,
-        is_to_me=False,
-        bot_id=bot_id,
-        bot_recently_replied=bot_recently_replied,
-        has_recent_back_and_forth=has_recent_back_and_forth,
-        has_candidate_pool=has_candidate_pool,
-    )
-    if necessity.score < 0 and not has_reply_cue:
-        return False
-    # 无 cue 时要求更高必要性，避免仅靠 back_forth+pool 刷进 LLM
-    if not has_reply_cue and necessity.score < REPLY_NECESSITY_NO_CUE_FLOOR:
-        ghost_stylish = mode == "ghost" and has_candidate_pool and candidate_style_score >= 0.72
-        if not ghost_stylish:
-            return False
     if unique_users < 2:
         return False
     # cue + 候选池：略放宽活跃度门槛（仍至少 2 条近期消息）
@@ -125,6 +186,23 @@ def should_attempt_repeater_opportunity(
     if not (has_recent_back_and_forth or has_strong_pool or has_reply_cue):
         return False
     return True
+
+
+def decide_llm_attempt(
+    *,
+    scene_tier: str,
+    opportunity_accepted: bool,
+    strong_attempt_rate: float,
+    rng: Callable[[], float] | None = None,
+) -> tuple[bool, float | None, str | None]:
+    if not opportunity_accepted:
+        return False, None, "opportunity_rejected"
+    if str(scene_tier).strip().lower() != "strong":
+        return True, None, None
+    roll = (rng or random.random)()
+    if roll >= float(strong_attempt_rate):
+        return False, roll, "rate"
+    return True, roll, None
 
 
 def build_opportunity_trace_payload(
@@ -168,6 +246,13 @@ def build_opportunity_trace_payload(
         "candidate_style_score": float(candidate_style_score),
         "has_recent_back_and_forth": bool(has_recent_back_and_forth),
         "bot_recently_replied": bool(bot_recently_replied),
+        "scene_tier": resolve_scene_tier(
+            plain,
+            candidate_pool_size=candidate_pool_size,
+            has_candidate_pool=has_candidate_pool,
+            has_recent_back_and_forth=has_recent_back_and_forth,
+            is_to_me=is_to_me,
+        ),
         "has_reply_cue": bool(looks_like_reply_cue(plain)),
         "cue_with_pool": bool(looks_like_reply_cue(plain) and has_candidate_pool and candidate_pool_size >= 2),
         "bystander": bool(is_bystander_plain_text(plain, bot_id=bot_id)),
