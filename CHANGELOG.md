@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.1.0] - 2026-07-24
+
+### Added
+
+- LLM：内核直连 Provider / ops（模型管理、会话与指标），不再依赖 AI 仓中转
+- LLM：记忆图谱（entity/edge）与 mid-term / session ops
+- WebUI：LLM ops 与记忆图 API；发版从 WebUI 仓库根构建 React
+
+### Changed
+
+- AI Runtime / 文档：LLM 能力以 Bot 内核为准；AI 仓侧重媒体（唱歌 / TTS）
+- Release：兼容 WebUI 根目录与旧 `react/` 子目录构建路径
+
+### Removed
+
+- 遗留登录页 HTML（`login_page.py`）及对应测试
+
 ## [4.0.3] - 2026-07-21
 
 ### Fixed
@@ -96,6 +113,7 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
+[4.1.0]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.3...v4.1.0
 [4.0.3]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.0...v4.0.1

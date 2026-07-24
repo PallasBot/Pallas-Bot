@@ -129,8 +129,7 @@ class Chat:
 
     _recent_topics = defaultdict(lambda: deque(maxlen=Chat.TOPICS_SIZE))
 
-    # ##
-
+    # #
     def __init__(self, data: ChatData | GroupMessageEvent):
         if isinstance(data, ChatData):
             self.chat_data = data

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 退出分片测试：恢复 .env、data 链接、协议端 accounts.json。
-#
+
 #   ./scripts/shard_test_leave.sh
 # 建议先: ./scripts/run_sharded_bot.sh stop
 
