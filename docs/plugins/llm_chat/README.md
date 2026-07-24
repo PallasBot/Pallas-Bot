@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="../assets/brand-avatar.png" width="220" height="220" alt="随时闲聊">
+  <img src="../assets/brand-avatar.png" width="220" height="220" alt="智能对话">
 </p>
 
-<h1 align="center">随时闲聊 llm_chat</h1>
+<h1 align="center">智能对话 llm_chat</h1>
 
 <p align="center">群里随时 @牛牛 聊天，也可以清空这轮聊天记录。</p>
 
@@ -14,13 +14,14 @@
 
 ## 安装方式
 
-默认加载，无需单独安装。使用前需要部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 并开启 `LLM_CHAT_ENABLED`。
+默认加载，无需单独安装。开启 `LLM_CHAT_ENABLED` 并配置 Bot 内核 Provider 即可（媒体能力如唱歌仍可用 Pallas-Bot-AI）。
 
 ## 怎么使用
 
 | 口令 / 触发 | 场景 | 说明 |
 | --- | --- | --- |
 | 群内 `@牛牛 + 消息` | 群内 | 与牛牛多轮聊天。 |
+| 醉酒时 `@牛牛` / `牛牛 + 文本` | 群内 | 酒后对话（须先喝酒）。 |
 | `@牛牛 clear` | 群内 | 清空本群当前会话记忆。 |
 
 > 详细用法、限制条件和可用范围以帮助为主。
@@ -38,16 +39,17 @@
 
 > 可在控制台对应插件页中修改。
 
-1. 通用配置里的智能对话和 AI 服务：开启总开关并填写服务地址。
-2. 插件页里的随时闲聊配置：可选调整人设提示词等高级项。
+1. **AI 配置 → 对话**：打开「启用智能对话」；低配可另开「启用遗留酒后 RWKV」。
+2. 通用配置里的智能对话与媒体服务：同上总闸与 AI 地址。
+3. 插件页人设提示词等高级项（可选）。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 无回复 | 检查 `LLM_CHAT_ENABLED`、AI 服务和 `牛牛连通` 结果。 |
+| 无回复 | 检查 `LLM_CHAT_ENABLED`、Provider；RWKV 路径另查 `CHAT_ENABLE` 与 AI Runtime chat 资源包。 |
 | 清空不生效 | 确认是在当前会话里 `@牛牛 clear`。 |
-| 和酒后聊天混淆 | 随时闲聊不要求喝酒；酒后聊天必须先醉酒。 |
+| 和酒后聊天混淆 | 清醒 `@` 不要求喝酒；酒后对话须先醉酒，也可「牛牛 + 文本」。 |
 
 ## 实现
 
@@ -57,20 +59,21 @@
 
 - [`__init__.py`](../../packages/llm_chat/__init__.py)：注册元数据、权限和 LLM 工具声明。
 - [`chat_message.py`](../../packages/llm_chat/chat_message.py)：处理群内 `@牛牛` 的聊天提交与门控。
+- [`drunk_chat.py`](../../packages/llm_chat/drunk_chat.py)：醉酒时 `@` /「牛牛 + 文本」的 drunk 提交路径。
 - [`commands.py`](../../packages/llm_chat/commands.py)：处理清空会话命令。
 
 实现要点：
 
-- 这是常驻的 `@牛牛` 对话能力，不依赖醉酒状态。
+- 清醒 `@牛牛` 与酒后对话共用 `LLM_CHAT_ENABLED` 与内核 Provider；酒后路径额外依赖 `drink` 醉酒度。
 - 会话记忆和工具注入都由统一的 LLM 能力层协调，不是单纯一问一答。
-- `clear` 既可由用户手动触发，也可由 LLM 作为工具命令派发。
+- `clear` 既可由用户手动触发，也可由 LLM 作为工具命令派发；醒酒时会清本群会话上下文。
 - 它和 `repeater` 不是对立关系：`@牛牛` 负责明确叫牛来聊，平时群内接话仍以语料底盘为主。
-- direct chat 与 repeater 共用 conversation kernel 的 scene/decision trace，但入口与产品语义保持独立。
-- 若开启 `LLM_REPEATER_MODE`，接话路径也可能让 LLM 做补位或轻润色，但不取代语料学习本身。
+- 酒后可选 `CHAT_TTS_ENABLE`：RWKV 路径随 `/api/chat` 带语音；LLM 路径出字后另调 AI 仓 `/tts`。
+- 旧扩展 `pallas-plugin-ai-media` 的 `chat` 已自 4.1.0 移除；若进程里仍加载旧模块，本体会让路。
 
 ## 相关链接
 
 - [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)
-- [酒后聊天](../chat/README.md)
+- [酒后聊天（跳转说明）](../chat/README.md)
 - [牛牛复读](../repeater/README.md)
 - [`@牛牛`、复读接话与 LLM 的关系](../../guide/llm-and-repeater.md)

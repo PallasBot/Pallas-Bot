@@ -30,7 +30,7 @@
 <NCard title="做梦 dream" route="/plugins/dream">做梦、跨群梦话 · pallas-plugin-dream</NCard>
 <NCard title="画画 draw" route="/plugins/draw">文生图 · pallas-plugin-draw</NCard>
 <NCard title="唱歌 sing" route="/plugins/sing">点歌 · pallas-plugin-ai-media</NCard>
-<NCard title="聊天 chat" route="/plugins/chat">酒后智能对话 · pallas-plugin-ai-media</NCard>
+<NCard title="聊天 chat" route="/plugins/chat">酒后对话 · 已并入 llm_chat</NCard>
 <NCard title="MAA maa" route="/plugins/maa">远控排队回图 · pallas-plugin-maa</NCard>
 <NCard title="协议端" route="/plugins/pb_protocol">NapCat / SnowLuma · pallas-plugin-protocol</NCard>
 <NCard title="上号 relogin_bot" route="/plugins/relogin_bot">重新登录 · pallas-plugin-protocol</NCard>
@@ -43,7 +43,7 @@
 
 <div class="plugin-doc-grid">
 
-<NCard title="闲聊 llm_chat" route="/plugins/llm_chat">随时 @ 智能闲聊与 AI 开关</NCard>
+<NCard title="智能对话 llm_chat" route="/plugins/llm_chat">随时 @ 智能对话与 AI 开关</NCard>
 <NCard title="牛牛核心 pb_core" route="/plugins/pb_core">进程摘要、插件概览与重启</NCard>
 <NCard title="控制台 pb_webui" route="/plugins/pb_webui">网页控制台与 API</NCard>
 <NCard title="在线统计 pb_stats" route="/plugins/pb_stats">社区主站心跳与上报</NCard>

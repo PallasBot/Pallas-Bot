@@ -21,6 +21,7 @@ from pallas.core.platform.ai_callback.media_task_hooks import (
     invoke_media_task_success,
 )
 from pallas.core.platform.ai_callback.task_types import (
+    CHAT_DRUNK_TASK_TYPE,
     DRAW_IMAGE_TASK_TYPE,
     LLM_CHAT_TASK_TYPE,
     REPEATER_FALLBACK_TASK_TYPE,
@@ -169,6 +170,7 @@ async def resolve_callback_task(task_id: str) -> dict | None:
         "llm_route": rec.get("llm_route"),
         "behavior_scene": rec.get("behavior_scene"),
         "last_reply_text": rec.get("last_reply_text"),
+        "recent_reply_texts": rec.get("recent_reply_texts"),
     }
 
 
@@ -450,7 +452,11 @@ async def run_ai_callback(
                 )
                 if delivered and file_bytes:
                     invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
-            elif task_type in SING_TASK_TYPES or (song_id is not None and chunk_index is not None):
+            elif (
+                task_type in SING_TASK_TYPES
+                or task_type == CHAT_DRUNK_TASK_TYPE
+                or (song_id is not None and chunk_index is not None)
+            ):
                 logger.info(
                     (
                         "AI callback delivering voice task={} bot_id={} group_id={} task_type={} "
@@ -466,6 +472,27 @@ async def run_ai_callback(
                     key,
                 )
                 delivered = await send_group_voice(bot, group_id, file_bytes) and delivered
+
+        if (
+            task_type == CHAT_DRUNK_TASK_TYPE
+            and task.get("want_tts")
+            and not task.get("voice_only")
+            and reply_text
+            and text_delivered
+            and file is None
+            and group_id is not None
+        ):
+            from pallas.product.llm.drunk_tts import enqueue_ai_drunk_tts
+
+            try:
+                await enqueue_ai_drunk_tts(
+                    bot_id=bot_id_str or bot_id or "",
+                    group_id=int(group_id),
+                    user_id=int(task.get("user_id") or 0) or None,
+                    text=reply_text,
+                )
+            except Exception:
+                logger.exception("enqueue drunk tts failed task={}", task_id)
 
         await TaskManager.remove_task(task_id)
         remove_ai_task(task_id)
