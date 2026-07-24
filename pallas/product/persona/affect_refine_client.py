@@ -116,8 +116,7 @@ def build_affect_refine_user_prompt(payload: dict[str, Any]) -> str:
         )
     if raw:
         lines.append(
-            f"raw: repeat_chain_rate={raw.get('repeat_chain_rate')}, "
-            f"local_answer_ratio={raw.get('local_answer_ratio')}"
+            f"raw: repeat_chain_rate={raw.get('repeat_chain_rate')}, local_answer_ratio={raw.get('local_answer_ratio')}"
         )
     if tone:
         lines.append(

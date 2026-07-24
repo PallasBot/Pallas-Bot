@@ -71,10 +71,7 @@ def embeddings_payload_for_api(texts: list[str], *, model: str | None = None) ->
     """兼容旧 OpenAI embeddings 响应形状（测试/调试用）。"""
     inputs = [str(text or "") for text in texts]
     name = (model or embedding_model_name()).strip() or "stub"
-    data = [
-        {"object": "embedding", "index": idx, "embedding": stub_embedding(text)}
-        for idx, text in enumerate(inputs)
-    ]
+    data = [{"object": "embedding", "index": idx, "embedding": stub_embedding(text)} for idx, text in enumerate(inputs)]
     return {
         "object": "list",
         "model": name,

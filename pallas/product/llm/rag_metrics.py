@@ -168,9 +168,7 @@ def llm_rag_metrics_snapshot(*, include_persisted: bool = True) -> dict[str, Any
         "hit_count": int(persisted_raw.get("hit_count") or 0),
         "miss_count": int(persisted_raw.get("miss_count") or 0),
         "hit_rate": float(persisted_raw.get("hit_rate") or 0),
-        "by_document": (
-            persisted_raw.get("by_document") if isinstance(persisted_raw.get("by_document"), dict) else {}
-        ),
+        "by_document": (persisted_raw.get("by_document") if isinstance(persisted_raw.get("by_document"), dict) else {}),
         "by_source": persisted_raw.get("by_source") if isinstance(persisted_raw.get("by_source"), dict) else {},
     }
     local_has = int(local.get("hit_count") or 0) > 0 or int(local.get("miss_count") or 0) > 0
