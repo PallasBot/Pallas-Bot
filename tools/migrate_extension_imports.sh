@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # migrate_extension_imports.sh — 将 pip 扩展仓库的 src.* import 迁移至 pallas.api.* / pallas.*
-#
+
 # 用法: bash tools/migrate_extension_imports.sh <扩展仓库路径>
 # 示例: bash tools/migrate_extension_imports.sh ../Pallas-Plugin-Duel
-#
+
 # 原则: 优先走 pallas.api.*；api 未覆盖的走 pallas.product.* / pallas.core.* / pallas.console.*
 
 set -euo pipefail

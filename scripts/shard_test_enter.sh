@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # 进入分片测试环境：主仓 .env、data 共用、协议端 ws_url 迁到 worker 端口。
-#
+
 #   ./scripts/shard_test_enter.sh
 #   ./scripts/shard_test_enter.sh --main-repo /path/to/Pallas-Bot
-#
+
 # 测试结束后执行: ./scripts/shard_test_leave.sh
 
 set -euo pipefail
