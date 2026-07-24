@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-LlmSubmitRejectReason = Literal[
-    "provider_not_configured",
-]
+LlmSubmitRejectReason = Literal["provider_not_configured",]
 
 LLM_SUBMIT_USER_MESSAGE_BY_STATUS: dict[str, str] = {
     "ai_unreachable": "这会儿连不上推理服务，稍后再戳戳我吧。",
