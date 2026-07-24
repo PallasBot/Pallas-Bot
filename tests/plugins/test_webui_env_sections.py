@@ -32,12 +32,19 @@ def test_list_webui_env_sections_is_empty():
     data = webui_env_section_payload("llm")
     env_keys = {f["env_key"] for f in data["fields"]}
     assert "LLM_CHAT_ENABLED" in env_keys
-    assert "LLM_RUNTIME" in env_keys
-    assert "LLM_BASE_URL" in env_keys
-    assert "LLM_API_KEY" in env_keys
-    assert "LLM_MODEL" in env_keys
+    assert "CHAT_ENABLE" in env_keys
     assert "LLM_REPEATER_MODE" in env_keys
     assert "LLM_REPEATER_FEEDBACK_ENABLED" in env_keys
+    assert "LLM_CHAT_CHAR_BUDGET" in env_keys
+    assert "LLM_SESSION_USER_WINDOW" in env_keys
+    assert "LLM_MEMORY_RAG_TOP_K" in env_keys
+    assert "LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC" in env_keys
+    assert "LLM_SESSION_SUMMARY_ENABLED" in env_keys
+    # Provider 事实源已迁出 WebUI llm 段；运行时/密钥不在本表单
+    assert "LLM_RUNTIME" not in env_keys
+    assert "LLM_BASE_URL" not in env_keys
+    assert "LLM_API_KEY" not in env_keys
+    assert "LLM_MODEL" not in env_keys
     assert "LLM_REPEATER_BIAS_ENABLED" in env_keys
     assert "LLM_REPEATER_WRITEBACK_ENABLED" in env_keys
     assert "CONVERSATION_FEATURE_LEVEL" in env_keys
