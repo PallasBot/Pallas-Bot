@@ -176,12 +176,14 @@ def test_official_extension_description_prefers_readme_summary():
 
 
 def test_official_extension_description_falls_back_for_multi_plugin_package():
-    assert official_extension_description("pallas-plugin-ai-media") == "唱歌（sing）与 酒后聊天（chat）。"
+    assert official_extension_description("pallas-plugin-ai-media") == (
+        "牛牛唱歌（翻唱 / 点歌）；包内仍含酒后 chat 旧路径。"
+    )
 
 
 def test_official_extension_display_name_uses_chinese_titles():
     assert official_extension_display_name("pallas-plugin-maa") == "MAA 远控"
-    assert official_extension_display_name("pallas-plugin-ai-media") == "唱歌 / 酒后聊天"
+    assert official_extension_display_name("pallas-plugin-ai-media") == "牛牛唱歌"
     assert official_extension_display_name("pallas-plugin-unknown") == "unknown"
 
 
