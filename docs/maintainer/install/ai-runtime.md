@@ -48,7 +48,7 @@ cp .env.example .env
 ./scripts/ai_bootstrap.sh --bot-host 127.0.0.1 --bot-port 8088
 ```
 
-默认只装 **LLM 栈**（不装 torch），启动 llm worker + API，够用 @ 闲聊 / 接话。
+默认安装 **媒体栈**（含 torch），启动 media worker + API。聊天 / 画画默认不经本 Runtime。
 
 或在 **Pallas-Bot** 仓库（同级已克隆 AI 仓时）：
 
@@ -56,7 +56,7 @@ cp .env.example .env
 uv run pallas ai setup
 ```
 
-也可在控制台 **AI 配置 · AI 服务** 使用「安装 AI Runtime（源码）」：克隆同级 `Pallas-Bot-AI` 并跑 `ai_bootstrap.sh`（可选「含唱歌/TTS」）；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
+也可在控制台 **AI 配置 · 媒体服务** 使用安装：克隆同级 `Pallas-Bot-AI` 并跑 `ai_bootstrap.sh`；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
 
 用户向手把手与 **能力包**（对话模型拉取、媒体权重 / Docker 换 `latest`）见 [AI 扩展](/guide/ai)。
 
@@ -64,25 +64,13 @@ uv run pallas ai setup
 | --- | --- |
 | 仅体检 | `uv run pallas ai setup --check-only` |
 | Bot 非默认端口 | `--bot-port <port>` |
-| 远端 API、不用 Ollama | `--remote-only` |
-| 唱歌 / TTS / 醉聊 RWKV | `--with-media`（装 torch CPU） |
-| 媒体 + NVIDIA torch | `--with-media --gpu` |
+| 媒体 + NVIDIA torch | `uv run pallas ai setup --gpu` |
 
-本地 Ollama 推理用 Ollama 自带 GPU，与 `--gpu`（本仓 PyTorch）无关。
+本地 Ollama 推理（若仍用遗留 LLM worker）用 Ollama 自带 GPU，与 `--gpu`（本仓 PyTorch）无关。
 
-### 无 GPU / 纯第三方 API（remote-only）
+### 无 GPU / 纯第三方 API（遗留 remote-only）
 
-服务器跑不动 Ollama 时，仍可用 DeepSeek、OpenAI 等 OpenAI 兼容 API 驱动 @ 闲聊与接话 LLM。需轻量 AI 仓（Redis + API + Celery），**不需要**本地模型，也**不需要** torch。
-
-```bash
-# AI 仓：编辑 .env 填入 LLM_REMOTE_* 后
-./scripts/ai_bootstrap.sh --remote-only --bot-port 8088
-
-# 或 Bot 仓
-uv run pallas ai setup --remote-only --bot-port 8088
-```
-
-完整配置、Docker 仅起 `redis`+`pallasbot-ai`、验收与排障见 **[Pallas-Bot-AI · remote-only 部署](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/deploy/remote-only.md)**。
+聊天默认走 Bot 内核 Provider，一般**不必**再跑 AI 仓 LLM。若仍要经 AI 仓跑远端 LLM，见 **[Pallas-Bot-AI · remote-only 部署](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/deploy/remote-only.md)**（需自行 `ctl.sh start llm`，bootstrap 不再代拉 Ollama）。
 
 ### Docker（仅 AI 栈）
 

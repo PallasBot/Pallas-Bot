@@ -3,7 +3,7 @@
 | 机制 | 入口 |
 | --- | --- |
 | 插件声明 | `PluginMetadata.extra['knowledge_sources']` |
-| 本地目录 | `data/pallas_knowledge/**/*.md` / `.jsonl` |
+| 本地目录 | `data/pallas_knowledge*.md` / `.jsonl` |
 
 Bot 在 LLM 闲聊前统一检索并注入 system prompt。无 LLM 时知识源不参与注入。
 
@@ -38,7 +38,7 @@ extra={
 
 | 项 | 说明 |
 | --- | --- |
-| 路径 | `data/pallas_knowledge/**/*.md` 或 `.jsonl` |
+| 路径 | `data/pallas_knowledge*.md` 或 `.jsonl` |
 | 开关 | `LLM_KNOWLEDGE_FILE_INGEST_ENABLED`（默认开） |
 | source_id | `pallas.file_ingest` |
 | Markdown | 按 `#` 标题切块 |
@@ -63,7 +63,7 @@ extra={
 | --- | --- | --- |
 | `LLM_KNOWLEDGE_SOURCES_ENABLED` | 开 | 总闸 |
 | `LLM_VECTOR_RETRIEVE` | `hybrid` | `hybrid` / `keyword` / `embedding`；向量失败回落关键词 |
-| `LLM_EMBEDDING_MODEL` | `stub` | 对齐 AI 仓 embeddings |
+| `LLM_EMBEDDING_MODEL` | `stub` | Bot 内核本地 hash stub 标识；无需 AI 仓 |
 | `LLM_KNOWLEDGE_TOP_K` | `3` | 注入块数上限 |
 
 读取受 `memory_governance.can_read_generic_knowledge()` 门控。运维视角见 [LLM 与 AI](/maintainer/operate/llm-and-ai)。

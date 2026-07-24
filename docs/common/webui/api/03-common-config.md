@@ -9,7 +9,6 @@ WebUI「通用配置」各段通过统一 REST 暴露；段定义在 `src/consol
 | PUT | `/common-config/{section_id}` | 是 | Body `{"values": {...}}` |
 | POST | `/common-config/service_gateways/connectivity-check` | 是 | 服务网关草稿连通性探测 |
 | GET | `/common-config/llm/runtime-overview` | | 聚合 AI health、模型、任务统计、conversation kernel |
-| GET | `/common-config/llm/wizard/status` | | AI 体检向导状态与下一步提示 |
 
 ## 常见 `section_id`
 
@@ -75,19 +74,6 @@ PUT 落盘 `webui.json`；各段 `apply_webui_env_section_patch` 内触发对应
 - 这是**聚合视图**，不是新的状态机事实源。
 - 各子字段仍沿用 AI runtime 既有健康语义，如 `health_state`、`circuit_state`、`degraded_state`。
 
-## `llm/wizard/status` 返回要点
-
-面向 AI 初次配置与排障引导，字段包括：
-
-- `ai_reachable`
-- `health_url`
-- `model`
-- `provider_mode`
-- `llm_chat_enabled`
-- `providers_configured`
-- `providers_reachable`
-- `checks[]`
-
 ## 媒体权重与模型管理
 
 Bot 代理 AI Runtime（需媒体服务可达）：
@@ -105,16 +91,6 @@ Bot 代理 AI Runtime（需媒体服务可达）：
 | PUT | `/common-config/llm/media-models/tts/defaults` | `ref_audio_path` / `prompt_text` 等 |
 
 WebUI「能力包」页消费上述接口。默认配置落在 AI 侧 `data/media_models.json`。
-- `next_step`
-
-其中 `checks[]` 每项包含：
-
-- `id`
-- `label`
-- `ok`
-- `detail`
-
-前端可按第一条 `ok=false` 的检查项展示下一步修复建议。
 
 ## 前端对应
 

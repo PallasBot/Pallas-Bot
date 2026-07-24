@@ -6,7 +6,7 @@
 
 | 层 | 路径 |
 | --- | --- |
-| 前端源码 | `Pallas-Bot-WebUI`（生产默认 `react/`） |
+| 前端源码 | `Pallas-Bot-WebUI`（生产默认仓库根（React）） |
 | 运行产物 | `data/pb_webui/public-react/`（默认）；Vue 为 `public/` |
 | 后端 | `pb_webui` · `/pallas/api` |
 
