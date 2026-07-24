@@ -72,12 +72,17 @@ def run_ai_bootstrap(
     ai_root: Path,
     check_only: bool = False,
     no_start: bool = False,
-    with_media: bool = False,
+    with_media: bool = True,
     remote_only: bool = False,
     use_gpu: bool = False,
     bot_host: str | None = None,
     bot_port: int | None = None,
 ) -> int:
+    """调用 AI 仓 bootstrap（默认媒体栈）。
+
+    ``with_media`` / ``remote_only`` 保留兼容，不再传给脚本。
+    """
+    del with_media, remote_only
     script = ai_root / _AI_BOOTSTRAP
     if not script.is_file():
         print(f"未找到 {script}", file=sys.stderr)
@@ -88,10 +93,6 @@ def run_ai_bootstrap(
         cmd.append("--check-only")
     if no_start:
         cmd.append("--no-start")
-    if with_media:
-        cmd.append("--with-media")
-    if remote_only:
-        cmd.append("--remote-only")
     cmd.extend(["--bot-host", bot_host or default_bot_callback_host()])
     cmd.extend(["--bot-port", str(bot_port if bot_port is not None else default_bot_callback_port())])
 

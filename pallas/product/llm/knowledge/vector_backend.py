@@ -58,7 +58,7 @@ def blend_hybrid_score(*, embedding_score: int, keyword_score: int) -> int:
 
 
 class EmbeddingAugmentedBackend:
-    """embedding / hybrid / vector：优先 AI `/v1/embeddings`；失败回落关键词。"""
+    """embedding / hybrid / vector：优先 Bot 内核本地 embeddings；失败回落关键词。"""
 
     def retrieve(
         self,

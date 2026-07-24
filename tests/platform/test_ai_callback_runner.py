@@ -26,6 +26,27 @@ def test_should_suppress_llm_duplicate_reply_for_short_parasitic_tail() -> None:
     assert not should_suppress_llm_duplicate_reply(task, "哈哈，别这么正式啦，叫我牛牛就行！不过你先说事。")
 
 
+def test_should_suppress_llm_duplicate_reply_for_short_suffix_echo() -> None:
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "last_reply_text": "原神挺受欢迎的，很多人都在玩呢。",
+    }
+    assert should_suppress_llm_duplicate_reply(task, "都在玩呢。")
+    assert not should_suppress_llm_duplicate_reply(task, "原神确实好玩。")
+
+
+def test_should_suppress_llm_duplicate_reply_for_recent_group_echo() -> None:
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "last_reply_text": "",
+        "recent_reply_texts": ["古振兴加油吧，希望他明年的表现能让大家满意。"],
+    }
+    assert should_suppress_llm_duplicate_reply(
+        task,
+        "古振兴加油吧，希望他明年的表现能让大家满意。",
+    )
+
+
 @pytest.mark.asyncio
 async def test_run_ai_callback_falls_back_to_shared_registry(monkeypatch: pytest.MonkeyPatch) -> None:
     bot = MagicMock()

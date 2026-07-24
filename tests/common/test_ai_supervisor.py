@@ -43,7 +43,7 @@ def test_ai_runtime_status_reads_pidfiles(tmp_path, monkeypatch) -> None:
     (root / "scripts" / "ctl.sh").write_text("#!/bin/sh\n", encoding="utf-8")
     (root / "logs").mkdir()
     (root / "logs" / "api.pid").write_text("1\n", encoding="utf-8")
-    (root / "logs" / "llm.pid").write_text("1\n", encoding="utf-8")
+    (root / "logs" / "media.pid").write_text("1\n", encoding="utf-8")
     monkeypatch.setattr(ai_supervisor, "_pid_alive", lambda pid: pid == 1)
     monkeypatch.setattr(
         ai_supervisor,
@@ -60,7 +60,8 @@ def test_ai_runtime_status_reads_pidfiles(tmp_path, monkeypatch) -> None:
     assert st["can_manage"] is True
     assert st["running"] is True
     assert st["services"]["api"]["running"] is True
-    assert st["services"]["llm"]["running"] is True
+    assert st["services"]["media"]["running"] is True
+    assert "llm" not in st["services"]
     assert st["health"]["ok"] is True
 
 
@@ -83,7 +84,7 @@ def test_start_ai_runtime_calls_ctl(tmp_path, monkeypatch) -> None:
     )
     out = ai_supervisor.start_ai_runtime(ai_root=root, with_media=False)
     assert out["ok"] is True
-    assert calls == [("start", "llm"), ("start", "api")]
-    with_media = ai_supervisor.start_ai_runtime(ai_root=root, with_media=True)
-    assert with_media["ok"] is True
-    assert calls[-1] == ("start", "all")
+    assert calls == [("start", "media"), ("start", "api")]
+    again = ai_supervisor.start_ai_runtime(ai_root=root, with_media=True)
+    assert again["ok"] is True
+    assert calls[-2:] == [("start", "media"), ("start", "api")]

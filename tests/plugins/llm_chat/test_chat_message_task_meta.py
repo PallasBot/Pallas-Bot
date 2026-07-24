@@ -574,8 +574,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     )
     monkeypatch.setattr(
         mod,
-        "list_behavior_patterns",
-        lambda: [
+        "select_behavior_patterns",
+        lambda **_kwargs: [
             BehaviorPattern(
                 pattern_id="p1",
                 scene=BehaviorScene.PROVOCATION,
@@ -608,6 +608,10 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
         ),
     )
     monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value="上一句"))
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
+        AsyncMock(return_value=["群内上一句", "群内更早一句"]),
+    )
     submit_mock = AsyncMock(return_value=SimpleNamespace(ok=True, task_id="ai-task-1", status="queued"))
     monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
     monkeypatch.setattr(mod.TaskManager, "add_task", fake_add_task)
@@ -639,6 +643,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert payload["fallback_text"] == "候选一"
     assert payload["llm_route"] == "corpus_select"
     assert payload["last_reply_text"] == "上一句"
+    assert payload["recent_reply_texts"] == ["群内上一句", "群内更早一句"]
     assert "最近几轮别再用这些开头" in payload["variation_hint"]
     assert payload["behavior_scene"] == "provocation"
     assert payload["behavior_pattern_ids"] == ["p1"]

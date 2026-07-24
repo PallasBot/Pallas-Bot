@@ -126,6 +126,17 @@ def test_resolve_output_filtered_reply_blocks_filler_and_soft_refuse() -> None:
     assert resolve_output_filtered_reply(task, "谢谢，还行吧") == "谢谢，还行吧"
 
 
+def test_resolve_output_filtered_reply_strips_orphan_leading_particle() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, "吧。深目的确是个特色。") == "深目的确是个特色。"
+
+
+def test_resolve_output_filtered_reply_blocks_service_tone_after_strip() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, "吧。时间管理真的很重要呢。你有没有什么好方法来提高效率？") == ""
+    assert resolve_output_filtered_reply(task, "得看设定啦。") == ""
+
+
 def test_resolve_output_filtered_reply_enforces_max_length() -> None:
     task = {
         "task_type": LLM_CHAT_TASK_TYPE,

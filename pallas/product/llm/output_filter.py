@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -25,6 +26,11 @@ OutputFilterProfile = Literal["chat", "polish_lite"]
 OutputFilterTier = Literal["hard_block", "soft_retry"]
 
 _FILTERED_TASK_TYPES = LEGACY_LLM_CHAT_TASK_TYPES | REPEATER_LLM_TASK_TYPES | frozenset({CHAT_DRUNK_TASK_TYPE})
+
+# 续写残片：模型把上一句语气词当成开头（线上大量「吧。…」）
+_ORPHAN_LEADING_PARTICLE_RE = re.compile(
+    r"^([吧呢啊嗯哦嘛呀哈呵欸唉呃额]+)([。．\.，,、！!？?\s～~]*)+",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +100,25 @@ def is_filler_only_reply(text: str) -> bool:
     return plain in FILLER_ONLY_REPLIES or compact in FILLER_ONLY_REPLIES
 
 
+def strip_orphan_leading_particles(text: str) -> str:
+    """去掉开头的续写语气残片；剥干净后过短则返回空串。"""
+    plain = str(text or "").strip()
+    if not plain:
+        return ""
+    cleaned = plain
+    for _ in range(3):
+        next_text = _ORPHAN_LEADING_PARTICLE_RE.sub("", cleaned, count=1).strip()
+        if next_text == cleaned:
+            break
+        cleaned = next_text
+    if not cleaned:
+        return ""
+    # 只剩标点/语气
+    if len(cleaned.strip("，,。！!？?~～ ….")) < 2:
+        return ""
+    return cleaned
+
+
 def match_output_filter(text: str, profile: OutputFilterProfile) -> OutputFilterHit | None:
     plain = str(text or "").strip()
     if not plain:
@@ -122,7 +147,17 @@ def _normalize_and_guard_reply(text: str, *, task_type: str) -> str:
         if str(text or "").strip():
             logger.info("LLM structured reply empty task_type={}", task_type)
         return ""
-    ok, reason = validate_reply_chars(normalized)
+    cleaned = strip_orphan_leading_particles(normalized)
+    if cleaned != normalized:
+        logger.info(
+            "LLM orphan leading particle stripped task_type={} before={!r} after={!r}",
+            task_type,
+            normalized[:48],
+            cleaned[:48],
+        )
+    if not cleaned:
+        return ""
+    ok, reason = validate_reply_chars(cleaned)
     if not ok:
         logger.info(
             "LLM reply char guard reject task_type={} reason={}",
@@ -130,7 +165,7 @@ def _normalize_and_guard_reply(text: str, *, task_type: str) -> str:
             reason,
         )
         return ""
-    return normalized
+    return cleaned
 
 
 def _enforce_max_length(text: str, *, task: dict, task_type: str) -> str:

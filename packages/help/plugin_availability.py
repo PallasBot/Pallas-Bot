@@ -21,6 +21,7 @@ def invalidate_plugin_help_availability_cache() -> None:
 
 def is_plugin_help_available(plugin_name: str) -> bool:
     name = (plugin_name or "").strip()
+    # 旧扩展仓 chat 包名：仍按酒后可用性判断（兼容未升级站点）
     if name == "chat":
         from pallas.product.llm.availability import is_drunk_chat_enabled
 

@@ -14,7 +14,7 @@ from pallas.console.webui.ai_install_writeback import DEFAULT_AI_SERVER_PORT
 
 MANAGED_MARKER_NAME = ".pallas-managed"
 _CTL = "scripts/ctl.sh"
-_SERVICES = ("llm", "media", "api")
+_SERVICES = ("media", "api")
 
 
 def mark_ai_root_managed(ai_root: Path) -> None:
@@ -210,7 +210,7 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
         services[name] = {"running": running, "pid": pid if running else None}
 
     api_up = bool(services["api"]["running"])
-    llm_up = bool(services["llm"]["running"])
+    media_up = bool(services["media"]["running"])
     health = (
         probe_ai_health_sync(ai_root=root)
         if api_up
@@ -227,7 +227,8 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
         "can_manage": ctl_ready,
         "ai_root": str(root),
         "layout": ai_root_layout(root),
-        "running": api_up and llm_up,
+        # 媒体扩展：api + media；LLM 已内置 Bot 内核，不再托管 llm worker
+        "running": api_up and media_up,
         "endpoint": {"host": "127.0.0.1", "port": resolve_ai_listen_port(root)},
         "services": services,
         "health": health,
@@ -252,26 +253,25 @@ def run_ctl(ai_root: Path, *args: str, timeout_sec: float = 120.0) -> tuple[int,
     return int(completed.returncode), header + out
 
 
-def start_ai_runtime(*, ai_root: Path | None = None, with_media: bool = False) -> dict[str, Any]:
+def start_ai_runtime(*, ai_root: Path | None = None, with_media: bool = True) -> dict[str, Any]:
+    """启动媒体服务（media worker + API）。
+
+    ``with_media`` 保留兼容旧调用，已忽略；聊天/画画不经本 Runtime。
+    """
+    del with_media  # 兼容参数，行为固定为媒体栈
     root = ai_root or resolve_ai_repo_root()
     if root is None:
         return {"ok": False, "error": "未检测到本地 AI Runtime，Docker 请在宿主机启停容器", "output_tail": ""}
     outputs: list[str] = []
-    if with_media:
-        code, out = run_ctl(root, "start", "all")
+    for target in ("media", "api"):
+        code, out = run_ctl(root, "start", target)
         outputs.append(out)
         if code != 0:
-            return {"ok": False, "error": f"ctl start all 退出码 {code}", "output_tail": out[-8000:]}
-    else:
-        for target in ("llm", "api"):
-            code, out = run_ctl(root, "start", target)
-            outputs.append(out)
-            if code != 0:
-                return {
-                    "ok": False,
-                    "error": f"ctl start {target} 退出码 {code}",
-                    "output_tail": "\n".join(outputs)[-8000:],
-                }
+            return {
+                "ok": False,
+                "error": f"ctl start {target} 退出码 {code}",
+                "output_tail": "\n".join(outputs)[-8000:],
+            }
     if is_managed_ai_root(root):
         mark_ai_root_managed(root)
     status = ai_runtime_status(ai_root=root)

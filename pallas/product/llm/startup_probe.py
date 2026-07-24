@@ -102,7 +102,7 @@ async def probe_llm_provider(*, timeout_sec: float = 3.0) -> dict[str, Any]:
             "ok": False,
             "configured": False,
             "url": "",
-            "error": "llm_base_url or llm_model missing",
+            "error": "llm provider missing (configure 接入 Provider or LLM_BASE_URL + LLM_MODEL)",
         }
     result = await probe_provider_models(timeout_sec=timeout_sec, cfg=cfg)
     result["configured"] = True
@@ -173,7 +173,10 @@ def install_llm_startup_probe() -> None:
                         "llm",
                         f"provider_not_configured switches={flag_text}",
                     )
-                    logger.warning("[LLM] 内核模式未配置 Provider（LLM_BASE_URL + LLM_MODEL） switches={}", flag_text)
+                    logger.warning(
+                        "[LLM] 内核模式未配置 Provider（接入页或 LLM_BASE_URL + LLM_MODEL） switches={}",
+                        flag_text,
+                    )
                 else:
                     logger.debug("[LLM] 内核模式未配置 Provider（开关均为关）")
                 return

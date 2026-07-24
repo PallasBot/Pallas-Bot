@@ -74,8 +74,14 @@ def merge_side_snapshot(existing: dict[str, Any] | None, snapshot: dict[str, Any
         "by_task",
         "totals",
         "tokens",
+        "images",
         "classification",
         "reachable",
+        "provider_stats",
+        "model_stats",
+        "failure_counts",
+        "state_counts",
+        "rag",
     ):
         if key in snapshot:
             out[key] = snapshot[key]

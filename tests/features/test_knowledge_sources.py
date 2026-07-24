@@ -40,6 +40,9 @@ def test_builtin_bot_faq_retrieves_on_clear_keyword() -> None:
 
 @pytest.mark.asyncio
 async def test_enrich_system_with_knowledge_sources_injects_block() -> None:
+    from pallas.product.llm.rag_metrics import clear_llm_rag_metrics_for_tests, llm_rag_metrics_snapshot
+
+    clear_llm_rag_metrics_for_tests()
     cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
     result = await enrich_system_with_knowledge_sources(
         "你是牛牛。",
@@ -52,6 +55,33 @@ async def test_enrich_system_with_knowledge_sources_injects_block() -> None:
     assert "相关知识参考" in result.system_prompt
     assert result.trace["hit_count"] >= 1
     assert "pallas.bot_faq" in result.trace["sources"]
+    snap = llm_rag_metrics_snapshot(include_persisted=False)
+    assert snap["hit_count"] >= 1
+    assert snap["miss_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_enrich_records_rag_miss_on_empty_retrieve(monkeypatch) -> None:
+    from pallas.product.llm.rag_metrics import clear_llm_rag_metrics_for_tests, llm_rag_metrics_snapshot
+
+    clear_llm_rag_metrics_for_tests()
+    monkeypatch.setattr(
+        "pallas.product.llm.knowledge.inject.retrieve_from_knowledge_sources",
+        lambda *args, **kwargs: [],
+    )
+    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
+    result = await enrich_system_with_knowledge_sources(
+        "你是牛牛。",
+        bot_id=1,
+        group_id=2,
+        user_id=3,
+        query_text="完全无关的查询xyz",
+        cfg=cfg,
+    )
+    assert result.trace["hit_count"] == 0
+    snap = llm_rag_metrics_snapshot(include_persisted=False)
+    assert snap["hit_count"] == 0
+    assert snap["miss_count"] == 1
 
 
 def test_can_read_generic_knowledge_respects_config() -> None:
@@ -157,6 +187,9 @@ def test_extension_plugins_declare_knowledge_sources(rel_path: str, source_id: s
 
 @pytest.mark.asyncio
 async def test_enrich_skips_when_generic_knowledge_disabled() -> None:
+    from pallas.product.llm.rag_metrics import clear_llm_rag_metrics_for_tests, llm_rag_metrics_snapshot
+
+    clear_llm_rag_metrics_for_tests()
     cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=False)
     result = await enrich_system_with_knowledge_sources(
         "你是牛牛。",
@@ -168,3 +201,6 @@ async def test_enrich_skips_when_generic_knowledge_disabled() -> None:
     )
     assert result.system_prompt == "你是牛牛。"
     assert result.trace["hit_count"] == 0
+    snap = llm_rag_metrics_snapshot(include_persisted=False)
+    assert snap["hit_count"] == 0
+    assert snap["miss_count"] == 0

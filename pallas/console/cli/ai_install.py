@@ -31,13 +31,13 @@ def default_ai_clone_target() -> Path:
 
 def docker_compose_hint() -> str:
     return (
-        "Docker 全栈：compose 已注入 AI_SERVER_HOST=pallasbot-ai；控制台探测该地址，"
-        "不在 Bot 容器内 clone AI。宿主机启停示例：\n"
+        "当前 Bot 在 Docker 内，无法在此页安装或启停媒体服务。\n"
+        "请在宿主机用 compose 管理 AI，控制台只填连接地址并测通。\n"
+        "示例：\n"
         "  docker compose -f docker-compose.full.yml up -d\n"
-        "  # 仅 AI 栈（在 Pallas-Bot-AI 仓）\n"
+        "  # 或在 Pallas-Bot-AI 仓：\n"
         "  docker compose -f docker-compose.llm.yml up -d\n"
-        "  # 默认 slim AI、不预拉模型；预拉可加 --profile pull-models\n"
-        "详见文档：docs/maintainer/install/ai-runtime.md / docs/deploy/docker.md"
+        "全栈 compose 通常已注入 AI_SERVER_HOST=pallasbot-ai。"
     )
 
 
@@ -138,13 +138,14 @@ def run_ai_bootstrap_captured(
     ai_root: Path,
     check_only: bool = False,
     no_start: bool = False,
-    with_media: bool = False,
+    with_media: bool = True,
     remote_only: bool = False,
     use_gpu: bool = False,
     bot_host: str | None = None,
     bot_port: int | None = None,
 ) -> tuple[int, str]:
-    """运行 bootstrap，返回 (exit_code, combined_output)。"""
+    """运行 bootstrap，返回 (exit_code, combined_output)。默认媒体栈。"""
+    del with_media, remote_only
     from pallas.console.cli.ai_supervisor import is_managed_ai_root, mark_ai_root_managed
 
     script = ai_root / _AI_BOOTSTRAP
@@ -156,10 +157,6 @@ def run_ai_bootstrap_captured(
         cmd.append("--check-only")
     if no_start:
         cmd.append("--no-start")
-    if with_media:
-        cmd.append("--with-media")
-    if remote_only:
-        cmd.append("--remote-only")
     cmd.extend(["--bot-host", bot_host or default_bot_callback_host()])
     cmd.extend(["--bot-port", str(bot_port if bot_port is not None else default_bot_callback_port())])
 

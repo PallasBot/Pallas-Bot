@@ -5,11 +5,8 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 from .model_admin import fetch_local_routing_config
-from .startup_probe import probe_ai_service_health
 
 _CACHE_TTL_SEC = 15.0
-_health_cache: dict[str, Any] = {}
-_health_cache_at = 0.0
 _local_routing_cache: dict[str, Any] = {}
 _local_routing_cache_at = 0.0
 _providers_cache: dict[str, Any] = {}
@@ -41,11 +38,9 @@ def serialize_task_route(spec: TaskRouteSpec) -> dict[str, Any]:
 
 
 def clear_task_route_cache() -> None:
-    global _health_cache_at, _local_routing_cache_at, _providers_cache_at
-    _health_cache.clear()
+    global _local_routing_cache_at, _providers_cache_at
     _local_routing_cache.clear()
     _providers_cache.clear()
-    _health_cache_at = 0.0
     _local_routing_cache_at = 0.0
     _providers_cache_at = 0.0
 
@@ -64,20 +59,6 @@ def _route_from_local_config(task: str, payload: dict[str, Any]) -> str | None:
             return resolved
     fallback = str(payload.get("llm_model") or payload.get("model") or "").strip()
     return fallback or None
-
-
-async def _cached_ai_health_payload() -> dict[str, Any]:
-    global _health_cache_at
-    now = time.monotonic()
-    if _health_cache and now - _health_cache_at < _CACHE_TTL_SEC:
-        return dict(_health_cache)
-    result = await probe_ai_service_health(timeout_sec=2.0)
-    body = result.get("body")
-    payload = dict(body) if result.get("ok") and isinstance(body, dict) else {}
-    _health_cache.clear()
-    _health_cache.update(payload)
-    _health_cache_at = now
-    return payload
 
 
 async def _cached_local_routing_payload() -> dict[str, Any]:
@@ -142,21 +123,52 @@ def _chain_fallback_models(
     *,
     task: str,
     primary_provider: str,
+    primary_model: str | None = None,
 ) -> tuple[str, ...]:
     routing = providers_payload.get("routing")
     if not isinstance(routing, dict):
         return ()
+
+    high_tasks = {"llm_chat", "drunk", "repeater_polish"}
+    low_tasks = {"repeater_select", "repeater_polish_lite", "repeater_fallback"}
+    tier = "high" if task in high_tasks else "low" if task in low_tasks else ""
+
+    out: list[str] = []
+    seen: set[str] = set()
+    primary_model_norm = str(primary_model or "").strip()
+    if primary_model_norm:
+        seen.add(primary_model_norm)
+
+    def add_model(model: str | None) -> None:
+        name = str(model or "").strip()
+        if not name or name in seen:
+            return
+        seen.add(name)
+        out.append(name)
+
+    if tier:
+        tier_backups = routing.get("tier_backups")
+        tier_backup_models = routing.get("tier_backup_models")
+        backup_provider = ""
+        backup_model = ""
+        if isinstance(tier_backups, dict):
+            backup_provider = str(tier_backups.get(tier) or "").strip()
+        if isinstance(tier_backup_models, dict):
+            backup_model = str(tier_backup_models.get(tier) or "").strip()
+        if backup_provider:
+            if backup_model:
+                add_model(backup_model)
+            elif backup_provider != primary_provider:
+                add_model(_resolve_provider_task_model(providers_payload, backup_provider, task))
+
     chain_fallback = routing.get("chain_fallback")
     if not isinstance(chain_fallback, list):
-        return ()
-    out: list[str] = []
+        return tuple(out)
     for raw in chain_fallback:
         provider_id = str(raw or "").strip()
         if not provider_id or provider_id == primary_provider:
             continue
-        model = _resolve_provider_task_model(providers_payload, provider_id, task)
-        if model:
-            out.append(model)
+        add_model(_resolve_provider_task_model(providers_payload, provider_id, task))
     return tuple(out)
 
 
@@ -190,77 +202,31 @@ async def resolve_task_route(task: str, *, explicit_model: str | None = None) ->
             fallback_models=(),
         )
 
-    from pallas.product.llm.config import get_llm_config, is_llm_bot_kernel_runtime
+    from pallas.product.llm.config import get_llm_config
+    from pallas.product.llm.providers_store import export_providers_for_api, resolve_endpoint_for_task
 
     cfg = get_llm_config()
-    if is_llm_bot_kernel_runtime(cfg):
-        model = str(cfg.llm_model or "").strip() or None
-        return TaskRouteSpec(
-            task=normalized_task,
-            resolved_model=model,
-            provider_hint="bot_kernel",
-            source="config",
-            fallback_models=(),
-        )
-
-    health_payload = await _cached_ai_health_payload()
-    llm_info = health_payload.get("llm") if isinstance(health_payload.get("llm"), dict) else {}
-    provider_mode = str(llm_info.get("provider_mode") or "").strip() or None
-    fallbacks = _fallback_models_from_payload(llm_info, normalized_task)
-
-    routed_provider = _mapping_lookup(llm_info.get("task_routing"), normalized_task)
-    if routed_provider:
-        providers_payload = await _cached_providers_payload()
-        resolved_model = _resolve_provider_task_model(providers_payload, routed_provider, normalized_task)
-        if not resolved_model:
-            resolved_model = _mapping_lookup(llm_info.get("local_task_models"), normalized_task)
+    endpoint = resolve_endpoint_for_task(normalized_task)
+    if endpoint is not None:
+        providers_payload = export_providers_for_api()
         chain_fallbacks = _chain_fallback_models(
             providers_payload,
             task=normalized_task,
-            primary_provider=routed_provider,
+            primary_provider=endpoint.provider_id,
+            primary_model=endpoint.model,
         )
-        merged_fallbacks = chain_fallbacks or fallbacks
         return TaskRouteSpec(
             task=normalized_task,
-            resolved_model=resolved_model,
-            provider_hint=routed_provider,
-            source="ai_health",
-            fallback_models=merged_fallbacks,
+            resolved_model=endpoint.model,
+            provider_hint=endpoint.provider_id,
+            source="config",
+            fallback_models=chain_fallbacks,
         )
-
-    local_model = _mapping_lookup(llm_info.get("local_task_models"), normalized_task)
-    if local_model:
-        return TaskRouteSpec(
-            task=normalized_task,
-            resolved_model=local_model,
-            provider_hint=provider_mode,
-            source="ai_health",
-            fallback_models=fallbacks,
-        )
-
-    local_payload = await _cached_local_routing_payload()
-    resolved = _route_from_local_config(normalized_task, local_payload)
-    local_fallbacks = _fallback_models_from_payload(local_payload, normalized_task) or fallbacks
-    if resolved:
-        return TaskRouteSpec(
-            task=normalized_task,
-            resolved_model=resolved,
-            provider_hint=provider_mode,
-            source="config" if not fallbacks else "fallback",
-            fallback_models=local_fallbacks,
-        )
-    if local_fallbacks:
-        return TaskRouteSpec(
-            task=normalized_task,
-            resolved_model=local_fallbacks[0],
-            provider_hint=provider_mode,
-            source="fallback",
-            fallback_models=local_fallbacks[1:],
-        )
+    model = str(cfg.llm_model or "").strip() or None
     return TaskRouteSpec(
         task=normalized_task,
-        resolved_model=None,
-        provider_hint=provider_mode,
+        resolved_model=model,
+        provider_hint="bot_kernel",
         source="config",
         fallback_models=(),
     )

@@ -42,6 +42,18 @@ async def enrich_system_with_knowledge_sources(
             for item in hits
         ],
     }
+    try:
+        from pallas.product.llm.rag_metrics import record_rag_query_result
+
+        if hits:
+            record_rag_query_result(
+                hit=True,
+                documents=[(item.title or item.source_id, item.source_id) for item in hits],
+            )
+        else:
+            record_rag_query_result(hit=False)
+    except Exception:
+        pass
     if not hits:
         return KnowledgeInjectionResult(system_prompt=system_prompt, trace=trace)
 

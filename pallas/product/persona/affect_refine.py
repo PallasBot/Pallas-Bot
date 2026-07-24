@@ -179,7 +179,7 @@ async def refine_group_style_affect(
     prev_profile: dict[str, Any] | None = None,
     force_llm: bool = False,
 ) -> tuple[dict[str, Any], bool]:
-    """批次 refresh 时可选调用 AI 仓；返回 (profile, used_llm)。"""
+    """批次 refresh 时可选调用 Bot 内核 LLM；返回 (profile, used_llm)。"""
     if not llm_affect_refine_enabled():
         profile = merge_affect_refine_into_profile(profile, empty_affect_refine())
         return apply_affect_refine_triggers_to_profile(profile, None), False
