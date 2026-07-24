@@ -55,6 +55,6 @@
 
 - `fetchSystem()` → `/system`
 - `http.get("/health")`（健康探测）
-- 登录：`POST /auth/login`（`public.py` 表单登录走 `/pallas/login`）
+- 登录：`POST /auth/login`（SPA 登录页 `GET /pallas/login`）
 
-实现：`api.py`（health）、`extended_api.py`（system、bots）、`public.py`（login）。
+实现：`api.py`（health）、`extended_api.py`（system、bots、auth）、`public.py`（SPA 入口）。

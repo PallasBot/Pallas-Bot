@@ -49,7 +49,10 @@
 
 | 键 | 说明 |
 | --- | --- |
-| **`LLM_CHAT_ENABLED`** | 总闸，默认关；打开后 @ / 接话 AI 才生效 |
+| **`LLM_CHAT_ENABLED`** | 智能对话总闸，默认关；打开后 @ / 接话走 Bot Provider |
+| **`CHAT_ENABLE`** | 遗留酒后 RWKV，默认关；与上项独立，走 AI 仓 `/api/chat`（需 chat 资源包） |
+
+WebUI 在同一页「功能开关」里：启用智能对话 / 启用遗留酒后 RWKV。二者都开时醉酒优先 LLM。
 
 ### 4. 验收
 

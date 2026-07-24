@@ -29,7 +29,7 @@
 - **读接口**：`router` 全局依赖 `_pallas_token_dep`（有效 token 或会话）
 - **写接口**（PUT/POST 改配置、备份、申请处理等）：额外 `_check_pallas_write_token`（写 token 可与读 token 相同，由 `pb_webui` 配置决定）
 
-登录页：`GET/POST /pallas/login`（`public.py`，非 JSON API）。
+登录页：`GET /pallas/login` 出 SPA；会话由 `POST /pallas/api/auth/login` 写入 Cookie。
 
 ## 文档分域
 

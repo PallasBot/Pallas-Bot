@@ -75,18 +75,17 @@ flowchart TD
 | 接口 | 用途 |
 | --- | --- |
 | `/pallas/api/auth/setup-status` | 是否仍处默认口令 / 首次引导 |
-| `/pallas/api/common-config/llm/wizard/status` | AI 服务、provider、总闸哪一步未就绪 |
 | `/pallas/api/common-config/llm/runtime-overview` | health、模型、任务统计、conversation kernel |
 
 ## 记忆与 session
 
-运行时 **session / task state** 以 **Pallas-Bot-AI** 为执行面；Bot 负责产品侧记忆策略与注入。
+多轮 **session** 与群记忆由 **Bot 内核**落盘（PG / Mongo）；聊天不再经 AI 仓维护 session。
 
 | 层级 | 位置 | 用途 |
 |------|------|------|
-| 会话窗口 | Bot `session_store`（PG / Mongo）+ AI 回调 | 群内多轮可见历史 |
-| 超长摘要 | metadata `session_summary` → AI | 窗口外压缩上下文 |
-| 群记忆（teach / auto_episode） | Bot PG / Mongo `llm_memory_entry` | 「记住：」与启发式旧事；默认 **hybrid** 检索（`LLM_VECTOR_RETRIEVE`；无向量时回落关键词） |
+| 会话窗口 | Bot `session_store`（PG / Mongo） | 群内多轮可见历史 |
+| 超长摘要 | Bot session metadata `session_summary` | 窗口外压缩上下文 |
+| 群记忆（teach / auto_episode） | Bot PG / Mongo `llm_memory_entry` | 「记住：」与启发式旧事；默认 **hybrid** 检索（`LLM_VECTOR_RETRIEVE`；向量为 Bot 本地 stub） |
 | 关系便签 | Bot PG / Mongo | 对用户的稳定关系备注 |
 | 知识源 | 插件声明 + `data/pallas_knowledge/` | FAQ / 本地文档块注入 |
 
@@ -95,8 +94,8 @@ flowchart TD
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `LLM_MEMORY_RAG_ENABLED` | 开 | 群记忆读写与注入 |
-| `LLM_VECTOR_RETRIEVE` | `hybrid` | 关键词+向量；AI embeddings 不可用时回落关键词 |
-| `LLM_EMBEDDING_MODEL` | `stub` | 与 AI 仓一致 |
+| `LLM_VECTOR_RETRIEVE` | `hybrid` | 关键词+向量；向量在 Bot 进程内计算，失败回落关键词 |
+| `LLM_EMBEDDING_MODEL` | `stub` | Bot 内核本地 hash stub 标识 |
 | `LLM_MEMORY_AUTO_EPISODE_ENABLED` | 开 | 有价值发言自动写入 episode |
 | `LLM_KNOWLEDGE_SOURCES_ENABLED` | 开 | 知识源总闸 |
 | `LLM_KNOWLEDGE_FILE_INGEST_ENABLED` | 开 | 扫描 `data/pallas_knowledge/` |
@@ -104,7 +103,7 @@ flowchart TD
 
 模型也可通过 tools `memory.search` / `memory.save` 主动检索与写入。控制台：`GET/POST /pallas/api/llm/conversation-kernel/memory`、`GET /pallas/api/llm/knowledge/sources`。
 
-排障：会话「记不住」先查 AI 任务与 callback；确认 `LLM_SESSION_ENABLED` 且数据库已初始化（PG 或 Mongo）。群记忆 / 关系便签同需对应开关与存储就绪；向量检索不可用时回落关键词。
+排障：会话「记不住」先查 `LLM_SESSION_ENABLED`、Provider 是否测通，以及数据库是否已初始化（PG 或 Mongo）。群记忆 / 关系便签同需对应开关与存储就绪；向量检索异常时回落关键词。
 
 ## callback
 
