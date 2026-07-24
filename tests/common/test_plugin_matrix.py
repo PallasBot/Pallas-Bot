@@ -60,7 +60,8 @@ def test_extra_package_mapping():
     assert extra_package_for_plugin("duel") == "pallas-plugin-duel"
     assert extra_package_for_plugin("pb_protocol") == "pallas-plugin-protocol"
     assert extra_package_for_plugin("pallas_protocol") == "pallas-plugin-protocol"
-    assert extra_package_for_plugin("chat") == "pallas-plugin-ai-media"
+    assert extra_package_for_plugin("chat") is None
+    assert extra_package_for_plugin("sing") == "pallas-plugin-ai-media"
     assert extra_package_for_plugin("bot_status") == "pallas-plugin-bot-status"
     assert uv_extra_for_plugin("duel") == "plugins-duel"
     assert uv_extra_for_plugin("bot_status") == "plugins-bot-status"
@@ -161,7 +162,6 @@ def test_community_stats_canonical_alias():
         "pallas_plugin_maa_hub": "maa_hub",
         "pallas_plugin_draw": "draw",
         "pallas_plugin_sing": "sing",
-        "pallas_plugin_chat": "chat",
         "pallas_plugin_bot_status": "bot_status",
     }
     all_modules = {mod for modules in EXTRA_PACKAGE_MODULES.values() for mod in modules}
@@ -177,7 +177,7 @@ def test_official_extension_description_prefers_readme_summary():
 
 def test_official_extension_description_falls_back_for_multi_plugin_package():
     assert official_extension_description("pallas-plugin-ai-media") == (
-        "牛牛唱歌（翻唱 / 点歌）；包内仍含酒后 chat 旧路径。"
+        "牛牛唱歌（翻唱 / 点歌）。"
     )
 
 

@@ -67,10 +67,11 @@
 
 - 翻唱与续唱依赖外部 AI 服务生成语音，Bot 侧主要负责收集口令参数并回传音频结果。
 - `点歌` 与 `查歌名` 依赖网易云侧能力，所以服务在线不代表一定能点歌，还要看登录状态。
-- 这个插件和 `chat` 共用 `pallas-plugin-ai-media` 扩展包，但命令权限、触发方式和故障定位要分别看。
+- 酒后对话见本体 `llm_chat`（本扩展自 4.1.0 起仅含唱歌）。
 
 ## 相关链接
 
 - [命令权限说明](../common/cmd_perm/README.md)
 - [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)
 - [牛牛唱歌插件仓库](https://github.com/TogetsuDo/pallas-plugin-ai-media)
+- [智能对话 / 酒后](../llm_chat/README.md)

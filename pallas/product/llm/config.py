@@ -39,18 +39,55 @@ def resolve_llm_chat_enabled() -> bool:
 
 
 def resolve_legacy_rwkv_drunk_chat_enabled() -> bool:
-    """遗留酒后 RWKV：仅当未显式配置 LLM_CHAT_ENABLED 时读取 CHAT_ENABLE / 插件 chat_enable。"""
-    if _env_bool_first_optional(("LLM_CHAT_ENABLED",)) is not None:
-        return False
+    """遗留酒后 RWKV（Bot 侧开关，推理仍打 AI 仓 POST /api/chat）。
+
+    与 ``LLM_CHAT_ENABLED`` 独立：两者可同时开；醉酒提交时 LLM 优先，否则走 RWKV。
+    开关来源：``CHAT_ENABLE``；兼容旧扩展插件 ``chat_enable``（若仍安装）。
+    """
+    import importlib
+
     env_legacy = _env_bool_first_optional(("CHAT_ENABLE",))
     if env_legacy is not None:
         return env_legacy
-    try:
-        from packages.chat.config import get_chat_config
+    for import_path in (
+        "pallas_plugin_chat.config",
+        "packages.chat.config",
+    ):
+        try:
+            mod = importlib.import_module(import_path)
+            getter = getattr(mod, "get_chat_config", None)
+            if getter is None:
+                continue
+            return bool(getter().chat_enable)
+        except Exception:
+            continue
+    return False
 
-        return bool(get_chat_config().chat_enable)
-    except Exception:
-        return False
+
+def resolve_chat_tts_enabled() -> bool:
+    """酒后对话是否附带 AI 仓 TTS 语音。
+
+    开关：``CHAT_TTS_ENABLE``；兼容旧扩展 ``tts_enable``。
+    RWKV 路径随 /api/chat 的 tts 字段；LLM 路径在文字回调后另调 /tts。
+    """
+    import importlib
+
+    env_tts = _env_bool_first_optional(("CHAT_TTS_ENABLE",))
+    if env_tts is not None:
+        return env_tts
+    for import_path in (
+        "pallas_plugin_chat.config",
+        "packages.chat.config",
+    ):
+        try:
+            mod = importlib.import_module(import_path)
+            getter = getattr(mod, "get_chat_config", None)
+            if getter is None:
+                continue
+            return bool(getattr(getter(), "tts_enable", False))
+        except Exception:
+            continue
+    return False
 
 
 def _env_bool(key: str, default: bool = False) -> bool:
@@ -168,13 +205,14 @@ def resolve_conversation_feature_level_raw() -> str:
 
 
 VectorRetrieveMode = Literal["keyword", "embedding", "hybrid", "vector"]
-LlmRuntime = Literal["bot_kernel", "ai_service"]
+LlmRuntime = Literal["bot_kernel"]
 
 
 def resolve_llm_runtime() -> LlmRuntime:
     raw = _env_str("LLM_RUNTIME", "bot_kernel").strip().lower()
-    if raw in ("bot_kernel", "ai_service"):
-        return raw  # type: ignore[return-value]
+    if raw and raw != "bot_kernel":
+        # 遗留 ai_service 已移除，强制走内核
+        pass
     return "bot_kernel"
 
 
@@ -226,6 +264,7 @@ class LlmConfig(BaseModel):
     ai_server_host: str = Field(default="127.0.0.1")
     ai_server_port: int = Field(default=9099, ge=1, le=65535)
     llm_chat_enabled: bool = Field(default=False)
+    chat_tts_enable: bool = Field(default=False)
     llm_repeater_mode: str = Field(default="select")
     llm_fallback_enabled: bool = Field(default=False)
     llm_polish_enabled: bool = Field(default=False)
@@ -292,6 +331,9 @@ class LlmConfig(BaseModel):
     llm_memory_content_max_len: int = Field(default=500, ge=64, le=4000)
     llm_memory_auto_episode_enabled: bool = Field(default=True)
     llm_memory_auto_episode_cooldown_sec: int = Field(default=120, ge=0, le=3600)
+    llm_memory_graph_extract_enabled: bool = Field(default=True)
+    llm_memory_graph_extract_on_write: bool = Field(default=False)
+    llm_memory_hiergraph_max_layers: int = Field(default=3, ge=1, le=6)
     llm_knowledge_sources_enabled: bool = Field(default=True)
     llm_knowledge_file_ingest_enabled: bool = Field(default=True)
     llm_knowledge_top_k: int = Field(default=3, ge=1, le=8)
@@ -375,6 +417,7 @@ def get_llm_config() -> LlmConfig:
             ai_server_host=host,
             ai_server_port=port,
             llm_chat_enabled=resolve_llm_chat_enabled(),
+            chat_tts_enable=resolve_chat_tts_enabled(),
             llm_repeater_mode=repeater_mode,
             llm_fallback_enabled=fallback_enabled,
             llm_polish_enabled=polish_enabled,
@@ -459,6 +502,9 @@ def get_llm_config() -> LlmConfig:
             llm_memory_content_max_len=_env_int("LLM_MEMORY_CONTENT_MAX_LEN", 500),
             llm_memory_auto_episode_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_ENABLED", True),
             llm_memory_auto_episode_cooldown_sec=_env_int("LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC", 120),
+            llm_memory_graph_extract_enabled=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ENABLED", True),
+            llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", False),
+            llm_memory_hiergraph_max_layers=_env_int("LLM_MEMORY_HIERGRAPH_MAX_LAYERS", 3),
             llm_knowledge_sources_enabled=_env_bool("LLM_KNOWLEDGE_SOURCES_ENABLED", True),
             llm_knowledge_file_ingest_enabled=_env_bool("LLM_KNOWLEDGE_FILE_INGEST_ENABLED", True),
             llm_knowledge_top_k=_env_int("LLM_KNOWLEDGE_TOP_K", 3),
@@ -499,9 +545,14 @@ def llm_server_base_url(cfg: LlmConfig | None = None) -> str:
 
 
 def is_llm_bot_kernel_runtime(cfg: LlmConfig | None = None) -> bool:
-    return (cfg or get_llm_config()).llm_runtime == "bot_kernel"
+    _ = cfg
+    return True
 
 
 def llm_provider_configured(cfg: LlmConfig | None = None) -> bool:
+    from pallas.product.llm.providers_store import bot_providers_configured
+
+    if bot_providers_configured(task="llm_chat"):
+        return True
     c = cfg or get_llm_config()
     return bool(str(c.llm_base_url or "").strip() and str(c.llm_model or "").strip())

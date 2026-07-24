@@ -299,25 +299,19 @@ def test_catalog_lists_unloaded_official_subplugins_from_package_modules(monkeyp
     monkeypatch.setattr(
         "pallas.console.webui.plugin_catalog._pip_plugin_metadata_stub",
         lambda module_path: {
-            "pallas_plugin_chat": {"name": "酒后聊天"},
             "pallas_plugin_sing": {"name": "牛牛唱歌"},
         }.get(module_path),
     )
     monkeypatch.setattr(
         "pallas.console.webui.plugin_catalog.module_has_config_module",
-        lambda module_name: module_name == "pallas_plugin_chat",
+        lambda module_name: module_name == "pallas_plugin_sing",
     )
 
     rows = build_plugin_catalog_rows()
     by_name = {r["name"]: r for r in rows}
 
-    assert "chat" in by_name
+    assert "chat" not in by_name
     assert "sing" in by_name
-    assert by_name["chat"]["module"] == "pallas_plugin_chat"
-    assert by_name["chat"]["extra_package"] == "pallas-plugin-ai-media"
-    assert by_name["chat"]["plugin_source"] == "pip"
-    assert by_name["chat"]["configurable"] is True
-    assert by_name["chat"]["loaded_in_process"] is False
     assert by_name["sing"]["module"] == "pallas_plugin_sing"
     assert by_name["sing"]["extra_package"] == "pallas-plugin-ai-media"
 
