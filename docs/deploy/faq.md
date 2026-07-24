@@ -201,4 +201,4 @@ A: 使用 PyPI 包 **`pallas-core`**（也可本地构建 wheel：`./scripts/bui
 
 ### Q: WebUI 首次登录为什么要走 Setup Wizard？
 
-A: 默认口令仅用于首次启动；改密后 `setup_state.json` 标记完成，路由守卫才放行其它页面。向导还推荐配置**协议端**与**插件扩展**；**AI 体检**仅在需要智能对话时可选配置。详见 WebUI「首次 Setup Wizard」页。
+A: 默认口令仅用于首次启动；改密后 `setup_state.json` 标记完成，路由守卫才放行其它页面。向导还推荐配置**协议端**与**插件扩展**。需要智能对话时再到侧栏 **AI 配置** 配 Provider 并打开对话总闸。详见 WebUI「首次 Setup Wizard」页。
