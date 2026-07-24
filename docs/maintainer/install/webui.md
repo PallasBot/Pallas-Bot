@@ -6,7 +6,7 @@
 
 | 层 | 路径 |
 | --- | --- |
-| 前端源码 | `Pallas-Bot-WebUI`（生产默认仓库根（React）） |
+| 前端源码 | `Pallas-Bot-WebUI`（React，仓库根） |
 | 运行产物 | `data/pb_webui/public-react/`（默认）；Vue 为 `public/` |
 | 后端 | `pb_webui` · `/pallas/api` |
 
@@ -14,7 +14,7 @@ Bot 挂载静态资源时读的是运行产物，不是源码仓。配置项 `pa
 
 | 操作 | 结果 |
 | --- | --- |
-| 改前端页面 / 样式 | 在 `Pallas-Bot-WebUI/react` 改 → build → 同步产物 |
+| 改前端页面 / 样式 | 在 `Pallas-Bot-WebUI` 改 → build → 同步产物 |
 | 只改主仓 `data/pb_webui/public-react/` | 下次构建同步会被覆盖 |
 | 只改源码仓、未 build / 同步 | 线上页面不变 |
 
@@ -31,7 +31,7 @@ flowchart LR
     Source[Pallas-Bot-WebUI 源码]
     Build[npm run build]
     Dist[dist 产物]
-    Runtime[data/pb_webui/public]
+    Runtime[data/pb_webui/public-react]
     Bot[Pallas-Bot]
     Browser[浏览器]
 
