@@ -133,7 +133,7 @@ A: 数据库连通性；`OneBot WebSocket` 是否已连上（Docker 默认 Compo
 
 A: 不再从 `.env` 读取口令。首次启动在日志里打印随机口令，哈希保存在 `data/pallas_console/auth_state.json`；浏览器访问 `/pallas/login` 或协议端登录页登录。仅本机开发可在 `pallas_webui` 配置中开启 `pallas_webui_dev_mode` 跳过控制台鉴权。
 
-### Q: 遗忘了控制台 / 协议端管理页的登录口令怎么办？
+### Q: 遗忘了控制台 / 协议端管理页的登录口令怎么办？ {#forgot-console-password}
 
 A: 磁盘上只有哈希，**没有「忘记密码」邮件或在线找回**；需能访问 Bot 的数据目录或历史日志。
 

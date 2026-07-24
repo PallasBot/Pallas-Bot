@@ -1,5 +1,7 @@
 """Pallas-Bot 控制台：与主程序分离的 Web 前端，通过本插件挂载静态与 API；配置原因见主插件 __init__ 说明。"""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from pallas.console.webui import install_hot_reload_config, plugin_config_proxy
@@ -21,6 +23,14 @@ class Config(BaseModel):
             "控制台在网址中的路径前缀",
             "一般填 /pallas，需与发布的前端包配置一致",
             "例如反代后访问地址为 https://域名/pallas/",
+        ),
+    )
+    pallas_webui_frontend: Literal["vue", "react"] = Field(
+        default="react",
+        description=field_help(
+            "控制台前端栈（同路径整包切换）",
+            "react=data/pb_webui/public-react；vue=data/pb_webui/public",
+            "修改后需重启牛牛；默认 react",
         ),
     )
     pallas_webui_dist_zip_url: str = Field(
@@ -97,11 +107,18 @@ def on_pallas_webui_config_reload(cfg: Config) -> None:
     from .console_meta_store import patch_console_meta
 
     dev_mode = bool(cfg.pallas_webui_dev_mode)
-    patch_console_meta(pallas_webui_dev_mode=dev_mode)
+    frontend = str(cfg.pallas_webui_frontend or "react").strip().lower()
+    if frontend not in ("vue", "react"):
+        frontend = "react"
+    patch_console_meta(pallas_webui_dev_mode=dev_mode, frontend=frontend)
     if dev_mode:
         logger.warning("Pallas-Bot 控制台: 已关闭 API 与静态页鉴权（仅限本机开发）")
     else:
         logger.info("Pallas-Bot 控制台: 已恢复控制台 API 与静态页鉴权")
+    logger.info(
+        "Pallas-Bot 控制台: frontend={}（静态目录在启动时绑定，切换栈请重启）",
+        frontend,
+    )
 
 
 plugin_webui = install_hot_reload_config(

@@ -30,6 +30,7 @@ from .manager import (
     github_release_asset_url,
     resolve_github_release_asset_urls,
     save_installed_webui_version,
+    webui_frontend_stack,
     webui_has_release_update,
     webui_public_path,
 )
@@ -82,13 +83,16 @@ if not is_sharded_worker():
             api_base=api_base,
             extra_meta={"static_root": str(public), "http_base": base},
         )
+        frontend = webui_frontend_stack()
         webui_version = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
         if plugin_config.pallas_webui_dev_mode:
             logger.warning("控制台：开发模式，已关闭鉴权")
+        logger.info("控制台：前端栈={} static_root={}", frontend, public)
         set_console_meta({
             "static_root": str(public),
             "http_base": base,
             "version": webui_version,
+            "frontend": frontend,
             "pallas_webui_dev_mode": bool(plugin_config.pallas_webui_dev_mode),
         })
         register_extended_api(app, api_base=api_base, plugin_config=plugin_config)

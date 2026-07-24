@@ -3,11 +3,10 @@ from __future__ import annotations
 from nonebot import logger
 
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
-from pallas.core.shared.ai_capability_request import build_llm_chat_capability_body
 from pallas.core.shared.utils import HTTPXClient
 
 from .budget import trim_messages_to_char_budget
-from .config import LlmConfig, get_llm_config, is_llm_bot_kernel_runtime, llm_server_base_url
+from .config import LlmConfig, get_llm_config, llm_server_base_url
 from .governance import LlmChatGovernance
 from .kernel.memory_governance import can_write_runtime_state_summary, runtime_state_summary_metadata
 from .legacy_guard import assess_legacy_chat_submit
@@ -20,7 +19,7 @@ from .repeater_limit import (
     release_repeater_llm_slot,
     try_acquire_repeater_llm_slot,
 )
-from .session_store import build_llm_chat_messages, format_legacy_transcript, is_llm_session_store_available
+from .session_store import build_llm_chat_messages, is_llm_session_store_available
 from .submit_gate import assess_llm_submit_gate
 from .task_routing import resolve_submit_task_name, resolve_task_route_chain, serialize_task_route
 
@@ -78,157 +77,124 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
 
     use_pg_session = is_llm_session_store_available() and request.bot_id is not None and request.user_id is not None
     task_name = resolve_submit_task_name(request.task, request.mode)
-    kernel_runtime = is_llm_bot_kernel_runtime(c)
-
-    base = llm_server_base_url(c)
-    endpoint = chat_endpoint_path(c)
-    url = f"{base}{endpoint}/{request.request_id}"
 
     legacy_reject = assess_legacy_chat_submit(c)
     if legacy_reject:
         timer.finish(status=legacy_reject, request_id=request.request_id)
         return ChatSubmitResult(status=legacy_reject, ok=False)
 
-    if c.use_unified_chat_api or kernel_runtime:
-        gate = await assess_llm_submit_gate()
-        if not gate.allowed:
-            timer.finish(status=gate.status, request_id=request.request_id)
-            return ChatSubmitResult(status=gate.status, ok=False)
+    gate = await assess_llm_submit_gate()
+    if not gate.allowed:
+        timer.finish(status=gate.status, request_id=request.request_id)
+        return ChatSubmitResult(status=gate.status, ok=False)
 
-        route_chain = await resolve_task_route_chain(task_name, explicit_model=request.model)
-        task_route = route_chain[0]
-        metadata = {
-            "bot_id": request.bot_id,
-            "group_id": request.group_id,
-            "user_id": request.user_id,
-            "request_id": request.request_id,
-            "pg_session": use_pg_session,
-            "mode": str(request.mode or "normal"),
-            "task": task_name,
-            "task_route": serialize_task_route(task_route),
-            "task_route_chain": [serialize_task_route(item) for item in route_chain],
-        }
-        if task_route.resolved_model:
-            metadata["resolved_model"] = task_route.resolved_model
-        if task_route.provider_hint:
-            metadata["provider_hint"] = task_route.provider_hint
-        from pallas.product.llm.inference_params import chat_token_count_with_tools
-        from pallas.product.llm.kernel import plan_direct_chat_stages
-        from pallas.product.llm.tools.registry import tool_metadata_for_chat
+    route_chain = await resolve_task_route_chain(task_name, explicit_model=request.model)
+    task_route = route_chain[0]
+    metadata = {
+        "bot_id": request.bot_id,
+        "group_id": request.group_id,
+        "user_id": request.user_id,
+        "request_id": request.request_id,
+        "pg_session": use_pg_session,
+        "mode": str(request.mode or "normal"),
+        "task": task_name,
+        "task_route": serialize_task_route(task_route),
+        "task_route_chain": [serialize_task_route(item) for item in route_chain],
+    }
+    if task_route.resolved_model:
+        metadata["resolved_model"] = task_route.resolved_model
+    if task_route.provider_hint:
+        metadata["provider_hint"] = task_route.provider_hint
+    from pallas.product.llm.inference_params import chat_token_count_with_tools
+    from pallas.product.llm.kernel import plan_direct_chat_stages
+    from pallas.product.llm.tools.registry import tool_metadata_for_chat
 
-        user_text = str(request.user_text or "").strip()
-        if not user_text and messages:
-            user_text = str(messages[-1].content or "")
-        tool_meta = tool_metadata_for_chat(task=task_name, user_text=user_text)
-        metadata.update(tool_meta)
-        if task_name == "llm_chat":
-            metadata["agent_stage_plan"] = plan_direct_chat_stages(tools_enabled=bool(tool_meta.get("tools_enabled")))
-            metadata["tool_schema_count"] = len(tool_meta.get("tool_schemas") or [])
-        metadata["token_count"] = chat_token_count_with_tools(
-            request.token_count,
-            tools_enabled=bool(tool_meta.get("tools_enabled")),
-        )
-        if request.temperature is not None:
-            metadata["temperature"] = float(request.temperature)
-        from pallas.product.llm.vision_content import extract_vision_message_payload, user_message_has_vision_content
+    user_text = str(request.user_text or "").strip()
+    if not user_text and messages:
+        user_text = str(messages[-1].content or "")
+    tool_meta = tool_metadata_for_chat(task=task_name, user_text=user_text)
+    metadata.update(tool_meta)
+    if task_name == "llm_chat":
+        metadata["agent_stage_plan"] = plan_direct_chat_stages(tools_enabled=bool(tool_meta.get("tools_enabled")))
+        metadata["tool_schema_count"] = len(tool_meta.get("tool_schemas") or [])
+    metadata["token_count"] = chat_token_count_with_tools(
+        request.token_count,
+        tools_enabled=bool(tool_meta.get("tools_enabled")),
+    )
+    if request.temperature is not None:
+        metadata["temperature"] = float(request.temperature)
+    from pallas.product.llm.vision_content import extract_vision_message_payload, user_message_has_vision_content
 
-        vision_payload = extract_vision_message_payload(user_text)
-        metadata["has_image"] = user_message_has_vision_content(user_text)
-        if vision_payload.image_urls:
-            metadata["vision_image_urls"] = list(vision_payload.image_urls)
-        if vision_payload.plain_text:
-            metadata["vision_plain_text"] = vision_payload.plain_text
-        summary_meta = runtime_state_summary_metadata(c)
-        metadata["runtime_state_summary_enabled"] = can_write_runtime_state_summary(c)
-        if summary_meta:
-            metadata["session_summary"] = summary_meta
-        if request.knowledge_retrieval_trace is not None:
-            from pallas.product.llm.knowledge.registry import knowledge_metadata_payload
+    vision_payload = extract_vision_message_payload(user_text)
+    metadata["has_image"] = user_message_has_vision_content(user_text)
+    if vision_payload.image_urls:
+        metadata["vision_image_urls"] = list(vision_payload.image_urls)
+    if vision_payload.plain_text:
+        metadata["vision_plain_text"] = vision_payload.plain_text
+    from pallas.product.llm.providers_store import (
+        find_provider,
+        provider_capabilities,
+        provider_model_effort,
+        resolve_endpoint_for_task,
+    )
 
-            metadata.update(knowledge_metadata_payload(request.knowledge_retrieval_trace, cfg=c))
-        if request.hybrid_retrieval_trace is not None:
-            metadata["hybrid_retrieval_trace"] = request.hybrid_retrieval_trace
-        rewrite_meta = request.llm_rewrite_metadata
-        if isinstance(rewrite_meta, dict):
-            metadata.update({key: value for key, value in rewrite_meta.items() if value is not None and value != ""})
-        from pallas.product.llm.runtime_debug import append_request_snapshot
+    endpoint = resolve_endpoint_for_task(task_name)
+    if endpoint is not None:
+        row = find_provider(endpoint.provider_id)
+        caps = provider_capabilities(row) if row else list(endpoint.capabilities)
+        if caps:
+            metadata["provider_capabilities"] = caps
+        effort = provider_model_effort(row) if row else endpoint.model_effort
+        if effort:
+            metadata["model_effort"] = effort
+        metadata["provider_hint"] = metadata.get("provider_hint") or endpoint.provider_id
+    summary_meta = runtime_state_summary_metadata(c)
+    metadata["runtime_state_summary_enabled"] = can_write_runtime_state_summary(c)
+    if summary_meta:
+        metadata["session_summary"] = summary_meta
+    if request.knowledge_retrieval_trace is not None:
+        from pallas.product.llm.knowledge.registry import knowledge_metadata_payload
 
-        message_dicts = [{"role": item.role, "content": item.content} for item in messages]
-        snapshot_id = append_request_snapshot(
-            request_id=request.request_id,
-            task=task_name,
+        metadata.update(knowledge_metadata_payload(request.knowledge_retrieval_trace, cfg=c))
+    if request.hybrid_retrieval_trace is not None:
+        metadata["hybrid_retrieval_trace"] = request.hybrid_retrieval_trace
+    rewrite_meta = request.llm_rewrite_metadata
+    if isinstance(rewrite_meta, dict):
+        metadata.update({key: value for key, value in rewrite_meta.items() if value is not None and value != ""})
+    from pallas.product.llm.runtime_debug import append_request_snapshot
+
+    message_dicts = [{"role": item.role, "content": item.content} for item in messages]
+    snapshot_id = append_request_snapshot(
+        request_id=request.request_id,
+        task=task_name,
+        system_prompt=request.system_prompt,
+        messages=message_dicts,
+        metadata=metadata,
+    )
+    metadata.setdefault("runtime_debug", {})
+    metadata["runtime_debug"]["request_snapshot_id"] = snapshot_id
+    metadata["runtime_debug"]["replay_enabled"] = True
+    metadata["runtime_debug"]["trace_level"] = "standard"
+    from pallas.product.llm.kernel_runner import (
+        submit_kernel_llm_chat_task,
+        submit_kernel_repeater_chat_task,
+    )
+
+    if is_repeater_llm_task(task_name):
+        return await submit_kernel_repeater_chat_task(
+            request,
             system_prompt=request.system_prompt,
             messages=message_dicts,
             metadata=metadata,
-        )
-        metadata.setdefault("runtime_debug", {})
-        metadata["runtime_debug"]["request_snapshot_id"] = snapshot_id
-        metadata["runtime_debug"]["replay_enabled"] = True
-        metadata["runtime_debug"]["trace_level"] = "standard"
-        if kernel_runtime:
-            from pallas.product.llm.kernel_runner import (
-                submit_kernel_llm_chat_task,
-                submit_kernel_repeater_chat_task,
-            )
-
-            if is_repeater_llm_task(task_name):
-                return await submit_kernel_repeater_chat_task(
-                    request,
-                    system_prompt=request.system_prompt,
-                    messages=message_dicts,
-                    metadata=metadata,
-                    timer=timer,
-                    message_count=len(messages),
-                    cfg=c,
-                )
-            return await submit_kernel_llm_chat_task(
-                request,
-                system_prompt=request.system_prompt,
-                messages=message_dicts,
-                metadata=metadata,
-                timer=timer,
-                message_count=len(messages),
-                cfg=c,
-            )
-        chat_payload = {
-            "session_id": request.session_id if not use_pg_session else request.request_id,
-            "model": request.model,
-            "system": request.system_prompt,
-            "messages": message_dicts,
-            "metadata": metadata,
-        }
-        payload = build_llm_chat_capability_body(
-            request_id=request.request_id,
-            payload=chat_payload,
-            bot_id=request.bot_id,
-            group_id=request.group_id,
-            user_id=request.user_id,
-            session_id=chat_payload["session_id"],
-            timeout_sec=c.chat_timeout_sec,
-        )
-    else:
-        legacy_text = format_legacy_transcript(messages) if use_pg_session else messages[-1].content
-        payload = {
-            "session": request.request_id if use_pg_session else request.session_id,
-            "text": legacy_text,
-            "system_prompt": request.system_prompt,
-            "model": request.model,
-        }
-
-    if is_repeater_llm_task(task_name):
-        return await submit_repeater_chat_task(
-            request,
-            url=url,
-            payload=payload,
             timer=timer,
             message_count=len(messages),
             cfg=c,
         )
-
-    return await submit_llm_chat_task(
+    return await submit_kernel_llm_chat_task(
         request,
-        url=url,
-        payload=payload,
+        system_prompt=request.system_prompt,
+        messages=message_dicts,
+        metadata=metadata,
         timer=timer,
         message_count=len(messages),
         cfg=c,

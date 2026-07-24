@@ -68,7 +68,7 @@ uv run pallas --help
 | `pallas-plugin-duel` | 决斗与八角笼玩法 |
 | `pallas-plugin-who-is-spy` | 谁是卧底 |
 | `pallas-plugin-maa` | MAA 远控 |
-| `pallas-plugin-ai-media` | 唱歌、酒后聊天等媒体类能力 |
+| `pallas-plugin-ai-media` | 牛牛唱歌（翻唱 / 点歌） |
 | `pallas-plugin-draw` | 绘图相关能力 |
 | `pallas-plugin-dream` | 做梦相关能力 |
 | `pallas-plugin-bot-status` | 在吗、报数等状态类能力 |

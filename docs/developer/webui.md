@@ -11,13 +11,13 @@
 cd Pallas-Bot
 uv run pallas
 
-# 终端 2：WebUI 开发服务器
+# 终端 2：WebUI 开发服务器（React，仓库根）
 cd Pallas-Bot-WebUI
 npm install
 npm run dev    # 默认 http://127.0.0.1:5173/pallas/
 ```
 
-`npm run dev` 将 `/pallas/api`、`/pallas/plugin-assets`、`/pallas/store-assets` 等代理到 `http://127.0.0.1:8088`。后端端口非 8088 时：
+`npm run dev` 将 `/pallas/api` 等代理到 Bot；端口非 8088 时：
 
 ```bash
 VITE_PROXY_TARGET=http://127.0.0.1:<port> npm run dev
@@ -25,20 +25,23 @@ VITE_PROXY_TARGET=http://127.0.0.1:<port> npm run dev
 
 ## 构建与挂载
 
+默认生产栈为 **React**（`pallas_webui_frontend=react`），静态目录 **`data/pb_webui/public-react/`**。历史 Vue 见 WebUI 分支 `archive/vue`。
+
 ```bash
 cd Pallas-Bot-WebUI
-npm run build   # vue-tsc + vite build
+npm install
+npm run build   # → dist/；写入 console-version.json
 ```
 
-主仓 CI / Release 会从 **Pallas-Bot-WebUI** checkout 源码，经 `tools/build_webui_dist.sh` 构建并打包 **`dist.zip`**（zip 根为 `public/`），随 **Pallas-Bot Release** 附件发布。Bot 启动时解压到 **`data/pb_webui`**，静态目录为 **`data/pb_webui/public`**（与 `webui_public_path()` 一致）。
+主仓 CI / Release 从 **Pallas-Bot-WebUI** 仓库根构建，经 `tools/build_webui_dist.sh` 打包 **`dist.zip`**（zip 根为 `public-react/`），随 **Pallas-Bot Release** 附件发布。Bot 启动时解压到 **`data/pb_webui`**。
 
-本地手动部署：将构建产物放入 `data/pb_webui/public/`，或解压 Release 的 `dist.zip` 到 `data/pb_webui/`。
+本地手动部署：将构建产物放入 `data/pb_webui/public-react/`，或解压 Release 的 `dist.zip` 到 `data/pb_webui/`。
 
 ```bash
-# 主仓内一键构建 zip（需已 clone WebUI 到 ../Pallas-Bot-WebUI 等路径）
 ./tools/build_webui_dist.sh /path/to/Pallas-Bot-WebUI dist.zip
 unzip -d data/pb_webui dist.zip
 ```
+
 
 自动更新默认从 **`PallasBot/Pallas-Bot`** Release 下载 `dist.zip`（配置项 `pallas_webui_dist_zip_repo`）。
 

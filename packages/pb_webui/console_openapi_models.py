@@ -32,26 +32,6 @@ class ConsoleLoginChangeData(BaseModel):
     message: str
 
 
-class LlmWizardCheckRow(BaseModel):
-    id: str
-    label: str
-    ok: bool
-    detail: str = ""
-
-
-class LlmWizardStatusData(BaseModel):
-    ai_reachable: bool
-    health_url: str = ""
-    model: str = ""
-    provider_mode: str = ""
-    llm_chat_enabled: bool
-    llm_tools_enabled: bool = False
-    providers_configured: int = 0
-    providers_reachable: int = 0
-    checks: list[LlmWizardCheckRow] = Field(default_factory=list)
-    next_step: str = ""
-
-
 class LlmHealthProviderRow(BaseModel):
     id: str
     kind: str = ""
@@ -105,6 +85,13 @@ class LlmMediaTasksHealthData(BaseModel):
     capabilities: list[LlmMediaTaskCapabilityRow] = Field(default_factory=list)
 
 
+class AiServiceHealthProbeData(BaseModel):
+    ok: bool
+    url: str = ""
+    status_code: int | None = None
+    error: str = ""
+
+
 class LlmRuntimeOverviewHealthData(BaseModel):
     ok: bool
     url: str = ""
@@ -117,6 +104,7 @@ class LlmRuntimeOverviewHealthData(BaseModel):
     draw_runtime_mode: str | None = None
     tts_health: LlmTtsHealthData | None = None
     media_tasks: LlmMediaTasksHealthData | None = None
+    ai_service: AiServiceHealthProbeData | None = None
     submit_gate: dict[str, Any] | None = None
 
 

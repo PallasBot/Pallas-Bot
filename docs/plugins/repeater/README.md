@@ -72,7 +72,7 @@
 - `不可以` 系列命令会直接影响后续学习和回复范围。
 - 若开启 `LLM_REPEATER_MODE`，LLM 可以作为接话补位或轻润色层参与，但默认仍是语料底盘优先。
 - 接话决策与观测已收敛到共享 conversation kernel（`pallas/product/llm/kernel/`），与 `llm_chat` 共用 scene/action/trace 契约。
-- 这和 `@牛牛` 随时闲聊不同：`repeater` 负责平时群内自然接话，`llm_chat` 负责明确叫牛牛来聊。
+- 这和 `@牛牛` 智能对话不同：`repeater` 负责平时群内自然接话，`llm_chat` 负责明确叫牛牛来聊。
 
 ## 相关链接
 

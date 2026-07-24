@@ -4,7 +4,7 @@
 
 # pallas-plugin-ai-media
 
-Pallas-Bot 4.0 官方扩展：**唱歌**（`sing`）与 **酒后聊天**（`chat`）。
+Pallas-Bot 4.0 官方扩展：**牛牛唱歌**（`sing`）。
 
 ## 安装
 
@@ -35,31 +35,21 @@ AI 翻唱、续唱、点歌与查歌名；依赖 AI 仓与本体 `callback` 回�
 
 配置：[`src/pallas_plugin_sing/config.py`](src/pallas_plugin_sing/config.py)
 
-### 酒后聊天（chat）
-
-牛牛**醉酒**时可用 ChatRWKV 对话（与 core 内置 `llm_chat` 随时 @ 闲聊独立）。
-
-| 触发 | 场景 | 说明 |
-| --- | --- | --- |
-| @牛牛 / 牛牛 + 文本 | 群内 | 醉酒时 AI 回复 |
-
-配置：[`src/pallas_plugin_chat/config.py`](src/pallas_plugin_chat/config.py)
+> 酒后对话已迁入本体 `llm_chat`（可选 `CHAT_TTS_ENABLE` 走 AI 仓 TTS）。
 
 ### 排障
 
 | 现象 | 处理 |
 | --- | --- |
 | 唱歌无语音 | 查 AI 服务、`/callback` 可达；**牛牛连通** 测唱歌网关 |
-| 聊天无回复 | 确认已喝酒、`chat_enable=true`、AI 可达 |
 
 ## 文档
 
 | 说明 | 链接 |
 | --- | --- |
 | 唱歌 | [文档站 · sing](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/sing) |
-| 酒后聊天 | [文档站 · chat](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/chat) |
+| 智能对话 / 酒后 | [文档站 · llm_chat](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/llm_chat) |
 
 ## 源码
 
 - [`src/pallas_plugin_sing/`](src/pallas_plugin_sing/)
-- [`src/pallas_plugin_chat/`](src/pallas_plugin_chat/)

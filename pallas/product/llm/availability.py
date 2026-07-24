@@ -12,7 +12,7 @@ def is_llm_chat_service_enabled(cfg: LlmConfig | None = None) -> bool:
 
 
 def is_legacy_rwkv_drunk_chat_enabled() -> bool:
-    """遗留酒后 RWKV 开关（未配置 LLM_CHAT_ENABLED 时的 CHAT_ENABLE）。"""
+    """遗留酒后 RWKV 开关（CHAT_ENABLE / chat_enable，与 LLM 总闸独立）。"""
     return resolve_legacy_rwkv_drunk_chat_enabled()
 
 

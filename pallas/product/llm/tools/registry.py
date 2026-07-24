@@ -281,7 +281,7 @@ _NO_TOOL_TASKS = frozenset({"repeater_fallback", "repeater_polish", "repeater_po
 
 
 def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> dict[str, Any]:
-    """写入 AI 仓 metadata：tool_catalog + 兼容字段 tools_enabled / tool_schemas。"""
+    """写入 Bot 工具 metadata：tool_catalog + 兼容字段 tools_enabled / tool_schemas。"""
     catalog = tool_catalog_for_chat(task=task, user_text=user_text)
     if catalog is None:
         return {}

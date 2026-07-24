@@ -180,6 +180,89 @@ def llm_health_summary(body: object) -> dict[str, Any] | None:
     return summary or None
 
 
+def llm_health_from_provider_probe(result: dict[str, Any] | None) -> dict[str, Any]:
+    """由内核 Provider 探测结果构造 llm_health（聊天不再读 AI /health body）。"""
+    payload = result if isinstance(result, dict) else {}
+    ok = bool(payload.get("ok"))
+    configured = payload.get("configured")
+    if configured is False:
+        return {
+            "health_state": "unhealthy",
+            "degraded_state": "degraded",
+            "circuit_state": "open",
+            "recent_failure_class": "runtime_unavailable",
+            "provider_status": [],
+        }
+    health_state = "healthy" if ok else "unhealthy"
+    circuit_state = "closed" if ok else "open"
+    degraded_state = "normal" if ok else "degraded"
+    summary: dict[str, Any] = {
+        "health_state": health_state,
+        "degraded_state": degraded_state,
+        "circuit_state": circuit_state,
+    }
+    if not ok:
+        err = str(payload.get("error") or "").strip().lower()
+        if "timeout" in err or "timed out" in err:
+            summary["recent_failure_class"] = "timeout"
+        elif "connect" in err:
+            summary["recent_failure_class"] = "connection_failed"
+        elif isinstance(payload.get("status_code"), int):
+            summary["recent_failure_class"] = "upstream_http_error"
+        else:
+            summary["recent_failure_class"] = "runtime_unavailable"
+
+    provider_row: dict[str, Any] | None = None
+    try:
+        from pallas.product.llm.providers_store import resolve_endpoint_for_task
+
+        endpoint = resolve_endpoint_for_task("llm_chat")
+    except Exception:  # noqa: BLE001
+        endpoint = None
+    if endpoint is not None:
+        provider_row = {
+            "id": endpoint.provider_id,
+            "kind": endpoint.kind or "",
+            "enabled": True,
+            "configured": True,
+            "reachable": ok,
+            "health_state": health_state,
+            "circuit_state": circuit_state,
+        }
+    if provider_row is None and ok:
+        provider_row = {
+            "id": "env",
+            "kind": "remote",
+            "enabled": True,
+            "configured": True,
+            "reachable": True,
+            "health_state": health_state,
+            "circuit_state": circuit_state,
+        }
+    if provider_row is not None:
+        summary["provider_status"] = [provider_row]
+    return summary
+
+
+def llm_runtime_detail_from_provider_probe(result: dict[str, Any] | None) -> str | None:
+    payload = result if isinstance(result, dict) else {}
+    if payload.get("ok"):
+        return "内核 Provider 可达"
+    if payload.get("configured") is False:
+        return "尚未配置 Provider"
+    err = str(payload.get("error") or "").strip()
+    if not err:
+        return "Provider 不可达"
+    lowered = err.lower()
+    if "timeout" in lowered or "timed out" in lowered:
+        return "Provider 探测超时"
+    if "connect" in lowered:
+        return "Provider 连接失败"
+    if isinstance(payload.get("status_code"), int):
+        return f"Provider HTTP {payload['status_code']}"
+    return err[:120]
+
+
 def tts_health_summary(body: object) -> dict[str, Any] | None:
     tts = health_section(body, "tts")
     if not tts:

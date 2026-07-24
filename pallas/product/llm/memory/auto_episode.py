@@ -60,6 +60,16 @@ async def maybe_auto_save_episode(
         return False
     if ok:
         _mark_written(int(bot_id), int(group_id))
+        try:
+            from pallas.product.llm.memory.graph.extract import maybe_extract_after_episode_write
+
+            await maybe_extract_after_episode_write(
+                bot_id=int(bot_id),
+                group_id=int(group_id),
+                text=raw,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("auto_episode extract hook failed bot={} group={} err={}", bot_id, group_id, exc)
     return bool(ok)
 
 

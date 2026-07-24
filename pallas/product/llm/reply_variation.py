@@ -89,7 +89,7 @@ def normalize_generic_prefix(text: str) -> str:
             return prefix
     prefix_chars: list[str] = []
     for char in plain:
-        if char in "，,。！？!?~～…：:；;、()（）[]【】<>《》\"'“”‘’ ":
+        if char in "，,。！？!?~～…：:；;、()[]【】<>《》\"'“”‘’ ":
             break
         prefix_chars.append(char)
         if len(prefix_chars) >= _GENERIC_PREFIX_MAX_LEN:

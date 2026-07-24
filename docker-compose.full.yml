@@ -1,30 +1,30 @@
 # 4.0 全栈：Bot + PostgreSQL + Redis + Ollama + AI Runtime
 # 新装默认 PostgreSQL；从 3.x 沿用 MongoDB 请用根目录 docker-compose.yml + --profile mongo（见 DockerDeployment.md）
-#
+
 # 准备:
 #   mkdir -p pallas-bot/config pallas-bot/data
 #   cp config/pallas.example.toml pallas-bot/config/pallas.toml   # 示例已默认 postgresql
 #   cp config/compose.env.example pallas-bot/config/compose.env
 #   # 编辑 pallas.toml：superusers、[bootstrap.postgres] 与 compose.env 的 PG_* 一致
-#
+
 # 启动:
 #   docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose.env up -d
-#
+
 # GPU（需 NVIDIA container toolkit）:
 #   docker compose -f docker-compose.full.yml -f docker-compose.full.gpu.yml \
 #     --env-file ./pallas-bot/config/compose.env up -d
-#
+
 # 验证:
 #   curl -s http://127.0.0.1:8088/pallas/api/health
 #   curl -s http://127.0.0.1:9099/health
-#
+
 # 端口: BOT_PORT=宿主机映射；BOT_LISTEN_PORT=容器内监听（默认皆 8088）。
 # AI 回调走 BOT_LISTEN_PORT，只改宿主机端口时勿动 BOT_LISTEN_PORT。
-#
+
 # 模型：默认不预拉 Ollama 权重；需要预拉时加 --profile pull-models。
 # 首次请在 WebUI「AI 配置 → 接入」选择/拉取模型。
 # AI 默认镜像为 slim（LLM-only）；GPU 全功能用 PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest
-#
+
 # AI 日志：pallasbot-ai 写入 ./pallas-bot-ai/logs/；pallasbot 只读挂到 /ai-logs 供 WebUI SSE。
 
 name: pallas-full

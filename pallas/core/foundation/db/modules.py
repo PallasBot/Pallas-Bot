@@ -334,6 +334,135 @@ class LlmRelationshipNote(Document):
         ]
 
 
+class LlmMemoryEntity(Document):
+    entity_id: int = Field(...)
+    scope_key: str = Field(...)
+    bot_id: int = Field(...)
+    group_id: int = Field(default=0)
+    name: str = Field(...)
+    summary: str = Field(default="")
+    tags: list[str] = Field(default_factory=list)
+    kind: str = Field(default="concept")
+    user_id: int | None = Field(default=None)
+    source: str = Field(default="manual")
+    deleted_at: int | None = Field(default=None)
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    updated_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "llm_memory_entity"
+        collection = "llm_memory_entity"
+        indexes = [
+            IndexModel([("entity_id", pymongo.ASCENDING)], name="entity_id_unique", unique=True),
+            IndexModel(
+                [("scope_key", pymongo.ASCENDING), ("name", pymongo.ASCENDING)],
+                name="scope_name_unique",
+                unique=True,
+            ),
+            IndexModel(
+                [
+                    ("bot_id", pymongo.ASCENDING),
+                    ("group_id", pymongo.ASCENDING),
+                    ("updated_at", pymongo.ASCENDING),
+                ],
+                name="bot_group_time",
+            ),
+        ]
+
+
+class LlmMemoryEdge(Document):
+    edge_id: int = Field(...)
+    scope_key: str = Field(...)
+    bot_id: int = Field(...)
+    group_id: int = Field(default=0)
+    fact: str = Field(...)
+    source_entity_id: int = Field(...)
+    target_entity_id: int = Field(...)
+    relation_type: str = Field(default="related_to")
+    weight: float = Field(default=1.0)
+    mention_count: int = Field(default=1)
+    episode_ids: list[str] = Field(default_factory=list)
+    valid_at: int = Field(default_factory=lambda: int(time.time()))
+    invalid_at: int | None = Field(default=None)
+    source: str = Field(default="manual")
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    updated_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "llm_memory_edge"
+        collection = "llm_memory_edge"
+        indexes = [
+            IndexModel([("edge_id", pymongo.ASCENDING)], name="edge_id_unique", unique=True),
+            IndexModel(
+                [("scope_key", pymongo.ASCENDING), ("source_entity_id", pymongo.ASCENDING)],
+                name="scope_source",
+            ),
+            IndexModel(
+                [("scope_key", pymongo.ASCENDING), ("target_entity_id", pymongo.ASCENDING)],
+                name="scope_target",
+            ),
+            IndexModel(
+                [("bot_id", pymongo.ASCENDING), ("group_id", pymongo.ASCENDING)],
+                name="bot_group",
+            ),
+        ]
+
+
+class LlmMemoryCategory(Document):
+    category_id: int = Field(...)
+    scope_key: str = Field(...)
+    bot_id: int = Field(...)
+    group_id: int = Field(default=0)
+    name: str = Field(...)
+    summary: str = Field(default="")
+    tags: list[str] = Field(default_factory=list)
+    layer: int = Field(default=1)
+    parent_id: int | None = Field(default=None)
+    member_entity_ids: list[str] = Field(default_factory=list)
+    source: str = Field(default="manual")
+    deleted_at: int | None = Field(default=None)
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    updated_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "llm_memory_category"
+        collection = "llm_memory_category"
+        indexes = [
+            IndexModel([("category_id", pymongo.ASCENDING)], name="category_id_unique", unique=True),
+            IndexModel(
+                [
+                    ("scope_key", pymongo.ASCENDING),
+                    ("layer", pymongo.ASCENDING),
+                    ("name", pymongo.ASCENDING),
+                ],
+                name="scope_layer_name_unique",
+                unique=True,
+            ),
+            IndexModel(
+                [("bot_id", pymongo.ASCENDING), ("group_id", pymongo.ASCENDING)],
+                name="bot_group",
+            ),
+        ]
+
+
+class LlmMemoryHierStatus(Document):
+    scope_key: str = Field(...)
+    bot_id: int = Field(...)
+    group_id: int = Field(default=0)
+    max_layer: int = Field(default=0)
+    last_rebuild_at: int = Field(default=0)
+    entity_count_at_rebuild: int = Field(default=0)
+    group_summary: str = Field(default="")
+    updated_at: int = Field(default_factory=lambda: int(time.time()))
+
+    class Settings:
+        name = "llm_memory_hier_status"
+        collection = "llm_memory_hier_status"
+        indexes = [
+            IndexModel([("scope_key", pymongo.ASCENDING)], name="scope_key_unique", unique=True),
+        ]
+
+
 __all__ = [
     "SingProgress",
     "BotConfigModule",
@@ -352,4 +481,8 @@ __all__ = [
     "LlmChatMessage",
     "LlmMemoryEntry",
     "LlmRelationshipNote",
+    "LlmMemoryEntity",
+    "LlmMemoryEdge",
+    "LlmMemoryCategory",
+    "LlmMemoryHierStatus",
 ]

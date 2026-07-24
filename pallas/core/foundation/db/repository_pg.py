@@ -329,6 +329,99 @@ class LlmRelationshipNoteRow(Base):
     updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
 
+class LlmMemoryEntityRow(Base):
+    """记忆图谱实体（人/概念等）。"""
+
+    __tablename__ = "llm_memory_entity"
+    __table_args__ = (
+        Index("uq_llm_memory_entity_scope_name", "scope_key", "name", unique=True),
+        Index("ix_llm_memory_entity_bot_group_time", "bot_id", "group_id", "updated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    scope_key: Mapped[str] = mapped_column(Text, nullable=False)
+    bot_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    tags_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    kind: Mapped[str] = mapped_column(Text, nullable=False, default="concept")
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, default=None)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="manual")
+    deleted_at: Mapped[int | None] = mapped_column(BigInteger, nullable=True, default=None)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class LlmMemoryEdgeRow(Base):
+    """记忆图谱关系边。"""
+
+    __tablename__ = "llm_memory_edge"
+    __table_args__ = (
+        Index("ix_llm_memory_edge_scope_valid", "scope_key", "valid_at"),
+        Index("ix_llm_memory_edge_scope_source", "scope_key", "source_entity_id"),
+        Index("ix_llm_memory_edge_scope_target", "scope_key", "target_entity_id"),
+        Index("ix_llm_memory_edge_bot_group", "bot_id", "group_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    scope_key: Mapped[str] = mapped_column(Text, nullable=False)
+    bot_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    fact: Mapped[str] = mapped_column(Text, nullable=False)
+    source_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_entity_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    relation_type: Mapped[str] = mapped_column(Text, nullable=False, default="related_to")
+    weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    mention_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    episode_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    valid_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    invalid_at: Mapped[int | None] = mapped_column(BigInteger, nullable=True, default=None)
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="manual")
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class LlmMemoryCategoryRow(Base):
+    """记忆图谱分类（分层语义树节点）。"""
+
+    __tablename__ = "llm_memory_category"
+    __table_args__ = (
+        Index("uq_llm_memory_category_scope_layer_name", "scope_key", "layer", "name", unique=True),
+        Index("ix_llm_memory_category_bot_group", "bot_id", "group_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    scope_key: Mapped[str] = mapped_column(Text, nullable=False)
+    bot_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    tags_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    layer: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    parent_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, default=None)
+    member_entity_ids_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="manual")
+    deleted_at: Mapped[int | None] = mapped_column(BigInteger, nullable=True, default=None)
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
+
+
+class LlmMemoryHierStatusRow(Base):
+    """分层语义图重建状态（每 scope 一行）。"""
+
+    __tablename__ = "llm_memory_hier_status"
+
+    scope_key: Mapped[str] = mapped_column(Text, primary_key=True)
+    bot_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    max_layer: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_rebuild_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    entity_count_at_rebuild: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    group_summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
 # ---------------------------------------------------------------------------
 # 引擎 / 会话
 # ---------------------------------------------------------------------------
@@ -474,6 +567,15 @@ def _ensure_pg_llm_memory_embedding_columns(connection) -> None:
         connection.execute(text("ALTER TABLE llm_memory_entry ADD COLUMN embedding_model TEXT"))
 
 
+def _ensure_pg_llm_memory_graph_columns(connection) -> None:
+    """旧库记忆图谱表补 soft-delete 列。"""
+    insp = inspect(connection)
+    if insp.has_table("llm_memory_entity"):
+        names = {c["name"] for c in insp.get_columns("llm_memory_entity")}
+        if "deleted_at" not in names:
+            connection.execute(text("ALTER TABLE llm_memory_entity ADD COLUMN deleted_at BIGINT"))
+
+
 def _ensure_pg_message_group_time_index(connection) -> None:
     """message 表补 group_id+time 索引。"""
     insp = inspect(connection)
@@ -615,6 +717,7 @@ async def init_pg(engine: AsyncEngine) -> None:
         await conn.run_sync(_ensure_pg_bot_config_plugin_storage)
         await conn.run_sync(_ensure_pg_user_config_maa_devices)
         await conn.run_sync(_ensure_pg_llm_memory_embedding_columns)
+        await conn.run_sync(_ensure_pg_llm_memory_graph_columns)
         await conn.run_sync(_ensure_pg_message_group_time_index)
         await conn.run_sync(_ensure_pg_message_group_user_time_index)
         await conn.run_sync(_ensure_pg_context_answer_reply_index)

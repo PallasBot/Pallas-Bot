@@ -65,7 +65,7 @@ uv run pallas ext install pallas-plugin-draw
 | `pallas-plugin-maa` | MAA 远控 |
 | `pallas-plugin-dream` | 做梦 |
 | `pallas-plugin-draw` | 画画 |
-| `pallas-plugin-ai-media` | 唱歌、酒后聊天 |
+| `pallas-plugin-ai-media` | 牛牛唱歌 |
 | `pallas-plugin-protocol` | 协议端、上号 |
 | `pallas-plugin-bot-status` | 在吗、报数 |
 
@@ -77,7 +77,7 @@ uv run pallas ext install pallas-plugin-draw
 | `plugins-protocol` | NapCat 协议端、重登 |
 | `plugins-game` | 决斗 + 谁是卧底 |
 | `plugins-maa` | MAA |
-| `plugins-ai-media` | 唱歌 + 酒后 chat |
+| `plugins-ai-media` | 唱歌 |
 | `plugins-draw` | 画画 |
 | `deploy-all` | 全官方插件 |
 

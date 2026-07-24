@@ -1,4 +1,4 @@
-"""模型管理：多数仍代理 AI Runtime；Provider 模型列表由 Bot 直连上游。"""
+"""模型管理：Ollama 运行态与本地分档由 Bot 直连；Provider CRUD 走 providers_store。"""
 
 from __future__ import annotations
 
@@ -6,10 +6,7 @@ from typing import Any
 
 from nonebot import logger
 
-from pallas.core.shared.utils import HTTPXClient
-
-from .config import LlmConfig, get_llm_config, llm_server_base_url
-from .startup_probe import probe_ai_service_health
+from .config import LlmConfig, get_llm_config
 from .task_metrics import cluster_llm_task_metrics_snapshot, llm_task_metrics_snapshot, today_key
 
 
@@ -33,8 +30,73 @@ def _ai_snapshot_collecting(snapshot: dict[str, Any] | None) -> bool:
         return True
     tokens = snapshot.get("tokens")
     if isinstance(tokens, dict):
-        return any(int(tokens.get(key) or 0) > 0 for key in ("prompt_tokens", "completion_tokens", "total_tokens"))
+        if any(
+            int(tokens.get(key) or 0) > 0
+            for key in (
+                "prompt_tokens",
+                "completion_tokens",
+                "total_tokens",
+                "cache_read_tokens",
+                "cache_write_tokens",
+            )
+        ):
+            return True
+    provider_stats = snapshot.get("provider_stats")
+    if isinstance(provider_stats, dict) and bool(provider_stats):
+        return True
+    model_stats = snapshot.get("model_stats")
+    if isinstance(model_stats, dict) and bool(model_stats):
+        return True
+    images = snapshot.get("images")
+    if isinstance(images, dict):
+        return (
+            any(int(images.get(key) or 0) > 0 for key in ("ok_count", "fail_count", "image_count"))
+            or bool(images.get("by_model"))
+            or bool(images.get("by_provider"))
+        )
+    rag = snapshot.get("rag")
+    if isinstance(rag, dict):
+        return int(rag.get("hit_count") or 0) > 0 or int(rag.get("miss_count") or 0) > 0
     return False
+
+
+def _normalize_images_slice(raw: Any, *, day_key: str = "", source: str = "draw_plugin") -> dict[str, Any]:
+    images_raw = raw if isinstance(raw, dict) else {}
+    return {
+        "source": str(images_raw.get("source") or source),
+        "day_key": str(images_raw.get("day_key") or day_key or ""),
+        "updated_at": images_raw.get("updated_at"),
+        "ok_count": int(images_raw.get("ok_count") or 0),
+        "fail_count": int(images_raw.get("fail_count") or 0),
+        "image_count": int(images_raw.get("image_count") or 0),
+        "cost_total": float(images_raw.get("cost_total") or 0),
+        "cost_currency": str(images_raw.get("cost_currency") or ""),
+        "by_gateway": images_raw.get("by_gateway") if isinstance(images_raw.get("by_gateway"), dict) else {},
+        "by_provider": images_raw.get("by_provider") if isinstance(images_raw.get("by_provider"), dict) else {},
+        "by_model": images_raw.get("by_model") if isinstance(images_raw.get("by_model"), dict) else {},
+    }
+
+
+def _normalize_rag_slice(raw: Any, *, day_key: str = "", source: str = "bot") -> dict[str, Any]:
+    rag_raw = raw if isinstance(raw, dict) else {}
+    hit = int(rag_raw.get("hit_count") or 0)
+    miss = int(rag_raw.get("miss_count") or 0)
+    total = hit + miss
+    rate = float(rag_raw.get("hit_rate") or 0)
+    if total > 0 and rate <= 0:
+        rate = round(100.0 * hit / total, 1)
+    by_document = rag_raw.get("by_document") if isinstance(rag_raw.get("by_document"), dict) else {}
+    by_source = rag_raw.get("by_source") if isinstance(rag_raw.get("by_source"), dict) else {}
+    return {
+        "source": str(rag_raw.get("source") or source),
+        "day_key": str(rag_raw.get("day_key") or day_key or ""),
+        "updated_at": rag_raw.get("updated_at"),
+        "hit_count": hit,
+        "miss_count": miss,
+        "hit_rate": rate,
+        "by_document": {str(k): int(v or 0) for k, v in by_document.items() if str(k).strip()},
+        "by_source": {str(k): int(v or 0) for k, v in by_source.items() if str(k).strip()},
+    }
 
 
 def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[str, Any]:
@@ -42,6 +104,8 @@ def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[s
     by_task = raw.get("by_task") if isinstance(raw.get("by_task"), dict) else {}
     totals = raw.get("totals") if isinstance(raw.get("totals"), dict) else {}
     tokens_raw = raw.get("tokens") if isinstance(raw.get("tokens"), dict) else {}
+    images_raw = raw.get("images") if isinstance(raw.get("images"), dict) else {}
+    rag_raw = raw.get("rag") if isinstance(raw.get("rag"), dict) else {}
     task_ok = int(totals.get("task_ok") or 0)
     task_fail = int(totals.get("task_fail") or 0)
     if task_ok == 0 and task_fail == 0:
@@ -52,8 +116,9 @@ def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[s
             task_fail += int(row.get("task_fail") or 0)
     state_counts = raw.get("state_counts") if isinstance(raw.get("state_counts"), dict) else {}
     failure_counts = raw.get("failure_counts") if isinstance(raw.get("failure_counts"), dict) else {}
-    provider_stats = raw.get("provider_stats") if isinstance(raw.get("provider_stats"), dict) else {}
-    model_stats = raw.get("model_stats") if isinstance(raw.get("model_stats"), dict) else {}
+    provider_stats = _normalize_dimension_stats(raw.get("provider_stats"))
+    model_stats = _normalize_dimension_stats(raw.get("model_stats"))
+    day_key = str(raw.get("day_key") or "")
     return {
         **raw,
         "by_task": by_task,
@@ -64,35 +129,63 @@ def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[s
             "succeeded": int(state_counts.get("succeeded") or task_ok),
             "failed": int(state_counts.get("failed") or task_fail),
         },
-        "failure_counts": dict(failure_counts),
-        "provider_stats": dict(provider_stats),
-        "model_stats": dict(model_stats),
+        "failure_counts": {str(k): int(v or 0) for k, v in failure_counts.items()},
+        "provider_stats": provider_stats,
+        "model_stats": model_stats,
         "tokens": {
             "source": str(tokens_raw.get("source") or raw.get("source") or "ai"),
-            "day_key": str(tokens_raw.get("day_key") or raw.get("day_key") or ""),
+            "day_key": str(tokens_raw.get("day_key") or day_key or ""),
             "updated_at": tokens_raw.get("updated_at"),
             "prompt_tokens": int(tokens_raw.get("prompt_tokens") or 0),
             "completion_tokens": int(tokens_raw.get("completion_tokens") or 0),
-            "total_tokens": int(tokens_raw.get("total_tokens") or 0),
+            "cache_read_tokens": int(tokens_raw.get("cache_read_tokens") or 0),
+            "cache_write_tokens": int(tokens_raw.get("cache_write_tokens") or 0),
+            "total_tokens": int(tokens_raw.get("total_tokens") or 0)
+            or (int(tokens_raw.get("prompt_tokens") or 0) + int(tokens_raw.get("completion_tokens") or 0)),
             "by_task": tokens_raw.get("by_task") if isinstance(tokens_raw.get("by_task"), dict) else {},
             "by_provider": tokens_raw.get("by_provider") if isinstance(tokens_raw.get("by_provider"), dict) else {},
             "by_model": tokens_raw.get("by_model") if isinstance(tokens_raw.get("by_model"), dict) else {},
         },
+        "images": _normalize_images_slice(images_raw, day_key=day_key),
+        "rag": _normalize_rag_slice(rag_raw, day_key=day_key, source=str(raw.get("source") or "bot")),
     }
 
 
-def _normalized_classification_table(raw: Any) -> dict[str, dict[str, int]]:
+def _normalize_dimension_stats(raw: Any) -> dict[str, dict[str, Any]]:
+    """统一 provider/model 维度统计为控制台字段（requests/succeeded/failed/avg_latency_ms）。"""
     if not isinstance(raw, dict):
         return {}
-    normalized: dict[str, dict[str, int]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for key, row in raw.items():
         if not isinstance(row, dict):
             continue
-        normalized[str(key)] = {
-            "ok": int(row.get("ok") or 0),
-            "fail": int(row.get("fail") or 0),
+        name = str(key or "").strip()
+        if not name:
+            continue
+        succeeded = int(row.get("succeeded") or row.get("ok") or 0)
+        failed = int(row.get("failed") or row.get("fail") or 0)
+        requests = int(row.get("requests") or 0) or (succeeded + failed)
+        total_latency = int(row.get("total_latency_ms") or 0)
+        avg_raw = row.get("avg_latency_ms")
+        if avg_raw is None and requests > 0 and total_latency > 0:
+            avg: float | None = total_latency / requests
+        elif avg_raw is None:
+            avg = None
+        else:
+            try:
+                avg = float(avg_raw)
+            except (TypeError, ValueError):
+                avg = None
+        recent = str(row.get("recent_failure_class") or "").strip()
+        out[name] = {
+            "requests": requests,
+            "succeeded": succeeded,
+            "failed": failed,
+            "total_latency_ms": total_latency,
+            "avg_latency_ms": avg,
+            "recent_failure_class": recent or None,
         }
-    return normalized
+    return out
 
 
 def _normalize_historical_ai_snapshot(snapshot: dict[str, Any] | None) -> dict[str, Any]:
@@ -107,8 +200,8 @@ def _normalize_historical_ai_snapshot(snapshot: dict[str, Any] | None) -> dict[s
         "failure_counts": (
             dict(classification.get("failure_counts")) if isinstance(classification.get("failure_counts"), dict) else {}
         ),
-        "provider_stats": _normalized_classification_table(classification.get("provider_stats")),
-        "model_stats": _normalized_classification_table(classification.get("model_stats")),
+        "provider_stats": _normalize_dimension_stats(classification.get("provider_stats")),
+        "model_stats": _normalize_dimension_stats(classification.get("model_stats")),
     }
 
 
@@ -120,77 +213,103 @@ def _latest_historical_ai_snapshot(rows: list[dict[str, Any]]) -> dict[str, Any]
     return None
 
 
-def ai_llm_api_base(cfg: LlmConfig | None = None) -> str:
-    return f"{llm_server_base_url(cfg or get_llm_config()).rstrip('/')}/api/llm"
+def _bot_tokens_have_usage(tokens: dict[str, Any] | None) -> bool:
+    if not isinstance(tokens, dict):
+        return False
+    return bool(
+        int(tokens.get("total_tokens") or 0) > 0
+        or int(tokens.get("cache_read_tokens") or 0) > 0
+        or int(tokens.get("cache_write_tokens") or 0) > 0
+        or tokens.get("by_task")
+        or tokens.get("by_model")
+        or tokens.get("by_provider")
+    )
+
+
+def _ai_has_live_llm_metrics(snapshot: dict[str, Any] | None) -> bool:
+    """是否已有 live LLM 侧指标（不含 images；画画用量不应挡住历史 token 回退）。"""
+    if not isinstance(snapshot, dict) or not snapshot:
+        return False
+    tokens = snapshot.get("tokens")
+    if isinstance(tokens, dict) and _bot_tokens_have_usage(tokens):
+        return True
+    by_task = snapshot.get("by_task")
+    if isinstance(by_task, dict) and bool(by_task):
+        return True
+    state_counts = snapshot.get("state_counts") if isinstance(snapshot.get("state_counts"), dict) else {}
+    if any(int(state_counts.get(key) or 0) > 0 for key in ("queued", "running", "succeeded", "failed")):
+        return True
+    if isinstance(snapshot.get("provider_stats"), dict) and bool(snapshot.get("provider_stats")):
+        return True
+    if isinstance(snapshot.get("model_stats"), dict) and bool(snapshot.get("model_stats")):
+        return True
+    if isinstance(snapshot.get("failure_counts"), dict) and bool(snapshot.get("failure_counts")):
+        return True
+    return False
+
+
+def _resolve_local_provider_base(*, cfg: LlmConfig | None = None) -> str:
+    from pallas.product.llm.providers_store import find_provider, load_providers_document, resolve_provider_base_url
+
+    doc = load_providers_document()
+    for row in doc.get("providers") or []:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("kind") or "").strip().lower() != "local":
+            continue
+        if row.get("enabled", True) is False:
+            continue
+        url = resolve_provider_base_url(row)
+        if url:
+            return url
+    local = find_provider("local", doc=doc)
+    if local is not None:
+        url = resolve_provider_base_url(local)
+        if url:
+            return url
+    return _resolve_local_ollama_base_url("", cfg=cfg)
 
 
 async def fetch_model_admin_status(*, cfg: LlmConfig | None = None, timeout_sec: float = 15.0) -> dict[str, Any]:
+    from pallas.product.llm.local_routing_store import export_local_routing_for_api, load_local_routing_document
+    from pallas.product.llm.ollama_admin import get_runtime_model_name, get_runtime_num_gpu, ping_ollama
+    from pallas.product.llm.providers_store import export_providers_for_api
+
     c = cfg or get_llm_config()
-    health = await probe_ai_service_health(timeout_sec=min(timeout_sec, 8.0))
+    local_doc = load_local_routing_document()
+    exported = export_local_routing_for_api(doc=local_doc)
+    providers_export = export_providers_for_api()
+    base = _resolve_local_provider_base(cfg=c)
+    reachable = await ping_ollama(base, timeout_sec=min(timeout_sec, 5.0)) if base else False
+    model = get_runtime_model_name(fallback=str(local_doc.get("llm_model") or "").strip())
     status: dict[str, Any] = {
-        "model": "",
-        "ai_reachable": bool(health.get("ok")),
+        "model": model,
+        "ai_reachable": reachable,
+        "ollama_reachable": reachable,
         "llm_chat_enabled": c.llm_chat_enabled,
-        "health_url": health.get("url", ""),
-        "error": "" if health.get("ok") else str(health.get("error") or "AI 服务不可达"),
+        "health_url": f"{base.rstrip('/')}/api/tags" if base else "",
+        "error": "" if reachable else ("缺少本地 Ollama Base URL" if not base else "本地 Ollama 不可达"),
+        "local_multi_model_enabled": bool(local_doc.get("local_multi_model_enabled")),
+        "local_task_models": dict(exported.get("task_models") or {}),
+        "local_moe_models": dict(exported.get("moe_models") or {}),
+        "moe_tier_routing": bool(local_doc.get("local_multi_model_enabled")),
+        "provider_status": providers_export.get("providers") if isinstance(providers_export, dict) else [],
+        "task_routing": (providers_export.get("routing") or {}).get("tasks")
+        if isinstance(providers_export, dict)
+        else {},
     }
-    if not health.get("ok"):
-        return status
-    body = health.get("body")
-    if isinstance(body, dict):
-        llm_info = body.get("llm")
-        if isinstance(llm_info, dict):
-            status["provider_mode"] = str(llm_info.get("provider_mode") or "").strip()
-            provider_status = llm_info.get("provider_status")
-            if isinstance(provider_status, list):
-                status["provider_status"] = provider_status
-            task_routing = llm_info.get("task_routing")
-            if isinstance(task_routing, dict):
-                status["task_routing"] = task_routing
-            status["categorizer_enabled"] = bool(llm_info.get("categorizer_enabled"))
-            status["categorizer_model"] = str(llm_info.get("categorizer_model") or "").strip()
-            status["tools_selective"] = bool(llm_info.get("tools_selective"))
-            status["moe_tier_routing"] = bool(llm_info.get("moe_tier_routing"))
-            status["local_multi_model_enabled"] = bool(llm_info.get("local_multi_model_enabled"))
-            status["local_model_policy"] = str(llm_info.get("local_model_policy") or "").strip()
-            local_task_models = llm_info.get("local_task_models")
-            if isinstance(local_task_models, dict):
-                status["local_task_models"] = {str(k): str(v) for k, v in local_task_models.items() if str(v).strip()}
-            local_moe_models = llm_info.get("local_moe_models")
-            if isinstance(local_moe_models, dict):
-                status["local_moe_models"] = {str(k): str(v) for k, v in local_moe_models.items() if str(v).strip()}
-    try:
-        response = await HTTPXClient.get(f"{ai_llm_api_base(c)}/model", timeout=timeout_sec)
-    except Exception as exc:
-        status["ai_reachable"] = False
-        status["error"] = str(exc)
-        return status
-    if response is None or response.status_code != 200:
-        code = response.status_code if response is not None else None
-        status["ai_reachable"] = False
-        status["error"] = f"读取模型失败 HTTP {code}"
-        return status
-    try:
-        payload = response.json()
-    except Exception:
-        status["ai_reachable"] = False
-        status["error"] = "模型接口响应无效"
-        return status
-    model = str(payload.get("model") or "").strip()
-    status["model"] = model
-    num_gpu = payload.get("num_gpu")
-    if isinstance(num_gpu, int):
+    num_gpu = get_runtime_num_gpu()
+    if num_gpu is not None:
         status["num_gpu"] = num_gpu
-    elif isinstance(num_gpu, float) and num_gpu.is_integer():
-        status["num_gpu"] = int(num_gpu)
-    status["error"] = "" if model else "当前未配置模型"
+    if reachable and not model:
+        status["error"] = "当前未配置模型"
     return status
 
 
 async def get_runtime_model(*, cfg: LlmConfig | None = None, timeout_sec: float = 30.0) -> str:
     status = await fetch_model_admin_status(cfg=cfg, timeout_sec=timeout_sec)
-    if not status.get("ai_reachable"):
-        msg = str(status.get("error") or "AI 服务不可达")
+    if not status.get("ollama_reachable") and not status.get("ai_reachable"):
+        msg = str(status.get("error") or "本地 Ollama 不可达")
         raise RuntimeError(msg)
     model = str(status.get("model") or "").strip()
     if not model:
@@ -205,29 +324,35 @@ async def switch_runtime_model(
     cfg: LlmConfig | None = None,
     timeout_sec: float = 600.0,
 ) -> dict[str, Any]:
+    from pallas.product.llm.local_routing_store import load_local_routing_document, save_local_routing_document
+    from pallas.product.llm.ollama_admin import (
+        get_runtime_num_gpu,
+        pull_ollama_model,
+        set_runtime_model_name,
+    )
+    from pallas.product.llm.provider_client import LlmProviderError
+
     name = model.strip()
     if not name:
         raise ValueError("模型名不能为空")
     c = cfg or get_llm_config()
-    response = await HTTPXClient.put(
-        f"{ai_llm_api_base(c)}/model",
-        json={"model": name, "pull": pull},
-        timeout=timeout_sec,
-    )
-    if response is None:
-        raise RuntimeError("切换模型请求失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"切换模型失败 HTTP {response.status_code}: {detail}")
-    payload = response.json()
-    resolved = str(payload.get("model") or name).strip()
-    num_gpu = payload.get("num_gpu")
-    result: dict[str, Any] = {"model": resolved or name}
-    if isinstance(num_gpu, int):
+    base = _resolve_local_provider_base(cfg=c)
+    if not base:
+        raise RuntimeError("缺少本地 Ollama Base URL")
+    if pull:
+        try:
+            await pull_ollama_model(base, name, timeout_sec=timeout_sec)
+        except LlmProviderError as exc:
+            raise RuntimeError(f"拉取模型失败: {exc}") from exc
+    set_runtime_model_name(name)
+    doc = load_local_routing_document()
+    doc["llm_model"] = name
+    save_local_routing_document(doc)
+    result: dict[str, Any] = {"model": name}
+    num_gpu = get_runtime_num_gpu()
+    if num_gpu is not None:
         result["num_gpu"] = num_gpu
-    elif isinstance(num_gpu, float) and num_gpu.is_integer():
-        result["num_gpu"] = int(num_gpu)
-    logger.info("llm model switched via AI API: model={} pull={} num_gpu={}", resolved, pull, result.get("num_gpu"))
+    logger.info("llm model switched via Bot Ollama: model={} pull={} num_gpu={}", name, pull, result.get("num_gpu"))
     return result
 
 
@@ -237,86 +362,94 @@ async def set_runtime_num_gpu(
     cfg: LlmConfig | None = None,
     timeout_sec: float = 60.0,
 ) -> dict[str, Any]:
+    from pallas.product.llm.ollama_admin import get_runtime_model_name, set_runtime_num_gpu_value
+
+    del timeout_sec
     if num_gpu < 0:
         raise ValueError("GPU 层数不能为负数")
     c = cfg or get_llm_config()
-    response = await HTTPXClient.post(
-        f"{ai_llm_api_base(c)}/model/num-gpu",
-        json={"num_gpu": num_gpu},
-        timeout=timeout_sec,
-    )
-    if response is None:
-        raise RuntimeError("设置 GPU 层数请求失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"设置 GPU 层数失败 HTTP {response.status_code}: {detail}")
-    payload = response.json()
-    resolved = str(payload.get("model") or "").strip()
-    result: dict[str, Any] = {}
-    if resolved:
-        result["model"] = resolved
-    resolved_gpu = payload.get("num_gpu")
-    if isinstance(resolved_gpu, int):
-        result["num_gpu"] = resolved_gpu
-    elif isinstance(resolved_gpu, float) and resolved_gpu.is_integer():
-        result["num_gpu"] = int(resolved_gpu)
-    else:
-        result["num_gpu"] = num_gpu
-    logger.info("llm num_gpu set via AI API: num_gpu={} model={}", result.get("num_gpu"), result.get("model"))
+    set_runtime_num_gpu_value(num_gpu)
+    from pallas.product.llm.local_routing_store import load_local_routing_document
+
+    model = get_runtime_model_name(fallback=str(load_local_routing_document().get("llm_model") or "").strip())
+    result: dict[str, Any] = {"num_gpu": num_gpu}
+    if model:
+        result["model"] = model
+    logger.info("llm num_gpu set via Bot: num_gpu={} model={}", num_gpu, model)
+    _ = c
     return result
 
 
 async def reload_runtime_model(*, cfg: LlmConfig | None = None, timeout_sec: float = 60.0) -> dict[str, Any]:
+    from pallas.product.llm.local_routing_store import load_local_routing_document
+    from pallas.product.llm.ollama_admin import get_runtime_num_gpu, set_runtime_model_name
+
+    del timeout_sec
     c = cfg or get_llm_config()
-    response = await HTTPXClient.post(
-        f"{ai_llm_api_base(c)}/model/reload",
-        json={},
-        timeout=timeout_sec,
-    )
-    if response is None:
-        raise RuntimeError("重载模型请求失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"重载模型失败 HTTP {response.status_code}: {detail}")
-    payload = response.json()
-    resolved = str(payload.get("model") or "").strip()
-    result: dict[str, Any] = {"model": resolved}
-    num_gpu = payload.get("num_gpu")
-    if isinstance(num_gpu, int):
+    doc = load_local_routing_document()
+    model = str(doc.get("llm_model") or "").strip()
+    if model:
+        set_runtime_model_name(model)
+    result: dict[str, Any] = {"model": model}
+    num_gpu = get_runtime_num_gpu()
+    if num_gpu is not None:
         result["num_gpu"] = num_gpu
-    elif isinstance(num_gpu, float) and num_gpu.is_integer():
-        result["num_gpu"] = int(num_gpu)
-    logger.info("llm model reloaded from env: model={} num_gpu={}", resolved, result.get("num_gpu"))
+    logger.info("llm model reloaded from local routing: model={} num_gpu={}", model, result.get("num_gpu"))
+    _ = c
     return result
 
 
 async def unload_runtime_model(*, cfg: LlmConfig | None = None, timeout_sec: float = 60.0) -> None:
+    from pallas.product.llm.local_routing_store import load_local_routing_document
+    from pallas.product.llm.ollama_admin import get_runtime_model_name, unload_ollama_model
+    from pallas.product.llm.provider_client import LlmProviderError
+
     c = cfg or get_llm_config()
-    response = await HTTPXClient.post(
-        f"{ai_llm_api_base(c)}/unload",
-        json={},
-        timeout=timeout_sec,
-    )
-    if response is None:
-        raise RuntimeError("卸载模型请求失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"卸载模型失败 HTTP {response.status_code}: {detail}")
-    logger.info("llm model unloaded via AI API")
+    base = _resolve_local_provider_base(cfg=c)
+    if not base:
+        raise RuntimeError("缺少本地 Ollama Base URL")
+    model = get_runtime_model_name(fallback=str(load_local_routing_document().get("llm_model") or "").strip())
+    try:
+        await unload_ollama_model(base, model, timeout_sec=timeout_sec)
+    except LlmProviderError as exc:
+        raise RuntimeError(f"卸载模型失败: {exc}") from exc
+    logger.info("llm model unloaded via Bot Ollama: model={}", model)
+
+
+async def fetch_local_routing_config(
+    *,
+    cfg: LlmConfig | None = None,
+    timeout_sec: float = 15.0,
+) -> dict[str, Any]:
+    del cfg, timeout_sec
+    from pallas.product.llm.local_routing_store import export_local_routing_for_api
+
+    return export_local_routing_for_api()
+
+
+async def save_local_routing_config(
+    document: dict[str, Any],
+    *,
+    cfg: LlmConfig | None = None,
+    timeout_sec: float = 30.0,
+) -> dict[str, Any]:
+    del cfg, timeout_sec
+    from pallas.product.llm.local_routing_store import save_local_routing_document
+    from pallas.product.llm.ollama_admin import set_runtime_model_name
+
+    payload = save_local_routing_document(document if isinstance(document, dict) else {})
+    model = str(payload.get("llm_model") or "").strip()
+    if model:
+        set_runtime_model_name(model)
+    logger.info("llm local routing config saved: path={}", payload.get("env_file"))
+    return payload
 
 
 async def fetch_providers_config(*, cfg: LlmConfig | None = None, timeout_sec: float = 15.0) -> dict[str, Any]:
-    c = cfg or get_llm_config()
-    response = await HTTPXClient.get(f"{ai_llm_api_base(c)}/providers", timeout=timeout_sec)
-    if response is None:
-        raise RuntimeError("读取提供方配置失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"读取提供方配置失败 HTTP {response.status_code}: {detail}")
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise RuntimeError("提供方配置响应无效")
-    return payload
+    del cfg, timeout_sec
+    from pallas.product.llm.providers_store import export_providers_for_api
+
+    return export_providers_for_api()
 
 
 async def save_providers_config(
@@ -325,21 +458,31 @@ async def save_providers_config(
     cfg: LlmConfig | None = None,
     timeout_sec: float = 30.0,
 ) -> dict[str, Any]:
-    c = cfg or get_llm_config()
-    response = await HTTPXClient.put(
-        f"{ai_llm_api_base(c)}/providers",
-        json=document,
-        timeout=timeout_sec,
-    )
-    if response is None:
-        raise RuntimeError("保存提供方配置失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"保存提供方配置失败 HTTP {response.status_code}: {detail}")
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise RuntimeError("保存提供方配置响应无效")
-    logger.info("llm providers saved: file={}", payload.get("providers_file"))
+    del cfg, timeout_sec
+    from pallas.product.llm.config import clear_llm_config_cache
+    from pallas.product.llm.providers_store import save_providers_document
+    from pallas.product.llm.task_routing import clear_task_route_cache
+
+    payload = save_providers_document(document)
+    clear_llm_config_cache()
+    clear_task_route_cache()
+    return payload
+
+
+async def upsert_provider_config(
+    provider: dict[str, Any],
+    *,
+    cfg: LlmConfig | None = None,
+    timeout_sec: float = 30.0,
+) -> dict[str, Any]:
+    del cfg, timeout_sec
+    from pallas.product.llm.config import clear_llm_config_cache
+    from pallas.product.llm.providers_store import upsert_provider_row
+    from pallas.product.llm.task_routing import clear_task_route_cache
+
+    payload = upsert_provider_row(provider)
+    clear_llm_config_cache()
+    clear_task_route_cache()
     return payload
 
 
@@ -367,6 +510,7 @@ async def fetch_provider_models(
     api_key: str = "",
     api_key_env: str = "",
     kind: str = "",
+    request_method: str = "",
     cfg: LlmConfig | None = None,
     timeout_sec: float = 15.0,
 ) -> dict[str, Any]:
@@ -377,7 +521,9 @@ async def fetch_provider_models(
         LlmProviderError,
         list_ollama_tag_models,
         list_openai_compatible_models,
+        resolve_request_method,
     )
+    from pallas.product.llm.providers_store import provider_request_method
 
     c = cfg or get_llm_config()
     pid = str(provider_id or "").strip() or "remote"
@@ -391,6 +537,24 @@ async def fetch_provider_models(
         key = str(os.environ.get(env_name) or "").strip()
 
     url = (base_url or "").strip()
+    method = str(request_method or "").strip()
+    stored = None
+    if not url or not key or not method:
+        from pallas.product.llm.providers_store import (
+            find_provider,
+            resolve_provider_api_key,
+            resolve_provider_base_url,
+        )
+
+        stored = find_provider(pid)
+        if stored is not None:
+            url = url or resolve_provider_base_url(stored)
+            key = key or resolve_provider_api_key(stored)
+            if not kind and str(stored.get("kind") or "").strip():
+                kind_norm = str(stored.get("kind") or "").strip().lower() or kind_norm
+            if not method:
+                method = provider_request_method(stored)
+
     if kind_norm == "local":
         url = _resolve_local_ollama_base_url(url, cfg=c)
         try:
@@ -432,65 +596,30 @@ async def fetch_provider_models(
             "error": "缺少 API Key，请填写后刷新（已保存密钥时请重新输入一次）",
         }
 
+    effective_method = resolve_request_method(method, url)
+    source = "anthropic" if effective_method == "anthropic_messages" else "openai"
     try:
-        models = await list_openai_compatible_models(url, key, timeout_sec=timeout_sec)
+        models = await list_openai_compatible_models(
+            url,
+            key,
+            timeout_sec=timeout_sec,
+            request_method=effective_method,
+        )
     except LlmProviderError as exc:
         return {
             "provider_id": pid,
             "ok": False,
             "models": [],
-            "source": "openai",
+            "source": source,
             "error": str(exc),
         }
     return {
         "provider_id": pid,
         "ok": True,
         "models": models,
-        "source": "openai",
+        "source": source,
         "error": "",
     }
-
-
-async def fetch_local_routing_config(
-    *,
-    cfg: LlmConfig | None = None,
-    timeout_sec: float = 15.0,
-) -> dict[str, Any]:
-    c = cfg or get_llm_config()
-    response = await HTTPXClient.get(f"{ai_llm_api_base(c)}/local-routing", timeout=timeout_sec)
-    if response is None:
-        raise RuntimeError("读取本地模型路由配置失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"读取本地模型路由配置失败 HTTP {response.status_code}: {detail}")
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise RuntimeError("本地模型路由配置响应无效")
-    return payload
-
-
-async def save_local_routing_config(
-    document: dict[str, Any],
-    *,
-    cfg: LlmConfig | None = None,
-    timeout_sec: float = 30.0,
-) -> dict[str, Any]:
-    c = cfg or get_llm_config()
-    response = await HTTPXClient.put(
-        f"{ai_llm_api_base(c)}/local-routing",
-        json=document,
-        timeout=timeout_sec,
-    )
-    if response is None:
-        raise RuntimeError("保存本地模型路由配置失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"保存本地模型路由配置失败 HTTP {response.status_code}: {detail}")
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise RuntimeError("保存本地模型路由配置响应无效")
-    logger.info("llm local routing config saved: env={}", payload.get("env_file"))
-    return payload
 
 
 async def probe_provider(
@@ -499,20 +628,40 @@ async def probe_provider(
     cfg: LlmConfig | None = None,
     timeout_sec: float = 15.0,
 ) -> dict[str, Any]:
-    from urllib.parse import quote
+    import time
 
-    c = cfg or get_llm_config()
-    pid = quote(str(provider_id), safe="")
-    response = await HTTPXClient.post(f"{ai_llm_api_base(c)}/providers/{pid}/test", json={}, timeout=timeout_sec)
-    if response is None:
-        raise RuntimeError("连通性测试失败")
-    if response.status_code != 200:
-        detail = (response.text or "")[:300]
-        raise RuntimeError(f"连通性测试失败 HTTP {response.status_code}: {detail}")
-    payload = response.json()
-    if not isinstance(payload, dict):
-        raise RuntimeError("连通性测试响应无效")
-    return payload
+    from pallas.product.llm.providers_store import find_provider, resolve_provider_api_key, resolve_provider_base_url
+
+    del cfg
+    pid = str(provider_id or "").strip()
+    row = find_provider(pid)
+    if row is None:
+        return {
+            "provider_id": pid,
+            "reachable": False,
+            "latency_ms": None,
+            "error": "提供方不存在或已禁用",
+        }
+    kind = str(row.get("kind") or "remote").strip().lower()
+    started = time.monotonic()
+    discovered = await fetch_provider_models(
+        pid,
+        base_url=resolve_provider_base_url(row),
+        api_key=resolve_provider_api_key(row),
+        api_key_env=str(row.get("api_key_env") or "").strip(),
+        kind=kind,
+        request_method=str(row.get("request_method") or "").strip(),
+        timeout_sec=timeout_sec,
+    )
+    latency_ms = int((time.monotonic() - started) * 1000)
+    ok = bool(discovered.get("ok"))
+    return {
+        "provider_id": pid,
+        "reachable": ok,
+        "latency_ms": latency_ms if ok else None,
+        "error": "" if ok else str(discovered.get("error") or "不可达"),
+        "models": discovered.get("models") if ok else [],
+    }
 
 
 async def fetch_llm_task_stats(
@@ -522,9 +671,10 @@ async def fetch_llm_task_stats(
     start: str | None = None,
     end: str | None = None,
 ) -> dict[str, Any]:
+    """聚合 Bot 任务计数与内核本地 token 计量（LLM 已下沉，不再请求 AI Runtime /api/llm/stats）。"""
     from datetime import date, timedelta
 
-    c = cfg or get_llm_config()
+    _ = (cfg, timeout_sec)
     try:
         from pallas.core.platform.shard import context as shard_ctx
 
@@ -538,7 +688,8 @@ async def fetch_llm_task_stats(
     payload: dict[str, Any] = {
         "bot": bot_snap,
         "ai": {},
-        "ai_reachable": False,
+        # LLM 计量在 Bot 内核；字段名保留兼容控制台，表示内核计量可读。
+        "ai_reachable": True,
         "persistence": {
             "store_file": "llm_daily_stats.json",
             "bot_collecting": bool(bot_snap.get("by_task")),
@@ -546,27 +697,103 @@ async def fetch_llm_task_stats(
         },
     }
     try:
-        response = await HTTPXClient.get(f"{ai_llm_api_base(c)}/stats", timeout=timeout_sec)
-    except Exception as exc:
-        payload["error"] = str(exc)
-    else:
-        if response is None or response.status_code != 200:
-            code = response.status_code if response is not None else None
-            payload["error"] = f"读取 AI 统计失败 HTTP {code}"
+        from pallas.core.platform.shard import context as shard_ctx
+        from pallas.product.llm.token_metrics import (
+            cluster_llm_token_metrics_snapshot,
+            flush_stats_sync,
+            llm_token_metrics_snapshot,
+        )
+
+        flush_stats_sync()
+        if shard_ctx.sharding_active() and shard_ctx.is_hub():
+            bot_tokens = cluster_llm_token_metrics_snapshot()
         else:
-            try:
-                body = response.json()
-            except Exception:
-                payload["error"] = "AI 统计响应无效"
-            else:
-                if isinstance(body, dict):
-                    payload["ai"] = _normalize_ai_task_stats_snapshot(body)
-                    payload["ai_reachable"] = True
-                    try:
-                        ai_day = str(payload["ai"].get("day_key") or bot_snap.get("day_key") or today_key())
-                        write_llm_daily_stats_side(ai_day, "ai", {**payload["ai"], "reachable": True})
-                    except Exception:
-                        pass
+            bot_tokens = llm_token_metrics_snapshot(include_persisted=True)
+    except Exception as exc:
+        bot_tokens = {}
+        payload["ai_reachable"] = False
+        payload["error"] = f"读取 Bot 本地 token 计量失败: {exc}"
+
+    if _bot_tokens_have_usage(bot_tokens):
+        merged_ai = {
+            "tokens": bot_tokens,
+            "day_key": bot_tokens.get("day_key") or bot_snap.get("day_key") or today_key(),
+            "source": "bot",
+        }
+        payload["ai"] = _normalize_ai_task_stats_snapshot(merged_ai)
+        try:
+            write_llm_daily_stats_side(
+                str(payload["ai"].get("day_key") or bot_snap.get("day_key") or today_key()),
+                "ai",
+                {**payload["ai"], "reachable": True},
+            )
+        except Exception:
+            pass
+
+    try:
+        from pallas.core.platform.shard import context as shard_ctx
+        from pallas.product.llm.provider_request_metrics import (
+            cluster_llm_provider_request_metrics_snapshot,
+            flush_provider_request_stats_sync,
+            llm_provider_request_metrics_snapshot,
+        )
+
+        flush_provider_request_stats_sync()
+        if shard_ctx.sharding_active() and shard_ctx.is_hub():
+            request_snap = cluster_llm_provider_request_metrics_snapshot()
+        else:
+            request_snap = llm_provider_request_metrics_snapshot(include_persisted=True)
+    except Exception:
+        request_snap = {}
+    if isinstance(request_snap, dict) and (request_snap.get("provider_stats") or request_snap.get("model_stats")):
+        ai_body = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
+        day = str(ai_body.get("day_key") or request_snap.get("day_key") or bot_snap.get("day_key") or today_key())
+        merged_ai = {
+            **ai_body,
+            "day_key": day,
+            "source": ai_body.get("source") or "bot",
+            "provider_stats": request_snap.get("provider_stats") or {},
+            "model_stats": request_snap.get("model_stats") or {},
+            "failure_counts": request_snap.get("failure_counts") or ai_body.get("failure_counts") or {},
+        }
+        payload["ai"] = _normalize_ai_task_stats_snapshot(merged_ai)
+        try:
+            write_llm_daily_stats_side(day, "ai", {**payload["ai"], "reachable": True})
+        except Exception:
+            pass
+
+    try:
+        from pallas.core.platform.shard import context as shard_ctx
+        from pallas.product.llm.rag_metrics import (
+            cluster_llm_rag_metrics_snapshot,
+            flush_rag_stats_sync,
+            llm_rag_metrics_snapshot,
+        )
+
+        flush_rag_stats_sync()
+        if shard_ctx.sharding_active() and shard_ctx.is_hub():
+            rag_snap = cluster_llm_rag_metrics_snapshot()
+        else:
+            rag_snap = llm_rag_metrics_snapshot(include_persisted=True)
+    except Exception:
+        rag_snap = {}
+    if isinstance(rag_snap, dict) and (
+        int(rag_snap.get("hit_count") or 0) > 0 or int(rag_snap.get("miss_count") or 0) > 0
+    ):
+        ai_body = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
+        day = str(ai_body.get("day_key") or rag_snap.get("day_key") or bot_snap.get("day_key") or today_key())
+        merged_ai = {
+            **ai_body,
+            "day_key": day,
+            "source": ai_body.get("source") or "bot",
+            "rag": rag_snap,
+        }
+        payload["ai"] = _normalize_ai_task_stats_snapshot(merged_ai)
+        try:
+            write_llm_daily_stats_side(day, "ai", {**payload["ai"], "reachable": True})
+        except Exception:
+            pass
+
     payload["persistence"]["ai_collecting"] = _ai_snapshot_collecting(
         payload.get("ai") if isinstance(payload.get("ai"), dict) else None
     )
@@ -589,7 +816,6 @@ async def fetch_llm_task_stats(
         start_d, end_d = end_d, start_d
     hist_rows, h_start, h_end = load_llm_daily_stats_range(start_day=start_d.isoformat(), end_day=end_d.isoformat())
     today_bot = bot_snap if isinstance(bot_snap, dict) else None
-    today_ai = payload.get("ai") if isinstance(payload.get("ai"), dict) and payload.get("ai") else None
     by_date = {}
     for hist_row in hist_rows:
         row_date = str(hist_row.get("date") or "").strip()[:10]
@@ -603,10 +829,47 @@ async def fetch_llm_task_stats(
             else None,
         }
         by_date[row_date] = row
-    if not payload.get("ai"):
+    if not _ai_has_live_llm_metrics(payload.get("ai") if isinstance(payload.get("ai"), dict) else None):
         fallback_ai = _latest_historical_ai_snapshot(list(by_date.values()))
         if fallback_ai is not None:
-            payload["ai"] = fallback_ai
+            existing = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
+            keep_images = existing.get("images") if isinstance(existing.get("images"), dict) else None
+            merged_fallback = dict(fallback_ai)
+            if keep_images:
+                merged_fallback["images"] = keep_images
+            payload["ai"] = _normalize_ai_task_stats_snapshot(merged_fallback)
+
+    try:
+        from pallas_plugin_draw.draw_stats_store import draw_stats_snapshot, flush_draw_stats_sync
+
+        flush_draw_stats_sync()
+        draw_images = draw_stats_snapshot(include_persisted=True)
+    except Exception:
+        draw_images = {}
+    if isinstance(draw_images, dict) and (
+        int(draw_images.get("ok_count") or 0) > 0
+        or int(draw_images.get("fail_count") or 0) > 0
+        or draw_images.get("by_model")
+        or draw_images.get("by_provider")
+    ):
+        ai_body = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
+        day = str(ai_body.get("day_key") or draw_images.get("day_key") or bot_snap.get("day_key") or today_key())
+        merged_ai = {
+            **ai_body,
+            "day_key": day,
+            "source": ai_body.get("source") or "bot",
+            "images": draw_images,
+        }
+        payload["ai"] = _normalize_ai_task_stats_snapshot(merged_ai)
+        try:
+            write_llm_daily_stats_side(day, "ai", {**payload["ai"], "reachable": True})
+        except Exception:
+            pass
+        payload["persistence"]["ai_collecting"] = _ai_snapshot_collecting(
+            payload.get("ai") if isinstance(payload.get("ai"), dict) else None
+        )
+
+    today_ai = payload.get("ai") if isinstance(payload.get("ai"), dict) and payload.get("ai") else None
     if start_d <= date.fromisoformat(clock_today) <= end_d:
         row = by_date.setdefault(clock_today, {"date": clock_today, "bot": None, "ai": None})
         if today_bot:

@@ -1,4 +1,4 @@
-"""统一 LLM 客户端：AI 仓调用与用户消息防注入。"""
+"""统一 LLM 客户端：Bot 内核 Provider 调用与用户消息防注入。"""
 
 import importlib
 from typing import TYPE_CHECKING, Any

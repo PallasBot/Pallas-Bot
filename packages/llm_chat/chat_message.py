@@ -507,6 +507,18 @@ async def handle_llm_chat(bot: Bot, event: Event):
     if corpus_ending_hint:
         system_prompt = f"{system_prompt.rstrip()}{corpus_ending_hint}"
     last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
+    recent_reply_texts: list[str] = []
+    if group_id is not None:
+        from pallas.product.llm.repeater_persona_context import load_recent_bot_plain_replies
+
+        try:
+            recent_reply_texts = await load_recent_bot_plain_replies(
+                int(bot.self_id),
+                int(group_id),
+                limit=6,
+            )
+        except Exception:
+            recent_reply_texts = []
     persona_dict = None
     if persona_bundle is not None:
         try:
@@ -539,6 +551,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "agent_stage_plan": list(direct_decision.agent_stages),
             "tool_schema_count": len(tool_meta.get("tool_schemas") or []),
             "last_reply_text": last_reply_text,
+            "recent_reply_texts": recent_reply_texts[:6],
             "variation_hint": variation_hint,
             "variation_applied": bool(variation_hint),
             "persona_affect_block": affect_system_block,
@@ -584,7 +597,17 @@ async def handle_llm_chat(bot: Bot, event: Event):
     if not result.ok:
         await TaskManager.remove_task(request_id)
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "submit_skip")
-        logger.debug("llm chat submit failed silently: status={} group={} user={}", result.status, group_id, user_id)
+        from pallas.product.llm.submit_gate import user_message_for_submit_status
+
+        hint = user_message_for_submit_status(result.status)
+        if hint:
+            await llm_chat_msg.send(hint)
+        logger.info(
+            "llm chat submit skipped: status={} group={} user={}",
+            result.status,
+            group_id,
+            user_id,
+        )
         return
 
     await refresh_llm_chat_cooldown(event, default_cd_sec=llm_cfg.llm_chat_cooldown_sec)

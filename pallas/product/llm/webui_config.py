@@ -1,4 +1,4 @@
-"""WebUI 通用配置：LLM 全局开关与 AI 服务地址。"""
+"""WebUI 通用配置：LLM 全局开关、Bot 内核对话策略与媒体服务地址。"""
 
 from __future__ import annotations
 
@@ -77,7 +77,23 @@ class LlmWebuiConfig(BaseModel):
         default=False,
         description=field_help(
             "是否启用智能对话",
-            "开启后可用「随时闲聊」等口令，并影响接话时的 AI 能力",
+            "开启后可用「智能对话」等口令，并影响接话时的模型能力（走 Bot 内核 Provider）",
+        ),
+    )
+    chat_enable: bool = Field(
+        default=False,
+        description=field_help(
+            "是否启用遗留酒后 RWKV",
+            "与「智能对话」总闸独立；开启后醉酒可用 AI 仓 ChatRWKV（POST /api/chat）",
+            "两者都开时醉酒优先走 LLM；仅开本项则走 RWKV。需 AI Runtime 含 chat 资源包",
+        ),
+    )
+    chat_tts_enable: bool = Field(
+        default=False,
+        description=field_help(
+            "酒后对话是否附带语音",
+            "走 AI Runtime TTS（RWKV 随 /api/chat；LLM 路径在出字后另调 /tts）",
+            "需 AI 仓启用 tts 任务包与音色资源",
         ),
     )
     llm_repeater_mode: RepeaterMode = Field(
@@ -112,14 +128,77 @@ class LlmWebuiConfig(BaseModel):
         default=True,
         description=field_help(
             "是否记住多轮对话上下文",
-            "开启后「随时闲聊」可连续聊；关闭则每句独立",
+            "开启后「智能对话」可连续聊；关闭则每句独立",
+        ),
+    )
+    llm_session_user_window: int = Field(
+        default=18,
+        ge=1,
+        le=200,
+        description=field_help("用户侧保留的最近消息条数", "越大越连贯，也越费上下文预算"),
+    )
+    llm_session_group_window: int = Field(
+        default=8,
+        ge=0,
+        le=100,
+        description=field_help("群内旁听上下文条数", "0 表示不注入群旁听消息"),
+    )
+    llm_session_group_ambient_enabled: bool = Field(
+        default=True,
+        description=field_help("是否注入群旁听上下文", "关闭后仅保留用户与机器人的对话"),
+    )
+    llm_session_user_ttl_sec: int = Field(
+        default=0,
+        ge=0,
+        le=2592000,
+        description=field_help("用户会话过期时间（秒）", "0 表示不过期；到期后清空该用户上下文"),
+    )
+    llm_session_private_ttl_sec: int = Field(
+        default=259200,
+        ge=0,
+        le=2592000,
+        description=field_help("私聊会话过期时间（秒）", "默认约 3 天"),
+    )
+    llm_session_max_content_len: int = Field(
+        default=4000,
+        ge=64,
+        le=16000,
+        description=field_help("单条会话消息写入上限（字符）", "超长消息会截断后再写入上下文"),
+    )
+    llm_session_strip_vision_enabled: bool = Field(
+        default=True,
+        description=field_help("写入会话时是否去掉图片内容", "开启可节省上下文，适合纯文本对话"),
+    )
+    llm_session_summary_enabled: bool = Field(
+        default=True,
+        description=field_help("是否在会话过长时生成摘要", "达到阈值后压缩旧消息，保留近期原文"),
+    )
+    llm_session_summary_threshold: int = Field(
+        default=40,
+        ge=8,
+        le=200,
+        description=field_help("触发摘要的消息条数阈值", "达到后才会压缩旧上下文"),
+    )
+    llm_session_summary_keep_messages: int = Field(
+        default=16,
+        ge=4,
+        le=120,
+        description=field_help("摘要后仍保留的近期消息条数", "其余由摘要代替"),
+    )
+    llm_chat_char_budget: int = Field(
+        default=12000,
+        ge=0,
+        le=200000,
+        description=field_help(
+            "单次闲聊上下文字符预算",
+            "0 表示不限制；建议按模型上下文窗口留余量",
         ),
     )
     llm_tools_enabled: bool = Field(
         default=True,
         description=field_help(
             "是否允许智能对话调用方舟等资料工具",
-            "需同时开启智能对话总闸与 AI 仓 LLM_TOOLS_ENABLED",
+            "需同时开启智能对话总闸；工具由 Bot 内核执行，不依赖 Pallas-Bot-AI",
         ),
     )
     llm_chat_max_concurrency: int = Field(
@@ -127,7 +206,7 @@ class LlmWebuiConfig(BaseModel):
         ge=1,
         le=64,
         description=field_help(
-            "同时向 AI 提交的闲聊请求上限",
+            "同时进行的闲聊模型请求上限",
             "每个分片 worker 进程独立计数；@ 闲聊与接话分开限流",
         ),
     )
@@ -136,7 +215,7 @@ class LlmWebuiConfig(BaseModel):
         ge=0,
         le=3600,
         description=field_help(
-            "同一群两次接话 AI 请求的最短间隔（秒）",
+            "同一群两次接话模型请求的最短间隔（秒）",
             "0 表示不限制群冷却",
         ),
     )
@@ -145,7 +224,7 @@ class LlmWebuiConfig(BaseModel):
         ge=1,
         le=32,
         description=field_help(
-            "每个 worker 同时进行的接话 AI 请求数",
+            "每个 worker 同时进行的接话模型请求数",
             "与闲聊并发分开计算",
         ),
     )
@@ -154,7 +233,7 @@ class LlmWebuiConfig(BaseModel):
         ge=1,
         le=600,
         description=field_help(
-            "全实例每分钟接话 AI 请求上限",
+            "全实例每分钟接话模型请求上限",
             "有 Redis 时全局限流；否则按 worker 数分摊",
         ),
     )
@@ -190,7 +269,7 @@ class LlmWebuiConfig(BaseModel):
         default=True,
         description=field_help(
             "是否过滤纯表情等不值得回复的 @",
-            "开启后表情包 @ 不会提交 AI",
+            "开启后表情包 @ 不会提交智能对话",
         ),
     )
     llm_chat_queue_merge: bool = Field(
@@ -203,7 +282,7 @@ class LlmWebuiConfig(BaseModel):
     llm_output_filter_enabled: bool = Field(
         default=True,
         description=field_help(
-            "是否启用 AI 回复输出后过滤",
+            "是否启用模型回复输出后过滤",
             "拦截客服腔、邀约尾缀等；接话任务优先回落语料原文",
         ),
     )
@@ -283,15 +362,58 @@ class LlmWebuiConfig(BaseModel):
         default="hybrid",
         description=field_help(
             "群记忆与知识源的检索方式",
-            "hybrid=关键词+向量（默认，需 AI 仓 embeddings）；keyword=仅关键词；embedding=纯向量",
+            "hybrid=关键词+向量（默认）；keyword=仅关键词；embedding=纯向量。"
+            "向量在 Bot 进程内计算，不请求 Pallas-Bot-AI",
         ),
     )
     llm_embedding_model: str = Field(
         default="stub",
         description=field_help(
-            "向量检索使用的 embedding 模型名",
-            "与 Pallas-Bot-AI embeddings 接口一致；本地联调可填 stub",
+            "向量检索使用的 embedding 标识",
+            "当前为 Bot 内核本地 hash stub；填 stub 即可，无需 AI 仓或外部 embedding 服务",
         ),
+    )
+    llm_memory_rag_top_k: int = Field(
+        default=3,
+        ge=1,
+        le=8,
+        description=field_help("每次检索注入的记忆条数", "越大越相关，也越占上下文预算"),
+    )
+    llm_memory_max_per_group: int = Field(
+        default=200,
+        ge=1,
+        le=2000,
+        description=field_help("每个群最多保留的记忆条数", "超出后淘汰旧记忆"),
+    )
+    llm_memory_content_max_len: int = Field(
+        default=500,
+        ge=64,
+        le=4000,
+        description=field_help("单条记忆内容上限（字符）", "超长会截断"),
+    )
+    llm_memory_auto_episode_enabled: bool = Field(
+        default=True,
+        description=field_help("是否自动沉淀会话片段为记忆", "开启后闲聊结束后可写入群记忆"),
+    )
+    llm_memory_auto_episode_cooldown_sec: int = Field(
+        default=120,
+        ge=0,
+        le=3600,
+        description=field_help("自动沉淀冷却（秒）", "同一会话两次自动写入的最短间隔"),
+    )
+    llm_memory_graph_extract_enabled: bool = Field(
+        default=True,
+        description=field_help("是否启用记忆图谱 LLM 抽取", "开启后可用模型从文本提取实体与关系"),
+    )
+    llm_memory_graph_extract_on_write: bool = Field(
+        default=False,
+        description=field_help("写入 Episode 后自动抽取", "默认关闭；开启后每次自动沉淀会触发图谱抽取"),
+    )
+    llm_memory_hiergraph_max_layers: int = Field(
+        default=3,
+        ge=1,
+        le=6,
+        description=field_help("分层语义图最大层数", "重建 HierGraph 时向上聚合的层数上限"),
     )
     llm_relationship_notes_enabled: bool = Field(
         default=True,
@@ -303,16 +425,31 @@ class LlmWebuiConfig(BaseModel):
 
 
 def get_llm_webui_config() -> LlmWebuiConfig:
+    from pallas.product.llm.config import resolve_chat_tts_enabled, resolve_legacy_rwkv_drunk_chat_enabled
+
     cfg = get_llm_config()
     mode = normalize_repeater_mode_for_webui(cfg.llm_repeater_mode)
     return LlmWebuiConfig(
         ai_server_host=cfg.ai_server_host,
         ai_server_port=cfg.ai_server_port,
         llm_chat_enabled=cfg.llm_chat_enabled,
+        chat_enable=resolve_legacy_rwkv_drunk_chat_enabled(),
+        chat_tts_enable=resolve_chat_tts_enabled(),
         llm_repeater_mode=mode,  # type: ignore[arg-type]
         llm_polish_lite_sample_rate=cfg.llm_polish_lite_sample_rate,
         llm_governance_enabled=cfg.llm_governance_enabled,
         llm_session_enabled=cfg.llm_session_enabled,
+        llm_session_user_window=cfg.llm_session_user_window,
+        llm_session_group_window=cfg.llm_session_group_window,
+        llm_session_group_ambient_enabled=cfg.llm_session_group_ambient_enabled,
+        llm_session_user_ttl_sec=cfg.llm_session_user_ttl_sec,
+        llm_session_private_ttl_sec=cfg.llm_session_private_ttl_sec,
+        llm_session_max_content_len=cfg.llm_session_max_content_len,
+        llm_session_strip_vision_enabled=cfg.llm_session_strip_vision_enabled,
+        llm_session_summary_enabled=cfg.llm_session_summary_enabled,
+        llm_session_summary_threshold=cfg.llm_session_summary_threshold,
+        llm_session_summary_keep_messages=cfg.llm_session_summary_keep_messages,
+        llm_chat_char_budget=cfg.llm_chat_char_budget,
         llm_tools_enabled=cfg.llm_tools_enabled,
         llm_chat_max_concurrency=cfg.llm_chat_max_concurrency,
         llm_repeater_group_cooldown_sec=cfg.llm_repeater_group_cooldown_sec,
@@ -339,5 +476,13 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
+        llm_memory_rag_top_k=cfg.llm_memory_rag_top_k,
+        llm_memory_max_per_group=cfg.llm_memory_max_per_group,
+        llm_memory_content_max_len=cfg.llm_memory_content_max_len,
+        llm_memory_auto_episode_enabled=cfg.llm_memory_auto_episode_enabled,
+        llm_memory_auto_episode_cooldown_sec=cfg.llm_memory_auto_episode_cooldown_sec,
+        llm_memory_graph_extract_enabled=cfg.llm_memory_graph_extract_enabled,
+        llm_memory_graph_extract_on_write=cfg.llm_memory_graph_extract_on_write,
+        llm_memory_hiergraph_max_layers=cfg.llm_memory_hiergraph_max_layers,
         llm_relationship_notes_enabled=cfg.llm_relationship_notes_enabled,
     )

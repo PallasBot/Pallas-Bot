@@ -42,14 +42,16 @@ FIELD_CHOICE_LABELS: dict[str, dict[str, str]] = {
         "fallback": "仅语料缺失时 AI 现编",
     },
     "llm_vector_retrieve": {
-        "keyword": "仅关键词（默认）",
-        "hybrid": "关键词 + 向量（推荐）",
-        "embedding": "纯向量",
+        "keyword": "仅关键词",
+        "hybrid": "关键词 + 向量（默认，Bot 本地 stub）",
+        "embedding": "纯向量（Bot 本地 stub）",
         "vector": "纯向量（同 embedding）",
     },
-    "pallas_image_runtime_mode": {
-        "ai_service_runtime": "AI 服务统一执行（推荐）",
-        "plugin_runtime": "插件直连图像网关",
+    "conversation_feature_level": {
+        "": "自动推断（推荐）",
+        "legacy_repeater": "仅语料规则（legacy）",
+        "repeater_plus_decision": "语料 + 统一决策",
+        "full_conversation_kernel": "决策 + 生成 + 反馈全链路",
     },
 }
 

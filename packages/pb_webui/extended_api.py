@@ -1430,6 +1430,18 @@ def _flush_today_console_daily_stats_disk() -> None:
         flush_stats_sync()
     except Exception:  # noqa: BLE001
         pass
+    try:
+        from pallas.product.llm.token_metrics import flush_stats_sync as flush_token_stats_sync
+
+        flush_token_stats_sync()
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        from pallas.product.llm.rag_metrics import flush_rag_stats_sync
+
+        flush_rag_stats_sync()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 async def flush_today_console_daily_stats_disk_async() -> None:
@@ -1599,7 +1611,10 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
     )
     from pallas.core.platform.shard.registry.config import get_shard_registry_settings
     from pallas.core.platform.shard.repeater_ingress_metrics import repeater_ingress_metrics_snapshot
+    from pallas.product.llm.provider_request_metrics import llm_provider_request_metrics_snapshot
+    from pallas.product.llm.rag_metrics import llm_rag_metrics_snapshot
     from pallas.product.llm.task_metrics import llm_task_metrics_snapshot
+    from pallas.product.llm.token_metrics import llm_token_metrics_snapshot
 
     if not _shard_worker_console():
         return
@@ -1627,6 +1642,9 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
             "coord_pending": coord_pending_snapshot_sync(),
             "process_memory": process_memory_snapshot(),
             "llm_task": llm_task_metrics_snapshot(),
+            "llm_token": llm_token_metrics_snapshot(include_persisted=False),
+            "llm_provider_request": llm_provider_request_metrics_snapshot(include_persisted=False),
+            "llm_rag": llm_rag_metrics_snapshot(include_persisted=False),
         },
     )
 
@@ -4158,15 +4176,17 @@ class _AiInstallBody(BaseModel):
 
     action: Literal["clone", "bootstrap", "clone_and_bootstrap"] = "clone_and_bootstrap"
     no_start: bool = False
+    # 兼容旧客户端；bootstrap 已固定媒体栈，以下两项忽略
     remote_only: bool = False
-    with_media: bool = False
+    with_media: bool = True
     use_gpu: bool = False
 
 
 class _AiRuntimeControlBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    with_media: bool = False
+    # 兼容旧客户端；启动固定 media + api
+    with_media: bool = True
 
 
 class _HelpMenuVisibilityBody(BaseModel):
@@ -4256,26 +4276,6 @@ class _ConsoleLoginChangeData(BaseModel):
     message: str
 
 
-class _LlmWizardCheckRow(BaseModel):
-    id: str
-    label: str
-    ok: bool
-    detail: str = ""
-
-
-class _LlmWizardStatusData(BaseModel):
-    ai_reachable: bool
-    health_url: str = ""
-    model: str = ""
-    provider_mode: str = ""
-    llm_chat_enabled: bool
-    llm_tools_enabled: bool = False
-    providers_configured: int = 0
-    providers_reachable: int = 0
-    checks: list[_LlmWizardCheckRow] = Field(default_factory=list)
-    next_step: str = ""
-
-
 class _LlmHealthProviderRow(BaseModel):
     id: str
     kind: str = ""
@@ -4329,7 +4329,17 @@ class _LlmMediaTasksHealthData(BaseModel):
     capabilities: list[_LlmMediaTaskCapabilityRow] = Field(default_factory=list)
 
 
+class _AiServiceHealthProbeData(BaseModel):
+    """媒体扩展（AI Runtime）探活；与聊天 Provider 健康分离。"""
+
+    ok: bool
+    url: str = ""
+    status_code: int | None = None
+    error: str = ""
+
+
 class _LlmRuntimeOverviewHealthData(BaseModel):
+    # ok / url / status_code / error：内核 LLM Provider（聊天）
     ok: bool
     url: str = ""
     status_code: int | None = None
@@ -4342,6 +4352,8 @@ class _LlmRuntimeOverviewHealthData(BaseModel):
     draw_runtime_mode: str | None = None
     tts_health: _LlmTtsHealthData | None = None
     media_tasks: _LlmMediaTasksHealthData | None = None
+    # 唱歌 / 可选 AI 绘图运行时等媒体侧
+    ai_service: _AiServiceHealthProbeData | None = None
     submit_gate: dict[str, Any] | None = None
 
 
@@ -4410,11 +4422,17 @@ class _LlmProviderConfigRowData(BaseModel):
     id: str
     kind: str
     base_url: str = ""
+    api_key: str = ""
+    api_keys: list[str] = Field(default_factory=list)
     api_key_env: str = ""
     api_key_set: bool = False
+    api_keys_count: int = 0
     default_model: str = ""
     enabled: bool = False
     task_models: dict[str, str] = Field(default_factory=dict)
+    capabilities: list[str] = Field(default_factory=list)
+    model_effort: str = ""
+    request_method: str = "chat_completions"
 
 
 class _LlmProvidersRoutingData(BaseModel):
@@ -4447,6 +4465,12 @@ class _AiExtensionTestData(BaseModel):
     image_circuit: _LlmImageHealthData | None = None
     llm_health: _LlmHealthSummaryData | None = None
     tts_health: _LlmTtsHealthData | None = None
+
+
+class _AuthLoginBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(min_length=1, max_length=512)
 
 
 class _ChangeConsoleLoginBody(BaseModel):
@@ -4502,10 +4526,15 @@ class _LlmProviderRowBody(BaseModel):
     kind: str = Field(default="remote")
     base_url: str = ""
     api_key: str = ""
+    api_keys: list[str] = Field(default_factory=list)
     api_key_env: str = ""
+    clear_api_keys: bool = False
     default_model: str = ""
     enabled: bool = True
     task_models: dict[str, str] = Field(default_factory=dict)
+    capabilities: list[str] = Field(default_factory=list)
+    model_effort: str = ""
+    request_method: str = "chat_completions"
 
 
 class _LlmProvidersRoutingBody(BaseModel):
@@ -4513,6 +4542,8 @@ class _LlmProvidersRoutingBody(BaseModel):
 
     chain_fallback: list[str] = Field(default_factory=list)
     tasks: dict[str, str] = Field(default_factory=dict)
+    tier_backups: dict[str, str] = Field(default_factory=dict)
+    tier_backup_models: dict[str, str] = Field(default_factory=dict)
 
 
 class _LlmProvidersDocumentBody(BaseModel):
@@ -4531,6 +4562,7 @@ class _LlmProviderModelsDiscoverBody(BaseModel):
     api_key: str = ""
     api_key_env: str = ""
     kind: str = ""
+    request_method: str = ""
 
 
 class _LlmLocalRoutingModelsBody(BaseModel):
@@ -4556,7 +4588,7 @@ class _LlmLocalRoutingTaskModelsBody(BaseModel):
 class _LlmLocalRoutingConfigBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    llm_model: str = Field(min_length=1, max_length=200)
+    llm_model: str = Field(default="", max_length=200)
     local_multi_model_enabled: bool = False
     moe_models: _LlmLocalRoutingModelsBody = Field(default_factory=_LlmLocalRoutingModelsBody)
     task_models: _LlmLocalRoutingTaskModelsBody = Field(default_factory=_LlmLocalRoutingTaskModelsBody)
@@ -5032,11 +5064,6 @@ def register_extended_api(
             token=token,
         )
 
-    class _AuthLoginBody(BaseModel):
-        model_config = ConfigDict(extra="forbid")
-
-        password: str = Field(min_length=1, max_length=512)
-
     router_pub = APIRouter(tags=["Pallas-Bot 控制台"])
 
     @router_pub.post(f"{x}/auth/login", include_in_schema=False)
@@ -5047,7 +5074,7 @@ def register_extended_api(
         from pallas.console.webui.console_login import SESSION_COOKIE_NAME, SESSION_TTL_SEC
 
         if not verify_console_password(body.password):
-            raise HTTPException(status_code=401, detail="口令错误")
+            raise HTTPException(status_code=401, detail="密码错误")
         tok = mint_session_token()
         resp = JSONResponse({"ok": True, "data": {"token": tok}})
         resp.set_cookie(
@@ -5077,8 +5104,22 @@ def register_extended_api(
     router = APIRouter(tags=["Pallas-Bot 控制台"], dependencies=[Depends(_pallas_token_dep)])
 
     from .acl_api import register_acl_router
+    from .llm_ops_api import register_llm_ops_router
+    from .memory_graph_api import register_memory_graph_router
 
     register_acl_router(router, x=x)
+    register_llm_ops_router(
+        router,
+        x=x,
+        plugin_config=plugin_config,
+        check_write_token=_check_pallas_write_token,
+    )
+    register_memory_graph_router(
+        router,
+        x=x,
+        plugin_config=plugin_config,
+        check_write_token=_check_pallas_write_token,
+    )
 
     @router.get(f"{x}/system", include_in_schema=True)
     async def _system() -> JSONResponse:
@@ -6570,7 +6611,30 @@ def register_extended_api(
         from pallas.product.llm.model_admin import save_providers_config
 
         try:
-            data = await save_providers_config(body.model_dump())
+            data = await save_providers_config(body.model_dump(exclude_unset=True))
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(f"{x}/common-config/llm/providers/{{provider_id}}", include_in_schema=True)
+    async def _llm_provider_upsert_put(
+        provider_id: str,
+        body: _LlmProviderRowBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        """只保存单个提供方，避免整表写回时误擦其他提供方密钥。"""
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm.model_admin import upsert_provider_config
+
+        payload = body.model_dump(exclude_unset=True)
+        payload["id"] = str(provider_id or "").strip() or str(payload.get("id") or "").strip()
+        if not payload["id"]:
+            raise HTTPException(status_code=400, detail="provider id is required")
+        try:
+            data = await upsert_provider_config(payload)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
@@ -6606,6 +6670,7 @@ def register_extended_api(
                 api_key=payload.api_key,
                 api_key_env=payload.api_key_env,
                 kind=payload.kind,
+                request_method=payload.request_method,
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
@@ -6818,15 +6883,14 @@ def register_extended_api(
     async def _llm_runtime_overview_get() -> dict[str, Any]:
         from pallas.product.llm.ai_health_parse import (
             image_health_circuit,
-            llm_health_circuit,
-            llm_health_runtime_detail,
-            llm_health_summary,
+            llm_health_from_provider_probe,
+            llm_runtime_detail_from_provider_probe,
             parse_media_tasks,
             tts_health_summary,
         )
         from pallas.product.llm.model_admin import fetch_llm_task_stats, fetch_model_admin_status
-        from pallas.product.llm.startup_probe import probe_ai_service_health
-        from pallas.product.llm.submit_gate import assess_llm_submit_gate_from_body
+        from pallas.product.llm.startup_probe import probe_ai_service_health, probe_llm_provider
+        from pallas.product.llm.submit_gate import assess_llm_kernel_submit_gate
         from pallas.product.llm.task_routing import build_task_routing_preview
 
         def _draw_runtime_mode() -> str | None:
@@ -6840,26 +6904,41 @@ def register_extended_api(
                 return None
 
         async def _load() -> dict[str, Any]:
-            health, model_admin, task_stats = await asyncio.gather(
+            provider, ai_health, model_admin, task_stats = await asyncio.gather(
+                probe_llm_provider(timeout_sec=8.0),
                 probe_ai_service_health(timeout_sec=8.0),
                 fetch_model_admin_status(timeout_sec=12.0),
                 fetch_llm_task_stats(timeout_sec=8.0),
             )
-            body = health.get("body") if isinstance(health.get("body"), dict) else None
-            submit_gate = assess_llm_submit_gate_from_body(body)
+            body = ai_health.get("body") if isinstance(ai_health.get("body"), dict) else None
+            provider_ok = bool(provider.get("ok"))
+            llm_health = llm_health_from_provider_probe(provider)
+            submit_gate = assess_llm_kernel_submit_gate()
             return {
                 "health": {
-                    "ok": bool(health.get("ok")),
-                    "url": str(health.get("url") or ""),
-                    "status_code": health.get("status_code"),
-                    "error": str(health.get("error") or ""),
-                    "llm_runtime_detail": llm_health_runtime_detail(body),
-                    "llm_health": llm_health_summary(body),
-                    "llm_circuit": llm_health_circuit(body),
-                    "image_health": image_health_circuit(body),
+                    "ok": provider_ok,
+                    "url": str(provider.get("url") or ""),
+                    "status_code": provider.get("status_code"),
+                    "error": "" if provider_ok else str(provider.get("error") or ""),
+                    "llm_runtime_detail": llm_runtime_detail_from_provider_probe(provider),
+                    "llm_health": llm_health,
+                    "llm_circuit": {
+                        "circuit_state": llm_health.get("circuit_state"),
+                        "consecutive_failures": int(llm_health.get("consecutive_failures") or 0),
+                        "recent_failure_class": llm_health.get("recent_failure_class"),
+                        "health_state": llm_health.get("health_state"),
+                        "degraded_state": llm_health.get("degraded_state"),
+                    },
+                    "image_health": image_health_circuit(body) if body else None,
                     "draw_runtime_mode": _draw_runtime_mode(),
-                    "tts_health": tts_health_summary(body),
-                    "media_tasks": parse_media_tasks(body),
+                    "tts_health": tts_health_summary(body) if body else None,
+                    "media_tasks": parse_media_tasks(body) if body else None,
+                    "ai_service": {
+                        "ok": bool(ai_health.get("ok")),
+                        "url": str(ai_health.get("url") or ""),
+                        "status_code": ai_health.get("status_code"),
+                        "error": str(ai_health.get("error") or ""),
+                    },
                     "submit_gate": {
                         "allowed": submit_gate.allowed,
                         "status": submit_gate.status or None,
@@ -6872,64 +6951,6 @@ def register_extended_api(
             }
 
         data = await cached_read(key="llm-runtime-overview", loader=_load, ttl_sec=2.0, stale_sec=8.0)
-        return {"ok": True, "data": data}
-
-    @router.get(
-        f"{x}/common-config/llm/wizard/status",
-        include_in_schema=True,
-        response_model=_ApiOkResponse[_LlmWizardStatusData],
-    )
-    async def _llm_wizard_status_get() -> dict[str, Any]:
-        from pallas.product.llm.model_admin import fetch_model_admin_status
-        from pallas.product.llm.webui_config import get_llm_webui_config
-
-        async def _load() -> dict[str, Any]:
-            cfg = get_llm_webui_config()
-            status = await fetch_model_admin_status(timeout_sec=12.0)
-            provider_rows = status.get("provider_status") if isinstance(status.get("provider_status"), list) else []
-            configured_count = sum(1 for row in provider_rows if isinstance(row, dict) and bool(row.get("configured")))
-            reachable_count = sum(1 for row in provider_rows if isinstance(row, dict) and row.get("reachable") is True)
-            checks = [
-                {
-                    "id": "ai_service",
-                    "label": "AI 服务可达",
-                    "ok": bool(status.get("ai_reachable")),
-                    "detail": str(status.get("error") or "") or str(status.get("health_url") or ""),
-                },
-                {
-                    "id": "provider_configured",
-                    "label": "至少存在一个已配置提供方",
-                    "ok": configured_count > 0,
-                    "detail": f"已配置 {configured_count} 个",
-                },
-                {
-                    "id": "provider_reachable",
-                    "label": "至少存在一个可达提供方",
-                    "ok": reachable_count > 0,
-                    "detail": f"可达 {reachable_count} 个",
-                },
-                {
-                    "id": "llm_chat_enabled",
-                    "label": "已开启智能对话总闸",
-                    "ok": bool(cfg.llm_chat_enabled),
-                    "detail": "LLM_CHAT_ENABLED",
-                },
-            ]
-            next_step = next((row["label"] for row in checks if not row["ok"]), "")
-            return {
-                "ai_reachable": bool(status.get("ai_reachable")),
-                "health_url": str(status.get("health_url") or ""),
-                "model": str(status.get("model") or ""),
-                "provider_mode": str(status.get("provider_mode") or ""),
-                "llm_chat_enabled": bool(cfg.llm_chat_enabled),
-                "llm_tools_enabled": bool(cfg.llm_tools_enabled),
-                "providers_configured": configured_count,
-                "providers_reachable": reachable_count,
-                "checks": checks,
-                "next_step": next_step,
-            }
-
-        data = await cached_read(key="llm-wizard-status", loader=_load, ttl_sec=2.0, stale_sec=8.0)
         return {"ok": True, "data": data}
 
     @router.get(f"{x}/common-config/llm/history/sessions", include_in_schema=True)

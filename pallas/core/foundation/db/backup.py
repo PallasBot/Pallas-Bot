@@ -13,8 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
-from pallas.core.foundation.db import get_db_backend
-from pallas.core.foundation.db.__init__ import _cfg
+from pallas.core.foundation.db import _cfg, get_db_backend
 from pallas.core.foundation.paths import PROJECT_ROOT
 
 MongoScope = Literal["full", "important"]

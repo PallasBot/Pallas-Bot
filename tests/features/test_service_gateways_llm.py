@@ -36,20 +36,20 @@ async def test_probe_llm_ok_without_url(monkeypatch) -> None:
         llm_select_enabled = False
         llm_polish_lite_enabled = False
 
-    async def fake_health(*, timeout_sec: float = 5.0):
+    async def fake_provider(*, timeout_sec: float = 3.0):
         _ = timeout_sec
         return {
             "ok": True,
-            "url": "http://127.0.0.1:8000/health",
+            "configured": True,
+            "url": "http://127.0.0.1:11434/v1/models",
             "status_code": 200,
-            "body": {"status": "ok", "version": "4.0.0"},
             "error": "",
         }
 
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: FakeCfg())
     monkeypatch.setattr(
-        "pallas.product.llm.startup_probe.probe_ai_service_health",
-        fake_health,
+        "pallas.product.llm.startup_probe.probe_llm_provider",
+        fake_provider,
     )
     results = await probe_llm_service(timeout_sec=5.0)
     assert len(results) == 1
@@ -60,9 +60,10 @@ async def test_probe_llm_ok_without_url(monkeypatch) -> None:
     assert results[0].capability_group == "dialogue"
     assert results[0].runtime_type == "llm"
     assert results[0].health_state == "healthy"
+    assert results[0].site == "Provider"
     line = format_probe_line(results[0])
     assert "127.0.0.1" not in line
-    assert line.endswith("ms")
+    assert "Provider 可达" in line
 
 
 @pytest.mark.asyncio
@@ -74,20 +75,20 @@ async def test_probe_llm_failure_without_url(monkeypatch) -> None:
         llm_select_enabled = False
         llm_polish_lite_enabled = False
 
-    async def fake_health(*, timeout_sec: float = 5.0):
+    async def fake_provider(*, timeout_sec: float = 3.0):
         _ = timeout_sec
         return {
             "ok": False,
-            "url": "http://127.0.0.1:8000/health",
+            "configured": True,
+            "url": "http://127.0.0.1:11434/v1/models",
             "status_code": None,
-            "body": None,
             "error": "ConnectError: connection refused",
         }
 
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: FakeCfg())
     monkeypatch.setattr(
-        "pallas.product.llm.startup_probe.probe_ai_service_health",
-        fake_health,
+        "pallas.product.llm.startup_probe.probe_llm_provider",
+        fake_provider,
     )
     results = await probe_llm_service(timeout_sec=5.0)
     assert len(results) == 1
@@ -98,7 +99,7 @@ async def test_probe_llm_failure_without_url(monkeypatch) -> None:
     assert results[0].capability_group == "dialogue"
     assert results[0].runtime_type == "llm"
     assert results[0].failure_class == "connection_failed"
-    assert results[0].health_state == "degraded"
+    assert results[0].health_state == "unhealthy"
     line = format_probe_line(results[0])
     assert "127.0.0.1" not in line
     assert "连接失败" in line
@@ -113,20 +114,20 @@ async def test_probe_llm_http_failure_uses_runtime_normalizer(monkeypatch) -> No
         llm_select_enabled = False
         llm_polish_lite_enabled = False
 
-    async def fake_health(*, timeout_sec: float = 5.0):
+    async def fake_provider(*, timeout_sec: float = 3.0):
         _ = timeout_sec
         return {
             "ok": False,
-            "url": "http://127.0.0.1:8000/health",
+            "configured": True,
+            "url": "http://127.0.0.1:11434/v1/models",
             "status_code": 503,
-            "body": None,
-            "error": "Service Unavailable",
+            "error": "HTTP 503",
         }
 
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: FakeCfg())
     monkeypatch.setattr(
-        "pallas.product.llm.startup_probe.probe_ai_service_health",
-        fake_health,
+        "pallas.product.llm.startup_probe.probe_llm_provider",
+        fake_provider,
     )
     results = await probe_llm_service(timeout_sec=5.0)
     assert len(results) == 1
@@ -134,7 +135,37 @@ async def test_probe_llm_http_failure_uses_runtime_normalizer(monkeypatch) -> No
     assert results[0].runtime_state == "degraded"
     assert results[0].runtime_detail is None
     assert results[0].failure_class == "upstream_http_error"
-    assert results[0].health_state == "degraded"
+    assert results[0].health_state == "unhealthy"
+
+
+@pytest.mark.asyncio
+async def test_probe_llm_not_configured(monkeypatch) -> None:
+    class FakeCfg:
+        llm_chat_enabled = True
+        llm_fallback_enabled = False
+        llm_polish_enabled = False
+        llm_select_enabled = False
+        llm_polish_lite_enabled = False
+
+    async def fake_provider(*, timeout_sec: float = 3.0):
+        _ = timeout_sec
+        return {
+            "ok": False,
+            "configured": False,
+            "url": "",
+            "error": "llm provider missing",
+        }
+
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: FakeCfg())
+    monkeypatch.setattr(
+        "pallas.product.llm.startup_probe.probe_llm_provider",
+        fake_provider,
+    )
+    results = await probe_llm_service(timeout_sec=5.0)
+    assert len(results) == 1
+    assert results[0].ok is False
+    assert results[0].error == "尚未配置 Provider"
+    assert results[0].failure_class == "runtime_unavailable"
 
 
 def test_normalize_llm_probe_error() -> None:
