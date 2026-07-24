@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
 
 from nonebot import logger, on_message
+from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 from nonebot.rule import Rule
 from ulid import ULID
@@ -23,9 +23,6 @@ from pallas.product.llm import (
 from pallas.product.llm.drunk_tts import is_chat_tts_enabled
 from pallas.product.llm.legacy_rwkv import delete_rwkv_chat_session, submit_rwkv_drunk_chat
 from pallas.product.llm.session_store import clear_llm_messages
-
-if TYPE_CHECKING:
-    from nonebot.adapters import Bot
 
 CHAT_COOLDOWN_KEY = "chat"
 # 与历史扩展仓 chat 一致：优先于清醒 @（llm_chat 默认 ~51）
