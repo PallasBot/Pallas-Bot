@@ -1,5 +1,11 @@
 # Changelog
 
+## [4.1.1] - 2026-07-24
+
+### Fixed
+
+- LLM：修复酒后对话因 `Bot` 仅在 TYPE_CHECKING 导入导致启动 NameError
+
 ## [4.1.0] - 2026-07-24
 
 ### Added
@@ -113,6 +119,7 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
+[4.1.1]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.0...v4.1.1
 [4.1.0]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.3...v4.1.0
 [4.0.3]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.1...v4.0.2
