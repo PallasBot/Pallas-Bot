@@ -67,6 +67,7 @@ class LlmRepeaterFeedbackEntry(BaseModel):
     user_text: str
     reply_text: str
     behavior_scene: str = ""
+    scene_tier: str = ""
     behavior_actions: list[str] = Field(default_factory=list)
     llm_route: str = ""
     source_tags: list[str] = Field(default_factory=list)
@@ -165,6 +166,7 @@ def build_feedback_entry(**kwargs: Any) -> LlmRepeaterFeedbackEntry:
         user_text=str(kwargs.get("user_text") or "").strip(),
         reply_text=str(kwargs.get("reply_text") or "").strip(),
         behavior_scene=str(kwargs.get("behavior_scene") or "").strip(),
+        scene_tier=str(kwargs.get("scene_tier") or "").strip(),
         behavior_actions=[
             str(item).strip() for item in list(kwargs.get("behavior_actions") or []) if str(item).strip()
         ],

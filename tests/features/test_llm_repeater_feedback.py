@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from pallas.product.llm.config import LlmConfig, clear_llm_config_cache
 from pallas.product.llm.repeater_feedback import (
     LlmRepeaterFeedbackEntry,
@@ -12,16 +14,16 @@ from pallas.product.llm.repeater_feedback import (
 )
 
 
-def test_llm_repeater_feedback_defaults_disabled_bias_writeback(monkeypatch) -> None:
+def test_llm_repeater_feedback_defaults_enabled_bias_writeback(monkeypatch) -> None:
     clear_llm_config_cache()
     monkeypatch.delenv("LLM_REPEATER_FEEDBACK_ENABLED", raising=False)
     monkeypatch.delenv("LLM_REPEATER_BIAS_ENABLED", raising=False)
     monkeypatch.delenv("LLM_REPEATER_WRITEBACK_ENABLED", raising=False)
 
     defaults = LlmConfig()
-    assert defaults.llm_repeater_feedback_enabled is False
-    assert defaults.llm_repeater_bias_enabled is False
-    assert defaults.llm_repeater_writeback_enabled is False
+    assert defaults.llm_repeater_feedback_enabled is True
+    assert defaults.llm_repeater_bias_enabled is True
+    assert defaults.llm_repeater_writeback_enabled is True
 
 
 def test_should_collect_llm_repeater_feedback_accepts_short_group_reply() -> None:
@@ -94,6 +96,65 @@ def test_build_feedback_entry_defaults_writeback_false() -> None:
     assert entry.entry_id == "req-1"
     assert entry.eligible_for_bias is True
     assert entry.eligible_for_writeback is False
+
+
+def test_maybe_append_feedback_marks_writeback_eligible_only_for_strong_scene(monkeypatch) -> None:
+    from pallas.core.platform.ai_callback.runner import maybe_append_llm_repeater_feedback
+
+    appended = []
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.runner.get_llm_config",
+        lambda: SimpleNamespace(llm_repeater_feedback_enabled=True),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_feedback.append_feedback_entry",
+        appended.append,
+    )
+    task = {
+        "task_type": "llm_chat",
+        "bot_id": 10001,
+        "group_id": 123,
+        "user_id": 456,
+        "user_text": "你又来这套",
+    }
+
+    maybe_append_llm_repeater_feedback("req-strong", {**task, "scene_tier": "strong"}, "少来。")
+    maybe_append_llm_repeater_feedback("req-weak", {**task, "scene_tier": "weak"}, "少来。")
+
+    assert [entry.eligible_for_writeback for entry in appended] == [True, False]
+
+
+def test_build_feedback_entry_keeps_scene_tier() -> None:
+    entry = build_feedback_entry(
+        bot_id=10001,
+        group_id=123,
+        user_id=456,
+        request_id="req-scene-tier",
+        user_text="你又来这套",
+        reply_text="少来。",
+        scene_tier=" strong ",
+    )
+
+    assert entry.scene_tier == "strong"
+
+
+def test_list_group_feedback_entries_roundtrips_scene_tier(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=10001,
+            group_id=123,
+            user_id=456,
+            request_id="req-scene-tier-roundtrip",
+            user_text="你又来这套",
+            reply_text="少来。",
+            scene_tier="strong",
+        )
+    )
+
+    rows = list_group_feedback_entries(group_id=123)
+
+    assert [row.scene_tier for row in rows] == ["strong"]
 
 
 def test_group_feedback_bias_snapshot_empty_when_no_entries(tmp_path, monkeypatch) -> None:

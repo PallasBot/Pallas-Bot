@@ -55,6 +55,7 @@ async def maybe_submit_repeater_llm_fallback(
     *,
     user_text: str,
     reply_mode: str = "normal",
+    scene_tier: str = "weak",
 ) -> bool:
     if event.is_tome():
         return False
@@ -122,6 +123,7 @@ async def maybe_submit_repeater_llm_fallback(
             "task_type": REPEATER_FALLBACK_TASK_TYPE,
             "user_text": text,
             "reply_mode": str(reply_mode or "normal"),
+            "scene_tier": scene_tier,
             "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
         },
@@ -137,6 +139,7 @@ async def maybe_submit_repeater_llm_fallback(
             user_id=user_id,
             mode="normal",
             task="repeater_fallback",
+            scene_tier=scene_tier,
             token_count=token_count,
             temperature=temperature,
             llm_rewrite_metadata=rewrite_metadata,

@@ -1,7 +1,9 @@
 """接话 LLM 限流：群冷却、进程内并发与全局限流。"""
 
 import asyncio
+import random
 import time
+from collections.abc import Callable
 
 from nonebot import logger
 
@@ -11,7 +13,8 @@ from pallas.core.platform.shard.coord.coord_redis_store import coord_key, redis_
 from .config import LlmConfig, get_llm_config
 
 REPEATER_LLM_TASKS = frozenset({"repeater_fallback", "repeater_polish", "repeater_polish_lite", "repeater_select"})
-_COOLDOWN_ACTION = "llm_repeater"
+_WEAK_COOLDOWN_ACTION = "llm_repeater"
+_STRONG_COOLDOWN_ACTION = "llm_repeater_strong"
 
 _repeater_sem: asyncio.Semaphore | None = None
 _repeater_sem_limit: int | None = None
@@ -32,6 +35,26 @@ def clear_repeater_llm_limit_state() -> None:
 
 def is_repeater_llm_task(task: str | None) -> bool:
     return str(task or "").strip().lower() in REPEATER_LLM_TASKS
+
+
+def cooldown_action_for_tier(scene_tier: str | None) -> str:
+    if str(scene_tier or "").strip().lower() == "strong":
+        return _STRONG_COOLDOWN_ACTION
+    return _WEAK_COOLDOWN_ACTION
+
+
+def roll_strong_llm_attempt(
+    *,
+    cfg: LlmConfig | None = None,
+    rng: Callable[[], float] | None = None,
+) -> bool:
+    c = cfg or get_llm_config()
+    rate = float(c.llm_repeater_strong_attempt_rate)
+    if rate <= 0:
+        return False
+    if rate >= 1:
+        return True
+    return (rng or random.random)() < rate
 
 
 def repeater_max_inflight(cfg: LlmConfig | None = None) -> int:
@@ -99,21 +122,33 @@ async def is_repeater_group_cooldown_ready(
     group_id: int,
     *,
     cfg: LlmConfig | None = None,
+    scene_tier: str = "weak",
 ) -> bool:
     c = cfg or get_llm_config()
-    cd_sec = max(0, int(c.llm_repeater_group_cooldown_sec))
+    strong = cooldown_action_for_tier(scene_tier) == _STRONG_COOLDOWN_ACTION
+    cd_sec = max(
+        0,
+        int(c.llm_repeater_strong_cooldown_sec if strong else c.llm_repeater_group_cooldown_sec),
+    )
     if cd_sec <= 0:
         return True
     config = BotConfig(int(bot_id), int(group_id), cooldown=cd_sec)
-    return await config.is_cooldown(_COOLDOWN_ACTION)
+    return await config.is_cooldown(cooldown_action_for_tier(scene_tier))
 
 
-async def refresh_repeater_group_cooldown(bot_id: int, group_id: int) -> None:
+async def refresh_repeater_group_cooldown(
+    bot_id: int,
+    group_id: int,
+    *,
+    scene_tier: str = "weak",
+) -> None:
     c = get_llm_config()
-    if int(c.llm_repeater_group_cooldown_sec) <= 0:
+    strong = cooldown_action_for_tier(scene_tier) == _STRONG_COOLDOWN_ACTION
+    cd_sec = int(c.llm_repeater_strong_cooldown_sec if strong else c.llm_repeater_group_cooldown_sec)
+    if cd_sec <= 0:
         return
-    config = BotConfig(int(bot_id), int(group_id), cooldown=int(c.llm_repeater_group_cooldown_sec))
-    await config.refresh_cooldown(_COOLDOWN_ACTION)
+    config = BotConfig(int(bot_id), int(group_id), cooldown=cd_sec)
+    await config.refresh_cooldown(cooldown_action_for_tier(scene_tier))
 
 
 async def check_repeater_llm_allowed(
@@ -121,12 +156,13 @@ async def check_repeater_llm_allowed(
     group_id: int,
     *,
     cfg: LlmConfig | None = None,
+    scene_tier: str = "weak",
 ) -> str | None:
     global _skipped_group_cd, _skipped_global_rpm
     c = cfg or get_llm_config()
     if not c.llm_governance_enabled:
         return None
-    if not await is_repeater_group_cooldown_ready(bot_id, group_id, cfg=c):
+    if not await is_repeater_group_cooldown_ready(bot_id, group_id, cfg=c, scene_tier=scene_tier):
         _skipped_group_cd += 1
         if _skipped_group_cd == 1 or _skipped_group_cd % 100 == 0:
             logger.debug(

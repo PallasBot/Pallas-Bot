@@ -73,6 +73,7 @@ async def maybe_submit_repeater_llm_polish(
     reply_mode: str = "normal",
     force_for_cue: bool = False,
     intensity: str = "light",
+    scene_tier: str = "weak",
 ) -> bool:
     if event.is_tome():
         return False
@@ -140,6 +141,7 @@ async def maybe_submit_repeater_llm_polish(
             "user_text": str(trigger_user_text or "").strip(),
             "fallback_text": candidate,
             "reply_mode": str(reply_mode or "normal"),
+            "scene_tier": scene_tier,
             "reply_max_length": 48,
             "start_time": time.time(),
         },
@@ -155,6 +157,7 @@ async def maybe_submit_repeater_llm_polish(
             user_id=user_id,
             mode="normal",
             task="repeater_polish",
+            scene_tier=scene_tier,
             token_count=token_count,
             temperature=temperature,
             llm_rewrite_metadata=rewrite_metadata,

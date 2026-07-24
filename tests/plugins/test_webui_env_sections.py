@@ -35,6 +35,8 @@ def test_list_webui_env_sections_is_empty():
     assert "CHAT_ENABLE" in env_keys
     assert "LLM_REPEATER_MODE" in env_keys
     assert "LLM_REPEATER_FEEDBACK_ENABLED" in env_keys
+    assert "LLM_REPEATER_STRONG_COOLDOWN_SEC" in env_keys
+    assert "LLM_REPEATER_STRONG_ATTEMPT_RATE" in env_keys
     assert "LLM_CHAT_CHAR_BUDGET" in env_keys
     assert "LLM_SESSION_USER_WINDOW" in env_keys
     assert "LLM_MEMORY_RAG_TOP_K" in env_keys

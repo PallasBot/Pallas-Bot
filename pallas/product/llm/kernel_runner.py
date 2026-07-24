@@ -111,7 +111,13 @@ async def submit_kernel_repeater_chat_task(
         timer.finish(status="missing_group", request_id=request.request_id)
         return ChatSubmitResult(status="missing_group", ok=False)
 
-    skip_reason = await check_repeater_llm_allowed(int(request.bot_id), int(request.group_id), cfg=cfg)
+    tier = str(request.scene_tier or "weak").strip().lower() or "weak"
+    skip_reason = await check_repeater_llm_allowed(
+        int(request.bot_id),
+        int(request.group_id),
+        cfg=cfg,
+        scene_tier=tier,
+    )
     if skip_reason:
         timer.finish(status=skip_reason, request_id=request.request_id)
         return ChatSubmitResult(status=skip_reason, ok=False)
@@ -128,7 +134,7 @@ async def submit_kernel_repeater_chat_task(
             metadata=metadata,
             cfg=cfg,
         )
-        await refresh_repeater_group_cooldown(int(request.bot_id), int(request.group_id))
+        await refresh_repeater_group_cooldown(int(request.bot_id), int(request.group_id), scene_tier=tier)
     finally:
         release_repeater_llm_slot(slot)
     timer.mark("kernel_schedule")

@@ -149,6 +149,8 @@ FIELD_LABELS: dict[str, str] = {
     "llm_governance_enabled": "限制闲聊频率与字数",
     "llm_chat_max_concurrency": "闲聊并发上限",
     "llm_repeater_group_cooldown_sec": "接话群冷却（秒）",
+    "llm_repeater_strong_cooldown_sec": "强场景接话冷却（秒）",
+    "llm_repeater_strong_attempt_rate": "强场景 LLM 尝试比例",
     "llm_repeater_max_inflight": "接话并发上限",
     "llm_repeater_global_rpm": "接话全局限流（次/分）",
     "llm_repeater_feedback_enabled": "收集闲聊反哺",

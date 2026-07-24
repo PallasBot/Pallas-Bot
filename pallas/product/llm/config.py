@@ -124,6 +124,10 @@ def _env_float(key: str, default: float) -> float:
         return default
 
 
+def _env_float_clamped(key: str, default: float, minimum: float, maximum: float) -> float:
+    return min(maximum, max(minimum, _env_float(key, default)))
+
+
 def _parse_group_id_set(raw: str | None) -> list[int]:
     if not raw or not raw.strip():
         return []
@@ -296,11 +300,13 @@ class LlmConfig(BaseModel):
     llm_chat_char_budget: int = Field(default=12000, ge=0, le=200000)
     llm_chat_disabled_group_ids: list[int] = Field(default_factory=list)
     llm_repeater_group_cooldown_sec: int = Field(default=60, ge=0, le=3600)
-    llm_repeater_max_inflight: int = Field(default=1, ge=1, le=32)
-    llm_repeater_global_rpm: int = Field(default=10, ge=1, le=600)
-    llm_repeater_feedback_enabled: bool = Field(default=False)
-    llm_repeater_bias_enabled: bool = Field(default=False)
-    llm_repeater_writeback_enabled: bool = Field(default=False)
+    llm_repeater_strong_cooldown_sec: int = Field(default=25, ge=0, le=3600)
+    llm_repeater_strong_attempt_rate: float = Field(default=0.55, ge=0.0, le=1.0)
+    llm_repeater_max_inflight: int = Field(default=2, ge=1, le=32)
+    llm_repeater_global_rpm: int = Field(default=18, ge=1, le=600)
+    llm_repeater_feedback_enabled: bool = Field(default=True)
+    llm_repeater_bias_enabled: bool = Field(default=True)
+    llm_repeater_writeback_enabled: bool = Field(default=True)
     conversation_feature_level: str = Field(default="")
     llm_reply_gate_enabled: bool = Field(default=True)
     llm_reply_gate_min_chars: int = Field(default=1, ge=0, le=32)
@@ -452,11 +458,18 @@ def get_llm_config() -> LlmConfig:
             llm_chat_char_budget=_env_int("LLM_CHAT_CHAR_BUDGET", 12000),
             llm_chat_disabled_group_ids=_env_group_id_list("LLM_CHAT_DISABLED_GROUP_IDS"),
             llm_repeater_group_cooldown_sec=_env_int("LLM_REPEATER_GROUP_COOLDOWN_SEC", 60),
-            llm_repeater_max_inflight=_env_int("LLM_REPEATER_MAX_INFLIGHT", 1),
-            llm_repeater_global_rpm=_env_int("LLM_REPEATER_GLOBAL_RPM", 10),
-            llm_repeater_feedback_enabled=_env_bool("LLM_REPEATER_FEEDBACK_ENABLED", False),
-            llm_repeater_bias_enabled=_env_bool("LLM_REPEATER_BIAS_ENABLED", False),
-            llm_repeater_writeback_enabled=_env_bool("LLM_REPEATER_WRITEBACK_ENABLED", False),
+            llm_repeater_strong_cooldown_sec=_env_int("LLM_REPEATER_STRONG_COOLDOWN_SEC", 25),
+            llm_repeater_strong_attempt_rate=_env_float_clamped(
+                "LLM_REPEATER_STRONG_ATTEMPT_RATE",
+                0.55,
+                0.0,
+                1.0,
+            ),
+            llm_repeater_max_inflight=_env_int("LLM_REPEATER_MAX_INFLIGHT", 2),
+            llm_repeater_global_rpm=_env_int("LLM_REPEATER_GLOBAL_RPM", 18),
+            llm_repeater_feedback_enabled=_env_bool("LLM_REPEATER_FEEDBACK_ENABLED", True),
+            llm_repeater_bias_enabled=_env_bool("LLM_REPEATER_BIAS_ENABLED", True),
+            llm_repeater_writeback_enabled=_env_bool("LLM_REPEATER_WRITEBACK_ENABLED", True),
             conversation_feature_level=resolve_conversation_feature_level_raw(),
             llm_reply_gate_enabled=_env_bool("LLM_REPLY_GATE_ENABLED", True),
             llm_reply_gate_min_chars=_env_int("LLM_REPLY_GATE_MIN_CHARS", 1),
