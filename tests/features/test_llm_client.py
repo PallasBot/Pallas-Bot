@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-import types
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -455,23 +453,12 @@ def test_resolve_llm_chat_enabled_priority(monkeypatch: pytest.MonkeyPatch) -> N
             return values.get(key)
 
         monkeypatch.setattr("pallas.product.llm.config.repo_env_raw_value", fake_raw)
-        chat_pkg = types.ModuleType("packages.chat")
-        chat_cfg = types.ModuleType("packages.chat.config")
-        chat_cfg.get_chat_config = lambda: type("Cfg", (), {"chat_enable": False})()
-        monkeypatch.setitem(sys.modules, "packages.chat", chat_pkg)
-        monkeypatch.setitem(sys.modules, "packages.chat.config", chat_cfg)
-        monkeypatch.setattr(
-            chat_pkg,
-            "config",
-            chat_cfg,
-            raising=False,
-        )
         clear_llm_config_cache()
 
     set_env({"LLM_CHAT_ENABLED": "false", "CHAT_ENABLE": "true"})
     assert resolve_llm_chat_enabled() is False
-    assert resolve_legacy_rwkv_drunk_chat_enabled() is False
-    assert is_drunk_chat_enabled() is False
+    assert resolve_legacy_rwkv_drunk_chat_enabled() is True
+    assert is_drunk_chat_enabled() is True
 
     set_env({"CHAT_ENABLE": "true"})
     assert resolve_llm_chat_enabled() is False
@@ -481,6 +468,11 @@ def test_resolve_llm_chat_enabled_priority(monkeypatch: pytest.MonkeyPatch) -> N
     set_env({"LLM_CHAT_ENABLE": "false", "CHAT_ENABLE": "true"})
     assert resolve_llm_chat_enabled() is False
     assert resolve_legacy_rwkv_drunk_chat_enabled() is True
+
+    set_env({"LLM_CHAT_ENABLED": "true", "CHAT_ENABLE": "true"})
+    assert resolve_llm_chat_enabled() is True
+    assert resolve_legacy_rwkv_drunk_chat_enabled() is True
+    assert is_drunk_chat_enabled() is True
 
     set_env({"LLM_CHAT_ENABLED": "true", "CHAT_ENABLE": "false"})
     assert resolve_llm_chat_enabled() is True

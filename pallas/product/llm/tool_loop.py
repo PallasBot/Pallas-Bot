@@ -63,6 +63,9 @@ def inference_options_from_metadata(metadata: dict[str, Any] | None) -> dict[str
             options["num_predict"] = int(meta["token_count"])
         except (TypeError, ValueError):
             pass
+    effort = str(meta.get("model_effort") or "").strip().lower()
+    if effort:
+        options["model_effort"] = effort
     return options
 
 
@@ -72,6 +75,12 @@ def resolve_model(metadata: dict[str, Any] | None, *, cfg: LlmConfig) -> str:
         raw = str(meta.get(key) or "").strip()
         if raw:
             return raw
+    from pallas.product.llm.providers_store import resolve_endpoint_for_task
+
+    task = str(meta.get("task") or "llm_chat").strip() or "llm_chat"
+    endpoint = resolve_endpoint_for_task(task)
+    if endpoint is not None and endpoint.model:
+        return endpoint.model
     return str(cfg.llm_model or "").strip()
 
 
@@ -87,12 +96,55 @@ async def complete_with_tool_loop(
     tool_schemas = meta.get("tool_schemas") if isinstance(meta.get("tool_schemas"), list) else []
     tools_enabled = bool(meta.get("tools_enabled")) and bool(tool_schemas) and bool(c.llm_tools_enabled)
     working = build_working_messages(system_prompt=system_prompt, messages=messages)
+    task = str(meta.get("task") or "llm_chat").strip() or "llm_chat"
+    from pallas.product.llm.vision_messages import prepare_kernel_chat_messages
+
+    user_text = ""
+    if working:
+        last = working[-1]
+        content = last.get("content")
+        if isinstance(content, str):
+            user_text = content
+        elif isinstance(meta.get("vision_plain_text"), str):
+            user_text = str(meta.get("vision_plain_text") or "")
+    working, provider_row = await prepare_kernel_chat_messages(
+        working,
+        metadata=meta,
+        task=task,
+        user_text=user_text,
+    )
+    if isinstance(metadata, dict):
+        metadata["vision_prepared"] = True
+        if provider_row is not None:
+            from pallas.product.llm.providers_store import provider_capabilities, provider_model_effort
+
+            metadata.setdefault("provider_capabilities", provider_capabilities(provider_row))
+            effort = provider_model_effort(provider_row)
+            if effort:
+                metadata.setdefault("model_effort", effort)
+
     model = resolve_model(meta, cfg=c)
     options = inference_options_from_metadata(meta)
+    if provider_row is not None:
+        from pallas.product.llm.providers_store import provider_model_effort, provider_request_method
+
+        effort = provider_model_effort(provider_row)
+        if effort and "model_effort" not in options:
+            options["model_effort"] = effort
+        method = provider_request_method(provider_row)
+        if method:
+            options["request_method"] = method
     context = ToolInvokeContext.from_payload(meta)
 
     if not tools_enabled:
-        last_message = await complete_chat_message(working, model=model, options=options, tools=None, cfg=c)
+        last_message = await complete_chat_message(
+            working,
+            model=model,
+            options=options,
+            tools=None,
+            cfg=c,
+            task=task,
+        )
         content = str(last_message.get("content", "") or "").strip()
         assistant_message = dict(last_message)
         assistant_message.setdefault("role", "assistant")
@@ -115,6 +167,7 @@ async def complete_with_tool_loop(
             options=options,
             tools=tool_schemas,
             cfg=c,
+            task=task,
         )
         tool_calls = last_message.get("tool_calls")
         round_trace: dict[str, Any] = {"round": round_idx + 1, "tool_calls": []}

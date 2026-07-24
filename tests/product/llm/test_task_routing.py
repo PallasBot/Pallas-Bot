@@ -11,12 +11,6 @@ from pallas.product.llm.task_routing import (
 )
 
 
-def _force_ai_service_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
-    cfg = LlmConfig(llm_runtime="ai_service", llm_chat_enabled=True)
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.config.is_llm_bot_kernel_runtime", lambda _cfg=None: False)
-
-
 def test_resolve_submit_task_name_defaults() -> None:
     assert resolve_submit_task_name("repeater_select") == "repeater_select"
     assert resolve_submit_task_name(None, "drunk") == "drunk"
@@ -26,14 +20,7 @@ def test_resolve_submit_task_name_defaults() -> None:
 @pytest.mark.asyncio
 async def test_resolve_task_route_explicit_model_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_task_route_cache()
-
-    async def fail_health(**_kwargs):
-        raise AssertionError("explicit model should bypass remote route lookup")
-
-    monkeypatch.setattr("pallas.product.llm.task_routing.probe_ai_service_health", fail_health)
-
     route = await resolve_task_route("llm_chat", explicit_model="qwen3:32b")
-
     assert route == TaskRouteSpec(
         task="llm_chat",
         resolved_model="qwen3:32b",
@@ -48,12 +35,10 @@ async def test_resolve_task_route_bot_kernel_uses_config_model(monkeypatch: pyte
     clear_task_route_cache()
     cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="kernel-demo", llm_base_url="http://x/v1")
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-
-    async def fail_health(**_kwargs):
-        raise AssertionError("kernel route should not probe AI health")
-
-    monkeypatch.setattr("pallas.product.llm.task_routing.probe_ai_service_health", fail_health)
-
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.resolve_endpoint_for_task",
+        lambda *_args, **_kwargs: None,
+    )
     route = await resolve_task_route("llm_chat")
     assert route == TaskRouteSpec(
         task="llm_chat",
@@ -65,159 +50,139 @@ async def test_resolve_task_route_bot_kernel_uses_config_model(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
-async def test_resolve_task_route_prefers_ai_health_task_routing_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_resolve_task_route_bot_kernel_uses_providers_store(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     clear_task_route_cache()
-    _force_ai_service_runtime(monkeypatch)
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    from pallas.product.llm.providers_store import clear_providers_store_cache, save_providers_document
 
-    async def fake_health(**_kwargs):
-        return {
-            "ok": True,
-            "body": {
-                "llm": {
-                    "provider_mode": "chain",
-                    "task_routing": {"drunk": "local", "llm_chat": "remote"},
-                    "local_task_models": {"repeater_select": "qwen2.5:0.5b"},
-                }
-            },
-        }
-
-    async def fail_local(**_kwargs):
-        raise AssertionError("health route should be preferred before local-routing fetch")
-
-    async def fake_providers(**_kwargs):
-        return {
+    clear_providers_store_cache()
+    save_providers_document(
+        {
             "providers": [
                 {
-                    "id": "local",
-                    "kind": "local",
-                    "default_model": "qwen3:8b",
-                    "task_models": {"drunk": "qwen2.5:0.5b"},
+                    "id": "primary",
+                    "kind": "remote",
+                    "base_url": "https://api.example.com/v1",
+                    "api_key": "sk-primary",
+                    "default_model": "model-a",
+                    "task_models": {"llm_chat": "model-a"},
                 },
                 {
-                    "id": "remote",
+                    "id": "backup",
                     "kind": "remote",
-                    "default_model": "deepseek-v4-flash",
-                    "task_models": {"llm_chat": "deepseek-v4-flash"},
+                    "base_url": "https://backup.example.com/v1",
+                    "api_key": "sk-backup",
+                    "default_model": "model-b",
+                    "task_models": {"llm_chat": "model-b"},
                 },
             ],
-            "routing": {"chain_fallback": ["local", "remote"], "tasks": {}},
+            "routing": {"chain_fallback": ["primary", "backup"], "tasks": {"llm_chat": "primary"}},
         }
-
-    monkeypatch.setattr("pallas.product.llm.task_routing.probe_ai_service_health", fake_health)
-    monkeypatch.setattr("pallas.product.llm.task_routing.fetch_local_routing_config", fail_local)
-    monkeypatch.setattr("pallas.product.llm.model_admin.fetch_providers_config", fake_providers)
-
-    drunk_route = await resolve_task_route("drunk")
-    chat_route = await resolve_task_route("llm_chat")
-
-    assert drunk_route == TaskRouteSpec(
-        task="drunk",
-        resolved_model="qwen2.5:0.5b",
-        provider_hint="local",
-        source="ai_health",
-        fallback_models=("deepseek-v4-flash",),
     )
-    assert chat_route == TaskRouteSpec(
-        task="llm_chat",
-        resolved_model="deepseek-v4-flash",
-        provider_hint="remote",
-        source="ai_health",
-        fallback_models=("qwen3:8b",),
-    )
+    cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url="")
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
 
-
-@pytest.mark.asyncio
-async def test_resolve_task_route_prefers_ai_health_local_task_models(monkeypatch: pytest.MonkeyPatch) -> None:
-    clear_task_route_cache()
-    _force_ai_service_runtime(monkeypatch)
-
-    async def fake_health(**_kwargs):
-        return {
-            "ok": True,
-            "body": {
-                "llm": {
-                    "provider_mode": "local",
-                    "local_task_models": {"repeater_select": "qwen3:14b", "llm_chat": "qwen3:8b"},
-                }
-            },
-        }
-
-    async def fail_local(**_kwargs):
-        raise AssertionError("health route should be preferred before local-routing fetch")
-
-    monkeypatch.setattr("pallas.product.llm.task_routing.probe_ai_service_health", fake_health)
-    monkeypatch.setattr("pallas.product.llm.task_routing.fetch_local_routing_config", fail_local)
-
-    route = await resolve_task_route("repeater_select")
-
+    route = await resolve_task_route("llm_chat")
     assert route == TaskRouteSpec(
-        task="repeater_select",
-        resolved_model="qwen3:14b",
-        provider_hint="local",
-        source="ai_health",
-        fallback_models=(),
+        task="llm_chat",
+        resolved_model="model-a",
+        provider_hint="primary",
+        source="config",
+        fallback_models=("model-b",),
     )
 
 
 @pytest.mark.asyncio
-async def test_resolve_task_route_falls_back_to_local_config(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_resolve_task_route_chain_expands_provider_fallbacks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
     clear_task_route_cache()
-    _force_ai_service_runtime(monkeypatch)
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    from pallas.product.llm.providers_store import clear_providers_store_cache, save_providers_document
+    from pallas.product.llm.task_routing import resolve_task_route_chain
 
-    async def fake_health(**_kwargs):
-        return {"ok": False, "body": None}
-
-    async def fake_local(**_kwargs):
-        return {
-            "llm_model": "qwen3:8b",
-            "task_models": {
-                "repeater_select": "qwen3:14b",
+    clear_providers_store_cache()
+    save_providers_document(
+        {
+            "providers": [
+                {
+                    "id": "primary",
+                    "kind": "remote",
+                    "base_url": "https://api.example.com/v1",
+                    "api_key": "sk-primary",
+                    "default_model": "primary",
+                },
+                {
+                    "id": "fb1",
+                    "kind": "remote",
+                    "base_url": "https://fb1.example.com/v1",
+                    "api_key": "sk-1",
+                    "default_model": "fb-1",
+                },
+                {
+                    "id": "fb2",
+                    "kind": "remote",
+                    "base_url": "https://fb2.example.com/v1",
+                    "api_key": "sk-2",
+                    "default_model": "fb-2",
+                },
+            ],
+            "routing": {
+                "chain_fallback": ["primary", "fb1", "fb2"],
+                "tasks": {"llm_chat": "primary"},
             },
         }
-
-    monkeypatch.setattr("pallas.product.llm.task_routing.probe_ai_service_health", fake_health)
-    monkeypatch.setattr("pallas.product.llm.task_routing.fetch_local_routing_config", fake_local)
-
-    repeater_route = await resolve_task_route("repeater_select")
-    chat_route = await resolve_task_route("llm_chat")
-
-    assert repeater_route == TaskRouteSpec(
-        task="repeater_select",
-        resolved_model="qwen3:14b",
-        provider_hint=None,
-        source="config",
-        fallback_models=(),
     )
-    assert chat_route == TaskRouteSpec(
-        task="llm_chat",
-        resolved_model="qwen3:8b",
-        provider_hint=None,
-        source="config",
-        fallback_models=(),
-    )
-
-
-@pytest.mark.asyncio
-async def test_resolve_task_route_chain_expands_fallbacks(monkeypatch: pytest.MonkeyPatch) -> None:
-    clear_task_route_cache()
-    _force_ai_service_runtime(monkeypatch)
-
-    async def fake_health(**_kwargs):
-        return {"ok": False, "body": None}
-
-    async def fake_local(**_kwargs):
-        return {
-            "llm_model": "primary",
-            "task_models": {"llm_chat": "primary"},
-            "task_fallback_chains": {"llm_chat": ["fb-1", "fb-2"]},
-        }
-
-    monkeypatch.setattr("pallas.product.llm.task_routing.probe_ai_service_health", fake_health)
-    monkeypatch.setattr("pallas.product.llm.task_routing.fetch_local_routing_config", fake_local)
-
-    from pallas.product.llm.task_routing import resolve_task_route_chain
+    cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url="")
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
 
     chain = await resolve_task_route_chain("llm_chat")
     assert [item.resolved_model for item in chain] == ["primary", "fb-1", "fb-2"]
     assert chain[0].source == "config"
     assert chain[1].source == "fallback"
+
+
+@pytest.mark.asyncio
+async def test_resolve_task_route_same_provider_tier_backup_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    clear_task_route_cache()
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    from pallas.product.llm.providers_store import clear_providers_store_cache, save_providers_document
+
+    clear_providers_store_cache()
+    save_providers_document(
+        {
+            "providers": [
+                {
+                    "id": "ds",
+                    "kind": "remote",
+                    "base_url": "https://api.example.com/v1",
+                    "api_key": "sk-ds",
+                    "default_model": "flash",
+                    "task_models": {"llm_chat": "flash"},
+                },
+            ],
+            "routing": {
+                "chain_fallback": ["ds"],
+                "tasks": {"llm_chat": "ds"},
+                "tier_backups": {"high": "ds"},
+                "tier_backup_models": {"high": "reasoner"},
+            },
+        }
+    )
+    cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url="")
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
+
+    route = await resolve_task_route("llm_chat")
+    assert route.resolved_model == "flash"
+    assert route.provider_hint == "ds"
+    assert route.fallback_models == ("reasoner",)

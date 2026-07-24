@@ -284,3 +284,29 @@ async def delete_memory_entry_mongo(entry_id: int, *, bot_id: int | None = None)
         return False
     await row.delete()
     return True
+
+
+async def clear_memory_entries_mongo(
+    *,
+    bot_id: int,
+    group_id: int | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    filt: dict[str, Any] = {"bot_id": int(bot_id)}
+    if group_id is not None:
+        filt["group_id"] = normalize_group_scope(group_id)
+    count = await LlmMemoryEntry.find(filt).count()
+    if dry_run:
+        return {
+            "deleted": int(count),
+            "dry_run": True,
+            "bot_id": int(bot_id),
+            "group_id": normalize_group_scope(group_id) if group_id is not None else None,
+        }
+    await LlmMemoryEntry.find(filt).delete()
+    return {
+        "deleted": int(count),
+        "dry_run": False,
+        "bot_id": int(bot_id),
+        "group_id": normalize_group_scope(group_id) if group_id is not None else None,
+    }

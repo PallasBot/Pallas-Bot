@@ -64,22 +64,24 @@ async def build_llm_status_text(*, cfg: LlmConfig | None = None) -> str:
     try:
         merged = await fetch_llm_task_stats(cfg=c)
     except Exception as exc:
-        lines.append(f"AI 统计：读取失败（{exc}）")
+        lines.append(f"LLM 计量：读取失败（{exc}）")
         return "\n".join(lines)
 
     ai_body = merged.get("ai") if isinstance(merged.get("ai"), dict) else {}
     tokens = ai_body.get("tokens") if isinstance(ai_body.get("tokens"), dict) else {}
     if tokens:
         lines.append(
-            "今日 Token（AI）："
+            "今日 Token（内核）："
             f"{int(tokens.get('total_tokens') or 0)} "
             f"（输入 {int(tokens.get('prompt_tokens') or 0)} / "
             f"输出 {int(tokens.get('completion_tokens') or 0)}）"
         )
     ai_totals = ai_body.get("totals") if isinstance(ai_body.get("totals"), dict) else {}
     if ai_totals:
-        lines.append(f"AI 任务：成功 {int(ai_totals.get('task_ok') or 0)}，失败 {int(ai_totals.get('task_fail') or 0)}")
+        ok = int(ai_totals.get("task_ok") or 0)
+        fail = int(ai_totals.get("task_fail") or 0)
+        lines.append(f"任务（内核）：成功 {ok}，失败 {fail}")
     if not merged.get("ai_reachable"):
-        err = str(merged.get("error") or "不可达").strip()
-        lines.append(f"AI 统计：{err}")
+        err = str(merged.get("error") or "内核计量不可用").strip()
+        lines.append(f"LLM 计量：{err}")
     return "\n".join(lines)

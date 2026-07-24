@@ -52,7 +52,7 @@ def test_superuser_only_plugins_hidden_from_user_help_but_visible_in_superuser_h
     )
     llm_chat = SimpleNamespace(
         name="llm_chat",
-        metadata=SimpleNamespace(name="随时闲聊", extra={"help_audience": "superuser"}),
+        metadata=SimpleNamespace(name="智能对话", extra={"help_audience": "superuser"}),
     )
     draw = SimpleNamespace(name="draw", metadata=SimpleNamespace(name="牛牛画画", extra={}))
 

@@ -1,15 +1,17 @@
-"""调用 AI 服务 `/api/v1/embeddings`（同步，供知识检索后端使用）。"""
+"""Bot 内核本地 embeddings（hash stub，供知识/记忆检索；不再依赖 AI HTTP）。"""
 
 from __future__ import annotations
 
+import hashlib
 from operator import itemgetter
-from typing import Any
-
-import httpx
-from nonebot import logger
+from typing import TYPE_CHECKING, Any
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
-from pallas.product.llm.config import LlmConfig, get_llm_config, llm_server_base_url
+
+if TYPE_CHECKING:
+    from pallas.product.llm.config import LlmConfig
+
+_DEFAULT_DIMS = 16
 
 
 def embedding_model_name(cfg: LlmConfig | None = None) -> str:
@@ -19,9 +21,13 @@ def embedding_model_name(cfg: LlmConfig | None = None) -> str:
     return model or "stub"
 
 
-def embeddings_api_url(cfg: LlmConfig | None = None) -> str:
-    c = cfg or get_llm_config()
-    return f"{llm_server_base_url(c).rstrip('/')}/api/v1/embeddings"
+def stub_embedding(text: str, *, dims: int = _DEFAULT_DIMS) -> list[float]:
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    out: list[float] = []
+    for i in range(dims):
+        byte = digest[i % len(digest)]
+        out.append((byte / 255.0) * 2.0 - 1.0)
+    return out
 
 
 def parse_embeddings_response(payload: object) -> list[list[float]]:
@@ -54,35 +60,27 @@ def fetch_embeddings_sync(
     cfg: LlmConfig | None = None,
     timeout_sec: float = 8.0,
 ) -> list[list[float]] | None:
+    _ = cfg, timeout_sec
     inputs = [str(text or "").strip() for text in texts]
     if not inputs or any(not text for text in inputs):
         return None
-    url = embeddings_api_url(cfg)
-    body: dict[str, Any] = {
-        "input": inputs if len(inputs) > 1 else inputs[0],
-        "model": embedding_model_name(cfg),
+    return [stub_embedding(text) for text in inputs]
+
+
+def embeddings_payload_for_api(texts: list[str], *, model: str | None = None) -> dict[str, Any]:
+    """兼容旧 OpenAI embeddings 响应形状（测试/调试用）。"""
+    inputs = [str(text or "") for text in texts]
+    name = (model or embedding_model_name()).strip() or "stub"
+    data = [
+        {"object": "embedding", "index": idx, "embedding": stub_embedding(text)}
+        for idx, text in enumerate(inputs)
+    ]
+    return {
+        "object": "list",
+        "model": name,
+        "data": data,
+        "usage": {
+            "prompt_tokens": sum(len(text) for text in inputs),
+            "total_tokens": sum(len(text) for text in inputs),
+        },
     }
-    try:
-        with httpx.Client(timeout=timeout_sec) as client:
-            response = client.post(url, json=body)
-    except Exception as exc:
-        logger.warning("knowledge embeddings request failed: {}", exc)
-        return None
-    if response is None or response.status_code >= 400:
-        code = response.status_code if response is not None else "?"
-        logger.warning("knowledge embeddings HTTP {} url={}", code, url)
-        return None
-    try:
-        payload = response.json()
-    except Exception:
-        logger.warning("knowledge embeddings invalid json url={}", url)
-        return None
-    vectors = parse_embeddings_response(payload)
-    if len(vectors) != len(inputs):
-        logger.warning(
-            "knowledge embeddings size mismatch expected={} got={}",
-            len(inputs),
-            len(vectors),
-        )
-        return None
-    return vectors
