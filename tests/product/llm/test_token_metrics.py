@@ -138,6 +138,8 @@ def test_hydrate_from_disk_after_restart(tmp_path, monkeypatch: pytest.MonkeyPat
     tm._completion_tokens = 0
     tm._cache_read_tokens = 0
     tm._cache_write_tokens = 0
+    tm._cost_total = 0.0
+    tm._cost_currency = ""
     tm._by_task.clear()
     tm._by_provider.clear()
     tm._by_model.clear()

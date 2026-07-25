@@ -39,6 +39,9 @@ def _empty_document() -> dict[str, Any]:
             "tasks": {},
             "tier_backups": {},
             "tier_backup_models": {},
+            "task_backups": {},
+            "task_backup_models": {},
+            "cost_currency": "",
         },
     }
 
@@ -228,6 +231,14 @@ def _normalize_provider_row(raw: dict[str, Any], existing: dict[str, Any] | None
         request_method = _normalize_request_method(existing)
     if kind == "local":
         request_method = DEFAULT_REQUEST_METHOD
+    from pallas.product.llm.token_cost import normalize_model_pricing
+
+    if "model_pricing" in raw:
+        model_pricing = normalize_model_pricing(raw.get("model_pricing"))
+    elif existing and isinstance(existing.get("model_pricing"), dict):
+        model_pricing = normalize_model_pricing(existing.get("model_pricing"))
+    else:
+        model_pricing = {}
     return {
         "id": pid,
         "kind": kind,
@@ -241,6 +252,7 @@ def _normalize_provider_row(raw: dict[str, Any], existing: dict[str, Any] | None
         "capabilities": capabilities,
         "model_effort": model_effort,
         "request_method": request_method,
+        "model_pricing": model_pricing,
     }
 
 
@@ -252,6 +264,18 @@ def _normalize_tier_str_map(raw: object) -> dict[str, str]:
         value = str(raw.get(key) or "").strip()
         if value:
             out[key] = value
+    return out
+
+
+def _normalize_task_str_map(raw: object) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, value in raw.items():
+        task = str(key or "").strip()
+        item = str(value or "").strip()
+        if task and item:
+            out[task] = item
     return out
 
 
@@ -271,6 +295,43 @@ def _merge_routing_tier_maps(
     prev_routing = existing.get("routing") if isinstance(existing.get("routing"), dict) else {}
     if isinstance(prev_routing, dict) and field in prev_routing:
         routing_out[field] = _normalize_tier_str_map(prev_routing.get(field))
+
+
+def _merge_routing_task_maps(
+    routing_out: dict[str, Any],
+    routing_raw: dict[str, Any],
+    *,
+    existing: dict[str, Any] | None,
+    field: str,
+) -> None:
+    if field in routing_raw:
+        routing_out[field] = _normalize_task_str_map(routing_raw.get(field))
+        return
+    if not existing:
+        return
+    prev_routing = existing.get("routing") if isinstance(existing.get("routing"), dict) else {}
+    if isinstance(prev_routing, dict) and field in prev_routing:
+        routing_out[field] = _normalize_task_str_map(prev_routing.get(field))
+
+
+def _merge_route_source(
+    routing_out: dict[str, Any],
+    routing_raw: dict[str, Any],
+    *,
+    existing: dict[str, Any] | None,
+) -> None:
+    if "route_source" in routing_raw:
+        raw = str(routing_raw.get("route_source") or "").strip().lower()
+        if raw in ("tiers", "tasks"):
+            routing_out["route_source"] = raw
+        return
+    if not existing:
+        return
+    prev_routing = existing.get("routing") if isinstance(existing.get("routing"), dict) else {}
+    if isinstance(prev_routing, dict):
+        raw = str(prev_routing.get("route_source") or "").strip().lower()
+        if raw in ("tiers", "tasks"):
+            routing_out["route_source"] = raw
 
 
 def _normalize_document(raw: dict[str, Any], *, existing: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -299,13 +360,28 @@ def _normalize_document(raw: dict[str, Any], *, existing: dict[str, Any] | None 
             provider_id = str(value or "").strip()
             if task and provider_id:
                 tasks[task] = provider_id
-    # tier_backups / tier_backup_models：允许同提供方不同模型作备用
+    # tier_*：高低档兜底；task_*：全任务覆盖（并存时运行时以 task_* 为准）
     routing_out: dict[str, Any] = {
         "chain_fallback": [str(item).strip() for item in chain if str(item).strip()],
         "tasks": tasks,
     }
     _merge_routing_tier_maps(routing_out, routing_raw, existing=existing, field="tier_backups")
     _merge_routing_tier_maps(routing_out, routing_raw, existing=existing, field="tier_backup_models")
+    _merge_routing_task_maps(routing_out, routing_raw, existing=existing, field="task_backups")
+    _merge_routing_task_maps(routing_out, routing_raw, existing=existing, field="task_backup_models")
+    _merge_route_source(routing_out, routing_raw, existing=existing)
+    from pallas.product.llm.token_cost import normalize_cost_currency
+
+    if "cost_currency" in routing_raw:
+        routing_out["cost_currency"] = normalize_cost_currency(routing_raw.get("cost_currency"))
+    elif existing:
+        prev_routing = existing.get("routing") if isinstance(existing.get("routing"), dict) else {}
+        if isinstance(prev_routing, dict) and "cost_currency" in prev_routing:
+            routing_out["cost_currency"] = normalize_cost_currency(prev_routing.get("cost_currency"))
+        else:
+            routing_out["cost_currency"] = ""
+    else:
+        routing_out["cost_currency"] = ""
     return {
         "providers": providers,
         "routing": routing_out,
@@ -427,6 +503,10 @@ def upsert_provider_row(provider: dict[str, Any]) -> dict[str, Any]:
             "tasks": dict(routing.get("tasks") or {}),
             "tier_backups": dict(routing.get("tier_backups") or {}),
             "tier_backup_models": dict(routing.get("tier_backup_models") or {}),
+            "task_backups": dict(routing.get("task_backups") or {}),
+            "task_backup_models": dict(routing.get("task_backup_models") or {}),
+            "route_source": str(routing.get("route_source") or ""),
+            "cost_currency": str(routing.get("cost_currency") or ""),
         },
     }
     path = providers_store_path()
@@ -464,11 +544,22 @@ def export_providers_for_api(*, doc: dict[str, Any] | None = None) -> dict[str, 
             "capabilities": _normalize_capabilities(raw),
             "model_effort": _normalize_model_effort(raw),
             "request_method": provider_request_method(raw),
+            "model_pricing": dict(raw.get("model_pricing") or {}),
         })
     path = providers_store_path()
+    routing = payload.get("routing") if isinstance(payload.get("routing"), dict) else {}
     return {
         "providers": providers,
-        "routing": payload.get("routing") or {"chain_fallback": [], "tasks": {}, "tier_backups": {}},
+        "routing": routing
+        or {
+            "chain_fallback": [],
+            "tasks": {},
+            "tier_backups": {},
+            "tier_backup_models": {},
+            "task_backups": {},
+            "task_backup_models": {},
+            "cost_currency": "",
+        },
         "providers_file": str(path),
         "file_exists": path.is_file(),
     }
