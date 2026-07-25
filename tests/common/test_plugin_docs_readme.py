@@ -31,14 +31,14 @@ def test_normalize_bundled_readme_rewrites_plugin_relative_assets() -> None:
 def test_normalize_bundled_readme_uses_official_extension_cover_for_maa() -> None:
     md = '<p align="center"><img src="../assets/brand-avatar.png" width="220" alt="MAA"></p>'
     out = normalize_bundled_plugin_readme_markdown("maa", md)
-    assert "raw.githubusercontent.com/TogetsuDo/pallas-plugin-maa/main/assets/brand-avatar.png" in out
+    assert "raw.githubusercontent.com/PallasBot/Plugin-Maa/main/assets/brand-avatar.png" in out
     assert "/pallas/assets/brand-avatar.png" not in out
 
 
-def test_normalize_bundled_readme_uses_official_extension_cover_for_chat() -> None:
-    md = '<p align="center"><img src="../assets/brand-avatar.png" width="220" alt="chat"></p>'
-    out = normalize_bundled_plugin_readme_markdown("chat", md)
-    assert "raw.githubusercontent.com/TogetsuDo/pallas-plugin-ai-media/main/assets/brand-avatar.png" in out
+def test_normalize_bundled_readme_uses_official_extension_cover_for_sing() -> None:
+    md = '<p align="center"><img src="../assets/brand-avatar.png" width="220" alt="sing"></p>'
+    out = normalize_bundled_plugin_readme_markdown("sing", md)
+    assert "raw.githubusercontent.com/PallasBot/Plugin-Ai-Media/main/assets/brand-avatar.png" in out
     assert "/pallas/assets/brand-avatar.png" not in out
 
 

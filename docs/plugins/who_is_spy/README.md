@@ -77,4 +77,4 @@
 ## 相关链接
 
 - [命令权限说明](../common/cmd_perm/README.md)
-- [牛牛卧底插件仓库](https://github.com/TogetsuDo/pallas-plugin-who-is-spy)
+- [牛牛卧底插件仓库](https://github.com/PallasBot/Plugin-Who-Is-Spy)
