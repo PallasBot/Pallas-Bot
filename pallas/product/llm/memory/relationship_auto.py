@@ -68,6 +68,14 @@ _OBSERVE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
         "希望被叫作{name}",
     ),
     (
+        re.compile(r"^我在群里叫(?P<name>[^，,。！!\s]{1,12})$"),
+        "希望被叫作{name}",
+    ),
+    (
+        re.compile(r"^我(?:的)?群名片(?:是|叫)(?P<name>[^，,。！!\s]{1,12})$"),
+        "希望被叫作{name}",
+    ),
+    (
         re.compile(r"^别(?:再)?叫我(?P<name>[^，,。！!\s]{1,12})$"),
         "不喜欢被叫作{name}",
     ),

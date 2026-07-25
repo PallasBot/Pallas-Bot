@@ -50,8 +50,10 @@ async def test_relationship_inject_facts_and_deltas() -> None:
         )
     assert "是本群群主" in result.system_prompt
     assert "希望被叫作队长" in result.system_prompt
+    assert "称呼对方时优先用「队长」" in result.system_prompt
     assert "不得覆盖" in result.system_prompt
     assert result.trace["hit_count"] == 1
     assert result.trace["note_source"] == "observe"
+    assert result.trace["preferred_name"] == "队长"
     assert result.trace["warmth_delta"] == 0.06
     assert result.trace["assertiveness_delta"] == -0.03

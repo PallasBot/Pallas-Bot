@@ -192,15 +192,13 @@ def merge_relationship_facts(
     max_len: int,
     max_parts: int = 6,
 ) -> str:
-    """合并多条关系事实；去重后用中文分号拼接，超长截断。"""
-    parts = split_relationship_facts(existing)
-    seen = {item.casefold() for item in parts}
-    for item in split_relationship_facts(incoming):
-        key = item.casefold()
-        if key in seen:
-            continue
-        seen.add(key)
-        parts.append(item)
+    """合并多条关系事实；同槽覆盖（称呼/身份等），其余去重后分号拼接。"""
+    from pallas.product.llm.memory.relationship_profile import apply_relationship_fact_slots
+
+    parts = apply_relationship_fact_slots(
+        split_relationship_facts(existing),
+        split_relationship_facts(incoming),
+    )
     if not parts:
         return ""
     parts = parts[-max(1, max_parts) :]

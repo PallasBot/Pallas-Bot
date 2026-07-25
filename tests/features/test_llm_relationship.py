@@ -102,6 +102,30 @@ def test_merge_relationship_facts_dedupes_and_joins() -> None:
     assert merged.count("是本群群主") == 1
 
 
+def test_merge_relationship_facts_replaces_call_as_slot() -> None:
+    merged = merge_relationship_facts("希望被叫作队长；是本群群主", "希望被叫作小明", max_len=200)
+    assert "希望被叫作小明" in merged
+    assert "希望被叫作队长" not in merged
+    assert "是本群群主" in merged
+
+
+def test_parse_relationship_fact_view_and_guidance() -> None:
+    from pallas.product.llm.memory.relationship_profile import (
+        build_relationship_guidance_lines,
+        parse_relationship_fact_view,
+    )
+
+    view = parse_relationship_fact_view("是本群群主；希望被叫作队长；不喜欢被叫作笨蛋；偏好直接沟通")
+    assert view.preferred_name == "队长"
+    assert "笨蛋" in view.avoid_names
+    assert view.role_label == "群主"
+    assert view.prefer_direct is True
+    hints = " ".join(build_relationship_guidance_lines(view))
+    assert "队长" in hints
+    assert "笨蛋" in hints
+    assert "直接" in hints
+
+
 def test_clamp_user_relationship_delta() -> None:
     assert clamp_user_relationship_delta(0.2) == 0.15
     assert clamp_user_relationship_delta(-0.2) == -0.15
@@ -127,6 +151,8 @@ def test_parse_relationship_observe_self_role() -> None:
 def test_parse_relationship_observe_address_and_pref() -> None:
     assert parse_relationship_observe("你可以叫我队长啊") == "希望被叫作队长"
     assert parse_relationship_observe("我叫小明") == "希望被叫作小明"
+    assert parse_relationship_observe("我在群里叫队长") == "希望被叫作队长"
+    assert parse_relationship_observe("我群名片是小明") == "希望被叫作小明"
     assert parse_relationship_observe("不要叫我笨蛋") == "不喜欢被叫作笨蛋"
     assert parse_relationship_observe("别用外号叫我") == "不喜欢被叫外号"
     assert parse_relationship_observe("以后别用外号") == "不喜欢被叫外号"

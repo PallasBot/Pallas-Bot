@@ -11,6 +11,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
 from pallas.product.llm.memory.policy import classify_memory_candidate, normalize_episode_note
+from pallas.product.llm.memory.relationship_profile import (
+    build_relationship_guidance_lines,
+    parse_relationship_fact_view,
+)
 from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile
 from pallas.product.llm.memory.retrieve import memory_relevance_score
 from pallas.product.llm.memory.store import retrieve_memory_hits
@@ -218,13 +222,14 @@ async def enrich_system_with_relationship_context(
     sources: list[str] = []
     entries: list[dict[str, str]] = []
     fallback = False
+    preferred_name = ""
     if profile is not None and profile.has_facts:
         safe = sanitize_prompt_block(profile.content, max_len=c.llm_relationship_content_max_len)
         if safe:
-            for part in safe.replace("；", "\n").splitlines():
-                item = part.strip(" -•")
-                if item:
-                    lines.append(f"- {item}")
+            view = parse_relationship_fact_view(safe)
+            preferred_name = view.preferred_name
+            lines.extend(f"- {item}" for item in view.facts)
+            lines.extend(f"- {hint}" for hint in build_relationship_guidance_lines(view))
             if lines:
                 sources.append("relationship_note")
                 entries.append({"source": "relationship_note", "content": safe[:120]})
@@ -246,6 +251,7 @@ async def enrich_system_with_relationship_context(
         "entries": entries,
         "fallback": fallback,
         "note_source": note_source or ("fallback" if fallback else ""),
+        "preferred_name": preferred_name,
         "warmth_delta": warmth_delta,
         "assertiveness_delta": assertiveness_delta,
     }
