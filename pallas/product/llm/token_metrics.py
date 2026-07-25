@@ -21,6 +21,7 @@ _cache_write_tokens = 0
 _by_task: dict[str, dict[str, int]] = {}
 _by_provider: dict[str, dict[str, int]] = {}
 _by_model: dict[str, dict[str, int]] = {}
+_by_hour: dict[str, dict[str, int]] = {}
 
 _EMPTY_ROW = {
     "prompt_tokens": 0,
@@ -74,6 +75,7 @@ def _hydrate_from_disk_locked() -> None:
         or _by_task
         or _by_provider
         or _by_model
+        or _by_hour
     ):
         return
     _prompt_tokens = int(raw.get("prompt_tokens") or 0)
@@ -83,6 +85,7 @@ def _hydrate_from_disk_locked() -> None:
     _copy_breakdown_from_persisted(_by_task, raw.get("by_task"))
     _copy_breakdown_from_persisted(_by_provider, raw.get("by_provider"))
     _copy_breakdown_from_persisted(_by_model, raw.get("by_model"))
+    _copy_breakdown_from_persisted(_by_hour, raw.get("by_hour"))
 
 
 def rollover_if_needed() -> None:
@@ -106,6 +109,7 @@ def rollover_if_needed() -> None:
         _by_task.clear()
         _by_provider.clear()
         _by_model.clear()
+        _by_hour.clear()
         _day_key = today
         _hydrated = True
         return
@@ -157,6 +161,9 @@ def record_llm_token_usage(
             if model_key:
                 mrow = _by_model.setdefault(model_key, dict(_EMPTY_ROW))
                 _bump_row(mrow, prompt=prompt, completion=completion, cache_read=cache_read, cache_write=cache_write)
+            hour_key = time.strftime("%H", time.localtime())
+            hrow = _by_hour.setdefault(hour_key, dict(_EMPTY_ROW))
+            _bump_row(hrow, prompt=prompt, completion=completion, cache_read=cache_read, cache_write=cache_write)
     except Exception:
         pass
 
@@ -186,6 +193,7 @@ def _snapshot_locked(*, day_override: str | None = None) -> dict[str, Any]:
         "by_task": {task: _row_with_total(values) for task, values in _by_task.items()},
         "by_provider": {key: _row_with_total(values) for key, values in _by_provider.items()},
         "by_model": {key: _row_with_total(values) for key, values in _by_model.items()},
+        "by_hour": {hour: _row_with_total(values) for hour, values in sorted(_by_hour.items())},
     }
 
 
@@ -223,6 +231,7 @@ def merge_llm_token_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
     by_task: dict[str, dict[str, int]] = {}
     by_provider: dict[str, dict[str, int]] = {}
     by_model: dict[str, dict[str, int]] = {}
+    by_hour: dict[str, dict[str, int]] = {}
     prompt_tokens = 0
     completion_tokens = 0
     cache_read_tokens = 0
@@ -246,6 +255,7 @@ def merge_llm_token_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
         _merge_breakdown(by_task, row.get("by_task"))
         _merge_breakdown(by_provider, row.get("by_provider"))
         _merge_breakdown(by_model, row.get("by_model"))
+        _merge_breakdown(by_hour, row.get("by_hour"))
     return {
         "source": source or "bot",
         "day_key": day_key or today_key(),
@@ -258,6 +268,7 @@ def merge_llm_token_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "by_task": {k: _row_with_total(v) for k, v in by_task.items()},
         "by_provider": {k: _row_with_total(v) for k, v in by_provider.items()},
         "by_model": {k: _row_with_total(v) for k, v in by_model.items()},
+        "by_hour": {k: _row_with_total(v) for k, v in sorted(by_hour.items())},
     }
 
 
@@ -343,3 +354,4 @@ def clear_llm_token_metrics_for_tests() -> None:
         _by_task.clear()
         _by_provider.clear()
         _by_model.clear()
+        _by_hour.clear()

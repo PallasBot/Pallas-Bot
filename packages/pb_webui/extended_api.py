@@ -1613,6 +1613,7 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
     )
     from pallas.core.platform.shard.registry.config import get_shard_registry_settings
     from pallas.core.platform.shard.repeater_ingress_metrics import repeater_ingress_metrics_snapshot
+    from pallas.product.llm.memory_rag_metrics import llm_memory_rag_metrics_snapshot
     from pallas.product.llm.provider_request_metrics import llm_provider_request_metrics_snapshot
     from pallas.product.llm.rag_metrics import llm_rag_metrics_snapshot
     from pallas.product.llm.task_metrics import llm_task_metrics_snapshot
@@ -1647,6 +1648,7 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
             "llm_token": llm_token_metrics_snapshot(include_persisted=False),
             "llm_provider_request": llm_provider_request_metrics_snapshot(include_persisted=False),
             "llm_rag": llm_rag_metrics_snapshot(include_persisted=False),
+            "llm_memory_rag": llm_memory_rag_metrics_snapshot(include_persisted=False),
         },
     )
 
