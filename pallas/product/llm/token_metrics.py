@@ -13,6 +13,7 @@ _STORE_VER = 1
 
 _lock = threading.Lock()
 _day_key = ""
+_hydrated = False
 _prompt_tokens = 0
 _completion_tokens = 0
 _cache_read_tokens = 0
@@ -37,8 +38,55 @@ def stats_file_path():
     return plugin_data_dir("pb_webui", create=True) / "llm_token_stats.json"
 
 
+def _copy_breakdown_from_persisted(dst: dict[str, dict[str, int]], src: Any) -> None:
+    if not isinstance(src, dict):
+        return
+    for key, metrics in src.items():
+        if not isinstance(metrics, dict):
+            continue
+        k = str(key).strip()
+        if not k:
+            continue
+        dst[k] = {
+            "prompt_tokens": int(metrics.get("prompt_tokens") or 0),
+            "completion_tokens": int(metrics.get("completion_tokens") or 0),
+            "cache_read_tokens": int(metrics.get("cache_read_tokens") or 0),
+            "cache_write_tokens": int(metrics.get("cache_write_tokens") or 0),
+        }
+
+
+def _hydrate_from_disk_locked() -> None:
+    """进程内只 hydrate 一次：把当日落盘计数载入内存，避免与内存再次相加。"""
+    global _hydrated, _prompt_tokens, _completion_tokens, _cache_read_tokens, _cache_write_tokens  # noqa: PLW0603
+    if _hydrated:
+        return
+    _hydrated = True
+    raw = load_stats_file()
+    if not isinstance(raw, dict) or not raw.get("day_key"):
+        return
+    if str(raw.get("day_key") or "") != str(_day_key or today_key()):
+        return
+    if (
+        _prompt_tokens
+        or _completion_tokens
+        or _cache_read_tokens
+        or _cache_write_tokens
+        or _by_task
+        or _by_provider
+        or _by_model
+    ):
+        return
+    _prompt_tokens = int(raw.get("prompt_tokens") or 0)
+    _completion_tokens = int(raw.get("completion_tokens") or 0)
+    _cache_read_tokens = int(raw.get("cache_read_tokens") or 0)
+    _cache_write_tokens = int(raw.get("cache_write_tokens") or 0)
+    _copy_breakdown_from_persisted(_by_task, raw.get("by_task"))
+    _copy_breakdown_from_persisted(_by_provider, raw.get("by_provider"))
+    _copy_breakdown_from_persisted(_by_model, raw.get("by_model"))
+
+
 def rollover_if_needed() -> None:
-    global _day_key, _prompt_tokens, _completion_tokens, _cache_read_tokens, _cache_write_tokens  # noqa: PLW0603
+    global _day_key, _hydrated, _prompt_tokens, _completion_tokens, _cache_read_tokens, _cache_write_tokens  # noqa: PLW0603
     today = today_key()
     if _day_key == today:
         return
@@ -51,14 +99,19 @@ def rollover_if_needed() -> None:
             write_day_side(_day_key, "ai", {"tokens": old, "day_key": _day_key, "source": "bot"})
         except Exception:
             pass
+        _prompt_tokens = 0
+        _completion_tokens = 0
+        _cache_read_tokens = 0
+        _cache_write_tokens = 0
+        _by_task.clear()
+        _by_provider.clear()
+        _by_model.clear()
+        _day_key = today
+        _hydrated = True
+        return
+    # 进程首次进入当日：先定 day_key，由 hydrate 按需载入落盘
     _day_key = today
-    _prompt_tokens = 0
-    _completion_tokens = 0
-    _cache_read_tokens = 0
-    _cache_write_tokens = 0
-    _by_task.clear()
-    _by_provider.clear()
-    _by_model.clear()
+    _hydrated = False
 
 
 def _bump_row(row: dict[str, int], *, prompt: int, completion: int, cache_read: int, cache_write: int) -> None:
@@ -88,6 +141,7 @@ def record_llm_token_usage(
     try:
         with _lock:
             rollover_if_needed()
+            _hydrate_from_disk_locked()
             global _prompt_tokens, _completion_tokens, _cache_read_tokens, _cache_write_tokens  # noqa: PLW0603
             _prompt_tokens += prompt
             _completion_tokens += completion
@@ -210,31 +264,9 @@ def merge_llm_token_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def llm_token_metrics_snapshot(*, include_persisted: bool = True) -> dict[str, Any]:
     with _lock:
         rollover_if_needed()
-        local = _snapshot_locked()
-    if not include_persisted:
-        return local
-    persisted_raw = load_stats_file()
-    if not isinstance(persisted_raw, dict) or not persisted_raw.get("day_key"):
-        return local
-    if str(persisted_raw.get("day_key") or "") != str(local.get("day_key") or ""):
-        return local
-    persisted = {
-        "source": str(persisted_raw.get("source") or "bot"),
-        "day_key": str(persisted_raw.get("day_key") or ""),
-        "updated_at": float(persisted_raw.get("updated_at") or 0),
-        "prompt_tokens": int(persisted_raw.get("prompt_tokens") or 0),
-        "completion_tokens": int(persisted_raw.get("completion_tokens") or 0),
-        "cache_read_tokens": int(persisted_raw.get("cache_read_tokens") or 0),
-        "cache_write_tokens": int(persisted_raw.get("cache_write_tokens") or 0),
-        "total_tokens": int(persisted_raw.get("total_tokens") or 0),
-        "by_task": persisted_raw.get("by_task") if isinstance(persisted_raw.get("by_task"), dict) else {},
-        "by_provider": persisted_raw.get("by_provider") if isinstance(persisted_raw.get("by_provider"), dict) else {},
-        "by_model": persisted_raw.get("by_model") if isinstance(persisted_raw.get("by_model"), dict) else {},
-    }
-    local_has = int(local.get("total_tokens") or 0) > 0 or bool(local.get("by_task"))
-    if not local_has:
-        return merge_llm_token_snapshots([persisted]) if persisted.get("day_key") else local
-    return merge_llm_token_snapshots([persisted, local])
+        if include_persisted:
+            _hydrate_from_disk_locked()
+        return _snapshot_locked()
 
 
 def cluster_llm_token_metrics_snapshot(*, max_stale_sec: float = 300.0) -> dict[str, Any]:
@@ -272,11 +304,8 @@ def flush_stats_sync() -> None:
 
         if shard_ctx.sharding_active() and shard_ctx.is_worker():
             return
-        snapshot = (
-            cluster_llm_token_metrics_snapshot()
-            if shard_ctx.sharding_active() and shard_ctx.is_hub()
-            else llm_token_metrics_snapshot(include_persisted=True)
-        )
+        # 只落盘本进程内存（经 hydrate），禁止再与磁盘快照相加，否则刷新统计会翻倍漂移
+        snapshot = llm_token_metrics_snapshot(include_persisted=True)
     except Exception:
         snapshot = llm_token_metrics_snapshot(include_persisted=True)
     if not snapshot.get("by_task") and int(snapshot.get("total_tokens") or 0) == 0:
@@ -303,9 +332,10 @@ def flush_stats_sync() -> None:
 
 
 def clear_llm_token_metrics_for_tests() -> None:
-    global _day_key, _prompt_tokens, _completion_tokens, _cache_read_tokens, _cache_write_tokens  # noqa: PLW0603
+    global _day_key, _hydrated, _prompt_tokens, _completion_tokens, _cache_read_tokens, _cache_write_tokens  # noqa: PLW0603
     with _lock:
-        _day_key = ""
+        _day_key = today_key()
+        _hydrated = True
         _prompt_tokens = 0
         _completion_tokens = 0
         _cache_read_tokens = 0
