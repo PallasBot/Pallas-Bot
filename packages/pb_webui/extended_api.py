@@ -5317,7 +5317,7 @@ def register_extended_api(
     @router.post(f"{x}/community-gallery", include_in_schema=True)
     async def _community_gallery_create(
         text: str = Form(default=""),
-        nickname: str = Form(...),
+        nickname: str = Form(default=""),
         avatar_url: str = Form(default=""),
         bot_qq: int | None = Form(default=None),
         source: str = Form(default="manual"),
@@ -5339,7 +5339,7 @@ def register_extended_api(
         try:
             data = await create_gallery_post(
                 text=text,
-                nickname=nickname,
+                nickname=(nickname or "").strip() or "牛牛",
                 avatar_url=avatar_url,
                 bot_qq=bot_qq,
                 source=source,
