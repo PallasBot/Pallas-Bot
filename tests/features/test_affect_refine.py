@@ -125,6 +125,35 @@ def test_should_request_llm_affect_refine_respects_interval(monkeypatch) -> None
     assert mod.should_request_llm_affect_refine(profile, prev_profile, force_llm=True) is True
 
 
+def test_affect_refine_min_interval_default_is_one_day(monkeypatch) -> None:
+    from pallas.product.persona import affect_refine as mod
+
+    mod.clear_affect_refine_config_cache()
+    monkeypatch.setattr(mod, "repo_env_raw_value", lambda _key: None)
+    assert mod.affect_refine_min_interval_sec() == 24 * 3600
+    mod.clear_affect_refine_config_cache()
+
+
+@pytest.mark.asyncio
+async def test_post_affect_refine_uses_affect_refine_task(monkeypatch) -> None:
+    from pallas.product.persona import affect_refine_client as client
+
+    captured: dict[str, object] = {}
+
+    async def fake_complete(messages, *, model="", options=None, task="llm_chat"):
+        captured["task"] = task
+        return {"content": '{"warmth_delta":0.01,"assertiveness_delta":0,"confidence":0.9,"summary":"ok"}'}
+
+    monkeypatch.setattr(
+        "pallas.product.llm.provider_client.complete_chat_message",
+        fake_complete,
+    )
+    body = await client.post_affect_refine({"group_id": 1, "profile": {}, "hints": [], "message_samples": []})
+    assert captured["task"] == "affect_refine"
+    assert body is not None
+    assert body["summary"] == "ok"
+
+
 @pytest.mark.asyncio
 async def test_refine_group_style_affect_skips_llm_when_not_allowed(monkeypatch) -> None:
     from pallas.product.persona import affect_refine as mod

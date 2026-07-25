@@ -27,7 +27,7 @@ _cached_min_confidence: float | None = None
 _cached_min_interval_sec: int | None = None
 _cached_llm_batch_limit: int | None = None
 
-_DEFAULT_MIN_INTERVAL_SEC = 2 * 3600
+_DEFAULT_MIN_INTERVAL_SEC = 24 * 3600
 _DEFAULT_LLM_BATCH_LIMIT = 4
 
 

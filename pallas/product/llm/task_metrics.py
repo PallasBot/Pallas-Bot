@@ -10,7 +10,14 @@ from typing import Any
 from pallas.core.foundation.paths import plugin_data_dir
 
 _STORE_VER = 1
-_TASKS = frozenset({"llm_chat", "repeater_polish", "repeater_polish_lite", "repeater_fallback", "repeater_select"})
+_TASKS = frozenset({
+    "llm_chat",
+    "repeater_polish",
+    "repeater_polish_lite",
+    "repeater_fallback",
+    "repeater_select",
+    "affect_refine",
+})
 _EVENTS = frozenset({
     "submit_ok",
     "submit_skip",

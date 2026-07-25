@@ -130,7 +130,7 @@ def _chain_fallback_models(
         return ()
 
     high_tasks = {"llm_chat", "drunk", "repeater_polish"}
-    low_tasks = {"repeater_select", "repeater_polish_lite", "repeater_fallback"}
+    low_tasks = {"repeater_select", "repeater_polish_lite", "repeater_fallback", "affect_refine"}
     tier = "high" if task in high_tasks else "low" if task in low_tasks else ""
 
     out: list[str] = []
@@ -145,6 +145,20 @@ def _chain_fallback_models(
             return
         seen.add(name)
         out.append(name)
+
+    # 全任务备用优先于高低档备用
+    task_backups = routing.get("task_backups")
+    task_backup_models = routing.get("task_backup_models")
+    if isinstance(task_backups, dict):
+        backup_provider = str(task_backups.get(task) or "").strip()
+        backup_model = ""
+        if isinstance(task_backup_models, dict):
+            backup_model = str(task_backup_models.get(task) or "").strip()
+        if backup_provider:
+            if backup_model:
+                add_model(backup_model)
+            elif backup_provider != primary_provider:
+                add_model(_resolve_provider_task_model(providers_payload, backup_provider, task))
 
     if tier:
         tier_backups = routing.get("tier_backups")

@@ -4422,6 +4422,15 @@ class _CommunityConnectivityCheckData(BaseModel):
     summary: _CommunityConnectivitySummary
 
 
+class _LlmModelPricingRowData(BaseModel):
+    """模型单价：币种见 routing.cost_currency；单位为「每百万 tokens」。"""
+
+    price_in: float = 0.0
+    price_out: float = 0.0
+    cache_price_in: float = 0.0
+    cache_price_out: float = 0.0
+
+
 class _LlmProviderConfigRowData(BaseModel):
     id: str
     kind: str
@@ -4437,11 +4446,18 @@ class _LlmProviderConfigRowData(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     model_effort: str = ""
     request_method: str = "chat_completions"
+    model_pricing: dict[str, _LlmModelPricingRowData] = Field(default_factory=dict)
 
 
 class _LlmProvidersRoutingData(BaseModel):
     chain_fallback: list[str] = Field(default_factory=list)
     tasks: dict[str, str] = Field(default_factory=dict)
+    tier_backups: dict[str, str] = Field(default_factory=dict)
+    tier_backup_models: dict[str, str] = Field(default_factory=dict)
+    task_backups: dict[str, str] = Field(default_factory=dict)
+    task_backup_models: dict[str, str] = Field(default_factory=dict)
+    route_source: str = ""
+    cost_currency: str = ""
 
 
 class _LlmProvidersConfigData(BaseModel):
@@ -4523,6 +4539,15 @@ class _LlmModelNumGpuBody(BaseModel):
     num_gpu: int = Field(ge=0, le=999)
 
 
+class _LlmModelPricingRowBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    price_in: float = Field(default=0.0, ge=0)
+    price_out: float = Field(default=0.0, ge=0)
+    cache_price_in: float = Field(default=0.0, ge=0)
+    cache_price_out: float = Field(default=0.0, ge=0)
+
+
 class _LlmProviderRowBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -4539,6 +4564,7 @@ class _LlmProviderRowBody(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     model_effort: str = ""
     request_method: str = "chat_completions"
+    model_pricing: dict[str, _LlmModelPricingRowBody] = Field(default_factory=dict)
 
 
 class _LlmProvidersRoutingBody(BaseModel):
@@ -4548,6 +4574,10 @@ class _LlmProvidersRoutingBody(BaseModel):
     tasks: dict[str, str] = Field(default_factory=dict)
     tier_backups: dict[str, str] = Field(default_factory=dict)
     tier_backup_models: dict[str, str] = Field(default_factory=dict)
+    task_backups: dict[str, str] = Field(default_factory=dict)
+    task_backup_models: dict[str, str] = Field(default_factory=dict)
+    route_source: str = ""
+    cost_currency: str = ""
 
 
 class _LlmProvidersDocumentBody(BaseModel):
