@@ -314,6 +314,8 @@ class LlmRelationshipNote(Document):
     content: str = Field(...)
     source: str = Field(default="teach")
     weight: float = Field(default=1.0)
+    warmth_delta: float = Field(default=0.0)
+    assertiveness_delta: float = Field(default=0.0)
     created_at: int = Field(default_factory=lambda: int(time.time()))
     updated_at: int = Field(default_factory=lambda: int(time.time()))
 

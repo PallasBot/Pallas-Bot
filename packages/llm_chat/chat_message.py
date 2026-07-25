@@ -39,6 +39,7 @@ from pallas.product.llm.knowledge.inject import enrich_system_with_knowledge_sou
 from pallas.product.llm.memory import (
     enrich_system_with_memory_context,
     enrich_system_with_relationship_context,
+    maybe_persist_relationship_from_utterance,
     parse_memory_teach,
     parse_relationship_teach,
     resolve_relationship_teach_target_id,
@@ -116,6 +117,7 @@ async def build_llm_chat_expression_suffix(
     plain_text: str = "",
     *,
     bot_id: int = 0,
+    blocked_openers: list[str] | None = None,
 ) -> str:
     if group_id is None:
         return ""
@@ -129,7 +131,13 @@ async def build_llm_chat_expression_suffix(
     if group_config is not None:
         raw_profile = getattr(group_config, "style_profile", None)
         profile = raw_profile if isinstance(raw_profile, dict) else None
-    return await build_expression_context_suffix(int(group_id), plain_text, bot_id=bot_id, style_profile=profile)
+    return await build_expression_context_suffix(
+        int(group_id),
+        plain_text,
+        bot_id=bot_id,
+        style_profile=profile,
+        blocked_openers=blocked_openers,
+    )
 
 
 def build_llm_chat_ending_hint(turns) -> str:
@@ -230,6 +238,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
     raw_group_id = getattr(event, "group_id", None)
     group_id = int(raw_group_id) if raw_group_id is not None else None
     user_id = int(getattr(event, "user_id", 0) or 0)
+    # 无发言门控时 llm_chat 仅 to_me；有门控时会覆盖为 mention/followup/ambient
+    speak_trigger = "to_me" if bool(getattr(event, "to_me", False)) else ""
 
     teach_body = parse_memory_teach(plain or msg)
     if teach_body is not None and llm_cfg.llm_memory_rag_enabled:
@@ -257,8 +267,28 @@ async def handle_llm_chat(bot: Bot, event: Event):
         )
         saved = await save_relationship_note(int(bot.self_id), group_id, target_id, relationship_body, cfg=llm_cfg)
         if saved:
+            logger.info(
+                "relationship teach saved bot={} group={} target={} fact={!r}",
+                int(bot.self_id),
+                group_id,
+                target_id,
+                relationship_body[:48],
+            )
             await llm_chat_msg.send(LLM_CHAT_RELATIONSHIP_SAVED_REPLY)
             return
+
+    # 硬触发后静默沉淀关系事实/态度；ambient 不写
+    try:
+        await maybe_persist_relationship_from_utterance(
+            int(bot.self_id),
+            group_id,
+            user_id,
+            plain or msg,
+            speak_trigger=speak_trigger,
+            cfg=llm_cfg,
+        )
+    except Exception:
+        logger.debug("relationship silent persist skipped")
 
     system_prompt = ""
     bundle = None
@@ -328,13 +358,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         "knowledge": knowledge_retrieval_trace,
         "relationship": relationship_result.trace,
     }
-    expression_suffix = await build_llm_chat_expression_suffix(
-        group_id,
-        plain or msg,
-        bot_id=int(bot.self_id),
-    )
-    if expression_suffix:
-        system_prompt = f"{system_prompt.rstrip()}\n{expression_suffix}"
+    expression_suffix = ""
 
     persona_for_gate = None
     if persona_bundle is not None:
@@ -346,6 +370,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 persona_for_gate = ResolvedPersona(**persona_raw)
         except Exception:
             persona_for_gate = None
+
+    user_warmth_delta = float(relationship_result.trace.get("warmth_delta") or 0.0)
+    user_assertiveness_delta = float(relationship_result.trace.get("assertiveness_delta") or 0.0)
 
     gate_decision = evaluate_llm_reply_gate(
         plain or msg,
@@ -412,6 +439,15 @@ async def handle_llm_chat(bot: Bot, event: Event):
 
     request_id = str(ULID())
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
+    blocked_openers = repeated_assistant_openers(recent_turns)
+    expression_suffix = await build_llm_chat_expression_suffix(
+        group_id,
+        plain or msg,
+        bot_id=int(bot.self_id),
+        blocked_openers=blocked_openers,
+    )
+    if expression_suffix:
+        system_prompt = f"{system_prompt.rstrip()}\n{expression_suffix}"
     from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
 
     system_prompt = enrich_system_with_situational_rules(
@@ -429,7 +465,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
         affect_contract = build_persona_affect_contract(
             persona_for_gate,
             group_flavor_summary=group_flavor,
-            repeated_openers=repeated_assistant_openers(recent_turns),
+            repeated_openers=blocked_openers,
+            user_warmth_delta=user_warmth_delta,
+            user_assertiveness_delta=user_assertiveness_delta,
         )
         affect_system_block = build_persona_affect_system_block(affect_contract)
         affect_hint = build_variation_hint_from_contract(affect_contract)

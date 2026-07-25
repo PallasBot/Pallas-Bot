@@ -313,15 +313,18 @@ async def retrieve_memory_hits(
                 await session.commit()
         except Exception as exc:
             logger.warning("memory embedding cache persist failed err={}", exc)
+    min_score = max(0, int(getattr(c, "llm_memory_rag_min_score", 0) or 0))
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     for item in scored:
         content = str(item.get("content") or "").strip()
         if not content or content in seen:
             continue
+        if int(item.get("score") or 0) < min_score:
+            continue
         seen.add(content)
         out.append(item)
-        if len(out) >= min(top_k, 3):
+        if len(out) >= top_k:
             break
     return out
 

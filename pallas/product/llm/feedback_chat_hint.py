@@ -148,13 +148,21 @@ def build_group_feedback_chat_hint(*, group_id: int, user_text: str = "", limit:
 
     good_snippets: list[str] = []
     seen_good: set[str] = set()
+    seen_good_openers: set[str] = set()
+    from pallas.product.persona.expression_retrieve import expression_opener_key
+
     for item in reversed(good_rows):
         if is_weak_good_feedback_snippet(item.reply_text):
             continue
         snippet = summarize_reply_snippet(item.reply_text)
         if not snippet or snippet in seen_good or is_weak_good_feedback_snippet(snippet):
             continue
+        opener = expression_opener_key(snippet)
+        if opener and opener in seen_good_openers:
+            continue
         seen_good.add(snippet)
+        if opener:
+            seen_good_openers.add(opener)
         good_snippets.append(snippet)
         if len(good_snippets) >= _GOOD_REPLY_LIMIT:
             break

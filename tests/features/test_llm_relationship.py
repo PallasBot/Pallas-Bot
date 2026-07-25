@@ -1,14 +1,24 @@
 from __future__ import annotations
 
 from pallas.product.llm.memory.relationship import (
+    clamp_user_relationship_delta,
     extract_at_target,
+    merge_relationship_facts,
     normalize_relationship_note,
     parse_relationship_teach,
+    prefer_relationship_source,
     relationship_note_has_value,
     relationship_teach_likely,
     resolve_relationship_teach_target_id,
 )
+from pallas.product.llm.memory.relationship_auto import (
+    extract_relationship_attitude_delta,
+    extract_relationship_auto,
+    parse_relationship_observe,
+)
 from pallas.product.llm.memory.relationship_store import decayed_weight
+from pallas.product.persona.affect_kernel import build_persona_affect_contract
+from pallas.product.persona.model import ResolvedPersona
 
 
 def test_parse_relationship_teach_prefix() -> None:
@@ -83,3 +93,97 @@ def test_decayed_weight_half_life() -> None:
 
 def test_decayed_weight_no_decay_when_disabled() -> None:
     assert decayed_weight(0.8, 0, half_life_days=0.0, now=999) == 0.8
+
+
+def test_merge_relationship_facts_dedupes_and_joins() -> None:
+    merged = merge_relationship_facts("是本群群主", "是本群群主；希望被叫作队长", max_len=200)
+    assert "是本群群主" in merged
+    assert "希望被叫作队长" in merged
+    assert merged.count("是本群群主") == 1
+
+
+def test_merge_relationship_facts_replaces_call_as_slot() -> None:
+    merged = merge_relationship_facts("希望被叫作队长；是本群群主", "希望被叫作小明", max_len=200)
+    assert "希望被叫作小明" in merged
+    assert "希望被叫作队长" not in merged
+    assert "是本群群主" in merged
+
+
+def test_parse_relationship_fact_view_and_guidance() -> None:
+    from pallas.product.llm.memory.relationship_profile import (
+        build_relationship_guidance_lines,
+        parse_relationship_fact_view,
+    )
+
+    view = parse_relationship_fact_view("是本群群主；希望被叫作队长；不喜欢被叫作笨蛋；偏好直接沟通")
+    assert view.preferred_name == "队长"
+    assert "笨蛋" in view.avoid_names
+    assert view.role_label == "群主"
+    assert view.prefer_direct is True
+    hints = " ".join(build_relationship_guidance_lines(view))
+    assert "队长" in hints
+    assert "笨蛋" in hints
+    assert "直接" in hints
+
+
+def test_clamp_user_relationship_delta() -> None:
+    assert clamp_user_relationship_delta(0.2) == 0.15
+    assert clamp_user_relationship_delta(-0.2) == -0.15
+    assert clamp_user_relationship_delta(0.05) == 0.05
+
+
+def test_prefer_relationship_source_keeps_teach() -> None:
+    assert prefer_relationship_source("teach", "auto") == "teach"
+    assert prefer_relationship_source("auto", "observe") == "observe"
+    assert prefer_relationship_source("observe", "teach") == "teach"
+
+
+def test_parse_relationship_observe_self_role() -> None:
+    assert parse_relationship_observe("我是本群群主") == "是本群群主"
+    assert parse_relationship_observe("群主是我") == "是本群群主"
+    assert parse_relationship_observe("我当群管") == "是本群群管"
+    assert parse_relationship_observe("叫我队长") == "希望被叫作队长"
+    assert parse_relationship_observe("别叫我笨蛋") == "不喜欢被叫作笨蛋"
+    assert parse_relationship_observe("记住关系：群主") is None
+    assert parse_relationship_observe("你好") is None
+
+
+def test_parse_relationship_observe_address_and_pref() -> None:
+    assert parse_relationship_observe("你可以叫我队长啊") == "希望被叫作队长"
+    assert parse_relationship_observe("我叫小明") == "希望被叫作小明"
+    assert parse_relationship_observe("我在群里叫队长") == "希望被叫作队长"
+    assert parse_relationship_observe("我群名片是小明") == "希望被叫作小明"
+    assert parse_relationship_observe("不要叫我笨蛋") == "不喜欢被叫作笨蛋"
+    assert parse_relationship_observe("别用外号叫我") == "不喜欢被叫外号"
+    assert parse_relationship_observe("以后别用外号") == "不喜欢被叫外号"
+    assert parse_relationship_observe("对我直说就行") == "偏好直接沟通"
+    assert parse_relationship_observe("别客套吧") == "偏好直接沟通"
+
+
+def test_parse_relationship_observe_rejects_noise() -> None:
+    assert parse_relationship_observe("我是不是群主") is None
+    assert parse_relationship_observe("叫我干什么") is None
+    assert parse_relationship_observe("我叫你一声好汉") is None
+    assert parse_relationship_observe("今天天气不错我们聊点别的吧哈哈哈") is None
+
+
+def test_extract_relationship_attitude_delta() -> None:
+    warmth, assertiveness = extract_relationship_attitude_delta("喜欢你啊")
+    assert warmth > 0
+    warmth_neg, _ = extract_relationship_attitude_delta("滚")
+    assert warmth_neg < 0
+
+
+def test_extract_relationship_auto_combines() -> None:
+    update = extract_relationship_auto("我是群主")
+    assert update is not None
+    assert update.fact == "是本群群主"
+
+
+def test_build_persona_affect_contract_applies_user_delta() -> None:
+    cold = build_persona_affect_contract(ResolvedPersona(warmth=0.0), user_warmth_delta=-0.12)
+    warm = build_persona_affect_contract(ResolvedPersona(warmth=0.0), user_warmth_delta=0.12)
+    cold_text = " ".join(cold.stance_hints)
+    warm_text = " ".join(warm.stance_hints)
+    assert "距离感" in cold_text
+    assert "稍熟" in warm_text

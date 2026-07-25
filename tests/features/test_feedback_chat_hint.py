@@ -178,4 +178,17 @@ def test_parse_self_alias_teach() -> None:
     assert parse_self_alias_teach("牛牛就是我") == ["牛牛"]
     assert parse_self_alias_teach("记住：牛牛指的是你") == ["牛牛"]
     assert parse_self_alias_teach("牛牛=你") == ["牛牛"]
+    assert parse_self_alias_teach("漂亮牛牛就是你") == ["漂亮牛牛"]
     assert parse_self_alias_teach("今天吃什么") == []
+
+
+def test_parse_self_alias_observe() -> None:
+    from pallas.product.persona.self_identity import parse_self_alias_observe
+
+    assert parse_self_alias_observe("大家叫你漂亮牛牛") == ["漂亮牛牛"]
+    assert parse_self_alias_observe("你是漂亮牛牛") == ["漂亮牛牛"]
+    assert parse_self_alias_observe("你的外号是漂亮牛") == ["漂亮牛"]
+    assert parse_self_alias_observe("你是谁") == []
+    assert parse_self_alias_observe("今天吃什么") == []
+    # teach 优先，observe 不重复吃
+    assert parse_self_alias_observe("漂亮牛牛就是你") == []

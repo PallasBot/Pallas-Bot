@@ -8,8 +8,13 @@ from pymongo.errors import DuplicateKeyError
 
 from pallas.core.foundation.db.modules import LlmRelationshipNote
 from pallas.product.llm.config import LlmConfig, get_llm_config
-from pallas.product.llm.memory.relationship import normalize_relationship_note
-from pallas.product.llm.memory.relationship_store import decayed_weight
+from pallas.product.llm.memory.relationship import (
+    clamp_user_relationship_delta,
+    merge_relationship_facts,
+    normalize_relationship_note,
+    prefer_relationship_source,
+)
+from pallas.product.llm.memory.relationship_store import RelationshipProfile, decayed_weight
 from pallas.product.llm.mongo_id import allocate_mongo_int_id
 from pallas.product.llm.session_models import normalize_group_scope
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
@@ -28,6 +33,87 @@ async def next_relationship_note_id() -> int:
     return await allocate_mongo_int_id("llm_relationship_note", peek_max=_peek_max_relationship_note_id)
 
 
+def _delta_limit(cfg: LlmConfig) -> float:
+    return float(getattr(cfg, "llm_relationship_affect_delta_max", 0.15) or 0.15)
+
+
+async def upsert_relationship_profile_mongo(
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    *,
+    content: str | None = None,
+    source: str = "auto",
+    warmth_delta_add: float = 0.0,
+    assertiveness_delta_add: float = 0.0,
+    merge_content: bool = True,
+    cfg: LlmConfig | None = None,
+) -> bool:
+    if not user_id:
+        return False
+    c = cfg or get_llm_config()
+    incoming = normalize_relationship_note(content or "", max_len=c.llm_relationship_content_max_len)
+    has_fact = bool(incoming)
+    has_delta = warmth_delta_add != 0.0 or assertiveness_delta_add != 0.0
+    if not has_fact and not has_delta:
+        return False
+    scope_gid = normalize_group_scope(group_id)
+    now = int(time.time())
+    safe_source = sanitize_prompt_literal(source, max_len=16) or "auto"
+    limit = _delta_limit(c)
+    existing = await LlmRelationshipNote.find_one({
+        "bot_id": int(bot_id),
+        "group_id": scope_gid,
+        "user_id": int(user_id),
+    })
+    if existing is not None:
+        if has_fact:
+            if merge_content:
+                existing.content = merge_relationship_facts(
+                    str(existing.content or ""),
+                    incoming,
+                    max_len=c.llm_relationship_content_max_len,
+                )
+            else:
+                existing.content = incoming
+        existing.source = prefer_relationship_source(str(existing.source or ""), safe_source)
+        existing.warmth_delta = clamp_user_relationship_delta(
+            float(getattr(existing, "warmth_delta", 0.0) or 0.0) + float(warmth_delta_add),
+            limit=limit,
+        )
+        existing.assertiveness_delta = clamp_user_relationship_delta(
+            float(getattr(existing, "assertiveness_delta", 0.0) or 0.0) + float(assertiveness_delta_add),
+            limit=limit,
+        )
+        existing.weight = 1.0
+        existing.updated_at = now
+        await existing.save()
+        return True
+    for _ in range(_RELATIONSHIP_ID_INSERT_RETRIES):
+        try:
+            await LlmRelationshipNote(
+                note_id=await next_relationship_note_id(),
+                bot_id=int(bot_id),
+                group_id=scope_gid,
+                user_id=int(user_id),
+                content=incoming if has_fact else "",
+                source=safe_source,
+                weight=1.0,
+                warmth_delta=clamp_user_relationship_delta(float(warmth_delta_add), limit=limit),
+                assertiveness_delta=clamp_user_relationship_delta(
+                    float(assertiveness_delta_add),
+                    limit=limit,
+                ),
+                created_at=now,
+                updated_at=now,
+            ).insert()
+            return True
+        except DuplicateKeyError:
+            continue
+    logger.warning("llm relationship note insert failed after duplicate note_id retries")
+    return False
+
+
 async def save_relationship_note_mongo(
     bot_id: int,
     group_id: int | None,
@@ -37,55 +123,24 @@ async def save_relationship_note_mongo(
     source: str = "teach",
     cfg: LlmConfig | None = None,
 ) -> bool:
-    if not user_id:
-        return False
-    c = cfg or get_llm_config()
-    safe_content = normalize_relationship_note(content, max_len=c.llm_relationship_content_max_len)
-    if not safe_content:
-        return False
-    scope_gid = normalize_group_scope(group_id)
-    now = int(time.time())
-    safe_source = sanitize_prompt_literal(source, max_len=16) or "teach"
-    existing = await LlmRelationshipNote.find_one({
-        "bot_id": int(bot_id),
-        "group_id": scope_gid,
-        "user_id": int(user_id),
-    })
-    if existing is not None:
-        existing.content = safe_content
-        existing.source = safe_source
-        existing.weight = 1.0
-        existing.updated_at = now
-        await existing.save()
-    else:
-        for _ in range(_RELATIONSHIP_ID_INSERT_RETRIES):
-            try:
-                await LlmRelationshipNote(
-                    note_id=await next_relationship_note_id(),
-                    bot_id=int(bot_id),
-                    group_id=scope_gid,
-                    user_id=int(user_id),
-                    content=safe_content,
-                    source=safe_source,
-                    weight=1.0,
-                    created_at=now,
-                    updated_at=now,
-                ).insert()
-                return True
-            except DuplicateKeyError:
-                continue
-        logger.warning("llm relationship note insert failed after duplicate note_id retries")
-        return False
-    return True
+    return await upsert_relationship_profile_mongo(
+        bot_id,
+        group_id,
+        user_id,
+        content=content,
+        source=source,
+        merge_content=True,
+        cfg=cfg,
+    )
 
 
-async def retrieve_relationship_note_mongo(
+async def retrieve_relationship_profile_mongo(
     bot_id: int,
     group_id: int | None,
     user_id: int,
     *,
     cfg: LlmConfig | None = None,
-) -> str | None:
+) -> RelationshipProfile | None:
     if not user_id:
         return None
     c = cfg or get_llm_config()
@@ -107,7 +162,36 @@ async def retrieve_relationship_note_mongo(
     if weight < c.llm_relationship_min_weight:
         return None
     content = str(row.content or "").strip()
-    return content or None
+    warmth = clamp_user_relationship_delta(
+        float(getattr(row, "warmth_delta", 0.0) or 0.0),
+        limit=_delta_limit(c),
+    )
+    assertiveness = clamp_user_relationship_delta(
+        float(getattr(row, "assertiveness_delta", 0.0) or 0.0),
+        limit=_delta_limit(c),
+    )
+    if not content and warmth == 0.0 and assertiveness == 0.0:
+        return None
+    return RelationshipProfile(
+        content=content,
+        warmth_delta=warmth,
+        assertiveness_delta=assertiveness,
+        source=str(row.source or "").strip() or "auto",
+        weight=weight,
+    )
+
+
+async def retrieve_relationship_note_mongo(
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    *,
+    cfg: LlmConfig | None = None,
+) -> str | None:
+    profile = await retrieve_relationship_profile_mongo(bot_id, group_id, user_id, cfg=cfg)
+    if profile is None or not profile.has_facts:
+        return None
+    return profile.content
 
 
 async def trim_relationship_notes_mongo(
@@ -170,6 +254,8 @@ async def list_relationship_notes_mongo(
             "content": content,
             "source": source,
             "weight": float(row.weight or 0.0),
+            "warmth_delta": float(getattr(row, "warmth_delta", 0.0) or 0.0),
+            "assertiveness_delta": float(getattr(row, "assertiveness_delta", 0.0) or 0.0),
             "created_at": int(row.created_at or 0),
             "updated_at": int(row.updated_at or 0),
         })
