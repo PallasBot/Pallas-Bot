@@ -119,13 +119,14 @@ def evaluate_speak_perception(
     group_id: int | None = None,
     bot_recently_replied: bool = False,
     has_recent_back_and_forth: bool = False,
+    followup_active: bool = False,
     rng: random.Random | None = None,
     now: float | None = None,
     record_ambient: bool = True,
 ) -> SpeakDecision:
     """判定是否应进入 llm_chat。
 
-    优先级：to_me → 挡命令/旁观 → 别名提及 → ambient（cue/必要性 + 冷却 + 概率）。
+    优先级：to_me → 挡命令/旁观 → 别名提及 → 续聊软窗 → ambient。
     """
     plain = str(plain_text or "").strip()
     ts = time.time() if now is None else float(now)
@@ -144,6 +145,9 @@ def evaluate_speak_perception(
 
     if mention_enabled and text_mentions_aliases(plain, aliases, min_alias_len=min_alias_len):
         return SpeakDecision(True, "mention", 100)
+
+    if followup_active and plain and not is_noise_fragment(plain):
+        return SpeakDecision(True, "followup", 80)
 
     if not ambient_enabled:
         return SpeakDecision(False, "ambient_off", 0)

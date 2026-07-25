@@ -27,6 +27,7 @@ from pallas.product.llm.dynamic_expression_context import (
     load_recent_live_expression_rows,
 )
 from pallas.product.llm.feedback_chat_hint import build_group_feedback_chat_hint
+from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
 from pallas.product.llm.kernel import (
     ConversationContext,
@@ -98,7 +99,9 @@ def llm_chat_rule(event: Event) -> bool:
     llm_cfg = get_llm_config()
     if not llm_cfg.llm_speak_perception_enabled:
         return False
-    if not (llm_cfg.llm_speak_mention_enabled or llm_cfg.llm_speak_ambient_enabled):
+    if not (
+        llm_cfg.llm_speak_mention_enabled or llm_cfg.llm_speak_ambient_enabled or llm_cfg.llm_speak_followup_enabled
+    ):
         return False
     return isinstance(event, GroupMessageEvent)
 
@@ -266,8 +269,27 @@ async def handle_llm_chat(bot: Bot, event: Event):
     user_id = int(getattr(event, "user_id", 0) or 0)
     is_to_me = bool(getattr(event, "to_me", False))
     speak_trigger = "to_me" if is_to_me else ""
+    followup_window_sec = int(llm_cfg.llm_speak_followup_window_sec)
+    followup_max_total = int(llm_cfg.llm_speak_followup_max_total_sec)
+
+    if is_to_me and llm_cfg.llm_speak_followup_enabled:
+        note_hard_speak_trigger(
+            group_id,
+            user_id,
+            window_seconds=followup_window_sec,
+            max_total_seconds=followup_max_total,
+        )
 
     if llm_cfg.llm_speak_perception_enabled and not is_to_me:
+        followup_active = bool(
+            llm_cfg.llm_speak_followup_enabled
+            and in_followup_window(
+                group_id,
+                user_id,
+                window_seconds=followup_window_sec,
+                max_total_seconds=followup_max_total,
+            )
+        )
         speak_aliases = await _resolve_speak_aliases(int(bot.self_id))
         decision = evaluate_speak_perception(
             plain_text=plain or msg,
@@ -281,10 +303,18 @@ async def handle_llm_chat(bot: Bot, event: Event):
             ambient_cooldown_sec=llm_cfg.llm_speak_ambient_cooldown_sec,
             min_alias_len=llm_cfg.llm_speak_min_alias_len,
             group_id=group_id,
+            followup_active=followup_active,
         )
         if not decision.should_speak:
             return
         speak_trigger = decision.reason
+        if speak_trigger == "mention" and llm_cfg.llm_speak_followup_enabled:
+            note_hard_speak_trigger(
+                group_id,
+                user_id,
+                window_seconds=followup_window_sec,
+                max_total_seconds=followup_max_total,
+            )
 
     teach_body = parse_memory_teach(plain or msg)
     if teach_body is not None and llm_cfg.llm_memory_rag_enabled:

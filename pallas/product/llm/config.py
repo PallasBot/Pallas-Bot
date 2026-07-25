@@ -359,6 +359,9 @@ class LlmConfig(BaseModel):
     llm_speak_ambient_min_score: int = Field(default=35, ge=0, le=100)
     llm_speak_ambient_cooldown_sec: int = Field(default=120, ge=0, le=3600)
     llm_speak_min_alias_len: int = Field(default=2, ge=1, le=8)
+    llm_speak_followup_enabled: bool = Field(default=True)
+    llm_speak_followup_window_sec: int = Field(default=45, ge=0, le=600)
+    llm_speak_followup_max_total_sec: int = Field(default=180, ge=0, le=3600)
     llm_relationship_notes_enabled: bool = Field(default=True)
     llm_relationship_content_max_len: int = Field(default=200, ge=32, le=2000)
     llm_relationship_half_life_days: float = Field(default=30.0, ge=0.0, le=365.0)
@@ -555,6 +558,9 @@ def get_llm_config() -> LlmConfig:
             llm_speak_ambient_min_score=_env_int("LLM_SPEAK_AMBIENT_MIN_SCORE", 35),
             llm_speak_ambient_cooldown_sec=_env_int("LLM_SPEAK_AMBIENT_COOLDOWN_SEC", 120),
             llm_speak_min_alias_len=_env_int("LLM_SPEAK_MIN_ALIAS_LEN", 2),
+            llm_speak_followup_enabled=_env_bool("LLM_SPEAK_FOLLOWUP_ENABLED", True),
+            llm_speak_followup_window_sec=_env_int("LLM_SPEAK_FOLLOWUP_WINDOW_SEC", 45),
+            llm_speak_followup_max_total_sec=_env_int("LLM_SPEAK_FOLLOWUP_MAX_TOTAL_SEC", 180),
             llm_relationship_notes_enabled=_env_bool("LLM_RELATIONSHIP_NOTES_ENABLED", True),
             llm_relationship_content_max_len=_env_int("LLM_RELATIONSHIP_CONTENT_MAX_LEN", 200),
             llm_relationship_half_life_days=_env_float("LLM_RELATIONSHIP_HALF_LIFE_DAYS", 30.0),
