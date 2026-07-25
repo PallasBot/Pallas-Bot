@@ -103,16 +103,21 @@ def test_build_tools_ui_rows_exposes_source(monkeypatch: pytest.MonkeyPatch) -> 
 
     catalog = registry.build_tools_catalog_ui()
     rows = registry.build_tools_ui_rows()
+    by_name = {row["name"]: row for row in rows}
 
-    assert catalog["count"] == 1
     assert catalog["policy"]["tools_enabled"] is True
     assert catalog["policy"]["selective_enabled"] is False
-    assert rows[0]["name"] == "plugin.roll"
-    assert rows[0]["source"] == "plugin_command"
-    assert rows[0]["domains"] == ["command", "dice"]
-    assert rows[0]["eligible"] is True
-    assert rows[0]["disabled_reason"] is None
-    assert rows[0]["command_id"] is None
+    assert "plugin.roll" in by_name
+    assert by_name["plugin.roll"]["source"] == "plugin_command"
+    assert by_name["plugin.roll"]["domains"] == ["command", "dice"]
+    assert by_name["plugin.roll"]["eligible"] is True
+    assert by_name["plugin.roll"]["disabled_reason"] is None
+    assert by_name["plugin.roll"]["command_id"] is None
+    # packages 声明会并入只读清单（hub 无 drink 时也能看到）
+    assert "drink.drink" in by_name
+    assert by_name["drink.drink"]["disabled_reason"] == "plugin_not_in_process"
+    assert by_name["drink.drink"]["eligible"] is False
+    assert catalog["count"] == len(rows)
 
 
 def test_execute_tool_async_normalizes_non_ok_dict(monkeypatch: pytest.MonkeyPatch) -> None:

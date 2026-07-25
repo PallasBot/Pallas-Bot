@@ -108,3 +108,59 @@ def test_build_command_tool_spec_requires_context() -> None:
     result = asyncio.run(spec.handler({"text": "hi"}, None))
     assert result["ok"] is False
     assert result["error"] == "missing_invoke_context"
+
+
+def test_parse_llm_tools_stub_reads_command_tool_row_calls() -> None:
+    from pathlib import Path
+
+    from pallas.product.llm.tools.metadata import parse_llm_tools_stub
+
+    decls = parse_llm_tools_stub(Path("packages/drink/__init__.py"))
+    names = {item.name for item in decls}
+    assert "drink.drink" in names
+    assert "drink.sober_up" in names
+
+
+def test_tool_metadata_prefers_required_for_selective_command_tools(monkeypatch) -> None:
+    from pallas.product.llm.tools import registry
+    from pallas.product.llm.tools.bootstrap import reset_llm_tools_bootstrap_for_tests
+
+    reset_llm_tools_bootstrap_for_tests()
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.registry.get_llm_config",
+        lambda: type(
+            "Cfg",
+            (),
+            {
+                "llm_tools_enabled": True,
+                "llm_tools_selective": True,
+                "llm_tools_blacklist": [],
+                "llm_tools_desc_max_len": 200,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.registry.get_arknights_kb_config",
+        lambda: type("Kb", (), {"arknights_kb_enabled": True})(),
+    )
+    clear_tool_registry()
+    registry.register_tool(
+        build_command_tool_spec(
+            parse_llm_command_tool_decl(
+                llm_command_tool_row(
+                    name="drink.drink",
+                    command_id="drink.drink",
+                    description="喝酒",
+                    parameters={"type": "object", "properties": {}},
+                    command_template="牛牛喝酒",
+                )
+            ),
+            plugin_name="drink",
+            plugin_title="喝酒",
+        )
+    )
+    meta = registry.tool_metadata_for_chat(task="llm_chat", user_text="喝一杯")
+    assert meta.get("tools_enabled") is True
+    assert meta.get("tool_choice_prefer") == "required"
+    names = {item["function"]["name"] for item in meta.get("tool_schemas") or []}
+    assert "drink.drink" in names

@@ -185,6 +185,13 @@ async def complete_with_tool_loop(
     max_rounds = max(1, int(c.llm_tools_max_rounds))
     last_message: dict[str, Any] = {}
     schema_names = tool_names_from_schemas(tool_schemas)
+    prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
+    # 口令类工具：提醒模型不要只口头答应
+    if schema_names and working and str(working[0].get("role") or "") == "system":
+        hint = "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
+        sys_content = str(working[0].get("content") or "")
+        if "【动作工具】" not in sys_content:
+            working[0] = {**working[0], "content": f"{sys_content.rstrip()}\n\n{hint}".strip()}
     agent_trace: dict[str, Any] = {
         "final_stage": "generate",
         "tool_call_count": 0,
@@ -196,10 +203,13 @@ async def complete_with_tool_loop(
     }
 
     for round_idx in range(max_rounds):
+        round_options = dict(options)
+        if prefer_required and round_idx == 0:
+            round_options["tool_choice"] = "required"
         last_message = await complete_chat_message(
             working,
             model=model,
-            options=options,
+            options=round_options,
             tools=tool_schemas,
             cfg=c,
             task=task,

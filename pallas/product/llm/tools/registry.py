@@ -286,22 +286,31 @@ def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> d
     if catalog is None:
         return {}
     schemas = openai_schemas_from_catalog(catalog)
-    return {
+    payload: dict[str, Any] = {
         "tools_enabled": True,
         "tool_catalog": catalog.model_dump(mode="json"),
         "tool_schemas": schemas,
         "tool_schema_count": int(catalog.selection.schema_count),
     }
+    # 选择性命中且全部为插件口令工具时，首轮要求必须调工具，避免只口头答应
+    if catalog.selection.selective_enabled and catalog.tools:
+        sources = {str(item.source or "") for item in catalog.tools}
+        if sources and sources <= {LlmToolSource.PLUGIN_COMMAND.value}:
+            payload["tool_choice_prefer"] = "required"
+    return payload
 
 
 def build_tools_catalog_ui() -> dict[str, Any]:
     """WebUI 只读工具清单：全量可见 tool + 当前策略门闸。"""
+    from pallas.product.llm.tools.metadata import iter_package_declared_llm_tools
+
     cfg = get_llm_config()
     kb = get_arknights_kb_config()
     ensure_tools_loaded()
     blacklist = {item.strip().lower() for item in cfg.llm_tools_blacklist if item.strip()}
     eligible_names = {spec.name for spec in iter_eligible_tool_specs()}
     items: list[dict[str, Any]] = []
+    seen_names: set[str] = set()
     for spec in iter_registered_tools():
         if not spec.visible_in_ui:
             continue
@@ -327,6 +336,31 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             "eligible": spec.name in eligible_names,
             "disabled_reason": disabled_reason,
         })
+        seen_names.add(entry.name)
+    # 分片 hub 不加载 drink/llm_chat：把 packages 声明补进只读清单，便于对照
+    for plugin_name, _title, decl in iter_package_declared_llm_tools():
+        if decl.name in seen_names:
+            continue
+        disabled_reason = "plugin_not_in_process"
+        if not cfg.llm_tools_enabled:
+            disabled_reason = "tools_disabled"
+        elif decl.name.lower() in blacklist:
+            disabled_reason = "blacklisted"
+        items.append({
+            "name": decl.name,
+            "description": decl.description,
+            "parameters": decl.parameters or {"type": "object", "properties": {}},
+            "source": LlmToolSource.PLUGIN_COMMAND.value,
+            "domains": ["command", plugin_name],
+            "capabilities": ["side_effecting", "requires_group_context"],
+            "command_id": decl.command_id,
+            "plugin_name": plugin_name,
+            "provider_name": None,
+            "mcp_server_id": None,
+            "eligible": False,
+            "disabled_reason": disabled_reason,
+        })
+        seen_names.add(decl.name)
     items.sort(key=operator.itemgetter("name"))
     return {
         "items": items,

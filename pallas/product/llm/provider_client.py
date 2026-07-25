@@ -286,7 +286,8 @@ def messages_to_responses_payload(
         payload["instructions"] = instructions
     if tools:
         payload["tools"] = tools
-        payload["tool_choice"] = "auto"
+        choice = str(options.get("tool_choice") or "auto").strip() or "auto"
+        payload["tool_choice"] = choice
     temperature = options.get("temperature")
     if temperature is not None:
         payload["temperature"] = float(temperature)
@@ -713,7 +714,8 @@ async def _post_chat_completions(
     }
     if tools:
         payload["tools"] = tools
-        payload["tool_choice"] = "auto"
+        choice = str(options.get("tool_choice") or "auto").strip() or "auto"
+        payload["tool_choice"] = choice
     temperature = options.get("temperature")
     if temperature is not None:
         payload["temperature"] = float(temperature)
