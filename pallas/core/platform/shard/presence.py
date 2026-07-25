@@ -496,8 +496,15 @@ def bot_has_local_connection(qq: int) -> bool:
 
 
 def bot_has_cluster_connection(qq: int) -> bool:
-    """本 worker 已连接，或分片下 presence 记录里任意 worker 已连接。"""
+    """本 worker 已连接，或分片下 presence 记录里任意 worker 已连接。
+
+    健康隔离中的 QQ 视为未在线（僵尸 WS 可能仍挂在 get_bots）。
+    """
     bid = int(qq)
+    from pallas.core.platform.shard.presence_health import health_quarantine_qq_ids
+
+    if bid in health_quarantine_qq_ids():
+        return False
     if bot_has_local_connection(bid):
         return True
     if not shard_ctx.sharding_active():

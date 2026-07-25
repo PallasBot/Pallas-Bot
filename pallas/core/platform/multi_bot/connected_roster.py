@@ -42,6 +42,23 @@ async def on_bot_connect(bot: Bot) -> None:
     if bot.self_id.isnumeric() and bot.type == "OneBot V11":
         logger.info(f"Bot {bot.self_id} connected.")
         qq = int(bot.self_id)
+        from pallas.core.platform.shard.presence import close_local_bot_connection
+        from pallas.core.platform.shard.presence_health import (
+            health_quarantine_qq_ids,
+            probe_bot_get_status_healthy,
+        )
+
+        # 隔离中的重连：先探测会话；仍不健康则关 WS，避免清 quarantine 后假在线。
+        if qq in health_quarantine_qq_ids():
+            if not await probe_bot_get_status_healthy(bot):
+                logger.warning(
+                    "Bot {} reconnected while quarantined but get_status unhealthy; closing WS",
+                    bot.self_id,
+                )
+                await close_local_bot_connection(qq)
+                return
+            clear_health_quarantine(qq)
+
         note_connected_bot(qq)
         note_bot_session_seen(qq)
         await clear_protocol_bot_offline(qq)

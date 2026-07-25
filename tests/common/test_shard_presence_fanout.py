@@ -18,6 +18,10 @@ def test_bot_has_cluster_connection_local(monkeypatch):
     monkeypatch.setattr(presence_mod, "bot_has_local_connection", lambda qq: qq == 100)
     monkeypatch.setattr(presence_mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(presence_mod, "get_cluster_online_bot_ids", lambda: frozenset({200}))
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.presence_health.health_quarantine_qq_ids",
+        lambda: frozenset(),
+    )
     assert presence_mod.bot_has_cluster_connection(100) is True
     assert presence_mod.bot_has_cluster_connection(200) is True
     assert presence_mod.bot_has_cluster_connection(300) is False
