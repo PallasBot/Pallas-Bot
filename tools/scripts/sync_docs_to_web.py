@@ -53,6 +53,7 @@ FILE_MAP: dict[str, str] = {
     "developer/architecture/config-storage.md": "developer/architecture/config-storage.md",
     "developer/architecture/plugin-governance.md": "developer/architecture/plugin-governance.md",
     "developer/architecture/shard-runtime.md": "developer/architecture/shard-runtime.md",
+    "developer/architecture/llm-output-path.md": "developer/architecture/llm-output-path.md",
     "developer/plugin-development/getting-started.md": (
         "developer/plugin-development/getting-started.md"
     ),
