@@ -138,6 +138,77 @@ def build_knowledge_source_detail_ui(
     }
 
 
+def probe_knowledge_source_retrieve(
+    query_text: str,
+    *,
+    source_id: str | None = None,
+    top_k: int | None = None,
+    cfg: LlmConfig | None = None,
+) -> dict[str, Any] | None:
+    """WebUI 检索试探：对单个或全部语料源跑与线上一致的 retrieve。"""
+    c = cfg or get_llm_config()
+    query = (query_text or "").strip()
+    sid = (source_id or "").strip() or None
+    min_score = max(0, int(getattr(c, "llm_knowledge_min_score", 0) or 0))
+    if not query:
+        return {
+            "query": "",
+            "source_id": sid,
+            "min_score": min_score,
+            "items": [],
+            "count": 0,
+            "enabled": can_read_generic_knowledge(c),
+        }
+    if not can_read_generic_knowledge(c):
+        return {
+            "query": query,
+            "source_id": sid,
+            "min_score": min_score,
+            "items": [],
+            "count": 0,
+            "enabled": False,
+        }
+
+    if sid:
+        row = get_knowledge_source_by_id(sid, cfg=c)
+        if row is None:
+            return None
+        rows = [row]
+    else:
+        rows = list_active_knowledge_sources(cfg=c)
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        decl = row.decl
+        k = min(int(decl.top_k), int(c.llm_knowledge_top_k))
+        if top_k is not None:
+            k = max(1, min(20, int(top_k)))
+        max_len = min(int(decl.max_chunk_len), int(c.llm_knowledge_content_max_len))
+        chunks = retrieve_chunks_from_decl(decl, query, top_k=k, max_chunk_len=max_len)
+        for chunk in chunks:
+            score = int(chunk.score)
+            if min_score > 0 and score < min_score:
+                continue
+            items.append({
+                "source_id": row.source_id,
+                "title": chunk.title,
+                "content": chunk.content,
+                "score": score,
+                "retrieval_mode": decl.retrieval_mode.value,
+            })
+    items.sort(key=lambda item: int(item["score"]), reverse=True)
+    if sid is None:
+        items = items[: max(1, int(c.llm_knowledge_top_k))]
+    return {
+        "query": query,
+        "source_id": sid,
+        "min_score": min_score,
+        "items": items,
+        "count": len(items),
+        "enabled": True,
+    }
+
+
 def retrieve_from_knowledge_sources(
     query_text: str,
     *,

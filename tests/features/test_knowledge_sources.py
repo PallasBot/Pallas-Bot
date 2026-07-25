@@ -16,6 +16,7 @@ from pallas.product.llm.knowledge.registry import (
     build_knowledge_source_detail_ui,
     knowledge_metadata_payload,
     list_active_knowledge_sources,
+    probe_knowledge_source_retrieve,
     retrieve_from_knowledge_sources,
 )
 from pallas.product.llm.knowledge.retrieve import retrieve_chunks_from_decl
@@ -119,6 +120,28 @@ def test_build_knowledge_source_detail_ui_truncates_preview() -> None:
 def test_build_knowledge_source_detail_ui_missing() -> None:
     cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
     assert build_knowledge_source_detail_ui("missing.source", cfg=cfg) is None
+
+
+def test_probe_knowledge_source_retrieve_scores_hits() -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
+    data = probe_knowledge_source_retrieve(
+        "怎么清空会话",
+        source_id="pallas.bot_faq",
+        top_k=3,
+        cfg=cfg,
+    )
+    assert data is not None
+    assert data["enabled"] is True
+    assert data["query"] == "怎么清空会话"
+    assert data["source_id"] == "pallas.bot_faq"
+    assert data["count"] >= 1
+    assert data["items"][0]["score"] > 0
+    assert data["items"][0]["source_id"] == "pallas.bot_faq"
+
+
+def test_probe_knowledge_source_retrieve_missing() -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
+    assert probe_knowledge_source_retrieve("hello", source_id="missing.source", cfg=cfg) is None
 
 
 def test_knowledge_metadata_payload_includes_trace() -> None:

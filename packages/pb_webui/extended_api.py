@@ -7655,6 +7655,26 @@ def register_extended_api(
             raise HTTPException(status_code=404, detail="未找到该语料源")
         return JSONResponse({"ok": True, "data": data})
 
+    @router.post(f"{x}/llm/conversation-kernel/knowledge-sources/retrieve", include_in_schema=True)
+    async def _llm_conversation_kernel_knowledge_sources_retrieve_post(
+        body: dict[str, Any],
+    ) -> JSONResponse:
+        from pallas.product.llm.knowledge.registry import probe_knowledge_source_retrieve
+
+        query = str(body.get("query") or "").strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="query required")
+        source_id = str(body.get("source_id") or "").strip() or None
+        top_k_raw = body.get("top_k")
+        top_k = int(top_k_raw) if top_k_raw is not None and str(top_k_raw).strip() != "" else None
+        try:
+            data = probe_knowledge_source_retrieve(query, source_id=source_id, top_k=top_k)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if data is None:
+            raise HTTPException(status_code=404, detail="未找到该语料源")
+        return JSONResponse({"ok": True, "data": data})
+
     @router.post(f"{x}/common-config/llm/history/behavior/annotate", include_in_schema=True)
     async def _llm_history_behavior_annotate(body: dict[str, Any]) -> JSONResponse:
         from pallas.product.llm.session_store import update_llm_behavior_annotation
