@@ -73,7 +73,7 @@ npm run sync:console-openapi-types   # 或 gen / check
 npm run check:console-openapi-types
 ```
 
-- Bot pre-commit：改 `packages/pb_webui/` 等会跑 `sync-console-openapi`（openspec 有实质变更时改写并要求重新 stage）
+- Bot pre-commit：每次 commit 跑 `sync-console-openapi`（openspec 有实质变更时改写并要求重新 stage）
 - WebUI pre-commit：从同级 Bot `openspec` gen 类型（有改动则 exit 1 以便 stage）
 - 路径：`PALLAS_WEBUI_ROOT` / `PALLAS_BOT_ROOT`；默认互为同级目录
 - CI：Bot drift check；WebUI 对照主仓 `main` 的 openspec 校验已提交类型

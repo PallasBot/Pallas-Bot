@@ -21,7 +21,7 @@ uv run ruff check pallas/ packages/
 uv run ruff format --check pallas/ packages/
 ```
 
-pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；改 `packages/pb_webui/` 等时 **`sync-console-openapi`** 自动导出 `openspec`（同级有 WebUI 仓则 gen 类型）；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
+pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；每次 commit 跑 **`sync-console-openapi`** 自动导出 `openspec`（同级有 WebUI 仓则 gen 类型）；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
 
 ## 文档与排障入口
 
@@ -139,7 +139,7 @@ packages/<name>/
 本地安装：`uvx pre-commit install`（或系统/venv 中的 `pre-commit install`）。
 
 - 基础文件卫生检查覆盖全仓；Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`
-- 改 `packages/pb_webui/` 等时会跑 `sync-console-openapi`（导出 openspec，同级有 WebUI 则 gen 类型）
+- 每次 commit 会跑 `sync-console-openapi`（导出 openspec，同级有 WebUI 则 gen 类型；有改动需重新 stage）
 
 **hooks 版本手动更新**（不启 pre-commit.ci 自动升级；默认会 weekly，且需 org 装 App）：
 
