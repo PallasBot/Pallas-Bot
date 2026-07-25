@@ -1,6 +1,7 @@
 from pallas.console.webui.field_help import field_help
 from pallas.console.webui.plugin_api import normalize_patch_value
 from pallas.console.webui.plugin_config import config_from_env, install_hot_reload_config, plugin_config_proxy
+from pallas.console.webui.provider_gateway import provider_gateway_bound_field_names, ui_provider_gateway
 from pallas.core.foundation.command_prefix import (
     extract_command_tail,
     extract_command_tail_any,
@@ -39,6 +40,8 @@ __all__ = [
     "install_hot_reload_config",
     "normalize_patch_value",
     "plugin_config_proxy",
+    "provider_gateway_bound_field_names",
+    "ui_provider_gateway",
     # 环境变量
     "repo_env_raw_value",
     "repo_root",

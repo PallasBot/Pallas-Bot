@@ -7,12 +7,11 @@ import pytest
 from pallas.core.foundation.apscheduler_runtime import ensure_apscheduler_running, register_apscheduler_startup_hook
 from pallas.product.community_stats import config as cfg_mod
 from pallas.product.community_stats.endpoints import (
-    FALLBACK_CORPUS_API_BASE,
-    FALLBACK_HEARTBEAT,
     PRIMARY_CORPUS_API_BASE,
     PRIMARY_HEARTBEAT,
     corpus_api_base_from_heartbeat,
     corpus_api_base_urls_for_config,
+    gallery_posts_urls_for_config,
     heartbeat_urls_for_config,
     is_auto_endpoint_mode,
 )
@@ -39,7 +38,7 @@ def test_auto_endpoint_mode_builtin_default(monkeypatch):
     cfg_mod.clear_community_stats_config_cache()
     cfg = cfg_mod.get_community_stats_config()
     assert is_auto_endpoint_mode(cfg) is True
-    assert heartbeat_urls_for_config(cfg)[:2] == [PRIMARY_HEARTBEAT, FALLBACK_HEARTBEAT]
+    assert heartbeat_urls_for_config(cfg) == [PRIMARY_HEARTBEAT]
 
 
 def test_auto_endpoint_custom_url_not_builtin(monkeypatch):
@@ -64,14 +63,45 @@ def test_stats_url_from_heartbeat_endpoint():
 
 def test_corpus_api_base_from_heartbeat():
     assert corpus_api_base_from_heartbeat(PRIMARY_HEARTBEAT) == PRIMARY_CORPUS_API_BASE
-    assert corpus_api_base_from_heartbeat(FALLBACK_HEARTBEAT) == FALLBACK_CORPUS_API_BASE
+    assert (
+        corpus_api_base_from_heartbeat("https://stats.example/v1/heartbeat") == "https://stats.example/v1/corpus"
+    )
 
 
 def test_corpus_api_base_urls_follow_heartbeat_order(monkeypatch):
     monkeypatch.delenv("PALLAS_COMMUNITY_STATS_ENDPOINT", raising=False)
     cfg_mod.clear_community_stats_config_cache()
     cfg = cfg_mod.get_community_stats_config()
-    assert corpus_api_base_urls_for_config(cfg)[:2] == [PRIMARY_CORPUS_API_BASE, FALLBACK_CORPUS_API_BASE]
+    assert corpus_api_base_urls_for_config(cfg) == [PRIMARY_CORPUS_API_BASE]
+
+
+def test_gallery_posts_urls_prefer_primary_center(monkeypatch):
+    monkeypatch.delenv("PALLAS_COMMUNITY_STATS_ENDPOINT", raising=False)
+    cfg_mod.clear_community_stats_config_cache()
+    cfg = cfg_mod.get_community_stats_config()
+    assert gallery_posts_urls_for_config(cfg) == ["https://stats.pallasbot.top/v1/gallery/posts"]
+
+    monkeypatch.setattr(
+        "pallas.product.community_stats.config.repo_env_raw_value",
+        lambda key: "https://stats.example/v1/heartbeat" if key == "PALLAS_COMMUNITY_STATS_ENDPOINT" else None,
+    )
+    cfg_mod.clear_community_stats_config_cache()
+    cfg = cfg_mod.get_community_stats_config()
+    assert gallery_posts_urls_for_config(cfg) == ["https://stats.example/v1/gallery/posts"]
+
+
+def test_legacy_fallback_endpoint_maps_to_primary(monkeypatch):
+    monkeypatch.setattr(
+        "pallas.product.community_stats.config.repo_env_raw_value",
+        lambda key: "https://pallas.togetsudo.com/v1/heartbeat"
+        if key == "PALLAS_COMMUNITY_STATS_ENDPOINT"
+        else None,
+    )
+    cfg_mod.clear_community_stats_config_cache()
+    cfg = cfg_mod.get_community_stats_config()
+    assert is_auto_endpoint_mode(cfg) is True
+    assert heartbeat_urls_for_config(cfg) == [PRIMARY_HEARTBEAT]
+    assert gallery_posts_urls_for_config(cfg) == ["https://stats.pallasbot.top/v1/gallery/posts"]
 
 
 def test_resolved_community_api_base_urls_auto_mode(monkeypatch):
@@ -82,7 +112,7 @@ def test_resolved_community_api_base_urls_auto_mode(monkeypatch):
     cfg_mod.clear_community_stats_config_cache()
     clear_corpus_config_cache()
     urls = resolved_community_api_base_urls()
-    assert urls[:2] == [PRIMARY_CORPUS_API_BASE, FALLBACK_CORPUS_API_BASE]
+    assert urls == [PRIMARY_CORPUS_API_BASE]
 
 
 def test_parse_stats_body():
@@ -510,7 +540,7 @@ def test_config_roster_split_flags(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_send_heartbeat_fallback_after_primary_fails(monkeypatch, tmp_path):
+async def test_send_heartbeat_records_primary_endpoint(monkeypatch, tmp_path):
     monkeypatch.delenv("PALLAS_COMMUNITY_STATS_ENDPOINT", raising=False)
     cfg_mod.clear_community_stats_config_cache()
     state_path = tmp_path / "pallas_config" / "community_stats.json"
@@ -524,8 +554,6 @@ async def test_send_heartbeat_fallback_after_primary_fails(monkeypatch, tmp_path
     async def fake_post(self, url, **kwargs):
         calls.append(url)
         mock = MagicMock()
-        if url == PRIMARY_HEARTBEAT:
-            raise httpx.ConnectError("ssl eof", request=MagicMock())
         mock.status_code = 200
         mock.text = '{"ok":true}'
         return mock
@@ -543,10 +571,9 @@ async def test_send_heartbeat_fallback_after_primary_fails(monkeypatch, tmp_path
         patch.object(httpx.AsyncClient, "post", fake_post),
     ):
         assert await send_community_stats_heartbeat() is True
-    assert calls[0] == PRIMARY_HEARTBEAT
-    assert calls[1] == FALLBACK_HEARTBEAT
+    assert calls == [PRIMARY_HEARTBEAT]
     raw = json.loads(state_path.read_text(encoding="utf-8"))
-    assert raw["heartbeat_endpoint"] == FALLBACK_HEARTBEAT
+    assert raw["heartbeat_endpoint"] == PRIMARY_HEARTBEAT
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,7 @@ _EVENTS = frozenset({
     "callback_fail",
     "reply_gate_skip",
     "reply_gate_defer",
+    "reply_gate_proceed",
 })
 _ROUTE_BUCKETS = frozenset({
     "plain_llm_chat",
