@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import types
 from collections.abc import Callable
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, TypeVar
+from typing import Any, Literal, TypeVar, Union, get_args, get_origin
 
 from nonebot import get_plugin_config
 from pydantic import BaseModel
@@ -22,17 +23,51 @@ OnReload = Callable[[Any], None]
 
 
 def default_parse_env_value(name: str, raw: str, ann: Any) -> Any:  # noqa: ARG001
+    """按注解解析 env 字符串。
+
+    不可用 ``\"int\" in str(ann)``：``Literal[..., \"hint\"]`` 会误命中 ``hint`` 中的 ``int``。
+    """
     text = raw.strip()
-    ann_text = str(ann).lower()
-    if "bool" in ann_text:
+    origin = get_origin(ann)
+
+    if origin is Literal:
+        args = get_args(ann)
+        if args and all(type(a) is int for a in args):
+            return int(text)
+        if args and all(type(a) is float for a in args):
+            return float(text)
+        if args and all(type(a) is bool for a in args):
+            return text.lower() in ("1", "true", "yes", "on")
+        return text
+
+    if origin is Union or origin is types.UnionType:
+        non_none = [a for a in get_args(ann) if a is not type(None)]
+        if len(non_none) == 1:
+            return default_parse_env_value(name, raw, non_none[0])
+
+    base = origin if origin is not None else ann
+    if base is bool:
         return text.lower() in ("1", "true", "yes", "on")
-    if "list" in ann_text or "dict" in ann_text or "set" in ann_text:
+    if base in (list, dict, set):
+        if not text:
+            return [] if base is list else {}
+        return json.loads(text)
+    if base is float:
+        return float(text)
+    if base is int:
+        return int(text)
+
+    # 字符串注解 / 前向引用等兜底（避免再对 Literal 成员名做子串匹配）
+    ann_text = str(ann).lower()
+    if ann_text in {"bool", "typing.optional[bool]"}:
+        return text.lower() in ("1", "true", "yes", "on")
+    if ann_text.startswith(("list[", "dict[", "set[")) or ann_text in {"list", "dict", "set"}:
         if not text:
             return [] if "list" in ann_text else {}
         return json.loads(text)
-    if "float" in ann_text and "list" not in ann_text:
+    if ann_text in {"float", "typing.optional[float]"}:
         return float(text)
-    if "int" in ann_text and "list" not in ann_text:
+    if ann_text in {"int", "typing.optional[int]"}:
         return int(text)
     return text
 

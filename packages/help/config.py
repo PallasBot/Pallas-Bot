@@ -94,6 +94,14 @@ class Config(BaseModel, extra="ignore"):
             "用于隐藏框架或内部插件，避免菜单过长",
         ),
     )
+    help_tag_overrides: dict[str, str] = Field(
+        default_factory=dict,
+        description=field_help(
+            "覆盖插件在帮助图上的分组标签",
+            "JSON：插件名 → tag（如 core/chat/fun）；未覆盖读 metadata.extra.help_tag，缺省 other",
+            "自定义 tag 会原样作为分组标题",
+        ),
+    )
 
 
 def on_help_config_reload(cfg: Config) -> None:

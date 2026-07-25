@@ -19,7 +19,7 @@ from operator import itemgetter
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from nonebot import get_bots, get_driver, logger
@@ -5330,6 +5330,75 @@ def register_extended_api(
 
         cache_key = f"community-corpus-hot:{mode_norm}:{period_norm}:{limit}"
         data = await cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=300.0)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/community-gallery", include_in_schema=True)
+    async def _community_gallery_list(
+        limit: int = Query(default=48, ge=1, le=100),
+        mine: bool = Query(default=False),
+    ) -> JSONResponse:
+        from pallas.product.community_stats.gallery_client import list_gallery_posts
+
+        try:
+            data = await list_gallery_posts(limit=limit, mine=mine)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 社区投稿列表失败")
+            raise HTTPException(status_code=502, detail=f"社区投稿列表失败: {e}") from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/community-gallery", include_in_schema=True)
+    async def _community_gallery_create(
+        text: str = Form(default=""),
+        nickname: str = Form(default=""),
+        avatar_url: str = Form(default=""),
+        bot_qq: int | None = Form(default=None),
+        source: str = Form(default="manual"),
+        keywords: str = Form(default=""),
+        image: UploadFile | None = File(default=None),  # noqa: B008
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.community_stats.gallery_client import create_gallery_post
+
+        image_bytes = None
+        image_filename = None
+        image_content_type = None
+        if image is not None and image.filename:
+            image_bytes = await image.read()
+            image_filename = image.filename
+            image_content_type = image.content_type
+        try:
+            data = await create_gallery_post(
+                text=text,
+                nickname=(nickname or "").strip() or "牛牛",
+                avatar_url=avatar_url,
+                bot_qq=bot_qq,
+                source=source,
+                keywords=keywords,
+                image_bytes=image_bytes,
+                image_filename=image_filename,
+                image_content_type=image_content_type,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 社区投稿失败")
+            raise HTTPException(status_code=502, detail=f"社区投稿失败: {e}") from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.delete(f"{x}/community-gallery/{{post_id}}", include_in_schema=True)
+    async def _community_gallery_delete(
+        post_id: str,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.community_stats.gallery_client import delete_gallery_post
+
+        try:
+            data = await delete_gallery_post(post_id)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 社区投稿撤下失败")
+            raise HTTPException(status_code=502, detail=f"社区投稿撤下失败: {e}") from e
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/local-corpus-hot", include_in_schema=True)

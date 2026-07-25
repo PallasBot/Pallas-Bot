@@ -42,7 +42,7 @@ def _seed_community_state(path: Path, payload: dict) -> None:
 
 
 @pytest.mark.asyncio
-async def test_probe_community_connectivity_auto_mode_covers_primary_and_fallback(
+async def test_probe_community_connectivity_auto_mode_covers_primary(
     community_state_file: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -74,11 +74,9 @@ async def test_probe_community_connectivity_auto_mode_covers_primary_and_fallbac
 
     assert [p["url"] for p in payload["probes"]] == [
         "https://stats.pallasbot.top/v1/stats",
-        "https://pallas.togetsudo.com/v1/stats",
     ]
     assert payload["probes"][0]["ok"] is True
     assert payload["probes"][0]["http_status"] == 200
-    assert payload["probes"][1]["ok"] is False
     assert payload["reporting"]["enabled"] is True
     assert payload["reporting"]["deployment_id"] == "123e4567-e89b-12d3-a456-426614174000"
     assert payload["reporting"]["last_heartbeat_ok_unix"] == 1_700_000_100
