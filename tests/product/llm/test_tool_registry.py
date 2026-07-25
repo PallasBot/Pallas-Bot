@@ -68,7 +68,7 @@ def test_register_tool_deduplicates_by_name(monkeypatch: pytest.MonkeyPatch) -> 
     schemas = registry.tool_openai_schemas()
 
     assert len(schemas) == 1
-    assert schemas[0]["function"]["name"] == "test.echo"
+    assert schemas[0]["function"]["name"] == "test__echo"
 
 
 def test_iter_registered_tools_filters_by_source_and_domain(monkeypatch: pytest.MonkeyPatch) -> None:

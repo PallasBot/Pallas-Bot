@@ -103,6 +103,26 @@ def trim_tool_description(description: str, *, max_len: int) -> str:
     return text[: max_len - 1].rstrip() + "…"
 
 
+def to_provider_tool_name(name: str) -> str:
+    """OpenAI / DeepSeek 等要求 function.name 匹配 ^[a-zA-Z0-9_-]+$，点号改为双下划线。"""
+    return str(name or "").strip().replace(".", "__")
+
+
+def from_provider_tool_name(name: str) -> str:
+    """把 provider 侧名称还原为 registry 名；已是 registry 名则原样返回。"""
+    raw = str(name or "").strip()
+    if not raw:
+        return raw
+    if raw in _REGISTERED_NAMES:
+        return raw
+    if "__" not in raw:
+        return raw
+    dotted = raw.replace("__", ".")
+    if dotted in _REGISTERED_NAMES:
+        return dotted
+    return dotted
+
+
 def tool_catalog_entry_from_spec(spec: LlmToolSpec, *, description: str | None = None) -> ToolCatalogEntry:
     return ToolCatalogEntry(
         name=spec.name,
@@ -191,7 +211,7 @@ def openai_schemas_from_catalog(catalog: ToolCatalogSnapshot) -> list[dict[str, 
         {
             "type": "function",
             "function": {
-                "name": item.name,
+                "name": to_provider_tool_name(item.name),
                 "description": item.description,
                 "parameters": item.parameters,
             },
@@ -247,8 +267,9 @@ async def execute_tool_async(
 ) -> dict[str, Any]:
     ensure_tools_loaded()
     args = arguments if isinstance(arguments, dict) else {}
+    resolved = from_provider_tool_name(name)
     for spec in _REGISTRY:
-        if spec.name != name:
+        if spec.name != resolved:
             continue
         try:
             if spec.source == LlmToolSource.MCP:

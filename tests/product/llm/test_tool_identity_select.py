@@ -40,5 +40,6 @@ def test_infer_drink_and_help_command_domains() -> None:
     assert "drink" in infer_tool_domains("让它醒一醒别喝了")
     assert "help" in infer_tool_domains("看看牛牛帮助")
     assert "help" in infer_tool_domains("有哪些功能")
+    assert "help" in infer_tool_domains("有什么功能")
     assert "llm_chat" in infer_tool_domains("把刚才聊的清空")
     assert infer_tool_domains("今天天气不错") == frozenset()

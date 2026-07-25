@@ -206,6 +206,8 @@ async def complete_with_tool_loop(
         round_options = dict(options)
         if prefer_required and round_idx == 0:
             round_options["tool_choice"] = "required"
+            # DeepSeek thinking 模式不支持 tool_choice=required
+            round_options["model_effort"] = "disable"
         last_message = await complete_chat_message(
             working,
             model=model,
@@ -237,22 +239,32 @@ async def complete_with_tool_loop(
             tool_name = str(fn.get("name") or call.get("name") or "").strip()
             if not tool_name:
                 continue
+            from pallas.product.llm.tools.registry import from_provider_tool_name
+
+            resolved_name = from_provider_tool_name(tool_name)
             call_id = str(call.get("id") or tool_name)
             args = parse_tool_arguments(fn.get("arguments"))
-            round_trace["tool_calls"].append(tool_name)
+            round_trace["tool_calls"].append(resolved_name)
             agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
-            logger.info("kernel tool call: round={} tool={} keys={}", round_idx + 1, tool_name, sorted(args.keys()))
-            tool_result = await execute_tool_async(tool_name, args, context=context)
+            logger.info(
+                "kernel tool call: round={} tool={} provider_name={} keys={}",
+                round_idx + 1,
+                resolved_name,
+                tool_name,
+                sorted(args.keys()),
+            )
+            tool_result = await execute_tool_async(resolved_name, args, context=context)
             result_dict = tool_result if isinstance(tool_result, dict) else {"ok": True, "result": tool_result}
             summary = summarize_tool_result(result_dict)
             round_trace["calls"].append({
-                "tool": tool_name,
+                "tool": resolved_name,
+                "provider_name": tool_name,
                 "args_keys": sorted(args.keys()),
                 "ok": summary["ok"],
                 "error": summary["error"],
                 "result_preview": summary["result_preview"],
             })
-            working.append(tool_result_message(call_id, tool_name, tool_result))
+            working.append(tool_result_message(call_id, resolved_name, tool_result))
         agent_trace["rounds"].append(round_trace)
 
     content = str(last_message.get("content", "") or "").strip()

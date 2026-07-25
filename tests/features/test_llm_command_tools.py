@@ -88,7 +88,7 @@ def test_register_plugin_command_tool_schema(monkeypatch) -> None:
     assert count == 1
     schemas = tool_openai_schemas()
     names = {item["function"]["name"] for item in schemas}
-    assert "demo.echo" in names
+    assert "demo__echo" in names
 
 
 def test_build_command_tool_spec_requires_context() -> None:
@@ -163,4 +163,13 @@ def test_tool_metadata_prefers_required_for_selective_command_tools(monkeypatch)
     assert meta.get("tools_enabled") is True
     assert meta.get("tool_choice_prefer") == "required"
     names = {item["function"]["name"] for item in meta.get("tool_schemas") or []}
-    assert "drink.drink" in names
+    assert "drink__drink" in names
+
+
+def test_provider_tool_name_roundtrip() -> None:
+    from pallas.product.llm.tools.registry import from_provider_tool_name, to_provider_tool_name
+
+    assert to_provider_tool_name("drink.sober_up") == "drink__sober_up"
+    assert to_provider_tool_name("arknights.operator.get") == "arknights__operator__get"
+    # 未注册时仍可逆
+    assert from_provider_tool_name("drink__sober_up") == "drink.sober_up"
