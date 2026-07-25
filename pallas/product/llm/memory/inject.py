@@ -144,6 +144,27 @@ async def enrich_system_with_memory_context(
             if str(item.get("content") or "").strip()
         ],
     }
+    try:
+        from pallas.product.llm.memory_rag_metrics import record_memory_rag_query_result
+
+        if lines:
+            record_memory_rag_query_result(
+                hit=True,
+                documents=[
+                    (
+                        str(item.get("content") or "").strip()[:40]
+                        or str(item.get("source") or "").strip()
+                        or "memory",
+                        str(item.get("source") or "").strip() or "memory",
+                    )
+                    for item in hits
+                    if str(item.get("content") or "").strip()
+                ],
+            )
+        else:
+            record_memory_rag_query_result(hit=False)
+    except Exception:
+        pass
     if not lines:
         return MemoryInjectionResult(system_prompt=system_prompt, trace=trace)
     lines = summarize_episode_notes(lines, max_items=3)

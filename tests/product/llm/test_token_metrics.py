@@ -141,6 +141,7 @@ def test_hydrate_from_disk_after_restart(tmp_path, monkeypatch: pytest.MonkeyPat
     tm._by_task.clear()
     tm._by_provider.clear()
     tm._by_model.clear()
+    tm._by_hour.clear()
 
     snap = llm_token_metrics_snapshot(include_persisted=True)
     assert snap["total_tokens"] == 50
