@@ -77,6 +77,7 @@ def test_refresh_promotion_candidates_builds_pending_candidate(tmp_path, monkeyp
                 user_text="你又来这套",
                 reply_text="少来。",
                 behavior_scene="banter",
+                scene_tier="strong" if idx == 0 else "weak",
             )
         )
 
@@ -87,6 +88,7 @@ def test_refresh_promotion_candidates_builds_pending_candidate(tmp_path, monkeyp
     assert rows[0].support_count == PROMOTION_SUPPORT_THRESHOLD
     assert rows[0].promoted is False
     assert rows[0].rejected_reason == ""
+    assert rows[0].scene_tier == "strong"
 
 
 def test_group_feedback_bias_snapshot_includes_promotion_candidate_count(tmp_path, monkeypatch) -> None:
@@ -251,6 +253,7 @@ async def test_auto_promote_eligible_candidates_writes_back(tmp_path, monkeypatc
                 user_text="你又来这套",
                 reply_text="少来。",
                 behavior_scene="banter",
+                scene_tier="strong",
             )
         )
 
@@ -275,6 +278,33 @@ async def test_auto_promote_eligible_candidates_writes_back(tmp_path, monkeypatc
     fake_repo.learn_answer.assert_awaited_once()
     pending = list_promotion_candidates(group_id=123, refresh=False)
     assert pending == []
+
+
+@pytest.mark.asyncio
+async def test_auto_promote_skips_weak_scene_candidate(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    enable_writeback_env(monkeypatch)
+
+    for idx in range(3):
+        append_feedback_entry(
+            build_feedback_entry(
+                bot_id=10001,
+                group_id=123,
+                user_id=456 + idx,
+                request_id=f"req-weak-{idx}",
+                user_text="你又来这套",
+                reply_text="少来。",
+                behavior_scene="banter",
+                scene_tier="weak",
+            )
+        )
+
+    promoted = await auto_promote_eligible_candidates_for_group(group_id=123)
+    pending = list_promotion_candidates(group_id=123, refresh=False)
+
+    assert promoted == []
+    assert len(pending) == 1
+    assert pending[0].scene_tier == "weak"
 
 
 @pytest.mark.asyncio

@@ -18,6 +18,7 @@ class ChatSubmitRequest(BaseModel):
     token_count: int | None = None
     temperature: float | None = None
     task: str | None = None
+    scene_tier: str = "weak"
     knowledge_retrieval_trace: dict[str, Any] | None = None
     hybrid_retrieval_trace: dict[str, Any] | None = None
     llm_rewrite_metadata: dict[str, Any] | None = None

@@ -110,6 +110,8 @@ def test_llm_repeater_feedback_promotion_candidates_api(monkeypatch) -> None:
                 support_count=2,
                 last_seen_at=1718700001,
                 behavior_scene="banter",
+                scene_tier="strong",
+                writeback_status="pending",
                 source_request_id="req-2",
             )
         ]
@@ -132,6 +134,8 @@ def test_llm_repeater_feedback_promotion_candidates_api(monkeypatch) -> None:
     assert payload["ok"] is True
     assert payload["data"]["items"][0]["candidate_id"] == "cand-1"
     assert payload["data"]["items"][0]["reply_text"] == "少来。"
+    assert payload["data"]["items"][0]["scene_tier"] == "strong"
+    assert payload["data"]["items"][0]["writeback_status"] == "pending"
 
 
 def test_llm_repeater_feedback_promotion_candidates_resolve_api(monkeypatch) -> None:

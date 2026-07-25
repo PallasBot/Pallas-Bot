@@ -219,8 +219,26 @@ class LlmWebuiConfig(BaseModel):
             "0 表示不限制群冷却",
         ),
     )
+    llm_repeater_strong_cooldown_sec: int = Field(
+        default=25,
+        ge=0,
+        le=3600,
+        description=field_help(
+            "强场景接话冷却（秒）",
+            "0 表示不限制强场景接话冷却",
+        ),
+    )
+    llm_repeater_strong_attempt_rate: float = Field(
+        default=0.55,
+        ge=0.0,
+        le=1.0,
+        description=field_help(
+            "强场景 LLM 尝试比例",
+            "0.55 表示约 55% 的强场景接话会尝试使用 LLM",
+        ),
+    )
     llm_repeater_max_inflight: int = Field(
-        default=1,
+        default=2,
         ge=1,
         le=32,
         description=field_help(
@@ -229,7 +247,7 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_repeater_global_rpm: int = Field(
-        default=10,
+        default=18,
         ge=1,
         le=600,
         description=field_help(
@@ -238,24 +256,24 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_repeater_feedback_enabled: bool = Field(
-        default=False,
+        default=True,
         description=field_help(
             "是否收集闲聊成功回复，作为复读软反馈",
-            "只在回复真正发出后记录；默认只收集，不改复读行为",
+            "只在回复真正发出后记录",
         ),
     )
     llm_repeater_bias_enabled: bool = Field(
-        default=False,
+        default=True,
         description=field_help(
             "是否让复读轻微偏向已被闲聊验证过的短回复",
             "保守弱偏置；样本不足时不会生效",
         ),
     )
     llm_repeater_writeback_enabled: bool = Field(
-        default=False,
+        default=True,
         description=field_help(
             "是否允许将软反馈回写到复读学习语料",
-            "默认关闭；后续确认策略后再开启",
+            "仅回写符合条件的软反馈",
         ),
     )
     conversation_feature_level: ConversationFeatureLevel = Field(
@@ -453,6 +471,8 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_tools_enabled=cfg.llm_tools_enabled,
         llm_chat_max_concurrency=cfg.llm_chat_max_concurrency,
         llm_repeater_group_cooldown_sec=cfg.llm_repeater_group_cooldown_sec,
+        llm_repeater_strong_cooldown_sec=cfg.llm_repeater_strong_cooldown_sec,
+        llm_repeater_strong_attempt_rate=cfg.llm_repeater_strong_attempt_rate,
         llm_repeater_max_inflight=cfg.llm_repeater_max_inflight,
         llm_repeater_global_rpm=cfg.llm_repeater_global_rpm,
         llm_repeater_feedback_enabled=cfg.llm_repeater_feedback_enabled,

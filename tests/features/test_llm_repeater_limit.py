@@ -7,23 +7,31 @@ from pallas.product.llm.repeater_limit import (
     clear_repeater_llm_limit_state,
     is_repeater_llm_task,
     per_worker_global_rpm_limit,
+    roll_strong_llm_attempt,
     try_consume_local_rpm,
 )
+from pallas.product.llm.submit_gate import LlmSubmitGateResult
 from pallas.product.llm.task_routing import TaskRouteSpec
 
 
 @pytest.fixture(autouse=True)
 def stub_task_route(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fake_resolve(task: str, *, explicit_model: str | None = None) -> TaskRouteSpec:
+    async def fake_resolve_chain(task: str, *, explicit_model: str | None = None) -> list[TaskRouteSpec]:
         task_name = str(task or "").strip().lower() or "llm_chat"
-        return TaskRouteSpec(
-            task=task_name,
-            resolved_model=str(explicit_model or "").strip() or None,
-            provider_hint=None,
-            source="explicit" if explicit_model else "config",
-        )
+        return [
+            TaskRouteSpec(
+                task=task_name,
+                resolved_model=str(explicit_model or "").strip() or None,
+                provider_hint=None,
+                source="explicit" if explicit_model else "config",
+            )
+        ]
 
-    monkeypatch.setattr("pallas.product.llm.client.resolve_task_route", fake_resolve)
+    async def fake_submit_gate() -> LlmSubmitGateResult:
+        return LlmSubmitGateResult(allowed=True)
+
+    monkeypatch.setattr("pallas.product.llm.client.resolve_task_route_chain", fake_resolve_chain)
+    monkeypatch.setattr("pallas.product.llm.client.assess_llm_submit_gate", fake_submit_gate)
 
 
 def test_is_repeater_llm_task() -> None:
@@ -47,6 +55,14 @@ def test_try_consume_local_rpm_respects_per_worker_limit(monkeypatch: pytest.Mon
     assert try_consume_local_rpm(cfg) is False
 
 
+def test_roll_strong_llm_attempt_respects_rate() -> None:
+    assert roll_strong_llm_attempt(cfg=LlmConfig(llm_repeater_strong_attempt_rate=0)) is False
+    assert roll_strong_llm_attempt(cfg=LlmConfig(llm_repeater_strong_attempt_rate=1)) is True
+    cfg = LlmConfig(llm_repeater_strong_attempt_rate=0.55)
+    assert roll_strong_llm_attempt(cfg=cfg, rng=lambda: 0.54) is True
+    assert roll_strong_llm_attempt(cfg=cfg, rng=lambda: 0.55) is False
+
+
 @pytest.mark.asyncio
 async def test_check_repeater_llm_allowed_group_cooldown(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm.repeater_limit import check_repeater_llm_allowed, refresh_repeater_group_cooldown
@@ -66,6 +82,30 @@ async def test_check_repeater_llm_allowed_group_cooldown(monkeypatch: pytest.Mon
 
 
 @pytest.mark.asyncio
+async def test_strong_and_weak_cooldowns_are_independent(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.repeater_limit import check_repeater_llm_allowed, refresh_repeater_group_cooldown
+
+    clear_repeater_llm_limit_state()
+    cfg = LlmConfig(
+        llm_governance_enabled=True,
+        llm_repeater_group_cooldown_sec=60,
+        llm_repeater_strong_cooldown_sec=60,
+        llm_repeater_global_rpm=600,
+    )
+    monkeypatch.setattr("pallas.product.llm.repeater_limit.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.repeater_limit.try_consume_global_rpm", lambda _cfg=None: True)
+
+    await refresh_repeater_group_cooldown(101, 201)
+    assert await check_repeater_llm_allowed(101, 201, cfg=cfg, scene_tier="strong") is None
+    await refresh_repeater_group_cooldown(102, 202, scene_tier="strong")
+    assert await check_repeater_llm_allowed(102, 202, cfg=cfg) is None
+    assert (
+        await check_repeater_llm_allowed(102, 202, cfg=cfg, scene_tier="strong")
+        == "repeater_group_cooldown"
+    )
+
+
+@pytest.mark.asyncio
 async def test_submit_chat_task_repeater_uses_repeater_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm.client import submit_chat_task
     from pallas.product.llm.models import ChatSubmitRequest
@@ -75,7 +115,7 @@ async def test_submit_chat_task_repeater_uses_repeater_limit(monkeypatch: pytest
     async def fake_check(*args, **kwargs):
         return "repeater_global_rpm"
 
-    monkeypatch.setattr("pallas.product.llm.client.check_repeater_llm_allowed", fake_check)
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.check_repeater_llm_allowed", fake_check)
 
     result = await submit_chat_task(
         ChatSubmitRequest(
@@ -110,7 +150,7 @@ async def test_submit_chat_task_llm_chat_still_uses_chat_governance(monkeypatch:
         async def __aexit__(self, *exc):
             return None
 
-    monkeypatch.setattr("pallas.product.llm.client.LlmChatGovernance", lambda **kwargs: FakeGov())
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.LlmChatGovernance", lambda **kwargs: FakeGov())
 
     result = await submit_chat_task(
         ChatSubmitRequest(

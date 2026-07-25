@@ -235,6 +235,8 @@ def _llm_section() -> WebuiEnvSection:
             "llm_tools_enabled": "LLM_TOOLS_ENABLED",
             "llm_chat_max_concurrency": "LLM_CHAT_MAX_CONCURRENCY",
             "llm_repeater_group_cooldown_sec": "LLM_REPEATER_GROUP_COOLDOWN_SEC",
+            "llm_repeater_strong_cooldown_sec": "LLM_REPEATER_STRONG_COOLDOWN_SEC",
+            "llm_repeater_strong_attempt_rate": "LLM_REPEATER_STRONG_ATTEMPT_RATE",
             "llm_repeater_max_inflight": "LLM_REPEATER_MAX_INFLIGHT",
             "llm_repeater_global_rpm": "LLM_REPEATER_GLOBAL_RPM",
             "llm_repeater_feedback_enabled": "LLM_REPEATER_FEEDBACK_ENABLED",

@@ -89,6 +89,7 @@ def maybe_append_llm_repeater_feedback(task_id: str, task: dict, reply_text: str
                 user_text=user_text,
                 reply_text=reply_text,
                 behavior_scene=str(task.get("behavior_scene") or "").strip(),
+                scene_tier=str(task.get("scene_tier") or "").strip(),
                 behavior_actions=list(task.get("behavior_actions") or []),
                 llm_route=resolve_feedback_llm_route(
                     task_type=task_type,
@@ -96,7 +97,7 @@ def maybe_append_llm_repeater_feedback(task_id: str, task: dict, reply_text: str
                 ),
                 source_tags=source_tags,
                 eligible_for_bias=True,
-                eligible_for_writeback=False,
+                eligible_for_writeback=str(task.get("scene_tier") or "").strip().lower() == "strong",
             )
         )
     except Exception as e:
