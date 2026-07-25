@@ -27,6 +27,7 @@ from pallas.product.llm.dynamic_expression_context import (
     load_recent_live_expression_rows,
 )
 from pallas.product.llm.feedback_chat_hint import build_group_feedback_chat_hint
+from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
 from pallas.product.llm.kernel import (
     ConversationContext,
@@ -58,6 +59,7 @@ from pallas.product.llm.reply_variation import (
     should_wait_for_more,
 )
 from pallas.product.llm.session_store import list_user_llm_messages
+from pallas.product.llm.speak_perception import evaluate_speak_perception
 from pallas.product.llm.task_metrics import record_bot_llm_task
 from pallas.product.llm.tools.registry import tool_metadata_for_chat
 from pallas.product.persona.affect_kernel import (
@@ -71,6 +73,7 @@ from pallas.product.persona.expression_habits import build_expression_context_su
 from pallas.product.persona.self_identity import (
     extract_self_aliases,
     maybe_persist_self_alias_from_utterance,
+    resolve_cached_login_nickname,
     resolve_login_nickname,
     save_self_alias_from_teach,
 )
@@ -91,7 +94,16 @@ from .replies import (
 def llm_chat_rule(event: Event) -> bool:
     if not is_llm_chat_service_enabled():
         return False
-    return bool(getattr(event, "to_me", False))
+    if bool(getattr(event, "to_me", False)):
+        return True
+    llm_cfg = get_llm_config()
+    if not llm_cfg.llm_speak_perception_enabled:
+        return False
+    if not (
+        llm_cfg.llm_speak_mention_enabled or llm_cfg.llm_speak_ambient_enabled or llm_cfg.llm_speak_followup_enabled
+    ):
+        return False
+    return isinstance(event, GroupMessageEvent)
 
 
 llm_chat_msg = on_message(
@@ -100,6 +112,23 @@ llm_chat_msg = on_message(
     rule=Rule(llm_chat_rule),
     permission=group_message_permission_for_command("llm_chat.chat"),
 )
+
+
+async def _resolve_speak_aliases(bot_id: int) -> list[str]:
+    login_nick = await resolve_login_nickname(int(bot_id))
+    if not login_nick:
+        login_nick = resolve_cached_login_nickname(int(bot_id))
+    persona_dict = None
+    try:
+        from pallas.core.foundation.db import make_bot_config_repository
+
+        doc = await make_bot_config_repository().get(int(bot_id))
+        raw = getattr(doc, "persona", None) if doc is not None else None
+        if isinstance(raw, dict):
+            persona_dict = raw
+    except Exception:
+        persona_dict = None
+    return extract_self_aliases(persona_dict, login_nickname=login_nick or None)
 
 
 def resolve_corpus_llm_route(llm_cfg, pool: list[str], candidate: str) -> str:
@@ -238,8 +267,54 @@ async def handle_llm_chat(bot: Bot, event: Event):
     raw_group_id = getattr(event, "group_id", None)
     group_id = int(raw_group_id) if raw_group_id is not None else None
     user_id = int(getattr(event, "user_id", 0) or 0)
-    # 无发言门控时 llm_chat 仅 to_me；有门控时会覆盖为 mention/followup/ambient
-    speak_trigger = "to_me" if bool(getattr(event, "to_me", False)) else ""
+    is_to_me = bool(getattr(event, "to_me", False))
+    speak_trigger = "to_me" if is_to_me else ""
+    followup_window_sec = int(llm_cfg.llm_speak_followup_window_sec)
+    followup_max_total = int(llm_cfg.llm_speak_followup_max_total_sec)
+
+    if is_to_me and llm_cfg.llm_speak_followup_enabled:
+        note_hard_speak_trigger(
+            group_id,
+            user_id,
+            window_seconds=followup_window_sec,
+            max_total_seconds=followup_max_total,
+        )
+
+    if llm_cfg.llm_speak_perception_enabled and not is_to_me:
+        followup_active = bool(
+            llm_cfg.llm_speak_followup_enabled
+            and in_followup_window(
+                group_id,
+                user_id,
+                window_seconds=followup_window_sec,
+                max_total_seconds=followup_max_total,
+            )
+        )
+        speak_aliases = await _resolve_speak_aliases(int(bot.self_id))
+        decision = evaluate_speak_perception(
+            plain_text=plain or msg,
+            aliases=speak_aliases,
+            is_to_me=False,
+            bot_id=int(bot.self_id),
+            mention_enabled=llm_cfg.llm_speak_mention_enabled,
+            ambient_enabled=llm_cfg.llm_speak_ambient_enabled,
+            ambient_rate=llm_cfg.llm_speak_ambient_rate,
+            ambient_min_score=llm_cfg.llm_speak_ambient_min_score,
+            ambient_cooldown_sec=llm_cfg.llm_speak_ambient_cooldown_sec,
+            min_alias_len=llm_cfg.llm_speak_min_alias_len,
+            group_id=group_id,
+            followup_active=followup_active,
+        )
+        if not decision.should_speak:
+            return
+        speak_trigger = decision.reason
+        if speak_trigger == "mention" and llm_cfg.llm_speak_followup_enabled:
+            note_hard_speak_trigger(
+                group_id,
+                user_id,
+                window_seconds=followup_window_sec,
+                max_total_seconds=followup_max_total,
+            )
 
     teach_body = parse_memory_teach(plain or msg)
     if teach_body is not None and llm_cfg.llm_memory_rag_enabled:
@@ -627,6 +702,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
+            "speak_trigger": speak_trigger or "to_me",
         },
     )
 
