@@ -10,7 +10,6 @@ from nonebot import logger
 
 from pallas.product.community_stats.config import get_community_stats_config
 from pallas.product.community_stats.endpoints import (
-    FALLBACK_HEARTBEAT,
     PRIMARY_HEARTBEAT,
     custom_heartbeat_url,
 )
@@ -22,15 +21,12 @@ _PROBE_TIMEOUT_SEC = 8.0
 
 
 def connectivity_probe_urls() -> list[str]:
-    """自动模式固定主+备；自定义 endpoint 只测一条。"""
+    """自动模式探测正式中心；自定义 endpoint 只测一条。"""
     cfg = get_community_stats_config()
     custom = custom_heartbeat_url(cfg)
     if custom:
         return [stats_url_from_endpoint(custom)]
-    return [
-        stats_url_from_endpoint(PRIMARY_HEARTBEAT),
-        stats_url_from_endpoint(FALLBACK_HEARTBEAT),
-    ]
+    return [stats_url_from_endpoint(PRIMARY_HEARTBEAT)]
 
 
 def _error_text(exc: BaseException) -> str:

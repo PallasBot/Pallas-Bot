@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from pallas.product.community_stats.endpoints import FALLBACK_HEARTBEAT, PRIMARY_HEARTBEAT
+from pallas.product.community_stats.endpoints import PRIMARY_HEARTBEAT
 from pallas.product.community_stats.store import community_stats_state_path
 from pallas.product.corpus.enroll import enroll_url_from_heartbeat, ensure_corpus_community_enrolled
 from pallas.product.corpus.store import load_corpus_community_state
@@ -73,14 +73,14 @@ async def test_enroll_prefers_derived_api_base_in_auto_mode(tmp_path, monkeypatc
     monkeypatch.setattr("pallas.product.corpus.enroll.should_run_corpus_auto_enroll", lambda: True)
     monkeypatch.setattr(
         "pallas.product.corpus.enroll.corpus_enroll_urls",
-        lambda: [f"{FALLBACK_HEARTBEAT.replace('/heartbeat', '/corpus/enroll')}"],
+        lambda: [f"{PRIMARY_HEARTBEAT.replace('/heartbeat', '/corpus/enroll')}"],
     )
 
     response = httpx.Response(
         200,
         json={
             "corpus_token": "pc_testtoken",
-            "api_base": "https://stats.pallasbot.top/v1/corpus",
+            "api_base": "https://stats.example/v1/corpus",
             "policy": {"read": True, "contribute": True},
         },
     )
@@ -90,7 +90,7 @@ async def test_enroll_prefers_derived_api_base_in_auto_mode(tmp_path, monkeypatc
 
     assert ok is True
     saved = load_corpus_community_state()
-    assert saved["api_base"] == "https://pallas.togetsudo.com/v1/corpus"
+    assert saved["api_base"] == "https://stats.pallasbot.top/v1/corpus"
 
 
 @pytest.mark.asyncio
