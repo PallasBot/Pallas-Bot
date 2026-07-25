@@ -17,7 +17,7 @@
 | --- | --- |
 | 社区 / 站点插件 | [首插件](/developer/plugin-development/first-plugin) → [入门](/developer/plugin-development/getting-started) → [配置](/developer/plugin-development/config-and-webui) → [发布](/developer/plugin-development/publishing) |
 | 官方插件 | [Core vs 扩展](/developer/architecture/core-vs-extensions) → [Golden](/developer/plugin-development/golden-plugin) → [元数据](/developer/plugin-development/metadata) → [发布](/developer/plugin-development/publishing) |
-| 主仓 / 平台 | [架构总览](/developer/architecture/overview) → [分片](/developer/architecture/shard-runtime) → [配置存储](/developer/architecture/config-storage) → [治理](/developer/architecture/plugin-governance) |
+| 主仓 / 平台 | [架构总览](/developer/architecture/overview) → [LLM 输出路径](/developer/architecture/llm-output-path) → [分片](/developer/architecture/shard-runtime) → [配置存储](/developer/architecture/config-storage) → [治理](/developer/architecture/plugin-governance) |
 
 短索引：[Author](/developer/author/index)。
 

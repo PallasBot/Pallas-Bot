@@ -375,6 +375,22 @@ async def run_ai_callback(
 
         if is_feedback_task_type(task_type) and reply_text and text_delivered:
             maybe_append_llm_repeater_feedback(task_id, task, reply_text)
+        if reply_text and text_delivered and group_id:
+            scene_tier = str(task.get("scene_tier") or "").strip()
+            channel = "at_chat" if task_type == LLM_CHAT_TASK_TYPE else "strong" if scene_tier == "strong" else "group"
+            try:
+                from pallas.product.persona.expression_learn import note_expression_from_utterance
+
+                note_expression_from_utterance(
+                    int(group_id),
+                    reply_text,
+                    source="llm_success",
+                    channel=channel,
+                    scene_tier=scene_tier,
+                    bot_id=int(bot_id or 0),
+                )
+            except Exception as exc:
+                logger.debug("AI callback expression learn skipped task={}: {}", task_id, exc)
         if reply_text and text_delivered:
             from pallas.product.llm.config import get_llm_config
 

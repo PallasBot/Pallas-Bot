@@ -341,6 +341,44 @@ async def test_run_ai_callback_appends_repeater_feedback_when_enabled(
 
 
 @pytest.mark.asyncio
+async def test_run_ai_callback_learns_delivered_llm_reply_without_breaking_feedback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bot = MagicMock()
+    bot.call_api = AsyncMock(return_value=None)
+    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
+    monkeypatch.setattr(
+        ai_callback_runner.TaskManager,
+        "get_task",
+        AsyncMock(
+            return_value={
+                "bot_id": "111",
+                "group_id": 222,
+                "user_id": 333,
+                "task_type": LLM_CHAT_TASK_TYPE,
+                "scene_tier": "strong",
+            }
+        ),
+    )
+    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
+    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
+    learned: list[tuple[int, str, dict]] = []
+
+    def note(group_id, text, **meta):
+        learned.append((group_id, text, meta))
+        raise RuntimeError("store unavailable")
+
+    monkeypatch.setattr("pallas.product.persona.expression_learn.note_expression_from_utterance", note)
+
+    result = await ai_callback_runner.run_ai_callback("task-expression-1", status="success", text="那确实")
+
+    assert result == {"message": "ok"}
+    assert learned == [
+        (222, "那确实", {"source": "llm_success", "channel": "at_chat", "scene_tier": "strong", "bot_id": 111})
+    ]
+
+
+@pytest.mark.asyncio
 async def test_run_ai_callback_appends_repeater_task_feedback_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

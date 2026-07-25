@@ -121,6 +121,54 @@ async def test_refresh_group_style_profile_writes_profile_and_invalidates_cache(
 
 
 @pytest.mark.asyncio
+async def test_refresh_group_style_profile_observes_non_bot_messages(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.persona.group_style_refresh import refresh_group_style_profile
+
+    class DummyGroupRepo:
+        async def get(self, _key_id: int, ignore_cache=False):  # noqa: ARG002
+            return None
+
+        async def upsert_field(self, _key_id: int, _field: str, _value):
+            return None
+
+    messages = [
+        SimpleNamespace(user_id=123, bot_id=999, plain_text="这也太离谱了吧", group_id=777, time=1),
+        SimpleNamespace(user_id=999, bot_id=999, plain_text="少来这套。", group_id=777, time=2),
+    ]
+
+    class DummyMessageRepo:
+        async def find_recent_in_group(self, *_args, **_kwargs):
+            return messages
+
+    class DummyContextRepo:
+        async def list_answers_for_group_since(self, *_args, **_kwargs):
+            return []
+
+    observed: list[tuple[int, list[str], int]] = []
+    monkeypatch.setattr(
+        "pallas.product.persona.group_style_refresh.make_group_config_repository", lambda: DummyGroupRepo()
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.group_style_refresh.make_message_repository", lambda: DummyMessageRepo()
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.group_style_refresh.make_local_context_repository", lambda: DummyContextRepo()
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.expression_learn.get_llm_config",
+        lambda: SimpleNamespace(llm_expression_learn_enabled=True),
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.expression_learn.learn_expressions_from_group_messages",
+        lambda group_id, texts, *, bot_id=0, max_notes=5: observed.append((group_id, texts, bot_id)),
+    )
+
+    await refresh_group_style_profile(777)
+
+    assert observed == [(777, ["这也太离谱了吧"], 999)]
+
+
+@pytest.mark.asyncio
 async def test_refresh_dirty_group_style_batch_isolates_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.persona.group_style_refresh import (
         clear_group_style_dirty_state,
