@@ -1,7 +1,9 @@
-"""续聊软窗口。"""
+"""续聊软窗口与空回复兜底。"""
 
 from __future__ import annotations
 
+from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
+from pallas.product.llm.chat_empty_fallback import resolve_llm_chat_empty_fallback
 from pallas.product.llm.followup_window import (
     clear_followup_window_state,
     in_followup_window,
@@ -24,6 +26,7 @@ def test_followup_window_hard_then_soft() -> None:
 def test_followup_soft_does_not_extend_by_itself() -> None:
     clear_followup_window_state()
     note_hard_speak_trigger(2, 9, window_seconds=20, max_total_seconds=100, now=1000.0)
+    # 软触发不调用 note_hard；窗口仍按 1000 起算
     assert in_followup_window(2, 9, window_seconds=20, max_total_seconds=100, now=1015.0)
     assert not in_followup_window(2, 9, window_seconds=20, max_total_seconds=100, now=1025.0)
 
@@ -48,3 +51,23 @@ def test_evaluate_followup_before_ambient() -> None:
     )
     assert d.should_speak
     assert d.reason == "followup"
+
+
+def test_empty_fallback_for_hard_trigger() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "speak_trigger": "mention", "fallback_text": ""}
+    assert resolve_llm_chat_empty_fallback(task, "") == "嗯？"
+    assert resolve_llm_chat_empty_fallback(task, "  你好  ") == "你好"
+
+
+def test_empty_fallback_uses_corpus_fallback() -> None:
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "speak_trigger": "to_me",
+        "fallback_text": "哈？",
+    }
+    assert resolve_llm_chat_empty_fallback(task, "") == "哈？"
+
+
+def test_empty_fallback_silent_for_ambient() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "speak_trigger": "ambient"}
+    assert resolve_llm_chat_empty_fallback(task, "") == ""
