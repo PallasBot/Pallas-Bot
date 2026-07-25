@@ -28,8 +28,8 @@ unzip -l build/pallas-core/dist/*.whl | grep 'pallas/__init__'
 
 | 字段 | 值 |
 | --- | --- |
-| Owner | `TogetsuDo`（或实际 org） |
-| Repository | `pallas-plugin-<name>` |
+| Owner | `PallasBot` |
+| Repository | `Plugin-<Name>`（GitHub）；PyPI 包名仍为 `pallas-plugin-<name>` |
 | Workflow | `publish-pypi.yml` |
 | Environment | `pypi`（可选，与 workflow 一致） |
 

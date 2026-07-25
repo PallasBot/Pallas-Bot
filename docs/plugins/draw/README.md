@@ -46,7 +46,7 @@
 
 ## 实现
 
-源码位置：扩展仓 [`src/pallas_plugin_draw/`](https://github.com/TogetsuDo/pallas-plugin-draw/tree/main/src/pallas_plugin_draw)
+源码位置：扩展仓 [`src/pallas_plugin_draw/`](https://github.com/PallasBot/Plugin-Draw/tree/main/src/pallas_plugin_draw)
 
 关键文件：
 
@@ -63,4 +63,4 @@
 ## 相关链接
 
 - [命令权限说明](../common/cmd_perm/README.md)
-- [牛牛画画插件仓库](https://github.com/TogetsuDo/pallas-plugin-draw)
+- [牛牛画画插件仓库](https://github.com/PallasBot/Plugin-Draw)

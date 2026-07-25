@@ -71,4 +71,4 @@
 ## 相关链接
 
 - [命令权限说明](../common/cmd_perm/README.md)
-- [牛牛状态插件仓库](https://github.com/TogetsuDo/pallas-plugin-bot-status)
+- [牛牛状态插件仓库](https://github.com/PallasBot/Plugin-Bot-Status)

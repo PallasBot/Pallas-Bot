@@ -342,8 +342,8 @@ def test_catalog_row_reuses_official_extension_visuals(monkeypatch) -> None:
         lambda plugin_id: (
             {
                 "avatar": None,
-                "icon": "https://raw.githubusercontent.com/TogetsuDo/pallas-plugin-draw/main/assets/brand-avatar.png",
-                "cover": "https://raw.githubusercontent.com/TogetsuDo/pallas-plugin-draw/main/assets/brand-avatar.png",
+                "icon": "https://raw.githubusercontent.com/PallasBot/Plugin-Draw/main/assets/brand-avatar.png",
+                "cover": "https://raw.githubusercontent.com/PallasBot/Plugin-Draw/main/assets/brand-avatar.png",
             }
             if plugin_id == "draw"
             else {"avatar": None, "icon": None, "cover": None}
@@ -354,8 +354,8 @@ def test_catalog_row_reuses_official_extension_visuals(monkeypatch) -> None:
     row = next(r for r in rows if r["name"] == "draw")
 
     assert row["avatar"] in (None, "")
-    assert row["icon"] == "https://raw.githubusercontent.com/TogetsuDo/pallas-plugin-draw/main/assets/brand-avatar.png"
-    assert row["cover"] == "https://raw.githubusercontent.com/TogetsuDo/pallas-plugin-draw/main/assets/brand-avatar.png"
+    assert row["icon"] == "https://raw.githubusercontent.com/PallasBot/Plugin-Draw/main/assets/brand-avatar.png"
+    assert row["cover"] == "https://raw.githubusercontent.com/PallasBot/Plugin-Draw/main/assets/brand-avatar.png"
 
 
 def test_catalog_row_reuses_community_plugin_visuals(monkeypatch) -> None:
