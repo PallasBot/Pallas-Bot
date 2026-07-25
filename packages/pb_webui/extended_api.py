@@ -9403,28 +9403,42 @@ def register_extended_api(
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from packages.pb_webui.manager import BotGitUpdateError
         from pallas.console.cli.update_ops import apply_bot_update
+        from pallas.console.webui.update_apply_progress import (
+            create_update_apply_job,
+            run_update_apply_job,
+        )
         from pallas.core.shared.utils.format_exception import format_exception_for_log
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
-        try:
-            logger.info(
-                "Pallas-Bot 控制台: Bot 仓库在线更新（git）请求已接受 restart={}",
-                restart,
-            )
-            data = await apply_bot_update(
-                github_token=github_token,
-                repo="PallasBot/Pallas-Bot",
-                restart=restart,
-            )
-            drop_read_cache(("update_check_bot:",))
-            return JSONResponse({"ok": True, "data": data})
-        except BotGitUpdateError as e:
-            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
-        except HTTPException:
-            raise
-        except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: Bot 仓库更新失败")
-            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+        job = await create_update_apply_job("bot", restart=restart)
+        logger.info(
+            "Pallas-Bot 控制台: Bot 仓库在线更新（git）任务已排队 job_id={} restart={}",
+            job.job_id,
+            restart,
+        )
+
+        async def _runner(j: Any) -> None:
+            def on_progress(pct: int, message: str) -> None:
+                j.push("running", message, progress_percent=pct)
+
+            try:
+                data = await apply_bot_update(
+                    github_token=github_token,
+                    repo="PallasBot/Pallas-Bot",
+                    restart=restart,
+                    on_progress=on_progress,
+                )
+                drop_read_cache(("update_check_bot:",))
+                j.result = data
+                j.message = str(data.get("message") or "完成")
+            except BotGitUpdateError as e:
+                j.push("failed", error=e.detail, progress_percent=j.progress_percent)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Pallas-Bot 控制台: Bot 仓库更新失败")
+                j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
+
+        asyncio.create_task(run_update_apply_job(job, _runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "kind": "bot", "restart": restart}})
 
     @router.post(f"{x}/update/apply", include_in_schema=True)
     async def _update_apply(
@@ -9433,29 +9447,65 @@ def register_extended_api(
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from pallas.console.cli.update_ops import WebuiUpdateError, apply_webui_dist_update
+        from pallas.console.webui.update_apply_progress import (
+            create_update_apply_job,
+            run_update_apply_job,
+        )
         from pallas.core.shared.utils.format_exception import format_exception_for_log
 
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
-        try:
-            data = await apply_webui_dist_update(
-                repo=repo,
-                asset=asset,
-                tag=tag,
-                github_token=github_token,
-                refresh_runtime_meta=True,
-            )
-            drop_read_cache(("update_check_webui:",))
-            return JSONResponse({"ok": True, "data": data})
-        except WebuiUpdateError as e:
-            raise HTTPException(status_code=500, detail=e.detail) from e
-        except HTTPException:
-            raise
-        except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: WebUI 更新失败")
-            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+        job = await create_update_apply_job("webui")
+
+        async def _runner(j: Any) -> None:
+            def on_progress(pct: int, message: str) -> None:
+                j.push("running", message, progress_percent=pct)
+
+            try:
+                data = await apply_webui_dist_update(
+                    repo=repo,
+                    asset=asset,
+                    tag=tag,
+                    github_token=github_token,
+                    refresh_runtime_meta=True,
+                    on_progress=on_progress,
+                )
+                drop_read_cache(("update_check_webui:",))
+                j.result = data
+                j.message = str(data.get("message") or "更新成功")
+            except WebuiUpdateError as e:
+                j.push("failed", error=e.detail, progress_percent=j.progress_percent)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Pallas-Bot 控制台: WebUI 更新失败")
+                j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
+
+        asyncio.create_task(run_update_apply_job(job, _runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "kind": "webui"}})
+
+    @router.get(f"{x}/update/jobs/{{job_id}}", include_in_schema=True)
+    async def _update_apply_job_get(job_id: str) -> JSONResponse:
+        from pallas.console.webui.update_apply_progress import get_update_apply_job
+
+        job = get_update_apply_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="job_not_found")
+        return JSONResponse({"ok": True, "data": job.as_dict()})
+
+    @router.get(f"{x}/update/jobs/{{job_id}}/stream", include_in_schema=True)
+    async def _update_apply_job_stream(job_id: str) -> StreamingResponse:
+        from pallas.console.webui.update_apply_progress import iter_update_apply_job_sse
+
+        return StreamingResponse(
+            iter_update_apply_job_sse(job_id.strip()),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @router.post(
         f"{x}/security/console-login",
