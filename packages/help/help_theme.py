@@ -1,4 +1,4 @@
-"""帮助图 v4 视觉令牌：浅色控制台 / 深色 GSUID 面板。"""
+"""帮助图 v4 视觉令牌：浅色控制台 / 深色面板。"""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ DETAIL_KV_GAP = 16
 DETAIL_FOOTER_PAD = 56
 DETAIL_STATUS_DOT = 8
 
-# 2× 绘制再 LANCZOS 缩回，圆角/文字更接近 GSUID 锐利感
+# 2× 绘制再 LANCZOS 缩回，圆角/文字更锐利
 RENDER_SCALE = 2
 
 _LIGHT = {
@@ -87,7 +87,7 @@ _LIGHT = {
     "FOOTER_BAR_BG": (244, 241, 250),
 }
 
-# 深色二次元 / GSUID 面板（紫调对齐品牌）
+# 深色面板（紫调对齐品牌）
 _DARK = {
     "CANVAS": (14, 12, 28),
     "SURFACE": (26, 22, 48),
@@ -162,7 +162,7 @@ def resolve_help_font_path() -> Path:
         path = Path(override).expanduser()
         if path.is_file():
             return path
-    # UI 面板锐利度：优先无衬线（GSUID 观感），宋体放最后
+    # UI 面板锐利度：优先无衬线，宋体放最后
     if PILLOWMD_DEFAULT_FONT.is_file():
         return PILLOWMD_DEFAULT_FONT
     for family in _FC_SANS_FAMILIES:
