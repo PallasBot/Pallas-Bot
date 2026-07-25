@@ -116,10 +116,29 @@ def test_prefer_relationship_source_keeps_teach() -> None:
 
 def test_parse_relationship_observe_self_role() -> None:
     assert parse_relationship_observe("我是本群群主") == "是本群群主"
+    assert parse_relationship_observe("群主是我") == "是本群群主"
+    assert parse_relationship_observe("我当群管") == "是本群群管"
     assert parse_relationship_observe("叫我队长") == "希望被叫作队长"
     assert parse_relationship_observe("别叫我笨蛋") == "不喜欢被叫作笨蛋"
     assert parse_relationship_observe("记住关系：群主") is None
     assert parse_relationship_observe("你好") is None
+
+
+def test_parse_relationship_observe_address_and_pref() -> None:
+    assert parse_relationship_observe("你可以叫我队长啊") == "希望被叫作队长"
+    assert parse_relationship_observe("我叫小明") == "希望被叫作小明"
+    assert parse_relationship_observe("不要叫我笨蛋") == "不喜欢被叫作笨蛋"
+    assert parse_relationship_observe("别用外号叫我") == "不喜欢被叫外号"
+    assert parse_relationship_observe("以后别用外号") == "不喜欢被叫外号"
+    assert parse_relationship_observe("对我直说就行") == "偏好直接沟通"
+    assert parse_relationship_observe("别客套吧") == "偏好直接沟通"
+
+
+def test_parse_relationship_observe_rejects_noise() -> None:
+    assert parse_relationship_observe("我是不是群主") is None
+    assert parse_relationship_observe("叫我干什么") is None
+    assert parse_relationship_observe("我叫你一声好汉") is None
+    assert parse_relationship_observe("今天天气不错我们聊点别的吧哈哈哈") is None
 
 
 def test_extract_relationship_attitude_delta() -> None:
