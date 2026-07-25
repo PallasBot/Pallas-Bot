@@ -59,7 +59,7 @@ def test_register_plugin_command_tool_schema(monkeypatch) -> None:
     assert decl is not None
 
     class FakePlugin:
-        name = "demo"
+        name = "pallas_plugin_demo"
         metadata = SimpleNamespace(
             name="演示",
             extra={
@@ -86,9 +86,11 @@ def test_register_plugin_command_tool_schema(monkeypatch) -> None:
     clear_tool_registry()
     count = register_plugin_command_tools()
     assert count == 1
-    schemas = tool_openai_schemas()
+    schemas = tool_openai_schemas(domains=frozenset({"demo"}))
     names = {item["function"]["name"] for item in schemas}
     assert "demo__echo" in names
+    # 短域名 demo 也能命中（即便插件模块名是 pallas_plugin_demo）
+    assert tool_openai_schemas(domains=frozenset({"pallas_plugin_demo"}))
 
 
 def test_build_command_tool_spec_requires_context() -> None:

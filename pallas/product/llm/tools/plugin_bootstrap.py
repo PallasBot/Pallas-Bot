@@ -64,7 +64,7 @@ def build_command_tool_spec(
         name=decl.name,
         description=description,
         parameters=decl.parameters or {"type": "object", "properties": {}},
-        domains=frozenset({"command", plugin_name}),
+        domains=_command_tool_domains(plugin_name=plugin_name, decl=decl),
         handler=handler,
         source=LlmToolSource.PLUGIN_COMMAND,
         command_id=decl.command_id,
@@ -74,3 +74,13 @@ def build_command_tool_spec(
             ToolCapability.REQUIRES_GROUP_CONTEXT.value,
         }),
     )
+
+
+def _command_tool_domains(*, plugin_name: str, decl: LlmCommandToolDecl) -> frozenset[str]:
+    """command + 插件名 + 口令/工具名前缀，便于 selective 命中 draw/sing 等短域名。"""
+    domains = {"command", str(plugin_name or "").strip()}
+    for raw in (decl.command_id, decl.name):
+        prefix = str(raw or "").strip().split(".", 1)[0].strip().lower()
+        if prefix:
+            domains.add(prefix)
+    return frozenset(d for d in domains if d)
