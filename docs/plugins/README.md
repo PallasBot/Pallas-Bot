@@ -12,6 +12,7 @@
 <NCard title="帮助 help" route="/plugins/help">帮助图、本群开关插件</NCard>
 <NCard title="欢迎 greeting" route="/plugins/greeting">入群 / 好友欢迎</NCard>
 <NCard title="喝酒 drink" route="/plugins/drink">喝酒、醒酒</NCard>
+<NCard title="智能对话 llm_chat" route="/plugins/llm_chat">@牛牛 连续聊天与酒后搭话</NCard>
 <NCard title="轮盘 roulette" route="/plugins/roulette">轮盘赌</NCard>
 <NCard title="夺舍 take_name" route="/plugins/take_name">自动改名片</NCard>
 <NCard title="拉黑 blacklist" route="/plugins/blacklist">拉黑、屏蔽</NCard>
@@ -43,7 +44,6 @@
 
 <div class="plugin-doc-grid">
 
-<NCard title="智能对话 llm_chat" route="/plugins/llm_chat">随时 @ 智能对话与 AI 开关</NCard>
 <NCard title="牛牛核心 pb_core" route="/plugins/pb_core">进程摘要、插件概览与重启</NCard>
 <NCard title="控制台 pb_webui" route="/plugins/pb_webui">网页控制台与 API</NCard>
 <NCard title="在线统计 pb_stats" route="/plugins/pb_stats">社区主站心跳与上报</NCard>
