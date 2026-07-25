@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from threading import Lock
 from typing import TYPE_CHECKING
 
-from packages.repeater.opportunity_gate import looks_like_reply_cue
 from pallas.product.llm.reply_necessity import (
     is_bystander_plain_text,
     is_noise_fragment,
@@ -24,6 +23,20 @@ _CQ_AT_RE = re.compile(r"\[CQ:at,qq=\d+[^\]]*\]", re.IGNORECASE)
 _AT_PLAIN_RE = re.compile(r"@[^\s@，,。！!？?：:;；]{1,24}")
 _REPLY_MARK_RE = re.compile(r"\[回复[^\]]*\]")
 _COMMAND_START_RE = re.compile(r"^[/!！#＃.]")
+_REPLY_CUE_TOKENS = (
+    "?",
+    "？",
+    "!",
+    "！",
+    "吗",
+    "呢",
+    "吧",
+    "真的假的",
+    "真假的",
+    "笑死",
+    "离谱",
+    "怎么个事",
+)
 
 _ambient_lock = Lock()
 _last_ambient_at: dict[int, float] = {}
@@ -83,6 +96,20 @@ def looks_like_bot_command(text: str) -> bool:
         head = stripped.split(None, 1)[0] if stripped else ""
         if 1 <= len(head) <= 16 and head.isascii() and head.isalnum():
             return True
+    return False
+
+
+def looks_like_reply_cue(plain_text: str) -> bool:
+    """轻量接话线索（本地副本，避免加载路径依赖 packages.repeater）。"""
+    plain = str(plain_text or "").strip()
+    if not plain:
+        return False
+    if any(token in plain for token in _REPLY_CUE_TOKENS):
+        return True
+    if 2 <= len(plain) <= 6 and plain.endswith(("确实", "离谱", "笑死")):
+        return True
+    if len(plain) <= 10 and plain.startswith(("这也", "这就", "怎么", "咋", "什么")):
+        return True
     return False
 
 
