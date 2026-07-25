@@ -98,3 +98,9 @@ def corpus_api_base_urls_for_config(cfg: CommunityStatsConfig) -> list[str]:
     if custom:
         return [corpus_api_base_from_heartbeat(custom)]
     return [corpus_api_base_from_heartbeat(u) for u in heartbeat_urls_for_config(cfg)]
+
+
+def gallery_posts_urls_for_config(cfg: CommunityStatsConfig) -> list[str]:
+    from pallas.product.community_stats.stats_url import gallery_posts_url_from_endpoint
+
+    return [gallery_posts_url_from_endpoint(u) for u in heartbeat_urls_for_config(cfg)]

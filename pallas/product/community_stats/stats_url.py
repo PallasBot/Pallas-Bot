@@ -48,3 +48,17 @@ def corpus_hot_url_from_endpoint(heartbeat_endpoint: str) -> str:
         root = f"{parsed.scheme}://{parsed.netloc}"
         return urljoin(root + "/", "v1/corpus/hot")
     return "https://stats.pallasbot.top/v1/corpus/hot"
+
+
+def gallery_posts_url_from_endpoint(heartbeat_endpoint: str) -> str:
+    ep = (heartbeat_endpoint or "").strip()
+    if not ep:
+        return "https://stats.pallasbot.top/v1/gallery/posts"
+    norm = ep.rstrip("/")
+    if norm.endswith("/heartbeat"):
+        return norm[: -len("/heartbeat")] + "/gallery/posts"
+    parsed = urlparse(ep)
+    if parsed.scheme and parsed.netloc:
+        root = f"{parsed.scheme}://{parsed.netloc}"
+        return urljoin(root + "/", "v1/gallery/posts")
+    return "https://stats.pallasbot.top/v1/gallery/posts"
