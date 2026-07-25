@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.1-14-gae4d1078-dirty",
+    "version": "v4.1.1-14-gc2d36c8d",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -5541,233 +5541,6 @@
               "minimum": 5,
               "default": 40,
               "title": "Limit"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/community-gallery": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Community Gallery List",
-        "operationId": "_community_gallery_list_pallas_api_community_gallery_get",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 48,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "mine",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "title": "Mine"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Community Gallery Create",
-        "operationId": "_community_gallery_create_pallas_api_community_gallery_post",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body__community_gallery_create_pallas_api_community_gallery_post"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/community-gallery/{post_id}": {
-      "delete": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Community Gallery Delete",
-        "operationId": "_community_gallery_delete_pallas_api_community_gallery__post_id__delete",
-        "parameters": [
-          {
-            "name": "post_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Post Id"
             }
           },
           {
@@ -18891,60 +18664,6 @@
   },
   "components": {
     "schemas": {
-      "Body__community_gallery_create_pallas_api_community_gallery_post": {
-        "properties": {
-          "text": {
-            "type": "string",
-            "title": "Text",
-            "default": ""
-          },
-          "nickname": {
-            "type": "string",
-            "title": "Nickname",
-            "default": ""
-          },
-          "avatar_url": {
-            "type": "string",
-            "title": "Avatar Url",
-            "default": ""
-          },
-          "bot_qq": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Bot Qq"
-          },
-          "source": {
-            "type": "string",
-            "title": "Source",
-            "default": "manual"
-          },
-          "keywords": {
-            "type": "string",
-            "title": "Keywords",
-            "default": ""
-          },
-          "image": {
-            "anyOf": [
-              {
-                "type": "string",
-                "contentMediaType": "application/octet-stream"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Image"
-          }
-        },
-        "type": "object",
-        "title": "Body__community_gallery_create_pallas_api_community_gallery_post"
-      },
       "GitMirrorApplyPluginBody": {
         "properties": {
           "preferred_id": {
@@ -21330,64 +21049,6 @@
         ],
         "title": "_LlmModelNumGpuBody"
       },
-      "_LlmModelPricingRowBody": {
-        "properties": {
-          "price_in": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Price In",
-            "default": 0.0
-          },
-          "price_out": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Price Out",
-            "default": 0.0
-          },
-          "cache_price_in": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Cache Price In",
-            "default": 0.0
-          },
-          "cache_price_out": {
-            "type": "number",
-            "minimum": 0.0,
-            "title": "Cache Price Out",
-            "default": 0.0
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "_LlmModelPricingRowBody"
-      },
-      "_LlmModelPricingRowData": {
-        "properties": {
-          "price_in": {
-            "type": "number",
-            "title": "Price In",
-            "default": 0.0
-          },
-          "price_out": {
-            "type": "number",
-            "title": "Price Out",
-            "default": 0.0
-          },
-          "cache_price_in": {
-            "type": "number",
-            "title": "Cache Price In",
-            "default": 0.0
-          },
-          "cache_price_out": {
-            "type": "number",
-            "title": "Cache Price Out",
-            "default": 0.0
-          }
-        },
-        "type": "object",
-        "title": "_LlmModelPricingRowData",
-        "description": "模型单价：币种见 routing.cost_currency；单位为「每百万 tokens」。"
-      },
       "_LlmModelSwitchBody": {
         "properties": {
           "model": {
@@ -21484,13 +21145,6 @@
             "type": "string",
             "title": "Request Method",
             "default": "chat_completions"
-          },
-          "model_pricing": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/_LlmModelPricingRowData"
-            },
-            "type": "object",
-            "title": "Model Pricing"
           }
         },
         "type": "object",
@@ -21606,13 +21260,6 @@
             "type": "string",
             "title": "Request Method",
             "default": "chat_completions"
-          },
-          "model_pricing": {
-            "additionalProperties": {
-              "$ref": "#/components/schemas/_LlmModelPricingRowBody"
-            },
-            "type": "object",
-            "title": "Model Pricing"
           }
         },
         "additionalProperties": false,
@@ -21733,30 +21380,6 @@
             },
             "type": "object",
             "title": "Tier Backup Models"
-          },
-          "task_backups": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Task Backups"
-          },
-          "task_backup_models": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Task Backup Models"
-          },
-          "route_source": {
-            "type": "string",
-            "title": "Route Source",
-            "default": ""
-          },
-          "cost_currency": {
-            "type": "string",
-            "title": "Cost Currency",
-            "default": ""
           }
         },
         "additionalProperties": false,
@@ -21778,44 +21401,6 @@
             },
             "type": "object",
             "title": "Tasks"
-          },
-          "tier_backups": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Tier Backups"
-          },
-          "tier_backup_models": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Tier Backup Models"
-          },
-          "task_backups": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Task Backups"
-          },
-          "task_backup_models": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object",
-            "title": "Task Backup Models"
-          },
-          "route_source": {
-            "type": "string",
-            "title": "Route Source",
-            "default": ""
-          },
-          "cost_currency": {
-            "type": "string",
-            "title": "Cost Currency",
-            "default": ""
           }
         },
         "type": "object",
