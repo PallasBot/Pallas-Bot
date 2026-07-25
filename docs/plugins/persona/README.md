@@ -59,6 +59,7 @@
 - 牛级差异来自 `bot_id` 的确定性派生，不需要手工给每只牛单独配置。
 - 群级风格来自本群学习到的 `message` 和 `answer` 数据，不是写死模板。
 - 群聊表达习惯不只看长短和活跃度；高频触发词、群梗和接梗倾向也会参与塑形。
+- 单群表达库（`expression_*.py`）会把场合说法注入 `@` 与强场景接话提示，成功出口可再学习。
 - `persona` 影响的是接话行为和风格，不是一个独立可调用插件。
 - `persona` 不只影响平时接话；当你 `@牛牛` 闲聊时，统一 LLM 路径也会继续吃到牛格与群味。
 
@@ -66,5 +67,6 @@
 
 - [复读插件](../repeater/README.md)
 - [`@牛牛`、复读接话与 LLM 的关系](../../guide/llm-and-repeater.md)
+- [LLM 输出路径（开发者）](../../developer/architecture/llm-output-path.md)
 - [架构总览](../../developer/architecture/overview.md)
 - [LLM 与 AI 运维](../../maintainer/operate/llm-and-ai.md)
