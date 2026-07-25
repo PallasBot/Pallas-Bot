@@ -33,3 +33,12 @@ def test_self_identity_does_not_infer_arknights_tools(text: str) -> None:
 def test_operator_lookup_still_infers_arknights(text: str) -> None:
     assert not is_self_identity_question(text)
     assert "arknights" in infer_tool_domains(text)
+
+
+def test_infer_drink_and_help_command_domains() -> None:
+    assert "drink" in infer_tool_domains("帮牛牛喝一杯")
+    assert "drink" in infer_tool_domains("让它醒一醒别喝了")
+    assert "help" in infer_tool_domains("看看牛牛帮助")
+    assert "help" in infer_tool_domains("有哪些功能")
+    assert "llm_chat" in infer_tool_domains("把刚才聊的清空")
+    assert infer_tool_domains("今天天气不错") == frozenset()

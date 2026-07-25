@@ -34,9 +34,11 @@ _OPERATOR_LOOKUP_HINTS = (
     "什么职业",
 )
 
-_COMMAND_HINTS: tuple[tuple[str, ...], str] = (
+_COMMAND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("画", "绘制", "抽卡", "来张"), "draw"),
     (("忘掉", "清空", "clear", "忘了吧"), "llm_chat"),
+    (("喝酒", "干杯", "继续喝", "醉酒", "醒一醒", "别喝了", "醒酒", "喝一杯", "再喝"), "drink"),
+    (("帮助", "有哪些功能", "功能列表", "牛牛帮助", "功能说明"), "help"),
 )
 
 
