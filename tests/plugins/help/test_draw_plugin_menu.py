@@ -17,7 +17,7 @@ def test_truncate_pixels_fits_card_width() -> None:
     assert fitted.endswith("…")
 
 
-def test_paginate_menu_rows_page_size_20() -> None:
+def test_paginate_menu_rows_page_size_21() -> None:
     rows = [
         HelpMenuRow(
             index=i,
@@ -32,8 +32,8 @@ def test_paginate_menu_rows_page_size_20() -> None:
     page_rows, page, total_pages = paginate_menu_rows(rows, page=2)
     assert page == 2
     assert total_pages == 2
-    assert len(page_rows) == 5
-    assert page_rows[0].index == 21
+    assert len(page_rows) == 4
+    assert page_rows[0].index == 22
 
 
 def test_draw_plugin_menu_image_dimensions() -> None:

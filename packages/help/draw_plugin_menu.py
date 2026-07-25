@@ -1,4 +1,4 @@
-"""一级帮助总览：双列加宽卡 + C 顶栏/底栏 + B 分组浅底。"""
+"""一级帮助总览：三列卡片 + C 顶栏/底栏 + B 分组浅底。"""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ from .plugin_visuals import help_font, load_help_plugin_icon
 
 
 def _card_text_width(scale: int) -> int:
-    return (ht.MENU_CARD_W - ht.MENU_CARD_TEXT_PAD * 2 - ht.MENU_ICON_SIZE - 12) * scale
+    return (ht.MENU_CARD_W - ht.MENU_CARD_TEXT_PAD * 2 - ht.MENU_ICON_SIZE - 10) * scale
 
 
 def _group_inner_height(rows: list[HelpMenuRow]) -> int:
@@ -150,28 +150,28 @@ def _draw_plugin_card(hc: HelpCanvas, x: int, y: int, row: HelpMenuRow) -> None:
     icon = load_help_plugin_icon(row.plugin, size=icon_size, label=row.display_name)
     hc.image.paste(icon, (x + u(ht.MENU_CARD_TEXT_PAD), y + (h - icon_size) // 2), icon)
 
-    text_x = x + u(ht.MENU_CARD_TEXT_PAD) + icon_size + u(12)
-    name_font = help_font(22)
-    intro_font = help_font(16)
+    text_x = x + u(ht.MENU_CARD_TEXT_PAD) + icon_size + u(10)
+    name_font = help_font(20)
+    intro_font = help_font(14)
 
     name = truncate_pixels(
         draw,
         f"{row.index}. {row.display_name}",
         name_font,
-        _card_text_width(hc.scale) - u(44),
+        _card_text_width(hc.scale) - u(40),
     )
-    draw.text((text_x, y + u(22)), name, fill=ht.TEXT, font=name_font)
+    draw.text((text_x, y + u(24)), name, fill=ht.TEXT, font=name_font)
 
     status_color = ht.STATUS_ON if row.enabled else ht.STATUS_OFF
     status_text = "开" if row.enabled else "关"
-    badge_font = help_font(15)
+    badge_font = help_font(14)
     bbox = draw.textbbox((0, 0), status_text, font=badge_font)
     tw = bbox[2] - bbox[0]
     th = bbox[3] - bbox[1]
-    bw, bh = tw + u(12), max(th + u(4), u(22))
+    bw, bh = tw + u(10), max(th + u(4), u(20))
     name_w = draw.textlength(name, font=name_font)
-    badge_x1 = min(text_x + int(name_w) + u(8), x + w - bw - u(10))
-    badge_y1 = y + u(22)
+    badge_x1 = min(text_x + int(name_w) + u(6), x + w - bw - u(8))
+    badge_y1 = y + u(24)
     chip_fill = ht.STATUS_ON_BG if row.enabled else ht.STATUS_OFF_BG
     draw.rounded_rectangle((badge_x1, badge_y1, badge_x1 + bw, badge_y1 + bh), radius=u(999), fill=chip_fill)
     draw.text(
@@ -183,4 +183,4 @@ def _draw_plugin_card(hc: HelpCanvas, x: int, y: int, row: HelpMenuRow) -> None:
     )
 
     intro = truncate_pixels(draw, row.description, intro_font, _card_text_width(hc.scale))
-    draw.text((text_x, y + u(72)), intro, fill=ht.TEXT_MUTED, font=intro_font)
+    draw.text((text_x, y + u(74)), intro, fill=ht.TEXT_MUTED, font=intro_font)

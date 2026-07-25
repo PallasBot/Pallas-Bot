@@ -14,22 +14,22 @@ from pallas.core.foundation.paths import project_path
 HelpVisualMode = Literal["light", "dark"]
 
 # 布局常量（两套主题共用）
-# 版心对齐现网 920；总览双列加宽卡片，标题更完整
+# 版心对齐现网 920；总览三列，卡片宽按版心均分
 MENU_WIDTH = 920
 MENU_PAD = 36
-MENU_COLS = 2
-MENU_CARD_W = 380
+MENU_COLS = 3
+MENU_CARD_W = 249
 MENU_CARD_H = 128
 MENU_CARD_GAP = 16
-MENU_ICON_SIZE = 64
-MENU_CARD_TEXT_PAD = 14
+MENU_ICON_SIZE = 56
+MENU_CARD_TEXT_PAD = 12
 MENU_STATUS_DOT = 8
 MENU_FRAME_RADIUS = 24
 MENU_CARD_RADIUS = 16
 MENU_SECTION_GAP = 10
 MENU_SECTION_BAR_H = 28
 MENU_SECTION_PANEL_PAD = 10
-MENU_PAGE_SIZE = 20
+MENU_PAGE_SIZE = 21
 # C 方案：顶栏 / 元信息条 / 底栏（逻辑像素）
 PAGE_HEADER_H = 58
 PAGE_META_H = 34
