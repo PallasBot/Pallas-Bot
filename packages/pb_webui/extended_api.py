@@ -1292,6 +1292,98 @@ def _day_totals_from_cluster_bot_blob(rec: dict[str, Any], *, fallback_day: str)
     return day_key, dr, ds, mr, ac
 
 
+def _normalize_active_group_ids(raw: object) -> set[str]:
+    out: set[str] = set()
+    if isinstance(raw, (set, list, tuple)):
+        items = raw
+    elif isinstance(raw, dict):
+        items = raw.keys()
+    else:
+        return out
+    for item in items:
+        key = str(item).strip()
+        if not key:
+            continue
+        try:
+            gid = int(key)
+        except (TypeError, ValueError):
+            continue
+        if gid > 0:
+            out.add(str(gid))
+    return out
+
+
+def _day_active_groups_from_mem(mem: dict[str, Any] | None) -> set[str]:
+    if not isinstance(mem, dict):
+        return set()
+    return _normalize_active_group_ids(mem.get("day_active_groups"))
+
+
+def _ensure_day_active_groups(mem: dict[str, Any]) -> set[str]:
+    groups = mem.get("day_active_groups")
+    if isinstance(groups, set):
+        return groups
+    normalized = _normalize_active_group_ids(groups)
+    mem["day_active_groups"] = normalized
+    return normalized
+
+
+def _record_active_group_from_event(mem: dict[str, Any], event: object) -> None:
+    gid = getattr(event, "group_id", None)
+    if gid is None:
+        return
+    try:
+        gid_i = int(gid)
+    except (TypeError, ValueError):
+        return
+    if gid_i <= 0:
+        return
+    _ensure_day_active_groups(mem).add(str(gid_i))
+
+
+def _collect_active_groups_flush_entries(today: str) -> list[tuple[str, str, set[str]]]:
+    """hub/单进程刷盘：合并 worker 与本进程当日活跃群。"""
+    bucket: dict[tuple[str, str], set[str]] = {}
+
+    def _merge(day: str, sid: str, ids: set[str]) -> None:
+        day_key = str(day).strip()[:10]
+        key_sid = str(sid).strip()
+        if not key_sid or len(day_key) < 10:
+            return
+        k = (day_key, key_sid)
+        bucket[k] = bucket.get(k, set()) | ids
+
+    if _shard_hub_console():
+        from pallas.core.platform.shard.console_stats import load_cluster_console_stats_by_sid
+
+        for sid, blob in load_cluster_console_stats_by_sid().items():
+            if not isinstance(blob, dict):
+                continue
+            msg = blob.get("msg") if isinstance(blob.get("msg"), dict) else {}
+            day_key = str(blob.get("day_key") or msg.get("day_key") or today).strip()[:10]
+            _merge(day_key, str(sid), _normalize_active_group_ids(msg.get("day_active_groups")))
+
+    for sid in set(_MSG_STATS.keys()):
+        sid = str(sid).strip()
+        if not sid:
+            continue
+        _rollover_console_day_if_needed(sid, today)
+        mem = _MSG_STATS.get(sid)
+        _merge(today, sid, _day_active_groups_from_mem(mem if isinstance(mem, dict) else None))
+
+    return [(day, sid, ids) for (day, sid), ids in sorted(bucket.items())]
+
+
+def _flush_active_groups_disk(today: str) -> None:
+    if not _console_daily_stats_disk_enabled():
+        return
+    from packages.pb_webui import active_groups_store
+
+    entries = _collect_active_groups_flush_entries(today)
+    if entries:
+        active_groups_store.write_batch_day_groups(entries)
+
+
 def _merge_console_daily_flush_entry(
     bucket: dict[tuple[str, str], tuple[int, int, int, int]],
     *,
@@ -1385,12 +1477,23 @@ def _rollover_console_day_if_needed(sid: str, today: str) -> None:
     mr = _sum_matcher_day_runs(sid)
     if _console_daily_stats_disk_enabled():
         daily_stats_store.write_day_totals(cur, sid, dr, ds, mr, ac)
+        try:
+            from packages.pb_webui import active_groups_store
+
+            active_groups_store.write_day_groups(
+                cur,
+                sid,
+                _day_active_groups_from_mem(mem if isinstance(mem, dict) else None),
+            )
+        except Exception:  # noqa: BLE001
+            pass
     if isinstance(mem, dict):
         mem["day_key"] = today
         mem["day_sent"] = 0
         mem["day_received"] = 0
         mem["day_api_total"] = 0
         mem["day_api_counts"] = {}
+        mem["day_active_groups"] = set()
     pblock = _PLUGIN_RUN_STATS.get(sid)
     if isinstance(pblock, dict):
         pblock["day_key"] = today
@@ -1426,6 +1529,10 @@ def _flush_today_console_daily_stats_disk() -> None:
     entries = _collect_console_daily_flush_entries(today)
     if entries:
         daily_stats_store.write_batch_day_totals(entries)
+    try:
+        _flush_active_groups_disk(today)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         from pallas.product.llm.task_metrics import flush_stats_sync
 
@@ -1479,6 +1586,7 @@ def _msg_stats_shard_export(mem: dict[str, Any]) -> dict[str, Any]:
         "day_api_counts": day_api,
         "api_call_buckets": [dict(x) for x in api_hist if isinstance(x, dict)],
         "msg_traffic_buckets": [dict(x) for x in traffic_hist if isinstance(x, dict)],
+        "day_active_groups": sorted(_day_active_groups_from_mem(mem), key=lambda s: int(s)),
     }
 
 
@@ -1511,6 +1619,7 @@ def _msg_stats_shard_import(msg: dict[str, Any], *, today: str) -> dict[str, Any
         "day_api_counts": day_api,
         "api_call_buckets": [dict(x) for x in api_hist if isinstance(x, dict)],
         "msg_traffic_buckets": [dict(x) for x in traffic_hist if isinstance(x, dict)],
+        "day_active_groups": _normalize_active_group_ids(msg.get("day_active_groups")),
     }
 
 
@@ -1889,6 +1998,7 @@ def _msg_stats_get_mut(sid: str) -> dict[str, Any]:
             "day_api_counts": {},
             "api_call_buckets": [],
             "msg_traffic_buckets": [],
+            "day_active_groups": set(),
         },
     )
     rec["day_key"] = today
@@ -1903,6 +2013,7 @@ def _msg_stats_get_mut(sid: str) -> dict[str, Any]:
         rec["api_call_buckets"] = []
     if not isinstance(rec.get("msg_traffic_buckets"), list):
         rec["msg_traffic_buckets"] = []
+    _ensure_day_active_groups(rec)
     return rec
 
 
@@ -2213,6 +2324,7 @@ def _init_message_tracking() -> None:
                     row["received"] = int(row["received"]) + 1
                     row["day_received"] = int(row["day_received"]) + 1
                     _msg_traffic_history_bump(row, recv_delta=1)
+                    _record_active_group_from_event(row, event)
         except Exception:  # noqa: BLE001
             pass
 
@@ -2233,6 +2345,7 @@ def _message_stats_row_from_mem(
         "today_sent": int(mem.get("day_sent", 0)),
         "today_received": int(mem.get("day_received", 0)),
         "today_api_calls": int(mem.get("day_api_total", 0)),
+        "today_active_groups": len(_day_active_groups_from_mem(mem)),
         "today_top_api": top_name,
         "today_top_api_count": top_cnt,
         "api_calls_history": _api_call_history_public(mem),
@@ -3539,6 +3652,57 @@ def _console_daily_stats_payload(
                 api_calls=ac,
             )
     merged = sorted(by_key.values(), key=itemgetter("date", "self_id"))
+    live_active: dict[str, set[str]] = {}
+    for sid, mem in _MSG_STATS.items():
+        key = str(sid).strip()
+        if not key or (sid_f is not None and key != sid_f):
+            continue
+        if isinstance(mem, dict):
+            live_active[key] = _day_active_groups_from_mem(mem)
+    if _shard_hub_console():
+        try:
+            from pallas.core.platform.shard.console_stats import load_cluster_console_stats_by_sid
+
+            for sid, blob in load_cluster_console_stats_by_sid().items():
+                key = str(sid).strip()
+                if not key or (sid_f is not None and key != sid_f):
+                    continue
+                if not isinstance(blob, dict):
+                    continue
+                msg = blob.get("msg") if isinstance(blob.get("msg"), dict) else {}
+                live_active[key] = live_active.get(key, set()) | _normalize_active_group_ids(
+                    msg.get("day_active_groups")
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
+    try:
+        from packages.pb_webui import active_groups_store
+
+        active_rows = active_groups_store.load_daily_active_counts(
+            self_id=sid_f,
+            start_day=start_d.isoformat(),
+            end_day=end_d.isoformat(),
+        )
+        active_by_key = {(r["date"], r["self_id"]): int(r.get("active_groups") or 0) for r in active_rows}
+        for row in merged:
+            key = (str(row.get("date") or ""), str(row.get("self_id") or ""))
+            count = active_by_key.get(key, 0)
+            if key[0] == clock_today:
+                live_ids = live_active.get(key[1], set())
+                count = max(count, len(live_ids))
+            row["active_groups"] = count
+        group_metrics = active_groups_store.compute_group_metrics(
+            self_id=sid_f,
+            today=clock_today,
+            mag_days=30,
+            live_today=live_active,
+        )
+    except Exception:  # noqa: BLE001
+        for row in merged:
+            row.setdefault("active_groups", 0)
+        group_metrics = {"dag": 0, "mag": 0, "dag_mag_ratio": None, "mag_days": 30}
+
     return {
         "start": s1,
         "end": s2,
@@ -3547,6 +3711,7 @@ def _console_daily_stats_payload(
         "rows": merged,
         "live_today": live_out,
         "server_date": clock_today,
+        "group_metrics": group_metrics,
     }
 
 
