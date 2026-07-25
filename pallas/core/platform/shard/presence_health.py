@@ -83,13 +83,16 @@ async def probe_bot_get_status_healthy(bot: Any) -> bool:
 
 
 async def apply_presence_qq_health_probes(*, force: bool = False) -> list[int]:
-    """对本机已连 OneBot 牛做 get_status；达阈值则清 presence。返回本轮踢出的 QQ。"""
+    """对本机已连 OneBot 牛做 get_status；达阈值则清 presence 并关闭僵尸 WS。返回本轮踢出的 QQ。"""
     global _last_probe_mono
 
     from nonebot import get_bots
 
     from pallas.core.platform.shard import context as shard_ctx
-    from pallas.core.platform.shard.presence import note_worker_bot_disconnected_sync
+    from pallas.core.platform.shard.presence import (
+        close_local_bot_connection,
+        note_worker_bot_disconnected_sync,
+    )
 
     if not shard_ctx.sharding_active():
         return []
@@ -114,11 +117,13 @@ async def apply_presence_qq_health_probes(*, force: bool = False) -> list[int]:
             ok = await probe_bot_get_status_healthy(bot)
         if record_health_probe_result(qq, ok=ok):
             note_worker_bot_disconnected_sync(qq=qq)
+            closed = await close_local_bot_connection(qq)
             kicked.append(qq)
             logger.warning(
-                "presence_health: qq={} quarantined after {} failed get_status",
+                "presence_health: qq={} quarantined after {} failed get_status closed_ws={}",
                 qq,
                 STATUS_FAIL_THRESHOLD,
+                closed,
             )
 
     await asyncio.gather(*starmap(one, bots.items()))
