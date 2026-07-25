@@ -28,6 +28,7 @@ __plugin_meta__ = PluginMetadata(
     homepage=PLUGIN_HOMEPAGE,
     supported_adapters={"~onebot.v11"},
     extra={
+        "help_tag": "chat",
         "version": PLUGIN_EXTRA_VERSION,
         "help_audience": "superuser",
         "menu_template": PLUGIN_MENU_TEMPLATE,

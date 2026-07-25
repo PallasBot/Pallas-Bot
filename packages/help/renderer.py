@@ -56,7 +56,7 @@ def _help_style_files_revision() -> str:
 
 def _compute_help_image_cache_suffix() -> str:
     from .config import get_help_config
-    from .help_theme import resolve_help_font_path
+    from .help_theme import RENDER_SCALE, help_visual_mode, resolve_help_font_path
 
     cfg = get_help_config()
     font_path = resolve_help_font_path()
@@ -71,7 +71,9 @@ def _compute_help_image_cache_suffix() -> str:
         f"|fn={cfg.side_paint_filename}"
         f"|sc={cfg.side_paint_scale:.4f}"
         f"|ap={int(cfg.side_paint_auto_page)}"
-        f"|enc=v3"
+        f"|enc=v4"
+        f"|vis={help_visual_mode()}"
+        f"|rs={RENDER_SCALE}"
         f"|{font_part}"
         f"|sty={_help_style_files_revision()}"
     )
@@ -371,9 +373,11 @@ def menu_image_cache_key(
     total_pages: int,
     total_plugin_count: int,
 ) -> str:
-    row_parts = [f"{row.index}:{row.display_name}:{int(row.enabled)}" for row in menu_rows]
+    row_parts = [
+        f"{row.index}:{row.display_name}:{int(row.enabled)}:{getattr(row, 'help_tag', '')}" for row in menu_rows
+    ]
     parts = [
-        f"menu_v1|ignored={int(show_ignored)}|page={page}/{total_pages}|total={total_plugin_count}",
+        f"menu_v4|ignored={int(show_ignored)}|page={page}/{total_pages}|total={total_plugin_count}",
         f"suffix={_help_image_cache_suffix()}",
         *row_parts,
     ]
@@ -411,7 +415,7 @@ async def render_plugin_menu_to_image(
         total_plugin_count=total_count,
         total_enabled_count=enabled_count,
     )
-    return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="menu_v1")
+    return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="menu_v4")
 
 
 async def send_plugin_detail_image(
@@ -423,11 +427,11 @@ async def send_plugin_detail_image(
     from .draw_plugin_detail import draw_plugin_detail_image
 
     cache_key = (
-        f"plugin_v1|{data.display_name}|enabled={data.enabled}|funcs={len(data.functions)}"
+        f"plugin_v4|{data.display_name}|enabled={data.enabled}|funcs={len(data.functions)}"
         f"|suffix={_help_image_cache_suffix()}"
     )
     image = draw_plugin_detail_image(data)
-    image_data = await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v1")
+    image_data = await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
     await matcher.finish(MessageSegment.image(image_data))
 
 
@@ -439,9 +443,9 @@ async def send_function_detail_image(
 ) -> None:
     from .draw_function_detail import draw_function_detail_image
 
-    cache_key = f"function_v1|{data.display_name}|{data.index}/{data.total}|{data.func_name}|suffix={_help_image_cache_suffix()}"  # noqa: E501
+    cache_key = f"function_v4|{data.display_name}|{data.index}/{data.total}|{data.func_name}|suffix={_help_image_cache_suffix()}"  # noqa: E501
     image = draw_function_detail_image(data)
-    image_data = await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v1")
+    image_data = await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
     await matcher.finish(MessageSegment.image(image_data))
 
 
