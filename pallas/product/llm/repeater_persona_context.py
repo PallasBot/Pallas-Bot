@@ -27,6 +27,7 @@ from pallas.product.persona.compile_persona_prompt import (
     load_polish_lite_system_prompt,
     resolve_select_system_prompt_path,
 )
+from pallas.product.persona.expression_habits import build_expression_context_suffix
 
 _STATIC_BASE_LOADERS = {
     "polish_lite": load_polish_lite_system_prompt,
@@ -143,6 +144,17 @@ async def build_repeater_llm_persona_context(
     raw_profile = getattr(group_config, "style_profile", None) if group_config is not None else None
     if isinstance(raw_profile, dict):
         group_style = raw_profile
+    expression_context_suffix = await build_expression_context_suffix(
+        group_id,
+        plain,
+        bot_id=bot_id,
+        style_profile=group_style,
+    )
+    expression_reference_count = (
+        max(0, len(expression_context_suffix.splitlines()) - 2)
+        if expression_context_suffix.startswith("\n【表达参考】")
+        else 0
+    )
 
     recent_replies = await load_recent_bot_plain_replies(bot_id, group_id)
     openers: list[str] = []
@@ -177,6 +189,8 @@ async def build_repeater_llm_persona_context(
     parts = [base_system.rstrip()]
     if affect_block:
         parts.append(affect_block)
+    if expression_context_suffix:
+        parts.append(expression_context_suffix.strip())
     if dynamic_expression_hint:
         parts.append(dynamic_expression_hint.strip())
     if variation_hint:
@@ -185,9 +199,10 @@ async def build_repeater_llm_persona_context(
     if feedback:
         parts.append(feedback)
 
-    shaping_active = bool(affect_block or dynamic_expression_hint or variation_hint)
+    shaping_active = bool(affect_block or expression_context_suffix or dynamic_expression_hint or variation_hint)
     llm_rewrite_metadata = {
         "persona_affect_block": affect_block,
+        "expression_reference_count": expression_reference_count,
         "dynamic_expression_hint": dynamic_expression_hint,
         "variation_hint": variation_hint,
         "persona_shaping_active": shaping_active,

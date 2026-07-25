@@ -66,6 +66,7 @@ from pallas.product.persona.affect_kernel import (
     group_flavor_summary_from_style_snapshot,
 )
 from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
+from pallas.product.persona.expression_habits import build_expression_context_suffix
 from pallas.product.persona.self_identity import extract_self_aliases, save_self_alias_from_teach
 
 from . import startup as _startup  # noqa: F401
@@ -105,18 +106,25 @@ def resolve_corpus_llm_route(llm_cfg, pool: list[str], candidate: str) -> str:
     return "corpus_fallback"
 
 
-async def build_llm_chat_expression_suffix(group_id: int | None) -> str:
+async def build_llm_chat_expression_suffix(
+    group_id: int | None,
+    plain_text: str = "",
+    *,
+    bot_id: int = 0,
+) -> str:
     if group_id is None:
         return ""
     from pallas.core.foundation.db import make_group_config_repository
-    from pallas.product.persona.expression_habits import build_expression_habits_suffix
 
+    profile = None
     try:
         group_config = await make_group_config_repository().get(int(group_id))
     except Exception:
-        return ""
-    profile = getattr(group_config, "style_profile", None) if group_config is not None else None
-    return build_expression_habits_suffix(profile if isinstance(profile, dict) else None)
+        group_config = None
+    if group_config is not None:
+        raw_profile = getattr(group_config, "style_profile", None)
+        profile = raw_profile if isinstance(raw_profile, dict) else None
+    return await build_expression_context_suffix(int(group_id), plain_text, bot_id=bot_id, style_profile=profile)
 
 
 def build_llm_chat_ending_hint(turns) -> str:
@@ -309,7 +317,11 @@ async def handle_llm_chat(bot: Bot, event: Event):
         "knowledge": knowledge_retrieval_trace,
         "relationship": relationship_result.trace,
     }
-    expression_suffix = await build_llm_chat_expression_suffix(group_id)
+    expression_suffix = await build_llm_chat_expression_suffix(
+        group_id,
+        plain or msg,
+        bot_id=int(bot.self_id),
+    )
     if expression_suffix:
         system_prompt = f"{system_prompt.rstrip()}\n{expression_suffix}"
 
