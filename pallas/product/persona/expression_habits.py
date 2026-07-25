@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
+
+from pallas.product.llm.config import get_llm_config
+from pallas.product.persona.expression_retrieve import (
+    build_expression_reference_block,
+    retrieve_expressions_for_message,
+)
 
 from .prompt_guard import sanitize_prompt_literal
 
@@ -44,3 +51,26 @@ def build_expression_habits_suffix(style_profile: dict[str, Any] | None) -> str:
     if not lines:
         return ""
     return "\n【表达习惯参考】" + "；".join(lines) + "。"
+
+
+async def build_expression_context_suffix(
+    group_id: int | None,
+    plain_text: str,
+    *,
+    bot_id: int = 0,
+    style_profile: dict[str, Any] | None = None,
+) -> str:
+    """Prefer matched expression-bank references, then retain profile habits."""
+    cfg = get_llm_config()
+    if cfg.llm_expression_inject_enabled and group_id is not None and str(plain_text or "").strip():
+        entries = await asyncio.to_thread(
+            retrieve_expressions_for_message,
+            int(group_id),
+            plain_text,
+            limit=cfg.llm_expression_retrieve_limit,
+            bot_id=bot_id,
+        )
+        reference = build_expression_reference_block(entries, limit=cfg.llm_expression_retrieve_limit)
+        if reference:
+            return reference
+    return build_expression_habits_suffix(style_profile)

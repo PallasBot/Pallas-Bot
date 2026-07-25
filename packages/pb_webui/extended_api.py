@@ -91,6 +91,8 @@ from pallas.product.llm.repeater_feedback import (
     set_feedback_entry_correction,
     set_feedback_entry_eligibility,
 )
+from pallas.product.persona.expression_bank import ExpressionStatus, list_group_expressions
+from pallas.product.persona.expression_promote import resolve_expression
 
 from .console_meta_store import (
     get_console_meta,
@@ -7144,6 +7146,49 @@ def register_extended_api(
             raise HTTPException(status_code=500, detail=str(e)) from e
         if updated is None:
             raise HTTPException(status_code=404, detail="未找到候选或 writeback 未开启")
+        return JSONResponse({"ok": True, "data": updated.model_dump(mode="json")})
+
+    @router.get(f"{x}/llm/expression-bank", include_in_schema=True)
+    async def _llm_expression_bank_get(
+        group_id: int = Query(..., ge=1, description="群号"),
+        status: Annotated[ExpressionStatus | None, Query(description="状态筛选")] = None,
+        limit: int = Query(default=50, ge=1, le=200),
+    ) -> JSONResponse:
+        try:
+            rows = list_group_expressions(group_id=group_id, status=status, limit=limit)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "items": [row.model_dump(mode="json") for row in rows],
+                "limit": limit,
+            },
+        })
+
+    @router.post(f"{x}/llm/expression-bank/resolve", include_in_schema=True)
+    async def _llm_expression_bank_resolve(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        entry_id = str(body.get("entry_id") or "").strip()
+        action = str(body.get("action") or "").strip().lower()
+        if not entry_id:
+            raise HTTPException(status_code=400, detail="entry_id required")
+        if action not in {"approve", "reject"}:
+            raise HTTPException(status_code=400, detail="action must be approve or reject")
+        try:
+            updated = resolve_expression(
+                entry_id,
+                action=action,  # type: ignore[arg-type]
+                reason=str(body.get("reason") or "").strip(),
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if updated is None:
+            raise HTTPException(status_code=404, detail="未找到表达记录")
         return JSONResponse({"ok": True, "data": updated.model_dump(mode="json")})
 
     @router.get(f"{x}/llm/conversation-kernel/status", include_in_schema=True)

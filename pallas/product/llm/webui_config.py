@@ -376,6 +376,24 @@ class LlmWebuiConfig(BaseModel):
             "开启后可将「记住：…」写入记忆，并按相关度注入对话",
         ),
     )
+    llm_expression_inject_enabled: bool = Field(
+        default=True,
+        description=field_help("是否向对话注入群表达", "关闭后不使用表达库调整回复口气"),
+    )
+    llm_expression_learn_enabled: bool = Field(
+        default=True,
+        description=field_help("是否学习群表达", "关闭后不从群消息沉淀表达"),
+    )
+    llm_expression_auto_promote_enabled: bool = Field(
+        default=True,
+        description=field_help("是否自动晋升群表达", "关闭后仅保留候选表达，不自动启用"),
+    )
+    llm_expression_retrieve_limit: int = Field(
+        default=5,
+        ge=1,
+        le=8,
+        description=field_help("每次检索的群表达条数", "越大越贴近群内说法，也越占上下文预算"),
+    )
     llm_vector_retrieve: VectorRetrieveMode = Field(
         default="hybrid",
         description=field_help(
@@ -494,6 +512,10 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_fit_enabled=cfg.llm_sticker_fit_enabled,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
+        llm_expression_inject_enabled=cfg.llm_expression_inject_enabled,
+        llm_expression_learn_enabled=cfg.llm_expression_learn_enabled,
+        llm_expression_auto_promote_enabled=cfg.llm_expression_auto_promote_enabled,
+        llm_expression_retrieve_limit=cfg.llm_expression_retrieve_limit,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
         llm_memory_rag_top_k=cfg.llm_memory_rag_top_k,

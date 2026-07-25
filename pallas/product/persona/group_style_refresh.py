@@ -124,6 +124,23 @@ async def refresh_group_style_profile(
     from pallas.product.persona.affect_refine_client import collect_affect_refine_samples
 
     recent_messages = await message_repo.find_recent_in_group(gid, before_time=now_ts + 1, limit=32)
+    try:
+        from pallas.product.persona.expression_learn import (
+            get_llm_config,
+            learn_expressions_from_group_messages,
+        )
+
+        if get_llm_config().llm_expression_learn_enabled:
+            bot_id = next((int(item.bot_id) for item in recent_messages if getattr(item, "bot_id", 0)), 0)
+            texts = [
+                str(item.plain_text or "").strip()
+                for item in recent_messages
+                if str(getattr(item, "plain_text", "") or "").strip()
+                and int(getattr(item, "user_id", 0) or 0) != int(getattr(item, "bot_id", 0) or 0)
+            ]
+            learn_expressions_from_group_messages(gid, texts, bot_id=bot_id)
+    except Exception as exc:
+        logger.debug("group expression observe skipped group={}: {}", gid, exc)
     profile, used_llm = await refine_group_style_affect(
         profile,
         group_id=gid,
