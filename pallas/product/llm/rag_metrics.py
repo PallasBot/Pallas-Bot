@@ -13,6 +13,7 @@ _STORE_VER = 1
 
 _lock = threading.Lock()
 _day_key = ""
+_hydrated = False
 _hit_count = 0
 _miss_count = 0
 _by_document: dict[str, int] = {}
@@ -34,8 +35,48 @@ def _hit_rate(hit: int, miss: int) -> float:
     return round(100.0 * hit / total, 1)
 
 
+def load_stats_file() -> dict[str, Any]:
+    path = stats_file_path()
+    if not path.is_file():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _hydrate_from_disk_locked() -> None:
+    """进程内只 hydrate 一次，避免落盘快照与内存再次相加导致命中数漂移。"""
+    global _hydrated, _hit_count, _miss_count  # noqa: PLW0603
+    if _hydrated:
+        return
+    _hydrated = True
+    raw = load_stats_file()
+    if not isinstance(raw, dict) or not raw.get("day_key"):
+        return
+    if str(raw.get("day_key") or "") != str(_day_key or today_key()):
+        return
+    if _hit_count or _miss_count or _by_document or _by_source:
+        return
+    _hit_count = int(raw.get("hit_count") or 0)
+    _miss_count = int(raw.get("miss_count") or 0)
+    docs = raw.get("by_document")
+    if isinstance(docs, dict):
+        for key, value in docs.items():
+            name = str(key or "").strip()
+            if name:
+                _by_document[name] = int(value or 0)
+    sources = raw.get("by_source")
+    if isinstance(sources, dict):
+        for key, value in sources.items():
+            sid = str(key or "").strip()
+            if sid:
+                _by_source[sid] = int(value or 0)
+
+
 def rollover_if_needed() -> None:
-    global _day_key, _hit_count, _miss_count  # noqa: PLW0603
+    global _day_key, _hydrated, _hit_count, _miss_count  # noqa: PLW0603
     today = today_key()
     if _day_key == today:
         return
@@ -47,11 +88,15 @@ def rollover_if_needed() -> None:
             write_day_side(_day_key, "ai", {"rag": old, "day_key": _day_key, "source": "bot"})
         except Exception:
             pass
+        _hit_count = 0
+        _miss_count = 0
+        _by_document.clear()
+        _by_source.clear()
+        _day_key = today
+        _hydrated = True
+        return
     _day_key = today
-    _hit_count = 0
-    _miss_count = 0
-    _by_document.clear()
-    _by_source.clear()
+    _hydrated = False
 
 
 def record_rag_query_result(
@@ -63,6 +108,7 @@ def record_rag_query_result(
     try:
         with _lock:
             rollover_if_needed()
+            _hydrate_from_disk_locked()
             global _hit_count, _miss_count  # noqa: PLW0603
             if hit:
                 _hit_count += 1
@@ -92,17 +138,6 @@ def _snapshot_locked(*, day_override: str | None = None) -> dict[str, Any]:
         "by_document": dict(_by_document),
         "by_source": dict(_by_source),
     }
-
-
-def load_stats_file() -> dict[str, Any]:
-    path = stats_file_path()
-    if not path.is_file():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return raw if isinstance(raw, dict) else {}
 
 
 def merge_llm_rag_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -153,28 +188,9 @@ def merge_llm_rag_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def llm_rag_metrics_snapshot(*, include_persisted: bool = True) -> dict[str, Any]:
     with _lock:
         rollover_if_needed()
-        local = _snapshot_locked()
-    if not include_persisted:
-        return local
-    persisted_raw = load_stats_file()
-    if not isinstance(persisted_raw, dict) or not persisted_raw.get("day_key"):
-        return local
-    if str(persisted_raw.get("day_key") or "") != str(local.get("day_key") or ""):
-        return local
-    persisted = {
-        "source": str(persisted_raw.get("source") or "bot"),
-        "day_key": str(persisted_raw.get("day_key") or ""),
-        "updated_at": float(persisted_raw.get("updated_at") or 0),
-        "hit_count": int(persisted_raw.get("hit_count") or 0),
-        "miss_count": int(persisted_raw.get("miss_count") or 0),
-        "hit_rate": float(persisted_raw.get("hit_rate") or 0),
-        "by_document": (persisted_raw.get("by_document") if isinstance(persisted_raw.get("by_document"), dict) else {}),
-        "by_source": persisted_raw.get("by_source") if isinstance(persisted_raw.get("by_source"), dict) else {},
-    }
-    local_has = int(local.get("hit_count") or 0) > 0 or int(local.get("miss_count") or 0) > 0
-    if not local_has:
-        return merge_llm_rag_snapshots([persisted]) if persisted.get("day_key") else local
-    return merge_llm_rag_snapshots([persisted, local])
+        if include_persisted:
+            _hydrate_from_disk_locked()
+        return _snapshot_locked()
 
 
 def cluster_llm_rag_metrics_snapshot(*, max_stale_sec: float = 300.0) -> dict[str, Any]:
@@ -211,11 +227,7 @@ def flush_rag_stats_sync() -> None:
 
         if shard_ctx.sharding_active() and shard_ctx.is_worker():
             return
-        snapshot = (
-            cluster_llm_rag_metrics_snapshot()
-            if shard_ctx.sharding_active() and shard_ctx.is_hub()
-            else llm_rag_metrics_snapshot(include_persisted=True)
-        )
+        snapshot = llm_rag_metrics_snapshot(include_persisted=True)
     except Exception:
         snapshot = llm_rag_metrics_snapshot(include_persisted=True)
     if int(snapshot.get("hit_count") or 0) <= 0 and int(snapshot.get("miss_count") or 0) <= 0:
@@ -241,9 +253,10 @@ def flush_rag_stats_sync() -> None:
 
 
 def clear_llm_rag_metrics_for_tests() -> None:
-    global _day_key, _hit_count, _miss_count  # noqa: PLW0603
+    global _day_key, _hydrated, _hit_count, _miss_count  # noqa: PLW0603
     with _lock:
-        _day_key = ""
+        _day_key = today_key()
+        _hydrated = True
         _hit_count = 0
         _miss_count = 0
         _by_document.clear()

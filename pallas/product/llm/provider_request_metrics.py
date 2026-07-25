@@ -13,6 +13,7 @@ _STORE_VER = 1
 
 _lock = threading.Lock()
 _day_key = ""
+_hydrated = False
 _by_provider: dict[str, dict[str, Any]] = {}
 _by_model: dict[str, dict[str, Any]] = {}
 _failure_counts: dict[str, int] = {}
@@ -71,7 +72,7 @@ def _row_with_avg(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def rollover_if_needed() -> None:
-    global _day_key  # noqa: PLW0603
+    global _day_key, _hydrated  # noqa: PLW0603
     today = today_key()
     if _day_key == today:
         return
@@ -93,10 +94,54 @@ def rollover_if_needed() -> None:
             )
         except Exception:
             pass
+        _by_provider.clear()
+        _by_model.clear()
+        _failure_counts.clear()
+        _day_key = today
+        _hydrated = True
+        return
     _day_key = today
-    _by_provider.clear()
-    _by_model.clear()
-    _failure_counts.clear()
+    _hydrated = False
+
+
+def _copy_dimension_from_persisted(dst: dict[str, dict[str, Any]], src: Any) -> None:
+    if not isinstance(src, dict):
+        return
+    for key, row in src.items():
+        if not isinstance(row, dict):
+            continue
+        name = str(key or "").strip()
+        if not name:
+            continue
+        dst[name] = {
+            "requests": int(row.get("requests") or 0),
+            "succeeded": int(row.get("succeeded") or row.get("ok") or 0),
+            "failed": int(row.get("failed") or row.get("fail") or 0),
+            "total_latency_ms": int(row.get("total_latency_ms") or 0),
+            "recent_failure_class": str(row.get("recent_failure_class") or "").strip(),
+        }
+
+
+def _hydrate_from_disk_locked() -> None:
+    global _hydrated  # noqa: PLW0603
+    if _hydrated:
+        return
+    _hydrated = True
+    raw = load_stats_file()
+    if not isinstance(raw, dict) or not raw.get("day_key"):
+        return
+    if str(raw.get("day_key") or "") != str(_day_key or today_key()):
+        return
+    if _by_provider or _by_model or _failure_counts:
+        return
+    _copy_dimension_from_persisted(_by_provider, raw.get("provider_stats"))
+    _copy_dimension_from_persisted(_by_model, raw.get("model_stats"))
+    fails = raw.get("failure_counts")
+    if isinstance(fails, dict):
+        for key, count in fails.items():
+            name = str(key or "").strip()
+            if name:
+                _failure_counts[name] = int(count or 0)
 
 
 def _snapshot_locked(*, day_override: str | None = None) -> dict[str, Any]:
@@ -124,6 +169,7 @@ def record_provider_request(
     fail_cls = str(failure_class or "").strip()
     with _lock:
         rollover_if_needed()
+        _hydrate_from_disk_locked()
         prow = _by_provider.setdefault(provider_key, _empty_row())
         _bump_row(prow, ok=ok, latency_ms=latency, failure_class=fail_cls)
         if model_key:
@@ -196,30 +242,9 @@ def merge_provider_request_snapshots(rows: list[dict[str, Any]]) -> dict[str, An
 def llm_provider_request_metrics_snapshot(*, include_persisted: bool = True) -> dict[str, Any]:
     with _lock:
         rollover_if_needed()
-        local = _snapshot_locked()
-    if not include_persisted:
-        return local
-    persisted_raw = load_stats_file()
-    if not isinstance(persisted_raw, dict) or not persisted_raw.get("day_key"):
-        return local
-    if str(persisted_raw.get("day_key") or "") != str(local.get("day_key") or ""):
-        return local
-    persisted = {
-        "source": str(persisted_raw.get("source") or "bot"),
-        "day_key": str(persisted_raw.get("day_key") or ""),
-        "updated_at": float(persisted_raw.get("updated_at") or 0),
-        "provider_stats": persisted_raw.get("provider_stats")
-        if isinstance(persisted_raw.get("provider_stats"), dict)
-        else {},
-        "model_stats": persisted_raw.get("model_stats") if isinstance(persisted_raw.get("model_stats"), dict) else {},
-        "failure_counts": persisted_raw.get("failure_counts")
-        if isinstance(persisted_raw.get("failure_counts"), dict)
-        else {},
-    }
-    local_has = bool(local.get("provider_stats")) or bool(local.get("model_stats"))
-    if not local_has:
-        return merge_provider_request_snapshots([persisted]) if persisted.get("day_key") else local
-    return merge_provider_request_snapshots([persisted, local])
+        if include_persisted:
+            _hydrate_from_disk_locked()
+        return _snapshot_locked()
 
 
 def cluster_llm_provider_request_metrics_snapshot(*, max_stale_sec: float = 300.0) -> dict[str, Any]:
@@ -257,11 +282,7 @@ def flush_provider_request_stats_sync() -> None:
 
         if shard_ctx.sharding_active() and shard_ctx.is_worker():
             return
-        snapshot = (
-            cluster_llm_provider_request_metrics_snapshot()
-            if shard_ctx.sharding_active() and shard_ctx.is_hub()
-            else llm_provider_request_metrics_snapshot(include_persisted=True)
-        )
+        snapshot = llm_provider_request_metrics_snapshot(include_persisted=True)
     except Exception:
         snapshot = llm_provider_request_metrics_snapshot(include_persisted=True)
     if not snapshot.get("provider_stats") and not snapshot.get("model_stats"):
@@ -293,9 +314,10 @@ def flush_provider_request_stats_sync() -> None:
 
 
 def clear_llm_provider_request_metrics_for_tests() -> None:
-    global _day_key  # noqa: PLW0603
+    global _day_key, _hydrated  # noqa: PLW0603
     with _lock:
-        _day_key = ""
+        _day_key = today_key()
+        _hydrated = True
         _by_provider.clear()
         _by_model.clear()
         _failure_counts.clear()
