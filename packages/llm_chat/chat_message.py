@@ -39,6 +39,7 @@ from pallas.product.llm.knowledge.inject import enrich_system_with_knowledge_sou
 from pallas.product.llm.memory import (
     enrich_system_with_memory_context,
     enrich_system_with_relationship_context,
+    maybe_persist_relationship_from_utterance,
     parse_memory_teach,
     parse_relationship_teach,
     resolve_relationship_teach_target_id,
@@ -237,6 +238,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
     raw_group_id = getattr(event, "group_id", None)
     group_id = int(raw_group_id) if raw_group_id is not None else None
     user_id = int(getattr(event, "user_id", 0) or 0)
+    # 无发言门控时 llm_chat 仅 to_me；有门控时会覆盖为 mention/followup/ambient
+    speak_trigger = "to_me" if bool(getattr(event, "to_me", False)) else ""
 
     teach_body = parse_memory_teach(plain or msg)
     if teach_body is not None and llm_cfg.llm_memory_rag_enabled:
@@ -264,8 +267,28 @@ async def handle_llm_chat(bot: Bot, event: Event):
         )
         saved = await save_relationship_note(int(bot.self_id), group_id, target_id, relationship_body, cfg=llm_cfg)
         if saved:
+            logger.info(
+                "relationship teach saved bot={} group={} target={} fact={!r}",
+                int(bot.self_id),
+                group_id,
+                target_id,
+                relationship_body[:48],
+            )
             await llm_chat_msg.send(LLM_CHAT_RELATIONSHIP_SAVED_REPLY)
             return
+
+    # 硬触发后静默沉淀关系事实/态度；ambient 不写
+    try:
+        await maybe_persist_relationship_from_utterance(
+            int(bot.self_id),
+            group_id,
+            user_id,
+            plain or msg,
+            speak_trigger=speak_trigger,
+            cfg=llm_cfg,
+        )
+    except Exception:
+        logger.debug("relationship silent persist skipped")
 
     system_prompt = ""
     bundle = None
@@ -347,6 +370,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 persona_for_gate = ResolvedPersona(**persona_raw)
         except Exception:
             persona_for_gate = None
+
+    user_warmth_delta = float(relationship_result.trace.get("warmth_delta") or 0.0)
+    user_assertiveness_delta = float(relationship_result.trace.get("assertiveness_delta") or 0.0)
 
     gate_decision = evaluate_llm_reply_gate(
         plain or msg,
@@ -440,6 +466,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
             persona_for_gate,
             group_flavor_summary=group_flavor,
             repeated_openers=blocked_openers,
+            user_warmth_delta=user_warmth_delta,
+            user_assertiveness_delta=user_assertiveness_delta,
         )
         affect_system_block = build_persona_affect_system_block(affect_contract)
         affect_hint = build_variation_hint_from_contract(affect_contract)

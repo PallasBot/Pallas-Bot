@@ -325,6 +325,8 @@ class LlmRelationshipNoteRow(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(Text, nullable=False, default="teach")
     weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    warmth_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    assertiveness_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
@@ -555,6 +557,22 @@ def _ensure_pg_bot_config_plugin_storage(connection) -> None:
     connection.execute(text("ALTER TABLE bot_config ADD COLUMN plugin_storage JSONB NOT NULL DEFAULT '{}'::jsonb"))
 
 
+def _ensure_pg_llm_relationship_delta_columns(connection) -> None:
+    """旧库 llm_relationship_note 缺人对语气偏置列时补列。"""
+    insp = inspect(connection)
+    if not insp.has_table("llm_relationship_note"):
+        return
+    names = {c["name"] for c in insp.get_columns("llm_relationship_note")}
+    if "warmth_delta" not in names:
+        connection.execute(
+            text("ALTER TABLE llm_relationship_note ADD COLUMN warmth_delta DOUBLE PRECISION NOT NULL DEFAULT 0")
+        )
+    if "assertiveness_delta" not in names:
+        connection.execute(
+            text("ALTER TABLE llm_relationship_note ADD COLUMN assertiveness_delta DOUBLE PRECISION NOT NULL DEFAULT 0")
+        )
+
+
 def _ensure_pg_llm_memory_embedding_columns(connection) -> None:
     """旧库 llm_memory_entry 缺 embedding 缓存列时补齐。"""
     insp = inspect(connection)
@@ -718,6 +736,7 @@ async def init_pg(engine: AsyncEngine) -> None:
         await conn.run_sync(_ensure_pg_user_config_maa_devices)
         await conn.run_sync(_ensure_pg_llm_memory_embedding_columns)
         await conn.run_sync(_ensure_pg_llm_memory_graph_columns)
+        await conn.run_sync(_ensure_pg_llm_relationship_delta_columns)
         await conn.run_sync(_ensure_pg_message_group_time_index)
         await conn.run_sync(_ensure_pg_message_group_user_time_index)
         await conn.run_sync(_ensure_pg_context_answer_reply_index)

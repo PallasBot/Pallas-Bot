@@ -1,6 +1,7 @@
 """关系备注层存储：按 (bot, group, user) upsert/校正、带衰减的检索与裁剪。
 
-写入：同一对象重复教导走 upsert（覆盖正文、刷新时间、权重回升），实现「校正」。
+写入：同一对象重复教导走 upsert（合并事实、刷新时间、权重回升），实现「校正」。
+人对语气偏置：warmth_delta / assertiveness_delta，钳制在配置上限内。
 衰减：检索时按距上次更新的天数指数衰减权重；低于阈值视为过期、惰性裁剪。
 """
 
@@ -8,17 +9,40 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
 
 from sqlalchemy import delete, select
 
 from pallas.core.foundation.db.repository_pg import LlmRelationshipNoteRow, get_session
 from pallas.product.llm.config import LlmConfig, get_llm_config
-from pallas.product.llm.memory.relationship import normalize_relationship_note
+from pallas.product.llm.memory.relationship import (
+    clamp_user_relationship_delta,
+    merge_relationship_facts,
+    normalize_relationship_note,
+    prefer_relationship_source,
+)
 from pallas.product.llm.session_backend import llm_product_storage_ready
 from pallas.product.llm.session_store import normalize_group_scope
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 
 _DAY_SEC = 86400.0
+
+
+@dataclass(frozen=True, slots=True)
+class RelationshipProfile:
+    content: str = ""
+    warmth_delta: float = 0.0
+    assertiveness_delta: float = 0.0
+    source: str = "auto"
+    weight: float = 1.0
+
+    @property
+    def has_facts(self) -> bool:
+        return bool(str(self.content or "").strip())
+
+    @property
+    def has_affect(self) -> bool:
+        return self.warmth_delta != 0.0 or self.assertiveness_delta != 0.0
 
 
 def is_relationship_store_available() -> bool:
@@ -46,30 +70,51 @@ def decayed_weight(weight: float, updated_at: int, *, half_life_days: float, now
     return float(weight) * math.pow(0.5, elapsed_days / half_life_days)
 
 
-async def save_relationship_note(
+def _delta_limit(cfg: LlmConfig) -> float:
+    return float(getattr(cfg, "llm_relationship_affect_delta_max", 0.15) or 0.15)
+
+
+async def upsert_relationship_profile(
     bot_id: int,
     group_id: int | None,
     user_id: int,
-    content: str,
     *,
-    source: str = "teach",
+    content: str | None = None,
+    source: str = "auto",
+    warmth_delta_add: float = 0.0,
+    assertiveness_delta_add: float = 0.0,
+    merge_content: bool = True,
     cfg: LlmConfig | None = None,
 ) -> bool:
+    """合并事实与人对偏置；content 为空时也可只更新 delta。"""
     if not is_relationship_store_available() or not user_id:
         return False
     if _use_mongodb_backend():
-        from pallas.product.llm.memory.relationship_store_mongo import save_relationship_note_mongo
+        from pallas.product.llm.memory.relationship_store_mongo import upsert_relationship_profile_mongo
 
-        return await save_relationship_note_mongo(bot_id, group_id, user_id, content, source=source, cfg=cfg)
+        return await upsert_relationship_profile_mongo(
+            bot_id,
+            group_id,
+            user_id,
+            content=content,
+            source=source,
+            warmth_delta_add=warmth_delta_add,
+            assertiveness_delta_add=assertiveness_delta_add,
+            merge_content=merge_content,
+            cfg=cfg,
+        )
     if not _use_postgresql_backend():
         return False
     c = cfg or get_llm_config()
-    safe_content = normalize_relationship_note(content, max_len=c.llm_relationship_content_max_len)
-    if not safe_content:
+    incoming = normalize_relationship_note(content or "", max_len=c.llm_relationship_content_max_len)
+    has_fact = bool(incoming)
+    has_delta = warmth_delta_add != 0.0 or assertiveness_delta_add != 0.0
+    if not has_fact and not has_delta:
         return False
     scope_gid = normalize_group_scope(group_id)
     now = int(time.time())
-    safe_source = sanitize_prompt_literal(source, max_len=16) or "teach"
+    safe_source = sanitize_prompt_literal(source, max_len=16) or "auto"
+    limit = _delta_limit(c)
     async with get_session() as session:
         existing = (
             await session.execute(
@@ -81,8 +126,24 @@ async def save_relationship_note(
             )
         ).scalar_one_or_none()
         if existing is not None:
-            existing.content = safe_content
-            existing.source = safe_source
+            if has_fact:
+                if merge_content:
+                    existing.content = merge_relationship_facts(
+                        str(existing.content or ""),
+                        incoming,
+                        max_len=c.llm_relationship_content_max_len,
+                    )
+                else:
+                    existing.content = incoming
+            existing.source = prefer_relationship_source(str(existing.source or ""), safe_source)
+            existing.warmth_delta = clamp_user_relationship_delta(
+                float(existing.warmth_delta or 0.0) + float(warmth_delta_add),
+                limit=limit,
+            )
+            existing.assertiveness_delta = clamp_user_relationship_delta(
+                float(existing.assertiveness_delta or 0.0) + float(assertiveness_delta_add),
+                limit=limit,
+            )
             existing.weight = 1.0
             existing.updated_at = now
         else:
@@ -91,9 +152,14 @@ async def save_relationship_note(
                     bot_id=int(bot_id),
                     group_id=scope_gid,
                     user_id=int(user_id),
-                    content=safe_content,
+                    content=incoming if has_fact else "",
                     source=safe_source,
                     weight=1.0,
+                    warmth_delta=clamp_user_relationship_delta(float(warmth_delta_add), limit=limit),
+                    assertiveness_delta=clamp_user_relationship_delta(
+                        float(assertiveness_delta_add),
+                        limit=limit,
+                    ),
                     created_at=now,
                     updated_at=now,
                 )
@@ -102,20 +168,40 @@ async def save_relationship_note(
     return True
 
 
-async def retrieve_relationship_note(
+async def save_relationship_note(
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    content: str,
+    *,
+    source: str = "teach",
+    cfg: LlmConfig | None = None,
+) -> bool:
+    return await upsert_relationship_profile(
+        bot_id,
+        group_id,
+        user_id,
+        content=content,
+        source=source,
+        merge_content=True,
+        cfg=cfg,
+    )
+
+
+async def retrieve_relationship_profile(
     bot_id: int,
     group_id: int | None,
     user_id: int,
     *,
     cfg: LlmConfig | None = None,
-) -> str | None:
-    """取当前对象的关系备注；权重衰减到阈值以下则视为过期，返回 None。"""
+) -> RelationshipProfile | None:
+    """取当前对象的关系档案；权重衰减到阈值以下则视为过期。"""
     if not is_relationship_store_available() or not user_id:
         return None
     if _use_mongodb_backend():
-        from pallas.product.llm.memory.relationship_store_mongo import retrieve_relationship_note_mongo
+        from pallas.product.llm.memory.relationship_store_mongo import retrieve_relationship_profile_mongo
 
-        return await retrieve_relationship_note_mongo(bot_id, group_id, user_id, cfg=cfg)
+        return await retrieve_relationship_profile_mongo(bot_id, group_id, user_id, cfg=cfg)
     if not _use_postgresql_backend():
         return None
     c = cfg or get_llm_config()
@@ -142,7 +228,34 @@ async def retrieve_relationship_note(
     if weight < c.llm_relationship_min_weight:
         return None
     content = str(row.content or "").strip()
-    return content or None
+    warmth = clamp_user_relationship_delta(float(getattr(row, "warmth_delta", 0.0) or 0.0), limit=_delta_limit(c))
+    assertiveness = clamp_user_relationship_delta(
+        float(getattr(row, "assertiveness_delta", 0.0) or 0.0),
+        limit=_delta_limit(c),
+    )
+    if not content and warmth == 0.0 and assertiveness == 0.0:
+        return None
+    return RelationshipProfile(
+        content=content,
+        warmth_delta=warmth,
+        assertiveness_delta=assertiveness,
+        source=str(row.source or "").strip() or "auto",
+        weight=weight,
+    )
+
+
+async def retrieve_relationship_note(
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    *,
+    cfg: LlmConfig | None = None,
+) -> str | None:
+    """取当前对象的关系备注正文；无事实时返回 None（即使有语气偏置）。"""
+    profile = await retrieve_relationship_profile(bot_id, group_id, user_id, cfg=cfg)
+    if profile is None or not profile.has_facts:
+        return None
+    return profile.content
 
 
 async def trim_relationship_notes(bot_id: int, group_id: int | None, *, cfg: LlmConfig | None = None) -> int:
@@ -234,6 +347,8 @@ async def list_relationship_notes(
             "content": content,
             "source": source,
             "weight": float(row.weight or 0.0),
+            "warmth_delta": float(getattr(row, "warmth_delta", 0.0) or 0.0),
+            "assertiveness_delta": float(getattr(row, "assertiveness_delta", 0.0) or 0.0),
             "created_at": int(row.created_at or 0),
             "updated_at": int(row.updated_at or 0),
         })

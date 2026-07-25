@@ -30,6 +30,8 @@ def build_persona_affect_contract(
     mode: ConversationMode = ConversationMode.NORMAL,
     group_flavor_summary: str = "",
     repeated_openers: list[str] | None = None,
+    user_warmth_delta: float = 0.0,
+    user_assertiveness_delta: float = 0.0,
 ) -> PersonaAffectContract:
     length_pref = str(getattr(persona, "length_pref", "") or "").strip().lower() if persona else ""
     if length_pref == "short":
@@ -58,9 +60,13 @@ def build_persona_affect_contract(
         stance_hints.append("像被 @ 后顺口接话，2 句内为主，别写成完整答复。")
 
     if persona is not None:
-        warmth = float(getattr(persona, "warmth", 0.0) or 0.0)
+        from pallas.product.persona.affect_baseline import clamp_affect
+
+        warmth = clamp_affect(float(getattr(persona, "warmth", 0.0) or 0.0) + float(user_warmth_delta or 0.0))
         chaos = float(getattr(persona, "chaos_bias", 0.0) or 0.0)
-        assertiveness = float(getattr(persona, "assertiveness", 0.0) or 0.0)
+        assertiveness = clamp_affect(
+            float(getattr(persona, "assertiveness", 0.0) or 0.0) + float(user_assertiveness_delta or 0.0)
+        )
         if warmth >= 0.1:
             stance_hints.append("语气可稍软、更接梗，但别像哄人或客服安抚。")
         elif warmth <= -0.1:
@@ -73,6 +79,10 @@ def build_persona_affect_contract(
             stance_hints.append("可适度反抛或顶一句，像群友接梗即可。")
         elif assertiveness <= -0.1:
             stance_hints.append("少反呛，顺着话题接，别抢戏。")
+        if user_warmth_delta >= 0.05:
+            stance_hints.append("对当前对话者可比平时稍熟一点，仍别演成专属宠粉。")
+        elif user_warmth_delta <= -0.05:
+            stance_hints.append("对当前对话者保持距离感，别硬热络。")
 
     opener_hints = [item for item in list(repeated_openers or []) if item]
     ending_constraints = ["避免固定模板收口", "避免连续重复同一开头"]

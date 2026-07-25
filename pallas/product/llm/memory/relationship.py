@@ -163,3 +163,59 @@ def parse_relationship_teach(plain_text: str) -> str | None:
 
 def normalize_relationship_note(text: str, *, max_len: int) -> str:
     return sanitize_prompt_block((text or "").strip(), max_len=max_len).strip()
+
+
+_FACT_SPLIT_RE = re.compile(r"[；;、\n]+")
+_USER_REL_DELTA_MAX = 0.15
+_SOURCE_RANK = {"teach": 3, "observe": 2, "auto": 1}
+
+
+def split_relationship_facts(text: str) -> list[str]:
+    parts: list[str] = []
+    seen: set[str] = set()
+    for raw in _FACT_SPLIT_RE.split(text or ""):
+        item = raw.strip(" ，,。.")
+        if not item:
+            continue
+        key = item.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        parts.append(item)
+    return parts
+
+
+def merge_relationship_facts(
+    existing: str,
+    incoming: str,
+    *,
+    max_len: int,
+    max_parts: int = 6,
+) -> str:
+    """合并多条关系事实；去重后用中文分号拼接，超长截断。"""
+    parts = split_relationship_facts(existing)
+    seen = {item.casefold() for item in parts}
+    for item in split_relationship_facts(incoming):
+        key = item.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        parts.append(item)
+    if not parts:
+        return ""
+    parts = parts[-max(1, max_parts) :]
+    merged = "；".join(parts)
+    return normalize_relationship_note(merged, max_len=max_len)
+
+
+def clamp_user_relationship_delta(value: float, *, limit: float = _USER_REL_DELTA_MAX) -> float:
+    bound = abs(float(limit))
+    return round(max(-bound, min(bound, float(value))), 3)
+
+
+def prefer_relationship_source(existing: str | None, incoming: str) -> str:
+    left = str(existing or "").strip() or "auto"
+    right = str(incoming or "").strip() or "auto"
+    if _SOURCE_RANK.get(right, 0) >= _SOURCE_RANK.get(left, 0):
+        return right[:16]
+    return left[:16]
