@@ -39,7 +39,7 @@ async def render_help_preview_bytes(
             total_enabled_count=enabled_count,
         )
         cache_key = f"preview_menu|p={current_page}|tp={total_pages}|n={len(all_rows)}|ignored={int(show_ignored)}"
-        return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="menu_v1")
+        return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="menu_v4")
 
     plugin_name = (plugin or "").strip() or "help"
     plugin_config = load_config()
@@ -64,7 +64,7 @@ async def render_help_preview_bytes(
         assert data is not None
         image = draw_plugin_detail_image(data)
         cache_key = f"preview_plugin|{resolved}|enabled={data.enabled}"
-        return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v1")
+        return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
 
     func_id = (function or "1").strip() or "1"
     data, issue = build_function_detail_data(resolved, func_id)
@@ -74,4 +74,4 @@ async def render_help_preview_bytes(
         raise ValueError("无法生成帮助预览")
     image = draw_function_detail_image(data)
     cache_key = f"preview_function|{resolved}|{func_id}|{data.index}"
-    return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v1")
+    return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")

@@ -15,6 +15,7 @@
 
 ## 结构与代码
 
+- [ ] `extra.help_tag` 已声明（帮助图分组：`core|chat|ai|fun|tool|admin|other`；见 `packages/help/help_tags.py`）；运维覆盖走 help 插件配置 `help_tag_overrides`
 - [ ] `__init__.py` 轻量；业务已拆到语义化模块
 - [ ] `config.py` 存在；WebUI 可调项已接 `install_hot_reload_config`（或通用配置段 + features 层）
 - [ ] 改 help/ingress 声明且不想重启：已设 `reload_policy: metadata`

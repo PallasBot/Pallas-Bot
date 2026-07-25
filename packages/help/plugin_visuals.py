@@ -159,7 +159,10 @@ def load_brand_avatar_icon(size: int) -> Image.Image | None:
 
 
 def help_font(size: int) -> ImageFont.FreeTypeFont:
-    return ImageFont.truetype(str(resolve_help_font_path()), size)
+    from . import help_theme as ht
+
+    px = max(1, int(round(size * max(1, int(ht.RENDER_SCALE)))))
+    return ImageFont.truetype(str(resolve_help_font_path()), px)
 
 
 def rounded_image(image: Image.Image, size: int, radius: int) -> Image.Image:

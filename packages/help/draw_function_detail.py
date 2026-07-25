@@ -1,7 +1,8 @@
-"""三级功能详情页。"""
+"""三级功能详情页：C 顶栏/底栏 + 文档流。"""
 
 from __future__ import annotations
 
+import textwrap
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -9,84 +10,129 @@ if TYPE_CHECKING:
 
     from .plugin_detail_data import FunctionDetailData
 
-from .help_draw_common import draw_wrapped_block, new_canvas, truncate_pixels
-from .help_theme import (
-    BORDER,
-    DETAIL_BANNER_H,
-    DETAIL_BANNER_ICON,
-    DETAIL_KV_CARD_H,
-    DETAIL_KV_GAP,
-    DETAIL_PAD,
-    DETAIL_WIDTH,
-    LINK,
-    QUOTE_BG,
-    SURFACE,
-    TEXT,
-    TEXT_MUTED,
-    TEXT_TITLE,
-)
-from .plugin_visuals import help_font, load_help_plugin_icon
+from . import help_theme as ht
+from .help_draw_assets import draw_page_footer_bar, draw_page_header_band, draw_page_meta_strip
+from .help_draw_common import new_canvas, strip_help_markdown, truncate_pixels
+from .plugin_visuals import help_font
 
 
-def _kv_half_width(content_left: int, content_right: int) -> int:
-    inner = content_right - content_left
-    return (inner - DETAIL_KV_GAP) // 2
+def _chip_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
+    bbox = draw.textbbox((0, 0), text, font=font)
+    return (bbox[2] - bbox[0]) + 20
 
 
 def _layout_height(data: FunctionDetailData) -> int:
-    grid_rows = 2
-    body = grid_rows * (DETAIL_KV_CARD_H + DETAIL_KV_GAP) + DETAIL_KV_CARD_H + DETAIL_KV_GAP
+    body = ht.PAGE_HEADER_H + ht.PAGE_META_H + ht.PAGE_CHROME_GAP
+    chips = 0
+    for value in (data.scene, data.perm, data.cooldown):
+        if value and value != "—":
+            chips += 1
+    if chips:
+        body += 36
+    body += 72 + 18
+    if data.brief:
+        body += 28
     if data.detail:
-        body += min(180, max(60, len(data.detail) // 2)) + 40
-    body += len(data.extra_sections) * 100
-    return DETAIL_BANNER_H + body + 80 + DETAIL_PAD * 2
+        content = strip_help_markdown((data.detail or "").strip() or "暂无")
+        lines = [ln for ln in textwrap.fill(content, width=52).splitlines() if ln.strip()] or ["暂无"]
+        body += 30 + 28 + len(lines) * 26 + 16
+    for _title, content in data.extra_sections:
+        text = strip_help_markdown((content or "").strip() or "暂无")
+        lines = [ln for ln in textwrap.fill(text, width=52).splitlines() if ln.strip()] or ["暂无"]
+        body += 30 + 28 + len(lines) * 26 + 16
+    return body + ht.PAGE_FOOTER_H + ht.PAGE_CHROME_GAP + ht.DETAIL_PAD * 2
 
 
 def draw_function_detail_image(data: FunctionDetailData) -> Image.Image:
     height = _layout_height(data)
-    canvas, draw, x1, y1, x2, y2 = new_canvas(height, width=DETAIL_WIDTH)
+    hc = new_canvas(height, width=ht.DETAIL_WIDTH)
+    draw, x1, y1, x2, y2 = hc.draw, hc.x1, hc.y1, hc.x2, hc.y2
+    u = hc.u
 
-    cursor_y = y1 + 20
-    banner_bottom = cursor_y + DETAIL_BANNER_H
-    banner_box = (x1 + 16, cursor_y, x2 - 16, banner_bottom)
-    draw.rounded_rectangle(banner_box, radius=16, fill=QUOTE_BG, outline=BORDER, width=1)
-    icon = load_help_plugin_icon(data.plugin, size=DETAIL_BANNER_ICON, label=data.display_name)
-    icon_y = cursor_y + (DETAIL_BANNER_H - DETAIL_BANNER_ICON) // 2
-    canvas.paste(icon, (x1 + 28, icon_y), icon)
-    text_x = x1 + 28 + DETAIL_BANNER_ICON + 16
-    draw.text((text_x, cursor_y + 18), data.display_name, fill=TEXT_MUTED, font=help_font(20))
-    draw.text((text_x, cursor_y + 48), data.func_name, fill=TEXT_TITLE, font=help_font(32))
-    draw.text((text_x, cursor_y + 92), f"第 {data.index}/{data.total} 条", fill=TEXT_MUTED, font=help_font(17))
+    content_left = x1 + u(28)
+    content_right = x2 - u(28)
 
-    cursor_y = banner_bottom + 20
-    content_left = x1 + 24
-    content_right = x2 - 24
-    half_w = _kv_half_width(content_left, content_right)
-    grid_pairs = [
-        [("怎么说", data.say), ("场景", data.scene)],
-        [("何人可用", data.perm), ("冷却", data.cooldown)],
-    ]
-    for row in grid_pairs:
-        for col, (label, value) in enumerate(row):
-            card_x1 = content_left + col * (half_w + DETAIL_KV_GAP)
-            card_x2 = card_x1 + half_w
-            draw_kv_card(draw, card_x1, cursor_y, card_x2, label, value)
-        cursor_y += DETAIL_KV_CARD_H + DETAIL_KV_GAP
-    cursor_y = draw_kv_card(draw, content_left, cursor_y, content_right, "简介", data.brief)
+    cursor_y = draw_page_header_band(
+        draw,
+        x1=x1,
+        y1=y1,
+        x2=x2,
+        title=data.func_name,
+        right=f"{data.index}/{data.total}",
+        scale=hc.scale,
+    )
+    cursor_y = draw_page_meta_strip(
+        draw,
+        x1=x1,
+        y=cursor_y,
+        x2=x2,
+        text=f"{data.display_name} · 功能详情",
+        scale=hc.scale,
+    )
+    cursor_y += u(ht.PAGE_CHROME_GAP)
+
+    chip_font = help_font(13)
+    chips: list[str] = []
+    if data.scene and data.scene != "—":
+        chips.append(data.scene)
+    if data.perm and data.perm != "—":
+        chips.append(data.perm)
+    if data.cooldown and data.cooldown != "—":
+        chips.append(data.cooldown)
+    chip_x = content_left
+    for chip in chips:
+        bw = _chip_width(draw, chip, chip_font) + u(8)
+        bh = u(24)
+        draw.rounded_rectangle((chip_x, cursor_y, chip_x + bw, cursor_y + bh), radius=u(8), fill=ht.CHIP_BG)
+        draw.text((chip_x + bw / 2, cursor_y + bh / 2), chip, fill=ht.CHIP_FG, font=chip_font, anchor="mm")
+        chip_x += bw + u(8)
+    if chips:
+        cursor_y += u(36)
+
+    say = strip_help_markdown(data.say or "—")
+    cmd_font = help_font(18)
+    label_font = help_font(12)
+    cmd_box_h = u(72)
+    dark = ht.help_visual_mode() == "dark"
+    draw.rounded_rectangle(
+        (content_left, cursor_y, content_right, cursor_y + cmd_box_h),
+        radius=u(12),
+        fill=ht.COMMAND_BG,
+        outline=ht.ACCENT if dark else ht.BORDER,
+        width=max(1, hc.scale),
+    )
+    if not dark:
+        draw.rectangle(
+            (content_left, cursor_y + u(10), content_left + u(3), cursor_y + cmd_box_h - u(10)),
+            fill=ht.ACCENT,
+        )
+    draw.text((content_left + u(16), cursor_y + u(12)), "触发", fill=ht.TEXT_MUTED, font=label_font)
+    fitted = truncate_pixels(draw, say, cmd_font, content_right - content_left - u(32))
+    draw.text((content_left + u(16), cursor_y + u(34)), fitted, fill=ht.COMMAND_FG, font=cmd_font)
+    cursor_y += cmd_box_h + u(18)
+
+    if data.brief:
+        brief_font = help_font(16)
+        draw.text((content_left, cursor_y), strip_help_markdown(data.brief), fill=ht.TEXT, font=brief_font)
+        cursor_y += u(28)
 
     if data.detail:
-        cursor_y = draw_wrapped_block(
-            draw,
-            x=x1 + 24,
-            y=cursor_y + 8,
-            max_x=x2 - 24,
+        cursor_y = _draw_doc_section(
+            hc,
+            x=content_left,
+            y=cursor_y,
+            max_x=content_right,
             title="怎么用",
             body=data.detail,
-            width_chars=46,
         )
     for title, body in data.extra_sections:
-        cursor_y = draw_wrapped_block(
-            draw, x=x1 + 24, y=cursor_y, max_x=x2 - 24, title=title, body=body, width_chars=46
+        cursor_y = _draw_doc_section(
+            hc,
+            x=content_left,
+            y=cursor_y,
+            max_x=content_right,
+            title=title,
+            body=body,
         )
 
     nav_bits = [f"牛牛帮助 {data.display_name}"]
@@ -95,18 +141,35 @@ def draw_function_detail_image(data: FunctionDetailData) -> Image.Image:
     if data.index < data.total:
         nav_bits.append(f"牛牛帮助 {data.display_name} {data.index + 1}")
     nav_bits.append("牛牛帮助")
-    footer_y = y2 - 42
-    draw.text((x1 + 24, footer_y), " · ".join(nav_bits), fill=LINK, font=help_font(16))
+    draw_page_footer_bar(draw, x1=x1, y2=y2, x2=x2, text=" · ".join(nav_bits), scale=hc.scale)
 
-    return canvas.convert("RGB")
+    return hc.finish()
 
 
-def draw_kv_card(draw: ImageDraw.ImageDraw, x1: int, y: int, x2: int, label: str, value: str) -> int:
-    card_h = DETAIL_KV_CARD_H
-    draw.rounded_rectangle((x1, y, x2, y + card_h), radius=10, fill=SURFACE, outline=BORDER, width=1)
-    label_font = help_font(16)
-    value_font = help_font(18)
-    draw.text((x1 + 12, y + 8), label, fill=TEXT_MUTED, font=label_font)
-    fitted = truncate_pixels(draw, value, value_font, x2 - x1 - 24)
-    draw.text((x1 + 12, y + 28), fitted, fill=TEXT, font=value_font)
-    return y + card_h + 10
+def _draw_doc_section(hc, *, x: int, y: int, max_x: int, title: str, body: str) -> int:
+    draw = hc.draw
+    u = hc.u
+    draw.text((x, y), title, fill=ht.TEXT_TITLE, font=help_font(20))
+    cursor = y + u(30)
+    content = strip_help_markdown((body or "").strip() or "暂无")
+    wrapped = textwrap.fill(content, width=52)
+    lines = [ln for ln in wrapped.splitlines() if ln.strip()] or ["暂无"]
+    line_h = u(26)
+    box_pad = u(14)
+    box_h = box_pad * 2 + len(lines) * line_h
+    draw.rounded_rectangle(
+        (x, cursor, max_x, cursor + box_h),
+        radius=u(10),
+        fill=ht.CARD,
+        outline=ht.BORDER,
+        width=max(1, hc.scale),
+    )
+    draw.rectangle((x, cursor + u(8), x + u(3), cursor + box_h - u(8)), fill=ht.ACCENT)
+    body_font = help_font(15)
+    text_x = x + u(16)
+    ty = cursor + box_pad
+    for line in lines:
+        fitted = truncate_pixels(draw, line, body_font, max_x - text_x - u(12))
+        draw.text((text_x, ty), fitted, fill=ht.TEXT, font=body_font)
+        ty += line_h
+    return cursor + box_h + u(16)
