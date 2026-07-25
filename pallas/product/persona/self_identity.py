@@ -25,11 +25,31 @@ _SELF_ALIAS_EQUALS_RE = re.compile(r"^(?P<left>[\u4e00-\u9fffA-Za-z·]{1,12})\s*
 _SELF_ALIAS_MEANS_RE = re.compile(
     r"^(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})\s*(?:指的是|就是指|就是)\s*(?:你|我|bot|Bot|机器人)$"
 )
+_ALIAS_BLOCKLIST = frozenset({"我", "你", "bot", "谁", "什么", "啥", "哪位", "哪个", "机器人"})
 
 
-def extract_self_aliases(bot_persona: dict[str, Any] | None) -> list[str]:
-    aliases: list[str] = list(DEFAULT_SELF_ALIASES)
-    seen = {item.casefold() for item in aliases}
+def extract_self_aliases(
+    bot_persona: dict[str, Any] | None,
+    *,
+    login_nickname: str | None = None,
+) -> list[str]:
+    aliases: list[str] = []
+    seen: set[str] = set()
+
+    def add(raw: str) -> None:
+        text = sanitize_prompt_literal(str(raw or "").strip(), max_len=16)
+        if not text or text.casefold() in seen:
+            return
+        if text.casefold() in {item.casefold() for item in _ALIAS_BLOCKLIST}:
+            return
+        seen.add(text.casefold())
+        aliases.append(text)
+
+    login = _safe_alias(str(login_nickname or ""))
+    if login:
+        add(login)
+    for item in DEFAULT_SELF_ALIASES:
+        add(item)
     if not isinstance(bot_persona, dict):
         return aliases
     raw = bot_persona.get("self_aliases")
@@ -38,20 +58,27 @@ def extract_self_aliases(bot_persona: dict[str, Any] | None) -> list[str]:
     if not isinstance(raw, list):
         return aliases
     for item in raw:
-        text = sanitize_prompt_literal(str(item or "").strip(), max_len=16)
-        if not text or text.casefold() in seen:
-            continue
-        seen.add(text.casefold())
-        aliases.append(text)
+        add(str(item or ""))
     return aliases
 
 
-def compile_self_identity_prompt(bot_persona: dict[str, Any] | None = None) -> str:
-    alias_text = "、".join(extract_self_aliases(bot_persona)[:6])
-    primary_alias = alias_text.split("、")[0] if alias_text else "牛牛"
+def compile_self_identity_prompt(
+    bot_persona: dict[str, Any] | None = None,
+    *,
+    login_nickname: str | None = None,
+) -> str:
+    aliases = extract_self_aliases(bot_persona, login_nickname=login_nickname)
+    alias_text = "、".join(aliases[:6])
+    primary_alias = aliases[0] if aliases else "牛牛"
+    login = _safe_alias(str(login_nickname or ""))
+    if login and login != "牛牛":
+        call_line = f"- 群友常叫你「{primary_alias}」等（含「牛牛」）——这些称呼指你本人。"
+    else:
+        call_line = f"- 群友常叫你「{primary_alias}」等——这些称呼指你本人。"
     body = "\n".join([
         "【自称与群称呼】",
-        f"- 群友常叫你「{primary_alias}」等——这些称呼指你本人。",
+        call_line,
+        f"- 常见称呼：{alias_text}。",
         "- 有人 @ 你或在句中喊上述名字时，默认是在跟你说话；用第一人称接话，不要当成第三者在聊。",
         "- 禁止把「牛牛」当外人夸奖（错误：「牛牛真棒」）；应理解成在说你，用「谢谢」「还行吧」等第一人称回应。",
         "- 自称优先用「我」；必要时可用群昵称指代自己，但不要每句都加动物口癖或句尾 ASCII 颜文字。",
@@ -59,15 +86,69 @@ def compile_self_identity_prompt(bot_persona: dict[str, Any] | None = None) -> s
     return wrap_stats_block("self_identity", body)
 
 
-def compile_repeater_self_identity_prompt(bot_persona: dict[str, Any] | None = None) -> str:
-    aliases = extract_self_aliases(bot_persona)
+def compile_repeater_self_identity_prompt(
+    bot_persona: dict[str, Any] | None = None,
+    *,
+    login_nickname: str | None = None,
+) -> str:
+    aliases = extract_self_aliases(bot_persona, login_nickname=login_nickname)
     primary_alias = aliases[0] if aliases else "牛牛"
+    if primary_alias == "牛牛":
+        call_line = "- 群友喊「牛牛」等时是在跟你说话；用第一人称接，别把称呼当第三者在聊。"
+    else:
+        call_line = f"- 群友喊「{primary_alias}」或「牛牛」等时是在跟你说话；用第一人称接，别把称呼当第三者在聊。"
     body = "\n".join([
         "【群称呼】",
-        f"- 群友喊「{primary_alias}」等时是在跟你说话；用第一人称接，别把称呼当第三者在聊。",
+        call_line,
         "- 日常接话不必自我介绍帕拉斯或罗德岛，像群友顺口回一句即可。",
     ])
     return wrap_stats_block("self_identity", body)
+
+
+def resolve_cached_login_nickname(bot_id: int) -> str:
+    """同步尽力取昵称：presence → 协议 accounts display_name。"""
+    sid = str(int(bot_id))
+    try:
+        from pallas.core.platform.shard.presence import read_presence_bots
+
+        rec = read_presence_bots().get(sid)
+        if isinstance(rec, dict):
+            nick = str(rec.get("nickname") or "").strip()
+            if nick:
+                return nick
+    except Exception:
+        pass
+    try:
+        from pallas.console.webui.protocol_accounts import protocol_account_display_names
+
+        return str(protocol_account_display_names().get(sid) or "").strip()
+    except Exception:
+        return ""
+
+
+async def resolve_login_nickname(bot_id: int) -> str:
+    """优先 OneBot get_login_info，失败则回退缓存。"""
+    sid = str(int(bot_id))
+    try:
+        from nonebot import get_bots
+
+        bot = get_bots().get(sid)
+        if bot is not None:
+            raw = await bot.call_api("get_login_info")  # type: ignore[union-attr]
+            if isinstance(raw, dict):
+                nick = str(raw.get("nickname") or "").strip()
+                if nick:
+                    return nick
+    except Exception:
+        pass
+    return resolve_cached_login_nickname(bot_id)
+
+
+def _safe_alias(raw: str) -> str | None:
+    safe = sanitize_prompt_literal(str(raw or "").strip(), max_len=16)
+    if not safe or safe.casefold() in {item.casefold() for item in _ALIAS_BLOCKLIST}:
+        return None
+    return safe
 
 
 def parse_self_alias_teach(plain_text: str) -> list[str]:
@@ -79,8 +160,8 @@ def parse_self_alias_teach(plain_text: str) -> list[str]:
         if not matched:
             continue
         alias = str(matched.groupdict().get("alias") or matched.groupdict().get("left") or "").strip()
-        safe = sanitize_prompt_literal(alias, max_len=16)
-        if safe and safe.casefold() not in {"我", "你", "bot"}:
+        safe = _safe_alias(alias)
+        if safe:
             return [safe]
     return []
 

@@ -67,7 +67,11 @@ from pallas.product.persona.affect_kernel import (
 )
 from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
 from pallas.product.persona.expression_habits import build_expression_context_suffix
-from pallas.product.persona.self_identity import extract_self_aliases, save_self_alias_from_teach
+from pallas.product.persona.self_identity import (
+    extract_self_aliases,
+    resolve_login_nickname,
+    save_self_alias_from_teach,
+)
 
 from . import startup as _startup  # noqa: F401
 from .config import get_llm_chat_config
@@ -540,7 +544,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 persona_dict = persona_raw
         except Exception:
             persona_dict = None
-    self_aliases = extract_self_aliases(persona_dict)
+    login_nick = await resolve_login_nickname(int(bot.self_id))
+    self_aliases = extract_self_aliases(persona_dict, login_nickname=login_nick or None)
     llm_user_text = (
         normalize_llm_chat_user_text(
             msg,
