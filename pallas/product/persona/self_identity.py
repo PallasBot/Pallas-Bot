@@ -15,6 +15,11 @@ _SELF_ALIAS_TEACH_RE = re.compile(
     r"(?P<alias>.+?)"
     r"(?:就是我|是我)$"
 )
+_SELF_ALIAS_IS_YOU_RE = re.compile(
+    r"^(?:记住[：:]?\s*)?"
+    r"(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})"
+    r"(?:就是你|是你)$"
+)
 _SELF_ALIAS_POINTS_YOU_RE = re.compile(
     r"^(?:记住[：:]?\s*)?"
     r"(?P<alias>.+?)"
@@ -24,6 +29,14 @@ _SELF_ALIAS_POINTS_YOU_RE = re.compile(
 _SELF_ALIAS_EQUALS_RE = re.compile(r"^(?P<left>[\u4e00-\u9fffA-Za-z·]{1,12})\s*[=＝]\s*(?:我|你|bot|Bot|机器人)$")
 _SELF_ALIAS_MEANS_RE = re.compile(
     r"^(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})\s*(?:指的是|就是指|就是)\s*(?:你|我|bot|Bot|机器人)$"
+)
+# 观察型称呼：不打断对话，静默写入 self_aliases
+_SELF_ALIAS_OBSERVE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^大家(?:都)?叫你(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})$"),
+    re.compile(r"^群友(?:都)?叫你(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})$"),
+    re.compile(r"^你的(?:外号|昵称|群名片)(?:是|叫)(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})$"),
+    re.compile(r"^(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})是你的(?:外号|昵称|群名片)$"),
+    re.compile(r"^你(?:就)?是(?P<alias>[\u4e00-\u9fffA-Za-z·]{2,12})$"),
 )
 _ALIAS_BLOCKLIST = frozenset({"我", "你", "bot", "谁", "什么", "啥", "哪位", "哪个", "机器人"})
 
@@ -155,7 +168,13 @@ def parse_self_alias_teach(plain_text: str) -> list[str]:
     body = str(plain_text or "").strip()
     if not body or len(body) > 48:
         return []
-    for pattern in (_SELF_ALIAS_TEACH_RE, _SELF_ALIAS_POINTS_YOU_RE, _SELF_ALIAS_EQUALS_RE, _SELF_ALIAS_MEANS_RE):
+    for pattern in (
+        _SELF_ALIAS_POINTS_YOU_RE,
+        _SELF_ALIAS_MEANS_RE,
+        _SELF_ALIAS_EQUALS_RE,
+        _SELF_ALIAS_IS_YOU_RE,
+        _SELF_ALIAS_TEACH_RE,
+    ):
         matched = pattern.match(body)
         if not matched:
             continue
@@ -166,9 +185,26 @@ def parse_self_alias_teach(plain_text: str) -> list[str]:
     return []
 
 
-async def save_self_alias_from_teach(bot_id: int, plain_text: str) -> bool:
-    aliases = parse_self_alias_teach(plain_text)
-    if not aliases:
+def parse_self_alias_observe(plain_text: str) -> list[str]:
+    """弱模式：从闲聊句沉淀称呼，不打断主对话。"""
+    body = str(plain_text or "").strip()
+    if not body or len(body) > 32:
+        return []
+    if parse_self_alias_teach(body):
+        return []
+    for pattern in _SELF_ALIAS_OBSERVE_PATTERNS:
+        matched = pattern.match(body)
+        if not matched:
+            continue
+        safe = _safe_alias(str(matched.group("alias") or ""))
+        if safe:
+            return [safe]
+    return []
+
+
+async def merge_self_aliases(bot_id: int, aliases: list[str]) -> bool:
+    cleaned = [item for item in (_safe_alias(alias) for alias in aliases) if item]
+    if not cleaned:
         return False
     repo = make_bot_config_repository()
     doc = await repo.get(int(bot_id))
@@ -178,7 +214,7 @@ async def save_self_alias_from_teach(bot_id: int, plain_text: str) -> bool:
     merged = extract_self_aliases(persona)
     seen = {item.casefold() for item in merged}
     changed = False
-    for alias in aliases:
+    for alias in cleaned:
         if alias.casefold() in seen:
             continue
         seen.add(alias.casefold())
@@ -189,3 +225,17 @@ async def save_self_alias_from_teach(bot_id: int, plain_text: str) -> bool:
     persona["self_aliases"] = [item for item in merged if item not in DEFAULT_SELF_ALIASES][:8]
     await repo.upsert_field(int(bot_id), "persona", persona)
     return True
+
+
+async def save_self_alias_from_teach(bot_id: int, plain_text: str) -> bool:
+    aliases = parse_self_alias_teach(plain_text)
+    if not aliases:
+        return False
+    return await merge_self_aliases(bot_id, aliases)
+
+
+async def maybe_persist_self_alias_from_utterance(bot_id: int, plain_text: str) -> bool:
+    aliases = parse_self_alias_observe(plain_text)
+    if not aliases:
+        return False
+    return await merge_self_aliases(bot_id, aliases)

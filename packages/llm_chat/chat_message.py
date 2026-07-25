@@ -69,6 +69,7 @@ from pallas.product.persona.corpus_expression_habits import infer_expression_aff
 from pallas.product.persona.expression_habits import build_expression_context_suffix
 from pallas.product.persona.self_identity import (
     extract_self_aliases,
+    maybe_persist_self_alias_from_utterance,
     resolve_login_nickname,
     save_self_alias_from_teach,
 )
@@ -240,6 +241,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
     if await save_self_alias_from_teach(int(bot.self_id), plain or msg):
         await llm_chat_msg.send(LLM_CHAT_ALIAS_SAVED_REPLY)
         return
+
+    # 弱模式称呼静默沉淀，不打断闲聊
+    try:
+        await maybe_persist_self_alias_from_utterance(int(bot.self_id), plain or msg)
+    except Exception:
+        logger.debug("self_alias observe persist skipped")
 
     relationship_body = parse_relationship_teach(plain or msg)
     if relationship_body is not None and llm_cfg.llm_relationship_notes_enabled:
