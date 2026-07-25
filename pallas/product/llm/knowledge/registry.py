@@ -80,6 +80,64 @@ def list_active_knowledge_sources(*, cfg: LlmConfig | None = None) -> list[Regis
     return rows
 
 
+def get_knowledge_source_by_id(
+    source_id: str,
+    *,
+    cfg: LlmConfig | None = None,
+) -> RegisteredKnowledgeSource | None:
+    sid = (source_id or "").strip()
+    if not sid:
+        return None
+    for row in list_active_knowledge_sources(cfg=cfg):
+        if row.source_id == sid:
+            return row
+    return None
+
+
+def build_knowledge_source_detail_ui(
+    source_id: str,
+    *,
+    preview_limit: int = 30,
+    preview_content_len: int = 240,
+    cfg: LlmConfig | None = None,
+) -> dict[str, Any] | None:
+    """WebUI 只读语料源详情：元数据 + chunk 预览（截断）。"""
+    row = get_knowledge_source_by_id(source_id, cfg=cfg)
+    if row is None:
+        return None
+    decl = row.decl
+    limit = max(1, min(100, int(preview_limit)))
+    content_len = max(32, min(2000, int(preview_content_len)))
+    chunks_preview: list[dict[str, Any]] = []
+    for index, chunk in enumerate(decl.chunks[:limit]):
+        raw = (chunk.content or "").strip()
+        preview = raw if len(raw) <= content_len else raw[: content_len - 1].rstrip() + "…"
+        chunks_preview.append({
+            "index": index,
+            "title": (chunk.title or "").strip(),
+            "keywords": (chunk.keywords or "").strip(),
+            "content_preview": preview,
+            "content_len": len(raw),
+        })
+    return {
+        "source_id": row.source_id,
+        "title": decl.title,
+        "description": decl.description,
+        "scope": decl.scope.value,
+        "retrieval_mode": decl.retrieval_mode.value,
+        "origin": row.origin.value,
+        "plugin_name": row.plugin_name,
+        "plugin_title": row.plugin_title,
+        "default": bool(decl.default),
+        "top_k": int(decl.top_k),
+        "max_chunk_len": int(decl.max_chunk_len),
+        "chunk_count": len(decl.chunks),
+        "chunks_preview": chunks_preview,
+        "chunks_preview_truncated": len(decl.chunks) > limit,
+        "preview_content_len": content_len,
+    }
+
+
 def retrieve_from_knowledge_sources(
     query_text: str,
     *,

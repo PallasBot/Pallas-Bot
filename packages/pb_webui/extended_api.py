@@ -7635,6 +7635,26 @@ def register_extended_api(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": {"items": items, "count": len(items)}})
 
+    @router.get(f"{x}/llm/conversation-kernel/knowledge-sources/{{source_id}}", include_in_schema=True)
+    async def _llm_conversation_kernel_knowledge_source_detail_get(
+        source_id: str,
+        preview_limit: int = Query(default=30, ge=1, le=100),
+        preview_content_len: int = Query(default=240, ge=32, le=2000),
+    ) -> JSONResponse:
+        try:
+            from pallas.product.llm.knowledge.registry import build_knowledge_source_detail_ui
+
+            data = build_knowledge_source_detail_ui(
+                source_id,
+                preview_limit=preview_limit,
+                preview_content_len=preview_content_len,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if data is None:
+            raise HTTPException(status_code=404, detail="未找到该语料源")
+        return JSONResponse({"ok": True, "data": data})
+
     @router.post(f"{x}/common-config/llm/history/behavior/annotate", include_in_schema=True)
     async def _llm_history_behavior_annotate(body: dict[str, Any]) -> JSONResponse:
         from pallas.product.llm.session_store import update_llm_behavior_annotation
