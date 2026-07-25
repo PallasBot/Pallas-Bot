@@ -68,6 +68,7 @@ flowchart LR
 | 分片运行时 | [shard-runtime.md](shard-runtime.md) |
 | 配置存储 | [config-storage.md](config-storage.md) |
 | 插件治理 | [plugin-governance.md](plugin-governance.md) |
+| LLM 输出路径（@ / 接话 / 表达库） | [llm-output-path.md](llm-output-path.md) |
 | 插件骨架 | [Golden Plugin](/developer/plugin-development/golden-plugin) |
 
 参考：
