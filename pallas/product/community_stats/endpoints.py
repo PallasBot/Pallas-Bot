@@ -11,12 +11,10 @@ PRIMARY_HEARTBEAT = "https://stats.pallasbot.top/v1/heartbeat"
 PRIMARY_CORPUS_API_BASE = "https://stats.pallasbot.top/v1/corpus"
 
 # 历史备案备用域：仅识别为「自动模式」并改走正式中心，不再请求。
-_LEGACY_FALLBACK_HEARTBEATS: frozenset[str] = frozenset(
-    {
-        "https://pallas.togetsudo.com/v1/heartbeat",
-        "http://pallas.togetsudo.com/v1/heartbeat",
-    }
-)
+_LEGACY_FALLBACK_HEARTBEATS: frozenset[str] = frozenset({
+    "https://pallas.togetsudo.com/v1/heartbeat",
+    "http://pallas.togetsudo.com/v1/heartbeat",
+})
 
 
 def normalize_heartbeat_url(url: str) -> str:
