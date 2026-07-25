@@ -13,6 +13,7 @@ from pallas.product.llm.knowledge.declare import knowledge_source_row
 from pallas.product.llm.knowledge.inject import enrich_system_with_knowledge_sources
 from pallas.product.llm.knowledge.metadata import parse_knowledge_source_decl
 from pallas.product.llm.knowledge.registry import (
+    build_knowledge_source_detail_ui,
     knowledge_metadata_payload,
     list_active_knowledge_sources,
     retrieve_from_knowledge_sources,
@@ -95,6 +96,29 @@ def test_list_active_knowledge_sources_includes_builtin() -> None:
     cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
     rows = list_active_knowledge_sources(cfg=cfg)
     assert any(row.source_id == "pallas.bot_faq" for row in rows)
+
+
+def test_build_knowledge_source_detail_ui_truncates_preview() -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
+    detail = build_knowledge_source_detail_ui(
+        "pallas.bot_faq",
+        preview_limit=2,
+        preview_content_len=40,
+        cfg=cfg,
+    )
+    assert detail is not None
+    assert detail["source_id"] == "pallas.bot_faq"
+    assert detail["chunk_count"] >= 1
+    assert len(detail["chunks_preview"]) <= 2
+    assert detail["chunks_preview_truncated"] is (detail["chunk_count"] > 2)
+    first = detail["chunks_preview"][0]
+    assert "content_preview" in first
+    assert first["content_len"] >= len(first["content_preview"].rstrip("…"))
+
+
+def test_build_knowledge_source_detail_ui_missing() -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
+    assert build_knowledge_source_detail_ui("missing.source", cfg=cfg) is None
 
 
 def test_knowledge_metadata_payload_includes_trace() -> None:
