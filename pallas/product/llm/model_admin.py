@@ -151,8 +151,18 @@ def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[s
     failure_counts = raw.get("failure_counts") if isinstance(raw.get("failure_counts"), dict) else {}
     provider_stats = _normalize_dimension_stats(raw.get("provider_stats"))
     model_stats = _normalize_dimension_stats(raw.get("model_stats"))
+    if task_ok == 0 and task_fail == 0:
+        for row in provider_stats.values():
+            task_ok += int(row.get("succeeded") or 0)
+            task_fail += int(row.get("failed") or 0)
     day_key = str(raw.get("day_key") or "")
     by_hour = tokens_raw.get("by_hour") if isinstance(tokens_raw.get("by_hour"), dict) else {}
+    try:
+        from pallas.product.llm.token_cost import enrich_tokens_cost_fields
+
+        tokens_enriched = enrich_tokens_cost_fields(tokens_raw)
+    except Exception:
+        tokens_enriched = dict(tokens_raw)
     return {
         **raw,
         "by_task": by_task,
@@ -167,18 +177,22 @@ def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[s
         "provider_stats": provider_stats,
         "model_stats": model_stats,
         "tokens": {
-            "source": str(tokens_raw.get("source") or raw.get("source") or "ai"),
-            "day_key": str(tokens_raw.get("day_key") or day_key or ""),
-            "updated_at": tokens_raw.get("updated_at"),
-            "prompt_tokens": int(tokens_raw.get("prompt_tokens") or 0),
-            "completion_tokens": int(tokens_raw.get("completion_tokens") or 0),
-            "cache_read_tokens": int(tokens_raw.get("cache_read_tokens") or 0),
-            "cache_write_tokens": int(tokens_raw.get("cache_write_tokens") or 0),
-            "total_tokens": int(tokens_raw.get("total_tokens") or 0)
-            or (int(tokens_raw.get("prompt_tokens") or 0) + int(tokens_raw.get("completion_tokens") or 0)),
-            "by_task": tokens_raw.get("by_task") if isinstance(tokens_raw.get("by_task"), dict) else {},
-            "by_provider": tokens_raw.get("by_provider") if isinstance(tokens_raw.get("by_provider"), dict) else {},
-            "by_model": tokens_raw.get("by_model") if isinstance(tokens_raw.get("by_model"), dict) else {},
+            "source": str(tokens_enriched.get("source") or raw.get("source") or "ai"),
+            "day_key": str(tokens_enriched.get("day_key") or day_key or ""),
+            "updated_at": tokens_enriched.get("updated_at"),
+            "prompt_tokens": int(tokens_enriched.get("prompt_tokens") or 0),
+            "completion_tokens": int(tokens_enriched.get("completion_tokens") or 0),
+            "cache_read_tokens": int(tokens_enriched.get("cache_read_tokens") or 0),
+            "cache_write_tokens": int(tokens_enriched.get("cache_write_tokens") or 0),
+            "total_tokens": int(tokens_enriched.get("total_tokens") or 0)
+            or (int(tokens_enriched.get("prompt_tokens") or 0) + int(tokens_enriched.get("completion_tokens") or 0)),
+            "cost_total": float(tokens_enriched.get("cost_total") or 0),
+            "cost_currency": str(tokens_enriched.get("cost_currency") or ""),
+            "by_task": tokens_enriched.get("by_task") if isinstance(tokens_enriched.get("by_task"), dict) else {},
+            "by_provider": tokens_enriched.get("by_provider")
+            if isinstance(tokens_enriched.get("by_provider"), dict)
+            else {},
+            "by_model": tokens_enriched.get("by_model") if isinstance(tokens_enriched.get("by_model"), dict) else {},
             "by_hour": by_hour,
         },
         "images": _normalize_images_slice(images_raw, day_key=day_key),

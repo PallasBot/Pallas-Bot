@@ -9,6 +9,8 @@ from pallas.product.llm.providers_store import (
 from pallas.product.llm.token_cost import (
     compute_usage_cost,
     cost_for_usage,
+    enrich_tokens_cost_fields,
+    estimate_tokens_cost_from_breakdown,
     normalize_cost_currency,
     normalize_model_pricing,
 )
@@ -50,27 +52,25 @@ def test_record_usage_accumulates_configured_cost(tmp_path, monkeypatch) -> None
     store = tmp_path / "llm_providers.json"
     monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
     clear_providers_store_cache()
-    save_providers_document(
-        {
-            "providers": [
-                {
-                    "id": "ds",
-                    "kind": "remote",
-                    "base_url": "https://api.example.com",
-                    "api_key": "sk-x",
-                    "default_model": "deepseek-chat",
-                    "model_pricing": {
-                        "deepseek-chat": {
-                            "price_in": 1.0,
-                            "price_out": 2.0,
-                            "cache_price_in": 0.1,
-                        }
-                    },
-                }
-            ],
-            "routing": {"tasks": {"llm_chat": "ds"}, "cost_currency": "cny"},
-        }
-    )
+    save_providers_document({
+        "providers": [
+            {
+                "id": "ds",
+                "kind": "remote",
+                "base_url": "https://api.example.com",
+                "api_key": "sk-x",
+                "default_model": "deepseek-chat",
+                "model_pricing": {
+                    "deepseek-chat": {
+                        "price_in": 1.0,
+                        "price_out": 2.0,
+                        "cache_price_in": 0.1,
+                    }
+                },
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "ds"}, "cost_currency": "cny"},
+    })
     clear_llm_token_metrics_for_tests()
     record_llm_token_usage(
         task="llm_chat",
@@ -93,3 +93,42 @@ def test_record_usage_accumulates_configured_cost(tmp_path, monkeypatch) -> None
     )
     assert cost == 0.0
     assert currency == "CNY"
+
+
+def test_estimate_tokens_cost_from_breakdown_fills_missing(tmp_path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [
+            {
+                "id": "ds",
+                "kind": "remote",
+                "base_url": "https://api.example.com",
+                "api_key": "sk-x",
+                "default_model": "deepseek-chat",
+                "model_pricing": {
+                    "deepseek-chat": {"price_in": 1.0, "price_out": 2.0},
+                },
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "ds"}, "cost_currency": "cny"},
+    })
+    tokens = {
+        "prompt_tokens": 1_000_000,
+        "completion_tokens": 500_000,
+        "cost_total": 0.0,
+        "cost_currency": "",
+        "by_provider": {"ds": {"prompt_tokens": 1_000_000, "completion_tokens": 500_000}},
+        "by_model": {"deepseek-chat": {"prompt_tokens": 1_000_000, "completion_tokens": 500_000}},
+    }
+    estimated, currency = estimate_tokens_cost_from_breakdown(tokens)
+    assert currency == "CNY"
+    assert abs(estimated - 2.0) < 1e-9
+    enriched = enrich_tokens_cost_fields(tokens)
+    assert abs(float(enriched["cost_total"]) - 2.0) < 1e-9
+    assert enriched["cost_currency"] == "CNY"
+    # 已有落盘费用时不覆盖
+    kept = enrich_tokens_cost_fields({**tokens, "cost_total": 9.5, "cost_currency": "USD"})
+    assert abs(float(kept["cost_total"]) - 9.5) < 1e-9
+    assert kept["cost_currency"] == "USD"
