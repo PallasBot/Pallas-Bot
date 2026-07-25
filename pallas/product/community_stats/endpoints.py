@@ -1,24 +1,20 @@
-"""社区统计心跳 / stats 地址：正式域名 + 备案前备用，自动切换。"""
+"""社区统计心跳 / stats 地址。"""
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
-
-from pallas.product.community_stats.store import load_community_stats_state
 
 if TYPE_CHECKING:
     from pallas.product.community_stats.config import CommunityStatsConfig
 
 PRIMARY_HEARTBEAT = "https://stats.pallasbot.top/v1/heartbeat"
-FALLBACK_HEARTBEAT = "https://pallas.togetsudo.com/v1/heartbeat"
 PRIMARY_CORPUS_API_BASE = "https://stats.pallasbot.top/v1/corpus"
-FALLBACK_CORPUS_API_BASE = "https://pallas.togetsudo.com/v1/corpus"
 
-_BUILTIN_HEARTBEATS: frozenset[str] = frozenset({PRIMARY_HEARTBEAT, FALLBACK_HEARTBEAT})
-
-# 走备用入口时，每隔若干秒再探测一次正式域名是否已可用
-_PRIMARY_REPROBE_SEC = 6 * 3600
+# 历史备案备用域：仅识别为「自动模式」并改走正式中心，不再请求。
+_LEGACY_FALLBACK_HEARTBEATS: frozenset[str] = frozenset({
+    "https://pallas.togetsudo.com/v1/heartbeat",
+    "http://pallas.togetsudo.com/v1/heartbeat",
+})
 
 
 def normalize_heartbeat_url(url: str) -> str:
@@ -26,11 +22,11 @@ def normalize_heartbeat_url(url: str) -> str:
 
 
 def is_auto_endpoint_mode(cfg: CommunityStatsConfig) -> bool:
-    """未配置自定义 endpoint，或仍为内置主/备地址之一。"""
+    """未配置自定义 endpoint，或仍为正式中心 / 历史备用域之一。"""
     ep = normalize_heartbeat_url(cfg.endpoint)
-    if not ep:
+    if not ep or ep == PRIMARY_HEARTBEAT:
         return True
-    return ep in _BUILTIN_HEARTBEATS
+    return ep in _LEGACY_FALLBACK_HEARTBEATS
 
 
 def custom_heartbeat_url(cfg: CommunityStatsConfig) -> str | None:
@@ -42,24 +38,11 @@ def custom_heartbeat_url(cfg: CommunityStatsConfig) -> str | None:
     return ep + "/heartbeat" if ep else None
 
 
-def should_reprobe_primary(*, last_probe_unix: int) -> bool:
-    if last_probe_unix <= 0:
-        return True
-    return int(time.time()) - last_probe_unix >= _PRIMARY_REPROBE_SEC
-
-
 def heartbeat_urls_for_config(cfg: CommunityStatsConfig) -> list[str]:
     custom = custom_heartbeat_url(cfg)
     if custom:
         return [custom]
-    state = load_community_stats_state()
-    active = normalize_heartbeat_url(str(state.get("heartbeat_endpoint") or ""))
-    last_probe = int(state.get("last_primary_probe_unix") or 0)
-    primary = PRIMARY_HEARTBEAT
-    fallback = FALLBACK_HEARTBEAT
-    if active == fallback and not should_reprobe_primary(last_probe_unix=last_probe):
-        return [fallback]
-    return [primary, fallback]
+    return [PRIMARY_HEARTBEAT]
 
 
 def stats_urls_for_config(cfg: CommunityStatsConfig) -> list[str]:
@@ -97,7 +80,7 @@ def corpus_api_base_urls_for_config(cfg: CommunityStatsConfig) -> list[str]:
     custom = custom_heartbeat_url(cfg)
     if custom:
         return [corpus_api_base_from_heartbeat(custom)]
-    return [corpus_api_base_from_heartbeat(u) for u in heartbeat_urls_for_config(cfg)]
+    return [PRIMARY_CORPUS_API_BASE]
 
 
 def gallery_posts_urls_for_config(cfg: CommunityStatsConfig) -> list[str]:

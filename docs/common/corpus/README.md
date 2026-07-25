@@ -19,9 +19,8 @@
 | 用途 | 地址 |
 | --- | --- |
 | 在线统计与语料 API | `https://stats.pallasbot.top` |
-| 备案过渡期备用 | `https://pallas.togetsudo.com` |
 
-Bot 在 auto enroll 下会从心跳地址推导语料 URL；读路径按主/备顺序 failover，与在线统计一致。
+Bot 在 auto enroll 下会从心跳地址推导语料 URL。
 
 ## 配置
 

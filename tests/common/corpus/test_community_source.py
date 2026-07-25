@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from pallas.product.community_stats.endpoints import FALLBACK_CORPUS_API_BASE, PRIMARY_CORPUS_API_BASE
+from pallas.product.community_stats.endpoints import PRIMARY_CORPUS_API_BASE
 from pallas.product.corpus.community_source import RemoteCorpusRepository
 
 
@@ -35,7 +35,8 @@ def open_remote_corpus_budget(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_find_by_keywords_failover_to_fallback():
+async def test_find_by_keywords_failover_to_secondary_base():
+    secondary = "https://stats.example/v1/corpus"
     calls: list[str] = []
 
     async def fake_get(self, url, **kwargs):
@@ -55,7 +56,7 @@ async def test_find_by_keywords_failover_to_fallback():
         return mock
 
     repo = RemoteCorpusRepository(
-        api_bases=[PRIMARY_CORPUS_API_BASE, FALLBACK_CORPUS_API_BASE],
+        api_bases=[PRIMARY_CORPUS_API_BASE, secondary],
         token="pc_test",
     )
     with patch.object(httpx.AsyncClient, "get", fake_get):
@@ -63,7 +64,7 @@ async def test_find_by_keywords_failover_to_fallback():
     assert ctx is not None
     assert ctx.keywords == "test"
     assert calls[0] == f"{PRIMARY_CORPUS_API_BASE}/context"
-    assert calls[1] == f"{FALLBACK_CORPUS_API_BASE}/context"
+    assert calls[1] == f"{secondary}/context"
 
 
 @pytest.mark.asyncio
@@ -80,8 +81,9 @@ async def test_find_by_keywords_404_returns_none():
 
 @pytest.mark.asyncio
 async def test_find_by_keywords_all_bases_fail_raises():
+    secondary = "https://stats.example/v1/corpus"
     repo = RemoteCorpusRepository(
-        api_bases=[PRIMARY_CORPUS_API_BASE, FALLBACK_CORPUS_API_BASE],
+        api_bases=[PRIMARY_CORPUS_API_BASE, secondary],
         token="pc_test",
     )
 
