@@ -59,6 +59,7 @@ async def build_expression_context_suffix(
     *,
     bot_id: int = 0,
     style_profile: dict[str, Any] | None = None,
+    blocked_openers: list[str] | None = None,
 ) -> str:
     """Prefer matched expression-bank references, then retain profile habits."""
     cfg = get_llm_config()
@@ -69,6 +70,7 @@ async def build_expression_context_suffix(
             plain_text,
             limit=cfg.llm_expression_retrieve_limit,
             bot_id=bot_id,
+            blocked_openers=blocked_openers or (),
         )
         reference = build_expression_reference_block(entries, limit=cfg.llm_expression_retrieve_limit)
         if reference:

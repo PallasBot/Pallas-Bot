@@ -159,6 +159,18 @@ def build_recent_reply_variation_hint(turns: list[LlmChatTurn]) -> str:
         except Exception:
             pass
 
+    # 同一开头连用 ≥2 次时加重提示（去重指令常被维护者样本盖过）
+    recent4 = assistant_texts[-4:]
+    opener_counts: dict[str, int] = {}
+    for text in recent4:
+        opener = classify_repeated_opener(text)
+        if not opener:
+            continue
+        opener_counts[opener] = opener_counts.get(opener, 0) + 1
+    sticky = [opener for opener, count in opener_counts.items() if count >= 2]
+    if sticky:
+        hints.insert(0, "严禁再用这些已重复的开头：" + "、".join(sticky) + "；换完全不同的起手")
+
     recent = assistant_texts[-3:]
     animal_openers = sum(1 for text in recent if _ANIMAL_OPENER_RE.match(text))
     if animal_openers >= 2:
@@ -194,7 +206,7 @@ def build_recent_reply_variation_hint(turns: list[LlmChatTurn]) -> str:
 
     if not hints:
         return ""
-    return "【本轮表达去重】\n- " + "\n- ".join(hints[:4])
+    return "【本轮表达去重】\n- " + "\n- ".join(hints[:5])
 
 
 def build_variation_hint_from_recent_texts(recent_texts: list[str]) -> str:

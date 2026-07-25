@@ -116,6 +116,7 @@ async def build_llm_chat_expression_suffix(
     plain_text: str = "",
     *,
     bot_id: int = 0,
+    blocked_openers: list[str] | None = None,
 ) -> str:
     if group_id is None:
         return ""
@@ -129,7 +130,13 @@ async def build_llm_chat_expression_suffix(
     if group_config is not None:
         raw_profile = getattr(group_config, "style_profile", None)
         profile = raw_profile if isinstance(raw_profile, dict) else None
-    return await build_expression_context_suffix(int(group_id), plain_text, bot_id=bot_id, style_profile=profile)
+    return await build_expression_context_suffix(
+        int(group_id),
+        plain_text,
+        bot_id=bot_id,
+        style_profile=profile,
+        blocked_openers=blocked_openers,
+    )
 
 
 def build_llm_chat_ending_hint(turns) -> str:
@@ -328,13 +335,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         "knowledge": knowledge_retrieval_trace,
         "relationship": relationship_result.trace,
     }
-    expression_suffix = await build_llm_chat_expression_suffix(
-        group_id,
-        plain or msg,
-        bot_id=int(bot.self_id),
-    )
-    if expression_suffix:
-        system_prompt = f"{system_prompt.rstrip()}\n{expression_suffix}"
+    expression_suffix = ""
 
     persona_for_gate = None
     if persona_bundle is not None:
@@ -412,6 +413,15 @@ async def handle_llm_chat(bot: Bot, event: Event):
 
     request_id = str(ULID())
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
+    blocked_openers = repeated_assistant_openers(recent_turns)
+    expression_suffix = await build_llm_chat_expression_suffix(
+        group_id,
+        plain or msg,
+        bot_id=int(bot.self_id),
+        blocked_openers=blocked_openers,
+    )
+    if expression_suffix:
+        system_prompt = f"{system_prompt.rstrip()}\n{expression_suffix}"
     from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
 
     system_prompt = enrich_system_with_situational_rules(
@@ -429,7 +439,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         affect_contract = build_persona_affect_contract(
             persona_for_gate,
             group_flavor_summary=group_flavor,
-            repeated_openers=repeated_assistant_openers(recent_turns),
+            repeated_openers=blocked_openers,
         )
         affect_system_block = build_persona_affect_system_block(affect_contract)
         affect_hint = build_variation_hint_from_contract(affect_contract)
