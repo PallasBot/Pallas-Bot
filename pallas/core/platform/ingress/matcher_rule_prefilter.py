@@ -69,15 +69,12 @@ def normalize_command(text: str) -> str:
 
 
 def command_matches_message(text: str, command: str) -> bool:
+    """预筛：消息是否像该命令（与 NoneBot 一致，命令后可无空白紧贴参数）。"""
     cmd = normalize_command(command)
     if not cmd:
         return False
     normalized = normalize_command(text)
-    if normalized == cmd:
-        return True
-    if normalized.startswith(cmd) and len(normalized) > len(cmd):
-        return normalized[len(cmd)].isspace()
-    return False
+    return normalized == cmd or normalized.startswith(cmd)
 
 
 @lru_cache(maxsize=512)

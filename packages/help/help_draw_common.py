@@ -1,25 +1,14 @@
-"""帮助图 v3 共用绘制工具。"""
+"""帮助图共用绘制工具（含 2× 超采样）。"""
 
 from __future__ import annotations
 
 import re
 import textwrap
+from dataclasses import dataclass
 
 from PIL import Image, ImageDraw
 
-from .help_theme import (
-    BORDER,
-    CANVAS,
-    DETAIL_PAD,
-    DETAIL_WIDTH,
-    MENU_FRAME_RADIUS,
-    MENU_PAD,
-    MENU_WIDTH,
-    QUOTE_BG,
-    SURFACE,
-    TEXT,
-    TEXT_TITLE,
-)
+from . import help_theme as ht
 from .plugin_visuals import help_font
 
 
@@ -36,7 +25,7 @@ def strip_help_markdown(text: str) -> str:
 
 
 def truncate_pixels(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> str:
-    t = re.sub(r"\s+", " ", (text or "").replace("\n", " ")).strip()
+    t = re.sub(r"\s+", " ", (text or "").strip().replace("\n", " ")).strip()
     if not t:
         return ""
     if draw.textlength(t, font=font) <= max_width:
@@ -47,13 +36,68 @@ def truncate_pixels(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) 
     return (t + ell) if t else ell
 
 
-def new_canvas(height: int, *, width: int = MENU_WIDTH) -> tuple[Image.Image, ImageDraw.ImageDraw, int, int, int, int]:
-    canvas = Image.new("RGBA", (width, height), CANVAS + (255,))
+@dataclass(slots=True)
+class HelpCanvas:
+    """逻辑坐标成图：内部按 RENDER_SCALE 放大绘制，finish 时缩回。"""
+
+    image: Image.Image
+    draw: ImageDraw.ImageDraw
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+    scale: int
+    logical_width: int
+    logical_height: int
+
+    def u(self, n: int | float) -> int:
+        return int(round(n * self.scale))
+
+    def finish(self) -> Image.Image:
+        if self.scale <= 1:
+            return self.image.convert("RGB")
+        return self.image.resize(
+            (self.logical_width, self.logical_height),
+            Image.Resampling.LANCZOS,
+        ).convert("RGB")
+
+
+def new_canvas(height: int, *, width: int | None = None) -> HelpCanvas:
+    scale = max(1, int(ht.RENDER_SCALE))
+    logical_w = ht.MENU_WIDTH if width is None else width
+    logical_h = height
+    canvas = Image.new("RGBA", (logical_w * scale, logical_h * scale), ht.CANVAS + (255,))
     draw = ImageDraw.Draw(canvas)
-    x1, y1 = MENU_PAD, MENU_PAD
-    x2, y2 = width - MENU_PAD, height - MENU_PAD
-    draw.rounded_rectangle((x1, y1, x2, y2), radius=MENU_FRAME_RADIUS, fill=SURFACE, outline=BORDER, width=2)
-    return canvas, draw, x1, y1, x2, y2
+    pad = ht.MENU_PAD * scale
+    x1, y1 = pad, pad
+    x2, y2 = logical_w * scale - pad, logical_h * scale - pad
+    dark = ht.help_visual_mode() == "dark"
+    outline = ht.ACCENT if dark else ht.BORDER
+    draw.rounded_rectangle(
+        (x1, y1, x2, y2),
+        radius=ht.MENU_FRAME_RADIUS * scale,
+        fill=ht.SURFACE,
+        outline=outline,
+        width=max(1, 2 * scale),
+    )
+    if dark:
+        band_h = 6 * scale
+        draw.rounded_rectangle(
+            (x1 + 2 * scale, y1 + 2 * scale, x2 - 2 * scale, y1 + 2 * scale + band_h),
+            radius=3 * scale,
+            fill=ht.TITLE_GLOW,
+        )
+    return HelpCanvas(
+        image=canvas,
+        draw=draw,
+        x1=x1,
+        y1=y1,
+        x2=x2,
+        y2=y2,
+        scale=scale,
+        logical_width=logical_w,
+        logical_height=logical_h,
+    )
 
 
 def draw_hint_boxes(
@@ -64,17 +108,22 @@ def draw_hint_boxes(
     start_y: int,
     hints: list[str],
     font_size: int = 18,
+    scale: int = 1,
 ) -> int:
     cursor_y = start_y
     small_font = help_font(font_size)
     for hint in hints:
         box_top = cursor_y
         wrapped = textwrap.fill(hint, width=46)
-        line_h = 24
-        box_h = max(line_h + 12, wrapped.count("\n") * line_h + line_h + 12)
-        draw.rounded_rectangle((x1 + 12, box_top, x2 - 12, box_top + box_h), radius=10, fill=QUOTE_BG)
-        draw.text((x1 + 24, box_top + 8), wrapped, fill=TEXT, font=small_font)
-        cursor_y = box_top + box_h + 10
+        line_h = 24 * scale
+        box_h = max(line_h + 12 * scale, wrapped.count("\n") * line_h + line_h + 12 * scale)
+        draw.rounded_rectangle(
+            (x1 + 12 * scale, box_top, x2 - 12 * scale, box_top + box_h),
+            radius=10 * scale,
+            fill=ht.QUOTE_BG,
+        )
+        draw.text((x1 + 24 * scale, box_top + 8 * scale), wrapped, fill=ht.TEXT, font=small_font)
+        cursor_y = box_top + box_h + 10 * scale
     return cursor_y
 
 
@@ -118,18 +167,19 @@ def draw_preformatted_lines_block(
     title_size: int = 24,
     body_size: int = 18,
     line_h: int = 26,
+    scale: int = 1,
 ) -> int:
     title_font = help_font(title_size)
     body_font = help_font(body_size)
-    draw.text((x, y), title, fill=TEXT_TITLE, font=title_font)
-    cursor = y + title_size + 8
+    draw.text((x, y), title, fill=ht.TEXT_TITLE, font=title_font)
+    cursor = y + (title_size + 8) * scale
     for line in (body or "").splitlines():
         if not line.strip():
             continue
         fitted = truncate_pixels(draw, line, body_font, max_x - x)
-        draw.text((x, cursor), fitted, fill=TEXT, font=body_font)
-        cursor += line_h
-    return cursor + 8
+        draw.text((x, cursor), fitted, fill=ht.TEXT, font=body_font)
+        cursor += line_h * scale
+    return cursor + 8 * scale
 
 
 def draw_body_block(
@@ -144,6 +194,7 @@ def draw_body_block(
     title_size: int = 24,
     body_size: int = 18,
     line_h: int = 26,
+    scale: int = 1,
 ) -> int:
     """绘制说明/用法等正文；有序列表保留 1. 2. 3. 结构与换行对齐。"""
     from .markdown_generator import _format_numbered_list_block, _is_numbered_list_block
@@ -161,6 +212,7 @@ def draw_body_block(
             title_size=title_size,
             body_size=body_size,
             line_h=line_h,
+            scale=scale,
         )
     return draw_wrapped_block(
         draw,
@@ -173,6 +225,7 @@ def draw_body_block(
         title_size=title_size,
         body_size=body_size,
         line_h=line_h,
+        scale=scale,
     )
 
 
@@ -188,20 +241,22 @@ def draw_wrapped_block(
     title_size: int = 24,
     body_size: int = 18,
     line_h: int = 26,
+    scale: int = 1,
 ) -> int:
     title_font = help_font(title_size)
     body_font = help_font(body_size)
-    draw.text((x, y), title, fill=TEXT_TITLE, font=title_font)
-    cursor = y + title_size + 8
+    draw.text((x, y), title, fill=ht.TEXT_TITLE, font=title_font)
+    cursor = y + (title_size + 8) * scale
     wrapped = textwrap.fill(strip_help_markdown((body or "").strip() or "暂无"), width=width_chars)
     for line in wrapped.splitlines():
         if not line.strip():
             continue
         fitted = truncate_pixels(draw, line, body_font, max_x - x)
-        draw.text((x, cursor), fitted, fill=TEXT, font=body_font)
-        cursor += line_h
-    return cursor + 8
+        draw.text((x, cursor), fitted, fill=ht.TEXT, font=body_font)
+        cursor += line_h * scale
+    return cursor + 8 * scale
 
 
-def content_inner_width(*, width: int = DETAIL_WIDTH) -> int:
-    return width - DETAIL_PAD * 2 - 24
+def content_inner_width(*, width: int | None = None) -> int:
+    w = ht.DETAIL_WIDTH if width is None else width
+    return w - ht.DETAIL_PAD * 2 - 24

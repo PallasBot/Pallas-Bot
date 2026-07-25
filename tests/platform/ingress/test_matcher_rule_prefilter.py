@@ -40,6 +40,21 @@ def test_command_rule_match():
     )
 
 
+def test_command_rule_match_without_whitespace_after_command():
+    """与 NoneBot 一致：命令后可紧贴参数（如「牛牛表情搜索急急国王」）。"""
+    descriptors = prefilter.extract_matcher_rule_descriptors(_FooCommandMatcher)
+    assert (
+        prefilter.matcher_rule_decision(
+            descriptors,
+            plain_text="foobar",
+            raw_text="foobar",
+        )
+        == "match"
+    )
+    assert prefilter.command_matches_message("牛牛表情搜索急急国王", "牛牛表情搜索")
+    assert prefilter.command_matches_message("牛牛表情搜索 急急国王", "牛牛表情搜索")
+
+
 def test_startswith_miss():
     descriptors = prefilter.extract_matcher_rule_descriptors(_BarStartMatcher)
     assert (

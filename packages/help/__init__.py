@@ -29,6 +29,7 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "help_tag": "core",
         "reload_policy": "metadata",
         "command_prefixes": [
             "牛牛帮助",

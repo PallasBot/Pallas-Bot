@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .help_constants import HELP_STATUS_OFF, HELP_STATUS_ON
+from .help_tags import DEFAULT_HELP_TAG, resolve_help_tag_overrides, resolve_plugin_help_tag
 from .help_theme import MENU_PAGE_SIZE
 from .plugin_manager import (
     collect_disabled_plugin_names,
@@ -23,6 +24,7 @@ class HelpMenuRow:
     display_name: str
     description: str
     enabled: bool
+    help_tag: str = DEFAULT_HELP_TAG
 
 
 def paginate_menu_rows(
@@ -52,6 +54,7 @@ async def build_help_menu_rows(
     bot_disabled_names = (
         await collect_disabled_plugin_names(bot_id, None, ignore_cache=False) if group_id else disabled_names
     )
+    tag_overrides = resolve_help_tag_overrides()
 
     rows: list[HelpMenuRow] = []
     for index, plugin in enumerate(plugins, 1):
@@ -69,6 +72,7 @@ async def build_help_menu_rows(
                 display_name=plugin_display_name(plugin),
                 description=str(description).strip() or "暂无描述",
                 enabled=enabled,
+                help_tag=resolve_plugin_help_tag(plugin, overrides=tag_overrides),
             )
         )
     return rows
