@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.1.2] - 2026-07-25
+
+### Added
+
+- LLM：群聊发言感知（别名提及 / ambient）、硬触发软窗口；口令工具（`llm_tools`）与 select 域扩展
+- LLM：关系层事实与人对语气偏置；人称自称与 `self_aliases`；工具轨迹 `tool_trace`
+- WebUI API：LLM 工具清单、语料源详情/检索试探、provider_gateway 主备线路、社区投稿墙代理
+- 帮助图：v4 分组与插件 `help_tag` 覆盖
+
+### Fixed
+
+- LLM：酒后对话加载、provider 工具名去点号、thinking 与 `tool_choice=required` 冲突
+- LLM：硬触发空回复兜底；检索降噪（min_score / 查询门控）；表达回灌限频
+- presence：隔离僵尸 WS，避免假在线挡重新上号
+- ingress：预筛允许命令后紧贴参数
+
+### Changed
+
+- 发行捆绑控制台：默认取 WebUI 最新 tag（本版对应 v0.7.8）
+
 ## [4.1.1] - 2026-07-24
 
 ### Fixed
@@ -119,6 +139,7 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
+[4.1.2]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.1...v4.1.2
 [4.1.1]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.0...v4.1.1
 [4.1.0]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.3...v4.1.0
 [4.0.3]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.2...v4.0.3
