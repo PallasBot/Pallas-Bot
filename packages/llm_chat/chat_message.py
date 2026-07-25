@@ -350,6 +350,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_defer")
         logger.debug("llm chat wait-for-more group={} user={}", group_id, user_id)
         return
+    record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_proceed")
 
     if llm_cfg.llm_select_enabled and group_id is not None and isinstance(event, GroupMessageEvent):
         from packages.repeater.model import Chat
