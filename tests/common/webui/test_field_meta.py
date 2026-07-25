@@ -227,3 +227,33 @@ def test_field_meta_json_schema_ui_hints():
     assert row["ui_group"] == "高级"
     assert row["ui_order"] == 10
     assert row["ui_hidden"] is True
+
+
+def test_field_meta_provider_gateway_widget():
+    from pallas.console.webui.provider_gateway import ui_provider_gateway
+
+    class _Gateway(BaseModel):
+        gateways: list[dict] = Field(
+            default_factory=list,
+            json_schema_extra=ui_provider_gateway(
+                mode="unified",
+                allow_manual=False,
+                capability="chat",
+                field="gateways",
+                label="AI 线路",
+                group="AI",
+            ),
+        )
+
+    f = _Gateway.model_fields["gateways"]
+    row = field_meta_for_model_field(
+        key="gateways",
+        field=f,
+        env_key="GATEWAYS",
+        cur=[],
+        default_value=[],
+    )
+    assert row["ui_widget"] == "provider_gateway"
+    assert row["ui_gateway"]["mode"] == "unified"
+    assert row["ui_gateway"]["allow_manual"] is False
+    assert row["label"] == "AI 线路"

@@ -131,4 +131,8 @@ def field_meta_for_model_field(*, key: str, field: Any, env_key: str, cur: Any, 
     for ui_key in ("ui_group", "ui_order", "ui_hidden"):
         if ui_key in extra:
             row[ui_key] = extra[ui_key]
+    if "ui_widget" in extra:
+        row["ui_widget"] = extra["ui_widget"]
+    if "ui_gateway" in extra and isinstance(extra["ui_gateway"], dict):
+        row["ui_gateway"] = extra["ui_gateway"]
     return row

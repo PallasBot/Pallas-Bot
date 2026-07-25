@@ -64,3 +64,21 @@ def test_config_from_env_reads_disk_after_environ_stale(tmp_path, monkeypatch):
         assert cfg.answer_threshold == 2
     finally:
         os.environ.pop("ANSWER_THRESHOLD", None)
+
+
+def test_config_from_env_string_literal_with_hint_not_parsed_as_int(tmp_path, monkeypatch):
+    """Regression: Literal[..., 'hint'] must not match substring 'int'."""
+    from typing import Literal
+
+    class Cfg(BaseModel):
+        meme_params_mismatch: Literal["silent", "hint"] = "silent"
+
+    webui = tmp_path / "webui.json"
+    webui.write_text(json.dumps({"env": {"MEME_PARAMS_MISMATCH": "hint"}}), encoding="utf-8")
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui)
+    monkeypatch.setattr(rs, "repo_config_path", lambda: tmp_path / "missing.toml")
+    monkeypatch.setattr(rs, "repo_env_path", lambda: tmp_path / "missing.env")
+    monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(ed, "repo_settings_files_exist", lambda: True)
+    cfg = config_from_env(Cfg)
+    assert cfg.meme_params_mismatch == "hint"
