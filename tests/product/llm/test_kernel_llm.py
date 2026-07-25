@@ -359,7 +359,12 @@ async def test_tool_loop_one_round(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert content == "最终回复"
     assert calls["n"] == 2
-    assert assistant.get("_agent_trace", {}).get("tool_call_count") == 1
+    trace = assistant.get("_agent_trace") or {}
+    assert trace.get("tool_call_count") == 1
+    assert trace.get("tool_schema_count") == 1
+    assert "demo.echo" in (trace.get("tool_names") or [])
+    assert trace["rounds"][0]["calls"][0]["tool"] == "demo.echo"
+    assert trace["rounds"][0]["calls"][0]["ok"] is True
 
 
 @pytest.mark.asyncio

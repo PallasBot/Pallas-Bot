@@ -44,6 +44,8 @@ def test_runtime_debug_snapshot_and_trace_roundtrip(tmp_path, monkeypatch) -> No
     assert bundle["persona_shaping"]["persona_shaping_active"] is True
     assert bundle["persona_shaping"]["lines"] == ["像顺口接话"]
     assert bundle["trace"]["tool_call_count"] == 1
+    assert bundle["tool_trace"]["tool_call_count"] == 1
+    assert bundle["tool_trace"]["tool_schema_count"] >= 0
     replay = build_replay_payload(request_id="req-1")
     assert replay["request_snapshot_id"] == snapshot_id
     assert replay["mode"] == "mock_tools"

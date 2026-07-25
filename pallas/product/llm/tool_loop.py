@@ -30,6 +30,37 @@ def tool_result_message(call_id: str, name: str, result: dict[str, Any]) -> dict
     return {"role": "tool", "tool_call_id": call_id, "content": content}
 
 
+def tool_names_from_schemas(schemas: list[Any]) -> list[str]:
+    names: list[str] = []
+    for item in schemas:
+        if not isinstance(item, dict):
+            continue
+        fn = item.get("function") if isinstance(item.get("function"), dict) else {}
+        name = str(fn.get("name") or item.get("name") or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names[:24]
+
+
+def summarize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
+    ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
+    error = str(result.get("error") or "").strip() if isinstance(result, dict) else ""
+    payload = result.get("result") if isinstance(result, dict) else result
+    if isinstance(payload, dict):
+        preview = json.dumps(payload, ensure_ascii=False)
+    elif payload is None:
+        preview = ""
+    else:
+        preview = str(payload)
+    if len(preview) > 160:
+        preview = preview[:159].rstrip() + "…"
+    return {
+        "ok": ok,
+        "error": error or None,
+        "result_preview": preview or None,
+    }
+
+
 def build_working_messages(
     *,
     system_prompt: str | None,
@@ -153,11 +184,15 @@ async def complete_with_tool_loop(
 
     max_rounds = max(1, int(c.llm_tools_max_rounds))
     last_message: dict[str, Any] = {}
+    schema_names = tool_names_from_schemas(tool_schemas)
     agent_trace: dict[str, Any] = {
         "final_stage": "generate",
         "tool_call_count": 0,
         "rounds": [],
         "status": "success",
+        "tool_loop_enabled": True,
+        "tool_schema_count": len(tool_schemas),
+        "tool_names": schema_names,
     }
 
     for round_idx in range(max_rounds):
@@ -170,7 +205,7 @@ async def complete_with_tool_loop(
             task=task,
         )
         tool_calls = last_message.get("tool_calls")
-        round_trace: dict[str, Any] = {"round": round_idx + 1, "tool_calls": []}
+        round_trace: dict[str, Any] = {"round": round_idx + 1, "tool_calls": [], "calls": []}
         if not isinstance(tool_calls, list) or not tool_calls:
             content = str(last_message.get("content", "") or "").strip()
             assistant_message = dict(last_message)
@@ -198,6 +233,15 @@ async def complete_with_tool_loop(
             agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
             logger.info("kernel tool call: round={} tool={} keys={}", round_idx + 1, tool_name, sorted(args.keys()))
             tool_result = await execute_tool_async(tool_name, args, context=context)
+            result_dict = tool_result if isinstance(tool_result, dict) else {"ok": True, "result": tool_result}
+            summary = summarize_tool_result(result_dict)
+            round_trace["calls"].append({
+                "tool": tool_name,
+                "args_keys": sorted(args.keys()),
+                "ok": summary["ok"],
+                "error": summary["error"],
+                "result_preview": summary["result_preview"],
+            })
             working.append(tool_result_message(call_id, tool_name, tool_result))
         agent_trace["rounds"].append(round_trace)
 
