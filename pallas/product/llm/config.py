@@ -337,6 +337,7 @@ class LlmConfig(BaseModel):
     llm_vector_retrieve: VectorRetrieveMode = Field(default="hybrid")
     llm_embedding_model: str = Field(default="stub")
     llm_memory_rag_top_k: int = Field(default=3, ge=1, le=8)
+    llm_memory_rag_min_score: int = Field(default=24, ge=0, le=100)
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
     llm_memory_content_max_len: int = Field(default=500, ge=64, le=4000)
     llm_memory_auto_episode_enabled: bool = Field(default=True)
@@ -347,6 +348,7 @@ class LlmConfig(BaseModel):
     llm_knowledge_sources_enabled: bool = Field(default=True)
     llm_knowledge_file_ingest_enabled: bool = Field(default=True)
     llm_knowledge_top_k: int = Field(default=3, ge=1, le=8)
+    llm_knowledge_min_score: int = Field(default=12, ge=0, le=100)
     llm_knowledge_content_max_len: int = Field(default=400, ge=64, le=2000)
     llm_relationship_notes_enabled: bool = Field(default=True)
     llm_relationship_content_max_len: int = Field(default=200, ge=32, le=2000)
@@ -519,6 +521,7 @@ def get_llm_config() -> LlmConfig:
             llm_vector_retrieve=resolve_llm_vector_retrieve(),
             llm_embedding_model=resolve_llm_embedding_model(),
             llm_memory_rag_top_k=_env_int("LLM_MEMORY_RAG_TOP_K", 3),
+            llm_memory_rag_min_score=_env_int("LLM_MEMORY_RAG_MIN_SCORE", 24),
             llm_memory_max_per_group=_env_int("LLM_MEMORY_MAX_PER_GROUP", 200),
             llm_memory_content_max_len=_env_int("LLM_MEMORY_CONTENT_MAX_LEN", 500),
             llm_memory_auto_episode_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_ENABLED", True),
@@ -529,6 +532,7 @@ def get_llm_config() -> LlmConfig:
             llm_knowledge_sources_enabled=_env_bool("LLM_KNOWLEDGE_SOURCES_ENABLED", True),
             llm_knowledge_file_ingest_enabled=_env_bool("LLM_KNOWLEDGE_FILE_INGEST_ENABLED", True),
             llm_knowledge_top_k=_env_int("LLM_KNOWLEDGE_TOP_K", 3),
+            llm_knowledge_min_score=_env_int("LLM_KNOWLEDGE_MIN_SCORE", 12),
             llm_knowledge_content_max_len=_env_int("LLM_KNOWLEDGE_CONTENT_MAX_LEN", 400),
             llm_relationship_notes_enabled=_env_bool("LLM_RELATIONSHIP_NOTES_ENABLED", True),
             llm_relationship_content_max_len=_env_int("LLM_RELATIONSHIP_CONTENT_MAX_LEN", 200),

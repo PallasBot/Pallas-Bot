@@ -118,6 +118,9 @@ def retrieve_from_knowledge_sources(
             for chunk in chunks
         )
     hits.sort(key=lambda item: item.score, reverse=True)
+    min_score = max(0, int(getattr(c, "llm_knowledge_min_score", 0) or 0))
+    if min_score > 0:
+        hits = [item for item in hits if int(item.score) >= min_score]
     cap = max(1, c.llm_knowledge_top_k)
     return hits[:cap]
 

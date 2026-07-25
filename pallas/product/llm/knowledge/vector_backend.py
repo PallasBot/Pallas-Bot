@@ -122,6 +122,8 @@ def retrieve_chunks_embedding(
         emb_score = embedding_relevance_score(query_vec, chunk_vec)
         kw_score = memory_relevance_score(query, keywords=chunk.keywords, content=chunk.content)
         if mode == "hybrid":
+            if kw_score <= 0:
+                continue
             score = blend_hybrid_score(embedding_score=emb_score, keyword_score=kw_score)
         else:
             score = emb_score
