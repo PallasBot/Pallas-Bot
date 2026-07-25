@@ -7547,6 +7547,16 @@ def register_extended_api(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": {"items": items, "count": len(items)}})
 
+    @router.get(f"{x}/llm/tools", include_in_schema=True)
+    async def _llm_tools_list() -> JSONResponse:
+        try:
+            from pallas.product.llm.tools.registry import build_tools_catalog_ui
+
+            data = build_tools_catalog_ui()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
     @router.post(f"{x}/llm/conversation-kernel/memory/delete", include_in_schema=True)
     async def _llm_conversation_kernel_memory_delete(
         body: dict[str, Any],

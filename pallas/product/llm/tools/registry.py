@@ -294,18 +294,53 @@ def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> d
     }
 
 
-def build_tools_ui_rows() -> list[dict[str, Any]]:
+def build_tools_catalog_ui() -> dict[str, Any]:
+    """WebUI 只读工具清单：全量可见 tool + 当前策略门闸。"""
+    cfg = get_llm_config()
+    kb = get_arknights_kb_config()
     ensure_tools_loaded()
-    rows = [
-        {
-            "name": spec.name,
-            "description": spec.description,
-            "domains": sorted(spec.domains),
-            "command_id": spec.command_id,
-            "source": spec.source.value,
-        }
-        for spec in iter_registered_tools()
-        if spec.visible_in_ui
-    ]
-    rows.sort(key=operator.itemgetter("name"))
-    return rows
+    blacklist = {item.strip().lower() for item in cfg.llm_tools_blacklist if item.strip()}
+    eligible_names = {spec.name for spec in iter_eligible_tool_specs()}
+    items: list[dict[str, Any]] = []
+    for spec in iter_registered_tools():
+        if not spec.visible_in_ui:
+            continue
+        entry = catalog_entry_for_spec(spec)
+        disabled_reason: str | None = None
+        if not cfg.llm_tools_enabled:
+            disabled_reason = "tools_disabled"
+        elif spec.name.lower() in blacklist or spec.domains.intersection(blacklist):
+            disabled_reason = "blacklisted"
+        elif "arknights" in spec.domains and not kb.arknights_kb_enabled:
+            disabled_reason = "arknights_kb_disabled"
+        items.append({
+            "name": entry.name,
+            "description": entry.description,
+            "parameters": entry.parameters,
+            "source": entry.source,
+            "domains": list(entry.domains),
+            "capabilities": list(entry.capabilities),
+            "command_id": entry.audit.command_id,
+            "plugin_name": entry.audit.plugin_name,
+            "provider_name": entry.audit.provider_name,
+            "mcp_server_id": entry.audit.mcp_server_id,
+            "eligible": spec.name in eligible_names,
+            "disabled_reason": disabled_reason,
+        })
+    items.sort(key=operator.itemgetter("name"))
+    return {
+        "items": items,
+        "count": len(items),
+        "policy": {
+            "tools_enabled": bool(cfg.llm_tools_enabled),
+            "selective_enabled": bool(cfg.llm_tools_selective),
+            "max_rounds": int(cfg.llm_tools_max_rounds),
+            "blacklist": [str(item) for item in (cfg.llm_tools_blacklist or []) if str(item).strip()],
+            "arknights_kb_enabled": bool(kb.arknights_kb_enabled),
+            "desc_max_len": int(cfg.llm_tools_desc_max_len),
+        },
+    }
+
+
+def build_tools_ui_rows() -> list[dict[str, Any]]:
+    return list(build_tools_catalog_ui().get("items") or [])

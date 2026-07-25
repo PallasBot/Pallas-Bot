@@ -22,6 +22,7 @@ def _patch_tool_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
             llm_tools_blacklist=[],
             llm_tools_desc_max_len=120,
             llm_tools_selective=False,
+            llm_tools_max_rounds=4,
         ),
     )
     monkeypatch.setattr(
@@ -100,17 +101,18 @@ def test_build_tools_ui_rows_exposes_source(monkeypatch: pytest.MonkeyPatch) -> 
         )
     )
 
+    catalog = registry.build_tools_catalog_ui()
     rows = registry.build_tools_ui_rows()
 
-    assert rows == [
-        {
-            "name": "plugin.roll",
-            "description": "plugin.roll description",
-            "domains": ["command", "dice"],
-            "command_id": None,
-            "source": "plugin_command",
-        }
-    ]
+    assert catalog["count"] == 1
+    assert catalog["policy"]["tools_enabled"] is True
+    assert catalog["policy"]["selective_enabled"] is False
+    assert rows[0]["name"] == "plugin.roll"
+    assert rows[0]["source"] == "plugin_command"
+    assert rows[0]["domains"] == ["command", "dice"]
+    assert rows[0]["eligible"] is True
+    assert rows[0]["disabled_reason"] is None
+    assert rows[0]["command_id"] is None
 
 
 def test_execute_tool_async_normalizes_non_ok_dict(monkeypatch: pytest.MonkeyPatch) -> None:
