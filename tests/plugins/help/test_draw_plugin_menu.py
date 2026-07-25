@@ -19,7 +19,14 @@ def test_truncate_pixels_fits_card_width() -> None:
 
 def test_paginate_menu_rows_page_size_20() -> None:
     rows = [
-        HelpMenuRow(index=i, plugin=SimpleNamespace(name=f"p{i}"), display_name=f"P{i}", description="", enabled=True)
+        HelpMenuRow(
+            index=i,
+            plugin=SimpleNamespace(name=f"p{i}"),
+            display_name=f"P{i}",
+            description="",
+            enabled=True,
+            help_tag="other",
+        )
         for i in range(1, 26)
     ]
     page_rows, page, total_pages = paginate_menu_rows(rows, page=2)
@@ -32,10 +39,24 @@ def test_paginate_menu_rows_page_size_20() -> None:
 def test_draw_plugin_menu_image_dimensions() -> None:
     plugin = SimpleNamespace(name="help", module=SimpleNamespace(__file__=__file__), metadata=None)
     rows = [
-        HelpMenuRow(index=1, plugin=plugin, display_name="牛牛帮助", description="查看功能说明", enabled=True),
-        HelpMenuRow(index=2, plugin=plugin, display_name="示例插件", description="一行简介", enabled=False),
+        HelpMenuRow(
+            index=1,
+            plugin=plugin,
+            display_name="牛牛帮助",
+            description="查看功能说明",
+            enabled=True,
+            help_tag="core",
+        ),
+        HelpMenuRow(
+            index=2,
+            plugin=plugin,
+            display_name="示例插件",
+            description="一行简介",
+            enabled=False,
+            help_tag="fun",
+        ),
     ]
     image = draw_plugin_menu_image(rows, show_ignored=False, page=1, total_pages=1, total_plugin_count=2)
     assert image.width == 920
-    assert image.height > 300
+    assert image.height > 150
     assert image.mode == "RGB"

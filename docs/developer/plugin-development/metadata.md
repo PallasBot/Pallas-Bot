@@ -8,6 +8,7 @@
 | --- | --- |
 | `name` / `description` / `usage` | 帮助图、插件说明 |
 | `extra.menu_data` | 帮助结构化入口、治理展示 |
+| `extra.help_tag` | 帮助图总览分组（`core|chat|ai|fun|tool|admin|other`）；可被 help 插件 `help_tag_overrides` 覆盖 |
 | `extra.command_permissions` | matcher 权限、WebUI 覆盖、「何人可用」 |
 | `extra.command_limits` | 冷却默认与展示 |
 | `extra.reload_policy` | 热载分级 |
