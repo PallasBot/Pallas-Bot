@@ -35,9 +35,9 @@ def test_build_official_extension_rows_include_visuals():
     rows = build_official_extension_rows()
     duel = next(r for r in rows if r["package"] == "pallas-plugin-duel")
     assert duel["icon"]
-    assert "pallas-plugin-duel" in duel["icon"]
+    assert "Plugin-Duel" in duel["icon"]
     assert duel["cover"]
-    assert "pallas-plugin-duel" in duel["cover"] or "brand-avatar" in duel["cover"]
+    assert "Plugin-Duel" in duel["cover"] or "brand-avatar" in duel["cover"]
     assert duel["description"] == "泰拉风味多幕决斗，带剧情事件、抢答和八角笼玩法。"
     assert duel["display_name"] == "牛牛决斗"
     assert duel["avatar"] is None
