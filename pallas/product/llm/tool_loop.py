@@ -30,6 +30,21 @@ def tool_result_message(call_id: str, name: str, result: dict[str, Any]) -> dict
     return {"role": "tool", "tool_call_id": call_id, "content": content}
 
 
+def assistant_history_message(message: dict[str, Any]) -> dict[str, Any]:
+    """把 provider 助手消息压成下一轮 messages；保留 reasoning_content 供 thinking 模式回传。"""
+    out: dict[str, Any] = {
+        "role": "assistant",
+        "content": message.get("content") or "",
+    }
+    tool_calls = message.get("tool_calls")
+    if isinstance(tool_calls, list) and tool_calls:
+        out["tool_calls"] = tool_calls
+    reasoning = message.get("reasoning_content")
+    if isinstance(reasoning, str) and reasoning.strip():
+        out["reasoning_content"] = reasoning
+    return out
+
+
 def tool_names_from_schemas(schemas: list[Any]) -> list[str]:
     names: list[str] = []
     for item in schemas:
@@ -295,11 +310,7 @@ async def complete_with_tool_loop(
             assistant_message["_agent_trace"] = agent_trace
             return content, assistant_message
 
-        working.append({
-            "role": "assistant",
-            "content": last_message.get("content") or "",
-            "tool_calls": tool_calls,
-        })
+        working.append(assistant_history_message(last_message))
         for call in tool_calls:
             if not isinstance(call, dict):
                 continue

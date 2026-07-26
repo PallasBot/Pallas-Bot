@@ -5644,12 +5644,16 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return await fetch_federation_onboarding()
 
-        data = await cached_read(
-            key="federation-onboarding",
-            loader=_load,
-            ttl_sec=120.0,
-            stale_sec=600.0,
-        )
+        try:
+            data = await cached_read(
+                key="federation-onboarding",
+                loader=_load,
+                ttl_sec=120.0,
+                stale_sec=600.0,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Pallas-Bot 控制台: 拉取联邦入池说明失败 err={}", e)
+            raise HTTPException(status_code=502, detail="无法从社区中心拉取联邦入池说明") from e
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/plugin-run-stats", include_in_schema=True)
