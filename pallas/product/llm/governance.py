@@ -94,6 +94,11 @@ def is_llm_chat_group_allowed(group_id: int | None, *, cfg: LlmConfig | None = N
 
 def should_skip_llm_chat_under_pressure(*, hot_path: bool = True) -> bool:
     global _skipped_pressure
+    from pallas.core.foundation.db.db_health import should_skip_noncritical_db
+
+    if should_skip_noncritical_db():
+        _skipped_pressure += 1
+        return True
     threshold = 0.70 if hot_path else 0.55
     if pg_pool_under_pressure(threshold=threshold):
         _skipped_pressure += 1

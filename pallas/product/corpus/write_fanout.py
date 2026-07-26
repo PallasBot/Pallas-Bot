@@ -200,9 +200,10 @@ def schedule_mirror_upsert_answer(
 ) -> None:
     if not cfg.fed_contribute and not community_contribute_enabled(cfg):
         return
+    from pallas.core.foundation.db.db_health import should_skip_noncritical_db
     from pallas.core.foundation.db.pool_budget import pg_pool_under_pressure
 
-    if pg_pool_under_pressure(threshold=0.78):
+    if should_skip_noncritical_db() or pg_pool_under_pressure(threshold=0.78):
         from pallas.core.foundation.db.pool_diagnostics import note_mirror_skipped_pressure
 
         note_mirror_skipped_pressure()
@@ -234,9 +235,10 @@ def schedule_mirror_insert(
 ) -> None:
     if not cfg.fed_contribute and not community_contribute_enabled(cfg):
         return
+    from pallas.core.foundation.db.db_health import should_skip_noncritical_db
     from pallas.core.foundation.db.pool_budget import pg_pool_under_pressure
 
-    if pg_pool_under_pressure(threshold=0.78):
+    if should_skip_noncritical_db() or pg_pool_under_pressure(threshold=0.78):
         from pallas.core.foundation.db.pool_diagnostics import note_mirror_skipped_pressure
 
         note_mirror_skipped_pressure()

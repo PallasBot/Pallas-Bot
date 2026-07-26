@@ -51,7 +51,9 @@ def should_skip_remote_corpus(*, hot_path: bool = False) -> bool:
     """池压力大时跳过远程语料。"""
     global _skipped_pressure
     threshold = 0.70 if hot_path else 0.55
-    if pg_pool_under_pressure(threshold=threshold):
+    from pallas.core.foundation.db.db_health import should_skip_noncritical_db
+
+    if should_skip_noncritical_db() or pg_pool_under_pressure(threshold=threshold):
         _skipped_pressure += 1
         return True
     return False

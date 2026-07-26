@@ -8016,6 +8016,50 @@ def register_extended_api(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
+    @router.get(f"{x}/db/health", include_in_schema=True)
+    async def _db_health() -> JSONResponse:
+        from pallas.core.foundation.db.pallas_console_data import database_health_view
+
+        try:
+            data = await database_health_view()
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 数据库健康探测失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/db/tables", include_in_schema=True)
+    async def _db_tables() -> JSONResponse:
+        from pallas.core.foundation.db.pallas_console_data import database_tables_view
+
+        try:
+            data = await cached_read(
+                key="db_tables",
+                loader=database_tables_view,
+                ttl_sec=8.0,
+                stale_sec=120.0,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 数据库表列表失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/db/table-rows", include_in_schema=True)
+    async def _db_table_rows(
+        table: str = Query(..., description="白名单表名"),
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=100),
+    ) -> JSONResponse:
+        from pallas.core.foundation.db.pallas_console_data import list_console_table_rows
+
+        try:
+            data = await list_console_table_rows(table, offset=offset, limit=limit)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 表分页读取失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
     @router.get(f"{x}/db/backend", include_in_schema=True)
     async def _db_backend_get() -> JSONResponse:
         from pallas.core.foundation.db.backend_config import build_backend_config_view
