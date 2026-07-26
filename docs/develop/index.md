@@ -9,3 +9,4 @@
 | WebUI 前端 | [webui](/developer/webui) |
 | 官方插件 PyPI | [extension-pypi-publish](/developer/extension-pypi-publish) |
 | 插件入门 / Cookbook | [写第一个插件](/developer/plugin-development/first-plugin) · [Cookbook](/developer/plugin-development/pallas-api-cookbook) |
+| 知识源 | [knowledge-sources](/developer/plugin-development/knowledge-sources) |

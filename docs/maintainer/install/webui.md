@@ -44,7 +44,7 @@ flowchart LR
 
 ### 1. 使用控制台
 
-确保 `data/pb_webui/public/` 可用且 Bot 已启动：
+确保默认 React 产物目录 `data/pb_webui/public-react/` 可用且 Bot 已启动：
 
 ```text
 http://<host>:8088/pallas/
@@ -55,7 +55,7 @@ http://<host>:8088/pallas/
 拿到新的 `dist.zip` 或构建产物后：
 
 1. 停止或避开当前写入过程
-2. 解压或覆盖到 `data/pb_webui/public/`
+2. 解压或覆盖到 `data/pb_webui/public-react/`
 3. 重启 Bot 或刷新静态资源缓存
 4. 浏览器强制刷新，确认版本已变
 
@@ -63,7 +63,7 @@ http://<host>:8088/pallas/
 
 1. 在 `Pallas-Bot-WebUI` 改源码
 2. 执行 `npm run build`
-3. 将 `dist` 同步到主仓 `data/pb_webui/public/`
+3. 将 `dist` 同步到主仓 `data/pb_webui/public-react/`
 4. 用实际运行中的 Bot 页面验证
 
 ## 按现象检查
@@ -76,7 +76,7 @@ http://<host>:8088/pallas/
 
 - 是否改的是 `Pallas-Bot-WebUI`（而非主仓运行目录）
 - `npm run build` 是否成功
-- 产物是否同步到 `data/pb_webui/public/`
+- 产物是否同步到 `data/pb_webui/public-react/`
 
 ### API 正确，UI 未展示
 
@@ -84,7 +84,7 @@ http://<host>:8088/pallas/
 
 ### 页面 404 或空白
 
-- `data/pb_webui/public/` 是否完整
+- `data/pb_webui/public-react/` 是否完整
 - Bot 是否挂载了 `pb_webui`
 - 路径是否为 `/pallas/`
 
@@ -109,7 +109,7 @@ http://<host>:8088/pallas/
 ## 排障顺序
 
 1. 访问路径 `/pallas/`
-2. `data/pb_webui/public/` 是否完整
+2. `data/pb_webui/public-react/` 是否完整
 3. 强制刷新浏览器缓存
 4. Bot 日志中 `pb_webui` 是否挂载
 5. 区分前端与 API

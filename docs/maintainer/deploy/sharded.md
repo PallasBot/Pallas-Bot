@@ -1,6 +1,8 @@
 # 分片部署
 
-单进程扩成 hub + worker。依赖明确的角色分工、共享 `data/`，以及 Redis 协调。
+把单进程扩成 hub + worker。适合多账号同机长跑、单进程已出现瓶颈，或需要拆开 WebUI / 协议端与消息处理的场景。依赖明确的角色分工、共享 `data/`，以及 Redis 协调。
+
+尚未验证单进程瓶颈时，请先用 [单进程部署](single-process.md)。
 
 ## 适用条件
 
@@ -97,6 +99,8 @@ REDIS_URL = "redis://127.0.0.1:6379/0"
 
 脚本处理：hub / worker 拉起、注册表端口对齐、协议端 `ws_url` 同步、日志目录与 PID。
 
+也可用部署模板：`uv run python tools/apply_deploy_profile.py shard`，再配置 `REDIS_URL` 后启动。
+
 ## 入口与运行
 
 | 对外 | 对内 |
@@ -167,4 +171,6 @@ REDIS_URL = "redis://127.0.0.1:6379/0"
 
 - [维护者排障](/maintainer/operate/troubleshooting)
 - [单进程部署](single-process.md)
+- [协议端](/maintainer/install/protocol)
 - [分片运行时（开发）](/developer/architecture/shard-runtime)
+- [Docker · 分片](/deploy/docker)

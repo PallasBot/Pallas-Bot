@@ -1,6 +1,8 @@
 # 插件治理
 
-插件治理覆盖声明、配置、生效与可见性；入口分散在 metadata、WebUI API 与 CLI。
+本页总览插件在声明、配置、生效与可见性上的稳定约定。写第一个插件时不必先读全文；需要声明 `reload_policy`、装包生效或帮助可见性时再回来。
+
+入口分散在 metadata、WebUI API 与 CLI；细节分别见文末链接。
 
 ## 治理面
 
@@ -50,9 +52,10 @@
 
 运维检查清单：[热重载前检查](/maintainer/operate/hot-reload-pre-reload-checklist)。
 
-## 相关
+## 后续阅读
 
 - [Core 与扩展](core-vs-extensions.md)
 - [元数据](/developer/plugin-development/metadata)
 - [Reload 与 Activation](/developer/plugin-development/reload-and-activation)
 - [Golden Plugin](/developer/plugin-development/golden-plugin)
+- [cmd_perm](/common/cmd_perm)

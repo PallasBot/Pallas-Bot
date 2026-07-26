@@ -1,6 +1,8 @@
 # 元数据
 
-`PluginMetadata` / `extra` 声明帮助、权限、冷却、热载与装包生效；平台按此消费。
+本页说明 `PluginMetadata` / `extra` 如何声明帮助、权限、冷却、热载与装包生效。平台按此消费；命令 ID 须全链路一致。
+
+最小群口令插件可先看 [写第一个插件](first-plugin.md)。热载与装包正交细节见 [Reload 与 Activation](reload-and-activation.md)。
 
 ## 必填面
 
@@ -114,8 +116,9 @@ extra={
 - [ ] 帮助仅靠 metadata 可理解
 - [ ] 装包生效方式已声明（扩展）
 
-## 相关
+## 后续阅读
 
 - [Golden Plugin](golden-plugin.md)
 - [Reload 与 Activation](reload-and-activation.md)
 - [cmd_perm](/common/cmd_perm)
+- [command_limits](/common/command_limits)

@@ -1,6 +1,8 @@
 # Reload 与 Activation
 
-`reload_policy` 与 `activation_policy` 正交，不可混用。
+本页区分 `reload_policy`（作者侧热载粒度）与 `activation_policy`（装包后如何生效）。二者正交，不可混用。
+
+只改插件开关 / 频率时，默认 `config_only` 即可。频繁改 help / ingress 声明再考虑 `metadata`；装包与升级看 `activation_policy`。
 
 | | `reload_policy` | `activation_policy` |
 | --- | --- | --- |
@@ -95,7 +97,7 @@ activation_policy = workers-restart
 | 作者 | 按变更粒度选 `reload_policy`；勿把代码变更标成可热载 |
 | 维护者 | 装包看 `activation_policy`；支持配置热载 ≠ 装包免重启 |
 
-## 相关
+## 后续阅读
 
 - [元数据](metadata.md)
 - [插件治理](/developer/architecture/plugin-governance)

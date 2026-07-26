@@ -1,6 +1,6 @@
 # 命令权限
 
-运维视角：谁能用某条命令。开发接入见 [cmd_perm](/common/cmd_perm)。
+本页从运维视角说明谁能用某条命令。开发接入见 [cmd_perm](/common/cmd_perm)。
 
 ## 三层值
 
@@ -10,7 +10,7 @@
 | 配置覆盖 | `pallas.toml` / 环境变量 | 可被 WebUI 覆盖 |
 | WebUI 覆盖 | 通用配置 → **命令权限** → `webui.json` 键 `PALLAS_COMMAND_PERMISSION_OVERRIDES` | **最高优先级** |
 
-帮助图「何人可用」展示**当前生效值**，不是写死在 `usage` 里的文案。
+帮助图「何人可用」展示**当前生效值**，不是写死在 `usage` 里的文案。合并顺序仍是 `pallas.toml` → `.env` → `webui.json`。
 
 ## 等级
 
@@ -50,3 +50,4 @@
 - [cmd_perm 接入](/common/cmd_perm)
 - [command_limits](/common/command_limits)
 - [插件治理](plugin-governance.md)
+- [Web 控制台运维](/maintainer/operate/webui)

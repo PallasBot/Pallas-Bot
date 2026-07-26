@@ -1,6 +1,5 @@
 # Cookbook（归档入口）
 
-手把手教程与 API 速查已迁到：
+→ [pallas.api Cookbook](/developer/plugin-development/pallas-api-cookbook)
 
-- [写第一个插件](/developer/plugin-development/first-plugin)
-- [pallas.api Cookbook](/developer/plugin-development/pallas-api-cookbook)
+相关：[写第一个插件](/developer/plugin-development/first-plugin)

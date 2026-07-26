@@ -1,6 +1,8 @@
 # 配置与 WebUI
 
-插件侧配置接入：热载模型、通用段与仓边界。合并顺序与读取 API 见 [配置存储](/developer/architecture/config-storage)。
+本页说明插件侧如何接入配置页、热载与通用段。合并顺序与读取 API 见 [配置存储](/developer/architecture/config-storage)。
+
+没有插件配置页时可以跳过本页。前端表单控件细节见 [DynamicConfigPanel](dynamic-config-panel.md)。
 
 ## 事实
 
@@ -38,7 +40,7 @@ UI 字段元数据见 [DynamicConfigPanel](dynamic-config-panel.md)。
 
 ## 通用配置段
 
-配置为平台横切项（多插件共享、非单插件私有页）时接到通用段，禁止自造存储点。
+配置为平台横切项（多插件共享、非单插件私有页）时接到通用段，禁止自造存储点。后端段注册与热载说明见 [WebUI 配置与热重载](/common/webui)。
 
 ## 热载边界
 
@@ -72,9 +74,10 @@ UI 字段元数据见 [DynamicConfigPanel](dynamic-config-panel.md)。
 | 模块 import 时缓存 `get_config()` |
 | 插件私有并行配置文件 |
 
-## 相关
+## 后续阅读
 
 - [配置存储](/developer/architecture/config-storage)
 - [Golden Plugin](golden-plugin.md)
 - [Reload 与 Activation](reload-and-activation.md)
 - [WebUI 底层](/common/webui)
+- [WebUI 前端](/developer/webui)（改控制台表单时）

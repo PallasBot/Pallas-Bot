@@ -94,7 +94,7 @@ Pallas-Bot 支持单进程，也支持 **hub + 多个 worker** 的多进程部�
 | 说明 | 链接 |
 | --- | --- |
 | 谁是卧底 · 用户文档 | [文档站 · who_is_spy](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/who_is_spy) |
-| 插件开发入门 | [develop/plugin/getting-started](https://PallasBot.github.io/Pallas-Bot-Docs/develop/plugin/getting-started) |
+| 插件开发入门 | [developer/plugin-development/getting-started](https://PallasBot.github.io/Pallas-Bot-Docs/developer/plugin-development/getting-started) |
 | 多进程分片 | [分片部署](https://PallasBot.github.io/Pallas-Bot-Docs/maintainer/deploy/sharded) |
 
 ## 源码

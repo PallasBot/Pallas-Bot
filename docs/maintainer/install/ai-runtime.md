@@ -1,11 +1,11 @@
 # AI Runtime
 
-接入可选的 AI Runtime（媒体 / 遗留 RWKV）。普通 LLM 聊天请在 Bot WebUI 配置 Provider。
+本页说明如何接入可选的 AI Runtime（媒体 / 遗留 RWKV）。普通 LLM 聊天请在 Bot WebUI「AI 配置 → 接入」配置 Provider，不依赖本 Runtime。
 
-独立仓 `Pallas-Bot-AI`；Bot 通过任务与 callback 协作，不是主仓内普通插件。
+独立仓是 `Pallas-Bot-AI`；Bot 通过任务与 callback 协作，不是主仓内普通插件。
 
 ::: tip
-可选。不接 AI 也能跑复读与官方插件。
+可选。不接 AI Runtime 也能跑复读、官方插件与普通 LLM 对话。
 :::
 
 ## 两层职责
@@ -172,3 +172,4 @@ Docker、多机或反代场景核对：
 
 - [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)
 - [架构总览](/developer/architecture/overview)
+- [运维入口](/maintainer/quickstart)

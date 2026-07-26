@@ -1,64 +1,51 @@
-<p align="center">
-  <img src="../assets/brand-avatar.png" width="220" height="220" alt="Web 控制台">
-</p>
+# Web 控制台 `pb_webui`
 
-<h1 align="center">Web 控制台 pb_webui</h1>
+用浏览器查看和管理牛牛（配置、日志、插件商店、协议端入口等）。需要网页运维入口时依赖本插件；默认随本体加载。
 
-<p align="center">用浏览器查看和管理牛牛。</p>
+**类型**：本体 core（默认加载）
 
-<p align="center">
-  <img alt="本体 core" src="https://img.shields.io/badge/%E6%9C%AC%E4%BD%93%20core-4B5563">
-  <img alt="默认加载" src="https://img.shields.io/badge/%E9%BB%98%E8%AE%A4%E5%8A%A0%E8%BD%BD-4EA94B">
-  <img alt="版本 4.0.0" src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-4.0.0-2563EB">
-</p>
+## 安装
 
-## 安装方式
+默认加载，无需单独安装。前端静态资源默认目录：`data/pb_webui/public-react`（React）。可用 `uv run pallas update webui` 拉取 Release 附带的构建产物。遗留 Vue 资源目录为 `data/pb_webui/public`，非默认。
 
-默认加载，无需单独安装。
+## 用法
 
-## 怎么使用
+| 入口 | 说明 |
+| --- | --- |
+| `/pallas/` | 控制台页面 |
+| `/pallas/api/*` | 控制台使用的状态与管理接口 |
 
-| 入口 / 触发 | 场景 | 说明 |
-| --- | --- | --- |
-| `/pallas/` | 浏览器 | 打开控制台页面。 |
-| `/pallas/api/*` | HTTP | 控制台使用的状态和管理接口。 |
+默认端口见 `pallas.toml` 的 `[bootstrap] port`（常见为 `8088`）。登录口令在 `data/pallas_console/`；遗忘见 [FAQ](../../FAQ.md)。
 
-> 详细用法、限制条件和可用范围以帮助为主。
+无群内用户口令。面板说明见 [网页控制台](../../guide/web-console.md)。
 
-## 命令权限
+## 命令权限（代码默认）
 
 无群内命令。
 
-## 配置项
+## 配置
 
-> 可在控制台对应插件页中修改。
-
-控制台口令保存在 `data/pallas_console/`。前端静态资源、热重载配置和控制台行为主要由 [`packages/pb_webui/config.py`](../../packages/pb_webui/config.py) 与启动流程控制。
+控制台相关行为见 [`packages/pb_webui/config.py`](../../../packages/pb_webui/config.py)。插件配置保存后写入 `data/pallas_config/webui.json`。热重载说明见 [webui](/common/webui)。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 无法登录 | 检查启动日志里的初始口令和控制台口令目录。 |
-| 插件配置没生效 | 确认对应插件实现了热重载配置接入。 |
+| 无法登录 | 查启动日志中的初始口令与 `data/pallas_console/` |
+| 页面空白 / 未部署前端 | 确认 `data/pb_webui/public-react` 有构建产物 |
+| 插件配置没生效 | 确认对应插件已接入热重载配置 |
 
-## 实现
+## 源码
 
-源码位置：[`packages/pb_webui/`](../../packages/pb_webui/)
+[`packages/pb_webui/`](../../../packages/pb_webui/)
 
-关键文件：
-
-- [`__init__.py`](../../packages/pb_webui/__init__.py)：注册控制台元数据。
-- [`startup.py`](../../packages/pb_webui/startup.py)：挂载控制台页面和 API。
-- [`config.py`](../../packages/pb_webui/config.py)：定义控制台相关配置。
-
-实现要点：
-
-- 控制台本身不是群内功能，而是浏览器侧的维护入口。
-- 页面和接口是一起挂载的，很多插件配置都通过这里统一写回。
-- 控制台也是很多运维能力的主入口，例如日志、数据库概览和插件配置。
+- `__init__.py`：控制台元数据
+- `startup.py`：挂载页面与 API
+- `config.py`：控制台配置
+- `manager.py` / `public.py`：静态资源目录与挂载
 
 ## 相关链接
 
-- [牛牛核心](../pb_core/README.md)
-- [在线统计](../pb_stats/README.md)
+- [牛牛核心 pb_core](../pb_core/README.md)
+- [在线统计 pb_stats](../pb_stats/README.md)
+- [网页控制台指南](../../guide/web-console.md)

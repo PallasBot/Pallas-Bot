@@ -1,6 +1,6 @@
 # 协议端
 
-把 QQ 账号接入 Pallas-Bot。4.0 一般通过官方插件 `pallas-plugin-protocol` 管理，并在 WebUI 提供控制台页。
+本页帮助你把 QQ 账号接到 Pallas-Bot。4.0 一般通过官方插件 `pallas-plugin-protocol` 管理，并在 WebUI 提供控制台页。
 
 ## 两层职责
 
@@ -8,6 +8,8 @@
 | --- | --- |
 | `Pallas-Bot` | 接收 OneBot 事件、运行插件、WebUI 与治理 |
 | 协议端 | 登录 QQ、维护账号实例、向 Bot 发起反向 WebSocket |
+
+记住三点：
 
 - 协议端异常 ≠ Bot 本体异常
 - Bot 正常启动 ≠ QQ 账号已接入
@@ -107,6 +109,6 @@ QQ / 协议端实例
 ## 相关阅读
 
 - [协议端管理插件](/plugins/pb_protocol)
-- [连接 QQ](../../guide/connect-qq.md)
+- [连接 QQ](/guide/connect-qq)
 - [分片部署](/maintainer/deploy/sharded)
 - [排障](/maintainer/operate/troubleshooting)

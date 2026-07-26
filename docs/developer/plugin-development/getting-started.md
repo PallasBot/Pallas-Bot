@@ -1,8 +1,8 @@
 # 插件开发入门
 
-推荐顺序：创建插件 → 元数据 → 发布（对齐 NoneBot 路径）。
+本页给出从零到可发布插件的阅读顺序。若你只想尽快跑通一条群命令，直接去 [写第一个插件](first-plugin.md)。
 
-## 路径
+## 推荐顺序
 
 | 步骤 | 文档 |
 | --- | --- |
@@ -11,6 +11,8 @@
 | 3. 公开 API | [pallas.api Cookbook](pallas-api-cookbook.md) |
 | 4. 配置 / 权限 / 元数据 | [配置与 WebUI](config-and-webui.md) · [cmd_perm](/common/cmd_perm) · [元数据](metadata.md) |
 | 5. 测试与发布 | [测试](testing.md) · [发布](publishing.md) |
+
+热载策略、分片守卫、官方 PyPI 等可在验收通过后再学。
 
 ## 放置位置
 
@@ -38,8 +40,9 @@
 | 命令 ID 全链路一致 | 帮助文案写死「仅群管」等 |
 | 配置走统一热载 | 模块级长期缓存 `get_config()` |
 
-## 相关
+## 后续阅读
 
 - [写第一个插件](first-plugin.md)
 - [Golden Plugin](golden-plugin.md)
 - [Developer 入口](/developer/index)
+- [Reload 与 Activation](reload-and-activation.md)（声明热载粒度时）

@@ -85,7 +85,7 @@ uv sync --extra plugins-protocol
 | --- | --- |
 | 协议端管理 | [文档站 · pb_protocol](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/pb_protocol) |
 | 重新上号 | [文档站 · relogin_bot](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/relogin_bot) |
-| 插件开发入门 | [develop/plugin/getting-started](https://PallasBot.github.io/Pallas-Bot-Docs/develop/plugin/getting-started) |
+| 插件开发入门 | [developer/plugin-development/getting-started](https://PallasBot.github.io/Pallas-Bot-Docs/developer/plugin-development/getting-started) |
 
 ## 源码
 

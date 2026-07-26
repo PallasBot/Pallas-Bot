@@ -1,12 +1,14 @@
 # 发布
 
-三条分发路径；归属层见 [Core vs 扩展](/developer/architecture/core-vs-extensions)。
+本页对照三条分发路径：官方 PyPI、社区生态、站点本地。归属层见 [Core 与扩展](/developer/architecture/core-vs-extensions)。
+
+站点私有插件放在 `local/plugins/` 即可，不必走 PyPI。准备公开发布时再选官方或社区路径。
 
 ## 路径矩阵
 
 | 路径 | 归属 | 交付物 | 细节 |
 | --- | --- | --- | --- |
-| 官方插件 PyPI | Official | wheel、Git tag、README、semver | [extension-pypi-publish](../../develop/extension-pypi-publish.md) |
+| 官方插件 PyPI | Official | wheel、Git tag、README、semver | [extension-pypi-publish](../extension-pypi-publish.md) |
 | 社区生态分发 | Community | README、metadata、图标、索引/Git | [community-plugin-author](../../guide/community-plugin-author.md) |
 | 站点本地投放 | `local/plugins/` | 可维护目录 + 最小 README/metadata | 本页「本地」节 |
 
@@ -50,7 +52,8 @@ Core 不按独立插件发行，随主仓版本。
 社区额外：索引字段、Git 可达、商店展示文案。  
 本地额外：确认无需公共发行、保留未来迁移空间。
 
-## 相关
+## 后续阅读
 
 - [Core 与扩展](/developer/architecture/core-vs-extensions)
 - [仓库结构](/developer/reference/repo-layout)
+- [社区插件作者指南](/guide/community-plugin-author)

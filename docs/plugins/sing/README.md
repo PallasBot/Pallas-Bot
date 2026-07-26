@@ -1,77 +1,67 @@
-<p align="center">
-  <img src="../assets/brand-avatar.png" width="220" height="220" alt="牛牛唱歌">
-</p>
+# 牛牛唱歌 `sing`
 
-<h1 align="center">牛牛唱歌 sing</h1>
+智能翻唱、续唱、点歌与查歌名。需要媒体翻唱 / 点歌时安装；依赖 **Pallas-Bot-AI（AI Runtime）**，与普通 `@牛牛` 聊天无关。
 
-<p align="center">智能翻唱、续唱、点歌与查歌名。</p>
+**类型**：官方插件（需安装）
 
-<p align="center">
-  <img alt="官方插件" src="https://img.shields.io/badge/%E5%AE%98%E6%96%B9%E6%8F%92%E4%BB%B6-FE7D37">
-  <img alt="WebUI 插件商店" src="https://img.shields.io/badge/WebUI-%E6%8F%92%E4%BB%B6%E5%95%86%E5%BA%97-4EA94B">
-  <img alt="安装命令" src="https://img.shields.io/badge/uv%20run%20pallas%20ext%20install%20pallas--plugin--ai--media-586069">
-  <img alt="版本 4.0.0" src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-4.0.0-2563EB">
-</p>
+## 安装
 
-## 安装方式
+控制台插件商店，或：
 
-可在控制台插件商店安装，或执行 `uv run pallas ext install pallas-plugin-ai-media`。使用前还需要部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)。
+```bash
+uv run pallas ext install pallas-plugin-ai-media
+```
 
-## 怎么使用
+另需部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，并在控制台配置媒体服务。见 [LLM 对话、媒体与 AI Runtime](../../guide/ai-runtime-choice.md)。
+
+自 `pallas-plugin-ai-media` **4.1.0** 起，本包仅含唱歌；酒后对话已由本体 [llm_chat](../llm_chat/README.md) 承接。
+
+## 用法
 
 | 口令 / 触发 | 场景 | 说明 |
 | --- | --- | --- |
-| `牛牛唱歌 歌曲名 [key=±N]` | 群内 | 让牛牛翻唱指定歌曲，可附带升降调参数。 |
-| `牛牛继续唱` / `牛牛接着唱` | 群内 | 续唱上一首歌。 |
-| `牛牛点歌 歌曲名` | 群内 | 播放网易云原曲。 |
-| `牛牛什么歌` / `牛牛哪首歌` | 群内 | 查询当前播放曲目。 |
-| `网易云登录` / `网易云登出` | 私聊 | 维护网易云账号登录状态。 |
+| `牛牛唱歌 歌曲名 [key=±N]` | 群内 | 翻唱；可附升降调 |
+| `牛牛继续唱` / `牛牛接着唱` | 群内 | 续唱上一首 |
+| `牛牛点歌 歌曲名` | 群内 | 播放网易云原曲 |
+| `牛牛什么歌` / `牛牛哪首歌` | 群内 | 查询当前曲目 |
+| `网易云登录` / `网易云登出` | 私聊 | 维护网易云登录 |
 
-> 详细用法、限制条件和可用范围以帮助为主。
+精确口令与「何人可用」以群内 **牛牛帮助** 为准。
 
-## 命令权限
+## 命令权限（代码默认）
 
-| 命令 ID | 默认等级 | 说明 |
-| --- | --- | --- |
-| `sing.sing` | 所有人 | 牛牛唱歌 / 牛牛继续唱 |
-| `sing.play` | 所有人 | 牛牛唱歌（随机，无歌名） |
-| `sing.request_song` | 所有人 | 牛牛点歌 |
-| `sing.song_title` | 所有人 | 牛牛什么歌 |
-| `sing.ncm_login` | 仅超管 | 网易云登录 |
-| `sing.ncm_logout` | 仅超管 | 网易云登出 |
+| 命令 ID | 默认等级 |
+| --- | --- |
+| `sing.sing` | 所有人 |
+| `sing.play` | 所有人 |
+| `sing.request_song` | 所有人 |
+| `sing.song_title` | 所有人 |
+| `sing.ncm_login` | 仅超管 |
+| `sing.ncm_logout` | 仅超管 |
 
-## 配置项
+实际生效等级以控制台「命令权限」为准。面向用户的 usage 不要写死角色名。
 
-> 可在控制台对应插件页中修改。
+## 配置
 
-主要在控制台的插件页和 **通用配置 → 外部服务地址** 中配置唱歌服务地址。
+控制台插件页，以及 **通用配置 → 外部服务地址**（唱歌 / 媒体服务地址）。媒体服务测通与 AI Runtime 部署见 [AI 扩展](../../guide/ai.md)。
+
+保存后写入 `data/pallas_config/webui.json`。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 没有返回语音 | 先确认 AI 服务在线，再发送 `牛牛连通` 测唱歌服务。 |
-| 点歌失败 | 检查网易云账号是否已登录。 |
+| 没有返回语音 | 确认 AI Runtime 在线，再发 `牛牛连通` 测唱歌服务 |
+| 点歌失败 | 检查网易云是否已登录 |
 
-## 实现
+## 源码
 
-源码位置：`pallas-plugin-ai-media` 扩展仓中的 `sing` 插件目录
+扩展仓 `pallas-plugin-ai-media` 中的 `sing` 目录。
 
-关键文件：
-
-- 扩展仓 `sing` 插件的 `__init__.py`：注册命令、权限和帮助文案。
-- 扩展仓 `sing` 相关命令处理文件：负责翻唱、续唱、点歌和查歌名流程。
-- 主仓 AI 服务连通性相关文档与能力：用于定位服务地址、检查接口是否可用。
-
-实现要点：
-
-- 翻唱与续唱依赖外部 AI 服务生成语音，Bot 侧主要负责收集口令参数并回传音频结果。
-- `点歌` 与 `查歌名` 依赖网易云侧能力，所以服务在线不代表一定能点歌，还要看登录状态。
-- 酒后对话见本体 `llm_chat`（本扩展自 4.1.0 起仅含唱歌）。
+仓库：[Plugin-Ai-Media](https://github.com/PallasBot/Plugin-Ai-Media)
 
 ## 相关链接
 
-- [命令权限说明](../common/cmd_perm/README.md)
+- [智能对话 llm_chat](../llm_chat/README.md)
 - [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)
-- [牛牛唱歌插件仓库](https://github.com/PallasBot/Plugin-Ai-Media)
-- [智能对话 / 酒后](../llm_chat/README.md)
+- [命令权限](../../common/cmd_perm/README.md)

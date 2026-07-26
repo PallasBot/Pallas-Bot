@@ -1,33 +1,59 @@
 # 快速开始
 
-::: tip
-**源码 / Docker 二选一** 装好本体后，必须 [连接 QQ](connect-qq.md)，群里才会有反应。账号连上后配置 [号主](bot-owner.md)。改配置看 [配置从哪改](config.md)。
+这一页带你完成第一次启动：打开网页控制台，并为连接 QQ 做好准备。Bot 启动后还需要 [连接 QQ](connect-qq.md)，它才能在群里收发消息。
+
+## 开始前准备
+
+| 需要准备 | 用途 |
+| --- | --- |
+| 一台能长期运行的电脑或服务器 | 运行 Bot 和网页控制台 |
+| 一个用于机器人的 QQ 账号 | 连接协议端后收发群消息 |
+| 源码环境或 Docker | 二选一安装 Bot |
+
+PostgreSQL 是默认数据库。Docker 部署会一并启动它；源码部署可以使用本机数据库，也可以用 Docker 单独启动。
+
+LLM、唱歌和画图都不是首次启动的前置条件。先让 Bot 正常上线，之后再按需安装插件或配置 AI。
+
+## 第 1 步：选择部署方式
+
+| 你的情况 | 推荐方式 | 完成后你会得到 |
+| --- | --- | --- |
+| 想直接部署到服务器，不准备修改代码 | [Docker 部署](/deploy/docker) | Bot、数据库和控制台容器 |
+| 要开发、调试或修改主仓代码 | [源码安装](install-source.md) | 本地 Python 环境和可运行的 Bot |
+
+::: tip 新手推荐
+没有源码开发需求时，优先选择 Docker。它会把 Bot 和默认数据库放进同一套编排，后续升级和查看日志也更集中。
 :::
 
-## 确认环境
+按所选文档完成安装、填写 `superusers` 与数据库配置，然后启动 Bot。
 
-| 需要 | 源码 | Docker |
-| --- | --- | --- |
-| [Git](https://git-scm.com/) | ✅ | — |
-| [uv](https://docs.astral.sh/uv/) + Python **3.12** | ✅ | — |
-| [Docker](https://docs.docker.com/get-docker/) + Compose | 可选（起库） | ✅ |
-| PostgreSQL | ✅（本机或容器） | Compose 一并拉起 |
+## 第 2 步：确认 Bot 已启动
 
-```bash
-git -v
-uv -V
-docker -v && docker compose version
+启动成功后，先检查下面三件事：
+
+1. 终端日志没有持续出现数据库连接失败。
+2. 日志中出现网页控制台的初始密码。
+3. 浏览器能打开 `http://<主机>:8088/pallas/`。
+
+本机运行时，`<主机>` 填 `127.0.0.1`。部署在服务器上时，换成服务器 IP 或域名，并确认防火墙已放行 8088。
+
+首次只看到控制台、还没有 QQ 消息是正常的：这说明 Bot 本体已经运行，但协议端尚未连接。
+
+## 第 3 步：连接 QQ 并完成验收
+
+打开 [连接 QQ](connect-qq.md)，在协议端管理页新建 NapCat 实例并扫码登录。
+
+协议端显示“在线”后，把机器人拉进测试群并发送：
+
+```text
+牛牛帮助
 ```
 
-::: details Windows / Linux 怎么装这些
-- Windows：Git、Docker 走官网安装包即可
-- Linux：`git` 用包管理器装；Docker 见[官方文档](https://docs.docker.com/get-docker/)
-- 零基础步骤 → [萌新引导](/noobook/)
-:::
+能收到帮助图，表示 Bot、协议端和群消息链路已经正常工作。
 
-## 选一种方式装本体
+## 接下来做什么
 
-| 场景 | 文档 |
-| --- | --- |
-| 本机开发、习惯 `uv` | **[源码安装](install-source.md)** |
-| 不想 clone、只想拉镜像 | **[Docker 部署](/deploy/docker)** |
+- 为每只机器人配置 [号主](bot-owner.md)，启用号主向管理能力。
+- 在 [网页控制台](web-console.md) 查看实例、日志和插件状态。
+- 按需 [安装插件](install-plugins.md)，或配置 [聊天、媒体与 AI Runtime](ai-runtime-choice.md)。
+- 日常配置与保存规则见 [配置从哪改](config.md)。

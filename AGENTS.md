@@ -12,7 +12,7 @@
 
 ## 本地开发与质量门禁
 
-人类贡献者的完整步骤见 [docs/develop/environment.md](docs/develop/environment.md) 与 [docs/develop/workflow.md](docs/develop/workflow.md)。
+人类贡献者的完整步骤见 [docs/developer/environment.md](docs/developer/environment.md) 与 [docs/developer/workflow.md](docs/developer/workflow.md)。
 
 Agent 提交前至少执行：
 
@@ -21,11 +21,11 @@ uv run ruff check pallas/ packages/
 uv run ruff format --check pallas/ packages/
 ```
 
-pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；每次 commit 跑 **`sync-console-openapi`** 自动导出 `openspec`（同级有 WebUI 仓则 gen 类型）；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
+pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；每次 commit 跑 **`sync-console-openapi`** 自动导出 `openspec`（同级有 WebUI 仓则 gen 类型）；`.env` 全局排除。详见 [workflow.md](docs/developer/workflow.md)。
 
 ## 文档与排障入口
 
-- **开发指南**：[docs/develop/README.md](docs/develop/README.md)（环境、流程、插件与 WebUI）。
+- **开发指南**：[docs/developer/index.md](docs/developer/index.md)（环境、流程、插件与 WebUI）。
 - **插件专项说明**：[docs/plugins/README.md](docs/plugins/README.md)（各子目录 `README.md` 与 `packages/<name>/` 对应）。
 - **命令权限（cmd_perm）**：[docs/common/cmd_perm/README.md](docs/common/cmd_perm/README.md)（可配置等级、WebUI 覆盖、帮助菜单「何人可用」）。
 - **运行配置存储**：[docs/developer/architecture/config-storage.md](docs/developer/architecture/config-storage.md)（`pallas.toml` + `webui.json`，勿再向根目录 `.env` 写入新项）。
@@ -59,7 +59,7 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`
 ### 代码质量与风格
 
 - **Ruff 是唯一强制的 lint/format 工具**（与 CI/预提交一致）。
-- **Ruff 仅 `pallas/`、`packages/`**；`.env` 全局排除。详见 [workflow.md](docs/develop/workflow.md)。
+- **Ruff 仅 `pallas/`、`packages/`**；`.env` 全局排除。详见 [workflow.md](docs/developer/workflow.md)。
 - **与周边代码一致**：命名、类型、抽象层次、导入风格、注释密度与文件内既有写法对齐；优先复用已有函数。
 - **新增函数**：非必要**不要**以下划线 `_` 作为前缀。
 - **注释**：保持精简；obvious 逻辑不必长段 docstring。

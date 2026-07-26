@@ -55,7 +55,7 @@ PUT 成功后：
 - `fetchGlobalPluginDisable`、`putGlobalPluginDisable`
 - `fetchGroupFleetWhitelist`、`putGroupFleetWhitelist`
 
-实现：`extended_api.py`；配置读写 `src/console/webui/plugin_api.py`。
+实现：`extended_api.py`；配置读写 `pallas/console/webui/plugin_api.py`。
 
 插件作者接入： [WebUI 插件配置](../README.md)。
 

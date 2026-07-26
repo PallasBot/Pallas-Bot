@@ -1,5 +1,7 @@
 # 官方插件与 pallas-core PyPI 发版
 
+本页说明如何把内核 SDK（`pallas-core`）与官方扩展（`pallas-plugin-*`）发到 PyPI。适合已完成插件开发、准备发版的维护者。站点私有插件不必走本流程。
+
 扩展包以 `pallas-plugin-*` 发 PyPI；内核 SDK 为 `pallas-core`（版本取自 `pallas/__init__.py` 的 `__version__`）。
 
 ## pallas-core（主仓）

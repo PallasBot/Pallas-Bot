@@ -1,6 +1,6 @@
 # 配置要点（生产）
 
-启动前核对 `config/pallas.toml` 与 `data/` 持久化目录。
+完成本页后，你将确认生产环境最少配置、合并优先级，以及需要备份的文件。启动前请核对 `config/pallas.toml` 与可写的 `data/`。
 
 相关：[配置存储](/developer/architecture/config-storage) · [标准部署](/deploy/deployment) · [Docker](/deploy/docker) · [FAQ](/deploy/faq)
 
@@ -31,7 +31,7 @@ db = "PallasBot"
 2. 遗留 `.env` / `.env.{ENVIRONMENT}`（若存在）
 3. `data/pallas_config/webui.json` — WebUI 保存后覆盖同名键
 
-生产建议：启动项、密钥、数据库写在 `pallas.toml`；插件开关与业务参数在控制台修改并落盘 `webui.json`。
+生产建议：启动项、密钥、数据库写在 `pallas.toml`；插件开关与业务参数在控制台修改并落盘 `webui.json`。改了 `pallas.toml` 却不生效时，先查同名键是否已被 `webui.json` 覆盖。
 
 ---
 
@@ -89,7 +89,7 @@ db = "PallasBot"
 
 Docker Compose 升级栈中 Bot 容器内 host 为 **`mongodb`**（compose 注入），见 [Docker 部署](/deploy/docker)。
 
-**验证**：启动无 `connection refused` / 认证失败；日志完成 `init_db`；控制台无持久 5xx。
+启动无 `connection refused` / 认证失败、日志完成 `init_db`、控制台无持久 5xx 时，数据库配置可用。
 
 ---
 
@@ -100,6 +100,7 @@ Docker Compose 升级栈中 Bot 容器内 host 为 **`mongodb`**（compose 注�
 | 插件开关、业务配置 | `data/pallas_config/webui.json` |
 | 控制台 / 协议端登录 | `data/pallas_console/auth_state.json` |
 | 只读导出快照 | `config/pallas.webui.export.toml`（保存时自动生成） |
+| 前端静态资源（默认） | `data/pb_webui/public-react/` |
 
 浏览器修改插件项后，是否须重启因插件而异；关键项保存后观察日志或按插件文档操作。
 
@@ -154,3 +155,4 @@ uv run python tools/migrate_env_to_pallas.py
 | Docker 卷 | [Docker 部署](/deploy/docker) |
 | 合并与热重载 | [配置存储](/developer/architecture/config-storage) |
 | 站点插件 | [站点定制](/maintainer/deploy/upgrade) |
+| 配置键索引 | [配置参考](/maintainer/reference/config) |

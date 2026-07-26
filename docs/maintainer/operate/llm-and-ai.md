@@ -1,5 +1,7 @@
 # LLM 与 AI 运维
 
+本页按现象排查 LLM 对话、记忆与媒体任务。普通 LLM 聊天走 Bot Provider；Pallas-Bot-AI 仅用于媒体 / 遗留 RWKV。
+
 ::: warning
 `@` 无回复或记不住旧事时，优先查：`LLM_CHAT_ENABLED`、**接入** Provider 是否测通。媒体任务才查 AI Runtime / callback。
 :::
@@ -12,11 +14,11 @@
 
 再查任务与会话状态是否可观察。
 
-## 闲聊 / 记忆不生效
+## LLM 对话 / 记忆不生效
 
 ```mermaid
 flowchart TD
-  Start[闲聊或记忆不生效] --> Gate{LLM_CHAT_ENABLED 已开?}
+  Start[LLM 对话或记忆不生效] --> Gate{LLM_CHAT_ENABLED 已开?}
   Gate -->|否| OpenGate[打开总闸并保存配置]
   Gate -->|是| Prov{Provider 测通?}
   Prov -->|否| FixProv[检查接入页密钥模型与 Base URL]
@@ -45,12 +47,12 @@ flowchart TD
 - `AI_SERVER_HOST` / `AI_SERVER_PORT`（仅媒体 / RWKV）
 
 ::: warning
-`LLM_CHAT_ENABLED` 未开时，即使 AI 后端在线也不会触发多数闲聊能力。
+`LLM_CHAT_ENABLED` 未开时，即使 AI 后端在线也不会触发多数LLM 对话能力。
 :::
 
 ## 按现象检查
 
-### `@` 闲聊无响应
+### `@` LLM 对话无响应
 
 - `LLM_CHAT_ENABLED` 是否开启
 - WebUI「AI 配置 → 接入」中 Provider、模型、密钥与 Base URL 是否测试成功
@@ -129,3 +131,4 @@ Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 20
 - [AI Runtime 安装](/maintainer/install/ai-runtime)
 - [排障](troubleshooting.md)
 - [架构总览](/developer/architecture/overview)
+- [FAQ](/deploy/faq)

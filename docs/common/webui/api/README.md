@@ -1,10 +1,15 @@
 # Pallas WebUI API 契约
 
-控制台 JSON API 由主仓 `pb_webui` 插件提供；前端 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) 通过 Axios 调用。实现源码：
+控制台 JSON API 由主仓 `pb_webui` 插件提供；前端 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)（React）通过 `consoleApi.ts` 调用。默认静态产物目录为 **`data/pb_webui/public-react/`**。
+
+本目录按控制台能力分域列出路径与写操作约定，保持参考手册风格。普通 LLM 聊天配置在侧栏 **AI 配置**（Bot Provider）；`/ai-extension/*` 仅覆盖媒体 Runtime / 遗留 RWKV，不是普通聊天前提。
+
+实现源码：
 
 - 路由注册：`packages/pb_webui/extended_api.py`（`register_extended_api`）
 - 轻量健康检查：`packages/pb_webui/api.py`
 - 登录与静态页：`packages/pb_webui/public.py`
+- 配置段 / 插件页：`pallas/console/webui/`
 
 ## 基址与格式
 
@@ -37,12 +42,12 @@
 | --- | --- |
 | [认证与健康检查](01-auth-health.md) | 登录、health、system、bots |
 | [插件与插件配置](02-plugins.md) | 插件列表、单插件 config、帮助可见性、全局禁用、舰队白名单 |
-| [通用配置](03-common-config.md) | CommonConfig、cmd_perm、语料、网关探测 |
+| [通用配置](03-common-config.md) | CommonConfig、cmd_perm、语料、网关探测、LLM runtime overview |
 | [仪表盘与统计](04-stats-dashboard.md) | 消息统计、社区、语料热度、分片、入站调度 |
 | [好友群与申请](05-social.md) | 好友/群列表、入群/好友申请 |
 | [数据库](06-database.md) | 概览、备份、表行编辑 |
 | [实例与账号配置](07-instances-configs.md) | instances、bot/group/user config |
-| [更新与 AI 扩展](08-update-ai.md) | WebUI/Bot 更新、AI 扩展、NCM |
+| [更新与 AI 扩展](08-update-ai.md) | WebUI/Bot 更新、媒体 / RWKV AI 扩展、NCM |
 
 ## 写操作与热重载
 
@@ -53,7 +58,7 @@
 | `PUT /bot-configs/{account}` 等 | 数据库 | 按各 repository 约定 |
 | 备份/更新 | 磁盘 / git | 可能需重启或异步任务 |
 
-插件作者接入新配置项：见 [WebUI 插件配置](../README.md) 与 [插件 Skill · WebUI 配置](../../skills/pallas-plugin-development/references/04-webui-config.md)。
+插件作者接入新配置项：见 [WebUI 插件配置](../README.md) 与 [插件 Skill · WebUI 配置](../../../skills/pallas-plugin-development/references/04-webui-config.md)。
 
 ## 扩展新 API
 

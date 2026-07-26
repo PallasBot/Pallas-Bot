@@ -1,6 +1,8 @@
 # 配置存储
 
-运行时配置事实源、合并顺序与读取入口。插件接法见 [配置与 WebUI](/developer/plugin-development/config-and-webui)。运维排障见 [配置参考](/maintainer/reference/config)。
+本页说明运行时配置的事实源、合并顺序与读取入口。写插件配置页时先读 [配置与 WebUI](/developer/plugin-development/config-and-webui)；运维排障见 [配置参考](/maintainer/reference/config)。
+
+日常开发只需记住：启动层在 `pallas.toml`，运行态最高优先级在 `webui.json`，代码通过统一读取 API 取值，不要把 `os.environ` 当终值。
 
 ## 事实源
 
@@ -87,9 +89,9 @@ uv run python tools/migrate_env_to_pallas.py
 2. 插件自造私有配置文件绕开 `webui.json`
 3. 平台横切项塞进单插件私有页
 
-## 相关
+## 后续阅读
 
 - [配置与 WebUI](/developer/plugin-development/config-and-webui)
 - [配置参考](/maintainer/reference/config)
-- [分片运行时](shard-runtime.md)
+- [分片运行时](shard-runtime.md)（多进程读同一合并结果时）
 - [站点定制与升级](/maintainer/deploy/upgrade)

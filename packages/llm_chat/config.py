@@ -19,8 +19,8 @@ class Config(BaseModel, extra="ignore"):
         le=99,
         validation_alias=AliasChoices("llm_chat_min_priority", "ollama_min_priority"),
         description=field_help(
-            "LLM 闲聊指令优先级（数值越大越靠后）",
-            "群内 @ 闲聊默认 51；卧底述词等优先于 LLM 闲聊",
+            "LLM 对话指令优先级（数值越大越靠后）",
+            "群内 @ LLM 对话默认 51；卧底述词等优先于 LLM 对话",
         ),
     )
 

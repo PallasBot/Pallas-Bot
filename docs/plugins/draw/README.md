@@ -1,66 +1,53 @@
-<p align="center">
-  <img src="../assets/brand-avatar.png" width="220" height="220" alt="牛牛画画">
-</p>
+# 牛牛画画 `draw`
 
-<h1 align="center">牛牛画画 draw</h1>
+按文字描述生图，或带参考图改图。需要文生图 / 图生图时安装本官方插件。默认由扩展直连画画网关，不依赖 AI Runtime。
 
-<p align="center">按文字描述生图，或带参考图改图。</p>
+**类型**：官方插件（需安装）
 
-<p align="center">
-  <img alt="官方插件" src="https://img.shields.io/badge/%E5%AE%98%E6%96%B9%E6%8F%92%E4%BB%B6-FE7D37">
-  <img alt="WebUI 插件商店" src="https://img.shields.io/badge/WebUI-%E6%8F%92%E4%BB%B6%E5%95%86%E5%BA%97-4EA94B">
-  <img alt="安装命令" src="https://img.shields.io/badge/uv%20run%20pallas%20ext%20install%20pallas--plugin--draw-586069">
-  <img alt="版本 4.0.0" src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-4.0.0-2563EB">
-</p>
+## 安装
 
-## 安装方式
+控制台插件商店，或：
 
-可在控制台插件商店安装，或执行 `uv run pallas ext install pallas-plugin-draw`。
+```bash
+uv run pallas ext install pallas-plugin-draw
+```
 
-## 怎么使用
+## 用法
 
 | 口令 / 触发 | 场景 | 说明 |
 | --- | --- | --- |
-| `牛牛画画 …` | 群内 | 按描述生成图片，也可以附图或回复图片做参考图改图。 |
+| `牛牛画画 …` | 群内 | 按描述生成；可附图或回复图片作参考图改图 |
 
-> 详细用法、限制条件和可用范围以帮助为主。
+精确口令与「何人可用」以群内 **牛牛帮助** 为准。连通性可用 `牛牛连通` 测画图服务。
 
-## 命令权限
+## 命令权限（代码默认）
 
 | 命令 ID | 默认等级 |
 | --- | --- |
 | `draw.draw` | 所有人 |
 
-## 配置项
+实际生效等级以控制台「命令权限」为准。
 
-> 可在控制台 **插件 → 牛牛画画** 页修改。
+## 配置
 
-主/备画图线路在插件页的「画图网关」面板配置：第一条为主线，其后为备线；可沿用 **AI 配置 · 接入** 中的 Provider，也可手填地址与密钥。字段前缀多为 `pallas_image_*`。连通性检测仍可用服务网关页或口令 `牛牛连通`。
+控制台 **插件 → 牛牛画画**：主 / 备画图线路在「画图网关」面板配置（第一条为主线）。可沿用 **AI 配置 · 接入** 的 Provider，也可手填地址与密钥。字段前缀多为 `pallas_image_*`。
+
+保存后写入 `data/pallas_config/webui.json`。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 生成失败 | 先看返回提示，再发送 `牛牛连通` 检查画图服务是否可用。 |
-| 提示次数或额度用尽 | 等待额度重置，或在服务端调整配额。 |
+| 生成失败 | 看返回提示，再发 `牛牛连通` 查画图服务 |
+| 次数或额度用尽 | 等待额度重置，或在服务端调整配额 |
 
-## 实现
+## 源码
 
-源码位置：扩展仓 [`src/pallas_plugin_draw/`](https://github.com/PallasBot/Plugin-Draw/tree/main/src/pallas_plugin_draw)
+扩展仓 [`src/pallas_plugin_draw/`](https://github.com/PallasBot/Plugin-Draw/tree/main/src/pallas_plugin_draw)。主仓参考图逻辑：[`pallas/core/platform/media/draw_reference.py`](../../../pallas/core/platform/media/draw_reference.py)。
 
-关键文件：
-
-- `src/pallas_plugin_draw/__init__.py`：注册插件、命令与元数据。
-- `src/pallas_plugin_draw/commands.py` 或同级命令文件：解析 `牛牛画画` 触发、组织请求参数。
-- 主仓 [`pallas/core/platform/media/draw_reference.py`](../../pallas/core/platform/media/draw_reference.py)：处理参考图输入与兼容逻辑。
-
-实现要点：
-
-- 默认由扩展在 Bot 进程内直连画画网关（`plugin_runtime`）；不再默认依赖 AI Runtime 的 `image.generate`。
-- 附图、回复图片等输入会先整理成统一的参考图数据，再交给扩展仓执行具体生成流程。
-- 主仓保留扩展加载与（兼容期）回调衔接槽位；日常画画以插件网关连通性为准。
+仓库：[Plugin-Draw](https://github.com/PallasBot/Plugin-Draw)
 
 ## 相关链接
 
-- [命令权限说明](../common/cmd_perm/README.md)
-- [牛牛画画插件仓库](https://github.com/PallasBot/Plugin-Draw)
+- [命令权限](../../common/cmd_perm/README.md)
+- [AI 扩展](../../guide/ai.md)
