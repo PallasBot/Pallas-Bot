@@ -159,12 +159,12 @@ _active_backend: VectorRetrieveBackend | None = None
 
 def get_vector_retrieve_backend() -> VectorRetrieveBackend:
     global _active_backend
+    want_embedding = vector_retrieve_mode() in ("embedding", "hybrid", "vector")
     if _active_backend is not None:
-        return _active_backend
-    if vector_retrieve_mode() in ("embedding", "hybrid", "vector"):
-        _active_backend = EmbeddingAugmentedBackend()
-    else:
-        _active_backend = KeywordVectorBackend()
+        is_embedding = isinstance(_active_backend, EmbeddingAugmentedBackend)
+        if is_embedding == want_embedding:
+            return _active_backend
+    _active_backend = EmbeddingAugmentedBackend() if want_embedding else KeywordVectorBackend()
     return _active_backend
 
 
