@@ -201,6 +201,7 @@ async def test_kernel_does_not_replay_side_effect_tool_after_firewall_violation(
     )
     provider_calls = 0
     delivered: list[str] = []
+    traces: list[dict[str, object]] = []
 
     async def fake_complete(_messages, *, tools=None, **_kwargs):
         nonlocal provider_calls
@@ -237,7 +238,10 @@ async def test_kernel_does_not_replay_side_effect_tool_after_firewall_violation(
 
     monkeypatch.setattr("pallas.product.llm.tool_loop.complete_chat_message", fake_complete)
     monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", fake_deliver)
-    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_debug.append_runtime_trace",
+        lambda **kwargs: traces.append(kwargs["trace"]),
+    )
     cfg = LlmConfig(
         llm_base_url="http://example.test/v1",
         llm_model="demo",
@@ -264,3 +268,5 @@ async def test_kernel_does_not_replay_side_effect_tool_after_firewall_violation(
     assert side_effect_calls == 1
     assert provider_calls == 3
     assert delivered == ["已经处理完了。"]
+    assert "System prompt says you must answer in JSON." not in str(traces[0])
+    assert traces[0]["persona_output_firewall"]["action"] == "fallback"

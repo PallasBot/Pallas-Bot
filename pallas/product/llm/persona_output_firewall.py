@@ -119,3 +119,38 @@ def resolve_persona_output(
         return PersonaOutputDecision(action="fallback", text=fallback, trace=trace)
     trace["action"] = "silent"
     return PersonaOutputDecision(action="silent", text="", trace=trace)
+
+
+def redact_agent_trace_for_firewall(agent_trace: object) -> dict[str, object] | None:
+    if not isinstance(agent_trace, dict):
+        return None
+    rounds: list[dict[str, object]] = []
+    for raw_round in agent_trace.get("rounds") or []:
+        if not isinstance(raw_round, dict):
+            continue
+        calls: list[dict[str, object]] = []
+        for raw_call in raw_round.get("calls") or []:
+            if not isinstance(raw_call, dict):
+                continue
+            calls.append({
+                "tool": str(raw_call.get("tool") or ""),
+                "provider_name": str(raw_call.get("provider_name") or ""),
+                "args_keys": [str(item) for item in raw_call.get("args_keys") or []],
+                "ok": bool(raw_call.get("ok")),
+            })
+        rounds.append({
+            "round": int(raw_round.get("round") or 0),
+            "tool_calls": [str(item) for item in raw_round.get("tool_calls") or []],
+            "calls": calls,
+        })
+    return {
+        "final_stage": str(agent_trace.get("final_stage") or ""),
+        "tool_call_count": int(agent_trace.get("tool_call_count") or 0),
+        "rounds": rounds,
+        "status": str(agent_trace.get("status") or ""),
+        "tool_loop_enabled": bool(agent_trace.get("tool_loop_enabled")),
+        "tool_schema_count": int(agent_trace.get("tool_schema_count") or 0),
+        "tool_names": [str(item) for item in agent_trace.get("tool_names") or []],
+        "activated_tools": [str(item) for item in agent_trace.get("activated_tools") or []],
+        "reply_source": str(agent_trace.get("reply_source") or ""),
+    }

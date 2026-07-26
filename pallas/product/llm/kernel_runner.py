@@ -62,6 +62,7 @@ async def run_kernel_chat_job(
         )
         from pallas.product.llm.persona_output_firewall import (
             persona_output_firewall_policy_from_data,
+            redact_agent_trace_for_firewall,
             resolve_persona_output,
         )
 
@@ -110,6 +111,8 @@ async def run_kernel_chat_job(
             )
         content = decision.text
         agent_trace_raw = assistant_message.get("_agent_trace")
+        if int(decision.trace.get("rule_count") or 0) > 0:
+            agent_trace_raw = redact_agent_trace_for_firewall(agent_trace_raw)
         agent_trace = None
         trace = {
             "status": "success",
