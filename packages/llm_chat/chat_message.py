@@ -692,6 +692,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
         )
         or (plain or msg).strip()
     )
+    from pallas.product.llm.tools.command_invoke import serialize_event_source_segments
+
+    command_source_segments = serialize_event_source_segments(event, bot_id=int(bot.self_id))
     await TaskManager.add_task(
         request_id,
         {
@@ -720,6 +723,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
             "speak_trigger": speak_trigger or "to_me",
+            "command_source_segments": command_source_segments,
         },
     )
 
@@ -746,6 +750,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 "persona_shaping_active": bool(affect_system_block or dynamic_expression_hint),
                 "dynamic_expression_hint": dynamic_expression_hint,
                 "preserve_colloquial_rewrite": bool(affect_system_block or dynamic_expression_hint),
+                "command_source_segments": command_source_segments,
             },
         ),
         cfg=llm_cfg,

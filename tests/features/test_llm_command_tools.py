@@ -5,7 +5,14 @@ from types import SimpleNamespace
 import pytest
 
 from pallas.product.llm.tools.bootstrap import reset_llm_tools_bootstrap_for_tests
-from pallas.product.llm.tools.command_invoke import CommandTemplateError, render_command_template
+from pallas.product.llm.tools.command_invoke import (
+    CommandTemplateError,
+    append_source_segments_to_message,
+    build_synthetic_group_event,
+    render_command_template,
+    serialize_event_source_segments,
+)
+from pallas.product.llm.tools.context import ToolInvokeContext
 from pallas.product.llm.tools.declare import llm_command_tool_row
 from pallas.product.llm.tools.metadata import parse_llm_command_tool_decl
 from pallas.product.llm.tools.plugin_bootstrap import build_command_tool_spec, register_plugin_command_tools
@@ -22,6 +29,96 @@ def reset_tools() -> None:
 def test_render_command_template() -> None:
     text = render_command_template("牛牛画画 {prompt}", {"prompt": "一只猫"})
     assert text == "牛牛画画 一只猫"
+
+
+def test_serialize_event_source_segments_keeps_at_image_and_self() -> None:
+    from nonebot.adapters.onebot.v11 import Message, MessageSegment
+
+    event = SimpleNamespace(
+        original_message=Message([
+            MessageSegment.at(3879348674),
+            MessageSegment.text("做个摸"),
+            MessageSegment.at(12345),
+            MessageSegment.image("https://example.com/a.png"),
+            MessageSegment.text("自己"),
+        ]),
+        get_message=lambda: Message("stripped"),
+        self_id=3879348674,
+        user_id=3023094357,
+    )
+    segments = serialize_event_source_segments(event, bot_id=3879348674)
+    assert segments[0] == {"type": "at", "qq": "12345"}
+    assert segments[1]["type"] == "image"
+    assert segments[1].get("url") == "https://example.com/a.png"
+    assert segments[2] == {"type": "text", "text": "自己"}
+
+
+def test_serialize_event_source_segments_drops_bot_at_and_pads_self() -> None:
+    from nonebot.adapters.onebot.v11 import Message, MessageSegment
+
+    event = SimpleNamespace(
+        original_message=Message([
+            MessageSegment.at(3879348674),
+            MessageSegment.text("做个摸表情"),
+        ]),
+        self_id=3879348674,
+        user_id=3023094357,
+    )
+    segments = serialize_event_source_segments(event, bot_id=3879348674)
+    assert segments == [{"type": "text", "text": "自己"}]
+
+
+def test_serialize_event_source_segments_keeps_target_drops_bot() -> None:
+    from nonebot.adapters.onebot.v11 import Message, MessageSegment
+
+    event = SimpleNamespace(
+        original_message=Message([
+            MessageSegment.at(3879348674),
+            MessageSegment.text("做个摸"),
+            MessageSegment.at(3023094357),
+            MessageSegment.text("的表情"),
+        ]),
+        self_id=3879348674,
+        user_id=3023094357,
+    )
+    segments = serialize_event_source_segments(event, bot_id=3879348674)
+    assert segments == [{"type": "at", "qq": "3023094357"}]
+
+
+def test_build_synthetic_group_event_appends_source_segments() -> None:
+    event = build_synthetic_group_event(
+        bot_id=1,
+        group_id=2,
+        user_id=3,
+        text="牛牛表情推荐 摸",
+        source_segments=[{"type": "at", "qq": "12345"}],
+    )
+    types = [seg.type for seg in event.message]
+    assert "text" in types
+    assert "at" in types
+    assert any(seg.type == "at" and str(seg.data.get("qq")) == "12345" for seg in event.message)
+    assert event.original_message is not None
+
+
+def test_tool_invoke_context_reads_source_segments() -> None:
+    ctx = ToolInvokeContext.from_payload({
+        "bot_id": 1,
+        "group_id": 2,
+        "user_id": 3,
+        "command_source_segments": [{"type": "at", "qq": "9"}],
+    })
+    assert ctx is not None
+    assert ctx.source_segments == ({"type": "at", "qq": "9"},)
+
+
+def test_append_source_segments_to_message() -> None:
+    from nonebot.adapters.onebot.v11 import Message
+
+    message = append_source_segments_to_message(
+        Message("hello"),
+        [{"type": "at", "qq": "42"}, {"type": "text", "text": "自己"}],
+    )
+    assert [seg.type for seg in message] == ["text", "at", "text"]
 
 
 def test_render_command_template_missing_field() -> None:
