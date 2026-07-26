@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from pallas.product.llm.client import delete_llm_chat_session, resolve_chat_messages, submit_chat_task
 from pallas.product.llm.config import LlmConfig
-from pallas.product.llm.models import ChatSubmitRequest
+from pallas.product.llm.models import ChatSubmitRequest, ChatSubmitResult
 from pallas.product.llm.task_routing import TaskRouteSpec
 
 
@@ -33,19 +33,9 @@ def stub_task_route(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_submit_chat_task_legacy_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict = {}
-
-    class FakeResponse:
-        def json(self):
-            return {"task_id": "task-1", "status": "processing"}
-
-    async def fake_post(url: str, json: dict | None = None, **kwargs):
-        captured["url"] = url
-        captured["json"] = json
-        return FakeResponse()
-
-    monkeypatch.setattr("pallas.product.llm.client.HTTPXClient.post", fake_post)
+async def test_submit_chat_task_legacy_settings_schedule_kernel(monkeypatch: pytest.MonkeyPatch) -> None:
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-1", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
     monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
 
     cfg = LlmConfig(
@@ -71,26 +61,15 @@ async def test_submit_chat_task_legacy_payload(monkeypatch: pytest.MonkeyPatch) 
     )
     assert result.ok is True
     assert result.task_id == "task-1"
-    assert captured["url"] == "http://127.0.0.1:9099/api/llm/chat/req-1"
-    assert captured["json"]["session"] == "sess-1"
-    assert captured["json"]["system_prompt"] == "system"
-    assert captured["json"]["text"].startswith("【用户消息")
+    assert submit_kernel.await_count == 1
+    assert submit_kernel.await_args.kwargs["system_prompt"] == "system"
+    assert submit_kernel.await_args.kwargs["messages"][-1]["content"].startswith("【用户消息")
 
 
 @pytest.mark.asyncio
-async def test_submit_chat_task_unified_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict = {}
-
-    class FakeResponse:
-        def json(self):
-            return {"task_id": "task-u1", "status": "processing"}
-
-    async def fake_post(url: str, json: dict | None = None, **kwargs):
-        captured["url"] = url
-        captured["json"] = json
-        return FakeResponse()
-
-    monkeypatch.setattr("pallas.product.llm.client.HTTPXClient.post", fake_post)
+async def test_submit_chat_task_unified_settings_schedule_kernel(monkeypatch: pytest.MonkeyPatch) -> None:
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-u1", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
     monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
 
     cfg = LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True, llm_governance_enabled=False)
@@ -109,36 +88,21 @@ async def test_submit_chat_task_unified_payload(monkeypatch: pytest.MonkeyPatch)
         cfg=cfg,
     )
     assert result.ok is True
-    assert captured["url"] == "http://127.0.0.1:9099/api/v1/chat/completions/req-u1"
-    payload = captured["json"]
-    assert payload["capability"] == "llm.chat"
-    assert payload["caller"]["plugin"] == "llm_chat"
-    assert payload["payload"]["session_id"] == "sess-u1"
-    assert payload["payload"]["system"] == "system"
-    assert payload["payload"]["metadata"]["mode"] == "drunk"
-    assert payload["payload"]["metadata"]["task"] == "drunk"
-    assert payload["payload"]["metadata"]["task_route"]["task"] == "drunk"
-    assert payload["payload"]["metadata"]["task_route"]["source"] == "config"
-    assert payload["payload"]["metadata"]["token_count"] == 50
-    assert payload["payload"]["messages"][-1]["content"].startswith("【用户消息")
+    metadata = submit_kernel.await_args.kwargs["metadata"]
+    assert metadata["mode"] == "drunk"
+    assert metadata["task"] == "drunk"
+    assert metadata["task_route"]["task"] == "drunk"
+    assert metadata["task_route"]["source"] == "config"
+    assert metadata["token_count"] == 50
+    assert submit_kernel.await_args.kwargs["messages"][-1]["content"].startswith("【用户消息")
 
 
 @pytest.mark.asyncio
 async def test_submit_chat_task_unified_llm_chat_payload_includes_agent_stage_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured: dict = {}
-
-    class FakeResponse:
-        def json(self):
-            return {"task_id": "task-u2", "status": "processing"}
-
-    async def fake_post(url: str, json: dict | None = None, **kwargs):
-        captured["url"] = url
-        captured["json"] = json
-        return FakeResponse()
-
-    monkeypatch.setattr("pallas.product.llm.client.HTTPXClient.post", fake_post)
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-u2", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
     monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
     monkeypatch.setattr(
         "pallas.product.llm.tools.registry.tool_metadata_for_chat",
@@ -172,7 +136,7 @@ async def test_submit_chat_task_unified_llm_chat_payload_includes_agent_stage_pl
         cfg=cfg,
     )
     assert result.ok is True
-    metadata = captured["json"]["payload"]["metadata"]
+    metadata = submit_kernel.await_args.kwargs["metadata"]
     assert metadata["task"] == "llm_chat"
     assert metadata["task_route"]["task"] == "llm_chat"
     assert metadata["tools_enabled"] is True
@@ -185,18 +149,7 @@ async def test_submit_chat_task_unified_llm_chat_payload_includes_agent_stage_pl
 
 
 @pytest.mark.asyncio
-async def test_submit_chat_task_unified_pg_session_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict = {}
-
-    class FakeResponse:
-        def json(self):
-            return {"task_id": "task-pg", "status": "processing"}
-
-    async def fake_post(url: str, json: dict | None = None, **kwargs):
-        captured["url"] = url
-        captured["json"] = json
-        return FakeResponse()
-
+async def test_submit_chat_task_kernel_uses_pg_session_messages(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm.models import ChatCompletionMessage
 
     async def fake_build_messages(*args, **kwargs):
@@ -206,7 +159,8 @@ async def test_submit_chat_task_unified_pg_session_payload(monkeypatch: pytest.M
             ChatCompletionMessage(role="user", content="【用户消息】你好"),
         ]
 
-    monkeypatch.setattr("pallas.product.llm.client.HTTPXClient.post", fake_post)
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-pg", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
     monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: True)
     monkeypatch.setattr("pallas.product.llm.client.build_llm_chat_messages", fake_build_messages)
 
@@ -224,26 +178,15 @@ async def test_submit_chat_task_unified_pg_session_payload(monkeypatch: pytest.M
         cfg=cfg,
     )
     assert result.ok is True
-    payload = captured["json"]["payload"]
-    assert payload["session_id"] == "req-pg"
-    assert payload["metadata"]["pg_session"] is True
-    assert len(payload["messages"]) == 3
-    assert payload["messages"][-1]["role"] == "user"
+    assert submit_kernel.await_args.kwargs["metadata"]["pg_session"] is True
+    assert len(submit_kernel.await_args.kwargs["messages"]) == 3
+    assert submit_kernel.await_args.kwargs["messages"][-1]["role"] == "user"
 
 
 @pytest.mark.asyncio
 async def test_submit_chat_task_metadata_includes_runtime_state_summary_gate(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict = {}
-
-    class FakeResponse:
-        def json(self):
-            return {"task_id": "task-sum", "status": "processing"}
-
-    async def fake_post(url: str, json: dict | None = None, **kwargs):
-        captured["json"] = json
-        return FakeResponse()
-
-    monkeypatch.setattr("pallas.product.llm.client.HTTPXClient.post", fake_post)
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-sum", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
     monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
 
     cfg = LlmConfig(
@@ -267,7 +210,7 @@ async def test_submit_chat_task_metadata_includes_runtime_state_summary_gate(mon
         cfg=cfg,
     )
     assert result.ok is True
-    metadata = captured["json"]["payload"]["metadata"]
+    metadata = submit_kernel.await_args.kwargs["metadata"]
     assert metadata["runtime_state_summary_enabled"] is True
     assert metadata["session_summary"] == {
         "enabled": True,
@@ -278,17 +221,8 @@ async def test_submit_chat_task_metadata_includes_runtime_state_summary_gate(mon
 
 @pytest.mark.asyncio
 async def test_submit_chat_task_metadata_disables_summary_when_session_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict = {}
-
-    class FakeResponse:
-        def json(self):
-            return {"task_id": "task-sum-off", "status": "processing"}
-
-    async def fake_post(url: str, json: dict | None = None, **kwargs):
-        captured["json"] = json
-        return FakeResponse()
-
-    monkeypatch.setattr("pallas.product.llm.client.HTTPXClient.post", fake_post)
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-sum-off", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
     monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
 
     cfg = LlmConfig(
@@ -309,7 +243,7 @@ async def test_submit_chat_task_metadata_disables_summary_when_session_off(monke
         ),
         cfg=cfg,
     )
-    metadata = captured["json"]["payload"]["metadata"]
+    metadata = submit_kernel.await_args.kwargs["metadata"]
     assert metadata["runtime_state_summary_enabled"] is False
     assert "session_summary" not in metadata
 
@@ -376,21 +310,9 @@ async def test_resolve_chat_messages_repeater_skips_pg_history(monkeypatch: pyte
 
 @pytest.mark.asyncio
 async def test_submit_chat_task_repeater_payload_has_single_message(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict = {}
-
-    class FakeResponse:
-        def json(self):
-            return {"task_id": "task-rp", "status": "processing"}
-
-    async def fake_post(url: str, json: dict | None = None, **kwargs):
-        captured["json"] = json
-        return FakeResponse()
-
-    monkeypatch.setattr("pallas.product.llm.client.HTTPXClient.post", fake_post)
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-rp", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_repeater_chat_task", submit_kernel)
     monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: True)
-    monkeypatch.setattr("pallas.product.llm.client.check_repeater_llm_allowed", AsyncMock(return_value=None))
-    slot = MagicMock(acquired=True)
-    monkeypatch.setattr("pallas.product.llm.client.try_acquire_repeater_llm_slot", AsyncMock(return_value=slot))
 
     async def fake_route_chain(task: str, *, explicit_model: str | None = None) -> list[TaskRouteSpec]:
         _ = explicit_model
@@ -420,9 +342,9 @@ async def test_submit_chat_task_repeater_payload_has_single_message(monkeypatch:
         cfg=cfg,
     )
     assert result.ok is True
-    assert len(captured["json"]["payload"]["messages"]) == 1
-    assert captured["json"]["payload"]["metadata"]["resolved_model"] == "qwen3:14b"
-    assert captured["json"]["payload"]["metadata"]["task_route"]["task"] == "repeater_polish"
+    assert len(submit_kernel.await_args.kwargs["messages"]) == 1
+    assert submit_kernel.await_args.kwargs["metadata"]["resolved_model"] == "qwen3:14b"
+    assert submit_kernel.await_args.kwargs["metadata"]["task_route"]["task"] == "repeater_polish"
 
 
 @pytest.mark.asyncio
