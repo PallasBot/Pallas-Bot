@@ -185,6 +185,70 @@ class LlmWebuiConfig(BaseModel):
         le=120,
         description=field_help("摘要后仍保留的近期消息条数", "其余由摘要代替"),
     )
+    llm_speak_perception_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "是否启用发言感知",
+            "关闭后仅 @ / 点名 to_me 会进智能对话；开启后可识别别名提及与氛围插嘴",
+        ),
+    )
+    llm_speak_mention_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "别名提及时强制进对话",
+            "群消息出现「牛牛」等自称别名时进入智能对话（无需 @）",
+        ),
+    )
+    llm_speak_ambient_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "氛围插嘴（ambient）",
+            "未点名时按接话必要度与概率轻量插嘴；空回复可静默",
+        ),
+    )
+    llm_speak_ambient_rate: float = Field(
+        default=0.08,
+        ge=0.0,
+        le=1.0,
+        description=field_help("氛围插嘴触发概率", "通过打分后仍按此比例抽样；默认约 8%"),
+    )
+    llm_speak_ambient_min_score: int = Field(
+        default=35,
+        ge=0,
+        le=100,
+        description=field_help("氛围插嘴最低必要度分", "低于此分不插嘴"),
+    )
+    llm_speak_ambient_cooldown_sec: int = Field(
+        default=120,
+        ge=0,
+        le=3600,
+        description=field_help("氛围插嘴冷却（秒）", "同一群两次 ambient 的最短间隔；0 表示不冷却"),
+    )
+    llm_speak_min_alias_len: int = Field(
+        default=2,
+        ge=1,
+        le=8,
+        description=field_help("别名最短匹配长度", "过短别名易误触；默认 2"),
+    )
+    llm_speak_followup_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "硬触发后续聊软窗",
+            "@ 或别名提及后，同一用户短时间内可免唤醒接话",
+        ),
+    )
+    llm_speak_followup_window_sec: int = Field(
+        default=45,
+        ge=0,
+        le=600,
+        description=field_help("续聊软窗时长（秒）", "每次硬触发后刷新；超时则需再次点名"),
+    )
+    llm_speak_followup_max_total_sec: int = Field(
+        default=180,
+        ge=0,
+        le=3600,
+        description=field_help("续聊最长总时长（秒）", "自首次硬触发起累计上限，防止软窗无限续"),
+    )
     llm_chat_char_budget: int = Field(
         default=12000,
         ge=0,
@@ -549,6 +613,16 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_session_summary_enabled=cfg.llm_session_summary_enabled,
         llm_session_summary_threshold=cfg.llm_session_summary_threshold,
         llm_session_summary_keep_messages=cfg.llm_session_summary_keep_messages,
+        llm_speak_perception_enabled=cfg.llm_speak_perception_enabled,
+        llm_speak_mention_enabled=cfg.llm_speak_mention_enabled,
+        llm_speak_ambient_enabled=cfg.llm_speak_ambient_enabled,
+        llm_speak_ambient_rate=cfg.llm_speak_ambient_rate,
+        llm_speak_ambient_min_score=cfg.llm_speak_ambient_min_score,
+        llm_speak_ambient_cooldown_sec=cfg.llm_speak_ambient_cooldown_sec,
+        llm_speak_min_alias_len=cfg.llm_speak_min_alias_len,
+        llm_speak_followup_enabled=cfg.llm_speak_followup_enabled,
+        llm_speak_followup_window_sec=cfg.llm_speak_followup_window_sec,
+        llm_speak_followup_max_total_sec=cfg.llm_speak_followup_max_total_sec,
         llm_chat_char_budget=cfg.llm_chat_char_budget,
         llm_tools_enabled=cfg.llm_tools_enabled,
         llm_tools_selective=cfg.llm_tools_selective,
