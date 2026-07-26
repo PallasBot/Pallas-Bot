@@ -589,8 +589,10 @@ async def handle_llm_chat(bot: Bot, event: Event):
     from pallas.product.llm.scene_style import format_scene_style_block, resolve_scene_style_constraints
     from pallas.product.llm.turn_style_layers import (
         build_probabilistic_alt_style_hint,
+        build_same_utterance_redup_hint,
         build_turn_behavior_block,
         build_turn_wording_user_hints,
+        find_previous_reply_for_utterance,
     )
     from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_lines
 
@@ -620,6 +622,24 @@ async def handle_llm_chat(bot: Bot, event: Event):
     if behavior_block:
         system_prompt = f"{system_prompt.rstrip()}\n\n{behavior_block}"
 
+    previous_same_reply = ""
+    try:
+        from pallas.product.llm.behavior_store import list_behavior_runs_for_session
+
+        session_runs = list_behavior_runs_for_session(
+            bot_id=int(bot.self_id),
+            group_id=group_id,
+            user_id=user_id,
+            limit=20,
+        )
+        previous_same_reply = find_previous_reply_for_utterance(
+            focus_text,
+            recent_turns=recent_turns,
+            behavior_runs=session_runs,
+        )
+    except Exception:
+        previous_same_reply = find_previous_reply_for_utterance(focus_text, recent_turns=recent_turns)
+    redup_hint = build_same_utterance_redup_hint(user_text=focus_text, previous_reply=previous_same_reply)
     alt_style_hint = build_probabilistic_alt_style_hint()
     catchphrase_lines = compile_catchphrase_prompt_lines(
         int(bot.self_id),
@@ -635,7 +655,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         bot_id=int(bot.self_id),
         current_user_id=user_id,
     )
-    # 口癖、换风格等走临时 user 提示；塑形块仍放 system
+    # 口癖、同句重回、换风格等走临时 user 提示；塑形块仍放 system
     if affect_system_block:
         system_prompt = f"{system_prompt.rstrip()}\n\n{affect_system_block}"
     style_user_hints = build_turn_wording_user_hints(
@@ -646,6 +666,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         ending_hint,
         corpus_ending_hint,
         catchphrase_hint,
+        redup_hint,
         alt_style_hint,
     )
     last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
@@ -708,6 +729,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "behavior_actions": [str(item.action) for item in behavior_patterns],
             "behavior_hint": behavior_hint,
             "style_user_hints": style_user_hints[:8],
+            "same_utterance_redup": bool(redup_hint),
             "alt_style_applied": bool(alt_style_hint),
             "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
@@ -742,6 +764,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 "dynamic_expression_hint": dynamic_expression_hint,
                 "preserve_colloquial_rewrite": bool(affect_system_block or dynamic_expression_hint),
                 "command_source_segments": command_source_segments,
+                "same_utterance_redup": bool(redup_hint),
                 "alt_style_applied": bool(alt_style_hint),
             },
             tool_metadata=tool_meta,

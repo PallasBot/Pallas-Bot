@@ -1,9 +1,14 @@
-"""本轮行为 / 措辞分层，以及概率换风格辅助。"""
+"""本轮行为 / 措辞分层，以及同句重回、概率换风格辅助。"""
 
 from __future__ import annotations
 
 import random
+import re
 from typing import Any
+
+from pallas.product.persona.prompt_guard import sanitize_prompt_literal
+
+_WS_RE = re.compile(r"\s+")
 
 # 概率换风格：默认约 1/4 轮注入一条临时措辞提示
 DEFAULT_ALT_STYLE_PROBABILITY = 0.25
@@ -15,6 +20,57 @@ _ALT_REPLY_STYLES: tuple[str, ...] = (
     "这轮用半句或反问收口，别起手软答应（行行行/还行吧）。",
     "这轮顺着对方最后一个词接，不要换话题。",
 )
+
+
+def normalize_utterance_key(text: str, *, max_len: int = 80) -> str:
+    plain = _WS_RE.sub("", str(text or "").strip()).lower()
+    return plain[: max(8, int(max_len))]
+
+
+def find_previous_reply_for_utterance(
+    user_text: str,
+    *,
+    recent_turns: list[Any] | None = None,
+    behavior_runs: list[Any] | None = None,
+) -> str:
+    """若近期已对同一（或极近）用户句回过，返回上次回复正文。"""
+    key = normalize_utterance_key(user_text)
+    if len(key) < 2:
+        return ""
+
+    for run in reversed(list(behavior_runs or [])):
+        run_key = normalize_utterance_key(str(getattr(run, "user_text", "") or ""))
+        reply = str(getattr(run, "reply_text", "") or "").strip()
+        if not reply or len(run_key) < 2:
+            continue
+        if run_key == key or (len(key) >= 6 and (key in run_key or run_key in key)):
+            return sanitize_prompt_literal(reply, max_len=120)
+
+    turns = list(recent_turns or [])
+    for index in range(len(turns) - 1, -1, -1):
+        turn = turns[index]
+        if str(getattr(turn, "role", "") or "").strip() != "user":
+            continue
+        turn_key = normalize_utterance_key(str(getattr(turn, "content", "") or ""))
+        if not turn_key or not (turn_key == key or (len(key) >= 6 and (key in turn_key or turn_key in key))):
+            continue
+        for follow in turns[index + 1 :]:
+            if str(getattr(follow, "role", "") or "").strip() != "assistant":
+                continue
+            reply = str(getattr(follow, "content", "") or "").strip()
+            if reply:
+                return sanitize_prompt_literal(reply, max_len=120)
+            break
+    return ""
+
+
+def build_same_utterance_redup_hint(*, user_text: str, previous_reply: str) -> str:
+    prev = sanitize_prompt_literal(str(previous_reply or "").strip(), max_len=120)
+    if not prev:
+        return ""
+    trigger = sanitize_prompt_literal(str(user_text or "").strip(), max_len=40)
+    prefix = f"用户又提了类似「{trigger}」。" if trigger else "用户又提了类似内容。"
+    return f"【同句重回】{prefix}你上次回过：「{prev}」。这次换说法，不要复述上一句，也不要用同一套起手。"
 
 
 def build_probabilistic_alt_style_hint(

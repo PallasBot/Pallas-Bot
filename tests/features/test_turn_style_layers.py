@@ -1,15 +1,19 @@
-"""本轮行为/措辞分层与概率换风格。"""
+"""本轮行为/措辞分层、同句重回与概率换风格。"""
 
 from __future__ import annotations
 
 import random
+from types import SimpleNamespace
 
 from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.turn_style_layers import (
     build_probabilistic_alt_style_hint,
+    build_same_utterance_redup_hint,
     build_turn_behavior_block,
     build_turn_wording_user_hints,
+    find_previous_reply_for_utterance,
     merge_style_hints_before_last_user,
+    normalize_utterance_key,
 )
 from pallas.product.persona.catchphrase_bank import (
     compile_catchphrase_prompt_lines,
@@ -18,6 +22,34 @@ from pallas.product.persona.catchphrase_bank import (
     propose_catchphrase_from_bot_success,
     select_catchphrases_for_turn,
 )
+
+
+def test_normalize_utterance_key_strips_ws() -> None:
+    assert normalize_utterance_key("行  行行") == normalize_utterance_key("行行行")
+
+
+def test_find_previous_reply_from_behavior_run() -> None:
+    runs = [
+        SimpleNamespace(user_text="你怎么一直嗯嗯嗯", reply_text="嗯？"),
+        SimpleNamespace(user_text="翻译成中文", reply_text="漂亮牛说想咬我"),
+    ]
+    assert find_previous_reply_for_utterance("翻译成中文", behavior_runs=runs) == "漂亮牛说想咬我"
+
+
+def test_find_previous_reply_from_turns() -> None:
+    turns = [
+        SimpleNamespace(role="user", content="牛牛坏掉了"),
+        SimpleNamespace(role="assistant", content="没坏，就是懒得动而已。"),
+        SimpleNamespace(role="user", content="别的"),
+    ]
+    assert "懒得动" in find_previous_reply_for_utterance("牛牛坏掉了", recent_turns=turns)
+
+
+def test_same_utterance_redup_hint() -> None:
+    hint = build_same_utterance_redup_hint(user_text="翻译成中文", previous_reply="漂亮牛说想咬我")
+    assert "同句重回" in hint
+    assert "漂亮牛说想咬我" in hint
+    assert "换说法" in hint
 
 
 def test_probabilistic_alt_style_respects_rng() -> None:
@@ -30,8 +62,8 @@ def test_probabilistic_alt_style_respects_rng() -> None:
 def test_behavior_and_wording_split() -> None:
     behavior = build_turn_behavior_block("【本轮行为参考】\n- 短回", "")
     assert "只管怎么接" in behavior
-    hints = build_turn_wording_user_hints("【表达参考】x", "", "【本轮临时措辞】y")
-    assert hints == ["【表达参考】x", "【本轮临时措辞】y"]
+    hints = build_turn_wording_user_hints("【表达参考】x", "", "【同句重回】y")
+    assert hints == ["【表达参考】x", "【同句重回】y"]
 
 
 def test_merge_style_hints_before_last_user() -> None:
