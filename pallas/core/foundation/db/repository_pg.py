@@ -721,26 +721,36 @@ async def get_session(*, read_only: bool = False):
 async def init_pg(engine: AsyncEngine) -> None:
     """创建表结构并注入 engine；对已有 PG 库补全 group_config.blocked_user_ids 等轻量迁移。"""
     global _engine, _session_factory
+    from pallas.core.foundation.db.schema_observability import run_schema_ensure_step
+
     _engine = engine
     _session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    ensure_steps: list[tuple[str, Any]] = [
+        ("image_cache_blob_data", _ensure_pg_image_cache_blob_data),
+        ("group_config_blocked_user_ids", _ensure_pg_group_config_blocked_user_ids),
+        ("group_config_style_profile", _ensure_pg_group_config_style_profile),
+        ("group_config_plugin_storage", _ensure_pg_group_config_plugin_storage),
+        ("bot_config_community_roster_show_qq", _ensure_pg_bot_config_community_roster_show_qq),
+        ("bot_config_group_style_enabled", _ensure_pg_bot_config_group_style_enabled),
+        ("bot_config_persona", _ensure_pg_bot_config_persona),
+        ("bot_config_plugin_storage", _ensure_pg_bot_config_plugin_storage),
+        ("user_config_maa_devices", _ensure_pg_user_config_maa_devices),
+        ("llm_memory_embedding_columns", _ensure_pg_llm_memory_embedding_columns),
+        ("llm_memory_graph_columns", _ensure_pg_llm_memory_graph_columns),
+        ("llm_relationship_delta_columns", _ensure_pg_llm_relationship_delta_columns),
+        ("message_group_time_index", _ensure_pg_message_group_time_index),
+        ("message_group_user_time_index", _ensure_pg_message_group_user_time_index),
+        ("context_answer_reply_index", _ensure_pg_context_answer_reply_index),
+        ("context_answer_message_reply_index", _ensure_pg_context_answer_message_reply_index),
+    ]
+
+    def _run_ensures(connection: Any) -> None:
+        for step_name, step_fn in ensure_steps:
+            run_schema_ensure_step(step_name, step_fn, connection)
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        await conn.run_sync(_ensure_pg_image_cache_blob_data)
-        await conn.run_sync(_ensure_pg_group_config_blocked_user_ids)
-        await conn.run_sync(_ensure_pg_group_config_style_profile)
-        await conn.run_sync(_ensure_pg_group_config_plugin_storage)
-        await conn.run_sync(_ensure_pg_bot_config_community_roster_show_qq)
-        await conn.run_sync(_ensure_pg_bot_config_group_style_enabled)
-        await conn.run_sync(_ensure_pg_bot_config_persona)
-        await conn.run_sync(_ensure_pg_bot_config_plugin_storage)
-        await conn.run_sync(_ensure_pg_user_config_maa_devices)
-        await conn.run_sync(_ensure_pg_llm_memory_embedding_columns)
-        await conn.run_sync(_ensure_pg_llm_memory_graph_columns)
-        await conn.run_sync(_ensure_pg_llm_relationship_delta_columns)
-        await conn.run_sync(_ensure_pg_message_group_time_index)
-        await conn.run_sync(_ensure_pg_message_group_user_time_index)
-        await conn.run_sync(_ensure_pg_context_answer_reply_index)
-        await conn.run_sync(_ensure_pg_context_answer_message_reply_index)
+        await conn.run_sync(_run_ensures)
 
 
 async def dispose_pg() -> None:
