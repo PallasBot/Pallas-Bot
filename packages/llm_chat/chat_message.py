@@ -648,6 +648,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         select_reply_style_variant,
     )
     from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_with_entries
+    from pallas.product.persona.scene_dialogue_examples import build_scene_dialogue_examples_hint
 
     scene_constraints = resolve_scene_style_constraints(
         behavior_scene,
@@ -716,6 +717,11 @@ async def handle_llm_chat(bot: Bot, event: Event):
     )
     selected_catchphrase_ids = [item.entry_id for item in selected_catchphrase_entries]
     catchphrase_hint = "\n".join(catchphrase_lines) if catchphrase_lines else ""
+    scene_examples_hint, selected_scene_examples = build_scene_dialogue_examples_hint(
+        int(bot.self_id),
+        scene=str(behavior_scene),
+        user_text=focus_text,
+    )
     ending_hint = build_llm_chat_ending_hint(recent_turns)
     corpus_ending_hint = await build_llm_chat_corpus_ending_hint(
         group_id,
@@ -734,6 +740,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         ending_hint,
         corpus_ending_hint,
         catchphrase_hint,
+        scene_examples_hint,
         redup_hint,
         alt_style_hint,
     )
@@ -802,6 +809,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "behavior_hint": behavior_hint,
             "selected_expression_ids": selected_expression_ids,
             "selected_catchphrase_ids": selected_catchphrase_ids,
+            "selected_scene_dialogue_example_ids": [item.example_id for item in selected_scene_examples],
             "style_user_hints": style_user_hints[:8],
             "same_utterance_redup": bool(redup_hint),
             "alt_style_applied": bool(alt_style_hint),
