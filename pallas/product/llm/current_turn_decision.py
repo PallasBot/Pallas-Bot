@@ -79,9 +79,8 @@ async def decide_current_turn_with_model(
     turn: CurrentTurnDecisionInput,
     *,
     enabled: bool,
-    model: str = "",
 ) -> CurrentTurnDecision:
-    """Use a low-latency model only when the explicit feature flag is enabled."""
+    """Use the turn-decision task route only when the explicit feature flag is enabled."""
     if not enabled:
         return decide_current_turn(turn, model_enabled=False)
     from pallas.product.llm.provider_client import complete_chat_message
@@ -97,7 +96,7 @@ async def decide_current_turn_with_model(
                 },
                 {"role": "user", "content": build_current_turn_decision_prompt(turn)},
             ],
-            model=model,
+            model="",
             options={"temperature": 0, "max_tokens": 24},
             task="turn_decision",
         )

@@ -607,29 +607,48 @@ def resolve_endpoint_candidates_for_task(task: str = "llm_chat") -> list[Resolve
     tasks = routing.get("tasks") if isinstance(routing.get("tasks"), dict) else {}
     chain = routing.get("chain_fallback") if isinstance(routing.get("chain_fallback"), list) else []
 
-    candidates: list[str] = []
+    candidates: list[tuple[str, str]] = []
+
+    def add_candidate(provider_id: str, model_override: str = "") -> None:
+        candidate = (str(provider_id or "").strip(), str(model_override or "").strip())
+        if candidate[0] and candidate not in candidates:
+            candidates.append(candidate)
+
     primary = str(tasks.get(task_name) or "").strip()
     if primary:
-        candidates.append(primary)
+        add_candidate(primary)
+    task_backups = routing.get("task_backups") if isinstance(routing.get("task_backups"), dict) else {}
+    task_backup_models = (
+        routing.get("task_backup_models") if isinstance(routing.get("task_backup_models"), dict) else {}
+    )
+    add_candidate(task_backups.get(task_name), task_backup_models.get(task_name))
+    from pallas.product.llm.task_routing import task_route_tier
+
+    tier = task_route_tier(task_name)
+    tier_backups = routing.get("tier_backups") if isinstance(routing.get("tier_backups"), dict) else {}
+    tier_backup_models = (
+        routing.get("tier_backup_models") if isinstance(routing.get("tier_backup_models"), dict) else {}
+    )
+    if tier:
+        add_candidate(tier_backups.get(tier), tier_backup_models.get(tier))
     for item in chain:
         pid = str(item or "").strip()
-        if pid and pid not in candidates:
-            candidates.append(pid)
+        add_candidate(pid)
     if not candidates:
         for row in doc.get("providers") or []:
             if isinstance(row, dict) and str(row.get("id") or "").strip():
-                candidates.append(str(row["id"]).strip())
+                add_candidate(str(row["id"]).strip())
                 break
 
     out: list[ResolvedLlmEndpoint] = []
-    for pid in candidates:
+    for pid, model_override in candidates:
         row = find_provider(pid, doc=doc)
         if row is None:
             continue
         if row.get("enabled", True) is False:
             continue
         base_url = resolve_provider_base_url(row)
-        model = provider_task_model(row, task_name)
+        model = model_override or provider_task_model(row, task_name)
         kind = str(row.get("kind") or "remote").strip().lower() or "remote"
         if kind == "local":
             from pallas.product.llm.local_routing_store import load_local_routing_document, resolve_local_task_model

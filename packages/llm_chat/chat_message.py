@@ -599,7 +599,6 @@ async def handle_llm_chat(bot: Bot, event: Event):
             tools_permitted=bool(tool_meta.get("tools_enabled")),
         ),
         enabled=bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)),
-        model=str(getattr(llm_cfg, "llm_current_turn_decision_model", "") or ""),
     )
     if group_id is not None:
         from packages.repeater.opportunity_trace import append_conversation_decision_trace

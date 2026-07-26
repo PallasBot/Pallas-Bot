@@ -193,7 +193,7 @@ async def complete_chat_message(
 
     candidates = resolve_endpoint_candidates_for_task(task)
     if candidates:
-        last_error: LlmProviderError | None = None
+        last_error: LlmProviderError | httpx.TransportError | None = None
         for index, endpoint in enumerate(candidates):
             use_model = explicit_model if (explicit_model and index == 0) else endpoint.model
             use_method = method if request_method else endpoint.request_method
@@ -210,7 +210,7 @@ async def complete_chat_message(
                     task=task,
                     provider_id=str(getattr(endpoint, "provider_id", "") or ""),
                 )
-            except LlmProviderError as exc:
+            except (LlmProviderError, httpx.TransportError) as exc:
                 last_error = exc
                 if index + 1 >= len(candidates):
                     break
