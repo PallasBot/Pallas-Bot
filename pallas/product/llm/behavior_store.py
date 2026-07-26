@@ -173,54 +173,54 @@ def settle_behavior_run_outcome(
     final_outcome: BehaviorOutcome | str,
     auto_feedback_payload: dict[str, Any] | None = None,
 ) -> BehaviorRun | None:
-    rows = list_behavior_runs(limit=10_000)
-    updated: BehaviorRun | None = None
     outcome = final_outcome if isinstance(final_outcome, BehaviorOutcome) else BehaviorOutcome(str(final_outcome))
     score_delta = map_behavior_outcome_score(outcome)
-    for idx, item in enumerate(rows):
-        if item.request_id != request_id or item.final_outcome is not None:
-            continue
-        item.final_outcome = outcome
-        item.score_delta = score_delta
-        merged_payload = dict(item.auto_feedback_payload or {})
-        merged_payload.update(dict(auto_feedback_payload or {}))
-        item.auto_feedback_payload = merged_payload
-        rows[idx] = item
-        updated = item
-        break
-    if updated is None:
-        return None
     from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
 
     path = _runs_path()
-    body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in rows)
     with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
-        atomic_write_text(path, body)
-    if updated.selected_pattern_ids and score_delta:
-        patterns = list_behavior_patterns()
-        changed = False
-        for idx, item in enumerate(patterns):
-            if item.pattern_id not in updated.selected_pattern_ids:
+        rows = list_behavior_runs(limit=10_000)
+        updated: BehaviorRun | None = None
+        for idx, item in enumerate(rows):
+            if item.request_id != request_id or item.final_outcome is not None:
                 continue
-            item.success_score = int(item.success_score) + score_delta
-            patterns[idx] = item
-            changed = True
-        if changed:
-            save_behavior_patterns(patterns)
-    if score_delta:
-        from pallas.product.persona.catchphrase_bank import record_catchphrase_outcome
-        from pallas.product.persona.expression_bank import record_expression_outcome
+            item.final_outcome = outcome
+            item.score_delta = score_delta
+            merged_payload = dict(item.auto_feedback_payload or {})
+            merged_payload.update(dict(auto_feedback_payload or {}))
+            item.auto_feedback_payload = merged_payload
+            rows[idx] = item
+            updated = item
+            break
+        if updated is None:
+            return None
+        body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in rows)
+        atomic_write_text(path, body)
+        if updated.selected_pattern_ids and score_delta:
+            patterns = list_behavior_patterns()
+            changed = False
+            for idx, item in enumerate(patterns):
+                if item.pattern_id not in updated.selected_pattern_ids:
+                    continue
+                item.success_score = int(item.success_score) + score_delta
+                patterns[idx] = item
+                changed = True
+            if changed:
+                save_behavior_patterns(patterns)
+        if score_delta:
+            from pallas.product.persona.catchphrase_bank import record_catchphrase_outcome
+            from pallas.product.persona.expression_bank import record_expression_outcome
 
-        record_expression_outcome(
-            updated.selected_expression_ids,
-            scene=str(updated.scene),
-            score_delta=score_delta,
-        )
-        record_catchphrase_outcome(
-            updated.selected_catchphrase_ids,
-            scene=str(updated.scene),
-            score_delta=score_delta,
-        )
+            record_expression_outcome(
+                updated.selected_expression_ids,
+                scene=str(updated.scene),
+                score_delta=score_delta,
+            )
+            record_catchphrase_outcome(
+                updated.selected_catchphrase_ids,
+                scene=str(updated.scene),
+                score_delta=score_delta,
+            )
     return updated
 
 

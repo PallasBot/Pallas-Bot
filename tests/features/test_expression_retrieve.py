@@ -162,7 +162,7 @@ def test_retrieve_filters_other_bot_and_builds_reference_block(monkeypatch, tmp_
     entries = retrieve_expressions_for_message(10001, "抽卡又歪了", limit=5, bot_id=10001)
 
     assert [entry.saying for entry in entries] == ["这也太黑了"]
-    assert build_expression_reference_block(entries) == "\n【表达参考】\n吐槽抽卡→这也太黑了。"
+    assert build_expression_reference_block(entries) == "\n【表达参考】\nventing→这也太黑了。"
 
 
 @pytest.mark.asyncio

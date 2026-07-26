@@ -43,4 +43,10 @@ def normalize_occasion_tag(value: str | OccasionTag) -> str:
         return ""
     if plain in OccasionTag._value2member_map_:
         return plain
+    if plain.startswith("吐槽"):
+        return OccasionTag.VENTING
+    if plain.startswith(("接梗", "玩笑")):
+        return OccasionTag.BANTER
+    if plain.startswith("安抚"):
+        return OccasionTag.VENTING
     return _OCCASION_ALIASES.get(plain, plain).value if plain in _OCCASION_ALIASES else plain

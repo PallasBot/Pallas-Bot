@@ -53,7 +53,7 @@ def score_expression_for_query(entry: ExpressionEntry, plain_text: str, *, scene
     if feedback.get("uses"):
         score += max(-6, min(6, int(feedback.get("score", 0))))
     # 与当前句无关的「已站稳」自生成金句不注入；弱相关则降权
-    if kw_hits == 0 and entry.source == "llm_success":
+    if kw_hits == 0 and entry.source == "llm_success" and (target_stance == "neutral" or target_stance != entry_stance):
         if entry.status == "active" or int(entry.support) >= 3:
             return None
         score -= 40

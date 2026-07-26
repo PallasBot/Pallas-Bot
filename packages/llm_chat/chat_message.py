@@ -67,7 +67,7 @@ from pallas.product.persona.affect_kernel import (
     group_flavor_summary_from_style_snapshot,
 )
 from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
-from pallas.product.persona.expression_habits import build_expression_context_suffix
+from pallas.product.persona.expression_habits import build_expression_context_with_entries
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.self_identity import (
     extract_self_aliases,
@@ -148,8 +148,24 @@ async def build_llm_chat_expression_suffix(
     bot_id: int = 0,
     blocked_openers: list[str] | None = None,
 ) -> str:
+    suffix, _entries = await build_llm_chat_expression_selection(
+        group_id,
+        plain_text,
+        bot_id=bot_id,
+        blocked_openers=blocked_openers,
+    )
+    return suffix
+
+
+async def build_llm_chat_expression_selection(
+    group_id: int | None,
+    plain_text: str = "",
+    *,
+    bot_id: int = 0,
+    blocked_openers: list[str] | None = None,
+) -> tuple[str, list]:
     if group_id is None:
-        return ""
+        return "", []
     from pallas.core.foundation.db import make_group_config_repository
 
     profile = None
@@ -160,7 +176,7 @@ async def build_llm_chat_expression_suffix(
     if group_config is not None:
         raw_profile = getattr(group_config, "style_profile", None)
         profile = raw_profile if isinstance(raw_profile, dict) else None
-    return await build_expression_context_suffix(
+    return await build_expression_context_with_entries(
         int(group_id),
         plain_text,
         bot_id=bot_id,
@@ -517,27 +533,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
         recent_texts=recent_plain,
         has_multi_party_overlap=has_multi_party,
     )
-    expression_suffix = await build_llm_chat_expression_suffix(
+    expression_suffix, selected_expression_entries = await build_llm_chat_expression_selection(
         group_id,
         focus_text,
         bot_id=int(bot.self_id),
         blocked_openers=blocked_openers,
     )
-    selected_expression_ids: list[str] = []
-    if expression_suffix and group_id is not None:
-        from pallas.product.persona.expression_retrieve import retrieve_expressions_for_message
-
-        selected_expression_ids = [
-            item.entry_id
-            for item in await asyncio.to_thread(
-                retrieve_expressions_for_message,
-                int(group_id),
-                focus_text,
-                limit=llm_cfg.llm_expression_retrieve_limit,
-                bot_id=int(bot.self_id),
-                blocked_openers=blocked_openers,
-            )
-        ]
+    selected_expression_ids = [item.entry_id for item in selected_expression_entries]
     from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
 
     system_prompt = enrich_system_with_situational_rules(
