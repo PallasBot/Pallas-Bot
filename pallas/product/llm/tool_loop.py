@@ -140,14 +140,12 @@ def resolve_visible_reply_after_tools(
     tool_call_count: int,
 ) -> tuple[str, str]:
     """动作与开口拆分：有 chat.reply 用其文本；仅副作用成功则静默丢掉自由文本。"""
-    from pallas.product.llm.tools.reply import is_side_effect_meta_reply
-
     if tool_call_count <= 0:
         return freeform_content, "generate"
     if reply_texts:
-        # 最后一次 chat.reply；空串表示显式静默；元叙述废话当静默
+        # 最后一次 chat.reply；空串表示显式静默。
         text = str(reply_texts[-1] or "").strip()
-        if not text or is_side_effect_meta_reply(text):
+        if not text:
             if side_effect_ok:
                 return "", "silence_after_side_effect"
             return "", "chat.reply"

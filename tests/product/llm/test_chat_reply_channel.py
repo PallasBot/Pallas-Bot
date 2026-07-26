@@ -36,15 +36,15 @@ def test_resolve_visible_reply_prefers_chat_reply() -> None:
     assert source == "chat.reply"
 
 
-def test_resolve_visible_reply_suppresses_meta_chat_reply() -> None:
+def test_resolve_visible_reply_keeps_explicit_chat_reply() -> None:
     text, source = resolve_visible_reply_after_tools(
         freeform_content="",
         reply_texts=["整了个打工人表情，大伙品品"],
         side_effect_ok=True,
         tool_call_count=2,
     )
-    assert text == ""
-    assert source == "silence_after_side_effect"
+    assert text == "整了个打工人表情，大伙品品"
+    assert source == "chat.reply"
 
 
 def test_resolve_visible_reply_silence_after_side_effect() -> None:
@@ -75,18 +75,18 @@ def test_extract_chat_reply_text() -> None:
     assert extract_chat_reply_text({"ok": False, "error": "x"}) is None
     assert (
         extract_chat_reply_text({"ok": True, "result": {"text": "整了个打工人表情，大伙品品", "visible_reply": True}})
-        == ""
+        == "整了个打工人表情，大伙品品"
     )
 
 
 @pytest.mark.asyncio
-async def test_chat_reply_handler_suppresses_meta() -> None:
+async def test_chat_reply_handler_keeps_explicit_text() -> None:
     from pallas.product.llm.tools.reply import handle_chat_reply
 
     result = await handle_chat_reply({"text": "整了个打工人表情，大伙品品"})
     assert result["ok"] is True
-    assert result["result"]["silent"] is True
-    assert result["result"]["text"] == ""
+    assert result["result"]["visible_reply"] is True
+    assert result["result"]["text"] == "整了个打工人表情，大伙品品"
 
 
 def _register_side_effect_tool() -> None:
