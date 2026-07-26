@@ -49,7 +49,7 @@ def build_backend_config_view() -> dict[str, Any]:
             "db": _raw("MONGO_DB", "PallasBot"),
             "auth_source": _raw("MONGO_AUTH_SOURCE", "") or _raw("MONGO_DB", "PallasBot"),
         },
-        "restart_required_hint": "保存后需重启进程才能切换数据库后端。",
+        "restart_required_hint": "保存后需重启 Bot，新后端才会生效。",
     }
 
 
@@ -111,9 +111,9 @@ def save_db_backend_config(payload: dict[str, Any], *, force: bool = False) -> d
             items["MONGO_PASSWORD"] = password
 
     upsert_env_dotenv_items(items)
-    message = "已保存数据库后端配置，请重启进程后生效。"
+    message = "已保存，重启后生效"
     if force:
-        message += "（已跳过连通性探测）"
+        message += "（已跳过连接测试）"
     return {
         "restart_required": True,
         "backend": backend,
@@ -139,7 +139,7 @@ async def probe_db_backend(payload: dict[str, Any]) -> dict[str, Any]:
         return {"ok": False, "latency_ms": latency_ms, "detail": _sanitize_error(exc)}
 
     latency_ms = int((time.perf_counter() - started) * 1000)
-    return {"ok": True, "latency_ms": latency_ms, "detail": "连接成功"}
+    return {"ok": True, "latency_ms": latency_ms, "detail": "已连通"}
 
 
 async def _probe_postgres(pg: dict[str, Any]) -> None:
