@@ -4253,6 +4253,37 @@ class _MongoAggregateBody(BaseModel):
     pipeline: list[Any] = Field(default_factory=list, max_length=16)
 
 
+class _DbBackendPostgresBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    host: str = Field(default="127.0.0.1", max_length=255)
+    port: int = Field(default=5432, ge=1, le=65535)
+    user: str = Field(default="", max_length=128)
+    password: str = Field(default="", max_length=512)
+    db: str = Field(default="PallasBot", max_length=128)
+    auto_create_db: bool = False
+
+
+class _DbBackendMongoBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    host: str = Field(default="127.0.0.1", max_length=255)
+    port: int = Field(default=27017, ge=1, le=65535)
+    user: str = Field(default="", max_length=128)
+    password: str = Field(default="", max_length=512)
+    db: str = Field(default="PallasBot", max_length=128)
+    auth_source: str = Field(default="", max_length=128)
+
+
+class _DbBackendBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    backend: Literal["postgresql", "mongodb"]
+    postgres: _DbBackendPostgresBody | None = None
+    mongo: _DbBackendMongoBody | None = None
+    force: bool = False
+
+
 class _DbBackupBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -7982,6 +8013,46 @@ def register_extended_api(
             )
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas-Bot 控制台: 数据库概览失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/db/backend", include_in_schema=True)
+    async def _db_backend_get() -> JSONResponse:
+        from pallas.core.foundation.db.backend_config import build_backend_config_view
+
+        return JSONResponse({"ok": True, "data": build_backend_config_view()})
+
+    @router.put(f"{x}/db/backend", include_in_schema=True)
+    async def _db_backend_put(
+        body: _DbBackendBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.core.foundation.db.backend_config import save_db_backend_config
+
+        try:
+            data = save_db_backend_config(body.model_dump(), force=body.force)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 保存数据库后端配置失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/db/backend/probe", include_in_schema=True)
+    async def _db_backend_probe(
+        body: _DbBackendBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.core.foundation.db.backend_config import probe_db_backend
+
+        try:
+            data = await probe_db_backend(body.model_dump())
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 数据库后端探测失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 

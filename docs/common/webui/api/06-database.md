@@ -3,6 +3,9 @@
 | 方法 | 路径 | 写 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/db/overview` | | 表概览、行数、后端类型 |
+| GET | `/db/backend` | | 数据库后端配置（密码掩码） |
+| PUT | `/db/backend` | 是 | 保存后端配置到 webui.json（需重启） |
+| POST | `/db/backend/probe` | 是 | 用草稿参数探测连通性 |
 | GET | `/db/backup/info` | | 备份目录与策略信息 |
 | POST | `/db/backup` | 是 | 发起备份任务 |
 | GET | `/db/backup/jobs/active` | | 进行中任务 |
@@ -20,8 +23,8 @@
 
 ## 前端对应
 
-- `DatabasePage`、`DatabaseBackupsPage`：`fetchDbOverview`、`postDbBackup` 等
+- `DatabasePage`、`DatabaseBackupsPage`：`fetchDbOverview`、`postDbBackup`、`fetchDbBackendConfig` 等
 
-实现：`extended_api.py` + `src/foundation/db/`；备份脚本见 `tools/scripts/`。
+实现：`extended_api.py` + `pallas/core/foundation/db/`；备份脚本见 `tools/scripts/`。
 
 部署说明：[Docker 部署](../../../DockerDeployment.md) 卷挂载需包含 `data/`。
