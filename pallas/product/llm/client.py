@@ -7,28 +7,14 @@ from pallas.core.shared.utils import HTTPXClient
 
 from .budget import trim_messages_to_char_budget
 from .config import LlmConfig, get_llm_config, llm_server_base_url
-from .governance import LlmChatGovernance
 from .kernel.memory_governance import can_write_runtime_state_summary, runtime_state_summary_metadata
 from .legacy_guard import assess_legacy_chat_submit
 from .message_guard import format_user_turn
 from .models import ChatCompletionMessage, ChatSubmitRequest, ChatSubmitResult
-from .repeater_limit import (
-    check_repeater_llm_allowed,
-    is_repeater_llm_task,
-    refresh_repeater_group_cooldown,
-    release_repeater_llm_slot,
-    try_acquire_repeater_llm_slot,
-)
+from .repeater_limit import is_repeater_llm_task
 from .session_store import build_llm_chat_messages, is_llm_session_store_available
 from .submit_gate import assess_llm_submit_gate
 from .task_routing import resolve_submit_task_name, resolve_task_route_chain, serialize_task_route
-
-
-def chat_endpoint_path(cfg: LlmConfig | None = None) -> str:
-    c = cfg or get_llm_config()
-    if c.use_unified_chat_api:
-        return c.unified_chat_endpoint
-    return c.legacy_chat_endpoint
 
 
 async def resolve_chat_messages(
@@ -199,105 +185,6 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
         message_count=len(messages),
         cfg=c,
     )
-
-
-async def submit_repeater_chat_task(
-    request: ChatSubmitRequest,
-    *,
-    url: str,
-    payload: dict,
-    timer: SlowPathTimer,
-    message_count: int,
-    cfg: LlmConfig,
-) -> ChatSubmitResult:
-    if request.bot_id is None or request.group_id is None:
-        timer.finish(status="missing_group", request_id=request.request_id)
-        return ChatSubmitResult(status="missing_group", ok=False)
-
-    tier = str(request.scene_tier or "weak").strip().lower() or "weak"
-    skip_reason = await check_repeater_llm_allowed(
-        int(request.bot_id),
-        int(request.group_id),
-        cfg=cfg,
-        scene_tier=tier,
-    )
-    if skip_reason:
-        timer.finish(status=skip_reason, request_id=request.request_id)
-        return ChatSubmitResult(status=skip_reason, ok=False)
-
-    slot = await try_acquire_repeater_llm_slot(cfg=cfg)
-    if slot is None:
-        timer.finish(status="repeater_busy", request_id=request.request_id)
-        return ChatSubmitResult(status="repeater_busy", ok=False)
-    response = None
-    try:
-        try:
-            response = await HTTPXClient.post(url, json=payload, timeout=cfg.chat_timeout_sec)
-        except Exception:
-            logger.exception("llm submit_chat_task failed: url={}", url)
-            timer.finish(status="request_failed", request_id=request.request_id)
-            return ChatSubmitResult(status="request_failed", ok=False)
-    finally:
-        release_repeater_llm_slot(slot)
-    timer.mark("http_post")
-
-    if not response:
-        timer.finish(status="empty_response", request_id=request.request_id)
-        return ChatSubmitResult(status="empty_response", ok=False)
-
-    try:
-        body = response.json()
-    except Exception:
-        logger.warning("llm submit_chat_task invalid json: url={}", url)
-        timer.finish(status="invalid_response", request_id=request.request_id)
-        return ChatSubmitResult(status="invalid_response", ok=False)
-
-    task_id = str(body.get("task_id") or body.get("id") or "")
-    status = str(body.get("status") or ("processing" if task_id else "unknown"))
-    ok = bool(task_id) or status in {"processing", "ok", "completed"}
-    if ok:
-        await refresh_repeater_group_cooldown(int(request.bot_id), int(request.group_id), scene_tier=tier)
-    timer.finish(status=status, request_id=request.request_id, message_count=message_count)
-    return ChatSubmitResult(task_id=task_id, status=status, ok=ok)
-
-
-async def submit_llm_chat_task(
-    request: ChatSubmitRequest,
-    *,
-    url: str,
-    payload: dict,
-    timer: SlowPathTimer,
-    message_count: int,
-    cfg: LlmConfig,
-) -> ChatSubmitResult:
-    async with LlmChatGovernance(wait=False, cfg=cfg) as gov:
-        if gov.skipped:
-            timer.finish(status="skipped_busy", request_id=request.request_id)
-            return ChatSubmitResult(status="busy", ok=False)
-        try:
-            response = await HTTPXClient.post(url, json=payload, timeout=cfg.chat_timeout_sec)
-        except Exception:
-            logger.exception("llm submit_chat_task failed: url={}", url)
-            timer.finish(status="request_failed", request_id=request.request_id)
-            return ChatSubmitResult(status="request_failed", ok=False)
-    timer.mark("http_post")
-
-    if not response:
-        timer.finish(status="empty_response", request_id=request.request_id)
-        return ChatSubmitResult(status="empty_response", ok=False)
-
-    try:
-        body = response.json()
-    except Exception:
-        logger.warning("llm submit_chat_task invalid json: url={}", url)
-        timer.finish(status="invalid_response", request_id=request.request_id)
-        return ChatSubmitResult(status="invalid_response", ok=False)
-
-    task_id = str(body.get("task_id") or body.get("id") or "")
-    status = str(body.get("status") or ("processing" if task_id else "unknown"))
-    ok = bool(task_id) or status in {"processing", "ok", "completed"}
-    timer.finish(status=status, request_id=request.request_id, message_count=message_count)
-    return ChatSubmitResult(task_id=task_id, status=status, ok=ok)
 
 
 def build_chat_messages(user_text: str, *, max_len: int = 4000) -> list[ChatCompletionMessage]:

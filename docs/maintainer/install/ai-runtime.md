@@ -31,7 +31,6 @@
 - 绘图与媒体生成
 - 唱歌、音频、工具类异步任务
 - 任务状态回调与结果回传
-- 遗留路径：`LLM_RUNTIME=ai_service` 时的聊天任务（默认聊天走 Bot 内核 Provider，不必装 Runtime）
 
 ::: tip
 普通复读、帮助、权限、扩展玩法：本体 + 扩展即可。默认 LLM 聊天只配 **接入** Provider；唱歌 / TTS 等媒体再接 AI Runtime。
@@ -89,16 +88,16 @@ docker compose -f docker-compose.llm.yml up -d
 `config/pallas.toml` 的 `[env]` 或 WebUI「智能对话与媒体服务」：
 
 - `LLM_CHAT_ENABLED=true`
-- Provider（**接入**页）；默认 `LLM_RUNTIME=bot_kernel`
-- 媒体 / 遗留 `ai_service` 时再配 `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；也可由扩展基址同步）
+- Provider（**接入**页）；聊天固定走 Bot 内核
+- 媒体任务再配 `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；也可由扩展基址同步）
 
 详细变量见 [Pallas-Bot-AI README](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/README.md) 与 [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)。
 
 从 0 安装验收见 [安装验收 Checklist](ga-install-checklist.md)。
 
-## 接入前核对（媒体 / 遗留 ai_service）
+## 接入前核对（媒体）
 
-默认 LLM 聊天只核对 Provider。下列项针对 **媒体任务** 或 `LLM_RUNTIME=ai_service`。
+默认 LLM 聊天只核对 Provider。下列项针对 **媒体任务**。
 
 ### 1. 地址与可达性
 

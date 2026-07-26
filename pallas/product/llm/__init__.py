@@ -9,7 +9,7 @@ from .message_guard import contains_likely_prompt_injection, format_user_turn, s
 from .models import ChatCompletionMessage, ChatCompletionRequest, ChatSubmitRequest, ChatSubmitResult
 
 if TYPE_CHECKING:
-    from .client import build_chat_messages, chat_endpoint_path, delete_llm_chat_session, submit_chat_task
+    from .client import build_chat_messages, delete_llm_chat_session, submit_chat_task
     from .drunk_chat_context import DrunkChatSubmitContext, build_drunk_chat_system_prompt
 
 __all__ = [
@@ -21,7 +21,6 @@ __all__ = [
     "LlmConfig",
     "build_drunk_chat_system_prompt",
     "build_chat_messages",
-    "chat_endpoint_path",
     "clear_llm_config_cache",
     "delete_llm_chat_session",
     "contains_likely_prompt_injection",
@@ -37,7 +36,7 @@ __all__ = [
 
 
 def __getattr__(name: str) -> Any:
-    if name in {"build_chat_messages", "chat_endpoint_path", "delete_llm_chat_session", "submit_chat_task"}:
+    if name in {"build_chat_messages", "delete_llm_chat_session", "submit_chat_task"}:
         module = importlib.import_module(".client", __name__)
         value = getattr(module, name)
         globals()[name] = value

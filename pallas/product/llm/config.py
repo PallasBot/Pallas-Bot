@@ -606,11 +606,6 @@ def llm_server_base_url(cfg: LlmConfig | None = None) -> str:
     return f"http://{c.ai_server_host}:{c.ai_server_port}"
 
 
-def is_llm_bot_kernel_runtime(cfg: LlmConfig | None = None) -> bool:
-    _ = cfg
-    return True
-
-
 def llm_provider_configured(cfg: LlmConfig | None = None) -> bool:
     from pallas.product.llm.providers_store import bot_providers_configured
 
