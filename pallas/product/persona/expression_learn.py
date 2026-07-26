@@ -125,6 +125,11 @@ def note_expression_from_utterance(group_id: int, text: str, **meta: object) -> 
     saved = append_or_merge_expression(entry)
     if saved.source == "llm_success":
         try:
+            bot_id = int(meta.get("bot_id") or 0)
+            if bot_id > 0:
+                from pallas.product.persona.catchphrase_bank import propose_catchphrase_from_bot_success
+
+                propose_catchphrase_from_bot_success(bot_id, target_group_id, saved.saying, saved.occasion)
             from pallas.product.persona.expression_promote import maybe_auto_promote_for_group
 
             maybe_auto_promote_for_group(target_group_id)
