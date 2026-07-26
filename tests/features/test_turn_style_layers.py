@@ -9,13 +9,13 @@ from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.turn_style_layers import (
     ReplyStyleVariantPolicy,
     build_probabilistic_alt_style_hint,
-    select_reply_style_variant,
     build_same_utterance_redup_hint,
     build_turn_behavior_block,
     build_turn_wording_user_hints,
     find_previous_reply_for_utterance,
     merge_style_hints_before_last_user,
     normalize_utterance_key,
+    select_reply_style_variant,
 )
 from pallas.product.persona.catchphrase_bank import (
     compile_catchphrase_prompt_lines,

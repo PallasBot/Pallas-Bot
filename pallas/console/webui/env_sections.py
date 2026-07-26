@@ -276,6 +276,7 @@ def _llm_section() -> WebuiEnvSection:
             "llm_reply_split_max_chars": "LLM_REPLY_SPLIT_MAX_CHARS",
             "llm_sticker_fit_enabled": "LLM_STICKER_FIT_ENABLED",
             "llm_reply_effect_eval_enabled": "LLM_REPLY_EFFECT_EVAL_ENABLED",
+            "llm_reply_style_variants": "LLM_REPLY_STYLE_VARIANTS",
             "llm_memory_rag_enabled": "LLM_MEMORY_RAG_ENABLED",
             "llm_expression_inject_enabled": "LLM_EXPRESSION_INJECT_ENABLED",
             "llm_expression_learn_enabled": "LLM_EXPRESSION_LEARN_ENABLED",

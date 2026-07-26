@@ -676,6 +676,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_reply_split_max_chars=cfg.llm_reply_split_max_chars,
         llm_sticker_fit_enabled=cfg.llm_sticker_fit_enabled,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
+        llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
         llm_expression_inject_enabled=cfg.llm_expression_inject_enabled,
         llm_expression_learn_enabled=cfg.llm_expression_learn_enabled,
