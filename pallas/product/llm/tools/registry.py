@@ -441,7 +441,7 @@ def tool_metadata_for_chat(
         "activated_tools": sorted(activated_names),
     }
     # 选择性命中且全部为插件口令工具时，首轮要求必须调工具，避免只口头答应。
-    # 软召回缺参时不强制调用，便于自然追问。
+    # 联网搜索同理：禁止「搜了一下」空口答应。软召回缺参时不强制，便于自然追问。
     if (
         catalog.selection.selective_enabled
         and catalog.tools
@@ -449,7 +449,11 @@ def tool_metadata_for_chat(
         and not catalog.selection.ask_before_call
     ):
         sources = {str(item.source or "") for item in catalog.tools}
+        tool_names = {str(item.name or "") for item in catalog.tools}
+        domains = {str(d) for item in catalog.tools for d in (item.domains or [])}
         if sources and sources <= {LlmToolSource.PLUGIN_COMMAND.value}:
+            payload["tool_choice_prefer"] = "required"
+        elif "web" in domains or tool_names.intersection({"web.search", "web.fetch"}):
             payload["tool_choice_prefer"] = "required"
     return payload
 

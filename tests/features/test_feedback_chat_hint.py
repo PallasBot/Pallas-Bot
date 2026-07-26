@@ -165,6 +165,45 @@ def test_build_group_feedback_chat_hint_skips_filler_good(tmp_path, monkeypatch)
         assert "还行吧" not in good_part
 
 
+def test_build_group_feedback_chat_hint_skips_canned_capability_good_samples(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("LLM_REPEATER_FEEDBACK_ENABLED", "true")
+    monkeypatch.setenv("LLM_CHAT_ENABLED", "true")
+    monkeypatch.setenv("LLM_REPEATER_BIAS_ENABLED", "true")
+    from pallas.product.llm.config import clear_llm_config_cache
+
+    clear_llm_config_cache()
+
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=1,
+            group_id=626,
+            user_id=1,
+            request_id="canned-cap",
+            user_text="有啥功能",
+            reply_text="能聊聊天、接接梗、陪你唠嗑儿，反正群里有啥话题我就跟着接两句。",
+        )
+    )
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=1,
+            group_id=626,
+            user_id=1,
+            request_id="real-good",
+            user_text="今天吃啥",
+            reply_text="随便，泡面也行。",
+        )
+    )
+
+    from pallas.product.llm.feedback_chat_hint import is_weak_good_feedback_snippet
+
+    assert is_weak_good_feedback_snippet("能聊聊天、接接梗、陪你唠嗑儿，反正群里有啥话题我就跟着接两句。")
+    hint = build_group_feedback_chat_hint(group_id=626, user_text="有什么用呢")
+    assert "能聊聊天" not in hint
+    assert "接接梗" not in hint
+    assert "泡面也行" in hint
+
+
 def test_build_group_feedback_chat_hint_empty_when_bias_disabled(monkeypatch) -> None:
     monkeypatch.setenv("LLM_CHAT_ENABLED", "true")
     monkeypatch.delenv("LLM_REPEATER_BIAS_ENABLED", raising=False)

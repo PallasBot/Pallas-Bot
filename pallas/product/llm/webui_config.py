@@ -246,6 +246,21 @@ class LlmWebuiConfig(BaseModel):
         le=512,
         description=field_help("工具描述最大长度", "写入模型 schema 前会截断，节省 token"),
     )
+    web_search_api_url: str = Field(
+        default="",
+        description=field_help(
+            "搜索接口地址",
+            "web.search 的 POST 目标（如兼容 Tavily 的搜索 API）；留空则不联网",
+        ),
+    )
+    tavily_api_key: str = Field(
+        default="",
+        description=field_help(
+            "搜索接口密钥",
+            "与接口地址配套，请求头 Authorization: Bearer …；两项都填才生效",
+        ),
+        json_schema_extra={"secret": True},
+    )
     llm_chat_max_concurrency: int = Field(
         default=2,
         ge=1,
@@ -507,6 +522,7 @@ class LlmWebuiConfig(BaseModel):
 
 
 def get_llm_webui_config() -> LlmWebuiConfig:
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
     from pallas.product.llm.config import resolve_chat_tts_enabled, resolve_legacy_rwkv_drunk_chat_enabled
 
     cfg = get_llm_config()
@@ -540,6 +556,8 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_tools_max_rounds=cfg.llm_tools_max_rounds,
         llm_tools_blacklist=list(cfg.llm_tools_blacklist or []),
         llm_tools_desc_max_len=cfg.llm_tools_desc_max_len,
+        web_search_api_url=str(repo_env_raw_value("WEB_SEARCH_API_URL") or "").strip(),
+        tavily_api_key=str(repo_env_raw_value("TAVILY_API_KEY") or "").strip(),
         llm_chat_max_concurrency=cfg.llm_chat_max_concurrency,
         llm_repeater_group_cooldown_sec=cfg.llm_repeater_group_cooldown_sec,
         llm_repeater_strong_cooldown_sec=cfg.llm_repeater_strong_cooldown_sec,

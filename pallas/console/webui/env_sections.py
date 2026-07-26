@@ -240,6 +240,8 @@ def _llm_section() -> WebuiEnvSection:
             "llm_tools_max_rounds": "LLM_TOOLS_MAX_ROUNDS",
             "llm_tools_blacklist": "LLM_TOOLS_BLACKLIST",
             "llm_tools_desc_max_len": "LLM_TOOLS_DESC_MAX_LEN",
+            "web_search_api_url": "WEB_SEARCH_API_URL",
+            "tavily_api_key": "TAVILY_API_KEY",
             "llm_chat_max_concurrency": "LLM_CHAT_MAX_CONCURRENCY",
             "llm_repeater_group_cooldown_sec": "LLM_REPEATER_GROUP_COOLDOWN_SEC",
             "llm_repeater_strong_cooldown_sec": "LLM_REPEATER_STRONG_COOLDOWN_SEC",

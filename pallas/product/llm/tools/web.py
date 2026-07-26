@@ -12,15 +12,33 @@ if TYPE_CHECKING:
     from pallas.product.llm.tools.context import ToolInvokeContext
 
 
+_WEB_SEARCH_HINTS = frozenset({
+    "搜一下",
+    "搜索一下",
+    "帮我搜",
+    "帮我搜索",
+    "联网搜",
+    "网上搜",
+    "上网搜",
+    "百度一下",
+    "google一下",
+    "谷歌一下",
+    "查网页",
+    "搜网页",
+    "搜索",
+})
+
+
 def register_web_tools() -> None:
     register_tool(
         LlmToolSpec(
             name="web.search",
-            description="搜索公开网页，返回结构化结果。",
+            description="搜索公开网页，返回结构化结果。未配置时返回 web_search_unconfigured，禁止口头装作搜过。",
             parameters={"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]},
             domains=frozenset({"web", "chat"}),
             handler=handle_web_search,
             capabilities=frozenset({ToolCapability.READ_ONLY.value, ToolCapability.EXTERNAL_NETWORK.value}),
+            hints=_WEB_SEARCH_HINTS,
             estimated_duration_ms=3000,
             background_ok=True,
         )
@@ -33,6 +51,7 @@ def register_web_tools() -> None:
             domains=frozenset({"web", "chat"}),
             handler=handle_web_fetch,
             capabilities=frozenset({ToolCapability.READ_ONLY.value, ToolCapability.EXTERNAL_NETWORK.value}),
+            hints=frozenset({"打开网页", "抓取网页", "读取链接", "打开链接"}),
             estimated_duration_ms=5000,
             background_ok=True,
         )
@@ -44,15 +63,22 @@ async def handle_web_search(arguments: dict[str, Any], context: ToolInvokeContex
     query = str((arguments or {}).get("query") or "").strip()
     if not query:
         return {"ok": False, "error": "query_required"}
-    endpoint = str(os.environ.get("WEB_SEARCH_API_URL") or "").strip()
-    if not endpoint or not os.environ.get("TAVILY_API_KEY"):
-        return {"ok": False, "error": "web_search_unconfigured"}
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+
+    endpoint = str(repo_env_raw_value("WEB_SEARCH_API_URL") or os.environ.get("WEB_SEARCH_API_URL") or "").strip()
+    api_key = str(repo_env_raw_value("TAVILY_API_KEY") or os.environ.get("TAVILY_API_KEY") or "").strip()
+    if not endpoint or not api_key:
+        return {
+            "ok": False,
+            "error": "web_search_unconfigured",
+            "user_hint": "联网搜索尚未配置，不要假装搜过；如实告诉用户暂时搜不了。",
+        }
     try:
         import httpx
 
         async with httpx.AsyncClient(timeout=8) as client:
             response = await client.post(
-                endpoint, json={"query": query}, headers={"Authorization": f"Bearer {os.environ['TAVILY_API_KEY']}"}
+                endpoint, json={"query": query}, headers={"Authorization": f"Bearer {api_key}"}
             )
             response.raise_for_status()
             return {"ok": True, "result": response.json()}
