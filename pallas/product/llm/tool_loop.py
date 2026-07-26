@@ -114,6 +114,47 @@ def _merge_activated_tool_schemas(
     return merged
 
 
+def _tool_spec_by_name(name: str):
+    from pallas.product.llm.tools.registry import list_registered_tools
+
+    for spec in list_registered_tools():
+        if spec.name == name:
+            return spec
+    return None
+
+
+def _is_side_effecting_tool(name: str) -> bool:
+    from pallas.product.llm.tools.contracts import ToolCapability
+
+    spec = _tool_spec_by_name(name)
+    if spec is None:
+        return False
+    return ToolCapability.SIDE_EFFECTING.value in (spec.capabilities or frozenset())
+
+
+def resolve_visible_reply_after_tools(
+    *,
+    freeform_content: str,
+    reply_texts: list[str],
+    side_effect_ok: bool,
+    tool_call_count: int,
+) -> tuple[str, str]:
+    """动作与开口拆分：有 chat.reply 用其文本；仅副作用成功则静默丢掉自由文本。"""
+    if tool_call_count <= 0:
+        return freeform_content, "generate"
+    if reply_texts:
+        # 最后一次 chat.reply；空串表示显式静默。
+        text = str(reply_texts[-1] or "").strip()
+        if not text:
+            if side_effect_ok:
+                return "", "silence_after_side_effect"
+            return "", "chat.reply"
+        return text, "chat.reply"
+    if side_effect_ok:
+        return "", "silence_after_side_effect"
+    return freeform_content, "generate"
+
+
 def summarize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
     error = str(result.get("error") or "").strip() if isinstance(result, dict) else ""
@@ -125,7 +166,7 @@ def summarize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         if summary:
             preview = summary
         elif command_text:
-            preview = f"已派发群口令「{command_text}」"
+            preview = f"已执行「{command_text}」"
         else:
             preview = json.dumps(payload, ensure_ascii=False)
     elif payload is None:
@@ -268,12 +309,34 @@ async def complete_with_tool_loop(
     last_message: dict[str, Any] = {}
     schema_names = tool_names_from_schemas(tool_schemas)
     prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
-    # 口令类工具：提醒模型不要只口头答应
+    ask_before_call = bool(meta.get("ask_before_call"))
+    selection_source = str(meta.get("selection_source") or "").strip().lower()
+    # 口令类工具：动作与开口拆分（对齐 MaiBot reply 通道）
     if schema_names and working and str(working[0].get("role") or "") == "system":
         hint = (
-            "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
-            "工具返回后，确认文案必须沿用 result.summary / command_text 中的歌名与参数，禁止改成其它曲目或编造结果。"
+            "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，"
+            "不要只口头答应或假装已执行。"
+            "动作类工具成功后默认保持沉默，不要再开口；"
+            "仅当必须补充工具未直接给出的信息（如口令、缺素材）才调用 chat.reply。"
+            "禁止自由文本或 chat.reply 写「整了个/搜了一下/已派发/帮你找找/大伙品品」等废话"
+            "或编造结果；勿把「随机」「随便」当歌名念。"
+            "查询类工具可用返回结果直接作答，或再用 chat.reply。"
         )
+        if ask_before_call or selection_source == "soft_recall":
+            missing = meta.get("missing_required_params")
+            missing_bits: list[str] = []
+            if isinstance(missing, dict):
+                for tool_name, params in missing.items():
+                    names = [str(p).strip() for p in (params or []) if str(p).strip()]
+                    if names:
+                        missing_bits.append(f"{tool_name} 缺 {','.join(names)}")
+            ask_hint = (
+                "【软召回】用户只表达想用某能力、但未给出必填参数时：先用自然口语追问所需信息，"
+                "本轮不要调用动作工具，也不要编造已执行。"
+            )
+            if missing_bits:
+                ask_hint = f"{ask_hint}（{'; '.join(missing_bits[:4])}）"
+            hint = f"{hint}\n{ask_hint}"
         sys_content = str(working[0].get("content") or "")
         if "【动作工具】" not in sys_content:
             working[0] = {**working[0], "content": f"{sys_content.rstrip()}\n\n{hint}".strip()}
@@ -285,7 +348,13 @@ async def complete_with_tool_loop(
         "tool_loop_enabled": True,
         "tool_schema_count": len(tool_schemas),
         "tool_names": schema_names,
+        "activated_tools": list(meta.get("activated_tools") or []),
     }
+    reply_texts: list[str] = []
+    side_effect_ok = False
+    chat_reply_injected = False
+
+    from pallas.product.llm.tools.reply import CHAT_REPLY_NAME, extract_chat_reply_text
 
     for round_idx in range(max_rounds):
         round_options = dict(options)
@@ -304,7 +373,16 @@ async def complete_with_tool_loop(
         tool_calls = last_message.get("tool_calls")
         round_trace: dict[str, Any] = {"round": round_idx + 1, "tool_calls": [], "calls": []}
         if not isinstance(tool_calls, list) or not tool_calls:
-            content = str(last_message.get("content", "") or "").strip()
+            freeform = str(last_message.get("content", "") or "").strip()
+            content, reply_source = resolve_visible_reply_after_tools(
+                freeform_content=freeform,
+                reply_texts=reply_texts,
+                side_effect_ok=side_effect_ok,
+                tool_call_count=int(agent_trace.get("tool_call_count") or 0),
+            )
+            agent_trace["reply_source"] = reply_source
+            if reply_source != "generate":
+                agent_trace["final_stage"] = reply_source
             assistant_message = dict(last_message)
             assistant_message.setdefault("role", "assistant")
             assistant_message["content"] = content
@@ -312,6 +390,8 @@ async def complete_with_tool_loop(
             assistant_message["_agent_trace"] = agent_trace
             if int(agent_trace.get("tool_call_count") or 0) <= 0:
                 record_bot_llm_task(task, "tool_session_no_call")
+                if ask_before_call or selection_source == "soft_recall":
+                    record_bot_llm_task(task, "soft_recall_ask_no_call")
             else:
                 record_bot_llm_task(task, "tool_session_called")
             return content, assistant_message
@@ -351,11 +431,38 @@ async def complete_with_tool_loop(
             })
             if summary["ok"]:
                 record_bot_llm_task(task, "tool_call_ok")
+                if resolved_name == CHAT_REPLY_NAME:
+                    extracted = extract_chat_reply_text(result_dict)
+                    if extracted is not None:
+                        reply_texts.append(extracted)
+                elif _is_side_effecting_tool(resolved_name):
+                    side_effect_ok = True
+                    if not chat_reply_injected:
+                        tool_schemas = _merge_activated_tool_schemas(tool_schemas, [CHAT_REPLY_NAME])
+                        schema_names = tool_names_from_schemas(tool_schemas)
+                        agent_trace["tool_schema_count"] = len(tool_schemas)
+                        agent_trace["tool_names"] = schema_names
+                        agent_trace.setdefault("activated_tools", [])
+                        if CHAT_REPLY_NAME not in agent_trace["activated_tools"]:
+                            agent_trace["activated_tools"].append(CHAT_REPLY_NAME)
+                        chat_reply_injected = True
             else:
                 record_bot_llm_task(task, "tool_call_fail")
+                if _is_side_effecting_tool(resolved_name):
+                    agent_trace.setdefault("reject_reasons", []).append({
+                        "tool": resolved_name,
+                        "reason": summary["error"] or "side_effect_rejected",
+                    })
             working.append(tool_result_message(call_id, resolved_name, tool_result))
             activated = _activate_names_from_tool_result(resolved_name, result_dict)
+            if resolved_name == "tools.find":
+                record_bot_llm_task(task, "tools_find_call")
             if activated:
+                record_bot_llm_task(task, "tool_activate")
+                if context is not None:
+                    from pallas.product.llm.tools.activation_cache import remember_activated_tools
+
+                    remember_activated_tools(context.bot_id, context.group_id, context.user_id, activated)
                 tool_schemas = _merge_activated_tool_schemas(tool_schemas, activated)
                 schema_names = tool_names_from_schemas(tool_schemas)
                 agent_trace["tool_schema_count"] = len(tool_schemas)
@@ -366,10 +473,20 @@ async def complete_with_tool_loop(
                         agent_trace["activated_tools"].append(name)
         agent_trace["rounds"].append(round_trace)
 
-    content = str(last_message.get("content", "") or "").strip()
-    if not content:
+    freeform = str(last_message.get("content", "") or "").strip()
+    content, reply_source = resolve_visible_reply_after_tools(
+        freeform_content=freeform,
+        reply_texts=reply_texts,
+        side_effect_ok=side_effect_ok,
+        tool_call_count=int(agent_trace.get("tool_call_count") or 0),
+    )
+    if not content and reply_source == "generate" and not freeform:
         content = "抱歉，工具调用次数已达上限，请换个说法再试。"
+        reply_source = "max_rounds_fallback"
     agent_trace["status"] = "max_rounds"
+    agent_trace["reply_source"] = reply_source
+    if reply_source != "generate":
+        agent_trace["final_stage"] = reply_source
     assistant_message = dict(last_message)
     assistant_message.setdefault("role", "assistant")
     assistant_message["content"] = content
@@ -378,4 +495,6 @@ async def complete_with_tool_loop(
         record_bot_llm_task(task, "tool_session_called")
     else:
         record_bot_llm_task(task, "tool_session_no_call")
+        if ask_before_call or selection_source == "soft_recall":
+            record_bot_llm_task(task, "soft_recall_ask_no_call")
     return content, assistant_message

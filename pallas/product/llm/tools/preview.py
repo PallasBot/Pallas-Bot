@@ -15,13 +15,16 @@ from pallas.product.llm.tools.select import (
 def preview_tool_intent(user_text: str, *, task: str = "llm_chat") -> dict[str, Any]:
     text = (user_text or "").strip()
     from pallas.product.llm.tools.registry import tool_catalog_for_chat
+    from pallas.product.llm.tools.soft_recall import select_soft_recall_hits
 
     domains = infer_tool_domains(text)
     structure = domains_from_structure(text)
     hint_domains = domains_from_registered_tool_hints(text)
     scored = score_registered_tools(text)[:16]
+    soft_hits = select_soft_recall_hits(text)[:8]
     catalog = tool_catalog_for_chat(task=task, user_text=text)
     schema_tools = [item.name for item in catalog.tools] if catalog is not None else []
+    selection = catalog.selection if catalog is not None else None
     return {
         "text": text,
         "domains": sorted(domains),
@@ -36,7 +39,17 @@ def preview_tool_intent(user_text: str, *, task: str = "llm_chat") -> dict[str, 
             }
             for score, spec in scored
         ],
+        "soft_recall_candidates": [
+            {
+                "name": hit.spec.name,
+                "score": hit.score,
+                "missing_required": list(hit.missing_required),
+            }
+            for hit in soft_hits
+        ],
         "schema_tools": schema_tools,
-        "schema_count": int(catalog.selection.schema_count) if catalog is not None else 0,
+        "schema_count": int(selection.schema_count) if selection is not None else 0,
+        "selection_source": str(selection.selection_source or "") if selection is not None else "",
+        "ask_before_call": bool(selection.ask_before_call) if selection is not None else False,
         "selective_empty": catalog is None and bool(text),
     }

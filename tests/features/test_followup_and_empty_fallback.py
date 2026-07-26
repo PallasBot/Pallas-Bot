@@ -71,3 +71,14 @@ def test_empty_fallback_uses_corpus_fallback() -> None:
 def test_empty_fallback_silent_for_ambient() -> None:
     task = {"task_type": LLM_CHAT_TASK_TYPE, "speak_trigger": "ambient"}
     assert resolve_llm_chat_empty_fallback(task, "") == ""
+
+
+def test_empty_fallback_silent_after_tool_calls() -> None:
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "speak_trigger": "mention",
+        "fallback_text": "哈？",
+        "agent_trace": {"tool_call_count": 1},
+    }
+    assert resolve_llm_chat_empty_fallback(task, "") == ""
+    assert resolve_llm_chat_empty_fallback(task, "房开了") == "房开了"

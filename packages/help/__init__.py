@@ -70,7 +70,7 @@ __plugin_meta__ = PluginMetadata(
                 description="打开牛牛帮助总览。用户想看有哪些功能、怎么用时使用。",
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛帮助",
-                hints=["帮助", "有哪些功能", "有什么功能", "功能列表", "怎么用", "使用说明", "功能说明"],
+                hints=["帮助", "有哪些功能", "有什么功能", "有啥功能", "功能列表", "怎么用", "使用说明", "功能说明"],
             ),
             llm_command_tool_row(
                 name="help.show_topic",
@@ -166,7 +166,7 @@ __plugin_meta__ = PluginMetadata(
                         "keywords": "开启,关闭,开关,插件,全部功能,禁用,启用",
                     },
                     {
-                        "title": "与闲聊的分工",
+                        "title": "与 LLM 对话的分工",
                         "content": (
                             "功能用法与开关状态以「牛牛帮助」口令为准；"
                             "向 @牛牛 提问时若不确定口令，应引导用户发送牛牛帮助，不要编造不存在的命令。"

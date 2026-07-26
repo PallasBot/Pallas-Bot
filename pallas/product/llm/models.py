@@ -22,6 +22,7 @@ class ChatSubmitRequest(BaseModel):
     knowledge_retrieval_trace: dict[str, Any] | None = None
     hybrid_retrieval_trace: dict[str, Any] | None = None
     llm_rewrite_metadata: dict[str, Any] | None = None
+    tool_metadata: dict[str, Any] | None = None
 
 
 class ChatSubmitResult(BaseModel):

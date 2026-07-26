@@ -183,11 +183,10 @@ def test_music_selective_catalog_excludes_unrelated_command_tools(monkeypatch) -
 
 def test_normalize_keeps_command_dispatch_summary() -> None:
     from pallas.product.llm.tool_loop import summarize_tool_result
+    from pallas.product.llm.tools.plugin_bootstrap import command_dispatch_result_summary
     from pallas.product.llm.tools.registry import normalize_tool_result
 
-    summary_text = (
-        "已派发群口令「牛牛点歌 铁花飞」。向用户确认时必须沿用该口令中的歌名/参数原文，禁止改成其它曲目或编造结果。"
-    )
+    summary_text = command_dispatch_result_summary("牛牛点歌 铁花飞")
     normalized = normalize_tool_result({
         "ok": True,
         "result": {
@@ -201,3 +200,16 @@ def test_normalize_keeps_command_dispatch_summary() -> None:
     assert summary["result_preview"]
     assert "铁花飞" in summary["result_preview"]
     assert "平凡之路" not in summary["result_preview"]
+    assert "歌名/参数原文" not in summary["result_preview"]
+    assert summary["result_preview"].startswith("已执行「")
+    assert "极短口语" in summary["result_preview"]
+    assert "系统腔" in summary["result_preview"]
+
+
+def test_command_dispatch_summary_forbids_meta_templates() -> None:
+    from pallas.product.llm.tools.plugin_bootstrap import command_dispatch_result_summary
+
+    text = command_dispatch_result_summary("牛牛画画 一头牛")
+    assert text.startswith("已执行「牛牛画画 一头牛」")
+    assert "禁止「已派发/帮你找找/正在生成」" in text
+    assert "系统腔" in text

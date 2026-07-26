@@ -1,6 +1,6 @@
 # 写社区插件并上架
 
-本页面向**插件作者**：把仓库整理成商店可识别的形态，自检通过后向索引仓提 PR。用户安装方式见 [社区插件商店](community-plugin-store.md)；代码结构合同见 [Golden Plugin](/developer/plugin-development/golden-plugin)。
+面向插件作者：把仓库整理成商店可识别的形态，自检通过后向索引仓提 PR。用户安装见 [社区插件商店](community-plugin-store.md)；代码结构合同见 [Golden Plugin](/developer/plugin-development/golden-plugin)。
 
 ## 你要完成什么
 
@@ -10,19 +10,15 @@
 | 自检 | `community_plugin_author.py check` 通过（可选 L2 画像） |
 | 收录 | 向 [community-plugin-index](https://github.com/PallasBot/community-plugin-index) 追加 `index.json` 条目并提 PR |
 
----
-
 ## 三种接入方式（落点相同）
 
 | 方式 | 适用 | 做法 |
-| --- | --- | --- |
-| **索引收录** | 希望公开展示、被商店发现 | 向 community-plugin-index 提 PR |
-| **Git 直装** | 运维自行安装，不进公共索引 | WebUI **插件商店 → 社区插件 → 从 Git 安装** |
-| **手工投放** | 内网或本地调试 | 复制目录到 `local/plugins/<id>/` |
+| --- | --- |
+| 索引收录 | 希望公开展示、被商店发现 | 向 community-plugin-index 提 PR |
+| Git 直装 | 运维自行安装，不进公共索引 | WebUI **插件商店 → 社区插件 → 从 Git 安装** |
+| 手工投放 | 内网或本地调试 | 复制目录到 `local/plugins/<id>/` |
 
 同名冲突时 **`local/plugins` 优先于官方插件**。
-
----
 
 ## 步骤 1：整理插件目录
 
@@ -36,16 +32,12 @@ my_plugin/
     └── icon.png         # 推荐 256×256，商店卡片图标
 ```
 
-约定：
-
 | 项 | 规则 |
 | --- | --- |
 | 插件 ID | 小写字母开头，仅 `a-z` / `0-9` / `_`，最长 64；与 `local/plugins/<id>/` 目录名一致 |
 | `PLUGIN_ID` | 可在 `__init__.py` 定义，便于与目录名对齐 |
 | 最低版本 | 依赖 Pallas-Bot 内核时在 README 注明（如 **4.0.0**） |
 | 权限 | 接入 [cmd_perm](/common/cmd_perm) 的 `command_permissions` 后，帮助图自动展示「何人可用」 |
-
----
 
 ## 步骤 2：维护版本与更新日志
 
@@ -71,12 +63,10 @@ my_plugin/
 
 | 档位 | 要点 |
 | --- | --- |
-| **L1（索引默认门槛）** | `command_permissions` + `menu_data` + 规范 `usage` |
-| **L2（优选）** | L1 + `command_limits` + 鉴权 ID 一致；命令推荐 `plugin_sdk` |
+| L1（索引默认门槛） | `command_permissions` + `menu_data` + 规范 `usage` |
+| L2（优选） | L1 + `command_limits` + 鉴权 ID 一致；命令推荐 `plugin_sdk` |
 
 `check --profile L1|L2` 校验 metadata 与命令 ID 一致性；目录、图标、README 仍是基础结构检查。
-
----
 
 ## 步骤 3：准备图标与索引元数据
 
@@ -109,8 +99,6 @@ my_plugin/
 ```
 
 提 PR 前更新根级 **`updated_at`**（ISO 日期），便于客户端刷新图标缓存。
-
----
 
 ## 步骤 4：用作者工具 CLI 自检
 
@@ -169,8 +157,6 @@ uv run python tools/community_plugin_author.py validate-index /path/to/index.jso
 
 索引仓另有 `python tools/validate_index.py`（与 CI 一致）。
 
----
-
 ## 步骤 5：提交收录 PR
 
 合并前对照：
@@ -185,13 +171,9 @@ uv run python tools/community_plugin_author.py validate-index /path/to/index.jso
 
 合并后 CI 同步 README 插件列表；Bot 拉远程 `index.json` 即可在商店展示。
 
----
-
 ## 步骤 6：发版后同步索引
 
 插件**已经收录**后，每次正式发版（归档 CHANGELOG、打 `vX.Y.Z` tag）应同步更新公共索引，否则商店卡片上的 `version` 会落后于仓库。
-
-推荐流程：
 
 1. 在插件仓完成发版：`CHANGELOG.md` 归档、`vX.Y.Z` tag、（若有）`community-index.entry.json` 的 `version` 一并改掉。
 2. Fork / 检出 [community-plugin-index](https://github.com/PallasBot/community-plugin-index)，找到 `index.json` → `plugins` 里 **同 `id` 的那一条**。
@@ -210,7 +192,10 @@ uv run python tools/community_plugin_author.py validate-index /path/to/index.jso
 
 当前**没有**「打 tag 后自动向索引开 PR」的官方 hook；发版同步仍靠作者提 PR（或维护者代提）。
 
----
+## 成功信号
+
+- `community_plugin_author.py check`（及可选 L2）通过。
+- 索引 PR 合并后，商店能看到该插件；发版后索引 `version` 与 tag 一致。
 
 ## 私有 / 公会索引
 
@@ -223,9 +208,7 @@ COMMUNITY_PLUGIN_INDEX_URL = "https://example.com/my-guild-index.json"
 
 或落盘 `data/pallas_config/community_plugin_index.json` 覆盖远程。
 
----
-
-## 相关
+## 接下来做什么
 
 | 项 | 位置 |
 | --- | --- |

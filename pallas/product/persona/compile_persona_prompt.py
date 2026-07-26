@@ -269,6 +269,19 @@ def compile_persona_prompt(
     bot_behavior = build_bot_behavior_prompt(persona, profile=profile)
     group_style = compile_group_style_prompt(style_profile)
     group_expression = compile_group_expression_prompt(style_profile)
+    try:
+        from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_lines
+
+        catchphrase_lines = compile_catchphrase_prompt_lines(int(bot_id))
+    except Exception:
+        catchphrase_lines = []
+    if catchphrase_lines:
+        catchphrase_block = "\n".join(f"- {line}" for line in catchphrase_lines[:5])
+        group_expression = (
+            f"{group_expression}\n\n【账号口癖】\n{catchphrase_block}".strip()
+            if group_expression.strip()
+            else f"【账号口癖】\n{catchphrase_block}"
+        )
     if profile == PROMPT_PROFILE_REPEATER:
         self_identity = compile_repeater_self_identity_prompt(
             bot_persona,

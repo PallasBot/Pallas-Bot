@@ -54,6 +54,7 @@ FILE_MAP: dict[str, str] = {
     "developer/architecture/plugin-governance.md": "developer/architecture/plugin-governance.md",
     "developer/architecture/shard-runtime.md": "developer/architecture/shard-runtime.md",
     "developer/architecture/llm-output-path.md": "developer/architecture/llm-output-path.md",
+    "developer/architecture/agent-lifecycle.md": "developer/architecture/agent-lifecycle.md",
     "developer/plugin-development/getting-started.md": (
         "developer/plugin-development/getting-started.md"
     ),
@@ -85,12 +86,12 @@ FILE_MAP: dict[str, str] = {
     "developer/reference/platform-api.md": "developer/reference/platform-api.md",
     "developer/reference/internal-api.md": "developer/reference/internal-api.md",
     "developer/reference/console-api-response.md": "developer/reference/console-api-response.md",
-    # --- 兼容：根部署页 / FAQ ---
-    "Deployment.md": "deploy/deployment.md",
-    "DockerDeployment.md": "deploy/docker.md",
-    "Config.md": "deploy/config.md",
+    # --- Deploy / FAQ（正文在 deploy/ 与 FAQ.md；根目录同名页为 stub，不同步）---
+    "deploy/deployment.md": "deploy/deployment.md",
+    "deploy/docker.md": "deploy/docker.md",
+    "deploy/config.md": "deploy/config.md",
     "FAQ.md": "deploy/faq.md",
-    "Migration-v3.md": "about/migration.md",
+    "about/migration.md": "about/migration.md",
     # --- common / develop 兼容 ---
     "common/community_stats.md": "common/community_stats.md",
     "common/corpus/README.md": "common/corpus.md",
@@ -106,6 +107,7 @@ FILE_MAP: dict[str, str] = {
     "common/webui/api/06-database.md": "common/webui/api/06-database.md",
     "common/webui/api/07-instances-configs.md": "common/webui/api/07-instances-configs.md",
     "common/webui/api/08-update-ai.md": "common/webui/api/08-update-ai.md",
+    "common/webui/api/09-agent-platform.md": "common/webui/api/09-agent-platform.md",
     "common/message_scrub/README.md": "common/message_scrub.md",
     "plugins/README.md": "plugins/index.md",
     "develop/README.md": "develop/index.md",
@@ -137,7 +139,8 @@ FILE_MAP: dict[str, str] = {
     "guide/community-plugin-author.md": "guide/community-plugin-author.md",
     "guide/llm-and-repeater.md": "guide/llm-and-repeater.md",
     "guide/llm-migrate-from-ollama.md": "guide/llm-migrate-from-ollama.md",
-    "user/README.md": "guide/usage-admin.md",
+    "guide/usage-admin.md": "guide/usage-admin.md",
+    "guide/ai-runtime-choice.md": "guide/ai-runtime-choice.md",
     "develop/extension-pypi-publish.md": "develop/extension-pypi-publish.md",
 }
 
@@ -332,6 +335,7 @@ def transform_for_vitepress(text: str) -> str:
         r"](/plugins/\1\2)",
         text,
     )
+    text = re.sub(r"\]\(/FAQ([^)]*)\)", r"](/deploy/faq\1)", text)
     text = re.sub(
         r"\]\(\.\./FAQ\.md([^)]*)\)",
         r"](/deploy/faq\1)",
@@ -360,6 +364,11 @@ def transform_for_vitepress(text: str) -> str:
     text = re.sub(
         r"\]\(\./TEMPLATE\.md([^)]*)\)",
         r"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/plugins/TEMPLATE.md\1)",
+        text,
+    )
+    text = re.sub(
+        r"\]\(\./SYNC\.md([^)]*)\)",
+        r"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/plugins/SYNC.md\1)",
         text,
     )
     text = re.sub(

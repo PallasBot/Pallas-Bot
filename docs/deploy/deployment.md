@@ -1,10 +1,10 @@
 # 标准部署
 
-面向 VPS / 本机长期运行。首次验证见 [快速开始](/guide/quickstart)。
+完成本页后，你将在本机或 VPS 上从源码跑起 Pallas-Bot，并完成数据库、控制台与 QQ 接入。适合需要长期运行、可改代码或不用 Docker 的场景。首次只想快速验证时，可先看 [快速开始](/guide/quickstart)。
 
 相关：[Docker](/deploy/docker) · [配置](/deploy/config) · [连接 QQ](/guide/connect-qq) · [分片](/maintainer/deploy/sharded) · [FAQ](/deploy/faq)
 
-## 部署前检查清单
+## 部署前准备
 
 | 项 | 要求 |
 | --- | --- |
@@ -20,20 +20,18 @@
 
 ---
 
-## 步骤 1：获取源码
+## 1. 获取源码
 
 ```bash
 git clone https://github.com/PallasBot/Pallas-Bot.git
 cd Pallas-Bot
 ```
 
-**验证**：目录内存在 `pyproject.toml`、`config/pallas.example.toml`。
-
-**失败**：`git clone` 超时 → 配置代理或换镜像源后重试。
+目录内应有 `pyproject.toml` 与 `config/pallas.example.toml`。`git clone` 超时可配置代理或换镜像源后重试。
 
 ---
 
-## 步骤 2：安装依赖
+## 2. 安装依赖
 
 ```bash
 uv sync
@@ -46,13 +44,13 @@ uv sync --extra perf          # 分词加速
 uv sync --extra deploy-shard  # 分片模板，另须配置 REDIS_URL
 ```
 
-**验证**：退出码 `0`；`.venv` 已创建；`uv run python -c "import nonebot"` 无报错。
+退出码为 `0`、`.venv` 已创建，且 `uv run python -c "import nonebot"` 无报错时，依赖已就绪。
 
-分片模板：`uv run python tools/apply_deploy_profile.py shard` → `pallas.toml [env]` 配置 `REDIS_URL` → `./scripts/run_sharded_bot.sh start`。消息审查 4.0 默认开启，WebUI「通用配置 → 消息审查」配置即可。分片 claim 依赖 Redis；`deploy-shard` 与 `coord-redis` 均安装 `redis` 客户端。
+分片模板：`uv run python tools/apply_deploy_profile.py shard` → 在 `pallas.toml` 的 `[env]` 配置 `REDIS_URL` → `./scripts/run_sharded_bot.sh start`。消息审查 4.0 默认开启，在 WebUI「通用配置 → 消息审查」中调整即可。分片 claim 依赖 Redis；`deploy-shard` 与 `coord-redis` 均安装 `redis` 客户端。
 
 ---
 
-## 步骤 3：主配置 `config/pallas.toml`
+## 3. 写入主配置 `config/pallas.toml`
 
 ```bash
 cp config/pallas.example.toml config/pallas.toml
@@ -62,7 +60,7 @@ cp config/pallas.example.toml config/pallas.toml
 
 1. `[bootstrap] superusers` — 超管 QQ 号
 2. `db_backend` — 新装 `postgresql`；3.x 升级可 `mongodb`
-3. `[bootstrap.postgres]` 或 `[bootstrap.mongo]` — 与步骤 4 实际库一致
+3. `[bootstrap.postgres]` 或 `[bootstrap.mongo]` — 与下一步实际库一致
 
 示例（PostgreSQL）：
 
@@ -87,13 +85,13 @@ db = "PallasBot"
 uv run python tools/migrate_env_to_pallas.py
 ```
 
-**验证**：`config/pallas.toml` 为文件（非目录）；`superusers`、数据库段已填写。勿提交含密钥的文件。
+确认 `config/pallas.toml` 是文件（不是目录），且 `superusers` 与数据库段已填写。勿提交含密钥的文件。
 
-插件与通用项可在 Web 控制台修改（落盘 `data/pallas_config/webui.json`），见 [配置要点](/deploy/config)、[配置存储](/developer/architecture/config-storage)。
+插件与通用项可在 Web 控制台修改（落盘 `data/pallas_config/webui.json`），见 [配置要点](/deploy/config)、[配置存储](/developer/architecture/config-storage)。合并顺序为 `pallas.toml` → `.env` → `webui.json`。
 
 ---
 
-## 步骤 4：数据库
+## 4. 准备数据库
 
 4.0 新装默认 PostgreSQL（`uv sync` 已含驱动）。3.x 升级、已有 Mongo 数据的站点可继续 MongoDB。
 
@@ -102,43 +100,41 @@ uv run python tools/migrate_env_to_pallas.py
 
 库表由 Pallas-Bot 首次启动自动初始化（PG 须目标库已存在；应用账号不必为超级用户）。PG 排障见 [Docker 部署 · PG](/deploy/docker#pg-日志-fatal-database-pallasbot-does-not-exist)。
 
-**验证**：
+启动前确认：
 
-- PostgreSQL：`psql -h ... -U ... -d ...` 可登录，库名与 `pallas.toml` 中 `db` 一致
+- PostgreSQL：`psql` 可登录，库名与 `pallas.toml` 中 `db` 一致
 - MongoDB：`mongosh` 或客户端可连上配置的 host/port
 
 ---
 
-## 步骤 5：语音资源（可选）
+## 5. 语音资源（可选）
 
-启动时自动下载语音包。
+启动时会自动下载语音包。唱歌等能力还需要 [FFmpeg](https://napneko.github.io/config/advanced#%E5%AE%89%E8%A3%85-ffmpeg)。
 
-FFmpeg（唱歌等）：[安装 FFmpeg](https://napneko.github.io/config/advanced#%E5%AE%89%E8%A3%85-ffmpeg)
+自动下载失败时，手动解压 [Pallas.zip](https://huggingface.co/pallasbot/Pallas-Bot/blob/main/voices/Pallas.zip) 至 `resource/voices/`，结构见 [path_structure.txt](https://github.com/PallasBot/Pallas-Bot/blob/main/resource/voices/path_structure.txt)。
 
-自动下载失败：手动解压 [Pallas.zip](https://huggingface.co/pallasbot/Pallas-Bot/blob/main/voices/Pallas.zip) 至 `resource/voices/`，结构见 [path_structure.txt](https://github.com/PallasBot/Pallas-Bot/blob/main/resource/voices/path_structure.txt)。
-
-**验证**：启动日志无语音目录致命错误；`resource/voices/` 存在预期文件。
+启动日志无语音目录致命错误，且 `resource/voices/` 有预期文件即可。
 
 ---
 
-## 步骤 6：启动 Bot
+## 6. 启动 Bot
 
 ```bash
 uv run pallas
 ```
 
-**验证**：
+启动成功时通常可见：
 
-1. 日志显示 NoneBot / 插件加载完成，无数据库连接致命错误
+1. NoneBot / 插件加载完成，无数据库连接致命错误
 2. 日志打印 Web 控制台初始口令（`data/pallas_console/`）
 3. `http://<主机IP>:8088/pallas/api/health` 返回正常
 4. `http://<主机IP>:8088/pallas/` 可用口令登录
 
-未配置守护进程时，关闭终端即停止服务。Linux 生产环境使用下文 systemd 或 [Docker](/deploy/docker)。
+未配置守护进程时，关闭终端即停止服务。Linux 生产环境使用下文 systemd，或改用 [Docker](/deploy/docker)。
 
 ---
 
-## 步骤 7：接入 QQ 协议端
+## 7. 接入 QQ 协议端
 
 详见 [连接 QQ](/guide/connect-qq)。
 
@@ -152,7 +148,7 @@ uv run pallas
 
 按 [NapCat](https://napneko.github.io/) 安装，反向 WebSocket 填上述地址。
 
-**验证**：控制台账号在线；群内 **牛牛帮助** 有响应。
+控制台账号在线，且群内 **牛牛帮助** 有响应时，接入完成。
 
 ---
 
@@ -224,13 +220,13 @@ WantedBy=multi-user.target
 | Web 控制台 | `http://<主机>:8088/pallas/` |
 | 协议端管理 | `http://<主机>:8088/pallas/protocol` |
 
-自定义 `host`/`port` 或路径时，以 `pallas.toml` 与插件配置为准。
+自定义 `host`/`port` 或路径时，以 `pallas.toml` 与插件配置为准。默认 WebUI 静态目录为 `data/pb_webui/public-react/`。
 
 ---
 
 ## AI 功能（可选）
 
-基础功能（复读、轮盘等）不依赖独立 AI 服务。唱歌、闲聊、TTS 等须 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，对 GPU/内存要求较高。
+基础功能（复读、轮盘等）不依赖独立 AI 服务。普通 LLM 对话在 Bot WebUI「AI 配置 → 接入」配置 Provider 即可；唱歌、TTS 和遗留 RWKV 才须 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，并可能需要更高 GPU/内存配置。
 
 ---
 

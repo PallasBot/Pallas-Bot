@@ -151,7 +151,7 @@ def _bump_row(
     row["cache_read_tokens"] = int(row.get("cache_read_tokens") or 0) + cache_read
     row["cache_write_tokens"] = int(row.get("cache_write_tokens") or 0) + cache_write
     if cost:
-        row["cost_total"] = _as_cost(row.get("cost_total")) + cost
+        row["cost_total"] = round(_as_cost(row.get("cost_total")) + cost, 6)
 
 
 def record_llm_token_usage(
@@ -187,6 +187,7 @@ def record_llm_token_usage(
     except Exception:
         cost = 0.0
         currency = ""
+    day_for_ledger = today_key()
     try:
         with _lock:
             rollover_if_needed()
@@ -197,7 +198,7 @@ def record_llm_token_usage(
             _cache_read_tokens += cache_read
             _cache_write_tokens += cache_write
             if cost > 0:
-                _cost_total += cost
+                _cost_total = round(_cost_total + cost, 6)
             if currency and not _cost_currency:
                 _cost_currency = currency
             row = _by_task.setdefault(task_key, dict(_EMPTY_ROW))
@@ -241,6 +242,21 @@ def record_llm_token_usage(
                 cache_write=cache_write,
                 cost=cost,
             )
+            day_for_ledger = _day_key or today_key()
+        from pallas.product.llm.usage_ledger import append_usage_record
+
+        append_usage_record(
+            task=task_key,
+            provider=provider,
+            model=model,
+            prompt_tokens=prompt,
+            completion_tokens=completion,
+            cache_read_tokens=cache_read,
+            cache_write_tokens=cache_write,
+            cost=cost,
+            currency=currency,
+            day_key=day_for_ledger,
+        )
     except Exception:
         pass
 
@@ -426,6 +442,12 @@ def flush_stats_sync() -> None:
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
     except OSError:
+        pass
+    try:
+        from pallas.product.llm.usage_ledger import trim_old_ledger_files
+
+        trim_old_ledger_files()
+    except Exception:
         pass
     try:
         from pallas.product.llm.llm_daily_stats_store import write_day_side

@@ -1,6 +1,8 @@
 # pallas.api Cookbook
 
-扩展作者稳定入口。实现在 `pallas.core` / `pallas.product`。社区扩展只允许 import `pallas.api.*`（及模板约定的包内模块）；官方插件可用 `pallas.api.platform`（见 [Platform API](/developer/reference/platform-api)）。
+本页速查扩展作者稳定入口。实现在 `pallas.core` / `pallas.product`。社区扩展只允许 import `pallas.api.*`（及模板约定的包内模块）；官方插件可用 `pallas.api.platform`（见 [Platform API](/developer/reference/platform-api)）。
+
+手把手最小插件见 [写第一个插件](first-plugin.md)。这里按主题找 import，不展开教程。
 
 ## 安装 pallas-core
 
@@ -8,7 +10,7 @@
 | --- | --- |
 | 主仓全仓开发 | 根目录 `uv sync`；无需单独装包 |
 | 独立扩展仓（wheel） | `./scripts/build_core.sh` 后 `uv pip install build/pallas-core/dist/pallas_core-*.whl` |
-| PyPI | `uv add "pallas-core>=4.0.0,<5.0.0"`（随主仓 `v*` tag 发布，见 [pallas-core 发版](../../develop/extension-pypi-publish.md#pallas-core主仓)） |
+| PyPI | `uv add "pallas-core>=4.0.0,<5.0.0"`（随主仓 `v*` tag 发布，见 [pallas-core 发版](../extension-pypi-publish.md#pallas-core主仓)） |
 
 模板：`templates/pallas-plugin-extension/pyproject.toml`。
 
@@ -82,7 +84,7 @@ from pallas.api.safety import is_message_scrub_blocked_async
 
 ## AI 运行时健康（只读）
 
-插件侧熔断/降级应读 AI `/health` 缓存，勿自建 parallel circuit：
+插件侧对**媒体**能力的熔断 / 降级应读 AI `/health` 缓存，勿自建 parallel circuit。普通聊天走 Bot Provider，不依赖该健康面。
 
 ```python
 from pallas.api.ai_runtime_health import image_runtime_circuit_is_open
@@ -99,12 +101,13 @@ from pallas.api.ai_runtime_health import image_runtime_circuit_is_open
 | `pallas.core.*`（除 api re-export） | 内部实现 |
 | `pallas.product.*` | 产品域 |
 | `pallas.console.*` | WebUI 维护者向 |
-| `pallas.product.llm.client` 直调 | 应走 capability 信封 / AI 仓 |
+| `pallas.product.llm.client` 直调 | 普通聊天由内核 Agent / Provider 负责；插件勿旁路 |
 
 CI：`tools/check_plugin_imports.py` 与 `community_plugin_author check` 会对齐上述边界。
 
-## 相关
+## 后续阅读
 
 - [插件开发入门](getting-started.md)
 - [Golden Plugin](golden-plugin.md)
 - [仓库布局与公开 API](/developer/reference/repo-layout)
+- [Platform API](/developer/reference/platform-api)（官方 / 内置）

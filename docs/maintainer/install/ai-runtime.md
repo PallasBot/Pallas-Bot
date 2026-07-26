@@ -1,19 +1,19 @@
 # AI Runtime
 
-接入 AI Runtime。现象无响应时，按 Bot 侧 / AI 侧分层排查。
+本页说明如何接入可选的 AI Runtime（媒体 / 遗留 RWKV）。普通 LLM 聊天请在 Bot WebUI「AI 配置 → 接入」配置 Provider，不依赖本 Runtime。
 
-独立仓 `Pallas-Bot-AI`；Bot 通过任务与 callback 协作，不是主仓内普通插件。
+独立仓是 `Pallas-Bot-AI`；Bot 通过任务与 callback 协作，不是主仓内普通插件。
 
 ::: tip
-可选。不接 AI 也能跑复读与官方插件。
+可选。不接 AI Runtime 也能跑复读、官方插件与普通 LLM 对话。
 :::
 
 ## 两层职责
 
 | 组件 | 职责 |
 | --- | --- |
-| `Pallas-Bot` | 接消息、发起任务、接收 callback、把结果送回群或会话 |
-| `Pallas-Bot-AI` | 执行 AI / 媒体任务 |
+| `Pallas-Bot` | 接消息、配置 Provider 并在进程内完成普通 LLM 聊天；媒体 / RWKV 时发起任务、接收 callback |
+| `Pallas-Bot-AI` | 执行媒体任务与遗留 RWKV `/api/chat` |
 
 任一侧异常都会表现为「AI 没反应」，根因不一定在同一仓。
 
@@ -31,7 +31,6 @@
 - 绘图与媒体生成
 - 唱歌、音频、工具类异步任务
 - 任务状态回调与结果回传
-- 遗留路径：`LLM_RUNTIME=ai_service` 时的聊天任务（默认聊天走 Bot 内核 Provider，不必装 Runtime）
 
 ::: tip
 普通复读、帮助、权限、扩展玩法：本体 + 扩展即可。默认 LLM 聊天只配 **接入** Provider；唱歌 / TTS 等媒体再接 AI Runtime。
@@ -48,7 +47,7 @@ cp .env.example .env
 ./scripts/ai_bootstrap.sh --bot-host 127.0.0.1 --bot-port 8088
 ```
 
-默认安装 **媒体栈**（含 torch），启动 media worker + API。聊天 / 画画默认不经本 Runtime。
+默认安装 **媒体栈**（含 torch），启动 media worker + API。普通聊天不经本 Runtime。
 
 或在 **Pallas-Bot** 仓库（同级已克隆 AI 仓时）：
 
@@ -68,9 +67,9 @@ uv run pallas ai setup
 
 本地 Ollama 推理（若仍用遗留 LLM worker）用 Ollama 自带 GPU，与 `--gpu`（本仓 PyTorch）无关。
 
-### 无 GPU / 纯第三方 API（遗留 remote-only）
+### 无 GPU / 纯第三方 API
 
-聊天默认走 Bot 内核 Provider，一般**不必**再跑 AI 仓 LLM。若仍要经 AI 仓跑远端 LLM，见 **[Pallas-Bot-AI · remote-only 部署](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/deploy/remote-only.md)**（需自行 `ctl.sh start llm`，bootstrap 不再代拉 Ollama）。
+普通聊天在 Bot WebUI「AI 配置 → 接入」配置 Provider、模型和密钥即可，不需要运行本 Runtime。
 
 ### Docker（仅 AI 栈）
 
@@ -82,23 +81,22 @@ docker compose -f docker-compose.llm.yml up -d
 
 使用主仓 **`docker-compose.full.yml`**（PostgreSQL + Bot + Redis + Ollama + AI），见 [Docker 部署](/deploy/docker)。
 
-默认 AI 为 **slim** 镜像；Ollama 模型默认不预拉（`--profile pull-models` 可选）。在 WebUI「AI 配置 → 媒体服务」保存基址时，会同步 Bot 侧 `AI_SERVER_HOST` / `AI_SERVER_PORT`；策略页不再单独填地址。
+AI 镜像仅用于媒体 / RWKV。Ollama 模型默认不预拉（`--profile pull-models` 可选）。在 WebUI「AI 配置 → 媒体服务」保存基址时，会同步 Bot 侧 `AI_SERVER_HOST` / `AI_SERVER_PORT`；策略页不再单独填地址。
 
 ### Bot 侧最小配置
 
-`config/pallas.toml` 的 `[env]` 或 WebUI「智能对话与媒体服务」：
+`config/pallas.toml` 的 `[env]` 或 WebUI：
 
-- `LLM_CHAT_ENABLED=true`
-- Provider（**接入**页）；默认 `LLM_RUNTIME=bot_kernel`
-- 媒体 / 遗留 `ai_service` 时再配 `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；也可由扩展基址同步）
+- 普通聊天：在 **AI 配置 → 接入** 配置 Provider，并打开 `LLM_CHAT_ENABLED`
+- 媒体或遗留 RWKV：再配 `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；也可由扩展基址同步）
 
 详细变量见 [Pallas-Bot-AI README](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/README.md) 与 [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)。
 
 从 0 安装验收见 [安装验收 Checklist](ga-install-checklist.md)。
 
-## 接入前核对（媒体 / 遗留 ai_service）
+## 接入前核对（媒体）
 
-默认 LLM 聊天只核对 Provider。下列项针对 **媒体任务** 或 `LLM_RUNTIME=ai_service`。
+默认 LLM 聊天只核对 Provider。下列项针对 **媒体任务**。
 
 ### 1. 地址与可达性
 
@@ -174,3 +172,4 @@ Docker、多机或反代场景核对：
 
 - [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)
 - [架构总览](/developer/architecture/overview)
+- [运维入口](/maintainer/quickstart)

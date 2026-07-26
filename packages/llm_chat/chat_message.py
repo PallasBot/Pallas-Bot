@@ -11,6 +11,8 @@ from pallas.core.foundation.config import TaskManager
 from pallas.core.perm import group_message_permission_for_command
 from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm import ChatSubmitRequest, get_llm_config, is_llm_chat_service_enabled, submit_chat_task
+from pallas.product.llm.assembler import assemble_tool_bundle
+from pallas.product.llm.assembler.context import assemble_direct_chat_context
 from pallas.product.llm.behavior import (
     build_behavior_hint_text,
     classify_behavior_scene,
@@ -36,10 +38,7 @@ from pallas.product.llm.kernel import (
     decide_direct_chat_action,
     resolve_conversation_feature_level,
 )
-from pallas.product.llm.knowledge.inject import enrich_system_with_knowledge_sources
 from pallas.product.llm.memory import (
-    enrich_system_with_memory_context,
-    enrich_system_with_relationship_context,
     maybe_persist_relationship_from_utterance,
     parse_memory_teach,
     parse_relationship_teach,
@@ -50,7 +49,7 @@ from pallas.product.llm.memory import (
 from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.persona_context import build_persona_llm_context
-from pallas.product.llm.polish_lite import maybe_submit_repeater_corpus_llm
+from pallas.product.llm.polish_lite import submit_corpus_assist_stages
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_variation import (
     build_recent_reply_ending_hint,
@@ -61,7 +60,6 @@ from pallas.product.llm.reply_variation import (
 from pallas.product.llm.session_store import list_user_llm_messages
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
-from pallas.product.llm.tools.registry import tool_metadata_for_chat
 from pallas.product.persona.affect_kernel import (
     build_persona_affect_contract,
     build_persona_affect_system_block,
@@ -399,16 +397,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         await llm_chat_msg.send(LLM_CHAT_VAGUE_REPLY)
         return
 
-    memory_result = await enrich_system_with_memory_context(
-        system_prompt,
-        bot_id=int(bot.self_id),
-        group_id=group_id,
-        query_text=plain or msg,
-        cfg=llm_cfg,
-    )
-    system_prompt = memory_result.system_prompt
-
-    knowledge_result = await enrich_system_with_knowledge_sources(
+    assembled_context = await assemble_direct_chat_context(
         system_prompt,
         bot_id=int(bot.self_id),
         group_id=group_id,
@@ -416,31 +405,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
         query_text=plain or msg,
         cfg=llm_cfg,
     )
-    system_prompt = knowledge_result.system_prompt
-    knowledge_retrieval_trace = knowledge_result.trace
-
-    relationship_result = await enrich_system_with_relationship_context(
-        system_prompt,
-        bot_id=int(bot.self_id),
-        group_id=group_id,
-        user_id=user_id,
-        cfg=llm_cfg,
-    )
-    system_prompt = relationship_result.system_prompt
-    hybrid_retrieval_trace = {
-        "sources": [
-            source
-            for source, trace in (
-                ("memory", memory_result.trace),
-                ("knowledge", knowledge_retrieval_trace),
-                ("relationship", relationship_result.trace),
-            )
-            if int(trace.get("hit_count") or 0) > 0
-        ],
-        "memory": memory_result.trace,
-        "knowledge": knowledge_retrieval_trace,
-        "relationship": relationship_result.trace,
-    }
+    system_prompt = assembled_context.system_prompt
+    knowledge_retrieval_trace = assembled_context.knowledge_retrieval_trace
+    hybrid_retrieval_trace = assembled_context.hybrid_retrieval_trace
     expression_suffix = ""
 
     persona_for_gate = None
@@ -454,8 +421,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
         except Exception:
             persona_for_gate = None
 
-    user_warmth_delta = float(relationship_result.trace.get("warmth_delta") or 0.0)
-    user_assertiveness_delta = float(relationship_result.trace.get("assertiveness_delta") or 0.0)
+    user_warmth_delta = float(assembled_context.relationship_trace.get("warmth_delta") or 0.0)
+    user_assertiveness_delta = float(assembled_context.relationship_trace.get("assertiveness_delta") or 0.0)
 
     gate_result = evaluate_llm_reply_gate_result(
         plain or msg,
@@ -493,11 +460,15 @@ async def handle_llm_chat(bot: Bot, event: Event):
         if bundle is not None:
             pool = [item for item in bundle.message_pool if item and "[CQ:" not in item]
             candidate = next((item for item in bundle.answer_list if item and "[CQ:" not in item), "")
-            if (pool or candidate) and await maybe_submit_repeater_corpus_llm(
+            from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
+
+            if (pool or candidate) and await submit_corpus_assist_stages(
                 event,
                 user_text=plain or msg,
                 candidates=pool,
                 candidate_text=candidate,
+                profile="direct_chat",
+                capabilities=resolve_repeater_capabilities(llm_cfg),
             ):
                 gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
                 if gate is None:
@@ -600,7 +571,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         })
         >= 2,
     )
-    tool_meta = tool_metadata_for_chat(task="llm_chat", user_text=plain or msg)
+    tool_meta = assemble_tool_bundle(task="llm_chat", user_text=plain or msg)
     direct_decision = decide_direct_chat_action(
         direct_ctx,
         feature_level=resolve_conversation_feature_level(llm_cfg),
@@ -692,6 +663,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
         )
         or (plain or msg).strip()
     )
+    from pallas.product.llm.tools.command_invoke import serialize_event_source_segments
+
+    command_source_segments = serialize_event_source_segments(event, bot_id=int(bot.self_id))
     await TaskManager.add_task(
         request_id,
         {
@@ -720,6 +694,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
             "speak_trigger": speak_trigger or "to_me",
+            "command_source_segments": command_source_segments,
         },
     )
 
@@ -746,7 +721,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 "persona_shaping_active": bool(affect_system_block or dynamic_expression_hint),
                 "dynamic_expression_hint": dynamic_expression_hint,
                 "preserve_colloquial_rewrite": bool(affect_system_block or dynamic_expression_hint),
+                "command_source_segments": command_source_segments,
             },
+            tool_metadata=tool_meta,
         ),
         cfg=llm_cfg,
     )

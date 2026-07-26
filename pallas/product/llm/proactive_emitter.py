@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any
 
 from nonebot import logger
@@ -14,6 +15,8 @@ ProactiveHandler = Callable[[dict[str, Any]], Awaitable[None]]
 _handlers: list[tuple[str, ProactiveHandler]] = []
 _last_emit_at: dict[str, float] = {}
 _cooldown_sec = 30.0
+_daily_counts: dict[tuple[int, str], int] = {}
+_daily_limit = 3
 
 
 @dataclass(slots=True)
@@ -56,3 +59,23 @@ async def emit_proactive(ctx: ProactiveEmitContext) -> bool:
             logger.exception("proactive handler failed name={}", name)
     _last_emit_at[ctx.source] = time.monotonic()
     return True
+
+
+def proactive_daily_count(group_id: int) -> int:
+    return _daily_counts.get((int(group_id), date.today().isoformat()), 0)
+
+
+def reset_proactive_budget_for_tests() -> None:
+    _daily_counts.clear()
+
+
+async def emit_group_proactive(ctx: ProactiveEmitContext) -> bool:
+    if ctx.group_id is None or int(ctx.group_id) <= 0:
+        return False
+    key = (int(ctx.group_id), date.today().isoformat())
+    if _daily_counts.get(key, 0) >= _daily_limit:
+        return False
+    emitted = await emit_proactive(ctx)
+    if emitted:
+        _daily_counts[key] = _daily_counts.get(key, 0) + 1
+    return emitted

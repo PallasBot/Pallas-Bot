@@ -16,11 +16,13 @@ from pallas.product.llm.behavior import classify_behavior_scene
 from pallas.product.llm.fallback import maybe_submit_repeater_llm_fallback
 from pallas.product.llm.kernel import (
     ConversationContext,
+    ConversationFeatureLevel,
     behavior_scene_to_conversation_scene,
     decide_repeater_action,
     resolve_conversation_feature_level,
 )
-from pallas.product.llm.polish_lite import maybe_submit_repeater_corpus_llm
+from pallas.product.llm.polish_lite import submit_corpus_assist_stages
+from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
 from pallas.product.llm.task_metrics import record_bot_llm_route
 from pallas.product.message_scrub import is_message_scrub_blocked_async
 from pallas.product.message_scrub.log_preview import scrub_intercept_log_preview
@@ -62,6 +64,10 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
         return
 
     config = BotConfig(event.self_id, event.group_id)
+    from pallas.product.llm.config import get_llm_config
+
+    llm_cfg = get_llm_config()
+    capabilities = resolve_repeater_capabilities(llm_cfg)
     from ..fanout_reply import repeater_can_attempt_reply
 
     chat = Chat(event)
@@ -141,12 +147,10 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
         await dispatch_repeater_fanout(event, fanout_gate.bot_ids, bundle)
         return
 
-    from pallas.product.llm.config import get_llm_config
-
     from ..message_store import MessageStore
 
-    llm_cfg = get_llm_config()
     feature_level = resolve_conversation_feature_level(llm_cfg)
+    repeater_llm_enabled = capabilities.llm_enabled and feature_level != ConversationFeatureLevel.LEGACY_REPEATER
     recent_group_messages = list(MessageStore._message_dict.get(int(event.group_id), []))
     has_candidate_pool = bool(bundle.message_pool or bundle.answer_list)
     recent_human_user_ids = [
@@ -162,10 +166,10 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     )
     plan = build_repeater_llm_plan(
         bundle,
-        llm_enabled=llm_cfg.llm_chat_enabled,
-        select_enabled=llm_cfg.llm_select_enabled,
-        polish_enabled=llm_cfg.llm_polish_enabled,
-        polish_lite_enabled=llm_cfg.llm_polish_lite_enabled,
+        llm_enabled=repeater_llm_enabled,
+        select_enabled=capabilities.select_enabled,
+        polish_enabled=capabilities.polish_enabled,
+        polish_lite_enabled=capabilities.polish_lite_enabled,
     )
     candidate_style_score = estimate_candidate_style_score(
         plan.candidate_pool or ([plan.candidate_text] if plan.candidate_text else []),
@@ -243,10 +247,10 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     )
     decision = decide_repeater_action(
         decision_ctx,
-        llm_enabled=llm_cfg.llm_chat_enabled,
-        select_enabled=llm_cfg.llm_select_enabled,
-        polish_enabled=llm_cfg.llm_polish_enabled,
-        polish_lite_enabled=llm_cfg.llm_polish_lite_enabled,
+        llm_enabled=repeater_llm_enabled,
+        select_enabled=capabilities.select_enabled,
+        polish_enabled=capabilities.polish_enabled,
+        polish_lite_enabled=capabilities.polish_lite_enabled,
         has_grounded_candidate=bool(plan.candidate_text or plan.candidate_pool),
         opportunity_accepted=opportunity_accepted,
         opportunity_trace_extra=opportunity_trace_extra,
@@ -263,15 +267,16 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
             if stage_name == "select":
                 record_bot_llm_route("repeater_select", "pipeline_select")
             else:
-                task_name = "repeater_polish_lite" if llm_cfg.llm_polish_lite_enabled else "repeater_polish"
+                task_name = "repeater_polish_lite" if capabilities.polish_lite_enabled else "repeater_polish"
                 record_bot_llm_route(task_name, "pipeline_rewrite")
-            return await maybe_submit_repeater_corpus_llm(
+            return await submit_corpus_assist_stages(
                 event,
                 user_text=ctx.plain_body,
                 candidates=plan.candidate_pool,
                 candidate_text=plan.candidate_text,
                 reply_mode=bundle.reply_mode,
                 scene_tier=scene_tier,
+                capabilities=capabilities,
             )
         if stage_name == "stitch":
             from pallas.product.persona import resolve_persona_for_message

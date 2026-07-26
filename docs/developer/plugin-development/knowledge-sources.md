@@ -1,11 +1,13 @@
 # 知识源与本地 ingest
 
+本页说明如何把 FAQ / 文档块注入 LLM 聊天上下文。普通聊天走 Bot Provider；未开启 LLM 时知识源不会参与注入。
+
 | 机制 | 入口 |
 | --- | --- |
 | 插件声明 | `PluginMetadata.extra['knowledge_sources']` |
 | 本地目录 | `data/pallas_knowledge*.md` / `.jsonl` |
 
-Bot 在 LLM 闲聊前统一检索并注入 system prompt。无 LLM 时知识源不参与注入。
+Bot 在 LLM 对话前统一检索并注入 system prompt。
 
 ## 官方参考
 

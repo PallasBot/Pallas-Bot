@@ -22,8 +22,9 @@ class LlmCommandToolDecl(BaseModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
     command_template: str = Field(min_length=1)
     default: bool = Field(default=True, description="是否默认注入 LLM schema")
-    hints: list[str] = Field(default_factory=list, description="口语触发词，参与域推断")
+    hints: list[str] = Field(default_factory=list, description="口语触发词；硬域未命中时参与 soft_recall")
     visibility: str = Field(default="visible", description="visible | deferred")
+    source_segments: str = Field(default="none", description="none | media")
 
 
 def parse_llm_command_tool_decl(raw: dict[str, Any]) -> LlmCommandToolDecl | None:

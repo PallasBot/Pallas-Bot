@@ -62,6 +62,11 @@ class LlmToolSpec:
     mcp_server_id: str | None = None
     hints: frozenset[str] = field(default_factory=frozenset)
     visibility: str = "visible"
+    estimated_duration_ms: int = 0
+    cost_hint: str = ""
+    approval_required: bool = False
+    background_ok: bool = False
+    display_mode: str = "default"
 
 
 _REGISTRY: list[LlmToolSpec] = []
@@ -145,6 +150,11 @@ def tool_catalog_entry_from_spec(spec: LlmToolSpec, *, description: str | None =
             provider_name=spec.provider_name,
             mcp_server_id=spec.mcp_server_id,
         ),
+        estimated_duration_ms=spec.estimated_duration_ms,
+        cost_hint=spec.cost_hint,
+        approval_required=spec.approval_required,
+        background_ok=spec.background_ok,
+        display_mode=spec.display_mode,
     )
 
 
@@ -270,18 +280,46 @@ def tool_catalog_for_chat(
     cfg = get_llm_config()
     domains: frozenset[str] | None = None
     inferred_domains: list[str] = []
+    selection_source = "all"
+    soft_fields: dict[str, Any] = {
+        "soft_recall_confidence": 0,
+        "soft_recall_candidates": [],
+        "ask_before_call": False,
+        "missing_required_params": {},
+    }
+    soft_hits = None
     if cfg.llm_tools_selective:
         inferred = infer_tool_domains(user_text)
-        if not inferred:
+        if inferred:
+            domains = inferred
+            inferred_domains = sorted(inferred)
+            selection_source = "selective"
+        elif bool(getattr(cfg, "llm_tools_soft_recall_enabled", True)):
+            from pallas.product.llm.tools.soft_recall import (
+                select_soft_recall_hits,
+                soft_recall_snapshot_fields,
+            )
+
+            soft_hits = select_soft_recall_hits(
+                user_text,
+                min_score=int(getattr(cfg, "llm_tools_soft_recall_min_score", 6) or 6),
+                max_candidates=int(getattr(cfg, "llm_tools_soft_recall_max_candidates", 3) or 3),
+            )
+            if not soft_hits:
+                return None
+            selection_source = "soft_recall"
+            soft_fields = soft_recall_snapshot_fields(soft_hits)
+        else:
             return None
-        domains = inferred
-        inferred_domains = sorted(inferred)
-    specs = iter_eligible_tool_specs(domains=domains)
-    specs = filter_specs_for_chat_visibility(
-        specs,
-        user_text=user_text,
-        activated_names=activated_names,
-    )
+    if soft_hits is not None:
+        specs = tuple(hit.spec for hit in soft_hits)
+    else:
+        specs = iter_eligible_tool_specs(domains=domains)
+        specs = filter_specs_for_chat_visibility(
+            specs,
+            user_text=user_text,
+            activated_names=activated_names,
+        )
     if not specs:
         return None
     entries = [catalog_entry_for_spec(spec) for spec in specs]
@@ -292,6 +330,11 @@ def tool_catalog_for_chat(
             selective_enabled=bool(cfg.llm_tools_selective),
             inferred_domains=inferred_domains,
             schema_count=len(entries),
+            selection_source=selection_source,
+            soft_recall_confidence=int(soft_fields.get("soft_recall_confidence") or 0),
+            soft_recall_candidates=list(soft_fields.get("soft_recall_candidates") or []),
+            ask_before_call=bool(soft_fields.get("ask_before_call")),
+            missing_required_params=dict(soft_fields.get("missing_required_params") or {}),
         ),
     )
 
@@ -302,7 +345,7 @@ def tool_openai_schemas(*, domains: frozenset[str] | None = None) -> list[dict[s
         return []
     catalog = ToolCatalogSnapshot(
         tools=[catalog_entry_for_spec(spec) for spec in specs],
-        selection=ToolCatalogSelection(tools_enabled=True, schema_count=len(specs)),
+        selection=ToolCatalogSelection(tools_enabled=True, schema_count=len(specs), selection_source="all"),
     )
     return openai_schemas_from_catalog(catalog)
 
@@ -349,15 +392,27 @@ def execute_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
 _NO_TOOL_TASKS = frozenset({"repeater_fallback", "repeater_polish", "repeater_polish_lite", "repeater_select", "drunk"})
 
 
-def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> dict[str, Any]:
+def tool_metadata_for_chat(
+    *,
+    task: str | None = None,
+    user_text: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
+    user_id: int | None = None,
+) -> dict[str, Any]:
     """写入 Bot 工具 metadata：tool_catalog + 兼容字段 tools_enabled / tool_schemas。"""
     from pallas.product.llm.task_metrics import record_bot_llm_task
 
     normalized = str(task or "").strip().lower()
     cfg = get_llm_config()
-    catalog = tool_catalog_for_chat(task=task, user_text=user_text)
+    activated_names = frozenset()
+    if bot_id is not None and user_id is not None:
+        from pallas.product.llm.tools.activation_cache import activated_tool_names
+
+        activated_names = frozenset(activated_tool_names(bot_id, group_id, user_id))
+    catalog = tool_catalog_for_chat(task=task, user_text=user_text, activated_names=activated_names)
     if catalog is None:
-        # selective 开启且非 no-tool task：空目录 = 口语未命中工具域
+        # selective 开启且非 no-tool task：空目录 = 口语未命中硬域与软召回
         if (
             normalized not in _NO_TOOL_TASKS
             and cfg.llm_tools_enabled
@@ -365,8 +420,13 @@ def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> d
             and str(user_text or "").strip()
         ):
             record_bot_llm_task(normalized or "llm_chat", "selective_empty")
+            if bool(getattr(cfg, "llm_tools_soft_recall_enabled", True)):
+                record_bot_llm_task(normalized or "llm_chat", "soft_recall_empty")
         return {}
-    if catalog.selection.selective_enabled:
+    source = str(catalog.selection.selection_source or "").strip().lower()
+    if source == "soft_recall":
+        record_bot_llm_task(normalized or "llm_chat", "soft_recall_hit")
+    elif catalog.selection.selective_enabled:
         record_bot_llm_task(normalized or "llm_chat", "selective_hit")
     schemas = openai_schemas_from_catalog(catalog)
     payload: dict[str, Any] = {
@@ -374,11 +434,26 @@ def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> d
         "tool_catalog": catalog.model_dump(mode="json"),
         "tool_schemas": schemas,
         "tool_schema_count": int(catalog.selection.schema_count),
+        "selection_source": source or "all",
+        "ask_before_call": bool(catalog.selection.ask_before_call),
+        "missing_required_params": dict(catalog.selection.missing_required_params or {}),
+        "soft_recall_confidence": int(catalog.selection.soft_recall_confidence or 0),
+        "activated_tools": sorted(activated_names),
     }
-    # 选择性命中且全部为插件口令工具时，首轮要求必须调工具，避免只口头答应
-    if catalog.selection.selective_enabled and catalog.tools:
+    # 选择性命中且全部为插件口令工具时，首轮要求必须调工具，避免只口头答应。
+    # 联网搜索同理：禁止「搜了一下」空口答应。软召回缺参时不强制，便于自然追问。
+    if (
+        catalog.selection.selective_enabled
+        and catalog.tools
+        and source != "soft_recall"
+        and not catalog.selection.ask_before_call
+    ):
         sources = {str(item.source or "") for item in catalog.tools}
+        tool_names = {str(item.name or "") for item in catalog.tools}
+        domains = {str(d) for item in catalog.tools for d in (item.domains or [])}
         if sources and sources <= {LlmToolSource.PLUGIN_COMMAND.value}:
+            payload["tool_choice_prefer"] = "required"
+        elif "web" in domains or tool_names.intersection({"web.search", "web.fetch"}):
             payload["tool_choice_prefer"] = "required"
     return payload
 
@@ -422,6 +497,11 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             "plugin_name": entry.audit.plugin_name,
             "provider_name": entry.audit.provider_name,
             "mcp_server_id": entry.audit.mcp_server_id,
+            "estimated_duration_ms": entry.estimated_duration_ms,
+            "cost_hint": entry.cost_hint,
+            "approval_required": entry.approval_required,
+            "background_ok": entry.background_ok,
+            "display_mode": entry.display_mode,
             "eligible": spec.name in eligible_names and disabled_reason is None,
             "disabled_reason": disabled_reason,
             "hints": declared_hints,

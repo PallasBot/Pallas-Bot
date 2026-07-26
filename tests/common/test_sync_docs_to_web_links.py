@@ -51,6 +51,10 @@ transform_for_vitepress = _MOD.transform_for_vitepress
             "[peer](../repeater/README.md)",
             "[peer](/plugins/repeater)",
         ),
+        (
+            "[faq](/FAQ)",
+            "[faq](/deploy/faq)",
+        ),
     ],
 )
 def test_transform_common_webui_dead_link_patterns(src: str, expected: str) -> None:

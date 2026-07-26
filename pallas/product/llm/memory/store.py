@@ -54,6 +54,25 @@ def canonicalize_memory_content(content: str) -> str:
     return text.rstrip("。！？!?；;，,、")
 
 
+def memory_lifecycle_overlay(entry_id: int) -> dict[str, Any]:
+    from pallas.product.llm.memory.ops import memory_lifecycle_overlay as get_overlay
+
+    return get_overlay(entry_id)
+
+
+def apply_memory_lifecycle_overlay(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    updated: list[dict[str, Any]] = []
+    for item in candidates:
+        entry_id = item.get("id")
+        overlay = memory_lifecycle_overlay(int(entry_id)) if entry_id is not None else {}
+        if overlay.get("frozen"):
+            continue
+        result = dict(item)
+        result["score"] = round(float(result.get("score") or 0) * float(overlay.get("weight") or 1.0))
+        updated.append(result)
+    return sorted(updated, key=lambda candidate: float(candidate.get("score") or 0), reverse=True)
+
+
 def memory_entries_semantically_match(left: str, right: str) -> bool:
     lhs = canonicalize_memory_content(left)
     rhs = canonicalize_memory_content(right)
@@ -138,7 +157,9 @@ async def save_memory_entry(
     keywords = derive_memory_keywords(safe_content)
     embedding_json: str | None = None
     embedding_model: str | None = None
-    if c.llm_vector_retrieve != "keyword":
+    from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
+
+    if vector_retrieve_mode(c) != "keyword":
         from pallas.product.llm.knowledge.embedding_client import embedding_model_name, fetch_embeddings_sync
         from pallas.product.llm.memory.retrieve import dump_embedding_json, memory_embedding_text
 
@@ -281,7 +302,11 @@ async def retrieve_memory_hits(
             .all()
         )
     from pallas.product.llm.knowledge.embedding_client import embedding_model_name
-    from pallas.product.llm.memory.retrieve import dump_embedding_json, rank_memory_candidates
+    from pallas.product.llm.memory.retrieve import (
+        dump_embedding_json,
+        effective_memory_rag_min_score,
+        rank_memory_candidates,
+    )
 
     candidates = [
         {
@@ -300,6 +325,7 @@ async def retrieve_memory_hits(
         candidates,
         embedding_model=embedding_model_name(c),
     )
+    scored = apply_memory_lifecycle_overlay(scored)
     dirty = [item for item in scored if item.get("embedding_dirty") and item.get("id") and item.get("embedding")]
     if dirty:
         try:
@@ -313,7 +339,7 @@ async def retrieve_memory_hits(
                 await session.commit()
         except Exception as exc:
             logger.warning("memory embedding cache persist failed err={}", exc)
-    min_score = max(0, int(getattr(c, "llm_memory_rag_min_score", 0) or 0))
+    min_score = effective_memory_rag_min_score(c)
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     for item in scored:

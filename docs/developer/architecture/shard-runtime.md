@@ -1,6 +1,8 @@
 # 分片运行时
 
-分片下的进程角色、编码约束与跨进程能力。部署与启停见 [分片部署](/maintainer/deploy/sharded)。
+本页说明分片下的进程角色、编码约束与跨进程能力。部署与启停见 [分片部署](/maintainer/deploy/sharded)。
+
+单进程足够时不必读全文。涉及同群多牛、跨 worker 去重、群独占活动或媒体 callback 回到发起 worker 时，再按本页设计。
 
 ## 何时用分片
 
@@ -34,6 +36,8 @@ flowchart LR
     W1 --> AI
     W2 --> AI
 ```
+
+图中 AI 为媒体 / RWKV Runtime；普通聊天仍在 worker 内走 Bot Provider，不经该边。
 
 ## 角色
 
@@ -72,7 +76,7 @@ flowchart LR
 - 跨 worker 去重
 - 指定某 bot 执行动作
 - 群级独占活动
-- AI callback 回到发起 worker
+- 媒体 / RWKV callback 回到发起 worker
 - WebUI 展示 worker 实时态
 
 ## 禁止
@@ -83,8 +87,9 @@ flowchart LR
 | hub 读本地插件态做全局结论 | 遗漏 worker 专属插件 |
 | 把 Redis 当可丢弃缓存 | 协调层事实源 |
 
-## 相关
+## 后续阅读
 
 - [架构总览](overview.md)
 - [Core 与扩展](core-vs-extensions.md)
 - [Platform API](/developer/reference/platform-api)
+- [分片部署](/maintainer/deploy/sharded)

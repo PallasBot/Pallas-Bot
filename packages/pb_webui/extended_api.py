@@ -4559,7 +4559,7 @@ class _LlmRuntimeOverviewHealthData(BaseModel):
     llm_health: _LlmHealthSummaryData | None = None
     llm_circuit: dict[str, Any] | None = None
     image_health: _LlmImageHealthData | None = None
-    # plugin_runtime | ai_service_runtime；画画插件未装时为 null
+    # 画画插件已装时多为 plugin_runtime；未装为 null（旧版可能为 ai_service_runtime）
     draw_runtime_mode: str | None = None
     tts_health: _LlmTtsHealthData | None = None
     media_tasks: _LlmMediaTasksHealthData | None = None
@@ -5345,6 +5345,7 @@ def register_extended_api(
     router = APIRouter(tags=["Pallas-Bot 控制台"], dependencies=[Depends(_pallas_token_dep)])
 
     from .acl_api import register_acl_router
+    from .agent_platform_api import register_agent_platform_router
     from .llm_ops_api import register_llm_ops_router
     from .memory_graph_api import register_memory_graph_router
 
@@ -5356,6 +5357,12 @@ def register_extended_api(
         check_write_token=_check_pallas_write_token,
     )
     register_memory_graph_router(
+        router,
+        x=x,
+        plugin_config=plugin_config,
+        check_write_token=_check_pallas_write_token,
+    )
+    register_agent_platform_router(
         router,
         x=x,
         plugin_config=plugin_config,
@@ -7212,7 +7219,9 @@ def register_extended_api(
                 from pallas.core.platform.plugin_runtime.resolve import import_plugin_submodule
 
                 draw_config = import_plugin_submodule("draw", "config")
-                mode = str(draw_config.active_image_gen_settings().runtime_mode or "").strip()
+                settings = draw_config.active_image_gen_settings()
+                # Draw ≥4.1.0 仅插件直连；旧版插件仍可能有 runtime_mode
+                mode = str(getattr(settings, "runtime_mode", None) or "plugin_runtime").strip()
                 return mode or None
             except Exception:  # noqa: BLE001
                 return None

@@ -24,7 +24,7 @@ def normalize_repeater_mode_for_webui(mode: str) -> RepeaterMode:
         return _LEGACY_REPEATER_MODE_TO_WEBUI[raw]
     if raw in ("off", "select", "select_polish_lite", "select_fallback", "fallback"):
         return raw  # type: ignore[return-value]
-    return "select"
+    return "select_polish_lite"
 
 
 ConversationFeatureLevel = Literal["", "legacy_repeater", "repeater_plus_decision", "full_conversation_kernel"]
@@ -97,10 +97,10 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_repeater_mode: RepeaterMode = Field(
-        default="select",
+        default="select_polish_lite",
         description=field_help(
             "接话时如何使用智能对话",
-            "推荐「命中语料时 AI 选句」；需要时可开启语料缺失现编，或少数回复做轻润色",
+            "推荐「选句为主，少数回复轻润色」；需要时可开启语料缺失现编",
             (
                 "off=只用语料；select=命中语料时 AI 选句；"
                 "select_polish_lite=以选句为主，约一成回复会轻润色口气；"
@@ -120,7 +120,7 @@ class LlmWebuiConfig(BaseModel):
     llm_governance_enabled: bool = Field(
         default=True,
         description=field_help(
-            "是否限制闲聊的频率与单次字数",
+            "是否限制 LLM 对话的频率与单次字数",
             "群很活跃时建议开启，避免刷屏",
         ),
     )
@@ -190,7 +190,7 @@ class LlmWebuiConfig(BaseModel):
         ge=0,
         le=200000,
         description=field_help(
-            "单次闲聊上下文字符预算",
+            "单次 LLM 对话上下文字符预算",
             "0 表示不限制；建议按模型上下文窗口留余量",
         ),
     )
@@ -205,8 +205,27 @@ class LlmWebuiConfig(BaseModel):
         default=True,
         description=field_help(
             "按意图筛选工具",
-            "开启后仅在话术命中领域/结构/hints 时下发对应工具，避免一次注入全家桶",
+            "开启后仅在话术命中硬域/结构时下发对应工具；未命中时可走软召回",
         ),
+    )
+    llm_tools_soft_recall_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "软召回工具候选",
+            "硬域未命中时，按 hints/描述打分注入少量工具；缺必填参数时先追问",
+        ),
+    )
+    llm_tools_soft_recall_min_score: int = Field(
+        default=6,
+        ge=1,
+        le=32,
+        description=field_help("软召回最低匹配分", "低于该分不注入候选工具"),
+    )
+    llm_tools_soft_recall_max_candidates: int = Field(
+        default=3,
+        ge=1,
+        le=8,
+        description=field_help("软召回最多候选工具数", "同分过低时不会扩成全量工具池"),
     )
     llm_tools_max_rounds: int = Field(
         default=4,
@@ -227,13 +246,30 @@ class LlmWebuiConfig(BaseModel):
         le=512,
         description=field_help("工具描述最大长度", "写入模型 schema 前会截断，节省 token"),
     )
+    web_search_api_url: str = Field(
+        default="",
+        description=field_help(
+            "群里说「搜一下…」时实际请求的完整 URL",
+            "推荐 Tavily：https://api.tavily.com/search（须含 /search，不要只填域名）",
+            '也可填其它兼容接口：POST，JSON {"query": "…"}。留空则不联网',
+        ),
+    )
+    tavily_api_key: str = Field(
+        default="",
+        description=field_help(
+            "搜索接口鉴权密钥",
+            "推荐在 app.tavily.com 注册后复制免费 Key（形如 tvly-…）",
+            "以 Authorization: Bearer 发送。须与地址同时填写，并开启「允许调用工具」",
+        ),
+        json_schema_extra={"secret": True},
+    )
     llm_chat_max_concurrency: int = Field(
         default=2,
         ge=1,
         le=64,
         description=field_help(
-            "同时进行的闲聊模型请求上限",
-            "每个分片 worker 进程独立计数；@ 闲聊与接话分开限流",
+            "同时进行的 LLM 对话模型请求上限",
+            "每个分片 worker 进程独立计数；@ LLM 对话与接话分开限流",
         ),
     )
     llm_repeater_group_cooldown_sec: int = Field(
@@ -269,7 +305,7 @@ class LlmWebuiConfig(BaseModel):
         le=32,
         description=field_help(
             "每个 worker 同时进行的接话模型请求数",
-            "与闲聊并发分开计算",
+            "与 LLM 对话并发分开计算",
         ),
     )
     llm_repeater_global_rpm: int = Field(
@@ -284,14 +320,14 @@ class LlmWebuiConfig(BaseModel):
     llm_repeater_feedback_enabled: bool = Field(
         default=True,
         description=field_help(
-            "是否收集闲聊成功回复，作为复读软反馈",
+            "是否收集 LLM 对话成功回复，作为复读软反馈",
             "只在回复真正发出后记录",
         ),
     )
     llm_repeater_bias_enabled: bool = Field(
         default=True,
         description=field_help(
-            "是否让复读轻微偏向已被闲聊验证过的短回复",
+            "是否让复读轻微偏向已被 LLM 对话验证过的短回复",
             "保守弱偏置；样本不足时不会生效",
         ),
     )
@@ -306,7 +342,8 @@ class LlmWebuiConfig(BaseModel):
         default="",
         description=field_help(
             "对话内核能力档位",
-            "留空则按现有开关自动推断；legacy=仅语料规则，plus=统一决策，full=决策+生成+反馈全链路",
+            "留空则按现有开关自动推断；推荐 full_conversation_kernel。"
+            "legacy_repeater / repeater_plus_decision 仅兼容读取，属 deprecated",
         ),
     )
     llm_reply_gate_enabled: bool = Field(
@@ -333,14 +370,14 @@ class LlmWebuiConfig(BaseModel):
     llm_output_filter_chat_hard_phrases: list[str] = Field(
         default_factory=default_output_filter_chat_hard_phrases,
         description=field_help(
-            "闲聊/接话硬拦截词表",
-            "JSON 字符串数组；命中后接话回落语料，闲聊静默不发",
+            "LLM 对话/接话硬拦截词表",
+            "JSON 字符串数组；命中后接话回落语料，LLM 对话静默不发",
         ),
     )
     llm_output_filter_chat_soft_phrases: list[str] = Field(
         default_factory=default_output_filter_chat_soft_phrases,
         description=field_help(
-            "闲聊/接话软拦截词表",
+            "LLM 对话/接话软拦截词表",
             "JSON 字符串数组；与硬拦截同样处理，便于分批下线",
         ),
     )
@@ -348,14 +385,14 @@ class LlmWebuiConfig(BaseModel):
         default_factory=default_output_filter_polish_lite_hard_phrases,
         description=field_help(
             "接话轻润色额外硬拦截词",
-            "与上方闲聊硬拦截合并后用于 repeater_polish_lite",
+            "与上方 LLM 对话硬拦截合并后用于 repeater_polish_lite",
         ),
     )
     llm_output_filter_polish_lite_soft_phrases: list[str] = Field(
         default_factory=default_output_filter_polish_lite_soft_phrases,
         description=field_help(
             "接话轻润色额外软拦截词",
-            "与上方闲聊软拦截合并后用于 repeater_polish_lite",
+            "与上方 LLM 对话软拦截合并后用于 repeater_polish_lite",
         ),
     )
     llm_reply_postprocess_enabled: bool = Field(
@@ -455,7 +492,7 @@ class LlmWebuiConfig(BaseModel):
     )
     llm_memory_auto_episode_enabled: bool = Field(
         default=True,
-        description=field_help("是否自动沉淀会话片段为记忆", "开启后闲聊结束后可写入群记忆"),
+        description=field_help("是否自动沉淀会话片段为记忆", "开启后 LLM 对话结束后可写入群记忆"),
     )
     llm_memory_auto_episode_cooldown_sec: int = Field(
         default=120,
@@ -487,6 +524,7 @@ class LlmWebuiConfig(BaseModel):
 
 
 def get_llm_webui_config() -> LlmWebuiConfig:
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
     from pallas.product.llm.config import resolve_chat_tts_enabled, resolve_legacy_rwkv_drunk_chat_enabled
 
     cfg = get_llm_config()
@@ -514,9 +552,14 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_chat_char_budget=cfg.llm_chat_char_budget,
         llm_tools_enabled=cfg.llm_tools_enabled,
         llm_tools_selective=cfg.llm_tools_selective,
+        llm_tools_soft_recall_enabled=cfg.llm_tools_soft_recall_enabled,
+        llm_tools_soft_recall_min_score=cfg.llm_tools_soft_recall_min_score,
+        llm_tools_soft_recall_max_candidates=cfg.llm_tools_soft_recall_max_candidates,
         llm_tools_max_rounds=cfg.llm_tools_max_rounds,
         llm_tools_blacklist=list(cfg.llm_tools_blacklist or []),
         llm_tools_desc_max_len=cfg.llm_tools_desc_max_len,
+        web_search_api_url=str(repo_env_raw_value("WEB_SEARCH_API_URL") or "").strip(),
+        tavily_api_key=str(repo_env_raw_value("TAVILY_API_KEY") or "").strip(),
         llm_chat_max_concurrency=cfg.llm_chat_max_concurrency,
         llm_repeater_group_cooldown_sec=cfg.llm_repeater_group_cooldown_sec,
         llm_repeater_strong_cooldown_sec=cfg.llm_repeater_strong_cooldown_sec,

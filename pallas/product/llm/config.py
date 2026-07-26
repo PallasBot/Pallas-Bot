@@ -165,17 +165,29 @@ def _env_group_id_list(key: str) -> list[int]:
 
 def resolve_llm_repeater_mode() -> str:
     raw = _env_str("LLM_REPEATER_MODE").strip().lower()
-    if raw in ("off", "fallback", "polish", "both", "select", "select_fallback", "select_polish_lite"):
+    aliases = {
+        "polish": "select_polish_lite",
+        "both": "select_fallback",
+    }
+    if raw in ("off", "fallback", "select", "select_fallback", "select_polish_lite"):
         return raw
+    if raw in aliases:
+        return aliases[raw]
+
+    fallback_raw = repo_env_raw_value("LLM_FALLBACK_ENABLED")
+    polish_raw = repo_env_raw_value("LLM_POLISH_ENABLED")
+    if fallback_raw is None and polish_raw is None:
+        return "select_polish_lite"
+
     fallback = _env_bool("LLM_FALLBACK_ENABLED", False)
-    polish = _env_bool("LLM_POLISH_ENABLED", True)
+    polish = _env_bool("LLM_POLISH_ENABLED", False)
     if fallback and polish:
-        return "both"
+        return "select_fallback"
     if fallback:
         return "fallback"
     if polish:
-        return "polish"
-    return "select"
+        return "select_polish_lite"
+    return "select_polish_lite"
 
 
 def resolve_llm_repeater_flags() -> tuple[bool, bool, bool]:
@@ -184,10 +196,6 @@ def resolve_llm_repeater_flags() -> tuple[bool, bool, bool]:
         return False, False, False
     if mode == "fallback":
         return True, False, False
-    if mode == "polish":
-        return False, True, False
-    if mode == "both":
-        return True, True, False
     if mode == "select":
         return False, False, True
     if mode == "select_fallback":
@@ -269,7 +277,7 @@ class LlmConfig(BaseModel):
     ai_server_port: int = Field(default=9099, ge=1, le=65535)
     llm_chat_enabled: bool = Field(default=False)
     chat_tts_enable: bool = Field(default=False)
-    llm_repeater_mode: str = Field(default="select")
+    llm_repeater_mode: str = Field(default="select_polish_lite")
     llm_fallback_enabled: bool = Field(default=False)
     llm_polish_enabled: bool = Field(default=False)
     llm_select_enabled: bool = Field(default=True)
@@ -295,6 +303,9 @@ class LlmConfig(BaseModel):
     llm_governance_enabled: bool = Field(default=True)
     llm_tools_enabled: bool = Field(default=True)
     llm_tools_selective: bool = Field(default=True)
+    llm_tools_soft_recall_enabled: bool = Field(default=True)
+    llm_tools_soft_recall_min_score: int = Field(default=6, ge=1, le=32)
+    llm_tools_soft_recall_max_candidates: int = Field(default=3, ge=1, le=8)
     llm_chat_cooldown_sec: int = Field(default=3, ge=0, le=3600)
     llm_chat_max_concurrency: int = Field(default=2, ge=1, le=64)
     llm_chat_char_budget: int = Field(default=12000, ge=0, le=200000)
@@ -475,6 +486,9 @@ def get_llm_config() -> LlmConfig:
             llm_governance_enabled=_env_bool("LLM_GOVERNANCE_ENABLED", True),
             llm_tools_enabled=_env_bool("LLM_TOOLS_ENABLED", True),
             llm_tools_selective=_env_bool("LLM_TOOLS_SELECTIVE", True),
+            llm_tools_soft_recall_enabled=_env_bool("LLM_TOOLS_SOFT_RECALL_ENABLED", True),
+            llm_tools_soft_recall_min_score=_env_int("LLM_TOOLS_SOFT_RECALL_MIN_SCORE", 6),
+            llm_tools_soft_recall_max_candidates=_env_int("LLM_TOOLS_SOFT_RECALL_MAX_CANDIDATES", 3),
             llm_chat_cooldown_sec=_env_int("LLM_CHAT_COOLDOWN_SEC", 3),
             llm_chat_max_concurrency=_env_int("LLM_CHAT_MAX_CONCURRENCY", 2),
             llm_chat_char_budget=_env_int("LLM_CHAT_CHAR_BUDGET", 12000),
@@ -598,11 +612,6 @@ def clear_llm_config_cache() -> None:
 def llm_server_base_url(cfg: LlmConfig | None = None) -> str:
     c = cfg or get_llm_config()
     return f"http://{c.ai_server_host}:{c.ai_server_port}"
-
-
-def is_llm_bot_kernel_runtime(cfg: LlmConfig | None = None) -> bool:
-    _ = cfg
-    return True
 
 
 def llm_provider_configured(cfg: LlmConfig | None = None) -> bool:

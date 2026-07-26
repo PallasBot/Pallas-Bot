@@ -10,11 +10,17 @@ LLM_CHAT_EMPTY_FALLBACK = "嗯？"
 
 
 def resolve_llm_chat_empty_fallback(task: dict, reply_text: str) -> str:
-    """有正文则原样返回；硬触发且为空时用 fallback / 短兜底。"""
+    """有正文则原样返回；硬触发且为空时用 fallback / 短兜底。
+
+    本轮已成功走过工具调用时允许静默，避免动作完成后硬塞「嗯？」。
+    """
     text = str(reply_text or "").strip()
     if text:
         return text
     if str(task.get("task_type") or "").strip() != LLM_CHAT_TASK_TYPE:
+        return ""
+    trace = task.get("agent_trace")
+    if isinstance(trace, dict) and int(trace.get("tool_call_count") or 0) > 0:
         return ""
     trigger = str(task.get("speak_trigger") or "to_me").strip() or "to_me"
     if trigger not in HARD_SPEAK_TRIGGERS:

@@ -2,7 +2,7 @@
 
 维护者从 **0** 安装时按本清单走查。每条打勾前记录 **日期 / 环境**（OS、GPU、Docker 版本）；失败项记录现象与日志路径。
 
-**相关文档**：[Docker 部署](/deploy/docker) · [AI Runtime](ai-runtime.md) · [运维入口](/maintainer/quickstart) · [升级](/maintainer/deploy/upgrade)
+相关文档：[Docker 部署](/deploy/docker) · [AI Runtime](ai-runtime.md) · [运维入口](/maintainer/quickstart) · [升级](/maintainer/deploy/upgrade) · [FAQ](/deploy/faq)
 
 ---
 
@@ -13,14 +13,14 @@
 | 机器 | 干净目录；建议 ≥ 8GB 内存；全栈 + Ollama 建议 ≥ 16GB 或接受 CPU 推理较慢 |
 | Docker | `docker --version`、`docker compose version` 有输出（Docker 路径） |
 | 网络 | 可拉取 `pallasbot/*` 镜像与 Ollama 模型（首次约 15–40 分钟） |
-| 端口 | 宿主机 **8088**（Bot）、**9099**（AI，全栈时）未被占用 |
-| 仓库 | 仅 compose 时可不克隆；本机开发须克隆 **Pallas-Bot**；AI 本机路径须同级 **Pallas-Bot-AI** |
+| 端口 | 宿主机 **8088**（Bot）未被占用；使用媒体 Runtime 时另留 **9099** |
+| 仓库 | 仅 compose 时可不克隆；本机开发须克隆 **Pallas-Bot**；使用媒体 Runtime 时 AI 本机路径须同级 **Pallas-Bot-AI** |
 
 ---
 
 ## 路径 A：Docker 全栈新装
 
-**目标**：Bot + PostgreSQL + Redis + Ollama + AI，单条 compose 启动。
+**目标**：Bot + PostgreSQL + Redis；按需在同一 compose 增加 Ollama 与 AI 媒体 Runtime。
 
 ### A1. 准备目录与配置
 
@@ -40,9 +40,8 @@ docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose
 # 可选预拉 Ollama 模型: 追加 --profile pull-models（默认不预拉，改在 WebUI 拉）
 ```
 
-- [ ] `docker compose ... ps`：`pallasbot`、`postgres`、`redis`、`pallasbot-ai`、`ollama` 为 **running/healthy**（默认无 `ollama-init`；仅加了 `--profile pull-models` 时可为 **exited 0**）
-- [ ] AI 默认镜像为 **`pallasbot/pallas-bot-ai:slim`**（LLM-only）；唱歌/TTS 等需在 `compose.env` 设 `PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest` 并叠加 GPU compose
-- [ ] 未用 `pull-models` 时：进 WebUI「AI 配置 → 接入 / 模型」配置 provider 并拉取模型（可勾选「切换时拉取」）
+- [ ] `docker compose ... ps`：`pallasbot`、`postgres`、`redis` 为 **running/healthy**；启用完整 AI 栈时再核对 `pallasbot-ai`、`ollama`（默认无 `ollama-init`；仅加了 `--profile pull-models` 时可为 **exited 0**）
+- [ ] 唱歌/TTS 等媒体能力才需要 `pallasbot/pallas-bot-ai`；需要完整媒体栈时，在 `compose.env` 设 `PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest` 并叠加 GPU compose
 
 **失败分支**：某服务非 healthy → `docker compose logs <服务名>`；PG 见 [Docker 部署 · PG 排障](/deploy/docker)。
 
@@ -50,24 +49,22 @@ docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose
 
 ```bash
 curl -s http://127.0.0.1:8088/pallas/api/health | python3 -m json.tool
-curl -s http://127.0.0.1:9099/health | python3 -m json.tool
 ```
 
 - [ ] Bot health 返回 JSON（非连接拒绝）
-- [ ] AI health：`llm.configuration_ok` 为 true 或 `provider_status` 本地可达
 - [ ] 浏览器 `http://<宿主机>:8088/pallas/` 可进登录 / Setup Wizard
 
 ### A4. 控制台与配置
 
 - [ ] 首次登录完成 Setup Wizard（改密、协议端可稍后）
-- [ ] WebUI「智能对话与 AI 服务」显示 AI 在线或探测成功
+- [ ] WebUI「AI 配置 → 接入」配置 Provider、模型与密钥，并通过连通性测试
 - [ ] `data/pallas_config/webui.json` 已生成（卷持久化）
 
 ### A5. 协议端与群（可选）
 
 - [ ] `http://<宿主机>:8088/pallas/protocol` 可创建 / 管理协议端实例
 - [ ] QQ 连上后群内 **牛牛帮助** 有响应
-- [ ] 开启 LLM 后 `@牛牛` 或智能对话有一条成功回复（首次可能较慢）
+- [ ] 打开 `LLM_CHAT_ENABLED` 后，`@牛牛` 或智能对话有一条成功回复（首次可能较慢）
 
 ### A6. 收尾
 
@@ -78,7 +75,7 @@ curl -s http://127.0.0.1:9099/health | python3 -m json.tool
 
 ## 路径 B：本机开发（uv）
 
-**目标**：本机 Bot + 可选 AI bootstrap。
+**目标**：本机 Bot；按需接入 LLM Provider 或 AI 媒体 Runtime。
 
 ### B1. Bot 本体
 
@@ -95,33 +92,39 @@ uv run pallas
 - [ ] `http://127.0.0.1:8088/pallas/api/health` 正常
 - [ ] WebUI 可登录
 
-### B2. AI Runtime（同级仓）
+### B2. LLM Provider
 
 ```bash
-cd /path/to/Pallas-Bot
-uv run pallas ai path               # 应输出 ../Pallas-Bot-AI
-uv run pallas ai setup
-# 唱歌/TTS: uv run pallas ai setup --with-media
+# 启动 Bot 后，在 http://127.0.0.1:8088/pallas/ 打开 AI 配置 → 接入
 ```
 
-- [ ] Redis 可达（脚本可自动 `docker compose -f docker-compose.4.0-ci.yml up -d`）
-- [ ] Ollama 或远端 LLM 配置正确（`--remote-only` 跳过 Ollama）
-- [ ] `curl -s http://127.0.0.1:9099/health` 正常
-- [ ] Bot `pallas.toml` 或 WebUI：`LLM_CHAT_ENABLED=true`，`AI_SERVER_HOST`/`PORT` 指向 AI
-- [ ] （可选）`--with-media` 后 media worker 就绪
+- [ ] Provider、模型与密钥已保存并测试成功
+- [ ] `LLM_CHAT_ENABLED=true`
+- [ ] `@牛牛` 有一条成功回复
 
-### B3. LLM 联调（可选）
+### B3. AI Runtime（仅媒体 / RWKV）
 
 ```bash
 cd /path/to/Pallas-Bot
-uv run python tools/integration_llm_chat.py --ai-port 9099
+uv run pallas ai setup --with-media
+```
+
+- [ ] `curl -s http://127.0.0.1:9099/health` 正常
+- [ ] `AI_SERVER_HOST` / `AI_SERVER_PORT` 指向 AI Runtime
+- [ ] 媒体 worker 就绪；需要遗留 RWKV 时 `/api/chat` 可用
+
+### B4. LLM 联调（可选）
+
+```bash
+cd /path/to/Pallas-Bot
+uv run python tools/integration_llm_chat.py
 ```
 
 - [ ] 脚本无致命错误（按脚本提示配置 PG/Mongo 与测试环境变量）
 
 ---
 
-## 路径 C：仅 AI Docker（Bot 在宿主机或其他机器）
+## 路径 C：仅 AI Docker（媒体 / RWKV，Bot 在宿主机或其他机器）
 
 ```bash
 cd /path/to/Pallas-Bot-AI
@@ -131,7 +134,7 @@ docker compose -f docker-compose.llm.yml up -d
 
 - [ ] `9099/health` 正常
 - [ ] Bot 侧 `CALLBACK_HOST`：同机 Docker 用 `host.docker.internal`；Bot 在 compose 内用服务名 `pallasbot`
-- [ ] Bot 发起 AI 任务可收到 callback（WebUI 运行态或群内 LLM 回复）
+- [ ] 媒体或 RWKV 任务可收到 callback
 
 ---
 
@@ -171,8 +174,9 @@ docker compose -f docker-compose.llm.yml up -d
 | compose 项目名为空 | 部署目录名含特殊字符；compose 已设 `name:` |
 | `pallas.toml` not a directory | 挂载路径误建成文件夹 |
 | PG `pg_isready` 失败 | `compose.env` 的 `PG_*` 与 TOML 不一致；或旧 `postgres/data` 库名冲突 |
-| AI health 失败 | `docker compose logs pallasbot-ai`；Redis/Ollama 是否 healthy |
-| 群无 LLM 回复 | callback 地址；`LLM_CHAT_ENABLED`；AI 日志与 Bot 同网段 |
+| Provider 测试失败 / 群无 LLM 回复 | WebUI「AI 配置 → 接入」的 Base URL、密钥、模型；确认 `LLM_CHAT_ENABLED` |
+| 媒体 Runtime health 失败 | `docker compose logs pallasbot-ai`；Redis/Ollama 是否 healthy |
+| 媒体任务无结果 | `AI_SERVER_*`、callback 地址、AI 与 Bot 网络 |
 | 帮助图样式异常 | 勿将整个 `resource` 挂到 `/app/resource`（见 [Docker 部署](/deploy/docker)） |
 
 更多：[FAQ](/deploy/faq) · [排障](/maintainer/operate/troubleshooting) · [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)

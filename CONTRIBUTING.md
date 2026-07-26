@@ -41,9 +41,9 @@
 
 开始编码前建议先阅读：
 
-- [开发指南总览](docs/develop/README.md)
-- [本地开发环境](docs/develop/environment.md)
-- [贡献与提交流程](docs/develop/workflow.md)
+- [开发指南总览](docs/developer/index.md)
+- [本地开发环境](docs/developer/environment.md)
+- [贡献与提交流程](docs/developer/workflow.md)
 - [项目结构约定](docs/developer/reference/repo-layout.md)
 - [Golden Plugin / 插件目录约定](docs/developer/plugin-development/golden-plugin.md)
 - [命令权限接入说明](docs/common/cmd_perm/README.md)

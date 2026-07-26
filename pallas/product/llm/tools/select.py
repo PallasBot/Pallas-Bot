@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from pallas.product.llm.tools.identity import is_self_identity_question
 from pallas.product.llm.tools.patterns import domains_from_structure
-from pallas.product.llm.tools.score import domains_from_tool_scores
 
 _ARKNIGHTS_HINTS = (
     "干员",
@@ -53,7 +52,20 @@ _COMMAND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("画", "绘制", "抽卡", "来张", "画一张", "画个"), "draw"),
     (("忘掉", "清空", "clear", "忘了吧"), "llm_chat"),
     (("喝酒", "干杯", "继续喝", "醉酒", "醒一醒", "别喝了", "醒酒", "喝一杯", "再喝", "来杯酒", "灌酒"), "drink"),
-    (("帮助", "有哪些功能", "有什么功能", "功能列表", "牛牛帮助", "功能说明", "怎么用", "使用说明"), "help"),
+    (
+        (
+            "帮助",
+            "有哪些功能",
+            "有什么功能",
+            "有啥功能",
+            "功能列表",
+            "牛牛帮助",
+            "功能说明",
+            "怎么用",
+            "使用说明",
+        ),
+        "help",
+    ),
     (
         (
             "唱歌",
@@ -87,6 +99,23 @@ _COMMAND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("额度", "爱发电", "画画次数"), "afdian"),
     (("找工具", "搜工具", "有什么工具", "能调什么"), "tools"),
     (("记住", "记得吗", "以前说过", "群里旧事", "查记忆"), "memory"),
+    (
+        (
+            "搜一下",
+            "搜索一下",
+            "帮我搜",
+            "帮我搜索",
+            "联网搜",
+            "网上搜",
+            "上网搜",
+            "百度一下",
+            "google一下",
+            "谷歌一下",
+            "查网页",
+            "搜网页",
+        ),
+        "web",
+    ),
 )
 
 
@@ -149,6 +178,5 @@ def infer_tool_domains(user_text: str) -> frozenset[str]:
         if any(hint in text for hint in hints):
             domains.add(domain)
     domains.update(domains_from_structure(user_text))
-    domains.update(domains_from_registered_tool_hints(user_text))
-    domains.update(domains_from_tool_scores(user_text))
+    # 插件 hints / 描述打分不进硬域：留给 soft_recall 做工具级 top-N，避免弱说法灌整域。
     return selective_domains(domains)

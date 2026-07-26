@@ -1,6 +1,15 @@
 # 贡献与提交流程
 
-完整说明亦见仓库 [CONTRIBUTING.md](https://github.com/PallasBot/Pallas-Bot/blob/main/CONTRIBUTING.md) 与 [AGENTS.md](https://github.com/PallasBot/Pallas-Bot/blob/main/AGENTS.md)。
+本页说明如何提 Issue / PR，以及提交前要过哪些检查。完整约定亦见仓库 [CONTRIBUTING.md](https://github.com/PallasBot/Pallas-Bot/blob/main/CONTRIBUTING.md) 与 [AGENTS.md](https://github.com/PallasBot/Pallas-Bot/blob/main/AGENTS.md)。
+
+环境已就绪时，从这里开始贡献即可。架构专题、插件骨架、WebUI 窄屏细则等按改动范围再读。
+
+## 推荐顺序
+
+1. 搜索是否已有同类 Issue。
+2. 阅读下方「编码前必读」中与本次改动相关的条目。
+3. 本地跑通 ruff / 相关 pytest，再开 PR。
+4. 一个 PR 只解决一类问题。
 
 ## Issue
 
@@ -13,7 +22,6 @@
 ## 分支与 PR
 
 - 日常开发：从 `main` 或 `dev` 拉分支，向目标分支提 PR
-- **架构与 AI 运维入口**：见 [架构总览](/developer/architecture/overview)、[LLM 与 AI](/maintainer/operate/llm-and-ai)
 - **一个 PR 只解决一类问题**（功能 / 修复 / 文档 / 重构勿混杂）
 - **最小必要改动**：避免无关格式化、大范围重排；历史问题在说明里标注「历史遗留」与「本次引入」
 
@@ -79,3 +87,9 @@ uv run python tools/scripts/sync_docs_to_web.py
 ## 沟通
 
 可在 Issue 留言或加入 README 中的 QQ 开发者群。
+
+## 后续阅读
+
+- [本地开发环境](environment.md)
+- [架构总览](/developer/architecture/overview)（改内核 / 归属边界时）
+- [WebUI 前端开发](webui.md)（改控制台时）

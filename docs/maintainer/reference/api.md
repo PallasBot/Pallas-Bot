@@ -1,6 +1,6 @@
 # 运维 API
 
-维护者可直接依赖的 API 入口。
+本页列出维护者可直接依赖的控制台 API 入口，用于健康检查、插件治理、通用配置与分片观测。详细字段契约见 [WebUI API](/common/webui/api/)。
 
 ## 接口域
 
@@ -92,6 +92,7 @@
 ## 相关阅读
 
 - [WebUI API 总览](/common/webui/api/)
+- [Agent Platform API](/common/webui/api/09-agent-platform)
 - [认证与健康检查](/common/webui/api/01-auth-health)
 - [插件 API](/common/webui/api/02-plugins)
 - [通用配置 API](/common/webui/api/03-common-config)

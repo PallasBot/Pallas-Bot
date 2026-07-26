@@ -28,10 +28,13 @@ def test_probe_from_draft_rejects_unknown_key() -> None:
         asyncio.run(probe_all_connectivity_from_draft({"not_a_field": 1}))
 
 
-def test_draw_draft_includes_ai_runtime_fields() -> None:
+def test_draw_draft_merges_gateway_fields() -> None:
     merged = draw_draft_from_values({
-        "pallas_image_runtime_mode": "ai_service_runtime",
-        "pallas_image_ai_runtime_fallback_to_plugin": False,
+        "pallas_image_base_url": "https://example.test/v1",
+        "pallas_image_api_key": "test-key",
+        "pallas_image_model": "demo-model",
     })
-    assert merged["pallas_image_runtime_mode"] == "ai_service_runtime"
-    assert merged["pallas_image_ai_runtime_fallback_to_plugin"] is False
+    assert merged["pallas_image_base_url"] == "https://example.test/v1"
+    assert merged["pallas_image_api_key"] == "test-key"
+    assert merged["pallas_image_model"] == "demo-model"
+    assert "pallas_image_runtime_mode" not in merged

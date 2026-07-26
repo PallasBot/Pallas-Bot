@@ -1,12 +1,18 @@
 # 排障
 
-排查顺序：部署形态 → 配置来源 → 角色与连接 → 日志 → WebUI 聚合。运行时问题多归入：配置未生效、角色判断错误、协议端连接错误、WebUI 资源或聚合异常、扩展未加载。
+按实际症状定位；每次排查都先完成以下三项，再查看对应进程日志或 WebUI 状态：
 
-## 问题分类索引
+1. 确认部署形态：单进程或分片，以及源码、Docker 或混合目录。
+2. 确认配置来源：`config/pallas.toml` 是否被 `data/pallas_config/webui.json` 的同名键覆盖。
+3. 确认运行角色和连接：协议端连接的是当前进程还是目标 worker。
+
+运行时问题通常属于配置未生效、角色判断错误、协议端连接错误、WebUI 资源或聚合异常，或扩展未加载。
+
+## 按症状选择入口
 
 ```mermaid
 flowchart TD
-  Start[故障] --> Kind{类别}
+  Start[故障] --> Kind{现象}
   Kind -->|配置未生效| Config[配置来源]
   Kind -->|单进程/分片混淆| Role[角色与连接]
   Kind -->|QQ在线无回复| Proto[协议端]
@@ -15,13 +21,12 @@ flowchart TD
   Kind -->|未归类| Order[按排障顺序]
 ```
 
-## 排障顺序
+## 首三项检查
 
-1. 确认部署形态（单进程 / 分片；源码 / Docker / 混合）
-2. 确认配置来源与覆盖关系
-3. 确认运行角色与连接路径
-4. 查看对应日志
-5. 核对 WebUI 聚合状态与插件状态
+完成前三项后：
+
+4. 查看对应日志。
+5. 核对 WebUI 聚合状态与插件状态。
 
 ## 1. 部署形态
 
@@ -65,15 +70,15 @@ flowchart TD
 - `data/pallas_shard/logs/hub.log`
 - `data/pallas_shard/logs/worker-*.log`
 
-## 4. 按现象查日志
+## 按实际症状查日志
 
 ### WebUI 页面旧或与源码不一致
 
-- `data/pb_webui/public/` 是否为当前版本产物
+- `data/pb_webui/public-react/` 是否为当前版本产物
 - 浏览器缓存
 - 修改的是否为 Pallas-Bot-WebUI 源码仓（与运行产物不同）
 
-### 协议端连不上
+### QQ 在线但群不回复，或协议端连不上
 
 - 协议端实例 `ws_url`
 - 分片下 `registry.json` 端口映射
@@ -86,9 +91,9 @@ flowchart TD
 - `local/plugins/` 同名覆盖
 - 分片下是否只查了 hub、未查 worker
 
-### AI 任务无回执
+### 媒体 / RWKV 任务无回执
 
-- AI callback 是否到达 hub
+- 媒体 / RWKV callback 是否到达 hub
 - hub 是否路由到目标 worker
 - 目标 worker 是否在线
 - 参见 [LLM 与 AI](llm-and-ai.md)
@@ -107,15 +112,15 @@ flowchart TD
 | 单进程日志 | 当前 Bot 进程 stdout / 配置的日志输出 |
 | 分片日志 | `data/pallas_shard/logs/hub.log`、`worker-*.log` |
 | 分片状态 | `data/pallas_shard/registry.json`、`stats/worker-*.json` |
-| WebUI 资源 | `data/pb_webui/public/` |
+| WebUI 资源 | `data/pb_webui/public-react/`（默认 React） |
 
-## 现象速查
+## 症状速查
 
 | 现象 | 第一判断 |
 | --- | --- |
 | 页面未更新 | 资源同步或浏览器缓存 |
 | 页面可开、数据错 | API 契约或 worker 聚合 |
-| QQ 在线无回复 | 协议端连接、worker 日志、Redis |
+| QQ 在线无回复 | 协议端连接、目标 worker 日志、Redis |
 | 商店已安装无功能 | 未重启或加载路径冲突 |
 | 单 Bot 或单群异常 | 定位对应 worker，勿全局扫描 |
 
@@ -134,4 +139,4 @@ flowchart TD
 | 分片连接 | [分片部署](/maintainer/deploy/sharded) |
 | WebUI 资源 | [WebUI](/maintainer/install/webui) |
 | 环境问题 | [FAQ](/deploy/faq) |
-| AI / 闲聊 | [LLM 与 AI](llm-and-ai.md) |
+| AI / LLM 对话 | [LLM 与 AI](llm-and-ai.md) |

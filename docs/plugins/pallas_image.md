@@ -2,4 +2,4 @@
 
 牛牛画画现为官方插件 **`draw`**（`pallas-plugin-draw`）。
 
-→ [draw（画画）](/plugins/draw)
+→ [draw（画画）](./draw/README.md)

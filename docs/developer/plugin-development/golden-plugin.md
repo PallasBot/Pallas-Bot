@@ -1,8 +1,8 @@
 # Golden Plugin
 
-Pallas-Bot 插件默认骨架与接入约定。新增 core 插件或回迁旧插件时按本页执行。
+本页是 Pallas-Bot 插件的默认骨架与接入约定。新增 core 插件或回迁旧插件时按本页执行。
 
-完整 checklist（主仓）：[08-golden-plugin-checklist](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/pallas-plugin-development/references/08-golden-plugin-checklist.md)。
+第一次写群口令插件可先跟 [写第一个插件](first-plugin.md)；本页偏长期维护的标准结构。完整 checklist（主仓）：[08-golden-plugin-checklist](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/pallas-plugin-development/references/08-golden-plugin-checklist.md)。
 
 ## 目录结构
 
@@ -140,7 +140,7 @@ get_config = plugin_webui.get
 - [ ] 帮助文案未写死权限角色
 - [ ] 测试与 README 已同步
 
-## 相关
+## 后续阅读
 
 - [写第一个插件](first-plugin.md)
 - [配置与 WebUI](config-and-webui.md)

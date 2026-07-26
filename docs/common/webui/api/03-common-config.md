@@ -1,6 +1,6 @@
 # 通用配置
 
-WebUI「通用配置」各段通过统一 REST 暴露；段定义在 `src/console/webui/env_sections.py`。
+WebUI「通用配置」各段通过统一 REST 暴露；段定义在 `pallas/console/webui/env_sections.py`。侧栏 **AI 配置**（Provider / 媒体连接）另有专用页面与接口，不全部落在下列 `section_id` 里。
 
 | 方法 | 路径 | 写 | 说明 |
 | --- | --- | --- | --- |
@@ -14,16 +14,17 @@ WebUI「通用配置」各段通过统一 REST 暴露；段定义在 `src/consol
 
 | ID | 用途 |
 | --- | --- |
-| `cmd_perm` | 命令权限覆盖矩阵 |
+| `cmd_perm` | 命令权限 |
 | `control_plane` | 联邦控制 |
 | `corpus_federation` | 语料联邦 |
-| `community_stats` | 在线统计与社区主站 |
 | `ingress_fanout` | 入站全员同响口令 |
 | `ingress_dispatch` | 入站调度运行时 |
 | `repeater_learn` | 复读后台学习 |
 | `message_scrub` | 消息审查 |
 | `service_gateways` | 画画 / MAA / 点歌等网关 URL |
 | `pallas_webui` / `pallas_protocol` / `help` | 对应插件控制台子集 |
+
+在线统计已迁至插件页 **`pb_stats`**（旧段 ID `community_stats` 在前端会重定向）。见 [在线统计与社区主站](/common/community_stats)。
 
 PUT 落盘 `webui.json`；各段 `apply_webui_env_section_patch` 内触发对应 reload（如 cmd_perm 清缓存、message_scrub 热读）。
 
@@ -97,4 +98,6 @@ WebUI「能力包」页消费上述接口。默认配置落在 AI 侧 `data/medi
 - `fetchCommonConfigSections`、`fetchCommonConfigSection`、`putCommonConfigSection`
 - `postServiceGatewaysConnectivityCheck`
 
-实现：`extended_api.py` + `env_sections.py`；网关探测 `src/features/service_gateways/`、`service_gateways_section.py`。
+实现：`extended_api.py` + `env_sections.py`；网关探测 `pallas/product/service_gateways/`、`service_gateways_section.py`。
+
+`GET /common-config/llm/runtime-overview` 中的 conversation kernel 反映 Bot 内 Provider 路径；媒体相关子字段依赖 AI Runtime 可达，与普通聊天是否可用无关。

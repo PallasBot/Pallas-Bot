@@ -5,7 +5,7 @@
 | 场景 | 入口 |
 | --- | --- |
 | 拉代码、同步依赖、启停、升级 Bot / WebUI | CLI |
-| 官方插件装 / 卸 / 更新、运行中配置 | [网页控制台](../../guide/web-console.md) |
+| 官方插件装 / 卸 / 更新、运行中配置 | [网页控制台](/guide/web-console) |
 
 完整子命令：`uv run pallas --help`。
 
@@ -68,14 +68,14 @@ uv run pallas plugin list
 
 ```bash
 uv run pallas ai path
-uv run pallas ai setup                 # LLM-only（不装 torch）
+uv run pallas ai setup                 # 媒体 sidecar 基础安装（不装 torch）
 uv run pallas ai setup --check-only
 uv run pallas ai setup --remote-only
 uv run pallas ai setup --with-media    # 唱歌/TTS（装 torch CPU）
 uv run pallas ai setup --with-media --gpu
 ```
 
-详见 [AI Runtime 安装](/maintainer/install/ai-runtime)。
+详见 [AI Runtime 安装](/maintainer/install/ai-runtime)。普通 LLM 聊天在 WebUI「AI 配置 → 接入」配置 Provider，不依赖本命令。
 
 ## 体检
 
@@ -104,10 +104,11 @@ uv run pallas doctor
 | `.env` 迁移 | 独立脚本 | 待 `pallas config migrate` |
 | 全栈一键升级 | `maintenance` + 控制台 | Bot 侧 CLI，插件侧 WebUI |
 
-维护者清单：[升级](/maintainer/deploy/upgrade)、[4.0 迁移指南](../../guide/4.0-migration.md)。
+维护者清单：[升级](/maintainer/deploy/upgrade)、[4.0 迁移指南](/guide/4.0-migration)。
 
 ## 相关阅读
 
 - [安装官方插件](/maintainer/install/official-extensions)
-- [网页控制台](../../guide/web-console.md)
+- [网页控制台](/guide/web-console)
 - [分片部署](/maintainer/deploy/sharded)
+- [运维入口](/maintainer/quickstart)

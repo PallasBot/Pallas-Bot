@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from nonebot import logger
 from ulid import ULID
@@ -19,6 +19,8 @@ from pallas.product.llm.task_metrics import record_bot_llm_task
 
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
+
+    from pallas.product.llm.repeater_capabilities import RepeaterCapabilities
 
 
 def should_polish_lite_sample(
@@ -164,7 +166,7 @@ async def maybe_submit_repeater_llm_polish_lite(
     return True
 
 
-async def maybe_submit_repeater_corpus_llm(
+async def submit_corpus_assist_stages(
     event: GroupMessageEvent,
     *,
     user_text: str,
@@ -172,9 +174,18 @@ async def maybe_submit_repeater_corpus_llm(
     candidate_text: str,
     reply_mode: str = "normal",
     scene_tier: str = "weak",
+    profile: Literal["repeater", "direct_chat"] = "repeater",
+    capabilities: RepeaterCapabilities | None = None,
 ) -> bool:
-    """语料 hit：强场景优先 select，弱场景按原顺序处理。"""
+    """Submit grounded corpus-assist stages for repeater or direct chat."""
     cfg = get_llm_config()
+    if capabilities is None:
+        from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
+
+        capabilities = resolve_repeater_capabilities(cfg)
+    if not capabilities.llm_enabled:
+        return False
+
     from packages.repeater.opportunity_gate import looks_like_reply_cue
     from pallas.product.llm.corpus_contamination import is_llm_learning_safe
 
@@ -185,7 +196,7 @@ async def maybe_submit_repeater_corpus_llm(
 
     cue = looks_like_reply_cue(user_text)
     if scene_tier == "strong":
-        if len(pool) >= 2 and cfg.llm_select_enabled:
+        if len(pool) >= 2 and capabilities.select_enabled:
             from pallas.product.llm.select import maybe_submit_repeater_llm_select
 
             if await maybe_submit_repeater_llm_select(
@@ -198,7 +209,7 @@ async def maybe_submit_repeater_corpus_llm(
             ):
                 return True
 
-        if cue and candidate and len(pool) >= 2:
+        if profile == "repeater" and capabilities.polish_enabled and cue and candidate and len(pool) >= 2:
             from pallas.product.llm.polish import maybe_submit_repeater_llm_polish
 
             if await maybe_submit_repeater_llm_polish(
@@ -212,7 +223,7 @@ async def maybe_submit_repeater_corpus_llm(
             ):
                 return True
 
-        if cfg.llm_polish_lite_enabled and candidate and pool:
+        if capabilities.polish_lite_enabled and candidate and pool:
             if await maybe_submit_repeater_llm_polish_lite(
                 event,
                 user_text=user_text,
@@ -224,7 +235,7 @@ async def maybe_submit_repeater_corpus_llm(
 
         return False
 
-    if cue and candidate and len(pool) >= 2:
+    if profile == "repeater" and capabilities.polish_enabled and cue and candidate and len(pool) >= 2:
         from pallas.product.llm.polish import maybe_submit_repeater_llm_polish
 
         if await maybe_submit_repeater_llm_polish(
@@ -238,7 +249,7 @@ async def maybe_submit_repeater_corpus_llm(
         ):
             return True
 
-    if cfg.llm_polish_lite_enabled and candidate and pool:
+    if capabilities.polish_lite_enabled and candidate and pool:
         if should_polish_lite_sample(
             int(event.self_id),
             int(event.group_id),
@@ -254,7 +265,7 @@ async def maybe_submit_repeater_corpus_llm(
             ):
                 return True
 
-    if len(pool) >= 2 and cfg.llm_select_enabled:
+    if len(pool) >= 2 and capabilities.select_enabled:
         from pallas.product.llm.select import maybe_submit_repeater_llm_select
 
         if await maybe_submit_repeater_llm_select(
@@ -267,7 +278,7 @@ async def maybe_submit_repeater_corpus_llm(
         ):
             return True
 
-    if candidate and cfg.llm_polish_enabled:
+    if profile == "repeater" and candidate and capabilities.polish_enabled:
         from pallas.product.llm.polish import maybe_submit_repeater_llm_polish
 
         if await maybe_submit_repeater_llm_polish(
@@ -280,3 +291,23 @@ async def maybe_submit_repeater_corpus_llm(
             return True
 
     return False
+
+
+async def maybe_submit_repeater_corpus_llm(
+    event: GroupMessageEvent,
+    *,
+    user_text: str,
+    candidates: list[str],
+    candidate_text: str,
+    reply_mode: str = "normal",
+    scene_tier: str = "weak",
+) -> bool:
+    """Compatibility wrapper for repeater corpus-assist submission."""
+    return await submit_corpus_assist_stages(
+        event,
+        user_text=user_text,
+        candidates=candidates,
+        candidate_text=candidate_text,
+        reply_mode=reply_mode,
+        scene_tier=scene_tier,
+    )

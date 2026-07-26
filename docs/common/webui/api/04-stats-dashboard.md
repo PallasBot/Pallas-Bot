@@ -26,13 +26,16 @@
 | GET | `/local-corpus-hot` | 同上 | 本机语料热度 |
 | GET | `/corpus-status` | | 语料联邦状态 |
 | GET | `/federation-onboarding` | | 联邦接入引导信息 |
+| GET | `/community-gallery` | `limit`, `mine` | 社区投稿列表（代理中心 `/v1/gallery/posts`） |
+| POST | `/community-gallery` | multipart | 提交投稿（正文 / 图片 / 可选 Bot） |
+| DELETE | `/community-gallery/{post_id}` | | 撤下本部署投稿 |
 
 ## 前端对应
 
 - 首页：`fetchSystem`、`fetchMessageStats`、`fetchConsoleDailyStats`、`fetchShardObservability`、`fetchIngressDispatch`
-- 社区页：`fetchCommunityStats`、`fetchCommunityCorpusHot`、`fetchLocalCorpusHot`
+- 社区页：`fetchCommunityStats`、`fetchCommunityCorpusHot`、`fetchLocalCorpusHot`、`fetchCommunityGallery`
 - 日志错误：`fetchPluginRunStats`、`postLogErrorsCleanup`
 
-实现：`extended_api.py`；社区 `src/features/community_stats/`、语料 `src/features/corpus/`、分片 `src/platform/shard/`。
+实现：`extended_api.py`；社区 `pallas/product/community_stats/`、语料 `pallas/product/corpus/`、分片 `pallas/core/platform/shard/`。
 
 架构说明：[分片运行时](../../../developer/architecture/shard-runtime.md)、[分片部署](../../../maintainer/deploy/sharded.md)。

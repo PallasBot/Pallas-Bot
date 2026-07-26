@@ -11,6 +11,10 @@ class ToolCapability(StrEnum):
     READ_ONLY = "read_only"
     SIDE_EFFECTING = "side_effecting"
     REQUIRES_GROUP_CONTEXT = "requires_group_context"
+    EXTERNAL_NETWORK = "external_network"
+    BACKGROUND_TASK = "background_task"
+    REQUIRES_APPROVAL = "requires_approval"
+    PROACTIVE_SEND = "proactive_send"
 
 
 class ToolAuditInfo(BaseModel):
@@ -32,6 +36,45 @@ class ToolCatalogEntry(BaseModel):
     domains: list[str] = Field(default_factory=list)
     capabilities: list[str] = Field(default_factory=list)
     audit: ToolAuditInfo = Field(default_factory=ToolAuditInfo)
+    estimated_duration_ms: int = 0
+    cost_hint: str = ""
+    approval_required: bool = False
+    background_ok: bool = False
+    display_mode: str = "default"
+
+
+class ArtifactRef(BaseModel):
+    artifact_id: str = ""
+    kind: str = "text"
+    uri: str = ""
+    title: str = ""
+
+
+class TaskContract(BaseModel):
+    task_id: str = ""
+    name: str = ""
+    status: str = "pending"
+    group_id: int | None = None
+    user_id: int | None = None
+    deadline: int | None = None
+    artifacts: list[ArtifactRef] = Field(default_factory=list)
+
+
+class SubAgentContract(BaseModel):
+    run_id: str = ""
+    task_id: str = ""
+    tools: list[str] = Field(default_factory=list)
+    budget: int = 3
+    deadline: int | None = None
+    status: str = "planned"
+
+
+class ProactiveDeliveryContract(BaseModel):
+    group_id: int
+    user_id: int | None = None
+    text: str
+    source: str = "task"
+    metadata: dict = Field(default_factory=dict)
 
 
 class ToolCatalogSelection(BaseModel):
@@ -41,6 +84,11 @@ class ToolCatalogSelection(BaseModel):
     selective_enabled: bool = False
     inferred_domains: list[str] = Field(default_factory=list)
     schema_count: int = 0
+    selection_source: str = ""
+    soft_recall_confidence: int = 0
+    soft_recall_candidates: list[dict] = Field(default_factory=list)
+    ask_before_call: bool = False
+    missing_required_params: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class ToolCatalogSnapshot(BaseModel):

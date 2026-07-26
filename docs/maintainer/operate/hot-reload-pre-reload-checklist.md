@@ -1,6 +1,6 @@
 # 热重载 pre-reload 清理清单
 
-> 配合 [Reload 与 Activation](/developer/plugin-development/reload-and-activation) 与官方插件 `activation_policy`。WebUI 保存插件配置或 `POST /plugins/{name}/reload` 前按本清单自检。
+在 WebUI 保存插件配置或调用 `POST /plugins/{name}/reload` 之前，用本页核对变更会落在哪一层。分级说明见 [Reload 与 Activation](/developer/plugin-development/reload-and-activation)。
 
 ## 1. 配置级（`reload_policy: config_only`，默认）
 
@@ -11,7 +11,7 @@
 | 协调状态 | 分片 Redis 键、hub-only 注册表是否需手动失效 |
 | 后台 worker | 如 repeater learn queue，配置键变更后是否需 `schedule_*_reload()` |
 
-**WebUI 提示**：`activation_policy=hot-reloadable` 时显示「保存后多数配置可热载」。
+`activation_policy=hot-reloadable` 时，控制台通常提示「保存后多数配置可热载」。
 
 ## 2. 元数据级（`reload_policy: metadata`）
 
@@ -21,7 +21,7 @@
 | ingress 路由声明 | `extra["ingress_routes"]` 变更是否需进程级重建索引 |
 | cmd_perm 声明 | 新命令是否出现在治理面板 |
 
-**不做**：卸载 matcher；仍走配置保存触发的元数据重建。
+本级不会卸载 matcher；仍走配置保存触发的元数据重建。
 
 ## 3. 代码级（`reload_policy: full` 或 pip 安装扩展）
 
@@ -32,7 +32,7 @@
 | 协议端连接 | `pb_protocol` 类扩展通常需 `full-restart` |
 | hub 挂载 | 仅 hub 注册的 API/静态资源需全栈重启 |
 
-**WebUI 提示**：按 `activation_policy` 展示：
+控制台按 `activation_policy` 展示：
 
 | activation_policy | 用户文案 |
 | --- | --- |
@@ -44,20 +44,21 @@
 
 `extension_install` / 商店安装返回 `needs_restart` 与 `activation_action` 时：
 
-1. 读返回 `message` 与 `stdout_tail`
-2. 若 SSE 进度流 `phase=failed`，勿假定已安装成功
-3. 按 activation_policy 选择牛牛重启或全栈重启
+1. 读取返回 `message` 与 `stdout_tail`
+2. 若 SSE 进度流 `phase=failed`，不要假定已安装成功
+3. 按 `activation_policy` 选择重启当前 Bot 或全栈重启
 
-## 5. 社区插件安装/更新/卸载后
+## 5. 社区插件安装 / 更新 / 卸载后
 
-`community_plugin_ops` / 商店安装返回 `activation_action` 时：
+`community_plugin_ops` / 商店返回 `activation_action` 时：
 
-1. **首次安装** + `hot-reload`：无需重启；确认插件页已出现且命令可用
-2. **更新**（无论是否勾重启）：NoneBot 无法卸载旧 matcher；未重启前仍运行旧代码
-3. **分片**：社区插件在 worker 加载；重启优先 **workers-only**（WebUI「立即重启」在分片下亦如此）
-4. `extra_plugin_dirs` 未含 `local/plugins` 时，安装后无法热加载，须先改配置再重启
+1. **首次安装**且动作为 `hot-reload`：通常无需重启；确认插件页已出现且命令可用
+2. **更新**：NoneBot 无法卸载旧 matcher；未重启前仍运行旧代码
+3. **分片**：社区插件在 worker 加载；优先重启 worker
+4. `extra_plugin_dirs` 未包含 `local/plugins` 时，安装后无法热加载，须先改配置再重启
 
 ## 相关
 
 - [Reload 与 Activation](/developer/plugin-development/reload-and-activation)
 - [Golden Plugin](/developer/plugin-development/golden-plugin)
+- [插件治理](plugin-governance.md)

@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 
 from pallas.product.service_gateways.media_probe import (
     maa_hub_probe_note,
-    probe_draw_ai_runtime,
     probe_image_gateways,
     probe_maa_endpoints,
     probe_sing_server,
@@ -155,86 +154,10 @@ def test_probe_sing_success_sets_runtime_state(monkeypatch) -> None:
     assert results[0].health_state == "healthy"
 
 
-def test_probe_draw_ai_runtime_enabled() -> None:
-    result = probe_draw_ai_runtime(
-        type("Cfg", (), {"runtime_mode": "ai_service_runtime", "ai_runtime_fallback_to_plugin": True})(),
-        ai_health={"image": {"backends": [{"circuit_state": "closed", "consecutive_failures": 0}]}},
-    )
-    assert result.category == "牛牛画画"
-    assert result.site == "AI runtime"
-    assert result.ok is True
-    assert result.runtime_state == "healthy"
-    assert result.error == "正常（开启回退）"
-    assert result.capability_id == "image.generate"
-    assert result.capability_group == "media"
-    assert result.runtime_type == "image"
-    assert result.health_state == "healthy"
-    assert result.circuit_state == "closed"
-    assert result.consecutive_failures == 0
-
-
-def test_probe_draw_ai_runtime_without_ai_health_is_unknown() -> None:
-    result = probe_draw_ai_runtime(
-        type("Cfg", (), {"runtime_mode": "ai_service_runtime", "ai_runtime_fallback_to_plugin": True})(),
-    )
-    assert result.health_state == "unknown"
-    assert "AI 健康未探活" in (result.error or "")
-
-
-def test_probe_draw_ai_runtime_prefers_ai_health_circuit() -> None:
-    result = probe_draw_ai_runtime(
-        type("Cfg", (), {"runtime_mode": "ai_service_runtime", "ai_runtime_fallback_to_plugin": True})(),
-        ai_health={
-            "image": {
-                "backends": [
-                    {
-                        "circuit_state": "open",
-                        "consecutive_failures": 2,
-                        "recent_failure_class": "timeout",
-                    },
-                ],
-            },
-        },
-    )
-    assert result.ok is False
-    assert result.circuit_state == "open"
-    assert "AI 服务熔断中" in (result.error or "")
-
-
-def test_probe_draw_ai_runtime_circuit_open() -> None:
-    result = probe_draw_ai_runtime(
-        type("Cfg", (), {"runtime_mode": "ai_service_runtime", "ai_runtime_fallback_to_plugin": False})(),
-        ai_health={
-            "image": {
-                "backends": [
-                    {
-                        "circuit_state": "open",
-                        "consecutive_failures": 3,
-                        "recent_failure_class": "timeout",
-                    },
-                ],
-            },
-        },
-    )
-    assert result.ok is False
-    assert result.runtime_state == "degraded"
-    assert "AI 服务熔断中" in (result.error or "")
-    assert result.capability_id == "image.generate"
-    assert result.capability_group == "media"
-    assert result.runtime_type == "image"
-    assert result.failure_class == "runtime_degraded"
-    assert result.health_state == "degraded"
-    assert result.circuit_state == "open"
-    assert result.consecutive_failures == 3
-
-
-def test_probe_image_gateways_plugin_runtime_skips_ai_runtime(monkeypatch) -> None:
+def test_probe_image_gateways_returns_backend_results_only(monkeypatch) -> None:
     from pallas.core.shared.service_probe import ServiceProbeResult
 
     class _Settings:
-        runtime_mode = "plugin_runtime"
-        ai_runtime_fallback_to_plugin = True
-
         def api_backends(self):
             return [object()]
 

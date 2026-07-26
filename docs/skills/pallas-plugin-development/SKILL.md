@@ -11,7 +11,7 @@ description: >
 
 > 本 Skill **描述 Pallas-Bot 仓库约定**（内核分层、cmd_perm、WebUI、多牛分片等）
 > 章节拆在 `references/`；需要某专题时再读对应文件，**不要**把全部 references 塞进上下文。
-> 人类贡献者请从 [Cookbook · 牛牛赞我](../../developer/plugin-development/getting-started.md) 先进入现行主线；速查见 [getting-started.md](../../developer/plugin-development/getting-started.md)。
+> 人类贡献者请从 [插件开发入门](../../developer/plugin-development/getting-started.md) 进入现行主线；写第一个插件见 [first-plugin.md](../../developer/plugin-development/first-plugin.md)。
 
 ## 章节索引
 
@@ -37,8 +37,10 @@ description: >
 
 ## 关键概念速记
 
-- **技术栈**：NoneBot2 + OneBot v11；配置 `pallas.toml` + `webui.json`；控制台为 Pallas WebUI（`/pallas/`）。
-- **插件位置**：上游 `packages/<name>/`；站点定制 `local/plugins/<name>/`（同名时 **local 优先**，需 `extra_plugin_dirs` + 重启）。
+- **技术栈**：NoneBot2 + OneBot v11；配置 `pallas.toml` + `webui.json`；控制台为 Pallas WebUI（`/pallas/`）；静态默认 `data/pb_webui/public-react/`。
+- **代码路径**：内核 `pallas/`；内置插件 `packages/`；站点定制 `local/plugins/`（同名时 **local 优先**，需 `extra_plugin_dirs` + 重启）。
+- **LLM 聊天**：普通 `@` 聊天走 **Bot Provider**（`bot_kernel`）；配置在侧栏 **AI 配置**。`Pallas-Bot-AI` / `ai_service` / `features/llm` 仅媒体或遗留路径，**不是**普通聊天前提。
+- **WebUI 分区**：插件页 / **通用配置**（横切 env 段）；Provider / 聊天 / 媒体 → **AI 配置**。
 - **多牛舰队**（进阶）：入站调度、进程分片见 [分片运行时](../../developer/architecture/shard-runtime.md)、[分片部署](../../maintainer/deploy/sharded.md)。
 - **导入分层**：社区插件仅 `pallas.api.*`；内置插件可用 `pallas.api.*` + `pallas.product.*`；跨插件能力不要深层 import 内核内部文件。见 [一、公开 API](./references/01-plugin-basics.md)。
 - **命令 ID**：`{插件}.{动作}` 须在 metadata、`permission_for_command`、matcher 中**完全一致**。

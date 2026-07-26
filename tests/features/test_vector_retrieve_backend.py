@@ -106,10 +106,21 @@ def test_hybrid_backend_blends_keyword_and_embedding(monkeypatch: pytest.MonkeyP
     assert blend_hybrid_score(embedding_score=80, keyword_score=10) >= 80
 
 
-def test_get_vector_retrieve_backend_honors_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_vector_retrieve_backend_honors_configured_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.config import LlmConfig, clear_llm_config_cache
+
+    set_vector_retrieve_backend(None)
+    clear_llm_config_cache()
+    cfg = LlmConfig(llm_vector_retrieve="embedding", llm_embedding_model="text-embedding-3-small")
+    monkeypatch.setattr("pallas.product.llm.knowledge.vector_backend.get_llm_config", lambda: cfg)
     monkeypatch.setattr(
-        "pallas.product.llm.config.repo_env_raw_value",
-        lambda key: "embedding" if key == "LLM_VECTOR_RETRIEVE" else None,
+        "pallas.product.llm.knowledge.embedding_client.embedding_capability_trace",
+        lambda current=None: {
+            "embedding_model": "text-embedding-3-small",
+            "embedding_fallback": False,
+            "embedding_error": None,
+            "semantic_available": True,
+        },
     )
     backend = get_vector_retrieve_backend()
     assert isinstance(backend, EmbeddingAugmentedBackend)

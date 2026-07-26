@@ -48,7 +48,7 @@ WebUI **插件 → 牛牛画画** 或 **服务网关 / 连通性**；字段前�
 | 说明 | 链接 |
 | --- | --- |
 | 牛牛画画 · 用户文档 | [文档站 · draw](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/draw) |
-| 插件开发入门 | [develop/plugin/getting-started](https://PallasBot.github.io/Pallas-Bot-Docs/develop/plugin/getting-started) |
+| 插件开发入门 | [developer/plugin-development/getting-started](https://PallasBot.github.io/Pallas-Bot-Docs/developer/plugin-development/getting-started) |
 
 ## 源码
 

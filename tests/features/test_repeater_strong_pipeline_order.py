@@ -5,7 +5,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pallas.product.llm.config import LlmConfig
-from pallas.product.llm.polish_lite import maybe_submit_repeater_corpus_llm
+from pallas.product.llm.polish_lite import submit_corpus_assist_stages
+from pallas.product.llm.repeater_capabilities import RepeaterCapabilities
 
 
 class FakeEvent:
@@ -60,10 +61,10 @@ def install_pipeline_mocks(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 
 @pytest.mark.asyncio
-async def test_strong_pipeline_attempts_select_before_cue_polish(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_strong_pipeline_attempts_select_before_lite_rewrite(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = install_pipeline_mocks(monkeypatch)
 
-    submitted = await maybe_submit_repeater_corpus_llm(
+    submitted = await submit_corpus_assist_stages(
         FakeEvent(),
         user_text="接一下这句",
         candidates=["候选一", "候选二"],
@@ -72,14 +73,14 @@ async def test_strong_pipeline_attempts_select_before_cue_polish(monkeypatch: py
     )
 
     assert submitted is False
-    assert calls == ["select", "polish:medium", "lite"]
+    assert calls == ["select", "lite"]
 
 
 @pytest.mark.asyncio
-async def test_weak_pipeline_keeps_cue_polish_before_select(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_weak_pipeline_attempts_lite_rewrite_before_select(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = install_pipeline_mocks(monkeypatch)
 
-    submitted = await maybe_submit_repeater_corpus_llm(
+    submitted = await submit_corpus_assist_stages(
         FakeEvent(),
         user_text="接一下这句",
         candidates=["候选一", "候选二"],
@@ -88,4 +89,44 @@ async def test_weak_pipeline_keeps_cue_polish_before_select(monkeypatch: pytest.
     )
 
     assert submitted is False
-    assert calls[:3] == ["polish:medium", "lite", "select"]
+    assert calls == ["lite", "select"]
+
+
+@pytest.mark.asyncio
+async def test_direct_chat_assist_skips_repeater_only_polish(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = install_pipeline_mocks(monkeypatch)
+
+    submitted = await submit_corpus_assist_stages(
+        FakeEvent(),
+        user_text="接一下这句",
+        candidates=["候选一", "候选二"],
+        candidate_text="候选一",
+        scene_tier="weak",
+        profile="direct_chat",
+    )
+
+    assert submitted is False
+    assert calls == ["lite", "select"]
+
+
+@pytest.mark.asyncio
+async def test_corpus_assist_uses_supplied_capability_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = install_pipeline_mocks(monkeypatch)
+
+    submitted = await submit_corpus_assist_stages(
+        FakeEvent(),
+        user_text="接一下这句",
+        candidates=["候选一", "候选二"],
+        candidate_text="候选一",
+        capabilities=RepeaterCapabilities(
+            mode="off",
+            llm_enabled=True,
+            fallback_enabled=False,
+            polish_enabled=False,
+            select_enabled=False,
+            polish_lite_enabled=False,
+        ),
+    )
+
+    assert submitted is False
+    assert calls == []

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pallas.product.llm.webui_config import normalize_repeater_mode_for_webui
+from pallas.product.llm.webui_config import LlmWebuiConfig, normalize_repeater_mode_for_webui
 
 
 def test_normalize_repeater_mode_for_webui_maps_legacy_modes() -> None:
@@ -14,5 +14,9 @@ def test_normalize_repeater_mode_for_webui_keeps_supported_modes() -> None:
     assert normalize_repeater_mode_for_webui("off") == "off"
 
 
-def test_normalize_repeater_mode_for_webui_unknown_defaults_select() -> None:
-    assert normalize_repeater_mode_for_webui("unknown") == "select"
+def test_normalize_repeater_mode_for_webui_unknown_defaults_select_polish_lite() -> None:
+    assert normalize_repeater_mode_for_webui("unknown") == "select_polish_lite"
+
+
+def test_llm_webui_config_defaults_to_select_polish_lite() -> None:
+    assert LlmWebuiConfig().llm_repeater_mode == "select_polish_lite"

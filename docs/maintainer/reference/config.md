@@ -1,6 +1,6 @@
 # 配置参考
 
-配置索引：来源、覆盖顺序、热生效与重启边界。
+按配置项查找来源、覆盖顺序、热生效与重启边界。生产检查清单见 [配置要点](/deploy/config)；合并与读取 API 见 [配置存储](/developer/architecture/config-storage)。
 
 ## 三类来源
 
@@ -46,7 +46,7 @@
 - 插件开关类配置
 - 通用配置段
 - 命令权限
-- 冷却、阈值、策略型配置
+- 冷却、频率、策略型配置
 - 已接入热重载的插件页配置
 
 ::: warning
@@ -102,12 +102,26 @@
 uv run python tools/migrate_env_to_pallas.py
 ```
 
+## LLM 工具与联网搜索（WebUI 对话策略）
+
+日常在 **AI 配置 → 对话 → 策略** 修改；落盘为 `webui.json` 对应环境键。
+
+| 键 | 说明 |
+| --- | --- |
+| `LLM_TOOLS_ENABLED` | 允许调用工具 |
+| `LLM_TOOLS_SELECTIVE` | 按意图筛选工具 |
+| `WEB_SEARCH_API_URL` | `web.search` 的 POST 完整地址（推荐 `https://api.tavily.com/search`） |
+| `TAVILY_API_KEY` | 搜索接口 Bearer 密钥（Tavily 形如 `tvly-…`） |
+
+两项搜索配置都填才会联网。操作说明见 [联网搜索](/guide/ai#联网搜索)。
+
 ## 相关阅读
 
 | 目标 | 文档 |
 | --- | --- |
+| 生产检查清单 | [配置要点](/deploy/config) |
 | 合并顺序与读取 API | [配置存储](/developer/architecture/config-storage) |
-| 本机跑通 | [五分钟跑起来](../../guide/quickstart.md) |
+| 本机跑通 | [五分钟跑起来](/guide/quickstart) |
 | 部署形态 | [运维入口](/maintainer/quickstart) |
 | 运行中配置 | [WebUI 运维](/maintainer/operate/webui) |
 | 保存后不生效 | [排障](/maintainer/operate/troubleshooting) |
