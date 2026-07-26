@@ -2,11 +2,26 @@
 
 from __future__ import annotations
 
+import re
+
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_read_generic_knowledge
 from pallas.product.llm.knowledge.models import KnowledgeInjectionResult
 from pallas.product.llm.knowledge.registry import retrieve_from_knowledge_sources
 from pallas.product.persona.prompt_guard import sanitize_prompt_block
+
+# 短闲聊不注入 FAQ；仅在像在问功能/用法时检索知识源
+_KNOWLEDGE_QUERY_RE = re.compile(
+    r"(怎么|如何|怎样|什么是|啥是|能不能|可以吗|咋整|咋弄|help|faq|清空|开关|配置|绑定|登录)",
+    re.IGNORECASE,
+)
+
+
+def looks_like_knowledge_query(text: str) -> bool:
+    body = str(text or "").strip()
+    if len(body) < 2:
+        return False
+    return bool(_KNOWLEDGE_QUERY_RE.search(body))
 
 
 async def enrich_system_with_knowledge_sources(
@@ -21,6 +36,14 @@ async def enrich_system_with_knowledge_sources(
     c = cfg or get_llm_config()
     empty_trace = {"hit_count": 0, "sources": [], "chunks": []}
     if not can_read_generic_knowledge(c):
+        return KnowledgeInjectionResult(system_prompt=system_prompt, trace=empty_trace)
+    if not looks_like_knowledge_query(query_text):
+        try:
+            from pallas.product.llm.rag_metrics import record_rag_query_result
+
+            record_rag_query_result(hit=False)
+        except Exception:
+            pass
         return KnowledgeInjectionResult(system_prompt=system_prompt, trace=empty_trace)
 
     hits = retrieve_from_knowledge_sources(

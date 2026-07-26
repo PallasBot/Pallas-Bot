@@ -22,6 +22,7 @@ def _patch_tool_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
             llm_tools_blacklist=[],
             llm_tools_desc_max_len=120,
             llm_tools_selective=False,
+            llm_tools_max_rounds=4,
         ),
     )
     monkeypatch.setattr(
@@ -67,7 +68,7 @@ def test_register_tool_deduplicates_by_name(monkeypatch: pytest.MonkeyPatch) -> 
     schemas = registry.tool_openai_schemas()
 
     assert len(schemas) == 1
-    assert schemas[0]["function"]["name"] == "test.echo"
+    assert schemas[0]["function"]["name"] == "test__echo"
 
 
 def test_iter_registered_tools_filters_by_source_and_domain(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -100,17 +101,23 @@ def test_build_tools_ui_rows_exposes_source(monkeypatch: pytest.MonkeyPatch) -> 
         )
     )
 
+    catalog = registry.build_tools_catalog_ui()
     rows = registry.build_tools_ui_rows()
+    by_name = {row["name"]: row for row in rows}
 
-    assert rows == [
-        {
-            "name": "plugin.roll",
-            "description": "plugin.roll description",
-            "domains": ["command", "dice"],
-            "command_id": None,
-            "source": "plugin_command",
-        }
-    ]
+    assert catalog["policy"]["tools_enabled"] is True
+    assert catalog["policy"]["selective_enabled"] is False
+    assert "plugin.roll" in by_name
+    assert by_name["plugin.roll"]["source"] == "plugin_command"
+    assert by_name["plugin.roll"]["domains"] == ["command", "dice"]
+    assert by_name["plugin.roll"]["eligible"] is True
+    assert by_name["plugin.roll"]["disabled_reason"] is None
+    assert by_name["plugin.roll"]["command_id"] is None
+    # packages 声明会并入只读清单（hub 无 drink 时也能看到）
+    assert "drink.drink" in by_name
+    assert by_name["drink.drink"]["disabled_reason"] == "plugin_not_in_process"
+    assert by_name["drink.drink"]["eligible"] is False
+    assert catalog["count"] == len(rows)
 
 
 def test_execute_tool_async_normalizes_non_ok_dict(monkeypatch: pytest.MonkeyPatch) -> None:

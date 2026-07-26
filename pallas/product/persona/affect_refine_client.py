@@ -191,7 +191,7 @@ async def post_affect_refine(payload: dict[str, Any]) -> dict[str, Any] | None:
             messages,
             model="",
             options={"temperature": 0.3, "max_tokens": 512},
-            task="other",
+            task="affect_refine",
         )
     except LlmProviderError as exc:
         logger.warning("affect refine kernel failed: {}", exc)

@@ -69,3 +69,20 @@ def test_merge_and_cluster_rag_snapshots(monkeypatch: pytest.MonkeyPatch) -> Non
     assert combined["hit_count"] == 1
     assert combined["miss_count"] == 3
     assert combined["hit_rate"] == 25.0
+
+
+def test_rag_flush_does_not_double_count(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import rag_metrics as rm
+
+    clear_llm_rag_metrics_for_tests()
+    path = tmp_path / "llm_rag_stats.json"
+    monkeypatch.setattr(rm, "stats_file_path", lambda: path)
+
+    record_rag_query_result(hit=True, documents=[("doc", "src")])
+    record_rag_query_result(hit=False)
+    rm.flush_rag_stats_sync()
+    rm.flush_rag_stats_sync()
+    snap = llm_rag_metrics_snapshot(include_persisted=True)
+    assert snap["hit_count"] == 1
+    assert snap["miss_count"] == 1
+    assert snap["by_document"]["doc"] == 1

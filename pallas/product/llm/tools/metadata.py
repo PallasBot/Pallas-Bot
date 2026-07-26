@@ -61,8 +61,27 @@ def iter_loaded_plugin_llm_tools() -> list[tuple[str, str, LlmCommandToolDecl]]:
     return rows
 
 
+def iter_package_declared_llm_tools() -> list[tuple[str, str, LlmCommandToolDecl]]:
+    """扫描 packages/*/__init__.py 中的 llm_tools 声明（含未加载到本进程的插件）。"""
+    from pallas.core.foundation.paths import PROJECT_ROOT
+
+    packages_root = PROJECT_ROOT / "packages"
+    if not packages_root.is_dir():
+        return []
+    rows: list[tuple[str, str, LlmCommandToolDecl]] = []
+    seen: set[str] = set()
+    for init_path in sorted(packages_root.glob("*/__init__.py")):
+        plugin_name = init_path.parent.name
+        for decl in parse_llm_tools_stub(init_path):
+            if not decl.default or decl.name in seen:
+                continue
+            seen.add(decl.name)
+            rows.append((plugin_name, plugin_name, decl))
+    return rows
+
+
 def parse_llm_tools_stub(init_path: Path) -> list[LlmCommandToolDecl]:
-    """未加载插件时从 __init__.py 字面量提取 llm_tools（供文档/测试）。"""
+    """未加载插件时从 __init__.py 提取 llm_tools（dict 字面量或 llm_command_tool_row 调用）。"""
     try:
         text = init_path.read_text(encoding="utf-8")
     except OSError:
@@ -88,13 +107,41 @@ def parse_llm_tools_stub(init_path: Path) -> list[LlmCommandToolDecl]:
                 if not isinstance(value_node, ast.List):
                     continue
                 for item in value_node.elts:
-                    if not isinstance(item, ast.Dict):
+                    raw = _ast_llm_tool_item_to_python(item)
+                    if raw is None:
                         continue
-                    raw = _ast_dict_to_python(item)
                     decl = parse_llm_command_tool_decl(raw)
                     if decl is not None:
                         decls.append(decl)
     return decls
+
+
+def _ast_llm_tool_item_to_python(node: ast.AST) -> dict[str, Any] | None:
+    if isinstance(node, ast.Dict):
+        return _ast_dict_to_python(node)
+    if isinstance(node, ast.Call) and _is_llm_command_tool_row_call(node):
+        return _ast_call_keywords_to_python(node)
+    return None
+
+
+def _is_llm_command_tool_row_call(node: ast.Call) -> bool:
+    func = node.func
+    if isinstance(func, ast.Name):
+        return func.id == "llm_command_tool_row"
+    if isinstance(func, ast.Attribute):
+        return func.attr == "llm_command_tool_row"
+    return False
+
+
+def _ast_call_keywords_to_python(node: ast.Call) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for kw in node.keywords:
+        if not kw.arg:
+            continue
+        value = _ast_value_to_python(kw.value)
+        if value is not None or isinstance(kw.value, ast.Constant):
+            out[kw.arg] = value
+    return out
 
 
 def _ast_dict_to_python(node: ast.Dict) -> dict[str, Any]:

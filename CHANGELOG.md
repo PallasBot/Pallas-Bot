@@ -1,5 +1,52 @@
 # Changelog
 
+## [4.1.3] - 2026-07-25
+
+### Changed
+
+- 帮助总览菜单改为三列布局，并按版心收窄卡片与字号
+
+## [4.1.2] - 2026-07-25
+
+本版相对 4.1.1：闲聊更会「接话 / 认人 / 调工具」，控制台补齐工具与语料调试能力；捆绑 WebUI **v0.7.8**。
+
+### Added
+
+#### 闲聊与人设
+
+- 群聊发言感知：别名提及、ambient 插嘴；硬触发后软窗口续聊
+- 关系层：弱观察沉淀、人对语气偏置、称呼注入；登录昵称自称与 `self_aliases`
+- 单群表达库接入牛格 / 情感装配；强场景接话双预算与反哺写回
+- 会话工具轨迹 `tool_trace`（便于排障与历史回看）
+
+#### 口令工具（LLM Tools）
+
+- 插件可通过 `extra["llm_tools"]` 声明群口令工具；按话术 select 域注入
+- 内置 / 官方扩展陆续开放（喝酒、帮助、轮盘、唱歌、画画等）；工具名兼容 DeepSeek 等 provider
+
+#### 控制台 API
+
+- LLM 工具只读清单；语料源详情 / chunk 预览 / 检索试探
+- `provider_gateway` 主备线路声明；活跃群 DAG/MAG 与 AI 费用补齐
+- 社区投稿墙代理 API
+
+#### 其他
+
+- 帮助图 v4 分组，插件 `help_tag` 覆盖
+
+### Fixed
+
+- 酒后对话启动加载；硬触发空回复兜底（避免已读不回）
+- Provider 工具名去点号；thinking 与 `tool_choice=required` 冲突
+- 检索降噪（memory/knowledge `min_score` 与查询门控）；表达回灌限频、抑制开场复读
+- 僵尸 WS 隔离，避免假在线挡重新上号；ingress 预筛允许「命令+紧贴参数」
+- 社区投稿：固定正式中心、可不选 Bot、默认昵称
+
+### Changed
+
+- 发行捆绑控制台默认取 WebUI 最新 tag（本版 **v0.7.8**）
+- 官方扩展仓库迁至 `PallasBot/Plugin-*`
+
 ## [4.1.1] - 2026-07-24
 
 ### Fixed
@@ -119,6 +166,7 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
+[4.1.2]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.1...v4.1.2
 [4.1.1]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.0...v4.1.1
 [4.1.0]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.3...v4.1.0
 [4.0.3]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.2...v4.0.3

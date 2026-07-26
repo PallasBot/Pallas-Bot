@@ -8,6 +8,7 @@ from pallas.core.perm.metadata_defaults import (
 )
 from pallas.core.perm.metadata_text import SCENE_GROUP, join_usage, usage_line
 from pallas.product.llm.knowledge.declare import knowledge_source_row
+from pallas.product.llm.tools.declare import llm_command_tool_row
 
 from . import handlers as _handlers  # noqa: F401
 from . import startup as _startup  # noqa: F401
@@ -23,6 +24,7 @@ __plugin_meta__ = PluginMetadata(
     homepage=PLUGIN_HOMEPAGE,
     supported_adapters={"~onebot.v11"},
     extra={
+        "help_tag": "fun",
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "ingress_fanout": {
@@ -39,6 +41,22 @@ __plugin_meta__ = PluginMetadata(
         "command_limits": command_limit_list(
             command_limit_row("drink.drink", 3),
         ),
+        "llm_tools": [
+            llm_command_tool_row(
+                name="drink.drink",
+                command_id="drink.drink",
+                description="让牛牛喝酒，增加醉酒度。用户明确要求喝酒、干杯、继续喝时使用。",
+                parameters={"type": "object", "properties": {}},
+                command_template="牛牛喝酒",
+            ),
+            llm_command_tool_row(
+                name="drink.sober_up",
+                command_id="drink.sober_up",
+                description="让牛牛立即醒酒。用户明确要求醒一醒、别喝了、醒酒时使用。",
+                parameters={"type": "object", "properties": {}},
+                command_template="牛牛醒一醒",
+            ),
+        ],
         "menu_data": [
             {
                 "func": "牛牛喝酒",

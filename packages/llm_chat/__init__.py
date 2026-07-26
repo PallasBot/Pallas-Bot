@@ -18,18 +18,18 @@ from . import status_commands as _status_commands  # noqa: F401
 
 __plugin_meta__ = PluginMetadata(
     name="智能对话",
-    description="群里 @牛牛 聊天；醉酒时也可直接「牛牛 + 文本」搭话，并可清空会话记忆。可开酒后语音（AI 仓 TTS）。",
+    description="群里 @牛牛 就能连续聊天；醉酒时也可以「牛牛 + 文本」搭话，并可清空本轮记忆。",
     usage=join_usage(
-        usage_line("群内 @牛牛 + 消息", "与牛牛多轮对话"),
-        usage_line("醉酒时 @牛牛 / 牛牛 + 文本", "酒后对话"),
-        usage_line("@牛牛 clear", "清空本群当前会话记忆"),
+        usage_line("群内 @牛牛 + 消息", "和牛牛多轮聊天"),
+        usage_line("醉酒时 @牛牛 / 牛牛 + 文本", "酒后搭话"),
+        usage_line("@牛牛 clear", "清空本轮聊天记忆"),
     ),
     type="application",
     homepage=PLUGIN_HOMEPAGE,
     supported_adapters={"~onebot.v11"},
     extra={
+        "help_tag": "chat",
         "version": PLUGIN_EXTRA_VERSION,
-        "help_audience": "superuser",
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "reload_policy": "metadata",
         "ingress_route": {"lane": "remote"},
@@ -74,7 +74,6 @@ __plugin_meta__ = PluginMetadata(
                             "牛牛须先处于醉酒状态（可先发送「牛牛喝酒」）；"
                             "然后在群内 @牛牛 发消息，或以「牛牛 + 文本」搭话。"
                             "未醉酒时的 @ 走清醒智能对话。"
-                            "若已安装扩展包酒后聊天插件，则优先走该旧路径。"
                         ),
                         "keywords": "酒后,聊天,醉酒,@牛牛,怎么聊,喝酒",
                     },
@@ -99,22 +98,12 @@ __plugin_meta__ = PluginMetadata(
         ],
         "menu_data": [
             {
-                "func": "LLM 状态",
-                "trigger_method": "on_cmd",
-                "trigger_scene": SCENE_PRIVATE,
-                "trigger_condition": "LLM状态 / llm状态",
-                "help_audience": "superuser",
-                "command_permission": "llm_chat.status",
-                "brief_des": "查看聊天状态",
-                "detail_des": "看看智能对话现在能不能正常用，以及当前的大致状态。",
-            },
-            {
                 "func": "智能对话",
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "群内 @牛牛 发消息",
                 "command_permission": "llm_chat.chat",
-                "brief_des": "和牛牛连续聊天",
+                "brief_des": "和牛牛连续聊天。",
                 "detail_des": "像平时发消息一样 @ 它就行；它会记住这轮聊过的话，再顺着接下去。",
             },
             {
@@ -123,8 +112,12 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "醉酒时 @牛牛 / 牛牛 + 文本",
                 "command_permission": "llm_chat.chat",
-                "brief_des": "醉酒时 AI 对话",
-                "detail_des": "要先让牛牛喝酒；它会结合当前上下文接话。醒酒后会话上下文会清掉。",
+                "brief_des": "醉酒时和牛牛聊天。",
+                "detail_des": (
+                    "要先让牛牛喝酒（例如「牛牛喝酒」）；"
+                    "醉酒后可 @ 它，或直接「牛牛 + 文本」搭话。"
+                    "醒酒后这轮酒后记忆会清掉。"
+                ),
             },
             {
                 "func": "清空和牛牛的记录",
@@ -132,8 +125,18 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "@牛牛 clear",
                 "command_permission": "llm_chat.clear",
-                "brief_des": "清空这轮聊天记录",
-                "detail_des": "让牛牛忘掉这轮刚聊过的话，但不会改掉它本来的说话风格。",
+                "brief_des": "清空这轮聊天记忆。",
+                "detail_des": "让牛牛忘掉这轮刚聊过的话，不会改掉它平时的说话风格。也可在对话里明确说让它忘记。",
+            },
+            {
+                "func": "LLM 状态",
+                "trigger_method": "on_cmd",
+                "trigger_scene": SCENE_PRIVATE,
+                "trigger_condition": "LLM状态 / llm状态",
+                "help_audience": "superuser",
+                "command_permission": "llm_chat.status",
+                "brief_des": "查看聊天服务状态。",
+                "detail_des": "私聊查看智能对话是否可用，以及当前大致状态。",
             },
             {
                 "func": "换模型",
@@ -142,7 +145,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_condition": "换模型 / 牛牛换模型 [模型名]",
                 "help_audience": "superuser",
                 "command_permission": "llm_chat.switch_model",
-                "brief_des": "切换本地对话模型",
+                "brief_des": "切换本地对话模型。",
                 "detail_des": "私聊发送可查看当前模型；带模型名则切换，无需重启 Celery，旧权重自动卸载。",
             },
             {
@@ -152,7 +155,7 @@ __plugin_meta__ = PluginMetadata(
                 "trigger_condition": "卸模型 / 牛牛卸模型",
                 "help_audience": "superuser",
                 "command_permission": "llm_chat.unload_model",
-                "brief_des": "卸载当前本地模型",
+                "brief_des": "卸载当前本地模型。",
                 "detail_des": "释放当前本地模型权重；下次对话按新配置重新加载。",
             },
         ],

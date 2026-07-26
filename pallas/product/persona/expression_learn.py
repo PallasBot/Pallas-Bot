@@ -13,6 +13,13 @@ from pallas.product.persona.expression_bank import ExpressionEntry, append_or_me
 
 _COMMANDISH_RE = re.compile(r"^(?:[/!！]|管理口令|封禁|解禁|禁言)", re.IGNORECASE)
 
+# (group_id, saying) -> last learned unix ts；限制 llm_success 自强化回灌
+_LLM_SUCCESS_LEARN_AT: dict[tuple[int, str], int] = {}
+
+
+def clear_expression_learn_cooldown_state() -> None:
+    _LLM_SUCCESS_LEARN_AT.clear()
+
 
 def clean_expression_saying(text: str) -> str:
     return " ".join(str(text or "").split())[:20].rstrip()
@@ -78,7 +85,8 @@ def propose_expression_from_utterance(
 
 
 def note_expression_from_utterance(group_id: int, text: str, **meta: object) -> ExpressionEntry | None:
-    if not get_llm_config().llm_expression_learn_enabled:
+    cfg = get_llm_config()
+    if not cfg.llm_expression_learn_enabled:
         return None
     source = str(meta.get("source") or "llm_success")
     draft = propose_expression_from_utterance(
@@ -92,11 +100,21 @@ def note_expression_from_utterance(group_id: int, text: str, **meta: object) -> 
     target_group_id = int(group_id)
     if target_group_id <= 0:
         return None
+    saying = draft.saying
+    support = 1
+    if source == "llm_success":
+        cooldown = max(0, int(getattr(cfg, "llm_expression_learn_cooldown_sec", 300) or 0))
+        now = int(time.time())
+        key = (target_group_id, saying)
+        last = _LLM_SUCCESS_LEARN_AT.get(key)
+        if cooldown > 0 and last is not None and now - last < cooldown:
+            return None
+        _LLM_SUCCESS_LEARN_AT[key] = now
     entry = draft.model_copy(
         update={
             "entry_id": build_entry_id(target_group_id, (draft.occasion, draft.saying)),
             "group_id": target_group_id,
-            "support": 2,
+            "support": support,
             "bot_id": int(meta.get("bot_id") or 0),
         }
     )

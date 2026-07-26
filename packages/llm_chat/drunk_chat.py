@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 
 from nonebot import logger, on_message
-from nonebot.adapters import Bot
+from nonebot.adapters import Bot  # noqa: TC002  # NoneBot 依赖解析需要运行时可见
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 from nonebot.rule import Rule
 from ulid import ULID

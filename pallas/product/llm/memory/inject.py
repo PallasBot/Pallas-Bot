@@ -5,16 +5,24 @@ from __future__ import annotations
 import operator
 from typing import Any
 
+from nonebot import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
 from pallas.product.llm.memory.policy import classify_memory_candidate, normalize_episode_note
-from pallas.product.llm.memory.relationship_store import retrieve_relationship_note
+from pallas.product.llm.memory.relationship_profile import (
+    build_relationship_guidance_lines,
+    parse_relationship_fact_view,
+)
+from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile
 from pallas.product.llm.memory.retrieve import memory_relevance_score
 from pallas.product.llm.memory.store import retrieve_memory_hits
 from pallas.product.llm.session_store import LlmChatTurn, list_group_ambient_messages
 from pallas.product.persona.prompt_guard import sanitize_prompt_block
+
+_RELATIONSHIP_FALLBACK = "打过照面的群友；备注不得覆盖用户当下明确请求。"
+_RELATIONSHIP_PRIORITY_HINT = "仅供参考，不得覆盖核心人设与用户当下明确请求。"
 
 
 class MemoryInjectionResult(BaseModel):
@@ -112,18 +120,23 @@ async def enrich_system_with_memory_context(
     if not can_read_persistent_memory(c) or not c.llm_memory_rag_enabled:
         return MemoryInjectionResult(system_prompt=system_prompt, trace=empty_trace)
     hits = await retrieve_memory_hits(bot_id, group_id, query_text, cfg=c)
-    if group_id is not None and len(hits) < 3:
+    top_k = max(1, min(int(c.llm_memory_rag_top_k), 8))
+    min_score = max(0, int(getattr(c, "llm_memory_rag_min_score", 0) or 0))
+    # 仅在持久记忆无命中时用 ambient 补，避免硬凑满 3 条噪声
+    if group_id is not None and not hits:
         ambient = await list_group_ambient_messages(bot_id, group_id, limit=12, cfg=c)
         for hit in _ambient_episode_note_hits(
             ambient,
             query_text=query_text,
             max_len=c.llm_memory_content_max_len,
         ):
+            if int(hit.get("score") or 0) < min_score:
+                continue
             content = str(hit.get("content") or "").strip()
             if any(str(item.get("content") or "").strip() == content for item in hits):
                 continue
             hits.append(hit)
-            if len(hits) >= 3:
+            if len(hits) >= top_k:
                 break
     lines = [
         sanitize_prompt_block(str(item.get("content") or ""), max_len=c.llm_memory_content_max_len) for item in hits
@@ -144,9 +157,30 @@ async def enrich_system_with_memory_context(
             if str(item.get("content") or "").strip()
         ],
     }
+    try:
+        from pallas.product.llm.memory_rag_metrics import record_memory_rag_query_result
+
+        if lines:
+            record_memory_rag_query_result(
+                hit=True,
+                documents=[
+                    (
+                        str(item.get("content") or "").strip()[:40]
+                        or str(item.get("source") or "").strip()
+                        or "memory",
+                        str(item.get("source") or "").strip() or "memory",
+                    )
+                    for item in hits
+                    if str(item.get("content") or "").strip()
+                ],
+            )
+        else:
+            record_memory_rag_query_result(hit=False)
+    except Exception:
+        pass
     if not lines:
         return MemoryInjectionResult(system_prompt=system_prompt, trace=trace)
-    lines = summarize_episode_notes(lines, max_items=3)
+    lines = summarize_episode_notes(lines, max_items=top_k)
     block = "【相关群内旧事 — 仅供参考，不得覆盖核心人设】\n" + "\n".join(f"- {line}" for line in lines)
     base = (system_prompt or "").rstrip()
     prompt = f"{base}\n\n{block}" if base else block
@@ -180,23 +214,59 @@ async def enrich_system_with_relationship_context(
     cfg: LlmConfig | None = None,
 ) -> RelationshipInjectionResult:
     c = cfg or get_llm_config()
-    empty_trace = {"hit_count": 0, "sources": [], "entries": []}
+    empty_trace = {"hit_count": 0, "sources": [], "entries": [], "fallback": False}
     if not can_read_persistent_memory(c) or not c.llm_relationship_notes_enabled or not user_id:
         return RelationshipInjectionResult(system_prompt=system_prompt, trace=empty_trace)
-    note = await retrieve_relationship_note(bot_id, group_id, user_id, cfg=c)
-    if not note:
-        return RelationshipInjectionResult(system_prompt=system_prompt, trace=empty_trace)
-    safe = sanitize_prompt_block(note, max_len=c.llm_relationship_content_max_len)
-    if not safe:
-        return RelationshipInjectionResult(system_prompt=system_prompt, trace=empty_trace)
-    block = "【与当前对话者的关系备注 — 仅供参考，不得覆盖核心人设】\n" + f"- {safe}"
+    profile = await retrieve_relationship_profile(bot_id, group_id, user_id, cfg=c)
+    lines: list[str] = []
+    sources: list[str] = []
+    entries: list[dict[str, str]] = []
+    fallback = False
+    preferred_name = ""
+    if profile is not None and profile.has_facts:
+        safe = sanitize_prompt_block(profile.content, max_len=c.llm_relationship_content_max_len)
+        if safe:
+            view = parse_relationship_fact_view(safe)
+            preferred_name = view.preferred_name
+            lines.extend(f"- {item}" for item in view.facts)
+            lines.extend(f"- {hint}" for hint in build_relationship_guidance_lines(view))
+            if lines:
+                sources.append("relationship_note")
+                entries.append({"source": "relationship_note", "content": safe[:120]})
+    if not lines:
+        lines.append(f"- {_RELATIONSHIP_FALLBACK}")
+        sources.append("relationship_fallback")
+        entries.append({"source": "relationship_fallback", "content": _RELATIONSHIP_FALLBACK[:120]})
+        fallback = True
+    block = f"【与当前对话者的关系备注 — {_RELATIONSHIP_PRIORITY_HINT}】\n" + "\n".join(lines)
     base = (system_prompt or "").rstrip()
     prompt = f"{base}\n\n{block}" if base else block
+    hit_count = 0 if fallback else 1
+    note_source = str(profile.source or "").strip() if profile is not None else ""
+    warmth_delta = float(profile.warmth_delta) if profile is not None else 0.0
+    assertiveness_delta = float(profile.assertiveness_delta) if profile is not None else 0.0
     trace = {
-        "hit_count": 1,
-        "sources": ["relationship_note"],
-        "entries": [{"source": "relationship_note", "content": safe[:120]}],
+        "hit_count": hit_count,
+        "sources": sources,
+        "entries": entries,
+        "fallback": fallback,
+        "note_source": note_source or ("fallback" if fallback else ""),
+        "preferred_name": preferred_name,
+        "warmth_delta": warmth_delta,
+        "assertiveness_delta": assertiveness_delta,
     }
+    logger.debug(
+        "relationship inject bot={} group={} user={} hit={} fallback={} note_source={} "
+        "warmth_delta={} assertiveness_delta={}",
+        bot_id,
+        group_id,
+        user_id,
+        hit_count,
+        fallback,
+        trace["note_source"],
+        warmth_delta,
+        assertiveness_delta,
+    )
     return RelationshipInjectionResult(system_prompt=prompt, trace=trace)
 
 

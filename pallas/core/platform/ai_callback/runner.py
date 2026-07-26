@@ -316,6 +316,10 @@ async def run_ai_callback(
                 bot_self_id=bot_self_id,
                 mention_names=mention_names,
             )
+        if task_type == LLM_CHAT_TASK_TYPE:
+            from pallas.product.llm.chat_empty_fallback import resolve_llm_chat_empty_fallback
+
+            reply_text = resolve_llm_chat_empty_fallback(task, reply_text)
         if task_type in _REPEATER_CALLBACK_TASKS and reply_text:
             accepted = await evaluate_repeater_callback_text(task, reply_text)
             if not accepted:

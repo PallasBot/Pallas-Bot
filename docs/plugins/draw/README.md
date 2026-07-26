@@ -33,9 +33,9 @@
 
 ## 配置项
 
-> 可在控制台对应插件页中修改。
+> 可在控制台 **插件 → 牛牛画画** 页修改。
 
-牛牛画画的主要连通性配置在控制台的服务网关 / 连通性页面，常见字段前缀为 `pallas_image_*`。
+主/备画图线路在插件页的「画图网关」面板配置：第一条为主线，其后为备线；可沿用 **AI 配置 · 接入** 中的 Provider，也可手填地址与密钥。字段前缀多为 `pallas_image_*`。连通性检测仍可用服务网关页或口令 `牛牛连通`。
 
 ## 排障
 
@@ -46,7 +46,7 @@
 
 ## 实现
 
-源码位置：扩展仓 [`src/pallas_plugin_draw/`](https://github.com/TogetsuDo/pallas-plugin-draw/tree/main/src/pallas_plugin_draw)
+源码位置：扩展仓 [`src/pallas_plugin_draw/`](https://github.com/PallasBot/Plugin-Draw/tree/main/src/pallas_plugin_draw)
 
 关键文件：
 
@@ -63,4 +63,4 @@
 ## 相关链接
 
 - [命令权限说明](../common/cmd_perm/README.md)
-- [牛牛画画插件仓库](https://github.com/TogetsuDo/pallas-plugin-draw)
+- [牛牛画画插件仓库](https://github.com/PallasBot/Plugin-Draw)

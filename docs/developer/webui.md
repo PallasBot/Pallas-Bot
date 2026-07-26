@@ -73,7 +73,7 @@ npm run sync:console-openapi-types   # 或 gen / check
 npm run check:console-openapi-types
 ```
 
-- Bot pre-commit：改 `packages/pb_webui/` 等会跑 `sync-console-openapi`（openspec 有实质变更时改写并要求重新 stage）
+- Bot pre-commit：每次 commit 跑 `sync-console-openapi`（openspec 有实质变更时改写并要求重新 stage）
 - WebUI pre-commit：从同级 Bot `openspec` gen 类型（有改动则 exit 1 以便 stage）
 - 路径：`PALLAS_WEBUI_ROOT` / `PALLAS_BOT_ROOT`；默认互为同级目录
 - CI：Bot drift check；WebUI 对照主仓 `main` 的 openspec 校验已提交类型
@@ -91,8 +91,9 @@ npm run check:console-openapi-types
 | `ui_hidden` | 进阶项，默认折叠在「高级」组 |
 | `secret` | 字符串打码 + 眼睛切换 |
 | `multiline` | 多行 textarea |
+| `ui_widget` / `ui_gateway` | 非默认控件；`provider_gateway` 渲染主备 Provider 线路面板（用 `ui_provider_gateway()` 生成） |
 
-未在 schema 声明但写入 `webui.json` 的键会在面板底部「未声明的环境键」列出；需改 Raw TOML 模式编辑。
+未在 schema 声明但写入 `webui.json` 的键会在面板底部「未声明的环境键」列出；需改 Raw TOML 模式编辑。主备线路细节见 [DynamicConfigPanel](plugin-development/dynamic-config-panel.md#provider-主备线路provider_gateway)。
 
 ## 代码约定
 

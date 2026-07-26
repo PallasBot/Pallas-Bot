@@ -103,6 +103,26 @@ def trim_tool_description(description: str, *, max_len: int) -> str:
     return text[: max_len - 1].rstrip() + "…"
 
 
+def to_provider_tool_name(name: str) -> str:
+    """OpenAI / DeepSeek 等要求 function.name 匹配 ^[a-zA-Z0-9_-]+$，点号改为双下划线。"""
+    return str(name or "").strip().replace(".", "__")
+
+
+def from_provider_tool_name(name: str) -> str:
+    """把 provider 侧名称还原为 registry 名；已是 registry 名则原样返回。"""
+    raw = str(name or "").strip()
+    if not raw:
+        return raw
+    if raw in _REGISTERED_NAMES:
+        return raw
+    if "__" not in raw:
+        return raw
+    dotted = raw.replace("__", ".")
+    if dotted in _REGISTERED_NAMES:
+        return dotted
+    return dotted
+
+
 def tool_catalog_entry_from_spec(spec: LlmToolSpec, *, description: str | None = None) -> ToolCatalogEntry:
     return ToolCatalogEntry(
         name=spec.name,
@@ -191,7 +211,7 @@ def openai_schemas_from_catalog(catalog: ToolCatalogSnapshot) -> list[dict[str, 
         {
             "type": "function",
             "function": {
-                "name": item.name,
+                "name": to_provider_tool_name(item.name),
                 "description": item.description,
                 "parameters": item.parameters,
             },
@@ -247,8 +267,9 @@ async def execute_tool_async(
 ) -> dict[str, Any]:
     ensure_tools_loaded()
     args = arguments if isinstance(arguments, dict) else {}
+    resolved = from_provider_tool_name(name)
     for spec in _REGISTRY:
-        if spec.name != name:
+        if spec.name != resolved:
             continue
         try:
             if spec.source == LlmToolSource.MCP:
@@ -286,26 +307,95 @@ def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> d
     if catalog is None:
         return {}
     schemas = openai_schemas_from_catalog(catalog)
-    return {
+    payload: dict[str, Any] = {
         "tools_enabled": True,
         "tool_catalog": catalog.model_dump(mode="json"),
         "tool_schemas": schemas,
         "tool_schema_count": int(catalog.selection.schema_count),
     }
+    # 选择性命中且全部为插件口令工具时，首轮要求必须调工具，避免只口头答应
+    if catalog.selection.selective_enabled and catalog.tools:
+        sources = {str(item.source or "") for item in catalog.tools}
+        if sources and sources <= {LlmToolSource.PLUGIN_COMMAND.value}:
+            payload["tool_choice_prefer"] = "required"
+    return payload
+
+
+def build_tools_catalog_ui() -> dict[str, Any]:
+    """WebUI 只读工具清单：全量可见 tool + 当前策略门闸。"""
+    from pallas.product.llm.tools.metadata import iter_package_declared_llm_tools
+
+    cfg = get_llm_config()
+    kb = get_arknights_kb_config()
+    ensure_tools_loaded()
+    blacklist = {item.strip().lower() for item in cfg.llm_tools_blacklist if item.strip()}
+    eligible_names = {spec.name for spec in iter_eligible_tool_specs()}
+    items: list[dict[str, Any]] = []
+    seen_names: set[str] = set()
+    for spec in iter_registered_tools():
+        if not spec.visible_in_ui:
+            continue
+        entry = catalog_entry_for_spec(spec)
+        disabled_reason: str | None = None
+        if not cfg.llm_tools_enabled:
+            disabled_reason = "tools_disabled"
+        elif spec.name.lower() in blacklist or spec.domains.intersection(blacklist):
+            disabled_reason = "blacklisted"
+        elif "arknights" in spec.domains and not kb.arknights_kb_enabled:
+            disabled_reason = "arknights_kb_disabled"
+        items.append({
+            "name": entry.name,
+            "description": entry.description,
+            "parameters": entry.parameters,
+            "source": entry.source,
+            "domains": list(entry.domains),
+            "capabilities": list(entry.capabilities),
+            "command_id": entry.audit.command_id,
+            "plugin_name": entry.audit.plugin_name,
+            "provider_name": entry.audit.provider_name,
+            "mcp_server_id": entry.audit.mcp_server_id,
+            "eligible": spec.name in eligible_names,
+            "disabled_reason": disabled_reason,
+        })
+        seen_names.add(entry.name)
+    # 分片 hub 不加载 drink/llm_chat：把 packages 声明补进只读清单，便于对照
+    for plugin_name, _title, decl in iter_package_declared_llm_tools():
+        if decl.name in seen_names:
+            continue
+        disabled_reason = "plugin_not_in_process"
+        if not cfg.llm_tools_enabled:
+            disabled_reason = "tools_disabled"
+        elif decl.name.lower() in blacklist:
+            disabled_reason = "blacklisted"
+        items.append({
+            "name": decl.name,
+            "description": decl.description,
+            "parameters": decl.parameters or {"type": "object", "properties": {}},
+            "source": LlmToolSource.PLUGIN_COMMAND.value,
+            "domains": ["command", plugin_name],
+            "capabilities": ["side_effecting", "requires_group_context"],
+            "command_id": decl.command_id,
+            "plugin_name": plugin_name,
+            "provider_name": None,
+            "mcp_server_id": None,
+            "eligible": False,
+            "disabled_reason": disabled_reason,
+        })
+        seen_names.add(decl.name)
+    items.sort(key=operator.itemgetter("name"))
+    return {
+        "items": items,
+        "count": len(items),
+        "policy": {
+            "tools_enabled": bool(cfg.llm_tools_enabled),
+            "selective_enabled": bool(cfg.llm_tools_selective),
+            "max_rounds": int(cfg.llm_tools_max_rounds),
+            "blacklist": [str(item) for item in (cfg.llm_tools_blacklist or []) if str(item).strip()],
+            "arknights_kb_enabled": bool(kb.arknights_kb_enabled),
+            "desc_max_len": int(cfg.llm_tools_desc_max_len),
+        },
+    }
 
 
 def build_tools_ui_rows() -> list[dict[str, Any]]:
-    ensure_tools_loaded()
-    rows = [
-        {
-            "name": spec.name,
-            "description": spec.description,
-            "domains": sorted(spec.domains),
-            "command_id": spec.command_id,
-            "source": spec.source.value,
-        }
-        for spec in iter_registered_tools()
-        if spec.visible_in_ui
-    ]
-    rows.sort(key=operator.itemgetter("name"))
-    return rows
+    return list(build_tools_catalog_ui().get("items") or [])

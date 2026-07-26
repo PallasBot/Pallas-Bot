@@ -51,9 +51,10 @@ repos:
         verbose: true
       - id: sync-console-openapi
         name: 同步控制台 OpenAPI
-        description: "导出 openspec；同级有 WebUI 仓时一并 gen 类型"
+        description: "每次 commit 导出 openspec；同级有 WebUI 仓时一并 gen 类型"
         entry: uv run python tools/sync_console_openapi.py --pre-commit
         language: system
-        files: ^(packages/pb_webui/|tools/(export_pb_webui_openapi|sync_console_openapi|check_console_openapi_drift)\.py|openspec/pallas-console-v1\.json)
+        # schema 可能随 pallas/console、product 等间接变化；不依赖 files 白名单
+        always_run: true
         pass_filenames: false
         verbose: true

@@ -27,7 +27,11 @@ from .prompt_guard import (
     sanitize_prompt_block,
     wrap_stats_block,
 )
-from .self_identity import compile_repeater_self_identity_prompt, compile_self_identity_prompt
+from .self_identity import (
+    compile_repeater_self_identity_prompt,
+    compile_self_identity_prompt,
+    resolve_login_nickname,
+)
 
 if TYPE_CHECKING:
     from .model import ResolvedPersona
@@ -254,6 +258,7 @@ def compile_persona_prompt(
     mode: str = "normal",
     bot_persona: dict[str, Any] | None = None,
     prompt_profile: str = PROMPT_PROFILE_DEFAULT,
+    login_nickname: str | None = None,
 ) -> PersonaPromptBundle:
     profile = str(prompt_profile or PROMPT_PROFILE_DEFAULT).strip() or PROMPT_PROFILE_DEFAULT
     base = sanitize_prompt_block(
@@ -264,9 +269,15 @@ def compile_persona_prompt(
     group_style = compile_group_style_prompt(style_profile)
     group_expression = compile_group_expression_prompt(style_profile)
     if profile == PROMPT_PROFILE_REPEATER:
-        self_identity = compile_repeater_self_identity_prompt(bot_persona)
+        self_identity = compile_repeater_self_identity_prompt(
+            bot_persona,
+            login_nickname=login_nickname,
+        )
     else:
-        self_identity = compile_self_identity_prompt(bot_persona)
+        self_identity = compile_self_identity_prompt(
+            bot_persona,
+            login_nickname=login_nickname,
+        )
     preset_layers = ""
     if profile != PROMPT_PROFILE_REPEATER and persona_preset_layers_enabled():
         sample = style_profile.get("sample") if isinstance(style_profile, dict) else None
@@ -325,6 +336,7 @@ async def compile_persona_prompt_for(
             if isinstance(raw_profile, dict):
                 style_profile = raw_profile
     resolved_profile = str(prompt_profile or PROMPT_PROFILE_DEFAULT).strip() or PROMPT_PROFILE_DEFAULT
+    login_nickname = await resolve_login_nickname(bid)
     return compile_persona_prompt(
         persona,
         style_profile,
@@ -335,4 +347,5 @@ async def compile_persona_prompt_for(
         mode=mode,
         bot_persona=bot_persona,
         prompt_profile=resolved_profile,
+        login_nickname=login_nickname or None,
     )

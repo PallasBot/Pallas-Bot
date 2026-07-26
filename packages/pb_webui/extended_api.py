@@ -19,7 +19,7 @@ from operator import itemgetter
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Depends, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from nonebot import get_bots, get_driver, logger
@@ -1292,6 +1292,98 @@ def _day_totals_from_cluster_bot_blob(rec: dict[str, Any], *, fallback_day: str)
     return day_key, dr, ds, mr, ac
 
 
+def _normalize_active_group_ids(raw: object) -> set[str]:
+    out: set[str] = set()
+    if isinstance(raw, (set, list, tuple)):
+        items = raw
+    elif isinstance(raw, dict):
+        items = raw.keys()
+    else:
+        return out
+    for item in items:
+        key = str(item).strip()
+        if not key:
+            continue
+        try:
+            gid = int(key)
+        except (TypeError, ValueError):
+            continue
+        if gid > 0:
+            out.add(str(gid))
+    return out
+
+
+def _day_active_groups_from_mem(mem: dict[str, Any] | None) -> set[str]:
+    if not isinstance(mem, dict):
+        return set()
+    return _normalize_active_group_ids(mem.get("day_active_groups"))
+
+
+def _ensure_day_active_groups(mem: dict[str, Any]) -> set[str]:
+    groups = mem.get("day_active_groups")
+    if isinstance(groups, set):
+        return groups
+    normalized = _normalize_active_group_ids(groups)
+    mem["day_active_groups"] = normalized
+    return normalized
+
+
+def _record_active_group_from_event(mem: dict[str, Any], event: object) -> None:
+    gid = getattr(event, "group_id", None)
+    if gid is None:
+        return
+    try:
+        gid_i = int(gid)
+    except (TypeError, ValueError):
+        return
+    if gid_i <= 0:
+        return
+    _ensure_day_active_groups(mem).add(str(gid_i))
+
+
+def _collect_active_groups_flush_entries(today: str) -> list[tuple[str, str, set[str]]]:
+    """hub/单进程刷盘：合并 worker 与本进程当日活跃群。"""
+    bucket: dict[tuple[str, str], set[str]] = {}
+
+    def _merge(day: str, sid: str, ids: set[str]) -> None:
+        day_key = str(day).strip()[:10]
+        key_sid = str(sid).strip()
+        if not key_sid or len(day_key) < 10:
+            return
+        k = (day_key, key_sid)
+        bucket[k] = bucket.get(k, set()) | ids
+
+    if _shard_hub_console():
+        from pallas.core.platform.shard.console_stats import load_cluster_console_stats_by_sid
+
+        for sid, blob in load_cluster_console_stats_by_sid().items():
+            if not isinstance(blob, dict):
+                continue
+            msg = blob.get("msg") if isinstance(blob.get("msg"), dict) else {}
+            day_key = str(blob.get("day_key") or msg.get("day_key") or today).strip()[:10]
+            _merge(day_key, str(sid), _normalize_active_group_ids(msg.get("day_active_groups")))
+
+    for sid in set(_MSG_STATS.keys()):
+        sid = str(sid).strip()
+        if not sid:
+            continue
+        _rollover_console_day_if_needed(sid, today)
+        mem = _MSG_STATS.get(sid)
+        _merge(today, sid, _day_active_groups_from_mem(mem if isinstance(mem, dict) else None))
+
+    return [(day, sid, ids) for (day, sid), ids in sorted(bucket.items())]
+
+
+def _flush_active_groups_disk(today: str) -> None:
+    if not _console_daily_stats_disk_enabled():
+        return
+    from packages.pb_webui import active_groups_store
+
+    entries = _collect_active_groups_flush_entries(today)
+    if entries:
+        active_groups_store.write_batch_day_groups(entries)
+
+
 def _merge_console_daily_flush_entry(
     bucket: dict[tuple[str, str], tuple[int, int, int, int]],
     *,
@@ -1385,12 +1477,23 @@ def _rollover_console_day_if_needed(sid: str, today: str) -> None:
     mr = _sum_matcher_day_runs(sid)
     if _console_daily_stats_disk_enabled():
         daily_stats_store.write_day_totals(cur, sid, dr, ds, mr, ac)
+        try:
+            from packages.pb_webui import active_groups_store
+
+            active_groups_store.write_day_groups(
+                cur,
+                sid,
+                _day_active_groups_from_mem(mem if isinstance(mem, dict) else None),
+            )
+        except Exception:  # noqa: BLE001
+            pass
     if isinstance(mem, dict):
         mem["day_key"] = today
         mem["day_sent"] = 0
         mem["day_received"] = 0
         mem["day_api_total"] = 0
         mem["day_api_counts"] = {}
+        mem["day_active_groups"] = set()
     pblock = _PLUGIN_RUN_STATS.get(sid)
     if isinstance(pblock, dict):
         pblock["day_key"] = today
@@ -1426,6 +1529,10 @@ def _flush_today_console_daily_stats_disk() -> None:
     entries = _collect_console_daily_flush_entries(today)
     if entries:
         daily_stats_store.write_batch_day_totals(entries)
+    try:
+        _flush_active_groups_disk(today)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         from pallas.product.llm.task_metrics import flush_stats_sync
 
@@ -1479,6 +1586,7 @@ def _msg_stats_shard_export(mem: dict[str, Any]) -> dict[str, Any]:
         "day_api_counts": day_api,
         "api_call_buckets": [dict(x) for x in api_hist if isinstance(x, dict)],
         "msg_traffic_buckets": [dict(x) for x in traffic_hist if isinstance(x, dict)],
+        "day_active_groups": sorted(_day_active_groups_from_mem(mem), key=lambda s: int(s)),
     }
 
 
@@ -1511,6 +1619,7 @@ def _msg_stats_shard_import(msg: dict[str, Any], *, today: str) -> dict[str, Any
         "day_api_counts": day_api,
         "api_call_buckets": [dict(x) for x in api_hist if isinstance(x, dict)],
         "msg_traffic_buckets": [dict(x) for x in traffic_hist if isinstance(x, dict)],
+        "day_active_groups": _normalize_active_group_ids(msg.get("day_active_groups")),
     }
 
 
@@ -1613,6 +1722,7 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
     )
     from pallas.core.platform.shard.registry.config import get_shard_registry_settings
     from pallas.core.platform.shard.repeater_ingress_metrics import repeater_ingress_metrics_snapshot
+    from pallas.product.llm.memory_rag_metrics import llm_memory_rag_metrics_snapshot
     from pallas.product.llm.provider_request_metrics import llm_provider_request_metrics_snapshot
     from pallas.product.llm.rag_metrics import llm_rag_metrics_snapshot
     from pallas.product.llm.task_metrics import llm_task_metrics_snapshot
@@ -1647,6 +1757,7 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
             "llm_token": llm_token_metrics_snapshot(include_persisted=False),
             "llm_provider_request": llm_provider_request_metrics_snapshot(include_persisted=False),
             "llm_rag": llm_rag_metrics_snapshot(include_persisted=False),
+            "llm_memory_rag": llm_memory_rag_metrics_snapshot(include_persisted=False),
         },
     )
 
@@ -1887,6 +1998,7 @@ def _msg_stats_get_mut(sid: str) -> dict[str, Any]:
             "day_api_counts": {},
             "api_call_buckets": [],
             "msg_traffic_buckets": [],
+            "day_active_groups": set(),
         },
     )
     rec["day_key"] = today
@@ -1901,6 +2013,7 @@ def _msg_stats_get_mut(sid: str) -> dict[str, Any]:
         rec["api_call_buckets"] = []
     if not isinstance(rec.get("msg_traffic_buckets"), list):
         rec["msg_traffic_buckets"] = []
+    _ensure_day_active_groups(rec)
     return rec
 
 
@@ -2211,6 +2324,7 @@ def _init_message_tracking() -> None:
                     row["received"] = int(row["received"]) + 1
                     row["day_received"] = int(row["day_received"]) + 1
                     _msg_traffic_history_bump(row, recv_delta=1)
+                    _record_active_group_from_event(row, event)
         except Exception:  # noqa: BLE001
             pass
 
@@ -2231,6 +2345,7 @@ def _message_stats_row_from_mem(
         "today_sent": int(mem.get("day_sent", 0)),
         "today_received": int(mem.get("day_received", 0)),
         "today_api_calls": int(mem.get("day_api_total", 0)),
+        "today_active_groups": len(_day_active_groups_from_mem(mem)),
         "today_top_api": top_name,
         "today_top_api_count": top_cnt,
         "api_calls_history": _api_call_history_public(mem),
@@ -3537,6 +3652,57 @@ def _console_daily_stats_payload(
                 api_calls=ac,
             )
     merged = sorted(by_key.values(), key=itemgetter("date", "self_id"))
+    live_active: dict[str, set[str]] = {}
+    for sid, mem in _MSG_STATS.items():
+        key = str(sid).strip()
+        if not key or (sid_f is not None and key != sid_f):
+            continue
+        if isinstance(mem, dict):
+            live_active[key] = _day_active_groups_from_mem(mem)
+    if _shard_hub_console():
+        try:
+            from pallas.core.platform.shard.console_stats import load_cluster_console_stats_by_sid
+
+            for sid, blob in load_cluster_console_stats_by_sid().items():
+                key = str(sid).strip()
+                if not key or (sid_f is not None and key != sid_f):
+                    continue
+                if not isinstance(blob, dict):
+                    continue
+                msg = blob.get("msg") if isinstance(blob.get("msg"), dict) else {}
+                live_active[key] = live_active.get(key, set()) | _normalize_active_group_ids(
+                    msg.get("day_active_groups")
+                )
+        except Exception:  # noqa: BLE001
+            pass
+
+    try:
+        from packages.pb_webui import active_groups_store
+
+        active_rows = active_groups_store.load_daily_active_counts(
+            self_id=sid_f,
+            start_day=start_d.isoformat(),
+            end_day=end_d.isoformat(),
+        )
+        active_by_key = {(r["date"], r["self_id"]): int(r.get("active_groups") or 0) for r in active_rows}
+        for row in merged:
+            key = (str(row.get("date") or ""), str(row.get("self_id") or ""))
+            count = active_by_key.get(key, 0)
+            if key[0] == clock_today:
+                live_ids = live_active.get(key[1], set())
+                count = max(count, len(live_ids))
+            row["active_groups"] = count
+        group_metrics = active_groups_store.compute_group_metrics(
+            self_id=sid_f,
+            today=clock_today,
+            mag_days=30,
+            live_today=live_active,
+        )
+    except Exception:  # noqa: BLE001
+        for row in merged:
+            row.setdefault("active_groups", 0)
+        group_metrics = {"dag": 0, "mag": 0, "dag_mag_ratio": None, "mag_days": 30}
+
     return {
         "start": s1,
         "end": s2,
@@ -3545,6 +3711,7 @@ def _console_daily_stats_payload(
         "rows": merged,
         "live_today": live_out,
         "server_date": clock_today,
+        "group_metrics": group_metrics,
     }
 
 
@@ -4420,6 +4587,15 @@ class _CommunityConnectivityCheckData(BaseModel):
     summary: _CommunityConnectivitySummary
 
 
+class _LlmModelPricingRowData(BaseModel):
+    """模型单价：币种见 routing.cost_currency；单位为「每百万 tokens」。"""
+
+    price_in: float = 0.0
+    price_out: float = 0.0
+    cache_price_in: float = 0.0
+    cache_price_out: float = 0.0
+
+
 class _LlmProviderConfigRowData(BaseModel):
     id: str
     kind: str
@@ -4435,11 +4611,18 @@ class _LlmProviderConfigRowData(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     model_effort: str = ""
     request_method: str = "chat_completions"
+    model_pricing: dict[str, _LlmModelPricingRowData] = Field(default_factory=dict)
 
 
 class _LlmProvidersRoutingData(BaseModel):
     chain_fallback: list[str] = Field(default_factory=list)
     tasks: dict[str, str] = Field(default_factory=dict)
+    tier_backups: dict[str, str] = Field(default_factory=dict)
+    tier_backup_models: dict[str, str] = Field(default_factory=dict)
+    task_backups: dict[str, str] = Field(default_factory=dict)
+    task_backup_models: dict[str, str] = Field(default_factory=dict)
+    route_source: str = ""
+    cost_currency: str = ""
 
 
 class _LlmProvidersConfigData(BaseModel):
@@ -4521,6 +4704,15 @@ class _LlmModelNumGpuBody(BaseModel):
     num_gpu: int = Field(ge=0, le=999)
 
 
+class _LlmModelPricingRowBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    price_in: float = Field(default=0.0, ge=0)
+    price_out: float = Field(default=0.0, ge=0)
+    cache_price_in: float = Field(default=0.0, ge=0)
+    cache_price_out: float = Field(default=0.0, ge=0)
+
+
 class _LlmProviderRowBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -4537,6 +4729,7 @@ class _LlmProviderRowBody(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     model_effort: str = ""
     request_method: str = "chat_completions"
+    model_pricing: dict[str, _LlmModelPricingRowBody] = Field(default_factory=dict)
 
 
 class _LlmProvidersRoutingBody(BaseModel):
@@ -4546,6 +4739,10 @@ class _LlmProvidersRoutingBody(BaseModel):
     tasks: dict[str, str] = Field(default_factory=dict)
     tier_backups: dict[str, str] = Field(default_factory=dict)
     tier_backup_models: dict[str, str] = Field(default_factory=dict)
+    task_backups: dict[str, str] = Field(default_factory=dict)
+    task_backup_models: dict[str, str] = Field(default_factory=dict)
+    route_source: str = ""
+    cost_currency: str = ""
 
 
 class _LlmProvidersDocumentBody(BaseModel):
@@ -5298,6 +5495,75 @@ def register_extended_api(
 
         cache_key = f"community-corpus-hot:{mode_norm}:{period_norm}:{limit}"
         data = await cached_read(key=cache_key, loader=_load, ttl_sec=120.0, stale_sec=300.0)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/community-gallery", include_in_schema=True)
+    async def _community_gallery_list(
+        limit: int = Query(default=48, ge=1, le=100),
+        mine: bool = Query(default=False),
+    ) -> JSONResponse:
+        from pallas.product.community_stats.gallery_client import list_gallery_posts
+
+        try:
+            data = await list_gallery_posts(limit=limit, mine=mine)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 社区投稿列表失败")
+            raise HTTPException(status_code=502, detail=f"社区投稿列表失败: {e}") from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/community-gallery", include_in_schema=True)
+    async def _community_gallery_create(
+        text: str = Form(default=""),
+        nickname: str = Form(default=""),
+        avatar_url: str = Form(default=""),
+        bot_qq: int | None = Form(default=None),
+        source: str = Form(default="manual"),
+        keywords: str = Form(default=""),
+        image: UploadFile | None = File(default=None),  # noqa: B008
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.community_stats.gallery_client import create_gallery_post
+
+        image_bytes = None
+        image_filename = None
+        image_content_type = None
+        if image is not None and image.filename:
+            image_bytes = await image.read()
+            image_filename = image.filename
+            image_content_type = image.content_type
+        try:
+            data = await create_gallery_post(
+                text=text,
+                nickname=(nickname or "").strip() or "牛牛",
+                avatar_url=avatar_url,
+                bot_qq=bot_qq,
+                source=source,
+                keywords=keywords,
+                image_bytes=image_bytes,
+                image_filename=image_filename,
+                image_content_type=image_content_type,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 社区投稿失败")
+            raise HTTPException(status_code=502, detail=f"社区投稿失败: {e}") from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.delete(f"{x}/community-gallery/{{post_id}}", include_in_schema=True)
+    async def _community_gallery_delete(
+        post_id: str,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.community_stats.gallery_client import delete_gallery_post
+
+        try:
+            data = await delete_gallery_post(post_id)
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 社区投稿撤下失败")
+            raise HTTPException(status_code=502, detail=f"社区投稿撤下失败: {e}") from e
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/local-corpus-hot", include_in_schema=True)
@@ -7281,6 +7547,16 @@ def register_extended_api(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": {"items": items, "count": len(items)}})
 
+    @router.get(f"{x}/llm/tools", include_in_schema=True)
+    async def _llm_tools_list() -> JSONResponse:
+        try:
+            from pallas.product.llm.tools.registry import build_tools_catalog_ui
+
+            data = build_tools_catalog_ui()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
     @router.post(f"{x}/llm/conversation-kernel/memory/delete", include_in_schema=True)
     async def _llm_conversation_kernel_memory_delete(
         body: dict[str, Any],
@@ -7358,6 +7634,46 @@ def register_extended_api(
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": {"items": items, "count": len(items)}})
+
+    @router.get(f"{x}/llm/conversation-kernel/knowledge-sources/{{source_id}}", include_in_schema=True)
+    async def _llm_conversation_kernel_knowledge_source_detail_get(
+        source_id: str,
+        preview_limit: int = Query(default=30, ge=1, le=100),
+        preview_content_len: int = Query(default=240, ge=32, le=2000),
+    ) -> JSONResponse:
+        try:
+            from pallas.product.llm.knowledge.registry import build_knowledge_source_detail_ui
+
+            data = build_knowledge_source_detail_ui(
+                source_id,
+                preview_limit=preview_limit,
+                preview_content_len=preview_content_len,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if data is None:
+            raise HTTPException(status_code=404, detail="未找到该语料源")
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/llm/conversation-kernel/knowledge-sources/retrieve", include_in_schema=True)
+    async def _llm_conversation_kernel_knowledge_sources_retrieve_post(
+        body: dict[str, Any],
+    ) -> JSONResponse:
+        from pallas.product.llm.knowledge.registry import probe_knowledge_source_retrieve
+
+        query = str(body.get("query") or "").strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="query required")
+        source_id = str(body.get("source_id") or "").strip() or None
+        top_k_raw = body.get("top_k")
+        top_k = int(top_k_raw) if top_k_raw is not None and str(top_k_raw).strip() != "" else None
+        try:
+            data = probe_knowledge_source_retrieve(query, source_id=source_id, top_k=top_k)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if data is None:
+            raise HTTPException(status_code=404, detail="未找到该语料源")
+        return JSONResponse({"ok": True, "data": data})
 
     @router.post(f"{x}/common-config/llm/history/behavior/annotate", include_in_schema=True)
     async def _llm_history_behavior_annotate(body: dict[str, Any]) -> JSONResponse:
@@ -9087,28 +9403,42 @@ def register_extended_api(
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from packages.pb_webui.manager import BotGitUpdateError
         from pallas.console.cli.update_ops import apply_bot_update
+        from pallas.console.webui.update_apply_progress import (
+            create_update_apply_job,
+            run_update_apply_job,
+        )
         from pallas.core.shared.utils.format_exception import format_exception_for_log
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
-        try:
-            logger.info(
-                "Pallas-Bot 控制台: Bot 仓库在线更新（git）请求已接受 restart={}",
-                restart,
-            )
-            data = await apply_bot_update(
-                github_token=github_token,
-                repo="PallasBot/Pallas-Bot",
-                restart=restart,
-            )
-            drop_read_cache(("update_check_bot:",))
-            return JSONResponse({"ok": True, "data": data})
-        except BotGitUpdateError as e:
-            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
-        except HTTPException:
-            raise
-        except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: Bot 仓库更新失败")
-            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+        job = await create_update_apply_job("bot", restart=restart)
+        logger.info(
+            "Pallas-Bot 控制台: Bot 仓库在线更新（git）任务已排队 job_id={} restart={}",
+            job.job_id,
+            restart,
+        )
+
+        async def _runner(j: Any) -> None:
+            def on_progress(pct: int, message: str) -> None:
+                j.push("running", message, progress_percent=pct)
+
+            try:
+                data = await apply_bot_update(
+                    github_token=github_token,
+                    repo="PallasBot/Pallas-Bot",
+                    restart=restart,
+                    on_progress=on_progress,
+                )
+                drop_read_cache(("update_check_bot:",))
+                j.result = data
+                j.message = str(data.get("message") or "完成")
+            except BotGitUpdateError as e:
+                j.push("failed", error=e.detail, progress_percent=j.progress_percent)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Pallas-Bot 控制台: Bot 仓库更新失败")
+                j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
+
+        asyncio.create_task(run_update_apply_job(job, _runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "kind": "bot", "restart": restart}})
 
     @router.post(f"{x}/update/apply", include_in_schema=True)
     async def _update_apply(
@@ -9117,29 +9447,65 @@ def register_extended_api(
     ) -> JSONResponse:
         _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from pallas.console.cli.update_ops import WebuiUpdateError, apply_webui_dist_update
+        from pallas.console.webui.update_apply_progress import (
+            create_update_apply_job,
+            run_update_apply_job,
+        )
         from pallas.core.shared.utils.format_exception import format_exception_for_log
 
         repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
-        try:
-            data = await apply_webui_dist_update(
-                repo=repo,
-                asset=asset,
-                tag=tag,
-                github_token=github_token,
-                refresh_runtime_meta=True,
-            )
-            drop_read_cache(("update_check_webui:",))
-            return JSONResponse({"ok": True, "data": data})
-        except WebuiUpdateError as e:
-            raise HTTPException(status_code=500, detail=e.detail) from e
-        except HTTPException:
-            raise
-        except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: WebUI 更新失败")
-            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+        job = await create_update_apply_job("webui")
+
+        async def _runner(j: Any) -> None:
+            def on_progress(pct: int, message: str) -> None:
+                j.push("running", message, progress_percent=pct)
+
+            try:
+                data = await apply_webui_dist_update(
+                    repo=repo,
+                    asset=asset,
+                    tag=tag,
+                    github_token=github_token,
+                    refresh_runtime_meta=True,
+                    on_progress=on_progress,
+                )
+                drop_read_cache(("update_check_webui:",))
+                j.result = data
+                j.message = str(data.get("message") or "更新成功")
+            except WebuiUpdateError as e:
+                j.push("failed", error=e.detail, progress_percent=j.progress_percent)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Pallas-Bot 控制台: WebUI 更新失败")
+                j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
+
+        asyncio.create_task(run_update_apply_job(job, _runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "kind": "webui"}})
+
+    @router.get(f"{x}/update/jobs/{{job_id}}", include_in_schema=True)
+    async def _update_apply_job_get(job_id: str) -> JSONResponse:
+        from pallas.console.webui.update_apply_progress import get_update_apply_job
+
+        job = get_update_apply_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="job_not_found")
+        return JSONResponse({"ok": True, "data": job.as_dict()})
+
+    @router.get(f"{x}/update/jobs/{{job_id}}/stream", include_in_schema=True)
+    async def _update_apply_job_stream(job_id: str) -> StreamingResponse:
+        from pallas.console.webui.update_apply_progress import iter_update_apply_job_sse
+
+        return StreamingResponse(
+            iter_update_apply_job_sse(job_id.strip()),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @router.post(
         f"{x}/security/console-login",

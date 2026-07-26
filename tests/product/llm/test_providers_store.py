@@ -32,15 +32,18 @@ def test_providers_store_roundtrip(tmp_path: Path, monkeypatch) -> None:
                 "api_key": "sk-test-key",
                 "default_model": "deepseek-v4-flash",
                 "task_models": {"llm_chat": "deepseek-v4-flash"},
+                "model_pricing": {"deepseek-v4-flash": {"price_in": 0.5, "price_out": 1.2}},
             }
         ],
-        "routing": {"chain_fallback": ["ds"], "tasks": {"llm_chat": "ds"}},
+        "routing": {"chain_fallback": ["ds"], "tasks": {"llm_chat": "ds"}, "cost_currency": "cny"},
     })
     assert saved["file_exists"] is True
     assert saved["providers"][0]["api_key_set"] is True
     assert saved["providers"][0]["api_keys"] == ["sk-test-key"]
     assert saved["providers"][0]["api_key"] == "sk-test-key"
     assert saved["providers"][0]["api_keys_count"] == 1
+    assert saved["providers"][0]["model_pricing"]["deepseek-v4-flash"]["price_in"] == 0.5
+    assert saved["routing"]["cost_currency"] == "CNY"
 
     clear_providers_store_cache()
     endpoint = resolve_endpoint_for_task("llm_chat")

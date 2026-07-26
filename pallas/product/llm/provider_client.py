@@ -138,9 +138,14 @@ def anthropic_auth_headers(api_key: str) -> dict[str, str]:
 def apply_model_effort_to_payload(payload: dict[str, Any], options: dict[str, Any], *, model: str) -> None:
     """把 Provider model_effort 映射到常见 OpenAI 兼容字段。"""
     effort = str(options.get("model_effort") or options.get("reasoning_effort") or "").strip().lower()
+    model_name = str(model or "").strip().lower()
+    choice = str(payload.get("tool_choice") or options.get("tool_choice") or "").strip().lower()
+    # DeepSeek：thinking 与非 auto 的 tool_choice 不兼容
+    if model_name.startswith("deepseek") and payload.get("tools") and choice and choice not in {"auto", "none"}:
+        payload["thinking"] = {"type": "disabled"}
+        return
     if not effort or effort == "enable":
         return
-    model_name = str(model or "").strip().lower()
     if effort == "disable":
         if model_name.startswith("deepseek"):
             payload["thinking"] = {"type": "disabled"}
@@ -286,7 +291,8 @@ def messages_to_responses_payload(
         payload["instructions"] = instructions
     if tools:
         payload["tools"] = tools
-        payload["tool_choice"] = "auto"
+        choice = str(options.get("tool_choice") or "auto").strip() or "auto"
+        payload["tool_choice"] = choice
     temperature = options.get("temperature")
     if temperature is not None:
         payload["temperature"] = float(temperature)
@@ -713,7 +719,8 @@ async def _post_chat_completions(
     }
     if tools:
         payload["tools"] = tools
-        payload["tool_choice"] = "auto"
+        choice = str(options.get("tool_choice") or "auto").strip() or "auto"
+        payload["tool_choice"] = choice
     temperature = options.get("temperature")
     if temperature is not None:
         payload["temperature"] = float(temperature)

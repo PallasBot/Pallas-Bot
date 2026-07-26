@@ -14,8 +14,6 @@ from pallas.core.platform.shard import context as shard_ctx
 from pallas.core.platform.shard.registry.store import get_shard_registry, is_test_shard_record
 from pallas.product.community_stats.config import CommunityStatsConfig, get_community_stats_config
 from pallas.product.community_stats.endpoints import (
-    FALLBACK_HEARTBEAT,
-    PRIMARY_HEARTBEAT,
     heartbeat_urls_for_config,
     is_auto_endpoint_mode,
 )
@@ -28,7 +26,6 @@ from pallas.product.community_stats.store import (
 from pallas.product.message_scrub.quiet_http_loggers import scrub_http_log_noise
 
 _HTTP_TIMEOUT_SEC = 15.0
-_PROBE_TIMEOUT_SEC = 8.0
 
 
 def should_run_community_stats_reporter() -> bool:
@@ -131,7 +128,7 @@ async def send_community_stats_heartbeat() -> bool:
     if not urls:
         logger.warning("community_stats: no endpoint configured, skip heartbeat")
         return False
-    if is_auto_endpoint_mode(cfg) and urls[0] == PRIMARY_HEARTBEAT:
+    if is_auto_endpoint_mode(cfg):
         touch_primary_probe_unix()
     show_qq_by_account: dict[int, bool] | None = None
     if cfg.roster_public:
@@ -148,12 +145,15 @@ async def send_community_stats_heartbeat() -> bool:
     try:
         async with scrub_http_log_noise():
             async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SEC) as client:
-                for i, endpoint in enumerate(urls):
-                    timeout = _PROBE_TIMEOUT_SEC if i == 0 and len(urls) > 1 else _HTTP_TIMEOUT_SEC
+                for endpoint in urls:
                     try:
-                        if await _post_heartbeat(client, endpoint, payload=payload, cfg=cfg, timeout_sec=timeout):
-                            if is_auto_endpoint_mode(cfg) and endpoint == FALLBACK_HEARTBEAT and i > 0:
-                                logger.info("community_stats: primary endpoint unavailable, using fallback")
+                        if await _post_heartbeat(
+                            client,
+                            endpoint,
+                            payload=payload,
+                            cfg=cfg,
+                            timeout_sec=_HTTP_TIMEOUT_SEC,
+                        ):
                             return True
                     except httpx.HTTPError as e:
                         logger.warning(f"community_stats: heartbeat failed endpoint={endpoint}: {e}")

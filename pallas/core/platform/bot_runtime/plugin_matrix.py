@@ -73,14 +73,14 @@ EXTRA_PACKAGE_PRIORITY: dict[str, str] = {
 }
 
 OFFICIAL_EXTENSION_REPOS: dict[str, str] = {
-    "pallas-plugin-protocol": "https://github.com/TogetsuDo/pallas-plugin-protocol",
-    "pallas-plugin-duel": "https://github.com/TogetsuDo/pallas-plugin-duel",
-    "pallas-plugin-maa": "https://github.com/TogetsuDo/pallas-plugin-maa",
-    "pallas-plugin-who-is-spy": "https://github.com/TogetsuDo/pallas-plugin-who-is-spy",
-    "pallas-plugin-dream": "https://github.com/TogetsuDo/pallas-plugin-dream",
-    "pallas-plugin-draw": "https://github.com/TogetsuDo/pallas-plugin-draw",
-    "pallas-plugin-ai-media": "https://github.com/TogetsuDo/pallas-plugin-ai-media",
-    "pallas-plugin-bot-status": "https://github.com/TogetsuDo/pallas-plugin-bot-status",
+    "pallas-plugin-protocol": "https://github.com/PallasBot/Plugin-Protocol",
+    "pallas-plugin-duel": "https://github.com/PallasBot/Plugin-Duel",
+    "pallas-plugin-maa": "https://github.com/PallasBot/Plugin-Maa",
+    "pallas-plugin-who-is-spy": "https://github.com/PallasBot/Plugin-Who-Is-Spy",
+    "pallas-plugin-dream": "https://github.com/PallasBot/Plugin-Dream",
+    "pallas-plugin-draw": "https://github.com/PallasBot/Plugin-Draw",
+    "pallas-plugin-ai-media": "https://github.com/PallasBot/Plugin-Ai-Media",
+    "pallas-plugin-bot-status": "https://github.com/PallasBot/Plugin-Bot-Status",
 }
 
 OFFICIAL_EXTENSION_ACTIVATION_POLICY: dict[str, ActivationPolicy] = {
@@ -197,7 +197,7 @@ def official_extension_repo_url(package: str) -> str | None:
     return OFFICIAL_EXTENSION_REPOS.get((package or "").strip())
 
 
-_OFFICIAL_EXTENSION_REPO_OWNER = "TogetsuDo"
+_OFFICIAL_EXTENSION_REPO_OWNER = "PallasBot"
 _OFFICIAL_EXTENSION_DEFAULT_REF = "main"
 _OFFICIAL_EXTENSION_BRAND_AVATAR_PATH = "assets/brand-avatar.png"
 _README_CENTERED_PARAGRAPH_RE = re.compile(r"<p\s+align=[\"']center[\"']>(.*?)</p>", flags=re.IGNORECASE | re.DOTALL)

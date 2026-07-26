@@ -27,6 +27,7 @@ from pallas.product.llm.dynamic_expression_context import (
     load_recent_live_expression_rows,
 )
 from pallas.product.llm.feedback_chat_hint import build_group_feedback_chat_hint
+from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
 from pallas.product.llm.kernel import (
     ConversationContext,
@@ -39,6 +40,7 @@ from pallas.product.llm.knowledge.inject import enrich_system_with_knowledge_sou
 from pallas.product.llm.memory import (
     enrich_system_with_memory_context,
     enrich_system_with_relationship_context,
+    maybe_persist_relationship_from_utterance,
     parse_memory_teach,
     parse_relationship_teach,
     resolve_relationship_teach_target_id,
@@ -57,6 +59,7 @@ from pallas.product.llm.reply_variation import (
     should_wait_for_more,
 )
 from pallas.product.llm.session_store import list_user_llm_messages
+from pallas.product.llm.speak_perception import evaluate_speak_perception
 from pallas.product.llm.task_metrics import record_bot_llm_task
 from pallas.product.llm.tools.registry import tool_metadata_for_chat
 from pallas.product.persona.affect_kernel import (
@@ -67,7 +70,13 @@ from pallas.product.persona.affect_kernel import (
 )
 from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
 from pallas.product.persona.expression_habits import build_expression_context_suffix
-from pallas.product.persona.self_identity import extract_self_aliases, save_self_alias_from_teach
+from pallas.product.persona.self_identity import (
+    extract_self_aliases,
+    maybe_persist_self_alias_from_utterance,
+    resolve_cached_login_nickname,
+    resolve_login_nickname,
+    save_self_alias_from_teach,
+)
 
 from . import startup as _startup  # noqa: F401
 from .config import get_llm_chat_config
@@ -85,7 +94,16 @@ from .replies import (
 def llm_chat_rule(event: Event) -> bool:
     if not is_llm_chat_service_enabled():
         return False
-    return bool(getattr(event, "to_me", False))
+    if bool(getattr(event, "to_me", False)):
+        return True
+    llm_cfg = get_llm_config()
+    if not llm_cfg.llm_speak_perception_enabled:
+        return False
+    if not (
+        llm_cfg.llm_speak_mention_enabled or llm_cfg.llm_speak_ambient_enabled or llm_cfg.llm_speak_followup_enabled
+    ):
+        return False
+    return isinstance(event, GroupMessageEvent)
 
 
 llm_chat_msg = on_message(
@@ -94,6 +112,23 @@ llm_chat_msg = on_message(
     rule=Rule(llm_chat_rule),
     permission=group_message_permission_for_command("llm_chat.chat"),
 )
+
+
+async def _resolve_speak_aliases(bot_id: int) -> list[str]:
+    login_nick = await resolve_login_nickname(int(bot_id))
+    if not login_nick:
+        login_nick = resolve_cached_login_nickname(int(bot_id))
+    persona_dict = None
+    try:
+        from pallas.core.foundation.db import make_bot_config_repository
+
+        doc = await make_bot_config_repository().get(int(bot_id))
+        raw = getattr(doc, "persona", None) if doc is not None else None
+        if isinstance(raw, dict):
+            persona_dict = raw
+    except Exception:
+        persona_dict = None
+    return extract_self_aliases(persona_dict, login_nickname=login_nick or None)
 
 
 def resolve_corpus_llm_route(llm_cfg, pool: list[str], candidate: str) -> str:
@@ -111,6 +146,7 @@ async def build_llm_chat_expression_suffix(
     plain_text: str = "",
     *,
     bot_id: int = 0,
+    blocked_openers: list[str] | None = None,
 ) -> str:
     if group_id is None:
         return ""
@@ -124,7 +160,13 @@ async def build_llm_chat_expression_suffix(
     if group_config is not None:
         raw_profile = getattr(group_config, "style_profile", None)
         profile = raw_profile if isinstance(raw_profile, dict) else None
-    return await build_expression_context_suffix(int(group_id), plain_text, bot_id=bot_id, style_profile=profile)
+    return await build_expression_context_suffix(
+        int(group_id),
+        plain_text,
+        bot_id=bot_id,
+        style_profile=profile,
+        blocked_openers=blocked_openers,
+    )
 
 
 def build_llm_chat_ending_hint(turns) -> str:
@@ -225,6 +267,54 @@ async def handle_llm_chat(bot: Bot, event: Event):
     raw_group_id = getattr(event, "group_id", None)
     group_id = int(raw_group_id) if raw_group_id is not None else None
     user_id = int(getattr(event, "user_id", 0) or 0)
+    is_to_me = bool(getattr(event, "to_me", False))
+    speak_trigger = "to_me" if is_to_me else ""
+    followup_window_sec = int(llm_cfg.llm_speak_followup_window_sec)
+    followup_max_total = int(llm_cfg.llm_speak_followup_max_total_sec)
+
+    if is_to_me and llm_cfg.llm_speak_followup_enabled:
+        note_hard_speak_trigger(
+            group_id,
+            user_id,
+            window_seconds=followup_window_sec,
+            max_total_seconds=followup_max_total,
+        )
+
+    if llm_cfg.llm_speak_perception_enabled and not is_to_me:
+        followup_active = bool(
+            llm_cfg.llm_speak_followup_enabled
+            and in_followup_window(
+                group_id,
+                user_id,
+                window_seconds=followup_window_sec,
+                max_total_seconds=followup_max_total,
+            )
+        )
+        speak_aliases = await _resolve_speak_aliases(int(bot.self_id))
+        decision = evaluate_speak_perception(
+            plain_text=plain or msg,
+            aliases=speak_aliases,
+            is_to_me=False,
+            bot_id=int(bot.self_id),
+            mention_enabled=llm_cfg.llm_speak_mention_enabled,
+            ambient_enabled=llm_cfg.llm_speak_ambient_enabled,
+            ambient_rate=llm_cfg.llm_speak_ambient_rate,
+            ambient_min_score=llm_cfg.llm_speak_ambient_min_score,
+            ambient_cooldown_sec=llm_cfg.llm_speak_ambient_cooldown_sec,
+            min_alias_len=llm_cfg.llm_speak_min_alias_len,
+            group_id=group_id,
+            followup_active=followup_active,
+        )
+        if not decision.should_speak:
+            return
+        speak_trigger = decision.reason
+        if speak_trigger == "mention" and llm_cfg.llm_speak_followup_enabled:
+            note_hard_speak_trigger(
+                group_id,
+                user_id,
+                window_seconds=followup_window_sec,
+                max_total_seconds=followup_max_total,
+            )
 
     teach_body = parse_memory_teach(plain or msg)
     if teach_body is not None and llm_cfg.llm_memory_rag_enabled:
@@ -237,6 +327,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
         await llm_chat_msg.send(LLM_CHAT_ALIAS_SAVED_REPLY)
         return
 
+    # 弱模式称呼静默沉淀，不打断闲聊
+    try:
+        await maybe_persist_self_alias_from_utterance(int(bot.self_id), plain or msg)
+    except Exception:
+        logger.debug("self_alias observe persist skipped")
+
     relationship_body = parse_relationship_teach(plain or msg)
     if relationship_body is not None and llm_cfg.llm_relationship_notes_enabled:
         target_id = resolve_relationship_teach_target_id(
@@ -246,8 +342,28 @@ async def handle_llm_chat(bot: Bot, event: Event):
         )
         saved = await save_relationship_note(int(bot.self_id), group_id, target_id, relationship_body, cfg=llm_cfg)
         if saved:
+            logger.info(
+                "relationship teach saved bot={} group={} target={} fact={!r}",
+                int(bot.self_id),
+                group_id,
+                target_id,
+                relationship_body[:48],
+            )
             await llm_chat_msg.send(LLM_CHAT_RELATIONSHIP_SAVED_REPLY)
             return
+
+    # 硬触发后静默沉淀关系事实/态度；ambient 不写
+    try:
+        await maybe_persist_relationship_from_utterance(
+            int(bot.self_id),
+            group_id,
+            user_id,
+            plain or msg,
+            speak_trigger=speak_trigger,
+            cfg=llm_cfg,
+        )
+    except Exception:
+        logger.debug("relationship silent persist skipped")
 
     system_prompt = ""
     bundle = None
@@ -317,13 +433,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         "knowledge": knowledge_retrieval_trace,
         "relationship": relationship_result.trace,
     }
-    expression_suffix = await build_llm_chat_expression_suffix(
-        group_id,
-        plain or msg,
-        bot_id=int(bot.self_id),
-    )
-    if expression_suffix:
-        system_prompt = f"{system_prompt.rstrip()}\n{expression_suffix}"
+    expression_suffix = ""
 
     persona_for_gate = None
     if persona_bundle is not None:
@@ -335,6 +445,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 persona_for_gate = ResolvedPersona(**persona_raw)
         except Exception:
             persona_for_gate = None
+
+    user_warmth_delta = float(relationship_result.trace.get("warmth_delta") or 0.0)
+    user_assertiveness_delta = float(relationship_result.trace.get("assertiveness_delta") or 0.0)
 
     gate_decision = evaluate_llm_reply_gate(
         plain or msg,
@@ -350,6 +463,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_defer")
         logger.debug("llm chat wait-for-more group={} user={}", group_id, user_id)
         return
+    record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_proceed")
 
     if llm_cfg.llm_select_enabled and group_id is not None and isinstance(event, GroupMessageEvent):
         from packages.repeater.model import Chat
@@ -400,6 +514,15 @@ async def handle_llm_chat(bot: Bot, event: Event):
 
     request_id = str(ULID())
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
+    blocked_openers = repeated_assistant_openers(recent_turns)
+    expression_suffix = await build_llm_chat_expression_suffix(
+        group_id,
+        plain or msg,
+        bot_id=int(bot.self_id),
+        blocked_openers=blocked_openers,
+    )
+    if expression_suffix:
+        system_prompt = f"{system_prompt.rstrip()}\n{expression_suffix}"
     from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
 
     system_prompt = enrich_system_with_situational_rules(
@@ -417,7 +540,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
         affect_contract = build_persona_affect_contract(
             persona_for_gate,
             group_flavor_summary=group_flavor,
-            repeated_openers=repeated_assistant_openers(recent_turns),
+            repeated_openers=blocked_openers,
+            user_warmth_delta=user_warmth_delta,
+            user_assertiveness_delta=user_assertiveness_delta,
         )
         affect_system_block = build_persona_affect_system_block(affect_contract)
         affect_hint = build_variation_hint_from_contract(affect_contract)
@@ -539,7 +664,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 persona_dict = persona_raw
         except Exception:
             persona_dict = None
-    self_aliases = extract_self_aliases(persona_dict)
+    login_nick = await resolve_login_nickname(int(bot.self_id))
+    self_aliases = extract_self_aliases(persona_dict, login_nickname=login_nick or None)
     llm_user_text = (
         normalize_llm_chat_user_text(
             msg,
@@ -576,6 +702,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
+            "speak_trigger": speak_trigger or "to_me",
         },
     )
 

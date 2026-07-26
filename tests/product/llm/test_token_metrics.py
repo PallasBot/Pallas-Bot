@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from pallas.product.llm.token_metrics import (
@@ -95,6 +97,61 @@ def test_cluster_llm_token_metrics_merges_worker_rows(monkeypatch: pytest.Monkey
     assert merged["total_tokens"] == 65
     assert merged["by_provider"]["hub"]["total_tokens"] == 15
     assert merged["by_provider"]["ds"]["total_tokens"] == 50
+
+
+def test_flush_does_not_double_count(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import token_metrics as tm
+
+    clear_llm_token_metrics_for_tests()
+    path = tmp_path / "llm_token_stats.json"
+    monkeypatch.setattr(tm, "stats_file_path", lambda: path)
+
+    record_llm_token_usage(
+        task="llm_chat",
+        provider="openai",
+        model="m",
+        prompt_tokens=100,
+        completion_tokens=20,
+    )
+    tm.flush_stats_sync()
+    tm.flush_stats_sync()
+    tm.flush_stats_sync()
+    snap = llm_token_metrics_snapshot(include_persisted=True)
+    assert snap["total_tokens"] == 120
+    assert snap["prompt_tokens"] == 100
+    assert int(json.loads(path.read_text(encoding="utf-8"))["total_tokens"]) == 120
+
+
+def test_hydrate_from_disk_after_restart(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import token_metrics as tm
+
+    clear_llm_token_metrics_for_tests()
+    path = tmp_path / "llm_token_stats.json"
+    monkeypatch.setattr(tm, "stats_file_path", lambda: path)
+
+    record_llm_token_usage(task="llm_chat", provider="x", model="m", prompt_tokens=40, completion_tokens=10)
+    tm.flush_stats_sync()
+
+    tm._day_key = ""
+    tm._hydrated = False
+    tm._prompt_tokens = 0
+    tm._completion_tokens = 0
+    tm._cache_read_tokens = 0
+    tm._cache_write_tokens = 0
+    tm._cost_total = 0.0
+    tm._cost_currency = ""
+    tm._by_task.clear()
+    tm._by_provider.clear()
+    tm._by_model.clear()
+    tm._by_hour.clear()
+
+    snap = llm_token_metrics_snapshot(include_persisted=True)
+    assert snap["total_tokens"] == 50
+    record_llm_token_usage(task="llm_chat", provider="x", model="m", prompt_tokens=5, completion_tokens=0)
+    snap2 = llm_token_metrics_snapshot(include_persisted=True)
+    assert snap2["total_tokens"] == 55
+    tm.flush_stats_sync()
+    assert int(json.loads(path.read_text(encoding="utf-8"))["total_tokens"]) == 55
 
 
 @pytest.mark.parametrize(

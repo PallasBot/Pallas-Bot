@@ -23,6 +23,7 @@ _EMPTY_TASKS = {
     "repeater_polish": "",
     "repeater_polish_lite": "",
     "repeater_select": "",
+    "affect_refine": "",
 }
 
 

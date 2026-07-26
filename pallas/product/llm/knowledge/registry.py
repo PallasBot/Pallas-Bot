@@ -80,6 +80,135 @@ def list_active_knowledge_sources(*, cfg: LlmConfig | None = None) -> list[Regis
     return rows
 
 
+def get_knowledge_source_by_id(
+    source_id: str,
+    *,
+    cfg: LlmConfig | None = None,
+) -> RegisteredKnowledgeSource | None:
+    sid = (source_id or "").strip()
+    if not sid:
+        return None
+    for row in list_active_knowledge_sources(cfg=cfg):
+        if row.source_id == sid:
+            return row
+    return None
+
+
+def build_knowledge_source_detail_ui(
+    source_id: str,
+    *,
+    preview_limit: int = 30,
+    preview_content_len: int = 240,
+    cfg: LlmConfig | None = None,
+) -> dict[str, Any] | None:
+    """WebUI 只读语料源详情：元数据 + chunk 预览（截断）。"""
+    row = get_knowledge_source_by_id(source_id, cfg=cfg)
+    if row is None:
+        return None
+    decl = row.decl
+    limit = max(1, min(100, int(preview_limit)))
+    content_len = max(32, min(2000, int(preview_content_len)))
+    chunks_preview: list[dict[str, Any]] = []
+    for index, chunk in enumerate(decl.chunks[:limit]):
+        raw = (chunk.content or "").strip()
+        preview = raw if len(raw) <= content_len else raw[: content_len - 1].rstrip() + "…"
+        chunks_preview.append({
+            "index": index,
+            "title": (chunk.title or "").strip(),
+            "keywords": (chunk.keywords or "").strip(),
+            "content_preview": preview,
+            "content_len": len(raw),
+        })
+    return {
+        "source_id": row.source_id,
+        "title": decl.title,
+        "description": decl.description,
+        "scope": decl.scope.value,
+        "retrieval_mode": decl.retrieval_mode.value,
+        "origin": row.origin.value,
+        "plugin_name": row.plugin_name,
+        "plugin_title": row.plugin_title,
+        "default": bool(decl.default),
+        "top_k": int(decl.top_k),
+        "max_chunk_len": int(decl.max_chunk_len),
+        "chunk_count": len(decl.chunks),
+        "chunks_preview": chunks_preview,
+        "chunks_preview_truncated": len(decl.chunks) > limit,
+        "preview_content_len": content_len,
+    }
+
+
+def probe_knowledge_source_retrieve(
+    query_text: str,
+    *,
+    source_id: str | None = None,
+    top_k: int | None = None,
+    cfg: LlmConfig | None = None,
+) -> dict[str, Any] | None:
+    """WebUI 检索试探：对单个或全部语料源跑与线上一致的 retrieve。"""
+    c = cfg or get_llm_config()
+    query = (query_text or "").strip()
+    sid = (source_id or "").strip() or None
+    min_score = max(0, int(getattr(c, "llm_knowledge_min_score", 0) or 0))
+    if not query:
+        return {
+            "query": "",
+            "source_id": sid,
+            "min_score": min_score,
+            "items": [],
+            "count": 0,
+            "enabled": can_read_generic_knowledge(c),
+        }
+    if not can_read_generic_knowledge(c):
+        return {
+            "query": query,
+            "source_id": sid,
+            "min_score": min_score,
+            "items": [],
+            "count": 0,
+            "enabled": False,
+        }
+
+    if sid:
+        row = get_knowledge_source_by_id(sid, cfg=c)
+        if row is None:
+            return None
+        rows = [row]
+    else:
+        rows = list_active_knowledge_sources(cfg=c)
+
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        decl = row.decl
+        k = min(int(decl.top_k), int(c.llm_knowledge_top_k))
+        if top_k is not None:
+            k = max(1, min(20, int(top_k)))
+        max_len = min(int(decl.max_chunk_len), int(c.llm_knowledge_content_max_len))
+        chunks = retrieve_chunks_from_decl(decl, query, top_k=k, max_chunk_len=max_len)
+        for chunk in chunks:
+            score = int(chunk.score)
+            if min_score > 0 and score < min_score:
+                continue
+            items.append({
+                "source_id": row.source_id,
+                "title": chunk.title,
+                "content": chunk.content,
+                "score": score,
+                "retrieval_mode": decl.retrieval_mode.value,
+            })
+    items.sort(key=lambda item: int(item["score"]), reverse=True)
+    if sid is None:
+        items = items[: max(1, int(c.llm_knowledge_top_k))]
+    return {
+        "query": query,
+        "source_id": sid,
+        "min_score": min_score,
+        "items": items,
+        "count": len(items),
+        "enabled": True,
+    }
+
+
 def retrieve_from_knowledge_sources(
     query_text: str,
     *,
@@ -118,6 +247,9 @@ def retrieve_from_knowledge_sources(
             for chunk in chunks
         )
     hits.sort(key=lambda item: item.score, reverse=True)
+    min_score = max(0, int(getattr(c, "llm_knowledge_min_score", 0) or 0))
+    if min_score > 0:
+        hits = [item for item in hits if int(item.score) >= min_score]
     cap = max(1, c.llm_knowledge_top_k)
     return hits[:cap]
 

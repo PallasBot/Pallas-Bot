@@ -175,6 +175,57 @@ def append_runtime_trace(*, request_id: str, trace: dict[str, Any]) -> None:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def _tool_names_from_catalog(tools: list[Any]) -> list[str]:
+    names: list[str] = []
+    for item in tools:
+        if not isinstance(item, dict):
+            continue
+        fn = item.get("function") if isinstance(item.get("function"), dict) else {}
+        name = str(item.get("name") or fn.get("name") or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names[:24]
+
+
+def build_tool_trace_ui(
+    *,
+    snapshot: dict[str, Any] | None,
+    agent_trace: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """WebUI 工具轨迹摘要：下发 schema + 实际调用轮次。"""
+    catalog: dict[str, Any] = {}
+    stage_tool: dict[str, Any] = {}
+    if isinstance(snapshot, dict):
+        raw_catalog = snapshot.get("tool_catalog")
+        if isinstance(raw_catalog, dict):
+            catalog = raw_catalog
+        stage_inputs = snapshot.get("stage_inputs")
+        if isinstance(stage_inputs, dict):
+            raw_stage = stage_inputs.get("tool_loop")
+            if isinstance(raw_stage, dict):
+                stage_tool = raw_stage
+    tools = catalog.get("tools") if isinstance(catalog.get("tools"), list) else []
+    catalog_names = _tool_names_from_catalog(tools)
+    trace = agent_trace if isinstance(agent_trace, dict) else {}
+    names = [
+        str(item).strip()
+        for item in list(trace.get("tool_names") or stage_tool.get("tool_names") or catalog_names)
+        if str(item).strip()
+    ][:24]
+    selection = catalog.get("selection") if isinstance(catalog.get("selection"), dict) else {}
+    return {
+        "tools_enabled": bool(stage_tool.get("tools_enabled") or names or tools),
+        "tool_schema_count": int(
+            trace.get("tool_schema_count") or stage_tool.get("tool_schema_count") or len(tools) or len(names) or 0
+        ),
+        "tool_names": names,
+        "selection": selection,
+        "tool_call_count": int(trace.get("tool_call_count") or 0),
+        "status": trace.get("status"),
+        "agent_trace": trace or None,
+    }
+
+
 def load_runtime_debug_bundle(*, request_id: str) -> dict[str, Any]:
     snapshot = find_request_snapshot(request_id=request_id)
     trace_row = find_runtime_trace(request_id=request_id)
@@ -191,11 +242,16 @@ def load_runtime_debug_bundle(*, request_id: str) -> dict[str, Any]:
                 system_prompt=str(snapshot.get("system_prompt") or ""),
                 task=str(snapshot.get("task") or ""),
             )
+    trace = (trace_row or {}).get("trace") if isinstance(trace_row, dict) else None
     return {
         "request_id": request_id,
         "snapshot": snapshot,
-        "trace": (trace_row or {}).get("trace"),
+        "trace": trace,
         "persona_shaping": persona_shaping,
+        "tool_trace": build_tool_trace_ui(
+            snapshot=snapshot if isinstance(snapshot, dict) else None,
+            agent_trace=trace if isinstance(trace, dict) else None,
+        ),
     }
 
 

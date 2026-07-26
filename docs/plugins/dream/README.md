@@ -68,4 +68,4 @@
 
 - [命令权限说明](../common/cmd_perm/README.md)
 - [喝酒插件说明](../drink/README.md)
-- [牛牛做梦插件仓库](https://github.com/TogetsuDo/pallas-plugin-dream)
+- [牛牛做梦插件仓库](https://github.com/PallasBot/Plugin-Dream)

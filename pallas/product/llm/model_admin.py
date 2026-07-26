@@ -56,7 +56,11 @@ def _ai_snapshot_collecting(snapshot: dict[str, Any] | None) -> bool:
         )
     rag = snapshot.get("rag")
     if isinstance(rag, dict):
-        return int(rag.get("hit_count") or 0) > 0 or int(rag.get("miss_count") or 0) > 0
+        if int(rag.get("hit_count") or 0) > 0 or int(rag.get("miss_count") or 0) > 0:
+            return True
+    memory_rag = snapshot.get("memory_rag")
+    if isinstance(memory_rag, dict):
+        return int(memory_rag.get("hit_count") or 0) > 0 or int(memory_rag.get("miss_count") or 0) > 0
     return False
 
 
@@ -99,6 +103,33 @@ def _normalize_rag_slice(raw: Any, *, day_key: str = "", source: str = "bot") ->
     }
 
 
+def _normalize_gates_slice(raw: Any) -> dict[str, int]:
+    gates = raw if isinstance(raw, dict) else {}
+    return {
+        "skip": int(gates.get("skip") or 0),
+        "defer": int(gates.get("defer") or 0),
+        "proceed": int(gates.get("proceed") or 0),
+    }
+
+
+def _gates_from_bot_snapshot(bot_snap: dict[str, Any] | None) -> dict[str, int]:
+    raw = bot_snap if isinstance(bot_snap, dict) else {}
+    totals = raw.get("totals") if isinstance(raw.get("totals"), dict) else {}
+    skip = int(totals.get("reply_gate_skip") or 0)
+    defer = int(totals.get("reply_gate_defer") or 0)
+    proceed = int(totals.get("reply_gate_proceed") or 0)
+    if skip or defer or proceed:
+        return {"skip": skip, "defer": defer, "proceed": proceed}
+    by_task = raw.get("by_task") if isinstance(raw.get("by_task"), dict) else {}
+    for row in by_task.values():
+        if not isinstance(row, dict):
+            continue
+        skip += int(row.get("reply_gate_skip") or 0)
+        defer += int(row.get("reply_gate_defer") or 0)
+        proceed += int(row.get("reply_gate_proceed") or 0)
+    return {"skip": skip, "defer": defer, "proceed": proceed}
+
+
 def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     raw = snapshot if isinstance(snapshot, dict) else {}
     by_task = raw.get("by_task") if isinstance(raw.get("by_task"), dict) else {}
@@ -106,6 +137,8 @@ def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[s
     tokens_raw = raw.get("tokens") if isinstance(raw.get("tokens"), dict) else {}
     images_raw = raw.get("images") if isinstance(raw.get("images"), dict) else {}
     rag_raw = raw.get("rag") if isinstance(raw.get("rag"), dict) else {}
+    memory_rag_raw = raw.get("memory_rag") if isinstance(raw.get("memory_rag"), dict) else {}
+    gates_raw = raw.get("gates") if isinstance(raw.get("gates"), dict) else {}
     task_ok = int(totals.get("task_ok") or 0)
     task_fail = int(totals.get("task_fail") or 0)
     if task_ok == 0 and task_fail == 0:
@@ -118,7 +151,18 @@ def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[s
     failure_counts = raw.get("failure_counts") if isinstance(raw.get("failure_counts"), dict) else {}
     provider_stats = _normalize_dimension_stats(raw.get("provider_stats"))
     model_stats = _normalize_dimension_stats(raw.get("model_stats"))
+    if task_ok == 0 and task_fail == 0:
+        for row in provider_stats.values():
+            task_ok += int(row.get("succeeded") or 0)
+            task_fail += int(row.get("failed") or 0)
     day_key = str(raw.get("day_key") or "")
+    by_hour = tokens_raw.get("by_hour") if isinstance(tokens_raw.get("by_hour"), dict) else {}
+    try:
+        from pallas.product.llm.token_cost import enrich_tokens_cost_fields
+
+        tokens_enriched = enrich_tokens_cost_fields(tokens_raw)
+    except Exception:
+        tokens_enriched = dict(tokens_raw)
     return {
         **raw,
         "by_task": by_task,
@@ -133,21 +177,28 @@ def _normalize_ai_task_stats_snapshot(snapshot: dict[str, Any] | None) -> dict[s
         "provider_stats": provider_stats,
         "model_stats": model_stats,
         "tokens": {
-            "source": str(tokens_raw.get("source") or raw.get("source") or "ai"),
-            "day_key": str(tokens_raw.get("day_key") or day_key or ""),
-            "updated_at": tokens_raw.get("updated_at"),
-            "prompt_tokens": int(tokens_raw.get("prompt_tokens") or 0),
-            "completion_tokens": int(tokens_raw.get("completion_tokens") or 0),
-            "cache_read_tokens": int(tokens_raw.get("cache_read_tokens") or 0),
-            "cache_write_tokens": int(tokens_raw.get("cache_write_tokens") or 0),
-            "total_tokens": int(tokens_raw.get("total_tokens") or 0)
-            or (int(tokens_raw.get("prompt_tokens") or 0) + int(tokens_raw.get("completion_tokens") or 0)),
-            "by_task": tokens_raw.get("by_task") if isinstance(tokens_raw.get("by_task"), dict) else {},
-            "by_provider": tokens_raw.get("by_provider") if isinstance(tokens_raw.get("by_provider"), dict) else {},
-            "by_model": tokens_raw.get("by_model") if isinstance(tokens_raw.get("by_model"), dict) else {},
+            "source": str(tokens_enriched.get("source") or raw.get("source") or "ai"),
+            "day_key": str(tokens_enriched.get("day_key") or day_key or ""),
+            "updated_at": tokens_enriched.get("updated_at"),
+            "prompt_tokens": int(tokens_enriched.get("prompt_tokens") or 0),
+            "completion_tokens": int(tokens_enriched.get("completion_tokens") or 0),
+            "cache_read_tokens": int(tokens_enriched.get("cache_read_tokens") or 0),
+            "cache_write_tokens": int(tokens_enriched.get("cache_write_tokens") or 0),
+            "total_tokens": int(tokens_enriched.get("total_tokens") or 0)
+            or (int(tokens_enriched.get("prompt_tokens") or 0) + int(tokens_enriched.get("completion_tokens") or 0)),
+            "cost_total": float(tokens_enriched.get("cost_total") or 0),
+            "cost_currency": str(tokens_enriched.get("cost_currency") or ""),
+            "by_task": tokens_enriched.get("by_task") if isinstance(tokens_enriched.get("by_task"), dict) else {},
+            "by_provider": tokens_enriched.get("by_provider")
+            if isinstance(tokens_enriched.get("by_provider"), dict)
+            else {},
+            "by_model": tokens_enriched.get("by_model") if isinstance(tokens_enriched.get("by_model"), dict) else {},
+            "by_hour": by_hour,
         },
         "images": _normalize_images_slice(images_raw, day_key=day_key),
         "rag": _normalize_rag_slice(rag_raw, day_key=day_key, source=str(raw.get("source") or "bot")),
+        "memory_rag": _normalize_rag_slice(memory_rag_raw, day_key=day_key, source=str(raw.get("source") or "bot")),
+        "gates": _normalize_gates_slice(gates_raw),
     }
 
 
@@ -787,6 +838,54 @@ async def fetch_llm_task_stats(
             "day_key": day,
             "source": ai_body.get("source") or "bot",
             "rag": rag_snap,
+        }
+        payload["ai"] = _normalize_ai_task_stats_snapshot(merged_ai)
+        try:
+            write_llm_daily_stats_side(day, "ai", {**payload["ai"], "reachable": True})
+        except Exception:
+            pass
+
+    try:
+        from pallas.core.platform.shard import context as shard_ctx
+        from pallas.product.llm.memory_rag_metrics import (
+            cluster_llm_memory_rag_metrics_snapshot,
+            flush_memory_rag_stats_sync,
+            llm_memory_rag_metrics_snapshot,
+        )
+
+        flush_memory_rag_stats_sync()
+        if shard_ctx.sharding_active() and shard_ctx.is_hub():
+            memory_rag_snap = cluster_llm_memory_rag_metrics_snapshot()
+        else:
+            memory_rag_snap = llm_memory_rag_metrics_snapshot(include_persisted=True)
+    except Exception:
+        memory_rag_snap = {}
+    if isinstance(memory_rag_snap, dict) and (
+        int(memory_rag_snap.get("hit_count") or 0) > 0 or int(memory_rag_snap.get("miss_count") or 0) > 0
+    ):
+        ai_body = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
+        day = str(ai_body.get("day_key") or memory_rag_snap.get("day_key") or bot_snap.get("day_key") or today_key())
+        merged_ai = {
+            **ai_body,
+            "day_key": day,
+            "source": ai_body.get("source") or "bot",
+            "memory_rag": memory_rag_snap,
+        }
+        payload["ai"] = _normalize_ai_task_stats_snapshot(merged_ai)
+        try:
+            write_llm_daily_stats_side(day, "ai", {**payload["ai"], "reachable": True})
+        except Exception:
+            pass
+
+    gates = _gates_from_bot_snapshot(bot_snap if isinstance(bot_snap, dict) else None)
+    if gates["skip"] or gates["defer"] or gates["proceed"]:
+        ai_body = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
+        day = str(ai_body.get("day_key") or bot_snap.get("day_key") or today_key())
+        merged_ai = {
+            **ai_body,
+            "day_key": day,
+            "source": ai_body.get("source") or "bot",
+            "gates": gates,
         }
         payload["ai"] = _normalize_ai_task_stats_snapshot(merged_ai)
         try:

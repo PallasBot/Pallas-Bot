@@ -8,6 +8,7 @@ import os
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Callable  # noqa: TC003
 from pathlib import Path
 
 import httpx
@@ -39,6 +40,8 @@ from pallas.core.shared.utils.stream_download import (
     format_download_byte_size,
     sync_stream_download_to_file,
 )
+
+ProgressReporter = Callable[[int, str], None]
 
 
 async def resolve_github_release_asset_urls(
@@ -234,6 +237,48 @@ def _webui_download_progress_log(ev: StreamDownloadProgress) -> None:
             )
 
 
+def chain_webui_download_progress(
+    *callbacks: Callable[[StreamDownloadProgress], None] | None,
+) -> Callable[[StreamDownloadProgress], None]:
+    active = [cb for cb in callbacks if cb is not None]
+
+    def _fanout(ev: StreamDownloadProgress) -> None:
+        for cb in active:
+            cb(ev)
+
+    return _fanout
+
+
+def map_webui_download_progress(
+    report: ProgressReporter | None,
+    *,
+    base: int = 8,
+    span: int = 72,
+) -> Callable[[StreamDownloadProgress], None] | None:
+    """将下载事件映射到整体进度区间 ``[base, base+span]``。"""
+    if report is None:
+        return None
+    unknown_pct = base + 8
+
+    def _on(ev: StreamDownloadProgress) -> None:
+        nonlocal unknown_pct
+        if ev["event"] == "percent":
+            pct = base + int(ev["milestone_percent"] * span / 100)
+            report(
+                pct,
+                f"下载中 {ev['milestone_percent']}%（{format_download_byte_size(ev['received'])}"
+                f" / {format_download_byte_size(ev['total'])}）",
+            )
+        elif ev["event"] == "unknown_step":
+            unknown_pct = min(base + span - 4, unknown_pct + 4)
+            report(unknown_pct, f"下载中 {format_download_byte_size(ev['received'])}（未知总大小）")
+        elif ev["event"] == "complete":
+            size = format_download_byte_size(ev["received"])
+            report(base + span, f"下载完成 {size}")
+
+    return _on
+
+
 def build_git_argv_with_mirror(mirror: MirrorSpec, *args: str) -> list[str]:
     return [*git_instead_of_args(mirror), *args]
 
@@ -246,8 +291,15 @@ def iter_failover_download_urls(url: str):
         yield rewrite_github_url(u, mirror)
 
 
-def _sync_download_webui_zip(url: str, dest: Path, *, follow_redirects: bool) -> None:
+def _sync_download_webui_zip(
+    url: str,
+    dest: Path,
+    *,
+    follow_redirects: bool,
+    on_progress: Callable[[StreamDownloadProgress], None] | None = None,
+) -> None:
     last_exc: Exception | None = None
+    progress = chain_webui_download_progress(_webui_download_progress_log, on_progress)
     for attempt_url in iter_failover_download_urls(url):
         try:
             sync_stream_download_to_file(
@@ -255,7 +307,8 @@ def _sync_download_webui_zip(url: str, dest: Path, *, follow_redirects: bool) ->
                 dest,
                 follow_redirects=follow_redirects,
                 timeout=httpx.Timeout(300.0, connect=60.0),
-                on_progress=_webui_download_progress_log,
+                progress_percent_step=5,
+                on_progress=progress,
             )
             return
         except Exception as e:  # noqa: BLE001
@@ -266,21 +319,40 @@ def _sync_download_webui_zip(url: str, dest: Path, *, follow_redirects: bool) ->
     raise RuntimeError("无可用镜像源")
 
 
-async def download_and_extract_dist_zip(public_dir: Path, url: str, *, follow_redirects: bool = True) -> bool:
+async def download_and_extract_dist_zip(
+    public_dir: Path,
+    url: str,
+    *,
+    follow_redirects: bool = True,
+    on_download_progress: Callable[[StreamDownloadProgress], None] | None = None,
+    on_stage: ProgressReporter | None = None,
+) -> bool:
     url = (url or "").strip()
     if not url:
         return False
     preview = url if len(url) <= 200 else url[:197] + "..."
     logger.info("[控制台] 正在下载 WebUI dist {}", preview)
+    if on_stage is not None:
+        on_stage(8, "开始下载 WebUI dist…")
 
     tmp_zip = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
     zip_path = Path(tmp_zip.name)
     tmp_zip.close()
 
     try:
-        await asyncio.to_thread(_sync_download_webui_zip, url, zip_path, follow_redirects=follow_redirects)
+        await asyncio.to_thread(
+            _sync_download_webui_zip,
+            url,
+            zip_path,
+            follow_redirects=follow_redirects,
+            on_progress=on_download_progress,
+        )
+        if on_stage is not None:
+            on_stage(85, "正在解压 WebUI dist…")
         await asyncio.to_thread(_sync_extract_dist_zip_file, zip_path, public_dir)
         logger.info("[控制台] 已解压 dist 到 {}", public_dir)
+        if on_stage is not None:
+            on_stage(92, "解压完成")
     finally:
         await asyncio.to_thread(_unlink_ignore_missing, zip_path)
 
@@ -545,6 +617,7 @@ async def apply_bot_repository_update(
     *,
     github_token: str = "",
     repo: str = "PallasBot/Pallas-Bot",
+    on_progress: ProgressReporter | None = None,
 ) -> dict[str, str]:
     """在仓库根目录执行 git 更新：发布标签部署切到新 tag；开发克隆走 ff-only pull。
 
@@ -552,6 +625,10 @@ async def apply_bot_repository_update(
     """
     root = _BOT_ROOT
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+
+    def report(pct: int, message: str) -> None:
+        if on_progress is not None:
+            on_progress(pct, message)
 
     async def git(
         *args: str,
@@ -591,6 +668,7 @@ async def apply_bot_repository_update(
             last_code, last_out, last_err = code, out, err
         return last_code, last_out, last_err
 
+    report(4, "检查 git 工作副本…")
     rc, out, err = await git("rev-parse", "--is-inside-work-tree")
     if rc != 0 or out != "true":
         raise BotGitUpdateError(
@@ -599,6 +677,7 @@ async def apply_bot_repository_update(
             status_code=400,
         )
 
+    report(12, "获取最新发布信息…")
     try:
         latest = await fetch_latest_bot_release(repo, token=github_token)
     except asyncio.CancelledError:
@@ -615,6 +694,7 @@ async def apply_bot_repository_update(
 
     logger.info("Pallas-Bot 控制台: Bot 仓库更新开始 repo={} target_tag={}", repo, latest_tag)
 
+    report(22, f"git fetch（目标 {latest_tag}）…")
     rc, _, fetch_err = await git_remote("fetch", "origin", "--tags", cmd_timeout_s=300.0)
     if rc != 0:
         detail = fetch_err or "(无 stderr)"
@@ -636,6 +716,7 @@ async def apply_bot_repository_update(
     if current_tag and current_tag == latest_tag:
         commit = str(current.get("commit", "") or "").strip()
         logger.info("Pallas-Bot 控制台: Bot 已处于目标标签 {}", latest_tag)
+        report(100, f"已处于发布标签 {latest_tag}")
         return {
             "tag": latest_tag,
             "message": f"已处于发布标签 {latest_tag}（{commit or 'commit 未知'}），无需更新。",
@@ -648,6 +729,7 @@ async def apply_bot_repository_update(
 
     if current_tag:
         if dirty:
+            report(40, "暂存本地改动…")
             rc_st, _, err_st = await git(
                 "stash",
                 "push",
@@ -662,6 +744,7 @@ async def apply_bot_repository_update(
                 )
             stashed = True
             logger.info("Pallas-Bot 控制台: Bot 更新前已自动 stash 本地改动")
+        report(55, f"切换到标签 {latest_tag}…")
         rc_co, _, err_co = await git("checkout", "--detach", detach_ref)
         if rc_co != 0:
             if stashed:
@@ -674,6 +757,7 @@ async def apply_bot_repository_update(
             )
         logger.info("Pallas-Bot 控制台: Bot 已 checkout 至标签 {}", latest_tag)
         if stashed:
+            report(78, "恢复本地改动…")
             rc_sp, _, err_sp = await git("stash", "pop")
             if rc_sp != 0:
                 stash_restore_note = (
@@ -684,6 +768,7 @@ async def apply_bot_repository_update(
                 stash_restore_note = " 已自动恢复先前暂存的本地改动。"
                 logger.info("Pallas-Bot 控制台: Bot 更新后已恢复 stash 的本地改动")
     else:
+        report(45, "拉取最新提交…")
         rc_u, upstream_out, _ = await git("rev-parse", "--abbrev-ref", "@{u}")
         if rc_u == 0 and upstream_out:
             rc_p, _, err_p = await git_remote("pull", "--ff-only", "--autostash")
@@ -715,10 +800,12 @@ async def apply_bot_repository_update(
                 def_branch,
             )
 
+    report(92, "整理版本信息…")
     after = get_bot_current_version()
     new_tag = str(after.get("tag", "") or "").strip()
     new_commit = str(after.get("commit", "") or "").strip()
     display = new_tag or new_commit or latest_tag
+    report(98, f"仓库已更新至 {display}")
     return {
         "tag": display,
         "message": f"仓库已更新（{display}）。请重启 Bot 进程后加载新代码。{stash_restore_note}",

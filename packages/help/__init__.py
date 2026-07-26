@@ -9,6 +9,7 @@ from pallas.core.perm.metadata_defaults import (
 from pallas.core.perm.metadata_text import SCENE_BOTH, SCENE_GROUP, join_usage, usage_line
 from pallas.core.storage.declare import plugin_storage_list, plugin_storage_row
 from pallas.product.llm.knowledge.declare import knowledge_source_row
+from pallas.product.llm.tools.declare import llm_command_tool_row
 
 from . import commands as _commands  # noqa: F401
 from .style_cache import refresh_style_cache
@@ -29,6 +30,7 @@ __plugin_meta__ = PluginMetadata(
     extra={
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
+        "help_tag": "core",
         "reload_policy": "metadata",
         "command_prefixes": [
             "牛牛帮助",
@@ -61,6 +63,31 @@ __plugin_meta__ = PluginMetadata(
             command_limit_row("help.plugin_enable_all", 15),
             command_limit_row("help.plugin_disable_all", 15),
         ),
+        "llm_tools": [
+            llm_command_tool_row(
+                name="help.show",
+                command_id="help.help",
+                description="打开牛牛帮助总览。用户想看有哪些功能、怎么用时使用。",
+                parameters={"type": "object", "properties": {}},
+                command_template="牛牛帮助",
+            ),
+            llm_command_tool_row(
+                name="help.show_topic",
+                command_id="help.help",
+                description="打开指定插件或口令的帮助详情。",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "topic": {
+                            "type": "string",
+                            "description": "插件名、序号或口令关键词，如 喝酒、智能对话",
+                        },
+                    },
+                    "required": ["topic"],
+                },
+                command_template="牛牛帮助 {topic}",
+            ),
+        ],
         "menu_data": [
             {
                 "func": "总列表",

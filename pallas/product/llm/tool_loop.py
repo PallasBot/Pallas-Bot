@@ -30,6 +30,37 @@ def tool_result_message(call_id: str, name: str, result: dict[str, Any]) -> dict
     return {"role": "tool", "tool_call_id": call_id, "content": content}
 
 
+def tool_names_from_schemas(schemas: list[Any]) -> list[str]:
+    names: list[str] = []
+    for item in schemas:
+        if not isinstance(item, dict):
+            continue
+        fn = item.get("function") if isinstance(item.get("function"), dict) else {}
+        name = str(fn.get("name") or item.get("name") or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names[:24]
+
+
+def summarize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
+    ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
+    error = str(result.get("error") or "").strip() if isinstance(result, dict) else ""
+    payload = result.get("result") if isinstance(result, dict) else result
+    if isinstance(payload, dict):
+        preview = json.dumps(payload, ensure_ascii=False)
+    elif payload is None:
+        preview = ""
+    else:
+        preview = str(payload)
+    if len(preview) > 160:
+        preview = preview[:159].rstrip() + "…"
+    return {
+        "ok": ok,
+        "error": error or None,
+        "result_preview": preview or None,
+    }
+
+
 def build_working_messages(
     *,
     system_prompt: str | None,
@@ -153,24 +184,40 @@ async def complete_with_tool_loop(
 
     max_rounds = max(1, int(c.llm_tools_max_rounds))
     last_message: dict[str, Any] = {}
+    schema_names = tool_names_from_schemas(tool_schemas)
+    prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
+    # 口令类工具：提醒模型不要只口头答应
+    if schema_names and working and str(working[0].get("role") or "") == "system":
+        hint = "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
+        sys_content = str(working[0].get("content") or "")
+        if "【动作工具】" not in sys_content:
+            working[0] = {**working[0], "content": f"{sys_content.rstrip()}\n\n{hint}".strip()}
     agent_trace: dict[str, Any] = {
         "final_stage": "generate",
         "tool_call_count": 0,
         "rounds": [],
         "status": "success",
+        "tool_loop_enabled": True,
+        "tool_schema_count": len(tool_schemas),
+        "tool_names": schema_names,
     }
 
     for round_idx in range(max_rounds):
+        round_options = dict(options)
+        if prefer_required and round_idx == 0:
+            round_options["tool_choice"] = "required"
+            # DeepSeek thinking 模式不支持 tool_choice=required
+            round_options["model_effort"] = "disable"
         last_message = await complete_chat_message(
             working,
             model=model,
-            options=options,
+            options=round_options,
             tools=tool_schemas,
             cfg=c,
             task=task,
         )
         tool_calls = last_message.get("tool_calls")
-        round_trace: dict[str, Any] = {"round": round_idx + 1, "tool_calls": []}
+        round_trace: dict[str, Any] = {"round": round_idx + 1, "tool_calls": [], "calls": []}
         if not isinstance(tool_calls, list) or not tool_calls:
             content = str(last_message.get("content", "") or "").strip()
             assistant_message = dict(last_message)
@@ -192,13 +239,32 @@ async def complete_with_tool_loop(
             tool_name = str(fn.get("name") or call.get("name") or "").strip()
             if not tool_name:
                 continue
+            from pallas.product.llm.tools.registry import from_provider_tool_name
+
+            resolved_name = from_provider_tool_name(tool_name)
             call_id = str(call.get("id") or tool_name)
             args = parse_tool_arguments(fn.get("arguments"))
-            round_trace["tool_calls"].append(tool_name)
+            round_trace["tool_calls"].append(resolved_name)
             agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
-            logger.info("kernel tool call: round={} tool={} keys={}", round_idx + 1, tool_name, sorted(args.keys()))
-            tool_result = await execute_tool_async(tool_name, args, context=context)
-            working.append(tool_result_message(call_id, tool_name, tool_result))
+            logger.info(
+                "kernel tool call: round={} tool={} provider_name={} keys={}",
+                round_idx + 1,
+                resolved_name,
+                tool_name,
+                sorted(args.keys()),
+            )
+            tool_result = await execute_tool_async(resolved_name, args, context=context)
+            result_dict = tool_result if isinstance(tool_result, dict) else {"ok": True, "result": tool_result}
+            summary = summarize_tool_result(result_dict)
+            round_trace["calls"].append({
+                "tool": resolved_name,
+                "provider_name": tool_name,
+                "args_keys": sorted(args.keys()),
+                "ok": summary["ok"],
+                "error": summary["error"],
+                "result_preview": summary["result_preview"],
+            })
+            working.append(tool_result_message(call_id, resolved_name, tool_result))
         agent_trace["rounds"].append(round_trace)
 
     content = str(last_message.get("content", "") or "").strip()

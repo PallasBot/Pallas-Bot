@@ -193,5 +193,5 @@ def test_official_extension_visuals_use_official_repo_assets() -> None:
     assert visuals["icon"] == visuals["cover"]
     assert (
         visuals["cover"]
-        == "https://raw.githubusercontent.com/TogetsuDo/pallas-plugin-draw/main/assets/brand-avatar.png"
+        == "https://raw.githubusercontent.com/PallasBot/Plugin-Draw/main/assets/brand-avatar.png"
     )
