@@ -37,7 +37,7 @@ def test_propose_expression_builds_clean_affect_aligned_draft() -> None:
     assert entry is not None
     assert entry.group_id == 0
     assert entry.saying == "这也太离谱了吧"
-    assert entry.occasion == "吐槽"
+    assert entry.occasion == "venting"
     assert entry.affect_hint == "complain"
     assert entry.source == "group_observe"
     assert entry.channel == "group"

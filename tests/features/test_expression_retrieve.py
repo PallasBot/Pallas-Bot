@@ -162,7 +162,7 @@ def test_retrieve_filters_other_bot_and_builds_reference_block(monkeypatch, tmp_
     entries = retrieve_expressions_for_message(10001, "抽卡又歪了", limit=5, bot_id=10001)
 
     assert [entry.saying for entry in entries] == ["这也太黑了"]
-    assert build_expression_reference_block(entries) == "\n【表达参考】\n吐槽抽卡→这也太黑了。"
+    assert build_expression_reference_block(entries) == "\n【表达参考】\nventing→这也太黑了。"
 
 
 @pytest.mark.asyncio
@@ -192,3 +192,20 @@ async def test_context_suffix_respects_inject_config_and_falls_back_to_habits(mo
         )
         == "\n【表达习惯参考】群里常接这些说法/梗：牛牛税。"
     )
+
+
+@pytest.mark.asyncio
+async def test_context_suffix_threads_behavior_scene_to_retrieval(monkeypatch) -> None:
+    from pallas.product.persona import expression_habits as habits
+
+    monkeypatch.setattr(
+        habits,
+        "get_llm_config",
+        lambda: SimpleNamespace(llm_expression_inject_enabled=True, llm_expression_retrieve_limit=2),
+    )
+    retrieve = Mock(return_value=[SimpleNamespace(entry_id="expr-1", occasion="venting", saying="太难了")])
+    monkeypatch.setattr(habits, "retrieve_expressions_for_message", retrieve)
+    text, entries = await habits.build_expression_context_with_entries(10001, "太难了", scene="venting")
+    assert text
+    assert [entry.entry_id for entry in entries] == ["expr-1"]
+    assert retrieve.call_args.kwargs["scene"] == "venting"

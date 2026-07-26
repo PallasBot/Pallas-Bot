@@ -21,6 +21,11 @@ from pallas.product.llm.behavior import (
 )
 from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
 from pallas.product.llm.chat_queue import merge_queued_chat, stash_chat_during_cooldown
+from pallas.product.llm.current_turn_decision import (
+    CurrentTurnAction,
+    CurrentTurnDecisionInput,
+    decide_current_turn_with_model,
+)
 from pallas.product.llm.dynamic_expression_context import (
     build_dynamic_expression_hint as build_llm_chat_dynamic_expression_hint,
 )
@@ -67,7 +72,7 @@ from pallas.product.persona.affect_kernel import (
     group_flavor_summary_from_style_snapshot,
 )
 from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
-from pallas.product.persona.expression_habits import build_expression_context_suffix
+from pallas.product.persona.expression_habits import build_expression_context_with_entries
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.self_identity import (
     extract_self_aliases,
@@ -146,10 +151,29 @@ async def build_llm_chat_expression_suffix(
     plain_text: str = "",
     *,
     bot_id: int = 0,
+    scene: str = "",
     blocked_openers: list[str] | None = None,
 ) -> str:
+    suffix, _entries = await build_llm_chat_expression_selection(
+        group_id,
+        plain_text,
+        bot_id=bot_id,
+        scene=scene,
+        blocked_openers=blocked_openers,
+    )
+    return suffix
+
+
+async def build_llm_chat_expression_selection(
+    group_id: int | None,
+    plain_text: str = "",
+    *,
+    bot_id: int = 0,
+    scene: str = "",
+    blocked_openers: list[str] | None = None,
+) -> tuple[str, list]:
     if group_id is None:
-        return ""
+        return "", []
     from pallas.core.foundation.db import make_group_config_repository
 
     profile = None
@@ -160,10 +184,11 @@ async def build_llm_chat_expression_suffix(
     if group_config is not None:
         raw_profile = getattr(group_config, "style_profile", None)
         profile = raw_profile if isinstance(raw_profile, dict) else None
-    return await build_expression_context_suffix(
+    return await build_expression_context_with_entries(
         int(group_id),
         plain_text,
         bot_id=bot_id,
+        scene=scene,
         style_profile=profile,
         blocked_openers=blocked_openers,
     )
@@ -517,12 +542,14 @@ async def handle_llm_chat(bot: Bot, event: Event):
         recent_texts=recent_plain,
         has_multi_party_overlap=has_multi_party,
     )
-    expression_suffix = await build_llm_chat_expression_suffix(
+    expression_suffix, selected_expression_entries = await build_llm_chat_expression_selection(
         group_id,
         focus_text,
         bot_id=int(bot.self_id),
+        scene=str(behavior_scene),
         blocked_openers=blocked_openers,
     )
+    selected_expression_ids = [item.entry_id for item in selected_expression_entries]
     from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
 
     system_prompt = enrich_system_with_situational_rules(
@@ -565,6 +592,29 @@ async def handle_llm_chat(bot: Bot, event: Event):
         has_multi_party_overlap=has_multi_party,
     )
     tool_meta = assemble_tool_bundle(task="llm_chat", user_text=focus_text)
+    current_turn_decision = await decide_current_turn_with_model(
+        CurrentTurnDecisionInput(
+            text=focus_text,
+            is_to_me=is_to_me,
+            tools_permitted=bool(tool_meta.get("tools_enabled")),
+        ),
+        enabled=bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)),
+    )
+    if group_id is not None:
+        from packages.repeater.opportunity_trace import append_conversation_decision_trace
+
+        append_conversation_decision_trace({
+            "group_id": int(group_id),
+            "bot_id": int(bot.self_id),
+            "kind": "current_turn_decision_trace",
+            **current_turn_decision.trace.model_dump(mode="json"),
+        })
+    if current_turn_decision.action is CurrentTurnAction.PASS:
+        return
+    if bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)) and (
+        current_turn_decision.action is not CurrentTurnAction.TOOL
+    ):
+        tool_meta = {**tool_meta, "tools_enabled": False, "tool_schemas": []}
     direct_decision = decide_direct_chat_action(
         direct_ctx,
         feature_level=resolve_conversation_feature_level(llm_cfg),
@@ -588,13 +638,16 @@ async def handle_llm_chat(bot: Bot, event: Event):
     from pallas.product.llm.kernel.models import ConversationMode
     from pallas.product.llm.scene_style import format_scene_style_block, resolve_scene_style_constraints
     from pallas.product.llm.turn_style_layers import (
-        build_probabilistic_alt_style_hint,
+        build_affect_style_variant_hint,
         build_same_utterance_redup_hint,
         build_turn_behavior_block,
         build_turn_wording_user_hints,
         find_previous_reply_for_utterance,
+        reply_style_variant_policy_from_data,
+        select_reply_style_variant,
     )
-    from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_lines
+    from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_with_entries
+    from pallas.product.persona.scene_dialogue_examples import build_scene_dialogue_examples_hint
 
     scene_constraints = resolve_scene_style_constraints(
         behavior_scene,
@@ -640,14 +693,34 @@ async def handle_llm_chat(bot: Bot, event: Event):
     except Exception:
         previous_same_reply = find_previous_reply_for_utterance(focus_text, recent_turns=recent_turns)
     redup_hint = build_same_utterance_redup_hint(user_text=focus_text, previous_reply=previous_same_reply)
-    alt_style_hint = build_probabilistic_alt_style_hint()
-    catchphrase_lines = compile_catchphrase_prompt_lines(
+    affect_class = ""
+    if persona_for_gate is not None:
+        if float(getattr(persona_for_gate, "chaos_bias", 0.0) or 0.0) >= 0.5:
+            affect_class = "chaotic"
+        elif float(getattr(persona_for_gate, "warmth", 0.0) or 0.0) >= 0.1:
+            affect_class = "warm"
+        elif float(getattr(persona_for_gate, "warmth", 0.0) or 0.0) <= -0.1:
+            affect_class = "cool"
+        elif float(getattr(persona_for_gate, "assertiveness", 0.0) or 0.0) >= 0.1:
+            affect_class = "assertive"
+    alt_style_selection = select_reply_style_variant(
+        reply_style_variant_policy_from_data(getattr(llm_cfg, "llm_reply_style_variants", {})),
+        affect_class=affect_class,
+    )
+    alt_style_hint = build_affect_style_variant_hint(alt_style_selection)
+    catchphrase_lines, selected_catchphrase_entries = compile_catchphrase_prompt_with_entries(
         int(bot.self_id),
         user_text=focus_text,
         scene=str(behavior_scene),
         limit=2,
     )
+    selected_catchphrase_ids = [item.entry_id for item in selected_catchphrase_entries]
     catchphrase_hint = "\n".join(catchphrase_lines) if catchphrase_lines else ""
+    scene_examples_hint, selected_scene_examples = build_scene_dialogue_examples_hint(
+        int(bot.self_id),
+        scene=str(behavior_scene),
+        user_text=focus_text,
+    )
     ending_hint = build_llm_chat_ending_hint(recent_turns)
     corpus_ending_hint = await build_llm_chat_corpus_ending_hint(
         group_id,
@@ -666,9 +739,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
         ending_hint,
         corpus_ending_hint,
         catchphrase_hint,
+        scene_examples_hint,
         redup_hint,
         alt_style_hint,
     )
+    if current_turn_decision.action is CurrentTurnAction.FOLLOW_UP:
+        style_user_hints.append("本轮只追问一个必要信息，问题要短。")
     last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
     recent_reply_texts: list[str] = []
     if group_id is not None:
@@ -715,6 +791,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "fallback_text": corpus_fallback,
             "llm_route": llm_route,
             "agent_loop_enabled": bool(tool_meta.get("tools_enabled")),
+            "current_turn_action": current_turn_decision.action,
+            "current_turn_trace": current_turn_decision.trace.model_dump(mode="json"),
             "agent_stage_plan": list(direct_decision.agent_stages),
             "tool_schema_count": len(tool_meta.get("tool_schemas") or []),
             "last_reply_text": last_reply_text,
@@ -728,9 +806,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "behavior_pattern_ids": [item.pattern_id for item in behavior_patterns],
             "behavior_actions": [str(item.action) for item in behavior_patterns],
             "behavior_hint": behavior_hint,
+            "selected_expression_ids": selected_expression_ids,
+            "selected_catchphrase_ids": selected_catchphrase_ids,
+            "selected_scene_dialogue_example_ids": [item.example_id for item in selected_scene_examples],
             "style_user_hints": style_user_hints[:8],
             "same_utterance_redup": bool(redup_hint),
             "alt_style_applied": bool(alt_style_hint),
+            "alt_style_class": alt_style_selection.style_class,
             "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
@@ -756,8 +838,10 @@ async def handle_llm_chat(bot: Bot, event: Event):
             style_user_hints=style_user_hints,
             llm_rewrite_metadata={
                 "task": "llm_chat",
+                "current_turn_action": current_turn_decision.action,
                 "bot_id": int(bot.self_id),
                 "self_aliases": self_aliases[:8],
+                "conversation_fallback_text": corpus_fallback,
                 "variation_hint": variation_hint,
                 "persona_affect_block": affect_system_block,
                 "persona_shaping_active": bool(affect_system_block or dynamic_expression_hint),
@@ -766,6 +850,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 "command_source_segments": command_source_segments,
                 "same_utterance_redup": bool(redup_hint),
                 "alt_style_applied": bool(alt_style_hint),
+                "alt_style_class": alt_style_selection.style_class,
             },
             tool_metadata=tool_meta,
         ),

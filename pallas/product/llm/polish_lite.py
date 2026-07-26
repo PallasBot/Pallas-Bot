@@ -140,7 +140,10 @@ async def maybe_submit_repeater_llm_polish_lite(
             scene_tier=scene_tier,
             token_count=persona_bundle.token_count,
             temperature=persona_bundle.temperature,
-            llm_rewrite_metadata=persona_bundle.llm_rewrite_metadata,
+            llm_rewrite_metadata={
+                **(persona_bundle.llm_rewrite_metadata or {}),
+                "conversation_fallback_text": candidate,
+            },
         ),
         cfg=cfg,
     )

@@ -338,6 +338,69 @@ def register_llm_ops_router(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": {"items": items, "count": len(items)}})
 
+    @router.get(f"{x}/common-config/llm/persona/scene-dialogue-examples", include_in_schema=True)
+    async def _llm_scene_dialogue_examples_get(
+        bot_id: int = Query(..., ge=1),
+    ) -> JSONResponse:
+        from pallas.product.persona.scene_dialogue_examples import list_scene_dialogue_examples
+
+        items = [item.model_dump(mode="json") for item in list_scene_dialogue_examples(bot_id)]
+        return JSONResponse({"ok": True, "data": {"items": items, "count": len(items)}})
+
+    @router.post(f"{x}/common-config/llm/persona/scene-dialogue-examples", include_in_schema=True)
+    async def _llm_scene_dialogue_examples_create(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.scene_dialogue_examples import create_scene_dialogue_example
+
+        try:
+            item = create_scene_dialogue_example(
+                bot_id=int(body.get("bot_id") or 0),
+                scene=str(body.get("scene") or ""),
+                user_cue=str(body.get("user_cue") or ""),
+                positive=str(body.get("positive") or ""),
+                negative=str(body.get("negative") or ""),
+                enabled=bool(body.get("enabled", True)),
+                order=int(body.get("order") or 0),
+            )
+        except (TypeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": item.model_dump(mode="json")})
+
+    @router.put(f"{x}/common-config/llm/persona/scene-dialogue-examples/{{example_id}}", include_in_schema=True)
+    async def _llm_scene_dialogue_examples_update(
+        example_id: str,
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.scene_dialogue_examples import update_scene_dialogue_example
+
+        try:
+            item = update_scene_dialogue_example(example_id, **body)
+        except (TypeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        if item is None:
+            raise HTTPException(status_code=404, detail="scene dialogue example not found")
+        return JSONResponse({"ok": True, "data": item.model_dump(mode="json")})
+
+    @router.delete(f"{x}/common-config/llm/persona/scene-dialogue-examples/{{example_id}}", include_in_schema=True)
+    async def _llm_scene_dialogue_examples_delete(
+        example_id: str,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.scene_dialogue_examples import delete_scene_dialogue_example
+
+        if not delete_scene_dialogue_example(example_id):
+            raise HTTPException(status_code=404, detail="scene dialogue example not found")
+        return JSONResponse({"ok": True, "data": {"id": example_id}})
+
     @router.get(f"{x}/common-config/llm/persona/export", include_in_schema=True)
     async def _llm_persona_export_get(
         bot_id: int = Query(..., ge=1),

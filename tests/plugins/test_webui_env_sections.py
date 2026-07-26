@@ -152,6 +152,12 @@ def test_field_to_env_uppercase_keys_matches_plugin_api():
     assert m["pallas_webui_enabled"] == "PALLAS_WEBUI_ENABLED"
 
 
+def test_llm_style_variant_field_maps_to_runtime_env():
+    from pallas.console.webui.env_sections import _llm_section
+
+    assert _llm_section().field_to_env["llm_reply_style_variants"] == "LLM_REPLY_STYLE_VARIANTS"
+
+
 def test_mail_patch_roundtrip_via_internal_section(tmp_path, monkeypatch):
     import json
 

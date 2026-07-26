@@ -47,6 +47,7 @@ class BehaviorPattern(BaseModel):
     persona_affinity: str = ""
     trigger_features: list[str] = Field(default_factory=list)
     reference_examples: list[str] = Field(default_factory=list)
+    applied_outcome_ids: list[str] = Field(default_factory=list)
 
 
 class BehaviorRun(BaseModel):
@@ -60,12 +61,15 @@ class BehaviorRun(BaseModel):
     reply_text: str = ""
     selected_pattern_ids: list[str] = Field(default_factory=list)
     selected_actions: list[BehaviorAction] = Field(default_factory=list)
+    selected_expression_ids: list[str] = Field(default_factory=list)
+    selected_catchphrase_ids: list[str] = Field(default_factory=list)
     behavior_hint_text: str = ""
     final_outcome: BehaviorOutcome | None = None
     score_delta: int = 0
     auto_feedback_payload: dict[str, Any] = Field(default_factory=dict)
     manual_labels: list[str] = Field(default_factory=list)
     disabled: bool = False
+    effects_applied: bool = False
 
 
 _PROVOCATION_TOKENS = ("效忠", "反党", "走资派", "快说", "表态", "忠诚")
