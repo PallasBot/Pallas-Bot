@@ -403,3 +403,15 @@ def test_resolve_llm_chat_enabled_priority(monkeypatch: pytest.MonkeyPatch) -> N
     set_env({})
     assert resolve_llm_chat_enabled() is False
     assert resolve_legacy_rwkv_drunk_chat_enabled() is False
+
+
+def test_resolve_llm_runtime_always_uses_bot_kernel(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import config as llm_config
+
+    monkeypatch.setattr(
+        llm_config,
+        "repo_env_raw_value",
+        lambda key: "ai_service" if key == "LLM_RUNTIME" else None,
+    )
+
+    assert llm_config.resolve_llm_runtime() == "bot_kernel"

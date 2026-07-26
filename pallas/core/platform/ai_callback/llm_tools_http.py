@@ -1,4 +1,4 @@
-"""AI 仓回调 Bot 执行 LLM tools。"""
+"""兼容 AI 扩展回调 Bot 执行 LLM tools；内核 tool loop 不经此路由。"""
 
 from __future__ import annotations
 
