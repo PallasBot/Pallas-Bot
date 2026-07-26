@@ -138,7 +138,9 @@ async def save_memory_entry(
     keywords = derive_memory_keywords(safe_content)
     embedding_json: str | None = None
     embedding_model: str | None = None
-    if c.llm_vector_retrieve != "keyword":
+    from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
+
+    if vector_retrieve_mode(c) != "keyword":
         from pallas.product.llm.knowledge.embedding_client import embedding_model_name, fetch_embeddings_sync
         from pallas.product.llm.memory.retrieve import dump_embedding_json, memory_embedding_text
 
@@ -281,7 +283,11 @@ async def retrieve_memory_hits(
             .all()
         )
     from pallas.product.llm.knowledge.embedding_client import embedding_model_name
-    from pallas.product.llm.memory.retrieve import dump_embedding_json, rank_memory_candidates
+    from pallas.product.llm.memory.retrieve import (
+        dump_embedding_json,
+        effective_memory_rag_min_score,
+        rank_memory_candidates,
+    )
 
     candidates = [
         {
@@ -313,7 +319,7 @@ async def retrieve_memory_hits(
                 await session.commit()
         except Exception as exc:
             logger.warning("memory embedding cache persist failed err={}", exc)
-    min_score = max(0, int(getattr(c, "llm_memory_rag_min_score", 0) or 0))
+    min_score = effective_memory_rag_min_score(c)
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     for item in scored:

@@ -14,6 +14,11 @@ _TOKEN_RE = re.compile(r"[\u4e00-\u9fff]{2,}|[a-z0-9]{2,}", re.IGNORECASE)
 _CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]+")
 
 
+def effective_memory_rag_min_score(cfg: Any) -> int:
+    configured = max(0, int(getattr(cfg, "llm_memory_rag_min_score", 0) or 0))
+    return 12 if vector_retrieve_mode(cfg) == "keyword" else configured
+
+
 def tokenize_for_memory(text: str) -> set[str]:
     tokens = {match.group(0).lower() for match in _TOKEN_RE.finditer(text or "")}
     for match in _CJK_RUN_RE.finditer(text or ""):

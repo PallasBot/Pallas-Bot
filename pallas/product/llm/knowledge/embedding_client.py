@@ -1,4 +1,4 @@
-"""Bot 内核本地 embeddings（hash stub，供知识/记忆检索；不再依赖 AI HTTP）。"""
+"""知识与记忆检索的 embedding 客户端。"""
 
 from __future__ import annotations
 
@@ -6,19 +6,34 @@ import hashlib
 from operator import itemgetter
 from typing import TYPE_CHECKING, Any
 
+import httpx
+
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 
 if TYPE_CHECKING:
     from pallas.product.llm.config import LlmConfig
 
 _DEFAULT_DIMS = 16
+_last_embedding_error = ""
 
 
 def embedding_model_name(cfg: LlmConfig | None = None) -> str:
-    _ = cfg
+    configured = str(getattr(cfg, "llm_embedding_model", "") or "").strip()
+    if configured:
+        return configured
     raw = repo_env_raw_value("LLM_EMBEDDING_MODEL")
     model = str(raw or "stub").strip()
     return model or "stub"
+
+
+def embedding_capability_trace(cfg: LlmConfig | None = None) -> dict[str, Any]:
+    model = embedding_model_name(cfg)
+    return {
+        "embedding_model": model,
+        "embedding_fallback": bool(_last_embedding_error),
+        "embedding_error": _last_embedding_error or None,
+        "semantic_available": model.lower() != "stub" and not _last_embedding_error,
+    }
 
 
 def stub_embedding(text: str, *, dims: int = _DEFAULT_DIMS) -> list[float]:
@@ -60,11 +75,38 @@ def fetch_embeddings_sync(
     cfg: LlmConfig | None = None,
     timeout_sec: float = 8.0,
 ) -> list[list[float]] | None:
-    _ = cfg, timeout_sec
+    global _last_embedding_error  # noqa: PLW0603
     inputs = [str(text or "").strip() for text in texts]
     if not inputs or any(not text for text in inputs):
         return None
-    return [stub_embedding(text) for text in inputs]
+    model = embedding_model_name(cfg)
+    if model.lower() == "stub":
+        _last_embedding_error = ""
+        return [stub_embedding(text) for text in inputs]
+    try:
+        from pallas.product.llm.provider_client import auth_headers, openai_api_root
+        from pallas.product.llm.providers_store import resolve_endpoint_for_task
+
+        endpoint = resolve_endpoint_for_task("llm_chat")
+        base_url = str(getattr(endpoint, "base_url", "") or getattr(cfg, "llm_base_url", "")).strip()
+        api_key = str(getattr(endpoint, "api_key", "") or getattr(cfg, "llm_api_key", "")).strip()
+        if not base_url:
+            raise ValueError("embedding provider base_url not configured")
+        response = httpx.post(
+            f"{openai_api_root(base_url)}/embeddings",
+            headers=auth_headers(api_key),
+            json={"model": model, "input": inputs},
+            timeout=timeout_sec,
+        )
+        response.raise_for_status()
+        vectors = parse_embeddings_response(response.json())
+        if len(vectors) != len(inputs):
+            raise ValueError("embedding response count mismatch")
+        _last_embedding_error = ""
+        return vectors
+    except Exception as exc:
+        _last_embedding_error = str(exc)[:240]
+        return [stub_embedding(text) for text in inputs]
 
 
 def embeddings_payload_for_api(texts: list[str], *, model: str | None = None) -> dict[str, Any]:

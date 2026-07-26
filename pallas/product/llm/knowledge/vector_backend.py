@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
-from pallas.product.llm.config import VectorRetrieveMode, resolve_llm_vector_retrieve
+from pallas.product.llm.config import VectorRetrieveMode, get_llm_config, resolve_llm_vector_retrieve
 
 if TYPE_CHECKING:
     from pallas.product.llm.knowledge.models import KnowledgeSourceDecl, RetrievedKnowledgeChunk
@@ -21,8 +21,17 @@ class VectorRetrieveBackend(Protocol):
     ) -> list[RetrievedKnowledgeChunk]: ...
 
 
-def vector_retrieve_mode() -> VectorRetrieveMode:
-    return resolve_llm_vector_retrieve()
+def effective_vector_retrieve_mode(cfg=None) -> VectorRetrieveMode:
+    from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
+
+    configured = resolve_llm_vector_retrieve() if cfg is None else cfg.llm_vector_retrieve
+    if not embedding_capability_trace(cfg)["semantic_available"]:
+        return "keyword"
+    return configured
+
+
+def vector_retrieve_mode(cfg=None) -> VectorRetrieveMode:
+    return effective_vector_retrieve_mode(cfg or get_llm_config())
 
 
 class KeywordVectorBackend:
@@ -150,12 +159,12 @@ _active_backend: VectorRetrieveBackend | None = None
 
 def get_vector_retrieve_backend() -> VectorRetrieveBackend:
     global _active_backend
+    want_embedding = vector_retrieve_mode() in ("embedding", "hybrid", "vector")
     if _active_backend is not None:
-        return _active_backend
-    if vector_retrieve_mode() in ("embedding", "hybrid", "vector"):
-        _active_backend = EmbeddingAugmentedBackend()
-    else:
-        _active_backend = KeywordVectorBackend()
+        is_embedding = isinstance(_active_backend, EmbeddingAugmentedBackend)
+        if is_embedding == want_embedding:
+            return _active_backend
+    _active_backend = EmbeddingAugmentedBackend() if want_embedding else KeywordVectorBackend()
     return _active_backend
 
 
