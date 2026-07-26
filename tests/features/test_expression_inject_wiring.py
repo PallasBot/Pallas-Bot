@@ -10,8 +10,8 @@ import pytest
 async def test_llm_chat_expression_suffix_passes_user_text_and_bot_id(monkeypatch) -> None:
     from packages.llm_chat import chat_message as mod
 
-    suffix = AsyncMock(return_value="\n【表达参考】\n吐槽→太难了。")
-    monkeypatch.setattr(mod, "build_expression_context_suffix", suffix)
+    suffix = AsyncMock(return_value=("\n【表达参考】\n吐槽→太难了。", []))
+    monkeypatch.setattr(mod, "build_expression_context_with_entries", suffix)
 
     result = await mod.build_llm_chat_expression_suffix(10001, "今天加班太离谱了", bot_id=20002)
 

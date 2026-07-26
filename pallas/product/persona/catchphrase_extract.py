@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any
 
+from pallas.product.persona.occasion import OccasionTag
+
 # 口癖：短、可复用；整句接话 / 多意图枚举不应入库
 _HABIT_MIN = 2
 _HABIT_MAX = 12
@@ -29,8 +31,12 @@ def clean_catchphrase_text(text: str) -> str:
 
 def is_catchphrase_habit(saying: str) -> bool:
     """是否像可反复带上的短口癖，而非完整接话。"""
+    from pallas.product.persona.soft_agree_fillers import is_weak_catchphrase_saying
+
     plain = clean_catchphrase_text(saying)
     if not _HABIT_MIN <= len(plain) <= _HABIT_MAX:
+        return False
+    if is_weak_catchphrase_saying(plain):
         return False
     if "[cq:" in plain.lower():
         return False
@@ -50,10 +56,14 @@ def is_catchphrase_habit(saying: str) -> bool:
 
 def _occasion_for(saying: str) -> str:
     if _SELF_TAG_RE.fullmatch(saying):
-        return "自称梗"
+        return OccasionTag.SELF_REFERENCE
     if _PARTICLE_TAIL_RE.match(saying):
-        return "语气尾巴"
-    return "口头禅"
+        return OccasionTag.SENTENCE_TAIL
+    if any(token in saying for token in ("笑", "梗", "典", "蚌", "乐")):
+        return OccasionTag.BANTER
+    if any(token in saying for token in ("咋了", "怎么了", "收到")):
+        return OccasionTag.SMALLTALK
+    return OccasionTag.SMALLTALK
 
 
 def extract_catchphrase_candidates(text: str, *, limit: int = 3) -> list[tuple[str, str]]:
@@ -131,8 +141,10 @@ def parse_llm_catchphrase_payload(raw: str) -> list[tuple[str, str]]:
 _EXTRACT_SYSTEM = (
     "你从机器人成功回复里抽取账号口癖候选。"
     "口癖是短、可反复自然带上的语气习惯或自称梗（如「我chovy」「那很牛了」「好耶」），"
-    "不是完整接话、不是能力介绍、不是多逗号并列。"
-    '只输出 JSON：{"items":[{"saying":"...","occasion":"自称梗|口头禅|语气尾巴"}]}'
+    "不是完整接话、不是能力介绍、不是多逗号并列，"
+    "也不是万能软答应（行行行/好好好/还行吧/行啊/嗯？）。"
+    "occasion 要写真实使用场合（自称梗|接梗玩笑|日常接话|顶嘴吐槽|安抚情绪|语气尾巴），不要一律口头禅。"
+    '只输出 JSON：{"items":[{"saying":"...","occasion":"..."}]}'
     '最多 3 条；没有则 {"items":[]}。'
 )
 

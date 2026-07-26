@@ -25,19 +25,27 @@ async def resolve_chat_messages(
     c = cfg or get_llm_config()
     task = str(request.task or "").strip().lower()
     if is_repeater_llm_task(task):
-        return build_chat_messages(request.user_text, max_len=c.user_message_max_len)
-    if is_llm_session_store_available() and request.bot_id is not None and request.user_id is not None:
-        return await build_llm_chat_messages(
+        messages = build_chat_messages(request.user_text, max_len=c.user_message_max_len)
+    elif is_llm_session_store_available() and request.bot_id is not None and request.user_id is not None:
+        messages = await build_llm_chat_messages(
             int(request.bot_id),
             request.group_id,
             int(request.user_id),
             request.user_text,
             cfg=c,
         )
-    user_turn = format_user_turn(request.user_text, max_len=c.user_message_max_len)
-    if not user_turn:
-        return []
-    return [ChatCompletionMessage(role="user", content=user_turn)]
+    else:
+        user_turn = format_user_turn(request.user_text, max_len=c.user_message_max_len)
+        messages = [ChatCompletionMessage(role="user", content=user_turn)] if user_turn else []
+    if messages and request.style_user_hints:
+        from pallas.product.llm.turn_style_layers import merge_style_hints_before_last_user
+
+        messages = merge_style_hints_before_last_user(
+            messages,
+            list(request.style_user_hints),
+            message_cls=ChatCompletionMessage,
+        )
+    return messages
 
 
 async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None = None) -> ChatSubmitResult:

@@ -430,6 +430,12 @@ async def run_ai_callback(
                         for item in list(task.get("behavior_actions") or [])
                         if str(item).strip()
                     ],
+                    selected_expression_ids=[
+                        str(item) for item in list(task.get("selected_expression_ids") or []) if str(item).strip()
+                    ],
+                    selected_catchphrase_ids=[
+                        str(item) for item in list(task.get("selected_catchphrase_ids") or []) if str(item).strip()
+                    ],
                     behavior_hint_text=str(task.get("behavior_hint") or "").strip(),
                     auto_feedback_payload={"agent_trace": parsed_agent_trace} if parsed_agent_trace else {},
                 )

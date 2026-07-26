@@ -417,6 +417,20 @@ class LlmWebuiConfig(BaseModel):
             "开启后表情包 @ 不会提交智能对话",
         ),
     )
+    llm_current_turn_decision_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "是否启用本轮动作小模型决策",
+            "默认关闭并保持原回复流程；开启后模型仅在 REPLY、PASS、TOOL、FOLLOW_UP 中选择。",
+        ),
+    )
+    llm_current_turn_decision_model: str = Field(
+        default="",
+        description=field_help(
+            "本轮动作决策模型",
+            "留空使用智能对话默认模型；建议填写低延迟小模型。",
+        ),
+    )
     llm_chat_queue_merge: bool = Field(
         default=True,
         description=field_help(
@@ -459,6 +473,19 @@ class LlmWebuiConfig(BaseModel):
             "与上方 LLM 对话软拦截合并后用于 repeater_polish_lite",
         ),
     )
+    llm_persona_output_firewall: dict[str, object] = Field(
+        default_factory=lambda: {
+            "version": 1,
+            "enabled": False,
+            "severity": "strict",
+            "strategy": "retry_then_fallback",
+            "max_retries": 1,
+        },
+        description=field_help(
+            "人设一致性输出防火墙",
+            "JSON 对象；默认关闭。开启后检查提示词泄露、舞台动作、模型身份冲突和重复垫词；最多重述一次。",
+        ),
+    )
     llm_reply_postprocess_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -494,6 +521,24 @@ class LlmWebuiConfig(BaseModel):
         description=field_help(
             "是否异步记录回复效果启发式评分",
             "默认关闭；落盘到 data 目录，不影响主路径延迟",
+        ),
+    )
+    llm_reply_style_variants: dict[str, object] = Field(
+        default_factory=lambda: {
+            "version": 1,
+            "enabled": True,
+            "base_probability": 0.25,
+            "affect_styles": {
+                "warm": ["playful", "follow"],
+                "cool": ["cool", "direct"],
+                "chaotic": ["playful", "rhetorical"],
+                "assertive": ["direct", "rhetorical"],
+                "default": ["cool", "playful", "direct", "rhetorical", "follow"],
+            },
+        },
+        description=field_help(
+            "本轮回复风格变体",
+            "仅以临时提示影响当轮，不写入牛格。version=1；可设置 enabled、base_probability 与 affect_styles。",
         ),
     )
     llm_memory_rag_enabled: bool = Field(
@@ -645,12 +690,15 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_repeater_writeback_enabled=cfg.llm_repeater_writeback_enabled,
         conversation_feature_level=cfg.conversation_feature_level or "",  # type: ignore[arg-type]
         llm_reply_gate_enabled=cfg.llm_reply_gate_enabled,
+        llm_current_turn_decision_enabled=cfg.llm_current_turn_decision_enabled,
+        llm_current_turn_decision_model=cfg.llm_current_turn_decision_model,
         llm_chat_queue_merge=cfg.llm_chat_queue_merge,
         llm_output_filter_enabled=cfg.llm_output_filter_enabled,
         llm_output_filter_chat_hard_phrases=cfg.llm_output_filter_chat_hard_phrases,
         llm_output_filter_chat_soft_phrases=cfg.llm_output_filter_chat_soft_phrases,
         llm_output_filter_polish_lite_hard_phrases=cfg.llm_output_filter_polish_lite_hard_phrases,
         llm_output_filter_polish_lite_soft_phrases=cfg.llm_output_filter_polish_lite_soft_phrases,
+        llm_persona_output_firewall=cfg.llm_persona_output_firewall,
         llm_reply_postprocess_enabled=cfg.llm_reply_postprocess_enabled,
         llm_reply_typo_enabled=cfg.llm_reply_typo_enabled,
         llm_reply_typo_rate=cfg.llm_reply_typo_rate,
@@ -658,6 +706,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_reply_split_max_chars=cfg.llm_reply_split_max_chars,
         llm_sticker_fit_enabled=cfg.llm_sticker_fit_enabled,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
+        llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
         llm_expression_inject_enabled=cfg.llm_expression_inject_enabled,
         llm_expression_learn_enabled=cfg.llm_expression_learn_enabled,

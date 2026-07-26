@@ -58,21 +58,43 @@ async def build_expression_context_suffix(
     plain_text: str,
     *,
     bot_id: int = 0,
+    scene: str = "",
     style_profile: dict[str, Any] | None = None,
     blocked_openers: list[str] | None = None,
 ) -> str:
+    reference, _entries = await build_expression_context_with_entries(
+        group_id,
+        plain_text,
+        bot_id=bot_id,
+        scene=scene,
+        style_profile=style_profile,
+        blocked_openers=blocked_openers,
+    )
+    return reference
+
+
+async def build_expression_context_with_entries(
+    group_id: int | None,
+    plain_text: str,
+    *,
+    bot_id: int = 0,
+    scene: str = "",
+    style_profile: dict[str, Any] | None = None,
+    blocked_openers: list[str] | None = None,
+) -> tuple[str, list]:
+    """Return the exact entries used to build the expression reference."""
     """Prefer matched expression-bank references, then retain profile habits."""
     cfg = get_llm_config()
     if cfg.llm_expression_inject_enabled and group_id is not None and str(plain_text or "").strip():
-        entries = await asyncio.to_thread(
-            retrieve_expressions_for_message,
-            int(group_id),
-            plain_text,
-            limit=cfg.llm_expression_retrieve_limit,
-            bot_id=bot_id,
-            blocked_openers=blocked_openers or (),
-        )
+        kwargs = {
+            "limit": cfg.llm_expression_retrieve_limit,
+            "bot_id": bot_id,
+            "blocked_openers": blocked_openers or (),
+        }
+        if scene:
+            kwargs["scene"] = scene
+        entries = await asyncio.to_thread(retrieve_expressions_for_message, int(group_id), plain_text, **kwargs)
         reference = build_expression_reference_block(entries, limit=cfg.llm_expression_retrieve_limit)
         if reference:
-            return reference
-    return build_expression_habits_suffix(style_profile)
+            return reference, entries
+    return build_expression_habits_suffix(style_profile), []
