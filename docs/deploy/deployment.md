@@ -230,7 +230,7 @@ WantedBy=multi-user.target
 
 ## AI 功能（可选）
 
-基础功能（复读、轮盘等）不依赖独立 AI 服务。唱歌、闲聊、TTS 等须 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，对 GPU/内存要求较高。
+基础功能（复读、轮盘等）不依赖独立 AI 服务。普通闲聊在 Bot WebUI「AI 配置 → 接入」配置 Provider 即可；唱歌、TTS 和遗留 RWKV 才须 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，并可能需要更高 GPU/内存配置。
 
 ---
 
