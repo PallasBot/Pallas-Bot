@@ -98,16 +98,215 @@ docker compose --env-file ./pallas-bot/config/compose.env down
 ```
 
 ::: details 全栈（Bot + PG + Redis + Ollama + AI）
-再下载 `docker-compose.full.yml`：
+仓库根目录只提供默认 `docker-compose.yml`（Bot + PostgreSQL）。需要 AI Runtime / Ollama 时，将下面 YAML 另存为部署目录中的 `docker-compose.full.yml`，再启动。
+
+准备目录与 `pallas.toml` / `compose.env` 与上文相同；另建 `pallas-bot-ai/logs`。`[bootstrap.postgres].host` 填 **`postgres`**。
+
+```yaml
+# Bot + PostgreSQL + Redis + Ollama + AI Runtime
+# 启动: docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose.env up -d
+# 可选预拉模型: 追加 --profile pull-models
+# GPU: 再叠加下文 docker-compose.full.gpu.yml
+
+name: pallas-full
+
+services:
+  pallasbot:
+    container_name: pallasbot
+    image: pallasbot/pallas-bot:latest
+    restart: always
+    ports:
+      - "${BOT_PORT:-8088}:${BOT_LISTEN_PORT:-8088}"
+    environment:
+      TZ: Asia/Shanghai
+      ENVIRONMENT: prod
+      APP_MODULE: bot:app
+      MAX_WORKERS: 1
+      PORT: ${BOT_LISTEN_PORT:-8088}
+      DB_BACKEND: postgresql
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_USER: ${PG_USER:-pallas}
+      PG_PASSWORD: ${PG_PASSWORD:-pallas}
+      PG_DB: ${PG_DB:-PallasBot}
+      AI_SERVER_HOST: pallasbot-ai
+      AI_SERVER_PORT: "9099"
+      LLM_CHAT_ENABLED: "true"
+    networks:
+      - pallas-full
+    volumes:
+      - ./pallas-bot/resource/voices:/app/resource/voices
+      - ./pallas-bot/config/pallas.toml:/app/config/pallas.toml
+      - ./pallas-bot/data:/app/data
+      - ./pallas-bot/local/plugins:/app/local/plugins
+      - ./pallas-bot-ai/logs:/ai-logs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pallasbot-ai:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    container_name: pallasbot_postgres
+    image: postgres:16-alpine
+    restart: always
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - track_io_timing=on
+      - -c
+      - idle_in_transaction_session_timeout=15s
+    environment:
+      TZ: Asia/Shanghai
+      POSTGRES_USER: ${PG_USER:-pallas}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-pallas}
+      POSTGRES_DB: ${PG_DB:-PallasBot}
+    networks:
+      - pallas-full
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  redis:
+    image: redis:7-alpine
+    container_name: pallas-full-redis
+    command: redis-server --appendonly yes
+    networks:
+      - pallas-full
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: pallas-full-ollama
+    networks:
+      - pallas-full
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  ollama-init:
+    profiles: ["pull-models"]
+    image: ollama/ollama:latest
+    container_name: pallas-full-ollama-init
+    networks:
+      - pallas-full
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      OLLAMA_CATEGORIZER_MODEL: ${LLM_CATEGORIZER_MODEL:-qwen2.5:0.5b}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until wget -q -O- http://ollama:11434/api/tags >/dev/null 2>&1; do sleep 2; done
+        ollama pull "$${OLLAMA_MODEL:-qwen2.5:7b}"
+        ollama pull "$${OLLAMA_CATEGORIZER_MODEL:-qwen2.5:0.5b}"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  pallasbot-ai:
+    image: ${PALLAS_AI_IMAGE:-pallasbot/pallas-bot-ai:slim}
+    container_name: pallasbot-ai
+    ports:
+      - "${AI_SERVER_PORT:-9099}:9099"
+    environment:
+      TZ: Asia/Shanghai
+      REDIS_URL: redis://redis:6379/0
+      LLM_SESSION_BACKEND: redis
+      CALLBACK_HOST: pallasbot
+      CALLBACK_PORT: ${BOT_LISTEN_PORT:-8088}
+      LLM_CHAT_ENABLED: "true"
+      LLM_PROVIDER_MODE: ${LLM_PROVIDER_MODE:-local_only}
+      LLM_BACKEND_URL: http://ollama:11434
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      LLM_CATEGORIZER_MODEL: ${LLM_CATEGORIZER_MODEL:-qwen2.5:0.5b}
+      LLM_AUTO_START: "false"
+      CELERY_TASK_PACKAGES: llm
+      AI_ENABLE_MEDIA_WORKER: "0"
+      PALLAS_AI_API_TOKEN: ${PALLAS_AI_API_TOKEN:-}
+    networks:
+      - pallas-full
+    volumes:
+      - ./pallas-bot-ai/logs:/server/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9099/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+networks:
+  pallas-full:
+
+volumes:
+  redis_data:
+  ollama_data:
+```
 
 ```bash
-curl -fsSL -o docker-compose.full.yml \
-  https://raw.githubusercontent.com/PallasBot/Pallas-Bot/main/docker-compose.full.yml
 docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose.env up -d
 # 可选预拉 Ollama 模型: 追加 --profile pull-models
 ```
 
-默认 AI 镜像为 **`pallasbot/pallas-bot-ai:slim`**，仅供媒体任务与遗留 RWKV 使用，不预拉模型。Bot 容器通过 **`AI_SERVER_HOST=pallasbot-ai`** 连接已启用的 AI 服务，**不会在容器内 clone** AI 仓。LLM 聊天默认走 Bot 内核 Provider，不必依赖 9099。有 NVIDIA GPU 且需唱歌/TTS 时，在 `compose.env` 设 `PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest` 并叠加 `docker-compose.full.gpu.yml`。始终验收 `8088`；启用 AI Runtime 时再验收 `9099`。
+默认 AI 镜像为 **`pallasbot/pallas-bot-ai:slim`**，仅供媒体任务与遗留 RWKV 使用，不预拉模型。Bot 容器通过 **`AI_SERVER_HOST=pallasbot-ai`** 连接已启用的 AI 服务。LLM 聊天默认走 Bot 内核 Provider，不必依赖 9099。始终验收 `8088`；启用 AI Runtime 时再验收 `9099`。
+
+`BOT_PORT` = 宿主机访问端口；`BOT_LISTEN_PORT` = 容器内监听（默认皆 8088）。AI 回调走 `BOT_LISTEN_PORT`，只改宿主机端口时勿动它。
+
+有 NVIDIA GPU 且需唱歌/TTS 时，在 `compose.env` 设 `PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest`，并将下面内容另存为 `docker-compose.full.gpu.yml` 后叠加：
+
+```yaml
+# GPU 覆盖层（需 NVIDIA container toolkit）
+# docker compose -f docker-compose.full.yml -f docker-compose.full.gpu.yml \
+#   --env-file ./pallas-bot/config/compose.env up -d
+
+services:
+  ollama:
+    runtime: nvidia
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1"]
+      interval: 5m
+      timeout: 15s
+      retries: 2
+      start_period: 60s
+```
 :::
 
 ::: details MongoDB（3.x 升级沿用）
@@ -130,7 +329,116 @@ docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d
 :::
 
 ::: details 多进程分片
-参考仓库 [`docker-compose.shard.example.yml`](https://github.com/PallasBot/Pallas-Bot/blob/main/docker-compose.shard.example.yml)；说明见 [分片部署](/maintainer/deploy/sharded)。
+官方根目录 Compose 面向单进程。源码部署优先 `./scripts/run_sharded_bot.sh`（见 [分片部署](/maintainer/deploy/sharded)）。若坚持用 Docker，可将下面示例另存为 `docker-compose.shard.yml`（hub + 2 worker；按需复制 worker 段并改端口 / `PALLAS_SHARD_ID`）。协议端反向 WS 须连 **worker** 端口（8090+），不是 hub 8088。`pallas.toml` 的 `[env]` 可设 `REDIS_URL=redis://redis:6379/0`，或依赖下方环境变量。
+
+```yaml
+name: pallas-bot-shard
+
+x-pallas-common: &pallas-common
+  image: pallasbot/pallas-bot:latest
+  restart: always
+  environment: &pallas-env
+    TZ: Asia/Shanghai
+    ENVIRONMENT: prod
+    MAX_WORKERS: 1
+    PALLAS_SHARD_ENABLED: "true"
+    PG_HOST: postgres
+    PG_PORT: "5432"
+    REDIS_URL: redis://redis:6379/0
+  volumes: &pallas-volumes
+    - ./pallas-bot/resource/voices:/app/resource/voices
+    - ./pallas-bot/config/pallas.toml:/app/config/pallas.toml
+    - ./pallas-bot/data:/app/data
+    - ./pallas-bot/local/plugins:/app/local/plugins
+  networks:
+    - pallasbot
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  pallas-hub:
+    <<: *pallas-common
+    container_name: pallas-hub
+    ports:
+      - "8088:8088"
+    environment:
+      <<: *pallas-env
+      APP_MODULE: bot_hub:app
+      PALLAS_BOT_ROLE: hub
+      PORT: "8088"
+      PALLAS_SHARD_WORKER_BASE_PORT: "8090"
+      PALLAS_SHARD_BOTS_PER: "5"
+
+  pallas-worker-0:
+    <<: *pallas-common
+    container_name: pallas-worker-0
+    ports:
+      - "8090:8090"
+    environment:
+      <<: *pallas-env
+      APP_MODULE: bot_worker:app
+      PALLAS_BOT_ROLE: worker
+      PALLAS_SHARD_ID: "0"
+      PORT: "8090"
+
+  pallas-worker-1:
+    <<: *pallas-common
+    container_name: pallas-worker-1
+    ports:
+      - "8091:8091"
+    environment:
+      <<: *pallas-env
+      APP_MODULE: bot_worker:app
+      PALLAS_BOT_ROLE: worker
+      PALLAS_SHARD_ID: "1"
+      PORT: "8091"
+
+  postgres:
+    container_name: pallasbot_postgres
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+      POSTGRES_USER: ${PG_USER:-pallas}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-pallas}
+      POSTGRES_DB: ${PG_DB:-PallasBot}
+    networks:
+      - pallasbot
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  redis:
+    container_name: pallasbot_redis
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    networks:
+      - pallasbot
+    volumes:
+      - ./redis/data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+networks:
+  pallasbot:
+```
+
+```bash
+docker compose -f docker-compose.shard.yml --env-file ./pallas-bot/config/compose.env up -d
+```
 :::
 
 ## 排障

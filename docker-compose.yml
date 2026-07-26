@@ -1,5 +1,5 @@
 # 默认：Pallas-Bot + PostgreSQL（与 config/pallas.example.toml 一致）。
-# AI 全栈另用 docker-compose.full.yml；3.x 沿用 MongoDB 加 --profile mongo（见 docs/deploy/docker.md）。
+# AI 全栈 / GPU / 分片编排示例见 docs/deploy/docker.md（文档站「Docker 部署」）。
 # NapCat 等由协议端管理（/protocol/console/）在宿主机或容器内拉起。
 # Bot 主配置：挂载 pallas-bot/config/pallas.toml → /app/config/pallas.toml（见 config/pallas.example.toml）
 # WebUI 插件配置：随 pallas-bot/data 卷持久化（data/pallas_config/webui.json）

@@ -79,7 +79,7 @@ docker compose -f docker-compose.llm.yml up -d
 
 ### 与 Bot 同编排（新装）
 
-使用主仓 **`docker-compose.full.yml`**（PostgreSQL + Bot + Redis + Ollama + AI），见 [Docker 部署](/deploy/docker)。
+使用文档站 [Docker 部署 · 全栈](/deploy/docker) 中的示例 YAML（PostgreSQL + Bot + Redis + Ollama + AI），本地另存后启动。
 
 AI 镜像仅用于媒体 / RWKV。Ollama 模型默认不预拉（`--profile pull-models` 可选）。在 WebUI「AI 配置 → 媒体服务」保存基址时，会同步 Bot 侧 `AI_SERVER_HOST` / `AI_SERVER_PORT`；策略页不再单独填地址。
 

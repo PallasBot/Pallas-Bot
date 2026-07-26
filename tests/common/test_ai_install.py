@@ -32,7 +32,7 @@ def test_ai_install_status_shape(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
     st = ai_install.ai_install_status()
     assert st["detected"] is False
     assert st["git_url"].endswith("Pallas-Bot-AI.git")
-    assert "docker-compose.full.yml" in st["docker_hint"]
+    assert "deploy/docker" in st["docker_hint"]
     assert "pallasbot-ai" in st["docker_hint"]
     assert st["clone_target"] == str((tmp_path / "missing").resolve())
     assert st["layout"] == "missing"

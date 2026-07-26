@@ -11,7 +11,7 @@ superusers = ["你的QQ号"]
 db_backend = "postgresql"
 
 [bootstrap.postgres]
-host = "127.0.0.1"   # docker-compose.full.yml 容器内为 postgres
+host = "127.0.0.1"   # Docker 编排内一般为 postgres
 port = 5432
 user = "pallas"
 password = "pallas"

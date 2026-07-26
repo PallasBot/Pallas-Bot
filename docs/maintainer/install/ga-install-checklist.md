@@ -25,7 +25,7 @@
 ### A1. 准备目录与配置
 
 - [ ] 新建部署目录（例 `~/pallas-deploy`）；Compose 项目目录名勿含中文或空格
-- [ ] 复制 `docker-compose.full.yml`、（可选）`docker-compose.full.gpu.yml`
+- [ ] 按 [Docker 部署 · 全栈](/deploy/docker) 将文档中的全栈 YAML 另存为 `docker-compose.full.yml`（GPU 另存 `docker-compose.full.gpu.yml`）
 - [ ] `mkdir -p pallas-bot/config pallas-bot/data pallas-bot-ai/logs`
 - [ ] 复制 `config/pallas.example.toml` → `pallas-bot/config/pallas.toml`
 - [ ] 编辑 `pallas.toml`：`superusers`；`db_backend = "postgresql"` 与 `[bootstrap.postgres]` 一致
@@ -144,7 +144,7 @@ docker compose -f docker-compose.llm.yml up -d
 
 - [ ] 升级前备份：`pallas-bot/data/`、`mongo/data/`、`pallas.toml`
 - [ ] `pallas.toml` 保持 `db_backend = "mongodb"` + `[bootstrap.mongo]`
-- [ ] 使用根目录 **`docker-compose.yml`**（非 `full`）并加 **`--profile mongo`**；勿换 PG 卷
+- [ ] 使用根目录 **`docker-compose.yml`** 并加 **`--profile mongo`**；勿换 PG 卷
 - [ ] `docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d` 后 Bot health 正常
 - [ ] 历史群数据、语料、配置仍在（抽一条已知数据核对）
 - [ ] （可选）`uv run python tools/migrate_env_to_pallas.py` 仅从旧 `.env` 迁移一次

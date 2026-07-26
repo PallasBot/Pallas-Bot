@@ -33,11 +33,10 @@ def docker_compose_hint() -> str:
     return (
         "当前 Bot 在 Docker 内，无法在此页安装或启停媒体服务。\n"
         "请在宿主机用 compose 管理 AI，控制台只填连接地址并测通。\n"
-        "示例：\n"
-        "  docker compose -f docker-compose.full.yml up -d\n"
-        "  # 或在 Pallas-Bot-AI 仓：\n"
-        "  docker compose -f docker-compose.llm.yml up -d\n"
-        "全栈 compose 通常已注入 AI_SERVER_HOST=pallasbot-ai。"
+        "全栈示例见文档站 Docker 部署「全栈」：\n"
+        "  https://PallasBot.github.io/Pallas-Bot-Docs/deploy/docker\n"
+        "或在 Pallas-Bot-AI 仓使用其 LLM compose。\n"
+        "全栈编排通常已注入 AI_SERVER_HOST=pallasbot-ai。"
     )
 
 

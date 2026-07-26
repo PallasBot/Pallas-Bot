@@ -36,9 +36,6 @@ config/compose.env
 config/pallas.webui.export.toml
 
 docker-compose.yml
-docker-compose.full.yml
-docker-compose.full.gpu.yml
-docker-compose.shard.example.yml
 
 AGENTS.md
 CONTRIBUTING.md
