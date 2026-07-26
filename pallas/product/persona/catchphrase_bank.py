@@ -75,26 +75,30 @@ def propose_catchphrase_from_bot_success(
     text = clean_catchphrase_text(saying)
     if int(bot_id) <= 0 or int(group_id) <= 0 or not is_catchphrase_habit(text):
         return None
-    rows = _load()
-    current = next((row for row in rows if row.bot_id == int(bot_id) and row.saying == text), None)
-    if current is None:
-        current = CatchphraseEntry(
-            entry_id=f"catch-{uuid.uuid4().hex[:12]}",
-            bot_id=int(bot_id),
-            saying=text,
-            occasion=normalize_occasion_tag(clean_catchphrase_text(occasion))[:20],
-            groups_seen=[int(group_id)],
-        )
-        rows.append(current)
-    else:
-        groups = sorted(set(current.groups_seen) | {int(group_id)})
-        update: dict = {"support": current.support + 1, "groups_seen": groups, "updated_at": int(time.time())}
-        if occasion and not current.occasion:
-            update["occasion"] = normalize_occasion_tag(clean_catchphrase_text(occasion))[:20]
-        current = current.model_copy(update=update)
-        rows[rows.index(next(row for row in rows if row.entry_id == current.entry_id))] = current
-    _save(rows)
-    return current
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
+
+    path = _path()
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        rows = _load()
+        current = next((row for row in rows if row.bot_id == int(bot_id) and row.saying == text), None)
+        if current is None:
+            current = CatchphraseEntry(
+                entry_id=f"catch-{uuid.uuid4().hex[:12]}",
+                bot_id=int(bot_id),
+                saying=text,
+                occasion=normalize_occasion_tag(clean_catchphrase_text(occasion))[:20],
+                groups_seen=[int(group_id)],
+            )
+            rows.append(current)
+        else:
+            groups = sorted(set(current.groups_seen) | {int(group_id)})
+            update: dict = {"support": current.support + 1, "groups_seen": groups, "updated_at": int(time.time())}
+            if occasion and not current.occasion:
+                update["occasion"] = normalize_occasion_tag(clean_catchphrase_text(occasion))[:20]
+            current = current.model_copy(update=update)
+            rows[rows.index(next(row for row in rows if row.entry_id == current.entry_id))] = current
+        _save(rows)
+        return current
 
 
 def propose_catchphrases_from_utterance(bot_id: int, group_id: int, text: str) -> list[CatchphraseEntry]:
@@ -145,27 +149,33 @@ def is_auto_promote_eligible(entry: CatchphraseEntry) -> bool:
 
 
 def promote_catchphrase(entry_id: str, *, force: bool = False) -> CatchphraseEntry | None:
-    rows = _load()
-    for index, row in enumerate(rows):
-        if row.entry_id != entry_id:
-            continue
-        if not is_catchphrase_habit(row.saying):
-            return None
-        if not force and not is_auto_promote_eligible(row):
-            return None
-        rows[index] = row.model_copy(update={"status": "active", "updated_at": int(time.time())})
-        _save(rows)
-        return rows[index]
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
+
+    path = _path()
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        rows = _load()
+        for index, row in enumerate(rows):
+            if row.entry_id != entry_id:
+                continue
+            if not is_catchphrase_habit(row.saying) or (not force and not is_auto_promote_eligible(row)):
+                return None
+            rows[index] = row.model_copy(update={"status": "active", "updated_at": int(time.time())})
+            _save(rows)
+            return rows[index]
     return None
 
 
 def reject_catchphrase(entry_id: str) -> CatchphraseEntry | None:
-    rows = _load()
-    for index, row in enumerate(rows):
-        if row.entry_id == entry_id:
-            rows[index] = row.model_copy(update={"status": "rejected", "updated_at": int(time.time())})
-            _save(rows)
-            return rows[index]
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
+
+    path = _path()
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        rows = _load()
+        for index, row in enumerate(rows):
+            if row.entry_id == entry_id:
+                rows[index] = row.model_copy(update={"status": "rejected", "updated_at": int(time.time())})
+                _save(rows)
+                return rows[index]
     return None
 
 
@@ -205,23 +215,24 @@ def record_catchphrase_outcome(entry_ids: list[str], *, scene: str, score_delta:
 
 def reject_weak_filler_catchphrases(bot_id: int | None = None) -> int:
     """把已入库的万能软答应口癖标为 rejected，切断正反馈。"""
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
     from pallas.product.persona.soft_agree_fillers import is_weak_catchphrase_saying
 
-    rows = _load()
-    changed = 0
-    now = int(time.time())
-    for index, row in enumerate(rows):
-        if bot_id is not None and row.bot_id != int(bot_id):
-            continue
-        if row.status == "rejected":
-            continue
-        if not is_weak_catchphrase_saying(row.saying):
-            continue
-        rows[index] = row.model_copy(update={"status": "rejected", "updated_at": now})
-        changed += 1
-    if changed:
-        _save(rows)
-    return changed
+    path = _path()
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        rows = _load()
+        changed = 0
+        now = int(time.time())
+        for index, row in enumerate(rows):
+            if bot_id is not None and row.bot_id != int(bot_id):
+                continue
+            if row.status == "rejected" or not is_weak_catchphrase_saying(row.saying):
+                continue
+            rows[index] = row.model_copy(update={"status": "rejected", "updated_at": now})
+            changed += 1
+        if changed:
+            _save(rows)
+        return changed
 
 
 _SCENE_OCCASION_TOKENS: dict[str, tuple[str, ...]] = {
