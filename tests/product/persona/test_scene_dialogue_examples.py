@@ -1,6 +1,6 @@
-from pydantic import ValidationError
 from fastapi import APIRouter, FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from packages.pb_webui.llm_ops_api import register_llm_ops_router
 from pallas.product.persona.scene_dialogue_examples import (
@@ -54,9 +54,10 @@ def test_storage_and_selector_keep_enabled_scene_relevant_subset(tmp_path, monke
 
     assert selected.scene == "banter"
     assert len(list_scene_dialogue_examples(42)) == 3
-    assert [item.example_id for item in select_scene_dialogue_examples_for_turn(
-        42, scene="banter", user_text="这个梗真的好笑", limit=1
-    )] == [selected.example_id]
+    assert [
+        item.example_id
+        for item in select_scene_dialogue_examples_for_turn(42, scene="banter", user_text="这个梗真的好笑", limit=1)
+    ] == [selected.example_id]
     assert disabled.example_id not in {
         item.example_id
         for item in select_scene_dialogue_examples_for_turn(42, scene="banter", user_text="这个梗真的好笑")
@@ -68,15 +69,32 @@ def test_selector_returns_empty_for_no_data_or_disabled_examples(tmp_path, monke
     assert select_scene_dialogue_examples_for_turn(42, scene="banter", user_text="你好") == []
 
 
+def test_selector_skips_same_scene_example_without_cue_relevance(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    create_scene_dialogue_example(
+        bot_id=42,
+        scene="banter",
+        user_cue="这个梗太好笑了",
+        positive="顺着梗短接。",
+        negative="不要只回行行行。",
+    )
+
+    assert select_scene_dialogue_examples_for_turn(42, scene="banter", user_text="今晚吃什么") == []
+
+
 def test_management_api_handles_empty_create_update_and_delete(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     app = FastAPI()
     router = APIRouter()
-    register_llm_ops_router(router, x="/pallas/api", plugin_config=object(), check_write_token=lambda *_args, **_kwargs: None)
+    register_llm_ops_router(
+        router, x="/pallas/api", plugin_config=object(), check_write_token=lambda *_args, **_kwargs: None
+    )
     app.include_router(router)
     client = TestClient(app)
 
-    assert client.get("/pallas/api/common-config/llm/persona/scene-dialogue-examples", params={"bot_id": 42}).json()["data"] == {
+    assert client.get("/pallas/api/common-config/llm/persona/scene-dialogue-examples", params={"bot_id": 42}).json()[
+        "data"
+    ] == {
         "items": [],
         "count": 0,
     }
@@ -90,8 +108,16 @@ def test_management_api_handles_empty_create_update_and_delete(tmp_path, monkeyp
             "negative": "不要只回行行行。",
         },
     ).json()["data"]
-    assert client.put(
-        f"/pallas/api/common-config/llm/persona/scene-dialogue-examples/{created['example_id']}",
-        json={"enabled": False},
-    ).json()["data"]["enabled"] is False
-    assert client.delete(f"/pallas/api/common-config/llm/persona/scene-dialogue-examples/{created['example_id']}").status_code == 200
+    assert (
+        client.put(
+            f"/pallas/api/common-config/llm/persona/scene-dialogue-examples/{created['example_id']}",
+            json={"enabled": False},
+        ).json()["data"]["enabled"]
+        is False
+    )
+    assert (
+        client.delete(
+            f"/pallas/api/common-config/llm/persona/scene-dialogue-examples/{created['example_id']}"
+        ).status_code
+        == 200
+    )

@@ -165,6 +165,8 @@ def select_scene_dialogue_examples_for_turn(
         if not item.enabled or item.scene != scene_key:
             continue
         overlap = len(query & _keywords(item.user_cue))
+        if overlap <= 0:
+            continue
         scored.append((overlap, item))
     scored.sort(key=lambda pair: (-pair[0], pair[1].order, -pair[1].updated_at, pair[1].example_id))
     return [item for _, item in scored[: min(MAX_SELECT_SCENE_DIALOGUE_EXAMPLES, int(limit))]]
