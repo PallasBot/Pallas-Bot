@@ -67,8 +67,7 @@ def build_command_tool_spec(
                 },
             }
         summary = (
-            f"已派发群口令「{command_text}」。"
-            "向用户确认时必须沿用该口令中的歌名/参数原文，禁止改成其它曲目或编造结果。"
+            f"已派发群口令「{command_text}」。向用户确认时必须沿用该口令中的歌名/参数原文，禁止改成其它曲目或编造结果。"
         )
         return {
             "ok": True,
