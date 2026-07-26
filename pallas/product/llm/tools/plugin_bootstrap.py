@@ -60,6 +60,10 @@ def build_command_tool_spec(
             **result,
         }
 
+    hints = frozenset(str(item).strip() for item in (decl.hints or []) if str(item).strip())
+    visibility = str(decl.visibility or "visible").strip().lower() or "visible"
+    if visibility not in {"visible", "deferred"}:
+        visibility = "visible"
     return LlmToolSpec(
         name=decl.name,
         description=description,
@@ -73,6 +77,8 @@ def build_command_tool_spec(
             ToolCapability.SIDE_EFFECTING.value,
             ToolCapability.REQUIRES_GROUP_CONTEXT.value,
         }),
+        hints=hints,
+        visibility=visibility,
     )
 
 

@@ -70,6 +70,7 @@ __plugin_meta__ = PluginMetadata(
                 description="打开牛牛帮助总览。用户想看有哪些功能、怎么用时使用。",
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛帮助",
+                hints=["帮助", "有哪些功能", "有什么功能", "功能列表", "怎么用", "使用说明", "功能说明"],
             ),
             llm_command_tool_row(
                 name="help.show_topic",
@@ -86,6 +87,7 @@ __plugin_meta__ = PluginMetadata(
                     "required": ["topic"],
                 },
                 command_template="牛牛帮助 {topic}",
+                hints=["帮助", "怎么用", "使用说明"],
             ),
         ],
         "menu_data": [

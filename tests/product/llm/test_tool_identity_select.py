@@ -38,12 +38,17 @@ def test_operator_lookup_still_infers_arknights(text: str) -> None:
 def test_infer_drink_and_help_command_domains() -> None:
     assert "drink" in infer_tool_domains("帮牛牛喝一杯")
     assert "drink" in infer_tool_domains("让它醒一醒别喝了")
+    assert "drink" in infer_tool_domains("来杯酒")
     assert "help" in infer_tool_domains("看看牛牛帮助")
     assert "help" in infer_tool_domains("有哪些功能")
     assert "help" in infer_tool_domains("有什么功能")
+    assert "help" in infer_tool_domains("怎么用")
     assert "llm_chat" in infer_tool_domains("把刚才聊的清空")
     assert "sing" in infer_tool_domains("来唱一首歌")
     assert "sing" in infer_tool_domains("帮我点歌周杰伦")
+    assert "sing" in infer_tool_domains("牛牛音乐 晴天")
+    assert "sing" in infer_tool_domains("放首歌 海阔天空")
+    assert "sing" in infer_tool_domains("来一首稻香")
     assert "roulette" in infer_tool_domains("开一局轮盘")
     assert "roulette" in infer_tool_domains("我要开枪")
     assert "dream" in infer_tool_domains("让牛牛做梦")
@@ -55,4 +60,25 @@ def test_infer_drink_and_help_command_domains() -> None:
     assert "bot_status" in infer_tool_domains("牛牛报数")
     assert "maa" in infer_tool_domains("牛牛长草")
     assert "afdian" in infer_tool_domains("查一下画画额度")
+    assert "tools" in infer_tool_domains("有什么工具可以用")
     assert infer_tool_domains("今天天气不错") == frozenset()
+
+
+def test_parse_decl_keeps_hints_and_visibility() -> None:
+    from pallas.product.llm.tools.declare import llm_command_tool_row
+    from pallas.product.llm.tools.metadata import parse_llm_command_tool_decl
+
+    decl = parse_llm_command_tool_decl(
+        llm_command_tool_row(
+            name="demo.x",
+            command_id="demo.x",
+            description="demo",
+            parameters={"type": "object", "properties": {}},
+            command_template="demo",
+            hints=["音乐", "放歌"],
+            visibility="deferred",
+        )
+    )
+    assert decl is not None
+    assert decl.hints == ["音乐", "放歌"]
+    assert decl.visibility == "deferred"

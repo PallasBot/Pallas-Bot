@@ -54,6 +54,8 @@ class LlmToolSpec:
     plugin_name: str | None = None
     provider_name: str | None = None
     mcp_server_id: str | None = None
+    hints: frozenset[str] = field(default_factory=frozenset)
+    visibility: str = "visible"
 
 
 _REGISTRY: list[LlmToolSpec] = []
@@ -220,7 +222,34 @@ def openai_schemas_from_catalog(catalog: ToolCatalogSnapshot) -> list[dict[str, 
     ]
 
 
-def tool_catalog_for_chat(*, task: str | None = None, user_text: str = "") -> ToolCatalogSnapshot | None:
+def filter_specs_for_chat_visibility(
+    specs: tuple[LlmToolSpec, ...],
+    *,
+    user_text: str = "",
+    activated_names: frozenset[str] | None = None,
+) -> tuple[LlmToolSpec, ...]:
+    """visible 随域注入；deferred 仅 hints 命中或已被 activate。"""
+    from pallas.product.llm.tools.select import deferred_tools_matched_by_hints
+
+    activated = activated_names or frozenset()
+    hint_hits = deferred_tools_matched_by_hints(user_text) if user_text else frozenset()
+    out: list[LlmToolSpec] = []
+    for spec in specs:
+        vis = str(spec.visibility or "visible").strip().lower()
+        if vis != "deferred":
+            out.append(spec)
+            continue
+        if spec.name in activated or spec.name in hint_hits:
+            out.append(spec)
+    return tuple(out)
+
+
+def tool_catalog_for_chat(
+    *,
+    task: str | None = None,
+    user_text: str = "",
+    activated_names: frozenset[str] | None = None,
+) -> ToolCatalogSnapshot | None:
     normalized = str(task or "").strip().lower()
     if normalized in _NO_TOOL_TASKS:
         return None
@@ -234,6 +263,11 @@ def tool_catalog_for_chat(*, task: str | None = None, user_text: str = "") -> To
         domains = inferred
         inferred_domains = sorted(inferred)
     specs = iter_eligible_tool_specs(domains=domains)
+    specs = filter_specs_for_chat_visibility(
+        specs,
+        user_text=user_text,
+        activated_names=activated_names,
+    )
     if not specs:
         return None
     entries = [catalog_entry_for_spec(spec) for spec in specs]

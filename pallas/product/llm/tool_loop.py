@@ -42,6 +42,63 @@ def tool_names_from_schemas(schemas: list[Any]) -> list[str]:
     return names[:24]
 
 
+def _activate_names_from_tool_result(tool_name: str, result: dict[str, Any]) -> list[str]:
+    from pallas.product.llm.tools.discovery import TOOLS_FIND_NAME
+    from pallas.product.llm.tools.registry import from_provider_tool_name
+
+    resolved = from_provider_tool_name(tool_name)
+    if resolved != TOOLS_FIND_NAME:
+        return []
+    payload = result.get("result") if isinstance(result.get("result"), dict) else result
+    if not isinstance(payload, dict):
+        return []
+    raw = payload.get("activate")
+    if not isinstance(raw, list):
+        return []
+    names: list[str] = []
+    for item in raw:
+        name = str(item or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _merge_activated_tool_schemas(
+    schemas: list[Any],
+    activated: list[str],
+) -> list[Any]:
+    from pallas.product.llm.tools.contracts import ToolCatalogSelection, ToolCatalogSnapshot
+    from pallas.product.llm.tools.registry import (
+        catalog_entry_for_spec,
+        list_registered_tools,
+        openai_schemas_from_catalog,
+        to_provider_tool_name,
+    )
+
+    if not activated:
+        return schemas
+    existing = {to_provider_tool_name(name) for name in tool_names_from_schemas(schemas)}
+    existing.update(tool_names_from_schemas(schemas))
+    wanted = {str(name).strip() for name in activated if str(name).strip()}
+    specs = [spec for spec in list_registered_tools() if spec.name in wanted]
+    if not specs:
+        return schemas
+    extra = openai_schemas_from_catalog(
+        ToolCatalogSnapshot(
+            tools=[catalog_entry_for_spec(spec) for spec in specs],
+            selection=ToolCatalogSelection(tools_enabled=True, schema_count=len(specs)),
+        )
+    )
+    merged = list(schemas)
+    for item in extra:
+        fn = item.get("function") if isinstance(item.get("function"), dict) else {}
+        name = str(fn.get("name") or "").strip()
+        if name and name not in existing:
+            merged.append(item)
+            existing.add(name)
+    return merged
+
+
 def summarize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
     error = str(result.get("error") or "").strip() if isinstance(result, dict) else ""
@@ -265,6 +322,16 @@ async def complete_with_tool_loop(
                 "result_preview": summary["result_preview"],
             })
             working.append(tool_result_message(call_id, resolved_name, tool_result))
+            activated = _activate_names_from_tool_result(resolved_name, result_dict)
+            if activated:
+                tool_schemas = _merge_activated_tool_schemas(tool_schemas, activated)
+                schema_names = tool_names_from_schemas(tool_schemas)
+                agent_trace["tool_schema_count"] = len(tool_schemas)
+                agent_trace["tool_names"] = schema_names
+                agent_trace.setdefault("activated_tools", [])
+                for name in activated:
+                    if name not in agent_trace["activated_tools"]:
+                        agent_trace["activated_tools"].append(name)
         agent_trace["rounds"].append(round_trace)
 
     content = str(last_message.get("content", "") or "").strip()
