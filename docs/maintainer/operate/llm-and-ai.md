@@ -1,14 +1,14 @@
 # LLM 与 AI 运维
 
 ::: warning
-`@` 无回复或记不住旧事时，优先查：`LLM_CHAT_ENABLED`、**接入** Provider 是否测通。仅媒体或 `LLM_RUNTIME=ai_service` 时才查 AI Runtime / callback。
+`@` 无回复或记不住旧事时，优先查：`LLM_CHAT_ENABLED`、**接入** Provider 是否测通。媒体任务才查 AI Runtime / callback。
 :::
 
 ## 优先确认
 
 1. **`LLM_CHAT_ENABLED`** 是否为开（总闸关闭时不会聊天）
 2. **Provider**（AI 配置 → 接入）是否可达；默认聊天不依赖 `:9099`
-3. 媒体任务或遗留 `ai_service`：**AI Runtime**（`AI_SERVER_*`）与 **callback** 是否回到 Bot
+3. 媒体任务：**AI Runtime**（`AI_SERVER_*`）与 **callback** 是否回到 Bot
 
 再查任务与会话状态是否可观察。
 
@@ -26,7 +26,7 @@ flowchart TD
   EmbOk -->|是| Store{PG 记忆或 knowledge 有数据?}
   Emb -->|只要关键词| Store
   Store -->|否| Teach[教一句记住或检查 data/pallas_knowledge]
-  Store -->|是| Deeper[再查 runtime-overview 与遗留 ai_service]
+  Store -->|是| Deeper[再查 runtime-overview]
 ```
 
 ## Bot 与 AI Runtime
@@ -34,7 +34,7 @@ flowchart TD
 | 组件 | 职责 |
 | --- | --- |
 | `Pallas-Bot` | 触发、权限、发消息；默认内核直连 Provider 聊天 |
-| `Pallas-Bot-AI` | 媒体 / 异步任务；遗留 `ai_service` 聊天路径 |
+| `Pallas-Bot-AI` | 媒体 / 异步任务 |
 
 功能不可用时，先分清是聊天（Provider）还是媒体（Runtime）。
 

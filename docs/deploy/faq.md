@@ -189,7 +189,7 @@ A: **`pallasbot` 只是 Compose 服务名**，DNS 只在**同一 Compose 网络�
 
 ### Q: 「媒体服务 / AI Runtime」显示不可达，聊天也不能配了吗？
 
-A: **不能混为一谈。** 默认 LLM 聊天走 Bot 内核 Provider，在 **AI 配置 → 接入** 测通并保存即可，**不要求** `:9099` 可达。媒体服务红灯只影响唱歌/TTS 等，以及显式 `LLM_RUNTIME=ai_service` 的遗留路径。排障见 [LLM 与 AI](/maintainer/operate/llm-and-ai)。
+A: **不能混为一谈。** LLM 聊天固定走 Bot 内核 Provider，在 **AI 配置 → 接入** 测通并保存即可，**不要求** `:9099` 可达。媒体服务红灯只影响唱歌/TTS 等媒体任务。排障见 [LLM 与 AI](/maintainer/operate/llm-and-ai)。
 
 ### Q: 3.x 的 `src/plugins` 插件在 4.0 还能用吗？
 

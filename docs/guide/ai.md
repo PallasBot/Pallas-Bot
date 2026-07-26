@@ -41,7 +41,7 @@
 2. 填写密钥 / Base URL 与模型  
 3. **测通 Provider 并保存**（不要求 AI Runtime / `:9099` 可达）
 
-遗留路径：若显式设置 `LLM_RUNTIME=ai_service`，聊天仍走 AI 扩展，此时才需 **媒体服务** 页测通。
+`LLM_RUNTIME` 已兼容为 Bot 内核运行时；聊天无需 **媒体服务** 页测通。
 
 ### 3. 打开对话总闸
 
