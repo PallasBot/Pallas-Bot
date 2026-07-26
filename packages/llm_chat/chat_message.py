@@ -523,6 +523,21 @@ async def handle_llm_chat(bot: Bot, event: Event):
         bot_id=int(bot.self_id),
         blocked_openers=blocked_openers,
     )
+    selected_expression_ids: list[str] = []
+    if expression_suffix and group_id is not None:
+        from pallas.product.persona.expression_retrieve import retrieve_expressions_for_message
+
+        selected_expression_ids = [
+            item.entry_id
+            for item in await asyncio.to_thread(
+                retrieve_expressions_for_message,
+                int(group_id),
+                focus_text,
+                limit=llm_cfg.llm_expression_retrieve_limit,
+                bot_id=int(bot.self_id),
+                blocked_openers=blocked_openers,
+            )
+        ]
     from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
 
     system_prompt = enrich_system_with_situational_rules(
@@ -647,6 +662,16 @@ async def handle_llm_chat(bot: Bot, event: Event):
         scene=str(behavior_scene),
         limit=2,
     )
+    selected_catchphrase_ids: list[str] = []
+    if catchphrase_lines:
+        from pallas.product.persona.catchphrase_bank import select_catchphrases_for_turn
+
+        selected_catchphrase_ids = [
+            item.entry_id
+            for item in select_catchphrases_for_turn(
+                int(bot.self_id), user_text=focus_text, scene=str(behavior_scene), limit=2
+            )
+        ]
     catchphrase_hint = "\n".join(catchphrase_lines) if catchphrase_lines else ""
     ending_hint = build_llm_chat_ending_hint(recent_turns)
     corpus_ending_hint = await build_llm_chat_corpus_ending_hint(
@@ -728,6 +753,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "behavior_pattern_ids": [item.pattern_id for item in behavior_patterns],
             "behavior_actions": [str(item.action) for item in behavior_patterns],
             "behavior_hint": behavior_hint,
+            "selected_expression_ids": selected_expression_ids,
+            "selected_catchphrase_ids": selected_catchphrase_ids,
             "style_user_hints": style_user_hints[:8],
             "same_utterance_redup": bool(redup_hint),
             "alt_style_applied": bool(alt_style_hint),

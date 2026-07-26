@@ -60,6 +60,8 @@ class BehaviorRun(BaseModel):
     reply_text: str = ""
     selected_pattern_ids: list[str] = Field(default_factory=list)
     selected_actions: list[BehaviorAction] = Field(default_factory=list)
+    selected_expression_ids: list[str] = Field(default_factory=list)
+    selected_catchphrase_ids: list[str] = Field(default_factory=list)
     behavior_hint_text: str = ""
     final_outcome: BehaviorOutcome | None = None
     score_delta: int = 0

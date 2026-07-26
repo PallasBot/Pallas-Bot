@@ -25,6 +25,14 @@ from pallas.product.llm.behavior_store import (
     update_behavior_run_annotation,
     upsert_behavior_pattern,
 )
+from pallas.product.persona.occasion import OccasionTag, normalize_occasion_tag
+
+
+def test_normalize_occasion_aliases_and_keeps_unknown_legacy_text() -> None:
+    assert normalize_occasion_tag("接梗玩笑") == OccasionTag.BANTER.value
+    assert normalize_occasion_tag("自称梗") == OccasionTag.SELF_REFERENCE.value
+    assert normalize_occasion_tag("语气尾巴") == OccasionTag.SENTENCE_TAIL.value
+    assert normalize_occasion_tag("朋友吐槽加班") == "朋友吐槽加班"
 
 
 def test_classify_behavior_scene_prefers_provocation() -> None:

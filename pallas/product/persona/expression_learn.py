@@ -10,6 +10,7 @@ from pallas.product.llm.corpus_contamination import is_llm_learning_safe, match_
 from pallas.product.llm.repeater_feedback import is_systemish_promote_text
 from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
 from pallas.product.persona.expression_bank import ExpressionEntry, append_or_merge_expression, build_entry_id
+from pallas.product.persona.occasion import OccasionTag
 
 _COMMANDISH_RE = re.compile(r"^(?:[/!！]|管理口令|封禁|解禁|禁言)", re.IGNORECASE)
 
@@ -46,17 +47,17 @@ def infer_expression_occasion(text: str, stance: str) -> str:
     plain = str(text or "").strip()
     if stance == "complain":
         if any(cue in plain for cue in ("加班", "上班", "下班")):
-            return "吐槽加班"
+            return OccasionTag.VENTING
         if "抽卡" in plain:
-            return "吐槽抽卡"
-        return "吐槽"
+            return OccasionTag.VENTING
+        return OccasionTag.VENTING
     if stance == "warm":
-        return "感谢回应" if any(cue in plain for cue in ("谢", "辛苦", "好耶")) else "友好回应"
+        return OccasionTag.WARM_REPLY
     if stance == "echo":
-        return "附和"
+        return OccasionTag.AGREEMENT
     if any(cue in plain for cue in ("早", "晚安", "晚")):
-        return "日常问候"
-    return "日常接话"
+        return OccasionTag.GREETING
+    return OccasionTag.SMALLTALK
 
 
 def propose_expression_from_utterance(

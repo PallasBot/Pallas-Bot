@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.product.persona.catchphrase_extract import (
@@ -16,6 +16,7 @@ from pallas.product.persona.catchphrase_extract import (
     extract_catchphrase_candidates,
     is_catchphrase_habit,
 )
+from pallas.product.persona.occasion import normalize_occasion_tag
 
 
 class CatchphraseEntry(BaseModel):
@@ -29,6 +30,12 @@ class CatchphraseEntry(BaseModel):
     sources: list[str] = Field(default_factory=lambda: ["llm_success"])
     created_at: int = Field(default_factory=lambda: int(time.time()))
     updated_at: int = Field(default_factory=lambda: int(time.time()))
+    scene_feedback: dict[str, dict[str, int]] = Field(default_factory=dict)
+
+    @field_validator("occasion", mode="before")
+    @classmethod
+    def normalize_occasion(cls, value: object) -> str:
+        return normalize_occasion_tag(clean_catchphrase_text(str(value or "")))
 
 
 def _path() -> Path:
@@ -74,7 +81,7 @@ def propose_catchphrase_from_bot_success(
             entry_id=f"catch-{uuid.uuid4().hex[:12]}",
             bot_id=int(bot_id),
             saying=text,
-            occasion=clean_catchphrase_text(occasion)[:20],
+            occasion=normalize_occasion_tag(clean_catchphrase_text(occasion))[:20],
             groups_seen=[int(group_id)],
         )
         rows.append(current)
@@ -82,7 +89,7 @@ def propose_catchphrase_from_bot_success(
         groups = sorted(set(current.groups_seen) | {int(group_id)})
         update: dict = {"support": current.support + 1, "groups_seen": groups, "updated_at": int(time.time())}
         if occasion and not current.occasion:
-            update["occasion"] = clean_catchphrase_text(occasion)[:20]
+            update["occasion"] = normalize_occasion_tag(clean_catchphrase_text(occasion))[:20]
         current = current.model_copy(update=update)
         rows[rows.index(next(row for row in rows if row.entry_id == current.entry_id))] = current
     _save(rows)
@@ -169,6 +176,25 @@ def list_catchphrases(bot_id: int | None = None, *, status: str | None = None) -
     ]
 
 
+def record_catchphrase_outcome(entry_ids: list[str], *, scene: str, score_delta: int) -> None:
+    targets = {str(item).strip() for item in entry_ids if str(item).strip()}
+    if not targets:
+        return
+    rows = _load()
+    changed = False
+    for index, row in enumerate(rows):
+        if row.entry_id not in targets:
+            continue
+        feedback = {key: dict(value) for key, value in row.scene_feedback.items()}
+        stat = feedback.setdefault(normalize_occasion_tag(scene), {"uses": 0, "score": 0})
+        stat["uses"] = int(stat.get("uses", 0)) + 1
+        stat["score"] = int(stat.get("score", 0)) + int(score_delta)
+        rows[index] = row.model_copy(update={"scene_feedback": feedback})
+        changed = True
+    if changed:
+        _save(rows)
+
+
 def reject_weak_filler_catchphrases(bot_id: int | None = None) -> int:
     """把已入库的万能软答应口癖标为 rejected，切断正反馈。"""
     from pallas.product.persona.soft_agree_fillers import is_weak_catchphrase_saying
@@ -239,6 +265,9 @@ def score_catchphrase_for_turn(
             score -= 15
         else:
             return None
+    feedback = entry.scene_feedback.get(scene_key, {}) if scene_key else {}
+    if feedback.get("uses"):
+        score += max(-6, min(6, int(feedback.get("score", 0))))
     return score
 
 

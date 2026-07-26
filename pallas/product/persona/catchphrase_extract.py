@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any
 
+from pallas.product.persona.occasion import OccasionTag
+
 # 口癖：短、可复用；整句接话 / 多意图枚举不应入库
 _HABIT_MIN = 2
 _HABIT_MAX = 12
@@ -54,14 +56,14 @@ def is_catchphrase_habit(saying: str) -> bool:
 
 def _occasion_for(saying: str) -> str:
     if _SELF_TAG_RE.fullmatch(saying):
-        return "自称梗"
+        return OccasionTag.SELF_REFERENCE
     if _PARTICLE_TAIL_RE.match(saying):
-        return "语气尾巴"
+        return OccasionTag.SENTENCE_TAIL
     if any(token in saying for token in ("笑", "梗", "典", "蚌", "乐")):
-        return "接梗玩笑"
+        return OccasionTag.BANTER
     if any(token in saying for token in ("咋了", "怎么了", "收到")):
-        return "日常接话"
-    return "口头禅"
+        return OccasionTag.SMALLTALK
+    return OccasionTag.SMALLTALK
 
 
 def extract_catchphrase_candidates(text: str, *, limit: int = 3) -> list[tuple[str, str]]:
