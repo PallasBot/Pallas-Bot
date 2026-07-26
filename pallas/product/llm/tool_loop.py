@@ -114,6 +114,42 @@ def _merge_activated_tool_schemas(
     return merged
 
 
+def _tool_spec_by_name(name: str):
+    from pallas.product.llm.tools.registry import list_registered_tools
+
+    for spec in list_registered_tools():
+        if spec.name == name:
+            return spec
+    return None
+
+
+def _is_side_effecting_tool(name: str) -> bool:
+    from pallas.product.llm.tools.contracts import ToolCapability
+
+    spec = _tool_spec_by_name(name)
+    if spec is None:
+        return False
+    return ToolCapability.SIDE_EFFECTING.value in (spec.capabilities or frozenset())
+
+
+def resolve_visible_reply_after_tools(
+    *,
+    freeform_content: str,
+    reply_texts: list[str],
+    side_effect_ok: bool,
+    tool_call_count: int,
+) -> tuple[str, str]:
+    """动作与开口拆分：有 chat.reply 用其文本；仅副作用成功则静默丢掉自由文本。"""
+    if tool_call_count <= 0:
+        return freeform_content, "generate"
+    if reply_texts:
+        # 最后一次 chat.reply；空串表示显式静默
+        return str(reply_texts[-1] or "").strip(), "chat.reply"
+    if side_effect_ok:
+        return "", "silence_after_side_effect"
+    return freeform_content, "generate"
+
+
 def summarize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
     error = str(result.get("error") or "").strip() if isinstance(result, dict) else ""
@@ -268,14 +304,13 @@ async def complete_with_tool_loop(
     last_message: dict[str, Any] = {}
     schema_names = tool_names_from_schemas(tool_schemas)
     prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
-    # 口令类工具：提醒模型不要只口头答应
+    # 口令类工具：动作与开口拆分（对齐 MaiBot reply 通道）
     if schema_names and working and str(working[0].get("role") or "") == "system":
         hint = (
             "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
-            "工具成功后：优先极短自然 ack（如「来了」「房开了」），也可不说话（PASS/空）；"
-            "禁止「已派发指令/帮你找找/正在生成」等模板，禁止编造结果；"
-            "有明确歌名或玩法口令时可点到，勿把「随机」「随便」当歌名念。"
-            "查询类工具用返回结果作答。"
+            "动作类工具成功后：若需对群友开口，只能调用 chat.reply（极短自然口语）；也可不调用以保持沉默。"
+            "禁止用自由文本写「已派发/帮你找找/正在生成」等系统腔或编造结果；勿把「随机」「随便」当歌名念。"
+            "查询类工具可用返回结果直接作答，或再用 chat.reply。"
         )
         sys_content = str(working[0].get("content") or "")
         if "【动作工具】" not in sys_content:
@@ -289,6 +324,11 @@ async def complete_with_tool_loop(
         "tool_schema_count": len(tool_schemas),
         "tool_names": schema_names,
     }
+    reply_texts: list[str] = []
+    side_effect_ok = False
+    chat_reply_injected = False
+
+    from pallas.product.llm.tools.reply import CHAT_REPLY_NAME, extract_chat_reply_text
 
     for round_idx in range(max_rounds):
         round_options = dict(options)
@@ -307,7 +347,16 @@ async def complete_with_tool_loop(
         tool_calls = last_message.get("tool_calls")
         round_trace: dict[str, Any] = {"round": round_idx + 1, "tool_calls": [], "calls": []}
         if not isinstance(tool_calls, list) or not tool_calls:
-            content = str(last_message.get("content", "") or "").strip()
+            freeform = str(last_message.get("content", "") or "").strip()
+            content, reply_source = resolve_visible_reply_after_tools(
+                freeform_content=freeform,
+                reply_texts=reply_texts,
+                side_effect_ok=side_effect_ok,
+                tool_call_count=int(agent_trace.get("tool_call_count") or 0),
+            )
+            agent_trace["reply_source"] = reply_source
+            if reply_source != "generate":
+                agent_trace["final_stage"] = reply_source
             assistant_message = dict(last_message)
             assistant_message.setdefault("role", "assistant")
             assistant_message["content"] = content
@@ -354,6 +403,21 @@ async def complete_with_tool_loop(
             })
             if summary["ok"]:
                 record_bot_llm_task(task, "tool_call_ok")
+                if resolved_name == CHAT_REPLY_NAME:
+                    extracted = extract_chat_reply_text(result_dict)
+                    if extracted is not None:
+                        reply_texts.append(extracted)
+                elif _is_side_effecting_tool(resolved_name):
+                    side_effect_ok = True
+                    if not chat_reply_injected:
+                        tool_schemas = _merge_activated_tool_schemas(tool_schemas, [CHAT_REPLY_NAME])
+                        schema_names = tool_names_from_schemas(tool_schemas)
+                        agent_trace["tool_schema_count"] = len(tool_schemas)
+                        agent_trace["tool_names"] = schema_names
+                        agent_trace.setdefault("activated_tools", [])
+                        if CHAT_REPLY_NAME not in agent_trace["activated_tools"]:
+                            agent_trace["activated_tools"].append(CHAT_REPLY_NAME)
+                        chat_reply_injected = True
             else:
                 record_bot_llm_task(task, "tool_call_fail")
             working.append(tool_result_message(call_id, resolved_name, tool_result))
@@ -369,10 +433,20 @@ async def complete_with_tool_loop(
                         agent_trace["activated_tools"].append(name)
         agent_trace["rounds"].append(round_trace)
 
-    content = str(last_message.get("content", "") or "").strip()
-    if not content:
+    freeform = str(last_message.get("content", "") or "").strip()
+    content, reply_source = resolve_visible_reply_after_tools(
+        freeform_content=freeform,
+        reply_texts=reply_texts,
+        side_effect_ok=side_effect_ok,
+        tool_call_count=int(agent_trace.get("tool_call_count") or 0),
+    )
+    if not content and reply_source == "generate" and not freeform:
         content = "抱歉，工具调用次数已达上限，请换个说法再试。"
+        reply_source = "max_rounds_fallback"
     agent_trace["status"] = "max_rounds"
+    agent_trace["reply_source"] = reply_source
+    if reply_source != "generate":
+        agent_trace["final_stage"] = reply_source
     assistant_message = dict(last_message)
     assistant_message.setdefault("role", "assistant")
     assistant_message["content"] = content
