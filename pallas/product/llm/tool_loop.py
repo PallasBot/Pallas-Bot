@@ -30,6 +30,21 @@ def tool_result_message(call_id: str, name: str, result: dict[str, Any]) -> dict
     return {"role": "tool", "tool_call_id": call_id, "content": content}
 
 
+def assistant_history_message(message: dict[str, Any]) -> dict[str, Any]:
+    """把 provider 助手消息压成下一轮 messages；保留 reasoning_content 供 thinking 模式回传。"""
+    out: dict[str, Any] = {
+        "role": "assistant",
+        "content": message.get("content") or "",
+    }
+    tool_calls = message.get("tool_calls")
+    if isinstance(tool_calls, list) and tool_calls:
+        out["tool_calls"] = tool_calls
+    reasoning = message.get("reasoning_content")
+    if isinstance(reasoning, str) and reasoning.strip():
+        out["reasoning_content"] = reasoning
+    return out
+
+
 def tool_names_from_schemas(schemas: list[Any]) -> list[str]:
     names: list[str] = []
     for item in schemas:
@@ -42,12 +57,77 @@ def tool_names_from_schemas(schemas: list[Any]) -> list[str]:
     return names[:24]
 
 
+def _activate_names_from_tool_result(tool_name: str, result: dict[str, Any]) -> list[str]:
+    from pallas.product.llm.tools.discovery import TOOLS_FIND_NAME
+    from pallas.product.llm.tools.registry import from_provider_tool_name
+
+    resolved = from_provider_tool_name(tool_name)
+    if resolved != TOOLS_FIND_NAME:
+        return []
+    payload = result.get("result") if isinstance(result.get("result"), dict) else result
+    if not isinstance(payload, dict):
+        return []
+    raw = payload.get("activate")
+    if not isinstance(raw, list):
+        return []
+    names: list[str] = []
+    for item in raw:
+        name = str(item or "").strip()
+        if name and name not in names:
+            names.append(name)
+    return names
+
+
+def _merge_activated_tool_schemas(
+    schemas: list[Any],
+    activated: list[str],
+) -> list[Any]:
+    from pallas.product.llm.tools.contracts import ToolCatalogSelection, ToolCatalogSnapshot
+    from pallas.product.llm.tools.registry import (
+        catalog_entry_for_spec,
+        list_registered_tools,
+        openai_schemas_from_catalog,
+        to_provider_tool_name,
+    )
+
+    if not activated:
+        return schemas
+    existing = {to_provider_tool_name(name) for name in tool_names_from_schemas(schemas)}
+    existing.update(tool_names_from_schemas(schemas))
+    wanted = {str(name).strip() for name in activated if str(name).strip()}
+    specs = [spec for spec in list_registered_tools() if spec.name in wanted]
+    if not specs:
+        return schemas
+    extra = openai_schemas_from_catalog(
+        ToolCatalogSnapshot(
+            tools=[catalog_entry_for_spec(spec) for spec in specs],
+            selection=ToolCatalogSelection(tools_enabled=True, schema_count=len(specs)),
+        )
+    )
+    merged = list(schemas)
+    for item in extra:
+        fn = item.get("function") if isinstance(item.get("function"), dict) else {}
+        name = str(fn.get("name") or "").strip()
+        if name and name not in existing:
+            merged.append(item)
+            existing.add(name)
+    return merged
+
+
 def summarize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
     error = str(result.get("error") or "").strip() if isinstance(result, dict) else ""
     payload = result.get("result") if isinstance(result, dict) else result
+    preview = ""
     if isinstance(payload, dict):
-        preview = json.dumps(payload, ensure_ascii=False)
+        summary = str(payload.get("summary") or "").strip()
+        command_text = str(payload.get("command_text") or "").strip()
+        if summary:
+            preview = summary
+        elif command_text:
+            preview = f"已派发群口令「{command_text}」"
+        else:
+            preview = json.dumps(payload, ensure_ascii=False)
     elif payload is None:
         preview = ""
     else:
@@ -182,13 +262,18 @@ async def complete_with_tool_loop(
         assistant_message["content"] = content
         return content, assistant_message
 
+    from pallas.product.llm.task_metrics import record_bot_llm_task
+
     max_rounds = max(1, int(c.llm_tools_max_rounds))
     last_message: dict[str, Any] = {}
     schema_names = tool_names_from_schemas(tool_schemas)
     prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
     # 口令类工具：提醒模型不要只口头答应
     if schema_names and working and str(working[0].get("role") or "") == "system":
-        hint = "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
+        hint = (
+            "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
+            "工具返回后，确认文案必须沿用 result.summary / command_text 中的歌名与参数，禁止改成其它曲目或编造结果。"
+        )
         sys_content = str(working[0].get("content") or "")
         if "【动作工具】" not in sys_content:
             working[0] = {**working[0], "content": f"{sys_content.rstrip()}\n\n{hint}".strip()}
@@ -225,13 +310,13 @@ async def complete_with_tool_loop(
             assistant_message["content"] = content
             agent_trace["rounds"].append(round_trace)
             assistant_message["_agent_trace"] = agent_trace
+            if int(agent_trace.get("tool_call_count") or 0) <= 0:
+                record_bot_llm_task(task, "tool_session_no_call")
+            else:
+                record_bot_llm_task(task, "tool_session_called")
             return content, assistant_message
 
-        working.append({
-            "role": "assistant",
-            "content": last_message.get("content") or "",
-            "tool_calls": tool_calls,
-        })
+        working.append(assistant_history_message(last_message))
         for call in tool_calls:
             if not isinstance(call, dict):
                 continue
@@ -264,7 +349,21 @@ async def complete_with_tool_loop(
                 "error": summary["error"],
                 "result_preview": summary["result_preview"],
             })
+            if summary["ok"]:
+                record_bot_llm_task(task, "tool_call_ok")
+            else:
+                record_bot_llm_task(task, "tool_call_fail")
             working.append(tool_result_message(call_id, resolved_name, tool_result))
+            activated = _activate_names_from_tool_result(resolved_name, result_dict)
+            if activated:
+                tool_schemas = _merge_activated_tool_schemas(tool_schemas, activated)
+                schema_names = tool_names_from_schemas(tool_schemas)
+                agent_trace["tool_schema_count"] = len(tool_schemas)
+                agent_trace["tool_names"] = schema_names
+                agent_trace.setdefault("activated_tools", [])
+                for name in activated:
+                    if name not in agent_trace["activated_tools"]:
+                        agent_trace["activated_tools"].append(name)
         agent_trace["rounds"].append(round_trace)
 
     content = str(last_message.get("content", "") or "").strip()
@@ -275,4 +374,8 @@ async def complete_with_tool_loop(
     assistant_message.setdefault("role", "assistant")
     assistant_message["content"] = content
     assistant_message["_agent_trace"] = agent_trace
+    if int(agent_trace.get("tool_call_count") or 0) > 0:
+        record_bot_llm_task(task, "tool_session_called")
+    else:
+        record_bot_llm_task(task, "tool_session_no_call")
     return content, assistant_message

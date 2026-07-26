@@ -54,12 +54,38 @@ def build_command_tool_spec(
             command_id=decl.command_id,
             command_text=command_text,
         )
+        if not bool(result.get("ok")):
+            return {
+                "ok": False,
+                "error": str(result.get("error") or "dispatch_failed"),
+                "result": {
+                    "plugin": plugin_name,
+                    "tool": decl.name,
+                    "command_id": decl.command_id,
+                    "command_text": command_text,
+                    "arguments": {key: str(value) for key, value in args.items()},
+                },
+            }
+        summary = (
+            f"已派发群口令「{command_text}」。向用户确认时必须沿用该口令中的歌名/参数原文，禁止改成其它曲目或编造结果。"
+        )
         return {
-            "plugin": plugin_name,
-            "tool": decl.name,
-            **result,
+            "ok": True,
+            "result": {
+                "plugin": plugin_name,
+                "tool": decl.name,
+                "command_id": decl.command_id,
+                "command_text": command_text,
+                "dispatched": True,
+                "arguments": {key: str(value) for key, value in args.items()},
+                "summary": summary,
+            },
         }
 
+    hints = frozenset(str(item).strip() for item in (decl.hints or []) if str(item).strip())
+    visibility = str(decl.visibility or "visible").strip().lower() or "visible"
+    if visibility not in {"visible", "deferred"}:
+        visibility = "visible"
     return LlmToolSpec(
         name=decl.name,
         description=description,
@@ -73,6 +99,8 @@ def build_command_tool_spec(
             ToolCapability.SIDE_EFFECTING.value,
             ToolCapability.REQUIRES_GROUP_CONTEXT.value,
         }),
+        hints=hints,
+        visibility=visibility,
     )
 
 

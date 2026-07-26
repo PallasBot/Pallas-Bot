@@ -300,6 +300,143 @@ async def database_overview() -> dict[str, Any]:
     return {"backend": backend, "note": "未实现该后端的概览"}
 
 
+# 控制台只读浏览白名单（大表仅概览，不做分页浏览）
+_BROWSEABLE_TABLES = frozenset({"bot_config", "group_config", "user_config", "blacklist"})
+_OVERVIEW_ONLY_TABLES = frozenset({"message", "context", "image_cache"})
+_TABLE_ROW_PAGE_MAX = 100
+
+
+async def database_health_view() -> dict[str, Any]:
+    """控制台健康摘要：先短探测再返回快照。"""
+    from pallas.core.foundation.db.db_health import probe_runtime_db_health
+    from pallas.core.foundation.db.low_priority_writer import low_priority_writers_snapshot
+    from pallas.core.foundation.db.schema_observability import schema_observability_snapshot
+    from pallas.core.foundation.db.schema_registry import list_pg_schema_ensure_steps
+
+    snap = await probe_runtime_db_health()
+    data = snap.as_dict()
+    data["backend"] = get_db_backend()
+    data["updated_at_unix"] = snap.updated_at
+    schema = schema_observability_snapshot()
+    schema["registered_steps"] = list_pg_schema_ensure_steps()
+    data["schema"] = schema
+    data["low_priority_writers"] = low_priority_writers_snapshot()
+    return data
+
+
+async def database_tables_view() -> dict[str, Any]:
+    """表白名单元数据 + 行数（复用 overview）。"""
+    overview = await database_overview()
+    backend = overview.get("backend")
+    items: list[dict[str, Any]] = []
+    if backend == "mongodb":
+        for c in overview.get("collections") or []:
+            name = str(c.get("name") or "")
+            items.append({
+                "name": name,
+                "count": c.get("count"),
+                "count_estimated": bool(c.get("count_estimated")),
+                "browseable": name in _BROWSEABLE_TABLES,
+                "overview_only": name in _OVERVIEW_ONLY_TABLES,
+            })
+    elif backend == "postgres":
+        for t in overview.get("tables") or []:
+            name = str(t.get("table") or "")
+            items.append({
+                "name": name,
+                "count": t.get("count"),
+                "count_estimated": bool(t.get("count_estimated")),
+                "browseable": name in _BROWSEABLE_TABLES,
+                "overview_only": name in _OVERVIEW_ONLY_TABLES,
+            })
+    return {"backend": backend, "tables": items}
+
+
+def normalize_console_table_name(table: str) -> str:
+    name = (table or "").strip().lower()
+    aliases = {
+        "config": "bot_config",
+        "bot_config": "bot_config",
+        "group_config": "group_config",
+        "user_config": "user_config",
+        "blacklist": "blacklist",
+    }
+    if name not in aliases:
+        raise ValueError(f"表不在只读白名单: {table}")
+    return aliases[name]
+
+
+async def list_console_table_rows(
+    table: str,
+    *,
+    offset: int = 0,
+    limit: int = 50,
+) -> dict[str, Any]:
+    """白名单表分页只读；大表拒绝。"""
+    name = normalize_console_table_name(table)
+    if name in _OVERVIEW_ONLY_TABLES:
+        raise ValueError(f"表 {name} 仅支持概览，不支持分页浏览")
+    if name not in _BROWSEABLE_TABLES:
+        raise ValueError(f"表不在只读白名单: {table}")
+
+    off = max(0, int(offset))
+    lim = max(1, min(int(limit), _TABLE_ROW_PAGE_MAX))
+    backend = get_db_backend()
+
+    if name == "bot_config":
+        rows = await list_all_bot_configs_public()
+        page = rows[off : off + lim]
+        return {"table": name, "offset": off, "limit": lim, "total": len(rows), "rows": page}
+    if name == "group_config":
+        rows = await list_group_configs_public(_GROUP_LIST_CAP)
+        page = rows[off : off + lim]
+        return {"table": name, "offset": off, "limit": lim, "total": len(rows), "rows": page}
+    if name == "user_config":
+        rows = await list_user_configs_public(_USER_LIST_CAP)
+        page = rows[off : off + lim]
+        return {"table": name, "offset": off, "limit": lim, "total": len(rows), "rows": page}
+    if name == "blacklist":
+        return await _list_blacklist_rows_public(offset=off, limit=lim, backend=backend)
+
+    raise ValueError(f"表不在只读白名单: {table}")
+
+
+async def _list_blacklist_rows_public(*, offset: int, limit: int, backend: str) -> dict[str, Any]:
+    if _is_pg_backend(backend):
+        from sqlalchemy import func, select
+
+        from pallas.core.foundation.db.repository_pg import BlackListRow, get_session
+
+        async with get_session(read_only=True) as session:
+            total = int((await session.execute(select(func.count()).select_from(BlackListRow))).scalar_one())
+            result = await session.execute(
+                select(BlackListRow).order_by(BlackListRow.group_id).offset(offset).limit(limit)
+            )
+            rows = [
+                {
+                    "group_id": int(r.group_id),
+                    "answers_count": len(r.answers or []),
+                    "answers_reserve_count": len(getattr(r, "answers_reserve", None) or []),
+                }
+                for r in result.scalars().all()
+            ]
+        return {"table": "blacklist", "offset": offset, "limit": limit, "total": total, "rows": rows}
+
+    from pallas.core.foundation.db.modules import BlackList
+
+    total = int(await BlackList.find_all().count())
+    docs = await BlackList.find_all().skip(offset).limit(limit).to_list()
+    rows = [
+        {
+            "group_id": int(d.group_id),
+            "answers_count": len(d.answers or []),
+            "answers_reserve_count": len(getattr(d, "answers_reserve", None) or []),
+        }
+        for d in docs
+    ]
+    return {"table": "blacklist", "offset": offset, "limit": limit, "total": total, "rows": rows}
+
+
 _MONGO_AGG_COLLECTIONS: dict[str, type] = {}
 _SAFE_AGG_OPS = frozenset({"$match", "$project", "$sort", "$limit", "$skip"})
 

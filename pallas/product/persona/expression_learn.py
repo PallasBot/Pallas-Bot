@@ -35,6 +35,10 @@ def is_saying_safe_for_expression(text: str) -> bool:
         return False
     if not is_llm_learning_safe(plain):
         return False
+    from pallas.product.persona.peer_bots_prompt import is_peer_harm_expression
+
+    if is_peer_harm_expression(plain):
+        return False
     return match_corpus_learn_block(plain) is None
 
 

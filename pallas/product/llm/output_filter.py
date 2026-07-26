@@ -32,6 +32,22 @@ _ORPHAN_LEADING_PARTICLE_RE = re.compile(
     r"^([吧呢啊嗯哦嘛呀哈呵欸唉呃额]+)([。．\.，,、！!？?\s～~]*)+",
 )
 
+# 舞台指示括号（叹气/笑/装傻等）；保留「（维尼修斯）」类人名注解
+_STAGE_DIRECTION_PAREN_RE = re.compile(
+    r"[（(]"
+    r"[^）)]{0,10}"
+    r"(?:叹气|轻笑|大笑|苦笑|冷笑|偷笑|微笑|干笑|傻笑|笑|"
+    r"愣住|愣了一下|愣|"
+    r"沉默片刻|沉默|"
+    r"装傻|思考|沉思|点头|摇头|耸肩|"
+    r"小声|轻声|低声|嘟囔|无奈|尴尬|脸红)"
+    r"[^）)]{0,8}"
+    r"[）)]"
+)
+
+_TRUNCATED_TAIL_RE = re.compile(r"(?:把别的|打成|以及|还有|然后|接着|或者|但是|不过|因为|所以|如果|要是)$")
+_TRUNCATED_CONNECTOR_RE = re.compile(r"(?:把|被|跟|和|与|给|让|用|从|向|往)[\u4e00-\u9fff]{0,2}$")
+
 
 @dataclass(frozen=True, slots=True)
 class OutputFilterHit:
@@ -119,6 +135,29 @@ def strip_orphan_leading_particles(text: str) -> str:
     return cleaned
 
 
+def strip_stage_direction_parens(text: str) -> str:
+    """去掉（叹气）（笑）等舞台指示括号，保留普通人名注解。"""
+    plain = str(text or "").strip()
+    if not plain:
+        return ""
+    cleaned = _STAGE_DIRECTION_PAREN_RE.sub("", plain)
+    cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
+    cleaned = re.sub(r"[，,]{2,}", "，", cleaned)
+    return cleaned.strip(" ，,")
+
+
+def looks_like_truncated_reply(text: str) -> bool:
+    """短句停在半截连词/「把别的」等，像被截断。"""
+    plain = str(text or "").strip()
+    if not plain or len(plain) < 6 or len(plain) > 48:
+        return False
+    if _TRUNCATED_TAIL_RE.search(plain):
+        return True
+    if _TRUNCATED_CONNECTOR_RE.search(plain) and not plain.endswith(("吧", "呢", "啊", "呀", "嘛", "咯")):
+        return True
+    return False
+
+
 def match_output_filter(text: str, profile: OutputFilterProfile) -> OutputFilterHit | None:
     plain = str(text or "").strip()
     if not plain:
@@ -156,6 +195,20 @@ def _normalize_and_guard_reply(text: str, *, task_type: str) -> str:
             cleaned[:48],
         )
     if not cleaned:
+        return ""
+    staged = strip_stage_direction_parens(cleaned)
+    if staged != cleaned:
+        logger.info(
+            "LLM stage direction stripped task_type={} before={!r} after={!r}",
+            task_type,
+            cleaned[:48],
+            staged[:48],
+        )
+    cleaned = staged
+    if not cleaned:
+        return ""
+    if looks_like_truncated_reply(cleaned):
+        logger.info("LLM truncated reply rejected task_type={} text={!r}", task_type, cleaned[:48])
         return ""
     ok, reason = validate_reply_chars(cleaned)
     if not ok:

@@ -38,7 +38,47 @@ _SELF_ALIAS_OBSERVE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})是你的(?:外号|昵称|群名片)$"),
     re.compile(r"^你(?:就)?是(?P<alias>[\u4e00-\u9fffA-Za-z·]{2,12})$"),
 )
-_ALIAS_BLOCKLIST = frozenset({"我", "你", "bot", "谁", "什么", "啥", "哪位", "哪个", "机器人"})
+_ALIAS_BLOCKLIST = frozenset({
+    "我",
+    "你",
+    "bot",
+    "谁",
+    "什么",
+    "啥",
+    "哪位",
+    "哪个",
+    "机器人",
+    # 观察/问句碎片误沉淀
+    "说的",
+    "这",
+    "那",
+    "哪只",
+    "哪只牛",
+    "哪只牛牛",
+    "什么牛",
+    "傻逼吗",
+    "什么吗",
+    "谁啊",
+    "干嘛",
+    "咋了",
+    "在吗",
+})
+
+# 别名若命中这些子串，视为问句/脏话碎片
+_ALIAS_BAD_SUBSTR = ("哪只", "什么牛", "傻逼", "吗", "谁啊", "咋了", "干嘛")
+
+
+def _safe_alias(raw: str) -> str | None:
+    safe = sanitize_prompt_literal(str(raw or "").strip(), max_len=16)
+    if not safe or safe.casefold() in {item.casefold() for item in _ALIAS_BLOCKLIST}:
+        return None
+    if len(safe) < 2:
+        return None
+    if any(token in safe for token in ("哪只", "什么牛", "傻逼")):
+        return None
+    if safe.endswith(("吗", "？", "?")):
+        return None
+    return safe
 
 
 def extract_self_aliases(
@@ -49,11 +89,13 @@ def extract_self_aliases(
     aliases: list[str] = []
     seen: set[str] = set()
 
-    def add(raw: str) -> None:
-        text = sanitize_prompt_literal(str(raw or "").strip(), max_len=16)
+    def add(raw: str, *, learned: bool = False) -> None:
+        text = _safe_alias(raw) if learned else sanitize_prompt_literal(str(raw or "").strip(), max_len=16)
         if not text or text.casefold() in seen:
             return
-        if text.casefold() in {item.casefold() for item in _ALIAS_BLOCKLIST}:
+        if not learned and text.casefold() in {item.casefold() for item in _ALIAS_BLOCKLIST}:
+            return
+        if learned and _safe_alias(text) is None:
             return
         seen.add(text.casefold())
         aliases.append(text)
@@ -71,7 +113,7 @@ def extract_self_aliases(
     if not isinstance(raw, list):
         return aliases
     for item in raw:
-        add(str(item or ""))
+        add(str(item or ""), learned=True)
     return aliases
 
 
@@ -155,13 +197,6 @@ async def resolve_login_nickname(bot_id: int) -> str:
     except Exception:
         pass
     return resolve_cached_login_nickname(bot_id)
-
-
-def _safe_alias(raw: str) -> str | None:
-    safe = sanitize_prompt_literal(str(raw or "").strip(), max_len=16)
-    if not safe or safe.casefold() in {item.casefold() for item in _ALIAS_BLOCKLIST}:
-        return None
-    return safe
 
 
 def parse_self_alias_teach(plain_text: str) -> list[str]:

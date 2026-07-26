@@ -8,6 +8,10 @@ from pallas.console.webui import install_hot_reload_config, plugin_config_proxy
 from pallas.console.webui.field_help import field_help
 
 
+def _ui(group: str, order: int, **extra: object) -> dict[str, object]:
+    return {"ui_group": group, "ui_order": order, **extra}
+
+
 class Config(BaseModel):
     pallas_webui_enabled: bool = Field(
         default=True,
@@ -16,6 +20,7 @@ class Config(BaseModel):
             "开启后可通过浏览器打开管理界面并调用相关接口",
             "关闭后无法访问控制台页面",
         ),
+        json_schema_extra=_ui("基础", 10),
     )
     pallas_webui_http_base: str = Field(
         default="/pallas",
@@ -24,6 +29,7 @@ class Config(BaseModel):
             "一般填 /pallas，需与发布的前端包配置一致",
             "例如反代后访问地址为 https://域名/pallas/",
         ),
+        json_schema_extra=_ui("基础", 20),
     )
     pallas_webui_frontend: Literal["vue", "react"] = Field(
         default="react",
@@ -32,6 +38,7 @@ class Config(BaseModel):
             "react=data/pb_webui/public-react；vue=data/pb_webui/public",
             "修改后需重启牛牛；默认 react",
         ),
+        json_schema_extra=_ui("基础", 30),
     )
     pallas_webui_dist_zip_url: str = Field(
         default="",
@@ -40,6 +47,7 @@ class Config(BaseModel):
             "填 zip 文件的完整直链",
             "留空时程序会按下面三项从 GitHub 发布页自动拼下载地址",
         ),
+        json_schema_extra=_ui("前端包", 10),
     )
     pallas_webui_dist_zip_repo: str = Field(
         default="PallasBot/Pallas-Bot",
@@ -48,6 +56,7 @@ class Config(BaseModel):
             "格式为 所有者/仓库名，例如 PallasBot/Pallas-Bot",
             "dist.zip 随主仓 Release 发布；仅在上面的 zip 直链留空时生效",
         ),
+        json_schema_extra=_ui("前端包", 20),
     )
     pallas_webui_dist_zip_tag: str = Field(
         default="",
@@ -56,6 +65,7 @@ class Config(BaseModel):
             "例如 v1.0.0；留空表示使用最新版 latest",
             "仅在上面的 zip 直链留空时生效",
         ),
+        json_schema_extra=_ui("前端包", 30),
     )
     pallas_webui_dist_zip_asset: str = Field(
         default="dist.zip",
@@ -64,6 +74,7 @@ class Config(BaseModel):
             "一般为 dist.zip，与 GitHub Release 上的资产名一致",
             "仅在上面的 zip 直链留空时生效",
         ),
+        json_schema_extra=_ui("前端包", 40),
     )
     pallas_webui_cors: bool = Field(
         default=False,
@@ -72,6 +83,7 @@ class Config(BaseModel):
             "仅在本机用 npm 开发前端、需要连远程牛牛时开启",
             "开启后必须同时填写下面的「允许的来源」列表",
         ),
+        json_schema_extra=_ui("开发与跨域", 10),
     )
     pallas_webui_allowed_origins: list[str] = Field(
         default_factory=list,
@@ -80,6 +92,16 @@ class Config(BaseModel):
             'JSON 数组，例如 ["http://localhost:5173"]',
             "留空且未开启跨域时不生效；列表里写 * 表示任意来源（不推荐生产环境）",
         ),
+        json_schema_extra=_ui("开发与跨域", 20),
+    )
+    pallas_webui_dev_mode: bool = Field(
+        default=False,
+        description=field_help(
+            "开发模式：临时跳过控制台登录校验",
+            "仅在本机调试时开启；也可在控制台顶栏快速切换",
+            "公网或生产环境务必关闭，否则任何人可改配置",
+        ),
+        json_schema_extra=_ui("开发与跨域", 30),
     )
     pallas_webui_log_lines_max: int = Field(
         default=20000,
@@ -90,14 +112,7 @@ class Config(BaseModel):
             "填 50～20000 之间的整数；多台分片机器时会合并各机日志",
             "数值越大占用内存越多",
         ),
-    )
-    pallas_webui_dev_mode: bool = Field(
-        default=False,
-        description=field_help(
-            "开发模式：临时跳过控制台登录校验",
-            "仅在本机调试时开启；也可在控制台顶栏快速切换",
-            "公网或生产环境务必关闭，否则任何人可改配置",
-        ),
+        json_schema_extra=_ui("日志", 10),
     )
 
 

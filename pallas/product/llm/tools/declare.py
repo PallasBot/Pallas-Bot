@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
+
+ToolVisibility = Literal["visible", "deferred"]
 
 
 def llm_command_tool_row(
@@ -13,8 +15,14 @@ def llm_command_tool_row(
     parameters: dict[str, Any],
     command_template: str,
     default: bool = True,
+    hints: list[str] | None = None,
+    visibility: ToolVisibility = "visible",
 ) -> dict[str, Any]:
-    """单条 ``extra['llm_tools']`` 项：意图识别后按模板拼口令并派发。"""
+    """单条 ``extra['llm_tools']`` 项：意图识别后按模板拼口令并派发。
+
+    hints: 口语触发词，参与 selective 域推断（与核心词表叠加）。
+    visibility: visible 随域注入；deferred 仅在自身 hints 命中或经 tools.find 激活后注入。
+    """
     tool_name = (name or "").strip()
     cid = (command_id or "").strip()
     if not tool_name or not cid:
@@ -22,11 +30,19 @@ def llm_command_tool_row(
     template = (command_template or "").strip()
     if not template:
         raise ValueError("command_template 不能为空")
-    return {
+    vis = (visibility or "visible").strip().lower()
+    if vis not in {"visible", "deferred"}:
+        vis = "visible"
+    hint_list = [str(item).strip() for item in (hints or []) if str(item).strip()]
+    row: dict[str, Any] = {
         "name": tool_name,
         "command_id": cid,
         "description": (description or tool_name).strip(),
         "parameters": parameters if isinstance(parameters, dict) else {},
         "command_template": template,
         "default": bool(default),
+        "visibility": vis,
     }
+    if hint_list:
+        row["hints"] = hint_list
+    return row

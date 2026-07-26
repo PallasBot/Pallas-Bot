@@ -131,6 +131,36 @@ def note_ambient_spoke(group_id: int | None, *, now: float | None = None) -> Non
         _last_ambient_at[int(group_id)] = ts
 
 
+def speak_perception_metrics(decision: SpeakDecision) -> tuple[str, ...]:
+    """映射发言感知结果到 llm_task 事件名（可同时记 skip 总计与原因桶）。"""
+    reason = str(decision.reason or "").strip().lower()
+    if decision.should_speak:
+        if reason == "mention":
+            return ("speak_mention",)
+        if reason == "ambient":
+            return ("speak_ambient",)
+        if reason == "followup":
+            return ("speak_followup",)
+        return ()
+    detail = "speak_skip"
+    if reason == "command":
+        detail = "speak_skip_command"
+    elif reason == "bystander":
+        detail = "speak_skip_bystander"
+    elif reason == "spam":
+        detail = "speak_skip_spam"
+    elif reason == "noise":
+        detail = "speak_skip_noise"
+    elif reason.startswith("ambient") or reason in {
+        "ambient_off",
+        "ambient_cooldown",
+        "ambient_low_score",
+        "ambient_miss",
+    }:
+        detail = "speak_skip_ambient"
+    return ("speak_skip", detail) if detail != "speak_skip" else ("speak_skip",)
+
+
 def evaluate_speak_perception(
     *,
     plain_text: str,

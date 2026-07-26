@@ -139,16 +139,15 @@ def apply_model_effort_to_payload(payload: dict[str, Any], options: dict[str, An
     """把 Provider model_effort 映射到常见 OpenAI 兼容字段。"""
     effort = str(options.get("model_effort") or options.get("reasoning_effort") or "").strip().lower()
     model_name = str(model or "").strip().lower()
-    choice = str(payload.get("tool_choice") or options.get("tool_choice") or "").strip().lower()
-    # DeepSeek：thinking 与非 auto 的 tool_choice 不兼容
-    if model_name.startswith("deepseek") and payload.get("tools") and choice and choice not in {"auto", "none"}:
-        payload["thinking"] = {"type": "disabled"}
-        return
-    if not effort or effort == "enable":
-        return
-    if effort == "disable":
-        if model_name.startswith("deepseek"):
+    # DeepSeek thinking 多轮须回传 reasoning_content；会话/tool loop 未存该字段时会 400。
+    # 带 tools，或未显式指定 effort 档位时，默认关闭 thinking。
+    if model_name.startswith("deepseek"):
+        if payload.get("tools") or not effort or effort in {"enable", "disable"}:
             payload["thinking"] = {"type": "disabled"}
+            return
+    elif not effort or effort == "enable":
+        return
+    elif effort == "disable":
         return
     mapped = "high" if effort == "xhigh" else effort
     if mapped in {"minimal", "low", "medium", "high"}:

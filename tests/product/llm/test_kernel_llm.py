@@ -314,6 +314,7 @@ async def test_complete_chat_message_falls_back_to_next_provider(
 @pytest.mark.asyncio
 async def test_tool_loop_one_round(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = {"n": 0}
+    seen_second_messages: list[list[dict[str, Any]]] = []
 
     async def fake_complete(messages, *, model, options=None, tools=None, cfg=None, **_kwargs):
         calls["n"] += 1
@@ -321,6 +322,7 @@ async def test_tool_loop_one_round(monkeypatch: pytest.MonkeyPatch) -> None:
             return {
                 "role": "assistant",
                 "content": "",
+                "reasoning_content": "plan-then-call",
                 "tool_calls": [
                     {
                         "id": "call_1",
@@ -329,6 +331,7 @@ async def test_tool_loop_one_round(monkeypatch: pytest.MonkeyPatch) -> None:
                     }
                 ],
             }
+        seen_second_messages.append(list(messages))
         return {"role": "assistant", "content": "最终回复"}
 
     async def fake_execute(name, arguments, *, context=None):
@@ -359,6 +362,12 @@ async def test_tool_loop_one_round(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert content == "最终回复"
     assert calls["n"] == 2
+    assistant_hist = next(
+        (m for m in seen_second_messages[0] if m.get("role") == "assistant" and m.get("tool_calls")),
+        None,
+    )
+    assert assistant_hist is not None
+    assert assistant_hist.get("reasoning_content") == "plan-then-call"
     trace = assistant.get("_agent_trace") or {}
     assert trace.get("tool_call_count") == 1
     assert trace.get("tool_schema_count") == 1

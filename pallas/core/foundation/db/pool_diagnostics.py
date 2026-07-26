@@ -232,6 +232,22 @@ async def emit_pool_diagnostics_tick() -> None:
         slow_max_ms=_slow_hold_max_ms,
     )
 
+    try:
+        from pallas.core.foundation.db.db_health import note_db_pool_pressure, note_db_probe_result
+
+        pool_summary = {
+            "capacity": budget.get("capacity"),
+            "utilization": budget.get("utilization"),
+            "under_pressure": budget.get("under_pressure"),
+            "live": budget.get("live"),
+            "idle_in_tx": idle_tx,
+        }
+        note_db_probe_result(True, pool=pool_summary)
+        if budget.get("under_pressure"):
+            note_db_pool_pressure(under_pressure=True, pool=pool_summary)
+    except Exception as e:  # noqa: BLE001
+        logger.debug("db_health update from pool tick failed: {}", e)
+
     _slow_by_caller.clear()
     _slow_session_total = 0
     _slow_hold_max_ms = 0.0

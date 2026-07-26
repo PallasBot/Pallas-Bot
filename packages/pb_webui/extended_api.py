@@ -4253,6 +4253,37 @@ class _MongoAggregateBody(BaseModel):
     pipeline: list[Any] = Field(default_factory=list, max_length=16)
 
 
+class _DbBackendPostgresBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    host: str = Field(default="127.0.0.1", max_length=255)
+    port: int = Field(default=5432, ge=1, le=65535)
+    user: str = Field(default="", max_length=128)
+    password: str = Field(default="", max_length=512)
+    db: str = Field(default="PallasBot", max_length=128)
+    auto_create_db: bool = False
+
+
+class _DbBackendMongoBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    host: str = Field(default="127.0.0.1", max_length=255)
+    port: int = Field(default=27017, ge=1, le=65535)
+    user: str = Field(default="", max_length=128)
+    password: str = Field(default="", max_length=512)
+    db: str = Field(default="PallasBot", max_length=128)
+    auth_source: str = Field(default="", max_length=128)
+
+
+class _DbBackendBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    backend: Literal["postgresql", "mongodb"]
+    postgres: _DbBackendPostgresBody | None = None
+    mongo: _DbBackendMongoBody | None = None
+    force: bool = False
+
+
 class _DbBackupBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -4306,6 +4337,17 @@ class _DbTableRowUpsertBody(BaseModel):
     table: str = Field(min_length=1, max_length=64)
     row_id: int = Field(ge=1)
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+class _DbMigrateMongoPgBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = False
+    restart_cursor: bool = False
+    switch_backend: bool = True
+    try_hot_rebind: bool = True
+    batch_size: int = Field(default=1000, ge=100, le=5000)
+    tables: list[str] = Field(default_factory=list, max_length=32)
 
 
 class _AiExtensionConfigBody(BaseModel):
@@ -5602,12 +5644,16 @@ def register_extended_api(
         async def _load() -> dict[str, Any]:
             return await fetch_federation_onboarding()
 
-        data = await cached_read(
-            key="federation-onboarding",
-            loader=_load,
-            ttl_sec=120.0,
-            stale_sec=600.0,
-        )
+        try:
+            data = await cached_read(
+                key="federation-onboarding",
+                loader=_load,
+                ttl_sec=120.0,
+                stale_sec=600.0,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Pallas-Bot 控制台: 拉取联邦入池说明失败 err={}", e)
+            raise HTTPException(status_code=502, detail="无法从社区中心拉取联邦入池说明") from e
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/plugin-run-stats", include_in_schema=True)
@@ -7557,6 +7603,62 @@ def register_extended_api(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
+    @router.post(f"{x}/llm/tools/preview", include_in_schema=True)
+    async def _llm_tools_preview(body: dict[str, Any]) -> JSONResponse:
+        try:
+            from pallas.product.llm.tools.preview import preview_tool_intent
+
+            text = str(body.get("text") or body.get("user_text") or "").strip()
+            task = str(body.get("task") or "llm_chat").strip() or "llm_chat"
+            data = preview_tool_intent(text, task=task)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(f"{x}/llm/tools/overrides", include_in_schema=True)
+    async def _llm_tools_overrides_put(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            from pallas.product.llm.tools.overrides import save_tool_overrides
+            from pallas.product.llm.tools.registry import build_tools_catalog_ui
+
+            raw = body.get("overrides") if isinstance(body.get("overrides"), dict) else body
+            if not isinstance(raw, dict):
+                raise HTTPException(status_code=400, detail="overrides must be an object")
+            saved = save_tool_overrides(raw)
+            data = build_tools_catalog_ui()
+            data["overrides"] = saved
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.patch(f"{x}/llm/tools/overrides/{{tool_name}}", include_in_schema=True)
+    async def _llm_tools_override_patch(
+        tool_name: str,
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            from pallas.product.llm.tools.overrides import upsert_tool_override
+            from pallas.product.llm.tools.registry import build_tools_catalog_ui
+
+            entry = upsert_tool_override(tool_name, body if isinstance(body, dict) else {})
+            data = build_tools_catalog_ui()
+            data["patched"] = {"name": tool_name, "override": entry}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
     @router.post(f"{x}/llm/conversation-kernel/memory/delete", include_in_schema=True)
     async def _llm_conversation_kernel_memory_delete(
         body: dict[str, Any],
@@ -7982,6 +8084,142 @@ def register_extended_api(
             )
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas-Bot 控制台: 数据库概览失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/db/health", include_in_schema=True)
+    async def _db_health() -> JSONResponse:
+        from pallas.core.foundation.db.pallas_console_data import database_health_view
+
+        try:
+            data = await database_health_view()
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 数据库健康探测失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/db/tables", include_in_schema=True)
+    async def _db_tables() -> JSONResponse:
+        from pallas.core.foundation.db.pallas_console_data import database_tables_view
+
+        try:
+            data = await cached_read(
+                key="db_tables",
+                loader=database_tables_view,
+                ttl_sec=8.0,
+                stale_sec=120.0,
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 数据库表列表失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/db/table-rows", include_in_schema=True)
+    async def _db_table_rows(
+        table: str = Query(..., description="白名单表名"),
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=100),
+    ) -> JSONResponse:
+        from pallas.core.foundation.db.pallas_console_data import list_console_table_rows
+
+        try:
+            data = await list_console_table_rows(table, offset=offset, limit=limit)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 表分页读取失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/db/migrate/mongo-to-pg/info", include_in_schema=True)
+    async def _db_migrate_mongo_pg_info() -> JSONResponse:
+        from pallas.core.foundation.db.migrate_jobs import migrate_wizard_info
+
+        try:
+            data = migrate_wizard_info()
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 迁移向导信息失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/db/migrate/mongo-to-pg", include_in_schema=True)
+    async def _db_migrate_mongo_pg_start(
+        body: _DbMigrateMongoPgBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.core.foundation.db.migrate_jobs import migrate_job_status_payload, start_migrate_job
+
+        try:
+            job = start_migrate_job(
+                dry_run=body.dry_run,
+                restart_cursor=body.restart_cursor,
+                switch_backend=body.switch_backend,
+                try_hot_rebind=body.try_hot_rebind,
+                batch_size=body.batch_size,
+                tables=list(body.tables),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 启动 Mongo→PG 迁移失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": migrate_job_status_payload(job)})
+
+    @router.get(f"{x}/db/migrate/mongo-to-pg/jobs/active", include_in_schema=True)
+    async def _db_migrate_mongo_pg_active() -> JSONResponse:
+        from pallas.core.foundation.db.migrate_jobs import active_migrate_job, migrate_job_status_payload
+
+        job = active_migrate_job()
+        return JSONResponse({"ok": True, "data": migrate_job_status_payload(job) if job else None})
+
+    @router.get(f"{x}/db/migrate/mongo-to-pg/jobs/{{job_id}}", include_in_schema=True)
+    async def _db_migrate_mongo_pg_job(job_id: str) -> JSONResponse:
+        from pallas.core.foundation.db.migrate_jobs import get_migrate_job, migrate_job_status_payload
+
+        job = get_migrate_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="未找到迁移任务")
+        return JSONResponse({"ok": True, "data": migrate_job_status_payload(job)})
+
+    @router.get(f"{x}/db/backend", include_in_schema=True)
+    async def _db_backend_get() -> JSONResponse:
+        from pallas.core.foundation.db.backend_config import build_backend_config_view
+
+        return JSONResponse({"ok": True, "data": build_backend_config_view()})
+
+    @router.put(f"{x}/db/backend", include_in_schema=True)
+    async def _db_backend_put(
+        body: _DbBackendBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.core.foundation.db.backend_config import save_db_backend_config
+
+        try:
+            data = save_db_backend_config(body.model_dump(), force=body.force)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 保存数据库后端配置失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/db/backend/probe", include_in_schema=True)
+    async def _db_backend_probe(
+        body: _DbBackendBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.core.foundation.db.backend_config import probe_db_backend
+
+        try:
+            data = await probe_db_backend(body.model_dump())
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 数据库后端探测失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 

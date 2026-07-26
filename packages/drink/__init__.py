@@ -45,9 +45,10 @@ __plugin_meta__ = PluginMetadata(
             llm_command_tool_row(
                 name="drink.drink",
                 command_id="drink.drink",
-                description="让牛牛喝酒，增加醉酒度。用户明确要求喝酒、干杯、继续喝时使用。",
+                description="让牛牛喝酒，增加醉酒度。用户明确要求喝酒、干杯、继续喝、来杯酒时使用。",
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛喝酒",
+                hints=["喝酒", "干杯", "继续喝", "喝一杯", "再喝", "来杯酒", "灌酒", "醉酒"],
             ),
             llm_command_tool_row(
                 name="drink.sober_up",
@@ -55,6 +56,7 @@ __plugin_meta__ = PluginMetadata(
                 description="让牛牛立即醒酒。用户明确要求醒一醒、别喝了、醒酒时使用。",
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛醒一醒",
+                hints=["醒一醒", "别喝了", "醒酒", "清醒"],
             ),
         ],
         "menu_data": [

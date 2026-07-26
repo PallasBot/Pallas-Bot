@@ -5,6 +5,10 @@ from pallas.console.webui import install_hot_reload_config, plugin_config_proxy
 from pallas.console.webui.field_help import field_help
 
 
+def _ui(group: str, order: int, **extra: object) -> dict[str, object]:
+    return {"ui_group": group, "ui_order": order, **extra}
+
+
 class StyleConfig(BaseModel):
     """样式配置"""
 
@@ -28,6 +32,7 @@ class Config(BaseModel, extra="ignore"):
             "用户未指定样式时默认用哪一套",
             "填样式列表里的 name，例如 pallas_default",
         ),
+        json_schema_extra=_ui("样式", 10),
     )
     enable_custom_style_loading: bool = Field(
         default=True,
@@ -35,6 +40,7 @@ class Config(BaseModel, extra="ignore"):
             "是否加载「自定义样式」列表里的额外样式",
             "关闭则只使用「内置样式」列表中的项",
         ),
+        json_schema_extra=_ui("样式", 20),
     )
     default_styles: list[StyleConfig] = Field(
         default_factory=lambda: [StyleConfig(name="pallas_default", path="resource/styles/default")],
@@ -42,6 +48,7 @@ class Config(BaseModel, extra="ignore"):
             "内置自带的帮助图样式",
             "JSON 数组，每项含 name 与 path；一般保持默认即可",
         ),
+        json_schema_extra=_ui("样式", 30),
     )
     custom_styles: list[StyleConfig] = Field(
         default_factory=list,
@@ -50,6 +57,7 @@ class Config(BaseModel, extra="ignore"):
             "JSON 数组，每项指向一个完整样式目录",
             "需开启上一项「允许加载自定义样式」",
         ),
+        json_schema_extra=_ui("样式", 40),
     )
     side_paint_enabled: bool = Field(
         default=False,
@@ -57,6 +65,7 @@ class Config(BaseModel, extra="ignore"):
             "是否在帮助图一侧显示角色立绘",
             "开启使用 imgs 目录下的立绘；关闭则用样式里自带的叠图方式",
         ),
+        json_schema_extra=_ui("立绘", 10),
     )
     side_paint_filename: str = Field(
         default="character.png",
@@ -64,6 +73,7 @@ class Config(BaseModel, extra="ignore"):
             "立绘图片的文件名",
             "放在对应样式资源目录下，例如 character.png",
         ),
+        json_schema_extra=_ui("立绘", 20),
     )
     side_paint_scale: float = Field(
         default=1.25,
@@ -71,6 +81,7 @@ class Config(BaseModel, extra="ignore"):
             "立绘在成图前的放大倍数",
             "填小数，例如 1.25；最终高度仍会按版式再缩放",
         ),
+        json_schema_extra=_ui("立绘", 30),
     )
     side_paint_auto_page: bool = Field(
         default=False,
@@ -78,6 +89,7 @@ class Config(BaseModel, extra="ignore"):
             "长帮助文是否自动分页",
             "开启后按版式比例拆成多页，适合立绘模式下的长说明",
         ),
+        json_schema_extra=_ui("立绘", 40),
     )
     ignored_plugins: list[str] = Field(
         default=[
@@ -93,6 +105,7 @@ class Config(BaseModel, extra="ignore"):
             "JSON 字符串数组，填插件模块名",
             "用于隐藏框架或内部插件，避免菜单过长",
         ),
+        json_schema_extra=_ui("菜单", 10),
     )
     help_tag_overrides: dict[str, str] = Field(
         default_factory=dict,
@@ -101,6 +114,7 @@ class Config(BaseModel, extra="ignore"):
             "JSON：插件名 → tag（如 core/chat/fun）；未覆盖读 metadata.extra.help_tag，缺省 other",
             "自定义 tag 会原样作为分组标题",
         ),
+        json_schema_extra=_ui("菜单", 20),
     )
 
 
