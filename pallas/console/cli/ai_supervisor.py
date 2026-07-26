@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from pallas.console.cli.ai_ops import managed_ai_root, resolve_ai_repo_root
+from pallas.console.cli.process_util import pid_alive, resolve_bash
 from pallas.console.webui.ai_install_writeback import DEFAULT_AI_SERVER_PORT
 
 MANAGED_MARKER_NAME = ".pallas-managed"
@@ -69,11 +70,7 @@ def _read_pid(pidfile: Path) -> int | None:
 def _pid_alive(pid: int | None) -> bool:
     if pid is None or pid <= 0:
         return False
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
+    return pid_alive(pid)
 
 
 def service_running(ai_root: Path, service: str) -> bool:
@@ -239,15 +236,23 @@ def run_ctl(ai_root: Path, *args: str, timeout_sec: float = 120.0) -> tuple[int,
     script = ai_root / _CTL
     if not script.is_file():
         return 1, f"未找到 {script}"
-    cmd = ["bash", str(script), *args]
-    completed = subprocess.run(
-        cmd,
-        cwd=ai_root,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=timeout_sec,
-    )
+    bash = resolve_bash()
+    if bash is None:
+        from pallas.console.cli.process_util import bash_missing_message
+
+        return 1, bash_missing_message(purpose="AI Runtime ctl")
+    cmd = [str(bash), str(script), *args]
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=ai_root,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+        )
+    except OSError as err:
+        return 1, f"无法执行 {script}: {err}"
     out = (completed.stdout or "") + (completed.stderr or "")
     header = f"执行: {' '.join(cmd)}\n"
     return int(completed.returncode), header + out

@@ -183,6 +183,16 @@ def execute_workers_only_start(
         logger.warning("shard worker scale: missing script {}", script)
         return False
 
+    from pallas.console.cli.process_util import is_windows, resolve_bash
+
+    bash = resolve_bash()
+    if bash is None:
+        logger.warning(
+            "shard worker scale: bash not found ({})",
+            "install Git Bash or use WSL" if is_windows() else "check PATH",
+        )
+        return False
+
     try:
         lock_path.write_text(f"pid={os.getpid()} ts={time.time():.0f}\n", encoding="utf-8")
     except OSError as err:
@@ -196,14 +206,23 @@ def execute_workers_only_start(
         running,
         missing_shard_ids,
     )
-    try:
-        proc = subprocess.Popen(  # noqa: S603
-            ["/bin/bash", str(script), "start", "--workers-only", "--scale-only"],
-            cwd=str(repo_root()),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            start_new_session=True,
+    popen_kwargs: dict = {
+        "args": [str(bash), str(script), "start", "--workers-only", "--scale-only"],
+        "cwd": str(repo_root()),
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.PIPE,
+    }
+    if is_windows():
+        popen_kwargs["creationflags"] = (
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "DETACHED_PROCESS", 0)
+            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
         )
+        popen_kwargs["close_fds"] = True
+    else:
+        popen_kwargs["start_new_session"] = True
+    try:
+        proc = subprocess.Popen(**popen_kwargs)  # noqa: S603
     except OSError as err:
         logger.warning("shard worker scale: spawn failed: {}", err)
         lock_path.unlink(missing_ok=True)

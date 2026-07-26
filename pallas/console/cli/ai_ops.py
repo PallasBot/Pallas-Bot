@@ -6,6 +6,7 @@ import sys
 import tomllib
 from pathlib import Path
 
+from pallas.console.cli.process_util import bash_missing_message, resolve_bash
 from pallas.core.foundation.config.repo_settings import repo_config_path
 from pallas.core.foundation.paths import DATA_ROOT, PROJECT_ROOT
 
@@ -88,7 +89,12 @@ def run_ai_bootstrap(
         print(f"未找到 {script}", file=sys.stderr)
         return 1
 
-    cmd = [str(script)]
+    bash = resolve_bash()
+    if bash is None:
+        print(bash_missing_message(purpose="AI Runtime bootstrap"), file=sys.stderr)
+        return 1
+
+    cmd = [str(bash), str(script)]
     if check_only:
         cmd.append("--check-only")
     if no_start:
@@ -102,5 +108,9 @@ def run_ai_bootstrap(
 
     print(f"执行: {' '.join(cmd)}")
     print(f"AI 仓: {ai_root}")
-    completed = subprocess.run(cmd, cwd=ai_root, env=env, check=False)
+    try:
+        completed = subprocess.run(cmd, cwd=ai_root, env=env, check=False)
+    except OSError as err:
+        print(f"无法执行 bootstrap: {err}", file=sys.stderr)
+        return 1
     return int(completed.returncode)

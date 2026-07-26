@@ -50,7 +50,7 @@ async def run_maintenance(
         from pallas.console.cli.bot_process import bot_lifecycle_available, run_bot_lifecycle
 
         if not bot_lifecycle_available():
-            print("无法重启：缺少 run_unified_bot.sh 或 run_sharded_bot.sh", file=sys.stderr)
+            print("无法重启：Bot 启停不可用", file=sys.stderr)
             return 1
         code = run_bot_lifecycle("restart", mode="auto")
         if code != 0:

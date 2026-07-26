@@ -119,6 +119,12 @@ def test_run_worker_scale_restart_spawns_script(shard_env, monkeypatch, tmp_path
     script.parent.mkdir(parents=True)
     script.write_text("#!/bin/bash\n", encoding="utf-8")
     monkeypatch.setattr("pallas.core.platform.shard.worker_scale.repo_root", lambda: fake_repo)
+    fake_bash = tmp_path / "bash"
+    fake_bash.write_text("", encoding="utf-8")
+    monkeypatch.setattr(
+        "pallas.console.cli.process_util.resolve_bash",
+        lambda: fake_bash,
+    )
 
     popen = MagicMock()
     proc = MagicMock()
@@ -134,7 +140,10 @@ def test_run_worker_scale_restart_spawns_script(shard_env, monkeypatch, tmp_path
     ):
         assert run_worker_scale_restart(reason="unit") is True
     popen.assert_called_once()
-    args = popen.call_args[0][0]
+    kwargs = popen.call_args.kwargs
+    args = kwargs.get("args") or (popen.call_args.args[0] if popen.call_args.args else None)
+    assert args is not None
+    assert args[0] == str(fake_bash)
     assert args[-3:] == ["start", "--workers-only", "--scale-only"]
 
 

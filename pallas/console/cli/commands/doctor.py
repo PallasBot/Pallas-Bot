@@ -5,7 +5,8 @@ import os
 import shutil
 import sys
 
-from pallas.console.cli.bot_process import bot_lifecycle_available
+from pallas.console.cli.bot_process import bot_lifecycle_available, shard_lifecycle_available
+from pallas.console.cli.process_util import is_windows, resolve_bash
 from pallas.console.cli.runtime_mode import detect_running_bot_mode, resolve_bot_mode
 from pallas.console.cli.shard_redis_check import shard_redis_doctor_lines
 from pallas.core.foundation.config.repo_settings import repo_config_path
@@ -42,9 +43,18 @@ def run(_args: argparse.Namespace) -> int:
         print(f"config: ok ({config_path})")
 
     if bot_lifecycle_available():
-        print("lifecycle scripts: ok")
+        print("lifecycle unified: ok (Python)")
     else:
-        print("lifecycle scripts: 缺少 run_unified_bot.sh 或 run_sharded_bot.sh", file=sys.stderr)
+        print("lifecycle unified: 不可用", file=sys.stderr)
+        issues += 1
+
+    bash = resolve_bash()
+    if shard_lifecycle_available():
+        print(f"lifecycle shard: ok (bash={bash})")
+    elif is_windows() and bash is None:
+        print("lifecycle shard: 跳过（Windows 未找到 bash；单进程不受影响）")
+    else:
+        print("lifecycle shard: 缺少 run_sharded_bot.sh 或 bash", file=sys.stderr)
         issues += 1
 
     running = detect_running_bot_mode()
