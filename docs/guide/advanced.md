@@ -14,6 +14,7 @@
 | 号主 | [号主](bot-owner.md) |
 | 唱歌 / 画画 / LLM 对话 | [AI 扩展](ai.md) |
 | `@牛牛` 与复读 | [@牛牛与复读](llm-and-repeater.md) |
+| AI 观测与联网搜索 | [AI 扩展 · 观测与策略](ai.md#聊得起来之后ai-观测与对话策略) |
 | 排障 | [FAQ](/deploy/faq) · [排障](/maintainer/operate/troubleshooting) |
 
 ## 部署与运维

@@ -102,6 +102,19 @@
 uv run python tools/migrate_env_to_pallas.py
 ```
 
+## LLM 工具与联网搜索（WebUI 对话策略）
+
+日常在 **AI 配置 → 对话 → 策略** 修改；落盘为 `webui.json` 对应环境键。
+
+| 键 | 说明 |
+| --- | --- |
+| `LLM_TOOLS_ENABLED` | 允许调用工具 |
+| `LLM_TOOLS_SELECTIVE` | 按意图筛选工具 |
+| `WEB_SEARCH_API_URL` | `web.search` 的 POST 完整地址（推荐 `https://api.tavily.com/search`） |
+| `TAVILY_API_KEY` | 搜索接口 Bearer 密钥（Tavily 形如 `tvly-…`） |
+
+两项搜索配置都填才会联网。操作说明见 [联网搜索](/guide/ai#联网搜索)。
+
 ## 相关阅读
 
 | 目标 | 文档 |

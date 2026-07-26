@@ -92,6 +92,7 @@
 ## 相关阅读
 
 - [WebUI API 总览](/common/webui/api/)
+- [Agent Platform API](/common/webui/api/09-agent-platform)
 - [认证与健康检查](/common/webui/api/01-auth-health)
 - [插件 API](/common/webui/api/02-plugins)
 - [通用配置 API](/common/webui/api/03-common-config)

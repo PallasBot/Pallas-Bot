@@ -66,6 +66,51 @@ WebUI 在同一页「功能开关」里：启用智能对话 / 启用遗留酒�
 
 ---
 
+## 聊得起来之后：AI 观测与对话策略
+
+侧栏 **AI** 分两块：**AI 配置**（接入 / 对话 / 媒体）与 **AI 观测**（运行态查看与维护）。多数观测页需顶栏选定 Bot QQ，部分还需群号。
+
+### AI 观测分段
+
+| 分段 | 做什么 |
+| --- | --- |
+| 统计 | Token、画画、RAG 与任务成功情况 |
+| 会话 | 查看对话、标注回复、试聊或清空上下文 |
+| 记忆 | 群内长期记忆：图谱、条目与偏好 |
+| 人物 | 人物事实、观察队列、账号口癖审批 |
+| 工具 | 当前可调用的内置 / 插件 / MCP 工具（只读浏览） |
+| 任务 | 提醒、周期与异步调研；可取消未完成任务 |
+| 牛格 | 牛格状态、群风格画像，以及发给模型的人设 |
+| 日志 | 媒体服务等扩展运行日志 |
+
+人物事实默认只在本群生效；跨群复用需用户同意。口癖候选来自该 Bot 成功回复，在人物页「待审」里通过或驳回。任务结果只投递到对应群。
+
+### 联网搜索
+
+群里「搜一下…」「帮我搜…」会走工具 `web.search`。在 **AI 配置 → 对话 → 策略 → 联网搜索** 配置；两项都填才联网，留空时 Bot 会如实说搜不了。
+
+推荐 [Tavily](https://app.tavily.com)（免费额度）：
+
+| 字段 | 示例 |
+| --- | --- |
+| 搜索接口完整地址 | `https://api.tavily.com/search` |
+| 搜索接口密钥 | `tvly-…` |
+
+并确认同页 **允许调用工具** 已开。环境变量键为 `WEB_SEARCH_API_URL`、`TAVILY_API_KEY`。也可用其它兼容接口（`POST` + JSON `{"query":"…"}` + `Authorization: Bearer …`）。字段旁「？」有简短说明。
+
+### 工具：何时交给模型
+
+浏览清单用 **AI 观测 → 工具**；改触发说法与策略用 **AI 配置 → 对话 → 工具 / 策略**。
+
+| 界面文案 | 含义 |
+| --- | --- |
+| 话题相关就带上（相关即带） | 话题与工具领域沾边时交给模型 |
+| 说到触发词才带上（触发才带） | 平时不带；说到触发说法或经 `tools.find` 后才出现 |
+
+后者更省上下文。开发向见 [Bot 内置 Agent 生命周期](/developer/architecture/agent-lifecycle)；HTTP 契约见 [Agent Platform API](/common/webui/api/09-agent-platform)；排障见 [LLM 与 AI](/maintainer/operate/llm-and-ai)。
+
+---
+
 ## 进阶：唱歌 / TTS（媒体服务）
 
 需要媒体时再装 AI Runtime：
@@ -99,4 +144,5 @@ WebUI 在同一页「功能开关」里：启用智能对话 / 启用遗留酒�
 
 - 维护者安装细节 → [AI Runtime](/maintainer/install/ai-runtime)  
 - 运维排障 → [LLM 与 AI](/maintainer/operate/llm-and-ai)  
-- 接话策略 → [@牛牛与复读](llm-and-repeater.md)
+- 接话策略 → [@牛牛与复读](llm-and-repeater.md)  
+- 组件边界 → [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)

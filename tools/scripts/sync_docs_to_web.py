@@ -107,6 +107,7 @@ FILE_MAP: dict[str, str] = {
     "common/webui/api/06-database.md": "common/webui/api/06-database.md",
     "common/webui/api/07-instances-configs.md": "common/webui/api/07-instances-configs.md",
     "common/webui/api/08-update-ai.md": "common/webui/api/08-update-ai.md",
+    "common/webui/api/09-agent-platform.md": "common/webui/api/09-agent-platform.md",
     "common/message_scrub/README.md": "common/message_scrub.md",
     "plugins/README.md": "plugins/index.md",
     "develop/README.md": "develop/index.md",

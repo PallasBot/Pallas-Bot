@@ -249,15 +249,17 @@ class LlmWebuiConfig(BaseModel):
     web_search_api_url: str = Field(
         default="",
         description=field_help(
-            "搜索接口地址",
-            "web.search 的 POST 目标（如兼容 Tavily 的搜索 API）；留空则不联网",
+            "群里说「搜一下…」时实际请求的完整 URL",
+            "推荐 Tavily：https://api.tavily.com/search（须含 /search，不要只填域名）",
+            '也可填其它兼容接口：POST，JSON {"query": "…"}。留空则不联网',
         ),
     )
     tavily_api_key: str = Field(
         default="",
         description=field_help(
-            "搜索接口密钥",
-            "与接口地址配套，请求头 Authorization: Bearer …；两项都填才生效",
+            "搜索接口鉴权密钥",
+            "推荐在 app.tavily.com 注册后复制免费 Key（形如 tvly-…）",
+            "以 Authorization: Bearer 发送。须与地址同时填写，并开启「允许调用工具」",
         ),
         json_schema_extra={"secret": True},
     )

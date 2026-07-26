@@ -48,6 +48,7 @@
 | [数据库](06-database.md) | 概览、备份、表行编辑 |
 | [实例与账号配置](07-instances-configs.md) | instances、bot/group/user config |
 | [更新与 AI 扩展](08-update-ai.md) | WebUI/Bot 更新、媒体 / RWKV AI 扩展、NCM |
+| [Agent Platform](09-agent-platform.md) | 人物事实、观察队列、任务、口癖、工具目录 |
 
 ## 写操作与热重载
 

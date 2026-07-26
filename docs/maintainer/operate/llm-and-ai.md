@@ -108,6 +108,19 @@ flowchart TD
 
 排障：会话「记不住」先查 `LLM_SESSION_ENABLED`、Provider 是否测通，以及数据库是否已初始化（PG 或 Mongo）。群记忆 / 关系便签同需对应开关与存储就绪；向量检索异常时回落关键词。
 
+人物事实、观察队列、口癖与任务见控制台 **AI 观测**；分段说明见 [AI 扩展 · 观测与策略](/guide/ai#聊得起来之后ai-观测与对话策略)。
+
+### 联网搜索不生效
+
+群里「搜一下…」却说搜不了，或日志出现 `web_search_unconfigured`：
+
+1. **AI 配置 → 对话 → 策略 → 联网搜索**：`WEB_SEARCH_API_URL` 与 `TAVILY_API_KEY` 是否都已填  
+2. 地址是否为完整 URL（推荐 `https://api.tavily.com/search`，须含 `/search`）  
+3. 同页 **允许调用工具**（`LLM_TOOLS_ENABLED`）是否开启  
+4. 保存后是否已热载；仍无效时重启 Bot 再试  
+
+推荐填法见 [联网搜索](/guide/ai#联网搜索)。
+
 ## callback（媒体 / RWKV）
 
 媒体或遗留 RWKV 任务在 AI Runtime 成功，不等于群里一定能收到结果。中间还经过：
@@ -128,6 +141,7 @@ Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 20
 
 ## 相关阅读
 
+- [AI 扩展](/guide/ai)
 - [AI Runtime 安装](/maintainer/install/ai-runtime)
 - [排障](troubleshooting.md)
 - [架构总览](/developer/architecture/overview)
