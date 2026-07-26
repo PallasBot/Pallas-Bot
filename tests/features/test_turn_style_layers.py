@@ -102,3 +102,11 @@ def test_catchphrase_canonical_venting_occasion_matches_legacy_variant(tmp_path,
     promote_catchphrase(row.entry_id, force=True)
     picked = select_catchphrases_for_turn(42, user_text="加班太难了", scene="venting", limit=1)
     assert [item.entry_id for item in picked] == [row.entry_id]
+
+
+def test_catchphrase_rejects_canonical_scene_mismatch_despite_keyword(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    row = propose_catchphrase_from_bot_success(42, 1, "太难了", "吐槽加班")
+    assert row is not None
+    promote_catchphrase(row.entry_id, force=True)
+    assert select_catchphrases_for_turn(42, user_text="加班太难了", scene="banter", limit=1) == []

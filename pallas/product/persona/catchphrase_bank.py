@@ -16,7 +16,7 @@ from pallas.product.persona.catchphrase_extract import (
     extract_catchphrase_candidates,
     is_catchphrase_habit,
 )
-from pallas.product.persona.occasion import normalize_occasion_tag
+from pallas.product.persona.occasion import OccasionTag, normalize_occasion_tag
 
 
 class CatchphraseEntry(BaseModel):
@@ -259,6 +259,16 @@ def score_catchphrase_for_turn(
     score += min(30, 8 * kw_hits)
     scene_key = normalize_occasion_tag(str(scene or "").strip())
     scene_tokens = _SCENE_OCCASION_TOKENS.get(scene_key, ())
+    scene_tags = {
+        OccasionTag.PROVOCATION,
+        OccasionTag.BANTER,
+        OccasionTag.SMALLTALK,
+        OccasionTag.VENTING,
+        OccasionTag.GROUP_THREADING,
+        OccasionTag.LIGHT_HELP,
+    }
+    if occasion in scene_tags and scene_key and occasion != scene_key:
+        return None
     scene_matches = occasion == scene_key or bool(scene_tokens and any(token in candidate for token in scene_tokens))
     if scene_matches:
         score += 24

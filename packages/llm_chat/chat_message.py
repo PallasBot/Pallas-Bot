@@ -146,12 +146,14 @@ async def build_llm_chat_expression_suffix(
     plain_text: str = "",
     *,
     bot_id: int = 0,
+    scene: str = "",
     blocked_openers: list[str] | None = None,
 ) -> str:
     suffix, _entries = await build_llm_chat_expression_selection(
         group_id,
         plain_text,
         bot_id=bot_id,
+        scene=scene,
         blocked_openers=blocked_openers,
     )
     return suffix
@@ -162,6 +164,7 @@ async def build_llm_chat_expression_selection(
     plain_text: str = "",
     *,
     bot_id: int = 0,
+    scene: str = "",
     blocked_openers: list[str] | None = None,
 ) -> tuple[str, list]:
     if group_id is None:
@@ -180,6 +183,7 @@ async def build_llm_chat_expression_selection(
         int(group_id),
         plain_text,
         bot_id=bot_id,
+        scene=scene,
         style_profile=profile,
         blocked_openers=blocked_openers,
     )
@@ -537,6 +541,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         group_id,
         focus_text,
         bot_id=int(bot.self_id),
+        scene=str(behavior_scene),
         blocked_openers=blocked_openers,
     )
     selected_expression_ids = [item.entry_id for item in selected_expression_entries]
