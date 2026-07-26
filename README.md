@@ -31,16 +31,17 @@
 
 ## ✨ 特性
 
-- **学习型复读**：记住群友说话，在合适时机复读出来
-- **复读优先**：可选接入 LLM 辅助，回复仍以群友语料为主
-- **插件化**：内置插件与本地扩展，按需启用
-- **WebUI 控制台**：浏览器管理配置、插件与权限
-- **可选能力**：[![AI 对话](https://img.shields.io/badge/AI%20对话-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![唱歌](https://img.shields.io/badge/唱歌-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![TTS](https://img.shields.io/badge/TTS-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![MAA 远控](https://img.shields.io/badge/MAA%20远控-FE7D37)](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/maa)
+- **学习型复读**：记住群友说话，在合适时机复读出来；可选接社区共享语料
+- **复读优先**：可选接入 [LLM](https://PallasBot.github.io/Pallas-Bot-Docs/guide/llm-and-repeater)，回复仍以群友语料为主
+- **WebUI 控制台**：浏览器管理配置、插件、命令权限与消息审查
+- **插件生态**：可从内置商店安装插件，原生支持 NoneBot 插件
+- **可选能力**：[![唱歌](https://img.shields.io/badge/唱歌-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![TTS](https://img.shields.io/badge/TTS-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![MAA 远控](https://img.shields.io/badge/MAA%20远控-FE7D37)](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/maa)
 
 ## 🚀 快速开始
 
 > [!NOTE]
-> 前置：Python 3.12+、PostgreSQL、可用的 OneBot v11 协议端（如 [NapCat](https://github.com/NapNeko/NapCatQQ)）。
+> 前置：Python 3.12+、PostgreSQL、 OneBot v11 协议端（如 [NapCat](https://github.com/NapNeko/NapCatQQ)）。  
+> 不想装 Python 时，可用 [Docker 部署](https://PallasBot.github.io/Pallas-Bot-Docs/deploy/docker)。
 
 ```bash
 # 获取代码
@@ -87,7 +88,7 @@ uv run pallas
 | --- | --- |
 | [Pallas-Bot-Docs](https://github.com/PallasBot/Pallas-Bot-Docs) | 文档站源码 |
 | [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) | 控制台前端 |
-| [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) | AI 对话 / 唱歌 / TTS 服务 |
+| [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) | 唱歌 / TTS 等 AI Runtime（普通对话不必装） |
 | [Pallas-Bot-Community-Stats](https://github.com/PallasBot/Pallas-Bot-Community-Stats) | 社区统计与语料中心服务 |
 | [community-plugin-index](https://github.com/PallasBot/community-plugin-index) | 社区插件商店索引 |
 
