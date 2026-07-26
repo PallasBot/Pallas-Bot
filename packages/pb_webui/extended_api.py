@@ -7603,6 +7603,18 @@ def register_extended_api(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
+    @router.post(f"{x}/llm/tools/preview", include_in_schema=True)
+    async def _llm_tools_preview(body: dict[str, Any]) -> JSONResponse:
+        try:
+            from pallas.product.llm.tools.preview import preview_tool_intent
+
+            text = str(body.get("text") or body.get("user_text") or "").strip()
+            task = str(body.get("task") or "llm_chat").strip() or "llm_chat"
+            data = preview_tool_intent(text, task=task)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
     @router.put(f"{x}/llm/tools/overrides", include_in_schema=True)
     async def _llm_tools_overrides_put(
         body: dict[str, Any],
