@@ -16,6 +16,7 @@ from pallas.product.llm.behavior import classify_behavior_scene
 from pallas.product.llm.fallback import maybe_submit_repeater_llm_fallback
 from pallas.product.llm.kernel import (
     ConversationContext,
+    ConversationFeatureLevel,
     behavior_scene_to_conversation_scene,
     decide_repeater_action,
     resolve_conversation_feature_level,
@@ -149,6 +150,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     from ..message_store import MessageStore
 
     feature_level = resolve_conversation_feature_level(llm_cfg)
+    repeater_llm_enabled = capabilities.llm_enabled and feature_level != ConversationFeatureLevel.LEGACY_REPEATER
     recent_group_messages = list(MessageStore._message_dict.get(int(event.group_id), []))
     has_candidate_pool = bool(bundle.message_pool or bundle.answer_list)
     recent_human_user_ids = [
@@ -164,7 +166,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     )
     plan = build_repeater_llm_plan(
         bundle,
-        llm_enabled=capabilities.llm_enabled,
+        llm_enabled=repeater_llm_enabled,
         select_enabled=capabilities.select_enabled,
         polish_enabled=capabilities.polish_enabled,
         polish_lite_enabled=capabilities.polish_lite_enabled,
@@ -245,7 +247,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     )
     decision = decide_repeater_action(
         decision_ctx,
-        llm_enabled=capabilities.llm_enabled,
+        llm_enabled=repeater_llm_enabled,
         select_enabled=capabilities.select_enabled,
         polish_enabled=capabilities.polish_enabled,
         polish_lite_enabled=capabilities.polish_lite_enabled,

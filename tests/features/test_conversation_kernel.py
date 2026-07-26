@@ -83,6 +83,67 @@ def test_decide_repeater_action_skips_when_opportunity_rejected() -> None:
     assert result.opportunity_accepted is False
 
 
+def test_decide_repeater_action_plans_stages_for_plus_decision() -> None:
+    ctx = ConversationContext.for_repeater(
+        plain_text="嗯",
+        group_id=1,
+        bot_id=2,
+        user_id=3,
+        reply_mode="normal",
+        unique_users=2,
+        recent_message_count=3,
+        has_candidate_pool=True,
+        candidate_pool_size=2,
+        candidate_style_score=0.8,
+        has_recent_back_and_forth=True,
+        bot_recently_replied=False,
+    )
+    result = decide_repeater_action(
+        ctx,
+        llm_enabled=True,
+        select_enabled=True,
+        polish_enabled=False,
+        polish_lite_enabled=False,
+        has_grounded_candidate=True,
+        opportunity_accepted=True,
+        feature_level=ConversationFeatureLevel.REPEATER_PLUS_DECISION,
+    )
+    assert result.generation_stages == [
+        GenerationStage.SELECT,
+        GenerationStage.STITCH,
+        GenerationStage.GENERATE,
+    ]
+
+
+def test_decide_repeater_action_blocks_llm_stages_for_legacy_repeater() -> None:
+    ctx = ConversationContext.for_repeater(
+        plain_text="嗯",
+        group_id=1,
+        bot_id=2,
+        user_id=3,
+        reply_mode="normal",
+        unique_users=2,
+        recent_message_count=3,
+        has_candidate_pool=True,
+        candidate_pool_size=2,
+        candidate_style_score=0.8,
+        has_recent_back_and_forth=True,
+        bot_recently_replied=False,
+    )
+    result = decide_repeater_action(
+        ctx,
+        llm_enabled=True,
+        select_enabled=True,
+        polish_enabled=True,
+        polish_lite_enabled=False,
+        has_grounded_candidate=True,
+        opportunity_accepted=True,
+        feature_level=ConversationFeatureLevel.LEGACY_REPEATER,
+    )
+    assert result.generation_stages == []
+    assert result.action == ConversationAction.REPLY_CORPUS
+
+
 def test_decide_direct_chat_action_forces_reply_generate() -> None:
     ctx = ConversationContext.for_direct_chat(
         plain_text="@牛牛 你好",
