@@ -1,5 +1,13 @@
 # Changelog
 
+## [4.1.6] - 2026-07-26
+
+本版相对 4.1.5：发言感知（别名提及 / 氛围插嘴 / 续聊软窗）配置进 WebUI 对话策略。捆绑 WebUI **v0.7.12**（发版前需先合并并发布该 WebUI tag）。
+
+### Added
+
+- WebUI 暴露 `LLM_SPEAK_*` 发言感知开关与细调（总闸、别名提及、ambient、续聊软窗）
+
 ## [4.1.5] - 2026-07-26
 
 本版相对 4.1.4：社交型 Agent 平台（观察队列 / 人物事实 / 口癖 / 任务编排）、LLM 动作与开口拆分、联网搜索与 Draw 连通修复；重复器接话 stage 收敛。捆绑 WebUI **v0.7.11**（人物 / 任务观测与口癖审批等；发版前需先发布该 WebUI tag）。
@@ -249,6 +257,7 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
+[4.1.6]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.5...v4.1.6
 [4.1.5]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.4...v4.1.5
 [4.1.4]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.3...v4.1.4
 [4.1.3]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.2...v4.1.3
