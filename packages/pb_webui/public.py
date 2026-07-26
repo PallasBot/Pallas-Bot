@@ -122,10 +122,17 @@ def register_routes(
     plugin_store_assets_dir.mkdir(parents=True, exist_ok=True)
     use_priest_avatar = shared_pallas_ui_dir.is_dir()
 
+    def _spa_file_response(path: Path) -> FileResponse:
+        response = FileResponse(path)
+        # SPA 入口勿被中间层/浏览器长期缓存，否则会继续引用旧 hash 的 JS。
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        return response
+
     def _spa_index_response() -> FileResponse | HTMLResponse:
         idx = public_dir / "index.html"
         if idx.is_file():
-            return FileResponse(idx)
+            return _spa_file_response(idx)
         logger.warning(
             "Pallas-Bot 控制台: 未找到 {}，可设置 pallas_webui_dist_zip_url 或手动放置构建产物。",
             public_dir / "index.html",
@@ -178,7 +185,7 @@ def register_routes(
                 )
         idx = public_dir / "index.html"
         if idx.is_file():
-            response = FileResponse(idx)
+            response = _spa_file_response(idx)
             if got and _is_token_valid(got):
                 _refresh_page_cookie(response, request, got)
             return response
@@ -228,10 +235,10 @@ def register_routes(
         if target is not None:
             if target.suffix.lower() == ".html":
                 if dev_mode_active():
-                    return FileResponse(target)
+                    return _spa_file_response(target)
                 got = _request_token(request, token)
                 if _is_token_valid(got):
-                    response = FileResponse(target)
+                    response = _spa_file_response(target)
                     _refresh_page_cookie(response, request, got)
                     return response
                 return _login_redirect(f"{base}/{path}", reason="请先登录后再访问页面")
@@ -239,10 +246,10 @@ def register_routes(
         fallback = _pick_index_fallback()
         if fallback is not None:
             if dev_mode_active():
-                return FileResponse(fallback)
+                return _spa_file_response(fallback)
             got = _request_token(request, token)
             if _is_token_valid(got):
-                response = FileResponse(fallback)
+                response = _spa_file_response(fallback)
                 _refresh_page_cookie(response, request, got)
                 return response
             return _login_redirect(f"{base}/{path}", reason="请先登录后再访问页面")
