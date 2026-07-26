@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import secrets
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -50,13 +51,23 @@ class MigrateJobState:
 
 
 def _load_migrate_module():
+    mod_name = "pallas_migrate_mongo_to_pg"
+    existing = sys.modules.get(mod_name)
+    if existing is not None:
+        return existing
     root = Path(__file__).resolve().parents[4]
     path = root / "tools" / "migrate_mongo_to_pg.py"
-    spec = importlib.util.spec_from_file_location("pallas_migrate_mongo_to_pg", path)
+    spec = importlib.util.spec_from_file_location(mod_name, path)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"无法加载迁移脚本: {path}")
     mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
+    # dataclass + from __future__ import annotations 需要模块先挂进 sys.modules
+    sys.modules[mod_name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        sys.modules.pop(mod_name, None)
+        raise
     return mod
 
 
