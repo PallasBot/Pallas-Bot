@@ -66,20 +66,24 @@ class _RemoteCorpusSlot:
         self.acquired = False
 
 
+async def try_acquire_remote_corpus_sem(sem: asyncio.Semaphore, *, wait: bool) -> bool:
+    """获取远程语料槽。wait=False 时不可用 wait_for(..., 0)：timeout=0 会在 acquire 尚未步进前触发，导致永远抢不到。"""
+    if wait:
+        await sem.acquire()
+        return True
+    if sem.locked():
+        return False
+    await sem.acquire()
+    return True
+
+
 async def try_remote_corpus_slot(*, wait: bool = True) -> _RemoteCorpusSlot | None:
     """获取远程语料并发槽；池满或槽满时可立即放弃。"""
     global _skipped_busy
     if should_skip_remote_corpus(hot_path=False):
         return None
     sem = remote_corpus_sem()
-    if wait:
-        await sem.acquire()
-        slot = _RemoteCorpusSlot()
-        slot.acquired = True
-        return slot
-    try:
-        await asyncio.wait_for(sem.acquire(), timeout=0)
-    except TimeoutError:
+    if not await try_acquire_remote_corpus_sem(sem, wait=wait):
         _skipped_busy += 1
         return None
     slot = _RemoteCorpusSlot()
@@ -108,20 +112,13 @@ class RemoteCorpusBudget:
             self.skipped = True
             return self
         sem = remote_corpus_sem()
-        if self._wait:
-            await sem.acquire()
-            self._slot = _RemoteCorpusSlot()
-            self._slot.acquired = True
-        else:
-            try:
-                await asyncio.wait_for(sem.acquire(), timeout=0)
-            except TimeoutError:
-                global _skipped_busy
-                _skipped_busy += 1
-                self.skipped = True
-                return self
-            self._slot = _RemoteCorpusSlot()
-            self._slot.acquired = True
+        if not await try_acquire_remote_corpus_sem(sem, wait=self._wait):
+            global _skipped_busy
+            _skipped_busy += 1
+            self.skipped = True
+            return self
+        self._slot = _RemoteCorpusSlot()
+        self._slot.acquired = True
         return self
 
     async def __aexit__(self, *exc: object) -> None:

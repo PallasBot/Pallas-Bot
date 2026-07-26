@@ -75,7 +75,7 @@ def run_shard(args: argparse.Namespace) -> int:
 
 def run_lifecycle(action: str, args: argparse.Namespace) -> int:
     if not bot_lifecycle_available():
-        print("缺少 run_unified_bot.sh 或 run_sharded_bot.sh", file=sys.stderr)
+        print("Bot 启停不可用", file=sys.stderr)
         return 1
     extra: list[str] = []
     if action == "restart":

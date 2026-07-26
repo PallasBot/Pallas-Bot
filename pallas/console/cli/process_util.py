@@ -1,0 +1,259 @@
+"""跨平台进程探测、后台启动与停止；解析 bash 供仍依赖 shell 脚本的路径使用。"""
+
+from __future__ import annotations
+
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from collections.abc import Mapping, Sequence  # noqa: TC003
+from pathlib import Path
+
+
+def is_windows() -> bool:
+    return sys.platform == "win32"
+
+
+def pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if is_windows():
+        return _windows_pid_alive(pid)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _windows_pid_alive(pid: int) -> bool:
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    process_query_limited_information = 0x1000
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if handle:
+        kernel32.CloseHandle(handle)
+        return True
+    return False
+
+
+def read_pid_file(path: Path) -> int | None:
+    if not path.is_file():
+        return None
+    try:
+        raw = path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not raw.isdigit():
+        return None
+    return int(raw)
+
+
+def write_pid_file(path: Path, pid: int) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{pid}\n", encoding="utf-8")
+
+
+def clear_pid_file(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def uv_run_python_cmd(*script_args: str) -> list[str]:
+    """``uv run --no-sync python …``，与启停脚本保持一致。"""
+    return ["uv", "run", "--no-sync", "python", *script_args]
+
+
+def spawn_detached(
+    cmd: Sequence[str],
+    *,
+    cwd: Path | str,
+    env: Mapping[str, str] | None = None,
+    log_path: Path | None = None,
+) -> int:
+    """后台启动进程，返回子进程 pid；可选将 stdout/stderr 追加到日志。"""
+    cwd_s = str(cwd)
+    popen_env = dict(os.environ)
+    if env:
+        popen_env.update({str(k): str(v) for k, v in env.items()})
+
+    stdout = subprocess.DEVNULL
+    stderr = subprocess.DEVNULL
+    log_fh = None
+    if log_path is not None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_fh = log_path.open("a", encoding="utf-8")
+        stdout = log_fh
+        stderr = subprocess.STDOUT
+
+    creationflags = 0
+    kwargs: dict = {
+        "args": list(cmd),
+        "cwd": cwd_s,
+        "env": popen_env,
+        "stdin": subprocess.DEVNULL,
+        "stdout": stdout,
+        "stderr": stderr,
+    }
+    if is_windows():
+        creationflags = (
+            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+            | getattr(subprocess, "DETACHED_PROCESS", 0)
+            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        )
+        kwargs["creationflags"] = creationflags
+        kwargs["close_fds"] = True
+    else:
+        kwargs["start_new_session"] = True
+
+    try:
+        proc = subprocess.Popen(**kwargs)  # noqa: S603
+    finally:
+        if log_fh is not None:
+            # 子进程已继承 fd，父进程可关
+            try:
+                log_fh.close()
+            except OSError:
+                pass
+    return int(proc.pid)
+
+
+def stop_pid(
+    pid: int,
+    *,
+    timeout_s: float = 30.0,
+    force: bool = False,
+) -> None:
+    """温和停止进程；超时或 force 时强制结束。"""
+    if pid <= 0 or not pid_alive(pid):
+        return
+    if is_windows():
+        _windows_stop_pid(pid, force=force or False, timeout_s=timeout_s)
+        return
+
+    if force:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+        return
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return
+
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if not pid_alive(pid):
+            return
+        time.sleep(0.5)
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except OSError:
+        pass
+
+
+def _windows_stop_pid(pid: int, *, force: bool, timeout_s: float) -> None:
+    # taskkill：先尝试无 /F，失败或 force 再强制
+    flags = ["/PID", str(pid), "/T"]
+    if force:
+        flags.append("/F")
+    try:
+        subprocess.run(  # noqa: S603
+            ["taskkill", *flags],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return
+    if force:
+        return
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if not pid_alive(pid):
+            return
+        time.sleep(0.5)
+    try:
+        subprocess.run(  # noqa: S603
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        pass
+
+
+def resolve_bash() -> Path | None:
+    """解析可用 bash：PATH，以及 Windows 常见 Git 安装路径。"""
+    found = shutil.which("bash")
+    if found:
+        return Path(found)
+    if is_windows():
+        candidates = [
+            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe",
+            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Git" / "bin" / "bash.exe",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Git" / "bin" / "bash.exe",
+        ]
+        for path in candidates:
+            if path.is_file():
+                return path
+    for path in (Path("/bin/bash"), Path("/usr/bin/bash")):
+        if path.is_file():
+            return path
+    return None
+
+
+def bash_missing_message(*, purpose: str) -> str:
+    if is_windows():
+        return (
+            f"{purpose} 需要 bash（当前未找到）。\n"
+            "请安装 Git for Windows 并将 bash 加入 PATH，或在 WSL 中运行；"
+            "单进程 Bot 请直接使用：uv run pallas（已不依赖 bash）。"
+        )
+    return f"{purpose} 需要 bash，但系统未找到（请安装 bash 或检查 PATH）。"
+
+
+def run_bash_script(
+    script: Path,
+    args: Sequence[str] = (),
+    *,
+    cwd: Path | str | None = None,
+    env: Mapping[str, str] | None = None,
+    purpose: str = "该操作",
+) -> int:
+    """用已解析的 bash 执行脚本；找不到 bash 时打印说明并返回 1。"""
+    bash = resolve_bash()
+    if bash is None:
+        print(bash_missing_message(purpose=purpose), file=sys.stderr)
+        return 1
+    if not script.is_file():
+        print(f"缺少脚本 {script}", file=sys.stderr)
+        return 1
+    cmd = [str(bash), str(script), *args]
+    popen_env = None
+    if env is not None:
+        popen_env = dict(os.environ)
+        popen_env.update({str(k): str(v) for k, v in env.items()})
+    try:
+        proc = subprocess.run(  # noqa: S603
+            cmd,
+            cwd=str(cwd) if cwd is not None else None,
+            env=popen_env,
+            check=False,
+        )
+    except OSError as err:
+        print(f"无法执行 {script}: {err}", file=sys.stderr)
+        return 1
+    return int(proc.returncode or 0)

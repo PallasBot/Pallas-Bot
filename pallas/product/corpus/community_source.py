@@ -169,7 +169,8 @@ class RemoteCorpusRepository(ContextRepositoryExistenceMixin):
             return
         from pallas.product.corpus.remote_budget import RemoteCorpusBudget
 
-        async with RemoteCorpusBudget(hot_path=False, wait=False) as budget:
+        # 后台 mirror：可排队等槽；wait=False 会被 prefetch/find 长期挤掉导致共享池不涨
+        async with RemoteCorpusBudget(hot_path=False, wait=True) as budget:
             if budget.skipped:
                 return
             await self._post_contribute_http(body)

@@ -3,34 +3,21 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path  # noqa: TC003
 
+from pallas.console.cli.process_util import pid_alive, read_pid_file
 from pallas.core.foundation.paths import PROJECT_ROOT
 
 UNIFIED_PID_FILE = PROJECT_ROOT / "data" / "pallas_unified" / "run" / "bot.pid"
 SHARD_HUB_PID_FILE = PROJECT_ROOT / "data" / "pallas_shard" / "run" / "hub.pid"
 
-
-def pid_alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
-
-
-def read_pid_file(path: Path) -> int | None:
-    if not path.is_file():
-        return None
-    try:
-        raw = path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    if not raw.isdigit():
-        return None
-    return int(raw)
+__all__ = [
+    "UNIFIED_PID_FILE",
+    "SHARD_HUB_PID_FILE",
+    "detect_running_bot_mode",
+    "pid_alive",
+    "read_pid_file",
+    "resolve_bot_mode",
+]
 
 
 def detect_running_bot_mode() -> str | None:

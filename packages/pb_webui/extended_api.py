@@ -9610,6 +9610,32 @@ def register_extended_api(
             },
         })
 
+    @router.get(f"{x}/update/changelog", include_in_schema=True)
+    async def _update_changelog(
+        target: str = Query(..., description="webui 或 bot"),
+        max_versions: int = Query(default=10, ge=1, le=30),
+    ) -> JSONResponse:
+        """拉取仓库 CHANGELOG.md，截取最近若干版本段（与发行说明分离）。"""
+        from pallas.core.shared.utils.changelog_md import load_update_changelog_payload
+        from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+        try:
+            data = await load_update_changelog_payload(target, max_versions=max_versions)
+            return JSONResponse({"ok": True, "data": data})
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": format_exception_for_log(e),
+                    "data": {
+                        "target": str(target or "").strip().lower() or None,
+                        "markdown": "",
+                        "changelog_url": "",
+                    },
+                },
+                status_code=502,
+            )
+
     @router.get(f"{x}/update/bot/config-migration/check", include_in_schema=True)
     async def _bot_config_migration_check() -> JSONResponse:
         from pallas.core.foundation.config.migrate_env_to_pallas import inspect_env_to_pallas_migration

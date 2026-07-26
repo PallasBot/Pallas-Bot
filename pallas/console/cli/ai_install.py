@@ -146,12 +146,17 @@ def run_ai_bootstrap_captured(
     """运行 bootstrap，返回 (exit_code, combined_output)。默认媒体栈。"""
     del with_media, remote_only
     from pallas.console.cli.ai_supervisor import is_managed_ai_root, mark_ai_root_managed
+    from pallas.console.cli.process_util import bash_missing_message, resolve_bash
 
     script = ai_root / _AI_BOOTSTRAP
     if not script.is_file():
         return 1, f"未找到 {script}"
 
-    cmd = [str(script)]
+    bash = resolve_bash()
+    if bash is None:
+        return 1, bash_missing_message(purpose="AI Runtime bootstrap")
+
+    cmd = [str(bash), str(script)]
     if check_only:
         cmd.append("--check-only")
     if no_start:
@@ -163,14 +168,17 @@ def run_ai_bootstrap_captured(
     if use_gpu:
         env["PALLAS_GPU"] = "1"
 
-    completed = subprocess.run(
-        cmd,
-        cwd=ai_root,
-        env=env,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=ai_root,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError as err:
+        return 1, f"无法执行 bootstrap: {err}"
     out = (completed.stdout or "") + (completed.stderr or "")
     header = f"执行: {' '.join(cmd)}\nAI 仓: {ai_root}\n"
     if completed.returncode == 0 and is_managed_ai_root(ai_root):
