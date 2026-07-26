@@ -12,6 +12,15 @@ _local_routing_cache_at = 0.0
 _providers_cache: dict[str, Any] = {}
 _providers_cache_at = 0.0
 
+HIGH_TIER_TASKS = frozenset({"llm_chat", "drunk", "repeater_polish"})
+LOW_TIER_TASKS = frozenset({
+    "repeater_select",
+    "repeater_polish_lite",
+    "repeater_fallback",
+    "affect_refine",
+    "turn_decision",
+})
+
 
 @dataclass(frozen=True)
 class TaskRouteSpec:
@@ -29,6 +38,15 @@ def resolve_submit_task_name(task: str | None, mode: str | None = None) -> str:
     if str(mode or "normal").strip().lower() == "drunk":
         return "drunk"
     return "llm_chat"
+
+
+def task_route_tier(task: str) -> str:
+    task_name = str(task or "").strip().lower()
+    if task_name in HIGH_TIER_TASKS:
+        return "high"
+    if task_name in LOW_TIER_TASKS:
+        return "low"
+    return ""
 
 
 def serialize_task_route(spec: TaskRouteSpec) -> dict[str, Any]:
@@ -129,9 +147,7 @@ def _chain_fallback_models(
     if not isinstance(routing, dict):
         return ()
 
-    high_tasks = {"llm_chat", "drunk", "repeater_polish"}
-    low_tasks = {"repeater_select", "repeater_polish_lite", "repeater_fallback", "affect_refine", "turn_decision"}
-    tier = "high" if task in high_tasks else "low" if task in low_tasks else ""
+    tier = task_route_tier(task)
 
     out: list[str] = []
     seen: set[str] = set()
