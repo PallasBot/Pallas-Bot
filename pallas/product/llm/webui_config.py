@@ -421,14 +421,15 @@ class LlmWebuiConfig(BaseModel):
         default=False,
         description=field_help(
             "是否启用本轮动作小模型决策",
-            "默认关闭并保持原回复流程；开启后模型仅在 REPLY、PASS、TOOL、FOLLOW_UP 中选择。",
+            "默认关闭并保持原回复流程；关闭时不会发起额外模型请求或产生费用。",
+            "开启后在「任务编排」的“本轮动作决策”中选择提供方与模型。",
         ),
     )
     llm_current_turn_decision_model: str = Field(
         default="",
         description=field_help(
-            "本轮动作决策模型",
-            "留空使用智能对话默认模型；建议填写低延迟小模型。",
+            "遗留本轮动作决策模型",
+            "仅兼容旧配置；正常请在「任务编排」的“本轮动作决策”中设置。",
         ),
     )
     llm_chat_queue_merge: bool = Field(

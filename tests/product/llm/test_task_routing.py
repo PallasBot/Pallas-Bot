@@ -186,3 +186,44 @@ async def test_resolve_task_route_same_provider_tier_backup_model(
     assert route.resolved_model == "flash"
     assert route.provider_hint == "ds"
     assert route.fallback_models == ("reasoner",)
+
+
+@pytest.mark.asyncio
+async def test_turn_decision_uses_low_tier_provider_route(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    clear_task_route_cache()
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    from pallas.product.llm.providers_store import clear_providers_store_cache, save_providers_document
+
+    clear_providers_store_cache()
+    save_providers_document(
+        {
+            "providers": [
+                {
+                    "id": "fast",
+                    "kind": "remote",
+                    "base_url": "https://fast.example.com/v1",
+                    "api_key": "sk-fast",
+                    "default_model": "fast-model",
+                    "task_models": {"turn_decision": "decision-model"},
+                }
+            ],
+            "routing": {
+                "chain_fallback": ["fast"],
+                "tasks": {"turn_decision": "fast"},
+                "tier_backups": {"low": "fast"},
+                "tier_backup_models": {"low": "decision-backup"},
+            },
+        }
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url=""),
+    )
+
+    route = await resolve_task_route("turn_decision")
+
+    assert route.resolved_model == "decision-model"
+    assert route.provider_hint == "fast"
+    assert route.fallback_models == ("decision-backup",)

@@ -130,7 +130,7 @@ def _chain_fallback_models(
         return ()
 
     high_tasks = {"llm_chat", "drunk", "repeater_polish"}
-    low_tasks = {"repeater_select", "repeater_polish_lite", "repeater_fallback", "affect_refine"}
+    low_tasks = {"repeater_select", "repeater_polish_lite", "repeater_fallback", "affect_refine", "turn_decision"}
     tier = "high" if task in high_tasks else "low" if task in low_tasks else ""
 
     out: list[str] = []
@@ -268,6 +268,7 @@ _TASK_ROUTING_PREVIEW_TASKS: tuple[str, ...] = (
     "repeater_fallback",
     "repeater_select",
     "repeater_polish",
+    "turn_decision",
 )
 
 
