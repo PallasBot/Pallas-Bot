@@ -1,10 +1,12 @@
 # 更新与 AI 扩展
 
+本页覆盖 WebUI / Bot 更新接口，以及 **Pallas-Bot-AI**（媒体 Runtime / 遗留 RWKV）扩展接口。普通 `@` 聊天走 Bot Provider，在侧栏 **AI 配置** 配接入即可，**不要求**本页 `/ai-extension/*` 或 `:9099` 可达。
+
 ## WebUI / Bot 更新
 
 | 方法 | 路径 | 写 | 说明 |
 | --- | --- | --- | --- |
-| GET | `/update/check` | | WebUI dist 发行版检查 |
+| GET | `/update/check` | | WebUI dist 发行版检查（默认产物 `public-react/`） |
 | POST | `/update/apply` | 是 | 拉取并应用 WebUI 更新 |
 | GET | `/update/bot/check` | | 主仓 Bot 版本检查 |
 | GET | `/update/bot/config-migration/check` | | 配置迁移检查 |
@@ -14,6 +16,8 @@
 写操作可能耗时较长；前端需处理进度与错误 `detail`。
 
 ## AI 扩展（Pallas-Bot-AI）
+
+面向唱歌 / TTS 等媒体任务与遗留 RWKV；不是普通聊天 Provider。
 
 | 方法 | 路径 | 写 | 说明 |
 | --- | --- | --- | --- |
@@ -37,7 +41,7 @@
 | 侧 | 配置项 | 说明 |
 | --- | --- | --- |
 | AI 服务 | `PALLAS_AI_API_TOKEN`（`.env`） | 非空时 `GET /api/ops/logs` 要求 `Authorization: Bearer <token>` |
-| Bot WebUI | `token`（AI 配置 · AI 服务） | 与 AI 侧**相同**；Bot 拉取远端日志时自动携带 |
+| Bot WebUI | `token`（**AI 配置** · AI 服务） | 与 AI 侧**相同**；Bot 拉取远端日志时自动携带 |
 
 两端 token **须一致**；AI 侧留空则不对 Bearer 校验（仅建议本地调试）。示例见 [Pallas-Bot-AI Deployment](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/Deployment.md#api-bearer-token)。
 
@@ -46,7 +50,7 @@ Bot 读日志顺序：本机落盘路径 → AI `GET /api/ops/logs` → 报错�
 ## 前端对应
 
 - `UpdatePage`：`fetchUpdateCheck`、`postUpdateApply`、`fetchBotUpdateCheck` 等
-- `AiExtensionPage`：`fetchAiExtensionConfig`、`putAiExtensionConfig` 等
+- **AI 配置**（连接 / 媒体服务）：`fetchAiExtensionConfig`、`putAiExtensionConfig` 等
 
 实现：`extended_api.py` + `pallas_webui/manager.py`（GitHub Release 拉取）。
 

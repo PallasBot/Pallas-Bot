@@ -1,8 +1,6 @@
 # 命令与功能
 
-::: tip
-群里发下列口令（或 @ 牛）即可触发。完整列表与「何人可用」以 **牛牛帮助** 帮助图为准。
-:::
+在群里用口令（或 @ 牛）触发功能。完整列表与「何人可用」以 **牛牛帮助** 帮助图为准；本页只作索引。
 
 ::: details 权限三个词
 | 词 | 意思 |
@@ -33,15 +31,20 @@
 
 安装步骤 → [安装插件](install-plugins.md)
 
-## 需 Pallas-Bot-AI
+## 需额外能力
 
 | 口令 | 依赖 |
 | --- | --- |
-| `牛牛唱歌` / `牛牛点歌` | [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) + `pallas-plugin-ai-media` |
-| `牛牛画画` | 同上 + `pallas-plugin-draw` |
-| @ 牛闲聊 | 控制台打开 `LLM_CHAT_ENABLED`；见 [AI 扩展](ai.md) |
+| `牛牛唱歌` / `牛牛点歌` | [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)（AI Runtime）+ `pallas-plugin-ai-media` |
+| `牛牛画画` | 画画插件网关 + `pallas-plugin-draw`（默认不经 AI Runtime） |
+| @ 牛 LLM 对话 | 控制台 **AI 配置** 打开 `LLM_CHAT_ENABLED`，并配置 Bot Provider；见 [AI 扩展](ai.md) |
 
 连通性测试：群里发 `牛牛连通`。
+
+## 成功信号
+
+- 群里发 `牛牛帮助` 能收到帮助图。
+- 已装插件的口令出现在帮助图中；AI 相关口令在 Provider / Runtime 配好后可用。
 
 ## 控制台入口
 
@@ -50,5 +53,12 @@
 | 改配置 | `http://<主机>:8088/pallas/` |
 | 扫码上 QQ | `/pallas/protocol` |
 | 关插件 | 控制台 **插件** |
+| 配 Provider / 媒体 | **AI 配置** |
 
 面板说明 → [网页控制台](web-console.md)
+
+## 接下来做什么
+
+- [日常管理](usage-admin.md)
+- [@牛牛与复读](llm-and-repeater.md)
+- [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)

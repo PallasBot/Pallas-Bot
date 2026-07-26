@@ -1,6 +1,6 @@
 # 单进程部署
 
-单进程承载全部 Bot 能力。适用：本地开发、小规模自用、功能验证。
+单进程承载全部 Bot 能力。适合本地开发、小规模自用与功能验证；多数站点先用本形态跑通，再考虑分片。
 
 ## 特点
 
@@ -40,8 +40,13 @@ uv run pallas
 | QQ 在线无回复 | 协议端 `ws_url`、是否连到当前进程 |
 | 插件无功能 | 是否重启；`local/plugins/` 同名覆盖 |
 
+## 何时改看分片
+
+多个 Bot 账号同时在线、单进程已卡顿，或需要独立 worker 协调时，再阅读 [分片部署](sharded.md)。完整源码步骤见 [标准部署](/deploy/deployment)。
+
 ## 相关文档
 
 - [标准部署](/deploy/deployment)
 - [Docker 部署](/deploy/docker)
 - [排障](/maintainer/operate/troubleshooting)
+- [运维入口](/maintainer/quickstart)

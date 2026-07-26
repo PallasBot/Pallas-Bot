@@ -1,8 +1,8 @@
 # 写第一个插件
 
-在 `local/plugins/` 里做一个能跑的群口令插件：含权限声明、帮助菜单与冷却。
+本页带你在 `local/plugins/` 创建第一个可运行的群口令插件。完成后，你会有一个使用公开 `pallas.api.*` 的插件，并了解如何声明命令权限、帮助菜单与冷却。
 
-完整骨架见 [Golden Plugin](golden-plugin.md)；要上架社区商店见 [社区插件作者](/guide/community-plugin-author)。
+适合已经能在本机运行 Pallas-Bot、希望先做站点私有插件的开发者。这里先聚焦一条群命令；配置页、热载策略、正式插件骨架和发布方式可以在验收通过后再学习。
 
 ## 验收目标
 
@@ -15,7 +15,7 @@
 <ChatMessage nickname="牛牛">（帮助图里出现「你好牛牛」，并展示何人可用）</ChatMessage>
 </ChatPanel>
 
-## 前置
+## 开始前
 
 | 项 | 要求 |
 | --- | --- |
@@ -29,6 +29,15 @@
 [bootstrap]
 extra_plugin_dirs = ["local/plugins"]
 ```
+
+## 推荐学习路径
+
+1. 按下面步骤创建并加载 `hello_pallas`，先完成验收目标。
+2. 需要增加口令、参数或常见交互时，查 [Cookbook](pallas-api-cookbook.md)。
+3. 需要插件配置页或调整热载方式时，读 [配置与 WebUI](config-and-webui.md) 与 [Reload 与 Activation](/developer/plugin-development/reload-and-activation)。
+4. 准备长期维护、内置或独立发布插件时，再使用 [Golden Plugin](golden-plugin.md)、[发布](publishing.md) 和 [社区插件作者](/guide/community-plugin-author)。
+
+本页的 `README.md` 是最小说明；社区商店详情页会读取它。WebUI 配置、独立仓 / PyPI、社区商店发布都不是完成第一个插件的前提。
 
 ---
 
@@ -112,9 +121,9 @@ async def handle_hello(matcher: Matcher, event: GroupMessageEvent) -> None:
     await matcher.finish(Message("你好，这里是 hello_pallas 示例插件。"))
 ```
 
-## 步骤 4：写 README（最小）
+## 步骤 4：写最小 README
 
-`README.md`：用途、口令、额外依赖、默认权限以 WebUI「命令权限」为准。社区商店详情页也会读此文件。
+`README.md` 写明用途、口令、额外依赖，并说明默认权限以 WebUI「命令权限」为准。
 
 ## 步骤 5：加载并验收
 

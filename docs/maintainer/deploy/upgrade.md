@@ -36,7 +36,7 @@ uv run pallas maintenance run \
 1. **备份运行数据** — `config/pallas.toml`、`data/`；按需数据库与协议端数据
 2. **升级主仓** — 代码与 `uv sync`；补齐新配置项
 3. **升级官方插件** — 控制台 **插件商店** 查看版本；无 UI 时用 `pallas ext install` 覆盖
-4. **同步 WebUI** — 页面或 API 契约变更时须同步静态资源至 `data/pb_webui/public/`
+4. **同步 WebUI** — 页面或 API 契约变更时须同步静态资源至 `data/pb_webui/public-react/`（默认 React）
 5. **联调协议端与 AI** — 验证地址、回调、字段未因版本漂移
 
 ## 单进程 vs 分片

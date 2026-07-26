@@ -1,32 +1,24 @@
 # 运维入口
 
-## 按目标跳转
+本页帮助你把 Bot 安装、运行并维护在可用状态。首次部署按下面的顺序完成；已经在运行的实例可直接按任务进入对应页面。
 
-| 目标 | 文档 |
+## 推荐顺序
+
+1. 先用 [快速开始](/guide/quickstart) 跑通本机实例。需要从源码安装时，改看 [源码安装](/guide/install-source)；使用容器时，改看 [Docker 部署](/deploy/docker)。
+2. 按需安装 [WebUI](/maintainer/install/webui)、[协议端](/maintainer/install/protocol) 和 [官方插件](/maintainer/install/official-extensions)。需要决斗、MAA 或其他扩展时，看 [安装插件](/guide/install-plugins)；接入 AI 时，看 [AI 扩展](/guide/ai) 和 [AI Runtime](/maintainer/install/ai-runtime)。
+3. 完成配置与权限：用 [命令权限](/maintainer/operate/command-permissions) 管理命令可用范围，用 [Web 控制台](/maintainer/operate/webui) 管理运行中的实例。
+4. 上线前按 [安装验收 Checklist](/maintainer/install/ga-install-checklist) 检查；长期运行的单个账号使用 [单进程部署](/maintainer/deploy/single-process)。
+
+## 按当前任务
+
+| 任务 | 说明 |
 | --- | --- |
-| 本机首次跑通 | [快速开始](/guide/quickstart) · [源码安装](/guide/install-source) · [Docker](/deploy/docker) |
-| 安装决斗 / MAA / 协议端 / AI | [安装插件](/guide/install-plugins) · [AI 扩展](/guide/ai) |
-| Docker | [Docker 部署](/deploy/docker) |
-| 单进程长跑 | [单进程部署](/maintainer/deploy/single-process) |
-| 多账号 / 分片 | [分片部署](/maintainer/deploy/sharded) |
-| 版本升级 | [升级](/maintainer/deploy/upgrade) · [3.x → 4.0 迁移](/guide/4.0-migration) |
-| 新装验收 | [安装验收 Checklist](/maintainer/install/ga-install-checklist) |
-| 排障 | [排障](/maintainer/operate/troubleshooting) |
-| 闲聊 / 记忆异常 | [LLM 与 AI](/maintainer/operate/llm-and-ai) |
-| 配置键查询 | [配置参考](/maintainer/reference/config) |
+| 安装 Pallas-Bot 本体 | [本体安装](/maintainer/install/bot) 说明运行所需的基础组件。 |
+| 使用 Docker | [Docker 部署](/deploy/docker) 说明容器部署和运行方式。 |
+| 升级现有实例 | [升级](/maintainer/deploy/upgrade) 说明常规升级步骤；从 3.x 升级时，先看 [3.x → 4.0 迁移](/guide/4.0-migration)。 |
+| 查询配置键 | [配置参考](/maintainer/reference/config) 按配置项查找含义和用法。 |
+| 处理运行问题 | [排障](/maintainer/operate/troubleshooting) 按现象定位常见运行问题；LLM 对话或记忆异常时，看 [LLM 与 AI](/maintainer/operate/llm-and-ai)。 |
 
-## 组件安装
+## 后续阅读：多账号与分片
 
-| 组件 | 文档 |
-| --- | --- |
-| Pallas-Bot 本体 | [本体安装](/maintainer/install/bot) |
-| WebUI | [WebUI](/maintainer/install/webui) |
-| 协议端 | [协议端](/maintainer/install/protocol) |
-| 官方插件 | [官方插件](/maintainer/install/official-extensions) |
-| AI Runtime | [AI Runtime](/maintainer/install/ai-runtime) |
-| 命令权限 | [命令权限](/maintainer/operate/command-permissions) |
-| Web 控制台 | [Web 控制台](/maintainer/operate/webui) |
-
-## 分片适用条件
-
-多 Bot 账号同时在线、单进程资源瓶颈、或需独立 worker 协调时，参见 [分片部署](/maintainer/deploy/sharded)。默认单进程即可。
+默认使用单进程即可。多个 Bot 账号同时在线、单进程出现资源瓶颈，或需要独立 worker 协调时，再阅读 [分片部署](/maintainer/deploy/sharded)。

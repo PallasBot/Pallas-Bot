@@ -1,6 +1,8 @@
 # 命令权限（cmd_perm）
 
-部分口令的「谁可用」可在运行中配置：代码声明默认等级，WebUI 可覆盖；**牛牛帮助**自动展示当前生效的「何人可用」。
+本页说明部分口令的「谁可用」如何声明与覆盖：代码写默认等级，WebUI 可覆盖；**牛牛帮助**自动展示当前生效的「何人可用」。
+
+接群口令时先在 [写第一个插件](/developer/plugin-development/first-plugin) 对齐命令 ID，再回到本页补权限与帮助文案约定。
 
 实现：`pallas.core.perm`；**插件侧只从 `pallas.api.perm` import**。
 
@@ -100,8 +102,8 @@ from pallas.api.metadata import SCENE_GROUP, join_usage, usage_line
 - [ ] `menu_data` 已绑 `command_permission`，`trigger_condition` 无静态角色
 - [ ] `usage` 未写死权限角色
 
-## 相关
+## 后续阅读
 
 - [命令冷却](/common/command_limits)
-- [首个插件](/developer/plugin-development/first-plugin)
+- [写第一个插件](/developer/plugin-development/first-plugin)
 - [元数据](/developer/plugin-development/metadata)

@@ -59,7 +59,7 @@ WebUI **插件 → dream**，或本仓库 [`config.py`](src/pallas_plugin_dream/
 | 说明 | 链接 |
 | --- | --- |
 | 牛牛做梦 · 用户文档 | [文档站 · dream](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/dream) |
-| 插件开发入门 | [develop/plugin/getting-started](https://PallasBot.github.io/Pallas-Bot-Docs/develop/plugin/getting-started) |
+| 插件开发入门 | [developer/plugin-development/getting-started](https://PallasBot.github.io/Pallas-Bot-Docs/developer/plugin-development/getting-started) |
 
 ## 源码
 

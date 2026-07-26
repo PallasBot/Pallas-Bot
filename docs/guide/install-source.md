@@ -1,19 +1,23 @@
 # 源码安装
 
-## 1. 下载 / 克隆仓库
+完成本页后，Bot 会连接 PostgreSQL 并启动网页控制台。适合需要从源码运行、修改或参与开发的使用者。
+
+## 1. 获得可运行的源码目录
 
 ```bash
 git clone https://github.com/PallasBot/Pallas-Bot.git
 cd Pallas-Bot
 ```
 
-进目录后应能看到 `pyproject.toml`、`config/pallas.example.toml`。
+进入目录后，能看到 `pyproject.toml` 和 `config/pallas.example.toml`，说明位置正确。
 
-## 2. 安装依赖
+## 2. 安装项目依赖
 
 ```bash
 uv run pallas sync
 ```
+
+命令完成且未报错后，依赖已就绪。
 
 ::: details 可选：自检环境
 ```bash
@@ -23,9 +27,9 @@ uv run pallas doctor
 还没有 `pallas.toml` 时，doctor 提示缺配置是正常的，下一步补上即可。
 :::
 
-## 3. 准备 PostgreSQL
+## 3. 准备可连接的 PostgreSQL 数据库
 
-需要一个**空库**（表会在首次启动时自动建）。下面 **二选一**。
+需要一个**空库**，首次启动时会自动建表。下面两种方式任选其一。
 
 ::: details 【推荐】Docker 起库
 ```bash
@@ -39,6 +43,7 @@ docker run -d --name pallas-pg \
 docker exec pallas-pg pg_isready
 # 回复类似 accepting connections 即可
 ```
+`pg_isready` 回复类似 `accepting connections`，说明数据库可以使用。
 :::
 
 ::: details 本机自己装 PostgreSQL
@@ -47,14 +52,14 @@ docker exec pallas-pg pg_isready
 | Windows | [装 PostgreSQL（Windows）](/noobook/advance/windows/postgresql) |
 | Linux / macOS | [PostgreSQL 官方下载](https://www.postgresql.org/download/) |
 
-建空库（示例名 `PallasBot`），账号能建表即可。权限说明见 [deploy/pg](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)。
+建一个空库（示例名 `PallasBot`），账号能建表即可。权限说明见 [deploy/pg](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)。
 :::
 
 ::: details 可选：库不存在时自动建库
 在 `[bootstrap.postgres]` 加 `auto_create_db = true`（账号需有 `CREATEDB`）。上面 Docker 方式已经建好库时不必开。
 :::
 
-## 4. 写配置
+## 4. 生成并填写启动配置
 
 复制一份配置：
 
@@ -70,7 +75,7 @@ copy config\pallas.example.toml config\pallas.toml
 
 :::
 
-编辑 `config/pallas.toml`，至少改这些（和上一步的库一致）：
+编辑 `config/pallas.toml`，至少让以下配置与上一步创建的数据库一致：
 
 ```toml
 [bootstrap]
@@ -91,22 +96,23 @@ db = "PallasBot"
 `pallas.toml` 已在 `.gitignore`，**不要**提交到公开仓库。
 :::
 
-## 5. 启动
+配置保存后，Bot 已知道监听地址、超级用户和数据库位置。
+
+## 5. 启动 Bot 并打开网页控制台
 
 ```bash
 uv run pallas
 ```
 
-（等价于 `uv run pallas run unified`。）
+这等价于 `uv run pallas run unified`。首次运行会创建数据库表，并在日志中打印 Web 控制台初始密码；这是正常现象。
 
-- 日志里不应出现数据库 `connection refused`
-- 会打印 **Web 控制台初始密码**（也可到 `data/pallas_console/` 找回）
-- 浏览器打开：`http://127.0.0.1:8088/pallas/`
+- 日志中没有数据库 `connection refused`，且已打印**Web 控制台初始密码**，说明启动成功。密码也可在 `data/pallas_console/` 找回。
+- 在浏览器打开 `http://127.0.0.1:8088/pallas/`，使用该密码登录。
 
 ::: tip
 本机用 `127.0.0.1`；挂到服务器请把访问地址换成公网 IP / 域名，并放行 **8088**。
 :::
 
-## 你已经跑通本体
+## 接下来：登录控制台并连接 QQ
 
-▶ [连接 QQ](connect-qq.md)
+先阅读 [网页控制台](web-console.md) 登录并完成首次设置，再按 [连接 QQ](connect-qq.md) 扫码连接账号。

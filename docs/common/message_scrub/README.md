@@ -1,8 +1,10 @@
 # 消息审查（message_scrub）
 
-复读**学习**与做梦**采集/漂流**前统一过滤入站消息：命中规则的内容不入库、不参与后续逻辑。**4.0 起默认开启审查框架**；未配置词表或远程 API 时不拦截，与关闭时行为一致。
+本页说明复读**学习**与做梦**采集/漂流**前如何统一过滤入站消息：命中规则的内容不入库、不参与后续逻辑。**4.0 起默认开启审查框架**；未配置词表或远程 API 时不拦截，与关闭时行为一致。
 
-实现：`src/features/message_scrub/`。
+多数部署保持默认即可。需要拦固定说法或接远程审核时，再配 WebUI **通用配置 → 消息审查与入站过滤**。
+
+实现：`pallas/product/message_scrub/`。
 
 ## 配置
 
@@ -25,7 +27,7 @@
 | `PALLAS_SCRUB_API_URL` | 空 | 自建审查 HTTP 接口 |
 | `PALLAS_INBOUND_FILTER_API_FAIL_OPEN` | 放行 | 远程失败时：`1` 放行，`0` 当拦 |
 
-完整字段见 WebUI 或 [`config.py`](../../../src/features/message_scrub/config.py)。
+完整字段见 WebUI 或 [`config.py`](https://github.com/PallasBot/Pallas-Bot/blob/main/pallas/product/message_scrub/config.py)。
 
 ## 使用场景
 
@@ -62,4 +64,4 @@ UTF-8 文本，一行一词；`#` 开头为注释。相对路径相对于 Bot �
 
 ## 实现
 
-[`src/features/message_scrub/`](../../../src/features/message_scrub/)
+[`pallas/product/message_scrub/`](https://github.com/PallasBot/Pallas-Bot/tree/main/pallas/product/message_scrub/)

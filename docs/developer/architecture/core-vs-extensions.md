@@ -1,6 +1,8 @@
 # Core 与扩展
 
-能力归属：core、官方插件或社区插件。不以「写起来方便」决定归属。
+本页帮助判断新能力应放进 core、官方插件还是社区插件。不以「写起来方便」决定归属。
+
+若目标是站点私有或社区插件，可先跳过判定表，直接从 [写第一个插件](/developer/plugin-development/first-plugin) 开始；只有要改主仓边界或发官方包时，再按本页执行。
 
 ## 三层
 
@@ -63,8 +65,9 @@
 
 顺序：归属层 → 目录与发布路径 → 代码。
 
-## 相关
+## 后续阅读
 
 - [架构总览](overview.md)
-- [发布](/developer/plugin-development/publishing)
 - [Golden Plugin](/developer/plugin-development/golden-plugin)
+- [发布](/developer/plugin-development/publishing)
+- [插件治理](plugin-governance.md)（声明与生效面）

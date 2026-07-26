@@ -1,15 +1,18 @@
 # 社区插件商店
 
-日常安装见 **[安装插件 · 社区与本地插件](install-plugins.md#社区与本地插件)**。
+从策展索引浏览并安装第三方插件到 `local/plugins/<id>/`。日常总装法见 [安装插件 · 社区与本地插件](install-plugins.md#社区与本地插件)。
 
-从策展索引浏览第三方插件，用 git 装到 `local/plugins/<id>/`。索引与收录细节如下。
-
-路径：控制台 **插件商店 → 社区插件**。  
 与 **官方插件**（pip）并存；**同名时 `local/plugins` 优先**。
 
-## WebUI 安装（推荐）
+## 开始前准备
 
-**条件**：运行环境能跑 `git`。
+| 需要准备 | 说明 |
+| --- | --- |
+| 可登录的网页控制台 | 路径 **插件商店 → 社区插件** |
+| 运行环境可执行 `git` | WebUI 安装依赖 git |
+| （推荐）`extra_plugin_dirs` | 在 `pallas.toml` 的 `[bootstrap]` 写明 `["local/plugins"]` |
+
+## WebUI 安装（推荐）
 
 1. 打开网页控制台 → **插件商店** → **社区插件**
 2. 选条目 → **安装**（或 **安装并重启**）
@@ -17,9 +20,7 @@
 
 ![插件商店 · 社区插件页签](/assets/plugin-store.png)
 
-**不走索引**：点右上角 **从 Git 安装**，填插件 ID 与仓库地址即可。
-
-安装路径：`local/plugins/<插件 ID>/`。
+**不走索引**：点右上角 **从 Git 安装**，填插件 ID 与仓库地址即可。安装路径：`local/plugins/<插件 ID>/`。
 
 建议在 `pallas.toml` 写明：
 
@@ -53,7 +54,15 @@ extra_plugin_dirs = ["local/plugins"]
 
 已收录插件发版后，请改索引里同 `id` 条目的 `version`（勿重复追加），步骤见 [写社区插件并上架 · 发版后同步索引](community-plugin-author.md#步骤-6发版后同步索引)。
 
-作者自检：[写社区插件并上架](community-plugin-author.md)。
+## 成功信号
+
+- 插件出现在 `local/plugins/<id>/`。
+- 重启后 **插件目录** 显示已加载；群里 **牛牛帮助** 出现对应命令（若该插件提供口令）。
+
+## 接下来做什么
+
+- 作者自检与上架 → [写社区插件并上架](community-plugin-author.md)
+- 官方 / 社区总入口 → [安装插件](install-plugins.md)
 
 ::: details 索引从哪来（一般不用管）
 | 优先级 | 来源 |

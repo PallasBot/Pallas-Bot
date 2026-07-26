@@ -1,18 +1,22 @@
 # 使用 Docker 部署
 
+完成本页后，Bot、PostgreSQL 和网页控制台会由 Docker Compose 启动。适合希望用官方镜像部署、无需修改源码的使用者。
+
 ::: tip
 **不要** `git clone` 整仓。镜像内已有代码；本机只需 compose 文件与配置。
 
-依赖：[Docker](https://docs.docker.com/get-docker/)。确认：
+依赖：[Docker](https://docs.docker.com/get-docker/)。先确认 Compose 可用：
 
 ```bash
 docker compose version
 ```
 :::
 
-## 1. 准备目录
+看到版本信息后，可以继续部署。
 
-建一个空的部署目录，只下载三个文件：
+## 1. 创建部署目录并下载所需文件
+
+创建一个空的部署目录，并下载三个所需文件：
 
 ```bash
 mkdir -p ~/pallas-deploy/pallas-bot/config \
@@ -32,7 +36,9 @@ Windows 可用 Docker Desktop 自带的终端。没有 `curl` 时，用浏览器
 注意：`pallas-bot/config/pallas.toml` 必须是**文件**，不能是目录。
 :::
 
-## 2. 改配置
+目录中已有 `docker-compose.yml`、`pallas-bot/config/pallas.toml` 和 `pallas-bot/config/compose.env` 后，文件已准备完成。
+
+## 2. 让 Bot 与数据库使用相同配置
 
 编辑 **`pallas-bot/config/pallas.toml`**：
 
@@ -57,13 +63,15 @@ db = "PallasBot"
 `host` 填 Compose 服务名 **`postgres`**，不要填 `127.0.0.1`（容器内指不到库）。
 :::
 
-## 3. 启动
+保存后，Bot 和 PostgreSQL 会使用同一组数据库连接信息。
+
+## 3. 启动服务并确认可访问
 
 ```bash
 docker compose --env-file ./pallas-bot/config/compose.env --profile postgres up -d
 ```
 
-看一眼状态：
+首次启动会拉取镜像并初始化数据库，控制台初始密码会出现在 Bot 日志中。接着检查状态：
 
 ```bash
 docker compose ps
@@ -71,17 +79,13 @@ curl -s http://127.0.0.1:8088/pallas/api/health
 docker compose logs pallasbot | head -80
 ```
 
-浏览器打开 `http://127.0.0.1:8088/pallas/`，用日志里的控制台密码登录。
+`docker compose ps` 显示服务运行，健康检查可访问且日志没有启动错误时，说明服务已启动。浏览器打开 `http://127.0.0.1:8088/pallas/`，使用日志里的控制台密码登录。
 
-## 4. 连接 QQ
+## 接下来：登录控制台并连接 QQ
 
-打开 `http://<主机>:8088/pallas/protocol`，用同一密码登录 → 新建 NapCat → 扫码。群里发 **牛牛帮助**，应能出图。
+先在 [网页控制台](/guide/web-console) 登录并完成首次设置。然后打开 `http://<主机>:8088/pallas/protocol`，用同一密码登录 → 新建 NapCat → 扫码。群里发 **牛牛帮助**，应能出图。
 
 完整说明见 [连接 QQ](/guide/connect-qq)。
-
-## 下一步
-
-▶ [连接 QQ](/guide/connect-qq)
 
 ## 日常命令
 

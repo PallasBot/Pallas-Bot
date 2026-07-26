@@ -1,6 +1,6 @@
 # 进阶查阅
 
-按主题检索，无需顺序阅读。
+按主题检索，无需顺序阅读。找到条目后跟对应文档即可。
 
 ## 日常使用
 
@@ -12,7 +12,7 @@
 | 群里口令一览 | [命令与功能](usage.md) |
 | 日常管理 | [日常管理](usage-admin.md) |
 | 号主 | [号主](bot-owner.md) |
-| 唱歌 / 画画 / 闲聊 | [AI 扩展](ai.md) |
+| 唱歌 / 画画 / LLM 对话 | [AI 扩展](ai.md) |
 | `@牛牛` 与复读 | [@牛牛与复读](llm-and-repeater.md) |
 | 排障 | [FAQ](/deploy/faq) · [排障](/maintainer/operate/troubleshooting) |
 

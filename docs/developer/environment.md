@@ -1,11 +1,17 @@
 # 本地开发环境
 
-## 前置条件
+本页帮你在本机装好可运行的开发环境：uv、配置、启停和质量检查。配好之后，下一步通常是 [写第一个插件](/developer/plugin-development/first-plugin) 或按 [贡献流程](workflow.md) 提 PR。
 
-- **Python 3.12+**
-- **[uv](https://docs.astral.sh/uv/)**（依赖与虚拟环境）
-- 可选：**Docker**（数据库、协议端、镜像构建校验）
-- 可选：**Node.js**（仅开发 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) 前端时）
+适合第一次克隆主仓、要跑 Bot 或改内核 / 插件的开发者。分片部署、WebUI 前端源码、生产排障可以稍后再看。
+
+## 先完成这些
+
+1. 安装 Python 3.12+ 与 [uv](https://docs.astral.sh/uv/)。
+2. `uv sync --dev`，复制 `config/pallas.toml`，用 `uv run pallas` 启动。
+3. 打开 `http://127.0.0.1:8088/pallas/`，确认控制台可登录。
+4. 跑一遍 `ruff` / `pytest`，与 CI 对齐。
+
+可选：Docker（数据库 / 镜像校验）、Node.js（仅开发 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)）、分片 Redis（`coord-redis`）。
 
 ## 克隆与安装依赖
 
@@ -21,7 +27,7 @@ uv sync --dev
 uv sync --dev --extra coord-redis
 ```
 
-`uv sync` 会在虚拟环境中注册 **`pallas`** 命令（见下文「统一运维 CLI」）。PostgreSQL 驱动已在主依赖，无需 `--extra pg`。
+`uv sync` 会在虚拟环境中注册 **`pallas`** 命令。PostgreSQL 驱动已在主依赖，无需 `--extra pg`。
 
 ## uv sync 与官方插件
 
@@ -164,7 +170,7 @@ uv run pallas stop --mode unified
 
 生产或多进程场景见 [多进程分片](/maintainer/deploy/sharded)。本地若需验证分片：
 
-- 在 `pallas.toml` 的 `[env]` 配置 `REDIS_URL`（Python 端需 `redis` 包，见上文 [uv sync 与官方插件](#uv-sync-与官方插件必读)）
+- 在 `pallas.toml` 的 `[env]` 配置 `REDIS_URL`（Python 端需 `redis` 包，见上文 [uv sync 与官方插件](#uv-sync-与官方插件)）
 - 使用 `uv run pallas run shard`（会探测 Redis；worker 已运行时跳过重复启动）
 
 ```bash
@@ -226,7 +232,9 @@ uv run pre-commit run -a
 
 loguru 风格 `logger`（NoneBot 提供）。占位符用 `{}` 或 f-string；避免 `logger.debug("msg %s", x)` 导致消息里仍显示 `%s`。
 
-## 相关
+## 后续阅读
 
 - [贡献与提交流程](workflow.md)
-- [插件开发入门](/developer/plugin-development/getting-started)
+- [写第一个插件](/developer/plugin-development/first-plugin)
+- [WebUI 前端开发](webui.md)（改控制台 UI 时）
+- [分片部署](/maintainer/deploy/sharded)（本地验证多进程时）

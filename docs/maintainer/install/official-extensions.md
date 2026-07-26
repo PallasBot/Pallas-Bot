@@ -1,6 +1,6 @@
 # 安装官方插件
 
-装、卸、更新官方插件。
+本页说明如何装、卸、更新官方插件。日常优先用 WebUI 插件商店；无图形界面或脚本化时再用 CLI。
 
 ## 三类包
 
@@ -99,6 +99,6 @@ uv run pallas --help
 
 ## 相关阅读
 
-- [网页控制台](../../guide/web-console.md)
+- [网页控制台](/guide/web-console)
 - [CLI 参考](/maintainer/reference/cli)（Bot 升级与初次部署）
-- [用户向安装说明](../../guide/install-plugins.md)
+- [用户向安装说明](/guide/install-plugins)

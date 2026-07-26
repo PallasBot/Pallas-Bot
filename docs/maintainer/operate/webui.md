@@ -5,7 +5,7 @@
 | 层 | 路径 |
 | --- | --- |
 | 前端源码 | `Pallas-Bot-WebUI` |
-| 运行产物 | `data/pb_webui/public/` |
+| 运行产物 | `data/pb_webui/public-react/`（默认 React） |
 | 后端 | `pb_webui` · `/pallas/api` |
 
 现象相似时，按层排查，处理方式不同。
@@ -20,7 +20,7 @@
 
 ### 页面能打开，内容像旧版
 
-- `data/pb_webui/public/` 是否为新产物
+- `data/pb_webui/public-react/` 是否为新产物
 - 浏览器是否强制刷新
 - 是否只改了源码仓、未同步运行产物
 

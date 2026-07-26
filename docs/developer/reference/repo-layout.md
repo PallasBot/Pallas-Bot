@@ -29,7 +29,7 @@ Pallas-Bot 多仓分工与主仓目录。
 
 | 主题 | 源码 | 运行产物 / 其它 |
 | --- | --- | --- |
-| WebUI | `Pallas-Bot-WebUI` | `data/pb_webui/public/` |
+| WebUI | `Pallas-Bot-WebUI` | `data/pb_webui/public-react/`（默认 React） |
 | AI 执行 | `Pallas-Bot-AI` | 主仓定义产品与编排边界 |
 | 官方玩法 | 对应扩展仓 | 主仓 `packages/` 未必有源码 |
 | 文档主线 | `docs/maintainer/`、`docs/developer/` | 架构入口在 `docs/developer/architecture/` |
