@@ -49,3 +49,4 @@ def test_fetch_embeddings_failure_uses_stub(monkeypatch) -> None:
 
     assert vectors is not None
     assert embedding_capability_trace(cfg)["embedding_fallback"] is True
+    assert effective_vector_retrieve_mode(cfg) == "keyword"

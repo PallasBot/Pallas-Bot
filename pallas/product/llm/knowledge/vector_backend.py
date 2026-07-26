@@ -22,10 +22,10 @@ class VectorRetrieveBackend(Protocol):
 
 
 def effective_vector_retrieve_mode(cfg=None) -> VectorRetrieveMode:
-    from pallas.product.llm.knowledge.embedding_client import embedding_model_name
+    from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
 
     configured = resolve_llm_vector_retrieve() if cfg is None else cfg.llm_vector_retrieve
-    if embedding_model_name(cfg).lower() == "stub":
+    if not embedding_capability_trace(cfg)["semantic_available"]:
         return "keyword"
     return configured
 
