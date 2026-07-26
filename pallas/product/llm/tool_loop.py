@@ -348,6 +348,7 @@ async def complete_with_tool_loop(
         "tool_loop_enabled": True,
         "tool_schema_count": len(tool_schemas),
         "tool_names": schema_names,
+        "activated_tools": list(meta.get("activated_tools") or []),
     }
     reply_texts: list[str] = []
     side_effect_ok = False
@@ -447,9 +448,21 @@ async def complete_with_tool_loop(
                         chat_reply_injected = True
             else:
                 record_bot_llm_task(task, "tool_call_fail")
+                if _is_side_effecting_tool(resolved_name):
+                    agent_trace.setdefault("reject_reasons", []).append({
+                        "tool": resolved_name,
+                        "reason": summary["error"] or "side_effect_rejected",
+                    })
             working.append(tool_result_message(call_id, resolved_name, tool_result))
             activated = _activate_names_from_tool_result(resolved_name, result_dict)
+            if resolved_name == "tools.find":
+                record_bot_llm_task(task, "tools_find_call")
             if activated:
+                record_bot_llm_task(task, "tool_activate")
+                if context is not None:
+                    from pallas.product.llm.tools.activation_cache import remember_activated_tools
+
+                    remember_activated_tools(context.bot_id, context.group_id, context.user_id, activated)
                 tool_schemas = _merge_activated_tool_schemas(tool_schemas, activated)
                 schema_names = tool_names_from_schemas(tool_schemas)
                 agent_trace["tool_schema_count"] = len(tool_schemas)

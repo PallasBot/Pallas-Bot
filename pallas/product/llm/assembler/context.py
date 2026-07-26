@@ -52,7 +52,17 @@ async def assemble_direct_chat_context(
         user_id=user_id,
         cfg=cfg,
     )
+    from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
+    from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
+
+    capability = {
+        "retrieve_mode": vector_retrieve_mode(cfg),
+        **embedding_capability_trace(cfg),
+    }
+    memory_result.trace.update(capability)
+    knowledge_result.trace.update(capability)
     hybrid_trace = {
+        "retrieve_mode": capability["retrieve_mode"],
         "sources": [
             source
             for source, trace in (

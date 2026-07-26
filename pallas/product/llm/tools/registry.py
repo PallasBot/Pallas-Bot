@@ -382,13 +382,25 @@ def execute_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
 _NO_TOOL_TASKS = frozenset({"repeater_fallback", "repeater_polish", "repeater_polish_lite", "repeater_select", "drunk"})
 
 
-def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> dict[str, Any]:
+def tool_metadata_for_chat(
+    *,
+    task: str | None = None,
+    user_text: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
+    user_id: int | None = None,
+) -> dict[str, Any]:
     """写入 Bot 工具 metadata：tool_catalog + 兼容字段 tools_enabled / tool_schemas。"""
     from pallas.product.llm.task_metrics import record_bot_llm_task
 
     normalized = str(task or "").strip().lower()
     cfg = get_llm_config()
-    catalog = tool_catalog_for_chat(task=task, user_text=user_text)
+    activated_names = frozenset()
+    if bot_id is not None and user_id is not None:
+        from pallas.product.llm.tools.activation_cache import activated_tool_names
+
+        activated_names = frozenset(activated_tool_names(bot_id, group_id, user_id))
+    catalog = tool_catalog_for_chat(task=task, user_text=user_text, activated_names=activated_names)
     if catalog is None:
         # selective 开启且非 no-tool task：空目录 = 口语未命中硬域与软召回
         if (
@@ -416,6 +428,7 @@ def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> d
         "ask_before_call": bool(catalog.selection.ask_before_call),
         "missing_required_params": dict(catalog.selection.missing_required_params or {}),
         "soft_recall_confidence": int(catalog.selection.soft_recall_confidence or 0),
+        "activated_tools": sorted(activated_names),
     }
     # 选择性命中且全部为插件口令工具时，首轮要求必须调工具，避免只口头答应。
     # 软召回缺参时不强制调用，便于自然追问。

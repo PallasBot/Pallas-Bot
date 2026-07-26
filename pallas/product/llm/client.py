@@ -101,6 +101,9 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
         task=task_name,
         user_text=user_text,
         tool_metadata=request.tool_metadata,
+        bot_id=request.bot_id,
+        group_id=request.group_id,
+        user_id=request.user_id,
     )
     metadata.update(tool_meta)
     metadata["token_count"] = chat_token_count_with_tools(
@@ -144,6 +147,7 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
         metadata.update(knowledge_metadata_payload(request.knowledge_retrieval_trace, cfg=c))
     if request.hybrid_retrieval_trace is not None:
         metadata["hybrid_retrieval_trace"] = request.hybrid_retrieval_trace
+        metadata["retrieval_mode"] = request.hybrid_retrieval_trace.get("retrieve_mode")
     rewrite_meta = request.llm_rewrite_metadata
     if isinstance(rewrite_meta, dict):
         metadata.update({key: value for key, value in rewrite_meta.items() if value is not None and value != ""})

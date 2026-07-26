@@ -62,16 +62,31 @@ async def run_kernel_chat_job(
         )
         agent_trace_raw = assistant_message.get("_agent_trace")
         agent_trace = None
+        trace = {"status": "success", "agent_trace": agent_trace_raw if isinstance(agent_trace_raw, dict) else None}
         if isinstance(agent_trace_raw, dict):
             agent_trace = json.dumps(agent_trace_raw, ensure_ascii=False)
+            trace.update(agent_trace_raw)
+        trace["retrieval_mode"] = metadata.get("retrieval_mode")
+        from pallas.product.llm.runtime_debug import append_runtime_trace
+
+        append_runtime_trace(request_id=request_id, trace=trace)
         await deliver_llm_chat_result(
             request_id,
             status="success",
             text=content,
             agent_trace=agent_trace,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("llm kernel chat failed: request_id={}", request_id)
+        try:
+            from pallas.product.llm.runtime_debug import append_runtime_trace
+
+            append_runtime_trace(
+                request_id=request_id,
+                trace={"status": "failed", "error": str(exc)[:240], "agent_trace": None},
+            )
+        except Exception:
+            logger.exception("llm kernel runtime trace failure: request_id={}", request_id)
         try:
             await deliver_llm_chat_result(request_id, status="failed")
         except Exception:
