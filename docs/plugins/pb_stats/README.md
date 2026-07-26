@@ -1,64 +1,45 @@
-<p align="center">
-  <img src="../assets/brand-avatar.png" width="220" height="220" alt="在线统计">
-</p>
+# 在线统计 `pb_stats`
 
-<h1 align="center">在线统计 pb_stats</h1>
+把本实例的在线统计同步到社区主站（心跳与聚合上报）。需要出现在社区统计、或不想上报时可在配置中关闭。旧名 `community_stats` 已内核化为本插件。
 
-<p align="center">把本实例的在线统计信息同步到社区页面。</p>
+**类型**：本体 core（默认加载）
 
-<p align="center">
-  <img alt="本体 core" src="https://img.shields.io/badge/%E6%9C%AC%E4%BD%93%20core-4B5563">
-  <img alt="默认加载" src="https://img.shields.io/badge/%E9%BB%98%E8%AE%A4%E5%8A%A0%E8%BD%BD-4EA94B">
-  <img alt="版本 4.0.0" src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-4.0.0-2563EB">
-</p>
-
-## 安装方式
+## 安装
 
 默认加载，无需单独安装。
 
-## 怎么使用
+## 用法
 
-无群内用户口令。这个插件会在后台持续同步在线统计信息。
+无群内用户口令。后台周期性上报；控制台「统计与语料 → 社区投稿」经本链路代理社区投稿墙。社区与配置说明见 [在线统计与社区主站](../../common/community_stats.md)。
 
-> 详细用法、限制条件和可用范围以帮助为主。
-
-## 命令权限
+## 命令权限（代码默认）
 
 无。
 
-## 配置项
+## 配置
 
-> 可在控制台对应插件页中修改。
+控制台 **插件 → 在线统计（pb_stats）**，或 `config/pallas.toml` 的 `[community_stats]`。默认开启。字段见 [`packages/pb_stats/config.py`](../../../packages/pb_stats/config.py)。社区投稿无 Bot 侧开关，取决于中心 `GALLERY_ENABLED`。
 
-在线统计配置在控制台的“在线统计与社区主站”相关区域，也可通过 `config/pallas.toml` 的对应段落管理。默认开启。
+保存后（经控制台）写入 `data/pallas_config/webui.json`，并热重载上报任务。
 
 ## 排障
 
 | 现象 | 处理 |
 | --- | --- |
-| 社区页看不到本实例 | 检查是否关闭了统计、网络是否可达、上报是否成功。 |
-| 数据延迟 | 后台上报是周期性的，不会每次状态变化都立刻刷新。 |
+| 社区页看不到本实例 | 检查插件页是否关闭统计、网络是否可达；可用「统计与语料」页的连通检测 |
+| 气泡墙没有某只牛 | 确认部署级名册开关，以及该牛实例配置中的「社区名册公开」 |
+| 数据延迟 | 后台上报是周期性的，不会每次状态变化立刻刷新 |
+| 投稿失败 / 429 | 检查到中心网络、部署级小时 / 日限额；中心是否关闭投稿墙 |
 
-## 实现
+## 源码
 
-源码位置：
+- 插件壳：[`packages/pb_stats/`](../../../packages/pb_stats/)
+- 业务逻辑：[`pallas/product/community_stats/`](../../../pallas/product/community_stats/)（含 `gallery_client.py`）
 
-- 插件壳：[`packages/pb_stats/`](../../packages/pb_stats/)
-- 业务逻辑：[`pallas/product/community_stats/`](../../pallas/product/community_stats/)
-
-关键文件：
-
-- [`packages/pb_stats/__init__.py`](../../packages/pb_stats/__init__.py)：注册在线统计元数据。
-- [`packages/pb_stats/startup.py`](../../packages/pb_stats/startup.py)：启动后台上报流程。
-- [`packages/pb_stats/config.py`](../../packages/pb_stats/config.py)：定义在线统计相关配置。
-
-实现要点：
-
-- 这是后台上报能力，不会直接响应群聊命令。
-- 主仓社区页、控制台统计页和部署心跳都依赖这条同步链路。
-- 旧的 `community_stats` 已经内核化到 `pb_stats`，不再作为独立插件维护。
+`startup.py` 启动后台上报；不响应群聊命令。
 
 ## 相关链接
 
 - [在线统计与社区主站](../../common/community_stats.md)
-- [Web 控制台](../pb_webui/README.md)
+- [Web 控制台 pb_webui](../pb_webui/README.md)
+- 旧名指针：[community_stats.md](../community_stats.md)
