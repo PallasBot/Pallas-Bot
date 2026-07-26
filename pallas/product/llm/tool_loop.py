@@ -311,6 +311,8 @@ async def complete_with_tool_loop(
     last_message: dict[str, Any] = {}
     schema_names = tool_names_from_schemas(tool_schemas)
     prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
+    ask_before_call = bool(meta.get("ask_before_call"))
+    selection_source = str(meta.get("selection_source") or "").strip().lower()
     # 口令类工具：动作与开口拆分（对齐 MaiBot reply 通道）
     if schema_names and working and str(working[0].get("role") or "") == "system":
         hint = (
@@ -322,6 +324,21 @@ async def complete_with_tool_loop(
             "或编造结果；勿把「随机」「随便」当歌名念。"
             "查询类工具可用返回结果直接作答，或再用 chat.reply。"
         )
+        if ask_before_call or selection_source == "soft_recall":
+            missing = meta.get("missing_required_params")
+            missing_bits: list[str] = []
+            if isinstance(missing, dict):
+                for tool_name, params in missing.items():
+                    names = [str(p).strip() for p in (params or []) if str(p).strip()]
+                    if names:
+                        missing_bits.append(f"{tool_name} 缺 {','.join(names)}")
+            ask_hint = (
+                "【软召回】用户只表达想用某能力、但未给出必填参数时：先用自然口语追问所需信息，"
+                "本轮不要调用动作工具，也不要编造已执行。"
+            )
+            if missing_bits:
+                ask_hint = f"{ask_hint}（{'; '.join(missing_bits[:4])}）"
+            hint = f"{hint}\n{ask_hint}"
         sys_content = str(working[0].get("content") or "")
         if "【动作工具】" not in sys_content:
             working[0] = {**working[0], "content": f"{sys_content.rstrip()}\n\n{hint}".strip()}

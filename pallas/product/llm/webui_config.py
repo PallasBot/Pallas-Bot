@@ -205,8 +205,27 @@ class LlmWebuiConfig(BaseModel):
         default=True,
         description=field_help(
             "按意图筛选工具",
-            "开启后仅在话术命中领域/结构/hints 时下发对应工具，避免一次注入全家桶",
+            "开启后仅在话术命中硬域/结构时下发对应工具；未命中时可走软召回",
         ),
+    )
+    llm_tools_soft_recall_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "软召回工具候选",
+            "硬域未命中时，按 hints/描述打分注入少量工具；缺必填参数时先追问",
+        ),
+    )
+    llm_tools_soft_recall_min_score: int = Field(
+        default=6,
+        ge=1,
+        le=32,
+        description=field_help("软召回最低匹配分", "低于该分不注入候选工具"),
+    )
+    llm_tools_soft_recall_max_candidates: int = Field(
+        default=3,
+        ge=1,
+        le=8,
+        description=field_help("软召回最多候选工具数", "同分过低时不会扩成全量工具池"),
     )
     llm_tools_max_rounds: int = Field(
         default=4,
@@ -514,6 +533,9 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_chat_char_budget=cfg.llm_chat_char_budget,
         llm_tools_enabled=cfg.llm_tools_enabled,
         llm_tools_selective=cfg.llm_tools_selective,
+        llm_tools_soft_recall_enabled=cfg.llm_tools_soft_recall_enabled,
+        llm_tools_soft_recall_min_score=cfg.llm_tools_soft_recall_min_score,
+        llm_tools_soft_recall_max_candidates=cfg.llm_tools_soft_recall_max_candidates,
         llm_tools_max_rounds=cfg.llm_tools_max_rounds,
         llm_tools_blacklist=list(cfg.llm_tools_blacklist or []),
         llm_tools_desc_max_len=cfg.llm_tools_desc_max_len,

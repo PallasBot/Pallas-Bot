@@ -126,6 +126,8 @@ def upsert_tool_override(tool_name: str, patch: dict[str, Any]) -> dict[str, Any
                 merged["hints"] = hints
             else:
                 merged.pop("hints", None)
+    # 清理历史 willingness 键；口语统一走 hints
+    merged.pop("willingness", None)
     if "visibility" in patch:
         vis = str(patch.get("visibility") or "").strip().lower()
         if vis in {"visible", "deferred"}:

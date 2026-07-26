@@ -295,6 +295,9 @@ class LlmConfig(BaseModel):
     llm_governance_enabled: bool = Field(default=True)
     llm_tools_enabled: bool = Field(default=True)
     llm_tools_selective: bool = Field(default=True)
+    llm_tools_soft_recall_enabled: bool = Field(default=True)
+    llm_tools_soft_recall_min_score: int = Field(default=6, ge=1, le=32)
+    llm_tools_soft_recall_max_candidates: int = Field(default=3, ge=1, le=8)
     llm_chat_cooldown_sec: int = Field(default=3, ge=0, le=3600)
     llm_chat_max_concurrency: int = Field(default=2, ge=1, le=64)
     llm_chat_char_budget: int = Field(default=12000, ge=0, le=200000)
@@ -475,6 +478,9 @@ def get_llm_config() -> LlmConfig:
             llm_governance_enabled=_env_bool("LLM_GOVERNANCE_ENABLED", True),
             llm_tools_enabled=_env_bool("LLM_TOOLS_ENABLED", True),
             llm_tools_selective=_env_bool("LLM_TOOLS_SELECTIVE", True),
+            llm_tools_soft_recall_enabled=_env_bool("LLM_TOOLS_SOFT_RECALL_ENABLED", True),
+            llm_tools_soft_recall_min_score=_env_int("LLM_TOOLS_SOFT_RECALL_MIN_SCORE", 6),
+            llm_tools_soft_recall_max_candidates=_env_int("LLM_TOOLS_SOFT_RECALL_MAX_CANDIDATES", 3),
             llm_chat_cooldown_sec=_env_int("LLM_CHAT_COOLDOWN_SEC", 3),
             llm_chat_max_concurrency=_env_int("LLM_CHAT_MAX_CONCURRENCY", 2),
             llm_chat_char_budget=_env_int("LLM_CHAT_CHAR_BUDGET", 12000),

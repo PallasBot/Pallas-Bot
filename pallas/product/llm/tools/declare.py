@@ -20,7 +20,7 @@ def llm_command_tool_row(
 ) -> dict[str, Any]:
     """单条 ``extra['llm_tools']`` 项：意图识别后按模板拼口令并派发。
 
-    hints: 口语触发词，参与 selective 域推断（与核心词表叠加）。
+    hints: 口语触发词；硬域未命中时参与 soft_recall 工具级打分。
     visibility: visible 随域注入；deferred 仅在自身 hints 命中或经 tools.find 激活后注入。
     """
     tool_name = (name or "").strip()
