@@ -61,18 +61,24 @@ def compute_usage_cost(
     cache_price_in: float = 0.0,
     cache_price_out: float = 0.0,
 ) -> float:
-    """按百万 tokens 单价计费；prompt 为非缓存输入（与 token_usage 解析一致）。"""
+    """按百万 tokens 单价计费：非缓存输入×price_in + 缓存命中×cache_price_in + 输出×price_out。
+
+    ``prompt_tokens`` 为非缓存输入；cache 拆分由 ``token_usage`` 完成。
+    费用四舍五入到 6 位小数。
+    """
     million = 1_000_000.0
+    miss = max(0, int(prompt_tokens))
+    hit = max(0, int(cache_read_tokens))
     cost = 0.0
-    if price_in > 0 and prompt_tokens > 0:
-        cost += (prompt_tokens / million) * price_in
+    if price_in > 0 and miss > 0:
+        cost += (miss / million) * price_in
     if price_out > 0 and completion_tokens > 0:
-        cost += (completion_tokens / million) * price_out
-    if cache_price_in > 0 and cache_read_tokens > 0:
-        cost += (cache_read_tokens / million) * cache_price_in
+        cost += (int(completion_tokens) / million) * price_out
+    if cache_price_in > 0 and hit > 0:
+        cost += (hit / million) * cache_price_in
     if cache_price_out > 0 and cache_write_tokens > 0:
-        cost += (cache_write_tokens / million) * cache_price_out
-    return cost
+        cost += (int(cache_write_tokens) / million) * cache_price_out
+    return round(cost, 6)
 
 
 def lookup_model_price(
@@ -207,7 +213,7 @@ def estimate_tokens_cost_from_breakdown(
             cache_price_in=price["cache_price_in"],
             cache_price_out=price["cache_price_out"],
         )
-    return total, currency
+    return round(total, 6), currency
 
 
 def enrich_tokens_cost_fields(

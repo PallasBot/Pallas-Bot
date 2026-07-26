@@ -22,6 +22,92 @@ def write_llm_daily_stats_side(day: str, side: str, snapshot: dict[str, Any]) ->
     write_day_side(day, side, snapshot)
 
 
+def _tokens_snapshot_from_ledger(ledger_tokens: dict[str, Any]) -> dict[str, Any]:
+    """账本日汇总 → ai.tokens 形状。"""
+    return {
+        "source": "ledger",
+        "day_key": str(ledger_tokens.get("day_key") or ""),
+        "prompt_tokens": int(ledger_tokens.get("prompt_tokens") or 0),
+        "completion_tokens": int(ledger_tokens.get("completion_tokens") or 0),
+        "cache_read_tokens": int(ledger_tokens.get("cache_read_tokens") or 0),
+        "cache_write_tokens": int(ledger_tokens.get("cache_write_tokens") or 0),
+        "total_tokens": int(ledger_tokens.get("total_tokens") or 0),
+        "cost_total": float(ledger_tokens.get("cost_total") or 0),
+        "cost_currency": str(ledger_tokens.get("cost_currency") or ""),
+        "by_task": ledger_tokens.get("by_task") if isinstance(ledger_tokens.get("by_task"), dict) else {},
+        "by_provider": ledger_tokens.get("by_provider") if isinstance(ledger_tokens.get("by_provider"), dict) else {},
+        "by_model": ledger_tokens.get("by_model") if isinstance(ledger_tokens.get("by_model"), dict) else {},
+        "by_hour": {},
+    }
+
+
+def _overlay_ledger_on_history_rows(
+    rows: list[dict[str, Any]],
+    *,
+    start_day: str,
+    end_day: str,
+) -> list[dict[str, Any]]:
+    """优先用请求级账本覆盖日 token；无账本时丢弃明显脏的日汇总。"""
+    from pallas.product.llm.usage_ledger import aggregate_ledger_range, tokens_look_corrupt
+
+    try:
+        ledger_by_day = aggregate_ledger_range(start_day=start_day, end_day=end_day)
+    except Exception:
+        ledger_by_day = {}
+    out: list[dict[str, Any]] = []
+    for hist_row in rows:
+        if not isinstance(hist_row, dict):
+            continue
+        row = dict(hist_row)
+        row_date = str(row.get("date") or "").strip()[:10]
+        ai = dict(row["ai"]) if isinstance(row.get("ai"), dict) else {}
+        ledger = ledger_by_day.get(row_date) if row_date else None
+        if isinstance(ledger, dict):
+            ai = {**ai, "tokens": _tokens_snapshot_from_ledger(ledger), "source": ai.get("source") or "bot"}
+            row["ai"] = ai
+            out.append(row)
+            continue
+        tokens = ai.get("tokens") if isinstance(ai.get("tokens"), dict) else None
+        if tokens_look_corrupt(tokens):
+            # 保留 gates/rag/images 等，仅清空异常 token
+            ai = {
+                **ai,
+                "tokens": {
+                    "source": "sanitized",
+                    "day_key": row_date,
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "cache_read_tokens": 0,
+                    "cache_write_tokens": 0,
+                    "total_tokens": 0,
+                    "cost_total": 0.0,
+                    "cost_currency": "",
+                    "by_task": {},
+                    "by_provider": {},
+                    "by_model": {},
+                    "by_hour": {},
+                },
+            }
+            row["ai"] = ai
+        out.append(row)
+    # 账本有、日 JSON 无的日期也补上
+    known = {str(r.get("date") or "").strip()[:10] for r in out}
+    for day_key, ledger in sorted(ledger_by_day.items()):
+        if day_key in known or not isinstance(ledger, dict):
+            continue
+        out.append({
+            "date": day_key,
+            "bot": None,
+            "ai": {
+                "source": "bot",
+                "day_key": day_key,
+                "tokens": _tokens_snapshot_from_ledger(ledger),
+            },
+        })
+    out.sort(key=lambda r: str(r.get("date") or ""))
+    return out
+
+
 def _ai_snapshot_collecting(snapshot: dict[str, Any] | None) -> bool:
     if not isinstance(snapshot, dict):
         return False
@@ -914,6 +1000,11 @@ async def fetch_llm_task_stats(
     if start_d > end_d:
         start_d, end_d = end_d, start_d
     hist_rows, h_start, h_end = load_llm_daily_stats_range(start_day=start_d.isoformat(), end_day=end_d.isoformat())
+    hist_rows = _overlay_ledger_on_history_rows(
+        hist_rows,
+        start_day=start_d.isoformat(),
+        end_day=end_d.isoformat(),
+    )
     today_bot = bot_snap if isinstance(bot_snap, dict) else None
     by_date = {}
     for hist_row in hist_rows:
