@@ -698,6 +698,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_output_filter_chat_soft_phrases=cfg.llm_output_filter_chat_soft_phrases,
         llm_output_filter_polish_lite_hard_phrases=cfg.llm_output_filter_polish_lite_hard_phrases,
         llm_output_filter_polish_lite_soft_phrases=cfg.llm_output_filter_polish_lite_soft_phrases,
+        llm_persona_output_firewall=cfg.llm_persona_output_firewall,
         llm_reply_postprocess_enabled=cfg.llm_reply_postprocess_enabled,
         llm_reply_typo_enabled=cfg.llm_reply_typo_enabled,
         llm_reply_typo_rate=cfg.llm_reply_typo_rate,
