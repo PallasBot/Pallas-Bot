@@ -41,6 +41,23 @@ def test_classify_repeated_opener_detects_animal_prefix() -> None:
     assert classify_repeated_opener("喵~ 你说得对") == "喵~"
 
 
+def test_classify_repeated_opener_detects_soft_agree() -> None:
+    assert classify_repeated_opener("行行行，我闭嘴就是。") == "行行行"
+    assert classify_repeated_opener("还行吧，主要看你会不会玩。") == "还行吧"
+    assert classify_repeated_opener("好好好，文明点。") == "好好好"
+
+
+def test_build_recent_reply_variation_hint_flags_soft_agree_openers() -> None:
+    turns = [
+        SimpleNamespace(role="assistant", content="行行行，你说了算。"),
+        SimpleNamespace(role="assistant", content="行行行，我闭嘴就是。"),
+        SimpleNamespace(role="assistant", content="还行吧，至少没被炖了。"),
+    ]
+    hint = build_recent_reply_variation_hint(turns)
+    assert "行行行" in hint
+    assert "软答应" in hint or "还行吧" in hint
+
+
 def test_classify_repeated_opener_ignores_numeric_prefix() -> None:
     assert classify_repeated_opener("3498 某种回复") == ""
     assert classify_repeated_opener("你快") == ""
@@ -65,3 +82,6 @@ def test_compile_self_identity_prompt_mentions_niu_niu() -> None:
     assert "牛牛" in prompt
     assert "第一人称" in prompt
     assert "牛牛真棒" in prompt
+    assert "勿用「还行吧」" in prompt
+    assert "谢谢" in prompt
+    assert "收到" in prompt

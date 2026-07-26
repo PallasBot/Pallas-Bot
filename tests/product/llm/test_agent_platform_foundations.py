@@ -51,6 +51,9 @@ def test_catchphrase_extract_prefers_short_habits() -> None:
     assert is_catchphrase_habit("我chovy")
     assert is_catchphrase_habit("那很牛了")
     assert not is_catchphrase_habit("那我能聊梗、接接梗、开开玩啊，找我玩就行")
+    assert not is_catchphrase_habit("行行行")
+    assert not is_catchphrase_habit("还行吧")
+    assert not is_catchphrase_habit("好好好")
     cands = extract_catchphrase_candidates("哈哈我chovy真的，那很牛了")
     sayings = [s for s, _ in cands]
     assert "我chovy" in sayings
@@ -58,8 +61,11 @@ def test_catchphrase_extract_prefers_short_habits() -> None:
     assert all(is_catchphrase_habit(s) for s in sayings)
     long_cands = extract_catchphrase_candidates("那我能聊梗、接接梗、开开玩啊，找我玩就行")
     assert long_cands == []
+    soft_cands = extract_catchphrase_candidates("行行行，我闭嘴就是。还行吧。")
+    assert soft_cands == []
     raw = (
         '{"items":[{"saying":"我chovy","occasion":"自称梗"},'
+        '{"saying":"行行行","occasion":"口头禅"},'
         '{"saying":"那我能聊梗接接梗开开玩啊找我玩就行","occasion":"x"}]}'
     )
     assert parse_llm_catchphrase_payload(raw) == [("我chovy", "自称梗")]
@@ -78,10 +84,36 @@ def test_catchphrase_promotion_requires_evidence(tmp_path, monkeypatch) -> None:
     promoted = promote_catchphrase(third.entry_id)
     assert promoted is not None
     assert promoted.status == "active"
-    assert any("那很牛了" in line for line in compile_catchphrase_prompt_lines(1001))
+    lines = compile_catchphrase_prompt_lines(1001)
+    assert any("那很牛了" in line for line in lines)
+    assert any("当「" in line and "可以自然用" in line for line in lines)
+    assert lines[0].startswith("【表达习惯参考")
     rejected = reject_catchphrase(second.entry_id if second else third.entry_id)
     assert rejected is not None
     assert list_catchphrases(1001)
+
+
+def test_catchphrase_rejects_weak_soft_agree(tmp_path, monkeypatch) -> None:
+    from pallas.product.persona.catchphrase_bank import reject_weak_filler_catchphrases
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    assert propose_catchphrase_from_bot_success(1001, 11, "行行行", "口头禅") is None
+    # 旧数据：人工写入弱填充后应被 purge
+    from pallas.product.persona.catchphrase_bank import CatchphraseEntry, _load, _save
+
+    rows = _load()
+    rows.append(
+        CatchphraseEntry(
+            entry_id="catch-weak-test",
+            bot_id=1001,
+            saying="行行行",
+            occasion="口头禅",
+            status="active",
+        )
+    )
+    _save(rows)
+    assert reject_weak_filler_catchphrases(1001) >= 1
+    assert all(row.status == "rejected" for row in list_catchphrases(1001) if row.saying == "行行行")
 
 
 def test_catchphrase_from_utterance_does_not_store_full_reply(tmp_path, monkeypatch) -> None:

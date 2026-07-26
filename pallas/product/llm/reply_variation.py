@@ -17,7 +17,12 @@ _DIRECT_REPEATED_OPENERS = (
     "我觉得",
     "确实",
     "一般来说",
+    "行行行",
+    "好好好",
+    "还行吧",
+    "行啊",
     "行吧",
+    "行，",
 )
 _LAUGH_OPENER_RE = re.compile(r"^(哈哈+|呵呵+|嘿嘿+)")
 _SIGH_OPENER_RE = re.compile(r"^(欸|哎|唉|呃|额)+")
@@ -62,6 +67,8 @@ def repeated_assistant_openers(turns: list[LlmChatTurn], *, limit: int = 3) -> l
 
 
 def classify_repeated_opener(text: str) -> str:
+    from pallas.product.persona.soft_agree_fillers import match_soft_agree_opener
+
     plain = str(text or "").strip()
     if not plain:
         return ""
@@ -72,6 +79,9 @@ def classify_repeated_opener(text: str) -> str:
         return "哈哈类"
     if _SIGH_OPENER_RE.match(plain):
         return "语气词类"
+    soft = match_soft_agree_opener(plain)
+    if soft:
+        return soft
     direct = next((item for item in _DIRECT_REPEATED_OPENERS if plain.startswith(item)), "")
     if direct:
         return direct
@@ -170,8 +180,17 @@ def build_recent_reply_variation_hint(turns: list[LlmChatTurn]) -> str:
     sticky = [opener for opener, count in opener_counts.items() if count >= 2]
     if sticky:
         hints.insert(0, "严禁再用这些已重复的开头：" + "、".join(sticky) + "；换完全不同的起手")
+        from pallas.product.persona.soft_agree_fillers import SOFT_AGREE_OPENERS
+
+        if any(item in SOFT_AGREE_OPENERS for item in sticky):
+            hints.insert(1, "别用行行行/好好好/还行吧起手，直接接话题")
 
     recent = assistant_texts[-3:]
+    from pallas.product.persona.soft_agree_fillers import match_soft_agree_opener
+
+    soft_recent = sum(1 for text in recent if match_soft_agree_opener(text))
+    if soft_recent >= 2:
+        hints.append("最近软答应起手太多，这轮直接接话，不要行行行/还行吧")
     animal_openers = sum(1 for text in recent if _ANIMAL_OPENER_RE.match(text))
     if animal_openers >= 2:
         hints.append("最近开头动物口癖太多，别再用哞~/喵~ 起手")

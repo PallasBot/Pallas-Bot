@@ -276,11 +276,10 @@ def compile_persona_prompt(
     except Exception:
         catchphrase_lines = []
     if catchphrase_lines:
-        catchphrase_block = "\n".join(f"- {line}" for line in catchphrase_lines[:5])
+        # 行内自带「视情况使用」头；勿再包一层【账号口癖】硬示范
+        catchphrase_block = "\n".join(catchphrase_lines[:6])
         group_expression = (
-            f"{group_expression}\n\n【账号口癖】\n{catchphrase_block}".strip()
-            if group_expression.strip()
-            else f"【账号口癖】\n{catchphrase_block}"
+            f"{group_expression}\n\n{catchphrase_block}".strip() if group_expression.strip() else catchphrase_block
         )
     if profile == PROMPT_PROFILE_REPEATER:
         self_identity = compile_repeater_self_identity_prompt(
