@@ -26,6 +26,10 @@ _WEAK_GOOD_SUBSTR = (
     "为您服务",
     "Jest",
     "有什么可以",
+    "其他牛牛",
+    "别的牛牛",
+    "没留活口",
+    "打成牛肉丸",
 )
 
 
@@ -36,6 +40,10 @@ def is_weak_good_feedback_snippet(text: str) -> bool:
         return True
     compact = plain.strip("，,。！!？?~～ ")
     if plain in _WEAK_GOOD_EXACT or compact in _WEAK_GOOD_EXACT:
+        return True
+    from pallas.product.persona.peer_bots_prompt import is_peer_harm_expression
+
+    if is_peer_harm_expression(plain):
         return True
     return any(token in plain for token in _WEAK_GOOD_SUBSTR)
 

@@ -85,6 +85,7 @@ async def refresh_bot_cross_group_persona(
             "seed",
             "seed_override",
             "self_aliases",
+            "peer_aliases",
             "alias_names",
             "knowledges",
             "relationships",
