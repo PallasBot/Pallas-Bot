@@ -69,15 +69,15 @@ cp config/pallas.example.toml config/pallas.toml
 ### 提交前检查
 
 ```bash
-uv run ruff check src/
-uv run ruff format --check src/
+uv run ruff check pallas/ packages/
+uv run ruff format --check pallas/ packages/
 ```
 
 可选自动修复：
 
 ```bash
-uv run ruff check --fix src/
-uv run ruff format src/
+uv run ruff check --fix pallas/ packages/
+uv run ruff format pallas/ packages/
 ```
 
 如仓库包含测试，请运行：

@@ -23,9 +23,12 @@ uv run ruff format --check pallas/ packages/
 
 pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；每次 commit 跑 **`sync-console-openapi`** 自动导出 `openspec`（同级有 WebUI 仓则 gen 类型）；`.env` 全局排除。详见 [workflow.md](docs/developer/workflow.md)。
 
+控制台 OpenAPI（改 API / 路由后）：`uv run python tools/sync_console_openapi.py` → `openspec/pallas-console-v1.json`；在线 `/pallas/api/openapi.json`；契约细则见 [webui.md · OpenAPI](docs/developer/webui.md#openapi-契约)。合并顺序：先合 Bot（含 openspec）→ 再合 WebUI 类型。
+
 ## 文档与排障入口
 
 - **开发指南**：[docs/developer/index.md](docs/developer/index.md)（环境、流程、插件与 WebUI）。
+- **OpenAPI 契约**：[docs/developer/webui.md](docs/developer/webui.md#openapi-契约)（导出 openspec、WebUI 类型、drift / CI）。
 - **插件专项说明**：[docs/plugins/README.md](docs/plugins/README.md)（各子目录 `README.md` 与 `packages/<name>/` 对应）。
 - **命令权限（cmd_perm）**：[docs/common/cmd_perm/README.md](docs/common/cmd_perm/README.md)（可配置等级、WebUI 覆盖、帮助菜单「何人可用」）。
 - **运行配置存储**：[docs/developer/architecture/config-storage.md](docs/developer/architecture/config-storage.md)（`pallas.toml` + `webui.json`，勿再向根目录 `.env` 写入新项）。
@@ -139,7 +142,7 @@ packages/<name>/
 本地安装：`uvx pre-commit install`（或系统/venv 中的 `pre-commit install`）。
 
 - 基础文件卫生检查覆盖全仓；Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`
-- 每次 commit 会跑 `sync-console-openapi`（导出 openspec，同级有 WebUI 则 gen 类型；有改动需重新 stage）
+- 每次 commit 会跑 `sync-console-openapi`（写出 `openspec/pallas-console-v1.json`；同级有 WebUI 则 gen 类型；有改动需重新 stage）。手动同步见上文「控制台 OpenAPI」
 
 **hooks 版本手动更新**（不启 pre-commit.ci 自动升级；默认会 weekly，且需 org 装 App）：
 
