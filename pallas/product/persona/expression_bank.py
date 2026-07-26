@@ -36,6 +36,7 @@ class ExpressionEntry(BaseModel):
     updated_at: int
     rejected_reason: str = ""
     scene_feedback: dict[str, dict[str, int]] = Field(default_factory=dict)
+    applied_outcome_ids: list[str] = Field(default_factory=list)
 
     @field_validator("occasion", mode="before")
     @classmethod
@@ -138,7 +139,7 @@ def append_or_merge_expression(entry: ExpressionEntry) -> ExpressionEntry:
     return canonical_entry
 
 
-def record_expression_outcome(entry_ids: list[str], *, scene: str, score_delta: int) -> None:
+def record_expression_outcome(entry_ids: list[str], *, scene: str, score_delta: int, outcome_id: str) -> None:
     targets = {str(item).strip() for item in entry_ids if str(item).strip()}
     if not targets:
         return
@@ -149,13 +150,15 @@ def record_expression_outcome(entry_ids: list[str], *, scene: str, score_delta: 
         rows = _load_expression_entries()
         changed = False
         for index, row in enumerate(rows):
-            if row.entry_id not in targets:
+            if row.entry_id not in targets or outcome_id in row.applied_outcome_ids:
                 continue
             feedback = {key: dict(value) for key, value in row.scene_feedback.items()}
             stat = feedback.setdefault(normalize_occasion_tag(scene), {"uses": 0, "score": 0})
             stat["uses"] = int(stat.get("uses", 0)) + 1
             stat["score"] = int(stat.get("score", 0)) + int(score_delta)
-            rows[index] = row.model_copy(update={"scene_feedback": feedback})
+            rows[index] = row.model_copy(
+                update={"scene_feedback": feedback, "applied_outcome_ids": [*row.applied_outcome_ids, outcome_id]}
+            )
             changed = True
         if changed:
             _write_expression_entries(path, rows)

@@ -611,7 +611,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         build_turn_wording_user_hints,
         find_previous_reply_for_utterance,
     )
-    from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_lines
+    from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_with_entries
 
     scene_constraints = resolve_scene_style_constraints(
         behavior_scene,
@@ -658,22 +658,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
         previous_same_reply = find_previous_reply_for_utterance(focus_text, recent_turns=recent_turns)
     redup_hint = build_same_utterance_redup_hint(user_text=focus_text, previous_reply=previous_same_reply)
     alt_style_hint = build_probabilistic_alt_style_hint()
-    catchphrase_lines = compile_catchphrase_prompt_lines(
+    catchphrase_lines, selected_catchphrase_entries = compile_catchphrase_prompt_with_entries(
         int(bot.self_id),
         user_text=focus_text,
         scene=str(behavior_scene),
         limit=2,
     )
-    selected_catchphrase_ids: list[str] = []
-    if catchphrase_lines:
-        from pallas.product.persona.catchphrase_bank import select_catchphrases_for_turn
-
-        selected_catchphrase_ids = [
-            item.entry_id
-            for item in select_catchphrases_for_turn(
-                int(bot.self_id), user_text=focus_text, scene=str(behavior_scene), limit=2
-            )
-        ]
+    selected_catchphrase_ids = [item.entry_id for item in selected_catchphrase_entries]
     catchphrase_hint = "\n".join(catchphrase_lines) if catchphrase_lines else ""
     ending_hint = build_llm_chat_ending_hint(recent_turns)
     corpus_ending_hint = await build_llm_chat_corpus_ending_hint(

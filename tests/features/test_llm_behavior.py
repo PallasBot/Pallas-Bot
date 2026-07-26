@@ -328,6 +328,20 @@ def test_settle_behavior_run_outcome_updates_entries_once(tmp_path, monkeypatch)
     assert list_catchphrases(1)[0].scene_feedback["venting"] == {"uses": 1, "score": 2}
 
 
+def test_catchphrase_prompt_returns_selected_entries(tmp_path, monkeypatch) -> None:
+    from pallas.product.persona.catchphrase_bank import (
+        CatchphraseEntry,
+        _save as save_catchphrases,
+        compile_catchphrase_prompt_with_entries,
+    )
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    save_catchphrases([CatchphraseEntry(entry_id="catch-selected", bot_id=1, saying="好耶", status="active")])
+    lines, rows = compile_catchphrase_prompt_with_entries(1, user_text="好耶", scene="smalltalk")
+    assert lines
+    assert [row.entry_id for row in rows] == ["catch-selected"]
+
+
 def test_behavior_run_annotation_update(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     append_behavior_run(

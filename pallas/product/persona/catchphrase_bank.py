@@ -31,6 +31,7 @@ class CatchphraseEntry(BaseModel):
     created_at: int = Field(default_factory=lambda: int(time.time()))
     updated_at: int = Field(default_factory=lambda: int(time.time()))
     scene_feedback: dict[str, dict[str, int]] = Field(default_factory=dict)
+    applied_outcome_ids: list[str] = Field(default_factory=list)
 
     @field_validator("occasion", mode="before")
     @classmethod
@@ -176,23 +177,30 @@ def list_catchphrases(bot_id: int | None = None, *, status: str | None = None) -
     ]
 
 
-def record_catchphrase_outcome(entry_ids: list[str], *, scene: str, score_delta: int) -> None:
+def record_catchphrase_outcome(entry_ids: list[str], *, scene: str, score_delta: int, outcome_id: str) -> None:
     targets = {str(item).strip() for item in entry_ids if str(item).strip()}
     if not targets:
         return
-    rows = _load()
-    changed = False
-    for index, row in enumerate(rows):
-        if row.entry_id not in targets:
-            continue
-        feedback = {key: dict(value) for key, value in row.scene_feedback.items()}
-        stat = feedback.setdefault(normalize_occasion_tag(scene), {"uses": 0, "score": 0})
-        stat["uses"] = int(stat.get("uses", 0)) + 1
-        stat["score"] = int(stat.get("score", 0)) + int(score_delta)
-        rows[index] = row.model_copy(update={"scene_feedback": feedback})
-        changed = True
-    if changed:
-        _save(rows)
+    from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
+
+    path = _path()
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        rows = _load()
+        changed = False
+        for index, row in enumerate(rows):
+            if row.entry_id not in targets or outcome_id in row.applied_outcome_ids:
+                continue
+            feedback = {key: dict(value) for key, value in row.scene_feedback.items()}
+            stat = feedback.setdefault(normalize_occasion_tag(scene), {"uses": 0, "score": 0})
+            stat["uses"] = int(stat.get("uses", 0)) + 1
+            stat["score"] = int(stat.get("score", 0)) + int(score_delta)
+            rows[index] = row.model_copy(
+                update={"scene_feedback": feedback, "applied_outcome_ids": [*row.applied_outcome_ids, outcome_id]}
+            )
+            changed = True
+        if changed:
+            body = "".join(json.dumps(row.model_dump(mode="json"), ensure_ascii=False) + "\n" for row in rows)
+            atomic_write_text(path, body)
 
 
 def reject_weak_filler_catchphrases(bot_id: int | None = None) -> int:
@@ -295,9 +303,20 @@ def compile_catchphrase_prompt_lines(
     scene: str = "",
     limit: int = 2,
 ) -> list[str]:
+    lines, _rows = compile_catchphrase_prompt_with_entries(bot_id, user_text=user_text, scene=scene, limit=limit)
+    return lines
+
+
+def compile_catchphrase_prompt_with_entries(
+    bot_id: int,
+    *,
+    user_text: str = "",
+    scene: str = "",
+    limit: int = 2,
+) -> tuple[list[str], list[CatchphraseEntry]]:
     """按本轮场合选入口癖；无线索时不强行塞入多条。"""
     if int(limit) <= 0:
-        return []
+        return [], []
     if str(user_text or "").strip() or str(scene or "").strip():
         rows = select_catchphrases_for_turn(
             int(bot_id),
@@ -315,8 +334,8 @@ def compile_catchphrase_prompt_lines(
         occasion = clean_catchphrase_text(row.occasion) or "日常接话"
         lines.append(f"当「{occasion}」时，可以自然用「{row.saying}」来表达。")
     if not lines:
-        return []
+        return [], []
     return [
         "【表达习惯参考，请视情况自然使用；不要每句都带，禁止行行行/好好好/还行吧起手】",
         *lines,
-    ]
+    ], rows

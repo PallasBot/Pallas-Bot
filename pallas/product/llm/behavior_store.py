@@ -182,13 +182,16 @@ def settle_behavior_run_outcome(
         rows = list_behavior_runs(limit=10_000)
         updated: BehaviorRun | None = None
         for idx, item in enumerate(rows):
-            if item.request_id != request_id or item.final_outcome is not None:
+            if item.request_id != request_id:
                 continue
-            item.final_outcome = outcome
-            item.score_delta = score_delta
-            merged_payload = dict(item.auto_feedback_payload or {})
-            merged_payload.update(dict(auto_feedback_payload or {}))
-            item.auto_feedback_payload = merged_payload
+            if item.final_outcome is None:
+                item.final_outcome = outcome
+                item.score_delta = score_delta
+                merged_payload = dict(item.auto_feedback_payload or {})
+                merged_payload.update(dict(auto_feedback_payload or {}))
+                item.auto_feedback_payload = merged_payload
+            if item.effects_applied:
+                return None
             rows[idx] = item
             updated = item
             break
@@ -202,25 +205,38 @@ def settle_behavior_run_outcome(
             for idx, item in enumerate(patterns):
                 if item.pattern_id not in updated.selected_pattern_ids:
                     continue
-                item.success_score = int(item.success_score) + score_delta
+                if updated.request_id in item.applied_outcome_ids:
+                    continue
+                item.success_score = int(item.success_score) + updated.score_delta
+                item.applied_outcome_ids.append(updated.request_id)
                 patterns[idx] = item
                 changed = True
             if changed:
                 save_behavior_patterns(patterns)
-        if score_delta:
+        if updated.score_delta:
             from pallas.product.persona.catchphrase_bank import record_catchphrase_outcome
             from pallas.product.persona.expression_bank import record_expression_outcome
 
             record_expression_outcome(
                 updated.selected_expression_ids,
                 scene=str(updated.scene),
-                score_delta=score_delta,
+                score_delta=updated.score_delta,
+                outcome_id=updated.request_id,
             )
             record_catchphrase_outcome(
                 updated.selected_catchphrase_ids,
                 scene=str(updated.scene),
-                score_delta=score_delta,
+                score_delta=updated.score_delta,
+                outcome_id=updated.request_id,
             )
+        updated.effects_applied = True
+        rows = list_behavior_runs(limit=10_000)
+        for index, item in enumerate(rows):
+            if item.request_id == updated.request_id:
+                rows[index] = updated
+                break
+        body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in rows)
+        atomic_write_text(path, body)
     return updated
 
 
