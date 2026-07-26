@@ -9,7 +9,9 @@ Pallas-Bot 4.0 官方扩展：**牛牛状态**（在吗、报数、离线邮件�
 ## 安装
 
 ```bash
-uv sync --extra plugins-bot-status
+# 推荐：控制台 → 插件商店 → 一键安装
+uv run pallas ext install pallas-plugin-bot-status
+# 或：uv pip install pallas-plugin-bot-status
 ```
 
 ## 功能

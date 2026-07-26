@@ -11,7 +11,9 @@ Pallas-Bot 4.0 官方扩展：**牛牛做梦**（群内旁路、分片漂移）�
 需已安装 [Pallas-Bot](https://github.com/PallasBot/Pallas-Bot) **≥ 4.0**。
 
 ```bash
-uv sync --extra plugins-dream
+# 推荐：控制台 → 插件商店 → 一键安装
+uv run pallas ext install pallas-plugin-dream
+# 或：uv pip install pallas-plugin-dream
 ```
 
 开发联调：clone 本仓库后 `uv pip install -e .`。

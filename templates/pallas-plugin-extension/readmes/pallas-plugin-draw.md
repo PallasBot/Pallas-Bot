@@ -11,7 +11,9 @@ Pallas-Bot 4.0 官方扩展：**牛牛画画**（直连生图网关）。
 需已安装 [Pallas-Bot](https://github.com/PallasBot/Pallas-Bot) **≥ 4.0**。
 
 ```bash
-uv sync --extra plugins-draw
+# 推荐：控制台 → 插件商店 → 一键安装
+uv run pallas ext install pallas-plugin-draw
+# 或：uv pip install pallas-plugin-draw
 ```
 
 ## 功能说明

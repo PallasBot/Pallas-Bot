@@ -11,7 +11,9 @@ Pallas-Bot 4.0 官方扩展：**牛牛唱歌**（`sing`）。
 需已安装 [Pallas-Bot](https://github.com/PallasBot/Pallas-Bot) **≥ 4.0**，并部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)。
 
 ```bash
-uv sync --extra plugins-ai-media
+# 推荐：控制台 → 插件商店 → 一键安装
+uv run pallas ext install pallas-plugin-ai-media
+# 或：uv pip install pallas-plugin-ai-media
 ```
 
 ## 功能说明

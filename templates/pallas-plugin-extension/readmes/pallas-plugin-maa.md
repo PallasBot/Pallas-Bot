@@ -11,10 +11,12 @@ Pallas-Bot 4.0 官方扩展：**MAA 远控**（含 worker 插件 `pallas_plugin_
 需已安装 [Pallas-Bot](https://github.com/PallasBot/Pallas-Bot) **≥ 4.0**。
 
 ```bash
-# 在本体项目中
-uv sync --extra plugins-maa
+# 推荐：控制台 → 插件商店 → 一键安装
 
-# 或单独安装本包
+# 或在 Pallas-Bot 根目录
+uv run pallas ext install pallas-plugin-maa
+
+# 或
 uv pip install pallas-plugin-maa
 ```
 

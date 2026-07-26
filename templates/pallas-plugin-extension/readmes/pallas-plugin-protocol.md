@@ -19,7 +19,9 @@ Pallas-Bot 4.0 官方扩展：**协议端管理**（NapCat / SnowLuma）与 **�
 需已安装 [Pallas-Bot](https://github.com/PallasBot/Pallas-Bot) **≥ 4.0**。
 
 ```bash
-uv sync --extra plugins-protocol
+# 推荐：控制台 → 插件商店 → 一键安装
+uv run pallas ext install pallas-plugin-protocol
+# 或：uv pip install pallas-plugin-protocol
 ```
 
 未安装时 Web 控制台仍可打开；**协议端 / 实例** 页会提示安装本扩展。
