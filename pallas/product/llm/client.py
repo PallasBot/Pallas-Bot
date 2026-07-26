@@ -91,18 +91,18 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
         metadata["resolved_model"] = task_route.resolved_model
     if task_route.provider_hint:
         metadata["provider_hint"] = task_route.provider_hint
+    from pallas.product.llm.assembler import assemble_tool_bundle
     from pallas.product.llm.inference_params import chat_token_count_with_tools
-    from pallas.product.llm.kernel import plan_direct_chat_stages
-    from pallas.product.llm.tools.registry import tool_metadata_for_chat
 
     user_text = str(request.user_text or "").strip()
     if not user_text and messages:
         user_text = str(messages[-1].content or "")
-    tool_meta = tool_metadata_for_chat(task=task_name, user_text=user_text)
+    tool_meta = assemble_tool_bundle(
+        task=task_name,
+        user_text=user_text,
+        tool_metadata=request.tool_metadata,
+    )
     metadata.update(tool_meta)
-    if task_name == "llm_chat":
-        metadata["agent_stage_plan"] = plan_direct_chat_stages(tools_enabled=bool(tool_meta.get("tools_enabled")))
-        metadata["tool_schema_count"] = len(tool_meta.get("tool_schemas") or [])
     metadata["token_count"] = chat_token_count_with_tools(
         request.token_count,
         tools_enabled=bool(tool_meta.get("tools_enabled")),

@@ -63,7 +63,7 @@ def decide_repeater_action(
         action = ConversationAction.SKIP
         trace_reason = "opportunity_rejected"
         stages = []
-    elif llm_enabled and feature_level == ConversationFeatureLevel.FULL_CONVERSATION_KERNEL:
+    elif llm_enabled and feature_level != ConversationFeatureLevel.LEGACY_REPEATER:
         stages = plan_generation_stages(
             has_candidate_pool=ctx.has_candidate_pool,
             candidate_pool_size=ctx.candidate_pool_size,

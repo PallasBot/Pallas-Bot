@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from pallas.product.llm.kernel import plan_generation_stages
 from pallas.product.llm.kernel.generation import GenerationPlan, build_repeater_generation_plan
-from pallas.product.llm.kernel.models import ConversationMode, ConversationPath, ConversationScene, GenerationStage
+from pallas.product.llm.kernel.models import ConversationMode, ConversationPath, ConversationScene
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -34,18 +35,15 @@ def build_repeater_llm_plan(
     if not llm_enabled:
         return RepeaterLlmPlan([], candidate, candidate, pool)
 
-    stage_names: list[str] = []
-    if len(pool) >= 2 and select_enabled:
-        stage_names.append("select")
-    if (candidate or pool) and (polish_enabled or polish_lite_enabled):
-        stage_names.append("rewrite")
-    if len(pool) >= 2:
-        stage_names.append("stitch")
-    if not stage_names or not (pool or candidate):
-        stage_names.append("generate")
-    elif "generate" not in stage_names:
-        stage_names.append("generate")
-    stages = [GenerationStage(item) for item in stage_names]
+    stages = plan_generation_stages(
+        has_candidate_pool=bool(pool),
+        candidate_pool_size=len(pool),
+        has_grounded_candidate=bool(candidate or pool),
+        select_enabled=select_enabled,
+        polish_enabled=polish_enabled,
+        polish_lite_enabled=polish_lite_enabled,
+    )
+    stage_names = [stage.value for stage in stages]
     generation_plan = build_repeater_generation_plan(
         path=ConversationPath.REPEATER_ASSIST,
         stages=stages,
