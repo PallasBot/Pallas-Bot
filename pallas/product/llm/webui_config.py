@@ -120,7 +120,7 @@ class LlmWebuiConfig(BaseModel):
     llm_governance_enabled: bool = Field(
         default=True,
         description=field_help(
-            "是否限制闲聊的频率与单次字数",
+            "是否限制 LLM 对话的频率与单次字数",
             "群很活跃时建议开启，避免刷屏",
         ),
     )
@@ -190,7 +190,7 @@ class LlmWebuiConfig(BaseModel):
         ge=0,
         le=200000,
         description=field_help(
-            "单次闲聊上下文字符预算",
+            "单次 LLM 对话上下文字符预算",
             "0 表示不限制；建议按模型上下文窗口留余量",
         ),
     )
@@ -251,8 +251,8 @@ class LlmWebuiConfig(BaseModel):
         ge=1,
         le=64,
         description=field_help(
-            "同时进行的闲聊模型请求上限",
-            "每个分片 worker 进程独立计数；@ 闲聊与接话分开限流",
+            "同时进行的 LLM 对话模型请求上限",
+            "每个分片 worker 进程独立计数；@ LLM 对话与接话分开限流",
         ),
     )
     llm_repeater_group_cooldown_sec: int = Field(
@@ -288,7 +288,7 @@ class LlmWebuiConfig(BaseModel):
         le=32,
         description=field_help(
             "每个 worker 同时进行的接话模型请求数",
-            "与闲聊并发分开计算",
+            "与 LLM 对话并发分开计算",
         ),
     )
     llm_repeater_global_rpm: int = Field(
@@ -303,14 +303,14 @@ class LlmWebuiConfig(BaseModel):
     llm_repeater_feedback_enabled: bool = Field(
         default=True,
         description=field_help(
-            "是否收集闲聊成功回复，作为复读软反馈",
+            "是否收集 LLM 对话成功回复，作为复读软反馈",
             "只在回复真正发出后记录",
         ),
     )
     llm_repeater_bias_enabled: bool = Field(
         default=True,
         description=field_help(
-            "是否让复读轻微偏向已被闲聊验证过的短回复",
+            "是否让复读轻微偏向已被 LLM 对话验证过的短回复",
             "保守弱偏置；样本不足时不会生效",
         ),
     )
@@ -353,14 +353,14 @@ class LlmWebuiConfig(BaseModel):
     llm_output_filter_chat_hard_phrases: list[str] = Field(
         default_factory=default_output_filter_chat_hard_phrases,
         description=field_help(
-            "闲聊/接话硬拦截词表",
-            "JSON 字符串数组；命中后接话回落语料，闲聊静默不发",
+            "LLM 对话/接话硬拦截词表",
+            "JSON 字符串数组；命中后接话回落语料，LLM 对话静默不发",
         ),
     )
     llm_output_filter_chat_soft_phrases: list[str] = Field(
         default_factory=default_output_filter_chat_soft_phrases,
         description=field_help(
-            "闲聊/接话软拦截词表",
+            "LLM 对话/接话软拦截词表",
             "JSON 字符串数组；与硬拦截同样处理，便于分批下线",
         ),
     )
@@ -368,14 +368,14 @@ class LlmWebuiConfig(BaseModel):
         default_factory=default_output_filter_polish_lite_hard_phrases,
         description=field_help(
             "接话轻润色额外硬拦截词",
-            "与上方闲聊硬拦截合并后用于 repeater_polish_lite",
+            "与上方 LLM 对话硬拦截合并后用于 repeater_polish_lite",
         ),
     )
     llm_output_filter_polish_lite_soft_phrases: list[str] = Field(
         default_factory=default_output_filter_polish_lite_soft_phrases,
         description=field_help(
             "接话轻润色额外软拦截词",
-            "与上方闲聊软拦截合并后用于 repeater_polish_lite",
+            "与上方 LLM 对话软拦截合并后用于 repeater_polish_lite",
         ),
     )
     llm_reply_postprocess_enabled: bool = Field(
@@ -475,7 +475,7 @@ class LlmWebuiConfig(BaseModel):
     )
     llm_memory_auto_episode_enabled: bool = Field(
         default=True,
-        description=field_help("是否自动沉淀会话片段为记忆", "开启后闲聊结束后可写入群记忆"),
+        description=field_help("是否自动沉淀会话片段为记忆", "开启后 LLM 对话结束后可写入群记忆"),
     )
     llm_memory_auto_episode_cooldown_sec: int = Field(
         default=120,
