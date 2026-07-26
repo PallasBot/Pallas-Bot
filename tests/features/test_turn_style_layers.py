@@ -92,3 +92,13 @@ def test_catchphrase_selects_by_scene_and_text(tmp_path, monkeypatch) -> None:
     lines = compile_catchphrase_prompt_lines(42, user_text="这个梗典炸了", scene="banter", limit=2)
     assert any("那很牛了" in line for line in lines)
     assert compile_catchphrase_prompt_lines(42, limit=0) == []
+
+
+def test_catchphrase_canonical_venting_occasion_matches_legacy_variant(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    row = propose_catchphrase_from_bot_success(42, 1, "太难了", "吐槽加班")
+    assert row is not None
+    assert row.occasion == "venting"
+    promote_catchphrase(row.entry_id, force=True)
+    picked = select_catchphrases_for_turn(42, user_text="加班太难了", scene="venting", limit=1)
+    assert [item.entry_id for item in picked] == [row.entry_id]

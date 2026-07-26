@@ -257,9 +257,10 @@ def score_catchphrase_for_turn(
     score = 40 + min(max(1, int(entry.support)), 10)
     kw_hits = sum(keyword in candidate for keyword in _query_keywords(user_text))
     score += min(30, 8 * kw_hits)
-    scene_key = str(scene or "").strip().lower()
+    scene_key = normalize_occasion_tag(str(scene or "").strip())
     scene_tokens = _SCENE_OCCASION_TOKENS.get(scene_key, ())
-    if scene_tokens and any(token in candidate for token in scene_tokens):
+    scene_matches = occasion == scene_key or bool(scene_tokens and any(token in candidate for token in scene_tokens))
+    if scene_matches:
         score += 24
     elif scene_key in {"banter", "venting", "provocation", "light_help"} and occasion in {
         "口头禅",
@@ -267,7 +268,7 @@ def score_catchphrase_for_turn(
         "语气尾巴",
     }:
         score -= 10
-    if kw_hits == 0 and scene_key and not any(token in candidate for token in scene_tokens):
+    if kw_hits == 0 and scene_key and not scene_matches:
         # 无关键词且场合不对：仅保留高支持自称梗作弱候选
         if entry.occasion == "自称梗" and entry.support >= 3:
             score -= 15
