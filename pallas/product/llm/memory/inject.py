@@ -10,13 +10,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
+from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
 from pallas.product.llm.memory.policy import classify_memory_candidate, normalize_episode_note
 from pallas.product.llm.memory.relationship_profile import (
     build_relationship_guidance_lines,
     parse_relationship_fact_view,
 )
 from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile
-from pallas.product.llm.memory.retrieve import memory_relevance_score
+from pallas.product.llm.memory.retrieve import effective_memory_rag_min_score, memory_relevance_score
 from pallas.product.llm.memory.store import retrieve_memory_hits
 from pallas.product.llm.session_store import LlmChatTurn, list_group_ambient_messages
 from pallas.product.persona.prompt_guard import sanitize_prompt_block
@@ -121,7 +122,7 @@ async def enrich_system_with_memory_context(
         return MemoryInjectionResult(system_prompt=system_prompt, trace=empty_trace)
     hits = await retrieve_memory_hits(bot_id, group_id, query_text, cfg=c)
     top_k = max(1, min(int(c.llm_memory_rag_top_k), 8))
-    min_score = max(0, int(getattr(c, "llm_memory_rag_min_score", 0) or 0))
+    min_score = effective_memory_rag_min_score(c)
     # 仅在持久记忆无命中时用 ambient 补，避免硬凑满 3 条噪声
     if group_id is not None and not hits:
         ambient = await list_group_ambient_messages(bot_id, group_id, limit=12, cfg=c)
@@ -144,6 +145,7 @@ async def enrich_system_with_memory_context(
     lines = [line for line in lines if line]
     trace = {
         "hit_count": len(lines),
+        "retrieve_mode": vector_retrieve_mode(c),
         "sources": sorted({
             str(item.get("source") or "").strip() or "memory" for item in hits if str(item.get("content") or "").strip()
         }),
@@ -157,6 +159,9 @@ async def enrich_system_with_memory_context(
             if str(item.get("content") or "").strip()
         ],
     }
+    from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
+
+    trace.update(embedding_capability_trace(c))
     try:
         from pallas.product.llm.memory_rag_metrics import record_memory_rag_query_result
 

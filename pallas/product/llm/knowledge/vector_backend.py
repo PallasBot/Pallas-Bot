@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Protocol
 
-from pallas.product.llm.config import VectorRetrieveMode, resolve_llm_vector_retrieve
+from pallas.product.llm.config import VectorRetrieveMode, get_llm_config, resolve_llm_vector_retrieve
 
 if TYPE_CHECKING:
     from pallas.product.llm.knowledge.models import KnowledgeSourceDecl, RetrievedKnowledgeChunk
@@ -21,8 +21,17 @@ class VectorRetrieveBackend(Protocol):
     ) -> list[RetrievedKnowledgeChunk]: ...
 
 
-def vector_retrieve_mode() -> VectorRetrieveMode:
-    return resolve_llm_vector_retrieve()
+def effective_vector_retrieve_mode(cfg=None) -> VectorRetrieveMode:
+    from pallas.product.llm.knowledge.embedding_client import embedding_model_name
+
+    configured = resolve_llm_vector_retrieve() if cfg is None else cfg.llm_vector_retrieve
+    if embedding_model_name(cfg).lower() == "stub":
+        return "keyword"
+    return configured
+
+
+def vector_retrieve_mode(cfg=None) -> VectorRetrieveMode:
+    return effective_vector_retrieve_mode(cfg or get_llm_config())
 
 
 class KeywordVectorBackend:
