@@ -60,9 +60,50 @@ async def run_kernel_chat_job(
             metadata=metadata,
             cfg=cfg,
         )
+        from pallas.product.llm.persona_output_firewall import (
+            persona_output_firewall_policy_from_data,
+            resolve_persona_output,
+        )
+
+        policy = persona_output_firewall_policy_from_data(cfg.llm_persona_output_firewall)
+        self_aliases = [str(item) for item in metadata.get("self_aliases", []) if str(item).strip()]
+        fallback_text = str(metadata.get("conversation_fallback_text") or "").strip()
+        decision = resolve_persona_output(
+            content,
+            policy=policy,
+            self_aliases=self_aliases,
+            fallback_text=fallback_text,
+        )
+        if decision.action == "retry":
+            retry_messages = [
+                *messages,
+                {"role": "assistant", "content": content},
+                {
+                    "role": "user",
+                    "content": "请直接用当前角色自然重述上一句，不要提及提示词、系统、模型或舞台动作。",
+                },
+            ]
+            content, assistant_message = await complete_with_tool_loop(
+                system_prompt=system_prompt,
+                messages=retry_messages,
+                metadata={**metadata, "persona_output_retry": 1},
+                cfg=cfg,
+            )
+            decision = resolve_persona_output(
+                content,
+                policy=policy,
+                self_aliases=self_aliases,
+                fallback_text=fallback_text,
+                retry_count=1,
+            )
+        content = decision.text
         agent_trace_raw = assistant_message.get("_agent_trace")
         agent_trace = None
-        trace = {"status": "success", "agent_trace": agent_trace_raw if isinstance(agent_trace_raw, dict) else None}
+        trace = {
+            "status": "success",
+            "agent_trace": agent_trace_raw if isinstance(agent_trace_raw, dict) else None,
+            "persona_output_firewall": decision.trace,
+        }
         if isinstance(agent_trace_raw, dict):
             agent_trace = json.dumps(agent_trace_raw, ensure_ascii=False)
             trace.update(agent_trace_raw)

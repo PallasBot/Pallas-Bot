@@ -473,6 +473,19 @@ class LlmWebuiConfig(BaseModel):
             "与上方 LLM 对话软拦截合并后用于 repeater_polish_lite",
         ),
     )
+    llm_persona_output_firewall: dict[str, object] = Field(
+        default_factory=lambda: {
+            "version": 1,
+            "enabled": False,
+            "severity": "strict",
+            "strategy": "retry_then_fallback",
+            "max_retries": 1,
+        },
+        description=field_help(
+            "人设一致性输出防火墙",
+            "JSON 对象；默认关闭。开启后检查提示词泄露、舞台动作、模型身份冲突和重复垫词；最多重述一次。",
+        ),
+    )
     llm_reply_postprocess_enabled: bool = Field(
         default=False,
         description=field_help(

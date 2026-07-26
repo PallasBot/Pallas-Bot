@@ -834,6 +834,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 "current_turn_action": current_turn_decision.action,
                 "bot_id": int(bot.self_id),
                 "self_aliases": self_aliases[:8],
+                "conversation_fallback_text": corpus_fallback,
                 "variation_hint": variation_hint,
                 "persona_affect_block": affect_system_block,
                 "persona_shaping_active": bool(affect_system_block or dynamic_expression_hint),

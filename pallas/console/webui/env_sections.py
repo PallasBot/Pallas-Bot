@@ -271,6 +271,7 @@ def _llm_section() -> WebuiEnvSection:
             "llm_output_filter_chat_soft_phrases": "LLM_OUTPUT_FILTER_CHAT_SOFT_PHRASES",
             "llm_output_filter_polish_lite_hard_phrases": "LLM_OUTPUT_FILTER_POLISH_LITE_HARD_PHRASES",
             "llm_output_filter_polish_lite_soft_phrases": "LLM_OUTPUT_FILTER_POLISH_LITE_SOFT_PHRASES",
+            "llm_persona_output_firewall": "LLM_PERSONA_OUTPUT_FIREWALL",
             "llm_reply_postprocess_enabled": "LLM_REPLY_POSTPROCESS_ENABLED",
             "llm_reply_typo_enabled": "LLM_REPLY_TYPO_ENABLED",
             "llm_reply_typo_rate": "LLM_REPLY_TYPO_RATE",

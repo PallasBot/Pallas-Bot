@@ -329,6 +329,7 @@ class LlmConfig(BaseModel):
     llm_output_filter_chat_soft_phrases: list[str] = Field(default_factory=list)
     llm_output_filter_polish_lite_hard_phrases: list[str] = Field(default_factory=list)
     llm_output_filter_polish_lite_soft_phrases: list[str] = Field(default_factory=list)
+    llm_persona_output_firewall: dict[str, object] = Field(default_factory=dict)
     llm_reply_postprocess_enabled: bool = Field(default=False)
     llm_reply_typo_enabled: bool = Field(default=False)
     llm_reply_typo_rate: float = Field(default=0.01, ge=0.0, le=1.0)
@@ -543,6 +544,7 @@ def get_llm_config() -> LlmConfig:
                 "LLM_OUTPUT_FILTER_POLISH_LITE_SOFT_PHRASES",
                 POLISH_LITE_SOFT_RETRY_PHRASES,
             ),
+            llm_persona_output_firewall=_env_json_object("LLM_PERSONA_OUTPUT_FIREWALL"),
             llm_reply_postprocess_enabled=_env_bool("LLM_REPLY_POSTPROCESS_ENABLED", False),
             llm_reply_typo_enabled=_env_bool("LLM_REPLY_TYPO_ENABLED", False),
             llm_reply_typo_rate=_env_float("LLM_REPLY_TYPO_RATE", 0.01),
