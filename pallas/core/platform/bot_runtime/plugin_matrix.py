@@ -221,6 +221,17 @@ def official_extension_cover(package: str) -> str | None:
     return official_extension_asset_url(pkg, _OFFICIAL_EXTENSION_BRAND_AVATAR_PATH)
 
 
+def _first_sentence(text: str) -> str:
+    plain = _README_WHITESPACE_RE.sub(" ", str(text or "")).strip()
+    if not plain:
+        return ""
+    for mark in ("。", "！", "？"):
+        index = plain.find(mark)
+        if index >= 0:
+            return plain[: index + 1].strip()
+    return plain
+
+
 def official_extension_readme_summary(package: str) -> str:
     path_str = OFFICIAL_EXTENSION_README_PATHS.get((package or "").strip())
     if not path_str:
@@ -234,7 +245,13 @@ def official_extension_readme_summary(package: str) -> str:
     search_start = max(title_index, 0)
     for match in _README_CENTERED_PARAGRAPH_RE.finditer(text, search_start):
         raw = _README_HTML_TAG_RE.sub("", match.group(1))
-        summary = _README_WHITESPACE_RE.sub(" ", raw).strip()
+        summary = _first_sentence(raw)
+        if summary:
+            return summary
+    # 文档站 Markdown：标题后首段首句
+    md_match = re.search(r"(?m)^#[^\n]*\n+(?:\s*\n)*([^\n#*][^\n]*)", text)
+    if md_match:
+        summary = _first_sentence(md_match.group(1))
         if summary:
             return summary
     return ""

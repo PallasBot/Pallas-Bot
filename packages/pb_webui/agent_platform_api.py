@@ -30,27 +30,21 @@ def register_agent_platform_router(
 
         ensure_tools_loaded()
         catalog = build_tools_catalog_ui()
-        tasks = [
-            item
-            for item in list_tasks()
-            if group_id is None or item.group_id in (None, int(group_id))
-        ][:50]
+        tasks = [item for item in list_tasks() if group_id is None or item.group_id in (None, int(group_id))][:50]
         catchphrases = list_catchphrases(bot_id)
         tools = catalog.get("items") if isinstance(catalog, dict) else None
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": {
-                    "observation_queue_size": observation_queue_size(),
-                    "tool_count": len(tools) if isinstance(tools, list) else int(catalog.get("count") or 0),
-                    "task_count": len(tasks),
-                    "open_tasks": sum(1 for item in tasks if item.status not in {"done", "cancelled"}),
-                    "catchphrase_candidates": sum(1 for item in catchphrases if item.status == "candidate"),
-                    "catchphrase_active": sum(1 for item in catchphrases if item.status == "active"),
-                    "scope": {"bot_id": bot_id, "group_id": group_id},
-                },
-            }
-        )
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "observation_queue_size": observation_queue_size(),
+                "tool_count": len(tools) if isinstance(tools, list) else int(catalog.get("count") or 0),
+                "task_count": len(tasks),
+                "open_tasks": sum(1 for item in tasks if item.status not in {"done", "cancelled"}),
+                "catchphrase_candidates": sum(1 for item in catchphrases if item.status == "candidate"),
+                "catchphrase_active": sum(1 for item in catchphrases if item.status == "active"),
+                "scope": {"bot_id": bot_id, "group_id": group_id},
+            },
+        })
 
     @router.get(f"{x}/llm/agent-platform/person-facts", include_in_schema=True)
     async def person_facts_list(
@@ -149,16 +143,14 @@ def register_agent_platform_router(
             status=status_filter,  # type: ignore[arg-type]
             limit=limit,
         )
-        return JSONResponse(
-            {
-                "ok": True,
-                "data": {
-                    "items": [item.model_dump() for item in items],
-                    "count": len(items),
-                    "queue_size": observation_queue_size(),
-                },
-            }
-        )
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "items": [item.model_dump() for item in items],
+                "count": len(items),
+                "queue_size": observation_queue_size(),
+            },
+        })
 
     @router.get(f"{x}/llm/agent-platform/tasks", include_in_schema=True)
     async def tasks_list(
@@ -168,9 +160,7 @@ def register_agent_platform_router(
         from pallas.product.llm.orchestration.task_store import list_tasks
 
         items = [
-            item.model_dump()
-            for item in list_tasks()
-            if group_id is None or item.group_id in (None, int(group_id))
+            item.model_dump() for item in list_tasks() if group_id is None or item.group_id in (None, int(group_id))
         ][:limit]
         return JSONResponse({"ok": True, "data": {"items": items, "count": len(items)}})
 

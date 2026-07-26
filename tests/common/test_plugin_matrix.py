@@ -172,13 +172,11 @@ def test_community_stats_canonical_alias():
 
 def test_official_extension_description_prefers_readme_summary():
     assert official_extension_description("pallas-plugin-draw") == "按文字描述生图，或带参考图改图。"
-    assert official_extension_description("pallas-plugin-protocol") == "管理 NapCat 和 SnowLuma 协议端实例与连接配置。"
+    assert official_extension_description("pallas-plugin-protocol") == ("管理 NapCat / SnowLuma 协议端实例与连接配置。")
 
 
 def test_official_extension_description_falls_back_for_multi_plugin_package():
-    assert official_extension_description("pallas-plugin-ai-media") == (
-        "牛牛唱歌（翻唱 / 点歌）。"
-    )
+    assert official_extension_description("pallas-plugin-ai-media") == ("牛牛唱歌（翻唱 / 点歌）。")
 
 
 def test_official_extension_display_name_uses_chinese_titles():
@@ -191,7 +189,4 @@ def test_official_extension_visuals_use_official_repo_assets() -> None:
     visuals = official_extension_visuals("pallas-plugin-draw")
     assert visuals["avatar"] is None
     assert visuals["icon"] == visuals["cover"]
-    assert (
-        visuals["cover"]
-        == "https://raw.githubusercontent.com/PallasBot/Plugin-Draw/main/assets/brand-avatar.png"
-    )
+    assert visuals["cover"] == "https://raw.githubusercontent.com/PallasBot/Plugin-Draw/main/assets/brand-avatar.png"

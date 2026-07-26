@@ -1,5 +1,43 @@
 # Changelog
 
+## [4.1.5] - 2026-07-26
+
+本版相对 4.1.4：社交型 Agent 平台（观察队列 / 人物事实 / 口癖 / 任务编排）、LLM 动作与开口拆分、联网搜索与 Draw 连通修复；重复器接话 stage 收敛。捆绑 WebUI **v0.7.11**（人物 / 任务观测与口癖审批等；发版前需先发布该 WebUI tag）。
+
+### Added
+
+#### Agent 平台与记忆
+
+- 记忆观察队列、Planner 与 lifecycle 检索
+- 人物事实、跨群同意与群体画像
+- 账号口癖候选库；成功回复抽短习惯后审批注入人设（非整句接话）
+- 行动工具、任务编排与 Agent Platform 控制台 API
+- 请求级 usage 账本与历史脏数据过滤
+
+#### LLM 对话与工具
+
+- 动作与开口拆分：工具结果经 `chat.reply` 发可见对白；可短 ack 或沉默
+- 硬域未命中时按 hints / 描述软召回工具；记住已激活工具并补全追踪
+- 统一重复器能力解析与阶段规划；复用聊天上下文与工具组装
+- 嵌入检索能力映射；回退时停用语义检索
+
+#### 文档
+
+- 全站信息架构与社区投稿墙；AI 观测 / 联网搜索说明；Agent 架构与部署边界
+
+### Fixed
+
+- 联网搜索可正确选中并支持配置（含 Tavily 等）
+- Draw 适配移除 `runtime_mode` 后的连通探测
+- AI 口令派发透传原消息图 / @ 素材，并排除唤醒 @bot
+- 压制动作后 `chat.reply` 元叙述废话
+
+### Changed
+
+- 收敛 LLM 接话 stage 与 lite 默认策略；移除旧 LLM 提交路径
+- 文案「闲聊」改为「LLM 对话」；兼容会话档位标注 deprecated
+- 发行捆绑控制台取 WebUI **v0.7.11**
+
 ## [4.1.4] - 2026-07-26
 
 本版相对 4.1.3：数据库韧性与 Mongo→PG 迁移、口令工具多域召回与选型调试、同伴身份与输出闸、LLM 日级观测计数；控制台配套健康/后端切换与异步更新。捆绑 WebUI **v0.7.9**（迁移向导、可搜索 Combobox、工具选型预览等）。
@@ -211,6 +249,7 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
+[4.1.5]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.4...v4.1.5
 [4.1.4]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.3...v4.1.4
 [4.1.3]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.2...v4.1.3
 [4.1.2]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.1...v4.1.2
