@@ -194,7 +194,13 @@ def test_resolve_conversation_feature_level_explicit_override(monkeypatch) -> No
 
 
 def test_memory_read_policy_disables_behavioral_learning_by_default() -> None:
-    policy = resolve_memory_read_policy(LlmConfig(llm_chat_enabled=True, llm_repeater_bias_enabled=False))
+    policy = resolve_memory_read_policy(
+        LlmConfig(
+            llm_chat_enabled=True,
+            llm_repeater_bias_enabled=False,
+            llm_repeater_writeback_enabled=False,
+        )
+    )
     assert policy.allow_behavioral_learning is False
     assert policy.allow_writeback is False
 
