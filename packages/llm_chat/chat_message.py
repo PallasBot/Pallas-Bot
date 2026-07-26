@@ -51,7 +51,7 @@ from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.persona_context import build_persona_llm_context
 from pallas.product.llm.polish_lite import maybe_submit_repeater_corpus_llm
-from pallas.product.llm.reply_gate import evaluate_llm_reply_gate
+from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_variation import (
     build_recent_reply_ending_hint,
     build_recent_reply_variation_hint,
@@ -59,7 +59,7 @@ from pallas.product.llm.reply_variation import (
     should_wait_for_more,
 )
 from pallas.product.llm.session_store import list_user_llm_messages
-from pallas.product.llm.speak_perception import evaluate_speak_perception
+from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
 from pallas.product.llm.tools.registry import tool_metadata_for_chat
 from pallas.product.persona.affect_kernel import (
@@ -307,6 +307,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
             group_id=group_id,
             followup_active=followup_active,
         )
+        for metric in speak_perception_metrics(decision):
+            record_bot_llm_task(LLM_CHAT_TASK_TYPE, metric)
         if not decision.should_speak:
             return
         speak_trigger = decision.reason
@@ -455,15 +457,24 @@ async def handle_llm_chat(bot: Bot, event: Event):
     user_warmth_delta = float(relationship_result.trace.get("warmth_delta") or 0.0)
     user_assertiveness_delta = float(relationship_result.trace.get("assertiveness_delta") or 0.0)
 
-    gate_decision = evaluate_llm_reply_gate(
+    gate_result = evaluate_llm_reply_gate_result(
         plain or msg,
         cfg=llm_cfg,
         persona=persona_for_gate,
         bot_id=int(bot.self_id),
     )
+    gate_decision = gate_result.decision
     if gate_decision == "skip":
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_skip")
-        logger.debug("llm chat reply gate skip group={} user={}", group_id, user_id)
+        skip_metric = reply_gate_skip_metric(gate_result.reason)
+        if skip_metric:
+            record_bot_llm_task(LLM_CHAT_TASK_TYPE, skip_metric)
+        logger.debug(
+            "llm chat reply gate skip group={} user={} reason={}",
+            group_id,
+            user_id,
+            gate_result.reason,
+        )
         return
     if should_wait_for_more(plain or msg):
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_defer")

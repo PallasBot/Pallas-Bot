@@ -351,9 +351,23 @@ _NO_TOOL_TASKS = frozenset({"repeater_fallback", "repeater_polish", "repeater_po
 
 def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> dict[str, Any]:
     """写入 Bot 工具 metadata：tool_catalog + 兼容字段 tools_enabled / tool_schemas。"""
+    from pallas.product.llm.task_metrics import record_bot_llm_task
+
+    normalized = str(task or "").strip().lower()
+    cfg = get_llm_config()
     catalog = tool_catalog_for_chat(task=task, user_text=user_text)
     if catalog is None:
+        # selective 开启且非 no-tool task：空目录 = 口语未命中工具域
+        if (
+            normalized not in _NO_TOOL_TASKS
+            and cfg.llm_tools_enabled
+            and cfg.llm_tools_selective
+            and str(user_text or "").strip()
+        ):
+            record_bot_llm_task(normalized or "llm_chat", "selective_empty")
         return {}
+    if catalog.selection.selective_enabled:
+        record_bot_llm_task(normalized or "llm_chat", "selective_hit")
     schemas = openai_schemas_from_catalog(catalog)
     payload: dict[str, Any] = {
         "tools_enabled": True,

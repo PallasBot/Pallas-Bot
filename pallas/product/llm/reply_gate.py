@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
@@ -13,6 +14,21 @@ if TYPE_CHECKING:
     from pallas.product.persona.model import ResolvedPersona
 
 ReplyGateDecision = Literal["proceed", "skip", "defer"]
+ReplyGateSkipReason = Literal[
+    "face",
+    "noise",
+    "short",
+    "bystander",
+    "incomplete",
+    "shut_up",
+]
+
+
+@dataclass(frozen=True, slots=True)
+class ReplyGateResult:
+    decision: ReplyGateDecision
+    reason: str = ""
+
 
 _CQ_CODE_RE = re.compile(r"\[CQ:[^\]]+\]", re.IGNORECASE)
 _CQ_FACE_RE = re.compile(r"\[CQ:(?:face|bface|sface|rps|dice)[^\]]*\]", re.IGNORECASE)
@@ -50,13 +66,13 @@ def persona_adjusted_min_chars(base_min: int, persona: ResolvedPersona | None) -
     return max(0, int(base_min) + delta)
 
 
-def evaluate_llm_reply_gate(
+def evaluate_llm_reply_gate_result(
     user_text: str,
     *,
     cfg: LlmConfig | None = None,
     persona: ResolvedPersona | None = None,
     bot_id: int | None = None,
-) -> ReplyGateDecision:
+) -> ReplyGateResult:
     from pallas.product.llm.reply_necessity import (
         is_bystander_plain_text,
         is_incomplete_utterance,
@@ -65,21 +81,49 @@ def evaluate_llm_reply_gate(
 
     c = cfg or get_llm_config()
     if not c.llm_reply_gate_enabled:
-        return "proceed"
+        return ReplyGateResult("proceed", "disabled")
     plain = strip_cq_codes(user_text)
     if is_shut_up_request(user_text):
-        return "skip"
+        return ReplyGateResult("skip", "shut_up")
     if not plain and is_mostly_face_or_emoji(user_text):
-        return "skip"
+        return ReplyGateResult("skip", "face")
     if is_mostly_face_or_emoji(user_text):
-        return "skip"
+        return ReplyGateResult("skip", "face")
     if is_noise_fragment(plain):
-        return "skip"
+        return ReplyGateResult("skip", "noise")
     if is_incomplete_utterance(plain):
-        return "skip"
+        return ReplyGateResult("skip", "incomplete")
     if is_bystander_plain_text(user_text, bot_id=bot_id):
-        return "skip"
+        return ReplyGateResult("skip", "bystander")
     min_chars = persona_adjusted_min_chars(max(0, int(c.llm_reply_gate_min_chars)), persona)
     if min_chars > 0 and len(plain) < min_chars:
-        return "skip"
-    return "proceed"
+        return ReplyGateResult("skip", "short")
+    return ReplyGateResult("proceed", "ok")
+
+
+def evaluate_llm_reply_gate(
+    user_text: str,
+    *,
+    cfg: LlmConfig | None = None,
+    persona: ResolvedPersona | None = None,
+    bot_id: int | None = None,
+) -> ReplyGateDecision:
+    return evaluate_llm_reply_gate_result(
+        user_text,
+        cfg=cfg,
+        persona=persona,
+        bot_id=bot_id,
+    ).decision
+
+
+def reply_gate_skip_metric(reason: str) -> str | None:
+    key = str(reason or "").strip().lower()
+    mapping = {
+        "face": "reply_gate_skip_face",
+        "noise": "reply_gate_skip_noise",
+        "short": "reply_gate_skip_short",
+        "bystander": "reply_gate_skip_bystander",
+        "incomplete": "reply_gate_skip_incomplete",
+        "shut_up": "reply_gate_skip_shut_up",
+    }
+    return mapping.get(key)

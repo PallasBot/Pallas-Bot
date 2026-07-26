@@ -262,6 +262,8 @@ async def complete_with_tool_loop(
         assistant_message["content"] = content
         return content, assistant_message
 
+    from pallas.product.llm.task_metrics import record_bot_llm_task
+
     max_rounds = max(1, int(c.llm_tools_max_rounds))
     last_message: dict[str, Any] = {}
     schema_names = tool_names_from_schemas(tool_schemas)
@@ -308,6 +310,10 @@ async def complete_with_tool_loop(
             assistant_message["content"] = content
             agent_trace["rounds"].append(round_trace)
             assistant_message["_agent_trace"] = agent_trace
+            if int(agent_trace.get("tool_call_count") or 0) <= 0:
+                record_bot_llm_task(task, "tool_session_no_call")
+            else:
+                record_bot_llm_task(task, "tool_session_called")
             return content, assistant_message
 
         working.append(assistant_history_message(last_message))
@@ -343,6 +349,10 @@ async def complete_with_tool_loop(
                 "error": summary["error"],
                 "result_preview": summary["result_preview"],
             })
+            if summary["ok"]:
+                record_bot_llm_task(task, "tool_call_ok")
+            else:
+                record_bot_llm_task(task, "tool_call_fail")
             working.append(tool_result_message(call_id, resolved_name, tool_result))
             activated = _activate_names_from_tool_result(resolved_name, result_dict)
             if activated:
@@ -364,4 +374,8 @@ async def complete_with_tool_loop(
     assistant_message.setdefault("role", "assistant")
     assistant_message["content"] = content
     assistant_message["_agent_trace"] = agent_trace
+    if int(agent_trace.get("tool_call_count") or 0) > 0:
+        record_bot_llm_task(task, "tool_session_called")
+    else:
+        record_bot_llm_task(task, "tool_session_no_call")
     return content, assistant_message
