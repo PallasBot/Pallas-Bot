@@ -60,6 +60,6 @@
 | `sync_docs_to_web.py` | 主仓 `docs/` → Pallas-Bot-Docs |
 | `bot_watchdog.py` | `/pallas/api/health` 探活重启 |
 | `backup_database.py` / `backup_pg.py` | 数据库备份 |
-| `backup.sh` / `backup_pg.sh` | shell 备份入口 |
+| `backup_pg.sh` | PostgreSQL 备份的 shell 入口 |
 
 分片详情见 [多进程分片](../docs/maintainer/deploy/sharded.md)。

@@ -99,7 +99,7 @@ WHERE account = 3888888888;
 
 ### 如何备份 MongoDB / PostgreSQL？
 
-A: **WebUI「数据库」页**有「数据库备份」面板；若未检测到 `mongodump` / `pg_dump`，页面会给出官方下载链接。也可在仓库根执行：`uv run python tools/scripts/backup_database.py`（按当前 `db_backend`），PostgreSQL 专用：`tools/scripts/backup_pg.py` 或 `sh tools/scripts/backup.sh -p`。
+A: **WebUI「数据库」页**有「数据库备份」面板；若未检测到 `mongodump` / `pg_dump`，页面会给出官方下载链接。也可在仓库根执行：`uv run python tools/scripts/backup_database.py`（按当前 `db_backend`），PostgreSQL 专用：`uv run python tools/scripts/backup_pg.py`（或 `sh tools/scripts/backup_pg.sh`）。
 
 ## 更新与版本问题
 

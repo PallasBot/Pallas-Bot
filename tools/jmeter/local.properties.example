@@ -1,9 +1,0 @@
-# 复制为 local.properties（勿提交），供 run_console_load.sh 读取
-HOST=127.0.0.1
-PORT=8088
-THREADS=20
-RAMP_SEC=5
-DURATION_SEC=60
-# 二选一：已有 token 或控制台口令
-# PALLAS_TOKEN=
-# PALLAS_CONSOLE_PASSWORD=

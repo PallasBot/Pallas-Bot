@@ -265,8 +265,7 @@ class ImageCacheRow(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     cq_code: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
-    # 原生二进制 BYTEA。旧库 base64_data 由 init_pg → _ensure_pg_image_cache_blob_data
-    # 幂等迁移；离线脚本 tools/migrate_image_cache_to_bytea.py 语义相同。
+    # 原生二进制 BYTEA。旧库 base64_data 由 init_pg → _ensure_pg_image_cache_blob_data 幂等迁移。
     blob_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     ref_times: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     date: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
@@ -440,8 +439,7 @@ _DELETE_ID_BATCH = 1000
 def _ensure_pg_image_cache_blob_data(connection) -> None:
     """旧库 image_cache 仍为 base64_data(TEXT) 时迁到 blob_data(BYTEA)。
 
-    与 ``tools/migrate_image_cache_to_bytea.py`` 同语义；幂等，可重复调用。
-    ``create_all`` 不会改已有表列，故升级路径必须走这里。
+    幂等，可重复调用。``create_all`` 不会改已有表列，故升级路径必须走这里。
     """
     insp = inspect(connection)
     if not insp.has_table("image_cache"):

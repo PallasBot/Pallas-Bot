@@ -236,8 +236,6 @@ data/pallas_knowledge/*
 !data/pallas_knowledge/.gitignore
 !data/pallas_knowledge/README.md
 !data/pallas_knowledge/example.md
-# 压测本地参数（含口令/token）；仅提交 local.properties.example
-tools/jmeter/local.properties
 .shard_test_state/
 data.pre_shard_test.*
 
