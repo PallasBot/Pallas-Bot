@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
 from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
+from pallas.product.llm.memory.person_facts import retrieve_person_facts_for_prompt
 from pallas.product.llm.memory.policy import classify_memory_candidate, normalize_episode_note
 from pallas.product.llm.memory.relationship_profile import (
     build_relationship_guidance_lines,
@@ -34,6 +35,13 @@ class MemoryInjectionResult(BaseModel):
 
 
 class RelationshipInjectionResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    system_prompt: str
+    trace: dict[str, Any] = Field(default_factory=dict)
+
+
+class PersonFactsInjectionResult(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     system_prompt: str
@@ -292,3 +300,28 @@ async def append_relationship_context(
         cfg=cfg,
     )
     return result.system_prompt
+
+
+async def enrich_system_with_person_facts(
+    system_prompt: str,
+    *,
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    cfg: LlmConfig | None = None,
+) -> PersonFactsInjectionResult:
+    if not group_id or not user_id:
+        return PersonFactsInjectionResult(system_prompt=system_prompt)
+    facts = retrieve_person_facts_for_prompt(
+        bot_id=bot_id,
+        group_id=group_id,
+        user_id=user_id,
+    )
+    if not facts:
+        return PersonFactsInjectionResult(system_prompt=system_prompt)
+    block = "【当前对话者的稳定偏好 — 仅供参考】\n" + "\n".join(f"- {fact}" for fact in facts)
+    base = (system_prompt or "").rstrip()
+    return PersonFactsInjectionResult(
+        system_prompt=f"{base}\n\n{block}" if base else block,
+        trace={"hit_count": len(facts), "sources": ["person_fact"]},
+    )

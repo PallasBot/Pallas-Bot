@@ -8,6 +8,7 @@ from typing import Any
 from pallas.product.llm.knowledge.inject import enrich_system_with_knowledge_sources
 from pallas.product.llm.memory import (
     enrich_system_with_memory_context,
+    enrich_system_with_person_facts,
     enrich_system_with_relationship_context,
 )
 from pallas.product.llm.repeater_persona_context import build_repeater_llm_persona_context
@@ -52,6 +53,13 @@ async def assemble_direct_chat_context(
         user_id=user_id,
         cfg=cfg,
     )
+    person_facts_result = await enrich_system_with_person_facts(
+        relationship_result.system_prompt,
+        bot_id=bot_id,
+        group_id=group_id,
+        user_id=user_id,
+        cfg=cfg,
+    )
     from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
     from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
 
@@ -69,6 +77,7 @@ async def assemble_direct_chat_context(
                 ("memory", memory_result.trace),
                 ("knowledge", knowledge_result.trace),
                 ("relationship", relationship_result.trace),
+                ("person_facts", person_facts_result.trace),
             )
             if int(trace.get("hit_count") or 0) > 0
         ],
@@ -77,7 +86,7 @@ async def assemble_direct_chat_context(
         "relationship": relationship_result.trace,
     }
     return DirectChatContext(
-        system_prompt=relationship_result.system_prompt,
+        system_prompt=person_facts_result.system_prompt,
         knowledge_retrieval_trace=knowledge_result.trace,
         hybrid_retrieval_trace=hybrid_trace,
         relationship_trace=relationship_result.trace,
