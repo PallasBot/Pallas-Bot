@@ -70,6 +70,7 @@ from pallas.product.persona.affect_kernel import (
 )
 from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
 from pallas.product.persona.expression_habits import build_expression_context_suffix
+from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.self_identity import (
     extract_self_aliases,
     maybe_persist_self_alias_from_utterance,
@@ -86,6 +87,7 @@ from .prompts import get_system_prompt
 from .replies import (
     LLM_CHAT_ALIAS_SAVED_REPLY,
     LLM_CHAT_MEMORY_SAVED_REPLY,
+    LLM_CHAT_PEER_ALIAS_SAVED_REPLY,
     LLM_CHAT_RELATIONSHIP_SAVED_REPLY,
     LLM_CHAT_VAGUE_REPLY,
 )
@@ -325,6 +327,10 @@ async def handle_llm_chat(bot: Bot, event: Event):
 
     if await save_self_alias_from_teach(int(bot.self_id), plain or msg):
         await llm_chat_msg.send(LLM_CHAT_ALIAS_SAVED_REPLY)
+        return
+
+    if await save_peer_alias_from_teach(int(bot.self_id), plain or msg):
+        await llm_chat_msg.send(LLM_CHAT_PEER_ALIAS_SAVED_REPLY)
         return
 
     # 弱模式称呼静默沉淀，不打断闲聊
