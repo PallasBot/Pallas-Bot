@@ -3,6 +3,9 @@
 | 方法 | 路径 | 写 | 说明 |
 | --- | --- | --- | --- |
 | GET | `/db/overview` | | 表概览、行数、后端类型 |
+| GET | `/db/health` | | 健康状态、原因摘要、连接池摘要 |
+| GET | `/db/tables` | | 表白名单元数据与是否可分页浏览 |
+| GET | `/db/table-rows` | | 白名单表分页只读（`bot_config`/`group_config`/`user_config`/`blacklist`） |
 | GET | `/db/backend` | | 数据库后端配置（密码掩码） |
 | PUT | `/db/backend` | 是 | 保存后端配置到 webui.json（需重启） |
 | POST | `/db/backend/probe` | 是 | 用草稿参数探测连通性 |
