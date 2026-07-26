@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -189,12 +190,99 @@ def reject_weak_filler_catchphrases(bot_id: int | None = None) -> int:
     return changed
 
 
-def compile_catchphrase_prompt_lines(bot_id: int) -> list[str]:
-    """口癖按场合软参考注入；勿写成每句必带的模板起手。"""
-    lines: list[str] = []
-    for row in list_catchphrases(bot_id, status="active"):
-        if not is_catchphrase_habit(row.saying):
+_SCENE_OCCASION_TOKENS: dict[str, tuple[str, ...]] = {
+    "banter": ("玩笑", "接梗", "吐槽", "乐", "梗", "调侃"),
+    "venting": ("安抚", "情绪", "吐槽", "安慰"),
+    "provocation": ("顶嘴", "吐槽", "挑衅", "怼"),
+    "light_help": ("帮助", "说明", "回答", "解释"),
+    "smalltalk": ("日常", "闲聊", "口头禅", "语气", "接话"),
+    "group_threading": ("多人", "接话", "日常", "插话"),
+}
+
+
+def _query_keywords(text: str) -> set[str]:
+    plain = clean_catchphrase_text(text).lower()
+    keywords: set[str] = set()
+    cjk = "".join(char for char in plain if "\u4e00" <= char <= "\u9fff")
+    keywords.update(cjk[index : index + 2] for index in range(max(0, len(cjk) - 1)))
+    keywords.update(token.lower() for token in re.findall(r"[a-z0-9_]{2,}", plain, flags=re.IGNORECASE))
+    return keywords
+
+
+def score_catchphrase_for_turn(
+    entry: CatchphraseEntry,
+    *,
+    user_text: str = "",
+    scene: str = "",
+) -> int | None:
+    """按用户句与场景给口癖打分；无关则 None。"""
+    if entry.status == "rejected" or not is_catchphrase_habit(entry.saying):
+        return None
+    occasion = clean_catchphrase_text(entry.occasion) or "日常接话"
+    candidate = f"{occasion} {entry.saying}".lower()
+    score = 40 + min(max(1, int(entry.support)), 10)
+    kw_hits = sum(keyword in candidate for keyword in _query_keywords(user_text))
+    score += min(30, 8 * kw_hits)
+    scene_key = str(scene or "").strip().lower()
+    scene_tokens = _SCENE_OCCASION_TOKENS.get(scene_key, ())
+    if scene_tokens and any(token in candidate for token in scene_tokens):
+        score += 24
+    elif scene_key in {"banter", "venting", "provocation", "light_help"} and occasion in {
+        "口头禅",
+        "日常接话",
+        "语气尾巴",
+    }:
+        score -= 10
+    if kw_hits == 0 and scene_key and not any(token in candidate for token in scene_tokens):
+        # 无关键词且场合不对：仅保留高支持自称梗作弱候选
+        if entry.occasion == "自称梗" and entry.support >= 3:
+            score -= 15
+        else:
+            return None
+    return score
+
+
+def select_catchphrases_for_turn(
+    bot_id: int,
+    *,
+    user_text: str = "",
+    scene: str = "",
+    limit: int = 2,
+) -> list[CatchphraseEntry]:
+    scored: list[tuple[int, CatchphraseEntry]] = []
+    for row in list_catchphrases(int(bot_id), status="active"):
+        score = score_catchphrase_for_turn(row, user_text=user_text, scene=scene)
+        if score is None:
             continue
+        scored.append((score, row))
+    scored.sort(key=lambda item: (-item[0], -item[1].updated_at, item[1].entry_id))
+    return [row for _, row in scored[: max(0, int(limit))]]
+
+
+def compile_catchphrase_prompt_lines(
+    bot_id: int,
+    *,
+    user_text: str = "",
+    scene: str = "",
+    limit: int = 2,
+) -> list[str]:
+    """按本轮场合选入口癖；无线索时不强行塞入多条。"""
+    if int(limit) <= 0:
+        return []
+    if str(user_text or "").strip() or str(scene or "").strip():
+        rows = select_catchphrases_for_turn(
+            int(bot_id),
+            user_text=user_text,
+            scene=scene,
+            limit=limit,
+        )
+    else:
+        # 无线索时最多保留 1 条高支持口癖
+        rows = [row for row in list_catchphrases(int(bot_id), status="active") if is_catchphrase_habit(row.saying)]
+        rows.sort(key=lambda row: (-int(row.support), -int(row.updated_at)))
+        rows = rows[: min(1, int(limit))]
+    lines: list[str] = []
+    for row in rows:
         occasion = clean_catchphrase_text(row.occasion) or "日常接话"
         lines.append(f"当「{occasion}」时，可以自然用「{row.saying}」来表达。")
     if not lines:

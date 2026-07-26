@@ -311,7 +311,7 @@ async def complete_with_tool_loop(
     prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
     ask_before_call = bool(meta.get("ask_before_call"))
     selection_source = str(meta.get("selection_source") or "").strip().lower()
-    # 口令类工具：动作与开口拆分（对齐 MaiBot reply 通道）
+    # 口令类工具：动作与开口拆分
     if schema_names and working and str(working[0].get("role") or "") == "system":
         hint = (
             "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，"

@@ -272,11 +272,11 @@ def compile_persona_prompt(
     try:
         from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_lines
 
-        catchphrase_lines = compile_catchphrase_prompt_lines(int(bot_id))
+        # 编译阶段不注入口癖；本轮按场合选入在 llm_chat 完成
+        catchphrase_lines = compile_catchphrase_prompt_lines(int(bot_id), limit=0)
     except Exception:
         catchphrase_lines = []
     if catchphrase_lines:
-        # 行内自带「视情况使用」头；勿再包一层【账号口癖】硬示范
         catchphrase_block = "\n".join(catchphrase_lines[:6])
         group_expression = (
             f"{group_expression}\n\n{catchphrase_block}".strip() if group_expression.strip() else catchphrase_block
