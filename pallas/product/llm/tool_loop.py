@@ -103,8 +103,16 @@ def summarize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
     ok = bool(result.get("ok", True)) if isinstance(result, dict) else True
     error = str(result.get("error") or "").strip() if isinstance(result, dict) else ""
     payload = result.get("result") if isinstance(result, dict) else result
+    preview = ""
     if isinstance(payload, dict):
-        preview = json.dumps(payload, ensure_ascii=False)
+        summary = str(payload.get("summary") or "").strip()
+        command_text = str(payload.get("command_text") or "").strip()
+        if summary:
+            preview = summary
+        elif command_text:
+            preview = f"已派发群口令「{command_text}」"
+        else:
+            preview = json.dumps(payload, ensure_ascii=False)
     elif payload is None:
         preview = ""
     else:
@@ -245,7 +253,10 @@ async def complete_with_tool_loop(
     prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
     # 口令类工具：提醒模型不要只口头答应
     if schema_names and working and str(working[0].get("role") or "") == "system":
-        hint = "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
+        hint = (
+            "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
+            "工具返回后，确认文案必须沿用 result.summary / command_text 中的歌名与参数，禁止改成其它曲目或编造结果。"
+        )
         sys_content = str(working[0].get("content") or "")
         if "【动作工具】" not in sys_content:
             working[0] = {**working[0], "content": f"{sys_content.rstrip()}\n\n{hint}".strip()}

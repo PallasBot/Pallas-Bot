@@ -49,6 +49,7 @@ def test_infer_drink_and_help_command_domains() -> None:
     assert "sing" in infer_tool_domains("牛牛音乐 晴天")
     assert "sing" in infer_tool_domains("放首歌 海阔天空")
     assert "sing" in infer_tool_domains("来一首稻香")
+    assert "command" not in infer_tool_domains("放首歌 铁花飞")
     assert "roulette" in infer_tool_domains("开一局轮盘")
     assert "roulette" in infer_tool_domains("我要开枪")
     assert "dream" in infer_tool_domains("让牛牛做梦")
