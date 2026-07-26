@@ -48,3 +48,25 @@ def test_resolve_repeater_capabilities_blocks_stages_when_llm_disabled(monkeypat
 
     assert capabilities.llm_enabled is False
     assert capabilities.select_enabled is False
+
+
+def test_resolve_repeater_capabilities_uses_config_snapshot(monkeypatch) -> None:
+    monkeypatch.setattr("pallas.product.llm.repeater_capabilities.resolve_llm_repeater_mode", lambda: "select")
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_capabilities.resolve_llm_repeater_flags",
+        lambda: (False, False, True),
+    )
+
+    capabilities = resolve_repeater_capabilities(
+        SimpleNamespace(
+            llm_chat_enabled=True,
+            llm_repeater_mode="off",
+            llm_fallback_enabled=False,
+            llm_polish_enabled=False,
+            llm_select_enabled=False,
+            llm_polish_lite_enabled=False,
+        )
+    )
+
+    assert capabilities.mode == "off"
+    assert capabilities.select_enabled is False
