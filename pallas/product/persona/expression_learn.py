@@ -93,6 +93,20 @@ def note_expression_from_utterance(group_id: int, text: str, **meta: object) -> 
     if not cfg.llm_expression_learn_enabled:
         return None
     source = str(meta.get("source") or "llm_success")
+    target_group_id = int(group_id)
+    bot_id = int(meta.get("bot_id") or 0)
+    # 口癖：从完整成功回复抽短习惯，不依赖表达库截断句
+    if source == "llm_success" and bot_id > 0 and target_group_id > 0:
+        try:
+            from pallas.product.persona.catchphrase_bank import (
+                propose_catchphrases_from_utterance,
+                schedule_llm_catchphrase_mine,
+            )
+
+            propose_catchphrases_from_utterance(bot_id, target_group_id, text)
+            schedule_llm_catchphrase_mine(bot_id, target_group_id, text)
+        except Exception:
+            pass
     draft = propose_expression_from_utterance(
         text,
         source=source,
@@ -101,7 +115,6 @@ def note_expression_from_utterance(group_id: int, text: str, **meta: object) -> 
     )
     if draft is None:
         return None
-    target_group_id = int(group_id)
     if target_group_id <= 0:
         return None
     saying = draft.saying
@@ -119,17 +132,12 @@ def note_expression_from_utterance(group_id: int, text: str, **meta: object) -> 
             "entry_id": build_entry_id(target_group_id, (draft.occasion, draft.saying)),
             "group_id": target_group_id,
             "support": support,
-            "bot_id": int(meta.get("bot_id") or 0),
+            "bot_id": bot_id,
         }
     )
     saved = append_or_merge_expression(entry)
     if saved.source == "llm_success":
         try:
-            bot_id = int(meta.get("bot_id") or 0)
-            if bot_id > 0:
-                from pallas.product.persona.catchphrase_bank import propose_catchphrase_from_bot_success
-
-                propose_catchphrase_from_bot_success(bot_id, target_group_id, saved.saying, saved.occasion)
             from pallas.product.persona.expression_promote import maybe_auto_promote_for_group
 
             maybe_auto_promote_for_group(target_group_id)

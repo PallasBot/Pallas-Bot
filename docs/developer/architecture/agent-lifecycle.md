@@ -57,7 +57,7 @@ WebUI 可覆盖单工具的描述、hints 与可见性（**AI 配置 → 对话 
 | --- | --- | --- |
 | 观察队列 | 待整理的候选片段，供后续沉淀 | AI 观测 → 人物 |
 | 人物事实 | 群内稳定偏好；跨群复用需同意 | AI 观测 → 人物 |
-| 账号口癖 | 成功表达抽样；审批后注入人设 | AI 观测 → 人物 |
+| 账号口癖 | 成功回复抽短语气习惯；审批后注入人设 | AI 观测 → 人物 |
 | 任务编排 | 提醒、周期与异步调研；结果只回群 | AI 观测 → 任务 |
 
 HTTP 契约见 [Agent Platform API](/common/webui/api/09-agent-platform)。主要代码：`pallas/product/llm/memory/`、`orchestration/`、`persona/catchphrase_bank.py`。

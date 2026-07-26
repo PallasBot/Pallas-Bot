@@ -10,6 +10,11 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from pallas.core.foundation.paths import plugin_data_dir
+from pallas.product.persona.catchphrase_extract import (
+    clean_catchphrase_text,
+    extract_catchphrase_candidates,
+    is_catchphrase_habit,
+)
 
 
 class CatchphraseEntry(BaseModel):
@@ -57,8 +62,9 @@ def _save(rows: list[CatchphraseEntry]) -> None:
 def propose_catchphrase_from_bot_success(
     bot_id: int, group_id: int, saying: str, occasion: str = ""
 ) -> CatchphraseEntry | None:
-    text = " ".join(str(saying or "").split())[:40]
-    if int(bot_id) <= 0 or int(group_id) <= 0 or not text:
+    """写入一条已校验的短口癖；非整句接话应先经 extract。"""
+    text = clean_catchphrase_text(saying)
+    if int(bot_id) <= 0 or int(group_id) <= 0 or not is_catchphrase_habit(text):
         return None
     rows = _load()
     current = next((row for row in rows if row.bot_id == int(bot_id) and row.saying == text), None)
@@ -67,18 +73,62 @@ def propose_catchphrase_from_bot_success(
             entry_id=f"catch-{uuid.uuid4().hex[:12]}",
             bot_id=int(bot_id),
             saying=text,
-            occasion=occasion,
+            occasion=clean_catchphrase_text(occasion)[:20],
             groups_seen=[int(group_id)],
         )
         rows.append(current)
     else:
         groups = sorted(set(current.groups_seen) | {int(group_id)})
-        current = current.model_copy(
-            update={"support": current.support + 1, "groups_seen": groups, "updated_at": int(time.time())}
-        )
+        update: dict = {"support": current.support + 1, "groups_seen": groups, "updated_at": int(time.time())}
+        if occasion and not current.occasion:
+            update["occasion"] = clean_catchphrase_text(occasion)[:20]
+        current = current.model_copy(update=update)
         rows[rows.index(next(row for row in rows if row.entry_id == current.entry_id))] = current
     _save(rows)
     return current
+
+
+def propose_catchphrases_from_utterance(bot_id: int, group_id: int, text: str) -> list[CatchphraseEntry]:
+    """从成功回复抽取短口癖并写入候选（规则路径）。"""
+    out: list[CatchphraseEntry] = []
+    for saying, occasion in extract_catchphrase_candidates(text):
+        entry = propose_catchphrase_from_bot_success(bot_id, group_id, saying, occasion)
+        if entry is not None:
+            out.append(entry)
+    return out
+
+
+_LLM_MINE_AT: dict[tuple[int, int], int] = {}
+_LLM_MINE_COOLDOWN_SEC = 600
+
+
+def schedule_llm_catchphrase_mine(bot_id: int, group_id: int, text: str) -> None:
+    """有事件循环时后台 LLM 补充抽取；按 bot+群冷却，失败静默。"""
+    if int(bot_id) <= 0 or int(group_id) <= 0 or len(clean_catchphrase_text(text)) < 8:
+        return
+    key = (int(bot_id), int(group_id))
+    now = int(time.time())
+    last = _LLM_MINE_AT.get(key)
+    if last is not None and now - last < _LLM_MINE_COOLDOWN_SEC:
+        return
+    import asyncio
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _LLM_MINE_AT[key] = now
+    loop.create_task(_llm_mine_catchphrases(int(bot_id), int(group_id), str(text)), name="catchphrase_llm_mine")
+
+
+async def _llm_mine_catchphrases(bot_id: int, group_id: int, text: str) -> None:
+    try:
+        from pallas.product.persona.catchphrase_extract import extract_catchphrase_candidates_llm
+
+        for saying, occasion in await extract_catchphrase_candidates_llm(text):
+            propose_catchphrase_from_bot_success(bot_id, group_id, saying, occasion)
+    except Exception:
+        pass
 
 
 def is_auto_promote_eligible(entry: CatchphraseEntry) -> bool:
@@ -90,6 +140,8 @@ def promote_catchphrase(entry_id: str, *, force: bool = False) -> CatchphraseEnt
     for index, row in enumerate(rows):
         if row.entry_id != entry_id:
             continue
+        if not is_catchphrase_habit(row.saying):
+            return None
         if not force and not is_auto_promote_eligible(row):
             return None
         rows[index] = row.model_copy(update={"status": "active", "updated_at": int(time.time())})
@@ -117,4 +169,10 @@ def list_catchphrases(bot_id: int | None = None, *, status: str | None = None) -
 
 
 def compile_catchphrase_prompt_lines(bot_id: int) -> list[str]:
-    return [f"可自然使用的口头禅：{row.saying}（{row.occasion}）" for row in list_catchphrases(bot_id, status="active")]
+    lines: list[str] = []
+    for row in list_catchphrases(bot_id, status="active"):
+        if not is_catchphrase_habit(row.saying):
+            continue
+        occasion = f"（{row.occasion}）" if row.occasion else ""
+        lines.append(f"可自然带上的短口癖：{row.saying}{occasion}")
+    return lines
