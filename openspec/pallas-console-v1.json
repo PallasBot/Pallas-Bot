@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.5-17-g3807a496-dirty",
+    "version": "v4.1.6-42-g32565373",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -20870,6 +20870,93 @@
         "description": "一次返回 WebUI 与 Bot 更新检查结果（GS 控制台同款聚合接口）。",
         "operationId": "_update_check_all_pallas_api_update_check_all_get",
         "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/update/changelog": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Update Changelog",
+        "description": "拉取仓库 CHANGELOG.md，截取最近若干版本段（与发行说明分离）。",
+        "operationId": "_update_changelog_pallas_api_update_changelog_get",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "webui 或 bot",
+              "title": "Target"
+            },
+            "description": "webui 或 bot"
+          },
+          {
+            "name": "max_versions",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 30,
+              "minimum": 1,
+              "default": 10,
+              "title": "Max Versions"
+            }
+          },
           {
             "name": "token",
             "in": "query",
