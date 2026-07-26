@@ -46,35 +46,18 @@ def test_run_bot_lifecycle_unified_delegates(monkeypatch):
     assert called == {"action": "start", "skip": True}
 
 
-def test_run_bot_lifecycle_shard_without_bash(monkeypatch, tmp_path: Path, capsys):
-    script = tmp_path / "run_sharded_bot.sh"
-    script.write_text("#!/bin/bash\n", encoding="utf-8")
-    monkeypatch.setattr(bot_process, "SHARD_SCRIPT", script)
-    monkeypatch.setattr(bot_process, "resolve_bot_mode", lambda mode: "shard")
-    monkeypatch.setattr(bot_process, "resolve_bash", lambda: None)
-    monkeypatch.setattr(bot_process, "is_windows", lambda: True)
-    assert bot_process.run_bot_lifecycle("start", mode="shard") == 1
-    err = capsys.readouterr().err
-    assert "bash" in err.lower()
-    assert "unified" in err.lower()
+def test_run_bot_lifecycle_shard_delegates(monkeypatch):
+    called: dict[str, object] = {}
 
-
-def test_run_bot_lifecycle_shard_with_bash(monkeypatch, tmp_path: Path):
-    script = tmp_path / "run_sharded_bot.sh"
-    script.write_text("#!/bin/bash\n", encoding="utf-8")
-    bash = tmp_path / "bash"
-    bash.write_text("", encoding="utf-8")
-    monkeypatch.setattr(bot_process, "SHARD_SCRIPT", script)
-    monkeypatch.setattr(bot_process, "resolve_bot_mode", lambda mode: "shard")
-    monkeypatch.setattr(bot_process, "resolve_bash", lambda: bash)
-
-    def fake_run(script_path, args=(), *, cwd=None, env=None, purpose=""):
-        assert script_path == script
-        assert args[0] == "status"
+    def fake_run(action: str, *, extra_args=None) -> int:
+        called["action"] = action
+        called["extra"] = list(extra_args or [])
         return 0
 
-    monkeypatch.setattr(bot_process, "run_bash_script", fake_run)
-    assert bot_process.run_bot_lifecycle("status", mode="shard") == 0
+    monkeypatch.setattr(bot_process, "run_shard_action", fake_run)
+    monkeypatch.setattr(bot_process, "resolve_bot_mode", lambda mode: "shard")
+    assert bot_process.run_bot_lifecycle("start", mode="shard", extra_args=["--hub-only"]) == 0
+    assert called == {"action": "start", "extra": ["--hub-only"]}
 
 
 def test_schedule_bot_restart_uses_python_not_bash(monkeypatch):

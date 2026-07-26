@@ -1,4 +1,4 @@
-"""包装 Bot 启停：unified 走 Python；shard 经可解析的 bash 调用脚本。"""
+"""包装 Bot 启停：unified / shard 均走 Python（跨平台）。"""
 
 from __future__ import annotations
 
@@ -7,13 +7,9 @@ import time
 from collections.abc import Sequence  # noqa: TC003
 from pathlib import Path  # noqa: TC003
 
-from pallas.console.cli.process_util import (
-    is_windows,
-    resolve_bash,
-    run_bash_script,
-    spawn_detached,
-)
+from pallas.console.cli.process_util import spawn_detached
 from pallas.console.cli.runtime_mode import resolve_bot_mode
+from pallas.console.cli.shard_lifecycle import run_shard_action
 from pallas.console.cli.unified_lifecycle import run_unified_action
 from pallas.core.foundation.paths import PROJECT_ROOT
 
@@ -26,12 +22,11 @@ def script_for_mode(mode: str) -> Path:
 
 
 def bot_lifecycle_available() -> bool:
-    """unified 已由 Python 实现；shard 仍需脚本（有 bash 时可跑）。"""
     return True
 
 
 def shard_lifecycle_available() -> bool:
-    return SHARD_SCRIPT.is_file() and resolve_bash() is not None
+    return True
 
 
 def run_bot_lifecycle(
@@ -45,28 +40,7 @@ def run_bot_lifecycle(
     if resolved == "unified":
         skip_port_sync = "--skip-port-sync" in extra
         return run_unified_action(action, skip_port_sync=skip_port_sync)
-
-    if not SHARD_SCRIPT.is_file():
-        print(f"缺少脚本 {SHARD_SCRIPT}", file=sys.stderr)
-        return 1
-    if resolve_bash() is None:
-        print(
-            "分片启停仍依赖 bash 脚本。\n"
-            + (
-                "Windows 请安装 Git for Windows（bash 在 PATH）或使用 WSL；"
-                "单进程请用：uv run pallas / uv run pallas run unified。"
-                if is_windows()
-                else "请安装 bash 或检查 PATH。"
-            ),
-            file=sys.stderr,
-        )
-        return 1
-    return run_bash_script(
-        SHARD_SCRIPT,
-        [action, *extra],
-        cwd=PROJECT_ROOT,
-        purpose="分片启停",
-    )
+    return run_shard_action(action, extra_args=extra)
 
 
 def restart_after_delay(delay_s: float, mode: str, workers_only: bool) -> None:
@@ -92,8 +66,6 @@ def schedule_bot_restart(
     except Exception:
         pass
     resolved = resolve_bot_mode(mode)
-    if resolved == "shard" and resolve_bash() is None:
-        return False
     py = (
         "from pallas.console.cli.bot_process import restart_after_delay; "
         f"restart_after_delay({delay_s!r}, {resolved!r}, {workers_only!r})"

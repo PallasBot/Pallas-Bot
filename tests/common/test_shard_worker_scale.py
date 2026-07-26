@@ -115,16 +115,8 @@ def test_run_worker_scale_restart_spawns_script(shard_env, monkeypatch, tmp_path
     save_shard_registry(reg)
     clear_shard_registry_cache()
     fake_repo = tmp_path / "repo"
-    script = fake_repo / "scripts" / "run_sharded_bot.sh"
-    script.parent.mkdir(parents=True)
-    script.write_text("#!/bin/bash\n", encoding="utf-8")
+    fake_repo.mkdir()
     monkeypatch.setattr("pallas.core.platform.shard.worker_scale.repo_root", lambda: fake_repo)
-    fake_bash = tmp_path / "bash"
-    fake_bash.write_text("", encoding="utf-8")
-    monkeypatch.setattr(
-        "pallas.console.cli.process_util.resolve_bash",
-        lambda: fake_bash,
-    )
 
     popen = MagicMock()
     proc = MagicMock()
@@ -143,8 +135,11 @@ def test_run_worker_scale_restart_spawns_script(shard_env, monkeypatch, tmp_path
     kwargs = popen.call_args.kwargs
     args = kwargs.get("args") or (popen.call_args.args[0] if popen.call_args.args else None)
     assert args is not None
-    assert args[0] == str(fake_bash)
-    assert args[-3:] == ["start", "--workers-only", "--scale-only"]
+    assert args[0] == __import__("sys").executable
+    assert "-c" in args
+    assert "run_shard_action" in args[-1]
+    assert "--workers-only" in args[-1]
+    assert "--scale-only" in args[-1]
 
 
 def test_auto_scale_disabled(monkeypatch):
