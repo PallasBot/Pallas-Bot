@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Ruff: check",
+      "type": "shell",
+      "command": "uv run ruff check pallas/ packages/ && uv run ruff format --check pallas/ packages/",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Ruff: fix",
+      "type": "shell",
+      "command": "uv run ruff check --fix pallas/ packages/ && uv run ruff format pallas/ packages/",
+      "problemMatcher": []
+    },
+    {
+      "label": "pytest",
+      "type": "shell",
+      "command": "uv run pytest",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "OpenAPI: sync console",
+      "type": "shell",
+      "command": "uv run python tools/sync_console_openapi.py",
+      "problemMatcher": []
+    },
+    {
+      "label": "pre-commit: run all",
+      "type": "shell",
+      "command": "uv run pre-commit run -a",
+      "problemMatcher": []
+    }
+  ]
+}
