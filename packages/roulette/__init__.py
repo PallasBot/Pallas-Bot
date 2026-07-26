@@ -72,6 +72,7 @@ __plugin_meta__ = PluginMetadata(
                 description="开始一局牛牛轮盘（默认禁言模式）。用户明确要求玩轮盘、开始轮盘时使用。",
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛轮盘",
+                hints=["轮盘", "玩轮盘", "开始轮盘", "来一局轮盘"],
             ),
             llm_command_tool_row(
                 name="roulette.shot",
@@ -79,6 +80,7 @@ __plugin_meta__ = PluginMetadata(
                 description="在已开始的轮盘局里开枪参与。用户说开枪、参与轮盘时使用。",
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛开枪",
+                hints=["开枪", "参与轮盘"],
             ),
             llm_command_tool_row(
                 name="roulette.rescue",
@@ -86,6 +88,7 @@ __plugin_meta__ = PluginMetadata(
                 description="尝试解救被禁言的人（不指定对象时帮大家解禁）。用户说救一下、解禁时使用。",
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛救一下",
+                hints=["救一下", "解禁", "救人"],
             ),
             llm_command_tool_row(
                 name="roulette.punish",
@@ -93,6 +96,7 @@ __plugin_meta__ = PluginMetadata(
                 description="对已中招者追加惩罚。用户说补一枪、再罚一次时使用。",
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛补一枪",
+                hints=["补一枪", "再罚一次"],
             ),
         ],
         "menu_data": [

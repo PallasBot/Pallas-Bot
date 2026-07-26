@@ -13,39 +13,19 @@ if TYPE_CHECKING:
 TOOLS_FIND_NAME = "tools.find"
 
 
-def _score_tool(query: str, *, name: str, description: str, hints: frozenset[str]) -> int:
-    q = (query or "").strip().lower()
-    if not q:
-        return 0
-    score = 0
-    hay_name = name.lower()
-    hay_desc = (description or "").lower()
-    if q in hay_name:
-        score += 8
-    if q in hay_desc:
-        score += 4
-    for hint in hints:
-        h = hint.lower()
-        if not h:
-            continue
-        if q == h or h in q or q in h:
-            score += 6
-        elif any(part and part in h for part in q.split()):
-            score += 2
-    return score
-
-
 def search_deferred_tools(query: str, *, limit: int = 8) -> list[dict[str, Any]]:
+    from pallas.product.llm.tools.overrides import effective_tool_hints, effective_tool_visibility
     from pallas.product.llm.tools.registry import list_registered_tools
+    from pallas.product.llm.tools.score import score_tool_text
 
     scored: list[tuple[int, LlmToolSpec]] = []
     for spec in list_registered_tools():
-        if str(getattr(spec, "visibility", "visible") or "visible").lower() != "deferred":
+        if effective_tool_visibility(spec) != "deferred":
             continue
         if spec.name == TOOLS_FIND_NAME:
             continue
-        hints = frozenset(getattr(spec, "hints", frozenset()) or frozenset())
-        score = _score_tool(query, name=spec.name, description=spec.description, hints=hints)
+        hints = effective_tool_hints(spec)
+        score = score_tool_text(query, name=spec.name, description=spec.description, hints=hints)
         if score <= 0:
             continue
         scored.append((score, spec))
