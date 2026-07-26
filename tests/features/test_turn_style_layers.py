@@ -7,7 +7,9 @@ from types import SimpleNamespace
 
 from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.turn_style_layers import (
+    ReplyStyleVariantPolicy,
     build_probabilistic_alt_style_hint,
+    select_reply_style_variant,
     build_same_utterance_redup_hint,
     build_turn_behavior_block,
     build_turn_wording_user_hints,
@@ -57,6 +59,31 @@ def test_probabilistic_alt_style_respects_rng() -> None:
     never = build_probabilistic_alt_style_hint(probability=0.0, rng=random.Random(0))
     assert always.startswith("【本轮临时措辞】")
     assert never == ""
+
+
+def test_affect_variant_selection_is_bounded_and_seeded() -> None:
+    policy = ReplyStyleVariantPolicy(
+        enabled=True,
+        base_probability=2.0,
+        affect_styles={"warm": ["playful"], "default": ["direct"]},
+    )
+    selected = select_reply_style_variant(
+        policy,
+        affect_class="warm",
+        rng=random.Random(0),
+    )
+    assert selected.style_class == "playful"
+    assert selected.applied is True
+
+
+def test_affect_variant_keeps_legacy_fallback_without_affect() -> None:
+    selected = select_reply_style_variant(
+        ReplyStyleVariantPolicy(base_probability=1.0),
+        affect_class="",
+        rng=random.Random(0),
+    )
+    assert selected.applied is True
+    assert selected.style_class
 
 
 def test_behavior_and_wording_split() -> None:

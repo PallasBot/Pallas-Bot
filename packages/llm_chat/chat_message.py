@@ -610,11 +610,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
     from pallas.product.llm.kernel.models import ConversationMode
     from pallas.product.llm.scene_style import format_scene_style_block, resolve_scene_style_constraints
     from pallas.product.llm.turn_style_layers import (
-        build_probabilistic_alt_style_hint,
+        build_affect_style_variant_hint,
         build_same_utterance_redup_hint,
         build_turn_behavior_block,
         build_turn_wording_user_hints,
         find_previous_reply_for_utterance,
+        reply_style_variant_policy_from_data,
+        select_reply_style_variant,
     )
     from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_with_entries
 
@@ -662,7 +664,21 @@ async def handle_llm_chat(bot: Bot, event: Event):
     except Exception:
         previous_same_reply = find_previous_reply_for_utterance(focus_text, recent_turns=recent_turns)
     redup_hint = build_same_utterance_redup_hint(user_text=focus_text, previous_reply=previous_same_reply)
-    alt_style_hint = build_probabilistic_alt_style_hint()
+    affect_class = ""
+    if persona_for_gate is not None:
+        if float(getattr(persona_for_gate, "chaos_bias", 0.0) or 0.0) >= 0.5:
+            affect_class = "chaotic"
+        elif float(getattr(persona_for_gate, "warmth", 0.0) or 0.0) >= 0.1:
+            affect_class = "warm"
+        elif float(getattr(persona_for_gate, "warmth", 0.0) or 0.0) <= -0.1:
+            affect_class = "cool"
+        elif float(getattr(persona_for_gate, "assertiveness", 0.0) or 0.0) >= 0.1:
+            affect_class = "assertive"
+    alt_style_selection = select_reply_style_variant(
+        reply_style_variant_policy_from_data(getattr(llm_cfg, "llm_reply_style_variants", {})),
+        affect_class=affect_class,
+    )
+    alt_style_hint = build_affect_style_variant_hint(alt_style_selection)
     catchphrase_lines, selected_catchphrase_entries = compile_catchphrase_prompt_with_entries(
         int(bot.self_id),
         user_text=focus_text,
@@ -756,6 +772,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "style_user_hints": style_user_hints[:8],
             "same_utterance_redup": bool(redup_hint),
             "alt_style_applied": bool(alt_style_hint),
+            "alt_style_class": alt_style_selection.style_class,
             "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
@@ -791,6 +808,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 "command_source_segments": command_source_segments,
                 "same_utterance_redup": bool(redup_hint),
                 "alt_style_applied": bool(alt_style_hint),
+                "alt_style_class": alt_style_selection.style_class,
             },
             tool_metadata=tool_meta,
         ),

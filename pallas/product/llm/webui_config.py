@@ -496,6 +496,24 @@ class LlmWebuiConfig(BaseModel):
             "默认关闭；落盘到 data 目录，不影响主路径延迟",
         ),
     )
+    llm_reply_style_variants: dict[str, object] = Field(
+        default_factory=lambda: {
+            "version": 1,
+            "enabled": True,
+            "base_probability": 0.25,
+            "affect_styles": {
+                "warm": ["playful", "follow"],
+                "cool": ["cool", "direct"],
+                "chaotic": ["playful", "rhetorical"],
+                "assertive": ["direct", "rhetorical"],
+                "default": ["cool", "playful", "direct", "rhetorical", "follow"],
+            },
+        },
+        description=field_help(
+            "本轮回复风格变体",
+            "仅以临时提示影响当轮，不写入牛格。version=1；可设置 enabled、base_probability 与 affect_styles。",
+        ),
+    )
     llm_memory_rag_enabled: bool = Field(
         default=True,
         description=field_help(

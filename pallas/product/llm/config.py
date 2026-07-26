@@ -334,6 +334,7 @@ class LlmConfig(BaseModel):
     llm_reply_split_max_chars: int = Field(default=36, ge=8, le=120)
     llm_sticker_fit_enabled: bool = Field(default=False)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
+    llm_reply_style_variants: dict[str, object] = Field(default_factory=dict)
     llm_corpus_learn_guard_enabled: bool = Field(default=True)
     llm_corpus_cleanup_scheduled_enabled: bool = Field(default=True)
     llm_corpus_cleanup_interval_sec: int = Field(default=86400, ge=3600, le=604800)
@@ -401,6 +402,17 @@ def _env_str_list(key: str) -> list[str]:
             return [str(item).strip() for item in data if str(item).strip()]
         return []
     return [part.strip() for part in text.replace(";", ",").split(",") if part.strip()]
+
+
+def _env_json_object(key: str) -> dict[str, object]:
+    raw = repo_env_raw_value(key)
+    if raw is None:
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 def _env_str_list_or_default(key: str, default: tuple[str, ...]) -> list[str]:
@@ -534,6 +546,7 @@ def get_llm_config() -> LlmConfig:
             llm_reply_split_max_chars=_env_int("LLM_REPLY_SPLIT_MAX_CHARS", 36),
             llm_sticker_fit_enabled=_env_bool("LLM_STICKER_FIT_ENABLED", False),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
+            llm_reply_style_variants=_env_json_object("LLM_REPLY_STYLE_VARIANTS"),
             llm_corpus_learn_guard_enabled=_env_bool("LLM_CORPUS_LEARN_GUARD_ENABLED", True),
             llm_corpus_cleanup_scheduled_enabled=_env_bool("LLM_CORPUS_CLEANUP_SCHEDULED", True),
             llm_corpus_cleanup_interval_sec=_env_int("LLM_CORPUS_CLEANUP_INTERVAL_SEC", 86400),
