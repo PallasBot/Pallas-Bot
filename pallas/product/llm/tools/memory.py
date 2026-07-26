@@ -36,6 +36,7 @@ def register_memory_tools() -> None:
             domains=frozenset({"chat", "memory"}),
             handler=handle_memory_search,
             capabilities=_READ_ONLY | frozenset({ToolCapability.REQUIRES_GROUP_CONTEXT.value}),
+            hints=frozenset({"记住", "记得吗", "以前说过", "群里旧事", "查记忆", "回忆一下"}),
         )
     )
     register_tool(
@@ -52,6 +53,7 @@ def register_memory_tools() -> None:
             domains=frozenset({"chat", "memory"}),
             handler=handle_memory_save,
             capabilities=_SIDE_EFFECT,
+            hints=frozenset({"记住这个", "记下来", "帮我记住", "写入记忆"}),
         )
     )
 

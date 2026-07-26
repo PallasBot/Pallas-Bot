@@ -55,6 +55,7 @@ __plugin_meta__ = PluginMetadata(
                 description="清空当前用户与本 bot 的多轮 LLM 会话记忆。用户明确要求忘记聊过的内容时使用。",
                 parameters={"type": "object", "properties": {}},
                 command_template="clear",
+                hints=["忘掉", "清空", "clear", "忘了吧", "清空对话", "忘记刚才"],
             ),
         ],
         "knowledge_sources": [

@@ -18,7 +18,13 @@ from pallas.product.llm.tools.contracts import (
     ToolCatalogSnapshot,
     ToolResultEnvelope,
 )
-from pallas.product.llm.tools.overrides import load_tool_description_overrides
+from pallas.product.llm.tools.overrides import (
+    effective_tool_hints,
+    effective_tool_visibility,
+    load_tool_description_overrides,
+    load_tool_overrides,
+    tool_override_disabled,
+)
 from pallas.product.llm.tools.select import infer_tool_domains
 
 if TYPE_CHECKING:
@@ -151,9 +157,7 @@ def normalize_tool_result(raw: Any, *, spec: LlmToolSpec | None = None) -> dict[
         elif result is None:
             # 兼容旧 handler：ok 与细节平铺在顶层时，收拢进 result 供模型阅读
             extras = {
-                key: value
-                for key, value in raw.items()
-                if key not in {"ok", "error", "result", "source", "audit"}
+                key: value for key, value in raw.items() if key not in {"ok", "error", "result", "source", "audit"}
             }
             result = extras or None
         error = str(raw.get("error") or "")
@@ -194,6 +198,8 @@ def iter_eligible_tool_specs(*, domains: frozenset[str] | None = None) -> tuple[
     blacklist = {item.strip().lower() for item in cfg.llm_tools_blacklist if item.strip()}
     items: list[LlmToolSpec] = []
     for spec in iter_registered_tools(domains=domains):
+        if tool_override_disabled(spec.name):
+            continue
         if blacklist:
             if spec.name.lower() in blacklist:
                 continue
@@ -243,7 +249,7 @@ def filter_specs_for_chat_visibility(
     hint_hits = deferred_tools_matched_by_hints(user_text) if user_text else frozenset()
     out: list[LlmToolSpec] = []
     for spec in specs:
-        vis = str(spec.visibility or "visible").strip().lower()
+        vis = effective_tool_visibility(spec)
         if vis != "deferred":
             out.append(spec)
             continue
@@ -364,7 +370,7 @@ def tool_metadata_for_chat(*, task: str | None = None, user_text: str = "") -> d
 
 
 def build_tools_catalog_ui() -> dict[str, Any]:
-    """WebUI 只读工具清单：全量可见 tool + 当前策略门闸。"""
+    """WebUI 工具清单：全量可见 tool + 策略门闸 + 覆写字段。"""
     from pallas.product.llm.tools.metadata import iter_package_declared_llm_tools
 
     cfg = get_llm_config()
@@ -372,19 +378,25 @@ def build_tools_catalog_ui() -> dict[str, Any]:
     ensure_tools_loaded()
     blacklist = {item.strip().lower() for item in cfg.llm_tools_blacklist if item.strip()}
     eligible_names = {spec.name for spec in iter_eligible_tool_specs()}
+    overrides = load_tool_overrides()
     items: list[dict[str, Any]] = []
     seen_names: set[str] = set()
     for spec in iter_registered_tools():
         if not spec.visible_in_ui:
             continue
         entry = catalog_entry_for_spec(spec)
+        override = overrides.get(spec.name) or {}
         disabled_reason: str | None = None
-        if not cfg.llm_tools_enabled:
+        if tool_override_disabled(spec.name):
+            disabled_reason = "override_disabled"
+        elif not cfg.llm_tools_enabled:
             disabled_reason = "tools_disabled"
         elif spec.name.lower() in blacklist or spec.domains.intersection(blacklist):
             disabled_reason = "blacklisted"
         elif "arknights" in spec.domains and not kb.arknights_kb_enabled:
             disabled_reason = "arknights_kb_disabled"
+        declared_hints = sorted(str(h) for h in (spec.hints or frozenset()) if str(h).strip())
+        effective_hints = sorted(effective_tool_hints(spec))
         items.append({
             "name": entry.name,
             "description": entry.description,
@@ -396,8 +408,18 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             "plugin_name": entry.audit.plugin_name,
             "provider_name": entry.audit.provider_name,
             "mcp_server_id": entry.audit.mcp_server_id,
-            "eligible": spec.name in eligible_names,
+            "eligible": spec.name in eligible_names and disabled_reason is None,
             "disabled_reason": disabled_reason,
+            "hints": declared_hints,
+            "effective_hints": effective_hints,
+            "visibility": effective_tool_visibility(spec),
+            "declared_visibility": str(spec.visibility or "visible"),
+            "override": {
+                "description": str(override.get("description") or "") or None,
+                "hints": list(override["hints"]) if isinstance(override.get("hints"), list) else None,
+                "visibility": override.get("visibility"),
+                "disabled": bool(override.get("disabled")) if "disabled" in override else None,
+            },
         })
         seen_names.add(entry.name)
     # 分片 hub 不加载 drink/llm_chat：把 packages 声明补进只读清单，便于对照
@@ -409,6 +431,8 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             disabled_reason = "tools_disabled"
         elif decl.name.lower() in blacklist:
             disabled_reason = "blacklisted"
+        override = overrides.get(decl.name) or {}
+        declared_hints = [str(h).strip() for h in (getattr(decl, "hints", None) or []) if str(h).strip()]
         items.append({
             "name": decl.name,
             "description": decl.description,
@@ -422,6 +446,16 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             "mcp_server_id": None,
             "eligible": False,
             "disabled_reason": disabled_reason,
+            "hints": declared_hints,
+            "effective_hints": declared_hints,
+            "visibility": str(getattr(decl, "visibility", "visible") or "visible"),
+            "declared_visibility": str(getattr(decl, "visibility", "visible") or "visible"),
+            "override": {
+                "description": str(override.get("description") or "") or None,
+                "hints": list(override["hints"]) if isinstance(override.get("hints"), list) else None,
+                "visibility": override.get("visibility"),
+                "disabled": bool(override.get("disabled")) if "disabled" in override else None,
+            },
         })
         seen_names.add(decl.name)
     items.sort(key=operator.itemgetter("name"))
@@ -436,6 +470,7 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             "arknights_kb_enabled": bool(kb.arknights_kb_enabled),
             "desc_max_len": int(cfg.llm_tools_desc_max_len),
         },
+        "overrides": overrides,
     }
 
 

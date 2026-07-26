@@ -197,9 +197,35 @@ class LlmWebuiConfig(BaseModel):
     llm_tools_enabled: bool = Field(
         default=True,
         description=field_help(
-            "是否允许智能对话调用方舟等资料工具",
-            "需同时开启智能对话总闸；工具由 Bot 内核执行，不依赖 Pallas-Bot-AI",
+            "是否允许智能对话调用工具",
+            "需同时开启智能对话总闸；工具由 Bot 内核执行",
         ),
+    )
+    llm_tools_selective: bool = Field(
+        default=True,
+        description=field_help(
+            "按意图筛选工具",
+            "开启后仅在话术命中领域/结构/hints 时下发对应工具，避免一次注入全家桶",
+        ),
+    )
+    llm_tools_max_rounds: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        description=field_help("单次对话最多工具调用轮数", "含模型回复与工具执行的往返次数上限"),
+    )
+    llm_tools_blacklist: list[str] = Field(
+        default_factory=list,
+        description=field_help(
+            "工具黑名单",
+            "可填工具名或领域名（如 sing、memory.search），命中则不下发",
+        ),
+    )
+    llm_tools_desc_max_len: int = Field(
+        default=120,
+        ge=32,
+        le=512,
+        description=field_help("工具描述最大长度", "写入模型 schema 前会截断，节省 token"),
     )
     llm_chat_max_concurrency: int = Field(
         default=2,
@@ -487,6 +513,10 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_session_summary_keep_messages=cfg.llm_session_summary_keep_messages,
         llm_chat_char_budget=cfg.llm_chat_char_budget,
         llm_tools_enabled=cfg.llm_tools_enabled,
+        llm_tools_selective=cfg.llm_tools_selective,
+        llm_tools_max_rounds=cfg.llm_tools_max_rounds,
+        llm_tools_blacklist=list(cfg.llm_tools_blacklist or []),
+        llm_tools_desc_max_len=cfg.llm_tools_desc_max_len,
         llm_chat_max_concurrency=cfg.llm_chat_max_concurrency,
         llm_repeater_group_cooldown_sec=cfg.llm_repeater_group_cooldown_sec,
         llm_repeater_strong_cooldown_sec=cfg.llm_repeater_strong_cooldown_sec,

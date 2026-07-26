@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pallas.product.llm.tools.identity import is_self_identity_question
+from pallas.product.llm.tools.patterns import domains_from_structure
+from pallas.product.llm.tools.score import domains_from_tool_scores
 
 _ARKNIGHTS_HINTS = (
     "干员",
@@ -84,6 +86,7 @@ _COMMAND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("maa", "长草", "公招", "基建"), "maa"),
     (("额度", "爱发电", "画画次数"), "afdian"),
     (("找工具", "搜工具", "有什么工具", "能调什么"), "tools"),
+    (("记住", "记得吗", "以前说过", "群里旧事", "查记忆"), "memory"),
 )
 
 
@@ -97,15 +100,16 @@ def _text_has_hint(text: str, hint: str) -> bool:
 
 
 def domains_from_registered_tool_hints(user_text: str) -> frozenset[str]:
-    """从已注册工具的 hints 推断域（插件声明优先叠加到核心词表）。"""
+    """从已注册工具的 hints（含 WebUI 覆写）推断域。"""
     text = _normalize_hint(user_text)
     if not text:
         return frozenset()
+    from pallas.product.llm.tools.overrides import effective_tool_hints
     from pallas.product.llm.tools.registry import list_registered_tools
 
     domains: set[str] = set()
     for spec in list_registered_tools():
-        hints = getattr(spec, "hints", frozenset()) or frozenset()
+        hints = effective_tool_hints(spec)
         if not hints:
             continue
         if any(_text_has_hint(text, hint) for hint in hints):
@@ -114,17 +118,18 @@ def domains_from_registered_tool_hints(user_text: str) -> frozenset[str]:
 
 
 def deferred_tools_matched_by_hints(user_text: str) -> frozenset[str]:
-    """visibility=deferred 且自身 hints 命中的工具名。"""
+    """visibility=deferred（含覆写）且自身 hints 命中的工具名。"""
     text = _normalize_hint(user_text)
     if not text:
         return frozenset()
+    from pallas.product.llm.tools.overrides import effective_tool_hints, effective_tool_visibility
     from pallas.product.llm.tools.registry import list_registered_tools
 
     names: set[str] = set()
     for spec in list_registered_tools():
-        if str(getattr(spec, "visibility", "visible") or "visible").lower() != "deferred":
+        if effective_tool_visibility(spec) != "deferred":
             continue
-        hints = getattr(spec, "hints", frozenset()) or frozenset()
+        hints = effective_tool_hints(spec)
         if hints and any(_text_has_hint(text, hint) for hint in hints):
             names.add(spec.name)
     return frozenset(names)
@@ -143,5 +148,7 @@ def infer_tool_domains(user_text: str) -> frozenset[str]:
     for hints, domain in _COMMAND_HINTS:
         if any(hint in text for hint in hints):
             domains.add(domain)
+    domains.update(domains_from_structure(user_text))
     domains.update(domains_from_registered_tool_hints(user_text))
+    domains.update(domains_from_tool_scores(user_text))
     return selective_domains(domains)

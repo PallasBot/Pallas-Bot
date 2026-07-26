@@ -1,0 +1,30 @@
+from __future__ import annotations
+
+from pallas.product.llm.tools.patterns import domains_from_structure
+
+from pallas.product.llm.tools.select import infer_tool_domains
+
+
+def test_structure_recall_sing_compact_forms() -> None:
+    assert "sing" in domains_from_structure("放首铁花飞")
+    assert "sing" in domains_from_structure("我叫你放首铁花飞")
+    assert "sing" in domains_from_structure("来首晴天")
+    assert "sing" in domains_from_structure("播一下歌")
+
+
+def test_structure_recall_other_domains() -> None:
+    assert "drink" in domains_from_structure("来杯酒")
+    assert "draw" in domains_from_structure("来张图")
+    assert "roulette" in domains_from_structure("来一把轮盘")
+    assert "help" in domains_from_structure("怎么用牛牛")
+
+
+def test_infer_domains_includes_structure_without_keyword_lexicon() -> None:
+    # 「放首X」不在旧关键词表里的整词，靠结构召回
+    domains = infer_tool_domains("放首铁花飞")
+    assert "sing" in domains
+
+
+def test_infer_domains_memory_keywords() -> None:
+    domains = infer_tool_domains("你还记得以前说过的事吗")
+    assert "memory" in domains

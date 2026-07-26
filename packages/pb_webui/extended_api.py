@@ -7603,6 +7603,62 @@ def register_extended_api(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
+    @router.post(f"{x}/llm/tools/preview", include_in_schema=True)
+    async def _llm_tools_preview(body: dict[str, Any]) -> JSONResponse:
+        try:
+            from pallas.product.llm.tools.preview import preview_tool_intent
+
+            text = str(body.get("text") or body.get("user_text") or "").strip()
+            task = str(body.get("task") or "llm_chat").strip() or "llm_chat"
+            data = preview_tool_intent(text, task=task)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(f"{x}/llm/tools/overrides", include_in_schema=True)
+    async def _llm_tools_overrides_put(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            from pallas.product.llm.tools.overrides import save_tool_overrides
+            from pallas.product.llm.tools.registry import build_tools_catalog_ui
+
+            raw = body.get("overrides") if isinstance(body.get("overrides"), dict) else body
+            if not isinstance(raw, dict):
+                raise HTTPException(status_code=400, detail="overrides must be an object")
+            saved = save_tool_overrides(raw)
+            data = build_tools_catalog_ui()
+            data["overrides"] = saved
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.patch(f"{x}/llm/tools/overrides/{{tool_name}}", include_in_schema=True)
+    async def _llm_tools_override_patch(
+        tool_name: str,
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            from pallas.product.llm.tools.overrides import upsert_tool_override
+            from pallas.product.llm.tools.registry import build_tools_catalog_ui
+
+            entry = upsert_tool_override(tool_name, body if isinstance(body, dict) else {})
+            data = build_tools_catalog_ui()
+            data["patched"] = {"name": tool_name, "override": entry}
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
     @router.post(f"{x}/llm/conversation-kernel/memory/delete", include_in_schema=True)
     async def _llm_conversation_kernel_memory_delete(
         body: dict[str, Any],

@@ -13,39 +13,33 @@ if TYPE_CHECKING:
 TOOLS_FIND_NAME = "tools.find"
 
 
-def _score_tool(query: str, *, name: str, description: str, hints: frozenset[str]) -> int:
-    q = (query or "").strip().lower()
-    if not q:
-        return 0
-    score = 0
-    hay_name = name.lower()
-    hay_desc = (description or "").lower()
-    if q in hay_name:
-        score += 8
-    if q in hay_desc:
-        score += 4
-    for hint in hints:
-        h = hint.lower()
-        if not h:
-            continue
-        if q == h or h in q or q in h:
-            score += 6
-        elif any(part and part in h for part in q.split()):
-            score += 2
-    return score
-
-
 def search_deferred_tools(query: str, *, limit: int = 8) -> list[dict[str, Any]]:
-    from pallas.product.llm.tools.registry import list_registered_tools
+    return search_tools(query, limit=limit, visibility="deferred")
 
+
+def search_tools(
+    query: str,
+    *,
+    limit: int = 8,
+    visibility: str | None = "deferred",
+) -> list[dict[str, Any]]:
+    """按口语打分检索工具；visibility=None 时含 visible+deferred。"""
+    from pallas.product.llm.tools.overrides import effective_tool_hints, effective_tool_visibility
+    from pallas.product.llm.tools.registry import list_registered_tools
+    from pallas.product.llm.tools.score import score_tool_text
+
+    want = (visibility or "").strip().lower() or None
     scored: list[tuple[int, LlmToolSpec]] = []
     for spec in list_registered_tools():
-        if str(getattr(spec, "visibility", "visible") or "visible").lower() != "deferred":
-            continue
         if spec.name == TOOLS_FIND_NAME:
             continue
-        hints = frozenset(getattr(spec, "hints", frozenset()) or frozenset())
-        score = _score_tool(query, name=spec.name, description=spec.description, hints=hints)
+        vis = effective_tool_visibility(spec)
+        if want == "deferred" and vis != "deferred":
+            continue
+        if want == "visible" and vis != "visible":
+            continue
+        hints = effective_tool_hints(spec)
+        score = score_tool_text(query, name=spec.name, description=spec.description, hints=hints)
         if score <= 0:
             continue
         scored.append((score, spec))
@@ -57,6 +51,7 @@ def search_deferred_tools(query: str, *, limit: int = 8) -> list[dict[str, Any]]
             "description": spec.description,
             "score": score,
             "domains": sorted(spec.domains),
+            "visibility": effective_tool_visibility(spec),
         })
     return out
 
@@ -69,7 +64,13 @@ def register_discovery_tools() -> None:
             limit = int(args.get("limit") or 8)
         except (TypeError, ValueError):
             limit = 8
-        matches = search_deferred_tools(query, limit=limit)
+        scope = str(args.get("scope") or "deferred").strip().lower()
+        if scope in {"all", "any", "*"}:
+            matches = search_tools(query, limit=limit, visibility=None)
+        else:
+            matches = search_tools(query, limit=limit, visibility="deferred")
+            if not matches:
+                matches = search_tools(query, limit=limit, visibility=None)
         return {
             "query": query,
             "matches": matches,
@@ -81,8 +82,8 @@ def register_discovery_tools() -> None:
         LlmToolSpec(
             name=TOOLS_FIND_NAME,
             description=(
-                "搜索尚未直接暴露的长尾动作工具。用户想找冷门玩法、或已知域工具不够用时调用；"
-                "query 写需求关键词（如 点赞、基建）。"
+                "搜索可用动作工具。用户想找冷门玩法、或已知域工具不够用时调用；"
+                "query 写需求关键词（如 点赞、基建）。默认先搜延迟工具，无结果再搜全量。"
             ),
             parameters={
                 "type": "object",
@@ -94,6 +95,10 @@ def register_discovery_tools() -> None:
                     "limit": {
                         "type": "integer",
                         "description": "最多返回条数，默认 8",
+                    },
+                    "scope": {
+                        "type": "string",
+                        "description": "deferred（默认）或 all（全量工具）",
                     },
                 },
                 "required": ["query"],
