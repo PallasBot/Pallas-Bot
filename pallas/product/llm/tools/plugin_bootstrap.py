@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from pallas.product.llm.tools.context import ToolInvokeContext
 
 _PLUGIN_TOOL_NAMES: set[str] = set()
+_MEDIA_TOOL_PREFIXES = frozenset({"draw", "memes"})
 
 
 def command_dispatch_result_summary(command_text: str) -> str:
@@ -51,6 +52,12 @@ def build_command_tool_spec(
     plugin_title: str,
 ) -> LlmToolSpec:
     description = f"{decl.description}（插件：{plugin_title}）"
+    source_segments_mode = str(decl.source_segments or "none").strip().lower()
+    if source_segments_mode not in {"none", "media"}:
+        source_segments_mode = "none"
+    # 兼容已发布的画图 / 表情插件声明；后续声明应显式标记 source_segments="media"。
+    if source_segments_mode == "none" and decl.name.split(".", 1)[0] in _MEDIA_TOOL_PREFIXES:
+        source_segments_mode = "media"
 
     async def handler(args: dict, ctx: ToolInvokeContext | None) -> dict:
         if ctx is None:
@@ -63,6 +70,7 @@ def build_command_tool_spec(
             ctx,
             command_id=decl.command_id,
             command_text=command_text,
+            source_segments_mode=source_segments_mode,
         )
         if not bool(result.get("ok")):
             return {

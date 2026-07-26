@@ -11,6 +11,7 @@ from pallas.product.llm.tools.command_invoke import (
     build_synthetic_group_event,
     render_command_template,
     serialize_event_source_segments,
+    source_segments_for_command,
 )
 from pallas.product.llm.tools.context import ToolInvokeContext
 from pallas.product.llm.tools.declare import llm_command_tool_row
@@ -53,7 +54,7 @@ def test_serialize_event_source_segments_keeps_at_image_and_self() -> None:
     assert segments[2] == {"type": "text", "text": "自己"}
 
 
-def test_serialize_event_source_segments_drops_bot_at_and_pads_self() -> None:
+def test_serialize_event_source_segments_drops_bot_at_without_padding_self() -> None:
     from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
     event = SimpleNamespace(
@@ -65,7 +66,7 @@ def test_serialize_event_source_segments_drops_bot_at_and_pads_self() -> None:
         user_id=3023094357,
     )
     segments = serialize_event_source_segments(event, bot_id=3879348674)
-    assert segments == [{"type": "text", "text": "自己"}]
+    assert segments == []
 
 
 def test_serialize_event_source_segments_keeps_target_drops_bot() -> None:
@@ -119,6 +120,14 @@ def test_append_source_segments_to_message() -> None:
         [{"type": "at", "qq": "42"}, {"type": "text", "text": "自己"}],
     )
     assert [seg.type for seg in message] == ["text", "at", "text"]
+
+
+def test_source_segments_for_command_only_adds_self_for_media() -> None:
+    assert source_segments_for_command((), mode="none") == ()
+    assert source_segments_for_command((), mode="media") == ({"type": "text", "text": "自己"},)
+    segments = ({"type": "at", "qq": "42"},)
+    assert source_segments_for_command(segments, mode="none") == ()
+    assert source_segments_for_command(segments, mode="media") == segments
 
 
 def test_render_command_template_missing_field() -> None:

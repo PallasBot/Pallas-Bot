@@ -43,6 +43,25 @@ MUST NOT：在 `usage` 或 `trigger_condition` 写死权限角色。细则：[cm
 
 即使 handler 内自行判断冷却，也 MUST 声明默认值。见 [command_limits](/common/command_limits)。
 
+## `llm_tools` 的素材透传
+
+`llm_command_tool_row()` 默认不携带原消息的图片、@ 或「自己」，避免帮助、点歌等文本口令被追加无关参数。
+
+画图、表情等需要引用素材的工具显式声明 `source_segments="media"`：
+
+```python
+llm_command_tool_row(
+    name="my_plugin.make",
+    command_id="my_plugin.make",
+    description="生成图片",
+    parameters={"type": "object", "properties": {}},
+    command_template="牛牛制作",
+    source_segments="media",
+)
+```
+
+`media` 会透传非 bot 的 @、图片与用户显式写出的「自己」；若原消息没有这些素材，则补「自己」供生成类插件使用。
+
 ## `reload_policy`
 
 类型：`Literal["config_only", "metadata", "full"]`（`pallas.core.plugin_reload.metadata.ReloadPolicy`）。默认 `config_only`。

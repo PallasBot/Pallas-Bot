@@ -38,10 +38,7 @@ def serialize_event_source_segments(
     *,
     bot_id: int | str | None = None,
 ) -> list[dict[str, Any]]:
-    """从原消息提取可复用的图片/@/「自己」段，供合成口令派发携带。
-
-    唤醒用的 @bot 不当作素材；若排除后仍无图/@/自己，则补「自己」用发送者头像。
-    """
+    """从原消息提取可复用的图片/@/显式「自己」段。"""
     message = getattr(event, "original_message", None)
     if message is None:
         get_message = getattr(event, "get_message", None)
@@ -92,9 +89,20 @@ def serialize_event_source_segments(
             continue
         if seg_type == "text" and str(data.get("text") or "").strip() == "自己":
             out.append({"type": "text", "text": "自己"})
-    if not out and getattr(event, "user_id", None) is not None:
-        out.append({"type": "text", "text": "自己"})
     return out
+
+
+def source_segments_for_command(
+    segments: tuple[dict[str, Any], ...],
+    *,
+    mode: str,
+) -> tuple[dict[str, Any], ...]:
+    """仅素材型口令携带原消息素材；无素材时才补「自己」给生成类插件。"""
+    if mode != "media":
+        return ()
+    if segments:
+        return segments
+    return ({"type": "text", "text": "自己"},)
 
 
 def append_source_segments_to_message(
@@ -157,6 +165,7 @@ async def dispatch_group_command_text(
     *,
     command_id: str,
     command_text: str,
+    source_segments_mode: str = "none",
 ) -> dict[str, Any]:
     if ctx.group_id is None:
         return {"ok": False, "error": "group_context_required"}
@@ -170,12 +179,16 @@ async def dispatch_group_command_text(
         logger.warning("llm command dispatch get_bot failed bot_id={}: {}", ctx.bot_id, err)
         return {"ok": False, "error": "bot_unavailable"}
 
+    source_segments = source_segments_for_command(
+        ctx.source_segments,
+        mode=source_segments_mode,
+    )
     event = build_synthetic_group_event(
         bot_id=ctx.bot_id,
         group_id=ctx.group_id,
         user_id=ctx.user_id,
         text=plain,
-        source_segments=ctx.source_segments,
+        source_segments=source_segments,
     )
     if not await satisfies_command_permission(bot, event, command_id):
         return {"ok": False, "error": "permission_denied", "command_id": command_id}
@@ -186,5 +199,5 @@ async def dispatch_group_command_text(
         "dispatched": True,
         "command_id": command_id,
         "command_text": plain,
-        "source_segment_count": len(ctx.source_segments),
+        "source_segment_count": len(source_segments),
     }
