@@ -68,7 +68,7 @@ uv run pallas plugin list
 
 ```bash
 uv run pallas ai path
-uv run pallas ai setup                 # LLM-only（不装 torch）
+uv run pallas ai setup                 # 媒体 sidecar 基础安装（不装 torch）
 uv run pallas ai setup --check-only
 uv run pallas ai setup --remote-only
 uv run pallas ai setup --with-media    # 唱歌/TTS（装 torch CPU）
