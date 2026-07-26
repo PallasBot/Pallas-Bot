@@ -325,7 +325,7 @@ class LlmWebuiConfig(BaseModel):
         default="",
         description=field_help(
             "对话内核能力档位",
-            "留空则按现有开关自动推断；legacy=仅语料规则，plus=统一决策，full=决策+生成+反馈全链路",
+            "留空则按现有开关自动推断；legacy 与 plus 为兼容档位，建议使用 full（决策、生成与反馈全链路）",
         ),
     )
     llm_reply_gate_enabled: bool = Field(
