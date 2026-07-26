@@ -86,9 +86,9 @@ flowchart TD
 - `local/plugins/` 同名覆盖
 - 分片下是否只查了 hub、未查 worker
 
-### AI 任务无回执
+### 媒体 / RWKV 任务无回执
 
-- AI callback 是否到达 hub
+- 媒体 / RWKV callback 是否到达 hub
 - hub 是否路由到目标 worker
 - 目标 worker 是否在线
 - 参见 [LLM 与 AI](llm-and-ai.md)

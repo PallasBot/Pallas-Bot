@@ -72,7 +72,7 @@ flowchart LR
 - 跨 worker 去重
 - 指定某 bot 执行动作
 - 群级独占活动
-- AI callback 回到发起 worker
+- 媒体 / RWKV callback 回到发起 worker
 - WebUI 展示 worker 实时态
 
 ## 禁止

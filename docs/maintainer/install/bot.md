@@ -26,6 +26,6 @@
 - 配置合并
 - WebUI API
 - 分片协调
-- AI callback 落地
+- 媒体 / RWKV callback 落地
 
 决斗、MAA 等由官方插件提供，见 [安装官方插件](official-extensions.md)。

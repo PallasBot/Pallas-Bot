@@ -39,7 +39,7 @@ flowchart LR
 
 | 角色 | 职责 |
 | --- | --- |
-| `hub` | WebUI、协议端管理、注册表、部分协调、AI callback 入口 |
+| `hub` | WebUI、协议端管理、注册表、部分协调、媒体 / RWKV callback 入口 |
 | `worker` | 消息处理、群聊玩法、绝大多数业务插件 |
 | `Redis` | 跨 worker claim、活动协调、部分广播与状态同步 |
 | `Protocol` | QQ 协议接入；反向连接到对应 **worker**（不是 hub） |
@@ -102,7 +102,7 @@ REDIS_URL = "redis://127.0.0.1:6379/0"
 | 对外 | 对内 |
 | --- | --- |
 | WebUI 主要访问 hub | worker 跑大多数插件 |
-| AI callback 先打到 hub | hub 聚合 worker 状态给控制台 |
+| 媒体 / RWKV callback 先打到 hub | hub 聚合 worker 状态给控制台 |
 | 协议端账号连到 worker | 无 Redis 时跨 worker 能力失效 |
 
 ## 三项检查

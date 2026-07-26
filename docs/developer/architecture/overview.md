@@ -17,16 +17,17 @@ flowchart LR
     WebUI --> Core
     Core --> Official
     Core --> Community
-    Core --> AI
+    Core --> Provider[LLM Provider]
+    Core -.媒体 / RWKV.-> AI
 ```
 
 ## 层职责
 
 | 层 | 职责 | 代码锚点 |
 | --- | --- | --- |
-| Core | 运行时、ingress、插件加载、cmd_perm / cooldown / help、WebUI 后端、分片、语料与产品记忆边界 | `pallas/`、`packages/` |
+| Core | 运行时、ingress、插件加载、cmd_perm / cooldown / help、WebUI 后端、分片、语料与产品记忆边界；含 LLM Agent、Provider 调用与工具循环 | `pallas/`、`packages/` |
 | WebUI | 前端页面与交互；构建后同步到主仓运行目录 | 仓 `Pallas-Bot-WebUI` → `data/pb_webui/public/` |
-| AI | 媒体 / LLM 任务 runtime、队列、健康、callback | 仓 `Pallas-Bot-AI` |
+| AI | 可选媒体 runtime、队列、健康、callback，以及遗留 RWKV `/api/chat` | 仓 `Pallas-Bot-AI` |
 | Official Extensions | 官方维护、可独立安装的玩法与外部能力 | 兄弟仓 / PyPI |
 | Community Extensions | 第三方与站点私有能力 | Git / 本地 / 索引 |
 
@@ -51,12 +52,22 @@ flowchart LR
 | `local/plugins/` | 站点私有插件（不入库） |
 | `data/` | 运行时数据（不入库） |
 
+## LLM Agent
+
+通用 LLM 聊天完整运行在 `pallas/product/llm`。`packages/llm_chat`、接话等入口调用
+`client.submit_chat_task`，由 `kernel_runner` 在 Bot 进程内执行 Provider 请求、工具循环与结果投递；
+不经 Pallas-Bot-AI、`:9099` 或 HTTP callback。
+
+工具循环会把模型返回的 tool call 逐轮执行，再把结果带回模型生成可见回复。涉及外部异步任务的工具只负责派发：
+结果在完成后由对应任务通道补发，因此不会阻塞本轮聊天投递。
+
 ## 禁止假设
 
 | 禁止 | 正确做法 |
 | --- | --- |
 | 把 `data/pb_webui/public/` 当前端源码 | 改 `Pallas-Bot-WebUI` 后同步产物 |
 | 把 AI runtime 当产品语义层 | 牛格 / 语料 / 人格边界留在主仓 |
+| 把 Pallas-Bot-AI 当普通聊天前提 | `@` 聊天配置 Bot Provider；AI 仅媒体 / RWKV |
 | 新玩法默认进 core | 按 [Core vs 扩展](core-vs-extensions.md) 判定 |
 | 社区插件 import `pallas.core.*` | 只用 `pallas.api.*` |
 
