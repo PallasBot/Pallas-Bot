@@ -21,6 +21,11 @@ from pallas.product.llm.behavior import (
 )
 from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
 from pallas.product.llm.chat_queue import merge_queued_chat, stash_chat_during_cooldown
+from pallas.product.llm.current_turn_decision import (
+    CurrentTurnAction,
+    CurrentTurnDecisionInput,
+    decide_current_turn_with_model,
+)
 from pallas.product.llm.dynamic_expression_context import (
     build_dynamic_expression_hint as build_llm_chat_dynamic_expression_hint,
 )
@@ -587,6 +592,30 @@ async def handle_llm_chat(bot: Bot, event: Event):
         has_multi_party_overlap=has_multi_party,
     )
     tool_meta = assemble_tool_bundle(task="llm_chat", user_text=focus_text)
+    current_turn_decision = await decide_current_turn_with_model(
+        CurrentTurnDecisionInput(
+            text=focus_text,
+            is_to_me=is_to_me,
+            tools_permitted=bool(tool_meta.get("tools_enabled")),
+        ),
+        enabled=bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)),
+        model=str(getattr(llm_cfg, "llm_current_turn_decision_model", "") or ""),
+    )
+    if group_id is not None:
+        from packages.repeater.opportunity_trace import append_conversation_decision_trace
+
+        append_conversation_decision_trace({
+            "group_id": int(group_id),
+            "bot_id": int(bot.self_id),
+            "kind": "current_turn_decision_trace",
+            **current_turn_decision.trace.model_dump(mode="json"),
+        })
+    if current_turn_decision.action is CurrentTurnAction.PASS:
+        return
+    if bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)) and (
+        current_turn_decision.action is not CurrentTurnAction.TOOL
+    ):
+        tool_meta = {**tool_meta, "tools_enabled": False, "tool_schemas": []}
     direct_decision = decide_direct_chat_action(
         direct_ctx,
         feature_level=resolve_conversation_feature_level(llm_cfg),
@@ -708,6 +737,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
         redup_hint,
         alt_style_hint,
     )
+    if current_turn_decision.action is CurrentTurnAction.FOLLOW_UP:
+        style_user_hints.append("本轮只追问一个必要信息，问题要短。")
     last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
     recent_reply_texts: list[str] = []
     if group_id is not None:
@@ -754,6 +785,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "fallback_text": corpus_fallback,
             "llm_route": llm_route,
             "agent_loop_enabled": bool(tool_meta.get("tools_enabled")),
+            "current_turn_action": current_turn_decision.action,
+            "current_turn_trace": current_turn_decision.trace.model_dump(mode="json"),
             "agent_stage_plan": list(direct_decision.agent_stages),
             "tool_schema_count": len(tool_meta.get("tool_schemas") or []),
             "last_reply_text": last_reply_text,
@@ -798,6 +831,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             style_user_hints=style_user_hints,
             llm_rewrite_metadata={
                 "task": "llm_chat",
+                "current_turn_action": current_turn_decision.action,
                 "bot_id": int(bot.self_id),
                 "self_aliases": self_aliases[:8],
                 "variation_hint": variation_hint,

@@ -417,6 +417,20 @@ class LlmWebuiConfig(BaseModel):
             "开启后表情包 @ 不会提交智能对话",
         ),
     )
+    llm_current_turn_decision_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "是否启用本轮动作小模型决策",
+            "默认关闭并保持原回复流程；开启后模型仅在 REPLY、PASS、TOOL、FOLLOW_UP 中选择。",
+        ),
+    )
+    llm_current_turn_decision_model: str = Field(
+        default="",
+        description=field_help(
+            "本轮动作决策模型",
+            "留空使用智能对话默认模型；建议填写低延迟小模型。",
+        ),
+    )
     llm_chat_queue_merge: bool = Field(
         default=True,
         description=field_help(
@@ -663,6 +677,8 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_repeater_writeback_enabled=cfg.llm_repeater_writeback_enabled,
         conversation_feature_level=cfg.conversation_feature_level or "",  # type: ignore[arg-type]
         llm_reply_gate_enabled=cfg.llm_reply_gate_enabled,
+        llm_current_turn_decision_enabled=cfg.llm_current_turn_decision_enabled,
+        llm_current_turn_decision_model=cfg.llm_current_turn_decision_model,
         llm_chat_queue_merge=cfg.llm_chat_queue_merge,
         llm_output_filter_enabled=cfg.llm_output_filter_enabled,
         llm_output_filter_chat_hard_phrases=cfg.llm_output_filter_chat_hard_phrases,

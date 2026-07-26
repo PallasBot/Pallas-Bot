@@ -263,6 +263,8 @@ def _llm_section() -> WebuiEnvSection:
             "llm_repeater_writeback_enabled": "LLM_REPEATER_WRITEBACK_ENABLED",
             "conversation_feature_level": "CONVERSATION_FEATURE_LEVEL",
             "llm_reply_gate_enabled": "LLM_REPLY_GATE_ENABLED",
+            "llm_current_turn_decision_enabled": "LLM_CURRENT_TURN_DECISION_ENABLED",
+            "llm_current_turn_decision_model": "LLM_CURRENT_TURN_DECISION_MODEL",
             "llm_chat_queue_merge": "LLM_CHAT_QUEUE_MERGE",
             "llm_output_filter_enabled": "LLM_OUTPUT_FILTER_ENABLED",
             "llm_output_filter_chat_hard_phrases": "LLM_OUTPUT_FILTER_CHAT_HARD_PHRASES",
