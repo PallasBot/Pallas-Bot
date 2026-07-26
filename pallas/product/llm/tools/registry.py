@@ -62,6 +62,11 @@ class LlmToolSpec:
     mcp_server_id: str | None = None
     hints: frozenset[str] = field(default_factory=frozenset)
     visibility: str = "visible"
+    estimated_duration_ms: int = 0
+    cost_hint: str = ""
+    approval_required: bool = False
+    background_ok: bool = False
+    display_mode: str = "default"
 
 
 _REGISTRY: list[LlmToolSpec] = []
@@ -145,6 +150,11 @@ def tool_catalog_entry_from_spec(spec: LlmToolSpec, *, description: str | None =
             provider_name=spec.provider_name,
             mcp_server_id=spec.mcp_server_id,
         ),
+        estimated_duration_ms=spec.estimated_duration_ms,
+        cost_hint=spec.cost_hint,
+        approval_required=spec.approval_required,
+        background_ok=spec.background_ok,
+        display_mode=spec.display_mode,
     )
 
 
@@ -483,6 +493,11 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             "plugin_name": entry.audit.plugin_name,
             "provider_name": entry.audit.provider_name,
             "mcp_server_id": entry.audit.mcp_server_id,
+            "estimated_duration_ms": entry.estimated_duration_ms,
+            "cost_hint": entry.cost_hint,
+            "approval_required": entry.approval_required,
+            "background_ok": entry.background_ok,
+            "display_mode": entry.display_mode,
             "eligible": spec.name in eligible_names and disabled_reason is None,
             "disabled_reason": disabled_reason,
             "hints": declared_hints,

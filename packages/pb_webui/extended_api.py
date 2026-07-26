@@ -5345,6 +5345,7 @@ def register_extended_api(
     router = APIRouter(tags=["Pallas-Bot 控制台"], dependencies=[Depends(_pallas_token_dep)])
 
     from .acl_api import register_acl_router
+    from .agent_platform_api import register_agent_platform_router
     from .llm_ops_api import register_llm_ops_router
     from .memory_graph_api import register_memory_graph_router
 
@@ -5356,6 +5357,12 @@ def register_extended_api(
         check_write_token=_check_pallas_write_token,
     )
     register_memory_graph_router(
+        router,
+        x=x,
+        plugin_config=plugin_config,
+        check_write_token=_check_pallas_write_token,
+    )
+    register_agent_platform_router(
         router,
         x=x,
         plugin_config=plugin_config,
