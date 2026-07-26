@@ -144,8 +144,8 @@ docker compose -f docker-compose.llm.yml up -d
 
 - [ ] 升级前备份：`pallas-bot/data/`、`mongo/data/`、`pallas.toml`
 - [ ] `pallas.toml` 保持 `db_backend = "mongodb"` + `[bootstrap.mongo]`
-- [ ] 使用根目录 **`docker-compose.yml`**（非 `full`）；勿换 PG 卷
-- [ ] `docker compose up -d` 后 Bot health 正常
+- [ ] 使用根目录 **`docker-compose.yml`**（非 `full`）并加 **`--profile mongo`**；勿换 PG 卷
+- [ ] `docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d` 后 Bot health 正常
 - [ ] 历史群数据、语料、配置仍在（抽一条已知数据核对）
 - [ ] （可选）`uv run python tools/migrate_env_to_pallas.py` 仅从旧 `.env` 迁移一次
 
@@ -159,8 +159,8 @@ docker compose -f docker-compose.llm.yml up -d
 
 | 栈 | 命令 |
 | --- | --- |
-| Mongo（升级栈） | `docker compose up -d` |
-| PG（分步） | `docker compose --env-file ./pallas-bot/config/compose.env --profile postgres up -d` |
+| PG（默认） | `docker compose --env-file ./pallas-bot/config/compose.env up -d` |
+| Mongo（升级栈） | `docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d` |
 
 - [ ] health + WebUI + 帮助菜单
 - [ ] 不接 AI 时群内无 LLM 属预期

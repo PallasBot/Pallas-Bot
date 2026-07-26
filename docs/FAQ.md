@@ -161,7 +161,7 @@ A: **不必。** 4.0 默认路径只连目标库做建表与迁移；`pg_stat_st
 
 ### Docker 里日志写「连接 MongoDB 127.0.0.1:27017」对吗？
 
-A: **在容器里 `127.0.0.1` 只指向容器自己**，连不到 Compose 里的 **`mongodb` / `postgres` 服务**。本仓库 [`docker-compose.yml`](https://github.com/PallasBot/Pallas-Bot/blob/main/docker-compose.yml) 已注入 **`MONGO_HOST=mongodb`**、**`MONGO_PORT=27017`**，并在用内置 PG 时注入 **`PG_HOST=postgres`**、**`PG_PORT=5432`**（与 **service 名**一致），覆盖 `pallas.toml` 里写的本机地址；若仍看到 `127.0.0.1`，多半是**旧 compose 未更新**或**自建编排未设置**。外置数据库时请删改 compose 里对应项并在 `pallas.toml` 写明真实地址。详见 [Docker 部署](/deploy/docker)。
+A: **在容器里 `127.0.0.1` 只指向容器自己**，连不到 Compose 里的 **`postgres` / `mongodb` 服务**。本仓库 [`docker-compose.yml`](https://github.com/PallasBot/Pallas-Bot/blob/main/docker-compose.yml) 已注入 **`PG_HOST=postgres`**、**`PG_PORT=5432`**（与 **service 名**一致）；`--profile mongo` 时另有 **`MONGO_HOST=mongodb`**、**`MONGO_PORT=27017`**，覆盖 `pallas.toml` 里写的本机地址；若仍看到 `127.0.0.1`，多半是**旧 compose 未更新**或**自建编排未设置**。外置数据库时请删改 compose 里对应项并在 `pallas.toml` 写明真实地址。详见 [Docker 部署](/deploy/docker)。
 
 ### Docker 里 `help` 报「样式路径不存在 `/app/resource/styles/default`」？
 
@@ -173,7 +173,7 @@ A: 多为 **Docker Hub 访问不稳定**（国内常见）。可在仓库根目�
 
 ### Docker Compose 起内置 Postgres 时，还要不要在 compose 里再配一套 `POSTGRES_USER`？
 
-A: **不用。** 仓库 [`docker-compose.yml`](https://github.com/PallasBot/Pallas-Bot/blob/main/docker-compose.yml) 已用 **`PG_USER` / `PG_PASSWORD` / `PG_DB`** 插值生成 **`POSTGRES_*`**。你只需在 **`pallas-bot/config/compose.env`**（由 [`config/compose.env.example`](https://github.com/PallasBot/Pallas-Bot/tree/main/config/compose.env.example) 复制）里维护 **`PG_*`**，并与 **`pallas.toml`** 的 `[bootstrap.postgres]` 一致；启动时带上 **`docker compose --env-file ./pallas-bot/config/compose.env --profile postgres up -d`**。否则插值会回落到 compose 默认值，可能与 Bot 实际使用的账号不一致。
+A: **不用。** 仓库 [`docker-compose.yml`](https://github.com/PallasBot/Pallas-Bot/blob/main/docker-compose.yml) 已用 **`PG_USER` / `PG_PASSWORD` / `PG_DB`** 插值生成 **`POSTGRES_*`**。你只需在 **`pallas-bot/config/compose.env`**（由 [`config/compose.env.example`](https://github.com/PallasBot/Pallas-Bot/tree/main/config/compose.env.example) 复制）里维护 **`PG_*`**，并与 **`pallas.toml`** 的 `[bootstrap.postgres]` 一致；启动时带上 **`docker compose --env-file ./pallas-bot/config/compose.env up -d`**。否则插值会回落到 compose 默认值，可能与 Bot 实际使用的账号不一致。
 
 ### Docker 启动报错里提到 `mounting`、`pallas.toml`、`not a directory` 或 `directory onto file` 是什么情况？
 

@@ -1,5 +1,5 @@
 # 4.0 全栈：Bot + PostgreSQL + Redis + Ollama + AI Runtime
-# 新装默认 PostgreSQL；从 3.x 沿用 MongoDB 请用根目录 docker-compose.yml + --profile mongo（见 DockerDeployment.md）
+# 仅 Bot+PG 用根目录 docker-compose.yml；3.x 沿用 Mongo 则根 compose 加 --profile mongo（见 docs/deploy/docker.md）
 
 # 准备:
 #   mkdir -p pallas-bot/config pallas-bot/data

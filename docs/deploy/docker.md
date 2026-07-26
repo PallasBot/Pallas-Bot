@@ -68,15 +68,15 @@ db = "PallasBot"
 ## 3. 启动服务并确认可访问
 
 ```bash
-docker compose --env-file ./pallas-bot/config/compose.env --profile postgres up -d
+docker compose --env-file ./pallas-bot/config/compose.env up -d
 ```
 
 首次启动会拉取镜像并初始化数据库，控制台初始密码会出现在 Bot 日志中。接着检查状态：
 
 ```bash
-docker compose ps
+docker compose --env-file ./pallas-bot/config/compose.env ps
 curl -s http://127.0.0.1:8088/pallas/api/health
-docker compose logs pallasbot | head -80
+docker compose --env-file ./pallas-bot/config/compose.env logs pallasbot | head -80
 ```
 
 `docker compose ps` 显示服务运行，健康检查可访问且日志没有启动错误时，说明服务已启动。浏览器打开 `http://127.0.0.1:8088/pallas/`，使用日志里的控制台密码登录。
@@ -90,11 +90,11 @@ docker compose logs pallasbot | head -80
 ## 日常命令
 
 ```bash
-docker compose --env-file ./pallas-bot/config/compose.env --profile postgres logs -f pallasbot
-docker compose --env-file ./pallas-bot/config/compose.env --profile postgres restart pallasbot
-docker compose --env-file ./pallas-bot/config/compose.env --profile postgres pull
-docker compose --env-file ./pallas-bot/config/compose.env --profile postgres up -d
-docker compose --env-file ./pallas-bot/config/compose.env --profile postgres down
+docker compose --env-file ./pallas-bot/config/compose.env logs -f pallasbot
+docker compose --env-file ./pallas-bot/config/compose.env restart pallasbot
+docker compose --env-file ./pallas-bot/config/compose.env pull
+docker compose --env-file ./pallas-bot/config/compose.env up -d
+docker compose --env-file ./pallas-bot/config/compose.env down
 ```
 
 ::: details 全栈（Bot + PG + Redis + Ollama + AI）
@@ -114,8 +114,10 @@ docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose
 `pallas.toml` 设 `db_backend = "mongodb"` 并填写 `[bootstrap.mongo]`，然后：
 
 ```bash
-docker compose up -d
+docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d
 ```
+
+根目录 compose 默认只起 PostgreSQL；Mongo 需显式加 `--profile mongo`。
 :::
 
 ::: details 备份与防火墙

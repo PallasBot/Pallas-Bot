@@ -15,7 +15,7 @@ extra_plugin_dirs = ["local/plugins"]
 
 **hub、worker、unified** 均会加载该目录；与 `src/plugins/` 或 hub 内置模块列表**同名时优先 local**（例如 `help`、`callback`）。
 
-Docker 可选挂载见 [`docker-compose.yml`](../docker-compose.yml) 与 [Docker 部署](../docs/DockerDeployment.md)。
+Docker 可选挂载见 [`docker-compose.yml`](../docker-compose.yml) 与 [Docker 部署](../docs/deploy/docker.md)。
 
 ## 补丁目录 `patches/`
 
