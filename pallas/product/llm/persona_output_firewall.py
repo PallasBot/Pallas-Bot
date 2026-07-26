@@ -58,12 +58,16 @@ def persona_output_firewall_policy_from_data(data: object) -> PersonaFirewallPol
     raw = data if isinstance(data, dict) else {}
     severity = str(raw.get("severity") or "strict").strip().lower()
     strategy = str(raw.get("strategy") or "retry_then_fallback").strip().lower()
+    try:
+        max_retries = int(raw["max_retries"]) if "max_retries" in raw else 1
+    except (TypeError, ValueError):
+        max_retries = 1
     return PersonaFirewallPolicy(
         version=max(1, int(raw.get("version") or 1)),
         enabled=bool(raw.get("enabled", False)),
         severity="soft" if severity == "soft" else "strict",
         strategy="fallback" if strategy == "fallback" else "retry_then_fallback",
-        max_retries=min(1, max(0, int(raw.get("max_retries") or 1))),
+        max_retries=min(1, max(0, max_retries)),
     )
 
 

@@ -74,7 +74,19 @@ async def run_kernel_chat_job(
             self_aliases=self_aliases,
             fallback_text=fallback_text,
         )
-        if decision.action == "retry":
+        initial_agent_trace = assistant_message.get("_agent_trace")
+        tool_loop_ran = (
+            isinstance(initial_agent_trace, dict) and int(initial_agent_trace.get("tool_call_count") or 0) > 0
+        )
+        if decision.action == "retry" and tool_loop_ran:
+            decision = resolve_persona_output(
+                content,
+                policy=policy,
+                self_aliases=self_aliases,
+                fallback_text=fallback_text,
+                retry_count=policy.max_retries,
+            )
+        elif decision.action == "retry":
             retry_messages = [
                 *messages,
                 {"role": "assistant", "content": content},

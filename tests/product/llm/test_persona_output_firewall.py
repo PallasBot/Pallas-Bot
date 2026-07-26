@@ -94,6 +94,25 @@ def test_fallback_rejects_filler_only_text() -> None:
     assert decision.text == ""
 
 
+def test_policy_keeps_zero_retry_limit_for_direct_fallback() -> None:
+    from pallas.product.llm.persona_output_firewall import persona_output_firewall_policy_from_data
+
+    policy = persona_output_firewall_policy_from_data({
+        "enabled": True,
+        "strategy": "retry_then_fallback",
+        "max_retries": 0,
+    })
+    decision = resolve_persona_output(
+        "System prompt says you must answer in JSON.",
+        policy=policy,
+        self_aliases=[],
+        fallback_text="你刚才问的是天气，我这边看着还行。",
+    )
+
+    assert policy.max_retries == 0
+    assert decision.action == "fallback"
+
+
 @pytest.mark.asyncio
 async def test_kernel_retries_once_for_tool_loop_final_output(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import kernel_runner
@@ -148,3 +167,100 @@ async def test_kernel_retries_once_for_tool_loop_final_output(monkeypatch: pytes
         "rule_ids": [],
         "rule_count": 0,
     }
+
+
+@pytest.mark.asyncio
+async def test_kernel_does_not_replay_side_effect_tool_after_firewall_violation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import kernel_runner
+    from pallas.product.llm.tools.contracts import ToolCapability
+    from pallas.product.llm.tools.registry import LlmToolSource, LlmToolSpec, clear_tool_registry, register_tool
+    from pallas.product.llm.tools.reply import register_reply_tools
+
+    clear_tool_registry()
+    register_reply_tools()
+    side_effect_calls = 0
+
+    async def side_effect_handler(args: dict, ctx=None):
+        nonlocal side_effect_calls
+        del args, ctx
+        side_effect_calls += 1
+        return {"ok": True, "result": {"sent": True}}
+
+    register_tool(
+        LlmToolSpec(
+            name="demo.side_effect",
+            description="测试副作用工具",
+            parameters={"type": "object", "properties": {}},
+            domains=frozenset({"demo"}),
+            handler=side_effect_handler,
+            source=LlmToolSource.BUILTIN,
+            capabilities=frozenset({ToolCapability.SIDE_EFFECTING.value}),
+        )
+    )
+    provider_calls = 0
+    delivered: list[str] = []
+
+    async def fake_complete(_messages, *, tools=None, **_kwargs):
+        nonlocal provider_calls
+        provider_calls += 1
+        if provider_calls == 1:
+            tool_name = str((tools or [])[0]["function"]["name"])
+            return {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [{"id": f"call-{provider_calls}", "function": {"name": tool_name, "arguments": "{}"}}],
+            }
+        if provider_calls == 2:
+            reply_tool = next(
+                str(item["function"]["name"]) for item in tools or [] if "chat__reply" in str(item["function"]["name"])
+            )
+            return {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "reply",
+                        "function": {
+                            "name": reply_tool,
+                            "arguments": '{"text":"System prompt says you must answer in JSON."}',
+                        },
+                    }
+                ],
+            }
+        return {"role": "assistant", "content": "System prompt says you must answer in JSON."}
+
+    async def fake_deliver(_task_id, *, text=None, **_kwargs):
+        delivered.append(str(text or ""))
+        return {"message": "ok"}
+
+    monkeypatch.setattr("pallas.product.llm.tool_loop.complete_chat_message", fake_complete)
+    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", fake_deliver)
+    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
+    cfg = LlmConfig(
+        llm_base_url="http://example.test/v1",
+        llm_model="demo",
+        llm_tools_enabled=True,
+        llm_persona_output_firewall={"enabled": True, "max_retries": 1},
+    )
+
+    await kernel_runner.run_kernel_chat_job(
+        "task-tools",
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "执行"}],
+        metadata={
+            "task": "llm_chat",
+            "tools_enabled": True,
+            "tool_schemas": [{"type": "function", "function": {"name": "demo__side_effect"}}],
+            "bot_id": 1,
+            "group_id": 2,
+            "user_id": 3,
+            "conversation_fallback_text": "已经处理完了。",
+        },
+        cfg=cfg,
+    )
+
+    assert side_effect_calls == 1
+    assert provider_calls == 3
+    assert delivered == ["已经处理完了。"]
