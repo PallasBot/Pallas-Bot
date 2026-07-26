@@ -7,14 +7,19 @@
 ```text
 群消息
  ├─ @ / to_me → packages/llm_chat/chat_message.py
- │     persona +【表达参考】→ LLM 生成 → AI callback
+ │     persona +【表达参考】→ client.submit_chat_task
  │
  └─ 非 @ 接话 → packages/repeater/handlers/message.py
        resolve_scene_tier → opportunity → decide_llm_attempt
-       → maybe_submit_repeater_corpus_llm（强：select → polish → polish_lite）
+       → maybe_submit_repeater_corpus_llm
        → 失败 / 未抽中 → 原语料发出
-       → 成功 → AI callback（feedback + 表达学习）
+       → 成功 → kernel_runner → tool_loop.complete_with_tool_loop
+                    → deliver_llm_chat_result → Bot 内投递 / feedback + 表达学习
 ```
+
+普通聊天与接话均在 Bot 进程内执行：`submit_chat_task` 安排 `kernel_runner`，后者调用 Provider、运行工具循环，并通过 `deliver_llm_chat_result` 交给既有投递入口。此路径不请求 Pallas-Bot-AI、`:9099` 或 HTTP callback。
+
+工具循环会在模型提出 tool call 后执行工具、将结果追加回上下文并继续补全。延迟完成的外部工具只派发任务；任务结果由其自身通道回传，不阻塞当前 LLM 回复。
 
 ## 关键锚点
 
@@ -25,7 +30,8 @@
 | 接话人格 + 表达注入 | `pallas/product/llm/repeater_persona_context.py` |
 | `@` 表达注入 | `packages/llm_chat/chat_message.py`（`build_llm_chat_expression_suffix`） |
 | 表达库存取 / 学习 | `pallas/product/persona/expression_*.py` |
-| 成功回调写回 | `pallas/core/platform/ai_callback/runner.py`（feedback + `note_expression_from_utterance`） |
+| 进程内投递 | `pallas/product/llm/kernel_runner.py`（`deliver_llm_chat_result`） |
+| 最终投递 / 写回 | `pallas/core/platform/ai_callback/runner.py`（复用投递、feedback + `note_expression_from_utterance`） |
 | 配置键 | `pallas/product/llm/config.py`；WebUI 段见 `env_sections.py` |
 
 ## 约束
