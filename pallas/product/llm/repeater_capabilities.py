@@ -25,8 +25,15 @@ class RepeaterCapabilities:
 
 
 def resolve_repeater_capabilities(cfg: LLMConfig) -> RepeaterCapabilities:
-    legacy_mode = resolve_llm_repeater_mode()
-    fallback_enabled, polish_enabled, select_enabled = resolve_llm_repeater_flags()
+    configured_mode = str(getattr(cfg, "llm_repeater_mode", "") or "").strip().lower()
+    if configured_mode:
+        legacy_mode = configured_mode
+        fallback_enabled = bool(getattr(cfg, "llm_fallback_enabled", False))
+        polish_enabled = bool(getattr(cfg, "llm_polish_enabled", False))
+        select_enabled = bool(getattr(cfg, "llm_select_enabled", False))
+    else:
+        legacy_mode = resolve_llm_repeater_mode()
+        fallback_enabled, polish_enabled, select_enabled = resolve_llm_repeater_flags()
     canonical_modes = {"off", "select", "select_polish_lite", "select_fallback", "fallback"}
     mode: RepeaterMode = {
         "polish": "select_polish_lite",

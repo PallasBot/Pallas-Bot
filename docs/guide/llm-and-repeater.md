@@ -56,8 +56,8 @@ AI **成功发出**之后，还可能：
 | 值 | 效果 |
 | --- | --- |
 | `off` | 纯语料接话，AI 不介入 |
-| `select` | 命中语料时 AI 选句（推荐默认） |
-| `select_polish_lite` | 选句为主，少数回复轻润色 |
+| `select` | 命中语料时 AI 选句 |
+| `select_polish_lite` | 选句为主，少数回复轻润色（默认） |
 | `select_fallback` | 选句；语料缺失时才现编 |
 | `fallback` | 仅语料缺失时 AI 现编 |
 | `polish` / `both` | 遗留：以润色 / 补位为主（仍可用） |

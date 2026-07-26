@@ -633,7 +633,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
         "packages.repeater.model",
         SimpleNamespace(Chat=FakeChat, ChatData=SimpleNamespace),
     )
-    monkeypatch.setattr(mod, "maybe_submit_repeater_corpus_llm", AsyncMock(return_value=False))
+    monkeypatch.setattr(mod, "submit_corpus_assist_stages", AsyncMock(return_value=False))
 
     await mod.handle_llm_chat(bot, event)
 

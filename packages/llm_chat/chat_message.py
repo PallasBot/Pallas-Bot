@@ -49,7 +49,7 @@ from pallas.product.llm.memory import (
 from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.persona_context import build_persona_llm_context
-from pallas.product.llm.polish_lite import maybe_submit_repeater_corpus_llm
+from pallas.product.llm.polish_lite import submit_corpus_assist_stages
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_variation import (
     build_recent_reply_ending_hint,
@@ -460,11 +460,15 @@ async def handle_llm_chat(bot: Bot, event: Event):
         if bundle is not None:
             pool = [item for item in bundle.message_pool if item and "[CQ:" not in item]
             candidate = next((item for item in bundle.answer_list if item and "[CQ:" not in item), "")
-            if (pool or candidate) and await maybe_submit_repeater_corpus_llm(
+            from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
+
+            if (pool or candidate) and await submit_corpus_assist_stages(
                 event,
                 user_text=plain or msg,
                 candidates=pool,
                 candidate_text=candidate,
+                profile="direct_chat",
+                capabilities=resolve_repeater_capabilities(llm_cfg),
             ):
                 gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
                 if gate is None:

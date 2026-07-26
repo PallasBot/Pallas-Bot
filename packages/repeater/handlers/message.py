@@ -21,7 +21,7 @@ from pallas.product.llm.kernel import (
     decide_repeater_action,
     resolve_conversation_feature_level,
 )
-from pallas.product.llm.polish_lite import maybe_submit_repeater_corpus_llm
+from pallas.product.llm.polish_lite import submit_corpus_assist_stages
 from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
 from pallas.product.llm.task_metrics import record_bot_llm_route
 from pallas.product.message_scrub import is_message_scrub_blocked_async
@@ -269,13 +269,14 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
             else:
                 task_name = "repeater_polish_lite" if capabilities.polish_lite_enabled else "repeater_polish"
                 record_bot_llm_route(task_name, "pipeline_rewrite")
-            return await maybe_submit_repeater_corpus_llm(
+            return await submit_corpus_assist_stages(
                 event,
                 user_text=ctx.plain_body,
                 candidates=plan.candidate_pool,
                 candidate_text=plan.candidate_text,
                 reply_mode=bundle.reply_mode,
                 scene_tier=scene_tier,
+                capabilities=capabilities,
             )
         if stage_name == "stitch":
             from pallas.product.persona import resolve_persona_for_message

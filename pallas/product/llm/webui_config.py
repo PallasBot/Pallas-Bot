@@ -24,7 +24,7 @@ def normalize_repeater_mode_for_webui(mode: str) -> RepeaterMode:
         return _LEGACY_REPEATER_MODE_TO_WEBUI[raw]
     if raw in ("off", "select", "select_polish_lite", "select_fallback", "fallback"):
         return raw  # type: ignore[return-value]
-    return "select"
+    return "select_polish_lite"
 
 
 ConversationFeatureLevel = Literal["", "legacy_repeater", "repeater_plus_decision", "full_conversation_kernel"]
@@ -97,10 +97,10 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_repeater_mode: RepeaterMode = Field(
-        default="select",
+        default="select_polish_lite",
         description=field_help(
             "接话时如何使用智能对话",
-            "推荐「命中语料时 AI 选句」；需要时可开启语料缺失现编，或少数回复做轻润色",
+            "推荐「选句为主，少数回复轻润色」；需要时可开启语料缺失现编",
             (
                 "off=只用语料；select=命中语料时 AI 选句；"
                 "select_polish_lite=以选句为主，约一成回复会轻润色口气；"
