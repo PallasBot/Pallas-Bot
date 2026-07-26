@@ -140,11 +140,18 @@ def resolve_visible_reply_after_tools(
     tool_call_count: int,
 ) -> tuple[str, str]:
     """动作与开口拆分：有 chat.reply 用其文本；仅副作用成功则静默丢掉自由文本。"""
+    from pallas.product.llm.tools.reply import is_side_effect_meta_reply
+
     if tool_call_count <= 0:
         return freeform_content, "generate"
     if reply_texts:
-        # 最后一次 chat.reply；空串表示显式静默
-        return str(reply_texts[-1] or "").strip(), "chat.reply"
+        # 最后一次 chat.reply；空串表示显式静默；元叙述废话当静默
+        text = str(reply_texts[-1] or "").strip()
+        if not text or is_side_effect_meta_reply(text):
+            if side_effect_ok:
+                return "", "silence_after_side_effect"
+            return "", "chat.reply"
+        return text, "chat.reply"
     if side_effect_ok:
         return "", "silence_after_side_effect"
     return freeform_content, "generate"
@@ -307,9 +314,12 @@ async def complete_with_tool_loop(
     # 口令类工具：动作与开口拆分（对齐 MaiBot reply 通道）
     if schema_names and working and str(working[0].get("role") or "") == "system":
         hint = (
-            "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
-            "动作类工具成功后：若需对群友开口，只能调用 chat.reply（极短自然口语）；也可不调用以保持沉默。"
-            "禁止用自由文本写「已派发/帮你找找/正在生成」等系统腔或编造结果；勿把「随机」「随便」当歌名念。"
+            "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，"
+            "不要只口头答应或假装已执行。"
+            "动作类工具成功后默认保持沉默，不要再开口；"
+            "仅当必须补充工具未直接给出的信息（如口令、缺素材）才调用 chat.reply。"
+            "禁止自由文本或 chat.reply 写「整了个/搜了一下/已派发/帮你找找/大伙品品」等废话"
+            "或编造结果；勿把「随机」「随便」当歌名念。"
             "查询类工具可用返回结果直接作答，或再用 chat.reply。"
         )
         sys_content = str(working[0].get("content") or "")
@@ -364,6 +374,8 @@ async def complete_with_tool_loop(
             assistant_message["_agent_trace"] = agent_trace
             if int(agent_trace.get("tool_call_count") or 0) <= 0:
                 record_bot_llm_task(task, "tool_session_no_call")
+                if ask_before_call or selection_source == "soft_recall":
+                    record_bot_llm_task(task, "soft_recall_ask_no_call")
             else:
                 record_bot_llm_task(task, "tool_session_called")
             return content, assistant_message
@@ -455,4 +467,6 @@ async def complete_with_tool_loop(
         record_bot_llm_task(task, "tool_session_called")
     else:
         record_bot_llm_task(task, "tool_session_no_call")
+        if ask_before_call or selection_source == "soft_recall":
+            record_bot_llm_task(task, "soft_recall_ask_no_call")
     return content, assistant_message
