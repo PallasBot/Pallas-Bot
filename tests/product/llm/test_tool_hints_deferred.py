@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from pallas.product.llm.tools.discovery import TOOLS_FIND_NAME, search_deferred_tools
-
 from pallas.product.llm.tools.bootstrap import reset_llm_tools_bootstrap_for_tests
 from pallas.product.llm.tools.declare import llm_command_tool_row
+from pallas.product.llm.tools.discovery import TOOLS_FIND_NAME, search_deferred_tools
 from pallas.product.llm.tools.metadata import parse_llm_command_tool_decl
 from pallas.product.llm.tools.plugin_bootstrap import build_command_tool_spec
 from pallas.product.llm.tools.registry import (
@@ -117,3 +116,88 @@ def test_search_deferred_tools_by_query() -> None:
     assert matches
     assert matches[0]["name"] == "interact.thumb"
     assert TOOLS_FIND_NAME
+
+
+def test_music_selective_catalog_excludes_unrelated_command_tools(monkeypatch) -> None:
+    reset_llm_tools_bootstrap_for_tests()
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.registry.get_llm_config",
+        lambda: type(
+            "Cfg",
+            (),
+            {
+                "llm_tools_enabled": True,
+                "llm_tools_selective": True,
+                "llm_tools_blacklist": [],
+                "llm_tools_desc_max_len": 200,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.registry.get_arknights_kb_config",
+        lambda: type("Kb", (), {"arknights_kb_enabled": True})(),
+    )
+    clear_tool_registry()
+    register_tool(
+        build_command_tool_spec(
+            parse_llm_command_tool_decl(
+                llm_command_tool_row(
+                    name="sing.request_song",
+                    command_id="sing.request_song",
+                    description="点歌",
+                    parameters={
+                        "type": "object",
+                        "properties": {"song": {"type": "string"}},
+                        "required": ["song"],
+                    },
+                    command_template="牛牛点歌 {song}",
+                    hints=["点歌", "放首歌", "音乐"],
+                )
+            ),
+            plugin_name="sing",
+            plugin_title="唱歌",
+        )
+    )
+    register_tool(
+        build_command_tool_spec(
+            parse_llm_command_tool_decl(
+                llm_command_tool_row(
+                    name="duel.cage",
+                    command_id="duel.cage",
+                    description="决斗",
+                    parameters={"type": "object", "properties": {}},
+                    command_template="牛牛决斗",
+                    hints=["决斗"],
+                )
+            ),
+            plugin_name="duel",
+            plugin_title="决斗",
+        )
+    )
+    meta = tool_metadata_for_chat(task="llm_chat", user_text="放首歌，铁花飞")
+    names = {item["function"]["name"] for item in meta.get("tool_schemas") or []}
+    assert "sing__request_song" in names
+    assert "duel__cage" not in names
+    assert "command" not in (meta.get("tool_catalog") or {}).get("selection", {}).get("inferred_domains", [])
+
+
+def test_normalize_keeps_command_dispatch_summary() -> None:
+    from pallas.product.llm.tool_loop import summarize_tool_result
+    from pallas.product.llm.tools.registry import normalize_tool_result
+
+    summary_text = (
+        "已派发群口令「牛牛点歌 铁花飞」。向用户确认时必须沿用该口令中的歌名/参数原文，禁止改成其它曲目或编造结果。"
+    )
+    normalized = normalize_tool_result({
+        "ok": True,
+        "result": {
+            "command_text": "牛牛点歌 铁花飞",
+            "summary": summary_text,
+        },
+    })
+    assert normalized["ok"] is True
+    assert normalized["result"]["command_text"] == "牛牛点歌 铁花飞"
+    summary = summarize_tool_result(normalized)
+    assert summary["result_preview"]
+    assert "铁花飞" in summary["result_preview"]
+    assert "平凡之路" not in summary["result_preview"]

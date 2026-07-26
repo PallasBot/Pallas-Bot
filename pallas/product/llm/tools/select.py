@@ -34,6 +34,19 @@ _OPERATOR_LOOKUP_HINTS = (
     "什么职业",
 )
 
+# 工具 spec 可带这些域做分类，但 selective 命中时不得单独用它们拉全仓口令工具
+_SELECTIVE_DOMAIN_EXCLUDE = frozenset({"command", "meta"})
+
+
+def selective_domains(domains: frozenset[str] | set[str]) -> frozenset[str]:
+    out: set[str] = set()
+    for raw in domains:
+        name = str(raw).strip()
+        if name and name not in _SELECTIVE_DOMAIN_EXCLUDE:
+            out.add(name)
+    return frozenset(out)
+
+
 _COMMAND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("画", "绘制", "抽卡", "来张", "画一张", "画个"), "draw"),
     (("忘掉", "清空", "clear", "忘了吧"), "llm_chat"),
@@ -96,7 +109,7 @@ def domains_from_registered_tool_hints(user_text: str) -> frozenset[str]:
         if not hints:
             continue
         if any(_text_has_hint(text, hint) for hint in hints):
-            domains.update(str(d).strip() for d in spec.domains if str(d).strip())
+            domains.update(selective_domains(frozenset(str(d).strip() for d in spec.domains if str(d).strip())))
     return frozenset(domains)
 
 
@@ -131,4 +144,4 @@ def infer_tool_domains(user_text: str) -> frozenset[str]:
         if any(hint in text for hint in hints):
             domains.add(domain)
     domains.update(domains_from_registered_tool_hints(user_text))
-    return frozenset(domains)
+    return selective_domains(domains)

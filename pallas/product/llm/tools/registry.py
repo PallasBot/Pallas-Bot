@@ -148,6 +148,14 @@ def normalize_tool_result(raw: Any, *, spec: LlmToolSpec | None = None) -> dict[
         result = raw.get("result")
         if result is not None and not isinstance(result, dict):
             result = {"value": result}
+        elif result is None:
+            # 兼容旧 handler：ok 与细节平铺在顶层时，收拢进 result 供模型阅读
+            extras = {
+                key: value
+                for key, value in raw.items()
+                if key not in {"ok", "error", "result", "source", "audit"}
+            }
+            result = extras or None
         error = str(raw.get("error") or "")
     elif isinstance(raw, dict):
         ok = True
