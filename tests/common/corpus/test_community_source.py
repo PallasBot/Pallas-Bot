@@ -15,6 +15,9 @@ def open_remote_corpus_budget(monkeypatch):
     class _OpenBudget:
         skipped = False
 
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
         async def __aenter__(self):
             return self
 
@@ -22,13 +25,20 @@ def open_remote_corpus_budget(monkeypatch):
             return None
 
     clear_remote_corpus_budget_state()
+    budgets: list[_OpenBudget] = []
+
+    def _factory(**kwargs):
+        budget = _OpenBudget(**kwargs)
+        budgets.append(budget)
+        return budget
+
     monkeypatch.setattr(
         "pallas.product.corpus.remote_budget.RemoteCorpusBudget",
-        lambda **kwargs: _OpenBudget(),
+        _factory,
     )
     mod._shared_client = None
     mod._shared_client_timeout = None
-    yield
+    yield budgets
     mod._shared_client = None
     mod._shared_client_timeout = None
     clear_remote_corpus_budget_state()
@@ -93,3 +103,25 @@ async def test_find_by_keywords_all_bases_fail_raises():
     with patch.object(httpx.AsyncClient, "get", fake_get):
         with pytest.raises(httpx.ConnectError):
             await repo.find_by_keywords("test")
+
+
+@pytest.mark.asyncio
+async def test_contribute_waits_for_remote_budget_slot(open_remote_corpus_budget):
+    async def fake_post(self, url, **kwargs):
+        mock = MagicMock()
+        mock.status_code = 200
+        mock.text = ""
+        return mock
+
+    repo = RemoteCorpusRepository(api_base=PRIMARY_CORPUS_API_BASE, token="pc_test")
+    with patch.object(httpx.AsyncClient, "post", fake_post):
+        await repo.upsert_answer(
+            keywords="kw",
+            group_id=0,
+            answer_keywords="ans",
+            answer_time=1,
+            message="hi",
+            append_on_existing=True,
+        )
+    assert open_remote_corpus_budget[-1].kwargs.get("wait") is True
+    assert open_remote_corpus_budget[-1].kwargs.get("hot_path") is False
