@@ -311,12 +311,15 @@ async def database_health_view() -> dict[str, Any]:
     from pallas.core.foundation.db.db_health import probe_runtime_db_health
     from pallas.core.foundation.db.low_priority_writer import low_priority_writers_snapshot
     from pallas.core.foundation.db.schema_observability import schema_observability_snapshot
+    from pallas.core.foundation.db.schema_registry import list_pg_schema_ensure_steps
 
     snap = await probe_runtime_db_health()
     data = snap.as_dict()
     data["backend"] = get_db_backend()
     data["updated_at_unix"] = snap.updated_at
-    data["schema"] = schema_observability_snapshot()
+    schema = schema_observability_snapshot()
+    schema["registered_steps"] = list_pg_schema_ensure_steps()
+    data["schema"] = schema
     data["low_priority_writers"] = low_priority_writers_snapshot()
     return data
 

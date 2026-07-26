@@ -4339,6 +4339,17 @@ class _DbTableRowUpsertBody(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class _DbMigrateMongoPgBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    dry_run: bool = False
+    restart_cursor: bool = False
+    switch_backend: bool = True
+    try_hot_rebind: bool = True
+    batch_size: int = Field(default=1000, ge=100, le=5000)
+    tables: list[str] = Field(default_factory=list, max_length=32)
+
+
 class _AiExtensionConfigBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -8059,6 +8070,58 @@ def register_extended_api(
             logger.exception("Pallas-Bot 控制台: 表分页读取失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/db/migrate/mongo-to-pg/info", include_in_schema=True)
+    async def _db_migrate_mongo_pg_info() -> JSONResponse:
+        from pallas.core.foundation.db.migrate_jobs import migrate_wizard_info
+
+        try:
+            data = migrate_wizard_info()
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 迁移向导信息失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/db/migrate/mongo-to-pg", include_in_schema=True)
+    async def _db_migrate_mongo_pg_start(
+        body: _DbMigrateMongoPgBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        _check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.core.foundation.db.migrate_jobs import migrate_job_status_payload, start_migrate_job
+
+        try:
+            job = start_migrate_job(
+                dry_run=body.dry_run,
+                restart_cursor=body.restart_cursor,
+                switch_backend=body.switch_backend,
+                try_hot_rebind=body.try_hot_rebind,
+                batch_size=body.batch_size,
+                tables=list(body.tables),
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 启动 Mongo→PG 迁移失败")
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": migrate_job_status_payload(job)})
+
+    @router.get(f"{x}/db/migrate/mongo-to-pg/jobs/active", include_in_schema=True)
+    async def _db_migrate_mongo_pg_active() -> JSONResponse:
+        from pallas.core.foundation.db.migrate_jobs import active_migrate_job, migrate_job_status_payload
+
+        job = active_migrate_job()
+        return JSONResponse({"ok": True, "data": migrate_job_status_payload(job) if job else None})
+
+    @router.get(f"{x}/db/migrate/mongo-to-pg/jobs/{{job_id}}", include_in_schema=True)
+    async def _db_migrate_mongo_pg_job(job_id: str) -> JSONResponse:
+        from pallas.core.foundation.db.migrate_jobs import get_migrate_job, migrate_job_status_payload
+
+        job = get_migrate_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="未找到迁移任务")
+        return JSONResponse({"ok": True, "data": migrate_job_status_payload(job)})
 
     @router.get(f"{x}/db/backend", include_in_schema=True)
     async def _db_backend_get() -> JSONResponse:

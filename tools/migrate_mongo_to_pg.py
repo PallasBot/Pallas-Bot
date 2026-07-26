@@ -74,7 +74,42 @@ except ImportError:
                 k, _, v = line.partition("=")
                 os.environ.setdefault(k.strip(), v.strip())
 
-ALL_TABLES = ["context", "message", "blacklist", "botconfig", "groupconfig", "userconfig", "imagecache"]
+ALL_TABLES = [
+    "context",
+    "message",
+    "blacklist",
+    "botconfig",
+    "groupconfig",
+    "userconfig",
+    "imagecache",
+    "adminmembers",
+    "aclrules",
+]
+
+# Mongo collection name → logical table for verify
+_MONGO_COLLECTION = {
+    "context": "context",
+    "message": "message",
+    "blacklist": "blacklist",
+    "botconfig": "config",
+    "groupconfig": "group_config",
+    "userconfig": "user_config",
+    "imagecache": "image_cache",
+    "adminmembers": "admin_members",
+    "aclrules": "acl_rules",
+}
+
+_PG_COUNT_TABLE = {
+    "context": "context",
+    "message": "message",
+    "blacklist": "blacklist",
+    "botconfig": "bot_config",
+    "groupconfig": "group_config",
+    "userconfig": "user_config",
+    "imagecache": "image_cache",
+    "adminmembers": "admin_members",
+    "aclrules": "acl_rules",
+}
 
 # asyncpg 单语句参数上限 32767
 _ANS_BATCH = 5000  # ContextAnswerRow    6 列（含 keywords_hash）
@@ -870,9 +905,165 @@ async def _migrate_image_cache(db, sf, ICRow, ins, batch_size, dry_run) -> _Tabl
     return stats
 
 
+async def _migrate_admin_members(db, sf, AdminRow, ins, batch_size: int, dry_run: bool) -> _TableStats:
+    col = db["admin_members"]
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[AdminMembers] total={stats.total}")
+    last_id_str: str | None = None
+    if not dry_run:
+        async with sf() as session:
+            last_id_str = await _get_state(session, "adminmembers")
+    async for batch in _stream_batches(col, last_id_str, batch_size):
+        rows: list[dict[str, Any]] = []
+        for d in batch:
+            try:
+                rows.append({
+                    "scope": _as_str(d.get("scope"), "bot"),
+                    "bot_id": _as_int(d["bot_id"]) if d.get("bot_id") is not None else None,
+                    "user_id": _as_int(d.get("user_id")),
+                    "note": _as_str(d.get("note")) or None,
+                    "created_at": _as_int(d.get("created_at")),
+                    "updated_at": _as_int(d.get("updated_at")),
+                })
+            except Exception as e:  # noqa: BLE001
+                stats.warn(f"adminmembers parse failed _id={d.get('_id')}: {e}")
+        if rows and not dry_run:
+            rows = _dedupe_by_key(rows, ("scope", "bot_id", "user_id"))
+            async with sf() as session:
+                stmt = ins(AdminRow).values(rows)
+                await session.execute(
+                    stmt.on_conflict_do_update(
+                        constraint="uq_admin_members_scope_bot_user",
+                        set_={
+                            "note": stmt.excluded.note,
+                            "updated_at": stmt.excluded.updated_at,
+                        },
+                    )
+                )
+                await _set_state(session, "adminmembers", str(batch[-1]["_id"]))
+                await session.commit()
+        stats.migrated += len(batch)
+    print(f"  [AdminMembers] {stats.migrated}/{stats.total} done (failed={stats.failed})")
+    return stats
+
+
+async def _migrate_acl_rules(db, sf, AclRow, ins, batch_size: int, dry_run: bool) -> _TableStats:
+    col = db["acl_rules"]
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[AclRules] total={stats.total}")
+    last_id_str: str | None = None
+    if not dry_run:
+        async with sf() as session:
+            last_id_str = await _get_state(session, "aclrules")
+    async for batch in _stream_batches(col, last_id_str, batch_size):
+        rows: list[dict[str, Any]] = []
+        for d in batch:
+            try:
+                subj = d.get("subject")
+                rows.append({
+                    "role": _as_str(d.get("role")),
+                    "subject": _as_str(subj) if subj is not None else None,
+                    "action": _as_str(d.get("action")),
+                    "target_scope": _as_str(d.get("target_scope")),
+                    "target": _as_str(d.get("target")),
+                    "effect": _as_str(d.get("effect")),
+                    "priority": _as_int(d.get("priority"), 100),
+                    "source": _as_str(d.get("source"), "user"),
+                    "created_at": _as_int(d.get("created_at")),
+                    "updated_at": _as_int(d.get("updated_at")),
+                })
+            except Exception as e:  # noqa: BLE001
+                stats.warn(f"aclrules parse failed _id={d.get('_id')}: {e}")
+        if rows and not dry_run:
+            rows = _dedupe_by_key(rows, ("role", "subject", "action", "target_scope", "target"))
+            async with sf() as session:
+                stmt = ins(AclRow).values(rows)
+                await session.execute(
+                    stmt.on_conflict_do_update(
+                        constraint="uq_acl_rules_signature",
+                        set_={
+                            "effect": stmt.excluded.effect,
+                            "priority": stmt.excluded.priority,
+                            "source": stmt.excluded.source,
+                            "updated_at": stmt.excluded.updated_at,
+                        },
+                    )
+                )
+                await _set_state(session, "aclrules", str(batch[-1]["_id"]))
+                await session.commit()
+        stats.migrated += len(batch)
+    print(f"  [AclRules] {stats.migrated}/{stats.total} done (failed={stats.failed})")
+    return stats
+
+
 # ---------------------------------------------------------------------------
 # 主入口
 # ---------------------------------------------------------------------------
+
+
+def apply_migrate_env_from_repo() -> None:
+    """优先合并 pallas.toml / webui.json 到环境变量（CLI 与控制台共用）。"""
+    try:
+        from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
+
+        apply_repo_settings_to_environ()
+    except Exception as e:  # noqa: BLE001
+        print(f"[env] 合并仓库配置失败，继续使用现有环境变量: {e}")
+
+
+async def verify_migration_counts(
+    tables: set[str],
+    *,
+    mongo_db: str | None = None,
+    pg_db: str | None = None,
+) -> dict[str, Any]:
+    """对比源 Mongo 与目标 PG 行数（message 允许 PG ≥ Mongo，因重启可能重复插入）。"""
+    if pg_db:
+        os.environ["PG_DB"] = pg_db
+    if mongo_db:
+        os.environ["MONGO_DB"] = mongo_db
+
+    from pymongo import AsyncMongoClient
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    mongo_client = AsyncMongoClient(_mongo_dsn(), unicode_decode_error_handler="ignore")
+    mdb = mongo_client[_mongo_db_name()]
+    engine = create_async_engine(_pg_dsn(), echo=False)
+    rows: list[dict[str, Any]] = []
+    ok_all = True
+    try:
+        for logical in ALL_TABLES:
+            if logical not in tables:
+                continue
+            coll = _MONGO_COLLECTION[logical]
+            pg_table = _PG_COUNT_TABLE[logical]
+            mongo_count = int(await mdb[coll].estimated_document_count())
+            async with engine.connect() as conn:
+                pg_count = int(
+                    (await conn.execute(text(f'SELECT count(*) FROM "{pg_table}"'))).scalar_one()  # noqa: S608
+                )
+            if logical == "message":
+                matched = pg_count >= mongo_count
+                note = "message 允许 PG≥Mongo（append-only）"
+            else:
+                matched = pg_count == mongo_count
+                note = ""
+            if not matched:
+                ok_all = False
+            rows.append({
+                "table": logical,
+                "mongo": mongo_count,
+                "postgres": pg_count,
+                "ok": matched,
+                "note": note,
+            })
+    finally:
+        await engine.dispose()
+        await mongo_client.close()
+    return {"ok": ok_all, "tables": rows}
 
 
 async def migrate(
@@ -882,7 +1073,14 @@ async def migrate(
     pg_db: str | None,
     mongo_db: str | None,
     restart: bool,
-) -> None:
+    *,
+    progress: list[str] | None = None,
+) -> dict[str, Any]:
+    def _log(msg: str) -> None:
+        print(msg)
+        if progress is not None:
+            progress.append(msg)
+
     if pg_db:
         os.environ["PG_DB"] = pg_db
     if mongo_db:
@@ -891,14 +1089,14 @@ async def migrate(
     try:
         from sqlalchemy.ext.asyncio import create_async_engine
     except ImportError:
-        print("❌ 缺少 SQLAlchemy/asyncpg，请执行：uv sync")
-        sys.exit(1)
+        raise RuntimeError("缺少 SQLAlchemy/asyncpg，请执行：uv sync") from None
 
     from pymongo import AsyncMongoClient
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
     from pallas.core.foundation.db.repository_pg import (
+        AdminMemberRow,
         BlackListRow,
         BotConfigRow,
         ContextAnswerMessageRow,
@@ -908,15 +1106,16 @@ async def migrate(
         GroupConfigRow,
         ImageCacheRow,
         MessageRow,
+        PallasACLRow,
         UserConfigRow,
         init_pg,
     )
 
-    print(f"[Mongo] {_mongo_dsn()} db={_mongo_db_name()}")
+    _log(f"[Mongo] {_mongo_dsn()} db={_mongo_db_name()}")
     mongo_client = AsyncMongoClient(_mongo_dsn(), unicode_decode_error_handler="ignore")
     db = mongo_client[_mongo_db_name()]
 
-    print(f"[PG] {_pg_dsn()}")
+    _log(f"[PG] {_pg_dsn()}")
     if not dry_run:
         await _ensure_db()
 
@@ -954,18 +1153,38 @@ async def migrate(
     if "imagecache" in tables:
         s = await _migrate_image_cache(db, sf, ImageCacheRow, pg_insert, batch_size, dry_run)
         summaries.append(("imagecache", s))
+    if "adminmembers" in tables:
+        s = await _migrate_admin_members(db, sf, AdminMemberRow, pg_insert, batch_size, dry_run)
+        summaries.append(("adminmembers", s))
+    if "aclrules" in tables:
+        s = await _migrate_acl_rules(db, sf, PallasACLRow, pg_insert, batch_size, dry_run)
+        summaries.append(("aclrules", s))
 
     await engine.dispose()
+    await mongo_client.close()
 
-    # 汇总
-    print("\n========== 迁移摘要 ==========")
+    _log("\n========== 迁移摘要 ==========")
     total_failed = 0
+    table_payload: list[dict[str, Any]] = []
     for name, s in summaries:
-        print(f"  {name:<12} total={s.total:<10} migrated={s.migrated:<10} failed={s.failed:<6}")
+        _log(f"  {name:<12} total={s.total:<10} migrated={s.migrated:<10} failed={s.failed:<6}")
         total_failed += s.failed
+        table_payload.append({
+            "table": name,
+            "total": s.total,
+            "migrated": s.migrated,
+            "failed": s.failed,
+            "warnings": list(s.warnings[:10]),
+        })
         for w in s.warnings[:5]:
-            print(f"      · {w}")
-    print(f"========== 完成（total_failed={total_failed}） ==========")
+            _log(f"      · {w}")
+    _log(f"========== 完成（total_failed={total_failed}） ==========")
+    return {
+        "ok": total_failed == 0,
+        "dry_run": dry_run,
+        "total_failed": total_failed,
+        "tables": table_payload,
+    }
 
 
 if __name__ == "__main__":
@@ -984,10 +1203,23 @@ if __name__ == "__main__":
     parser.add_argument("--restart", action="store_true", help="清空 pallas_migration_state 从头迁移")
     args = parser.parse_args()
 
+    apply_migrate_env_from_repo()
     selected = set(args.tables) if args.tables else set(ALL_TABLES)
     if args.dry_run:
-        print("⚠️  dry-run 模式，不会写入 PostgreSQL")
+        print("dry-run 模式，不会写入 PostgreSQL")
     if args.tables:
         print(f"仅迁移：{', '.join(t for t in ALL_TABLES if t in selected)}")
 
-    asyncio.run(migrate(args.batch, args.dry_run, selected, args.pg_db, args.mongo_db, args.restart))
+    result = asyncio.run(migrate(args.batch, args.dry_run, selected, args.pg_db, args.mongo_db, args.restart))
+    if not args.dry_run and result.get("ok"):
+        verify = asyncio.run(verify_migration_counts(selected, mongo_db=args.mongo_db, pg_db=args.pg_db))
+        print("\n========== 行数校验 ==========")
+        for row in verify.get("tables") or []:
+            mark = "ok" if row.get("ok") else "DIFF"
+            print(
+                f"  [{mark}] {row['table']:<14} mongo={row['mongo']:<10} pg={row['postgres']:<10} {row.get('note') or ''}"
+            )
+        if not verify.get("ok"):
+            sys.exit(2)
+    if not result.get("ok"):
+        sys.exit(1)

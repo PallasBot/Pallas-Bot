@@ -552,3 +552,9 @@ async def ensure_runtime_storage_ready(backend: str | None = None) -> bool:
             return False
         await init_db(name)
         return True
+
+
+def reset_mongodb_initialized_flag() -> None:
+    """热切换前允许重新 init Mongo。"""
+    global _mongodb_initialized
+    _mongodb_initialized = False
