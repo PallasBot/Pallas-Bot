@@ -1,5 +1,50 @@
 # Changelog
 
+## [4.1.4] - 2026-07-26
+
+本版相对 4.1.3：数据库韧性与 Mongo→PG 迁移、口令工具多域召回与选型调试、同伴身份与输出闸、LLM 日级观测计数；控制台配套健康/后端切换与异步更新。捆绑 WebUI **v0.7.9**（迁移向导、可搜索 Combobox、工具选型预览等）。
+
+### Added
+
+#### 数据库
+
+- 健康状态与热路径非关键门禁；低优先级写队列与 schema 步骤可观测
+- 版本化 schema 注册；Mongo→PostgreSQL 控制台迁移任务（含热重绑尝试）
+- 控制台：数据库健康与表白名单只读 API；后端切换与连通性探测
+
+#### 口令工具与闲聊（LLM）
+
+- 多域结构召回与工具选型打分；`tools.find` 全量回退检索
+- 工具选型预览与 hints / 描述覆盖 API（控制台可调试口语选型）
+- 插件工具声明式触发说法与口语召回；点歌等域收窄，避免 command 全家桶
+- 同伴牛牛身份注入；输出旁白 / 填料闸
+- `reply_gate` / 发言感知 / 选择性回复 / 工具链路日级观测计数
+
+#### 控制台与插件
+
+- 「应用 Bot 更新」改为异步 job，并上报真实进度百分比
+- 插件配置 `ui_group` 分组（如 repeater / webui / help）
+
+#### 捆绑控制台（WebUI v0.7.9）
+
+- Mongo→PostgreSQL 迁移向导；数据库健康摘要与表白名单只读浏览
+- Bot / 长列表选择改为可搜索 Combobox（≥8 显示搜索）；AI 观测群可搜可选
+- 对话工具页：口语选型预览与 hints / 描述覆盖
+- 工具条与配置弹窗体验（右钉操作、存储视图切换、群好友配置删除等）
+
+### Fixed
+
+- DeepSeek thinking 默认关闭，并正确回传 `reasoning_content`
+- 口令工具回传歌名等结果字段
+- 动态加载迁移脚本时先注册 `sys.modules`，避免重复导入失败
+- SPA HTML 入口禁用长期缓存，降低发版后仍引用旧 hash 资源的概率
+- 精简数据库后端探测与保存文案
+
+### Changed
+
+- 同步控制台 OpenAPI（迁移任务、工具预览与覆盖、数据库健康等）
+- 发行捆绑控制台默认取 WebUI 最新 tag（本版 **v0.7.9**）
+
 ## [4.1.3] - 2026-07-25
 
 ### Changed
@@ -166,6 +211,8 @@
 
 见 [4.0 启动说明](docs/guide/4.0-start.md) 与 [4.0 迁移指南](docs/guide/4.0-migration.md)。
 
+[4.1.4]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.3...v4.1.4
+[4.1.3]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.2...v4.1.3
 [4.1.2]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.1...v4.1.2
 [4.1.1]: https://github.com/PallasBot/Pallas-Bot/compare/v4.1.0...v4.1.1
 [4.1.0]: https://github.com/PallasBot/Pallas-Bot/compare/v4.0.3...v4.1.0
