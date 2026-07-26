@@ -503,20 +503,32 @@ async def handle_llm_chat(bot: Bot, event: Event):
     request_id = str(ULID())
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
     blocked_openers = repeated_assistant_openers(recent_turns)
+    focus_text = plain or msg
+    recent_plain = [str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]]
+    has_multi_party = (
+        isinstance(event, GroupMessageEvent)
+        and len({
+            int(getattr(turn, "user_id", 0) or 0) for turn in recent_turns[-6:] if int(getattr(turn, "user_id", 0) or 0)
+        })
+        >= 2
+    )
+    behavior_scene = classify_behavior_scene(
+        user_text=focus_text,
+        recent_texts=recent_plain,
+        has_multi_party_overlap=has_multi_party,
+    )
     expression_suffix = await build_llm_chat_expression_suffix(
         group_id,
-        plain or msg,
+        focus_text,
         bot_id=int(bot.self_id),
         blocked_openers=blocked_openers,
     )
-    if expression_suffix:
-        system_prompt = f"{system_prompt.rstrip()}\n{expression_suffix}"
     from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
 
     system_prompt = enrich_system_with_situational_rules(
         system_prompt,
-        focus_text=plain or msg,
-        recent_texts=[str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]],
+        focus_text=focus_text,
+        recent_texts=recent_plain,
     )
     variation_hint = build_recent_reply_variation_hint(recent_turns)
     affect_system_block = ""
@@ -536,42 +548,23 @@ async def handle_llm_chat(bot: Bot, event: Event):
         affect_hint = build_variation_hint_from_contract(affect_contract)
         if affect_hint and affect_hint not in variation_hint:
             variation_hint = f"{variation_hint}\n{affect_hint}".strip() if variation_hint else affect_hint
-    if affect_system_block:
-        system_prompt = f"{system_prompt.rstrip()}\n\n{affect_system_block}"
     dynamic_expression_hint = await build_llm_chat_dynamic_expression_hint(
         group_id,
-        plain or msg,
+        focus_text,
         bot_id=int(bot.self_id),
         current_user_id=user_id,
     )
-    if dynamic_expression_hint:
-        system_prompt = f"{system_prompt.rstrip()}{dynamic_expression_hint}"
-    if variation_hint:
-        system_prompt = f"{system_prompt.rstrip()}\n\n{variation_hint}"
-    behavior_scene = classify_behavior_scene(
-        user_text=plain or msg,
-        recent_texts=[str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]],
-        has_multi_party_overlap=isinstance(event, GroupMessageEvent)
-        and len({
-            int(getattr(turn, "user_id", 0) or 0) for turn in recent_turns[-6:] if int(getattr(turn, "user_id", 0) or 0)
-        })
-        >= 2,
-    )
     conversation_scene = behavior_scene_to_conversation_scene(behavior_scene)
     direct_ctx = ConversationContext.for_direct_chat(
-        plain_text=plain or msg,
+        plain_text=focus_text,
         group_id=group_id,
         bot_id=int(bot.self_id),
         user_id=user_id,
         scene=conversation_scene,
-        recent_texts=[str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]],
-        has_multi_party_overlap=isinstance(event, GroupMessageEvent)
-        and len({
-            int(getattr(turn, "user_id", 0) or 0) for turn in recent_turns[-6:] if int(getattr(turn, "user_id", 0) or 0)
-        })
-        >= 2,
+        recent_texts=recent_plain,
+        has_multi_party_overlap=has_multi_party,
     )
-    tool_meta = assemble_tool_bundle(task="llm_chat", user_text=plain or msg)
+    tool_meta = assemble_tool_bundle(task="llm_chat", user_text=focus_text)
     direct_decision = decide_direct_chat_action(
         direct_ctx,
         feature_level=resolve_conversation_feature_level(llm_cfg),
@@ -594,6 +587,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
     behavior_actions = [item.action for item in behavior_patterns]
     from pallas.product.llm.kernel.models import ConversationMode
     from pallas.product.llm.scene_style import format_scene_style_block, resolve_scene_style_constraints
+    from pallas.product.llm.turn_style_layers import (
+        build_probabilistic_alt_style_hint,
+        build_turn_behavior_block,
+        build_turn_wording_user_hints,
+    )
+    from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_lines
 
     scene_constraints = resolve_scene_style_constraints(
         behavior_scene,
@@ -601,36 +600,54 @@ async def handle_llm_chat(bot: Bot, event: Event):
         direct_chat=True,
     )
     scene_style_block = format_scene_style_block(scene_constraints)
-    if scene_style_block:
-        system_prompt = f"{system_prompt.rstrip()}\n{scene_style_block}"
+    behavior_hint = ""
+    group_behavior_hint = ""
+    feedback_hint = ""
     if can_read_behavioral_learning(llm_cfg):
         group_behavior_hint = default_group_chat_behavior_hint()
-        if group_behavior_hint:
-            system_prompt = f"{system_prompt.rstrip()}\n{group_behavior_hint}"
         behavior_hint = build_behavior_hint_text(scene=behavior_scene, actions=behavior_actions)
-        if behavior_hint:
-            system_prompt = f"{system_prompt.rstrip()}\n{behavior_hint}"
         if group_id is not None:
             feedback_hint = await asyncio.to_thread(
                 build_group_feedback_chat_hint,
                 group_id=int(group_id),
-                user_text=plain or msg,
+                user_text=focus_text,
             )
-            if feedback_hint:
-                system_prompt = f"{system_prompt.rstrip()}{feedback_hint}"
-    else:
-        behavior_hint = ""
+    behavior_block = build_turn_behavior_block(
+        group_behavior_hint,
+        behavior_hint,
+        scene_style_block,
+    )
+    if behavior_block:
+        system_prompt = f"{system_prompt.rstrip()}\n\n{behavior_block}"
+
+    alt_style_hint = build_probabilistic_alt_style_hint()
+    catchphrase_lines = compile_catchphrase_prompt_lines(
+        int(bot.self_id),
+        user_text=focus_text,
+        scene=str(behavior_scene),
+        limit=2,
+    )
+    catchphrase_hint = "\n".join(catchphrase_lines) if catchphrase_lines else ""
     ending_hint = build_llm_chat_ending_hint(recent_turns)
-    if ending_hint:
-        system_prompt = f"{system_prompt.rstrip()}{ending_hint}"
     corpus_ending_hint = await build_llm_chat_corpus_ending_hint(
         group_id,
-        plain or msg,
+        focus_text,
         bot_id=int(bot.self_id),
         current_user_id=user_id,
     )
-    if corpus_ending_hint:
-        system_prompt = f"{system_prompt.rstrip()}{corpus_ending_hint}"
+    # 口癖、换风格等走临时 user 提示；塑形块仍放 system
+    if affect_system_block:
+        system_prompt = f"{system_prompt.rstrip()}\n\n{affect_system_block}"
+    style_user_hints = build_turn_wording_user_hints(
+        expression_suffix,
+        dynamic_expression_hint,
+        variation_hint,
+        feedback_hint,
+        ending_hint,
+        corpus_ending_hint,
+        catchphrase_hint,
+        alt_style_hint,
+    )
     last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
     recent_reply_texts: list[str] = []
     if group_id is not None:
@@ -661,7 +678,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             bot_self_id=int(bot.self_id),
             mention_names=self_aliases,
         )
-        or (plain or msg).strip()
+        or focus_text.strip()
     )
     from pallas.product.llm.tools.command_invoke import serialize_event_source_segments
 
@@ -690,6 +707,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "behavior_pattern_ids": [item.pattern_id for item in behavior_patterns],
             "behavior_actions": [str(item.action) for item in behavior_patterns],
             "behavior_hint": behavior_hint,
+            "style_user_hints": style_user_hints[:8],
+            "alt_style_applied": bool(alt_style_hint),
             "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
@@ -712,6 +731,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             temperature=temperature,
             knowledge_retrieval_trace=knowledge_retrieval_trace,
             hybrid_retrieval_trace=hybrid_retrieval_trace,
+            style_user_hints=style_user_hints,
             llm_rewrite_metadata={
                 "task": "llm_chat",
                 "bot_id": int(bot.self_id),
@@ -722,6 +742,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 "dynamic_expression_hint": dynamic_expression_hint,
                 "preserve_colloquial_rewrite": bool(affect_system_block or dynamic_expression_hint),
                 "command_source_segments": command_source_segments,
+                "alt_style_applied": bool(alt_style_hint),
             },
             tool_metadata=tool_meta,
         ),

@@ -84,7 +84,7 @@ def test_catchphrase_promotion_requires_evidence(tmp_path, monkeypatch) -> None:
     promoted = promote_catchphrase(third.entry_id)
     assert promoted is not None
     assert promoted.status == "active"
-    lines = compile_catchphrase_prompt_lines(1001)
+    lines = compile_catchphrase_prompt_lines(1001, user_text="那很牛了啊", scene="smalltalk", limit=2)
     assert any("那很牛了" in line for line in lines)
     assert any("当「" in line and "可以自然用" in line for line in lines)
     assert lines[0].startswith("【表达习惯参考")

@@ -57,6 +57,10 @@ def _occasion_for(saying: str) -> str:
         return "自称梗"
     if _PARTICLE_TAIL_RE.match(saying):
         return "语气尾巴"
+    if any(token in saying for token in ("笑", "梗", "典", "蚌", "乐")):
+        return "接梗玩笑"
+    if any(token in saying for token in ("咋了", "怎么了", "收到")):
+        return "日常接话"
     return "口头禅"
 
 
@@ -137,7 +141,8 @@ _EXTRACT_SYSTEM = (
     "口癖是短、可反复自然带上的语气习惯或自称梗（如「我chovy」「那很牛了」「好耶」），"
     "不是完整接话、不是能力介绍、不是多逗号并列，"
     "也不是万能软答应（行行行/好好好/还行吧/行啊/嗯？）。"
-    '只输出 JSON：{"items":[{"saying":"...","occasion":"自称梗|口头禅|语气尾巴"}]}'
+    "occasion 要写真实使用场合（自称梗|接梗玩笑|日常接话|顶嘴吐槽|安抚情绪|语气尾巴），不要一律口头禅。"
+    '只输出 JSON：{"items":[{"saying":"...","occasion":"..."}]}'
     '最多 3 条；没有则 {"items":[]}。'
 )
 
