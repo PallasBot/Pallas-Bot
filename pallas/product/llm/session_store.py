@@ -323,19 +323,6 @@ async def build_llm_chat_messages(
     return messages
 
 
-def format_legacy_transcript(messages: list[ChatCompletionMessage]) -> str:
-    parts: list[str] = []
-    for item in messages:
-        text = item.content.strip()
-        if not text:
-            continue
-        if item.role == "assistant":
-            parts.append(f"帕拉斯：{text}")
-        else:
-            parts.append(text)
-    return "\n\n".join(parts)
-
-
 async def clear_llm_messages(bot_id: int, group_id: int | None) -> int:
     if not is_llm_session_store_available():
         return 0
