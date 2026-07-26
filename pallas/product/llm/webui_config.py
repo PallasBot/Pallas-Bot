@@ -595,9 +595,9 @@ class LlmWebuiConfig(BaseModel):
             "max_retries": 1,
         },
         description=field_help(
-            "要不要检查回复是否人设崩了（泄提示词、舞台旁白、自称模型等）",
-            "JSON 对象；默认 enabled=false。要更严人设时把 enabled 设为 true，其余保持默认即可",
-            "开启后违规最多重说一次，仍不行则按策略回落；会多一次模型请求",
+            "要不要检查回复是否人设崩了（泄提示词、舞台旁白、自称模型、重复垫词）",
+            "默认关。要更严人设时再开；表单里可选拦截力度、拦下后先重说还是直接兜底",
+            "开启后违规最多再生成一次，仍不行则用安全回复；可能多一次模型费用。工具已执行时不会重跑工具",
         ),
     )
     llm_reply_postprocess_enabled: bool = Field(
