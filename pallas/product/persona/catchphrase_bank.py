@@ -168,11 +168,38 @@ def list_catchphrases(bot_id: int | None = None, *, status: str | None = None) -
     ]
 
 
+def reject_weak_filler_catchphrases(bot_id: int | None = None) -> int:
+    """把已入库的万能软答应口癖标为 rejected，切断正反馈。"""
+    from pallas.product.persona.soft_agree_fillers import is_weak_catchphrase_saying
+
+    rows = _load()
+    changed = 0
+    now = int(time.time())
+    for index, row in enumerate(rows):
+        if bot_id is not None and row.bot_id != int(bot_id):
+            continue
+        if row.status == "rejected":
+            continue
+        if not is_weak_catchphrase_saying(row.saying):
+            continue
+        rows[index] = row.model_copy(update={"status": "rejected", "updated_at": now})
+        changed += 1
+    if changed:
+        _save(rows)
+    return changed
+
+
 def compile_catchphrase_prompt_lines(bot_id: int) -> list[str]:
+    """口癖按场合软参考注入；勿写成每句必带的模板起手。"""
     lines: list[str] = []
     for row in list_catchphrases(bot_id, status="active"):
         if not is_catchphrase_habit(row.saying):
             continue
-        occasion = f"（{row.occasion}）" if row.occasion else ""
-        lines.append(f"可自然带上的短口癖：{row.saying}{occasion}")
-    return lines
+        occasion = clean_catchphrase_text(row.occasion) or "日常接话"
+        lines.append(f"当「{occasion}」时，可以自然用「{row.saying}」来表达。")
+    if not lines:
+        return []
+    return [
+        "【表达习惯参考，请视情况自然使用；不要每句都带，禁止行行行/好好好/还行吧起手】",
+        *lines,
+    ]
