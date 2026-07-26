@@ -19,6 +19,16 @@ if TYPE_CHECKING:
 _PLUGIN_TOOL_NAMES: set[str] = set()
 
 
+def command_dispatch_result_summary(command_text: str) -> str:
+    """口令派发成功后写入 tool result.summary，约束后续确认语气。"""
+    text = str(command_text or "").strip() or "（空口令）"
+    return (
+        f"已执行「{text}」。若需开口：用极短口语 ack 即可，也可不说话（PASS/空）；"
+        "禁止「已派发/帮你找找/正在生成」等系统腔；禁止编造未发生的结果；"
+        "勿把「随机」「随便」等占位词当歌名念出来；有明确歌名或玩法口令时才可点到。"
+    )
+
+
 def clear_plugin_command_tools() -> None:
     _PLUGIN_TOOL_NAMES.clear()
 
@@ -66,9 +76,7 @@ def build_command_tool_spec(
                     "arguments": {key: str(value) for key, value in args.items()},
                 },
             }
-        summary = (
-            f"已派发群口令「{command_text}」。向用户确认时必须沿用该口令中的歌名/参数原文，禁止改成其它曲目或编造结果。"
-        )
+        summary = command_dispatch_result_summary(command_text)
         return {
             "ok": True,
             "result": {

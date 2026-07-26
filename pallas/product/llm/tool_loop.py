@@ -125,7 +125,7 @@ def summarize_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         if summary:
             preview = summary
         elif command_text:
-            preview = f"已派发群口令「{command_text}」"
+            preview = f"已执行「{command_text}」"
         else:
             preview = json.dumps(payload, ensure_ascii=False)
     elif payload is None:
@@ -272,7 +272,10 @@ async def complete_with_tool_loop(
     if schema_names and working and str(working[0].get("role") or "") == "system":
         hint = (
             "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，不要只口头答应或假装已执行。"
-            "工具返回后，确认文案必须沿用 result.summary / command_text 中的歌名与参数，禁止改成其它曲目或编造结果。"
+            "工具成功后：优先极短自然 ack（如「来了」「房开了」），也可不说话（PASS/空）；"
+            "禁止「已派发指令/帮你找找/正在生成」等模板，禁止编造结果；"
+            "有明确歌名或玩法口令时可点到，勿把「随机」「随便」当歌名念。"
+            "查询类工具用返回结果作答。"
         )
         sys_content = str(working[0].get("content") or "")
         if "【动作工具】" not in sys_content:
