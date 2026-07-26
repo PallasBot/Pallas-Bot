@@ -54,6 +54,25 @@ def canonicalize_memory_content(content: str) -> str:
     return text.rstrip("。！？!?；;，,、")
 
 
+def memory_lifecycle_overlay(entry_id: int) -> dict[str, Any]:
+    from pallas.product.llm.memory.ops import memory_lifecycle_overlay as get_overlay
+
+    return get_overlay(entry_id)
+
+
+def apply_memory_lifecycle_overlay(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    updated: list[dict[str, Any]] = []
+    for item in candidates:
+        entry_id = item.get("id")
+        overlay = memory_lifecycle_overlay(int(entry_id)) if entry_id is not None else {}
+        if overlay.get("frozen"):
+            continue
+        result = dict(item)
+        result["score"] = round(float(result.get("score") or 0) * float(overlay.get("weight") or 1.0))
+        updated.append(result)
+    return sorted(updated, key=lambda candidate: float(candidate.get("score") or 0), reverse=True)
+
+
 def memory_entries_semantically_match(left: str, right: str) -> bool:
     lhs = canonicalize_memory_content(left)
     rhs = canonicalize_memory_content(right)
@@ -306,6 +325,7 @@ async def retrieve_memory_hits(
         candidates,
         embedding_model=embedding_model_name(c),
     )
+    scored = apply_memory_lifecycle_overlay(scored)
     dirty = [item for item in scored if item.get("embedding_dirty") and item.get("id") and item.get("embedding")]
     if dirty:
         try:

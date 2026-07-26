@@ -217,6 +217,9 @@ async def retrieve_memory_hits_mongo(
         candidates,
         embedding_model=embedding_model_name(c),
     )
+    from pallas.product.llm.memory.store import apply_memory_lifecycle_overlay
+
+    scored = apply_memory_lifecycle_overlay(scored)
     dirty = [item for item in scored if item.get("embedding_dirty") and item.get("id") and item.get("embedding")]
     if dirty:
         try:
