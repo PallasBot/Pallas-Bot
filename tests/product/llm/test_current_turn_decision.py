@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from pallas.product.llm.current_turn_decision import (
@@ -134,7 +135,12 @@ async def test_enabled_current_turn_decision_uses_task_routing_without_legacy_mo
 
 
 @pytest.mark.asyncio
-async def test_current_turn_decision_retries_configured_task_backup(monkeypatch, tmp_path) -> None:
+@pytest.mark.parametrize("transport_failure", [False, True], ids=["provider_error", "connect_error"])
+async def test_current_turn_decision_retries_configured_task_backup(
+    monkeypatch,
+    tmp_path,
+    transport_failure: bool,
+) -> None:
     from pallas.product.llm.config import LlmConfig
     from pallas.product.llm.provider_client import LlmProviderError
     from pallas.product.llm.providers_store import clear_providers_store_cache, save_providers_document
@@ -179,6 +185,8 @@ async def test_current_turn_decision_retries_configured_task_backup(monkeypatch,
     async def post_provider_chat(*args: object, **kwargs: object) -> dict[str, str]:
         attempted.append((str(kwargs["base_url"]), str(kwargs["model"])))
         if len(attempted) == 1:
+            if transport_failure:
+                raise httpx.ConnectError("primary unavailable")
             raise LlmProviderError("primary unavailable")
         return {"content": '{"action":"PASS"}'}
 
