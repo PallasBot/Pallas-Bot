@@ -5,7 +5,7 @@ from pallas.product.llm.assembler import assemble_tool_bundle
 
 def test_assemble_tool_bundle_adds_direct_chat_stage_plan(monkeypatch) -> None:
     monkeypatch.setattr(
-        "pallas.product.llm.assembler.tools.tool_metadata_for_chat",
+        "pallas.product.llm.tools.registry.tool_metadata_for_chat",
         lambda **kwargs: {"tools_enabled": True, "tool_schemas": [{"name": "search"}]},
     )
 
@@ -17,7 +17,7 @@ def test_assemble_tool_bundle_adds_direct_chat_stage_plan(monkeypatch) -> None:
 
 def test_assemble_tool_bundle_reuses_precomputed_metadata(monkeypatch) -> None:
     monkeypatch.setattr(
-        "pallas.product.llm.assembler.tools.tool_metadata_for_chat",
+        "pallas.product.llm.tools.registry.tool_metadata_for_chat",
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not resolve twice")),
     )
 
@@ -28,3 +28,4 @@ def test_assemble_tool_bundle_reuses_precomputed_metadata(monkeypatch) -> None:
     )
 
     assert bundle["agent_stage_plan"] == ["generate"]
+    assert bundle["tool_schema_count"] == 0
