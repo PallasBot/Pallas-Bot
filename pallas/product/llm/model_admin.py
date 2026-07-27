@@ -41,6 +41,30 @@ def _tokens_snapshot_from_ledger(ledger_tokens: dict[str, Any]) -> dict[str, Any
     }
 
 
+def _prefer_ledger_tokens_on_ai(
+    ai: dict[str, Any] | None,
+    *,
+    day_key: str,
+) -> dict[str, Any] | None:
+    """当日 token 优先用请求账本（跨重启/分片更完整），保留实时 by_hour。"""
+    if not isinstance(ai, dict):
+        return ai
+    try:
+        from pallas.product.llm.usage_ledger import aggregate_day_from_ledger
+
+        ledger = aggregate_day_from_ledger(day_key)
+    except Exception:
+        return ai
+    if not isinstance(ledger, dict):
+        return ai
+    tokens = _tokens_snapshot_from_ledger(ledger)
+    live = ai.get("tokens") if isinstance(ai.get("tokens"), dict) else {}
+    by_hour = live.get("by_hour") if isinstance(live.get("by_hour"), dict) else None
+    if by_hour:
+        tokens = {**tokens, "by_hour": by_hour}
+    return {**ai, "tokens": tokens}
+
+
 def _overlay_ledger_on_history_rows(
     rows: list[dict[str, Any]],
     *,
@@ -1060,6 +1084,10 @@ async def fetch_llm_task_stats(
         )
 
     today_ai = payload.get("ai") if isinstance(payload.get("ai"), dict) and payload.get("ai") else None
+    # 实时内存在重启后可能缺提供方；当日 token 以账本为准，避免盖掉 history 里的 ledger 分桶
+    if isinstance(today_ai, dict):
+        today_ai = _prefer_ledger_tokens_on_ai(today_ai, day_key=clock_today) or today_ai
+        payload["ai"] = today_ai
     if start_d <= date.fromisoformat(clock_today) <= end_d:
         row = by_date.setdefault(clock_today, {"date": clock_today, "bot": None, "ai": None})
         if today_bot:
