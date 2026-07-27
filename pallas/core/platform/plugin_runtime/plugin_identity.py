@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from pallas.core.platform.bot_runtime.plugin_matrix import (
+    BUNDLED_PLAY_PLUGIN_NAMES,
     CORE_PLUGIN_NAMES,
     EXTRA_PACKAGE_MODULES,
     EXTRA_PLUGIN_PACKAGES,
@@ -14,7 +15,7 @@ from pallas.core.platform.bot_runtime.plugin_matrix import (
     SHARD_INTERNAL_PLUGIN_NAMES,
 )
 
-PluginKind = Literal["core", "extra", "shard-internal", "unknown"]
+PluginKind = Literal["core", "extra", "bundled", "shard-internal", "unknown"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +45,7 @@ def _infer_pip_module_prefix(plugin_id: str, pip_package: str | None) -> str | N
 def _build_registry() -> dict[str, PluginIdentity]:
     plugin_ids = (
         set(CORE_PLUGIN_NAMES)
+        | set(BUNDLED_PLAY_PLUGIN_NAMES)
         | set(EXTRA_PLUGIN_PACKAGES)
         | set(PLUGIN_BUNDLED_MODULE_PREFIXES)
         | set(PLUGIN_LEGACY_ALIASES)
@@ -56,6 +58,8 @@ def _build_registry() -> dict[str, PluginIdentity]:
             kind: PluginKind = "shard-internal"
         elif pip_package:
             kind = "extra"
+        elif plugin_id in BUNDLED_PLAY_PLUGIN_NAMES:
+            kind = "bundled"
         else:
             kind = "core"
         registry[plugin_id] = PluginIdentity(

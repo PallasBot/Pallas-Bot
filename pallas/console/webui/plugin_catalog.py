@@ -20,6 +20,7 @@ from pallas.core.foundation.paths import PROJECT_ROOT
 from pallas.core.platform.bot_runtime.plugin_matrix import (
     EXTRA_PACKAGE_MODULES,
     extra_package_for_plugin,
+    is_bundled_play_plugin,
     is_core_plugin,
     is_extra_plugin,
 )
@@ -27,7 +28,7 @@ from pallas.core.platform.plugin_runtime.plugin_identity import canonical_plugin
 
 _PLUGINS_ROOT = PROJECT_ROOT / "packages"
 
-PluginSourceKind = str  # "core" | "extra" | "local" | "pip"
+PluginSourceKind = str  # "core" | "extra" | "bundled" | "local" | "pip"
 
 _INFRA_NAME_PREFIXES = (
     "nonebot",
@@ -102,6 +103,8 @@ def plugin_source_from_module_path(mod_file: str) -> PluginSourceKind | None:
             return "core"
         if is_extra_plugin(package):
             return "extra"
+        if is_bundled_play_plugin(package):
+            return "bundled"
         return "core"
     return "pip"
 
@@ -128,7 +131,7 @@ def infer_plugin_source(
         src = plugin_source_from_module_path(file_path)
         if src == "local":
             return "local", module_dir_rel(file_path) or _package_dir_posix(extra_pkgs.get(package))
-        if src in ("core", "extra"):
+        if src in ("core", "extra", "bundled"):
             return src, module_dir_rel(file_path) or f"packages/{package}"
         if src == "pip":
             if is_extra_plugin(package):
@@ -139,6 +142,8 @@ def infer_plugin_source(
         if module_name.startswith("packages."):
             if is_extra_plugin(package):
                 return "extra", f"packages/{package}"
+            if is_bundled_play_plugin(package):
+                return "bundled", f"packages/{package}"
             return "core", f"packages/{package}"
         if extra_pkgs.get(package) is not None:
             return "local", _package_dir_posix(extra_pkgs.get(package))
@@ -148,6 +153,8 @@ def infer_plugin_source(
     if (_PLUGINS_ROOT / package / "__init__.py").is_file():
         if is_extra_plugin(package):
             return "extra", f"packages/{package}"
+        if is_bundled_play_plugin(package):
+            return "bundled", f"packages/{package}"
         return "core", f"packages/{package}"
     return "pip", None
 
