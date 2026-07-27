@@ -27,7 +27,7 @@ def register_memory_graph_router(
         scope_key: str | None = Query(default=None),
         materialize: bool = Query(default=True),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.service import build_graph_stats
+        from pallas.product.llm.ops_api import build_graph_stats
 
         try:
             data = await build_graph_stats(
@@ -47,7 +47,7 @@ def register_memory_graph_router(
         bot_id: int = Query(..., ge=1),
         limit: int = Query(default=100, ge=1, le=200),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.store import list_scopes
+        from pallas.product.llm.ops_api import list_scopes
 
         try:
             items = await list_scopes(bot_id=bot_id, limit=limit)
@@ -63,7 +63,7 @@ def register_memory_graph_router(
         materialize: bool = Query(default=True),
         limit: int = Query(default=200, ge=1, le=500),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.service import build_graph_payload
+        from pallas.product.llm.ops_api import build_graph_payload
 
         try:
             data = await build_graph_payload(
@@ -86,7 +86,7 @@ def register_memory_graph_router(
         query: str | None = Query(default=None),
         limit: int = Query(default=50, ge=1, le=200),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.service import list_episodes
+        from pallas.product.llm.ops_api import list_episodes
 
         try:
             items = await list_episodes(bot_id=bot_id, group_id=group_id, query=str(query or ""), limit=limit)
@@ -103,8 +103,11 @@ def register_memory_graph_router(
         materialize: bool = Query(default=True),
         limit: int = Query(default=50, ge=1, le=200),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.service import materialize_keyword_entities, materialize_relationship_notes
-        from pallas.product.llm.memory.graph.store import list_entities
+        from pallas.product.llm.ops_api import (
+            list_entities,
+            materialize_keyword_entities,
+            materialize_relationship_notes,
+        )
 
         try:
             if materialize:
@@ -126,7 +129,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import upsert_entity
+        from pallas.product.llm.ops_api import upsert_entity
 
         bot_id = int(body.get("bot_id") or 0)
         name = str(body.get("name") or "").strip()
@@ -160,7 +163,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import delete_entity
+        from pallas.product.llm.ops_api import delete_entity
 
         entity_id = int(body.get("id") or body.get("entity_id") or 0)
         bot_id = int(body.get("bot_id") or 0) or None
@@ -182,8 +185,7 @@ def register_memory_graph_router(
         materialize: bool = Query(default=True),
         limit: int = Query(default=100, ge=1, le=500),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.service import materialize_relationship_notes
-        from pallas.product.llm.memory.graph.store import list_edges
+        from pallas.product.llm.ops_api import list_edges, materialize_relationship_notes
 
         try:
             if materialize:
@@ -202,7 +204,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import upsert_edge
+        from pallas.product.llm.ops_api import upsert_edge
 
         bot_id = int(body.get("bot_id") or 0)
         fact = str(body.get("fact") or "").strip()
@@ -239,7 +241,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import soft_delete_edge
+        from pallas.product.llm.ops_api import soft_delete_edge
 
         edge_id = int(body.get("id") or body.get("edge_id") or 0)
         bot_id = int(body.get("bot_id") or 0) or None
@@ -260,7 +262,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import restore_edge
+        from pallas.product.llm.ops_api import restore_edge
 
         edge_id = int(body.get("id") or body.get("edge_id") or 0)
         bot_id = int(body.get("bot_id") or 0) or None
@@ -281,7 +283,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import restore_entity
+        from pallas.product.llm.ops_api import restore_entity
 
         entity_id = int(body.get("id") or body.get("entity_id") or 0)
         bot_id = int(body.get("bot_id") or 0) or None
@@ -302,7 +304,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import purge_entity
+        from pallas.product.llm.ops_api import purge_entity
 
         entity_id = int(body.get("id") or body.get("entity_id") or 0)
         bot_id = int(body.get("bot_id") or 0) or None
@@ -323,7 +325,7 @@ def register_memory_graph_router(
         include_deleted: bool = Query(default=False),
         limit: int = Query(default=100, ge=1, le=500),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.store import list_categories
+        from pallas.product.llm.ops_api import list_categories
 
         try:
             items = await list_categories(
@@ -342,7 +344,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import upsert_category
+        from pallas.product.llm.ops_api import upsert_category
 
         bot_id = int(body.get("bot_id") or 0)
         name = str(body.get("name") or "").strip()
@@ -379,7 +381,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import soft_delete_category
+        from pallas.product.llm.ops_api import soft_delete_category
 
         category_id = int(body.get("id") or body.get("category_id") or 0)
         bot_id = int(body.get("bot_id") or 0) or None
@@ -400,7 +402,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import restore_category
+        from pallas.product.llm.ops_api import restore_category
 
         category_id = int(body.get("id") or body.get("category_id") or 0)
         bot_id = int(body.get("bot_id") or 0) or None
@@ -421,7 +423,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import purge_category
+        from pallas.product.llm.ops_api import purge_category
 
         category_id = int(body.get("id") or body.get("category_id") or 0)
         bot_id = int(body.get("bot_id") or 0) or None
@@ -441,7 +443,7 @@ def register_memory_graph_router(
         group_id: int | None = Query(default=None, ge=0),
         scope_key: str | None = Query(default=None),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.hiergraph import get_hiergraph_status
+        from pallas.product.llm.ops_api import get_hiergraph_status
 
         try:
             data = await get_hiergraph_status(bot_id=bot_id, group_id=group_id, scope_key=scope_key)
@@ -458,7 +460,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.hiergraph import rebuild_hiergraph
+        from pallas.product.llm.ops_api import rebuild_hiergraph
 
         bot_id = int(body.get("bot_id") or 0)
         if bot_id <= 0:
@@ -485,7 +487,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.extract import extract_from_episodes, extract_from_text
+        from pallas.product.llm.ops_api import extract_from_episodes, extract_from_text
 
         bot_id = int(body.get("bot_id") or 0)
         if bot_id <= 0:
@@ -521,7 +523,7 @@ def register_memory_graph_router(
         group_id: int | None = Query(default=None, ge=0),
         limit: int = Query(default=100, ge=1, le=500),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.store import list_trash
+        from pallas.product.llm.ops_api import list_trash
 
         try:
             data = await list_trash(bot_id=bot_id, group_id=group_id, limit=limit)
@@ -538,7 +540,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import (
+        from pallas.product.llm.ops_api import (
             restore_category,
             restore_edge,
             restore_entity,
@@ -569,7 +571,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import purge_category, purge_entity
+        from pallas.product.llm.ops_api import purge_category, purge_entity
 
         kind = str(body.get("kind") or "").strip().lower()
         item_id = int(body.get("id") or 0)
@@ -594,7 +596,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.store import clear_scope_graph
+        from pallas.product.llm.ops_api import clear_scope_graph
 
         bot_id = int(body.get("bot_id") or 0)
         if bot_id <= 0:
@@ -620,7 +622,7 @@ def register_memory_graph_router(
         group_id: int | None = Query(default=None, ge=0),
         scope_key: str | None = Query(default=None),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.graph.import_export import export_scope_graph
+        from pallas.product.llm.ops_api import export_scope_graph
 
         try:
             data = await export_scope_graph(bot_id=bot_id, group_id=group_id, scope_key=scope_key)
@@ -637,7 +639,7 @@ def register_memory_graph_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.graph.import_export import import_scope_graph
+        from pallas.product.llm.ops_api import import_scope_graph
 
         bot_id = int(body.get("bot_id") or 0)
         if bot_id <= 0:
@@ -658,7 +660,7 @@ def register_memory_graph_router(
 
     @router.post(f"{base}/search", include_in_schema=True)
     async def _memory_graph_search(body: dict[str, Any]) -> JSONResponse:
-        from pallas.product.llm.memory.graph.service import search_memory_graph
+        from pallas.product.llm.ops_api import search_memory_graph
 
         bot_id = int(body.get("bot_id") or 0)
         query = str(body.get("query") or "").strip()

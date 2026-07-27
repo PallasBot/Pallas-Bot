@@ -7,22 +7,20 @@ from typing import TYPE_CHECKING, Annotated, Any
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 
-from pallas.product.llm.kernel.observability import (
+from pallas.product.llm.ops_api import (
     build_conversation_kernel_status,
-    list_recent_conversation_traces,
-)
-from pallas.product.llm.knowledge.registry import list_active_knowledge_sources
-from pallas.product.llm.memory.relationship_store import delete_relationship_note, list_relationship_notes
-from pallas.product.llm.memory.store import delete_memory_entry, list_memory_entries
-from pallas.product.llm.promotion_candidates import (
-    list_promotion_candidates,
-    resolve_promotion_candidate_with_writeback,
-)
-from pallas.product.llm.repeater_feedback import (
     clear_feedback_entry_correction,
     delete_feedback_entry,
+    delete_memory_entry,
+    delete_relationship_note,
     group_feedback_bias_snapshot,
+    list_active_knowledge_sources,
     list_group_feedback_entries,
+    list_memory_entries,
+    list_promotion_candidates,
+    list_recent_conversation_traces,
+    list_relationship_notes,
+    resolve_promotion_candidate_with_writeback,
     set_feedback_entry_correction,
     set_feedback_entry_eligibility,
 )
@@ -299,7 +297,7 @@ def register_llm_product_router(
             raise HTTPException(status_code=400, detail="bot_id and content required")
         gid = int(group_id) if group_id is not None else None
         try:
-            from pallas.product.llm.memory.store import save_memory_entry
+            from pallas.product.llm.ops_api import save_memory_entry
 
             ok = await save_memory_entry(bot_id, gid, content, source="teach")
         except Exception as e:  # noqa: BLE001
@@ -311,7 +309,7 @@ def register_llm_product_router(
     @router.get(f"{x}/llm/knowledge/sources", include_in_schema=True)
     async def _llm_knowledge_sources_list() -> JSONResponse:
         try:
-            from pallas.product.llm.knowledge.registry import list_active_knowledge_sources
+            from pallas.product.llm.ops_api import list_active_knowledge_sources
 
             rows = list_active_knowledge_sources()
             items = [
@@ -331,7 +329,7 @@ def register_llm_product_router(
     @router.get(f"{x}/llm/tools", include_in_schema=True)
     async def _llm_tools_list() -> JSONResponse:
         try:
-            from pallas.product.llm.tools.registry import build_tools_catalog_ui
+            from pallas.product.llm.ops_api import build_tools_catalog_ui
 
             data = build_tools_catalog_ui()
         except Exception as e:  # noqa: BLE001
@@ -341,7 +339,7 @@ def register_llm_product_router(
     @router.post(f"{x}/llm/tools/preview", include_in_schema=True)
     async def _llm_tools_preview(body: dict[str, Any]) -> JSONResponse:
         try:
-            from pallas.product.llm.tools.preview import preview_tool_intent
+            from pallas.product.llm.ops_api import preview_tool_intent
 
             text = str(body.get("text") or body.get("user_text") or "").strip()
             task = str(body.get("task") or "llm_chat").strip() or "llm_chat"
@@ -358,8 +356,7 @@ def register_llm_product_router(
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         try:
-            from pallas.product.llm.tools.overrides import save_tool_overrides
-            from pallas.product.llm.tools.registry import build_tools_catalog_ui
+            from pallas.product.llm.ops_api import build_tools_catalog_ui, save_tool_overrides
 
             raw = body.get("overrides") if isinstance(body.get("overrides"), dict) else body
             if not isinstance(raw, dict):
@@ -382,8 +379,7 @@ def register_llm_product_router(
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         try:
-            from pallas.product.llm.tools.overrides import upsert_tool_override
-            from pallas.product.llm.tools.registry import build_tools_catalog_ui
+            from pallas.product.llm.ops_api import build_tools_catalog_ui, upsert_tool_override
 
             entry = upsert_tool_override(tool_name, body if isinstance(body, dict) else {})
             data = build_tools_catalog_ui()
@@ -479,7 +475,7 @@ def register_llm_product_router(
         preview_content_len: int = Query(default=240, ge=32, le=2000),
     ) -> JSONResponse:
         try:
-            from pallas.product.llm.knowledge.registry import build_knowledge_source_detail_ui
+            from pallas.product.llm.ops_api import build_knowledge_source_detail_ui
 
             data = build_knowledge_source_detail_ui(
                 source_id,
@@ -496,7 +492,7 @@ def register_llm_product_router(
     async def _llm_conversation_kernel_knowledge_sources_retrieve_post(
         body: dict[str, Any],
     ) -> JSONResponse:
-        from pallas.product.llm.knowledge.registry import probe_knowledge_source_retrieve
+        from pallas.product.llm.ops_api import probe_knowledge_source_retrieve
 
         query = str(body.get("query") or "").strip()
         if not query:

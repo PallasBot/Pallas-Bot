@@ -10,8 +10,7 @@ from pallas.api.metadata import (
     join_usage,
     usage_line,
 )
-from pallas.product.llm.knowledge.declare import knowledge_source_row
-from pallas.product.llm.tools.declare import llm_command_tool_row
+from pallas.product.llm.runtime_api import knowledge_source_row, llm_command_tool_row
 
 from . import admin_commands as _admin_commands  # noqa: F401
 from . import chat_message as _chat_message  # noqa: F401

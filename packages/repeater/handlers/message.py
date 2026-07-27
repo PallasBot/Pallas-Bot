@@ -12,18 +12,18 @@ from pallas.core.foundation.config import BotConfig
 from pallas.core.foundation.db.pool_budget import is_pg_pool_timeout_error
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from pallas.core.shared.utils.media_cache import insert_image
-from pallas.product.llm.behavior import classify_behavior_scene
-from pallas.product.llm.fallback import maybe_submit_repeater_llm_fallback
-from pallas.product.llm.kernel import (
+from pallas.product.llm.runtime_api import (
     ConversationContext,
     ConversationFeatureLevel,
     behavior_scene_to_conversation_scene,
+    classify_behavior_scene,
     decide_repeater_action,
+    maybe_submit_repeater_llm_fallback,
+    record_bot_llm_route,
     resolve_conversation_feature_level,
+    resolve_repeater_capabilities,
+    submit_corpus_assist_stages,
 )
-from pallas.product.llm.polish_lite import submit_corpus_assist_stages
-from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
-from pallas.product.llm.task_metrics import record_bot_llm_route
 from pallas.product.message_scrub import is_message_scrub_blocked_async
 from pallas.product.message_scrub.log_preview import scrub_intercept_log_preview
 

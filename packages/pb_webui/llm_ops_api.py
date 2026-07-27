@@ -24,7 +24,7 @@ def register_llm_ops_router(
         group_id: int | None = Query(default=None, ge=0),
         limit: int = Query(default=200, ge=1, le=500),
     ) -> JSONResponse:
-        from pallas.product.llm.session_ops import build_llm_history_stats
+        from pallas.product.llm.ops_api import build_llm_history_stats
 
         try:
             data = await build_llm_history_stats(bot_id=bot_id, group_id=group_id, limit=limit)
@@ -39,7 +39,7 @@ def register_llm_ops_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.session_ops import clear_llm_history_session
+        from pallas.product.llm.ops_api import clear_llm_history_session
 
         bot_id = int(body.get("bot_id") or 0)
         if bot_id <= 0:
@@ -63,7 +63,7 @@ def register_llm_ops_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.session_ops import inject_llm_history_message
+        from pallas.product.llm.ops_api import inject_llm_history_message
 
         bot_id = int(body.get("bot_id") or 0)
         user_id = int(body.get("user_id") or 0)
@@ -94,7 +94,7 @@ def register_llm_ops_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.session_ops import compact_llm_history_session
+        from pallas.product.llm.ops_api import compact_llm_history_session
 
         bot_id = int(body.get("bot_id") or 0)
         user_id = int(body.get("user_id") or 0)
@@ -118,7 +118,7 @@ def register_llm_ops_router(
 
     @router.get(f"{x}/common-config/llm/session", include_in_schema=True)
     async def _llm_session_ops_config_get() -> JSONResponse:
-        from pallas.product.llm.ops_config import get_llm_session_ops_config
+        from pallas.product.llm.ops_api import get_llm_session_ops_config
 
         return JSONResponse({"ok": True, "data": get_llm_session_ops_config().model_dump()})
 
@@ -130,7 +130,7 @@ def register_llm_ops_router(
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from pallas.console.webui.env_sections import apply_webui_env_section_patch
-        from pallas.product.llm.ops_config import get_llm_session_ops_config, session_ops_patch_dict
+        from pallas.product.llm.ops_api import get_llm_session_ops_config, session_ops_patch_dict
 
         try:
             patch = session_ops_patch_dict(dict(body or {}))
@@ -144,7 +144,7 @@ def register_llm_ops_router(
 
     @router.get(f"{x}/common-config/llm/memory", include_in_schema=True)
     async def _llm_memory_ops_config_get() -> JSONResponse:
-        from pallas.product.llm.ops_config import get_llm_memory_ops_config
+        from pallas.product.llm.ops_api import get_llm_memory_ops_config
 
         return JSONResponse({"ok": True, "data": get_llm_memory_ops_config().model_dump()})
 
@@ -156,7 +156,7 @@ def register_llm_ops_router(
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from pallas.console.webui.env_sections import apply_webui_env_section_patch
-        from pallas.product.llm.ops_config import get_llm_memory_ops_config, memory_ops_patch_dict
+        from pallas.product.llm.ops_api import get_llm_memory_ops_config, memory_ops_patch_dict
 
         try:
             patch = memory_ops_patch_dict(dict(body or {}))
@@ -173,7 +173,7 @@ def register_llm_ops_router(
         bot_id: int | None = Query(default=None, ge=1),
         group_id: int | None = Query(default=None, ge=0),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.ops import build_memory_stats
+        from pallas.product.llm.ops_api import build_memory_stats
 
         try:
             data = await build_memory_stats(bot_id=bot_id, group_id=group_id)
@@ -183,7 +183,7 @@ def register_llm_ops_router(
 
     @router.post(f"{x}/llm/conversation-kernel/memory/retrieve", include_in_schema=True)
     async def _llm_memory_retrieve_post(body: dict[str, Any]) -> JSONResponse:
-        from pallas.product.llm.memory.ops import preview_memory_retrieve
+        from pallas.product.llm.ops_api import preview_memory_retrieve
 
         bot_id = int(body.get("bot_id") or 0)
         query = str(body.get("query") or "").strip()
@@ -206,7 +206,7 @@ def register_llm_ops_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.ops import clear_memory_entries
+        from pallas.product.llm.ops_api import clear_memory_entries
 
         bot_id = int(body.get("bot_id") or 0)
         if bot_id <= 0:
@@ -228,7 +228,7 @@ def register_llm_ops_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.ops import apply_memory_lifecycle
+        from pallas.product.llm.ops_api import apply_memory_lifecycle
 
         entry_id = int(body.get("id") or 0)
         action = str(body.get("action") or "").strip().lower()
@@ -253,7 +253,7 @@ def register_llm_ops_router(
         group_id: int | None = Query(default=None, ge=0),
         limit: int = Query(default=100, ge=1, le=200),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.ops import list_memory_preferences
+        from pallas.product.llm.ops_api import list_memory_preferences
 
         items = list_memory_preferences(bot_id=bot_id, group_id=group_id, limit=limit)
         return JSONResponse({"ok": True, "data": {"items": items, "count": len(items)}})
@@ -265,7 +265,7 @@ def register_llm_ops_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.ops import upsert_memory_preference
+        from pallas.product.llm.ops_api import upsert_memory_preference
 
         bot_id = int(body.get("bot_id") or 0)
         rule = str(body.get("rule") or "").strip()
@@ -294,7 +294,7 @@ def register_llm_ops_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.ops import delete_memory_preference
+        from pallas.product.llm.ops_api import delete_memory_preference
 
         pref_id = str(body.get("id") or "").strip()
         if not pref_id:
@@ -310,7 +310,7 @@ def register_llm_ops_router(
         group_id: int | None = Query(default=None, ge=0),
         limit: int = Query(default=50, ge=1, le=200),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.ops import list_memory_entity_summaries_async
+        from pallas.product.llm.ops_api import list_memory_entity_summaries_async
 
         try:
             items = await list_memory_entity_summaries_async(bot_id=bot_id, group_id=group_id, limit=limit)
@@ -325,7 +325,7 @@ def register_llm_ops_router(
         user_id: int | None = Query(default=None, ge=1),
         limit: int = Query(default=50, ge=1, le=200),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.mid_term import list_mid_term_summaries
+        from pallas.product.llm.ops_api import list_mid_term_summaries
 
         try:
             items = await list_mid_term_summaries(
