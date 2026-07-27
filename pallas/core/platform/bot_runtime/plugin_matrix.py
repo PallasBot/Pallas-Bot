@@ -44,6 +44,7 @@ EXTRA_PLUGIN_PACKAGES: dict[str, str] = {
     "maa_hub": "pallas-plugin-maa",
     "draw": "pallas-plugin-draw",
     "sing": "pallas-plugin-ai-media",
+    "tts": "pallas-plugin-ai-media",
     "bot_status": "pallas-plugin-bot-status",
 }
 
@@ -58,7 +59,7 @@ EXTRA_PACKAGE_MODULES: dict[str, tuple[str, ...]] = {
     "pallas-plugin-who-is-spy": ("pallas_plugin_who_is_spy",),
     "pallas-plugin-dream": ("pallas_plugin_dream",),
     "pallas-plugin-draw": ("pallas_plugin_draw",),
-    "pallas-plugin-ai-media": ("pallas_plugin_sing",),
+    "pallas-plugin-ai-media": ("pallas_plugin_sing", "pallas_plugin_tts"),
     "pallas-plugin-bot-status": ("pallas_plugin_bot_status",),
 }
 
@@ -105,7 +106,7 @@ OFFICIAL_EXTENSION_TITLES: dict[str, str] = {
     "pallas-plugin-maa": "MAA 远控",
     "pallas-plugin-protocol": "协议端管理",
     "pallas-plugin-who-is-spy": "谁是卧底",
-    "pallas-plugin-ai-media": "牛牛唱歌",
+    "pallas-plugin-ai-media": "牛牛唱歌 / 牛牛说",
     "pallas-plugin-bot-status": "牛牛状态",
 }
 
@@ -117,7 +118,7 @@ OFFICIAL_EXTENSION_DESCRIPTIONS: dict[str, str] = {
     "pallas-plugin-maa": "MAA 远控（含 worker 插件 pallas_plugin_maa 与分片 hub 入口 pallas_plugin_maa_hub）。",
     "pallas-plugin-protocol": "协议端管理（NapCat / SnowLuma）与 牛牛重新上号（含分片 worker 转发）。",
     "pallas-plugin-who-is-spy": "谁是卧底。",
-    "pallas-plugin-ai-media": "牛牛唱歌（翻唱 / 点歌）。",
+    "pallas-plugin-ai-media": "牛牛唱歌（翻唱 / 点歌）与牛牛说（TTS）。",
     "pallas-plugin-bot-status": "牛牛状态（在吗、报数、离线邮件）。",
 }
 

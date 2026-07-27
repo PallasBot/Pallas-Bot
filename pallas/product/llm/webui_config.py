@@ -91,14 +91,6 @@ class LlmWebuiConfig(BaseModel):
             "两者都开时醉酒优先走智能对话；仅开本项则走 RWKV。需要 AI Runtime 带上 chat 资源包",
         ),
     )
-    chat_tts_enable: bool = Field(
-        default=False,
-        description=field_help(
-            "醉酒回复要不要再念成语音发出去",
-            "开=醉酒文字后再合成语音；关=只发文字。要听语音时再开，会多一次媒体请求",
-            "依赖媒体服务已启用 TTS 与音色；智能对话路径是出字后再调语音接口",
-        ),
-    )
     llm_repeater_mode: RepeaterMode = Field(
         default="select_polish_lite",
         description=field_help(
@@ -820,7 +812,7 @@ class LlmWebuiConfig(BaseModel):
 
 def get_llm_webui_config() -> LlmWebuiConfig:
     from pallas.core.foundation.config.repo_settings import repo_env_raw_value
-    from pallas.product.llm.config import resolve_chat_tts_enabled, resolve_legacy_rwkv_drunk_chat_enabled
+    from pallas.product.llm.config import resolve_legacy_rwkv_drunk_chat_enabled
 
     cfg = get_llm_config()
     mode = normalize_repeater_mode_for_webui(cfg.llm_repeater_mode)
@@ -829,7 +821,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         ai_server_port=cfg.ai_server_port,
         llm_chat_enabled=cfg.llm_chat_enabled,
         chat_enable=resolve_legacy_rwkv_drunk_chat_enabled(),
-        chat_tts_enable=resolve_chat_tts_enabled(),
         llm_repeater_mode=mode,  # type: ignore[arg-type]
         llm_polish_lite_sample_rate=cfg.llm_polish_lite_sample_rate,
         llm_governance_enabled=cfg.llm_governance_enabled,

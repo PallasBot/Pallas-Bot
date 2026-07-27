@@ -217,7 +217,6 @@ def _llm_section() -> WebuiEnvSection:
             "ai_server_port": "AI_SERVER_PORT",
             "llm_chat_enabled": "LLM_CHAT_ENABLED",
             "chat_enable": "CHAT_ENABLE",
-            "chat_tts_enable": "CHAT_TTS_ENABLE",
             "llm_repeater_mode": "LLM_REPEATER_MODE",
             "llm_polish_lite_sample_rate": "LLM_POLISH_LITE_SAMPLE_RATE",
             "llm_governance_enabled": "LLM_GOVERNANCE_ENABLED",

@@ -64,32 +64,6 @@ def resolve_legacy_rwkv_drunk_chat_enabled() -> bool:
     return False
 
 
-def resolve_chat_tts_enabled() -> bool:
-    """酒后对话是否附带 AI 仓 TTS 语音。
-
-    开关：``CHAT_TTS_ENABLE``；兼容旧扩展 ``tts_enable``。
-    RWKV 路径随 /api/chat 的 tts 字段；LLM 路径在文字回调后另调 /tts。
-    """
-    import importlib
-
-    env_tts = _env_bool_first_optional(("CHAT_TTS_ENABLE",))
-    if env_tts is not None:
-        return env_tts
-    for import_path in (
-        "pallas_plugin_chat.config",
-        "packages.chat.config",
-    ):
-        try:
-            mod = importlib.import_module(import_path)
-            getter = getattr(mod, "get_chat_config", None)
-            if getter is None:
-                continue
-            return bool(getattr(getter(), "tts_enable", False))
-        except Exception:
-            continue
-    return False
-
-
 def _env_bool(key: str, default: bool = False) -> bool:
     raw = repo_env_raw_value(key)
     if raw is None:
@@ -276,7 +250,6 @@ class LlmConfig(BaseModel):
     ai_server_host: str = Field(default="127.0.0.1")
     ai_server_port: int = Field(default=9099, ge=1, le=65535)
     llm_chat_enabled: bool = Field(default=False)
-    chat_tts_enable: bool = Field(default=False)
     llm_repeater_mode: str = Field(default="select_polish_lite")
     llm_fallback_enabled: bool = Field(default=False)
     llm_polish_enabled: bool = Field(default=False)
@@ -471,7 +444,6 @@ def get_llm_config() -> LlmConfig:
             ai_server_host=host,
             ai_server_port=port,
             llm_chat_enabled=resolve_llm_chat_enabled(),
-            chat_tts_enable=resolve_chat_tts_enabled(),
             llm_repeater_mode=repeater_mode,
             llm_fallback_enabled=fallback_enabled,
             llm_polish_enabled=polish_enabled,

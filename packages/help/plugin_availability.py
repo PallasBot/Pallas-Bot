@@ -7,6 +7,7 @@ import importlib
 _CONFIG_GATED: dict[str, tuple[str, str, str]] = {
     "chat": ("pallas.product.llm.config", "get_llm_config", "llm_chat_enabled"),
     "sing": ("packages.sing.config", "get_sing_config", "sing_enable"),
+    "tts": ("pallas_plugin_tts.config", "get_tts_config", "tts_enable"),
     "llm_chat": ("pallas.product.llm.config", "get_llm_config", "llm_chat_enabled"),
     "ollama": ("pallas.product.llm.config", "get_llm_config", "llm_chat_enabled"),
 }

@@ -73,6 +73,7 @@ def test_extra_package_mapping():
     assert extra_package_for_plugin("pallas_protocol") == "pallas-plugin-protocol"
     assert extra_package_for_plugin("chat") is None
     assert extra_package_for_plugin("sing") == "pallas-plugin-ai-media"
+    assert extra_package_for_plugin("tts") == "pallas-plugin-ai-media"
     assert extra_package_for_plugin("bot_status") == "pallas-plugin-bot-status"
     assert uv_extra_for_plugin("duel") == "plugins-duel"
     assert uv_extra_for_plugin("bot_status") == "plugins-bot-status"
@@ -181,6 +182,7 @@ def test_community_stats_canonical_alias():
         "pallas_plugin_maa_hub": "maa_hub",
         "pallas_plugin_draw": "draw",
         "pallas_plugin_sing": "sing",
+        "pallas_plugin_tts": "tts",
         "pallas_plugin_bot_status": "bot_status",
     }
     all_modules = {mod for modules in EXTRA_PACKAGE_MODULES.values() for mod in modules}
@@ -195,12 +197,12 @@ def test_official_extension_description_prefers_readme_summary():
 
 
 def test_official_extension_description_falls_back_for_multi_plugin_package():
-    assert official_extension_description("pallas-plugin-ai-media") == ("牛牛唱歌（翻唱 / 点歌）。")
+    assert official_extension_description("pallas-plugin-ai-media") == ("牛牛唱歌（翻唱 / 点歌）与牛牛说（TTS）。")
 
 
 def test_official_extension_display_name_uses_chinese_titles():
     assert official_extension_display_name("pallas-plugin-maa") == "MAA 远控"
-    assert official_extension_display_name("pallas-plugin-ai-media") == "牛牛唱歌"
+    assert official_extension_display_name("pallas-plugin-ai-media") == "牛牛唱歌 / 牛牛说"
     assert official_extension_display_name("pallas-plugin-unknown") == "unknown"
 
 

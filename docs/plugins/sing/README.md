@@ -14,7 +14,7 @@ uv run pallas ext install pallas-plugin-ai-media
 
 另需部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，并在控制台配置媒体服务。见 [LLM 对话、媒体与 AI Runtime](../../guide/ai-runtime-choice.md)。
 
-自 `pallas-plugin-ai-media` **4.1.0** 起，本包仅含唱歌；酒后对话已由本体 [llm_chat](../llm_chat/README.md) 承接。
+自 `pallas-plugin-ai-media` **4.1.0** 起，本包仅含唱歌与 TTS；酒后对话已由本体 [llm_chat](../llm_chat/README.md) 承接。
 
 ## 用法
 
@@ -63,5 +63,6 @@ uv run pallas ext install pallas-plugin-ai-media
 ## 相关链接
 
 - [智能对话 llm_chat](../llm_chat/README.md)
+- [牛牛说 tts](../tts/README.md)
 - [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)
 - [命令权限](../../common/cmd_perm/README.md)

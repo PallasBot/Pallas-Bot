@@ -52,7 +52,6 @@ async def test_drunk_chat_uses_unified_submit(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(chat_mod, "build_drunk_chat_system_prompt", fake_build_prompt)
     monkeypatch.setattr(chat_mod, "is_llm_chat_service_enabled", lambda: True)
     monkeypatch.setattr(chat_mod, "is_legacy_rwkv_drunk_chat_enabled", lambda: False)
-    monkeypatch.setattr(chat_mod, "is_chat_tts_enabled", lambda: True)
     monkeypatch.setattr(chat_mod, "ULID", lambda: "chat-request-id")
 
     class DummyBot:
@@ -74,7 +73,7 @@ async def test_drunk_chat_uses_unified_submit(monkeypatch: pytest.MonkeyPatch) -
     assert removed == []
     assert [task_id for task_id, _ in added] == ["chat-request-id"]
     assert added[0][1]["task_type"] == "chat"
-    assert added[0][1]["want_tts"] is True
+    assert "want_tts" not in added[0][1]
     assert captured["request_id"] == "chat-request-id"
     assert captured["session_id"] == "123456_42"
     assert captured["user_text"] == "你好呀"

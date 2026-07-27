@@ -102,7 +102,6 @@ class Chat:
     DUPLICATE_REPLY = plugin_config.duplicate_reply
 
     SPLIT_PROBABILITY = plugin_config.split_probability
-    DRUNK_TTS_THRESHOLD = plugin_config.drunk_tts_threshold
     SPEAK_CONTINUOUSLY_PROBABILITY = plugin_config.speak_continuously_probability
     SPEAK_POKE_PROBABILITY = plugin_config.speak_poke_probability
     SPEAK_CONTINUOUSLY_MAX_LEN = plugin_config.speak_continuously_max_len

@@ -18,7 +18,6 @@ FIELD_LABELS: dict[str, str] = {
     "bots": "已连接牛牛 QQ 集合",
     "chat_enable": "启用酒后 RWKV（独立通道）",
     "chat_endpoint": "聊天接口路径",
-    "chat_tts_enable": "酒后对话附带语音",
     "claim_ttl_sec": "去重保留秒数",
     "command_limit_overrides": "命令冷却覆盖",
     "command_permission_overrides": "命令权限覆盖",
@@ -52,7 +51,6 @@ FIELD_LABELS: dict[str, str] = {
     "dream_prefer_learned_echo_probability": "优先已学回声概率",
     "dream_worker_sleep_max_sec": "做梦线程最长休眠（秒）",
     "dream_worker_sleep_min_sec": "做梦线程最短休眠（秒）",
-    "drunk_tts_threshold": "醉酒转语音字数",
     "duel_auto_sync_operators": "启动同步干员表",
     "duel_avatar_download_on_startup": "启动批量下载头像",
     "duel_avatar_download_on_use": "用时下载头像",
@@ -397,7 +395,12 @@ FIELD_LABELS: dict[str, str] = {
     "spy_word_avoid_recent": "同群词对去重局数",
     "topics_importance": "关键词命中加成",
     "topics_size": "上下文关键词条数",
-    "tts_enable": "醉酒后发语音回复（旧扩展项；请改用 CHAT_TTS_ENABLE）",
+    "tts_enable": "启用语音合成",
+    "tts_endpoint": "TTS 接口路径",
+    "tts_route": "语音通路",
+    "tts_timeout_sec": "TTS 提交超时（秒）",
+    "tts_max_chars": "单次最大字数",
+    "api_token": "API Bearer Token",
 }
 
 

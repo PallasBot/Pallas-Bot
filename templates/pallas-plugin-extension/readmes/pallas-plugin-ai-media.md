@@ -4,7 +4,7 @@
 
 # pallas-plugin-ai-media
 
-Pallas-Bot 4.0 官方扩展：**牛牛唱歌**（`sing`）。
+Pallas-Bot 4.0 官方扩展：**牛牛唱歌**（`sing`）与 **牛牛说**（`tts`）。
 
 ## 安装
 
@@ -37,21 +37,32 @@ AI 翻唱、续唱、点歌与查歌名；依赖 AI 仓与本体 `callback` 回�
 
 配置：[`src/pallas_plugin_sing/config.py`](src/pallas_plugin_sing/config.py)
 
-> 酒后对话已迁入本体 `llm_chat`（可选 `CHAT_TTS_ENABLE` 走 AI 仓 TTS）。
+### 牛牛说（tts）
+
+| 口令 | 场景 | 说明 |
+| --- | --- | --- |
+| 牛牛说 〈文本〉 | 群内 | 侧车 `/v1/tts` 合成语音 |
+
+配置：[`src/pallas_plugin_tts/config.py`](src/pallas_plugin_tts/config.py)
+
+> 酒后对话已迁入本体 `llm_chat`（纯文字）。语音请用「牛牛说」。
 
 ### 排障
 
 | 现象 | 处理 |
 | --- | --- |
 | 唱歌无语音 | 查 AI 服务、`/callback` 可达；**牛牛连通** 测唱歌网关 |
+| 「牛牛说」无语音 | 确认 TTS 已启用、Bearer 与音色默认正确 |
 
 ## 文档
 
 | 说明 | 链接 |
 | --- | --- |
 | 唱歌 | [文档站 · sing](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/sing) |
+| TTS | [文档站 · tts](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/tts) |
 | 智能对话 / 酒后 | [文档站 · llm_chat](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/llm_chat) |
 
 ## 源码
 
 - [`src/pallas_plugin_sing/`](src/pallas_plugin_sing/)
+- [`src/pallas_plugin_tts/`](src/pallas_plugin_tts/)

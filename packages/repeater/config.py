@@ -66,11 +66,6 @@ class Config(BaseModel, extra="ignore"):
         description="按逗号把一条回复拆成多条发送的概率。",
         json_schema_extra=_ui("主动发言", 30),
     )
-    drunk_tts_threshold: int = Field(
-        default=6,
-        description="醉酒状态下，正文超过多少字时改为发语音（TTS）。",
-        json_schema_extra=_ui("主动发言", 40),
-    )
     speak_continuously_probability: float = Field(
         default=0.5,
         description="主动发言后，继续连说下一句的概率。",
@@ -190,7 +185,6 @@ def sync_repeater_runtime_constants(cfg: Config) -> None:
         "SPEAK_THRESHOLD": cfg.speak_threshold,
         "DUPLICATE_REPLY": cfg.duplicate_reply,
         "SPLIT_PROBABILITY": cfg.split_probability,
-        "DRUNK_TTS_THRESHOLD": cfg.drunk_tts_threshold,
         "SPEAK_CONTINUOUSLY_PROBABILITY": cfg.speak_continuously_probability,
         "SPEAK_POKE_PROBABILITY": cfg.speak_poke_probability,
         "SPEAK_CONTINUOUSLY_MAX_LEN": cfg.speak_continuously_max_len,
