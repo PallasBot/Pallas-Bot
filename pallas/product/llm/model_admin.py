@@ -944,6 +944,14 @@ async def fetch_llm_task_stats(
         },
     }
     try:
+        write_llm_daily_stats_side(
+            str(bot_snap.get("day_key") or today_key()),
+            "bot",
+            bot_snap if isinstance(bot_snap, dict) else {},
+        )
+    except Exception:
+        pass
+    try:
         from pallas.core.platform.shard import context as shard_ctx
         from pallas.product.llm.token_metrics import (
             cluster_llm_token_metrics_snapshot,
@@ -1177,6 +1185,12 @@ async def fetch_llm_task_stats(
     if start_d <= date.fromisoformat(clock_today) <= end_d:
         row = by_date.setdefault(clock_today, {"date": clock_today, "bot": None, "ai": None})
         if today_bot:
+            prev_bot = row.get("bot") if isinstance(row.get("bot"), dict) else None
+            if prev_bot:
+                from pallas.product.llm.llm_daily_stats_store import merge_side_snapshot
+
+                today_bot = merge_side_snapshot(prev_bot, today_bot)
+                payload["bot"] = today_bot
             row["bot"] = today_bot
         if today_ai:
             prev_ai = row.get("ai") if isinstance(row.get("ai"), dict) else None
