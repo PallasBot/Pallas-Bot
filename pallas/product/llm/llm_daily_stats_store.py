@@ -63,6 +63,185 @@ def _trim_old_days(by_day: dict[str, Any]) -> None:
         by_day.pop(k, None)
 
 
+def _metric_weight(key: str, value: object) -> int:
+    if not isinstance(value, dict):
+        return 0
+    if key in {"rag", "memory_rag"}:
+        return int(value.get("hit_count") or 0) + int(value.get("miss_count") or 0)
+    if key == "tokens":
+        total = int(value.get("total_tokens") or 0)
+        if total > 0:
+            return total
+        return int(value.get("prompt_tokens") or 0) + int(value.get("completion_tokens") or 0)
+    if key in {"provider_stats", "model_stats"}:
+        total = 0
+        for row in value.values():
+            if isinstance(row, dict):
+                total += int(row.get("requests") or 0)
+        return total
+    if key == "images":
+        return int(value.get("ok_count") or 0) + int(value.get("fail_count") or 0) + int(value.get("image_count") or 0)
+    if key == "gates":
+        return int(value.get("skip") or 0) + int(value.get("defer") or 0) + int(value.get("proceed") or 0)
+    if key == "totals":
+        return sum(int(v or 0) for v in value.values() if not isinstance(v, dict))
+    if key == "by_task":
+        total = 0
+        for metrics in value.values():
+            if not isinstance(metrics, dict):
+                continue
+            for name, count in metrics.items():
+                if name == "route_counts" and isinstance(count, dict):
+                    total += sum(int(v or 0) for v in count.values())
+                else:
+                    try:
+                        total += int(count or 0)
+                    except (TypeError, ValueError):
+                        pass
+        return total
+    return 0
+
+
+def _merge_dimension_prefer_max(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    out = {str(k): dict(v) for k, v in existing.items() if isinstance(v, dict)}
+    for key, row in incoming.items():
+        if not isinstance(row, dict):
+            continue
+        name = str(key or "").strip()
+        if not name:
+            continue
+        cur = out.get(name)
+        if not cur:
+            out[name] = dict(row)
+            continue
+        if int(row.get("requests") or 0) >= int(cur.get("requests") or 0):
+            out[name] = dict(row)
+    return out
+
+
+def _merge_int_map_prefer_max(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    keys = set(existing) | set(incoming)
+    for key in keys:
+        name = str(key or "").strip()
+        if not name:
+            continue
+        try:
+            a = int(existing.get(key) or 0)
+        except (TypeError, ValueError):
+            a = 0
+        try:
+            b = int(incoming.get(key) or 0)
+        except (TypeError, ValueError):
+            b = 0
+        out[name] = max(a, b)
+    return out
+
+
+def _merge_by_task_prefer_max(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    keys = set(existing) | set(incoming)
+    for key in keys:
+        name = str(key or "").strip()
+        if not name:
+            continue
+        prev = existing.get(key) if isinstance(existing.get(key), dict) else {}
+        nxt = incoming.get(key) if isinstance(incoming.get(key), dict) else {}
+        row: dict[str, Any] = {}
+        metric_keys = set(prev) | set(nxt)
+        for metric in metric_keys:
+            if metric == "route_counts":
+                continue
+            try:
+                a = int(prev.get(metric) or 0)
+            except (TypeError, ValueError):
+                a = 0
+            try:
+                b = int(nxt.get(metric) or 0)
+            except (TypeError, ValueError):
+                b = 0
+            row[metric] = max(a, b)
+        prev_routes = prev.get("route_counts") if isinstance(prev.get("route_counts"), dict) else {}
+        nxt_routes = nxt.get("route_counts") if isinstance(nxt.get("route_counts"), dict) else {}
+        if prev_routes or nxt_routes:
+            row["route_counts"] = _merge_int_map_prefer_max(prev_routes, nxt_routes)
+        out[name] = row
+    return out
+
+
+def _prefer_complete_metric(key: str, existing: Any, incoming: Any) -> Any:
+    """累计型指标：禁止用偏少快照覆盖（重启后实时内存变小）。"""
+    if not isinstance(incoming, dict):
+        return existing if existing is not None else incoming
+    if not isinstance(existing, dict):
+        return incoming
+    if key == "images":
+        # 总量取高水位；分桶按 ok+fail+image 取较大行，避免回退丢维度
+        w_ex = (
+            int(existing.get("ok_count") or 0)
+            + int(existing.get("fail_count") or 0)
+            + int(existing.get("image_count") or 0)
+        )
+        w_in = (
+            int(incoming.get("ok_count") or 0)
+            + int(incoming.get("fail_count") or 0)
+            + int(incoming.get("image_count") or 0)
+        )
+        base = incoming if w_in > w_ex else existing if w_in < w_ex else existing
+        out = dict(base)
+        for bucket in ("by_gateway", "by_provider", "by_model"):
+            prev = existing.get(bucket) if isinstance(existing.get(bucket), dict) else {}
+            nxt = incoming.get(bucket) if isinstance(incoming.get(bucket), dict) else {}
+            merged: dict[str, Any] = {}
+            for name in set(prev) | set(nxt):
+                key_name = str(name or "").strip()
+                if not key_name:
+                    continue
+                a = prev.get(name) if isinstance(prev.get(name), dict) else {}
+                b = nxt.get(name) if isinstance(nxt.get(name), dict) else {}
+                wa = int(a.get("ok_count") or 0) + int(a.get("fail_count") or 0) + int(a.get("image_count") or 0)
+                wb = int(b.get("ok_count") or 0) + int(b.get("fail_count") or 0) + int(b.get("image_count") or 0)
+                chosen = b if wb > wa else a
+                if chosen:
+                    merged[key_name] = dict(chosen)
+            out[bucket] = merged
+        if w_in > w_ex:
+            out["ok_count"] = int(incoming.get("ok_count") or 0)
+            out["fail_count"] = int(incoming.get("fail_count") or 0)
+            out["image_count"] = int(incoming.get("image_count") or 0)
+            out["cost_total"] = float(incoming.get("cost_total") or 0)
+            if incoming.get("cost_currency"):
+                out["cost_currency"] = incoming.get("cost_currency")
+        return out
+    if key in {"provider_stats", "model_stats"}:
+        return _merge_dimension_prefer_max(existing, incoming)
+    if key == "by_task":
+        return _merge_by_task_prefer_max(existing, incoming)
+    if key in {"totals", "gates"}:
+        return _merge_int_map_prefer_max(existing, incoming)
+    w_ex = _metric_weight(key, existing)
+    w_in = _metric_weight(key, incoming)
+    if w_in > w_ex:
+        return incoming
+    if w_in < w_ex:
+        return existing
+    # 同量级保留已有（避免 hit/miss 分别取 max 把总量抬高）
+    return existing
+
+
+_PREFER_COMPLETE_KEYS = frozenset({
+    "tokens",
+    "images",
+    "provider_stats",
+    "model_stats",
+    "rag",
+    "memory_rag",
+    "by_task",
+    "totals",
+    "gates",
+})
+
+
 def merge_side_snapshot(existing: dict[str, Any] | None, snapshot: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(snapshot, dict):
         return existing if isinstance(existing, dict) else {}
@@ -85,7 +264,11 @@ def merge_side_snapshot(existing: dict[str, Any] | None, snapshot: dict[str, Any
         "memory_rag",
         "gates",
     ):
-        if key in snapshot:
+        if key not in snapshot:
+            continue
+        if key in _PREFER_COMPLETE_KEYS and key in out:
+            out[key] = _prefer_complete_metric(key, out.get(key), snapshot.get(key))
+        else:
             out[key] = snapshot[key]
     return out
 

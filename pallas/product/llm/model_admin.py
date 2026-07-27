@@ -944,6 +944,14 @@ async def fetch_llm_task_stats(
         },
     }
     try:
+        write_llm_daily_stats_side(
+            str(bot_snap.get("day_key") or today_key()),
+            "bot",
+            bot_snap if isinstance(bot_snap, dict) else {},
+        )
+    except Exception:
+        pass
+    try:
         from pallas.core.platform.shard import context as shard_ctx
         from pallas.product.llm.token_metrics import (
             cluster_llm_token_metrics_snapshot,
@@ -1140,10 +1148,22 @@ async def fetch_llm_task_stats(
             payload["ai"] = _normalize_ai_task_stats_snapshot(merged_fallback)
 
     try:
-        from pallas_plugin_draw.draw_stats_store import draw_stats_snapshot, flush_draw_stats_sync
+        from pallas_plugin_draw.draw_stats_store import (
+            cluster_draw_stats_snapshot,
+            draw_stats_snapshot,
+            flush_draw_stats_sync,
+        )
 
         flush_draw_stats_sync()
-        draw_images = draw_stats_snapshot(include_persisted=True)
+        try:
+            from pallas.core.platform.shard import context as shard_ctx
+
+            if shard_ctx.sharding_active() and shard_ctx.is_hub():
+                draw_images = cluster_draw_stats_snapshot()
+            else:
+                draw_images = draw_stats_snapshot(include_persisted=True)
+        except Exception:
+            draw_images = draw_stats_snapshot(include_persisted=True)
     except Exception:
         draw_images = {}
     if isinstance(draw_images, dict) and (
@@ -1177,8 +1197,21 @@ async def fetch_llm_task_stats(
     if start_d <= date.fromisoformat(clock_today) <= end_d:
         row = by_date.setdefault(clock_today, {"date": clock_today, "bot": None, "ai": None})
         if today_bot:
+            prev_bot = row.get("bot") if isinstance(row.get("bot"), dict) else None
+            if prev_bot:
+                from pallas.product.llm.llm_daily_stats_store import merge_side_snapshot
+
+                today_bot = merge_side_snapshot(prev_bot, today_bot)
+                payload["bot"] = today_bot
             row["bot"] = today_bot
         if today_ai:
+            prev_ai = row.get("ai") if isinstance(row.get("ai"), dict) else None
+            if prev_ai:
+                # 日汇总里更完整的 rag/token 等不要被重启后偏少的实时快照盖掉
+                from pallas.product.llm.llm_daily_stats_store import merge_side_snapshot
+
+                today_ai = merge_side_snapshot(prev_ai, today_ai)
+                payload["ai"] = today_ai
             row["ai"] = today_ai
     merged_hist = sorted(by_date.values(), key=lambda r: str(r.get("date", "")))
     payload["history"] = {
