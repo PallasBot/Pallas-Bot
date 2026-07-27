@@ -52,27 +52,58 @@ def _hydrate_from_disk_locked() -> None:
     if _hydrated:
         return
     _hydrated = True
+    today = str(_day_key or today_key()).strip()[:10]
+
+    def apply_raw(raw: dict[str, Any]) -> None:
+        global _hit_count, _miss_count  # noqa: PLW0603
+        if _hit_count or _miss_count or _by_document or _by_source:
+            return
+        _hit_count = int(raw.get("hit_count") or 0)
+        _miss_count = int(raw.get("miss_count") or 0)
+        docs = raw.get("by_document")
+        if isinstance(docs, dict):
+            for key, value in docs.items():
+                name = str(key or "").strip()
+                if name:
+                    _by_document[name] = int(value or 0)
+        sources = raw.get("by_source")
+        if isinstance(sources, dict):
+            for key, value in sources.items():
+                sid = str(key or "").strip()
+                if sid:
+                    _by_source[sid] = int(value or 0)
+
+    try:
+        from pallas.product.llm.shard_metric_hydrate import load_worker_day_metric
+
+        worker_raw = load_worker_day_metric(metric_key="llm_memory_rag", day_key=today)
+        if isinstance(worker_raw, dict):
+            apply_raw(worker_raw)
+            return
+    except Exception:
+        pass
+
     raw = load_stats_file()
     if not isinstance(raw, dict) or not raw.get("day_key"):
         return
-    if str(raw.get("day_key") or "") != str(_day_key or today_key()):
+    file_day = str(raw.get("day_key") or "").strip()[:10]
+    if file_day and file_day != today:
+        try:
+            from pallas.product.llm.llm_daily_stats_store import write_day_side
+
+            write_day_side(
+                file_day,
+                "ai",
+                {
+                    "memory_rag": {**raw, "day_key": file_day, "source": "bot"},
+                    "day_key": file_day,
+                    "source": "bot",
+                },
+            )
+        except Exception:
+            pass
         return
-    if _hit_count or _miss_count or _by_document or _by_source:
-        return
-    _hit_count = int(raw.get("hit_count") or 0)
-    _miss_count = int(raw.get("miss_count") or 0)
-    docs = raw.get("by_document")
-    if isinstance(docs, dict):
-        for key, value in docs.items():
-            name = str(key or "").strip()
-            if name:
-                _by_document[name] = int(value or 0)
-    sources = raw.get("by_source")
-    if isinstance(sources, dict):
-        for key, value in sources.items():
-            sid = str(key or "").strip()
-            if sid:
-                _by_source[sid] = int(value or 0)
+    apply_raw(raw)
 
 
 def rollover_if_needed() -> None:

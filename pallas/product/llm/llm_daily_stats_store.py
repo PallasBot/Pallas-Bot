@@ -63,6 +63,71 @@ def _trim_old_days(by_day: dict[str, Any]) -> None:
         by_day.pop(k, None)
 
 
+def _metric_weight(key: str, value: object) -> int:
+    if not isinstance(value, dict):
+        return 0
+    if key in {"rag", "memory_rag"}:
+        return int(value.get("hit_count") or 0) + int(value.get("miss_count") or 0)
+    if key == "tokens":
+        total = int(value.get("total_tokens") or 0)
+        if total > 0:
+            return total
+        return int(value.get("prompt_tokens") or 0) + int(value.get("completion_tokens") or 0)
+    if key in {"provider_stats", "model_stats"}:
+        total = 0
+        for row in value.values():
+            if isinstance(row, dict):
+                total += int(row.get("requests") or 0)
+        return total
+    if key == "images":
+        return (
+            int(value.get("ok_count") or 0)
+            + int(value.get("fail_count") or 0)
+            + int(value.get("image_count") or 0)
+        )
+    return 0
+
+
+def _merge_dimension_prefer_max(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
+    out = {str(k): dict(v) for k, v in existing.items() if isinstance(v, dict)}
+    for key, row in incoming.items():
+        if not isinstance(row, dict):
+            continue
+        name = str(key or "").strip()
+        if not name:
+            continue
+        cur = out.get(name)
+        if not cur:
+            out[name] = dict(row)
+            continue
+        if int(row.get("requests") or 0) >= int(cur.get("requests") or 0):
+            out[name] = dict(row)
+    return out
+
+
+def _prefer_complete_metric(key: str, existing: Any, incoming: Any) -> Any:
+    """累计型指标：禁止用偏少快照覆盖（重启后实时内存变小）。"""
+    if not isinstance(incoming, dict):
+        return existing if existing is not None else incoming
+    if not isinstance(existing, dict):
+        return incoming
+    if key in {"provider_stats", "model_stats"}:
+        return _merge_dimension_prefer_max(existing, incoming)
+    w_ex = _metric_weight(key, existing)
+    w_in = _metric_weight(key, incoming)
+    if w_in > w_ex:
+        return incoming
+    if w_in < w_ex:
+        return existing
+    # 同量级保留已有（避免 hit/miss 分别取 max 把总量抬高）
+    return existing
+
+
+_PREFER_COMPLETE_KEYS = frozenset(
+    {"tokens", "images", "provider_stats", "model_stats", "rag", "memory_rag"}
+)
+
+
 def merge_side_snapshot(existing: dict[str, Any] | None, snapshot: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(snapshot, dict):
         return existing if isinstance(existing, dict) else {}
@@ -85,7 +150,11 @@ def merge_side_snapshot(existing: dict[str, Any] | None, snapshot: dict[str, Any
         "memory_rag",
         "gates",
     ):
-        if key in snapshot:
+        if key not in snapshot:
+            continue
+        if key in _PREFER_COMPLETE_KEYS and key in out:
+            out[key] = _prefer_complete_metric(key, out.get(key), snapshot.get(key))
+        else:
             out[key] = snapshot[key]
     return out
 

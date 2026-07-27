@@ -76,33 +76,60 @@ def _hydrate_from_disk_locked() -> None:
     if _hydrated:
         return
     _hydrated = True
+    today = str(_day_key or today_key()).strip()[:10]
+
+    def apply_raw(raw: dict[str, Any]) -> None:
+        global _prompt_tokens, _completion_tokens, _cache_read_tokens, _cache_write_tokens, _cost_total, _cost_currency  # noqa: PLW0603, E501
+        if (
+            _prompt_tokens
+            or _completion_tokens
+            or _cache_read_tokens
+            or _cache_write_tokens
+            or _cost_total
+            or _by_task
+            or _by_provider
+            or _by_model
+            or _by_hour
+        ):
+            return
+        _prompt_tokens = int(raw.get("prompt_tokens") or 0)
+        _completion_tokens = int(raw.get("completion_tokens") or 0)
+        _cache_read_tokens = int(raw.get("cache_read_tokens") or 0)
+        _cache_write_tokens = int(raw.get("cache_write_tokens") or 0)
+        _cost_total = _as_cost(raw.get("cost_total"))
+        _cost_currency = str(raw.get("cost_currency") or "").strip().upper()
+        _copy_breakdown_from_persisted(_by_task, raw.get("by_task"))
+        _copy_breakdown_from_persisted(_by_provider, raw.get("by_provider"))
+        _copy_breakdown_from_persisted(_by_model, raw.get("by_model"))
+        _copy_breakdown_from_persisted(_by_hour, raw.get("by_hour"))
+
+    try:
+        from pallas.product.llm.shard_metric_hydrate import load_worker_day_metric
+
+        worker_raw = load_worker_day_metric(metric_key="llm_token", day_key=today)
+        if isinstance(worker_raw, dict):
+            apply_raw(worker_raw)
+            return
+    except Exception:
+        pass
+
     raw = load_stats_file()
     if not isinstance(raw, dict) or not raw.get("day_key"):
         return
-    if str(raw.get("day_key") or "") != str(_day_key or today_key()):
+    file_day = str(raw.get("day_key") or "").strip()[:10]
+    if file_day and file_day != today:
+        try:
+            from pallas.product.llm.llm_daily_stats_store import write_day_side
+
+            write_day_side(
+                file_day,
+                "ai",
+                {"tokens": {**raw, "day_key": file_day, "source": "bot"}, "day_key": file_day, "source": "bot"},
+            )
+        except Exception:
+            pass
         return
-    if (
-        _prompt_tokens
-        or _completion_tokens
-        or _cache_read_tokens
-        or _cache_write_tokens
-        or _cost_total
-        or _by_task
-        or _by_provider
-        or _by_model
-        or _by_hour
-    ):
-        return
-    _prompt_tokens = int(raw.get("prompt_tokens") or 0)
-    _completion_tokens = int(raw.get("completion_tokens") or 0)
-    _cache_read_tokens = int(raw.get("cache_read_tokens") or 0)
-    _cache_write_tokens = int(raw.get("cache_write_tokens") or 0)
-    _cost_total = _as_cost(raw.get("cost_total"))
-    _cost_currency = str(raw.get("cost_currency") or "").strip().upper()
-    _copy_breakdown_from_persisted(_by_task, raw.get("by_task"))
-    _copy_breakdown_from_persisted(_by_provider, raw.get("by_provider"))
-    _copy_breakdown_from_persisted(_by_model, raw.get("by_model"))
-    _copy_breakdown_from_persisted(_by_hour, raw.get("by_hour"))
+    apply_raw(raw)
 
 
 def rollover_if_needed() -> None:

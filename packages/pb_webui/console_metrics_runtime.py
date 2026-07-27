@@ -752,10 +752,10 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
             "coord_pending": coord_pending_snapshot_sync(),
             "process_memory": process_memory_snapshot(),
             "llm_task": llm_task_metrics_snapshot(),
-            "llm_token": llm_token_metrics_snapshot(include_persisted=False),
-            "llm_provider_request": llm_provider_request_metrics_snapshot(include_persisted=False),
-            "llm_rag": llm_rag_metrics_snapshot(include_persisted=False),
-            "llm_memory_rag": llm_memory_rag_metrics_snapshot(include_persisted=False),
+            "llm_token": llm_token_metrics_snapshot(include_persisted=True),
+            "llm_provider_request": llm_provider_request_metrics_snapshot(include_persisted=True),
+            "llm_rag": llm_rag_metrics_snapshot(include_persisted=True),
+            "llm_memory_rag": llm_memory_rag_metrics_snapshot(include_persisted=True),
         },
     )
 

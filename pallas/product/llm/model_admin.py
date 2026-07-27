@@ -1179,6 +1179,13 @@ async def fetch_llm_task_stats(
         if today_bot:
             row["bot"] = today_bot
         if today_ai:
+            prev_ai = row.get("ai") if isinstance(row.get("ai"), dict) else None
+            if prev_ai:
+                # 日汇总里更完整的 rag/token 等不要被重启后偏少的实时快照盖掉
+                from pallas.product.llm.llm_daily_stats_store import merge_side_snapshot
+
+                today_ai = merge_side_snapshot(prev_ai, today_ai)
+                payload["ai"] = today_ai
             row["ai"] = today_ai
     merged_hist = sorted(by_date.values(), key=lambda r: str(r.get("date", "")))
     payload["history"] = {
