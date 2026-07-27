@@ -585,25 +585,95 @@ def register_plugins_console_router(
         import asyncio
 
         from pallas.console.cli.extension_ops import install_official_extension_with_options
-        from pallas.console.webui.extension_install_progress import (
-            create_extension_install_job,
-            run_extension_install_job,
+        from pallas.console.webui.plugin_store_job_progress import (
+            create_plugin_store_job,
+            job_progress_reporter,
+            run_plugin_store_job,
         )
 
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        job = await create_extension_install_job(body.package, "install")
+        job = await create_plugin_store_job(kind="official", target=body.package, action="install")
 
-        async def runner(package: str) -> dict[str, Any]:
-            return await install_official_extension_with_options(package, restart=bool(body.restart))
+        async def runner(j) -> None:
+            data = await install_official_extension_with_options(
+                j.target,
+                restart=bool(body.restart),
+                on_progress=job_progress_reporter(j),
+            )
+            drop_read_cache(("plugins-official-extensions", "plugins"))
+            j.result = dict(data)
+            j.message = str(data.get("message") or "完成")
 
-        asyncio.create_task(run_extension_install_job(job, runner))
-        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "package": job.package}})
+        asyncio.create_task(run_plugin_store_job(job, runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "package": job.target}})
 
-    def _install_job_stream_response(job_id: str) -> StreamingResponse:
-        from pallas.console.webui.extension_install_progress import iter_extension_install_job_sse
+    @router.post(f"{x}/plugins/official-extensions/update-async", include_in_schema=True)
+    async def _plugins_official_extensions_update_async(
+        body: OfficialExtensionPackageBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        import asyncio
+
+        from pallas.console.cli.extension_ops import update_official_extension_with_options
+        from pallas.console.webui.plugin_store_job_progress import (
+            create_plugin_store_job,
+            job_progress_reporter,
+            run_plugin_store_job,
+        )
+
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        job = await create_plugin_store_job(kind="official", target=body.package, action="update")
+
+        async def runner(j) -> None:
+            data = await update_official_extension_with_options(
+                j.target,
+                restart=bool(body.restart),
+                on_progress=job_progress_reporter(j),
+            )
+            drop_read_cache(("plugins-official-extensions", "plugins"))
+            j.result = dict(data)
+            j.message = str(data.get("message") or "完成")
+
+        asyncio.create_task(run_plugin_store_job(job, runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "package": job.target}})
+
+    @router.post(f"{x}/plugins/official-extensions/uninstall-async", include_in_schema=True)
+    async def _plugins_official_extensions_uninstall_async(
+        body: OfficialExtensionPackageBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        import asyncio
+
+        from pallas.console.cli.extension_ops import uninstall_official_extension_with_options
+        from pallas.console.webui.plugin_store_job_progress import (
+            create_plugin_store_job,
+            job_progress_reporter,
+            run_plugin_store_job,
+        )
+
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        job = await create_plugin_store_job(kind="official", target=body.package, action="uninstall")
+
+        async def runner(j) -> None:
+            data = await uninstall_official_extension_with_options(
+                j.target,
+                restart=bool(body.restart),
+                on_progress=job_progress_reporter(j),
+            )
+            drop_read_cache(("plugins-official-extensions", "plugins"))
+            j.result = dict(data)
+            j.message = str(data.get("message") or "完成")
+
+        asyncio.create_task(run_plugin_store_job(job, runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "package": job.target}})
+
+    def _store_job_stream_response(job_id: str) -> StreamingResponse:
+        from pallas.console.webui.plugin_store_job_progress import iter_plugin_store_job_sse
 
         return StreamingResponse(
-            iter_extension_install_job_sse(job_id),
+            iter_plugin_store_job_sse(job_id),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -613,18 +683,25 @@ def register_plugins_console_router(
         )
 
     @router.get(
+        f"{x}/plugins/store-jobs/{{job_id}}/stream",
+        include_in_schema=True,
+    )
+    async def _plugins_store_job_stream(job_id: str) -> StreamingResponse:
+        return _store_job_stream_response(job_id)
+
+    @router.get(
         f"{x}/plugins/official-extensions/install-jobs/{{job_id}}/stream",
         include_in_schema=True,
     )
     async def _plugins_official_extensions_install_job_stream(job_id: str) -> StreamingResponse:
-        return _install_job_stream_response(job_id)
+        return _store_job_stream_response(job_id)
 
     @router.get(
         f"{x}/plugins/install-jobs/{{job_id}}/stream",
         include_in_schema=True,
     )
     async def _plugins_install_job_stream(job_id: str) -> StreamingResponse:
-        return _install_job_stream_response(job_id)
+        return _store_job_stream_response(job_id)
 
     @router.post(f"{x}/plugins/official-extensions/uninstall", include_in_schema=True)
     async def _plugins_official_extensions_uninstall(
@@ -822,27 +899,109 @@ def register_plugins_console_router(
         import asyncio
 
         from pallas.console.cli.community_plugin_ops import install_community_plugin_with_options
-        from pallas.console.webui.extension_install_progress import (
-            create_extension_install_job,
-            run_extension_install_job,
+        from pallas.console.webui.plugin_store_job_progress import (
+            create_plugin_store_job,
+            job_progress_reporter,
+            run_plugin_store_job,
         )
 
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         plugin_id, repo_url, ref = await _resolve_community_plugin_target(body)
-        job = await create_extension_install_job(plugin_id, "install")
+        job = await create_plugin_store_job(kind="community", target=plugin_id, action="install")
 
-        async def runner(_package: str) -> dict[str, Any]:
+        async def runner(j) -> None:
             data = await install_community_plugin_with_options(
-                _package,
+                j.target,
                 repository_url=repo_url,
                 ref=ref,
                 restart=bool(body.restart),
+                on_progress=job_progress_reporter(j),
             )
             drop_read_cache(("plugins-community-store", "plugins"))
-            return data
+            j.result = dict(data)
+            j.message = str(data.get("message") or "完成")
 
-        asyncio.create_task(run_extension_install_job(job, runner))
+        asyncio.create_task(run_plugin_store_job(job, runner))
         return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "package": plugin_id}})
+
+    @router.post(f"{x}/plugins/community-plugins/update-async", include_in_schema=True)
+    async def _plugins_community_plugins_update_async(
+        body: CommunityPluginActionBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        import asyncio
+
+        from pallas.console.cli.community_plugin_ops import update_community_plugin_with_options
+        from pallas.console.webui.community_plugin_index import load_community_plugin_index_safe
+        from pallas.console.webui.plugin_store_job_progress import (
+            create_plugin_store_job,
+            job_progress_reporter,
+            run_plugin_store_job,
+        )
+
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        ref = (body.ref or "main").strip() or "main"
+        if not (body.ref or "").strip():
+            index = await load_community_plugin_index_safe()
+            for entry in index.get("plugins") or []:
+                if str(entry.get("plugin_id")) == body.plugin_id.strip():
+                    ref = str(entry.get("ref") or ref).strip() or "main"
+                    break
+        job = await create_plugin_store_job(
+            kind="community",
+            target=body.plugin_id.strip(),
+            action="update",
+        )
+
+        async def runner(j) -> None:
+            data = await update_community_plugin_with_options(
+                j.target,
+                ref=ref,
+                restart=bool(body.restart),
+                on_progress=job_progress_reporter(j),
+            )
+            drop_read_cache(("plugins-community-store", "plugins"))
+            j.result = dict(data)
+            j.message = str(data.get("message") or "完成")
+
+        asyncio.create_task(run_plugin_store_job(job, runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "package": job.target}})
+
+    @router.post(f"{x}/plugins/community-plugins/uninstall-async", include_in_schema=True)
+    async def _plugins_community_plugins_uninstall_async(
+        body: CommunityPluginActionBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        import asyncio
+
+        from pallas.console.cli.community_plugin_ops import uninstall_community_plugin_with_options
+        from pallas.console.webui.plugin_store_job_progress import (
+            create_plugin_store_job,
+            job_progress_reporter,
+            run_plugin_store_job,
+        )
+
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        job = await create_plugin_store_job(
+            kind="community",
+            target=body.plugin_id.strip(),
+            action="uninstall",
+        )
+
+        async def runner(j) -> None:
+            data = await uninstall_community_plugin_with_options(
+                j.target,
+                restart=bool(body.restart),
+                on_progress=job_progress_reporter(j),
+            )
+            drop_read_cache(("plugins-community-store", "plugins"))
+            j.result = dict(data)
+            j.message = str(data.get("message") or "完成")
+
+        asyncio.create_task(run_plugin_store_job(job, runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "package": job.target}})
 
     @router.post(f"{x}/plugins/community-plugins/uninstall", include_in_schema=True)
     async def _plugins_community_plugins_uninstall(
