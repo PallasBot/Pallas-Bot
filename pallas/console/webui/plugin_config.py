@@ -12,8 +12,11 @@ from typing import Any, Literal, TypeVar, Union, get_args, get_origin
 from nonebot import get_plugin_config
 from pydantic import BaseModel
 
-from pallas.core.foundation.config.dotenv import repo_env_raw_value, repo_settings_files_exist
-from pallas.core.foundation.config.repo_settings import repo_settings_disk_revision
+from pallas.core.foundation.config.repo_settings import (
+    repo_env_raw_value,
+    repo_settings_disk_revision,
+    repo_settings_files_exist,
+)
 
 from .registry import PluginWebuiConfigHooks, register_plugin_webui_config
 

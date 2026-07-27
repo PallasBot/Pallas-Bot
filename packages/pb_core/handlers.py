@@ -10,7 +10,7 @@ from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot
 from pallas.console.cli.runtime_mode import resolve_bot_mode
 
 if TYPE_CHECKING:
-    from pallas.core.commands import PluginHandlerContext
+    from pallas.api.commands import PluginHandlerContext
 
 from .admins import (
     ADD_BOT_ADMIN_COMMAND,

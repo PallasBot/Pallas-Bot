@@ -20,8 +20,14 @@ from pallas.core.foundation.config import (
     user_is_bot_admin,
 )
 from pallas.core.foundation.config.bot_admins_cache import invalidate_bot_admins_cache
-from pallas.core.foundation.config.dotenv import repo_env_raw_value
-from pallas.core.foundation.config.repo_settings import repo_root
+from pallas.core.foundation.config.repo_settings import (
+    apply_repo_settings_to_environ,
+    merged_repo_settings_upper,
+    repo_env_raw_value,
+    repo_root,
+    repo_settings_files_exist,
+    upsert_repo_settings_items,
+)
 
 __all__ = [
     # 配置模型
@@ -42,9 +48,13 @@ __all__ = [
     "plugin_config_proxy",
     "provider_gateway_bound_field_names",
     "ui_provider_gateway",
-    # 环境变量
+    # 环境变量与仓库设置
+    "apply_repo_settings_to_environ",
+    "merged_repo_settings_upper",
     "repo_env_raw_value",
     "repo_root",
+    "repo_settings_files_exist",
+    "upsert_repo_settings_items",
     # 命令前缀
     "extract_command_tail",
     "extract_command_tail_any",

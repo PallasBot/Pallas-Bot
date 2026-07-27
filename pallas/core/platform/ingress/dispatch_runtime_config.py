@@ -6,7 +6,7 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.console.webui.field_help import field_help
-from pallas.core.foundation.config.dotenv import repo_env_raw_value, repo_layered_dotenv_files_exist
+from pallas.core.foundation.config.repo_settings import repo_env_raw_value, repo_layered_dotenv_files_exist
 
 _config_lock = Lock()
 _cached: IngressDispatchRuntimeConfig | None = None

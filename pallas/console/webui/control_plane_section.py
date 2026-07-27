@@ -7,8 +7,8 @@ from typing import Any
 from pydantic_core import PydanticUndefined
 
 from pallas.console.webui.field_help import field_help, normalize_field_description
-from pallas.core.foundation.config.dotenv import env_value_to_str
 from pallas.core.foundation.config.repo_settings import (
+    env_value_to_str,
     remove_repo_settings_keys,
     repo_env_raw_value,
     upsert_repo_settings_items,

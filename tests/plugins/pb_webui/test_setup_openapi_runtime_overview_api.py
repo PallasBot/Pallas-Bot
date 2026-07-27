@@ -180,17 +180,17 @@ def test_llm_runtime_overview_returns_aggregated_fields(monkeypatch) -> None:
         _ = timeout_sec
         return {"bot": {"day_key": "2026-06-24"}, "ai": {}, "ai_reachable": True}
 
-    monkeypatch.setattr("pallas.product.llm.startup_probe.probe_llm_provider", fake_provider)
-    monkeypatch.setattr("pallas.product.llm.startup_probe.probe_ai_service_health", fake_health)
-    monkeypatch.setattr("pallas.product.llm.model_admin.fetch_model_admin_status", fake_model_admin)
-    monkeypatch.setattr("pallas.product.llm.model_admin.fetch_llm_task_stats", fake_task_stats)
+    monkeypatch.setattr("pallas.product.llm.ops_api.probe_llm_provider", fake_provider)
+    monkeypatch.setattr("pallas.product.llm.ops_api.probe_ai_service_health", fake_health)
+    monkeypatch.setattr("pallas.product.llm.ops_api.fetch_model_admin_status", fake_model_admin)
+    monkeypatch.setattr("pallas.product.llm.ops_api.fetch_llm_task_stats", fake_task_stats)
 
     class _Gate:
         allowed = True
         status = ""
 
     monkeypatch.setattr(
-        "pallas.product.llm.submit_gate.assess_llm_kernel_submit_gate",
+        "pallas.product.llm.ops_api.assess_llm_kernel_submit_gate",
         lambda cfg=None: _Gate(),
     )
 
@@ -206,7 +206,10 @@ def test_llm_runtime_overview_returns_aggregated_fields(monkeypatch) -> None:
             }
         }
 
-    monkeypatch.setattr("pallas.product.llm.task_routing.build_task_routing_preview", fake_task_routing_preview)
+    monkeypatch.setattr(
+        "pallas.product.llm.ops_api.build_task_routing_preview",
+        fake_task_routing_preview,
+    )
     monkeypatch.setattr(
         mod,
         "build_conversation_kernel_status",
@@ -287,7 +290,7 @@ def test_llm_providers_put_ignores_readonly_metadata(monkeypatch) -> None:
         captured["document"] = document
         return {"providers_file": "/tmp/providers.toml", "provider_status": [], "task_routing": {}}
 
-    monkeypatch.setattr("pallas.product.llm.model_admin.save_providers_config", fake_save)
+    monkeypatch.setattr("pallas.product.llm.ops_api.save_providers_config", fake_save)
     client = _build_client(monkeypatch)
     response = client.put(
         "/pallas/api/common-config/llm/providers",
@@ -303,7 +306,7 @@ def test_llm_providers_put_ignores_readonly_metadata(monkeypatch) -> None:
 
 
 def test_llm_provider_test_accepts_float_latency(monkeypatch) -> None:
-    monkeypatch.setattr("pallas.product.llm.model_admin.probe_provider", _fake_probe_provider)
+    monkeypatch.setattr("pallas.product.llm.ops_api.probe_provider", _fake_probe_provider)
     client = _build_client(monkeypatch)
     response = client.post("/pallas/api/common-config/llm/providers/local/test")
     assert response.status_code == 200, response.text

@@ -157,7 +157,7 @@ def test_resolve_catalog_visuals_prefers_package_cover_over_brand_avatar() -> No
     roulette_root = Path(__file__).resolve().parents[2] / "packages" / "roulette"
     if not (roulette_root / "assets" / "cover.png").is_file():
         return
-    visuals = resolve_catalog_visuals(plugin_id="roulette", plugin_source="core", plugin_root=roulette_root)
+    visuals = resolve_catalog_visuals(plugin_id="roulette", plugin_source="bundled", plugin_root=roulette_root)
     assert visuals["cover"] == plugin_package_asset_public_url("roulette", "assets/cover.png")
     assert visuals["icon"] == visuals["cover"]
 

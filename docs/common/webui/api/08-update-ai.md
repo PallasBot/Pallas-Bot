@@ -52,6 +52,6 @@ Bot 读日志顺序：本机落盘路径 → AI `GET /api/ops/logs` → 报错�
 - `UpdatePage`：`fetchUpdateCheck`、`postUpdateApply`、`fetchBotUpdateCheck` 等
 - **AI 配置**（连接 / 媒体服务）：`fetchAiExtensionConfig`、`putAiExtensionConfig` 等
 
-实现：`extended_api.py` + `pallas_webui/manager.py`（GitHub Release 拉取）。
+实现：`update_api.py` + `ai_extension_api.py` + `pallas_webui/manager.py`（GitHub Release 拉取）。
 
 AI 仓库：[Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)。

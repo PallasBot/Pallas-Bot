@@ -6,8 +6,8 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from pallas.core.limits import effective_command_cooldown_text
-from pallas.core.perm import (
+from pallas.api.limits import effective_command_cooldown_text
+from pallas.api.perm import (
     effective_permission_avail_text,
     help_say_phrase,
     help_scene_text,
@@ -27,7 +27,7 @@ _CMD_PLACEHOLDER_RE = re.compile(r"[<>\[\]〈〉]")
 
 def normalize_plugin_usage_text(usage: str) -> str:
     """插件 usage 统一为 join_usage 序号列表（≥2 条时 1. 2. 3.）。"""
-    from pallas.core.perm.metadata_text import join_usage
+    from pallas.api.metadata import join_usage
 
     raw = (usage or "").strip()
     if not raw:

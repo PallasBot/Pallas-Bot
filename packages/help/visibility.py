@@ -45,7 +45,7 @@ def _migrate_legacy_hidden_plugins() -> list[str]:
     path = _visibility_path()
     if not legacy and not path.exists():
         return []
-    from pallas.core.storage.deploy_store import DeployPluginStorage
+    from pallas.api.storage import DeployPluginStorage
 
     store = DeployPluginStorage("help")
     store.set(_STORAGE_KEY, legacy)
@@ -65,7 +65,7 @@ def _normalize_hidden_plugins(raw: Any) -> list[str]:
 def load_help_hidden_plugins() -> list[str]:
     """从 deploy plugin_storage 读取的额外隐藏名单。"""
     try:
-        from pallas.core.storage.deploy_store import DeployPluginStorage
+        from pallas.api.storage import DeployPluginStorage
 
         store = DeployPluginStorage("help")
         vals = store.get(_STORAGE_KEY)
@@ -83,7 +83,7 @@ def resolve_help_hidden_plugins() -> list[str]:
 
 def save_help_hidden_plugins(hidden_plugins: list[str]) -> list[str]:
     out = sorted({str(x).strip() for x in hidden_plugins if str(x).strip()})
-    from pallas.core.storage.deploy_store import DeployPluginStorage
+    from pallas.api.storage import DeployPluginStorage
 
     DeployPluginStorage("help").set(_STORAGE_KEY, out)
     return out

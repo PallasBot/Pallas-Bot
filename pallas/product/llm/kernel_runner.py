@@ -23,26 +23,7 @@ if TYPE_CHECKING:
     from pallas.product.llm.config import LlmConfig
 
 
-async def deliver_llm_chat_result(
-    task_id: str,
-    *,
-    status: str,
-    text: str | None = None,
-    agent_trace: str | None = None,
-    history_summary: str | None = None,
-    history_keep_messages: int | None = None,
-) -> dict[str, str]:
-    """内核与 AI 回调共用的投递入口（不经 HTTP）。"""
-    from pallas.core.platform.ai_callback.runner import deliver_llm_chat_result as _deliver
-
-    return await _deliver(
-        task_id,
-        status=status,
-        text=text,
-        agent_trace=agent_trace,
-        history_summary=history_summary,
-        history_keep_messages=history_keep_messages,
-    )
+from pallas.product.llm.delivery import deliver_llm_chat_result
 
 
 async def run_kernel_chat_job(

@@ -152,7 +152,7 @@ def test_plugin_governance_put_filters_only_plugin_prefix(monkeypatch) -> None:
     async def fake_invalidate_disabled_plugin_gate_cache(*, clear_all: bool = False) -> None:
         assert clear_all is True
 
-    monkeypatch.setattr("pallas.console.webui.plugin_api.upsert_env_dotenv_items", fake_upsert_env)
+    monkeypatch.setattr("pallas.api.config.upsert_repo_settings_items", fake_upsert_env)
     monkeypatch.setattr(
         "pallas.core.perm.config.clear_cmd_perm_cache",
         lambda: cleared.__setitem__("perm", True),
@@ -235,7 +235,7 @@ def test_plugin_governance_put_keeps_existing_overrides_and_honors_alias_prefix(
     async def fake_invalidate_disabled_plugin_gate_cache(*, clear_all: bool = False) -> None:
         assert clear_all is True
 
-    monkeypatch.setattr("pallas.console.webui.plugin_api.upsert_env_dotenv_items", fake_upsert_env)
+    monkeypatch.setattr("pallas.api.config.upsert_repo_settings_items", fake_upsert_env)
     monkeypatch.setattr("packages.help.visibility.load_help_hidden_plugins", list)
     monkeypatch.setattr("packages.help.global_disable.load_global_disabled_plugins", list)
     monkeypatch.setattr(

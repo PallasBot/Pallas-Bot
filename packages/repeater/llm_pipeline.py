@@ -3,9 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pallas.product.llm.kernel import plan_generation_stages
-from pallas.product.llm.kernel.generation import GenerationPlan, build_repeater_generation_plan
-from pallas.product.llm.kernel.models import ConversationMode, ConversationPath, ConversationScene
+from pallas.product.llm.runtime_api import (
+    ConversationMode,
+    ConversationPath,
+    ConversationScene,
+    GenerationPlan,
+    build_repeater_generation_plan,
+    plan_generation_stages,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable

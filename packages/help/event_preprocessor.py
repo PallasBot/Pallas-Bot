@@ -7,7 +7,7 @@ from nonebot.exception import IgnoredException
 from nonebot.internal.matcher import Matcher
 from nonebot.message import event_preprocessor, run_preprocessor
 
-from pallas.core.perm.acl import AclSubject, evaluate_acl
+from pallas.api.perm import AclSubject, evaluate_acl
 from pallas.core.perm.plugin_acl import plugin_acl_key
 from pallas.core.platform.ingress.plugin_command_plaintext import is_plugin_command_plaintext
 from pallas.core.platform.ingress.policy_registry import text_matches_plugin_fanout

@@ -23,8 +23,8 @@ def test_llm_history_stats_and_clear(monkeypatch) -> None:
     async def fake_clear(*, bot_id, group_id, user_id=None):
         return {"scope": "user", "bot_id": bot_id, "group_id": group_id, "user_id": user_id, "deleted": 3}
 
-    monkeypatch.setattr("pallas.product.llm.session_ops.build_llm_history_stats", fake_stats)
-    monkeypatch.setattr("pallas.product.llm.session_ops.clear_llm_history_session", fake_clear)
+    monkeypatch.setattr("pallas.product.llm.ops_api.build_llm_history_stats", fake_stats)
+    monkeypatch.setattr("pallas.product.llm.ops_api.clear_llm_history_session", fake_clear)
 
     client = _build_client(monkeypatch)
     stats = client.get("/pallas/api/common-config/llm/history/stats", params={"bot_id": 1})
@@ -46,8 +46,8 @@ def test_llm_history_inject_and_compact(monkeypatch) -> None:
     async def fake_compact(**kwargs):
         return {"ok": True, "keep_messages": 16, **{k: kwargs[k] for k in ("bot_id", "group_id", "user_id")}}
 
-    monkeypatch.setattr("pallas.product.llm.session_ops.inject_llm_history_message", fake_inject)
-    monkeypatch.setattr("pallas.product.llm.session_ops.compact_llm_history_session", fake_compact)
+    monkeypatch.setattr("pallas.product.llm.ops_api.inject_llm_history_message", fake_inject)
+    monkeypatch.setattr("pallas.product.llm.ops_api.compact_llm_history_session", fake_compact)
 
     client = _build_client(monkeypatch)
     injected = client.post(
@@ -73,8 +73,8 @@ def test_memory_ops_retrieve_clear_lifecycle(monkeypatch, tmp_path) -> None:
         return {"deleted": 4, "dry_run": dry_run, "bot_id": bot_id, "group_id": group_id}
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr("pallas.product.llm.memory.ops.preview_memory_retrieve", fake_preview)
-    monkeypatch.setattr("pallas.product.llm.memory.ops.clear_memory_entries", fake_clear)
+    monkeypatch.setattr("pallas.product.llm.ops_api.preview_memory_retrieve", fake_preview)
+    monkeypatch.setattr("pallas.product.llm.ops_api.clear_memory_entries", fake_clear)
 
     client = _build_client(monkeypatch)
     retrieved = client.post(
@@ -105,7 +105,7 @@ def test_memory_preferences_and_mid_term(monkeypatch, tmp_path) -> None:
     async def fake_mid(*, bot_id, group_id=None, user_id=None, limit=50):
         return [{"bot_id": bot_id, "group_id": 0, "user_id": 1, "summary": "聊过猫", "created_at": 1}]
 
-    monkeypatch.setattr("pallas.product.llm.memory.mid_term.list_mid_term_summaries", fake_mid)
+    monkeypatch.setattr("pallas.product.llm.ops_api.list_mid_term_summaries", fake_mid)
 
     client = _build_client(monkeypatch)
     created = client.post(
@@ -134,11 +134,11 @@ def test_session_memory_config_subset_get(monkeypatch) -> None:
     from pallas.product.llm.ops_config import LlmMemoryOpsConfig, LlmSessionOpsConfig
 
     monkeypatch.setattr(
-        "pallas.product.llm.ops_config.get_llm_session_ops_config",
+        "pallas.product.llm.ops_api.get_llm_session_ops_config",
         lambda: LlmSessionOpsConfig(llm_session_user_window=22),
     )
     monkeypatch.setattr(
-        "pallas.product.llm.ops_config.get_llm_memory_ops_config",
+        "pallas.product.llm.ops_api.get_llm_memory_ops_config",
         lambda: LlmMemoryOpsConfig(llm_memory_rag_top_k=5),
     )
     client = _build_client(monkeypatch)

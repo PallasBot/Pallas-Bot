@@ -69,8 +69,8 @@ from packages.request_handler.texts import (
     build_quick_action_arg_hint,
     build_quick_action_missing_hint,
 )
+from pallas.api.perm import private_message_permission_for_command, satisfies_command_permission
 from pallas.core.foundation.config import BotConfig, GroupConfig, UserConfig, user_is_bot_admin
-from pallas.core.perm import private_message_permission_for_command, satisfies_command_permission
 
 request_cmd = on_request(priority=14, block=False)
 

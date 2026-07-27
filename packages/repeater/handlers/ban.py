@@ -13,7 +13,7 @@ from nonebot.exception import ActionFailed
 from nonebot.rule import Rule
 from nonebot.typing import T_State  # noqa: TC002
 
-from pallas.core.perm import group_message_permission_for_command
+from pallas.api.perm import group_message_permission_for_command
 from pallas.core.shared.dream_ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
 from pallas.core.shared.reply_command_rule import (
     event_has_reply_target,

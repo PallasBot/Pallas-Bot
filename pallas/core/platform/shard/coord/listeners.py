@@ -19,8 +19,8 @@ _COORD_LISTENER_SPECS: tuple[tuple[str, str, str | None], ...] = (
         "start_repeater_reply_buffer_redis_listener",
         "repeater",
     ),
-    ("pallas.core.platform.shard.coord.dream_drift", "start_dream_drift_redis_listener", "dream"),
-    ("pallas.core.platform.shard.coord.duel_qte_redis", "start_duel_qte_redis_listeners", "duel"),
+    ("pallas.extensions.coord.dream.drift", "start_dream_drift_redis_listener", "dream"),
+    ("pallas.extensions.coord.duel.qte_redis", "start_duel_qte_redis_listeners", "duel"),
     ("pallas.core.platform.shard.coord.bot_action", "start_bot_action_redis_listener", None),
 )
 

@@ -42,7 +42,7 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`
 - **主配置**：复制 [`config/pallas.example.toml`](config/pallas.example.toml) 为 **`config/pallas.toml`**（已 gitignore），填写 `[bootstrap]`（监听、数据库等）。
 - **WebUI 落盘**：插件与通用项写入 **`data/pallas_config/webui.json`**；只读快照 **`config/pallas.webui.export.toml`** 由保存自动生成。
 - **合并顺序**：`pallas.toml` → 遗留 `.env` / `.env.{ENVIRONMENT}` → `webui.json`（后者覆盖前者；**WebUI 落盘最高**）。
-- **读取 API**：`pallas/core/foundation/config/repo_settings.py` 的 `repo_env_raw_value()` / `merged_repo_settings_upper()`；启动前 `apply_repo_settings_to_environ()`。
+- **读取 API**：`pallas/core/foundation/config/repo_settings.py` 的 `repo_env_raw_value()` / `merged_repo_settings_upper()`（插件经 `pallas.api.config`）；启动前 `apply_repo_settings_to_environ()`。`dotenv` 为弃用兼容层，勿新增依赖。
 - **从旧 `.env` 迁移**：`uv run python tools/migrate_env_to_pallas.py`（一次性）；**`.env` 仍可保留**专放 nb/pip 插件项（见 `.env.example`），与 `webui.json` 避免同名键重复。
 - **分片可选 Redis**：在 `pallas.toml` 的 `[env]` 配置 `REDIS_URL`；`run_sharded_bot.sh` 自动探测。依赖：`uv sync --extra coord-redis` 或 `uv sync --extra deploy-shard`。
 - **可选部署模板**：`deploy/` 目录 + `uv sync --extra deploy-shard`；应用 `uv run python tools/apply_deploy_profile.py shard`（分片）。消息审查 4.0 默认开启，无需模板。
@@ -100,7 +100,7 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`
 
 ### 内核插件（core）与 golden 模板
 
-`CORE_PLUGIN_NAMES` 见 `src/platform/bot_runtime/plugin_matrix.py`（含 `pb_core`、`pb_stats`、`pb_webui` 等）。维护者向内核插件包名优先 **`pb_*`**；历史名经 `plugin_package_aliases.py` / `plugin_legacy_names.py` 别名兼容（如 `community_stats` → `pb_stats`）。
+`CORE_PLUGIN_NAMES` 与 `BUNDLED_PLAY_PLUGIN_NAMES` 见 `pallas/core/platform/bot_runtime/plugin_matrix.py`。**core**（平台内核，catalog kind `core`）：`pb_core`、`repeater`、`help`、`pb_webui`、`request_handler`、`blacklist`、`llm_chat`、`pb_stats`。**bundled play**（仍默认从 `packages/` 加载，kind `bundled`）：`drink`、`greeting`、`roulette`、`take_name`——不属于 core。官方可选包仍走 `EXTRA_PLUGIN_PACKAGES`。维护者向内核插件包名优先 **`pb_*`**；历史名经 `plugin_package_aliases.py` / `plugin_legacy_names.py` 别名兼容（如 `community_stats` → `pb_stats`）。
 
 **标准目录**（参考 `pb_core`、`pb_stats`）：
 
