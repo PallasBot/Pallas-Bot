@@ -16,8 +16,7 @@ from packages.pb_webui.console_openapi_models import (
 from packages.pb_webui.console_openapi_models import (
     _ApiOkResponse,
 )
-from pallas.product.llm.behavior import BehaviorPattern, BehaviorScene
-from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
+from pallas.product.llm.ops_api import BehaviorPattern, BehaviorScene, ensure_default_behavior_patterns
 
 from .ai_extension_api import ai_extension_http_json
 from .config import Config
@@ -518,7 +517,7 @@ def register_common_config_router(
 
     @router.get(f"{x}/common-config/llm/model-admin", include_in_schema=True)
     async def _llm_model_admin_get() -> JSONResponse:
-        from pallas.product.llm.model_admin import fetch_model_admin_status
+        from pallas.product.llm.ops_api import fetch_model_admin_status
 
         try:
             data = await fetch_model_admin_status()
@@ -533,7 +532,7 @@ def register_common_config_router(
         x_pallas_token: str | None,
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.model_admin import switch_runtime_model
+        from pallas.product.llm.ops_api import switch_runtime_model
 
         try:
             data = await switch_runtime_model(body.model, pull=body.pull)
@@ -573,7 +572,7 @@ def register_common_config_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.model_admin import reload_runtime_model
+        from pallas.product.llm.ops_api import reload_runtime_model
 
         try:
             data = await reload_runtime_model()
@@ -588,7 +587,7 @@ def register_common_config_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.model_admin import set_runtime_num_gpu
+        from pallas.product.llm.ops_api import set_runtime_num_gpu
 
         try:
             data = await set_runtime_num_gpu(body.num_gpu)
@@ -604,7 +603,7 @@ def register_common_config_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.model_admin import unload_runtime_model
+        from pallas.product.llm.ops_api import unload_runtime_model
 
         try:
             await unload_runtime_model()
@@ -618,7 +617,7 @@ def register_common_config_router(
         response_model=_ApiOkResponse[_LlmProvidersConfigData],
     )
     async def _llm_providers_get() -> dict[str, Any]:
-        from pallas.product.llm.model_admin import fetch_providers_config
+        from pallas.product.llm.ops_api import fetch_providers_config
 
         try:
             data = await fetch_providers_config()
@@ -628,7 +627,7 @@ def register_common_config_router(
 
     @router.get(f"{x}/common-config/llm/local-routing", include_in_schema=True)
     async def _llm_local_routing_get() -> JSONResponse:
-        from pallas.product.llm.model_admin import fetch_local_routing_config
+        from pallas.product.llm.ops_api import fetch_local_routing_config
 
         try:
             data = await fetch_local_routing_config()
@@ -643,7 +642,7 @@ def register_common_config_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.model_admin import save_local_routing_config
+        from pallas.product.llm.ops_api import save_local_routing_config
 
         try:
             data = await save_local_routing_config(body.model_dump())
@@ -658,7 +657,7 @@ def register_common_config_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.model_admin import save_providers_config
+        from pallas.product.llm.ops_api import save_providers_config
 
         try:
             data = await save_providers_config(body.model_dump(exclude_unset=True))
@@ -675,7 +674,7 @@ def register_common_config_router(
     ) -> JSONResponse:
         """只保存单个提供方，避免整表写回时误擦其他提供方密钥。"""
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.model_admin import upsert_provider_config
+        from pallas.product.llm.ops_api import upsert_provider_config
 
         payload = body.model_dump(exclude_unset=True)
         payload["id"] = str(provider_id or "").strip() or str(payload.get("id") or "").strip()
@@ -691,7 +690,7 @@ def register_common_config_router(
 
     @router.get(f"{x}/common-config/llm/providers/{{provider_id}}/models", include_in_schema=True)
     async def _llm_provider_models_get(provider_id: str) -> JSONResponse:
-        from pallas.product.llm.model_admin import fetch_provider_models
+        from pallas.product.llm.ops_api import fetch_provider_models
 
         try:
             data = await fetch_provider_models(provider_id)
@@ -710,7 +709,7 @@ def register_common_config_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.model_admin import fetch_provider_models
+        from pallas.product.llm.ops_api import fetch_provider_models
 
         payload = body or _LlmProviderModelsDiscoverBody()
         try:
@@ -737,7 +736,7 @@ def register_common_config_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> dict[str, Any]:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.model_admin import probe_provider
+        from pallas.product.llm.ops_api import probe_provider
 
         try:
             data = await probe_provider(provider_id)
@@ -750,7 +749,7 @@ def register_common_config_router(
         start: str | None = Query(default=None, description="YYYY-MM-DD，含当日"),
         end: str | None = Query(default=None, description="YYYY-MM-DD，含当日"),
     ) -> JSONResponse:
-        from pallas.product.llm.model_admin import fetch_llm_task_stats
+        from pallas.product.llm.ops_api import fetch_llm_task_stats
 
         try:
             data = await fetch_llm_task_stats(start=start, end=end)
@@ -763,7 +762,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_assets_status_get() -> JSONResponse:
-        from pallas.product.llm.media_assets import fetch_media_assets_status
+        from pallas.product.llm.ops_api import fetch_media_assets_status
 
         data = await fetch_media_assets_status()
         return JSONResponse({"ok": True, "data": data})
@@ -773,7 +772,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_assets_download_post(body: dict[str, Any] | None = None) -> JSONResponse:
-        from pallas.product.llm.media_assets import start_media_assets_download
+        from pallas.product.llm.ops_api import start_media_assets_download
 
         assets = None
         if isinstance(body, dict) and isinstance(body.get("assets"), list):
@@ -793,7 +792,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_assets_delete_post(body: dict[str, Any]) -> JSONResponse:
-        from pallas.product.llm.media_assets import delete_media_assets
+        from pallas.product.llm.ops_api import delete_media_assets
 
         assets = body.get("assets") if isinstance(body, dict) else None
         if not isinstance(assets, list) or not assets:
@@ -813,7 +812,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_assets_download_job_get(job_id: str) -> JSONResponse:
-        from pallas.product.llm.media_assets import fetch_media_assets_download_job
+        from pallas.product.llm.ops_api import fetch_media_assets_download_job
 
         try:
             data = await fetch_media_assets_download_job(job_id)
@@ -828,7 +827,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_models_sing_speakers_get() -> JSONResponse:
-        from pallas.product.llm.media_models import fetch_sing_speakers
+        from pallas.product.llm.ops_api import fetch_sing_speakers
 
         try:
             data = await fetch_sing_speakers()
@@ -841,7 +840,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_models_sing_backends_get() -> JSONResponse:
-        from pallas.product.llm.media_models import fetch_sing_backends
+        from pallas.product.llm.ops_api import fetch_sing_backends
 
         try:
             data = await fetch_sing_backends()
@@ -854,7 +853,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_models_sing_defaults_get() -> JSONResponse:
-        from pallas.product.llm.media_models import fetch_sing_defaults
+        from pallas.product.llm.ops_api import fetch_sing_defaults
 
         try:
             data = await fetch_sing_defaults()
@@ -867,7 +866,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_models_sing_defaults_put(body: dict[str, Any]) -> JSONResponse:
-        from pallas.product.llm.media_models import put_sing_defaults
+        from pallas.product.llm.ops_api import put_sing_defaults
 
         payload = body if isinstance(body, dict) else {}
         if payload.get("default_speaker") is None and payload.get("preferred_backend") is None:
@@ -887,7 +886,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_models_tts_voices_get() -> JSONResponse:
-        from pallas.product.llm.media_models import fetch_tts_voices
+        from pallas.product.llm.ops_api import fetch_tts_voices
 
         try:
             data = await fetch_tts_voices()
@@ -900,7 +899,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_models_tts_defaults_get() -> JSONResponse:
-        from pallas.product.llm.media_models import fetch_tts_defaults
+        from pallas.product.llm.ops_api import fetch_tts_defaults
 
         try:
             data = await fetch_tts_defaults()
@@ -913,7 +912,7 @@ def register_common_config_router(
         include_in_schema=True,
     )
     async def _llm_media_models_tts_defaults_put(body: dict[str, Any]) -> JSONResponse:
-        from pallas.product.llm.media_models import put_tts_defaults
+        from pallas.product.llm.ops_api import put_tts_defaults
 
         try:
             data = await put_tts_defaults(body if isinstance(body, dict) else {})
@@ -931,17 +930,19 @@ def register_common_config_router(
         response_model=_ApiOkResponse[_LlmRuntimeOverviewData],
     )
     async def _llm_runtime_overview_get() -> dict[str, Any]:
-        from pallas.product.llm.ai_health_parse import (
+        from pallas.product.llm.ops_api import (
+            assess_llm_kernel_submit_gate,
+            build_task_routing_preview,
+            fetch_llm_task_stats,
+            fetch_model_admin_status,
             image_health_circuit,
             llm_health_from_provider_probe,
             llm_runtime_detail_from_provider_probe,
             parse_media_tasks,
+            probe_ai_service_health,
+            probe_llm_provider,
             tts_health_summary,
         )
-        from pallas.product.llm.model_admin import fetch_llm_task_stats, fetch_model_admin_status
-        from pallas.product.llm.startup_probe import probe_ai_service_health, probe_llm_provider
-        from pallas.product.llm.submit_gate import assess_llm_kernel_submit_gate
-        from pallas.product.llm.task_routing import build_task_routing_preview
 
         def _draw_runtime_mode() -> str | None:
             try:
@@ -1012,7 +1013,7 @@ def register_common_config_router(
         user_id: int | None = Query(default=None, ge=1, description="用户 QQ；省略则返回最近会话列表"),
         limit: int = Query(default=50, ge=1, le=200),
     ) -> JSONResponse:
-        from pallas.product.llm.session_store import list_llm_history_sessions
+        from pallas.product.llm.ops_api import list_llm_history_sessions
 
         try:
             rows = await list_llm_history_sessions(
@@ -1038,7 +1039,7 @@ def register_common_config_router(
         user_id: int = Query(..., ge=1, description="用户 QQ"),
         limit: int = Query(default=100, ge=1, le=200),
     ) -> JSONResponse:
-        from pallas.product.llm.session_store import get_llm_history_session_detail
+        from pallas.product.llm.ops_api import get_llm_history_session_detail
 
         try:
             data = await get_llm_history_session_detail(
@@ -1055,7 +1056,7 @@ def register_common_config_router(
 
     @router.post(f"{x}/common-config/llm/history/behavior/annotate", include_in_schema=True)
     async def _llm_history_behavior_annotate(body: dict[str, Any]) -> JSONResponse:
-        from pallas.product.llm.session_store import update_llm_behavior_annotation
+        from pallas.product.llm.ops_api import update_llm_behavior_annotation
 
         request_id = str(body.get("request_id") or "").strip()
         if not request_id:
@@ -1173,7 +1174,7 @@ def register_common_config_router(
 
     @router.get(f"{x}/common-config/llm/runtime-debug/{{request_id}}", include_in_schema=True)
     async def _llm_runtime_debug_get(request_id: str) -> JSONResponse:
-        from pallas.product.llm.runtime_debug import load_runtime_debug_bundle
+        from pallas.product.llm.ops_api import load_runtime_debug_bundle
 
         rid = str(request_id or "").strip()
         if not rid:
@@ -1188,7 +1189,7 @@ def register_common_config_router(
         request_id: str,
         mode: str = Query(default="mock_tools"),
     ) -> JSONResponse:
-        from pallas.product.llm.runtime_debug import build_replay_payload
+        from pallas.product.llm.ops_api import build_replay_payload
 
         rid = str(request_id or "").strip()
         if not rid:
@@ -1203,7 +1204,7 @@ def register_common_config_router(
         request_id: str,
         body: Annotated[LlmReplayRunBody, Body()],
     ) -> JSONResponse:
-        from pallas.product.llm.runtime_debug import build_replay_payload
+        from pallas.product.llm.ops_api import build_replay_payload
 
         rid = str(request_id or "").strip()
         if not rid:
