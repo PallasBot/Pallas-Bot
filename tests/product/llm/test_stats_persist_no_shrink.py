@@ -36,6 +36,39 @@ def test_merge_side_snapshot_accepts_higher_rag() -> None:
     assert merged["rag"]["miss_count"] == 3
 
 
+def test_merge_side_snapshot_does_not_shrink_images_buckets() -> None:
+    existing = {
+        "images": {
+            "ok_count": 10,
+            "fail_count": 1,
+            "image_count": 10,
+            "cost_total": 1.0,
+            "by_gateway": {"provider": {"ok_count": 10, "fail_count": 1, "image_count": 10, "cost_total": 1.0}},
+            "by_provider": {"p1": {"ok_count": 10, "fail_count": 1, "image_count": 10, "cost_total": 1.0}},
+            "by_model": {"m1": {"ok_count": 10, "fail_count": 1, "image_count": 10, "cost_total": 1.0}},
+        }
+    }
+    incoming = {
+        "images": {
+            "ok_count": 2,
+            "fail_count": 0,
+            "image_count": 2,
+            "cost_total": 0.2,
+            "by_gateway": {"provider": {"ok_count": 2, "fail_count": 0, "image_count": 2, "cost_total": 0.2}},
+            "by_provider": {"p2": {"ok_count": 2, "fail_count": 0, "image_count": 2, "cost_total": 0.2}},
+            "by_model": {"m2": {"ok_count": 2, "fail_count": 0, "image_count": 2, "cost_total": 0.2}},
+        }
+    }
+    merged = merge_side_snapshot(existing, incoming)
+    img = merged["images"]
+    assert img["ok_count"] == 10
+    assert img["image_count"] == 10
+    assert img["by_provider"]["p1"]["ok_count"] == 10
+    assert img["by_provider"]["p2"]["ok_count"] == 2
+    assert img["by_model"]["m1"]["ok_count"] == 10
+    assert img["by_model"]["m2"]["ok_count"] == 2
+
+
 def test_rag_stale_file_salvaged_and_worker_rehydrates(tmp_path, monkeypatch) -> None:
     clear_llm_rag_metrics_for_tests()
     import pallas.product.llm.rag_metrics as rm
@@ -51,15 +84,13 @@ def test_rag_stale_file_salvaged_and_worker_rehydrates(tmp_path, monkeypatch) ->
     monkeypatch.setattr("pallas.product.llm.llm_daily_stats_store.write_day_side", fake_write)
 
     stats_path.write_text(
-        json.dumps(
-            {
-                "v": 1,
-                "day_key": "2026-07-25",
-                "hit_count": 88,
-                "miss_count": 2,
-                "by_document": {"old": 1},
-            }
-        ),
+        json.dumps({
+            "v": 1,
+            "day_key": "2026-07-25",
+            "hit_count": 88,
+            "miss_count": 2,
+            "by_document": {"old": 1},
+        }),
         encoding="utf-8",
     )
 

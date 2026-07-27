@@ -93,9 +93,10 @@ async def test_fetch_llm_task_stats_uses_bot_kernel_token_metering(
     assert payload["ai"]["source"] == "bot"
     assert payload["ai"]["tokens"]["total_tokens"] == 200
     assert payload["history"]["rows"][0]["ai"]["tokens"]["prompt_tokens"] == 123
-    assert written[0][0] == "2026-06-18"
-    assert written[0][1] == "ai"
-    assert written[0][2]["reachable"] is True
+    ai_writes = [row for row in written if row[1] == "ai"]
+    assert ai_writes
+    assert ai_writes[0][0] == "2026-06-18"
+    assert ai_writes[0][2]["reachable"] is True
 
 
 @pytest.mark.asyncio
@@ -347,6 +348,11 @@ async def test_fetch_llm_task_stats_history_fallback_ignores_images_only_live(
     monkeypatch.setattr(
         "pallas_plugin_draw.draw_stats_store.draw_stats_snapshot",
         lambda include_persisted=True: images_only,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "pallas_plugin_draw.draw_stats_store.cluster_draw_stats_snapshot",
+        lambda **kwargs: images_only,
         raising=False,
     )
 

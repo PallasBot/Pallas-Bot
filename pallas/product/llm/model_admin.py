@@ -1148,10 +1148,22 @@ async def fetch_llm_task_stats(
             payload["ai"] = _normalize_ai_task_stats_snapshot(merged_fallback)
 
     try:
-        from pallas_plugin_draw.draw_stats_store import draw_stats_snapshot, flush_draw_stats_sync
+        from pallas_plugin_draw.draw_stats_store import (
+            cluster_draw_stats_snapshot,
+            draw_stats_snapshot,
+            flush_draw_stats_sync,
+        )
 
         flush_draw_stats_sync()
-        draw_images = draw_stats_snapshot(include_persisted=True)
+        try:
+            from pallas.core.platform.shard import context as shard_ctx
+
+            if shard_ctx.sharding_active() and shard_ctx.is_hub():
+                draw_images = cluster_draw_stats_snapshot()
+            else:
+                draw_images = draw_stats_snapshot(include_persisted=True)
+        except Exception:
+            draw_images = draw_stats_snapshot(include_persisted=True)
     except Exception:
         draw_images = {}
     if isinstance(draw_images, dict) and (

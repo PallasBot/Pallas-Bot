@@ -726,6 +726,14 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
     from pallas.product.llm.task_metrics import llm_task_metrics_snapshot
     from pallas.product.llm.token_metrics import llm_token_metrics_snapshot
 
+    def _worker_draw_stats_snapshot() -> dict:
+        try:
+            from pallas_plugin_draw.draw_stats_store import draw_stats_snapshot
+
+            return draw_stats_snapshot(include_persisted=True)
+        except Exception:
+            return {}
+
     if not shard_worker_console():
         return
     shard_id = int(get_shard_registry_settings().shard_id)
@@ -756,6 +764,7 @@ def flush_worker_shard_console_stats_sync(*, include_hist: bool = False) -> None
             "llm_provider_request": llm_provider_request_metrics_snapshot(include_persisted=True),
             "llm_rag": llm_rag_metrics_snapshot(include_persisted=True),
             "llm_memory_rag": llm_memory_rag_metrics_snapshot(include_persisted=True),
+            "llm_draw": _worker_draw_stats_snapshot(),
         },
     )
 

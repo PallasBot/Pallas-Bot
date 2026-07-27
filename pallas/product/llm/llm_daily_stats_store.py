@@ -175,6 +175,44 @@ def _prefer_complete_metric(key: str, existing: Any, incoming: Any) -> Any:
         return existing if existing is not None else incoming
     if not isinstance(existing, dict):
         return incoming
+    if key == "images":
+        # 总量取高水位；分桶按 ok+fail+image 取较大行，避免回退丢维度
+        w_ex = (
+            int(existing.get("ok_count") or 0)
+            + int(existing.get("fail_count") or 0)
+            + int(existing.get("image_count") or 0)
+        )
+        w_in = (
+            int(incoming.get("ok_count") or 0)
+            + int(incoming.get("fail_count") or 0)
+            + int(incoming.get("image_count") or 0)
+        )
+        base = incoming if w_in > w_ex else existing if w_in < w_ex else existing
+        out = dict(base)
+        for bucket in ("by_gateway", "by_provider", "by_model"):
+            prev = existing.get(bucket) if isinstance(existing.get(bucket), dict) else {}
+            nxt = incoming.get(bucket) if isinstance(incoming.get(bucket), dict) else {}
+            merged: dict[str, Any] = {}
+            for name in set(prev) | set(nxt):
+                key_name = str(name or "").strip()
+                if not key_name:
+                    continue
+                a = prev.get(name) if isinstance(prev.get(name), dict) else {}
+                b = nxt.get(name) if isinstance(nxt.get(name), dict) else {}
+                wa = int(a.get("ok_count") or 0) + int(a.get("fail_count") or 0) + int(a.get("image_count") or 0)
+                wb = int(b.get("ok_count") or 0) + int(b.get("fail_count") or 0) + int(b.get("image_count") or 0)
+                chosen = b if wb > wa else a
+                if chosen:
+                    merged[key_name] = dict(chosen)
+            out[bucket] = merged
+        if w_in > w_ex:
+            out["ok_count"] = int(incoming.get("ok_count") or 0)
+            out["fail_count"] = int(incoming.get("fail_count") or 0)
+            out["image_count"] = int(incoming.get("image_count") or 0)
+            out["cost_total"] = float(incoming.get("cost_total") or 0)
+            if incoming.get("cost_currency"):
+                out["cost_currency"] = incoming.get("cost_currency")
+        return out
     if key in {"provider_stats", "model_stats"}:
         return _merge_dimension_prefer_max(existing, incoming)
     if key == "by_task":
