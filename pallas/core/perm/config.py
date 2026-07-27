@@ -10,7 +10,10 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.console.webui.field_help import field_help
-from pallas.core.foundation.config.dotenv import merged_repo_dotenv_upper, repo_layered_dotenv_files_exist
+from pallas.core.foundation.config.repo_settings import (
+    merged_repo_settings_upper,
+    repo_layered_dotenv_files_exist,
+)
 
 
 class CmdPermConfig(BaseModel):
@@ -27,7 +30,7 @@ class CmdPermConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> Self:
-        merged = merged_repo_dotenv_upper()
+        merged = merged_repo_settings_upper()
         raw = ""
         if "PALLAS_COMMAND_PERMISSION_OVERRIDES" in os.environ:
             raw = (os.environ.get("PALLAS_COMMAND_PERMISSION_OVERRIDES") or "").strip()

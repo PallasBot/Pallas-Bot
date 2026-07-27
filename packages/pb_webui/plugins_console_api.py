@@ -421,7 +421,7 @@ def register_plugins_console_router(
         from packages.help.global_disable import load_global_disabled_plugins, save_global_disabled_plugins
         from packages.help.plugin_manager import invalidate_disabled_plugin_gate_cache
         from packages.help.visibility import load_help_hidden_plugins, save_help_hidden_plugins
-        from pallas.console.webui.plugin_api import upsert_env_dotenv_items
+        from pallas.api.config import upsert_repo_settings_items
         from pallas.core.limits.config import get_command_limits_config, normalize_command_limit_overrides
         from pallas.core.perm.config import get_cmd_perm_config
         from pallas.core.perm.plugin_acl import sync_plugin_blocked_user_ids
@@ -469,7 +469,7 @@ def register_plugins_console_router(
                 separators=(",", ":"),
             )
         if env_items:
-            upsert_env_dotenv_items(env_items)
+            upsert_repo_settings_items(env_items)
             if "PALLAS_COMMAND_PERMISSION_OVERRIDES" in env_items:
                 from pallas.core.perm.config import clear_cmd_perm_cache
 
