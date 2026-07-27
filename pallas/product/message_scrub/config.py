@@ -7,8 +7,8 @@ from typing import Self
 from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.console.webui.field_help import field_help
-from pallas.core.foundation.config.dotenv import (
-    merged_repo_dotenv_upper,
+from pallas.core.foundation.config.repo_settings import (
+    merged_repo_settings_upper,
     repo_layered_dotenv_files_exist,
 )
 
@@ -102,7 +102,7 @@ def message_scrub_has_active_config(cfg: MessageScrubConfig | None = None) -> bo
 
 def is_message_scrub_enabled() -> bool:
     """运行时是否执行入站审查；显式 ``PALLAS_MESSAGE_SCRUB_ENABLED=false`` 可关闭。"""
-    merged = merged_repo_dotenv_upper()
+    merged = merged_repo_settings_upper()
     raw = _scrub_env_str("PALLAS_MESSAGE_SCRUB_ENABLED", merged_dotenv=merged, default="")
     if raw:
         return raw.lower() not in ("0", "false", "no", "off")
@@ -234,7 +234,7 @@ class MessageScrubConfig(BaseModel):
 
     @classmethod
     def from_env(cls) -> Self:
-        merged_dotenv = merged_repo_dotenv_upper()
+        merged_dotenv = merged_repo_settings_upper()
         has_rp = _scrub_review_providers_key_explicit(merged_dotenv)
         rp_val = _scrub_env_str("PALLAS_SCRUB_REVIEW_PROVIDERS", merged_dotenv=merged_dotenv, default="")
         try:

@@ -7,8 +7,7 @@ from typing import Any
 from pydantic_core import PydanticUndefined
 
 from pallas.console.webui.field_help import normalize_field_description
-from pallas.core.foundation.config.dotenv import env_value_to_str
-from pallas.core.foundation.config.repo_settings import upsert_repo_settings_items
+from pallas.core.foundation.config.repo_settings import env_value_to_str, upsert_repo_settings_items
 from pallas.product.corpus.reply_perf_config import CorpusReplyPerfConfig, get_corpus_reply_perf_config
 from pallas.product.corpus.webui_config import CorpusFederationWebuiConfig, get_corpus_federation_webui_config
 

@@ -33,10 +33,10 @@ pallas.toml  →  .env / .env.{ENVIRONMENT}  →  webui.json
 
 | 场景 | API |
 | --- | --- |
-| 仓库合并键（平台 / 产品） | `pallas.core.foundation.config.repo_settings.repo_env_raw_value`（亦经 `pallas.api.config.repo_env_raw_value` 导出） |
-| 启动灌入 environ | `apply_repo_settings_to_environ()` |
+| 仓库合并键（平台 / 产品） | `pallas.core.foundation.config.repo_settings`（插件经 `pallas.api.config` 导出） |
+| 启动灌入 environ | `repo_settings.apply_repo_settings_to_environ()` |
 | 插件页 | `install_hot_reload_config` → `get_config()` |
-| 业务侧禁止 | 散落 `os.environ` 当终值；私有「先 env 再文件」拼读 |
+| 业务侧禁止 | 散落 `os.environ` 当终值；私有「先 env 再文件」拼读；`pallas.core.foundation.config.dotenv`（已弃用兼容层） |
 
 ## 热载与分片
 

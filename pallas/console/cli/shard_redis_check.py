@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def shard_redis_doctor_lines() -> list[str]:
-    from pallas.core.foundation.config.dotenv import apply_repo_settings_to_environ
+    from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
     from pallas.core.platform.coord.redis_settings import (
         clear_coord_redis_settings_cache,
         coord_redis_enabled,
