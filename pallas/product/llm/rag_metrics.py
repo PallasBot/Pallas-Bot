@@ -16,6 +16,7 @@ _day_key = ""
 _hydrated = False
 _hit_count = 0
 _miss_count = 0
+_skip_count = 0
 _by_document: dict[str, int] = {}
 _by_source: dict[str, int] = {}
 
@@ -48,35 +49,68 @@ def load_stats_file() -> dict[str, Any]:
 
 def _hydrate_from_disk_locked() -> None:
     """进程内只 hydrate 一次，避免落盘快照与内存再次相加导致命中数漂移。"""
-    global _hydrated, _hit_count, _miss_count  # noqa: PLW0603
+    global _hydrated, _hit_count, _miss_count, _skip_count  # noqa: PLW0603
     if _hydrated:
         return
     _hydrated = True
+    today = str(_day_key or today_key()).strip()[:10]
+
+    def apply_raw(raw: dict[str, Any]) -> None:
+        global _hit_count, _miss_count, _skip_count  # noqa: PLW0603
+        if _hit_count or _miss_count or _skip_count or _by_document or _by_source:
+            return
+        _hit_count = int(raw.get("hit_count") or 0)
+        _miss_count = int(raw.get("miss_count") or 0)
+        _skip_count = int(raw.get("skip_count") or 0)
+        docs = raw.get("by_document")
+        if isinstance(docs, dict):
+            for key, value in docs.items():
+                name = str(key or "").strip()
+                if name:
+                    _by_document[name] = int(value or 0)
+        sources = raw.get("by_source")
+        if isinstance(sources, dict):
+            for key, value in sources.items():
+                sid = str(key or "").strip()
+                if sid:
+                    _by_source[sid] = int(value or 0)
+
+    try:
+        from pallas.product.llm.shard_metric_hydrate import (
+            allow_shared_stats_file_hydrate,
+            load_worker_day_metric,
+        )
+
+        worker_raw = load_worker_day_metric(metric_key="llm_rag", day_key=today)
+        if isinstance(worker_raw, dict):
+            apply_raw(worker_raw)
+            return
+        if not allow_shared_stats_file_hydrate():
+            return
+    except Exception:
+        pass
+
     raw = load_stats_file()
     if not isinstance(raw, dict) or not raw.get("day_key"):
         return
-    if str(raw.get("day_key") or "") != str(_day_key or today_key()):
+    file_day = str(raw.get("day_key") or "").strip()[:10]
+    if file_day and file_day != today:
+        try:
+            from pallas.product.llm.llm_daily_stats_store import write_day_side
+
+            write_day_side(
+                file_day,
+                "ai",
+                {"rag": {**raw, "day_key": file_day, "source": "bot"}, "day_key": file_day, "source": "bot"},
+            )
+        except Exception:
+            pass
         return
-    if _hit_count or _miss_count or _by_document or _by_source:
-        return
-    _hit_count = int(raw.get("hit_count") or 0)
-    _miss_count = int(raw.get("miss_count") or 0)
-    docs = raw.get("by_document")
-    if isinstance(docs, dict):
-        for key, value in docs.items():
-            name = str(key or "").strip()
-            if name:
-                _by_document[name] = int(value or 0)
-    sources = raw.get("by_source")
-    if isinstance(sources, dict):
-        for key, value in sources.items():
-            sid = str(key or "").strip()
-            if sid:
-                _by_source[sid] = int(value or 0)
+    apply_raw(raw)
 
 
 def rollover_if_needed() -> None:
-    global _day_key, _hydrated, _hit_count, _miss_count  # noqa: PLW0603
+    global _day_key, _hydrated, _hit_count, _miss_count, _skip_count  # noqa: PLW0603
     today = today_key()
     if _day_key == today:
         return
@@ -90,6 +124,7 @@ def rollover_if_needed() -> None:
             pass
         _hit_count = 0
         _miss_count = 0
+        _skip_count = 0
         _by_document.clear()
         _by_source.clear()
         _day_key = today
@@ -99,12 +134,24 @@ def rollover_if_needed() -> None:
     _hydrated = False
 
 
+def record_rag_skip() -> None:
+    """意图门控跳过：不计 hit/miss，只累加 skip_count。"""
+    try:
+        with _lock:
+            rollover_if_needed()
+            _hydrate_from_disk_locked()
+            global _skip_count  # noqa: PLW0603
+            _skip_count += 1
+    except Exception:
+        pass
+
+
 def record_rag_query_result(
     *,
     hit: bool,
     documents: list[tuple[str, str]] | None = None,
 ) -> None:
-    """查询级记账：有结果 hit+1，空结果 miss+1；命中时再累加文档/来源。"""
+    """查询级记账：仅实际检索后调用；有结果 hit+1，空结果 miss+1。"""
     try:
         with _lock:
             rollover_if_needed()
@@ -128,12 +175,14 @@ def record_rag_query_result(
 def _snapshot_locked(*, day_override: str | None = None) -> dict[str, Any]:
     hit = int(_hit_count)
     miss = int(_miss_count)
+    skip = int(_skip_count)
     return {
         "source": "bot",
         "day_key": day_override or _day_key or today_key(),
         "updated_at": time.time(),
         "hit_count": hit,
         "miss_count": miss,
+        "skip_count": skip,
         "hit_rate": _hit_rate(hit, miss),
         "by_document": dict(_by_document),
         "by_source": dict(_by_source),
@@ -143,6 +192,7 @@ def _snapshot_locked(*, day_override: str | None = None) -> dict[str, Any]:
 def merge_llm_rag_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
     hit_count = 0
     miss_count = 0
+    skip_count = 0
     by_document: dict[str, int] = {}
     by_source: dict[str, int] = {}
     day_key = ""
@@ -159,6 +209,7 @@ def merge_llm_rag_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
             pass
         hit_count += int(row.get("hit_count") or 0)
         miss_count += int(row.get("miss_count") or 0)
+        skip_count += int(row.get("skip_count") or 0)
         docs = row.get("by_document")
         if isinstance(docs, dict):
             for key, value in docs.items():
@@ -179,6 +230,7 @@ def merge_llm_rag_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "updated_at": updated_at or time.time(),
         "hit_count": hit_count,
         "miss_count": miss_count,
+        "skip_count": skip_count,
         "hit_rate": _hit_rate(hit_count, miss_count),
         "by_document": by_document,
         "by_source": by_source,
@@ -206,7 +258,11 @@ def cluster_llm_rag_metrics_snapshot(*, max_stale_sec: float = 300.0) -> dict[st
                 rag = blob.get("llm_rag")
                 if not isinstance(rag, dict):
                     continue
-                if int(rag.get("hit_count") or 0) <= 0 and int(rag.get("miss_count") or 0) <= 0:
+                if (
+                    int(rag.get("hit_count") or 0) <= 0
+                    and int(rag.get("miss_count") or 0) <= 0
+                    and int(rag.get("skip_count") or 0) <= 0
+                ):
                     continue
                 rows.append(rag)
     except Exception:
@@ -253,11 +309,12 @@ def flush_rag_stats_sync() -> None:
 
 
 def clear_llm_rag_metrics_for_tests() -> None:
-    global _day_key, _hydrated, _hit_count, _miss_count  # noqa: PLW0603
+    global _day_key, _hydrated, _hit_count, _miss_count, _skip_count  # noqa: PLW0603
     with _lock:
         _day_key = today_key()
         _hydrated = True
         _hit_count = 0
         _miss_count = 0
+        _skip_count = 0
         _by_document.clear()
         _by_source.clear()

@@ -127,21 +127,59 @@ def _hydrate_from_disk_locked() -> None:
     if _hydrated:
         return
     _hydrated = True
+    today = str(_day_key or today_key()).strip()[:10]
+
+    def apply_raw(raw: dict[str, Any]) -> None:
+        if _by_provider or _by_model or _failure_counts:
+            return
+        _copy_dimension_from_persisted(_by_provider, raw.get("provider_stats"))
+        _copy_dimension_from_persisted(_by_model, raw.get("model_stats"))
+        fails = raw.get("failure_counts")
+        if isinstance(fails, dict):
+            for key, count in fails.items():
+                name = str(key or "").strip()
+                if name:
+                    _failure_counts[name] = int(count or 0)
+
+    try:
+        from pallas.product.llm.shard_metric_hydrate import (
+            allow_shared_stats_file_hydrate,
+            load_worker_day_metric,
+        )
+
+        worker_raw = load_worker_day_metric(metric_key="llm_provider_request", day_key=today)
+        if isinstance(worker_raw, dict):
+            apply_raw(worker_raw)
+            return
+        if not allow_shared_stats_file_hydrate():
+            return
+    except Exception:
+        pass
+
     raw = load_stats_file()
     if not isinstance(raw, dict) or not raw.get("day_key"):
         return
-    if str(raw.get("day_key") or "") != str(_day_key or today_key()):
+    file_day = str(raw.get("day_key") or "").strip()[:10]
+    if file_day and file_day != today:
+        # 进程跨日重启时可能跳过 rollover；把过期落盘回写日汇总，避免历史提供方调用丢失
+        try:
+            from pallas.product.llm.llm_daily_stats_store import write_day_side
+
+            write_day_side(
+                file_day,
+                "ai",
+                {
+                    "day_key": file_day,
+                    "source": "bot",
+                    "provider_stats": raw.get("provider_stats") or {},
+                    "model_stats": raw.get("model_stats") or {},
+                    "failure_counts": raw.get("failure_counts") or {},
+                },
+            )
+        except Exception:
+            pass
         return
-    if _by_provider or _by_model or _failure_counts:
-        return
-    _copy_dimension_from_persisted(_by_provider, raw.get("provider_stats"))
-    _copy_dimension_from_persisted(_by_model, raw.get("model_stats"))
-    fails = raw.get("failure_counts")
-    if isinstance(fails, dict):
-        for key, count in fails.items():
-            name = str(key or "").strip()
-            if name:
-                _failure_counts[name] = int(count or 0)
+    apply_raw(raw)
 
 
 def _snapshot_locked(*, day_override: str | None = None) -> dict[str, Any]:

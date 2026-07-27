@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import os
 import shutil
+from typing import TYPE_CHECKING
 
 from nonebot import logger
 
@@ -15,8 +16,18 @@ from pallas.core.platform.bot_runtime.plugin_matrix import (
     pip_module_installed,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    ProgressReporter = Callable[[int, str], None]
+
 INSTALL_TIMEOUT_S = 600.0
 UNINSTALL_TIMEOUT_S = 120.0
+
+
+def _report(on_progress: ProgressReporter | None, percent: int, message: str) -> None:
+    if on_progress is not None:
+        on_progress(percent, message)
 
 
 class ExtensionInstallError(Exception):
@@ -89,9 +100,15 @@ def tail_output(text: str, *, limit: int = 2000) -> str:
     return t[-limit:]
 
 
-async def install_official_extension(package: str) -> dict[str, str | bool]:
+async def install_official_extension(
+    package: str,
+    *,
+    on_progress: ProgressReporter | None = None,
+) -> dict[str, str | bool]:
     pkg = resolve_official_extension_package(package)
+    _report(on_progress, 5, "准备安装…")
     if pip_package_installed(pkg):
+        _report(on_progress, 100, "扩展包已在当前环境中")
         return {
             "package": pkg,
             "pip_installed": True,
@@ -100,6 +117,7 @@ async def install_official_extension(package: str) -> dict[str, str | bool]:
             "message": "扩展包已在当前环境中。",
         }
     logger.info("Pallas-Bot 控制台: 安装官方扩展 package={}", pkg)
+    _report(on_progress, 20, "执行 uv pip install…")
     code, out, err = await run_uv_command(
         INSTALL_TIMEOUT_S,
         "pip",
@@ -110,11 +128,13 @@ async def install_official_extension(package: str) -> dict[str, str | bool]:
     if code != 0:
         detail = err or out or "(无输出)"
         raise ExtensionInstallError(f"uv pip install 失败：{tail_output(detail)}", status_code=502)
+    _report(on_progress, 85, "校验扩展模块…")
     if not pip_package_installed(pkg):
         raise ExtensionInstallError(
             "uv pip install 已完成但未检测到扩展模块，请查看日志或手动执行安装命令。",
             status_code=502,
         )
+    _report(on_progress, 95, "安装完成")
     return {
         "package": pkg,
         "pip_installed": True,
@@ -125,11 +145,17 @@ async def install_official_extension(package: str) -> dict[str, str | bool]:
     }
 
 
-async def update_official_extension(package: str) -> dict[str, str | bool]:
+async def update_official_extension(
+    package: str,
+    *,
+    on_progress: ProgressReporter | None = None,
+) -> dict[str, str | bool]:
     pkg = resolve_official_extension_package(package)
+    _report(on_progress, 5, "准备更新…")
     if not pip_package_installed(pkg):
         raise ExtensionInstallError("扩展未安装，请先安装后再更新")
     logger.info("Pallas-Bot 控制台: 更新官方扩展 package={}", pkg)
+    _report(on_progress, 20, "执行 uv pip install --upgrade…")
     code, out, err = await run_uv_command(
         INSTALL_TIMEOUT_S,
         "pip",
@@ -140,11 +166,13 @@ async def update_official_extension(package: str) -> dict[str, str | bool]:
     if code != 0:
         detail = err or out or "(无输出)"
         raise ExtensionInstallError(f"uv pip install 失败：{tail_output(detail)}", status_code=502)
+    _report(on_progress, 85, "校验扩展模块…")
     if not pip_package_installed(pkg):
         raise ExtensionInstallError(
             "uv pip install 已完成但未检测到扩展模块，请查看日志或手动执行安装命令。",
             status_code=502,
         )
+    _report(on_progress, 95, "更新完成")
     return {
         "package": pkg,
         "pip_installed": True,
@@ -154,9 +182,15 @@ async def update_official_extension(package: str) -> dict[str, str | bool]:
     }
 
 
-async def uninstall_official_extension(package: str) -> dict[str, str | bool]:
+async def uninstall_official_extension(
+    package: str,
+    *,
+    on_progress: ProgressReporter | None = None,
+) -> dict[str, str | bool]:
     pkg = resolve_official_extension_package(package)
+    _report(on_progress, 5, "准备卸载…")
     if not pip_package_installed(pkg):
+        _report(on_progress, 100, "无需卸载")
         return {
             "package": pkg,
             "pip_installed": False,
@@ -165,6 +199,7 @@ async def uninstall_official_extension(package: str) -> dict[str, str | bool]:
             "message": "扩展包未通过 pip 安装，无需卸载。",
         }
     logger.info("Pallas-Bot 控制台: 卸载官方扩展 package={}", pkg)
+    _report(on_progress, 25, "执行 uv pip uninstall…")
     code, out, err = await run_uv_command(
         UNINSTALL_TIMEOUT_S,
         "pip",
@@ -174,6 +209,7 @@ async def uninstall_official_extension(package: str) -> dict[str, str | bool]:
     if code != 0:
         detail = err or out or "(无输出)"
         raise ExtensionInstallError(f"uv pip uninstall 失败：{tail_output(detail)}", status_code=502)
+    _report(on_progress, 95, "卸载完成")
     return {
         "package": pkg,
         "pip_installed": False,

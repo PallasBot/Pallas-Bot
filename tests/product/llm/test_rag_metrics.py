@@ -23,10 +23,25 @@ def test_record_rag_query_hit_and_miss() -> None:
     snap = llm_rag_metrics_snapshot(include_persisted=False)
     assert snap["hit_count"] == 1
     assert snap["miss_count"] == 1
+    assert snap["skip_count"] == 0
     assert snap["hit_rate"] == 50.0
     assert snap["by_document"]["清空会话"] == 1
     assert snap["by_document"]["多轮记忆"] == 1
     assert snap["by_source"]["pallas.bot_faq"] == 2
+
+
+def test_record_rag_skip_not_in_hit_rate() -> None:
+    from pallas.product.llm.rag_metrics import record_rag_skip
+
+    clear_llm_rag_metrics_for_tests()
+    record_rag_skip()
+    record_rag_skip()
+    record_rag_query_result(hit=True, documents=[("A", "s")])
+    snap = llm_rag_metrics_snapshot(include_persisted=False)
+    assert snap["skip_count"] == 2
+    assert snap["hit_count"] == 1
+    assert snap["miss_count"] == 0
+    assert snap["hit_rate"] == 100.0
 
 
 def test_merge_and_cluster_rag_snapshots(monkeypatch: pytest.MonkeyPatch) -> None:

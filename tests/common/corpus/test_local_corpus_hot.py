@@ -32,27 +32,39 @@ async def test_build_local_corpus_hot_payload_shape() -> None:
 
 
 @pytest.mark.asyncio
-async def test_aggregate_local_hot_keywords_mongo_uses_single_projection(
+async def test_aggregate_local_hot_keywords_mongo_uses_aggregation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Beanie 2.x project() 只接受一个 projection model（issue #227）。"""
+    """Mongo 路径用聚合取 top，避免 find_all 整表。"""
     import pallas.core.foundation.db.modules as modules
     from pallas.product.corpus import local_hot as mod
 
-    calls: list[object] = []
+    pipelines: list[list] = []
 
-    class _FakeFind:
-        def project(self, projection_model):
-            calls.append(projection_model)
-            return self
+    class _Agg:
+        def __init__(self, pipeline):
+            pipelines.append(pipeline)
 
-        async def to_list(self):
-            return []
+        async def to_list(self, _n):
+            if len(pipelines) == 1:
+                return [{"_id": "你好", "score": 3}]
+            return [
+                {
+                    "_id": "你好",
+                    "answer_rows": [
+                        {"answer_keywords": "早", "count": 3, "messages": ["早上好"]},
+                    ],
+                }
+            ]
+
+    class _Coll:
+        def aggregate(self, pipeline):
+            return _Agg(pipeline)
 
     class _FakeContext:
         @staticmethod
-        def find_all():
-            return _FakeFind()
+        def get_motor_collection():
+            return _Coll()
 
     monkeypatch.setattr(modules, "Context", _FakeContext)
 
@@ -62,6 +74,12 @@ async def test_aggregate_local_hot_keywords_mongo_uses_single_projection(
         limit=10,
         answers_per_keyword=3,
     )
-    assert rows == []
-    assert len(calls) == 1
-    assert getattr(calls[0], "__name__", "") == "_ContextHotProjection"
+    assert rows == [
+        {
+            "keywords": "你好",
+            "score": 3,
+            "answers": [{"answer_keywords": "早", "message": "早上好", "count": 3}],
+        }
+    ]
+    assert len(pipelines) == 2
+    assert pipelines[0][0] == {"$unwind": "$answers"}

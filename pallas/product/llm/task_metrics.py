@@ -67,6 +67,7 @@ _ROUTE_BUCKETS = frozenset({
 
 _lock = threading.Lock()
 _day_key = ""
+_hydrated = False
 _counters: dict[str, int] = {}
 
 
@@ -116,8 +117,88 @@ def snapshot_locked(*, day_override: str | None = None) -> dict[str, Any]:
     }
 
 
+def _counters_from_snapshot(raw: dict[str, Any]) -> dict[str, int]:
+    out: dict[str, int] = {}
+    by_task = raw.get("by_task") if isinstance(raw.get("by_task"), dict) else {}
+    for task, metrics in by_task.items():
+        task_key = str(task or "").strip() or "other"
+        if not isinstance(metrics, dict):
+            continue
+        for metric in _EVENTS:
+            count = int(metrics.get(metric) or 0)
+            if count > 0:
+                out[f"{task_key}:{metric}"] = count
+        route_counts = metrics.get("route_counts")
+        if isinstance(route_counts, dict):
+            for route, count in route_counts.items():
+                c = int(count or 0)
+                if c <= 0:
+                    continue
+                route_key = normalize_llm_route_name(str(route))
+                out[f"route:{task_key}:{route_key}"] = c
+    if out:
+        return out
+    # 兼容仅有 totals 的旧快照
+    totals = raw.get("totals") if isinstance(raw.get("totals"), dict) else {}
+    for metric in _EVENTS:
+        count = int(totals.get(metric) or 0)
+        if count > 0:
+            out[f"llm_chat:{metric}"] = count
+    return out
+
+
+def _hydrate_from_disk_locked() -> None:
+    global _hydrated  # noqa: PLW0603
+    if _hydrated:
+        return
+    _hydrated = True
+    today = str(_day_key or today_key()).strip()[:10]
+
+    def apply_raw(raw: dict[str, Any]) -> None:
+        if _counters:
+            return
+        loaded = _counters_from_snapshot(raw)
+        if loaded:
+            _counters.update(loaded)
+
+    try:
+        from pallas.product.llm.shard_metric_hydrate import (
+            allow_shared_stats_file_hydrate,
+            load_worker_day_metric,
+        )
+
+        worker_raw = load_worker_day_metric(metric_key="llm_task", day_key=today)
+        if isinstance(worker_raw, dict):
+            apply_raw(worker_raw)
+            return
+        if not allow_shared_stats_file_hydrate():
+            return
+    except Exception:
+        pass
+
+    path = stats_file_path()
+    if not path.is_file():
+        return
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(raw, dict) or not raw.get("day_key"):
+        return
+    file_day = str(raw.get("day_key") or "").strip()[:10]
+    if file_day and file_day != today:
+        try:
+            from pallas.product.llm.llm_daily_stats_store import write_day_side
+
+            write_day_side(file_day, "bot", {**raw, "day_key": file_day, "source": "bot"})
+        except Exception:
+            pass
+        return
+    apply_raw(raw)
+
+
 def rollover_if_needed() -> None:
-    global _day_key  # noqa: PLW0603
+    global _day_key, _hydrated  # noqa: PLW0603
     today = today_key()
     if _day_key == today:
         return
@@ -129,8 +210,12 @@ def rollover_if_needed() -> None:
             write_day_side(_day_key, "bot", old_snapshot)
         except Exception:
             pass
+        _counters.clear()
+        _day_key = today
+        _hydrated = True
+        return
     _day_key = today
-    _counters.clear()
+    _hydrated = False
 
 
 def record_bot_llm_task(task: str | None, event: str) -> None:
@@ -140,6 +225,7 @@ def record_bot_llm_task(task: str | None, event: str) -> None:
     try:
         with _lock:
             rollover_if_needed()
+            _hydrate_from_disk_locked()
             _counters[f"{key}:{event}"] = int(_counters.get(f"{key}:{event}", 0)) + 1
     except Exception:
         pass
@@ -158,6 +244,7 @@ def record_bot_llm_route(task: str | None, route: str | None) -> None:
     try:
         with _lock:
             rollover_if_needed()
+            _hydrate_from_disk_locked()
             compound = f"route:{key}:{route_key}"
             _counters[compound] = int(_counters.get(compound, 0)) + 1
     except Exception:
@@ -236,6 +323,7 @@ def cluster_llm_task_metrics_snapshot(*, max_stale_sec: float = 300.0) -> dict[s
 def llm_task_metrics_snapshot() -> dict[str, Any]:
     with _lock:
         rollover_if_needed()
+        _hydrate_from_disk_locked()
         return snapshot_locked()
 
 
@@ -245,11 +333,8 @@ def flush_stats_sync() -> None:
 
         if shard_ctx.sharding_active() and shard_ctx.is_worker():
             return
-        snapshot = (
-            cluster_llm_task_metrics_snapshot()
-            if shard_ctx.sharding_active() and shard_ctx.is_hub()
-            else llm_task_metrics_snapshot()
-        )
+        # 只落盘本进程，禁止写 cluster 合计，否则 hub hydrate 后再合并 worker 会翻倍
+        snapshot = llm_task_metrics_snapshot()
     except Exception:
         snapshot = llm_task_metrics_snapshot()
     if not snapshot.get("by_task") and not any(snapshot.get("totals", {}).values()):
@@ -265,13 +350,15 @@ def flush_stats_sync() -> None:
     try:
         from pallas.product.llm.llm_daily_stats_store import write_day_side
 
+        # 日汇总仍可用 cluster（读路径），此处写本进程；完整集群由 fetch 时 merge 写入
         write_day_side(str(snapshot.get("day_key") or today_key()), "bot", snapshot)
     except Exception:
         pass
 
 
 def clear_llm_task_metrics_for_tests() -> None:
-    global _day_key  # noqa: PLW0603
+    global _day_key, _hydrated  # noqa: PLW0603
     with _lock:
-        _day_key = ""
+        _day_key = today_key()
+        _hydrated = True
         _counters.clear()

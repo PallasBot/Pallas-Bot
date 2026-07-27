@@ -17,25 +17,32 @@ from pallas.product.llm.speak_perception import (
 
 def test_followup_window_hard_then_soft() -> None:
     clear_followup_window_state()
-    note_hard_speak_trigger(1, 9, window_seconds=30, max_total_seconds=120, now=1000.0)
-    assert in_followup_window(1, 9, window_seconds=30, max_total_seconds=120, now=1010.0)
-    assert not in_followup_window(1, 8, window_seconds=30, max_total_seconds=120, now=1010.0)
-    assert not in_followup_window(1, 9, window_seconds=30, max_total_seconds=120, now=1040.0)
+    note_hard_speak_trigger(7, 1, 9, window_seconds=30, max_total_seconds=120, now=1000.0)
+    assert in_followup_window(7, 1, 9, window_seconds=30, max_total_seconds=120, now=1010.0)
+    assert not in_followup_window(7, 1, 8, window_seconds=30, max_total_seconds=120, now=1010.0)
+    assert not in_followup_window(7, 1, 9, window_seconds=30, max_total_seconds=120, now=1040.0)
+
+
+def test_followup_isolated_per_bot() -> None:
+    clear_followup_window_state()
+    note_hard_speak_trigger(2357682124, 1, 9, window_seconds=30, max_total_seconds=120, now=1000.0)
+    assert in_followup_window(2357682124, 1, 9, window_seconds=30, max_total_seconds=120, now=1010.0)
+    assert not in_followup_window(3129723001, 1, 9, window_seconds=30, max_total_seconds=120, now=1010.0)
 
 
 def test_followup_soft_does_not_extend_by_itself() -> None:
     clear_followup_window_state()
-    note_hard_speak_trigger(2, 9, window_seconds=20, max_total_seconds=100, now=1000.0)
+    note_hard_speak_trigger(7, 2, 9, window_seconds=20, max_total_seconds=100, now=1000.0)
     # 软触发不调用 note_hard；窗口仍按 1000 起算
-    assert in_followup_window(2, 9, window_seconds=20, max_total_seconds=100, now=1015.0)
-    assert not in_followup_window(2, 9, window_seconds=20, max_total_seconds=100, now=1025.0)
+    assert in_followup_window(7, 2, 9, window_seconds=20, max_total_seconds=100, now=1015.0)
+    assert not in_followup_window(7, 2, 9, window_seconds=20, max_total_seconds=100, now=1025.0)
 
 
 def test_followup_max_total_ceiling() -> None:
     clear_followup_window_state()
-    note_hard_speak_trigger(3, 9, window_seconds=60, max_total_seconds=50, now=1000.0)
-    note_hard_speak_trigger(3, 9, window_seconds=60, max_total_seconds=50, now=1030.0)
-    assert not in_followup_window(3, 9, window_seconds=60, max_total_seconds=50, now=1055.0)
+    note_hard_speak_trigger(7, 3, 9, window_seconds=60, max_total_seconds=50, now=1000.0)
+    note_hard_speak_trigger(7, 3, 9, window_seconds=60, max_total_seconds=50, now=1030.0)
+    assert not in_followup_window(7, 3, 9, window_seconds=60, max_total_seconds=50, now=1055.0)
 
 
 def test_evaluate_followup_before_ambient() -> None:

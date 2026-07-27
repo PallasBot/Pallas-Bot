@@ -22,22 +22,25 @@ def test_community_install_async_returns_job(monkeypatch) -> None:
     async def fake_resolve(body):
         return "demo-plugin", "https://github.com/example/demo.git", "main"
 
-    async def fake_create(package: str, action: str):
-        from pallas.console.webui.extension_install_progress import ExtensionInstallJob
+    async def fake_create(*, kind: str, target: str, action: str):
+        from pallas.console.webui.plugin_store_job_progress import PluginStoreJob
 
-        return ExtensionInstallJob(job_id="job-demo", package=package, action=action)
+        return PluginStoreJob(job_id="job-demo", kind=kind, target=target, action=action)
 
     async def fake_run(job, runner):
         _ = runner
-        job.push("done", "ok", result={"message": "ok"})
+        job.push("done", "ok", result={"message": "ok"}, progress_percent=100)
 
-    monkeypatch.setattr(mod, "_resolve_community_plugin_target", fake_resolve)
     monkeypatch.setattr(
-        "pallas.console.webui.extension_install_progress.create_extension_install_job",
+        "packages.pb_webui.plugins_console_api._resolve_community_plugin_target",
+        fake_resolve,
+    )
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_store_job_progress.create_plugin_store_job",
         fake_create,
     )
     monkeypatch.setattr(
-        "pallas.console.webui.extension_install_progress.run_extension_install_job",
+        "pallas.console.webui.plugin_store_job_progress.run_plugin_store_job",
         fake_run,
     )
 
@@ -58,7 +61,7 @@ def test_install_job_stream_alias_route(monkeypatch) -> None:
         yield 'data: {"type":"complete","phase":"done","message":"ok"}\n\n'
 
     monkeypatch.setattr(
-        "pallas.console.webui.extension_install_progress.iter_extension_install_job_sse",
+        "pallas.console.webui.plugin_store_job_progress.iter_plugin_store_job_sse",
         fake_iter,
     )
     client = _build_client(monkeypatch)

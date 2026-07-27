@@ -21,6 +21,9 @@ from pallas.core.platform.shard.registry.store import (
 )
 
 _account_config_manager: Any | None = None
+_account_config_manager_loaded: bool = False
+
+MISSING_PROTOCOL_ONEBOT_SYNC_NOTE = "未安装 pallas-plugin-protocol，跳过实例 onebot 配置同步（accounts.json 仍可对齐）"
 
 
 @dataclass
@@ -31,6 +34,7 @@ class ProtocolPortSyncResult:
     skipped_invalid: int = 0
     onebot_drift_count: int = 0
     onebot_synced_count: int = 0
+    onebot_sync_skipped_reason: str = ""
     dry_run: bool = False
 
 
@@ -128,16 +132,26 @@ def _resolve_config_manager_path() -> Path | None:
     return None
 
 
-def get_account_config_manager() -> Any:
-    global _account_config_manager
-    if _account_config_manager is not None:
+def clear_account_config_manager_cache() -> None:
+    global _account_config_manager, _account_config_manager_loaded
+    _account_config_manager = None
+    _account_config_manager_loaded = False
+
+
+def get_account_config_manager() -> Any | None:
+    """返回 AccountConfigManager；未安装协议端扩展时返回 None。"""
+    global _account_config_manager, _account_config_manager_loaded
+    if _account_config_manager_loaded:
         return _account_config_manager
     path = _resolve_config_manager_path()
+    _account_config_manager_loaded = True
     if path is None:
-        raise ImportError("无法定位 AccountConfigManager：未找到 pallas_plugin_protocol.config_manager")
+        _account_config_manager = None
+        return None
     spec = importlib.util.spec_from_file_location("_pallas_account_config_manager", path)
     if spec is None or spec.loader is None:
-        raise ImportError(f"无法加载 AccountConfigManager: {path}")
+        _account_config_manager = None
+        return None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     _account_config_manager = mod.AccountConfigManager()
@@ -153,6 +167,8 @@ def read_onebot_instance_ws_url(account: dict) -> str:
     if not config_dir.is_dir():
         return ""
     mgr = get_account_config_manager()
+    if mgr is None:
+        return ""
     config_path = mgr._resolve_onebot_config_path(config_dir, qq)
     data = mgr.safe_read_json(config_path)
     network = data.get("network")
@@ -193,8 +209,13 @@ def sync_onebot_instances_from_accounts(
     *,
     dry_run: bool = False,
 ) -> tuple[int, int]:
-    """将 instances/<QQ>/config/onebot11_*.json 的 WS 与 accounts.json 对齐。"""
+    """将 instances/<QQ>/config/onebot11_*.json 的 WS 与 accounts.json 对齐。
+
+    未安装 pallas-plugin-protocol 时返回 (0, 0)，由调用方写入跳过说明。
+    """
     mgr = get_account_config_manager()
+    if mgr is None:
+        return 0, 0
     drift = 0
     synced = 0
     for account_id, account in accounts.items():
@@ -210,6 +231,21 @@ def sync_onebot_instances_from_accounts(
         mgr.sync_onebot(account, make_resolve_account_qq(account_id))
         synced += 1
     return synced, drift
+
+
+def apply_onebot_instance_sync(
+    result: ProtocolPortSyncResult,
+    accounts: dict,
+    *,
+    dry_run: bool = False,
+) -> None:
+    """把实例 onebot 同步结果写入 ProtocolPortSyncResult；缺协议端扩展时仅记跳过原因。"""
+    if get_account_config_manager() is None:
+        result.onebot_sync_skipped_reason = MISSING_PROTOCOL_ONEBOT_SYNC_NOTE
+        return
+    onebot_synced, onebot_drift = sync_onebot_instances_from_accounts(accounts, dry_run=dry_run)
+    result.onebot_synced_count = onebot_synced
+    result.onebot_drift_count = onebot_drift
 
 
 def sync_accounts_ws_urls(
@@ -300,9 +336,7 @@ def sync_accounts_ws_urls(
         )
         save_shard_registry(reg)
 
-    onebot_synced, onebot_drift = sync_onebot_instances_from_accounts(accounts, dry_run=dry_run)
-    result.onebot_synced_count = onebot_synced
-    result.onebot_drift_count = onebot_drift
+    apply_onebot_instance_sync(result, accounts, dry_run=dry_run)
     return result
 
 
@@ -317,7 +351,9 @@ def format_sync_user_message(result: ProtocolPortSyncResult, *, backup_path: Pat
             lines.append(f"  · QQ {qq} -> 端口 {port}  {new}")
         if len(result.details) > 15:
             lines.append(f"  · … 另有 {len(result.details) - 15} 个账号")
-    if result.onebot_synced_count:
+    if result.onebot_sync_skipped_reason:
+        lines.append(result.onebot_sync_skipped_reason)
+    elif result.onebot_synced_count:
         if result.onebot_drift_count:
             lines.append(
                 f"已同步 {result.onebot_synced_count} 个 NapCat/SnowLuma 实例 onebot 配置"

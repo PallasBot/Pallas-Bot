@@ -113,6 +113,7 @@ def _empty_day_bucket() -> dict[str, Any]:
         "by_task": {},
         "by_provider": {},
         "by_model": {},
+        "by_hour": {},
         "source": "ledger",
     }
 
@@ -138,6 +139,7 @@ def _bump_breakdown(
             "cache_read_tokens": 0,
             "cache_write_tokens": 0,
             "cost_total": 0.0,
+            "requests": 0,
         },
     )
     row["prompt_tokens"] = int(row.get("prompt_tokens") or 0) + prompt
@@ -145,6 +147,7 @@ def _bump_breakdown(
     row["cache_read_tokens"] = int(row.get("cache_read_tokens") or 0) + cache_read
     row["cache_write_tokens"] = int(row.get("cache_write_tokens") or 0) + cache_write
     row["cost_total"] = round(float(row.get("cost_total") or 0.0) + cost, 6)
+    row["requests"] = int(row.get("requests") or 0) + 1
 
 
 def aggregate_day_from_ledger(day: str) -> dict[str, Any] | None:
@@ -214,12 +217,27 @@ def aggregate_day_from_ledger(day: str) -> dict[str, Any] | None:
                 cache_write=cache_write,
                 cost=cost,
             )
+            try:
+                ts = float(row.get("ts") or 0)
+            except (TypeError, ValueError):
+                ts = 0.0
+            if ts > 0:
+                hour_key = time.strftime("%H", time.localtime(ts))
+                _bump_breakdown(
+                    bucket["by_hour"],
+                    hour_key,
+                    prompt=prompt,
+                    completion=completion,
+                    cache_read=cache_read,
+                    cache_write=cache_write,
+                    cost=cost,
+                )
     if int(bucket["request_count"]) <= 0:
         return None
     bucket["total_tokens"] = int(bucket["prompt_tokens"]) + int(bucket["completion_tokens"])
     bucket["cost_currency"] = currency
     bucket["day_key"] = str(day).strip()[:10]
-    for label in ("by_task", "by_provider", "by_model"):
+    for label in ("by_task", "by_provider", "by_model", "by_hour"):
         for values in bucket[label].values():
             values["total_tokens"] = int(values.get("prompt_tokens") or 0) + int(values.get("completion_tokens") or 0)
     return bucket

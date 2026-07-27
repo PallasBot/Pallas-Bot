@@ -18,13 +18,21 @@ from pallas.core.shared.utils.git_mirror import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
+
+    ProgressReporter = Callable[[int, str], None]
 
 COMMUNITY_PLUGINS_DIR = "local/plugins"
 INSTALL_TIMEOUT_S = 300.0
 UNINSTALL_TIMEOUT_S = 60.0
 PLUGIN_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 ALLOWED_GIT_HOSTS = ("github.com", "gitlab.com", "gitee.com", "codeberg.org")
+
+
+def _report(on_progress: ProgressReporter | None, percent: int, message: str) -> None:
+    if on_progress is not None:
+        on_progress(percent, message)
 
 
 class CommunityPluginInstallError(Exception):
@@ -124,11 +132,13 @@ async def install_community_plugin(
     *,
     repository_url: str,
     ref: str = "main",
+    on_progress: ProgressReporter | None = None,
 ) -> dict[str, str | bool]:
     pid = validate_plugin_id(plugin_id)
     repo = validate_git_repository(repository_url)
     branch = (ref or "main").strip() or "main"
     dest = plugin_install_path(pid)
+    _report(on_progress, 5, "准备安装…")
     if dest.exists():
         raise CommunityPluginInstallError(
             f"local/plugins/{pid} 已存在，请先卸载或手工更新",
@@ -144,6 +154,7 @@ async def install_community_plugin(
     last_detail = ""
     clone_ok = False
     out = ""
+    _report(on_progress, 15, "git clone…")
     for mirror in iter_mirrors_for_failover("community"):
         clone_url = rewrite_github_url(repo, mirror)
         code, out, err = await run_git_command(
@@ -167,6 +178,7 @@ async def install_community_plugin(
             f"git clone 失败：{tail_output(last_detail)}",
             status_code=502,
         )
+    _report(on_progress, 80, "校验插件包…")
     if not (dest / "__init__.py").is_file():
         shutil.rmtree(dest, ignore_errors=True)
         raise CommunityPluginInstallError(
@@ -177,6 +189,7 @@ async def install_community_plugin(
     msg = f"已安装到 local/plugins/{pid}/。"
     if not dirs_ready:
         msg += ' 请在 config/pallas.toml 的 [bootstrap].extra_plugin_dirs 加入 "local/plugins"。'
+    _report(on_progress, 95, "安装完成")
     return {
         "plugin_id": pid,
         "local_path": f"{COMMUNITY_PLUGINS_DIR}/{pid}/",
@@ -193,10 +206,12 @@ async def update_community_plugin(
     plugin_id: str,
     *,
     ref: str = "main",
+    on_progress: ProgressReporter | None = None,
 ) -> dict[str, str | bool]:
     pid = validate_plugin_id(plugin_id)
     branch = (ref or "main").strip() or "main"
     dest = plugin_install_path(pid)
+    _report(on_progress, 5, "准备更新…")
     if not local_plugin_installed(pid):
         raise CommunityPluginInstallError(f"local/plugins/{pid} 未安装，无法更新")
     logger.info("Pallas-Bot 控制台: 更新社区插件 id={} ref={}", pid, branch)
@@ -206,6 +221,7 @@ async def update_community_plugin(
     out = ""
     for mirror in iter_mirrors_for_failover("community"):
         extra = git_instead_of_args(mirror)
+        _report(on_progress, 25, "git fetch…")
         code, out, err = await run_git_command(
             INSTALL_TIMEOUT_S,
             *extra,
@@ -218,6 +234,7 @@ async def update_community_plugin(
             last_detail = err or out or "(无输出)"
             last_stage = "fetch"
             continue
+        _report(on_progress, 55, "同步到最新提交…")
         code, out, err = await run_git_command(
             INSTALL_TIMEOUT_S,
             *extra,
@@ -251,6 +268,7 @@ async def update_community_plugin(
             f"git 更新失败：{tail_output(last_detail)}",
             status_code=502,
         )
+    _report(on_progress, 85, "校验插件包…")
     if not (dest / "__init__.py").is_file():
         raise CommunityPluginInstallError(
             "更新后目录缺少 __init__.py，不是有效 NoneBot 插件包",
@@ -260,6 +278,7 @@ async def update_community_plugin(
     msg = f"已更新 local/plugins/{pid}/。"
     if not dirs_ready:
         msg += ' 请在 config/pallas.toml 的 [bootstrap].extra_plugin_dirs 加入 "local/plugins"。'
+    _report(on_progress, 95, "更新完成")
     return {
         "plugin_id": pid,
         "local_path": f"{COMMUNITY_PLUGINS_DIR}/{pid}/",
@@ -272,10 +291,16 @@ async def update_community_plugin(
     }
 
 
-async def uninstall_community_plugin(plugin_id: str) -> dict[str, str | bool]:
+async def uninstall_community_plugin(
+    plugin_id: str,
+    *,
+    on_progress: ProgressReporter | None = None,
+) -> dict[str, str | bool]:
     pid = validate_plugin_id(plugin_id)
     dest = plugin_install_path(pid)
+    _report(on_progress, 5, "准备删除…")
     if not dest.is_dir():
+        _report(on_progress, 100, "无需删除")
         return {
             "plugin_id": pid,
             "installed": False,
@@ -284,10 +309,12 @@ async def uninstall_community_plugin(plugin_id: str) -> dict[str, str | bool]:
             "message": f"local/plugins/{pid} 不存在，无需卸载。",
         }
     logger.info("Pallas-Bot 控制台: 卸载社区插件 id={}", pid)
+    _report(on_progress, 40, f"删除 local/plugins/{pid}/…")
     try:
         shutil.rmtree(dest)
     except OSError as e:
         raise CommunityPluginInstallError(f"删除目录失败：{e}", status_code=502) from e
+    _report(on_progress, 95, "删除完成")
     return {
         "plugin_id": pid,
         "installed": False,
