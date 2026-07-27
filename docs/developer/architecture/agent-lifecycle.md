@@ -21,7 +21,7 @@ Pallas-Bot 的普通 LLM 聊天在 Bot 进程内完成。本文说明维护者�
 | 上下文装配 | 组织会话、人格、记忆和知识上下文 | `pallas/product/llm/assembler/context.py` |
 | 工具装配 | 按场景选择工具，携带已激活的延迟工具 | `pallas/product/llm/assembler/tools.py`、`tools/registry.py` |
 | 工具循环 | 执行 tool call，将结果回填给模型继续生成 | `pallas/product/llm/tool_loop.py` |
-| 投递与追踪 | 发送结果，并记录状态、工具调用和拒绝原因 | `kernel_runner.py`、`runtime_debug.py` |
+| 投递与追踪 | 发送结果，并记录状态、工具调用和拒绝原因 | `pallas/product/llm/delivery.py`、`kernel_runner.py`、`runtime_debug.py` |
 
 `Pallas-Bot-AI` 不参与这条普通聊天路径。它负责媒体任务和遗留 RWKV；不要为普通 `@` 聊天增加 AI Runtime callback。
 

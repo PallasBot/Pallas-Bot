@@ -59,7 +59,7 @@ flowchart LR
 | 路径 | 作用 |
 | --- | --- |
 | `pallas/` | 内核、平台、产品、console |
-| `packages/` | 内置 core 插件（`pb_*` 等） |
+| `packages/` | 内置插件：core（`CORE_PLUGIN_NAMES`）、bundled play（`BUNDLED_PLAY_PLUGIN_NAMES`）、以及 `EXTRA_PLUGIN_PACKAGES` 对应的官方 extra |
 | `tests/` | 内核 / 平台 / 插件 / 分片回归 |
 | `docs/` | maintainer + developer 主线 |
 | `local/plugins/` | 站点私有插件（不入库） |
@@ -74,6 +74,8 @@ flowchart LR
 工具循环会把模型返回的 tool call 逐轮执行，再把结果带回模型生成可见回复。涉及外部异步任务的工具只负责派发：
 结果在完成后由对应任务通道补发，因此不会阻塞本轮聊天投递。
 
+进程内投递实现在 `pallas/product/llm/delivery.py`；`pallas/core/platform/ai_callback/runner.py` 仅保留 HTTP callback 薄壳。控制台 LLM 运维与聊天路径分别经 `ops_api` / `runtime_api` 门面导入（见 `tools/check_llm_import_boundaries.py`）。
+
 ## 禁止假设
 
 | 禁止 | 正确做法 |
@@ -82,7 +84,7 @@ flowchart LR
 | 把 AI runtime 当产品语义层 | 牛格 / 语料 / 人格边界留在主仓 |
 | 把 Pallas-Bot-AI 当普通聊天前提 | `@` 聊天配置 Bot Provider；AI 仅媒体 / RWKV |
 | 新玩法默认进 core | 按 [Core vs 扩展](core-vs-extensions.md) 判定 |
-| 社区插件 import `pallas.core.*` | 只用 `pallas.api.*` |
+| 社区插件 import `pallas.core.*` | 只用 `pallas.api.*`；core 插件优先 `pallas.api`（perm/commands/limits/storage/config） |
 
 ## 按需深入
 

@@ -36,6 +36,6 @@
 - 社区页：`fetchCommunityStats`、`fetchCommunityCorpusHot`、`fetchLocalCorpusHot`、`fetchCommunityGallery`
 - 日志错误：`fetchPluginRunStats`、`postLogErrorsCleanup`
 
-实现：`extended_api.py`；社区 `pallas/product/community_stats/`、语料 `pallas/product/corpus/`、分片 `pallas/core/platform/shard/`。
+实现：`stats_dashboard_api.py`、`console_metrics_runtime.py`；社区 `pallas/product/community_stats/`、语料 `pallas/product/corpus/`、分片 `pallas/core/platform/shard/`。
 
 架构说明：[分片运行时](../../../developer/architecture/shard-runtime.md)、[分片部署](../../../maintainer/deploy/sharded.md)。
