@@ -80,10 +80,6 @@ uv run pallas
 <td><strong>公开进展 / 里程碑</strong></td>
 <td><a href="https://pallasbot.notion.site/388943646d10813d9ff4dcb70d7c28e8?source=copy_link"><img src="https://img.shields.io/badge/Notion-%E7%94%A8%E6%88%B7%E5%85%AC%E5%BC%80%E8%BF%9B%E5%B1%95-000000?logo=notion" alt="用户公开进展"></a></td>
 </tr>
-<tr>
-<td><strong>社区中心</strong></td>
-<td><a href="https://stats.pallasbot.top/"><img src="https://img.shields.io/badge/社区中心-stats.pallasbot.top-FE7D37" alt="Pallas 社区中心"></a></td>
-</tr>
 </table>
 
 ## 🧩 相关仓库
@@ -143,11 +139,20 @@ uv run pallas
 
 > 自部署用户还可在本机可选接入**社区共享语料**，拓展牛牛语料池，说明见文档 [语料联邦](https://PallasBot.github.io/Pallas-Bot-Docs/common/corpus)。
 
-<p>
-  <a href="https://stats.pallasbot.top/"><img src="https://img.shields.io/badge/社区中心-stats.pallasbot.top-FE7D37" alt="社区中心"></a>
-  <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fdeployments-online" alt="deployments online">
-  <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fbots-online" alt="bots online">
-</p>
+<table>
+<tr>
+<td><strong>社区中心主站</strong></td>
+<td><a href="https://stats.pallasbot.top/"><img src="https://img.shields.io/badge/社区中心-stats.pallasbot.top-FE7D37" alt="社区中心"></a></td>
+</tr>
+<tr>
+<td><strong>在线部署 / 牛牛</strong></td>
+<td>
+<img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fdeployments-online" alt="deployments online">
+<img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fbots-online" alt="bots online">
+</td>
+</tr>
+</table>
+
 
 <a id="qq-群"></a>
 
