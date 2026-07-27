@@ -164,6 +164,7 @@ PLUGIN_NAMES = [
     "request_handler",
     "roulette",
     "sing",
+    "tts",
     "who_is_spy",
     "llm_chat",
     "persona",
