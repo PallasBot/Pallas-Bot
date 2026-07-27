@@ -5,6 +5,7 @@
   <pre><code>「我是来自米诺斯的祭司帕拉斯，会在罗德岛休息一段时间......虽然这么说，我渴望以美酒和戏剧被招待，更渴望走向战场。」</code></pre>
 
   <p>
+    <a href="https://github.com/PallasBot/Pallas-Bot-Docs">安装文档</a> ·
     <a href="https://github.com/PallasBot/Pallas-Bot/issues/new/choose">报告 Bug</a> ·
     <a href="https://github.com/PallasBot/Pallas-Bot/issues/new/choose">提出新特性</a>
   </p>
@@ -19,7 +20,6 @@
 
 ![learning-repeater](https://img.shields.io/badge/Core-%E5%AD%A6%E4%B9%A0%E5%9E%8B%E5%A4%8D%E8%AF%BB-8A2BE2)
 ![community-bots](https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fbots-online)
-
 [![tencent-qq](https://img.shields.io/badge/%E7%BE%A4-开发者群-red?style=flat&logo=tencent-qq)](https://qm.qq.com/q/yIiAajYwms)
 [![tencent-qq](https://img.shields.io/badge/%E7%BE%A4-拉牛牛-c73e7e?style=flat&logo=tencent-qq)](#qq-群)
 
@@ -63,9 +63,9 @@ uv run pallas
 浏览器打开 `http://<主机>:8088/pallas/`，使用启动日志中的口令登录。  
 更完整的上手说明见文档站 [快速开始](https://PallasBot.github.io/Pallas-Bot-Docs/guide/quickstart)。
 
-## 📖 文档
+## 📖 文档与进展
 
-部署、配置、插件、迁移与排障见文档站；全网在线牛牛与社区概览见社区中心。
+> 安装与使用看文档站；想知道牛牛最近在推进什么，可以看公开进展。
 
 <table>
 <tr>
@@ -75,6 +75,10 @@ uv run pallas
 <tr>
 <td><strong>快速开始</strong></td>
 <td><a href="https://PallasBot.github.io/Pallas-Bot-Docs/guide/quickstart"><img src="https://img.shields.io/badge/guide-quickstart-8A2BE2" alt="quickstart"></a></td>
+</tr>
+<tr>
+<td><strong>公开进展 / 里程碑</strong></td>
+<td><a href="https://pallasbot.notion.site/388943646d10813d9ff4dcb70d7c28e8?source=copy_link"><img src="https://img.shields.io/badge/Notion-%E7%94%A8%E6%88%B7%E5%85%AC%E5%BC%80%E8%BF%9B%E5%B1%95-000000?logo=notion" alt="用户公开进展"></a></td>
 </tr>
 <tr>
 <td><strong>社区中心</strong></td>
@@ -88,7 +92,7 @@ uv run pallas
 | --- | --- |
 | [Pallas-Bot-Docs](https://github.com/PallasBot/Pallas-Bot-Docs) | 文档站源码 |
 | [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) | 控制台前端 |
-| [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) | 唱歌 / TTS 等 AI Runtime（普通对话不必装） |
+| [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) | 唱歌 / TTS 等 AI Runtime |
 | [Pallas-Bot-Community-Stats](https://github.com/PallasBot/Pallas-Bot-Community-Stats) | 社区统计与语料中心服务 |
 | [community-plugin-index](https://github.com/PallasBot/community-plugin-index) | 社区插件商店索引 |
 
@@ -113,13 +117,10 @@ uv run pallas
 
 ## 💻 开发与贡献
 
-欢迎通过 [Issues](https://github.com/PallasBot/Pallas-Bot/issues) / PR 参与改进。参与前请阅读 [贡献指南](CONTRIBUTING.md) 与仓库根目录 [AGENTS.md](AGENTS.md)。
+> [!Important]
+> 想为牛牛做贡献，请先阅读 [贡献指南](CONTRIBUTING.md) 与 [AGENTS.md](AGENTS.md)。若要一起跟进任务，可通过下方邀请加入 Notion 协作区。
 
 <table>
-<tr>
-<td><strong>公开进展 / 里程碑</strong></td>
-<td><a href="https://pallasbot.notion.site/388943646d10813d9ff4dcb70d7c28e8?source=copy_link"><img src="https://img.shields.io/badge/Notion-%E7%94%A8%E6%88%B7%E5%85%AC%E5%BC%80%E8%BF%9B%E5%B1%95-000000?logo=notion" alt="用户公开进展"></a></td>
-</tr>
 <tr>
 <td><strong>贡献指南</strong></td>
 <td><a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/CONTRIBUTING-readme-00A3FF" alt="CONTRIBUTING"></a></td>
@@ -128,20 +129,37 @@ uv run pallas
 <td><strong>Agent 约定</strong></td>
 <td><a href="AGENTS.md"><img src="https://img.shields.io/badge/AGENTS-md-4EA94B" alt="AGENTS.md"></a></td>
 </tr>
+<tr>
+<td><strong>协作区邀请</strong></td>
+<td><a href="https://app.notion.com/invite/620c7eed0a3087b751896407b8dc8cbf915f3a22"><img src="https://img.shields.io/badge/Notion-%E5%8A%A0%E5%85%A5%E5%8D%8F%E4%BD%9C%E5%8C%BA-000000?logo=notion&logoColor=white" alt="加入 Notion 协作区"></a></td>
+</tr>
 </table>
 
 ## 🤝 社区与支持
 
+### 🌐 社区中心
+
+[Pallas-Bot 社区中心](https://stats.pallasbot.top/) 是面向大家的公开主站：可看在线部署与牛牛数量，逛金句投稿墙。
+
+> 自部署用户还可在本机可选接入**社区共享语料**，拓展牛牛语料池，说明见文档 [语料联邦](https://PallasBot.github.io/Pallas-Bot-Docs/common/corpus)。
+
+<p>
+  <a href="https://stats.pallasbot.top/"><img src="https://img.shields.io/badge/社区中心-stats.pallasbot.top-FE7D37" alt="社区中心"></a>
+  <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fdeployments-online" alt="deployments online">
+  <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fbots-online" alt="bots online">
+</p>
+
 <a id="qq-群"></a>
 
 ### 💬 QQ 群
+
+> 部署牛牛遇到问题也可以进开发者群询问哦!
 
 <table>
 <tr>
 <td><strong>开发者</strong></td>
 <td>
 <a href="https://qm.qq.com/q/yIiAajYwms"><img src="https://img.shields.io/badge/群-牛牛听话!-red?logo=tencent-qq" alt="开发者群"></a>
-<a href="https://app.notion.com/invite/620c7eed0a3087b751896407b8dc8cbf915f3a22"><img src="https://img.shields.io/badge/Notion-牛牛协作区-000000?logo=notion&logoColor=white" alt="Notion 牛牛协作区"></a>
 </td>
 </tr>
 <tr>
@@ -156,17 +174,6 @@ uv run pallas
 <td>
 <a href="https://qm.qq.com/q/8P"><img src="https://img.shields.io/badge/群-西海福牛养殖学院-00A3FF?logo=tencent-qq" alt="西海福牛养殖学院"></a>
 <a href="https://qm.qq.com/q/Qgc6ir7Jk"><img src="https://img.shields.io/badge/群-丽丽玛玛玛%3F-00A3FF?logo=tencent-qq" alt="丽丽玛玛玛"></a>
-</td>
-</tr>
-<tr>
-<td><strong>社区中心</strong></td>
-<td><a href="https://stats.pallasbot.top/"><img src="https://img.shields.io/badge/社区中心-stats.pallasbot.top-FE7D37" alt="社区中心"></a></td>
-</tr>
-<tr>
-<td><strong>在线部署 / 牛牛</strong></td>
-<td>
-<img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fdeployments-online" alt="deployments online">
-<img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fbots-online" alt="bots online">
 </td>
 </tr>
 </table>
