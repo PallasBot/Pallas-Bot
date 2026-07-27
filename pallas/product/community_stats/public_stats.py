@@ -14,6 +14,8 @@ from pallas.product.message_scrub.quiet_http_loggers import scrub_http_log_noise
 
 _MONITOR_TIMEOUT_SEC = 5.0
 _STATS_TIMEOUT_SEC = 12.0
+# monitor 字段更全，但常比 /v1/stats 慢；先等一小段优先拿 overview，超时则用先到的合法结果
+_MONITOR_PREFER_SEC = 0.45
 _REQUIRED_KEYS = ("deployments_total", "deployments_online", "bots_online_sum")
 _CORPUS_KEYS = (
     "contexts_total",
@@ -135,6 +137,30 @@ async def _fetch_from_urls(urls: list[str], *, timeout_sec: float) -> dict[str, 
     raise ValueError("community stats fetch failed")
 
 
+def _task_result_or_none(
+    task: asyncio.Task[dict[str, Any]],
+    errors: list[Exception],
+) -> dict[str, Any] | None:
+    try:
+        return task.result()
+    except Exception as e:
+        errors.append(e)
+        logger.debug("community_stats: source failed: {}", e)
+        return None
+
+
+async def _await_result_or_none(
+    task: asyncio.Task[dict[str, Any]],
+    errors: list[Exception],
+) -> dict[str, Any] | None:
+    try:
+        return await task
+    except Exception as e:
+        errors.append(e)
+        logger.debug("community_stats: source failed: {}", e)
+        return None
+
+
 async def fetch_community_public_stats() -> dict[str, Any]:
     cfg = get_community_stats_config()
     monitor_urls = monitor_overview_urls_for_config(cfg)
@@ -153,26 +179,42 @@ async def fetch_community_public_stats() -> dict[str, Any]:
             _fetch_from_urls(stats_urls, timeout_sec=_STATS_TIMEOUT_SEC),
         )
 
+    errors: list[Exception] = []
     data: dict[str, Any] | None = None
-    monitor_err: Exception | None = None
-    if monitor_task is not None:
-        try:
-            data = await monitor_task
-            if stats_task is not None and not stats_task.done():
-                stats_task.cancel()
-        except Exception as e:
-            monitor_err = e
-            logger.debug("community_stats: monitor overview unavailable, fallback to /v1/stats: {}", e)
+
+    if monitor_task is not None and stats_task is not None:
+        # 先等一小段：monitor 若及时完成则优先用更全字段，否则用已完成的 /v1/stats
+        await asyncio.wait(
+            {monitor_task, stats_task},
+            timeout=_MONITOR_PREFER_SEC,
+            return_when=asyncio.ALL_COMPLETED,
+        )
+        if monitor_task.done():
+            data = _task_result_or_none(monitor_task, errors)
+        if data is None and stats_task.done():
+            data = _task_result_or_none(stats_task, errors)
+        if data is None:
+            # prefer 窗口内都未成功：继续等谁先成功
+            pending = {t for t in (monitor_task, stats_task) if not t.done()}
+            while pending and data is None:
+                done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    got = _task_result_or_none(task, errors)
+                    if got is not None:
+                        data = got
+                        break
+        for task in (monitor_task, stats_task):
+            if not task.done():
+                task.cancel()
+    elif monitor_task is not None:
+        data = await _await_result_or_none(monitor_task, errors)
+    elif stats_task is not None:
+        data = await _await_result_or_none(stats_task, errors)
 
     if data is None:
-        if stats_task is None:
-            raise monitor_err or ValueError("community stats fetch failed")
-        try:
-            data = await stats_task
-        except Exception as stats_err:
-            if monitor_err is not None:
-                raise stats_err from monitor_err
-            raise
+        if errors:
+            raise errors[-1]
+        raise ValueError("community stats fetch failed")
 
     logger.debug(
         "community stats fetched: total={} online={} bots_sum={} url={}",

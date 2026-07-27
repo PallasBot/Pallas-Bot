@@ -63,9 +63,7 @@ def test_stats_url_from_heartbeat_endpoint():
 
 def test_corpus_api_base_from_heartbeat():
     assert corpus_api_base_from_heartbeat(PRIMARY_HEARTBEAT) == PRIMARY_CORPUS_API_BASE
-    assert (
-        corpus_api_base_from_heartbeat("https://stats.example/v1/heartbeat") == "https://stats.example/v1/corpus"
-    )
+    assert corpus_api_base_from_heartbeat("https://stats.example/v1/heartbeat") == "https://stats.example/v1/corpus"
 
 
 def test_corpus_api_base_urls_follow_heartbeat_order(monkeypatch):
@@ -93,9 +91,7 @@ def test_gallery_posts_urls_prefer_primary_center(monkeypatch):
 def test_legacy_fallback_endpoint_maps_to_primary(monkeypatch):
     monkeypatch.setattr(
         "pallas.product.community_stats.config.repo_env_raw_value",
-        lambda key: "https://pallas.togetsudo.com/v1/heartbeat"
-        if key == "PALLAS_COMMUNITY_STATS_ENDPOINT"
-        else None,
+        lambda key: "https://pallas.togetsudo.com/v1/heartbeat" if key == "PALLAS_COMMUNITY_STATS_ENDPOINT" else None,
     )
     cfg_mod.clear_community_stats_config_cache()
     cfg = cfg_mod.get_community_stats_config()
@@ -156,6 +152,53 @@ async def test_fetch_community_public_stats_parallel_fallback(monkeypatch):
         data = await fetch_community_public_stats()
     assert data["deployments_online"] == 1
     assert data["stats_url"].endswith("/v1/stats")
+
+
+@pytest.mark.asyncio
+async def test_fetch_community_public_stats_prefers_fast_stats_over_slow_monitor(monkeypatch):
+    monkeypatch.delenv("PALLAS_COMMUNITY_STATS_ENDPOINT", raising=False)
+    cfg_mod.clear_community_stats_config_cache()
+    monkeypatch.setattr(
+        "pallas.product.community_stats.public_stats._MONITOR_PREFER_SEC",
+        0.05,
+    )
+
+    stats_body = {
+        "deployments_total": 2,
+        "deployments_online": 2,
+        "bots_online_sum": 4,
+    }
+    monitor_body = {
+        "deployments": {
+            "deployments_total": 9,
+            "deployments_online": 9,
+            "bots_online_sum": 9,
+        }
+    }
+
+    async def fake_get(self, url, **kwargs):
+        mock = MagicMock()
+        mock.status_code = 200
+        mock.raise_for_status = MagicMock()
+        if url.endswith("/monitor/overview"):
+            await asyncio.sleep(0.2)
+            mock.json.return_value = monitor_body
+        else:
+            mock.json.return_value = stats_body
+        return mock
+
+    import asyncio
+
+    with patch.object(httpx.AsyncClient, "get", fake_get):
+        from pallas.product.community_stats.public_stats import fetch_community_public_stats
+
+        started = asyncio.get_running_loop().time()
+        data = await fetch_community_public_stats()
+        elapsed = asyncio.get_running_loop().time() - started
+
+    assert data["deployments_online"] == 2
+    assert data["stats_url"].endswith("/v1/stats")
+    assert elapsed < 0.18
 
 
 def test_parse_monitor_overview_body():
