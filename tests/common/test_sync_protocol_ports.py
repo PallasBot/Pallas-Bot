@@ -126,3 +126,55 @@ def test_sync_onebot_instances_detects_drift(tmp_path):
     assert drift == 1
     data = json.loads((config_dir / "onebot11_100.json").read_text(encoding="utf-8"))
     assert data["network"]["websocketClients"][0]["url"] == "ws://172.17.0.1:8091/onebot/v11/ws"
+
+
+def test_sync_accounts_skips_onebot_when_protocol_missing(tmp_path, monkeypatch, request):
+    from pallas.core.platform.shard.registry import sync_protocol_ports as spp
+
+    proto = tmp_path / "pallas_protocol"
+    proto.mkdir(parents=True)
+    accounts_path = proto / "accounts.json"
+    env_path = tmp_path / ".env"
+    env_path.write_text(
+        "PALLAS_SHARD_ENABLED=true\nPALLAS_SHARD_WORKER_BASE_PORT=8090\nPALLAS_SHARD_WS_HOST=127.0.0.1\n",
+        encoding="utf-8",
+    )
+    reg_dir = tmp_path / "pallas_shard"
+    reg_dir.mkdir(parents=True)
+    (reg_dir / "registry.json").write_text(
+        json.dumps({
+            "bots_per_shard": 5,
+            "hub_port": 8088,
+            "worker_base_port": 8090,
+            "ws_path": "/onebot/v11/ws",
+            "ws_host": "127.0.0.1",
+            "assignments": {"100": 0},
+            "shards": [{"id": 0, "port": 8090, "bot_ids": ["100"]}],
+        }),
+        encoding="utf-8",
+    )
+    accounts_path.write_text(
+        json.dumps({
+            "a1": {
+                "qq": "100",
+                "enabled": True,
+                "ws_url": "ws://127.0.0.1:8090/onebot/v11/ws",
+                "account_data_dir": str(tmp_path / "instances" / "100"),
+            }
+        }),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("PALLAS_SHARD_ENABLED", "true")
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.registry.store._registry_path",
+        lambda: reg_dir / "registry.json",
+    )
+    spp.clear_account_config_manager_cache()
+    monkeypatch.setattr(spp, "_resolve_config_manager_path", lambda: None)
+    request.addfinalizer(spp.clear_account_config_manager_cache)
+
+    result = sync_accounts_ws_urls(accounts_path, env_path=env_path, dry_run=True)
+    assert result.changed_count == 0
+    assert result.onebot_drift_count == 0
+    assert result.onebot_sync_skipped_reason
+    assert "pallas-plugin-protocol" in result.onebot_sync_skipped_reason
