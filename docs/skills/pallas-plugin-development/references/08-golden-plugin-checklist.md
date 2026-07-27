@@ -13,6 +13,12 @@
 
 参照：`pb_core`（口令）、`pb_stats`（维护者向 + 通用段）。
 
+## Bundled play（`BUNDLED_PLAY_PLUGIN_NAMES`）
+
+- [ ] 仍放 `packages/<name>/`，默认加载；identity/catalog kind 为 **`bundled`**，**不要**加入 `CORE_PLUGIN_NAMES`
+- [ ] 结构与口令型 checklist 同 core 插件；导入优先 `pallas.api.*`
+- [ ] 示例：`drink`、`greeting`、`roulette`、`take_name`
+
 ## 结构与代码
 
 - [ ] `extra.help_tag` 已声明（帮助图分组：`core|chat|ai|fun|tool|admin|other`；见 `packages/help/help_tags.py`）；运维覆盖走 help 插件配置 `help_tag_overrides`

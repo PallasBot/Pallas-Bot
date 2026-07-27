@@ -98,6 +98,6 @@ WebUI「能力包」页消费上述接口。默认配置落在 AI 侧 `data/medi
 - `fetchCommonConfigSections`、`fetchCommonConfigSection`、`putCommonConfigSection`
 - `postServiceGatewaysConnectivityCheck`
 
-实现：`extended_api.py` + `env_sections.py`；网关探测 `pallas/product/service_gateways/`、`service_gateways_section.py`。
+实现：`common_config_api.py` + `llm_product_api.py`（LLM runtime overview）+ `env_sections.py`；网关探测 `pallas/product/service_gateways/`、`service_gateways_section.py`。
 
 `GET /common-config/llm/runtime-overview` 中的 conversation kernel 反映 Bot 内 Provider 路径；媒体相关子字段依赖 AI Runtime 可达，与普通聊天是否可用无关。

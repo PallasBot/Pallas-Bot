@@ -31,4 +31,4 @@
 - `InstancesPage`、`ProtocolPage`：`fetchInstances`
 - 社交配置弹窗：`fetchGroupConfigById`、`putGroupConfig`
 
-实现：`extended_api.py`；持久化 `pallas/core/foundation/db/`。
+实现：`instances_configs_api.py`；持久化 `pallas/core/foundation/db/`。

@@ -15,6 +15,8 @@
 
 跨进程 claim 依赖 Redis（`REDIS_URL` / `PALLAS_COORD_REDIS_URL`）；与 AI 仓可共用。详见 [分片部署](/maintainer/deploy/sharded)。
 
+玩法专属协调（duel、dream、maa、spy 等）在 `pallas/extensions/coord/{duel,dream,maa,spy}/`；`pallas/core/platform/shard/coord/` 下旧路径为兼容 shim。通用 claim/presence 与 `worker_port.py` 仍在 core。
+
 ## 拓扑
 
 ```mermaid
@@ -45,7 +47,7 @@ flowchart LR
 | --- | --- | --- |
 | Hub | 协调、控制台聚合、部分入口；非主要消息处理 | `is_sharded_hub` / `is_hub_role` |
 | Worker | 插件与群消息主路径 | `is_sharded_worker` |
-| Redis | 分片协调事实源（非可丢弃缓存） | 分片 coord / presence |
+| Redis | 分片协调事实源（非可丢弃缓存） | 通用 claim/presence（core）；玩法协调见 `pallas/extensions/coord/{duel,dream,maa,spy}/` |
 | Protocol | 账号接入，连到 worker | 协议扩展 |
 
 角色探测：`from pallas.api.platform import is_sharded_hub, is_sharded_worker, is_sharding_active`。
@@ -62,7 +64,7 @@ flowchart LR
 
 | 能力 | 约束 | API（`pallas.api.platform`） |
 | --- | --- | --- |
-| 消息去重 / claim | 同条消息不可多 worker 重复响应 | `try_claim_group_message_once`、`claim_group_message_event`、`claim_group_handler` |
+| 消息去重 / claim | 同条消息不可多 worker 重复响应 | `try_claim_group_message_once`、`claim_group_message_event`、`claim_group_handler`（core）；玩法协调见 `pallas/extensions/coord/` |
 | 群独占活动 | 同群同时一场 | `begin_group_exclusive_activity`、`try_begin_group_owned_gate` |
 | Fanout / host gate | ingress 策略与主持牛 | `text_matches_plugin_fanout`、`dream_session_ingress_passes` |
 | 跨分片发送 | 指定 bot 代发 | `send_group_message_as_bot`、`invoke_bot_action` |
