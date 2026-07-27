@@ -123,6 +123,7 @@ from pallas.product.llm.providers_store import (
     resolve_endpoint_candidates_for_task,
     resolve_endpoint_for_task,
     resolve_provider_api_key,
+    resolve_provider_api_keys,
     resolve_provider_base_url,
     upsert_provider_row,
 )
@@ -257,6 +258,7 @@ __all__ = [
     "resolve_endpoint_for_task",
     "resolve_promotion_candidate_with_writeback",
     "resolve_provider_api_key",
+    "resolve_provider_api_keys",
     "resolve_provider_base_url",
     "restore_category",
     "restore_edge",

@@ -21,6 +21,35 @@ class LlmProviderError(Exception):
         self.status = status
 
 
+# 同 Provider 内换下一把密钥；400 等业务错误不换
+API_KEY_FAILOVER_STATUSES = frozenset({401, 403, 429, 502, 503})
+
+
+def should_failover_api_key(exc: BaseException) -> bool:
+    return isinstance(exc, LlmProviderError) and exc.status in API_KEY_FAILOVER_STATUSES
+
+
+def mask_api_key_hint(key: str) -> str:
+    text = str(key or "").strip()
+    if len(text) <= 4:
+        return "****"
+    return f"…{text[-4:]}"
+
+
+def endpoint_api_keys(endpoint: Any, *, fallback: str = "") -> list[str]:
+    keys: list[str] = []
+    seen: set[str] = set()
+    for item in getattr(endpoint, "api_keys", ()) or ():
+        key = str(item or "").strip()
+        if key and key not in seen:
+            keys.append(key)
+            seen.add(key)
+    if keys:
+        return keys
+    primary = str(getattr(endpoint, "api_key", "") or "").strip() or str(fallback or "").strip()
+    return [primary] if primary else [""]
+
+
 def _record_usage_from_payload(
     data: dict[str, Any],
     *,
@@ -197,29 +226,48 @@ async def complete_chat_message(
         for index, endpoint in enumerate(candidates):
             use_model = explicit_model if (explicit_model and index == 0) else endpoint.model
             use_method = method if request_method else endpoint.request_method
-            try:
-                return await _post_provider_chat(
-                    messages,
-                    base_url=endpoint.base_url,
-                    api_key=endpoint.api_key or str(c.llm_api_key or "").strip(),
-                    model=use_model,
-                    options=opts,
-                    tools=tools,
-                    timeout_sec=float(c.chat_timeout_sec),
-                    request_method=use_method,
-                    task=task,
-                    provider_id=str(getattr(endpoint, "provider_id", "") or ""),
-                )
-            except (LlmProviderError, httpx.TransportError) as exc:
-                last_error = exc
-                if index + 1 >= len(candidates):
+            fallback_key = str(c.llm_api_key or "").strip()
+            keys = endpoint_api_keys(endpoint, fallback=fallback_key)
+            key_failed_over = False
+            for key_index, use_key in enumerate(keys):
+                try:
+                    return await _post_provider_chat(
+                        messages,
+                        base_url=endpoint.base_url,
+                        api_key=use_key,
+                        model=use_model,
+                        options=opts,
+                        tools=tools,
+                        timeout_sec=float(c.chat_timeout_sec),
+                        request_method=use_method,
+                        task=task,
+                        provider_id=str(getattr(endpoint, "provider_id", "") or ""),
+                    )
+                except LlmProviderError as exc:
+                    last_error = exc
+                    if should_failover_api_key(exc) and key_index + 1 < len(keys):
+                        key_failed_over = True
+                        logger.warning(
+                            "llm api key failed, trying next key: provider={} model={} key={} err={}",
+                            endpoint.provider_id,
+                            use_model,
+                            mask_api_key_hint(use_key),
+                            exc,
+                        )
+                        continue
                     break
-                logger.warning(
-                    "llm provider failed, trying fallback: provider={} model={} err={}",
-                    endpoint.provider_id,
-                    use_model,
-                    exc,
-                )
+                except httpx.TransportError as exc:
+                    last_error = exc
+                    break
+            if index + 1 >= len(candidates):
+                break
+            logger.warning(
+                "llm provider failed, trying fallback: provider={} model={} key_failover={} err={}",
+                endpoint.provider_id,
+                use_model,
+                key_failed_over,
+                last_error,
+            )
         assert last_error is not None
         raise last_error
 
