@@ -165,6 +165,7 @@ def test_providers_store_multi_api_keys_and_capabilities(tmp_path: Path, monkeyp
     endpoint = resolve_endpoint_for_task("llm_chat")
     assert endpoint is not None
     assert endpoint.api_key == "sk-first"
+    assert endpoint.api_keys == ("sk-first", "sk-second")
     assert endpoint.capabilities == ("text", "image")
     assert endpoint.model_effort == "high"
     raw = json.loads(store.read_text(encoding="utf-8"))

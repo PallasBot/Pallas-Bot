@@ -83,15 +83,22 @@ def _provider_api_key_set(raw: dict[str, Any]) -> bool:
 
 
 def resolve_provider_api_key(raw: dict[str, Any]) -> str:
+    keys = resolve_provider_api_keys(raw)
+    return keys[0] if keys else ""
+
+
+def resolve_provider_api_keys(raw: dict[str, Any]) -> list[str]:
+    """有序密钥列表：第 0 项为主用，其后为同 Provider 备用。"""
     keys = _normalize_api_keys(raw)
     if keys:
-        return keys[0]
+        return list(keys)
     env_name = str(raw.get("api_key_env") or "").strip()
     if env_name and not _looks_like_inline_api_key(env_name):
-        return str(os.environ.get(env_name) or "").strip()
+        value = str(os.environ.get(env_name) or "").strip()
+        return [value] if value else []
     if env_name and _looks_like_inline_api_key(env_name):
-        return env_name
-    return ""
+        return [env_name]
+    return []
 
 
 PROVIDER_CAPABILITIES = ("text", "image", "audio", "video")
@@ -598,6 +605,7 @@ class ResolvedLlmEndpoint:
     capabilities: tuple[str, ...] = ()
     model_effort: str = ""
     request_method: str = DEFAULT_REQUEST_METHOD
+    api_keys: tuple[str, ...] = ()
 
 
 def resolve_endpoint_candidates_for_task(task: str = "llm_chat") -> list[ResolvedLlmEndpoint]:
@@ -663,16 +671,18 @@ def resolve_endpoint_candidates_for_task(task: str = "llm_chat") -> list[Resolve
                 model = str(local_doc.get("llm_model") or "").strip()
         if not base_url or not model:
             continue
+        api_keys = tuple(resolve_provider_api_keys(row))
         out.append(
             ResolvedLlmEndpoint(
                 provider_id=pid,
                 base_url=base_url,
-                api_key=resolve_provider_api_key(row),
+                api_key=api_keys[0] if api_keys else "",
                 model=model,
                 kind=kind,
                 capabilities=tuple(provider_capabilities(row)),
                 model_effort=provider_model_effort(row),
                 request_method=provider_request_method(row),
+                api_keys=api_keys,
             )
         )
     return out
