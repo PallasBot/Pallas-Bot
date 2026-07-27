@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from pallas.console.cli.community_plugin_activation import (
     append_community_activation_note,
     append_community_activation_result,
@@ -14,6 +16,11 @@ from pallas.console.webui.community_plugin_install import (
     update_community_plugin,
 )
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    ProgressReporter = Callable[[int, str], None]
+
 
 async def install_community_plugin_with_options(
     plugin_id: str,
@@ -21,11 +28,13 @@ async def install_community_plugin_with_options(
     repository_url: str,
     ref: str = "main",
     restart: bool = False,
+    on_progress: ProgressReporter | None = None,
 ) -> dict[str, str | bool]:
     result = await install_community_plugin(
         plugin_id,
         repository_url=repository_url,
         ref=ref,
+        on_progress=on_progress,
     )
     result = append_community_activation_result(dict(result), action="install", restart=restart)
     if should_append_community_activation_note(result, restart=restart):
@@ -42,8 +51,9 @@ async def update_community_plugin_with_options(
     *,
     ref: str = "main",
     restart: bool = False,
+    on_progress: ProgressReporter | None = None,
 ) -> dict[str, str | bool]:
-    result = await update_community_plugin(plugin_id, ref=ref)
+    result = await update_community_plugin(plugin_id, ref=ref, on_progress=on_progress)
     result = append_community_activation_result(dict(result), action="update", restart=restart)
     if should_append_community_activation_note(result, restart=restart):
         result["message"] = append_community_activation_note(
@@ -58,8 +68,9 @@ async def uninstall_community_plugin_with_options(
     plugin_id: str,
     *,
     restart: bool = False,
+    on_progress: ProgressReporter | None = None,
 ) -> dict[str, str | bool]:
-    result = await uninstall_community_plugin(plugin_id)
+    result = await uninstall_community_plugin(plugin_id, on_progress=on_progress)
     result = append_community_activation_result(dict(result), action="uninstall", restart=restart)
     if should_append_community_activation_note(result, restart=restart):
         result["message"] = append_community_activation_note(

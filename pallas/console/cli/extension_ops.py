@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from pallas.console.cli.extension_activation import append_activation_note, append_activation_result
 from pallas.console.webui.extension_install import (
     ExtensionInstallError,
@@ -9,6 +11,11 @@ from pallas.console.webui.extension_install import (
     uninstall_official_extension,
     update_official_extension,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    ProgressReporter = Callable[[int, str], None]
 
 
 def should_append_activation_note(result: dict[str, str | bool], *, restart: bool) -> bool:
@@ -20,8 +27,9 @@ async def install_official_extension_with_options(
     package: str,
     *,
     restart: bool = False,
+    on_progress: ProgressReporter | None = None,
 ) -> dict[str, str | bool]:
-    result = await install_official_extension(package)
+    result = await install_official_extension(package, on_progress=on_progress)
     result = append_activation_result(result, restart=restart)
     if should_append_activation_note(result, restart=restart):
         result["message"] = append_activation_note(str(result.get("message") or ""), result)
@@ -32,8 +40,9 @@ async def update_official_extension_with_options(
     package: str,
     *,
     restart: bool = False,
+    on_progress: ProgressReporter | None = None,
 ) -> dict[str, str | bool]:
-    result = await update_official_extension(package)
+    result = await update_official_extension(package, on_progress=on_progress)
     result = append_activation_result(result, restart=restart)
     if should_append_activation_note(result, restart=restart):
         result["message"] = append_activation_note(str(result.get("message") or ""), result)
@@ -44,8 +53,9 @@ async def uninstall_official_extension_with_options(
     package: str,
     *,
     restart: bool = False,
+    on_progress: ProgressReporter | None = None,
 ) -> dict[str, str | bool]:
-    result = await uninstall_official_extension(package)
+    result = await uninstall_official_extension(package, on_progress=on_progress)
     result = append_activation_result(result, restart=restart)
     if should_append_activation_note(result, restart=restart):
         result["message"] = append_activation_note(str(result.get("message") or ""), result)
