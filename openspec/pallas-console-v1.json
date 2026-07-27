@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.6-42-g32565373",
+    "version": "v4.1.7-3-g59dfa69b-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -39,6 +39,81 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/_ApiOkResponse__ConsoleSetupStatusData_"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/security/console-login": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Security Console Login",
+        "operationId": "_security_console_login_pallas_api_security_console_login_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeConsoleLoginBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__ConsoleLoginChangeData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -6641,6 +6716,132 @@
         }
       }
     },
+    "/pallas/api/bots": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Bots",
+        "operationId": "_bots_pallas_api_bots_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/plugin-config-hint": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Plugin Config Hint",
+        "operationId": "_plugin_config_hint_pallas_api_plugin_config_hint_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/message-stats": {
       "get": {
         "tags": [
@@ -6831,7 +7032,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/_ApiOkResponse__CommunityConnectivityCheckData_"
+                  "$ref": "#/components/schemas/_ApiOkResponse_CommunityConnectivityCheckData_"
                 }
               }
             }
@@ -11107,7 +11308,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/_PluginConfigUpdateBody"
+                "$ref": "#/components/schemas/_CommonConfigSectionPatchBody"
               }
             }
           }
@@ -11336,7 +11537,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/_PluginConfigUpdateBody"
+                "$ref": "#/components/schemas/_CommonConfigSectionPatchBody"
               }
             }
           }
@@ -13594,6 +13795,821 @@
         }
       }
     },
+    "/pallas/api/common-config/llm/history/behavior/annotate": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm History Behavior Annotate",
+        "operationId": "_llm_history_behavior_annotate_pallas_api_common_config_llm_history_behavior_annotate_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/behavior/patterns": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Behavior Patterns Get",
+        "operationId": "_llm_behavior_patterns_get_pallas_api_common_config_llm_behavior_patterns_get",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "群号；省略则查看全部 pattern",
+              "title": "Group Id"
+            },
+            "description": "群号；省略则查看全部 pattern"
+          },
+          {
+            "name": "scene",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "scene 过滤",
+              "title": "Scene"
+            },
+            "description": "scene 过滤"
+          },
+          {
+            "name": "include_disabled",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "是否包含 disabled pattern",
+              "default": true,
+              "title": "Include Disabled"
+            },
+            "description": "是否包含 disabled pattern"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/behavior/patterns/upsert": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Behavior Patterns Upsert",
+        "operationId": "_llm_behavior_patterns_upsert_pallas_api_common_config_llm_behavior_patterns_upsert_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/behavior/patterns/delete": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Behavior Patterns Delete",
+        "operationId": "_llm_behavior_patterns_delete_pallas_api_common_config_llm_behavior_patterns_delete_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/behavior/runs": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Behavior Runs Get",
+        "operationId": "_llm_behavior_runs_get_pallas_api_common_config_llm_behavior_runs_get",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "群号",
+              "title": "Group Id"
+            },
+            "description": "群号"
+          },
+          {
+            "name": "scene",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "scene 过滤",
+              "title": "Scene"
+            },
+            "description": "scene 过滤"
+          },
+          {
+            "name": "final_outcome",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "outcome 过滤",
+              "title": "Final Outcome"
+            },
+            "description": "outcome 过滤"
+          },
+          {
+            "name": "include_disabled",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "是否包含 disabled run",
+              "default": true,
+              "title": "Include Disabled"
+            },
+            "description": "是否包含 disabled run"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/runtime-debug/{request_id}": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Runtime Debug Get",
+        "operationId": "_llm_runtime_debug_get_pallas_api_common_config_llm_runtime_debug__request_id__get",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/runtime-debug/{request_id}/replay": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Runtime Replay Get",
+        "operationId": "_llm_runtime_replay_get_pallas_api_common_config_llm_runtime_debug__request_id__replay_get",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "mock_tools",
+              "title": "Mode"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/runtime-debug/{request_id}/replay/run": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Runtime Replay Run Post",
+        "operationId": "_llm_runtime_replay_run_post_pallas_api_common_config_llm_runtime_debug__request_id__replay_run_post",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmReplayRunBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona-observe": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Observe Get",
+        "operationId": "_llm_persona_observe_get_pallas_api_common_config_llm_persona_observe_get",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "群号；省略则仅展示 bot 基线",
+              "title": "Group Id"
+            },
+            "description": "群号；省略则仅展示 bot 基线"
+          },
+          {
+            "name": "accounts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "逗号分隔 bot account，省略则全部",
+              "title": "Accounts"
+            },
+            "description": "逗号分隔 bot account，省略则全部"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/llm/repeater-feedback": {
       "get": {
         "tags": [
@@ -15462,884 +16478,6 @@
         }
       }
     },
-    "/pallas/api/common-config/llm/history/behavior/annotate": {
-      "post": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm History Behavior Annotate",
-        "operationId": "_llm_history_behavior_annotate_pallas_api_common_config_llm_history_behavior_annotate_post",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Body"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/common-config/llm/behavior/patterns": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Behavior Patterns Get",
-        "operationId": "_llm_behavior_patterns_get_pallas_api_common_config_llm_behavior_patterns_get",
-        "parameters": [
-          {
-            "name": "group_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "群号；省略则查看全部 pattern",
-              "title": "Group Id"
-            },
-            "description": "群号；省略则查看全部 pattern"
-          },
-          {
-            "name": "scene",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "scene 过滤",
-              "title": "Scene"
-            },
-            "description": "scene 过滤"
-          },
-          {
-            "name": "include_disabled",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "description": "是否包含 disabled pattern",
-              "default": true,
-              "title": "Include Disabled"
-            },
-            "description": "是否包含 disabled pattern"
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/common-config/llm/behavior/patterns/upsert": {
-      "post": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Behavior Patterns Upsert",
-        "operationId": "_llm_behavior_patterns_upsert_pallas_api_common_config_llm_behavior_patterns_upsert_post",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Body"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/common-config/llm/behavior/patterns/delete": {
-      "post": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Behavior Patterns Delete",
-        "operationId": "_llm_behavior_patterns_delete_pallas_api_common_config_llm_behavior_patterns_delete_post",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Body"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/common-config/llm/behavior/runs": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Behavior Runs Get",
-        "operationId": "_llm_behavior_runs_get_pallas_api_common_config_llm_behavior_runs_get",
-        "parameters": [
-          {
-            "name": "group_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "群号",
-              "title": "Group Id"
-            },
-            "description": "群号"
-          },
-          {
-            "name": "scene",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "scene 过滤",
-              "title": "Scene"
-            },
-            "description": "scene 过滤"
-          },
-          {
-            "name": "final_outcome",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "outcome 过滤",
-              "title": "Final Outcome"
-            },
-            "description": "outcome 过滤"
-          },
-          {
-            "name": "include_disabled",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "description": "是否包含 disabled run",
-              "default": true,
-              "title": "Include Disabled"
-            },
-            "description": "是否包含 disabled run"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/common-config/llm/runtime-debug/{request_id}": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Runtime Debug Get",
-        "operationId": "_llm_runtime_debug_get_pallas_api_common_config_llm_runtime_debug__request_id__get",
-        "parameters": [
-          {
-            "name": "request_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Request Id"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/common-config/llm/runtime-debug/{request_id}/replay": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Runtime Replay Get",
-        "operationId": "_llm_runtime_replay_get_pallas_api_common_config_llm_runtime_debug__request_id__replay_get",
-        "parameters": [
-          {
-            "name": "request_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Request Id"
-            }
-          },
-          {
-            "name": "mode",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "mock_tools",
-              "title": "Mode"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/common-config/llm/runtime-debug/{request_id}/replay/run": {
-      "post": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Runtime Replay Run Post",
-        "operationId": "_llm_runtime_replay_run_post_pallas_api_common_config_llm_runtime_debug__request_id__replay_run_post",
-        "parameters": [
-          {
-            "name": "request_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Request Id"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LlmReplayRunBody"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/common-config/llm/persona-observe": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Persona Observe Get",
-        "operationId": "_llm_persona_observe_get_pallas_api_common_config_llm_persona_observe_get",
-        "parameters": [
-          {
-            "name": "group_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "群号；省略则仅展示 bot 基线",
-              "title": "Group Id"
-            },
-            "description": "群号；省略则仅展示 bot 基线"
-          },
-          {
-            "name": "accounts",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "逗号分隔 bot account，省略则全部",
-              "title": "Accounts"
-            },
-            "description": "逗号分隔 bot account，省略则全部"
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/bots": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Bots",
-        "operationId": "_bots_pallas_api_bots_get",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/pallas/api/logs": {
       "get": {
         "tags": [
@@ -16543,69 +16681,6 @@
                 }
               ],
               "title": "Last-Event-Id"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/plugin-config-hint": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Plugin Config Hint",
-        "operationId": "_plugin_config_hint_pallas_api_plugin_config_hint_get",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
             }
           },
           {
@@ -21428,81 +21503,6 @@
         }
       }
     },
-    "/pallas/api/security/console-login": {
-      "post": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Security Console Login",
-        "operationId": "_security_console_login_pallas_api_security_console_login_post",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_ChangeConsoleLoginBody"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/_ApiOkResponse__ConsoleLoginChangeData_"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/pallas/api/help/preview": {
       "get": {
         "tags": [
@@ -21690,6 +21690,46 @@
         },
         "type": "object",
         "title": "Body__community_gallery_create_pallas_api_community_gallery_post"
+      },
+      "ChangeConsoleLoginBody": {
+        "properties": {
+          "new_password": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "New Password"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "new_password"
+        ],
+        "title": "ChangeConsoleLoginBody"
+      },
+      "CommunityConnectivityCheckData": {
+        "properties": {
+          "probes": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Probes"
+          },
+          "summary": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Summary"
+          },
+          "reporting": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Reporting"
+          }
+        },
+        "type": "object",
+        "title": "CommunityConnectivityCheckData"
       },
       "GitMirrorApplyPluginBody": {
         "properties": {
@@ -22570,12 +22610,14 @@
           "media_tasks": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/_LlmMediaTasksHealthData"
+                "additionalProperties": true,
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Media Tasks"
           },
           "llm_detail": {
             "anyOf": [
@@ -22591,32 +22633,38 @@
           "image_circuit": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/_LlmImageHealthData"
+                "additionalProperties": true,
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Image Circuit"
           },
           "llm_health": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/_LlmHealthSummaryData"
+                "additionalProperties": true,
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Llm Health"
           },
           "tts_health": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/_LlmTtsHealthData"
+                "additionalProperties": true,
+                "type": "object"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Tts Health"
           }
         },
         "type": "object",
@@ -22762,6 +22810,28 @@
         "title": "_AiServiceHealthProbeData",
         "description": "媒体扩展（AI Runtime）探活；与聊天 Provider 健康分离。"
       },
+      "_ApiOkResponse_CommunityConnectivityCheckData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/CommunityConnectivityCheckData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[CommunityConnectivityCheckData]"
+      },
       "_ApiOkResponse_IngressDispatchData_": {
         "properties": {
           "ok": {
@@ -22772,6 +22842,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/IngressDispatchData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22790,6 +22864,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/LogsData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22808,6 +22886,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/PluginConfigData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22826,6 +22908,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/PluginConfigRawData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22844,6 +22930,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/PluginGovernanceData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22862,6 +22952,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/ShardObservabilityData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22880,6 +22974,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/_AiExtensionTestData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22887,24 +22985,6 @@
           "data"
         ],
         "title": "_ApiOkResponse[_AiExtensionTestData]"
-      },
-      "_ApiOkResponse__CommunityConnectivityCheckData_": {
-        "properties": {
-          "ok": {
-            "type": "boolean",
-            "const": true,
-            "title": "Ok",
-            "default": true
-          },
-          "data": {
-            "$ref": "#/components/schemas/_CommunityConnectivityCheckData"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "title": "_ApiOkResponse[_CommunityConnectivityCheckData]"
       },
       "_ApiOkResponse__ConsoleLoginChangeData_": {
         "properties": {
@@ -22916,6 +22996,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/_ConsoleLoginChangeData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22934,6 +23018,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/_ConsoleSetupStatusData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22952,6 +23040,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/_LlmProviderTestData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22970,6 +23062,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/_LlmProvidersConfigData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -22988,6 +23084,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/_LlmRuntimeOverviewData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -23006,6 +23106,10 @@
           },
           "data": {
             "$ref": "#/components/schemas/_ServiceGatewaysConnectivityCheckData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
           }
         },
         "type": "object",
@@ -23116,172 +23220,17 @@
         "type": "object",
         "title": "_BotConfigPatch"
       },
-      "_ChangeConsoleLoginBody": {
+      "_CommonConfigSectionPatchBody": {
         "properties": {
-          "new_password": {
-            "type": "string",
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "New Password"
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
           }
         },
         "additionalProperties": false,
         "type": "object",
-        "required": [
-          "new_password"
-        ],
-        "title": "_ChangeConsoleLoginBody"
-      },
-      "_CommunityConnectivityCheckData": {
-        "properties": {
-          "probes": {
-            "items": {
-              "$ref": "#/components/schemas/_CommunityConnectivityProbeRow"
-            },
-            "type": "array",
-            "title": "Probes"
-          },
-          "reporting": {
-            "$ref": "#/components/schemas/_CommunityConnectivityReporting"
-          },
-          "summary": {
-            "$ref": "#/components/schemas/_CommunityConnectivitySummary"
-          }
-        },
-        "type": "object",
-        "required": [
-          "probes",
-          "reporting",
-          "summary"
-        ],
-        "title": "_CommunityConnectivityCheckData"
-      },
-      "_CommunityConnectivityProbeRow": {
-        "properties": {
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "ok": {
-            "type": "boolean",
-            "title": "Ok"
-          },
-          "latency_ms": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Latency Ms"
-          },
-          "http_status": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Http Status"
-          },
-          "error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Error"
-          }
-        },
-        "type": "object",
-        "required": [
-          "url",
-          "ok"
-        ],
-        "title": "_CommunityConnectivityProbeRow"
-      },
-      "_CommunityConnectivityReporting": {
-        "properties": {
-          "enabled": {
-            "type": "boolean",
-            "title": "Enabled",
-            "default": true
-          },
-          "endpoint": {
-            "type": "string",
-            "title": "Endpoint",
-            "default": ""
-          },
-          "active_heartbeat_endpoint": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Active Heartbeat Endpoint"
-          },
-          "deployment_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Deployment Id"
-          },
-          "last_heartbeat_ok_unix": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Heartbeat Ok Unix"
-          },
-          "last_primary_probe_unix": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Primary Probe Unix"
-          }
-        },
-        "type": "object",
-        "title": "_CommunityConnectivityReporting"
-      },
-      "_CommunityConnectivitySummary": {
-        "properties": {
-          "any_ok": {
-            "type": "boolean",
-            "title": "Any Ok",
-            "default": false
-          },
-          "hint": {
-            "type": "string",
-            "title": "Hint",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "title": "_CommunityConnectivitySummary"
+        "title": "_CommonConfigSectionPatchBody"
       },
       "_CommunityPluginActionBody": {
         "properties": {
