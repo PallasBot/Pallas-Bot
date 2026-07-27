@@ -63,6 +63,38 @@ async def test_enrich_system_with_knowledge_sources_injects_block() -> None:
 
 
 @pytest.mark.asyncio
+async def test_enrich_gate_skip_not_counted_as_miss(monkeypatch) -> None:
+    from pallas.product.llm.rag_metrics import clear_llm_rag_metrics_for_tests, llm_rag_metrics_snapshot
+
+    clear_llm_rag_metrics_for_tests()
+    called = {"n": 0}
+
+    def _should_not_retrieve(*args, **kwargs):
+        called["n"] += 1
+        return []
+
+    monkeypatch.setattr(
+        "pallas.product.llm.knowledge.inject.retrieve_from_knowledge_sources",
+        _should_not_retrieve,
+    )
+    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
+    result = await enrich_system_with_knowledge_sources(
+        "你是牛牛。",
+        bot_id=1,
+        group_id=2,
+        user_id=3,
+        query_text="点牛牛",
+        cfg=cfg,
+    )
+    assert result.trace["hit_count"] == 0
+    assert called["n"] == 0
+    snap = llm_rag_metrics_snapshot(include_persisted=False)
+    assert snap["hit_count"] == 0
+    assert snap["miss_count"] == 0
+    assert snap["skip_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_enrich_records_rag_miss_on_empty_retrieve(monkeypatch) -> None:
     from pallas.product.llm.rag_metrics import clear_llm_rag_metrics_for_tests, llm_rag_metrics_snapshot
 
@@ -77,13 +109,14 @@ async def test_enrich_records_rag_miss_on_empty_retrieve(monkeypatch) -> None:
         bot_id=1,
         group_id=2,
         user_id=3,
-        query_text="完全无关的查询xyz",
+        query_text="怎么清空聊天记录",
         cfg=cfg,
     )
     assert result.trace["hit_count"] == 0
     snap = llm_rag_metrics_snapshot(include_persisted=False)
     assert snap["hit_count"] == 0
     assert snap["miss_count"] == 1
+    assert int(snap.get("skip_count") or 0) == 0
 
 
 def test_can_read_generic_knowledge_respects_config() -> None:

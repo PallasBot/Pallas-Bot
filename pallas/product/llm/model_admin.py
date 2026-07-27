@@ -258,7 +258,11 @@ def _ai_snapshot_collecting(snapshot: dict[str, Any] | None) -> bool:
         )
     rag = snapshot.get("rag")
     if isinstance(rag, dict):
-        if int(rag.get("hit_count") or 0) > 0 or int(rag.get("miss_count") or 0) > 0:
+        if (
+            int(rag.get("hit_count") or 0) > 0
+            or int(rag.get("miss_count") or 0) > 0
+            or int(rag.get("skip_count") or 0) > 0
+        ):
             return True
     memory_rag = snapshot.get("memory_rag")
     if isinstance(memory_rag, dict):
@@ -287,6 +291,7 @@ def _normalize_rag_slice(raw: Any, *, day_key: str = "", source: str = "bot") ->
     rag_raw = raw if isinstance(raw, dict) else {}
     hit = int(rag_raw.get("hit_count") or 0)
     miss = int(rag_raw.get("miss_count") or 0)
+    skip = int(rag_raw.get("skip_count") or 0)
     total = hit + miss
     rate = float(rag_raw.get("hit_rate") or 0)
     if total > 0 and rate <= 0:
@@ -299,6 +304,7 @@ def _normalize_rag_slice(raw: Any, *, day_key: str = "", source: str = "bot") ->
         "updated_at": rag_raw.get("updated_at"),
         "hit_count": hit,
         "miss_count": miss,
+        "skip_count": skip,
         "hit_rate": rate,
         "by_document": {str(k): int(v or 0) for k, v in by_document.items() if str(k).strip()},
         "by_source": {str(k): int(v or 0) for k, v in by_source.items() if str(k).strip()},

@@ -39,9 +39,9 @@ async def enrich_system_with_knowledge_sources(
         return KnowledgeInjectionResult(system_prompt=system_prompt, trace=empty_trace)
     if not looks_like_knowledge_query(query_text):
         try:
-            from pallas.product.llm.rag_metrics import record_rag_query_result
+            from pallas.product.llm.rag_metrics import record_rag_skip
 
-            record_rag_query_result(hit=False)
+            record_rag_skip()
         except Exception:
             pass
         return KnowledgeInjectionResult(system_prompt=system_prompt, trace=empty_trace)
