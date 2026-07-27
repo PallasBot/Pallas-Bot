@@ -1,12 +1,13 @@
 # ruff: noqa: E501
 from nonebot.plugin import PluginMetadata
 
-from pallas.core.perm.metadata_defaults import (
+from pallas.api.metadata import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
+    join_usage,
+    usage_line,
 )
-from pallas.core.perm.metadata_text import join_usage, usage_line
 
 from . import startup as _startup  # noqa: F401
 
