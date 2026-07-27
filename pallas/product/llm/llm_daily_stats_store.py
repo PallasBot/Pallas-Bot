@@ -67,7 +67,7 @@ def _metric_weight(key: str, value: object) -> int:
     if not isinstance(value, dict):
         return 0
     if key in {"rag", "memory_rag"}:
-        return int(value.get("hit_count") or 0) + int(value.get("miss_count") or 0)
+        return int(value.get("hit_count") or 0) + int(value.get("miss_count") or 0) + int(value.get("skip_count") or 0)
     if key == "tokens":
         total = int(value.get("total_tokens") or 0)
         if total > 0:
