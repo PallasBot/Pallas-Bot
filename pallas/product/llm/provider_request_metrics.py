@@ -130,7 +130,26 @@ def _hydrate_from_disk_locked() -> None:
     raw = load_stats_file()
     if not isinstance(raw, dict) or not raw.get("day_key"):
         return
-    if str(raw.get("day_key") or "") != str(_day_key or today_key()):
+    file_day = str(raw.get("day_key") or "").strip()[:10]
+    today = str(_day_key or today_key()).strip()[:10]
+    if file_day and file_day != today:
+        # 进程跨日重启时可能跳过 rollover；把过期落盘回写日汇总，避免历史提供方调用丢失
+        try:
+            from pallas.product.llm.llm_daily_stats_store import write_day_side
+
+            write_day_side(
+                file_day,
+                "ai",
+                {
+                    "day_key": file_day,
+                    "source": "bot",
+                    "provider_stats": raw.get("provider_stats") or {},
+                    "model_stats": raw.get("model_stats") or {},
+                    "failure_counts": raw.get("failure_counts") or {},
+                },
+            )
+        except Exception:
+            pass
         return
     if _by_provider or _by_model or _failure_counts:
         return

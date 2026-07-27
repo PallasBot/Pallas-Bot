@@ -41,12 +41,64 @@ def _tokens_snapshot_from_ledger(ledger_tokens: dict[str, Any]) -> dict[str, Any
     }
 
 
-def _prefer_ledger_tokens_on_ai(
+def _dimension_stats_from_ledger_breakdown(raw: Any) -> dict[str, dict[str, Any]]:
+    """账本分桶 → provider_stats / model_stats 形状（仅有成功记账的请求次数）。"""
+    out: dict[str, dict[str, Any]] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, metrics in raw.items():
+        name = str(key or "").strip()
+        if not name or not isinstance(metrics, dict):
+            continue
+        requests = int(metrics.get("requests") or 0)
+        if requests <= 0:
+            continue
+        out[name] = {
+            "requests": requests,
+            "succeeded": requests,
+            "failed": 0,
+            "total_latency_ms": 0,
+            "avg_latency_ms": None,
+            "recent_failure_class": None,
+        }
+    return out
+
+
+def _merge_dimension_stats_prefer_complete(live: Any, from_ledger: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """实时缺桶或次数偏少时，用账本请求次数补全。"""
+    out: dict[str, Any] = dict(live) if isinstance(live, dict) else {}
+    for key, row in from_ledger.items():
+        cur = out.get(key) if isinstance(out.get(key), dict) else None
+        led_req = int(row.get("requests") or 0)
+        if not cur:
+            out[key] = dict(row)
+            continue
+        live_req = int(cur.get("requests") or 0)
+        if led_req <= live_req:
+            continue
+        failed = int(cur.get("failed") or 0)
+        succeeded = int(cur.get("succeeded") or 0)
+        if failed > 0 and succeeded + failed == live_req:
+            # 保留失败计数，把差额记为成功
+            succeeded = max(succeeded, led_req - failed)
+        else:
+            succeeded = max(succeeded, led_req)
+        out[key] = {
+            **cur,
+            "requests": led_req,
+            "succeeded": succeeded,
+            "failed": failed,
+            "avg_latency_ms": (int(cur.get("total_latency_ms") or 0) / led_req) if led_req > 0 else None,
+        }
+    return out
+
+
+def _enrich_ai_snapshot_from_ledger(
     ai: dict[str, Any] | None,
     *,
     day_key: str,
 ) -> dict[str, Any] | None:
-    """当日 token 优先用请求账本（跨重启/分片更完整），保留实时 by_hour。"""
+    """当日 token / 提供方调用优先用请求账本补全（跨重启更完整），保留实时 by_hour。"""
     if not isinstance(ai, dict):
         return ai
     try:
@@ -62,7 +114,24 @@ def _prefer_ledger_tokens_on_ai(
     by_hour = live.get("by_hour") if isinstance(live.get("by_hour"), dict) else None
     if by_hour:
         tokens = {**tokens, "by_hour": by_hour}
-    return {**ai, "tokens": tokens}
+    provider_stats = _merge_dimension_stats_prefer_complete(
+        ai.get("provider_stats"),
+        _dimension_stats_from_ledger_breakdown(ledger.get("by_provider")),
+    )
+    model_stats = _merge_dimension_stats_prefer_complete(
+        ai.get("model_stats"),
+        _dimension_stats_from_ledger_breakdown(ledger.get("by_model")),
+    )
+    return {
+        **ai,
+        "tokens": tokens,
+        "provider_stats": provider_stats,
+        "model_stats": model_stats,
+    }
+
+
+# 兼容旧名
+_prefer_ledger_tokens_on_ai = _enrich_ai_snapshot_from_ledger
 
 
 def _overlay_ledger_on_history_rows(
@@ -87,7 +156,22 @@ def _overlay_ledger_on_history_rows(
         ai = dict(row["ai"]) if isinstance(row.get("ai"), dict) else {}
         ledger = ledger_by_day.get(row_date) if row_date else None
         if isinstance(ledger, dict):
-            ai = {**ai, "tokens": _tokens_snapshot_from_ledger(ledger), "source": ai.get("source") or "bot"}
+            tokens = _tokens_snapshot_from_ledger(ledger)
+            provider_stats = _merge_dimension_stats_prefer_complete(
+                ai.get("provider_stats"),
+                _dimension_stats_from_ledger_breakdown(ledger.get("by_provider")),
+            )
+            model_stats = _merge_dimension_stats_prefer_complete(
+                ai.get("model_stats"),
+                _dimension_stats_from_ledger_breakdown(ledger.get("by_model")),
+            )
+            ai = {
+                **ai,
+                "tokens": tokens,
+                "provider_stats": provider_stats,
+                "model_stats": model_stats,
+                "source": ai.get("source") or "bot",
+            }
             row["ai"] = ai
             out.append(row)
             continue
@@ -126,6 +210,8 @@ def _overlay_ledger_on_history_rows(
                 "source": "bot",
                 "day_key": day_key,
                 "tokens": _tokens_snapshot_from_ledger(ledger),
+                "provider_stats": _dimension_stats_from_ledger_breakdown(ledger.get("by_provider")),
+                "model_stats": _dimension_stats_from_ledger_breakdown(ledger.get("by_model")),
             },
         })
     out.sort(key=lambda r: str(r.get("date") or ""))
@@ -1086,7 +1172,7 @@ async def fetch_llm_task_stats(
     today_ai = payload.get("ai") if isinstance(payload.get("ai"), dict) and payload.get("ai") else None
     # 实时内存在重启后可能缺提供方；当日 token 以账本为准，避免盖掉 history 里的 ledger 分桶
     if isinstance(today_ai, dict):
-        today_ai = _prefer_ledger_tokens_on_ai(today_ai, day_key=clock_today) or today_ai
+        today_ai = _enrich_ai_snapshot_from_ledger(today_ai, day_key=clock_today) or today_ai
         payload["ai"] = today_ai
     if start_d <= date.fromisoformat(clock_today) <= end_d:
         row = by_date.setdefault(clock_today, {"date": clock_today, "bot": None, "ai": None})

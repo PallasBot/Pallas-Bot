@@ -138,6 +138,7 @@ def _bump_breakdown(
             "cache_read_tokens": 0,
             "cache_write_tokens": 0,
             "cost_total": 0.0,
+            "requests": 0,
         },
     )
     row["prompt_tokens"] = int(row.get("prompt_tokens") or 0) + prompt
@@ -145,6 +146,7 @@ def _bump_breakdown(
     row["cache_read_tokens"] = int(row.get("cache_read_tokens") or 0) + cache_read
     row["cache_write_tokens"] = int(row.get("cache_write_tokens") or 0) + cache_write
     row["cost_total"] = round(float(row.get("cost_total") or 0.0) + cost, 6)
+    row["requests"] = int(row.get("requests") or 0) + 1
 
 
 def aggregate_day_from_ledger(day: str) -> dict[str, Any] | None:
