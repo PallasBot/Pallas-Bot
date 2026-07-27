@@ -36,7 +36,7 @@ flowchart TD
 | 组件 | 职责 |
 | --- | --- |
 | `Pallas-Bot` | LLM Agent、Provider 调用、会话、工具循环与消息投递 |
-| `Pallas-Bot-AI` | 唱歌、TTS、绘图等媒体任务，以及遗留 RWKV 酒后 `/api/chat` |
+| `Pallas-Bot-AI` | 唱歌、TTS 等媒体任务，以及遗留 RWKV 酒后 `/api/chat` |
 
 功能不可用时，先分清是聊天（Provider）还是媒体（Runtime）。
 
@@ -130,10 +130,6 @@ flowchart TD
 3. 最终消息发送
 
 「AI 端执行成功但群里没消息」时，同时查 Bot 侧路由与发送。普通 `@` 聊天不走 callback。
-
-## Ollama GPU 回退 CPU（推理极慢）
-
-Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 200 但推理回退 CPU。探活与 cron 见 **Pallas-Bot-AI**：[docs/operate/ollama-gpu-watchdog.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/operate/ollama-gpu-watchdog.md)（`scripts/ollama_gpu_watchdog.sh --fix`）。
 
 ## 纯远端 API
 

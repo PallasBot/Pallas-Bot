@@ -35,7 +35,7 @@
 
 | 口令 | 依赖 |
 | --- | --- |
-| `牛牛唱歌` / `牛牛点歌` | [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)（AI Runtime）+ `pallas-plugin-ai-media` |
+| `牛牛唱歌` / `牛牛点歌` / `牛牛说` | [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)（AI Runtime）+ `pallas-plugin-ai-media` |
 | `牛牛画画` | 画画插件网关 + `pallas-plugin-draw`（默认不经 AI Runtime） |
 | @ 牛 LLM 对话 | 控制台 **AI 配置** 打开 `LLM_CHAT_ENABLED`，并配置 Bot Provider；见 [AI 扩展](ai.md) |
 
