@@ -31,7 +31,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    from pallas.core.foundation.config.dotenv import apply_repo_settings_to_environ
+    from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
 
     apply_repo_settings_to_environ()
 

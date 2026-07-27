@@ -1,6 +1,6 @@
 from nonebot.plugin import PluginMetadata
 
-from pallas.core.commands import (
+from pallas.api.commands import (
     bind_alias_handlers,
     command_limit_list,
     command_limit_row,
@@ -8,12 +8,15 @@ from pallas.core.commands import (
     command_perm_row,
     message_command,
 )
-from pallas.core.perm.metadata_defaults import (
+from pallas.api.metadata import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
+    SCENE_BOTH,
+    SCENE_PRIVATE,
+    join_usage,
+    usage_line,
 )
-from pallas.core.perm.metadata_text import SCENE_BOTH, SCENE_PRIVATE, join_usage, usage_line
 
 from . import config as _config  # noqa: F401
 from . import startup as _startup  # noqa: F401

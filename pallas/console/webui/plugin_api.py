@@ -9,7 +9,7 @@ from nonebot import get_loaded_plugins, get_plugin_config, logger
 from pydantic import BaseModel, ValidationError
 from pydantic_core import PydanticUndefined
 
-from pallas.core.foundation.config.dotenv import env_value_to_str, upsert_env_dotenv_items
+from pallas.core.foundation.config.repo_settings import env_value_to_str, upsert_repo_settings_items
 from pallas.core.platform.plugin_runtime.plugin_identity import canonical_plugin_id
 from pallas.core.platform.plugin_runtime.resolve import import_plugin_submodule
 
@@ -372,7 +372,7 @@ def apply_plugin_config_patch(
     except ValidationError as e:
         raise ValueError(format_validation_error(e)) from e
     env_items = {plugin_field_env_key(plugin_name, k): env_value_to_str(validated[k]) for k in normalized}
-    upsert_env_dotenv_items(env_items)
+    upsert_repo_settings_items(env_items)
     try:
         reload_plugin_config(module_name)
     except Exception:

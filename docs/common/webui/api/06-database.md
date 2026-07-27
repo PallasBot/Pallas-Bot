@@ -32,6 +32,6 @@
 
 - `DatabasePage`、`DatabaseBackupsPage`：`fetchDbOverview`、`postDbBackup`、`fetchDbBackendConfig` 等
 
-实现：`extended_api.py` + `pallas/core/foundation/db/`；备份脚本见 `tools/scripts/`。
+实现：`db_api.py` + `pallas/core/foundation/db/`；备份脚本见 `tools/scripts/`。
 
 部署说明：[Docker 部署](/deploy/docker) 卷挂载需包含 `data/`。

@@ -17,7 +17,7 @@ from nonebot.exception import IgnoredException
 from nonebot.message import event_preprocessor
 from nonebot.utils import run_coro_with_shield
 
-from pallas.core.perm.acl import (
+from pallas.api.perm import (
     ACL_TARGET_ANY,
     ACL_TARGET_GROUP_BAN,
     AclDecision,

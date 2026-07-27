@@ -57,4 +57,4 @@
 - `http.get("/health")`（健康探测）
 - 登录：`POST /auth/login`（SPA 登录页 `GET /pallas/login`）
 
-实现：`api.py`（health）、`extended_api.py`（system、bots、auth）、`public.py`（SPA 入口）。
+实现：`api.py`（health）、`auth_security_api.py` + `system_home_api.py`（system、bots、auth）、`public.py`（SPA 入口）；由 `extended_api.register_extended_api` 编排。

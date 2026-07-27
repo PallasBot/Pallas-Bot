@@ -28,12 +28,13 @@ packages/<name>/   # 或 local/plugins/<name>/
 3. 命令 ID：`my_plugin.action`；改名同步 `plugin_package_aliases.py` / `plugin_legacy_names.py`
 4. 新增函数非必要不要 `_` 前缀
 
-## 1.4 core 与 extra
+## 1.4 core、bundled play 与 extra
 
-| 类型 | 矩阵 | 默认加载 | 示例 |
-| --- | --- | --- | --- |
-| **core** | `CORE_PLUGIN_NAMES`（`pallas/core/platform/bot_runtime/plugin_matrix.py`） | slim 也加载 | `repeater`、`pb_stats`、`pb_core` |
-| **extra** | `EXTRA_PLUGIN_PACKAGES` | 需 `load_bundled_extra` 或 pip | `duel`、`pb_protocol` |
+| 类型 | 矩阵 | 默认加载 | catalog kind | 示例 |
+| --- | --- | --- | --- | --- |
+| **core** | `CORE_PLUGIN_NAMES`（`pallas/core/platform/bot_runtime/plugin_matrix.py`） | slim 也加载 | `core` | `repeater`、`pb_stats`、`pb_core`、`llm_chat` |
+| **bundled play** | `BUNDLED_PLAY_PLUGIN_NAMES` | 是（随主仓 `packages/`） | `bundled` | `drink`、`greeting`、`roulette`、`take_name` |
+| **extra** | `EXTRA_PLUGIN_PACKAGES` | 需 `load_bundled_extra` 或 pip | 视包而定 | `duel`、`pb_protocol` |
 
 在线统计已升格为 core **`pb_stats`**（业务在 `pallas/product/community_stats/`；配置在插件页，落盘兼容 ID 仍可能为 `community_stats`）。
 
@@ -51,7 +52,7 @@ packages/<name>/   # 或 local/plugins/<name>/
 | api | `pallas.api.safety` | `message_scrub` 入站过滤 |
 | product | `pallas.product.*` | 内置专用实现（如 `message_scrub`） |
 
-> **社区 / pip**：仅 `pallas.api.*`（L1）。**内置 `packages/`**：`pallas.api.*` + `pallas.product.*`（L2）；禁止深层 `pallas.core.*` 私有文件。
+> **社区 / pip**：仅 `pallas.api.*`（L1）。**内置 `packages/`**：core 插件优先 `pallas.api.*`（perm/commands/limits/storage/config）；可用 `pallas.product.*`（L2）；禁止深层 `pallas.core.*` 私有文件。CI：`tools/check_plugin_imports.py`（`packages/` 禁 `src.` / `dotenv`；`--strict-packages` 禁直连 core perm/commands/limits/storage）。
 
 布局：[repo-layout.md](../../../developer/reference/repo-layout.md)。反例：从 `packages.other_plugin` 直接 import 业务 → 共享能力下沉到 `pallas/`。
 

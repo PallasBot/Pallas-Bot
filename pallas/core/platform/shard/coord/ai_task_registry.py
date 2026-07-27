@@ -8,10 +8,10 @@ import time
 from typing import Any
 
 from pallas.core.platform.shard import context as shard_ctx
-from pallas.core.platform.shard.coord.maa_route_registry import current_worker_port
 from pallas.core.platform.shard.registry import get_shard_registry, worker_port_for_shard
 from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 from pallas.core.platform.shard.registry.store import assign_bot_to_shard
+from pallas.core.platform.shard.worker_port import current_worker_port
 
 _DEFAULT_TTL_SEC = 86400.0
 _KEY_PREFIX = "pallas:ai_task:"

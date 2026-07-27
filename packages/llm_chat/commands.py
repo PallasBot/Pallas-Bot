@@ -1,4 +1,4 @@
-from pallas.core.commands import PluginHandlerContext, bind_alias_handlers, group_command
+from pallas.api.commands import PluginHandlerContext, bind_alias_handlers, group_command
 from pallas.product.llm import delete_llm_chat_session, get_llm_config, is_llm_chat_service_enabled
 from pallas.product.llm.session_store import clear_llm_messages, clear_user_llm_messages
 

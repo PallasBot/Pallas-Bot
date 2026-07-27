@@ -49,6 +49,14 @@ repos:
         files: ^(pallas|packages|tests|tools)/
         pass_filenames: true
         verbose: true
+      - id: check-llm-import-boundaries
+        name: 检查 LLM runtime/ops 导入边界
+        description: "llm_chat/repeater 禁止直接 import model_admin/providers_store/webui_config"
+        entry: python3 tools/check_llm_import_boundaries.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
       - id: sync-console-openapi
         name: 同步控制台 OpenAPI
         description: "每次 commit 导出 openspec；同级有 WebUI 仓时一并 gen 类型"

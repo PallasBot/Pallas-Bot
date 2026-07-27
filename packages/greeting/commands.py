@@ -20,11 +20,11 @@ from nonebot.rule import Rule, to_me
 from nonebot.typing import T_State
 
 from packages.blacklist import invalidate_group_ban_gate_cache, invalidate_user_ban_gate_cache
-from pallas.core.foundation.config import BotConfig, GroupConfig, UserConfig
-from pallas.core.perm import (
+from pallas.api.perm import (
     group_message_permission_for_command,
     private_message_permission_for_command,
 )
+from pallas.core.foundation.config import BotConfig, GroupConfig, UserConfig
 from pallas.core.plugin_coord.duel import duel_qte_blocks_greeting_user
 from pallas.core.shared.utils import is_bot_admin
 from pallas.product.ban_gate.snapshot import patch_group_banned, patch_user_banned

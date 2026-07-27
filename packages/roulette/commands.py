@@ -13,8 +13,8 @@ from nonebot.adapters.onebot.v11 import (
 )
 from nonebot.rule import Rule
 
+from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.config import BotConfig, GroupConfig
-from pallas.core.perm import group_message_permission_for_command
 
 from .config import SHOT_CFG
 from .game import (

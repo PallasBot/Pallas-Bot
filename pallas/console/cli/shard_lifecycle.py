@@ -116,7 +116,7 @@ def shard_common_env(opts: ShardOptions) -> dict[str, str]:
 
 
 def load_coord_redis_env() -> dict[str, str]:
-    from pallas.core.foundation.config.dotenv import apply_repo_settings_to_environ
+    from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
     from pallas.core.platform.coord.redis_settings import (
         clear_coord_redis_settings_cache,
         coord_redis_enabled,
@@ -135,7 +135,7 @@ def load_coord_redis_env() -> dict[str, str]:
 
 
 def redis_status() -> dict[str, str]:
-    from pallas.core.foundation.config.dotenv import apply_repo_settings_to_environ
+    from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
     from pallas.core.platform.coord.redis_settings import (
         clear_coord_redis_settings_cache,
         coord_redis_enabled,

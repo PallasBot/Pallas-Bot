@@ -1,6 +1,6 @@
 from nonebot.plugin import PluginMetadata
 
-from pallas.core.perm.metadata_defaults import (
+from pallas.api.metadata import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,

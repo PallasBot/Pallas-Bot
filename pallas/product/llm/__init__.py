@@ -1,4 +1,13 @@
-"""统一 LLM 客户端：Bot 内核 Provider 调用与用户消息防注入。"""
+"""统一 LLM 产品层。
+
+**Runtime**（进程内对话）：``kernel``、``delivery``、``tools``、``orchestration`` —
+聊天插件经 ``runtime_api`` 导入。
+
+**Ops**（控制台运维）：``providers_store``、``model_admin``、``webui_config``、
+记忆图谱管理等 — 控制台经 ``ops_api`` 导入，聊天插件不应直接依赖。
+
+顶层 ``__init__`` 仍暴露通用客户端与配置；细分边界见 ``runtime_api`` / ``ops_api``。
+"""
 
 import importlib
 from typing import TYPE_CHECKING, Any

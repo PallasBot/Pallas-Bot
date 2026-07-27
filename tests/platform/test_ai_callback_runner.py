@@ -14,6 +14,7 @@ from pallas.core.platform.ai_callback.task_types import (
     REPEATER_POLISH_LITE_TASK_TYPE,
     REPEATER_POLISH_TASK_TYPE,
 )
+from pallas.product.llm import delivery as llm_delivery
 from pallas.product.llm.behavior import BehaviorAction, BehaviorScene
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.output_filter import CHAT_HARD_BLOCK_PHRASES
@@ -102,7 +103,7 @@ async def test_run_ai_callback_appends_user_and_assistant_on_llm_chat_success(
         calls.append((bot_id, group_id, user_id, role, content))
         return True
 
-    monkeypatch.setattr(ai_callback_runner, "append_llm_message", track_append)
+    monkeypatch.setattr(llm_delivery, "append_llm_message", track_append)
 
     result = await ai_callback_runner.run_ai_callback("task-1", status="success", text="银灰是谢拉格领袖")
 
@@ -135,11 +136,11 @@ async def test_run_ai_callback_skips_summary_writeback_when_policy_disabled(
     )
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
-    monkeypatch.setattr(ai_callback_runner, "append_llm_message", AsyncMock(return_value=True))
-    monkeypatch.setattr(ai_callback_runner, "can_write_runtime_state_summary", lambda: False)
+    monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(return_value=True))
+    monkeypatch.setattr(llm_delivery, "can_write_runtime_state_summary", lambda: False)
 
     compact = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner, "compact_user_llm_history_with_summary", compact)
+    monkeypatch.setattr(llm_delivery, "compact_user_llm_history_with_summary", compact)
 
     await ai_callback_runner.run_ai_callback(
         "task-summary-off",
@@ -235,9 +236,9 @@ async def test_run_ai_callback_appends_behavior_run(monkeypatch: pytest.MonkeyPa
     )
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
-    monkeypatch.setattr(ai_callback_runner, "append_llm_message", AsyncMock(return_value=True))
+    monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(return_value=True))
     recorded: list[object] = []
-    monkeypatch.setattr(ai_callback_runner, "append_behavior_run", lambda run: recorded.append(run))
+    monkeypatch.setattr(llm_delivery, "append_behavior_run", lambda run: recorded.append(run))
 
     result = await ai_callback_runner.run_ai_callback("task-behavior-1", status="success", text="少来这套。")
 
@@ -273,9 +274,9 @@ async def test_run_ai_callback_attaches_agent_trace_to_behavior_run(monkeypatch:
     )
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
-    monkeypatch.setattr(ai_callback_runner, "append_llm_message", AsyncMock(return_value=True))
+    monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(return_value=True))
     recorded: list[object] = []
-    monkeypatch.setattr(ai_callback_runner, "append_behavior_run", lambda run: recorded.append(run))
+    monkeypatch.setattr(llm_delivery, "append_behavior_run", lambda run: recorded.append(run))
 
     result = await ai_callback_runner.run_ai_callback(
         "task-agent-trace-1",
@@ -318,7 +319,7 @@ async def test_run_ai_callback_appends_repeater_feedback_when_enabled(
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
-        ai_callback_runner,
+        llm_delivery,
         "get_llm_config",
         lambda: LlmConfig(llm_repeater_feedback_enabled=True),
     )
@@ -403,11 +404,11 @@ async def test_run_ai_callback_appends_repeater_task_feedback_when_enabled(
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
-        ai_callback_runner,
+        llm_delivery,
         "get_llm_config",
         lambda: LlmConfig(llm_repeater_feedback_enabled=True),
     )
-    monkeypatch.setattr(ai_callback_runner, "evaluate_repeater_callback_text", AsyncMock(return_value=True))
+    monkeypatch.setattr(llm_delivery, "evaluate_repeater_callback_text", AsyncMock(return_value=True))
     appended: list[object] = []
     monkeypatch.setattr(
         "pallas.product.llm.repeater_feedback.append_feedback_entry",
@@ -448,7 +449,7 @@ async def test_run_ai_callback_disabled_repeater_feedback_does_not_append(
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
-        ai_callback_runner,
+        llm_delivery,
         "get_llm_config",
         lambda: LlmConfig(llm_repeater_feedback_enabled=False),
     )
@@ -486,7 +487,7 @@ async def test_run_ai_callback_feedback_write_failure_does_not_break_success(
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
-        ai_callback_runner,
+        llm_delivery,
         "get_llm_config",
         lambda: LlmConfig(llm_repeater_feedback_enabled=True),
     )
@@ -525,11 +526,11 @@ async def test_run_ai_callback_delivery_failure_does_not_append_repeater_feedbac
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
-        ai_callback_runner,
+        llm_delivery,
         "get_llm_config",
         lambda: LlmConfig(llm_repeater_feedback_enabled=True),
     )
-    monkeypatch.setattr(ai_callback_runner, "send_group_message", AsyncMock(return_value=False))
+    monkeypatch.setattr(llm_delivery, "send_group_message", AsyncMock(return_value=False))
     append_feedback_entry = MagicMock()
     monkeypatch.setattr("pallas.product.llm.repeater_feedback.append_feedback_entry", append_feedback_entry)
 
@@ -581,7 +582,7 @@ async def test_run_ai_callback_llm_chat_duplicate_reply_uses_fallback(monkeypatc
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
-        ai_callback_runner,
+        llm_delivery,
         "should_suppress_llm_duplicate_reply",
         lambda task, reply_text: True,
     )
@@ -745,7 +746,7 @@ async def test_run_ai_callback_repeater_fallback_success_rejected_is_silent(
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
-        ai_callback_runner,
+        llm_delivery,
         "evaluate_repeater_callback_text",
         AsyncMock(return_value=False),
     )
@@ -778,7 +779,7 @@ async def test_run_ai_callback_repeater_polish_success_rejected_uses_fallback_te
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
-        ai_callback_runner,
+        llm_delivery,
         "evaluate_repeater_callback_text",
         AsyncMock(side_effect=[False, True]),
     )
@@ -813,7 +814,8 @@ async def test_run_ai_callback_chat_output_filter_blocks_service_tone(
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
-        "pallas.product.llm.config.get_llm_config",
+        llm_delivery,
+        "get_llm_config",
         lambda: LlmConfig(
             llm_output_filter_enabled=True,
             llm_output_filter_chat_hard_phrases=list(CHAT_HARD_BLOCK_PHRASES),
@@ -851,7 +853,7 @@ async def test_run_ai_callback_polish_lite_output_filter_uses_fallback(
     )
     monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
     monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
-    monkeypatch.setattr(ai_callback_runner, "evaluate_repeater_callback_text", AsyncMock(return_value=True))
+    monkeypatch.setattr(llm_delivery, "evaluate_repeater_callback_text", AsyncMock(return_value=True))
 
     result = await ai_callback_runner.run_ai_callback(
         "task-polish-lite-filter",
