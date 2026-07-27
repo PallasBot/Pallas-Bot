@@ -19,6 +19,8 @@ def test_append_and_aggregate_day(tmp_path, monkeypatch) -> None:
         "pallas.product.llm.token_metrics.today_key",
         lambda: "2026-07-26",
     )
+    # 2026-07-26 13:00:00 / 14:00:00 local
+    ts_afternoon = 1785042000.0
     append_usage_record(
         task="llm_chat",
         provider="ds",
@@ -29,7 +31,7 @@ def test_append_and_aggregate_day(tmp_path, monkeypatch) -> None:
         cost=0.0013,
         currency="cny",
         day_key="2026-07-26",
-        ts=1.0,
+        ts=ts_afternoon,
     )
     append_usage_record(
         task="repeater_select",
@@ -40,7 +42,7 @@ def test_append_and_aggregate_day(tmp_path, monkeypatch) -> None:
         cost=0.0,
         currency="CNY",
         day_key="2026-07-26",
-        ts=2.0,
+        ts=ts_afternoon + 3600,
     )
     bucket = aggregate_day_from_ledger("2026-07-26")
     assert bucket is not None
@@ -51,6 +53,8 @@ def test_append_and_aggregate_day(tmp_path, monkeypatch) -> None:
     assert abs(float(bucket["cost_total"]) - 0.0013) < 1e-9
     assert bucket["cost_currency"] == "CNY"
     assert bucket["by_model"]["deepseek-v4-flash"]["prompt_tokens"] == 1000
+    assert bucket["by_hour"]["13"]["total_tokens"] == 1100
+    assert bucket["by_hour"]["14"]["total_tokens"] == 210
     assert (root / "2026-07-26.jsonl").is_file()
 
 

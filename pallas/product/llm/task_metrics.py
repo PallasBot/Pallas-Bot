@@ -162,11 +162,16 @@ def _hydrate_from_disk_locked() -> None:
             _counters.update(loaded)
 
     try:
-        from pallas.product.llm.shard_metric_hydrate import load_worker_day_metric
+        from pallas.product.llm.shard_metric_hydrate import (
+            allow_shared_stats_file_hydrate,
+            load_worker_day_metric,
+        )
 
         worker_raw = load_worker_day_metric(metric_key="llm_task", day_key=today)
         if isinstance(worker_raw, dict):
             apply_raw(worker_raw)
+            return
+        if not allow_shared_stats_file_hydrate():
             return
     except Exception:
         pass

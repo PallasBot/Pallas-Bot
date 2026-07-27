@@ -169,6 +169,48 @@ def _merge_by_task_prefer_max(existing: dict[str, Any], incoming: dict[str, Any]
     return out
 
 
+def _images_is_integer_multiple_clone(big: dict[str, Any], small: dict[str, Any]) -> bool:
+    """existing 是否像把 small 按分片数原样相加后的放大副本。"""
+    small_ok = int(small.get("ok_count") or 0)
+    big_ok = int(big.get("ok_count") or 0)
+    if small_ok <= 0 or big_ok <= small_ok or big_ok % small_ok != 0:
+        return False
+    factor = big_ok // small_ok
+    if factor < 2 or factor > 64:
+        return False
+    if int(big.get("fail_count") or 0) != int(small.get("fail_count") or 0) * factor:
+        return False
+    if int(big.get("image_count") or 0) != int(small.get("image_count") or 0) * factor:
+        return False
+    try:
+        big_cost = float(big.get("cost_total") or 0)
+        small_cost = float(small.get("cost_total") or 0)
+    except (TypeError, ValueError):
+        return False
+    if abs(big_cost - small_cost * factor) > 1e-6:
+        return False
+    for bucket in ("by_gateway", "by_provider", "by_model"):
+        big_map = big.get(bucket) if isinstance(big.get(bucket), dict) else {}
+        small_map = small.get(bucket) if isinstance(small.get(bucket), dict) else {}
+        if set(big_map) != set(small_map):
+            return False
+        for name, small_row in small_map.items():
+            if not isinstance(small_row, dict):
+                return False
+            big_row = big_map.get(name)
+            if not isinstance(big_row, dict):
+                return False
+            for metric in ("ok_count", "fail_count", "image_count"):
+                if int(big_row.get(metric) or 0) != int(small_row.get(metric) or 0) * factor:
+                    return False
+            try:
+                if abs(float(big_row.get("cost_total") or 0) - float(small_row.get("cost_total") or 0) * factor) > 1e-6:
+                    return False
+            except (TypeError, ValueError):
+                return False
+    return True
+
+
 def _prefer_complete_metric(key: str, existing: Any, incoming: Any) -> Any:
     """累计型指标：禁止用偏少快照覆盖（重启后实时内存变小）。"""
     if not isinstance(incoming, dict):
@@ -187,6 +229,19 @@ def _prefer_complete_metric(key: str, existing: Any, incoming: Any) -> Any:
             + int(incoming.get("fail_count") or 0)
             + int(incoming.get("image_count") or 0)
         )
+        if w_in < w_ex and _images_is_integer_multiple_clone(existing, incoming):
+            # 旧日汇总被分片重复加总放大时，允许用正确较小快照纠正
+            out = dict(incoming)
+            for bucket in ("by_gateway", "by_provider", "by_model"):
+                nxt = incoming.get(bucket) if isinstance(incoming.get(bucket), dict) else {}
+                out[bucket] = {str(k): dict(v) for k, v in nxt.items() if isinstance(v, dict)}
+            out["ok_count"] = int(incoming.get("ok_count") or 0)
+            out["fail_count"] = int(incoming.get("fail_count") or 0)
+            out["image_count"] = int(incoming.get("image_count") or 0)
+            out["cost_total"] = float(incoming.get("cost_total") or 0)
+            if incoming.get("cost_currency"):
+                out["cost_currency"] = incoming.get("cost_currency")
+            return out
         base = incoming if w_in > w_ex else existing if w_in < w_ex else existing
         out = dict(base)
         for bucket in ("by_gateway", "by_provider", "by_model"):
