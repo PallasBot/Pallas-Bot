@@ -17,12 +17,15 @@ CORE_PLUGIN_NAMES: frozenset[str] = frozenset({
     "pb_webui",
     "request_handler",
     "blacklist",
+    "llm_chat",
+    "pb_stats",
+})
+
+BUNDLED_PLAY_PLUGIN_NAMES: frozenset[str] = frozenset({
     "drink",
     "greeting",
     "roulette",
     "take_name",
-    "llm_chat",
-    "pb_stats",
 })
 
 SHARD_INTERNAL_PLUGIN_NAMES: frozenset[str] = frozenset({
@@ -134,7 +137,7 @@ _PROTOCOL_MODULE_NAMES: frozenset[str] = frozenset({
 })
 
 PLUGIN_BUNDLED_MODULE_PREFIXES: dict[str, str] = {
-    **{name: f"packages.{name}" for name in CORE_PLUGIN_NAMES},
+    **{name: f"packages.{name}" for name in CORE_PLUGIN_NAMES | BUNDLED_PLAY_PLUGIN_NAMES},
     "pb_protocol": "packages.pb_protocol",
     "relogin_bot": "packages.relogin_bot",
     "relogin_forward": "packages.relogin_forward",
@@ -173,6 +176,12 @@ def is_core_plugin(name: str) -> bool:
     from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 
     return canonical_plugin_package((name or "").strip()) in CORE_PLUGIN_NAMES
+
+
+def is_bundled_play_plugin(name: str) -> bool:
+    from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
+
+    return canonical_plugin_package((name or "").strip()) in BUNDLED_PLAY_PLUGIN_NAMES
 
 
 def is_extra_plugin(name: str) -> bool:
@@ -326,6 +335,8 @@ def should_load_bundled_plugin(name: str, *, load_bundled_extra: bool | str | No
     if not short:
         return False
     if is_core_plugin(short):
+        return True
+    if is_bundled_play_plugin(short):
         return True
     if is_extra_plugin(short):
         mode = normalize_load_bundled_extra_mode(load_bundled_extra)

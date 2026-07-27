@@ -126,6 +126,15 @@ def test_infer_plugin_source_local_dir(tmp_path, monkeypatch) -> None:
     assert dir_posix == "local/plugins/demo"
 
 
+def test_plugin_source_from_bundled_play_path() -> None:
+    from pallas.core.foundation.paths import PROJECT_ROOT
+
+    drink_init = PROJECT_ROOT / "packages" / "drink" / "__init__.py"
+    if not drink_init.is_file():
+        return
+    assert plugin_source_from_module_path(str(drink_init)) == "bundled"
+
+
 def test_plugin_source_from_core_path() -> None:
     from pallas.core.foundation.paths import PROJECT_ROOT
 
@@ -463,6 +472,6 @@ def test_catalog_row_uses_package_asset_cover_when_present() -> None:
     roulette_root = Path(__file__).resolve().parents[2] / "packages" / "roulette"
     if not (roulette_root / "assets" / "cover.png").is_file():
         return
-    visuals = resolve_catalog_visuals(plugin_id="roulette", plugin_source="core", plugin_root=roulette_root)
+    visuals = resolve_catalog_visuals(plugin_id="roulette", plugin_source="bundled", plugin_root=roulette_root)
     assert visuals["cover"] == "/pallas/plugin-assets/roulette/assets/cover.png"
     assert visuals["icon"] == visuals["cover"]
