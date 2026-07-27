@@ -14,8 +14,9 @@ from pallas.product.message_scrub.quiet_http_loggers import scrub_http_log_noise
 
 _MONITOR_TIMEOUT_SEC = 5.0
 _STATS_TIMEOUT_SEC = 12.0
-# monitor 字段更全，但常比 /v1/stats 慢；先等一小段优先拿 overview，超时则用先到的合法结果
+# monitor 字段更全（含 online_versions），但常更慢：先短等优先 overview，否则用 /v1/stats 并再等一段补全
 _MONITOR_PREFER_SEC = 0.45
+_MONITOR_ENRICH_SEC = 1.4
 _REQUIRED_KEYS = ("deployments_total", "deployments_online", "bots_online_sum")
 _CORPUS_KEYS = (
     "contexts_total",
@@ -194,7 +195,6 @@ async def fetch_community_public_stats() -> dict[str, Any]:
         if data is None and stats_task.done():
             data = _task_result_or_none(stats_task, errors)
         if data is None:
-            # prefer 窗口内都未成功：继续等谁先成功
             pending = {t for t in (monitor_task, stats_task) if not t.done()}
             while pending and data is None:
                 done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
@@ -203,6 +203,18 @@ async def fetch_community_public_stats() -> dict[str, Any]:
                     if got is not None:
                         data = got
                         break
+        # 已用 /v1/stats：再等 monitor，补版本分布等 overview 专有字段
+        if (
+            data is not None
+            and monitor_task is not None
+            and not monitor_task.done()
+            and not data.get("online_versions")
+        ):
+            await asyncio.wait({monitor_task}, timeout=_MONITOR_ENRICH_SEC)
+            if monitor_task.done():
+                enriched = _task_result_or_none(monitor_task, errors)
+                if enriched is not None:
+                    data = enriched
         for task in (monitor_task, stats_task):
             if not task.done():
                 task.cancel()

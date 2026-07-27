@@ -162,6 +162,10 @@ async def test_fetch_community_public_stats_prefers_fast_stats_over_slow_monitor
         "pallas.product.community_stats.public_stats._MONITOR_PREFER_SEC",
         0.05,
     )
+    monkeypatch.setattr(
+        "pallas.product.community_stats.public_stats._MONITOR_ENRICH_SEC",
+        0.05,
+    )
 
     stats_body = {
         "deployments_total": 2,
@@ -173,6 +177,7 @@ async def test_fetch_community_public_stats_prefers_fast_stats_over_slow_monitor
             "deployments_total": 9,
             "deployments_online": 9,
             "bots_online_sum": 9,
+            "online_versions": [{"version": "4.1.9", "count": 2}],
         }
     }
 
@@ -181,7 +186,7 @@ async def test_fetch_community_public_stats_prefers_fast_stats_over_slow_monitor
         mock.status_code = 200
         mock.raise_for_status = MagicMock()
         if url.endswith("/monitor/overview"):
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(0.3)
             mock.json.return_value = monitor_body
         else:
             mock.json.return_value = stats_body
@@ -198,7 +203,57 @@ async def test_fetch_community_public_stats_prefers_fast_stats_over_slow_monitor
 
     assert data["deployments_online"] == 2
     assert data["stats_url"].endswith("/v1/stats")
-    assert elapsed < 0.18
+    assert elapsed < 0.2
+
+
+@pytest.mark.asyncio
+async def test_fetch_community_public_stats_enriches_versions_from_monitor(monkeypatch):
+    monkeypatch.delenv("PALLAS_COMMUNITY_STATS_ENDPOINT", raising=False)
+    cfg_mod.clear_community_stats_config_cache()
+    monkeypatch.setattr(
+        "pallas.product.community_stats.public_stats._MONITOR_PREFER_SEC",
+        0.05,
+    )
+    monkeypatch.setattr(
+        "pallas.product.community_stats.public_stats._MONITOR_ENRICH_SEC",
+        0.4,
+    )
+
+    stats_body = {
+        "deployments_total": 2,
+        "deployments_online": 2,
+        "bots_online_sum": 4,
+    }
+    monitor_body = {
+        "deployments": {
+            "deployments_total": 9,
+            "deployments_online": 9,
+            "bots_online_sum": 9,
+            "online_versions": [{"version": "4.1.9", "count": 3}],
+        }
+    }
+
+    async def fake_get(self, url, **kwargs):
+        mock = MagicMock()
+        mock.status_code = 200
+        mock.raise_for_status = MagicMock()
+        if url.endswith("/monitor/overview"):
+            await asyncio.sleep(0.12)
+            mock.json.return_value = monitor_body
+        else:
+            mock.json.return_value = stats_body
+        return mock
+
+    import asyncio
+
+    with patch.object(httpx.AsyncClient, "get", fake_get):
+        from pallas.product.community_stats.public_stats import fetch_community_public_stats
+
+        data = await fetch_community_public_stats()
+
+    assert data["deployments_online"] == 9
+    assert data["online_versions"] == [{"version": "4.1.9", "count": 3}]
+    assert data["stats_url"].endswith("/monitor/overview")
 
 
 def test_parse_monitor_overview_body():
