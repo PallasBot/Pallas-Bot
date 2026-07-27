@@ -135,14 +135,18 @@ uv run pallas
 
 ### 🌐 社区中心
 
-[Pallas-Bot 社区中心](https://stats.pallasbot.top/) 是面向大家的公开主站：可看在线部署与牛牛数量，逛金句投稿墙。
+[Pallas-Bot 社区中心](https://stats.pallasbot.top/) 是面向大家的公开主站：可看在线部署与牛牛数量，逛金句投稿墙；也可直接在主站 [投稿](https://stats.pallasbot.top/submit)。
 
-> 自部署用户还可在本机可选接入**社区共享语料**，拓展牛牛语料池，说明见文档 [语料联邦](https://PallasBot.github.io/Pallas-Bot-Docs/common/corpus)。
+> 自部署用户还可在本机接入**社区共享语料**，或投稿牛牛消息正文，说明见文档 [语料联邦](https://PallasBot.github.io/Pallas-Bot-Docs/common/corpus) 与 [在线统计与社区主站](https://pallasbot.github.io/Pallas-Bot-Docs/common/community_stats)。
 
 <table>
 <tr>
 <td><strong>社区中心主站</strong></td>
 <td><a href="https://stats.pallasbot.top/"><img src="https://img.shields.io/badge/社区中心-stats.pallasbot.top-FE7D37" alt="社区中心"></a></td>
+</tr>
+<tr>
+<td><strong>金句投稿</strong></td>
+<td><a href="https://stats.pallasbot.top/submit"><img src="https://img.shields.io/badge/投稿-stats.pallasbot.top%2Fsubmit-8A2BE2" alt="金句投稿"></a></td>
 </tr>
 <tr>
 <td><strong>在线部署 / 牛牛</strong></td>
