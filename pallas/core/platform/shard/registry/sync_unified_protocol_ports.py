@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING
 
 from pallas.core.platform.shard.registry.sync_protocol_ports import (
     ProtocolPortSyncResult,
+    apply_onebot_instance_sync,
     build_ws_url,
     format_sync_user_message,
     load_accounts,
     merge_ws_url_for_shard_update,
     read_dotenv,
-    sync_onebot_instances_from_accounts,
     ws_url_aligned_with_worker,
 )
 
@@ -140,9 +140,7 @@ def sync_accounts_ws_urls_unified(
             encoding="utf-8",
         )
 
-    onebot_synced, onebot_drift = sync_onebot_instances_from_accounts(accounts, dry_run=dry_run)
-    result.onebot_synced_count = onebot_synced
-    result.onebot_drift_count = onebot_drift
+    apply_onebot_instance_sync(result, accounts, dry_run=dry_run)
     return result
 
 

@@ -132,8 +132,13 @@ def evaluate_protocol_port_sync(
         dry_run=True,
     )
     skip_protocol = sync_result.changed_count == 0 and sync_result.onebot_drift_count == 0
+    if sync_result.onebot_sync_skipped_reason:
+        notes.append(sync_result.onebot_sync_skipped_reason)
     if skip_protocol:
-        notes.append("协议端 ws_url 与实例 onebot 均已对齐，跳过同步")
+        if sync_result.onebot_sync_skipped_reason:
+            notes.append("协议端 accounts.json ws_url 已对齐")
+        else:
+            notes.append("协议端 ws_url 与实例 onebot 均已对齐，跳过同步")
     else:
         if sync_result.changed_count:
             notes.append(f"协议端有 {sync_result.changed_count} 个账号 ws_url 需对齐")
