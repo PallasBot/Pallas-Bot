@@ -69,6 +69,71 @@ def test_merge_side_snapshot_does_not_shrink_images_buckets() -> None:
     assert img["by_model"]["m2"]["ok_count"] == 2
 
 
+def test_merge_side_snapshot_corrects_images_shard_multiple_clone() -> None:
+    small = {
+        "ok_count": 48,
+        "fail_count": 5,
+        "image_count": 48,
+        "cost_total": 0.9856,
+        "cost_currency": "CNY",
+        "by_gateway": {
+            "manual": {"ok_count": 16, "fail_count": 5, "image_count": 16, "cost_total": 0.0},
+            "provider": {"ok_count": 32, "fail_count": 0, "image_count": 32, "cost_total": 0.9856},
+        },
+        "by_provider": {
+            "AK": {"ok_count": 32, "fail_count": 0, "image_count": 32, "cost_total": 0.9856},
+            "router.shengsuanyun.com": {"ok_count": 16, "fail_count": 0, "image_count": 16, "cost_total": 0.0},
+            "exhausted": {"ok_count": 0, "fail_count": 5, "image_count": 0, "cost_total": 0.0},
+        },
+        "by_model": {
+            "gpt-image-2": {"ok_count": 32, "fail_count": 0, "image_count": 32, "cost_total": 0.9856},
+            "openai/gpt-image-2": {"ok_count": 16, "fail_count": 0, "image_count": 16, "cost_total": 0.0},
+        },
+    }
+    factor = 9
+    big = {
+        "ok_count": small["ok_count"] * factor,
+        "fail_count": small["fail_count"] * factor,
+        "image_count": small["image_count"] * factor,
+        "cost_total": small["cost_total"] * factor,
+        "cost_currency": "CNY",
+        "by_gateway": {
+            k: {
+                "ok_count": v["ok_count"] * factor,
+                "fail_count": v["fail_count"] * factor,
+                "image_count": v["image_count"] * factor,
+                "cost_total": v["cost_total"] * factor,
+            }
+            for k, v in small["by_gateway"].items()
+        },
+        "by_provider": {
+            k: {
+                "ok_count": v["ok_count"] * factor,
+                "fail_count": v["fail_count"] * factor,
+                "image_count": v["image_count"] * factor,
+                "cost_total": v["cost_total"] * factor,
+            }
+            for k, v in small["by_provider"].items()
+        },
+        "by_model": {
+            k: {
+                "ok_count": v["ok_count"] * factor,
+                "fail_count": v["fail_count"] * factor,
+                "image_count": v["image_count"] * factor,
+                "cost_total": v["cost_total"] * factor,
+            }
+            for k, v in small["by_model"].items()
+        },
+    }
+    merged = merge_side_snapshot({"images": big}, {"images": small})
+    img = merged["images"]
+    assert img["ok_count"] == 48
+    assert img["fail_count"] == 5
+    assert img["image_count"] == 48
+    assert abs(img["cost_total"] - 0.9856) < 1e-9
+    assert img["by_provider"]["AK"]["ok_count"] == 32
+
+
 def test_rag_stale_file_salvaged_and_worker_rehydrates(tmp_path, monkeypatch) -> None:
     clear_llm_rag_metrics_for_tests()
     import pallas.product.llm.rag_metrics as rm
