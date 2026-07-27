@@ -297,8 +297,10 @@ async def handle_llm_chat(bot: Bot, event: Event):
     followup_window_sec = int(llm_cfg.llm_speak_followup_window_sec)
     followup_max_total = int(llm_cfg.llm_speak_followup_max_total_sec)
 
+    bot_id = int(bot.self_id)
     if is_to_me and llm_cfg.llm_speak_followup_enabled:
         note_hard_speak_trigger(
+            bot_id,
             group_id,
             user_id,
             window_seconds=followup_window_sec,
@@ -309,18 +311,19 @@ async def handle_llm_chat(bot: Bot, event: Event):
         followup_active = bool(
             llm_cfg.llm_speak_followup_enabled
             and in_followup_window(
+                bot_id,
                 group_id,
                 user_id,
                 window_seconds=followup_window_sec,
                 max_total_seconds=followup_max_total,
             )
         )
-        speak_aliases = await _resolve_speak_aliases(int(bot.self_id))
+        speak_aliases = await _resolve_speak_aliases(bot_id)
         decision = evaluate_speak_perception(
             plain_text=plain or msg,
             aliases=speak_aliases,
             is_to_me=False,
-            bot_id=int(bot.self_id),
+            bot_id=bot_id,
             mention_enabled=llm_cfg.llm_speak_mention_enabled,
             ambient_enabled=llm_cfg.llm_speak_ambient_enabled,
             ambient_rate=llm_cfg.llm_speak_ambient_rate,
@@ -337,6 +340,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         speak_trigger = decision.reason
         if speak_trigger == "mention" and llm_cfg.llm_speak_followup_enabled:
             note_hard_speak_trigger(
+                bot_id,
                 group_id,
                 user_id,
                 window_seconds=followup_window_sec,
