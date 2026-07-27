@@ -12,6 +12,8 @@ def test_prefer_ledger_tokens_keeps_ds_after_incomplete_live(tmp_path, monkeypat
         "pallas.product.llm.usage_ledger.usage_ledger_dir",
         lambda: root,
     )
+    # 2026-07-27 10:00 local
+    ts_hour = 1785117600.0
     append_usage_record(
         task="llm_chat",
         provider="ds",
@@ -19,6 +21,7 @@ def test_prefer_ledger_tokens_keeps_ds_after_incomplete_live(tmp_path, monkeypat
         prompt_tokens=100,
         completion_tokens=20,
         day_key="2026-07-27",
+        ts=ts_hour,
     )
     append_usage_record(
         task="llm_chat",
@@ -27,6 +30,7 @@ def test_prefer_ledger_tokens_keeps_ds_after_incomplete_live(tmp_path, monkeypat
         prompt_tokens=10,
         completion_tokens=5,
         day_key="2026-07-27",
+        ts=ts_hour,
     )
     live = {
         "source": "bot",
@@ -50,8 +54,9 @@ def test_prefer_ledger_tokens_keeps_ds_after_incomplete_live(tmp_path, monkeypat
     assert tokens["completion_tokens"] == 25
     assert set(tokens["by_provider"]) == {"ds", "packy"}
     assert tokens["by_provider"]["ds"]["total_tokens"] == 120
-    # 实时按小时桶保留
-    assert tokens["by_hour"]["17"]["total_tokens"] == 15
+    # 账本按 ts 重建小时桶（覆盖重启后残缺的实时 by_hour）
+    assert tokens["by_hour"]["10"]["total_tokens"] == 135
+    assert "17" not in tokens["by_hour"]
     assert out["gates"]["proceed"] == 3
 
 

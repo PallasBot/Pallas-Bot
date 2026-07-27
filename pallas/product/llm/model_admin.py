@@ -24,6 +24,7 @@ def write_llm_daily_stats_side(day: str, side: str, snapshot: dict[str, Any]) ->
 
 def _tokens_snapshot_from_ledger(ledger_tokens: dict[str, Any]) -> dict[str, Any]:
     """账本日汇总 → ai.tokens 形状。"""
+    by_hour = ledger_tokens.get("by_hour") if isinstance(ledger_tokens.get("by_hour"), dict) else {}
     return {
         "source": "ledger",
         "day_key": str(ledger_tokens.get("day_key") or ""),
@@ -37,7 +38,7 @@ def _tokens_snapshot_from_ledger(ledger_tokens: dict[str, Any]) -> dict[str, Any
         "by_task": ledger_tokens.get("by_task") if isinstance(ledger_tokens.get("by_task"), dict) else {},
         "by_provider": ledger_tokens.get("by_provider") if isinstance(ledger_tokens.get("by_provider"), dict) else {},
         "by_model": ledger_tokens.get("by_model") if isinstance(ledger_tokens.get("by_model"), dict) else {},
-        "by_hour": {},
+        "by_hour": by_hour,
     }
 
 
@@ -98,7 +99,10 @@ def _enrich_ai_snapshot_from_ledger(
     *,
     day_key: str,
 ) -> dict[str, Any] | None:
-    """当日 token / 提供方调用优先用请求账本补全（跨重启更完整），保留实时 by_hour。"""
+    """当日 token / 提供方调用优先用请求账本补全（跨重启更完整）。
+
+    by_hour：账本按请求 ts 重建全日小时桶；仅当账本无小时数据时回退实时内存。
+    """
     if not isinstance(ai, dict):
         return ai
     try:
@@ -111,9 +115,11 @@ def _enrich_ai_snapshot_from_ledger(
         return ai
     tokens = _tokens_snapshot_from_ledger(ledger)
     live = ai.get("tokens") if isinstance(ai.get("tokens"), dict) else {}
-    by_hour = live.get("by_hour") if isinstance(live.get("by_hour"), dict) else None
-    if by_hour:
-        tokens = {**tokens, "by_hour": by_hour}
+    ledger_hours = tokens.get("by_hour") if isinstance(tokens.get("by_hour"), dict) else {}
+    if not ledger_hours:
+        by_hour = live.get("by_hour") if isinstance(live.get("by_hour"), dict) else None
+        if by_hour:
+            tokens = {**tokens, "by_hour": by_hour}
     provider_stats = _merge_dimension_stats_prefer_complete(
         ai.get("provider_stats"),
         _dimension_stats_from_ledger_breakdown(ledger.get("by_provider")),
