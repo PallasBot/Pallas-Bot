@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class ApiOkResponse[T](BaseModel):
+class _ApiOkResponse[T](BaseModel):
     ok: Literal[True] = True
     data: T
     error: None = None
