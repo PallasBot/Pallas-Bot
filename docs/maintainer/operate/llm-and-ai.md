@@ -133,7 +133,7 @@ flowchart TD
 
 ## Ollama GPU 回退 CPU（推理极慢）
 
-Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 200 但推理回退 CPU。探活与 cron 见 **Pallas-Bot-AI**：[docs/operate/ollama-gpu-watchdog.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/operate/ollama-gpu-watchdog.md)（`scripts/ollama_gpu_watchdog.sh --fix`）。
+Ollama 在 Docker + GPU 下长跑后，容器内 NVML 可能断联，HTTP 仍 200 但推理回退 CPU。探活与 cron 见 **Pallas-Bot-AI**：[docs/operate/ollama-gpu-watchdog.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/operate/ollama-gpu-watchdog.md)（`scripts/ollama_gpu_watchdog.sh --fix`）。
 
 ## 纯远端 API
 

@@ -90,7 +90,7 @@ AI 镜像仅用于媒体 / RWKV。Ollama 模型默认不预拉（`--profile pull
 - 普通聊天：在 **AI 配置 → 接入** 配置 Provider，并打开 `LLM_CHAT_ENABLED`
 - 媒体或遗留 RWKV：再配 `AI_SERVER_HOST` / `AI_SERVER_PORT`（默认 `127.0.0.1:9099`；也可由扩展基址同步）
 
-详细变量见 [Pallas-Bot-AI README](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/README.md) 与 [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)。
+详细变量见 [Pallas-Bot-AI README](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/README.md) 与 [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)。
 
 从 0 安装验收见 [安装验收 Checklist](ga-install-checklist.md)。
 
