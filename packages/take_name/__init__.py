@@ -1,11 +1,13 @@
 from nonebot.plugin import PluginMetadata
 
-from pallas.core.perm.metadata_defaults import (
+from pallas.api.metadata import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
+    SCENE_AUTO,
+    join_usage,
+    usage_line,
 )
-from pallas.core.perm.metadata_text import SCENE_AUTO, join_usage, usage_line
 from pallas.product.llm.knowledge.declare import knowledge_source_row
 
 from . import handlers as _handlers  # noqa: F401

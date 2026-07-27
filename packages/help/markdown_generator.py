@@ -2,7 +2,7 @@ import re
 import textwrap
 from enum import StrEnum
 
-from pallas.core.perm import (
+from pallas.api.perm import (
     effective_permission_avail_text,
     help_say_phrase,
     help_scene_text,

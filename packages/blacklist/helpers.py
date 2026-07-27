@@ -12,8 +12,8 @@ from nonebot.adapters.onebot.v11 import (
     PrivateMessageEvent,
 )
 
+from pallas.api.perm import satisfies_command_permission
 from pallas.core.foundation.config import GroupConfig
-from pallas.core.perm import satisfies_command_permission
 
 
 def collect_target_qqs_from_plain_and_message(plain_text: str, message) -> list[int]:

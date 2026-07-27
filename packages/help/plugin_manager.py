@@ -12,10 +12,10 @@ from nonebot.adapters.onebot.v11 import MessageEvent
 from nonebot.internal.adapter import Event
 from nonebot.permission import SUPERUSER
 
+from pallas.api.perm import is_user_help_plugin
 from pallas.core.foundation.db import make_bot_config_repository, make_group_config_repository
 from pallas.core.foundation.db.modules import BotConfigModule, GroupConfigModule
 from pallas.core.foundation.paths import plugin_data_dir
-from pallas.core.perm.help_menu import is_user_help_plugin
 from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 
 from .global_disable import resolve_global_disabled_plugin_names, sync_global_disable_remote_generation

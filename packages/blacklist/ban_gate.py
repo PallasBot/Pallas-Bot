@@ -97,8 +97,8 @@ async def _sync_acl_user_banned(user_id: int, banned: bool) -> None:
 
 async def _sync_acl_group_banned(group_id: int, banned: bool) -> None:
     try:
+        from pallas.api.perm import ACL_TARGET_GROUP_BAN
         from pallas.core.foundation.db import make_acl_repository
-        from pallas.core.perm.acl import ACL_TARGET_GROUP_BAN
 
         repo = make_acl_repository()
     except Exception:
@@ -137,8 +137,8 @@ async def _sync_acl_group_blocked_users(group_id: int, user_ids: list[int]) -> N
     不在列表里的历史 deny 行同步删除。
     """
     try:
+        from pallas.api.perm import group_block_target
         from pallas.core.foundation.db import make_acl_repository
-        from pallas.core.perm.acl import group_block_target
 
         repo = make_acl_repository()
     except Exception:

@@ -6,7 +6,7 @@ from nonebot import on_command
 from nonebot.adapters.onebot.v11 import MessageEvent, PrivateMessageEvent
 from nonebot.params import CommandArg
 
-from pallas.core.perm import private_message_permission_for_command
+from pallas.api.perm import private_message_permission_for_command
 from pallas.product.llm.model_admin import get_runtime_model, switch_runtime_model, unload_runtime_model
 
 switch_model_cmd = on_command(

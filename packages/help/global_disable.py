@@ -54,7 +54,7 @@ def file_mtime_ns(path) -> int:
 
 
 def _read_disabled_names_from_disk() -> frozenset[str]:
-    from pallas.core.storage.deploy_store import DeployPluginStorage
+    from pallas.api.storage import DeployPluginStorage
 
     protected = GLOBAL_DISABLE_PROTECTED_PLUGINS
     try:
@@ -91,7 +91,7 @@ def _migrate_legacy_global_disabled() -> frozenset[str]:
     path = _legacy_global_disable_path()
     if not names and not path.exists():
         return frozenset()
-    from pallas.core.storage.deploy_store import DeployPluginStorage
+    from pallas.api.storage import DeployPluginStorage
 
     DeployPluginStorage("help").set(_STORAGE_KEY, sorted(names))
     if path.exists():
@@ -161,7 +161,7 @@ def save_global_disabled_plugins(disabled_plugins: list[str]) -> list[str]:
     global _cache_mtime_ns, _cache_names, _synced_redis_gen, _remote_gen_checked_at
     protected = GLOBAL_DISABLE_PROTECTED_PLUGINS
     out = sorted({str(x).strip() for x in disabled_plugins if str(x).strip() and str(x).strip() not in protected})
-    from pallas.core.storage.deploy_store import DeployPluginStorage
+    from pallas.api.storage import DeployPluginStorage
 
     DeployPluginStorage("help").set(_STORAGE_KEY, out)
     names = frozenset(out)
