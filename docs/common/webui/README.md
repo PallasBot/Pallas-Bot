@@ -95,7 +95,7 @@ get_my_config = plugin_webui.get
 
 ## 实现
 
-[`pallas/console/webui/`](https://github.com/PallasBot/Pallas-Bot/tree/main/pallas/console/webui/) · 路由薄层 [`packages/pb_webui/extended_api.py`](https://github.com/PallasBot/Pallas-Bot/tree/main/packages/pb_webui/extended_api.py)
+[`pallas/console/webui/`](https://github.com/PallasBot/Pallas-Bot/tree/main/pallas/console/webui/) · 控制台 JSON API 编排 [`packages/pb_webui/extended_api.py`](https://github.com/PallasBot/Pallas-Bot/tree/main/packages/pb_webui/extended_api.py)（`register_extended_api`），域路由分散在 `db_api`、`ai_extension_api`、`update_api`、`social_api`、`plugins_console_api`、`common_config_api`、`llm_product_api`、`system_home_api`、`logs_api`、`auth_security_api`、`stats_dashboard_api`、`instances_configs_api` 等模块，以及既有 `acl_api`、`llm_ops_api`、`memory_graph_api`、`agent_platform_api`、`console_metrics_runtime`、`extended_common`。
 
 ## API 契约（按域）
 

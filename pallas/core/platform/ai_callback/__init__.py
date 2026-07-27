@@ -12,6 +12,8 @@ from pallas.core.platform.ai_callback.task_types import (
     REPEATER_FALLBACK_TASK_TYPE,
     REPEATER_POLISH_TASK_TYPE,
     SING_TASK_TYPES,
+    TTS_TASK_TYPE,
+    VOICE_TASK_TYPES,
 )
 
 __all__ = [
@@ -23,6 +25,8 @@ __all__ = [
     "REPEATER_FALLBACK_TASK_TYPE",
     "REPEATER_POLISH_TASK_TYPE",
     "SING_TASK_TYPES",
+    "TTS_TASK_TYPE",
+    "VOICE_TASK_TYPES",
     "register_ai_callback_http",
     "resolve_callback_task",
     "run_ai_callback",

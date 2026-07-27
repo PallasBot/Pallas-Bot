@@ -1,5 +1,26 @@
 # Changelog
 
+## [4.1.8] - 2026-07-27
+
+本版相对 4.1.7：接入官方扩展「牛牛说」（侧车 TTS），去掉酒后对话附带语音；插件 / LLM / 控制台分层继续收紧。捆绑 WebUI **v0.8.2**。
+
+### Added
+
+- 官方「牛牛说」：`tts` 任务类型、语音投递与插件矩阵注册（依赖 `pallas-plugin-ai-media`）
+- TTS / AI Runtime 文档与帮助入口
+
+### Fixed
+
+- `bytes_to_data_reference_url` 媒体导出
+- 控制台 LLM 测试 patch 面；`ai_callback` 导入顺序
+
+### Changed
+
+- 移除 `CHAT_TTS_ENABLE` / 酒后附带语音路径
+- 玩法插件 bundled；LLM / 配置 / 分片 / 控制台公开面收紧
+- AI Runtime 文档去掉「绘图归属本仓」；链接改指向 `main`
+- 发行捆绑控制台取 WebUI **v0.8.2**
+
 ## [4.1.7] - 2026-07-27
 
 ### 更新公告

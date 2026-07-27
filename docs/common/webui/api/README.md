@@ -6,7 +6,8 @@
 
 实现源码：
 
-- 路由注册：`packages/pb_webui/extended_api.py`（`register_extended_api`）
+- 编排入口：`packages/pb_webui/extended_api.py`（`register_extended_api`，挂载各域 `register_*_router`）
+- 域路由模块：`auth_security_api`、`system_home_api`、`plugins_console_api`、`common_config_api`、`llm_product_api`、`stats_dashboard_api`、`social_api`、`db_api`、`instances_configs_api`、`update_api`、`ai_extension_api`、`logs_api`，以及 `acl_api`、`llm_ops_api`、`memory_graph_api`、`agent_platform_api`、`console_metrics_runtime`、`extended_common`
 - 轻量健康检查：`packages/pb_webui/api.py`
 - 登录与静态页：`packages/pb_webui/public.py`
 - 配置段 / 插件页：`pallas/console/webui/`
@@ -63,7 +64,7 @@
 
 ## 扩展新 API
 
-1. 在 `extended_api.py` 的 `register_extended_api` 内增加路由（`include_in_schema=True` 便于 OpenAPI）
+1. 在对应域模块新增 `register_*_router`（或在 `extended_api.register_extended_api` 中挂载），`include_in_schema=True` 便于 OpenAPI
 2. 写操作使用 `_check_pallas_write_token`
 3. 在本目录补充对应域文档或新增分域文件
 4. 更新 OpenAPI 与 WebUI 类型（见下），再在 `consoleApi.ts` 增加请求函数

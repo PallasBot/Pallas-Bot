@@ -40,6 +40,7 @@ def _build_plugin_package_aliases() -> dict[str, str]:
         "maa_hub",
         "draw",
         "sing",
+        "tts",
         "bot_status",
     ):
         try:

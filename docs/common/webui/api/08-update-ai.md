@@ -43,7 +43,7 @@
 | AI 服务 | `PALLAS_AI_API_TOKEN`（`.env`） | 非空时 `GET /api/ops/logs` 要求 `Authorization: Bearer <token>` |
 | Bot WebUI | `token`（**AI 配置** · AI 服务） | 与 AI 侧**相同**；Bot 拉取远端日志时自动携带 |
 
-两端 token **须一致**；AI 侧留空则不对 Bearer 校验（仅建议本地调试）。示例见 [Pallas-Bot-AI Deployment](https://github.com/PallasBot/Pallas-Bot-AI/blob/master/docs/Deployment.md#api-bearer-token)。
+两端 token **须一致**；AI 侧留空则不对 Bearer 校验（仅建议本地调试）。示例见 [Pallas-Bot-AI Deployment](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/Deployment.md#api-bearer-token)。
 
 Bot 读日志顺序：本机落盘路径 → AI `GET /api/ops/logs` → 报错提示。
 
@@ -52,6 +52,6 @@ Bot 读日志顺序：本机落盘路径 → AI `GET /api/ops/logs` → 报错�
 - `UpdatePage`：`fetchUpdateCheck`、`postUpdateApply`、`fetchBotUpdateCheck` 等
 - **AI 配置**（连接 / 媒体服务）：`fetchAiExtensionConfig`、`putAiExtensionConfig` 等
 
-实现：`extended_api.py` + `pallas_webui/manager.py`（GitHub Release 拉取）。
+实现：`update_api.py` + `ai_extension_api.py` + `pallas_webui/manager.py`（GitHub Release 拉取）。
 
 AI 仓库：[Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)。

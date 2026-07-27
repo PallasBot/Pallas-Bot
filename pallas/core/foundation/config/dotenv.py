@@ -1,4 +1,4 @@
-"""兼容层：配置读写见 ``repo_settings``。"""
+"""已弃用兼容层：请改用 ``repo_settings``；插件侧经 ``pallas.api.config`` 导出。"""
 
 from __future__ import annotations
 

@@ -11,7 +11,7 @@ from pallas.core.platform.bot_runtime.plugin_loader import (
     _short_name,
     load_plugins_for_role,
 )
-from pallas.core.platform.bot_runtime.plugin_matrix import CORE_PLUGIN_NAMES
+from pallas.core.platform.bot_runtime.plugin_matrix import BUNDLED_PLAY_PLUGIN_NAMES, CORE_PLUGIN_NAMES
 from pallas.core.platform.bot_runtime.roles import UNIFIED_SKIP_PLUGIN_NAMES
 from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
@@ -89,7 +89,7 @@ def test_unified_role_loads_core_and_skips_shard_only(monkeypatch: pytest.Monkey
     loaded = {p.name for p in nonebot.get_loaded_plugins()}
     assert "relogin_forward" not in loaded
     assert "maa_hub" not in loaded
-    for name in CORE_PLUGIN_NAMES:
+    for name in CORE_PLUGIN_NAMES | BUNDLED_PLAY_PLUGIN_NAMES:
         if (_PACKAGES / name).is_dir():
             assert name in loaded
     assert "ingress_gate" not in loaded

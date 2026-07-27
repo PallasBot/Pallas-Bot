@@ -8,13 +8,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from pallas.core.foundation.config.dotenv import merged_repo_dotenv_upper
+from pallas.core.foundation.config.repo_settings import merged_repo_settings_upper
 
 BotRole = Literal["unified", "hub", "worker"]
 
 
 def _env_str(name: str, default: str = "") -> str:
-    merged = merged_repo_dotenv_upper()
+    merged = merged_repo_settings_upper()
     if name in os.environ:
         return (os.environ.get(name, default) or "").strip()
     return (merged.get(name) or default).strip()

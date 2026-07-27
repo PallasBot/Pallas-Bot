@@ -18,7 +18,7 @@
 
 ## 配置
 
-控制台 **插件 → 在线统计（pb_stats）**，或 `config/pallas.toml` 的 `[community_stats]`。默认开启。字段见 [`packages/pb_stats/config.py`](../../../packages/pb_stats/config.py)。社区投稿无 Bot 侧开关，取决于中心 `GALLERY_ENABLED`。
+控制台 **插件 → 在线统计（pb_stats）**，或 `config/pallas.toml` 的 `[community_stats]`。默认开启。字段见 [`packages/pb_stats/config.py`](../../../packages/pb_stats/config.py)。社区投稿由官方社区中心提供；本机无单独「投稿总开关」。
 
 保存后（经控制台）写入 `data/pallas_config/webui.json`，并热重载上报任务。
 

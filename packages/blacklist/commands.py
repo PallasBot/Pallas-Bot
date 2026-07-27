@@ -2,8 +2,8 @@ from nonebot import on_command
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, PrivateMessageEvent
 
+from pallas.api.perm import permission_for_command
 from pallas.core.foundation.config import GroupConfig, UserConfig
-from pallas.core.perm import permission_for_command
 from pallas.product.ban_gate.snapshot import patch_group_banned, patch_group_blocked_users, patch_user_banned
 
 from .ban_gate import invalidate_group_ban_gate_cache, invalidate_user_ban_gate_cache

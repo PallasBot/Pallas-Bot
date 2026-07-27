@@ -21,6 +21,7 @@ PLUGIN_HELP_ALIASES: dict[str, tuple[str, ...]] = {
     ),
     "ollama": ("智能对话", "随时闲聊", "Ollama"),
     "sing": ("唱歌", "点歌", "翻唱", "续唱"),
+    "tts": ("牛牛说", "TTS", "语音合成", "念"),
     "drink": ("喝酒", "干杯"),
     "dream": ("做梦", "抽签"),
     "duel": ("决斗", "比拼"),

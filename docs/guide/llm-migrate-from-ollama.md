@@ -34,7 +34,7 @@ WebUI：在 **AI 配置 → 接入** 配置并测试 Provider，再在 AI 配置
 
 ## Pallas-Bot-AI 的保留用途
 
-Pallas-Bot-AI 是可选的媒体 sidecar，提供唱歌、TTS、绘图等媒体任务，以及遗留 RWKV 酒后 `/api/chat`。这些任务才需要 `AI_SERVER_HOST` / `AI_SERVER_PORT`、`:9099` 与 callback；普通 `@` 聊天、接话和会话管理均在 Bot 内完成。
+Pallas-Bot-AI 是可选的媒体 sidecar，提供唱歌、TTS 等媒体任务，以及遗留 RWKV 酒后 `/api/chat`。这些任务才需要 `AI_SERVER_HOST` / `AI_SERVER_PORT`、`:9099` 与 callback；普通 `@` 聊天、接话和会话管理均在 Bot 内完成。
 
 ## 迁移步骤
 

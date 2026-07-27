@@ -37,3 +37,12 @@ def test_plugin_identity_marks_shard_internal_plugins() -> None:
     assert plugin_identity("pallas_plugin_maa_hub").kind == "shard-internal"
     assert is_shard_internal_plugin("packages.maa_hub")
     assert is_shard_internal_plugin("pallas_plugin_maa_hub")
+
+
+def test_plugin_identity_marks_bundled_play_plugins() -> None:
+    assert plugin_identity("drink").kind == "bundled"
+    assert plugin_identity("greeting").kind == "bundled"
+    assert plugin_identity("roulette").kind == "bundled"
+    assert plugin_identity("take_name").kind == "bundled"
+    assert plugin_identity("packages.drink").kind == "bundled"
+    assert plugin_identity("repeater").kind == "core"

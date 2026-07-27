@@ -1,13 +1,17 @@
 from nonebot import get_bot
 from nonebot.plugin import PluginMetadata
 
-from pallas.core.commands import command_limit_list, command_limit_row, command_perm_list, command_perm_row
-from pallas.core.perm.metadata_defaults import (
+from pallas.api.commands import command_limit_list, command_limit_row, command_perm_list, command_perm_row
+from pallas.api.metadata import (
     PLUGIN_EXTRA_VERSION,
     PLUGIN_HOMEPAGE,
     PLUGIN_MENU_TEMPLATE,
+    SCENE_AUTO,
+    SCENE_GROUP,
+    SCENE_PRIVATE,
+    join_usage,
+    usage_line,
 )
-from pallas.core.perm.metadata_text import SCENE_AUTO, SCENE_GROUP, SCENE_PRIVATE, join_usage, usage_line
 from pallas.product.llm.knowledge.declare import knowledge_source_row
 
 from . import commands as _commands  # noqa: F401

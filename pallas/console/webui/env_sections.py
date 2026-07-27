@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
-from pallas.core.foundation.config.dotenv import env_value_to_str, upsert_env_dotenv_items
+from pallas.core.foundation.config.repo_settings import env_value_to_str, upsert_repo_settings_items
 from pallas.core.foundation.paths import PACKAGE_ROOT
 
 
@@ -199,6 +199,7 @@ def _mail_section() -> WebuiEnvSection:
 
 
 def _llm_section() -> WebuiEnvSection:
+    # LLM 段字段与读写逻辑归 `pallas.product.llm.webui_config` 所有。
     from pallas.product.llm.webui_config import LlmWebuiConfig, get_llm_webui_config
 
     return WebuiEnvSection(
@@ -216,7 +217,6 @@ def _llm_section() -> WebuiEnvSection:
             "ai_server_port": "AI_SERVER_PORT",
             "llm_chat_enabled": "LLM_CHAT_ENABLED",
             "chat_enable": "CHAT_ENABLE",
-            "chat_tts_enable": "CHAT_TTS_ENABLE",
             "llm_repeater_mode": "LLM_REPEATER_MODE",
             "llm_polish_lite_sample_rate": "LLM_POLISH_LITE_SAMPLE_RATE",
             "llm_governance_enabled": "LLM_GOVERNANCE_ENABLED",
@@ -522,7 +522,7 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
     merged = {**current, **patch}
     validated = s.model_cls(**merged).model_dump(mode="python")
     items = {s.field_to_env[k]: env_value_to_str(validated[k]) for k in patch}
-    upsert_env_dotenv_items(items)
+    upsert_repo_settings_items(items)
     if section_id == "llm":
         from pallas.core.foundation.config.repo_settings import purge_misplaced_ai_env_keys_from_webui
 

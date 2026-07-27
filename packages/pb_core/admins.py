@@ -104,7 +104,7 @@ async def add_bot_admins(bot_id: int, admin_ids: list[int]) -> tuple[bool, list[
                 )
         # ACL 引擎 cache 依赖 admin_members 变更需失效
         try:
-            from pallas.core.perm.acl import clear_acl_cache
+            from pallas.api.perm import clear_acl_cache
 
             clear_acl_cache()
         except Exception:

@@ -27,6 +27,7 @@
 | [做梦 dream](/plugins/dream) | `pallas-plugin-dream` | 做梦、跨群梦话 |
 | [画画 draw](/plugins/draw) | `pallas-plugin-draw` | 文生图 |
 | [唱歌 sing](/plugins/sing) | `pallas-plugin-ai-media` | 点歌、翻唱（需 AI Runtime） |
+| [牛牛说 tts](/plugins/tts) | `pallas-plugin-ai-media` | 文字转语音（需 AI Runtime） |
 | [MAA maa](/plugins/maa) | `pallas-plugin-maa` | 远控排队回图 |
 | [协议端 pb_protocol](/plugins/pb_protocol) | `pallas-plugin-protocol` | NapCat / SnowLuma |
 | [上号 relogin_bot](/plugins/relogin_bot) | `pallas-plugin-protocol` | 重新登录 |

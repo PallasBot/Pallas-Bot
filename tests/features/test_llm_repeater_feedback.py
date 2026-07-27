@@ -99,11 +99,13 @@ def test_build_feedback_entry_defaults_writeback_false() -> None:
 
 
 def test_maybe_append_feedback_marks_writeback_eligible_only_for_strong_scene(monkeypatch) -> None:
-    from pallas.core.platform.ai_callback.runner import maybe_append_llm_repeater_feedback
+    from pallas.product.llm import delivery as llm_delivery
+    from pallas.product.llm.delivery import maybe_append_llm_repeater_feedback
 
     appended = []
     monkeypatch.setattr(
-        "pallas.core.platform.ai_callback.runner.get_llm_config",
+        llm_delivery,
+        "get_llm_config",
         lambda: SimpleNamespace(llm_repeater_feedback_enabled=True),
     )
     monkeypatch.setattr(

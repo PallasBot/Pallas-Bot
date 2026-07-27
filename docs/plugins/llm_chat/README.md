@@ -33,7 +33,7 @@
 
 1. **AI 配置 → 对话**：打开「启用智能对话」（`LLM_CHAT_ENABLED`），并配置 Provider。
 2. 可选：人设提示词、冷却与并发等。
-3. 酒后语音等媒体能力另配 AI Runtime 相关开关（与普通 `@` 聊天无关）。
+3. 需要文字转语音时安装 `pallas-plugin-ai-media` 并使用「牛牛说」（与普通 `@` 聊天无关）。
 
 保存后写入 `data/pallas_config/webui.json`。步骤见 [AI 扩展](../../guide/ai.md)。
 

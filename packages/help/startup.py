@@ -1,4 +1,4 @@
-from pallas.core.storage.startup import register_plugin_storage_startup_hook
+from pallas.api.storage import register_plugin_storage_startup_hook
 from pallas.product.llm.tools.startup import register_llm_tools_startup_hook
 
 from . import event_preprocessor  # noqa: F401

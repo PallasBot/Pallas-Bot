@@ -7,8 +7,8 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from nonebot.rule import Rule
 from ulid import ULID
 
+from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.config import TaskManager
-from pallas.core.perm import group_message_permission_for_command
 from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm import ChatSubmitRequest, get_llm_config, is_llm_chat_service_enabled, submit_chat_task
 from pallas.product.llm.assembler import assemble_tool_bundle

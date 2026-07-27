@@ -7,7 +7,7 @@ from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
 from nonebot.log import logger
 
 from pallas.console.web import install_nonebot_log_sink
-from pallas.core.foundation.config.dotenv import apply_repo_settings_to_environ
+from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
 from pallas.core.foundation.db import init_db
 from pallas.core.foundation.logging import (
     apply_stdlib_logging_channel_prefix,
