@@ -256,9 +256,16 @@ async def merge_self_aliases(bot_id: int, aliases: list[str]) -> bool:
         seen.add(alias.casefold())
         merged.append(alias)
         changed = True
+    stored = [item for item in merged if item not in DEFAULT_SELF_ALIASES][:8]
+    try:
+        from pallas.core.platform.ingress.alias_route import remember_learned_self_aliases
+
+        remember_learned_self_aliases(int(bot_id), stored)
+    except Exception:
+        pass
     if not changed:
         return True
-    persona["self_aliases"] = [item for item in merged if item not in DEFAULT_SELF_ALIASES][:8]
+    persona["self_aliases"] = stored
     await repo.upsert_field(int(bot_id), "persona", persona)
     return True
 

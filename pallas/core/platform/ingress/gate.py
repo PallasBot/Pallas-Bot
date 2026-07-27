@@ -143,6 +143,14 @@ async def ingress_group_message_gate(bot, event) -> None:
                 record_ingress_early_discard("not_at_target")
             raise IgnoredException("not at-target bot")
 
+        from pallas.core.platform.ingress.alias_route import should_yield_ingress_for_peer_alias
+
+        if should_yield_ingress_for_peer_alias(self_id=self_id, plain_text=plain):
+            outcome = "peer_alias_yield"
+            if metrics:
+                record_ingress_early_discard("peer_alias")
+            raise IgnoredException("peer alias target")
+
         safe_before_host_gates = ingress_once_claim_safe_before_host_gates(
             int(event.group_id),
             plain,
