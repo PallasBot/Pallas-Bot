@@ -249,14 +249,19 @@ def prefix_log_source(line: str, source: str) -> str:
 
 
 def _line_matches_scope(line: str, scope: str) -> bool:
+    """按日志切面过滤落盘行：无结构化 facet 时用行文分类，分不出则视为 other。"""
     if scope == "all":
         return True
-    low = line.lower()
-    if scope == "webui":
-        return "pb_webui" in low or "pallas_webui" in low or "[pallas-webui]" in low
+    if scope not in ("message", "console", "other", "webui", "protocol"):
+        return True
+    # 旧枚举兼容：webui→console；protocol 已废弃，不匹配任何行
     if scope == "protocol":
-        return "pb_protocol" in low or "pallas_protocol" in low or "[pallas-protocol]" in low
-    return True
+        return False
+    want = "console" if scope == "webui" else scope
+    from pallas.console.web.bot_web import classify_log_facet, parse_nonebot_log_line
+
+    entry = parse_nonebot_log_line(line, entry_id=0)
+    return classify_log_facet(None, entry) == want
 
 
 def tail_log_file(path, max_lines: int) -> list[str]:

@@ -14,9 +14,17 @@ from typing import TYPE_CHECKING, Any, Literal
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
 
-LogScope = Literal["all", "webui", "protocol"]
+LogFacet = Literal["message", "console", "other"]
+LogScope = Literal["all", "message", "console", "other"]
 
 _LOG_ERROR_SINK_CB: Callable[[str, Mapping[str, Any]], None] | None = None
+
+_CONSOLE_LOGGER_NAMES = frozenset({"pb_webui", "pallas_webui"})
+_MESSAGE_SEND_API_RE = re.compile(
+    r"Calling API send_(?:msg|group_msg|private_msg|group_forward_msg|private_forward_msg)\b",
+    re.IGNORECASE,
+)
+_ACCESS_PALLAS_PATH_RE = re.compile(r'"[A-Z]+\s+/pallas(?:/|\s|")')
 
 
 def set_log_error_capture(cb: Callable[[str, Mapping[str, Any]], None] | None) -> None:
@@ -27,8 +35,6 @@ def set_log_error_capture(cb: Callable[[str, Mapping[str, Any]], None] | None) -
 
 _MAX = 20000
 _lines: deque[str] = deque(maxlen=_MAX)
-_lines_webui: deque[str] = deque(maxlen=_MAX)
-_lines_protocol: deque[str] = deque(maxlen=_MAX)
 _entry_ring: deque[dict[str, Any]] = deque(maxlen=4000)
 _lock = threading.Lock()
 _entries_lock = threading.Lock()
@@ -252,12 +258,8 @@ def replay_log_entries_after(
         eid = int(entry.get("id") or 0)
         if eid <= last_event_id:
             continue
-        if scope == "webui" and not str(entry.get("scope") or "").startswith(("pb_webui", "pallas_webui")):
-            if "[pallas-webui]" not in str(entry.get("message") or ""):
-                continue
-        if scope == "protocol" and not str(entry.get("scope") or "").startswith(("pb_protocol", "pallas_protocol")):
-            if "[pallas-protocol]" not in str(entry.get("message") or ""):
-                continue
+        if not entry_matches_log_scope(entry, scope):
+            continue
         if not _entry_matches_log_source(entry, source):
             continue
         out.append(dict(entry))
@@ -454,7 +456,10 @@ def tail_nonebot_log_entries_scoped(
     lines = merge_log_line_continuations(tail_nonebot_log_lines_scoped(n, scope, source=source))
     out: list[dict[str, Any]] = []
     for i, line in enumerate(lines):
-        out.append(parse_nonebot_log_line(line, entry_id=-(i + 1)))
+        entry = parse_nonebot_log_line(line, entry_id=-(i + 1))
+        if "facet" not in entry:
+            entry["facet"] = classify_log_facet(None, entry)
+        out.append(entry)
     return fill_missing_log_entry_times(out)
 
 
@@ -478,10 +483,11 @@ def _entry_matches_log_source(entry: dict[str, Any], source: str | None) -> bool
     want = (source or "all").strip() or "all"
     if want == "all":
         return True
-    scope = str(entry.get("scope") or "")
-    if want == "hub":
-        return scope.startswith("hub/") or scope in ("hub", "hub-file")
-    return scope == want or scope.startswith(f"{want}/")
+    key = _log_source_key_from_entry(entry)
+    if want in ("hub", "hub-file"):
+        # hub 内存环常无前缀；落盘为 hub-file → 归一成 hub
+        return key in ("", "hub")
+    return key == want
 
 
 async def iter_nonebot_log_sse(
@@ -520,17 +526,15 @@ async def iter_nonebot_log_sse(
             payload = await asyncio.to_thread(_pull)
             hub_sent = False
             if payload is not None:
-                scopes = payload.get("scopes") or {}
-                if scope != "webui" or scopes.get("webui"):
-                    if scope != "protocol" or scopes.get("protocol"):
-                        entry = payload.get("entry")
-                        if isinstance(entry, dict) and _entry_matches_log_source(entry, source):
-                            filled = fill_missing_log_entry_times([dict(entry)])
-                            payload_entry = filled[0]
-                            entry_id = payload_entry.get("id")
-                            entry_json = json.dumps(payload_entry, ensure_ascii=False)
-                            yield f"id: {entry_id}\ndata: {entry_json}\n\n"
-                            hub_sent = True
+                entry = payload.get("entry")
+                if isinstance(entry, dict) and entry_matches_log_scope(entry, scope):
+                    if _entry_matches_log_source(entry, source):
+                        filled = fill_missing_log_entry_times([dict(entry)])
+                        payload_entry = filled[0]
+                        entry_id = payload_entry.get("id")
+                        entry_json = json.dumps(payload_entry, ensure_ascii=False)
+                        yield f"id: {entry_id}\ndata: {entry_json}\n\n"
+                        hub_sent = True
 
             shard_sent = False
             new_lines: list[str] = []
@@ -553,6 +557,9 @@ async def iter_nonebot_log_sse(
                 for key in order:
                     for merged_line in merge_log_line_continuations(by_source[key]):
                         e = parse_nonebot_log_line(merged_line)
+                        e["facet"] = classify_log_facet(None, e)
+                        if not entry_matches_log_scope(e, scope):
+                            continue
                         if not _entry_matches_log_source(e, source):
                             continue
                         t = str(e.get("time") or "").strip()
@@ -580,17 +587,102 @@ def public_base_url(*, host: str | object | None, port: int | object | None) -> 
     return f"http://{h}:{p}"
 
 
+def _logger_name_from_record_or_entry(
+    record: Mapping[str, Any] | Any | None,
+    entry: Mapping[str, Any] | None,
+) -> str:
+    if record is not None:
+        try:
+            name = str(record.get("name") or "").strip()
+        except Exception:
+            name = str(getattr(record, "name", "") or "").strip()
+        if name:
+            return name
+    if entry is not None:
+        scope = str(entry.get("scope") or "").strip()
+        if "/" in scope:
+            scope = scope.rsplit("/", 1)[-1]
+        return scope
+    return ""
+
+
+def _message_text_from_record_or_entry(
+    record: Mapping[str, Any] | Any | None,
+    entry: Mapping[str, Any] | None,
+) -> str:
+    if record is not None:
+        try:
+            raw = record.get("message")
+        except Exception:
+            raw = None
+        if isinstance(raw, str):
+            return raw
+    if entry is not None:
+        return str(entry.get("message") or "")
+    return ""
+
+
+def classify_log_facet(
+    record: Mapping[str, Any] | Any | None,
+    entry: Mapping[str, Any] | None,
+) -> LogFacet:
+    """将日志条目归类为 message / console / other（优先级：console → message → other）。"""
+    name = _logger_name_from_record_or_entry(record, entry)
+    msg = _message_text_from_record_or_entry(record, entry)
+
+    if name in _CONSOLE_LOGGER_NAMES or "[pallas-webui]" in msg:
+        return "console"
+    if name == "uvicorn.access" or name.startswith("uvicorn.access"):
+        if "/pallas/" in msg or "/pallas " in msg or msg.rstrip().endswith("/pallas"):
+            return "console"
+    if _ACCESS_PALLAS_PATH_RE.search(msg):
+        return "console"
+
+    if "ready to send" in msg:
+        return "message"
+    if "[message." in msg:
+        return "message"
+    if "Matcher(type='message'" in msg or 'Matcher(type="message"' in msg:
+        return "message"
+    if _MESSAGE_SEND_API_RE.search(msg):
+        return "message"
+    if name.startswith("nonebot.adapters.onebot") and ("Message " in msg and " from " in msg):
+        return "message"
+
+    return "other"
+
+
+def resolve_entry_facet(entry: Mapping[str, Any] | None) -> LogFacet:
+    """读取条目 facet；缺失时视为 other（旧日志不回填）。"""
+    if not entry:
+        return "other"
+    raw = entry.get("facet")
+    if raw in ("message", "console", "other"):
+        return raw  # type: ignore[return-value]
+    return "other"
+
+
+def entry_matches_log_scope(entry: Mapping[str, Any] | None, scope: LogScope | str) -> bool:
+    if scope == "all":
+        return True
+    if scope not in ("message", "console", "other"):
+        return True
+    return resolve_entry_facet(entry) == scope
+
+
 def nonebot_log_record_matches_http_facet(
     record: Mapping[str, Any],
-    facet: Literal["webui", "protocol"],
+    facet: Literal["webui", "protocol", "console", "message", "other"],
 ) -> bool:
-    """是否与控制台或协议端相关。"""
-    name = str(record.get("name") or "")
-    raw_msg = record.get("message")
-    mstr = raw_msg if isinstance(raw_msg, str) else ""
-    if facet == "webui":
-        return name in ("pb_webui", "pallas_webui") or "[pallas-webui]" in mstr
-    return name in ("pb_protocol", "pallas_protocol") or "[pallas-protocol]" in mstr
+    """兼容旧调用：webui→console；protocol 不再单独切面，恒为 False。"""
+    classified = classify_log_facet(record, None)
+    if facet in ("webui", "console"):
+        return classified == "console"
+    if facet == "message":
+        return classified == "message"
+    if facet == "other":
+        return classified == "other"
+    return False
 
 
 def _sink_dispatch(message: object) -> None:
@@ -599,20 +691,20 @@ def _sink_dispatch(message: object) -> None:
         return
     record = getattr(message, "record", None)
     entry = parse_nonebot_log_line(text)
+    facet = classify_log_facet(record, entry)
+    entry["facet"] = facet
     _remember_log_entry(entry)
-    in_webui = bool(record is not None and nonebot_log_record_matches_http_facet(record, "webui"))
-    in_protocol = bool(record is not None and nonebot_log_record_matches_http_facet(record, "protocol"))
     payload = {
         "entry": entry,
-        "scopes": {"all": True, "webui": in_webui, "protocol": in_protocol},
+        "scopes": {
+            "all": True,
+            "message": facet == "message",
+            "console": facet == "console",
+            "other": facet == "other",
+        },
     }
     with _lock:
         _lines.append(text)
-        if record is not None:
-            if in_webui:
-                _lines_webui.append(text)
-            if in_protocol:
-                _lines_protocol.append(text)
     if _subscribers:
         with _sub_lock:
             subs = list(_subscribers)
@@ -662,18 +754,17 @@ def tail_nonebot_log_lines(n: int) -> list[str]:
         return list(_lines)[-n:]
 
 
-def tail_nonebot_log_lines_webui(n: int) -> list[str]:
-    if n <= 0:
-        return []
-    with _lock:
-        return list(_lines_webui)[-n:]
-
-
-def tail_nonebot_log_lines_protocol(n: int) -> list[str]:
-    if n <= 0:
-        return []
-    with _lock:
-        return list(_lines_protocol)[-n:]
+def filter_log_lines_by_scope(lines: list[str], scope: LogScope | str) -> list[str]:
+    """按 facet 过滤原始行；无 facet 时用 classify 从行文推断（file merge）；推断不出则 other。"""
+    if scope == "all":
+        return list(lines)
+    out: list[str] = []
+    for line in lines:
+        entry = parse_nonebot_log_line(line, entry_id=0)
+        facet = classify_log_facet(None, entry)
+        if facet == scope:
+            out.append(line)
+    return out
 
 
 def tail_nonebot_log_lines_scoped(
@@ -683,12 +774,14 @@ def tail_nonebot_log_lines_scoped(
     source: str | None = None,
 ) -> list[str]:
     want = (source or "all").strip() or "all"
-    if scope == "webui":
-        base = tail_nonebot_log_lines_webui(n)
-    elif scope == "protocol":
-        base = tail_nonebot_log_lines_protocol(n)
-    else:
+    if scope == "all":
         base = tail_nonebot_log_lines(n)
+    else:
+        # 从主环过量取样再按 facet 过滤，避免窄范围时条数不足
+        oversample = min(max(n * 8, n + 200), _MAX)
+        with _lock:
+            candidates = list(_lines)[-oversample:]
+        base = filter_log_lines_by_scope(candidates, scope)[-n:]
     try:
         from pallas.core.platform.bot_runtime.roles import is_sharded_hub
 

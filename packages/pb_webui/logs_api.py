@@ -43,8 +43,9 @@ def register_logs_router(
             Query(
                 description=(
                     "all=全部（分片 hub 时合并 hub 环与各 worker 落盘日志）；"
-                    "webui=pallas_webui 或 [pallas-webui]；"
-                    "protocol=pallas_protocol 或 [pallas-protocol]"
+                    "message=消息面（OneBot 消息事件 / 复读发送等）；"
+                    "console=控制台（pb_webui / [pallas-webui] / /pallas/ access）；"
+                    "other=其它（含无 facet 的旧日志）"
                 ),
             ),
         ] = "all",
@@ -98,7 +99,7 @@ def register_logs_router(
         scope: Annotated[
             LogScope,
             Query(
-                description=("all=全部；webui=pallas_webui；protocol=pallas_protocol（与 GET /logs 一致）"),
+                description=("all=全部；message=消息面；console=控制台；other=其它（与 GET /logs 一致）"),
             ),
         ] = "all",
         source: str | None = Query(
@@ -151,7 +152,7 @@ def register_logs_router(
         scope: Annotated[
             LogScope,
             Query(
-                description=("all=全部；webui=仅 pallas_webui 相关；protocol=仅 pallas_protocol 相关"),
+                description=("all=全部；message=仅消息面；console=仅控制台；other=仅其它"),
             ),
         ] = "all",
         source: str | None = Query(
