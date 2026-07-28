@@ -717,15 +717,22 @@ def cleanup_stale_shard_log_files(
 
 
 class ShardLogTailer:
-    """分片 hub SSE：按文件偏移增量读取各 worker/hub 落盘日志。"""
+    """分片 hub SSE：按文件偏移增量读取各 worker 落盘日志。
+
+    不读 ``hub.log``：hub 实时已由内存环推送，再 tail 会变成 ``hub`` + ``hub-file`` 双份。
+    """
 
     def __init__(self, *, source: str | None = None) -> None:
         self._source = (source or "all").strip() or "all"
         self._offsets: dict[str, int] = {}
+        self._partial: dict[str, str] = {}
         self._bootstrap_offsets()
 
+    def _iter_sse_paths(self) -> list[tuple[Any, str]]:
+        return [(path, tag) for path, tag in _iter_shard_log_paths(self._source) if tag != "hub-file"]
+
     def _bootstrap_offsets(self) -> None:
-        for path, _tag in _iter_shard_log_paths(self._source):
+        for path, _tag in self._iter_sse_paths():
             key = str(path)
             try:
                 self._offsets[key] = path.stat().st_size
@@ -734,7 +741,7 @@ class ShardLogTailer:
 
     def poll_new_lines(self, *, scope: str) -> list[str]:
         out: list[str] = []
-        for path, tag in _iter_shard_log_paths(self._source):
+        for path, tag in self._iter_sse_paths():
             key = str(path)
             try:
                 size = path.stat().st_size
@@ -743,6 +750,7 @@ class ShardLogTailer:
             start = self._offsets.get(key, 0)
             if size < start:
                 start = 0
+                self._partial.pop(key, None)
             if size <= start:
                 continue
             try:
@@ -752,7 +760,18 @@ class ShardLogTailer:
             except OSError:
                 continue
             self._offsets[key] = size
-            for line in chunk.splitlines():
+            data = self._partial.pop(key, "") + chunk
+            if chunk and not chunk.endswith(("\n", "\r")):
+                head, sep, rem = data.rpartition("\n")
+                if sep:
+                    complete = head
+                    self._partial[key] = rem
+                else:
+                    self._partial[key] = data
+                    continue
+            else:
+                complete = data
+            for line in complete.splitlines():
                 line = line.strip()
                 if not line:
                     continue

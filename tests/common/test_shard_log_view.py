@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from pallas.core.platform.shard.logs.view import (
+    ShardLogTailer,
     collect_cluster_log_errors,
     list_shard_log_sources,
     merge_cluster_log_lines,
@@ -264,3 +265,47 @@ def test_exc_type_from_loguru_style_traceback(tmp_path, monkeypatch):
     rows = collect_cluster_log_errors(per_file=50, limit=10)
     assert rows
     assert rows[-1].get("exc_type") == "ModuleNotFoundError"
+
+
+def test_shard_log_tailer_skips_hub_file(tmp_path, monkeypatch):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "hub.log").write_text(
+        "07-28 12:00:00 | INFO     | hub:1 - hub only\n",
+        encoding="utf-8",
+    )
+    (log_dir / "worker-0.log").write_text(
+        "07-28 12:00:01 | INFO     | a:1 - worker line\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.worker_log_stem_allowed", lambda _stem: True)
+
+    tailer = ShardLogTailer(source="all")
+    # bootstrap 已在 EOF；追加后再 poll
+    with (log_dir / "hub.log").open("a", encoding="utf-8") as fh:
+        fh.write("07-28 12:00:02 | INFO     | hub:1 - hub new\n")
+    with (log_dir / "worker-0.log").open("a", encoding="utf-8") as fh:
+        fh.write("07-28 12:00:03 | INFO     | a:1 - worker new\n")
+    lines = tailer.poll_new_lines(scope="all")
+    assert any("worker new" in ln for ln in lines)
+    assert not any("hub new" in ln or "hub-file" in ln for ln in lines)
+
+
+def test_shard_log_tailer_buffers_partial_line(tmp_path, monkeypatch):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    worker = log_dir / "worker-0.log"
+    worker.write_text("", encoding="utf-8")
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.worker_log_stem_allowed", lambda _stem: True)
+
+    tailer = ShardLogTailer(source="all")
+    with worker.open("ab") as fh:
+        fh.write(b"07-28 12:00:00 | INFO     | a:1 - hell")
+    assert tailer.poll_new_lines(scope="all") == []
+    with worker.open("ab") as fh:
+        fh.write(b"o world\n")
+    lines = tailer.poll_new_lines(scope="all")
+    assert len(lines) == 1
+    assert "hello world" in lines[0]
