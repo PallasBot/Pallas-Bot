@@ -46,6 +46,8 @@ def test_pool_diag_tick_notable_only_when_anomaly() -> None:
         "learn_pool_wait": 0,
     }
     assert pool_diagnostics.pool_diag_tick_notable(**base) is False
+    assert pool_diagnostics.pool_diag_tick_notable(**{**base, "slow_sessions": 1}) is False
+    assert pool_diagnostics.pool_diag_tick_notable(**{**base, "slow_sessions": 5}) is True
     assert pool_diagnostics.pool_diag_tick_notable(**{**base, "under_pressure": True}) is True
     assert pool_diagnostics.pool_diag_tick_notable(**{**base, "remote_skipped_busy": 3}) is True
 

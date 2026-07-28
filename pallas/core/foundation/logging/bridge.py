@@ -109,10 +109,26 @@ _PLUGIN_LOAD_SUCCESS_RE = re.compile(r"Succeeded to load plugin", re.IGNORECASE)
 _COLOR_TAG_RE = re.compile(r"</?[a-zA-Z#][^>]*>")
 
 
-def install_startup_log_noise_patcher() -> None:
-    """在 ``nonebot.init()`` 之后调用：把插件逐条 SUCCESS 降为 DEBUG。
+def is_matcher_lifecycle_noise(plain: str) -> bool:
+    """NoneBot Matcher 生命周期 INFO：每事件数行，生产 INFO 下应降为 DEBUG。"""
+    text = (plain or "").strip()
+    if not text:
+        return False
+    if text.startswith("Event will be handled by "):
+        return True
+    if text.endswith(" running complete") or " running is cancelled" in text:
+        return True
+    # 「Event foo.bar is ignored」；勿匹配 Error … Event ignored!
+    if text.startswith("Event ") and text.endswith(" is ignored"):
+        return True
+    return False
 
-    摘要已有多行 ``[启动] 就绪``；INFO 下不必再刷十余行 Succeeded。
+
+def install_startup_log_noise_patcher() -> None:
+    """在 ``nonebot.init()`` 之后调用：压制启动与 Matcher 生命周期刷屏。
+
+    - 插件逐条 Succeeded → DEBUG（摘要已有 ``[启动] 就绪``）
+    - Matcher handled / complete / cancelled / ignored → DEBUG
     """
     from nonebot import _log_patcher
     from nonebot.log import logger
@@ -126,7 +142,7 @@ def install_startup_log_noise_patcher() -> None:
     def patcher(record: dict[str, Any]) -> None:
         _log_patcher(record)
         plain = _COLOR_TAG_RE.sub("", str(record.get("message", "")))
-        if _PLUGIN_LOAD_SUCCESS_RE.search(plain):
+        if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(plain):
             record["level"].name = "DEBUG"
             record["level"].no = debug_no
 

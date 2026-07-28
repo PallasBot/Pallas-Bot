@@ -188,16 +188,30 @@ class RemoteCorpusRepository(ContextRepositoryExistenceMixin):
                         resp = await client.post(contribute_url, json=body, headers=self._headers())
                     except httpx.HTTPError as e:
                         last_error = e
-                        logger.warning(f"corpus community contribute failed api_base={base}: {e}")
+                        logger.warning(
+                            "corpus community contribute failed api_base={} err_type={} err={!r}",
+                            base,
+                            type(e).__name__,
+                            e,
+                        )
                         continue
                     if resp.status_code in (200, 202):
                         return
+                    if resp.status_code in (401, 403):
+                        asyncio.create_task(self.schedule_auth_refresh())
                     body_preview = (resp.text or "")[:200]
                     logger.warning(
-                        f"corpus community contribute HTTP {resp.status_code} api_base={base}: {body_preview}"
+                        "corpus community contribute HTTP {} api_base={}: {}",
+                        resp.status_code,
+                        base,
+                        body_preview,
                     )
         except httpx.HTTPError as e:
-            logger.warning(f"corpus community contribute failed: {e}")
+            logger.warning(
+                "corpus community contribute failed err_type={} err={!r}",
+                type(e).__name__,
+                e,
+            )
             raise
         if last_error is not None:
             raise last_error

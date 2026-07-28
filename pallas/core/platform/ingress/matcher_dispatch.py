@@ -76,16 +76,25 @@ def matcher_dispatch_batches(selected_matchers: list[type]) -> list[list[type]]:
 
 
 async def patched_handle_event(bot: Bot, event: Event) -> None:
+    from pallas.core.foundation.logging import compact_inbound_event_log, inbound_event_log_as_debug
+
     ingress_started = time.perf_counter()
     mark_activity()
     show_log = True
     log_msg = f" {nb_message.escape_tag(bot.type)} {nb_message.escape_tag(bot.self_id)} | "
     try:
-        log_msg += event.get_log_string()
+        log_msg += compact_inbound_event_log(event.get_log_string())
     except nb_message.NoLogException:
         show_log = False
     if show_log:
-        nb_message.logger.opt(colors=True).success(log_msg)
+        log = nb_message.logger.opt(colors=True)
+        event_type = ""
+        with contextlib.suppress(Exception):
+            event_type = str(event.get_type() or "")
+        if inbound_event_log_as_debug(event_type):
+            log.debug(log_msg)
+        else:
+            log.success(log_msg)
 
     state: dict[Any, Any] = {}
     dependency_cache: dict[Any, Any] = {}
