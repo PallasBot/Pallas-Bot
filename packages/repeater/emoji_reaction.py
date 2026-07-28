@@ -250,6 +250,27 @@ def mark_reaction_sent(bot_id: str, message_id: int):
         sent_reactions[bot_id] = dict(sorted_items[len(sorted_items) // 2 :])
 
 
+async def onebot_app_name(bot: Bot) -> str:
+    """协议端 ``get_version_info.app_name``；失败返回空串。"""
+    try:
+        info = await bot.get_version_info()  # type: ignore[attr-defined]
+    except Exception:
+        return ""
+    if not isinstance(info, dict):
+        return ""
+    return str(info.get("app_name") or "").strip()
+
+
+async def send_msg_emoji_like(bot: Bot, message_id: int, emoji_code: str, *, delete: bool = False) -> None:
+    """NapCat / SnowLuma 等支持的 ``set_msg_emoji_like``。"""
+    await bot.call_api(  # type: ignore[attr-defined]
+        "set_msg_emoji_like",
+        message_id=int(message_id),
+        emoji_id=str(emoji_code),
+        set=not delete,
+    )
+
+
 async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
     bot_id = str(bot.self_id)
     message_id = event.message_id  # type: ignore[attr-defined]
@@ -259,7 +280,12 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
         return
 
     try:
-        await message_reaction(emoji_code, str(message_id), event, bot, delete=False)
+        # Uniseg 仅识别 NapCat/LLOneBot/Lagrange/ws-plugin；SnowLuma 会 WARNING 且不发送。
+        app_name = await onebot_app_name(bot)
+        if app_name in {"SnowLuma", "NapCat.Onebot", "LLOneBot"}:
+            await send_msg_emoji_like(bot, int(message_id), emoji_code)
+        else:
+            await message_reaction(emoji_code, str(message_id), event, bot, delete=False)
         mark_reaction_sent(bot_id, message_id)
         _maybe_feedback_emoji_fit(emoji_code, score=3)
         logger.debug(f"[Reaction] Bot {bot_id} successfully sent emoji {emoji_code} in group {event.group_id}")  # type: ignore[attr-defined]

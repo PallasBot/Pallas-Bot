@@ -21,7 +21,19 @@ def remote_corpus_timeout_sec() -> float:
             return max(0.5, float(str(raw).strip()))
         except ValueError:
             pass
-    return 2.0
+    # 社区中心偶发慢；过短易 ReadTimeout，mirror/find 共享此默认
+    return 8.0
+
+
+def remote_corpus_contribute_timeout_sec() -> float:
+    """后台 contribute 可比读路径更长，避免共享池写回被短超时掐断。"""
+    raw = repo_env_raw_value("PALLAS_CORPUS_CONTRIBUTE_TIMEOUT_SEC")
+    if raw is not None:
+        try:
+            return max(0.5, float(str(raw).strip()))
+        except ValueError:
+            pass
+    return max(12.0, remote_corpus_timeout_sec())
 
 
 _shared_client: httpx.AsyncClient | None = None
@@ -177,27 +189,43 @@ class RemoteCorpusRepository(ContextRepositoryExistenceMixin):
 
     async def _post_contribute_http(self, body: dict[str, Any]) -> None:
         last_error: httpx.HTTPError | None = None
+        contribute_timeout = remote_corpus_contribute_timeout_sec()
         try:
             async with scrub_http_log_noise():
-                client = await shared_remote_corpus_client(self._timeout)
-                for base in self._api_bases:
-                    contribute_url = f"{base}/contribute"
-                    if not contribute_url.startswith("http"):
-                        continue
-                    try:
-                        resp = await client.post(contribute_url, json=body, headers=self._headers())
-                    except httpx.HTTPError as e:
-                        last_error = e
-                        logger.warning(f"corpus community contribute failed api_base={base}: {e}")
-                        continue
-                    if resp.status_code in (200, 202):
-                        return
-                    body_preview = (resp.text or "")[:200]
-                    logger.warning(
-                        f"corpus community contribute HTTP {resp.status_code} api_base={base}: {body_preview}"
-                    )
+                # 独立 client，避免与读路径抢共享 client 的 timeout 重建
+                async with httpx.AsyncClient(timeout=contribute_timeout) as client:
+                    for base in self._api_bases:
+                        contribute_url = f"{base}/contribute"
+                        if not contribute_url.startswith("http"):
+                            continue
+                        try:
+                            resp = await client.post(contribute_url, json=body, headers=self._headers())
+                        except httpx.HTTPError as e:
+                            last_error = e
+                            logger.warning(
+                                "corpus community contribute failed api_base={} err_type={} err={!r}",
+                                base,
+                                type(e).__name__,
+                                e,
+                            )
+                            continue
+                        if resp.status_code in (200, 202):
+                            return
+                        if resp.status_code in (401, 403):
+                            asyncio.create_task(self.schedule_auth_refresh())
+                        body_preview = (resp.text or "")[:200]
+                        logger.warning(
+                            "corpus community contribute HTTP {} api_base={}: {}",
+                            resp.status_code,
+                            base,
+                            body_preview,
+                        )
         except httpx.HTTPError as e:
-            logger.warning(f"corpus community contribute failed: {e}")
+            logger.warning(
+                "corpus community contribute failed err_type={} err={!r}",
+                type(e).__name__,
+                e,
+            )
             raise
         if last_error is not None:
             raise last_error

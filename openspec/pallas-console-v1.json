@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.9-12-ga9a47247-dirty",
+    "version": "v4.1.10-12-g585092d8-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -12969,6 +12969,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/_LlmProviderModelsDiscoverBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -16869,15 +16886,16 @@
             "schema": {
               "enum": [
                 "all",
-                "webui",
-                "protocol"
+                "message",
+                "console",
+                "other"
               ],
               "type": "string",
-              "description": "all=全部（分片 hub 时合并 hub 环与各 worker 落盘日志）；webui=pallas_webui 或 [pallas-webui]；protocol=pallas_protocol 或 [pallas-protocol]",
+              "description": "all=全部（分片 hub 时合并 hub 环与各 worker 落盘日志）；message=消息面（OneBot 消息事件 / 复读发送等）；console=控制台（pb_webui / [pallas-webui] / /pallas/ access）；other=其它（含无 facet 的旧日志）",
               "default": "all",
               "title": "Scope"
             },
-            "description": "all=全部（分片 hub 时合并 hub 环与各 worker 落盘日志）；webui=pallas_webui 或 [pallas-webui]；protocol=pallas_protocol 或 [pallas-protocol]"
+            "description": "all=全部（分片 hub 时合并 hub 环与各 worker 落盘日志）；message=消息面（OneBot 消息事件 / 复读发送等）；console=控制台（pb_webui / [pallas-webui] / /pallas/ access）；other=其它（含无 facet 的旧日志）"
           },
           {
             "name": "source",
@@ -16954,6 +16972,118 @@
         }
       }
     },
+    "/pallas/api/logs/export": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Logs Export",
+        "description": "导出当前筛选范围的日志为 text/plain 附件（便于 Docker / curl 拉到宿主机）。",
+        "operationId": "_logs_export_pallas_api_logs_export_get",
+        "parameters": [
+          {
+            "name": "n",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 20000,
+              "minimum": 1,
+              "default": 500,
+              "title": "N"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "message",
+                "console",
+                "other"
+              ],
+              "type": "string",
+              "description": "all=全部；message=消息面；console=控制台；other=其它（与 GET /logs 一致）",
+              "default": "all",
+              "title": "Scope"
+            },
+            "description": "all=全部；message=消息面；console=控制台；other=其它（与 GET /logs 一致）"
+          },
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "分片来源：all|hub|worker-N（默认 all）",
+              "title": "Source"
+            },
+            "description": "分片来源：all|hub|worker-N（默认 all）"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/logs/stream": {
       "get": {
         "tags": [
@@ -16969,15 +17099,16 @@
             "schema": {
               "enum": [
                 "all",
-                "webui",
-                "protocol"
+                "message",
+                "console",
+                "other"
               ],
               "type": "string",
-              "description": "all=全部；webui=仅 pallas_webui 相关；protocol=仅 pallas_protocol 相关",
+              "description": "all=全部；message=仅消息面；console=仅控制台；other=仅其它",
               "default": "all",
               "title": "Scope"
             },
-            "description": "all=全部；webui=仅 pallas_webui 相关；protocol=仅 pallas_protocol 相关"
+            "description": "all=全部；message=仅消息面；console=仅控制台；other=仅其它"
           },
           {
             "name": "source",
@@ -22258,6 +22389,17 @@
             "type": "string",
             "title": "Message",
             "default": ""
+          },
+          "facet": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facet"
           }
         },
         "type": "object",
@@ -24884,6 +25026,28 @@
               }
             ],
             "title": "Error"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
           }
         },
         "type": "object",

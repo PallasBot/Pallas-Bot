@@ -24,6 +24,7 @@ from pallas.core.shared.utils.git_mirror import (
     MirrorSpec,
     git_instead_of_args,
     iter_mirrors_for_failover,
+    resolve_mirror_for_scope,
     rewrite_github_url,
 )
 from pallas.core.shared.utils.github_release import (
@@ -291,6 +292,15 @@ def iter_failover_download_urls(url: str):
         yield rewrite_github_url(u, mirror)
 
 
+def iter_failover_download_attempts(url: str):
+    """Yield ``(mirror_id, rewritten_url)`` for WebUI dist failover."""
+    u = (url or "").strip()
+    if not u:
+        return
+    for mirror in iter_mirrors_for_failover("webui"):
+        yield mirror.id, rewrite_github_url(u, mirror)
+
+
 def _sync_download_webui_zip(
     url: str,
     dest: Path,
@@ -300,7 +310,16 @@ def _sync_download_webui_zip(
 ) -> None:
     last_exc: Exception | None = None
     progress = chain_webui_download_progress(_webui_download_progress_log, on_progress)
-    for attempt_url in iter_failover_download_urls(url):
+    attempts = list(iter_failover_download_attempts(url))
+    for i, (mirror_id, attempt_url) in enumerate(attempts, start=1):
+        preview = attempt_url if len(attempt_url) <= 200 else attempt_url[:197] + "..."
+        logger.info(
+            "[控制台] WebUI dist 尝试下载 {}/{} mirror={} {}",
+            i,
+            len(attempts),
+            mirror_id,
+            preview,
+        )
         try:
             sync_stream_download_to_file(
                 attempt_url,
@@ -310,9 +329,15 @@ def _sync_download_webui_zip(
                 progress_percent_step=5,
                 on_progress=progress,
             )
+            logger.info("[控制台] WebUI dist 已通过 mirror={} 下载完成", mirror_id)
             return
         except Exception as e:  # noqa: BLE001
             last_exc = e
+            logger.warning(
+                "[控制台] WebUI dist mirror={} 失败：{}",
+                mirror_id,
+                format_exception_for_log(e),
+            )
             continue
     if last_exc:
         raise last_exc
@@ -330,8 +355,13 @@ async def download_and_extract_dist_zip(
     url = (url or "").strip()
     if not url:
         return False
+    preferred = resolve_mirror_for_scope("webui")
     preview = url if len(url) <= 200 else url[:197] + "..."
-    logger.info("[控制台] 正在下载 WebUI dist {}", preview)
+    logger.info(
+        "[控制台] 正在下载 WebUI dist（首选镜像 {}，将按 failover 改写）{}",
+        preferred.id,
+        preview,
+    )
     if on_stage is not None:
         on_stage(8, "开始下载 WebUI dist…")
 
@@ -661,10 +691,27 @@ async def apply_bot_repository_update(
         last_code = 1
         last_out = ""
         last_err = ""
-        for mirror in iter_mirrors_for_failover("bot"):
+        mirrors = list(iter_mirrors_for_failover("bot"))
+        for i, mirror in enumerate(mirrors, start=1):
+            logger.info(
+                "Pallas-Bot 控制台: Bot git {} 尝试 {}/{} mirror={}",
+                " ".join(args[:3]),
+                i,
+                len(mirrors),
+                mirror.id,
+            )
             code, out, err = await git(*args, cmd_timeout_s=cmd_timeout_s, mirror=mirror)
             if code == 0:
+                logger.info(
+                    "Pallas-Bot 控制台: Bot git 已通过 mirror={} 成功",
+                    mirror.id,
+                )
                 return code, out, err
+            logger.warning(
+                "Pallas-Bot 控制台: Bot git mirror={} 失败：{}",
+                mirror.id,
+                (err or out or f"exit={code}")[:300],
+            )
             last_code, last_out, last_err = code, out, err
         return last_code, last_out, last_err
 

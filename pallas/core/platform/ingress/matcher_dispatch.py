@@ -76,16 +76,26 @@ def matcher_dispatch_batches(selected_matchers: list[type]) -> list[list[type]]:
 
 
 async def patched_handle_event(bot: Bot, event: Event) -> None:
+    from pallas.core.foundation.logging import compact_inbound_event_log, inbound_event_log_as_debug
+
     ingress_started = time.perf_counter()
     mark_activity()
     show_log = True
     log_msg = f" {nb_message.escape_tag(bot.type)} {nb_message.escape_tag(bot.self_id)} | "
     try:
-        log_msg += event.get_log_string()
+        # 群消息正文可能含 `<le>` 等伪标签；colors=True 时必须 escape，否则整条事件处理失败
+        log_msg += nb_message.escape_tag(compact_inbound_event_log(event.get_log_string()))
     except nb_message.NoLogException:
         show_log = False
     if show_log:
-        nb_message.logger.opt(colors=True).success(log_msg)
+        log = nb_message.logger.opt(colors=True)
+        event_type = ""
+        with contextlib.suppress(Exception):
+            event_type = str(event.get_type() or "")
+        if inbound_event_log_as_debug(event_type):
+            log.debug(log_msg)
+        else:
+            log.success(log_msg)
 
     state: dict[Any, Any] = {}
     dependency_cache: dict[Any, Any] = {}

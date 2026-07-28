@@ -123,3 +123,31 @@ async def test_undeclared_key_rejected(monkeypatch) -> None:
     clear_plugin_storage_registry_cache()
     with pytest.raises(PluginStorageKeyError):
         await get_plugin_storage("missing", "x", scope_id=1)
+
+
+@pytest.mark.asyncio
+async def test_storage_decl_resolves_pip_module_alias(monkeypatch, tmp_path) -> None:
+    """pip 模块名 pallas_plugin_draw 声明时，短 id draw 也应能读写。"""
+
+    class FakePlugin:
+        name = "pallas_plugin_draw"
+        metadata = SimpleNamespace(
+            name="牛牛画画",
+            extra={
+                "plugin_storage": [
+                    plugin_storage_row("daily_usage", scope="deploy"),
+                ]
+            },
+        )
+
+    monkeypatch.setattr("nonebot.get_loaded_plugins", lambda: [FakePlugin()])
+    monkeypatch.setattr(
+        "pallas.core.storage.deploy_store.plugin_data_dir",
+        lambda name: tmp_path / str(name),
+    )
+    clear_plugin_storage_registry_cache()
+
+    from pallas.core.storage.deploy_store import DeployPluginStorage
+
+    DeployPluginStorage("draw").set("daily_usage", {"version": 1, "entries": {}})
+    assert DeployPluginStorage("draw").get("daily_usage") == {"version": 1, "entries": {}}

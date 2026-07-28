@@ -233,6 +233,8 @@ class _LlmProviderTestData(BaseModel):
     reachable: bool
     latency_ms: float | None = None
     error: str | None = None
+    status: int | None = None
+    enabled: bool | None = None
 
 
 class _AiExtensionTestData(BaseModel):
@@ -732,14 +734,23 @@ def register_common_config_router(
     )
     async def _llm_provider_test_post(
         provider_id: str,
+        body: LlmProviderModelsDiscoverBody | None = None,
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> dict[str, Any]:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from pallas.product.llm.ops_api import probe_provider
 
+        payload = body or _LlmProviderModelsDiscoverBody()
         try:
-            data = await probe_provider(provider_id)
+            data = await probe_provider(
+                provider_id,
+                base_url=payload.base_url,
+                api_key=payload.api_key,
+                api_key_env=payload.api_key_env,
+                kind=payload.kind,
+                request_method=payload.request_method,
+            )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return {"ok": True, "data": data}

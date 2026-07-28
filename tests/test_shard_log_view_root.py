@@ -1,4 +1,8 @@
-from pallas.console.web.bot_web import fill_missing_log_entry_times, parse_nonebot_log_line
+from pallas.console.web.bot_web import (
+    _entry_matches_log_source,
+    fill_missing_log_entry_times,
+    parse_nonebot_log_line,
+)
 from pallas.core.platform.shard.logs.view import dedupe_log_lines_preserve_order, merge_cluster_log_lines
 
 
@@ -18,6 +22,16 @@ def test_parse_shard_prefixed_line():
     )
     assert "worker-6" in e["scope"]
     assert "7976" in e["message"]
+
+
+def test_parse_embedded_shard_scope_from_prefix_log_source():
+    """历史 prefix_log_source 把来源嵌进 scope：``| [worker-1] mod:lineno -``。"""
+    e = parse_nonebot_log_line(
+        "05-21 22:44:15 | INFO | [worker-1] pallas:208 - pg pool diag: hello",
+    )
+    assert e["scope"] == "worker-1/pallas"
+    assert e["message"] == "pg pool diag: hello"
+    assert e["level"] == "info"
 
 
 def test_parse_raw_line_no_fake_now_time():
@@ -215,3 +229,22 @@ def test_fill_missing_times_isolated_by_worker():
     out = fill_missing_log_entry_times(rows)
     assert "22:44:15" in out[2]["time"]
     assert "22:44:16" not in out[2]["time"]
+
+
+def test_entry_matches_log_source_hub_file_and_workers():
+    hub_file = parse_nonebot_log_line(
+        "[hub-file] 07-28 12:42:34 | INFO     | packages:34 - jieba",
+    )
+    hub_ring = parse_nonebot_log_line(
+        "07-28 12:42:34 | INFO     | packages:34 - jieba",
+    )
+    worker = parse_nonebot_log_line(
+        "[worker-0] 07-28 12:42:34 | INFO     | packages:34 - jieba",
+    )
+    assert hub_file["scope"].startswith("hub-file")
+    assert _entry_matches_log_source(hub_file, "hub")
+    assert _entry_matches_log_source(hub_ring, "hub")
+    assert not _entry_matches_log_source(hub_file, "worker-0")
+    assert _entry_matches_log_source(worker, "worker-0")
+    assert not _entry_matches_log_source(worker, "worker-1")
+    assert _entry_matches_log_source(worker, "all")

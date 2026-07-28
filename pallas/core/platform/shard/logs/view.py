@@ -123,6 +123,14 @@ def _line_matches_source(line: str, source: str | None) -> bool:
     return f"[{want}]" in raw[:32]
 
 
+def _iso_dt_to_mmdd(iso: str) -> str:
+    """``YYYY-MM-DD HH:mm:ss`` → ``MM-DD HH:mm:ss``，与 loguru 行对齐便于字典序合并。"""
+    try:
+        return datetime.strptime(iso[:19], "%Y-%m-%d %H:%M:%S").strftime("%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return iso
+
+
 def _extract_line_dt(body: str) -> str | None:
     raw = body.strip()
     m = _LOG_LINE_RE.match(raw)
@@ -133,18 +141,15 @@ def _extract_line_dt(body: str) -> str | None:
         return m2.group("dt")
     m3 = _TS_ISO.match(raw)
     if m3:
-        return m3.group("dt")
+        # 会话横幅等带年份；若原样参与排序，``2026-…`` 会排在无年份的 ``07-28 …`` 之后，
+        # WebUI 尾部就会一直叠着启动时的几条旧日志。
+        return _iso_dt_to_mmdd(m3.group("dt"))
     m4 = _TS_PIPE.match(raw)
     if m4:
         return m4.group("dt")
     m5 = _STDERR_ERROR_RE.match(raw)
     if m5:
-        iso = m5.group("dt")
-        try:
-            dt = datetime.strptime(iso[:19], "%Y-%m-%d %H:%M:%S")
-            return dt.strftime("%m-%d %H:%M:%S")
-        except ValueError:
-            return iso
+        return _iso_dt_to_mmdd(m5.group("dt"))
     return None
 
 
@@ -179,7 +184,8 @@ def _is_log_continuation_body(body: str) -> bool:
         return True
     if re.match(r"^raise\s+[\w.]*(?:Error|Exception)\b", s):
         return True
-    if re.match(r"^[A-Z][a-zA-Z0-9_.]*(?:Error|Exception):", s):
+    # ValueError: / asyncpg.exceptions.TooManyConnectionsError:
+    if re.match(r"^(?:[a-z_][\w]*\.)*[A-Z][\w]*(?:Error|Exception)\s*:", s):
         return True
     if s.startswith("During handling of the above exception"):
         return True
@@ -226,26 +232,36 @@ def _lines_with_sort_keys(lines: list[str]) -> list[tuple[str, tuple[str, str, i
 
 
 def prefix_log_source(line: str, source: str) -> str:
+    """在行首加 ``[source] ``，便于解析成 ``source/module``（勿嵌入 scope 字段）。"""
     raw = line.rstrip("\n")
     if not raw:
         return raw
-    m = _LOG_LINE_RE.match(raw.strip())
-    if m:
-        return (
-            f"{m.group('dt')} | {m.group('lev')} | [{source}] {m.group('scope')}:{m.group('lineno')} - {m.group('msg')}"
-        )
-    return f"[{source}] {raw}"
+    tag = (source or "").strip()
+    if not tag:
+        return raw
+    prefix = f"[{tag}] "
+    if raw.startswith(prefix):
+        return raw
+    # 兼容历史：scope 内已是 ``[tag] module:lineno``
+    if f"| [{tag}] " in raw or raw.startswith(f"[{tag}]"):
+        return raw
+    return f"{prefix}{raw}"
 
 
 def _line_matches_scope(line: str, scope: str) -> bool:
+    """按日志切面过滤落盘行：无结构化 facet 时用行文分类，分不出则视为 other。"""
     if scope == "all":
         return True
-    low = line.lower()
-    if scope == "webui":
-        return "pb_webui" in low or "pallas_webui" in low or "[pallas-webui]" in low
+    if scope not in ("message", "console", "other", "webui", "protocol"):
+        return True
+    # 旧枚举兼容：webui→console；protocol 已废弃，不匹配任何行
     if scope == "protocol":
-        return "pb_protocol" in low or "pallas_protocol" in low or "[pallas-protocol]" in low
-    return True
+        return False
+    want = "console" if scope == "webui" else scope
+    from pallas.console.web.bot_web import classify_log_facet, parse_nonebot_log_line
+
+    entry = parse_nonebot_log_line(line, entry_id=0)
+    return classify_log_facet(None, entry) == want
 
 
 def tail_log_file(path, max_lines: int) -> list[str]:
@@ -346,7 +362,11 @@ def _merge_same_source_continuations(lines: list[str]) -> list[str]:
             continue
         body = _line_body_without_shard_tag(raw)
         if out and _is_log_continuation_body(body):
-            out[-1] = f"{out[-1]}\n{raw}"
+            # 续行写入无 tag 正文，避免多行块无法剥行首 ``[source] ``
+            out[-1] = f"{out[-1]}\n{body}"
+        elif not out and _is_log_continuation_body(body):
+            # 文件尾截断落在块中间：无父行可挂，丢掉以免全局排序甩到最底
+            continue
         else:
             out.append(raw)
     return out
@@ -702,15 +722,22 @@ def cleanup_stale_shard_log_files(
 
 
 class ShardLogTailer:
-    """分片 hub SSE：按文件偏移增量读取各 worker/hub 落盘日志。"""
+    """分片 hub SSE：按文件偏移增量读取各 worker 落盘日志。
+
+    不读 ``hub.log``：hub 实时已由内存环推送，再 tail 会变成 ``hub`` + ``hub-file`` 双份。
+    """
 
     def __init__(self, *, source: str | None = None) -> None:
         self._source = (source or "all").strip() or "all"
         self._offsets: dict[str, int] = {}
+        self._partial: dict[str, str] = {}
         self._bootstrap_offsets()
 
+    def _iter_sse_paths(self) -> list[tuple[Any, str]]:
+        return [(path, tag) for path, tag in _iter_shard_log_paths(self._source) if tag != "hub-file"]
+
     def _bootstrap_offsets(self) -> None:
-        for path, _tag in _iter_shard_log_paths(self._source):
+        for path, _tag in self._iter_sse_paths():
             key = str(path)
             try:
                 self._offsets[key] = path.stat().st_size
@@ -719,7 +746,7 @@ class ShardLogTailer:
 
     def poll_new_lines(self, *, scope: str) -> list[str]:
         out: list[str] = []
-        for path, tag in _iter_shard_log_paths(self._source):
+        for path, tag in self._iter_sse_paths():
             key = str(path)
             try:
                 size = path.stat().st_size
@@ -728,6 +755,7 @@ class ShardLogTailer:
             start = self._offsets.get(key, 0)
             if size < start:
                 start = 0
+                self._partial.pop(key, None)
             if size <= start:
                 continue
             try:
@@ -737,7 +765,18 @@ class ShardLogTailer:
             except OSError:
                 continue
             self._offsets[key] = size
-            for line in chunk.splitlines():
+            data = self._partial.pop(key, "") + chunk
+            if chunk and not chunk.endswith(("\n", "\r")):
+                head, sep, rem = data.rpartition("\n")
+                if sep:
+                    complete = head
+                    self._partial[key] = rem
+                else:
+                    self._partial[key] = data
+                    continue
+            else:
+                complete = data
+            for line in complete.splitlines():
                 line = line.strip()
                 if not line:
                     continue

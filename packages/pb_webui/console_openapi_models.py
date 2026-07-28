@@ -160,6 +160,7 @@ class LogEntryData(BaseModel):
     level: str = "info"
     scope: str = ""
     message: str = ""
+    facet: str | None = None
 
 
 class LogsData(BaseModel):

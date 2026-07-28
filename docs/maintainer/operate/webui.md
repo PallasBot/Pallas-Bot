@@ -70,4 +70,5 @@
 
 - [WebUI 安装](/maintainer/install/webui)
 - [排障](troubleshooting.md)
+- [日志](logs.md)
 - [WebUI API](/common/webui/api/)

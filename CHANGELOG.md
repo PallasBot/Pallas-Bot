@@ -1,5 +1,32 @@
 # Changelog
 
+## [4.1.11] - 2026-07-28
+
+### 更新公告
+
+- 运行日志：分片合并时间线更稳（ISO 启动行归一）；SSE 跳过 hub-file 双推并缓冲半行
+- 范围切面改为「消息 / 控制台 / 其它」（新日志打 facet；旧条目归入其它）
+- 支持导出纯文本运行日志；补充落盘位置与导出说明
+- LLM：提供方探测回落收紧；统一错误详情；支持禁用项与多密钥草稿连通测试
+- 其它：加大社区语料超时默认值；对齐 pip 插件短 id；ingress/Matcher 降噪；镜像拉取日志打印实际 mirror
+- 捆绑控制台 WebUI **v0.8.6**
+
+### Added
+
+- `GET /logs/export` 纯文本导出
+- 日志条目 `facet`（message / console / other）与范围筛选
+
+### Fixed
+
+- 分片日志 ISO 启动行排序、SSE hub-file 双推与半行截断
+- 分片来源归一与多行合并；ingress/access 降噪与入站颜色标签
+- LLM 提供方错误与探测回落；插件短 id 与 plugin_storage 对齐
+
+### Changed
+
+- 日志范围由 webui/protocol 改为 message/console/other
+- 发行捆绑控制台取 WebUI **v0.8.6**
+
 ## [4.1.10] - 2026-07-28
 
 ### 更新公告

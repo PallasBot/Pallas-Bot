@@ -59,12 +59,17 @@ def register_stats_dashboard_router(
 
     @router.get(f"{x}/community-stats", include_in_schema=True)
     async def _community_stats() -> JSONResponse:
+        from pallas.core.shared.utils.format_exception import format_exception_for_log
         from pallas.product.community_stats.public_stats import fetch_community_public_stats
 
         async def _load() -> dict[str, Any]:
             return await fetch_community_public_stats()
 
-        data = await cached_read(key="community-stats", loader=_load, ttl_sec=30.0, stale_sec=120.0)
+        try:
+            data = await cached_read(key="community-stats", loader=_load, ttl_sec=30.0, stale_sec=120.0)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("community-stats: {}", format_exception_for_log(e))
+            raise HTTPException(status_code=502, detail=format_exception_for_log(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
     @router.post(

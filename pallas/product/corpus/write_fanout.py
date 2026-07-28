@@ -80,7 +80,7 @@ async def run_corpus_write_consumer() -> None:
             else:
                 await mirror_insert(**op.payload)
         except Exception as e:
-            logger.warning("corpus mirror failed: {}", e)
+            logger.warning("corpus mirror failed err_type={} err={!r}", type(e).__name__, e)
         finally:
             corpus_write_queue().task_done()
 

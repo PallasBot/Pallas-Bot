@@ -54,7 +54,10 @@ def pool_diag_tick_notable(
     mirror_skip: int,
     learn_pool_wait: int,
 ) -> bool:
-    if under_pressure or slow_sessions > 0:
+    # 单次慢查询（如定时热词聚合）常见，不单独抬到 INFO；突发或压力才刷屏。
+    if under_pressure:
+        return True
+    if slow_sessions >= 5:
         return True
     if idle_in_tx and idle_in_tx > 0:
         return True

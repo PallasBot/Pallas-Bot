@@ -124,3 +124,34 @@ def test_dispatch_auto_reaction_send_skips_when_too_many_pending(monkeypatch):
     mod.dispatch_auto_reaction_send(bot, event, "66")
 
     assert created == []
+
+
+@pytest.mark.asyncio
+async def test_send_reaction_uses_native_api_for_snowluma(monkeypatch):
+    import packages.repeater.emoji_reaction as mod
+
+    event = SimpleNamespace(message_id=99, group_id=1, self_id="10001")
+    calls: list[tuple] = []
+
+    async def call_api(name, **kwargs):
+        calls.append((name, kwargs))
+
+    async def get_version_info():
+        return {"app_name": "SnowLuma"}
+
+    bot = SimpleNamespace(self_id="10001", call_api=call_api, get_version_info=get_version_info)
+    uniseg_called = {"n": 0}
+
+    async def boom(*_a, **_k):
+        uniseg_called["n"] += 1
+        raise AssertionError("uniseg should not be used for SnowLuma")
+
+    monkeypatch.setattr(mod, "has_sent_reaction", lambda *_a: False)
+    monkeypatch.setattr(mod, "mark_reaction_sent", lambda *_a: None)
+    monkeypatch.setattr(mod, "_maybe_feedback_emoji_fit", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod, "message_reaction", boom)
+
+    await mod.send_reaction(bot, event, "66")
+
+    assert uniseg_called["n"] == 0
+    assert calls == [("set_msg_emoji_like", {"message_id": 99, "emoji_id": "66", "set": True})]

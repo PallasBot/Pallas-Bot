@@ -9,6 +9,7 @@ import pytest
 from packages.pb_webui.manager import (
     apply_bot_repository_update,
     build_git_argv_with_mirror,
+    iter_failover_download_attempts,
     iter_failover_download_urls,
 )
 from pallas.core.shared.utils import git_mirror as gm
@@ -53,6 +54,19 @@ def test_iter_failover_download_urls_rewrites_release_asset(monkeypatch, tmp_pat
     )
     assert urls[-1] == url
     assert len(urls) == len(set(urls))
+
+
+def test_iter_failover_download_attempts_includes_mirror_id(monkeypatch, tmp_path):
+    monkeypatch.setattr(gm, "repo_webui_settings_path", lambda: tmp_path / "webui.json")
+    (tmp_path / "webui.json").write_text(
+        '{"env":{},"git_mirror":{"preferred_id":"ghproxy-vip","custom_proxy_prefix":""}}\n',
+        encoding="utf-8",
+    )
+    url = "https://github.com/PallasBot/Pallas-Bot-WebUI/releases/download/v1.0.0/dist.zip"
+    attempts = list(iter_failover_download_attempts(url))
+    assert attempts[0][0] == "ghproxy-vip"
+    assert attempts[0][1].startswith("https://ghproxy.vip/https://github.com/")
+    assert attempts[-1] == ("github", url)
 
 
 @pytest.mark.asyncio
