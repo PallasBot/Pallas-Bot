@@ -8,15 +8,39 @@ import subprocess
 import threading
 from typing import Any
 
+from nonebot import logger
+
 from pallas.product.llm.config import LlmMcpServerConfig, get_llm_config
 from pallas.product.llm.tools.contracts import ToolCapability
 from pallas.product.llm.tools.registry import LlmToolSource, LlmToolSpec, register_tool
 
 _MCP_TOOL_NAMES: set[str] = set()
+_MCP_REGISTER_ERRORS: list[dict[str, str]] = []
 
 
 def clear_mcp_tools() -> None:
     _MCP_TOOL_NAMES.clear()
+    _MCP_REGISTER_ERRORS.clear()
+
+
+def mcp_registration_snapshot() -> dict[str, Any]:
+    cfg = get_llm_config()
+    servers = [
+        {
+            "id": server.id,
+            "transport": (server.transport or "stdio").strip().lower() or "stdio",
+            "command": list(server.command or []),
+            "url": str(server.url or "").strip(),
+            "enabled_tools": list(server.enabled_tools or []),
+        }
+        for server in cfg.mcp_servers
+    ]
+    return {
+        "servers": servers,
+        "registered_tool_names": sorted(_MCP_TOOL_NAMES),
+        "registered_count": len(_MCP_TOOL_NAMES),
+        "errors": list(_MCP_REGISTER_ERRORS),
+    }
 
 
 def _tool_capabilities(tool_row: dict[str, Any]) -> frozenset[str]:
@@ -251,10 +275,18 @@ def build_mcp_tool_spec(server: LlmMcpServerConfig, tool_row: dict[str, Any]) ->
 
 def register_mcp_tools() -> int:
     count = 0
+    _MCP_REGISTER_ERRORS.clear()
     for server in get_llm_config().mcp_servers:
+        server_id = str(server.id or "").strip()
+        if not server_id:
+            _MCP_REGISTER_ERRORS.append({"server_id": "", "error": "missing_server_id"})
+            continue
         try:
             tools = list_mcp_tools(server)
-        except Exception:
+        except Exception as err:
+            msg = str(err).strip() or err.__class__.__name__
+            logger.warning("mcp register failed server_id={}: {}", server_id, msg)
+            _MCP_REGISTER_ERRORS.append({"server_id": server_id, "error": msg})
             continue
         for tool_row in tools:
             name = _tool_name(server.id, tool_row)

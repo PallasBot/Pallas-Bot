@@ -209,6 +209,8 @@ FIELD_LABELS: dict[str, str] = {
     "llm_tools_max_rounds": "工具调用最多轮数",
     "llm_tools_blacklist": "工具黑名单",
     "llm_tools_desc_max_len": "工具描述最大长度",
+    "mcp_servers": "MCP 服务器",
+    "llm_mcp_http_allowlist": "MCP HTTP 允许前缀",
     "web_search_api_url": "搜索接口完整地址",
     "tavily_api_key": "搜索接口密钥",
     "llm_reply_postprocess_enabled": "回复后处理",

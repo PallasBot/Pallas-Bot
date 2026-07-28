@@ -250,6 +250,8 @@ def _llm_section() -> WebuiEnvSection:
             "llm_tools_max_rounds": "LLM_TOOLS_MAX_ROUNDS",
             "llm_tools_blacklist": "LLM_TOOLS_BLACKLIST",
             "llm_tools_desc_max_len": "LLM_TOOLS_DESC_MAX_LEN",
+            "mcp_servers": "LLM_MCP_SERVERS",
+            "llm_mcp_http_allowlist": "LLM_MCP_HTTP_ALLOWLIST",
             "web_search_api_url": "WEB_SEARCH_API_URL",
             "tavily_api_key": "TAVILY_API_KEY",
             "llm_chat_max_concurrency": "LLM_CHAT_MAX_CONCURRENCY",
@@ -559,6 +561,22 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             clear_llm_config_cache()
         except Exception:
             pass
+        if "mcp_servers" in patch or "llm_mcp_http_allowlist" in patch:
+            old_mcp = {
+                "mcp_servers": current.get("mcp_servers") or [],
+                "llm_mcp_http_allowlist": str(current.get("llm_mcp_http_allowlist") or "").strip(),
+            }
+            new_mcp = {
+                "mcp_servers": validated.get("mcp_servers") or [],
+                "llm_mcp_http_allowlist": str(validated.get("llm_mcp_http_allowlist") or "").strip(),
+            }
+            if old_mcp != new_mcp:
+                try:
+                    from pallas.product.llm.tools.bootstrap import ensure_llm_tools_bootstrapped
+
+                    ensure_llm_tools_bootstrapped(force=True)
+                except Exception:
+                    pass
         if "ai_server_host" in patch or "ai_server_port" in patch:
             try:
                 from pallas.console.webui.ai_install_writeback import (

@@ -7,7 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.console.webui.field_help import field_help
-from pallas.product.llm.config import get_llm_config
+from pallas.product.llm.config import LlmMcpServerConfig, get_llm_config
 
 VectorRetrieveMode = Literal["keyword", "embedding", "hybrid", "vector"]
 RepeaterMode = Literal["off", "select", "select_polish_lite", "select_fallback", "fallback"]
@@ -394,6 +394,22 @@ class LlmWebuiConfig(BaseModel):
             "发给模型的工具说明最长多少字（多了截断）",
             "默认 120。说明太短模型可能用错工具可略增；想省 token 保持默认或略减",
             "只影响写入模型的说明长度，不改工具本身功能",
+        ),
+    )
+    mcp_servers: list[LlmMcpServerConfig] = Field(
+        default_factory=list,
+        description=field_help(
+            "接入哪些外部 MCP 工具服务器",
+            "在「对话配置 → 工具」里增删。stdio 填启动命令；HTTP 还须配置下方允许的 URL 前缀",
+            "保存后会重新注册工具目录。command / enabled_tools 为空时按传输类型忽略对应项",
+        ),
+    )
+    llm_mcp_http_allowlist: str = Field(
+        default="",
+        description=field_help(
+            "允许访问的 MCP HTTP 地址前缀（逗号分隔）",
+            "仅 transport=http 时需要。例如 http://127.0.0.1:8765 。留空则拒绝所有 HTTP MCP",
+            "须与服务器 url 前缀匹配；未列入名单的地址不会连接",
         ),
     )
     web_search_api_url: str = Field(
@@ -854,6 +870,8 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_tools_max_rounds=cfg.llm_tools_max_rounds,
         llm_tools_blacklist=list(cfg.llm_tools_blacklist or []),
         llm_tools_desc_max_len=cfg.llm_tools_desc_max_len,
+        mcp_servers=list(cfg.mcp_servers or []),
+        llm_mcp_http_allowlist=str(repo_env_raw_value("LLM_MCP_HTTP_ALLOWLIST") or "").strip(),
         web_search_api_url=str(repo_env_raw_value("WEB_SEARCH_API_URL") or "").strip(),
         tavily_api_key=str(repo_env_raw_value("TAVILY_API_KEY") or "").strip(),
         llm_chat_max_concurrency=cfg.llm_chat_max_concurrency,
