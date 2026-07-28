@@ -76,17 +76,51 @@ def _strip_shard_log_prefix(raw: str) -> tuple[str, str]:
     """去掉日志里的 worker 前缀，返回来源标签与正文。
 
     保留正文行首缩进（如 ``  File ``），避免 traceback 续行被误判为普通 info。
+    多行块只剥每段行首的 ``[tag] ``（含合并后续行时残留的 tag）。
     """
     tags: list[str] = []
     body = raw.rstrip("\n")
     while True:
-        m = _shard_source_prefix_re.match(body)
+        first, sep, rest = body.partition("\n")
+        m = _shard_source_prefix_re.match(first)
         if not m:
             break
         tags.append(m.group("tag"))
-        body = m.group("body")
+        body = m.group("body") + (f"{sep}{rest}" if sep else "")
+    # 合并块内续行可能仍带 ``[tag] ``，剥掉以免正文里夹来源标签
+    if tags and "\n" in body:
+        tag_set = set(tags)
+        rebuilt: list[str] = []
+        for i, ln in enumerate(body.split("\n")):
+            if i == 0:
+                rebuilt.append(ln)
+                continue
+            m = _shard_source_prefix_re.match(ln)
+            if m and m.group("tag") in tag_set:
+                rebuilt.append(m.group("body"))
+            else:
+                rebuilt.append(ln)
+        body = "\n".join(rebuilt)
     source_tag = tags[0] if len(tags) == 1 else "/".join(tags) if tags else ""
     return source_tag, body
+
+
+_embedded_scope_tag_re = re.compile(r"^\[(?P<tag>[^\]]+)\]\s*(?P<mod>.*)$")
+
+
+def _compose_log_scope(scope: str, source_tag: str) -> str:
+    """合并来源标签与模块名；兼容 ``prefix_log_source`` 写入的 ``[worker-N] mod``。"""
+    mod = (scope or "").strip()
+    tag = (source_tag or "").strip()
+    em = _embedded_scope_tag_re.match(mod)
+    if em:
+        embedded = (em.group("tag") or "").strip()
+        mod = (em.group("mod") or "").strip()
+        if not tag:
+            tag = embedded
+    if tag:
+        return f"{tag}/{mod}" if mod else tag
+    return mod
 
 
 def _is_traceback_body(body: str) -> bool:
@@ -135,9 +169,7 @@ def parse_nonebot_log_line(line: str, *, entry_id: int | None = None) -> dict[st
         m3 = _nonebot_bracket_re.match(head)
         if m3:
             lev_raw = (m3.group("lev") or "").strip().upper()
-            scope = (m3.group("scope") or "").strip()[:120]
-            if source_tag:
-                scope = f"{source_tag}/{scope}" if scope else source_tag
+            scope = _compose_log_scope((m3.group("scope") or "").strip()[:120], source_tag)
             msg = _with_multiline_msg(m3.group("msg") or "", remainder)
             return {
                 "id": entry_id if entry_id is not None else _next_stream_id(),
@@ -175,9 +207,7 @@ def parse_nonebot_log_line(line: str, *, entry_id: int | None = None) -> dict[st
         }
     dt_part = m.group("dt")
     lev_raw = (m.group("lev") or "").strip().upper()
-    scope = (m.group("scope") or "").strip()[:120]
-    if source_tag:
-        scope = f"{source_tag}/{scope}" if scope else source_tag
+    scope = _compose_log_scope((m.group("scope") or "").strip()[:120], source_tag)
     msg = _with_multiline_msg(m.group("msg") or "", remainder)
     level = LEVEL_TO_BUCKET.get(lev_raw, "info")
     iso_time = _mmdd_hms_to_iso(dt_part)
@@ -350,15 +380,15 @@ def merge_log_line_continuations(lines: list[str]) -> list[str]:
         if out:
             prev_key = _log_source_key_from_raw_line(out[-1])
             if key and prev_key == key:
-                out[-1] = f"{out[-1]}\n{raw}"
+                out[-1] = f"{out[-1]}\n{body}"
                 merged = True
             elif not key and not prev_key:
-                out[-1] = f"{out[-1]}\n{raw}"
+                out[-1] = f"{out[-1]}\n{body}"
                 merged = True
             elif key and _is_traceback_body(body):
                 idx = last_idx_by_source.get(key)
                 if idx is not None and _raw_line_accepts_traceback_continuation(out[idx]):
-                    out[idx] = f"{out[idx]}\n{raw}"
+                    out[idx] = f"{out[idx]}\n{body}"
                     merged = True
         if not merged:
             out.append(raw)

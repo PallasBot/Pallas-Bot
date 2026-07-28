@@ -20,6 +20,16 @@ def test_parse_shard_prefixed_line():
     assert "7976" in e["message"]
 
 
+def test_parse_embedded_shard_scope_from_prefix_log_source():
+    """历史 prefix_log_source 把来源嵌进 scope：``| [worker-1] mod:lineno -``。"""
+    e = parse_nonebot_log_line(
+        "05-21 22:44:15 | INFO | [worker-1] pallas:208 - pg pool diag: hello",
+    )
+    assert e["scope"] == "worker-1/pallas"
+    assert e["message"] == "pg pool diag: hello"
+    assert e["level"] == "info"
+
+
 def test_parse_raw_line_no_fake_now_time():
     e = parse_nonebot_log_line("[worker-6] RuntimeError: Module src.plugins.sing is not loaded")
     assert e["time"] == ""

@@ -15,8 +15,14 @@ from pallas.core.platform.shard.registry.store import ShardRecord, ShardRegistry
 def test_prefix_log_source():
     line = "05-21 12:00:00 | INFO     | src:1 - hello"
     out = prefix_log_source(line, "worker-1")
-    assert "[worker-1]" in out
+    assert out.startswith("[worker-1] ")
     assert "hello" in out
+    assert out == f"[worker-1] {line}"
+
+
+def test_prefix_log_source_idempotent():
+    line = "[worker-1] 05-21 12:00:00 | INFO     | src:1 - hello"
+    assert prefix_log_source(line, "worker-1") == line
 
 
 def test_list_shard_log_sources_skips_orphan_worker_log(tmp_path, monkeypatch):

@@ -226,15 +226,20 @@ def _lines_with_sort_keys(lines: list[str]) -> list[tuple[str, tuple[str, str, i
 
 
 def prefix_log_source(line: str, source: str) -> str:
+    """在行首加 ``[source] ``，便于解析成 ``source/module``（勿嵌入 scope 字段）。"""
     raw = line.rstrip("\n")
     if not raw:
         return raw
-    m = _LOG_LINE_RE.match(raw.strip())
-    if m:
-        return (
-            f"{m.group('dt')} | {m.group('lev')} | [{source}] {m.group('scope')}:{m.group('lineno')} - {m.group('msg')}"
-        )
-    return f"[{source}] {raw}"
+    tag = (source or "").strip()
+    if not tag:
+        return raw
+    prefix = f"[{tag}] "
+    if raw.startswith(prefix):
+        return raw
+    # 兼容历史：scope 内已是 ``[tag] module:lineno``
+    if f"| [{tag}] " in raw or raw.startswith(f"[{tag}]"):
+        return raw
+    return f"{prefix}{raw}"
 
 
 def _line_matches_scope(line: str, scope: str) -> bool:
@@ -346,7 +351,8 @@ def _merge_same_source_continuations(lines: list[str]) -> list[str]:
             continue
         body = _line_body_without_shard_tag(raw)
         if out and _is_log_continuation_body(body):
-            out[-1] = f"{out[-1]}\n{raw}"
+            # 续行写入无 tag 正文，避免多行块无法剥行首 ``[source] ``
+            out[-1] = f"{out[-1]}\n{body}"
         else:
             out.append(raw)
     return out
