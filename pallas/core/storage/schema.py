@@ -15,13 +15,75 @@ def clear_plugin_storage_registry_cache() -> None:
     _registry_cache = None
 
 
+def _storage_plugin_aliases(plugin_name: str) -> tuple[str, ...]:
+    """NoneBot 加载名（如 pallas_plugin_draw）与短 id（draw）互相对齐。
+
+    不经 ``plugin_identity``：该模块会绕进 console 形成循环导入。
+    """
+    name = (plugin_name or "").strip()
+    if not name:
+        return ()
+    names: list[str] = [name]
+    if name.startswith("pallas_plugin_"):
+        short = name[len("pallas_plugin_") :]
+        if short and short not in names:
+            names.append(short)
+    else:
+        pip_mod = f"pallas_plugin_{name}"
+        if pip_mod not in names:
+            names.append(pip_mod)
+    try:
+        from pallas.core.platform.bot_runtime.plugin_matrix import (
+            EXTRA_PACKAGE_MODULES,
+            PLUGIN_LEGACY_ALIASES,
+        )
+    except Exception:
+        return tuple(names)
+    for plugin_id, aliases in PLUGIN_LEGACY_ALIASES.items():
+        related = {plugin_id, *aliases}
+        if name in related or any(n in related for n in names):
+            for item in related:
+                s = str(item or "").strip()
+                if s and s not in names:
+                    names.append(s)
+    for modules in EXTRA_PACKAGE_MODULES.values():
+        if name in modules or any(n in modules for n in names):
+            for mod in modules:
+                m = str(mod or "").strip()
+                if m and m not in names:
+                    names.append(m)
+                if m.startswith("pallas_plugin_"):
+                    short = m[len("pallas_plugin_") :]
+                    if short and short not in names:
+                        names.append(short)
+    return tuple(names)
+
+
+def _canonical_storage_plugin_name(plugin_name: str) -> str:
+    name = (plugin_name or "").strip()
+    if name.startswith("pallas_plugin_"):
+        short = name[len("pallas_plugin_") :]
+        if short:
+            return short
+    try:
+        from pallas.core.platform.bot_runtime.plugin_matrix import PLUGIN_LEGACY_ALIASES
+
+        for plugin_id, aliases in PLUGIN_LEGACY_ALIASES.items():
+            if name == plugin_id or name in aliases:
+                return plugin_id
+    except Exception:
+        pass
+    return name
+
+
 def merged_storage_registry() -> dict[tuple[str, str], PluginStorageDecl]:
     global _registry_cache
     if _registry_cache is not None:
         return _registry_cache
     merged: dict[tuple[str, str], PluginStorageDecl] = {}
     for plugin_name, _title, decl in iter_loaded_plugin_storage():
-        merged[(plugin_name, decl.key)] = decl
+        for alias in _storage_plugin_aliases(plugin_name):
+            merged.setdefault((alias, decl.key), decl)
     _registry_cache = merged
     return merged
 
@@ -33,9 +95,10 @@ def storage_decl_for(plugin_name: str, key: str) -> PluginStorageDecl | None:
 def build_plugin_storage_ui() -> dict[str, Any]:
     plugins: dict[str, dict[str, Any]] = {}
     for plugin_name, title, decl in iter_loaded_plugin_storage():
+        display_name = _canonical_storage_plugin_name(plugin_name)
         bucket = plugins.setdefault(
-            plugin_name,
-            {"plugin": plugin_name, "title": title, "keys": []},
+            display_name,
+            {"plugin": display_name, "title": title, "keys": []},
         )
         bucket["keys"].append({
             "key": decl.key,
