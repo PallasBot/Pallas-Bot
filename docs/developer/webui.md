@@ -1,6 +1,6 @@
 # WebUI 前端开发
 
-控制台 UI 由独立仓库 **[Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)** 构建，产物由主仓 `pb_webui` 挂载，基址 **`/pallas/`**。本页覆盖本地联调、构建挂载、OpenAPI 契约与窄屏约定。
+控制台 UI 由独立仓库 **[Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)** 构建，产物由主仓 `pb_webui` 挂载，基址 **`/pallas/`**。本页覆盖本地联调、构建挂载、OpenAPI 契约与窄屏约定。运行日志落盘与导出见 [维护者 · 日志](/maintainer/operate/logs)。
 
 后端 API 见 [WebUI API](/common/webui/api/)；插件配置热重载见 [WebUI 配置与热重载](/common/webui)。普通 LLM 聊天走 Bot Provider（侧栏 **AI 配置**），与媒体 / RWKV 用的 Pallas-Bot-AI 分开。
 

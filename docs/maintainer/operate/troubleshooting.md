@@ -109,7 +109,7 @@ flowchart TD
 | 类型 | 路径 |
 | --- | --- |
 | 配置 | `config/pallas.toml`、`data/pallas_config/webui.json` |
-| 单进程日志 | 当前 Bot 进程 stdout / 配置的日志输出 |
+| 单进程日志 | 当前 Bot 进程 stdout / `data/bot/nonebot_*.log`（详见 [日志](logs.md)） |
 | 分片日志 | `data/pallas_shard/logs/hub.log`、`worker-*.log` |
 | 分片状态 | `data/pallas_shard/registry.json`、`stats/worker-*.json` |
 | WebUI 资源 | `data/pb_webui/public-react/`（默认 React） |
@@ -140,3 +140,4 @@ flowchart TD
 | WebUI 资源 | [WebUI](/maintainer/install/webui) |
 | 环境问题 | [FAQ](/deploy/faq) |
 | AI / LLM 对话 | [LLM 与 AI](llm-and-ai.md) |
+| 日志落盘与导出 | [日志](logs.md) |

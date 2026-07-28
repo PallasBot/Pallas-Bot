@@ -1,6 +1,6 @@
 # 常见问题
 
-按症状查找答案；部署、启动与运行时问题先完成 [排障](/maintainer/operate/troubleshooting) 的前三项检查。需要继续定位时，再按下列入口进入对应专题。
+按症状查找答案；部署、启动与运行时问题先完成 [排障](/maintainer/operate/troubleshooting) 的前三项检查。需要继续定位时，再按下列入口进入对应专题。查日志落盘路径、控制台导出或 Docker/`curl` 拉日志见 [日志](/maintainer/operate/logs)。
 
 ## 问题分类
 
