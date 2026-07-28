@@ -120,6 +120,54 @@ def test_merge_cluster_sorts_and_limits(tmp_path, monkeypatch):
     assert merged[-1].endswith("late worker") or "late worker" in merged[-1]
 
 
+def test_merge_cluster_iso_banner_sorts_with_mmdd(tmp_path, monkeypatch):
+    """会话横幅为 YYYY-MM-DD，不得因字典序飘到无年份 loguru 行之后。"""
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "hub.log").write_text(
+        "2026-07-28 12:03:45 | INFO     | shard_session:0 - === hub START ===\n"
+        "07-28 12:03:47 | INFO     | pallas:1 - hub ready\n"
+        "07-28 12:08:47 | INFO     | packages:1 - jieba ready\n",
+        encoding="utf-8",
+    )
+    (log_dir / "worker-0.log").write_text(
+        "2026-07-28 12:03:47 | INFO     | shard_session:0 - === worker-0 START ===\n"
+        "07-28 12:15:00 | SUCCESS  | pallas:1 - late message\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.worker_log_stem_allowed", lambda _stem: True)
+
+    merged = merge_cluster_log_lines(20, "all", hub_ring_lines=[])
+    assert any("hub START" in row for row in merged)
+    assert any("jieba ready" in row for row in merged)
+    assert "late message" in merged[-1]
+    start_idx = next(i for i, row in enumerate(merged) if "hub START" in row)
+    late_idx = next(i for i, row in enumerate(merged) if "late message" in row)
+    assert start_idx < late_idx
+
+
+def test_merge_cluster_drops_leading_orphan_continuations(tmp_path, monkeypatch):
+    """文件尾截在 pretty-print 中间时，无父行续行不应垫在合并结果最底部。"""
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    (log_dir / "worker-0.log").write_text(
+        "07-28 12:15:00 | SUCCESS  | pallas:1 - late message\n",
+        encoding="utf-8",
+    )
+    (log_dir / "worker-98.log").write_text(
+        '                 └ <function require at 0x7f95926844a0>\n  File "/tmp/x.py", line 1, in <module>\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
+    monkeypatch.setattr("pallas.core.platform.shard.logs.view.worker_log_stem_allowed", lambda _stem: True)
+
+    merged = merge_cluster_log_lines(20, "all", hub_ring_lines=[])
+    assert any("late message" in row for row in merged)
+    assert not any("require at 0x" in row for row in merged)
+    assert merged[-1].endswith("late message") or "late message" in merged[-1]
+
+
 def test_tail_log_file():
     p = Path(__file__)
     lines = tail_log_file(p, 5)

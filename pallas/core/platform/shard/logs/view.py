@@ -123,6 +123,14 @@ def _line_matches_source(line: str, source: str | None) -> bool:
     return f"[{want}]" in raw[:32]
 
 
+def _iso_dt_to_mmdd(iso: str) -> str:
+    """``YYYY-MM-DD HH:mm:ss`` → ``MM-DD HH:mm:ss``，与 loguru 行对齐便于字典序合并。"""
+    try:
+        return datetime.strptime(iso[:19], "%Y-%m-%d %H:%M:%S").strftime("%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return iso
+
+
 def _extract_line_dt(body: str) -> str | None:
     raw = body.strip()
     m = _LOG_LINE_RE.match(raw)
@@ -133,18 +141,15 @@ def _extract_line_dt(body: str) -> str | None:
         return m2.group("dt")
     m3 = _TS_ISO.match(raw)
     if m3:
-        return m3.group("dt")
+        # 会话横幅等带年份；若原样参与排序，``2026-…`` 会排在无年份的 ``07-28 …`` 之后，
+        # WebUI 尾部就会一直叠着启动时的几条旧日志。
+        return _iso_dt_to_mmdd(m3.group("dt"))
     m4 = _TS_PIPE.match(raw)
     if m4:
         return m4.group("dt")
     m5 = _STDERR_ERROR_RE.match(raw)
     if m5:
-        iso = m5.group("dt")
-        try:
-            dt = datetime.strptime(iso[:19], "%Y-%m-%d %H:%M:%S")
-            return dt.strftime("%m-%d %H:%M:%S")
-        except ValueError:
-            return iso
+        return _iso_dt_to_mmdd(m5.group("dt"))
     return None
 
 
@@ -179,7 +184,8 @@ def _is_log_continuation_body(body: str) -> bool:
         return True
     if re.match(r"^raise\s+[\w.]*(?:Error|Exception)\b", s):
         return True
-    if re.match(r"^[A-Z][a-zA-Z0-9_.]*(?:Error|Exception):", s):
+    # ValueError: / asyncpg.exceptions.TooManyConnectionsError:
+    if re.match(r"^(?:[a-z_][\w]*\.)*[A-Z][\w]*(?:Error|Exception)\s*:", s):
         return True
     if s.startswith("During handling of the above exception"):
         return True
@@ -353,6 +359,9 @@ def _merge_same_source_continuations(lines: list[str]) -> list[str]:
         if out and _is_log_continuation_body(body):
             # 续行写入无 tag 正文，避免多行块无法剥行首 ``[source] ``
             out[-1] = f"{out[-1]}\n{body}"
+        elif not out and _is_log_continuation_body(body):
+            # 文件尾截断落在块中间：无父行可挂，丢掉以免全局排序甩到最底
+            continue
         else:
             out.append(raw)
     return out
