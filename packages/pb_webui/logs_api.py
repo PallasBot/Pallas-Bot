@@ -90,6 +90,60 @@ def register_logs_router(
         return {"ok": True, "data": data}
 
     @router.get(
+        f"{x}/logs/export",
+        include_in_schema=True,
+    )
+    async def _logs_export(
+        n: int = Query(default=500, ge=1, le=plugin_config.pallas_webui_log_lines_max),
+        scope: Annotated[
+            LogScope,
+            Query(
+                description=("all=全部；webui=pallas_webui；protocol=pallas_protocol（与 GET /logs 一致）"),
+            ),
+        ] = "all",
+        source: str | None = Query(
+            default=None,
+            description="分片来源：all|hub|worker-N（默认 all）",
+        ),
+    ):
+        """导出当前筛选范围的日志为 text/plain 附件（便于 Docker / curl 拉到宿主机）。"""
+        from datetime import datetime
+        from urllib.parse import quote
+
+        from fastapi.responses import Response
+
+        from pallas.console.web import tail_nonebot_log_entries_scoped
+
+        _ensure_log_sink()
+        src = (source or "all").strip() or "all"
+        scope_norm = scope
+        n_cap = n
+
+        def _sync() -> tuple[str, str]:
+            entries = tail_nonebot_log_entries_scoped(n_cap, scope_norm, source=src)
+            lines: list[str] = []
+            for e in entries:
+                if not isinstance(e, dict):
+                    continue
+                time_s = str(e.get("time") or "").strip()
+                level = str(e.get("level") or "info").strip() or "info"
+                scope_s = str(e.get("scope") or "").strip()
+                msg = str(e.get("message") or "").rstrip("\n")
+                lines.append(f"[{time_s}] [{level}] [{scope_s}] {msg}")
+            stamp = datetime.now().strftime("%Y%m%d-%H%M")
+            filename = f"pallas-logs_{scope_norm}_{src}_{stamp}.txt"
+            return "\n".join(lines) + ("\n" if lines else ""), filename
+
+        body, filename = await asyncio.to_thread(_sync)
+        # ASCII fallback + RFC 5987，避免中文环境下下载名乱码
+        disposition = f"attachment; filename=\"{filename}\"; filename*=UTF-8''{quote(filename)}"
+        return Response(
+            content=body.encode("utf-8"),
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": disposition},
+        )
+
+    @router.get(
         f"{x}/logs/stream",
         include_in_schema=True,
     )
