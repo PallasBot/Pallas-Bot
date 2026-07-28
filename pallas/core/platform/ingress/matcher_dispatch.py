@@ -83,7 +83,8 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
     show_log = True
     log_msg = f" {nb_message.escape_tag(bot.type)} {nb_message.escape_tag(bot.self_id)} | "
     try:
-        log_msg += compact_inbound_event_log(event.get_log_string())
+        # 群消息正文可能含 `<le>` 等伪标签；colors=True 时必须 escape，否则整条事件处理失败
+        log_msg += nb_message.escape_tag(compact_inbound_event_log(event.get_log_string()))
     except nb_message.NoLogException:
         show_log = False
     if show_log:

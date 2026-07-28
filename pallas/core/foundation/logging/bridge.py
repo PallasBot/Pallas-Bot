@@ -17,6 +17,20 @@ _TRANSIENT_UVICORN_MESSAGES = (
     "data transfer failed",
 )
 
+# access 刷屏路径：即使 LOG_LEVEL=DEBUG，2xx 也降到 DEBUG。
+_QUIET_ACCESS_PATH_MARKERS = (
+    "/pallas/api/logs",
+    "/health",
+    "/favicon",
+)
+
+_TRANSIENT_ASGI_EXC_NAMES = (
+    "ConnectTimeout",
+    "ReadTimeout",
+    "ConnectError",
+    "ProxyError",
+)
+
 _CHANNEL_ALIASES = (
     ("pallas.core.", "内核"),
     ("pallas.product.", "功能"),
@@ -75,6 +89,33 @@ def _stdlib_logger_channel_label(logger_name: str) -> str:
     return name
 
 
+def _is_quiet_access_line(text: str) -> bool:
+    """2xx 访问日志中的高频健康/推流路径。"""
+    if '" 5' in text or '" 4' in text:  # 4xx/5xx 仍可见
+        return False
+    return any(marker in text for marker in _QUIET_ACCESS_PATH_MARKERS)
+
+
+def _is_transient_asgi_failure(record: LogRecord) -> bool:
+    if "Exception in ASGI application" not in (record.getMessage() or ""):
+        return False
+    exc_info = record.exc_info
+    if not exc_info or not exc_info[0]:
+        return False
+    name = getattr(exc_info[0], "__name__", "") or ""
+    if name in _TRANSIENT_ASGI_EXC_NAMES:
+        return True
+    # httpx 常包装为 httpx.ConnectTimeout，__name__ 已覆盖；再扫 cause 链
+    exc = exc_info[1]
+    seen: set[int] = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if type(exc).__name__ in _TRANSIENT_ASGI_EXC_NAMES:
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
+
+
 class ChannelLoguruHandler(LoguruHandler):
     """为经 stdlib logging 转发的日志行追加 ``[标签]`` 前缀。"""
 
@@ -84,6 +125,15 @@ class ChannelLoguruHandler(LoguruHandler):
         if label == "服务" and any(part in text for part in _TRANSIENT_UVICORN_MESSAGES):
             record.levelno = logging.WARNING
             record.levelname = "WARNING"
+        elif record.name == "uvicorn.access" and _is_quiet_access_line(text):
+            record.levelno = logging.DEBUG
+            record.levelname = "DEBUG"
+        elif label == "服务" and _is_transient_asgi_failure(record):
+            # 外呼超时已在业务侧打点；避免 uvicorn 再刷 ERROR+整栈。
+            record.levelno = logging.WARNING
+            record.levelname = "WARNING"
+            record.exc_info = None
+            record.exc_text = None
         record.msg = f"[{label}] {text}" if label else text
         record.args = ()
         super().emit(record)
@@ -96,7 +146,11 @@ def apply_stdlib_logging_channel_prefix() -> None:
 
 
 def configure_quiet_library_loggers() -> None:
-    """启动早期压制第三方库刷屏；DEBUG/TRACE 时不压制。"""
+    """启动早期压制第三方库刷屏；DEBUG/TRACE 时不压制。
+
+    ``uvicorn.access`` 在 DEBUG 下仍允许 INFO，但 ``/logs`` ``/health`` 由
+    ``ChannelLoguruHandler`` 降到 DEBUG。
+    """
     level_name = resolve_repo_log_level()
     if level_name in {"TRACE", "DEBUG"}:
         return

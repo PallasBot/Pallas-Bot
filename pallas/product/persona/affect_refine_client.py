@@ -196,8 +196,10 @@ async def post_affect_refine(payload: dict[str, Any]) -> dict[str, Any] | None:
     except LlmProviderError as exc:
         logger.warning("affect refine kernel failed: {}", exc)
         return None
-    except Exception:
-        logger.warning("affect refine kernel request failed")
+    except Exception as exc:
+        from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+        logger.warning("affect refine kernel request failed: {}", format_exception_for_log(exc))
         return None
     content = str(message.get("content") or "").strip() if isinstance(message, dict) else ""
     if not content:

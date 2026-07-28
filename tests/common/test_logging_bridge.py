@@ -57,6 +57,16 @@ def test_compact_inbound_event_log_folds_long_url() -> None:
     assert "multimedia.nt.qq.com.cn" in out
 
 
+def test_inbound_log_with_angle_brackets_survives_loguru_colorizer() -> None:
+    """群消息含 <le> 等时，escape 后 colors=True 不应再抛 ValueError。"""
+    from loguru._colorizer import Colorizer
+    from nonebot.message import escape_tag
+
+    raw = "[message.group.normal]: Message 1 from 2@[群:3] 'foo <le> bar'"
+    escaped = escape_tag(compact_inbound_event_log(raw))
+    Colorizer.prepare_simple_message(escaped)
+
+
 def test_inbound_event_log_as_debug_for_notice() -> None:
     assert inbound_event_log_as_debug("notice") is True
     assert inbound_event_log_as_debug("request") is True

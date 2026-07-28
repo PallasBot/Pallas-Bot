@@ -132,7 +132,13 @@ async def _fetch_from_urls(urls: list[str], *, timeout_sec: float) -> dict[str, 
                 return _parse_stats_body(resp.json(), stats_url)
             except (httpx.HTTPError, ValueError) as e:
                 last_err = e
-                logger.debug("community_stats: fetch stats failed url={}: {}", stats_url, e)
+                from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+                logger.debug(
+                    "community_stats: fetch stats failed url={}: {}",
+                    stats_url,
+                    format_exception_for_log(e),
+                )
     if last_err is not None:
         raise last_err
     raise ValueError("community stats fetch failed")
@@ -146,7 +152,9 @@ def _task_result_or_none(
         return task.result()
     except Exception as e:
         errors.append(e)
-        logger.debug("community_stats: source failed: {}", e)
+        from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+        logger.debug("community_stats: source failed: {}", format_exception_for_log(e))
         return None
 
 
@@ -158,7 +166,9 @@ async def _await_result_or_none(
         return await task
     except Exception as e:
         errors.append(e)
-        logger.debug("community_stats: source failed: {}", e)
+        from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+        logger.debug("community_stats: source failed: {}", format_exception_for_log(e))
         return None
 
 
