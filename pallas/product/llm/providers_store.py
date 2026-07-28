@@ -572,14 +572,20 @@ def export_providers_for_api(*, doc: dict[str, Any] | None = None) -> dict[str, 
     }
 
 
-def find_provider(provider_id: str, *, doc: dict[str, Any] | None = None) -> dict[str, Any] | None:
+def find_provider(
+    provider_id: str,
+    *,
+    doc: dict[str, Any] | None = None,
+    include_disabled: bool = False,
+) -> dict[str, Any] | None:
+    """按 id 查找提供方。默认跳过已禁用（路由用）；连通探测可 include_disabled=True。"""
     pid = str(provider_id or "").strip()
     if not pid:
         return None
     payload = doc if isinstance(doc, dict) else load_providers_document()
     for row in payload.get("providers") or []:
         if isinstance(row, dict) and str(row.get("id") or "").strip() == pid:
-            if row.get("enabled", True) is False:
+            if not include_disabled and row.get("enabled", True) is False:
                 return None
             return row
     return None

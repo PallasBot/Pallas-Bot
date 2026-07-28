@@ -780,9 +780,16 @@ async def fetch_provider_models(
         LlmProviderError,
         list_ollama_tag_models,
         list_openai_compatible_models,
+        mask_api_key_hint,
         resolve_request_method,
+        should_failover_api_key,
     )
-    from pallas.product.llm.providers_store import provider_request_method
+    from pallas.product.llm.providers_store import (
+        find_provider,
+        provider_request_method,
+        resolve_provider_api_keys,
+        resolve_provider_base_url,
+    )
 
     c = cfg or get_llm_config()
     pid = str(provider_id or "").strip() or "remote"
@@ -790,29 +797,28 @@ async def fetch_provider_models(
     if not kind_norm:
         kind_norm = "local" if pid == "local" else "remote"
 
-    key = (api_key or "").strip()
+    draft_key = (api_key or "").strip()
     env_name = (api_key_env or "").strip()
-    if not key and env_name:
-        key = str(os.environ.get(env_name) or "").strip()
+    keys: list[str] = []
+    if draft_key:
+        keys = [draft_key]
+    elif env_name:
+        env_val = str(os.environ.get(env_name) or "").strip()
+        if env_val:
+            keys = [env_val]
 
     url = (base_url or "").strip()
     method = str(request_method or "").strip()
-    stored = None
-    if not url or not key or not method:
-        from pallas.product.llm.providers_store import (
-            find_provider,
-            resolve_provider_api_key,
-            resolve_provider_base_url,
-        )
-
-        stored = find_provider(pid)
-        if stored is not None:
-            url = url or resolve_provider_base_url(stored)
-            key = key or resolve_provider_api_key(stored)
-            if not kind and str(stored.get("kind") or "").strip():
-                kind_norm = str(stored.get("kind") or "").strip().lower() or kind_norm
-            if not method:
-                method = provider_request_method(stored)
+    # 探测/发现可读已禁用行（路由仍默认跳过）；避免误报「不存在」
+    stored = find_provider(pid, include_disabled=True)
+    if stored is not None:
+        url = url or resolve_provider_base_url(stored)
+        if not keys:
+            keys = resolve_provider_api_keys(stored)
+        if not kind and str(stored.get("kind") or "").strip():
+            kind_norm = str(stored.get("kind") or "").strip().lower() or kind_norm
+        if not method:
+            method = provider_request_method(stored)
 
     if kind_norm == "local":
         url = _resolve_local_ollama_base_url(url, cfg=c)
@@ -837,53 +843,62 @@ async def fetch_provider_models(
         }
 
     if not url:
-        url = str(c.llm_base_url or "").strip()
-        if not key:
-            key = str(c.llm_api_key or "").strip()
-    if not url:
         return {
             "provider_id": pid,
             "ok": False,
             "models": [],
             "source": "openai",
-            "error": "缺少 Base URL，请填写后刷新",
+            "error": "缺少 Base URL，请填写后重试",
             "status": None,
         }
-    if not key:
+    if not keys:
         return {
             "provider_id": pid,
             "ok": False,
             "models": [],
             "source": "openai",
-            "error": "缺少 API Key，请填写后刷新（已保存密钥时请重新输入一次）",
+            "error": "缺少 API Key：请在草稿中填写，或确认已保存密钥 / 环境变量可用",
             "status": None,
         }
 
     effective_method = resolve_request_method(method, url)
     source = "anthropic" if effective_method == "anthropic_messages" else "openai"
-    try:
-        models = await list_openai_compatible_models(
-            url,
-            key,
-            timeout_sec=timeout_sec,
-            request_method=effective_method,
-        )
-    except LlmProviderError as exc:
-        return {
-            "provider_id": pid,
-            "ok": False,
-            "models": [],
-            "source": source,
-            "error": str(exc),
-            "status": exc.status,
-        }
+    last_exc: LlmProviderError | None = None
+    for key_index, use_key in enumerate(keys):
+        try:
+            models = await list_openai_compatible_models(
+                url,
+                use_key,
+                timeout_sec=timeout_sec,
+                request_method=effective_method,
+            )
+            return {
+                "provider_id": pid,
+                "ok": True,
+                "models": models,
+                "source": source,
+                "error": "",
+                "status": None,
+            }
+        except LlmProviderError as exc:
+            last_exc = exc
+            if should_failover_api_key(exc) and key_index + 1 < len(keys):
+                logger.warning(
+                    "llm models discover api key failed, trying next: provider={} key={} err={}",
+                    pid,
+                    mask_api_key_hint(use_key),
+                    exc,
+                )
+                continue
+            break
+    assert last_exc is not None
     return {
         "provider_id": pid,
-        "ok": True,
-        "models": models,
+        "ok": False,
+        "models": [],
         "source": source,
-        "error": "",
-        "status": None,
+        "error": str(last_exc),
+        "status": last_exc.status,
     }
 
 
@@ -898,7 +913,7 @@ async def probe_provider(
     cfg: LlmConfig | None = None,
     timeout_sec: float = 15.0,
 ) -> dict[str, Any]:
-    """连通探测：优先用请求体草稿字段，再回落已保存提供方。"""
+    """连通探测：优先用请求体草稿字段，再回落已保存提供方（含已禁用）。"""
     import time
 
     from pallas.product.llm.providers_store import find_provider
@@ -912,7 +927,7 @@ async def probe_provider(
     draft_method = str(request_method or "").strip()
     has_draft = bool(draft_url or draft_key or draft_env or draft_kind or draft_method)
 
-    row = find_provider(pid)
+    row = find_provider(pid, include_disabled=True)
     if row is None and not has_draft:
         return {
             "provider_id": pid,
@@ -920,6 +935,7 @@ async def probe_provider(
             "latency_ms": None,
             "error": "提供方不存在或未填写 Base URL / API Key（可先保存，或直接在草稿上测试）",
             "status": None,
+            "enabled": None,
         }
 
     started = time.monotonic()
@@ -937,12 +953,12 @@ async def probe_provider(
     status = discovered.get("status")
     status_i = int(status) if isinstance(status, int) else None
     error = "" if ok else str(discovered.get("error") or "不可达")
+    enabled = None if row is None else bool(row.get("enabled", True))
     if not ok:
-        from nonebot import logger
-
         logger.warning(
-            "llm provider probe failed: id={} status={} err={}",
+            "llm provider probe failed: id={} enabled={} status={} err={}",
             pid,
+            enabled,
             status_i,
             error,
         )
@@ -952,6 +968,7 @@ async def probe_provider(
         "latency_ms": latency_ms if ok else None,
         "error": error,
         "status": status_i,
+        "enabled": enabled,
         "models": discovered.get("models") if ok else [],
     }
 

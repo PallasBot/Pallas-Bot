@@ -25,8 +25,13 @@ __all__ = [
 ]
 
 
-def find_provider(provider_id: str, *, doc: dict[str, Any] | None = None) -> dict[str, Any] | None:
-    return _find_provider(provider_id, doc=doc)
+def find_provider(
+    provider_id: str,
+    *,
+    doc: dict[str, Any] | None = None,
+    include_disabled: bool = False,
+) -> dict[str, Any] | None:
+    return _find_provider(provider_id, doc=doc, include_disabled=include_disabled)
 
 
 def resolve_provider_api_key(row: dict[str, Any]) -> str:

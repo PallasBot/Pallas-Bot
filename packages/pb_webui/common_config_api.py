@@ -234,6 +234,7 @@ class _LlmProviderTestData(BaseModel):
     latency_ms: float | None = None
     error: str | None = None
     status: int | None = None
+    enabled: bool | None = None
 
 
 class _AiExtensionTestData(BaseModel):
