@@ -1,5 +1,23 @@
 # Changelog
 
+## [4.1.12] - 2026-07-28
+
+### 更新公告
+
+- 智能对话可在控制台配置外部 MCP，并挂到工具目录
+- MCP 连接改为常驻复用（stdio / HTTP），避免每次冷启动
+- 注册失败原因可在工具策略里看到
+- 捆绑控制台 WebUI **v0.8.7**
+
+### Added
+
+- `LLM_MCP_SERVERS` / `LLM_MCP_HTTP_ALLOWLIST` 经 WebUI llm 段读写；变更后重注册工具
+
+### Changed
+
+- MCP stdio/HTTP 常驻 session；snapshot 含 sessions
+- 发行捆绑控制台取 WebUI **v0.8.7**
+
 ## [4.1.11] - 2026-07-28
 
 ### 更新公告

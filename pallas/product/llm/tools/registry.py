@@ -553,6 +553,8 @@ def build_tools_catalog_ui() -> dict[str, Any]:
         })
         seen_names.add(decl.name)
     items.sort(key=operator.itemgetter("name"))
+    from pallas.product.llm.tools.mcp_bootstrap import mcp_registration_snapshot
+
     return {
         "items": items,
         "count": len(items),
@@ -563,6 +565,7 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             "blacklist": [str(item) for item in (cfg.llm_tools_blacklist or []) if str(item).strip()],
             "arknights_kb_enabled": bool(kb.arknights_kb_enabled),
             "desc_max_len": int(cfg.llm_tools_desc_max_len),
+            "mcp": mcp_registration_snapshot(),
         },
         "overrides": overrides,
     }
