@@ -825,6 +825,7 @@ async def fetch_provider_models(
                 "models": [],
                 "source": "ollama",
                 "error": str(exc),
+                "status": exc.status,
             }
         return {
             "provider_id": pid,
@@ -832,6 +833,7 @@ async def fetch_provider_models(
             "models": models,
             "source": "ollama",
             "error": "",
+            "status": None,
         }
 
     if not url:
@@ -845,6 +847,7 @@ async def fetch_provider_models(
             "models": [],
             "source": "openai",
             "error": "缺少 Base URL，请填写后刷新",
+            "status": None,
         }
     if not key:
         return {
@@ -853,6 +856,7 @@ async def fetch_provider_models(
             "models": [],
             "source": "openai",
             "error": "缺少 API Key，请填写后刷新（已保存密钥时请重新输入一次）",
+            "status": None,
         }
 
     effective_method = resolve_request_method(method, url)
@@ -871,6 +875,7 @@ async def fetch_provider_models(
             "models": [],
             "source": source,
             "error": str(exc),
+            "status": exc.status,
         }
     return {
         "provider_id": pid,
@@ -878,47 +883,75 @@ async def fetch_provider_models(
         "models": models,
         "source": source,
         "error": "",
+        "status": None,
     }
 
 
 async def probe_provider(
     provider_id: str,
     *,
+    base_url: str = "",
+    api_key: str = "",
+    api_key_env: str = "",
+    kind: str = "",
+    request_method: str = "",
     cfg: LlmConfig | None = None,
     timeout_sec: float = 15.0,
 ) -> dict[str, Any]:
+    """连通探测：优先用请求体草稿字段，再回落已保存提供方。"""
     import time
 
-    from pallas.product.llm.providers_store import find_provider, resolve_provider_api_key, resolve_provider_base_url
+    from pallas.product.llm.providers_store import find_provider
 
     del cfg
     pid = str(provider_id or "").strip()
+    draft_url = str(base_url or "").strip()
+    draft_key = str(api_key or "").strip()
+    draft_env = str(api_key_env or "").strip()
+    draft_kind = str(kind or "").strip()
+    draft_method = str(request_method or "").strip()
+    has_draft = bool(draft_url or draft_key or draft_env or draft_kind or draft_method)
+
     row = find_provider(pid)
-    if row is None:
+    if row is None and not has_draft:
         return {
             "provider_id": pid,
             "reachable": False,
             "latency_ms": None,
-            "error": "提供方不存在或已禁用",
+            "error": "提供方不存在或未填写 Base URL / API Key（可先保存，或直接在草稿上测试）",
+            "status": None,
         }
-    kind = str(row.get("kind") or "remote").strip().lower()
+
     started = time.monotonic()
     discovered = await fetch_provider_models(
         pid,
-        base_url=resolve_provider_base_url(row),
-        api_key=resolve_provider_api_key(row),
-        api_key_env=str(row.get("api_key_env") or "").strip(),
-        kind=kind,
-        request_method=str(row.get("request_method") or "").strip(),
+        base_url=draft_url,
+        api_key=draft_key,
+        api_key_env=draft_env,
+        kind=draft_kind,
+        request_method=draft_method,
         timeout_sec=timeout_sec,
     )
     latency_ms = int((time.monotonic() - started) * 1000)
     ok = bool(discovered.get("ok"))
+    status = discovered.get("status")
+    status_i = int(status) if isinstance(status, int) else None
+    error = "" if ok else str(discovered.get("error") or "不可达")
+    if not ok:
+        from nonebot import logger
+
+        logger.warning(
+            "llm provider probe failed: id={} status={} err={}",
+            pid,
+            status_i,
+            error,
+        )
     return {
         "provider_id": pid,
         "reachable": ok,
         "latency_ms": latency_ms if ok else None,
-        "error": "" if ok else str(discovered.get("error") or "不可达"),
+        "error": error,
+        "status": status_i,
         "models": discovered.get("models") if ok else [],
     }
 

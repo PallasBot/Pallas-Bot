@@ -36,6 +36,57 @@ def mask_api_key_hint(key: str) -> str:
     return f"…{text[-4:]}"
 
 
+def host_from_url(url: str) -> str:
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    try:
+        host = (urlparse(raw).hostname or "").strip()
+    except Exception:
+        return ""
+    return host
+
+
+def format_provider_http_error(status: int, body: str = "", *, limit: int = 200) -> str:
+    """统一 HTTP 错误文案，保留 524 等状态码与短正文。"""
+    detail = " ".join(str(body or "").split())
+    if len(detail) > limit:
+        detail = detail[: limit - 1] + "…"
+    if detail:
+        return f"HTTP {int(status)}: {detail}"
+    return f"HTTP {int(status)}"
+
+
+def format_provider_transport_error(exc: BaseException, *, url: str = "") -> str:
+    """传输层失败：类型名 + host，避免 toast 只剩含糊「不可达」。"""
+    host = host_from_url(url)
+    name = type(exc).__name__
+    if isinstance(exc, httpx.TimeoutException):
+        label = "连接超时" if "Connect" in name else "请求超时"
+    elif isinstance(exc, httpx.ConnectError):
+        label = "连接失败"
+    elif isinstance(exc, httpx.HTTPError):
+        label = "网络错误"
+    else:
+        label = name or "请求失败"
+    brief = " ".join(str(exc).split())
+    if len(brief) > 160:
+        brief = brief[:159] + "…"
+    parts = [label]
+    if host:
+        parts.append(host)
+    if brief and brief.lower() not in {label.lower(), name.lower()}:
+        parts.append(brief)
+    return " · ".join(parts)
+
+
+def raise_provider_http_error(response: httpx.Response) -> None:
+    raise LlmProviderError(
+        format_provider_http_error(response.status_code, response.text or ""),
+        status=response.status_code,
+    ) from None
+
+
 def endpoint_api_keys(endpoint: Any, *, fallback: str = "") -> list[str]:
     keys: list[str] = []
     seen: set[str] = set()
@@ -855,13 +906,9 @@ async def list_openai_compatible_models(
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
             response = await client.get(url, headers=headers)
     except Exception as exc:
-        raise LlmProviderError(str(exc)) from exc
+        raise LlmProviderError(format_provider_transport_error(exc, url=url)) from exc
     if response.status_code != 200:
-        detail = (response.text or "")[:200]
-        raise LlmProviderError(
-            f"HTTP {response.status_code}" + (f": {detail}" if detail else ""),
-            status=response.status_code,
-        )
+        raise_provider_http_error(response)
     try:
         payload = response.json()
     except Exception as exc:
@@ -881,13 +928,9 @@ async def list_anthropic_models(
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
             response = await client.get(url, headers=headers)
     except Exception as exc:
-        raise LlmProviderError(str(exc)) from exc
+        raise LlmProviderError(format_provider_transport_error(exc, url=url)) from exc
     if response.status_code != 200:
-        detail = (response.text or "")[:200]
-        raise LlmProviderError(
-            f"HTTP {response.status_code}" + (f": {detail}" if detail else ""),
-            status=response.status_code,
-        )
+        raise_provider_http_error(response)
     try:
         payload = response.json()
     except Exception as exc:
@@ -905,9 +948,9 @@ async def list_ollama_tag_models(
         async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
             response = await client.get(url)
     except Exception as exc:
-        raise LlmProviderError(str(exc)) from exc
+        raise LlmProviderError(format_provider_transport_error(exc, url=url)) from exc
     if response.status_code != 200:
-        raise LlmProviderError(f"HTTP {response.status_code}", status=response.status_code)
+        raise_provider_http_error(response)
     try:
         payload = response.json()
     except Exception as exc:
