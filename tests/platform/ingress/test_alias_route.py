@@ -32,7 +32,7 @@ def test_should_yield_when_peer_display_name_mentioned(monkeypatch) -> None:
     assert not should_yield_ingress_for_peer_alias(self_id=2357682124, plain_text=plain)
 
 
-def test_no_yield_when_shared_default_alias(monkeypatch) -> None:
+def test_shared_generic_niu_niu_does_not_exclusive_match(monkeypatch) -> None:
     clear_alias_route_state()
     monkeypatch.setattr(
         "pallas.core.platform.multi_bot.fleet.get_fleet_bot_ids",
@@ -43,9 +43,39 @@ def test_no_yield_when_shared_default_alias(monkeypatch) -> None:
         lambda _bot_id: "",
     )
     plain = "牛牛出来一下"
-    assert fleet_bots_matching_plain(plain) == frozenset({11, 22})
+    assert fleet_bots_matching_plain(plain) == frozenset()
     assert not should_yield_ingress_for_peer_alias(self_id=11, plain_text=plain)
-    assert not should_yield_ingress_for_peer_alias(self_id=22, plain_text=plain)
+
+
+def test_pallas_exclusive_yield(monkeypatch) -> None:
+    clear_alias_route_state()
+    monkeypatch.setattr(
+        "pallas.core.platform.multi_bot.fleet.get_fleet_bot_ids",
+        lambda: frozenset({11, 22, 33}),
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.self_identity.resolve_cached_login_nickname",
+        lambda bot_id: {11: "帕拉斯", 22: "豆包牛牛", 33: "牛牛测试机"}.get(int(bot_id), ""),
+    )
+    plain = "帕拉斯出"
+    assert fleet_bots_matching_plain(plain) == frozenset({11})
+    assert should_yield_ingress_for_peer_alias(self_id=22, plain_text=plain)
+    assert not should_yield_ingress_for_peer_alias(self_id=11, plain_text=plain)
+
+
+def test_doubao_short_alias_exclusive(monkeypatch) -> None:
+    clear_alias_route_state()
+    monkeypatch.setattr(
+        "pallas.core.platform.multi_bot.fleet.get_fleet_bot_ids",
+        lambda: frozenset({11, 22}),
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.self_identity.resolve_cached_login_nickname",
+        lambda bot_id: {11: "帕拉斯", 22: "豆包牛牛"}.get(int(bot_id), ""),
+    )
+    plain = "豆包来一下"
+    assert fleet_bots_matching_plain(plain) == frozenset({22})
+    assert should_yield_ingress_for_peer_alias(self_id=11, plain_text=plain)
 
 
 def test_no_yield_without_alias_hit(monkeypatch) -> None:

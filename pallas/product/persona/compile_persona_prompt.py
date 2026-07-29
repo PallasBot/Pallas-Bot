@@ -28,6 +28,7 @@ from .prompt_guard import (
     sanitize_prompt_block,
     wrap_stats_block,
 )
+from .seed import normalize_seed_prefs, resolve_effective_seed_prefs
 from .self_identity import (
     compile_repeater_self_identity_prompt,
     compile_self_identity_prompt,
@@ -77,6 +78,20 @@ _LENGTH_HINTS: dict[str, str] = {
     "short": "优先简短回复（1-2 句）",
     "medium": "适中长度（2-3 句）",
     "long": "可稍详细展开，但仍保持口语",
+}
+
+_ARCHETYPE_FINGERPRINTS: dict[str, str] = {
+    "terse": "- 少展开，能一句接完就一句接完，别起哄加戏。",
+    "chaotic": "- 可短促接梗，少总结陈词，别把梗抻成长段。",
+    "polite": "- 先应一句再吐槽，少抢话下结论，给人留接茬口。",
+}
+
+_SEED_FINGERPRINTS: dict[str, str] = {
+    "short": "- 优先短句收口，能不铺垫就别铺垫。",
+    "long": "- 需要展开时也只多补半句，别写成小作文。",
+    "warm": "- 先把对方的话接住，再顺势回一句。",
+    "chaotic": "- 可顺手接梗反抛半句，但别连着抖包袱。",
+    "restrained": "- 收着点火候，别追着一个梗反复拱。",
 }
 
 _DRUNK_CHAT_OVERLAY = (
@@ -188,7 +203,12 @@ def clear_base_system_prompt_cache() -> None:
         _base_cached_text = ""
 
 
-def build_bot_behavior_prompt(persona: ResolvedPersona, *, profile: str = PROMPT_PROFILE_DEFAULT) -> str:
+def build_bot_behavior_prompt(
+    persona: ResolvedPersona,
+    *,
+    profile: str = PROMPT_PROFILE_DEFAULT,
+    seed_prefs: list[str] | None = None,
+) -> str:
     tone = normalize_enum(str(persona.tone or ""), ALLOWED_TONES, "neutral")
     length_pref = normalize_enum(str(persona.length_pref or ""), ALLOWED_LENGTH_PREFS, "any")
     tone_map = _REPEATER_TONE_HINTS if profile == PROMPT_PROFILE_REPEATER else _TONE_HINTS
@@ -219,6 +239,21 @@ def build_bot_behavior_prompt(persona: ResolvedPersona, *, profile: str = PROMPT
     bluntness_hint = bluntness_behavior_hint(float(persona.bluntness))
     if bluntness_hint:
         lines.append(bluntness_hint)
+    fingerprint_lines: list[str] = []
+    archetype_fingerprint = _ARCHETYPE_FINGERPRINTS.get(str(persona.archetype or "").strip().lower())
+    if archetype_fingerprint:
+        fingerprint_lines.extend(["【接话指纹】", archetype_fingerprint])
+    normalized_seed_prefs = normalize_seed_prefs(seed_prefs or [])
+    if normalized_seed_prefs:
+        if not fingerprint_lines:
+            fingerprint_lines.append("【接话指纹】")
+        for pref in normalized_seed_prefs:
+            seed_line = _SEED_FINGERPRINTS.get(pref)
+            if seed_line and seed_line not in fingerprint_lines:
+                fingerprint_lines.append(seed_line)
+        fingerprint_lines.append("- 少反复同一隐喻起手。")
+    if fingerprint_lines:
+        lines.extend(fingerprint_lines)
     return wrap_stats_block("bot_behavior", "\n".join(lines))
 
 
@@ -266,7 +301,8 @@ def compile_persona_prompt(
         (base_system or "").strip() or load_base_system_prompt(custom_path=base_system_path),
         max_len=12000,
     )
-    bot_behavior = build_bot_behavior_prompt(persona, profile=profile)
+    seed_prefs, _seed_source = resolve_effective_seed_prefs(bot_persona, int(bot_id))
+    bot_behavior = build_bot_behavior_prompt(persona, profile=profile, seed_prefs=seed_prefs)
     group_style = compile_group_style_prompt(style_profile)
     group_expression = compile_group_expression_prompt(style_profile)
     try:

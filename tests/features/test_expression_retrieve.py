@@ -165,6 +165,44 @@ def test_retrieve_filters_other_bot_and_builds_reference_block(monkeypatch, tmp_
     assert build_expression_reference_block(entries) == "\n【表达参考】\nventing→这也太黑了。"
 
 
+def test_retrieve_prefers_own_bot_and_demotes_blocked_motifs(monkeypatch, tmp_path) -> None:
+    from pallas.product.persona.expression_retrieve import retrieve_expressions_for_message
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    append_or_merge_expression(
+        make_entry(
+            occasion="聊草料",
+            saying="今天草料直接拉满。",
+            status="active",
+            bot_id=0,
+            support=3,
+        )
+    )
+    append_or_merge_expression(
+        make_entry(
+            occasion="聊草料",
+            saying="今天份额管够，先狠狠干活。",
+            status="active",
+            bot_id=10001,
+            support=3,
+        )
+    )
+
+    entries = retrieve_expressions_for_message(10001, "草料安排上没", limit=2, bot_id=10001)
+    assert [entry.bot_id for entry in entries][:2] == [10001, 0]
+
+    filtered = retrieve_expressions_for_message(
+        10001,
+        "草料安排上没",
+        limit=2,
+        bot_id=10001,
+        blocked_motifs=["草料"],
+    )
+    assert filtered
+    assert filtered[0].bot_id == 10001
+    assert all("草料" not in entry.saying for entry in filtered[:1])
+
+
 @pytest.mark.asyncio
 async def test_context_suffix_respects_inject_config_and_falls_back_to_habits(monkeypatch) -> None:
     from pallas.product.persona import expression_habits as habits
@@ -176,8 +214,18 @@ async def test_context_suffix_respects_inject_config_and_falls_back_to_habits(mo
     )
     retrieve = Mock(return_value=[SimpleNamespace(occasion="吐槽", saying="太难了")])
     monkeypatch.setattr(habits, "retrieve_expressions_for_message", retrieve)
-    assert await habits.build_expression_context_suffix(10001, "太离谱了") == "\n【表达参考】\n吐槽→太难了。"
-    retrieve.assert_called_once_with(10001, "太离谱了", limit=2, bot_id=0, blocked_openers=())
+    assert (
+        await habits.build_expression_context_suffix(10001, "太离谱了", blocked_motifs=["草料"])
+        == "\n【表达参考】\n吐槽→太难了。"
+    )
+    retrieve.assert_called_once_with(
+        10001,
+        "太离谱了",
+        limit=2,
+        bot_id=0,
+        blocked_openers=(),
+        blocked_motifs=("草料",),
+    )
 
     monkeypatch.setattr(
         habits,
