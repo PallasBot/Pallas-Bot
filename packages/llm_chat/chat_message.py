@@ -59,6 +59,7 @@ from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_
 from pallas.product.llm.reply_variation import (
     build_recent_reply_ending_hint,
     build_recent_reply_variation_hint,
+    extract_recent_motifs,
     repeated_assistant_openers,
     should_wait_for_more,
 )
@@ -153,6 +154,7 @@ async def build_llm_chat_expression_suffix(
     bot_id: int = 0,
     scene: str = "",
     blocked_openers: list[str] | None = None,
+    blocked_motifs: list[str] | None = None,
 ) -> str:
     suffix, _entries = await build_llm_chat_expression_selection(
         group_id,
@@ -160,6 +162,7 @@ async def build_llm_chat_expression_suffix(
         bot_id=bot_id,
         scene=scene,
         blocked_openers=blocked_openers,
+        blocked_motifs=blocked_motifs,
     )
     return suffix
 
@@ -171,6 +174,7 @@ async def build_llm_chat_expression_selection(
     bot_id: int = 0,
     scene: str = "",
     blocked_openers: list[str] | None = None,
+    blocked_motifs: list[str] | None = None,
 ) -> tuple[str, list]:
     if group_id is None:
         return "", []
@@ -191,6 +195,7 @@ async def build_llm_chat_expression_selection(
         scene=scene,
         style_profile=profile,
         blocked_openers=blocked_openers,
+        blocked_motifs=blocked_motifs,
     )
 
 
@@ -268,6 +273,46 @@ async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id:
         if str(getattr(turn, "role", "")).strip() == "assistant":
             return str(getattr(turn, "content", "") or "").strip()
     return ""
+
+
+def build_blocked_motifs(
+    *,
+    recent_turns,
+    recent_group_rows,
+    bot_id: int,
+) -> list[str]:
+    group_texts: list[str] = []
+    target_bot_id = int(bot_id)
+    for row in recent_group_rows or ():
+        if isinstance(row, str):
+            plain = row.strip()
+            if plain and "[CQ:" not in plain:
+                group_texts.append(plain)
+            continue
+        plain = str(
+            row.get("text", "") if isinstance(row, dict) else getattr(row, "text", "")
+        ).strip()
+        if not plain or "[CQ:" in plain:
+            continue
+        role = str(
+            row.get("role", "") if isinstance(row, dict) else getattr(row, "role", "")
+        ).strip()
+        row_user_id = int(
+            row.get("user_id", 0) if isinstance(row, dict) else getattr(row, "user_id", 0) or 0
+        )
+        row_bot_id = int(
+            row.get("bot_id", 0) if isinstance(row, dict) else getattr(row, "bot_id", 0) or 0
+        )
+        if role == "assistant" or row_user_id == target_bot_id or row_bot_id == target_bot_id:
+            group_texts.append(plain)
+    motifs = extract_recent_motifs(group_texts)
+    if motifs:
+        return motifs
+    return extract_recent_motifs([
+        str(getattr(turn, "content", "") or "").strip()
+        for turn in recent_turns
+        if str(getattr(turn, "role", "")).strip() == "assistant"
+    ])
 
 
 @llm_chat_msg.handle()
@@ -532,6 +577,23 @@ async def handle_llm_chat(bot: Bot, event: Event):
     request_id = str(ULID())
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
     blocked_openers = repeated_assistant_openers(recent_turns)
+    recent_reply_texts: list[str] = []
+    if group_id is not None:
+        from pallas.product.llm.repeater_persona_context import load_recent_bot_plain_replies
+
+        try:
+            recent_reply_texts = await load_recent_bot_plain_replies(
+                int(bot.self_id),
+                int(group_id),
+                limit=6,
+            )
+        except Exception:
+            recent_reply_texts = []
+    blocked_motifs = build_blocked_motifs(
+        recent_turns=recent_turns,
+        recent_group_rows=recent_reply_texts,
+        bot_id=int(bot.self_id),
+    )
     focus_text = plain or msg
     recent_plain = [str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]]
     has_multi_party = (
@@ -552,6 +614,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         bot_id=int(bot.self_id),
         scene=str(behavior_scene),
         blocked_openers=blocked_openers,
+        blocked_motifs=blocked_motifs,
     )
     selected_expression_ids = [item.entry_id for item in selected_expression_entries]
     from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
@@ -750,18 +813,6 @@ async def handle_llm_chat(bot: Bot, event: Event):
     if current_turn_decision.action is CurrentTurnAction.FOLLOW_UP:
         style_user_hints.append("本轮只追问一个必要信息，问题要短。")
     last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
-    recent_reply_texts: list[str] = []
-    if group_id is not None:
-        from pallas.product.llm.repeater_persona_context import load_recent_bot_plain_replies
-
-        try:
-            recent_reply_texts = await load_recent_bot_plain_replies(
-                int(bot.self_id),
-                int(group_id),
-                limit=6,
-            )
-        except Exception:
-            recent_reply_texts = []
     persona_dict = None
     if persona_bundle is not None:
         try:
