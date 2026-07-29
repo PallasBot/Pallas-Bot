@@ -12,7 +12,7 @@ Pallas-Bot 4.0 官方扩展：**协议端管理**（NapCat / SnowLuma）与 **�
 | --- | --- | --- |
 | `pallas_plugin_protocol` | 协议端管理 | hub / unified |
 | `pallas_plugin_relogin_bot` | 重新上号、创建牛牛 | hub / unified |
-| `pallas_plugin_relogin_forward` | 分片 worker 口令转发 | worker |
+| `pallas_plugin_relogin_forward` | 分片 worker 命令转发 | worker |
 
 ## 安装
 
@@ -62,7 +62,7 @@ uv run pallas ext install pallas-plugin-protocol
 
 ### 重新上号（relogin_bot）
 
-| 口令 | 场景 | 说明 |
+| 命令 | 场景 | 说明 |
 | --- | --- | --- |
 | 牛牛重新上号 [QQ] | 私聊 | 号主重启本账号协议端 |
 | 创建牛牛 … | 私聊 | 超管新建实例 |

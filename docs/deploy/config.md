@@ -23,7 +23,7 @@ password = "pallas"
 db = "PallasBot"
 ```
 
-启动后打开 `/pallas/`，使用日志中的默认口令登录。
+启动后打开 `/pallas/`，使用日志中的默认密钥登录。
 
 ## 配置合并顺序（优先级从低到高）
 
@@ -42,7 +42,7 @@ db = "PallasBot"
 - [ ] `db_backend` 与 `[bootstrap.mongo]` / `[bootstrap.postgres]` 与实际库一致
 - [ ] `host` / `port` 与防火墙、反向代理一致（默认 `0.0.0.0:8088`）
 - [ ] `data/` 目录可写
-- [ ] 已记录控制台初始口令（`data/pallas_console/`；遗忘见 [FAQ](/deploy/faq)）
+- [ ] 已记录控制台初始密钥（`data/pallas_console/`；遗忘见 [FAQ](/deploy/faq)）
 - [ ] 未在生产环境开启 `pallas_webui_dev_mode`
 
 ---

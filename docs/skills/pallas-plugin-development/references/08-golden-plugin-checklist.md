@@ -5,18 +5,18 @@
 ## Core 插件（`CORE_PLUGIN_NAMES`）
 
 - [ ] `__init__.py` 薄（目标 ≤120 行）；`startup.py` 承载启动/HTTP 注册
-- [ ] 口令型：`plugin_sdk` / `pallas.api.commands` + `handlers.py`；`command_permissions` / `command_limits` / `menu_data` 齐全
-- [ ] 维护者向：`help_audience: maintainer`；无群口令时用 `menu_data` 指向 WebUI 路径
+- [ ] 命令型：`plugin_sdk` / `pallas.api.commands` + `handlers.py`；`command_permissions` / `command_limits` / `menu_data` 齐全
+- [ ] 维护者向：`help_audience: maintainer`；无群命令时用 `menu_data` 指向 WebUI 路径
 - [ ] 配置：插件页 `install_hot_reload_config`；或 **通用配置**段（`env_sections.py`）+ `pallas/product/`（维护者向横切项；`pb_stats` 用插件页，勿再塞回通用配置）
 - [ ] 改名保留别名：`plugin_package_aliases.py`、`plugin_legacy_names.py`
 - [ ] 分片 hub-only：`is_sharded_worker()` 守卫；`roles.py` 名单与矩阵单测
 
-参照：`pb_core`（口令）、`pb_stats`（维护者向 + 通用段）。
+参照：`pb_core`（命令）、`pb_stats`（维护者向 + 通用段）。
 
 ## Bundled play（`BUNDLED_PLAY_PLUGIN_NAMES`）
 
 - [ ] 仍放 `packages/<name>/`，默认加载；identity/catalog kind 为 **`bundled`**，**不要**加入 `CORE_PLUGIN_NAMES`
-- [ ] 结构与口令型 checklist 同 core 插件；导入优先 `pallas.api.*`
+- [ ] 结构与命令型 checklist 同 core 插件；导入优先 `pallas.api.*`
 - [ ] 示例：`drink`、`greeting`、`roulette`、`take_name`
 
 ## 结构与代码
@@ -31,7 +31,7 @@
 
 ## Matcher 与权限
 
-- [ ] 口令型用 `on_command`；被动型 `on_message` 有合理 priority/block/rule
+- [ ] 命令型用 `on_command`；被动型 `on_message` 有合理 priority/block/rule
 - [ ] 每个鉴权命令有 `command_permissions` + matcher permission
 - [ ] `menu_data` 与命令 ID 一致
 - [ ] `usage` / `trigger_condition` 无写死权限文案

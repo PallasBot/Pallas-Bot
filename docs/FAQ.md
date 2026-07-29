@@ -129,17 +129,17 @@ A: **`docker`**：请用镜像更新；**`release_tag`** / **`release_tag_dirty`
 
 A: 先按 [排障](/maintainer/operate/troubleshooting) 的前三项检查部署形态、配置覆盖与连接路径；随后检查数据库连通性、`OneBot WebSocket` 是否已连上（Docker 默认 Compose 无独立 NapCat，需在 **`/pallas/protocol`** 创建实例并配置 WS），以及控制台是否有持续报错。
 
-### 控制台 / 协议端管理页的口令在哪里配？
+### 控制台 / 协议端管理页的登录密钥在哪里配？
 
-A: 不再从 `.env` 读取口令。首次启动在日志里打印随机口令，哈希保存在 `data/pallas_console/auth_state.json`；浏览器访问 `/pallas/login` 或协议端登录页登录。仅本机开发可在 `pallas_webui` 配置中开启 `pallas_webui_dev_mode` 跳过控制台鉴权。
+A: 不再从 `.env` 读取密钥。首次启动在日志里打印随机密钥，哈希保存在 `data/pallas_console/auth_state.json`；浏览器访问 `/pallas/login` 或协议端登录页登录。仅本机开发可在 `pallas_webui` 配置中开启 `pallas_webui_dev_mode` 跳过控制台鉴权。
 
-### 遗忘了控制台 / 协议端管理页的登录口令怎么办？ {#forgot-console-password}
+### 遗忘了控制台 / 协议端管理页的登录密钥怎么办？ {#forgot-console-password}
 
 A: 磁盘上只有哈希，**没有「忘记密码」邮件或在线找回**；需能访问 Bot 的数据目录或历史日志。
 
-- **从未在设置里改过口令**：可看同目录下的 **`data/pallas_console/default_login_password.txt`**（若仍存在）。
-- **仍保留首次启动时的终端 / 容器日志**：其中会有「Pallas-Bot 默认口令」一类输出。
-- **以上都没有**：停掉 Bot，删除或移走 **`data/pallas_console/auth_state.json`** 后重启；进程会重新生成随机口令并写入日志（必要时可一并删除 **`session_secret.bin`**，避免旧会话状态干扰）。**所有已登录会话会失效**，新口令请妥善保存。
+- **从未在设置里改过密钥**：可看同目录下的 **`data/pallas_console/default_login_password.txt`**（若仍存在）。
+- **仍保留首次启动时的终端 / 容器日志**：其中会有「Pallas-Bot 默认密钥」一类输出。
+- **以上都没有**：停掉 Bot，删除或移走 **`data/pallas_console/auth_state.json`** 后重启；进程会重新生成随机密钥并写入日志（必要时可一并删除 **`session_secret.bin`**，避免旧会话状态干扰）。**所有已登录会话会失效**，新密钥请妥善保存。
 
 ### 执行 `docker compose` 时报 `project name must not be empty` 怎么办？
 
@@ -201,4 +201,4 @@ A: 使用 PyPI 包 **`pallas-core`**（也可本地构建 wheel：`./scripts/bui
 
 ### WebUI 首次登录为什么要走 Setup Wizard？
 
-A: 默认口令仅用于首次启动；改密后 `setup_state.json` 标记完成，路由守卫才放行其它页面。向导还推荐配置**协议端**与**插件扩展**。需要智能对话时再到侧栏 **AI 配置** 配 Provider 并打开对话总闸。详见 WebUI「首次 Setup Wizard」页。
+A: 默认密钥仅用于首次启动；改密后 `setup_state.json` 标记完成，路由守卫才放行其它页面。向导还推荐配置**协议端**与**插件扩展**。需要智能对话时再到侧栏 **AI 配置** 配 Provider 并打开对话总闸。详见 WebUI「首次 Setup Wizard」页。

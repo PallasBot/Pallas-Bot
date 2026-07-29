@@ -23,7 +23,7 @@ def test_pb_core_plugin_config_payload(monkeypatch):
     assert "enabled" in names or "instance_secret" in names
     groups = data.get("field_groups") or []
     assert len(groups) >= 5
-    assert any(g.get("id") == "command_start" or g.get("title") == "命令口令" for g in groups)
+    assert any(g.get("id") == "command_start" or g.get("title") == "命令前缀" for g in groups)
     clear_webui_env_sections_cache()
 
 

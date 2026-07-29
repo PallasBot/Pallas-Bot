@@ -1,4 +1,4 @@
-"""分片 worker：将私聊 relogin 口令转发至 hub。"""
+"""分片 worker：将私聊 relogin 命令转发至 hub。"""
 
 from __future__ import annotations
 

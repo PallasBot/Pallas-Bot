@@ -50,7 +50,7 @@ def setup_state_path() -> Path:
 
 
 def default_login_password_path() -> Path:
-    """自动生成的默认口令明文副本路径；用户修改口令后应不存在。"""
+    """自动生成的默认密钥明文副本路径；用户修改密钥后应不存在。"""
     return console_auth_dir() / _DEFAULT_LOGIN_PASSWORD_FILE
 
 
@@ -59,7 +59,7 @@ def session_secret_path() -> Path:
 
 
 def invalidate_shared_console_login_token_cache() -> None:
-    """保留旧名：口令哈希变更后使内存缓存失效。"""
+    """保留旧名：密钥哈希变更后使内存缓存失效。"""
 
 
 def _atomic_write_bytes(path: Path, data: bytes) -> None:
@@ -199,7 +199,7 @@ def verify_console_password(plain: str) -> bool:
 def set_console_password_plain(new_plain: str, *, keep_default_password_plaintext: bool = False) -> None:
     s = str(new_plain or "")
     if not s:
-        raise ValueError("口令不能为空")
+        raise ValueError("密钥不能为空")
     if not keep_default_password_plaintext:
         _unlink_default_login_password_plain()
     salt = secrets.token_bytes(16)
@@ -211,7 +211,7 @@ def set_console_password_plain(new_plain: str, *, keep_default_password_plaintex
 
 
 def _materialize_auth_state() -> tuple[str | None, bool]:
-    """返回 (若需打印给管理员的明文口令, 是否本次随机生成)。"""
+    """返回 (若需打印给管理员的明文密钥, 是否本次随机生成)。"""
     if _load_auth_state():
         return None, False
     chosen = secrets.token_urlsafe(18)
@@ -228,7 +228,7 @@ def prime_shared_console_login() -> None:
     if plain is not None and rnd:
         logger.info("[控制台] 鉴权已初始化 {}", auth_state_path())
         # 只走 logger（stdout sink），避免再写 stderr 造成双打
-        logger.success("[控制台] 默认口令: {}", plain)
+        logger.success("[控制台] 默认密钥: {}", plain)
         _announced_default_password_auth_path = auth_path
     else:
         boot = _read_default_login_password_plain()
@@ -236,7 +236,7 @@ def prime_shared_console_login() -> None:
             _unlink_default_login_password_plain()
         elif boot:
             if _announced_default_password_auth_path != auth_path:
-                logger.success("[控制台] 默认口令: {}", boot)
+                logger.success("[控制台] 默认密钥: {}", boot)
             _announced_default_password_auth_path = auth_path
 
 
@@ -272,7 +272,7 @@ def register_console_session_invalidation_hook(fn: Callable[[], None]) -> None:
 
 
 def invalidate_console_sessions() -> None:
-    """口令变更后轮换会话密钥，使已签发令牌全部失效。"""
+    """密钥变更后轮换会话密钥，使已签发令牌全部失效。"""
     _atomic_write_bytes(session_secret_path(), secrets.token_bytes(32))
     for hook in tuple(_SESSION_INVALIDATION_HOOKS):
         try:
@@ -335,7 +335,7 @@ def extract_session_from_request(
 
 
 def set_shared_console_login_token(new_plain: str) -> None:
-    """保留旧函数名：写入新口令哈希。"""
+    """保留旧函数名：写入新密钥哈希。"""
     set_console_password_plain(new_plain)
 
 

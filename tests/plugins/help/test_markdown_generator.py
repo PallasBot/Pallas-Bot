@@ -9,7 +9,7 @@ from packages.help.markdown_generator import (
 
 
 def test_wrap_preserves_markdown_table() -> None:
-    raw = "| 口令 | 说明 |\n|------|------|\n| 牛牛长草 | 完整长草 |"
+    raw = "| 命令 | 说明 |\n|------|------|\n| 牛牛长草 | 完整长草 |"
     out = _wrap_paragraphs_for_help_page(raw)
     assert "| 牛牛长草 |" in out
     assert out.count("\n") >= 2

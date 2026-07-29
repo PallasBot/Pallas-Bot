@@ -108,12 +108,12 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`
 packages/<name>/
 ├── __init__.py    # PluginMetadata + matcher/路由注册（薄，目标 ≤120 行）
 ├── config.py      # Pydantic + install_hot_reload_config（有插件页配置时）
-├── handlers.py    # 口令 handler（优先 plugin_sdk）
+├── handlers.py    # 命令 handler（优先 plugin_sdk）
 └── startup.py     # 可选：@driver.on_startup、HTTP 挂载
 ```
 
-- **口令型**：`plugin_sdk.message_command` + `bind_alias_handlers`；`command_permissions` / `command_limits` / `menu_data` 与命令 ID 一致。
-- **维护者向、无群口令**：`help_audience: maintainer`；说明写在 `menu_data` 或 WebUI 通用配置段（如 `pb_stats` → 段 ID `community_stats`）。
+- **命令型**：`plugin_sdk.message_command` + `bind_alias_handlers`；`command_permissions` / `command_limits` / `menu_data` 与命令 ID 一致。
+- **维护者向、无群命令**：`help_audience: maintainer`；说明写在 `menu_data` 或 WebUI 通用配置段（如 `pb_stats` → 段 ID `community_stats`）。
 - **配置热载**：插件页用 `install_hot_reload_config`；横切项在 `env_sections.py` 注册通用段。
 - **元数据热载**：频繁改 help/ingress 声明时设 `extra["reload_policy"]: "metadata"`（见 [hot-reload-tiers.md](docs/developer/plugin-development/reload-and-activation.md)）。
 - **分片**：hub-only 逻辑在 `startup.py` 用 `is_sharded_worker()` 守卫；hub 显式名单见 `roles.HUB_PLUGIN_MODULES`。

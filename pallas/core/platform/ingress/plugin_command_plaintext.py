@@ -11,7 +11,7 @@ from nonebot.rule import TrieRule
 
 from pallas.core.foundation.command_prefix import matches_command_prefix, strip_leading_command_marks
 
-# 别名口令用「 / 」分隔（两侧需空白），避免拆开「图片/文字」这类说明
+# 别名命令用「 / 」分隔（两侧需空白），避免拆开「图片/文字」这类说明
 _TRIGGER_SPLIT_RE = re.compile(r"\s+/\s+|[、，,]")
 _TOKEN_SPLIT_RE = re.compile(r"[\s<＜〈\[(（(:：]")
 _PLUGIN_PREFIX_CACHE_VALUE: tuple[str, ...] | None = None

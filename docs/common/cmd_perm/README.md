@@ -1,8 +1,8 @@
 # 命令权限（cmd_perm）
 
-本页说明部分口令的「谁可用」如何声明与覆盖：代码写默认等级，WebUI 可覆盖；**牛牛帮助**自动展示当前生效的「何人可用」。
+本页说明部分命令的「谁可用」如何声明与覆盖：代码写默认等级，WebUI 可覆盖；**牛牛帮助**自动展示当前生效的「何人可用」。
 
-接群口令时先在 [写第一个插件](/developer/plugin-development/first-plugin) 对齐命令 ID，再回到本页补权限与帮助文案约定。
+接群命令时先在 [写第一个插件](/developer/plugin-development/first-plugin) 对齐命令 ID，再回到本页补权限与帮助文案约定。
 
 实现：`pallas.core.perm`；**插件侧只从 `pallas.api.perm` import**。
 
@@ -46,7 +46,7 @@ group_message_permission_for_command("my_plugin.demo")
 private_message_permission_for_command("my_plugin.demo")
 ```
 
-口令注册优先 `pallas.api.commands`（`group_command` / `bind_alias_handlers`），内部会接权限。
+命令注册优先 `pallas.api.commands`（`group_command` / `bind_alias_handlers`），内部会接权限。
 
 ### 默认等级
 
@@ -66,7 +66,7 @@ extra={
 
 | 字段 | 要点 |
 | --- | --- |
-| `trigger_condition` | 口令原文；**不写**权限角色 |
+| `trigger_condition` | 命令原文；**不写**权限角色 |
 | `command_permission(s)` | 与鉴权 ID 一致 |
 | `usage` | `usage_line` + `join_usage`；**勿**写权限脚注 |
 

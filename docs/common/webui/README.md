@@ -66,7 +66,7 @@ get_my_config = plugin_webui.get
 | `cmd_perm` | 命令权限 | 覆盖矩阵 |
 | `control_plane` | 联邦控制 | 专用 payload |
 | `corpus_federation` | 语料联邦 | 专用 payload |
-| `ingress_fanout` | 入站：全员同响口令 | |
+| `ingress_fanout` | 入站：全员同响命令 | |
 | `repeater_learn` | 复读：后台语料学习 | |
 | `message_scrub` | 消息审查与入站过滤 | 4.0 默认开启 |
 | `service_gateways` | 外部服务地址 | 画画 / MAA / 点歌 + 连通检测 |

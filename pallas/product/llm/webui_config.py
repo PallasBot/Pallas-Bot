@@ -78,7 +78,7 @@ class LlmWebuiConfig(BaseModel):
     llm_chat_enabled: bool = Field(
         default=False,
         description=field_help(
-            "群里能不能用智能对话（@ 牛牛、口令聊天、接话用模型能力）",
+            "群里能不能用智能对话（@ 牛牛、命令聊天、接话用模型能力）",
             "开=允许智能对话相关能力；关=群内不走智能对话。新人建议先开，并配好「接入」里的提供方",
             "须先在「接入」配置可用模型；本开关只管对话总闸，不负责唱歌/TTS",
         ),

@@ -18,7 +18,7 @@ def register_reply_tools() -> None:
             name=CHAT_REPLY_NAME,
             description=(
                 "向群友发送一条可见口语对白。动作类工具成功后默认不调用（沉默）；"
-                "仅当必须补充工具未直接给出的信息（如口令、缺素材）才调用。"
+                "仅当必须补充工具未直接给出的信息（如命令、缺素材）才调用。"
             ),
             parameters={
                 "type": "object",

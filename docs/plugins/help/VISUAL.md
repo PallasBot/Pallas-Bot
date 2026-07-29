@@ -60,7 +60,7 @@ resource/styles/default/
 
 ## 与 Markdown 结构的配合
 
-- 一级：总览表 + 引用块导航/示例/开关说明（示例不用表格，以便口令 **加粗**）
+- 一级：总览表 + 引用块导航/示例/开关说明（示例不用表格，以便命令 **加粗**）
 - 二级：功能表五列，列宽在生成阶段截断
 - 三级：键值表 + 「怎么用」段落
 
@@ -68,4 +68,4 @@ resource/styles/default/
 
 启用/停用：首页表状态列为 **● 已启用** / **○ 已停用**（几何符号，help 字体可显示；勿用 🟢🔴）；占位符 `__HELP_ROW_STATUS__` 按行填入。
 
-帮助文案里的口令用 **加粗** 标出（引用块、段落等表格外正文）；**表格单元格内勿写 `**`**，pillowmd 按纯文本绘制，会露出星号且不会变粗。库默认加粗为左右叠绘易糊，帮助图在 `pillowmd_bold.py` 改为 **描边加粗**（`stroke_width=0.5`，可调 `HELP_BOLD_STROKE_WIDTH`）。不用反引号行内代码（避免缩小字号、浅灰字）。若插件 `usage` 等仍含 `` ` ``，由 `insertCodeTextColor` 与 `expressionFontSizeRate` 保证可读。
+帮助文案里的命令用 **加粗** 标出（引用块、段落等表格外正文）；**表格单元格内勿写 `**`**，pillowmd 按纯文本绘制，会露出星号且不会变粗。库默认加粗为左右叠绘易糊，帮助图在 `pillowmd_bold.py` 改为 **描边加粗**（`stroke_width=0.5`，可调 `HELP_BOLD_STROKE_WIDTH`）。不用反引号行内代码（避免缩小字号、浅灰字）。若插件 `usage` 等仍含 `` ` ``，由 `insertCodeTextColor` 与 `expressionFontSizeRate` 保证可读。

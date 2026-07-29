@@ -1,4 +1,4 @@
-"""将 LLM tool 参数渲染为插件口令并派发到群消息处理链。"""
+"""将 LLM tool 参数渲染为插件命令并派发到群消息处理链。"""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ class CommandTemplateError(ValueError):
 
 
 def render_command_template(template: str, arguments: dict[str, Any]) -> str:
-    """用 tool 参数填充口令模板，缺失键抛错。"""
+    """用 tool 参数填充命令模板，缺失键抛错。"""
     fields = {field_name for _, field_name, _, _ in Formatter().parse(template) if field_name}
     missing = [name for name in fields if name not in arguments]
     if missing:
@@ -97,7 +97,7 @@ def source_segments_for_command(
     *,
     mode: str,
 ) -> tuple[dict[str, Any], ...]:
-    """仅素材型口令携带原消息素材；无素材时才补「自己」给生成类插件。"""
+    """仅素材型命令携带原消息素材；无素材时才补「自己」给生成类插件。"""
     if mode != "media":
         return ()
     if segments:

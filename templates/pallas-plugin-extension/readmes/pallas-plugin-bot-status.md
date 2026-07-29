@@ -16,7 +16,7 @@ uv run pallas ext install pallas-plugin-bot-status
 
 ## 功能
 
-| 口令 | 说明 |
+| 命令 | 说明 |
 | --- | --- |
 | 牛牛在吗 | 查在线/离线 |
 | 牛牛报数 / 牛牛出列 | 群内依次报到 |

@@ -36,21 +36,21 @@ Pallas-Bot 支持单进程，也支持 **hub + 多个 worker** 的多进程部�
 
 ## 功能说明
 
-[MAA 远程控制协议](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html)：`getTask` / `reportStatus` + QQ 绑定、口令排队、结果回传。
+[MAA 远程控制协议](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html)：`getTask` / `reportStatus` + QQ 绑定、命令排队、结果回传。
 
 ### 用户命令
 
-| 类型 | 口令示例 |
+| 类型 | 命令示例 |
 | --- | --- |
 | 绑定 | `牛牛绑定MAA`、`牛牛MAA状态`、`牛牛切换MAA设备`、`牛牛MAA设备名`、`牛牛清空MAA队列` |
 | 任务 | `牛牛长草`、`牛牛作战`、`牛牛公招`、`牛牛基建`、`牛牛截图`、`牛牛停止` 等 |
 | 高级 | `牛牛MAA任务 <type> [params]` |
 
-**上手**：配置 `maa_public_base_url` → MAA 填帮助页 URL（用户标识符 = QQ）→ 私聊绑定设备 → 群聊发口令。完整表见 **牛牛帮助 → MAA 远控**。
+**上手**：配置 `maa_public_base_url` → MAA 填帮助页 URL（用户标识符 = QQ）→ 私聊绑定设备 → 群聊发命令。完整表见 **牛牛帮助 → MAA 远控**。
 
 #### 多台设备
 
-| 口令 | 说明 |
+| 命令 | 说明 |
 | --- | --- |
 | `牛牛MAA状态` | 列表与当前选用 |
 | `牛牛切换MAA设备` | 改远控目标 |
@@ -109,13 +109,13 @@ Pallas-Bot 支持单进程，也支持 **hub + 多个 worker** 的多进程部�
 
 #### 多 Bot 同群
 
-群内远控口令与 `牛牛MAA状态` 等命令经 `claim_group_handler("maa", …)`，同一条群消息仅一只牛响应。私聊绑定/切换设备不受影响。
+群内远控命令与 `牛牛MAA状态` 等命令经 `claim_group_handler("maa", …)`，同一条群消息仅一只牛响应。私聊绑定/切换设备不受影响。
 
 #### 代码索引
 
 | 逻辑 | 位置 |
 | --- | --- |
-| 口令 → type | `tasks.py` |
+| 命令 → type | `tasks.py` |
 | HTTP | `http_api.py`、`http_routes.py` |
 | 队列/绑定 | `store.py` |
 

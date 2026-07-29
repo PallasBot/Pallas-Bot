@@ -1,4 +1,4 @@
-"""unified 模式下 ingress_gate once claim 胜出标记，供 repeater / 口令 matcher 跳过二次抢占。"""
+"""unified 模式下 ingress_gate once claim 胜出标记，供 repeater / 命令 matcher 跳过二次抢占。"""
 
 from __future__ import annotations
 

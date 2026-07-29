@@ -1,4 +1,4 @@
-"""启动后扫描重复命令 prefix（多插件模块注册同一口令）。"""
+"""启动后扫描重复命令 prefix（多插件模块注册同一命令）。"""
 
 from __future__ import annotations
 

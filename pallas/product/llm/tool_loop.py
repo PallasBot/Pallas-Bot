@@ -311,13 +311,13 @@ async def complete_with_tool_loop(
     prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
     ask_before_call = bool(meta.get("ask_before_call"))
     selection_source = str(meta.get("selection_source") or "").strip().lower()
-    # 口令类工具：动作与开口拆分
+    # 命令类工具：动作与开口拆分
     if schema_names and working and str(working[0].get("role") or "") == "system":
         hint = (
             "【动作工具】用户明确要求执行可用工具对应的动作时，必须先调用对应 function，"
             "不要只口头答应或假装已执行。"
             "动作类工具成功后默认保持沉默，不要再开口；"
-            "仅当必须补充工具未直接给出的信息（如口令、缺素材）才调用 chat.reply。"
+            "仅当必须补充工具未直接给出的信息（如命令、缺素材）才调用 chat.reply。"
             "禁止自由文本或 chat.reply 写「整了个/搜了一下/已派发/帮你找找/大伙品品」等废话"
             "或编造结果；勿把「随机」「随便」当歌名念。"
             "查询类工具可用返回结果直接作答，或再用 chat.reply。"

@@ -20,11 +20,11 @@ def llm_command_tool_row(
     visibility: ToolVisibility = "visible",
     source_segments: SourceSegmentsMode = "none",
 ) -> dict[str, Any]:
-    """单条 ``extra['llm_tools']`` 项：意图识别后按模板拼口令并派发。
+    """单条 ``extra['llm_tools']`` 项：意图识别后按模板拼命令并派发。
 
     hints: 口语触发词；硬域未命中时参与 soft_recall 工具级打分。
     visibility: visible 随域注入；deferred 仅在自身 hints 命中或经 tools.find 激活后注入。
-    source_segments: media 时透传原消息的图片 / @ /「自己」；其余口令不附加素材。
+    source_segments: media 时透传原消息的图片 / @ /「自己」；其余命令不附加素材。
     """
     tool_name = (name or "").strip()
     cid = (command_id or "").strip()

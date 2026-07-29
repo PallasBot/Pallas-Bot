@@ -12,7 +12,7 @@ from pallas.product.persona.corpus_expression_habits import infer_expression_aff
 from pallas.product.persona.expression_bank import ExpressionEntry, append_or_merge_expression, build_entry_id
 from pallas.product.persona.occasion import OccasionTag
 
-_COMMANDISH_RE = re.compile(r"^(?:[/!！]|管理口令|封禁|解禁|禁言)", re.IGNORECASE)
+_COMMANDISH_RE = re.compile(r"^(?:[/!！]|管理命令|封禁|解禁|禁言)", re.IGNORECASE)
 
 # (group_id, saying) -> last learned unix ts；限制 llm_success 自强化回灌
 _LLM_SUCCESS_LEARN_AT: dict[tuple[int, str], int] = {}

@@ -78,13 +78,13 @@ __plugin_meta__ = PluginMetadata(
             llm_command_tool_row(
                 name="help.show_topic",
                 command_id="help.help",
-                description="打开指定插件或口令的帮助详情。",
+                description="打开指定插件或命令的帮助详情。",
                 parameters={
                     "type": "object",
                     "properties": {
                         "topic": {
                             "type": "string",
-                            "description": "插件名、序号或口令关键词，如 喝酒、智能对话",
+                            "description": "插件名、序号或命令关键词，如 喝酒、智能对话",
                         },
                     },
                     "required": ["topic"],
@@ -116,10 +116,10 @@ __plugin_meta__ = PluginMetadata(
                 "func": "功能详情",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
-                "trigger_condition": "牛牛帮助 〈插件〉 〈功能序号或名称〉 或 牛牛帮助 〈口令〉",
+                "trigger_condition": "牛牛帮助 〈插件〉 〈功能序号或名称〉 或 牛牛帮助 〈命令〉",
                 "command_permission": "help.help",
                 "brief_des": "查看单条说明",
-                "detail_des": "查看某一条功能该怎么用、在哪用、谁能用；也可直接发口令如「牛牛帮助 牛牛喝酒」。",
+                "detail_des": "查看某一条功能该怎么用、在哪用、谁能用；也可直接发命令如「牛牛帮助 牛牛喝酒」。",
             },
             {
                 "func": "插件开关",
@@ -171,10 +171,10 @@ __plugin_meta__ = PluginMetadata(
                     {
                         "title": "与 LLM 对话的分工",
                         "content": (
-                            "功能用法与开关状态以「牛牛帮助」口令为准；"
-                            "向 @牛牛 提问时若不确定口令，应引导用户发送牛牛帮助，不要编造不存在的命令。"
+                            "功能用法与开关状态以「牛牛帮助」命令为准；"
+                            "向 @牛牛 提问时若不确定命令，应引导用户发送牛牛帮助，不要编造不存在的命令。"
                         ),
-                        "keywords": "口令,帮助,闲聊,怎么查",
+                        "keywords": "命令,帮助,闲聊,怎么查",
                     },
                 ],
             ),

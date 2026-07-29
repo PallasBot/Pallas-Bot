@@ -25,7 +25,7 @@ def help_list_status_mark(enabled: bool) -> str:
 
 
 def _plugin_page_status_banner(plugin_name_display: str, enabled: bool) -> str:
-    """二级页标题下状态与开关口令。"""
+    """二级页标题下状态与开关命令。"""
     if enabled:
         return f"> **状态** 已启用 · 发送 **牛牛关闭 {plugin_name_display}** 可停用本插件\n\n"
     return f"> **状态** 已停用 · 发送 **牛牛开启 {plugin_name_display}** 可启用本插件\n\n"
@@ -232,7 +232,7 @@ def generate_plugin_functions_markdown(
             first_func = _sanitize_pipe(str(user_menu[0].get("func", "1") or "1"))
             markdown_content += "## 功能一览\n\n"
             detail_hint = (
-                f"需要某一条的完整口令与步骤时，发「牛牛帮助 {plugin_name_display}」+ **序号**"
+                f"需要某一条的完整命令与步骤时，发「牛牛帮助 {plugin_name_display}」+ **序号**"
                 f"（如「牛牛帮助 {plugin_name_display} 2」），"
                 f"或 + **功能名**（如「牛牛帮助 {plugin_name_display} {first_func}」）。"
             )

@@ -100,7 +100,7 @@ def message_command(
     priority: int = 5,
     block: bool = True,
 ) -> PluginCommand:
-    """注册口令 matcher；``prefix`` 为主命令名，``aliases`` 共享同一 handler 时需多次调用 handle。"""
+    """注册命令 matcher；``prefix`` 为主命令名，``aliases`` 共享同一 handler 时需多次调用 handle。"""
     primary = (prefix or "").strip()
     if not primary:
         raise ValueError("prefix 不能为空")

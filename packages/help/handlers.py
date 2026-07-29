@@ -98,7 +98,7 @@ async def handle_help_command(
             await send_plugin_detail_image(detail_data, matcher=matcher, group_id=group_id)
             return
 
-        # 非插件名时，尝试把单条参数当作口令/功能名，跨插件直达功能详情页
+        # 非插件名时，尝试把单条参数当作命令/功能名，跨插件直达功能详情页
         targets = find_command_help_targets(
             plugin_identifier,
             show_ignored=show_ignored,
