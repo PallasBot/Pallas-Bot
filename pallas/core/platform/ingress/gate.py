@@ -129,9 +129,10 @@ async def ingress_group_message_gate(bot, event) -> None:
                 record_ingress_early_discard("fleet")
             raise IgnoredException("fleet bot message")
 
-        # 仅口令走粘性群归属；闲聊 / @LLM 等 chat 车道只靠 claim，避免热群钉死一台。
+        # 仅命令走粘性群归属；闲聊 / @LLM 等 chat 车道只靠 claim，避免热群钉死一台。
         if legacy_command_traffic(plain) and not should_process_federate_group_on_current_deployment(
-            int(event.group_id)
+            int(event.group_id),
+            plain=plain,
         ):
             outcome = "federate_owner_skip"
             if metrics:
