@@ -78,7 +78,13 @@ extra={
 }
 ```
 
-热群默认开启闲聊严格预筛（`PALLAS_CHAT_MATCHER_STRICT`）：非口令消息主要只跑 `passive` / `always_run` 与路由命中的模块。需要被动听群聊的插件应设 `passive: true`，否则可能收不到闲聊事件。用户向说明见 [语料联邦 · 热闹群与入站设计](/common/corpus#热闹群与入站设计行为说明)。
+热群默认开启闲聊严格预筛（`PALLAS_CHAT_MATCHER_STRICT`）：非口令消息主要只跑 `passive` / `always_run` 与路由命中的模块。
+
+- **`passive: true`**：声明本插件要吃闲聊车道（复读、智能对话、局内玩法等）。不标则严格模式下普通群聊可能收不到事件。
+- **`always_run: true`**：极少用；几乎每条群消息都激活，热群代价高。
+- **`lane`**：调度档位（与是否 passive 正交），如 `storage` / `remote`。
+
+用户向说明（含对照表）见 [语料联邦 · 热闹群与入站设计](/common/corpus#热闹群与入站设计行为说明)。
 
 ## `reload_policy`
 
