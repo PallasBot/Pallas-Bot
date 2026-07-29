@@ -78,6 +78,49 @@ def test_message_load_overload_window():
     assert message_load.should_pause_tasks() is True
 
 
+@pytest.mark.asyncio
+async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        raw_message = "今天天气不错"
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "今天天气不错"
+
+    class PassiveMatcher:
+        rule = Rule()
+
+    bot = MagicMock()
+    bot.type = "OneBot V11"
+    bot.self_id = "10001"
+    event = FakeGroupMessageEvent()
+    pre_mock = AsyncMock(return_value=True)
+    post_mock = AsyncMock()
+    run_matcher = AsyncMock()
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", post_mock)
+    monkeypatch.setattr("nonebot.message.check_and_run_matcher", run_matcher)
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(dispatch, "chat_drop_on_overload_enabled", lambda: True)
+    monkeypatch.setattr(dispatch, "is_overloaded", lambda: True)
+    monkeypatch.setattr(dispatch, "record_chatter_overload_dropped", lambda: None)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "matchers", {1: [PassiveMatcher]})
+
+    await dispatch.patched_handle_event(bot, event)
+
+    pre_mock.assert_awaited_once()
+    post_mock.assert_awaited_once()
+    run_matcher.assert_not_awaited()
+
+
 def test_matcher_dispatch_enabled_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dispatch, "repo_env_raw_value", lambda _key: None)
     assert dispatch.matcher_dispatch_enabled() is True

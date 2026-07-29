@@ -9,7 +9,6 @@ from nonebot.adapters import Bot  # noqa: TC002
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 
 from pallas.core.foundation.config import BotConfig
-from pallas.core.foundation.db.pool_budget import is_pg_pool_timeout_error
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from pallas.core.shared.utils.media_cache import insert_image
 from pallas.product.llm.runtime_api import (
@@ -86,23 +85,9 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
                 "repeater.find_reply_bundle",
                 threshold_ms=slow_path_threshold_ms("PALLAS_SLOW_REPEATER_BUNDLE_MS", 120.0),
             )
-            try:
-                bundle = await chat.find_reply_bundle()
-            except Exception as exc:
-                if is_pg_pool_timeout_error(exc):
-                    logger.debug(
-                        "repeater.find_reply_bundle db_timeout bot={} group={}",
-                        event.self_id,
-                        event.group_id,
-                    )
-                else:
-                    logger.debug(
-                        "repeater.find_reply_bundle failed bot={} group={}: {}",
-                        event.self_id,
-                        event.group_id,
-                        exc,
-                    )
-                bundle = None
+            from ..bundle_lookup import find_reply_bundle_bounded
+
+            bundle = await find_reply_bundle_bounded(chat)
             reply_timer.mark("find_reply_bundle")
             reply_timer.finish(
                 bot_id=int(event.self_id),

@@ -205,7 +205,7 @@ async def test_unified_ingress_discards_federate_peer_bot_before_claims(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_unified_ingress_non_owner_deployment_skips_once_and_federate_claim(
+async def test_unified_ingress_non_owner_deployment_skips_command_once_and_federate_claim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
@@ -217,6 +217,7 @@ async def test_unified_ingress_non_owner_deployment_skips_once_and_federate_clai
         lambda _group_id: False,
     )
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain: True)
     federate = AsyncMock(return_value=True)
     once = AsyncMock(return_value=True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.claim_federate_group_message_ingress", federate)
@@ -236,14 +237,56 @@ async def test_unified_ingress_non_owner_deployment_skips_once_and_federate_clai
         user_id=999,
         group_id=54321,
         message_id=1,
-        message=Message("human message"),
-        raw_message="human message",
+        message=Message("牛牛帮助"),
+        raw_message="牛牛帮助",
     )
 
     with pytest.raises(IgnoredException):
         await ingress_group_message_gate(FakeBot(111), event)
     once.assert_not_awaited()
     federate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unified_ingress_non_owner_still_claims_chat_traffic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.should_process_federate_group_on_current_deployment",
+        lambda _group_id: False,
+    )
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain: False)
+    federate = AsyncMock(return_value=True)
+    once = AsyncMock(return_value=True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.claim_federate_group_message_ingress", federate)
+    monkeypatch.setattr("pallas.core.platform.ingress.claim_gate.try_claim_group_message_once", once)
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    class FakeBot:
+        def __init__(self, self_id: int):
+            self.self_id = str(self_id)
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=54321,
+        message_id=1,
+        message=Message("今天天气怎么样"),
+        raw_message="今天天气怎么样",
+    )
+
+    await ingress_group_message_gate(FakeBot(111), event)
+    once.assert_awaited()
+    federate.assert_awaited()
 
 
 @pytest.mark.asyncio

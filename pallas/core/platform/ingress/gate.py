@@ -25,6 +25,7 @@ from pallas.core.platform.ingress.dream_host_gate import dream_session_ingress_p
 from pallas.core.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
 from pallas.core.platform.ingress.fast_path import ingress_once_claim_safe_before_host_gates
 from pallas.core.platform.ingress.hosted_activity_gate import hosted_activity_ingress_passes
+from pallas.core.platform.ingress.matcher_activation import legacy_command_traffic
 from pallas.core.platform.ingress.notice_gate import ingress_notice_gate
 from pallas.core.platform.multi_bot.at_targets import group_at_qq_ids, message_at_fleet_bot
 from pallas.core.platform.multi_bot.fleet import fleet_bot_ids_contains, get_fleet_bot_ids
@@ -128,7 +129,10 @@ async def ingress_group_message_gate(bot, event) -> None:
                 record_ingress_early_discard("fleet")
             raise IgnoredException("fleet bot message")
 
-        if not should_process_federate_group_on_current_deployment(int(event.group_id)):
+        # 仅口令走粘性群归属；闲聊 / @LLM 等 chat 车道只靠 claim，避免热群钉死一台。
+        if legacy_command_traffic(plain) and not should_process_federate_group_on_current_deployment(
+            int(event.group_id)
+        ):
             outcome = "federate_owner_skip"
             if metrics:
                 record_ingress_early_discard("federate")

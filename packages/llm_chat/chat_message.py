@@ -483,7 +483,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
 
         chat = Chat(event)
         try:
-            bundle = await chat.find_reply_bundle()
+            from packages.repeater.bundle_lookup import find_reply_bundle_bounded
+
+            bundle = await find_reply_bundle_bounded(chat)
         except Exception:
             bundle = None
         if bundle is not None:

@@ -22,8 +22,9 @@ def test_record_group_message_and_p95() -> None:
     assert snap["matchers_selected_ratio"] == 0.4
     assert snap["route_index_hits"] == 1
     assert snap["route_index_fallbacks"] == 1
-    assert snap["route_index_hit_ratio"] == 0.01
-    assert snap["route_index_fallback_ratio"] == 0.01
+    assert snap["command_traffic"] == 50
+    assert snap["route_index_hit_ratio"] == 0.02
+    assert snap["route_index_fallback_ratio"] == 0.02
 
 
 def test_lane_wait_and_alerts() -> None:
