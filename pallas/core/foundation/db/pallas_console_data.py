@@ -269,6 +269,9 @@ async def database_overview() -> dict[str, Any]:
         from pallas.core.foundation.db.repository_pg import (
             BlackListRow,
             BotConfigRow,
+            ContextAnswerMessageRow,
+            ContextAnswerRow,
+            ContextBanRow,
             ContextRow,
             GroupConfigRow,
             ImageCacheRow,
@@ -282,6 +285,9 @@ async def database_overview() -> dict[str, Any]:
             ("user_config", UserConfigRow, False),
             ("message", MessageRow, True),
             ("context", ContextRow, True),
+            ("context_answer", ContextAnswerRow, True),
+            ("context_answer_message", ContextAnswerMessageRow, True),
+            ("context_ban", ContextBanRow, True),
             ("blacklist", BlackListRow, False),
             ("image_cache", ImageCacheRow, True),
         ]
@@ -302,7 +308,14 @@ async def database_overview() -> dict[str, Any]:
 
 # 控制台只读浏览白名单（大表仅概览，不做分页浏览）
 _BROWSEABLE_TABLES = frozenset({"bot_config", "group_config", "user_config", "blacklist"})
-_OVERVIEW_ONLY_TABLES = frozenset({"message", "context", "image_cache"})
+_OVERVIEW_ONLY_TABLES = frozenset({
+    "message",
+    "context",
+    "context_answer",
+    "context_answer_message",
+    "context_ban",
+    "image_cache",
+})
 _TABLE_ROW_PAGE_MAX = 100
 
 
