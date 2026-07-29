@@ -11,7 +11,8 @@ from nonebot.rule import TrieRule
 
 from pallas.core.foundation.command_prefix import matches_command_prefix, strip_leading_command_marks
 
-_TRIGGER_SPLIT_RE = re.compile(r"\s*/\s*|[、，,]")
+# 别名口令用「 / 」分隔（两侧需空白），避免拆开「图片/文字」这类说明
+_TRIGGER_SPLIT_RE = re.compile(r"\s+/\s+|[、，,]")
 _TOKEN_SPLIT_RE = re.compile(r"[\s<＜〈\[(（(:：]")
 _PLUGIN_PREFIX_CACHE_VALUE: tuple[str, ...] | None = None
 
@@ -22,13 +23,23 @@ def _iter_trigger_parts(trigger_condition: str) -> list[str]:
 
 def _extract_literal_prefix(part: str) -> str | None:
     raw = (part or "").strip()
-    if not raw or raw.startswith("@") or "+" in raw:
+    if not raw or raw.startswith("@"):
         return None
+    # 「命令 + 参数说明」只取 + 左侧；「牛牛 + 文本」整段仍不当命令
+    if "+" in raw:
+        left, _, right = raw.partition("+")
+        left = left.strip()
+        right = right.strip()
+        if left == "牛牛" and (not right or "文本" in right):
+            return None
+        raw = left
+        if not raw:
+            return None
     head = _TOKEN_SPLIT_RE.split(raw, maxsplit=1)[0].strip()
     if not head or any(ch in head for ch in "@+"):
         return None
-    # 「牛牛 + 文本」这类聊天触发不应视作命令。
-    if head == "牛牛" and ("文本" in raw or raw == "牛牛"):
+    # 裸「牛牛」不当命令前缀（避免抢走「牛牛 xxx」闲聊）
+    if head == "牛牛" and (raw == "牛牛" or "文本" in raw):
         return None
     return head if len(head) >= 2 else None
 
