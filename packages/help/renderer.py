@@ -348,8 +348,6 @@ async def send_plugin_menu_image(
     show_ignored: bool,
     matcher: Matcher,
     group_id: int | None = None,
-    page: int = 1,
-    total_pages: int = 1,
     total_plugin_count: int | None = None,
     total_enabled_count: int | None = None,
 ) -> None:
@@ -357,8 +355,6 @@ async def send_plugin_menu_image(
         menu_rows,
         show_ignored=show_ignored,
         group_id=group_id,
-        page=page,
-        total_pages=total_pages,
         total_plugin_count=total_plugin_count,
         total_enabled_count=total_enabled_count,
     )
@@ -369,15 +365,13 @@ def menu_image_cache_key(
     menu_rows: list,
     *,
     show_ignored: bool,
-    page: int,
-    total_pages: int,
     total_plugin_count: int,
 ) -> str:
     row_parts = [
         f"{row.index}:{row.display_name}:{int(row.enabled)}:{getattr(row, 'help_tag', '')}" for row in menu_rows
     ]
     parts = [
-        f"menu_v4|ignored={int(show_ignored)}|page={page}/{total_pages}|total={total_plugin_count}",
+        f"menu_v4|ignored={int(show_ignored)}|total={total_plugin_count}",
         f"suffix={_help_image_cache_suffix()}",
         *row_parts,
     ]
@@ -389,8 +383,6 @@ async def render_plugin_menu_to_image(
     *,
     show_ignored: bool,
     group_id: int | None = None,
-    page: int = 1,
-    total_pages: int = 1,
     total_plugin_count: int | None = None,
     total_enabled_count: int | None = None,
 ) -> bytes:
@@ -403,15 +395,11 @@ async def render_plugin_menu_to_image(
     cache_key = menu_image_cache_key(
         menu_rows,
         show_ignored=show_ignored,
-        page=page,
-        total_pages=total_pages,
         total_plugin_count=total_count,
     )
     image = draw_plugin_menu_image(
         menu_rows,
         show_ignored=show_ignored,
-        page=page,
-        total_pages=total_pages,
         total_plugin_count=total_count,
         total_enabled_count=enabled_count,
     )

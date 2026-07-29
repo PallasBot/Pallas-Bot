@@ -44,10 +44,10 @@ def _group_cards_height(groups: list[tuple[str, list[HelpMenuRow]]]) -> int:
     return total
 
 
-def _layout_height(groups: list[tuple[str, list[HelpMenuRow]]], *, total_pages: int) -> int:
+def _layout_height(groups: list[tuple[str, list[HelpMenuRow]]]) -> int:
     chrome = ht.PAGE_HEADER_H + ht.PAGE_META_H + ht.PAGE_CHROME_GAP
     cards_h = _group_cards_height(groups) or ht.MENU_CARD_H
-    footer = ht.PAGE_FOOTER_H + (20 if total_pages > 1 else 0) + ht.PAGE_CHROME_GAP
+    footer = ht.PAGE_FOOTER_H + ht.PAGE_CHROME_GAP
     return chrome + cards_h + footer + ht.MENU_PAD * 2
 
 
@@ -55,13 +55,11 @@ def draw_plugin_menu_image(
     menu_rows: list[HelpMenuRow],
     *,
     show_ignored: bool = False,
-    page: int = 1,
-    total_pages: int = 1,
     total_plugin_count: int | None = None,
     total_enabled_count: int | None = None,
 ) -> Image.Image:
     groups = group_rows_by_help_tag(menu_rows, tag_of=lambda r: r.help_tag)
-    height = _layout_height(groups, total_pages=total_pages)
+    height = _layout_height(groups)
     hc = new_canvas(height)
     draw, x1, y1, x2, y2 = hc.draw, hc.x1, hc.y1, hc.x2, hc.y2
     u = hc.u
@@ -72,13 +70,9 @@ def draw_plugin_menu_image(
         total_enabled_count if total_enabled_count is not None else sum(1 for row in menu_rows if row.enabled)
     )
     right = f"共 {total_count} 个 · 启用 {enabled_count}"
-    if total_pages > 1:
-        right += f" · {page}/{total_pages} 页"
 
     cursor_y = draw_page_header_band(draw, x1=x1, y1=y1, x2=x2, title=title, right=right, scale=hc.scale)
     meta = "牛牛帮助 + 序号/插件名 → 功能；开关：牛牛开启/关闭 + 插件名"
-    if total_pages > 1:
-        meta += " · 翻页：牛牛帮助 2页"
     if show_ignored:
         meta += " · 超管视图"
     cursor_y = draw_page_meta_strip(draw, x1=x1, y=cursor_y, x2=x2, text=meta, scale=hc.scale)
@@ -126,9 +120,6 @@ def draw_plugin_menu_image(
         cursor_y += panel_h
 
     footer = "发 牛牛帮助 + 插件名 查看功能 · 任意层级发 牛牛帮助 回总览"
-    if total_pages > 1:
-        next_page = page + 1 if page < total_pages else 1
-        footer = f"第 {page}/{total_pages} 页 · 牛牛帮助 {next_page}页 · {footer}"
     draw_page_footer_bar(draw, x1=x1, y2=y2, x2=x2, text=footer, scale=hc.scale)
 
     return hc.finish()

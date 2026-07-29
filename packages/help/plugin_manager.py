@@ -24,6 +24,7 @@ from .group_fleet_whitelist import (
     resolve_group_fleet_whitelist_plugins,
     sync_group_fleet_whitelist_remote_generation,
 )
+from .help_tags import help_tag_sort_rank, resolve_help_tag_overrides, resolve_plugin_help_tag
 from .plugin_availability import is_plugin_help_available
 from .plugin_legacy_names import is_plugin_name_in_set
 from .plugin_match import find_matching_plugins
@@ -96,7 +97,13 @@ def get_help_menu_plugins(
             continue
         seen_canonical.add(key)
         deduped.append(p)
-    return sorted(deduped, key=plugin_display_name)
+    tag_overrides = resolve_help_tag_overrides()
+
+    def menu_sort_key(plugin: Any) -> tuple:
+        tag = resolve_plugin_help_tag(plugin, overrides=tag_overrides)
+        return (*help_tag_sort_rank(tag), plugin_display_name(plugin))
+
+    return sorted(deduped, key=menu_sort_key)
 
 
 def clear_help_cache(group_id: int | None = None):

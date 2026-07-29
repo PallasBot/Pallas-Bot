@@ -2,9 +2,9 @@ from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, PrivateMessageEv
 from nonebot.permission import SUPERUSER
 from nonebot.typing import T_State
 
-from .help_args import parse_help_args, parse_help_page_token
+from .help_args import parse_help_args
 from .markdown_generator import HelpMarkdownIssue
-from .menu_rows import build_help_menu_rows, paginate_menu_rows
+from .menu_rows import build_help_menu_rows
 from .plugin_detail_data import (
     build_function_detail_data,
     build_plugin_detail_data,
@@ -65,44 +65,16 @@ async def handle_help_command(
             group_id=group_id,
             show_ignored=show_ignored,
         )
-        page_rows, page, total_pages = paginate_menu_rows(all_rows, page=1)
         enabled_count = sum(1 for row in all_rows if row.enabled)
         await send_plugin_menu_image(
-            page_rows,
+            all_rows,
             show_ignored=show_ignored,
             matcher=matcher,
             group_id=group_id,
-            page=page,
-            total_pages=total_pages,
             total_plugin_count=len(all_rows),
             total_enabled_count=enabled_count,
         )
         return
-
-    if len(args) == 1:
-        page_token = parse_help_page_token(args[0])
-        if page_token is not None:
-            all_rows = await build_help_menu_rows(
-                bot_id=bot_id,
-                group_id=group_id,
-                show_ignored=show_ignored,
-            )
-            page_rows, page, total_pages = paginate_menu_rows(all_rows, page=page_token)
-            if page_token > total_pages:
-                await matcher.finish(f"博士，帮助总览只有 {total_pages} 页哦")
-                return
-            enabled_count = sum(1 for row in all_rows if row.enabled)
-            await send_plugin_menu_image(
-                page_rows,
-                show_ignored=show_ignored,
-                matcher=matcher,
-                group_id=group_id,
-                page=page,
-                total_pages=total_pages,
-                total_plugin_count=len(all_rows),
-                total_enabled_count=enabled_count,
-            )
-            return
 
     plugin_identifier = args[0]
     ignored_plugins = None if show_ignored else (plugin_config.ignored_plugins if plugin_config else [])
