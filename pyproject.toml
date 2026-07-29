@@ -37,6 +37,8 @@ dependencies = [
     # 4.0 默认 PostgreSQL；Mongo 站点仍可用 beanie，多装这两项无害
     "sqlalchemy[asyncio]>=2.0",
     "asyncpg>=0.29",
+    # 多机协同 coord / 分片 claim；新装默认需要，勿再藏进 optional
+    "redis>=5.2,<6",
 ]
 
 [project.optional-dependencies]
@@ -45,17 +47,12 @@ perf = [
 ]
 # 兼容旧文档/脚本的 `uv sync --extra pg`；驱动已在主依赖
 pg = []
-coord-redis = [
-    "redis>=5.2,<6",
-]
+# 兼容旧文档/脚本；redis 已在主依赖
+coord-redis = []
 shard = []
-deploy-shard = [
-    "redis>=5.2,<6",
-]
-# 兼容旧构建参数；PG 驱动已在主依赖，此处仅 Redis
-deploy-shard-pg = [
-    "redis>=5.2,<6",
-]
+deploy-shard = []
+# 兼容旧构建参数；PG / Redis 均已在主依赖
+deploy-shard-pg = []
 
 [project.scripts]
 pallas = "pallas.console.cli.main:main"

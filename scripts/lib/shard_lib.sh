@@ -110,7 +110,7 @@ require_coord_redis_for_shard_start() {
   fi
   if [[ "${reachable}" != "yes" ]]; then
     if [[ "${pkg}" == "no" ]]; then
-      echo "  错误       Redis 客户端未安装，请执行: uv sync --extra coord-redis" >&2
+      echo "  错误       Redis 客户端未安装，请执行: uv sync（redis 已在主依赖）" >&2
     else
       echo "  错误       Redis 不可达: ${url}" >&2
       echo "  提示       请确认 Redis 服务已启动并可 ping 通" >&2
@@ -170,7 +170,7 @@ print_redis_status_block() {
   echo "    策略     ${policy}"
   echo "    地址     ${url}"
   if [[ "${pkg}" == "no" ]]; then
-    echo "    客户端   未安装（uv sync --extra coord-redis）"
+    echo "    客户端   未安装（请 uv sync；redis 已在主依赖）"
   else
     echo "    客户端   已安装"
   fi

@@ -34,7 +34,7 @@ uv run pallas restart
 ### 依赖同步
 
 ```bash
-uv run pallas sync --extra coord-redis
+uv run pallas sync              # 包装 uv sync（redis 已在主依赖）
 ```
 
 ### 启停
