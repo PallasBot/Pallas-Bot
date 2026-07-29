@@ -8,7 +8,9 @@ from typing import Any
 from pallas.core.foundation.db import make_bot_config_repository
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal, wrap_stats_block
 
-DEFAULT_SELF_ALIASES: tuple[str, ...] = ("牛牛", "帕拉斯", "Pallas")
+DEFAULT_GENERIC_ALIASES: tuple[str, ...] = ("牛牛",)
+# 兼容旧引用；默认全员通称不再广播「帕拉斯」「Pallas」。
+DEFAULT_SELF_ALIASES: tuple[str, ...] = DEFAULT_GENERIC_ALIASES
 
 _SELF_ALIAS_TEACH_RE = re.compile(
     r"^(?:记住[：:]?\s*)?"
@@ -66,11 +68,13 @@ _ALIAS_BLOCKLIST = frozenset({
 
 # 别名若命中这些子串，视为问句/脏话碎片
 _ALIAS_BAD_SUBSTR = ("哪只", "什么牛", "傻逼", "吗", "谁啊", "咋了", "干嘛")
+_ALIAS_BLOCKLIST_CASEFOLDS = frozenset(item.casefold() for item in _ALIAS_BLOCKLIST)
+_DEFAULT_GENERIC_ALIAS_CASEFOLDS = frozenset(item.casefold() for item in DEFAULT_GENERIC_ALIASES)
 
 
 def _safe_alias(raw: str) -> str | None:
     safe = sanitize_prompt_literal(str(raw or "").strip(), max_len=16)
-    if not safe or safe.casefold() in {item.casefold() for item in _ALIAS_BLOCKLIST}:
+    if not safe or safe.casefold() in _ALIAS_BLOCKLIST_CASEFOLDS:
         return None
     if len(safe) < 2:
         return None
@@ -81,30 +85,47 @@ def _safe_alias(raw: str) -> str | None:
     return safe
 
 
-def extract_self_aliases(
+def shorten_niu_niu_compound_alias(raw: str) -> str | None:
+    text = _safe_alias(raw) or ""
+    if not text or text == "牛牛":
+        return None
+    if text.startswith("牛牛") and len(text) > 2:
+        return _safe_alias(text[2:])
+    if text.endswith("牛牛") and len(text) > 2:
+        return _safe_alias(text[:-2])
+    return None
+
+
+def _append_alias(aliases: list[str], seen: set[str], raw: str) -> None:
+    text = _safe_alias(raw)
+    if not text or text.casefold() in seen:
+        return
+    seen.add(text.casefold())
+    aliases.append(text)
+
+
+def _append_exclusive_alias(aliases: list[str], seen: set[str], raw: str) -> None:
+    text = _safe_alias(raw)
+    if not text or text.casefold() in _DEFAULT_GENERIC_ALIAS_CASEFOLDS:
+        return
+    _append_alias(aliases, seen, text)
+    shortened = shorten_niu_niu_compound_alias(text)
+    if shortened and shortened.casefold() not in _DEFAULT_GENERIC_ALIAS_CASEFOLDS:
+        _append_alias(aliases, seen, shortened)
+
+
+def extract_generic_self_aliases() -> list[str]:
+    return list(DEFAULT_GENERIC_ALIASES)
+
+
+def extract_exclusive_self_aliases(
     bot_persona: dict[str, Any] | None,
     *,
     login_nickname: str | None = None,
 ) -> list[str]:
     aliases: list[str] = []
     seen: set[str] = set()
-
-    def add(raw: str, *, learned: bool = False) -> None:
-        text = _safe_alias(raw) if learned else sanitize_prompt_literal(str(raw or "").strip(), max_len=16)
-        if not text or text.casefold() in seen:
-            return
-        if not learned and text.casefold() in {item.casefold() for item in _ALIAS_BLOCKLIST}:
-            return
-        if learned and _safe_alias(text) is None:
-            return
-        seen.add(text.casefold())
-        aliases.append(text)
-
-    login = _safe_alias(str(login_nickname or ""))
-    if login:
-        add(login)
-    for item in DEFAULT_SELF_ALIASES:
-        add(item)
+    _append_exclusive_alias(aliases, seen, str(login_nickname or ""))
     if not isinstance(bot_persona, dict):
         return aliases
     raw = bot_persona.get("self_aliases")
@@ -113,7 +134,36 @@ def extract_self_aliases(
     if not isinstance(raw, list):
         return aliases
     for item in raw:
-        add(str(item or ""), learned=True)
+        _append_exclusive_alias(aliases, seen, str(item or ""))
+    return aliases
+
+
+def extract_raw_learned_self_aliases(bot_persona: dict[str, Any] | None) -> list[str]:
+    aliases: list[str] = []
+    seen: set[str] = set()
+    if not isinstance(bot_persona, dict):
+        return aliases
+    raw = bot_persona.get("self_aliases")
+    if raw is None:
+        raw = bot_persona.get("alias_names")
+    if not isinstance(raw, list):
+        return aliases
+    for item in raw:
+        _append_alias(aliases, seen, str(item or ""))
+    return aliases
+
+
+def extract_self_aliases(
+    bot_persona: dict[str, Any] | None,
+    *,
+    login_nickname: str | None = None,
+) -> list[str]:
+    aliases: list[str] = []
+    seen: set[str] = set()
+    for item in extract_exclusive_self_aliases(bot_persona, login_nickname=login_nickname):
+        _append_alias(aliases, seen, item)
+    for item in extract_generic_self_aliases():
+        _append_alias(aliases, seen, item)
     return aliases
 
 
@@ -122,18 +172,20 @@ def compile_self_identity_prompt(
     *,
     login_nickname: str | None = None,
 ) -> str:
-    aliases = extract_self_aliases(bot_persona, login_nickname=login_nickname)
-    alias_text = "、".join(aliases[:6])
-    primary_alias = aliases[0] if aliases else "牛牛"
-    login = _safe_alias(str(login_nickname or ""))
-    if login and login != "牛牛":
-        call_line = f"- 群友常叫你「{primary_alias}」等（含「牛牛」）——这些称呼指你本人。"
+    generic_aliases = extract_generic_self_aliases()
+    exclusive_aliases = extract_exclusive_self_aliases(bot_persona, login_nickname=login_nickname)
+    generic_text = "、".join(generic_aliases[:4]) or "牛牛"
+    exclusive_text = "、".join(exclusive_aliases[:6])
+    primary_alias = exclusive_aliases[0] if exclusive_aliases else (generic_aliases[0] if generic_aliases else "牛牛")
+    if exclusive_aliases:
+        call_line = f"- 群友会用通称「{generic_text}」叫你；若喊专属称呼如「{primary_alias}」等，也是在叫你本人。"
     else:
-        call_line = f"- 群友常叫你「{primary_alias}」等——这些称呼指你本人。"
+        call_line = f"- 群友常用通称「{generic_text}」叫你——这些称呼默认都在跟你说话。"
     body = "\n".join([
         "【自称与群称呼】",
         call_line,
-        f"- 常见称呼：{alias_text}。",
+        f"- 通称：{generic_text}。",
+        f"- 专属称呼：{exclusive_text}。" if exclusive_text else "- 当前没有额外专属称呼；学到后也应视为在喊你。",
         "- 有人 @ 你或在句中喊上述名字时，默认是在跟你说话；用第一人称接话，不要当成第三者在聊。",
         "- 禁止把「牛牛」当外人夸奖（错误：「牛牛真棒」）；应理解成在说你，"
         "用「谢谢」「收到」等第一人称回应，勿用「还行吧」「行行行」起手。",
@@ -147,15 +199,25 @@ def compile_repeater_self_identity_prompt(
     *,
     login_nickname: str | None = None,
 ) -> str:
-    aliases = extract_self_aliases(bot_persona, login_nickname=login_nickname)
-    primary_alias = aliases[0] if aliases else "牛牛"
-    if primary_alias == "牛牛":
-        call_line = "- 群友喊「牛牛」等时是在跟你说话；用第一人称接，别把称呼当第三者在聊。"
+    generic_aliases = extract_generic_self_aliases()
+    exclusive_aliases = extract_exclusive_self_aliases(bot_persona, login_nickname=login_nickname)
+    generic_text = "、".join(generic_aliases[:4]) or "牛牛"
+    primary_alias = exclusive_aliases[0] if exclusive_aliases else (generic_aliases[0] if generic_aliases else "牛牛")
+    if not exclusive_aliases:
+        call_line = f"- 群友喊「{generic_text}」等时是在跟你说话；用第一人称接，别把称呼当第三者在聊。"
     else:
-        call_line = f"- 群友喊「{primary_alias}」或「牛牛」等时是在跟你说话；用第一人称接，别把称呼当第三者在聊。"
+        call_line = (
+            f"- 群友喊通称「{generic_text}」或专属称呼「{primary_alias}」等时，"
+            "都可能是在跟你说话；用第一人称接，别把称呼当第三者在聊。"
+        )
     body = "\n".join([
         "【群称呼】",
         call_line,
+        (
+            f"- 你的专属称呼：{'、'.join(exclusive_aliases[:6])}。"
+            if exclusive_aliases
+            else f"- 当前只使用通称「{generic_text}」。"
+        ),
         "- 日常接话不必自我介绍帕拉斯或罗德岛，像群友顺口回一句即可。",
     ])
     return wrap_stats_block("self_identity", body)
@@ -247,7 +309,7 @@ async def merge_self_aliases(bot_id: int, aliases: list[str]) -> bool:
     persona: dict[str, Any] = {}
     if doc is not None and isinstance(getattr(doc, "persona", None), dict):
         persona = dict(doc.persona)
-    merged = extract_self_aliases(persona)
+    merged = extract_raw_learned_self_aliases(persona)
     seen = {item.casefold() for item in merged}
     changed = False
     for alias in cleaned:
@@ -256,7 +318,7 @@ async def merge_self_aliases(bot_id: int, aliases: list[str]) -> bool:
         seen.add(alias.casefold())
         merged.append(alias)
         changed = True
-    stored = [item for item in merged if item not in DEFAULT_SELF_ALIASES][:8]
+    stored = [item for item in merged if item.casefold() not in _DEFAULT_GENERIC_ALIAS_CASEFOLDS][:8]
     try:
         from pallas.core.platform.ingress.alias_route import remember_learned_self_aliases
 

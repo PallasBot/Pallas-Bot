@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pallas.product.persona.self_identity import (
+    DEFAULT_GENERIC_ALIASES,
     compile_repeater_self_identity_prompt,
     compile_self_identity_prompt,
     extract_self_aliases,
@@ -13,7 +14,20 @@ def test_extract_self_aliases_login_nickname_primary_keeps_niu_niu() -> None:
     aliases = extract_self_aliases(None, login_nickname="小牛")
     assert aliases[0] == "小牛"
     assert "牛牛" in aliases
+
+
+def test_default_generic_aliases_are_niu_niu_only() -> None:
+    assert DEFAULT_GENERIC_ALIASES == ("牛牛",)
+    aliases = extract_self_aliases(None)
+    assert aliases[0] == "牛牛"
+    assert "帕拉斯" not in aliases
+    assert "Pallas" not in aliases
+
+
+def test_login_pallas_keeps_exclusive_pallas() -> None:
+    aliases = extract_self_aliases(None, login_nickname="帕拉斯")
     assert "帕拉斯" in aliases
+    assert "牛牛" in aliases
 
 
 def test_extract_self_aliases_without_login_keeps_default_primary() -> None:
@@ -32,16 +46,35 @@ def test_extract_self_aliases_merges_learned_after_defaults() -> None:
     assert aliases[0] == "小牛"
     assert "牛牛" in aliases
     assert "阿帕" in aliases
-    assert aliases.index("小牛") < aliases.index("牛牛") < aliases.index("阿帕")
+    assert aliases.index("小牛") < aliases.index("阿帕") < aliases.index("牛牛")
 
 
 def test_compile_self_identity_prompt_uses_login_as_primary() -> None:
     prompt = compile_self_identity_prompt(login_nickname="小牛")
     assert "「小牛」" in prompt
     assert "牛牛" in prompt
+    assert "通称" in prompt
+    assert "专属" in prompt
+    assert "通称：牛牛" in prompt
+    assert "专属称呼：小牛" in prompt
 
 
 def test_compile_repeater_self_identity_prompt_uses_login_as_primary() -> None:
     prompt = compile_repeater_self_identity_prompt(login_nickname="小牛")
     assert "「小牛」" in prompt
     assert "牛牛" in prompt or "等" in prompt
+    assert "通称" in prompt
+    assert "专属称呼" in prompt
+    assert "小牛" in prompt
+
+
+def test_compile_repeater_self_identity_prompt_uses_generic_text_without_exclusive(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "pallas.product.persona.self_identity.extract_generic_self_aliases",
+        lambda: ["测试牛"],
+    )
+    prompt = compile_repeater_self_identity_prompt()
+    assert "测试牛" in prompt
+    assert "牛牛" not in prompt
