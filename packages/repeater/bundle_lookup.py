@@ -10,6 +10,8 @@ from nonebot import logger
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 from pallas.core.foundation.db.pool_budget import is_pg_pool_timeout_error
 
+from .bundle_cache import get_cached_reply_bundle, store_cached_reply_bundle
+
 if TYPE_CHECKING:
     from .model import Chat
 
@@ -26,16 +28,27 @@ def repeater_bundle_timeout_sec() -> float:
 
 
 async def find_reply_bundle_bounded(chat: Chat) -> Any | None:
+    data = chat.chat_data
+    cached = get_cached_reply_bundle(
+        int(data.group_id),
+        int(data.bot_id),
+        str(data.raw_message or ""),
+        str(getattr(data, "keywords", "") or ""),
+    )
+    if cached is not None:
+        return cached
+
     timeout = repeater_bundle_timeout_sec()
     try:
         if timeout <= 0:
-            return await chat.find_reply_bundle()
-        return await asyncio.wait_for(chat.find_reply_bundle(), timeout=timeout)
+            bundle = await chat.find_reply_bundle()
+        else:
+            bundle = await asyncio.wait_for(chat.find_reply_bundle(), timeout=timeout)
     except TimeoutError:
         logger.debug(
             "repeater.find_reply_bundle timeout bot={} group={} limit_sec={}",
-            getattr(chat.chat_data, "bot_id", 0),
-            getattr(chat.chat_data, "group_id", 0),
+            getattr(data, "bot_id", 0),
+            getattr(data, "group_id", 0),
             timeout,
         )
         return None
@@ -43,14 +56,24 @@ async def find_reply_bundle_bounded(chat: Chat) -> Any | None:
         if is_pg_pool_timeout_error(exc):
             logger.debug(
                 "repeater.find_reply_bundle db_timeout bot={} group={}",
-                getattr(chat.chat_data, "bot_id", 0),
-                getattr(chat.chat_data, "group_id", 0),
+                getattr(data, "bot_id", 0),
+                getattr(data, "group_id", 0),
             )
         else:
             logger.debug(
                 "repeater.find_reply_bundle failed bot={} group={}: {}",
-                getattr(chat.chat_data, "bot_id", 0),
-                getattr(chat.chat_data, "group_id", 0),
+                getattr(data, "bot_id", 0),
+                getattr(data, "group_id", 0),
                 exc,
             )
         return None
+
+    if bundle is not None:
+        store_cached_reply_bundle(
+            int(data.group_id),
+            int(data.bot_id),
+            str(data.raw_message or ""),
+            str(getattr(data, "keywords", "") or ""),
+            bundle,
+        )
+    return bundle

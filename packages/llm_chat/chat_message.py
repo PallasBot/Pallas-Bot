@@ -207,6 +207,45 @@ async def build_llm_chat_corpus_ending_hint(
 ) -> str:
     if group_id is None:
         return ""
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+
+    raw_timeout = repo_env_raw_value("PALLAS_LLM_CORPUS_ENDING_HINT_TIMEOUT_SEC")
+    try:
+        timeout = 0.35 if raw_timeout is None else max(0.0, float(str(raw_timeout).strip()))
+    except ValueError:
+        timeout = 0.35
+    if timeout <= 0:
+        return await _build_llm_chat_corpus_ending_hint_uncapped(
+            group_id,
+            text,
+            bot_id=bot_id,
+            current_user_id=current_user_id,
+        )
+    try:
+        import asyncio
+
+        return await asyncio.wait_for(
+            _build_llm_chat_corpus_ending_hint_uncapped(
+                group_id,
+                text,
+                bot_id=bot_id,
+                current_user_id=current_user_id,
+            ),
+            timeout=timeout,
+        )
+    except TimeoutError:
+        return ""
+
+
+async def _build_llm_chat_corpus_ending_hint_uncapped(
+    group_id: int | None,
+    text: str = "",
+    *,
+    bot_id: int | None = None,
+    current_user_id: int | None = None,
+) -> str:
+    if group_id is None:
+        return ""
     recent_rows = await load_recent_live_expression_rows(
         int(group_id),
         text,
@@ -318,7 +357,28 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 max_total_seconds=followup_max_total,
             )
         )
+        from pallas.product.llm.ambient_turn_window import note_ambient_turn_and_should_flush
+        from pallas.product.llm.speak_perception import text_mentions_aliases
+
         speak_aliases = await _resolve_speak_aliases(bot_id)
+        mention_force = bool(
+            llm_cfg.llm_speak_mention_enabled
+            and text_mentions_aliases(
+                plain or msg,
+                speak_aliases,
+                min_alias_len=llm_cfg.llm_speak_min_alias_len,
+            )
+        )
+        should_eval, _merged = note_ambient_turn_and_should_flush(
+            bot_id=bot_id,
+            group_id=group_id,
+            user_id=user_id,
+            text=plain or msg,
+            force=followup_active or mention_force,
+        )
+        if not should_eval:
+            record_bot_llm_task(LLM_CHAT_TASK_TYPE, "ambient_turn_coalesce")
+            return
         decision = evaluate_speak_perception(
             plain_text=plain or msg,
             aliases=speak_aliases,

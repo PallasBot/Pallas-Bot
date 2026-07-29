@@ -32,6 +32,7 @@ __plugin_meta__ = PluginMetadata(
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "reload_policy": "metadata",
+        "ingress_route": {"passive": True},
         "command_permissions": command_perm_list(
             command_perm_row("greeting.set_friend_welcome", "设置好友欢迎", "bot_moderator"),
             command_perm_row("greeting.clear_friend_welcome", "清除好友欢迎", "bot_moderator"),

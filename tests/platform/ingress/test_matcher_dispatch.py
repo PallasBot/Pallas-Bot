@@ -31,7 +31,9 @@ def test_matcher_is_command_only():
     assert activation.matcher_is_command_only(_EmptyMatcher) is False
 
 
-def test_select_priority_matchers_skips_commands_on_chatter():
+def test_select_priority_matchers_skips_commands_on_chatter(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(activation, "chat_matcher_strict_enabled", lambda: False)
+    monkeypatch.setattr(activation, "route_index_enabled", lambda: False)
     selected = activation.select_priority_matchers(
         [_CommandMatcher, _PassiveMatcher, _EmptyMatcher],
         command_traffic=False,
@@ -39,6 +41,40 @@ def test_select_priority_matchers_skips_commands_on_chatter():
     assert _CommandMatcher not in selected
     assert _PassiveMatcher in selected
     assert _EmptyMatcher in selected
+
+
+def test_select_priority_matchers_strict_chat_keeps_passive_only(monkeypatch: pytest.MonkeyPatch):
+    from pallas.core.platform.ingress import route_index
+
+    class RepeaterMatcher:
+        plugin_name = "packages.repeater"
+        rule = Rule()
+
+    class RandomMatcher:
+        plugin_name = "packages.unknown_plugin"
+        rule = Rule()
+
+    snapshot = route_index.RouteIndexSnapshot(
+        prefix_to_modules={},
+        exact_to_modules={},
+        regex_entries=(),
+        always_run_modules=frozenset(),
+        passive_modules=frozenset({"repeater"}),
+        indexed_modules=frozenset(),
+    )
+    monkeypatch.setattr(activation, "route_index_enabled", lambda: True)
+    monkeypatch.setattr(activation, "chat_matcher_strict_enabled", lambda: True)
+    monkeypatch.setattr(activation, "get_route_index", lambda: snapshot)
+    monkeypatch.setattr(activation, "resolve_route_for_event", lambda _e: None)
+    resolution = route_index.RouteResolution(frozenset(), False)
+    selected = activation.select_priority_matchers(
+        [RepeaterMatcher, RandomMatcher, _CommandMatcher],
+        command_traffic=False,
+        resolution=resolution,
+    )
+    assert RepeaterMatcher in selected
+    assert RandomMatcher not in selected
+    assert _CommandMatcher not in selected
 
 
 def test_select_priority_matchers_keeps_all_on_command_traffic():

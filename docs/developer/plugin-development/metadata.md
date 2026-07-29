@@ -64,6 +64,22 @@ llm_command_tool_row(
 
 `media` 会透传非 bot 的 @、图片与用户显式写出的「自己」；若原消息没有这些素材，则补「自己」供生成类插件使用。
 
+## `ingress_route`
+
+可选。声明该插件在入站预筛里的车道与是否吃闲聊：
+
+```python
+extra={
+    "ingress_route": {
+        "lane": "storage",   # 可选：command / chat / storage / remote 等调度档
+        "passive": True,     # 闲聊严格模式下仍会激活（复读、智能对话、局内玩法等）
+        "always_run": False, # 极少用：几乎每条群消息都激活
+    },
+}
+```
+
+热群默认开启闲聊严格预筛（`PALLAS_CHAT_MATCHER_STRICT`）：非口令消息主要只跑 `passive` / `always_run` 与路由命中的模块。需要被动听群聊的插件应设 `passive: true`，否则可能收不到闲聊事件。用户向说明见 [语料联邦 · 热闹群与入站设计](/common/corpus#热闹群与入站设计行为说明)。
+
 ## `reload_policy`
 
 类型：`Literal["config_only", "metadata", "full"]`（`pallas.core.plugin_reload.metadata.ReloadPolicy`）。默认 `config_only`。
