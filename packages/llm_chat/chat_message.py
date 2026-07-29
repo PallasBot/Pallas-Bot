@@ -289,20 +289,12 @@ def build_blocked_motifs(
             if plain and "[CQ:" not in plain:
                 group_texts.append(plain)
             continue
-        plain = str(
-            row.get("text", "") if isinstance(row, dict) else getattr(row, "text", "")
-        ).strip()
+        plain = str(row.get("text", "") if isinstance(row, dict) else getattr(row, "text", "")).strip()
         if not plain or "[CQ:" in plain:
             continue
-        role = str(
-            row.get("role", "") if isinstance(row, dict) else getattr(row, "role", "")
-        ).strip()
-        row_user_id = int(
-            row.get("user_id", 0) if isinstance(row, dict) else getattr(row, "user_id", 0) or 0
-        )
-        row_bot_id = int(
-            row.get("bot_id", 0) if isinstance(row, dict) else getattr(row, "bot_id", 0) or 0
-        )
+        role = str(row.get("role", "") if isinstance(row, dict) else getattr(row, "role", "")).strip()
+        row_user_id = int(row.get("user_id", 0) if isinstance(row, dict) else getattr(row, "user_id", 0) or 0)
+        row_bot_id = int(row.get("bot_id", 0) if isinstance(row, dict) else getattr(row, "bot_id", 0) or 0)
         if role == "assistant" or row_user_id == target_bot_id or row_bot_id == target_bot_id:
             group_texts.append(plain)
     motifs = extract_recent_motifs(group_texts)
