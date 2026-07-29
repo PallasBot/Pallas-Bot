@@ -57,6 +57,7 @@ def test_owner_ring_filters_to_deployments_that_advertise_command(monkeypatch):
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
     monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
     monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
     monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset({"牛牛塔罗牌"}))
     mod._cache_deployment_ids = frozenset({"dep-peer"})
     mod._cache_deployment_capabilities = {
@@ -74,6 +75,7 @@ def test_owner_ring_keeps_legacy_peer_without_capabilities_field(monkeypatch):
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-b")
     monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
     monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
     monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset({"牛牛塔罗牌"}))
     mod._cache_deployment_ids = frozenset({"dep-a", "dep-c"})
     mod._cache_deployment_capabilities = {
@@ -90,6 +92,7 @@ def test_should_process_federate_group_on_current_deployment_uses_sorted_owner_r
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-b")
     monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
     monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
     mod._cache_deployment_ids = frozenset({"dep-a", "dep-c"})
 
     assert mod.federate_group_owner_deployment(123) == "dep-a"
@@ -107,6 +110,7 @@ def test_federate_group_owner_rotates_across_epochs(monkeypatch):
     mod.clear_federate_peer_bot_cache_for_tests()
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-a")
     monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 43200)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
     mod._cache_deployment_ids = frozenset({"dep-b"})
 
     flipped = False
@@ -120,4 +124,42 @@ def test_federate_group_owner_rotates_across_epochs(monkeypatch):
     assert mod.federate_group_owner_deployment(42, now=0.0) in {"dep-a", "dep-b"}
 
 
+def test_prefer_local_owner_keeps_capable_local_as_owner(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛帮助"}),
+    )
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {
+        "dep-peer": frozenset({"牛牛帮助"}),
+    }
 
+    # 无优先时按群号可能落到 peer；开启后本机在环内则固定本机
+    assert mod.federate_group_owner_deployment(123, plain="牛牛帮助") == "dep-local"
+    assert mod.should_process_federate_group_on_current_deployment(123, plain="牛牛帮助") is True
+
+
+def test_prefer_local_owner_does_not_steal_incapable_commands(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛帮助"}),
+    )
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {
+        "dep-peer": frozenset({"牛牛塔罗牌"}),
+    }
+
+    assert mod.federate_group_owner_deployment(733291779, plain="牛牛塔罗牌") == "dep-peer"
+    assert mod.should_process_federate_group_on_current_deployment(733291779, plain="牛牛塔罗牌") is False

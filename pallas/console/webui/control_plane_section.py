@@ -36,6 +36,7 @@ _FIELD_TO_ENV: dict[str, str] = {
     "federate_redis_prefix": "PALLAS_FEDERATE_REDIS_PREFIX",
     "coord_redis_url": "PALLAS_FEDERATE_COORD_REDIS_URL",
     "claim_ttl_sec": "PALLAS_FEDERATE_CLAIM_TTL_SEC",
+    "prefer_local_owner": "PALLAS_FEDERATE_PREFER_LOCAL_OWNER",
 }
 
 _FIELD_ORDER: tuple[str, ...] = (
@@ -44,6 +45,7 @@ _FIELD_ORDER: tuple[str, ...] = (
     "bootstrap_url",
     "federate_id",
     "federate_ingress_enabled",
+    "prefer_local_owner",
     "ingress_bypass_unified",
     "coord_redis_url",
     "federate_redis_prefix",
@@ -127,6 +129,14 @@ def _field_row(key: str, cur: Any) -> dict[str, Any]:
             "开启后命令响应更快，但不再参与跨机去重",
             "默认关闭；仅本地排障或你明确不需要去重时再开",
         )
+    elif key == "prefer_local_owner":
+        row["kind"] = "bool"
+        row["current"] = bool(cur)
+        row["description"] = field_help(
+            "命令群归属优先本机",
+            "开启后：本机能处理的命令固定由本机当主人，不再与同池其它部署轮换",
+            "本机不会的命令仍按能力环与轮换规则；默认关闭，适合自托管想少抢答时打开",
+        )
     elif key == "coord_redis_url":
         row["description"] = field_help(
             "各套牛牛共用的去重服务器地址",
@@ -172,7 +182,12 @@ def control_plane_payload(*, current_values: dict[str, Any] | None = None) -> di
             {
                 "id": "pool",
                 "title": "协同池与消息去重",
-                "field_names": ["federate_id", "federate_ingress_enabled", "ingress_bypass_unified"],
+                "field_names": [
+                    "federate_id",
+                    "federate_ingress_enabled",
+                    "prefer_local_owner",
+                    "ingress_bypass_unified",
+                ],
             },
             {
                 "id": "redis",
@@ -228,6 +243,11 @@ def apply_control_plane_patch(patch: dict[str, Any]) -> dict[str, Any]:
             patch["ingress_bypass_unified"],
             field_name="ingress_bypass_unified",
         )
+    if "prefer_local_owner" in patch:
+        merged["prefer_local_owner"] = _coerce_bool(
+            patch["prefer_local_owner"],
+            field_name="prefer_local_owner",
+        )
     if "claim_ttl_sec" in patch:
         merged["claim_ttl_sec"] = _coerce_int(patch["claim_ttl_sec"], field_name="claim_ttl_sec", min_v=60)
 
@@ -239,6 +259,7 @@ def apply_control_plane_patch(patch: dict[str, Any]) -> dict[str, Any]:
         federate_id=str(merged.get("federate_id") or ""),
         federate_ingress_enabled=str(merged.get("federate_ingress_enabled") or "auto"),
         ingress_bypass_unified=bool(merged.get("ingress_bypass_unified")),
+        prefer_local_owner=bool(merged.get("prefer_local_owner")),
         federate_redis_prefix=str(merged.get("federate_redis_prefix") or ""),
         coord_redis_url=str(merged.get("coord_redis_url") or ""),
         claim_ttl_sec=int(merged.get("claim_ttl_sec") or 86400),

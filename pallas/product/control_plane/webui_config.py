@@ -87,6 +87,13 @@ class ControlPlaneWebuiConfig(BaseModel):
             "默认 86400（一天）；过期后其他牛可再次响应",
         ),
     )
+    prefer_local_owner: bool = Field(
+        default=False,
+        description=field_help(
+            "命令群归属优先本机",
+            "开启后：本机能处理的命令固定由本机当主人，不再与同池其它部署轮换；本机不会的命令仍按原规则",
+        ),
+    )
 
 
 def repair_misplaced_federate_redis_env() -> bool:
@@ -182,6 +189,11 @@ def get_control_plane_webui_config() -> ControlPlaneWebuiConfig:
         federate_redis_prefix=setting_str("PALLAS_FEDERATE_REDIS_PREFIX"),
         coord_redis_url=resolved_coord_redis_url_for_webui(),
         claim_ttl_sec=resolved_claim_ttl_sec_for_webui(),
+        prefer_local_owner=parse_tristate(
+            setting_str("PALLAS_FEDERATE_PREFER_LOCAL_OWNER", "false"),
+            default=False,
+        )
+        is True,
     )
 
 

@@ -15,6 +15,7 @@ from pallas.core.foundation.command_prefix import matches_command_prefix
 from pallas.core.platform.federate.config import (
     federate_ingress_active,
     federate_owner_rotate_sec,
+    federate_prefer_local_owner,
     federate_redis_prefix,
 )
 from pallas.core.platform.federate.redis_settings import get_federate_redis_client
@@ -260,6 +261,8 @@ def federate_group_owner_deployment(
         return deployment_id
     local_caps = collect_local_federate_command_capabilities()
     ring = _capable_owner_ring(active, mine=deployment_id, plain=plain, local_caps=local_caps)
+    if federate_prefer_local_owner() and deployment_id in ring:
+        return deployment_id
     idx = federate_group_owner_ring_index(int(group_id), len(ring), now=now)
     return ring[idx]
 
