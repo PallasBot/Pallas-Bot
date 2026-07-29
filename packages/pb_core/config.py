@@ -26,6 +26,7 @@ _MESSAGE_SCRUB_FIELDS = frozenset({
     "scrub_baidu_block_suspected",
 })
 _MAIL_FIELDS = frozenset({"smtp_user", "smtp_password", "smtp_server", "smtp_port"})
+_COMMAND_START_FIELDS = frozenset({"command_start"})
 _INGRESS_FANOUT_FIELDS = frozenset({"greeting_fanout_texts"})
 _INGRESS_DISPATCH_FIELDS = frozenset({
     "matcher_dispatch_enabled",
@@ -35,6 +36,7 @@ _INGRESS_DISPATCH_FIELDS = frozenset({
 })
 
 _PB_CORE_SECTION_ORDER: tuple[tuple[str, frozenset[str]], ...] = (
+    ("command_start", _COMMAND_START_FIELDS),
     ("message_scrub", _MESSAGE_SCRUB_FIELDS),
     ("ingress_fanout", _INGRESS_FANOUT_FIELDS),
     ("ingress_dispatch", _INGRESS_DISPATCH_FIELDS),
@@ -129,6 +131,7 @@ def pb_core_webui_payload(*, current_values: dict[str, Any] | None = None) -> di
     fields: list[dict[str, Any]] = []
     field_groups: list[dict[str, Any]] = []
     section_titles = {
+        "command_start": "命令口令",
         "message_scrub": "消息审查",
         "ingress_fanout": "全员同响口令",
         "ingress_dispatch": "消息处理与发送",

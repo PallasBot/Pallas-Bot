@@ -394,6 +394,8 @@ def repo_env_raw_value(key_upper: str) -> str | None:
 
 def apply_repo_settings_to_environ() -> None:
     """在 ``nonebot.init()`` 前调用：将磁盘配置写入 ``os.environ``。"""
+    from pallas.core.foundation.command_start_config import DEFAULT_COMMAND_START_JSON
+
     from .ai_service_env import is_misplaced_ai_env_key
 
     for k, v in merged_repo_settings_upper().items():
@@ -401,6 +403,9 @@ def apply_repo_settings_to_environ() -> None:
             continue
         if k not in os.environ:
             os.environ[k] = v
+    # NoneBot 默认仅 ``{"/"}``；发行缺省带上空前缀，中文口令无需斜杠。
+    if "COMMAND_START" not in os.environ:
+        os.environ["COMMAND_START"] = DEFAULT_COMMAND_START_JSON
 
 
 def _atomic_write_text(path: Path, text: str) -> None:

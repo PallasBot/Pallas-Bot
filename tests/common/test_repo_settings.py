@@ -144,3 +144,29 @@ def test_apply_repo_settings_does_not_override_environ(tmp_path: Path, monkeypat
         assert os.environ["HOST"] == "docker-host"
     finally:
         os.environ.pop("HOST", None)
+
+
+def test_apply_repo_settings_defaults_command_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rs, "repo_config_path", lambda: tmp_path / "missing.toml")
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: tmp_path / "w.json")
+    monkeypatch.setattr(rs, "repo_env_path", lambda: tmp_path / "e.env")
+    monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
+    os.environ.pop("COMMAND_START", None)
+    try:
+        rs.apply_repo_settings_to_environ()
+        assert os.environ["COMMAND_START"] == '["", "/"]'
+    finally:
+        os.environ.pop("COMMAND_START", None)
+
+
+def test_apply_repo_settings_keeps_explicit_command_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rs, "repo_config_path", lambda: tmp_path / "missing.toml")
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: tmp_path / "w.json")
+    monkeypatch.setattr(rs, "repo_env_path", lambda: tmp_path / "e.env")
+    monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
+    os.environ["COMMAND_START"] = '["/"]'
+    try:
+        rs.apply_repo_settings_to_environ()
+        assert os.environ["COMMAND_START"] == '["/"]'
+    finally:
+        os.environ.pop("COMMAND_START", None)

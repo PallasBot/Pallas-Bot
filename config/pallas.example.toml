@@ -30,7 +30,9 @@ db = "PallasBot"
 # extra_plugin_dirs = ["local/plugins"]   # 未配置时，local/plugins 有有效插件包会自动纳入
 # load_bundled_extra_plugins = "auto"      # true | false | auto（默认 auto：pip 未装时用仓库内副本）
 
-# [env]
+[env]
+# 口令前缀：含空串则中文口令无需加 /；仅 ["/"] 时须写 /牛牛…。也可在 WebUI「牛牛核心 → 命令口令」改（须重启）。
+COMMAND_START = '["", "/"]'
 # LLM 聊天：在 WebUI「AI 配置 → 接入」配置 Provider 后开 LLM_CHAT_ENABLED，无需 AI Runtime / 9099。
 # LLM_RUNTIME 已移除；即使遗留配置中存在 ai_service 也会被忽略，不要再设置。
 # LLM_BASE_URL = "http://127.0.0.1:11434/v1"   # 兼容 LLM_REMOTE_BASE_URL

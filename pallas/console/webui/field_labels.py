@@ -21,6 +21,7 @@ FIELD_LABELS: dict[str, str] = {
     "claim_ttl_sec": "去重保留秒数",
     "command_limit_overrides": "命令冷却覆盖",
     "command_permission_overrides": "命令权限覆盖",
+    "command_start": "命令前缀",
     "community_api_base": "共享语料服务地址",
     "community_contribute": "把新学到的回复上传到社区",
     "corpus_backfill_batch_size": "每轮同步条数",
