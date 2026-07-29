@@ -15,7 +15,12 @@ from pallas.product.llm.speak_perception import (
 def test_text_mentions_aliases_login_and_default() -> None:
     aliases = ["漂亮牛", "牛牛", "帕拉斯"]
     assert text_mentions_aliases("漂亮牛出来一下", aliases)
-    assert text_mentions_aliases("臭牛牛出来", aliases)
+    # 纯通称需要边界；复合词里的「牛牛」不再算提及。
+    assert not text_mentions_aliases(
+        "臭牛牛出来",
+        aliases,
+        generic_aliases=["牛牛"],
+    )
     assert text_mentions_aliases("帕拉斯在吗", aliases)
     assert not text_mentions_aliases("今天吃牛肉面", aliases)
     assert not text_mentions_aliases("随便聊聊", aliases)
@@ -28,6 +33,36 @@ def test_text_mentions_aliases_skips_short() -> None:
 def test_text_mentions_aliases_strips_cq_at_noise() -> None:
     aliases = ["牛牛"]
     assert text_mentions_aliases("[CQ:at,qq=123] 牛牛出来", aliases)
+
+
+def test_generic_niu_niu_requires_boundary() -> None:
+    assert not text_mentions_aliases(
+        "漂亮牛牛出来",
+        ["牛牛"],
+        min_alias_len=2,
+        generic_aliases=["牛牛"],
+    )
+    assert not text_mentions_aliases(
+        "牛牛测试机出来",
+        ["牛牛"],
+        min_alias_len=2,
+        generic_aliases=["牛牛"],
+    )
+    assert text_mentions_aliases(
+        "牛牛出来",
+        ["牛牛"],
+        min_alias_len=2,
+        generic_aliases=["牛牛"],
+    )
+
+
+def test_exclusive_long_alias_still_matches_substring() -> None:
+    assert text_mentions_aliases(
+        "叫豆包牛牛一声",
+        ["豆包牛牛", "豆包", "牛牛"],
+        min_alias_len=2,
+        generic_aliases=["牛牛"],
+    )
 
 
 def test_evaluate_to_me_always() -> None:

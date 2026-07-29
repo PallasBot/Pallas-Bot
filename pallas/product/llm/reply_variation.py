@@ -35,6 +35,7 @@ _USER_WAIT_TOKENS = ("等等", "等下", "先别", "我补一句", "还有", "�
 _STRUCTURE_MARKERS = ("先", "别", "可以", "不用", "慢慢", "一下", "这事", "你先")
 _GENERIC_PREFIX_MIN_LEN = 3
 _GENERIC_PREFIX_MAX_LEN = 4
+DEFAULT_MOTIF_TOKENS = ("草料", "土木", "漂亮牛牛")
 
 
 def should_wait_for_more(user_text: str) -> bool:
@@ -48,6 +49,13 @@ def should_wait_for_more(user_text: str) -> bool:
 
 def has_kaomoji_suffix(text: str) -> bool:
     return bool(_KAOMOJI_SUFFIX_RE.search(str(text or "").strip()))
+
+
+def extract_recent_motifs(texts: list[str]) -> list[str]:
+    recent_texts = [str(item or "").strip() for item in texts[-6:] if str(item or "").strip()]
+    if not recent_texts:
+        return []
+    return [token for token in DEFAULT_MOTIF_TOKENS if any(token in text for text in recent_texts)]
 
 
 def repeated_assistant_openers(turns: list[LlmChatTurn], *, limit: int = 3) -> list[str]:
@@ -152,6 +160,9 @@ def build_recent_reply_variation_hint(turns: list[LlmChatTurn]) -> str:
         return ""
 
     hints: list[str] = []
+    motifs = extract_recent_motifs(assistant_texts)
+    if motifs:
+        hints.append("最近几轮别老围着这些短窗母题打转：" + "、".join(motifs))
     openers = repeated_assistant_openers(turns)
     if openers:
         hints.append("最近几轮别再用这些开头：" + "、".join(openers))
@@ -234,6 +245,9 @@ def build_variation_hint_from_recent_texts(recent_texts: list[str]) -> str:
         return ""
 
     hints: list[str] = []
+    motifs = extract_recent_motifs(texts)
+    if motifs:
+        hints.append("最近几轮别老围着这些短窗母题打转：" + "、".join(motifs))
     openers: list[str] = []
     for text in reversed(texts[-6:]):
         opener = classify_repeated_opener(text)
