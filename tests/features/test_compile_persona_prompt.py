@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pallas.product.persona.auto import derive_persona_from_bot_id
+from pallas.product.persona.auto import archetype_for_bot_id, derive_persona_from_bot_id
 from pallas.product.persona.compile_persona_prompt import (
     assemble_persona_system,
     build_bot_behavior_prompt,
@@ -99,6 +99,30 @@ def test_build_bot_behavior_prompt_includes_tone_and_length() -> None:
     assert "tone=dramatic" not in prompt
     assert "短句" in prompt or "短促" in prompt
     assert "客服式完整解释" in prompt
+
+
+def test_bot_behavior_fingerprint_differs_by_archetype() -> None:
+    p_terse = build_bot_behavior_prompt(derive_persona_from_bot_id(0))
+    p_chaotic = build_bot_behavior_prompt(derive_persona_from_bot_id(1))
+
+    assert archetype_for_bot_id(0) != archetype_for_bot_id(1)
+    assert p_terse != p_chaotic
+    assert any(token in p_terse for token in ("少展开", "一句", "少解释", "别起哄加戏"))
+    assert len(p_terse.splitlines()) <= 14
+
+
+def test_compile_persona_prompt_includes_seed_fingerprint_lines() -> None:
+    persona = derive_persona_from_bot_id(2)
+    bundle = compile_persona_prompt(
+        persona,
+        None,
+        bot_id=2,
+        base_system="基础",
+        bot_persona={"seed_override": {"prefs": ["warm", "restrained"]}},
+    )
+    assert "【接话指纹】" in bundle.sections.bot_behavior
+    assert "少反复同一隐喻起手" in bundle.sections.bot_behavior
+    assert "先应一句再吐槽" in bundle.sections.bot_behavior
 
 
 def test_compile_persona_prompt_merges_sections() -> None:

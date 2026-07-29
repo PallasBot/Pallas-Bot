@@ -5,7 +5,9 @@ from types import SimpleNamespace
 from pallas.product.llm.reply_variation import (
     build_recent_reply_ending_hint,
     build_recent_reply_variation_hint,
+    build_variation_hint_from_recent_texts,
     classify_repeated_opener,
+    extract_recent_motifs,
     repeated_assistant_openers,
 )
 from pallas.product.persona.self_identity import compile_self_identity_prompt
@@ -75,6 +77,22 @@ def test_build_recent_reply_variation_hint_flags_animal_and_kaomoji() -> None:
     assert "哞~" in hint or "喵~" in hint
     assert "颜文字" in hint
     assert repeated_assistant_openers(turns)
+
+
+def test_motif_hint_from_recent_texts() -> None:
+    hint = build_variation_hint_from_recent_texts([
+        "双倍草料，土木牛牛明天干活都有劲了。",
+        "草料管够就行",
+    ])
+    assert "草料" in hint or "土木" in hint
+
+
+def test_extract_recent_motifs_deduplicates_default_tokens() -> None:
+    motifs = extract_recent_motifs([
+        "双倍草料，土木牛牛明天干活都有劲了。",
+        "漂亮牛牛今天也得吃草料。",
+    ])
+    assert motifs == ["草料", "土木", "漂亮牛牛"]
 
 
 def test_compile_self_identity_prompt_mentions_niu_niu() -> None:

@@ -33,13 +33,25 @@ def expression_opener_key(saying: str) -> str:
     return cjk[:4] if len(cjk) >= 2 else plain[:4]
 
 
-def score_expression_for_query(entry: ExpressionEntry, plain_text: str, *, scene: str = "") -> int | None:
+def score_expression_for_query(
+    entry: ExpressionEntry,
+    plain_text: str,
+    *,
+    scene: str = "",
+    target_bot_id: int = 0,
+    blocked_motifs: Iterable[str] | None = None,
+) -> int | None:
     """Return a relevance score, or None for entries that cannot be injected."""
     if entry.status == "rejected":
         return None
 
     score = 100 if entry.status == "active" else 50
     score += min(max(1, int(entry.support)), 10)
+    if target_bot_id:
+        if int(entry.bot_id) == target_bot_id:
+            score += 15
+        elif int(entry.bot_id) == 0:
+            score -= 10
 
     target_stance = infer_expression_affect_stance(plain_text)
     entry_stance = str(entry.affect_hint or "").strip() or infer_expression_affect_stance(entry.saying)
@@ -52,6 +64,9 @@ def score_expression_for_query(entry: ExpressionEntry, plain_text: str, *, scene
     feedback = entry.scene_feedback.get(str(scene), {}) if scene else {}
     if feedback.get("uses"):
         score += max(-6, min(6, int(feedback.get("score", 0))))
+    blocked_tokens = {str(item).strip() for item in (blocked_motifs or []) if str(item).strip()}
+    if blocked_tokens and any(token in entry.saying for token in blocked_tokens):
+        score -= 25
     # 与当前句无关的「已站稳」自生成金句不注入；弱相关则降权
     if kw_hits == 0 and entry.source == "llm_success" and (target_stance == "neutral" or target_stance != entry_stance):
         if entry.status == "active" or int(entry.support) >= 3:
@@ -68,6 +83,7 @@ def retrieve_expressions_for_message(
     bot_id: int = 0,
     scene: str = "",
     blocked_openers: Iterable[str] | None = None,
+    blocked_motifs: Iterable[str] | None = None,
 ) -> list[ExpressionEntry]:
     """Return the highest-ranked non-rejected expressions for a group message."""
     target_bot_id = int(bot_id)
@@ -76,7 +92,13 @@ def retrieve_expressions_for_message(
     for entry in list_group_expressions(int(group_id), limit=100):
         if target_bot_id and entry.bot_id not in {0, target_bot_id}:
             continue
-        score = score_expression_for_query(entry, plain_text, scene=scene)
+        score = score_expression_for_query(
+            entry,
+            plain_text,
+            scene=scene,
+            target_bot_id=target_bot_id,
+            blocked_motifs=blocked_motifs,
+        )
         if score is None:
             continue
         opener = expression_opener_key(entry.saying)

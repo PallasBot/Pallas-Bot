@@ -36,6 +36,7 @@ __plugin_meta__ = PluginMetadata(
                 "牛牛别喝了",
             ],
         },
+        "ingress_route": {"passive": True},
         "command_permissions": command_perm_list(
             command_perm_row("drink.drink", "牛牛喝酒 / 牛牛干杯 / 牛牛继续喝"),
             command_perm_row("drink.sober_up", "牛牛醒一醒 / 牛牛别喝了"),

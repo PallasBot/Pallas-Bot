@@ -287,3 +287,52 @@ def test_resolve_endpoint_candidates_follow_chain_fallback(tmp_path: Path, monke
     candidates = resolve_endpoint_candidates_for_task("llm_chat")
     assert [item.provider_id for item in candidates] == ["a", "b"]
     assert candidates[1].model == "mb"
+
+
+def test_providers_store_reloads_when_disk_revision_changes(tmp_path: Path, monkeypatch) -> None:
+    """模拟 hub 写盘、worker 进程内缓存：不显式 clear 也应按 mtime 热载。"""
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [
+            {
+                "id": "packy",
+                "kind": "remote",
+                "base_url": "https://packy.example/v1",
+                "api_key": "sk-packy",
+                "default_model": "m-packy",
+            }
+        ],
+        "routing": {"chain_fallback": ["packy"], "tasks": {"llm_chat": "packy"}},
+    })
+    first = resolve_endpoint_for_task("llm_chat")
+    assert first is not None
+    assert first.provider_id == "packy"
+
+    # 另一进程（hub）直接改文件，本进程不走 save_providers_document
+    payload = json.loads(store.read_text(encoding="utf-8"))
+    payload["providers"] = [
+        {
+            "id": "ds",
+            "kind": "remote",
+            "base_url": "https://api.deepseek.com",
+            "api_key": "sk-ds",
+            "default_model": "deepseek-chat",
+            "enabled": True,
+            "task_models": {},
+            "capabilities": [],
+            "model_effort": "",
+            "request_method": "chat_completions",
+            "model_pricing": {},
+        }
+    ]
+    payload["routing"]["tasks"] = {"llm_chat": "ds"}
+    payload["routing"]["chain_fallback"] = ["ds"]
+    store.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    second = resolve_endpoint_for_task("llm_chat")
+    assert second is not None
+    assert second.provider_id == "ds"
+    assert second.base_url == "https://api.deepseek.com"

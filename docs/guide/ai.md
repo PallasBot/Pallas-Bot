@@ -125,17 +125,17 @@ WebUI 在同一页「功能开关」里：启用智能对话 / 启用遗留酒�
 | **源码（推荐本机开发）** | 「安装 AI Runtime」：克隆同级 `Pallas-Bot-AI` 并 bootstrap；勾 **含唱歌/TTS**。 |
 | **Docker 全栈** | 用主仓 compose 起 `pallasbot-ai`。见 [Docker 部署](/deploy/docker)。 |
 
-控制台**不代跑** Docker。保存连接后，扩展基址会同步 Bot 侧 `AI_SERVER_*`。
+控制台**不代跑** Docker。保存连接（含 Bearer）后，扩展基址会同步 Bot 侧 `AI_SERVER_*`，Token 同步 `TTS_API_TOKEN`。
 
 然后：
 
-1. **AI 配置 → 能力包 → 唱歌 · TTS · 媒体模型**
-2. **源码**：
-   - 任务包未开 →「重新安装（含媒体）」
-   - 资源包可**分项下载 / 删除**（`sing_pallas` / `sing_pretrain` / `tts` 等）
-   - 在同页选择**默认说话人**、**优先 SVC backend**（失败仍按 registry 回退）与 **TTS 参考音色**
-3. **Docker**：页内只读就绪状态；下载请换 `pallas-bot-ai:latest` 并由启动脚本拉取；若 `data/` 卷可写，仍可切换默认说话人 / backend / 音色
-4. 插件商店安装 **`pallas-plugin-ai-media`**（画画另装 `pallas-plugin-draw`）
+1. **AI 配置 → 媒体 → 媒体资产**：官方权重可**分项下载 / 删除**（`sing_pallas` / `sing_pretrain` / `tts` 等）
+2. **AI 配置 → 媒体 → 唱歌 / TTS**：
+   - 选择侧车**默认说话人**、**优先 SVC backend**（失败仍按 registry 回退）与 **TTS 参考音色**
+   - 同页嵌入插件配置（启停、音色映射、合成时长等）；服务地址不再在插件页填写
+3. **自备唱歌音色**：放到 AI 仓 `resource/sing/models/<音色名>/`（目录名即 Speaker id，勿用 `pretrain`），刷新「唱歌」页应出现在 Speaker 列表；细节见 [唱歌插件说明](../plugins/sing/README.md)
+4. **Docker**：页内只读就绪状态；下载请换 `pallas-bot-ai:latest` 并由启动脚本拉取；若 `data/` 卷可写，仍可切换默认说话人 / backend / 音色
+5. 插件商店安装 **`pallas-plugin-ai-media`**（画画另装 `pallas-plugin-draw`）
 
 插件安装步骤 → [安装插件](install-plugins.md)
 

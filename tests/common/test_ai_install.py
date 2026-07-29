@@ -251,6 +251,25 @@ def test_sync_ai_server_from_extension_base_url(monkeypatch: pytest.MonkeyPatch,
     assert env["AI_SERVER_PORT"] == "9099"
 
 
+def test_sync_tts_token_from_extension_token(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    webui = tmp_path / "webui.json"
+    webui.write_text(json.dumps({"env": {}}, ensure_ascii=False) + "\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_webui_settings_path",
+        lambda: webui,
+    )
+    from pallas.core.foundation.config.repo_settings import clear_merged_repo_settings_cache
+
+    clear_merged_repo_settings_cache()
+    assert writeback.sync_tts_token_from_extension_token("secret-bearer") is True
+    env = json.loads(webui.read_text(encoding="utf-8"))["env"]
+    assert env["TTS_API_TOKEN"] == "secret-bearer"
+    assert writeback.sync_tts_token_from_extension_token("secret-bearer") is False
+    assert writeback.sync_tts_token_from_extension_token("") is True
+    env2 = json.loads(webui.read_text(encoding="utf-8"))["env"]
+    assert env2.get("TTS_API_TOKEN", "") == ""
+
+
 def test_sync_extension_base_url_from_ai_server_preserves_token(tmp_path) -> None:
     path = tmp_path / "ai_extension.json"
     path.write_text(

@@ -18,6 +18,50 @@ if TYPE_CHECKING:
 
 _PLUGIN_TOOL_NAMES: set[str] = set()
 _MEDIA_TOOL_PREFIXES = frozenset({"draw", "memes"})
+# list/search/info 只查模板，不应垫「自己」污染口令；出图类口令才自动 media。
+_MEDIA_SKIP_ACTIONS = frozenset({"list", "search", "info", "help"})
+_MEME_ARG_NOISE_PHRASES = (
+    "牛牛表情推荐",
+    "牛牛表情搜索",
+    "牛牛表情列表",
+    "牛牛表情",
+    "表情包",
+    "表情模板",
+)
+_MEME_ARG_NOISE_TOKENS = frozenset({"牛牛", "表情", "模板", "推荐", "搜索", "制作", "自己"})
+
+
+def sanitize_meme_tool_argument(value: object) -> str:
+    """去掉 LLM 常误塞进 keyword/intent 的「自己」与口令噪声。"""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    for phrase in _MEME_ARG_NOISE_PHRASES:
+        text = text.replace(phrase, " ")
+    text = text.replace("自己", " ")
+    tokens = [tok for tok in text.split() if tok and tok not in _MEME_ARG_NOISE_TOKENS]
+    return " ".join(tokens).strip()
+
+
+def prepare_command_tool_arguments(tool_name: str, args: dict) -> dict:
+    """按工具清洗参数（可洗成空串，由调用方决定是否拒派发）。"""
+    name = str(tool_name or "").strip()
+    out = dict(args or {})
+    if name == "memes.search" and "keyword" in out:
+        out["keyword"] = sanitize_meme_tool_argument(out.get("keyword"))
+    elif name == "memes.recommend" and "intent" in out:
+        out["intent"] = sanitize_meme_tool_argument(out.get("intent"))
+    return out
+
+
+def command_tool_arguments_ready(tool_name: str, args: dict) -> str | None:
+    """参数不可用时返回 error 码；可用返回 None。"""
+    name = str(tool_name or "").strip()
+    if name == "memes.search" and not str(args.get("keyword") or "").strip():
+        return "empty_meme_keyword"
+    if name == "memes.recommend" and not str(args.get("intent") or "").strip():
+        return "empty_meme_intent"
+    return None
 
 
 def command_dispatch_result_summary(command_text: str) -> str:
@@ -56,14 +100,24 @@ def build_command_tool_spec(
     if source_segments_mode not in {"none", "media"}:
         source_segments_mode = "none"
     # 兼容已发布的画图 / 表情插件声明；后续声明应显式标记 source_segments="media"。
-    if source_segments_mode == "none" and decl.name.split(".", 1)[0] in _MEDIA_TOOL_PREFIXES:
+    tool_prefix = decl.name.split(".", 1)[0]
+    tool_action = decl.name.rsplit(".", 1)[-1]
+    if (
+        source_segments_mode == "none"
+        and tool_prefix in _MEDIA_TOOL_PREFIXES
+        and tool_action not in _MEDIA_SKIP_ACTIONS
+    ):
         source_segments_mode = "media"
 
     async def handler(args: dict, ctx: ToolInvokeContext | None) -> dict:
         if ctx is None:
             return {"ok": False, "error": "missing_invoke_context"}
+        prepared = prepare_command_tool_arguments(decl.name, args)
+        not_ready = command_tool_arguments_ready(decl.name, prepared)
+        if not_ready:
+            return {"ok": False, "error": not_ready}
         try:
-            command_text = render_command_template(decl.command_template, args)
+            command_text = render_command_template(decl.command_template, prepared)
         except CommandTemplateError as exc:
             return {"ok": False, "error": str(exc)}
         result = await dispatch_group_command_text(
@@ -81,7 +135,7 @@ def build_command_tool_spec(
                     "tool": decl.name,
                     "command_id": decl.command_id,
                     "command_text": command_text,
-                    "arguments": {key: str(value) for key, value in args.items()},
+                    "arguments": {key: str(value) for key, value in prepared.items()},
                 },
             }
         summary = command_dispatch_result_summary(command_text)
@@ -93,7 +147,7 @@ def build_command_tool_spec(
                 "command_id": decl.command_id,
                 "command_text": command_text,
                 "dispatched": True,
-                "arguments": {key: str(value) for key, value in args.items()},
+                "arguments": {key: str(value) for key, value in prepared.items()},
                 "summary": summary,
             },
         }

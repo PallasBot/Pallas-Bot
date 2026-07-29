@@ -88,6 +88,27 @@ def sync_ai_server_from_extension_base_url(base_url: str) -> bool:
     return True
 
 
+def sync_tts_token_from_extension_token(token: str) -> bool:
+    """把 extension Bearer 同步写入 TTS_API_TOKEN（供 TTS 插件 /v1 鉴权）。"""
+    from pallas.core.foundation.config.repo_settings import (
+        repo_env_raw_value,
+        upsert_repo_settings_items,
+    )
+
+    value = (token or "").strip()
+    current = (repo_env_raw_value("TTS_API_TOKEN") or "").strip()
+    if current == value:
+        return False
+    upsert_repo_settings_items({"TTS_API_TOKEN": value})
+    import os
+
+    if value:
+        os.environ["TTS_API_TOKEN"] = value
+    else:
+        os.environ.pop("TTS_API_TOKEN", None)
+    return True
+
+
 def sync_extension_base_url_from_ai_server(
     host: str,
     port: str | int,

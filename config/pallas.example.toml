@@ -43,7 +43,7 @@ COMMAND_START = '["", "/"]'
 # AI 扩展连接（WebUI 保存 → data/pb_webui/ai_extension.json；示例见 config/ai_extension.example.json）
 # 「AI 服务」Bearer Token 须与 Pallas-Bot-AI 的 PALLAS_AI_API_TOKEN 一致，否则运维日志 HTTP 拉取会 401。
 # LLM_CHAT_ENABLED = "true"
-# REDIS_URL = "redis://127.0.0.1:6379/0"   # 分片多进程 claim；需 uv sync --extra coord-redis
+# REDIS_URL = "redis://127.0.0.1:6379/0"   # 分片多进程 claim（redis 客户端已在主依赖）
 # PALLAS_DUPLICATE_PREFIX_STRICT = "true"  # 生产推荐：重复命令 prefix 冲突时阻断启动
 
 # [community_stats]

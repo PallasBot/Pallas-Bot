@@ -80,7 +80,7 @@ async def dispatch_stats_log_loop() -> None:
         prev = snap
         log(
             "ingress_dispatch: stats group_messages={} cmd={} chat={} route_hit={} route_fallback={} "
-            "matchers {}/{} run={} p95={}ms lane_wait_avg={} overload={} lane_busy={} "
+            "matchers {}/{} run={} p95={}ms lane_wait_avg={} overload={} chat_drop={} lane_busy={} "
             "send_q={}/{} dropped={}",
             group_messages,
             int(snap.get("command_traffic") or 0),
@@ -93,6 +93,7 @@ async def dispatch_stats_log_loop() -> None:
             snap.get("ingress_duration_ms_p95"),
             snap.get("lane_wait_ms_avg"),
             int(snap.get("overload_signals") or 0),
+            int(snap.get("chatter_overload_dropped") or 0),
             int(snap.get("lane_busy") or 0),
             (snap.get("send_queue") or {}).get("depth"),
             (snap.get("send_queue") or {}).get("max_depth"),

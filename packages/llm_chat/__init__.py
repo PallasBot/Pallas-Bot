@@ -34,7 +34,7 @@ __plugin_meta__ = PluginMetadata(
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "reload_policy": "metadata",
-        "ingress_route": {"lane": "remote"},
+        "ingress_route": {"lane": "remote", "passive": True},
         "help_aliases": ["牛牛聊天", "智能闲聊", "随时闲聊", "酒后聊天", "醉酒聊天"],
         "command_permissions": command_perm_list(
             command_perm_row("llm_chat.chat", "智能对话", "everyone"),

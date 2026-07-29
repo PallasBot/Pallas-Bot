@@ -171,6 +171,11 @@ def bind_group_style_refresh_lifecycle() -> None:
         async def _run() -> None:
             while True:
                 try:
+                    from pallas.core.platform.ingress.message_load import is_overloaded
+
+                    if is_overloaded():
+                        await asyncio.sleep(min(60.0, float(_DEFAULT_REFRESH_INTERVAL_SEC)))
+                        continue
                     await refresh_dirty_group_style_batch()
                     from pallas.product.persona.cross_group_refresh import refresh_dirty_bot_cross_group_batch
 

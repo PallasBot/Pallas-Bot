@@ -32,6 +32,7 @@ __plugin_meta__ = PluginMetadata(
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "reload_policy": "metadata",
+        "ingress_route": {"passive": True},
         "exact_plaintexts": [
             "牛牛轮盘",
             "牛牛轮盘踢人",

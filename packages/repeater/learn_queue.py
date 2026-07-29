@@ -94,7 +94,10 @@ def learn_queue_under_pressure() -> bool:
 
 def should_skip_repeater_learn_enqueue() -> bool:
     from pallas.core.foundation.db.pool_budget import pg_pool_under_pressure
+    from pallas.core.platform.ingress.message_load import is_overloaded
 
+    if is_overloaded():
+        return True
     if pg_pool_under_pressure(threshold=0.25):
         return True
     return learn_queue_under_pressure()

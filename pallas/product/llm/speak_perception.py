@@ -23,6 +23,28 @@ _CQ_AT_RE = re.compile(r"\[CQ:at,qq=\d+[^\]]*\]", re.IGNORECASE)
 _AT_PLAIN_RE = re.compile(r"@[^\s@，,。！!？?：:;；]{1,24}")
 _REPLY_MARK_RE = re.compile(r"\[回复[^\]]*\]")
 _COMMAND_START_RE = re.compile(r"^[/!！#＃.]")
+_GENERIC_ALIAS_PREFIX_CUES = ("叫", "喊", "问", "找", "戳", "cue", "艾特")
+_GENERIC_ALIAS_SUFFIX_CUES = (
+    "出来",
+    "一下",
+    "一声",
+    "在吗",
+    "在嘛",
+    "在不",
+    "你好",
+    "呢",
+    "呀",
+    "啊",
+    "吗",
+    "嘛",
+    "么",
+    "快",
+    "看",
+    "说",
+    "回",
+    "救",
+    "帮",
+)
 _REPLY_CUE_TOKENS = (
     "?",
     "？",
@@ -62,18 +84,82 @@ def strip_mention_noise(text: str) -> str:
     return " ".join(out.split()).strip()
 
 
+def _is_cjk_or_alnum(char: str) -> bool:
+    if not char:
+        return False
+    codepoint = ord(char)
+    if (
+        0x4E00 <= codepoint <= 0x9FFF
+        or 0x3400 <= codepoint <= 0x4DBF
+        or 0x20000 <= codepoint <= 0x2A6DF
+        or 0x2A700 <= codepoint <= 0x2B73F
+        or 0x2B740 <= codepoint <= 0x2B81F
+        or 0x2B820 <= codepoint <= 0x2CEAF
+        or 0xF900 <= codepoint <= 0xFAFF
+    ):
+        return True
+    return char.isalnum()
+
+
+def _generic_alias_before_ok(content: str, start: int) -> bool:
+    if start == 0:
+        return True
+    prev = content[start - 1]
+    if not _is_cjk_or_alnum(prev):
+        return True
+    prefix = content[max(0, start - 2) : start]
+    return any(prefix.endswith(token) for token in _GENERIC_ALIAS_PREFIX_CUES)
+
+
+def _generic_alias_after_ok(content: str, end: int) -> bool:
+    if end == len(content):
+        return True
+    next_char = content[end]
+    if not _is_cjk_or_alnum(next_char):
+        return True
+    tail = content[end:]
+    return any(tail.startswith(token) for token in _GENERIC_ALIAS_SUFFIX_CUES)
+
+
+def _contains_generic_alias(content: str, alias: str) -> bool:
+    alias_text = str(alias or "").strip()
+    if not content or not alias_text:
+        return False
+    alias_folded = alias_text.casefold()
+    alias_len = len(alias_text)
+    max_start = len(content) - alias_len
+    for start in range(max_start + 1):
+        segment = content[start : start + alias_len]
+        if segment != alias_text and segment.casefold() != alias_folded:
+            continue
+        before_ok = _generic_alias_before_ok(content, start)
+        end = start + alias_len
+        after_ok = _generic_alias_after_ok(content, end)
+        if before_ok and after_ok:
+            return True
+    return False
+
+
 def text_mentions_aliases(
     text: str,
     aliases: Sequence[str],
     *,
     min_alias_len: int = 2,
+    generic_aliases: Sequence[str] | None = None,
 ) -> bool:
     content = strip_mention_noise(text)
     if not content:
         return False
     folded = content.casefold()
+    generic_casefolds = {
+        str(alias or "").strip().casefold() for alias in (generic_aliases or ()) if str(alias or "").strip()
+    }
     for alias in sorted((str(a or "").strip() for a in aliases), key=len, reverse=True):
         if len(alias) < int(min_alias_len):
+            continue
+        if alias.casefold() in generic_casefolds:
+            if _contains_generic_alias(content, alias):
+                return True
             continue
         if alias.casefold() in folded or alias in content:
             return True
@@ -165,6 +251,7 @@ def evaluate_speak_perception(
     *,
     plain_text: str,
     aliases: Sequence[str],
+    generic_aliases: Sequence[str] | None = None,
     is_to_me: bool,
     bot_id: int | None = None,
     mention_enabled: bool = True,
@@ -200,7 +287,21 @@ def evaluate_speak_perception(
     if looks_like_spam_or_promo(plain):
         return SpeakDecision(False, "spam", 0)
 
-    if mention_enabled and text_mentions_aliases(plain, aliases, min_alias_len=min_alias_len):
+    speak_generic_aliases = generic_aliases
+    if speak_generic_aliases is None:
+        try:
+            from pallas.product.persona.self_identity import extract_generic_self_aliases
+
+            speak_generic_aliases = extract_generic_self_aliases()
+        except Exception:
+            speak_generic_aliases = ()
+
+    if mention_enabled and text_mentions_aliases(
+        plain,
+        aliases,
+        min_alias_len=min_alias_len,
+        generic_aliases=speak_generic_aliases,
+    ):
         return SpeakDecision(True, "mention", 100)
 
     if followup_active and plain and not is_noise_fragment(plain):

@@ -61,6 +61,7 @@ async def build_expression_context_suffix(
     scene: str = "",
     style_profile: dict[str, Any] | None = None,
     blocked_openers: list[str] | None = None,
+    blocked_motifs: list[str] | None = None,
 ) -> str:
     reference, _entries = await build_expression_context_with_entries(
         group_id,
@@ -69,6 +70,7 @@ async def build_expression_context_suffix(
         scene=scene,
         style_profile=style_profile,
         blocked_openers=blocked_openers,
+        blocked_motifs=blocked_motifs,
     )
     return reference
 
@@ -81,6 +83,7 @@ async def build_expression_context_with_entries(
     scene: str = "",
     style_profile: dict[str, Any] | None = None,
     blocked_openers: list[str] | None = None,
+    blocked_motifs: list[str] | None = None,
 ) -> tuple[str, list]:
     """Return the exact entries used to build the expression reference."""
     """Prefer matched expression-bank references, then retain profile habits."""
@@ -91,6 +94,8 @@ async def build_expression_context_with_entries(
             "bot_id": bot_id,
             "blocked_openers": blocked_openers or (),
         }
+        if blocked_motifs:
+            kwargs["blocked_motifs"] = tuple(blocked_motifs)
         if scene:
             kwargs["scene"] = scene
         entries = await asyncio.to_thread(retrieve_expressions_for_message, int(group_id), plain_text, **kwargs)

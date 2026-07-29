@@ -17,6 +17,7 @@ from pallas.core.platform.ingress.dispatch_lanes import (
     uninstall_dispatch_lanes,
 )
 from pallas.core.platform.ingress.dispatch_metrics import (
+    record_chatter_overload_dropped,
     record_group_message_ingress,
     record_preprocessor_dropped,
     record_route_index_decision,
@@ -27,7 +28,7 @@ from pallas.core.platform.ingress.matcher_activation import (
     resolve_route_for_event,
     select_priority_matchers,
 )
-from pallas.core.platform.ingress.message_load import mark_activity, signal_overload
+from pallas.core.platform.ingress.message_load import is_overloaded, mark_activity, signal_overload
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
 
 if TYPE_CHECKING:
@@ -68,6 +69,17 @@ def matcher_dispatch_batch_size() -> int:
         return max(1, int(str(raw).strip()))
     except ValueError:
         return scaled_dispatch_int(_MATCHER_DISPATCH_BATCH, per_bot=1, cap=16)
+
+
+def chat_drop_on_overload_enabled() -> bool:
+    """过载时是否跳过闲聊 matcher，优先保口令。默认开启。"""
+    raw = repo_env_raw_value("PALLAS_INGRESS_CHAT_DROP_ON_OVERLOAD")
+    if raw is None:
+        return True
+    text = str(raw).strip().lower()
+    if text in ("0", "false", "no", "off"):
+        return False
+    return True
 
 
 def matcher_dispatch_batches(selected_matchers: list[type]) -> list[list[type]]:
@@ -123,6 +135,18 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
                 index_hit=resolution.index_hit,
                 fallback=command_traffic and not resolution.index_hit,
             )
+        if apply_dispatch and not command_traffic and chat_drop_on_overload_enabled() and is_overloaded():
+            record_chatter_overload_dropped()
+            record_group_message_ingress(
+                duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                command_traffic=False,
+                matchers_considered=0,
+                matchers_selected=0,
+                matchers_run=0,
+            )
+            await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
+            return
+
         threshold = overload_selected_threshold()
         total_selected = 0
         total_considered = 0

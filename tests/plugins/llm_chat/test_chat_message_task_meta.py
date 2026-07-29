@@ -442,6 +442,153 @@ def test_build_recent_reply_variation_hint_flags_generic_prefix_cluster() -> Non
     assert "最近几轮别再用这些开头：行吧" in hint
 
 
+def test_build_blocked_motifs_prefers_recent_group_bot_texts() -> None:
+    from packages.llm_chat import chat_message as mod
+
+    recent_turns = [
+        LlmChatTurn(role="assistant", content="私窗里还是老说草料", user_id=1, created_at=1),
+    ]
+    recent_group_rows = [
+        {"text": "土木牛牛今天继续搬砖", "user_id": 10001, "bot_id": 10001, "role": "assistant"},
+        {"text": "漂亮牛牛先吃饭", "user_id": 10001, "bot_id": 10001},
+        {"text": "路人甲说随便", "user_id": 2222},
+    ]
+
+    motifs = mod.build_blocked_motifs(
+        recent_turns=recent_turns,
+        recent_group_rows=recent_group_rows,
+        bot_id=10001,
+    )
+
+    assert motifs == ["土木", "漂亮牛牛"]
+
+
+@pytest.mark.asyncio
+async def test_handle_llm_chat_prefers_group_bot_motifs_for_expression_blocking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.llm_chat import chat_message as mod
+
+    event = SimpleNamespace(
+        to_me=True,
+        self_id="10001",
+        group_id=20002,
+        user_id=30003,
+        message_id=40004,
+        time=123456,
+        raw_message="[CQ:at,qq=10001] 你好",
+        get_plaintext=lambda: "你好",
+        get_message=lambda: "[CQ:at,qq=10001] 你好",
+        get_session_id=lambda: "group_20002_30003",
+    )
+    bot = SimpleNamespace(self_id="10001")
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "get_llm_chat_config",
+        lambda: SimpleNamespace(
+            llm_chat_system_prompt_path="",
+            llm_chat_min_priority=40,
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "get_llm_config",
+        lambda: SimpleNamespace(
+            llm_memory_rag_enabled=False,
+            llm_relationship_notes_enabled=False,
+            llm_chat_enabled=True,
+            llm_select_enabled=False,
+            llm_polish_lite_enabled=False,
+            llm_polish_enabled=False,
+            llm_chat_cooldown_sec=3,
+            llm_chat_queue_merge=True,
+            llm_current_turn_decision_enabled=False,
+            llm_speak_perception_enabled=False,
+            llm_speak_followup_enabled=False,
+            llm_speak_followup_window_sec=30,
+            llm_speak_followup_max_total_sec=120,
+            llm_reply_style_variants={},
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "build_persona_llm_context",
+        AsyncMock(
+            return_value=(
+                SimpleNamespace(system="sys", metadata=SimpleNamespace(persona={})),
+                None,
+                None,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "assemble_direct_chat_context",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                system_prompt="sys",
+                knowledge_retrieval_trace={},
+                hybrid_retrieval_trace={},
+                relationship_trace={},
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "evaluate_llm_reply_gate_result",
+        lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
+    )
+    monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
+    monkeypatch.setattr(
+        mod,
+        "merge_queued_chat",
+        lambda *_args, **_kwargs: SimpleNamespace(text="[CQ:at,qq=10001] 你好", merged=False),
+    )
+    monkeypatch.setattr(
+        mod,
+        "list_user_llm_messages",
+        AsyncMock(
+            return_value=[
+                SimpleNamespace(role="assistant", content="私窗里还是老说草料", user_id=30003, created_at=1),
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
+        AsyncMock(return_value=["土木牛牛今天继续搬砖", "漂亮牛牛先吃饭"]),
+    )
+    monkeypatch.setattr(mod, "classify_behavior_scene", lambda **_kwargs: BehaviorScene.PROVOCATION)
+
+    async def fake_build_expression_selection(*_args, **kwargs):
+        captured["blocked_motifs"] = kwargs.get("blocked_motifs")
+        return "", []
+
+    monkeypatch.setattr(mod, "build_llm_chat_expression_selection", fake_build_expression_selection)
+    monkeypatch.setattr(mod, "assemble_tool_bundle", lambda **_kwargs: {"tools_enabled": False, "tool_schemas": []})
+    monkeypatch.setattr(
+        mod,
+        "decide_current_turn_with_model",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                action=mod.CurrentTurnAction.PASS,
+                trace=SimpleNamespace(model_dump=lambda mode="json": {"action": "PASS", "source": "rule"}),
+            )
+        ),
+    )
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "packages.repeater.opportunity_trace",
+        SimpleNamespace(append_conversation_decision_trace=lambda _row: None),
+    )
+
+    await mod.handle_llm_chat(bot, event)
+
+    assert captured["blocked_motifs"] == ["土木", "漂亮牛牛"]
+
+
 @pytest.mark.asyncio
 async def test_handle_llm_chat_skips_empty_to_me_without_reply(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.llm_chat import chat_message as mod

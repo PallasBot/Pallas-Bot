@@ -15,6 +15,7 @@ from pallas.core.platform.ingress.plugin_command_plaintext import is_plugin_comm
 from pallas.core.platform.ingress.route_index import (
     RouteIndexSnapshot,
     RouteResolution,
+    chat_matcher_strict_enabled,
     get_route_index,
     matcher_always_runs,
     matcher_module_key,
@@ -173,18 +174,26 @@ def select_priority_matchers(
         if command_traffic:
             selected = priority_matchers
         else:
-            selected = [matcher for matcher in priority_matchers if not matcher_is_command_only(matcher)]
+            # 无索引时仍尽量只留非 command-only；有索引快照则走严格闲聊过滤
+            try:
+                index = get_route_index()
+            except Exception:
+                index = None
+            if index is not None and chat_matcher_strict_enabled():
+                empty = RouteResolution(matched_modules=frozenset(), index_hit=False)
+                selected = filter_chatter_matchers(priority_matchers, empty, index)
+            else:
+                selected = [matcher for matcher in priority_matchers if not matcher_is_command_only(matcher)]
     else:
         index = get_route_index()
         apply_index_filter = resolution.index_hit or route_index_strict()
-        if not apply_index_filter:
-            if command_traffic:
-                selected = priority_matchers
+        if command_traffic:
+            if apply_index_filter:
+                selected = filter_command_matchers(priority_matchers, resolution, index)
             else:
-                selected = [matcher for matcher in priority_matchers if not matcher_is_command_only(matcher)]
-        elif command_traffic:
-            selected = filter_command_matchers(priority_matchers, resolution, index)
+                selected = priority_matchers
         else:
+            # 闲聊：无论是否 index_hit，都走 chatter 过滤（默认严格只跑 passive）
             selected = filter_chatter_matchers(priority_matchers, resolution, index)
 
     if event is None:
@@ -201,6 +210,7 @@ def filter_chatter_matchers(
 ) -> list[type[Matcher]]:
     matched = resolution.matched_modules
     selected: list[type[Matcher]] = []
+    strict = chat_matcher_strict_enabled()
     for matcher in priority_matchers:
         if matcher_is_command_only(matcher):
             continue
@@ -208,9 +218,13 @@ def filter_chatter_matchers(
             selected.append(matcher)
             continue
         module_key = matcher_module_key(matcher)
-        if module_key in index.indexed_modules and module_key not in matched:
+        if module_key in matched:
+            selected.append(matcher)
             continue
-        selected.append(matcher)
+        if not strict:
+            if module_key in index.indexed_modules:
+                continue
+            selected.append(matcher)
     return selected
 
 

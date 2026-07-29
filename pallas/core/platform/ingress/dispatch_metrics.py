@@ -9,6 +9,7 @@ _COUNTERS = (
     "command_traffic",
     "chatter_traffic",
     "preprocessor_dropped",
+    "chatter_overload_dropped",
     "route_index_hits",
     "route_index_fallbacks",
     "matchers_considered",
@@ -72,6 +73,11 @@ def record_group_message_ingress(
 def record_preprocessor_dropped() -> None:
     _rollover_if_needed()
     _state["preprocessor_dropped"] += 1
+
+
+def record_chatter_overload_dropped() -> None:
+    _rollover_if_needed()
+    _state["chatter_overload_dropped"] += 1
 
 
 def record_route_index_decision(*, index_hit: bool, fallback: bool) -> None:
@@ -159,6 +165,7 @@ def build_dispatch_metrics_payload(
     pg_util: float | None,
 ) -> dict[str, Any]:
     group_messages = int(counters.get("group_messages") or 0)
+    command_traffic = int(counters.get("command_traffic") or 0)
     considered = int(counters.get("matchers_considered") or 0)
     selected = int(counters.get("matchers_selected") or 0)
     route_hits = int(counters.get("route_index_hits") or 0)
@@ -176,8 +183,9 @@ def build_dispatch_metrics_payload(
         "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util),
         "matchers_selected_ratio": round(selected / considered, 4) if considered else None,
         "avg_matchers_per_message": round(selected / group_messages, 2) if group_messages else None,
-        "route_index_hit_ratio": round(route_hits / group_messages, 4) if group_messages else None,
-        "route_index_fallback_ratio": round(route_fallbacks / group_messages, 4) if group_messages else None,
+        # 口令才走 route index；闲聊 hit=0 是常态，勿除以全部群消息
+        "route_index_hit_ratio": round(route_hits / command_traffic, 4) if command_traffic else None,
+        "route_index_fallback_ratio": round(route_fallbacks / command_traffic, 4) if command_traffic else None,
     }
 
 

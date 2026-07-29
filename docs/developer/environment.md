@@ -11,7 +11,7 @@
 3. 打开 `http://127.0.0.1:8088/pallas/`，确认控制台可登录。
 4. 跑一遍 `ruff` / `pytest`，与 CI 对齐。
 
-可选：Docker（数据库 / 镜像校验）、Node.js（仅开发 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)）、分片 Redis（`coord-redis`）。
+可选：Docker（数据库 / 镜像校验）、Node.js（仅开发 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)）。分片若配 `REDIS_URL`，`redis` 客户端已在主依赖。
 
 ## 克隆与安装依赖
 
@@ -24,7 +24,7 @@ uv sync --dev
 需要分片协调 Redis 时：
 
 ```bash
-uv sync --dev --extra coord-redis
+uv sync --dev
 ```
 
 `uv sync` 会在虚拟环境中注册 **`pallas`** 命令。PostgreSQL 驱动已在主依赖，无需 `--extra pg`。
@@ -36,19 +36,19 @@ uv sync --dev --extra coord-redis
 | 类别 | 典型包 | 如何装 |
 | --- | --- | --- |
 | 官方插件（8 个） | `pallas-plugin-protocol`、`pallas-plugin-duel` 等 | `uv run pallas ext install <package>` 或 WebUI 插件商店 |
-| 分片 Redis 客户端 | `redis` | `uv sync --extra coord-redis` 或 `uv pip install 'redis>=5.2,<6'` |
+| 分片 / 多机协同 Redis 客户端 | `redis` | 已在主依赖；`uv sync` 即可 |
 | PostgreSQL 驱动 | `sqlalchemy`、`asyncpg` | 已在主依赖；`uv sync` 即可 |
 
 约束：
 
-- 已装官方插件或已配分片 Redis 时，勿反复执行裸 `uv sync` / `uv sync --frozen`（须带实际用到的 `--extra`，如 `coord-redis`）。
+- 已装官方插件时，勿反复执行裸 `uv sync` / `uv sync --frozen`（会卸掉扩展包；sync 后再 `pallas ext install`）。
 - 仅注册 `pallas` CLI、不动其它 pip 包：
   ```bash
   uv pip install -e . --no-deps
   ```
-- 须 sync 本体依赖时，带上全部 extras，sync 后再补扩展：
+- 须 sync 本体依赖时，sync 后再补扩展：
   ```bash
-  uv sync --extra coord-redis
+  uv sync
   uv run pallas ext list                   # 查看应装的官方插件
   # 对 listed 里 installed=no 的逐个：
   uv run pallas ext install pallas-plugin-protocol

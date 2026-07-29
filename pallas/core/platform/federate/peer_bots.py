@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import time
 
 from nonebot import logger
 
-from pallas.core.platform.federate.config import federate_ingress_active, federate_redis_prefix
+from pallas.core.platform.federate.config import (
+    federate_ingress_active,
+    federate_owner_rotate_sec,
+    federate_redis_prefix,
+)
 from pallas.core.platform.federate.redis_settings import get_federate_redis_client
 from pallas.core.platform.multi_bot.fleet import get_catalog_bot_ids
 from pallas.product.community_stats.store import load_or_create_deployment_id
@@ -115,14 +120,33 @@ def federate_peer_bot_ids_contains(qq: int | str) -> bool:
         return False
 
 
-def federate_group_owner_deployment(group_id: int) -> str:
+def federate_group_owner_ring_index(
+    group_id: int,
+    ring_size: int,
+    *,
+    now: float | None = None,
+    rotate_sec: int | None = None,
+) -> int:
+    """协同池内群归属下标；``rotate_sec<=0`` 时仅按群号取模。"""
+    if ring_size <= 0:
+        return 0
+    period = federate_owner_rotate_sec() if rotate_sec is None else max(0, int(rotate_sec))
+    if period <= 0:
+        return abs(int(group_id)) % ring_size
+    epoch = int(time.time() if now is None else now) // period
+    digest = hashlib.blake2b(f"{int(group_id)}:{epoch}".encode(), digest_size=8).digest()
+    return int.from_bytes(digest, "big") % ring_size
+
+
+def federate_group_owner_deployment(group_id: int, *, now: float | None = None) -> str:
     deployment_id = load_or_create_deployment_id().strip().lower()
     if not deployment_id:
         return ""
     active = sorted({deployment_id, *_cache_deployment_ids})
     if not active:
         return deployment_id
-    return active[abs(int(group_id)) % len(active)]
+    idx = federate_group_owner_ring_index(int(group_id), len(active), now=now)
+    return active[idx]
 
 
 def should_process_federate_group_on_current_deployment(group_id: int) -> bool:

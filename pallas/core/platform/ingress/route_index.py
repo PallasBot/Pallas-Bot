@@ -19,8 +19,26 @@ if TYPE_CHECKING:
 
     from nonebot.matcher import Matcher
 
-_DEFAULT_PASSIVE_MODULES = frozenset({"repeater"})
+_DEFAULT_PASSIVE_MODULES = frozenset({
+    "repeater",
+    "llm_chat",
+    "greeting",
+    "drink",
+    "roulette",
+    "request_handler",
+})
 _INDEX_CACHE: RouteIndexSnapshot | None = None
+
+
+def chat_matcher_strict_enabled() -> bool:
+    """闲聊是否只跑 passive/always_run/命中模块。默认开启。"""
+    raw = repo_env_raw_value("PALLAS_CHAT_MATCHER_STRICT")
+    if raw is None:
+        return True
+    text = str(raw).strip().lower()
+    if text in ("0", "false", "no", "off"):
+        return False
+    return True
 
 
 @dataclass(frozen=True, slots=True)

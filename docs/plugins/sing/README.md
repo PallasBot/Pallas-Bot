@@ -43,7 +43,30 @@ uv run pallas ext install pallas-plugin-ai-media
 
 ## 配置
 
-控制台插件页，以及 **通用配置 → 外部服务地址**（唱歌 / 媒体服务地址）。媒体服务测通与 AI Runtime 部署见 [AI 扩展](../../guide/ai.md)。
+推荐在控制台 **AI 配置 → 媒体**：
+
+| 面板 | 配置什么 |
+| --- | --- |
+| **媒体服务 · 连接** | 服务地址与 **Bearer Token**（同步 `AI_SERVER_*` / `TTS_API_TOKEN`；须与 AI 侧 `PALLAS_AI_API_TOKEN` 一致） |
+| **媒体资产** | 官方权重一键下载（`sing_pallas` / `sing_pretrain` 等） |
+| **唱歌** | 侧车默认 Speaker / 后端；嵌入插件配置（启停、音色映射、合成时长） |
+| **网易云** | 点歌所需登录 |
+
+自 `pallas-plugin-ai-media` **4.3.0** 起，插件页不再展示服务地址 / endpoint（由媒体连接统一管理）。
+
+### 自备音色
+
+在 **Pallas-Bot-AI** 仓库根下新建目录：
+
+```text
+resource/sing/models/<音色名>/
+```
+
+- `<音色名>` 即 Speaker id（例如 `pallas`）；**不要**占用 `pretrain`（公共预训练权重）
+- 放入对应 SVC 后端的 `.pt` / `.pth`，刷新控制台「唱歌」页应能探测到
+- 在插件「音色映射」里把口令前缀（如「牛牛」「帕拉斯」）指到该 id
+
+官方包也可在「媒体资产」下载 `sing_pallas` / `sing_pretrain`。
 
 保存后写入 `data/pallas_config/webui.json`。
 
@@ -51,8 +74,9 @@ uv run pallas ext install pallas-plugin-ai-media
 
 | 现象 | 处理 |
 | --- | --- |
-| 没有返回语音 | 确认 AI Runtime 在线，再发 `牛牛连通` 测唱歌服务 |
-| 点歌失败 | 检查网易云是否已登录 |
+| 没有返回语音 | 确认 AI Runtime 在线，再发 `牛牛连通` 测唱歌服务；音色放在 `resource/sing/models/<音色名>/` |
+| 点歌失败 | 检查网易云是否已登录（**AI 配置 → 媒体 → 网易云**） |
+| 插件配置加载失败 | 先在插件商店安装 `pallas-plugin-ai-media` |
 
 ## 源码
 
