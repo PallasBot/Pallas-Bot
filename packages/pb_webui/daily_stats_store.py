@@ -22,22 +22,10 @@ _LOCK = threading.RLock()
 @contextmanager
 def interprocess_stats_lock():
     """跨 hub/worker 进程互斥；分片下仅 hub 写盘，单进程亦可用。"""
-    p = stats_file_path().with_suffix(".json.lock")
-    p.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(p), os.O_CREAT | os.O_RDWR)
-    try:
-        import fcntl
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
 
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with interprocess_file_lock(stats_file_path().with_suffix(".json.lock")):
         yield
-    finally:
-        try:
-            import fcntl
-
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        except OSError:
-            pass
-        os.close(fd)
 
 
 def merge_day_bot_record(
