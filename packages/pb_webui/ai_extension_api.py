@@ -233,10 +233,19 @@ def register_ai_extension_router(
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         clean = _save_ai_extension_config(body.model_dump())
-        from pallas.console.webui.ai_install_writeback import sync_ai_server_from_extension_base_url
+        from pallas.console.webui.ai_install_writeback import (
+            sync_ai_server_from_extension_base_url,
+            sync_tts_token_from_extension_token,
+        )
 
         synced = sync_ai_server_from_extension_base_url(str(clean.get("base_url") or ""))
-        return JSONResponse({"ok": True, "data": clean, "synced_ai_server": synced})
+        synced_token = sync_tts_token_from_extension_token(str(clean.get("token") or ""))
+        return JSONResponse({
+            "ok": True,
+            "data": clean,
+            "synced_ai_server": synced,
+            "synced_tts_token": synced_token,
+        })
 
     @router.post(
         f"{x}/ai-extension/test",
@@ -551,7 +560,15 @@ def register_ai_extension_router(
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from pallas.console.cli.ai_install import clone_ai_repo, run_ai_bootstrap_captured
         from pallas.console.cli.ai_ops import resolve_ai_repo_root
-        from pallas.console.webui.ai_install_progress import create_ai_install_job, run_ai_install_job
+        from pallas.console.webui.ai_install_progress import (
+            PCT_BOOTSTRAP,
+            PCT_CLONE,
+            PCT_CLONE_DONE,
+            PCT_WRITEBACK,
+            bootstrap_line_progress,
+            create_ai_install_job,
+            run_ai_install_job,
+        )
 
         job = create_ai_install_job(body.action)
 
@@ -559,30 +576,62 @@ def register_ai_extension_router(
             try:
                 ai_root = None
                 if body.action in ("clone", "clone_and_bootstrap"):
-                    j.push("running", "正在克隆 Pallas-Bot-AI…")
+                    j.push("running", "正在克隆 Pallas-Bot-AI…", progress_percent=PCT_CLONE)
                     existing = resolve_ai_repo_root()
                     if existing is not None:
                         if body.action == "clone":
                             j.result = {"ai_root": str(existing), "skipped_clone": True}
-                            j.push("done", "已检测到 AI 仓，跳过克隆", result=j.result)
+                            j.push(
+                                "done",
+                                "已检测到 AI 仓，跳过克隆",
+                                progress_percent=100,
+                                result=j.result,
+                            )
                             return
-                        j.push("running", "已检测到 AI 仓，跳过克隆")
+                        j.push(
+                            "running",
+                            "已检测到 AI 仓，跳过克隆",
+                            progress_percent=PCT_CLONE_DONE,
+                        )
                         ai_root = existing
                     else:
                         ai_root = clone_ai_repo()
-                        j.push("running", f"克隆完成: {ai_root}")
+                        j.push(
+                            "running",
+                            f"克隆完成: {ai_root}",
+                            progress_percent=PCT_CLONE_DONE,
+                        )
                 if body.action in ("bootstrap", "clone_and_bootstrap"):
                     ai_root = ai_root or resolve_ai_repo_root()
                     if ai_root is None:
                         j.push("failed", error="未找到 Pallas-Bot-AI，请先克隆")
                         return
-                    j.push("running", "正在运行 ai_bootstrap.sh…")
+                    j.push(
+                        "running",
+                        "正在运行 ai_bootstrap.sh…",
+                        progress_percent=PCT_BOOTSTRAP,
+                    )
+                    line_idx = 0
+
+                    def _on_line(line: str) -> None:
+                        nonlocal line_idx
+                        line_idx += 1
+                        preview = (line or "").strip()
+                        msg = preview[:160] if preview else "bootstrap 进行中…"
+                        j.push(
+                            "running",
+                            msg,
+                            progress_percent=bootstrap_line_progress(line_idx),
+                            line=line,
+                        )
+
                     code, output = run_ai_bootstrap_captured(
                         ai_root=ai_root,
                         no_start=body.no_start,
                         remote_only=body.remote_only,
                         with_media=body.with_media,
                         use_gpu=body.use_gpu,
+                        on_output_line=_on_line,
                     )
                     j.result = {
                         "ai_root": str(ai_root),
@@ -590,8 +639,17 @@ def register_ai_extension_router(
                         "output_tail": output[-8000:],
                     }
                     if code != 0:
-                        j.push("failed", error=f"bootstrap 退出码 {code}", result=j.result)
+                        j.push(
+                            "failed",
+                            error=f"bootstrap 退出码 {code}",
+                            result=j.result,
+                        )
                         return
+                    j.push(
+                        "running",
+                        "写入默认连接配置…",
+                        progress_percent=PCT_WRITEBACK,
+                    )
                     from pallas.console.webui.ai_install_writeback import (
                         apply_ai_install_connection_writeback,
                     )

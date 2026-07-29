@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pallas.console.cli.ai_ops import (
     default_bot_callback_host,
@@ -15,6 +15,9 @@ from pallas.console.cli.ai_ops import (
     resolve_ai_repo_root,
     sibling_ai_root,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _AI_BOOTSTRAP = "scripts/ai_bootstrap.sh"
 AI_REPO_GIT_URL = "https://github.com/PallasBot/Pallas-Bot-AI.git"
@@ -142,8 +145,12 @@ def run_ai_bootstrap_captured(
     use_gpu: bool = False,
     bot_host: str | None = None,
     bot_port: int | None = None,
+    on_output_line: Callable[[str], None] | None = None,
 ) -> tuple[int, str]:
-    """运行 bootstrap，返回 (exit_code, combined_output)。默认媒体栈。"""
+    """运行 bootstrap，返回 (exit_code, combined_output)。默认媒体栈。
+
+    ``on_output_line`` 按行回调 stdout/stderr 合并流（不含命令头）。
+    """
     del with_media, remote_only
     from pallas.console.cli.ai_supervisor import is_managed_ai_root, mark_ai_root_managed
     from pallas.console.cli.process_util import bash_missing_message, resolve_bash
@@ -168,19 +175,36 @@ def run_ai_bootstrap_captured(
     if use_gpu:
         env["PALLAS_GPU"] = "1"
 
+    header = f"执行: {' '.join(cmd)}\nAI 仓: {ai_root}\n"
     try:
-        completed = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             cwd=ai_root,
             env=env,
-            check=False,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
+            bufsize=1,
         )
     except OSError as err:
         return 1, f"无法执行 bootstrap: {err}"
-    out = (completed.stdout or "") + (completed.stderr or "")
-    header = f"执行: {' '.join(cmd)}\nAI 仓: {ai_root}\n"
-    if completed.returncode == 0 and is_managed_ai_root(ai_root):
+
+    chunks: list[str] = []
+    try:
+        assert proc.stdout is not None
+        for raw in proc.stdout:
+            chunks.append(raw)
+            if on_output_line is not None:
+                on_output_line(raw.rstrip("\n"))
+        code = int(proc.wait())
+    except Exception as err:  # noqa: BLE001
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        return 1, header + "".join(chunks) + f"\nbootstrap 读取失败: {err}"
+
+    out = "".join(chunks)
+    if code == 0 and is_managed_ai_root(ai_root):
         mark_ai_root_managed(ai_root)
-    return int(completed.returncode), header + out
+    return code, header + out
