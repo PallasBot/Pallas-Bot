@@ -16,6 +16,8 @@ from pallas.core.foundation.paths import DATA_ROOT, PROJECT_ROOT
 
 _LOCK = threading.RLock()
 _DOC_CACHE: dict[str, Any] | None = None
+# hub 写入后 worker 靠磁盘 revision 失效缓存（同 repo_settings）
+_DOC_CACHE_REV: tuple[int, int] | None = None
 
 DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:11434"
 PROVIDERS_FILENAME = "llm_providers.json"
@@ -25,10 +27,23 @@ def providers_store_path() -> Path:
     return DATA_ROOT / "pallas_config" / PROVIDERS_FILENAME
 
 
+def providers_store_disk_revision() -> tuple[int, int] | None:
+    """返回 (mtime_ns, size)；文件不存在则为 None。"""
+    path = providers_store_path()
+    if not path.is_file():
+        return None
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (int(st.st_mtime_ns), int(st.st_size))
+
+
 def clear_providers_store_cache() -> None:
-    global _DOC_CACHE
+    global _DOC_CACHE, _DOC_CACHE_REV
     with _LOCK:
         _DOC_CACHE = None
+        _DOC_CACHE_REV = None
 
 
 def _empty_document() -> dict[str, Any]:
@@ -452,17 +467,19 @@ def _ensure_seeded_document() -> dict[str, Any]:
 
 
 def load_providers_document(*, refresh: bool = False) -> dict[str, Any]:
-    global _DOC_CACHE
+    global _DOC_CACHE, _DOC_CACHE_REV
     with _LOCK:
-        if _DOC_CACHE is not None and not refresh:
+        rev = providers_store_disk_revision()
+        if _DOC_CACHE is not None and not refresh and _DOC_CACHE_REV == rev:
             return json.loads(json.dumps(_DOC_CACHE))
         doc = _ensure_seeded_document()
         _DOC_CACHE = json.loads(json.dumps(doc))
-        return json.loads(json.dumps(doc))
+        _DOC_CACHE_REV = providers_store_disk_revision()
+        return json.loads(json.dumps(_DOC_CACHE))
 
 
 def save_providers_document(document: dict[str, Any]) -> dict[str, Any]:
-    global _DOC_CACHE
+    global _DOC_CACHE, _DOC_CACHE_REV
     existing = load_providers_document(refresh=True)
     normalized = _normalize_document(document if isinstance(document, dict) else {}, existing=existing)
     path = providers_store_path()
@@ -470,13 +487,14 @@ def save_providers_document(document: dict[str, Any]) -> dict[str, Any]:
     path.write_text(json.dumps(normalized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     with _LOCK:
         _DOC_CACHE = json.loads(json.dumps(normalized))
+        _DOC_CACHE_REV = providers_store_disk_revision()
     logger.info("llm providers saved: file={}", path)
     return export_providers_for_api(doc=normalized)
 
 
 def upsert_provider_row(provider: dict[str, Any]) -> dict[str, Any]:
     """只更新单个提供方；其余行原样保留（避免整表 PUT 误擦其他密钥）。"""
-    global _DOC_CACHE
+    global _DOC_CACHE, _DOC_CACHE_REV
     if not isinstance(provider, dict):
         raise ValueError("provider must be an object")
     existing = load_providers_document(refresh=True)
@@ -521,6 +539,7 @@ def upsert_provider_row(provider: dict[str, Any]) -> dict[str, Any]:
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     with _LOCK:
         _DOC_CACHE = json.loads(json.dumps(doc))
+        _DOC_CACHE_REV = providers_store_disk_revision()
     logger.info("llm provider upserted: id={} file={}", pid, path)
     return export_providers_for_api(doc=doc)
 
