@@ -131,9 +131,7 @@ def federate_owner_rotate_sec() -> int:
 
 def federate_prefer_local_owner() -> bool:
     """命令群归属是否优先本机（本机在能力环内时直接当主人）。默认关闭。"""
-    return (
-        parse_tristate(setting_str(f"{_PREFIX}PREFER_LOCAL_OWNER", "false"), default=False) is True
-    )
+    return parse_tristate(setting_str(f"{_PREFIX}PREFER_LOCAL_OWNER", "false"), default=False) is True
 
 
 def federate_ingress_active() -> bool:
