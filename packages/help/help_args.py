@@ -44,24 +44,6 @@ def parse_command_args(
     )
 
 
-def parse_help_page_token(text: str) -> int | None:
-    """解析分页口令：2页 / 第2页 / p2 / 页2。"""
-    raw = (text or "").strip()
-    if not raw:
-        return None
-    for pattern in (
-        r"^(?:第)?(\d+)页$",
-        r"^[pP](\d+)$",
-        r"^页(\d+)$",
-    ):
-        match = re.match(pattern, raw)
-        if not match:
-            continue
-        page = int(match.group(1))
-        return page if page >= 1 else None
-    return None
-
-
 def parse_help_args(plaintext: str, *, plugin_count: int | None = None) -> list[str]:
     return parse_command_args(
         plaintext,

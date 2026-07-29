@@ -8,7 +8,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 from pallas.core.platform.federate.redis_settings import federate_redis_available
-from pallas.core.platform.shard import context as shard_ctx
 
 _PREFIX = "PALLAS_FEDERATE_"
 
@@ -100,9 +99,12 @@ def federate_redis_prefix(cfg: FederateConfig | None = None) -> str:
 
 
 def federate_ingress_enabled(cfg: FederateConfig | None = None) -> bool:
+    """入站协同是否启用。
+
+    ``auto``（默认）：已配置协同池编号时开启，单进程与分片均可；
+    仍须 coord Redis 可用才会 ``federate_ingress_active``（含发布 peer 名册）。
+    """
     cfg = cfg or get_federate_config()
-    if not shard_ctx.sharding_active() and cfg.ingress_enabled is not True:
-        return False
     if cfg.control_plane_enabled is False and cfg.ingress_enabled is not True:
         return False
     flag = cfg.ingress_enabled

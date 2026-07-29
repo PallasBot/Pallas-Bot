@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 
 from packages.help.draw_plugin_menu import draw_plugin_menu_image
 from packages.help.help_draw_common import truncate_pixels
-from packages.help.menu_rows import HelpMenuRow, paginate_menu_rows
+from packages.help.menu_rows import HelpMenuRow
 from packages.help.plugin_visuals import help_font
 
 
@@ -15,25 +15,6 @@ def test_truncate_pixels_fits_card_width() -> None:
     fitted = truncate_pixels(draw, long_text, font, 156)
     assert draw.textlength(fitted, font=font) <= 156
     assert fitted.endswith("…")
-
-
-def test_paginate_menu_rows_page_size_21() -> None:
-    rows = [
-        HelpMenuRow(
-            index=i,
-            plugin=SimpleNamespace(name=f"p{i}"),
-            display_name=f"P{i}",
-            description="",
-            enabled=True,
-            help_tag="other",
-        )
-        for i in range(1, 26)
-    ]
-    page_rows, page, total_pages = paginate_menu_rows(rows, page=2)
-    assert page == 2
-    assert total_pages == 2
-    assert len(page_rows) == 4
-    assert page_rows[0].index == 22
 
 
 def test_draw_plugin_menu_image_dimensions() -> None:
@@ -56,7 +37,19 @@ def test_draw_plugin_menu_image_dimensions() -> None:
             help_tag="fun",
         ),
     ]
-    image = draw_plugin_menu_image(rows, show_ignored=False, page=1, total_pages=1, total_plugin_count=2)
+    image = draw_plugin_menu_image(rows, show_ignored=False, total_plugin_count=2)
     assert image.width == 920
     assert image.height > 150
     assert image.mode == "RGB"
+
+
+def test_draw_plugin_menu_indices_follow_group_order_labels() -> None:
+    """序号应与分组后的展示顺序一致（组内连续）。"""
+    plugin = SimpleNamespace(name="p", module=SimpleNamespace(__file__=__file__), metadata=None)
+    rows = [
+        HelpMenuRow(index=1, plugin=plugin, display_name="A核心", description="", enabled=True, help_tag="core"),
+        HelpMenuRow(index=2, plugin=plugin, display_name="B娱乐", description="", enabled=True, help_tag="fun"),
+        HelpMenuRow(index=3, plugin=plugin, display_name="C其他", description="", enabled=True, help_tag="other"),
+    ]
+    image = draw_plugin_menu_image(rows, total_plugin_count=3)
+    assert image.width == 920

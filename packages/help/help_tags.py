@@ -103,6 +103,17 @@ def resolve_plugin_help_tag(plugin: Any, *, overrides: dict[str, str] | None = N
     return plugin_help_tag(plugin)
 
 
+def help_tag_sort_rank(tag: str, *, order: tuple[str, ...] = DEFAULT_HELP_TAG_ORDER) -> tuple[int, int, str]:
+    """分组排序键：已知 tag → 未知 tag → other。"""
+    key = normalize_help_tag(tag)
+    if key == DEFAULT_HELP_TAG:
+        return (2, 0, key)
+    try:
+        return (0, order.index(key), key)
+    except ValueError:
+        return (1, 0, key)
+
+
 def group_rows_by_help_tag[T](
     rows: Iterable[T],
     *,

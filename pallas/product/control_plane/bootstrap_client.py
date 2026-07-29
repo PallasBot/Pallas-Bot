@@ -11,7 +11,10 @@ from pallas.product.community_stats.config import get_community_stats_config
 from pallas.product.community_stats.endpoints import heartbeat_urls_for_config, normalize_heartbeat_url
 from pallas.product.community_stats.store import load_or_create_deployment_id
 from pallas.product.control_plane.config import (
+    INSTANCE_SECRET_ENV_KEY,
     ControlPlaneConfig,
+    clear_control_plane_config_cache,
+    control_plane_wanted,
     get_control_plane_config,
     should_run_bootstrap_refresh,
 )
@@ -58,12 +61,47 @@ def clear_bootstrap_runtime_caches() -> None:
     clear_federate_config_cache()
 
 
+async def maybe_autofill_instance_secret_from_onboarding() -> bool:
+    """控制面已开且未填入池密钥时，从公开 onboarding 写入密钥（社区池口令，非私密）。"""
+    cfg = get_control_plane_config()
+    if not control_plane_wanted(cfg):
+        return False
+    if (cfg.instance_secret or "").strip():
+        return False
+    try:
+        from pallas.product.community_stats.federation_onboarding import fetch_federation_onboarding
+
+        body = await fetch_federation_onboarding()
+    except Exception as e:
+        logger.debug("control_plane autofill secret: onboarding failed: {}", e)
+        return False
+    secret = str((body or {}).get("instance_secret") or "").strip()
+    if not secret:
+        return False
+    try:
+        from pallas.core.foundation.config.repo_settings import upsert_repo_settings_items
+
+        upsert_repo_settings_items({INSTANCE_SECRET_ENV_KEY: secret})
+    except Exception as e:
+        logger.warning("control_plane autofill secret: persist failed: {}", e)
+        return False
+    clear_control_plane_config_cache()
+    clear_bootstrap_runtime_caches()
+    logger.info("control_plane autofill secret: wrote instance secret from community onboarding")
+    return True
+
+
 async def refresh_control_plane_bootstrap(*, force: bool = False) -> bool:
     """拉取 bootstrap 并落盘；成功返回 True。"""
+    await maybe_autofill_instance_secret_from_onboarding()
     if not should_run_bootstrap_refresh() and not force:
         return bootstrap_state_valid()
 
     cfg = get_control_plane_config()
+    if not (cfg.instance_secret or "").strip() and not (get_community_stats_config().token or "").strip():
+        logger.warning("control_plane bootstrap: no instance secret (autofill unavailable)")
+        return bootstrap_state_valid()
+
     urls = bootstrap_urls(cfg)
     if not urls:
         logger.warning("control_plane bootstrap: no URL configured")
@@ -139,6 +177,7 @@ async def refresh_control_plane_bootstrap(*, force: bool = False) -> bool:
 
 
 async def ensure_control_plane_bootstrap(*, force: bool = False) -> bool:
+    await maybe_autofill_instance_secret_from_onboarding()
     if not force and bootstrap_state_valid():
         return True
     return await refresh_control_plane_bootstrap(force=force)

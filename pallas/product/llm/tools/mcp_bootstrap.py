@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import subprocess
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
@@ -158,14 +159,18 @@ class _StdioMcpSession(_McpSessionBase):
             return
         if not server.command:
             raise RuntimeError(f"mcp server {server.id} missing command")
-        proc = subprocess.Popen(
-            list(server.command),
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-        )
+        popen_kwargs: dict[str, Any] = {
+            "args": list(server.command),
+            "stdin": subprocess.PIPE,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "text": True,
+            "bufsize": 1,
+        }
+        if sys.platform == "win32":
+            # 避免 MCP stdio 子进程弹出控制台窗口
+            popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proc = subprocess.Popen(**popen_kwargs)  # noqa: S603
         if proc.stdin is None or proc.stdout is None:
             proc.terminate()
             raise RuntimeError(f"mcp server {server.id} missing stdio pipe")

@@ -51,15 +51,10 @@ def production_worker_count_required(reg: ShardRegistry | None = None) -> int:
 
 
 def pid_is_alive(pid_file: Path) -> bool:
-    try:
-        pid = int(pid_file.read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
-        return False
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError:
-        return False
+    from pallas.console.cli.process_util import pid_alive, read_pid_file
+
+    pid = read_pid_file(pid_file)
+    return pid is not None and pid_alive(pid)
 
 
 def list_running_production_worker_shard_ids() -> set[int]:

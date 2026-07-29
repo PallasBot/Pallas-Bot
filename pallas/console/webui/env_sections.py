@@ -198,6 +198,23 @@ def _mail_section() -> WebuiEnvSection:
     )
 
 
+def _command_start_section() -> WebuiEnvSection:
+    from pallas.core.foundation.command_start_config import (
+        CommandStartConfig,
+        get_command_start_config,
+    )
+
+    return WebuiEnvSection(
+        id="command_start",
+        title="命令口令",
+        module_label="pallas.core.foundation.command_start_config",
+        model_cls=CommandStartConfig,
+        read_current=get_command_start_config,
+        field_to_env={"command_start": "COMMAND_START"},
+        skip_fields=frozenset(),
+    )
+
+
 def _llm_section() -> WebuiEnvSection:
     # LLM 段字段与读写逻辑归 `pallas.product.llm.webui_config` 所有。
     from pallas.product.llm.webui_config import LlmWebuiConfig, get_llm_webui_config
@@ -321,6 +338,7 @@ def _arknights_kb_section() -> WebuiEnvSection:
 def _base_section_by_id(section_id: str) -> WebuiEnvSection | None:
     builders: dict[str, Any] = {
         "mail": _mail_section,
+        "command_start": _command_start_section,
         "llm": _llm_section,
         "arknights_kb": _arknights_kb_section,
     }
@@ -360,6 +378,7 @@ def list_webui_env_sections() -> list[dict[str, str]]:
 
 _REMOVED_FROM_COMMON_CONFIG_LIST = frozenset({
     "mail",
+    "command_start",
     "message_scrub",
     "ingress_fanout",
     "ingress_dispatch",
@@ -541,6 +560,13 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             from pallas.core.platform.ingress.config import clear_ingress_fanout_config_cache
 
             clear_ingress_fanout_config_cache()
+        except Exception:
+            pass
+    elif section_id == "command_start":
+        try:
+            from pallas.core.foundation.command_start_config import clear_command_start_config_cache
+
+            clear_command_start_config_cache()
         except Exception:
             pass
     elif section_id == "ingress_dispatch":

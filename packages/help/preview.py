@@ -7,7 +7,7 @@ from typing import Literal
 from .draw_function_detail import draw_function_detail_image
 from .draw_plugin_detail import draw_plugin_detail_image
 from .draw_plugin_menu import draw_plugin_menu_image
-from .menu_rows import build_help_menu_rows, paginate_menu_rows
+from .menu_rows import build_help_menu_rows
 from .plugin_detail_data import build_function_detail_data, build_plugin_detail_data
 from .plugin_manager import find_plugin_by_identifier, is_plugin_disabled_for_help_display
 from .renderer import render_v3_image_bytes
@@ -26,19 +26,17 @@ async def render_help_preview_bytes(
     bot_id: int | None = None,
     group_id: int | None = None,
 ) -> bytes:
+    del page  # 总览不再分页；保留参数兼容旧预览 URL
     if level == "menu":
         all_rows = await build_help_menu_rows(bot_id=bot_id, group_id=group_id, show_ignored=show_ignored)
-        page_rows, current_page, total_pages = paginate_menu_rows(all_rows, page=page)
         enabled_count = sum(1 for row in all_rows if row.enabled)
         image = draw_plugin_menu_image(
-            page_rows,
+            all_rows,
             show_ignored=show_ignored,
-            page=current_page,
-            total_pages=total_pages,
             total_plugin_count=len(all_rows),
             total_enabled_count=enabled_count,
         )
-        cache_key = f"preview_menu|p={current_page}|tp={total_pages}|n={len(all_rows)}|ignored={int(show_ignored)}"
+        cache_key = f"preview_menu|n={len(all_rows)}|ignored={int(show_ignored)}"
         return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="menu_v4")
 
     plugin_name = (plugin or "").strip() or "help"

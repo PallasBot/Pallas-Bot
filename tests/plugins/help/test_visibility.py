@@ -64,3 +64,31 @@ def test_superuser_only_plugins_hidden_from_user_help_but_visible_in_superuser_h
 
     assert {p.name for p in user_menu} == {"draw", "llm_chat"}
     assert {p.name for p in superuser_menu} == {"pb_core", "draw", "llm_chat"}
+
+
+def test_get_help_menu_plugins_sorted_by_help_tag_then_display_name(monkeypatch):
+    from packages.help import plugin_manager as pm
+
+    zebra_fun = SimpleNamespace(
+        name="zebra",
+        metadata=SimpleNamespace(name="ZebraFun", extra={"help_tag": "fun"}),
+    )
+    apple_core = SimpleNamespace(
+        name="apple",
+        metadata=SimpleNamespace(name="AppleCore", extra={"help_tag": "core"}),
+    )
+    banana_fun = SimpleNamespace(
+        name="banana",
+        metadata=SimpleNamespace(name="BananaFun", extra={"help_tag": "fun"}),
+    )
+    other_plug = SimpleNamespace(
+        name="misc",
+        metadata=SimpleNamespace(name="Misc", extra={"help_tag": "other"}),
+    )
+
+    monkeypatch.setattr(pm, "get_loaded_plugins", lambda: [zebra_fun, apple_core, banana_fun, other_plug])
+    monkeypatch.setattr(pm, "is_plugin_help_available", lambda _name: True)
+    monkeypatch.setattr(pm, "resolve_help_tag_overrides", dict)
+
+    menu = pm.get_help_menu_plugins(show_ignored=True)
+    assert [p.name for p in menu] == ["apple", "banana", "zebra", "misc"]

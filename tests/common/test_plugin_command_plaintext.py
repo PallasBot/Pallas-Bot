@@ -26,6 +26,32 @@ def test_extract_command_prefixes_from_menu_data_skips_chat_like_trigger() -> No
     assert "决斗事件重载" in prefixes
 
 
+def test_extract_command_prefixes_keeps_command_before_plus_args() -> None:
+    menu_data = [
+        {"trigger_condition": "牛牛表情列表 / 表情包制作"},
+        {"trigger_condition": "牛牛表情搜索 + 关键词"},
+        {"trigger_condition": "牛牛表情详情 + 关键词"},
+        {"trigger_condition": "牛牛表情推荐 + 意图"},
+        {"trigger_condition": "牛牛表情 + 关键词 + 图片/文字"},
+        {"trigger_condition": "牛牛拉黑 / 牛牛屏蔽 / 牛牛解禁 + QQ 或 @"},
+    ]
+
+    prefixes = extract_command_prefixes_from_menu_data(menu_data)
+
+    assert "牛牛表情列表" in prefixes
+    assert "表情包制作" in prefixes
+    assert "牛牛表情搜索" in prefixes
+    assert "牛牛表情详情" in prefixes
+    assert "牛牛表情推荐" in prefixes
+    assert "牛牛表情" in prefixes
+    assert "牛牛拉黑" in prefixes
+    assert "牛牛屏蔽" in prefixes
+    assert "牛牛解禁" in prefixes
+    assert "文字" not in prefixes
+    assert "关键词" not in prefixes
+    assert "牛牛" not in prefixes
+
+
 def test_is_plugin_command_plaintext_uses_trie_and_menu_prefixes(monkeypatch) -> None:
     fake_plugins = [
         SimpleNamespace(

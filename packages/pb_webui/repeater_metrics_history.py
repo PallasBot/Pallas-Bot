@@ -24,22 +24,10 @@ def repeater_metrics_history_path() -> Path:
 @contextmanager
 def interprocess_history_lock(path: Path) -> Iterator[None]:
     """跨 hub/worker 互斥，避免共用固定 .tmp 时 os.replace 竞态。"""
-    lock_path = path.with_suffix(path.suffix + ".lock")
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
-    try:
-        import fcntl
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
 
-        fcntl.flock(fd, fcntl.LOCK_EX)
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
         yield
-    finally:
-        try:
-            import fcntl
-
-            fcntl.flock(fd, fcntl.LOCK_UN)
-        except OSError:
-            pass
-        os.close(fd)
 
 
 def append_repeater_metrics_history(

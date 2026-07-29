@@ -7,7 +7,6 @@ from typing import Any
 
 from .help_constants import HELP_STATUS_OFF, HELP_STATUS_ON
 from .help_tags import DEFAULT_HELP_TAG, resolve_help_tag_overrides, resolve_plugin_help_tag
-from .help_theme import MENU_PAGE_SIZE
 from .plugin_manager import (
     collect_disabled_plugin_names,
     get_help_menu_plugins,
@@ -25,18 +24,6 @@ class HelpMenuRow:
     description: str
     enabled: bool
     help_tag: str = DEFAULT_HELP_TAG
-
-
-def paginate_menu_rows(
-    rows: list[HelpMenuRow],
-    *,
-    page: int,
-    page_size: int = MENU_PAGE_SIZE,
-) -> tuple[list[HelpMenuRow], int, int]:
-    total_pages = max(1, (len(rows) + page_size - 1) // page_size)
-    current = max(1, min(page, total_pages))
-    start = (current - 1) * page_size
-    return rows[start : start + page_size], current, total_pages
 
 
 async def build_help_menu_rows(

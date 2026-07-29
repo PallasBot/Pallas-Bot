@@ -18,10 +18,12 @@ def test_pb_core_plugin_config_payload(monkeypatch):
     assert "greeting_fanout_texts" in names
     assert "matcher_dispatch_enabled" in names
     assert "smtp_user" in names
+    assert "command_start" in names
     assert "community_enabled" in names
     assert "enabled" in names or "instance_secret" in names
     groups = data.get("field_groups") or []
-    assert len(groups) >= 4
+    assert len(groups) >= 5
+    assert any(g.get("id") == "command_start" or g.get("title") == "命令口令" for g in groups)
     clear_webui_env_sections_cache()
 
 
@@ -37,6 +39,7 @@ def test_list_webui_env_sections_excludes_pb_core_migrated():
     "section_id",
     [
         "mail",
+        "command_start",
         "message_scrub",
         "ingress_fanout",
         "ingress_dispatch",

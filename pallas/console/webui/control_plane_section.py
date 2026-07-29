@@ -89,13 +89,13 @@ def _field_row(key: str, cur: Any) -> dict[str, Any]:
         row["description"] = field_help(
             "是否向社区中心自动领取协同配置",
             "一般选「自动」或「开启」；关闭后不再向中心拉取配置",
-            "默认已开启；仍需填写下方的入池密钥",
+            "默认已开启；入池密钥可留空，启动时会自动从中心写入",
         )
     elif key == "instance_secret":
         row["description"] = field_help(
             "加入多机协同池的密钥",
-            "打开控制台「统计与语料」，在「多机协同」面板复制后粘贴到此处",
-            "与共享语料口令、在线统计无关；请勿泄露",
+            "可留空：控制面开启时启动会自动从社区中心拉取并保存",
+            "也可在「统计与语料 → 多机协同」复制后粘贴；与共享语料口令无关",
         )
     elif key == "bootstrap_url":
         row["description"] = field_help(
@@ -115,9 +115,9 @@ def _field_row(key: str, cur: Any) -> dict[str, Any]:
         raw = str(cur or "auto").strip().lower()
         row["current"] = raw if raw in _TRI_CHOICES else "auto"
         row["description"] = field_help(
-            "避免多套牛牛对同一条群消息各回复一遍",
-            "选「自动」：已入池且去重服务可用时开启",
-            "单进程与分片模式都会经过此去重",
+            "避免多套牛牛对同一条群消息各回复一遍，并发布本站账号供对方识别为 bot",
+            "选「自动」：已有协同池编号且去重服务可用时开启",
+            "单进程与分片均可；对方也须入同一池并发布名单，AI/复读才会当 bot 忽略",
         )
     elif key == "ingress_bypass_unified":
         row["kind"] = "bool"
