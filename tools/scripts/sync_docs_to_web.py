@@ -34,6 +34,7 @@ FILE_MAP: dict[str, str] = {
     "maintainer/deploy/sharded.md": "maintainer/deploy/sharded.md",
     "maintainer/deploy/upgrade.md": "maintainer/deploy/upgrade.md",
     "maintainer/operate/webui.md": "maintainer/operate/webui.md",
+    "maintainer/operate/logs.md": "maintainer/operate/logs.md",
     "maintainer/operate/llm-and-ai.md": "maintainer/operate/llm-and-ai.md",
     "maintainer/operate/command-permissions.md": "maintainer/operate/command-permissions.md",
     "maintainer/operate/plugin-governance.md": "maintainer/operate/plugin-governance.md",

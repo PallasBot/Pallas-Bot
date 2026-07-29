@@ -14,6 +14,7 @@ assert _SPEC.loader is not None
 _MOD = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MOD)
 transform_for_vitepress = _MOD.transform_for_vitepress
+FILE_MAP = _MOD.FILE_MAP
 
 
 @pytest.mark.parametrize(
@@ -59,3 +60,7 @@ transform_for_vitepress = _MOD.transform_for_vitepress
 )
 def test_transform_common_webui_dead_link_patterns(src: str, expected: str) -> None:
     assert transform_for_vitepress(src) == expected
+
+
+def test_maintainer_logs_page_is_synced_to_docs_repo() -> None:
+    assert FILE_MAP["maintainer/operate/logs.md"] == "maintainer/operate/logs.md"
