@@ -130,6 +130,85 @@ def test_source_segments_for_command_only_adds_self_for_media() -> None:
     assert source_segments_for_command(segments, mode="media") == segments
 
 
+def test_sanitize_meme_tool_argument_strips_self_and_noise() -> None:
+    from pallas.product.llm.tools.plugin_bootstrap import (
+        prepare_command_tool_arguments,
+        sanitize_meme_tool_argument,
+    )
+
+    assert sanitize_meme_tool_argument("吃自己") == "吃"
+    assert sanitize_meme_tool_argument("自己自己") == ""
+    assert sanitize_meme_tool_argument("牛牛表情搜索 牛牛自己") == ""
+    assert sanitize_meme_tool_argument("摸") == "摸"
+    prepared = prepare_command_tool_arguments(
+        "memes.recommend",
+        {"intent": "吃自己"},
+    )
+    assert prepared["intent"] == "吃"
+    prepared_search = prepare_command_tool_arguments(
+        "memes.search",
+        {"keyword": "牛牛自己"},
+    )
+    assert prepared_search["keyword"] == ""
+    from pallas.product.llm.tools.plugin_bootstrap import command_tool_arguments_ready
+
+    assert command_tool_arguments_ready("memes.search", prepared_search) == "empty_meme_keyword"
+    assert command_tool_arguments_ready("memes.recommend", prepared) is None
+
+
+def test_memes_list_search_do_not_auto_media(monkeypatch) -> None:
+    decl_search = parse_llm_command_tool_decl(
+        llm_command_tool_row(
+            name="memes.search",
+            command_id="memes.search",
+            description="搜",
+            parameters={
+                "type": "object",
+                "properties": {"keyword": {"type": "string"}},
+                "required": ["keyword"],
+            },
+            command_template="牛牛表情搜索 {keyword}",
+            source_segments="none",
+        )
+    )
+    decl_recommend = parse_llm_command_tool_decl(
+        llm_command_tool_row(
+            name="memes.recommend",
+            command_id="memes.recommend",
+            description="荐",
+            parameters={
+                "type": "object",
+                "properties": {"intent": {"type": "string"}},
+                "required": ["intent"],
+            },
+            command_template="牛牛表情推荐 {intent}",
+            source_segments="none",
+        )
+    )
+    assert decl_search is not None
+    assert decl_recommend is not None
+
+    captured: list[str] = []
+
+    async def fake_dispatch(ctx, *, command_id, command_text, source_segments_mode="none"):
+        captured.append(source_segments_mode)
+        return {"ok": True, "dispatched": True}
+
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.plugin_bootstrap.dispatch_group_command_text",
+        fake_dispatch,
+    )
+    import asyncio
+
+    search_spec = build_command_tool_spec(decl_search, plugin_name="memes", plugin_title="表情")
+    recommend_spec = build_command_tool_spec(decl_recommend, plugin_name="memes", plugin_title="表情")
+    ctx = ToolInvokeContext.from_payload({"bot_id": 1, "group_id": 2, "user_id": 3})
+    assert ctx is not None
+    asyncio.run(search_spec.handler({"keyword": "吃"}, ctx))
+    asyncio.run(recommend_spec.handler({"intent": "吃"}, ctx))
+    assert captured == ["none", "media"]
+
+
 def test_render_command_template_missing_field() -> None:
     with pytest.raises(CommandTemplateError):
         render_command_template("牛牛画画 {prompt}", {})
