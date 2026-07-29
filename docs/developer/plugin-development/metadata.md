@@ -2,7 +2,7 @@
 
 本页说明 `PluginMetadata` / `extra` 如何声明帮助、权限、冷却、热载与装包生效。平台按此消费；命令 ID 须全链路一致。
 
-最小群口令插件可先看 [写第一个插件](first-plugin.md)。热载与装包正交细节见 [Reload 与 Activation](reload-and-activation.md)。
+最小群命令插件可先看 [写第一个插件](first-plugin.md)。热载与装包正交细节见 [Reload 与 Activation](reload-and-activation.md)。
 
 ## 必填面
 
@@ -20,7 +20,7 @@
 
 | 字段 | 职责 |
 | --- | --- |
-| `usage` | 口令展示；用 `usage_line` + `join_usage` |
+| `usage` | 命令展示；用 `usage_line` + `join_usage` |
 | `menu_data` | `func` / `trigger_*` / `brief_des` / `detail_des`；权限绑 `command_permission(s)` |
 
 MUST NOT：在 `usage` 或 `trigger_condition` 写死权限角色。细则：[cmd_perm](/common/cmd_perm)。
@@ -47,7 +47,7 @@ MUST NOT：在 `usage` 或 `trigger_condition` 写死权限角色。细则：[cm
 
 ## `llm_tools` 的素材透传
 
-`llm_command_tool_row()` 默认不携带原消息的图片、@ 或「自己」，避免帮助、点歌等文本口令被追加无关参数。
+`llm_command_tool_row()` 默认不携带原消息的图片、@ 或「自己」，避免帮助、点歌等文本命令被追加无关参数。
 
 画图、表情等需要引用素材的工具显式声明 `source_segments="media"`：
 
@@ -78,7 +78,7 @@ extra={
 }
 ```
 
-热群默认开启闲聊严格预筛（`PALLAS_CHAT_MATCHER_STRICT`）：非口令消息主要只跑 `passive` / `always_run` 与路由命中的模块。
+热群默认开启闲聊严格预筛（`PALLAS_CHAT_MATCHER_STRICT`）：非命令消息主要只跑 `passive` / `always_run` 与路由命中的模块。
 
 - **`passive: true`**：声明本插件要吃闲聊车道（复读、智能对话、局内玩法等）。不标则严格模式下普通群聊可能收不到事件。
 - **`always_run: true`**：极少用；几乎每条群消息都激活，热群代价高。

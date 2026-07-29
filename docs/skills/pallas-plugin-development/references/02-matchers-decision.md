@@ -5,7 +5,7 @@
 ## 2.1 决策流程
 
 ```
-需要用户明确说一条口令？
+需要用户明确说一条命令？
 ├─ 是 → 群专属还是私聊也可？
 │   ├─ 仅群 → on_command + group_message_permission_for_command
 │   ├─ 仅私聊 → on_command + private_message_permission_for_command
@@ -21,13 +21,13 @@
 
 | Matcher | 典型场景 | 仓库示例 | cmd_perm |
 | --- | --- | --- | --- |
-| `on_command` | 用户主动口令 | `greeting`、`help`；官方扩展如 `duel`（pip） | matcher `permission=` |
+| `on_command` | 用户主动命令 | `greeting`、`help`；官方扩展如 `duel`（pip） | matcher `permission=` |
 | `on_message` | 被动接话、关键词、`@` LLM 对话 | `repeater`、`llm_chat` | handler 内或无需 |
 | `on_notice` | 撤回、成员变动 | `repeater` | 通常无命令 ID |
 | `on_request` | 加群/好友申请 | `request_handler` | 按业务 |
 | meta / 适配器事件 | 戳一戳等 | `greeting`（poke） | 按业务 |
 
-## 2.3 口令型：`plugin_sdk`（推荐）
+## 2.3 命令型：`plugin_sdk`（推荐）
 
 优先 [`pallas.api.commands`](../../../../pallas/api/commands/__init__.py)：
 
@@ -58,7 +58,7 @@ async def handle_hello(ctx):
 
 ## 2.6 自检
 
-- [ ] 口令型未滥用宽泛 `on_message`
+- [ ] 命令型未滥用宽泛 `on_message`
 - [ ] `on_message` 有合理 `priority` / `block` / `rule`
 - [ ] 命令型已绑 `command_permissions` 与 matcher `permission`
 - [ ] 被动文本类已评估 message_scrub

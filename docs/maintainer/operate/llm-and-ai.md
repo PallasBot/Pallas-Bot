@@ -77,7 +77,7 @@ flowchart TD
 
 | 接口 | 用途 |
 | --- | --- |
-| `/pallas/api/auth/setup-status` | 是否仍处默认口令 / 首次引导 |
+| `/pallas/api/auth/setup-status` | 是否仍处默认密钥 / 首次引导 |
 | `/pallas/api/common-config/llm/runtime-overview` | health、模型、任务统计、conversation kernel |
 
 ## 记忆与 session

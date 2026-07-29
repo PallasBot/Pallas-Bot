@@ -1,4 +1,4 @@
-"""分片 hub：worker 私聊 relogin 口令 HTTP 入口。"""
+"""分片 hub：worker 私聊 relogin 命令 HTTP 入口。"""
 
 from __future__ import annotations
 

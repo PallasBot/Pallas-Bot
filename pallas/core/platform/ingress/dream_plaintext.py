@@ -10,5 +10,5 @@ _DREAM_FANOUT_TEXTS = frozenset({
 
 
 def is_dream_plaintext(text: str) -> bool:
-    """做梦与醒梦口令：分片下恒 fanout，各牛独立做梦态。"""
+    """做梦与醒梦命令：分片下恒 fanout，各牛独立做梦态。"""
     return (text or "").strip() in _DREAM_FANOUT_TEXTS

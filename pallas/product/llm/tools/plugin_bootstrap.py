@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 _PLUGIN_TOOL_NAMES: set[str] = set()
 _MEDIA_TOOL_PREFIXES = frozenset({"draw", "memes"})
-# list/search/info 只查模板，不应垫「自己」污染口令；出图类口令才自动 media。
+# list/search/info 只查模板，不应垫「自己」污染命令；出图类命令才自动 media。
 _MEDIA_SKIP_ACTIONS = frozenset({"list", "search", "info", "help"})
 _MEME_ARG_NOISE_PHRASES = (
     "牛牛表情推荐",
@@ -32,7 +32,7 @@ _MEME_ARG_NOISE_TOKENS = frozenset({"牛牛", "表情", "模板", "推荐", "搜
 
 
 def sanitize_meme_tool_argument(value: object) -> str:
-    """去掉 LLM 常误塞进 keyword/intent 的「自己」与口令噪声。"""
+    """去掉 LLM 常误塞进 keyword/intent 的「自己」与命令噪声。"""
     text = str(value or "").strip()
     if not text:
         return ""
@@ -65,12 +65,12 @@ def command_tool_arguments_ready(tool_name: str, args: dict) -> str | None:
 
 
 def command_dispatch_result_summary(command_text: str) -> str:
-    """口令派发成功后写入 tool result.summary，约束后续确认语气。"""
-    text = str(command_text or "").strip() or "（空口令）"
+    """命令派发成功后写入 tool result.summary，约束后续确认语气。"""
+    text = str(command_text or "").strip() or "（空命令）"
     return (
         f"已执行「{text}」。若需开口：用极短口语 ack 即可，也可不说话（PASS/空）；"
         "禁止「已派发/帮你找找/正在生成」等系统腔；禁止编造未发生的结果；"
-        "勿把「随机」「随便」等占位词当歌名念出来；有明确歌名或玩法口令时才可点到。"
+        "勿把「随机」「随便」等占位词当歌名念出来；有明确歌名或玩法命令时才可点到。"
     )
 
 
@@ -175,7 +175,7 @@ def build_command_tool_spec(
 
 
 def _command_tool_domains(*, plugin_name: str, decl: LlmCommandToolDecl) -> frozenset[str]:
-    """command + 插件名 + 口令/工具名前缀，便于 selective 命中 draw/sing 等短域名。"""
+    """command + 插件名 + 命令/工具名前缀，便于 selective 命中 draw/sing 等短域名。"""
     domains = {"command", str(plugin_name or "").strip()}
     for raw in (decl.command_id, decl.name):
         prefix = str(raw or "").strip().split(".", 1)[0].strip().lower()

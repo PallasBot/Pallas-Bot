@@ -176,12 +176,12 @@ __plugin_meta__ = PluginMetadata(
                         "keywords": "救一下,补一枪,解禁,追加,翻车",
                     },
                     {
-                        "title": "与口令工具的分工",
+                        "title": "与命令工具的分工",
                         "content": (
                             "闲聊中若用户要玩轮盘，可调用 roulette.start / roulette.shot 等工具；"
-                            "效果与对应群口令一致，不要编造其它入口。"
+                            "效果与对应群命令一致，不要编造其它入口。"
                         ),
-                        "keywords": "工具,口令,轮盘,开枪",
+                        "keywords": "工具,命令,轮盘,开枪",
                     },
                 ],
             ),

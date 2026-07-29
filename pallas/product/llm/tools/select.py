@@ -35,7 +35,7 @@ _OPERATOR_LOOKUP_HINTS = (
     "什么职业",
 )
 
-# 工具 spec 可带这些域做分类，但 selective 命中时不得单独用它们拉全仓口令工具
+# 工具 spec 可带这些域做分类，但 selective 命中时不得单独用它们拉全仓命令工具
 _SELECTIVE_DOMAIN_EXCLUDE = frozenset({"command", "meta"})
 
 

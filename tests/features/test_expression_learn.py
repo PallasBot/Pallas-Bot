@@ -19,7 +19,7 @@ def test_expression_learning_safety_rejects_protocol_commands_and_system_text() 
     assert not learn.is_saying_safe_for_expression("x" * 21)
     assert not learn.is_saying_safe_for_expression("[CQ:face,id=14]")
     assert not learn.is_saying_safe_for_expression("/ban 123")
-    assert not learn.is_saying_safe_for_expression("管理口令123")
+    assert not learn.is_saying_safe_for_expression("管理命令123")
     assert not learn.is_saying_safe_for_expression("欢迎新人进群")
     assert not learn.is_saying_safe_for_expression("谢谢您的陪伴")
 

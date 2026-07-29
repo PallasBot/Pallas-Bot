@@ -126,9 +126,9 @@ uv run pallas
 启动成功时通常可见：
 
 1. NoneBot / 插件加载完成，无数据库连接致命错误
-2. 日志打印 Web 控制台初始口令（`data/pallas_console/`）
+2. 日志打印 Web 控制台初始密钥（`data/pallas_console/`）
 3. `http://<主机IP>:8088/pallas/api/health` 返回正常
-4. `http://<主机IP>:8088/pallas/` 可用口令登录
+4. `http://<主机IP>:8088/pallas/` 可用密钥登录
 
 未配置守护进程时，关闭终端即停止服务。Linux 生产环境使用下文 systemd，或改用 [Docker](/deploy/docker)。
 
@@ -181,7 +181,7 @@ WantedBy=multi-user.target
 
 - 备份：`data/pallas_config/webui.json`、`data/pallas_console/`、协议端实例数据
 - 防火墙：仅对可信网络开放 `8088`
-- 生产：勿长期开启 `pallas_webui_dev_mode`；公网访问须 HTTPS + 强口令
+- 生产：勿长期开启 `pallas_webui_dev_mode`；公网访问须 HTTPS + 强密钥
 - 更新：`git pull` + `uv sync` + 重启；Docker 见 [Docker 部署](/deploy/docker)
 
 定制仅改 `config/pallas.toml`、`data/`、`local/plugins/`。见 [升级与站点定制](/maintainer/deploy/upgrade)。
@@ -248,7 +248,7 @@ WantedBy=multi-user.target
 | 主题 | 文档 |
 | --- | --- |
 | 插件安装 | [安装插件](/guide/install-plugins) |
-| 插件口令 | [插件索引](/plugins/index) |
+| 插件命令 | [插件索引](/plugins/index) |
 | 控制台配置 | [Web 控制台](/common/webui) |
 | 排障 | [FAQ](/deploy/faq) |
 | Docker | [Docker 部署](/deploy/docker) |

@@ -15,9 +15,9 @@
 | `/pallas/` | 控制台页面 |
 | `/pallas/api/*` | 控制台使用的状态与管理接口 |
 
-默认端口见 `pallas.toml` 的 `[bootstrap] port`（常见为 `8088`）。登录口令在 `data/pallas_console/`；遗忘见 [FAQ](../../FAQ.md)。
+默认端口见 `pallas.toml` 的 `[bootstrap] port`（常见为 `8088`）。登录密钥在 `data/pallas_console/`；遗忘见 [FAQ](../../FAQ.md)。
 
-无群内用户口令。面板说明见 [网页控制台](../../guide/web-console.md)。
+无群内用户命令。面板说明见 [网页控制台](../../guide/web-console.md)。
 
 ## 命令权限（代码默认）
 
@@ -31,7 +31,7 @@
 
 | 现象 | 处理 |
 | --- | --- |
-| 无法登录 | 查启动日志中的初始口令与 `data/pallas_console/` |
+| 无法登录 | 查启动日志中的初始密钥与 `data/pallas_console/` |
 | 页面空白 / 未部署前端 | 确认 `data/pb_webui/public-react` 有构建产物 |
 | 插件配置没生效 | 确认对应插件已接入热重载配置 |
 

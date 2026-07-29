@@ -1,4 +1,4 @@
-"""接话行为：由 bot 账号派生与群学习统计推导，无手动人设口令。"""
+"""接话行为：由 bot 账号派生与群学习统计推导，无手动人设命令。"""
 
 from .compile_group_style import (
     build_group_style_hints,

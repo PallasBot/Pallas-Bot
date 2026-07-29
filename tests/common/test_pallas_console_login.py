@@ -9,9 +9,9 @@ def test_empty_password_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
     from pallas.console.webui import console_login as m
 
     monkeypatch.setattr(m, "console_auth_dir", lambda: tmp_path / "pc")
-    with pytest.raises(ValueError, match="口令不能为空"):
+    with pytest.raises(ValueError, match="密钥不能为空"):
         m.set_console_password_plain("")
-    with pytest.raises(ValueError, match="口令不能为空"):
+    with pytest.raises(ValueError, match="密钥不能为空"):
         m.set_shared_console_login_token("")
 
 
@@ -123,7 +123,7 @@ def test_prime_shared_console_login_announces_default_password_once(
     monkeypatch.setattr(m.logger, "success", capture_success)
     m.prime_shared_console_login()
     m.prime_shared_console_login()
-    hits = [w for w in success_msgs if "默认口令:" in w]
+    hits = [w for w in success_msgs if "默认密钥:" in w]
     assert len(hits) == 1
 
 
@@ -152,5 +152,5 @@ def test_prime_reannounces_default_password_when_auth_dir_changes(
             shutil.copy2(src, root2 / name)
     monkeypatch.setattr(m, "console_auth_dir", lambda: root2)
     m.prime_shared_console_login()
-    hits = [w for w in success_msgs if "默认口令:" in w]
+    hits = [w for w in success_msgs if "默认密钥:" in w]
     assert len(hits) == 2

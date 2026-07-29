@@ -2,7 +2,7 @@
 
 本页是 Pallas-Bot 插件的默认骨架与接入约定。新增 core 插件或回迁旧插件时按本页执行。
 
-第一次写群口令插件可先跟 [写第一个插件](first-plugin.md)；本页偏长期维护的标准结构。完整 checklist（主仓）：[08-golden-plugin-checklist](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/pallas-plugin-development/references/08-golden-plugin-checklist.md)。
+第一次写群命令插件可先跟 [写第一个插件](first-plugin.md)；本页偏长期维护的标准结构。完整 checklist（主仓）：[08-golden-plugin-checklist](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/pallas-plugin-development/references/08-golden-plugin-checklist.md)。
 
 ## 目录结构
 
@@ -10,7 +10,7 @@
 packages/<name>/
 ├── __init__.py   # PluginMetadata + matcher 注册（薄入口，目标 ≤120 行）
 ├── config.py     # Pydantic + install_hot_reload_config（有插件页时）
-├── handlers.py   # 口令 / 被动消息
+├── handlers.py   # 命令 / 被动消息
 └── startup.py    # 可选：on_startup、HTTP 挂载；hub-only 用 is_sharded_worker 守卫
 ```
 
@@ -18,7 +18,7 @@ packages/<name>/
 | --- | --- | --- |
 | `__init__.py` | `PluginMetadata`、`command_permissions` / `limits` / `menu_data`、matcher 注册 | 大段业务、复杂持久化、长启动、大段 HTTP |
 | `config.py` | 模型 + `install_hot_reload_config` | import 时缓存配置快照 |
-| `handlers.py` | 口令实现 | 重复声明权限默认值导致漂移 |
+| `handlers.py` | 命令实现 | 重复声明权限默认值导致漂移 |
 | `startup.py` | 仅在需要时存在 | 无守卫的 hub 侧消息逻辑 |
 
 ## 命令接入
@@ -55,7 +55,7 @@ __plugin_meta__ = PluginMetadata(
             {
                 "func": "示例命令",
                 "trigger_method": "命令",
-                "trigger_condition": "群聊发送口令",
+                "trigger_condition": "群聊发送命令",
                 "brief_des": "一句话说明。",
                 "detail_des": "详细说明。",
                 "command_permission": "example.main",
@@ -87,12 +87,12 @@ get_config = plugin_webui.get
 
 业务侧每次调用 `get_config()`；禁止模块级长期快照。
 
-## 维护者向 vs 群口令
+## 维护者向 vs 群命令
 
 | 类型 | 约定 |
 | --- | --- |
-| 维护者向（`pb_webui`、`pb_protocol`、`pb_stats` 等） | 可无群口令；`help_audience: maintainer`；说明落在 WebUI / 通用配置段 |
-| 群口令插件 | `handlers.py` + 完整 `menu_data` / 权限 / 冷却 |
+| 维护者向（`pb_webui`、`pb_protocol`、`pb_stats` 等） | 可无群命令；`help_audience: maintainer`；说明落在 WebUI / 通用配置段 |
+| 群命令插件 | `handlers.py` + 完整 `menu_data` / 权限 / 冷却 |
 
 ## 存储与路径
 

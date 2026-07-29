@@ -1,4 +1,4 @@
-"""帮助口令解析用别名。"""
+"""帮助命令解析用别名。"""
 
 from __future__ import annotations
 

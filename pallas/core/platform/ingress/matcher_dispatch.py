@@ -72,7 +72,7 @@ def matcher_dispatch_batch_size() -> int:
 
 
 def chat_drop_on_overload_enabled() -> bool:
-    """过载时是否跳过闲聊 matcher，优先保口令。默认开启。"""
+    """过载时是否跳过闲聊 matcher，优先保命令。默认开启。"""
     raw = repo_env_raw_value("PALLAS_INGRESS_CHAT_DROP_ON_OVERLOAD")
     if raw is None:
         return True

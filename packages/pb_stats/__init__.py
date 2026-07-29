@@ -28,7 +28,7 @@ __plugin_meta__ = PluginMetadata(
                 "help_audience": "superuser",
                 "trigger_condition": "WebUI 插件「在线统计」配置页",
                 "brief_des": "在线统计同步",
-                "detail_des": "在后台持续同步在线统计信息；没有群内口令。",
+                "detail_des": "在后台持续同步在线统计信息；没有群内命令。",
             },
         ],
     },

@@ -23,7 +23,7 @@ async def test_shard_claim_lost_skips_host_gates(monkeypatch: pytest.MonkeyPatch
     )
     monkeypatch.setattr(
         "pallas.core.platform.ingress.gate.should_process_federate_group_on_current_deployment",
-        lambda _gid: True,
+        lambda _gid, **_kw: True,
     )
     host_gate = MagicMock(return_value=True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.hosted_activity_ingress_passes", host_gate)
@@ -65,7 +65,7 @@ async def test_shard_not_at_target_discards_before_host_gates(monkeypatch: pytes
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
     monkeypatch.setattr(
         "pallas.core.platform.ingress.gate.should_process_federate_group_on_current_deployment",
-        lambda _gid: True,
+        lambda _gid, **_kw: True,
     )
     monkeypatch.setattr("pallas.core.platform.ingress.gate.pallas_at_targets", lambda _event: frozenset({222}))
     host_gate = MagicMock(return_value=True)

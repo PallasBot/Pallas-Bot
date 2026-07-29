@@ -17,7 +17,7 @@ Pallas 插件运行在 **NoneBot2** 之上，业务代码落在 `packages/` 或�
 packages/<name>/   # 或 local/plugins/<name>/
 ├── __init__.py    # PluginMetadata + Matcher 注册（薄，目标 ≤120 行）
 ├── config.py      # 配置；WebUI 插件页可调时接热重载
-├── handlers.py    # 口令 handler（优先 plugin_sdk）
+├── handlers.py    # 命令 handler（优先 plugin_sdk）
 └── startup.py     # 可选：启动钩子（pb_stats、pb_webui 等）
 ```
 
@@ -42,7 +42,7 @@ packages/<name>/   # 或 local/plugins/<name>/
 
 | 层 | 路径 | 典型用途 |
 | --- | --- | --- |
-| api | `pallas.api.commands` | 口令注册、PluginHandlerContext |
+| api | `pallas.api.commands` | 命令注册、PluginHandlerContext |
 | api | `pallas.api.perm` | 命令权限 helper |
 | api | `pallas.api.metadata` | 帮助文案、菜单模板常量 |
 | api | `pallas.api.limits` | 命令 CD（`cmd_limit:{id}`） |
@@ -62,7 +62,7 @@ packages/<name>/   # 或 local/plugins/<name>/
 
 - [ ] `command_permissions` / `menu_data` / matcher `permission` 同一 `command_id`
 - [ ] `usage` 用 `usage_line` + `join_usage`；无写死权限角色
-- [ ] 口令型优先 `group_command` / `message_command` + `bind_alias_handlers`
+- [ ] 命令型优先 `group_command` / `message_command` + `bind_alias_handlers`
 - [ ] WebUI 可调 → `install_hot_reload_config` + `get_config()`（见 [四](./04-webui-config.md)）
 
 ## 1.7 加载与发现

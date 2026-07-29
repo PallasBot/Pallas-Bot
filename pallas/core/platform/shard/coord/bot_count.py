@@ -34,7 +34,7 @@ def normalize_bot_count_command_plaintext(plain: str) -> str:
 
 
 def bot_count_coord_plaintext(plain: str) -> str:
-    """协调 claim_key 用：报数口令归一化，其它明文保持 strip 后原样。"""
+    """协调 claim_key 用：报数命令归一化，其它明文保持 strip 后原样。"""
     normalized = normalize_bot_count_command_plaintext(plain)
     if normalized in _BOT_COUNT_TEXTS:
         return normalized

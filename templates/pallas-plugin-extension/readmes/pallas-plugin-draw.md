@@ -22,7 +22,7 @@ uv run pallas ext install pallas-plugin-draw
 
 ### 用户命令
 
-| 口令 | 场景 | 说明 |
+| 命令 | 场景 | 说明 |
 | --- | --- | --- |
 | 牛牛画画 … | 群内 | 按描述生图或改图 |
 

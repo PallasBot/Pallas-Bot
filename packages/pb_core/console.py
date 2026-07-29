@@ -34,7 +34,7 @@ def format_console_hint_text() -> str:
         if path and not path.startswith("/"):
             path = f"/{path}"
     url = f"{base.rstrip('/')}{path or '/pallas'}/"
-    return f"控制台：{url}\n浏览器打开后使用启动日志中的口令登录。"
+    return f"控制台：{url}\n浏览器打开后使用启动日志中的密钥登录。"
 
 
 def format_plugins_summary_text(*, loaded_names: set[str]) -> str:

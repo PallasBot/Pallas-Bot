@@ -10,7 +10,7 @@ SCENE_AUTO = "自动"
 
 
 def usage_line(trigger: str, description: str) -> str:
-    """一行用法：口令 — 说明。"""
+    """一行用法：命令 — 说明。"""
     return f"{trigger} — {description}"
 
 

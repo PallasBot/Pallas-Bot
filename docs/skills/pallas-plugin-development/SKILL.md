@@ -44,7 +44,7 @@ description: >
 - **多牛舰队**（进阶）：入站调度、进程分片见 [分片运行时](../../developer/architecture/shard-runtime.md)、[分片部署](../../maintainer/deploy/sharded.md)。
 - **导入分层**：社区插件仅 `pallas.api.*`；内置插件可用 `pallas.api.*` + `pallas.product.*`；跨插件能力不要深层 import 内核内部文件。见 [一、公开 API](./references/01-plugin-basics.md)。
 - **命令 ID**：`{插件}.{动作}` 须在 metadata、`permission_for_command`、matcher 中**完全一致**。
-- **plugin_sdk**：口令型优先 `message_command` + `bind_alias_handlers`（见 [Golden Plugin](../../developer/plugin-development/golden-plugin.md)）。
+- **plugin_sdk**：命令型优先 `message_command` + `bind_alias_handlers`（见 [Golden Plugin](../../developer/plugin-development/golden-plugin.md)）。
 - **core 插件**：`CORE_PLUGIN_NAMES` 默认加载（平台内核）；维护者向包名 `pb_*`；golden 模板见 [八、checklist](./references/08-golden-plugin-checklist.md)。
 - **bundled play**：`BUNDLED_PLAY_PLUGIN_NAMES`（drink、greeting、roulette、take_name）仍默认从 `packages/` 加载，catalog kind 为 `bundled`，**不属于** core。
 - **reload_policy**：改 help/ingress 声明且不想重启时设 `metadata`（见 [Reload 与 Activation](../../developer/plugin-development/reload-and-activation.md)）。

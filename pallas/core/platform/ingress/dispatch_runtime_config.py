@@ -71,7 +71,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
     matcher_dispatch_enabled: bool = Field(
         default=True,
         description=field_help(
-            "减少群消息在插件里反复试匹配的开销，闲聊时跳过纯口令类插件",
+            "减少群消息在插件里反复试匹配的开销，闲聊时跳过纯命令类插件",
             "选开或关；多牛、插件多的群一般保持开启",
             "关闭后恢复框架默认匹配方式；保存后立即生效",
         ),
@@ -89,7 +89,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
     route_index_enabled: bool = Field(
         default=True,
         description=field_help(
-            "按口令前缀或全文只激活可能相关的插件，减少无关扫描",
+            "按命令前缀或全文只激活可能相关的插件，减少无关扫描",
             "选开或关；一般保持开启",
             "关闭后每条消息仍会尝试全部插件 matcher",
         ),
@@ -97,15 +97,15 @@ class IngressDispatchRuntimeConfig(BaseModel):
     route_index_strict: bool = Field(
         default=False,
         description=field_help(
-            "未收录的口令是否还允许回退到全量插件扫描",
-            "关表示漏网口令仍有机会被匹配；开表示只认索引里列出的插件",
-            "稳定运行前建议保持关闭，避免口令无反应",
+            "未收录的命令是否还允许回退到全量插件扫描",
+            "关表示漏网命令仍有机会被匹配；开表示只认索引里列出的插件",
+            "稳定运行前建议保持关闭，避免命令无反应",
         ),
     )
     dispatch_lanes_enabled: bool = Field(
         default=True,
         description=field_help(
-            "按口令、闲聊、数据库、外呼等档位限制同时运行的插件数量",
+            "按命令、闲聊、数据库、外呼等档位限制同时运行的插件数量",
             "选开或关；一般保持开启",
             "关闭后重命令可能占满数据库连接或拖慢整群回复",
         ),
@@ -117,7 +117,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
         description=field_help(
             "某个插件等待空闲档位最多等多久",
             "填秒数，默认 1.0；繁忙群可试 0.5～2.0",
-            "超时则跳过该次执行；口令流量可能收到忙回复",
+            "超时则跳过该次执行；命令流量可能收到忙回复",
         ),
     )
     lane_wait_overload_ms: int = Field(
@@ -133,7 +133,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
     lane_busy_reply: bool = Field(
         default=True,
         description=field_help(
-            "口令档已满时是否向群里发一句「忙不过来」的人设回复",
+            "命令档已满时是否向群里发一句「忙不过来」的人设回复",
             "选开或关；一般保持开启",
             "关闭时静默丢弃，群友可能误以为没触发命令",
         ),
@@ -143,7 +143,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
         ge=1,
         le=128,
         description=field_help(
-            "同时执行多少条口令类命令",
+            "同时执行多少条命令类命令",
             "填正整数，默认 16",
             "保存后立即调整档位上限",
         ),

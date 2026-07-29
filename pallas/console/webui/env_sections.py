@@ -106,6 +106,7 @@ def _control_plane_section() -> WebuiEnvSection:
             "instance_secret": "PALLAS_INSTANCE_SECRET",
             "federate_id": "PALLAS_FEDERATE_ID",
             "federate_ingress_enabled": "PALLAS_FEDERATE_INGRESS_ENABLED",
+            "prefer_local_owner": "PALLAS_FEDERATE_PREFER_LOCAL_OWNER",
             "federate_redis_prefix": "PALLAS_FEDERATE_REDIS_PREFIX",
             "coord_redis_url": "PALLAS_FEDERATE_COORD_REDIS_URL",
         },
@@ -118,7 +119,7 @@ def _ingress_fanout_section() -> WebuiEnvSection:
 
     return WebuiEnvSection(
         id="ingress_fanout",
-        title="全员同响口令",
+        title="全员同响命令",
         module_label="pallas.core.platform.ingress",
         model_cls=IngressFanoutConfig,
         read_current=get_ingress_fanout_config,
@@ -206,7 +207,7 @@ def _command_start_section() -> WebuiEnvSection:
 
     return WebuiEnvSection(
         id="command_start",
-        title="命令口令",
+        title="命令前缀",
         module_label="pallas.core.foundation.command_start_config",
         model_cls=CommandStartConfig,
         read_current=get_command_start_config,
@@ -488,7 +489,7 @@ def _ingress_dispatch_payload_extras() -> dict[str, Any]:
             },
             {
                 "id": "route_index",
-                "title": "口令快速定位",
+                "title": "命令快速定位",
                 "field_names": ["route_index_enabled", "route_index_strict"],
             },
             {

@@ -121,7 +121,7 @@ Docker 可挂载 `./pallas-bot/local/plugins:/app/local/plugins`；镜像更新�
 
 ### 生产门禁：重复命令 prefix
 
-local 整包覆盖与官方插件并存时，可能重复注册同一口令。生产建议：
+local 整包覆盖与官方插件并存时，可能重复注册同一命令。生产建议：
 
 ```toml
 [env]

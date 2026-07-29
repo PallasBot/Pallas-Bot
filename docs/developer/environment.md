@@ -164,7 +164,7 @@ uv run pallas stop --mode unified
 ./scripts/run_unified_bot.sh stop
 ```
 
-浏览器打开 `http://127.0.0.1:8088/pallas/`，使用启动日志中的口令登录。
+浏览器打开 `http://127.0.0.1:8088/pallas/`，使用启动日志中的密钥登录。
 
 ### 分片模式（可选）
 

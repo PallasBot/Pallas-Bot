@@ -131,9 +131,9 @@ def pb_core_webui_payload(*, current_values: dict[str, Any] | None = None) -> di
     fields: list[dict[str, Any]] = []
     field_groups: list[dict[str, Any]] = []
     section_titles = {
-        "command_start": "命令口令",
+        "command_start": "命令前缀",
         "message_scrub": "消息审查",
-        "ingress_fanout": "全员同响口令",
+        "ingress_fanout": "全员同响命令",
         "ingress_dispatch": "消息处理与发送",
         "mail": "邮件发送（SMTP）",
         "control_plane": "多机协同",

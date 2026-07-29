@@ -214,7 +214,7 @@ async def test_unified_ingress_non_owner_deployment_skips_command_once_and_feder
     monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr(
         "pallas.core.platform.ingress.gate.should_process_federate_group_on_current_deployment",
-        lambda _group_id: False,
+        lambda _group_id, **_kw: False,
     )
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain: True)
@@ -257,7 +257,7 @@ async def test_unified_ingress_non_owner_still_claims_chat_traffic(
     monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr(
         "pallas.core.platform.ingress.gate.should_process_federate_group_on_current_deployment",
-        lambda _group_id: False,
+        lambda _group_id, **_kw: False,
     )
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain: False)

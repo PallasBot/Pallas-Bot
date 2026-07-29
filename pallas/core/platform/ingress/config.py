@@ -48,8 +48,8 @@ class IngressFanoutConfig(BaseModel):
     greeting_fanout_texts: str = Field(
         default="牛牛,帕拉斯,牛牛报数,牛牛出列",
         description=field_help(
-            "同群有多只牛时，让列出的口令由每一只牛都响应",
-            "多个口令用英文逗号分隔；须与群消息全文完全一致",
+            "同群有多只牛时，让列出的命令由每一只牛都响应",
+            "多个命令用英文逗号分隔；须与群消息全文完全一致",
             "例如招呼、报数、出列；保存后立即生效",
         ),
     )

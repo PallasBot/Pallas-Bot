@@ -14,7 +14,7 @@ uv run pallas ext install pallas-plugin-protocol
 
 ## 用法
 
-无群内用户口令。入口：
+无群内用户命令。入口：
 
 | 入口 | 说明 |
 | --- | --- |
@@ -47,7 +47,7 @@ uv run pallas ext install pallas-plugin-protocol
 | --- | --- |
 | 账号无法启动 | 查实例日志、协议端版本与程序目录 |
 | Bot 不回复 | 确认反向 WebSocket 已连到对应 hub / worker 端口 |
-| 控制台登录失败 | 口令与主控制台共用；遗忘见 [FAQ](../../FAQ.md) |
+| 控制台登录失败 | 命令与主控制台共用；遗忘见 [FAQ](../../FAQ.md) |
 | Docker 下 WS 连不上 | 检查反向 WS 主机名，不要默认写 Compose 服务名 |
 
 ## 源码

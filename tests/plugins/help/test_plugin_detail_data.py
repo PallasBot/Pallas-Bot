@@ -91,4 +91,4 @@ def test_search_command_help_targets_multiple_candidates() -> None:
 
 def test_search_command_help_targets_no_match() -> None:
     plugins = [_make_plugin("drink", [{"func": "牛牛喝酒", "trigger_condition": "牛牛喝酒"}])]
-    assert search_command_help_targets("不存在的口令", plugins) == []
+    assert search_command_help_targets("不存在的命令", plugins) == []

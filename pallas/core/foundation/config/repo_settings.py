@@ -403,7 +403,7 @@ def apply_repo_settings_to_environ() -> None:
             continue
         if k not in os.environ:
             os.environ[k] = v
-    # NoneBot 默认仅 ``{"/"}``；发行缺省带上空前缀，中文口令无需斜杠。
+    # NoneBot 默认仅 ``{"/"}``；发行缺省带上空前缀，中文命令无需斜杠。
     if "COMMAND_START" not in os.environ:
         os.environ["COMMAND_START"] = DEFAULT_COMMAND_START_JSON
 

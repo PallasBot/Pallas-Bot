@@ -60,7 +60,7 @@ cp config/pallas.example.toml config/pallas.toml
 uv run pallas
 ```
 
-浏览器打开 `http://<主机>:8088/pallas/`，使用启动日志中的口令登录。  
+浏览器打开 `http://<主机>:8088/pallas/`，使用启动日志中的密钥登录。  
 更完整的上手说明见文档站 [快速开始](https://PallasBot.github.io/Pallas-Bot-Docs/guide/quickstart)。
 
 ## 📖 文档与进展

@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 from .menu_display import raw_trigger_condition
 
-# trigger_condition：用户要发送的口令或可见触发说明
+# trigger_condition：用户要发送的命令或可见触发说明
 # trigger_scene：私聊 / 群内 / 自动
 # trigger_method：实现方式，帮助图不展示
 # help_audience：superuser 时不进入用户帮助图（"maintainer" 为历史别名，等同 superuser）
@@ -70,7 +70,7 @@ def iter_plugin_detail_menu(plugin: Any, menu_data: list[dict[str, Any]]) -> Ite
 
 
 def help_say_phrase(item: dict[str, Any]) -> str:
-    """帮助表「怎么说」列：口令或用户可见说明。"""
+    """帮助表「怎么说」列：命令或用户可见说明。"""
     raw = raw_trigger_condition(item)
     if raw in ("未知", ""):
         return "—"

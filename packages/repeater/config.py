@@ -112,7 +112,7 @@ class Config(BaseModel, extra="ignore"):
         le=20000,
         description=field_help(
             "等待学习的消息最多排多少条",
-            "队列满时只跳过学习，不影响复读和口令回复",
+            "队列满时只跳过学习，不影响复读和命令回复",
         ),
         json_schema_extra=_ui("学习与持久化", 50),
     )

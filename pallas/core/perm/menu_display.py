@@ -32,7 +32,7 @@ def command_ids_from_menu_item(item: dict[str, Any]) -> list[str]:
 
 
 def trigger_conditions_by_command_id(menu_items: list[dict[str, Any]]) -> dict[str, list[str]]:
-    """命令 ID -> 该命令在帮助菜单里声明的触发口令（去重保序）。"""
+    """命令 ID -> 该命令在帮助菜单里声明的触发命令（去重保序）。"""
     out: dict[str, list[str]] = {}
     for item in menu_items:
         if not isinstance(item, dict):
@@ -51,7 +51,7 @@ def enrich_commands_with_menu_triggers(
     commands: list[dict[str, Any]],
     menu_items: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """为治理/能力面板命令补上 menu_data 里的实际触发口令。"""
+    """为治理/能力面板命令补上 menu_data 里的实际触发命令。"""
     if not commands:
         return commands
     triggers_by_id = trigger_conditions_by_command_id(menu_items)

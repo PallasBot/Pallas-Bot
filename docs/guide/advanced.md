@@ -9,7 +9,7 @@
 | 连接 QQ | [连接 QQ](connect-qq.md) |
 | 安装官方 / 社区插件 | [安装插件](install-plugins.md) |
 | 控制台改配置、看日志 | [网页控制台](web-console.md) |
-| 群里口令一览 | [命令与功能](usage.md) |
+| 群里命令一览 | [命令与功能](usage.md) |
 | 日常管理 | [日常管理](usage-admin.md) |
 | 号主 | [号主](bot-owner.md) |
 | 唱歌 / 画画 / LLM 对话 | [AI 扩展](ai.md) |

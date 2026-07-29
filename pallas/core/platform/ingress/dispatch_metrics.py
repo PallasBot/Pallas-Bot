@@ -183,7 +183,7 @@ def build_dispatch_metrics_payload(
         "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util),
         "matchers_selected_ratio": round(selected / considered, 4) if considered else None,
         "avg_matchers_per_message": round(selected / group_messages, 2) if group_messages else None,
-        # 口令才走 route index；闲聊 hit=0 是常态，勿除以全部群消息
+        # 命令才走 route index；闲聊 hit=0 是常态，勿除以全部群消息
         "route_index_hit_ratio": round(route_hits / command_traffic, 4) if command_traffic else None,
         "route_index_fallback_ratio": round(route_fallbacks / command_traffic, 4) if command_traffic else None,
     }

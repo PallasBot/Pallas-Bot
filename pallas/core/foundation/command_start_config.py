@@ -1,4 +1,4 @@
-"""NoneBot ``COMMAND_START``：发行默认含空前缀，便于中文口令无需 ``/``。"""
+"""NoneBot ``COMMAND_START``：发行默认含空前缀，便于中文命令无需 ``/``。"""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ class CommandStartConfig(BaseModel):
     command_start: list[str] = Field(
         default_factory=lambda: list(DEFAULT_COMMAND_START),
         description=field_help(
-            "口令触发前缀（NoneBot COMMAND_START）",
-            'JSON 数组，如 ["", "/"]；空串表示无需斜杠即可触发中文口令',
+            "命令触发前缀（NoneBot COMMAND_START）",
+            'JSON 数组，如 ["", "/"]；空串表示无需斜杠即可触发中文命令',
             "修改后须重启 Bot 才生效（命令 Trie 在启动加载插件时注册）",
         ),
         json_schema_extra={"label": "命令前缀"},

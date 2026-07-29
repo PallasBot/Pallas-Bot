@@ -17,7 +17,7 @@ WebUI「通用配置」各段通过统一 REST 暴露；段定义在 `pallas/con
 | `cmd_perm` | 命令权限 |
 | `control_plane` | 联邦控制 |
 | `corpus_federation` | 语料联邦 |
-| `ingress_fanout` | 入站全员同响口令 |
+| `ingress_fanout` | 入站全员同响命令 |
 | `ingress_dispatch` | 入站调度运行时 |
 | `repeater_learn` | 复读后台学习 |
 | `message_scrub` | 消息审查 |

@@ -52,7 +52,7 @@ uv run python tools/integration_llm_chat.py
 uv run python tools/integration_repeater_llm.py --scenario both
 ```
 
-## 口令与帮助
+## 命令与帮助
 
 | 3.x | 现行 |
 | --- | --- |
