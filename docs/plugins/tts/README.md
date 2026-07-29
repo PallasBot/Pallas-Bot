@@ -32,13 +32,14 @@ uv run pallas ext install pallas-plugin-ai-media
 
 ## 配置
 
-控制台插件「牛牛说」页：
+推荐在控制台 **AI 配置 → 媒体**：
 
-- 启用开关、媒体服务地址与端口
-- 接口路径（默认 `/v1/tts`）与 Bearer Token（与 AI 侧 `PALLAS_AI_API_TOKEN` 一致）
-- 语音通路：`sidecar`（侧车）或 `cloud`（预留，尚未接入）
+| 面板 | 配置什么 |
+| --- | --- |
+| **媒体服务 · 连接** | 服务地址与 **Bearer Token**（同步 `AI_SERVER_*` / `TTS_API_TOKEN`） |
+| **TTS** | 侧车参考音色默认；嵌入插件配置（启停、通路、超时、字数） |
 
-音色默认值仍在 **AI 配置 → 能力包 → TTS**。
+自 `pallas-plugin-ai-media` **4.3.0** 起，插件页不再展示服务地址 / Bearer / endpoint（由媒体连接统一管理）。接口默认仍为 `/v1/tts`。
 
 保存后写入 `data/pallas_config/webui.json`。
 
@@ -46,7 +47,7 @@ uv run pallas ext install pallas-plugin-ai-media
 
 | 现象 | 处理 |
 | --- | --- |
-| 没有返回语音 | 确认插件已启用、AI Runtime 在线、`/callback` 可达；`/v1` 鉴权 Token 一致 |
+| 「牛牛说」无语音 | 确认插件已启用、AI Runtime 在线、`/callback` 可达；媒体连接 Bearer 与 AI 侧 `PALLAS_AI_API_TOKEN` 一致 |
 | 提示云端未接入 | 将「语音通路」改为侧车 |
 
 ## 源码
