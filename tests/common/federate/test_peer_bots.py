@@ -44,8 +44,32 @@ def test_should_process_federate_group_on_current_deployment_uses_sorted_owner_r
     mod.clear_federate_peer_bot_cache_for_tests()
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-b")
     monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
     mod._cache_deployment_ids = frozenset({"dep-a", "dep-c"})
 
     assert mod.federate_group_owner_deployment(123) == "dep-a"
     assert mod.should_process_federate_group_on_current_deployment(124) is True
     assert mod.should_process_federate_group_on_current_deployment(125) is False
+
+
+def test_federate_group_owner_ring_index_stable_within_epoch():
+    assert mod.federate_group_owner_ring_index(733291779, 2, now=100.0, rotate_sec=43200) == (
+        mod.federate_group_owner_ring_index(733291779, 2, now=43199.0, rotate_sec=43200)
+    )
+
+
+def test_federate_group_owner_rotates_across_epochs(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-a")
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 43200)
+    mod._cache_deployment_ids = frozenset({"dep-b"})
+
+    flipped = False
+    for gid in range(1, 500):
+        a = mod.federate_group_owner_deployment(gid, now=0.0)
+        b = mod.federate_group_owner_deployment(gid, now=43200.0)
+        if a != b:
+            flipped = True
+            break
+    assert flipped
+    assert mod.federate_group_owner_deployment(42, now=0.0) in {"dep-a", "dep-b"}
