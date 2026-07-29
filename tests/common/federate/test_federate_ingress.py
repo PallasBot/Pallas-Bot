@@ -66,13 +66,23 @@ def test_federate_ingress_active_requires_redis(monkeypatch):
     assert fc.federate_ingress_active() is False
 
 
-def test_federate_ingress_disabled_by_default_in_unified_mode(monkeypatch):
+def test_federate_ingress_auto_enabled_in_unified_mode_with_federate_id():
+    """单进程 + auto：有协同池编号即启用（与 WebUI「自动」文案一致）。"""
     cfg = fc.FederateConfig(control_plane_enabled=True, federate_id="pool-1", ingress_enabled=None, redis_prefix="")
-    monkeypatch.setattr("pallas.core.platform.federate.config.is_sharding_active", lambda: False)
+    assert fc.federate_ingress_enabled(cfg) is True
+
+
+def test_federate_ingress_auto_disabled_without_federate_id(monkeypatch):
+    cfg = fc.FederateConfig(control_plane_enabled=True, federate_id="", ingress_enabled=None, redis_prefix="")
+    monkeypatch.setattr(fc, "resolved_federate_id", lambda _cfg=None: "")
     assert fc.federate_ingress_enabled(cfg) is False
 
 
-def test_federate_ingress_can_be_forced_in_unified_mode(monkeypatch):
+def test_federate_ingress_can_be_forced_in_unified_mode():
     cfg = fc.FederateConfig(control_plane_enabled=True, federate_id="pool-1", ingress_enabled=True, redis_prefix="")
-    monkeypatch.setattr("pallas.core.platform.federate.config.is_sharding_active", lambda: False)
     assert fc.federate_ingress_enabled(cfg) is True
+
+
+def test_federate_ingress_off_when_control_plane_disabled():
+    cfg = fc.FederateConfig(control_plane_enabled=False, federate_id="pool-1", ingress_enabled=None, redis_prefix="")
+    assert fc.federate_ingress_enabled(cfg) is False

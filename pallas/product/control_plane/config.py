@@ -11,6 +11,7 @@ from pallas.product.corpus.config import parse_tristate
 
 _PREFIX = "PALLAS_CONTROL_PLANE_"
 _INSTANCE_SECRET_KEY = "PALLAS_INSTANCE_SECRET"
+INSTANCE_SECRET_ENV_KEY = _INSTANCE_SECRET_KEY
 
 
 def setting_str(name: str, default: str = "") -> str:
@@ -52,14 +53,16 @@ def control_plane_wanted(cfg: ControlPlaneConfig | None = None) -> bool:
 
 
 def should_run_bootstrap_refresh() -> bool:
+    """控制面开启且能解析 bootstrap URL 时尝试刷新。
+
+    入池密钥可为空：启动时会先从公开 onboarding 自动写入，再拉 coord / federate_id。
+    """
     from pallas.core.platform.bot_runtime.roles import is_sharded_worker
 
     if is_sharded_worker():
         return False
     cfg = get_control_plane_config()
     if not control_plane_wanted(cfg):
-        return False
-    if not (cfg.instance_secret or "").strip():
         return False
     from pallas.product.control_plane.bootstrap_client import bootstrap_urls
 

@@ -42,7 +42,7 @@ class ControlPlaneWebuiConfig(BaseModel):
         default="",
         description=field_help(
             "加入协同时用的密钥",
-            "与中心分配的一致；多套牛牛共池时必填",
+            "可留空：启动时会从社区中心自动写入；也可从「统计与语料」复制后粘贴",
         ),
     )
     federate_id: str = Field(
@@ -55,8 +55,8 @@ class ControlPlaneWebuiConfig(BaseModel):
     federate_ingress_enabled: str = Field(
         default="auto",
         description=field_help(
-            "多机部署时是否过滤重复群消息",
-            "选自动、开启或关闭；单进程一般保持自动",
+            "多机部署时是否过滤重复群消息并发布本站牛牛名单",
+            "选自动：已有协同池编号且去重服务可用时开启（单进程与分片均可）",
         ),
     )
     ingress_bypass_unified: bool = Field(
