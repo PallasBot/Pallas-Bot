@@ -121,12 +121,12 @@ def federate_ingress_bypass_unified(cfg: FederateConfig | None = None) -> bool:
 
 
 def federate_owner_rotate_sec() -> int:
-    """群归属轮换周期（秒）。默认 12h；``0`` 表示按群号固定不轮换。"""
-    raw = setting_str(f"{_PREFIX}OWNER_ROTATE_SEC", "43200")
+    """群归属轮换周期（秒）。默认 2h；``0`` 表示按群号固定不轮换。"""
+    raw = setting_str(f"{_PREFIX}OWNER_ROTATE_SEC", "7200")
     try:
         return max(0, int(raw))
     except ValueError:
-        return 43200
+        return 7200
 
 
 def federate_prefer_local_owner() -> bool:
