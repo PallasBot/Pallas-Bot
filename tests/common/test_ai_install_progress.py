@@ -89,10 +89,16 @@ def test_run_ai_bootstrap_streams_lines(monkeypatch: pytest.MonkeyPatch, tmp_pat
         "pallas.console.cli.process_util.resolve_bash",
         lambda: "/bin/bash",
     )
+    captured_kwargs: dict[str, object] = {}
+
+    def fake_popen(*_a, **k):
+        captured_kwargs.update(k)
+        return FakeProc()
+
     monkeypatch.setattr(
         ai_install.subprocess,
         "Popen",
-        lambda *a, **k: FakeProc(),
+        fake_popen,
     )
     monkeypatch.setattr(
         "pallas.console.cli.ai_supervisor.is_managed_ai_root",
@@ -108,6 +114,12 @@ def test_run_ai_bootstrap_streams_lines(monkeypatch: pytest.MonkeyPatch, tmp_pat
     assert seen == ["line-a", "line-b"]
     assert "line-a" in out
     assert "AI 仓:" in out
+    assert captured_kwargs.get("encoding") == "utf-8"
+    assert captured_kwargs.get("errors") == "replace"
+    env = captured_kwargs.get("env")
+    assert isinstance(env, dict)
+    assert env.get("PYTHONUTF8") == "1"
+    assert env.get("PYTHONIOENCODING") == "utf-8"
 
 
 def test_run_ai_bootstrap_missing_script(tmp_path: Path) -> None:

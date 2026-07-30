@@ -125,6 +125,8 @@ def clone_ai_repo(*, target: Path | None = None, git_url: str = AI_REPO_GIT_URL)
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if completed.returncode != 0:
         err = (completed.stderr or completed.stdout or "").strip() or f"exit {completed.returncode}"
@@ -175,6 +177,10 @@ def run_ai_bootstrap_captured(
     if use_gpu:
         env["PALLAS_GPU"] = "1"
 
+    # 中文 Windows 默认 GBK；bootstrap/uv 多为 UTF-8，勿用 locale 解码。
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+
     header = f"执行: {' '.join(cmd)}\nAI 仓: {ai_root}\n"
     try:
         proc = subprocess.Popen(
@@ -184,6 +190,8 @@ def run_ai_bootstrap_captured(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
         )
     except OSError as err:
