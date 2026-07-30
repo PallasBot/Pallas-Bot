@@ -38,7 +38,10 @@ def serialize_event_source_segments(
     *,
     bot_id: int | str | None = None,
 ) -> list[dict[str, Any]]:
-    """从原消息提取可复用的图片/@/显式「自己」段。"""
+    """从原消息提取可复用的图片/@/显式「自己」段。
+
+    仅跳过**开头**的唤醒 ``@bot``；句中或句末 ``@bot`` 保留，供表情等用牛牛头像。
+    """
     message = getattr(event, "original_message", None)
     if message is None:
         get_message = getattr(event, "get_message", None)
@@ -54,7 +57,7 @@ def serialize_event_source_segments(
         resolved_bot_id = getattr(event, "self_id", None)
     bot_key = str(resolved_bot_id) if resolved_bot_id is not None else ""
 
-    out: list[dict[str, Any]] = []
+    raw: list[dict[str, Any]] = []
     seen_at: set[str] = set()
     for segment in message:
         seg_type = getattr(segment, "type", None)
@@ -66,12 +69,10 @@ def serialize_event_source_segments(
             if qq is None or str(qq) in ("all", "0"):
                 continue
             key = str(qq)
-            if bot_key and key == bot_key:
-                continue
             if key in seen_at:
                 continue
             seen_at.add(key)
-            out.append({"type": "at", "qq": key})
+            raw.append({"type": "at", "qq": key})
             continue
         if seg_type == "image":
             item: dict[str, Any] = {"type": "image"}
@@ -85,11 +86,28 @@ def serialize_event_source_segments(
                 if "url" not in item and file_text.startswith(("http://", "https://")):
                     item["url"] = file_text
             if "url" in item or "file" in item:
-                out.append(item)
+                raw.append(item)
             continue
-        if seg_type == "text" and str(data.get("text") or "").strip() == "自己":
-            out.append({"type": "text", "text": "自己"})
-    return out
+        if seg_type == "text":
+            text = str(data.get("text") or "")
+            if text.strip() == "自己":
+                raw.append({"type": "text", "text": "自己"})
+                continue
+            # 空白可夹在前缀唤醒 @bot 之间；非空正文打断前缀，本身不输出
+            raw.append({"type": "_ws" if not text.strip() else "_break"})
+
+    # 去掉前缀唤醒：(@bot 空白*)*
+    while raw and bot_key:
+        head = raw[0]
+        if head.get("type") == "at" and str(head.get("qq") or "") == bot_key:
+            raw.pop(0)
+            continue
+        if head.get("type") == "_ws":
+            raw.pop(0)
+            continue
+        break
+
+    return [item for item in raw if item.get("type") not in {"_ws", "_break"}]
 
 
 def source_segments_for_command(

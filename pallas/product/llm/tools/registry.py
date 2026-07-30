@@ -274,7 +274,7 @@ def tool_catalog_for_chat(
     user_text: str = "",
     activated_names: frozenset[str] | None = None,
 ) -> ToolCatalogSnapshot | None:
-    from pallas.product.llm.tools.inventory import is_inventory_intent, merge_inventory_overlay_specs
+    from pallas.product.llm.tools.inventory import is_inventory_intent, is_query_tool, merge_inventory_overlay_specs
 
     normalized = str(task or "").strip().lower()
     if normalized in _NO_TOOL_TASKS:
@@ -339,6 +339,10 @@ def tool_catalog_for_chat(
             soft_recall_min_score=int(getattr(cfg, "llm_tools_soft_recall_min_score", 6) or 6),
             soft_recall_max_candidates=int(getattr(cfg, "llm_tools_soft_recall_max_candidates", 3) or 3),
         )
+    # 盘点口语只留查询类，避免 memes.recommend 直接出图抢答
+        query_only = [spec for spec in specs_list if is_query_tool(spec)]
+        if query_only:
+            specs_list = query_only
         if selection_source == "selective":
             selection_source = "selective+inventory"
         elif selection_source == "soft_recall":
@@ -469,23 +473,22 @@ def tool_metadata_for_chat(
         "activated_tools": sorted(activated_names),
         "inventory_intent": bool(catalog.selection.inventory_intent),
     }
-    # 选择性命中且全部为插件命令工具时，首轮要求必须调工具，避免只口头答应。
-    # 联网搜索同理：禁止「搜了一下」空口答应。软召回缺参时不强制，便于自然追问。
-    # 盘点意图同理：须先查再答，禁止空口编能力。
+    # 选择性命中 / 软召回材料齐全 / 盘点：首轮要求必须调工具，避免只口头答应。
+    # 软召回缺参时不强制，便于自然追问。
     if catalog.selection.inventory_intent and catalog.tools:
         payload["tool_choice_prefer"] = "required"
-    elif (
-        catalog.selection.selective_enabled
-        and catalog.tools
-        and source != "soft_recall"
-        and not catalog.selection.ask_before_call
-    ):
+    elif catalog.tools and not catalog.selection.ask_before_call:
         sources = {str(item.source or "") for item in catalog.tools}
         tool_names = {str(item.name or "") for item in catalog.tools}
         domains = {str(d) for item in catalog.tools for d in (item.domains or [])}
-        if sources and sources <= {LlmToolSource.PLUGIN_COMMAND.value}:
+        prefer_plugin = bool(sources) and sources <= {LlmToolSource.PLUGIN_COMMAND.value}
+        prefer_web = "web" in domains or bool(tool_names.intersection({"web.search", "web.fetch"}))
+        if catalog.selection.selective_enabled and prefer_plugin:
             payload["tool_choice_prefer"] = "required"
-        elif "web" in domains or tool_names.intersection({"web.search", "web.fetch"}):
+        elif catalog.selection.selective_enabled and prefer_web:
+            payload["tool_choice_prefer"] = "required"
+        elif source.startswith("soft_recall") and prefer_plugin:
+            # 与硬域同等：软召回已命中且参数可填时，禁止空口答应
             payload["tool_choice_prefer"] = "required"
     return payload
 

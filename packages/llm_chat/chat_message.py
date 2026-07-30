@@ -590,20 +590,27 @@ async def handle_llm_chat(bot: Bot, event: Event):
             candidate = next((item for item in bundle.answer_list if item and "[CQ:" not in item), "")
             from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
 
-            if (pool or candidate) and await submit_corpus_assist_stages(
-                event,
-                user_text=plain or msg,
-                candidates=pool,
-                candidate_text=candidate,
-                profile="direct_chat",
-                capabilities=resolve_repeater_capabilities(llm_cfg),
+            # 任一工具已命中时不要被语料 polish 抢走（硬域 / 软召回 / 盘点通用）
+            tool_preview = assemble_tool_bundle(task="llm_chat", user_text=plain or msg)
+            prefer_tools = bool(tool_preview.get("tools_enabled")) and bool(tool_preview.get("tool_schemas"))
+            if (
+                not prefer_tools
+                and (pool or candidate)
+                and await submit_corpus_assist_stages(
+                    event,
+                    user_text=plain or msg,
+                    candidates=pool,
+                    candidate_text=candidate,
+                    profile="direct_chat",
+                    capabilities=resolve_repeater_capabilities(llm_cfg),
+                )
             ):
                 gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
                 if gate is None:
                     await refresh_llm_chat_cooldown(event, default_cd_sec=llm_cfg.llm_chat_cooldown_sec)
                 return
             corpus_fallback = candidate or (pool[0] if pool else "")
-            llm_route = resolve_corpus_llm_route(llm_cfg, pool, candidate)
+            llm_route = "plain_llm_chat" if prefer_tools else resolve_corpus_llm_route(llm_cfg, pool, candidate)
         else:
             corpus_fallback = ""
             llm_route = "plain_llm_chat"
