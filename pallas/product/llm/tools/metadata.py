@@ -25,6 +25,7 @@ class LlmCommandToolDecl(BaseModel):
     hints: list[str] = Field(default_factory=list, description="口语触发词；硬域未命中时参与 soft_recall")
     visibility: str = Field(default="visible", description="visible | deferred")
     source_segments: str = Field(default="none", description="none | media")
+    capabilities: list[str] = Field(default_factory=list, description="可选能力标签，如 read_only")
 
 
 def parse_llm_command_tool_decl(raw: dict[str, Any]) -> LlmCommandToolDecl | None:

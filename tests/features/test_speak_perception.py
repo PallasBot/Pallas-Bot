@@ -35,7 +35,8 @@ def test_text_mentions_aliases_strips_cq_at_noise() -> None:
     assert text_mentions_aliases("[CQ:at,qq=123] 牛牛出来", aliases)
 
 
-def test_generic_niu_niu_requires_boundary() -> None:
+def test_generic_niu_niu_requires_before_boundary() -> None:
+    """通称只卡前界：漂亮/臭牛牛不唤起；句首牛牛（含口令）可唤起。"""
     assert not text_mentions_aliases(
         "漂亮牛牛出来",
         ["牛牛"],
@@ -43,7 +44,7 @@ def test_generic_niu_niu_requires_boundary() -> None:
         generic_aliases=["牛牛"],
     )
     assert not text_mentions_aliases(
-        "牛牛测试机出来",
+        "臭牛牛出来",
         ["牛牛"],
         min_alias_len=2,
         generic_aliases=["牛牛"],
@@ -54,6 +55,42 @@ def test_generic_niu_niu_requires_boundary() -> None:
         min_alias_len=2,
         generic_aliases=["牛牛"],
     )
+    # 句首复合名不再靠后界挡；若有专名应配长别名优先匹配。
+    assert text_mentions_aliases(
+        "牛牛测试机出来",
+        ["牛牛"],
+        min_alias_len=2,
+        generic_aliases=["牛牛"],
+    )
+
+
+def test_generic_niu_niu_allows_command_verbs() -> None:
+    """句首「牛牛 + 口令」算提及，可进对话挂工具。"""
+    aliases = ["牛牛"]
+    generic = ["牛牛"]
+    assert text_mentions_aliases("牛牛放一首铁花飞", aliases, generic_aliases=generic)
+    assert text_mentions_aliases("牛牛做个吃表情", aliases, generic_aliases=generic)
+    assert text_mentions_aliases("牛牛来一首晴天", aliases, generic_aliases=generic)
+    d_music = evaluate_speak_perception(
+        plain_text="牛牛放一首铁花飞",
+        aliases=aliases,
+        generic_aliases=generic,
+        is_to_me=False,
+        mention_enabled=True,
+        ambient_enabled=False,
+    )
+    d_meme = evaluate_speak_perception(
+        plain_text="牛牛做个吃表情",
+        aliases=aliases,
+        generic_aliases=generic,
+        is_to_me=False,
+        mention_enabled=True,
+        ambient_enabled=False,
+    )
+    assert d_music.should_speak
+    assert d_music.reason == "mention"
+    assert d_meme.should_speak
+    assert d_meme.reason == "mention"
 
 
 def test_exclusive_long_alias_still_matches_substring() -> None:

@@ -24,27 +24,6 @@ _AT_PLAIN_RE = re.compile(r"@[^\s@，,。！!？?：:;；]{1,24}")
 _REPLY_MARK_RE = re.compile(r"\[回复[^\]]*\]")
 _COMMAND_START_RE = re.compile(r"^[/!！#＃.]")
 _GENERIC_ALIAS_PREFIX_CUES = ("叫", "喊", "问", "找", "戳", "cue", "艾特")
-_GENERIC_ALIAS_SUFFIX_CUES = (
-    "出来",
-    "一下",
-    "一声",
-    "在吗",
-    "在嘛",
-    "在不",
-    "你好",
-    "呢",
-    "呀",
-    "啊",
-    "吗",
-    "嘛",
-    "么",
-    "快",
-    "看",
-    "说",
-    "回",
-    "救",
-    "帮",
-)
 _REPLY_CUE_TOKENS = (
     "?",
     "？",
@@ -102,6 +81,7 @@ def _is_cjk_or_alnum(char: str) -> bool:
 
 
 def _generic_alias_before_ok(content: str, start: int) -> bool:
+    """通称只卡前界：挡住「漂亮牛牛」；句首/标点后的「牛牛放一首…」一律放行。"""
     if start == 0:
         return True
     prev = content[start - 1]
@@ -109,16 +89,6 @@ def _generic_alias_before_ok(content: str, start: int) -> bool:
         return True
     prefix = content[max(0, start - 2) : start]
     return any(prefix.endswith(token) for token in _GENERIC_ALIAS_PREFIX_CUES)
-
-
-def _generic_alias_after_ok(content: str, end: int) -> bool:
-    if end == len(content):
-        return True
-    next_char = content[end]
-    if not _is_cjk_or_alnum(next_char):
-        return True
-    tail = content[end:]
-    return any(tail.startswith(token) for token in _GENERIC_ALIAS_SUFFIX_CUES)
 
 
 def _contains_generic_alias(content: str, alias: str) -> bool:
@@ -132,10 +102,7 @@ def _contains_generic_alias(content: str, alias: str) -> bool:
         segment = content[start : start + alias_len]
         if segment != alias_text and segment.casefold() != alias_folded:
             continue
-        before_ok = _generic_alias_before_ok(content, start)
-        end = start + alias_len
-        after_ok = _generic_alias_after_ok(content, end)
-        if before_ok and after_ok:
+        if _generic_alias_before_ok(content, start):
             return True
     return False
 

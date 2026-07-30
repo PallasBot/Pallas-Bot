@@ -274,10 +274,13 @@ def tool_catalog_for_chat(
     user_text: str = "",
     activated_names: frozenset[str] | None = None,
 ) -> ToolCatalogSnapshot | None:
+    from pallas.product.llm.tools.inventory import is_inventory_intent, merge_inventory_overlay_specs
+
     normalized = str(task or "").strip().lower()
     if normalized in _NO_TOOL_TASKS:
         return None
     cfg = get_llm_config()
+    inventory = is_inventory_intent(user_text)
     domains: frozenset[str] | None = None
     inferred_domains: list[str] = []
     selection_source = "all"
@@ -305,24 +308,44 @@ def tool_catalog_for_chat(
                 min_score=int(getattr(cfg, "llm_tools_soft_recall_min_score", 6) or 6),
                 max_candidates=int(getattr(cfg, "llm_tools_soft_recall_max_candidates", 3) or 3),
             )
-            if not soft_hits:
+            if soft_hits:
+                selection_source = "soft_recall"
+                soft_fields = soft_recall_snapshot_fields(soft_hits)
+            elif inventory:
+                selection_source = "inventory"
+            else:
                 return None
-            selection_source = "soft_recall"
-            soft_fields = soft_recall_snapshot_fields(soft_hits)
+        elif inventory:
+            selection_source = "inventory"
         else:
             return None
     if soft_hits is not None:
-        specs = tuple(hit.spec for hit in soft_hits)
+        specs_list = [hit.spec for hit in soft_hits]
+    elif selection_source == "inventory":
+        specs_list = []
     else:
-        specs = iter_eligible_tool_specs(domains=domains)
-        specs = filter_specs_for_chat_visibility(
-            specs,
-            user_text=user_text,
-            activated_names=activated_names,
+        specs_list = list(
+            filter_specs_for_chat_visibility(
+                iter_eligible_tool_specs(domains=domains),
+                user_text=user_text,
+                activated_names=activated_names,
+            )
         )
-    if not specs:
+    if inventory and cfg.llm_tools_selective:
+        specs_list = merge_inventory_overlay_specs(
+            specs_list,
+            user_text=user_text,
+            domains=domains,
+            soft_recall_min_score=int(getattr(cfg, "llm_tools_soft_recall_min_score", 6) or 6),
+            soft_recall_max_candidates=int(getattr(cfg, "llm_tools_soft_recall_max_candidates", 3) or 3),
+        )
+        if selection_source == "selective":
+            selection_source = "selective+inventory"
+        elif selection_source == "soft_recall":
+            selection_source = "soft_recall+inventory"
+    if not specs_list:
         return None
-    entries = [catalog_entry_for_spec(spec) for spec in specs]
+    entries = [catalog_entry_for_spec(spec) for spec in specs_list]
     return ToolCatalogSnapshot(
         tools=entries,
         selection=ToolCatalogSelection(
@@ -335,6 +358,7 @@ def tool_catalog_for_chat(
             soft_recall_candidates=list(soft_fields.get("soft_recall_candidates") or []),
             ask_before_call=bool(soft_fields.get("ask_before_call")),
             missing_required_params=dict(soft_fields.get("missing_required_params") or {}),
+            inventory_intent=bool(inventory),
         ),
     )
 
@@ -424,9 +448,13 @@ def tool_metadata_for_chat(
                 record_bot_llm_task(normalized or "llm_chat", "soft_recall_empty")
         return {}
     source = str(catalog.selection.selection_source or "").strip().lower()
-    if source == "soft_recall":
+    if catalog.selection.inventory_intent:
+        record_bot_llm_task(normalized or "llm_chat", "inventory_hit")
+    if source.startswith("soft_recall"):
         record_bot_llm_task(normalized or "llm_chat", "soft_recall_hit")
-    elif catalog.selection.selective_enabled:
+    elif source.startswith("selective"):
+        record_bot_llm_task(normalized or "llm_chat", "selective_hit")
+    elif catalog.selection.selective_enabled and source not in {"inventory", "all"}:
         record_bot_llm_task(normalized or "llm_chat", "selective_hit")
     schemas = openai_schemas_from_catalog(catalog)
     payload: dict[str, Any] = {
@@ -439,10 +467,14 @@ def tool_metadata_for_chat(
         "missing_required_params": dict(catalog.selection.missing_required_params or {}),
         "soft_recall_confidence": int(catalog.selection.soft_recall_confidence or 0),
         "activated_tools": sorted(activated_names),
+        "inventory_intent": bool(catalog.selection.inventory_intent),
     }
     # 选择性命中且全部为插件命令工具时，首轮要求必须调工具，避免只口头答应。
     # 联网搜索同理：禁止「搜了一下」空口答应。软召回缺参时不强制，便于自然追问。
-    if (
+    # 盘点意图同理：须先查再答，禁止空口编能力。
+    if catalog.selection.inventory_intent and catalog.tools:
+        payload["tool_choice_prefer"] = "required"
+    elif (
         catalog.selection.selective_enabled
         and catalog.tools
         and source != "soft_recall"
