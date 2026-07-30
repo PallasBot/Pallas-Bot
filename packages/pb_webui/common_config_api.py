@@ -936,6 +936,36 @@ def register_common_config_router(
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(
+        f"{x}/common-config/llm/media-models/tts/translator",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_translator_get() -> JSONResponse:
+        from pallas.product.llm.ops_api import fetch_tts_translator
+
+        try:
+            data = await fetch_tts_translator()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(
+        f"{x}/common-config/llm/media-models/tts/translator",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_translator_put(body: dict[str, Any]) -> JSONResponse:
+        from pallas.product.llm.ops_api import put_tts_translator
+
+        try:
+            data = await put_tts_translator(body if isinstance(body, dict) else {})
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
         f"{x}/common-config/llm/runtime-overview",
         include_in_schema=True,
         response_model=_ApiOkResponse[_LlmRuntimeOverviewData],
