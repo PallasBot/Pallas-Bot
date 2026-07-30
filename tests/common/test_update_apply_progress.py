@@ -6,10 +6,19 @@ import pytest
 
 from packages.pb_webui.manager import map_webui_download_progress
 from pallas.console.webui.update_apply_progress import (
+    clear_update_apply_jobs_for_tests,
     create_update_apply_job,
     get_update_apply_job,
+    has_active_update_apply_job,
     run_update_apply_job,
 )
+
+
+@pytest.fixture(autouse=True)
+def _clear_jobs():
+    clear_update_apply_jobs_for_tests()
+    yield
+    clear_update_apply_jobs_for_tests()
 
 
 @pytest.mark.asyncio
@@ -27,6 +36,19 @@ async def test_update_apply_job_progress_and_complete():
     assert job.phase == "done"
     assert job.progress_percent == 100
     assert job.result == {"message": "ok", "tag": "v1"}
+
+
+@pytest.mark.asyncio
+async def test_has_active_update_apply_job_kinds_and_exclude():
+    auto_job = await create_update_apply_job("auto")
+    auto_job.push("running", "auto", progress_percent=10)
+    assert has_active_update_apply_job() is True
+    assert has_active_update_apply_job(kinds=("webui", "bot")) is False
+    assert has_active_update_apply_job(exclude_job_id=auto_job.job_id) is False
+    web = await create_update_apply_job("webui")
+    web.push("running", "web", progress_percent=10)
+    assert has_active_update_apply_job(kinds=("webui", "bot")) is True
+    assert has_active_update_apply_job(exclude_job_id=web.job_id, kinds=("webui", "bot")) is False
 
 
 @pytest.mark.asyncio

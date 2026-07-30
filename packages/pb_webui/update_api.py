@@ -390,6 +390,77 @@ def register_update_router(
         asyncio.create_task(run_update_apply_job(job, _runner))
         return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "kind": "webui"}})
 
+    @router.get(f"{x}/update/auto/status", include_in_schema=True)
+    async def _update_auto_status() -> JSONResponse:
+        from .webui_auto_update import auto_update_status_payload
+
+        return JSONResponse({"ok": True, "data": auto_update_status_payload(plugin_config)})
+
+    @router.post(f"{x}/update/auto/ack", include_in_schema=True)
+    async def _update_auto_ack(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from .webui_auto_update import ack_pending_notice, auto_update_status_payload
+
+        ack_pending_notice()
+        return JSONResponse({"ok": True, "data": auto_update_status_payload(plugin_config)})
+
+    @router.post(f"{x}/update/auto/run-once", include_in_schema=True)
+    async def _update_auto_run_once(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.console.webui.update_apply_progress import (
+            create_update_apply_job,
+            has_active_update_apply_job,
+            run_update_apply_job,
+        )
+        from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+        from .webui_auto_update import auto_update_status_payload, run_auto_update_tick
+
+        if has_active_update_apply_job():
+            raise HTTPException(status_code=409, detail="update_busy")
+
+        job = await create_update_apply_job("auto")
+        logger.info("Pallas-Bot 控制台: 自动更新立即执行已排队 job_id={}", job.job_id)
+
+        async def _runner(j: Any) -> None:
+            def on_progress(pct: int, message: str) -> None:
+                j.push("running", message, progress_percent=pct)
+
+            try:
+                tick = await run_auto_update_tick(
+                    config=plugin_config,
+                    force=True,
+                    progress_job_id=j.job_id,
+                    on_progress=on_progress,
+                )
+                status = auto_update_status_payload(plugin_config)
+                status["tick"] = tick
+                j.result = status
+                overall = str((tick or {}).get("result") or "")
+                if overall == "applied":
+                    j.message = "已自动更新"
+                elif overall == "up_to_date":
+                    j.message = "各项均已是最新或无可应用更新"
+                elif overall == "skipped":
+                    j.message = "本轮已跳过（未开启或不可用）"
+                elif overall == "failed":
+                    j.message = str((tick or {}).get("error") or status.get("last_error") or "自动更新失败")
+                    j.push("failed", error=j.message, progress_percent=j.progress_percent)
+                else:
+                    j.message = "本轮自动更新结束"
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Pallas-Bot 控制台: 自动更新立即执行失败")
+                j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
+
+        asyncio.create_task(run_update_apply_job(job, _runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "kind": "auto"}})
+
     @router.get(f"{x}/update/jobs/{{job_id}}", include_in_schema=True)
     async def _update_apply_job_get(job_id: str) -> JSONResponse:
         from pallas.console.webui.update_apply_progress import get_update_apply_job
