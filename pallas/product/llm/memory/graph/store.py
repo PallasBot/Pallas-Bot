@@ -221,6 +221,7 @@ async def upsert_entity(
             )
             session.add(row)
             await session.flush()
+            await session.commit()
             return _entity_dict_from_row(row)
         existing.summary = safe_summary or str(existing.summary or "")
         existing.tags_json = tags_json if tags is not None else existing.tags_json
@@ -231,6 +232,7 @@ async def upsert_entity(
         existing.deleted_at = None
         existing.updated_at = now
         await session.flush()
+        await session.commit()
         return _entity_dict_from_row(existing)
 
 
@@ -354,6 +356,7 @@ async def delete_entity(entity_id: int, *, bot_id: int | None = None) -> bool:
                 edge.invalid_at = now
                 edge.updated_at = now
         await session.flush()
+        await session.commit()
         return True
 
 
@@ -379,6 +382,7 @@ async def restore_entity(entity_id: int, *, bot_id: int | None = None) -> bool:
         row.deleted_at = None
         row.updated_at = int(time.time())
         await session.flush()
+        await session.commit()
         return True
 
 
@@ -416,6 +420,7 @@ async def purge_entity(entity_id: int, *, bot_id: int | None = None) -> bool:
             await session.delete(edge)
         await session.delete(row)
         await session.flush()
+        await session.commit()
         return True
 
 
@@ -490,6 +495,7 @@ async def upsert_edge(
             )
             session.add(row)
             await session.flush()
+            await session.commit()
             return _edge_dict_from_row(row)
         existing.weight = max(float(existing.weight or 1.0), float(weight))
         existing.mention_count = int(existing.mention_count or 1) + 1
@@ -499,6 +505,7 @@ async def upsert_edge(
             existing.episode_ids_json = _episode_ids_to_json(episode_ids)
         existing.updated_at = now
         await session.flush()
+        await session.commit()
         return _edge_dict_from_row(existing)
 
 
@@ -558,6 +565,7 @@ async def soft_delete_edge(edge_id: int, *, bot_id: int | None = None) -> bool:
         row.invalid_at = int(time.time())
         row.updated_at = int(time.time())
         await session.flush()
+        await session.commit()
         return True
 
 
@@ -584,6 +592,7 @@ async def restore_edge(edge_id: int, *, bot_id: int | None = None) -> bool:
         row.invalid_at = None
         row.updated_at = int(time.time())
         await session.flush()
+        await session.commit()
         return True
 
 
@@ -657,6 +666,7 @@ async def upsert_category(
             )
             session.add(row)
             await session.flush()
+            await session.commit()
             return _category_dict_from_row(row)
         existing.summary = safe_summary or str(existing.summary or "")
         if tags is not None:
@@ -668,6 +678,7 @@ async def upsert_category(
         existing.deleted_at = None
         existing.updated_at = now
         await session.flush()
+        await session.commit()
         return _category_dict_from_row(existing)
 
 
@@ -756,6 +767,7 @@ async def soft_delete_category(category_id: int, *, bot_id: int | None = None) -
             row.deleted_at = now
             row.updated_at = now
             await session.flush()
+            await session.commit()
         return True
 
 
@@ -781,6 +793,7 @@ async def restore_category(category_id: int, *, bot_id: int | None = None) -> bo
         row.deleted_at = None
         row.updated_at = int(time.time())
         await session.flush()
+        await session.commit()
         return True
 
 
@@ -803,6 +816,7 @@ async def purge_category(category_id: int, *, bot_id: int | None = None) -> bool
             return False
         await session.delete(row)
         await session.flush()
+        await session.commit()
         return True
 
 
@@ -885,6 +899,7 @@ async def set_hier_status(
             row.group_summary = safe_summary
             row.updated_at = now
         await session.flush()
+        await session.commit()
         return _hier_status_dict_from_row(row)
 
 
@@ -979,6 +994,7 @@ async def clear_scope_graph(
                     row.updated_at = now
                     cat_n += 1
         await session.flush()
+        await session.commit()
     return {"entities": ent_n, "edges": edge_n, "categories": cat_n}
 
 
