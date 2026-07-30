@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import re
 from functools import lru_cache
 from typing import TYPE_CHECKING
@@ -30,6 +31,15 @@ if TYPE_CHECKING:
 
 _COMMAND_CHECKER_NAMES = frozenset({"CommandRule", "ShellCommandRule"})
 _LEADING_PLACEHOLDER_RE = re.compile(r"^(?:\s*(?:\[[^\]]*]|\<[^>]*>))+\s*")
+# 同一条事件处理任务内复用明文归一化结果，避免 gate/route/select 反复 get_plaintext
+_EVENT_DISPATCH_TEXT_CACHE: contextvars.ContextVar[dict[int, tuple[str, str]] | None] = contextvars.ContextVar(
+    "ingress_event_dispatch_text_cache",
+    default=None,
+)
+
+
+def clear_event_dispatch_text_cache() -> None:
+    _EVENT_DISPATCH_TEXT_CACHE.set(None)
 
 
 def iter_matcher_checker_calls(matcher: type[Matcher]):
@@ -72,12 +82,23 @@ def normalize_dispatch_plain_text(text: str) -> str:
 
 
 def event_dispatch_texts(event: Event) -> tuple[str, str]:
+    cache = _EVENT_DISPATCH_TEXT_CACHE.get()
+    if cache is None:
+        cache = {}
+        _EVENT_DISPATCH_TEXT_CACHE.set(cache)
+    key = id(event)
+    hit = cache.get(key)
+    if hit is not None:
+        return hit
+
     raw = getattr(event, "raw_message", None)
     raw_text = normalize_dispatch_plain_text(raw) if isinstance(raw, str) else ""
     plain = normalize_dispatch_plain_text((event.get_plaintext() or "").strip())
     if not plain and raw_text:
         plain = raw_text
-    return plain, raw_text
+    result = (plain, raw_text)
+    cache[key] = result
+    return result
 
 
 def legacy_command_traffic(plain: str) -> bool:

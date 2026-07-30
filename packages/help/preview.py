@@ -10,7 +10,11 @@ from .draw_plugin_menu import draw_plugin_menu_image
 from .menu_rows import build_help_menu_rows
 from .plugin_detail_data import build_function_detail_data, build_plugin_detail_data
 from .plugin_manager import find_plugin_by_identifier, is_plugin_disabled_for_help_display
-from .renderer import render_v3_image_bytes
+from .renderer import (
+    _function_detail_fingerprint,
+    _plugin_detail_fingerprint,
+    render_v3_image_bytes,
+)
 from .styles import load_config
 
 PreviewLevel = Literal["menu", "plugin", "function"]
@@ -56,20 +60,30 @@ async def render_help_preview_bytes(
             bot=None,
             event=None,
         )
-        data, issue = build_plugin_detail_data(resolved, plugin_enabled=not is_disabled)
+        data, issue = build_plugin_detail_data(
+            resolved,
+            plugin_enabled=not is_disabled,
+            show_ignored=show_ignored,
+        )
         if data is None or issue.value != "ok":
-            data, _ = build_plugin_detail_data("help", plugin_enabled=True)
+            data, _ = build_plugin_detail_data("help", plugin_enabled=True, show_ignored=show_ignored)
         assert data is not None
         image = draw_plugin_detail_image(data)
-        cache_key = f"preview_plugin|{resolved}|enabled={data.enabled}"
+        cache_key = (
+            f"preview_plugin|{resolved}|enabled={data.enabled}|ignored={int(show_ignored)}"
+            f"|fp={_plugin_detail_fingerprint(data)}"
+        )
         return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
 
     func_id = (function or "1").strip() or "1"
-    data, issue = build_function_detail_data(resolved, func_id)
+    data, issue = build_function_detail_data(resolved, func_id, show_ignored=show_ignored)
     if data is None:
-        data, _ = build_function_detail_data("help", "1")
+        data, _ = build_function_detail_data("help", "1", show_ignored=show_ignored)
     if data is None:
         raise ValueError("无法生成帮助预览")
     image = draw_function_detail_image(data)
-    cache_key = f"preview_function|{resolved}|{func_id}|{data.index}"
+    cache_key = (
+        f"preview_function|{resolved}|{func_id}|{data.index}|ignored={int(show_ignored)}"
+        f"|fp={_function_detail_fingerprint(data)}"
+    )
     return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")

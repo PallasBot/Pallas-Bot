@@ -27,7 +27,14 @@ def test_stub_embedding_forces_keyword_retrieve() -> None:
 
 
 def test_fetch_embeddings_uses_openai_compatible_endpoint(monkeypatch) -> None:
-    cfg = LlmConfig(llm_embedding_model="text-embedding-3-small", llm_base_url="https://example.test", llm_api_key="key")
+    from pallas.product.llm.knowledge.embedding_provider import clear_embedding_provider_cache
+
+    clear_embedding_provider_cache()
+    cfg = LlmConfig(
+        llm_embedding_model="text-embedding-3-small",
+        llm_base_url="https://example.test",
+        llm_api_key="key",
+    )
 
     class Response:
         def raise_for_status(self) -> None:
@@ -42,6 +49,9 @@ def test_fetch_embeddings_uses_openai_compatible_endpoint(monkeypatch) -> None:
 
 
 def test_fetch_embeddings_failure_uses_stub(monkeypatch) -> None:
+    from pallas.product.llm.knowledge.embedding_provider import clear_embedding_provider_cache
+
+    clear_embedding_provider_cache()
     cfg = LlmConfig(llm_embedding_model="text-embedding-3-small", llm_base_url="https://example.test")
     monkeypatch.setattr("httpx.post", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down")))
 

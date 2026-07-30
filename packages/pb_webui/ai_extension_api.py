@@ -182,7 +182,7 @@ class _AiNcmVerifySmsBody(BaseModel):
 class _AiInstallBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["clone", "bootstrap", "clone_and_bootstrap"] = "clone_and_bootstrap"
+    action: Literal["clone", "bootstrap", "clone_and_bootstrap", "update"] = "clone_and_bootstrap"
     no_start: bool = False
     # 兼容旧客户端；bootstrap 已固定媒体栈，以下两项忽略
     remote_only: bool = False
@@ -558,12 +558,14 @@ def register_ai_extension_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.console.cli.ai_install import clone_ai_repo, run_ai_bootstrap_captured
+        from pallas.console.cli.ai_install import clone_ai_repo, run_ai_bootstrap_captured, update_ai_repo
         from pallas.console.cli.ai_ops import resolve_ai_repo_root
         from pallas.console.webui.ai_install_progress import (
             PCT_BOOTSTRAP,
             PCT_CLONE,
             PCT_CLONE_DONE,
+            PCT_UPDATE,
+            PCT_UPDATE_DONE,
             PCT_WRITEBACK,
             bootstrap_line_progress,
             create_ai_install_job,
@@ -575,6 +577,17 @@ def register_ai_extension_router(
         def _runner(j: Any) -> None:
             try:
                 ai_root = None
+                update_meta: dict[str, Any] = {}
+                if body.action == "update":
+                    j.push("running", "正在更新 AI Runtime（git pull）…", progress_percent=PCT_UPDATE)
+                    update_meta = update_ai_repo()
+                    ai_root = Path(str(update_meta["ai_root"]))
+                    changed = bool(update_meta.get("changed"))
+                    msg = f"已更新至 {update_meta.get('after', '')[:12]}" if changed else "已是最新（快进无变更）"
+                    j.push("running", msg, progress_percent=PCT_UPDATE_DONE, line=msg)
+                    if update_meta.get("submodule_ok") is False:
+                        warn = f"子模块更新失败: {update_meta.get('submodule_error') or 'unknown'}"
+                        j.push("running", warn, progress_percent=PCT_UPDATE_DONE, line=warn)
                 if body.action in ("clone", "clone_and_bootstrap"):
                     j.push("running", "正在克隆 Pallas-Bot-AI…", progress_percent=PCT_CLONE)
                     existing = resolve_ai_repo_root()
@@ -601,7 +614,7 @@ def register_ai_extension_router(
                             f"克隆完成: {ai_root}",
                             progress_percent=PCT_CLONE_DONE,
                         )
-                if body.action in ("bootstrap", "clone_and_bootstrap"):
+                if body.action in ("bootstrap", "clone_and_bootstrap", "update"):
                     ai_root = ai_root or resolve_ai_repo_root()
                     if ai_root is None:
                         j.push("failed", error="未找到 Pallas-Bot-AI，请先克隆")
@@ -637,6 +650,7 @@ def register_ai_extension_router(
                         "ai_root": str(ai_root),
                         "exit_code": code,
                         "output_tail": output[-8000:],
+                        **({"update": update_meta} if update_meta else {}),
                     }
                     if code != 0:
                         j.push(
@@ -662,7 +676,7 @@ def register_ai_extension_router(
                         **writeback,
                         "runtime": ai_runtime_status(ai_root=ai_root),
                     }
-                    j.message = "bootstrap 完成"
+                    j.message = "更新完成" if body.action == "update" else "bootstrap 完成"
                 elif body.action == "clone":
                     j.result = {"ai_root": str(ai_root)}
                     j.message = "克隆完成"

@@ -15,6 +15,7 @@ from pallas.console.cli.ai_ops import (
     resolve_ai_repo_root,
     sibling_ai_root,
 )
+from pallas.console.cli.process_util import env_for_nested_project
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -78,6 +79,26 @@ def ai_install_status() -> dict[str, Any]:
     host, port = resolve_configured_ai_endpoint()
     forbid_clone = forbid_ai_clone(runtime=runtime)
     can_clone = git_ok and resolved is None and not target.exists() and not forbid_clone
+    can_bootstrap = resolved is not None and (resolved / _AI_BOOTSTRAP).is_file()
+    can_update = (
+        git_ok
+        and resolved is not None
+        and is_managed_ai_root(resolved)
+        and (resolved / ".git").exists()
+        and (resolved / _AI_BOOTSTRAP).is_file()
+        and not forbid_clone
+    )
+    has_update: bool | None = None
+    installed_ref: str | None = None
+    latest_ref: str | None = None
+    update_check_error: str | None = None
+    if can_update and resolved is not None:
+        probe = probe_ai_repo_update(resolved)
+        has_update = probe.get("has_update")
+        installed_ref = probe.get("installed_ref")
+        latest_ref = probe.get("latest_ref")
+        err = probe.get("error")
+        update_check_error = str(err).strip() if err else None
     detected = (
         resolved is not None
         or bool(runtime.get("running"))
@@ -96,7 +117,12 @@ def ai_install_status() -> dict[str, Any]:
         "bootstrap_ready": bootstrap.is_file() if resolved or target.exists() else False,
         "git_available": git_ok,
         "can_clone": can_clone,
-        "can_bootstrap": resolved is not None and (resolved / _AI_BOOTSTRAP).is_file(),
+        "can_bootstrap": can_bootstrap,
+        "can_update": can_update,
+        "has_update": has_update,
+        "installed_ref": installed_ref,
+        "latest_ref": latest_ref,
+        "update_check_error": update_check_error,
         "in_docker": running_in_docker(),
         "endpoint": {"host": host, "port": port},
         "docker_hint": docker_compose_hint(),
@@ -125,6 +151,8 @@ def clone_ai_repo(*, target: Path | None = None, git_url: str = AI_REPO_GIT_URL)
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if completed.returncode != 0:
         err = (completed.stderr or completed.stdout or "").strip() or f"exit {completed.returncode}"
@@ -133,6 +161,183 @@ def clone_ai_repo(*, target: Path | None = None, git_url: str = AI_REPO_GIT_URL)
         raise RuntimeError(f"克隆完成但缺少 {_AI_BOOTSTRAP}")
     mark_ai_root_managed(dest)
     return dest
+
+
+def _git_run(
+    ai_root: Path,
+    *args: str,
+    timeout_sec: float | None = None,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", *args],
+        cwd=ai_root,
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=timeout_sec,
+    )
+
+
+_UPDATE_FETCH_TIMEOUT_SEC = 15.0
+
+
+def probe_ai_repo_update(
+    ai_root: Path,
+    *,
+    fetch_timeout_sec: float = _UPDATE_FETCH_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """``git fetch`` 后对比 HEAD 与上游；失败时 ``has_update`` 为 ``None``。"""
+    result: dict[str, Any] = {
+        "has_update": None,
+        "installed_ref": None,
+        "latest_ref": None,
+        "upstream": None,
+        "error": None,
+    }
+    if not (ai_root / ".git").exists():
+        result["error"] = "不是 git 仓库"
+        return result
+    if not shutil.which("git"):
+        result["error"] = "未找到 git"
+        return result
+
+    try:
+        head = _git_run(ai_root, "rev-parse", "HEAD")
+    except subprocess.TimeoutExpired:
+        result["error"] = "读取 HEAD 超时"
+        return result
+    if head.returncode != 0:
+        result["error"] = (head.stderr or head.stdout or "").strip() or "无法读取 HEAD"
+        return result
+    local_sha = (head.stdout or "").strip()
+    if not local_sha:
+        result["error"] = "HEAD 为空"
+        return result
+    result["installed_ref"] = local_sha[:12]
+
+    try:
+        fetch = _git_run(ai_root, "fetch", "--prune", "origin", timeout_sec=fetch_timeout_sec)
+    except subprocess.TimeoutExpired:
+        result["error"] = f"git fetch 超时（>{fetch_timeout_sec:.0f}s）"
+        return result
+    if fetch.returncode != 0:
+        result["error"] = (fetch.stderr or fetch.stdout or "").strip() or f"git fetch exit {fetch.returncode}"
+        return result
+
+    upstream_ref: str | None = None
+    try:
+        upstream = _git_run(ai_root, "rev-parse", "--abbrev-ref", "@{u}")
+    except subprocess.TimeoutExpired:
+        result["error"] = "解析上游超时"
+        return result
+    if upstream.returncode == 0 and (upstream.stdout or "").strip():
+        upstream_ref = (upstream.stdout or "").strip()
+    else:
+        for candidate in ("origin/main", "origin/master"):
+            try:
+                check = _git_run(ai_root, "rev-parse", "--verify", candidate)
+            except subprocess.TimeoutExpired:
+                result["error"] = "解析远端分支超时"
+                return result
+            if check.returncode == 0 and (check.stdout or "").strip():
+                upstream_ref = candidate
+                break
+    if not upstream_ref:
+        result["error"] = "无可用上游（@{u} / origin/main / origin/master）"
+        return result
+    result["upstream"] = upstream_ref
+
+    try:
+        remote = _git_run(ai_root, "rev-parse", upstream_ref)
+    except subprocess.TimeoutExpired:
+        result["error"] = "读取远端提交超时"
+        return result
+    if remote.returncode != 0:
+        result["error"] = (remote.stderr or remote.stdout or "").strip() or f"无法读取 {upstream_ref}"
+        return result
+    remote_sha = (remote.stdout or "").strip()
+    if not remote_sha:
+        result["error"] = f"{upstream_ref} 为空"
+        return result
+    result["latest_ref"] = remote_sha[:12]
+    result["has_update"] = local_sha != remote_sha
+    return result
+
+
+def update_ai_repo(*, ai_root: Path | None = None) -> dict[str, Any]:
+    """托管目录 ``git pull --ff-only``（含 submodule）；非托管 / Docker 远端禁止。"""
+    from pallas.console.cli.ai_supervisor import is_managed_ai_root, mark_ai_root_managed
+
+    root = ai_root or resolve_ai_repo_root()
+    if root is None:
+        raise FileNotFoundError("未找到 AI Runtime 目录")
+    root = root.resolve()
+    if forbid_ai_clone():
+        raise RuntimeError("当前环境禁止在进程内更新 AI Runtime（Docker / 远端请在宿主机更新）")
+    if not is_managed_ai_root(root):
+        raise PermissionError(
+            "仅允许更新控制台托管的 AI Runtime（data/runtimes/pallas-bot-ai）；同级手工克隆请自行 git pull"
+        )
+    if not (root / ".git").exists():
+        raise RuntimeError(f"不是 git 仓库，无法更新: {root}")
+    if not (root / _AI_BOOTSTRAP).is_file():
+        raise RuntimeError(f"缺少 {_AI_BOOTSTRAP}")
+    if not shutil.which("git"):
+        raise RuntimeError("未找到 git，无法更新")
+
+    before = _git_run(root, "rev-parse", "HEAD")
+    if before.returncode != 0:
+        raise RuntimeError(f"无法读取当前提交: {(before.stderr or before.stdout or '').strip()}")
+    before_sha = (before.stdout or "").strip()
+
+    fetch = _git_run(root, "fetch", "--prune", "origin")
+    if fetch.returncode != 0:
+        err = (fetch.stderr or fetch.stdout or "").strip() or f"exit {fetch.returncode}"
+        raise RuntimeError(f"git fetch 失败: {err}")
+
+    upstream = _git_run(root, "rev-parse", "--abbrev-ref", "@{u}")
+    if upstream.returncode == 0 and (upstream.stdout or "").strip():
+        pull = _git_run(root, "pull", "--ff-only", "--autostash")
+        pull_desc = (upstream.stdout or "").strip()
+    else:
+        pull = _git_run(root, "pull", "--ff-only", "--autostash", "origin", "main")
+        pull_desc = "origin/main"
+        if pull.returncode != 0:
+            pull = _git_run(root, "pull", "--ff-only", "--autostash", "origin", "master")
+            pull_desc = "origin/master"
+
+    if pull.returncode != 0:
+        err = (pull.stderr or pull.stdout or "").strip() or f"exit {pull.returncode}"
+        raise RuntimeError(f"git pull --ff-only 失败（{pull_desc}）: {err}")
+
+    after = _git_run(root, "rev-parse", "HEAD")
+    after_sha = (after.stdout or "").strip() if after.returncode == 0 else ""
+
+    sub = _git_run(root, "submodule", "update", "--init", "--recursive")
+    mark_ai_root_managed(root)
+
+    chunks = [
+        fetch.stdout or "",
+        fetch.stderr or "",
+        pull.stdout or "",
+        pull.stderr or "",
+        sub.stdout or "",
+        sub.stderr or "",
+    ]
+    result: dict[str, Any] = {
+        "ai_root": str(root),
+        "before": before_sha,
+        "after": after_sha,
+        "changed": bool(before_sha and after_sha and before_sha != after_sha),
+        "upstream": pull_desc,
+        "output_tail": "".join(chunks)[-4000:],
+        "submodule_ok": sub.returncode == 0,
+    }
+    if sub.returncode != 0:
+        result["submodule_error"] = (sub.stderr or sub.stdout or "").strip() or f"exit {sub.returncode}"
+    return result
 
 
 def run_ai_bootstrap_captured(
@@ -153,17 +358,16 @@ def run_ai_bootstrap_captured(
     """
     del with_media, remote_only
     from pallas.console.cli.ai_supervisor import is_managed_ai_root, mark_ai_root_managed
-    from pallas.console.cli.process_util import bash_missing_message, resolve_bash
+    from pallas.console.cli.process_util import bash_missing_message, bash_script_cmd
 
     script = ai_root / _AI_BOOTSTRAP
     if not script.is_file():
         return 1, f"未找到 {script}"
 
-    bash = resolve_bash()
-    if bash is None:
+    cmd = bash_script_cmd(script)
+    if cmd is None:
         return 1, bash_missing_message(purpose="AI Runtime bootstrap")
 
-    cmd = [str(bash), str(script)]
     if check_only:
         cmd.append("--check-only")
     if no_start:
@@ -171,9 +375,13 @@ def run_ai_bootstrap_captured(
     cmd.extend(["--bot-host", bot_host or default_bot_callback_host()])
     cmd.extend(["--bot-port", str(bot_port if bot_port is not None else default_bot_callback_port())])
 
-    env = os.environ.copy()
+    env = env_for_nested_project()
     if use_gpu:
         env["PALLAS_GPU"] = "1"
+
+    # 中文 Windows 默认 GBK；bootstrap/uv 多为 UTF-8，勿用 locale 解码。
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
 
     header = f"执行: {' '.join(cmd)}\nAI 仓: {ai_root}\n"
     try:
@@ -184,6 +392,8 @@ def run_ai_bootstrap_captured(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
         )
     except OSError as err:

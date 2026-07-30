@@ -49,13 +49,25 @@ cp .env.example .env
 
 默认安装 **媒体栈**（含 torch），启动 media worker + API。普通聊天不经本 Runtime。
 
+**Windows**：媒体栈依赖 Redis。bootstrap 默认 `docker compose` 拉起，请先安装并启动 [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)（托盘就绪）；或本机/WSL 自备 Redis 并设置 AI 仓 `.env` 的 `REDIS_URL`。失败时以脚本日志提示为准。
+
+唱歌 / TTS 还需要本机 **ffmpeg** 在 PATH 中（否则日志会出现 `Couldn't find ffmpeg`，音频处理可能失败）。可用：
+
+```powershell
+winget install --id Gyan.FFmpeg -e
+```
+
+装完后**新开终端**，再在控制台重启媒体服务。也可把 `ffmpeg.exe` / `ffprobe.exe` 放到 AI Runtime 目录后确保 PATH 能找到。
+
+从 Bot 控制台启动 AI 时，若曾看到 `VIRTUAL_ENV=…\Pallas-Bot\.venv does not match`：那是 Bot 虚拟环境变量泄漏到 AI 仓，**可忽略**；新版启停会自动剥掉该变量。`pydub` 的 `SyntaxWarning: invalid escape sequence` 来自第三方库，也不影响使用。
+
 或在 **Pallas-Bot** 仓库（同级已克隆 AI 仓时）：
 
 ```bash
 uv run pallas ai setup
 ```
 
-也可在控制台 **AI 配置 · 媒体服务** 使用安装：克隆同级 `Pallas-Bot-AI` 并跑 `ai_bootstrap.sh`；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
+也可在控制台 **AI 配置 · 媒体服务** 使用安装：未安装时「下载并安装」；托管目录（`data/runtimes/pallas-bot-ai`）打开/刷新会 `git fetch` 对比远端，有更新才显示「更新 Runtime」（`git pull --ff-only` 后再 bootstrap），已是最新则只留「仅重装依赖」；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
 
 用户向手把手与 **能力包**（对话模型拉取、媒体权重 / Docker 换 `latest`）见 [AI 扩展](/guide/ai)。
 

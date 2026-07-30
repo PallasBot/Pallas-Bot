@@ -104,3 +104,11 @@ async def fetch_tts_defaults(*, cfg: LlmConfig | None = None) -> dict[str, Any]:
 
 async def put_tts_defaults(body: dict[str, Any], *, cfg: LlmConfig | None = None) -> dict[str, Any]:
     return await _proxy_put("/tts/defaults", body, cfg=cfg)
+
+
+async def fetch_tts_translator(*, cfg: LlmConfig | None = None) -> dict[str, Any]:
+    return await _proxy_get("/tts/translator", cfg=cfg)
+
+
+async def put_tts_translator(body: dict[str, Any], *, cfg: LlmConfig | None = None) -> dict[str, Any]:
+    return await _proxy_put("/tts/translator", body, cfg=cfg)

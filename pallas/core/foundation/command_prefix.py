@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+_COMMAND_STARTS_CACHE: tuple[str, ...] | None = None
 
-def strip_leading_command_marks(text: str) -> str:
-    """去掉 NoneBot ``command_start`` 与遗留 ``/`` 前缀。"""
-    stripped = (text or "").strip()
+
+def clear_command_start_cache() -> None:
+    global _COMMAND_STARTS_CACHE
+    _COMMAND_STARTS_CACHE = None
+
+
+def _command_starts() -> tuple[str, ...]:
+    global _COMMAND_STARTS_CACHE
+    if _COMMAND_STARTS_CACHE is not None:
+        return _COMMAND_STARTS_CACHE
     starts: tuple[str, ...] = ("/", "")
     try:
         from nonebot import get_driver
@@ -15,6 +23,14 @@ def strip_leading_command_marks(text: str) -> str:
             starts = tuple(str(s) for s in raw)
     except Exception:
         pass
+    _COMMAND_STARTS_CACHE = starts
+    return starts
+
+
+def strip_leading_command_marks(text: str) -> str:
+    """去掉 NoneBot ``command_start`` 与遗留 ``/`` 前缀。"""
+    stripped = (text or "").strip()
+    starts = _command_starts()
     for start in sorted((s for s in starts if s), key=len, reverse=True):
         if stripped.startswith(start):
             return stripped[len(start) :].lstrip()

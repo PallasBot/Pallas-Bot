@@ -160,6 +160,7 @@ def _ingress_dispatch_section() -> WebuiEnvSection:
         field_to_env={
             "matcher_dispatch_enabled": "PALLAS_MATCHER_DISPATCH_ENABLED",
             "matcher_dispatch_overload_threshold": "PALLAS_MATCHER_DISPATCH_OVERLOAD_THRESHOLD",
+            "chat_drop_on_overload": "PALLAS_INGRESS_CHAT_DROP_ON_OVERLOAD",
             "route_index_enabled": "PALLAS_ROUTE_INDEX_ENABLED",
             "route_index_strict": "PALLAS_ROUTE_INDEX_STRICT",
             "dispatch_lanes_enabled": "PALLAS_DISPATCH_LANES_ENABLED",
@@ -235,6 +236,9 @@ def _llm_section() -> WebuiEnvSection:
             "ai_server_port": "AI_SERVER_PORT",
             "llm_chat_enabled": "LLM_CHAT_ENABLED",
             "chat_enable": "CHAT_ENABLE",
+            "chat_tts_enable": "CHAT_TTS_ENABLE",
+            "drunk_tts_min_drunkenness": "DRUNK_TTS_MIN_DRUNKENNESS",
+            "drunk_tts_min_chars": "DRUNK_TTS_MIN_CHARS",
             "llm_repeater_mode": "LLM_REPEATER_MODE",
             "llm_polish_lite_sample_rate": "LLM_POLISH_LITE_SAMPLE_RATE",
             "llm_governance_enabled": "LLM_GOVERNANCE_ENABLED",
@@ -307,6 +311,11 @@ def _llm_section() -> WebuiEnvSection:
             "llm_expression_retrieve_limit": "LLM_EXPRESSION_RETRIEVE_LIMIT",
             "llm_vector_retrieve": "LLM_VECTOR_RETRIEVE",
             "llm_embedding_model": "LLM_EMBEDDING_MODEL",
+            "llm_embedding_provider": "LLM_EMBEDDING_PROVIDER",
+            "llm_embedding_provider_id": "LLM_EMBEDDING_PROVIDER_ID",
+            "llm_embedding_base_url": "LLM_EMBEDDING_BASE_URL",
+            "llm_embedding_api_key": "LLM_EMBEDDING_API_KEY",
+            "llm_embedding_api_backends": "LLM_EMBEDDING_API_BACKENDS",
             "llm_memory_rag_top_k": "LLM_MEMORY_RAG_TOP_K",
             "llm_memory_max_per_group": "LLM_MEMORY_MAX_PER_GROUP",
             "llm_memory_content_max_len": "LLM_MEMORY_CONTENT_MAX_LEN",
@@ -485,6 +494,7 @@ def _ingress_dispatch_payload_extras() -> dict[str, Any]:
                 "field_names": [
                     "matcher_dispatch_enabled",
                     "matcher_dispatch_overload_threshold",
+                    "chat_drop_on_overload",
                 ],
             },
             {

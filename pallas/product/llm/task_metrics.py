@@ -46,6 +46,7 @@ _EVENTS = frozenset({
     "soft_recall_hit",
     "soft_recall_empty",
     "soft_recall_ask_no_call",
+    "inventory_hit",
     "tools_find_call",
     "tool_activate",
     "tool_call_ok",

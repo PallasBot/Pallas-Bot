@@ -1,12 +1,10 @@
-"""知识与记忆检索的 embedding 客户端。"""
+"""知识与记忆检索的 embedding 客户端（对外入口，内部走 EmbeddingProvider）。"""
 
 from __future__ import annotations
 
 import hashlib
 from operator import itemgetter
 from typing import TYPE_CHECKING, Any
-
-import httpx
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 
@@ -26,13 +24,59 @@ def embedding_model_name(cfg: LlmConfig | None = None) -> str:
     return model or "stub"
 
 
+def resolved_embedding_model_name(cfg: LlmConfig | None = None) -> str:
+    """实际用于向量的模型名（本机/远程在配置仍写 stub 时落到默认模型）。"""
+    from pallas.product.llm.knowledge.embedding_provider import (
+        resolve_embedding_provider_name,
+        resolve_local_embedding_model,
+        resolve_remote_embedding_model,
+    )
+
+    provider_name = resolve_embedding_provider_name(cfg)
+    if provider_name == "local":
+        return resolve_local_embedding_model(cfg)
+    if provider_name == "openai":
+        return resolve_remote_embedding_model(cfg)
+    return embedding_model_name(cfg)
+
+
 def embedding_capability_trace(cfg: LlmConfig | None = None) -> dict[str, Any]:
+    from pallas.product.llm.knowledge.embedding_provider import (
+        embedding_remote_endpoint_configured,
+        local_embedding_dependency_available,
+        resolve_embedding_provider_name,
+    )
+
     model = embedding_model_name(cfg)
+    provider_name = resolve_embedding_provider_name(cfg)
+    error = _last_embedding_error
+    resolved_model = resolved_embedding_model_name(cfg)
+    if provider_name == "local":
+        if not local_embedding_dependency_available():
+            error = error or "未安装 fastembed；请执行 uv pip install 'fastembed>=0.5'"
+            semantic = False
+        else:
+            semantic = not bool(_last_embedding_error)
+    elif provider_name == "openai":
+        if not embedding_remote_endpoint_configured(cfg):
+            error = error or (
+                "未配置向量服务地址：请填写「Embedding 接口地址」，或先在对话 Provider 配好可用的 OpenAI 兼容地址"
+            )
+            semantic = False
+        elif model.lower() == "stub":
+            # 选了 openai 但模型仍写 stub 时，运行会用默认远程模型名
+            semantic = not bool(_last_embedding_error)
+        else:
+            semantic = not bool(_last_embedding_error)
+    else:
+        semantic = False
     return {
+        "embedding_provider": provider_name,
         "embedding_model": model,
-        "embedding_fallback": bool(_last_embedding_error),
-        "embedding_error": _last_embedding_error or None,
-        "semantic_available": model.lower() != "stub" and not _last_embedding_error,
+        "resolved_model": resolved_model,
+        "embedding_fallback": bool(error),
+        "embedding_error": error or None,
+        "semantic_available": semantic,
     }
 
 
@@ -79,33 +123,18 @@ def fetch_embeddings_sync(
     inputs = [str(text or "").strip() for text in texts]
     if not inputs or any(not text for text in inputs):
         return None
-    model = embedding_model_name(cfg)
-    if model.lower() == "stub":
-        _last_embedding_error = ""
-        return [stub_embedding(text) for text in inputs]
-    try:
-        from pallas.product.llm.provider_client import auth_headers, openai_api_root
-        from pallas.product.llm.providers_store import resolve_endpoint_for_task
+    from pallas.product.llm.knowledge.embedding_provider import get_embedding_provider
 
-        endpoint = resolve_endpoint_for_task("llm_chat")
-        base_url = str(getattr(endpoint, "base_url", "") or getattr(cfg, "llm_base_url", "")).strip()
-        api_key = str(getattr(endpoint, "api_key", "") or getattr(cfg, "llm_api_key", "")).strip()
-        if not base_url:
-            raise ValueError("embedding provider base_url not configured")
-        response = httpx.post(
-            f"{openai_api_root(base_url)}/embeddings",
-            headers=auth_headers(api_key),
-            json={"model": model, "input": inputs},
-            timeout=timeout_sec,
-        )
-        response.raise_for_status()
-        vectors = parse_embeddings_response(response.json())
+    provider = get_embedding_provider(cfg)
+    try:
+        vectors = provider.embed_sync(inputs, timeout_sec=timeout_sec)
         if len(vectors) != len(inputs):
             raise ValueError("embedding response count mismatch")
         _last_embedding_error = ""
         return vectors
     except Exception as exc:
         _last_embedding_error = str(exc)[:240]
+        # 远程失败回落 stub，保证调用方不中断
         return [stub_embedding(text) for text in inputs]
 
 

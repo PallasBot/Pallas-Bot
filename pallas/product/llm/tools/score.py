@@ -10,6 +10,38 @@ if TYPE_CHECKING:
 # 达到该分才把工具域并入 selective 推断（避免单字误触）
 DEFAULT_MIN_SCORE = 6
 
+# 口语与 hint 共用的祈使词干（跨插件通用，不写死模板名）
+_IMPERATIVE_STEMS: tuple[str, ...] = (
+    "做个",
+    "来个",
+    "放首",
+    "来首",
+    "画个",
+    "画张",
+    "来张",
+    "来杯",
+    "整首",
+)
+
+
+def _imperative_stem_bonus(query: str, hints: frozenset[str] | set[str] | list[str]) -> int:
+    """query 与任一 hint 共享祈使词干时加分；优先点名语境，降低「做个饭」误触。"""
+    q = (query or "").strip().lower()
+    if not q:
+        return 0
+    hint_blob = " ".join(str(h).strip().lower() for h in hints if str(h).strip())
+    if not hint_blob:
+        return 0
+    addressed = "牛牛" in q
+    for stem in _IMPERATIVE_STEMS:
+        if stem in q and stem in hint_blob:
+            if addressed:
+                return 6
+            if any(tag in q for tag in ("表情", "meme", "歌", "曲", "图", "酒", "杯")):
+                return 6
+            return 0
+    return 0
+
 
 def score_tool_text(
     query: str,
@@ -38,6 +70,7 @@ def score_tool_text(
             score += 4
         elif any(part and len(part) >= 2 and part in h for part in q.split()):
             score += 2
+    score += _imperative_stem_bonus(q, hints)
     return score
 
 

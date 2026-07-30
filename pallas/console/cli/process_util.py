@@ -16,6 +16,34 @@ def is_windows() -> bool:
     return sys.platform == "win32"
 
 
+# 从 Bot venv 启动 AI 子进程时需剥掉，否则 uv 会警告 VIRTUAL_ENV 与项目 .venv 不一致
+_NESTED_PROJECT_ENV_DROP = (
+    "VIRTUAL_ENV",
+    "VIRTUAL_ENV_PROMPT",
+    "UV_PROJECT",
+    "UV_PROJECT_ENVIRONMENT",
+    "PYTHONHOME",
+)
+
+
+def env_for_nested_project(
+    base: Mapping[str, str] | None = None,
+    *,
+    extra: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """为「另一份 uv/venv 项目」（如 AI Runtime）准备子进程环境。
+
+    Bot 进程常带 ``VIRTUAL_ENV=…/Pallas-Bot/.venv``；在 AI 仓跑 ``uv run`` 时会刷
+    「does not match the project environment path」警告。剥掉相关键后由 AI 仓自有 ``.venv`` 接管。
+    """
+    out = dict(os.environ if base is None else base)
+    for key in _NESTED_PROJECT_ENV_DROP:
+        out.pop(key, None)
+    if extra:
+        out.update({str(k): str(v) for k, v in extra.items()})
+    return out
+
+
 def pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -195,31 +223,77 @@ def _windows_stop_pid(pid: int, *, force: bool, timeout_s: float) -> None:
         pass
 
 
+def is_wsl_system_bash(path: Path) -> bool:
+    """Windows ``System32\\bash.exe`` 是 WSL 入口，不能直接吃 ``F:\\...`` 反斜杠路径。"""
+    normalized = str(path).replace("/", "\\").lower()
+    return normalized.endswith(("\\system32\\bash.exe", "\\system32\\bash"))
+
+
+def windows_git_bash_candidates() -> list[Path]:
+    return [
+        Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe",
+        Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Git" / "bin" / "bash.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Git" / "bin" / "bash.exe",
+    ]
+
+
+def windows_path_to_wsl(path: Path) -> str:
+    """``F:\\foo\\bar`` → ``/mnt/f/foo/bar``，供 WSL system bash 使用。"""
+    text = str(path)
+    if len(text) >= 2 and text[1] == ":":
+        drive = text[0].lower()
+        rest = text[2:].replace("\\", "/")
+        if not rest.startswith("/"):
+            rest = "/" + rest
+        return f"/mnt/{drive}{rest}"
+    return text.replace("\\", "/")
+
+
+def path_for_bash(path: Path, bash: Path) -> str:
+    """把路径转成指定 bash 可直接作为 argv 使用的形式。"""
+    if is_windows() and is_wsl_system_bash(bash):
+        return windows_path_to_wsl(path)
+    return str(path)
+
+
 def resolve_bash() -> Path | None:
-    """解析可用 bash：PATH，以及 Windows 常见 Git 安装路径。"""
+    """解析可用 bash：Windows 优先 Git Bash，避免 PATH 上的 WSL system32 bash。"""
+    if is_windows():
+        for path in windows_git_bash_candidates():
+            if path.is_file():
+                return path
+        found = shutil.which("bash")
+        if found:
+            cand = Path(found)
+            if not is_wsl_system_bash(cand):
+                return cand
+            # 仅有 WSL bash 时仍返回，调用方须用 path_for_bash 转换路径
+            return cand
+        return None
+
     found = shutil.which("bash")
     if found:
         return Path(found)
-    if is_windows():
-        candidates = [
-            Path(os.environ.get("ProgramFiles", r"C:\Program Files")) / "Git" / "bin" / "bash.exe",
-            Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / "Git" / "bin" / "bash.exe",
-            Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Git" / "bin" / "bash.exe",
-        ]
-        for path in candidates:
-            if path.is_file():
-                return path
     for path in (Path("/bin/bash"), Path("/usr/bin/bash")):
         if path.is_file():
             return path
     return None
 
 
+def bash_script_cmd(script: Path, *args: str, bash: Path | None = None) -> list[str] | None:
+    """构造 ``[bash, script, *args]``；找不到 bash 时返回 None。"""
+    resolved = bash if bash is not None else resolve_bash()
+    if resolved is None:
+        return None
+    return [str(resolved), path_for_bash(script, resolved), *args]
+
+
 def bash_missing_message(*, purpose: str) -> str:
     if is_windows():
         return (
             f"{purpose} 需要 bash（当前未找到）。\n"
-            "请安装 Git for Windows 并将 bash 加入 PATH，或在 WSL 中运行；"
+            "请安装 Git for Windows（推荐，bash 在 Git\\bin），"
+            "勿仅依赖 C:\\Windows\\System32\\bash.exe（WSL，无法直接跑盘符路径脚本）；"
             "单进程 Bot 请直接使用：uv run pallas（已不依赖 bash）。"
         )
     return f"{purpose} 需要 bash，但系统未找到（请安装 bash 或检查 PATH）。"
@@ -234,14 +308,13 @@ def run_bash_script(
     purpose: str = "该操作",
 ) -> int:
     """用已解析的 bash 执行脚本；找不到 bash 时打印说明并返回 1。"""
-    bash = resolve_bash()
-    if bash is None:
+    cmd = bash_script_cmd(script, *args)
+    if cmd is None:
         print(bash_missing_message(purpose=purpose), file=sys.stderr)
         return 1
     if not script.is_file():
         print(f"缺少脚本 {script}", file=sys.stderr)
         return 1
-    cmd = [str(bash), str(script), *args]
     popen_env = None
     if env is not None:
         popen_env = dict(os.environ)

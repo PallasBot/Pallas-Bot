@@ -30,6 +30,7 @@ _COMMAND_START_FIELDS = frozenset({"command_start"})
 _INGRESS_FANOUT_FIELDS = frozenset({"greeting_fanout_texts"})
 _INGRESS_DISPATCH_FIELDS = frozenset({
     "matcher_dispatch_enabled",
+    "chat_drop_on_overload",
     "route_index_enabled",
     "dispatch_lanes_enabled",
     "send_queue_enabled",

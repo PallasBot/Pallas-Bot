@@ -19,12 +19,14 @@ def llm_command_tool_row(
     hints: list[str] | None = None,
     visibility: ToolVisibility = "visible",
     source_segments: SourceSegmentsMode = "none",
+    capabilities: list[str] | None = None,
 ) -> dict[str, Any]:
     """单条 ``extra['llm_tools']`` 项：意图识别后按模板拼命令并派发。
 
     hints: 口语触发词；硬域未命中时参与 soft_recall 工具级打分。
     visibility: visible 随域注入；deferred 仅在自身 hints 命中或经 tools.find 激活后注入。
     source_segments: media 时透传原消息的图片 / @ /「自己」；其余命令不附加素材。
+    capabilities: 可选能力标签（如 read_only）；省略则按工具名启发式推断。
     """
     tool_name = (name or "").strip()
     cid = (command_id or "").strip()
@@ -40,6 +42,7 @@ def llm_command_tool_row(
     if segment_mode not in {"none", "media"}:
         segment_mode = "none"
     hint_list = [str(item).strip() for item in (hints or []) if str(item).strip()]
+    cap_list = [str(item).strip().lower() for item in (capabilities or []) if str(item).strip()]
     row: dict[str, Any] = {
         "name": tool_name,
         "command_id": cid,
@@ -52,4 +55,6 @@ def llm_command_tool_row(
     }
     if hint_list:
         row["hints"] = hint_list
+    if cap_list:
+        row["capabilities"] = cap_list
     return row

@@ -97,8 +97,45 @@ flowchart TD
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `LLM_MEMORY_RAG_ENABLED` | 开 | 群记忆读写与注入 |
-| `LLM_VECTOR_RETRIEVE` | `hybrid` | 关键词+向量；real embedding 由 Bot Provider 配置，stub 或失败时回落关键词 |
-| `LLM_EMBEDDING_MODEL` | `stub` | embedding 模型标识；填 `stub` 时使用关键词检索 |
+| `LLM_VECTOR_RETRIEVE` | `hybrid` | 关键词+向量；真实向量由 Embedding 提供方决定，stub 或失败时回落关键词 |
+| `LLM_EMBEDDING_PROVIDER` | （空=自动） | `stub` 占位 / `openai` 远程 / `local` 本机；空则按模型名推断 |
+| `LLM_EMBEDDING_MODEL` | `stub` | 模型标识；`stub` 为占位。`openai` 且仍写 stub 时实际用 `text-embedding-3-small`；`local` 时可留 stub（默认 `BAAI/bge-small-zh-v1.5`） |
+| `LLM_EMBEDDING_PROVIDER_ID` | （空） | Provider 名册 id；选中后走该线路的 base_url/密钥。空则回落对话主线 |
+| `LLM_EMBEDDING_BASE_URL` / `API_KEY` | （空） | 可选手填；覆盖名册 / 对话主线 |
+| `LLM_EMBEDDING_API_BACKENDS` | `[]` | 备线 JSON；由「Embedding 线路」面板维护 |
+
+### 怎么开真实 Embedding
+
+控制台：**AI 配置 → 接话 → 记忆**。
+
+1. **群记忆检索**保持开；检索模式建议 `hybrid`（或 `embedding`）。
+2. **向量提供方**选「远程（OpenAI 兼容）」；本机选「本机（fastembed）」并安装依赖（见下）。
+3. 仅当向量提供方为「远程」时，在 **Embedding 线路**点 **添加网关** 选 Provider 或手填；本机 / 占位无需配线路。
+4. 保存后点上方 **探测**：应显示「语义可用」。DeepSeek 官方多数无 `/embeddings`，请换兼容网关。
+5. 换模型后旧记忆向量可能对不上，等后台回填或重新写入记忆。
+
+本机依赖（用 pip 装包，勿对含 editable 插件的环境跑会裁剪依赖的 `uv sync --extra`）：
+
+```bash
+uv pip install 'fastembed>=0.5'
+```
+
+等价落盘（`data/pallas_config/webui.json` 或环境变量）：
+
+```text
+LLM_EMBEDDING_PROVIDER=openai
+LLM_EMBEDDING_MODEL=text-embedding-3-small
+LLM_EMBEDDING_PROVIDER_ID=<名册里的 id>
+```
+
+本机：
+
+```text
+LLM_EMBEDDING_PROVIDER=local
+```
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
 | `LLM_MEMORY_AUTO_EPISODE_ENABLED` | 开 | 有价值发言自动写入 episode |
 | `LLM_KNOWLEDGE_SOURCES_ENABLED` | 开 | 知识源总闸 |
 | `LLM_KNOWLEDGE_FILE_INGEST_ENABLED` | 开 | 扫描 `data/pallas_knowledge/` |
@@ -114,7 +151,7 @@ flowchart TD
 
 群里「搜一下…」却说搜不了，或日志出现 `web_search_unconfigured`：
 
-1. **AI 配置 → 对话 → 策略 → 联网搜索**：`WEB_SEARCH_API_URL` 与 `TAVILY_API_KEY` 是否都已填  
+1. **AI 配置 → 接话 → 策略 → 联网搜索**：`WEB_SEARCH_API_URL` 与 `TAVILY_API_KEY` 是否都已填  
 2. 地址是否为完整 URL（推荐 `https://api.tavily.com/search`，须含 `/search`）  
 3. 同页 **允许调用工具**（`LLM_TOOLS_ENABLED`）是否开启  
 4. 保存后是否已热载；仍无效时重启 Bot 再试  

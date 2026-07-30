@@ -115,6 +115,21 @@ def test_soft_recall_with_song_residual_not_ask(monkeypatch) -> None:
     assert catalog.selection.selection_source == "soft_recall"
     assert catalog.selection.ask_before_call is False
     assert missing_required_params_for_text(_song_spec(), "我想听铁花飞") == ()
+    meta = tool_metadata_for_chat(task="llm_chat", user_text="我想听铁花飞")
+    # 软召回材料齐全时与硬域一样强制调工具，避免空口答应
+    assert meta.get("tool_choice_prefer") == "required"
+
+
+def test_imperative_stem_bonus_addressed(monkeypatch) -> None:
+    from pallas.product.llm.tools.score import score_tool_text
+
+    score = score_tool_text(
+        "牛牛做个流萤举牌",
+        name="memes.recommend",
+        description="推荐并制作表情",
+        hints=frozenset({"做个表情", "牛牛做个", "表情包"}),
+    )
+    assert score >= 6
 
 
 def _song_spec():

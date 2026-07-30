@@ -34,9 +34,11 @@ Pallas-Bot 的普通 LLM 聊天在 Bot 进程内完成。本文说明维护者�
 | `visible`（默认） | 相关即带 / 话题相关就带上 | 意图域命中后随场景注入 |
 | `deferred` | 触发才带 / 说到触发词才带上 | 仅自身 hints 命中，或经 `tools.find` 激活后注入 |
 
+盘点口语（如「你会啥」「有哪些…」）会额外打开查询通道：注入 `tools.find`，并对命中域内的只读/清单类工具本轮忽略 deferred，避免空口编造能力。插件可在 `llm_command_tool_row` 声明 `capabilities=["read_only"]`；未声明时按工具名（list/search/…）启发式推断。
+
 模型需要低频能力时，可以调用 `tools.find`。匹配到的延迟工具会加入本轮后续调用，并在短时间内保留给同一会话范围。副作用工具仍经过既有安全和确认策略；被拦截的原因会写入运行追踪。
 
-WebUI 可覆盖单工具的描述、hints 与可见性（**AI 配置 → 对话 → 工具**）。联网搜索工具 `web.search` 依赖 `WEB_SEARCH_API_URL` 与 `TAVILY_API_KEY`，见 [AI 扩展 · 联网搜索](/guide/ai#联网搜索)。
+WebUI 可覆盖单工具的描述、hints 与可见性（**AI 配置 → 接话 → 工具**）。联网搜索工具 `web.search` 依赖 `WEB_SEARCH_API_URL` 与 `TAVILY_API_KEY`，见 [AI 扩展 · 联网搜索](/guide/ai#联网搜索)。
 
 新增工具优先复用注册表与能力标签，不要绕过工具循环直接在消息入口执行。
 

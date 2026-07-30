@@ -33,9 +33,11 @@ from pallas.product.llm.media_models import (
     fetch_sing_defaults,
     fetch_sing_speakers,
     fetch_tts_defaults,
+    fetch_tts_translator,
     fetch_tts_voices,
     put_sing_defaults,
     put_tts_defaults,
+    put_tts_translator,
 )
 from pallas.product.llm.memory.graph.extract import extract_from_episodes, extract_from_text
 from pallas.product.llm.memory.graph.hiergraph import get_hiergraph_status, rebuild_hiergraph
@@ -198,6 +200,7 @@ __all__ = [
     "fetch_sing_defaults",
     "fetch_sing_speakers",
     "fetch_tts_defaults",
+    "fetch_tts_translator",
     "fetch_tts_voices",
     "find_provider",
     "get_hiergraph_status",
@@ -252,6 +255,7 @@ __all__ = [
     "purge_entity",
     "put_sing_defaults",
     "put_tts_defaults",
+    "put_tts_translator",
     "rebuild_hiergraph",
     "reload_runtime_model",
     "resolve_endpoint_candidates_for_task",

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.10-12-g585092d8-dirty",
+    "version": "v4.1.15-54-g4cadf786",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -12135,6 +12135,153 @@
         }
       }
     },
+    "/pallas/api/common-config/llm/embedding-status": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Embedding Status Get",
+        "operationId": "_llm_embedding_status_get_pallas_api_common_config_llm_embedding_status_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__LlmEmbeddingStatusData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/embedding-status/probe": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Embedding Status Probe",
+        "operationId": "_llm_embedding_status_probe_pallas_api_common_config_llm_embedding_status_probe_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/_LlmEmbeddingProbeBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__LlmEmbeddingStatusData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/common-config/llm/model-admin/switch": {
       "post": {
         "tags": [
@@ -13793,6 +13940,142 @@
         ],
         "summary": " Llm Media Models Tts Defaults Put",
         "operationId": "_llm_media_models_tts_defaults_put_pallas_api_common_config_llm_media_models_tts_defaults_put",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/media-models/tts/translator": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Media Models Tts Translator Get",
+        "operationId": "_llm_media_models_tts_translator_get_pallas_api_common_config_llm_media_models_tts_translator_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Media Models Tts Translator Put",
+        "operationId": "_llm_media_models_tts_translator_put_pallas_api_common_config_llm_media_models_tts_translator_put",
         "parameters": [
           {
             "name": "token",
@@ -21854,6 +22137,195 @@
         }
       }
     },
+    "/pallas/api/update/auto/status": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Update Auto Status",
+        "operationId": "_update_auto_status_pallas_api_update_auto_status_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/update/auto/ack": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Update Auto Ack",
+        "operationId": "_update_auto_ack_pallas_api_update_auto_ack_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/update/auto/run-once": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Update Auto Run Once",
+        "operationId": "_update_auto_run_once_pallas_api_update_auto_run_once_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/update/jobs/{job_id}": {
       "get": {
         "tags": [
@@ -23186,7 +23658,8 @@
             "enum": [
               "clone",
               "bootstrap",
-              "clone_and_bootstrap"
+              "clone_and_bootstrap",
+              "update"
             ],
             "title": "Action",
             "default": "clone_and_bootstrap"
@@ -23535,6 +24008,28 @@
           "data"
         ],
         "title": "_ApiOkResponse[_ConsoleSetupStatusData]"
+      },
+      "_ApiOkResponse__LlmEmbeddingStatusData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_LlmEmbeddingStatusData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_LlmEmbeddingStatusData]"
       },
       "_ApiOkResponse__LlmProviderTestData_": {
         "properties": {
@@ -24297,6 +24792,154 @@
         "additionalProperties": false,
         "type": "object",
         "title": "_HelpMenuVisibilityBody"
+      },
+      "_LlmEmbeddingProbeBody": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Text",
+            "default": "ping"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "_LlmEmbeddingProbeBody"
+      },
+      "_LlmEmbeddingStatusData": {
+        "properties": {
+          "embedding_provider": {
+            "type": "string",
+            "title": "Embedding Provider",
+            "default": ""
+          },
+          "embedding_kind": {
+            "type": "string",
+            "title": "Embedding Kind",
+            "default": ""
+          },
+          "embedding_model": {
+            "type": "string",
+            "title": "Embedding Model",
+            "default": ""
+          },
+          "resolved_model": {
+            "type": "string",
+            "title": "Resolved Model",
+            "default": ""
+          },
+          "semantic_available": {
+            "type": "boolean",
+            "title": "Semantic Available",
+            "default": false
+          },
+          "embedding_fallback": {
+            "type": "boolean",
+            "title": "Embedding Fallback",
+            "default": false
+          },
+          "embedding_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Error"
+          },
+          "available_providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Available Providers"
+          },
+          "local_dependency_ready": {
+            "type": "boolean",
+            "title": "Local Dependency Ready",
+            "default": false
+          },
+          "local_default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Default Model"
+          },
+          "remote_default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Default Model"
+          },
+          "endpoint_configured": {
+            "type": "boolean",
+            "title": "Endpoint Configured",
+            "default": false
+          },
+          "trigger_cache_count": {
+            "type": "integer",
+            "title": "Trigger Cache Count",
+            "default": 0
+          },
+          "trigger_cache_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Cache Model"
+          },
+          "probe_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Ok"
+          },
+          "probe_dims": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Dims"
+          },
+          "probe_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Ms"
+          }
+        },
+        "type": "object",
+        "title": "_LlmEmbeddingStatusData"
       },
       "_LlmHealthProviderRow": {
         "properties": {

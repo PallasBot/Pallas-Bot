@@ -57,13 +57,19 @@ def iter_user_help_menu(menu_data: list[dict[str, Any]]) -> Iterator[dict[str, A
             yield item
 
 
-def iter_plugin_detail_menu(plugin: Any, menu_data: list[dict[str, Any]]) -> Iterator[dict[str, Any]]:
+def iter_plugin_detail_menu(
+    plugin: Any,
+    menu_data: list[dict[str, Any]],
+    *,
+    show_ignored: bool = False,
+) -> Iterator[dict[str, Any]]:
     """插件详情页的 menu 条目。
 
-    超管专属插件（``is_user_help_plugin`` 为假）整体已对普通用户隐藏，
-    其详情页只有超管才打得开，因此展示全部条目；普通插件仍按 user 受众过滤。
+    - 超管私聊（``show_ignored=True``）：展示全部条目（含条目级 ``help_audience`` 受限项）。
+    - 超管专属插件（``is_user_help_plugin`` 为假）：整体已对普通用户隐藏，详情只有超管能开，展示全部。
+    - 普通视图下的用户向插件：仍按 user 受众过滤。
     """
-    if not is_user_help_plugin(plugin):
+    if show_ignored or not is_user_help_plugin(plugin):
         yield from menu_data
         return
     yield from iter_user_help_menu(menu_data)

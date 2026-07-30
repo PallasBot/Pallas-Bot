@@ -40,6 +40,7 @@ def test_ai_install_status_shape(monkeypatch: pytest.MonkeyPatch, tmp_path) -> N
     assert st["runtime"]["can_manage"] is False
     assert st["runtime"]["running"] is False
     assert st["can_clone"] is True or st["git_available"] is False
+    assert st["has_update"] is None
     assert "managed_root" in st
     assert "sibling_root" in st
 
@@ -135,6 +136,194 @@ def test_clone_ai_repo_rejects_existing(tmp_path, monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(ai_install, "default_ai_clone_target", lambda: allowed.resolve())
     with pytest.raises(FileExistsError):
         ai_install.clone_ai_repo()
+
+
+def test_update_ai_repo_ff_only(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "pallas-bot-ai"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "ai_bootstrap.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / ".git").mkdir()
+    (root / ".pallas-managed").write_text("managed-by=pallas-bot\n", encoding="utf-8")
+    monkeypatch.setattr(ai_install, "resolve_ai_repo_root", lambda: root.resolve())
+    monkeypatch.setattr(ai_install, "forbid_ai_clone", lambda **_: False)
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.is_managed_ai_root",
+        lambda p: True,
+    )
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.mark_ai_root_managed",
+        lambda _p: None,
+    )
+
+    calls: list[tuple[str, ...]] = []
+    head_reads = {"n": 0}
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001, ANN003
+        del kwargs
+        calls.append(tuple(cmd))
+        args = tuple(cmd[1:])
+        out = ""
+        if args == ("rev-parse", "HEAD"):
+            head_reads["n"] += 1
+            out = "aaa111\n" if head_reads["n"] == 1 else "bbb222\n"
+        elif args[:1] == ("rev-parse",) and "--abbrev-ref" in args:
+            out = "origin/main\n"
+        return type("R", (), {"returncode": 0, "stdout": out, "stderr": ""})()
+
+    monkeypatch.setattr(ai_install.subprocess, "run", fake_run)
+    result = ai_install.update_ai_repo(ai_root=root)
+    assert result["before"] == "aaa111"
+    assert result["after"] == "bbb222"
+    assert result["changed"] is True
+    assert ("git", "pull", "--ff-only", "--autostash") in calls
+    assert ("git", "submodule", "update", "--init", "--recursive") in calls
+
+
+def test_update_ai_repo_rejects_unmanaged(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "sibling-ai"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "ai_bootstrap.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / ".git").mkdir()
+    monkeypatch.setattr(ai_install, "forbid_ai_clone", lambda **_: False)
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.is_managed_ai_root",
+        lambda _p: False,
+    )
+    with pytest.raises(PermissionError, match="托管"):
+        ai_install.update_ai_repo(ai_root=root)
+
+
+def test_ai_install_status_can_update(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    root = tmp_path / "managed-ai"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "ai_bootstrap.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / ".git").mkdir()
+    monkeypatch.setenv("PALLAS_AI_ROOT", str(root))
+    monkeypatch.setattr(ai_install, "resolve_ai_repo_root", lambda: root.resolve())
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr(ai_install, "forbid_ai_clone", lambda **_: False)
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.is_managed_ai_root",
+        lambda p: p is not None,
+    )
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.probe_ai_health_at",
+        lambda host, port, timeout_sec=3.0: {
+            "ok": False,
+            "url": f"http://{host}:{port}/health",
+            "status_code": None,
+            "body_preview": None,
+            "error": "down",
+        },
+    )
+    monkeypatch.setattr("pallas.console.cli.ai_supervisor.running_in_docker", lambda: False)
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.resolve_configured_ai_endpoint",
+        lambda: ("127.0.0.1", 9099),
+    )
+    monkeypatch.setattr(
+        ai_install,
+        "probe_ai_repo_update",
+        lambda _root, **_: {
+            "has_update": True,
+            "installed_ref": "abc123456789",
+            "latest_ref": "def123456789",
+            "upstream": "origin/main",
+            "error": None,
+        },
+    )
+    st = ai_install.ai_install_status()
+    assert st["can_update"] is True
+    assert st["can_bootstrap"] is True
+    assert st["can_clone"] is False
+    assert st["has_update"] is True
+    assert st["installed_ref"] == "abc123456789"
+    assert st["latest_ref"] == "def123456789"
+    assert st["update_check_error"] is None
+
+
+def test_probe_ai_repo_update_compares_head(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    root = tmp_path / "ai"
+    (root / ".git").mkdir(parents=True)
+
+    def fake_git_run(_cwd, *args, timeout_sec=None):  # noqa: ANN001
+        del timeout_sec
+        cmd = list(args)
+        from types import SimpleNamespace
+
+        if cmd[:2] == ["rev-parse", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="aaa111\n", stderr="")
+        if cmd[:3] == ["fetch", "--prune", "origin"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:3] == ["rev-parse", "--abbrev-ref", "@{u}"]:
+            return SimpleNamespace(returncode=0, stdout="origin/main\n", stderr="")
+        if cmd[:2] == ["rev-parse", "origin/main"]:
+            return SimpleNamespace(returncode=0, stdout="bbb222\n", stderr="")
+        return SimpleNamespace(returncode=1, stdout="", stderr="unexpected")
+
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr(ai_install, "_git_run", fake_git_run)
+    out = ai_install.probe_ai_repo_update(root)
+    assert out["has_update"] is True
+    assert out["installed_ref"] == "aaa111"
+    assert out["latest_ref"] == "bbb222"
+    assert out["upstream"] == "origin/main"
+    assert out["error"] is None
+
+
+def test_probe_ai_repo_update_latest(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    root = tmp_path / "ai"
+    (root / ".git").mkdir(parents=True)
+
+    def fake_git_run(_cwd, *args, timeout_sec=None):  # noqa: ANN001
+        del timeout_sec
+        cmd = list(args)
+        from types import SimpleNamespace
+
+        if cmd[:2] == ["rev-parse", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="samehash0001\n", stderr="")
+        if cmd[:3] == ["fetch", "--prune", "origin"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if cmd[:3] == ["rev-parse", "--abbrev-ref", "@{u}"]:
+            return SimpleNamespace(returncode=1, stdout="", stderr="no upstream")
+        if cmd[:3] == ["rev-parse", "--verify", "origin/main"]:
+            return SimpleNamespace(returncode=0, stdout="samehash0001\n", stderr="")
+        if cmd[:2] == ["rev-parse", "origin/main"]:
+            return SimpleNamespace(returncode=0, stdout="samehash0001\n", stderr="")
+        return SimpleNamespace(returncode=1, stdout="", stderr="unexpected")
+
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr(ai_install, "_git_run", fake_git_run)
+    out = ai_install.probe_ai_repo_update(root)
+    assert out["has_update"] is False
+    assert out["installed_ref"] == "samehash0001"
+    assert out["latest_ref"] == "samehash0001"
+    assert out["error"] is None
+
+
+def test_probe_ai_repo_update_fetch_fail(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    root = tmp_path / "ai"
+    (root / ".git").mkdir(parents=True)
+
+    def fake_git_run(_cwd, *args, timeout_sec=None):  # noqa: ANN001
+        del timeout_sec
+        cmd = list(args)
+        from types import SimpleNamespace
+
+        if cmd[:2] == ["rev-parse", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="aaa111\n", stderr="")
+        if cmd[:3] == ["fetch", "--prune", "origin"]:
+            return SimpleNamespace(returncode=1, stdout="", stderr="network down")
+        return SimpleNamespace(returncode=1, stdout="", stderr="unexpected")
+
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr(ai_install, "_git_run", fake_git_run)
+    out = ai_install.probe_ai_repo_update(root)
+    assert out["has_update"] is None
+    assert out["installed_ref"] == "aaa111"
+    assert "network down" in (out["error"] or "")
 
 
 def test_writeback_ai_extension_creates_missing_file(tmp_path) -> None:

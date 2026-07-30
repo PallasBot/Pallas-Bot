@@ -17,6 +17,7 @@ def test_pb_core_plugin_config_payload(monkeypatch):
     names = {f["name"] for f in data["fields"]}
     assert "greeting_fanout_texts" in names
     assert "matcher_dispatch_enabled" in names
+    assert "chat_drop_on_overload" in names
     assert "smtp_user" in names
     assert "command_start" in names
     assert "community_enabled" in names
@@ -24,6 +25,9 @@ def test_pb_core_plugin_config_payload(monkeypatch):
     groups = data.get("field_groups") or []
     assert len(groups) >= 5
     assert any(g.get("id") == "command_start" or g.get("title") == "命令前缀" for g in groups)
+    from packages.pb_core.config import field_section_id
+
+    assert field_section_id("chat_drop_on_overload") == "ingress_dispatch"
     clear_webui_env_sections_cache()
 
 

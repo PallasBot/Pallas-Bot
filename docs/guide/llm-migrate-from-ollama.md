@@ -30,7 +30,7 @@
 | — | `LLM_SESSION_ENABLED` | 多轮会话，默认 `true` |
 | — | `LLM_GOVERNANCE_ENABLED` | 冷却/并发/字数，默认 `true` |
 
-WebUI：在 **AI 配置 → 接入** 配置并测试 Provider，再在 AI 配置的对话功能区打开 `LLM_CHAT_ENABLED`；群风格开关在 **Bot 配置** 的 `group_style_enabled`。
+WebUI：在 **AI 配置 → 接入** 配置并测试 Provider，再在 **AI 配置 → 接话** 打开 `LLM_CHAT_ENABLED`；群风格开关在 **Bot 配置** 的 `group_style_enabled`。
 
 ## Pallas-Bot-AI 的保留用途
 
@@ -41,7 +41,7 @@ Pallas-Bot-AI 是可选的媒体 sidecar，提供唱歌、TTS 等媒体任务，
 1. 备份 `config/pallas.toml`、`data/pallas_config/webui.json`、`.env`。
 2. 升级主仓，`uv sync`（按需 `--extra` 装玩法扩展）。
 3. 在 Bot WebUI **AI 配置 → 接入** 配置 Provider、模型与密钥，并完成连通性测试。
-4. 在 AI 配置的对话功能区打开 **`LLM_CHAT_ENABLED`**。需要遗留 RWKV 酒后时，再部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)、配置 `AI_SERVER_HOST` / `AI_SERVER_PORT`，并打开 **`CHAT_ENABLE`**。
+4. 在 **AI 配置 → 接话** 打开 **`LLM_CHAT_ENABLED`**。需要遗留 RWKV 酒后时，再部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)、配置 `AI_SERVER_HOST` / `AI_SERVER_PORT`，并打开 **`CHAT_ENABLE`**。
 5. 删除或注释遗留 `OLLAMA_*`；**`CHAT_ENABLE` 可保留**（只要还要用 AI 仓 RWKV 酒后路径）。
 6. 验收：Provider 测试成功，群内 `@牛牛` 与（可选）接话正常；媒体或 RWKV 任务另验收 AI Runtime 与 callback。
 

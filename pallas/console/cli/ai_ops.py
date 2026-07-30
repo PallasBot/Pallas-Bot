@@ -6,7 +6,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from pallas.console.cli.process_util import bash_missing_message, resolve_bash
+from pallas.console.cli.process_util import bash_missing_message, bash_script_cmd, env_for_nested_project
 from pallas.core.foundation.config.repo_settings import repo_config_path
 from pallas.core.foundation.paths import DATA_ROOT, PROJECT_ROOT
 
@@ -89,12 +89,11 @@ def run_ai_bootstrap(
         print(f"未找到 {script}", file=sys.stderr)
         return 1
 
-    bash = resolve_bash()
-    if bash is None:
+    cmd = bash_script_cmd(script)
+    if cmd is None:
         print(bash_missing_message(purpose="AI Runtime bootstrap"), file=sys.stderr)
         return 1
 
-    cmd = [str(bash), str(script)]
     if check_only:
         cmd.append("--check-only")
     if no_start:
@@ -102,7 +101,7 @@ def run_ai_bootstrap(
     cmd.extend(["--bot-host", bot_host or default_bot_callback_host()])
     cmd.extend(["--bot-port", str(bot_port if bot_port is not None else default_bot_callback_port())])
 
-    env = os.environ.copy()
+    env = env_for_nested_project()
     if use_gpu:
         env["PALLAS_GPU"] = "1"
 

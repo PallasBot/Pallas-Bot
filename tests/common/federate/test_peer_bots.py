@@ -24,6 +24,7 @@ def test_publish_local_federate_peer_bot_ids_sync_writes_current_catalog(monkeyp
     data = json.loads(payload)
     assert set(data["bot_ids"]) == {111, 222}
     assert set(data["command_capabilities"]) == {"牛牛塔罗牌", "牛牛帮助"}
+    assert data["present_group_ids"] == []
     assert client.set.call_args.kwargs["ex"] > 0
 
 
@@ -36,9 +37,7 @@ def test_refresh_federate_peer_bot_ids_sync_reads_other_deployments(monkeypatch)
     ])
     client.get.side_effect = lambda key: {
         "pallas:fed:pool-1:peer_bots:dep-local": json.dumps({"bot_ids": [111]}),
-        "pallas:fed:pool-1:peer_bots:dep-a": json.dumps(
-            {"bot_ids": [222, 333], "command_capabilities": ["牛牛帮助"]}
-        ),
+        "pallas:fed:pool-1:peer_bots:dep-a": json.dumps({"bot_ids": [222, 333], "command_capabilities": ["牛牛帮助"]}),
         "pallas:fed:pool-1:peer_bots:dep-b": json.dumps({"bot_ids": [333, 444]}),
     }[key.decode("utf-8") if isinstance(key, bytes) else key]
     monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
@@ -163,3 +162,79 @@ def test_prefer_local_owner_does_not_steal_incapable_commands(monkeypatch):
 
     assert mod.federate_group_owner_deployment(733291779, plain="牛牛塔罗牌") == "dep-peer"
     assert mod.should_process_federate_group_on_current_deployment(733291779, plain="牛牛塔罗牌") is False
+
+
+def test_owner_ring_excludes_peer_not_present_in_group(monkeypatch):
+    """对端宣告了在场群且不含本群时，不参与命令归属（避免空应答）。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛喝酒"}),
+    )
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {
+        "dep-peer": frozenset({"牛牛喝酒"}),
+    }
+    mod._cache_deployment_present_groups = {
+        "dep-peer": frozenset({999}),  # 不在 733291779
+    }
+
+    assert mod.federate_group_owner_deployment(733291779, plain="牛牛喝酒") == "dep-local"
+    assert mod.should_process_federate_group_on_current_deployment(733291779, plain="牛牛喝酒") is True
+
+
+def test_owner_ring_keeps_legacy_peer_without_present_groups_field(monkeypatch):
+    """未宣告 present_group_ids 的对端仍视为可能在场。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-b")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛喝酒"}),
+    )
+    mod._cache_deployment_ids = frozenset({"dep-a"})
+    mod._cache_deployment_capabilities = {"dep-a": frozenset({"牛牛喝酒"})}
+    mod._cache_deployment_present_groups = {"dep-a": None}
+
+    # rotate_sec=0：ring=[dep-a, dep-b]，122%2==0 → dep-a
+    assert mod.federate_group_owner_deployment(122, plain="牛牛喝酒") == "dep-a"
+    assert mod.should_process_federate_group_on_current_deployment(122, plain="牛牛喝酒") is False
+
+
+def test_publish_includes_present_group_ids(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({111}))
+    monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset())
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", lambda: [42, 733291779])
+
+    assert mod.publish_local_federate_peer_bot_ids_sync() is True
+    data = json.loads(client.set.call_args.args[1])
+    assert data["present_group_ids"] == [42, 733291779]
+
+
+def test_refresh_reads_present_group_ids(monkeypatch):
+    client = MagicMock()
+    client.scan_iter.return_value = iter([b"pallas:fed:pool-1:peer_bots:dep-peer"])
+    client.get.side_effect = lambda key: json.dumps({
+        "deployment_id": "dep-peer",
+        "bot_ids": [222],
+        "present_group_ids": [733291779],
+        "command_capabilities": ["牛牛喝酒"],
+    })
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+
+    mod.refresh_federate_peer_bot_ids_sync()
+    assert mod.get_federate_peer_present_groups("dep-peer") == frozenset({733291779})

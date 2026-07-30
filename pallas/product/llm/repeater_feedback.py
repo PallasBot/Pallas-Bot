@@ -77,6 +77,16 @@ class LlmRepeaterFeedbackEntry(BaseModel):
     corrected_at: int = 0
 
 
+_GROUP_ENTRIES_CACHE_TTL_SEC = 5.0
+_GROUP_ENTRIES_CACHE_MAX = 512
+# (path, group_id, limit) -> (expire_monotonic, mtime, rows)
+_group_entries_cache: dict[tuple[str, int, int], tuple[float, float, list[LlmRepeaterFeedbackEntry]]] = {}
+
+
+def clear_group_feedback_entries_cache() -> None:
+    _group_entries_cache.clear()
+
+
 def feedback_base_dir() -> Path:
     env_dir = str(os.environ.get("PALLAS_DATA_DIR") or "").strip()
     if env_dir:
@@ -195,8 +205,11 @@ def append_feedback_entry(entry: LlmRepeaterFeedbackEntry) -> None:
             if needs_leading_newline:
                 handle.write("\n")
             handle.write(line)
+    clear_group_feedback_entries_cache()
+    from pallas.product.llm.feedback_embedding_cache import prefetch_trigger_embedding
     from pallas.product.llm.promotion_candidates import note_feedback_entry_for_promotion
 
+    prefetch_trigger_embedding(str(entry.user_text or ""))
     note_feedback_entry_for_promotion(entry)
 
 
@@ -439,7 +452,23 @@ def list_group_feedback_entries(*, group_id: int, limit: int = 50) -> list[LlmRe
     path = feedback_entries_path()
     if not path.exists():
         return []
-    window_size = max(1, int(limit)) * _RECENT_WINDOW_MULTIPLIER
+    lim = max(1, int(limit))
+    try:
+        path_key = str(path.resolve())
+    except OSError:
+        path_key = str(path)
+    key = (path_key, int(group_id), lim)
+    try:
+        mtime = float(path.stat().st_mtime)
+    except OSError:
+        mtime = 0.0
+    now = time.monotonic()
+    cached = _group_entries_cache.get(key)
+    if cached is not None:
+        expire_at, cached_mtime, rows = cached
+        if now < expire_at and cached_mtime == mtime:
+            return list(rows)
+    window_size = lim * _RECENT_WINDOW_MULTIPLIER
     recent: deque[LlmRepeaterFeedbackEntry] = deque(maxlen=window_size)
     target_group_id = int(group_id)
     for item in _iter_feedback_entries(path):
@@ -455,7 +484,11 @@ def list_group_feedback_entries(*, group_id: int, limit: int = 50) -> list[LlmRe
         seen_ids.add(dedupe_key)
         deduped.append(item)
     deduped.reverse()
-    return deduped[-max(1, int(limit)) :]
+    rows = deduped[-lim:]
+    _group_entries_cache[key] = (now + _GROUP_ENTRIES_CACHE_TTL_SEC, mtime, list(rows))
+    while len(_group_entries_cache) > _GROUP_ENTRIES_CACHE_MAX:
+        _group_entries_cache.pop(next(iter(_group_entries_cache)))
+    return rows
 
 
 def is_reply_safe_for_auto_promote(reply_text: str, *, trigger_text: str = "") -> bool:
@@ -479,6 +512,7 @@ def group_feedback_bias_snapshot(
     limit: int = 50,
     user_text: str = "",
     behavior_scene: str = "",
+    hotpath: bool = False,
 ) -> dict[str, Any]:
     from pallas.product.llm.feedback_learning import build_feedback_bias_snapshot_data
 
@@ -487,6 +521,7 @@ def group_feedback_bias_snapshot(
         limit=int(limit),
         user_text=str(user_text or ""),
         behavior_scene=str(behavior_scene or ""),
+        hotpath=bool(hotpath),
     )
 
 

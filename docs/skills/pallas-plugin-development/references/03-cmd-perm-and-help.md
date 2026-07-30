@@ -36,6 +36,9 @@ on_command("通用", permission=permission_for_command("my_plugin.any"))
 | `trigger_condition` | 只写怎么说 | 写权限角色 |
 | `command_permission(s)` | 与 matcher ID 一致 | 漏绑 |
 | `detail_des` / 插件 README | 与 cmd_perm 无关的前提（如本 Bot 须为 QQ 群管） | 塞进 `usage` / `trigger_condition` |
+| `help_audience` | 维护者向整插件或单条目；与执行权限分开 | 与 `command_permissions` 混为一谈 |
+
+双菜单（普通 vs 超管私聊）：[help/README.md · 普通菜单与超管菜单](../../../plugins/help/README.md#普通菜单与超管菜单)。
 
 模板常量：`PLUGIN_EXTRA_VERSION` / `PLUGIN_HOMEPAGE` / `PLUGIN_MENU_TEMPLATE`（`pallas.api.metadata`）。用户向 README：[plugins/TEMPLATE.md](../../../plugins/TEMPLATE.md)。
 

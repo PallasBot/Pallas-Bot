@@ -155,6 +155,32 @@ class _ServiceGatewaysConnectivityCheckData(BaseModel):
     results: list[_ServiceProbeResultData] = Field(default_factory=list)
 
 
+class _LlmEmbeddingStatusData(BaseModel):
+    embedding_provider: str = ""
+    embedding_kind: str = ""
+    embedding_model: str = ""
+    resolved_model: str = ""
+    semantic_available: bool = False
+    embedding_fallback: bool = False
+    embedding_error: str | None = None
+    available_providers: list[str] = Field(default_factory=list)
+    local_dependency_ready: bool = False
+    local_default_model: str | None = None
+    remote_default_model: str | None = None
+    endpoint_configured: bool = False
+    trigger_cache_count: int = 0
+    trigger_cache_model: str | None = None
+    probe_ok: bool | None = None
+    probe_dims: int | None = None
+    probe_ms: float | None = None
+
+
+class _LlmEmbeddingProbeBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(default="ping", max_length=200)
+
+
 class _CommunityConnectivityProbeRow(BaseModel):
     url: str
     ok: bool
@@ -526,6 +552,40 @@ def register_common_config_router(
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/embedding-status",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_LlmEmbeddingStatusData],
+    )
+    async def _llm_embedding_status_get() -> dict[str, Any]:
+        from pallas.product.llm.knowledge.embedding_provider import build_embedding_status
+
+        try:
+            data = await asyncio.to_thread(build_embedding_status, probe=False)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return {"ok": True, "data": data}
+
+    @router.post(
+        f"{x}/common-config/llm/embedding-status/probe",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_LlmEmbeddingStatusData],
+    )
+    async def _llm_embedding_status_probe(
+        body: _LlmEmbeddingProbeBody | None = None,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> dict[str, Any]:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm.knowledge.embedding_provider import build_embedding_status
+
+        probe_text = str(getattr(body, "text", None) or "ping")
+        try:
+            data = await asyncio.to_thread(build_embedding_status, probe=True, probe_text=probe_text)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return {"ok": True, "data": data}
 
     async def _llm_model_admin_switch(
         body: LlmModelSwitchBody,
@@ -927,6 +987,36 @@ def register_common_config_router(
 
         try:
             data = await put_tts_defaults(body if isinstance(body, dict) else {})
+        except PermissionError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/media-models/tts/translator",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_translator_get() -> JSONResponse:
+        from pallas.product.llm.ops_api import fetch_tts_translator
+
+        try:
+            data = await fetch_tts_translator()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(
+        f"{x}/common-config/llm/media-models/tts/translator",
+        include_in_schema=True,
+    )
+    async def _llm_media_models_tts_translator_put(body: dict[str, Any]) -> JSONResponse:
+        from pallas.product.llm.ops_api import put_tts_translator
+
+        try:
+            data = await put_tts_translator(body if isinstance(body, dict) else {})
         except PermissionError as e:
             raise HTTPException(status_code=409, detail=str(e)) from e
         except ValueError as e:

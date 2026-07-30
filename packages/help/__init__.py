@@ -74,6 +74,7 @@ __plugin_meta__ = PluginMetadata(
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛帮助",
                 hints=["帮助", "有哪些功能", "有什么功能", "有啥功能", "功能列表", "怎么用", "使用说明", "功能说明"],
+                capabilities=["read_only"],
             ),
             llm_command_tool_row(
                 name="help.show_topic",

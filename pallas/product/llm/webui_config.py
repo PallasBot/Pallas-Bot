@@ -7,9 +7,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.console.webui.field_help import field_help
+from pallas.console.webui.provider_gateway import ui_provider_gateway
 from pallas.product.llm.config import LlmMcpServerConfig, get_llm_config
 
 VectorRetrieveMode = Literal["keyword", "embedding", "hybrid", "vector"]
+EmbeddingProviderChoice = Literal["", "stub", "openai", "local"]
 RepeaterMode = Literal["off", "select", "select_polish_lite", "select_fallback", "fallback"]
 
 _LEGACY_REPEATER_MODE_TO_WEBUI: dict[str, RepeaterMode] = {
@@ -25,6 +27,15 @@ def normalize_repeater_mode_for_webui(mode: str) -> RepeaterMode:
     if raw in ("off", "select", "select_polish_lite", "select_fallback", "fallback"):
         return raw  # type: ignore[return-value]
     return "select_polish_lite"
+
+
+def _embedding_provider_choice(raw: object) -> EmbeddingProviderChoice:
+    from pallas.product.llm.knowledge.embedding_provider import normalize_embedding_provider_name
+
+    name = normalize_embedding_provider_name(str(raw or ""))
+    if name in ("", "stub", "openai", "local"):
+        return name  # type: ignore[return-value]
+    return ""
 
 
 ConversationFeatureLevel = Literal["", "legacy_repeater", "repeater_plus_decision", "full_conversation_kernel"]
@@ -89,6 +100,36 @@ class LlmWebuiConfig(BaseModel):
             "醉酒玩法是否走旧版 AI 仓 RWKV 聊天（与智能对话总闸分开）",
             "开=醉酒可走 AI 仓 ChatRWKV；关=不走这条旧通道。多数人只开「智能对话」即可，本项可保持关",
             "两者都开时醉酒优先走智能对话；仅开本项则走 RWKV。需要 AI Runtime 带上 chat 资源包",
+        ),
+    )
+    chat_tts_enable: bool = Field(
+        default=False,
+        description=field_help(
+            "酒后对话出字后，要不要再跟一条语音（侧车 TTS）",
+            "开=先发文字，再按下方阈值决定是否念出来；关=酒后只出字。"
+            "须已安装「牛牛说」扩展、启用 TTS，并配好媒体服务与音色",
+            "与手动「牛牛说」共用 AI Runtime；未达醉酒度/字数阈值时仍只发文字，不会报错刷屏",
+        ),
+    )
+    drunk_tts_min_drunkenness: int = Field(
+        default=1,
+        ge=0,
+        le=100,
+        description=field_help(
+            "酒后附带语音所需的最低醉酒度",
+            "默认 1：该牛在本群至少成功「牛牛喝酒」1 次且尚未醒酒。"
+            "醉酒度按「每只牛 × 每个群」计数，每喝一杯 +1；定时醒酒 -1，「牛牛醒一醒」清零",
+            "设为 0 表示不卡醉酒度（仍须处于酒后对话路径且总开关开启）；调高则要多喝几杯才念",
+        ),
+    )
+    drunk_tts_min_chars: int = Field(
+        default=6,
+        ge=0,
+        le=2000,
+        description=field_help(
+            "酒后回文至少多少字才附带语音",
+            "默认 6：回文字数（去首尾空白）≥ 此值才 enqueue TTS，避免极短应答也念",
+            "与「最低醉酒度」同时满足才会文+音；仅统计本次酒后回复正文",
         ),
     )
     llm_repeater_mode: RepeaterMode = Field(
@@ -734,12 +775,70 @@ class LlmWebuiConfig(BaseModel):
             "向量在 Bot 进程内算，不请求 Pallas-Bot-AI；换模式后新旧记忆召回观感可能不同",
         ),
     )
+    llm_embedding_provider: EmbeddingProviderChoice = Field(
+        default="",
+        description=field_help(
+            "向量提供方",
+            "远程=用 OpenAI 兼容 /embeddings（需配置下方 Embedding 线路）；"
+            "本机=进程内 fastembed；占位=不做真实语义；自动=模型名非 stub 则远程，否则占位",
+            "仅「远程」或自动且模型非 stub 时需要配 Embedding 线路",
+        ),
+    )
+    llm_embedding_provider_id: str = Field(
+        default="",
+        description=field_help(
+            "Embedding 线路",
+            "点「添加网关」从名册选 Provider，或手填向量服务地址与模型（如 text-embedding-3-small）",
+            "仅向量提供方为远程时使用；未配则回落对话主线",
+        ),
+        json_schema_extra=ui_provider_gateway(
+            mode="split",
+            allow_manual=True,
+            primary={
+                "provider_id": "llm_embedding_provider_id",
+                "base_url": "llm_embedding_base_url",
+                "api_key": "llm_embedding_api_key",
+                "model": "llm_embedding_model",
+            },
+            backends="llm_embedding_api_backends",
+            title="Embedding 线路",
+            subtitle="从名册选 Provider 或手填地址；模型名写在线路里。",
+            label="Embedding 线路",
+            group="记忆",
+        ),
+    )
     llm_embedding_model: str = Field(
         default="stub",
         description=field_help(
-            "向量检索用哪套本地向量标识（一般不用改）",
-            "当前填 stub 即可：Bot 内核本地哈希占位，不需要外接 embedding 服务",
-            "乱改成不存在的名字可能导致向量检索异常；保持 stub",
+            "Embedding 模型名",
+            "远程时填服务商模型名（如 text-embedding-3-small）；若仍写 stub，远程会默认 text-embedding-3-small。"
+            "本机可留 stub（默认 BAAI/bge-small-zh-v1.5）",
+            "换模型后旧向量可能对不上，需重新生成或等后台回填",
+        ),
+    )
+    llm_embedding_base_url: str = Field(
+        default="",
+        description=field_help(
+            "Embedding 接口地址（可选）",
+            "留空=用线路所选 Provider 或对话主线。向量服务与聊天不是同一套时再手填",
+            "只填根地址即可，不要带 /embeddings",
+        ),
+    )
+    llm_embedding_api_key: str = Field(
+        default="",
+        description=field_help(
+            "Embedding API Key（可选）",
+            "留空=用线路 Provider 或对话主线密钥。仅当向量服务要用另一套 Key 时填写",
+            "敏感项，保存后以落盘为准",
+        ),
+        json_schema_extra={"secret": True},
+    )
+    llm_embedding_api_backends: list[dict] = Field(
+        default_factory=list,
+        description=field_help(
+            "Embedding 备线",
+            "主线路失败时的备用网关列表（JSON）；一般由 Embedding 线路面板维护，无需手改",
+            "条目含 provider_id，或 base_url+api_key，可选 model",
         ),
     )
     llm_memory_rag_top_k: int = Field(
@@ -828,7 +927,7 @@ class LlmWebuiConfig(BaseModel):
 
 def get_llm_webui_config() -> LlmWebuiConfig:
     from pallas.core.foundation.config.repo_settings import repo_env_raw_value
-    from pallas.product.llm.config import resolve_legacy_rwkv_drunk_chat_enabled
+    from pallas.product.llm.config import resolve_chat_tts_enabled, resolve_legacy_rwkv_drunk_chat_enabled
 
     cfg = get_llm_config()
     mode = normalize_repeater_mode_for_webui(cfg.llm_repeater_mode)
@@ -837,6 +936,9 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         ai_server_port=cfg.ai_server_port,
         llm_chat_enabled=cfg.llm_chat_enabled,
         chat_enable=resolve_legacy_rwkv_drunk_chat_enabled(),
+        chat_tts_enable=resolve_chat_tts_enabled(),
+        drunk_tts_min_drunkenness=cfg.drunk_tts_min_drunkenness,
+        drunk_tts_min_chars=cfg.drunk_tts_min_chars,
         llm_repeater_mode=mode,  # type: ignore[arg-type]
         llm_polish_lite_sample_rate=cfg.llm_polish_lite_sample_rate,
         llm_governance_enabled=cfg.llm_governance_enabled,
@@ -909,6 +1011,11 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_expression_retrieve_limit=cfg.llm_expression_retrieve_limit,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
+        llm_embedding_provider=_embedding_provider_choice(cfg.llm_embedding_provider),
+        llm_embedding_provider_id=str(getattr(cfg, "llm_embedding_provider_id", "") or ""),
+        llm_embedding_base_url=str(getattr(cfg, "llm_embedding_base_url", "") or ""),
+        llm_embedding_api_key=str(getattr(cfg, "llm_embedding_api_key", "") or ""),
+        llm_embedding_api_backends=list(getattr(cfg, "llm_embedding_api_backends", None) or []),
         llm_memory_rag_top_k=cfg.llm_memory_rag_top_k,
         llm_memory_max_per_group=cfg.llm_memory_max_per_group,
         llm_memory_content_max_len=cfg.llm_memory_content_max_len,

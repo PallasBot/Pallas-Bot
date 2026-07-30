@@ -43,9 +43,15 @@ FIELD_CHOICE_LABELS: dict[str, dict[str, str]] = {
     },
     "llm_vector_retrieve": {
         "keyword": "仅关键词",
-        "hybrid": "关键词 + 向量（默认，Bot 本地 stub）",
-        "embedding": "纯向量（Bot 本地 stub）",
+        "hybrid": "关键词 + 向量（默认）",
+        "embedding": "纯向量",
         "vector": "纯向量（同 embedding）",
+    },
+    "llm_embedding_provider": {
+        "": "自动（模型非 stub → 远程，否则占位）",
+        "stub": "占位（关闭真实语义）",
+        "openai": "远程（OpenAI 兼容 /embeddings）",
+        "local": "本机（fastembed）",
     },
     "conversation_feature_level": {
         "": "自动推断（推荐）",

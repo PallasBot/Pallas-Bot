@@ -64,6 +64,17 @@ def resolve_legacy_rwkv_drunk_chat_enabled() -> bool:
     return False
 
 
+def resolve_chat_tts_enabled() -> bool:
+    """酒后对话是否在出字后附带侧车 TTS。
+
+    开关：``CHAT_TTS_ENABLE``。另需醉酒度 / 回文字数达到阈值，且「牛牛说」可用。
+    """
+    env_tts = _env_bool_first_optional(("CHAT_TTS_ENABLE",))
+    if env_tts is not None:
+        return env_tts
+    return False
+
+
 def _env_bool(key: str, default: bool = False) -> bool:
     raw = repo_env_raw_value(key)
     if raw is None:
@@ -229,6 +240,12 @@ def resolve_llm_embedding_model() -> str:
     return text or "stub"
 
 
+def resolve_llm_embedding_provider() -> str:
+    from pallas.product.llm.knowledge.embedding_provider import normalize_embedding_provider_name
+
+    return normalize_embedding_provider_name(str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER") or ""))
+
+
 class LlmMcpServerConfig(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
@@ -250,6 +267,9 @@ class LlmConfig(BaseModel):
     ai_server_host: str = Field(default="127.0.0.1")
     ai_server_port: int = Field(default=9099, ge=1, le=65535)
     llm_chat_enabled: bool = Field(default=False)
+    chat_tts_enable: bool = Field(default=False)
+    drunk_tts_min_drunkenness: int = Field(default=1, ge=0, le=100)
+    drunk_tts_min_chars: int = Field(default=6, ge=0, le=2000)
     llm_repeater_mode: str = Field(default="select_polish_lite")
     llm_fallback_enabled: bool = Field(default=False)
     llm_polish_enabled: bool = Field(default=False)
@@ -324,6 +344,11 @@ class LlmConfig(BaseModel):
     llm_expression_retrieve_limit: int = Field(default=5, ge=1, le=8)
     llm_vector_retrieve: VectorRetrieveMode = Field(default="hybrid")
     llm_embedding_model: str = Field(default="stub")
+    llm_embedding_provider: str = Field(default="")
+    llm_embedding_provider_id: str = Field(default="")
+    llm_embedding_base_url: str = Field(default="")
+    llm_embedding_api_key: str = Field(default="")
+    llm_embedding_api_backends: list[dict[str, object]] = Field(default_factory=list)
     llm_memory_rag_top_k: int = Field(default=3, ge=1, le=8)
     llm_memory_rag_min_score: int = Field(default=24, ge=0, le=100)
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
@@ -391,6 +416,19 @@ def _env_json_object(key: str) -> dict[str, object]:
     return value if isinstance(value, dict) else {}
 
 
+def _env_json_dict_list(key: str) -> list[dict[str, object]]:
+    raw = repo_env_raw_value(key)
+    if raw is None or not str(raw).strip():
+        return []
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
 def _env_str_list_or_default(key: str, default: tuple[str, ...]) -> list[str]:
     raw = repo_env_raw_value(key)
     if raw is None or not str(raw).strip():
@@ -444,6 +482,9 @@ def get_llm_config() -> LlmConfig:
             ai_server_host=host,
             ai_server_port=port,
             llm_chat_enabled=resolve_llm_chat_enabled(),
+            chat_tts_enable=resolve_chat_tts_enabled(),
+            drunk_tts_min_drunkenness=_env_int("DRUNK_TTS_MIN_DRUNKENNESS", 1),
+            drunk_tts_min_chars=_env_int("DRUNK_TTS_MIN_CHARS", 6),
             llm_repeater_mode=repeater_mode,
             llm_fallback_enabled=fallback_enabled,
             llm_polish_enabled=polish_enabled,
@@ -541,6 +582,11 @@ def get_llm_config() -> LlmConfig:
             llm_expression_retrieve_limit=min(8, max(1, _env_int("LLM_EXPRESSION_RETRIEVE_LIMIT", 5))),
             llm_vector_retrieve=resolve_llm_vector_retrieve(),
             llm_embedding_model=resolve_llm_embedding_model(),
+            llm_embedding_provider=resolve_llm_embedding_provider(),
+            llm_embedding_provider_id=str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER_ID") or "").strip(),
+            llm_embedding_base_url=str(repo_env_raw_value("LLM_EMBEDDING_BASE_URL") or "").strip(),
+            llm_embedding_api_key=str(repo_env_raw_value("LLM_EMBEDDING_API_KEY") or "").strip(),
+            llm_embedding_api_backends=_env_json_dict_list("LLM_EMBEDDING_API_BACKENDS"),
             llm_memory_rag_top_k=_env_int("LLM_MEMORY_RAG_TOP_K", 3),
             llm_memory_rag_min_score=_env_int("LLM_MEMORY_RAG_MIN_SCORE", 24),
             llm_memory_max_per_group=_env_int("LLM_MEMORY_MAX_PER_GROUP", 200),
@@ -586,6 +632,22 @@ def clear_llm_config_cache() -> None:
     global _cached_llm_config
     with _config_lock:
         _cached_llm_config = None
+    try:
+        from pallas.product.llm.knowledge.embedding_provider import clear_embedding_provider_cache
+
+        clear_embedding_provider_cache()
+    except Exception:
+        pass
+    try:
+        from pallas.product.llm.feedback_embedding_cache import (
+            invalidate_feedback_embedding_caches,
+            schedule_feedback_trigger_backfill,
+        )
+
+        invalidate_feedback_embedding_caches()
+        schedule_feedback_trigger_backfill()
+    except Exception:
+        pass
     try:
         from .governance import clear_llm_chat_governance_state
 

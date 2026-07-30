@@ -17,12 +17,15 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
 JobPhase = Literal["queued", "running", "done", "failed"]
+InstallAction = Literal["clone", "bootstrap", "clone_and_bootstrap", "update"]
 
-# clone_and_bootstrap 里程碑
+# clone_and_bootstrap / update 里程碑
 PCT_QUEUED = 0
 PCT_START = 5
 PCT_CLONE = 10
 PCT_CLONE_DONE = 40
+PCT_UPDATE = 12
+PCT_UPDATE_DONE = 40
 PCT_BOOTSTRAP = 45
 PCT_BOOTSTRAP_CAP = 88
 PCT_WRITEBACK = 92
@@ -34,7 +37,7 @@ _MAX_LOG_LINES = 500
 @dataclass
 class AiInstallJob:
     job_id: str
-    action: Literal["clone", "bootstrap", "clone_and_bootstrap"]
+    action: InstallAction
     phase: JobPhase = "queued"
     message: str = ""
     progress_percent: int = 0
@@ -99,7 +102,7 @@ class AiInstallJob:
 _JOBS: dict[str, AiInstallJob] = {}
 
 
-def create_ai_install_job(action: Literal["clone", "bootstrap", "clone_and_bootstrap"]) -> AiInstallJob:
+def create_ai_install_job(action: InstallAction) -> AiInstallJob:
     job = AiInstallJob(job_id=str(uuid.uuid4()), action=action)
     job.push("queued", "已排队", progress_percent=PCT_QUEUED)
     _JOBS[job.job_id] = job
