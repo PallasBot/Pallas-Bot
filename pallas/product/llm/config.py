@@ -240,6 +240,13 @@ def resolve_llm_embedding_model() -> str:
     return text or "stub"
 
 
+def resolve_llm_embedding_provider() -> str:
+    raw = str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER") or "").strip().lower()
+    if raw in {"stub", "openai", "openai_compatible"}:
+        return "stub" if raw == "stub" else "openai"
+    return ""
+
+
 class LlmMcpServerConfig(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
@@ -338,6 +345,7 @@ class LlmConfig(BaseModel):
     llm_expression_retrieve_limit: int = Field(default=5, ge=1, le=8)
     llm_vector_retrieve: VectorRetrieveMode = Field(default="hybrid")
     llm_embedding_model: str = Field(default="stub")
+    llm_embedding_provider: str = Field(default="")
     llm_memory_rag_top_k: int = Field(default=3, ge=1, le=8)
     llm_memory_rag_min_score: int = Field(default=24, ge=0, le=100)
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
@@ -558,6 +566,7 @@ def get_llm_config() -> LlmConfig:
             llm_expression_retrieve_limit=min(8, max(1, _env_int("LLM_EXPRESSION_RETRIEVE_LIMIT", 5))),
             llm_vector_retrieve=resolve_llm_vector_retrieve(),
             llm_embedding_model=resolve_llm_embedding_model(),
+            llm_embedding_provider=resolve_llm_embedding_provider(),
             llm_memory_rag_top_k=_env_int("LLM_MEMORY_RAG_TOP_K", 3),
             llm_memory_rag_min_score=_env_int("LLM_MEMORY_RAG_MIN_SCORE", 24),
             llm_memory_max_per_group=_env_int("LLM_MEMORY_MAX_PER_GROUP", 200),
@@ -603,6 +612,12 @@ def clear_llm_config_cache() -> None:
     global _cached_llm_config
     with _config_lock:
         _cached_llm_config = None
+    try:
+        from pallas.product.llm.knowledge.embedding_provider import clear_embedding_provider_cache
+
+        clear_embedding_provider_cache()
+    except Exception:
+        pass
     try:
         from .governance import clear_llm_chat_governance_state
 

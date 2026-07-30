@@ -311,6 +311,7 @@ def _llm_section() -> WebuiEnvSection:
             "llm_expression_retrieve_limit": "LLM_EXPRESSION_RETRIEVE_LIMIT",
             "llm_vector_retrieve": "LLM_VECTOR_RETRIEVE",
             "llm_embedding_model": "LLM_EMBEDDING_MODEL",
+            "llm_embedding_provider": "LLM_EMBEDDING_PROVIDER",
             "llm_memory_rag_top_k": "LLM_MEMORY_RAG_TOP_K",
             "llm_memory_max_per_group": "LLM_MEMORY_MAX_PER_GROUP",
             "llm_memory_content_max_len": "LLM_MEMORY_CONTENT_MAX_LEN",

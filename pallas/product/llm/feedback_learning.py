@@ -141,7 +141,15 @@ def find_semantic_matched_replies(
     active_scene: str = "",
     limit: int = VECTOR_MATCH_LIMIT,
     now: int | None = None,
+    remote_policy: str = "full",
 ) -> list[str]:
+    """语义匹配。
+
+    remote_policy:
+    - ``full``：可远程补齐 query + 缺失 trigger（WebUI/完整 snapshot）
+    - ``query_only``：只允许远程拿 query（热路径）；trigger 必须已预热
+    - ``cache_only``：禁止远程，仅用缓存
+    """
     query = str(user_text or "").strip()
     if not query:
         return []
@@ -162,17 +170,44 @@ def find_semantic_matched_replies(
         candidates.append((weight, trigger, reply))
     if not candidates:
         return []
-    from pallas.product.llm.knowledge.embedding_client import fetch_embeddings_sync
+
+    from pallas.product.llm.feedback_embedding_cache import (
+        ensure_trigger_embeddings,
+        resolve_query_embedding,
+    )
     from pallas.product.llm.knowledge.embedding_score import embedding_relevance_score
 
-    texts = [query] + [trigger for _, trigger, _ in candidates]
-    vectors = fetch_embeddings_sync(texts)
-    if not vectors or len(vectors) != len(texts):
+    policy = str(remote_policy or "full").strip().lower()
+    allow_query_remote = policy in {"full", "query_only"}
+    allow_trigger_remote = policy == "full"
+    query_timeout = 0.35 if policy == "query_only" else 8.0
+
+    query_vec = resolve_query_embedding(
+        query,
+        allow_remote=allow_query_remote,
+        timeout_sec=query_timeout,
+    )
+    if query_vec is None:
         return []
-    query_vec = vectors[0]
+
+    trigger_texts = [trigger for _, trigger, _ in candidates]
+    trigger_vecs = ensure_trigger_embeddings(
+        trigger_texts,
+        allow_remote=allow_trigger_remote,
+        timeout_sec=8.0,
+    )
+    if policy == "query_only":
+        missing = [t for t in trigger_texts if t not in trigger_vecs]
+        for text in missing[:8]:
+            from pallas.product.llm.feedback_embedding_cache import prefetch_trigger_embedding
+
+            prefetch_trigger_embedding(text)
     scored: list[tuple[float, str]] = []
-    for idx, (weight, _trigger, reply) in enumerate(candidates, start=1):
-        score = embedding_relevance_score(query_vec, vectors[idx])
+    for weight, trigger, reply in candidates:
+        vec = trigger_vecs.get(trigger)
+        if vec is None:
+            continue
+        score = embedding_relevance_score(query_vec, vec)
         if score < VECTOR_MATCH_MIN_SCORE:
             continue
         scored.append((weight * (score / 100.0), reply))
@@ -255,6 +290,7 @@ def build_feedback_bias_snapshot_data(
     limit: int = 50,
     user_text: str = "",
     behavior_scene: str = "",
+    hotpath: bool = False,
 ) -> dict:
     from pallas.product.llm.kernel.feedback_models import FeedbackBiasSnapshot
     from pallas.product.llm.kernel.memory_governance import can_promote_writeback
@@ -278,18 +314,23 @@ def build_feedback_bias_snapshot_data(
         limit=3,
         now=now,
     )
+    # 热路径：query_only（trigger 靠预热缓存；query 短超时/缓存）
+    # 完整路径：可批量补齐缺失 trigger 向量
     semantic_matched_replies = find_semantic_matched_replies(
         rows=rows,
         user_text=user_text,
         active_scene=behavior_scene,
         limit=VECTOR_MATCH_LIMIT,
         now=now,
+        remote_policy="query_only" if hotpath else "full",
     )
     penalized_replies = compute_penalized_replies(all_rows)
     promotion_candidate_count = 0
-    if can_promote_writeback():
-        promotion_candidate_count = count_pending_promotion_candidates(group_id=int(group_id))
-    learning_stats = summarize_learning_effectiveness(group_id=int(group_id))
+    learning_stats: dict[str, int | float] = {}
+    if not hotpath:
+        if can_promote_writeback():
+            promotion_candidate_count = count_pending_promotion_candidates(group_id=int(group_id))
+        learning_stats = summarize_learning_effectiveness(group_id=int(group_id))
     active_count = sum(
         1 for item in rows if feedback_entry_effective_weight(item, active_scene=behavior_scene, now=now) > 0.05
     )

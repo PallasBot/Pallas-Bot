@@ -176,6 +176,7 @@ FIELD_LABELS: dict[str, str] = {
     "llm_expression_retrieve_limit": "表达检索条数",
     "llm_vector_retrieve": "记忆/知识检索模式",
     "llm_embedding_model": "Embedding 模型",
+    "llm_embedding_provider": "Embedding 从哪里算",
     "llm_memory_rag_top_k": "记忆检索条数",
     "llm_memory_max_per_group": "每群记忆上限",
     "llm_memory_content_max_len": "单条记忆字数上限",

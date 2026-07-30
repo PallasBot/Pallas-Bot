@@ -767,9 +767,18 @@ class LlmWebuiConfig(BaseModel):
     llm_embedding_model: str = Field(
         default="stub",
         description=field_help(
-            "向量检索用哪套本地向量标识（一般不用改）",
-            "当前填 stub 即可：Bot 内核本地哈希占位，不需要外接 embedding 服务",
-            "乱改成不存在的名字可能导致向量检索异常；保持 stub",
+            "Embedding 模型名",
+            "用 stub 时填 stub；接真实向量服务时填服务商给的模型名，例如 text-embedding-3-small",
+            "换模型后，以前存下来的向量可能对不上，需要重新生成",
+        ),
+    )
+    llm_embedding_provider: str = Field(
+        default="",
+        description=field_help(
+            "Embedding 从哪里算",
+            "留空=按上面的模型名自动选：stub 用本地占位，其它走兼容接口。"
+            "也可手填 stub 或 openai。若向量服务地址与聊天不是同一套，可另配 LLM_EMBEDDING_BASE_URL 和 API_KEY",
+            "本机小模型方案以后再开，现在不用填",
         ),
     )
     llm_memory_rag_top_k: int = Field(
@@ -942,6 +951,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_expression_retrieve_limit=cfg.llm_expression_retrieve_limit,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
+        llm_embedding_provider=str(getattr(cfg, "llm_embedding_provider", "") or ""),
         llm_memory_rag_top_k=cfg.llm_memory_rag_top_k,
         llm_memory_max_per_group=cfg.llm_memory_max_per_group,
         llm_memory_content_max_len=cfg.llm_memory_content_max_len,

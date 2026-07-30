@@ -26,6 +26,7 @@ MEMORY_FIELD_NAMES = (
     "llm_memory_rag_enabled",
     "llm_vector_retrieve",
     "llm_embedding_model",
+    "llm_embedding_provider",
     "llm_memory_rag_top_k",
     "llm_memory_max_per_group",
     "llm_memory_content_max_len",
@@ -56,6 +57,7 @@ class LlmMemoryOpsConfig(BaseModel):
     llm_memory_rag_enabled: bool = True
     llm_vector_retrieve: VectorRetrieveMode = "hybrid"
     llm_embedding_model: str = "stub"
+    llm_embedding_provider: str = ""
     llm_memory_rag_top_k: int = Field(default=3, ge=1, le=8)
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
     llm_memory_content_max_len: int = Field(default=500, ge=64, le=4000)

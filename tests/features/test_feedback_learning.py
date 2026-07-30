@@ -107,11 +107,15 @@ def test_feedback_bias_multiplier_applies_penalty() -> None:
     assert mult == 0.45
 
 
-def test_find_semantic_matched_replies_uses_embeddings(monkeypatch) -> None:
+def test_find_semantic_matched_replies_uses_embeddings(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(
-        "pallas.product.llm.config.resolve_llm_vector_retrieve",
+        "pallas.product.llm.feedback_learning.resolve_llm_vector_retrieve",
         lambda: "hybrid",
     )
+    from pallas.product.llm.feedback_embedding_cache import clear_feedback_embedding_caches_for_tests
+
+    clear_feedback_embedding_caches_for_tests()
 
     rows = [
         build_feedback_entry(
@@ -124,12 +128,14 @@ def test_find_semantic_matched_replies_uses_embeddings(monkeypatch) -> None:
         )
     ]
 
+    calls: list[list[str]] = []
+
     def fake_fetch(texts, **kwargs):
-        assert texts[0] == "又来了"
-        return [[1.0, 0.0], [0.95, 0.05]]
+        calls.append(list(texts))
+        return [[1.0, 0.0] for _ in texts]
 
     monkeypatch.setattr(
-        "pallas.product.llm.knowledge.embedding_client.fetch_embeddings_sync",
+        "pallas.product.llm.feedback_embedding_cache.fetch_embeddings_sync",
         fake_fetch,
     )
     monkeypatch.setattr(
@@ -139,3 +145,51 @@ def test_find_semantic_matched_replies_uses_embeddings(monkeypatch) -> None:
 
     matched = find_semantic_matched_replies(rows=rows, user_text="又来了")
     assert matched == ["别闹"]
+    assert calls == [["又来了"], ["你怎么又来了"]]
+
+    calls.clear()
+    matched_again = find_semantic_matched_replies(
+        rows=rows,
+        user_text="又来了",
+        remote_policy="cache_only",
+    )
+    assert matched_again == ["别闹"]
+    assert calls == []
+
+
+def test_find_semantic_matched_replies_query_only_skips_uncached_triggers(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_learning.resolve_llm_vector_retrieve",
+        lambda: "hybrid",
+    )
+    from pallas.product.llm.feedback_embedding_cache import clear_feedback_embedding_caches_for_tests
+
+    clear_feedback_embedding_caches_for_tests()
+
+    rows = [
+        build_feedback_entry(
+            bot_id=1,
+            group_id=123,
+            user_id=1,
+            request_id="s2",
+            user_text="完全没预热",
+            reply_text="嗯",
+        )
+    ]
+
+    def fake_fetch(texts, **kwargs):
+        assert texts == ["你好啊"]
+        return [[1.0, 0.0]]
+
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_embedding_cache.fetch_embeddings_sync",
+        fake_fetch,
+    )
+
+    matched = find_semantic_matched_replies(
+        rows=rows,
+        user_text="你好啊",
+        remote_policy="query_only",
+    )
+    assert matched == []

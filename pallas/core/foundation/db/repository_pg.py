@@ -981,6 +981,7 @@ async def cached_reply_query_snapshot(
     loader,
 ) -> Context | None:
     from pallas.core.foundation.db.pool_budget import is_pg_pool_timeout_error, pg_pool_under_pressure
+    from pallas.core.platform.ingress.hotpath_metrics import record_reply_snapshot
     from pallas.product.corpus.find_cache import mark_reply_db_fail, reply_db_fail_active
     from pallas.product.corpus.reply_perf_config import reply_snapshot_max_entries, reply_snapshot_ttl_sec
 
@@ -988,12 +989,14 @@ async def cached_reply_query_snapshot(
     if not key:
         return None
     if pg_pool_under_pressure(threshold=0.55):
+        record_reply_snapshot(hit=False, skipped=True)
         logger.debug(
             "reply_query_snapshot.skip pg_pool_pressure kw_len={}",
             len(key),
         )
         return None
     if reply_db_fail_active(key):
+        record_reply_snapshot(hit=False, skipped=True)
         logger.debug(
             "reply_query_snapshot.skip reply_db_fail_cooldown kw_len={}",
             len(key),
@@ -1007,12 +1010,17 @@ async def cached_reply_query_snapshot(
             expire_at, value = hit
             if now < expire_at:
                 _reply_query_snapshot_cache.move_to_end(key)
+                record_reply_snapshot(hit=True)
                 return value
             _reply_query_snapshot_cache.pop(key, None)
         task = _reply_query_snapshot_inflight.get(key)
         if task is None:
             task = asyncio.create_task(loader(key))
             _reply_query_snapshot_inflight[key] = task
+            record_reply_snapshot(hit=False)
+        else:
+            # 与 inflight 合并：算命中同类请求，避免重复打库计数偏高
+            record_reply_snapshot(hit=True)
 
     try:
         ctx = await asyncio.shield(task)
@@ -1210,6 +1218,15 @@ class PgContextRepository:
         message_count: int,
         hit: bool,
     ) -> None:
+        from pallas.core.platform.ingress.hotpath_metrics import record_reply_query_stages
+
+        record_reply_query_stages(
+            context_ms=context_ms,
+            ban_ms=ban_ms,
+            answer_ms=answer_ms,
+            message_ms=message_ms,
+            total_ms=elapsed_ms,
+        )
         threshold_ms = slow_path_threshold_ms("PALLAS_SLOW_REPLY_QUERY_MS", 250.0)
         if elapsed_ms < threshold_ms:
             return
