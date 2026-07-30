@@ -61,9 +61,69 @@ class StubEmbeddingProvider:
         return [stub_embedding(text, dims=self.dims) for text in texts]
 
 
+def resolve_embedding_catalog_provider_id(cfg: LlmConfig | None = None) -> str:
+    """Embedding 线路选用的 LLM Provider 名册 id（可空=回落对话主线）。"""
+    return str(
+        getattr(cfg, "llm_embedding_provider_id", "") or repo_env_raw_value("LLM_EMBEDDING_PROVIDER_ID") or ""
+    ).strip()
+
+
+def resolve_embedding_http_endpoint(cfg: LlmConfig | None = None) -> tuple[str, str, str]:
+    """解析 Embedding HTTP 端点：(base_url, api_key, source_provider_id)。
+
+    优先级：手填 base/key → 名册 ``llm_embedding_provider_id`` → 对话主线 / ``llm_base_url``。
+    """
+    from pallas.product.llm.providers_store import (
+        find_provider,
+        resolve_endpoint_for_task,
+        resolve_provider_api_key,
+        resolve_provider_base_url,
+    )
+
+    override_base = str(
+        getattr(cfg, "llm_embedding_base_url", "") or repo_env_raw_value("LLM_EMBEDDING_BASE_URL") or ""
+    ).strip()
+    override_key = str(
+        getattr(cfg, "llm_embedding_api_key", "") or repo_env_raw_value("LLM_EMBEDDING_API_KEY") or ""
+    ).strip()
+    catalog_id = resolve_embedding_catalog_provider_id(cfg)
+
+    base_url = ""
+    api_key = ""
+    source_id = ""
+
+    if catalog_id:
+        row = find_provider(catalog_id)
+        if row is not None:
+            base_url = resolve_provider_base_url(row)
+            api_key = resolve_provider_api_key(row)
+            source_id = catalog_id
+
+    if not base_url or not api_key:
+        endpoint = resolve_endpoint_for_task("llm_chat")
+        chat_base = str(getattr(endpoint, "base_url", "") or getattr(cfg, "llm_base_url", "") or "").strip()
+        chat_key = str(getattr(endpoint, "api_key", "") or getattr(cfg, "llm_api_key", "") or "").strip()
+        chat_id = str(getattr(endpoint, "provider_id", "") or "").strip()
+        if not base_url and chat_base:
+            base_url = chat_base
+            if not source_id:
+                source_id = chat_id
+        if not api_key and chat_key:
+            api_key = chat_key
+
+    if override_base:
+        base_url = override_base
+        if not source_id:
+            source_id = "manual"
+    if override_key:
+        api_key = override_key
+
+    return base_url, api_key, source_id
+
+
 @dataclass(frozen=True)
 class OpenAICompatibleEmbeddingProvider:
-    """OpenAI 兼容 /embeddings；默认复用聊天端点凭据，模型名来自配置。"""
+    """OpenAI 兼容 /embeddings；优先 Embedding 线路名册，否则复用聊天端点。"""
 
     cfg: LlmConfig | None = None
 
@@ -80,26 +140,12 @@ class OpenAICompatibleEmbeddingProvider:
 
     def embed_sync(self, texts: list[str], *, timeout_sec: float = 8.0) -> list[list[float]]:
         from pallas.product.llm.provider_client import auth_headers, openai_api_root
-        from pallas.product.llm.providers_store import resolve_endpoint_for_task
 
         model = self.model_name()
-        endpoint = resolve_endpoint_for_task("llm_chat")
-        base_url = str(getattr(endpoint, "base_url", "") or getattr(self.cfg, "llm_base_url", "") or "").strip()
-        api_key = str(getattr(endpoint, "api_key", "") or getattr(self.cfg, "llm_api_key", "") or "").strip()
-        # 可选独立 embedding 端点（未配则沿用聊天端点）
-        override_base = str(
-            getattr(self.cfg, "llm_embedding_base_url", "") or repo_env_raw_value("LLM_EMBEDDING_BASE_URL") or ""
-        ).strip()
-        override_key = str(
-            getattr(self.cfg, "llm_embedding_api_key", "") or repo_env_raw_value("LLM_EMBEDDING_API_KEY") or ""
-        ).strip()
-        if override_base:
-            base_url = override_base
-        if override_key:
-            api_key = override_key
+        base_url, api_key, _source = resolve_embedding_http_endpoint(self.cfg)
         if not base_url:
             raise ValueError(
-                "embedding provider base_url not configured（请填 Embedding 接口地址，或配置对话 Provider）"
+                "embedding provider base_url not configured（请在 Embedding 线路选 Provider，或填接口地址）"
             )
         response = httpx.post(
             f"{openai_api_root(base_url)}/embeddings",
@@ -138,22 +184,8 @@ def resolve_remote_embedding_model(cfg: LlmConfig | None = None) -> str:
 
 
 def embedding_remote_endpoint_configured(cfg: LlmConfig | None = None) -> bool:
-    override = str(
-        getattr(cfg, "llm_embedding_base_url", "") or repo_env_raw_value("LLM_EMBEDDING_BASE_URL") or ""
-    ).strip()
-    if override:
-        return True
-    if str(getattr(cfg, "llm_base_url", "") or "").strip():
-        return True
-    try:
-        from pallas.product.llm.providers_store import resolve_endpoint_for_task
-
-        endpoint = resolve_endpoint_for_task("llm_chat")
-        if str(getattr(endpoint, "base_url", "") or "").strip():
-            return True
-    except Exception:
-        pass
-    return False
+    base_url, _api_key, _source = resolve_embedding_http_endpoint(cfg)
+    return bool(base_url)
 
 
 def _load_local_fastembed_model(model_name: str) -> Any:
@@ -305,10 +337,17 @@ def build_embedding_status(*, probe: bool = False, probe_text: str = "ping") -> 
         # 重新读 trace：fetch 可能写入 fallback 错误
         trace = embedding_capability_trace(cfg)
 
+    catalog_id = resolve_embedding_catalog_provider_id(cfg)
+    endpoint_source = ""
+    if provider.name == "openai":
+        _base, _key, endpoint_source = resolve_embedding_http_endpoint(cfg)
+
     return {
         **trace,
         "embedding_kind": provider.kind,
         "resolved_model": provider.model_name(),
+        "embedding_provider_id": catalog_id or None,
+        "endpoint_provider_id": endpoint_source or None,
         "available_providers": list_embedding_provider_names(),
         "local_dependency_ready": local_ready,
         "local_default_model": _DEFAULT_LOCAL_MODEL,

@@ -99,12 +99,31 @@ flowchart TD
 | `LLM_MEMORY_RAG_ENABLED` | 开 | 群记忆读写与注入 |
 | `LLM_VECTOR_RETRIEVE` | `hybrid` | 关键词+向量；真实向量由 Embedding 提供方决定，stub 或失败时回落关键词 |
 | `LLM_EMBEDDING_PROVIDER` | （空=自动） | `stub` / `openai` / `local`；空则按模型名推断 |
-| `LLM_EMBEDDING_MODEL` | `stub` | 模型标识；`stub` 为占位。`local` 时可留 stub（默认 `BAAI/bge-small-zh-v1.5`） |
-| `LLM_EMBEDDING_BASE_URL` / `API_KEY` | （空） | 可选；远程向量端点与聊天不同时填写 |
+| `LLM_EMBEDDING_MODEL` | `stub` | 模型标识；`stub` 为占位。`openai` 且仍写 stub 时实际用 `text-embedding-3-small`；`local` 时可留 stub（默认 `BAAI/bge-small-zh-v1.5`） |
+| `LLM_EMBEDDING_PROVIDER_ID` | （空） | Provider 名册 id；选中后走该线路的 base_url/密钥。空则回落对话主线 |
+| `LLM_EMBEDDING_BASE_URL` / `API_KEY` | （空） | 可选手填；覆盖名册 / 对话主线 |
 | `LLM_MEMORY_AUTO_EPISODE_ENABLED` | 开 | 有价值发言自动写入 episode |
 | `LLM_KNOWLEDGE_SOURCES_ENABLED` | 开 | 知识源总闸 |
 | `LLM_KNOWLEDGE_FILE_INGEST_ENABLED` | 开 | 扫描 `data/pallas_knowledge/` |
 | `LLM_RELATIONSHIP_NOTES_ENABLED` | 开 | 关系备注 |
+
+### 怎么开真实 Embedding
+
+控制台：**AI 配置 → 对话 → 记忆**。
+
+1. **群记忆检索**保持开；检索模式建议 `hybrid`（或 `embedding`）。
+2. **从哪里算**选 `openai`（OpenAI 兼容 `/embeddings`）。本机可选手 `local`（需 `uv sync --extra embedding-local`）。
+3. 在 **Embedding 线路**（与画画同类网关）里点主线：从名册选一个**支持向量**的 Provider，模型填如 `text-embedding-3-small`。也可手填专用地址/密钥。
+4. 保存后点上方 **探测**：应显示「语义可用」。失败时看错误——DeepSeek 官方多数无 `/embeddings`，请换 OpenAI 兼容网关（如自建的 packy / holdai / AK 等）。
+5. 换模型后旧记忆向量可能对不上，等后台回填或重新写入记忆。
+
+等价落盘（`data/pallas_config/webui.json` 或环境变量）：
+
+```text
+LLM_EMBEDDING_PROVIDER=openai
+LLM_EMBEDDING_MODEL=text-embedding-3-small
+LLM_EMBEDDING_PROVIDER_ID=<名册里的 id>
+```
 
 模型也可通过 tools `memory.search` / `memory.save` 主动检索与写入。控制台：`GET/POST /pallas/api/llm/conversation-kernel/memory`、`GET /pallas/api/llm/knowledge/sources`。
 

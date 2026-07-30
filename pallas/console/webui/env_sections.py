@@ -312,6 +312,7 @@ def _llm_section() -> WebuiEnvSection:
             "llm_vector_retrieve": "LLM_VECTOR_RETRIEVE",
             "llm_embedding_model": "LLM_EMBEDDING_MODEL",
             "llm_embedding_provider": "LLM_EMBEDDING_PROVIDER",
+            "llm_embedding_provider_id": "LLM_EMBEDDING_PROVIDER_ID",
             "llm_embedding_base_url": "LLM_EMBEDDING_BASE_URL",
             "llm_embedding_api_key": "LLM_EMBEDDING_API_KEY",
             "llm_memory_rag_top_k": "LLM_MEMORY_RAG_TOP_K",

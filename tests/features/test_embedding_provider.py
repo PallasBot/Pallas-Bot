@@ -116,7 +116,36 @@ def test_fetch_via_provider_openai(monkeypatch) -> None:
     monkeypatch.setattr("httpx.post", lambda *args, **kwargs: Response())
     monkeypatch.setattr(
         "pallas.product.llm.providers_store.resolve_endpoint_for_task",
-        lambda *_a, **_k: type("E", (), {"base_url": "", "api_key": ""})(),
+        lambda *_a, **_k: type("E", (), {"base_url": "", "api_key": "", "provider_id": ""})(),
     )
     assert fetch_embeddings_sync(["hello"], cfg=cfg) == [[0.5, 0.5]]
     assert embedding_capability_trace(cfg)["embedding_provider"] == "openai"
+
+
+def test_resolve_embedding_http_endpoint_prefers_catalog(monkeypatch) -> None:
+    from pallas.product.llm.knowledge.embedding_provider import resolve_embedding_http_endpoint
+
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.find_provider",
+        lambda pid, **_k: {
+            "id": pid,
+            "base_url": "https://embed.example/v1",
+            "api_key": "embed-key",
+            "api_keys": ["embed-key"],
+        },
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.resolve_endpoint_for_task",
+        lambda *_a, **_k: type(
+            "E", (), {"base_url": "https://chat.example", "api_key": "chat-key", "provider_id": "ds"}
+        )(),
+    )
+    cfg = LlmConfig(
+        llm_embedding_provider="openai",
+        llm_embedding_provider_id="packy",
+        llm_embedding_model="text-embedding-3-small",
+    )
+    base, key, source = resolve_embedding_http_endpoint(cfg)
+    assert base == "https://embed.example/v1"
+    assert key == "embed-key"
+    assert source == "packy"

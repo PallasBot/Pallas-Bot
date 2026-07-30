@@ -27,6 +27,7 @@ MEMORY_FIELD_NAMES = (
     "llm_vector_retrieve",
     "llm_embedding_model",
     "llm_embedding_provider",
+    "llm_embedding_provider_id",
     "llm_embedding_base_url",
     "llm_embedding_api_key",
     "llm_memory_rag_top_k",
@@ -60,6 +61,7 @@ class LlmMemoryOpsConfig(BaseModel):
     llm_vector_retrieve: VectorRetrieveMode = "hybrid"
     llm_embedding_model: str = "stub"
     llm_embedding_provider: str = ""
+    llm_embedding_provider_id: str = ""
     llm_embedding_base_url: str = ""
     llm_embedding_api_key: str = ""
     llm_memory_rag_top_k: int = Field(default=3, ge=1, le=8)

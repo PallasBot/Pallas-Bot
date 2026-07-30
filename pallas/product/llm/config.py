@@ -345,6 +345,7 @@ class LlmConfig(BaseModel):
     llm_vector_retrieve: VectorRetrieveMode = Field(default="hybrid")
     llm_embedding_model: str = Field(default="stub")
     llm_embedding_provider: str = Field(default="")
+    llm_embedding_provider_id: str = Field(default="")
     llm_embedding_base_url: str = Field(default="")
     llm_embedding_api_key: str = Field(default="")
     llm_memory_rag_top_k: int = Field(default=3, ge=1, le=8)
@@ -568,6 +569,7 @@ def get_llm_config() -> LlmConfig:
             llm_vector_retrieve=resolve_llm_vector_retrieve(),
             llm_embedding_model=resolve_llm_embedding_model(),
             llm_embedding_provider=resolve_llm_embedding_provider(),
+            llm_embedding_provider_id=str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER_ID") or "").strip(),
             llm_embedding_base_url=str(repo_env_raw_value("LLM_EMBEDDING_BASE_URL") or "").strip(),
             llm_embedding_api_key=str(repo_env_raw_value("LLM_EMBEDDING_API_KEY") or "").strip(),
             llm_memory_rag_top_k=_env_int("LLM_MEMORY_RAG_TOP_K", 3),

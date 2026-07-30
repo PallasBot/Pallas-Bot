@@ -177,6 +177,7 @@ FIELD_LABELS: dict[str, str] = {
     "llm_vector_retrieve": "记忆/知识检索模式",
     "llm_embedding_model": "Embedding 模型",
     "llm_embedding_provider": "Embedding 从哪里算",
+    "llm_embedding_provider_id": "Embedding 线路",
     "llm_embedding_base_url": "Embedding 接口地址",
     "llm_embedding_api_key": "Embedding API Key",
     "llm_memory_rag_top_k": "记忆检索条数",
