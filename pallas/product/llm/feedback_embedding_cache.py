@@ -25,6 +25,7 @@ _trigger_mem: dict[str, list[float]] = {}
 _trigger_model = ""
 _trigger_loaded_path = ""
 _prefetch_inflight: set[str] = set()
+_backfill_started = False
 
 
 def _text_key(text: str) -> str:
@@ -42,6 +43,18 @@ def trigger_embeddings_path() -> Path:
 
 
 def clear_feedback_embedding_caches_for_tests() -> None:
+    global _trigger_model, _trigger_loaded_path, _backfill_started
+    with _LOCK:
+        _query_cache.clear()
+        _trigger_mem.clear()
+        _trigger_model = ""
+        _trigger_loaded_path = ""
+        _prefetch_inflight.clear()
+        _backfill_started = False
+
+
+def invalidate_feedback_embedding_caches() -> None:
+    """配置/模型变更后丢掉内存缓存，下次按新模型重新加载或回填。"""
     global _trigger_model, _trigger_loaded_path
     with _LOCK:
         _query_cache.clear()
@@ -251,3 +264,88 @@ def prefetch_trigger_embedding(text: str) -> None:
                 _prefetch_inflight.discard(key)
 
     threading.Thread(target=_run, name="feedback-trigger-embed", daemon=True).start()
+
+
+def collect_recent_feedback_trigger_texts(*, limit: int = 200) -> list[str]:
+    """从 feedback 落盘条目收集近期去重 trigger 文本（新→旧）。"""
+    from pallas.product.llm.repeater_feedback import _iter_feedback_entries, feedback_entries_path
+
+    path = feedback_entries_path()
+    if not path.exists():
+        return []
+    lim = max(1, int(limit))
+    seen: set[str] = set()
+    ordered: list[str] = []
+    # 文件大致按追加顺序；先扫全量再取尾部，避免只看到最旧条目
+    all_texts: list[str] = []
+    for item in _iter_feedback_entries(path):
+        plain = str(item.user_text or "").strip()
+        if plain:
+            all_texts.append(plain)
+    for plain in reversed(all_texts):
+        if plain in seen:
+            continue
+        seen.add(plain)
+        ordered.append(plain)
+        if len(ordered) >= lim:
+            break
+    ordered.reverse()
+    return ordered
+
+
+def backfill_feedback_trigger_embeddings(
+    *,
+    limit_texts: int = 200,
+    batch_size: int = 32,
+    timeout_sec: float = 8.0,
+) -> dict[str, int]:
+    """补齐近期缺失的 trigger 向量；供启动后台或运维调用。"""
+    from pallas.product.llm.knowledge.embedding_provider import resolve_embedding_provider_name
+
+    if resolve_embedding_provider_name() == "stub":
+        return {"scanned": 0, "missing": 0, "filled": 0, "skipped_stub": 1}
+    texts = collect_recent_feedback_trigger_texts(limit=limit_texts)
+    missing = [t for t in texts if get_cached_trigger_embedding(t) is None]
+    filled = 0
+    batch = max(1, int(batch_size))
+    for i in range(0, len(missing), batch):
+        chunk = missing[i : i + batch]
+        before = {t: get_cached_trigger_embedding(t) is not None for t in chunk}
+        ensure_trigger_embeddings(chunk, allow_remote=True, timeout_sec=timeout_sec)
+        for t in chunk:
+            if not before.get(t) and get_cached_trigger_embedding(t) is not None:
+                filled += 1
+    return {
+        "scanned": len(texts),
+        "missing": len(missing),
+        "filled": filled,
+        "skipped_stub": 0,
+    }
+
+
+def schedule_feedback_trigger_backfill(*, limit_texts: int = 120, batch_size: int = 24) -> None:
+    """进程内只排一次的后台回填，避免拖启动。"""
+    global _backfill_started
+    with _LOCK:
+        if _backfill_started:
+            return
+        _backfill_started = True
+
+    def _run() -> None:
+        try:
+            stats = backfill_feedback_trigger_embeddings(
+                limit_texts=limit_texts,
+                batch_size=batch_size,
+                timeout_sec=8.0,
+            )
+            if int(stats.get("filled") or 0) > 0 or int(stats.get("missing") or 0) > 0:
+                logger.info(
+                    "feedback trigger embedding backfill scanned={} missing={} filled={}",
+                    stats.get("scanned"),
+                    stats.get("missing"),
+                    stats.get("filled"),
+                )
+        except Exception as exc:
+            logger.debug("feedback trigger embedding backfill failed: {}", exc)
+
+    threading.Thread(target=_run, name="feedback-trigger-backfill", daemon=True).start()

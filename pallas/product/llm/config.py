@@ -619,6 +619,12 @@ def clear_llm_config_cache() -> None:
     except Exception:
         pass
     try:
+        from pallas.product.llm.feedback_embedding_cache import invalidate_feedback_embedding_caches
+
+        invalidate_feedback_embedding_caches()
+    except Exception:
+        pass
+    try:
         from .governance import clear_llm_chat_governance_state
 
         clear_llm_chat_governance_state()
