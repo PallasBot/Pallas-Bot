@@ -137,6 +137,97 @@ def test_clone_ai_repo_rejects_existing(tmp_path, monkeypatch: pytest.MonkeyPatc
         ai_install.clone_ai_repo()
 
 
+def test_update_ai_repo_ff_only(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "pallas-bot-ai"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "ai_bootstrap.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / ".git").mkdir()
+    (root / ".pallas-managed").write_text("managed-by=pallas-bot\n", encoding="utf-8")
+    monkeypatch.setattr(ai_install, "resolve_ai_repo_root", lambda: root.resolve())
+    monkeypatch.setattr(ai_install, "forbid_ai_clone", lambda **_: False)
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.is_managed_ai_root",
+        lambda p: True,
+    )
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.mark_ai_root_managed",
+        lambda _p: None,
+    )
+
+    calls: list[tuple[str, ...]] = []
+    head_reads = {"n": 0}
+
+    def fake_run(cmd, **kwargs):  # noqa: ANN001, ANN003
+        del kwargs
+        calls.append(tuple(cmd))
+        args = tuple(cmd[1:])
+        out = ""
+        if args == ("rev-parse", "HEAD"):
+            head_reads["n"] += 1
+            out = "aaa111\n" if head_reads["n"] == 1 else "bbb222\n"
+        elif args[:1] == ("rev-parse",) and "--abbrev-ref" in args:
+            out = "origin/main\n"
+        return type("R", (), {"returncode": 0, "stdout": out, "stderr": ""})()
+
+    monkeypatch.setattr(ai_install.subprocess, "run", fake_run)
+    result = ai_install.update_ai_repo(ai_root=root)
+    assert result["before"] == "aaa111"
+    assert result["after"] == "bbb222"
+    assert result["changed"] is True
+    assert ("git", "pull", "--ff-only", "--autostash") in calls
+    assert ("git", "submodule", "update", "--init", "--recursive") in calls
+
+
+def test_update_ai_repo_rejects_unmanaged(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = tmp_path / "sibling-ai"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "ai_bootstrap.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / ".git").mkdir()
+    monkeypatch.setattr(ai_install, "forbid_ai_clone", lambda **_: False)
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.is_managed_ai_root",
+        lambda _p: False,
+    )
+    with pytest.raises(PermissionError, match="托管"):
+        ai_install.update_ai_repo(ai_root=root)
+
+
+def test_ai_install_status_can_update(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    root = tmp_path / "managed-ai"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "ai_bootstrap.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / ".git").mkdir()
+    monkeypatch.setenv("PALLAS_AI_ROOT", str(root))
+    monkeypatch.setattr(ai_install, "resolve_ai_repo_root", lambda: root.resolve())
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: "/usr/bin/git")
+    monkeypatch.setattr(ai_install, "forbid_ai_clone", lambda **_: False)
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.is_managed_ai_root",
+        lambda p: p is not None,
+    )
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.probe_ai_health_at",
+        lambda host, port, timeout_sec=3.0: {
+            "ok": False,
+            "url": f"http://{host}:{port}/health",
+            "status_code": None,
+            "body_preview": None,
+            "error": "down",
+        },
+    )
+    monkeypatch.setattr("pallas.console.cli.ai_supervisor.running_in_docker", lambda: False)
+    monkeypatch.setattr(
+        "pallas.console.cli.ai_supervisor.resolve_configured_ai_endpoint",
+        lambda: ("127.0.0.1", 9099),
+    )
+    st = ai_install.ai_install_status()
+    assert st["can_update"] is True
+    assert st["can_bootstrap"] is True
+    assert st["can_clone"] is False
+
+
 def test_writeback_ai_extension_creates_missing_file(tmp_path) -> None:
     path = tmp_path / "ai_extension.json"
     assert writeback.writeback_ai_extension_if_empty(path=path) is True
