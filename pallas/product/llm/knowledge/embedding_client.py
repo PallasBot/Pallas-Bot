@@ -26,23 +26,42 @@ def embedding_model_name(cfg: LlmConfig | None = None) -> str:
 
 def embedding_capability_trace(cfg: LlmConfig | None = None) -> dict[str, Any]:
     from pallas.product.llm.knowledge.embedding_provider import (
+        embedding_remote_endpoint_configured,
         local_embedding_dependency_available,
         resolve_embedding_provider_name,
+        resolve_local_embedding_model,
+        resolve_remote_embedding_model,
     )
 
     model = embedding_model_name(cfg)
     provider_name = resolve_embedding_provider_name(cfg)
     error = _last_embedding_error
-    if provider_name == "local" and not local_embedding_dependency_available():
-        error = error or "未安装 fastembed；请执行 uv sync --extra embedding-local"
-        semantic = False
-    elif provider_name == "local":
-        semantic = not bool(_last_embedding_error)
+    resolved_model = model
+    if provider_name == "local":
+        resolved_model = resolve_local_embedding_model(cfg)
+        if not local_embedding_dependency_available():
+            error = error or "未安装 fastembed；请执行 uv sync --extra embedding-local"
+            semantic = False
+        else:
+            semantic = not bool(_last_embedding_error)
+    elif provider_name == "openai":
+        resolved_model = resolve_remote_embedding_model(cfg)
+        if not embedding_remote_endpoint_configured(cfg):
+            error = error or (
+                "未配置向量服务地址：请填写「Embedding 接口地址」，或先在对话 Provider 配好可用的 OpenAI 兼容地址"
+            )
+            semantic = False
+        elif model.lower() == "stub":
+            # 选了 openai 但模型仍写 stub 时，运行会用默认远程模型名
+            semantic = not bool(_last_embedding_error)
+        else:
+            semantic = not bool(_last_embedding_error)
     else:
-        semantic = provider_name != "stub" and model.lower() != "stub" and not bool(error)
+        semantic = False
     return {
         "embedding_provider": provider_name,
         "embedding_model": model,
+        "resolved_model": resolved_model,
         "embedding_fallback": bool(error),
         "embedding_error": error or None,
         "semantic_available": semantic,

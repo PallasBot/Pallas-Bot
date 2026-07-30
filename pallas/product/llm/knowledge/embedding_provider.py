@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 EmbeddingProviderKind = Literal["stub", "remote", "local"]
 
 _DEFAULT_LOCAL_MODEL = "BAAI/bge-small-zh-v1.5"
+_DEFAULT_REMOTE_MODEL = "text-embedding-3-small"
 _provider_cache: dict[str, EmbeddingProvider] = {}
 _local_model_lock = threading.Lock()
 _local_models: dict[str, Any] = {}
@@ -75,7 +76,7 @@ class OpenAICompatibleEmbeddingProvider:
         return "remote"
 
     def model_name(self) -> str:
-        return embedding_model_name(self.cfg)
+        return resolve_remote_embedding_model(self.cfg)
 
     def embed_sync(self, texts: list[str], *, timeout_sec: float = 8.0) -> list[list[float]]:
         from pallas.product.llm.provider_client import auth_headers, openai_api_root
@@ -86,14 +87,20 @@ class OpenAICompatibleEmbeddingProvider:
         base_url = str(getattr(endpoint, "base_url", "") or getattr(self.cfg, "llm_base_url", "") or "").strip()
         api_key = str(getattr(endpoint, "api_key", "") or getattr(self.cfg, "llm_api_key", "") or "").strip()
         # 可选独立 embedding 端点（未配则沿用聊天端点）
-        override_base = str(repo_env_raw_value("LLM_EMBEDDING_BASE_URL") or "").strip()
-        override_key = str(repo_env_raw_value("LLM_EMBEDDING_API_KEY") or "").strip()
+        override_base = str(
+            getattr(self.cfg, "llm_embedding_base_url", "") or repo_env_raw_value("LLM_EMBEDDING_BASE_URL") or ""
+        ).strip()
+        override_key = str(
+            getattr(self.cfg, "llm_embedding_api_key", "") or repo_env_raw_value("LLM_EMBEDDING_API_KEY") or ""
+        ).strip()
         if override_base:
             base_url = override_base
         if override_key:
             api_key = override_key
         if not base_url:
-            raise ValueError("embedding provider base_url not configured")
+            raise ValueError(
+                "embedding provider base_url not configured（请填 Embedding 接口地址，或配置对话 Provider）"
+            )
         response = httpx.post(
             f"{openai_api_root(base_url)}/embeddings",
             headers=auth_headers(api_key),
@@ -122,6 +129,33 @@ def resolve_local_embedding_model(cfg: LlmConfig | None = None) -> str:
     return model
 
 
+def resolve_remote_embedding_model(cfg: LlmConfig | None = None) -> str:
+    """openai 提供方：模型仍写 stub 时落到默认远程模型名。"""
+    model = embedding_model_name(cfg).strip()
+    if not model or model.lower() == "stub":
+        return _DEFAULT_REMOTE_MODEL
+    return model
+
+
+def embedding_remote_endpoint_configured(cfg: LlmConfig | None = None) -> bool:
+    override = str(
+        getattr(cfg, "llm_embedding_base_url", "") or repo_env_raw_value("LLM_EMBEDDING_BASE_URL") or ""
+    ).strip()
+    if override:
+        return True
+    if str(getattr(cfg, "llm_base_url", "") or "").strip():
+        return True
+    try:
+        from pallas.product.llm.providers_store import resolve_endpoint_for_task
+
+        endpoint = resolve_endpoint_for_task("llm_chat")
+        if str(getattr(endpoint, "base_url", "") or "").strip():
+            return True
+    except Exception:
+        pass
+    return False
+
+
 def _load_local_fastembed_model(model_name: str) -> Any:
     with _local_model_lock:
         hit = _local_models.get(model_name)
@@ -130,9 +164,7 @@ def _load_local_fastembed_model(model_name: str) -> Any:
         try:
             from fastembed import TextEmbedding
         except ImportError as exc:
-            raise ImportError(
-                "本地 Embedding 需要 fastembed；请执行: uv sync --extra embedding-local"
-            ) from exc
+            raise ImportError("本地 Embedding 需要 fastembed；请执行: uv sync --extra embedding-local") from exc
         model = TextEmbedding(model_name=model_name)
         _local_models[model_name] = model
         return model
@@ -203,6 +235,8 @@ def get_embedding_provider(cfg: LlmConfig | None = None) -> EmbeddingProvider:
     name = resolve_embedding_provider_name(cfg)
     if name == "local":
         model = resolve_local_embedding_model(cfg)
+    elif name == "openai":
+        model = resolve_remote_embedding_model(cfg)
     else:
         model = embedding_model_name(cfg)
     cache_key = f"{name}|{model}"
@@ -278,6 +312,8 @@ def build_embedding_status(*, probe: bool = False, probe_text: str = "ping") -> 
         "available_providers": list_embedding_provider_names(),
         "local_dependency_ready": local_ready,
         "local_default_model": _DEFAULT_LOCAL_MODEL,
+        "remote_default_model": _DEFAULT_REMOTE_MODEL,
+        "endpoint_configured": embedding_remote_endpoint_configured(cfg),
         "trigger_cache_count": trigger_cached,
         "trigger_cache_model": trigger_model or None,
         "probe_ok": probe_ok,

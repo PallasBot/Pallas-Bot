@@ -166,6 +166,8 @@ class _LlmEmbeddingStatusData(BaseModel):
     available_providers: list[str] = Field(default_factory=list)
     local_dependency_ready: bool = False
     local_default_model: str | None = None
+    remote_default_model: str | None = None
+    endpoint_configured: bool = False
     trigger_cache_count: int = 0
     trigger_cache_model: str | None = None
     probe_ok: bool | None = None

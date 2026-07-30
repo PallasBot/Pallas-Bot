@@ -778,19 +778,36 @@ class LlmWebuiConfig(BaseModel):
         default="stub",
         description=field_help(
             "Embedding 模型名",
-            "占位选 stub；远程兼容接口填服务商模型名（如 text-embedding-3-small）；"
-            "本机 fastembed 可留 stub（默认 BAAI/bge-small-zh-v1.5）或填具体模型名",
-            "换模型后，以前存下来的向量可能对不上，需要重新生成或等后台回填",
+            "选 openai 时填服务商模型名（如 text-embedding-3-small）；若仍写 stub，会自动用 text-embedding-3-small。"
+            "本机 local 可留 stub（默认 BAAI/bge-small-zh-v1.5）",
+            "换模型后旧向量可能对不上，需重新生成或等后台回填",
         ),
     )
     llm_embedding_provider: EmbeddingProviderChoice = Field(
         default="",
         description=field_help(
             "Embedding 从哪里算",
-            "留空=按模型名自动：stub 用占位，其它走 OpenAI 兼容接口。"
-            "也可指定 stub / openai / local（本机 fastembed，需 uv sync --extra embedding-local）",
-            "远程地址与聊天不同时可另配 LLM_EMBEDDING_BASE_URL 与 API_KEY；本机首次加载会占内存并较慢",
+            "留空=按模型名自动。选 openai 走 OpenAI 兼容 /embeddings（默认同聊天 Provider 地址）；"
+            "选 local 需 uv sync --extra embedding-local",
+            "地址与聊天不同时，在下方填 Embedding 专用接口地址/密钥",
         ),
+    )
+    llm_embedding_base_url: str = Field(
+        default="",
+        description=field_help(
+            "Embedding 接口地址（可选）",
+            "留空=复用对话 Provider / LLM_BASE_URL。向量服务与聊天不是同一套时再填，例如 https://api.openai.com/v1",
+            "只填根地址即可，不要带 /embeddings",
+        ),
+    )
+    llm_embedding_api_key: str = Field(
+        default="",
+        description=field_help(
+            "Embedding API Key（可选）",
+            "留空=复用对话 Provider 密钥。仅当向量服务要用另一套 Key 时填写",
+            "敏感项，保存后以落盘为准",
+        ),
+        json_schema_extra={"secret": True},
     )
     llm_memory_rag_top_k: int = Field(
         default=3,
@@ -963,6 +980,8 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
         llm_embedding_provider=_embedding_provider_choice(cfg.llm_embedding_provider),
+        llm_embedding_base_url=str(getattr(cfg, "llm_embedding_base_url", "") or ""),
+        llm_embedding_api_key=str(getattr(cfg, "llm_embedding_api_key", "") or ""),
         llm_memory_rag_top_k=cfg.llm_memory_rag_top_k,
         llm_memory_max_per_group=cfg.llm_memory_max_per_group,
         llm_memory_content_max_len=cfg.llm_memory_content_max_len,
