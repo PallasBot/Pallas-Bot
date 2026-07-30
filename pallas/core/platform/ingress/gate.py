@@ -15,6 +15,7 @@ from pallas.core.platform.federate.peer_bots import (
     should_process_federate_group_on_current_deployment,
     start_federate_peer_bot_sync_loop,
     sync_federate_peer_bot_roster,
+    touch_federate_present_group,
 )
 from pallas.core.platform.ingress.claim_gate import (
     IngressClaimError,
@@ -128,6 +129,9 @@ async def ingress_group_message_gate(bot, event) -> None:
             if metrics:
                 record_ingress_early_discard("fleet")
             raise IgnoredException("fleet bot message")
+
+        # 收到本群消息即记在场，供命令归属只在「本群有号」的部署间取模。
+        touch_federate_present_group(int(event.group_id))
 
         # 仅命令走粘性群归属；闲聊 / @LLM 等 chat 车道只靠 claim，避免热群钉死一台。
         if legacy_command_traffic(plain) and not should_process_federate_group_on_current_deployment(

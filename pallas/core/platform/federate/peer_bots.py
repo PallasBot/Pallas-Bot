@@ -25,21 +25,36 @@ from pallas.core.platform.multi_bot.fleet import get_catalog_bot_ids
 from pallas.product.community_stats.store import load_or_create_deployment_id
 
 _PEER_KEY_SEGMENT = "peer_bots"
+_PRESENT_GROUPS_KEY_SEGMENT = "present_groups"
 _PUBLISH_TTL_SEC = max(60, int(os.getenv("PALLAS_FEDERATE_PEER_BOT_TTL_SEC", "180")))
 _REFRESH_INTERVAL_SEC = max(15.0, float(os.getenv("PALLAS_FEDERATE_PEER_BOT_REFRESH_SEC", "60")))
+_PRESENT_GROUP_WINDOW_SEC = max(_PUBLISH_TTL_SEC, int(os.getenv("PALLAS_FEDERATE_PRESENT_GROUP_WINDOW_SEC", "300")))
+_PRESENT_GROUP_PUBLISH_CAP = max(64, int(os.getenv("PALLAS_FEDERATE_PRESENT_GROUP_PUBLISH_CAP", "2000")))
 _cache_ids: frozenset[int] = frozenset()
 _cache_deployment_ids: frozenset[str] = frozenset()
 # None = 对端未宣告（旧版），视为全能；frozenset = 明确能力集
 _cache_deployment_capabilities: dict[str, frozenset[str] | None] = {}
+# None = 对端未宣告在场群（旧版），视为可能在场；frozenset = 近期在场群
+_cache_deployment_present_groups: dict[str, frozenset[int] | None] = {}
+_local_present_groups: dict[int, float] = {}
 _cache_updated_mono: float = 0.0
 _sync_task: asyncio.Task[None] | None = None
 
 
 def clear_federate_peer_bot_cache_for_tests() -> None:
-    global _cache_deployment_capabilities, _cache_deployment_ids, _cache_ids, _cache_updated_mono, _sync_task
+    global \
+        _cache_deployment_capabilities, \
+        _cache_deployment_ids, \
+        _cache_deployment_present_groups, \
+        _cache_ids, \
+        _cache_updated_mono, \
+        _local_present_groups, \
+        _sync_task
     _cache_ids = frozenset()
     _cache_deployment_ids = frozenset()
     _cache_deployment_capabilities = {}
+    _cache_deployment_present_groups = {}
+    _local_present_groups = {}
     _cache_updated_mono = 0.0
     _sync_task = None
 
@@ -47,6 +62,11 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
 def federate_peer_redis_key(deployment_id: str) -> str:
     prefix = federate_redis_prefix()
     return f"{prefix}:{_PEER_KEY_SEGMENT}:{deployment_id.strip().lower()}"
+
+
+def federate_present_groups_redis_key(deployment_id: str) -> str:
+    prefix = federate_redis_prefix()
+    return f"{prefix}:{_PRESENT_GROUPS_KEY_SEGMENT}:{deployment_id.strip().lower()}"
 
 
 def collect_local_federate_command_capabilities() -> frozenset[str]:
@@ -102,6 +122,74 @@ def get_federate_peer_command_capabilities(deployment_id: str) -> frozenset[str]
     return _cache_deployment_capabilities[key]
 
 
+def get_federate_peer_present_groups(deployment_id: str) -> frozenset[int] | None:
+    key = deployment_id.strip().lower()
+    if key not in _cache_deployment_present_groups:
+        return None
+    return _cache_deployment_present_groups[key]
+
+
+def touch_federate_present_group(group_id: int) -> None:
+    """记录本机某群仍有号在收消息（分片 worker 共用 Redis ZSET）。"""
+    try:
+        gid = int(group_id)
+    except (TypeError, ValueError):
+        return
+    now = time.time()
+    _local_present_groups[gid] = now
+    cutoff = now - float(_PRESENT_GROUP_WINDOW_SEC)
+    stale = [g for g, ts in _local_present_groups.items() if ts < cutoff]
+    for g in stale:
+        _local_present_groups.pop(g, None)
+
+    client = get_federate_redis_client()
+    prefix = federate_redis_prefix()
+    deployment_id = load_or_create_deployment_id().strip().lower()
+    if client is None or not prefix or not deployment_id:
+        return
+    key = federate_present_groups_redis_key(deployment_id)
+    try:
+        pipe = client.pipeline()
+        pipe.zadd(key, {str(gid): now})
+        pipe.zremrangebyscore(key, "-inf", cutoff)
+        pipe.expire(key, int(_PRESENT_GROUP_WINDOW_SEC) + int(_PUBLISH_TTL_SEC))
+        pipe.execute()
+    except Exception:
+        return
+
+
+def collect_local_present_group_ids() -> list[int]:
+    """心跳用：本机近期在场群（本地 + Redis 合并，有上限）。"""
+    now = time.time()
+    cutoff = now - float(_PRESENT_GROUP_WINDOW_SEC)
+    ids: set[int] = {gid for gid, ts in _local_present_groups.items() if ts >= cutoff}
+
+    client = get_federate_redis_client()
+    prefix = federate_redis_prefix()
+    deployment_id = load_or_create_deployment_id().strip().lower()
+    if client is not None and prefix and deployment_id:
+        key = federate_present_groups_redis_key(deployment_id)
+        try:
+            client.zremrangebyscore(key, "-inf", cutoff)
+            raw_members = client.zrangebyscore(key, cutoff, "+inf")
+            for item in raw_members or []:
+                text = item.decode("utf-8") if isinstance(item, bytes) else str(item)
+                if text.isdigit():
+                    ids.add(int(text))
+        except Exception:
+            pass
+
+    ordered = sorted(ids)
+    if len(ordered) > _PRESENT_GROUP_PUBLISH_CAP:
+        # 保留最近碰过的：按本地时间戳优先，其余按群号截断
+        scored = sorted(
+            ((_local_present_groups.get(g, 0.0), g) for g in ordered),
+            reverse=True,
+        )
+        ordered = sorted(g for _, g in scored[:_PRESENT_GROUP_PUBLISH_CAP])
+    return ordered
+
+
 def publish_local_federate_peer_bot_ids_sync(bot_ids: set[int] | frozenset[int] | None = None) -> bool:
     client = get_federate_redis_client()
     prefix = federate_redis_prefix()
@@ -110,10 +198,12 @@ def publish_local_federate_peer_bot_ids_sync(bot_ids: set[int] | frozenset[int] 
         return False
     ids = sorted(int(qq) for qq in (bot_ids if bot_ids is not None else get_catalog_bot_ids()))
     capabilities = sorted(collect_local_federate_command_capabilities())
+    present_groups = collect_local_present_group_ids()
     payload_obj: dict[str, Any] = {
         "deployment_id": deployment_id,
         "bot_ids": ids,
         "updated_at": int(time.time()),
+        "present_group_ids": present_groups,
     }
     # 插件尚未加载时能力为空：不写字段，避免被当成「零能力」抢走全部命令归属
     if capabilities:
@@ -140,8 +230,26 @@ def _parse_command_capabilities(data: dict[str, Any]) -> frozenset[str] | None:
     return frozenset(caps)
 
 
+def _parse_present_group_ids(data: dict[str, Any]) -> frozenset[int] | None:
+    if "present_group_ids" not in data:
+        return None
+    raw = data.get("present_group_ids")
+    if not isinstance(raw, (list, tuple, set, frozenset)):
+        return frozenset()
+    groups: set[int] = set()
+    for item in raw:
+        if str(item).isdigit():
+            groups.add(int(item))
+    return frozenset(groups)
+
+
 def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
-    global _cache_deployment_capabilities, _cache_deployment_ids, _cache_ids, _cache_updated_mono
+    global \
+        _cache_deployment_capabilities, \
+        _cache_deployment_ids, \
+        _cache_deployment_present_groups, \
+        _cache_ids, \
+        _cache_updated_mono
     client = get_federate_redis_client()
     prefix = federate_redis_prefix()
     deployment_id = load_or_create_deployment_id().strip().lower()
@@ -149,11 +257,13 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
         _cache_ids = frozenset()
         _cache_deployment_ids = frozenset()
         _cache_deployment_capabilities = {}
+        _cache_deployment_present_groups = {}
         _cache_updated_mono = time.monotonic()
         return _cache_ids
     peer_deployment_ids: set[str] = set()
     peer_ids: set[int] = set()
     peer_capabilities: dict[str, frozenset[str] | None] = {}
+    peer_present: dict[str, frozenset[int] | None] = {}
     pattern = f"{prefix}:{_PEER_KEY_SEGMENT}:*"
     try:
         for raw_key in client.scan_iter(match=pattern, count=100):
@@ -174,6 +284,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
             if payload_deployment_id and payload_deployment_id != deployment_id:
                 peer_deployment_ids.add(payload_deployment_id)
                 peer_capabilities[payload_deployment_id] = _parse_command_capabilities(data)
+                peer_present[payload_deployment_id] = _parse_present_group_ids(data)
             for qq in data.get("bot_ids") or []:
                 if str(qq).isdigit():
                     peer_ids.add(int(qq))
@@ -182,6 +293,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
     _cache_ids = frozenset(peer_ids)
     _cache_deployment_ids = frozenset(peer_deployment_ids)
     _cache_deployment_capabilities = peer_capabilities
+    _cache_deployment_present_groups = peer_present
     _cache_updated_mono = time.monotonic()
     return _cache_ids
 
@@ -247,6 +359,26 @@ def _capable_owner_ring(
     return active
 
 
+def _deployment_present_in_group(dep: str, group_id: int, *, mine: str) -> bool:
+    if dep == mine:
+        return True
+    if dep not in _cache_deployment_present_groups:
+        return True
+    present = _cache_deployment_present_groups[dep]
+    if present is None:
+        return True
+    return int(group_id) in present
+
+
+def _present_owner_ring(capable: list[str], *, group_id: int, mine: str) -> list[str]:
+    present = [dep for dep in capable if _deployment_present_in_group(dep, group_id, mine=mine)]
+    if present:
+        return present
+    if mine in capable:
+        return [mine]
+    return capable
+
+
 def federate_group_owner_deployment(
     group_id: int,
     *,
@@ -260,7 +392,8 @@ def federate_group_owner_deployment(
     if not active:
         return deployment_id
     local_caps = collect_local_federate_command_capabilities()
-    ring = _capable_owner_ring(active, mine=deployment_id, plain=plain, local_caps=local_caps)
+    capable = _capable_owner_ring(active, mine=deployment_id, plain=plain, local_caps=local_caps)
+    ring = _present_owner_ring(capable, group_id=int(group_id), mine=deployment_id)
     if federate_prefer_local_owner() and deployment_id in ring:
         return deployment_id
     idx = federate_group_owner_ring_index(int(group_id), len(ring), now=now)
@@ -283,9 +416,10 @@ def should_process_federate_group_on_current_deployment(
 
 
 async def sync_federate_peer_bot_roster() -> None:
-    global _cache_ids, _cache_updated_mono
+    global _cache_ids, _cache_deployment_present_groups, _cache_updated_mono
     if not federate_ingress_active():
         _cache_ids = frozenset()
+        _cache_deployment_present_groups = {}
         _cache_updated_mono = time.monotonic()
         return
     await asyncio.to_thread(publish_local_federate_peer_bot_ids_sync)
