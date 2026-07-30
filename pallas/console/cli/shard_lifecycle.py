@@ -43,6 +43,7 @@ class ShardOptions:
     skip_port_sync: bool = False
     skip_occupied_ports: bool = True
     force: bool = False
+    no_force: bool = False
     dry_run: bool = False
     worker_ports: list[int] = field(default_factory=list)
 
@@ -759,7 +760,16 @@ def cmd_start(opts: ShardOptions) -> int:
     return 0 if hub_ok else 1
 
 
+def apply_restart_force_default(opts: ShardOptions) -> None:
+    """restart 默认 --force（SIGKILL + 短等端口）；--no-force 可改回优雅停。"""
+    if opts.no_force:
+        opts.force = False
+    else:
+        opts.force = True
+
+
 def cmd_restart(opts: ShardOptions) -> int:
+    apply_restart_force_default(opts)
     if opts.hub_only:
         if require_coord_redis(dry_run=opts.dry_run) != 0:
             return 1
@@ -834,6 +844,9 @@ def parse_extra_args(extra: list[str] | None) -> ShardOptions:
             opts.skip_occupied_ports = False
         elif a == "--force":
             opts.force = True
+        elif a == "--no-force":
+            opts.no_force = True
+            opts.force = False
         elif a == "--dry-run":
             opts.dry_run = True
         elif a == "--workers" and i + 1 < len(args):
@@ -884,7 +897,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--scale-only", action="store_true")
     parser.add_argument("--skip-port-sync", action="store_true")
     parser.add_argument("--no-skip-occupied-ports", action="store_true")
-    parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="stop 时 SIGKILL 强杀并跳过端口长等待；restart 默认已启用",
+    )
+    parser.add_argument(
+        "--no-force",
+        action="store_true",
+        help="restart 时改用优雅停止（默认 restart 等同 --force）",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     opts = ShardOptions(
@@ -897,7 +919,8 @@ def main(argv: list[str] | None = None) -> int:
         scale_only=args.scale_only,
         skip_port_sync=args.skip_port_sync,
         skip_occupied_ports=not args.no_skip_occupied_ports,
-        force=args.force,
+        force=bool(args.force) and not bool(args.no_force),
+        no_force=bool(args.no_force),
         dry_run=args.dry_run,
     )
     if args.action == "start":

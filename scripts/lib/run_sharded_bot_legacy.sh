@@ -41,6 +41,7 @@ SHARD_TEST_SCRIPT="${SCRIPT_DIR}/shard_test_worker.py"
 DETECT_REDIS_SCRIPT="${SCRIPT_DIR}/detect_shard_redis.py"
 PORT_RELEASE_TIMEOUT="${PALLAS_SHARD_PORT_RELEASE_TIMEOUT:-60}"
 FORCE_STOP=0
+NO_FORCE=0
 PID_WORKER_TEST="${RUN_DIR}/worker-test.pid"
 PID_WORKER_TEST2="${RUN_DIR}/worker-test2.pid"
 TEST_SHARD_ID="${PALLAS_SHARD_TEST_ID:-99}"
@@ -147,6 +148,11 @@ while [[ $# -gt 0 ]]; do
       FORCE_STOP=1
       shift
       ;;
+    --no-force)
+      NO_FORCE=1
+      FORCE_STOP=0
+      shift
+      ;;
     -h|--help)
       usage
       exit 0
@@ -170,6 +176,11 @@ fi
 if [[ "${WORKERS_ONLY}" -eq 1 && "${HUB_ONLY}" -eq 1 ]]; then
   echo "  --workers-only 与 --hub-only 不能同时使用" >&2
   exit 1
+fi
+
+# restart 默认强制停止；--no-force 可改回优雅停
+if [[ "${ACTION}" == "restart" && "${NO_FORCE}" -eq 0 ]]; then
+  FORCE_STOP=1
 fi
 
 case "${ACTION}" in

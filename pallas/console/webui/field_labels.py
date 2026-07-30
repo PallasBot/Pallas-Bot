@@ -242,6 +242,8 @@ FIELD_LABELS: dict[str, str] = {
     "omit_response_format": "备线省略返回格式",
     "cost_per_image": "单张费用",
     "on_remote_failure": "远端失败策略",
+    "pallas_auto_update_notify_bot_id": "自动更新汇报用牛 QQ",
+    "pallas_auto_update_notify_superusers": "自动更新成功后私聊超管",
     "pallas_image_api_backends": "备用网关",
     "pallas_image_api_key": "主网关密钥",
     "pallas_image_aspect_ratio": "画幅比例",

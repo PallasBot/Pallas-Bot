@@ -69,12 +69,25 @@ extra={
 | `trigger_condition` | 命令原文；**不写**权限角色 |
 | `command_permission(s)` | 与鉴权 ID 一致 |
 | `usage` | `usage_line` + `join_usage`；**勿**写权限脚注 |
+| `help_audience` | 帮助**可见性**（谁能在帮助里看见），与「谁能执行」分开 |
 
 ```python
 from pallas.api.metadata import SCENE_GROUP, join_usage, usage_line
 ```
 
 业务前提（如须本 Bot 为 QQ 群管）写 `detail_des` 或插件 README，不进 `usage`。
+
+#### 帮助可见性 `help_audience`
+
+与 cmd_perm 等级正交：改「何人可用」不会自动改帮助里显不显示。
+
+| 写在哪 | 值 | 普通「牛牛帮助」 |
+| --- | --- | --- |
+| 插件 `extra.help_audience` | `superuser` / `maintainer` | 整插件不出现 |
+| `menu_data[].help_audience` | 同上 | 该条目不出现在**普通**详情；超管私聊详情可见 |
+| 缺省 / `user` | — | 可见 |
+
+超管**私聊**发「牛牛帮助」可看到插件级受限与配置忽略名单中的插件（内置 hidden 除外）。机制与排障见 [牛牛帮助 · 普通菜单与超管菜单](/plugins/help/README.md#普通菜单与超管菜单)。
 
 ## 排障
 
@@ -93,6 +106,7 @@ from pallas.api.metadata import SCENE_GROUP, join_usage, usage_line
 | `pallas.core.perm.registry` | 合法等级、默认表 |
 | `pallas.core.perm.schema` | 合并 metadata、WebUI 矩阵 |
 | `pallas.core.perm.menu_display` | 帮助文案 |
+| `pallas.core.perm.help_menu` | `help_audience` 过滤、`iter_plugin_detail_menu` |
 | `pallas.core.perm.metadata_text` | `usage_line` / `join_usage` |
 
 ## 上线自检
@@ -101,9 +115,11 @@ from pallas.api.metadata import SCENE_GROUP, join_usage, usage_line
 - [ ] `command_permissions` 含可读 `label`
 - [ ] `menu_data` 已绑 `command_permission`，`trigger_condition` 无静态角色
 - [ ] `usage` 未写死权限角色
+- [ ] 维护者向整插件或单条目已按需设 `help_audience`（与默认执行等级分开考虑）
 
 ## 后续阅读
 
 - [命令冷却](/common/command_limits)
+- [牛牛帮助（含双菜单）](/plugins/help/README.md#普通菜单与超管菜单)
 - [写第一个插件](/developer/plugin-development/first-plugin)
 - [元数据](/developer/plugin-development/metadata)

@@ -125,7 +125,7 @@ def draw_plugin_detail_image(data: PluginDetailData) -> Image.Image:
     footer = "返回总览：牛牛帮助"
     if data.functions:
         first = data.functions[0]
-        footer += f" · 详情：牛牛帮助 {data.display_name} 2 或 牛牛帮助 {data.display_name} {first.func}"
+        footer += f" · 详情：牛牛帮助 {data.display_name} {first.index} 或 牛牛帮助 {data.display_name} {first.func}"
     draw_page_footer_bar(draw, x1=x1, y2=y2, x2=x2, text=footer, scale=hc.scale)
 
     return hc.finish()
@@ -143,9 +143,14 @@ def _draw_function_card(hc, x: int, y: int, row) -> None:
     cmd_y = y + u(12) + u(22) + u(ht.DETAIL_FUNC_TITLE_CMD_GAP)
     say = truncate_pixels(draw, row.say, small_font, w - u(24))
     draw.text((x + u(14), cmd_y), say, fill=ht.TEXT, font=small_font)
-    meta_y = cmd_y + u(22)
+    meta_y = cmd_y + u(20)
     meta = truncate_pixels(draw, f"{row.scene} · {row.perm}", small_font, w - u(24))
     draw.text((x + u(14), meta_y), meta, fill=ht.TEXT_MUTED, font=small_font)
-    if row.cooldown and row.cooldown != "—":
+    brief = str(getattr(row, "brief", "") or "").strip()
+    if brief:
+        brief_y = meta_y + u(20) + u(ht.DETAIL_FUNC_BRIEF_GAP)
+        brief_line = truncate_pixels(draw, brief, small_font, w - u(24))
+        draw.text((x + u(14), brief_y), brief_line, fill=ht.TEXT_MUTED, font=small_font)
+    elif row.cooldown and row.cooldown != "—":
         cd_line = truncate_pixels(draw, row.cooldown, small_font, w - u(24))
         draw.text((x + u(14), meta_y + u(20)), cd_line, fill=ht.TEXT_MUTED, font=small_font)

@@ -43,7 +43,7 @@ def test_maintainer_plugin_extra_excluded_from_user_help() -> None:
 
 def test_plugin_detail_menu_shows_all_items_for_superuser_plugin() -> None:
     # 超管专属插件详情页应展示全部条目（含 help_audience 受限项），
-    # 普通插件仍按 user 受众过滤。
+    # 普通插件在普通视图仍按 user 受众过滤；超管私聊（show_ignored）展示全部。
     menu = [
         {"func": "用户功能", "trigger_condition": "牛牛帮助"},
         {"func": "超管功能", "help_audience": "superuser", "trigger_condition": "牛牛状态"},
@@ -53,3 +53,7 @@ def test_plugin_detail_menu_shows_all_items_for_superuser_plugin() -> None:
 
     assert [i["func"] for i in iter_plugin_detail_menu(superuser_plugin, menu)] == ["用户功能", "超管功能"]
     assert [i["func"] for i in iter_plugin_detail_menu(user_plugin, menu)] == ["用户功能"]
+    assert [i["func"] for i in iter_plugin_detail_menu(user_plugin, menu, show_ignored=True)] == [
+        "用户功能",
+        "超管功能",
+    ]

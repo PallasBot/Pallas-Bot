@@ -11,6 +11,7 @@
 | `name` / `description` / `usage` | 帮助图、插件说明 |
 | `extra.menu_data` | 帮助结构化入口、治理展示 |
 | `extra.help_tag` | 帮助图总览分组（`core|chat|ai|fun|tool|admin|other`）；可被 help 插件 `help_tag_overrides` 覆盖 |
+| `extra.help_audience` | 帮助可见性：`superuser` / `maintainer` 时整插件不进普通总览 |
 | `extra.command_permissions` | matcher 权限、WebUI 覆盖、「何人可用」 |
 | `extra.command_limits` | 冷却默认与展示 |
 | `extra.reload_policy` | 热载分级 |
@@ -24,6 +25,8 @@
 | `menu_data` | `func` / `trigger_*` / `brief_des` / `detail_des`；权限绑 `command_permission(s)` |
 
 MUST NOT：在 `usage` 或 `trigger_condition` 写死权限角色。细则：[cmd_perm](/common/cmd_perm)。
+
+帮助「谁能看见」用 `help_audience`（插件级或 `menu_data` 条目级），与「谁能执行」的 `command_permissions` 分开；普通 / 超管私聊双视图见 [牛牛帮助](/plugins/help/README.md#普通菜单与超管菜单)。
 
 ## `command_permissions`
 

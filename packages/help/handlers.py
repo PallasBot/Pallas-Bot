@@ -90,7 +90,11 @@ async def handle_help_command(
                 bot=bot,
                 event=event,
             )
-            detail_data, issue = build_plugin_detail_data(plugin_name, plugin_enabled=not is_disabled)
+            detail_data, issue = build_plugin_detail_data(
+                plugin_name,
+                plugin_enabled=not is_disabled,
+                show_ignored=show_ignored,
+            )
             if issue is HelpMarkdownIssue.PLUGIN_NOT_FOUND:
                 await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
                 return
@@ -106,7 +110,11 @@ async def handle_help_command(
         )
         if len(targets) == 1:
             target = targets[0]
-            detail_data, issue = build_function_detail_data(target.plugin_name, target.func_name)
+            detail_data, issue = build_function_detail_data(
+                target.plugin_name,
+                target.func_name,
+                show_ignored=show_ignored,
+            )
             if issue is HelpMarkdownIssue.OK and detail_data is not None:
                 await send_function_detail_image(detail_data, matcher=matcher, group_id=group_id)
                 return
@@ -132,7 +140,11 @@ async def handle_help_command(
 
     if len(args) == 2:
         function_identifier = args[1]
-        detail_data, issue = build_function_detail_data(plugin_name, function_identifier)
+        detail_data, issue = build_function_detail_data(
+            plugin_name,
+            function_identifier,
+            show_ignored=show_ignored,
+        )
 
         if issue is HelpMarkdownIssue.PLUGIN_NOT_FOUND:
             await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")

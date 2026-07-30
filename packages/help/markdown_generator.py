@@ -200,7 +200,10 @@ def generate_plugins_markdown(
 
 
 def generate_plugin_functions_markdown(
-    plugin_name: str, plugin_enabled: bool | None = None
+    plugin_name: str,
+    plugin_enabled: bool | None = None,
+    *,
+    show_ignored: bool = False,
 ) -> tuple[str, HelpMarkdownIssue]:
     """生成二级菜单。"""
     target_plugin = find_plugin(plugin_name)
@@ -221,12 +224,18 @@ def generate_plugin_functions_markdown(
     if target_plugin.metadata:
         metadata = target_plugin.metadata
         description = _wrap_paragraphs_for_help_page(metadata.description or "暂无描述")
-        usage = _wrap_paragraphs_for_help_page(metadata.usage or "暂无说明")
 
         user_menu: list[dict] = []
         if hasattr(metadata, "extra") and metadata.extra:
             menu_data = metadata.extra.get("menu_data", [])
-            user_menu = list(iter_plugin_detail_menu(target_plugin, menu_data))
+            user_menu = list(iter_plugin_detail_menu(target_plugin, menu_data, show_ignored=show_ignored))
+
+        if user_menu:
+            from .plugin_detail_data import usage_text_from_menu_items
+
+            usage = _wrap_paragraphs_for_help_page(usage_text_from_menu_items(user_menu))
+        else:
+            usage = _wrap_paragraphs_for_help_page(metadata.usage or "暂无说明")
 
         if user_menu:
             first_func = _sanitize_pipe(str(user_menu[0].get("func", "1") or "1"))
@@ -271,7 +280,12 @@ def generate_plugin_functions_markdown(
     return markdown_content, HelpMarkdownIssue.OK
 
 
-def generate_function_detail_markdown(plugin_name: str, function_name: str) -> tuple[str, HelpMarkdownIssue]:
+def generate_function_detail_markdown(
+    plugin_name: str,
+    function_name: str,
+    *,
+    show_ignored: bool = False,
+) -> tuple[str, HelpMarkdownIssue]:
     """生成三级菜单。"""
     target_plugin = find_plugin(plugin_name)
     if not target_plugin:
@@ -285,7 +299,7 @@ def generate_function_detail_markdown(plugin_name: str, function_name: str) -> t
 
     metadata = target_plugin.metadata
     menu_data = metadata.extra.get("menu_data", []) if metadata.extra else []
-    user_menu = list(iter_plugin_detail_menu(target_plugin, menu_data))
+    user_menu = list(iter_plugin_detail_menu(target_plugin, menu_data, show_ignored=show_ignored))
 
     target_function = None
     target_index = -1

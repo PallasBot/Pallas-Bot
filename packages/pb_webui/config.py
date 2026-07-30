@@ -141,6 +141,25 @@ class Config(BaseModel):
         ),
         json_schema_extra=_ui("自动更新", 14),
     )
+    pallas_auto_update_notify_superusers: bool = Field(
+        default=False,
+        description=field_help(
+            "自动更新成功后私聊超管",
+            "有目标成功应用时，用指定牛（或任一头在线牛）私聊通知 SUPERUSERS",
+            "默认关闭；失败不私聊以免刷屏",
+        ),
+        json_schema_extra=_ui("自动更新", 16),
+    )
+    pallas_auto_update_notify_bot_id: int = Field(
+        default=0,
+        ge=0,
+        description=field_help(
+            "汇报用牛牛 QQ",
+            "发私聊通知时使用的 Bot 账号；填 0 表示任选当前在线的一头牛",
+            "指定号必须在线，否则跳过本次汇报",
+        ),
+        json_schema_extra=_ui("自动更新", 17),
+    )
     pallas_webui_auto_update_schedule_mode: Literal["interval", "cron"] = Field(
         default="interval",
         description=field_help(

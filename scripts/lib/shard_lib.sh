@@ -21,7 +21,7 @@ usage() {
   start     启动控制台与全部牛牛 worker（worker 已全部运行则跳过启动与端口重分配；可加 --hub-only / --workers-only）
   stop      停止全部分片进程（可加 --workers-only 仅停 worker，或 --hub-only 仅停 hub）
   status    查看进程、端口、Redis 协调与配置摘要
-  restart   先 stop 再 start（可加 --workers-only 仅重启 worker，或 --hub-only 仅重启 hub）
+  restart   先 stop 再 start（默认 --force；可加 --workers-only 仅重启 worker，或 --hub-only 仅重启 hub）
 
 测试 worker（手动迁入账号，不参与自动负载）:
   test init              在 registry 中启用 test 分片并分配端口
@@ -58,7 +58,8 @@ usage() {
   --workers-only       仅操作生产 worker（不停/不启 hub；start 时只拉起缺失进程，restart 时全量重启）
   --scale-only         扩容模式：不重分配端口、不同步协议端 ws_url（已有 worker 在跑时 start --workers-only 自动启用）
   --hub-only           仅操作 hub 控制台（不停/不启 worker；restart 时常用）
-  --force              stop/restart 时 SIGKILL 强杀并跳过端口长等待（加快重启）
+  --force              stop 时 SIGKILL 强杀并跳过端口长等待；restart 默认已启用
+  --no-force           restart 时改用优雅停止（默认 restart 等同 --force）
   --dry-run            只显示将要执行的命令，不真正启动
   -h, --help           显示本帮助
 

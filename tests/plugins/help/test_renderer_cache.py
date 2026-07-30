@@ -27,6 +27,26 @@ def test_save_image_to_cache_prunes_old_pngs(tmp_path, monkeypatch):
     assert "old-b.png" in pngs
 
 
+def test_plugin_detail_fingerprint_changes_with_usage():
+    from types import SimpleNamespace
+
+    from packages.help.renderer import _plugin_detail_fingerprint
+
+    base = SimpleNamespace(
+        description="desc",
+        usage="#pallas",
+        functions=[],
+        extra_sections=[],
+    )
+    changed = SimpleNamespace(
+        description="desc",
+        usage="#pallas · 更详细",
+        functions=[],
+        extra_sections=[],
+    )
+    assert _plugin_detail_fingerprint(base) != _plugin_detail_fingerprint(changed)
+
+
 def test_render_v3_image_bytes_uses_disk_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(renderer, "plugin_data_dir", lambda _name: tmp_path)
     monkeypatch.setattr(renderer, "_help_image_cache_suffix", lambda: "fixed-v3")
