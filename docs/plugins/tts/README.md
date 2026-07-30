@@ -58,7 +58,7 @@ uv run pallas ext install pallas-plugin-ai-media
 
 自 `pallas-plugin-ai-media` **4.3.0** 起，插件页不再展示服务地址 / Bearer / endpoint（由媒体连接统一管理）。接口默认仍为 `/v1/tts`。
 
-翻译落盘在 AI Runtime 的 `data/media_models.json`（`translator` 段）；控制台未保存过时回退 AI 侧 `.env` 的 `TRANSLATOR_*`。开启且译成功后按日语合成；失败则保留原文与「合成语种」。
+翻译落盘在 AI Runtime 的 `data/media_models.json`（`translator` 段）；控制台未保存过时回退 AI 侧 `.env` 的 `TRANSLATOR_*`。开启且**译成功**后自动按日语合成（不必把「合成语种」改成日）；**译失败**则保留原文并按「合成语种」念——中文输入请保持合成语种为中文，避免中文被按日语切分。
 
 保存后写入 `data/pallas_config/webui.json`（Bot）与 AI 侧 `media_models.json`（音色/翻译）。
 
