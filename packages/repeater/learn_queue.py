@@ -94,9 +94,9 @@ def learn_queue_under_pressure() -> bool:
 
 def should_skip_repeater_learn_enqueue() -> bool:
     from pallas.core.foundation.db.pool_budget import pg_pool_under_pressure
-    from pallas.core.platform.ingress.message_load import is_overloaded
+    from pallas.core.platform.ingress.message_load import should_shed_chat_sidework
 
-    if is_overloaded():
+    if should_shed_chat_sidework():
         return True
     if pg_pool_under_pressure(threshold=0.25):
         return True
@@ -119,6 +119,9 @@ async def execute_repeater_learn(chat: Chat) -> None:
         ok = await chat.learn()
         if ok:
             _completed += 1
+            from pallas.core.platform.ingress.hotpath_metrics import record_learn_completed
+
+            record_learn_completed()
     except Exception as e:
         logger.warning(
             "repeater learn background failed bot={} group={}: {}",
@@ -133,6 +136,9 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
     global _dropped_full, _dropped_pressure
     if should_skip_repeater_learn_enqueue():
         _dropped_pressure += 1
+        from pallas.core.platform.ingress.hotpath_metrics import record_learn_skipped_pressure
+
+        record_learn_skipped_pressure()
         if _dropped_pressure == 1 or _dropped_pressure % 100 == 0:
             logger.debug(
                 "repeater learn enqueue skipped under pressure (watermark={}, dropped={})",
@@ -144,9 +150,15 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
         return False
     try:
         learn_queue().put_nowait(chat)
+        from pallas.core.platform.ingress.hotpath_metrics import record_learn_enqueued
+
+        record_learn_enqueued()
         return True
     except asyncio.QueueFull:
         _dropped_full += 1
+        from pallas.core.platform.ingress.hotpath_metrics import record_learn_skipped_full
+
+        record_learn_skipped_full()
         if _dropped_full == 1 or _dropped_full % 100 == 0:
             logger.debug(
                 "repeater learn queue full (max={}), dropped={} (learn only)",

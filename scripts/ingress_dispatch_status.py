@@ -52,6 +52,29 @@ def main() -> int:
     util = pool.get("utilization")
     util_text = f"{util * 100:.1f}%" if isinstance(util, float) else "—"
     print(f"PG 池利用率              {util_text}  capacity={pool.get('capacity', '—')}")
+    hotpath = data.get("hotpath") or {}
+    print(
+        f"hotpath 路由/分词/查库P95 {fmt_optional(hotpath.get('route_ms_p95'), suffix='ms')} / "
+        f"{fmt_optional(hotpath.get('keywords_ms_p95'), suffix='ms')} / "
+        f"{fmt_optional(hotpath.get('bundle_ms_p95'), suffix='ms')}"
+    )
+    print(
+        f"hotpath bundle 缓存命中   {hotpath.get('bundle_cache_hit_ratio', '—')}  "
+        f"(+{hotpath.get('bundle_cache_hit', 0)}/-{hotpath.get('bundle_cache_negative_hit', 0)})  "
+        f"timeout={hotpath.get('bundle_timeout', 0)}  "
+        f"found={hotpath.get('bundle_found', 0)}  none={hotpath.get('bundle_none', 0)}"
+    )
+    print(
+        f"hotpath learn            enq={hotpath.get('learn_enqueued', 0)}  "
+        f"skip_pressure={hotpath.get('learn_skipped_pressure', 0)}  "
+        f"done={hotpath.get('learn_completed', 0)}  "
+        f"shed={hotpath.get('chat_shed_sidework', 0)}  "
+        f"local_reply={hotpath.get('reply_local_dispatched', 0)}"
+    )
+    print(
+        f"hotpath 分词 LRU          hit={hotpath.get('keywords_lru_hit_ratio', '—')}  "
+        f"size={hotpath.get('keywords_lru_size', 0)}"
+    )
     if alerts:
         print(f"告警                     {', '.join(str(x) for x in alerts)}")
     else:

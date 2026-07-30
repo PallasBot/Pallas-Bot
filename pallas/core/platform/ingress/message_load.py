@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import contextvars
 import time
 
 _OVERLOAD_UNTIL = 0.0
 _LAST_ACTIVITY = time.monotonic()
 _LANE_WAIT_OVERLOAD_MS = 250
+# 本条事件在过载时选择「降质接话」而非整段丢弃闲聊
+_CHAT_DEGRADED = contextvars.ContextVar("ingress_chat_degraded", default=False)
 
 
 def mark_activity() -> None:
@@ -34,6 +37,23 @@ def is_overloaded() -> bool:
 
 def should_pause_tasks() -> bool:
     return is_overloaded()
+
+
+def mark_chat_degraded(enabled: bool = True) -> contextvars.Token[bool]:
+    return _CHAT_DEGRADED.set(bool(enabled))
+
+
+def reset_chat_degraded(token: contextvars.Token[bool]) -> None:
+    _CHAT_DEGRADED.reset(token)
+
+
+def is_chat_degraded() -> bool:
+    return bool(_CHAT_DEGRADED.get())
+
+
+def should_shed_chat_sidework() -> bool:
+    """过载或本条已标记降质时：停 learn / LLM 锦上添花，仍可本地接话。"""
+    return is_overloaded() or is_chat_degraded()
 
 
 def lane_wait_overload_threshold_ms() -> int:

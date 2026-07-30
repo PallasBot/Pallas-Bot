@@ -37,6 +37,15 @@ def test_lane_wait_and_alerts() -> None:
     assert snap["lane_wait_ms_avg"] == 120.0
 
 
+def test_chatter_overload_degraded_counter() -> None:
+    dispatch_metrics.clear_dispatch_metrics_for_tests()
+    dispatch_metrics.record_chatter_overload_degraded()
+    dispatch_metrics.record_chatter_overload_dropped()
+    snap = dispatch_metrics.dispatch_metrics_snapshot()
+    assert snap["chatter_overload_degraded"] == 1
+    assert snap["chatter_overload_dropped"] == 1
+
+
 def test_dispatch_alerts() -> None:
     alerts = dispatch_metrics.dispatch_alerts(p95_ms=150.0, pg_util=0.9)
     assert "ingress_p95_over_100ms" in alerts

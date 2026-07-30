@@ -1,18 +1,20 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
 from nonebot import get_loaded_plugins
 
-from pallas.core.foundation.command_prefix import matches_command_prefix, strip_leading_command_marks
+from pallas.core.foundation.command_prefix import strip_leading_command_marks
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 from pallas.core.platform.ingress.plugin_command_plaintext import (
     _iter_trigger_parts,
     extract_command_prefixes_from_menu_data,
 )
 from pallas.core.platform.ingress.policy_registry import parse_fanout_policy
+from pallas.core.platform.ingress.prefix_trie import PrefixModuleTrie
 
 if TYPE_CHECKING:
     import re
@@ -49,6 +51,7 @@ class RouteIndexSnapshot:
     always_run_modules: frozenset[str]
     passive_modules: frozenset[str]
     indexed_modules: frozenset[str]
+    prefix_trie: PrefixModuleTrie | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,6 +217,7 @@ def build_route_index() -> RouteIndexSnapshot:
         always_run_modules=frozenset(always_run),
         passive_modules=frozenset(passive),
         indexed_modules=frozenset(indexed),
+        prefix_trie=PrefixModuleTrie.from_mapping(prefix_frozen),
     )
 
 
@@ -224,31 +228,43 @@ def get_route_index() -> RouteIndexSnapshot:
     return _INDEX_CACHE
 
 
+def _prefix_trie_for(index: RouteIndexSnapshot) -> PrefixModuleTrie:
+    trie = index.prefix_trie
+    if trie is not None:
+        return trie
+    return PrefixModuleTrie.from_mapping(index.prefix_to_modules)
+
+
 def resolve_message_route(plain: str) -> RouteResolution:
-    text = strip_leading_command_marks((plain or "").strip())
-    if not text:
-        return RouteResolution(frozenset(), False)
+    started = time.perf_counter()
+    try:
+        text = strip_leading_command_marks((plain or "").strip())
+        if not text:
+            return RouteResolution(frozenset(), False)
 
-    index = get_route_index()
-    matched: set[str] = set()
-    hit = False
+        index = get_route_index()
+        matched: set[str] = set()
+        hit = False
 
-    if text in index.exact_to_modules:
-        matched.update(index.exact_to_modules[text])
-        hit = True
-
-    for prefix in sorted(index.prefix_to_modules.keys(), key=len, reverse=True):
-        if matches_command_prefix(text, prefix):
-            matched.update(index.prefix_to_modules[prefix])
-            hit = True
-            break
-
-    for module_key, pattern in index.regex_entries:
-        if pattern.match(text):
-            matched.add(module_key)
+        if text in index.exact_to_modules:
+            matched.update(index.exact_to_modules[text])
             hit = True
 
-    return RouteResolution(frozenset(matched), hit)
+        prefix_modules = _prefix_trie_for(index).longest_prefix_modules(text)
+        if prefix_modules:
+            matched.update(prefix_modules)
+            hit = True
+
+        for module_key, pattern in index.regex_entries:
+            if pattern.match(text):
+                matched.add(module_key)
+                hit = True
+
+        return RouteResolution(frozenset(matched), hit)
+    finally:
+        from pallas.core.platform.ingress.hotpath_metrics import record_route_resolve_ms
+
+        record_route_resolve_ms((time.perf_counter() - started) * 1000.0)
 
 
 def matcher_always_runs(matcher: type[Matcher], index: RouteIndexSnapshot) -> bool:

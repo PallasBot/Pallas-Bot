@@ -4,7 +4,7 @@ import time
 from collections import defaultdict, deque
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, lru_cache
 from typing import cast
 
 import pypinyin
@@ -37,6 +37,22 @@ except ImportError:
 plugin_config = get_repeater_config()
 
 
+@lru_cache(maxsize=4096)
+def extract_keyword_tags(plain_text: str, top_k: int = 2) -> tuple[str, ...]:
+    """跨消息复用分词结果；同句高频出现时避免反复跑 jieba。"""
+    import time
+
+    from pallas.core.platform.ingress.hotpath_metrics import record_keywords_extract_ms
+
+    text = (plain_text or "").strip()
+    if not text:
+        return ()
+    started = time.perf_counter()
+    result = jieba_analyse.extract_tags(text, topK=top_k)
+    record_keywords_extract_ms((time.perf_counter() - started) * 1000.0)
+    return tuple(cast("list[str]", result))
+
+
 @dataclass
 class ChatData:
     group_id: int
@@ -61,8 +77,7 @@ class ChatData:
         if not self.is_plain_text and len(self.plain_text) == 0:
             return []
 
-        result = jieba_analyse.extract_tags(self.plain_text, topK=ChatData._keywords_size)
-        return cast("list[str]", result)  # type: ignore[return-value]
+        return list(extract_keyword_tags(self.plain_text, ChatData._keywords_size))
 
     @cached_property
     def keywords_len(self) -> int:

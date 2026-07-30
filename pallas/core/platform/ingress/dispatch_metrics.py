@@ -10,6 +10,7 @@ _COUNTERS = (
     "chatter_traffic",
     "preprocessor_dropped",
     "chatter_overload_dropped",
+    "chatter_overload_degraded",
     "route_index_hits",
     "route_index_fallbacks",
     "matchers_considered",
@@ -80,6 +81,11 @@ def record_chatter_overload_dropped() -> None:
     _state["chatter_overload_dropped"] += 1
 
 
+def record_chatter_overload_degraded() -> None:
+    _rollover_if_needed()
+    _state["chatter_overload_degraded"] += 1
+
+
 def record_route_index_decision(*, index_hit: bool, fallback: bool) -> None:
     _rollover_if_needed()
     if index_hit:
@@ -139,6 +145,7 @@ def dispatch_alerts(*, p95_ms: float | None, pg_util: float | None) -> list[str]
 def dispatch_metrics_snapshot() -> dict[str, Any]:
     _rollover_if_needed()
     from pallas.core.foundation.db.pool_budget import pool_budget_status
+    from pallas.core.platform.ingress.hotpath_metrics import hotpath_metrics_snapshot
     from pallas.core.platform.ingress.send_queue import send_queue_status
 
     p95 = ingress_duration_p95_ms()
@@ -152,6 +159,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
         send_queue=send_queue_status(),
         pool_budget=pool,
         pg_util=pg_util if isinstance(pg_util, float) else None,
+        hotpath=hotpath_metrics_snapshot(),
     )
 
 
@@ -163,6 +171,7 @@ def build_dispatch_metrics_payload(
     send_queue: dict[str, Any],
     pool_budget: dict[str, Any],
     pg_util: float | None,
+    hotpath: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     group_messages = int(counters.get("group_messages") or 0)
     command_traffic = int(counters.get("command_traffic") or 0)
@@ -180,6 +189,7 @@ def build_dispatch_metrics_payload(
         "ingress_duration_ms_p95": ingress_duration_ms_p95,
         "send_queue": send_queue,
         "pool_budget": pool_budget,
+        "hotpath": hotpath or {},
         "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util),
         "matchers_selected_ratio": round(selected / considered, 4) if considered else None,
         "avg_matchers_per_message": round(selected / group_messages, 2) if group_messages else None,
@@ -250,6 +260,7 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     p95_values: list[float] = []
     send_rows: list[dict[str, Any]] = []
     pool_rows: list[dict[str, Any]] = []
+    hotpath_rows: list[dict[str, Any]] = []
     day_key = ""
     for row in rows:
         if not isinstance(row, dict):
@@ -266,9 +277,14 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         pool = row.get("pool_budget")
         if isinstance(pool, dict):
             pool_rows.append(pool)
+        hotpath = row.get("hotpath")
+        if isinstance(hotpath, dict):
+            hotpath_rows.append(hotpath)
     p95_cluster = round(max(p95_values), 2) if p95_values else None
     pool_merged = merge_pool_budget_snapshots(pool_rows)
     pg_util = pool_merged.get("utilization")
+    from pallas.core.platform.ingress.hotpath_metrics import merge_hotpath_metrics
+
     return build_dispatch_metrics_payload(
         day_key=day_key or _today_key(),
         counters=counters,
@@ -276,4 +292,5 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         send_queue=merge_send_queue_snapshots(send_rows),
         pool_budget=pool_merged,
         pg_util=pg_util if isinstance(pg_util, float) else None,
+        hotpath=merge_hotpath_metrics(hotpath_rows),
     )
