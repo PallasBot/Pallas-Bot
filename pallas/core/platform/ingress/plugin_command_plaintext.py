@@ -9,12 +9,13 @@ from typing import Any
 from nonebot import get_loaded_plugins
 from nonebot.rule import TrieRule
 
-from pallas.core.foundation.command_prefix import matches_command_prefix, strip_leading_command_marks
+from pallas.core.foundation.command_prefix import strip_leading_command_marks
 
 # 别名命令用「 / 」分隔（两侧需空白），避免拆开「图片/文字」这类说明
 _TRIGGER_SPLIT_RE = re.compile(r"\s+/\s+|[、，,]")
 _TOKEN_SPLIT_RE = re.compile(r"[\s<＜〈\[(（(:：]")
 _PLUGIN_PREFIX_CACHE_VALUE: tuple[str, ...] | None = None
+_PLUGIN_PREFIX_TRIE = None
 
 
 def _iter_trigger_parts(trigger_condition: str) -> list[str]:
@@ -76,13 +77,16 @@ def _loaded_plugin_command_prefixes() -> tuple[str, ...]:
 
 
 def clear_plugin_command_plaintext_cache() -> None:
-    global _PLUGIN_PREFIX_CACHE_VALUE
+    global _PLUGIN_PREFIX_CACHE_VALUE, _PLUGIN_PREFIX_TRIE
 
     _PLUGIN_PREFIX_CACHE_VALUE = None
+    _PLUGIN_PREFIX_TRIE = None
     is_plugin_command_plaintext.cache_clear()
+    from pallas.core.foundation.command_prefix import clear_command_start_cache
     from pallas.core.platform.ingress.hosted_activity_gate import clear_hosted_activity_ingress_cache
     from pallas.core.platform.ingress.policy_registry import clear_ingress_policy_cache
 
+    clear_command_start_cache()
     clear_hosted_activity_ingress_cache()
     clear_ingress_policy_cache()
     from pallas.core.platform.ingress.route_index import clear_route_index_cache
@@ -93,6 +97,15 @@ def clear_plugin_command_plaintext_cache() -> None:
     clear_dispatch_lanes_cache()
 
 
+def _plugin_prefix_trie():
+    global _PLUGIN_PREFIX_TRIE
+    if _PLUGIN_PREFIX_TRIE is None:
+        from pallas.core.platform.ingress.prefix_trie import PrefixModuleTrie
+
+        _PLUGIN_PREFIX_TRIE = PrefixModuleTrie.from_prefixes(_loaded_plugin_command_prefixes())
+    return _PLUGIN_PREFIX_TRIE
+
+
 @lru_cache(maxsize=2048)
 def is_plugin_command_plaintext(text: str) -> bool:
     plain = strip_leading_command_marks(text)
@@ -100,4 +113,4 @@ def is_plugin_command_plaintext(text: str) -> bool:
         return False
     if TrieRule.prefix.longest_prefix(plain):
         return True
-    return any(matches_command_prefix(plain, prefix) for prefix in _loaded_plugin_command_prefixes())
+    return _plugin_prefix_trie().has_any_prefix(plain)
