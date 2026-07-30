@@ -165,13 +165,21 @@ def build_command_tool_spec(
         source=LlmToolSource.PLUGIN_COMMAND,
         command_id=decl.command_id,
         plugin_name=plugin_name,
-        capabilities=frozenset({
-            ToolCapability.SIDE_EFFECTING.value,
-            ToolCapability.REQUIRES_GROUP_CONTEXT.value,
-        }),
+        capabilities=_command_tool_capabilities(decl.name),
         hints=hints,
         visibility=visibility,
     )
+
+
+def _command_tool_capabilities(tool_name: str) -> frozenset[str]:
+    from pallas.product.llm.tools.inventory import is_query_tool_name
+
+    caps: set[str] = {ToolCapability.REQUIRES_GROUP_CONTEXT.value}
+    if is_query_tool_name(tool_name):
+        caps.add(ToolCapability.READ_ONLY.value)
+    else:
+        caps.add(ToolCapability.SIDE_EFFECTING.value)
+    return frozenset(caps)
 
 
 def _command_tool_domains(*, plugin_name: str, decl: LlmCommandToolDecl) -> frozenset[str]:
