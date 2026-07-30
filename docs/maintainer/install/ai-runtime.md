@@ -67,7 +67,7 @@ winget install --id Gyan.FFmpeg -e
 uv run pallas ai setup
 ```
 
-也可在控制台 **AI 配置 · 媒体服务** 使用安装：同一主按钮在「下载并安装」与「更新 Runtime」间切换（托管目录 `data/runtimes/pallas-bot-ai` 可 `git pull --ff-only` 后再 bootstrap）；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
+也可在控制台 **AI 配置 · 媒体服务** 使用安装：未安装时「下载并安装」；托管目录（`data/runtimes/pallas-bot-ai`）打开/刷新会 `git fetch` 对比远端，有更新才显示「更新 Runtime」（`git pull --ff-only` 后再 bootstrap），已是最新则只留「仅重装依赖」；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
 
 用户向手把手与 **能力包**（对话模型拉取、媒体权重 / Docker 换 `latest`）见 [AI 扩展](/guide/ai)。
 

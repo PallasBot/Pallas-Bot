@@ -88,6 +88,17 @@ def ai_install_status() -> dict[str, Any]:
         and (resolved / _AI_BOOTSTRAP).is_file()
         and not forbid_clone
     )
+    has_update: bool | None = None
+    installed_ref: str | None = None
+    latest_ref: str | None = None
+    update_check_error: str | None = None
+    if can_update and resolved is not None:
+        probe = probe_ai_repo_update(resolved)
+        has_update = probe.get("has_update")
+        installed_ref = probe.get("installed_ref")
+        latest_ref = probe.get("latest_ref")
+        err = probe.get("error")
+        update_check_error = str(err).strip() if err else None
     detected = (
         resolved is not None
         or bool(runtime.get("running"))
@@ -108,6 +119,10 @@ def ai_install_status() -> dict[str, Any]:
         "can_clone": can_clone,
         "can_bootstrap": can_bootstrap,
         "can_update": can_update,
+        "has_update": has_update,
+        "installed_ref": installed_ref,
+        "latest_ref": latest_ref,
+        "update_check_error": update_check_error,
         "in_docker": running_in_docker(),
         "endpoint": {"host": host, "port": port},
         "docker_hint": docker_compose_hint(),
@@ -148,7 +163,11 @@ def clone_ai_repo(*, target: Path | None = None, git_url: str = AI_REPO_GIT_URL)
     return dest
 
 
-def _git_run(ai_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _git_run(
+    ai_root: Path,
+    *args: str,
+    timeout_sec: float | None = None,
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
         cwd=ai_root,
@@ -157,7 +176,94 @@ def _git_run(ai_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
         text=True,
         encoding="utf-8",
         errors="replace",
+        timeout=timeout_sec,
     )
+
+
+_UPDATE_FETCH_TIMEOUT_SEC = 15.0
+
+
+def probe_ai_repo_update(
+    ai_root: Path,
+    *,
+    fetch_timeout_sec: float = _UPDATE_FETCH_TIMEOUT_SEC,
+) -> dict[str, Any]:
+    """``git fetch`` 后对比 HEAD 与上游；失败时 ``has_update`` 为 ``None``。"""
+    result: dict[str, Any] = {
+        "has_update": None,
+        "installed_ref": None,
+        "latest_ref": None,
+        "upstream": None,
+        "error": None,
+    }
+    if not (ai_root / ".git").exists():
+        result["error"] = "不是 git 仓库"
+        return result
+    if not shutil.which("git"):
+        result["error"] = "未找到 git"
+        return result
+
+    try:
+        head = _git_run(ai_root, "rev-parse", "HEAD")
+    except subprocess.TimeoutExpired:
+        result["error"] = "读取 HEAD 超时"
+        return result
+    if head.returncode != 0:
+        result["error"] = (head.stderr or head.stdout or "").strip() or "无法读取 HEAD"
+        return result
+    local_sha = (head.stdout or "").strip()
+    if not local_sha:
+        result["error"] = "HEAD 为空"
+        return result
+    result["installed_ref"] = local_sha[:12]
+
+    try:
+        fetch = _git_run(ai_root, "fetch", "--prune", "origin", timeout_sec=fetch_timeout_sec)
+    except subprocess.TimeoutExpired:
+        result["error"] = f"git fetch 超时（>{fetch_timeout_sec:.0f}s）"
+        return result
+    if fetch.returncode != 0:
+        result["error"] = (fetch.stderr or fetch.stdout or "").strip() or f"git fetch exit {fetch.returncode}"
+        return result
+
+    upstream_ref: str | None = None
+    try:
+        upstream = _git_run(ai_root, "rev-parse", "--abbrev-ref", "@{u}")
+    except subprocess.TimeoutExpired:
+        result["error"] = "解析上游超时"
+        return result
+    if upstream.returncode == 0 and (upstream.stdout or "").strip():
+        upstream_ref = (upstream.stdout or "").strip()
+    else:
+        for candidate in ("origin/main", "origin/master"):
+            try:
+                check = _git_run(ai_root, "rev-parse", "--verify", candidate)
+            except subprocess.TimeoutExpired:
+                result["error"] = "解析远端分支超时"
+                return result
+            if check.returncode == 0 and (check.stdout or "").strip():
+                upstream_ref = candidate
+                break
+    if not upstream_ref:
+        result["error"] = "无可用上游（@{u} / origin/main / origin/master）"
+        return result
+    result["upstream"] = upstream_ref
+
+    try:
+        remote = _git_run(ai_root, "rev-parse", upstream_ref)
+    except subprocess.TimeoutExpired:
+        result["error"] = "读取远端提交超时"
+        return result
+    if remote.returncode != 0:
+        result["error"] = (remote.stderr or remote.stdout or "").strip() or f"无法读取 {upstream_ref}"
+        return result
+    remote_sha = (remote.stdout or "").strip()
+    if not remote_sha:
+        result["error"] = f"{upstream_ref} 为空"
+        return result
+    result["latest_ref"] = remote_sha[:12]
+    result["has_update"] = local_sha != remote_sha
+    return result
 
 
 def update_ai_repo(*, ai_root: Path | None = None) -> dict[str, Any]:
