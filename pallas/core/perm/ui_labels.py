@@ -57,7 +57,7 @@ COMMAND_LABEL_FALLBACKS: dict[str, str] = {
     "help.plugin_disable": "牛牛关闭（单插件）",
     "help.plugin_enable_all": "牛牛开启全部功能",
     "help.plugin_disable_all": "牛牛关闭全部功能",
-    "pb_core.status": "牛牛状态",
+    "pb_core.status": "运行状态",
     "pb_core.console": "牛牛控制台",
     "pb_core.plugins": "牛牛插件",
     "pb_core.update_check": "牛牛更新",

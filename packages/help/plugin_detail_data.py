@@ -42,6 +42,27 @@ def normalize_plugin_usage_text(usage: str) -> str:
     return items[0] if items else "暂无说明"
 
 
+def usage_text_from_menu_items(menu_items: list[dict[str, Any]]) -> str:
+    """按当前可见 menu 条目生成「插件内用法」，与功能一览一致。"""
+    from pallas.api.metadata import join_usage, usage_line
+
+    lines: list[str] = []
+    for item in menu_items:
+        say = help_say_phrase(item)
+        brief = str(item.get("brief_des") or "").strip()
+        if not brief:
+            brief = str(item.get("func") or "").strip()
+        if say and say != "—":
+            lines.append(usage_line(say, brief or "见功能详情"))
+        elif brief:
+            lines.append(brief)
+    if not lines:
+        return "暂无说明"
+    if len(lines) == 1:
+        return lines[0]
+    return join_usage(*lines)
+
+
 @dataclass(frozen=True, slots=True)
 class HelpFunctionRow:
     index: int
@@ -85,6 +106,7 @@ def build_plugin_detail_data(
     plugin_name: str,
     *,
     plugin_enabled: bool | None,
+    show_ignored: bool = False,
 ) -> tuple[PluginDetailData | None, HelpMarkdownIssue]:
     target_plugin = find_plugin(plugin_name)
     if not target_plugin:
@@ -102,10 +124,19 @@ def build_plugin_detail_data(
     meta = getattr(target_plugin, "metadata", None)
     if meta is not None:
         data.description = str(getattr(meta, "description", None) or "暂无描述").strip()
-        data.usage = normalize_plugin_usage_text(str(getattr(meta, "usage", None) or "暂无说明"))
         menu_data = []
         if getattr(meta, "extra", None):
-            menu_data = list(iter_plugin_detail_menu(target_plugin, meta.extra.get("menu_data", [])))
+            menu_data = list(
+                iter_plugin_detail_menu(
+                    target_plugin,
+                    meta.extra.get("menu_data", []),
+                    show_ignored=show_ignored,
+                )
+            )
+        if menu_data:
+            data.usage = usage_text_from_menu_items(menu_data)
+        else:
+            data.usage = normalize_plugin_usage_text(str(getattr(meta, "usage", None) or "暂无说明"))
         for i, item in enumerate(menu_data, 1):
             perm_raw = effective_permission_avail_text(item)
             cd_raw = effective_command_cooldown_text(item)
@@ -133,6 +164,8 @@ def build_plugin_detail_data(
 def build_function_detail_data(
     plugin_name: str,
     function_name: str,
+    *,
+    show_ignored: bool = False,
 ) -> tuple[FunctionDetailData | None, HelpMarkdownIssue]:
     target_plugin = find_plugin(plugin_name)
     if not target_plugin:
@@ -142,7 +175,13 @@ def build_function_detail_data(
     if meta is None or not getattr(meta, "extra", None):
         return None, HelpMarkdownIssue.METADATA_MISSING
 
-    user_menu = list(iter_plugin_detail_menu(target_plugin, meta.extra.get("menu_data", [])))
+    user_menu = list(
+        iter_plugin_detail_menu(
+            target_plugin,
+            meta.extra.get("menu_data", []),
+            show_ignored=show_ignored,
+        )
+    )
     target_function = None
     target_index = -1
 
@@ -225,7 +264,12 @@ def command_match_tokens(item: dict[str, Any]) -> list[str]:
     return tokens
 
 
-def search_command_help_targets(identifier: str, plugins: list[Any]) -> list[CommandHelpTarget]:
+def search_command_help_targets(
+    identifier: str,
+    plugins: list[Any],
+    *,
+    show_ignored: bool = False,
+) -> list[CommandHelpTarget]:
     """在给定插件集合里把单条参数当作命令/功能名解析，精确优先、其次为命令的子串。"""
     key = normalize_help_key(identifier)
     if not key:
@@ -240,7 +284,11 @@ def search_command_help_targets(identifier: str, plugins: list[Any]) -> list[Com
         meta = getattr(plugin, "metadata", None)
         if meta is None or not getattr(meta, "extra", None):
             continue
-        for item in iter_plugin_detail_menu(plugin, meta.extra.get("menu_data", [])):
+        for item in iter_plugin_detail_menu(
+            plugin,
+            meta.extra.get("menu_data", []),
+            show_ignored=show_ignored,
+        ):
             func = str(item.get("func", "") or "").strip()
             if not func:
                 continue
@@ -271,4 +319,4 @@ def find_command_help_targets(
     from .plugin_manager import get_help_menu_plugins
 
     plugins = get_help_menu_plugins(show_ignored=show_ignored, ignored_plugins=ignored_plugins)
-    return search_command_help_targets(identifier, plugins)
+    return search_command_help_targets(identifier, plugins, show_ignored=show_ignored)
