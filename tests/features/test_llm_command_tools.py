@@ -54,7 +54,7 @@ def test_serialize_event_source_segments_keeps_at_image_and_self() -> None:
     assert segments[2] == {"type": "text", "text": "自己"}
 
 
-def test_serialize_event_source_segments_drops_bot_at_without_padding_self() -> None:
+def test_serialize_event_source_segments_drops_leading_wake_bot_at() -> None:
     from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
     event = SimpleNamespace(
@@ -69,7 +69,23 @@ def test_serialize_event_source_segments_drops_bot_at_without_padding_self() -> 
     assert segments == []
 
 
-def test_serialize_event_source_segments_keeps_target_drops_bot() -> None:
+def test_serialize_event_source_segments_keeps_trailing_bot_at() -> None:
+    """句末 @bot 表示用牛牛头像做表情，不能当唤醒丢掉。"""
+    from nonebot.adapters.onebot.v11 import Message, MessageSegment
+
+    event = SimpleNamespace(
+        original_message=Message([
+            MessageSegment.text("做个滚表情"),
+            MessageSegment.at(3879348674),
+        ]),
+        self_id=3879348674,
+        user_id=3023094357,
+    )
+    segments = serialize_event_source_segments(event, bot_id=3879348674)
+    assert segments == [{"type": "at", "qq": "3879348674"}]
+
+
+def test_serialize_event_source_segments_keeps_target_drops_leading_bot() -> None:
     from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
     event = SimpleNamespace(
