@@ -25,16 +25,27 @@ def embedding_model_name(cfg: LlmConfig | None = None) -> str:
 
 
 def embedding_capability_trace(cfg: LlmConfig | None = None) -> dict[str, Any]:
-    from pallas.product.llm.knowledge.embedding_provider import resolve_embedding_provider_name
+    from pallas.product.llm.knowledge.embedding_provider import (
+        local_embedding_dependency_available,
+        resolve_embedding_provider_name,
+    )
 
     model = embedding_model_name(cfg)
     provider_name = resolve_embedding_provider_name(cfg)
+    error = _last_embedding_error
+    if provider_name == "local" and not local_embedding_dependency_available():
+        error = error or "未安装 fastembed；请执行 uv sync --extra embedding-local"
+        semantic = False
+    elif provider_name == "local":
+        semantic = not bool(_last_embedding_error)
+    else:
+        semantic = provider_name != "stub" and model.lower() != "stub" and not bool(error)
     return {
         "embedding_provider": provider_name,
         "embedding_model": model,
-        "embedding_fallback": bool(_last_embedding_error),
-        "embedding_error": _last_embedding_error or None,
-        "semantic_available": provider_name != "stub" and model.lower() != "stub" and not _last_embedding_error,
+        "embedding_fallback": bool(error),
+        "embedding_error": error or None,
+        "semantic_available": semantic,
     }
 
 

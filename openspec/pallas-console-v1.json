@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.15-15-g90965cf7-dirty",
+    "version": "v4.1.15-20-gb3d1a4d5-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -12135,6 +12135,153 @@
         }
       }
     },
+    "/pallas/api/common-config/llm/embedding-status": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Embedding Status Get",
+        "operationId": "_llm_embedding_status_get_pallas_api_common_config_llm_embedding_status_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__LlmEmbeddingStatusData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/embedding-status/probe": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Embedding Status Probe",
+        "operationId": "_llm_embedding_status_probe_pallas_api_common_config_llm_embedding_status_probe_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/_LlmEmbeddingProbeBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__LlmEmbeddingStatusData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/common-config/llm/model-admin/switch": {
       "post": {
         "tags": [
@@ -23862,6 +24009,28 @@
         ],
         "title": "_ApiOkResponse[_ConsoleSetupStatusData]"
       },
+      "_ApiOkResponse__LlmEmbeddingStatusData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_LlmEmbeddingStatusData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_LlmEmbeddingStatusData]"
+      },
       "_ApiOkResponse__LlmProviderTestData_": {
         "properties": {
           "ok": {
@@ -24623,6 +24792,138 @@
         "additionalProperties": false,
         "type": "object",
         "title": "_HelpMenuVisibilityBody"
+      },
+      "_LlmEmbeddingProbeBody": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Text",
+            "default": "ping"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "_LlmEmbeddingProbeBody"
+      },
+      "_LlmEmbeddingStatusData": {
+        "properties": {
+          "embedding_provider": {
+            "type": "string",
+            "title": "Embedding Provider",
+            "default": ""
+          },
+          "embedding_kind": {
+            "type": "string",
+            "title": "Embedding Kind",
+            "default": ""
+          },
+          "embedding_model": {
+            "type": "string",
+            "title": "Embedding Model",
+            "default": ""
+          },
+          "resolved_model": {
+            "type": "string",
+            "title": "Resolved Model",
+            "default": ""
+          },
+          "semantic_available": {
+            "type": "boolean",
+            "title": "Semantic Available",
+            "default": false
+          },
+          "embedding_fallback": {
+            "type": "boolean",
+            "title": "Embedding Fallback",
+            "default": false
+          },
+          "embedding_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Error"
+          },
+          "available_providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Available Providers"
+          },
+          "local_dependency_ready": {
+            "type": "boolean",
+            "title": "Local Dependency Ready",
+            "default": false
+          },
+          "local_default_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Local Default Model"
+          },
+          "trigger_cache_count": {
+            "type": "integer",
+            "title": "Trigger Cache Count",
+            "default": 0
+          },
+          "trigger_cache_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Cache Model"
+          },
+          "probe_ok": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Ok"
+          },
+          "probe_dims": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Dims"
+          },
+          "probe_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Probe Ms"
+          }
+        },
+        "type": "object",
+        "title": "_LlmEmbeddingStatusData"
       },
       "_LlmHealthProviderRow": {
         "properties": {

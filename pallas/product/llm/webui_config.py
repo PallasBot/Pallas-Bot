@@ -10,6 +10,7 @@ from pallas.console.webui.field_help import field_help
 from pallas.product.llm.config import LlmMcpServerConfig, get_llm_config
 
 VectorRetrieveMode = Literal["keyword", "embedding", "hybrid", "vector"]
+EmbeddingProviderChoice = Literal["", "stub", "openai", "local"]
 RepeaterMode = Literal["off", "select", "select_polish_lite", "select_fallback", "fallback"]
 
 _LEGACY_REPEATER_MODE_TO_WEBUI: dict[str, RepeaterMode] = {
@@ -25,6 +26,15 @@ def normalize_repeater_mode_for_webui(mode: str) -> RepeaterMode:
     if raw in ("off", "select", "select_polish_lite", "select_fallback", "fallback"):
         return raw  # type: ignore[return-value]
     return "select_polish_lite"
+
+
+def _embedding_provider_choice(raw: object) -> EmbeddingProviderChoice:
+    from pallas.product.llm.knowledge.embedding_provider import normalize_embedding_provider_name
+
+    name = normalize_embedding_provider_name(str(raw or ""))
+    if name in ("", "stub", "openai", "local"):
+        return name  # type: ignore[return-value]
+    return ""
 
 
 ConversationFeatureLevel = Literal["", "legacy_repeater", "repeater_plus_decision", "full_conversation_kernel"]
@@ -768,17 +778,18 @@ class LlmWebuiConfig(BaseModel):
         default="stub",
         description=field_help(
             "Embedding 模型名",
-            "用 stub 时填 stub；接真实向量服务时填服务商给的模型名，例如 text-embedding-3-small",
-            "换模型后，以前存下来的向量可能对不上，需要重新生成",
+            "占位选 stub；远程兼容接口填服务商模型名（如 text-embedding-3-small）；"
+            "本机 fastembed 可留 stub（默认 BAAI/bge-small-zh-v1.5）或填具体模型名",
+            "换模型后，以前存下来的向量可能对不上，需要重新生成或等后台回填",
         ),
     )
-    llm_embedding_provider: str = Field(
+    llm_embedding_provider: EmbeddingProviderChoice = Field(
         default="",
         description=field_help(
             "Embedding 从哪里算",
-            "留空=按上面的模型名自动选：stub 用本地占位，其它走兼容接口。"
-            "也可手填 stub 或 openai。若向量服务地址与聊天不是同一套，可另配 LLM_EMBEDDING_BASE_URL 和 API_KEY",
-            "本机小模型方案以后再开，现在不用填",
+            "留空=按模型名自动：stub 用占位，其它走 OpenAI 兼容接口。"
+            "也可指定 stub / openai / local（本机 fastembed，需 uv sync --extra embedding-local）",
+            "远程地址与聊天不同时可另配 LLM_EMBEDDING_BASE_URL 与 API_KEY；本机首次加载会占内存并较慢",
         ),
     )
     llm_memory_rag_top_k: int = Field(
@@ -951,7 +962,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_expression_retrieve_limit=cfg.llm_expression_retrieve_limit,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
-        llm_embedding_provider=str(getattr(cfg, "llm_embedding_provider", "") or ""),
+        llm_embedding_provider=_embedding_provider_choice(cfg.llm_embedding_provider),
         llm_memory_rag_top_k=cfg.llm_memory_rag_top_k,
         llm_memory_max_per_group=cfg.llm_memory_max_per_group,
         llm_memory_content_max_len=cfg.llm_memory_content_max_len,

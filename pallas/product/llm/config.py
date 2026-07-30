@@ -241,10 +241,9 @@ def resolve_llm_embedding_model() -> str:
 
 
 def resolve_llm_embedding_provider() -> str:
-    raw = str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER") or "").strip().lower()
-    if raw in {"stub", "openai", "openai_compatible"}:
-        return "stub" if raw == "stub" else "openai"
-    return ""
+    from pallas.product.llm.knowledge.embedding_provider import normalize_embedding_provider_name
+
+    return normalize_embedding_provider_name(str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER") or ""))
 
 
 class LlmMcpServerConfig(BaseModel):

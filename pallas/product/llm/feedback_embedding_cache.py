@@ -53,6 +53,16 @@ def clear_feedback_embedding_caches_for_tests() -> None:
         _backfill_started = False
 
 
+def feedback_trigger_cache_stats() -> dict[str, Any]:
+    with _LOCK:
+        return {
+            "cached": len(_trigger_mem),
+            "model": _trigger_model,
+            "path": _trigger_loaded_path,
+            "backfill_started": _backfill_started,
+        }
+
+
 def invalidate_feedback_embedding_caches() -> None:
     """配置/模型变更后丢掉内存缓存，下次按新模型重新加载或回填。"""
     global _trigger_model, _trigger_loaded_path

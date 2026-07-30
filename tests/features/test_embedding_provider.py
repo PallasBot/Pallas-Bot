@@ -46,7 +46,28 @@ def test_resolve_provider_name_from_cfg_field() -> None:
 
 
 def test_list_embedding_provider_names() -> None:
-    assert list_embedding_provider_names() == ["stub", "openai"]
+    assert list_embedding_provider_names() == ["stub", "openai", "local"]
+
+
+def test_resolve_provider_name_local(monkeypatch) -> None:
+    clear_embedding_provider_cache()
+    monkeypatch.setenv("LLM_EMBEDDING_PROVIDER", "local")
+    cfg = LlmConfig(llm_embedding_model="stub")
+    assert resolve_embedding_provider_name(cfg) == "local"
+    from pallas.product.llm.knowledge.embedding_provider import LocalFastEmbedProvider
+
+    assert isinstance(get_embedding_provider(cfg), LocalFastEmbedProvider)
+
+
+def test_build_embedding_status_stub() -> None:
+    clear_embedding_provider_cache()
+    from pallas.product.llm.knowledge.embedding_provider import build_embedding_status
+
+    status = build_embedding_status(probe=False)
+    assert status["embedding_provider"] == "stub"
+    assert status["semantic_available"] is False
+    assert "local" in status["available_providers"]
+    assert status["probe_ok"] is None
 
 
 def test_capability_trace_includes_provider() -> None:

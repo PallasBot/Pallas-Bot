@@ -1,9 +1,10 @@
-"""Embedding Provider：可插拔向量后端（stub / OpenAI 兼容；本地预留）。"""
+"""Embedding Provider：可插拔向量后端（stub / OpenAI 兼容 / 可选本地）。"""
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import httpx
 
@@ -19,7 +20,10 @@ if TYPE_CHECKING:
 
 EmbeddingProviderKind = Literal["stub", "remote", "local"]
 
+_DEFAULT_LOCAL_MODEL = "BAAI/bge-small-zh-v1.5"
 _provider_cache: dict[str, EmbeddingProvider] = {}
+_local_model_lock = threading.Lock()
+_local_models: dict[str, Any] = {}
 
 
 class EmbeddingProvider(Protocol):
@@ -103,13 +107,83 @@ class OpenAICompatibleEmbeddingProvider:
         return vectors
 
 
+def local_embedding_dependency_available() -> bool:
+    try:
+        import fastembed  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def resolve_local_embedding_model(cfg: LlmConfig | None = None) -> str:
+    model = embedding_model_name(cfg).strip()
+    if not model or model.lower() == "stub":
+        return _DEFAULT_LOCAL_MODEL
+    return model
+
+
+def _load_local_fastembed_model(model_name: str) -> Any:
+    with _local_model_lock:
+        hit = _local_models.get(model_name)
+        if hit is not None:
+            return hit
+        try:
+            from fastembed import TextEmbedding
+        except ImportError as exc:
+            raise ImportError(
+                "本地 Embedding 需要 fastembed；请执行: uv sync --extra embedding-local"
+            ) from exc
+        model = TextEmbedding(model_name=model_name)
+        _local_models[model_name] = model
+        return model
+
+
+@dataclass(frozen=True)
+class LocalFastEmbedProvider:
+    """本机 fastembed；首次加载可能较慢，应在后台线程调用。"""
+
+    cfg: LlmConfig | None = None
+
+    @property
+    def name(self) -> str:
+        return "local"
+
+    @property
+    def kind(self) -> EmbeddingProviderKind:
+        return "local"
+
+    def model_name(self) -> str:
+        return resolve_local_embedding_model(self.cfg)
+
+    def embed_sync(self, texts: list[str], *, timeout_sec: float = 8.0) -> list[list[float]]:
+        del timeout_sec
+        model = _load_local_fastembed_model(self.model_name())
+        vectors = [list(map(float, vec)) for vec in model.embed(texts)]
+        if len(vectors) != len(texts):
+            raise ValueError("local embedding response count mismatch")
+        return vectors
+
+
+def normalize_embedding_provider_name(raw: str) -> str:
+    name = str(raw or "").strip().lower()
+    if name in {"", "auto"}:
+        return ""
+    if name == "stub":
+        return "stub"
+    if name in {"openai", "openai_compatible"}:
+        return "openai"
+    if name in {"local", "fastembed"}:
+        return "local"
+    return ""
+
+
 def resolve_embedding_provider_name(cfg: LlmConfig | None = None) -> str:
-    configured = str(getattr(cfg, "llm_embedding_provider", "") or "").strip().lower()
-    if configured in {"stub", "openai", "openai_compatible"}:
-        return "stub" if configured == "stub" else "openai"
-    raw = str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER") or "").strip().lower()
-    if raw in {"stub", "openai", "openai_compatible"}:
-        return "stub" if raw == "stub" else "openai"
+    configured = normalize_embedding_provider_name(str(getattr(cfg, "llm_embedding_provider", "") or ""))
+    if configured:
+        return configured
+    raw = normalize_embedding_provider_name(str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER") or ""))
+    if raw:
+        return raw
     model = embedding_model_name(cfg)
     if model.lower() == "stub":
         return "stub"
@@ -120,15 +194,25 @@ def clear_embedding_provider_cache() -> None:
     _provider_cache.clear()
 
 
+def clear_local_embedding_models_for_tests() -> None:
+    with _local_model_lock:
+        _local_models.clear()
+
+
 def get_embedding_provider(cfg: LlmConfig | None = None) -> EmbeddingProvider:
     name = resolve_embedding_provider_name(cfg)
-    model = embedding_model_name(cfg)
+    if name == "local":
+        model = resolve_local_embedding_model(cfg)
+    else:
+        model = embedding_model_name(cfg)
     cache_key = f"{name}|{model}"
     hit = _provider_cache.get(cache_key)
     if hit is not None:
         return hit
     if name == "stub":
         provider: EmbeddingProvider = StubEmbeddingProvider()
+    elif name == "local":
+        provider = LocalFastEmbedProvider(cfg=cfg)
     else:
         provider = OpenAICompatibleEmbeddingProvider(cfg=cfg)
     _provider_cache[cache_key] = provider
@@ -136,5 +220,67 @@ def get_embedding_provider(cfg: LlmConfig | None = None) -> EmbeddingProvider:
 
 
 def list_embedding_provider_names() -> list[str]:
-    """已实现提供方；local 预留注册位，本版未内置。"""
-    return ["stub", "openai"]
+    return ["stub", "openai", "local"]
+
+
+def build_embedding_status(*, probe: bool = False, probe_text: str = "ping") -> dict[str, Any]:
+    """控制台诊断：当前提供方、是否语义可用、是否回落 stub。"""
+    from pallas.product.llm.config import get_llm_config
+    from pallas.product.llm.knowledge.embedding_client import (
+        embedding_capability_trace,
+        fetch_embeddings_sync,
+    )
+
+    cfg = get_llm_config()
+    provider = get_embedding_provider(cfg)
+    trace = embedding_capability_trace(cfg)
+    local_ready = local_embedding_dependency_available()
+    if provider.name == "local" and not local_ready:
+        trace = {
+            **trace,
+            "semantic_available": False,
+            "embedding_fallback": True,
+            "embedding_error": trace.get("embedding_error")
+            or "未安装 fastembed；请执行 uv sync --extra embedding-local",
+        }
+
+    trigger_cached = 0
+    trigger_model = ""
+    try:
+        from pallas.product.llm.feedback_embedding_cache import feedback_trigger_cache_stats
+
+        stats = feedback_trigger_cache_stats()
+        trigger_cached = int(stats.get("cached") or 0)
+        trigger_model = str(stats.get("model") or "")
+    except Exception:
+        pass
+
+    probe_ok: bool | None = None
+    probe_dims: int | None = None
+    probe_ms: float | None = None
+    if probe:
+        import time
+
+        text = str(probe_text or "ping").strip() or "ping"
+        started = time.perf_counter()
+        vectors = fetch_embeddings_sync([text], cfg=cfg, timeout_sec=8.0)
+        probe_ms = round((time.perf_counter() - started) * 1000.0, 1)
+        probe_ok = bool(vectors and vectors[0])
+        if vectors and vectors[0]:
+            probe_dims = len(vectors[0])
+        # 重新读 trace：fetch 可能写入 fallback 错误
+        trace = embedding_capability_trace(cfg)
+
+    return {
+        **trace,
+        "embedding_kind": provider.kind,
+        "resolved_model": provider.model_name(),
+        "available_providers": list_embedding_provider_names(),
+        "local_dependency_ready": local_ready,
+        "local_default_model": _DEFAULT_LOCAL_MODEL,
+        "trigger_cache_count": trigger_cached,
+        "trigger_cache_model": trigger_model or None,
+        "probe_ok": probe_ok,
+        "probe_dims": probe_dims,
+        "probe_ms": probe_ms,
+    }

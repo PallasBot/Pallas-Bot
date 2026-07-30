@@ -97,8 +97,10 @@ flowchart TD
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `LLM_MEMORY_RAG_ENABLED` | 开 | 群记忆读写与注入 |
-| `LLM_VECTOR_RETRIEVE` | `hybrid` | 关键词+向量；real embedding 由 Bot Provider 配置，stub 或失败时回落关键词 |
-| `LLM_EMBEDDING_MODEL` | `stub` | embedding 模型标识；填 `stub` 时使用关键词检索 |
+| `LLM_VECTOR_RETRIEVE` | `hybrid` | 关键词+向量；真实向量由 Embedding 提供方决定，stub 或失败时回落关键词 |
+| `LLM_EMBEDDING_PROVIDER` | （空=自动） | `stub` / `openai` / `local`；空则按模型名推断 |
+| `LLM_EMBEDDING_MODEL` | `stub` | 模型标识；`stub` 为占位。`local` 时可留 stub（默认 `BAAI/bge-small-zh-v1.5`） |
+| `LLM_EMBEDDING_BASE_URL` / `API_KEY` | （空） | 可选；远程向量端点与聊天不同时填写 |
 | `LLM_MEMORY_AUTO_EPISODE_ENABLED` | 开 | 有价值发言自动写入 episode |
 | `LLM_KNOWLEDGE_SOURCES_ENABLED` | 开 | 知识源总闸 |
 | `LLM_KNOWLEDGE_FILE_INGEST_ENABLED` | 开 | 扫描 `data/pallas_knowledge/` |
