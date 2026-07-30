@@ -86,12 +86,14 @@ def test_run_ai_bootstrap_streams_lines(monkeypatch: pytest.MonkeyPatch, tmp_pat
             return None
 
     monkeypatch.setattr(
-        "pallas.console.cli.process_util.resolve_bash",
-        lambda: "/bin/bash",
+        "pallas.console.cli.process_util.bash_script_cmd",
+        lambda script, *a, **k: ["/bin/bash", str(script), *a],
     )
     captured_kwargs: dict[str, object] = {}
+    captured_cmd: list[str] = []
 
-    def fake_popen(*_a, **k):
+    def fake_popen(cmd, **k):
+        captured_cmd.extend(cmd)
         captured_kwargs.update(k)
         return FakeProc()
 

@@ -49,6 +49,8 @@ cp .env.example .env
 
 默认安装 **媒体栈**（含 torch），启动 media worker + API。普通聊天不经本 Runtime。
 
+**Windows**：媒体栈依赖 Redis。bootstrap 默认 `docker compose` 拉起，请先安装并启动 [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)（托盘就绪）；或本机/WSL 自备 Redis 并设置 AI 仓 `.env` 的 `REDIS_URL`。失败时以脚本日志提示为准。
+
 或在 **Pallas-Bot** 仓库（同级已克隆 AI 仓时）：
 
 ```bash
