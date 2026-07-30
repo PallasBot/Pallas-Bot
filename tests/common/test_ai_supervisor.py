@@ -78,6 +78,59 @@ def test_ai_runtime_status_reads_pidfiles(tmp_path, monkeypatch) -> None:
     assert st["health"]["ok"] is True
 
 
+def test_ai_runtime_status_http_fallback_when_api_pid_stale(tmp_path, monkeypatch) -> None:
+    """Git Bash $! 写入的伪 PID 探活失败时，仍以 /health 认定 api 在跑。"""
+    root = tmp_path / "ai"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "ctl.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / "logs").mkdir()
+    (root / "logs" / "api.pid").write_text("999001\n", encoding="utf-8")
+    (root / "logs" / "media.pid").write_text("1\n", encoding="utf-8")
+    monkeypatch.setattr(ai_supervisor, "_pid_alive", lambda pid: pid == 1)
+    monkeypatch.setattr(
+        ai_supervisor,
+        "probe_ai_health_sync",
+        lambda **_: {
+            "ok": True,
+            "url": "http://127.0.0.1:9099/health",
+            "status_code": 200,
+            "body_preview": "{}",
+            "error": None,
+        },
+    )
+    st = ai_supervisor.ai_runtime_status(ai_root=root)
+    assert st["health"]["ok"] is True
+    assert st["services"]["api"]["running"] is True
+    assert st["services"]["media"]["running"] is True
+    assert st["running"] is True
+
+
+def test_ai_runtime_status_dead_api_without_health(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "ai"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "ctl.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    (root / "logs").mkdir()
+    (root / "logs" / "api.pid").write_text("999001\n", encoding="utf-8")
+    (root / "logs" / "media.pid").write_text("1\n", encoding="utf-8")
+    monkeypatch.setattr(ai_supervisor, "_pid_alive", lambda pid: pid == 1)
+    monkeypatch.setattr(
+        ai_supervisor,
+        "probe_ai_health_sync",
+        lambda **_: {
+            "ok": False,
+            "url": "http://127.0.0.1:9099/health",
+            "status_code": None,
+            "body_preview": None,
+            "error": "Connection refused",
+        },
+    )
+    st = ai_supervisor.ai_runtime_status(ai_root=root)
+    assert st["services"]["api"]["running"] is False
+    assert st["running"] is False
+    assert st["health"]["ok"] is False
+    assert "Connection refused" in str(st["health"]["error"])
+
+
 def test_start_ai_runtime_calls_ctl(tmp_path, monkeypatch) -> None:
     root = tmp_path / "ai"
     (root / "scripts").mkdir(parents=True)
