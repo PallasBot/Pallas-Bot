@@ -15,8 +15,14 @@ def test_structure_recall_sing_compact_forms() -> None:
 def test_structure_recall_other_domains() -> None:
     assert "drink" in domains_from_structure("来杯酒")
     assert "draw" in domains_from_structure("来张图")
+    assert "draw" in domains_from_structure("牛牛画个猫")
     assert "roulette" in domains_from_structure("来一把轮盘")
     assert "help" in domains_from_structure("怎么用牛牛")
+    assert "memes" in domains_from_structure("做个摸表情")
+    # 点名祈使：不依赖具体模板名
+    assert "memes" in domains_from_structure("牛牛做个流萤举牌")
+    assert "memes" in domains_from_structure("牛牛来个摸")
+    assert "memes" not in domains_from_structure("来个虹夏举牌")  # 未点名且无「表情」字
 
 
 def test_infer_domains_includes_structure_without_keyword_lexicon() -> None:
