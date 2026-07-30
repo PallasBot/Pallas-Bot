@@ -114,6 +114,75 @@ class Config(BaseModel):
         ),
         json_schema_extra=_ui("日志", 10),
     )
+    pallas_webui_auto_update_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "是否自动更新控制台前端包",
+            "开启后按共用调度从 GitHub Release 拉取 dist.zip；默认关闭",
+            "推荐在「更新」页统一配置",
+        ),
+        json_schema_extra=_ui("自动更新", 10),
+    )
+    pallas_bot_auto_update_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "是否自动更新 Bot 本体",
+            "仅干净正式版（release_tag）会自动 checkout 新 tag 并重启；Docker / 开发克隆 / 脏工作树只检查不应用",
+            "推荐在「更新」页统一配置",
+        ),
+        json_schema_extra=_ui("自动更新", 12),
+    )
+    pallas_plugins_auto_update_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "是否自动更新已安装插件",
+            "对有新版本的官方扩展与社区插件执行更新，完成后尝试安排重启",
+            "推荐在「更新」页统一配置",
+        ),
+        json_schema_extra=_ui("自动更新", 14),
+    )
+    pallas_webui_auto_update_schedule_mode: Literal["interval", "cron"] = Field(
+        default="interval",
+        description=field_help(
+            "自动更新的共用调度方式",
+            "interval=按间隔；cron=每天定时（机器本地时区）；WebUI / Bot / 插件共用",
+            "任一自动更新开启时生效",
+        ),
+        json_schema_extra=_ui("自动更新", 20),
+    )
+    pallas_webui_auto_update_interval_hours: int = Field(
+        default=6,
+        ge=1,
+        le=168,
+        description=field_help(
+            "按间隔自动检查的小时数",
+            "1～168；调度方式为间隔时生效（各目标共用）",
+            "例如 6 表示大约每 6 小时检查一次",
+        ),
+        json_schema_extra=_ui("自动更新", 30),
+    )
+    pallas_webui_auto_update_cron_hour: int = Field(
+        default=4,
+        ge=0,
+        le=23,
+        description=field_help(
+            "每天定时检查的小时（0～23）",
+            "调度方式为每天定时时生效；按机器本地时区（各目标共用）",
+            "例如 4 表示凌晨 4 点",
+        ),
+        json_schema_extra=_ui("自动更新", 40),
+    )
+    pallas_webui_auto_update_cron_minute: int = Field(
+        default=0,
+        ge=0,
+        le=59,
+        description=field_help(
+            "每天定时检查的分钟（0～59）",
+            "调度方式为每天定时时生效（各目标共用）",
+            "与上面的小时组成每天 HH:MM",
+        ),
+        json_schema_extra=_ui("自动更新", 50),
+    )
 
 
 def on_pallas_webui_config_reload(cfg: Config) -> None:
@@ -134,6 +203,12 @@ def on_pallas_webui_config_reload(cfg: Config) -> None:
         "Pallas-Bot 控制台: frontend={}（静态目录在启动时绑定，切换栈请重启）",
         frontend,
     )
+    try:
+        from .webui_auto_update import reschedule_webui_auto_update_job
+
+        reschedule_webui_auto_update_job(cfg)
+    except Exception:  # noqa: BLE001
+        logger.exception("Pallas-Bot 控制台: 重载 WebUI 自动更新调度失败")
 
 
 plugin_webui = install_hot_reload_config(

@@ -88,8 +88,18 @@ async def create_update_apply_job(kind: UpdateKind, *, restart: bool = False) ->
     return job
 
 
+def clear_update_apply_jobs_for_tests() -> None:
+    """仅供单元测试清理进程内 job 表。"""
+    _JOBS.clear()
+
+
 def get_update_apply_job(job_id: str) -> UpdateApplyJob | None:
     return _JOBS.get((job_id or "").strip())
+
+
+def has_active_update_apply_job() -> bool:
+    """是否存在排队中或执行中的更新任务（供自动更新跳过）。"""
+    return any(job.phase in ("queued", "running") for job in _JOBS.values())
 
 
 async def run_update_apply_job(

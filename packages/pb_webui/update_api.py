@@ -390,6 +390,36 @@ def register_update_router(
         asyncio.create_task(run_update_apply_job(job, _runner))
         return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "kind": "webui"}})
 
+    @router.get(f"{x}/update/auto/status", include_in_schema=True)
+    async def _update_auto_status() -> JSONResponse:
+        from .webui_auto_update import auto_update_status_payload
+
+        return JSONResponse({"ok": True, "data": auto_update_status_payload(plugin_config)})
+
+    @router.post(f"{x}/update/auto/ack", include_in_schema=True)
+    async def _update_auto_ack(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from .webui_auto_update import ack_pending_notice, auto_update_status_payload
+
+        ack_pending_notice()
+        return JSONResponse({"ok": True, "data": auto_update_status_payload(plugin_config)})
+
+    @router.post(f"{x}/update/auto/run-once", include_in_schema=True)
+    async def _update_auto_run_once(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from .webui_auto_update import auto_update_status_payload, run_auto_update_tick
+
+        tick = await run_auto_update_tick(config=plugin_config, force=True)
+        data = auto_update_status_payload(plugin_config)
+        data["tick"] = tick
+        return JSONResponse({"ok": True, "data": data})
+
     @router.get(f"{x}/update/jobs/{{job_id}}", include_in_schema=True)
     async def _update_apply_job_get(job_id: str) -> JSONResponse:
         from pallas.console.webui.update_apply_progress import get_update_apply_job

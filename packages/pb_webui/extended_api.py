@@ -229,6 +229,12 @@ def register_extended_api(
             max_instances=1,
             misfire_grace_time=3600,
         )
+        try:
+            from .webui_auto_update import reschedule_webui_auto_update_job
+
+            reschedule_webui_auto_update_job(plugin_config)
+        except Exception:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 注册 WebUI 自动更新调度失败")
 
 
 # Re-export domain helpers / patch targets for tests and lazy imports in domain modules.
