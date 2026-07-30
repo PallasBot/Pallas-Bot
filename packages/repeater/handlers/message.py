@@ -67,8 +67,19 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
 
     llm_cfg = get_llm_config()
     capabilities = resolve_repeater_capabilities(llm_cfg)
+    from pallas.core.platform.ingress.message_load import should_shed_chat_sidework
+
     from ..fanout_reply import repeater_can_attempt_reply
 
+    shed_sidework = should_shed_chat_sidework()
+    if shed_sidework:
+        from pallas.core.platform.ingress.hotpath_metrics import (
+            record_chat_shed_sidework,
+            record_llm_path_skipped_shed,
+        )
+
+        record_chat_shed_sidework()
+        record_llm_path_skipped_shed()
     chat = Chat(event)
     can_reply = await repeater_can_attempt_reply(int(event.self_id), int(event.group_id))
 
@@ -99,9 +110,10 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
                 plain_text=chat.chat_data.is_plain_text,
             )
 
-    for seg in event.message:
-        if seg.type == "image":
-            await insert_image(seg)
+    if not shed_sidework:
+        for seg in event.message:
+            if seg.type == "image":
+                await insert_image(seg)
 
     await enqueue_repeater_learn(chat, event)
 
@@ -109,7 +121,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
         return
 
     if bundle is None:
-        if can_reply:
+        if can_reply and not shed_sidework:
             scene_tier = resolve_scene_tier(
                 ctx.plain_body,
                 candidate_pool_size=0,
@@ -135,7 +147,9 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     from ..message_store import MessageStore
 
     feature_level = resolve_conversation_feature_level(llm_cfg)
-    repeater_llm_enabled = capabilities.llm_enabled and feature_level != ConversationFeatureLevel.LEGACY_REPEATER
+    repeater_llm_enabled = (
+        (not shed_sidework) and capabilities.llm_enabled and feature_level != ConversationFeatureLevel.LEGACY_REPEATER
+    )
     recent_group_messages = list(MessageStore._message_dict.get(int(event.group_id), []))
     has_candidate_pool = bool(bundle.message_pool or bundle.answer_list)
     recent_human_user_ids = [
@@ -317,6 +331,9 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
         return
 
     await config.refresh_cooldown("repeat")
+    from pallas.core.platform.ingress.hotpath_metrics import record_reply_local_dispatched
+
     from ..fanout_reply import dispatch_repeater_reply
 
+    record_reply_local_dispatched()
     dispatch_repeater_reply(int(event.self_id), int(event.group_id), answers)

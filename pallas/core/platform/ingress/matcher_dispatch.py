@@ -17,6 +17,7 @@ from pallas.core.platform.ingress.dispatch_lanes import (
     uninstall_dispatch_lanes,
 )
 from pallas.core.platform.ingress.dispatch_metrics import (
+    record_chatter_overload_degraded,
     record_chatter_overload_dropped,
     record_group_message_ingress,
     record_preprocessor_dropped,
@@ -24,11 +25,18 @@ from pallas.core.platform.ingress.dispatch_metrics import (
 )
 from pallas.core.platform.ingress.fleet_dispatch_scale import scaled_dispatch_int
 from pallas.core.platform.ingress.matcher_activation import (
+    clear_event_dispatch_text_cache,
     event_command_traffic,
     resolve_route_for_event,
     select_priority_matchers,
 )
-from pallas.core.platform.ingress.message_load import is_overloaded, mark_activity, signal_overload
+from pallas.core.platform.ingress.message_load import (
+    is_overloaded,
+    mark_activity,
+    mark_chat_degraded,
+    reset_chat_degraded,
+    signal_overload,
+)
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
 
 if TYPE_CHECKING:
@@ -72,14 +80,18 @@ def matcher_dispatch_batch_size() -> int:
 
 
 def chat_drop_on_overload_enabled() -> bool:
-    """过载时是否跳过闲聊 matcher，优先保命令。默认开启。"""
+    """过载时是否整段跳过闲聊 matcher。
+
+    默认关闭：聊天 Bot 高峰应降质接话（停 learn / LLM），而不是突然哑巴。
+    需要极端保命令吞吐时可显式打开。
+    """
     raw = repo_env_raw_value("PALLAS_INGRESS_CHAT_DROP_ON_OVERLOAD")
     if raw is None:
-        return True
-    text = str(raw).strip().lower()
-    if text in ("0", "false", "no", "off"):
         return False
-    return True
+    text = str(raw).strip().lower()
+    if text in ("1", "true", "yes", "on"):
+        return True
+    return False
 
 
 def matcher_dispatch_batches(selected_matchers: list[type]) -> list[list[type]]:
@@ -112,122 +124,136 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
     state: dict[Any, Any] = {}
     dependency_cache: dict[Any, Any] = {}
 
-    async with nb_message.AsyncExitStack() as stack:
-        if not await nb_message._apply_event_preprocessors(
-            bot=bot,
-            event=event,
-            state=state,
-            stack=stack,
-            dependency_cache=dependency_cache,
-        ):
-            if isinstance(event, GroupMessageEvent):
-                record_preprocessor_dropped()
-            return
+    try:
+        async with nb_message.AsyncExitStack() as stack:
+            if not await nb_message._apply_event_preprocessors(
+                bot=bot,
+                event=event,
+                state=state,
+                stack=stack,
+                dependency_cache=dependency_cache,
+            ):
+                if isinstance(event, GroupMessageEvent):
+                    record_preprocessor_dropped()
+                return
 
-        with contextlib.suppress(Exception):
-            nb_message.TrieRule.get_value(bot, event, state)
+            with contextlib.suppress(Exception):
+                nb_message.TrieRule.get_value(bot, event, state)
 
-        apply_dispatch = isinstance(event, GroupMessageEvent)
-        resolution = resolve_route_for_event(event) if apply_dispatch else None
-        command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
-        if apply_dispatch and resolution is not None:
-            record_route_index_decision(
-                index_hit=resolution.index_hit,
-                fallback=command_traffic and not resolution.index_hit,
-            )
-        if apply_dispatch and not command_traffic and chat_drop_on_overload_enabled() and is_overloaded():
-            record_chatter_overload_dropped()
-            record_group_message_ingress(
-                duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
-                command_traffic=False,
-                matchers_considered=0,
-                matchers_selected=0,
-                matchers_run=0,
-            )
-            await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
-            return
-
-        threshold = overload_selected_threshold()
-        total_selected = 0
-        total_considered = 0
-        matchers_run = 0
-        any_matcher_executed = False
-
-        break_flag = False
-
-        async def run_selected_matcher(matcher) -> None:
-            nonlocal any_matcher_executed, matchers_run
-            matchers_run += 1
-            result = await check_and_run_matcher_with_lane(
-                matcher,
-                bot,
-                event,
-                state.copy(),
-                stack,
-                dependency_cache,
-                command_traffic=command_traffic,
-            )
-            if result.acquired:
-                any_matcher_executed = True
-            return
-
-        def handle_stop_propagation(_exc_group) -> None:
-            nonlocal break_flag
-            break_flag = True
-            nb_message.logger.debug("Stop event propagation")
-
-        for priority in sorted(matchers.keys()):
-            if break_flag:
-                break
-
-            if show_log:
-                nb_message.logger.debug("Checking for matchers in priority {}...", priority)
-
-            if not (priority_matchers := matchers[priority]):
-                continue
-
-            selected_matchers = (
-                select_priority_matchers(
-                    priority_matchers,
-                    command_traffic=command_traffic,
-                    resolution=resolution,
-                    event=event,
+            apply_dispatch = isinstance(event, GroupMessageEvent)
+            resolution = resolve_route_for_event(event) if apply_dispatch else None
+            command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
+            if apply_dispatch and resolution is not None:
+                record_route_index_decision(
+                    index_hit=resolution.index_hit,
+                    fallback=command_traffic and not resolution.index_hit,
                 )
-                if apply_dispatch
-                else priority_matchers
-            )
-            if not selected_matchers:
-                continue
+            chat_degraded_token = None
+            if apply_dispatch and not command_traffic and is_overloaded():
+                if chat_drop_on_overload_enabled():
+                    record_chatter_overload_dropped()
+                    record_group_message_ingress(
+                        duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                        command_traffic=False,
+                        matchers_considered=0,
+                        matchers_selected=0,
+                        matchers_run=0,
+                    )
+                    await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
+                    return
+                # 默认：继续跑闲聊 matcher，标记降质（停附属、保本地接话）
+                record_chatter_overload_degraded()
+                chat_degraded_token = mark_chat_degraded(True)
 
-            total_considered += len(priority_matchers)
-            total_selected += len(selected_matchers)
-            if total_selected > threshold:
-                signal_overload(3.0)
+            try:
+                threshold = overload_selected_threshold()
+                total_selected = 0
+                total_considered = 0
+                matchers_run = 0
+                any_matcher_executed = False
 
-            with nb_message.catch({
-                nb_message.StopPropagation: handle_stop_propagation,
-                Exception: nb_message._handle_exception("<r><bg #f8bbd0>Error when checking Matcher.</bg #f8bbd0></r>"),
-            }):
-                for batch in matcher_dispatch_batches(selected_matchers):
+                break_flag = False
+
+                async def run_selected_matcher(matcher) -> None:
+                    nonlocal any_matcher_executed, matchers_run
+                    matchers_run += 1
+                    result = await check_and_run_matcher_with_lane(
+                        matcher,
+                        bot,
+                        event,
+                        state.copy(),
+                        stack,
+                        dependency_cache,
+                        command_traffic=command_traffic,
+                    )
+                    if result.acquired:
+                        any_matcher_executed = True
+                    return
+
+                def handle_stop_propagation(_exc_group) -> None:
+                    nonlocal break_flag
+                    break_flag = True
+                    nb_message.logger.debug("Stop event propagation")
+
+                for priority in sorted(matchers.keys()):
                     if break_flag:
                         break
-                    async with nb_message.anyio.create_task_group() as tg:
-                        for matcher in batch:
-                            tg.start_soon(nb_message.run_coro_with_shield, run_selected_matcher(matcher))
 
-        if show_log:
-            nb_message.logger.debug("Checking for matchers completed")
+                    if show_log:
+                        nb_message.logger.debug("Checking for matchers in priority {}...", priority)
 
-        if apply_dispatch:
-            record_group_message_ingress(
-                duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
-                command_traffic=command_traffic,
-                matchers_considered=total_considered,
-                matchers_selected=total_selected,
-                matchers_run=matchers_run,
-            )
+                    if not (priority_matchers := matchers[priority]):
+                        continue
 
-        await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
+                    selected_matchers = (
+                        select_priority_matchers(
+                            priority_matchers,
+                            command_traffic=command_traffic,
+                            resolution=resolution,
+                            event=event,
+                        )
+                        if apply_dispatch
+                        else priority_matchers
+                    )
+                    if not selected_matchers:
+                        continue
+
+                    total_considered += len(priority_matchers)
+                    total_selected += len(selected_matchers)
+                    if total_selected > threshold:
+                        signal_overload(3.0)
+
+                    with nb_message.catch({
+                        nb_message.StopPropagation: handle_stop_propagation,
+                        Exception: nb_message._handle_exception(
+                            "<r><bg #f8bbd0>Error when checking Matcher.</bg #f8bbd0></r>"
+                        ),
+                    }):
+                        for batch in matcher_dispatch_batches(selected_matchers):
+                            if break_flag:
+                                break
+                            async with nb_message.anyio.create_task_group() as tg:
+                                for matcher in batch:
+                                    tg.start_soon(nb_message.run_coro_with_shield, run_selected_matcher(matcher))
+
+                if show_log:
+                    nb_message.logger.debug("Checking for matchers completed")
+
+                if apply_dispatch:
+                    record_group_message_ingress(
+                        duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                        command_traffic=command_traffic,
+                        matchers_considered=total_considered,
+                        matchers_selected=total_selected,
+                        matchers_run=matchers_run,
+                    )
+
+                await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
+            finally:
+                if chat_degraded_token is not None:
+                    reset_chat_degraded(chat_degraded_token)
+    finally:
+        clear_event_dispatch_text_cache()
 
 
 def install_matcher_dispatch() -> None:

@@ -109,6 +109,7 @@ FIELD_LABELS: dict[str, str] = {
     "lane_wait_overload_ms": "排队过久判定阈值（毫秒）",
     "matcher_dispatch_enabled": "先筛掉与牛牛无关的消息",
     "matcher_dispatch_overload_threshold": "预筛过载阈值",
+    "chat_drop_on_overload": "过载时整段丢弃闲聊",
     "route_index_enabled": "命令快速定位（推荐开启）",
     "route_index_strict": "只响应已登记的命令",
     "send_queue_enabled": "发送消息排队（防刷屏）",

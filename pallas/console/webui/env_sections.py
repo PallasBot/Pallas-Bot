@@ -160,6 +160,7 @@ def _ingress_dispatch_section() -> WebuiEnvSection:
         field_to_env={
             "matcher_dispatch_enabled": "PALLAS_MATCHER_DISPATCH_ENABLED",
             "matcher_dispatch_overload_threshold": "PALLAS_MATCHER_DISPATCH_OVERLOAD_THRESHOLD",
+            "chat_drop_on_overload": "PALLAS_INGRESS_CHAT_DROP_ON_OVERLOAD",
             "route_index_enabled": "PALLAS_ROUTE_INDEX_ENABLED",
             "route_index_strict": "PALLAS_ROUTE_INDEX_STRICT",
             "dispatch_lanes_enabled": "PALLAS_DISPATCH_LANES_ENABLED",
@@ -485,6 +486,7 @@ def _ingress_dispatch_payload_extras() -> dict[str, Any]:
                 "field_names": [
                     "matcher_dispatch_enabled",
                     "matcher_dispatch_overload_threshold",
+                    "chat_drop_on_overload",
                 ],
             },
             {

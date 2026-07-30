@@ -86,6 +86,14 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "触发后社区语料 prefetch 等后台任务会暂时让路",
         ),
     )
+    chat_drop_on_overload: bool = Field(
+        default=False,
+        description=field_help(
+            "入站过载时是否整段跳过闲聊接话（默认关：降质接话，停学习/LLM）",
+            "选开或关；聊天场景建议保持关闭",
+            "开启后高峰期牛牛可能突然不接话，仅在极端保命令吞吐时使用",
+        ),
+    )
     route_index_enabled: bool = Field(
         default=True,
         description=field_help(
@@ -239,6 +247,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
                 minimum=1,
                 maximum=256,
             ),
+            chat_drop_on_overload=dispatch_env_bool("PALLAS_INGRESS_CHAT_DROP_ON_OVERLOAD", default=False),
             route_index_enabled=dispatch_env_bool("PALLAS_ROUTE_INDEX_ENABLED", default=True),
             route_index_strict=dispatch_env_bool("PALLAS_ROUTE_INDEX_STRICT", default=False),
             dispatch_lanes_enabled=dispatch_env_bool("PALLAS_DISPATCH_LANES_ENABLED", default=True),
