@@ -104,7 +104,7 @@ uv run python tools/migrate_env_to_pallas.py
 
 ## LLM 工具与联网搜索（WebUI 对话策略）
 
-日常在 **AI 配置 → 对话 → 策略** 修改；落盘为 `webui.json` 对应环境键。
+日常在 **AI 配置 → 接话 → 策略** 修改；落盘为 `webui.json` 对应环境键。
 
 | 键 | 说明 |
 | --- | --- |

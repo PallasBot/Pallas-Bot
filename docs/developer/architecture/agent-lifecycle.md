@@ -38,7 +38,7 @@ Pallas-Bot 的普通 LLM 聊天在 Bot 进程内完成。本文说明维护者�
 
 模型需要低频能力时，可以调用 `tools.find`。匹配到的延迟工具会加入本轮后续调用，并在短时间内保留给同一会话范围。副作用工具仍经过既有安全和确认策略；被拦截的原因会写入运行追踪。
 
-WebUI 可覆盖单工具的描述、hints 与可见性（**AI 配置 → 对话 → 工具**）。联网搜索工具 `web.search` 依赖 `WEB_SEARCH_API_URL` 与 `TAVILY_API_KEY`，见 [AI 扩展 · 联网搜索](/guide/ai#联网搜索)。
+WebUI 可覆盖单工具的描述、hints 与可见性（**AI 配置 → 接话 → 工具**）。联网搜索工具 `web.search` 依赖 `WEB_SEARCH_API_URL` 与 `TAVILY_API_KEY`，见 [AI 扩展 · 联网搜索](/guide/ai#联网搜索)。
 
 新增工具优先复用注册表与能力标签，不要绕过工具循环直接在消息入口执行。
 
