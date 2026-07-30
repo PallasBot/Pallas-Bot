@@ -48,10 +48,10 @@ FIELD_CHOICE_LABELS: dict[str, dict[str, str]] = {
         "vector": "纯向量（同 embedding）",
     },
     "llm_embedding_provider": {
-        "": "自动（按模型名）",
-        "stub": "占位向量（无真实语义）",
-        "openai": "OpenAI 兼容接口",
-        "local": "本机 fastembed",
+        "": "自动（模型非 stub → 远程，否则占位）",
+        "stub": "占位（关闭真实语义）",
+        "openai": "远程（OpenAI 兼容 /embeddings）",
+        "local": "本机（fastembed）",
     },
     "conversation_feature_level": {
         "": "自动推断（推荐）",

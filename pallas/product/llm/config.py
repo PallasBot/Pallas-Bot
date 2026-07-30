@@ -348,6 +348,7 @@ class LlmConfig(BaseModel):
     llm_embedding_provider_id: str = Field(default="")
     llm_embedding_base_url: str = Field(default="")
     llm_embedding_api_key: str = Field(default="")
+    llm_embedding_api_backends: list[dict[str, object]] = Field(default_factory=list)
     llm_memory_rag_top_k: int = Field(default=3, ge=1, le=8)
     llm_memory_rag_min_score: int = Field(default=24, ge=0, le=100)
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
@@ -413,6 +414,19 @@ def _env_json_object(key: str) -> dict[str, object]:
     except json.JSONDecodeError:
         return {}
     return value if isinstance(value, dict) else {}
+
+
+def _env_json_dict_list(key: str) -> list[dict[str, object]]:
+    raw = repo_env_raw_value(key)
+    if raw is None or not str(raw).strip():
+        return []
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def _env_str_list_or_default(key: str, default: tuple[str, ...]) -> list[str]:
@@ -572,6 +586,7 @@ def get_llm_config() -> LlmConfig:
             llm_embedding_provider_id=str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER_ID") or "").strip(),
             llm_embedding_base_url=str(repo_env_raw_value("LLM_EMBEDDING_BASE_URL") or "").strip(),
             llm_embedding_api_key=str(repo_env_raw_value("LLM_EMBEDDING_API_KEY") or "").strip(),
+            llm_embedding_api_backends=_env_json_dict_list("LLM_EMBEDDING_API_BACKENDS"),
             llm_memory_rag_top_k=_env_int("LLM_MEMORY_RAG_TOP_K", 3),
             llm_memory_rag_min_score=_env_int("LLM_MEMORY_RAG_MIN_SCORE", 24),
             llm_memory_max_per_group=_env_int("LLM_MEMORY_MAX_PER_GROUP", 200),
@@ -624,9 +639,13 @@ def clear_llm_config_cache() -> None:
     except Exception:
         pass
     try:
-        from pallas.product.llm.feedback_embedding_cache import invalidate_feedback_embedding_caches
+        from pallas.product.llm.feedback_embedding_cache import (
+            invalidate_feedback_embedding_caches,
+            schedule_feedback_trigger_backfill,
+        )
 
         invalidate_feedback_embedding_caches()
+        schedule_feedback_trigger_backfill()
     except Exception:
         pass
     try:

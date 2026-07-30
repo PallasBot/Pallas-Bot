@@ -30,6 +30,7 @@ MEMORY_FIELD_NAMES = (
     "llm_embedding_provider_id",
     "llm_embedding_base_url",
     "llm_embedding_api_key",
+    "llm_embedding_api_backends",
     "llm_memory_rag_top_k",
     "llm_memory_max_per_group",
     "llm_memory_content_max_len",
@@ -64,6 +65,7 @@ class LlmMemoryOpsConfig(BaseModel):
     llm_embedding_provider_id: str = ""
     llm_embedding_base_url: str = ""
     llm_embedding_api_key: str = ""
+    llm_embedding_api_backends: list[dict] = Field(default_factory=list)
     llm_memory_rag_top_k: int = Field(default=3, ge=1, le=8)
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
     llm_memory_content_max_len: int = Field(default=500, ge=64, le=4000)

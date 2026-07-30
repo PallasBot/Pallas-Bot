@@ -53,7 +53,8 @@ shard = []
 deploy-shard = []
 # 兼容旧构建参数；PG / Redis 均已在主依赖
 deploy-shard-pg = []
-# 可选本机 Embedding（fastembed）；默认仍可用 stub / 远程兼容接口
+# 可选本机 Embedding（fastembed）。有 editable 插件时请用
+# `uv pip install 'fastembed>=0.5'`，勿裸跑 `uv sync --extra embedding-local`（会裁掉环境外包装）。
 embedding-local = [
     "fastembed>=0.5.0",
 ]

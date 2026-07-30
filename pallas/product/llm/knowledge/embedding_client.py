@@ -24,28 +24,40 @@ def embedding_model_name(cfg: LlmConfig | None = None) -> str:
     return model or "stub"
 
 
-def embedding_capability_trace(cfg: LlmConfig | None = None) -> dict[str, Any]:
+def resolved_embedding_model_name(cfg: LlmConfig | None = None) -> str:
+    """实际用于向量的模型名（本机/远程在配置仍写 stub 时落到默认模型）。"""
     from pallas.product.llm.knowledge.embedding_provider import (
-        embedding_remote_endpoint_configured,
-        local_embedding_dependency_available,
         resolve_embedding_provider_name,
         resolve_local_embedding_model,
         resolve_remote_embedding_model,
     )
 
+    provider_name = resolve_embedding_provider_name(cfg)
+    if provider_name == "local":
+        return resolve_local_embedding_model(cfg)
+    if provider_name == "openai":
+        return resolve_remote_embedding_model(cfg)
+    return embedding_model_name(cfg)
+
+
+def embedding_capability_trace(cfg: LlmConfig | None = None) -> dict[str, Any]:
+    from pallas.product.llm.knowledge.embedding_provider import (
+        embedding_remote_endpoint_configured,
+        local_embedding_dependency_available,
+        resolve_embedding_provider_name,
+    )
+
     model = embedding_model_name(cfg)
     provider_name = resolve_embedding_provider_name(cfg)
     error = _last_embedding_error
-    resolved_model = model
+    resolved_model = resolved_embedding_model_name(cfg)
     if provider_name == "local":
-        resolved_model = resolve_local_embedding_model(cfg)
         if not local_embedding_dependency_available():
-            error = error or "未安装 fastembed；请执行 uv sync --extra embedding-local"
+            error = error or "未安装 fastembed；请执行 uv pip install 'fastembed>=0.5'"
             semantic = False
         else:
             semantic = not bool(_last_embedding_error)
     elif provider_name == "openai":
-        resolved_model = resolve_remote_embedding_model(cfg)
         if not embedding_remote_endpoint_configured(cfg):
             error = error or (
                 "未配置向量服务地址：请填写「Embedding 接口地址」，或先在对话 Provider 配好可用的 OpenAI 兼容地址"

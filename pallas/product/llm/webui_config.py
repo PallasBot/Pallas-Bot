@@ -778,18 +778,18 @@ class LlmWebuiConfig(BaseModel):
     llm_embedding_provider: EmbeddingProviderChoice = Field(
         default="",
         description=field_help(
-            "Embedding 从哪里算",
-            "留空=按模型名自动。选 openai 走 OpenAI 兼容 /embeddings；"
-            "选 local 需 uv sync --extra embedding-local；选 stub 强制占位",
-            "远程线路在下方「Embedding 线路」里从 Provider 名册挑选（与画画网关同类）",
+            "向量提供方",
+            "远程=用 OpenAI 兼容 /embeddings（需配置下方 Embedding 线路）；"
+            "本机=进程内 fastembed；占位=不做真实语义；自动=模型名非 stub 则远程，否则占位",
+            "仅「远程」或自动且模型非 stub 时需要配 Embedding 线路",
         ),
     )
     llm_embedding_provider_id: str = Field(
         default="",
         description=field_help(
             "Embedding 线路",
-            "从 Provider 名册选一条作向量服务；也可手填地址。未选则回落对话主线",
-            "须配合「从哪里算」为 openai（或模型名非 stub）。DeepSeek 官方通常无 /embeddings，优先选支持向量的网关",
+            "点「添加网关」从名册选 Provider，或手填向量服务地址与模型（如 text-embedding-3-small）",
+            "仅向量提供方为远程时使用；未配则回落对话主线",
         ),
         json_schema_extra=ui_provider_gateway(
             mode="split",
@@ -800,8 +800,9 @@ class LlmWebuiConfig(BaseModel):
                 "api_key": "llm_embedding_api_key",
                 "model": "llm_embedding_model",
             },
+            backends="llm_embedding_api_backends",
             title="Embedding 线路",
-            subtitle="从名册沿用 Provider，或手填向量服务地址；模型名写在线路里。",
+            subtitle="从名册选 Provider 或手填地址；模型名写在线路里。",
             label="Embedding 线路",
             group="记忆",
         ),
@@ -810,8 +811,8 @@ class LlmWebuiConfig(BaseModel):
         default="stub",
         description=field_help(
             "Embedding 模型名",
-            "选 openai 时填服务商模型名（如 text-embedding-3-small）；若仍写 stub，会自动用 text-embedding-3-small。"
-            "本机 local 可留 stub（默认 BAAI/bge-small-zh-v1.5）",
+            "远程时填服务商模型名（如 text-embedding-3-small）；若仍写 stub，远程会默认 text-embedding-3-small。"
+            "本机可留 stub（默认 BAAI/bge-small-zh-v1.5）",
             "换模型后旧向量可能对不上，需重新生成或等后台回填",
         ),
     )
@@ -819,7 +820,7 @@ class LlmWebuiConfig(BaseModel):
         default="",
         description=field_help(
             "Embedding 接口地址（可选）",
-            "留空=用上方线路所选 Provider 或对话主线。向量服务与聊天不是同一套时再手填",
+            "留空=用线路所选 Provider 或对话主线。向量服务与聊天不是同一套时再手填",
             "只填根地址即可，不要带 /embeddings",
         ),
     )
@@ -831,6 +832,14 @@ class LlmWebuiConfig(BaseModel):
             "敏感项，保存后以落盘为准",
         ),
         json_schema_extra={"secret": True},
+    )
+    llm_embedding_api_backends: list[dict] = Field(
+        default_factory=list,
+        description=field_help(
+            "Embedding 备线",
+            "主线路失败时的备用网关列表（JSON）；一般由 Embedding 线路面板维护，无需手改",
+            "条目含 provider_id，或 base_url+api_key，可选 model",
+        ),
     )
     llm_memory_rag_top_k: int = Field(
         default=3,
@@ -1006,6 +1015,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_embedding_provider_id=str(getattr(cfg, "llm_embedding_provider_id", "") or ""),
         llm_embedding_base_url=str(getattr(cfg, "llm_embedding_base_url", "") or ""),
         llm_embedding_api_key=str(getattr(cfg, "llm_embedding_api_key", "") or ""),
+        llm_embedding_api_backends=list(getattr(cfg, "llm_embedding_api_backends", None) or []),
         llm_memory_rag_top_k=cfg.llm_memory_rag_top_k,
         llm_memory_max_per_group=cfg.llm_memory_max_per_group,
         llm_memory_content_max_len=cfg.llm_memory_content_max_len,

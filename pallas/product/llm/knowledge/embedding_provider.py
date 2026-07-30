@@ -196,7 +196,7 @@ def _load_local_fastembed_model(model_name: str) -> Any:
         try:
             from fastembed import TextEmbedding
         except ImportError as exc:
-            raise ImportError("本地 Embedding 需要 fastembed；请执行: uv sync --extra embedding-local") from exc
+            raise ImportError("本地 Embedding 需要 fastembed；请执行: uv pip install 'fastembed>=0.5'") from exc
         model = TextEmbedding(model_name=model_name)
         _local_models[model_name] = model
         return model
@@ -307,7 +307,7 @@ def build_embedding_status(*, probe: bool = False, probe_text: str = "ping") -> 
             "semantic_available": False,
             "embedding_fallback": True,
             "embedding_error": trace.get("embedding_error")
-            or "未安装 fastembed；请执行 uv sync --extra embedding-local",
+            or "未安装 fastembed；请执行 uv pip install 'fastembed>=0.5'",
         }
 
     trigger_cached = 0
