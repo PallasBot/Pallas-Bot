@@ -27,6 +27,10 @@ def state_dir(tmp_path, monkeypatch: pytest.MonkeyPatch):
 def _cfg(**overrides: object) -> MagicMock:
     cfg = MagicMock()
     cfg.pallas_webui_auto_update_enabled = False
+    cfg.pallas_bot_auto_update_enabled = False
+    cfg.pallas_plugins_auto_update_enabled = False
+    cfg.pallas_auto_update_notify_superusers = False
+    cfg.pallas_auto_update_notify_bot_id = 0
     cfg.pallas_webui_auto_update_schedule_mode = "interval"
     cfg.pallas_webui_auto_update_interval_hours = 6
     cfg.pallas_webui_auto_update_cron_hour = 4
@@ -274,3 +278,86 @@ async def test_tick_skips_when_other_job_busy_but_not_own(state_dir) -> None:
     webui.assert_not_awaited()
     assert out2["result"] == "skipped"
     assert out2["reason"] == "busy"
+
+
+def test_format_auto_update_notify_message() -> None:
+    text = auto.format_auto_update_notify_message(
+        [
+            {"kind": "webui", "tag": "v1.2.3"},
+            {"kind": "plugins", "updated": ["a", "b"], "result": "partial"},
+        ]
+    )
+    assert "【自动更新】" in text
+    assert "WebUI：v1.2.3" in text
+    assert "插件：2 个" in text
+
+
+@pytest.mark.asyncio
+async def test_notify_superusers_respects_switch_and_bot_id(state_dir) -> None:
+    bot_ok = MagicMock()
+    bot_ok.self_id = "10001"
+    bot_ok.send_private_msg = AsyncMock()
+    bot_other = MagicMock()
+    bot_other.self_id = "10002"
+    bot_other.send_private_msg = AsyncMock()
+    driver = MagicMock()
+    driver.config.superusers = {"3023094357"}
+
+    with (
+        patch("nonebot.get_bots", return_value={"a": bot_ok, "b": bot_other}),
+        patch("nonebot.get_driver", return_value=driver),
+    ):
+        disabled = await auto.notify_superusers_auto_update(
+            [{"kind": "webui", "tag": "v1"}],
+            config=_cfg(pallas_auto_update_notify_superusers=False),
+        )
+        assert disabled["reason"] == "disabled"
+
+        offline = await auto.notify_superusers_auto_update(
+            [{"kind": "webui", "tag": "v1"}],
+            config=_cfg(
+                pallas_auto_update_notify_superusers=True,
+                pallas_auto_update_notify_bot_id=99999,
+            ),
+        )
+        assert offline["reason"] == "bot_offline"
+        bot_ok.send_private_msg.assert_not_awaited()
+
+        sent = await auto.notify_superusers_auto_update(
+            [{"kind": "webui", "tag": "v9.9.9"}],
+            config=_cfg(
+                pallas_auto_update_notify_superusers=True,
+                pallas_auto_update_notify_bot_id=10001,
+            ),
+        )
+        assert sent["sent"] is True
+        assert sent["bot_id"] == 10001
+        bot_ok.send_private_msg.assert_awaited_once()
+        kwargs = bot_ok.send_private_msg.await_args.kwargs
+        assert kwargs["user_id"] == 3023094357
+        assert "v9.9.9" in kwargs["message"]
+
+
+@pytest.mark.asyncio
+async def test_unified_tick_notifies_on_applied(state_dir) -> None:
+    notify = AsyncMock(return_value={"sent": True})
+    with (
+        patch.object(
+            auto,
+            "_run_webui_target",
+            new=AsyncMock(return_value={"result": "applied", "tag": "v2"}),
+        ),
+        patch.object(auto, "notify_superusers_auto_update", notify),
+    ):
+        out = await auto.run_auto_update_tick(
+            config=_cfg(
+                pallas_webui_auto_update_enabled=True,
+                pallas_auto_update_notify_superusers=True,
+            ),
+            force=True,
+        )
+    assert out["result"] == "applied"
+    notify.assert_awaited_once()
+    items = notify.await_args.args[0]
+    assert items[0]["kind"] == "webui"
+    assert items[0]["tag"] == "v2"

@@ -21,11 +21,17 @@ from .admins import (
 from .console import format_console_hint_text, format_plugins_summary_text
 from .restart_notify import record_restart_notify
 from .status import format_runtime_status_text
-from .update import format_update_check_text
+from .update import (
+    apply_update_action,
+    apply_update_config_command,
+    parse_update_action,
+    parse_update_config_command,
+    update_usage_text,
+)
 
 
 async def handle_status(ctx: PluginHandlerContext) -> None:
-    await ctx.finish(format_runtime_status_text())
+    await ctx.finish(format_runtime_status_text(self_id=ctx.event.self_id))
 
 
 async def handle_console(ctx: PluginHandlerContext) -> None:
@@ -38,7 +44,17 @@ async def handle_plugins(ctx: PluginHandlerContext) -> None:
 
 
 async def handle_update_check(ctx: PluginHandlerContext) -> None:
-    await ctx.finish(await format_update_check_text())
+    config_cmd = parse_update_config_command(ctx.plain_text)
+    if config_cmd is not None:
+        await ctx.finish(apply_update_config_command(config_cmd))
+        return
+    action = parse_update_action(ctx.plain_text)
+    if action is None:
+        await ctx.finish(update_usage_text())
+        return
+    if action != "check":
+        await ctx.matcher.send(f"开始更新（{action}）…")
+    await ctx.finish(await apply_update_action(action))
 
 
 async def handle_add_bot_admin(ctx: PluginHandlerContext) -> None:

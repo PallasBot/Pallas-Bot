@@ -15,9 +15,9 @@ from pallas.core.platform.bot_runtime.plugin_matrix import (
 
 def format_console_hint_text() -> str:
     try:
-        from packages.pb_webui.config import get_config as get_webui_config
+        from packages.pb_webui.config import get_pallas_webui_config
 
-        cfg = get_webui_config()
+        cfg = get_pallas_webui_config()
         if not cfg.pallas_webui_enabled:
             return "网页控制台已在本实例关闭（pallas_webui_enabled=false）。"
     except ImportError:

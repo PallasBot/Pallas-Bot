@@ -192,6 +192,7 @@ def auto_update_status_payload(config: Any | None = None) -> dict[str, Any]:
     web = state["targets"]["webui"]
     bot = state["targets"]["bot"]
     plugins = state["targets"]["plugins"]
+    notify_bot_id = int(getattr(cfg, "pallas_auto_update_notify_bot_id", 0) or 0)
     return {
         **sched,
         # 兼容旧前端字段（等同 webui）
@@ -202,6 +203,8 @@ def auto_update_status_payload(config: Any | None = None) -> dict[str, Any]:
         "last_applied_at": web.get("last_applied_at"),
         "last_error": web.get("last_error"),
         "pending_notice": state.get("pending_notice"),
+        "notify_superusers": bool(getattr(cfg, "pallas_auto_update_notify_superusers", False)),
+        "notify_bot_id": notify_bot_id,
         "webui": {
             "enabled": bool(getattr(cfg, "pallas_webui_auto_update_enabled", False)),
             **web,
@@ -674,7 +677,99 @@ async def run_auto_update_tick(
     if all(str((results.get(k) or {}).get("result") or "") == "skipped" for k in results):
         overall = "skipped"
     push(100, "本轮自动更新结束")
+    if applied:
+        notice_items = [
+            {"kind": kind, **(row if isinstance(row, dict) else {})}
+            for kind, row in results.items()
+            if str((row or {}).get("result") or "") in ("applied", "partial")
+        ]
+        try:
+            await notify_superusers_auto_update(notice_items, config=cfg)
+        except Exception:  # noqa: BLE001
+            logger.exception("Pallas-Bot 控制台: 自动更新私聊超管汇报失败")
     return {"result": overall, "targets": results}
+
+
+def format_auto_update_notify_message(items: list[dict[str, Any]]) -> str:
+    lines = ["【自动更新】本轮已应用："]
+    labels = {"webui": "WebUI", "bot": "Bot", "plugins": "插件"}
+    for item in items:
+        kind = str(item.get("kind") or "").strip()
+        label = labels.get(kind, kind or "项")
+        tag = str(item.get("tag") or item.get("last_applied_tag") or item.get("message") or "").strip()
+        if kind == "plugins":
+            updated = item.get("updated")
+            if isinstance(updated, list) and updated:
+                tag = f"{len(updated)} 个" + (f"（{tag}）" if tag else "")
+            elif not tag:
+                tag = "已更新"
+        lines.append(f"· {label}" + (f"：{tag}" if tag else ""))
+    return "\n".join(lines)
+
+
+async def notify_superusers_auto_update(
+    items: list[dict[str, Any]],
+    *,
+    config: Any | None = None,
+) -> dict[str, Any]:
+    """有成功应用时私聊 SUPERUSERS；受配置开关与汇报 Bot 号约束。"""
+    cfg = config if config is not None else get_pallas_webui_config()
+    if not bool(getattr(cfg, "pallas_auto_update_notify_superusers", False)):
+        return {"sent": False, "reason": "disabled"}
+    clean = [item for item in items if isinstance(item, dict)]
+    if not clean:
+        return {"sent": False, "reason": "empty"}
+
+    from nonebot import get_bots, get_driver
+
+    bots = get_bots()
+    if not bots:
+        logger.warning("Pallas-Bot 控制台: 自动更新汇报时无在线 Bot")
+        return {"sent": False, "reason": "no_bot"}
+
+    prefer = int(getattr(cfg, "pallas_auto_update_notify_bot_id", 0) or 0)
+    bot = None
+    if prefer > 0:
+        for candidate in bots.values():
+            try:
+                if int(candidate.self_id) == prefer:
+                    bot = candidate
+                    break
+            except (TypeError, ValueError):
+                continue
+        if bot is None:
+            logger.warning("Pallas-Bot 控制台: 汇报 Bot {} 不在线，跳过私聊", prefer)
+            return {"sent": False, "reason": "bot_offline", "bot_id": prefer}
+    else:
+        bot = next(iter(bots.values()))
+
+    superusers: list[int] = []
+    for raw in get_driver().config.superusers:
+        try:
+            superusers.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+    if not superusers:
+        return {"sent": False, "reason": "no_superusers"}
+
+    message = format_auto_update_notify_message(clean)
+    delivered = 0
+    for uid in superusers:
+        try:
+            await bot.send_private_msg(user_id=uid, message=message)
+            delivered += 1
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Pallas-Bot 控制台: 自动更新私聊失败 bot={} user={} err={}",
+                getattr(bot, "self_id", "?"),
+                uid,
+                exc,
+            )
+    return {
+        "sent": delivered > 0,
+        "delivered": delivered,
+        "bot_id": int(getattr(bot, "self_id", 0) or 0),
+    }
 
 
 def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
