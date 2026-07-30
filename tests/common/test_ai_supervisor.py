@@ -37,6 +37,19 @@ def test_is_managed_by_path_or_marker(tmp_path) -> None:
     assert (root / ".pallas-managed").is_file()
 
 
+def test_env_for_nested_project_drops_bot_venv(monkeypatch) -> None:
+    from pallas.console.cli.process_util import env_for_nested_project
+
+    monkeypatch.setenv("VIRTUAL_ENV", r"F:\Pallas-Bot\Pallas-Bot\.venv")
+    monkeypatch.setenv("UV_PROJECT_ENVIRONMENT", r"F:\Pallas-Bot\Pallas-Bot\.venv")
+    monkeypatch.setenv("PATH", "C:\\Windows")
+    cleaned = env_for_nested_project(extra={"PALLAS_GPU": "1"})
+    assert "VIRTUAL_ENV" not in cleaned
+    assert "UV_PROJECT_ENVIRONMENT" not in cleaned
+    assert cleaned.get("PATH") == "C:\\Windows"
+    assert cleaned.get("PALLAS_GPU") == "1"
+
+
 def test_ai_runtime_status_reads_pidfiles(tmp_path, monkeypatch) -> None:
     root = tmp_path / "ai"
     (root / "scripts").mkdir(parents=True)

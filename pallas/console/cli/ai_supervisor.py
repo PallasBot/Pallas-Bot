@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from pallas.console.cli.ai_ops import managed_ai_root, resolve_ai_repo_root
-from pallas.console.cli.process_util import pid_alive
+from pallas.console.cli.process_util import env_for_nested_project, pid_alive
 from pallas.console.webui.ai_install_writeback import DEFAULT_AI_SERVER_PORT
 
 MANAGED_MARKER_NAME = ".pallas-managed"
@@ -241,10 +241,12 @@ def run_ctl(ai_root: Path, *args: str, timeout_sec: float = 120.0) -> tuple[int,
     cmd = bash_script_cmd(script, *args)
     if cmd is None:
         return 1, bash_missing_message(purpose="AI Runtime ctl")
+    env = env_for_nested_project()
     try:
         completed = subprocess.run(
             cmd,
             cwd=ai_root,
+            env=env,
             check=False,
             capture_output=True,
             text=True,

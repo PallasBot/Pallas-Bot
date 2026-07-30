@@ -6,7 +6,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from pallas.console.cli.process_util import bash_missing_message, bash_script_cmd
+from pallas.console.cli.process_util import bash_missing_message, bash_script_cmd, env_for_nested_project
 from pallas.core.foundation.config.repo_settings import repo_config_path
 from pallas.core.foundation.paths import DATA_ROOT, PROJECT_ROOT
 
@@ -101,7 +101,7 @@ def run_ai_bootstrap(
     cmd.extend(["--bot-host", bot_host or default_bot_callback_host()])
     cmd.extend(["--bot-port", str(bot_port if bot_port is not None else default_bot_callback_port())])
 
-    env = os.environ.copy()
+    env = env_for_nested_project()
     if use_gpu:
         env["PALLAS_GPU"] = "1"
 

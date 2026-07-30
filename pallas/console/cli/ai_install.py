@@ -15,6 +15,7 @@ from pallas.console.cli.ai_ops import (
     resolve_ai_repo_root,
     sibling_ai_root,
 )
+from pallas.console.cli.process_util import env_for_nested_project
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -268,7 +269,7 @@ def run_ai_bootstrap_captured(
     cmd.extend(["--bot-host", bot_host or default_bot_callback_host()])
     cmd.extend(["--bot-port", str(bot_port if bot_port is not None else default_bot_callback_port())])
 
-    env = os.environ.copy()
+    env = env_for_nested_project()
     if use_gpu:
         env["PALLAS_GPU"] = "1"
 
