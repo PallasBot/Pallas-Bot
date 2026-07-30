@@ -16,6 +16,9 @@ _QUERY_NAME_ACTIONS = frozenset({"list", "search", "info", "find", "catalog", "k
 _INVENTORY_PHRASES: tuple[str, ...] = (
     "有哪些",
     "有啥",
+    "有没有",
+    "有么",
+    "之类",
     "都会啥",
     "都会哪些",
     "会哪些",

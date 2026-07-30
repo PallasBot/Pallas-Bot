@@ -39,6 +39,8 @@ def test_is_inventory_intent_phrases() -> None:
     assert is_inventory_intent("你会啥")
     assert is_inventory_intent("有啥功能")
     assert is_inventory_intent("功能列表")
+    assert is_inventory_intent("有没有举牌之类的表情")
+    assert is_inventory_intent("有没有表情")
     assert not is_inventory_intent("做个摸表情")
     assert not is_inventory_intent("放首歌")
     assert not is_inventory_intent("会")  # 过宽单字不命中
@@ -147,10 +149,28 @@ def test_inventory_opens_find_and_deferred_list(monkeypatch) -> None:
     names = {item.name for item in catalog.tools}
     assert TOOLS_FIND_NAME in names
     assert "memes.list" in names
+    assert "memes.recommend" not in names
 
     meta = tool_metadata_for_chat(task="llm_chat", user_text="都会啥表情")
     assert meta.get("tool_choice_prefer") == "required"
     assert meta.get("inventory_intent") is True
+
+
+def test_inventory_ask_has_meme_excludes_recommend(monkeypatch) -> None:
+    reset_llm_tools_bootstrap_for_tests()
+    monkeypatch.setattr("pallas.product.llm.tools.registry.get_llm_config", lambda: _cfg())
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.registry.get_arknights_kb_config",
+        lambda: type("Kb", (), {"arknights_kb_enabled": True})(),
+    )
+    _register_memes_and_find()
+
+    catalog = tool_catalog_for_chat(task="llm_chat", user_text="有没有举牌之类的表情")
+    assert catalog is not None
+    assert catalog.selection.inventory_intent is True
+    names = {item.name for item in catalog.tools}
+    assert "memes.recommend" not in names
+    assert "memes.list" in names or TOOLS_FIND_NAME in names
 
 
 def test_make_meme_does_not_force_inventory_list(monkeypatch) -> None:
