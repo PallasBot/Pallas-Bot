@@ -339,7 +339,7 @@ def tool_catalog_for_chat(
             soft_recall_min_score=int(getattr(cfg, "llm_tools_soft_recall_min_score", 6) or 6),
             soft_recall_max_candidates=int(getattr(cfg, "llm_tools_soft_recall_max_candidates", 3) or 3),
         )
-    # 盘点口语只留查询类，避免 memes.recommend 直接出图抢答
+        # 盘点口语只留查询类，避免 memes.recommend 直接出图抢答
         query_only = [spec for spec in specs_list if is_query_tool(spec)]
         if query_only:
             specs_list = query_only
