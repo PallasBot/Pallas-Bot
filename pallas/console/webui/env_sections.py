@@ -315,6 +315,7 @@ def _llm_section() -> WebuiEnvSection:
             "llm_embedding_provider_id": "LLM_EMBEDDING_PROVIDER_ID",
             "llm_embedding_base_url": "LLM_EMBEDDING_BASE_URL",
             "llm_embedding_api_key": "LLM_EMBEDDING_API_KEY",
+            "llm_embedding_api_backends": "LLM_EMBEDDING_API_BACKENDS",
             "llm_memory_rag_top_k": "LLM_MEMORY_RAG_TOP_K",
             "llm_memory_max_per_group": "LLM_MEMORY_MAX_PER_GROUP",
             "llm_memory_content_max_len": "LLM_MEMORY_CONTENT_MAX_LEN",

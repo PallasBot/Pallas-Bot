@@ -11,7 +11,10 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
-from pallas.product.llm.knowledge.embedding_client import embedding_model_name, fetch_embeddings_sync
+from pallas.product.llm.knowledge.embedding_client import (
+    fetch_embeddings_sync,
+    resolved_embedding_model_name,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -65,13 +68,14 @@ def feedback_trigger_cache_stats() -> dict[str, Any]:
 
 def invalidate_feedback_embedding_caches() -> None:
     """配置/模型变更后丢掉内存缓存，下次按新模型重新加载或回填。"""
-    global _trigger_model, _trigger_loaded_path
+    global _trigger_model, _trigger_loaded_path, _backfill_started
     with _LOCK:
         _query_cache.clear()
         _trigger_mem.clear()
         _trigger_model = ""
         _trigger_loaded_path = ""
         _prefetch_inflight.clear()
+        _backfill_started = False
 
 
 def _load_trigger_file(path: Path, model: str) -> None:
@@ -107,7 +111,7 @@ def _load_trigger_file(path: Path, model: str) -> None:
 
 
 def ensure_trigger_cache_loaded() -> str:
-    model = embedding_model_name()
+    model = resolved_embedding_model_name()
     path = trigger_embeddings_path()
     path_key = str(path)
     with _LOCK:
@@ -151,7 +155,7 @@ def get_cached_query_embedding(text: str) -> list[float] | None:
     plain = str(text or "").strip()
     if not plain:
         return None
-    model = embedding_model_name()
+    model = resolved_embedding_model_name()
     key = _query_cache_key(model, plain)
     now = time.monotonic()
     with _LOCK:
@@ -170,7 +174,7 @@ def store_query_embedding(text: str, vec: list[float]) -> None:
     plain = str(text or "").strip()
     if not plain or not vec:
         return
-    model = embedding_model_name()
+    model = resolved_embedding_model_name()
     key = _query_cache_key(model, plain)
     with _LOCK:
         _query_cache[key] = (time.monotonic() + _QUERY_CACHE_TTL_SEC, list(vec))

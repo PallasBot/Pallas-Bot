@@ -35,7 +35,7 @@ LLM 对话与接话中的 AI 介入都走 **Bot Provider**（控制台 **AI 配�
 ## `@牛牛` LLM 对话
 
 1. 在控制台 **AI 配置** 配好 Bot Provider 并测通。
-2. 打开总闸 **`LLM_CHAT_ENABLED`**（**AI 配置 → 对话**）。
+2. 打开总闸 **`LLM_CHAT_ENABLED`**（**AI 配置 → 接话**）。
 3. 在群里明确 `@牛牛`，或喊该号专属名试一句。
 
 比日常接话更自由：可带会话、记忆等能力；同样会吃到牛格、情感与本群 **表达参考**。详见 [智能对话（llm_chat）](/plugins/llm_chat) 与 [AI 扩展](ai.md)。
