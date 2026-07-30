@@ -33,7 +33,15 @@
 
 1. **AI 配置 → 对话**：打开「启用智能对话」（`LLM_CHAT_ENABLED`），并配置 Provider。
 2. 可选：人设提示词、冷却与并发等。
-3. 需要文字转语音时安装 `pallas-plugin-ai-media` 并使用「牛牛说」（与普通 `@` 聊天无关）。
+3. **酒后对话附带语音**（可选，与手动「牛牛说」独立）：
+
+| 配置项 | 环境变量 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| 酒后对话附带语音 | `CHAT_TTS_ENABLE` | 关 | 开=酒后回文先出字，再视阈值跟语音 |
+| 最低醉酒度 | `DRUNK_TTS_MIN_DRUNKENNESS` | `1` | 见 [drink · 醉酒度](../drink/README.md) |
+| 回文最短字数 | `DRUNK_TTS_MIN_CHARS` | `6` | 本次酒后回复去空白后的字数 |
+
+   须安装 `pallas-plugin-ai-media`、启用 TTS，并配置媒体服务。手动念字仍用「牛牛说 〈文本〉」。
 
 保存后写入 `data/pallas_config/webui.json`。步骤见 [AI 扩展](../../guide/ai.md)。
 
@@ -44,6 +52,7 @@
 | 无回复 / 帮助里看不到 | 确认已启用智能对话且 Provider 可用；服务不可用时帮助图可能暂时隐藏本插件 |
 | 清空不生效 | 确认是在当前群里 `@牛牛 clear` |
 | 和酒后 / 复读搞混 | 清醒 `@` 不要求喝酒；酒后须先醉酒；平时接话见 [复读](../repeater/README.md) |
+| 酒后有字无语音 | 查 `CHAT_TTS_ENABLE`、醉酒度与字数阈值、TTS 插件与媒体侧车 |
 
 ## 源码
 
@@ -54,11 +63,12 @@
 - `drunk_chat.py`：醉酒时 `@` /「牛牛 + 文本」
 - `commands.py`：清空会话
 
-清醒 `@` 与酒后对话共用智能对话总闸与内核 Provider；酒后路径额外依赖 `drink` 醉酒度。与 `repeater` 分工见 [guide](../../guide/llm-and-repeater.md)。
+清醒 `@` 与酒后对话共用智能对话总闸与内核 Provider；酒后路径额外依赖 `drink` 醉酒度。酒后附带语音见上文配置与 [tts](../tts/README.md)。与 `repeater` 分工见 [guide](../../guide/llm-and-repeater.md)。
 
 ## 相关链接
 
 - [复读 repeater](../repeater/README.md)
 - [喝酒 drink](../drink/README.md)
+- [牛牛说 tts](../tts/README.md)
 - [`@牛牛` 与复读](../../guide/llm-and-repeater.md)
 - [命令权限](../../common/cmd_perm/README.md)
