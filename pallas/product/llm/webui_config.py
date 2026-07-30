@@ -7,9 +7,11 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.console.webui.field_help import field_help
+from pallas.console.webui.provider_gateway import ui_provider_gateway
 from pallas.product.llm.config import LlmMcpServerConfig, get_llm_config
 
 VectorRetrieveMode = Literal["keyword", "embedding", "hybrid", "vector"]
+EmbeddingProviderChoice = Literal["", "stub", "openai", "local"]
 RepeaterMode = Literal["off", "select", "select_polish_lite", "select_fallback", "fallback"]
 
 _LEGACY_REPEATER_MODE_TO_WEBUI: dict[str, RepeaterMode] = {
@@ -25,6 +27,15 @@ def normalize_repeater_mode_for_webui(mode: str) -> RepeaterMode:
     if raw in ("off", "select", "select_polish_lite", "select_fallback", "fallback"):
         return raw  # type: ignore[return-value]
     return "select_polish_lite"
+
+
+def _embedding_provider_choice(raw: object) -> EmbeddingProviderChoice:
+    from pallas.product.llm.knowledge.embedding_provider import normalize_embedding_provider_name
+
+    name = normalize_embedding_provider_name(str(raw or ""))
+    if name in ("", "stub", "openai", "local"):
+        return name  # type: ignore[return-value]
+    return ""
 
 
 ConversationFeatureLevel = Literal["", "legacy_repeater", "repeater_plus_decision", "full_conversation_kernel"]
@@ -764,13 +775,62 @@ class LlmWebuiConfig(BaseModel):
             "向量在 Bot 进程内算，不请求 Pallas-Bot-AI；换模式后新旧记忆召回观感可能不同",
         ),
     )
+    llm_embedding_provider: EmbeddingProviderChoice = Field(
+        default="",
+        description=field_help(
+            "Embedding 从哪里算",
+            "留空=按模型名自动。选 openai 走 OpenAI 兼容 /embeddings；"
+            "选 local 需 uv sync --extra embedding-local；选 stub 强制占位",
+            "远程线路在下方「Embedding 线路」里从 Provider 名册挑选（与画画网关同类）",
+        ),
+    )
+    llm_embedding_provider_id: str = Field(
+        default="",
+        description=field_help(
+            "Embedding 线路",
+            "从 Provider 名册选一条作向量服务；也可手填地址。未选则回落对话主线",
+            "须配合「从哪里算」为 openai（或模型名非 stub）。DeepSeek 官方通常无 /embeddings，优先选支持向量的网关",
+        ),
+        json_schema_extra=ui_provider_gateway(
+            mode="split",
+            allow_manual=True,
+            primary={
+                "provider_id": "llm_embedding_provider_id",
+                "base_url": "llm_embedding_base_url",
+                "api_key": "llm_embedding_api_key",
+                "model": "llm_embedding_model",
+            },
+            title="Embedding 线路",
+            subtitle="从名册沿用 Provider，或手填向量服务地址；模型名写在线路里。",
+            label="Embedding 线路",
+            group="记忆",
+        ),
+    )
     llm_embedding_model: str = Field(
         default="stub",
         description=field_help(
-            "向量检索用哪套本地向量标识（一般不用改）",
-            "当前填 stub 即可：Bot 内核本地哈希占位，不需要外接 embedding 服务",
-            "乱改成不存在的名字可能导致向量检索异常；保持 stub",
+            "Embedding 模型名",
+            "选 openai 时填服务商模型名（如 text-embedding-3-small）；若仍写 stub，会自动用 text-embedding-3-small。"
+            "本机 local 可留 stub（默认 BAAI/bge-small-zh-v1.5）",
+            "换模型后旧向量可能对不上，需重新生成或等后台回填",
         ),
+    )
+    llm_embedding_base_url: str = Field(
+        default="",
+        description=field_help(
+            "Embedding 接口地址（可选）",
+            "留空=用上方线路所选 Provider 或对话主线。向量服务与聊天不是同一套时再手填",
+            "只填根地址即可，不要带 /embeddings",
+        ),
+    )
+    llm_embedding_api_key: str = Field(
+        default="",
+        description=field_help(
+            "Embedding API Key（可选）",
+            "留空=用线路 Provider 或对话主线密钥。仅当向量服务要用另一套 Key 时填写",
+            "敏感项，保存后以落盘为准",
+        ),
+        json_schema_extra={"secret": True},
     )
     llm_memory_rag_top_k: int = Field(
         default=3,
@@ -942,6 +1002,10 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_expression_retrieve_limit=cfg.llm_expression_retrieve_limit,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
+        llm_embedding_provider=_embedding_provider_choice(cfg.llm_embedding_provider),
+        llm_embedding_provider_id=str(getattr(cfg, "llm_embedding_provider_id", "") or ""),
+        llm_embedding_base_url=str(getattr(cfg, "llm_embedding_base_url", "") or ""),
+        llm_embedding_api_key=str(getattr(cfg, "llm_embedding_api_key", "") or ""),
         llm_memory_rag_top_k=cfg.llm_memory_rag_top_k,
         llm_memory_max_per_group=cfg.llm_memory_max_per_group,
         llm_memory_content_max_len=cfg.llm_memory_content_max_len,

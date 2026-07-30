@@ -13,6 +13,7 @@ from pallas.core.foundation.config import BotConfig
 from pallas.core.foundation.db import Answer
 from pallas.core.foundation.db.context_repo_access import context_repo
 from pallas.core.foundation.db.pool_budget import is_pg_pool_timeout_error, pg_pool_under_pressure
+from pallas.core.platform.ingress.hotpath_metrics import record_bundle_stages
 from pallas.core.platform.shard import context as shard_ctx
 from pallas.core.platform.shard.repeater_ingress_metrics import record_repeater_reply_selection
 from pallas.product.llm.kernel.memory_governance import can_apply_feedback_bias
@@ -576,6 +577,7 @@ class Responder:
             return None
 
         find_reply = getattr(context_repo, "find_by_keywords_for_reply", None)
+        t_db = time.perf_counter()
         try:
             if callable(find_reply):
                 context = await find_reply(keywords)
@@ -591,8 +593,10 @@ class Responder:
                 )
                 return None
             raise
+        db_find_ms = (time.perf_counter() - t_db) * 1000.0
 
         if not context:
+            record_bundle_stages(outcome="db_miss", db_find_ms=db_find_ms)
             return None
 
         from pallas.product.persona import resolve_persona_for_message
@@ -601,12 +605,16 @@ class Responder:
 
         from .activity_gate import group_has_hosted_activity
 
+        t_persona = time.perf_counter()
         persona = await resolve_persona_for_message(
             bot_id,
             group_id,
             str(getattr(chat_data, "plain_text", "") or chat_data.raw_message or ""),
         )
+        persona_ms = (time.perf_counter() - t_persona) * 1000.0
+        t_affect = time.perf_counter()
         affect_triggers = await load_affect_triggers(group_id)
+        affect_ms = (time.perf_counter() - t_affect) * 1000.0
         in_hosted_activity = group_has_hosted_activity(group_id) and not chat_data.to_me
         group_activity = Responder._group_activity_score(group_msgs)
         reply_mode = Responder._roll_active_mode(
@@ -641,7 +649,9 @@ class Responder:
         else:
             cross_group_threshold = Responder.CROSS_GROUP_THRESHOLD
 
+        t_ban = time.perf_counter()
         ban_keywords = await BanManager.find_ban_keywords(context=context, group_id=group_id)
+        ban_ms = (time.perf_counter() - t_ban) * 1000.0
 
         candidate_answers: dict[str, Answer] = {}
         other_group_cache = {}
@@ -670,6 +680,7 @@ class Responder:
             )
         except Exception as exc:
             logger.warning("repeater.behavior_scene_failed group_id={}: {}", group_id, exc)
+        t_feedback = time.perf_counter()
         if can_apply_feedback_bias():
             try:
                 feedback_snapshot = await asyncio.to_thread(
@@ -678,9 +689,13 @@ class Responder:
                     limit=Responder.FEEDBACK_BIAS_LIMIT,
                     user_text=trigger_text,
                     behavior_scene=behavior_scene,
+                    hotpath=True,
                 )
             except Exception as exc:
                 logger.warning("repeater.llm_feedback_bias_snapshot_failed group_id={}: {}", group_id, exc)
+        feedback_ms = (time.perf_counter() - t_feedback) * 1000.0
+
+        t_select = time.perf_counter()
 
         def candidate_append(dst: dict[str, Answer], answer: Answer):
             answer_key = answer.keywords
@@ -745,6 +760,16 @@ class Responder:
                     candidate_append(candidate_answers, answer)
 
         if not candidate_answers:
+            select_ms = (time.perf_counter() - t_select) * 1000.0
+            record_bundle_stages(
+                outcome="no_candidates",
+                db_find_ms=db_find_ms,
+                persona_ms=persona_ms,
+                affect_ms=affect_ms,
+                ban_ms=ban_ms,
+                feedback_ms=feedback_ms,
+                select_ms=select_ms,
+            )
             return None
 
         message_pool: list[str] = []
@@ -776,6 +801,16 @@ class Responder:
             persona=persona,
         )
         if not answer_str:
+            select_ms = (time.perf_counter() - t_select) * 1000.0
+            record_bundle_stages(
+                outcome="no_candidates",
+                db_find_ms=db_find_ms,
+                persona_ms=persona_ms,
+                affect_ms=affect_ms,
+                ban_ms=ban_ms,
+                feedback_ms=feedback_ms,
+                select_ms=select_ms,
+            )
             return None
         answer_keywords = final_answer.keywords
         reply_source = "same_group" if int(final_answer.group_id) == int(group_id) else "cross_group"
@@ -784,6 +819,16 @@ class Responder:
 
         plan = Responder._plan_from_answer_text(answer_str, answer_keywords)
         if plan is None:
+            select_ms = (time.perf_counter() - t_select) * 1000.0
+            record_bundle_stages(
+                outcome="no_candidates",
+                db_find_ms=db_find_ms,
+                persona_ms=persona_ms,
+                affect_ms=affect_ms,
+                ban_ms=ban_ms,
+                feedback_ms=feedback_ms,
+                select_ms=select_ms,
+            )
             return None
         if not message_pool:
             message_pool = list(plan[0])
@@ -813,6 +858,16 @@ class Responder:
                 Responder._feedback_bias_multiplier(answer_str, feedback_snapshot=feedback_snapshot)
             ),
         })
+        select_ms = (time.perf_counter() - t_select) * 1000.0
+        record_bundle_stages(
+            outcome="found",
+            db_find_ms=db_find_ms,
+            persona_ms=persona_ms,
+            affect_ms=affect_ms,
+            ban_ms=ban_ms,
+            feedback_ms=feedback_ms,
+            select_ms=select_ms,
+        )
         return ReplyBundle(
             answer_list=plan[0],
             answer_keywords=plan[1],

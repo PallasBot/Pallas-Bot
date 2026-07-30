@@ -59,10 +59,35 @@ def main() -> int:
         f"{fmt_optional(hotpath.get('bundle_ms_p95'), suffix='ms')}"
     )
     print(
+        f"hotpath bundle 阶段P95   db={fmt_optional(hotpath.get('db_find_ms_p95'), suffix='ms')}  "
+        f"persona={fmt_optional(hotpath.get('persona_ms_p95'), suffix='ms')}  "
+        f"affect={fmt_optional(hotpath.get('affect_ms_p95'), suffix='ms')}  "
+        f"ban={fmt_optional(hotpath.get('ban_ms_p95'), suffix='ms')}  "
+        f"feedback={fmt_optional(hotpath.get('feedback_ms_p95'), suffix='ms')}  "
+        f"select={fmt_optional(hotpath.get('select_ms_p95'), suffix='ms')}"
+    )
+    print(
+        f"hotpath SQL 分段P95      total={fmt_optional(hotpath.get('sql_total_ms_p95'), suffix='ms')}  "
+        f"ctx={fmt_optional(hotpath.get('sql_context_ms_p95'), suffix='ms')}  "
+        f"ban={fmt_optional(hotpath.get('sql_ban_ms_p95'), suffix='ms')}  "
+        f"ans={fmt_optional(hotpath.get('sql_answer_ms_p95'), suffix='ms')}  "
+        f"msg={fmt_optional(hotpath.get('sql_message_ms_p95'), suffix='ms')}  "
+        f"uncached={hotpath.get('reply_query_uncached', 0)}"
+    )
+    print(
         f"hotpath bundle 缓存命中   {hotpath.get('bundle_cache_hit_ratio', '—')}  "
         f"(+{hotpath.get('bundle_cache_hit', 0)}/-{hotpath.get('bundle_cache_negative_hit', 0)})  "
         f"timeout={hotpath.get('bundle_timeout', 0)}  "
         f"found={hotpath.get('bundle_found', 0)}  none={hotpath.get('bundle_none', 0)}"
+    )
+    print(
+        f"hotpath snapshot/阶段    snap={hotpath.get('reply_snapshot_hit_ratio', '—')}  "
+        f"(hit={hotpath.get('reply_snapshot_hit', 0)} miss={hotpath.get('reply_snapshot_miss', 0)} "
+        f"skip={hotpath.get('reply_snapshot_skip', 0)})  "
+        f"db_miss={hotpath.get('bundle_stage_db_miss', 0)}  "
+        f"db_hit={hotpath.get('bundle_stage_db_hit', 0)}  "
+        f"no_cand={hotpath.get('bundle_stage_no_candidates', 0)}  "
+        f"stage_found={hotpath.get('bundle_stage_found', 0)}"
     )
     print(
         f"hotpath learn            enq={hotpath.get('learn_enqueued', 0)}  "

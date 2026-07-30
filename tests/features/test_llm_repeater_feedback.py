@@ -464,6 +464,88 @@ def test_group_feedback_bias_snapshot_matched_replies_for_trigger(tmp_path, monk
     assert snap["matched_replies"] == ["还行吧"]
 
 
+def test_group_feedback_bias_snapshot_hotpath_skips_heavy_stats(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=10001,
+            group_id=123,
+            user_id=456,
+            request_id="req-hot-1",
+            user_text="牛牛真棒啊",
+            reply_text="还行吧",
+        )
+    )
+
+    seen: dict[str, str] = {}
+
+    def fake_semantic(*, remote_policy: str = "full", **kwargs):
+        seen["policy"] = remote_policy
+        return ["还行吧"]
+
+    def boom(*_a, **_k):
+        raise AssertionError("hotpath must not compute learning/promotion stats")
+
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_learning.find_semantic_matched_replies",
+        fake_semantic,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_learning.summarize_learning_effectiveness",
+        boom,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.promotion_candidates.count_pending_promotion_candidates",
+        boom,
+    )
+
+    snap = group_feedback_bias_snapshot(
+        group_id=123,
+        limit=50,
+        user_text="真棒啊",
+        hotpath=True,
+    )
+
+    assert snap["matched_replies"] == ["还行吧"]
+    assert snap["semantic_matched_replies"] == ["还行吧"]
+    assert seen.get("policy") == "query_only"
+    assert snap["learning_stats"] == {}
+    assert snap["promotion_candidate_count"] == 0
+
+
+def test_list_group_feedback_entries_uses_short_ttl_cache(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=10001,
+            group_id=55,
+            user_id=1,
+            request_id="cache-1",
+            user_text="hi",
+            reply_text="yo",
+        )
+    )
+    first = list_group_feedback_entries(group_id=55, limit=10)
+    assert len(first) == 1
+
+    calls = {"n": 0}
+    real_iter = __import__(
+        "pallas.product.llm.repeater_feedback", fromlist=["_iter_feedback_entries"]
+    )._iter_feedback_entries
+
+    def counting_iter(path):
+        calls["n"] += 1
+        yield from real_iter(path)
+
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_feedback._iter_feedback_entries",
+        counting_iter,
+    )
+    second = list_group_feedback_entries(group_id=55, limit=10)
+    assert second[0].reply_text == "yo"
+    assert calls["n"] == 0
+
+
 def test_should_collect_llm_repeater_feedback_rejects_attack_or_plugin_reply() -> None:
     for reply in ("我操你妈。", "匹配失败，积分不足18点", "[CQ:image,file=x]"):
         assert not should_collect_llm_repeater_feedback(
