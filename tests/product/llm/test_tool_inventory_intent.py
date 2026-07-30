@@ -203,3 +203,40 @@ def test_build_command_tool_marks_list_read_only() -> None:
     )
     assert ToolCapability.READ_ONLY.value in spec.capabilities
     assert ToolCapability.SIDE_EFFECTING.value not in spec.capabilities
+
+
+def test_declared_capabilities_override_name_heuristic() -> None:
+    spec = build_command_tool_spec(
+        parse_llm_command_tool_decl(
+            llm_command_tool_row(
+                name="help.show",
+                command_id="help.help",
+                description="帮助总览",
+                parameters={"type": "object", "properties": {}},
+                command_template="牛牛帮助",
+                capabilities=["read_only"],
+            )
+        ),
+        plugin_name="help",
+        plugin_title="帮助",
+    )
+    assert ToolCapability.READ_ONLY.value in spec.capabilities
+    assert ToolCapability.SIDE_EFFECTING.value not in spec.capabilities
+    assert ToolCapability.REQUIRES_GROUP_CONTEXT.value in spec.capabilities
+
+
+def test_inventory_hit_metric(monkeypatch) -> None:
+    from pallas.product.llm.task_metrics import clear_llm_task_metrics_for_tests, llm_task_metrics_snapshot
+
+    reset_llm_tools_bootstrap_for_tests()
+    clear_llm_task_metrics_for_tests()
+    monkeypatch.setattr("pallas.product.llm.tools.registry.get_llm_config", lambda: _cfg())
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.registry.get_arknights_kb_config",
+        lambda: type("Kb", (), {"arknights_kb_enabled": True})(),
+    )
+    clear_tool_registry()
+    register_discovery_tools()
+    tool_metadata_for_chat(task="llm_chat", user_text="你都会啥")
+    snap = llm_task_metrics_snapshot()
+    assert snap["by_task"]["llm_chat"]["inventory_hit"] == 1

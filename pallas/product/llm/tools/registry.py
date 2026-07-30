@@ -448,9 +448,13 @@ def tool_metadata_for_chat(
                 record_bot_llm_task(normalized or "llm_chat", "soft_recall_empty")
         return {}
     source = str(catalog.selection.selection_source or "").strip().lower()
-    if source == "soft_recall":
+    if catalog.selection.inventory_intent:
+        record_bot_llm_task(normalized or "llm_chat", "inventory_hit")
+    if source.startswith("soft_recall"):
         record_bot_llm_task(normalized or "llm_chat", "soft_recall_hit")
-    elif catalog.selection.selective_enabled:
+    elif source.startswith("selective"):
+        record_bot_llm_task(normalized or "llm_chat", "selective_hit")
+    elif catalog.selection.selective_enabled and source not in {"inventory", "all"}:
         record_bot_llm_task(normalized or "llm_chat", "selective_hit")
     schemas = openai_schemas_from_catalog(catalog)
     payload: dict[str, Any] = {

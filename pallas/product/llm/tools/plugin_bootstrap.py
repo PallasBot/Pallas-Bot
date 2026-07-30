@@ -165,16 +165,25 @@ def build_command_tool_spec(
         source=LlmToolSource.PLUGIN_COMMAND,
         command_id=decl.command_id,
         plugin_name=plugin_name,
-        capabilities=_command_tool_capabilities(decl.name),
+        capabilities=_command_tool_capabilities(decl.name, declared=decl.capabilities),
         hints=hints,
         visibility=visibility,
     )
 
 
-def _command_tool_capabilities(tool_name: str) -> frozenset[str]:
+def _command_tool_capabilities(tool_name: str, *, declared: list[str] | None = None) -> frozenset[str]:
     from pallas.product.llm.tools.inventory import is_query_tool_name
 
     caps: set[str] = {ToolCapability.REQUIRES_GROUP_CONTEXT.value}
+    known = {item.value for item in ToolCapability}
+    declared_caps = {str(item).strip().lower() for item in (declared or []) if str(item).strip().lower() in known}
+    if declared_caps:
+        caps.update(declared_caps)
+        if ToolCapability.READ_ONLY.value in declared_caps:
+            caps.discard(ToolCapability.SIDE_EFFECTING.value)
+        elif ToolCapability.SIDE_EFFECTING.value not in declared_caps:
+            caps.add(ToolCapability.SIDE_EFFECTING.value)
+        return frozenset(caps)
     if is_query_tool_name(tool_name):
         caps.add(ToolCapability.READ_ONLY.value)
     else:
