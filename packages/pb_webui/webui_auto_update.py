@@ -244,7 +244,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         )
         return out
 
-    if has_active_update_apply_job():
+    if has_active_update_apply_job(kinds=("webui", "bot")):
         out = {"result": "skipped", "reason": "busy"}
         _patch_target(
             "webui",
@@ -275,7 +275,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         )
         return {"result": "up_to_date", "current_tag": current_tag, "latest_tag": latest_tag}
 
-    if has_active_update_apply_job():
+    if has_active_update_apply_job(kinds=("webui", "bot")):
         out = {"result": "skipped", "reason": "busy"}
         _patch_target(
             "webui",
@@ -377,7 +377,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         )
         return out
 
-    if has_active_update_apply_job():
+    if has_active_update_apply_job(kinds=("webui", "bot")):
         out = {"result": "skipped", "reason": "busy"}
         _patch_target(
             "bot",
@@ -408,7 +408,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         )
         return {"result": "up_to_date", "current_tag": current_tag, "latest_tag": latest_tag}
 
-    if has_active_update_apply_job():
+    if has_active_update_apply_job(kinds=("webui", "bot")):
         out = {"result": "skipped", "reason": "busy"}
         _patch_target(
             "bot",
@@ -613,21 +613,31 @@ async def run_auto_update_tick(
     config: Any | None = None,
     force: bool = False,
     targets: list[TargetKind] | None = None,
+    progress_job_id: str | None = None,
+    on_progress: Any | None = None,
 ) -> dict[str, Any]:
-    """统一调度一轮。force=True 时忽略各目标开关（立即执行）。"""
+    """统一调度一轮。force=True 时仍只跑已开启的目标（立即执行）。"""
     from pallas.core.platform.bot_runtime.roles import is_sharded_worker
 
     cfg = config if config is not None else get_pallas_webui_config()
     now = time.time()
+
+    def push(pct: int, message: str) -> None:
+        if callable(on_progress):
+            on_progress(pct, message)
+
     if is_sharded_worker():
         save_auto_update_state({"last_run_at": now})
         return {"result": "skipped", "reason": "worker", "targets": {}}
 
+    if has_active_update_apply_job(exclude_job_id=progress_job_id):
+        save_auto_update_state({"last_run_at": now})
+        push(100, "已有更新任务进行中，本轮跳过")
+        return {"result": "skipped", "reason": "busy", "targets": {}}
+
     wanted: list[TargetKind]
     if targets:
         wanted = targets
-    elif force:
-        wanted = ["webui", "bot", "plugins"]
     else:
         wanted = []
         if getattr(cfg, "pallas_webui_auto_update_enabled", False):
@@ -639,12 +649,17 @@ async def run_auto_update_tick(
 
     if not wanted:
         save_auto_update_state({"last_run_at": now})
+        push(100, "未开启任何自动更新目标")
         return {"result": "skipped", "reason": "disabled", "targets": {}}
 
     results: dict[str, Any] = {}
     # WebUI → 插件 → Bot（Bot 可能重启）
     order: list[TargetKind] = [t for t in ("webui", "plugins", "bot") if t in wanted]
-    for kind in order:
+    labels = {"webui": "控制台 WebUI", "plugins": "插件", "bot": "Bot 本体"}
+    push(2, "开始检查并应用…")
+    for idx, kind in enumerate(order):
+        base = int(5 + (90 * idx) / max(len(order), 1))
+        push(base, f"正在处理：{labels.get(kind, kind)}")
         if kind == "webui":
             results["webui"] = await _run_webui_target(config=cfg, force=force)
         elif kind == "plugins":
@@ -658,6 +673,7 @@ async def run_auto_update_tick(
     overall = "applied" if applied else ("failed" if failed else "up_to_date")
     if all(str((results.get(k) or {}).get("result") or "") == "skipped" for k in results):
         overall = "skipped"
+    push(100, "本轮自动更新结束")
     return {"result": overall, "targets": results}
 
 

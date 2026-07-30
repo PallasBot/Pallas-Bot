@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable
 
 JobPhase = Literal["queued", "running", "done", "failed"]
-UpdateKind = Literal["webui", "bot"]
+UpdateKind = Literal["webui", "bot", "auto"]
 
 
 @dataclass
@@ -97,9 +97,26 @@ def get_update_apply_job(job_id: str) -> UpdateApplyJob | None:
     return _JOBS.get((job_id or "").strip())
 
 
-def has_active_update_apply_job() -> bool:
-    """是否存在排队中或执行中的更新任务（供自动更新跳过）。"""
-    return any(job.phase in ("queued", "running") for job in _JOBS.values())
+def has_active_update_apply_job(
+    *,
+    exclude_job_id: str | None = None,
+    kinds: tuple[UpdateKind, ...] | None = None,
+) -> bool:
+    """是否存在排队中或执行中的更新任务。
+
+    exclude_job_id：忽略自身（例如 auto run-once 任务在跑目标时）。
+    kinds：仅匹配指定 kind；默认全部。目标 runner 应传 ``("webui", "bot")``，
+    避免把本轮的 ``auto`` job 当成 busy。
+    """
+    exclude = (exclude_job_id or "").strip() or None
+    for job in _JOBS.values():
+        if exclude and job.job_id == exclude:
+            continue
+        if kinds is not None and job.kind not in kinds:
+            continue
+        if job.phase in ("queued", "running"):
+            return True
+    return False
 
 
 async def run_update_apply_job(

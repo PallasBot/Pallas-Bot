@@ -222,3 +222,55 @@ async def test_unified_tick_runs_enabled_targets(state_dir) -> None:
     assert "webui" in out["targets"]
     assert "plugins" in out["targets"]
     assert "bot" not in out["targets"]
+
+
+@pytest.mark.asyncio
+async def test_force_tick_only_runs_enabled_targets(state_dir) -> None:
+    webui = AsyncMock(return_value={"result": "up_to_date"})
+    bot = AsyncMock(return_value={"result": "up_to_date"})
+    plugins = AsyncMock(return_value={"result": "up_to_date"})
+    with (
+        patch.object(auto, "_run_webui_target", webui),
+        patch.object(auto, "_run_bot_target", bot),
+        patch.object(auto, "_run_plugins_target", plugins),
+    ):
+        out = await auto.run_auto_update_tick(
+            config=_cfg(
+                pallas_webui_auto_update_enabled=True,
+                pallas_bot_auto_update_enabled=False,
+                pallas_plugins_auto_update_enabled=False,
+            ),
+            force=True,
+        )
+    webui.assert_awaited_once()
+    bot.assert_not_awaited()
+    plugins.assert_not_awaited()
+    assert out["result"] == "up_to_date"
+
+
+@pytest.mark.asyncio
+async def test_tick_skips_when_other_job_busy_but_not_own(state_dir) -> None:
+    own = await create_update_apply_job("auto")
+    own.push("running", "own", progress_percent=5)
+    webui = AsyncMock(return_value={"result": "up_to_date"})
+    with patch.object(auto, "_run_webui_target", webui):
+        out = await auto.run_auto_update_tick(
+            config=_cfg(pallas_webui_auto_update_enabled=True),
+            force=True,
+            progress_job_id=own.job_id,
+        )
+    webui.assert_awaited_once()
+    assert out["result"] == "up_to_date"
+
+    other = await create_update_apply_job("webui")
+    other.push("running", "manual", progress_percent=10)
+    webui.reset_mock()
+    with patch.object(auto, "_run_webui_target", webui):
+        out2 = await auto.run_auto_update_tick(
+            config=_cfg(pallas_webui_auto_update_enabled=True),
+            force=True,
+            progress_job_id=own.job_id,
+        )
+    webui.assert_not_awaited()
+    assert out2["result"] == "skipped"
+    assert out2["reason"] == "busy"
