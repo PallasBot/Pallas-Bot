@@ -125,6 +125,8 @@ def clone_ai_repo(*, target: Path | None = None, git_url: str = AI_REPO_GIT_URL)
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     if completed.returncode != 0:
         err = (completed.stderr or completed.stdout or "").strip() or f"exit {completed.returncode}"
@@ -153,17 +155,16 @@ def run_ai_bootstrap_captured(
     """
     del with_media, remote_only
     from pallas.console.cli.ai_supervisor import is_managed_ai_root, mark_ai_root_managed
-    from pallas.console.cli.process_util import bash_missing_message, resolve_bash
+    from pallas.console.cli.process_util import bash_missing_message, bash_script_cmd
 
     script = ai_root / _AI_BOOTSTRAP
     if not script.is_file():
         return 1, f"未找到 {script}"
 
-    bash = resolve_bash()
-    if bash is None:
+    cmd = bash_script_cmd(script)
+    if cmd is None:
         return 1, bash_missing_message(purpose="AI Runtime bootstrap")
 
-    cmd = [str(bash), str(script)]
     if check_only:
         cmd.append("--check-only")
     if no_start:
@@ -175,6 +176,10 @@ def run_ai_bootstrap_captured(
     if use_gpu:
         env["PALLAS_GPU"] = "1"
 
+    # 中文 Windows 默认 GBK；bootstrap/uv 多为 UTF-8，勿用 locale 解码。
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+
     header = f"执行: {' '.join(cmd)}\nAI 仓: {ai_root}\n"
     try:
         proc = subprocess.Popen(
@@ -184,6 +189,8 @@ def run_ai_bootstrap_captured(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             bufsize=1,
         )
     except OSError as err:

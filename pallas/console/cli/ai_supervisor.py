@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from pallas.console.cli.ai_ops import managed_ai_root, resolve_ai_repo_root
-from pallas.console.cli.process_util import pid_alive, resolve_bash
+from pallas.console.cli.process_util import pid_alive
 from pallas.console.webui.ai_install_writeback import DEFAULT_AI_SERVER_PORT
 
 MANAGED_MARKER_NAME = ".pallas-managed"
@@ -233,15 +233,14 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
 
 
 def run_ctl(ai_root: Path, *args: str, timeout_sec: float = 120.0) -> tuple[int, str]:
+    from pallas.console.cli.process_util import bash_missing_message, bash_script_cmd
+
     script = ai_root / _CTL
     if not script.is_file():
         return 1, f"未找到 {script}"
-    bash = resolve_bash()
-    if bash is None:
-        from pallas.console.cli.process_util import bash_missing_message
-
+    cmd = bash_script_cmd(script, *args)
+    if cmd is None:
         return 1, bash_missing_message(purpose="AI Runtime ctl")
-    cmd = [str(bash), str(script), *args]
     try:
         completed = subprocess.run(
             cmd,
@@ -249,6 +248,8 @@ def run_ctl(ai_root: Path, *args: str, timeout_sec: float = 120.0) -> tuple[int,
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_sec,
         )
     except OSError as err:
