@@ -103,6 +103,43 @@ def _help_image_cache_suffix() -> str:
     return suffix
 
 
+def _short_content_fp(*parts: str) -> str:
+    blob = "\n".join(str(p or "") for p in parts)
+    return hashlib.md5(blob.encode()).hexdigest()[:12]
+
+
+def _plugin_detail_fingerprint(data) -> str:
+    rows = [
+        str(getattr(data, "description", "") or ""),
+        str(getattr(data, "usage", "") or ""),
+    ]
+    rows.extend(
+        "|".join([
+            str(getattr(row, "func", "") or ""),
+            str(getattr(row, "say", "") or ""),
+            str(getattr(row, "scene", "") or ""),
+            str(getattr(row, "perm", "") or ""),
+            str(getattr(row, "brief", "") or ""),
+            str(getattr(row, "detail", "") or ""),
+        ])
+        for row in getattr(data, "functions", None) or []
+    )
+    rows.extend(f"{title}|{body}" for title, body in (getattr(data, "extra_sections", None) or []))
+    return _short_content_fp(*rows)
+
+
+def _function_detail_fingerprint(data) -> str:
+    return _short_content_fp(
+        str(getattr(data, "func_name", "") or ""),
+        str(getattr(data, "say", "") or ""),
+        str(getattr(data, "scene", "") or ""),
+        str(getattr(data, "perm", "") or ""),
+        str(getattr(data, "brief", "") or ""),
+        str(getattr(data, "detail", "") or ""),
+        *(f"{t}|{b}" for t, b in (getattr(data, "extra_sections", None) or [])),
+    )
+
+
 def resize_image_if_needed(image, max_width=1200, max_height=2800):
     """调整图像大小"""
     if image.width > max_width or image.height > max_height:
@@ -415,8 +452,8 @@ async def send_plugin_detail_image(
     from .draw_plugin_detail import draw_plugin_detail_image
 
     cache_key = (
-        f"plugin_v4|{data.display_name}|enabled={data.enabled}|funcs={len(data.functions)}"
-        f"|suffix={_help_image_cache_suffix()}"
+        f"plugin_v5|{data.display_name}|enabled={data.enabled}"
+        f"|fp={_plugin_detail_fingerprint(data)}|suffix={_help_image_cache_suffix()}"
     )
     image = draw_plugin_detail_image(data)
     image_data = await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
@@ -431,7 +468,10 @@ async def send_function_detail_image(
 ) -> None:
     from .draw_function_detail import draw_function_detail_image
 
-    cache_key = f"function_v4|{data.display_name}|{data.index}/{data.total}|{data.func_name}|suffix={_help_image_cache_suffix()}"  # noqa: E501
+    cache_key = (
+        f"function_v5|{data.display_name}|{data.index}/{data.total}|{data.func_name}"
+        f"|fp={_function_detail_fingerprint(data)}|suffix={_help_image_cache_suffix()}"
+    )
     image = draw_function_detail_image(data)
     image_data = await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
     await matcher.finish(MessageSegment.image(image_data))

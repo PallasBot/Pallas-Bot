@@ -137,7 +137,7 @@ __plugin_meta__ = PluginMetadata(
 status_cmd = message_command("pb_core.status", "#pallas", cd_sec=10)
 console_cmd = message_command("pb_core.console", "牛牛控制台", cd_sec=10)
 plugins_cmd = message_command("pb_core.plugins", "牛牛插件", cd_sec=15)
-update_cmd = message_command("pb_core.update_check", "牛牛更新", cd_sec=60, scene="private")
+update_cmd = message_command("pb_core.update_check", "牛牛更新", cd_sec=0, scene="private")
 restart_cmd = message_command("pb_core.restart", "牛牛重启", cd_sec=120)
 add_bot_admin_cmd = message_command("pb_core.add_bot_admin", "牛牛添加号主", cd_sec=30, scene="private")
 

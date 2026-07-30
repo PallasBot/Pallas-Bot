@@ -12,6 +12,8 @@ from pallas.console.cli.runtime_mode import resolve_bot_mode
 if TYPE_CHECKING:
     from pallas.api.commands import PluginHandlerContext
 
+from pallas.core.limits import is_command_cooldown_ready, refresh_command_cooldown
+
 from .admins import (
     ADD_BOT_ADMIN_COMMAND,
     add_bot_admins,
@@ -28,6 +30,9 @@ from .update import (
     parse_update_config_command,
     update_usage_text,
 )
+
+_UPDATE_APPLY_ACTIONS = frozenset({"all", "bot", "webui", "plugins"})
+_UPDATE_APPLY_CD_SEC = 60
 
 
 async def handle_status(ctx: PluginHandlerContext) -> None:
@@ -52,7 +57,19 @@ async def handle_update_check(ctx: PluginHandlerContext) -> None:
     if action is None:
         await ctx.finish(update_usage_text())
         return
-    if action != "check":
+    if action in _UPDATE_APPLY_ACTIONS:
+        if not await is_command_cooldown_ready(
+            ctx.event,
+            ctx.command_id,
+            default_cd_sec=_UPDATE_APPLY_CD_SEC,
+        ):
+            await ctx.finish("更新冷却中，请稍后再试。")
+            return
+        await refresh_command_cooldown(
+            ctx.event,
+            ctx.command_id,
+            default_cd_sec=_UPDATE_APPLY_CD_SEC,
+        )
         await ctx.matcher.send(f"开始更新（{action}）…")
     await ctx.finish(await apply_update_action(action))
 
