@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from pallas.console.cli.ai_ops import managed_ai_root, resolve_ai_repo_root
-from pallas.console.cli.process_util import pid_alive
+from pallas.console.cli.process_util import env_for_nested_project, pid_alive
 from pallas.console.webui.ai_install_writeback import DEFAULT_AI_SERVER_PORT
 
 MANAGED_MARKER_NAME = ".pallas-managed"
@@ -208,17 +208,20 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
 
     api_up = bool(services["api"]["running"])
     media_up = bool(services["media"]["running"])
-    health = (
-        probe_ai_health_sync(ai_root=root)
-        if api_up
-        else {
+    # 始终探活：Windows/Git Bash 下 ctl 用 $! 写入的 api.pid 常非原生 PID，
+    # 仅信 pid 会误报「api 未运行」并跳过 HTTP（联通测试却能通）。
+    health = probe_ai_health_sync(ai_root=root)
+    if health.get("ok") and not api_up:
+        services["api"]["running"] = True
+        api_up = True
+    elif not api_up and not health.get("ok"):
+        health = {
             "ok": False,
-            "url": f"http://127.0.0.1:{resolve_ai_listen_port(root)}/health",
-            "status_code": None,
-            "body_preview": None,
-            "error": "api 未运行",
+            "url": str(health.get("url") or f"http://127.0.0.1:{resolve_ai_listen_port(root)}/health"),
+            "status_code": health.get("status_code"),
+            "body_preview": health.get("body_preview"),
+            "error": str(health.get("error") or "").strip() or "api 未运行",
         }
-    )
     ctl_ready = (root / _CTL).is_file()
     return {
         "can_manage": ctl_ready,
@@ -241,10 +244,12 @@ def run_ctl(ai_root: Path, *args: str, timeout_sec: float = 120.0) -> tuple[int,
     cmd = bash_script_cmd(script, *args)
     if cmd is None:
         return 1, bash_missing_message(purpose="AI Runtime ctl")
+    env = env_for_nested_project()
     try:
         completed = subprocess.run(
             cmd,
             cwd=ai_root,
+            env=env,
             check=False,
             capture_output=True,
             text=True,

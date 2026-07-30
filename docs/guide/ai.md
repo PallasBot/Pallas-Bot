@@ -125,7 +125,7 @@ WebUI 在同一页「功能开关」里：启用智能对话 / 启用遗留酒�
 
 | 方式 | 做法 |
 | --- | --- |
-| **源码（推荐本机开发）** | 「下载并安装」：克隆托管目录并 bootstrap；已安装可用「更新 Runtime」（`git pull` + 再 bootstrap）。 |
+| **源码（推荐本机开发）** | 未安装：「下载并安装」。托管目录已安装时打开/刷新会 `git fetch` 对比：有更新才显示「更新 Runtime」；已是最新则只留「仅重装依赖」作修复。探测失败时显示「检查并更新」。 |
 | **Docker 全栈** | 用主仓 compose 起 `pallasbot-ai`。见 [Docker 部署](/deploy/docker)。 |
 
 控制台**不代跑** Docker。保存连接（含 Bearer）后，扩展基址会同步 Bot 侧 `AI_SERVER_*`，Token 同步 `TTS_API_TOKEN`。

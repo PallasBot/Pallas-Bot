@@ -16,6 +16,34 @@ def is_windows() -> bool:
     return sys.platform == "win32"
 
 
+# 从 Bot venv 启动 AI 子进程时需剥掉，否则 uv 会警告 VIRTUAL_ENV 与项目 .venv 不一致
+_NESTED_PROJECT_ENV_DROP = (
+    "VIRTUAL_ENV",
+    "VIRTUAL_ENV_PROMPT",
+    "UV_PROJECT",
+    "UV_PROJECT_ENVIRONMENT",
+    "PYTHONHOME",
+)
+
+
+def env_for_nested_project(
+    base: Mapping[str, str] | None = None,
+    *,
+    extra: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """为「另一份 uv/venv 项目」（如 AI Runtime）准备子进程环境。
+
+    Bot 进程常带 ``VIRTUAL_ENV=…/Pallas-Bot/.venv``；在 AI 仓跑 ``uv run`` 时会刷
+    「does not match the project environment path」警告。剥掉相关键后由 AI 仓自有 ``.venv`` 接管。
+    """
+    out = dict(os.environ if base is None else base)
+    for key in _NESTED_PROJECT_ENV_DROP:
+        out.pop(key, None)
+    if extra:
+        out.update({str(k): str(v) for k, v in extra.items()})
+    return out
+
+
 def pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
