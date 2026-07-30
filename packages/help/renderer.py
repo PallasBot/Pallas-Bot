@@ -71,7 +71,7 @@ def _compute_help_image_cache_suffix() -> str:
         f"|fn={cfg.side_paint_filename}"
         f"|sc={cfg.side_paint_scale:.4f}"
         f"|ap={int(cfg.side_paint_auto_page)}"
-        f"|enc=v4"
+        f"|enc=v5"
         f"|vis={help_visual_mode()}"
         f"|rs={RENDER_SCALE}"
         f"|{font_part}"
