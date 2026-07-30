@@ -89,7 +89,8 @@ Bot 代理 AI Runtime（需媒体服务可达）：
 | GET | `/common-config/llm/media-models/sing/backends` | SVC backend 清单与 preferred |
 | PUT | `/common-config/llm/media-models/sing/defaults` | `{ "default_speaker" }` 和/或 `{ "preferred_backend" }`（空串=自动 fallback） |
 | GET | `/common-config/llm/media-models/tts/voices` | TTS 参考音频清单 |
-| PUT | `/common-config/llm/media-models/tts/defaults` | `ref_audio_path` / `prompt_text` 等 |
+| GET/PUT | `/common-config/llm/media-models/tts/defaults` | `ref_audio_path` / `prompt_text` 等 |
+| GET/PUT | `/common-config/llm/media-models/tts/translator` | TTS 中翻日开关、后端与密钥（secret GET 脱敏） |
 
 WebUI「能力包」页消费上述接口。默认配置落在 AI 侧 `data/media_models.json`。
 

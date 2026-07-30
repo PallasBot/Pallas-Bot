@@ -16,6 +16,7 @@ from pallas.core.platform.ai_callback.media_task_hooks import (
     invoke_media_task_success,
 )
 from pallas.core.platform.ai_callback.task_types import (
+    CHAT_DRUNK_TASK_TYPE,
     DRAW_IMAGE_TASK_TYPE,
     VOICE_TASK_TYPES,
 )
@@ -214,6 +215,33 @@ async def run_ai_callback(
                     key,
                 )
                 delivered = await send_group_voice(bot, group_id, file_bytes) and delivered
+
+        if (
+            task_type == CHAT_DRUNK_TASK_TYPE
+            and task.get("want_tts")
+            and not task.get("voice_only")
+            and reply_text
+            and text_delivered
+            and file is None
+            and group_id is not None
+            and bot_id is not None
+        ):
+            from pallas.product.llm.drunk_tts import enqueue_ai_drunk_tts, should_attach_drunk_tts
+
+            try:
+                if await should_attach_drunk_tts(
+                    bot_id=bot_id,
+                    group_id=int(group_id),
+                    reply_text=reply_text,
+                ):
+                    await enqueue_ai_drunk_tts(
+                        bot_id=bot_id_str or bot_id or "",
+                        group_id=int(group_id),
+                        user_id=int(task.get("user_id") or 0) or None,
+                        text=reply_text,
+                    )
+            except Exception:
+                logger.exception("enqueue drunk tts failed task={}", task_id)
 
         await TaskManager.remove_task(task_id)
         remove_ai_task(task_id)

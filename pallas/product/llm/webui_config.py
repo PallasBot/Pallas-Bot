@@ -91,6 +91,36 @@ class LlmWebuiConfig(BaseModel):
             "两者都开时醉酒优先走智能对话；仅开本项则走 RWKV。需要 AI Runtime 带上 chat 资源包",
         ),
     )
+    chat_tts_enable: bool = Field(
+        default=False,
+        description=field_help(
+            "酒后对话出字后，要不要再跟一条语音（侧车 TTS）",
+            "开=先发文字，再按下方阈值决定是否念出来；关=酒后只出字。"
+            "须已安装「牛牛说」扩展、启用 TTS，并配好媒体服务与音色",
+            "与手动「牛牛说」共用 AI Runtime；未达醉酒度/字数阈值时仍只发文字，不会报错刷屏",
+        ),
+    )
+    drunk_tts_min_drunkenness: int = Field(
+        default=1,
+        ge=0,
+        le=100,
+        description=field_help(
+            "酒后附带语音所需的最低醉酒度",
+            "默认 1：该牛在本群至少成功「牛牛喝酒」1 次且尚未醒酒。"
+            "醉酒度按「每只牛 × 每个群」计数，每喝一杯 +1；定时醒酒 -1，「牛牛醒一醒」清零",
+            "设为 0 表示不卡醉酒度（仍须处于酒后对话路径且总开关开启）；调高则要多喝几杯才念",
+        ),
+    )
+    drunk_tts_min_chars: int = Field(
+        default=6,
+        ge=0,
+        le=2000,
+        description=field_help(
+            "酒后回文至少多少字才附带语音",
+            "默认 6：回文字数（去首尾空白）≥ 此值才 enqueue TTS，避免极短应答也念",
+            "与「最低醉酒度」同时满足才会文+音；仅统计本次酒后回复正文",
+        ),
+    )
     llm_repeater_mode: RepeaterMode = Field(
         default="select_polish_lite",
         description=field_help(
@@ -828,7 +858,7 @@ class LlmWebuiConfig(BaseModel):
 
 def get_llm_webui_config() -> LlmWebuiConfig:
     from pallas.core.foundation.config.repo_settings import repo_env_raw_value
-    from pallas.product.llm.config import resolve_legacy_rwkv_drunk_chat_enabled
+    from pallas.product.llm.config import resolve_chat_tts_enabled, resolve_legacy_rwkv_drunk_chat_enabled
 
     cfg = get_llm_config()
     mode = normalize_repeater_mode_for_webui(cfg.llm_repeater_mode)
@@ -837,6 +867,9 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         ai_server_port=cfg.ai_server_port,
         llm_chat_enabled=cfg.llm_chat_enabled,
         chat_enable=resolve_legacy_rwkv_drunk_chat_enabled(),
+        chat_tts_enable=resolve_chat_tts_enabled(),
+        drunk_tts_min_drunkenness=cfg.drunk_tts_min_drunkenness,
+        drunk_tts_min_chars=cfg.drunk_tts_min_chars,
         llm_repeater_mode=mode,  # type: ignore[arg-type]
         llm_polish_lite_sample_rate=cfg.llm_polish_lite_sample_rate,
         llm_governance_enabled=cfg.llm_governance_enabled,

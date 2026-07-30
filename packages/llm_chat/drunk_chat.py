@@ -20,6 +20,7 @@ from pallas.product.llm import (
     is_llm_chat_service_enabled,
     submit_chat_task,
 )
+from pallas.product.llm.drunk_tts import is_chat_tts_enabled
 from pallas.product.llm.legacy_rwkv import delete_rwkv_chat_session, submit_rwkv_drunk_chat
 from pallas.product.llm.session_store import clear_llm_messages
 
@@ -98,6 +99,7 @@ async def handle_drunk_chat(bot: Bot, event: GroupMessageEvent):
 
     session = f"{bot.self_id}_{event.group_id}"
     request_id = str(ULID())
+    want_tts = is_chat_tts_enabled()
     await TaskManager.add_task(
         request_id,
         {
@@ -106,6 +108,7 @@ async def handle_drunk_chat(bot: Bot, event: GroupMessageEvent):
             "user_id": event.user_id,
             "task_type": CHAT_DRUNK_TASK_TYPE,
             "start_time": time.time(),
+            "want_tts": want_tts,
         },
     )
 
@@ -144,7 +147,7 @@ async def handle_drunk_chat(bot: Bot, event: GroupMessageEvent):
             request_id=request_id,
             session=session,
             text=text,
-            tts=False,
+            tts=want_tts,
         )
         result = type("LegacyResult", (), {"ok": ok, "task_id": task_id})()
     else:
