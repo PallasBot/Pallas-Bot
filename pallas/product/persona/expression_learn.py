@@ -45,12 +45,16 @@ def is_saying_safe_for_expression(text: str) -> bool:
 
 def infer_expression_occasion(text: str, stance: str) -> str:
     plain = str(text or "").strip()
+    if any(cue in plain for cue in ("打死", "撞死", "杀掉", "滚出来", "滚", "蠢东西", "笨蛋", "废物", "去死")):
+        return OccasionTag.PROVOCATION
     if stance == "complain":
         if any(cue in plain for cue in ("加班", "上班", "下班")):
             return OccasionTag.VENTING
         if "抽卡" in plain:
             return OccasionTag.VENTING
         return OccasionTag.VENTING
+    if any(cue in plain for cue in ("哈哈", "笑死", "草", "整活", "玩梗")):
+        return OccasionTag.BANTER
     if stance == "warm":
         return OccasionTag.WARM_REPLY
     if stance == "echo":
@@ -69,6 +73,9 @@ def propose_expression_from_utterance(
 ) -> ExpressionEntry | None:
     saying = clean_expression_saying(text)
     if not is_saying_safe_for_expression(saying):
+        return None
+    # 自生成「复读词？」模板不再回灌表达库，避免短窗母题自我强化
+    if source == "llm_success" and re.match(r"^[\u4e00-\u9fffA-Za-z0-9]{1,8}[？?]", saying):
         return None
     stance = infer_expression_affect_stance(saying)
     occasion = infer_expression_occasion(saying, stance)

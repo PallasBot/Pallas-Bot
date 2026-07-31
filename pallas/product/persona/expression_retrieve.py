@@ -45,6 +45,10 @@ def score_expression_for_query(
     if entry.status == "rejected":
         return None
 
+    blocked_tokens = {str(item).strip() for item in (blocked_motifs or []) if str(item).strip()}
+    if blocked_tokens and any(token in entry.saying for token in blocked_tokens):
+        return None
+
     score = 100 if entry.status == "active" else 50
     score += min(max(1, int(entry.support)), 10)
     if target_bot_id:
@@ -52,6 +56,13 @@ def score_expression_for_query(
             score += 15
         elif int(entry.bot_id) == 0:
             score -= 10
+
+    # 短窗母题发粘时，优先群友观察说法，少灌自生成金句
+    if blocked_tokens:
+        if entry.source == "group_observe":
+            score += 25
+        elif entry.source == "llm_success":
+            score -= 15
 
     target_stance = infer_expression_affect_stance(plain_text)
     entry_stance = str(entry.affect_hint or "").strip() or infer_expression_affect_stance(entry.saying)
@@ -64,9 +75,6 @@ def score_expression_for_query(
     feedback = entry.scene_feedback.get(str(scene), {}) if scene else {}
     if feedback.get("uses"):
         score += max(-6, min(6, int(feedback.get("score", 0))))
-    blocked_tokens = {str(item).strip() for item in (blocked_motifs or []) if str(item).strip()}
-    if blocked_tokens and any(token in entry.saying for token in blocked_tokens):
-        score -= 25
     # 与当前句无关的「已站稳」自生成金句不注入；弱相关则降权
     if kw_hits == 0 and entry.source == "llm_success" and (target_stance == "neutral" or target_stance != entry_stance):
         if entry.status == "active" or int(entry.support) >= 3:
@@ -133,7 +141,12 @@ def retrieve_expressions_for_message(
     return picked
 
 
-def build_expression_reference_block(entries: Iterable[ExpressionEntry], *, limit: int = 5) -> str:
+def build_expression_reference_block(
+    entries: Iterable[ExpressionEntry],
+    *,
+    limit: int = 5,
+    blocked_motifs: Iterable[str] | None = None,
+) -> str:
     lines: list[str] = []
     seen_openers: set[str] = set()
     for entry in entries:
@@ -146,7 +159,13 @@ def build_expression_reference_block(entries: Iterable[ExpressionEntry], *, limi
             continue
         if opener:
             seen_openers.add(opener)
-        lines.append(f"{occasion}→{saying}")
+        lines.append(f"当「{occasion}」时可参考「{saying}」")
         if len(lines) >= max(1, int(limit)):
             break
-    return f"\n【表达参考】\n{chr(10).join(lines)}。" if lines else ""
+    if not lines:
+        return ""
+    motif_tokens = [str(item).strip() for item in (blocked_motifs or []) if str(item).strip()]
+    header = "【表达参考】按场合换说法"
+    if motif_tokens:
+        header += "，勿复读：" + "、".join(motif_tokens[:4])
+    return f"\n{header}。\n" + "\n".join(lines) + "。"

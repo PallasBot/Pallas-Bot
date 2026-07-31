@@ -83,16 +83,35 @@ def test_motif_hint_from_recent_texts() -> None:
     hint = build_variation_hint_from_recent_texts([
         "双倍草料，土木牛牛明天干活都有劲了。",
         "草料管够就行",
+        "再来一份草料垫垫肚子。",
     ])
-    assert "草料" in hint or "土木" in hint
+    assert "草料" in hint
 
 
-def test_extract_recent_motifs_deduplicates_default_tokens() -> None:
+def test_extract_recent_motifs_detects_repeated_ngrams() -> None:
     motifs = extract_recent_motifs([
         "双倍草料，土木牛牛明天干活都有劲了。",
         "漂亮牛牛今天也得吃草料。",
+        "草料管够就行。",
     ])
-    assert motifs == ["草料", "土木", "漂亮牛牛"]
+    assert "草料" in motifs
+
+
+def test_extract_recent_motifs_catches_sticky_horn_without_blacklist() -> None:
+    motifs = extract_recent_motifs([
+        "兑？我这牛角可不能兑，留着顶门用呢。",
+        "撞死你？那我得先热热身，牛角可金贵着呢。",
+        "牛角割了可没法再长，我留着顶门用呢。",
+        "嘿，说我蠢？牛角给你当棒球棍耍是吧。",
+    ])
+    assert "牛角" in motifs
+    hint = build_variation_hint_from_recent_texts([
+        "兑？我这牛角可不能兑，留着顶门用呢。",
+        "撞死你？那我得先热热身，牛角可金贵着呢。",
+        "牛角割了可没法再长，我留着顶门用呢。",
+    ])
+    assert "复读对方词" in hint
+    assert "牛角" in hint
 
 
 def test_compile_self_identity_prompt_mentions_niu_niu() -> None:
