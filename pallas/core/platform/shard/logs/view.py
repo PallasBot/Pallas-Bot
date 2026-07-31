@@ -195,7 +195,8 @@ def _is_log_continuation_body(body: str) -> bool:
         return True
     if s.startswith("..."):
         return True
-    if re.match(r"^\s+\S", body):
+    # 仅 ≥2 个空白才当缩进续行；单空格前缀（事件正文常见）勿并入上条
+    if re.match(r"^[ \t]{2,}\S", body):
         return True
     return False
 
