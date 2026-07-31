@@ -1,14 +1,14 @@
 # 单进程部署
 
-单进程承载全部 Bot 能力。适合本地开发、小规模自用与功能验证；多数站点先用本形态跑通，再考虑分片。
+单进程承载全部 Bot 能力（可另起 **辅进程**，如本机 Embedding 的 `bot_embed`）。适合本地开发、自用与默认生产路径；多数站点先用本形态，仅在验证过瓶颈或需要强隔离时再上 [分片](sharded.md)。
 
 ## 特点
 
 | 项 | 说明 |
 | --- | --- |
-| 架构 | 单进程，无 hub/worker 拆分 |
-| 依赖 | 不强制 Redis |
-| 排障 | 协议端、Bot、扩展同进程，日志路径最短 |
+| 架构 | 单 ingress 进程；可选 aux（不占分片心智） |
+| 依赖 | 不强制 Redis；本机 Embedding 需要 Redis + embed 辅进程 |
+| 排障 | 主日志一条路径；辅进程日志在 `data/pallas_embed/logs/` |
 
 ## 部署检查
 
@@ -21,7 +21,9 @@
 
 ```bash
 cd /path/to/Pallas-Bot
-uv run pallas
+uv run pallas                 # 或 uv run pallas run unified
+uv run pallas status
+uv run pallas logs            # Bot + 可选 embed 辅进程
 ```
 
 | 检查项 | 预期 |
@@ -30,6 +32,7 @@ uv run pallas
 | Health | `curl -s http://127.0.0.1:8088/pallas/api/health` 返回 JSON |
 | 协议端 | 控制台显示账号在线 |
 | 群内命令 | **牛牛帮助** 有响应 |
+| 本机 Embedding | `status` 中 embed 辅进程为运行中（需 Redis + `local`） |
 
 ## 失败分支
 

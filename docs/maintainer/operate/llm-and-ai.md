@@ -134,6 +134,8 @@ LLM_EMBEDDING_PROVIDER_ID=<名册里的 id>
 LLM_EMBEDDING_PROVIDER=local
 ```
 
+本机路径需要 **`REDIS_URL`（或分片协调用 Redis）** 与 **embed 辅进程**（`bot_embed`）：`uv run pallas run unified` / `restart` 在条件满足时会自动拉起；热路径经 Redis 队列，避免在 ingress 进程里加载 fastembed。无 Redis 时不会启辅进程，也不会在热路径做本机 embed。排障：`uv run pallas status`、`uv run pallas logs`（看 `data/pallas_embed/logs/embed.log`）。
+
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `LLM_MEMORY_AUTO_EPISODE_ENABLED` | 开 | 有价值发言自动写入 episode |

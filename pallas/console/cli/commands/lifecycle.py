@@ -19,7 +19,10 @@ def register_run(sub: argparse._SubParsersAction) -> None:
     parser = sub.add_parser("run", help="启动 Bot（单进程或分片）")
     run_sub = parser.add_subparsers(dest="run_mode", required=True)
 
-    unified = run_sub.add_parser("unified", help="单进程 unified")
+    unified = run_sub.add_parser(
+        "unified",
+        help="单进程 unified（默认推荐；本机 Embedding 会附带 embed 辅进程）",
+    )
     unified.add_argument(
         "--skip-port-sync",
         action="store_true",
@@ -27,7 +30,10 @@ def register_run(sub: argparse._SubParsersAction) -> None:
     )
     unified.set_defaults(handler=run_unified)
 
-    shard = run_sub.add_parser("shard", help="分片 hub + worker")
+    shard = run_sub.add_parser(
+        "shard",
+        help="分片 hub + worker（可选进阶；热路径不阻塞时优先 unified+aux）",
+    )
     shard.add_argument("--hub-only", action="store_true")
     shard.add_argument("--workers-only", action="store_true")
     shard.add_argument("--workers", metavar="N")
