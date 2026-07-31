@@ -262,6 +262,30 @@ def _append_responses_reasoning_item(input_items: list[dict[str, Any]], message:
     })
 
 
+ANTHROPIC_EFFORT_BUDGET_TOKENS: dict[str, int] = {
+    "minimal": 1024,
+    "low": 1024,
+    "medium": 4096,
+    "high": 8192,
+    "xhigh": 16384,
+    "enable": 4096,
+}
+
+
+def _map_deepseek_effort_level(effort: str) -> str | None:
+    """DeepSeek 档位：low/high/max（Responses 与 Chat 的 reasoning_effort 共用）。"""
+    mapped = "high" if effort == "xhigh" else effort
+    if mapped == "medium":
+        mapped = "high"
+    if mapped == "minimal":
+        mapped = "low"
+    if mapped == "max":
+        return "max"
+    if mapped in {"low", "high"}:
+        return mapped
+    return None
+
+
 def apply_model_effort_to_payload(
     payload: dict[str, Any],
     options: dict[str, Any],
@@ -269,11 +293,12 @@ def apply_model_effort_to_payload(
     model: str,
     request_method: str = "chat_completions",
 ) -> None:
-    """把 Provider model_effort 映射到 Chat Completions / Responses 字段。"""
+    """把 Provider model_effort 映射到 Chat Completions / Responses / Anthropic 字段。"""
     effort = str(options.get("model_effort") or options.get("reasoning_effort") or "").strip().lower()
     model_name = str(model or "").strip().lower()
     method = str(request_method or "").strip().lower() or "chat_completions"
     is_responses = method == "responses"
+    is_anthropic = method == "anthropic_messages"
 
     def disable_deepseek_thinking() -> None:
         if is_responses:
@@ -282,37 +307,65 @@ def apply_model_effort_to_payload(
             payload.pop("reasoning_effort", None)
         else:
             payload["thinking"] = {"type": "disabled"}
+            payload.pop("reasoning_effort", None)
 
-    # DeepSeek：带 tools 或未显式档位时默认关思考（后续提交放开思考+tools）。
+    if is_anthropic:
+        if not effort or effort == "disable":
+            return
+        budget = ANTHROPIC_EFFORT_BUDGET_TOKENS.get(effort)
+        if budget is None:
+            return
+        payload["thinking"] = {"type": "enabled", "budget_tokens": budget}
+        max_tokens = int(payload.get("max_tokens") or 0)
+        if max_tokens <= budget:
+            payload["max_tokens"] = budget + 1024
+        return
+
+    # DeepSeek：默认关思考；显式开启/档位可与 tools 同开（须回传 reasoning_content）。
     if model_name.startswith("deepseek"):
-        if payload.get("tools") or not effort or effort in {"enable", "disable"}:
+        if not effort or effort == "disable":
             disable_deepseek_thinking()
             return
-    elif not effort or effort == "enable":
+        if effort == "enable":
+            if is_responses:
+                # 不写 reasoning.none，交给厂商默认思考强度
+                payload.pop("reasoning", None)
+                payload.pop("thinking", None)
+                payload.pop("reasoning_effort", None)
+            else:
+                payload["thinking"] = {"type": "enabled"}
+                payload.pop("reasoning_effort", None)
+            return
+        level = _map_deepseek_effort_level(effort)
+        if level is None:
+            disable_deepseek_thinking()
+            return
+        if is_responses:
+            payload["reasoning"] = {"effort": level}
+            payload.pop("thinking", None)
+            payload.pop("reasoning_effort", None)
+            return
+        payload["thinking"] = {"type": "enabled"}
+        # Chat：reasoning_effort 用 low/high；max 按文档可传，兼容端未知时退到 high
+        payload["reasoning_effort"] = level if level in {"low", "high", "max"} else "high"
         return
-    elif effort == "disable":
+
+    if not effort or effort == "enable":
+        return
+    if effort == "disable":
         if is_responses:
             payload["reasoning"] = {"effort": "none"}
+            payload.pop("reasoning_effort", None)
         return
 
     mapped = "high" if effort == "xhigh" else effort
     if is_responses:
-        if model_name.startswith("deepseek"):
-            ds_effort = "max" if mapped in {"max", "xhigh"} else mapped
-            if ds_effort == "medium":
-                ds_effort = "high"
-            if ds_effort == "minimal":
-                ds_effort = "low"
-            if ds_effort in {"low", "high", "max"}:
-                payload["reasoning"] = {"effort": ds_effort}
-            return
-        if mapped in {"minimal", "low", "medium", "high", "max", "none"}:
-            payload["reasoning"] = {"effort": mapped}
+        if mapped in {"minimal", "low", "medium", "high", "max", "none", "xhigh"}:
+            payload["reasoning"] = {"effort": "high" if mapped == "xhigh" else mapped}
             payload.pop("reasoning_effort", None)
         return
-    if mapped in {"minimal", "low", "medium", "high"}:
+    if mapped in {"minimal", "low", "medium", "high", "xhigh"}:
         payload["reasoning_effort"] = mapped
-
 
 
 async def complete_chat_message(
@@ -686,6 +739,7 @@ def messages_to_anthropic_payload(
     temperature = options.get("temperature")
     if temperature is not None:
         payload["temperature"] = float(temperature)
+    apply_model_effort_to_payload(payload, options, model=model, request_method="anthropic_messages")
     return payload
 
 

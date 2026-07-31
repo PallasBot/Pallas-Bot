@@ -56,7 +56,7 @@ def test_messages_to_responses_payload_flattens_tools() -> None:
     payload = messages_to_responses_payload(
         [{"role": "user", "content": "查一下"}],
         model="deepseek-v4-flash",
-        options={},
+        options={"model_effort": "high"},
         tools=[
             {
                 "type": "function",
@@ -71,7 +71,7 @@ def test_messages_to_responses_payload_flattens_tools() -> None:
     assert payload["tools"][0]["name"] == "demo"
     assert "function" not in payload["tools"][0]
     assert payload["tools"][0]["strict"] is False
-    assert payload["reasoning"] == {"effort": "none"}
+    assert payload["reasoning"] == {"effort": "high"}
 
 
 def test_messages_to_responses_payload_echoes_reasoning_before_tool_calls() -> None:
