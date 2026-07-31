@@ -115,6 +115,11 @@ def _parse_stats_body(body: Any, stats_url: str) -> dict[str, Any]:
         out["corpus"] = corpus_out
     if "corpus_enabled" in body:
         out["corpus_enabled"] = bool(body["corpus_enabled"])
+    elif corpus_out:
+        # /v1/stats 不含 corpus_enabled；有语料聚合块即视为中心已开共享语料
+        out["corpus_enabled"] = True
+    elif "corpus" in body and body["corpus"] is None:
+        out["corpus_enabled"] = False
     federation_out = _parse_federation_block(body.get("federation"))
     if federation_out:
         out["federation"] = federation_out
