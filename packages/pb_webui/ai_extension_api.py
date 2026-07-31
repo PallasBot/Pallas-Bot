@@ -197,6 +197,15 @@ class _AiRuntimeControlBody(BaseModel):
     with_media: bool = True
 
 
+class _AiRuntimeCallbackBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    host: str | None = None
+    port: int | None = Field(default=None, ge=1, le=65535)
+    align: bool = False
+    restart_media: bool = True
+
+
 class _AiExtensionTestData(BaseModel):
     ok: bool
     status_code: int | None = None
@@ -729,6 +738,30 @@ def register_ai_extension_router(
         from pallas.console.cli.ai_supervisor import stop_ai_runtime
 
         data = await asyncio.to_thread(stop_ai_runtime)
+        status = 200 if data.get("ok") else 400
+        return JSONResponse({"ok": bool(data.get("ok")), "data": data}, status_code=status)
+
+    @router.put(f"{x}/ai-extension/runtime/callback", include_in_schema=True)
+    async def _ai_extension_runtime_callback_put(
+        body: _AiRuntimeCallbackBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.console.cli.ai_callback_settings import apply_callback_settings
+
+        if not body.align and body.host is None and body.port is None:
+            return JSONResponse(
+                {"ok": False, "error": "请提供 host/port，或设置 align=true"},
+                status_code=400,
+            )
+        data = await asyncio.to_thread(
+            apply_callback_settings,
+            host=body.host,
+            port=body.port,
+            align=body.align,
+            restart_media=body.restart_media,
+        )
         status = 200 if data.get("ok") else 400
         return JSONResponse({"ok": bool(data.get("ok")), "data": data}, status_code=status)
 
