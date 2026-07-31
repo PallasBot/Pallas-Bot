@@ -162,7 +162,9 @@ def test_retrieve_filters_other_bot_and_builds_reference_block(monkeypatch, tmp_
     entries = retrieve_expressions_for_message(10001, "抽卡又歪了", limit=5, bot_id=10001)
 
     assert [entry.saying for entry in entries] == ["这也太黑了"]
-    assert build_expression_reference_block(entries) == "\n【表达参考】\nventing→这也太黑了。"
+    block = build_expression_reference_block(entries)
+    assert "当「venting」时可参考「这也太黑了」" in block
+    assert block.startswith("\n【表达参考】")
 
 
 def test_retrieve_prefers_own_bot_and_demotes_blocked_motifs(monkeypatch, tmp_path) -> None:
@@ -199,8 +201,40 @@ def test_retrieve_prefers_own_bot_and_demotes_blocked_motifs(monkeypatch, tmp_pa
         blocked_motifs=["草料"],
     )
     assert filtered
-    assert filtered[0].bot_id == 10001
-    assert all("草料" not in entry.saying for entry in filtered[:1])
+    assert all("草料" not in entry.saying for entry in filtered)
+
+
+def test_retrieve_prefers_group_observe_when_motifs_sticky(monkeypatch, tmp_path) -> None:
+    from pallas.product.persona.expression_retrieve import retrieve_expressions_for_message
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    append_or_merge_expression(
+        make_entry(
+            occasion="banter",
+            saying="够得着再说。",
+            status="shadow",
+            source="group_observe",
+            support=1,
+        )
+    )
+    append_or_merge_expression(
+        make_entry(
+            occasion="banter",
+            saying="牛角给你当棒球棍。",
+            status="active",
+            source="llm_success",
+            support=8,
+        )
+    )
+    entries = retrieve_expressions_for_message(
+        10001,
+        "你打一下试试",
+        limit=2,
+        blocked_motifs=["牛角"],
+    )
+    assert entries
+    assert entries[0].saying == "够得着再说。"
+    assert all("牛角" not in entry.saying for entry in entries)
 
 
 @pytest.mark.asyncio
@@ -214,10 +248,9 @@ async def test_context_suffix_respects_inject_config_and_falls_back_to_habits(mo
     )
     retrieve = Mock(return_value=[SimpleNamespace(occasion="吐槽", saying="太难了")])
     monkeypatch.setattr(habits, "retrieve_expressions_for_message", retrieve)
-    assert (
-        await habits.build_expression_context_suffix(10001, "太离谱了", blocked_motifs=["草料"])
-        == "\n【表达参考】\n吐槽→太难了。"
-    )
+    suffix = await habits.build_expression_context_suffix(10001, "太离谱了", blocked_motifs=["草料"])
+    assert "当「吐槽」时可参考「太难了」" in suffix
+    assert "勿复读：草料" in suffix
     retrieve.assert_called_once_with(
         10001,
         "太离谱了",

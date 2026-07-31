@@ -410,3 +410,24 @@ def register_instances_configs_router(
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(("db_overview", "user_configs_list"))
         return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/bots/{{qq}}/disconnect-ws", include_in_schema=True)
+    async def _bot_disconnect_ws(
+        qq: int,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        """关闭本进程对该 QQ 的 OneBot WS（不停止外置协议端进程）。"""
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        if qq < 1:
+            raise HTTPException(status_code=400, detail="无效的 QQ")
+        from pallas.core.platform.shard.presence import close_local_bot_connection
+
+        closed = await close_local_bot_connection(int(qq))
+        if not closed:
+            raise HTTPException(
+                status_code=404,
+                detail="当前进程未找到该账号的 WS 连接（可能已断开，或不在本机）",
+            )
+        drop_read_cache(("instances", "bots", "home-overview"))
+        return JSONResponse({"ok": True, "data": {"qq": int(qq), "closed": True}})

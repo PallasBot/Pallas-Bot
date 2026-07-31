@@ -462,14 +462,26 @@ def list_connected_bots_for_webui() -> list[dict[str, Any]]:
         rec = bots[key]
         qq = str(rec.get("qq") or key)
         nick = str(rec.get("nickname") or "").strip() or names.get(qq, "")
+        shard_id = rec.get("shard_id")
+        ws_port: int | None = None
+        if shard_id is not None:
+            try:
+                from pallas.core.platform.shard.registry.store import worker_port_for_shard
+
+                p = int(worker_port_for_shard(int(shard_id)))
+                if 1 <= p <= 65535:
+                    ws_port = p
+            except Exception:  # noqa: BLE001
+                ws_port = None
         rows.append({
             "connection_key": str(rec.get("connection_key") or qq),
             "self_id": qq,
             "adapter": str(rec.get("adapter") or ""),
             "connected_at_unix": rec.get("connected_at_unix"),
-            "shard_id": rec.get("shard_id"),
+            "shard_id": shard_id,
             "nickname": nick,
             "online": True,
+            "ws_port": ws_port,
         })
     return rows
 

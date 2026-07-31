@@ -1,5 +1,27 @@
 # Changelog
 
+## [4.1.18] - 2026-08-01
+
+### 更新公告
+
+- 控制台可断开外置协议账号的本机 OneBot WS；连接列表带出 WS 端口
+- 短窗自动母题去重，表达库换说法更稳
+- 社区统计 `/v1/stats` 回退时能推断语料是否开启
+- 捆绑控制台 WebUI **v0.8.13**
+
+### Added
+
+- `POST /pallas/api/bots/{qq}/disconnect-ws` 断开本机 WS
+- 连接列表 `ws_port` / `shard_id` 供控制台展示
+
+### Fixed
+
+- 社区统计 `/v1/stats` 回退时推断 `corpus_enabled`
+
+### Changed
+
+- LLM 短窗自动母题去重并强化表达库换说法
+
 ## [4.1.17] - 2026-07-31
 
 ### 更新公告

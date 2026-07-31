@@ -99,7 +99,11 @@ async def build_expression_context_with_entries(
         if scene:
             kwargs["scene"] = scene
         entries = await asyncio.to_thread(retrieve_expressions_for_message, int(group_id), plain_text, **kwargs)
-        reference = build_expression_reference_block(entries, limit=cfg.llm_expression_retrieve_limit)
+        reference = build_expression_reference_block(
+            entries,
+            limit=cfg.llm_expression_retrieve_limit,
+            blocked_motifs=blocked_motifs,
+        )
         if reference:
             return reference, entries
     return build_expression_habits_suffix(style_profile), []

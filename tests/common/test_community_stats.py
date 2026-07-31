@@ -124,6 +124,30 @@ def test_parse_stats_body():
     )
     assert data["deployments_total"] == 10
     assert data["online_ttl_sec"] == 900
+    assert "corpus_enabled" not in data
+
+
+def test_parse_stats_body_infers_corpus_enabled_from_corpus_block():
+    data = _parse_stats_body(
+        {
+            "deployments_total": 10,
+            "deployments_online": 3,
+            "bots_online_sum": 7,
+            "corpus": {
+                "contexts_total": 1,
+                "answers_total": 2,
+                "answer_hits_sum": 5,
+                "enrollments_total": 3,
+                "enrollments_online": 2,
+                "enrollments_recent_24h": 1,
+                "read_enabled_total": 3,
+                "contribute_enabled_total": 2,
+            },
+        },
+        "https://stats.example/v1/stats",
+    )
+    assert data["corpus_enabled"] is True
+    assert data["corpus"]["enrollments_total"] == 3
 
 
 @pytest.mark.asyncio

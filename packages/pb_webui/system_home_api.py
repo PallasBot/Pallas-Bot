@@ -86,6 +86,47 @@ def _ensure_bot_session_hooks() -> None:
             pass
 
 
+def _resolve_local_onebot_ws_port() -> int | None:
+    """本进程 OneBot 反向 WS 监听端口（分片 worker / unified 的 PORT）。"""
+    try:
+        from pallas.core.platform.shard.worker_port import current_worker_port
+
+        wp = current_worker_port()
+        if wp is not None and 1 <= int(wp) <= 65535:
+            return int(wp)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        port = getattr(get_driver().config, "port", None)
+        if port is not None:
+            p = int(port)
+            if 1 <= p <= 65535:
+                return p
+    except Exception:  # noqa: BLE001
+        pass
+    raw = (os.environ.get("PORT") or "").strip()
+    if raw.isdigit():
+        p = int(raw)
+        if 1 <= p <= 65535:
+            return p
+    return None
+
+
+def _local_shard_id_for_bots() -> int | None:
+    try:
+        from pallas.core.platform.shard import context as shard_ctx
+        from pallas.core.platform.shard.registry.config import get_shard_registry_settings
+
+        if not shard_ctx.sharding_active():
+            return None
+        s = get_shard_registry_settings()
+        if s.role != "worker":
+            return None
+        return int(s.shard_id)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _list_bots_dict() -> list[dict[str, Any]]:
 
     if shard_hub_console():
@@ -93,6 +134,8 @@ def _list_bots_dict() -> list[dict[str, Any]]:
 
         return list_connected_bots_for_webui()
 
+    ws_port = _resolve_local_onebot_ws_port()
+    shard_id = _local_shard_id_for_bots()
     rows: list[dict[str, Any]] = []
     for key, bot in get_bots().items():
         self_id: str
@@ -107,12 +150,16 @@ def _list_bots_dict() -> list[dict[str, Any]]:
                 adapter = str(a.get_name())
         except Exception:  # noqa: BLE001
             pass
-        rows.append({
+        row: dict[str, Any] = {
             "connection_key": str(key),
             "self_id": self_id,
             "adapter": adapter,
             "connected_at_unix": _BOT_SESSION_CONNECTED_UNIX.get(str(key)),
-        })
+            "ws_port": ws_port,
+        }
+        if shard_id is not None:
+            row["shard_id"] = shard_id
+        rows.append(row)
     return rows
 
 

@@ -46,6 +46,26 @@ def test_propose_expression_builds_clean_affect_aligned_draft() -> None:
     assert len(entry.saying) <= 20
 
 
+def test_propose_skips_llm_success_echo_question_template() -> None:
+    learn = expression_learn()
+    assert (
+        learn.propose_expression_from_utterance(
+            "兑？我这牛角可不能兑",
+            source="llm_success",
+            channel="group",
+        )
+        is None
+    )
+    assert (
+        learn.propose_expression_from_utterance(
+            "够得着再说",
+            source="llm_success",
+            channel="group",
+        )
+        is not None
+    )
+
+
 def test_note_expression_respects_config_and_merges_llm_success_weight(monkeypatch, tmp_path) -> None:
     learn = expression_learn()
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))

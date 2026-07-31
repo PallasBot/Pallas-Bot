@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -29,13 +30,72 @@ _SIGH_OPENER_RE = re.compile(r"^(欸|哎|唉|呃|额)+")
 _ANIMAL_OPENER_RE = re.compile(r"^(哞~|喵~|喵呜~|哞呜~)")
 _TILDE_OPENER_RE = re.compile(r"^([\u4e00-\u9fff]{1,2})~")
 _KAOMOJI_SUFFIX_RE = re.compile(r"\(\*[^)]{1,16}\*\)\s*$")
+_CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]+")
+_ECHO_QUESTION_RE = re.compile(r"^[\u4e00-\u9fffA-Za-z0-9]{1,8}[？?]")
 
 _USER_WAIT_SUFFIXES = ("?", "？", "...", "…", "、")
 _USER_WAIT_TOKENS = ("等等", "等下", "先别", "我补一句", "还有", "然后")
 _STRUCTURE_MARKERS = ("先", "别", "可以", "不用", "慢慢", "一下", "这事", "你先")
 _GENERIC_PREFIX_MIN_LEN = 3
 _GENERIC_PREFIX_MAX_LEN = 4
+# 兼容旧测试/调用；母题去重已改为短窗统计，不再依赖手维名单。
 DEFAULT_MOTIF_TOKENS = ("草料", "土木", "漂亮牛牛")
+_MOTIF_WINDOW = 6
+_MOTIF_MIN_DOCS = 2
+_MOTIF_LIMIT = 4
+_MOTIF_NGRAM_MIN = 2
+_MOTIF_NGRAM_MAX = 4
+_MOTIF_STOPWORDS = frozenset({
+    "我们",
+    "你们",
+    "他们",
+    "这个",
+    "那个",
+    "什么",
+    "怎么",
+    "不是",
+    "就是",
+    "可以",
+    "没有",
+    "还是",
+    "一个",
+    "自己",
+    "然后",
+    "因为",
+    "所以",
+    "如果",
+    "已经",
+    "真的",
+    "有点",
+    "一下",
+    "这样",
+    "那样",
+    "这么",
+    "那么",
+    "怎样",
+    "为何",
+    "为啥",
+    "知道",
+    "觉得",
+    "感觉",
+    "其实",
+    "不过",
+    "但是",
+    "而且",
+    "或者",
+    "牛牛",
+    "博士",
+    "帕拉斯",
+    "今天",
+    "明天",
+    "昨天",
+    "现在",
+    "时候",
+    "东西",
+    "地方",
+    "问题",
+    "事情",
+})
 
 
 def should_wait_for_more(user_text: str) -> bool:
@@ -51,11 +111,47 @@ def has_kaomoji_suffix(text: str) -> bool:
     return bool(_KAOMOJI_SUFFIX_RE.search(str(text or "").strip()))
 
 
+def _motif_ngrams_for_text(text: str) -> set[str]:
+    grams: set[str] = set()
+    for run in _CJK_RUN_RE.findall(str(text or "")):
+        max_n = min(_MOTIF_NGRAM_MAX, len(run))
+        for size in range(_MOTIF_NGRAM_MIN, max_n + 1):
+            for index in range(len(run) - size + 1):
+                gram = run[index : index + size]
+                if gram in _MOTIF_STOPWORDS:
+                    continue
+                if any(stop in gram and stop != gram for stop in ("什么", "怎么", "怎样")):
+                    continue
+                grams.add(gram)
+    return grams
+
+
 def extract_recent_motifs(texts: list[str]) -> list[str]:
-    recent_texts = [str(item or "").strip() for item in texts[-6:] if str(item or "").strip()]
-    if not recent_texts:
+    """从近窗 assistant 回复里统计重复中文片段，自动当成本轮母题（无需手维黑名单）。"""
+    recent_texts = [str(item or "").strip() for item in texts[-_MOTIF_WINDOW:] if str(item or "").strip()]
+    if len(recent_texts) < _MOTIF_MIN_DOCS:
         return []
-    return [token for token in DEFAULT_MOTIF_TOKENS if any(token in text for text in recent_texts)]
+
+    doc_freq: Counter[str] = Counter()
+    for text in recent_texts:
+        for gram in _motif_ngrams_for_text(text):
+            doc_freq[gram] += 1
+
+    candidates = [(gram, count) for gram, count in doc_freq.items() if count >= _MOTIF_MIN_DOCS]
+    # 先高文档频，再偏长，抓住「牛角」这类真正发粘核心
+    candidates.sort(key=lambda item: (-item[1], -len(item[0]), item[0]))
+    picked: list[str] = []
+    for gram, _count in candidates:
+        if any(gram in chosen or chosen in gram for chosen in picked):
+            continue
+        picked.append(gram)
+        if len(picked) >= _MOTIF_LIMIT:
+            break
+    return picked
+
+
+def count_echo_question_openers(texts: list[str]) -> int:
+    return sum(1 for text in texts if _ECHO_QUESTION_RE.match(str(text or "").strip()))
 
 
 def repeated_assistant_openers(turns: list[LlmChatTurn], *, limit: int = 3) -> list[str]:
@@ -162,7 +258,7 @@ def build_recent_reply_variation_hint(turns: list[LlmChatTurn]) -> str:
     hints: list[str] = []
     motifs = extract_recent_motifs(assistant_texts)
     if motifs:
-        hints.append("最近几轮别老围着这些短窗母题打转：" + "、".join(motifs))
+        hints.append("最近几轮别老围着这些短窗母题打转：" + "、".join(motifs) + "；换隐喻或直接短怼")
     openers = repeated_assistant_openers(turns)
     if openers:
         hints.append("最近几轮别再用这些开头：" + "、".join(openers))
@@ -195,6 +291,9 @@ def build_recent_reply_variation_hint(turns: list[LlmChatTurn]) -> str:
 
         if any(item in SOFT_AGREE_OPENERS for item in sticky):
             hints.insert(1, "别用行行行/好好好/还行吧起手，直接接话题")
+
+    if count_echo_question_openers(recent4) >= 2:
+        hints.insert(0, "最近老用「复读对方词？」起手，这轮直接接话，别再复读反问")
 
     recent = assistant_texts[-3:]
     from pallas.product.persona.soft_agree_fillers import match_soft_agree_opener
@@ -247,7 +346,7 @@ def build_variation_hint_from_recent_texts(recent_texts: list[str]) -> str:
     hints: list[str] = []
     motifs = extract_recent_motifs(texts)
     if motifs:
-        hints.append("最近几轮别老围着这些短窗母题打转：" + "、".join(motifs))
+        hints.append("最近几轮别老围着这些短窗母题打转：" + "、".join(motifs) + "；换隐喻或直接短怼")
     openers: list[str] = []
     for text in reversed(texts[-6:]):
         opener = classify_repeated_opener(text)
@@ -259,6 +358,8 @@ def build_variation_hint_from_recent_texts(recent_texts: list[str]) -> str:
         hints.append("最近几轮别再用这些开头：" + "、".join(openers))
 
     recent = texts[-3:]
+    if count_echo_question_openers(texts[-4:]) >= 2:
+        hints.insert(0, "最近老用「复读对方词？」起手，这轮直接接话，别再复读反问")
     animal_openers = sum(1 for text in recent if _ANIMAL_OPENER_RE.match(text))
     if animal_openers >= 2:
         hints.append("最近开头动物口癖太多，别再用哞~/喵~ 起手")
