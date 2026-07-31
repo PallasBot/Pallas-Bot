@@ -190,6 +190,8 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
             layout = "docker"
         else:
             layout = "missing"
+        from pallas.console.cli.ai_ops import default_bot_callback_host, default_bot_callback_port
+
         return {
             "can_manage": False,
             "ai_root": None,
@@ -198,6 +200,16 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
             "endpoint": {"host": host, "port": port},
             "services": {name: {"running": False, "pid": None} for name in _SERVICES},
             "health": health,
+            "callback": {
+                "can_edit": False,
+                "host": None,
+                "port": None,
+                "expected_host": default_bot_callback_host(),
+                "expected_port": default_bot_callback_port(),
+                "aligned": None,
+                "probe": None,
+                "error": "无本地 AI Runtime，回调配置在 compose / 远端 .env",
+            },
         }
 
     services: dict[str, dict[str, Any]] = {}
@@ -223,6 +235,8 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
             "error": str(health.get("error") or "").strip() or "api 未运行",
         }
     ctl_ready = (root / _CTL).is_file()
+    from pallas.console.cli.ai_callback_settings import build_callback_status
+
     return {
         "can_manage": ctl_ready,
         "ai_root": str(root),
@@ -232,6 +246,7 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
         "endpoint": {"host": "127.0.0.1", "port": resolve_ai_listen_port(root)},
         "services": services,
         "health": health,
+        "callback": build_callback_status(ai_root=root),
     }
 
 

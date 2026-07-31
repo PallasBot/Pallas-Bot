@@ -310,6 +310,7 @@ async def maybe_submit_repeater_llm_select(
             "group_id": group_id,
             "user_id": user_id,
             "task_type": REPEATER_SELECT_TASK_TYPE,
+            "llm_route": "pipeline_select",
             "user_text": plain,
             "fallback_text": fallback,
             "candidate_pool": list(ranked),

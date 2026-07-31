@@ -138,6 +138,7 @@ async def maybe_submit_repeater_llm_polish(
             "group_id": group_id,
             "user_id": user_id,
             "task_type": REPEATER_POLISH_TASK_TYPE,
+            "llm_route": "corpus_polish",
             "user_text": str(trigger_user_text or "").strip(),
             "fallback_text": candidate,
             "reply_mode": str(reply_mode or "normal"),

@@ -13,6 +13,7 @@ _COMMAND_MODULES = (
     "pallas.console.cli.commands.plugin_cmd",
     "pallas.console.cli.commands.update_cmd",
     "pallas.console.cli.commands.lifecycle",
+    "pallas.console.cli.commands.logs_cmd",
     "pallas.console.cli.commands.maintenance_cmd",
     "pallas.console.cli.commands.deploy_cmd",
     "pallas.console.cli.commands.ai_cmd",
@@ -22,7 +23,10 @@ _COMMAND_MODULES = (
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pallas",
-        description="Pallas Bot 统一运维：依赖同步、官方插件、启停与更新（无子命令时默认启动单进程 Bot）",
+        description=(
+            "Pallas Bot 统一运维：依赖同步、官方插件、启停与更新"
+            "（无子命令时默认启动 unified；本机 Embedding 会附带 embed 辅进程）"
+        ),
     )
     parser.add_argument(
         "-V",

@@ -1,17 +1,25 @@
 # 日志位置与导出
 
-查运行问题时，先确认部署形态（单进程 / 分片 / Docker），再按下表找日志。更广的排障顺序见 [排障](troubleshooting.md)。
+查运行问题时，先确认部署形态（默认 **unified + 可选 aux** / 分片 / Docker），再按下表找日志。日常优先：
+
+```bash
+uv run pallas logs          # 默认 Bot + embed 辅进程；分片时给 hub
+uv run pallas status
+```
+
+更广的排障顺序见 [排障](troubleshooting.md)。
 
 ## 落盘位置
 
 | 场景 | 位置 |
 | --- | --- |
-| 单进程落盘 | `data/bot/nonebot_*.log`（`boot.py` 经 `plugin_data_dir("bot")`） |
-| 分片 | `data/pallas_shard/logs/hub.log`、`worker-*.log`，以及同目录下的 bootstrap / archive |
+| unified（默认） | `data/pallas_unified/logs/bot.log`；NoneBot 亦可有 `data/bot/nonebot_*.log` |
+| embed 辅进程 | `data/pallas_embed/logs/embed.log`（本机 Embedding + Redis 时） |
+| 分片（进阶） | `data/pallas_shard/logs/hub.log`、`worker-*.log`，以及同目录 bootstrap / archive |
 | 控制台实时 | 内存环 + 上述文件尾；WebUI「运行日志」页 |
-| Docker | 数据卷内 `…/data/bot/`、`…/data/pallas_shard/logs/`（具体挂载以 Compose 为准，常见为 `./pallas-bot/data`） |
+| Docker | 数据卷内对应 `data/`（具体挂载以 Compose 为准，常见为 `./pallas-bot/data`） |
 
-单进程时也可看 Bot 进程 stdout；分片故障优先查对应 hub / worker 文件，不要只扫单进程目录。
+默认排障跟 **unified Bot 日志**；语义/向量异常再看 embed 辅进程。分片故障优先查 hub，需要账号级再打开对应 `worker-*.log`，不要一上来扫全部分片文件。
 
 ## 控制台查看与导出
 

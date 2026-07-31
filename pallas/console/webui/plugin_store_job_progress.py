@@ -117,6 +117,13 @@ def get_plugin_store_job(job_id: str) -> PluginStoreJob | None:
     return _JOBS.get((job_id or "").strip())
 
 
+def get_active_plugin_store_job() -> PluginStoreJob | None:
+    running = [j for j in _JOBS.values() if j.phase in ("queued", "running")]
+    if not running:
+        return None
+    return max(running, key=lambda j: j.updated_at)
+
+
 def job_progress_reporter(job: PluginStoreJob) -> ProgressReporter:
     def report(percent: int, message: str = "") -> None:
         job.push("running", message, progress_percent=percent)

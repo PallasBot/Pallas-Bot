@@ -134,6 +134,8 @@ def fetch_embeddings_sync(
         return vectors
     except Exception as exc:
         _last_embedding_error = str(exc)[:240]
+        if provider.name == "local":
+            return None
         # 远程失败回落 stub，保证调用方不中断
         return [stub_embedding(text) for text in inputs]
 

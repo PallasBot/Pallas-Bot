@@ -1,5 +1,38 @@
 # Changelog
 
+## [4.1.17] - 2026-07-31
+
+### 更新公告
+
+- 控制台可查看并对齐 AI 回调端口；异步任务切页后可续看进度
+- DeepSeek 等可统一配置思考强度，并支持思考与工具同开；Responses 工具入参更稳
+- 本机 Embedding 可走 Redis 辅进程，减轻对话热路径压力
+- CLI：`unified` / 辅进程启停说明更清晰，可用 `pallas logs` 看日志
+- 回复路径统计只在真正发出时记账，不再把「尝试现编」算进去
+- 运行日志续行合并更准；语料扫库不再重复 init 卡死连接
+- 捆绑控制台 WebUI **v0.8.12**
+
+### Added
+
+- 控制台 AI 回调端口展示与对齐
+- `/jobs/active` 续看异步 job 进度
+- 思考强度统一映射；DeepSeek 思考 + tools
+- Responses 扁平 tools 与 reasoning 回传
+- 本机 Embedding Redis 辅进程
+- `pallas logs` 与 unified/aux 生命周期叙事
+
+### Fixed
+
+- 回复路径在提交前虚记；callback 成功且带明确 `llm_route` 再记
+- 日志续行仅合并 ≥2 空白缩进
+- 语料扫库重复 init 导致 idle-in-transaction
+- 唱歌映射字段文案「命令」→「音色」
+- 图片缓存失败日志带异常类型
+
+### Changed
+
+- Agent / 面向用户用语约定同步
+
 ## [4.1.16] - 2026-07-30
 
 ### 更新公告

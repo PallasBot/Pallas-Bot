@@ -7,7 +7,7 @@
 1. 先用 [快速开始](/guide/quickstart) 跑通本机实例。需要从源码安装时，改看 [源码安装](/guide/install-source)；使用容器时，改看 [Docker 部署](/deploy/docker)。
 2. 按需安装 [WebUI](/maintainer/install/webui)、[协议端](/maintainer/install/protocol) 和 [官方插件](/maintainer/install/official-extensions)。需要决斗、MAA 或其他扩展时，看 [安装插件](/guide/install-plugins)；接入 AI 时，看 [AI 扩展](/guide/ai) 和 [AI Runtime](/maintainer/install/ai-runtime)。
 3. 完成配置与权限：用 [命令权限](/maintainer/operate/command-permissions) 管理命令可用范围，用 [Web 控制台](/maintainer/operate/webui) 管理运行中的实例。
-4. 上线前按 [安装验收 Checklist](/maintainer/install/ga-install-checklist) 检查；长期运行的单个账号使用 [单进程部署](/maintainer/deploy/single-process)。
+4. 上线前按 [安装验收 Checklist](/maintainer/install/ga-install-checklist) 检查；长期运行默认用 [单进程部署](/maintainer/deploy/single-process)（可带 Embedding 辅进程）。
 
 ## 按当前任务
 
@@ -21,4 +21,4 @@
 
 ## 后续阅读：多账号与分片
 
-默认使用单进程即可。多个 Bot 账号同时在线、单进程出现资源瓶颈，或需要独立 worker 协调时，再阅读 [分片部署](/maintainer/deploy/sharded)。
+默认 **unified + 辅进程**（如本机 Embedding 的 `bot_embed`）即可；`uv run pallas status` / `pallas logs` 不必先学 worker-N。多个 Bot 账号同时在线且单进程已验证瓶颈、或需要强隔离时，再阅读 [分片部署](/maintainer/deploy/sharded)。

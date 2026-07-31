@@ -4,6 +4,8 @@
 
 接群命令时先在 [写第一个插件](/developer/plugin-development/first-plugin) 对齐命令 ID，再回到本页补权限与帮助文案约定。
 
+**用语**：面向用户（帮助、`usage`、控制台）统一称「**命令**」，不要写「口令」。控制台登录称「密钥」；社区统计 / 共享语料访问凭证可保留「口令」。
+
 实现：`pallas.core.perm`；**插件侧只从 `pallas.api.perm` import**。
 
 ## 等级

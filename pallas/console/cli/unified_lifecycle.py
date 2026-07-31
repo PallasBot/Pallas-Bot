@@ -73,7 +73,9 @@ def start_bot(*, skip_port_sync: bool = False) -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     if is_bot_running():
         print(f"unified 已在运行 (pid {read_pid_file(PID_FILE)})")
-        return 0
+        from pallas.console.cli.embedding_aux import start_embed_aux
+
+        return start_embed_aux()
     port = read_listen_port()
     sync_rc = prepare_unified_ports(port, skip_port_sync=skip_port_sync)
     if sync_rc != 0:
@@ -96,13 +98,18 @@ def start_bot(*, skip_port_sync: bool = False) -> int:
         print(f"unified 已启动 pid={read_pid_file(PID_FILE)} port={port}")
         print(f"WebUI: http://127.0.0.1:{port}/pallas/")
         print(f"日志: {LOG_FILE}")
-        return 0
+        from pallas.console.cli.embedding_aux import start_embed_aux
+
+        return start_embed_aux()
     print(f"unified 启动失败，查看 {LOG_FILE}", file=sys.stderr)
     clear_pid_file(PID_FILE)
     return 1
 
 
 def stop_bot() -> int:
+    from pallas.console.cli.embedding_aux import stop_embed_aux
+
+    stop_embed_aux()
     pid = read_pid_file(PID_FILE)
     if pid is None or not pid_alive(pid):
         clear_pid_file(PID_FILE)
@@ -115,15 +122,19 @@ def stop_bot() -> int:
 
 
 def status_bot() -> int:
+    from pallas.console.cli.embedding_aux import print_embed_aux_status
+
     port = read_listen_port()
-    print("PALLAS_SHARD_ENABLED=false (期望)")
+    print("形态 unified（默认；分片为可选进阶）")
     print(f"监听端口 {port}")
     if is_bot_running():
-        print(f"状态 运行中 pid={read_pid_file(PID_FILE)}")
+        print(f"Bot 运行中 pid={read_pid_file(PID_FILE)}")
         print(f"WebUI http://127.0.0.1:{port}/pallas/")
     else:
-        print("状态 未运行")
-    print(f"日志 {LOG_FILE}")
+        print("Bot 未运行")
+    print(f"Bot 日志 {LOG_FILE}")
+    print_embed_aux_status()
+    print("更多日志: uv run pallas logs")
     return 0
 
 

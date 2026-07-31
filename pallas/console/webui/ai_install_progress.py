@@ -117,6 +117,13 @@ def get_ai_install_job(job_id: str) -> AiInstallJob | None:
     return _JOBS.get(job_id)
 
 
+def get_active_ai_install_job() -> AiInstallJob | None:
+    running = [j for j in _JOBS.values() if j.phase in ("queued", "running")]
+    if not running:
+        return None
+    return max(running, key=lambda j: j.updated_at)
+
+
 def bootstrap_line_progress(line_index: int) -> int:
     """bootstrap 输出行对应的缓升百分比（不含封顶后的 writeback）。"""
     return min(PCT_BOOTSTRAP_CAP, PCT_BOOTSTRAP + max(0, int(line_index)))

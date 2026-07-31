@@ -129,7 +129,6 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
                 has_recent_back_and_forth=False,
                 is_to_me=bool(event.is_tome()),
             )
-            record_bot_llm_route("repeater_fallback", "pipeline_generate")
             await maybe_submit_repeater_llm_fallback(
                 event,
                 user_text=ctx.plain_body,
@@ -263,11 +262,6 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
 
     async def stage_runner(stage_name: str) -> bool:
         if stage_name in {"select", "rewrite"}:
-            if stage_name == "select":
-                record_bot_llm_route("repeater_select", "pipeline_select")
-            else:
-                task_name = "repeater_polish_lite" if capabilities.polish_lite_enabled else "repeater_polish"
-                record_bot_llm_route(task_name, "pipeline_rewrite")
             return await submit_corpus_assist_stages(
                 event,
                 user_text=ctx.plain_body,
@@ -310,11 +304,11 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
             await config.refresh_cooldown("repeat")
             from ..fanout_reply import dispatch_repeater_reply
 
+            # 本地拼接发出才记账（无 LLM callback）
             record_bot_llm_route("repeater_polish", "pipeline_stitch")
             dispatch_repeater_reply(int(event.self_id), int(event.group_id), answers)
             return True
         if stage_name == "generate":
-            record_bot_llm_route("repeater_fallback", "pipeline_generate")
             return await maybe_submit_repeater_llm_fallback(
                 event,
                 user_text=ctx.plain_body,

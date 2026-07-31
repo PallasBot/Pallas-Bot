@@ -23,7 +23,7 @@ uv run pallas ext install pallas-plugin-ai-media
 
 精确命令与「何人可用」以群内 **牛牛帮助** 为准。
 
-不要用「牛牛说啥呢」这种粘连句当口令——中间没空格时不会当「牛牛说」处理，以免挡住正常闲聊。
+不要用「牛牛说啥呢」这种粘连句当命令——中间没空格时不会当「牛牛说」处理，以免挡住正常闲聊。
 
 ## 酒后自动跟语音（可选）
 
@@ -66,7 +66,7 @@ uv run pallas ext install pallas-plugin-ai-media
 
 | 现象 | 处理 |
 | --- | --- |
-| 「牛牛说」无语音 | 确认插件已启用、AI Runtime 在线、`/callback` 可达；媒体连接 Bearer 与 AI 侧 `PALLAS_AI_API_TOKEN` 一致；口令中间是否有空格 |
+| 「牛牛说」无语音 | 确认插件已启用、AI Runtime 在线、`/callback` 可达；媒体连接 Bearer 与 AI 侧 `PALLAS_AI_API_TOKEN` 一致；命令中间是否有空格 |
 | 「牛牛说啥呢」却出声 | 已改为前缀后须空白；升级 ai-media 后应不再误触发 |
 | `@` 让念出来只回文字 | 确认 `LLM_TOOLS_ENABLED` / soft recall；hints 含「念出来」「把你的话」等；被回复原文应作为工具 `text` |
 | 语音听感截断 / 怪 | 查控制台 TTS「中翻日」与合成语种：译失败不应再强行按日语合成；音色默认与 prompt 语言是否匹配 |

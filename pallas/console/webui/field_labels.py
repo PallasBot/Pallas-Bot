@@ -389,7 +389,7 @@ FIELD_LABELS: dict[str, str] = {
     "sing_enable": "启用唱歌点歌",
     "sing_endpoint": "合成任务路径",
     "sing_length": "默认合成时长（秒）",
-    "sing_speakers": "音色映射",
+    "sing_speakers": "命令 → 音色",
     "smtp_password": "SMTP 密码",
     "smtp_port": "SMTP 端口",
     "smtp_server": "SMTP 服务器",

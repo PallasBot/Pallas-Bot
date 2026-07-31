@@ -683,6 +683,28 @@ def register_plugins_console_router(
         )
 
     @router.get(
+        f"{x}/plugins/store-jobs/active",
+        include_in_schema=True,
+    )
+    async def _plugins_store_job_active() -> JSONResponse:
+        from pallas.console.webui.plugin_store_job_progress import get_active_plugin_store_job
+
+        job = get_active_plugin_store_job()
+        return JSONResponse({"ok": True, "data": job.as_dict() if job else None})
+
+    @router.get(
+        f"{x}/plugins/store-jobs/{{job_id}}",
+        include_in_schema=True,
+    )
+    async def _plugins_store_job_get(job_id: str) -> JSONResponse:
+        from pallas.console.webui.plugin_store_job_progress import get_plugin_store_job
+
+        job = get_plugin_store_job(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="job_not_found")
+        return JSONResponse({"ok": True, "data": job.as_dict()})
+
+    @router.get(
         f"{x}/plugins/store-jobs/{{job_id}}/stream",
         include_in_schema=True,
     )

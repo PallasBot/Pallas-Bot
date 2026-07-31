@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -195,6 +195,15 @@ class _AiRuntimeControlBody(BaseModel):
 
     # 兼容旧客户端；启动固定 media + api
     with_media: bool = True
+
+
+class _AiRuntimeCallbackBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    host: str | None = None
+    port: int | None = Field(default=None, ge=1, le=65535)
+    align: bool = False
+    restart_media: bool = True
 
 
 class _AiExtensionTestData(BaseModel):
@@ -686,6 +695,22 @@ def register_ai_extension_router(
         asyncio.create_task(run_ai_install_job(job, _runner))
         return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "action": job.action}})
 
+    @router.get(f"{x}/ai-extension/install/jobs/active", include_in_schema=True)
+    async def _ai_extension_install_job_active() -> JSONResponse:
+        from pallas.console.webui.ai_install_progress import get_active_ai_install_job
+
+        job = get_active_ai_install_job()
+        return JSONResponse({"ok": True, "data": job.as_dict() if job else None})
+
+    @router.get(f"{x}/ai-extension/install/jobs/{{job_id}}", include_in_schema=True)
+    async def _ai_extension_install_job_get(job_id: str) -> JSONResponse:
+        from pallas.console.webui.ai_install_progress import get_ai_install_job
+
+        job = get_ai_install_job(job_id.strip())
+        if job is None:
+            raise HTTPException(status_code=404, detail="job_not_found")
+        return JSONResponse({"ok": True, "data": job.as_dict()})
+
     @router.get(f"{x}/ai-extension/install/jobs/{{job_id}}/stream", include_in_schema=True)
     async def _ai_extension_install_job_stream(job_id: str) -> StreamingResponse:
         from pallas.console.webui.ai_install_progress import iter_ai_install_job_sse
@@ -729,6 +754,30 @@ def register_ai_extension_router(
         from pallas.console.cli.ai_supervisor import stop_ai_runtime
 
         data = await asyncio.to_thread(stop_ai_runtime)
+        status = 200 if data.get("ok") else 400
+        return JSONResponse({"ok": bool(data.get("ok")), "data": data}, status_code=status)
+
+    @router.put(f"{x}/ai-extension/runtime/callback", include_in_schema=True)
+    async def _ai_extension_runtime_callback_put(
+        body: _AiRuntimeCallbackBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.console.cli.ai_callback_settings import apply_callback_settings
+
+        if not body.align and body.host is None and body.port is None:
+            return JSONResponse(
+                {"ok": False, "error": "请提供 host/port，或设置 align=true"},
+                status_code=400,
+            )
+        data = await asyncio.to_thread(
+            apply_callback_settings,
+            host=body.host,
+            port=body.port,
+            align=body.align,
+            restart_media=body.restart_media,
+        )
         status = 200 if data.get("ok") else 400
         return JSONResponse({"ok": bool(data.get("ok")), "data": data}, status_code=status)
 

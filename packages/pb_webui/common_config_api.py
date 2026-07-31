@@ -879,6 +879,19 @@ def register_common_config_router(
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(
+        f"{x}/common-config/llm/media-assets/download/jobs/active",
+        include_in_schema=True,
+    )
+    async def _llm_media_assets_download_job_active_get() -> JSONResponse:
+        from pallas.product.llm.ops_api import fetch_media_assets_download_active
+
+        try:
+            data = await fetch_media_assets_download_active()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
         f"{x}/common-config/llm/media-assets/download/jobs/{{job_id}}",
         include_in_schema=True,
     )

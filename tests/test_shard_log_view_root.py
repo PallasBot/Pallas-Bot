@@ -220,6 +220,30 @@ def test_merge_entry_does_not_glue_cross_worker_traceback():
     assert "Traceback" not in merged[1]["message"]
 
 
+def test_merge_does_not_glue_leading_space_event_onto_previous():
+    from pallas.console.web.bot_web import merge_log_line_continuations
+
+    lines = [
+        "07-31 17:30:55 | WARNING  | pallas:88 - image cache capture failed: ",
+        "07-31 17:30:55 | SUCCESS  | pallas:122 -  OneBot V11 2927116873 | [message.group.normal]: Message",
+    ]
+    # 若正文被拆成无时间戳续行（仅剩前导空格 + OneBot），也不得并入上条
+    lines_bare = [
+        "07-31 17:30:55 | WARNING  | pallas:88 - image cache capture failed: ",
+        " OneBot V11 2927116873 | [message.group.normal]: Message",
+    ]
+    merged = merge_log_line_continuations(lines)
+    assert len(merged) == 2
+    assert "image cache capture failed" in merged[0]
+    assert "OneBot" not in merged[0]
+    assert "OneBot" in merged[1]
+
+    merged_bare = merge_log_line_continuations(lines_bare)
+    assert len(merged_bare) == 2
+    assert "OneBot" not in merged_bare[0]
+    assert "OneBot" in merged_bare[1]
+
+
 def test_fill_missing_times_isolated_by_worker():
     rows = [
         parse_nonebot_log_line("[worker-1] 05-21 22:44:15 | ERROR    | load:50 - Failed"),

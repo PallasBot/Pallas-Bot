@@ -85,7 +85,7 @@ async def run_image_capture_consumer() -> None:
         try:
             await _insert_image_io(image_seg)
         except Exception as e:
-            logger.warning("image cache capture failed: {}", e)
+            logger.warning("image cache capture failed: {}: {}", type(e).__name__, e)
         finally:
             image_capture_queue().task_done()
 

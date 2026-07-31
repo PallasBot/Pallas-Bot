@@ -346,12 +346,32 @@ def _cfg_bool(key: str, default: bool = False) -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _pg_init_failure_looks_like_dropped_connection(exc: BaseException) -> bool:
+    text = f"{type(exc).__name__}: {exc}".lower()
+    compact = text.replace(" ", "").replace("_", "")
+    return "connectiondoesnotexist" in compact or "connectionwasclosed" in compact or "idleintransaction" in compact
+
+
+def _pg_init_failure_looks_like_missing_db(exc: BaseException) -> bool:
+    if _pg_init_failure_looks_like_dropped_connection(exc):
+        return False
+    text = f"{type(exc).__name__}: {exc}".lower()
+    return (
+        "invalidcatalogname" in text.replace(" ", "")
+        or "3d000" in text
+        or ("does not exist" in text and "database" in text)
+    )
+
+
 async def init_postgresql_db() -> None:
     """初始化 PostgreSQL 连接。
 
     默认只连 ``PG_DB`` 做建表/迁移，不要求 CREATEDB / 超级用户。
     可选 ``PG_AUTO_CREATE_DB=true``：连维护库 ``postgres`` 并 ``CREATE DATABASE``（本地开发）。
     ``pg_stat_statements`` 在 schema 事务外尝试启用，失败仅降级诊断。
+
+    已初始化则直接返回，避免周期任务在负载下重复 ``create_all``/schema ensure
+    （长事务易撞 ``idle_in_transaction_session_timeout``）。
     """
     import re
 
@@ -359,7 +379,10 @@ async def init_postgresql_db() -> None:
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    from .repository_pg import dispose_pg, init_pg, try_enable_pg_stat_statements
+    from .repository_pg import dispose_pg, init_pg, is_pg_initialized, try_enable_pg_stat_statements
+
+    if is_pg_initialized():
+        return
 
     pg_host_raw = _cfg("PG_HOST", "")
     if pg_host_raw:
@@ -406,13 +429,23 @@ async def init_postgresql_db() -> None:
     )
     try:
         await init_pg(engine)
-    except Exception:
+    except Exception as exc:
         await engine.dispose()
-        logger.error(
-            "[数据库] 无法初始化 PostgreSQL 库 {!r}。请确认库已存在，或设置 PG_AUTO_CREATE_DB=true "
-            "（需 CREATEDB）。托管 PG 请先手动建库，见 deploy/pg/README.md",
-            db_name,
-        )
+        if _pg_init_failure_looks_like_dropped_connection(exc):
+            logger.error(
+                "[数据库] 初始化 PostgreSQL 库 {!r} 时连接中断（常见：idle_in_transaction 超时或对端断开）。"
+                "请查 PG 日志与当时事件循环负载；默认 idle_in_transaction_session_timeout=15s。详情: {}",
+                db_name,
+                exc,
+            )
+        elif _pg_init_failure_looks_like_missing_db(exc):
+            logger.error(
+                "[数据库] 无法初始化 PostgreSQL 库 {!r}。请确认库已存在，或设置 PG_AUTO_CREATE_DB=true "
+                "（需 CREATEDB）。托管 PG 请先手动建库，见 deploy/pg/README.md",
+                db_name,
+            )
+        else:
+            logger.error("[数据库] 初始化 PostgreSQL 库 {!r} 失败: {}", db_name, exc)
         raise
     await try_enable_pg_stat_statements(engine)
     logger.info(

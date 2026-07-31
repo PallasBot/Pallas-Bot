@@ -39,13 +39,18 @@ uv run pallas sync              # 包装 uv sync（redis 已在主依赖）
 
 ### 启停
 
+默认形态是 **unified**（单进程）。配置本机 Embedding（`local`）且 Redis 可用时，启停会自动带上 **embed 辅进程**，不必另记 worker。
+
 ```bash
-uv run pallas status
+uv run pallas status               # Bot + embed 辅进程折叠展示
+uv run pallas logs                 # 默认日志路径与尾部（不强迫记 worker-N）
 uv run pallas restart
 uv run pallas stop
-uv run pallas run unified          # 单进程
-uv run pallas run shard            # 分片
+uv run pallas run unified          # 推荐默认
+uv run pallas run shard            # 可选进阶：已验证瓶颈或强隔离时
 ```
+
+分片仅在热路径仍不够、或需要账号级炸点隔离时使用，见 [分片部署](/maintainer/deploy/sharded)。
 
 ## 官方插件（CLI 备选）
 
