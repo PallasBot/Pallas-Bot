@@ -40,6 +40,24 @@ def test_record_repeater_stage_routes() -> None:
     clear_llm_task_metrics_for_tests()
 
 
+def test_track_llm_callback_uses_task_llm_route() -> None:
+    from pallas.product.llm.delivery import track_llm_callback
+
+    clear_llm_task_metrics_for_tests()
+    track_llm_callback(
+        {"task_type": "repeater_fallback", "llm_route": "pipeline_generate"},
+        "callback_ok",
+    )
+    track_llm_callback({"task_type": "repeater_fallback"}, "callback_ok")
+    snap = llm_task_metrics_snapshot()
+    assert snap["by_task"]["repeater_fallback"]["callback_ok"] == 2
+    assert snap["by_task"]["repeater_fallback"]["route_counts"] == {
+        "pipeline_generate": 1,
+        "corpus_fallback": 1,
+    }
+    clear_llm_task_metrics_for_tests()
+
+
 def test_merge_llm_task_snapshots() -> None:
     merged = merge_llm_task_snapshots([
         {

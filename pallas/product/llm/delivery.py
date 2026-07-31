@@ -97,7 +97,15 @@ def track_llm_callback(task: dict, event: str) -> None:
     if task_type in _TRACKED_LLM_TASKS:
         record_bot_llm_task(task_type, event)
         if event == "callback_ok":
-            record_bot_llm_route(task_type, str(task.get("llm_route") or ""))
+            from pallas.product.llm.repeater_feedback import resolve_feedback_llm_route
+
+            record_bot_llm_route(
+                task_type,
+                resolve_feedback_llm_route(
+                    task_type=task_type,
+                    llm_route=str(task.get("llm_route") or "").strip(),
+                ),
+            )
 
 
 async def evaluate_repeater_callback_text(task: dict, reply_text: str) -> bool:

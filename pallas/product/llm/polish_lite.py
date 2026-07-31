@@ -118,6 +118,7 @@ async def maybe_submit_repeater_llm_polish_lite(
             "group_id": group_id,
             "user_id": user_id,
             "task_type": REPEATER_POLISH_LITE_TASK_TYPE,
+            "llm_route": "pipeline_rewrite",
             "user_text": plain,
             "fallback_text": candidate,
             "reply_mode": str(reply_mode or "normal"),

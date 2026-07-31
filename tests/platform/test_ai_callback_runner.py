@@ -213,6 +213,77 @@ async def test_run_ai_callback_records_llm_route_metrics(monkeypatch: pytest.Mon
 
 
 @pytest.mark.asyncio
+async def test_run_ai_callback_records_pipeline_route_from_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.task_metrics import clear_llm_task_metrics_for_tests, llm_task_metrics_snapshot
+
+    clear_llm_task_metrics_for_tests()
+    bot = MagicMock()
+    bot.call_api = AsyncMock(return_value=None)
+    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
+    monkeypatch.setattr(
+        ai_callback_runner.TaskManager,
+        "get_task",
+        AsyncMock(
+            return_value={
+                "bot_id": "111",
+                "group_id": 222,
+                "user_id": 333,
+                "task_type": REPEATER_FALLBACK_TASK_TYPE,
+                "llm_route": "pipeline_generate",
+                "user_text": "你好",
+                "reply_mode": "normal",
+            }
+        ),
+    )
+    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
+    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
+    monkeypatch.setattr(
+        "pallas.product.llm.delivery.evaluate_repeater_callback_text",
+        AsyncMock(return_value=True),
+    )
+
+    await ai_callback_runner.run_ai_callback("task-route-fb", status="success", text="现编回复")
+    snap = llm_task_metrics_snapshot()
+    assert snap["by_task"]["repeater_fallback"]["route_counts"] == {"pipeline_generate": 1}
+    clear_llm_task_metrics_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_run_ai_callback_resolves_empty_route_by_task_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.task_metrics import clear_llm_task_metrics_for_tests, llm_task_metrics_snapshot
+
+    clear_llm_task_metrics_for_tests()
+    bot = MagicMock()
+    bot.call_api = AsyncMock(return_value=None)
+    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
+    monkeypatch.setattr(
+        ai_callback_runner.TaskManager,
+        "get_task",
+        AsyncMock(
+            return_value={
+                "bot_id": "111",
+                "group_id": 222,
+                "user_id": 333,
+                "task_type": REPEATER_FALLBACK_TASK_TYPE,
+                "user_text": "你好",
+                "reply_mode": "normal",
+            }
+        ),
+    )
+    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
+    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
+    monkeypatch.setattr(
+        "pallas.product.llm.delivery.evaluate_repeater_callback_text",
+        AsyncMock(return_value=True),
+    )
+
+    await ai_callback_runner.run_ai_callback("task-route-empty", status="success", text="现编回复")
+    snap = llm_task_metrics_snapshot()
+    assert snap["by_task"]["repeater_fallback"]["route_counts"] == {"corpus_fallback": 1}
+    clear_llm_task_metrics_for_tests()
+
+
+@pytest.mark.asyncio
 async def test_run_ai_callback_appends_behavior_run(monkeypatch: pytest.MonkeyPatch) -> None:
     bot = MagicMock()
     bot.call_api = AsyncMock(return_value=None)
