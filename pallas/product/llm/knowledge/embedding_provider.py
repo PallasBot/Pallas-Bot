@@ -228,6 +228,39 @@ class LocalFastEmbedProvider:
         return vectors
 
 
+@dataclass(frozen=True)
+class RedisQueueEmbeddingProvider:
+    """业务进程侧：经 Redis 队列请求 embed 辅进程，本进程不加载模型。"""
+
+    cfg: LlmConfig | None = None
+
+    @property
+    def name(self) -> str:
+        return "local"
+
+    @property
+    def kind(self) -> EmbeddingProviderKind:
+        return "local"
+
+    def model_name(self) -> str:
+        return resolve_local_embedding_model(self.cfg)
+
+    def embed_sync(self, texts: list[str], *, timeout_sec: float = 8.0) -> list[list[float]]:
+        from pallas.product.llm.knowledge.embed_redis import redis_embed_available, request_embeddings
+
+        if not redis_embed_available():
+            raise RuntimeError("local Embedding 需要 Redis（REDIS_URL）与 embed 辅进程")
+        vectors = request_embeddings(
+            list(texts),
+            model=self.model_name(),
+            timeout_sec=timeout_sec,
+            kind="query",
+        )
+        if vectors is None or len(vectors) != len(texts):
+            raise TimeoutError("embed queue timeout or incomplete reply")
+        return vectors
+
+
 def normalize_embedding_provider_name(raw: str) -> str:
     name = str(raw or "").strip().lower()
     if name in {"", "auto"}:
@@ -264,6 +297,8 @@ def clear_local_embedding_models_for_tests() -> None:
 
 
 def get_embedding_provider(cfg: LlmConfig | None = None) -> EmbeddingProvider:
+    import os
+
     name = resolve_embedding_provider_name(cfg)
     if name == "local":
         model = resolve_local_embedding_model(cfg)
@@ -271,14 +306,19 @@ def get_embedding_provider(cfg: LlmConfig | None = None) -> EmbeddingProvider:
         model = resolve_remote_embedding_model(cfg)
     else:
         model = embedding_model_name(cfg)
-    cache_key = f"{name}|{model}"
+    role = str(os.environ.get("PALLAS_BOT_ROLE") or "").strip().lower()
+    # 仅 embed 辅进程在进程内加载 fastembed；业务进程走 Redis 队列
+    local_in_process = name == "local" and role == "embed"
+    cache_key = f"{name}|{model}|{'native' if local_in_process or name != 'local' else 'queue'}"
     hit = _provider_cache.get(cache_key)
     if hit is not None:
         return hit
     if name == "stub":
         provider: EmbeddingProvider = StubEmbeddingProvider()
-    elif name == "local":
+    elif name == "local" and local_in_process:
         provider = LocalFastEmbedProvider(cfg=cfg)
+    elif name == "local":
+        provider = RedisQueueEmbeddingProvider(cfg=cfg)
     else:
         provider = OpenAICompatibleEmbeddingProvider(cfg=cfg)
     _provider_cache[cache_key] = provider
@@ -342,6 +382,28 @@ def build_embedding_status(*, probe: bool = False, probe_text: str = "ping") -> 
     if provider.name == "openai":
         _base, _key, endpoint_source = resolve_embedding_http_endpoint(cfg)
 
+    redis_ok = False
+    embed_running = False
+    try:
+        from pallas.product.llm.knowledge.embed_redis import redis_embed_available
+
+        redis_ok = redis_embed_available()
+    except Exception:
+        pass
+    try:
+        from pallas.console.cli.embedding_aux import embed_aux_running
+
+        embed_running = embed_aux_running()
+    except Exception:
+        pass
+    if provider.name == "local" and not redis_ok:
+        trace = {
+            **trace,
+            "semantic_available": False,
+            "embedding_fallback": True,
+            "embedding_error": trace.get("embedding_error") or "本机 Embedding 需要 Redis（REDIS_URL）与 embed 辅进程",
+        }
+
     return {
         **trace,
         "embedding_kind": provider.kind,
@@ -355,6 +417,8 @@ def build_embedding_status(*, probe: bool = False, probe_text: str = "ping") -> 
         "endpoint_configured": embedding_remote_endpoint_configured(cfg),
         "trigger_cache_count": trigger_cached,
         "trigger_cache_model": trigger_model or None,
+        "redis_embed_available": redis_ok,
+        "embed_aux_running": embed_running,
         "probe_ok": probe_ok,
         "probe_dims": probe_dims,
         "probe_ms": probe_ms,

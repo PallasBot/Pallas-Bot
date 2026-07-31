@@ -59,10 +59,12 @@ def test_trigger_cache_skips_stub_disk_when_local_resolved_model(tmp_path, monke
 
 def test_backfill_feedback_trigger_embeddings_fills_missing(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("LLM_EMBEDDING_PROVIDER", "openai")
-    monkeypatch.setenv("LLM_EMBEDDING_MODEL", "text-embedding-3-small")
     clear_feedback_embedding_caches_for_tests()
     clear_embedding_provider_cache()
+    monkeypatch.setattr(
+        "pallas.product.llm.knowledge.embedding_provider.resolve_embedding_provider_name",
+        lambda cfg=None: "openai",
+    )
     monkeypatch.setattr(
         "pallas.product.llm.feedback_embedding_cache.prefetch_trigger_embedding",
         lambda *_a, **_k: None,

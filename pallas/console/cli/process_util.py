@@ -161,34 +161,38 @@ def stop_pid(
     timeout_s: float = 30.0,
     force: bool = False,
 ) -> None:
-    """温和停止进程；超时或 force 时强制结束。"""
+    """温和停止进程；超时或 force 时强制结束。
+
+    Unix 下优先对会话组发信号（``spawn_detached`` 使用 ``start_new_session``），
+    避免只杀掉 ``uv`` 父进程而留下孤儿 ``python``。
+    """
     if pid <= 0 or not pid_alive(pid):
         return
     if is_windows():
         _windows_stop_pid(pid, force=force or False, timeout_s=timeout_s)
         return
 
-    if force:
+    def _send(sig: int) -> None:
         try:
-            os.kill(pid, signal.SIGKILL)
+            os.killpg(pid, sig)
         except OSError:
-            pass
+            try:
+                os.kill(pid, sig)
+            except OSError:
+                pass
+
+    if force:
+        _send(signal.SIGKILL)
         return
 
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        return
+    _send(signal.SIGTERM)
 
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         if not pid_alive(pid):
             return
         time.sleep(0.5)
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except OSError:
-        pass
+    _send(signal.SIGKILL)
 
 
 def _windows_stop_pid(pid: int, *, force: bool, timeout_s: float) -> None:

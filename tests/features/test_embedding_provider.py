@@ -6,8 +6,8 @@ from pallas.product.llm.knowledge.embedding_client import (
     fetch_embeddings_sync,
 )
 from pallas.product.llm.knowledge.embedding_provider import (
-    LocalFastEmbedProvider,
     OpenAICompatibleEmbeddingProvider,
+    RedisQueueEmbeddingProvider,
     StubEmbeddingProvider,
     clear_embedding_provider_cache,
     get_embedding_provider,
@@ -17,14 +17,30 @@ from pallas.product.llm.knowledge.embedding_provider import (
 )
 
 
-def test_resolve_provider_name_infers_stub_from_model() -> None:
+def _ignore_webui_embedding_env(monkeypatch) -> None:
+    """单测用 cfg 字段，避免本机 webui.json 的 local 覆盖空 provider。"""
+    import pallas.product.llm.knowledge.embedding_provider as ep
+
+    real = ep.repo_env_raw_value
+
+    def fake(key: str):
+        if str(key).upper().startswith("LLM_EMBEDDING"):
+            return None
+        return real(key)
+
+    monkeypatch.setattr(ep, "repo_env_raw_value", fake)
+
+
+def test_resolve_provider_name_infers_stub_from_model(monkeypatch) -> None:
+    _ignore_webui_embedding_env(monkeypatch)
     clear_embedding_provider_cache()
     cfg = LlmConfig(llm_embedding_model="stub", llm_embedding_provider="")
     assert resolve_embedding_provider_name(cfg) == "stub"
     assert isinstance(get_embedding_provider(cfg), StubEmbeddingProvider)
 
 
-def test_resolve_provider_name_openai_when_model_set() -> None:
+def test_resolve_provider_name_openai_when_model_set(monkeypatch) -> None:
+    _ignore_webui_embedding_env(monkeypatch)
     clear_embedding_provider_cache()
     cfg = LlmConfig(llm_embedding_model="text-embedding-3-small", llm_embedding_provider="")
     assert resolve_embedding_provider_name(cfg) == "openai"
@@ -46,10 +62,12 @@ def test_resolve_provider_name_local() -> None:
     clear_embedding_provider_cache()
     cfg = LlmConfig(llm_embedding_model="stub", llm_embedding_provider="local")
     assert resolve_embedding_provider_name(cfg) == "local"
-    assert isinstance(get_embedding_provider(cfg), LocalFastEmbedProvider)
+    # 业务进程走 Redis 队列封装，不在进程内加载 fastembed
+    assert isinstance(get_embedding_provider(cfg), RedisQueueEmbeddingProvider)
 
 
 def test_build_embedding_status_stub(monkeypatch) -> None:
+    _ignore_webui_embedding_env(monkeypatch)
     clear_embedding_provider_cache()
     monkeypatch.setattr(
         "pallas.product.llm.config.get_llm_config",
@@ -64,7 +82,8 @@ def test_build_embedding_status_stub(monkeypatch) -> None:
     assert status["probe_ok"] is None
 
 
-def test_capability_trace_includes_provider() -> None:
+def test_capability_trace_includes_provider(monkeypatch) -> None:
+    _ignore_webui_embedding_env(monkeypatch)
     clear_embedding_provider_cache()
     cfg = LlmConfig(llm_embedding_model="stub", llm_embedding_provider="")
     trace = embedding_capability_trace(cfg)

@@ -209,11 +209,27 @@ def resolve_query_embedding(
     cached = get_cached_query_embedding(text)
     if cached is not None:
         return cached
-    if not allow_remote:
-        return None
     plain = str(text or "").strip()
     if not plain:
         return None
+    model = resolved_embedding_model_name()
+    from pallas.product.llm.knowledge.embed_redis import get_cached_vec, redis_embed_available, request_embeddings
+    from pallas.product.llm.knowledge.embedding_provider import resolve_embedding_provider_name
+
+    redis_hit = get_cached_vec(model, plain)
+    if redis_hit is not None:
+        store_query_embedding(plain, redis_hit)
+        return list(redis_hit)
+    if not allow_remote:
+        return None
+    if resolve_embedding_provider_name() == "local":
+        if not redis_embed_available():
+            return None
+        vectors = request_embeddings([plain], model=model, timeout_sec=timeout_sec, kind="query")
+        if not vectors or len(vectors) != 1:
+            return None
+        store_query_embedding(plain, vectors[0])
+        return list(vectors[0])
     vectors = fetch_embeddings_sync([plain], timeout_sec=timeout_sec)
     if not vectors or len(vectors) != 1:
         return None
@@ -232,6 +248,10 @@ def ensure_trigger_embeddings(
     out: dict[str, list[float]] = {}
     missing: list[str] = []
     seen_miss: set[str] = set()
+    model = resolved_embedding_model_name()
+    from pallas.product.llm.knowledge.embed_redis import get_cached_vec, redis_embed_available, request_embeddings
+    from pallas.product.llm.knowledge.embedding_provider import resolve_embedding_provider_name
+
     for raw in texts:
         plain = str(raw or "").strip()
         if not plain:
@@ -240,12 +260,22 @@ def ensure_trigger_embeddings(
         if cached is not None:
             out[plain] = cached
             continue
+        redis_hit = get_cached_vec(model, plain)
+        if redis_hit is not None:
+            store_trigger_embeddings([(plain, redis_hit)])
+            out[plain] = list(redis_hit)
+            continue
         if plain not in seen_miss:
             seen_miss.add(plain)
             missing.append(plain)
     if not missing or not allow_remote:
         return out
-    vectors = fetch_embeddings_sync(missing, timeout_sec=timeout_sec)
+    if resolve_embedding_provider_name() == "local":
+        if not redis_embed_available():
+            return out
+        vectors = request_embeddings(missing, model=model, timeout_sec=timeout_sec, kind="trigger")
+    else:
+        vectors = fetch_embeddings_sync(missing, timeout_sec=timeout_sec)
     if not vectors or len(vectors) != len(missing):
         return out
     pairs = list(zip(missing, vectors, strict=True))
