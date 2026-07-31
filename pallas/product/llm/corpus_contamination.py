@@ -467,13 +467,15 @@ async def run_pg_corpus_contamination_cleanup(
     preview_limit: int = 20,
     clean_message_history: bool | None = None,
 ) -> CorpusCleanupReport:
-    from pallas.core.foundation.db import init_postgresql_db, is_postgresql_backend
+    from pallas.core.foundation.db import ensure_runtime_storage_ready, is_postgresql_backend
     from pallas.core.foundation.db.repository_pg import clear_reply_query_snapshot_cache, get_session
 
     if not is_postgresql_backend():
         return CorpusCleanupReport(0, 0, 0, 0, 0, 0)
 
-    await init_postgresql_db()
+    # 勿直接 init_postgresql_db：已就绪时重复 create_all/schema ensure 会长事务，
+    # 事件循环拥堵时易撞 idle_in_transaction_session_timeout。
+    await ensure_runtime_storage_ready("postgresql")
     include_message_history = (
         corpus_cleanup_message_history_enabled() if clean_message_history is None else bool(clean_message_history)
     )
