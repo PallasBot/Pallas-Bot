@@ -215,23 +215,104 @@ def anthropic_auth_headers(api_key: str) -> dict[str, str]:
     return headers
 
 
-def apply_model_effort_to_payload(payload: dict[str, Any], options: dict[str, Any], *, model: str) -> None:
-    """把 Provider model_effort 映射到常见 OpenAI 兼容字段。"""
+def tools_for_responses_api(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
+    """Chat Completions 嵌套 function → Responses 扁平 name/parameters。
+
+    Responses 默认倾向 strict；我们 schema 未必合规，显式 ``strict: false``。
+    """
+    if not tools:
+        return None
+    out: list[dict[str, Any]] = []
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        typ = str(tool.get("type") or "").strip().lower()
+        nested = tool.get("function") if isinstance(tool.get("function"), dict) else None
+        if typ == "function" and nested is not None:
+            flat: dict[str, Any] = {
+                "type": "function",
+                "name": str(nested.get("name") or "").strip(),
+                "description": str(nested.get("description") or ""),
+                "parameters": nested.get("parameters")
+                if isinstance(nested.get("parameters"), dict)
+                else {"type": "object", "properties": {}},
+            }
+            if "strict" in nested:
+                flat["strict"] = bool(nested.get("strict"))
+            else:
+                flat["strict"] = False
+            out.append(flat)
+            continue
+        if typ == "function" and str(tool.get("name") or "").strip():
+            flat = dict(tool)
+            flat.setdefault("strict", False)
+            out.append(flat)
+            continue
+        out.append(tool)
+    return out
+
+
+def _append_responses_reasoning_item(input_items: list[dict[str, Any]], message: dict[str, Any]) -> None:
+    reasoning = message.get("reasoning_content")
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        return
+    input_items.append({
+        "type": "reasoning",
+        "content": [{"type": "reasoning_text", "text": reasoning.strip()}],
+    })
+
+
+def apply_model_effort_to_payload(
+    payload: dict[str, Any],
+    options: dict[str, Any],
+    *,
+    model: str,
+    request_method: str = "chat_completions",
+) -> None:
+    """把 Provider model_effort 映射到 Chat Completions / Responses 字段。"""
     effort = str(options.get("model_effort") or options.get("reasoning_effort") or "").strip().lower()
     model_name = str(model or "").strip().lower()
-    # DeepSeek thinking 多轮须回传 reasoning_content；会话/tool loop 未存该字段时会 400。
-    # 带 tools，或未显式指定 effort 档位时，默认关闭 thinking。
+    method = str(request_method or "").strip().lower() or "chat_completions"
+    is_responses = method == "responses"
+
+    def disable_deepseek_thinking() -> None:
+        if is_responses:
+            payload["reasoning"] = {"effort": "none"}
+            payload.pop("thinking", None)
+            payload.pop("reasoning_effort", None)
+        else:
+            payload["thinking"] = {"type": "disabled"}
+
+    # DeepSeek：带 tools 或未显式档位时默认关思考（后续提交放开思考+tools）。
     if model_name.startswith("deepseek"):
         if payload.get("tools") or not effort or effort in {"enable", "disable"}:
-            payload["thinking"] = {"type": "disabled"}
+            disable_deepseek_thinking()
             return
     elif not effort or effort == "enable":
         return
     elif effort == "disable":
+        if is_responses:
+            payload["reasoning"] = {"effort": "none"}
         return
+
     mapped = "high" if effort == "xhigh" else effort
+    if is_responses:
+        if model_name.startswith("deepseek"):
+            ds_effort = "max" if mapped in {"max", "xhigh"} else mapped
+            if ds_effort == "medium":
+                ds_effort = "high"
+            if ds_effort == "minimal":
+                ds_effort = "low"
+            if ds_effort in {"low", "high", "max"}:
+                payload["reasoning"] = {"effort": ds_effort}
+            return
+        if mapped in {"minimal", "low", "medium", "high", "max", "none"}:
+            payload["reasoning"] = {"effort": mapped}
+            payload.pop("reasoning_effort", None)
+        return
     if mapped in {"minimal", "low", "medium", "high"}:
         payload["reasoning_effort"] = mapped
+
 
 
 async def complete_chat_message(
@@ -365,6 +446,7 @@ def messages_to_responses_payload(
             })
             continue
         if role == "assistant" and item.get("tool_calls"):
+            _append_responses_reasoning_item(input_items, item)
             for call in item.get("tool_calls") or []:
                 if not isinstance(call, dict):
                     continue
@@ -382,13 +464,16 @@ def messages_to_responses_payload(
                 input_items.append({"role": "assistant", "content": content})
             continue
         if role in {"user", "assistant"}:
+            if role == "assistant":
+                _append_responses_reasoning_item(input_items, item)
             input_items.append({"role": role, "content": content if content is not None else ""})
 
     payload: dict[str, Any] = {"model": model, "input": input_items}
     if instructions:
         payload["instructions"] = instructions
-    if tools:
-        payload["tools"] = tools
+    responses_tools = tools_for_responses_api(tools)
+    if responses_tools:
+        payload["tools"] = responses_tools
         choice = str(options.get("tool_choice") or "auto").strip() or "auto"
         payload["tool_choice"] = choice
     temperature = options.get("temperature")
@@ -399,12 +484,13 @@ def messages_to_responses_payload(
         max_tokens = options.get("max_tokens")
     if max_tokens is not None:
         payload["max_output_tokens"] = int(max_tokens)
-    apply_model_effort_to_payload(payload, options, model=model)
+    apply_model_effort_to_payload(payload, options, model=model, request_method="responses")
     return payload
 
 
 def parse_responses_message(data: dict[str, Any]) -> dict[str, Any]:
     texts: list[str] = []
+    reasoning_texts: list[str] = []
     tool_calls: list[dict[str, Any]] = []
     output = data.get("output")
     if isinstance(output, list):
@@ -412,6 +498,20 @@ def parse_responses_message(data: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(item, dict):
                 continue
             typ = str(item.get("type") or "").strip().lower()
+            if typ == "reasoning":
+                content = item.get("content")
+                if isinstance(content, list):
+                    for part in content:
+                        if not isinstance(part, dict):
+                            continue
+                        part_type = str(part.get("type") or "").strip().lower()
+                        if part_type in {"reasoning_text", "text", "summary_text"}:
+                            text = str(part.get("text") or "").strip()
+                            if text:
+                                reasoning_texts.append(text)
+                elif isinstance(content, str) and content.strip():
+                    reasoning_texts.append(content.strip())
+                continue
             if typ == "message":
                 content = item.get("content")
                 if isinstance(content, list):
@@ -444,6 +544,8 @@ def parse_responses_message(data: dict[str, Any]) -> dict[str, Any]:
         "role": "assistant",
         "content": "\n".join(texts).strip(),
     }
+    if reasoning_texts:
+        message["reasoning_content"] = "\n".join(reasoning_texts).strip()
     if tool_calls:
         message["tool_calls"] = tool_calls
     return message

@@ -29,3 +29,42 @@ def test_apply_model_effort_deepseek_tools_disables_thinking() -> None:
     apply_model_effort_to_payload(payload, {"model_effort": "high"}, model="deepseek-v4-flash")
     assert payload["thinking"] == {"type": "disabled"}
     assert "reasoning_effort" not in payload
+
+
+def test_apply_model_effort_deepseek_responses_disables_with_reasoning_none() -> None:
+    payload: dict = {
+        "model": "deepseek-v4-flash",
+        "tools": [{"type": "function", "name": "demo"}],
+    }
+    apply_model_effort_to_payload(
+        payload,
+        {"model_effort": "high"},
+        model="deepseek-v4-flash",
+        request_method="responses",
+    )
+    assert payload["reasoning"] == {"effort": "none"}
+    assert "thinking" not in payload
+
+
+def test_apply_model_effort_deepseek_responses_enables_high() -> None:
+    payload: dict = {"model": "deepseek-v4-flash"}
+    apply_model_effort_to_payload(
+        payload,
+        {"model_effort": "high"},
+        model="deepseek-v4-flash",
+        request_method="responses",
+    )
+    assert payload["reasoning"] == {"effort": "high"}
+    assert "thinking" not in payload
+
+
+def test_apply_model_effort_responses_openai_uses_reasoning_object() -> None:
+    payload: dict = {"model": "gpt-5"}
+    apply_model_effort_to_payload(
+        payload,
+        {"model_effort": "medium"},
+        model="gpt-5",
+        request_method="responses",
+    )
+    assert payload["reasoning"] == {"effort": "medium"}
+    assert "reasoning_effort" not in payload
