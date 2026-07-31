@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from fastapi import APIRouter, Header, Query
+from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -694,6 +694,22 @@ def register_ai_extension_router(
 
         asyncio.create_task(run_ai_install_job(job, _runner))
         return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "action": job.action}})
+
+    @router.get(f"{x}/ai-extension/install/jobs/active", include_in_schema=True)
+    async def _ai_extension_install_job_active() -> JSONResponse:
+        from pallas.console.webui.ai_install_progress import get_active_ai_install_job
+
+        job = get_active_ai_install_job()
+        return JSONResponse({"ok": True, "data": job.as_dict() if job else None})
+
+    @router.get(f"{x}/ai-extension/install/jobs/{{job_id}}", include_in_schema=True)
+    async def _ai_extension_install_job_get(job_id: str) -> JSONResponse:
+        from pallas.console.webui.ai_install_progress import get_ai_install_job
+
+        job = get_ai_install_job(job_id.strip())
+        if job is None:
+            raise HTTPException(status_code=404, detail="job_not_found")
+        return JSONResponse({"ok": True, "data": job.as_dict()})
 
     @router.get(f"{x}/ai-extension/install/jobs/{{job_id}}/stream", include_in_schema=True)
     async def _ai_extension_install_job_stream(job_id: str) -> StreamingResponse:

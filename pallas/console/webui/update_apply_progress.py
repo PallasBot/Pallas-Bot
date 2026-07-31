@@ -97,6 +97,20 @@ def get_update_apply_job(job_id: str) -> UpdateApplyJob | None:
     return _JOBS.get((job_id or "").strip())
 
 
+def get_active_update_apply_job(
+    *,
+    kinds: tuple[UpdateKind, ...] | None = None,
+) -> UpdateApplyJob | None:
+    running = [
+        job
+        for job in _JOBS.values()
+        if job.phase in ("queued", "running") and (kinds is None or job.kind in kinds)
+    ]
+    if not running:
+        return None
+    return max(running, key=lambda j: j.updated_at)
+
+
 def has_active_update_apply_job(
     *,
     exclude_job_id: str | None = None,

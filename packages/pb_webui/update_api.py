@@ -461,6 +461,13 @@ def register_update_router(
         asyncio.create_task(run_update_apply_job(job, _runner))
         return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "kind": "auto"}})
 
+    @router.get(f"{x}/update/jobs/active", include_in_schema=True)
+    async def _update_apply_job_active() -> JSONResponse:
+        from pallas.console.webui.update_apply_progress import get_active_update_apply_job
+
+        job = get_active_update_apply_job()
+        return JSONResponse({"ok": True, "data": job.as_dict() if job else None})
+
     @router.get(f"{x}/update/jobs/{{job_id}}", include_in_schema=True)
     async def _update_apply_job_get(job_id: str) -> JSONResponse:
         from pallas.console.webui.update_apply_progress import get_update_apply_job

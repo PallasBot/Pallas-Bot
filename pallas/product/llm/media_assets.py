@@ -166,3 +166,24 @@ async def fetch_media_assets_download_job(
     if not isinstance(payload, dict):
         raise RuntimeError("下载任务响应格式无效")
     return payload
+
+
+async def fetch_media_assets_download_active(
+    *, cfg: LlmConfig | None = None, timeout_sec: float = 12.0
+) -> dict[str, Any] | None:
+    url = f"{ai_media_assets_base(cfg)}/download/jobs/active"
+    try:
+        response = await HTTPXClient.get(url, timeout=timeout_sec)
+    except Exception as exc:
+        raise RuntimeError(str(exc)) from exc
+    if response is None or response.status_code != 200:
+        code = response.status_code if response is not None else None
+        raise RuntimeError(f"读取进行中下载任务失败 HTTP {code}")
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError("下载任务响应格式无效")
+    job_id = str(payload.get("job_id") or "").strip()
+    state = str(payload.get("state") or "").strip().lower()
+    if not job_id or state in {"", "idle", "none"}:
+        return None
+    return payload

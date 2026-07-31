@@ -24,6 +24,7 @@ from pallas.product.llm.knowledge.registry import (
 )
 from pallas.product.llm.media_assets import (
     delete_media_assets,
+    fetch_media_assets_download_active,
     fetch_media_assets_download_job,
     fetch_media_assets_status,
     start_media_assets_download,
@@ -191,6 +192,7 @@ __all__ = [
     "extract_from_text",
     "fetch_llm_task_stats",
     "fetch_local_routing_config",
+    "fetch_media_assets_download_active",
     "fetch_media_assets_download_job",
     "fetch_media_assets_status",
     "fetch_model_admin_status",
