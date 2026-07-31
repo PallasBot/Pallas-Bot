@@ -102,9 +102,7 @@ def get_active_update_apply_job(
     kinds: tuple[UpdateKind, ...] | None = None,
 ) -> UpdateApplyJob | None:
     running = [
-        job
-        for job in _JOBS.values()
-        if job.phase in ("queued", "running") and (kinds is None or job.kind in kinds)
+        job for job in _JOBS.values() if job.phase in ("queued", "running") and (kinds is None or job.kind in kinds)
     ]
     if not running:
         return None
