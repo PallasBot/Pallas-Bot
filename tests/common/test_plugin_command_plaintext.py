@@ -83,6 +83,35 @@ def test_is_plugin_command_plaintext_uses_trie_and_menu_prefixes(monkeypatch) ->
     assert not is_plugin_command_plaintext("牛牛 今天吃什么")
 
 
+def test_is_plugin_command_plaintext_uses_explicit_command_prefixes(monkeypatch) -> None:
+    fake_plugins = [
+        SimpleNamespace(
+            metadata=SimpleNamespace(
+                extra={
+                    "command_prefixes": ["一歌唱歌", "一歌点歌"],
+                    "menu_data": [
+                        {"trigger_condition": "牛牛唱歌 歌曲名 [key=±N]"},
+                    ],
+                }
+            )
+        )
+    ]
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.plugin_command_plaintext.get_loaded_plugins",
+        lambda: fake_plugins,
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.plugin_command_plaintext.TrieRule.prefix.longest_prefix",
+        lambda _text: None,
+    )
+    clear_plugin_command_plaintext_cache()
+
+    assert is_plugin_command_plaintext("一歌唱歌 皆大欢喜")
+    assert is_plugin_command_plaintext("一歌点歌")
+    assert is_plugin_command_plaintext("牛牛唱歌 海阔天空")
+    assert not is_plugin_command_plaintext("一歌随便聊")
+
+
 def test_is_plugin_command_plaintext_builds_plugin_prefix_cache_once(monkeypatch) -> None:
     fake_plugins = [
         SimpleNamespace(

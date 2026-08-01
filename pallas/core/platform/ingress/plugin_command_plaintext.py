@@ -68,8 +68,16 @@ def _loaded_plugin_command_prefixes() -> tuple[str, ...]:
     for plugin in plugins:
         meta = getattr(plugin, "metadata", None)
         extra = getattr(meta, "extra", None) if meta is not None else None
-        menu_data = extra.get("menu_data") if isinstance(extra, dict) else None
-        for prefix in extract_command_prefixes_from_menu_data(menu_data):
+        if not isinstance(extra, dict):
+            continue
+        explicit = extra.get("command_prefixes")
+        if isinstance(explicit, (list, tuple)):
+            for prefix in explicit:
+                item = str(prefix or "").strip()
+                if item and item not in prefixes:
+                    prefixes.append(item)
+        menu_data = extra.get("menu_data")
+        for prefix in extract_command_prefixes_from_menu_data(menu_data if isinstance(menu_data, list) else None):
             if prefix not in prefixes:
                 prefixes.append(prefix)
     _PLUGIN_PREFIX_CACHE_VALUE = tuple(prefixes)
