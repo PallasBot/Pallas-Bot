@@ -185,6 +185,39 @@ def test_resolve_message_route_prefix_and_exact(monkeypatch: pytest.MonkeyPatch)
     assert resolution.matched_modules == frozenset({"duel"})
 
 
+def test_resolve_message_route_hits_custom_sing_speaker_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """音频映射自定义前缀须进入 route index，否则「一歌唱歌」会被当成闲聊丢掉。"""
+    plugins = [
+        _fake_plugin(
+            module_name="pallas_plugin_sing",
+            menu_data=[{"trigger_condition": "牛牛唱歌 歌曲名 [key=±N]"}],
+        ),
+        _fake_plugin(
+            module_name="packages.repeater",
+            ingress_route={"passive": True},
+        ),
+    ]
+    plugins[0].metadata.extra["command_prefixes"] = [
+        "牛牛唱歌",
+        "一歌唱歌",
+        "一歌点歌",
+    ]
+    monkeypatch.setattr(route_index, "get_loaded_plugins", lambda: plugins)
+    route_index.clear_route_index_cache()
+
+    index = route_index.build_route_index()
+    assert index.prefix_to_modules["一歌唱歌"] == frozenset({"sing"})
+
+    resolution = route_index.resolve_message_route("一歌唱歌 皆大欢喜")
+    assert resolution.index_hit is True
+    assert "sing" in resolution.matched_modules
+
+    miss = route_index.resolve_message_route("一歌随便聊")
+    assert miss.index_hit is False
+
+
 def test_event_command_traffic_uses_index_before_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
     event = MagicMock()
     event.get_plaintext.return_value = "今天天气不错"
