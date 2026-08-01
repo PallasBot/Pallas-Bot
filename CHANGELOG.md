@@ -1,5 +1,26 @@
 # Changelog
 
+## [4.1.21] - 2026-08-01
+
+### 更新公告
+
+- AI Runtime 启停后短轮询再返回状态，控制台更不易卡在「启动中 / 已停止」错态
+- 唱歌可为每个音色单独指定优先推理后端（需配套控制台与较新 AI Runtime）
+- 补充 DDSP 多版本手动安装说明；官方 `pallas` 对应 6.2
+- 捆绑控制台 WebUI **v0.8.14**
+
+### Added
+
+- 控制台 BFF 透传 `speaker_backends`
+
+### Fixed
+
+- Runtime 启停后短轮询 `ai_runtime_status` 再返回
+
+### Changed
+
+- AI Runtime / 唱歌文档：DDSP 多版本与按音色绑定后端
+
 ## [4.1.20] - 2026-08-01
 
 ### 更新公告
