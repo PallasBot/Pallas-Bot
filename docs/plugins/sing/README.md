@@ -12,7 +12,7 @@
 uv run pallas ext install pallas-plugin-ai-media
 ```
 
-另需部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，并在控制台配置媒体服务。见 [LLM 对话、媒体与 AI Runtime](../../guide/ai-runtime-choice.md)。
+另需部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，并在控制台配置媒体服务。见 [LLM 对话、媒体与 AI Runtime](../../guide/ai-runtime-choice.md)。默认仅带 DDSP **6.2**；若要用 6.3 / 6.1，见 [AI Runtime 安装 · 手动补充 DDSP](../../maintainer/install/ai-runtime.md#手动补充-ddsp-svc-多版本可选)。
 
 自 `pallas-plugin-ai-media` **4.1.0** 起，本包仅含唱歌与 TTS；酒后对话已由本体 [llm_chat](../llm_chat/README.md) 承接。
 
