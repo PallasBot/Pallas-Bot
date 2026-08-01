@@ -154,3 +154,24 @@ def test_start_ai_runtime_calls_ctl(tmp_path, monkeypatch) -> None:
     again = ai_supervisor.start_ai_runtime(ai_root=root, with_media=True)
     assert again["ok"] is True
     assert calls[-2:] == [("start", "media"), ("start", "api")]
+
+
+def test_poll_ai_runtime_status_waits_until_running(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "ai"
+    root.mkdir()
+    hits = {"n": 0}
+
+    def fake_status(**_kwargs):  # noqa: ANN001
+        hits["n"] += 1
+        return {"running": hits["n"] >= 3, "can_manage": True}
+
+    monkeypatch.setattr(ai_supervisor, "ai_runtime_status", fake_status)
+    monkeypatch.setattr(ai_supervisor.time, "sleep", lambda _s: None)
+    st = ai_supervisor.poll_ai_runtime_status(
+        ai_root=root,
+        want_running=True,
+        timeout_sec=5.0,
+        interval_sec=0.1,
+    )
+    assert st["running"] is True
+    assert hits["n"] >= 3

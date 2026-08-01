@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -279,6 +280,24 @@ def run_ctl(ai_root: Path, *args: str, timeout_sec: float = 120.0) -> tuple[int,
     return int(completed.returncode), header + out
 
 
+def poll_ai_runtime_status(
+    *,
+    ai_root: Path,
+    want_running: bool,
+    timeout_sec: float = 30.0,
+    interval_sec: float = 1.0,
+) -> dict[str, Any]:
+    """ctl 返回后进程/探活常滞后；短轮询再返回，避免控制台立刻读到旧状态。"""
+    deadline = time.monotonic() + max(0.0, float(timeout_sec))
+    status = ai_runtime_status(ai_root=ai_root)
+    while bool(status.get("running")) != bool(want_running):
+        if time.monotonic() >= deadline:
+            break
+        time.sleep(max(0.05, float(interval_sec)))
+        status = ai_runtime_status(ai_root=ai_root)
+    return status
+
+
 def start_ai_runtime(*, ai_root: Path | None = None, with_media: bool = True) -> dict[str, Any]:
     """启动媒体服务（media worker + API）。
 
@@ -300,7 +319,8 @@ def start_ai_runtime(*, ai_root: Path | None = None, with_media: bool = True) ->
             }
     if is_managed_ai_root(root):
         mark_ai_root_managed(root)
-    status = ai_runtime_status(ai_root=root)
+    # media 冷启动（尤其 Windows+torch）常需数十秒；此处只短等，前端继续轮询
+    status = poll_ai_runtime_status(ai_root=root, want_running=True, timeout_sec=20.0, interval_sec=1.0)
     return {
         "ok": True,
         "error": None,
@@ -314,7 +334,11 @@ def stop_ai_runtime(*, ai_root: Path | None = None) -> dict[str, Any]:
     if root is None:
         return {"ok": False, "error": "未检测到本地 AI Runtime", "output_tail": ""}
     code, out = run_ctl(root, "stop", "all")
-    status = ai_runtime_status(ai_root=root)
+    status = (
+        poll_ai_runtime_status(ai_root=root, want_running=False, timeout_sec=12.0, interval_sec=0.8)
+        if code == 0
+        else ai_runtime_status(ai_root=root)
+    )
     return {
         "ok": code == 0,
         "error": None if code == 0 else f"ctl stop all 退出码 {code}",
