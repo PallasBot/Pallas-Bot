@@ -264,9 +264,11 @@ def register_ai_extension_router(
     async def _ai_extension_test() -> dict[str, Any]:
         import json
         import urllib.error
+        import urllib.parse
         import urllib.request
 
         from packages.pb_webui import extended_api as ext
+        from pallas.console.cli.ai_supervisor import is_loopback_host
 
         cfg = ext._load_ai_extension_config()
         tried_urls: list[str] = []
@@ -283,6 +285,12 @@ def register_ai_extension_router(
         last_image_circuit: dict[str, object] | None = None
         last_llm_health: dict[str, object] | None = None
         last_tts_health: dict[str, object] | None = None
+        base_host = urllib.parse.urlparse(base).hostname or ""
+        health_opener = (
+            urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            if is_loopback_host(base_host)
+            else urllib.request.build_opener()
+        )
 
         def parse_health_payload(
             payload: object,
@@ -324,7 +332,7 @@ def register_ai_extension_router(
                 dict[str, object] | None,
                 dict[str, object] | None,
             ]:
-                with urllib.request.urlopen(_req, timeout=float(cfg["timeout_sec"])) as resp:
+                with health_opener.open(_req, timeout=float(cfg["timeout_sec"])) as resp:
                     status_code = int(getattr(resp, "status", 200) or 200)
                     media_tasks = None
                     llm_detail = None
