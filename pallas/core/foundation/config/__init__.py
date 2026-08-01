@@ -469,6 +469,19 @@ class TaskManager:
             return cls._tasks.get(task_id)
 
     @classmethod
+    async def claim_task(cls, task_id: str) -> dict | None:
+        """原子取出并移除任务，避免并发回调重复投递。"""
+        await cls.refresh()
+        async with cls._lock:
+            task = cls._tasks.pop(task_id, None)
+        if task is None:
+            return None
+        from pallas.core.platform.shard.coord.ai_task_registry import remove_ai_task
+
+        await asyncio.to_thread(remove_ai_task, task_id)
+        return task
+
+    @classmethod
     async def remove_task(cls, task_id: str):
         await cls.refresh()
         async with cls._lock:
