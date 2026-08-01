@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.17-2-g671bbe76-dirty",
+    "version": "v4.1.21-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -8657,6 +8657,18 @@
         "operationId": "_plugins_official_extensions_pallas_api_plugins_official_extensions_get",
         "parameters": [
           {
+            "name": "skip_assets",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "为 true 时跳过商店资源快照刷新（侧栏提醒等轻量读取）",
+              "default": false,
+              "title": "Skip Assets"
+            },
+            "description": "为 true 时跳过商店资源快照刷新（侧栏提醒等轻量读取）"
+          },
+          {
             "name": "token",
             "in": "query",
             "required": false,
@@ -9519,6 +9531,18 @@
               "title": "Refresh"
             },
             "description": "为 true 时跳过进程内读缓存并重新拉取索引"
+          },
+          {
+            "name": "skip_assets",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "为 true 时跳过商店资源快照刷新（侧栏提醒等轻量读取）",
+              "default": false,
+              "title": "Skip Assets"
+            },
+            "description": "为 true 时跳过商店资源快照刷新（侧栏提醒等轻量读取）"
           },
           {
             "name": "token",

@@ -544,27 +544,45 @@ async def _refresh_one(kind: str, target: dict[str, Any], previous: dict[str, An
     return target_id, entry
 
 
+_refresh_inflight: asyncio.Task[dict[str, Any]] | None = None
+
+
 async def refresh_store_asset_snapshot() -> dict[str, Any]:
-    previous = load_snapshot()
-    targets = await collect_store_asset_targets()
-    snapshot: dict[str, Any] = {"checked_at": time.time(), "official": {}, "community": {}}
-    sem = asyncio.Semaphore(_MAX_CONCURRENCY)
+    """并发请求合并为一次刷新，避免侧栏轮询与商店页同时撞上全量拉资源。"""
+    global _refresh_inflight
+    existing = _refresh_inflight
+    if existing is not None and not existing.done():
+        return await existing
 
-    async def _run(kind: str, target: dict[str, Any]):
-        async with sem:
-            previous_bucket = (previous.get(kind) or {}) if isinstance(previous.get(kind), dict) else {}
-            prev = previous_bucket.get(target["id"]) or {}
-            if not isinstance(prev, dict):
-                prev = {}
-            return await _refresh_one(kind, target, prev)
+    async def _run_refresh() -> dict[str, Any]:
+        previous = load_snapshot()
+        targets = await collect_store_asset_targets()
+        snapshot: dict[str, Any] = {"checked_at": time.time(), "official": {}, "community": {}}
+        sem = asyncio.Semaphore(_MAX_CONCURRENCY)
 
-    for kind in ("official", "community"):
-        items = [t for t in targets.get(kind, []) if isinstance(t, dict) and t.get("id")]
-        results = await asyncio.gather(*[_run(kind, item) for item in items])
-        snapshot[kind] = dict(results)
+        async def _run(kind: str, target: dict[str, Any]):
+            async with sem:
+                previous_bucket = (previous.get(kind) or {}) if isinstance(previous.get(kind), dict) else {}
+                prev = previous_bucket.get(target["id"]) or {}
+                if not isinstance(prev, dict):
+                    prev = {}
+                return await _refresh_one(kind, target, prev)
 
-    save_snapshot(snapshot)
-    return snapshot
+        for kind in ("official", "community"):
+            items = [t for t in targets.get(kind, []) if isinstance(t, dict) and t.get("id")]
+            results = await asyncio.gather(*[_run(kind, item) for item in items])
+            snapshot[kind] = dict(results)
+
+        save_snapshot(snapshot)
+        return snapshot
+
+    task = asyncio.create_task(_run_refresh())
+    _refresh_inflight = task
+    try:
+        return await task
+    finally:
+        if _refresh_inflight is task:
+            _refresh_inflight = None
 
 
 async def fetch_and_cache_readme_markdown(
