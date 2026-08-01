@@ -255,7 +255,7 @@ async def test_request_failover_skips_failing_mirror():
 
 
 @pytest.mark.asyncio
-async def test_request_failover_reraises_last_exception():
+async def test_request_failover_reraises_first_exception():
     from pallas.core.shared.utils import git_mirror as gm
 
     async def always_fail(url: str) -> str:
@@ -265,9 +265,16 @@ async def test_request_failover_reraises_last_exception():
         next(m for m in gm.BUILTIN_MIRRORS if m.id == "ghproxy-vip"),
         next(m for m in gm.BUILTIN_MIRRORS if m.id == "github"),
     ]
-    with pytest.raises(RuntimeError, match="fail:https://api.github.com/"):
+    with pytest.raises(RuntimeError, match="fail:https://ghproxy.vip/"):
         await gm.request_with_mirrors(
             "https://api.github.com/repos/a/b/releases/latest",
             mirrors,
             always_fail,
         )
+
+
+def test_builtin_mirrors_exclude_retired_moeyy():
+    from pallas.core.shared.utils import git_mirror as gm
+
+    assert all(m.id != "moeyy-gh" for m in gm.BUILTIN_MIRRORS)
+    assert gm.mirror_by_id("moeyy-gh") is None

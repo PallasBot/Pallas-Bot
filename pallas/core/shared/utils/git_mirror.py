@@ -61,7 +61,6 @@ BUILTIN_MIRRORS: tuple[MirrorSpec, ...] = (
     _proxy_mirror("ghproxy-net", "ghproxy.net", "https://ghproxy.net"),
     _proxy_mirror("gh-proxy-com", "gh-proxy.com", "https://gh-proxy.com"),
     _proxy_mirror("github-akams", "github.akams.cn", "https://github.akams.cn"),
-    _proxy_mirror("moeyy-gh", "moeyy.cn/gh-proxy", "https://moeyy.cn/gh-proxy"),
 )
 
 
@@ -315,16 +314,18 @@ async def request_with_mirrors[T](
     mirrors: Sequence[MirrorSpec] | Iterable[MirrorSpec],
     getter: Callable[[str], Awaitable[T]],
 ) -> T:
-    last_exc: Exception | None = None
+    first_exc: Exception | None = None
     for mirror in mirrors:
         rewritten = rewrite_github_url(url, mirror)
         try:
             return await getter(rewritten)
         except Exception as e:  # noqa: BLE001
-            last_exc = e
+            if first_exc is None:
+                first_exc = e
             continue
-    if last_exc:
-        raise last_exc
+    if first_exc is not None:
+        # 抛优先镜像的异常，避免末位失效代理把报错 URL 带偏
+        raise first_exc
     raise RuntimeError("无可用镜像源")
 
 
