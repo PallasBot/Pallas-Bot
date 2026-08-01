@@ -953,8 +953,15 @@ def register_common_config_router(
         from pallas.product.llm.ops_api import put_sing_defaults
 
         payload = body if isinstance(body, dict) else {}
-        if payload.get("default_speaker") is None and payload.get("preferred_backend") is None:
-            raise HTTPException(status_code=400, detail="至少提供 default_speaker 或 preferred_backend")
+        if (
+            payload.get("default_speaker") is None
+            and payload.get("preferred_backend") is None
+            and payload.get("speaker_backends") is None
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="至少提供 default_speaker、preferred_backend 或 speaker_backends",
+            )
         try:
             data = await put_sing_defaults(payload)
         except PermissionError as e:

@@ -108,6 +108,53 @@ AI 镜像仅用于媒体 / RWKV。Ollama 模型默认不预拉（`--profile pull
 
 从 0 安装验收见 [安装验收 Checklist](ga-install-checklist.md)。
 
+### 手动补充 DDSP-SVC 多版本（可选）
+
+默认安装只会检出 **一份** 唱歌推理代码：`app/workers/sing/DDSP-SVC`（对应 **6.2**）。控制台「优先后端」若选 `ddsp_6.3` / `ddsp_6.1`，需要本地另有对应目录；新版本 Runtime 可在缺脚本时后台自动拉取，直连 GitHub 失败时也可按下述**手动**安装。
+
+| 版本 | 优先后端 ID | 本地目录 | Git 分支 |
+| --- | --- | --- | --- |
+| 6.2（默认） | `ddsp_6.2` | `app/workers/sing/DDSP-SVC` | `6.2` |
+| 6.3 | `ddsp_6.3` | `app/workers/sing/DDSP-SVC-6.3` | `6.3` |
+| 6.1 | `ddsp_6.1` | `app/workers/sing/DDSP-SVC-6.1` | `6.1` |
+
+在 **AI Runtime 根目录**执行（同级源码仓，或托管目录如 `data/runtimes/pallas-bot-ai`）。`git clone` 的仓库地址与目标目录须写在**同一条命令**里。
+
+**PowerShell（本机代理；把 `7890` 改成你的端口）——可多行整段粘贴：**
+
+```powershell
+cd F:\Pallas-Bot\Pallas-Bot\data\runtimes\pallas-bot-ai
+$env:HTTPS_PROXY="http://127.0.0.1:7890"
+$env:HTTP_PROXY="http://127.0.0.1:7890"
+Remove-Item -Recurse -Force app\workers\sing\DDSP-SVC-6.3 -ErrorAction SilentlyContinue
+git clone --depth 1 --branch 6.3 https://github.com/PallasBot/DDSP-SVC.git app/workers/sing/DDSP-SVC-6.3
+```
+
+**终端吃不到系统代理时，用镜像（不必设 PROXY）：**
+
+```powershell
+cd F:\Pallas-Bot\Pallas-Bot\data\runtimes\pallas-bot-ai
+Remove-Item -Recurse -Force app\workers\sing\DDSP-SVC-6.3 -ErrorAction SilentlyContinue
+git clone --depth 1 --branch 6.3 https://ghproxy.net/https://github.com/PallasBot/DDSP-SVC.git app/workers/sing/DDSP-SVC-6.3
+```
+
+镜像不可用时可换：`gh-proxy.com`、`github.akams.cn`（写法同为 `https://<镜像>/https://github.com/PallasBot/DDSP-SVC.git`）。装 **6.1** 时把分支改成 `--branch 6.1`、目录改成 `app/workers/sing/DDSP-SVC-6.1`。
+
+Linux / macOS 示例：
+
+```bash
+cd /path/to/pallas-bot-ai   # 或 data/runtimes/pallas-bot-ai
+export HTTPS_PROXY=http://127.0.0.1:7890 HTTP_PROXY=http://127.0.0.1:7890
+rm -rf app/workers/sing/DDSP-SVC-6.3
+git clone --depth 1 --branch 6.3 https://github.com/PallasBot/DDSP-SVC.git app/workers/sing/DDSP-SVC-6.3
+```
+
+::: tip
+每份约 1.6G。6.2+ 与旧 checkpoint **不兼容**——权重按哪个版本训的，就优先用哪个后端；不要指望同一份 `.pt` 跨 6.1/6.2/6.3 通吃。装完后在控制台重启媒体服务。
+
+控制台「AI 配置 → 媒体」可为**每个音色**单独指定优先推理（`speaker_backends`）。官方 `pallas`（`config.yaml` 里 `RectifiedFlow`）对应 **6.2**，建议选 `ddsp_6.2`；**6.1** 只给旧扩散权重用，不是现网官方音色。
+:::
+
 ## 接入前核对（媒体）
 
 默认 LLM 聊天只核对 Provider。下列项针对 **媒体任务**。
