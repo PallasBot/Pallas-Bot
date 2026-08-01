@@ -534,14 +534,19 @@ def register_plugins_console_router(
         return JSONResponse({"ok": bool(data.get("ok")), "data": data}, status_code=status)
 
     @router.get(f"{x}/plugins/official-extensions", include_in_schema=True)
-    async def _plugins_official_extensions() -> JSONResponse:
+    async def _plugins_official_extensions(
+        skip_assets: bool = Query(
+            default=False,
+            description="为 true 时跳过商店资源快照刷新（侧栏提醒等轻量读取）",
+        ),
+    ) -> JSONResponse:
         from pallas.console.webui.plugin_registry import build_official_extension_rows
         from pallas.console.webui.plugin_store_assets import (
             refresh_store_asset_snapshot,
             snapshot_has_assets_for_kind,
         )
 
-        if not snapshot_has_assets_for_kind("official"):
+        if not skip_assets and not snapshot_has_assets_for_kind("official"):
             await refresh_store_asset_snapshot()
 
         async def _load() -> list[dict[str, Any]]:
@@ -780,6 +785,10 @@ def register_plugins_console_router(
     @router.get(f"{x}/plugins/community-store", include_in_schema=True)
     async def _plugins_community_store(
         refresh: bool = Query(default=False, description="为 true 时跳过进程内读缓存并重新拉取索引"),
+        skip_assets: bool = Query(
+            default=False,
+            description="为 true 时跳过商店资源快照刷新（侧栏提醒等轻量读取）",
+        ),
     ) -> JSONResponse:
         from pallas.console.webui.community_plugin_registry import build_community_plugin_store
         from pallas.console.webui.plugin_store_assets import (
@@ -789,8 +798,9 @@ def register_plugins_console_router(
 
         if refresh:
             drop_read_cache(("plugins-community-store",))
-            await refresh_store_asset_snapshot()
-        elif not snapshot_has_assets_for_kind("community"):
+            if not skip_assets:
+                await refresh_store_asset_snapshot()
+        elif not skip_assets and not snapshot_has_assets_for_kind("community"):
             await refresh_store_asset_snapshot()
 
         async def _load() -> dict[str, Any]:
