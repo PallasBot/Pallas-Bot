@@ -137,9 +137,15 @@ def resolve_configured_ai_endpoint() -> tuple[str, int]:
 def probe_ai_health_at(host: str, port: int, *, timeout_sec: float = 3.0) -> dict[str, Any]:
     h = str(host or "").strip() or "127.0.0.1"
     url = f"http://{h}:{int(port)}/health"
+    # 回环探活勿走系统 HTTP(S)_PROXY，否则易被代理成 502 而误判不健康
+    opener = (
+        urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        if is_loopback_host(h)
+        else urllib.request.build_opener()
+    )
     try:
         req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+        with opener.open(req, timeout=timeout_sec) as resp:
             body = resp.read(4096).decode("utf-8", errors="replace")
             return {
                 "ok": 200 <= int(resp.status) < 300,
@@ -286,11 +292,20 @@ def poll_ai_runtime_status(
     want_running: bool,
     timeout_sec: float = 30.0,
     interval_sec: float = 1.0,
+    want_healthy: bool | None = None,
 ) -> dict[str, Any]:
     """ctl 返回后进程/探活常滞后；短轮询再返回，避免控制台立刻读到旧状态。"""
     deadline = time.monotonic() + max(0.0, float(timeout_sec))
     status = ai_runtime_status(ai_root=ai_root)
-    while bool(status.get("running")) != bool(want_running):
+
+    def _matched(st: dict[str, Any]) -> bool:
+        if bool(st.get("running")) != bool(want_running):
+            return False
+        if want_healthy is True:
+            return bool((st.get("health") or {}).get("ok"))
+        return True
+
+    while not _matched(status):
         if time.monotonic() >= deadline:
             break
         time.sleep(max(0.05, float(interval_sec)))
@@ -298,16 +313,30 @@ def poll_ai_runtime_status(
     return status
 
 
+def _local_services_claim_running(status: dict[str, Any]) -> bool:
+    services = status.get("services") or {}
+    return any(bool((services.get(name) or {}).get("running")) for name in _SERVICES)
+
+
 def start_ai_runtime(*, ai_root: Path | None = None, with_media: bool = True) -> dict[str, Any]:
     """启动媒体服务（media worker + API）。
 
     ``with_media`` 保留兼容旧调用，已忽略；聊天/画画不经本 Runtime。
+    若本地服务宣称在跑但 ``/health`` 失败（僵死 pid / 空端口），先 stop 再 start，
+    避免 ctl「已在运行」空操作导致控制台健康一直异常。
     """
     del with_media  # 兼容参数，行为固定为媒体栈
     root = ai_root or resolve_ai_repo_root()
     if root is None:
         return {"ok": False, "error": "未检测到本地 AI Runtime，Docker 请在宿主机启停容器", "output_tail": ""}
     outputs: list[str] = []
+    healed = False
+    pre = ai_runtime_status(ai_root=root)
+    health_ok = bool((pre.get("health") or {}).get("ok"))
+    if _local_services_claim_running(pre) and not health_ok:
+        healed = True
+        _code, out = run_ctl(root, "stop", "all")
+        outputs.append(out)
     for target in ("media", "api"):
         code, out = run_ctl(root, "start", target)
         outputs.append(out)
@@ -316,15 +345,23 @@ def start_ai_runtime(*, ai_root: Path | None = None, with_media: bool = True) ->
                 "ok": False,
                 "error": f"ctl start {target} 退出码 {code}",
                 "output_tail": "\n".join(outputs)[-8000:],
+                "healed": healed,
             }
     if is_managed_ai_root(root):
         mark_ai_root_managed(root)
     # media 冷启动（尤其 Windows+torch）常需数十秒；此处只短等，前端继续轮询
-    status = poll_ai_runtime_status(ai_root=root, want_running=True, timeout_sec=20.0, interval_sec=1.0)
+    status = poll_ai_runtime_status(
+        ai_root=root,
+        want_running=True,
+        want_healthy=True,
+        timeout_sec=20.0,
+        interval_sec=1.0,
+    )
     return {
         "ok": True,
         "error": None,
         "output_tail": "\n".join(outputs)[-8000:],
+        "healed": healed,
         "runtime": status,
     }
 

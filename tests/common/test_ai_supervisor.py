@@ -146,14 +146,60 @@ def test_start_ai_runtime_calls_ctl(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(
         ai_supervisor,
         "ai_runtime_status",
-        lambda **_: {"running": True, "can_manage": True},
+        lambda **_: {
+            "running": True,
+            "can_manage": True,
+            "services": {"api": {"running": True}, "media": {"running": True}},
+            "health": {"ok": True},
+        },
     )
     out = ai_supervisor.start_ai_runtime(ai_root=root, with_media=False)
     assert out["ok"] is True
+    assert out["healed"] is False
     assert calls == [("start", "media"), ("start", "api")]
     again = ai_supervisor.start_ai_runtime(ai_root=root, with_media=True)
     assert again["ok"] is True
     assert calls[-2:] == [("start", "media"), ("start", "api")]
+
+
+def test_start_ai_runtime_stops_unhealthy_before_start(tmp_path, monkeypatch) -> None:
+    """pid 还在但 /health 失败时，先 stop 再 start，避免 ctl 空操作。"""
+    root = tmp_path / "ai"
+    (root / "scripts").mkdir(parents=True)
+    (root / "scripts" / "ctl.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    calls: list[tuple[str, ...]] = []
+    hits = {"n": 0}
+
+    def fake_status(**_kwargs):  # noqa: ANN001
+        hits["n"] += 1
+        if hits["n"] == 1:
+            return {
+                "running": True,
+                "can_manage": True,
+                "services": {"api": {"running": True}, "media": {"running": True}},
+                "health": {"ok": False, "status_code": 502, "error": "HTTP Error 502"},
+            }
+        return {
+            "running": True,
+            "can_manage": True,
+            "services": {"api": {"running": True}, "media": {"running": True}},
+            "health": {"ok": True, "status_code": 200},
+        }
+
+    def fake_ctl(ai_root, *args: str, timeout_sec: float = 120.0):  # noqa: ANN001
+        assert ai_root == root
+        calls.append(args)
+        return 0, f"ok {' '.join(args)}"
+
+    monkeypatch.setattr(ai_supervisor, "run_ctl", fake_ctl)
+    monkeypatch.setattr(ai_supervisor, "ai_runtime_status", fake_status)
+    monkeypatch.setattr(ai_supervisor.time, "sleep", lambda _s: None)
+    out = ai_supervisor.start_ai_runtime(ai_root=root)
+    assert out["ok"] is True
+    assert out["healed"] is True
+    assert calls[0] == ("stop", "all")
+    assert calls[1:] == [("start", "media"), ("start", "api")]
+    assert out["runtime"]["health"]["ok"] is True
 
 
 def test_poll_ai_runtime_status_waits_until_running(tmp_path, monkeypatch) -> None:
@@ -174,4 +220,30 @@ def test_poll_ai_runtime_status_waits_until_running(tmp_path, monkeypatch) -> No
         interval_sec=0.1,
     )
     assert st["running"] is True
+    assert hits["n"] >= 3
+
+
+def test_poll_ai_runtime_status_waits_until_healthy(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "ai"
+    root.mkdir()
+    hits = {"n": 0}
+
+    def fake_status(**_kwargs):  # noqa: ANN001
+        hits["n"] += 1
+        return {
+            "running": True,
+            "can_manage": True,
+            "health": {"ok": hits["n"] >= 3},
+        }
+
+    monkeypatch.setattr(ai_supervisor, "ai_runtime_status", fake_status)
+    monkeypatch.setattr(ai_supervisor.time, "sleep", lambda _s: None)
+    st = ai_supervisor.poll_ai_runtime_status(
+        ai_root=root,
+        want_running=True,
+        want_healthy=True,
+        timeout_sec=5.0,
+        interval_sec=0.1,
+    )
+    assert st["health"]["ok"] is True
     assert hits["n"] >= 3
