@@ -61,6 +61,32 @@ async def test_task_manager_keeps_ai_task_beyond_legacy_10min(monkeypatch) -> No
     assert "task-1" in TaskManager._tasks
 
 
+async def test_task_manager_claim_task_is_one_shot(monkeypatch) -> None:
+    import time
+
+    start = time.time()
+    TaskManager._tasks = {
+        "task-claim": {
+            "bot_id": "123456",
+            "group_id": 42,
+            "start_time": start,
+        }
+    }
+    monkeypatch.setattr("pallas.core.platform.shard.coord.ai_task_registry.ai_task_ttl_sec", lambda: 86400.0)
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.coord.ai_task_registry.remove_ai_task",
+        lambda _task_id: None,
+    )
+
+    first = await TaskManager.claim_task("task-claim")
+    second = await TaskManager.claim_task("task-claim")
+
+    assert first is not None
+    assert first["group_id"] == 42
+    assert second is None
+    assert "task-claim" not in TaskManager._tasks
+
+
 def test_ai_task_registry_uses_redis(fake_coord_redis, monkeypatch) -> None:
     now = 1000.0
     monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
@@ -81,6 +107,28 @@ def test_ai_task_registry_uses_redis(fake_coord_redis, monkeypatch) -> None:
 
     mod.remove_ai_task("task-redis")
     assert mod.get_ai_task_record("task-redis") is None
+
+
+def test_claim_ai_task_record_is_one_shot(fake_coord_redis, monkeypatch) -> None:
+    now = 1500.0
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
+    monkeypatch.setattr(mod, "current_worker_port", lambda: 7973)
+    monkeypatch.setattr(mod, "get_shard_registry_settings", lambda: SimpleNamespace(shard_id=3))
+    monkeypatch.setattr(mod, "get_shard_registry", lambda: SimpleNamespace(shard_for_bot=lambda _bot_id: None))
+    monkeypatch.setattr(mod.time, "time", lambda: now)
+
+    mod.register_ai_task(
+        "task-claim-redis",
+        {"bot_id": "123456", "group_id": 42, "start_time": now},
+    )
+
+    first = mod.claim_ai_task_record("task-claim-redis")
+    second = mod.claim_ai_task_record("task-claim-redis")
+
+    assert first is not None
+    assert first["worker_port"] == 7973
+    assert second is None
+    assert mod.get_ai_task_record("task-claim-redis") is None
 
 
 def test_ai_task_registry_requires_redis_when_sharding(monkeypatch) -> None:
