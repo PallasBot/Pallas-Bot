@@ -20,7 +20,7 @@ from pallas.core.platform.ai_callback.task_types import (
     DRAW_IMAGE_TASK_TYPE,
     VOICE_TASK_TYPES,
 )
-from pallas.core.platform.shard.coord.ai_task_registry import get_ai_task_record, remove_ai_task
+from pallas.core.platform.shard.coord.ai_task_registry import claim_ai_task_record
 from pallas.product.llm.delivery import (
     deliver_llm_callback_success,
     deliver_llm_chat_result,
@@ -39,10 +39,11 @@ __all__ = [
 
 
 async def resolve_callback_task(task_id: str) -> dict | None:
-    task = await TaskManager.get_task(task_id)
+    """原子领取回调任务；重复回调将拿不到任务（404），避免重复发语音/图。"""
+    task = await TaskManager.claim_task(task_id)
     if task:
         return task
-    rec = get_ai_task_record(task_id)
+    rec = claim_ai_task_record(task_id)
     if not rec:
         return None
     return {
@@ -132,8 +133,6 @@ async def run_ai_callback(
     if status == "failed":
         track_llm_callback(task, "callback_fail")
         invoke_media_task_failure(task)
-        await TaskManager.remove_task(task_id)
-        remove_ai_task(task_id)
         if bot is not None and group_id:
             fail_msg = failure_reply_for_task(task)
             if fail_msg:
@@ -243,8 +242,6 @@ async def run_ai_callback(
             except Exception:
                 logger.exception("enqueue drunk tts failed task={}", task_id)
 
-        await TaskManager.remove_task(task_id)
-        remove_ai_task(task_id)
         logger.info(
             "AI callback completed task={} delivered={} bot_id={} group_id={} task_type={}",
             task_id,

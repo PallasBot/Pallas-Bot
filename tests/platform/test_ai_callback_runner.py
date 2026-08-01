@@ -55,22 +55,18 @@ async def test_run_ai_callback_falls_back_to_shared_registry(monkeypatch: pytest
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(return_value=None),
     )
     monkeypatch.setattr(
         ai_callback_runner,
-        "get_ai_task_record",
+        "claim_ai_task_record",
         lambda _task_id: {"bot_id": "111", "group_id": 222},
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     result = await ai_callback_runner.run_ai_callback("task-1", status="success", text="hello")
 
     assert result == {"message": "ok"}
-    remove_task.assert_awaited_once_with("task-1")
 
 
 @pytest.mark.asyncio
@@ -82,7 +78,7 @@ async def test_run_ai_callback_appends_user_and_assistant_on_llm_chat_success(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -93,9 +89,6 @@ async def test_run_ai_callback_appends_user_and_assistant_on_llm_chat_success(
             }
         ),
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     calls: list[tuple] = []
 
@@ -123,7 +116,7 @@ async def test_run_ai_callback_skips_summary_writeback_when_policy_disabled(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -134,8 +127,6 @@ async def test_run_ai_callback_skips_summary_writeback_when_policy_disabled(
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(return_value=True))
     monkeypatch.setattr(llm_delivery, "can_write_runtime_state_summary", lambda: False)
 
@@ -163,7 +154,7 @@ async def test_run_ai_callback_records_llm_task_metrics(monkeypatch: pytest.Monk
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -173,8 +164,6 @@ async def test_run_ai_callback_records_llm_task_metrics(monkeypatch: pytest.Monk
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     await ai_callback_runner.run_ai_callback("task-1", status="success", text="润色后")
     snap = llm_task_metrics_snapshot()
@@ -192,7 +181,7 @@ async def test_run_ai_callback_records_llm_route_metrics(monkeypatch: pytest.Mon
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -203,8 +192,6 @@ async def test_run_ai_callback_records_llm_route_metrics(monkeypatch: pytest.Mon
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     await ai_callback_runner.run_ai_callback("task-route-1", status="success", text="选句结果")
     snap = llm_task_metrics_snapshot()
@@ -222,7 +209,7 @@ async def test_run_ai_callback_records_pipeline_route_from_task(monkeypatch: pyt
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -235,8 +222,6 @@ async def test_run_ai_callback_records_pipeline_route_from_task(monkeypatch: pyt
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         "pallas.product.llm.delivery.evaluate_repeater_callback_text",
         AsyncMock(return_value=True),
@@ -258,7 +243,7 @@ async def test_run_ai_callback_resolves_empty_route_by_task_type(monkeypatch: py
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -270,8 +255,6 @@ async def test_run_ai_callback_resolves_empty_route_by_task_type(monkeypatch: py
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         "pallas.product.llm.delivery.evaluate_repeater_callback_text",
         AsyncMock(return_value=True),
@@ -290,7 +273,7 @@ async def test_run_ai_callback_appends_behavior_run(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -305,8 +288,6 @@ async def test_run_ai_callback_appends_behavior_run(monkeypatch: pytest.MonkeyPa
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(return_value=True))
     recorded: list[object] = []
     monkeypatch.setattr(llm_delivery, "append_behavior_run", lambda run: recorded.append(run))
@@ -328,7 +309,7 @@ async def test_run_ai_callback_attaches_agent_trace_to_behavior_run(monkeypatch:
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -343,8 +324,6 @@ async def test_run_ai_callback_attaches_agent_trace_to_behavior_run(monkeypatch:
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(return_value=True))
     recorded: list[object] = []
     monkeypatch.setattr(llm_delivery, "append_behavior_run", lambda run: recorded.append(run))
@@ -372,7 +351,7 @@ async def test_run_ai_callback_appends_repeater_feedback_when_enabled(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -387,8 +366,6 @@ async def test_run_ai_callback_appends_repeater_feedback_when_enabled(
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
@@ -421,7 +398,7 @@ async def test_run_ai_callback_learns_delivered_llm_reply_without_breaking_feedb
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -432,8 +409,6 @@ async def test_run_ai_callback_learns_delivered_llm_reply_without_breaking_feedb
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     learned: list[tuple[int, str, dict]] = []
 
     def note(group_id, text, **meta):
@@ -459,7 +434,7 @@ async def test_run_ai_callback_appends_repeater_task_feedback_when_enabled(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -472,8 +447,6 @@ async def test_run_ai_callback_appends_repeater_task_feedback_when_enabled(
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
@@ -505,7 +478,7 @@ async def test_run_ai_callback_disabled_repeater_feedback_does_not_append(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -517,8 +490,6 @@ async def test_run_ai_callback_disabled_repeater_feedback_does_not_append(
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
@@ -542,7 +513,7 @@ async def test_run_ai_callback_feedback_write_failure_does_not_break_success(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -554,9 +525,6 @@ async def test_run_ai_callback_feedback_write_failure_does_not_break_success(
             }
         ),
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
@@ -572,7 +540,6 @@ async def test_run_ai_callback_feedback_write_failure_does_not_break_success(
 
     assert result == {"message": "ok"}
     bot.call_api.assert_awaited_once()
-    remove_task.assert_awaited_once_with("task-feedback-fail-1")
 
 
 @pytest.mark.asyncio
@@ -582,7 +549,7 @@ async def test_run_ai_callback_delivery_failure_does_not_append_repeater_feedbac
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: MagicMock())
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -594,8 +561,6 @@ async def test_run_ai_callback_delivery_failure_does_not_append_repeater_feedbac
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
@@ -618,17 +583,13 @@ async def test_run_ai_callback_send_timeout_returns_failed(monkeypatch: pytest.M
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(return_value={"bot_id": "111", "group_id": 222}),
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     result = await ai_callback_runner.run_ai_callback("task-1", status="success", text="hello")
 
     assert result == {"message": "failed"}
-    remove_task.assert_awaited_once_with("task-1")
 
 
 @pytest.mark.asyncio
@@ -638,7 +599,7 @@ async def test_run_ai_callback_llm_chat_duplicate_reply_uses_fallback(monkeypatc
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -649,9 +610,6 @@ async def test_run_ai_callback_llm_chat_duplicate_reply_uses_fallback(monkeypatc
             }
         ),
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         llm_delivery,
         "should_suppress_llm_duplicate_reply",
@@ -665,7 +623,6 @@ async def test_run_ai_callback_llm_chat_duplicate_reply_uses_fallback(monkeypatc
     call_kwargs = bot.call_api.await_args.kwargs
     assert call_kwargs["group_id"] == 222
     assert call_kwargs["message"] == "语料候选"
-    remove_task.assert_awaited_once_with("task-dup-1")
 
 
 @pytest.mark.asyncio
@@ -676,7 +633,7 @@ async def test_run_ai_callback_get_bot_failed(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(ai_callback_runner, "get_bot", raise_get_bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(return_value={"bot_id": "111", "group_id": 222}),
     )
 
@@ -692,7 +649,7 @@ async def test_run_ai_callback_drunk_chat_failed_is_silent(monkeypatch: pytest.M
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -701,15 +658,11 @@ async def test_run_ai_callback_drunk_chat_failed_is_silent(monkeypatch: pytest.M
             }
         ),
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     result = await ai_callback_runner.run_ai_callback("task-drunk-fail", status="failed")
 
     assert result == {"message": "ok"}
     bot.call_api.assert_not_awaited()
-    remove_task.assert_awaited_once_with("task-drunk-fail")
 
 
 @pytest.mark.asyncio
@@ -719,7 +672,7 @@ async def test_run_ai_callback_llm_chat_failed_is_silent(monkeypatch: pytest.Mon
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -728,15 +681,11 @@ async def test_run_ai_callback_llm_chat_failed_is_silent(monkeypatch: pytest.Mon
             }
         ),
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     result = await ai_callback_runner.run_ai_callback("task-llm-chat-fail", status="failed")
 
     assert result == {"message": "ok"}
     bot.call_api.assert_not_awaited()
-    remove_task.assert_awaited_once_with("task-llm-chat-fail")
 
 
 @pytest.mark.asyncio
@@ -746,7 +695,7 @@ async def test_run_ai_callback_repeater_fallback_failed_is_silent(monkeypatch: p
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -755,15 +704,11 @@ async def test_run_ai_callback_repeater_fallback_failed_is_silent(monkeypatch: p
             }
         ),
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     result = await ai_callback_runner.run_ai_callback("task-1", status="failed")
 
     assert result == {"message": "ok"}
     bot.call_api.assert_not_awaited()
-    remove_task.assert_awaited_once_with("task-1")
 
 
 @pytest.mark.asyncio
@@ -775,7 +720,7 @@ async def test_run_ai_callback_repeater_polish_failed_is_silent(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -785,15 +730,11 @@ async def test_run_ai_callback_repeater_polish_failed_is_silent(
             }
         ),
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     result = await ai_callback_runner.run_ai_callback("task-1", status="failed")
 
     assert result == {"message": "ok"}
     bot.call_api.assert_not_awaited()
-    remove_task.assert_awaited_once_with("task-1")
 
 
 @pytest.mark.asyncio
@@ -805,7 +746,7 @@ async def test_run_ai_callback_repeater_fallback_success_rejected_is_silent(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -814,8 +755,6 @@ async def test_run_ai_callback_repeater_fallback_success_rejected_is_silent(
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         llm_delivery,
         "evaluate_repeater_callback_text",
@@ -837,7 +776,7 @@ async def test_run_ai_callback_repeater_polish_success_rejected_uses_fallback_te
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -847,8 +786,6 @@ async def test_run_ai_callback_repeater_polish_success_rejected_uses_fallback_te
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         llm_delivery,
         "evaluate_repeater_callback_text",
@@ -872,7 +809,7 @@ async def test_run_ai_callback_chat_output_filter_blocks_service_tone(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -882,8 +819,6 @@ async def test_run_ai_callback_chat_output_filter_blocks_service_tone(
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
@@ -912,7 +847,7 @@ async def test_run_ai_callback_polish_lite_output_filter_uses_fallback(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -922,8 +857,6 @@ async def test_run_ai_callback_polish_lite_output_filter_uses_fallback(
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     monkeypatch.setattr(llm_delivery, "evaluate_repeater_callback_text", AsyncMock(return_value=True))
 
     result = await ai_callback_runner.run_ai_callback(
@@ -957,7 +890,7 @@ async def test_run_ai_callback_draw_image_failed_records_runtime_failure(monkeyp
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -967,8 +900,6 @@ async def test_run_ai_callback_draw_image_failed_records_runtime_failure(monkeyp
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     record_failure = MagicMock()
     monkeypatch.setattr("pallas_plugin_draw.runtime_state.record_ai_runtime_failure", record_failure)
 
@@ -1002,7 +933,7 @@ async def test_run_ai_callback_draw_image_success(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -1013,9 +944,6 @@ async def test_run_ai_callback_draw_image_success(monkeypatch: pytest.MonkeyPatc
             }
         ),
     )
-    remove_task = AsyncMock()
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", remove_task)
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
     bump_usage = MagicMock()
     monkeypatch.setattr("pallas_plugin_draw.draw_usage_store.bump_pallas_draw_usage", bump_usage)
     persist = MagicMock()
@@ -1033,7 +961,6 @@ async def test_run_ai_callback_draw_image_success(monkeypatch: pytest.MonkeyPatc
     bump_usage.assert_called_once_with((222, 333), True)
     persist.assert_called_once_with(png, 222, 333)
     record_success.assert_called_once()
-    remove_task.assert_awaited_once_with("draw-task-1")
 
 
 @pytest.mark.asyncio
@@ -1050,7 +977,7 @@ async def test_run_ai_callback_sing_sends_voice_without_progress_metadata(
     monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
     monkeypatch.setattr(
         ai_callback_runner.TaskManager,
-        "get_task",
+        "claim_task",
         AsyncMock(
             return_value={
                 "bot_id": "111",
@@ -1059,8 +986,6 @@ async def test_run_ai_callback_sing_sends_voice_without_progress_metadata(
             }
         ),
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     mp3 = b"ID3" + (b"x" * 64)
     upload = UploadFile(filename="sing.mp3", file=BytesIO(mp3))
@@ -1092,10 +1017,10 @@ async def test_run_ai_callback_sing_registry_fallback_uses_registered_bot(monkey
         return bot
 
     monkeypatch.setattr(ai_callback_runner, "get_bot", fake_get_bot)
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "get_task", AsyncMock(return_value=None))
+    monkeypatch.setattr(ai_callback_runner.TaskManager, "claim_task", AsyncMock(return_value=None))
     monkeypatch.setattr(
         ai_callback_runner,
-        "get_ai_task_record",
+        "claim_ai_task_record",
         lambda _task_id: {
             "bot_id": "2927116873",
             "group_id": 626266902,
@@ -1103,8 +1028,6 @@ async def test_run_ai_callback_sing_registry_fallback_uses_registered_bot(monkey
             "task_type": "sing",
         },
     )
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr(ai_callback_runner, "remove_ai_task", lambda _task_id: None)
 
     mp3 = b"ID3" + (b"x" * 64)
     upload = UploadFile(filename="sing.mp3", file=BytesIO(mp3))
@@ -1138,3 +1061,20 @@ async def test_send_group_voice_uses_message_segment_record() -> None:
     message = call_kwargs["message"]
     assert isinstance(message, MessageSegment)
     assert message.type == "record"
+
+
+@pytest.mark.asyncio
+async def test_run_ai_callback_duplicate_claim_returns_404(monkeypatch: pytest.MonkeyPatch) -> None:
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(
+        ai_callback_runner.TaskManager,
+        "claim_task",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(ai_callback_runner, "claim_ai_task_record", lambda _task_id: None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await ai_callback_runner.run_ai_callback("task-dup-voice", status="success", text="ok")
+
+    assert exc_info.value.status_code == 404

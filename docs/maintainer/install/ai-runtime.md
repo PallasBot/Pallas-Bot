@@ -77,6 +77,8 @@ uv run pallas ai setup
 | Bot 非默认端口 | `--bot-port <port>` |
 | 媒体 + NVIDIA torch | `uv run pallas ai setup --gpu` |
 
+`--gpu` 安装 AI Runtime 的 **torch 2.7.1 + cu128**（支持 RTX 50 / `sm_120`）；驱动需支持 CUDA 12.8。从旧 cu124 环境升级后请「仅重装依赖」或再跑一次带 `--gpu` 的 setup。
+
 本地 Ollama 推理（若仍用遗留 LLM worker）用 Ollama 自带 GPU，与 `--gpu`（本仓 PyTorch）无关。
 
 ### 无 GPU / 纯第三方 API

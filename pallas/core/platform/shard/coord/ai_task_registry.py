@@ -90,6 +90,38 @@ def remove_ai_task_redis_sync(task_id: str) -> None:
         return
 
 
+def claim_ai_task_redis_sync(task_id: str) -> dict[str, Any] | None:
+    """原子读取并删除 Redis 中的 AI 任务登记。"""
+    from pallas.core.platform.coord.redis_claim import get_coord_redis_client
+    from pallas.core.platform.coord.redis_settings import coord_redis_enabled
+
+    if not coord_redis_enabled():
+        return None
+    client = get_coord_redis_client()
+    if client is None:
+        return None
+    key = ai_task_redis_key(task_id)
+    try:
+        getdel = getattr(client, "getdel", None)
+        if callable(getdel):
+            raw = getdel(key)
+        else:
+            raw = client.get(key)
+            if raw is not None:
+                client.delete(key)
+    except Exception:
+        return None
+    if raw is None:
+        return None
+    try:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        data = json.loads(str(raw))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def _is_stale(rec: dict[str, Any]) -> bool:
     start = float(rec.get("start_time") or 0)
     return start <= 0 or (time.time() - start) > ai_task_ttl_sec()
@@ -151,6 +183,18 @@ def get_ai_task_record(task_id: str) -> dict[str, Any] | None:
     rec = read_ai_task_redis_sync(task_id)
     if not rec or _is_stale(rec):
         remove_ai_task(task_id)
+        return None
+    return rec
+
+
+def claim_ai_task_record(task_id: str) -> dict[str, Any] | None:
+    """原子领取分片任务登记；已被领取或过期则返回 None。"""
+    if not shard_ctx.sharding_active():
+        return None
+    rec = claim_ai_task_redis_sync(task_id)
+    if not rec:
+        return None
+    if _is_stale(rec):
         return None
     return rec
 
