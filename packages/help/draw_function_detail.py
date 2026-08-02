@@ -5,22 +5,30 @@ from __future__ import annotations
 import textwrap
 from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw
 
+if TYPE_CHECKING:
     from .plugin_detail_data import FunctionDetailData
 
 from . import help_theme as ht
 from .help_draw_assets import draw_page_footer_bar, draw_page_header_band, draw_page_meta_strip
-from .help_draw_common import new_canvas, strip_help_markdown, truncate_pixels
+from .help_draw_common import new_canvas, strip_help_markdown, truncate_pixels, wrap_pixels
 from .plugin_visuals import help_font
 
 _DOC_BODY_WRAP = 52
+_DOC_BODY_FONT_SIZE = 15
+_DOC_LINE_H = 26
+_DOC_BOX_PAD = 14
+_DOC_TEXT_INSET = 16 + 12  # text_x 相对 content + 右侧留白
 
 
 def _chip_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
     bbox = draw.textbbox((0, 0), text, font=font)
     return (bbox[2] - bbox[0]) + 20
+
+
+def _measure_draw() -> ImageDraw.ImageDraw:
+    return ImageDraw.Draw(Image.new("RGB", (1, 1)))
 
 
 def wrap_doc_body_lines(content: str, *, width: int = _DOC_BODY_WRAP) -> list[str]:
@@ -48,7 +56,36 @@ def wrap_doc_body_lines(content: str, *, width: int = _DOC_BODY_WRAP) -> list[st
     return lines or ["暂无"]
 
 
+def expand_doc_body_lines(
+    content: str,
+    *,
+    draw: ImageDraw.ImageDraw | None = None,
+    font=None,
+    max_width: int | None = None,
+    width: int = _DOC_BODY_WRAP,
+) -> list[str]:
+    """结构折行后再按像素折行，保证长条目（如可用音色）完整可见。"""
+    structural = wrap_doc_body_lines(content, width=width)
+    if draw is None or font is None or max_width is None:
+        return structural
+    out: list[str] = []
+    for line in structural:
+        wrapped = wrap_pixels(draw, line, font, max_width)
+        out.extend(wrapped or [line])
+    return out or ["暂无"]
+
+
+def _doc_text_max_width(*, scale: int = 1) -> int:
+    # 与 draw_function_detail_image 内容区一致：左右 pad 28 + 文本 inset
+    logical = ht.DETAIL_WIDTH - ht.DETAIL_PAD * 2 - 28 * 2 - _DOC_TEXT_INSET
+    return max(1, logical * scale)
+
+
 def _layout_height(data: FunctionDetailData) -> int:
+    measure = _measure_draw()
+    body_font = help_font(_DOC_BODY_FONT_SIZE)
+    # help_font / 画布同乘 RENDER_SCALE；用缩放后的 max_w 估行数，高度仍用逻辑像素
+    max_w = _doc_text_max_width(scale=max(1, int(ht.RENDER_SCALE)))
     body = ht.PAGE_HEADER_H + ht.PAGE_META_H + ht.PAGE_CHROME_GAP
     chips = 0
     for value in (data.scene, data.perm, data.cooldown):
@@ -61,12 +98,12 @@ def _layout_height(data: FunctionDetailData) -> int:
         body += 28
     if data.detail:
         content = strip_help_markdown((data.detail or "").strip() or "暂无")
-        lines = wrap_doc_body_lines(content)
-        body += 30 + 28 + len(lines) * 26 + 16
+        lines = expand_doc_body_lines(content, draw=measure, font=body_font, max_width=max_w)
+        body += 30 + _DOC_BOX_PAD * 2 + len(lines) * _DOC_LINE_H + 16
     for _title, content in data.extra_sections:
         text = strip_help_markdown((content or "").strip() or "暂无")
-        lines = wrap_doc_body_lines(text)
-        body += 30 + 28 + len(lines) * 26 + 16
+        lines = expand_doc_body_lines(text, draw=measure, font=body_font, max_width=max_w)
+        body += 30 + _DOC_BOX_PAD * 2 + len(lines) * _DOC_LINE_H + 16
     return body + ht.PAGE_FOOTER_H + ht.PAGE_CHROME_GAP + ht.DETAIL_PAD * 2
 
 
@@ -179,9 +216,12 @@ def _draw_doc_section(hc, *, x: int, y: int, max_x: int, title: str, body: str) 
     draw.text((x, y), title, fill=ht.TEXT_TITLE, font=help_font(20))
     cursor = y + u(30)
     content = strip_help_markdown((body or "").strip() or "暂无")
-    lines = wrap_doc_body_lines(content)
-    line_h = u(26)
-    box_pad = u(14)
+    body_font = help_font(_DOC_BODY_FONT_SIZE)
+    text_x = x + u(16)
+    max_text_w = max_x - text_x - u(12)
+    lines = expand_doc_body_lines(content, draw=draw, font=body_font, max_width=max_text_w)
+    line_h = u(_DOC_LINE_H)
+    box_pad = u(_DOC_BOX_PAD)
     box_h = box_pad * 2 + len(lines) * line_h
     draw.rounded_rectangle(
         (x, cursor, max_x, cursor + box_h),
@@ -191,11 +231,8 @@ def _draw_doc_section(hc, *, x: int, y: int, max_x: int, title: str, body: str) 
         width=max(1, hc.scale),
     )
     draw.rectangle((x, cursor + u(8), x + u(3), cursor + box_h - u(8)), fill=ht.ACCENT)
-    body_font = help_font(15)
-    text_x = x + u(16)
     ty = cursor + box_pad
     for line in lines:
-        fitted = truncate_pixels(draw, line, body_font, max_x - text_x - u(12))
-        draw.text((text_x, ty), fitted, fill=ht.TEXT, font=body_font)
+        draw.text((text_x, ty), line, fill=ht.TEXT, font=body_font)
         ty += line_h
     return cursor + box_h + u(16)

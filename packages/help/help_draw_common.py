@@ -36,6 +36,27 @@ def truncate_pixels(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) 
     return (t + ell) if t else ell
 
 
+def wrap_pixels(draw: ImageDraw.ImageDraw, text: str, font, max_width: int) -> list[str]:
+    """按像素宽度折行，不截断、不加省略号（正文长列表用）。"""
+    t = (text or "").rstrip("\n")
+    if not t:
+        return []
+    if max_width <= 0 or draw.textlength(t, font=font) <= max_width:
+        return [t]
+    lines: list[str] = []
+    current = ""
+    for ch in t:
+        trial = current + ch
+        if current and draw.textlength(trial, font=font) > max_width:
+            lines.append(current)
+            current = ch
+        else:
+            current = trial
+    if current:
+        lines.append(current)
+    return lines
+
+
 @dataclass(slots=True)
 class HelpCanvas:
     """逻辑坐标成图：内部按 RENDER_SCALE 放大绘制，finish 时缩回。"""
