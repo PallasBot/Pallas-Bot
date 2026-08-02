@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -182,11 +183,28 @@ def register_agent_platform_router(
     async def catchphrases_list(
         bot_id: int | None = Query(default=None, ge=1),
         status: str | None = Query(default=None),
+        offset: int = Query(default=0, ge=0),
+        limit: int = Query(default=50, ge=1, le=200),
     ) -> JSONResponse:
         from pallas.product.persona.catchphrase_bank import list_catchphrases
 
-        items = list_catchphrases(bot_id, status=status)
-        return JSONResponse({"ok": True, "data": {"items": [item.model_dump() for item in items], "count": len(items)}})
+        rows = await asyncio.to_thread(list_catchphrases, bot_id)
+        counts = {
+            "candidate": sum(1 for item in rows if item.status == "candidate"),
+            "active": sum(1 for item in rows if item.status == "active"),
+            "all": len(rows),
+        }
+        filtered = rows if status is None else [item for item in rows if item.status == status]
+        items = filtered[offset : offset + limit]
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "items": [item.model_dump() for item in items],
+                "count": len(items),
+                "total": len(filtered),
+                "counts": counts,
+            },
+        })
 
     @router.post(f"{x}/llm/agent-platform/catchphrases/resolve", include_in_schema=True)
     async def catchphrases_resolve(
@@ -200,9 +218,9 @@ def register_agent_platform_router(
         action = str(body.get("action") or "").strip().lower()
         entry_id = str(body.get("entry_id") or "").strip()
         if action == "approve":
-            item = promote_catchphrase(entry_id, force=True)
+            item = await asyncio.to_thread(promote_catchphrase, entry_id, force=True)
         elif action == "reject":
-            item = reject_catchphrase(entry_id)
+            item = await asyncio.to_thread(reject_catchphrase, entry_id)
         else:
             raise HTTPException(status_code=400, detail="action must be approve or reject")
         if item is None:

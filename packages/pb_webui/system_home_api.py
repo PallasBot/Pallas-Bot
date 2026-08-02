@@ -7,6 +7,7 @@ import os
 import platform
 import shutil
 import socket
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -452,6 +453,7 @@ def _runtime_metrics() -> dict[str, Any]:
         "python": platform.python_version(),
         "hostname": hostname_s or None,
         "boot_time": boot_time,
+        "cpu_model": cpu_model(),
         "cpu_percent": cpu_percent,
         "cpu_per_core": cpu_per_core,
         "cpu_load_avg": cpu_load_avg,
@@ -459,6 +461,39 @@ def _runtime_metrics() -> dict[str, Any]:
         "disk": disk,
         "gpu": _gpu_metrics(),
     }
+
+
+def cpu_model() -> str | None:
+    """Return the host CPU model when the operating system exposes one."""
+    try:
+        system_name = platform.system()
+        if system_name == "Linux":
+            for line in Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace").splitlines():
+                key, sep, value = line.partition(":")
+                if sep and key.strip().lower() in {"model name", "hardware", "model"}:
+                    model = " ".join(value.split())
+                    if model:
+                        return model
+        elif system_name == "Darwin":
+            model = subprocess.check_output(
+                ["sysctl", "-n", "machdep.cpu.brand_string"],
+                text=True,
+                timeout=1,
+            )
+            if model := " ".join(model.split()):
+                return model
+        elif system_name == "Windows":
+            import winreg
+
+            key_path = r"HARDWARE\DESCRIPTION\System\CentralProcessor\0"
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path) as key:
+                model, _ = winreg.QueryValueEx(key, "ProcessorNameString")
+            if model := " ".join(str(model).split()):
+                return model
+    except Exception:  # noqa: BLE001
+        pass
+
+    return " ".join(platform.processor().split()) or None
 
 
 def register_system_home_router(
