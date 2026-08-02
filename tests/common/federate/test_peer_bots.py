@@ -205,6 +205,49 @@ def test_prefer_local_owner_does_not_steal_incapable_commands(monkeypatch):
     assert mod.should_process_federate_group_on_current_deployment(733291779, plain="牛牛塔罗牌") is False
 
 
+def test_yield_federate_when_peer_covers_command_local_does_not(monkeypatch):
+    """本机无决斗等能力、对端显式有时，即使本机不认作命令也不得参与抢占。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛帮助"}),
+    )
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {
+        "dep-peer": frozenset({"牛牛决斗", "八角笼牛"}),
+    }
+    mod._cache_deployment_present_groups = {
+        "dep-peer": frozenset({1076683542}),
+    }
+
+    assert mod.should_yield_federate_ingress_for_peer_command(1076683542, plain="牛牛决斗") is True
+    assert mod.should_yield_federate_ingress_for_peer_command(1076683542, plain="牛牛帮助") is False
+    assert mod.should_yield_federate_ingress_for_peer_command(1076683542, plain="今天吃什么") is False
+
+
+def test_yield_federate_skips_when_capable_peer_not_present_in_group(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛帮助"}),
+    )
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {
+        "dep-peer": frozenset({"牛牛决斗"}),
+    }
+    mod._cache_deployment_present_groups = {
+        "dep-peer": frozenset({999}),
+    }
+
+    assert mod.should_yield_federate_ingress_for_peer_command(1076683542, plain="牛牛决斗") is False
+
+
 def test_owner_ring_excludes_peer_not_present_in_group(monkeypatch):
     """对端宣告了在场群且不含本群时，不参与命令归属（避免空应答）。"""
     mod.clear_federate_peer_bot_cache_for_tests()

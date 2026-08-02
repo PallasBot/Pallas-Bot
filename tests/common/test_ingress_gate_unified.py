@@ -248,6 +248,50 @@ async def test_unified_ingress_non_owner_deployment_skips_command_once_and_feder
 
 
 @pytest.mark.asyncio
+async def test_unified_ingress_yields_peer_covered_command_even_if_not_local_command_traffic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """本机未装决斗插件时不认「牛牛决斗」为本地命令，但仍须让给有能力的对端，不得抢 federate claim。"""
+    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.should_yield_federate_ingress_for_peer_command",
+        lambda _group_id, **_kw: True,
+    )
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain: False)
+    federate = AsyncMock(return_value=True)
+    once = AsyncMock(return_value=True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.claim_federate_group_message_ingress", federate)
+    monkeypatch.setattr("pallas.core.platform.ingress.claim_gate.try_claim_group_message_once", once)
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    class FakeBot:
+        def __init__(self, self_id: int):
+            self.self_id = str(self_id)
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=1076683542,
+        message_id=1,
+        message=Message("牛牛决斗"),
+        raw_message="牛牛决斗",
+    )
+
+    with pytest.raises(IgnoredException):
+        await ingress_group_message_gate(FakeBot(111), event)
+    once.assert_not_awaited()
+    federate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_unified_ingress_non_owner_still_claims_chat_traffic(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
