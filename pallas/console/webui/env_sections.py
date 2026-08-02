@@ -320,6 +320,7 @@ def _llm_section() -> WebuiEnvSection:
             "llm_memory_max_per_group": "LLM_MEMORY_MAX_PER_GROUP",
             "llm_memory_content_max_len": "LLM_MEMORY_CONTENT_MAX_LEN",
             "llm_memory_auto_episode_enabled": "LLM_MEMORY_AUTO_EPISODE_ENABLED",
+            "llm_memory_auto_episode_summary_enabled": "LLM_MEMORY_AUTO_EPISODE_SUMMARY_ENABLED",
             "llm_memory_auto_episode_cooldown_sec": "LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC",
             "llm_knowledge_file_ingest_enabled": "LLM_KNOWLEDGE_FILE_INGEST_ENABLED",
             "llm_relationship_notes_enabled": "LLM_RELATIONSHIP_NOTES_ENABLED",

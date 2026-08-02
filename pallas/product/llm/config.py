@@ -354,6 +354,7 @@ class LlmConfig(BaseModel):
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
     llm_memory_content_max_len: int = Field(default=500, ge=64, le=4000)
     llm_memory_auto_episode_enabled: bool = Field(default=True)
+    llm_memory_auto_episode_summary_enabled: bool = Field(default=False)
     llm_memory_auto_episode_cooldown_sec: int = Field(default=120, ge=0, le=3600)
     llm_memory_graph_extract_enabled: bool = Field(default=True)
     llm_memory_graph_extract_on_write: bool = Field(default=False)
@@ -592,6 +593,7 @@ def get_llm_config() -> LlmConfig:
             llm_memory_max_per_group=_env_int("LLM_MEMORY_MAX_PER_GROUP", 200),
             llm_memory_content_max_len=_env_int("LLM_MEMORY_CONTENT_MAX_LEN", 500),
             llm_memory_auto_episode_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_ENABLED", True),
+            llm_memory_auto_episode_summary_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_SUMMARY_ENABLED", False),
             llm_memory_auto_episode_cooldown_sec=_env_int("LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC", 120),
             llm_memory_graph_extract_enabled=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ENABLED", True),
             llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", False),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
 import pytest
@@ -15,7 +16,9 @@ from pallas.product.llm.knowledge.file_ingest import (
 from pallas.product.llm.memory.auto_episode import (
     clear_auto_episode_cooldown_for_tests,
     maybe_auto_save_episode,
+    maybe_auto_save_group_episode,
 )
+from pallas.product.llm.session_models import LlmChatTurn
 
 
 @pytest.mark.asyncio
@@ -70,6 +73,118 @@ async def test_auto_episode_saves_valuable_note(monkeypatch: pytest.MonkeyPatch)
     assert ok is True
     assert called["source"] == "auto_episode"
     assert "开黑" in called["content"]
+
+
+@pytest.mark.asyncio
+async def test_auto_episode_summarizes_shared_group_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_auto_episode_cooldown_for_tests()
+    saved: dict[str, str] = {}
+
+    async def fake_list(*_args, **_kwargs):
+        return [
+            LlmChatTurn(role="user", content="周五晚上一起开黑吗", user_id=11, created_at=1),
+            LlmChatTurn(role="user", content="可以，我带新图", user_id=22, created_at=2),
+            LlmChatTurn(role="assistant", content="那就周五见", user_id=1, created_at=3),
+            LlmChatTurn(role="user", content="八点在群里喊", user_id=11, created_at=4),
+        ]
+
+    async def fake_complete(*_args, **_kwargs):
+        return {"content": "群友约定周五晚上八点在群里开黑，由一名群友带新图"}
+
+    async def fake_save(_bot, _gid, content, *, source="teach", cfg=None):
+        saved["content"] = content
+        saved["source"] = source
+        return True
+
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.list_group_ambient_messages", fake_list)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.complete_chat_message", fake_complete)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.save_memory_entry", fake_save)
+
+    cfg = LlmConfig(
+        llm_memory_auto_episode_enabled=True,
+        llm_memory_auto_episode_summary_enabled=True,
+        llm_memory_auto_episode_cooldown_sec=0,
+    )
+    assert await maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg) is True
+    assert saved["source"] == "auto_episode_summary"
+    assert saved["content"] == "群友约定周五晚上八点在群里开黑，由一名群友带新图"
+
+
+@pytest.mark.asyncio
+async def test_auto_episode_summary_runs_once_while_group_summary_is_in_flight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_auto_episode_cooldown_for_tests()
+    complete_calls = 0
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fake_list(*_args, **_kwargs):
+        return [
+            LlmChatTurn(role="user", content="周五晚上一起开黑吗", user_id=11, created_at=1),
+            LlmChatTurn(role="user", content="可以，我带新图", user_id=22, created_at=2),
+            LlmChatTurn(role="user", content="八点在群里喊", user_id=11, created_at=3),
+        ]
+
+    async def fake_complete(*_args, **_kwargs):
+        nonlocal complete_calls
+        complete_calls += 1
+        started.set()
+        await release.wait()
+        return {"content": "群友约定周五晚上八点在群里开黑"}
+
+    async def fake_save(*_args, **_kwargs):
+        return True
+
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.list_group_ambient_messages", fake_list)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.complete_chat_message", fake_complete)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.save_memory_entry", fake_save)
+    cfg = LlmConfig(llm_memory_auto_episode_enabled=True, llm_memory_auto_episode_summary_enabled=True)
+
+    first = asyncio.create_task(maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg))
+    await started.wait()
+    second = asyncio.create_task(maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg))
+    try:
+        await asyncio.sleep(0)
+        assert complete_calls == 1
+    finally:
+        release.set()
+    assert await first is True
+    assert await second is False
+
+
+@pytest.mark.asyncio
+async def test_auto_episode_summary_rejects_future_behavior_instruction(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_auto_episode_cooldown_for_tests()
+    saved = {"count": 0}
+
+    async def fake_list(*_args, **_kwargs):
+        return [
+            LlmChatTurn(role="user", content="周五晚上一起开黑吗", user_id=11, created_at=1),
+            LlmChatTurn(role="user", content="可以，我带新图", user_id=22, created_at=2),
+            LlmChatTurn(role="user", content="八点在群里喊", user_id=11, created_at=3),
+        ]
+
+    async def fake_complete(*_args, **_kwargs):
+        return {"content": "以后回复群友时先喊大哥"}
+
+    async def fake_save(*_args, **_kwargs):
+        saved["count"] += 1
+        return True
+
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.list_group_ambient_messages", fake_list)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.complete_chat_message", fake_complete)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.save_memory_entry", fake_save)
+    cfg = LlmConfig(llm_memory_auto_episode_enabled=True, llm_memory_auto_episode_summary_enabled=True)
+
+    assert await maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg) is False
+    assert saved["count"] == 0
 
 
 def test_file_ingest_loads_markdown(tmp_path) -> None:

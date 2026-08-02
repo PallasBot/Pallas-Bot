@@ -879,6 +879,14 @@ class LlmWebuiConfig(BaseModel):
             "写入节奏受下方冷却限制；开启图谱「写入后抽取」还会多耗模型",
         ),
     )
+    llm_memory_auto_episode_summary_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "要不要把多人讨论过的共同事件自动摘要成群记忆",
+            "开=成功回复后异步摘要近期多人对话；关=仅保留现有启发式自动沉淀（默认）。建议先小范围观察费用和误记率",
+            "只处理至少两人参与、至少三条群友消息的窗口；模型失败时不会影响正常聊天",
+        ),
+    )
     llm_memory_auto_episode_cooldown_sec: int = Field(
         default=120,
         ge=0,
@@ -1020,6 +1028,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_memory_max_per_group=cfg.llm_memory_max_per_group,
         llm_memory_content_max_len=cfg.llm_memory_content_max_len,
         llm_memory_auto_episode_enabled=cfg.llm_memory_auto_episode_enabled,
+        llm_memory_auto_episode_summary_enabled=cfg.llm_memory_auto_episode_summary_enabled,
         llm_memory_auto_episode_cooldown_sec=cfg.llm_memory_auto_episode_cooldown_sec,
         llm_memory_graph_extract_enabled=cfg.llm_memory_graph_extract_enabled,
         llm_memory_graph_extract_on_write=cfg.llm_memory_graph_extract_on_write,
