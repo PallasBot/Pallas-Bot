@@ -27,7 +27,8 @@ async def _instances_payload() -> dict[str, Any]:
 
     db_bots = await list_all_bot_configs_public()
     snap = pallas_protocol_snapshot()
-    bot_profiles = await _collect_online_bot_profiles()
+    db_accounts = [int(b["account"]) for b in db_bots if isinstance(b, dict) and b.get("account") is not None]
+    bot_profiles = await _collect_online_bot_profiles(ensure_accounts=db_accounts)
     payload: dict[str, Any] = {
         "nonebot_bots": _list_bots_dict(),
         "db_bot_configs": db_bots,
