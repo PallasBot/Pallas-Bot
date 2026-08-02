@@ -9,12 +9,23 @@ from typing import TYPE_CHECKING, Any
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from nonebot import logger
+from pydantic import BaseModel, ConfigDict, Field
 
 from .console_read_cache import cached_read, drop_read_cache
 from .extended_common import check_pallas_write_token
 
 if TYPE_CHECKING:
     from .config import Config
+
+
+class BotGitApplyBody(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    mode: str = Field(default="release", description="release 或 commit")
+    branch: str = Field(default="", description="commit 模式跟踪分支")
+    ref: str = Field(default="", description="目标 tag 或 commit；空表示 tip/latest")
+    strategy: str = Field(default="safe", description="safe 或 force")
+    restart: bool = Field(default=False, description="更新后安排 Bot 重启")
 
 
 async def warm_console_read_caches() -> None:
@@ -94,38 +105,114 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
     from pallas.core.shared.utils.format_exception import format_exception_for_log
     from pallas.core.shared.utils.github_release import fetch_release_notes_range
 
+    from .bot_git_manage import normalize_bot_git_track_branch
     from .manager import (
+        BotGitUpdateError,
+        bot_branch_update_probe,
         bot_has_release_update,
         bot_is_development_build,
+        fetch_bot_origin_refs,
         fetch_latest_bot_release,
         get_bot_current_version,
         inspect_bot_deployment,
+        normalize_bot_update_track,
     )
 
     github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
+    update_track = normalize_bot_update_track(getattr(plugin_config, "pallas_bot_update_track", "release"))
+    preferred_branch = normalize_bot_git_track_branch(getattr(plugin_config, "pallas_bot_update_branch", "") or "")
     current = get_bot_current_version()
     current_tag = current.get("tag", "")
     current_commit = current.get("commit", "")
     bot_repo = "PallasBot/Pallas-Bot"
+    deploy = inspect_bot_deployment()
+    base = {
+        "current_tag": current_tag,
+        "current_commit": current_commit,
+        "update_track": update_track,
+        "update_branch": preferred_branch,
+        "upstream_ref": "",
+        "latest_commit": "",
+        "commits_behind": 0,
+        "checked_at": time.time(),
+        **deploy,
+        "restart_available": _bot_restart_available(),
+    }
+
+    latest_tag = ""
+    release_url = ""
+    release_notes = ""
+    github_err: str | None = None
     try:
         latest = await fetch_latest_bot_release(bot_repo, token=github_token)
         latest_tag = str(latest.get("tag", "") or "").strip()
         release_url = str(latest.get("html_url", "") or "").strip()
+        release_notes = await fetch_release_notes_range(
+            bot_repo,
+            current_tag=str(current_tag or ""),
+            latest_tag=latest_tag,
+            token=github_token,
+            user_agent="Pallas-Bot/1.0",
+            changelog_url="",
+        )
+        if not release_notes:
+            notes_raw = str(latest.get("body", "") or "").strip()
+            notes_max = 12000
+            release_notes = (
+                notes_raw
+                if len(notes_raw) <= notes_max
+                else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
+            )
     except Exception as e:  # noqa: BLE001
-        err_msg = format_exception_for_log(e)
-        logger.warning("Pallas-Bot 控制台: Bot 版本更新检查失败（GitHub） err={}", err_msg)
+        github_err = format_exception_for_log(e)
+        logger.warning("Pallas-Bot 控制台: Bot 版本更新检查失败（GitHub） err={}", github_err)
+
+    if update_track == "branch":
+        if not deploy.get("git_available"):
+            return {
+                **base,
+                "latest_tag": latest_tag or None,
+                "has_update": False,
+                "development_build": False,
+                "release_url": release_url,
+                "release_notes": release_notes,
+                "error": "当前不是 git 工作副本，无法使用分支轨道",
+            }
+        fetch_err: str | None = None
+        try:
+            await fetch_bot_origin_refs()
+        except BotGitUpdateError as e:
+            fetch_err = e.detail
+            logger.warning("Pallas-Bot 控制台: Bot 分支轨道 fetch 失败 err={}", fetch_err)
+        except Exception as e:  # noqa: BLE001
+            fetch_err = format_exception_for_log(e)
+            logger.warning("Pallas-Bot 控制台: Bot 分支轨道 fetch 异常 err={}", fetch_err)
+        probe = bot_branch_update_probe(preferred_branch=preferred_branch)
+        err = probe.get("error") or fetch_err or github_err
+        # fetch 失败但本地仍有远端 refs 时，仍可给出 has_update；否则透传错误
+        has_branch_update = bool(probe.get("has_update")) if not probe.get("error") else False
         return {
-            "current_tag": current_tag,
-            "current_commit": current_commit,
+            **base,
+            "latest_tag": latest_tag or None,
+            "has_update": has_branch_update,
+            "development_build": False,
+            "upstream_ref": str(probe.get("upstream_ref") or ""),
+            "latest_commit": str(probe.get("latest_commit") or ""),
+            "commits_behind": int(probe.get("commits_behind") or 0),
+            "release_url": release_url,
+            "release_notes": release_notes,
+            "error": err if not has_branch_update else None,
+        }
+
+    if github_err and not latest_tag:
+        return {
+            **base,
             "latest_tag": None,
             "has_update": False,
             "development_build": False,
             "release_url": "",
             "release_notes": "",
-            "error": err_msg,
-            "checked_at": time.time(),
-            **inspect_bot_deployment(),
-            "restart_available": _bot_restart_available(),
+            "error": github_err,
         }
     has_update = bot_has_release_update(
         latest_tag=latest_tag,
@@ -137,34 +224,14 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
         current_tag=str(current_tag or ""),
         current_commit=str(current_commit or ""),
     )
-    release_notes = await fetch_release_notes_range(
-        bot_repo,
-        current_tag=str(current_tag or ""),
-        latest_tag=latest_tag,
-        token=github_token,
-        user_agent="Pallas-Bot/1.0",
-        changelog_url="",
-    )
-    if not release_notes:
-        notes_raw = str(latest.get("body", "") or "").strip()
-        notes_max = 12000
-        release_notes = (
-            notes_raw
-            if len(notes_raw) <= notes_max
-            else f"{notes_raw[:notes_max].rstrip()}\n\n…（已截断，完整内容见 Release 页面）"
-        )
     return {
-        "current_tag": current_tag,
-        "current_commit": current_commit,
+        **base,
         "latest_tag": latest_tag,
         "has_update": has_update,
         "development_build": development_build,
         "release_url": release_url,
         "release_notes": release_notes,
         "error": None,
-        "checked_at": time.time(),
-        **inspect_bot_deployment(),
-        "restart_available": _bot_restart_available(),
     }
 
 
@@ -299,6 +366,112 @@ def register_update_router(
         except Exception as e:  # noqa: BLE001
             logger.exception("Pallas-Bot 控制台: .env 配置迁移失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+
+    @router.get(f"{x}/update/git/bot/status", include_in_schema=True)
+    async def _bot_git_status() -> JSONResponse:
+        from .bot_git_manage import build_bot_git_status_payload
+        from .manager import normalize_bot_update_track
+
+        update_track = normalize_bot_update_track(getattr(plugin_config, "pallas_bot_update_track", "release"))
+        update_branch = str(getattr(plugin_config, "pallas_bot_update_branch", "") or "").strip()
+        data = await build_bot_git_status_payload(
+            update_track=update_track,
+            update_branch=update_branch,
+            fetch=True,
+            restart_available=_bot_restart_available(),
+        )
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/update/git/bot/history", include_in_schema=True)
+    async def _bot_git_history(
+        mode: str = Query(default="commit", description="commit 或 release"),
+        branch: str = Query(default="", description="commit 模式分支名"),
+        limit: int = Query(default=30, ge=1, le=100),
+    ) -> JSONResponse:
+        from .bot_git_manage import load_bot_git_history_payload
+
+        data = await load_bot_git_history_payload(mode=mode, branch=branch, limit=limit, fetch=True)
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/update/git/bot/apply", include_in_schema=True)
+    async def _bot_git_apply(
+        body: BotGitApplyBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from packages.pb_webui.manager import BotGitUpdateError
+        from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
+        from pallas.console.webui.update_apply_progress import (
+            create_update_apply_job,
+            run_update_apply_job,
+        )
+        from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+        from .bot_git_manage import apply_bot_git_target, normalize_git_apply_mode, normalize_git_apply_strategy
+
+        github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
+        apply_mode = normalize_git_apply_mode(body.mode)
+        apply_strategy = normalize_git_apply_strategy(body.strategy)
+        branch = (body.branch or "").strip()
+        target_ref = (body.ref or "").strip()
+        restart = bool(body.restart)
+
+        job = await create_update_apply_job("bot", restart=restart)
+        logger.info(
+            "Pallas-Bot 控制台: Bot git 定向更新任务已排队 job_id={} mode={} strategy={} ref={} restart={}",
+            job.job_id,
+            apply_mode,
+            apply_strategy,
+            target_ref or "(tip/latest)",
+            restart,
+        )
+
+        async def _runner(j: Any) -> None:
+            def on_progress(pct: int, message: str) -> None:
+                j.push("running", message, progress_percent=pct)
+
+            try:
+                result = await apply_bot_git_target(
+                    github_token=github_token,
+                    repo="PallasBot/Pallas-Bot",
+                    mode=apply_mode,
+                    preferred_branch=branch,
+                    target_ref=target_ref,
+                    strategy=apply_strategy,
+                    on_progress=on_progress,
+                )
+                scheduled = False
+                if restart and bot_lifecycle_available():
+                    on_progress(96, "安排进程重启…")
+                    scheduled = schedule_bot_restart(delay_s=3.0)
+                out = dict(result)
+                out["restart_scheduled"] = scheduled
+                if restart:
+                    base = str(out.get("message") or "").rstrip()
+                    note = "已安排 Bot 重启。" if scheduled else "未能安排自动重启，请手动重启 Bot。"
+                    out["message"] = f"{base} {note}".strip() if base else note
+                drop_read_cache(("update_check_bot:",))
+                j.result = out
+                j.message = str(out.get("message") or "完成")
+                on_progress(100, j.message)
+            except BotGitUpdateError as e:
+                j.push("failed", error=e.detail, progress_percent=j.progress_percent)
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Pallas-Bot 控制台: Bot git 定向更新失败")
+                j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
+
+        asyncio.create_task(run_update_apply_job(job, _runner))
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "job_id": job.job_id,
+                "kind": "bot",
+                "mode": apply_mode,
+                "strategy": apply_strategy,
+                "restart": restart,
+            },
+        })
 
     @router.post(f"{x}/update/bot/apply", include_in_schema=True)
     async def _bot_update_apply(

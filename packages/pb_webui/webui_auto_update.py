@@ -185,10 +185,18 @@ def auto_update_status_payload(config: Any | None = None) -> dict[str, Any]:
     cfg = config if config is not None else get_pallas_webui_config()
     state = load_auto_update_state()
     sched = _schedule_fields(cfg)
-    from .manager import inspect_bot_deployment
+    from .manager import inspect_bot_deployment, normalize_bot_update_track
 
     deploy = inspect_bot_deployment()
     mode = str(deploy.get("deployment_mode") or "").strip()
+    from .bot_git_manage import normalize_bot_git_track_branch
+
+    update_track = normalize_bot_update_track(getattr(cfg, "pallas_bot_update_track", "release"))
+    update_branch = normalize_bot_git_track_branch(getattr(cfg, "pallas_bot_update_branch", "") or "")
+    if update_track == "branch":
+        auto_apply_eligible = bool(deploy.get("git_available")) and mode != "docker"
+    else:
+        auto_apply_eligible = mode == "release_tag"
     web = state["targets"]["webui"]
     bot = state["targets"]["bot"]
     plugins = state["targets"]["plugins"]
@@ -212,7 +220,9 @@ def auto_update_status_payload(config: Any | None = None) -> dict[str, Any]:
         "bot": {
             "enabled": bool(getattr(cfg, "pallas_bot_auto_update_enabled", False)),
             "deployment_mode": mode,
-            "auto_apply_eligible": mode == "release_tag",
+            "update_track": update_track,
+            "update_branch": update_branch,
+            "auto_apply_eligible": auto_apply_eligible,
             **bot,
         },
         "plugins": {
@@ -351,10 +361,11 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
 async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> dict[str, Any]:
     from pallas.core.shared.utils.format_exception import format_exception_for_log
 
-    from .manager import BotGitUpdateError, inspect_bot_deployment
+    from .manager import BotGitUpdateError, inspect_bot_deployment, normalize_bot_update_track
 
     cfg = config if config is not None else get_pallas_webui_config()
     enabled = bool(getattr(cfg, "pallas_bot_auto_update_enabled", False))
+    update_track = normalize_bot_update_track(getattr(cfg, "pallas_bot_update_track", "release"))
     now = time.time()
 
     if not enabled and not force:
@@ -367,15 +378,21 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
 
     deploy = inspect_bot_deployment()
     mode = str(deploy.get("deployment_mode") or "").strip()
-    if mode != "release_tag":
-        out = {"result": "skipped", "reason": f"deploy:{mode or 'unknown'}"}
+    if update_track == "branch":
+        eligible = bool(deploy.get("git_available")) and mode != "docker"
+        skip_reason = (mode or "unknown") if not eligible else ""
+    else:
+        eligible = mode == "release_tag"
+        skip_reason = (mode or "unknown") if not eligible else ""
+    if not eligible:
+        out = {"result": "skipped", "reason": f"deploy:{skip_reason or 'unknown'}"}
         _patch_target(
             "bot",
             {
                 "last_check_at": now,
                 "last_check_result": "skipped",
                 "last_error": None,
-                "skip_reason": mode or "unknown",
+                "skip_reason": skip_reason or "unknown",
             },
         )
         return out
@@ -396,15 +413,17 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
-    if check.get("error"):
+    if check.get("error") and not check.get("has_update"):
         err = str(check.get("error") or "").strip() or "check_failed"
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
     current_tag = str(check.get("current_tag") or "").strip()
     latest_tag = str(check.get("latest_tag") or "").strip()
+    latest_commit = str(check.get("latest_commit") or "").strip()
+    target_label = latest_tag if update_track == "release" else (latest_commit or str(check.get("upstream_ref") or ""))
     has_update = bool(check.get("has_update"))
-    if not has_update or not latest_tag:
+    if not has_update or (update_track == "release" and not latest_tag):
         _patch_target(
             "bot",
             {"last_check_at": now, "last_check_result": "up_to_date", "last_error": None, "skip_reason": None},
@@ -420,9 +439,10 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         return out
 
     logger.info(
-        "Pallas-Bot 控制台: Bot 自动更新开始 current={} target={}",
+        "Pallas-Bot 控制台: Bot 自动更新开始 track={} current={} target={}",
+        update_track,
         current_tag or "(unknown)",
-        latest_tag,
+        target_label or "(unknown)",
     )
     try:
         data = await apply_bot_update(restart=True)

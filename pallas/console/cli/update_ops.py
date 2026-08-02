@@ -140,17 +140,35 @@ async def apply_bot_update(
     github_token: str | None = None,
     repo: str = "PallasBot/Pallas-Bot",
     restart: bool = False,
+    track: str | None = None,
+    preferred_branch: str | None = None,
     on_progress: ProgressReporter | None = None,
 ) -> dict[str, Any]:
-    from packages.pb_webui.manager import BotGitUpdateError, apply_bot_repository_update
+    from packages.pb_webui.manager import (
+        BotGitUpdateError,
+        apply_bot_repository_update,
+        normalize_bot_update_track,
+    )
+    from packages.pb_webui.webui_auto_update import get_pallas_webui_config
     from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
 
     defaults = webui_update_settings_from_repo()
     token = defaults["github_token"] if github_token is None else github_token
+    cfg = get_pallas_webui_config()
+    update_track = normalize_bot_update_track(
+        track if track is not None else getattr(cfg, "pallas_bot_update_track", "release")
+    )
+    from packages.pb_webui.bot_git_manage import normalize_bot_git_track_branch
+
+    branch = normalize_bot_git_track_branch(
+        preferred_branch if preferred_branch is not None else str(getattr(cfg, "pallas_bot_update_branch", "") or "")
+    )
     try:
         result = await apply_bot_repository_update(
             github_token=token,
             repo=repo,
+            track=update_track,
+            preferred_branch=branch,
             on_progress=on_progress,
         )
     except BotGitUpdateError:
