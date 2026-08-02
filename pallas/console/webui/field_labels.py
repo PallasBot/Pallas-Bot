@@ -367,7 +367,7 @@ FIELD_LABELS: dict[str, str] = {
     "reply_snapshot_ttl_sec": "接话快照保留秒数",
     "reply_with_same_emoji": "跟回应用相同表情",
     "request_endpoint": "唱歌请求路径",
-    "request_handler_notify_superusers": "通知超管审批",
+    "request_handler_notify_superusers": "额外通知超管",
     "request_handler_poll_doubt_friends": "轮询可疑好友",
     "save_count_threshold": "持久化消息条数",
     "save_reserved_size": "持久化后保留条数",

@@ -565,16 +565,18 @@ def plugin_config() -> Config:
 
 async def notify_admins(bot: Bot, msg: str, *, kind: str, target_id: str) -> bool:
     bot_key = str(bot.self_id)
-    admins = await get_bot_admins(int(bot.self_id))
+    # 号主始终通知（含同时是超管的号主）；开关只控制是否并集「纯超管」
+    recipients = list(dict.fromkeys(int(uid) for uid in await get_bot_admins(int(bot.self_id))))
     plugin_cfg = plugin_config()
-    if not plugin_cfg.request_handler_notify_superusers:
-        superusers = {int(uid) for uid in get_driver().config.superusers}
-        admins = [uid for uid in admins if uid not in superusers] or admins
-    if not admins:
-        admins = [int(uid) for uid in get_driver().config.superusers]
+    if plugin_cfg.request_handler_notify_superusers:
+        seen = set(recipients)
+        for uid in sorted({int(x) for x in get_driver().config.superusers}):
+            if uid not in seen:
+                recipients.append(uid)
+                seen.add(uid)
     registered = False
     delivered_any = False
-    for admin_id in admins:
+    for admin_id in recipients:
         try:
             ret = await bot.send_private_msg(user_id=admin_id, message=msg)
             delivered_any = True

@@ -5,8 +5,8 @@ from pallas.console.webui import install_hot_reload_config, plugin_config_proxy
 
 class Config(BaseModel, extra="ignore"):
     request_handler_notify_superusers: bool = Field(
-        default=False,
-        description="收到好友申请时是否同时通知 SUPERUSER（默认关闭，避免与适配器通知重复）。",
+        default=True,
+        description="除号主外，是否额外通知不在号主列表中的 SUPERUSER（号主始终通知；默认开启）。",
     )
     request_handler_poll_doubt_friends: bool = Field(
         default=True,
