@@ -20,7 +20,10 @@ from pallas.core.platform.federate.config import (
 )
 from pallas.core.platform.federate.redis_settings import get_federate_redis_client
 from pallas.core.platform.ingress.plugin_command_plaintext import extract_command_prefixes_from_menu_data
-from pallas.core.platform.ingress.route_index import extract_exact_plaintexts_from_menu_data
+from pallas.core.platform.ingress.route_index import (
+    extract_exact_plaintexts_from_menu_data,
+    extract_explicit_route_strings,
+)
 from pallas.core.platform.multi_bot.fleet import get_catalog_bot_ids
 from pallas.product.community_stats.store import load_or_create_deployment_id
 
@@ -70,7 +73,11 @@ def federate_present_groups_redis_key(deployment_id: str) -> str:
 
 
 def collect_local_federate_command_capabilities() -> frozenset[str]:
-    """本机已加载插件的命令明文能力（exact + prefix），供协同心跳宣告。"""
+    """本机已加载插件的命令明文能力（exact + prefix），供协同心跳宣告。
+
+    含 ``extra.command_prefixes`` / ``exact_plaintexts``（如唱歌音频映射自定义前缀），
+    不仅 menu_data，避免「一歌唱歌」等未进入能力环而被他机夺走。
+    """
     try:
         from nonebot import get_loaded_plugins
     except Exception:
@@ -85,6 +92,8 @@ def collect_local_federate_command_capabilities() -> frozenset[str]:
         extra = getattr(meta, "extra", None) if meta is not None else None
         if not isinstance(extra, dict):
             continue
+        caps.update(extract_explicit_route_strings(extra.get("command_prefixes")))
+        caps.update(extract_explicit_route_strings(extra.get("exact_plaintexts")))
         menu_data = extra.get("menu_data")
         if not isinstance(menu_data, list):
             continue
@@ -100,7 +109,11 @@ def collect_local_federate_command_capabilities() -> frozenset[str]:
 
 
 def command_capability_covers_plaintext(capabilities: frozenset[str] | None, plain: str) -> bool:
-    """``None`` 表示未宣告（旧版全能）；否则看 exact / 前缀是否覆盖明文。"""
+    """显式能力集是否覆盖明文。
+
+    ``None`` 表示未宣告（旧版）；是否当作全能由 ``_capable_owner_ring`` 决定，
+    本函数对 ``None`` 仍返回 True 以保持调用方语义。
+    """
     text = (plain or "").strip()
     if not text:
         return False
@@ -338,22 +351,33 @@ def _capable_owner_ring(
     plain: str | None,
     local_caps: frozenset[str],
 ) -> list[str]:
+    """按命令能力筛归属环。
+
+    规则（由宽到窄的反例都踩过）：
+    1. 只要有任一部署**显式**宣告能覆盖该明文，就只在这些部署里取模；
+       未宣告（``None`` / 旧版）的对端不再视为全能抢单——避免「一歌唱歌」
+       被只有默认牛牛前缀或未升级的端 ``federate_owner_skip`` 掉。
+    2. 若无人显式覆盖，但本机能力集能覆盖 → 本机独担。
+    3. 仍无人 → 退回全员环（含未宣告端），兼容闲聊 / 未知命令。
+    """
     text = (plain or "").strip()
     if not text:
         return active
-    capable: list[str] = []
+    explicit: list[str] = []
     for dep in active:
         if dep == mine:
             caps: frozenset[str] | None = local_caps
         else:
-            caps = _cache_deployment_capabilities.get(dep)
             if dep not in _cache_deployment_capabilities:
-                caps = None
+                # 缓存未收录：与「字段缺失」一样视为未宣告，不进显式环
+                continue
+            caps = _cache_deployment_capabilities.get(dep)
+            if caps is None:
+                continue
         if command_capability_covers_plaintext(caps, text):
-            capable.append(dep)
-    if capable:
-        return capable
-    # 无人覆盖该命令：若本机有能力则独担；否则退回全员环（兼容）
+            explicit.append(dep)
+    if explicit:
+        return explicit
     if command_capability_covers_plaintext(local_caps, text):
         return [mine]
     return active
