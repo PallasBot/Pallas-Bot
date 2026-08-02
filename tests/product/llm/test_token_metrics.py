@@ -194,6 +194,30 @@ def test_hydrate_from_disk_after_restart(tmp_path, monkeypatch: pytest.MonkeyPat
             },
             (2234, 412, 16000, 0),
         ),
+        # OpenAI / DeepSeek Responses：input_tokens_details.cached_tokens
+        (
+            {
+                "usage": {
+                    "input_tokens": 1296,
+                    "input_tokens_details": {"cached_tokens": 1280},
+                    "output_tokens": 4,
+                    "total_tokens": 1300,
+                }
+            },
+            (16, 4, 1280, 0),
+        ),
+        # miss 字段优先于 prompt_raw - cache_read
+        (
+            {
+                "usage": {
+                    "prompt_tokens": 200,
+                    "completion_tokens": 1,
+                    "prompt_cache_hit_tokens": 100,
+                    "prompt_cache_miss_tokens": 95,
+                }
+            },
+            (95, 1, 100, 0),
+        ),
     ],
 )
 def test_usage_parsers(data: dict, expected: tuple[int, int, int, int]) -> None:
