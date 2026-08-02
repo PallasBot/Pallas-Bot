@@ -91,7 +91,12 @@ def cap_fanout_bot_ids(bot_ids: list[int]) -> list[int]:
     return bot_ids[:limit]
 
 
-def fanout_payload_from_event(event: GroupMessageEvent, bundle: ReplyBundle) -> dict[str, Any]:
+def fanout_payload_from_event(
+    event: GroupMessageEvent,
+    bundle: ReplyBundle,
+    *,
+    fanout_bot_ids: list[int] | tuple[int, ...] | None = None,
+) -> dict[str, Any]:
 
     return {
         "group_id": int(event.group_id),
@@ -99,6 +104,7 @@ def fanout_payload_from_event(event: GroupMessageEvent, bundle: ReplyBundle) -> 
         "raw_message": event.raw_message,
         "plain_text": (event.get_plaintext() or "").strip(),
         "time": int(event.time),
+        "fanout_bot_ids": [int(x) for x in (fanout_bot_ids or ()) if int(x) > 0],
         "reply_bundle": {
             "answer_list": list(bundle.answer_list),
             "answer_keywords": bundle.answer_keywords,
@@ -315,7 +321,9 @@ async def run_repeater_reply_for_bot(bot_id: int, payload: dict[str, Any]) -> No
         bot_id=bot_id,
     )
 
-    plan = Responder.pick_fanout_plan(bundle, bot_id)
+    peers_raw = payload.get("fanout_bot_ids")
+    peers = [int(x) for x in peers_raw] if isinstance(peers_raw, list) else None
+    plan = Responder.pick_fanout_plan(bundle, bot_id, peer_bot_ids=peers)
 
     chat = Chat(chat_data)
 
@@ -332,9 +340,9 @@ async def dispatch_repeater_fanout(
     bot_ids: list[int] | tuple[int, ...],
     bundle: ReplyBundle,
 ) -> None:
-    payload = fanout_payload_from_event(event, bundle)
     group_id = int(event.group_id)
     ids = list(bot_ids)
+    payload = fanout_payload_from_event(event, bundle, fanout_bot_ids=ids)
     stagger = 0.35
 
     from pallas.core.platform.shard.presence import bot_has_cluster_connection, bot_has_local_connection
