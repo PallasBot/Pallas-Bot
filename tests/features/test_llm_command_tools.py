@@ -172,6 +172,18 @@ def test_sanitize_meme_tool_argument_strips_self_and_noise() -> None:
     assert command_tool_arguments_ready("memes.recommend", prepared) is None
 
 
+def test_sing_tool_rejects_placeholder_song_args() -> None:
+    from pallas.product.llm.tools.plugin_bootstrap import command_tool_arguments_ready
+
+    assert command_tool_arguments_ready("sing.sing", {"song": ""}) == "placeholder_sing_song"
+    assert command_tool_arguments_ready("sing.sing", {"song": "牛牛唱歌"}) == "placeholder_sing_song"
+    assert command_tool_arguments_ready("sing.sing", {"song": "随机"}) == "placeholder_sing_song"
+    assert command_tool_arguments_ready("sing.sing", {"song": "随便"}) == "placeholder_sing_song"
+    assert command_tool_arguments_ready("sing.request_song", {"song": "牛牛唱歌"}) == ("placeholder_sing_song")
+    assert command_tool_arguments_ready("sing.sing", {"song": "夜曲"}) is None
+    assert command_tool_arguments_ready("sing.request_song", {"song": "夜曲"}) is None
+
+
 def test_memes_list_search_do_not_auto_media(monkeypatch) -> None:
     decl_search = parse_llm_command_tool_decl(
         llm_command_tool_row(

@@ -29,6 +29,31 @@ _MEME_ARG_NOISE_PHRASES = (
     "表情模板",
 )
 _MEME_ARG_NOISE_TOKENS = frozenset({"牛牛", "表情", "模板", "推荐", "搜索", "制作", "自己"})
+# LLM 常把整句命令或占位词塞进 song，合成后再命中随机 play / 空翻唱
+_SING_SONG_PLACEHOLDERS = frozenset({
+    "唱歌",
+    "随机",
+    "随便",
+    "来一首",
+    "一首",
+    "一首歌",
+    "歌曲",
+    "音乐",
+})
+_SING_SONG_TOOLS = frozenset({"sing.sing", "sing.request_song"})
+
+
+def is_placeholder_sing_song(song: object) -> bool:
+    """空歌名、占位词、或以「唱歌」结尾的整句命令，不能当翻唱/点歌歌名。"""
+    text = str(song or "").strip()
+    if not text:
+        return True
+    if text in _SING_SONG_PLACEHOLDERS:
+        return True
+    # 「牛牛唱歌」「牛牛唱歌 牛牛唱歌」等
+    if text.endswith("唱歌"):
+        return True
+    return False
 
 
 def sanitize_meme_tool_argument(value: object) -> str:
@@ -61,6 +86,8 @@ def command_tool_arguments_ready(tool_name: str, args: dict) -> str | None:
         return "empty_meme_keyword"
     if name == "memes.recommend" and not str(args.get("intent") or "").strip():
         return "empty_meme_intent"
+    if name in _SING_SONG_TOOLS and is_placeholder_sing_song(args.get("song")):
+        return "placeholder_sing_song"
     return None
 
 
