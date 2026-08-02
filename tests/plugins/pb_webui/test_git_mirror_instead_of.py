@@ -77,13 +77,23 @@ async def test_apply_bot_repository_update_fetch_uses_instead_of(monkeypatch, tm
         yield ghproxy_mirror
 
     monkeypatch.setattr("packages.pb_webui.manager.iter_mirrors_for_failover", fake_iter_mirrors)
+    monkeypatch.setattr("packages.pb_webui.bot_git_manage.iter_mirrors_for_failover", fake_iter_mirrors)
     monkeypatch.setattr("packages.pb_webui.manager._BOT_ROOT", tmp_path)
+    monkeypatch.setattr("packages.pb_webui.bot_git_manage.bot_repo_root", lambda: tmp_path)
     monkeypatch.setattr(
         "packages.pb_webui.manager.fetch_latest_bot_release",
         AsyncMock(return_value={"tag": "v9.9.9", "html_url": "", "body": ""}),
     )
     monkeypatch.setattr(
+        "packages.pb_webui.bot_git_manage.fetch_latest_bot_release",
+        AsyncMock(return_value={"tag": "v9.9.9", "html_url": "", "body": ""}),
+    )
+    monkeypatch.setattr(
         "packages.pb_webui.manager.get_bot_current_version",
+        lambda: {"tag": "v9.9.9", "commit": "abc1234"},
+    )
+    monkeypatch.setattr(
+        "packages.pb_webui.bot_git_manage.get_bot_current_version",
         lambda: {"tag": "v9.9.9", "commit": "abc1234"},
     )
 
@@ -112,6 +122,7 @@ async def test_apply_bot_repository_update_fetch_uses_instead_of(monkeypatch, tm
         return proc
 
     monkeypatch.setattr("packages.pb_webui.manager.asyncio.create_subprocess_exec", fake_create_subprocess_exec)
+    monkeypatch.setattr("packages.pb_webui.bot_git_manage.asyncio.create_subprocess_exec", fake_create_subprocess_exec)
 
     result = await apply_bot_repository_update()
 

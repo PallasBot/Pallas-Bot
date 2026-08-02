@@ -8,11 +8,22 @@ from unittest.mock import patch
 import pytest
 
 from packages.pb_webui.manager import (
+    bot_branch_update_probe,
     bot_has_release_update,
     bot_is_development_build,
     is_bot_release_style_tag,
+    normalize_bot_update_track,
+    resolve_bot_upstream_ref,
     webui_has_release_update,
 )
+
+
+def test_normalize_bot_update_track() -> None:
+    assert normalize_bot_update_track("branch") == "branch"
+    assert normalize_bot_update_track("BRANCH") == "branch"
+    assert normalize_bot_update_track("release") == "release"
+    assert normalize_bot_update_track("") == "release"
+    assert normalize_bot_update_track(None) == "release"
 
 
 def test_same_tag_no_update() -> None:
@@ -70,6 +81,61 @@ def test_webui_update_ignores_npm_version() -> None:
     assert not webui_has_release_update(latest_tag="v3.9.3", current_tag="0.6.35")
     assert webui_has_release_update(latest_tag="v3.9.3", current_tag="v3.9.0")
     assert not webui_has_release_update(latest_tag="v3.9.3", current_tag="v3.9.3")
+
+
+def test_bot_branch_update_probe_behind() -> None:
+    root = Path("/fake/repo")
+
+    def check_output(cmd: list[str], **kwargs: object) -> str:
+        if cmd[:3] == ["git", "rev-parse", "--abbrev-ref"] and cmd[3] == "@{u}":
+            return "origin/dev\n"
+        if cmd[:2] == ["git", "rev-parse"]:
+            ref = cmd[-1]
+            if ref == "HEAD":
+                return "aaa111\n"
+            if ref == "origin/dev":
+                return "bbb222ccccdddd\n"
+        if cmd[:3] == ["git", "rev-list", "--count"]:
+            if cmd[3] == "aaa111..bbb222ccccdddd":
+                return "2\n"
+            return "0\n"
+        raise AssertionError(cmd)
+
+    with (
+        patch("packages.pb_webui.manager._BOT_ROOT", root),
+        patch("subprocess.check_output", side_effect=check_output),
+    ):
+        assert resolve_bot_upstream_ref() == "origin/dev"
+        probe = bot_branch_update_probe()
+    assert probe["has_update"] is True
+    assert probe["commits_behind"] == 2
+    assert probe["latest_commit"] == "bbb222ccccdd"
+    assert probe["upstream_ref"] == "origin/dev"
+
+
+def test_bot_branch_update_probe_preferred_branch() -> None:
+    root = Path("/fake/repo")
+
+    def check_output(cmd: list[str], **kwargs: object) -> str:
+        if cmd[:4] == ["git", "rev-parse", "-q", "--verify"] and cmd[4] == "origin/main":
+            return "origin/main\n"
+        if cmd[:2] == ["git", "rev-parse"]:
+            ref = cmd[-1]
+            if ref == "HEAD":
+                return "aaa111\n"
+            if ref == "origin/main":
+                return "aaa111\n"
+        if cmd[:3] == ["git", "rev-list", "--count"]:
+            return "0\n"
+        raise AssertionError(cmd)
+
+    with (
+        patch("packages.pb_webui.manager._BOT_ROOT", root),
+        patch("subprocess.check_output", side_effect=check_output),
+    ):
+        probe = bot_branch_update_probe(preferred_branch="main")
+    assert probe["has_update"] is False
+    assert probe["upstream_ref"] == "origin/main"
 
 
 @pytest.mark.parametrize(

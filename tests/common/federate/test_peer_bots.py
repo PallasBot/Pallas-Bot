@@ -68,8 +68,8 @@ def test_owner_ring_filters_to_deployments_that_advertise_command(monkeypatch):
     assert mod.should_process_federate_group_on_current_deployment(733291779, plain="牛牛塔罗牌") is True
 
 
-def test_owner_ring_keeps_legacy_peer_without_capabilities_field(monkeypatch):
-    """未升级对端（无 capabilities 字段）仍视为全能，保持兼容。"""
+def test_owner_ring_prefers_explicit_caps_over_undeclared_legacy_peers(monkeypatch):
+    """本机（或任一端）已显式宣告能处理时，未宣告能力的旧对端不再抢归属。"""
     mod.clear_federate_peer_bot_cache_for_tests()
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-b")
     monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
@@ -82,8 +82,49 @@ def test_owner_ring_keeps_legacy_peer_without_capabilities_field(monkeypatch):
         "dep-c": None,
     }
 
-    assert mod.federate_group_owner_deployment(123, plain="牛牛塔罗牌") == "dep-a"
+    assert mod.federate_group_owner_deployment(123, plain="牛牛塔罗牌") == "dep-b"
+    assert mod.should_process_federate_group_on_current_deployment(123, plain="牛牛塔罗牌") is True
     assert mod.should_process_federate_group_on_current_deployment(124, plain="牛牛塔罗牌") is True
+
+
+def test_owner_ring_custom_prefix_not_stolen_by_generic_sing_peer(monkeypatch):
+    """自定义前缀（如一歌唱歌）只在宣告了该前缀的部署间归属，不被仅有牛牛唱歌的对端夺走。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"一歌唱歌", "一歌点歌", "牛牛唱歌"}),
+    )
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {
+        "dep-peer": frozenset({"牛牛唱歌", "牛牛点歌"}),
+    }
+
+    for gid in (1085338862, 733291779, 1, 2, 99):
+        assert mod.federate_group_owner_deployment(gid, plain="一歌唱歌 ファイター") == "dep-local"
+        assert mod.should_process_federate_group_on_current_deployment(gid, plain="一歌唱歌 ファイター")
+
+
+def test_owner_ring_falls_back_to_legacy_when_nobody_explicitly_covers(monkeypatch):
+    """无人显式覆盖该命令时，未宣告能力的对端仍可进环（兼容旧端闲聊/未知命令）。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-b")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
+    monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset({"牛牛帮助"}))
+    mod._cache_deployment_ids = frozenset({"dep-a", "dep-c"})
+    mod._cache_deployment_capabilities = {
+        "dep-a": None,
+        "dep-c": None,
+    }
+
+    # 本机未宣告「随便聊聊」；旧对端未宣告 → 退回全员环，123%3==0 → dep-a
+    assert mod.federate_group_owner_deployment(123, plain="随便聊聊") == "dep-a"
 
 
 def test_should_process_federate_group_on_current_deployment_uses_sorted_owner_ring(monkeypatch):
@@ -238,3 +279,40 @@ def test_refresh_reads_present_group_ids(monkeypatch):
 
     mod.refresh_federate_peer_bot_ids_sync()
     assert mod.get_federate_peer_present_groups("dep-peer") == frozenset({733291779})
+
+
+def test_collect_local_federate_command_capabilities_includes_explicit_command_prefixes(
+    monkeypatch,
+):
+    """音频映射等写入的 extra.command_prefixes 必须进入协同能力宣告。"""
+    from types import SimpleNamespace
+
+    fake_plugins = [
+        SimpleNamespace(
+            metadata=SimpleNamespace(
+                extra={
+                    "command_prefixes": ["一歌唱歌", "一歌点歌", "咲希唱歌"],
+                    "menu_data": [{"trigger_condition": "牛牛唱歌 歌曲名"}],
+                }
+            )
+        ),
+        SimpleNamespace(
+            metadata=SimpleNamespace(
+                extra={
+                    "exact_plaintexts": ["牛牛在吗"],
+                    "menu_data": [],
+                }
+            )
+        ),
+    ]
+    # peer_bots 内 from nonebot import get_loaded_plugins；patch nonebot 模块
+    import nonebot
+
+    monkeypatch.setattr(nonebot, "get_loaded_plugins", lambda: fake_plugins)
+
+    caps = mod.collect_local_federate_command_capabilities()
+    assert "一歌唱歌" in caps
+    assert "一歌点歌" in caps
+    assert "咲希唱歌" in caps
+    assert "牛牛唱歌" in caps
+    assert "牛牛在吗" in caps

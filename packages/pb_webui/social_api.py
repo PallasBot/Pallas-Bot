@@ -695,8 +695,73 @@ async def _call_get_message_history(
     return out
 
 
-async def _collect_online_bot_profiles() -> dict[str, dict[str, Any]]:
-    """尽力读取在线 OneBot V11 账号资料，失败时忽略单个账号并保留其它结果。"""
+def _merge_protocol_snap_display_names(out: dict[str, dict[str, Any]]) -> None:
+    """用协议端 accounts 的 display_name 补全资料（含未连接账号）。"""
+    from pallas.core.foundation.db.pallas_console_data import pallas_protocol_snapshot
+
+    snap = pallas_protocol_snapshot()
+    if not snap or not isinstance(snap.get("accounts"), list):
+        return
+    for acc in snap["accounts"]:
+        if not isinstance(acc, dict):
+            continue
+        sid = str(acc.get("qq") or acc.get("id") or "").strip()
+        if not sid.isdigit():
+            continue
+        disp = str(acc.get("display_name") or acc.get("nickname") or "").strip()
+        if sid in out:
+            if disp and not str(out[sid].get("nickname") or "").strip():
+                out[sid]["nickname"] = disp
+        elif disp:
+            out[sid] = {
+                "nickname": disp,
+                "user_id": int(sid),
+                "connection_key": sid,
+                "adapter": "",
+                "shard_id": None,
+                "online": False,
+            }
+
+
+def _fill_bot_profile_nicknames_for_accounts(
+    out: dict[str, dict[str, Any]],
+    account_ids: list[int] | tuple[int, ...] | set[int],
+) -> None:
+    """为库内账号补全缺失昵称：presence / 协议 accounts.json。"""
+    from pallas.product.persona.self_identity import resolve_cached_login_nickname
+
+    for raw_acc in account_ids:
+        try:
+            acc = int(raw_acc)
+        except (TypeError, ValueError):
+            continue
+        if acc <= 0:
+            continue
+        sid = str(acc)
+        existing = out.get(sid)
+        if existing is not None and str(existing.get("nickname") or "").strip():
+            continue
+        nick = resolve_cached_login_nickname(acc)
+        if not nick:
+            continue
+        if existing is not None:
+            existing["nickname"] = nick
+        else:
+            out[sid] = {
+                "nickname": nick,
+                "user_id": acc,
+                "connection_key": sid,
+                "adapter": "",
+                "shard_id": None,
+                "online": False,
+            }
+
+
+async def _collect_online_bot_profiles(
+    *,
+    ensure_accounts: list[int] | None = None,
+) -> dict[str, dict[str, Any]]:
+    """尽力读取 Bot 账号资料；在线优先 get_login_info，离线回退协议/presence。"""
 
     if shard_hub_console():
         from pallas.console.webui.protocol_accounts import protocol_account_display_names
@@ -714,32 +779,14 @@ async def _collect_online_bot_profiles() -> dict[str, dict[str, Any]]:
                 "adapter": str(rec.get("adapter") or ""),
                 "shard_id": rec.get("shard_id"),
             }
-        from pallas.core.foundation.db.pallas_console_data import pallas_protocol_snapshot
-
-        snap = pallas_protocol_snapshot()
-        if snap and isinstance(snap.get("accounts"), list):
-            for acc in snap["accounts"]:
-                if not isinstance(acc, dict):
-                    continue
-                sid = str(acc.get("qq") or acc.get("id") or "").strip()
-                if not sid.isdigit():
-                    continue
-                disp = str(acc.get("display_name") or "").strip()
-                if sid in out:
-                    if disp and not out[sid].get("nickname"):
-                        out[sid]["nickname"] = disp
-                elif disp:
-                    out[sid] = {
-                        "nickname": disp,
-                        "user_id": int(sid),
-                        "connection_key": sid,
-                        "adapter": "",
-                        "shard_id": None,
-                        "online": False,
-                    }
+        _merge_protocol_snap_display_names(out)
+        if ensure_accounts:
+            _fill_bot_profile_nicknames_for_accounts(out, ensure_accounts)
         return out
 
-    out: dict[str, dict[str, Any]] = {}
+    from pallas.product.persona.self_identity import resolve_cached_login_nickname
+
+    out = {}
     for key, bot in get_bots().items():
         self_id = str(getattr(bot, "self_id", "") or "").strip()
         if not self_id:
@@ -750,10 +797,20 @@ async def _collect_online_bot_profiles() -> dict[str, dict[str, Any]]:
             raw = await bot.call_api("get_login_info")  # type: ignore[union-attr]
         except Exception:  # noqa: BLE001
             logger.debug("Pallas-Bot 控制台: get_login_info 失败 key={} self_id={}", key, self_id)
+            nick = resolve_cached_login_nickname(int(self_id)) if self_id.isdigit() else ""
+            if nick:
+                out[self_id] = {
+                    "nickname": nick,
+                    "user_id": int(self_id) if self_id.isdigit() else None,
+                    "connection_key": str(key),
+                    "adapter": _bot_adapter_label(bot),
+                }
             continue
         if not isinstance(raw, dict):
             continue
         nickname = str(raw.get("nickname") or "").strip()
+        if not nickname and self_id.isdigit():
+            nickname = resolve_cached_login_nickname(int(self_id))
         user_id = raw.get("user_id")
         out[self_id] = {
             "nickname": nickname,
@@ -761,6 +818,9 @@ async def _collect_online_bot_profiles() -> dict[str, dict[str, Any]]:
             "connection_key": str(key),
             "adapter": _bot_adapter_label(bot),
         }
+    _merge_protocol_snap_display_names(out)
+    if ensure_accounts:
+        _fill_bot_profile_nicknames_for_accounts(out, ensure_accounts)
     return out
 
 
