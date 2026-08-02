@@ -137,7 +137,7 @@ WebUI 在同一页「功能开关」里：启用智能对话 / 启用遗留酒�
    - 选择侧车**默认说话人**、**优先 SVC backend**（失败仍按 registry 回退）与 **TTS 参考音色**
    - TTS 页可配置 **中翻日**（开关、百度/有道与密钥；单独保存；落盘 AI `media_models.json`，未保存过回退 AI `.env`）
    - 同页嵌入插件配置（启停、音色映射、合成时长等）；服务地址不再在插件页填写
-3. **自备唱歌音色**：放到 AI 仓 `resource/sing/models/<音色名>/`（目录名即 Speaker id，勿用 `pretrain`），刷新「唱歌」页应出现在 Speaker 列表；细节见 [唱歌插件说明](../plugins/sing/README.md)
+3. **自备唱歌音色**：放到 AI 仓 `resource/sing/models/<音色名>/`（目录名即 Speaker id，勿用 `pretrain`），刷新「唱歌」页应出现在 Speaker 列表；DDSP / RVC / SoVITS 文件约定见 [唱歌插件说明](../plugins/sing/README.md#自备音色)
 4. **Docker**：页内只读就绪状态；下载请换 `pallas-bot-ai:latest` 并由启动脚本拉取；若 `data/` 卷可写，仍可切换默认说话人 / backend / 音色
 5. 插件商店安装 **`pallas-plugin-ai-media`**（画画另装 `pallas-plugin-draw`）
 

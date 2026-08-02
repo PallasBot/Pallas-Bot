@@ -155,6 +155,26 @@ git clone --depth 1 --branch 6.3 https://github.com/PallasBot/DDSP-SVC.git app/w
 控制台「AI 配置 → 媒体」可为**每个音色**单独指定优先推理（`speaker_backends`）。官方 `pallas`（`config.yaml` 里 `RectifiedFlow`）对应 **6.2**，建议选 `ddsp_6.2`；**6.1** 只给旧扩散权重用，不是现网官方音色。
 :::
 
+### 社区 RVC 音色（可选第三后端）
+
+唱歌 registry 在 DDSP / SoVITS 之外支持 **`rvc`**：社区常见 `.pth`（+ 可选 `.index`）可直接当 Speaker。回退顺序默认 `DDSP → RVC → SoVITS`；仅有 `.pth` 的目录不会误进 DDSP（DDSP 认 `*.pt`）。
+
+| 项 | 路径 / 说明 |
+| --- | --- |
+| 引擎子模块 | `app/workers/sing/RVC`（[RVC WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)） |
+| 薄入口 | `app/workers/sing/rvc/infer_rvc.py` |
+| 音色目录 | `resource/sing/models/<id>/*.pth`，可选同 stem 或唯一一个 `*.index` |
+| 共享资产 | `resource/sing/models/pretrain/rvc/hubert_base/`、`rmvpe.pt`（[lj1995/VoiceConversionWebUI](https://huggingface.co/lj1995/VoiceConversionWebUI)） |
+
+```bash
+cd /path/to/pallas-bot-ai
+git submodule update --init app/workers/sing/RVC
+# 下载 hubert_base + rmvpe.pt 到 resource/sing/models/pretrain/rvc/
+uv sync --group sing   # 含 faiss-cpu
+```
+
+控制台优先后端可选 `rvc`。v1/v2 从 checkpoint 元数据识别，无需手填。细节见 AI 仓 [Deployment.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/Deployment.md)。
+
 ## 接入前核对（媒体）
 
 默认 LLM 聊天只核对 Provider。下列项针对 **媒体任务**。

@@ -12,7 +12,7 @@
 uv run pallas ext install pallas-plugin-ai-media
 ```
 
-另需部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，并在控制台配置媒体服务。见 [LLM 对话、媒体与 AI Runtime](../../guide/ai-runtime-choice.md)。默认仅带 DDSP **6.2**；若要用 6.3 / 6.1，见 [AI Runtime 安装 · 手动补充 DDSP](../../maintainer/install/ai-runtime.md#手动补充-ddsp-svc-多版本可选)。
+另需部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)，并在控制台配置媒体服务。见 [LLM 对话、媒体与 AI Runtime](../../guide/ai-runtime-choice.md)。默认仅带 DDSP **6.2**；若要用 6.3 / 6.1，见 [AI Runtime 安装 · 手动补充 DDSP](../../maintainer/install/ai-runtime.md#手动补充-ddsp-svc-多版本可选)。社区 **RVC**（`.pth`）见 [同页 · 社区 RVC](../../maintainer/install/ai-runtime.md#社区-rvc-音色可选第三后端)。
 
 自 `pallas-plugin-ai-media` **4.1.0** 起，本包仅含唱歌与 TTS；酒后对话已由本体 [llm_chat](../llm_chat/README.md) 承接。
 
@@ -63,8 +63,10 @@ resource/sing/models/<音色名>/
 ```
 
 - `<音色名>` 即 Speaker id（例如 `pallas`）；**不要**占用 `pretrain`（公共预训练权重）
-- 放入对应 SVC 后端的 `.pt` / `.pth`，刷新控制台「唱歌」页应能探测到
-- 在插件「音色映射」里把命令前缀（如「牛牛」「帕拉斯」）指到该 id
+- **DDSP**：放入 `*.pt` + `config.yaml`（官方 `pallas` 即此形态）
+- **RVC（社区）**：放入 `*.pth`，可选同名或唯一一个 `*.index`；并准备 `pretrain/rvc` 下 hubert / rmvpe（见 [AI Runtime · RVC](../../maintainer/install/ai-runtime.md#社区-rvc-音色可选第三后端)）
+- **SoVITS**：`G_*.pth` + `config.json`
+- 刷新控制台「唱歌」页应能探测到；在插件「音色映射」里把命令前缀（如「牛牛」「帕拉斯」）指到该 id
 
 官方包也可在「媒体资产」下载 `sing_pallas` / `sing_pretrain`。
 
