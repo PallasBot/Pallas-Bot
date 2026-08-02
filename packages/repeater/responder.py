@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import random
 import time
 from collections import defaultdict
@@ -892,13 +893,48 @@ class Responder:
         return ([answer_str], answer_keywords)
 
     @staticmethod
-    def pick_fanout_plan(bundle: ReplyBundle, bot_id: int) -> tuple[list[str], str]:
-        """各牛从共享候选池选句，按 bot_id 稳定分化，避免齐声。"""
-        pool = bundle.message_pool
+    def pick_fanout_plan(
+        bundle: ReplyBundle,
+        bot_id: int,
+        *,
+        peer_bot_ids: list[int] | tuple[int, ...] | None = None,
+    ) -> tuple[list[str], str]:
+        """各牛从共享候选池选句：按 peer 次序轮转，尽量互不重复。
+
+        池大于牛数时一人一句；池不足时按轮次复用，仍优先错开。
+        peer_bot_ids 缺省时退回 bot_id 哈希分化（兼容旧调用）。
+        """
+        # 保序去重，避免池里重复句把多人分到同一句
+        pool: list[str] = []
+        for raw in bundle.message_pool:
+            text = str(raw or "").strip()
+            if text and text not in pool:
+                pool.append(text)
         if len(pool) <= 1:
             return bundle.answer_list, bundle.answer_keywords
-        rng = random.Random(int(bot_id) ^ hash(bundle.answer_keywords))
-        text = rng.choice(pool)
+
+        peers = sorted({int(x) for x in (peer_bot_ids or ()) if int(x) > 0})
+        # 跨进程/分片须稳定：勿用 builtin hash（受 PYTHONHASHSEED 影响）
+        seed_src = f"{bundle.answer_keywords}|{'|'.join(pool[:24])}".encode()
+        seed = int.from_bytes(hashlib.blake2b(seed_src, digest_size=8).digest(), "big")
+        rng = random.Random(seed)
+        shuffled = pool.copy()
+        rng.shuffle(shuffled)
+
+        bid = int(bot_id)
+        if peers and bid in peers:
+            idx = peers.index(bid)
+        elif peers:
+            idx = bid % len(peers)
+        else:
+            # 无舰队名单时仍按 bot 稳定错开
+            solo = int.from_bytes(
+                hashlib.blake2b(f"{bid}|{bundle.answer_keywords}".encode(), digest_size=8).digest(),
+                "big",
+            )
+            idx = solo % len(shuffled)
+
+        text = shuffled[idx % len(shuffled)]
         plan = Responder._plan_from_answer_text(text, bundle.answer_keywords)
         if plan is None:
             return bundle.answer_list, bundle.answer_keywords
