@@ -1,8 +1,15 @@
 from types import SimpleNamespace
 
-from packages.help.draw_function_detail import draw_function_detail_image
+from packages.help.draw_function_detail import draw_function_detail_image, wrap_doc_body_lines
 from packages.help.draw_plugin_detail import draw_plugin_detail_image
 from packages.help.plugin_detail_data import FunctionDetailData, HelpFunctionRow, PluginDetailData
+
+
+def test_wrap_doc_body_lines_keeps_paragraph_breaks() -> None:
+    lines = wrap_doc_body_lines("继续上次未完成的歌曲。\n\n可用音色：牛牛、帕拉斯；兔兔。")
+    assert lines[0] == "继续上次未完成的歌曲。"
+    assert any(ln.startswith("可用音色：") for ln in lines)
+    assert "pallas" not in "\n".join(lines)
 
 
 def test_draw_plugin_detail_image() -> None:
