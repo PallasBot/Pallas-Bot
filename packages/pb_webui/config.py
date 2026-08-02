@@ -123,14 +123,32 @@ class Config(BaseModel):
         ),
         json_schema_extra=_ui("自动更新", 10),
     )
+    pallas_bot_update_track: Literal["release", "branch"] = Field(
+        default="release",
+        description=field_help(
+            "Bot 本体更新轨道",
+            "release=只跟 GitHub 正式版 tag；branch=git pull 跟踪分支最新提交",
+            "推荐在「更新」页切换；Docker 镜像部署仍需自行拉镜像",
+        ),
+        json_schema_extra=_ui("自动更新", 11),
+    )
+    pallas_bot_update_branch: str = Field(
+        default="dev",
+        description=field_help(
+            "分支轨道跟踪的分支名",
+            "仅「branch」轨道生效；仅允许 dev 或 main（控制台下拉同限）",
+            "默认 dev，始终跟开发线 tip；稳定线选 main",
+        ),
+        json_schema_extra=_ui("自动更新", 12),
+    )
     pallas_bot_auto_update_enabled: bool = Field(
         default=False,
         description=field_help(
             "是否自动更新 Bot 本体",
-            "仅干净正式版（release_tag）会自动 checkout 新 tag 并重启；Docker / 开发克隆 / 脏工作树只检查不应用",
+            "release 仅干净正式版自动 checkout 新 tag；branch 可对 git 副本自动 pull（排除 Docker）",
             "推荐在「更新」页统一配置",
         ),
-        json_schema_extra=_ui("自动更新", 12),
+        json_schema_extra=_ui("自动更新", 13),
     )
     pallas_plugins_auto_update_enabled: bool = Field(
         default=False,

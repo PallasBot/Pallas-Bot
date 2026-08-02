@@ -28,6 +28,8 @@ def _cfg(**overrides: object) -> MagicMock:
     cfg = MagicMock()
     cfg.pallas_webui_auto_update_enabled = False
     cfg.pallas_bot_auto_update_enabled = False
+    cfg.pallas_bot_update_track = "release"
+    cfg.pallas_bot_update_branch = ""
     cfg.pallas_plugins_auto_update_enabled = False
     cfg.pallas_auto_update_notify_superusers = False
     cfg.pallas_auto_update_notify_bot_id = 0
@@ -163,9 +165,12 @@ async def test_tick_failed_records_error(state_dir) -> None:
 
 @pytest.mark.asyncio
 async def test_bot_tick_skips_non_release_tag(state_dir) -> None:
-    with patch("packages.pb_webui.manager.inspect_bot_deployment", return_value={"deployment_mode": "dev_clone"}):
+    with patch(
+        "packages.pb_webui.manager.inspect_bot_deployment",
+        return_value={"deployment_mode": "dev_clone", "git_available": True},
+    ):
         result = await auto._run_bot_target(
-            config=_cfg(pallas_bot_auto_update_enabled=True),
+            config=_cfg(pallas_bot_auto_update_enabled=True, pallas_bot_update_track="release"),
             force=True,
         )
     assert result["result"] == "skipped"
@@ -173,6 +178,34 @@ async def test_bot_tick_skips_non_release_tag(state_dir) -> None:
     state = auto.load_auto_update_state()
     assert state["targets"]["bot"]["last_check_result"] == "skipped"
     assert state["targets"]["bot"]["skip_reason"] == "dev_clone"
+
+
+@pytest.mark.asyncio
+async def test_bot_tick_branch_track_applies_on_dev_clone(state_dir) -> None:
+    check = {
+        "current_tag": "",
+        "latest_tag": "v1.1.0",
+        "latest_commit": "abc1234",
+        "upstream_ref": "origin/dev",
+        "has_update": True,
+        "error": None,
+        "update_track": "branch",
+    }
+    apply = AsyncMock(return_value={"tag": "abc1234", "message": "ok", "restart_scheduled": True})
+    with (
+        patch(
+            "packages.pb_webui.manager.inspect_bot_deployment",
+            return_value={"deployment_mode": "dev_clone", "git_available": True},
+        ),
+        patch.object(auto, "_load_bot_check", AsyncMock(return_value=check)),
+        patch.object(auto, "apply_bot_update", apply),
+    ):
+        result = await auto._run_bot_target(
+            config=_cfg(pallas_bot_auto_update_enabled=True, pallas_bot_update_track="branch"),
+            force=True,
+        )
+    assert result["result"] == "applied"
+    apply.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -281,12 +314,10 @@ async def test_tick_skips_when_other_job_busy_but_not_own(state_dir) -> None:
 
 
 def test_format_auto_update_notify_message() -> None:
-    text = auto.format_auto_update_notify_message(
-        [
-            {"kind": "webui", "tag": "v1.2.3"},
-            {"kind": "plugins", "updated": ["a", "b"], "result": "partial"},
-        ]
-    )
+    text = auto.format_auto_update_notify_message([
+        {"kind": "webui", "tag": "v1.2.3"},
+        {"kind": "plugins", "updated": ["a", "b"], "result": "partial"},
+    ])
     assert "【自动更新】" in text
     assert "WebUI：v1.2.3" in text
     assert "插件：2 个" in text
