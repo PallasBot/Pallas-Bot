@@ -1,8 +1,51 @@
 from types import SimpleNamespace
 
-from packages.help.draw_function_detail import draw_function_detail_image
+from PIL import Image, ImageDraw
+
+from packages.help.draw_function_detail import (
+    draw_function_detail_image,
+    expand_doc_body_lines,
+    wrap_doc_body_lines,
+)
 from packages.help.draw_plugin_detail import draw_plugin_detail_image
+from packages.help.help_draw_common import wrap_pixels
 from packages.help.plugin_detail_data import FunctionDetailData, HelpFunctionRow, PluginDetailData
+from packages.help.plugin_visuals import help_font
+
+
+def test_wrap_doc_body_lines_keeps_paragraph_breaks() -> None:
+    lines = wrap_doc_body_lines("继续上次未完成的歌曲。\n\n可用音色：\n\n· 牛牛、帕拉斯\n· 兔兔")
+    assert lines[0] == "继续上次未完成的歌曲。"
+    assert "可用音色：" in lines
+    assert "· 牛牛、帕拉斯" in lines
+    assert "· 兔兔" in lines
+    assert "pallas" not in "\n".join(lines)
+
+
+def test_expand_doc_body_lines_pixel_wraps_long_bullets() -> None:
+    draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    font = help_font(15)
+    long = "· " + "、".join(f"音色{i}" for i in range(40))
+    lines = expand_doc_body_lines(
+        f"说明。\n\n可用音色：\n\n{long}",
+        draw=draw,
+        font=font,
+        max_width=200,
+    )
+    assert any(ln.startswith("· ") for ln in lines)
+    assert sum(1 for ln in lines if "音色" in ln) >= 2
+    for ln in lines:
+        assert "…" not in ln
+        assert draw.textlength(ln, font=font) <= 200 + 1
+
+
+def test_wrap_pixels_keeps_full_text() -> None:
+    draw = ImageDraw.Draw(Image.new("RGB", (1, 1)))
+    font = help_font(15)
+    text = "帕拉斯；牛牛；兔兔；阿米娅；祥子、小祥、saki"
+    parts = wrap_pixels(draw, text, font, 120)
+    assert "".join(parts) == text
+    assert len(parts) >= 2
 
 
 def test_draw_plugin_detail_image() -> None:

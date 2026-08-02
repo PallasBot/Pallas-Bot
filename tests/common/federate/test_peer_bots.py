@@ -299,12 +299,14 @@ def test_publish_includes_present_group_ids(monkeypatch):
     monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
     monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({111}))
-    monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset())
+    monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset({"牛牛帮助"}))
     monkeypatch.setattr(mod, "collect_local_present_group_ids", lambda: [42, 733291779])
 
     assert mod.publish_local_federate_peer_bot_ids_sync() is True
     data = json.loads(client.set.call_args.args[1])
     assert data["present_group_ids"] == [42, 733291779]
+    assert data["command_capability_protocol"] == mod.COMMAND_CAPABILITY_PROTOCOL_VERSION
+    assert data["command_capabilities"] == ["牛牛帮助"]
 
 
 def test_refresh_reads_present_group_ids(monkeypatch):
@@ -314,6 +316,7 @@ def test_refresh_reads_present_group_ids(monkeypatch):
         "deployment_id": "dep-peer",
         "bot_ids": [222],
         "present_group_ids": [733291779],
+        "command_capability_protocol": mod.COMMAND_CAPABILITY_PROTOCOL_VERSION,
         "command_capabilities": ["牛牛喝酒"],
     })
     monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
@@ -322,6 +325,25 @@ def test_refresh_reads_present_group_ids(monkeypatch):
 
     mod.refresh_federate_peer_bot_ids_sync()
     assert mod.get_federate_peer_present_groups("dep-peer") == frozenset({733291779})
+    assert mod.get_federate_peer_command_capability_protocol("dep-peer") == mod.COMMAND_CAPABILITY_PROTOCOL_VERSION
+
+
+def test_refresh_marks_peer_without_capability_protocol_as_incompatible(monkeypatch):
+    client = MagicMock()
+    client.scan_iter.return_value = iter([b"pallas:fed:pool-1:peer_bots:dep-peer"])
+    client.get.return_value = json.dumps({
+        "deployment_id": "dep-peer",
+        "bot_ids": [222],
+        "command_capabilities": ["soyo唱歌"],
+    })
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+
+    mod.refresh_federate_peer_bot_ids_sync()
+
+    assert mod.get_federate_peer_command_capability_protocol("dep-peer") is None
+    assert mod.get_incompatible_federate_command_capability_peers() == ("dep-peer",)
 
 
 def test_collect_local_federate_command_capabilities_includes_explicit_command_prefixes(
