@@ -15,10 +15,37 @@ from .help_draw_assets import draw_page_footer_bar, draw_page_header_band, draw_
 from .help_draw_common import new_canvas, strip_help_markdown, truncate_pixels
 from .plugin_visuals import help_font
 
+_DOC_BODY_WRAP = 52
+
 
 def _chip_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
     bbox = draw.textbbox((0, 0), text, font=font)
     return (bbox[2] - bbox[0]) + 20
+
+
+def wrap_doc_body_lines(content: str, *, width: int = _DOC_BODY_WRAP) -> list[str]:
+    """按空行分段 soft-wrap；保留段结构，避免把「可用音色」等另起段糊回一段。"""
+    lines: list[str] = []
+    for block in (content or "").split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        stripped = [ln.strip() for ln in block.splitlines() if ln.strip()]
+        if stripped and all(ln.startswith(("·", "•", "- ", "* ")) for ln in stripped):
+            lines.extend(stripped)
+            continue
+        for ln in stripped:
+            if ln.startswith(("·", "•", "- ", "* ")):
+                lines.append(ln)
+                continue
+            wrapped = textwrap.wrap(
+                ln,
+                width=max(12, width),
+                break_long_words=False,
+                break_on_hyphens=False,
+            )
+            lines.extend(wrapped or [ln])
+    return lines or ["暂无"]
 
 
 def _layout_height(data: FunctionDetailData) -> int:
@@ -34,11 +61,11 @@ def _layout_height(data: FunctionDetailData) -> int:
         body += 28
     if data.detail:
         content = strip_help_markdown((data.detail or "").strip() or "暂无")
-        lines = [ln for ln in textwrap.fill(content, width=52).splitlines() if ln.strip()] or ["暂无"]
+        lines = wrap_doc_body_lines(content)
         body += 30 + 28 + len(lines) * 26 + 16
     for _title, content in data.extra_sections:
         text = strip_help_markdown((content or "").strip() or "暂无")
-        lines = [ln for ln in textwrap.fill(text, width=52).splitlines() if ln.strip()] or ["暂无"]
+        lines = wrap_doc_body_lines(text)
         body += 30 + 28 + len(lines) * 26 + 16
     return body + ht.PAGE_FOOTER_H + ht.PAGE_CHROME_GAP + ht.DETAIL_PAD * 2
 
@@ -152,8 +179,7 @@ def _draw_doc_section(hc, *, x: int, y: int, max_x: int, title: str, body: str) 
     draw.text((x, y), title, fill=ht.TEXT_TITLE, font=help_font(20))
     cursor = y + u(30)
     content = strip_help_markdown((body or "").strip() or "暂无")
-    wrapped = textwrap.fill(content, width=52)
-    lines = [ln for ln in wrapped.splitlines() if ln.strip()] or ["暂无"]
+    lines = wrap_doc_body_lines(content)
     line_h = u(26)
     box_pad = u(14)
     box_h = box_pad * 2 + len(lines) * line_h
