@@ -439,6 +439,45 @@ def should_process_federate_group_on_current_deployment(
     return federate_group_owner_deployment(group_id, plain=plain) == deployment_id
 
 
+def should_yield_federate_ingress_for_peer_command(
+    group_id: int,
+    *,
+    plain: str | None = None,
+) -> bool:
+    """本机无能力、但对端显式宣告能覆盖且在本群在场时，不参与联邦抢占。
+
+    典型坑：对端装了决斗、本机没有 → 本机 ``legacy_command_traffic`` 为假，
+    会绕过命令归属直接去抢 ``federate_ingress``，抢走后无 matcher，有能力的端又输掉 claim。
+    """
+    if not federate_ingress_active():
+        return False
+    if not _cache_deployment_ids:
+        return False
+    text = (plain or "").strip()
+    if not text:
+        return False
+    local_caps = collect_local_federate_command_capabilities()
+    if command_capability_covers_plaintext(local_caps, text):
+        return False
+    mine = load_or_create_deployment_id().strip().lower()
+    if not mine:
+        return False
+    for dep in _cache_deployment_ids:
+        if dep == mine:
+            continue
+        if dep not in _cache_deployment_capabilities:
+            continue
+        caps = _cache_deployment_capabilities.get(dep)
+        if caps is None:
+            continue
+        if not command_capability_covers_plaintext(caps, text):
+            continue
+        if not _deployment_present_in_group(dep, int(group_id), mine=mine):
+            continue
+        return True
+    return False
+
+
 async def sync_federate_peer_bot_roster() -> None:
     global _cache_ids, _cache_deployment_present_groups, _cache_updated_mono
     if not federate_ingress_active():
