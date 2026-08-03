@@ -51,7 +51,15 @@ def test_parse_offline_quality_judge_normalizes_scores() -> None:
     )
 
     assert result.verdict == "RETRY"
-    assert result.scores == {"grounded": 5, "naturalness": 5, "overexplained": 1, "persona_drift": 3}
+    assert result.scores == {
+        "grounded": 5,
+        "naturalness": 5,
+        "overexplained": 1,
+        "persona_drift": 3,
+        "memory_factuality": 3,
+        "tool_faithfulness": 3,
+        "silence_correctness": 3,
+    }
     assert result.reason_ids == ("too_long",)
 
 
