@@ -120,6 +120,24 @@ def merge_persona_with_seed_patch(
                 "source": "auto",
                 "updated_at": int(time.time()),
             }
+    if "disposition" in patch:
+        raw_disposition = patch.get("disposition")
+        if raw_disposition is None:
+            merged.pop("disposition", None)
+        elif isinstance(raw_disposition, dict):
+            from .disposition import resolve_persona_disposition
+
+            disposition = resolve_persona_disposition({"disposition": raw_disposition})
+            if any((
+                disposition.approach,
+                disposition.initiative,
+                disposition.conflict,
+                disposition.do,
+                disposition.dont,
+            )):
+                merged["disposition"] = disposition.model_dump()
+            else:
+                merged.pop("disposition", None)
     if "seed" not in merged:
         merged["seed"] = build_auto_seed_payload(bot_id)
     return merged
