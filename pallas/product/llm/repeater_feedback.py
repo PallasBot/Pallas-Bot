@@ -8,6 +8,7 @@ import re
 import time
 from collections import deque
 from pathlib import Path
+from threading import RLock
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -79,12 +80,23 @@ class LlmRepeaterFeedbackEntry(BaseModel):
 
 _GROUP_ENTRIES_CACHE_TTL_SEC = 5.0
 _GROUP_ENTRIES_CACHE_MAX = 512
-# (path, group_id, limit) -> (expire_monotonic, mtime, rows)
-_group_entries_cache: dict[tuple[str, int, int], tuple[float, float, list[LlmRepeaterFeedbackEntry]]] = {}
+# (path, group_id, limit) -> (expire_monotonic, group_revision, rows)
+_group_entries_cache: dict[tuple[str, int, int], tuple[float, int, list[LlmRepeaterFeedbackEntry]]] = {}
+_group_entries_index_lock = RLock()
+_group_entries_index_path = ""
+_group_entries_index_revision: tuple[int, int] | None = None
+_group_entries_index: dict[int, list[LlmRepeaterFeedbackEntry]] = {}
+_group_entries_revisions: dict[int, int] = {}
 
 
 def clear_group_feedback_entries_cache() -> None:
-    _group_entries_cache.clear()
+    global _group_entries_index_path, _group_entries_index_revision, _group_entries_index
+    with _group_entries_index_lock:
+        _group_entries_cache.clear()
+        _group_entries_index_path = ""
+        _group_entries_index_revision = None
+        _group_entries_index = {}
+        _group_entries_revisions.clear()
 
 
 def feedback_base_dir() -> Path:
@@ -102,6 +114,69 @@ def feedback_base_dir() -> Path:
 
 def feedback_entries_path() -> Path:
     return feedback_base_dir() / "entries.jsonl"
+
+
+def _feedback_entries_path_key(path: Path) -> str:
+    try:
+        return str(path.resolve())
+    except OSError:
+        return str(path)
+
+
+def _feedback_entries_revision(path: Path) -> tuple[int, int]:
+    try:
+        stat = path.stat()
+    except OSError:
+        return (0, 0)
+    return (int(stat.st_mtime_ns), int(stat.st_size))
+
+
+def _group_entries_index_rows(path: Path, *, group_id: int) -> tuple[str, int, list[LlmRepeaterFeedbackEntry]]:
+    global _group_entries_index_path, _group_entries_index_revision, _group_entries_index
+    path_key = _feedback_entries_path_key(path)
+    revision = _feedback_entries_revision(path)
+    target_group_id = int(group_id)
+    with _group_entries_index_lock:
+        if _group_entries_index_path != path_key or _group_entries_index_revision != revision:
+            rows_by_group: dict[int, list[LlmRepeaterFeedbackEntry]] = {}
+            if path.exists():
+                for item in _iter_feedback_entries(path):
+                    rows_by_group.setdefault(int(item.group_id), []).append(item)
+            _group_entries_index_path = path_key
+            _group_entries_index_revision = _feedback_entries_revision(path)
+            _group_entries_index = rows_by_group
+            _group_entries_revisions.clear()
+            _group_entries_cache.clear()
+        return (
+            path_key,
+            _group_entries_revisions.get(target_group_id, 0),
+            list(_group_entries_index.get(target_group_id, [])),
+        )
+
+
+def _note_feedback_entry_append(
+    path: Path,
+    entry: LlmRepeaterFeedbackEntry,
+    *,
+    before_revision: tuple[int, int],
+    after_revision: tuple[int, int],
+) -> None:
+    global _group_entries_index_path, _group_entries_index_revision, _group_entries_index
+    path_key = _feedback_entries_path_key(path)
+    group_id = int(entry.group_id)
+    with _group_entries_index_lock:
+        if _group_entries_index_path != path_key:
+            return
+        if _group_entries_index_revision != before_revision:
+            _group_entries_cache.clear()
+            _group_entries_index_path = ""
+            _group_entries_index_revision = None
+            _group_entries_index = {}
+            _group_entries_revisions.clear()
+            return
+        _group_entries_index.setdefault(group_id, []).append(entry)
+        _group_entries_index_revision = after_revision
+        _group_entries_revisions[group_id] = _group_entries_revisions.get(group_id, 0) + 1
 
 
 def resolve_feedback_llm_route(*, task_type: str, llm_route: str = "") -> str:
@@ -196,6 +271,7 @@ def append_feedback_entry(entry: LlmRepeaterFeedbackEntry) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     line = json.dumps(entry.model_dump(mode="json"), ensure_ascii=False) + "\n"
     with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        before_revision = _feedback_entries_revision(path)
         needs_leading_newline = False
         if path.exists() and path.stat().st_size > 0:
             with path.open("rb") as existing:
@@ -205,7 +281,12 @@ def append_feedback_entry(entry: LlmRepeaterFeedbackEntry) -> None:
             if needs_leading_newline:
                 handle.write("\n")
             handle.write(line)
-    clear_group_feedback_entries_cache()
+    _note_feedback_entry_append(
+        path,
+        entry,
+        before_revision=before_revision,
+        after_revision=_feedback_entries_revision(path),
+    )
     from pallas.product.llm.feedback_embedding_cache import prefetch_trigger_embedding
     from pallas.product.llm.promotion_candidates import note_feedback_entry_for_promotion
 
@@ -245,6 +326,7 @@ def _write_feedback_entries(rows: list[LlmRepeaterFeedbackEntry]) -> None:
     body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in rows)
     with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
         atomic_write_text(path, body)
+    clear_group_feedback_entries_cache()
 
 
 def _load_all_feedback_entries() -> list[LlmRepeaterFeedbackEntry]:
@@ -453,28 +535,18 @@ def list_group_feedback_entries(*, group_id: int, limit: int = 50) -> list[LlmRe
     if not path.exists():
         return []
     lim = max(1, int(limit))
-    try:
-        path_key = str(path.resolve())
-    except OSError:
-        path_key = str(path)
-    key = (path_key, int(group_id), lim)
-    try:
-        mtime = float(path.stat().st_mtime)
-    except OSError:
-        mtime = 0.0
-    now = time.monotonic()
-    cached = _group_entries_cache.get(key)
-    if cached is not None:
-        expire_at, cached_mtime, rows = cached
-        if now < expire_at and cached_mtime == mtime:
-            return list(rows)
-    window_size = lim * _RECENT_WINDOW_MULTIPLIER
-    recent: deque[LlmRepeaterFeedbackEntry] = deque(maxlen=window_size)
     target_group_id = int(group_id)
-    for item in _iter_feedback_entries(path):
-        if int(item.group_id) != target_group_id:
-            continue
-        recent.append(item)
+    path_key, group_revision, source_rows = _group_entries_index_rows(path, group_id=target_group_id)
+    key = (path_key, target_group_id, lim)
+    now = time.monotonic()
+    window_size = lim * _RECENT_WINDOW_MULTIPLIER
+    with _group_entries_index_lock:
+        cached = _group_entries_cache.get(key)
+        if cached is not None:
+            expire_at, cached_revision, rows = cached
+            if now < expire_at and cached_revision == group_revision:
+                return list(rows)
+    recent: deque[LlmRepeaterFeedbackEntry] = deque(source_rows, maxlen=window_size)
     deduped: list[LlmRepeaterFeedbackEntry] = []
     seen_ids: set[str] = set()
     for item in reversed(recent):
@@ -485,9 +557,11 @@ def list_group_feedback_entries(*, group_id: int, limit: int = 50) -> list[LlmRe
         deduped.append(item)
     deduped.reverse()
     rows = deduped[-lim:]
-    _group_entries_cache[key] = (now + _GROUP_ENTRIES_CACHE_TTL_SEC, mtime, list(rows))
-    while len(_group_entries_cache) > _GROUP_ENTRIES_CACHE_MAX:
-        _group_entries_cache.pop(next(iter(_group_entries_cache)))
+    with _group_entries_index_lock:
+        if _group_entries_revisions.get(target_group_id, 0) == group_revision:
+            _group_entries_cache[key] = (now + _GROUP_ENTRIES_CACHE_TTL_SEC, group_revision, list(rows))
+            while len(_group_entries_cache) > _GROUP_ENTRIES_CACHE_MAX:
+                _group_entries_cache.pop(next(iter(_group_entries_cache)))
     return rows
 
 
