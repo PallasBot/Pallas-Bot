@@ -12,6 +12,7 @@ from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
 from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
 from pallas.product.llm.memory.person_facts import retrieve_person_facts_for_prompt
+from pallas.product.llm.memory.planner import plan_memory_retrieval
 from pallas.product.llm.memory.policy import classify_memory_candidate, normalize_episode_note
 from pallas.product.llm.memory.relationship_profile import (
     build_relationship_guidance_lines,
@@ -138,6 +139,16 @@ async def enrich_system_with_memory_context(
             system_prompt=system_prompt,
             trace={**empty_trace, "skipped_short_social_turn": True},
         )
+    plan = plan_memory_retrieval(query_text)
+    if not plan.need_persistent:
+        return MemoryInjectionResult(
+            system_prompt=system_prompt,
+            trace={
+                **empty_trace,
+                "skipped_unneeded_turn": True,
+                "memory_plan": plan.model_dump(mode="json"),
+            },
+        )
     if not can_read_persistent_memory(c) or not c.llm_memory_rag_enabled:
         return MemoryInjectionResult(system_prompt=system_prompt, trace=empty_trace)
     hits = await retrieve_memory_hits(bot_id, group_id, query_text, cfg=c)
@@ -192,6 +203,7 @@ async def enrich_system_with_memory_context(
             if str(item.get("content") or "").strip()
         ],
         "skipped_current_turn_echoes": skipped_current_turn_echoes,
+        "memory_plan": plan.model_dump(mode="json"),
     }
     from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
 

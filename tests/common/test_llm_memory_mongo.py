@@ -75,16 +75,36 @@ async def test_mongo_memory_save_list_retrieve_delete(beanie_fixture, monkeypatc
     monkeypatch.setattr("pallas.product.llm.memory.store.get_llm_config", lambda: cfg)
     assert is_llm_memory_store_available() is True
 
-    assert await save_memory_entry(1, 100, "本群周五固定开黑", source="teach", cfg=cfg) is True
+    assert (
+        await save_memory_entry(
+            1,
+            100,
+            "本群周五固定开黑",
+            source="teach",
+            importance=0.95,
+            confidence=0.85,
+            expires_at=4102444800,
+            cfg=cfg,
+        )
+        is True
+    )
     assert await save_memory_entry(1, 100, "银灰是谢拉格军阀", source="teach", cfg=cfg) is True
 
     rows = await list_memory_entries(1, 100, query="开黑")
     assert len(rows) == 1
     assert "开黑" in rows[0]["content"]
+    assert rows[0]["importance"] == 0.95
+    assert rows[0]["confidence"] == 0.85
+    assert rows[0]["expires_at"] == 4102444800
+    assert rows[0]["visibility"] == "group"
+    assert rows[0]["created_at"] > 0
     entry_id = int(rows[0]["id"])
 
     hits = await retrieve_memory_hits(1, 100, "周五开黑", cfg=cfg)
     assert any("开黑" in str(item.get("content") or "") for item in hits)
+    hit = next(item for item in hits if "开黑" in str(item.get("content") or ""))
+    assert hit["importance"] == 0.95
+    assert hit["visibility"] == "group"
 
     assert await delete_memory_entry(entry_id, bot_id=1) is True
     assert await list_memory_entries(1, 100, query="开黑") == []

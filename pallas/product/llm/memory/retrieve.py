@@ -14,6 +14,46 @@ _TOKEN_RE = re.compile(r"[\u4e00-\u9fff]{2,}|[a-z0-9]{2,}", re.IGNORECASE)
 _CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]+")
 
 
+def _candidate_sort_key(item: dict[str, Any]) -> tuple[int, float, float]:
+    """保持相关性优先；同分时优先更重要、更新的同域记忆。"""
+    try:
+        importance = float(item.get("importance") or 0)
+    except (TypeError, ValueError):
+        importance = 0.0
+    try:
+        created_at = float(item.get("created_at") or 0)
+    except (TypeError, ValueError):
+        created_at = 0.0
+    return int(item.get("score") or 0), importance, created_at
+
+
+def filter_memory_candidates_for_scope(
+    candidates: list[dict[str, Any]],
+    *,
+    bot_id: int,
+    group_id: int | None,
+    now: int,
+) -> list[dict[str, Any]]:
+    """在排序前执行账号、范围与过期守卫；历史缺字段按私域处理。"""
+    scope_group_id = 0 if group_id is None else int(group_id)
+    out: list[dict[str, Any]] = []
+    for item in candidates:
+        if int(item.get("bot_id") or 0) != int(bot_id):
+            continue
+        expires_at = int(item.get("expires_at") or 0)
+        if expires_at > 0 and expires_at <= int(now):
+            continue
+        candidate_group_id = int(item.get("group_id") or 0)
+        visibility = str(item.get("visibility") or ("private" if candidate_group_id == 0 else "group"))
+        if candidate_group_id == scope_group_id:
+            if visibility in {"group", "private", "bot_global"}:
+                out.append(dict(item))
+            continue
+        if group_id is not None and candidate_group_id == 0 and visibility == "bot_global":
+            out.append(dict(item))
+    return out
+
+
 def effective_memory_rag_min_score(cfg: Any) -> int:
     configured = max(0, int(getattr(cfg, "llm_memory_rag_min_score", 0) or 0))
     return 12 if vector_retrieve_mode(cfg) == "keyword" else configured
@@ -100,7 +140,7 @@ def rank_memory_candidates(
         scored.append(row)
 
     if active_mode == "keyword":
-        scored.sort(key=lambda item: int(item.get("score") or 0), reverse=True)
+        scored.sort(key=_candidate_sort_key, reverse=True)
         return [item for item in scored if int(item.get("score") or 0) > 0]
 
     from pallas.product.llm.knowledge.embedding_client import embedding_model_name, fetch_embeddings_sync
@@ -129,7 +169,7 @@ def rank_memory_candidates(
 
     vectors = fetch_embeddings_sync(embed_inputs)
     if vectors is None or len(vectors) != len(embed_inputs):
-        scored.sort(key=lambda item: int(item.get("score") or 0), reverse=True)
+        scored.sort(key=_candidate_sort_key, reverse=True)
         return [item for item in scored if int(item.get("score") or 0) > 0]
 
     query_vec = vectors[0]
@@ -152,5 +192,5 @@ def rank_memory_candidates(
         else:
             item["score"] = emb_score
 
-    scored.sort(key=lambda item: int(item.get("score") or 0), reverse=True)
+    scored.sort(key=_candidate_sort_key, reverse=True)
     return [item for item in scored if int(item.get("score") or 0) > 0]

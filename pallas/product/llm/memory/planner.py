@@ -4,15 +4,39 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+_SHORT_SOCIAL_TURNS = frozenset({
+    "在吗",
+    "在不在",
+    "人呢",
+    "哈",
+    "哈哈",
+    "哈哈哈",
+    "嗯",
+    "哦",
+    "噢",
+    "好的",
+    "好吧",
+    "谢谢",
+    "早",
+    "晚安",
+    "ok",
+})
+
 
 class MemoryPlan(BaseModel):
     need_session: bool = True
+    need_persistent: bool = False
     need_mid_term: bool = False
     need_episodes: bool = False
     need_person: bool = False
     need_relationship: bool = False
     need_graph: bool = False
     reasons: list[str] = Field(default_factory=list)
+
+
+def is_short_social_memory_turn(query_text: str) -> bool:
+    normalized = (query_text or "").casefold().strip().rstrip("。！？!?，,、")
+    return normalized in _SHORT_SOCIAL_TURNS
 
 
 def plan_memory_retrieval(
@@ -34,7 +58,11 @@ def plan_memory_retrieval(
         reasons.append("查询包含人物线索")
     if has_relationship_cues or "关系" in text:
         reasons.append("查询包含关系线索")
+    need_persistent = not is_short_social_memory_turn(query_text)
+    if not need_persistent:
+        reasons.append("短社交轮次无需持久记忆")
     return MemoryPlan(
+        need_persistent=need_persistent,
         need_mid_term=bool(reasons),
         need_episodes=any(word in text for word in past + group),
         need_person=has_mention or any(word in text for word in social),
