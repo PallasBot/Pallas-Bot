@@ -31,6 +31,7 @@ _FIELD_TO_ENV: dict[str, str] = {
     "bootstrap_url": "PALLAS_CONTROL_PLANE_BOOTSTRAP_URL",
     "instance_secret": "PALLAS_INSTANCE_SECRET",
     "federate_id": "PALLAS_FEDERATE_ID",
+    "deployment_name": "PALLAS_FEDERATE_DEPLOYMENT_NAME",
     "federate_ingress_enabled": "PALLAS_FEDERATE_INGRESS_ENABLED",
     "ingress_bypass_unified": "PALLAS_FEDERATE_INGRESS_BYPASS_UNIFIED",
     "federate_redis_prefix": "PALLAS_FEDERATE_REDIS_PREFIX",
@@ -44,6 +45,7 @@ _FIELD_ORDER: tuple[str, ...] = (
     "instance_secret",
     "bootstrap_url",
     "federate_id",
+    "deployment_name",
     "federate_ingress_enabled",
     "prefer_local_owner",
     "ingress_bypass_unified",
@@ -110,6 +112,11 @@ def _field_row(key: str, cur: Any) -> dict[str, Any]:
             "所属协同池编号",
             "可留空，填写密钥并由中心下发后会自动写入",
             "多套牛牛要共用同一编号，跨机去重才会生效",
+        )
+    elif key == "deployment_name":
+        row["description"] = field_help(
+            "本部署在“牛牛在吗”等协同命令中的显示名",
+            "例如“部署 A”；不同机器建议填写不同名称",
         )
     elif key == "federate_ingress_enabled":
         row["kind"] = "enum"
@@ -184,6 +191,7 @@ def control_plane_payload(*, current_values: dict[str, Any] | None = None) -> di
                 "title": "协同池与消息去重",
                 "field_names": [
                     "federate_id",
+                    "deployment_name",
                     "federate_ingress_enabled",
                     "prefer_local_owner",
                     "ingress_bypass_unified",
@@ -257,6 +265,7 @@ def apply_control_plane_patch(patch: dict[str, Any]) -> dict[str, Any]:
         bootstrap_url=str(merged.get("bootstrap_url") or ""),
         instance_secret=str(merged.get("instance_secret") or ""),
         federate_id=str(merged.get("federate_id") or ""),
+        deployment_name=str(merged.get("deployment_name") or "").strip(),
         federate_ingress_enabled=str(merged.get("federate_ingress_enabled") or "auto"),
         ingress_bypass_unified=bool(merged.get("ingress_bypass_unified")),
         prefer_local_owner=bool(merged.get("prefer_local_owner")),

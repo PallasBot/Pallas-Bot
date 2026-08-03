@@ -52,6 +52,13 @@ class ControlPlaneWebuiConfig(BaseModel):
             "可留空，由中心在首次登记时写入",
         ),
     )
+    deployment_name: str = Field(
+        default="",
+        description=field_help(
+            "本部署在协同命令中的显示名",
+            "例如“部署 A”；留空时显示协同池自动编号",
+        ),
+    )
     federate_ingress_enabled: str = Field(
         default="auto",
         description=field_help(
@@ -180,6 +187,7 @@ def get_control_plane_webui_config() -> ControlPlaneWebuiConfig:
         bootstrap_url=setting_str("PALLAS_CONTROL_PLANE_BOOTSTRAP_URL"),
         instance_secret=setting_str("PALLAS_INSTANCE_SECRET"),
         federate_id=fid,
+        deployment_name=setting_str("PALLAS_FEDERATE_DEPLOYMENT_NAME"),
         federate_ingress_enabled=setting_str("PALLAS_FEDERATE_INGRESS_ENABLED", "auto") or "auto",
         ingress_bypass_unified=parse_tristate(
             setting_str("PALLAS_FEDERATE_INGRESS_BYPASS_UNIFIED", "false"),

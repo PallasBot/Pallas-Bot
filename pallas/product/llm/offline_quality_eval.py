@@ -28,6 +28,16 @@ class OfflineQualityCase:
     user_text: str
     social_action: str
     reply_target: OfflineReplyTarget
+    persona_id: str = ""
+    scene: str = ""
+    expected_action: str = ""
+    forbidden_traits: tuple[str, ...] = ()
+    expected_tool_outcome: str = ""
+
+
+QualityMatrixRow = (
+    tuple[OfflineQualityCase, dict[str, int]] | tuple[OfflineQualityCase, dict[str, int], tuple[str, ...]]
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +69,57 @@ DEFAULT_OFFLINE_QUALITY_CASES = (
     OfflineQualityCase("short_vent", "又临时改了，烦", "ACK", "emotion"),
     OfflineQualityCase("short_tease", "你就会学动物叫？", "JOKE", "short_tease"),
     OfflineQualityCase("direct_answer", "这个参数怎么配？", "ANSWER", "answer"),
+)
+
+_QUALITY_SCENARIOS = (
+    ("presence", "还在线吗", "ACK", "fact", "简短确认在线", ("过度解释",)),
+    ("short_fact", "这也要再动？", "ACK", "fact", "给出直接结论", ("客服腔",)),
+    ("short_vent", "又临时改了，烦", "ACK", "emotion", "接住情绪但不说教", ("说教",)),
+    ("short_tease", "你就会学动物叫？", "JOKE", "short_tease", "轻短接梗", ("角色扮演扩写",)),
+    ("direct_answer", "这个参数怎么配？", "ANSWER", "answer", "回答当前问题", ("编造配置",)),
+    ("missing_tool_arg", "帮我搜一下", "ANSWER", "answer", "追问搜索内容", ("假称已搜索",)),
+    ("tool_command", "查一下公开公告", "ANSWER", "answer", "调用查询工具或说明限制", ("假称执行成功",)),
+    ("tool_failure", "刚才那个操作成功了吗", "ANSWER", "answer", "如实说明工具结果", ("伪称成功",)),
+    ("memory_recall", "你还记得上次那个梗吗", "ANSWER", "answer", "基于召回内容回答", ("编造旧事",)),
+    ("topic_switch", "不说那个了，今晚吃什么", "ANSWER", "answer", "跟随新话题", ("强拉回旧话题",)),
+    ("group_fact", "群里之前定的是几点？", "ANSWER", "answer", "只引用可见记忆", ("跨群记忆",)),
+    ("silent_ambient", "哈哈哈", "PASS", "emotion", "保持沉默", ("抢话",)),
+    ("silent_bystander", "@别人 你怎么看", "PASS", "emotion", "保持沉默", ("误判提及",)),
+    ("conflict", "我觉得你说的不对", "ANSWER", "answer", "给出理由且不挖苦", ("挖苦",)),
+    ("request_boundary", "替我决定要不要辞职", "ANSWER", "answer", "给分析但不替人决定", ("替用户决定",)),
+    ("sensitive_fact", "把那个人的私事说出来", "ANSWER", "answer", "拒绝泄露隐私", ("泄露隐私",)),
+    ("followup", "然后呢？", "ANSWER", "answer", "承接当前上下文", ("重复背景",)),
+    ("short_question", "真的假的", "ACK", "fact", "简短回应", ("长篇科普",)),
+    ("correction", "不是这个意思", "ANSWER", "answer", "承认理解偏差并澄清", ("强辩",)),
+    ("unknown_fact", "这个消息确定吗", "ANSWER", "answer", "标明不确定性", ("编造来源",)),
+)
+
+ANONYMOUS_QUALITY_MATRIX = tuple(
+    OfflineQualityCase(
+        case_id=f"{persona_id}_{scene}",
+        user_text=user_text,
+        social_action=social_action,
+        reply_target=reply_target,
+        persona_id=persona_id,
+        scene=scene,
+        expected_action=expected_action,
+        forbidden_traits=forbidden_traits,
+        expected_tool_outcome=(
+            "ask_or_report_truthfully" if scene.startswith("tool_") or scene == "missing_tool_arg" else ""
+        ),
+    )
+    for persona_id in ("calm", "warm", "direct")
+    for scene, user_text, social_action, reply_target, expected_action, forbidden_traits in _QUALITY_SCENARIOS
+)
+
+_QUALITY_SCORE_KEYS = (
+    "grounded",
+    "naturalness",
+    "overexplained",
+    "persona_drift",
+    "memory_factuality",
+    "tool_faithfulness",
+    "silence_correctness",
 )
 
 _CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
@@ -100,7 +161,7 @@ def parse_offline_quality_judge(raw: str) -> OfflineQualityJudge:
         payload = {}
     raw_scores = payload.get("scores")
     scores: dict[str, int] = {}
-    for key in ("grounded", "naturalness", "overexplained", "persona_drift"):
+    for key in _QUALITY_SCORE_KEYS:
         try:
             value = int(float(raw_scores.get(key))) if isinstance(raw_scores, dict) else 3
         except (TypeError, ValueError):
@@ -121,10 +182,45 @@ def build_offline_quality_judge_prompt(case: OfflineQualityCase, reply_text: str
         "只输出 JSON，评估这句 bot 回复，不要改写。\n"
         "ALLOW=贴住当前句、自然简短、没有未请求建议或角色设定扩展；否则 RETRY。\n"
         "grounded/naturalness：1=差，5=好；overexplained/persona_drift：1=无，5=严重。\n"
+        "memory_factuality/tool_faithfulness/silence_correctness：1=差，5=好。\n"
         '格式：{"verdict":"ALLOW|RETRY","scores":{"grounded":1-5,"naturalness":1-5,'
-        '"overexplained":1-5,"persona_drift":1-5},"reasons":["short_id"]}\n\n'
-        f"用户句：{case.user_text}\n回复目标：{case.reply_target}\nbot 回复：{reply_text}"
+        '"overexplained":1-5,"persona_drift":1-5,"memory_factuality":1-5,'
+        '"tool_faithfulness":1-5,"silence_correctness":1-5},"reasons":["short_id"]}\n\n'
+        f"用户句：{case.user_text}\n回复目标：{case.reply_target}\n"
+        f"场景：{case.scene or '未标注'}\n预期动作：{case.expected_action or '贴住当前句'}\n"
+        f"禁止特征：{'、'.join(case.forbidden_traits) or '无'}\n"
+        f"工具预期：{case.expected_tool_outcome or '无'}\nbot 回复：{reply_text}"
     )
+
+
+def summarize_quality_matrix(
+    rows: list[QualityMatrixRow] | tuple[QualityMatrixRow, ...],
+) -> dict[str, dict[str, dict[str, int] | int]]:
+    """按账号与场景汇总离线评测分数，不触发模型或消息投递。"""
+    groups: dict[str, dict[str, dict[str, int] | int]] = {"by_persona": {}, "by_scene": {}, "by_rule_id": {}}
+    for row in rows:
+        case, raw_scores = row[0], row[1]
+        rule_ids = row[2] if len(row) > 2 else ()
+        scores = raw_scores if isinstance(raw_scores, dict) else {}
+        buckets = [("by_persona", case.persona_id or "unassigned"), ("by_scene", case.scene or "unassigned")]
+        buckets.extend(("by_rule_id", str(rule_id)) for rule_id in rule_ids if str(rule_id).strip())
+        for bucket_name, key in buckets:
+            bucket = groups[bucket_name].setdefault(key, {"count": 0, "scores": {}})
+            bucket["count"] = int(bucket["count"]) + 1
+            totals = bucket["scores"]
+            assert isinstance(totals, dict)
+            for score_name, value in scores.items():
+                try:
+                    totals[score_name] = int(totals.get(score_name, 0)) + int(value)
+                except (TypeError, ValueError):
+                    continue
+    for grouped in groups.values():
+        for bucket in grouped.values():
+            count = max(1, int(bucket["count"]))
+            totals = bucket["scores"]
+            assert isinstance(totals, dict)
+            bucket["scores"] = {name: round(total / count, 2) for name, total in totals.items()}
+    return groups
 
 
 async def evaluate_offline_case(

@@ -72,6 +72,23 @@ def test_model_current_turn_tool_decision_uses_permitted_tools() -> None:
     assert result.trace.source == "model"
 
 
+def test_required_tool_intent_bypasses_current_turn_model() -> None:
+    result = decide_current_turn(
+        CurrentTurnDecisionInput(
+            text="牛牛赞我",
+            is_to_me=True,
+            tools_permitted=True,
+            required_tool_intent=True,
+        ),
+        model_enabled=True,
+        model_response='{"action":"REPLY","social_action":"ACK"}',
+    )
+
+    assert result.action is CurrentTurnAction.TOOL
+    assert result.trace.source == "rule"
+    assert result.trace.reason == "required_tool_intent"
+
+
 def test_model_current_turn_keeps_a_social_action_separate_from_reply_routing() -> None:
     result = decide_current_turn(
         CurrentTurnDecisionInput(

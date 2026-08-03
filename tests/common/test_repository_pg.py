@@ -341,6 +341,48 @@ def test_ensure_pg_llm_memory_embedding_columns_adds_only_missing_columns(monkey
 
 
 @pytest.mark.parametrize(
+    ("existing_columns", "expected"),
+    [
+        (
+            [],
+            [
+                "ALTER TABLE llm_memory_entry ADD COLUMN importance DOUBLE PRECISION NOT NULL DEFAULT 0.5",
+                "ALTER TABLE llm_memory_entry ADD COLUMN confidence DOUBLE PRECISION NOT NULL DEFAULT 0.5",
+                "ALTER TABLE llm_memory_entry ADD COLUMN expires_at BIGINT NOT NULL DEFAULT 0",
+                "ALTER TABLE llm_memory_entry ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'",
+            ],
+        ),
+        (
+            ["importance", "confidence", "expires_at", "visibility"],
+            [],
+        ),
+    ],
+)
+def test_ensure_pg_llm_memory_metadata_columns_adds_only_missing_columns(monkeypatch, existing_columns, expected):
+    from pallas.core.foundation.db import repository_pg as mod
+
+    executed: list[str] = []
+
+    class FakeInspector:
+        def has_table(self, name: str) -> bool:
+            return name == "llm_memory_entry"
+
+        def get_columns(self, name: str) -> list[dict[str, str]]:
+            assert name == "llm_memory_entry"
+            return [{"name": column} for column in existing_columns]
+
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
+
+    monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
+
+    mod._ensure_pg_llm_memory_metadata_columns(FakeConnection())
+
+    assert executed == expected
+
+
+@pytest.mark.parametrize(
     ("existing_columns", "expected_substrings"),
     [
         (["blob_data"], []),

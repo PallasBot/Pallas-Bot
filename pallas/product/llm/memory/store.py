@@ -54,6 +54,44 @@ def canonicalize_memory_content(content: str) -> str:
     return text.rstrip("。！？!?；;，,、")
 
 
+def derive_memory_metadata(
+    *,
+    group_id: int | None,
+    source: str,
+    importance: float | None = None,
+    confidence: float | None = None,
+    expires_at: int = 0,
+    visibility: str | None = None,
+) -> dict[str, float | int | str]:
+    source_defaults = {
+        "teach": (0.8, 0.9),
+        "auto_episode": (0.3, 0.4),
+        "auto_episode_summary": (0.5, 0.6),
+    }
+    default_importance, default_confidence = source_defaults.get((source or "").strip(), (0.5, 0.5))
+
+    def bounded(value: float | None, default: float) -> float:
+        try:
+            return max(0.0, min(float(value if value is not None else default), 1.0))
+        except (TypeError, ValueError):
+            return default
+
+    scope_gid = normalize_group_scope(group_id)
+    normalized_visibility = str(visibility or ("private" if scope_gid == 0 else "group")).strip().lower()
+    if normalized_visibility not in {"private", "group", "bot_global"}:
+        normalized_visibility = "private" if scope_gid == 0 else "group"
+    try:
+        normalized_expiry = max(0, int(expires_at or 0))
+    except (TypeError, ValueError):
+        normalized_expiry = 0
+    return {
+        "importance": bounded(importance, default_importance),
+        "confidence": bounded(confidence, default_confidence),
+        "expires_at": normalized_expiry,
+        "visibility": normalized_visibility,
+    }
+
+
 def memory_lifecycle_overlay(entry_id: int) -> dict[str, Any]:
     from pallas.product.llm.memory.ops import memory_lifecycle_overlay as get_overlay
 
@@ -130,6 +168,10 @@ async def save_memory_entry(
     content: str,
     *,
     source: str = "teach",
+    importance: float | None = None,
+    confidence: float | None = None,
+    expires_at: int = 0,
+    visibility: str | None = None,
     cfg: LlmConfig | None = None,
 ) -> bool:
     if not is_llm_memory_store_available():
@@ -137,7 +179,17 @@ async def save_memory_entry(
     if _use_mongodb_backend():
         from pallas.product.llm.memory.store_mongo import save_memory_entry_mongo
 
-        return await save_memory_entry_mongo(bot_id, group_id, content, source=source, cfg=cfg)
+        return await save_memory_entry_mongo(
+            bot_id,
+            group_id,
+            content,
+            source=source,
+            importance=importance,
+            confidence=confidence,
+            expires_at=expires_at,
+            visibility=visibility,
+            cfg=cfg,
+        )
     if not _use_postgresql_backend():
         return False
     c = cfg or get_llm_config()
@@ -153,6 +205,14 @@ async def save_memory_entry(
     if not safe_content:
         return False
     scope_gid = normalize_group_scope(group_id)
+    metadata = derive_memory_metadata(
+        group_id=group_id,
+        source=source,
+        importance=importance,
+        confidence=confidence,
+        expires_at=expires_at,
+        visibility=visibility,
+    )
     now = int(time.time())
     keywords = derive_memory_keywords(safe_content)
     embedding_json: str | None = None
@@ -181,6 +241,10 @@ async def save_memory_entry(
             existing.keywords = keywords
             existing.content = safe_content
             existing.source = safe_source
+            existing.importance = float(metadata["importance"])
+            existing.confidence = float(metadata["confidence"])
+            existing.expires_at = int(metadata["expires_at"])
+            existing.visibility = str(metadata["visibility"])
             existing.updated_at = now
             if embedding_json is not None:
                 existing.embedding_json = embedding_json
@@ -193,6 +257,10 @@ async def save_memory_entry(
                     keywords=keywords,
                     content=safe_content,
                     source=safe_source,
+                    importance=float(metadata["importance"]),
+                    confidence=float(metadata["confidence"]),
+                    expires_at=int(metadata["expires_at"]),
+                    visibility=str(metadata["visibility"]),
                     embedding_json=embedding_json,
                     embedding_model=embedding_model,
                     created_at=now,
@@ -305,6 +373,7 @@ async def retrieve_memory_hits(
     from pallas.product.llm.memory.retrieve import (
         dump_embedding_json,
         effective_memory_rag_min_score,
+        filter_memory_candidates_for_scope,
         rank_memory_candidates,
     )
 
@@ -314,12 +383,25 @@ async def retrieve_memory_hits(
             "content": str(row.content or "").strip(),
             "keywords": str(row.keywords or "").strip(),
             "source": str(row.source or "").strip() or "memory",
+            "bot_id": int(row.bot_id),
             "group_id": int(row.group_id or 0),
+            "importance": float(getattr(row, "importance", 0.5) or 0.5),
+            "confidence": float(getattr(row, "confidence", 0.5) or 0.5),
+            "expires_at": int(getattr(row, "expires_at", 0) or 0),
+            "visibility": str(getattr(row, "visibility", "") or ""),
+            "created_at": int(row.created_at or 0),
+            "updated_at": int(row.updated_at or 0),
             "embedding_json": getattr(row, "embedding_json", None),
             "embedding_model": getattr(row, "embedding_model", None),
         }
         for row in rows
     ]
+    candidates = filter_memory_candidates_for_scope(
+        candidates,
+        bot_id=int(bot_id),
+        group_id=group_id,
+        now=int(time.time()),
+    )
     scored = rank_memory_candidates(
         query_text,
         candidates,
@@ -399,6 +481,11 @@ async def list_memory_entries(
             "keywords": keywords,
             "content": content,
             "source": str(row.source or "").strip() or "teach",
+            "importance": float(getattr(row, "importance", 0.5) or 0.5),
+            "confidence": float(getattr(row, "confidence", 0.5) or 0.5),
+            "expires_at": int(getattr(row, "expires_at", 0) or 0),
+            "visibility": str(getattr(row, "visibility", "") or "")
+            or ("private" if int(row.group_id or 0) == 0 else "group"),
             "created_at": int(row.created_at or 0),
             "updated_at": int(row.updated_at or 0),
         })

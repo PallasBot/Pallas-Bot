@@ -4,7 +4,7 @@ from pathlib import Path
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from pallas.core.foundation.config.repo_settings import repo_root
 from pallas.core.foundation.db import make_bot_config_repository, make_group_config_repository
@@ -16,6 +16,7 @@ from .affect_axes import (
 )
 from .compile_group_style import compile_group_style_prompt, compile_group_style_snapshot
 from .config import persona_preset_layers_enabled
+from .disposition import compile_disposition_prompt, resolve_persona_disposition
 from .group_expression import compile_group_expression_prompt
 from .loader import resolve_persona, resolve_persona_for_message
 from .peer_bots_prompt import (
@@ -116,6 +117,7 @@ class PersonaPromptSections(BaseModel):
     base: str
     self_identity: str = ""
     preset_layers: str = ""
+    disposition: str = ""
     bot_behavior: str
     group_style: str
     group_expression: str = ""
@@ -126,6 +128,7 @@ class PersonaPromptMetadata(BaseModel):
     bot_id: int
     group_id: int | None = None
     persona: dict[str, Any]
+    disposition: dict[str, Any] = Field(default_factory=dict)
     group_style: dict[str, Any]
 
 
@@ -275,6 +278,7 @@ def assemble_persona_system(sections: PersonaPromptSections, *, mode: str = "nor
         sections.base,
         sections.self_identity,
         sections.preset_layers,
+        sections.disposition,
         sections.bot_behavior,
     )
     parts = [section.strip() for section in section_values if section.strip()]
@@ -355,10 +359,12 @@ def compile_persona_prompt(
         sample = style_profile.get("sample") if isinstance(style_profile, dict) else None
         layers = extract_preset_layers(bot_persona, sample if isinstance(sample, dict) else None)
         preset_layers = compile_preset_layers_prompt(layers)
+    disposition = compile_disposition_prompt(bot_persona) if profile == PROMPT_PROFILE_CHAT else ""
     sections = PersonaPromptSections(
         base=base,
         self_identity=self_identity,
         preset_layers=preset_layers,
+        disposition=disposition,
         bot_behavior=bot_behavior,
         group_style=group_style,
         group_expression=group_expression,
@@ -367,6 +373,7 @@ def compile_persona_prompt(
         bot_id=int(bot_id),
         group_id=int(group_id) if group_id is not None else None,
         persona=persona.model_dump(),
+        disposition=resolve_persona_disposition(bot_persona).model_dump(),
         group_style=compile_group_style_snapshot(style_profile),
     )
     return PersonaPromptBundle(

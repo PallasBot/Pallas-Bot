@@ -62,3 +62,37 @@ def test_merge_persona_with_seed_patch_preserves_cross_group() -> None:
     assert merged["derived"]["chaos_bias"] == 0.1
     assert merged["seed_override"]["prefs"] == ["chaotic", "short"]
     assert merged["seed_override"]["source"] == "manual"
+
+
+def test_merge_persona_with_seed_patch_updates_disposition_without_losing_seed() -> None:
+    existing = {
+        "seed": {"prefs": ["warm"]},
+        "seed_override": {"prefs": ["short"]},
+        "cross_group": {"tone": "calm"},
+    }
+
+    merged = merge_persona_with_seed_patch(
+        existing,
+        {
+            "disposition": {
+                "approach": "先接住再判断",
+                "do": ["说重点", "留接话口"],
+            },
+        },
+        bot_id=7,
+    )
+
+    assert merged["seed_override"] == {"prefs": ["short"]}
+    assert merged["cross_group"] == {"tone": "calm"}
+    assert merged["disposition"] == {
+        "version": 1,
+        "approach": "先接住再判断",
+        "initiative": "",
+        "conflict": "",
+        "do": ["说重点", "留接话口"],
+        "dont": [],
+    }
+
+    cleared = merge_persona_with_seed_patch(merged, {"disposition": {}}, bot_id=7)
+
+    assert "disposition" not in cleared

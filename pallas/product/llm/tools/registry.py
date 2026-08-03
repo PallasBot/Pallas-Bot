@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import operator
 from collections.abc import Awaitable, Callable
@@ -64,13 +65,18 @@ class LlmToolSpec:
     visibility: str = "visible"
     estimated_duration_ms: int = 0
     cost_hint: str = ""
+    read_only: bool = False
     approval_required: bool = False
+    reversible: bool = False
+    idempotency_key: str = ""
+    max_execution_ms: int = 10000
     background_ok: bool = False
     display_mode: str = "default"
 
 
 _REGISTRY: list[LlmToolSpec] = []
 _REGISTERED_NAMES: set[str] = set()
+_IDEMPOTENT_RESULTS: dict[tuple[str, int | None, int | None, int | None, str], dict[str, Any]] = {}
 
 
 def ensure_tools_loaded() -> None:
@@ -82,6 +88,7 @@ def ensure_tools_loaded() -> None:
 def clear_tool_registry() -> None:
     _REGISTRY.clear()
     _REGISTERED_NAMES.clear()
+    _IDEMPOTENT_RESULTS.clear()
 
 
 def register_tool(spec: LlmToolSpec) -> None:
@@ -137,6 +144,7 @@ def from_provider_tool_name(name: str) -> str:
 
 
 def tool_catalog_entry_from_spec(spec: LlmToolSpec, *, description: str | None = None) -> ToolCatalogEntry:
+    read_only = spec.read_only or "read_only" in spec.capabilities
     return ToolCatalogEntry(
         name=spec.name,
         description=description if description is not None else spec.description,
@@ -152,7 +160,11 @@ def tool_catalog_entry_from_spec(spec: LlmToolSpec, *, description: str | None =
         ),
         estimated_duration_ms=spec.estimated_duration_ms,
         cost_hint=spec.cost_hint,
+        read_only=read_only,
         approval_required=spec.approval_required,
+        reversible=spec.reversible or read_only,
+        idempotency_key=spec.idempotency_key,
+        max_execution_ms=spec.max_execution_ms,
         background_ok=spec.background_ok,
         display_mode=spec.display_mode,
     )
@@ -287,6 +299,8 @@ def tool_catalog_for_chat(
     soft_fields: dict[str, Any] = {
         "soft_recall_confidence": 0,
         "soft_recall_candidates": [],
+        "semantic_recall_confidence": 0,
+        "semantic_recall_candidates": [],
         "ask_before_call": False,
         "missing_required_params": {},
     }
@@ -347,6 +361,35 @@ def tool_catalog_for_chat(
             selection_source = "selective+inventory"
         elif selection_source == "soft_recall":
             selection_source = "soft_recall+inventory"
+    if domains and not inventory and len(specs_list) > 1 and bool(getattr(cfg, "llm_tools_soft_recall_enabled", True)):
+        from pallas.product.llm.tools.soft_recall import select_soft_recall_hits, soft_recall_snapshot_fields
+
+        ranked_hits = select_soft_recall_hits(
+            user_text,
+            min_score=int(getattr(cfg, "llm_tools_soft_recall_min_score", 6) or 6),
+            max_candidates=int(getattr(cfg, "llm_tools_soft_recall_max_candidates", 3) or 3),
+            eligible_specs=tuple(specs_list),
+        )
+        if ranked_hits:
+            specs_list = [hit.spec for hit in ranked_hits]
+            soft_fields = soft_recall_snapshot_fields(ranked_hits)
+            selection_source = f"{selection_source}+ranked"
+        else:
+            from pallas.product.llm.tools.semantic_recall import (
+                select_semantic_recall_hits,
+                semantic_recall_snapshot_fields,
+            )
+
+            semantic_hits = select_semantic_recall_hits(
+                user_text,
+                eligible_specs=tuple(specs_list),
+                cfg=cfg,
+                max_candidates=int(getattr(cfg, "llm_tools_soft_recall_max_candidates", 3) or 3),
+            )
+            if semantic_hits:
+                specs_list = [hit.spec for hit in semantic_hits]
+                soft_fields.update(semantic_recall_snapshot_fields(semantic_hits))
+                selection_source = f"{selection_source}+semantic"
     if not specs_list:
         return None
     entries = [catalog_entry_for_spec(spec) for spec in specs_list]
@@ -360,6 +403,8 @@ def tool_catalog_for_chat(
             selection_source=selection_source,
             soft_recall_confidence=int(soft_fields.get("soft_recall_confidence") or 0),
             soft_recall_candidates=list(soft_fields.get("soft_recall_candidates") or []),
+            semantic_recall_confidence=int(soft_fields.get("semantic_recall_confidence") or 0),
+            semantic_recall_candidates=list(soft_fields.get("semantic_recall_candidates") or []),
             ask_before_call=bool(soft_fields.get("ask_before_call")),
             missing_required_params=dict(soft_fields.get("missing_required_params") or {}),
             inventory_intent=bool(inventory),
@@ -383,6 +428,7 @@ async def execute_tool_async(
     arguments: dict[str, Any] | None,
     *,
     context: ToolInvokeContext | None = None,
+    background: bool = False,
 ) -> dict[str, Any]:
     ensure_tools_loaded()
     args = arguments if isinstance(arguments, dict) else {}
@@ -390,16 +436,51 @@ async def execute_tool_async(
     for spec in _REGISTRY:
         if spec.name != resolved:
             continue
-        try:
-            if spec.source == LlmToolSource.MCP:
-                from pallas.product.llm.tools.mcp_bootstrap import execute_mcp_tool_async
+        if spec.approval_required and (context is None or not context.is_tool_approved(spec.name)):
+            return normalize_tool_result({"ok": False, "error": "approval_required"}, spec=spec)
+        if background:
+            if not spec.background_ok:
+                return normalize_tool_result({"ok": False, "error": "background_not_supported"}, spec=spec)
+            if context is None:
+                return normalize_tool_result({"ok": False, "error": "background_context_required"}, spec=spec)
+            from pallas.product.llm.tools.background import start_background_tool
 
-                result = await execute_mcp_tool_async(spec, args)
-                return normalize_tool_result(result, spec=spec)
-            result = spec.handler(args, context)
-            if inspect.isawaitable(result):
-                result = await result
-            return normalize_tool_result(result, spec=spec)
+            queued = start_background_tool(
+                tool_name=spec.name,
+                context=context,
+                arguments=dict(args),
+                max_execution_ms=spec.max_execution_ms,
+            )
+            return normalize_tool_result({"ok": True, "result": queued}, spec=spec)
+        dedupe_key = str(args.get(spec.idempotency_key) or "").strip() if spec.idempotency_key else ""
+        cache_key = (
+            spec.name,
+            context.bot_id if context is not None else None,
+            context.group_id if context is not None else None,
+            context.user_id if context is not None else None,
+            dedupe_key,
+        )
+        if dedupe_key and cache_key in _IDEMPOTENT_RESULTS:
+            return _IDEMPOTENT_RESULTS[cache_key]
+        try:
+            current_spec = spec
+
+            async def invoke(current_spec: LlmToolSpec = current_spec) -> Any:
+                if current_spec.source == LlmToolSource.MCP:
+                    from pallas.product.llm.tools.mcp_bootstrap import execute_mcp_tool_async
+
+                    return await execute_mcp_tool_async(current_spec, args)
+                result = current_spec.handler(args, context)
+                return await result if inspect.isawaitable(result) else result
+
+            timeout = max(1, int(spec.max_execution_ms)) / 1000 if spec.max_execution_ms > 0 else None
+            result = await asyncio.wait_for(invoke(), timeout=timeout) if timeout is not None else await invoke()
+            normalized = normalize_tool_result(result, spec=spec)
+            if dedupe_key:
+                _IDEMPOTENT_RESULTS[cache_key] = normalized
+            return normalized
+        except TimeoutError:
+            return normalize_tool_result({"ok": False, "error": "tool_timeout"}, spec=spec)
         except Exception as exc:
             return normalize_tool_result({"ok": False, "error": str(exc)}, spec=spec)
     return normalize_tool_result({"ok": False, "error": f"unknown tool: {name}"})
@@ -470,6 +551,8 @@ def tool_metadata_for_chat(
         "ask_before_call": bool(catalog.selection.ask_before_call),
         "missing_required_params": dict(catalog.selection.missing_required_params or {}),
         "soft_recall_confidence": int(catalog.selection.soft_recall_confidence or 0),
+        "semantic_recall_confidence": int(catalog.selection.semantic_recall_confidence or 0),
+        "semantic_recall_candidates": list(catalog.selection.semantic_recall_candidates or []),
         "activated_tools": sorted(activated_names),
         "inventory_intent": bool(catalog.selection.inventory_intent),
     }
@@ -534,7 +617,11 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             "mcp_server_id": entry.audit.mcp_server_id,
             "estimated_duration_ms": entry.estimated_duration_ms,
             "cost_hint": entry.cost_hint,
+            "read_only": entry.read_only,
             "approval_required": entry.approval_required,
+            "reversible": entry.reversible,
+            "idempotency_key": entry.idempotency_key,
+            "max_execution_ms": entry.max_execution_ms,
             "background_ok": entry.background_ok,
             "display_mode": entry.display_mode,
             "eligible": spec.name in eligible_names and disabled_reason is None,

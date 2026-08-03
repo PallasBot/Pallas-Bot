@@ -12,6 +12,7 @@ class ToolInvokeContext:
     group_id: int | None
     user_id: int
     source_segments: tuple[dict[str, Any], ...] = ()
+    approved_tools: frozenset[str] = frozenset()
 
     @classmethod
     def from_payload(cls, payload: dict) -> ToolInvokeContext | None:
@@ -27,12 +28,19 @@ class ToolInvokeContext:
         group_raw = payload.get("group_id")
         group_id = int(group_raw) if group_raw is not None else None
         source_segments = _parse_source_segments(payload.get("command_source_segments"))
+        approved_tools = frozenset(
+            str(name).strip() for name in (payload.get("approved_tools") or []) if str(name).strip()
+        )
         return cls(
             bot_id=bot_id,
             group_id=group_id,
             user_id=user_id,
             source_segments=source_segments,
+            approved_tools=approved_tools,
         )
+
+    def is_tool_approved(self, name: str) -> bool:
+        return str(name or "").strip() in self.approved_tools
 
 
 def _parse_source_segments(raw: Any) -> tuple[dict[str, Any], ...]:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pallas.product.llm.tools.patterns import domains_from_structure
 
+from pallas.product.llm.tools.score import score_tool_text
 from pallas.product.llm.tools.select import infer_tool_domains
 
 
@@ -29,6 +30,16 @@ def test_infer_domains_includes_structure_without_keyword_lexicon() -> None:
     # 「放首X」不在旧关键词表里的整词，靠结构召回
     domains = infer_tool_domains("放首铁花飞")
     assert "sing" in domains
+
+
+def test_tool_score_normalizes_optional_quantifier_in_hints() -> None:
+    score = score_tool_text(
+        "牛牛放一首铁花飞",
+        name="sing.request_song",
+        description="点播原曲。",
+        hints=frozenset({"放首"}),
+    )
+    assert score >= 6
 
 
 def test_infer_domains_memory_keywords() -> None:

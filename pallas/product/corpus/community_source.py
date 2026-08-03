@@ -39,6 +39,9 @@ def remote_corpus_contribute_timeout_sec() -> float:
 _shared_client: httpx.AsyncClient | None = None
 _shared_client_timeout: float | None = None
 _shared_client_lock = asyncio.Lock()
+_shared_contribute_client: httpx.AsyncClient | None = None
+_shared_contribute_client_timeout: float | None = None
+_shared_contribute_client_lock = asyncio.Lock()
 
 
 async def shared_remote_corpus_client(timeout_sec: float) -> httpx.AsyncClient:
@@ -51,6 +54,18 @@ async def shared_remote_corpus_client(timeout_sec: float) -> httpx.AsyncClient:
             _shared_client = httpx.AsyncClient(timeout=timeout)
             _shared_client_timeout = timeout
     return _shared_client
+
+
+async def shared_remote_corpus_contribute_client(timeout_sec: float) -> httpx.AsyncClient:
+    global _shared_contribute_client, _shared_contribute_client_timeout
+    timeout = max(0.5, float(timeout_sec))
+    async with _shared_contribute_client_lock:
+        if _shared_contribute_client is None or _shared_contribute_client_timeout != timeout:
+            if _shared_contribute_client is not None:
+                await _shared_contribute_client.aclose()
+            _shared_contribute_client = httpx.AsyncClient(timeout=timeout)
+            _shared_contribute_client_timeout = timeout
+    return _shared_contribute_client
 
 
 class RemoteCorpusRepository(ContextRepositoryExistenceMixin):
@@ -192,34 +207,33 @@ class RemoteCorpusRepository(ContextRepositoryExistenceMixin):
         contribute_timeout = remote_corpus_contribute_timeout_sec()
         try:
             async with scrub_http_log_noise():
-                # 独立 client，避免与读路径抢共享 client 的 timeout 重建
-                async with httpx.AsyncClient(timeout=contribute_timeout) as client:
-                    for base in self._api_bases:
-                        contribute_url = f"{base}/contribute"
-                        if not contribute_url.startswith("http"):
-                            continue
-                        try:
-                            resp = await client.post(contribute_url, json=body, headers=self._headers())
-                        except httpx.HTTPError as e:
-                            last_error = e
-                            logger.warning(
-                                "corpus community contribute failed api_base={} err_type={} err={!r}",
-                                base,
-                                type(e).__name__,
-                                e,
-                            )
-                            continue
-                        if resp.status_code in (200, 202):
-                            return
-                        if resp.status_code in (401, 403):
-                            asyncio.create_task(self.schedule_auth_refresh())
-                        body_preview = (resp.text or "")[:200]
+                client = await shared_remote_corpus_contribute_client(contribute_timeout)
+                for base in self._api_bases:
+                    contribute_url = f"{base}/contribute"
+                    if not contribute_url.startswith("http"):
+                        continue
+                    try:
+                        resp = await client.post(contribute_url, json=body, headers=self._headers())
+                    except httpx.HTTPError as e:
+                        last_error = e
                         logger.warning(
-                            "corpus community contribute HTTP {} api_base={}: {}",
-                            resp.status_code,
+                            "corpus community contribute failed api_base={} err_type={} err={!r}",
                             base,
-                            body_preview,
+                            type(e).__name__,
+                            e,
                         )
+                        continue
+                    if resp.status_code in (200, 202):
+                        return
+                    if resp.status_code in (401, 403):
+                        asyncio.create_task(self.schedule_auth_refresh())
+                    body_preview = (resp.text or "")[:200]
+                    logger.warning(
+                        "corpus community contribute HTTP {} api_base={}: {}",
+                        resp.status_code,
+                        base,
+                        body_preview,
+                    )
         except httpx.HTTPError as e:
             logger.warning(
                 "corpus community contribute failed err_type={} err={!r}",

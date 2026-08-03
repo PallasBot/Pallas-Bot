@@ -19,8 +19,8 @@ def _setting(key: str) -> str | None:
 
 
 def resolve_coord_redis_url() -> str | None:
-    """PALLAS_COORD_REDIS_URL 优先，否则 REDIS_URL。"""
-    for key in ("PALLAS_COORD_REDIS_URL", "REDIS_URL"):
+    """联邦协调 Redis 优先，其次通用协调 Redis 与分片 Redis。"""
+    for key in ("PALLAS_FEDERATE_COORD_REDIS_URL", "PALLAS_COORD_REDIS_URL", "REDIS_URL"):
         val = _setting(key)
         if val:
             return val

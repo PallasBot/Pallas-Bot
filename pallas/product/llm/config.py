@@ -372,6 +372,8 @@ class LlmConfig(BaseModel):
     llm_speak_ambient_rate: float = Field(default=0.08, ge=0.0, le=1.0)
     llm_speak_ambient_min_score: int = Field(default=35, ge=0, le=100)
     llm_speak_ambient_cooldown_sec: int = Field(default=120, ge=0, le=3600)
+    llm_speak_ambient_budget_limit: int = Field(default=2, ge=0, le=20)
+    llm_speak_ambient_budget_window_sec: int = Field(default=900, ge=60, le=86400)
     llm_speak_min_alias_len: int = Field(default=2, ge=1, le=8)
     llm_speak_followup_enabled: bool = Field(default=True)
     llm_speak_followup_window_sec: int = Field(default=45, ge=0, le=600)
@@ -610,6 +612,8 @@ def get_llm_config() -> LlmConfig:
             llm_speak_ambient_rate=_env_float("LLM_SPEAK_AMBIENT_RATE", 0.08),
             llm_speak_ambient_min_score=_env_int("LLM_SPEAK_AMBIENT_MIN_SCORE", 35),
             llm_speak_ambient_cooldown_sec=_env_int("LLM_SPEAK_AMBIENT_COOLDOWN_SEC", 120),
+            llm_speak_ambient_budget_limit=_env_int("LLM_SPEAK_AMBIENT_BUDGET_LIMIT", 2),
+            llm_speak_ambient_budget_window_sec=_env_int("LLM_SPEAK_AMBIENT_BUDGET_WINDOW_SEC", 900),
             llm_speak_min_alias_len=_env_int("LLM_SPEAK_MIN_ALIAS_LEN", 2),
             llm_speak_followup_enabled=_env_bool("LLM_SPEAK_FOLLOWUP_ENABLED", True),
             llm_speak_followup_window_sec=_env_int("LLM_SPEAK_FOLLOWUP_WINDOW_SEC", 45),

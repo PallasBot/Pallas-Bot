@@ -297,6 +297,10 @@ class LlmMemoryEntryRow(Base):
     keywords: Mapped[str] = mapped_column(Text, nullable=False, default="")
     content: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(Text, nullable=False, default="teach")
+    importance: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    expires_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    visibility: Mapped[str] = mapped_column(Text, nullable=False, default="private")
     embedding_json: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     embedding_model: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -583,6 +587,26 @@ def _ensure_pg_llm_memory_embedding_columns(connection) -> None:
         connection.execute(text("ALTER TABLE llm_memory_entry ADD COLUMN embedding_model TEXT"))
 
 
+def _ensure_pg_llm_memory_metadata_columns(connection) -> None:
+    """旧库 llm_memory_entry 缺治理元数据列时补齐。"""
+    insp = inspect(connection)
+    if not insp.has_table("llm_memory_entry"):
+        return
+    names = {c["name"] for c in insp.get_columns("llm_memory_entry")}
+    if "importance" not in names:
+        connection.execute(
+            text("ALTER TABLE llm_memory_entry ADD COLUMN importance DOUBLE PRECISION NOT NULL DEFAULT 0.5")
+        )
+    if "confidence" not in names:
+        connection.execute(
+            text("ALTER TABLE llm_memory_entry ADD COLUMN confidence DOUBLE PRECISION NOT NULL DEFAULT 0.5")
+        )
+    if "expires_at" not in names:
+        connection.execute(text("ALTER TABLE llm_memory_entry ADD COLUMN expires_at BIGINT NOT NULL DEFAULT 0"))
+    if "visibility" not in names:
+        connection.execute(text("ALTER TABLE llm_memory_entry ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'"))
+
+
 def _ensure_pg_llm_memory_graph_columns(connection) -> None:
     """旧库记忆图谱表补 soft-delete 列。"""
     insp = inspect(connection)
@@ -728,6 +752,7 @@ PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.bot_config_plugin_storage", _ensure_pg_bot_config_plugin_storage),
     ("ddl.user_config_maa_devices", _ensure_pg_user_config_maa_devices),
     ("ddl.llm_memory_embedding_columns", _ensure_pg_llm_memory_embedding_columns),
+    ("ddl.llm_memory_metadata_columns", _ensure_pg_llm_memory_metadata_columns),
     ("ddl.llm_memory_graph_columns", _ensure_pg_llm_memory_graph_columns),
     ("ddl.llm_relationship_delta_columns", _ensure_pg_llm_relationship_delta_columns),
     ("ddl.message_group_time_index", _ensure_pg_message_group_time_index),

@@ -23,6 +23,15 @@ from pallas.core.platform.bot_runtime.send_unavailable import (
     log_bot_send_unavailable,
 )
 
+# ── 多机协同名册 ──
+from pallas.core.platform.federate.config import federate_ingress_active
+from pallas.core.platform.federate.peer_bots import (
+    FederatePeerBotRoster,
+    get_federate_bot_rosters,
+    get_federate_peer_bot_rosters,
+    sync_federate_peer_bot_roster,
+)
+
 # ── 消息入口策略 ──
 from pallas.core.platform.ingress.dream_host_gate import (
     DREAM_HOST_GATE_PLUGIN,
@@ -136,6 +145,12 @@ __all__ = [
     "get_catalog_bot_ids",
     "get_fleet_bot_ids",
     "get_session_seen_bot_ids",
+    # 多机协同名册
+    "FederatePeerBotRoster",
+    "get_federate_bot_rosters",
+    "get_federate_peer_bot_rosters",
+    "sync_federate_peer_bot_roster",
+    "federate_ingress_active",
     "invalidate_fleet_bot_cache",
     "is_fleet_bot_qq",
     "is_group_owned_gate_holder",

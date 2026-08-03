@@ -5,12 +5,33 @@ from types import SimpleNamespace
 from packages.pb_webui import system_home_api as mod
 
 
+class _CpuPercentPsutil:
+    def __init__(self) -> None:
+        self.calls: list[tuple[float | None, bool]] = []
+
+    def cpu_percent(self, interval: float | None, *, percpu: bool) -> list[float]:
+        self.calls.append((interval, percpu))
+        return [12.5, 37.5]
+
+
+def test_runtime_metrics_primes_non_blocking_cpu_sampling(monkeypatch) -> None:
+    psutil = _CpuPercentPsutil()
+    monkeypatch.setitem(__import__("sys").modules, "psutil", psutil)
+    monkeypatch.setattr(mod, "_gpu_metrics", lambda: {"available": False, "devices": []})
+
+    metrics = mod._runtime_metrics()
+
+    assert psutil.calls[:2] == [(None, True), (0.0, True)]
+    assert metrics["cpu_per_core"] == [12.5, 37.5]
+    assert metrics["cpu_percent"] == 25.0
+
+
 def test_cpu_model_reads_linux_model_name(monkeypatch) -> None:
     monkeypatch.setattr(mod.platform, "system", lambda: "Linux")
     monkeypatch.setattr(
         mod.Path,
         "read_text",
-        lambda *_args, **_kwargs: "processor\t: 0\nmodel name\t: AMD Ryzen Test CPU\n",
+        lambda *_args, **_kwargs: "processor\t: 0\nmodel\t\t: 33\nmodel name\t: AMD Ryzen Test CPU\n",
     )
 
     assert mod.cpu_model() == "AMD Ryzen Test CPU"

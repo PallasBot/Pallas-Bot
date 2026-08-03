@@ -143,6 +143,35 @@ async def test_check_and_run_matcher_with_lane_skips_when_busy(monkeypatch: pyte
         await controller.release()
 
 
+@pytest.mark.asyncio
+async def test_synthetic_llm_command_uses_dedicated_tool_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    dispatch_lanes.install_dispatch_lanes()
+    command_lane = dispatch_lanes.lane_controller(DispatchLane.COMMAND)
+    assert command_lane is not None
+    for _ in range(command_lane.base_limit):
+        ok, _ = await command_lane.acquire(0.01)
+        assert ok is True
+
+    run_mock = AsyncMock()
+    monkeypatch.setattr("nonebot.message.check_and_run_matcher", run_mock)
+
+    result = await dispatch_lanes.check_and_run_matcher_with_lane(
+        _CommandMatcher,
+        AsyncMock(),
+        MagicMock(),
+        {},
+        MagicMock(),
+        {},
+        command_traffic=True,
+        synthetic_llm_command=True,
+    )
+
+    assert result.acquired is True
+    run_mock.assert_awaited_once()
+    for _ in range(command_lane.base_limit):
+        await command_lane.release()
+
+
 def test_install_dispatch_lanes_reads_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dispatch_lanes, "repo_env_raw_value", lambda _key: None)
     monkeypatch.setattr(dispatch_lanes, "pg_pool_capacity", lambda: 30)

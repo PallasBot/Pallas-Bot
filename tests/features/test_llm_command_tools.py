@@ -6,9 +6,11 @@ import pytest
 
 from pallas.product.llm.tools.bootstrap import reset_llm_tools_bootstrap_for_tests
 from pallas.product.llm.tools.command_invoke import (
+    LLM_COMMAND_EVENT_CONTEXT_ATTR,
     CommandTemplateError,
     append_source_segments_to_message,
     build_synthetic_group_event,
+    dispatch_group_command_text,
     render_command_template,
     serialize_event_source_segments,
     source_segments_for_command,
@@ -117,6 +119,20 @@ def test_build_synthetic_group_event_appends_source_segments() -> None:
     assert event.original_message is not None
 
 
+def test_build_synthetic_group_event_keeps_original_media_after_message_mutation() -> None:
+    event = build_synthetic_group_event(
+        bot_id=1,
+        group_id=2,
+        user_id=3,
+        text="牛牛表情推荐 摸",
+        source_segments=[{"type": "at", "qq": "12345"}],
+    )
+
+    event.message.pop()
+
+    assert any(seg.type == "at" and str(seg.data.get("qq")) == "12345" for seg in event.original_message)
+
+
 def test_tool_invoke_context_reads_source_segments() -> None:
     ctx = ToolInvokeContext.from_payload({
         "bot_id": 1,
@@ -144,6 +160,57 @@ def test_source_segments_for_command_only_adds_self_for_media() -> None:
     segments = ({"type": "at", "qq": "42"},)
     assert source_segments_for_command(segments, mode="none") == ()
     assert source_segments_for_command(segments, mode="media") == segments
+
+
+def test_source_segments_for_command_uses_sender_at_when_media_is_missing() -> None:
+    assert source_segments_for_command((), mode="media", sender_id=12345) == ({"type": "at", "qq": "12345"},)
+
+
+@pytest.mark.asyncio
+async def test_dispatch_group_command_text_reports_source_segment_types(monkeypatch) -> None:
+    from pallas.product.llm.tools import command_invoke
+
+    async def allow(*_args, **_kwargs) -> bool:
+        return True
+
+    dispatched_events = []
+
+    async def handle(_bot, event) -> None:
+        dispatched_events.append(event)
+        return None
+
+    monkeypatch.setattr(command_invoke, "get_bot", lambda _bot_id: SimpleNamespace())
+    monkeypatch.setattr(command_invoke, "satisfies_command_permission", allow)
+    monkeypatch.setattr(command_invoke.nb_message, "handle_event", handle)
+
+    result = await dispatch_group_command_text(
+        ToolInvokeContext(bot_id=1, group_id=2, user_id=12345),
+        command_id="memes.recommend",
+        command_text="牛牛表情推荐 摸",
+        source_segments_mode="media",
+    )
+
+    assert result["source_segment_count"] == 1
+    assert result["source_segment_types"] == ["at"]
+    assert getattr(dispatched_events[0], LLM_COMMAND_EVENT_CONTEXT_ATTR) == {
+        "command_id": "memes.recommend",
+        "source_segment_types": ["at"],
+    }
+
+
+def test_source_segments_for_command_uses_sender_when_only_wake_bot_is_present() -> None:
+    segments = ({"type": "at", "qq": "3879348674"},)
+    assert source_segments_for_command(segments, mode="media", bot_id=3879348674) == ({"type": "text", "text": "自己"},)
+
+
+def test_source_segments_for_command_keeps_an_explicit_subject() -> None:
+    segments = (
+        {"type": "at", "qq": "3879348674"},
+        {"type": "at", "qq": "3023094357"},
+    )
+    assert source_segments_for_command(segments, mode="media", bot_id=3879348674) == (
+        {"type": "at", "qq": "3023094357"},
+    )
 
 
 def test_sanitize_meme_tool_argument_strips_self_and_noise() -> None:

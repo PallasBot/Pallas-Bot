@@ -73,3 +73,17 @@ def test_control_plane_webui_config_exposes_low_risk_federate_fields(monkeypatch
     cfg = get_control_plane_webui_config()
     assert cfg.claim_ttl_sec == 7200
     assert cfg.ingress_bypass_unified is True
+
+
+def test_coord_redis_prefers_federate_coord_url(monkeypatch):
+    from pallas.core.platform.coord.redis_settings import resolve_coord_redis_url
+
+    monkeypatch.setattr(
+        "pallas.core.platform.coord.redis_settings.repo_env_raw_value",
+        lambda key: {
+            "PALLAS_FEDERATE_COORD_REDIS_URL": "redis://federate.example:6379/1",
+            "REDIS_URL": "redis://local.example:6379/0",
+        }.get(key),
+    )
+
+    assert resolve_coord_redis_url() == "redis://federate.example:6379/1"

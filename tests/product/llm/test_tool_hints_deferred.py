@@ -151,7 +151,27 @@ def test_music_selective_catalog_excludes_unrelated_command_tools(monkeypatch) -
                         "required": ["song"],
                     },
                     command_template="牛牛点歌 {song}",
-                    hints=["点歌", "放首歌", "音乐"],
+                    hints=["点歌", "放首歌", "来首", "音乐"],
+                )
+            ),
+            plugin_name="sing",
+            plugin_title="唱歌",
+        )
+    )
+    register_tool(
+        build_command_tool_spec(
+            parse_llm_command_tool_decl(
+                llm_command_tool_row(
+                    name="sing.sing",
+                    command_id="sing.sing",
+                    description="让牛牛翻唱指定歌曲。",
+                    parameters={
+                        "type": "object",
+                        "properties": {"song": {"type": "string"}},
+                        "required": ["song"],
+                    },
+                    command_template="牛牛唱歌 {song}",
+                    hints=["唱歌", "唱一首", "翻唱", "来一首"],
                 )
             ),
             plugin_name="sing",
@@ -174,11 +194,20 @@ def test_music_selective_catalog_excludes_unrelated_command_tools(monkeypatch) -
             plugin_title="决斗",
         )
     )
-    meta = tool_metadata_for_chat(task="llm_chat", user_text="放首歌，铁花飞")
+    meta = tool_metadata_for_chat(task="llm_chat", user_text="牛牛放一首铁花飞")
     names = {item["function"]["name"] for item in meta.get("tool_schemas") or []}
-    assert "sing__request_song" in names
+    assert names == {"sing__request_song"}
+    assert meta.get("selection_source") == "selective+ranked"
     assert "duel__cage" not in names
     assert "command" not in (meta.get("tool_catalog") or {}).get("selection", {}).get("inferred_domains", [])
+
+    cover_meta = tool_metadata_for_chat(task="llm_chat", user_text="牛牛唱一首铁花飞")
+    cover_names = {item["function"]["name"] for item in cover_meta.get("tool_schemas") or []}
+    assert cover_names == {"sing__sing"}
+
+    ambiguous_meta = tool_metadata_for_chat(task="llm_chat", user_text="牛牛来一首铁花飞")
+    ambiguous_names = {item["function"]["name"] for item in ambiguous_meta.get("tool_schemas") or []}
+    assert ambiguous_names == {"sing__request_song", "sing__sing"}
 
 
 def test_normalize_keeps_command_dispatch_summary() -> None:

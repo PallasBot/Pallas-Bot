@@ -205,6 +205,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
         if not should_eval:
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "ambient_turn_coalesce")
             return
+        persona_speak_bias = 1.0
+        try:
+            from pallas.product.persona.loader import resolve_persona
+
+            persona_speak_bias = float((await resolve_persona(bot_id, group_id)).speak_bias)
+        except Exception:
+            logger.debug("resolve persona speak bias skipped bot={} group={}", bot_id, group_id)
         decision = evaluate_speak_perception(
             plain_text=plain or msg,
             aliases=speak_aliases,
@@ -215,6 +222,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
             ambient_rate=llm_cfg.llm_speak_ambient_rate,
             ambient_min_score=llm_cfg.llm_speak_ambient_min_score,
             ambient_cooldown_sec=llm_cfg.llm_speak_ambient_cooldown_sec,
+            ambient_budget_limit=llm_cfg.llm_speak_ambient_budget_limit,
+            ambient_budget_window_sec=llm_cfg.llm_speak_ambient_budget_window_sec,
+            persona_speak_bias=persona_speak_bias,
             min_alias_len=llm_cfg.llm_speak_min_alias_len,
             group_id=group_id,
             followup_active=followup_active,
@@ -447,6 +457,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
     recent_bot_reply_count = len(recent_reply_texts)
     if not recent_bot_reply_count:
         recent_bot_reply_count = sum(1 for turn in recent_turns if str(getattr(turn, "role", "")) == "assistant")
+    tool_meta = assemble_tool_bundle(task="llm_chat", user_text=focus_text)
+    required_tool_intent = (
+        bool(tool_meta.get("tools_enabled"))
+        and bool(tool_meta.get("tool_schemas"))
+        and str(tool_meta.get("tool_choice_prefer") or "").strip().lower() == "required"
+    )
     necessity = evaluate_reply_necessity_gate(
         text=focus_text,
         is_to_me=is_to_me,
@@ -468,7 +484,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "detail": necessity.detail,
             "speak_trigger": speak_trigger or "to_me",
         })
-    if necessity.decision == "skip":
+    if necessity.decision == "skip" and not required_tool_intent:
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_necessity_skip")
         logger.debug(
             "llm chat reply necessity skip group={} user={} score={} detail={}",
@@ -487,13 +503,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
         recent_texts=recent_plain,
         has_multi_party_overlap=has_multi_party,
     )
-    tool_meta = assemble_tool_bundle(task="llm_chat", user_text=focus_text)
     current_turn_decision = await decide_current_turn_with_model(
         CurrentTurnDecisionInput(
             text=focus_text,
             is_to_me=is_to_me,
             is_explicitly_addressed=speak_trigger in {"mention", "followup"},
             tools_permitted=bool(tool_meta.get("tools_enabled")),
+            required_tool_intent=required_tool_intent,
             recent_bot_reply_count=min(6, recent_bot_reply_count),
             has_multi_party_overlap=has_multi_party,
         ),

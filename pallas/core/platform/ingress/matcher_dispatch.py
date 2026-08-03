@@ -37,6 +37,7 @@ from pallas.core.platform.ingress.message_load import (
     reset_chat_degraded,
     signal_overload,
 )
+from pallas.core.platform.ingress.route_index import RouteResolution, matcher_module_key
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
 
 if TYPE_CHECKING:
@@ -99,6 +100,28 @@ def matcher_dispatch_batches(selected_matchers: list[type]) -> list[list[type]]:
     return [selected_matchers[i : i + batch_size] for i in range(0, len(selected_matchers), batch_size)]
 
 
+def synthetic_llm_command_context(event: Event) -> dict[str, Any] | None:
+    raw = getattr(event, "_pallas_llm_command_context", None)
+    if not isinstance(raw, dict):
+        return None
+    command_id = str(raw.get("command_id") or "").strip()
+    if not command_id:
+        return None
+    return {
+        "command_id": command_id,
+        "source_segment_types": [str(item) for item in raw.get("source_segment_types") or []],
+    }
+
+
+def matcher_log_name(matcher: type) -> str:
+    return str(getattr(matcher, "plugin_name", "") or "<unknown>")
+
+
+def select_synthetic_llm_command_matchers(selected_matchers: list[type], resolution: RouteResolution) -> list[type]:
+    """合成命令仅派发到其路由目标，避免无关 blocker 占满执行通道。"""
+    return [matcher for matcher in selected_matchers if matcher_module_key(matcher) in resolution.matched_modules]
+
+
 async def patched_handle_event(bot: Bot, event: Event) -> None:
     from pallas.core.foundation.logging import compact_inbound_event_log, inbound_event_log_as_debug
 
@@ -123,6 +146,9 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
 
     state: dict[Any, Any] = {}
     dependency_cache: dict[Any, Any] = {}
+    llm_command = synthetic_llm_command_context(event)
+    selected_matcher_modules: list[str] = []
+    acquired_matcher_modules: list[str] = []
 
     try:
         async with nb_message.AsyncExitStack() as stack:
@@ -185,9 +211,12 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
                         stack,
                         dependency_cache,
                         command_traffic=command_traffic,
+                        synthetic_llm_command=llm_command is not None,
                     )
                     if result.acquired:
                         any_matcher_executed = True
+                        if llm_command is not None:
+                            acquired_matcher_modules.append(matcher_log_name(matcher))
                     return
 
                 def handle_stop_propagation(_exc_group) -> None:
@@ -215,8 +244,13 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
                         if apply_dispatch
                         else priority_matchers
                     )
+                    if llm_command is not None and resolution is not None:
+                        selected_matchers = select_synthetic_llm_command_matchers(selected_matchers, resolution)
                     if not selected_matchers:
                         continue
+
+                    if llm_command is not None:
+                        selected_matcher_modules.extend(matcher_log_name(matcher) for matcher in selected_matchers)
 
                     total_considered += len(priority_matchers)
                     total_selected += len(selected_matchers)
@@ -246,6 +280,14 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
                         matchers_considered=total_considered,
                         matchers_selected=total_selected,
                         matchers_run=matchers_run,
+                    )
+                if llm_command is not None:
+                    logger.info(
+                        "LLM 合成命令调度 command={} source_segment_types={} selected_matchers={} acquired_matchers={}",
+                        llm_command["command_id"],
+                        llm_command["source_segment_types"],
+                        selected_matcher_modules,
+                        acquired_matcher_modules,
                     )
 
                 await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)

@@ -369,6 +369,7 @@ def _runtime_metrics() -> dict[str, Any]:
     try:
         import psutil  # type: ignore
 
+        psutil.cpu_percent(interval=None, percpu=True)
         percpu = psutil.cpu_percent(interval=0.0, percpu=True)
         if isinstance(percpu, (list, tuple)) and len(percpu) > 0:
             cpu_per_core = [round(float(min(100.0, max(0.0, float(x)))), 2) for x in percpu]
@@ -468,12 +469,21 @@ def cpu_model() -> str | None:
     try:
         system_name = platform.system()
         if system_name == "Linux":
+            fallback_model: str | None = None
             for line in Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="replace").splitlines():
                 key, sep, value = line.partition(":")
-                if sep and key.strip().lower() in {"model name", "hardware", "model"}:
-                    model = " ".join(value.split())
-                    if model:
-                        return model
+                if not sep:
+                    continue
+                model = " ".join(value.split())
+                if not model:
+                    continue
+                key = key.strip()
+                if key.lower() == "model name":
+                    return model
+                if key in {"Hardware", "Model"} and fallback_model is None:
+                    fallback_model = model
+            if fallback_model:
+                return fallback_model
         elif system_name == "Darwin":
             model = subprocess.check_output(
                 ["sysctl", "-n", "machdep.cpu.brand_string"],

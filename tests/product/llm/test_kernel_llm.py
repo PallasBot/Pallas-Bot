@@ -354,6 +354,10 @@ async def test_tool_loop_one_round(monkeypatch: pytest.MonkeyPatch) -> None:
         metadata={
             "tools_enabled": True,
             "tool_schemas": [{"type": "function", "function": {"name": "demo.echo"}}],
+            "selection_source": "selective+semantic",
+            "soft_recall_confidence": 0,
+            "semantic_recall_confidence": 88,
+            "semantic_recall_candidates": [{"name": "demo.echo", "score": 88}],
             "bot_id": 1,
             "user_id": 2,
             "group_id": 3,
@@ -372,6 +376,12 @@ async def test_tool_loop_one_round(monkeypatch: pytest.MonkeyPatch) -> None:
     assert trace.get("tool_call_count") == 1
     assert trace.get("tool_schema_count") == 1
     assert "demo.echo" in (trace.get("tool_names") or [])
+    assert trace["tool_selection"] == {
+        "source": "selective+semantic",
+        "soft_recall_confidence": 0,
+        "semantic_recall_confidence": 88,
+        "semantic_recall_candidates": [{"name": "demo.echo", "score": 88}],
+    }
     assert trace["rounds"][0]["calls"][0]["tool"] == "demo.echo"
     assert trace["rounds"][0]["calls"][0]["ok"] is True
 

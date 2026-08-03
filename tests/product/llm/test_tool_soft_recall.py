@@ -15,6 +15,7 @@ from pallas.product.llm.tools.registry import (
 )
 from pallas.product.llm.tools.select import infer_tool_domains
 from pallas.product.llm.tools.soft_recall import (
+    SoftRecallHit,
     missing_required_params_for_text,
     select_soft_recall_hits,
 )
@@ -202,3 +203,43 @@ def test_soft_recall_does_not_expand_to_unrelated_tools(monkeypatch) -> None:
 def test_help_hard_domain_for_casual_phrase() -> None:
     assert "help" in infer_tool_domains("有啥功能")
     assert "help" in infer_tool_domains("@有啥功能".replace("@", ""))
+
+
+def test_semantic_recall_falls_back_to_the_best_domain_candidate(monkeypatch) -> None:
+    from pallas.product.llm.tools import registry
+
+    reset_llm_tools_bootstrap_for_tests()
+    monkeypatch.setattr("pallas.product.llm.tools.registry.get_llm_config", lambda: _cfg())
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.registry.get_arknights_kb_config",
+        lambda: type("Kb", (), {"arknights_kb_enabled": True})(),
+    )
+    _register_song_and_duel()
+    register_tool(
+        build_command_tool_spec(
+            parse_llm_command_tool_decl(
+                llm_command_tool_row(
+                    name="sing.sing",
+                    command_id="sing.sing",
+                    description="AI 翻唱指定歌曲。",
+                    parameters={"type": "object", "properties": {"song": {"type": "string"}}},
+                    command_template="牛牛唱歌 {song}",
+                    hints=["唱歌", "翻唱"],
+                )
+            ),
+            plugin_name="sing",
+            plugin_title="唱歌",
+        )
+    )
+    request_song = next(spec for spec in registry.list_registered_tools() if spec.name == "sing.request_song")
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.semantic_recall.select_semantic_recall_hits",
+        lambda *_args, **_kwargs: [SoftRecallHit(spec=request_song, score=88, missing_required=())],
+    )
+
+    catalog = tool_catalog_for_chat(task="llm_chat", user_text="牛牛播一下这首歌")
+
+    assert catalog is not None
+    assert [item.name for item in catalog.tools] == ["sing.request_song"]
+    assert catalog.selection.selection_source == "selective+semantic"
+    assert catalog.selection.semantic_recall_candidates == [{"name": "sing.request_song", "score": 88}]

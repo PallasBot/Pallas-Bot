@@ -36,7 +36,7 @@ def test_search_utterance_infers_web_domain_and_requires_tool(monkeypatch) -> No
     assert "web" in infer_tool_domains(text)
     catalog = tool_catalog_for_chat(task="llm_chat", user_text=text)
     assert catalog is not None
-    assert catalog.selection.selection_source == "selective"
+    assert catalog.selection.selection_source == "selective+ranked"
     assert {item.name for item in catalog.tools} >= {"web.search"}
 
     meta = tool_metadata_for_chat(task="llm_chat", user_text=text)

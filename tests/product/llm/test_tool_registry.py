@@ -120,6 +120,26 @@ def test_build_tools_ui_rows_exposes_source(monkeypatch: pytest.MonkeyPatch) -> 
     assert catalog["count"] == len(rows)
 
 
+def test_catalog_derives_read_only_risk_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_tool_runtime(monkeypatch)
+    registry.clear_tool_registry()
+    registry.register_tool(
+        registry.LlmToolSpec(
+            name="test.read",
+            description="read only",
+            parameters={"type": "object"},
+            domains=frozenset({"test"}),
+            handler=_echo_handler,
+            capabilities=frozenset({"read_only"}),
+        )
+    )
+
+    entry = registry.catalog_entry_for_spec(registry.list_registered_tools()[0])
+
+    assert entry.read_only is True
+    assert entry.reversible is True
+
+
 def test_execute_tool_async_normalizes_non_ok_dict(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_tool_runtime(monkeypatch)
     registry.clear_tool_registry()

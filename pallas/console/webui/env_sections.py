@@ -259,6 +259,8 @@ def _llm_section() -> WebuiEnvSection:
             "llm_speak_ambient_rate": "LLM_SPEAK_AMBIENT_RATE",
             "llm_speak_ambient_min_score": "LLM_SPEAK_AMBIENT_MIN_SCORE",
             "llm_speak_ambient_cooldown_sec": "LLM_SPEAK_AMBIENT_COOLDOWN_SEC",
+            "llm_speak_ambient_budget_limit": "LLM_SPEAK_AMBIENT_BUDGET_LIMIT",
+            "llm_speak_ambient_budget_window_sec": "LLM_SPEAK_AMBIENT_BUDGET_WINDOW_SEC",
             "llm_speak_min_alias_len": "LLM_SPEAK_MIN_ALIAS_LEN",
             "llm_speak_followup_enabled": "LLM_SPEAK_FOLLOWUP_ENABLED",
             "llm_speak_followup_window_sec": "LLM_SPEAK_FOLLOWUP_WINDOW_SEC",

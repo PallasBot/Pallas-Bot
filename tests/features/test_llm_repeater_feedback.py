@@ -546,6 +546,61 @@ def test_list_group_feedback_entries_uses_short_ttl_cache(tmp_path, monkeypatch)
     assert calls["n"] == 0
 
 
+def test_list_group_feedback_entries_updates_loaded_group_without_rescanning_file(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_embedding_cache.prefetch_trigger_embedding",
+        lambda _text: None,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.promotion_candidates.note_feedback_entry_for_promotion",
+        lambda _entry: None,
+    )
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=10001,
+            group_id=55,
+            user_id=1,
+            request_id="index-1",
+            user_text="hi",
+            reply_text="first",
+        )
+    )
+
+    calls = {"n": 0}
+    real_iter = __import__(
+        "pallas.product.llm.repeater_feedback", fromlist=["_iter_feedback_entries"]
+    )._iter_feedback_entries
+
+    def counting_iter(path):
+        calls["n"] += 1
+        yield from real_iter(path)
+
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_feedback._iter_feedback_entries",
+        counting_iter,
+    )
+
+    assert [item.reply_text for item in list_group_feedback_entries(group_id=55, limit=10)] == ["first"]
+
+    append_feedback_entry(
+        build_feedback_entry(
+            bot_id=10001,
+            group_id=55,
+            user_id=2,
+            request_id="index-2",
+            user_text="again",
+            reply_text="second",
+        )
+    )
+
+    assert [item.reply_text for item in list_group_feedback_entries(group_id=55, limit=10)] == [
+        "first",
+        "second",
+    ]
+    assert calls["n"] == 1
+
+
 def test_should_collect_llm_repeater_feedback_rejects_attack_or_plugin_reply() -> None:
     for reply in ("我操你妈。", "匹配失败，积分不足18点", "[CQ:image,file=x]"):
         assert not should_collect_llm_repeater_feedback(

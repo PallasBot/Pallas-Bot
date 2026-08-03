@@ -38,9 +38,13 @@ def open_remote_corpus_budget(monkeypatch):
     )
     mod._shared_client = None
     mod._shared_client_timeout = None
+    mod._shared_contribute_client = None
+    mod._shared_contribute_client_timeout = None
     yield budgets
     mod._shared_client = None
     mod._shared_client_timeout = None
+    mod._shared_contribute_client = None
+    mod._shared_contribute_client_timeout = None
     clear_remote_corpus_budget_state()
 
 
@@ -125,3 +129,32 @@ async def test_contribute_waits_for_remote_budget_slot(open_remote_corpus_budget
         )
     assert open_remote_corpus_budget[-1].kwargs.get("wait") is True
     assert open_remote_corpus_budget[-1].kwargs.get("hot_path") is False
+
+
+@pytest.mark.asyncio
+async def test_contribute_reuses_dedicated_shared_client(monkeypatch):
+    from pallas.product.corpus import community_source as mod
+
+    created: list[object] = []
+
+    class FakeClient:
+        def __init__(self, *, timeout):
+            self.timeout = timeout
+            created.append(self)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_exc):
+            return None
+
+        async def post(self, _url, **_kwargs):
+            return MagicMock(status_code=200)
+
+    monkeypatch.setattr(mod.httpx, "AsyncClient", FakeClient)
+    repo = RemoteCorpusRepository(api_base=PRIMARY_CORPUS_API_BASE, token="pc_test")
+
+    await repo._post_contribute_http({"op": "insert"})
+    await repo._post_contribute_http({"op": "insert"})
+
+    assert len(created) == 1
