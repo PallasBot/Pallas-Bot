@@ -38,7 +38,11 @@ class ToolCatalogEntry(BaseModel):
     audit: ToolAuditInfo = Field(default_factory=ToolAuditInfo)
     estimated_duration_ms: int = 0
     cost_hint: str = ""
+    read_only: bool = False
     approval_required: bool = False
+    reversible: bool = False
+    idempotency_key: str = ""
+    max_execution_ms: int = 10000
     background_ok: bool = False
     display_mode: str = "default"
 
