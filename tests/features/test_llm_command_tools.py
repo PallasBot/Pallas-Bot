@@ -146,6 +146,23 @@ def test_source_segments_for_command_only_adds_self_for_media() -> None:
     assert source_segments_for_command(segments, mode="media") == segments
 
 
+def test_source_segments_for_command_uses_sender_when_only_wake_bot_is_present() -> None:
+    segments = ({"type": "at", "qq": "3879348674"},)
+    assert source_segments_for_command(segments, mode="media", bot_id=3879348674) == (
+        {"type": "text", "text": "自己"},
+    )
+
+
+def test_source_segments_for_command_keeps_an_explicit_subject() -> None:
+    segments = (
+        {"type": "at", "qq": "3879348674"},
+        {"type": "at", "qq": "3023094357"},
+    )
+    assert source_segments_for_command(segments, mode="media", bot_id=3879348674) == (
+        {"type": "at", "qq": "3023094357"},
+    )
+
+
 def test_sanitize_meme_tool_argument_strips_self_and_noise() -> None:
     from pallas.product.llm.tools.plugin_bootstrap import (
         prepare_command_tool_arguments,

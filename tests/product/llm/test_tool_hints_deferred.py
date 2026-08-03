@@ -162,6 +162,26 @@ def test_music_selective_catalog_excludes_unrelated_command_tools(monkeypatch) -
         build_command_tool_spec(
             parse_llm_command_tool_decl(
                 llm_command_tool_row(
+                    name="sing.sing",
+                    command_id="sing.sing",
+                    description="让牛牛翻唱指定歌曲。",
+                    parameters={
+                        "type": "object",
+                        "properties": {"song": {"type": "string"}},
+                        "required": ["song"],
+                    },
+                    command_template="牛牛唱歌 {song}",
+                    hints=["唱歌", "翻唱"],
+                )
+            ),
+            plugin_name="sing",
+            plugin_title="唱歌",
+        )
+    )
+    register_tool(
+        build_command_tool_spec(
+            parse_llm_command_tool_decl(
+                llm_command_tool_row(
                     name="duel.cage",
                     command_id="duel.cage",
                     description="决斗",
@@ -174,9 +194,9 @@ def test_music_selective_catalog_excludes_unrelated_command_tools(monkeypatch) -
             plugin_title="决斗",
         )
     )
-    meta = tool_metadata_for_chat(task="llm_chat", user_text="放首歌，铁花飞")
+    meta = tool_metadata_for_chat(task="llm_chat", user_text="牛牛放一首铁花飞")
     names = {item["function"]["name"] for item in meta.get("tool_schemas") or []}
-    assert "sing__request_song" in names
+    assert names == {"sing__request_song"}
     assert "duel__cage" not in names
     assert "command" not in (meta.get("tool_catalog") or {}).get("selection", {}).get("inferred_domains", [])
 

@@ -25,7 +25,7 @@ from pallas.product.llm.tools.overrides import (
     load_tool_overrides,
     tool_override_disabled,
 )
-from pallas.product.llm.tools.select import infer_tool_domains
+from pallas.product.llm.tools.select import infer_tool_domains, preferred_tool_names
 
 if TYPE_CHECKING:
     from pallas.product.llm.tools.context import ToolInvokeContext
@@ -347,6 +347,11 @@ def tool_catalog_for_chat(
             selection_source = "selective+inventory"
         elif selection_source == "soft_recall":
             selection_source = "soft_recall+inventory"
+    preferred_names = preferred_tool_names(user_text)
+    if preferred_names:
+        preferred_specs = [spec for spec in specs_list if spec.name in preferred_names]
+        if preferred_specs:
+            specs_list = preferred_specs
     if not specs_list:
         return None
     entries = [catalog_entry_for_spec(spec) for spec in specs_list]

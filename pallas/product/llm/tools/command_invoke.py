@@ -114,12 +114,19 @@ def source_segments_for_command(
     segments: tuple[dict[str, Any], ...],
     *,
     mode: str,
+    bot_id: int | str | None = None,
 ) -> tuple[dict[str, Any], ...]:
-    """仅素材型命令携带原消息素材；无素材时才补「自己」给生成类插件。"""
+    """仅素材型命令携带原消息素材；忽略当前 bot 的唤醒 @。"""
     if mode != "media":
         return ()
-    if segments:
-        return segments
+    current_bot_id = str(bot_id) if bot_id is not None else ""
+    media_segments = tuple(
+        item
+        for item in segments
+        if not (current_bot_id and item.get("type") == "at" and str(item.get("qq") or "") == current_bot_id)
+    )
+    if media_segments:
+        return media_segments
     return ({"type": "text", "text": "自己"},)
 
 
@@ -200,6 +207,7 @@ async def dispatch_group_command_text(
     source_segments = source_segments_for_command(
         ctx.source_segments,
         mode=source_segments_mode,
+        bot_id=ctx.bot_id,
     )
     event = build_synthetic_group_event(
         bot_id=ctx.bot_id,
