@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import copy
 import json
+import re
 import time
 import uuid
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
 from pallas.core.foundation.paths import plugin_data_dir
+
+_RETIRED_PERSONA_DEBUG_SECTION_RE = re.compile(
+    r"(?ms)^【(?:本轮牛格塑形|情境触发|语料收尾参考|收尾变化参考)】.*?(?=^【|\Z)"
+)
+_RETIRED_PERSONA_DEBUG_SECTION_NAMES = ("本轮牛格塑形", "情境触发", "语料收尾参考", "收尾变化参考")
+_RETIRED_PERSONA_DEBUG_FIELDS = ("dynamic_expression", "compare_note", "corpus_ending")
 
 
 def runtime_debug_dir() -> Path:
@@ -253,6 +261,67 @@ def load_runtime_debug_bundle(*, request_id: str) -> dict[str, Any]:
             agent_trace=trace if isinstance(trace, dict) else None,
         ),
     }
+
+
+def build_runtime_debug_webui_view(bundle: dict[str, Any]) -> dict[str, Any]:
+    """Hide retired prompt-shaping details from the console without changing replay input."""
+    view = copy.deepcopy(bundle)
+    snapshot = view.get("snapshot")
+    removed_sections: list[str] = []
+    removed_summary_fields: set[str] = set()
+    if isinstance(snapshot, dict):
+        system_prompt = snapshot.get("system_prompt")
+        removed_sections = _retired_persona_debug_sections(system_prompt)
+        snapshot["system_prompt"] = _strip_retired_persona_debug_sections(system_prompt)
+        removed_summary_fields.update(_sanitize_persona_shaping_summary(snapshot.get("persona_shaping")))
+        stage_inputs = snapshot.get("stage_inputs")
+        if isinstance(stage_inputs, dict):
+            generate = stage_inputs.get("generate")
+            if isinstance(generate, dict):
+                removed_summary_fields.update(_sanitize_persona_shaping_summary(generate.get("persona_shaping")))
+    removed_summary_fields.update(_sanitize_persona_shaping_summary(view.get("persona_shaping")))
+    view["debug_view"] = {
+        "retired_persona_cleanup": {
+            "system_prompt_sections": removed_sections,
+            "persona_summary_fields": sorted(removed_summary_fields),
+        }
+    }
+    return view
+
+
+def _strip_retired_persona_debug_sections(value: object) -> str:
+    return _RETIRED_PERSONA_DEBUG_SECTION_RE.sub("", str(value or "")).strip()
+
+
+def _retired_persona_debug_sections(value: object) -> list[str]:
+    plain = str(value or "")
+    return [name for name in _RETIRED_PERSONA_DEBUG_SECTION_NAMES if f"【{name}】" in plain]
+
+
+def _sanitize_persona_shaping_summary(value: object) -> tuple[str, ...]:
+    if not isinstance(value, dict):
+        return ()
+    removed: list[str] = []
+    for field in _RETIRED_PERSONA_DEBUG_FIELDS:
+        if field in value:
+            value.pop(field)
+            removed.append(field)
+    affect_block = str(value.get("affect_block") or "").strip()
+    variation_hint = str(value.get("variation_hint") or "").strip()
+    if affect_block.startswith("【本轮牛格塑形】"):
+        for field in ("affect_block", "lines"):
+            if field in value:
+                value.pop(field)
+                removed.append(field)
+        affect_block = ""
+    if variation_hint.startswith("【收尾变化参考】"):
+        if "variation_hint" in value:
+            value.pop("variation_hint")
+            removed.append("variation_hint")
+        variation_hint = ""
+    if "persona_shaping_active" in value:
+        value["persona_shaping_active"] = bool(affect_block or variation_hint)
+    return tuple(removed)
 
 
 def build_replay_payload(*, request_id: str, mode: str = "mock_tools") -> dict[str, Any]:
