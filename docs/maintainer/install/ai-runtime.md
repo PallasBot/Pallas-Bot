@@ -110,7 +110,13 @@ AI 镜像仅用于媒体 / RWKV。Ollama 模型默认不预拉（`--profile pull
 
 ### 手动补充 DDSP-SVC 多版本（可选）
 
-默认安装只会检出 **一份** 唱歌推理代码：`app/workers/sing/DDSP-SVC`（对应 **6.2**）。控制台「优先后端」若选 `ddsp_6.3` / `ddsp_6.1`，需要本地另有对应目录；新版本 Runtime 可在缺脚本时后台自动拉取，直连 GitHub 失败时也可按下述**手动**安装。
+默认安装只会检出 **一份** 唱歌推理代码：`app/workers/sing/DDSP-SVC`（对应 **6.2**）。`ai_bootstrap.sh` 会初始化它；若源码仓已存在但该目录为空，可在 AI Runtime 根目录恢复默认子模块：
+
+```bash
+git submodule update --init app/workers/sing/DDSP-SVC
+```
+
+控制台「优先后端」若选 `ddsp_6.3` / `ddsp_6.1`，需要本地另有对应目录；新版本 Runtime 可在缺脚本时后台自动拉取，直连 GitHub 失败时也可按下述**手动**安装。
 
 | 版本 | 优先后端 ID | 本地目录 | Git 分支 |
 | --- | --- | --- | --- |
@@ -155,6 +161,17 @@ git clone --depth 1 --branch 6.3 https://github.com/PallasBot/DDSP-SVC.git app/w
 控制台「AI 配置 → 媒体」可为**每个音色**单独指定优先推理（`speaker_backends`）。官方 `pallas`（`config.yaml` 里 `RectifiedFlow`）对应 **6.2**，建议选 `ddsp_6.2`；**6.1** 只给旧扩散权重用，不是现网官方音色。
 :::
 
+#### DDSP 权重与音色
+
+优先在控制台 **AI 配置 → 媒体 → 媒体资产** 下载官方 `sing_pallas` 和 `sing_pretrain`：前者提供官方 `pallas` 音色，后者提供 DDSP 预训练资产。自备 DDSP 音色必须将 `*.pt` 与同目录 `config.yaml` 一起放入 `resource/sing/models/<音色 id>/`；缺少 `config.yaml` 时推理会失败。
+
+| 后端 | 音色 | 必需共享权重 |
+| --- | --- | --- |
+| `ddsp_6.2` / `ddsp_6.1` | `resource/sing/models/<id>/<name>.pt` + `config.yaml` | `resource/sing/models/pretrain/contentvec/checkpoint_best_legacy_500.pt`、`resource/sing/models/pretrain/rmvpe/model.pt`，以及音色 `config.yaml` 指向的 NSF / PC-NSF HiFiGAN 目录 |
+| `ddsp_6.3` | 同上；权重需由 6.3 训练 | `resource/sing/models/pretrain/contentvec/pytorch_model.bin`；首次使用会从 [lengyue233/content-vec-best](https://huggingface.co/lengyue233/content-vec-best) 自动下载 |
+
+不要跨版本混用 DDSP `.pt`。`sing_pretrain` 是默认来源；若手工准备，请以该音色的 `config.yaml` 中 `encoder_ckpt` 与 vocoder 路径为准。
+
 ### 社区 RVC 音色（可选第三后端）
 
 唱歌 registry 在 DDSP / SoVITS 之外支持 **`rvc`**：社区常见 `.pth`（+ 可选 `.index`）可直接当 Speaker。回退顺序默认 `DDSP → RVC → SoVITS`；仅有 `.pth` 的目录不会误进 DDSP（DDSP 认 `*.pt`）。
@@ -166,14 +183,39 @@ git clone --depth 1 --branch 6.3 https://github.com/PallasBot/DDSP-SVC.git app/w
 | 音色目录 | `resource/sing/models/<id>/*.pth`，可选同 stem 或唯一一个 `*.index` |
 | 共享资产 | `resource/sing/models/pretrain/rvc/hubert_base/`、`rmvpe.pt`（[lj1995/VoiceConversionWebUI](https://huggingface.co/lj1995/VoiceConversionWebUI)） |
 
+在 AI Runtime 根目录初始化引擎、安装依赖并下载共享权重：
+
 ```bash
 cd /path/to/pallas-bot-ai
 git submodule update --init app/workers/sing/RVC
-# 下载 hubert_base + rmvpe.pt 到 resource/sing/models/pretrain/rvc/
-uv sync --group sing   # 含 faiss-cpu
+uv sync --group sing   # 含 av、faiss-cpu、ffmpeg-python
+python -m pip install --upgrade huggingface_hub
+hf download lj1995/VoiceConversionWebUI --revision main \
+  --include "hubert_base/*" --local-dir resource/sing/models/pretrain/rvc
+hf download lj1995/VoiceConversionWebUI rmvpe.pt --revision main \
+  --local-dir resource/sing/models/pretrain/rvc
 ```
 
-控制台优先后端可选 `rvc`。v1/v2 从 checkpoint 元数据识别，无需手填。细节见 AI 仓 [Deployment.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/Deployment.md)。
+下载完成后应是：
+
+```text
+resource/sing/models/pretrain/rvc/
+├── hubert_base/
+│   ├── config.json
+│   ├── preprocessor_config.json
+│   └── pytorch_model.bin
+└── rmvpe.pt
+```
+
+若已有旧版 fairseq `hubert_base.pt`，可放在 `resource/sing/models/pretrain/rvc/hubert_base.pt`（或 `hubert_base/hubert_base.pt`），再执行：
+
+```bash
+uv run python tools/convert_rvc_hubert.py
+```
+
+它会生成上述 Transformers `hubert_base/` 目录。Windows 无软链接权限时，也可直接将同一批文件放到 `app/workers/sing/RVC/assets/hubert_base/` 与 `app/workers/sing/RVC/assets/rmvpe/rmvpe.pt`。
+
+控制台优先后端可选 `rvc`。v1/v2 从 checkpoint 元数据识别，无需手填。RVC 音色必须使用可推理的 `*.pth`，不要放训练过程的 `G_*.pth`；`.index` 可选。细节见 AI 仓 [Deployment.md](https://github.com/PallasBot/Pallas-Bot-AI/blob/main/docs/Deployment.md)。
 
 ## 接入前核对（媒体）
 
