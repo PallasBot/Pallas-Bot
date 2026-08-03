@@ -101,20 +101,11 @@ def note_expression_from_utterance(group_id: int, text: str, **meta: object) -> 
     if not cfg.llm_expression_learn_enabled:
         return None
     source = str(meta.get("source") or "llm_success")
+    # 模型自己的成功回复不再反向沉淀为可注入表达资产。
+    if source == "llm_success":
+        return None
     target_group_id = int(group_id)
     bot_id = int(meta.get("bot_id") or 0)
-    # 口癖：从完整成功回复抽短习惯，不依赖表达库截断句
-    if source == "llm_success" and bot_id > 0 and target_group_id > 0:
-        try:
-            from pallas.product.persona.catchphrase_bank import (
-                propose_catchphrases_from_utterance,
-                schedule_llm_catchphrase_mine,
-            )
-
-            propose_catchphrases_from_utterance(bot_id, target_group_id, text)
-            schedule_llm_catchphrase_mine(bot_id, target_group_id, text)
-        except Exception:
-            pass
     draft = propose_expression_from_utterance(
         text,
         source=source,
@@ -125,16 +116,7 @@ def note_expression_from_utterance(group_id: int, text: str, **meta: object) -> 
         return None
     if target_group_id <= 0:
         return None
-    saying = draft.saying
     support = 1
-    if source == "llm_success":
-        cooldown = max(0, int(getattr(cfg, "llm_expression_learn_cooldown_sec", 300) or 0))
-        now = int(time.time())
-        key = (target_group_id, saying)
-        last = _LLM_SUCCESS_LEARN_AT.get(key)
-        if cooldown > 0 and last is not None and now - last < cooldown:
-            return None
-        _LLM_SUCCESS_LEARN_AT[key] = now
     entry = draft.model_copy(
         update={
             "entry_id": build_entry_id(target_group_id, (draft.occasion, draft.saying)),
@@ -144,13 +126,6 @@ def note_expression_from_utterance(group_id: int, text: str, **meta: object) -> 
         }
     )
     saved = append_or_merge_expression(entry)
-    if saved.source == "llm_success":
-        try:
-            from pallas.product.persona.expression_promote import maybe_auto_promote_for_group
-
-            maybe_auto_promote_for_group(target_group_id)
-        except Exception:
-            pass
     return saved
 
 

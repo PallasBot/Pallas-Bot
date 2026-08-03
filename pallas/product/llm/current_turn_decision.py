@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from pallas.product.llm.reply_necessity import has_reply_obligation, is_low_value_social_turn
 
 
 class CurrentTurnAction(StrEnum):
@@ -14,6 +18,17 @@ class CurrentTurnAction(StrEnum):
     FOLLOW_UP = "FOLLOW_UP"
 
 
+class CurrentTurnSocialAction(StrEnum):
+    ACK = "ACK"
+    JOKE = "JOKE"
+    STANCE = "STANCE"
+    ANSWER = "ANSWER"
+    ASK_ONE = "ASK_ONE"
+
+
+ReplyTarget = Literal["fact", "emotion", "short_tease", "answer", "silent"]
+
+
 class CurrentTurnDecisionInput(BaseModel):
     """Only current-turn, non-identifying fields may enter this decision."""
 
@@ -21,19 +36,24 @@ class CurrentTurnDecisionInput(BaseModel):
 
     text: str = Field(max_length=4000)
     is_to_me: bool = False
+    is_explicitly_addressed: bool = False
     tools_permitted: bool = False
+    recent_bot_reply_count: int = Field(default=0, ge=0, le=6)
+    has_multi_party_overlap: bool = False
 
 
 class CurrentTurnModelResponse(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     action: CurrentTurnAction
+    social_action: CurrentTurnSocialAction = CurrentTurnSocialAction.ANSWER
 
 
 class CurrentTurnDecisionTrace(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     action: CurrentTurnAction
+    social_action: CurrentTurnSocialAction
     source: str
     reason: str
 
@@ -42,17 +62,88 @@ class CurrentTurnDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action: CurrentTurnAction
+    social_action: CurrentTurnSocialAction
     trace: CurrentTurnDecisionTrace
+
+
+_SHORT_SOCIAL_MEMORY_TURN_RE = re.compile(r"(?:烦|唉|累|难受|没绷住|服了|崩溃)[，,。.!！?？~～\s]*$")
+
+
+def should_pass_low_value_social_turn(text: str) -> bool:
+    """Allow short, non-request social turns to end without a generated reply."""
+    return is_low_value_social_turn(text)
+
+
+def should_read_persistent_memory_for_turn(
+    text: str,
+    social_action: CurrentTurnSocialAction | str,
+) -> bool:
+    """Keep retrieval out of short social turns without changing reply routing."""
+    action = str(getattr(social_action, "value", social_action) or "").strip().upper()
+    if action in {CurrentTurnSocialAction.ACK.value, CurrentTurnSocialAction.JOKE.value}:
+        return False
+    current = str(text or "").strip()
+    return not (len(current) <= 24 and bool(_SHORT_SOCIAL_MEMORY_TURN_RE.search(current)))
+
+
+def resolve_reply_target(
+    text: str,
+    *,
+    action: CurrentTurnAction | str,
+    social_action: CurrentTurnSocialAction | str,
+) -> ReplyTarget:
+    """Choose a compact, current-turn-only generation target."""
+    action_value = str(getattr(action, "value", action) or "").strip().upper()
+    social_value = str(getattr(social_action, "value", social_action) or "").strip().upper()
+    plain = str(text or "").strip()
+    if action_value == CurrentTurnAction.PASS.value:
+        return "silent"
+    if social_value == CurrentTurnSocialAction.ACK.value:
+        if _SHORT_SOCIAL_MEMORY_TURN_RE.search(plain):
+            return "emotion"
+        return "fact"
+    if social_value == CurrentTurnSocialAction.JOKE.value:
+        return "short_tease"
+    if has_reply_obligation(plain) or social_value in {
+        CurrentTurnSocialAction.ANSWER.value,
+        CurrentTurnSocialAction.ASK_ONE.value,
+        CurrentTurnSocialAction.STANCE.value,
+    }:
+        return "answer"
+    return "fact"
+
+
+def build_reply_target_instruction(target: ReplyTarget | str) -> str:
+    """Return a per-request guardrail without changing the base persona."""
+    instructions = {
+        "fact": "只回应当前句明确说到的事，不扩成评价、鼓励、邀约或新话题。",
+        "emotion": "只顺手接住当前情绪，一两句即可；不解释、建议或收尾。",
+        "short_tease": "只围绕当前句开一个短玩笑，不引入角色背景、动作描写、邀约或新话题。",
+        "answer": "直接回答当前问题或请求；角色只影响措辞，不改变话题或补出新安排。",
+    }
+    return instructions.get(str(target or "").strip().lower(), "")
 
 
 def build_current_turn_decision_prompt(turn: CurrentTurnDecisionInput) -> str:
     """Build the compact classifier prompt without conversation history."""
     tool_option = "TOOL is available" if turn.tools_permitted else "TOOL is unavailable"
-    addressed = "directly addressed to the bot" if turn.is_to_me else "not directly addressed to the bot"
+    addressed = (
+        "directly addressed to the bot"
+        if turn.is_to_me or turn.is_explicitly_addressed
+        else "not directly addressed to the bot"
+    )
     return (
-        "Classify only this current message. Reply with JSON only: "
-        '{"action":"REPLY|PASS|TOOL|FOLLOW_UP"}. '
+        "Classify this current chat turn. Reply with JSON only: "
+        '{"action":"REPLY|PASS|TOOL|FOLLOW_UP","social_action":"ACK|JOKE|STANCE|ANSWER|ASK_ONE"}. '
+        "social_action is the visible conversational move, not a writing style. "
+        "ACK is for a short vent, acknowledgement, or low-stakes reaction. "
+        "JOKE is for banter or a playful reaction. "
+        "For a short ACK or JOKE without a question or request, use PASS. "
+        "STANCE is only for an explicit request for an opinion or choice. "
+        "ANSWER is for a direct question, and ASK_ONE is only for a necessary clarification. "
         f"The message is {addressed}; {tool_option}. "
+        f"The bot has replied {turn.recent_bot_reply_count} time(s) recently; "
+        f"multi-party overlap is {turn.has_multi_party_overlap}. "
         f"Message: {turn.text}"
     )
 
@@ -72,7 +163,35 @@ def decide_current_turn(
         return _decision(CurrentTurnAction.REPLY, source="fallback", reason="invalid_model_response")
     if parsed.action is CurrentTurnAction.TOOL and not turn.tools_permitted:
         return _decision(CurrentTurnAction.REPLY, source="fallback", reason="tool_not_permitted")
-    return _decision(parsed.action, source="model", reason="model_action")
+    if (
+        parsed.action is CurrentTurnAction.PASS
+        and (turn.is_to_me or turn.is_explicitly_addressed)
+        and has_reply_obligation(turn.text)
+    ):
+        return _decision(
+            CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.ANSWER,
+            source="rule",
+            reason="addressed_obligation_reply",
+        )
+    if (
+        parsed.action is CurrentTurnAction.REPLY
+        and parsed.social_action in {CurrentTurnSocialAction.ACK, CurrentTurnSocialAction.JOKE}
+        and should_pass_low_value_social_turn(turn.text)
+    ):
+        reason = "low_value_ack_pass" if parsed.social_action is CurrentTurnSocialAction.ACK else "low_value_joke_pass"
+        return _decision(
+            CurrentTurnAction.PASS,
+            social_action=parsed.social_action,
+            source="rule",
+            reason=reason,
+        )
+    return _decision(
+        parsed.action,
+        social_action=parsed.social_action,
+        source="model",
+        reason="model_action",
+    )
 
 
 async def decide_current_turn_with_model(
@@ -91,7 +210,9 @@ async def decide_current_turn_with_model(
                 {
                     "role": "system",
                     "content": (
-                        "Return only a JSON object with action. Allowed actions: REPLY, PASS, TOOL, FOLLOW_UP."
+                        "Return only a JSON object with action and social_action. "
+                        "Allowed actions: REPLY, PASS, TOOL, FOLLOW_UP. "
+                        "Allowed social actions: ACK, JOKE, STANCE, ANSWER, ASK_ONE."
                     ),
                 },
                 {"role": "user", "content": build_current_turn_decision_prompt(turn)},
@@ -106,8 +227,24 @@ async def decide_current_turn_with_model(
     return decide_current_turn(turn, model_enabled=True, model_response=content)
 
 
-def _decision(action: CurrentTurnAction, *, source: str, reason: str) -> CurrentTurnDecision:
+def _decision(
+    action: CurrentTurnAction,
+    *,
+    social_action: CurrentTurnSocialAction | None = None,
+    source: str,
+    reason: str,
+) -> CurrentTurnDecision:
+    if social_action is None:
+        social_action = (
+            CurrentTurnSocialAction.ASK_ONE if action is CurrentTurnAction.FOLLOW_UP else CurrentTurnSocialAction.ANSWER
+        )
     return CurrentTurnDecision(
         action=action,
-        trace=CurrentTurnDecisionTrace(action=action, source=source, reason=reason),
+        social_action=social_action,
+        trace=CurrentTurnDecisionTrace(
+            action=action,
+            social_action=social_action,
+            source=source,
+            reason=reason,
+        ),
     )

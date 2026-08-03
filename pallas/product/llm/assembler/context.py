@@ -11,6 +11,7 @@ from pallas.product.llm.memory import (
     enrich_system_with_person_facts,
     enrich_system_with_relationship_context,
 )
+from pallas.product.llm.memory.inject import PersonFactsInjectionResult, RelationshipInjectionResult
 from pallas.product.llm.repeater_persona_context import build_repeater_llm_persona_context
 
 
@@ -30,6 +31,7 @@ async def assemble_direct_chat_context(
     user_id: int,
     query_text: str,
     cfg: Any,
+    allow_persistent_memory: bool = True,
 ) -> DirectChatContext:
     memory_result = await enrich_system_with_memory_context(
         system_prompt,
@@ -37,6 +39,7 @@ async def assemble_direct_chat_context(
         group_id=group_id,
         query_text=query_text,
         cfg=cfg,
+        allow_persistent_memory=allow_persistent_memory,
     )
     knowledge_result = await enrich_system_with_knowledge_sources(
         memory_result.system_prompt,
@@ -46,20 +49,31 @@ async def assemble_direct_chat_context(
         query_text=query_text,
         cfg=cfg,
     )
-    relationship_result = await enrich_system_with_relationship_context(
-        knowledge_result.system_prompt,
-        bot_id=bot_id,
-        group_id=group_id,
-        user_id=user_id,
-        cfg=cfg,
-    )
-    person_facts_result = await enrich_system_with_person_facts(
-        relationship_result.system_prompt,
-        bot_id=bot_id,
-        group_id=group_id,
-        user_id=user_id,
-        cfg=cfg,
-    )
+    if allow_persistent_memory:
+        relationship_result = await enrich_system_with_relationship_context(
+            knowledge_result.system_prompt,
+            bot_id=bot_id,
+            group_id=group_id,
+            user_id=user_id,
+            cfg=cfg,
+        )
+        person_facts_result = await enrich_system_with_person_facts(
+            relationship_result.system_prompt,
+            bot_id=bot_id,
+            group_id=group_id,
+            user_id=user_id,
+            cfg=cfg,
+        )
+    else:
+        skipped_trace = {"hit_count": 0, "sources": [], "skipped_short_social_turn": True}
+        relationship_result = RelationshipInjectionResult(
+            system_prompt=knowledge_result.system_prompt,
+            trace=skipped_trace,
+        )
+        person_facts_result = PersonFactsInjectionResult(
+            system_prompt=knowledge_result.system_prompt,
+            trace=skipped_trace,
+        )
     from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
     from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
 

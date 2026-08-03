@@ -116,6 +116,12 @@ def _ambient_episode_note_hits(
     return candidates
 
 
+def _is_current_turn_auto_episode_echo(query_text: str, content: str) -> bool:
+    query = "".join(char for char in str(query_text or "") if char.isalnum())
+    note = "".join(char for char in str(content or "") if char.isalnum())
+    return len(query) >= 6 and query == note
+
+
 async def enrich_system_with_memory_context(
     system_prompt: str,
     *,
@@ -123,12 +129,28 @@ async def enrich_system_with_memory_context(
     group_id: int | None,
     query_text: str,
     cfg: LlmConfig | None = None,
+    allow_persistent_memory: bool = True,
 ) -> MemoryInjectionResult:
     c = cfg or get_llm_config()
     empty_trace = {"hit_count": 0, "sources": [], "entries": []}
+    if not allow_persistent_memory:
+        return MemoryInjectionResult(
+            system_prompt=system_prompt,
+            trace={**empty_trace, "skipped_short_social_turn": True},
+        )
     if not can_read_persistent_memory(c) or not c.llm_memory_rag_enabled:
         return MemoryInjectionResult(system_prompt=system_prompt, trace=empty_trace)
     hits = await retrieve_memory_hits(bot_id, group_id, query_text, cfg=c)
+    skipped_current_turn_echoes = 0
+    filtered_hits: list[dict[str, Any]] = []
+    for item in hits:
+        source = str(item.get("source") or "").strip()
+        content = str(item.get("content") or "").strip()
+        if source == "auto_episode" and _is_current_turn_auto_episode_echo(query_text, content):
+            skipped_current_turn_echoes += 1
+            continue
+        filtered_hits.append(item)
+    hits = filtered_hits
     top_k = max(1, min(int(c.llm_memory_rag_top_k), 8))
     min_score = effective_memory_rag_min_score(c)
     # 仅在持久记忆无命中时用 ambient 补，避免硬凑满 3 条噪声
@@ -142,6 +164,9 @@ async def enrich_system_with_memory_context(
             if int(hit.get("score") or 0) < min_score:
                 continue
             content = str(hit.get("content") or "").strip()
+            if _is_current_turn_auto_episode_echo(query_text, content):
+                skipped_current_turn_echoes += 1
+                continue
             if any(str(item.get("content") or "").strip() == content for item in hits):
                 continue
             hits.append(hit)
@@ -166,6 +191,7 @@ async def enrich_system_with_memory_context(
             for item in hits
             if str(item.get("content") or "").strip()
         ],
+        "skipped_current_turn_echoes": skipped_current_turn_echoes,
     }
     from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
 

@@ -23,6 +23,7 @@ class ChatSubmitRequest(BaseModel):
     hybrid_retrieval_trace: dict[str, Any] | None = None
     llm_rewrite_metadata: dict[str, Any] | None = None
     tool_metadata: dict[str, Any] | None = None
+    include_session_history: bool = True
     # 措辞相关临时提示（口癖/换风格/同句重回），插在最后一条 user 之前
     style_user_hints: list[str] = Field(default_factory=list)
 

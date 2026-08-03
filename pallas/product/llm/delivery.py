@@ -161,6 +161,7 @@ async def deliver_llm_callback_success(
     parsed_agent_trace: dict | None,
     history_summary: str | None,
     history_keep_messages: int | None,
+    suppress_empty_fallback: bool = False,
 ) -> tuple[str, bool, bool]:
     """处理 LLM 回调文本并投递到群。返回 (reply_text, text_delivered, delivered)。"""
     delivered = bot is not None
@@ -200,7 +201,11 @@ async def deliver_llm_callback_success(
     if task_type == LLM_CHAT_TASK_TYPE and not had_reply_before_filter:
         from pallas.product.llm.chat_empty_fallback import resolve_llm_chat_empty_fallback
 
-        reply_text = resolve_llm_chat_empty_fallback(task, reply_text)
+        reply_text = resolve_llm_chat_empty_fallback(
+            task,
+            reply_text,
+            suppress_empty_fallback=suppress_empty_fallback,
+        )
     if task_type in _REPEATER_CALLBACK_TASKS and reply_text:
         accepted = await evaluate_repeater_callback_text(task, reply_text)
         if not accepted:
@@ -331,6 +336,7 @@ async def deliver_llm_chat_result(
     agent_trace: str | None = None,
     history_summary: str | None = None,
     history_keep_messages: int | None = None,
+    suppress_empty_fallback: bool = False,
 ) -> dict[str, str]:
     """闲聊结果投递（内核直连与 AI HTTP 回调共用）。"""
     from pallas.core.platform.ai_callback.runner import run_ai_callback
@@ -342,4 +348,5 @@ async def deliver_llm_chat_result(
         agent_trace=agent_trace,
         history_summary=history_summary,
         history_keep_messages=history_keep_messages,
+        suppress_empty_fallback=suppress_empty_fallback,
     )

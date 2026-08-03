@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Literal
 
 REPLY_NECESSITY_TRIGGER_SCORE = 50
 # 无 reply cue 时，低于此分不抢话（避免仅靠 back_forth+pool 刷到 25~30）
@@ -16,7 +17,10 @@ _EMOJI_ONLY_RE = re.compile(
     re.UNICODE,
 )
 _DIRECT_REQUEST_TERMS = ("帮我", "帮忙", "能不能", "可以吗", "要不要")
-_QUESTION_TERMS = ("怎么", "如何", "为什么", "有没有", "咋")
+_REPLY_OBLIGATION_RE = re.compile(
+    r"[?？]|(?:怎么|如何|为什么|为啥|吗|么|能不能|可以吗|帮我|回我|快回|谁|什么|哪里|哪儿|哪|咋|"
+    r"怎样|多少|几|有没有|要不要|会不会|是不是|能否|继续|再说|刚才|等等|等下|补一句|先别)"
+)
 _SPAM_PROMO_TERMS = (
     "点击即玩",
     "不用下载",
@@ -51,6 +55,25 @@ _NOISE_RE = re.compile(r"^[\W_\d]{1,6}$", re.UNICODE)
 class ReplyNecessityScore:
     score: int
     detail: str
+
+
+ReplyNecessityGateDecision = Literal["proceed", "skip"]
+
+
+@dataclass(frozen=True, slots=True)
+class ReplyNecessityGateResult:
+    decision: ReplyNecessityGateDecision
+    score: int
+    detail: str
+
+
+def is_low_value_social_turn(text: str) -> bool:
+    plain = str(text or "").strip()
+    return bool(plain) and len(plain) <= 24 and not has_reply_obligation(plain)
+
+
+def has_reply_obligation(text: str) -> bool:
+    return bool(_REPLY_OBLIGATION_RE.search(str(text or "").strip()))
 
 
 def is_noise_fragment(text: str) -> bool:
@@ -108,6 +131,9 @@ def score_reply_necessity(
     bot_recently_replied: bool = False,
     has_recent_back_and_forth: bool = False,
     has_candidate_pool: bool = False,
+    is_mentioned: bool = False,
+    is_followup: bool = False,
+    recent_bot_reply_count: int = 0,
 ) -> ReplyNecessityScore:
     plain = str(text or "").strip()
     score = 0
@@ -116,6 +142,12 @@ def score_reply_necessity(
     if is_to_me:
         score += 55
         parts.append("to_me+55")
+    if is_mentioned:
+        score += 35
+        parts.append("mention+35")
+    if is_followup:
+        score += 25
+        parts.append("followup+25")
     if is_bystander_plain_text(plain, bot_id=bot_id) and not is_to_me:
         score -= 45
         parts.append("bystander-45")
@@ -134,16 +166,27 @@ def score_reply_necessity(
     if any(term in plain for term in _DIRECT_REQUEST_TERMS):
         score += 25
         parts.append("request+25")
-    if any(term in plain for term in _QUESTION_TERMS) or "?" in plain or "？" in plain:
+    if has_reply_obligation(plain):
         score += 20
-        parts.append("question+20")
+        parts.append("obligation+20")
+    if is_low_value_social_turn(plain):
+        score -= 35
+        parts.append("low_social-35")
     if has_recent_back_and_forth:
         score += 15
         parts.append("back_forth+15")
     if has_candidate_pool:
         score += 10
         parts.append("pool+10")
-    if bot_recently_replied and not is_to_me:
+    recent_presence = max(0, min(6, int(recent_bot_reply_count)))
+    if recent_presence:
+        if (is_to_me or is_mentioned or is_followup) and has_reply_obligation(plain):
+            parts.append("bot_presence_exempt")
+        else:
+            penalty = recent_presence * 8
+            score -= penalty
+            parts.append(f"bot_presence-{penalty}")
+    elif bot_recently_replied and not is_to_me:
         score -= 20
         parts.append("bot_recent-20")
     if 2 <= len(plain) <= 24:
@@ -151,3 +194,31 @@ def score_reply_necessity(
         parts.append("len_ok+5")
 
     return ReplyNecessityScore(score=score, detail=",".join(parts) or "base")
+
+
+def evaluate_reply_necessity_gate(
+    *,
+    text: str,
+    is_to_me: bool = False,
+    bot_id: int | None = None,
+    bot_recently_replied: bool = False,
+    has_recent_back_and_forth: bool = False,
+    has_candidate_pool: bool = False,
+    is_mentioned: bool = False,
+    is_followup: bool = False,
+    recent_bot_reply_count: int = 0,
+    threshold: int = REPLY_NECESSITY_TRIGGER_SCORE,
+) -> ReplyNecessityGateResult:
+    scored = score_reply_necessity(
+        text=text,
+        is_to_me=is_to_me,
+        bot_id=bot_id,
+        bot_recently_replied=bot_recently_replied,
+        has_recent_back_and_forth=has_recent_back_and_forth,
+        has_candidate_pool=has_candidate_pool,
+        is_mentioned=is_mentioned,
+        is_followup=is_followup,
+        recent_bot_reply_count=recent_bot_reply_count,
+    )
+    decision: ReplyNecessityGateDecision = "proceed" if scored.score >= int(threshold) else "skip"
+    return ReplyNecessityGateResult(decision=decision, score=scored.score, detail=scored.detail)

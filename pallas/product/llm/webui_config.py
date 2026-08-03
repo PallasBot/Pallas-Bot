@@ -572,11 +572,11 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_current_turn_decision_enabled: bool = Field(
-        default=False,
+        default=True,
         description=field_help(
             "回复前要不要先用小模型想一下「回不回、怎么回、要不要用工具」",
-            "开=多一次决策请求，再决定动作；关=走原来的直接回复流程（默认，不额外花钱）",
-            "关闭时不会发起额外模型请求。开启后请到「接入 → 任务编排」里给「本轮动作决策」选提供方与模型",
+            "开=多一次决策请求，再决定动作（默认）；关=走原来的直接回复流程，不额外花钱",
+            "开启后请到「接入 → 任务编排」里给「本轮动作决策」选提供方与模型",
         ),
     )
     llm_current_turn_decision_model: str = Field(

@@ -272,8 +272,6 @@ def assemble_persona_system(sections: PersonaPromptSections, *, mode: str = "nor
         sections.self_identity,
         sections.preset_layers,
         sections.bot_behavior,
-        sections.group_style,
-        sections.group_expression,
     )
     parts = [section.strip() for section in section_values if section.strip()]
     core = "\n\n".join(parts)
@@ -302,7 +300,15 @@ def compile_persona_prompt(
         max_len=12000,
     )
     seed_prefs, _seed_source = resolve_effective_seed_prefs(bot_persona, int(bot_id))
-    bot_behavior = build_bot_behavior_prompt(persona, profile=profile, seed_prefs=seed_prefs)
+    bot_behavior = (
+        ""
+        if profile == PROMPT_PROFILE_CHAT
+        else build_bot_behavior_prompt(
+            persona,
+            profile=profile,
+            seed_prefs=seed_prefs,
+        )
+    )
     group_style = compile_group_style_prompt(style_profile)
     group_expression = compile_group_expression_prompt(style_profile)
     try:

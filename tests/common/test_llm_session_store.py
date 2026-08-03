@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from pallas.product.llm.behavior import BehaviorAction, BehaviorOutcome, BehaviorPattern, BehaviorRun, BehaviorScene
@@ -121,6 +123,31 @@ async def test_build_llm_chat_messages_user_thread_and_ambient(pg_engine, monkey
     assert "my-new" in messages[-1].content
     assert any("群环境摘录" in item.content for item in messages)
     assert any("my-old" in item.content for item in messages)
+
+
+@pytest.mark.asyncio
+async def test_build_llm_chat_messages_skips_session_context_for_short_social_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_llm_config_cache()
+    cfg = LlmConfig(
+        llm_session_enabled=True,
+        llm_session_user_window=8,
+        llm_session_group_window=4,
+    )
+    ambient_mock = AsyncMock(return_value=[])
+    history_mock = AsyncMock(return_value=[])
+    monkeypatch.setattr("pallas.product.llm.session_store.can_read_runtime_state", lambda _cfg: True)
+    monkeypatch.setattr("pallas.product.llm.session_store.list_group_ambient_messages", ambient_mock)
+    monkeypatch.setattr("pallas.product.llm.session_store.list_user_llm_messages", history_mock)
+
+    messages = await build_llm_chat_messages(1, 100, 300, "没绷住", cfg=cfg, include_history=False)
+
+    assert len(messages) == 1
+    assert messages[0].role == "user"
+    assert "没绷住" in messages[0].content
+    ambient_mock.assert_not_awaited()
+    history_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio

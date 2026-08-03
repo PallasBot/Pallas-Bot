@@ -9,6 +9,7 @@ from pallas.product.llm.reply_variation import (
     classify_repeated_opener,
     extract_recent_motifs,
     repeated_assistant_openers,
+    should_wait_for_more,
 )
 from pallas.product.persona.self_identity import compile_self_identity_prompt
 
@@ -118,7 +119,9 @@ def test_compile_self_identity_prompt_mentions_niu_niu() -> None:
     prompt = compile_self_identity_prompt()
     assert "牛牛" in prompt
     assert "第一人称" in prompt
-    assert "牛牛真棒" in prompt
-    assert "勿用「还行吧」" in prompt
-    assert "谢谢" in prompt
-    assert "收到" in prompt
+    assert "不是物种" in prompt
+
+
+def test_explicit_mention_question_does_not_wait_for_more() -> None:
+    assert should_wait_for_more("你是不是只会哞哞叫？", is_to_me=True) is False
+    assert should_wait_for_more("你是不是只会哞哞叫？") is True

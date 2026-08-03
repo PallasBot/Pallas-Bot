@@ -49,23 +49,29 @@ def test_extract_self_aliases_merges_learned_after_defaults() -> None:
     assert aliases.index("小牛") < aliases.index("阿帕") < aliases.index("牛牛")
 
 
-def test_compile_self_identity_prompt_uses_login_as_primary() -> None:
+def test_compile_self_identity_prompt_keeps_login_nickname_out_of_role_context() -> None:
     prompt = compile_self_identity_prompt(login_nickname="小牛")
-    assert "「小牛」" in prompt
     assert "牛牛" in prompt
-    assert "通称" in prompt
-    assert "专属" in prompt
-    assert "通称：牛牛" in prompt
-    assert "专属称呼：小牛" in prompt
+    assert "登录昵称和学习到的别名只供路由判断" in prompt
+    assert "小牛" not in prompt
 
 
-def test_compile_repeater_self_identity_prompt_uses_login_as_primary() -> None:
+def test_compile_self_identity_prompt_keeps_learned_aliases_out_of_role_context() -> None:
+    prompt = compile_self_identity_prompt(
+        {"self_aliases": ["啥阴", "阿帕"]},
+        login_nickname="小牛",
+    )
+
+    assert "只用于判断是否在叫你" in prompt
+    assert "啥阴" not in prompt
+    assert "阿帕" not in prompt
+
+
+def test_compile_repeater_self_identity_prompt_keeps_login_nickname_out_of_role_context() -> None:
     prompt = compile_repeater_self_identity_prompt(login_nickname="小牛")
-    assert "「小牛」" in prompt
-    assert "牛牛" in prompt or "等" in prompt
-    assert "通称" in prompt
-    assert "专属称呼" in prompt
-    assert "小牛" in prompt
+    assert "牛牛" in prompt
+    assert "登录昵称和学习别名只供路由判断" in prompt
+    assert "小牛" not in prompt
 
 
 def test_compile_repeater_self_identity_prompt_uses_generic_text_without_exclusive(

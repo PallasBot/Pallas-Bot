@@ -38,8 +38,6 @@ _USER_WAIT_TOKENS = ("等等", "等下", "先别", "我补一句", "还有", "�
 _STRUCTURE_MARKERS = ("先", "别", "可以", "不用", "慢慢", "一下", "这事", "你先")
 _GENERIC_PREFIX_MIN_LEN = 3
 _GENERIC_PREFIX_MAX_LEN = 4
-# 兼容旧测试/调用；母题去重已改为短窗统计，不再依赖手维名单。
-DEFAULT_MOTIF_TOKENS = ("草料", "土木", "漂亮牛牛")
 _MOTIF_WINDOW = 6
 _MOTIF_MIN_DOCS = 2
 _MOTIF_LIMIT = 4
@@ -98,7 +96,9 @@ _MOTIF_STOPWORDS = frozenset({
 })
 
 
-def should_wait_for_more(user_text: str) -> bool:
+def should_wait_for_more(user_text: str, *, is_to_me: bool = False) -> bool:
+    if is_to_me:
+        return False
     text = str(user_text or "").strip()
     if not text:
         return False

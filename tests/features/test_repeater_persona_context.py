@@ -26,24 +26,17 @@ async def test_build_repeater_llm_persona_context_polish_lite(monkeypatch) -> No
     async def fake_recent(*args, **kwargs):
         return ["其实还行", "好的"]
 
-    async def fake_dynamic(*args, **kwargs):
-        return "\n【情境触发】测试"
-
     async def fake_resolve_persona(*args, **kwargs):
         return __import__("pallas.product.persona.model", fromlist=["ResolvedPersona"]).ResolvedPersona()
 
-    class FakeGroupRepo:
-        async def get(self, group_id: int):
-            return None
-
     monkeypatch.setattr(mod, "resolve_repeater_base_system", fake_resolve_base)
     monkeypatch.setattr(mod, "load_recent_bot_plain_replies", fake_recent)
-    monkeypatch.setattr(mod, "build_dynamic_expression_hint", fake_dynamic)
     monkeypatch.setattr(mod, "resolve_persona_for_message", fake_resolve_persona)
-    monkeypatch.setattr(mod, "make_group_config_repository", lambda: FakeGroupRepo())
 
     bundle = await mod.build_repeater_llm_persona_context(1, 2, "你怎么又这样", purpose="polish_lite")
     assert bundle is not None
     assert "【接话塑形】" in bundle.system_prompt
+    assert "【情境触发】" not in bundle.system_prompt
+    assert "本群风格" not in bundle.system_prompt
     assert bundle.llm_rewrite_metadata.get("persona_shaping_active") is True
     assert bundle.llm_rewrite_metadata.get("preserve_colloquial_rewrite") is True

@@ -1,4 +1,3 @@
-import asyncio
 import time
 
 from nonebot import logger, on_message
@@ -16,7 +15,6 @@ from pallas.product.llm.assembler.context import assemble_direct_chat_context
 from pallas.product.llm.behavior import (
     build_behavior_hint_text,
     classify_behavior_scene,
-    default_group_chat_behavior_hint,
     select_behavior_patterns,
 )
 from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
@@ -25,15 +23,9 @@ from pallas.product.llm.current_turn_decision import (
     CurrentTurnAction,
     CurrentTurnDecisionInput,
     decide_current_turn_with_model,
+    resolve_reply_target,
+    should_read_persistent_memory_for_turn,
 )
-from pallas.product.llm.dynamic_expression_context import (
-    build_dynamic_expression_hint as build_llm_chat_dynamic_expression_hint,
-)
-from pallas.product.llm.dynamic_expression_context import (
-    extract_chat_trigger_keywords,
-    load_recent_live_expression_rows,
-)
-from pallas.product.llm.feedback_chat_hint import build_group_feedback_chat_hint
 from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
 from pallas.product.llm.kernel import (
@@ -56,24 +48,11 @@ from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.persona_context import build_persona_llm_context
 from pallas.product.llm.polish_lite import submit_corpus_assist_stages
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
-from pallas.product.llm.reply_variation import (
-    build_recent_reply_ending_hint,
-    build_recent_reply_variation_hint,
-    extract_recent_motifs,
-    repeated_assistant_openers,
-    should_wait_for_more,
-)
+from pallas.product.llm.reply_necessity import evaluate_reply_necessity_gate
+from pallas.product.llm.reply_variation import should_wait_for_more
 from pallas.product.llm.session_store import list_user_llm_messages
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
-from pallas.product.persona.affect_kernel import (
-    build_persona_affect_contract,
-    build_persona_affect_system_block,
-    build_variation_hint_from_contract,
-    group_flavor_summary_from_style_snapshot,
-)
-from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
-from pallas.product.persona.expression_habits import build_expression_context_with_entries
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.self_identity import (
     extract_self_aliases,
@@ -85,8 +64,6 @@ from pallas.product.persona.self_identity import (
 
 from . import startup as _startup  # noqa: F401
 from .config import get_llm_chat_config
-from .near_field_scorer import ANSWER_SOURCE as _ANSWER_SOURCE
-from .near_field_scorer import recent_hint_source_label, select_scored_expression_candidates
 from .prompts import get_system_prompt
 from .replies import (
     LLM_CHAT_ALIAS_SAVED_REPLY,
@@ -147,162 +124,6 @@ def resolve_corpus_llm_route(llm_cfg, pool: list[str], candidate: str) -> str:
     return "corpus_fallback"
 
 
-async def build_llm_chat_expression_suffix(
-    group_id: int | None,
-    plain_text: str = "",
-    *,
-    bot_id: int = 0,
-    scene: str = "",
-    blocked_openers: list[str] | None = None,
-    blocked_motifs: list[str] | None = None,
-) -> str:
-    suffix, _entries = await build_llm_chat_expression_selection(
-        group_id,
-        plain_text,
-        bot_id=bot_id,
-        scene=scene,
-        blocked_openers=blocked_openers,
-        blocked_motifs=blocked_motifs,
-    )
-    return suffix
-
-
-async def build_llm_chat_expression_selection(
-    group_id: int | None,
-    plain_text: str = "",
-    *,
-    bot_id: int = 0,
-    scene: str = "",
-    blocked_openers: list[str] | None = None,
-    blocked_motifs: list[str] | None = None,
-) -> tuple[str, list]:
-    if group_id is None:
-        return "", []
-    from pallas.core.foundation.db import make_group_config_repository
-
-    profile = None
-    try:
-        group_config = await make_group_config_repository().get(int(group_id))
-    except Exception:
-        group_config = None
-    if group_config is not None:
-        raw_profile = getattr(group_config, "style_profile", None)
-        profile = raw_profile if isinstance(raw_profile, dict) else None
-    return await build_expression_context_with_entries(
-        int(group_id),
-        plain_text,
-        bot_id=bot_id,
-        scene=scene,
-        style_profile=profile,
-        blocked_openers=blocked_openers,
-        blocked_motifs=blocked_motifs,
-    )
-
-
-def build_llm_chat_ending_hint(turns) -> str:
-    return build_recent_reply_ending_hint(turns)
-
-
-async def build_llm_chat_corpus_ending_hint(
-    group_id: int | None,
-    text: str = "",
-    *,
-    bot_id: int | None = None,
-    current_user_id: int | None = None,
-) -> str:
-    if group_id is None:
-        return ""
-    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
-
-    raw_timeout = repo_env_raw_value("PALLAS_LLM_CORPUS_ENDING_HINT_TIMEOUT_SEC")
-    try:
-        timeout = 0.35 if raw_timeout is None else max(0.0, float(str(raw_timeout).strip()))
-    except ValueError:
-        timeout = 0.35
-    if timeout <= 0:
-        return await _build_llm_chat_corpus_ending_hint_uncapped(
-            group_id,
-            text,
-            bot_id=bot_id,
-            current_user_id=current_user_id,
-        )
-    try:
-        import asyncio
-
-        return await asyncio.wait_for(
-            _build_llm_chat_corpus_ending_hint_uncapped(
-                group_id,
-                text,
-                bot_id=bot_id,
-                current_user_id=current_user_id,
-            ),
-            timeout=timeout,
-        )
-    except TimeoutError:
-        return ""
-
-
-async def _build_llm_chat_corpus_ending_hint_uncapped(
-    group_id: int | None,
-    text: str = "",
-    *,
-    bot_id: int | None = None,
-    current_user_id: int | None = None,
-) -> str:
-    if group_id is None:
-        return ""
-    recent_rows = await load_recent_live_expression_rows(
-        int(group_id),
-        text,
-        bot_id=bot_id,
-        current_user_id=current_user_id,
-    )
-    near_field_rows = list(recent_rows)
-
-    try:
-        from pallas.core.foundation.db.context_repo_access import get_shared_context_repository
-    except Exception:
-        repo = None
-    else:
-        repo = get_shared_context_repository()
-
-    answer_rows: list[dict[str, object]] = []
-    list_answers = getattr(repo, "list_answers_for_group_since", None) if repo is not None else None
-    if callable(list_answers):
-        try:
-            answers = await list_answers(int(group_id), 0)
-        except Exception:
-            answers = []
-        for ans in answers:
-            messages = getattr(ans, "messages", None) or []
-            sample = str(messages[0] if messages else getattr(ans, "keywords", "") or "").strip()
-            answer_rows.append({
-                "text": sample,
-                "count": int(getattr(ans, "count", 0) or 0),
-                "keywords": str(getattr(ans, "keywords", "") or "").strip(),
-                "source": _ANSWER_SOURCE,
-                "time": int(getattr(ans, "time", 0) or 0),
-                "topic_hits": 0,
-            })
-
-    trigger_keywords = extract_chat_trigger_keywords(text)
-    target_stance = infer_expression_affect_stance(text)
-    merged_rows = near_field_rows + answer_rows
-    candidates = select_scored_expression_candidates(
-        merged_rows,
-        target_stance=target_stance,
-        trigger_keywords=trigger_keywords,
-        query_text=text,
-        limit=3,
-        reference_min_len=2,
-        reference_min_cjk=2,
-    )
-    if not candidates:
-        return ""
-    label = recent_hint_source_label(merged_rows, trigger_keywords)
-    return "\n【语料收尾参考】" + label + "：" + "、".join(candidates) + "。"
-
-
 async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id: int) -> str:
     try:
         turns = await list_user_llm_messages(bot_id, group_id, user_id, limit=6)
@@ -312,38 +133,6 @@ async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id:
         if str(getattr(turn, "role", "")).strip() == "assistant":
             return str(getattr(turn, "content", "") or "").strip()
     return ""
-
-
-def build_blocked_motifs(
-    *,
-    recent_turns,
-    recent_group_rows,
-    bot_id: int,
-) -> list[str]:
-    group_texts: list[str] = []
-    target_bot_id = int(bot_id)
-    for row in recent_group_rows or ():
-        if isinstance(row, str):
-            plain = row.strip()
-            if plain and "[CQ:" not in plain:
-                group_texts.append(plain)
-            continue
-        plain = str(row.get("text", "") if isinstance(row, dict) else getattr(row, "text", "")).strip()
-        if not plain or "[CQ:" in plain:
-            continue
-        role = str(row.get("role", "") if isinstance(row, dict) else getattr(row, "role", "")).strip()
-        row_user_id = int(row.get("user_id", 0) if isinstance(row, dict) else getattr(row, "user_id", 0) or 0)
-        row_bot_id = int(row.get("bot_id", 0) if isinstance(row, dict) else getattr(row, "bot_id", 0) or 0)
-        if role == "assistant" or row_user_id == target_bot_id or row_bot_id == target_bot_id:
-            group_texts.append(plain)
-    motifs = extract_recent_motifs(group_texts)
-    if motifs:
-        return motifs
-    return extract_recent_motifs([
-        str(getattr(turn, "content", "") or "").strip()
-        for turn in recent_turns
-        if str(getattr(turn, "role", "")).strip() == "assistant"
-    ])
 
 
 @llm_chat_msg.handle()
@@ -523,19 +312,6 @@ async def handle_llm_chat(bot: Bot, event: Event):
         await llm_chat_msg.send(LLM_CHAT_VAGUE_REPLY)
         return
 
-    assembled_context = await assemble_direct_chat_context(
-        system_prompt,
-        bot_id=int(bot.self_id),
-        group_id=group_id,
-        user_id=user_id,
-        query_text=plain or msg,
-        cfg=llm_cfg,
-    )
-    system_prompt = assembled_context.system_prompt
-    knowledge_retrieval_trace = assembled_context.knowledge_retrieval_trace
-    hybrid_retrieval_trace = assembled_context.hybrid_retrieval_trace
-    expression_suffix = ""
-
     persona_for_gate = None
     if persona_bundle is not None:
         try:
@@ -546,9 +322,6 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 persona_for_gate = ResolvedPersona(**persona_raw)
         except Exception:
             persona_for_gate = None
-
-    user_warmth_delta = float(assembled_context.relationship_trace.get("warmth_delta") or 0.0)
-    user_assertiveness_delta = float(assembled_context.relationship_trace.get("assertiveness_delta") or 0.0)
 
     gate_result = evaluate_llm_reply_gate_result(
         plain or msg,
@@ -569,7 +342,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             gate_result.reason,
         )
         return
-    if should_wait_for_more(plain or msg):
+    if should_wait_for_more(plain or msg, is_to_me=is_to_me):
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_defer")
         logger.debug("llm chat wait-for-more group={} user={}", group_id, user_id)
         return
@@ -637,7 +410,6 @@ async def handle_llm_chat(bot: Bot, event: Event):
 
     request_id = str(ULID())
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
-    blocked_openers = repeated_assistant_openers(recent_turns)
     recent_reply_texts: list[str] = []
     if group_id is not None:
         from pallas.product.llm.repeater_persona_context import load_recent_bot_plain_replies
@@ -650,11 +422,6 @@ async def handle_llm_chat(bot: Bot, event: Event):
             )
         except Exception:
             recent_reply_texts = []
-    blocked_motifs = build_blocked_motifs(
-        recent_turns=recent_turns,
-        recent_group_rows=recent_reply_texts,
-        bot_id=int(bot.self_id),
-    )
     focus_text = plain or msg
     recent_plain = [str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]]
     has_multi_party = (
@@ -669,15 +436,6 @@ async def handle_llm_chat(bot: Bot, event: Event):
         recent_texts=recent_plain,
         has_multi_party_overlap=has_multi_party,
     )
-    expression_suffix, selected_expression_entries = await build_llm_chat_expression_selection(
-        group_id,
-        focus_text,
-        bot_id=int(bot.self_id),
-        scene=str(behavior_scene),
-        blocked_openers=blocked_openers,
-        blocked_motifs=blocked_motifs,
-    )
-    selected_expression_ids = [item.entry_id for item in selected_expression_entries]
     from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
 
     system_prompt = enrich_system_with_situational_rules(
@@ -685,31 +443,41 @@ async def handle_llm_chat(bot: Bot, event: Event):
         focus_text=focus_text,
         recent_texts=recent_plain,
     )
-    variation_hint = build_recent_reply_variation_hint(recent_turns)
-    affect_system_block = ""
-    if persona_for_gate is not None:
-        group_flavor = ""
-        group_style = getattr(persona_bundle.metadata, "group_style", None)
-        if persona_bundle is not None and isinstance(group_style, dict):
-            group_flavor = group_flavor_summary_from_style_snapshot(group_style)
-        affect_contract = build_persona_affect_contract(
-            persona_for_gate,
-            group_flavor_summary=group_flavor,
-            repeated_openers=blocked_openers,
-            user_warmth_delta=user_warmth_delta,
-            user_assertiveness_delta=user_assertiveness_delta,
-        )
-        affect_system_block = build_persona_affect_system_block(affect_contract)
-        affect_hint = build_variation_hint_from_contract(affect_contract)
-        if affect_hint and affect_hint not in variation_hint:
-            variation_hint = f"{variation_hint}\n{affect_hint}".strip() if variation_hint else affect_hint
-    dynamic_expression_hint = await build_llm_chat_dynamic_expression_hint(
-        group_id,
-        focus_text,
-        bot_id=int(bot.self_id),
-        current_user_id=user_id,
-    )
     conversation_scene = behavior_scene_to_conversation_scene(behavior_scene)
+    recent_bot_reply_count = len(recent_reply_texts)
+    if not recent_bot_reply_count:
+        recent_bot_reply_count = sum(1 for turn in recent_turns if str(getattr(turn, "role", "")) == "assistant")
+    necessity = evaluate_reply_necessity_gate(
+        text=focus_text,
+        is_to_me=is_to_me,
+        bot_id=int(bot.self_id),
+        has_recent_back_and_forth=bool(recent_turns),
+        is_mentioned=speak_trigger == "mention",
+        is_followup=speak_trigger == "followup",
+        recent_bot_reply_count=recent_bot_reply_count,
+    )
+    if group_id is not None:
+        from packages.repeater.opportunity_trace import append_conversation_decision_trace
+
+        append_conversation_decision_trace({
+            "group_id": int(group_id),
+            "bot_id": int(bot.self_id),
+            "kind": "reply_necessity_trace",
+            "decision": necessity.decision,
+            "score": necessity.score,
+            "detail": necessity.detail,
+            "speak_trigger": speak_trigger or "to_me",
+        })
+    if necessity.decision == "skip":
+        record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_necessity_skip")
+        logger.debug(
+            "llm chat reply necessity skip group={} user={} score={} detail={}",
+            group_id,
+            user_id,
+            necessity.score,
+            necessity.detail,
+        )
+        return
     direct_ctx = ConversationContext.for_direct_chat(
         plain_text=focus_text,
         group_id=group_id,
@@ -724,7 +492,10 @@ async def handle_llm_chat(bot: Bot, event: Event):
         CurrentTurnDecisionInput(
             text=focus_text,
             is_to_me=is_to_me,
+            is_explicitly_addressed=speak_trigger in {"mention", "followup"},
             tools_permitted=bool(tool_meta.get("tools_enabled")),
+            recent_bot_reply_count=min(6, recent_bot_reply_count),
+            has_multi_party_overlap=has_multi_party,
         ),
         enabled=bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)),
     )
@@ -739,10 +510,31 @@ async def handle_llm_chat(bot: Bot, event: Event):
         })
     if current_turn_decision.action is CurrentTurnAction.PASS:
         return
+    reply_target = resolve_reply_target(
+        focus_text,
+        action=current_turn_decision.action,
+        social_action=current_turn_decision.social_action,
+    )
     if bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)) and (
         current_turn_decision.action is not CurrentTurnAction.TOOL
     ):
         tool_meta = {**tool_meta, "tools_enabled": False, "tool_schemas": []}
+    include_session_history = should_read_persistent_memory_for_turn(
+        focus_text,
+        current_turn_decision.social_action,
+    )
+    assembled_context = await assemble_direct_chat_context(
+        system_prompt,
+        bot_id=int(bot.self_id),
+        group_id=group_id,
+        user_id=user_id,
+        query_text=focus_text,
+        cfg=llm_cfg,
+        allow_persistent_memory=include_session_history,
+    )
+    system_prompt = assembled_context.system_prompt
+    knowledge_retrieval_trace = assembled_context.knowledge_retrieval_trace
+    hybrid_retrieval_trace = assembled_context.hybrid_retrieval_trace
     direct_decision = decide_direct_chat_action(
         direct_ctx,
         feature_level=resolve_conversation_feature_level(llm_cfg),
@@ -764,115 +556,16 @@ async def handle_llm_chat(bot: Bot, event: Event):
     )
     behavior_actions = [item.action for item in behavior_patterns]
     from pallas.product.llm.kernel.models import ConversationMode
-    from pallas.product.llm.scene_style import format_scene_style_block, resolve_scene_style_constraints
-    from pallas.product.llm.turn_style_layers import (
-        build_affect_style_variant_hint,
-        build_same_utterance_redup_hint,
-        build_turn_behavior_block,
-        build_turn_wording_user_hints,
-        find_previous_reply_for_utterance,
-        reply_style_variant_policy_from_data,
-        select_reply_style_variant,
-    )
-    from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_with_entries
-    from pallas.product.persona.scene_dialogue_examples import build_scene_dialogue_examples_hint
+    from pallas.product.llm.scene_style import resolve_scene_style_constraints
 
     scene_constraints = resolve_scene_style_constraints(
         behavior_scene,
         ConversationMode.NORMAL,
         direct_chat=True,
     )
-    scene_style_block = format_scene_style_block(scene_constraints)
     behavior_hint = ""
-    group_behavior_hint = ""
-    feedback_hint = ""
     if can_read_behavioral_learning(llm_cfg):
-        group_behavior_hint = default_group_chat_behavior_hint()
         behavior_hint = build_behavior_hint_text(scene=behavior_scene, actions=behavior_actions)
-        if group_id is not None:
-            feedback_hint = await asyncio.to_thread(
-                build_group_feedback_chat_hint,
-                group_id=int(group_id),
-                user_text=focus_text,
-            )
-    behavior_block = build_turn_behavior_block(
-        group_behavior_hint,
-        behavior_hint,
-        scene_style_block,
-    )
-    if behavior_block:
-        system_prompt = f"{system_prompt.rstrip()}\n\n{behavior_block}"
-
-    previous_same_reply = ""
-    try:
-        from pallas.product.llm.behavior_store import list_behavior_runs_for_session
-
-        session_runs = list_behavior_runs_for_session(
-            bot_id=int(bot.self_id),
-            group_id=group_id,
-            user_id=user_id,
-            limit=20,
-        )
-        previous_same_reply = find_previous_reply_for_utterance(
-            focus_text,
-            recent_turns=recent_turns,
-            behavior_runs=session_runs,
-        )
-    except Exception:
-        previous_same_reply = find_previous_reply_for_utterance(focus_text, recent_turns=recent_turns)
-    redup_hint = build_same_utterance_redup_hint(user_text=focus_text, previous_reply=previous_same_reply)
-    affect_class = ""
-    if persona_for_gate is not None:
-        if float(getattr(persona_for_gate, "chaos_bias", 0.0) or 0.0) >= 0.5:
-            affect_class = "chaotic"
-        elif float(getattr(persona_for_gate, "warmth", 0.0) or 0.0) >= 0.1:
-            affect_class = "warm"
-        elif float(getattr(persona_for_gate, "warmth", 0.0) or 0.0) <= -0.1:
-            affect_class = "cool"
-        elif float(getattr(persona_for_gate, "assertiveness", 0.0) or 0.0) >= 0.1:
-            affect_class = "assertive"
-    alt_style_selection = select_reply_style_variant(
-        reply_style_variant_policy_from_data(getattr(llm_cfg, "llm_reply_style_variants", {})),
-        affect_class=affect_class,
-    )
-    alt_style_hint = build_affect_style_variant_hint(alt_style_selection)
-    catchphrase_lines, selected_catchphrase_entries = compile_catchphrase_prompt_with_entries(
-        int(bot.self_id),
-        user_text=focus_text,
-        scene=str(behavior_scene),
-        limit=2,
-    )
-    selected_catchphrase_ids = [item.entry_id for item in selected_catchphrase_entries]
-    catchphrase_hint = "\n".join(catchphrase_lines) if catchphrase_lines else ""
-    scene_examples_hint, selected_scene_examples = build_scene_dialogue_examples_hint(
-        int(bot.self_id),
-        scene=str(behavior_scene),
-        user_text=focus_text,
-    )
-    ending_hint = build_llm_chat_ending_hint(recent_turns)
-    corpus_ending_hint = await build_llm_chat_corpus_ending_hint(
-        group_id,
-        focus_text,
-        bot_id=int(bot.self_id),
-        current_user_id=user_id,
-    )
-    # 口癖、同句重回、换风格等走临时 user 提示；塑形块仍放 system
-    if affect_system_block:
-        system_prompt = f"{system_prompt.rstrip()}\n\n{affect_system_block}"
-    style_user_hints = build_turn_wording_user_hints(
-        expression_suffix,
-        dynamic_expression_hint,
-        variation_hint,
-        feedback_hint,
-        ending_hint,
-        corpus_ending_hint,
-        catchphrase_hint,
-        scene_examples_hint,
-        redup_hint,
-        alt_style_hint,
-    )
-    if current_turn_decision.action is CurrentTurnAction.FOLLOW_UP:
-        style_user_hints.append("本轮只追问一个必要信息，问题要短。")
     last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
     persona_dict = None
     if persona_bundle is not None:
@@ -909,26 +602,15 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "agent_loop_enabled": bool(tool_meta.get("tools_enabled")),
             "current_turn_action": current_turn_decision.action,
             "current_turn_trace": current_turn_decision.trace.model_dump(mode="json"),
+            "reply_target": reply_target,
             "agent_stage_plan": list(direct_decision.agent_stages),
             "tool_schema_count": len(tool_meta.get("tool_schemas") or []),
             "last_reply_text": last_reply_text,
             "recent_reply_texts": recent_reply_texts[:6],
-            "variation_hint": variation_hint,
-            "variation_applied": bool(variation_hint),
-            "persona_affect_block": affect_system_block,
-            "persona_shaping_active": bool(affect_system_block),
-            "dynamic_expression_hint": dynamic_expression_hint,
             "behavior_scene": str(behavior_scene),
             "behavior_pattern_ids": [item.pattern_id for item in behavior_patterns],
             "behavior_actions": [str(item.action) for item in behavior_patterns],
             "behavior_hint": behavior_hint,
-            "selected_expression_ids": selected_expression_ids,
-            "selected_catchphrase_ids": selected_catchphrase_ids,
-            "selected_scene_dialogue_example_ids": [item.example_id for item in selected_scene_examples],
-            "style_user_hints": style_user_hints[:8],
-            "same_utterance_redup": bool(redup_hint),
-            "alt_style_applied": bool(alt_style_hint),
-            "alt_style_class": alt_style_selection.style_class,
             "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
@@ -951,22 +633,16 @@ async def handle_llm_chat(bot: Bot, event: Event):
             temperature=temperature,
             knowledge_retrieval_trace=knowledge_retrieval_trace,
             hybrid_retrieval_trace=hybrid_retrieval_trace,
-            style_user_hints=style_user_hints,
+            include_session_history=include_session_history,
             llm_rewrite_metadata={
                 "task": "llm_chat",
                 "current_turn_action": current_turn_decision.action,
                 "bot_id": int(bot.self_id),
                 "self_aliases": self_aliases[:8],
                 "conversation_fallback_text": corpus_fallback,
-                "variation_hint": variation_hint,
-                "persona_affect_block": affect_system_block,
-                "persona_shaping_active": bool(affect_system_block or dynamic_expression_hint),
-                "dynamic_expression_hint": dynamic_expression_hint,
-                "preserve_colloquial_rewrite": bool(affect_system_block or dynamic_expression_hint),
                 "command_source_segments": command_source_segments,
-                "same_utterance_redup": bool(redup_hint),
-                "alt_style_applied": bool(alt_style_hint),
-                "alt_style_class": alt_style_selection.style_class,
+                "social_action": current_turn_decision.social_action,
+                "reply_target": reply_target,
             },
             tool_metadata=tool_meta,
         ),

@@ -173,23 +173,12 @@ def compile_self_identity_prompt(
     login_nickname: str | None = None,
 ) -> str:
     generic_aliases = extract_generic_self_aliases()
-    exclusive_aliases = extract_exclusive_self_aliases(bot_persona, login_nickname=login_nickname)
     generic_text = "、".join(generic_aliases[:4]) or "牛牛"
-    exclusive_text = "、".join(exclusive_aliases[:6])
-    primary_alias = exclusive_aliases[0] if exclusive_aliases else (generic_aliases[0] if generic_aliases else "牛牛")
-    if exclusive_aliases:
-        call_line = f"- 群友会用通称「{generic_text}」叫你；若喊专属称呼如「{primary_alias}」等，也是在叫你本人。"
-    else:
-        call_line = f"- 群友常用通称「{generic_text}」叫你——这些称呼默认都在跟你说话。"
     body = "\n".join([
         "【自称与群称呼】",
-        call_line,
-        f"- 通称：{generic_text}。",
-        f"- 专属称呼：{exclusive_text}。" if exclusive_text else "- 当前没有额外专属称呼；学到后也应视为在喊你。",
-        "- 有人 @ 你或在句中喊上述名字时，默认是在跟你说话；用第一人称接话，不要当成第三者在聊。",
-        "- 禁止把「牛牛」当外人夸奖（错误：「牛牛真棒」）；应理解成在说你，"
-        "用「谢谢」「收到」等第一人称回应，勿用「还行吧」「行行行」起手。",
-        "- 自称优先用「我」；必要时可用群昵称指代自己，但不要每句都加动物口癖或句尾 ASCII 颜文字。",
+        f"- 「{generic_text}」是群友叫你的外号，只用于判断是否在叫你，不是物种、身体设定或话题联想。",
+        "- 登录昵称和学习到的别名只供路由判断，不在对话中列举或据此推断性格、身份与关系。",
+        "- 被叫到时用第一人称回应；日常自称优先用「我」，不要把「牛牛」当第三者。",
     ])
     return wrap_stats_block("self_identity", body)
 
@@ -200,24 +189,11 @@ def compile_repeater_self_identity_prompt(
     login_nickname: str | None = None,
 ) -> str:
     generic_aliases = extract_generic_self_aliases()
-    exclusive_aliases = extract_exclusive_self_aliases(bot_persona, login_nickname=login_nickname)
     generic_text = "、".join(generic_aliases[:4]) or "牛牛"
-    primary_alias = exclusive_aliases[0] if exclusive_aliases else (generic_aliases[0] if generic_aliases else "牛牛")
-    if not exclusive_aliases:
-        call_line = f"- 群友喊「{generic_text}」等时是在跟你说话；用第一人称接，别把称呼当第三者在聊。"
-    else:
-        call_line = (
-            f"- 群友喊通称「{generic_text}」或专属称呼「{primary_alias}」等时，"
-            "都可能是在跟你说话；用第一人称接，别把称呼当第三者在聊。"
-        )
     body = "\n".join([
         "【群称呼】",
-        call_line,
-        (
-            f"- 你的专属称呼：{'、'.join(exclusive_aliases[:6])}。"
-            if exclusive_aliases
-            else f"- 当前只使用通称「{generic_text}」。"
-        ),
+        f"- 「{generic_text}」是群友对你的称呼，只用于判断是否在叫你；用第一人称接，别当成第三者。",
+        "- 登录昵称和学习别名只供路由判断，不据此推断身份或话题。",
         "- 日常接话不必自我介绍帕拉斯或罗德岛，像群友顺口回一句即可。",
     ])
     return wrap_stats_block("self_identity", body)

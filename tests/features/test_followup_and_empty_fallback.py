@@ -66,6 +66,12 @@ def test_empty_fallback_for_hard_trigger() -> None:
     assert resolve_llm_chat_empty_fallback(task, "  你好  ") == "你好"
 
 
+def test_empty_fallback_stays_silent_after_firewall_rejection() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "speak_trigger": "mention", "fallback_text": ""}
+
+    assert resolve_llm_chat_empty_fallback(task, "", suppress_empty_fallback=True) == ""
+
+
 def test_empty_fallback_uses_corpus_fallback() -> None:
     task = {
         "task_type": LLM_CHAT_TASK_TYPE,
