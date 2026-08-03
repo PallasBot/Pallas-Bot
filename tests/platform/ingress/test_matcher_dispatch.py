@@ -11,6 +11,34 @@ from pallas.core.perm import group_message_permission_for_command
 from pallas.core.platform.ingress import dispatch_lanes, message_load
 from pallas.core.platform.ingress import matcher_activation as activation
 from pallas.core.platform.ingress import matcher_dispatch as dispatch
+from pallas.core.platform.ingress.route_index import RouteResolution
+
+
+def test_synthetic_llm_command_context_reads_structured_marker() -> None:
+    event = MagicMock()
+    event._pallas_llm_command_context = {
+        "command_id": "memes.recommend",
+        "source_segment_types": ["at"],
+    }
+    assert dispatch.synthetic_llm_command_context(event) == {
+        "command_id": "memes.recommend",
+        "source_segment_types": ["at"],
+    }
+
+
+def test_synthetic_llm_command_selects_only_its_routed_plugin_matchers() -> None:
+    class MemesMatcher:
+        plugin_name = "memes"
+
+    class BlockingOtherMatcher:
+        plugin_name = "other"
+        block = True
+
+    resolution = RouteResolution(frozenset({"memes"}), True)
+
+    assert dispatch.select_synthetic_llm_command_matchers([BlockingOtherMatcher, MemesMatcher], resolution) == [
+        MemesMatcher
+    ]
 
 
 class _CommandMatcher:

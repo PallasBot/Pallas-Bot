@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from unittest.mock import MagicMock
 
@@ -26,6 +27,93 @@ def test_publish_local_federate_peer_bot_ids_sync_writes_current_catalog(monkeyp
     assert set(data["command_capabilities"]) == {"牛牛塔罗牌", "牛牛帮助"}
     assert data["present_group_ids"] == []
     assert client.set.call_args.kwargs["ex"] > 0
+
+
+def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
+    client = MagicMock()
+    client.scan_iter.return_value = iter([
+        b"pallas:fed:pool-1:peer_bots:dep-local",
+        b"pallas:fed:pool-1:peer_bots:dep-b",
+    ])
+    client.get.side_effect = lambda key: {
+        "pallas:fed:pool-1:peer_bots:dep-b": json.dumps({
+            "deployment_id": "dep-b",
+            "deployment_name": "部署 B",
+            "bot_ids": [20001, 20002, 20003],
+            "online_bot_ids": [20001, 20002, 20003],
+            "public_bot_ids": [20001, 20002],
+        }),
+    }.get(key.decode("utf-8") if isinstance(key, bytes) else key)
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({10001}))
+    monkeypatch.setattr(mod, "collect_local_federate_online_bot_ids", lambda: frozenset({10001}))
+    monkeypatch.setattr(mod, "local_federate_deployment_name", lambda: "部署 A")
+
+    assert mod.publish_local_federate_peer_bot_ids_sync(public_bot_ids=frozenset({10001})) is True
+    _, payload = client.set.call_args.args[:2]
+    assert json.loads(payload) == {
+        "deployment_id": "dep-local",
+        "deployment_name": "部署 A",
+        "bot_ids": [10001],
+        "online_bot_ids": [10001],
+        "public_bot_ids": [10001],
+        "updated_at": json.loads(payload)["updated_at"],
+        "present_group_ids": [],
+        "command_capability_protocol": mod.COMMAND_CAPABILITY_PROTOCOL_VERSION,
+    }
+
+    mod.refresh_federate_peer_bot_ids_sync()
+    peer = mod.get_federate_peer_bot_roster("dep-b")
+    assert peer is not None
+    assert peer.deployment_name == "部署 B"
+    assert peer.online_bot_ids == frozenset({20001, 20002, 20003})
+    assert peer.public_bot_ids == frozenset({20001, 20002})
+
+    from pallas.api.platform import get_federate_peer_bot_rosters
+
+    assert get_federate_peer_bot_rosters() == (peer,)
+
+
+def test_peer_roster_marks_legacy_online_status_unknown(monkeypatch):
+    client = MagicMock()
+    client.scan_iter.return_value = iter([b"pallas:fed:pool-1:peer_bots:dep-legacy"])
+    client.get.return_value = json.dumps({"deployment_id": "dep-legacy", "bot_ids": [20001]})
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+
+    mod.refresh_federate_peer_bot_ids_sync()
+
+    peer = mod.get_federate_peer_bot_roster("dep-legacy")
+    assert peer is not None
+    assert peer.online_bot_ids is None
+
+
+def test_federate_bot_rosters_include_local_deployment(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "local_federate_deployment_name", lambda: "部署 A")
+    monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({10001, 10002}))
+    monkeypatch.setattr(mod, "collect_local_federate_online_bot_ids", lambda: frozenset({10002}))
+
+    async def public_ids(_bot_ids):
+        return frozenset({10001})
+
+    monkeypatch.setattr(mod, "collect_local_federate_public_bot_ids", public_ids)
+
+    rosters = asyncio.run(mod.get_federate_bot_rosters())
+
+    assert rosters == (
+        mod.FederatePeerBotRoster(
+            deployment_id="dep-local",
+            deployment_name="部署 A",
+            bot_ids=frozenset({10001, 10002}),
+            online_bot_ids=frozenset({10002}),
+            public_bot_ids=frozenset({10001}),
+        ),
+    )
 
 
 def test_refresh_federate_peer_bot_ids_sync_reads_other_deployments(monkeypatch):

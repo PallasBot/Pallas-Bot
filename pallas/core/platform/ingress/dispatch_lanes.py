@@ -37,6 +37,7 @@ _PLUGIN_LANE_CACHE: dict[str, str | None] | None = None
 
 class DispatchLane(StrEnum):
     COMMAND = "command"
+    TOOL = "tool"
     CHAT = "chat"
     STORAGE = "storage"
     REMOTE = "remote"
@@ -143,12 +144,14 @@ def default_lane_limits() -> dict[str, int]:
         pool_size = 10
     storage_default = min(8, pool_size)
     command_default = scaled_dispatch_int(16, per_bot=2, cap=64)
+    tool_default = scaled_dispatch_int(4, per_bot=1, cap=16)
     chat_default = scaled_dispatch_int(32, per_bot=1, cap=48)
     remote_default = scaled_dispatch_int(4, per_bot=1, cap=16)
     return {
         DispatchLane.COMMAND: _env_lane_limit(
             "PALLAS_LANE_COMMAND", "PALLAS_LANE_COMMAND_EXACT", default=command_default
         ),
+        DispatchLane.TOOL: _env_lane_limit("PALLAS_LANE_TOOL", default=tool_default),
         DispatchLane.CHAT: _env_lane_limit("PALLAS_LANE_CHAT", "PALLAS_LANE_PASSIVE_LIGHT", default=chat_default),
         DispatchLane.STORAGE: _env_lane_limit("PALLAS_LANE_STORAGE", "PALLAS_LANE_PASSIVE_DB", default=storage_default),
         DispatchLane.REMOTE: _env_lane_limit(
@@ -211,8 +214,9 @@ def install_dispatch_lanes() -> None:
     limits = default_lane_limits()
     _LANES = {lane: LaneController(lane, limit) for lane, limit in limits.items()}
     logger.debug(
-        "[调度通道] command={} chat={} storage={} remote={} pool_capacity={}",
+        "[调度通道] command={} tool={} chat={} storage={} remote={} pool_capacity={}",
         limits[DispatchLane.COMMAND],
+        limits[DispatchLane.TOOL],
         limits[DispatchLane.CHAT],
         limits[DispatchLane.STORAGE],
         limits[DispatchLane.REMOTE],
@@ -283,6 +287,7 @@ async def check_and_run_matcher_with_lane(
     dependency_cache: dict,
     *,
     command_traffic: bool,
+    synthetic_llm_command: bool = False,
 ) -> MatcherLaneResult:
     import nonebot.message as nb_message
 
@@ -292,7 +297,7 @@ async def check_and_run_matcher_with_lane(
         await nb_message.check_and_run_matcher(matcher, bot, event, state, stack, dependency_cache)
         return MatcherLaneResult(acquired=True, lane_busy=False)
 
-    lane = lane_for_matcher(matcher)
+    lane = DispatchLane.TOOL if synthetic_llm_command else lane_for_matcher(matcher)
     acquired, wait_ms = await acquire_lane(lane)
     record_lane_wait(wait_ms, busy=not acquired)
     if not acquired:

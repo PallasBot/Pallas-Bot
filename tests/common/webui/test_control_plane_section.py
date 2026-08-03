@@ -18,6 +18,7 @@ def test_control_plane_payload_exposes_low_risk_fields(monkeypatch):
     assert "claim_ttl_sec" in names
     assert "ingress_bypass_unified" in names
     assert "prefer_local_owner" in names
+    assert "deployment_name" in names
     claim = next(f for f in data["fields"] if f["name"] == "claim_ttl_sec")
     assert claim["kind"] == "number"
     bypass = next(f for f in data["fields"] if f["name"] == "ingress_bypass_unified")
@@ -28,6 +29,7 @@ def test_control_plane_payload_exposes_low_risk_fields(monkeypatch):
     redis_group = next(g for g in data["field_groups"] if g["id"] == "redis")
     assert "ingress_bypass_unified" in pool_group["field_names"]
     assert "prefer_local_owner" in pool_group["field_names"]
+    assert "deployment_name" in pool_group["field_names"]
     assert "claim_ttl_sec" in redis_group["field_names"]
 
 
@@ -46,9 +48,11 @@ def test_apply_control_plane_patch_writes_low_risk_fields(monkeypatch, tmp_path)
         "claim_ttl_sec": 7200,
         "ingress_bypass_unified": True,
         "prefer_local_owner": True,
+        "deployment_name": "部署 A",
     })
     assert out["fields"]
     raw = webui.read_text(encoding="utf-8")
     assert "PALLAS_FEDERATE_CLAIM_TTL_SEC" in raw
     assert "PALLAS_FEDERATE_INGRESS_BYPASS_UNIFIED" in raw
     assert "PALLAS_FEDERATE_PREFER_LOCAL_OWNER" in raw
+    assert "PALLAS_FEDERATE_DEPLOYMENT_NAME" in raw
