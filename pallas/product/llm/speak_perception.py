@@ -5,6 +5,7 @@ from __future__ import annotations
 import random
 import re
 import time
+from collections import deque
 from dataclasses import dataclass
 from threading import Lock
 from typing import TYPE_CHECKING
@@ -41,6 +42,7 @@ _REPLY_CUE_TOKENS = (
 
 _ambient_lock = Lock()
 _last_ambient_at: dict[int, float] = {}
+_ambient_budget_at: dict[tuple[int, int], deque[float]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +55,7 @@ class SpeakDecision:
 def clear_speak_perception_state() -> None:
     with _ambient_lock:
         _last_ambient_at.clear()
+        _ambient_budget_at.clear()
 
 
 def strip_mention_noise(text: str) -> str:
@@ -176,12 +179,45 @@ def _ambient_cooldown_ok(group_id: int | None, *, cooldown_sec: int, now: float)
     return (now - last) >= float(cooldown_sec)
 
 
-def note_ambient_spoke(group_id: int | None, *, now: float | None = None) -> None:
+def _ambient_budget_available(
+    bot_id: int | None,
+    group_id: int | None,
+    *,
+    limit: int,
+    window_sec: int,
+    now: float,
+) -> bool:
+    if bot_id is None or group_id is None or int(limit) <= 0:
+        return True
+    key = (int(bot_id), int(group_id))
+    cutoff = now - max(1, int(window_sec))
+    with _ambient_lock:
+        entries = _ambient_budget_at.setdefault(key, deque())
+        while entries and entries[0] <= cutoff:
+            entries.popleft()
+        return len(entries) < int(limit)
+
+
+def note_ambient_spoke(
+    group_id: int | None,
+    *,
+    bot_id: int | None = None,
+    budget_limit: int = 0,
+    budget_window_sec: int = 900,
+    now: float | None = None,
+) -> None:
     if group_id is None:
         return
     ts = time.time() if now is None else float(now)
     with _ambient_lock:
         _last_ambient_at[int(group_id)] = ts
+        if bot_id is not None and int(budget_limit) > 0:
+            key = (int(bot_id), int(group_id))
+            entries = _ambient_budget_at.setdefault(key, deque())
+            cutoff = ts - max(1, int(budget_window_sec))
+            while entries and entries[0] <= cutoff:
+                entries.popleft()
+            entries.append(ts)
 
 
 def speak_perception_metrics(decision: SpeakDecision) -> tuple[str, ...]:
@@ -209,6 +245,7 @@ def speak_perception_metrics(decision: SpeakDecision) -> tuple[str, ...]:
         "ambient_cooldown",
         "ambient_low_score",
         "ambient_miss",
+        "ambient_budget",
     }:
         detail = "speak_skip_ambient"
     return ("speak_skip", detail) if detail != "speak_skip" else ("speak_skip",)
@@ -226,6 +263,9 @@ def evaluate_speak_perception(
     ambient_rate: float = 0.08,
     ambient_min_score: int = 35,
     ambient_cooldown_sec: int = 120,
+    ambient_budget_limit: int = 2,
+    ambient_budget_window_sec: int = 900,
+    persona_speak_bias: float = 1.0,
     min_alias_len: int = 2,
     group_id: int | None = None,
     bot_recently_replied: bool = False,
@@ -283,6 +323,15 @@ def evaluate_speak_perception(
     if not _ambient_cooldown_ok(group_id, cooldown_sec=ambient_cooldown_sec, now=ts):
         return SpeakDecision(False, "ambient_cooldown", 0)
 
+    if not _ambient_budget_available(
+        bot_id,
+        group_id,
+        limit=ambient_budget_limit,
+        window_sec=ambient_budget_window_sec,
+        now=ts,
+    ):
+        return SpeakDecision(False, "ambient_budget", 0)
+
     necessity = score_reply_necessity(
         text=plain,
         is_to_me=False,
@@ -294,7 +343,9 @@ def evaluate_speak_perception(
     score = int(necessity.score)
     if looks_like_reply_cue(plain):
         score += 15
-    if score < int(ambient_min_score):
+    bias = min(1.2, max(0.8, float(persona_speak_bias or 1.0)))
+    effective_min_score = int(round(int(ambient_min_score) / bias))
+    if score < effective_min_score:
         return SpeakDecision(False, "ambient_low_score", score)
 
     roll = (rng or random).random()
@@ -302,5 +353,11 @@ def evaluate_speak_perception(
         return SpeakDecision(False, "ambient_miss", score)
 
     if record_ambient:
-        note_ambient_spoke(group_id, now=ts)
+        note_ambient_spoke(
+            group_id,
+            bot_id=bot_id,
+            budget_limit=ambient_budget_limit,
+            budget_window_sec=ambient_budget_window_sec,
+            now=ts,
+        )
     return SpeakDecision(True, "ambient", score)

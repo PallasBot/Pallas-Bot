@@ -317,6 +317,26 @@ class LlmWebuiConfig(BaseModel):
             "只约束 ambient 插嘴，不影响 @ / 别名硬触发",
         ),
     )
+    llm_speak_ambient_budget_limit: int = Field(
+        default=2,
+        ge=0,
+        le=20,
+        description=field_help(
+            "同一牛牛账号在同一群的氛围插嘴次数上限",
+            "默认 2；0=不限次数，容易刷屏，慎用",
+            "只约束未点名 ambient，不影响 @、别名点名和续聊",
+        ),
+    )
+    llm_speak_ambient_budget_window_sec: int = Field(
+        default=900,
+        ge=60,
+        le=86400,
+        description=field_help(
+            "氛围插嘴预算的统计窗口（秒）",
+            "默认 900（15 分钟）；窗口内到上限会保持沉默",
+            "与同群冷却一起限制打扰，不影响硬触发",
+        ),
+    )
     llm_speak_min_alias_len: int = Field(
         default=2,
         ge=1,
@@ -967,6 +987,8 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_speak_ambient_rate=cfg.llm_speak_ambient_rate,
         llm_speak_ambient_min_score=cfg.llm_speak_ambient_min_score,
         llm_speak_ambient_cooldown_sec=cfg.llm_speak_ambient_cooldown_sec,
+        llm_speak_ambient_budget_limit=cfg.llm_speak_ambient_budget_limit,
+        llm_speak_ambient_budget_window_sec=cfg.llm_speak_ambient_budget_window_sec,
         llm_speak_min_alias_len=cfg.llm_speak_min_alias_len,
         llm_speak_followup_enabled=cfg.llm_speak_followup_enabled,
         llm_speak_followup_window_sec=cfg.llm_speak_followup_window_sec,

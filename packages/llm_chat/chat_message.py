@@ -205,6 +205,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
         if not should_eval:
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "ambient_turn_coalesce")
             return
+        persona_speak_bias = 1.0
+        try:
+            from pallas.product.persona.loader import resolve_persona
+
+            persona_speak_bias = float((await resolve_persona(bot_id, group_id)).speak_bias)
+        except Exception:
+            logger.debug("resolve persona speak bias skipped bot={} group={}", bot_id, group_id)
         decision = evaluate_speak_perception(
             plain_text=plain or msg,
             aliases=speak_aliases,
@@ -215,6 +222,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
             ambient_rate=llm_cfg.llm_speak_ambient_rate,
             ambient_min_score=llm_cfg.llm_speak_ambient_min_score,
             ambient_cooldown_sec=llm_cfg.llm_speak_ambient_cooldown_sec,
+            ambient_budget_limit=llm_cfg.llm_speak_ambient_budget_limit,
+            ambient_budget_window_sec=llm_cfg.llm_speak_ambient_budget_window_sec,
+            persona_speak_bias=persona_speak_bias,
             min_alias_len=llm_cfg.llm_speak_min_alias_len,
             group_id=group_id,
             followup_active=followup_active,
