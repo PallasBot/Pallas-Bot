@@ -23,9 +23,9 @@ def test_llm_webui_config_defaults_to_select_polish_lite() -> None:
     assert LlmWebuiConfig().llm_repeater_mode == "select_polish_lite"
 
 
-def test_llm_webui_config_defaults_current_turn_model_decision_off() -> None:
+def test_llm_webui_config_defaults_current_turn_model_decision_on() -> None:
     config = LlmWebuiConfig()
-    assert config.llm_current_turn_decision_enabled is False
+    assert config.llm_current_turn_decision_enabled is True
     assert config.llm_current_turn_decision_model == ""
 
 

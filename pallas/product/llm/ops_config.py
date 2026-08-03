@@ -35,6 +35,7 @@ MEMORY_FIELD_NAMES = (
     "llm_memory_max_per_group",
     "llm_memory_content_max_len",
     "llm_memory_auto_episode_enabled",
+    "llm_memory_auto_episode_summary_enabled",
     "llm_memory_auto_episode_cooldown_sec",
     "llm_memory_graph_extract_enabled",
     "llm_memory_graph_extract_on_write",
@@ -70,6 +71,7 @@ class LlmMemoryOpsConfig(BaseModel):
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
     llm_memory_content_max_len: int = Field(default=500, ge=64, le=4000)
     llm_memory_auto_episode_enabled: bool = True
+    llm_memory_auto_episode_summary_enabled: bool = False
     llm_memory_auto_episode_cooldown_sec: int = Field(default=120, ge=0, le=3600)
     llm_memory_graph_extract_enabled: bool = True
     llm_memory_graph_extract_on_write: bool = False

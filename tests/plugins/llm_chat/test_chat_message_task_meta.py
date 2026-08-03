@@ -1,395 +1,13 @@
 from __future__ import annotations
 
-import time
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from pallas.product.llm.behavior import BehaviorAction, BehaviorPattern, BehaviorScene
 from pallas.product.llm.reply_variation import build_recent_reply_variation_hint
 from pallas.product.llm.session_store import LlmChatTurn
-
-
-def patch_expression_message_repository(
-    monkeypatch: pytest.MonkeyPatch,
-    mod,
-    message_repo,
-) -> None:
-    import pallas.product.llm.dynamic_expression_context as dec_mod
-
-    monkeypatch.setattr(dec_mod, "make_message_repository", lambda: message_repo)
-
-
-def patch_expression_trigger_keywords(
-    monkeypatch: pytest.MonkeyPatch,
-    mod,
-    keywords_fn,
-) -> None:
-    import pallas.product.llm.dynamic_expression_context as dec_mod
-
-    monkeypatch.setattr(dec_mod, "extract_chat_trigger_keywords", keywords_fn)
-    monkeypatch.setattr(mod, "extract_chat_trigger_keywords", keywords_fn)
-
-
-@pytest.mark.asyncio
-async def test_build_llm_chat_corpus_ending_hint_prefers_topical_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    answers = [
-        SimpleNamespace(messages=["那确实"], keywords="明日方舟 六星", count=4),
-        SimpleNamespace(messages=["行啊"], keywords="吃饭 下班", count=9),
-        SimpleNamespace(messages=["你这波有点狠"], keywords="明日方舟 抽卡", count=3),
-    ]
-
-    repo = SimpleNamespace(list_answers_for_group_since=AsyncMock(return_value=answers))
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-    monkeypatch.setattr(
-        mod,
-        "extract_chat_trigger_keywords",
-        lambda text: ["明日方舟", "抽卡"] if text == "这次抽卡也太黑了" else [],
-    )
-
-    hint = await mod.build_llm_chat_corpus_ending_hint(20002, "这次抽卡也太黑了")
-
-    assert hint == "\n【语料收尾参考】当前话题可参考本群常接的短句：你这波有点狠、那确实。"
-
-
-@pytest.mark.asyncio
-async def test_build_llm_chat_corpus_ending_hint_prefers_recent_live_group_replies(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    now = int(time.time())
-    answers = [
-        SimpleNamespace(messages=["那确实"], keywords="明日方舟 六星", count=9),
-        SimpleNamespace(messages=["也不是不行"], keywords="明日方舟 抽卡", count=8),
-    ]
-    recent_messages = [
-        SimpleNamespace(
-            group_id=20002,
-            user_id=111,
-            bot_id=10001,
-            raw_message="这也太黑了吧",
-            is_plain_text=True,
-            plain_text="这也太黑了吧",
-            keywords="明日方舟 抽卡",
-            time=now - 30,
-        ),
-        SimpleNamespace(
-            group_id=20002,
-            user_id=111,
-            bot_id=10001,
-            raw_message="你这波有点狠",
-            is_plain_text=True,
-            plain_text="你这波有点狠",
-            keywords="明日方舟 抽卡",
-            time=now - 20,
-        ),
-        SimpleNamespace(
-            group_id=20002,
-            user_id=222,
-            bot_id=10001,
-            raw_message="谢谢你呀",
-            is_plain_text=True,
-            plain_text="谢谢你呀",
-            keywords="明日方舟 抽卡",
-            time=now - 10,
-        ),
-    ]
-
-    repo = SimpleNamespace(list_answers_for_group_since=AsyncMock(return_value=answers))
-    message_repo = SimpleNamespace(find_recent_in_group=AsyncMock(return_value=recent_messages))
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-    patch_expression_message_repository(monkeypatch, mod, message_repo)
-    patch_expression_trigger_keywords(monkeypatch, mod, lambda _text: ["明日方舟", "抽卡"])
-
-    hint = await mod.build_llm_chat_corpus_ending_hint(20002, "这次抽卡也太黑了吧？？？")
-
-    assert hint == "\n【语料收尾参考】当前话题可参考本群最近常接的短句：这也太黑了吧、你这波有点狠。"
-
-
-@pytest.mark.asyncio
-async def test_build_llm_chat_corpus_ending_hint_skips_bot_and_current_user_in_recent_live(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    now = int(time.time())
-    repo = SimpleNamespace(list_answers_for_group_since=AsyncMock(return_value=[]))
-    recent_messages = [
-        SimpleNamespace(
-            group_id=20002,
-            user_id=30003,
-            bot_id=10001,
-            raw_message="这也太黑了吧",
-            is_plain_text=True,
-            plain_text="这也太黑了吧",
-            keywords="明日方舟 抽卡",
-            time=now - 30,
-        ),
-        SimpleNamespace(
-            group_id=20002,
-            user_id=444,
-            bot_id=10001,
-            raw_message="你这波有点狠",
-            is_plain_text=True,
-            plain_text="你这波有点狠",
-            keywords="明日方舟 抽卡",
-            time=now - 20,
-        ),
-        SimpleNamespace(
-            group_id=20002,
-            user_id=555,
-            bot_id=10001,
-            raw_message="这波真的黑",
-            is_plain_text=True,
-            plain_text="这波真的黑",
-            keywords="明日方舟 抽卡",
-            time=now - 10,
-        ),
-    ]
-    message_repo = SimpleNamespace(find_recent_in_group=AsyncMock(return_value=recent_messages))
-
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-    patch_expression_message_repository(monkeypatch, mod, message_repo)
-    patch_expression_trigger_keywords(monkeypatch, mod, lambda _text: ["明日方舟", "抽卡"])
-
-    hint = await mod.build_llm_chat_corpus_ending_hint(
-        20002,
-        "这次抽卡也太黑了吧？？？",
-        bot_id=10001,
-        current_user_id=30003,
-    )
-
-    assert hint == "\n【语料收尾参考】当前话题可参考本群最近常接的短句：这波真的黑、你这波有点狠。"
-
-
-@pytest.mark.asyncio
-async def test_build_llm_chat_corpus_ending_hint_prefers_topic_run_from_same_recent_user(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    now = int(time.time())
-    repo = SimpleNamespace(list_answers_for_group_since=AsyncMock(return_value=[]))
-    recent_messages = [
-        SimpleNamespace(
-            group_id=20002,
-            user_id=777,
-            bot_id=10001,
-            raw_message="这也太黑了吧",
-            is_plain_text=True,
-            plain_text="这也太黑了吧",
-            keywords="明日方舟 抽卡",
-            time=now - 40,
-        ),
-        SimpleNamespace(
-            group_id=20002,
-            user_id=777,
-            bot_id=10001,
-            raw_message="你这波有点狠",
-            is_plain_text=True,
-            plain_text="你这波有点狠",
-            keywords="明日方舟 抽卡",
-            time=now - 30,
-        ),
-        SimpleNamespace(
-            group_id=20002,
-            user_id=888,
-            bot_id=10001,
-            raw_message="那确实",
-            is_plain_text=True,
-            plain_text="那确实",
-            keywords="明日方舟 抽卡",
-            time=now - 10,
-        ),
-    ]
-    message_repo = SimpleNamespace(find_recent_in_group=AsyncMock(return_value=recent_messages))
-
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-    patch_expression_message_repository(monkeypatch, mod, message_repo)
-    patch_expression_trigger_keywords(monkeypatch, mod, lambda _text: ["明日方舟", "抽卡"])
-
-    hint = await mod.build_llm_chat_corpus_ending_hint(20002, "这次抽卡也太黑了吧？？？")
-
-    assert hint == "\n【语料收尾参考】当前话题可参考本群最近常接的短句：这也太黑了吧、你这波有点狠。"
-
-
-@pytest.mark.asyncio
-async def test_build_llm_chat_corpus_ending_hint_ignores_repeater_bundle_backfill(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    now = int(time.time())
-    repo = SimpleNamespace(list_answers_for_group_since=AsyncMock(return_value=[]))
-    recent_messages = [
-        SimpleNamespace(
-            group_id=20002,
-            user_id=888,
-            bot_id=10001,
-            raw_message="那确实",
-            is_plain_text=True,
-            plain_text="那确实",
-            keywords="明日方舟 抽卡",
-            time=now - 10,
-        ),
-    ]
-    message_repo = SimpleNamespace(find_recent_in_group=AsyncMock(return_value=recent_messages))
-
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-    patch_expression_message_repository(monkeypatch, mod, message_repo)
-    patch_expression_trigger_keywords(monkeypatch, mod, lambda _text: ["明日方舟", "抽卡"])
-    hint = await mod.build_llm_chat_corpus_ending_hint(20002, "这次抽卡也太黑了吧？？？")
-
-    assert hint == "\n【语料收尾参考】当前话题可参考本群最近常接的短句：那确实。"
-
-
-@pytest.mark.asyncio
-async def test_build_llm_chat_corpus_ending_hint_unifies_recent_and_answer_sources(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    now = int(time.time())
-    repo = SimpleNamespace(
-        list_answers_for_group_since=AsyncMock(
-            return_value=[
-                SimpleNamespace(messages=["这也太黑了吧"], keywords="明日方舟 抽卡", count=8),
-                SimpleNamespace(messages=["你这波有点狠"], keywords="明日方舟 抽卡", count=6),
-            ]
-        )
-    )
-    message_repo = SimpleNamespace(
-        find_recent_in_group=AsyncMock(
-            return_value=[
-                SimpleNamespace(
-                    group_id=20002,
-                    user_id=111,
-                    bot_id=10001,
-                    raw_message="那确实",
-                    is_plain_text=True,
-                    plain_text="那确实",
-                    keywords="明日方舟 抽卡",
-                    time=now - 20,
-                ),
-            ]
-        )
-    )
-
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-    patch_expression_message_repository(monkeypatch, mod, message_repo)
-    patch_expression_trigger_keywords(monkeypatch, mod, lambda _text: ["明日方舟", "抽卡"])
-    hint = await mod.build_llm_chat_corpus_ending_hint(20002, "这次抽卡也太黑了吧？？？")
-
-    assert hint == "\n【语料收尾参考】当前话题可参考本群最近常接的短句：那确实、这也太黑了吧、你这波有点狠。"
-
-
-@pytest.mark.asyncio
-async def test_build_llm_chat_corpus_ending_hint_dedupes_similar_endings(monkeypatch: pytest.MonkeyPatch) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    repo = SimpleNamespace(list_answers_for_group_since=AsyncMock(return_value=[]))
-    message_repo = SimpleNamespace(find_recent_in_group=AsyncMock(return_value=[]))
-
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-    patch_expression_message_repository(monkeypatch, mod, message_repo)
-    patch_expression_trigger_keywords(monkeypatch, mod, lambda _text: ["明日方舟", "抽卡"])
-    repo = SimpleNamespace(
-        list_answers_for_group_since=AsyncMock(
-            return_value=[
-                SimpleNamespace(messages=["这也太黑了吧"], keywords="明日方舟 抽卡", count=8),
-                SimpleNamespace(messages=["这也太离谱了吧"], keywords="明日方舟 抽卡", count=7),
-                SimpleNamespace(messages=["你这波有点狠"], keywords="明日方舟 抽卡", count=6),
-            ]
-        )
-    )
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-
-    hint = await mod.build_llm_chat_corpus_ending_hint(20002, "这次抽卡也太黑了吧？？？")
-
-    assert hint == "\n【语料收尾参考】当前话题可参考本群常接的短句：这也太黑了吧、你这波有点狠。"
-
-
-@pytest.mark.asyncio
-async def test_build_llm_chat_corpus_ending_hint_prefers_affect_aligned_topical_candidates(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    answers = [
-        SimpleNamespace(messages=["这也太黑了吧"], keywords="明日方舟 抽卡", count=4),
-        SimpleNamespace(messages=["那确实"], keywords="明日方舟 抽卡", count=9),
-        SimpleNamespace(messages=["谢谢你呀"], keywords="明日方舟 抽卡", count=6),
-    ]
-
-    repo = SimpleNamespace(list_answers_for_group_since=AsyncMock(return_value=answers))
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-    monkeypatch.setattr(mod, "extract_chat_trigger_keywords", lambda _text: ["明日方舟", "抽卡"])
-
-    hint = await mod.build_llm_chat_corpus_ending_hint(20002, "这次抽卡也太黑了吧？？？")
-
-    assert hint == "\n【语料收尾参考】当前话题可参考本群常接的短句：这也太黑了吧。"
-
-
-@pytest.mark.asyncio
-async def test_build_llm_chat_corpus_ending_hint_falls_back_to_hot_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    answers = [
-        SimpleNamespace(messages=["行啊"], keywords="吃饭 下班", count=9),
-        SimpleNamespace(messages=["也不是不行"], keywords="夜宵", count=7),
-    ]
-
-    repo = SimpleNamespace(list_answers_for_group_since=AsyncMock(return_value=answers))
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "pallas.core.foundation.db.context_repo_access",
-        SimpleNamespace(get_shared_context_repository=lambda: repo),
-    )
-    monkeypatch.setattr(mod, "extract_chat_trigger_keywords", lambda _text: ["明日方舟"])
-
-    hint = await mod.build_llm_chat_corpus_ending_hint(20002, "这次抽卡也太黑了")
-
-    assert hint == "\n【语料收尾参考】本群常见短句可参考：行啊、也不是不行。"
 
 
 def test_build_recent_reply_variation_hint_flags_repeated_structure_without_exact_duplicate() -> None:
@@ -442,152 +60,6 @@ def test_build_recent_reply_variation_hint_flags_generic_prefix_cluster() -> Non
     assert "最近几轮别再用这些开头：行吧" in hint
 
 
-def test_build_blocked_motifs_prefers_recent_group_bot_texts() -> None:
-    from packages.llm_chat import chat_message as mod
-
-    recent_turns = [
-        LlmChatTurn(role="assistant", content="私窗里还是老说草料", user_id=1, created_at=1),
-    ]
-    recent_group_rows = [
-        {"text": "土木牛牛今天继续搬砖", "user_id": 10001, "bot_id": 10001, "role": "assistant"},
-        {"text": "漂亮牛牛先吃饭", "user_id": 10001, "bot_id": 10001},
-        {"text": "路人甲说随便", "user_id": 2222},
-    ]
-
-    motifs = mod.build_blocked_motifs(
-        recent_turns=recent_turns,
-        recent_group_rows=recent_group_rows,
-        bot_id=10001,
-    )
-
-    assert motifs == ["土木", "漂亮牛牛"]
-
-
-@pytest.mark.asyncio
-async def test_handle_llm_chat_prefers_group_bot_motifs_for_expression_blocking(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    event = SimpleNamespace(
-        to_me=True,
-        self_id="10001",
-        group_id=20002,
-        user_id=30003,
-        message_id=40004,
-        time=123456,
-        raw_message="[CQ:at,qq=10001] 你好",
-        get_plaintext=lambda: "你好",
-        get_message=lambda: "[CQ:at,qq=10001] 你好",
-        get_session_id=lambda: "group_20002_30003",
-    )
-    bot = SimpleNamespace(self_id="10001")
-    captured: dict[str, object] = {}
-
-    monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
-    monkeypatch.setattr(
-        mod,
-        "get_llm_chat_config",
-        lambda: SimpleNamespace(
-            llm_chat_system_prompt_path="",
-            llm_chat_min_priority=40,
-        ),
-    )
-    monkeypatch.setattr(
-        mod,
-        "get_llm_config",
-        lambda: SimpleNamespace(
-            llm_memory_rag_enabled=False,
-            llm_relationship_notes_enabled=False,
-            llm_chat_enabled=True,
-            llm_select_enabled=False,
-            llm_polish_lite_enabled=False,
-            llm_polish_enabled=False,
-            llm_chat_cooldown_sec=3,
-            llm_chat_queue_merge=True,
-            llm_current_turn_decision_enabled=False,
-            llm_speak_perception_enabled=False,
-            llm_speak_followup_enabled=False,
-            llm_speak_followup_window_sec=30,
-            llm_speak_followup_max_total_sec=120,
-            llm_reply_style_variants={},
-        ),
-    )
-    monkeypatch.setattr(
-        mod,
-        "build_persona_llm_context",
-        AsyncMock(
-            return_value=(
-                SimpleNamespace(system="sys", metadata=SimpleNamespace(persona={})),
-                None,
-                None,
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        mod,
-        "assemble_direct_chat_context",
-        AsyncMock(
-            return_value=SimpleNamespace(
-                system_prompt="sys",
-                knowledge_retrieval_trace={},
-                hybrid_retrieval_trace={},
-                relationship_trace={},
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        mod,
-        "evaluate_llm_reply_gate_result",
-        lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
-    )
-    monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
-    monkeypatch.setattr(
-        mod,
-        "merge_queued_chat",
-        lambda *_args, **_kwargs: SimpleNamespace(text="[CQ:at,qq=10001] 你好", merged=False),
-    )
-    monkeypatch.setattr(
-        mod,
-        "list_user_llm_messages",
-        AsyncMock(
-            return_value=[
-                SimpleNamespace(role="assistant", content="私窗里还是老说草料", user_id=30003, created_at=1),
-            ]
-        ),
-    )
-    monkeypatch.setattr(
-        "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
-        AsyncMock(return_value=["土木牛牛今天继续搬砖", "漂亮牛牛先吃饭"]),
-    )
-    monkeypatch.setattr(mod, "classify_behavior_scene", lambda **_kwargs: BehaviorScene.PROVOCATION)
-
-    async def fake_build_expression_selection(*_args, **kwargs):
-        captured["blocked_motifs"] = kwargs.get("blocked_motifs")
-        return "", []
-
-    monkeypatch.setattr(mod, "build_llm_chat_expression_selection", fake_build_expression_selection)
-    monkeypatch.setattr(mod, "assemble_tool_bundle", lambda **_kwargs: {"tools_enabled": False, "tool_schemas": []})
-    monkeypatch.setattr(
-        mod,
-        "decide_current_turn_with_model",
-        AsyncMock(
-            return_value=SimpleNamespace(
-                action=mod.CurrentTurnAction.PASS,
-                trace=SimpleNamespace(model_dump=lambda mode="json": {"action": "PASS", "source": "rule"}),
-            )
-        ),
-    )
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "packages.repeater.opportunity_trace",
-        SimpleNamespace(append_conversation_decision_trace=lambda _row: None),
-    )
-
-    await mod.handle_llm_chat(bot, event)
-
-    assert captured["blocked_motifs"] == ["土木", "漂亮牛牛"]
-
 
 @pytest.mark.asyncio
 async def test_handle_llm_chat_skips_empty_to_me_without_reply(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -622,6 +94,59 @@ async def test_handle_llm_chat_skips_empty_to_me_without_reply(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
+async def test_handle_llm_chat_skips_low_value_direct_social_before_turn_decision(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.llm_chat import chat_message as mod
+    from pallas.product.llm.config import LlmConfig
+
+    event = SimpleNamespace(
+        to_me=True,
+        group_id=20002,
+        user_id=30003,
+        reply=None,
+        get_plaintext=lambda: "你好",
+        get_message=lambda: "[CQ:at,qq=10001] 你好",
+        get_session_id=lambda: "group_20002_30003",
+    )
+    bot = SimpleNamespace(self_id="10001")
+
+    monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "get_llm_chat_config",
+        lambda: SimpleNamespace(llm_chat_system_prompt_path="", llm_chat_min_priority=40),
+    )
+    monkeypatch.setattr(mod, "get_llm_config", lambda: LlmConfig(llm_chat_enabled=True))
+    monkeypatch.setattr(
+        mod,
+        "build_persona_llm_context",
+        AsyncMock(return_value=(SimpleNamespace(system="sys", metadata=SimpleNamespace(persona={})), None, None)),
+    )
+    monkeypatch.setattr(
+        mod,
+        "evaluate_llm_reply_gate_result",
+        lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
+    )
+    monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "list_user_llm_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value=""))
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
+        AsyncMock(return_value=[]),
+    )
+    turn_decision = AsyncMock(side_effect=AssertionError("low-value social turn must not reach the model"))
+    monkeypatch.setattr(mod, "decide_current_turn_with_model", turn_decision)
+    submit_mock = AsyncMock()
+    monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
+
+    await mod.handle_llm_chat(bot, event)
+
+    turn_decision.assert_not_awaited()
+    submit_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.llm_chat import chat_message as mod
 
@@ -632,9 +157,9 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
         user_id=30003,
         message_id=40004,
         time=123456,
-        raw_message="[CQ:at,qq=10001] 你好",
-        get_plaintext=lambda: "你好",
-        get_message=lambda: "[CQ:at,qq=10001] 你好",
+        raw_message="[CQ:at,qq=10001] 你还在吗",
+        get_plaintext=lambda: "你还在吗",
+        get_message=lambda: "[CQ:at,qq=10001] 你还在吗",
         get_session_id=lambda: "group_20002_30003",
     )
     bot = SimpleNamespace(self_id="10001")
@@ -666,6 +191,10 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
             llm_polish_enabled=False,
             llm_chat_cooldown_sec=3,
             llm_chat_queue_merge=True,
+            llm_speak_followup_enabled=False,
+            llm_speak_followup_window_sec=30,
+            llm_speak_followup_max_total_sec=120,
+            llm_speak_perception_enabled=False,
         ),
     )
     monkeypatch.setattr(
@@ -679,41 +208,35 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
             )
         ),
     )
-    monkeypatch.setattr(
-        mod,
-        "enrich_system_with_memory_context",
-        AsyncMock(side_effect=lambda prompt, **_: SimpleNamespace(system_prompt=prompt, trace={"hit_count": 1})),
-    )
-    monkeypatch.setattr(
-        mod,
-        "enrich_system_with_knowledge_sources",
-        AsyncMock(side_effect=lambda prompt, **_: SimpleNamespace(system_prompt=prompt, trace={"hit_count": 0})),
-    )
-    monkeypatch.setattr(
-        mod,
-        "enrich_system_with_relationship_context",
-        AsyncMock(side_effect=lambda prompt, **_: SimpleNamespace(system_prompt=prompt, trace={"hit_count": 0})),
-    )
-    monkeypatch.setattr(
-        mod,
-        "build_llm_chat_expression_suffix",
-        AsyncMock(return_value="\n【表达习惯参考】群里常接这些说法/梗：牛牛税。"),
-    )
-    monkeypatch.setattr(
-        mod,
-        "build_llm_chat_ending_hint",
-        lambda *_args, **_kwargs: "\n【收尾变化参考】这轮可优先试试这些自然收口：行啊、也不是不行、那确实。",
-    )
-    monkeypatch.setattr(
-        mod,
-        "build_llm_chat_dynamic_expression_hint",
-        AsyncMock(return_value=""),
-    )
-    monkeypatch.setattr(
-        mod,
-        "build_llm_chat_corpus_ending_hint",
-        AsyncMock(return_value="\n【语料收尾参考】当前话题可参考本群常接的短句：行啊、那确实。"),
-    )
+    decision_called: list[bool] = []
+
+    async def fake_context(*_args, **kwargs) -> SimpleNamespace:
+        assert decision_called, "current turn decision must run before context assembly"
+        assert kwargs["allow_persistent_memory"] is False
+        return SimpleNamespace(
+            system_prompt="sys",
+            knowledge_retrieval_trace={"hit_count": 1},
+            hybrid_retrieval_trace={"sources": ["memory"]},
+            relationship_trace={},
+        )
+
+    async def fake_current_turn_decision(*_args, **_kwargs):
+        decision_called.append(True)
+        return SimpleNamespace(
+            action=mod.CurrentTurnAction.REPLY,
+            social_action="ACK",
+            trace=SimpleNamespace(
+                model_dump=lambda **_kwargs: {
+                    "action": "REPLY",
+                    "social_action": "ACK",
+                    "source": "test",
+                    "reason": "test",
+                }
+            ),
+        )
+
+    monkeypatch.setattr(mod, "decide_current_turn_with_model", fake_current_turn_decision)
+    monkeypatch.setattr(mod, "assemble_direct_chat_context", fake_context)
     monkeypatch.setattr(
         mod,
         "classify_behavior_scene",
@@ -734,14 +257,20 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     )
     monkeypatch.setattr(mod, "GroupMessageEvent", SimpleNamespace)
     monkeypatch.setattr(mod, "resolve_conversation_feature_level", lambda *_args, **_kwargs: "full_conversation_kernel")
-    monkeypatch.setattr(mod, "can_read_behavioral_learning", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(mod, "evaluate_llm_reply_gate", lambda *_args, **_kwargs: None)
+    feedback_hint = Mock(return_value="【维护者样本参考】\n- 可写一句群内短梗。")
+    monkeypatch.setattr(mod, "build_group_feedback_chat_hint", feedback_hint, raising=False)
+    monkeypatch.setattr(mod, "can_read_behavioral_learning", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        mod,
+        "evaluate_llm_reply_gate_result",
+        lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
+    )
     monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
     monkeypatch.setattr(mod, "refresh_llm_chat_cooldown", AsyncMock())
     monkeypatch.setattr(
         mod,
         "merge_queued_chat",
-        lambda *_args, **_kwargs: SimpleNamespace(text="[CQ:at,qq=10001] 你好", merged=False),
+        lambda *_args, **_kwargs: SimpleNamespace(text="[CQ:at,qq=10001] 你还在吗", merged=False),
     )
     monkeypatch.setattr(
         mod,
@@ -780,6 +309,9 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
         "packages.repeater.model",
         SimpleNamespace(Chat=FakeChat, ChatData=SimpleNamespace),
     )
+    from packages.repeater import bundle_lookup
+
+    monkeypatch.setattr(bundle_lookup, "find_reply_bundle_bounded", AsyncMock(return_value=bundle))
     monkeypatch.setattr(mod, "submit_corpus_assist_stages", AsyncMock(return_value=False))
 
     await mod.handle_llm_chat(bot, event)
@@ -791,24 +323,36 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert payload["llm_route"] == "corpus_select"
     assert payload["last_reply_text"] == "上一句"
     assert payload["recent_reply_texts"] == ["群内上一句", "群内更早一句"]
-    assert "最近几轮别再用这些开头" in payload["variation_hint"]
+    assert "variation_hint" not in payload
     assert payload["behavior_scene"] == "provocation"
     assert payload["behavior_pattern_ids"] == ["p1"]
     assert payload["behavior_actions"] == ["light_tease_and_close"]
-    assert payload["behavior_hint"] == ""
+    assert payload["behavior_hint"]
+    assert "persona_affect_block" not in payload
+    assert payload["current_turn_trace"]["social_action"] == "ACK"
+    feedback_hint.assert_not_called()
     submit_request = submit_mock.await_args.args[0]
-    assert "【本轮表达去重】" in submit_request.system_prompt
-    assert "【本轮牛格塑形】" in submit_request.system_prompt
-    assert "【表达习惯参考】" in submit_request.system_prompt
-    assert "【收尾变化参考】" in submit_request.system_prompt
-    assert "【语料收尾参考】" in submit_request.system_prompt
-    assert submit_request.llm_rewrite_metadata["persona_shaping_active"] is True
-    assert "【本轮牛格塑形】" in submit_request.llm_rewrite_metadata["persona_affect_block"]
+    assert "【本轮表达去重】" not in submit_request.system_prompt
+    assert "【本轮牛格塑形】" not in submit_request.system_prompt
+    assert "【表达习惯参考】" not in submit_request.system_prompt
+    assert "【收尾变化参考】" not in submit_request.system_prompt
+    assert "【语料收尾参考】" not in submit_request.system_prompt
+    assert "【本轮表达去重】" not in "\n".join(submit_request.style_user_hints)
+    assert "【收尾变化参考】" not in "\n".join(submit_request.style_user_hints)
+    assert "本轮直接回答当前问题，别补一整套客套。" not in "\n".join(submit_request.style_user_hints)
+    assert "【本轮临时措辞】" not in "\n".join(submit_request.style_user_hints)
+    assert submit_request.style_user_hints == []
+    assert "persona_shaping_active" not in submit_request.llm_rewrite_metadata
+    assert "variation_hint" not in submit_request.llm_rewrite_metadata
+    assert "same_utterance_redup" not in submit_request.llm_rewrite_metadata
+    assert submit_request.llm_rewrite_metadata["social_action"] == "ACK"
+    assert submit_request.llm_rewrite_metadata["reply_target"] == "fact"
+    assert submit_request.include_session_history is False
     assert submit_request.hybrid_retrieval_trace["sources"] == ["memory"]
 
 
 @pytest.mark.asyncio
-async def test_handle_llm_chat_defers_when_user_likely_not_finished(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_handle_llm_chat_submits_explicit_mention_without_wait(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.llm_chat import chat_message as mod
 
     event = SimpleNamespace(
@@ -846,6 +390,10 @@ async def test_handle_llm_chat_defers_when_user_likely_not_finished(monkeypatch:
             llm_polish_enabled=False,
             llm_chat_cooldown_sec=3,
             llm_chat_queue_merge=True,
+            llm_speak_followup_enabled=False,
+            llm_speak_followup_window_sec=30,
+            llm_speak_followup_max_total_sec=120,
+            llm_speak_perception_enabled=False,
         ),
     )
     monkeypatch.setattr(
@@ -861,26 +409,30 @@ async def test_handle_llm_chat_defers_when_user_likely_not_finished(monkeypatch:
     )
     monkeypatch.setattr(
         mod,
-        "enrich_system_with_memory_context",
-        AsyncMock(side_effect=lambda prompt, **_: SimpleNamespace(system_prompt=prompt, trace={"hit_count": 0})),
+        "assemble_direct_chat_context",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                system_prompt="sys",
+                knowledge_retrieval_trace={},
+                hybrid_retrieval_trace={},
+                relationship_trace={},
+            )
+        ),
     )
-    monkeypatch.setattr(
-        mod,
-        "enrich_system_with_knowledge_sources",
-        AsyncMock(side_effect=lambda prompt, **_: SimpleNamespace(system_prompt=prompt, trace={"hit_count": 0})),
-    )
-    monkeypatch.setattr(
-        mod,
-        "enrich_system_with_relationship_context",
-        AsyncMock(side_effect=lambda prompt, **_: SimpleNamespace(system_prompt=prompt, trace={"hit_count": 0})),
-    )
-    monkeypatch.setattr(mod, "build_llm_chat_expression_suffix", AsyncMock(return_value=""))
     monkeypatch.setattr(mod, "resolve_conversation_feature_level", lambda *_args, **_kwargs: "full_conversation_kernel")
     monkeypatch.setattr(mod, "can_read_behavioral_learning", lambda *_args, **_kwargs: False)
-    monkeypatch.setattr(mod, "evaluate_llm_reply_gate", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        mod,
+        "evaluate_llm_reply_gate_result",
+        lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
+    )
+    monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "refresh_llm_chat_cooldown", AsyncMock())
+    monkeypatch.setattr(mod, "list_user_llm_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value=""))
     submit_mock = AsyncMock(return_value=SimpleNamespace(ok=True, task_id="ai-task-1", status="queued"))
     monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
 
     await mod.handle_llm_chat(bot, event)
 
-    submit_mock.assert_not_awaited()
+    submit_mock.assert_awaited_once()

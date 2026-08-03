@@ -73,6 +73,7 @@ async def run_ai_callback(
     file: UploadFile | None = None,
     history_summary: str | None = None,
     history_keep_messages: int | None = None,
+    suppress_empty_fallback: bool = False,
 ) -> dict[str, str]:
     task = await resolve_callback_task(task_id)
     if not task:
@@ -158,6 +159,7 @@ async def run_ai_callback(
             parsed_agent_trace=parsed_agent_trace,
             history_summary=history_summary,
             history_keep_messages=history_keep_messages,
+            suppress_empty_fallback=suppress_empty_fallback,
         )
         task_type = str(task.get("task_type") or "").strip()
         if file and group_id and bot is not None:

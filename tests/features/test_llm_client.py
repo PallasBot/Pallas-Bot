@@ -184,6 +184,31 @@ async def test_submit_chat_task_kernel_uses_pg_session_messages(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
+async def test_resolve_chat_messages_passes_short_social_history_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.models import ChatCompletionMessage
+
+    build_messages = AsyncMock(return_value=[ChatCompletionMessage(role="user", content="【用户消息】没绷住")])
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.client.build_llm_chat_messages", build_messages)
+
+    await resolve_chat_messages(
+        ChatSubmitRequest(
+            request_id="req-social-history",
+            session_id="sess-social-history",
+            user_text="没绷住",
+            system_prompt="system",
+            bot_id=10001,
+            group_id=20002,
+            user_id=30003,
+            include_session_history=False,
+        ),
+        cfg=LlmConfig(llm_chat_enabled=True),
+    )
+
+    assert build_messages.await_args.kwargs["include_history"] is False
+
+
+@pytest.mark.asyncio
 async def test_submit_chat_task_metadata_includes_runtime_state_summary_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-sum", status="processing", ok=True))
     monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)

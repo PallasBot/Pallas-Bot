@@ -19,7 +19,6 @@ class RepeaterOverlayExport(BaseModel):
     token_count: int | None = None
     affect_block: str = ""
     variation_hint: str = ""
-    dynamic_expression_hint: str = ""
     llm_rewrite_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -80,7 +79,6 @@ async def build_persona_asset_bundle_v1(
                 token_count=repeater_bundle.token_count,
                 affect_block=repeater_bundle.affect_block,
                 variation_hint=repeater_bundle.variation_hint,
-                dynamic_expression_hint=repeater_bundle.dynamic_expression_hint,
                 llm_rewrite_metadata=dict(repeater_bundle.llm_rewrite_metadata),
             )
     return PersonaAssetBundleV1(

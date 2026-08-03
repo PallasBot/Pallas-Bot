@@ -313,7 +313,7 @@ class LlmConfig(BaseModel):
     llm_repeater_writeback_enabled: bool = Field(default=True)
     conversation_feature_level: str = Field(default="")
     llm_reply_gate_enabled: bool = Field(default=True)
-    llm_current_turn_decision_enabled: bool = Field(default=False)
+    llm_current_turn_decision_enabled: bool = Field(default=True)
     llm_current_turn_decision_model: str = Field(default="")
     llm_reply_gate_min_chars: int = Field(default=1, ge=0, le=32)
     llm_chat_queue_merge: bool = Field(default=True)
@@ -354,6 +354,7 @@ class LlmConfig(BaseModel):
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
     llm_memory_content_max_len: int = Field(default=500, ge=64, le=4000)
     llm_memory_auto_episode_enabled: bool = Field(default=True)
+    llm_memory_auto_episode_summary_enabled: bool = Field(default=False)
     llm_memory_auto_episode_cooldown_sec: int = Field(default=120, ge=0, le=3600)
     llm_memory_graph_extract_enabled: bool = Field(default=True)
     llm_memory_graph_extract_on_write: bool = Field(default=False)
@@ -536,7 +537,7 @@ def get_llm_config() -> LlmConfig:
             llm_repeater_writeback_enabled=_env_bool("LLM_REPEATER_WRITEBACK_ENABLED", True),
             conversation_feature_level=resolve_conversation_feature_level_raw(),
             llm_reply_gate_enabled=_env_bool("LLM_REPLY_GATE_ENABLED", True),
-            llm_current_turn_decision_enabled=_env_bool("LLM_CURRENT_TURN_DECISION_ENABLED", False),
+            llm_current_turn_decision_enabled=_env_bool("LLM_CURRENT_TURN_DECISION_ENABLED", True),
             llm_current_turn_decision_model=_env_str("LLM_CURRENT_TURN_DECISION_MODEL"),
             llm_reply_gate_min_chars=_env_int("LLM_REPLY_GATE_MIN_CHARS", 1),
             llm_chat_queue_merge=_env_bool("LLM_CHAT_QUEUE_MERGE", True),
@@ -592,6 +593,7 @@ def get_llm_config() -> LlmConfig:
             llm_memory_max_per_group=_env_int("LLM_MEMORY_MAX_PER_GROUP", 200),
             llm_memory_content_max_len=_env_int("LLM_MEMORY_CONTENT_MAX_LEN", 500),
             llm_memory_auto_episode_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_ENABLED", True),
+            llm_memory_auto_episode_summary_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_SUMMARY_ENABLED", False),
             llm_memory_auto_episode_cooldown_sec=_env_int("LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC", 120),
             llm_memory_graph_extract_enabled=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ENABLED", True),
             llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", False),

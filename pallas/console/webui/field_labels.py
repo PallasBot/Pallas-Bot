@@ -185,6 +185,7 @@ FIELD_LABELS: dict[str, str] = {
     "llm_memory_max_per_group": "每群记忆上限",
     "llm_memory_content_max_len": "单条记忆字数上限",
     "llm_memory_auto_episode_enabled": "自动沉淀会话为记忆",
+    "llm_memory_auto_episode_summary_enabled": "自动摘要群内共同事件",
     "llm_memory_auto_episode_cooldown_sec": "自动沉淀冷却（秒）",
     "llm_memory_graph_extract_enabled": "记忆图谱抽取",
     "llm_memory_graph_extract_on_write": "写入后自动抽取图谱",

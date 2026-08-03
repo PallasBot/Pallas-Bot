@@ -131,7 +131,6 @@
 | 复读查库短缓存 | 同群同文案短时复用结果 | `PALLAS_REPEATER_BUNDLE_CACHE_SEC`（默认约 2.5s；`0`=关） |
 | 复读学习入队 | 过载或队列压力下可丢学习、不影响回消息 | 学习队列配置见复读运行时 |
 | 被动插嘴攒窗 | 同群短间隔连发只评估首条 ambient；@ / 点名 / 续聊窗不受影响 | `PALLAS_LLM_AMBIENT_TURN_WINDOW`、`PALLAS_LLM_AMBIENT_TURN_IDLE_SEC` |
-| 语料收尾提示 | 组装 LLM 提示时查语料有短超时，超时则省略该提示 | `PALLAS_LLM_CORPUS_ENDING_HINT_TIMEOUT_SEC` |
 
 人设群风格等后台刷新在过载时会暂缓，避免与群消息抢事件环。
 

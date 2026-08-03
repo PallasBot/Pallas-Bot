@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -18,6 +20,17 @@ from pallas.product.llm import delivery as llm_delivery
 from pallas.product.llm.behavior import BehaviorAction, BehaviorScene
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.output_filter import CHAT_HARD_BLOCK_PHRASES
+
+
+def test_llm_delivery_import_does_not_eagerly_import_callback_runner() -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", "import pallas.product.llm.delivery"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_should_suppress_llm_duplicate_reply_for_short_parasitic_tail() -> None:

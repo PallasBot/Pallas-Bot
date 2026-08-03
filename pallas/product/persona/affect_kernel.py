@@ -121,40 +121,6 @@ def build_variation_hint_from_contract(contract: PersonaAffectContract) -> str:
     return f"【开头去重】最近别再用这些开头：{labels}。"
 
 
-def build_persona_affect_system_block(contract: PersonaAffectContract) -> str:
-    """@ 闲聊专用：把 contract 的 stance/长度/禁腔调写入 system，而不只放 metadata 去重。"""
-    lines = ["【本轮牛格塑形】"]
-    seen: set[str] = set()
-    for hint in contract.stance_hints:
-        text = str(hint or "").strip()
-        if not text or text in seen:
-            continue
-        seen.add(text)
-        lines.append(f"- {text}")
-
-    if contract.preferred_length_max <= 16:
-        length_line = "句长预算：优先 1 句，最多 2 句短口语。"
-    elif contract.preferred_length_max <= 36:
-        length_line = "句长预算：2 句内说完，像群友顺口接话。"
-    else:
-        length_line = "句长预算：可稍展开，但仍保持口语，别写分段小作文。"
-    if length_line not in seen:
-        lines.append(f"- {length_line}")
-
-    if contract.disallowed_tones:
-        tones = "、".join(contract.disallowed_tones)
-        lines.append(f"- 避免腔调：{tones}；像群友顺口接话，别演成助手或导游。")
-
-    for item in contract.ending_constraints:
-        text = str(item or "").strip()
-        if text and text not in seen:
-            lines.append(f"- {text}")
-
-    if len(lines) <= 1:
-        lines.append("- 像本群常出现的接话：口语、直接，短句为主。")
-    return "\n".join(lines)
-
-
 def build_repeater_persona_affect_system_block(contract: PersonaAffectContract) -> str:
     lines = ["【接话塑形】"]
     seen: set[str] = set()
@@ -179,15 +145,3 @@ def build_repeater_persona_affect_system_block(contract: PersonaAffectContract) 
         lines.append(f"- 别再用这些开头：{labels}")
 
     return "\n".join(lines)
-
-
-def group_flavor_summary_from_style_snapshot(group_style: dict | None) -> str:
-    if not isinstance(group_style, dict):
-        return ""
-    hints = group_style.get("hints")
-    if not isinstance(hints, list):
-        return ""
-    parts = [str(item).strip() for item in hints if str(item).strip()]
-    if not parts:
-        return ""
-    return "本群风格：" + "、".join(parts[:4])

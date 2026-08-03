@@ -66,7 +66,7 @@ def test_propose_skips_llm_success_echo_question_template() -> None:
     )
 
 
-def test_note_expression_respects_config_and_merges_llm_success_weight(monkeypatch, tmp_path) -> None:
+def test_note_expression_does_not_persist_llm_success(monkeypatch, tmp_path) -> None:
     learn = expression_learn()
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     monkeypatch.setattr(learn, "get_llm_config", lambda: SimpleNamespace(llm_expression_learn_enabled=False))
@@ -74,23 +74,14 @@ def test_note_expression_respects_config_and_merges_llm_success_weight(monkeypat
     assert learn.note_expression_from_utterance(10001, "那确实", channel="group") is None
 
     monkeypatch.setattr(learn, "get_llm_config", lambda: SimpleNamespace(llm_expression_learn_enabled=True))
-    saved = learn.note_expression_from_utterance(10001, "那确实", channel="group", scene_tier="casual")
-
-    assert saved is not None
-    assert saved.group_id == 10001
-    assert saved.source == "llm_success"
-    assert saved.support == 1
-    assert saved.status == "shadow"
-    assert learn.note_expression_from_utterance(10001, "[CQ:face,id=14]", channel="group") is None
+    assert learn.note_expression_from_utterance(10001, "那确实", channel="group", scene_tier="casual") is None
 
     from pallas.product.persona.expression_bank import list_group_expressions
 
-    entries = list_group_expressions(10001)
-    assert len(entries) == 1
-    assert entries[0].support == 1
+    assert list_group_expressions(10001) == []
 
 
-def test_note_expression_llm_success_respects_cooldown(monkeypatch, tmp_path) -> None:
+def test_note_expression_keeps_group_observation_separate_from_llm_success(monkeypatch, tmp_path) -> None:
     learn = expression_learn()
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     learn.clear_expression_learn_cooldown_state()
@@ -99,14 +90,10 @@ def test_note_expression_llm_success_respects_cooldown(monkeypatch, tmp_path) ->
         "get_llm_config",
         lambda: SimpleNamespace(llm_expression_learn_enabled=True, llm_expression_learn_cooldown_sec=300),
     )
-    first = learn.note_expression_from_utterance(10001, "那确实", channel="group", source="llm_success")
-    second = learn.note_expression_from_utterance(10001, "那确实", channel="group", source="llm_success")
-    assert first is not None
-    assert second is None
-    learn.clear_expression_learn_cooldown_state()
-    third = learn.note_expression_from_utterance(10001, "那确实", channel="group", source="llm_success")
-    assert third is not None
-    assert third.support >= 2  # merge increments support
+    assert learn.note_expression_from_utterance(10001, "那确实", channel="group", source="llm_success") is None
+    observed = learn.note_expression_from_utterance(10001, "那确实", channel="group", source="group_observe")
+    assert observed is not None
+    assert observed.source == "group_observe"
 
 
 def test_group_observe_learning_batches_safe_messages(monkeypatch, tmp_path) -> None:

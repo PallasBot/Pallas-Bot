@@ -29,8 +29,7 @@
 | --- | --- |
 | 强弱场景 / 抽签 | `packages/repeater/opportunity_gate.py`（`resolve_scene_tier`、`decide_llm_attempt`） |
 | 接话提交管线 | `pallas/product/llm/polish_lite.py`（`maybe_submit_repeater_corpus_llm`） |
-| 接话人格 + 表达注入 | `pallas/product/llm/repeater_persona_context.py` |
-| `@` 表达注入 | `packages/llm_chat/chat_message.py`（`build_llm_chat_expression_suffix`） |
+| 接话人格 | `pallas/product/llm/repeater_persona_context.py` |
 | 表达库存取 / 学习 | `pallas/product/persona/expression_*.py` |
 | 进程内投递 | `pallas/product/llm/delivery.py`（`deliver_llm_chat_result`）；`kernel_runner.py` 调用 delivery |
 | 媒体 / HTTP callback 壳 | `pallas/core/platform/ai_callback/runner.py`（薄壳，复用 delivery） |

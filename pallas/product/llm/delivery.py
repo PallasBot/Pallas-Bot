@@ -161,6 +161,7 @@ async def deliver_llm_callback_success(
     parsed_agent_trace: dict | None,
     history_summary: str | None,
     history_keep_messages: int | None,
+    suppress_empty_fallback: bool = False,
 ) -> tuple[str, bool, bool]:
     """处理 LLM 回调文本并投递到群。返回 (reply_text, text_delivered, delivered)。"""
     delivered = bot is not None
@@ -178,6 +179,7 @@ async def deliver_llm_callback_success(
         reply_text = fallback if fallback and fallback != reply_text else ""
     from pallas.product.llm.output_filter import resolve_output_filtered_reply
 
+    had_reply_before_filter = bool(reply_text)
     reply_text = resolve_output_filtered_reply(task, reply_text)
     if task_type == LLM_CHAT_TASK_TYPE and reply_text:
         from pallas.product.llm.message_guard import strip_leading_self_at_mentions
@@ -196,10 +198,14 @@ async def deliver_llm_callback_success(
             bot_self_id=bot_self_id,
             mention_names=mention_names,
         )
-    if task_type == LLM_CHAT_TASK_TYPE:
+    if task_type == LLM_CHAT_TASK_TYPE and not had_reply_before_filter:
         from pallas.product.llm.chat_empty_fallback import resolve_llm_chat_empty_fallback
 
-        reply_text = resolve_llm_chat_empty_fallback(task, reply_text)
+        reply_text = resolve_llm_chat_empty_fallback(
+            task,
+            reply_text,
+            suppress_empty_fallback=suppress_empty_fallback,
+        )
     if task_type in _REPEATER_CALLBACK_TASKS and reply_text:
         accepted = await evaluate_repeater_callback_text(task, reply_text)
         if not accepted:
@@ -254,6 +260,9 @@ async def deliver_llm_callback_success(
             if user_text:
                 await append_llm_message(int(bot_id), scope_group, speaker_id, "user", user_text)
             await append_llm_message(int(bot_id), scope_group, speaker_id, "assistant", reply_text)
+            from pallas.product.llm.memory.auto_episode import schedule_auto_save_group_episode
+
+            schedule_auto_save_group_episode(bot_id=int(bot_id), group_id=scope_group)
     from pallas.product.llm.repeater_feedback import is_feedback_task_type
 
     if is_feedback_task_type(task_type) and reply_text and text_delivered:
@@ -327,6 +336,7 @@ async def deliver_llm_chat_result(
     agent_trace: str | None = None,
     history_summary: str | None = None,
     history_keep_messages: int | None = None,
+    suppress_empty_fallback: bool = False,
 ) -> dict[str, str]:
     """闲聊结果投递（内核直连与 AI HTTP 回调共用）。"""
     from pallas.core.platform.ai_callback.runner import run_ai_callback
@@ -338,4 +348,5 @@ async def deliver_llm_chat_result(
         agent_trace=agent_trace,
         history_summary=history_summary,
         history_keep_messages=history_keep_messages,
+        suppress_empty_fallback=suppress_empty_fallback,
     )

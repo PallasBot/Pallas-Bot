@@ -52,3 +52,8 @@ def test_ops_config_patch_dicts_keep_known_fields() -> None:
     memory_patch = memory_ops_patch_dict({"llm_memory_rag_top_k": 4})
     assert memory_patch["llm_memory_rag_top_k"] == 4
     assert LlmMemoryOpsConfig.model_validate(memory_patch)
+
+
+def test_memory_ops_patch_keeps_group_episode_summary_switch() -> None:
+    memory_patch = memory_ops_patch_dict({"llm_memory_auto_episode_summary_enabled": True})
+    assert memory_patch["llm_memory_auto_episode_summary_enabled"] is True

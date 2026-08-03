@@ -6,8 +6,6 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from pallas.core.foundation.db import make_group_config_repository
-from pallas.product.llm.dynamic_expression_context import build_dynamic_expression_hint
 from pallas.product.llm.inference_params import derive_llm_inference_params
 from pallas.product.llm.persona_context import build_persona_llm_context
 from pallas.product.llm.reply_variation import (
@@ -19,15 +17,12 @@ from pallas.product.persona.affect_kernel import (
     build_persona_affect_contract,
     build_repeater_persona_affect_system_block,
     build_variation_hint_from_contract,
-    group_flavor_summary_from_style_snapshot,
 )
-from pallas.product.persona.compile_group_style import compile_group_style_snapshot
 from pallas.product.persona.compile_persona_prompt import (
     load_fallback_lite_system_prompt,
     load_polish_lite_system_prompt,
     resolve_select_system_prompt_path,
 )
-from pallas.product.persona.expression_habits import build_expression_context_suffix
 
 _STATIC_BASE_LOADERS = {
     "polish_lite": load_polish_lite_system_prompt,
@@ -43,7 +38,6 @@ class RepeaterLlmPersonaBundle:
     llm_rewrite_metadata: dict[str, Any]
     affect_block: str = ""
     variation_hint: str = ""
-    dynamic_expression_hint: str = ""
 
 
 async def load_recent_bot_plain_replies(bot_id: int, group_id: int, *, limit: int = 6) -> list[str]:
@@ -136,26 +130,6 @@ async def build_repeater_llm_persona_context(
         return None
 
     persona = await resolve_persona_for_message(bot_id, group_id, plain)
-    group_style: dict[str, Any] | None = None
-    try:
-        group_config = await make_group_config_repository().get(int(group_id))
-    except Exception:
-        group_config = None
-    raw_profile = getattr(group_config, "style_profile", None) if group_config is not None else None
-    if isinstance(raw_profile, dict):
-        group_style = raw_profile
-    expression_context_suffix = await build_expression_context_suffix(
-        group_id,
-        plain,
-        bot_id=bot_id,
-        style_profile=group_style,
-    )
-    expression_reference_count = (
-        max(0, len(expression_context_suffix.splitlines()) - 2)
-        if expression_context_suffix.startswith("\n【表达参考】")
-        else 0
-    )
-
     recent_replies = await load_recent_bot_plain_replies(bot_id, group_id)
     openers: list[str] = []
     for text in reversed(recent_replies):
@@ -167,20 +141,12 @@ async def build_repeater_llm_persona_context(
 
     from pallas.product.llm.kernel.models import normalize_conversation_mode
 
-    group_flavor = group_flavor_summary_from_style_snapshot(compile_group_style_snapshot(group_style))
     affect_contract = build_persona_affect_contract(
         persona,
         mode=normalize_conversation_mode(str(mode or "normal")),
-        group_flavor_summary=group_flavor,
         repeated_openers=openers,
     )
     affect_block = build_repeater_persona_affect_system_block(affect_contract)
-    dynamic_expression_hint = await build_dynamic_expression_hint(
-        group_id,
-        plain,
-        bot_id=bot_id,
-        current_user_id=user_id,
-    )
     variation_hint = build_variation_hint_from_recent_texts(recent_replies)
     contract_variation = build_variation_hint_from_contract(affect_contract)
     if contract_variation and contract_variation not in variation_hint:
@@ -189,21 +155,15 @@ async def build_repeater_llm_persona_context(
     parts = [base_system.rstrip()]
     if affect_block:
         parts.append(affect_block)
-    if expression_context_suffix:
-        parts.append(expression_context_suffix.strip())
-    if dynamic_expression_hint:
-        parts.append(dynamic_expression_hint.strip())
     if variation_hint:
         parts.append(variation_hint.strip())
     feedback = str(feedback_suffix or "").strip()
     if feedback:
         parts.append(feedback)
 
-    shaping_active = bool(affect_block or expression_context_suffix or dynamic_expression_hint or variation_hint)
+    shaping_active = bool(affect_block or variation_hint)
     llm_rewrite_metadata = {
         "persona_affect_block": affect_block,
-        "expression_reference_count": expression_reference_count,
-        "dynamic_expression_hint": dynamic_expression_hint,
         "variation_hint": variation_hint,
         "persona_shaping_active": shaping_active,
         "persona_shaping_profile": "repeater",
@@ -217,5 +177,4 @@ async def build_repeater_llm_persona_context(
         llm_rewrite_metadata=llm_rewrite_metadata,
         affect_block=affect_block,
         variation_hint=variation_hint,
-        dynamic_expression_hint=dynamic_expression_hint,
     )

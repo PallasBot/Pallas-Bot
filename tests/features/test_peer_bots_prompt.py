@@ -7,6 +7,7 @@ from pallas.product.persona.peer_bots_prompt import (
     is_peer_harm_expression,
     parse_peer_alias_teach,
 )
+from pallas.product.persona import peer_bots_prompt as mod
 
 
 def test_compile_peer_bots_prompt_lists_peers() -> None:
@@ -24,6 +25,34 @@ def test_compile_peer_bots_prompt_lists_peers() -> None:
 
 def test_compile_peer_bots_prompt_empty_without_peers() -> None:
     assert compile_peer_bots_prompt(self_bot_id=1001, peer_labels=[], taught_aliases=[]) == ""
+
+
+def test_compile_peer_bots_prompt_for_message_requires_peer_reference() -> None:
+    ordinary = mod.compile_peer_bots_prompt_for_message(
+        self_bot_id=1001,
+        plain_text="改改改",
+        peer_labels=["测试机"],
+    )
+    explicit = mod.compile_peer_bots_prompt_for_message(
+        self_bot_id=1001,
+        plain_text="测试机怎么没说话",
+        peer_labels=["测试机"],
+    )
+    generic = mod.compile_peer_bots_prompt_for_message(
+        self_bot_id=1001,
+        plain_text="其他牛牛也在吗",
+        peer_labels=["测试机"],
+    )
+    generic_nickname = mod.compile_peer_bots_prompt_for_message(
+        self_bot_id=1001,
+        plain_text="牛牛在吗",
+        peer_labels=["牛牛", "测试机"],
+    )
+
+    assert ordinary == ""
+    assert "测试机" in explicit
+    assert "测试机" in generic
+    assert generic_nickname == ""
 
 
 def test_parse_peer_alias_teach() -> None:

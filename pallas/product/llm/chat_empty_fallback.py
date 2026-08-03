@@ -11,7 +11,12 @@ HARD_SPEAK_TRIGGERS = frozenset({"to_me", "mention", "followup"})
 LLM_CHAT_EMPTY_FALLBACK = LLM_CHAT_EMPTY_FALLBACK_TEXT
 
 
-def resolve_llm_chat_empty_fallback(task: dict, reply_text: str) -> str:
+def resolve_llm_chat_empty_fallback(
+    task: dict,
+    reply_text: str,
+    *,
+    suppress_empty_fallback: bool = False,
+) -> str:
     """有正文则原样返回；硬触发且为空时用 fallback / 短兜底。
 
     本轮已成功走过工具调用时允许静默，避免动作完成后硬塞垫词。
@@ -19,6 +24,8 @@ def resolve_llm_chat_empty_fallback(task: dict, reply_text: str) -> str:
     text = str(reply_text or "").strip()
     if text:
         return text
+    if suppress_empty_fallback:
+        return ""
     if str(task.get("task_type") or "").strip() != LLM_CHAT_TASK_TYPE:
         return ""
     trace = task.get("agent_trace")

@@ -100,12 +100,12 @@ async def save_memory_entry_mongo(
     c = cfg or get_llm_config()
     safe_content = sanitize_prompt_block(content, max_len=c.llm_memory_content_max_len)
     normalized_source = (source or "").strip()
-    if normalized_source in ("teach", "auto_episode", ""):
+    if normalized_source in ("teach", "auto_episode", "auto_episode_summary", ""):
         kind = classify_memory_candidate(safe_content)
         if normalized_source in ("teach", ""):
             normalized_source = kind or "teach"
         safe_content = normalize_episode_note(safe_content, max_len=c.llm_memory_content_max_len)
-        if normalized_source == "auto_episode" and not kind:
+        if normalized_source in ("auto_episode", "auto_episode_summary") and not kind:
             return False
     if not safe_content:
         return False

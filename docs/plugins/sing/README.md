@@ -64,7 +64,7 @@ resource/sing/models/<音色名>/
 
 - `<音色名>` 即 Speaker id（例如 `pallas`）；**不要**占用 `pretrain`（公共预训练权重）
 - **DDSP**：放入 `*.pt` + `config.yaml`（官方 `pallas` 即此形态）
-- **RVC（社区）**：放入 `*.pth`，可选同名或唯一一个 `*.index`；并准备 `pretrain/rvc` 下 hubert / rmvpe（见 [AI Runtime · RVC](../../maintainer/install/ai-runtime.md#社区-rvc-音色可选第三后端)）
+- **RVC（社区）**：放入可推理的 `*.pth`（不是训练过程的 `G_*.pth`），可选同名或唯一一个 `*.index`；并按 [AI Runtime · RVC](../../maintainer/install/ai-runtime.md#社区-rvc-音色可选第三后端) 准备 `pretrain/rvc` 下完整的 HuBERT / RMVPE 共享权重
 - **SoVITS**：`G_*.pth` + `config.json`
 - 刷新控制台「唱歌」页应能探测到；在插件「音色映射」里把命令前缀（如「牛牛」「帕拉斯」）指到该 id
 

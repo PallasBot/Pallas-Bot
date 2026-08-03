@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
 from pallas.product.persona.auto import archetype_for_bot_id, derive_persona_from_bot_id
@@ -54,6 +56,15 @@ def test_load_at_chat_system_prompt_avoids_assistant_style() -> None:
     assert "禁止客服/助手口吻" in text
     assert "有啥想聊" in text
     assert "1-3 段" not in text
+    assert "不负责把对方情绪收好" in text
+
+
+def test_at_chat_prompt_keeps_pallas_identity_without_animal_persona() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "你是女性" in prompt
+    assert "牛牛只是群友叫你的外号" in prompt
+    assert "偶尔会因爱酒、对新鲜事物的兴致或一时沉思" in prompt
 
 
 def test_compile_persona_prompt_uses_repeater_base() -> None:
@@ -99,6 +110,26 @@ def test_build_bot_behavior_prompt_includes_tone_and_length() -> None:
     assert "tone=dramatic" not in prompt
     assert "短句" in prompt or "短促" in prompt
     assert "客服式完整解释" in prompt
+
+
+def test_compile_persona_prompt_chat_profile_skips_bot_behavior_and_peer_list(monkeypatch) -> None:
+    prompt_module = importlib.import_module("pallas.product.persona.compile_persona_prompt")
+    monkeypatch.setattr(
+        prompt_module,
+        "compile_peer_bots_prompt",
+        lambda **_kwargs: "<<STATS:peer_bots>>\n旧同伴列表",
+    )
+    bundle = compile_persona_prompt(
+        derive_persona_from_bot_id(1),
+        None,
+        bot_id=1,
+        base_system="基础",
+        prompt_profile="chat",
+    )
+
+    assert bundle.sections.bot_behavior == ""
+    assert "<<STATS:bot_behavior>>" not in bundle.system
+    assert "<<STATS:peer_bots>>" not in bundle.system
 
 
 def test_bot_behavior_fingerprint_differs_by_archetype() -> None:
@@ -154,6 +185,8 @@ def test_compile_persona_prompt_merges_sections() -> None:
     assert "<<STATS:group_expression>>" in bundle.sections.group_expression
     assert "【测试基础人设】" in bundle.system
     assert "【安全约束" in bundle.system
+    assert "<<STATS:group_style>>" not in bundle.system
+    assert "<<STATS:group_expression>>" not in bundle.system
 
 
 def test_compile_persona_prompt_rejects_poisoned_style_profile_enums() -> None:
@@ -188,7 +221,14 @@ def test_assemble_persona_system_skips_empty_sections() -> None:
 
     system = assemble_persona_system(PersonaPromptSections(base="A", bot_behavior="", group_style="B"))
     assert "【安全约束" in system
-    assert "A\n\nB" in system
+    assert "A" in system
+    assert "B" not in system
+
+
+def test_at_chat_prompt_does_not_default_to_emotional_closure() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "不负责把对方情绪收好" in prompt
 
 
 @pytest.mark.asyncio

@@ -1296,11 +1296,12 @@ def register_common_config_router(
     @router.get(f"{x}/common-config/llm/runtime-debug/{{request_id}}", include_in_schema=True)
     async def _llm_runtime_debug_get(request_id: str) -> JSONResponse:
         from pallas.product.llm.ops_api import load_runtime_debug_bundle
+        from pallas.product.llm.runtime_debug import build_runtime_debug_webui_view
 
         rid = str(request_id or "").strip()
         if not rid:
             raise HTTPException(status_code=400, detail="缺少 request_id")
-        data = load_runtime_debug_bundle(request_id=rid)
+        data = build_runtime_debug_webui_view(load_runtime_debug_bundle(request_id=rid))
         if not data.get("snapshot") and not data.get("trace"):
             raise HTTPException(status_code=404, detail="未找到 runtime debug 记录")
         return JSONResponse({"ok": True, "data": data})

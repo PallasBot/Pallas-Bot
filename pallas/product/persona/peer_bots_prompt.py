@@ -16,6 +16,7 @@ _PEER_TEACH_RE = re.compile(
 )
 
 _PEER_HARM_RE = re.compile(r"(?:其他牛牛|别的牛牛|打死.{0,8}牛|打了其他|哪只都不舍得打死|没留活口|打成牛肉丸)")
+_PEER_REFERENCE_RE = re.compile(r"(?:其他|别的|另一只|同伴)(?:的)?牛+(?:们)?|哪只牛+")
 
 _PEER_ALIAS_BLOCKLIST = frozenset({
     "我",
@@ -137,6 +138,32 @@ def compile_peer_bots_prompt(
         "- 不要宣称「我打死了其他牛牛」或替同伴受过；可以说「那是另一只牛牛在说话」。",
     ])
     return wrap_stats_block("peer_bots", body)
+
+
+def compile_peer_bots_prompt_for_message(
+    *,
+    self_bot_id: int,
+    plain_text: str,
+    peer_labels: list[str] | None = None,
+    taught_aliases: list[str] | None = None,
+    bot_persona: dict[str, Any] | None = None,
+) -> str:
+    labels = list(peer_labels) if peer_labels is not None else resolve_peer_bot_labels(int(self_bot_id))
+    taught = list(taught_aliases) if taught_aliases is not None else extract_taught_peer_aliases(bot_persona)
+    plain = str(plain_text or "").strip().casefold()
+    names: list[str] = []
+    for item in [*labels, *taught]:
+        safe = _safe_peer_alias(str(item or ""))
+        if safe:
+            names.append(safe.casefold())
+    if not plain or (not _PEER_REFERENCE_RE.search(plain) and not any(name in plain for name in names)):
+        return ""
+    return compile_peer_bots_prompt(
+        self_bot_id=self_bot_id,
+        peer_labels=labels,
+        taught_aliases=taught,
+        bot_persona=bot_persona,
+    )
 
 
 def compile_repeater_peer_bots_prompt(

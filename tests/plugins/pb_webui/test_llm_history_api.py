@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from packages.pb_webui import common_config_api as common_config
 from packages.pb_webui import extended_api as mod
 from packages.pb_webui.config import Config
 from pallas.product.llm.session_store import LlmChatTurn
@@ -38,7 +39,7 @@ def test_llm_history_sessions_get(monkeypatch) -> None:
         ]
 
     monkeypatch.setattr(
-        "pallas.product.llm.session_store.list_llm_history_sessions",
+        "pallas.product.llm.ops_api.list_llm_history_sessions",
         fake_list_sessions,
     )
 
@@ -94,7 +95,7 @@ def test_llm_history_session_detail_get(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(
-        "pallas.product.llm.session_store.get_llm_history_session_detail",
+        "pallas.product.llm.ops_api.get_llm_history_session_detail",
         fake_session_detail,
     )
 
@@ -168,7 +169,7 @@ def test_llm_history_behavior_annotation_post(monkeypatch) -> None:
         }
 
     monkeypatch.setattr(
-        "pallas.product.llm.session_store.update_llm_behavior_annotation",
+        "pallas.product.llm.ops_api.update_llm_behavior_annotation",
         fake_update,
     )
 
@@ -200,9 +201,14 @@ def test_llm_runtime_debug_api_returns_snapshot_and_trace(tmp_path, monkeypatch)
     snapshot_id = append_request_snapshot(
         request_id="req-1",
         task="llm_chat",
-        system_prompt="你是牛牛",
+        system_prompt="你是牛牛\n【本轮牛格塑形】\n- 旧塑形\n【情境触发】\n- 旧动态表达\n【收尾变化参考】\n- 旧收尾",
         messages=[{"role": "user", "content": "你好"}],
-        metadata={"agent_stage_plan": ["plan", "tool_loop", "generate"]},
+        metadata={
+            "agent_stage_plan": ["plan", "tool_loop", "generate"],
+            "persona_affect_block": "【本轮牛格塑形】\n- 旧塑形",
+            "dynamic_expression_hint": "【情境触发】\n- 旧动态表达",
+            "variation_hint": "【收尾变化参考】\n- 旧收尾",
+        },
     )
     append_runtime_trace(
         request_id="req-1",
@@ -216,6 +222,20 @@ def test_llm_runtime_debug_api_returns_snapshot_and_trace(tmp_path, monkeypatch)
     assert payload["ok"] is True
     assert payload["data"]["snapshot"]["request_snapshot_id"] == snapshot_id
     assert payload["data"]["trace"]["request_snapshot_id"] == snapshot_id
+    debug_snapshot = payload["data"]["snapshot"]
+    assert "【本轮牛格塑形】" not in debug_snapshot["system_prompt"]
+    assert "【情境触发】" not in debug_snapshot["system_prompt"]
+    assert "【收尾变化参考】" not in debug_snapshot["system_prompt"]
+    assert "dynamic_expression" not in payload["data"]["persona_shaping"]
+    assert "compare_note" not in payload["data"]["persona_shaping"]
+    assert "corpus_ending" not in payload["data"]["persona_shaping"]
+    cleanup = payload["data"]["debug_view"]["retired_persona_cleanup"]
+    assert cleanup["system_prompt_sections"] == ["本轮牛格塑形", "情境触发", "收尾变化参考"]
+    assert cleanup["persona_summary_fields"] == [
+        "affect_block",
+        "lines",
+        "variation_hint",
+    ]
 
     replay = client.get("/pallas/api/common-config/llm/runtime-debug/req-1/replay")
     assert replay.status_code == 200, replay.text
@@ -223,11 +243,12 @@ def test_llm_runtime_debug_api_returns_snapshot_and_trace(tmp_path, monkeypatch)
     assert replay_payload["ok"] is True
     assert replay_payload["data"]["request_snapshot_id"] == snapshot_id
     assert replay_payload["data"]["mode"] == "mock_tools"
+    assert "【本轮牛格塑形】" in replay_payload["data"]["system_prompt"]
 
 
 def test_llm_runtime_replay_run_api_proxies_to_ai_extension(monkeypatch) -> None:
     monkeypatch.setattr(
-        "pallas.product.llm.runtime_debug.build_replay_payload",
+        "pallas.product.llm.ops_api.build_replay_payload",
         lambda *, request_id, mode="mock_tools": {
             "request_id": request_id,
             "request_snapshot_id": "snap-1",
@@ -261,7 +282,7 @@ def test_llm_runtime_replay_run_api_proxies_to_ai_extension(monkeypatch) -> None
             "error": None,
         }
 
-    monkeypatch.setattr(mod, "ai_extension_http_json", fake_ai_http_json)
+    monkeypatch.setattr(common_config, "ai_extension_http_json", fake_ai_http_json)
 
     client = _build_client(monkeypatch)
     response = client.post(

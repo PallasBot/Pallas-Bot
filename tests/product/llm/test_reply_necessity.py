@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
 from pallas.product.llm.reply_necessity import (
     REPLY_NECESSITY_TRIGGER_SCORE,
+    evaluate_reply_necessity_gate,
     is_bystander_plain_text,
     is_noise_fragment,
     score_reply_necessity,
@@ -30,6 +33,74 @@ def test_necessity_high_for_to_me_or_question() -> None:
         has_candidate_pool=True,
     )
     assert hit.score >= REPLY_NECESSITY_TRIGGER_SCORE
+
+
+@pytest.mark.parametrize("text", ["没绷住", "我又改输出了，唉", "就是骂你"])
+def test_direct_short_social_turn_does_not_cross_reply_necessity_threshold(text: str) -> None:
+    result = evaluate_reply_necessity_gate(text=text, is_to_me=True)
+
+    assert result.decision == "skip"
+    assert result.score < REPLY_NECESSITY_TRIGGER_SCORE
+    assert "low_social" in result.detail
+
+
+@pytest.mark.parametrize("text", ["你还在吗", "这个怎么弄", "快回我", "继续说"])
+def test_direct_question_or_request_still_crosses_reply_necessity_threshold(text: str) -> None:
+    result = evaluate_reply_necessity_gate(text=text, is_to_me=True)
+
+    assert result.decision == "proceed"
+    assert result.score >= REPLY_NECESSITY_TRIGGER_SCORE
+
+
+def test_direct_question_is_not_suppressed_by_recent_bot_presence() -> None:
+    result = evaluate_reply_necessity_gate(
+        text="这个怎么弄",
+        is_to_me=True,
+        recent_bot_reply_count=6,
+    )
+
+    assert result.decision == "proceed"
+    assert result.score >= REPLY_NECESSITY_TRIGGER_SCORE
+
+
+def test_mentioned_question_crosses_reply_necessity_threshold() -> None:
+    result = evaluate_reply_necessity_gate(text="牛牛你还在吗", is_mentioned=True)
+
+    assert result.decision == "proceed"
+    assert result.score >= REPLY_NECESSITY_TRIGGER_SCORE
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "name"),
+    [
+        ({"is_mentioned": True}, "mention"),
+        ({"is_followup": True}, "followup"),
+    ],
+)
+def test_addressed_question_is_not_suppressed_by_recent_bot_presence(
+    kwargs: dict[str, bool],
+    name: str,
+) -> None:
+    result = evaluate_reply_necessity_gate(
+        text="你还在吗",
+        recent_bot_reply_count=6,
+        **kwargs,
+    )
+
+    assert result.decision == "proceed", name
+    assert result.score >= REPLY_NECESSITY_TRIGGER_SCORE
+    assert "bot_presence_exempt" in result.detail
+
+
+def test_reply_necessity_applies_recent_bot_presence_penalty() -> None:
+    result = evaluate_reply_necessity_gate(
+        text="这也太离谱了",
+        is_mentioned=True,
+        recent_bot_reply_count=4,
+    )
+
+    assert result.decision == "skip"
+    assert "bot_presence" in result.detail
 
 
 def test_necessity_low_for_short_reaction_after_bot_spoke() -> None:
