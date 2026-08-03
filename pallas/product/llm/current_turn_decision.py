@@ -38,6 +38,7 @@ class CurrentTurnDecisionInput(BaseModel):
     is_to_me: bool = False
     is_explicitly_addressed: bool = False
     tools_permitted: bool = False
+    required_tool_intent: bool = False
     recent_bot_reply_count: int = Field(default=0, ge=0, le=6)
     has_multi_party_overlap: bool = False
 
@@ -155,6 +156,8 @@ def decide_current_turn(
     model_response: str | None = None,
 ) -> CurrentTurnDecision:
     """Choose a validated current-turn action, with a reply-safe fallback."""
+    if turn.required_tool_intent and turn.tools_permitted:
+        return _decision(CurrentTurnAction.TOOL, source="rule", reason="required_tool_intent")
     if not model_enabled:
         return _decision(CurrentTurnAction.REPLY, source="rule", reason="default_reply")
     try:
@@ -200,6 +203,8 @@ async def decide_current_turn_with_model(
     enabled: bool,
 ) -> CurrentTurnDecision:
     """Use the turn-decision task route only when the explicit feature flag is enabled."""
+    if turn.required_tool_intent and turn.tools_permitted:
+        return decide_current_turn(turn, model_enabled=False)
     if not enabled:
         return decide_current_turn(turn, model_enabled=False)
     from pallas.product.llm.provider_client import complete_chat_message
