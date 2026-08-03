@@ -18,7 +18,11 @@ from .compile_group_style import compile_group_style_prompt, compile_group_style
 from .config import persona_preset_layers_enabled
 from .group_expression import compile_group_expression_prompt
 from .loader import resolve_persona, resolve_persona_for_message
-from .peer_bots_prompt import compile_peer_bots_prompt, compile_repeater_peer_bots_prompt
+from .peer_bots_prompt import (
+    compile_peer_bots_prompt,
+    compile_peer_bots_prompt_for_message,
+    compile_repeater_peer_bots_prompt,
+)
 from .preset_layers import compile_preset_layers_prompt, extract_preset_layers
 from .prompt_guard import (
     ALLOWED_LENGTH_PREFS,
@@ -293,6 +297,7 @@ def compile_persona_prompt(
     bot_persona: dict[str, Any] | None = None,
     prompt_profile: str = PROMPT_PROFILE_DEFAULT,
     login_nickname: str | None = None,
+    plain_text: str = "",
 ) -> PersonaPromptBundle:
     profile = str(prompt_profile or PROMPT_PROFILE_DEFAULT).strip() or PROMPT_PROFILE_DEFAULT
     base = sanitize_prompt_block(
@@ -334,7 +339,15 @@ def compile_persona_prompt(
             bot_persona,
             login_nickname=login_nickname,
         )
-        peer = compile_peer_bots_prompt(self_bot_id=int(bot_id), bot_persona=bot_persona)
+        peer = (
+            compile_peer_bots_prompt_for_message(
+                self_bot_id=int(bot_id),
+                plain_text=plain_text,
+                bot_persona=bot_persona,
+            )
+            if profile == PROMPT_PROFILE_CHAT
+            else compile_peer_bots_prompt(self_bot_id=int(bot_id), bot_persona=bot_persona)
+        )
     if peer:
         self_identity = f"{self_identity}\n\n{peer}" if self_identity.strip() else peer
     preset_layers = ""
@@ -407,4 +420,5 @@ async def compile_persona_prompt_for(
         bot_persona=bot_persona,
         prompt_profile=resolved_profile,
         login_nickname=login_nickname or None,
+        plain_text=message_text,
     )

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+
 import pytest
 
 from pallas.product.persona.auto import archetype_for_bot_id, derive_persona_from_bot_id
@@ -110,7 +112,13 @@ def test_build_bot_behavior_prompt_includes_tone_and_length() -> None:
     assert "客服式完整解释" in prompt
 
 
-def test_compile_persona_prompt_chat_profile_skips_bot_behavior() -> None:
+def test_compile_persona_prompt_chat_profile_skips_bot_behavior_and_peer_list(monkeypatch) -> None:
+    prompt_module = importlib.import_module("pallas.product.persona.compile_persona_prompt")
+    monkeypatch.setattr(
+        prompt_module,
+        "compile_peer_bots_prompt",
+        lambda **_kwargs: "<<STATS:peer_bots>>\n旧同伴列表",
+    )
     bundle = compile_persona_prompt(
         derive_persona_from_bot_id(1),
         None,
@@ -121,6 +129,7 @@ def test_compile_persona_prompt_chat_profile_skips_bot_behavior() -> None:
 
     assert bundle.sections.bot_behavior == ""
     assert "<<STATS:bot_behavior>>" not in bundle.system
+    assert "<<STATS:peer_bots>>" not in bundle.system
 
 
 def test_bot_behavior_fingerprint_differs_by_archetype() -> None:
