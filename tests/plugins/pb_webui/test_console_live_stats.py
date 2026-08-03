@@ -9,12 +9,21 @@ from packages.pb_webui import console_live_stats, daily_stats_store
 
 
 def test_unified_console_live_stats_enabled_single_process(monkeypatch) -> None:
-    monkeypatch.setattr(ext, "_shard_worker_console", lambda: False)
-    monkeypatch.setattr(ext, "_shard_hub_console", lambda: False)
-    assert ext._unified_console_live_stats_enabled() is True
+    from packages.pb_webui import console_metrics_runtime as metrics
 
-    monkeypatch.setattr(ext, "_shard_hub_console", lambda: True)
-    assert ext._unified_console_live_stats_enabled() is False
+    monkeypatch.setattr(metrics, "shard_worker_console", lambda: False)
+    monkeypatch.setattr(metrics, "shard_hub_console", lambda: False)
+    assert metrics._unified_console_live_stats_enabled() is True
+
+    monkeypatch.setattr(metrics, "shard_hub_console", lambda: True)
+    assert metrics._unified_console_live_stats_enabled() is False
+
+
+def test_unified_console_stats_fast_flush_uses_ten_second_interval(monkeypatch) -> None:
+    from packages.pb_webui import console_metrics_runtime as metrics
+
+    monkeypatch.setattr(metrics, "shard_worker_console", lambda: False)
+    assert metrics._worker_stats_fast_flush_sec() == 10.0
 
 
 def test_restore_unified_from_live_file(tmp_path, monkeypatch) -> None:
@@ -93,37 +102,58 @@ def test_write_bots_sync_skips_rewrite_when_payload_unchanged(tmp_path, monkeypa
     assert first == second
 
 
+def test_write_bots_sync_preserving_history_reads_disk_once(tmp_path, monkeypatch) -> None:
+    live = tmp_path / "console_live_stats.json"
+    monkeypatch.setattr(console_live_stats, "live_stats_path", lambda: live)
+    live.write_text(json.dumps({"v": 1, "bots": {}}), encoding="utf-8")
+    real_read_raw = console_live_stats._read_raw
+    calls = {"count": 0}
+
+    def counting_read_raw():
+        calls["count"] += 1
+        return real_read_raw()
+
+    monkeypatch.setattr(console_live_stats, "_read_raw", counting_read_raw)
+
+    assert console_live_stats.write_bots_sync({"10001": {}}, preserve_matcher_hist=True) is True
+    assert calls["count"] == 1
+
+
 @pytest.mark.asyncio
 async def test_flush_worker_shard_console_stats_async_uses_to_thread(monkeypatch) -> None:
+    from packages.pb_webui import console_metrics_runtime as metrics
+
     calls: list[tuple[object, tuple, dict]] = []
 
     async def fake_to_thread(func, /, *args, **kwargs):
         calls.append((func, args, kwargs))
         return None
 
-    monkeypatch.setattr(ext.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr(metrics.asyncio, "to_thread", fake_to_thread)
 
-    await ext.flush_worker_shard_console_stats_async(include_hist=True)
+    await metrics.flush_worker_shard_console_stats_async(include_hist=True)
 
     assert len(calls) == 1
-    assert calls[0][0] is ext.flush_worker_shard_console_stats_sync
+    assert calls[0][0] is metrics.flush_worker_shard_console_stats_sync
     assert calls[0][1] == ()
     assert calls[0][2] == {"include_hist": True}
 
 
 @pytest.mark.asyncio
 async def test_flush_today_console_daily_stats_disk_async_uses_to_thread(monkeypatch) -> None:
+    from packages.pb_webui import console_metrics_runtime as metrics
+
     calls: list[tuple[object, tuple, dict]] = []
 
     async def fake_to_thread(func, /, *args, **kwargs):
         calls.append((func, args, kwargs))
         return None
 
-    monkeypatch.setattr(ext.asyncio, "to_thread", fake_to_thread)
+    monkeypatch.setattr(metrics.asyncio, "to_thread", fake_to_thread)
 
-    await ext.flush_today_console_daily_stats_disk_async()
+    await metrics.flush_today_console_daily_stats_disk_async()
 
     assert len(calls) == 1
-    assert calls[0][0] is ext._flush_today_console_daily_stats_disk
+    assert calls[0][0] is metrics._flush_today_console_daily_stats_disk
     assert calls[0][1] == ()
     assert calls[0][2] == {}

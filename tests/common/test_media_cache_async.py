@@ -52,3 +52,30 @@ async def test_image_capture_consumer_processes_queue(monkeypatch: pytest.Monkey
         await mod.reset_image_cache_runtime_state_for_tests()
 
     assert seen == [seg]
+
+
+@pytest.mark.asyncio
+async def test_insert_image_io_uses_detached_model_for_postgresql(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.shared.utils import media_cache as mod
+
+    inserted: list[object] = []
+
+    class FakeRepository:
+        async def find_by_cq_code(self, _cq_code):
+            return None
+
+        async def insert(self, cache):
+            inserted.append(cache)
+
+    async def fake_get(_url):
+        return SimpleNamespace(status_code=200, content=b"image")
+
+    monkeypatch.setattr(mod, "image_cache_repo", FakeRepository())
+    monkeypatch.setattr(mod, "image_capture_under_load", lambda: False)
+    monkeypatch.setattr(mod, "is_postgresql_backend", lambda: True, raising=False)
+    monkeypatch.setattr(mod.HTTPXClient, "get", fake_get)
+
+    await mod._insert_image_io(SimpleNamespace(data={"url": "https://example.com/image.png"}))
+
+    assert len(inserted) == 1
+    assert inserted[0].blob_data == b"image"

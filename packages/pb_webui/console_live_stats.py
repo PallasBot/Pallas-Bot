@@ -41,8 +41,12 @@ def read_bots_for_boot() -> dict[str, dict[str, Any]]:
     return {str(k): v for k, v in bots.items() if isinstance(v, dict)}
 
 
-def preserve_matcher_hist_from_disk(bots: dict[str, Any]) -> dict[str, Any]:
-    old_bots = _read_raw().get("bots")
+def preserve_matcher_hist_from_disk(
+    bots: dict[str, Any],
+    *,
+    current: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    old_bots = (current if current is not None else _read_raw()).get("bots")
     if not isinstance(old_bots, dict):
         return bots
     merged: dict[str, Any] = {}
@@ -58,8 +62,8 @@ def preserve_matcher_hist_from_disk(bots: dict[str, Any]) -> dict[str, Any]:
 
 
 def write_bots_sync(bots: dict[str, Any], *, preserve_matcher_hist: bool = False) -> bool:
-    payload = preserve_matcher_hist_from_disk(bots) if preserve_matcher_hist else bots
     current = _read_raw()
+    payload = preserve_matcher_hist_from_disk(bots, current=current) if preserve_matcher_hist else bots
     if current.get("bots") == payload:
         return False
     data: dict[str, Any] = {

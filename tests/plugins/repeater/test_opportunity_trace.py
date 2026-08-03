@@ -39,3 +39,23 @@ def test_append_opportunity_trace_survives_shared_tmp_race(tmp_path, monkeypatch
     rows = read_recent_repeater_opportunity_trace(limit=100)
     assert len(rows) == 40
     assert not list(tmp_path.glob("*.tmp"))
+
+
+def test_append_opportunity_trace_does_not_reread_known_file(tmp_path, monkeypatch) -> None:
+    from packages.repeater import opportunity_trace as mod
+
+    path = tmp_path / "repeater_opportunity_trace.jsonl"
+    monkeypatch.setattr(mod, "repeater_opportunity_trace_path", lambda: path)
+    assert append_repeater_opportunity_trace({"kind": "first"})
+
+    real_read_text = type(path).read_text
+    calls = {"count": 0}
+
+    def counting_read_text(self, *args, **kwargs):
+        if self == path:
+            calls["count"] += 1
+        return real_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(type(path), "read_text", counting_read_text)
+    assert append_repeater_opportunity_trace({"kind": "second"})
+    assert calls["count"] == 0

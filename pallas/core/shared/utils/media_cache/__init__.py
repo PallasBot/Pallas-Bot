@@ -7,6 +7,7 @@ from nonebot import get_driver, logger
 from nonebot.adapters.onebot.v11 import MessageSegment
 
 from pallas.core.foundation.db import ImageCache, make_image_cache_repository
+from pallas.core.foundation.db.runtime import is_postgresql_backend
 from pallas.core.shared.utils import HTTPXClient
 
 image_cache_repo = make_image_cache_repository()
@@ -65,12 +66,13 @@ async def _insert_image_io(image_seg: MessageSegment) -> None:
             return
         if not rsp or rsp.status_code != httpx.codes.OK:
             return  # 下载失败就不缓存这张图，让它保持"未缓存"状态
-        cache = ImageCache(
-            cq_code=cq_code,
-            blob_data=rsp.content,
-            ref_times=1,
-            date=int(str(datetime.now().date()).replace("-", "")),
-        )
+        values = {
+            "cq_code": cq_code,
+            "blob_data": rsp.content,
+            "ref_times": 1,
+            "date": int(str(datetime.now().date()).replace("-", "")),
+        }
+        cache = ImageCache.model_construct(**values) if is_postgresql_backend() else ImageCache(**values)
         await image_cache_repo.insert(cache)
         return
     # 已有缓存：只累加 ref_times + 刷鲜日期，不再补下载
