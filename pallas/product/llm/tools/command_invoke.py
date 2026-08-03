@@ -16,6 +16,9 @@ if TYPE_CHECKING:
     from pallas.product.llm.tools.context import ToolInvokeContext
 
 
+LLM_COMMAND_EVENT_CONTEXT_ATTR = "_pallas_llm_command_context"
+
+
 class CommandTemplateError(ValueError):
     pass
 
@@ -115,6 +118,7 @@ def source_segments_for_command(
     *,
     mode: str,
     bot_id: int | str | None = None,
+    sender_id: int | str | None = None,
 ) -> tuple[dict[str, Any], ...]:
     """仅素材型命令携带原消息素材；忽略当前 bot 的唤醒 @。"""
     if mode != "media":
@@ -127,6 +131,8 @@ def source_segments_for_command(
     )
     if media_segments:
         return media_segments
+    if sender_id is not None:
+        return ({"type": "at", "qq": str(sender_id)},)
     return ({"type": "text", "text": "自己"},)
 
 
@@ -208,6 +214,7 @@ async def dispatch_group_command_text(
         ctx.source_segments,
         mode=source_segments_mode,
         bot_id=ctx.bot_id,
+        sender_id=ctx.user_id,
     )
     event = build_synthetic_group_event(
         bot_id=ctx.bot_id,
@@ -215,6 +222,15 @@ async def dispatch_group_command_text(
         user_id=ctx.user_id,
         text=plain,
         source_segments=source_segments,
+    )
+    source_segment_types = [str(item.get("type") or "") for item in source_segments]
+    setattr(
+        event,
+        LLM_COMMAND_EVENT_CONTEXT_ATTR,
+        {
+            "command_id": command_id,
+            "source_segment_types": source_segment_types,
+        },
     )
     if not await satisfies_command_permission(bot, event, command_id):
         return {"ok": False, "error": "permission_denied", "command_id": command_id}
@@ -226,4 +242,5 @@ async def dispatch_group_command_text(
         "command_id": command_id,
         "command_text": plain,
         "source_segment_count": len(source_segments),
+        "source_segment_types": source_segment_types,
     }

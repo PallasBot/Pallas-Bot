@@ -174,6 +174,8 @@ def build_command_tool_spec(
                 "command_id": decl.command_id,
                 "command_text": command_text,
                 "dispatched": True,
+                "source_segment_count": int(result.get("source_segment_count") or 0),
+                "source_segment_types": list(result.get("source_segment_types") or []),
                 "arguments": {key: str(value) for key, value in prepared.items()},
                 "summary": summary,
             },
