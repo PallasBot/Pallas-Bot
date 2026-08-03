@@ -104,3 +104,58 @@ async def test_unified_ingress_early_once_claim_before_host_checks(monkeypatch: 
         await ingress_group_message_gate(FakeBot(222), event)
     hosted.assert_not_called()
     dream.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_hosted_activity_owner_precedes_peer_alias_yield(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.shard_ctx.sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.ingress_once_claim_safe_before_host_gates",
+        lambda *_args, **_kwargs: False,
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.should_process_federate_group_on_current_deployment",
+        lambda _gid, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.alias_route.should_yield_ingress_for_peer_alias",
+        lambda **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.hosted_activity_claim_is_hosted",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.hosted_activity_ingress_passes",
+        lambda *_args, **_kwargs: True,
+    )
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.dream_session_ingress_passes", AsyncMock(return_value=True))
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.run_ingress_message_claim", AsyncMock(return_value=[]))
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.claim_federate_group_message_ingress",
+        AsyncMock(return_value=True),
+    )
+
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    class FakeBot:
+        self_id = "111"
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=733291779,
+        message_id=1,
+        message=Message("帕拉斯"),
+        raw_message="帕拉斯",
+    )
+
+    await ingress_group_message_gate(FakeBot(), event)
