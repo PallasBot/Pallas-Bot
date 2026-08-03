@@ -10,7 +10,10 @@ from nonebot import get_loaded_plugins
 from pallas.core.foundation.command_prefix import matches_command_prefix
 from pallas.core.platform.ingress.plugin_command_plaintext import extract_command_prefixes_from_menu_data
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
-from pallas.core.platform.shard.coord.group_gate import is_owned_gate_holder_sync
+from pallas.core.platform.shard.coord.group_gate import (
+    is_owned_gate_holder_sync,
+    read_owned_gate_bot_id_sync,
+)
 from pallas.core.platform.shard.coord.hosted_activity_coord import coord_session_active, hosted_activity_live
 
 _SPECS_CACHE: tuple[HostedActivityIngressSpec, ...] | None = None
@@ -112,7 +115,9 @@ def spec_matches_speak_traffic(
     text = (plain or "").strip()
     if _matches_prefix(text, spec.command_prefixes):
         return False
-    if not coord_session_active(spec.activity_namespace, group_id, session_flag=spec.session_flag):
+    session_active = coord_session_active(spec.activity_namespace, group_id, session_flag=spec.session_flag)
+    owner_active = read_owned_gate_bot_id_sync(spec.plugin_key, int(group_id)) is not None
+    if not session_active and not owner_active:
         return False
     if spec.speak_at_fleet_bot_only:
         return at_fleet_bot
@@ -146,6 +151,30 @@ def spec_host_gate_passes(
         return True
 
     return is_owned_gate_holder_sync(spec.plugin_key, int(group_id), int(bot_id))
+
+
+def hosted_activity_claim_is_hosted(
+    group_id: int,
+    plain: str,
+    *,
+    at_fleet_bot: bool = False,
+) -> bool:
+    """当前消息是否属于一场存活的主持活动。"""
+    gid = int(group_id)
+    text = (plain or "").strip()
+    for spec in loaded_hosted_activity_specs():
+        in_room = spec_matches_in_room_command(spec, plain)
+        speak = spec_matches_speak_traffic(spec, gid, plain, at_fleet_bot=at_fleet_bot)
+        open_or_end = _matches_prefix(text, spec.always_pass_prefixes)
+        if not in_room and not speak and not open_or_end:
+            continue
+        if hosted_activity_live(
+            activity_namespace=spec.activity_namespace,
+            plugin_key=spec.plugin_key,
+            group_id=gid,
+        ):
+            return True
+    return False
 
 
 def hosted_activity_ingress_passes(
