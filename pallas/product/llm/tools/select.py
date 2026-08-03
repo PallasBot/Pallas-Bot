@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import re
-
 from pallas.product.llm.tools.identity import is_self_identity_question
 from pallas.product.llm.tools.patterns import domains_from_structure
 
@@ -40,9 +38,6 @@ _OPERATOR_LOOKUP_HINTS = (
 # 工具 spec 可带这些域做分类，但 selective 命中时不得单独用它们拉全仓命令工具
 _SELECTIVE_DOMAIN_EXCLUDE = frozenset({"command", "meta"})
 
-_SING_REQUEST_TOOL_PATTERN = re.compile(r"(?:放|播|点|听)\s*(?:一\s*)?(?:首|歌|曲)|(?:放|播|听)\s*一下")
-_SING_COVER_TOOL_PATTERN = re.compile(r"(?:翻唱|唱)\s*(?:一\s*)?(?:首|歌|曲)")
-
 
 def selective_domains(domains: frozenset[str] | set[str]) -> frozenset[str]:
     out: set[str] = set()
@@ -51,16 +46,6 @@ def selective_domains(domains: frozenset[str] | set[str]) -> frozenset[str]:
         if name and name not in _SELECTIVE_DOMAIN_EXCLUDE:
             out.add(name)
     return frozenset(out)
-
-
-def preferred_tool_names(user_text: str) -> frozenset[str]:
-    """根据明确动词收窄同域工具，避免将放歌误作翻唱。"""
-    text = _normalize_hint(user_text)
-    if _SING_REQUEST_TOOL_PATTERN.search(text):
-        return frozenset({"sing.request_song"})
-    if _SING_COVER_TOOL_PATTERN.search(text):
-        return frozenset({"sing.sing"})
-    return frozenset()
 
 
 _COMMAND_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (

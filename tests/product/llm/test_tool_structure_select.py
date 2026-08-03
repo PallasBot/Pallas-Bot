@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pallas.product.llm.tools.patterns import domains_from_structure
 
-from pallas.product.llm.tools.select import infer_tool_domains, preferred_tool_names
+from pallas.product.llm.tools.score import score_tool_text
+from pallas.product.llm.tools.select import infer_tool_domains
 
 
 def test_structure_recall_sing_compact_forms() -> None:
@@ -31,10 +32,14 @@ def test_infer_domains_includes_structure_without_keyword_lexicon() -> None:
     assert "sing" in domains
 
 
-def test_preferred_tool_names_choose_song_request_for_playback_verbs() -> None:
-    assert preferred_tool_names("牛牛放一首铁花飞") == frozenset({"sing.request_song"})
-    assert preferred_tool_names("牛牛播一下晴天") == frozenset({"sing.request_song"})
-    assert preferred_tool_names("牛牛唱一首铁花飞") == frozenset({"sing.sing"})
+def test_tool_score_normalizes_optional_quantifier_in_hints() -> None:
+    score = score_tool_text(
+        "牛牛放一首铁花飞",
+        name="sing.request_song",
+        description="点播原曲。",
+        hints=frozenset({"放首"}),
+    )
+    assert score >= 6
 
 
 def test_infer_domains_memory_keywords() -> None:

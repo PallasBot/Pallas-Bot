@@ -87,6 +87,8 @@ class ToolCatalogSelection(BaseModel):
     selection_source: str = ""
     soft_recall_confidence: int = 0
     soft_recall_candidates: list[dict] = Field(default_factory=list)
+    semantic_recall_confidence: int = 0
+    semantic_recall_candidates: list[dict] = Field(default_factory=list)
     ask_before_call: bool = False
     missing_required_params: dict[str, list[str]] = Field(default_factory=dict)
     inventory_intent: bool = False

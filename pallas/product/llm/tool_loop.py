@@ -349,6 +349,12 @@ async def complete_with_tool_loop(
         "tool_schema_count": len(tool_schemas),
         "tool_names": schema_names,
         "activated_tools": list(meta.get("activated_tools") or []),
+        "tool_selection": {
+            "source": selection_source,
+            "soft_recall_confidence": int(meta.get("soft_recall_confidence") or 0),
+            "semantic_recall_confidence": int(meta.get("semantic_recall_confidence") or 0),
+            "semantic_recall_candidates": list(meta.get("semantic_recall_candidates") or []),
+        },
     }
     reply_texts: list[str] = []
     side_effect_ok = False

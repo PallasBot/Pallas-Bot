@@ -25,7 +25,7 @@ from pallas.product.llm.tools.overrides import (
     load_tool_overrides,
     tool_override_disabled,
 )
-from pallas.product.llm.tools.select import infer_tool_domains, preferred_tool_names
+from pallas.product.llm.tools.select import infer_tool_domains
 
 if TYPE_CHECKING:
     from pallas.product.llm.tools.context import ToolInvokeContext
@@ -287,6 +287,8 @@ def tool_catalog_for_chat(
     soft_fields: dict[str, Any] = {
         "soft_recall_confidence": 0,
         "soft_recall_candidates": [],
+        "semantic_recall_confidence": 0,
+        "semantic_recall_candidates": [],
         "ask_before_call": False,
         "missing_required_params": {},
     }
@@ -347,11 +349,35 @@ def tool_catalog_for_chat(
             selection_source = "selective+inventory"
         elif selection_source == "soft_recall":
             selection_source = "soft_recall+inventory"
-    preferred_names = preferred_tool_names(user_text)
-    if preferred_names:
-        preferred_specs = [spec for spec in specs_list if spec.name in preferred_names]
-        if preferred_specs:
-            specs_list = preferred_specs
+    if domains and not inventory and len(specs_list) > 1 and bool(getattr(cfg, "llm_tools_soft_recall_enabled", True)):
+        from pallas.product.llm.tools.soft_recall import select_soft_recall_hits, soft_recall_snapshot_fields
+
+        ranked_hits = select_soft_recall_hits(
+            user_text,
+            min_score=int(getattr(cfg, "llm_tools_soft_recall_min_score", 6) or 6),
+            max_candidates=int(getattr(cfg, "llm_tools_soft_recall_max_candidates", 3) or 3),
+            eligible_specs=tuple(specs_list),
+        )
+        if ranked_hits:
+            specs_list = [hit.spec for hit in ranked_hits]
+            soft_fields = soft_recall_snapshot_fields(ranked_hits)
+            selection_source = f"{selection_source}+ranked"
+        else:
+            from pallas.product.llm.tools.semantic_recall import (
+                select_semantic_recall_hits,
+                semantic_recall_snapshot_fields,
+            )
+
+            semantic_hits = select_semantic_recall_hits(
+                user_text,
+                eligible_specs=tuple(specs_list),
+                cfg=cfg,
+                max_candidates=int(getattr(cfg, "llm_tools_soft_recall_max_candidates", 3) or 3),
+            )
+            if semantic_hits:
+                specs_list = [hit.spec for hit in semantic_hits]
+                soft_fields.update(semantic_recall_snapshot_fields(semantic_hits))
+                selection_source = f"{selection_source}+semantic"
     if not specs_list:
         return None
     entries = [catalog_entry_for_spec(spec) for spec in specs_list]
@@ -365,6 +391,8 @@ def tool_catalog_for_chat(
             selection_source=selection_source,
             soft_recall_confidence=int(soft_fields.get("soft_recall_confidence") or 0),
             soft_recall_candidates=list(soft_fields.get("soft_recall_candidates") or []),
+            semantic_recall_confidence=int(soft_fields.get("semantic_recall_confidence") or 0),
+            semantic_recall_candidates=list(soft_fields.get("semantic_recall_candidates") or []),
             ask_before_call=bool(soft_fields.get("ask_before_call")),
             missing_required_params=dict(soft_fields.get("missing_required_params") or {}),
             inventory_intent=bool(inventory),
@@ -475,6 +503,8 @@ def tool_metadata_for_chat(
         "ask_before_call": bool(catalog.selection.ask_before_call),
         "missing_required_params": dict(catalog.selection.missing_required_params or {}),
         "soft_recall_confidence": int(catalog.selection.soft_recall_confidence or 0),
+        "semantic_recall_confidence": int(catalog.selection.semantic_recall_confidence or 0),
+        "semantic_recall_candidates": list(catalog.selection.semantic_recall_candidates or []),
         "activated_tools": sorted(activated_names),
         "inventory_intent": bool(catalog.selection.inventory_intent),
     }
