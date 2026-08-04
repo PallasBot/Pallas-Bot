@@ -154,9 +154,9 @@ def test_unified_foreground_runs_bot_in_current_process(monkeypatch, tmp_path: P
     monkeypatch.setattr(unified_lifecycle, "read_listen_port", lambda: 9090)
     monkeypatch.setattr(unified_lifecycle, "prepare_unified_ports", lambda port, *, skip_port_sync: 0)
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: False)
-    monkeypatch.setattr(unified_lifecycle, "start_embed_aux", lambda: 0)
+    monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: 0)
     stopped: list[bool] = []
-    monkeypatch.setattr(unified_lifecycle, "stop_embed_aux", lambda: stopped.append(True))
+    monkeypatch.setattr(unified_lifecycle, "stop_aux_services", lambda: stopped.append(True))
     executed: list[str] = []
     monkeypatch.setattr(unified_lifecycle.runpy, "run_path", lambda path, run_name: executed.append(path))
 
