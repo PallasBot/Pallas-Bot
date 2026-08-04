@@ -149,6 +149,7 @@ def find_semantic_matched_replies(
     - ``full``：可远程补齐 query + 缺失 trigger（WebUI/完整 snapshot）
     - ``query_only``：只允许远程拿 query（热路径）；trigger 必须已预热
     - ``cache_only``：禁止远程，仅用缓存
+    - ``memory_only``：仅用进程内缓存，不访问 Redis 或文件缓存
     """
     query = str(user_text or "").strip()
     if not query:
@@ -171,31 +172,42 @@ def find_semantic_matched_replies(
     if not candidates:
         return []
 
-    from pallas.product.llm.feedback_embedding_cache import (
-        ensure_trigger_embeddings,
-        resolve_query_embedding,
-    )
     from pallas.product.llm.knowledge.embedding_score import embedding_relevance_score
 
     policy = str(remote_policy or "full").strip().lower()
-    allow_query_remote = policy in {"full", "query_only"}
-    allow_trigger_remote = policy == "full"
-    query_timeout = 0.35 if policy == "query_only" else 8.0
+    trigger_texts = [trigger for _, trigger, _ in candidates]
+    if policy == "memory_only":
+        from pallas.product.llm.feedback_embedding_cache import (
+            get_cached_query_embedding,
+            get_cached_trigger_embeddings,
+        )
 
-    query_vec = resolve_query_embedding(
-        query,
-        allow_remote=allow_query_remote,
-        timeout_sec=query_timeout,
-    )
+        query_vec = get_cached_query_embedding(query)
+        if query_vec is None:
+            return []
+        trigger_vecs = get_cached_trigger_embeddings(trigger_texts)
+    else:
+        from pallas.product.llm.feedback_embedding_cache import (
+            ensure_trigger_embeddings,
+            resolve_query_embedding,
+        )
+
+        allow_query_remote = policy in {"full", "query_only"}
+        allow_trigger_remote = policy == "full"
+        query_timeout = 0.35 if policy == "query_only" else 8.0
+        query_vec = resolve_query_embedding(
+            query,
+            allow_remote=allow_query_remote,
+            timeout_sec=query_timeout,
+        )
+        trigger_vecs = ensure_trigger_embeddings(
+            trigger_texts,
+            allow_remote=allow_trigger_remote,
+            timeout_sec=8.0,
+        )
     if query_vec is None:
         return []
 
-    trigger_texts = [trigger for _, trigger, _ in candidates]
-    trigger_vecs = ensure_trigger_embeddings(
-        trigger_texts,
-        allow_remote=allow_trigger_remote,
-        timeout_sec=8.0,
-    )
     if policy == "query_only":
         missing = [t for t in trigger_texts if t not in trigger_vecs]
         for text in missing[:8]:
@@ -314,15 +326,14 @@ def build_feedback_bias_snapshot_data(
         limit=3,
         now=now,
     )
-    # 热路径：query_only（trigger 靠预热缓存；query 短超时/缓存）
-    # 完整路径：可批量补齐缺失 trigger 向量
+    # 热路径只读取进程内缓存，完整路径可补齐缺失向量。
     semantic_matched_replies = find_semantic_matched_replies(
         rows=rows,
         user_text=user_text,
         active_scene=behavior_scene,
         limit=VECTOR_MATCH_LIMIT,
         now=now,
-        remote_policy="query_only" if hotpath else "full",
+        remote_policy="memory_only" if hotpath else "full",
     )
     penalized_replies = compute_penalized_replies(all_rows)
     promotion_candidate_count = 0

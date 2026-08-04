@@ -1,18 +1,17 @@
 from __future__ import annotations
 
-from pallas.console.cli.log_paths import (
-    EMBED_AUX_LOG,
-    UNIFIED_BOT_LOG,
-    list_default_log_targets,
-    read_log_tail,
-)
+from pallas.console.cli.log_paths import EMBED_AUX_LOG, list_default_log_targets, read_log_tail
 
 
-def test_list_default_log_targets_unified() -> None:
+def test_list_default_log_targets_unified(monkeypatch, tmp_path) -> None:
+    from pallas.console.cli import log_paths
+
+    monkeypatch.setattr(log_paths, "BOT_LOG_DIR", tmp_path)
+    bot_log = tmp_path / "nonebot_2026-08-04_18-00-00.log"
+    bot_log.write_text("business log", encoding="utf-8")
+
     targets = list_default_log_targets(mode="unified")
-    labels = [label for label, _ in targets]
-    assert labels[0] == "Bot (unified)"
-    assert targets[0][1] == UNIFIED_BOT_LOG
+    assert targets[0] == ("Bot 业务日志", bot_log)
     assert ("embed 辅进程", EMBED_AUX_LOG) in targets
 
 

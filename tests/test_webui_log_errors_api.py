@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from packages.pb_webui import console_metrics_runtime as metrics
 from packages.pb_webui import extended_api as api
 
 
@@ -16,10 +17,14 @@ def test_plugin_run_stats_overview_skips_log_errors_when_scoped(monkeypatch):
 
 def test_log_errors_payload_shape(monkeypatch):
     sample = [{"at": 9, "plugin": "hub", "exc_type": "E", "message": "m", "traceback": ""}]
-    monkeypatch.setattr(api, "_log_error_log_public", lambda **_kw: sample)
-    monkeypatch.setattr(api, "_log_error_log_meta", lambda: {"sharded_log_errors": False, "log_error_sources": ["hub"]})
+    monkeypatch.setattr(metrics, "_log_error_log_public", lambda **_kw: sample)
+    monkeypatch.setattr(
+        metrics,
+        "_log_error_log_meta",
+        lambda: {"sharded_log_errors": False, "log_error_sources": ["hub"]},
+    )
 
-    out = api._log_errors_payload(source="all", tb_limit=0, limit=10)
+    out = metrics._log_errors_payload(source="all", tb_limit=0, limit=10)
     assert out["log_error_log"] == sample
     assert out["sharded_log_errors"] is False
 

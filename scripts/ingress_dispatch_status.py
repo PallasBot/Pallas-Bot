@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from typing import Any
+from urllib.request import urlopen
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from pallas.core.platform.ingress.dispatch_metrics import dispatch_metrics_snapshot  # noqa: E402
+from pallas.console.cli.unified_lifecycle import read_listen_port  # noqa: E402
 
 
 def fmt_optional(value: float | None, *, suffix: str = "") -> str:
@@ -18,8 +21,28 @@ def fmt_optional(value: float | None, *, suffix: str = "") -> str:
     return f"{value:.2f}{suffix}"
 
 
+def fetch_live_dispatch_metrics(
+    *,
+    port: int,
+    opener=urlopen,
+) -> dict[str, Any]:
+    url = f"http://127.0.0.1:{port}/pallas/api/ingress-dispatch"
+    with opener(url, timeout=3.0) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("统一运行时未返回有效 ingress 指标")
+    data = payload.get("data")
+    if payload.get("ok") is not True or not isinstance(data, dict):
+        raise ValueError("统一运行时未返回有效 ingress 指标")
+    return data
+
+
 def main() -> int:
-    data = dispatch_metrics_snapshot()
+    try:
+        data = fetch_live_dispatch_metrics(port=read_listen_port())
+    except (OSError, TimeoutError, ValueError, json.JSONDecodeError) as err:
+        print(f"读取统一运行时 ingress 指标失败: {err}", file=sys.stderr)
+        return 1
     alerts = data.get("alerts") or []
     send_queue = data.get("send_queue") or {}
     pool = data.get("pool_budget") or {}

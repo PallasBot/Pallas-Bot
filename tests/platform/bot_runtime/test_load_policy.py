@@ -31,7 +31,7 @@ def test_merge_startup_skip_plugins_reads_plugin_storage(tmp_path, monkeypatch) 
     )
 
     merged = merge_startup_skip_plugins(frozenset({"maa_hub"}))
-    assert merged == frozenset({"maa_hub", "chat", "ollama"})
+    assert merged == frozenset({"maa_hub", "chat", "ollama", "llm_chat"})
 
 
 def test_merge_startup_skip_plugins_migrates_legacy_json(tmp_path, monkeypatch) -> None:
@@ -42,9 +42,20 @@ def test_merge_startup_skip_plugins_migrates_legacy_json(tmp_path, monkeypatch) 
     )
 
     merged = merge_startup_skip_plugins(frozenset({"maa_hub"}))
-    assert merged == frozenset({"maa_hub", "chat", "ollama"})
+    assert merged == frozenset({"maa_hub", "chat", "ollama", "llm_chat"})
     assert (help_dir / "plugin_storage.json").is_file()
     assert not (help_dir / "global_disabled_plugins.json").is_file()
+
+
+def test_merge_startup_skip_plugins_expands_disabled_extension_package(tmp_path, monkeypatch) -> None:
+    help_dir = _patch_help_data_dir(monkeypatch, tmp_path)
+    (help_dir / "plugin_storage.json").write_text(
+        json.dumps({"global_disabled_plugins": ["pallas-plugin-ai-media"]}),
+        encoding="utf-8",
+    )
+
+    merged = merge_startup_skip_plugins(frozenset())
+    assert {"pallas-plugin-ai-media", "pallas_plugin_sing", "pallas_plugin_tts"} <= merged
 
 
 def test_merge_startup_skip_plugins_keeps_protected_out(tmp_path, monkeypatch) -> None:

@@ -7,8 +7,11 @@ from pathlib import Path  # noqa: TC003
 from pallas.console.cli.runtime_mode import resolve_bot_mode
 from pallas.core.foundation.paths import PROJECT_ROOT
 
-UNIFIED_BOT_LOG = PROJECT_ROOT / "data" / "pallas_unified" / "logs" / "bot.log"
+BOT_LOG_DIR = PROJECT_ROOT / "data" / "bot"
+UNIFIED_LAUNCHER_LOG_DIR = PROJECT_ROOT / "data" / "pallas_unified" / "logs"
+UNIFIED_BOT_LOG = UNIFIED_LAUNCHER_LOG_DIR / "bot.log"
 EMBED_AUX_LOG = PROJECT_ROOT / "data" / "pallas_embed" / "logs" / "embed.log"
+WORK_AUX_LOG = PROJECT_ROOT / "data" / "pallas_work" / "logs" / "work.log"
 SHARD_HUB_LOG = PROJECT_ROOT / "data" / "pallas_shard" / "logs" / "hub.log"
 SHARD_LOG_DIR = PROJECT_ROOT / "data" / "pallas_shard" / "logs"
 
@@ -20,17 +23,30 @@ def default_primary_log(*, mode: str = "auto") -> Path:
     return UNIFIED_BOT_LOG
 
 
+def latest_bot_log() -> Path | None:
+    try:
+        return max(BOT_LOG_DIR.glob("nonebot_*.log"), key=lambda path: path.stat().st_mtime)
+    except (OSError, ValueError):
+        return None
+
+
 def list_default_log_targets(*, mode: str = "auto") -> list[tuple[str, Path]]:
-    """返回 (标签, 路径)；默认不枚举 worker-N，分片只给 hub + 目录提示。"""
+    """返回 (标签, 路径)；优先业务日志，默认不枚举 worker-N。"""
     resolved = resolve_bot_mode(mode)
+    bot_log = latest_bot_log()
+    bot_targets = [("Bot 业务日志", bot_log)] if bot_log is not None else []
     if resolved == "shard":
         targets: list[tuple[str, Path]] = [
+            *bot_targets,
             ("hub", SHARD_HUB_LOG),
+            ("work 辅进程", WORK_AUX_LOG),
             ("embed 辅进程", EMBED_AUX_LOG),
         ]
         return targets
     return [
-        ("Bot (unified)", UNIFIED_BOT_LOG),
+        *bot_targets,
+        ("启动器日志目录", UNIFIED_LAUNCHER_LOG_DIR),
+        ("work 辅进程", WORK_AUX_LOG),
         ("embed 辅进程", EMBED_AUX_LOG),
     ]
 

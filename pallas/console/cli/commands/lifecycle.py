@@ -15,14 +15,26 @@ def add_mode_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_detach_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "-d",
+        "--detach",
+        action="store_true",
+        help="转入后台运行（默认在当前终端前台运行）",
+    )
+
+
 def register_run(sub: argparse._SubParsersAction) -> None:
-    parser = sub.add_parser("run", help="启动 Bot（单进程或分片）")
-    run_sub = parser.add_subparsers(dest="run_mode", required=True)
+    parser = sub.add_parser("run", help="启动 Bot（默认前台；-d 转入后台）")
+    add_detach_argument(parser)
+    run_sub = parser.add_subparsers(dest="run_mode", required=False)
+    parser.set_defaults(handler=run_default)
 
     unified = run_sub.add_parser(
         "unified",
         help="单进程 unified（默认推荐；本机 Embedding 会附带 embed 辅进程）",
     )
+    add_detach_argument(unified)
     unified.add_argument(
         "--skip-port-sync",
         action="store_true",
@@ -46,14 +58,14 @@ def register_lifecycle(sub: argparse._SubParsersAction) -> None:
     for name, help_text in (
         ("stop", "停止当前编排的 Bot 进程"),
         ("status", "查看运行状态"),
-        ("restart", "停止后重新启动"),
+        ("restart", "停止后重新启动（unified 默认跳过协议端口文件同步）"),
     ):
         parser = sub.add_parser(name, help=help_text)
         add_mode_argument(parser)
         if name == "restart":
             parser.add_argument("--workers-only", action="store_true", help="分片：仅重启 worker")
             parser.add_argument("--hub-only", action="store_true", help="分片：仅重启 hub")
-            parser.add_argument("--skip-port-sync", action="store_true")
+            parser.add_argument("--skip-port-sync", action="store_true", help="兼容参数；unified 默认跳过同步")
         parser.set_defaults(handler=lambda args, action=name: run_lifecycle(action, args))
 
 
@@ -61,7 +73,14 @@ def run_unified(args: argparse.Namespace) -> int:
     extra: list[str] = []
     if args.skip_port_sync:
         extra.append("--skip-port-sync")
+    if args.detach:
+        extra.append("--detach")
     return run_bot_lifecycle("start", mode="unified", extra_args=extra)
+
+
+def run_default(args: argparse.Namespace) -> int:
+    extra = ["--detach"] if args.detach else None
+    return run_bot_lifecycle("start", mode="auto", extra_args=extra)
 
 
 def run_shard(args: argparse.Namespace) -> int:

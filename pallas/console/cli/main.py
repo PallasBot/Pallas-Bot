@@ -17,22 +17,26 @@ _COMMAND_MODULES = (
     "pallas.console.cli.commands.maintenance_cmd",
     "pallas.console.cli.commands.deploy_cmd",
     "pallas.console.cli.commands.ai_cmd",
+    "pallas.console.cli.commands.redis_cmd",
 )
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="pallas",
-        description=(
-            "Pallas Bot 统一运维：依赖同步、官方插件、启停与更新"
-            "（无子命令时默认启动 unified；本机 Embedding 会附带 embed 辅进程）"
-        ),
+        description="Pallas Bot 统一运维：依赖同步、官方插件、启停与更新（无子命令时前台启动 unified；加 -d 转入后台）",
     )
     parser.add_argument(
         "-V",
         "--version",
         action="version",
         version=f"%(prog)s {CLI_VERSION}",
+    )
+    parser.add_argument(
+        "-d",
+        "--detach",
+        action="store_true",
+        help="无子命令时转入后台运行",
     )
     sub = parser.add_subparsers(dest="command", required=False)
     for module_name in _COMMAND_MODULES:
@@ -56,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command is None:
         from pallas.console.cli.commands.lifecycle import run_unified
 
-        return int(run_unified(argparse.Namespace(skip_port_sync=False)))
+        return int(run_unified(argparse.Namespace(skip_port_sync=False, detach=args.detach)))
     parser.print_help()
     return 2
 

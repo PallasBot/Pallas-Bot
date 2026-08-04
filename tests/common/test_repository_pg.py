@@ -970,6 +970,18 @@ async def test_config_cache_hit_and_invalidate_on_write(pg_engine):
 
 
 @pytest.mark.asyncio
+async def test_config_list_all_returns_detached_rows(pg_engine):
+    from pallas.core.foundation.db.repository_pg import PgConfigRepository
+
+    repo = PgConfigRepository("bot_config", "account")
+    await repo.upsert_field(4101, "disabled_plugins", ["a"])
+    await repo.upsert_field(4102, "disabled_plugins", ["b"])
+
+    rows = await repo.list_all()
+    assert {int(row.account) for row in rows} >= {4101, 4102}
+
+
+@pytest.mark.asyncio
 async def test_config_cache_ignore_cache_forces_db_read(pg_engine):
     """ignore_cache=True 必须绕过缓存直接回源，不受外部 SQL 旁路改库影响。"""
     from sqlalchemy import update

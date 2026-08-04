@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import runpy
 import sys
 import time
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from pallas.console.cli.process_util import (
     clear_pid_file,
@@ -28,7 +34,33 @@ LOG_DIR = PROJECT_ROOT / "data" / "pallas_unified" / "logs"
 ACCOUNTS_JSON = PROJECT_ROOT / "data" / "pallas_protocol" / "accounts.json"
 PID_FILE = RUN_DIR / "bot.pid"
 LOG_FILE = LOG_DIR / "bot.log"
+LOG_RETENTION_DAYS = 14
 ENV_PATH = PROJECT_ROOT / ".env"
+
+
+def start_aux_services() -> int:
+    from pallas.console.cli.embedding_aux import start_embed_aux
+    from pallas.console.cli.work_aux import start_work_aux
+
+    if start_embed_aux() != 0:
+        return 1
+    return start_work_aux()
+
+
+def stop_aux_services() -> None:
+    from pallas.console.cli.embedding_aux import stop_embed_aux
+    from pallas.console.cli.work_aux import stop_work_aux
+
+    stop_embed_aux()
+    stop_work_aux()
+
+
+def print_aux_services_status() -> None:
+    from pallas.console.cli.embedding_aux import print_embed_aux_status
+    from pallas.console.cli.work_aux import print_work_aux_status
+
+    print_embed_aux_status()
+    print_work_aux_status()
 
 
 def is_bot_running() -> bool:
@@ -68,48 +100,86 @@ def prepare_unified_ports(port: int, *, skip_port_sync: bool) -> int:
     return 0
 
 
-def start_bot(*, skip_port_sync: bool = False) -> int:
+def bot_environment(port: int) -> dict[str, str]:
+    return {
+        "PALLAS_SHARD_ENABLED": "false",
+        "PALLAS_BOT_ROLE": "unified",
+        "PORT": str(port),
+    }
+
+
+def launcher_log_path() -> Path:
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")
+    return LOG_DIR / f"bot_{stamp}.log"
+
+
+def cleanup_launcher_logs() -> None:
+    cutoff = time.time() - LOG_RETENTION_DAYS * 24 * 60 * 60
+    for path in LOG_DIR.glob("bot_*.log"):
+        try:
+            if path.stat().st_mtime < cutoff:
+                path.unlink()
+        except OSError:
+            continue
+
+
+def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     if is_bot_running():
         print(f"unified 已在运行 (pid {read_pid_file(PID_FILE)})")
-        from pallas.console.cli.embedding_aux import start_embed_aux
-
-        return start_embed_aux()
+        return start_aux_services()
     port = read_listen_port()
     sync_rc = prepare_unified_ports(port, skip_port_sync=skip_port_sync)
     if sync_rc != 0:
         return sync_rc
 
-    env = {
-        "PALLAS_SHARD_ENABLED": "false",
-        "PALLAS_BOT_ROLE": "unified",
-        "PORT": str(port),
-    }
+    env = bot_environment(port)
+    if not detach:
+        print(f"unified 前台运行 · port {port}")
+        print(f"控制台 http://127.0.0.1:{port}/pallas/")
+        print("提示：保持当前终端查看实时日志；需后台运行请使用 uv run pallas -d。")
+        print("按 Ctrl+C 停止 Bot 与本次自动启动的辅进程。")
+        if start_aux_services() != 0:
+            return 1
+        write_pid_file(PID_FILE, os.getpid())
+        old_env = {key: os.environ.get(key) for key in env}
+        os.environ.update(env)
+        try:
+            runpy.run_path(str(PROJECT_ROOT / "bot.py"), run_name="__main__")
+        except KeyboardInterrupt:
+            print("\nunified 正在停止…")
+        finally:
+            clear_pid_file(PID_FILE)
+            stop_aux_services()
+            for key, value in old_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+        return 0
+
+    cleanup_launcher_logs()
     cmd = uv_run_python_cmd("bot.py")
     try:
-        pid = spawn_detached(cmd, cwd=PROJECT_ROOT, env=env, log_path=LOG_FILE)
+        pid = spawn_detached(cmd, cwd=PROJECT_ROOT, env=env, log_path=launcher_log_path())
     except OSError as err:
         print(f"unified 启动失败: {err}", file=sys.stderr)
         return 1
     write_pid_file(PID_FILE, pid)
     time.sleep(2)
     if is_bot_running():
-        print(f"unified 已启动 pid={read_pid_file(PID_FILE)} port={port}")
-        print(f"WebUI: http://127.0.0.1:{port}/pallas/")
-        print(f"日志: {LOG_FILE}")
-        from pallas.console.cli.embedding_aux import start_embed_aux
-
-        return start_embed_aux()
-    print(f"unified 启动失败，查看 {LOG_FILE}", file=sys.stderr)
+        print(f"unified 已转入后台 · pid {read_pid_file(PID_FILE)} · port {port}")
+        print(f"控制台 http://127.0.0.1:{port}/pallas/")
+        print(f"启动器日志 {LOG_DIR}")
+        return start_aux_services()
+    print(f"unified 启动失败，查看 {LOG_DIR}", file=sys.stderr)
     clear_pid_file(PID_FILE)
     return 1
 
 
 def stop_bot() -> int:
-    from pallas.console.cli.embedding_aux import stop_embed_aux
-
-    stop_embed_aux()
+    stop_aux_services()
     pid = read_pid_file(PID_FILE)
     if pid is None or not pid_alive(pid):
         clear_pid_file(PID_FILE)
@@ -122,19 +192,17 @@ def stop_bot() -> int:
 
 
 def status_bot() -> int:
-    from pallas.console.cli.embedding_aux import print_embed_aux_status
-
     port = read_listen_port()
-    print("形态 unified（默认；分片为可选进阶）")
-    print(f"监听端口 {port}")
+    print("Pallas · 统一运行时")
+    print(f"  监听端口   {port}")
     if is_bot_running():
-        print(f"Bot 运行中 pid={read_pid_file(PID_FILE)}")
-        print(f"WebUI http://127.0.0.1:{port}/pallas/")
+        print(f"  消息实例   运行中 · pid {read_pid_file(PID_FILE)}")
+        print(f"  控制台     http://127.0.0.1:{port}/pallas/")
     else:
-        print("Bot 未运行")
-    print(f"Bot 日志 {LOG_FILE}")
-    print_embed_aux_status()
-    print("更多日志: uv run pallas logs")
+        print("  消息实例   未运行")
+    print(f"  业务日志   {PROJECT_ROOT / 'data' / 'bot'}")
+    print_aux_services_status()
+    print("  更多日志   uv run pallas logs")
     return 0
 
 
@@ -160,10 +228,11 @@ def run_unified_action(
     action: str,
     *,
     skip_port_sync: bool = False,
+    detach: bool = False,
 ) -> int:
     normalized = (action or "status").strip().lower()
     if normalized == "start":
-        return start_bot(skip_port_sync=skip_port_sync)
+        return start_bot(skip_port_sync=skip_port_sync, detach=detach)
     if normalized == "stop":
         return stop_bot()
     if normalized == "restart":

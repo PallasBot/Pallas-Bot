@@ -17,12 +17,14 @@ _caches: dict[str, dict[int, tuple[float, tuple[int, ...]]]] = {
     NS_FLEET: {},
     NS_LOCAL_CONNECTED: {},
 }
+_observed_local_group_bots: dict[int, dict[int, float]] = {}
 
 
 def clear_group_online_cache(namespace: str | None = None) -> None:
     if namespace is None:
         for bucket in _caches.values():
             bucket.clear()
+        _observed_local_group_bots.clear()
         return
     bucket = _caches.get(namespace)
     if bucket is not None:
@@ -58,9 +60,39 @@ async def store_cached_group_bot_ids(
         bucket[gid] = (now + GROUP_ONLINE_TTL_SEC, tup)
 
 
+def remember_local_group_bot(group_id: int, bot_id: int) -> None:
+    """记录已实际收到该群消息的本机帐号。"""
+    gid = int(group_id)
+    bid = int(bot_id)
+    now = time.time()
+    observed = _observed_local_group_bots.setdefault(gid, {})
+    for old_bot_id, expires_at in tuple(observed.items()):
+        if expires_at <= now:
+            observed.pop(old_bot_id, None)
+    observed[bid] = now + GROUP_ONLINE_TTL_SEC
+
+
+def recent_local_group_bot_ids(group_id: int) -> list[int]:
+    gid = int(group_id)
+    observed = _observed_local_group_bots.get(gid)
+    if not observed:
+        return []
+    now = time.time()
+    for bot_id, expires_at in tuple(observed.items()):
+        if expires_at <= now:
+            observed.pop(bot_id, None)
+    if not observed:
+        _observed_local_group_bots.pop(gid, None)
+        return []
+    return sorted(observed)
+
+
 async def resolve_local_connected_bots_in_group(group_id: int) -> list[int]:
     """本进程已连接且能查到该群成员资料的牛牛 QQ。"""
     gid = int(group_id)
+    observed = recent_local_group_bot_ids(gid)
+    if observed:
+        return observed
     cached = get_cached_group_bot_ids(gid, namespace=NS_LOCAL_CONNECTED)
     if cached is not None:
         return cached

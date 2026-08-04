@@ -6,7 +6,7 @@
 
 ## 最少能跑
 
-复制 `config/pallas.example.toml` → `config/pallas.toml`，配置 **`superusers`** 与 **`[bootstrap.postgres]`**（3.x 升级用 mongo 段）即可启动；其余在 WebUI 按需配置。
+复制 `config/pallas.example.toml` → `config/pallas.toml`，配置 **`superusers`** 与 **`[bootstrap.postgres]`** 即可启动；其余在 WebUI 按需配置。
 
 ```toml
 [bootstrap]
@@ -106,14 +106,22 @@ Docker Compose 升级栈中 Bot 容器内 host 为 **`mongodb`**（compose 注�
 
 ---
 
-## `[env]` 与分片（按需）
+## Redis、分片与后台任务（按需）
 
 ```toml
 [env]
 REDIS_URL = "redis://127.0.0.1:6379/0"
 ```
 
-多进程分片跨 worker claim 依赖 Redis；分片部署时配置该项，并 `uv sync --extra coord-redis`（或 `deploy-shard`）。`run_sharded_bot.sh` 自动探测；与 Pallas-Bot-AI 共用 Redis 时填相同 URL。
+单进程 Bot 的消息主路径与 `work aux` 默认使用 PostgreSQL / MongoDB outbox，**不要求 Redis**。多进程分片跨 worker claim、local Embedding 与 Pallas-Bot-AI 的 Celery 则需要或明显受益于 Redis；默认可共用同一个 URL，以键前缀或逻辑 DB 隔离。
+
+分片部署时配置该项，并 `uv sync --extra coord-redis`（或 `deploy-shard`）。本机没有 Redis 时可执行：
+
+```bash
+uv run pallas redis start
+```
+
+命令优先复用可达服务；否则通过 Docker 创建仅绑定回环地址、带持久卷的 Redis，并把最终 `REDIS_URL` 写入 `data/pallas_config/webui.json`。无 Docker 时单机 Bot / work aux 仍可运行，但不能启用分片协调或本机 AI 队列。
 
 ## `[community_stats]`（可选）
 

@@ -49,6 +49,16 @@ _disabled_group_generation: dict[int, int] = {}
 _disabled_bot_fetch_tasks: dict[int, asyncio.Task[frozenset[str]]] = {}
 _disabled_group_fetch_tasks: dict[int, asyncio.Task[frozenset[str]]] = {}
 _disabled_fetch_tasks_lock = asyncio.Lock()
+_disabled_bot_snapshot: dict[int, frozenset[str]] = {}
+_disabled_group_snapshot: dict[int, frozenset[str]] = {}
+_disabled_snapshot_ready = False
+_disabled_snapshot_last_refresh_mono = 0.0
+_disabled_snapshot_last_failure_mono = 0.0
+_disabled_snapshot_refresh_failures = 0
+_DISABLED_SNAPSHOT_REDIS_GEN_KEY = "pallas:help:disabled_plugin_snapshot_gen"
+_DISABLED_SNAPSHOT_REMOTE_GEN_SYNC_TTL_SEC = 2.0
+_disabled_snapshot_synced_redis_gen = -1
+_disabled_snapshot_remote_gen_checked_at = 0.0
 
 
 def _disabled_gate_key(bot_id: int | None, group_id: int | None) -> tuple[int | None, int | None]:
@@ -268,7 +278,136 @@ async def invalidate_disabled_plugin_gate_cache(
 
 async def reset_disabled_plugin_gate_cache() -> None:
     """清空禁用插件门禁内存缓存。"""
+    global \
+        _disabled_snapshot_last_failure_mono, \
+        _disabled_snapshot_last_refresh_mono, \
+        _disabled_snapshot_ready, \
+        _disabled_snapshot_refresh_failures, \
+        _disabled_snapshot_remote_gen_checked_at, \
+        _disabled_snapshot_synced_redis_gen
     await invalidate_disabled_plugin_gate_cache(clear_all=True)
+    _disabled_bot_snapshot.clear()
+    _disabled_group_snapshot.clear()
+    _disabled_snapshot_ready = False
+    _disabled_snapshot_last_refresh_mono = 0.0
+    _disabled_snapshot_last_failure_mono = 0.0
+    _disabled_snapshot_refresh_failures = 0
+    _disabled_snapshot_synced_redis_gen = -1
+    _disabled_snapshot_remote_gen_checked_at = 0.0
+
+
+async def refresh_disabled_plugin_snapshot() -> bool:
+    """启动或显式刷新时批量读取插件禁用配置，避免热路径逐群回源。"""
+    global \
+        _disabled_snapshot_last_failure_mono, \
+        _disabled_snapshot_last_refresh_mono, \
+        _disabled_snapshot_ready, \
+        _disabled_snapshot_refresh_failures
+    if _pg_not_ready():
+        return False
+    try:
+        bot_rows, group_rows = await asyncio.gather(bot_config_repo.list_all(), group_config_repo.list_all())
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _disabled_snapshot_refresh_failures += 1
+        _disabled_snapshot_last_failure_mono = time.monotonic()
+        logger.exception("[帮助] 插件禁用快照刷新失败，保留最近成功值")
+        return False
+    bot_snapshot = {
+        int(row.account): frozenset(row.disabled_plugins or [])
+        for row in bot_rows
+        if getattr(row, "disabled_plugins", None)
+    }
+    group_snapshot = {
+        int(row.group_id): frozenset(row.disabled_plugins or [])
+        for row in group_rows
+        if getattr(row, "disabled_plugins", None)
+    }
+    async with _disabled_gate_lock:
+        _disabled_bot_snapshot.clear()
+        _disabled_bot_snapshot.update(bot_snapshot)
+        _disabled_group_snapshot.clear()
+        _disabled_group_snapshot.update(group_snapshot)
+        _disabled_snapshot_ready = True
+        _disabled_snapshot_last_refresh_mono = time.monotonic()
+    return True
+
+
+def disabled_plugin_snapshot_ready() -> bool:
+    return _disabled_snapshot_ready
+
+
+def bump_disabled_plugin_snapshot_remote_generation() -> None:
+    global _disabled_snapshot_remote_gen_checked_at, _disabled_snapshot_synced_redis_gen
+    try:
+        from pallas.core.platform.coord.redis_claim import get_coord_redis_client
+
+        client = get_coord_redis_client()
+        if client is not None:
+            _disabled_snapshot_synced_redis_gen = int(client.incr(_DISABLED_SNAPSHOT_REDIS_GEN_KEY))
+            _disabled_snapshot_remote_gen_checked_at = time.monotonic()
+    except Exception:
+        pass
+
+
+def sync_disabled_plugin_snapshot_remote_generation() -> int | None:
+    """返回待确认的 Redis 世代；刷新成功后调用方才可提交。"""
+    global _disabled_snapshot_remote_gen_checked_at, _disabled_snapshot_synced_redis_gen
+    now = time.monotonic()
+    if (
+        _disabled_snapshot_remote_gen_checked_at
+        and now - _disabled_snapshot_remote_gen_checked_at < _DISABLED_SNAPSHOT_REMOTE_GEN_SYNC_TTL_SEC
+    ):
+        return None
+    try:
+        from pallas.core.platform.coord.redis_claim import get_coord_redis_client
+
+        client = get_coord_redis_client()
+        if client is None:
+            _disabled_snapshot_remote_gen_checked_at = now
+            return None
+        raw = client.get(_DISABLED_SNAPSHOT_REDIS_GEN_KEY)
+        _disabled_snapshot_remote_gen_checked_at = now
+        remote = int(raw) if raw else 0
+        if remote == _disabled_snapshot_synced_redis_gen:
+            return None
+        return remote
+    except Exception:
+        _disabled_snapshot_remote_gen_checked_at = now
+        return None
+
+
+async def apply_disabled_plugin_config_change(
+    *,
+    bot_id: int | None = None,
+    group_id: int | None = None,
+    disabled_plugins: list[str],
+) -> None:
+    """配置落库后同步本地快照，并通知其他消息实例刷新。"""
+    await invalidate_disabled_plugin_gate_cache(bot_id=bot_id, group_id=group_id)
+    async with _disabled_gate_lock:
+        if _disabled_snapshot_ready:
+            names = frozenset(disabled_plugins)
+            if bot_id is not None:
+                _disabled_bot_snapshot[int(bot_id)] = names
+            if group_id is not None:
+                _disabled_group_snapshot[int(group_id)] = names
+    bump_disabled_plugin_snapshot_remote_generation()
+
+
+def disabled_plugin_snapshot_status() -> dict[str, bool | int | float | None]:
+    now = time.monotonic()
+    return {
+        "ready": _disabled_snapshot_ready,
+        "refresh_age_sec": (
+            round(now - _disabled_snapshot_last_refresh_mono, 2) if _disabled_snapshot_last_refresh_mono else None
+        ),
+        "refresh_failures": _disabled_snapshot_refresh_failures,
+        "last_failure_age_sec": (
+            round(now - _disabled_snapshot_last_failure_mono, 2) if _disabled_snapshot_last_failure_mono else None
+        ),
+    }
 
 
 async def _await_disabled_scope_deduped(
@@ -347,10 +486,21 @@ async def collect_disabled_plugin_names(
     ignore_cache: bool = False,
 ) -> frozenset[str]:
     """合并 Bot 全局与群级的禁用插件名，供批量判断。"""
+    global _disabled_snapshot_remote_gen_checked_at, _disabled_snapshot_synced_redis_gen
     if _pg_not_ready():
         return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(frozenset()))
     if ignore_cache:
         return await load_disabled_plugin_names_from_db(bot_id, group_id, ignore_cache=True)
+    if _disabled_snapshot_ready:
+        remote_generation = sync_disabled_plugin_snapshot_remote_generation()
+        if remote_generation is not None:
+            if await refresh_disabled_plugin_snapshot():
+                _disabled_snapshot_synced_redis_gen = remote_generation
+            else:
+                _disabled_snapshot_remote_gen_checked_at = 0.0
+        bot_names = _disabled_bot_snapshot.get(int(bot_id), frozenset()) if bot_id else frozenset()
+        group_names = _disabled_group_snapshot.get(int(group_id), frozenset()) if group_id else frozenset()
+        return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(bot_names | group_names))
 
     remote_changed = sync_global_disable_remote_generation() or sync_group_fleet_whitelist_remote_generation()
     key = _disabled_gate_key(bot_id, group_id)
@@ -456,7 +606,7 @@ async def update_bot_config(bot_id: int, disabled_plugins: list[str]) -> BotConf
     """
     await bot_config_repo.upsert_field(bot_id, "disabled_plugins", disabled_plugins.copy())
     await bot_config_repo.invalidate_cache()
-    await invalidate_disabled_plugin_gate_cache(bot_id=bot_id)
+    await apply_disabled_plugin_config_change(bot_id=bot_id, disabled_plugins=disabled_plugins)
 
     bot_config = await bot_config_repo.get(bot_id, ignore_cache=True)
     # 不用 assert：python -O 下 assert 会被剥离。
@@ -472,7 +622,7 @@ async def update_group_config(group_id: int, disabled_plugins: list[str]) -> Gro
     """
     await group_config_repo.upsert_field(group_id, "disabled_plugins", disabled_plugins.copy())
     await group_config_repo.invalidate_cache()
-    await invalidate_disabled_plugin_gate_cache(group_id=group_id)
+    await apply_disabled_plugin_config_change(group_id=group_id, disabled_plugins=disabled_plugins)
 
     group_config = await group_config_repo.get(group_id, ignore_cache=True)
     if group_config is None:

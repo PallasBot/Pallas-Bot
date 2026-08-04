@@ -28,6 +28,16 @@ async def test_get_returns_none_when_missing(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_list_all_returns_config_documents(beanie_fixture):
+    repo = MongoConfigRepository(BotConfigModule, "account")
+    await repo.upsert_field(701, "disabled_plugins", ["a"])
+    await repo.upsert_field(702, "disabled_plugins", ["b"])
+
+    rows = await repo.list_all()
+    assert {int(row.account) for row in rows} >= {701, 702}
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_creates_document(beanie_fixture):
     repo = MongoConfigRepository(BotConfigModule, "account")
     doc, created = await repo.get_or_create(100, disabled_plugins=["foo"])

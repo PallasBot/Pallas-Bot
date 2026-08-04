@@ -50,6 +50,7 @@ from pallas.core.platform.multi_bot.dedup import (
     claim_group_handler,
     claim_group_message_event,
     is_group_owned_gate_holder,
+    local_deployment_claim_plugin,
     needs_group_host_bot_gate,
     normalize_message_time,
     release_group_owned_gate_sync,
@@ -97,8 +98,11 @@ from pallas.core.platform.shard.coord.bot_action import (
 )
 from pallas.core.platform.shard.coord.bot_count import (
     STAGGER_SEC,
+    get_shard_bot_count_order,
+    mark_shard_bot_count_reported_and_claim_completion,
     run_shard_coordinated_bot_count,
     update_shard_bot_count_registration,
+    wait_shard_bot_count_turn,
 )
 
 # ── 分片在线态 ──
@@ -154,6 +158,7 @@ __all__ = [
     "invalidate_fleet_bot_cache",
     "is_fleet_bot_qq",
     "is_group_owned_gate_holder",
+    "local_deployment_claim_plugin",
     "list_local_fleet_bots_in_group",
     "message_at_fleet_bot",
     "needs_group_host_bot_gate",
@@ -188,8 +193,11 @@ __all__ = [
     "send_private_msg_as_bot",
     "set_group_card_as_bot",
     "STAGGER_SEC",
+    "get_shard_bot_count_order",
+    "mark_shard_bot_count_reported_and_claim_completion",
     "run_shard_coordinated_bot_count",
     "update_shard_bot_count_registration",
+    "wait_shard_bot_count_turn",
     # 插件子模块
     "import_plugin_submodule",
     # LLM

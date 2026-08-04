@@ -34,6 +34,7 @@ from pallas.core.platform.ingress.matcher_activation import legacy_command_traff
 from pallas.core.platform.ingress.notice_gate import ingress_notice_gate
 from pallas.core.platform.multi_bot.at_targets import group_at_qq_ids, message_at_fleet_bot
 from pallas.core.platform.multi_bot.fleet import fleet_bot_ids_contains, get_fleet_bot_ids
+from pallas.core.platform.multi_bot.group_online_cache import remember_local_group_bot
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from pallas.core.platform.shard import context as shard_ctx
 from pallas.core.platform.shard.ingress_metrics import (
@@ -90,12 +91,13 @@ async def ingress_notice_preprocess(bot, event) -> None:
 
 
 async def ingress_group_message_gate(bot, event) -> None:
-    if not ingress_gate_active():
-        return
     if not isinstance(event, GroupMessageEvent):
         return
 
     self_id = int(bot.self_id)
+    remember_local_group_bot(event.group_id, self_id)
+    if not ingress_gate_active():
+        return
     user_id = int(event.user_id)
     metrics = should_record_ingress_metrics(self_id)
     sharding_active = shard_ctx.sharding_active()

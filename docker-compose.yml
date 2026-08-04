@@ -46,6 +46,31 @@ services:
         condition: service_healthy
         required: false
 
+  pallas-work:
+    container_name: pallasbot_work
+    image: pallasbot/pallas-bot:latest
+    restart: always
+    command: ["python", "bot_work.py"]
+    environment:
+      TZ: Asia/Shanghai
+      ENVIRONMENT: prod
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      MONGO_HOST: mongodb
+      MONGO_PORT: "27017"
+    networks:
+      - pallasbot
+    volumes:
+      - ./pallas-bot/config/pallas.toml:/app/config/pallas.toml
+      - ./pallas-bot/data:/app/data
+      - ./pallas-bot/local/plugins:/app/local/plugins
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+        required: false
+
   postgres:
     container_name: pallasbot_postgres
     image: postgres:16-alpine

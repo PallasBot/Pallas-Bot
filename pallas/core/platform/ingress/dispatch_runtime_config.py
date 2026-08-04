@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.console.webui.field_help import field_help
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value, repo_layered_dotenv_files_exist
+from pallas.core.foundation.db.pool_budget import cap_by_pg_pool
 
 _config_lock = Lock()
 _cached: IngressDispatchRuntimeConfig | None = None
@@ -116,6 +117,34 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "按命令、闲聊、数据库、外呼等档位限制同时运行的插件数量",
             "选开或关；一般保持开启",
             "关闭后重命令可能占满数据库连接或拖慢整群回复",
+        ),
+    )
+    conversation_scheduler_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "让同一群的消息按顺序处理，并在活跃群之间公平轮转",
+            "选开或关；一般保持开启",
+            "变更后需重启 Bot，避免处理中消息切换到不同调度路径",
+        ),
+    )
+    conversation_scheduler_concurrency: int = Field(
+        default=6,
+        ge=1,
+        le=64,
+        description=field_help(
+            "同时处理多少个群会话",
+            "填正整数；默认按 PostgreSQL 连接池容量估算",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
+    conversation_scheduler_max_pending: int = Field(
+        default=512,
+        ge=32,
+        le=8192,
+        description=field_help(
+            "内存中最多等待处理多少条群消息",
+            "填正整数；默认 512",
+            "达到上限时入站处理会等待空位，变更后需重启 Bot",
         ),
     )
     lane_acquire_timeout_sec: float = Field(
@@ -239,6 +268,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
     def from_env(cls) -> Self:
         pool_size = dispatch_env_int("PG_POOL_SIZE", default=10, minimum=1, maximum=128)
         storage_default = min(8, pool_size)
+        conversation_default = cap_by_pg_pool(8, workload_fraction=0.30)
         return cls(
             matcher_dispatch_enabled=dispatch_env_bool("PALLAS_MATCHER_DISPATCH_ENABLED", default=True),
             matcher_dispatch_overload_threshold=dispatch_env_int(
@@ -251,6 +281,19 @@ class IngressDispatchRuntimeConfig(BaseModel):
             route_index_enabled=dispatch_env_bool("PALLAS_ROUTE_INDEX_ENABLED", default=True),
             route_index_strict=dispatch_env_bool("PALLAS_ROUTE_INDEX_STRICT", default=False),
             dispatch_lanes_enabled=dispatch_env_bool("PALLAS_DISPATCH_LANES_ENABLED", default=True),
+            conversation_scheduler_enabled=dispatch_env_bool("PALLAS_CONVERSATION_SCHEDULER_ENABLED", default=True),
+            conversation_scheduler_concurrency=dispatch_env_int(
+                "PALLAS_CONVERSATION_SCHEDULER_CONCURRENCY",
+                default=conversation_default,
+                minimum=1,
+                maximum=64,
+            ),
+            conversation_scheduler_max_pending=dispatch_env_int(
+                "PALLAS_CONVERSATION_SCHEDULER_MAX_PENDING",
+                default=512,
+                minimum=32,
+                maximum=8192,
+            ),
             lane_acquire_timeout_sec=dispatch_env_float("PALLAS_LANE_ACQUIRE_TIMEOUT_SEC", default=1.0, minimum=0.0),
             lane_wait_overload_ms=dispatch_env_int(
                 "PALLAS_LANE_WAIT_OVERLOAD_MS",

@@ -21,6 +21,7 @@ def test_bot_count_coord_plaintext_unifies_claim_key():
         mod.bot_count_coord_plaintext("牛牛出列"),
         t,
         use_plaintext=True,
+        include_message_time=True,
     )
     key_punct = cross_bot_group_message_key(
         gid,
@@ -28,6 +29,7 @@ def test_bot_count_coord_plaintext_unifies_claim_key():
         mod.bot_count_coord_plaintext("牛牛出列！"),
         t,
         use_plaintext=True,
+        include_message_time=True,
     )
     assert key_plain == key_punct
 
@@ -65,7 +67,7 @@ def test_cross_shard_order_finalize(fake_coord_redis, monkeypatch):
     assert len(order) == 3
 
 
-def test_finalize_reopens_order_when_registration_grows(fake_coord_redis):
+def test_finalize_keeps_order_when_late_registration_arrives(fake_coord_redis):
     path = mod._session_path(10086, 999003)
     mod._ensure_session(
         path,
@@ -89,10 +91,10 @@ def test_finalize_reopens_order_when_registration_grows(fake_coord_redis):
     mod._try_finalize_order(path, 100)
     order = mod._read_session(path).get("order")
     assert isinstance(order, list)
-    assert set(order) == {100, 300}
+    assert order == [100]
 
 
-def test_non_min_bot_can_rebuild_stale_order_after_registration_grows(fake_coord_redis):
+def test_completion_claims_once_after_report_window(fake_coord_redis):
     path = mod._session_path(10086, 999004)
     mod._ensure_session(
         path,
@@ -101,50 +103,125 @@ def test_non_min_bot_can_rebuild_stale_order_after_registration_grows(fake_coord
         message_time=1,
         seed="2026-05-22:10086",
     )
-    mod._register_shard_bots(path, 1, [100])
     data = mod._read_session(path)
     assert data is not None
-    data["collect_until"] = time.time() - 0.01
-    data["order"] = [100]
-    data["finalized_by"] = 100
+    data["order"] = [100, 200]
+    data["report_until"] = time.time() - 0.01
     mod._write_session_atomic(path, data)
 
-    mod._register_shard_bots(path, 2, [300])
+    assert mod._mark_bot_count_reported_and_claim_completion(path, 100)
+    assert not mod._mark_bot_count_reported_and_claim_completion(path, 200)
+
     data = mod._read_session(path)
     assert data is not None
-    data["collect_until"] = time.time() - 0.01
-    mod._write_session_atomic(path, data)
-
-    mod._try_finalize_order(path, 300)
-    data = mod._read_session(path)
-    assert data is not None
-    assert isinstance(data.get("order"), list)
-    assert set(data["order"]) == {100, 300}
-    assert data["finalized_by"] == 300
+    assert data["reported"] == [100, 200]
+    assert data["completion_claimed_by"] == 100
 
 
-def test_non_min_bot_does_not_clear_stale_order_without_rebuilding(fake_coord_redis):
-    path = mod._session_path(10086, 999005)
+async def test_reads_finalized_order_for_local_dispatch(fake_coord_redis):
+    from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
+
+    group_id, user_id, message_time = 10086, 1, 1
+    claim_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        mod.bot_count_coord_plaintext("牛牛报数"),
+        message_time,
+        use_plaintext=True,
+        include_message_time=True,
+    )
+    path = mod._session_path(group_id, claim_key)
     mod._ensure_session(
         path,
-        group_id=10086,
-        user_id=1,
-        message_time=1,
+        group_id=group_id,
+        user_id=user_id,
+        message_time=message_time,
         seed="2026-05-22:10086",
     )
-    mod._register_shard_bots(path, 1, [100, 200])
     data = mod._read_session(path)
     assert data is not None
-    data["collect_until"] = time.time() - 0.01
-    data["order"] = [100]
-    data["finalized_by"] = 100
+    data["order"] = [200, 100]
     mod._write_session_atomic(path, data)
 
-    mod._try_finalize_order(path, 200)
+    order = await mod.get_shard_bot_count_order(
+        group_id=group_id,
+        user_id=user_id,
+        plaintext="牛牛报数",
+        message_time=message_time,
+    )
+
+    assert order == [200, 100]
+
+
+async def test_repeated_count_does_not_read_previous_completed_session(fake_coord_redis):
+    from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
+
+    group_id, user_id = 10086, 1
+    previous_time, current_time = 100, 200
+    previous_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        mod.bot_count_coord_plaintext("牛牛报数"),
+        previous_time,
+        use_plaintext=True,
+    )
+    previous_path = mod._session_path(group_id, previous_key)
+    mod._ensure_session(
+        previous_path,
+        group_id=group_id,
+        user_id=user_id,
+        message_time=previous_time,
+        seed="2026-05-22:10086",
+    )
+    data = mod._read_session(previous_path)
+    assert data is not None
+    data["order"] = [100]
+    data["completion_claimed_by"] = 100
+    mod._write_session_atomic(previous_path, data)
+
+    order = await mod.get_shard_bot_count_order(
+        group_id=group_id,
+        user_id=user_id,
+        plaintext="牛牛报数",
+        message_time=current_time,
+    )
+
+    assert order is None
+
+
+async def test_turn_is_ready_after_previous_bot_reported(fake_coord_redis):
+    from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
+
+    group_id, user_id, message_time = 10086, 1, 1
+    claim_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        mod.bot_count_coord_plaintext("牛牛报数"),
+        message_time,
+        use_plaintext=True,
+        include_message_time=True,
+    )
+    path = mod._session_path(group_id, claim_key)
+    mod._ensure_session(
+        path,
+        group_id=group_id,
+        user_id=user_id,
+        message_time=message_time,
+        seed="2026-05-22:10086",
+    )
     data = mod._read_session(path)
     assert data is not None
-    assert isinstance(data.get("order"), list)
-    assert set(data["order"]) == {100, 200}
+    data["order"] = [100, 200]
+    data["reported"] = [100]
+    mod._write_session_atomic(path, data)
+
+    assert await mod.wait_shard_bot_count_turn(
+        group_id=group_id,
+        user_id=user_id,
+        plaintext="牛牛报数",
+        message_time=message_time,
+        bot_id=200,
+    )
 
 
 def test_late_shard_extends_collect_window(fake_coord_redis):

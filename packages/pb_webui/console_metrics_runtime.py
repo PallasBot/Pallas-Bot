@@ -85,6 +85,7 @@ def _hist_bucket_start_local(ts: int, bucket_sec: int) -> int:
 # self_id -> { day_key, by_plugin: { plugin: { runs, errors, day_runs, day_errors, duration_* } } }
 _PLUGIN_RUN_STATS: dict[str, dict[str, Any]] = {}
 _PLUGIN_RUN_TRACKING_INIT = False
+_MATCHER_DURATION_LOG_DIRTY = False
 _WORKER_STATS_SYNC_STARTED = False
 _UNIFIED_STATS_SYNC_STARTED = False
 _REPEATER_HISTORY_SYNC_STARTED = False
@@ -696,6 +697,7 @@ def flush_unified_console_live_stats_sync(*, include_hist: bool = False) -> None
         _collect_worker_console_stats_snapshot(include_hist=include_hist),
         preserve_matcher_hist=not include_hist,
     )
+    _flush_matcher_duration_log_if_dirty()
 
 
 async def flush_unified_console_live_stats_async(*, include_hist: bool = False) -> None:
@@ -1762,6 +1764,8 @@ def _append_matcher_duration_log(
 ) -> None:
     """进程内环形缓冲；单进程/hub 另写 jsonl；分片 worker 由 stats 文件周期刷盘。"""
 
+    global _MATCHER_DURATION_LOG_DIRTY
+
     entry: dict[str, Any] = {
         "at": int(time.time()),
         "plugin": plugin,
@@ -1778,10 +1782,25 @@ def _append_matcher_duration_log(
         enforce_matcher_duration_log_limits(log)
         if shard_worker_console():
             return
+        if not shard_hub_console():
+            _MATCHER_DURATION_LOG_DIRTY = True
+            return
         with _MATCHER_DURATION_JSONL_LOCK:
             _rewrite_matcher_durations_jsonl()
     except Exception:  # noqa: BLE001
         pass
+
+
+def _flush_matcher_duration_log_if_dirty() -> None:
+    global _MATCHER_DURATION_LOG_DIRTY
+
+    if not _MATCHER_DURATION_LOG_DIRTY:
+        return
+    with _MATCHER_DURATION_JSONL_LOCK:
+        if not _MATCHER_DURATION_LOG_DIRTY:
+            return
+        _rewrite_matcher_durations_jsonl()
+        _MATCHER_DURATION_LOG_DIRTY = False
 
 
 def _matcher_duration_log_public(

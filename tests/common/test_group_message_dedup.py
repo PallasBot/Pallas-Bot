@@ -7,6 +7,7 @@ from pallas.core.platform.multi_bot.group import (
     claim_group_handler,
     cross_bot_group_message_key,
     cross_bot_message_signature,
+    local_deployment_claim_plugin,
     normalize_group_plaintext,
     normalize_group_raw_message,
     try_acquire_group_broadcast_slot,
@@ -159,3 +160,14 @@ async def test_claim_group_handler_non_group_passes() -> None:
 
     event = MagicMock()
     assert await claim_group_handler("maa", event, 111) is True
+
+
+@pytest.mark.asyncio
+async def test_local_deployment_claim_isolated_from_other_deployments() -> None:
+    gid, uid, body, t = 733291779, 3023094357, "我的牛牛", 100
+    local = local_deployment_claim_plugin("bot_status", "dep-local")
+    peer = local_deployment_claim_plugin("bot_status", "dep-peer")
+
+    assert await try_claim_cross_bot_message_memory(local, gid, uid, body, t, 10001) is True
+    assert await try_claim_cross_bot_message_memory(local, gid, uid, body, t, 10002) is False
+    assert await try_claim_cross_bot_message_memory(peer, gid, uid, body, t, 20001) is True

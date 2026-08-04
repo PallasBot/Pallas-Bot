@@ -21,6 +21,12 @@ def test_builtin_help_hidden_includes_infra_plugins():
     assert is_plugin_name_in_set("community_stats", hidden)
 
 
+def test_plugin_disable_matches_pip_module_alias():
+    from packages.help.plugin_legacy_names import is_plugin_name_in_set
+
+    assert is_plugin_name_in_set("pallas_plugin_tts", {"tts"})
+
+
 def test_console_stats_excluded_matches_help_hidden_infra():
     excluded = _visibility.resolve_console_stats_excluded_plugin_names()
     assert "pb_webui" in excluded

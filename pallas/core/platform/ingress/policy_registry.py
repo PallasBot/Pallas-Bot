@@ -90,7 +90,28 @@ def parse_fanout_policy(raw: dict[str, Any]) -> FanoutPolicyEntry | None:
     )
 
 
+def parse_fanout_policies(raw: object) -> tuple[FanoutPolicyEntry, ...]:
+    if isinstance(raw, dict):
+        entry = parse_fanout_policy(raw)
+        return (entry,) if entry is not None else ()
+    if not isinstance(raw, (list, tuple)):
+        return ()
+    entries: list[FanoutPolicyEntry] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        entry = parse_fanout_policy(item)
+        if entry is not None:
+            entries.append(entry)
+    return tuple(entries)
+
+
 def fanout_policy_for_plugin(plugin_name: str) -> FanoutPolicyEntry | None:
+    policies = fanout_policies_for_plugin(plugin_name)
+    return policies[0] if policies else None
+
+
+def fanout_policies_for_plugin(plugin_name: str) -> tuple[FanoutPolicyEntry, ...]:
     from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 
     name = canonical_plugin_package((plugin_name or "").strip())
@@ -102,19 +123,16 @@ def fanout_policy_for_plugin(plugin_name: str) -> FanoutPolicyEntry | None:
         meta = getattr(plugin, "metadata", None)
         extra = getattr(meta, "extra", None) if meta is not None else None
         if not isinstance(extra, dict):
-            return None
-        raw = extra.get("ingress_fanout")
-        if not isinstance(raw, dict):
-            return None
-        return parse_fanout_policy(raw)
-    return None
+            return ()
+        return (
+            *parse_fanout_policies(extra.get("ingress_fanout")),
+            *parse_fanout_policies(extra.get("ingress_fanout_additional")),
+        )
+    return ()
 
 
 def text_matches_plugin_fanout(plain: str, plugin_name: str) -> bool:
-    entry = fanout_policy_for_plugin(plugin_name)
-    if entry is None:
-        return False
-    return policy_matches_text(entry, plain)
+    return any(policy_matches_text(entry, plain) for entry in fanout_policies_for_plugin(plugin_name))
 
 
 def loaded_fanout_policies() -> tuple[FanoutPolicyEntry, ...]:
@@ -124,9 +142,7 @@ def loaded_fanout_policies() -> tuple[FanoutPolicyEntry, ...]:
 
     entries: list[FanoutPolicyEntry] = []
     for plugin in get_loaded_plugins():
-        entry = fanout_policy_for_plugin(str(getattr(plugin, "name", "")).strip())
-        if entry is not None:
-            entries.append(entry)
+        entries.extend(fanout_policies_for_plugin(str(getattr(plugin, "name", "")).strip()))
     _POLICIES_CACHE = tuple(entries)
     return _POLICIES_CACHE
 

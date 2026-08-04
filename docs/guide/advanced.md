@@ -31,6 +31,7 @@
 | 主题 | 文档 |
 | --- | --- |
 | 组件结构 | [牛是怎么拼起来的](/guide/concepts) |
+| 统一运行时与分片 | [运行架构](/guide/concepts#运行方式) |
 | 配置存储 | [配置存储](/developer/architecture/config-storage) |
 | 分片部署 | [分片部署](/maintainer/deploy/sharded) |
 | 写第一个插件 | [写第一个插件](/developer/plugin-development/first-plugin) |

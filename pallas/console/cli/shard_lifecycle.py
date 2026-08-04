@@ -576,7 +576,7 @@ def print_observability_status_block(opts: ShardOptions) -> None:
 def cmd_status(opts: ShardOptions) -> int:
     workers = calc_worker_count(opts)
     hub_port = resolve_hub_port(opts)
-    print_title("Pallas-Bot 分片模式 · 运行状态")
+    print_title("Pallas-Bot 统一运行时 · 运行状态")
     print("  配置摘要")
     print_config_summary(opts, workers)
     print()
@@ -584,25 +584,27 @@ def cmd_status(opts: ShardOptions) -> int:
     print()
     print_observability_status_block(opts)
     print()
-    print("  进程")
+    print("  运行实例")
     hub_state = "运行中" if pidfile_running(PID_HUB) else "未运行"
-    print(f"    hub        {hub_state}  :{hub_port}")
+    print(f"    控制台实例 {hub_state}  :{hub_port}")
     running = 0
     for path in production_worker_pid_files():
         sid = path.stem.removeprefix("worker-")
         wport = registry_port_for_shard(int(sid) if sid.isdigit() else 0, opts)
         if pidfile_running(path):
             running += 1
-            print(f"    worker-{sid}  运行中  WS:{wport}  pid={read_pid_file(path)}")
+            print(f"    消息实例 {sid}  运行中  WS:{wport}  pid={read_pid_file(path)}")
         else:
-            print(f"    worker-{sid}  未运行  WS:{wport}")
+            print(f"    消息实例 {sid}  未运行  WS:{wport}")
     print()
-    print(f"  汇总       hub {hub_state} · worker {running}/{workers}")
+    print(f"  汇总       控制台实例 {hub_state} · 消息实例 {running}/{workers}")
     print(f"  WebUI      http://127.0.0.1:{hub_port}/pallas/")
     print(f"  日志目录   {LOG_DIR}")
     from pallas.console.cli.embedding_aux import print_embed_aux_status
+    from pallas.console.cli.work_aux import print_work_aux_status
 
     print_embed_aux_status()
+    print_work_aux_status()
     return 0
 
 
@@ -638,8 +640,10 @@ def cmd_stop(opts: ShardOptions) -> int:
     title = "Pallas-Bot 分片模式 · 停止" + ("（强制）" if opts.force else "")
     print_title(title)
     from pallas.console.cli.embedding_aux import stop_embed_aux
+    from pallas.console.cli.work_aux import stop_work_aux
 
     stop_embed_aux(force=opts.force, dry_run=opts.dry_run)
+    stop_work_aux(force=opts.force, dry_run=opts.dry_run)
     stop_one("worker-test", "测试 worker-test", opts=opts)
     stop_one("worker-test2", "测试 worker-test2", opts=opts)
     stop_production_workers(opts)
@@ -666,6 +670,10 @@ def cmd_start(opts: ShardOptions) -> int:
         print()
         print("  正在启动 hub…")
         if start_hub(opts) != 0:
+            return 1
+        from pallas.console.cli.work_aux import start_work_aux
+
+        if start_work_aux(dry_run=opts.dry_run) != 0:
             return 1
         if opts.dry_run:
             print()
@@ -739,8 +747,11 @@ def cmd_start(opts: ShardOptions) -> int:
             return 1
 
     from pallas.console.cli.embedding_aux import start_embed_aux
+    from pallas.console.cli.work_aux import start_work_aux
 
     if start_embed_aux(dry_run=opts.dry_run) != 0:
+        return 1
+    if start_work_aux(dry_run=opts.dry_run) != 0:
         return 1
 
     if opts.dry_run:

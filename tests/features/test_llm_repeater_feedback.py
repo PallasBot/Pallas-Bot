@@ -508,7 +508,7 @@ def test_group_feedback_bias_snapshot_hotpath_skips_heavy_stats(tmp_path, monkey
 
     assert snap["matched_replies"] == ["还行吧"]
     assert snap["semantic_matched_replies"] == ["还行吧"]
-    assert seen.get("policy") == "query_only"
+    assert seen.get("policy") == "memory_only"
     assert snap["learning_stats"] == {}
     assert snap["promotion_candidate_count"] == 0
 

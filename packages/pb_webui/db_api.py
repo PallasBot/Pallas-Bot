@@ -90,9 +90,12 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
             await repo.upsert_field(int(row_id), k, v)
         await repo.invalidate_cache()
         if "disabled_plugins" in payload:
-            from packages.help.plugin_manager import invalidate_disabled_plugin_gate_cache
+            from packages.help.plugin_manager import apply_disabled_plugin_config_change
 
-            await invalidate_disabled_plugin_gate_cache(bot_id=int(row_id))
+            await apply_disabled_plugin_config_change(
+                bot_id=int(row_id),
+                disabled_plugins=list(payload["disabled_plugins"] or []),
+            )
         if "admins" in payload:
             from pallas.core.foundation.config.bot_admins_cache import invalidate_bot_admins_cache
 
@@ -120,9 +123,12 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
 
             await apply_group_banned_change(int(row_id), bool(payload["banned"]))
         if "disabled_plugins" in payload:
-            from packages.help.plugin_manager import invalidate_disabled_plugin_gate_cache
+            from packages.help.plugin_manager import apply_disabled_plugin_config_change
 
-            await invalidate_disabled_plugin_gate_cache(group_id=int(row_id))
+            await apply_disabled_plugin_config_change(
+                group_id=int(row_id),
+                disabled_plugins=list(payload["disabled_plugins"] or []),
+            )
         got = await _get_db_table_row_public("group_config", int(row_id))
         if got is None:
             raise ValueError("upsert 后回读失败")
