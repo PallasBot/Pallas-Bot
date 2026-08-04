@@ -26,6 +26,9 @@ _COUNTERS = (
     "bundle_db_error",
     "bundle_other_error",
     "learn_enqueued",
+    "learn_buffered",
+    "learn_persisted",
+    "learn_dropped_shutdown",
     "learn_skipped_pressure",
     "learn_skipped_full",
     "learn_completed",
@@ -223,6 +226,21 @@ def record_reply_query_stages(
 def record_learn_enqueued() -> None:
     _rollover_if_needed()
     _state["learn_enqueued"] += 1
+
+
+def record_learn_buffered() -> None:
+    _rollover_if_needed()
+    _state["learn_buffered"] += 1
+
+
+def record_learn_persisted(count: int = 1) -> None:
+    _rollover_if_needed()
+    _state["learn_persisted"] += max(0, int(count))
+
+
+def record_learn_dropped_shutdown(count: int = 1) -> None:
+    _rollover_if_needed()
+    _state["learn_dropped_shutdown"] += max(0, int(count))
 
 
 def record_learn_skipped_pressure() -> None:
