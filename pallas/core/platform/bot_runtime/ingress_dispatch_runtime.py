@@ -17,6 +17,7 @@ from pallas.core.platform.ingress.matcher_dispatch import (
     matcher_dispatch_enabled,
     uninstall_matcher_dispatch,
 )
+from pallas.core.platform.ingress.onebot_backpressure import install_onebot_backpressure, uninstall_onebot_backpressure
 from pallas.core.platform.ingress.route_index import build_route_index, route_index_enabled, route_index_strict
 from pallas.core.platform.ingress.send_queue import (
     install_send_queue,
@@ -51,6 +52,7 @@ def register_ingress_dispatch_runtime() -> None:
         install_send_queue()
         await start_send_queue_workers()
         await start_conversation_scheduler()
+        install_onebot_backpressure()
         install_matcher_dispatch()
         start_dispatch_stats_logger()
 
@@ -59,6 +61,7 @@ def register_ingress_dispatch_runtime() -> None:
         await stop_dispatch_stats_logger()
         await stop_conversation_scheduler()
         uninstall_matcher_dispatch()
+        uninstall_onebot_backpressure()
         await stop_send_queue_workers()
         uninstall_send_queue()
 

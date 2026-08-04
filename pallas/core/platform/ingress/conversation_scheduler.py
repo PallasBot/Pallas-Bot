@@ -57,6 +57,14 @@ class ConversationScheduler:
             self._condition.notify_all()
         await asyncio.shield(future)
 
+    async def wait_for_capacity(self) -> None:
+        async with self._condition:
+            while not self._stopping and self._pending_count >= self.max_pending:
+                self._backpressure_waits += 1
+                await self._condition.wait()
+            if self._stopping:
+                raise RuntimeError("conversation scheduler is stopping")
+
     async def stop(self) -> None:
         async with self._condition:
             if self._stopping:
@@ -190,6 +198,13 @@ async def submit_conversation_event(bot: Bot, event: Event, work: Work) -> None:
         await work()
         return
     await scheduler.submit(key, work)
+
+
+async def wait_for_conversation_capacity(bot: Bot, event: Event) -> None:
+    scheduler = _scheduler
+    if scheduler is None or conversation_key(bot, event) is None:
+        return
+    await scheduler.wait_for_capacity()
 
 
 def conversation_scheduler_status() -> dict[str, int | float | bool | None]:
