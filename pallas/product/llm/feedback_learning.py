@@ -314,15 +314,14 @@ def build_feedback_bias_snapshot_data(
         limit=3,
         now=now,
     )
-    # 热路径：query_only（trigger 靠预热缓存；query 短超时/缓存）
-    # 完整路径：可批量补齐缺失 trigger 向量
+    # 热路径只读取缓存，完整路径可补齐缺失向量。
     semantic_matched_replies = find_semantic_matched_replies(
         rows=rows,
         user_text=user_text,
         active_scene=behavior_scene,
         limit=VECTOR_MATCH_LIMIT,
         now=now,
-        remote_policy="query_only" if hotpath else "full",
+        remote_policy="cache_only" if hotpath else "full",
     )
     penalized_replies = compute_penalized_replies(all_rows)
     promotion_candidate_count = 0
