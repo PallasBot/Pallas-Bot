@@ -15,6 +15,7 @@ from pallas.core.platform.ingress.conversation_scheduler import wait_for_convers
 
 _ORIGINAL_HANDLE_WS: Any = None
 _ORIGINAL_HANDLE_HTTP: Any = None
+_ORIGINAL_FORWARD_WS: Any = None
 _PATCHED = False
 
 
@@ -92,23 +93,64 @@ async def patched_handle_http(adapter: Adapter, request: Any) -> Any:
     return Response(204)
 
 
+async def patched_forward_ws(adapter: Adapter, url: Any) -> None:
+    from nonebot.adapters.onebot.v11.adapter import RECONNECT_INTERVAL, Request
+    from nonebot.adapters.onebot.v11.event import LifecycleMetaEvent
+
+    headers = {}
+    if adapter.onebot_config.onebot_access_token:
+        headers["Authorization"] = f"Bearer {adapter.onebot_config.onebot_access_token}"
+    request = Request("GET", url, headers=headers, timeout=30.0)
+    bot: Bot | None = None
+    while True:
+        try:
+            async with adapter.websocket(request) as websocket:
+                try:
+                    while True:
+                        event = adapter.json_to_event(json.loads(await websocket.receive()))
+                        if event is None:
+                            continue
+                        if bot is None:
+                            if not isinstance(event, LifecycleMetaEvent) or event.sub_type != "connect":
+                                continue
+                            bot = Bot(adapter, str(event.self_id))
+                            adapter.bot_connect(bot)
+                            adapter.connections[bot.self_id] = websocket
+                        await wait_for_conversation_capacity(bot, event)
+                        task = asyncio.create_task(bot.handle_event(event))
+                        task.add_done_callback(adapter.tasks.discard)
+                        adapter.tasks.add(task)
+                finally:
+                    if bot is not None:
+                        adapter.connections.pop(bot.self_id, None)
+                        adapter.bot_disconnect(bot)
+                        bot = None
+        except Exception as exc:
+            log("ERROR", f"OneBot forward websocket failed {escape_tag(str(url))}", exc)
+        await asyncio.sleep(RECONNECT_INTERVAL)
+
+
 def install_onebot_backpressure() -> None:
-    global _ORIGINAL_HANDLE_HTTP, _ORIGINAL_HANDLE_WS, _PATCHED
+    global _ORIGINAL_FORWARD_WS, _ORIGINAL_HANDLE_HTTP, _ORIGINAL_HANDLE_WS, _PATCHED
     if _PATCHED:
         return
     _ORIGINAL_HANDLE_WS = Adapter._handle_ws
     _ORIGINAL_HANDLE_HTTP = Adapter._handle_http
+    _ORIGINAL_FORWARD_WS = Adapter._forward_ws
     Adapter._handle_ws = patched_handle_ws  # type: ignore[method-assign]
     Adapter._handle_http = patched_handle_http  # type: ignore[method-assign]
+    Adapter._forward_ws = patched_forward_ws  # type: ignore[method-assign]
     _PATCHED = True
 
 
 def uninstall_onebot_backpressure() -> None:
-    global _ORIGINAL_HANDLE_HTTP, _ORIGINAL_HANDLE_WS, _PATCHED
+    global _ORIGINAL_FORWARD_WS, _ORIGINAL_HANDLE_HTTP, _ORIGINAL_HANDLE_WS, _PATCHED
     if not _PATCHED:
         return
     Adapter._handle_ws = _ORIGINAL_HANDLE_WS
     Adapter._handle_http = _ORIGINAL_HANDLE_HTTP
+    Adapter._forward_ws = _ORIGINAL_FORWARD_WS
+    _ORIGINAL_FORWARD_WS = None
     _ORIGINAL_HANDLE_HTTP = None
     _ORIGINAL_HANDLE_WS = None
     _PATCHED = False
