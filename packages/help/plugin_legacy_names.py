@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pallas.core.platform.plugin_runtime.plugin_identity import canonical_plugin_id
+
 PLUGIN_LEGACY_NAMES: dict[str, str] = {
     "ollama": "llm_chat",
     "community_stats": "pb_stats",
@@ -16,8 +18,12 @@ def canonical_plugin_name(name: str) -> str:
 
 
 def plugin_name_aliases(name: str) -> frozenset[str]:
-    canonical = canonical_plugin_name(name)
+    raw = (name or "").strip()
+    canonical = canonical_plugin_name(raw)
     names = {canonical}
+    resolved = canonical_plugin_id(raw)
+    if resolved:
+        names.add(resolved)
     for legacy, current in PLUGIN_LEGACY_NAMES.items():
         if current == canonical:
             names.add(legacy)
@@ -27,7 +33,8 @@ def plugin_name_aliases(name: str) -> frozenset[str]:
 
 
 def is_plugin_name_in_set(name: str, names: frozenset[str] | set[str]) -> bool:
-    return bool(plugin_name_aliases(name) & set(names))
+    canonical_names = {canonical_plugin_id(str(item).strip()) for item in names if str(item).strip()}
+    return bool(plugin_name_aliases(name) & canonical_names)
 
 
 def expand_disabled_plugin_names(names: frozenset[str] | set[str]) -> frozenset[str]:
