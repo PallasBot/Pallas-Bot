@@ -87,3 +87,28 @@ async def test_process_work_payload_persists_message_and_uses_captured_predecess
     context_insert.assert_awaited_once()
     persist.assert_awaited_once()
     assert marked == [42]
+
+
+@pytest.mark.asyncio
+async def test_captured_live_message_is_not_repersisted_by_local_periodic_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater.message_store import MessageStore
+    from packages.repeater.model import ChatData
+
+    MessageStore._message_lock = asyncio.Lock()
+    MessageStore._message_dict = defaultdict(list)
+    MessageStore._synced_prefix_counts = {}
+    MessageStore._late_save_time = 0
+    try:
+        await MessageStore.capture_message(
+            ChatData(group_id=42, user_id=11, bot_id=100, raw_message="这一句", plain_text="这一句", time=20)
+        )
+        persist = AsyncMock()
+        monkeypatch.setattr("packages.repeater.message_store.message_repo.bulk_insert", persist)
+
+        assert await MessageStore.periodic_sync_if_buffered() is True
+        persist.assert_not_awaited()
+        assert MessageStore._synced_prefix_counts == {42: 1}
+    finally:
+        MessageStore._message_dict.clear()
+        MessageStore._synced_prefix_counts = {}
+        MessageStore._late_save_time = 0

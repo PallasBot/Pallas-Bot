@@ -60,7 +60,12 @@ class MessageStore:
         """只更新消息进程的近期窗口，持久化由 work aux 处理。"""
         message = MessageStore.build_message(chat_data)
         async with MessageStore._message_lock:
-            MessageStore._message_dict[chat_data.group_id].append(message)
+            group_msgs = MessageStore._message_dict[chat_data.group_id]
+            group_msgs.append(message)
+            # aux 将单独持久化该消息；标记本地窗口前缀，避免定时 _sync 重复写入。
+            MessageStore._synced_prefix_counts[chat_data.group_id] = len(group_msgs)
+            if MessageStore._late_save_time == 0:
+                MessageStore._late_save_time = int(chat_data.time)
         if chat_data.is_plain_text and topics_callback is not None:
             await topics_callback(chat_data.group_id, chat_data._keywords_list)
         if shard_ctx.sharding_active():
