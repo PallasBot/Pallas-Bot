@@ -34,6 +34,17 @@ async def run_work_consumer(worker: WorkJobWorker) -> None:
             await asyncio.sleep(0.2)
 
 
+async def run_work_status_publisher(store, *, consumers: int) -> None:
+    from .observability import write_work_aux_status
+
+    while True:
+        try:
+            write_work_aux_status(consumers=consumers, stats=await store.stats())
+        except Exception as exc:
+            logger.warning("work aux status publish failed: {}", exc)
+        await asyncio.sleep(5.0)
+
+
 async def run_work_service(handlers: dict[str, WorkJobHandler]) -> None:
     from pallas.core.foundation.db import init_db
 
@@ -45,4 +56,7 @@ async def run_work_service(handlers: dict[str, WorkJobHandler]) -> None:
         WorkJobWorker(store=store, owner=f"{owner_prefix}:{index}", handlers=handlers) for index in range(concurrency)
     ]
     logger.info("work aux started handlers={} consumers={}", sorted(handlers), concurrency)
-    await asyncio.gather(*(run_work_consumer(worker) for worker in workers))
+    await asyncio.gather(
+        *(run_work_consumer(worker) for worker in workers),
+        run_work_status_publisher(store, consumers=concurrency),
+    )

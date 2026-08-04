@@ -135,7 +135,9 @@ def lane_wait_avg_ms() -> float | None:
     return round(float(_state["lane_wait_ms_total"]) / count, 2)
 
 
-def dispatch_alerts(*, p95_ms: float | None, pg_util: float | None) -> list[str]:
+def dispatch_alerts(
+    *, p95_ms: float | None, pg_util: float | None, work_aux: dict[str, Any] | None = None
+) -> list[str]:
     alerts: list[str] = []
     if p95_ms is not None:
         if p95_ms > 5_000.0:
@@ -144,6 +146,11 @@ def dispatch_alerts(*, p95_ms: float | None, pg_util: float | None) -> list[str]
             alerts.append("ingress_p95_over_1000ms")
     if pg_util is not None and pg_util >= 0.85:
         alerts.append("pg_pool_over_85pct")
+    work = work_aux or {}
+    if work.get("available") and float(work.get("heartbeat_age_sec") or 0) > 15.0:
+        alerts.append("work_aux_heartbeat_stale")
+    if float(work.get("oldest_pending_age_sec") or 0) > 300.0:
+        alerts.append("work_aux_backlog_old")
     return alerts
 
 
@@ -153,6 +160,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
     from pallas.core.platform.ingress.conversation_scheduler import conversation_scheduler_status
     from pallas.core.platform.ingress.hotpath_metrics import hotpath_metrics_snapshot
     from pallas.core.platform.ingress.send_queue import send_queue_status
+    from pallas.core.platform.work_jobs.observability import work_aux_status
 
     p95 = ingress_duration_p95_ms()
     pool = pool_budget_status()
@@ -166,6 +174,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
         pool_budget=pool,
         pg_util=pg_util if isinstance(pg_util, float) else None,
         hotpath=hotpath_metrics_snapshot(),
+        work_aux=work_aux_status(),
         conversation_scheduler=conversation_scheduler_status(),
         snapshot_health=ingress_snapshot_health(),
     )
@@ -180,6 +189,7 @@ def build_dispatch_metrics_payload(
     pool_budget: dict[str, Any],
     pg_util: float | None,
     hotpath: dict[str, Any] | None = None,
+    work_aux: dict[str, Any] | None = None,
     conversation_scheduler: dict[str, Any] | None = None,
     snapshot_health: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -200,9 +210,10 @@ def build_dispatch_metrics_payload(
         "send_queue": send_queue,
         "pool_budget": pool_budget,
         "hotpath": hotpath or {},
+        "work_aux": work_aux or {},
         "conversation_scheduler": conversation_scheduler or {},
         "snapshot_health": snapshot_health or {},
-        "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util),
+        "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util, work_aux=work_aux),
         "matchers_selected_ratio": round(selected / considered, 4) if considered else None,
         "avg_matchers_per_message": round(selected / group_messages, 2) if group_messages else None,
         # 命令才走 route index；闲聊 hit=0 是常态，勿除以全部群消息
