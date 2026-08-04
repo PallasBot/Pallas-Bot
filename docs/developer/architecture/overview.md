@@ -13,7 +13,7 @@ Pallas-Bot 的可执行边界是：主仓承载运行时与产品语义；WebUI�
 - 修改控制台界面，到 `Pallas-Bot-WebUI` 修改前端源码；`data/pb_webui/public-react/` 是构建后的运行目录。
 - 接入普通 LLM 聊天，使用 Bot Provider；Pallas-Bot-AI 只在媒体 runtime、队列、健康、callback 或遗留 RWKV `/api/chat` 等场景需要。
 
-分片、配置存储、插件治理、Agent 生命周期与输出路径都属于后续专题：当当前工作涉及这些能力时，从文末「按需深入」进入即可。
+分片、配置存储、后台 work aux、插件治理、Agent 生命周期与输出路径都属于后续专题：当当前工作涉及这些能力时，从文末「按需深入」进入即可。
 
 ## 拓扑
 
@@ -92,6 +92,7 @@ flowchart LR
 | --- | --- |
 | Core 与扩展判定 | [core-vs-extensions.md](core-vs-extensions.md) |
 | 分片运行时 | [shard-runtime.md](shard-runtime.md) |
+| 后台任务与 work aux | [work-aux.md](work-aux.md) |
 | 配置存储 | [config-storage.md](config-storage.md) |
 | 插件治理 | [plugin-governance.md](plugin-governance.md) |
 | Bot 内置 Agent 生命周期 | [agent-lifecycle.md](agent-lifecycle.md) |

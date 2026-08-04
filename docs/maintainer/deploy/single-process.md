@@ -1,14 +1,14 @@
 # 单进程部署
 
-单进程承载全部 Bot 能力（可另起 **辅进程**，如本机 Embedding 的 `bot_embed`）。适合本地开发、自用与默认生产路径；多数站点先用本形态，仅在验证过瓶颈或需要强隔离时再上 [分片](sharded.md)。
+单进程承载消息主路径，并自动维护 **work aux**；本机 Embedding 也可另起 `bot_embed`。适合本地开发、自用与默认生产路径；多数站点先用本形态，仅在验证过瓶颈或需要强隔离时再上 [分片](sharded.md)。
 
 ## 特点
 
 | 项 | 说明 |
 | --- | --- |
-| 架构 | 单 ingress 进程；可选 aux（不占分片心智） |
-| 依赖 | 不强制 Redis；本机 Embedding 需要 Redis + embed 辅进程 |
-| 排障 | 主日志一条路径；辅进程日志在 `data/pallas_embed/logs/` |
+| 架构 | 单 ingress 进程 + 一个数据库 outbox 消费者；不占分片心智 |
+| 依赖 | work aux 不强制 Redis；本机 Embedding 需要 Redis + embed 辅进程 |
+| 排障 | 主日志、`data/pallas_work/logs/work.log` 与可选 `data/pallas_embed/logs/` |
 
 ## 部署检查
 
@@ -32,6 +32,7 @@ uv run pallas logs            # Bot + 可选 embed 辅进程
 | Health | `curl -s http://127.0.0.1:8088/pallas/api/health` 返回 JSON |
 | 协议端 | 控制台显示账号在线 |
 | 群内命令 | **牛牛帮助** 有响应 |
+| 后台任务 | `status` 中 work 辅进程为运行中 |
 | 本机 Embedding | `status` 中 embed 辅进程为运行中（需 Redis + `local`） |
 
 ## 失败分支

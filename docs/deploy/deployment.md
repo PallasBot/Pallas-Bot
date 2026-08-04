@@ -48,6 +48,8 @@ uv sync --extra deploy-shard  # 分片模板，另须配置 REDIS_URL
 
 分片模板：`uv run python tools/apply_deploy_profile.py shard` → 在 `pallas.toml` 的 `[env]` 配置 `REDIS_URL` → `./scripts/run_sharded_bot.sh start`。消息审查 4.0 默认开启，在 WebUI「通用配置 → 消息审查」中调整即可。分片 claim 依赖 Redis；`deploy-shard` 与 `coord-redis` 均安装 `redis` 客户端。
 
+单进程不需要 Redis；后台学习任务由数据库 outbox 和 `work aux` 消费。需要分片、本机 Embedding 或 Pallas-Bot-AI 队列时，可先执行 `uv run pallas redis start` 创建或复用共享 Redis。
+
 ---
 
 ## 3. 写入主配置 `config/pallas.toml`
@@ -129,6 +131,8 @@ uv run pallas
 2. 日志打印 Web 控制台初始密钥（`data/pallas_console/`）
 3. `http://<主机IP>:8088/pallas/api/health` 返回正常
 4. `http://<主机IP>:8088/pallas/` 可用密钥登录
+
+启动后再执行 `uv run pallas status`，确认 `work 辅进程` 在运行；其日志在 `data/pallas_work/logs/work.log`。消息进程负责命令与实时回复，复读学习等持久化工作由该进程消费。
 
 未配置守护进程时，关闭终端即停止服务。Linux 生产环境使用下文 systemd，或改用 [Docker](/deploy/docker)。
 
