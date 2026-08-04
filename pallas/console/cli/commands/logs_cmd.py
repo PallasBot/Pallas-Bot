@@ -10,7 +10,7 @@ from pallas.console.cli.log_paths import (
     list_default_log_targets,
     read_log_tail,
 )
-from pallas.console.cli.runtime_mode import resolve_bot_mode
+from pallas.console.cli.runtime_mode import resolve_bot_mode, runtime_instance_summary
 
 
 def register(sub: argparse._SubParsersAction) -> None:
@@ -43,7 +43,8 @@ def register(sub: argparse._SubParsersAction) -> None:
 def run_logs(args: argparse.Namespace) -> int:
     mode = resolve_bot_mode(args.mode)
     lines = 0 if args.paths_only else max(0, int(args.lines))
-    print(f"形态 {mode}（默认入口；分片为可选进阶）")
+    summary = runtime_instance_summary(mode)
+    print(f"{summary['label']} · 运行实例 {summary['running_instances']}")
     for label, path in list_default_log_targets(mode=mode):
         exists = "有" if path.is_file() else "无"
         print(f"  · {label}: {path} [{exists}]")
@@ -58,6 +59,6 @@ def run_logs(args: argparse.Namespace) -> int:
             print(f"    {line}")
         print("    ---")
     if mode == "shard":
-        print(f"  · worker 等分片日志目录: {SHARD_LOG_DIR}/worker-*.log")
-        print("    需要账号级排障时再打开对应 worker 文件。", file=sys.stderr)
+        print(f"  · 消息实例进阶日志目录: {SHARD_LOG_DIR}/worker-*.log")
+        print("    需要账号级排障时再打开对应消息实例日志。", file=sys.stderr)
     return 0

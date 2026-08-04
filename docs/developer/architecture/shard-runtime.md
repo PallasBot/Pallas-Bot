@@ -1,8 +1,8 @@
-# 分片运行时
+# 多实例运行时（分片兼容）
 
-本页说明分片下的进程角色、编码约束与跨进程能力。部署与启停见 [分片部署](/maintainer/deploy/sharded)。
+日常部署和运维只使用 `pallas run`、`pallas status`、`pallas restart`、`pallas logs`；它们呈现为统一运行时与运行实例，自动沿用当前编排。单实例是默认路径，不需要 Redis。需要显式扩缩容、账号级隔离或定位单个消息实例时，才使用 `pallas run shard` 与本页的分片兼容细节。
 
-单进程足够时不必读全文。涉及同群多牛、跨 worker 去重、群独占活动或媒体 callback 回到发起 worker 时，再按本页设计。
+本页说明多实例后端的进程角色、编码约束与跨进程能力。部署与启停见 [分片部署](/maintainer/deploy/sharded)。涉及同群多牛、跨 worker 去重、群独占活动或媒体 callback 回到发起 worker 时，再按本页设计。
 
 ## 何时用分片
 

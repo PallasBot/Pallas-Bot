@@ -16,8 +16,9 @@ def add_mode_argument(parser: argparse.ArgumentParser) -> None:
 
 
 def register_run(sub: argparse._SubParsersAction) -> None:
-    parser = sub.add_parser("run", help="启动 Bot（单进程或分片）")
-    run_sub = parser.add_subparsers(dest="run_mode", required=True)
+    parser = sub.add_parser("run", help="启动统一运行时（自动沿用当前编排）")
+    run_sub = parser.add_subparsers(dest="run_mode", required=False)
+    parser.set_defaults(handler=run_default)
 
     unified = run_sub.add_parser(
         "unified",
@@ -62,6 +63,10 @@ def run_unified(args: argparse.Namespace) -> int:
     if args.skip_port_sync:
         extra.append("--skip-port-sync")
     return run_bot_lifecycle("start", mode="unified", extra_args=extra)
+
+
+def run_default(_args: argparse.Namespace) -> int:
+    return run_bot_lifecycle("start", mode="auto")
 
 
 def run_shard(args: argparse.Namespace) -> int:
