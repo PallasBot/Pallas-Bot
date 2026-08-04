@@ -49,6 +49,15 @@ def mark_snapshot_ready() -> None:
     snapshot._last_refresh_mono = time.monotonic()
 
 
+def test_stale_snapshot_still_serves_last_successful_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    mark_snapshot_ready()
+    snapshot._global_banned = frozenset({10001})
+    monkeypatch.setattr(snapshot.time, "monotonic", lambda: snapshot._last_refresh_mono + 121.0)
+
+    assert snapshot.is_user_globally_banned_fast(10001) is True
+    assert snapshot.is_user_globally_banned_fast(10002) is False
+
+
 @pytest.mark.asyncio
 async def test_apply_user_banned_change_updates_fast_path(monkeypatch):
     from packages.blacklist import apply_user_banned_change, reset_user_ban_gate_cache

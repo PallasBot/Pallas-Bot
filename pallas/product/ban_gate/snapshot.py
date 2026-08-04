@@ -69,9 +69,7 @@ def schedule_ban_gate_snapshot_refresh() -> None:
 
 
 def snapshot_ready() -> bool:
-    if not _ready:
-        return False
-    return (time.monotonic() - _last_refresh_mono) <= _SNAPSHOT_STALE_SEC
+    return _ready
 
 
 def is_user_globally_banned_fast(user_id: int) -> bool | None:
