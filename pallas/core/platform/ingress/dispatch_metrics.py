@@ -283,15 +283,27 @@ def merge_conversation_scheduler_snapshots(rows: list[dict[str, Any]]) -> dict[s
         "active": 0,
         "ready": 0,
         "max_pending": 0,
+        "per_key_pending_limit": 0,
+        "active_keys": 0,
         "wait_ms_p95": None,
         "backpressure_waits": 0,
+        "per_key_backpressure_waits": 0,
     }
     waits: list[float] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
         merged["enabled"] = bool(merged["enabled"] or row.get("enabled"))
-        for key in ("pending", "active", "ready", "max_pending", "backpressure_waits"):
+        for key in (
+            "pending",
+            "active",
+            "ready",
+            "max_pending",
+            "per_key_pending_limit",
+            "active_keys",
+            "backpressure_waits",
+            "per_key_backpressure_waits",
+        ):
             merged[key] += int(row.get(key) or 0)
         wait = row.get("wait_ms_p95")
         if isinstance(wait, (int, float)):
