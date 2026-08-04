@@ -47,6 +47,36 @@ def test_run_bot_lifecycle_unified_delegates(monkeypatch):
     assert called == {"action": "start", "skip": True}
 
 
+def test_run_bot_lifecycle_unified_restart_skips_port_sync_by_default(monkeypatch):
+    called: dict[str, object] = {}
+
+    def fake_run(action: str, *, skip_port_sync: bool = False) -> int:
+        called["action"] = action
+        called["skip"] = skip_port_sync
+        return 0
+
+    monkeypatch.setattr(bot_process, "run_unified_action", fake_run)
+    monkeypatch.setattr(bot_process, "resolve_bot_mode", lambda mode: "unified")
+
+    assert bot_process.run_bot_lifecycle("restart", mode="unified") == 0
+    assert called == {"action": "restart", "skip": True}
+
+
+def test_run_bot_lifecycle_unified_start_keeps_port_sync_default(monkeypatch):
+    called: dict[str, object] = {}
+
+    def fake_run(action: str, *, skip_port_sync: bool = False) -> int:
+        called["action"] = action
+        called["skip"] = skip_port_sync
+        return 0
+
+    monkeypatch.setattr(bot_process, "run_unified_action", fake_run)
+    monkeypatch.setattr(bot_process, "resolve_bot_mode", lambda mode: "unified")
+
+    assert bot_process.run_bot_lifecycle("start", mode="unified") == 0
+    assert called == {"action": "start", "skip": False}
+
+
 def test_run_bot_lifecycle_shard_delegates(monkeypatch):
     called: dict[str, object] = {}
 

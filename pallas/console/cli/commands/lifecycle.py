@@ -47,14 +47,14 @@ def register_lifecycle(sub: argparse._SubParsersAction) -> None:
     for name, help_text in (
         ("stop", "停止当前编排的 Bot 进程"),
         ("status", "查看运行状态"),
-        ("restart", "停止后重新启动"),
+        ("restart", "停止后重新启动（unified 默认跳过协议端口文件同步）"),
     ):
         parser = sub.add_parser(name, help=help_text)
         add_mode_argument(parser)
         if name == "restart":
             parser.add_argument("--workers-only", action="store_true", help="分片：仅重启 worker")
             parser.add_argument("--hub-only", action="store_true", help="分片：仅重启 hub")
-            parser.add_argument("--skip-port-sync", action="store_true")
+            parser.add_argument("--skip-port-sync", action="store_true", help="兼容参数；unified 默认跳过同步")
         parser.set_defaults(handler=lambda args, action=name: run_lifecycle(action, args))
 
 
