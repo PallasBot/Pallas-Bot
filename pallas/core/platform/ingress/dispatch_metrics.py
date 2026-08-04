@@ -145,6 +145,7 @@ def dispatch_alerts(*, p95_ms: float | None, pg_util: float | None) -> list[str]
 def dispatch_metrics_snapshot() -> dict[str, Any]:
     _rollover_if_needed()
     from pallas.core.foundation.db.pool_budget import pool_budget_status
+    from pallas.core.platform.ingress.conversation_scheduler import conversation_scheduler_status
     from pallas.core.platform.ingress.hotpath_metrics import hotpath_metrics_snapshot
     from pallas.core.platform.ingress.send_queue import send_queue_status
 
@@ -160,6 +161,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
         pool_budget=pool,
         pg_util=pg_util if isinstance(pg_util, float) else None,
         hotpath=hotpath_metrics_snapshot(),
+        conversation_scheduler=conversation_scheduler_status(),
     )
 
 
@@ -172,6 +174,7 @@ def build_dispatch_metrics_payload(
     pool_budget: dict[str, Any],
     pg_util: float | None,
     hotpath: dict[str, Any] | None = None,
+    conversation_scheduler: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     group_messages = int(counters.get("group_messages") or 0)
     command_traffic = int(counters.get("command_traffic") or 0)
@@ -190,6 +193,7 @@ def build_dispatch_metrics_payload(
         "send_queue": send_queue,
         "pool_budget": pool_budget,
         "hotpath": hotpath or {},
+        "conversation_scheduler": conversation_scheduler or {},
         "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util),
         "matchers_selected_ratio": round(selected / considered, 4) if considered else None,
         "avg_matchers_per_message": round(selected / group_messages, 2) if group_messages else None,
@@ -253,6 +257,31 @@ def merge_pool_budget_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def merge_conversation_scheduler_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    merged: dict[str, Any] = {
+        "enabled": False,
+        "pending": 0,
+        "active": 0,
+        "ready": 0,
+        "max_pending": 0,
+        "wait_ms_p95": None,
+        "backpressure_waits": 0,
+    }
+    waits: list[float] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        merged["enabled"] = bool(merged["enabled"] or row.get("enabled"))
+        for key in ("pending", "active", "ready", "max_pending", "backpressure_waits"):
+            merged[key] += int(row.get(key) or 0)
+        wait = row.get("wait_ms_p95")
+        if isinstance(wait, (int, float)):
+            waits.append(float(wait))
+    if waits:
+        merged["wait_ms_p95"] = round(max(waits), 2)
+    return merged
+
+
 def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return dispatch_metrics_snapshot()
@@ -261,6 +290,7 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     send_rows: list[dict[str, Any]] = []
     pool_rows: list[dict[str, Any]] = []
     hotpath_rows: list[dict[str, Any]] = []
+    scheduler_rows: list[dict[str, Any]] = []
     day_key = ""
     for row in rows:
         if not isinstance(row, dict):
@@ -280,6 +310,9 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         hotpath = row.get("hotpath")
         if isinstance(hotpath, dict):
             hotpath_rows.append(hotpath)
+        scheduler = row.get("conversation_scheduler")
+        if isinstance(scheduler, dict):
+            scheduler_rows.append(scheduler)
     p95_cluster = round(max(p95_values), 2) if p95_values else None
     pool_merged = merge_pool_budget_snapshots(pool_rows)
     pg_util = pool_merged.get("utilization")
@@ -293,4 +326,5 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         pool_budget=pool_merged,
         pg_util=pg_util if isinstance(pg_util, float) else None,
         hotpath=merge_hotpath_metrics(hotpath_rows),
+        conversation_scheduler=merge_conversation_scheduler_snapshots(scheduler_rows),
     )

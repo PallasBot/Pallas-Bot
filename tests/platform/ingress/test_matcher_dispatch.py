@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -284,6 +285,53 @@ def test_matcher_dispatch_enabled_default(monkeypatch: pytest.MonkeyPatch) -> No
 def test_matcher_dispatch_can_disable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dispatch, "repo_env_raw_value", lambda _key: "false")
     assert dispatch.matcher_dispatch_enabled() is False
+
+
+@pytest.mark.asyncio
+async def test_group_event_is_submitted_before_matcher_chain(monkeypatch: pytest.MonkeyPatch) -> None:
+    @dataclass
+    class FakeGroupMessageEvent:
+        group_id: int
+
+    bot = MagicMock(self_id="10001", type="OneBot V11")
+    event = FakeGroupMessageEvent(group_id=12345)
+    submitted: list[tuple[str, int]] = []
+    run_now = AsyncMock()
+
+    async def submit(inbound_bot, inbound_event, work) -> None:
+        submitted.append((str(inbound_bot.self_id), inbound_event.group_id))
+        await work()
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch, "conversation_scheduler_enabled", lambda: True)
+    monkeypatch.setattr(dispatch, "submit_conversation_event", submit)
+    monkeypatch.setattr(dispatch, "patched_handle_event_now", run_now)
+
+    await dispatch.patched_handle_event(bot, event)
+
+    assert submitted == [("10001", 12345)]
+    run_now.assert_awaited_once_with(bot, event)
+
+
+@pytest.mark.asyncio
+async def test_non_group_event_bypasses_conversation_scheduler(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        pass
+
+    bot = MagicMock()
+    event = MagicMock(spec=[])
+    submit = AsyncMock()
+    run_now = AsyncMock()
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch, "conversation_scheduler_enabled", lambda: True)
+    monkeypatch.setattr(dispatch, "submit_conversation_event", submit)
+    monkeypatch.setattr(dispatch, "patched_handle_event_now", run_now)
+
+    await dispatch.patched_handle_event(bot, event)
+
+    submit.assert_not_awaited()
+    run_now.assert_awaited_once_with(bot, event)
 
 
 def test_install_and_uninstall_patch(monkeypatch: pytest.MonkeyPatch) -> None:

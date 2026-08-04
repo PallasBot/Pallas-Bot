@@ -76,12 +76,14 @@ async def dispatch_stats_log_loop() -> None:
             continue
         considered = int(snap.get("matchers_considered") or 0)
         selected = int(snap.get("matchers_selected") or 0)
+        scheduler = snap.get("conversation_scheduler") or {}
         log = logger.info if dispatch_stats_tick_notable(snap, prev=prev) else logger.debug
         prev = snap
         log(
             "ingress_dispatch: stats group_messages={} cmd={} chat={} route_hit={} route_fallback={} "
             "matchers {}/{} run={} p95={}ms lane_wait_avg={} overload={} chat_drop={} chat_degraded={} "
-            "lane_busy={} send_q={}/{} dropped={} | hotpath route_p95={}ms kw_p95={}ms bundle_p95={}ms "
+            "lane_busy={} sched={}/{} active={} ready={} wait_p95={}ms backpressure={} send_q={}/{} dropped={} "
+            "| hotpath route_p95={}ms kw_p95={}ms bundle_p95={}ms "
             "bundle_cache_hit={} db_find_p95={}ms persona_p95={}ms sql_total_p95={}ms snap_hit={} "
             "learn_skip_p={} shed={}",
             group_messages,
@@ -98,6 +100,12 @@ async def dispatch_stats_log_loop() -> None:
             int(snap.get("chatter_overload_dropped") or 0),
             int(snap.get("chatter_overload_degraded") or 0),
             int(snap.get("lane_busy") or 0),
+            scheduler.get("pending"),
+            scheduler.get("max_pending"),
+            scheduler.get("active"),
+            scheduler.get("ready"),
+            scheduler.get("wait_ms_p95"),
+            scheduler.get("backpressure_waits"),
             (snap.get("send_queue") or {}).get("depth"),
             (snap.get("send_queue") or {}).get("max_depth"),
             (snap.get("send_queue") or {}).get("dropped"),

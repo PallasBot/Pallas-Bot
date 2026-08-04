@@ -50,3 +50,23 @@ def test_dispatch_alerts() -> None:
     alerts = dispatch_metrics.dispatch_alerts(p95_ms=150.0, pg_util=0.9)
     assert "ingress_p95_over_100ms" in alerts
     assert "pg_pool_over_85pct" in alerts
+
+
+def test_dispatch_metrics_include_conversation_scheduler(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.conversation_scheduler.conversation_scheduler_status",
+        lambda: {
+            "enabled": True,
+            "pending": 12,
+            "active": 3,
+            "ready": 4,
+            "max_pending": 512,
+            "wait_ms_p95": 84.0,
+            "backpressure_waits": 2,
+        },
+    )
+
+    snap = dispatch_metrics.dispatch_metrics_snapshot()
+
+    assert snap["conversation_scheduler"]["pending"] == 12
+    assert snap["conversation_scheduler"]["wait_ms_p95"] == 84.0
