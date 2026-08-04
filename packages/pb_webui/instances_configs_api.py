@@ -58,9 +58,9 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
             fields[field_name] = raw
     await repo.upsert_fields(account, fields)
     if "disabled_plugins" in fields:
-        from packages.help.plugin_manager import invalidate_disabled_plugin_gate_cache
+        from packages.help.plugin_manager import apply_disabled_plugin_config_change
 
-        await invalidate_disabled_plugin_gate_cache(bot_id=account)
+        await apply_disabled_plugin_config_change(bot_id=account, disabled_plugins=fields["disabled_plugins"])
     if "admins" in fields:
         from pallas.core.foundation.config.bot_admins_cache import invalidate_bot_admins_cache
 
@@ -116,9 +116,9 @@ async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> d
 
         await apply_group_banned_change(group_id, bool(fields["banned"]))
     if "disabled_plugins" in fields:
-        from packages.help.plugin_manager import invalidate_disabled_plugin_gate_cache
+        from packages.help.plugin_manager import apply_disabled_plugin_config_change
 
-        await invalidate_disabled_plugin_gate_cache(group_id=group_id)
+        await apply_disabled_plugin_config_change(group_id=group_id, disabled_plugins=fields["disabled_plugins"])
     doc = await repo.get(group_id, ignore_cache=True)
     if doc is None:
         raise HTTPException(status_code=500, detail="config upsert 后回读失败")

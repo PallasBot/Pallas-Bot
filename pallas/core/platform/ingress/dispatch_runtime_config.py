@@ -124,7 +124,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
         description=field_help(
             "让同一群的消息按顺序处理，并在活跃群之间公平轮转",
             "选开或关；一般保持开启",
-            "关闭后恢复每条消息直接进入 matcher 的方式",
+            "变更后需重启 Bot，避免处理中消息切换到不同调度路径",
         ),
     )
     conversation_scheduler_concurrency: int = Field(

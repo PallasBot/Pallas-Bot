@@ -272,6 +272,51 @@ async def test_refresh_disabled_plugin_snapshot_keeps_last_success_on_failure(mo
 
 
 @pytest.mark.asyncio
+async def test_disabled_plugin_config_change_updates_ready_snapshot(monkeypatch):
+    from packages.help import plugin_manager
+
+    await plugin_manager.reset_disabled_plugin_gate_cache()
+    plugin_manager._disabled_snapshot_ready = True
+    plugin_manager._disabled_bot_snapshot[77] = frozenset({"old_plugin"})
+    monkeypatch.setattr(plugin_manager, "_pg_not_ready", lambda: False)
+    monkeypatch.setattr(plugin_manager, "bump_disabled_plugin_snapshot_remote_generation", lambda: None)
+
+    await plugin_manager.apply_disabled_plugin_config_change(bot_id=77, disabled_plugins=["new_plugin"])
+
+    names = await plugin_manager.collect_disabled_plugin_names(77, None)
+    assert names == frozenset({"new_plugin"})
+
+
+@pytest.mark.asyncio
+async def test_ready_snapshot_refreshes_after_remote_generation_change(monkeypatch):
+    from packages.help import plugin_manager
+
+    class FakeRedis:
+        def get(self, _key):
+            return b"2"
+
+    await plugin_manager.reset_disabled_plugin_gate_cache()
+    plugin_manager._disabled_snapshot_ready = True
+    plugin_manager._disabled_bot_snapshot[77] = frozenset({"old_plugin"})
+    plugin_manager._disabled_snapshot_synced_redis_gen = 1
+    monkeypatch.setattr(plugin_manager, "_pg_not_ready", lambda: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.coord.redis_claim.get_coord_redis_client",
+        lambda: FakeRedis(),
+    )
+
+    async def refresh():
+        plugin_manager._disabled_bot_snapshot[77] = frozenset({"new_plugin"})
+        return True
+
+    monkeypatch.setattr(plugin_manager, "refresh_disabled_plugin_snapshot", refresh)
+
+    names = await plugin_manager.collect_disabled_plugin_names(77, None)
+
+    assert names == frozenset({"new_plugin"})
+
+
+@pytest.mark.asyncio
 async def test_plugin_manager_startup_continues_when_snapshot_is_unavailable(monkeypatch):
     from packages.help import event_preprocessor, plugin_manager
 

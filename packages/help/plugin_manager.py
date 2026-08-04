@@ -55,6 +55,10 @@ _disabled_snapshot_ready = False
 _disabled_snapshot_last_refresh_mono = 0.0
 _disabled_snapshot_last_failure_mono = 0.0
 _disabled_snapshot_refresh_failures = 0
+_DISABLED_SNAPSHOT_REDIS_GEN_KEY = "pallas:help:disabled_plugin_snapshot_gen"
+_DISABLED_SNAPSHOT_REMOTE_GEN_SYNC_TTL_SEC = 2.0
+_disabled_snapshot_synced_redis_gen = -1
+_disabled_snapshot_remote_gen_checked_at = 0.0
 
 
 def _disabled_gate_key(bot_id: int | None, group_id: int | None) -> tuple[int | None, int | None]:
@@ -278,7 +282,9 @@ async def reset_disabled_plugin_gate_cache() -> None:
         _disabled_snapshot_last_failure_mono, \
         _disabled_snapshot_last_refresh_mono, \
         _disabled_snapshot_ready, \
-        _disabled_snapshot_refresh_failures
+        _disabled_snapshot_refresh_failures, \
+        _disabled_snapshot_remote_gen_checked_at, \
+        _disabled_snapshot_synced_redis_gen
     await invalidate_disabled_plugin_gate_cache(clear_all=True)
     _disabled_bot_snapshot.clear()
     _disabled_group_snapshot.clear()
@@ -286,6 +292,8 @@ async def reset_disabled_plugin_gate_cache() -> None:
     _disabled_snapshot_last_refresh_mono = 0.0
     _disabled_snapshot_last_failure_mono = 0.0
     _disabled_snapshot_refresh_failures = 0
+    _disabled_snapshot_synced_redis_gen = -1
+    _disabled_snapshot_remote_gen_checked_at = 0.0
 
 
 async def refresh_disabled_plugin_snapshot() -> bool:
@@ -328,6 +336,65 @@ async def refresh_disabled_plugin_snapshot() -> bool:
 
 def disabled_plugin_snapshot_ready() -> bool:
     return _disabled_snapshot_ready
+
+
+def bump_disabled_plugin_snapshot_remote_generation() -> None:
+    global _disabled_snapshot_remote_gen_checked_at, _disabled_snapshot_synced_redis_gen
+    try:
+        from pallas.core.platform.coord.redis_claim import get_coord_redis_client
+
+        client = get_coord_redis_client()
+        if client is not None:
+            _disabled_snapshot_synced_redis_gen = int(client.incr(_DISABLED_SNAPSHOT_REDIS_GEN_KEY))
+            _disabled_snapshot_remote_gen_checked_at = time.monotonic()
+    except Exception:
+        pass
+
+
+def sync_disabled_plugin_snapshot_remote_generation() -> bool:
+    """Redis 世代变化时返回 True，调用方再批量刷新本地快照。"""
+    global _disabled_snapshot_remote_gen_checked_at, _disabled_snapshot_synced_redis_gen
+    now = time.monotonic()
+    if (
+        _disabled_snapshot_remote_gen_checked_at
+        and now - _disabled_snapshot_remote_gen_checked_at < _DISABLED_SNAPSHOT_REMOTE_GEN_SYNC_TTL_SEC
+    ):
+        return False
+    try:
+        from pallas.core.platform.coord.redis_claim import get_coord_redis_client
+
+        client = get_coord_redis_client()
+        if client is None:
+            _disabled_snapshot_remote_gen_checked_at = now
+            return False
+        raw = client.get(_DISABLED_SNAPSHOT_REDIS_GEN_KEY)
+        _disabled_snapshot_remote_gen_checked_at = now
+        remote = int(raw) if raw else 0
+        if remote == _disabled_snapshot_synced_redis_gen:
+            return False
+        _disabled_snapshot_synced_redis_gen = remote
+        return True
+    except Exception:
+        _disabled_snapshot_remote_gen_checked_at = now
+        return False
+
+
+async def apply_disabled_plugin_config_change(
+    *,
+    bot_id: int | None = None,
+    group_id: int | None = None,
+    disabled_plugins: list[str],
+) -> None:
+    """配置落库后同步本地快照，并通知其他消息实例刷新。"""
+    await invalidate_disabled_plugin_gate_cache(bot_id=bot_id, group_id=group_id)
+    async with _disabled_gate_lock:
+        if _disabled_snapshot_ready:
+            names = frozenset(disabled_plugins)
+            if bot_id is not None:
+                _disabled_bot_snapshot[int(bot_id)] = names
+            if group_id is not None:
+                _disabled_group_snapshot[int(group_id)] = names
+    bump_disabled_plugin_snapshot_remote_generation()
 
 
 def disabled_plugin_snapshot_status() -> dict[str, bool | int | float | None]:
@@ -425,6 +492,8 @@ async def collect_disabled_plugin_names(
     if ignore_cache:
         return await load_disabled_plugin_names_from_db(bot_id, group_id, ignore_cache=True)
     if _disabled_snapshot_ready:
+        if sync_disabled_plugin_snapshot_remote_generation():
+            await refresh_disabled_plugin_snapshot()
         bot_names = _disabled_bot_snapshot.get(int(bot_id), frozenset()) if bot_id else frozenset()
         group_names = _disabled_group_snapshot.get(int(group_id), frozenset()) if group_id else frozenset()
         return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(bot_names | group_names))
@@ -533,9 +602,7 @@ async def update_bot_config(bot_id: int, disabled_plugins: list[str]) -> BotConf
     """
     await bot_config_repo.upsert_field(bot_id, "disabled_plugins", disabled_plugins.copy())
     await bot_config_repo.invalidate_cache()
-    await invalidate_disabled_plugin_gate_cache(bot_id=bot_id)
-    if _disabled_snapshot_ready:
-        _disabled_bot_snapshot[int(bot_id)] = frozenset(disabled_plugins)
+    await apply_disabled_plugin_config_change(bot_id=bot_id, disabled_plugins=disabled_plugins)
 
     bot_config = await bot_config_repo.get(bot_id, ignore_cache=True)
     # 不用 assert：python -O 下 assert 会被剥离。
@@ -551,9 +618,7 @@ async def update_group_config(group_id: int, disabled_plugins: list[str]) -> Gro
     """
     await group_config_repo.upsert_field(group_id, "disabled_plugins", disabled_plugins.copy())
     await group_config_repo.invalidate_cache()
-    await invalidate_disabled_plugin_gate_cache(group_id=group_id)
-    if _disabled_snapshot_ready:
-        _disabled_group_snapshot[int(group_id)] = frozenset(disabled_plugins)
+    await apply_disabled_plugin_config_change(group_id=group_id, disabled_plugins=disabled_plugins)
 
     group_config = await group_config_repo.get(group_id, ignore_cache=True)
     if group_config is None:

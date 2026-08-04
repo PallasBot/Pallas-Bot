@@ -131,6 +131,7 @@ def _ingress_fanout_section() -> WebuiEnvSection:
 _INGRESS_DISPATCH_SKIP = frozenset({
     "matcher_dispatch_overload_threshold",
     "route_index_strict",
+    "conversation_scheduler_enabled",
     "conversation_scheduler_concurrency",
     "conversation_scheduler_max_pending",
     "lane_acquire_timeout_sec",
