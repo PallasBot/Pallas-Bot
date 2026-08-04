@@ -42,6 +42,7 @@ def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
             "bot_ids": [20001, 20002, 20003],
             "online_bot_ids": [20001, 20002, 20003],
             "public_bot_ids": [20001, 20002],
+            "public_online_bot_names": {"20001": "对端一号", "20003": "不应公开"},
         }),
     }.get(key.decode("utf-8") if isinstance(key, bytes) else key)
     monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
@@ -50,6 +51,11 @@ def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
     monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({10001}))
     monkeypatch.setattr(mod, "collect_local_federate_online_bot_ids", lambda: frozenset({10001}))
     monkeypatch.setattr(mod, "local_federate_deployment_name", lambda: "部署 A")
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_public_online_bot_names",
+        lambda _online_ids, _public_bot_ids: {10001: "本机一号"},
+    )
 
     assert mod.publish_local_federate_peer_bot_ids_sync(public_bot_ids=frozenset({10001})) is True
     _, payload = client.set.call_args.args[:2]
@@ -59,6 +65,7 @@ def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
         "bot_ids": [10001],
         "online_bot_ids": [10001],
         "public_bot_ids": [10001],
+        "public_online_bot_names": {"10001": "本机一号"},
         "updated_at": json.loads(payload)["updated_at"],
         "present_group_ids": [],
         "command_capability_protocol": mod.COMMAND_CAPABILITY_PROTOCOL_VERSION,
@@ -70,6 +77,7 @@ def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
     assert peer.deployment_name == "部署 B"
     assert peer.online_bot_ids == frozenset({20001, 20002, 20003})
     assert peer.public_bot_ids == frozenset({20001, 20002})
+    assert peer.public_online_bot_names == {20001: "对端一号"}
 
     from pallas.api.platform import get_federate_peer_bot_rosters
 
@@ -89,6 +97,7 @@ def test_peer_roster_marks_legacy_online_status_unknown(monkeypatch):
     peer = mod.get_federate_peer_bot_roster("dep-legacy")
     assert peer is not None
     assert peer.online_bot_ids is None
+    assert peer.public_online_bot_names == {}
 
 
 def test_federate_bot_rosters_include_local_deployment(monkeypatch):
@@ -102,6 +111,11 @@ def test_federate_bot_rosters_include_local_deployment(monkeypatch):
         return frozenset({10001})
 
     monkeypatch.setattr(mod, "collect_local_federate_public_bot_ids", public_ids)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_public_online_bot_names",
+        lambda _online_ids, _public_bot_ids: {10002: "本机二号"},
+    )
 
     rosters = asyncio.run(mod.get_federate_bot_rosters())
 
@@ -112,6 +126,7 @@ def test_federate_bot_rosters_include_local_deployment(monkeypatch):
             bot_ids=frozenset({10001, 10002}),
             online_bot_ids=frozenset({10002}),
             public_bot_ids=frozenset({10001}),
+            public_online_bot_names={},
         ),
     )
 

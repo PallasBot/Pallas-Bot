@@ -13,7 +13,7 @@ from pallas.core.platform.ingress.plugin_command_plaintext import (
     _iter_trigger_parts,
     extract_command_prefixes_from_menu_data,
 )
-from pallas.core.platform.ingress.policy_registry import parse_fanout_policy
+from pallas.core.platform.ingress.policy_registry import parse_fanout_policies
 from pallas.core.platform.ingress.prefix_trie import PrefixModuleTrie
 
 if TYPE_CHECKING:
@@ -197,10 +197,8 @@ def build_route_index() -> RouteIndexSnapshot:
                 _add_module_mapping(exact_map, exact, module_key)
                 indexed.add(module_key)
 
-        fanout_raw = extra.get("ingress_fanout")
-        if isinstance(fanout_raw, dict):
-            entry = parse_fanout_policy(fanout_raw)
-            if entry is not None:
+        for fanout_raw in (extra.get("ingress_fanout"), extra.get("ingress_fanout_additional")):
+            for entry in parse_fanout_policies(fanout_raw):
                 indexed.add(module_key)
                 for plain in entry.plaintexts:
                     _add_module_mapping(exact_map, plain, module_key)

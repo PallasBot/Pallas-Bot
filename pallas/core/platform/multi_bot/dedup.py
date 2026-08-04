@@ -104,6 +104,15 @@ def cross_bot_group_message_key(
     return int(hashlib.sha256(payload.encode("utf-8")).hexdigest()[:15], 16)
 
 
+def local_deployment_claim_plugin(plugin: str, deployment_id: str | None = None) -> str:
+    """生成仅在本部署内共享的群消息 claim 命名空间。"""
+    if deployment_id is None:
+        from pallas.product.community_stats.store import load_or_create_deployment_id
+
+        deployment_id = load_or_create_deployment_id()
+    return f"{plugin}:deployment:{str(deployment_id).strip().lower()}"
+
+
 def _prune_cross_bot_claims() -> None:
     if len(_cross_bot_claim_owners) <= _CROSS_BOT_CLAIM_MAX:
         return
