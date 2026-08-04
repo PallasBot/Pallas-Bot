@@ -351,8 +351,8 @@ def bump_disabled_plugin_snapshot_remote_generation() -> None:
         pass
 
 
-def sync_disabled_plugin_snapshot_remote_generation() -> bool:
-    """Redis 世代变化时返回 True，调用方再批量刷新本地快照。"""
+def sync_disabled_plugin_snapshot_remote_generation() -> int | None:
+    """返回待确认的 Redis 世代；刷新成功后调用方才可提交。"""
     global _disabled_snapshot_remote_gen_checked_at, _disabled_snapshot_synced_redis_gen
     now = time.monotonic()
     if (
@@ -371,9 +371,8 @@ def sync_disabled_plugin_snapshot_remote_generation() -> bool:
         _disabled_snapshot_remote_gen_checked_at = now
         remote = int(raw) if raw else 0
         if remote == _disabled_snapshot_synced_redis_gen:
-            return False
-        _disabled_snapshot_synced_redis_gen = remote
-        return True
+            return None
+        return remote
     except Exception:
         _disabled_snapshot_remote_gen_checked_at = now
         return False
@@ -487,13 +486,18 @@ async def collect_disabled_plugin_names(
     ignore_cache: bool = False,
 ) -> frozenset[str]:
     """合并 Bot 全局与群级的禁用插件名，供批量判断。"""
+    global _disabled_snapshot_remote_gen_checked_at, _disabled_snapshot_synced_redis_gen
     if _pg_not_ready():
         return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(frozenset()))
     if ignore_cache:
         return await load_disabled_plugin_names_from_db(bot_id, group_id, ignore_cache=True)
     if _disabled_snapshot_ready:
-        if sync_disabled_plugin_snapshot_remote_generation():
-            await refresh_disabled_plugin_snapshot()
+        remote_generation = sync_disabled_plugin_snapshot_remote_generation()
+        if remote_generation is not None:
+            if await refresh_disabled_plugin_snapshot():
+                _disabled_snapshot_synced_redis_gen = remote_generation
+            else:
+                _disabled_snapshot_remote_gen_checked_at = 0.0
         bot_names = _disabled_bot_snapshot.get(int(bot_id), frozenset()) if bot_id else frozenset()
         group_names = _disabled_group_snapshot.get(int(group_id), frozenset()) if group_id else frozenset()
         return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(bot_names | group_names))

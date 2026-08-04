@@ -317,6 +317,40 @@ async def test_ready_snapshot_refreshes_after_remote_generation_change(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_ready_snapshot_retries_remote_refresh_after_failure(monkeypatch):
+    from packages.help import plugin_manager
+
+    class FakeRedis:
+        def get(self, _key):
+            return b"2"
+
+    await plugin_manager.reset_disabled_plugin_gate_cache()
+    plugin_manager._disabled_snapshot_ready = True
+    plugin_manager._disabled_bot_snapshot[77] = frozenset({"old_plugin"})
+    plugin_manager._disabled_snapshot_synced_redis_gen = 1
+    monkeypatch.setattr(plugin_manager, "_pg_not_ready", lambda: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.coord.redis_claim.get_coord_redis_client",
+        lambda: FakeRedis(),
+    )
+    calls = 0
+
+    async def refresh():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return False
+        plugin_manager._disabled_bot_snapshot[77] = frozenset({"new_plugin"})
+        return True
+
+    monkeypatch.setattr(plugin_manager, "refresh_disabled_plugin_snapshot", refresh)
+
+    assert await plugin_manager.collect_disabled_plugin_names(77, None) == frozenset({"old_plugin"})
+    assert await plugin_manager.collect_disabled_plugin_names(77, None) == frozenset({"new_plugin"})
+    assert plugin_manager._disabled_snapshot_synced_redis_gen == 2
+
+
+@pytest.mark.asyncio
 async def test_plugin_manager_startup_continues_when_snapshot_is_unavailable(monkeypatch):
     from packages.help import event_preprocessor, plugin_manager
 
