@@ -21,6 +21,7 @@ def test_bot_count_coord_plaintext_unifies_claim_key():
         mod.bot_count_coord_plaintext("牛牛出列"),
         t,
         use_plaintext=True,
+        include_message_time=True,
     )
     key_punct = cross_bot_group_message_key(
         gid,
@@ -28,6 +29,7 @@ def test_bot_count_coord_plaintext_unifies_claim_key():
         mod.bot_count_coord_plaintext("牛牛出列！"),
         t,
         use_plaintext=True,
+        include_message_time=True,
     )
     assert key_plain == key_punct
 
@@ -126,6 +128,7 @@ async def test_reads_finalized_order_for_local_dispatch(fake_coord_redis):
         mod.bot_count_coord_plaintext("牛牛报数"),
         message_time,
         use_plaintext=True,
+        include_message_time=True,
     )
     path = mod._session_path(group_id, claim_key)
     mod._ensure_session(
@@ -150,6 +153,42 @@ async def test_reads_finalized_order_for_local_dispatch(fake_coord_redis):
     assert order == [200, 100]
 
 
+async def test_repeated_count_does_not_read_previous_completed_session(fake_coord_redis):
+    from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
+
+    group_id, user_id = 10086, 1
+    previous_time, current_time = 100, 200
+    previous_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        mod.bot_count_coord_plaintext("牛牛报数"),
+        previous_time,
+        use_plaintext=True,
+    )
+    previous_path = mod._session_path(group_id, previous_key)
+    mod._ensure_session(
+        previous_path,
+        group_id=group_id,
+        user_id=user_id,
+        message_time=previous_time,
+        seed="2026-05-22:10086",
+    )
+    data = mod._read_session(previous_path)
+    assert data is not None
+    data["order"] = [100]
+    data["completion_claimed_by"] = 100
+    mod._write_session_atomic(previous_path, data)
+
+    order = await mod.get_shard_bot_count_order(
+        group_id=group_id,
+        user_id=user_id,
+        plaintext="牛牛报数",
+        message_time=current_time,
+    )
+
+    assert order is None
+
+
 async def test_turn_is_ready_after_previous_bot_reported(fake_coord_redis):
     from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
 
@@ -160,6 +199,7 @@ async def test_turn_is_ready_after_previous_bot_reported(fake_coord_redis):
         mod.bot_count_coord_plaintext("牛牛报数"),
         message_time,
         use_plaintext=True,
+        include_message_time=True,
     )
     path = mod._session_path(group_id, claim_key)
     mod._ensure_session(

@@ -208,6 +208,7 @@ async def mark_shard_bot_count_reported_and_claim_completion(
         bot_count_coord_plaintext(plaintext),
         message_time,
         use_plaintext=True,
+        include_message_time=True,
     )
     session_key = _session_key(group_id, claim_key)
     return await asyncio.to_thread(_mark_bot_count_reported_and_claim_completion, session_key, bot_id)
@@ -227,6 +228,7 @@ async def get_shard_bot_count_order(
         bot_count_coord_plaintext(plaintext),
         message_time,
         use_plaintext=True,
+        include_message_time=True,
     )
     data = await asyncio.to_thread(_read_session, _session_key(group_id, claim_key))
     if not data or data.get("cancelled"):
@@ -255,6 +257,7 @@ async def wait_shard_bot_count_turn(
         bot_count_coord_plaintext(plaintext),
         message_time,
         use_plaintext=True,
+        include_message_time=True,
     )
     session_key = _session_key(group_id, claim_key)
     deadline = time.monotonic() + 8.0
@@ -379,6 +382,7 @@ async def update_shard_bot_count_registration(
         bot_count_coord_plaintext(plaintext),
         message_time,
         use_plaintext=True,
+        include_message_time=True,
     )
     session_key = _session_key(group_id, claim_key)
     shard_id = get_shard_registry_settings().shard_id
@@ -406,6 +410,7 @@ async def run_shard_coordinated_bot_count(
         bot_count_coord_plaintext(plaintext),
         message_time,
         use_plaintext=True,
+        include_message_time=True,
     )
     session_key = _session_key(group_id, claim_key)
     seed = f"{datetime.now().strftime('%Y-%m-%d')}:{group_id}"
