@@ -216,3 +216,26 @@ def test_unified_start_spawns(monkeypatch, tmp_path: Path, capsys):
     assert "bot.py" in states["cmd"]
     assert unified_lifecycle.read_pid_file(unified_lifecycle.PID_FILE) == 4242
     assert "已转入后台" in capsys.readouterr().out
+
+
+def test_unified_detached_start_rolls_back_bot_when_aux_start_fails(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(unified_lifecycle, "RUN_DIR", tmp_path / "run")
+    monkeypatch.setattr(unified_lifecycle, "LOG_DIR", tmp_path / "logs")
+    monkeypatch.setattr(unified_lifecycle, "PID_FILE", tmp_path / "run" / "bot.pid")
+    monkeypatch.setattr(unified_lifecycle, "read_listen_port", lambda: 9090)
+    monkeypatch.setattr(unified_lifecycle, "prepare_unified_ports", lambda _port, *, skip_port_sync: 0)
+    state = {"started": False}
+
+    def spawn(*args, **kwargs):
+        state["started"] = True
+        return 4242
+
+    monkeypatch.setattr(unified_lifecycle, "spawn_detached", spawn)
+    monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: state["started"])
+    monkeypatch.setattr(unified_lifecycle.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: 1)
+    stopped: list[bool] = []
+    monkeypatch.setattr(unified_lifecycle, "stop_bot", lambda: stopped.append(True) or 0)
+
+    assert unified_lifecycle.start_bot(detach=True) == 1
+    assert stopped == [True]
