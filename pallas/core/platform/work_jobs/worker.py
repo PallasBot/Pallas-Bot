@@ -36,11 +36,33 @@ class WorkJobWorker:
         jobs = await self.store.claim_many(owner=self.owner, lease_sec=self.lease_sec, limit=self.batch_size)
         if not jobs:
             return False
-        completed = await asyncio.gather(*(self._run_job(job) for job in jobs))
-        job_ids = [job_id for job_id in completed if job_id is not None]
-        if job_ids:
-            await self.store.complete_many(job_ids=job_ids, owner=self.owner)
-        return True
+        tasks = {asyncio.create_task(self._run_job(job)): job for job in jobs}
+        refill_slots = True
+        try:
+            while tasks:
+                completed_tasks, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+                completed = [task.result() for task in completed_tasks]
+                for task in completed_tasks:
+                    tasks.pop(task)
+                job_ids = [job_id for job_id in completed if job_id is not None]
+                if len(job_ids) != len(completed):
+                    refill_slots = False
+                if job_ids:
+                    await self.store.complete_many(job_ids=job_ids, owner=self.owner)
+                available_slots = self.batch_size - len(tasks)
+                if refill_slots and available_slots > 0:
+                    next_jobs = await self.store.claim_many(
+                        owner=self.owner,
+                        lease_sec=self.lease_sec,
+                        limit=available_slots,
+                    )
+                    tasks.update({asyncio.create_task(self._run_job(job)): job for job in next_jobs})
+            return True
+        finally:
+            if tasks:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _run_job(self, job) -> str | None:
         handler = self.handlers.get(job.kind)

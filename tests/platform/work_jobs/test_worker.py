@@ -89,3 +89,35 @@ async def test_worker_runs_claimed_batch_concurrently_and_acknowledges_it() -> N
     assert await task is True
     assert started == 2
     assert await store.claim_many(owner="other", lease_sec=1, limit=2) == []
+
+
+@pytest.mark.asyncio
+async def test_worker_refills_a_completed_slot_while_another_job_is_still_running() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+    from pallas.core.platform.work_jobs.worker import WorkJobWorker
+
+    store = MemoryWorkJobStore()
+    for job_id in ("slow", "fast", "next"):
+        await store.enqueue(WorkJob.create(kind="test", payload={"id": job_id}, idempotency_key=f"test:{job_id}"))
+    slow_started = asyncio.Event()
+    release_slow = asyncio.Event()
+    next_started = asyncio.Event()
+
+    async def handler(payload: dict) -> None:
+        if payload["id"] == "slow":
+            slow_started.set()
+            await release_slow.wait()
+        elif payload["id"] == "next":
+            next_started.set()
+
+    worker = WorkJobWorker(store=store, owner="test-worker", handlers={"test": handler}, batch_size=2)
+    run_task = asyncio.create_task(worker.run_once())
+    await slow_started.wait()
+    try:
+        await asyncio.wait_for(next_started.wait(), timeout=0.1)
+    finally:
+        release_slow.set()
+        await run_task
+
+    assert next_started.is_set()
