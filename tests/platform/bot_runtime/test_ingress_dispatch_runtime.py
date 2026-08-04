@@ -12,6 +12,16 @@ def test_register_skips_hub(monkeypatch) -> None:
     assert runtime.ingress_dispatch_runtime_registered() is False
 
 
+def test_register_allows_sharded_worker(monkeypatch) -> None:
+    import nonebot
+
+    nonebot.init()
+    monkeypatch.setattr(runtime, "_HOOK_REGISTERED", False)
+    monkeypatch.setattr(runtime, "is_hub_role", lambda: False)
+    runtime.register_ingress_dispatch_runtime()
+    assert runtime.ingress_dispatch_runtime_registered() is True
+
+
 def test_register_unified(monkeypatch) -> None:
     import nonebot
 
