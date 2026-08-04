@@ -1,0 +1,5 @@
+interface:
+  display_name: "Edit Article"
+  short_description: "Restructure and tighten a draft"
+policy:
+  allow_implicit_invocation: false
