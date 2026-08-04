@@ -14,6 +14,46 @@ from pallas.product.llm.feedback_learning import (
 from pallas.product.llm.repeater_feedback import build_feedback_entry
 
 
+def test_memory_only_semantic_match_skips_redis_and_remote_embedding(monkeypatch) -> None:
+    from pallas.product.llm import feedback_learning
+
+    entry = build_feedback_entry(
+        bot_id=10001,
+        group_id=123,
+        user_id=456,
+        request_id="memory-only",
+        user_text="你好",
+        reply_text="你好呀",
+    )
+    monkeypatch.setattr(feedback_learning, "resolve_llm_vector_retrieve", lambda: "embedding")
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_embedding_cache.get_cached_query_embedding",
+        lambda text: [1.0, 0.0] if text == "你好" else None,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_embedding_cache.get_cached_trigger_embedding",
+        lambda text: [1.0, 0.0] if text == "你好" else None,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_embedding_cache.resolve_query_embedding",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("no remote query")),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_embedding_cache.ensure_trigger_embeddings",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("no Redis trigger lookup")),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.knowledge.embedding_score.embedding_relevance_score",
+        lambda *_args, **_kwargs: 100.0,
+    )
+
+    assert feedback_learning.find_semantic_matched_replies(
+        rows=[entry],
+        user_text="你好",
+        remote_policy="memory_only",
+    ) == ["你好呀"]
+
+
 def test_feedback_entry_age_weight_decays_over_time() -> None:
     now = 1_700_000_000
     fresh = feedback_entry_age_weight(created_at=now - 3600, now=now)
