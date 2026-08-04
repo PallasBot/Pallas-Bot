@@ -223,6 +223,26 @@ async def test_collect_disabled_plugin_names_reuses_bot_scope_across_groups(bean
 
 
 @pytest.mark.asyncio
+async def test_collect_disabled_plugin_names_uses_ready_snapshot_without_db(monkeypatch):
+    from packages.help import plugin_manager
+
+    await plugin_manager.reset_disabled_plugin_gate_cache()
+    plugin_manager._disabled_bot_snapshot[77] = frozenset({"bot_plugin"})
+    plugin_manager._disabled_group_snapshot[5001] = frozenset({"group_plugin"})
+    plugin_manager._disabled_snapshot_ready = True
+
+    async def fail_loader(*_args, **_kwargs):
+        raise AssertionError("ready snapshot must not query config repositories")
+
+    monkeypatch.setattr(plugin_manager, "_pg_not_ready", lambda: False)
+    monkeypatch.setattr(plugin_manager, "load_disabled_plugin_names_from_db", fail_loader)
+    names = await plugin_manager.collect_disabled_plugin_names(77, 5001)
+
+    assert names == frozenset({"bot_plugin", "group_plugin"})
+    await plugin_manager.reset_disabled_plugin_gate_cache()
+
+
+@pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_does_not_create_empty_bot_config(beanie_fixture):
     from packages.help import plugin_manager
 

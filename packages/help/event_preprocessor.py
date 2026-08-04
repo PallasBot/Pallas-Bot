@@ -146,4 +146,7 @@ driver = get_driver()
 
 @driver.on_startup
 async def register_plugin_manager():
+    from .plugin_manager import refresh_disabled_plugin_snapshot
+
+    await refresh_disabled_plugin_snapshot()
     logger.debug("[帮助] 插件禁用预处理已注册")

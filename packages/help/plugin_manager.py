@@ -49,6 +49,9 @@ _disabled_group_generation: dict[int, int] = {}
 _disabled_bot_fetch_tasks: dict[int, asyncio.Task[frozenset[str]]] = {}
 _disabled_group_fetch_tasks: dict[int, asyncio.Task[frozenset[str]]] = {}
 _disabled_fetch_tasks_lock = asyncio.Lock()
+_disabled_bot_snapshot: dict[int, frozenset[str]] = {}
+_disabled_group_snapshot: dict[int, frozenset[str]] = {}
+_disabled_snapshot_ready = False
 
 
 def _disabled_gate_key(bot_id: int | None, group_id: int | None) -> tuple[int | None, int | None]:
@@ -268,7 +271,39 @@ async def invalidate_disabled_plugin_gate_cache(
 
 async def reset_disabled_plugin_gate_cache() -> None:
     """清空禁用插件门禁内存缓存。"""
+    global _disabled_snapshot_ready
     await invalidate_disabled_plugin_gate_cache(clear_all=True)
+    _disabled_bot_snapshot.clear()
+    _disabled_group_snapshot.clear()
+    _disabled_snapshot_ready = False
+
+
+async def refresh_disabled_plugin_snapshot() -> None:
+    """启动或显式刷新时批量读取插件禁用配置，避免热路径逐群回源。"""
+    global _disabled_snapshot_ready
+    if _pg_not_ready():
+        return
+    bot_rows, group_rows = await asyncio.gather(bot_config_repo.list_all(), group_config_repo.list_all())
+    bot_snapshot = {
+        int(row.account): frozenset(row.disabled_plugins or [])
+        for row in bot_rows
+        if getattr(row, "disabled_plugins", None)
+    }
+    group_snapshot = {
+        int(row.group_id): frozenset(row.disabled_plugins or [])
+        for row in group_rows
+        if getattr(row, "disabled_plugins", None)
+    }
+    async with _disabled_gate_lock:
+        _disabled_bot_snapshot.clear()
+        _disabled_bot_snapshot.update(bot_snapshot)
+        _disabled_group_snapshot.clear()
+        _disabled_group_snapshot.update(group_snapshot)
+        _disabled_snapshot_ready = True
+
+
+def disabled_plugin_snapshot_ready() -> bool:
+    return _disabled_snapshot_ready
 
 
 async def _await_disabled_scope_deduped(
@@ -351,6 +386,10 @@ async def collect_disabled_plugin_names(
         return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(frozenset()))
     if ignore_cache:
         return await load_disabled_plugin_names_from_db(bot_id, group_id, ignore_cache=True)
+    if _disabled_snapshot_ready:
+        bot_names = _disabled_bot_snapshot.get(int(bot_id), frozenset()) if bot_id else frozenset()
+        group_names = _disabled_group_snapshot.get(int(group_id), frozenset()) if group_id else frozenset()
+        return apply_group_fleet_whitelist(group_id, merge_global_disabled_plugin_names(bot_names | group_names))
 
     remote_changed = sync_global_disable_remote_generation() or sync_group_fleet_whitelist_remote_generation()
     key = _disabled_gate_key(bot_id, group_id)
@@ -457,6 +496,8 @@ async def update_bot_config(bot_id: int, disabled_plugins: list[str]) -> BotConf
     await bot_config_repo.upsert_field(bot_id, "disabled_plugins", disabled_plugins.copy())
     await bot_config_repo.invalidate_cache()
     await invalidate_disabled_plugin_gate_cache(bot_id=bot_id)
+    if _disabled_snapshot_ready:
+        _disabled_bot_snapshot[int(bot_id)] = frozenset(disabled_plugins)
 
     bot_config = await bot_config_repo.get(bot_id, ignore_cache=True)
     # 不用 assert：python -O 下 assert 会被剥离。
@@ -473,6 +514,8 @@ async def update_group_config(group_id: int, disabled_plugins: list[str]) -> Gro
     await group_config_repo.upsert_field(group_id, "disabled_plugins", disabled_plugins.copy())
     await group_config_repo.invalidate_cache()
     await invalidate_disabled_plugin_gate_cache(group_id=group_id)
+    if _disabled_snapshot_ready:
+        _disabled_group_snapshot[int(group_id)] = frozenset(disabled_plugins)
 
     group_config = await group_config_repo.get(group_id, ignore_cache=True)
     if group_config is None:
