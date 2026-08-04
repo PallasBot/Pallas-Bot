@@ -351,6 +351,45 @@ async def test_ready_snapshot_retries_remote_refresh_after_failure(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ready_snapshot_does_not_refresh_without_redis(monkeypatch):
+    from packages.help import plugin_manager
+
+    await plugin_manager.reset_disabled_plugin_gate_cache()
+    plugin_manager._disabled_snapshot_ready = True
+    plugin_manager._disabled_bot_snapshot[77] = frozenset({"cached_plugin"})
+    monkeypatch.setattr(plugin_manager, "_pg_not_ready", lambda: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.coord.redis_claim.get_coord_redis_client",
+        lambda: None,
+    )
+
+    async def fail_refresh():
+        raise AssertionError("single-process hot path must not refresh the full snapshot")
+
+    monkeypatch.setattr(plugin_manager, "refresh_disabled_plugin_snapshot", fail_refresh)
+
+    assert await plugin_manager.collect_disabled_plugin_names(77, None) == frozenset({"cached_plugin"})
+
+
+@pytest.mark.asyncio
+async def test_ready_snapshot_does_not_refresh_inside_remote_check_ttl(monkeypatch):
+    from packages.help import plugin_manager
+
+    await plugin_manager.reset_disabled_plugin_gate_cache()
+    plugin_manager._disabled_snapshot_ready = True
+    plugin_manager._disabled_bot_snapshot[77] = frozenset({"cached_plugin"})
+    plugin_manager._disabled_snapshot_remote_gen_checked_at = plugin_manager.time.monotonic()
+    monkeypatch.setattr(plugin_manager, "_pg_not_ready", lambda: False)
+
+    async def fail_refresh():
+        raise AssertionError("remote generation TTL must not refresh the full snapshot")
+
+    monkeypatch.setattr(plugin_manager, "refresh_disabled_plugin_snapshot", fail_refresh)
+
+    assert await plugin_manager.collect_disabled_plugin_names(77, None) == frozenset({"cached_plugin"})
+
+
+@pytest.mark.asyncio
 async def test_plugin_manager_startup_continues_when_snapshot_is_unavailable(monkeypatch):
     from packages.help import event_preprocessor, plugin_manager
 

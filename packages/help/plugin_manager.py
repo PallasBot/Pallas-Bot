@@ -359,14 +359,14 @@ def sync_disabled_plugin_snapshot_remote_generation() -> int | None:
         _disabled_snapshot_remote_gen_checked_at
         and now - _disabled_snapshot_remote_gen_checked_at < _DISABLED_SNAPSHOT_REMOTE_GEN_SYNC_TTL_SEC
     ):
-        return False
+        return None
     try:
         from pallas.core.platform.coord.redis_claim import get_coord_redis_client
 
         client = get_coord_redis_client()
         if client is None:
             _disabled_snapshot_remote_gen_checked_at = now
-            return False
+            return None
         raw = client.get(_DISABLED_SNAPSHOT_REDIS_GEN_KEY)
         _disabled_snapshot_remote_gen_checked_at = now
         remote = int(raw) if raw else 0
@@ -375,7 +375,7 @@ def sync_disabled_plugin_snapshot_remote_generation() -> int | None:
         return remote
     except Exception:
         _disabled_snapshot_remote_gen_checked_at = now
-        return False
+        return None
 
 
 async def apply_disabled_plugin_config_change(
