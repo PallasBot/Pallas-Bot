@@ -15,8 +15,18 @@ def add_mode_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_detach_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "-d",
+        "--detach",
+        action="store_true",
+        help="转入后台运行（默认在当前终端前台运行）",
+    )
+
+
 def register_run(sub: argparse._SubParsersAction) -> None:
-    parser = sub.add_parser("run", help="启动统一运行时（自动沿用当前编排）")
+    parser = sub.add_parser("run", help="启动 Bot（默认前台；-d 转入后台）")
+    add_detach_argument(parser)
     run_sub = parser.add_subparsers(dest="run_mode", required=False)
     parser.set_defaults(handler=run_default)
 
@@ -24,6 +34,7 @@ def register_run(sub: argparse._SubParsersAction) -> None:
         "unified",
         help="单进程 unified（默认推荐；本机 Embedding 会附带 embed 辅进程）",
     )
+    add_detach_argument(unified)
     unified.add_argument(
         "--skip-port-sync",
         action="store_true",
@@ -62,11 +73,14 @@ def run_unified(args: argparse.Namespace) -> int:
     extra: list[str] = []
     if args.skip_port_sync:
         extra.append("--skip-port-sync")
+    if args.detach:
+        extra.append("--detach")
     return run_bot_lifecycle("start", mode="unified", extra_args=extra)
 
 
-def run_default(_args: argparse.Namespace) -> int:
-    return run_bot_lifecycle("start", mode="auto")
+def run_default(args: argparse.Namespace) -> int:
+    extra = ["--detach"] if args.detach else None
+    return run_bot_lifecycle("start", mode="auto", extra_args=extra)
 
 
 def run_shard(args: argparse.Namespace) -> int:

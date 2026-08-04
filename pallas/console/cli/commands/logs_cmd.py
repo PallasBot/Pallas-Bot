@@ -44,8 +44,11 @@ def run_logs(args: argparse.Namespace) -> int:
     mode = resolve_bot_mode(args.mode)
     lines = 0 if args.paths_only else max(0, int(args.lines))
     summary = runtime_instance_summary(mode)
-    print(f"{summary['label']} · 运行实例 {summary['running_instances']}")
+    print(f"Pallas · 运行日志 · {summary['label']} · 实例 {summary['running_instances']}")
     for label, path in list_default_log_targets(mode=mode):
+        if path.is_dir():
+            print(f"  · {label}: {path}")
+            continue
         exists = "有" if path.is_file() else "无"
         print(f"  · {label}: {path} [{exists}]")
         if lines <= 0:

@@ -36,45 +36,48 @@ def test_bash_missing_message_mentions_uv_run_pallas():
 def test_run_bot_lifecycle_unified_delegates(monkeypatch):
     called: dict[str, object] = {}
 
-    def fake_run(action: str, *, skip_port_sync: bool = False) -> int:
+    def fake_run(action: str, *, skip_port_sync: bool = False, detach: bool = False) -> int:
         called["action"] = action
         called["skip"] = skip_port_sync
+        called["detach"] = detach
         return 0
 
     monkeypatch.setattr(bot_process, "run_unified_action", fake_run)
     monkeypatch.setattr(bot_process, "resolve_bot_mode", lambda mode: "unified")
     assert bot_process.run_bot_lifecycle("start", mode="unified", extra_args=["--skip-port-sync"]) == 0
-    assert called == {"action": "start", "skip": True}
+    assert called == {"action": "start", "skip": True, "detach": False}
 
 
 def test_run_bot_lifecycle_unified_restart_skips_port_sync_by_default(monkeypatch):
     called: dict[str, object] = {}
 
-    def fake_run(action: str, *, skip_port_sync: bool = False) -> int:
+    def fake_run(action: str, *, skip_port_sync: bool = False, detach: bool = False) -> int:
         called["action"] = action
         called["skip"] = skip_port_sync
+        called["detach"] = detach
         return 0
 
     monkeypatch.setattr(bot_process, "run_unified_action", fake_run)
     monkeypatch.setattr(bot_process, "resolve_bot_mode", lambda mode: "unified")
 
     assert bot_process.run_bot_lifecycle("restart", mode="unified") == 0
-    assert called == {"action": "restart", "skip": True}
+    assert called == {"action": "restart", "skip": True, "detach": False}
 
 
 def test_run_bot_lifecycle_unified_start_keeps_port_sync_default(monkeypatch):
     called: dict[str, object] = {}
 
-    def fake_run(action: str, *, skip_port_sync: bool = False) -> int:
+    def fake_run(action: str, *, skip_port_sync: bool = False, detach: bool = False) -> int:
         called["action"] = action
         called["skip"] = skip_port_sync
+        called["detach"] = detach
         return 0
 
     monkeypatch.setattr(bot_process, "run_unified_action", fake_run)
     monkeypatch.setattr(bot_process, "resolve_bot_mode", lambda mode: "unified")
 
     assert bot_process.run_bot_lifecycle("start", mode="unified") == 0
-    assert called == {"action": "start", "skip": False}
+    assert called == {"action": "start", "skip": False, "detach": False}
 
 
 def test_run_bot_lifecycle_shard_delegates(monkeypatch):
@@ -117,6 +120,11 @@ def test_unified_status_prints(monkeypatch, capsys):
     assert "消息实例" in out
 
 
+def test_run_parser_accepts_detach_flag():
+    args = build_parser().parse_args(["run", "unified", "-d"])
+    assert args.detach is True
+
+
 def test_run_without_mode_uses_auto_runtime(monkeypatch):
     from pallas.console.cli.commands import lifecycle
 
@@ -137,6 +145,46 @@ def test_unified_start_when_already_running(monkeypatch, capsys):
     monkeypatch.setattr(unified_lifecycle, "read_pid_file", lambda _p: 42)
     assert unified_lifecycle.start_bot() == 0
     assert "已在运行" in capsys.readouterr().out
+
+
+def test_unified_foreground_runs_bot_in_current_process(monkeypatch, tmp_path: Path, capsys):
+    monkeypatch.setattr(unified_lifecycle, "RUN_DIR", tmp_path / "run")
+    monkeypatch.setattr(unified_lifecycle, "PID_FILE", tmp_path / "run" / "bot.pid")
+    monkeypatch.setattr(unified_lifecycle, "ACCOUNTS_JSON", tmp_path / "missing.json")
+    monkeypatch.setattr(unified_lifecycle, "read_listen_port", lambda: 9090)
+    monkeypatch.setattr(unified_lifecycle, "prepare_unified_ports", lambda port, *, skip_port_sync: 0)
+    monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: False)
+    monkeypatch.setattr(unified_lifecycle, "start_embed_aux", lambda: 0)
+    stopped: list[bool] = []
+    monkeypatch.setattr(unified_lifecycle, "stop_embed_aux", lambda: stopped.append(True))
+    executed: list[str] = []
+    monkeypatch.setattr(unified_lifecycle.runpy, "run_path", lambda path, run_name: executed.append(path))
+
+    assert unified_lifecycle.start_bot(detach=False) == 0
+    assert executed == [str(unified_lifecycle.PROJECT_ROOT / "bot.py")]
+    assert stopped == [True]
+    assert unified_lifecycle.read_pid_file(unified_lifecycle.PID_FILE) is None
+    out = capsys.readouterr().out
+    assert "前台运行" in out
+    assert "pallas -d" in out
+    assert "Ctrl+C" in out
+
+
+def test_launcher_log_cleanup_removes_expired_files(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(unified_lifecycle, "LOG_DIR", tmp_path)
+    expired = tmp_path / "bot_2026-07-01_00-00-00.log"
+    retained = tmp_path / "bot_2026-08-04_00-00-00.log"
+    expired.write_text("old", encoding="utf-8")
+    retained.write_text("new", encoding="utf-8")
+    now = 1_754_294_400.0
+    os.utime(expired, (now - 15 * 24 * 60 * 60, now - 15 * 24 * 60 * 60))
+    os.utime(retained, (now, now))
+    monkeypatch.setattr(unified_lifecycle.time, "time", lambda: now)
+
+    unified_lifecycle.cleanup_launcher_logs()
+
+    assert not expired.exists()
+    assert retained.exists()
 
 
 def test_unified_start_spawns(monkeypatch, tmp_path: Path, capsys):
@@ -162,9 +210,9 @@ def test_unified_start_spawns(monkeypatch, tmp_path: Path, capsys):
 
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", is_running)
     monkeypatch.setattr(unified_lifecycle, "spawn_detached", fake_spawn)
-    assert unified_lifecycle.start_bot() == 0
+    assert unified_lifecycle.start_bot(detach=True) == 0
     assert states["env"]["PALLAS_BOT_ROLE"] == "unified"
     assert states["env"]["PORT"] == "9090"
     assert "bot.py" in states["cmd"]
     assert unified_lifecycle.read_pid_file(unified_lifecycle.PID_FILE) == 4242
-    assert "已启动" in capsys.readouterr().out
+    assert "已转入后台" in capsys.readouterr().out

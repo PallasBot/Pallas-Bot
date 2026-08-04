@@ -39,7 +39,8 @@ def run_bot_lifecycle(
     extra = list(extra_args or ())
     if resolved == "unified":
         skip_port_sync = action == "restart" or "--skip-port-sync" in extra
-        return run_unified_action(action, skip_port_sync=skip_port_sync)
+        detach = "--detach" in extra
+        return run_unified_action(action, skip_port_sync=skip_port_sync, detach=detach)
     return run_shard_action(action, extra_args=extra)
 
 
