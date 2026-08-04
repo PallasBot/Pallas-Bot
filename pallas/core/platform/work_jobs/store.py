@@ -14,11 +14,17 @@ if TYPE_CHECKING:
 class WorkJobStore(Protocol):
     async def enqueue(self, job: WorkJob) -> WorkJob: ...
 
+    async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]: ...
+
     async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None: ...
+
+    async def renew(self, *, job_id: str, owner: str, lease_sec: float) -> bool: ...
 
     async def complete(self, *, job_id: str, owner: str) -> bool: ...
 
     async def fail(self, *, job_id: str, owner: str, retry_after_sec: float) -> bool: ...
+
+    async def stats(self) -> dict[str, float | int | None]: ...
 
 
 class MemoryWorkJobStore:
@@ -28,6 +34,7 @@ class MemoryWorkJobStore:
         self._jobs: dict[str, WorkJob] = {}
         self._idempotency: dict[str, str] = {}
         self._available_at: dict[str, float] = {}
+        self._enqueued_at: dict[str, float] = {}
         self._leases: dict[str, tuple[str, float]] = {}
         self._completed: set[str] = set()
         self._lock = asyncio.Lock()
@@ -40,7 +47,11 @@ class MemoryWorkJobStore:
             self._jobs[job.id] = job
             self._idempotency[job.idempotency_key] = job.id
             self._available_at[job.id] = time.monotonic()
+            self._enqueued_at[job.id] = time.monotonic()
             return job
+
+    async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]:
+        return [await self.enqueue(job) for job in jobs]
 
     async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None:
         now = time.monotonic()
@@ -56,6 +67,15 @@ class MemoryWorkJobStore:
                 self._leases[job_id] = (str(owner), now + max(0.01, float(lease_sec)))
                 return claimed
         return None
+
+    async def renew(self, *, job_id: str, owner: str, lease_sec: float) -> bool:
+        now = time.monotonic()
+        async with self._lock:
+            lease = self._leases.get(job_id)
+            if lease is None or lease[0] != owner or lease[1] <= now:
+                return False
+            self._leases[job_id] = (str(owner), now + max(0.01, float(lease_sec)))
+            return True
 
     async def complete(self, *, job_id: str, owner: str) -> bool:
         async with self._lock:
@@ -74,3 +94,24 @@ class MemoryWorkJobStore:
             self._leases.pop(job_id, None)
             self._available_at[job_id] = time.monotonic() + max(0.0, float(retry_after_sec))
             return True
+
+    async def stats(self) -> dict[str, float | int | None]:
+        now = time.monotonic()
+        async with self._lock:
+            pending = [
+                job
+                for job_id, job in self._jobs.items()
+                if job_id not in self._completed and job_id not in self._leases
+            ]
+            leased = [
+                job
+                for job_id, job in self._jobs.items()
+                if job_id not in self._completed and job_id in self._leases and self._leases[job_id][1] > now
+            ]
+            oldest_created = min((self._enqueued_at[job.id] for job in pending), default=None)
+            return {
+                "pending": len(pending),
+                "leased": len(leased),
+                "oldest_pending_age_sec": round(now - oldest_created, 3) if oldest_created is not None else None,
+                "max_attempts": max((job.attempts for job in self._jobs.values()), default=0),
+            }
