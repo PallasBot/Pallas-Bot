@@ -11,7 +11,11 @@ from nonebot.adapters.onebot.v11.utils import log
 from nonebot.exception import WebSocketClosed
 from nonebot.utils import escape_tag
 
-from pallas.core.platform.ingress.conversation_scheduler import wait_for_conversation_capacity
+from pallas.core.platform.ingress.conversation_scheduler import (
+    reserve_conversation_capacity,
+    run_conversation_event_with_reservation,
+    wait_for_conversation_capacity,
+)
 
 _ORIGINAL_HANDLE_WS: Any = None
 _ORIGINAL_HANDLE_HTTP: Any = None
@@ -39,14 +43,20 @@ async def patched_handle_ws(adapter: Adapter, websocket: Any) -> None:
     adapter.bot_connect(bot)
     adapter.connections[self_id] = websocket
     log("INFO", f"<y>Bot {escape_tag(self_id)}</y> connected")
+    previous_event: Any = None
     try:
         while True:
+            if previous_event is not None:
+                await wait_for_conversation_capacity(bot, previous_event)
             data = await websocket.receive()
             if event := adapter.json_to_event(json.loads(data)):
-                await wait_for_conversation_capacity(bot, event)
-                task = asyncio.create_task(bot.handle_event(event))
+                reservation = await reserve_conversation_capacity(bot, event)
+                task = asyncio.create_task(run_conversation_event_with_reservation(bot, event, reservation))
                 task.add_done_callback(adapter.tasks.discard)
                 adapter.tasks.add(task)
+                previous_event = event
+            else:
+                previous_event = None
     except WebSocketClosed:
         log("WARNING", f"WebSocket for Bot {escape_tag(self_id)} closed by peer")
     except Exception as exc:
@@ -84,8 +94,8 @@ async def patched_handle_http(adapter: Adapter, request: Any) -> Any:
             adapter.bot_connect(bot)
             log("INFO", f"<y>Bot {escape_tag(self_id)}</y> connected")
         bot = cast("Bot", bot)
-        await wait_for_conversation_capacity(bot, event)
-        task = asyncio.create_task(bot.handle_event(event))
+        reservation = await reserve_conversation_capacity(bot, event)
+        task = asyncio.create_task(run_conversation_event_with_reservation(bot, event, reservation))
         task.add_done_callback(adapter.tasks.discard)
         adapter.tasks.add(task)
     from nonebot.drivers import Response
@@ -105,10 +115,14 @@ async def patched_forward_ws(adapter: Adapter, url: Any) -> None:
     while True:
         try:
             async with adapter.websocket(request) as websocket:
+                previous_event: Any = None
                 try:
                     while True:
+                        if bot is not None and previous_event is not None:
+                            await wait_for_conversation_capacity(bot, previous_event)
                         event = adapter.json_to_event(json.loads(await websocket.receive()))
                         if event is None:
+                            previous_event = None
                             continue
                         if bot is None:
                             if not isinstance(event, LifecycleMetaEvent) or event.sub_type != "connect":
@@ -116,10 +130,11 @@ async def patched_forward_ws(adapter: Adapter, url: Any) -> None:
                             bot = Bot(adapter, str(event.self_id))
                             adapter.bot_connect(bot)
                             adapter.connections[bot.self_id] = websocket
-                        await wait_for_conversation_capacity(bot, event)
-                        task = asyncio.create_task(bot.handle_event(event))
+                        reservation = await reserve_conversation_capacity(bot, event)
+                        task = asyncio.create_task(run_conversation_event_with_reservation(bot, event, reservation))
                         task.add_done_callback(adapter.tasks.discard)
                         adapter.tasks.add(task)
+                        previous_event = event
                 finally:
                     if bot is not None:
                         adapter.connections.pop(bot.self_id, None)

@@ -4,6 +4,7 @@ import asyncio
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar, Token
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -25,6 +26,16 @@ class ConversationWork:
     queued_at: float
 
 
+@dataclass(slots=True)
+class ConversationCapacityReservation:
+    scheduler: ConversationScheduler
+    _claimed: bool = False
+    _released: bool = False
+
+    async def release(self) -> None:
+        await self.scheduler.release_reservation(self)
+
+
 class ConversationScheduler:
     def __init__(self, *, concurrency: int, max_pending: int) -> None:
         self.concurrency = max(1, int(concurrency))
@@ -40,22 +51,59 @@ class ConversationScheduler:
         self._stopping = False
         self._condition = asyncio.Condition()
 
-    async def submit(self, key: ConversationKey, work: Work) -> None:
+    async def submit(
+        self,
+        key: ConversationKey,
+        work: Work,
+        *,
+        reservation: ConversationCapacityReservation | None = None,
+    ) -> None:
         loop = asyncio.get_running_loop()
         future: asyncio.Future[None] = loop.create_future()
         item = ConversationWork(work=work, future=future, queued_at=time.monotonic())
+        async with self._condition:
+            reserved = reservation is not None and reservation.scheduler is self
+            if reserved:
+                if reservation._claimed or reservation._released:
+                    raise RuntimeError("conversation capacity reservation is no longer available")
+                reservation._claimed = True
+            else:
+                while not self._stopping and self._pending_count >= self.max_pending:
+                    self._backpressure_waits += 1
+                    await self._condition.wait()
+            if self._stopping:
+                if reserved:
+                    reservation._claimed = False
+                    self._release_reservation_locked(reservation)
+                raise RuntimeError("conversation scheduler is stopping")
+            if not reserved:
+                self._pending_count += 1
+            self._queues.setdefault(key, deque()).append(item)
+            self._queue_ready_key_locked(key)
+            self._start_ready_locked()
+            self._condition.notify_all()
+        await asyncio.shield(future)
+
+    async def reserve(self, key: ConversationKey) -> ConversationCapacityReservation:
         async with self._condition:
             while not self._stopping and self._pending_count >= self.max_pending:
                 self._backpressure_waits += 1
                 await self._condition.wait()
             if self._stopping:
                 raise RuntimeError("conversation scheduler is stopping")
-            self._queues.setdefault(key, deque()).append(item)
             self._pending_count += 1
-            self._queue_ready_key_locked(key)
-            self._start_ready_locked()
-            self._condition.notify_all()
-        await asyncio.shield(future)
+            return ConversationCapacityReservation(scheduler=self)
+
+    async def release_reservation(self, reservation: ConversationCapacityReservation) -> None:
+        async with self._condition:
+            self._release_reservation_locked(reservation)
+
+    def _release_reservation_locked(self, reservation: ConversationCapacityReservation) -> None:
+        if reservation.scheduler is not self or reservation._claimed or reservation._released:
+            return
+        reservation._released = True
+        self._pending_count = max(0, self._pending_count - 1)
+        self._condition.notify_all()
 
     async def wait_for_capacity(self) -> None:
         async with self._condition:
@@ -160,6 +208,10 @@ class ConversationScheduler:
 
 
 _scheduler: ConversationScheduler | None = None
+_active_reservation: ContextVar[ConversationCapacityReservation | None] = ContextVar(
+    "conversation_capacity_reservation",
+    default=None,
+)
 
 
 def conversation_scheduler_enabled() -> bool:
@@ -194,10 +246,48 @@ async def stop_conversation_scheduler() -> None:
 async def submit_conversation_event(bot: Bot, event: Event, work: Work) -> None:
     scheduler = _scheduler
     key = conversation_key(bot, event)
-    if scheduler is None or key is None:
+    reservation = _active_reservation.get()
+    if scheduler is None:
+        if reservation is not None:
+            await reservation.release()
+            raise RuntimeError("conversation scheduler is stopping")
         await work()
         return
-    await scheduler.submit(key, work)
+    if key is None:
+        await work()
+        return
+    if reservation is not None and reservation.scheduler is not scheduler:
+        await reservation.release()
+        reservation = None
+    await scheduler.submit(key, work, reservation=reservation)
+
+
+async def reserve_conversation_capacity(
+    bot: Bot,
+    event: Event,
+) -> ConversationCapacityReservation | None:
+    scheduler = _scheduler
+    key = conversation_key(bot, event)
+    if scheduler is None or key is None:
+        return None
+    return await scheduler.reserve(key)
+
+
+async def run_conversation_event_with_reservation(
+    bot: Bot,
+    event: Event,
+    reservation: ConversationCapacityReservation | None,
+) -> None:
+    token: Token[ConversationCapacityReservation | None] | None = None
+    if reservation is not None:
+        token = _active_reservation.set(reservation)
+    try:
+        await bot.handle_event(event)
+    finally:
+        if token is not None:
+            _active_reservation.reset(token)
+        if reservation is not None:
+            await reservation.release()
 
 
 async def wait_for_conversation_capacity(bot: Bot, event: Event) -> None:

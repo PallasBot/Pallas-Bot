@@ -77,3 +77,31 @@ async def test_submit_waits_for_capacity_without_dropping_work() -> None:
 
     assert seen == ["first", "second"]
     await scheduler.stop()
+
+
+@pytest.mark.asyncio
+async def test_reservation_occupies_capacity_before_handler_submission() -> None:
+    scheduler = ConversationScheduler(concurrency=1, max_pending=1)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def work() -> None:
+        started.set()
+        await release.wait()
+
+    reservation = await scheduler.reserve(("10001", 1))
+    handler = asyncio.create_task(scheduler.submit(("10001", 1), work, reservation=reservation))
+    await started.wait()
+
+    next_reservation = asyncio.create_task(scheduler.reserve(("10001", 2)))
+    await asyncio.sleep(0)
+
+    assert next_reservation.done() is False
+    assert scheduler.snapshot()["pending"] == 1
+
+    release.set()
+    await handler
+    next_reservation_value = await next_reservation
+    await next_reservation_value.release()
+    assert scheduler.snapshot()["pending"] == 0
+    await scheduler.stop()
