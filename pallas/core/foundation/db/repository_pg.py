@@ -2171,6 +2171,13 @@ class PgConfigRepository:
         await self._cache.put(key_id, row)
         return row
 
+    async def list_all(self) -> list[Any]:
+        async with get_session(read_only=True) as session:
+            rows = list((await session.execute(select(self._row_class))).scalars().all())
+            for row in rows:
+                session.expunge(row)
+        return rows
+
     async def get_or_create(self, key_id: int, **defaults: Any) -> tuple[Any, bool]:
         async with get_session() as session:
             result = await session.execute(

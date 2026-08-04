@@ -253,6 +253,9 @@ class MongoConfigRepository:
             ignore_cache=ignore_cache,
         )
 
+    async def list_all(self) -> list[Any]:
+        return await self._module_class.find_all().to_list()
+
     async def get_or_create(self, key_id: int, **defaults: Any) -> tuple[Any, bool]:
         existing = await self._module_class.find_one({self._primary_key: key_id})
         if existing is not None:
