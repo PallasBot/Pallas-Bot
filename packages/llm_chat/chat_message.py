@@ -645,6 +645,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             group_id=group_id,
             user_id=user_id,
             task="llm_chat",
+            priority=("explicit" if is_to_me or speak_trigger in {"mention", "followup"} else "ambient"),
             token_count=token_count,
             temperature=temperature,
             knowledge_retrieval_trace=knowledge_retrieval_trace,
@@ -669,7 +670,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "submit_skip")
         from pallas.product.llm.submit_gate import user_message_for_submit_status
 
-        hint = user_message_for_submit_status(result.status)
+        hint = "" if result.status == "shared_budget_busy" else user_message_for_submit_status(result.status)
         if hint:
             await llm_chat_msg.send(hint)
         logger.info(

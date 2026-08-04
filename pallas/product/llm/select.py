@@ -332,6 +332,7 @@ async def maybe_submit_repeater_llm_select(
             mode="normal",
             task="repeater_select",
             scene_tier=scene_tier,
+            priority=("repeater_strong" if scene_tier == "strong" else "repeater_weak"),
             token_count=persona_bundle.token_count,
             temperature=persona_bundle.temperature,
             llm_rewrite_metadata=rewrite_metadata,

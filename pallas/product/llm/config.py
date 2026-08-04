@@ -301,6 +301,7 @@ class LlmConfig(BaseModel):
     llm_tools_soft_recall_max_candidates: int = Field(default=3, ge=1, le=8)
     llm_chat_cooldown_sec: int = Field(default=3, ge=0, le=3600)
     llm_chat_max_concurrency: int = Field(default=2, ge=1, le=64)
+    llm_shared_max_concurrency: int = Field(default=4, ge=1, le=64)
     llm_chat_char_budget: int = Field(default=12000, ge=0, le=200000)
     llm_chat_disabled_group_ids: list[int] = Field(default_factory=list)
     llm_repeater_group_cooldown_sec: int = Field(default=60, ge=0, le=3600)
@@ -522,6 +523,7 @@ def get_llm_config() -> LlmConfig:
             llm_tools_soft_recall_max_candidates=_env_int("LLM_TOOLS_SOFT_RECALL_MAX_CANDIDATES", 3),
             llm_chat_cooldown_sec=_env_int("LLM_CHAT_COOLDOWN_SEC", 3),
             llm_chat_max_concurrency=_env_int("LLM_CHAT_MAX_CONCURRENCY", 2),
+            llm_shared_max_concurrency=_env_int("LLM_SHARED_MAX_CONCURRENCY", 4),
             llm_chat_char_budget=_env_int("LLM_CHAT_CHAR_BUDGET", 12000),
             llm_chat_disabled_group_ids=_env_group_id_list("LLM_CHAT_DISABLED_GROUP_IDS"),
             llm_repeater_group_cooldown_sec=_env_int("LLM_REPEATER_GROUP_COOLDOWN_SEC", 60),

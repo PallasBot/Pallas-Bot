@@ -32,6 +32,7 @@ _COUNTERS = (
     "chat_shed_sidework",
     "reply_local_dispatched",
     "llm_path_skipped_shed",
+    "llm_retained_under_shed",
     "bundle_stage_db_miss",
     "bundle_stage_db_hit",
     "bundle_stage_no_candidates",
@@ -254,6 +255,11 @@ def record_llm_path_skipped_shed() -> None:
     _state["llm_path_skipped_shed"] += 1
 
 
+def record_llm_retained_under_shed() -> None:
+    _rollover_if_needed()
+    _state["llm_retained_under_shed"] += 1
+
+
 def _keywords_cache_stats() -> dict[str, int | float | None]:
     try:
         from packages.repeater.model import extract_keyword_tags
@@ -293,9 +299,16 @@ def hotpath_metrics_snapshot() -> dict[str, Any]:
     snap_hit = int(_state["reply_snapshot_hit"])
     snap_miss = int(_state["reply_snapshot_miss"])
     snap_total = snap_hit + snap_miss
+    try:
+        from pallas.product.llm.execution_budget import llm_execution_budget_snapshot
+
+        budget = llm_execution_budget_snapshot()
+    except Exception:
+        budget = {}
     return {
         "day_key": _day_key or _today_key(),
         **{key: int(_state[key]) for key in _COUNTERS},
+        **budget,
         "route_ms_p50": _percentile(_route_ms, 0.50),
         "route_ms_p95": _percentile(_route_ms, 0.95),
         "keywords_ms_p50": _percentile(_keywords_ms, 0.50),

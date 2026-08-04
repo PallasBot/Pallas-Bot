@@ -139,6 +139,7 @@ async def maybe_submit_repeater_llm_polish_lite(
             mode="normal",
             task="repeater_polish_lite",
             scene_tier=scene_tier,
+            priority=("repeater_strong" if scene_tier == "strong" else "repeater_weak"),
             token_count=persona_bundle.token_count,
             temperature=persona_bundle.temperature,
             llm_rewrite_metadata={
