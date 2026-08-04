@@ -6,7 +6,7 @@
 
 ## 最少能跑
 
-复制 `config/pallas.example.toml` → `config/pallas.toml`，配置 **`superusers`** 与 **`[bootstrap.postgres]`**（3.x 升级用 mongo 段）即可启动；其余在 WebUI 按需配置。
+复制 `config/pallas.example.toml` → `config/pallas.toml`，配置 **`superusers`** 与 **`[bootstrap.postgres]`** 即可启动；其余在 WebUI 按需配置。
 
 ```toml
 [bootstrap]
