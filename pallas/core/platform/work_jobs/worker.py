@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -38,11 +39,23 @@ class WorkJobWorker:
             logger.error("work aux: unknown job kind={} id={}", job.kind, job.id)
             await self.store.complete(job_id=job.id, owner=self.owner)
             return True
+        lease_task = asyncio.create_task(self._renew_lease(job.id), name=f"work_job_lease:{job.id}")
         try:
             await handler(job.payload)
         except Exception as exc:
             logger.warning("work aux: job failed kind={} id={}: {}", job.kind, job.id, exc)
             await self.store.fail(job_id=job.id, owner=self.owner, retry_after_sec=self.retry_after_sec)
             return True
+        finally:
+            lease_task.cancel()
+            await asyncio.gather(lease_task, return_exceptions=True)
         await self.store.complete(job_id=job.id, owner=self.owner)
         return True
+
+    async def _renew_lease(self, job_id: str) -> None:
+        while True:
+            await asyncio.sleep(self.lease_sec / 3)
+            if await self.store.renew(job_id=job_id, owner=self.owner, lease_sec=self.lease_sec):
+                continue
+            logger.warning("work aux: lease lost id={} owner={}", job_id, self.owner)
+            return
