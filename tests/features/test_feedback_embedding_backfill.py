@@ -10,6 +10,7 @@ from pallas.product.llm.feedback_embedding_cache import (
     ensure_trigger_cache_loaded,
     feedback_trigger_cache_stats,
     get_cached_trigger_embedding,
+    get_cached_trigger_embeddings,
     trigger_embeddings_path,
 )
 from pallas.product.llm.knowledge.embedding_client import (
@@ -55,6 +56,30 @@ def test_trigger_cache_skips_stub_disk_when_local_resolved_model(tmp_path, monke
     assert model == _LOCAL_DEFAULT
     assert stats["cached"] == 0
     assert stats["model"] == _LOCAL_DEFAULT
+
+
+def test_cached_trigger_embeddings_loads_cache_once(monkeypatch) -> None:
+    from pallas.product.llm import feedback_embedding_cache
+
+    feedback_embedding_cache.clear_feedback_embedding_caches_for_tests()
+    calls = 0
+
+    def load_once() -> str:
+        nonlocal calls
+        calls += 1
+        return "test-model"
+
+    monkeypatch.setattr(feedback_embedding_cache, "ensure_trigger_cache_loaded", load_once)
+    feedback_embedding_cache._trigger_mem.update({
+        feedback_embedding_cache._text_key("甲"): [1.0, 0.0],
+        feedback_embedding_cache._text_key("乙"): [0.0, 1.0],
+    })
+
+    assert get_cached_trigger_embeddings(["甲", "乙", "丙", "甲"]) == {
+        "甲": [1.0, 0.0],
+        "乙": [0.0, 1.0],
+    }
+    assert calls == 1
 
 
 def test_backfill_feedback_trigger_embeddings_fills_missing(tmp_path, monkeypatch) -> None:

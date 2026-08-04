@@ -31,8 +31,8 @@ def test_memory_only_semantic_match_skips_redis_and_remote_embedding(monkeypatch
         lambda text: [1.0, 0.0] if text == "你好" else None,
     )
     monkeypatch.setattr(
-        "pallas.product.llm.feedback_embedding_cache.get_cached_trigger_embedding",
-        lambda text: [1.0, 0.0] if text == "你好" else None,
+        "pallas.product.llm.feedback_embedding_cache.get_cached_trigger_embeddings",
+        lambda texts: {text: [1.0, 0.0] for text in texts if text == "你好"},
     )
     monkeypatch.setattr(
         "pallas.product.llm.feedback_embedding_cache.resolve_query_embedding",
@@ -52,6 +52,37 @@ def test_memory_only_semantic_match_skips_redis_and_remote_embedding(monkeypatch
         user_text="你好",
         remote_policy="memory_only",
     ) == ["你好呀"]
+
+
+def test_memory_only_semantic_match_skips_trigger_cache_without_query_vector(monkeypatch) -> None:
+    from pallas.product.llm import feedback_learning
+
+    entry = build_feedback_entry(
+        bot_id=10001,
+        group_id=123,
+        user_id=456,
+        request_id="memory-only-query-miss",
+        user_text="你好",
+        reply_text="你好呀",
+    )
+    monkeypatch.setattr(feedback_learning, "resolve_llm_vector_retrieve", lambda: "embedding")
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_embedding_cache.get_cached_query_embedding",
+        lambda _text: None,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_embedding_cache.get_cached_trigger_embeddings",
+        lambda _texts: (_ for _ in ()).throw(AssertionError("query miss must skip trigger cache")),
+    )
+
+    assert (
+        feedback_learning.find_semantic_matched_replies(
+            rows=[entry],
+            user_text="你好",
+            remote_policy="memory_only",
+        )
+        == []
+    )
 
 
 def test_feedback_entry_age_weight_decays_over_time() -> None:

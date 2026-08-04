@@ -151,6 +151,20 @@ def get_cached_trigger_embedding(text: str) -> list[float] | None:
         return list(vec) if vec is not None else None
 
 
+def get_cached_trigger_embeddings(texts: list[str]) -> dict[str, list[float]]:
+    ensure_trigger_cache_loaded()
+    out: dict[str, list[float]] = {}
+    with _LOCK:
+        for raw in texts:
+            plain = str(raw or "").strip()
+            if not plain or plain in out:
+                continue
+            vec = _trigger_mem.get(_text_key(plain))
+            if vec is not None:
+                out[plain] = list(vec)
+    return out
+
+
 def get_cached_query_embedding(text: str) -> list[float] | None:
     plain = str(text or "").strip()
     if not plain:

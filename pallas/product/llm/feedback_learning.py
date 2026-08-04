@@ -179,13 +179,13 @@ def find_semantic_matched_replies(
     if policy == "memory_only":
         from pallas.product.llm.feedback_embedding_cache import (
             get_cached_query_embedding,
-            get_cached_trigger_embedding,
+            get_cached_trigger_embeddings,
         )
 
         query_vec = get_cached_query_embedding(query)
-        trigger_vecs = {
-            text: vector for text in trigger_texts if (vector := get_cached_trigger_embedding(text)) is not None
-        }
+        if query_vec is None:
+            return []
+        trigger_vecs = get_cached_trigger_embeddings(trigger_texts)
     else:
         from pallas.product.llm.feedback_embedding_cache import (
             ensure_trigger_embeddings,
