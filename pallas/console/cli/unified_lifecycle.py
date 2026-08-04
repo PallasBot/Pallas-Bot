@@ -125,13 +125,13 @@ def status_bot() -> int:
     from pallas.console.cli.embedding_aux import print_embed_aux_status
 
     port = read_listen_port()
-    print("形态 unified（默认；分片为可选进阶）")
+    print("统一运行时（单实例）")
     print(f"监听端口 {port}")
     if is_bot_running():
-        print(f"Bot 运行中 pid={read_pid_file(PID_FILE)}")
+        print(f"消息实例 运行中 pid={read_pid_file(PID_FILE)}")
         print(f"WebUI http://127.0.0.1:{port}/pallas/")
     else:
-        print("Bot 未运行")
+        print("消息实例 未运行")
     print(f"Bot 日志 {LOG_FILE}")
     print_embed_aux_status()
     print("更多日志: uv run pallas logs")

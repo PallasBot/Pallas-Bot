@@ -146,4 +146,9 @@ driver = get_driver()
 
 @driver.on_startup
 async def register_plugin_manager():
+    from .plugin_manager import disabled_plugin_snapshot_ready, refresh_disabled_plugin_snapshot
+
+    refreshed = await refresh_disabled_plugin_snapshot()
+    if not refreshed and not disabled_plugin_snapshot_ready():
+        logger.warning("[帮助] 插件禁用快照未就绪，暂时回退按需读取配置")
     logger.debug("[帮助] 插件禁用预处理已注册")

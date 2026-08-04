@@ -75,6 +75,16 @@ def test_ingress_dispatch_section_payload_has_field_groups():
     assert "send_queue_max_depth" not in field_names
 
 
+def test_conversation_scheduler_fields_require_restart() -> None:
+    from pallas.console.webui.env_sections import _INGRESS_DISPATCH_SKIP
+
+    assert {
+        "conversation_scheduler_enabled",
+        "conversation_scheduler_concurrency",
+        "conversation_scheduler_max_pending",
+    } <= _INGRESS_DISPATCH_SKIP
+
+
 @skip_no_message_scrub
 def test_message_scrub_not_in_common_config_list(monkeypatch: pytest.MonkeyPatch):
     from pallas.console.webui import list_webui_env_sections

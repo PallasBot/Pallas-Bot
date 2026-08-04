@@ -11,6 +11,10 @@ from nonebot.log import logger
 from nonebot.matcher import matchers
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.platform.ingress.conversation_scheduler import (
+    conversation_scheduler_enabled,
+    submit_conversation_event,
+)
 from pallas.core.platform.ingress.dispatch_lanes import (
     check_and_run_matcher_with_lane,
     install_dispatch_lanes,
@@ -123,6 +127,13 @@ def select_synthetic_llm_command_matchers(selected_matchers: list[type], resolut
 
 
 async def patched_handle_event(bot: Bot, event: Event) -> None:
+    if isinstance(event, GroupMessageEvent) and conversation_scheduler_enabled():
+        await submit_conversation_event(bot, event, lambda: patched_handle_event_now(bot, event))
+        return
+    await patched_handle_event_now(bot, event)
+
+
+async def patched_handle_event_now(bot: Bot, event: Event) -> None:
     from pallas.core.foundation.logging import compact_inbound_event_log, inbound_event_log_as_debug
 
     ingress_started = time.perf_counter()

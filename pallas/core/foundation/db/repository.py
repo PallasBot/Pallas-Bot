@@ -148,6 +148,10 @@ class ConfigRepository(Protocol):
         """根据主键 id 获取配置文档，返回 None 表示不存在。"""
         ...
 
+    async def list_all(self) -> list[Any]:
+        """列出全部配置文档，供启动预热等低频批处理使用。"""
+        ...
+
     async def get_or_create(self, key_id: int, **defaults: Any) -> tuple[Any, bool]:
         """
         获取配置文档，若不存在则用 defaults 创建新文档。

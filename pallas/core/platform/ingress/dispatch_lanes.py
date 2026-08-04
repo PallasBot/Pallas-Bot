@@ -11,7 +11,7 @@ from nonebot import get_loaded_plugins
 from nonebot.log import logger
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
-from pallas.core.foundation.db.pool_budget import pg_pool_capacity, pg_pool_under_pressure
+from pallas.core.foundation.db.pool_budget import cap_by_pg_pool, pg_pool_capacity, pg_pool_under_pressure
 from pallas.core.platform.ingress.fleet_dispatch_scale import scaled_dispatch_int
 from pallas.core.platform.ingress.matcher_activation import iter_matcher_checker_calls, matcher_is_command_only
 from pallas.core.platform.ingress.route_index import matcher_module_key, plugin_module_key_from_plugin
@@ -145,7 +145,8 @@ def default_lane_limits() -> dict[str, int]:
     storage_default = min(8, pool_size)
     command_default = scaled_dispatch_int(16, per_bot=2, cap=64)
     tool_default = scaled_dispatch_int(4, per_bot=1, cap=16)
-    chat_default = scaled_dispatch_int(32, per_bot=1, cap=48)
+    chat_scaled = scaled_dispatch_int(32, per_bot=1, cap=48)
+    chat_default = cap_by_pg_pool(chat_scaled, workload_fraction=0.30)
     remote_default = scaled_dispatch_int(4, per_bot=1, cap=16)
     return {
         DispatchLane.COMMAND: _env_lane_limit(

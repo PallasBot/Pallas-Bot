@@ -4,6 +4,7 @@ import os
 from typing import TYPE_CHECKING
 
 from pallas.console.cli import bot_process, process_util, unified_lifecycle
+from pallas.console.cli.main import build_parser
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -82,6 +83,23 @@ def test_unified_status_prints(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "未运行" in out
     assert "8088" in out
+    assert "统一运行时" in out
+    assert "消息实例" in out
+
+
+def test_run_without_mode_uses_auto_runtime(monkeypatch):
+    from pallas.console.cli.commands import lifecycle
+
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        lifecycle,
+        "run_bot_lifecycle",
+        lambda action, *, mode, extra_args=None: calls.append((action, mode)) or 0,
+    )
+
+    args = build_parser().parse_args(["run"])
+    assert args.handler(args) == 0
+    assert calls == [("start", "auto")]
 
 
 def test_unified_start_when_already_running(monkeypatch, capsys):

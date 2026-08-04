@@ -576,7 +576,7 @@ def print_observability_status_block(opts: ShardOptions) -> None:
 def cmd_status(opts: ShardOptions) -> int:
     workers = calc_worker_count(opts)
     hub_port = resolve_hub_port(opts)
-    print_title("Pallas-Bot 分片模式 · 运行状态")
+    print_title("Pallas-Bot 统一运行时 · 运行状态")
     print("  配置摘要")
     print_config_summary(opts, workers)
     print()
@@ -584,20 +584,20 @@ def cmd_status(opts: ShardOptions) -> int:
     print()
     print_observability_status_block(opts)
     print()
-    print("  进程")
+    print("  运行实例")
     hub_state = "运行中" if pidfile_running(PID_HUB) else "未运行"
-    print(f"    hub        {hub_state}  :{hub_port}")
+    print(f"    控制台实例 {hub_state}  :{hub_port}")
     running = 0
     for path in production_worker_pid_files():
         sid = path.stem.removeprefix("worker-")
         wport = registry_port_for_shard(int(sid) if sid.isdigit() else 0, opts)
         if pidfile_running(path):
             running += 1
-            print(f"    worker-{sid}  运行中  WS:{wport}  pid={read_pid_file(path)}")
+            print(f"    消息实例 {sid}  运行中  WS:{wport}  pid={read_pid_file(path)}")
         else:
-            print(f"    worker-{sid}  未运行  WS:{wport}")
+            print(f"    消息实例 {sid}  未运行  WS:{wport}")
     print()
-    print(f"  汇总       hub {hub_state} · worker {running}/{workers}")
+    print(f"  汇总       控制台实例 {hub_state} · 消息实例 {running}/{workers}")
     print(f"  WebUI      http://127.0.0.1:{hub_port}/pallas/")
     print(f"  日志目录   {LOG_DIR}")
     from pallas.console.cli.embedding_aux import print_embed_aux_status

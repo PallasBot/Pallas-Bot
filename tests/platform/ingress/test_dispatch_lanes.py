@@ -6,6 +6,7 @@ import pytest
 from nonebot.internal.rule import Rule
 from nonebot.rule import command, to_me
 
+from pallas.core.foundation.db import pool_budget
 from pallas.core.platform.ingress import dispatch_lanes, message_load
 from pallas.core.platform.ingress.dispatch_lanes import DispatchLane, LaneController
 
@@ -87,6 +88,40 @@ def test_storage_limit_tightens_under_pool_pressure(monkeypatch: pytest.MonkeyPa
     assert controller.effective_limit() == 8
     monkeypatch.setattr(dispatch_lanes, "pg_pool_under_pressure", lambda **kwargs: True)
     assert controller.effective_limit() == 4
+
+
+def test_default_chat_limit_is_capped_by_pg_pool(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.fleet_dispatch_scale.connected_bot_count",
+        lambda: 7,
+    )
+    env_values = {"PG_POOL_SIZE": "12", "PG_MAX_OVERFLOW": "8"}
+    with monkeypatch.context() as config_monkeypatch:
+        config_monkeypatch.setattr(dispatch_lanes, "repo_env_raw_value", env_values.get)
+        config_monkeypatch.setattr(pool_budget, "repo_env_raw_value", env_values.get)
+        pool_budget.clear_pool_budget_runtime_cache()
+
+        try:
+            assert dispatch_lanes.default_lane_limits()[DispatchLane.CHAT] == 6
+        finally:
+            pool_budget.clear_pool_budget_runtime_cache()
+
+
+def test_default_chat_limit_clears_pool_cache_when_assertion_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_cache = MagicMock()
+    monkeypatch.setattr(pool_budget, "clear_pool_budget_runtime_cache", clear_cache)
+    monkeypatch.setattr(
+        dispatch_lanes,
+        "default_lane_limits",
+        lambda: {DispatchLane.CHAT: 0},
+    )
+
+    with pytest.raises(AssertionError):
+        test_default_chat_limit_is_capped_by_pg_pool(monkeypatch)
+
+    assert clear_cache.call_count == 2
 
 
 @pytest.mark.asyncio

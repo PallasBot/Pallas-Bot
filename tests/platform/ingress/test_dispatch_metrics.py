@@ -50,3 +50,71 @@ def test_dispatch_alerts() -> None:
     alerts = dispatch_metrics.dispatch_alerts(p95_ms=150.0, pg_util=0.9)
     assert "ingress_p95_over_100ms" in alerts
     assert "pg_pool_over_85pct" in alerts
+
+
+def test_dispatch_metrics_include_conversation_scheduler(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.conversation_scheduler.conversation_scheduler_status",
+        lambda: {
+            "enabled": True,
+            "pending": 12,
+            "active": 3,
+            "ready": 4,
+            "max_pending": 512,
+            "wait_ms_p95": 84.0,
+            "backpressure_waits": 2,
+        },
+    )
+
+    snap = dispatch_metrics.dispatch_metrics_snapshot()
+
+    assert snap["conversation_scheduler"]["pending"] == 12
+    assert snap["conversation_scheduler"]["wait_ms_p95"] == 84.0
+
+
+def test_dispatch_metrics_include_snapshot_health(monkeypatch) -> None:
+    monkeypatch.setattr(
+        dispatch_metrics,
+        "ingress_snapshot_health",
+        lambda: {
+            "ban_gate": {"ready": True, "refresh_failures": 2},
+            "disabled_plugins": {"ready": False, "refresh_failures": 1},
+        },
+    )
+
+    snap = dispatch_metrics.dispatch_metrics_snapshot()
+
+    assert snap["snapshot_health"]["ban_gate"]["refresh_failures"] == 2
+    assert snap["snapshot_health"]["disabled_plugins"]["ready"] is False
+
+
+def test_merge_snapshot_health_counts_worker_readiness() -> None:
+    merged = dispatch_metrics.merge_snapshot_health(
+        [
+            {
+                "ban_gate": {
+                    "ready": True,
+                    "refresh_age_sec": 2.0,
+                    "refresh_failures": 1,
+                    "last_failure_age_sec": 8.0,
+                }
+            },
+            {
+                "ban_gate": {
+                    "ready": False,
+                    "refresh_age_sec": 5.0,
+                    "refresh_failures": 2,
+                    "last_failure_age_sec": 4.0,
+                }
+            },
+        ]
+    )
+
+    assert merged["ban_gate"] == {
+        "ready": False,
+        "workers": 2,
+        "ready_workers": 1,
+        "refresh_age_sec_max": 5.0,
+        "refresh_failures": 3,
+        "last_failure_age_sec_min": 4.0,
+    }
