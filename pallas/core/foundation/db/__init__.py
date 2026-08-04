@@ -6,6 +6,7 @@ from urllib.parse import quote_plus
 from .modules import (
     AdminMember,
     Answer,
+    BackgroundJob,
     Ban,
     BlackList,
     BotConfigModule,
@@ -268,6 +269,7 @@ async def init_mongodb_db() -> None:
             GroupConfigModule,
             UserConfigModule,
             Message,
+            BackgroundJob,
             Context,
             BlackList,
             ImageCache,

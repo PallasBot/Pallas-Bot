@@ -89,6 +89,36 @@ class Message(Document):
         indexes = [IndexModel([("time", pymongo.DESCENDING)], name="time_index")]
 
 
+class BackgroundJob(Document):
+    job_id: str = Field(...)
+    kind: str = Field(...)
+    payload: dict = Field(default_factory=dict)
+    idempotency_key: str = Field(...)
+    status: str = Field(default="pending")
+    attempts: int = Field(default=0)
+    available_at: float = Field(default_factory=time.time)
+    leased_until: float | None = Field(default=None)
+    lease_owner: str | None = Field(default=None)
+    created_at: float = Field(default_factory=time.time)
+    finished_at: float | None = Field(default=None)
+
+    class Settings:
+        name = "background_jobs"
+        collection = "background_jobs"
+        indexes = [
+            IndexModel([("job_id", pymongo.ASCENDING)], name="job_id_unique", unique=True),
+            IndexModel([("idempotency_key", pymongo.ASCENDING)], name="idempotency_unique", unique=True),
+            IndexModel(
+                [
+                    ("status", pymongo.ASCENDING),
+                    ("available_at", pymongo.ASCENDING),
+                    ("leased_until", pymongo.ASCENDING),
+                ],
+                name="claim_index",
+            ),
+        ]
+
+
 class Ban(BaseModel):
     keywords: str = Field(...)
     group_id: int = Field(...)

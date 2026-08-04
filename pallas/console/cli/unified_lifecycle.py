@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-from pallas.console.cli.embedding_aux import start_embed_aux, stop_embed_aux
 from pallas.console.cli.process_util import (
     clear_pid_file,
     pid_alive,
@@ -37,6 +36,31 @@ PID_FILE = RUN_DIR / "bot.pid"
 LOG_FILE = LOG_DIR / "bot.log"
 LOG_RETENTION_DAYS = 14
 ENV_PATH = PROJECT_ROOT / ".env"
+
+
+def start_aux_services() -> int:
+    from pallas.console.cli.embedding_aux import start_embed_aux
+    from pallas.console.cli.work_aux import start_work_aux
+
+    if start_embed_aux() != 0:
+        return 1
+    return start_work_aux()
+
+
+def stop_aux_services() -> None:
+    from pallas.console.cli.embedding_aux import stop_embed_aux
+    from pallas.console.cli.work_aux import stop_work_aux
+
+    stop_embed_aux()
+    stop_work_aux()
+
+
+def print_aux_services_status() -> None:
+    from pallas.console.cli.embedding_aux import print_embed_aux_status
+    from pallas.console.cli.work_aux import print_work_aux_status
+
+    print_embed_aux_status()
+    print_work_aux_status()
 
 
 def is_bot_running() -> bool:
@@ -104,7 +128,7 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     if is_bot_running():
         print(f"unified 已在运行 (pid {read_pid_file(PID_FILE)})")
-        return start_embed_aux()
+        return start_aux_services()
     port = read_listen_port()
     sync_rc = prepare_unified_ports(port, skip_port_sync=skip_port_sync)
     if sync_rc != 0:
@@ -116,7 +140,7 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
         print(f"控制台 http://127.0.0.1:{port}/pallas/")
         print("提示：保持当前终端查看实时日志；需后台运行请使用 uv run pallas -d。")
         print("按 Ctrl+C 停止 Bot 与本次自动启动的辅进程。")
-        if start_embed_aux() != 0:
+        if start_aux_services() != 0:
             return 1
         write_pid_file(PID_FILE, os.getpid())
         old_env = {key: os.environ.get(key) for key in env}
@@ -127,7 +151,7 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
             print("\nunified 正在停止…")
         finally:
             clear_pid_file(PID_FILE)
-            stop_embed_aux()
+            stop_aux_services()
             for key, value in old_env.items():
                 if value is None:
                     os.environ.pop(key, None)
@@ -148,16 +172,14 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
         print(f"unified 已转入后台 · pid {read_pid_file(PID_FILE)} · port {port}")
         print(f"控制台 http://127.0.0.1:{port}/pallas/")
         print(f"启动器日志 {LOG_DIR}")
-        return start_embed_aux()
+        return start_aux_services()
     print(f"unified 启动失败，查看 {LOG_DIR}", file=sys.stderr)
     clear_pid_file(PID_FILE)
     return 1
 
 
 def stop_bot() -> int:
-    from pallas.console.cli.embedding_aux import stop_embed_aux
-
-    stop_embed_aux()
+    stop_aux_services()
     pid = read_pid_file(PID_FILE)
     if pid is None or not pid_alive(pid):
         clear_pid_file(PID_FILE)
@@ -170,8 +192,6 @@ def stop_bot() -> int:
 
 
 def status_bot() -> int:
-    from pallas.console.cli.embedding_aux import print_embed_aux_status
-
     port = read_listen_port()
     print("Pallas · 统一运行时")
     print(f"  监听端口   {port}")
@@ -181,7 +201,7 @@ def status_bot() -> int:
     else:
         print("  消息实例   未运行")
     print(f"  业务日志   {PROJECT_ROOT / 'data' / 'bot'}")
-    print_embed_aux_status()
+    print_aux_services_status()
     print("  更多日志   uv run pallas logs")
     return 0
 

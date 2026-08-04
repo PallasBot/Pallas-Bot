@@ -159,6 +159,26 @@ class MessageRow(Base):
     time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class BackgroundJobRow(Base):
+    __tablename__ = "background_job"
+    __table_args__ = (
+        UniqueConstraint("idempotency_key", name="uq_background_job_idempotency"),
+        Index("ix_background_job_claim", "status", "available_at", "leased_until", "id"),
+    )
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    payload: Mapped[Any] = mapped_column(_JsonB, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    available_at: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    leased_until: Mapped[float | None] = mapped_column(Float, nullable=True)
+    lease_owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    finished_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class BlackListRow(Base):
     __tablename__ = "blacklist"
 

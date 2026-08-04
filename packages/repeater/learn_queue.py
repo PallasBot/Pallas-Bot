@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 from nonebot import get_driver, logger
 
 from pallas.core.platform.multi_bot.group import claim_group_message_event
+from pallas.core.platform.work_jobs.models import WorkJob
+from pallas.core.platform.work_jobs.runtime import build_work_job_store
 
 from .learn_runtime_config import get_repeater_learn_runtime_config
 
@@ -132,40 +134,35 @@ async def execute_repeater_learn(chat: Chat) -> None:
 
 
 async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
-    """仅抢占成功的牛入队；队列满则丢弃本条 learn。"""
-    global _dropped_full, _dropped_pressure
-    if should_skip_repeater_learn_enqueue():
-        _dropped_pressure += 1
-        from pallas.core.platform.ingress.hotpath_metrics import record_learn_skipped_pressure
-
-        record_learn_skipped_pressure()
-        if _dropped_pressure == 1 or _dropped_pressure % 100 == 0:
-            logger.debug(
-                "repeater learn enqueue skipped under pressure (watermark={}, dropped={})",
-                learn_queue_pressure_threshold(),
-                _dropped_pressure,
-            )
-        return False
+    """仅抢占成功的牛写入 durable outbox，实际学习在 work aux 执行。"""
     if not await claim_group_message_event(_LEARN_PLUGIN, event, int(event.self_id)):
         return False
-    try:
-        learn_queue().put_nowait(chat)
-        from pallas.core.platform.ingress.hotpath_metrics import record_learn_enqueued
+    from .learner import Learner
+    from .model import Chat
 
-        record_learn_enqueued()
-        return True
-    except asyncio.QueueFull:
-        _dropped_full += 1
-        from pallas.core.platform.ingress.hotpath_metrics import record_learn_skipped_full
-
-        record_learn_skipped_full()
-        if _dropped_full == 1 or _dropped_full % 100 == 0:
-            logger.debug(
-                "repeater learn queue full (max={}), dropped={} (learn only)",
-                learn_queue_max_size(),
-                _dropped_full,
-            )
+    payload = await Learner.capture_for_work(chat.chat_data, Chat._topics_lock, Chat._recent_topics)
+    if payload is None:
         return False
+    job = WorkJob.create(
+        kind="repeater.learn",
+        payload=payload.to_dict(),
+        idempotency_key=f"repeater.learn:{int(event.group_id)}:{int(event.message_id)}:{int(event.self_id)}",
+    )
+    try:
+        await build_work_job_store().enqueue(job)
+    except Exception as exc:
+        logger.warning(
+            "repeater learn outbox enqueue failed bot={} group={} message={}: {}",
+            event.self_id,
+            event.group_id,
+            event.message_id,
+            exc,
+        )
+        return False
+    from pallas.core.platform.ingress.hotpath_metrics import record_learn_enqueued
+
+    record_learn_enqueued()
+    return True
 
 
 def _learn_workers_running() -> bool:

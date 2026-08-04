@@ -601,8 +601,10 @@ def cmd_status(opts: ShardOptions) -> int:
     print(f"  WebUI      http://127.0.0.1:{hub_port}/pallas/")
     print(f"  日志目录   {LOG_DIR}")
     from pallas.console.cli.embedding_aux import print_embed_aux_status
+    from pallas.console.cli.work_aux import print_work_aux_status
 
     print_embed_aux_status()
+    print_work_aux_status()
     return 0
 
 
@@ -638,8 +640,10 @@ def cmd_stop(opts: ShardOptions) -> int:
     title = "Pallas-Bot 分片模式 · 停止" + ("（强制）" if opts.force else "")
     print_title(title)
     from pallas.console.cli.embedding_aux import stop_embed_aux
+    from pallas.console.cli.work_aux import stop_work_aux
 
     stop_embed_aux(force=opts.force, dry_run=opts.dry_run)
+    stop_work_aux(force=opts.force, dry_run=opts.dry_run)
     stop_one("worker-test", "测试 worker-test", opts=opts)
     stop_one("worker-test2", "测试 worker-test2", opts=opts)
     stop_production_workers(opts)
@@ -666,6 +670,10 @@ def cmd_start(opts: ShardOptions) -> int:
         print()
         print("  正在启动 hub…")
         if start_hub(opts) != 0:
+            return 1
+        from pallas.console.cli.work_aux import start_work_aux
+
+        if start_work_aux(dry_run=opts.dry_run) != 0:
             return 1
         if opts.dry_run:
             print()
@@ -739,8 +747,11 @@ def cmd_start(opts: ShardOptions) -> int:
             return 1
 
     from pallas.console.cli.embedding_aux import start_embed_aux
+    from pallas.console.cli.work_aux import start_work_aux
 
     if start_embed_aux(dry_run=opts.dry_run) != 0:
+        return 1
+    if start_work_aux(dry_run=opts.dry_run) != 0:
         return 1
 
     if opts.dry_run:
