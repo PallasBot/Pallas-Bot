@@ -11,8 +11,11 @@ from collections import deque
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
+from pallas.console.cli.log_paths import EMBED_AUX_LOG, WORK_AUX_LOG
+
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
+    from pathlib import Path
 
 LogFacet = Literal["message", "console", "other"]
 LogScope = Literal["all", "message", "console", "other"]
@@ -20,6 +23,11 @@ LogScope = Literal["all", "message", "console", "other"]
 _LOG_ERROR_SINK_CB: Callable[[str, Mapping[str, Any]], None] | None = None
 
 _CONSOLE_LOGGER_NAMES = frozenset({"pb_webui", "pallas_webui"})
+AuxLogSource = Literal["work", "embed"]
+AUX_LOG_PATHS: dict[AuxLogSource, Path] = {
+    "work": WORK_AUX_LOG,
+    "embed": EMBED_AUX_LOG,
+}
 _MESSAGE_SEND_API_RE = re.compile(
     r"Calling API send_(?:msg|group_msg|private_msg|group_forward_msg|private_forward_msg)\b",
     re.IGNORECASE,
@@ -269,12 +277,14 @@ def replay_log_entries_after(
 
 
 def _normalize_log_source_key(tag: str) -> str:
-    """分片来源归一：仅 ``worker-N`` / ``hub``；其余视为无来源标签。"""
+    """日志来源归一：分片 hub/worker 与辅进程标签。"""
     primary = (tag or "").strip().split("/", 1)[0]
     if primary.startswith("worker-"):
         return primary
     if primary in ("hub", "hub-file"):
         return "hub"
+    if primary in AUX_LOG_PATHS:
+        return primary
     return ""
 
 
@@ -490,6 +500,108 @@ def _entry_matches_log_source(entry: dict[str, Any], source: str | None) -> bool
     return key == want
 
 
+def list_aux_log_sources() -> list[AuxLogSource]:
+    """返回已有落盘日志的辅进程来源，避免未启用的 embed 出现在控制台。"""
+    return [source for source, path in AUX_LOG_PATHS.items() if path.is_file()]
+
+
+def _tail_aux_log_lines(n: int, scope: LogScope, source: str | None) -> list[str]:
+    from pallas.core.platform.shard.logs.view import prefix_log_source, tail_log_file
+
+    want = (source or "all").strip() or "all"
+    out: list[str] = []
+    for aux_source, path in AUX_LOG_PATHS.items():
+        if want not in ("all", aux_source):
+            continue
+        lines = filter_log_lines_by_scope(tail_log_file(path, n), scope)
+        out.extend(prefix_log_source(line, aux_source) for line in lines)
+    return out
+
+
+def merge_aux_log_lines(
+    n: int,
+    scope: LogScope,
+    *,
+    base_lines: list[str],
+    source: str | None,
+) -> list[str]:
+    """将主进程或分片日志与辅进程落盘日志按时间合并。"""
+    want = (source or "all").strip() or "all"
+    lines = _tail_aux_log_lines(n, scope, source)
+    if want in ("all", "hub"):
+        if want == "hub":
+            from pallas.core.platform.shard.logs.view import prefix_log_source
+
+            lines.extend(prefix_log_source(line, "hub") for line in base_lines)
+        else:
+            lines.extend(base_lines)
+
+    ordered = sorted(
+        enumerate(lines),
+        key=lambda item: (str(parse_nonebot_log_line(item[1], entry_id=0).get("time") or "~"), item[0]),
+    )
+    return [line for _, line in ordered[-n:]]
+
+
+class AuxLogTailer:
+    """WebUI SSE：按文件偏移增量读取 work / embed 辅进程日志。"""
+
+    def __init__(self, *, source: str | None = None) -> None:
+        self._source = (source or "all").strip() or "all"
+        self._offsets: dict[str, int] = {}
+        self._partial: dict[str, str] = {}
+        self._bootstrap_offsets()
+
+    def _iter_paths(self) -> list[tuple[Path, AuxLogSource]]:
+        return [(path, aux_source) for aux_source, path in AUX_LOG_PATHS.items() if self._source in ("all", aux_source)]
+
+    def _bootstrap_offsets(self) -> None:
+        for path, _source in self._iter_paths():
+            try:
+                self._offsets[str(path)] = path.stat().st_size
+            except OSError:
+                self._offsets[str(path)] = 0
+
+    def poll_new_lines(self, *, scope: LogScope) -> list[str]:
+        from pallas.core.platform.shard.logs.view import prefix_log_source
+
+        out: list[str] = []
+        for path, aux_source in self._iter_paths():
+            key = str(path)
+            try:
+                size = path.stat().st_size
+            except OSError:
+                continue
+            start = self._offsets.get(key, 0)
+            if size < start:
+                start = 0
+                self._partial.pop(key, None)
+            if size <= start:
+                continue
+            try:
+                with path.open("rb") as fh:
+                    fh.seek(start)
+                    chunk = fh.read(size - start).decode("utf-8", errors="replace")
+            except OSError:
+                continue
+            self._offsets[key] = size
+            data = self._partial.pop(key, "") + chunk
+            if chunk and not chunk.endswith(("\n", "\r")):
+                head, sep, rem = data.rpartition("\n")
+                if sep:
+                    complete = head
+                    self._partial[key] = rem
+                else:
+                    self._partial[key] = data
+                    continue
+            else:
+                complete = data
+            out.extend(
+                prefix_log_source(line, aux_source) for line in filter_log_lines_by_scope(complete.splitlines(), scope)
+            )
+        return out
+
+
 async def iter_nonebot_log_sse(
     scope: LogScope,
     *,
@@ -503,6 +615,7 @@ async def iter_nonebot_log_sse(
             yield f"id: {entry.get('id')}\ndata: {json.dumps(entry, ensure_ascii=False)}\n\n"
     q, unsub = subscribe_nonebot_log_stream()
     shard_tailer = None
+    aux_tailer = AuxLogTailer(source=source)
     try:
         from pallas.core.platform.bot_runtime.roles import is_sharded_hub
 
@@ -536,7 +649,7 @@ async def iter_nonebot_log_sse(
                         yield f"id: {entry_id}\ndata: {entry_json}\n\n"
                         hub_sent = True
 
-            shard_sent = False
+            file_sent = False
             new_lines: list[str] = []
             if shard_tailer is not None:
 
@@ -544,6 +657,13 @@ async def iter_nonebot_log_sse(
                     return shard_tailer.poll_new_lines(scope=scope)
 
                 new_lines = await asyncio.to_thread(_poll_shard)
+            if aux_tailer is not None:
+
+                def _poll_aux() -> list[str]:
+                    return aux_tailer.poll_new_lines(scope=scope)
+
+                new_lines.extend(await asyncio.to_thread(_poll_aux))
+            if new_lines:
                 # 按来源缓冲本轮增量，先合并同 worker 续行再吐出，避免多 worker 交错串台
                 by_source: dict[str, list[str]] = {}
                 order: list[str] = []
@@ -568,9 +688,9 @@ async def iter_nonebot_log_sse(
                         elif last_time_by_source.get(key):
                             e["time"] = last_time_by_source[key]
                         yield f"id: {e.get('id')}\ndata: {json.dumps(e, ensure_ascii=False)}\n\n"
-                        shard_sent = True
+                        file_sent = True
 
-            if not hub_sent and not shard_sent:
+            if not hub_sent and not file_sent:
                 yield ": heartbeat\n\n"
     finally:
         unsub()
@@ -782,19 +902,19 @@ def tail_nonebot_log_lines_scoped(
         with _lock:
             candidates = list(_lines)[-oversample:]
         base = filter_log_lines_by_scope(candidates, scope)[-n:]
+    sharded = False
     try:
         from pallas.core.platform.bot_runtime.roles import is_sharded_hub
 
-        if is_sharded_hub():
+        sharded = is_sharded_hub()
+        if sharded:
             from pallas.core.platform.shard.logs.view import merge_cluster_log_lines
 
-            return merge_cluster_log_lines(n, scope, hub_ring_lines=base, source=source)
+            base = merge_cluster_log_lines(n, scope, hub_ring_lines=base, source=source)
     except Exception:
         pass
-    if want == "all":
-        return base
-    from pallas.core.platform.shard.logs.view import collect_shard_file_log_lines, prefix_log_source
+    if not sharded and want not in ("all", "hub", *AUX_LOG_PATHS):
+        from pallas.core.platform.shard.logs.view import collect_shard_file_log_lines
 
-    if want == "hub":
-        return [prefix_log_source(line, "hub") for line in base]
-    return collect_shard_file_log_lines(per_file=n, scope=scope, source=source)[-n:]
+        base = collect_shard_file_log_lines(per_file=n, scope=scope, source=source)[-n:]
+    return merge_aux_log_lines(n, scope, base_lines=base, source=source)

@@ -2,6 +2,7 @@ from pallas.console.web.bot_web import (
     _entry_matches_log_source,
     fill_missing_log_entry_times,
     parse_nonebot_log_line,
+    tail_nonebot_log_lines_scoped,
 )
 from pallas.core.platform.shard.logs.view import dedupe_log_lines_preserve_order, merge_cluster_log_lines
 
@@ -272,3 +273,75 @@ def test_entry_matches_log_source_hub_file_and_workers():
     assert _entry_matches_log_source(worker, "worker-0")
     assert not _entry_matches_log_source(worker, "worker-1")
     assert _entry_matches_log_source(worker, "all")
+
+
+def test_list_aux_log_sources_uses_existing_log_files(tmp_path, monkeypatch):
+    from pallas.console.web import bot_web
+
+    work_log = tmp_path / "work.log"
+    embed_log = tmp_path / "embed.log"
+    work_log.write_text("work ready\n", encoding="utf-8")
+    monkeypatch.setattr(
+        bot_web,
+        "AUX_LOG_PATHS",
+        {"work": work_log, "embed": embed_log},
+    )
+
+    assert bot_web.list_aux_log_sources() == ["work"]
+
+
+def test_tail_scoped_logs_merges_and_filters_aux_files(tmp_path, monkeypatch):
+    from pallas.console.web import bot_web
+
+    work_log = tmp_path / "work.log"
+    embed_log = tmp_path / "embed.log"
+    work_log.write_text(
+        "08-04 10:01:00 | INFO     | work:1 - work ready\n",
+        encoding="utf-8",
+    )
+    embed_log.write_text(
+        "08-04 10:02:00 | INFO     | embed:1 - embed ready\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        bot_web,
+        "AUX_LOG_PATHS",
+        {"work": work_log, "embed": embed_log},
+    )
+    monkeypatch.setattr(
+        bot_web,
+        "tail_nonebot_log_lines",
+        lambda _n: ["08-04 10:00:00 | INFO     | bot:1 - bot ready"],
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.bot_runtime.roles.is_sharded_hub",
+        lambda: False,
+    )
+
+    merged = tail_nonebot_log_lines_scoped(10, "all")
+    assert [line.rsplit(" - ", 1)[-1] for line in merged] == [
+        "bot ready",
+        "work ready",
+        "embed ready",
+    ]
+    assert "[work]" in merged[1]
+    assert "[embed]" in merged[2]
+    assert tail_nonebot_log_lines_scoped(10, "all", source="work") == [
+        "[work] 08-04 10:01:00 | INFO     | work:1 - work ready"
+    ]
+
+
+def test_aux_log_tailer_emits_only_appended_aux_lines(tmp_path, monkeypatch):
+    from pallas.console.web import bot_web
+
+    work_log = tmp_path / "work.log"
+    work_log.write_text("existing line\n", encoding="utf-8")
+    monkeypatch.setattr(bot_web, "AUX_LOG_PATHS", {"work": work_log})
+
+    tailer = bot_web.AuxLogTailer(source="work")
+    work_log.write_text(
+        "existing line\n08-04 10:03:00 | INFO     | work:1 - work appended\n",
+        encoding="utf-8",
+    )
+
+    assert tailer.poll_new_lines(scope="all") == ["[work] 08-04 10:03:00 | INFO     | work:1 - work appended"]

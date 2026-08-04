@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.25-dirty",
+    "version": "v4.1.26-60-g619a727d-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -17419,11 +17419,11 @@
                 "other"
               ],
               "type": "string",
-              "description": "all=全部（分片 hub 时合并 hub 环与各 worker 落盘日志）；message=消息面（OneBot 消息事件 / 复读发送等）；console=控制台（pb_webui / [pallas-webui] / /pallas/ access）；other=其它（含无 facet 的旧日志）",
+              "description": "all=全部（合并主进程、分片 worker 与辅进程落盘日志）；message=消息面（OneBot 消息事件 / 复读发送等）；console=控制台（pb_webui / [pallas-webui] / /pallas/ access）；other=其它（含无 facet 的旧日志）",
               "default": "all",
               "title": "Scope"
             },
-            "description": "all=全部（分片 hub 时合并 hub 环与各 worker 落盘日志）；message=消息面（OneBot 消息事件 / 复读发送等）；console=控制台（pb_webui / [pallas-webui] / /pallas/ access）；other=其它（含无 facet 的旧日志）"
+            "description": "all=全部（合并主进程、分片 worker 与辅进程落盘日志）；message=消息面（OneBot 消息事件 / 复读发送等）；console=控制台（pb_webui / [pallas-webui] / /pallas/ access）；other=其它（含无 facet 的旧日志）"
           },
           {
             "name": "source",
@@ -17438,10 +17438,10 @@
                   "type": "null"
                 }
               ],
-              "description": "分片来源：all|hub|worker-0|worker-1…（默认 all，不含 bootstrap）",
+              "description": "日志来源：all|hub|worker-N|work|embed（默认 all）",
               "title": "Source"
             },
-            "description": "分片来源：all|hub|worker-0|worker-1…（默认 all，不含 bootstrap）"
+            "description": "日志来源：all|hub|worker-N|work|embed（默认 all）"
           },
           {
             "name": "token",
@@ -17552,10 +17552,10 @@
                   "type": "null"
                 }
               ],
-              "description": "分片来源：all|hub|worker-N（默认 all）",
+              "description": "日志来源：all|hub|worker-N|work|embed（默认 all）",
               "title": "Source"
             },
-            "description": "分片来源：all|hub|worker-N（默认 all）"
+            "description": "日志来源：all|hub|worker-N|work|embed（默认 all）"
           },
           {
             "name": "token",
@@ -17651,10 +17651,10 @@
                   "type": "null"
                 }
               ],
-              "description": "分片来源：all|hub|worker-N（与 GET /logs 一致）",
+              "description": "日志来源：all|hub|worker-N|work|embed（与 GET /logs 一致）",
               "title": "Source"
             },
-            "description": "分片来源：all|hub|worker-N（与 GET /logs 一致）"
+            "description": "日志来源：all|hub|worker-N|work|embed（与 GET /logs 一致）"
           },
           {
             "name": "last_event_id",

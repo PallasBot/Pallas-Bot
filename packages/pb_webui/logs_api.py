@@ -42,7 +42,7 @@ def register_logs_router(
             LogScope,
             Query(
                 description=(
-                    "all=全部（分片 hub 时合并 hub 环与各 worker 落盘日志）；"
+                    "all=全部（合并主进程、分片 worker 与辅进程落盘日志）；"
                     "message=消息面（OneBot 消息事件 / 复读发送等）；"
                     "console=控制台（pb_webui / [pallas-webui] / /pallas/ access）；"
                     "other=其它（含无 facet 的旧日志）"
@@ -51,7 +51,7 @@ def register_logs_router(
         ] = "all",
         source: str | None = Query(
             default=None,
-            description="分片来源：all|hub|worker-0|worker-1…（默认 all，不含 bootstrap）",
+            description="日志来源：all|hub|worker-N|work|embed（默认 all）",
         ),
     ) -> dict[str, Any]:
         _ensure_log_sink()
@@ -65,11 +65,17 @@ def register_logs_router(
             sharded_logs = False
             log_sources: list[str] = []
             try:
+                from pallas.console.web import list_aux_log_sources
+
+                aux_sources = list_aux_log_sources()
                 if shard_hub_console():
                     sharded_logs = True
                     from pallas.core.platform.shard.logs.view import list_shard_log_sources
 
                     log_sources = list_shard_log_sources()
+                elif aux_sources:
+                    log_sources = ["hub"]
+                log_sources.extend(aux_sources)
             except Exception:
                 pass
 
@@ -104,7 +110,7 @@ def register_logs_router(
         ] = "all",
         source: str | None = Query(
             default=None,
-            description="分片来源：all|hub|worker-N（默认 all）",
+            description="日志来源：all|hub|worker-N|work|embed（默认 all）",
         ),
     ):
         """导出当前筛选范围的日志为 text/plain 附件（便于 Docker / curl 拉到宿主机）。"""
@@ -157,7 +163,7 @@ def register_logs_router(
         ] = "all",
         source: str | None = Query(
             default=None,
-            description="分片来源：all|hub|worker-N（与 GET /logs 一致）",
+            description="日志来源：all|hub|worker-N|work|embed（与 GET /logs 一致）",
         ),
         last_event_id: int | None = Query(
             default=None,
