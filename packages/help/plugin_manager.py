@@ -52,6 +52,9 @@ _disabled_fetch_tasks_lock = asyncio.Lock()
 _disabled_bot_snapshot: dict[int, frozenset[str]] = {}
 _disabled_group_snapshot: dict[int, frozenset[str]] = {}
 _disabled_snapshot_ready = False
+_disabled_snapshot_last_refresh_mono = 0.0
+_disabled_snapshot_last_failure_mono = 0.0
+_disabled_snapshot_refresh_failures = 0
 
 
 def _disabled_gate_key(bot_id: int | None, group_id: int | None) -> tuple[int | None, int | None]:
@@ -271,19 +274,38 @@ async def invalidate_disabled_plugin_gate_cache(
 
 async def reset_disabled_plugin_gate_cache() -> None:
     """清空禁用插件门禁内存缓存。"""
-    global _disabled_snapshot_ready
+    global \
+        _disabled_snapshot_last_failure_mono, \
+        _disabled_snapshot_last_refresh_mono, \
+        _disabled_snapshot_ready, \
+        _disabled_snapshot_refresh_failures
     await invalidate_disabled_plugin_gate_cache(clear_all=True)
     _disabled_bot_snapshot.clear()
     _disabled_group_snapshot.clear()
     _disabled_snapshot_ready = False
+    _disabled_snapshot_last_refresh_mono = 0.0
+    _disabled_snapshot_last_failure_mono = 0.0
+    _disabled_snapshot_refresh_failures = 0
 
 
-async def refresh_disabled_plugin_snapshot() -> None:
+async def refresh_disabled_plugin_snapshot() -> bool:
     """启动或显式刷新时批量读取插件禁用配置，避免热路径逐群回源。"""
-    global _disabled_snapshot_ready
+    global \
+        _disabled_snapshot_last_failure_mono, \
+        _disabled_snapshot_last_refresh_mono, \
+        _disabled_snapshot_ready, \
+        _disabled_snapshot_refresh_failures
     if _pg_not_ready():
-        return
-    bot_rows, group_rows = await asyncio.gather(bot_config_repo.list_all(), group_config_repo.list_all())
+        return False
+    try:
+        bot_rows, group_rows = await asyncio.gather(bot_config_repo.list_all(), group_config_repo.list_all())
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _disabled_snapshot_refresh_failures += 1
+        _disabled_snapshot_last_failure_mono = time.monotonic()
+        logger.exception("[帮助] 插件禁用快照刷新失败，保留最近成功值")
+        return False
     bot_snapshot = {
         int(row.account): frozenset(row.disabled_plugins or [])
         for row in bot_rows
@@ -300,10 +322,26 @@ async def refresh_disabled_plugin_snapshot() -> None:
         _disabled_group_snapshot.clear()
         _disabled_group_snapshot.update(group_snapshot)
         _disabled_snapshot_ready = True
+        _disabled_snapshot_last_refresh_mono = time.monotonic()
+    return True
 
 
 def disabled_plugin_snapshot_ready() -> bool:
     return _disabled_snapshot_ready
+
+
+def disabled_plugin_snapshot_status() -> dict[str, bool | int | float | None]:
+    now = time.monotonic()
+    return {
+        "ready": _disabled_snapshot_ready,
+        "refresh_age_sec": (
+            round(now - _disabled_snapshot_last_refresh_mono, 2) if _disabled_snapshot_last_refresh_mono else None
+        ),
+        "refresh_failures": _disabled_snapshot_refresh_failures,
+        "last_failure_age_sec": (
+            round(now - _disabled_snapshot_last_failure_mono, 2) if _disabled_snapshot_last_failure_mono else None
+        ),
+    }
 
 
 async def _await_disabled_scope_deduped(

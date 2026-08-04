@@ -59,6 +59,28 @@ def test_stale_snapshot_still_serves_last_successful_value(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
+async def test_snapshot_status_reports_refresh_failure_without_dropping_last_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mark_snapshot_ready()
+    snapshot._global_banned = frozenset({10001})
+    monkeypatch.setattr(snapshot, "get_db_backend", lambda: "postgresql")
+
+    async def fail_load():
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(snapshot, "_load_snapshot_postgresql", fail_load)
+
+    await snapshot.refresh_ban_gate_snapshot()
+
+    status = snapshot.ban_gate_snapshot_status()
+    assert snapshot.is_user_globally_banned_fast(10001) is True
+    assert status["ready"] is True
+    assert status["refresh_failures"] == 1
+    assert status["last_failure_age_sec"] is not None
+
+
+@pytest.mark.asyncio
 async def test_apply_user_banned_change_updates_fast_path(monkeypatch):
     from packages.blacklist import apply_user_banned_change, reset_user_ban_gate_cache
 

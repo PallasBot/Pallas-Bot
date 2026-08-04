@@ -4,6 +4,8 @@ import time
 from collections import deque
 from typing import Any
 
+from pallas.core.platform.ingress.snapshot_health import ingress_snapshot_health
+
 _COUNTERS = (
     "group_messages",
     "command_traffic",
@@ -162,6 +164,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
         pg_util=pg_util if isinstance(pg_util, float) else None,
         hotpath=hotpath_metrics_snapshot(),
         conversation_scheduler=conversation_scheduler_status(),
+        snapshot_health=ingress_snapshot_health(),
     )
 
 
@@ -175,6 +178,7 @@ def build_dispatch_metrics_payload(
     pg_util: float | None,
     hotpath: dict[str, Any] | None = None,
     conversation_scheduler: dict[str, Any] | None = None,
+    snapshot_health: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     group_messages = int(counters.get("group_messages") or 0)
     command_traffic = int(counters.get("command_traffic") or 0)
@@ -194,6 +198,7 @@ def build_dispatch_metrics_payload(
         "pool_budget": pool_budget,
         "hotpath": hotpath or {},
         "conversation_scheduler": conversation_scheduler or {},
+        "snapshot_health": snapshot_health or {},
         "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util),
         "matchers_selected_ratio": round(selected / considered, 4) if considered else None,
         "avg_matchers_per_message": round(selected / group_messages, 2) if group_messages else None,
@@ -282,6 +287,39 @@ def merge_conversation_scheduler_snapshots(rows: list[dict[str, Any]]) -> dict[s
     return merged
 
 
+def merge_snapshot_health(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for name, status in row.items():
+            if isinstance(status, dict):
+                grouped.setdefault(str(name), []).append(status)
+
+    merged: dict[str, dict[str, Any]] = {}
+    for name, statuses in grouped.items():
+        ready_workers = sum(1 for status in statuses if status.get("ready") is True)
+        refresh_ages = [
+            float(status["refresh_age_sec"])
+            for status in statuses
+            if isinstance(status.get("refresh_age_sec"), (int, float))
+        ]
+        failure_ages = [
+            float(status["last_failure_age_sec"])
+            for status in statuses
+            if isinstance(status.get("last_failure_age_sec"), (int, float))
+        ]
+        merged[name] = {
+            "ready": ready_workers == len(statuses),
+            "workers": len(statuses),
+            "ready_workers": ready_workers,
+            "refresh_age_sec_max": round(max(refresh_ages), 2) if refresh_ages else None,
+            "refresh_failures": sum(int(status.get("refresh_failures") or 0) for status in statuses),
+            "last_failure_age_sec_min": round(min(failure_ages), 2) if failure_ages else None,
+        }
+    return merged
+
+
 def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return dispatch_metrics_snapshot()
@@ -291,6 +329,7 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     pool_rows: list[dict[str, Any]] = []
     hotpath_rows: list[dict[str, Any]] = []
     scheduler_rows: list[dict[str, Any]] = []
+    snapshot_health_rows: list[dict[str, Any]] = []
     day_key = ""
     for row in rows:
         if not isinstance(row, dict):
@@ -313,6 +352,9 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         scheduler = row.get("conversation_scheduler")
         if isinstance(scheduler, dict):
             scheduler_rows.append(scheduler)
+        snapshot_health = row.get("snapshot_health")
+        if isinstance(snapshot_health, dict):
+            snapshot_health_rows.append(snapshot_health)
     p95_cluster = round(max(p95_values), 2) if p95_values else None
     pool_merged = merge_pool_budget_snapshots(pool_rows)
     pg_util = pool_merged.get("utilization")
@@ -327,4 +369,5 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         pg_util=pg_util if isinstance(pg_util, float) else None,
         hotpath=merge_hotpath_metrics(hotpath_rows),
         conversation_scheduler=merge_conversation_scheduler_snapshots(scheduler_rows),
+        snapshot_health=merge_snapshot_health(snapshot_health_rows),
     )

@@ -243,6 +243,48 @@ async def test_collect_disabled_plugin_names_uses_ready_snapshot_without_db(monk
 
 
 @pytest.mark.asyncio
+async def test_refresh_disabled_plugin_snapshot_keeps_last_success_on_failure(monkeypatch):
+    from packages.help import plugin_manager
+
+    await plugin_manager.reset_disabled_plugin_gate_cache()
+    monkeypatch.setattr(plugin_manager, "_pg_not_ready", lambda: False)
+
+    async def successful_list_all():
+        return [type("Row", (), {"account": 77, "disabled_plugins": ["bot_plugin"]})()]
+
+    async def successful_group_list_all():
+        return [type("Row", (), {"group_id": 5001, "disabled_plugins": ["group_plugin"]})()]
+
+    monkeypatch.setattr(plugin_manager.bot_config_repo, "list_all", successful_list_all)
+    monkeypatch.setattr(plugin_manager.group_config_repo, "list_all", successful_group_list_all)
+    assert await plugin_manager.refresh_disabled_plugin_snapshot() is True
+
+    async def failed_list_all():
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(plugin_manager.bot_config_repo, "list_all", failed_list_all)
+    assert await plugin_manager.refresh_disabled_plugin_snapshot() is False
+
+    status = plugin_manager.disabled_plugin_snapshot_status()
+    assert plugin_manager._disabled_bot_snapshot[77] == frozenset({"bot_plugin"})
+    assert status["ready"] is True
+    assert status["refresh_failures"] == 1
+
+
+@pytest.mark.asyncio
+async def test_plugin_manager_startup_continues_when_snapshot_is_unavailable(monkeypatch):
+    from packages.help import event_preprocessor, plugin_manager
+
+    async def failed_refresh():
+        return False
+
+    monkeypatch.setattr(plugin_manager, "refresh_disabled_plugin_snapshot", failed_refresh)
+    monkeypatch.setattr(plugin_manager, "disabled_plugin_snapshot_ready", lambda: False)
+
+    await event_preprocessor.register_plugin_manager()
+
+
+@pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_does_not_create_empty_bot_config(beanie_fixture):
     from packages.help import plugin_manager
 

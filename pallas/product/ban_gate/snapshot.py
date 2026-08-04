@@ -20,6 +20,8 @@ _global_banned: frozenset[int] = frozenset()
 _group_blocked: dict[int, frozenset[int]] = {}
 _banned_groups: frozenset[int] = frozenset()
 _last_refresh_mono: float = 0.0
+_last_failure_mono: float = 0.0
+_refresh_failures: int = 0
 _ready: bool = False
 _lock = asyncio.Lock()
 _refresh_task: asyncio.Task[None] | None = None
@@ -70,6 +72,19 @@ def schedule_ban_gate_snapshot_refresh() -> None:
 
 def snapshot_ready() -> bool:
     return _ready
+
+
+def ban_gate_snapshot_status() -> dict[str, bool | int | float | None]:
+    now = time.monotonic()
+    refresh_age = round(now - _last_refresh_mono, 2) if _last_refresh_mono else None
+    failure_age = round(now - _last_failure_mono, 2) if _last_failure_mono else None
+    return {
+        "ready": _ready,
+        "refresh_age_sec": refresh_age,
+        "stale": bool(refresh_age is not None and refresh_age > _SNAPSHOT_STALE_SEC),
+        "refresh_failures": _refresh_failures,
+        "last_failure_age_sec": failure_age,
+    }
 
 
 def is_user_globally_banned_fast(user_id: int) -> bool | None:
@@ -134,7 +149,14 @@ async def patch_group_banned(group_id: int, banned: bool) -> None:
 
 
 async def refresh_ban_gate_snapshot() -> None:
-    global _global_banned, _group_blocked, _banned_groups, _last_refresh_mono, _ready
+    global \
+        _global_banned, \
+        _group_blocked, \
+        _banned_groups, \
+        _last_refresh_mono, \
+        _ready, \
+        _last_failure_mono, \
+        _refresh_failures
     backend = get_db_backend()
     try:
         if backend == "mongodb":
@@ -147,6 +169,8 @@ async def refresh_ban_gate_snapshot() -> None:
     except asyncio.CancelledError:
         raise
     except Exception:
+        _refresh_failures += 1
+        _last_failure_mono = time.monotonic()
         logger.exception("ban_gate_snapshot: refresh failed")
         return
 
@@ -252,6 +276,7 @@ async def stop_ban_gate_snapshot() -> None:
 async def reset_ban_gate_snapshot_for_tests() -> None:
     """测试用：清空快照并停止后台任务。"""
     global _global_banned, _group_blocked, _banned_groups, _last_refresh_mono, _ready  # noqa: FURB154
+    global _last_failure_mono, _refresh_failures  # noqa: FURB154
     global _synced_redis_gen, _remote_gen_checked_at  # noqa: FURB154
     await stop_ban_gate_snapshot()
     async with _lock:
@@ -259,6 +284,8 @@ async def reset_ban_gate_snapshot_for_tests() -> None:
         _group_blocked = {}
         _banned_groups = frozenset()
         _last_refresh_mono = 0.0
+        _last_failure_mono = 0.0
+        _refresh_failures = 0
         _ready = False
     _synced_redis_gen = -1
     _remote_gen_checked_at = 0.0
