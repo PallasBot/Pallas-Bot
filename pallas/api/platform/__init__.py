@@ -102,6 +102,7 @@ from pallas.core.platform.shard.coord.bot_count import (
     mark_shard_bot_count_reported_and_claim_completion,
     run_shard_coordinated_bot_count,
     update_shard_bot_count_registration,
+    wait_shard_bot_count_turn,
 )
 
 # ── 分片在线态 ──
@@ -196,6 +197,7 @@ __all__ = [
     "mark_shard_bot_count_reported_and_claim_completion",
     "run_shard_coordinated_bot_count",
     "update_shard_bot_count_registration",
+    "wait_shard_bot_count_turn",
     # 插件子模块
     "import_plugin_submodule",
     # LLM

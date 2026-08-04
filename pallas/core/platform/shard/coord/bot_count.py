@@ -240,6 +240,43 @@ async def get_shard_bot_count_order(
         return None
 
 
+async def wait_shard_bot_count_turn(
+    *,
+    group_id: int,
+    user_id: int,
+    plaintext: str,
+    message_time: int,
+    bot_id: int,
+) -> bool:
+    """等待报数顺序中的前序账号确认，超时后让调用端降级继续。"""
+    claim_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        bot_count_coord_plaintext(plaintext),
+        message_time,
+        use_plaintext=True,
+    )
+    session_key = _session_key(group_id, claim_key)
+    deadline = time.monotonic() + 8.0
+    while time.monotonic() < deadline:
+        data = await asyncio.to_thread(_read_session, session_key)
+        if not data or data.get("cancelled"):
+            return False
+        order = data.get("order")
+        if not isinstance(order, list):
+            return False
+        try:
+            order_ids = [int(item) for item in order]
+            index = order_ids.index(int(bot_id))
+            reported = {int(item) for item in data.get("reported", [])}
+        except (TypeError, ValueError):
+            return False
+        if set(order_ids[:index]) <= reported:
+            return True
+        await asyncio.sleep(_POLL_SEC)
+    return False
+
+
 async def _wait_collect_until(session_key: str) -> None:
     while True:
         data = await asyncio.to_thread(_read_session, session_key)

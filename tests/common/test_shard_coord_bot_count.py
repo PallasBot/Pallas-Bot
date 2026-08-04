@@ -150,6 +150,40 @@ async def test_reads_finalized_order_for_local_dispatch(fake_coord_redis):
     assert order == [200, 100]
 
 
+async def test_turn_is_ready_after_previous_bot_reported(fake_coord_redis):
+    from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
+
+    group_id, user_id, message_time = 10086, 1, 1
+    claim_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        mod.bot_count_coord_plaintext("牛牛报数"),
+        message_time,
+        use_plaintext=True,
+    )
+    path = mod._session_path(group_id, claim_key)
+    mod._ensure_session(
+        path,
+        group_id=group_id,
+        user_id=user_id,
+        message_time=message_time,
+        seed="2026-05-22:10086",
+    )
+    data = mod._read_session(path)
+    assert data is not None
+    data["order"] = [100, 200]
+    data["reported"] = [100]
+    mod._write_session_atomic(path, data)
+
+    assert await mod.wait_shard_bot_count_turn(
+        group_id=group_id,
+        user_id=user_id,
+        plaintext="牛牛报数",
+        message_time=message_time,
+        bot_id=200,
+    )
+
+
 def test_late_shard_extends_collect_window(fake_coord_redis):
     path = mod._session_path(10086, 999002)
     mod._ensure_session(
