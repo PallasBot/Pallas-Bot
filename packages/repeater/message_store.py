@@ -40,6 +40,41 @@ class MessageStore:
     _late_save_time = 0
 
     @staticmethod
+    def build_message(chat_data: "ChatData") -> MessageModel:
+        return MessageModel.model_construct(
+            group_id=chat_data.group_id,
+            user_id=chat_data.user_id,
+            bot_id=chat_data.bot_id,
+            raw_message=chat_data.raw_message,
+            is_plain_text=chat_data.is_plain_text,
+            plain_text=chat_data.plain_text,
+            keywords=chat_data.keywords,
+            time=chat_data.time,
+        )
+
+    @staticmethod
+    async def capture_message(
+        chat_data: "ChatData",
+        topics_callback: Callable[[int, list[str]], Awaitable[None]] | None = None,
+    ) -> MessageModel:
+        """只更新消息进程的近期窗口，持久化由 work aux 处理。"""
+        message = MessageStore.build_message(chat_data)
+        async with MessageStore._message_lock:
+            MessageStore._message_dict[chat_data.group_id].append(message)
+        if chat_data.is_plain_text and topics_callback is not None:
+            await topics_callback(chat_data.group_id, chat_data._keywords_list)
+        if shard_ctx.sharding_active():
+            from pallas.core.platform.shard.coord.repeater_buffer import schedule_publish_repeater_buffer
+
+            schedule_publish_repeater_buffer(chat_data)
+        return message
+
+    @staticmethod
+    async def persist_message(chat_data: "ChatData") -> None:
+        """由 work aux 单独落库，避免占用消息进程的批量缓冲与锁。"""
+        await message_repo.bulk_insert([MessageStore.build_message(chat_data)])
+
+    @staticmethod
     async def message_insert(
         chat_data: "ChatData", topics_callback: Callable[[int, list[str]], Awaitable[None]] | None = None
     ):

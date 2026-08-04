@@ -11,6 +11,7 @@ from .learner_context import group_messages_before
 from .message_store import MessageStore
 from .repeat_teach import is_forced_repeat_teaching
 from .topic_utils import filtered_recent_topics
+from .work_payload import RepeaterLearnPayload, chat_data_to_dict, message_to_dict
 
 if TYPE_CHECKING:
     from .model import ChatData
@@ -62,6 +63,53 @@ class Learner:
 
         mark_group_style_dirty(chat_data.group_id)
         return True
+
+    @staticmethod
+    async def capture_for_work(
+        chat_data: "ChatData",
+        topics_lock: asyncio.Lock,
+        recent_topics: dict[int, deque],
+    ) -> RepeaterLearnPayload | None:
+        """在消息进程保存回复窗口，并冻结 aux 所需的前序上下文。"""
+        if len(chat_data.raw_message.strip()) == 0:
+            return None
+
+        from .responder import Responder
+
+        if chat_data.user_id in Responder._repeat_ignore_user_ids():
+            return None
+
+        from pallas.core.plugin_coord.duel import should_skip_repeater_learn
+
+        if await should_skip_repeater_learn(chat_data.group_id, chat_data.user_id, chat_data.raw_message):
+            return None
+
+        group_msgs = await group_messages_before(chat_data)
+        predecessor = group_msgs[-1] if group_msgs else None
+
+        async def topics_callback(group_id: int, keywords_list: list[str]):
+            async with topics_lock:
+                recent_topics[group_id] += filtered_recent_topics(keywords_list)
+
+        await MessageStore.capture_message(chat_data, topics_callback=topics_callback)
+        return RepeaterLearnPayload(
+            chat=chat_data_to_dict(chat_data),
+            predecessor=message_to_dict(predecessor) if predecessor is not None else None,
+        )
+
+    @staticmethod
+    async def process_work_payload(payload: RepeaterLearnPayload) -> None:
+        """在 work aux 执行持久化学习；不触碰消息进程的本地回复窗口。"""
+        from .model import ChatData
+
+        chat_data = ChatData(**payload.chat)
+        predecessor = MessageModel.model_construct(**payload.predecessor) if payload.predecessor is not None else None
+        if predecessor is not None:
+            await Learner._context_insert(chat_data, predecessor)
+        await MessageStore.persist_message(chat_data)
+        from pallas.product.persona.group_style_refresh import mark_group_style_dirty
+
+        mark_group_style_dirty(chat_data.group_id)
 
     @staticmethod
     async def _context_insert(chat_data: "ChatData", pre_msg: MessageModel | None):

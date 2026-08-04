@@ -10,7 +10,9 @@ from pallas.core.platform.work_jobs.service import run_work_service
 
 def main() -> None:
     apply_repo_settings_to_environ()
-    asyncio.run(run_work_service({}))
+    from packages.repeater.work_handler import repeater_work_handlers
+
+    asyncio.run(run_work_service(repeater_work_handlers()))
 
 
 if __name__ == "__main__":
