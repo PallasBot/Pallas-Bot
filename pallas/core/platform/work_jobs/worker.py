@@ -42,13 +42,13 @@ class WorkJobWorker:
             while tasks:
                 completed_tasks, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
                 completed = [task.result() for task in completed_tasks]
+                completed_jobs = [tasks[task] for task in completed_tasks if task.result()]
                 for task in completed_tasks:
                     tasks.pop(task)
-                job_ids = [job_id for job_id in completed if job_id is not None]
-                if len(job_ids) != len(completed):
+                if len(completed_jobs) != len(completed):
                     refill_slots = False
-                if job_ids:
-                    await self.store.complete_many(job_ids=job_ids, owner=self.owner)
+                if completed_jobs:
+                    await self.store.complete_many(jobs=completed_jobs, owner=self.owner)
                 available_slots = self.batch_size - len(tasks)
                 if refill_slots and available_slots > 0:
                     next_jobs = await self.store.claim_many(
@@ -68,23 +68,48 @@ class WorkJobWorker:
         handler = self.handlers.get(job.kind)
         if handler is None:
             logger.error("work aux: unknown job kind={} id={}", job.kind, job.id)
-            return job.id
-        lease_task = asyncio.create_task(self._renew_lease(job.id), name=f"work_job_lease:{job.id}")
+            await self.store.fail(
+                job_id=job.id, owner=self.owner, lease_id=job.lease_id or "", retry_after_sec=self.retry_after_sec
+            )
+            return None
+        lease_task = asyncio.create_task(self._renew_lease(job), name=f"work_job_lease:{job.id}")
+        handler_task = asyncio.create_task(handler(job.payload), name=f"work_job_handler:{job.id}")
         try:
-            await handler(job.payload)
+            done, _ = await asyncio.wait((handler_task, lease_task), return_when=asyncio.FIRST_COMPLETED)
+            if lease_task in done:
+                handler_task.cancel()
+                await asyncio.gather(handler_task, return_exceptions=True)
+                await self.store.fail(
+                    job_id=job.id,
+                    owner=self.owner,
+                    lease_id=job.lease_id or "",
+                    retry_after_sec=self.retry_after_sec,
+                )
+                return None
+            await handler_task
         except Exception as exc:
             logger.warning("work aux: job failed kind={} id={}: {}", job.kind, job.id, exc)
-            await self.store.fail(job_id=job.id, owner=self.owner, retry_after_sec=self.retry_after_sec)
+            await self.store.fail(
+                job_id=job.id, owner=self.owner, lease_id=job.lease_id or "", retry_after_sec=self.retry_after_sec
+            )
             return None
         finally:
+            if not handler_task.done():
+                handler_task.cancel()
+                await asyncio.gather(handler_task, return_exceptions=True)
             lease_task.cancel()
             await asyncio.gather(lease_task, return_exceptions=True)
         return job.id
 
-    async def _renew_lease(self, job_id: str) -> None:
+    async def _renew_lease(self, job) -> None:
         while True:
             await asyncio.sleep(self.lease_sec / 3)
-            if await self.store.renew(job_id=job_id, owner=self.owner, lease_sec=self.lease_sec):
+            if await self.store.renew(
+                job_id=job.id,
+                owner=self.owner,
+                lease_id=job.lease_id or "",
+                lease_sec=self.lease_sec,
+            ):
                 continue
-            logger.warning("work aux: lease lost id={} owner={}", job_id, self.owner)
+            logger.warning("work aux: lease lost id={} owner={}", job.id, self.owner)
             return

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import time
+import uuid
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .models import WorkJob
@@ -36,7 +37,9 @@ class PostgresWorkJobStore:
                 )
             ).scalar_one()
             await session.commit()
-        return WorkJob(row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts)
+        return WorkJob(
+            row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts, row.lease_id
+        )
 
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]:
         if not jobs:
@@ -66,7 +69,15 @@ class PostgresWorkJobStore:
             by_key = {row.idempotency_key: row for row in rows}
             await session.commit()
         return [
-            WorkJob(row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts)
+            WorkJob(
+                row.id,
+                row.kind,
+                dict(row.payload or {}),
+                row.idempotency_key,
+                row.created_at,
+                row.attempts,
+                row.lease_id,
+            )
             for key in keys
             if (row := by_key.get(key)) is not None
         ]
@@ -92,10 +103,13 @@ class PostgresWorkJobStore:
                 return None
             row.status = "leased"
             row.lease_owner = str(owner)
+            row.lease_id = uuid.uuid4().hex
             row.leased_until = now + max(1.0, float(lease_sec))
             row.attempts += 1
             await session.commit()
-        return WorkJob(row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts)
+        return WorkJob(
+            row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts, row.lease_id
+        )
 
     async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
@@ -122,15 +136,24 @@ class PostgresWorkJobStore:
             for row in rows:
                 row.status = "leased"
                 row.lease_owner = str(owner)
+                row.lease_id = uuid.uuid4().hex
                 row.leased_until = now + max(1.0, float(lease_sec))
                 row.attempts += 1
             await session.commit()
         return [
-            WorkJob(row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts)
+            WorkJob(
+                row.id,
+                row.kind,
+                dict(row.payload or {}),
+                row.idempotency_key,
+                row.created_at,
+                row.attempts,
+                row.lease_id,
+            )
             for row in rows
         ]
 
-    async def renew(self, *, job_id: str, owner: str, lease_sec: float) -> bool:
+    async def renew(self, *, job_id: str, owner: str, lease_id: str, lease_sec: float) -> bool:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
         now = time.time()
@@ -140,6 +163,7 @@ class PostgresWorkJobStore:
                 .where(
                     BackgroundJobRow.id == job_id,
                     BackgroundJobRow.lease_owner == owner,
+                    BackgroundJobRow.lease_id == lease_id,
                     BackgroundJobRow.leased_until > now,
                 )
                 .values(leased_until=now + max(1.0, float(lease_sec)))
@@ -147,11 +171,11 @@ class PostgresWorkJobStore:
             await session.commit()
         return bool(result.rowcount)
 
-    async def complete(self, *, job_id: str, owner: str) -> bool:
-        return await self._release(job_id=job_id, owner=owner, completed=True, retry_after_sec=0)
+    async def complete(self, *, job_id: str, owner: str, lease_id: str) -> bool:
+        return await self._release(job_id=job_id, owner=owner, lease_id=lease_id, completed=True, retry_after_sec=0)
 
-    async def complete_many(self, *, job_ids: list[str], owner: str) -> int:
-        if not job_ids:
+    async def complete_many(self, *, jobs: list[WorkJob], owner: str) -> int:
+        if not jobs:
             return 0
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
@@ -159,22 +183,34 @@ class PostgresWorkJobStore:
         async with get_session() as session:
             result = await session.execute(
                 update(BackgroundJobRow)
-                .where(BackgroundJobRow.id.in_(job_ids), BackgroundJobRow.lease_owner == owner)
-                .values(status="done", lease_owner=None, leased_until=None, finished_at=now, available_at=now)
+                .where(
+                    BackgroundJobRow.lease_owner == owner,
+                    tuple_(BackgroundJobRow.id, BackgroundJobRow.lease_id).in_([
+                        (job.id, job.lease_id) for job in jobs
+                    ]),
+                )
+                .values(
+                    status="done", lease_owner=None, lease_id=None, leased_until=None, finished_at=now, available_at=now
+                )
             )
             await session.commit()
         return int(result.rowcount or 0)
 
-    async def fail(self, *, job_id: str, owner: str, retry_after_sec: float) -> bool:
-        return await self._release(job_id=job_id, owner=owner, completed=False, retry_after_sec=retry_after_sec)
+    async def fail(self, *, job_id: str, owner: str, lease_id: str, retry_after_sec: float) -> bool:
+        return await self._release(
+            job_id=job_id, owner=owner, lease_id=lease_id, completed=False, retry_after_sec=retry_after_sec
+        )
 
-    async def _release(self, *, job_id: str, owner: str, completed: bool, retry_after_sec: float) -> bool:
+    async def _release(
+        self, *, job_id: str, owner: str, lease_id: str, completed: bool, retry_after_sec: float
+    ) -> bool:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
         now = time.time()
         values = {
             "status": "done" if completed else "pending",
             "lease_owner": None,
+            "lease_id": None,
             "leased_until": None,
             "finished_at": now if completed else None,
             "available_at": now + max(0.0, retry_after_sec),
@@ -182,7 +218,11 @@ class PostgresWorkJobStore:
         async with get_session() as session:
             result = await session.execute(
                 update(BackgroundJobRow)
-                .where(BackgroundJobRow.id == job_id, BackgroundJobRow.lease_owner == owner)
+                .where(
+                    BackgroundJobRow.id == job_id,
+                    BackgroundJobRow.lease_owner == owner,
+                    BackgroundJobRow.lease_id == lease_id,
+                )
                 .values(**values)
             )
             await session.commit()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
@@ -20,13 +21,13 @@ class WorkJobStore(Protocol):
 
     async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]: ...
 
-    async def renew(self, *, job_id: str, owner: str, lease_sec: float) -> bool: ...
+    async def renew(self, *, job_id: str, owner: str, lease_id: str, lease_sec: float) -> bool: ...
 
-    async def complete(self, *, job_id: str, owner: str) -> bool: ...
+    async def complete(self, *, job_id: str, owner: str, lease_id: str) -> bool: ...
 
-    async def complete_many(self, *, job_ids: list[str], owner: str) -> int: ...
+    async def complete_many(self, *, jobs: list[WorkJob], owner: str) -> int: ...
 
-    async def fail(self, *, job_id: str, owner: str, retry_after_sec: float) -> bool: ...
+    async def fail(self, *, job_id: str, owner: str, lease_id: str, retry_after_sec: float) -> bool: ...
 
     async def stats(self) -> dict[str, float | int | None]: ...
 
@@ -39,7 +40,7 @@ class MemoryWorkJobStore:
         self._idempotency: dict[str, str] = {}
         self._available_at: dict[str, float] = {}
         self._enqueued_at: dict[str, float] = {}
-        self._leases: dict[str, tuple[str, float]] = {}
+        self._leases: dict[str, tuple[str, float, str]] = {}
         self._completed: set[str] = set()
         self._lock = asyncio.Lock()
 
@@ -68,8 +69,9 @@ class MemoryWorkJobStore:
                     continue
                 claimed = replace(job, attempts=job.attempts + 1)
                 self._jobs[job_id] = claimed
-                self._leases[job_id] = (str(owner), now + max(0.01, float(lease_sec)))
-                return claimed
+                lease_id = uuid.uuid4().hex
+                self._leases[job_id] = (str(owner), now + max(0.01, float(lease_sec)), lease_id)
+                return replace(claimed, lease_id=lease_id)
         return None
 
     async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]:
@@ -86,44 +88,46 @@ class MemoryWorkJobStore:
                     continue
                 item = replace(job, attempts=job.attempts + 1)
                 self._jobs[job_id] = item
-                self._leases[job_id] = (str(owner), now + max(0.01, float(lease_sec)))
-                claimed.append(item)
+                lease_id = uuid.uuid4().hex
+                self._leases[job_id] = (str(owner), now + max(0.01, float(lease_sec)), lease_id)
+                claimed.append(replace(item, lease_id=lease_id))
         return claimed
 
-    async def renew(self, *, job_id: str, owner: str, lease_sec: float) -> bool:
+    async def renew(self, *, job_id: str, owner: str, lease_id: str, lease_sec: float) -> bool:
         now = time.monotonic()
         async with self._lock:
             lease = self._leases.get(job_id)
-            if lease is None or lease[0] != owner or lease[1] <= now:
+            if lease is None or lease[0] != owner or lease[2] != lease_id or lease[1] <= now:
                 return False
-            self._leases[job_id] = (str(owner), now + max(0.01, float(lease_sec)))
+            self._leases[job_id] = (str(owner), now + max(0.01, float(lease_sec)), lease_id)
             return True
 
-    async def complete(self, *, job_id: str, owner: str) -> bool:
+    async def complete(self, *, job_id: str, owner: str, lease_id: str) -> bool:
         async with self._lock:
             lease = self._leases.get(job_id)
-            if lease is None or lease[0] != owner:
+            if lease is None or lease[0] != owner or lease[2] != lease_id:
                 return False
             self._completed.add(job_id)
             self._leases.pop(job_id, None)
             return True
 
-    async def complete_many(self, *, job_ids: list[str], owner: str) -> int:
+    async def complete_many(self, *, jobs: list[WorkJob], owner: str) -> int:
         completed = 0
         async with self._lock:
-            for job_id in job_ids:
+            for job in jobs:
+                job_id = job.id
                 lease = self._leases.get(job_id)
-                if lease is None or lease[0] != owner:
+                if lease is None or lease[0] != owner or lease[2] != job.lease_id:
                     continue
                 self._completed.add(job_id)
                 self._leases.pop(job_id, None)
                 completed += 1
         return completed
 
-    async def fail(self, *, job_id: str, owner: str, retry_after_sec: float) -> bool:
+    async def fail(self, *, job_id: str, owner: str, lease_id: str, retry_after_sec: float) -> bool:
         async with self._lock:
             lease = self._leases.get(job_id)
-            if lease is None or lease[0] != owner:
+            if lease is None or lease[0] != owner or lease[2] != lease_id:
                 return False
             self._leases.pop(job_id, None)
             self._available_at[job_id] = time.monotonic() + max(0.0, float(retry_after_sec))

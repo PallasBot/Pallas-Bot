@@ -42,6 +42,24 @@ async def test_worker_requeues_a_failed_job() -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_requeues_unknown_job_kind() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+    from pallas.core.platform.work_jobs.worker import WorkJobWorker
+
+    store = MemoryWorkJobStore()
+    await store.enqueue(WorkJob.create(kind="new-kind", payload={}, idempotency_key="test:unknown"))
+
+    worker = WorkJobWorker(store=store, owner="old-worker", handlers={}, retry_after_sec=0)
+
+    assert await worker.run_once() is True
+    reclaimed = await store.claim(owner="new-worker", lease_sec=1)
+    assert reclaimed is not None
+    assert reclaimed.kind == "new-kind"
+    assert reclaimed.attempts == 2
+
+
+@pytest.mark.asyncio
 async def test_worker_renews_lease_while_handler_is_running() -> None:
     from pallas.core.platform.work_jobs.models import WorkJob
     from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
@@ -59,6 +77,31 @@ async def test_worker_renews_lease_while_handler_is_running() -> None:
 
     assert await worker.run_once() is True
     assert claimed_by_other == [None]
+
+
+@pytest.mark.asyncio
+async def test_worker_cancels_handler_after_losing_its_lease(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+    from pallas.core.platform.work_jobs.worker import WorkJobWorker
+
+    store = MemoryWorkJobStore()
+    await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:lost-lease"))
+    monkeypatch.setattr(store, "renew", lambda **_kwargs: asyncio.sleep(0, result=False))
+    cancelled = asyncio.Event()
+
+    async def handler(_payload: dict) -> None:
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+
+    worker = WorkJobWorker(store=store, owner="worker", handlers={"test": handler}, lease_sec=1, retry_after_sec=0)
+
+    assert await worker.run_once() is True
+    assert cancelled.is_set()
+    assert await store.claim(owner="replacement", lease_sec=1) is not None
 
 
 @pytest.mark.asyncio

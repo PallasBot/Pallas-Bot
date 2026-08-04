@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 
 from pymongo import ReturnDocument
 
@@ -17,6 +18,7 @@ def work_job_from_mongo(row) -> WorkJob:
         idempotency_key=str(row.idempotency_key),
         created_at=float(row.created_at),
         attempts=int(row.attempts),
+        lease_id=getattr(row, "lease_id", None),
     )
 
 
@@ -58,7 +60,12 @@ class MongoWorkJobStore:
                 "$or": [{"status": "pending"}, {"leased_until": {"$lt": now}}],
             },
             {
-                "$set": {"status": "leased", "lease_owner": str(owner), "leased_until": now + max(1.0, lease_sec)},
+                "$set": {
+                    "status": "leased",
+                    "lease_owner": str(owner),
+                    "lease_id": uuid.uuid4().hex,
+                    "leased_until": now + max(1.0, lease_sec),
+                },
                 "$inc": {"attempts": 1},
             },
             sort=[("created_at", 1)],
@@ -75,31 +82,32 @@ class MongoWorkJobStore:
             jobs.append(job)
         return jobs
 
-    async def renew(self, *, job_id: str, owner: str, lease_sec: float) -> bool:
+    async def renew(self, *, job_id: str, owner: str, lease_id: str, lease_sec: float) -> bool:
         from pallas.core.foundation.db.modules import BackgroundJob
 
         now = time.time()
         result = await BackgroundJob.get_pymongo_collection().update_one(
-            {"job_id": job_id, "lease_owner": owner, "leased_until": {"$gt": now}},
+            {"job_id": job_id, "lease_owner": owner, "lease_id": lease_id, "leased_until": {"$gt": now}},
             {"$set": {"leased_until": now + max(1.0, float(lease_sec))}},
         )
         return bool(result.modified_count)
 
-    async def complete(self, *, job_id: str, owner: str) -> bool:
-        return await self._release(job_id=job_id, owner=owner, completed=True, retry_after_sec=0)
+    async def complete(self, *, job_id: str, owner: str, lease_id: str) -> bool:
+        return await self._release(job_id=job_id, owner=owner, lease_id=lease_id, completed=True, retry_after_sec=0)
 
-    async def complete_many(self, *, job_ids: list[str], owner: str) -> int:
-        if not job_ids:
+    async def complete_many(self, *, jobs: list[WorkJob], owner: str) -> int:
+        if not jobs:
             return 0
         from pallas.core.foundation.db.modules import BackgroundJob
 
         now = time.time()
         result = await BackgroundJob.get_pymongo_collection().update_many(
-            {"job_id": {"$in": job_ids}, "lease_owner": owner},
+            {"$or": [{"job_id": job.id, "lease_owner": owner, "lease_id": job.lease_id} for job in jobs]},
             {
                 "$set": {
                     "status": "done",
                     "lease_owner": None,
+                    "lease_id": None,
                     "leased_until": None,
                     "finished_at": now,
                     "available_at": now,
@@ -108,19 +116,24 @@ class MongoWorkJobStore:
         )
         return int(result.modified_count)
 
-    async def fail(self, *, job_id: str, owner: str, retry_after_sec: float) -> bool:
-        return await self._release(job_id=job_id, owner=owner, completed=False, retry_after_sec=retry_after_sec)
+    async def fail(self, *, job_id: str, owner: str, lease_id: str, retry_after_sec: float) -> bool:
+        return await self._release(
+            job_id=job_id, owner=owner, lease_id=lease_id, completed=False, retry_after_sec=retry_after_sec
+        )
 
-    async def _release(self, *, job_id: str, owner: str, completed: bool, retry_after_sec: float) -> bool:
+    async def _release(
+        self, *, job_id: str, owner: str, lease_id: str, completed: bool, retry_after_sec: float
+    ) -> bool:
         from pallas.core.foundation.db.modules import BackgroundJob
 
         now = time.time()
         result = await BackgroundJob.get_pymongo_collection().update_one(
-            {"job_id": job_id, "lease_owner": owner},
+            {"job_id": job_id, "lease_owner": owner, "lease_id": lease_id},
             {
                 "$set": {
                     "status": "done" if completed else "pending",
                     "lease_owner": None,
+                    "lease_id": None,
                     "leased_until": None,
                     "finished_at": now if completed else None,
                     "available_at": now + max(0.0, retry_after_sec),

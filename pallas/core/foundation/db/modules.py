@@ -99,6 +99,7 @@ class BackgroundJob(Document):
     available_at: float = Field(default_factory=time.time)
     leased_until: float | None = Field(default=None)
     lease_owner: str | None = Field(default=None)
+    lease_id: str | None = Field(default=None)
     created_at: float = Field(default_factory=time.time)
     finished_at: float | None = Field(default=None)
 

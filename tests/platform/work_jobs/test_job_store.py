@@ -94,5 +94,23 @@ async def test_memory_store_complete_many_releases_a_claimed_batch() -> None:
     await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:complete:2"))
     claimed = await store.claim_many(owner="worker", lease_sec=1, limit=2)
 
-    assert await store.complete_many(job_ids=[job.id for job in claimed], owner="worker") == 2
+    assert await store.complete_many(jobs=claimed, owner="worker") == 2
     assert await store.claim_many(owner="other", lease_sec=1, limit=2) == []
+
+
+@pytest.mark.asyncio
+async def test_memory_store_does_not_complete_a_reclaimed_lease() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+
+    store = MemoryWorkJobStore()
+    await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:fence"))
+    first = await store.claim(owner="worker-a", lease_sec=0.01)
+    assert first is not None
+
+    await asyncio.sleep(0.02)
+    second = await store.claim(owner="worker-b", lease_sec=1)
+    assert second is not None
+
+    assert await store.complete_many(jobs=[first], owner="worker-a") == 0
+    assert await store.complete_many(jobs=[second], owner="worker-b") == 1
