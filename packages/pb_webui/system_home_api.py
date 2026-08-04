@@ -369,13 +369,12 @@ def _runtime_metrics() -> dict[str, Any]:
     try:
         import psutil  # type: ignore
 
-        psutil.cpu_percent(interval=None, percpu=True)
-        percpu = psutil.cpu_percent(interval=0.0, percpu=True)
+        percpu = psutil.cpu_percent(interval=None, percpu=True)
         if isinstance(percpu, (list, tuple)) and len(percpu) > 0:
             cpu_per_core = [round(float(min(100.0, max(0.0, float(x)))), 2) for x in percpu]
             cpu_percent = round(sum(cpu_per_core) / len(cpu_per_core), 2)
         else:
-            cpu_percent = float(psutil.cpu_percent(interval=0.0))
+            cpu_percent = float(psutil.cpu_percent(interval=None))
         vm = psutil.virtual_memory()
         mem = {
             "total": int(getattr(vm, "total", 0) or 0),
