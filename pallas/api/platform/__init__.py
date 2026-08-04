@@ -98,6 +98,7 @@ from pallas.core.platform.shard.coord.bot_action import (
 )
 from pallas.core.platform.shard.coord.bot_count import (
     STAGGER_SEC,
+    get_shard_bot_count_order,
     mark_shard_bot_count_reported_and_claim_completion,
     run_shard_coordinated_bot_count,
     update_shard_bot_count_registration,
@@ -191,6 +192,7 @@ __all__ = [
     "send_private_msg_as_bot",
     "set_group_card_as_bot",
     "STAGGER_SEC",
+    "get_shard_bot_count_order",
     "mark_shard_bot_count_reported_and_claim_completion",
     "run_shard_coordinated_bot_count",
     "update_shard_bot_count_registration",

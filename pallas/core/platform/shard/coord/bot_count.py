@@ -213,6 +213,33 @@ async def mark_shard_bot_count_reported_and_claim_completion(
     return await asyncio.to_thread(_mark_bot_count_reported_and_claim_completion, session_key, bot_id)
 
 
+async def get_shard_bot_count_order(
+    *,
+    group_id: int,
+    user_id: int,
+    plaintext: str,
+    message_time: int,
+) -> list[int] | None:
+    """读取已完成协调的报数顺序，供本机代理逐号发送。"""
+    claim_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        bot_count_coord_plaintext(plaintext),
+        message_time,
+        use_plaintext=True,
+    )
+    data = await asyncio.to_thread(_read_session, _session_key(group_id, claim_key))
+    if not data or data.get("cancelled"):
+        return None
+    order = data.get("order")
+    if not isinstance(order, list) or not order:
+        return None
+    try:
+        return [int(bot_id) for bot_id in order]
+    except (TypeError, ValueError):
+        return None
+
+
 async def _wait_collect_until(session_key: str) -> None:
     while True:
         data = await asyncio.to_thread(_read_session, session_key)

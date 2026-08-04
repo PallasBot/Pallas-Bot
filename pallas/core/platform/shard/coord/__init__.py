@@ -1,6 +1,7 @@
 """分片跨 worker 协调。"""
 
 from pallas.core.platform.shard.coord.bot_count import (
+    get_shard_bot_count_order,
     is_shard_bot_count_command_plaintext,
     mark_shard_bot_count_reported_and_claim_completion,
     run_shard_coordinated_bot_count,
@@ -14,6 +15,7 @@ from pallas.core.platform.shard.coord.duel_qte import (
 from pallas.core.platform.shard.coord.worker_poll import start_duel_qte_coord_watcher
 
 __all__ = [
+    "get_shard_bot_count_order",
     "is_shard_bot_count_command_plaintext",
     "mark_shard_bot_count_reported_and_claim_completion",
     "run_shard_coordinated_bot_count",

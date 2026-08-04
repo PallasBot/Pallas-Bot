@@ -116,6 +116,40 @@ def test_completion_claims_once_after_report_window(fake_coord_redis):
     assert data["completion_claimed_by"] == 100
 
 
+async def test_reads_finalized_order_for_local_dispatch(fake_coord_redis):
+    from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
+
+    group_id, user_id, message_time = 10086, 1, 1
+    claim_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        mod.bot_count_coord_plaintext("牛牛报数"),
+        message_time,
+        use_plaintext=True,
+    )
+    path = mod._session_path(group_id, claim_key)
+    mod._ensure_session(
+        path,
+        group_id=group_id,
+        user_id=user_id,
+        message_time=message_time,
+        seed="2026-05-22:10086",
+    )
+    data = mod._read_session(path)
+    assert data is not None
+    data["order"] = [200, 100]
+    mod._write_session_atomic(path, data)
+
+    order = await mod.get_shard_bot_count_order(
+        group_id=group_id,
+        user_id=user_id,
+        plaintext="牛牛报数",
+        message_time=message_time,
+    )
+
+    assert order == [200, 100]
+
+
 def test_late_shard_extends_collect_window(fake_coord_redis):
     path = mod._session_path(10086, 999002)
     mod._ensure_session(
