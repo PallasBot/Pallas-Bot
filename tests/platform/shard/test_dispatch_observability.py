@@ -38,7 +38,7 @@ def test_merge_dispatch_metrics_sums_counters() -> None:
     assert merged["send_queue"]["depth_live"] == 3
     assert merged["send_queue"]["sent"] == 8
     assert merged["pool_budget"]["utilization"] == 0.8
-    assert "ingress_p95_over_100ms" in merged["alerts"]
+    assert merged["alerts"] == []
 
 
 def test_aggregate_ingress_dispatch_unified(monkeypatch) -> None:

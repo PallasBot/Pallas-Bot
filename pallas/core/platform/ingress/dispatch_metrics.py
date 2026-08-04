@@ -137,8 +137,11 @@ def lane_wait_avg_ms() -> float | None:
 
 def dispatch_alerts(*, p95_ms: float | None, pg_util: float | None) -> list[str]:
     alerts: list[str] = []
-    if p95_ms is not None and p95_ms > 100.0:
-        alerts.append("ingress_p95_over_100ms")
+    if p95_ms is not None:
+        if p95_ms > 5_000.0:
+            alerts.append("ingress_p95_over_5000ms")
+        elif p95_ms > 1_000.0:
+            alerts.append("ingress_p95_over_1000ms")
     if pg_util is not None and pg_util >= 0.85:
         alerts.append("pg_pool_over_85pct")
     return alerts

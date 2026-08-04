@@ -47,9 +47,11 @@ def test_chatter_overload_degraded_counter() -> None:
 
 
 def test_dispatch_alerts() -> None:
-    alerts = dispatch_metrics.dispatch_alerts(p95_ms=150.0, pg_util=0.9)
-    assert "ingress_p95_over_100ms" in alerts
-    assert "pg_pool_over_85pct" in alerts
+    assert dispatch_metrics.dispatch_alerts(p95_ms=1_000.0, pg_util=None) == []
+    assert dispatch_metrics.dispatch_alerts(p95_ms=1_001.0, pg_util=None) == ["ingress_p95_over_1000ms"]
+    assert dispatch_metrics.dispatch_alerts(p95_ms=5_000.0, pg_util=None) == ["ingress_p95_over_1000ms"]
+    assert dispatch_metrics.dispatch_alerts(p95_ms=5_001.0, pg_util=None) == ["ingress_p95_over_5000ms"]
+    assert "pg_pool_over_85pct" in dispatch_metrics.dispatch_alerts(p95_ms=None, pg_util=0.9)
 
 
 def test_dispatch_metrics_include_conversation_scheduler(monkeypatch) -> None:
