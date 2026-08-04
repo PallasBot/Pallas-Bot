@@ -154,19 +154,63 @@ def _try_finalize_order(session_key: str, self_bot_id: int) -> dict[str, Any] | 
             return
         existing = data.get("order")
         if isinstance(existing, list) and existing:
-            try:
-                order_ids = {int(x) for x in existing}
-            except (TypeError, ValueError):
-                order_ids = set()
-            if order_ids == set(registered):
-                return
+            return
         order = list(registered)
         seed = str(data.get("seed") or "")
         random.Random(seed).shuffle(order)
         data["order"] = order
+        data["report_until"] = time.time() + (len(order) - 1) * STAGGER_SEC + 0.8
         data["finalized_by"] = self_bot_id
 
     return _mutate_session(session_key, finalize)
+
+
+def _mark_bot_count_reported_and_claim_completion(session_key: str, bot_id: int) -> bool:
+    claimed = False
+
+    def mark_reported(data: dict[str, Any]) -> None:
+        nonlocal claimed
+        order = data.get("order")
+        if not isinstance(order, list) or not order:
+            return
+        try:
+            order_ids = {int(x) for x in order}
+        except (TypeError, ValueError):
+            return
+        if bot_id not in order_ids:
+            return
+        reported = {int(x) for x in data.get("reported", [])}
+        reported.add(bot_id)
+        data["reported"] = sorted(reported)
+        if data.get("completion_claimed_by") is not None:
+            return
+        report_until = float(data.get("report_until") or 0)
+        if order_ids <= reported or time.time() >= report_until:
+            data["completion_claimed_by"] = bot_id
+            claimed = True
+
+    _mutate_session(session_key, mark_reported)
+    return claimed
+
+
+async def mark_shard_bot_count_reported_and_claim_completion(
+    *,
+    group_id: int,
+    user_id: int,
+    plaintext: str,
+    message_time: int,
+    bot_id: int,
+) -> bool:
+    """登记成功报数，并由首个完成者负责发送收尾提示。"""
+    claim_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        bot_count_coord_plaintext(plaintext),
+        message_time,
+        use_plaintext=True,
+    )
+    session_key = _session_key(group_id, claim_key)
+    return await asyncio.to_thread(_mark_bot_count_reported_and_claim_completion, session_key, bot_id)
 
 
 async def _wait_collect_until(session_key: str) -> None:
@@ -215,10 +259,6 @@ async def _wait_registration_stable(session_key: str, *, deadline: float) -> Non
         await asyncio.sleep(_POLL_SEC)
 
 
-def _order_matches_registration(order: list[int], registered: list[int]) -> bool:
-    return set(order) == set(registered)
-
-
 async def _wait_for_order(session_key: str, *, deadline: float, self_bot_id: int) -> list[int] | None:
     end = deadline
     while time.time() < end:
@@ -232,23 +272,16 @@ async def _wait_for_order(session_key: str, *, deadline: float, self_bot_id: int
         registered = _all_registered_bots(data)
         if registered and time.time() >= float(data.get("collect_until") or 0) and min(registered) == self_bot_id:
             order = data.get("order")
-            stale = not isinstance(order, list) or not order
-            if not stale:
-                try:
-                    stale = not _order_matches_registration([int(x) for x in order], registered)
-                except (TypeError, ValueError):
-                    stale = True
-            if stale:
+            if not isinstance(order, list) or not order:
                 await asyncio.to_thread(_try_finalize_order, session_key, self_bot_id)
                 data = await asyncio.to_thread(_read_session, session_key) or data
-                registered = _all_registered_bots(data)
         order = data.get("order")
         if isinstance(order, list) and order:
             try:
                 out = [int(x) for x in order]
             except (TypeError, ValueError):
                 out = []
-            if out and _order_matches_registration(out, registered) and self_bot_id in out:
+            if self_bot_id in out:
                 return out
         if time.time() >= float(data.get("collect_until") or 0) and not registered:
             break
@@ -256,14 +289,13 @@ async def _wait_for_order(session_key: str, *, deadline: float, self_bot_id: int
     data = await asyncio.to_thread(_read_session, session_key)
     if not data or data.get("cancelled"):
         return None
-    registered = _all_registered_bots(data)
     order = data.get("order")
     if isinstance(order, list) and order:
         try:
             out = [int(x) for x in order]
         except (TypeError, ValueError):
             return None
-        if out and _order_matches_registration(out, registered) and self_bot_id in out:
+        if self_bot_id in out:
             return out
     return None
 

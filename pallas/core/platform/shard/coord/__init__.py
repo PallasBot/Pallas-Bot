@@ -2,6 +2,7 @@
 
 from pallas.core.platform.shard.coord.bot_count import (
     is_shard_bot_count_command_plaintext,
+    mark_shard_bot_count_reported_and_claim_completion,
     run_shard_coordinated_bot_count,
     update_shard_bot_count_registration,
 )
@@ -14,6 +15,7 @@ from pallas.core.platform.shard.coord.worker_poll import start_duel_qte_coord_wa
 
 __all__ = [
     "is_shard_bot_count_command_plaintext",
+    "mark_shard_bot_count_reported_and_claim_completion",
     "run_shard_coordinated_bot_count",
     "update_shard_bot_count_registration",
     "publish_single_qte_request",
