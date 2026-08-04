@@ -59,3 +59,33 @@ async def test_worker_renews_lease_while_handler_is_running() -> None:
 
     assert await worker.run_once() is True
     assert claimed_by_other == [None]
+
+
+@pytest.mark.asyncio
+async def test_worker_runs_claimed_batch_concurrently_and_acknowledges_it() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+    from pallas.core.platform.work_jobs.worker import WorkJobWorker
+
+    store = MemoryWorkJobStore()
+    await store.enqueue(WorkJob.create(kind="test", payload={"id": 1}, idempotency_key="test:batch-worker:1"))
+    await store.enqueue(WorkJob.create(kind="test", payload={"id": 2}, idempotency_key="test:batch-worker:2"))
+    release = asyncio.Event()
+    started = 0
+
+    async def handler(_payload: dict) -> None:
+        nonlocal started
+        started += 1
+        await release.wait()
+
+    worker = WorkJobWorker(store=store, owner="test-worker", handlers={"test": handler}, batch_size=2)
+    task = asyncio.create_task(worker.run_once())
+    for _ in range(20):
+        if started == 2:
+            break
+        await asyncio.sleep(0.01)
+    release.set()
+
+    assert await task is True
+    assert started == 2
+    assert await store.claim_many(owner="other", lease_sec=1, limit=2) == []

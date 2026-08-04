@@ -18,6 +18,14 @@ def test_work_aux_concurrency_uses_configured_value_with_pg_budget(monkeypatch: 
     assert service.work_aux_concurrency() == 3
 
 
+def test_work_aux_batch_sizes_preserve_total_concurrency() -> None:
+    from pallas.core.platform.work_jobs import service
+
+    assert service.work_aux_batch_sizes(3) == [3]
+    assert service.work_aux_batch_sizes(4) == [4]
+    assert service.work_aux_batch_sizes(5) == [3, 2]
+
+
 @pytest.mark.asyncio
 async def test_work_service_initializes_database_before_building_store(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.core.platform.work_jobs import service

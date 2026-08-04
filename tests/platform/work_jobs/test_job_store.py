@@ -66,3 +66,33 @@ async def test_memory_store_stats_reports_pending_leased_age_and_attempts(monkey
         "oldest_pending_age_sec": None,
         "max_attempts": 1,
     }
+
+
+@pytest.mark.asyncio
+async def test_memory_store_claim_many_leases_oldest_jobs_in_one_call() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+
+    store = MemoryWorkJobStore()
+    first = await store.enqueue(WorkJob.create(kind="test", payload={"id": 1}, idempotency_key="test:claim:1"))
+    second = await store.enqueue(WorkJob.create(kind="test", payload={"id": 2}, idempotency_key="test:claim:2"))
+    await store.enqueue(WorkJob.create(kind="test", payload={"id": 3}, idempotency_key="test:claim:3"))
+
+    claimed = await store.claim_many(owner="worker", lease_sec=1, limit=2)
+
+    assert [job.id for job in claimed] == [first.id, second.id]
+    assert [job.attempts for job in claimed] == [1, 1]
+
+
+@pytest.mark.asyncio
+async def test_memory_store_complete_many_releases_a_claimed_batch() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+
+    store = MemoryWorkJobStore()
+    await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:complete:1"))
+    await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:complete:2"))
+    claimed = await store.claim_many(owner="worker", lease_sec=1, limit=2)
+
+    assert await store.complete_many(job_ids=[job.id for job in claimed], owner="worker") == 2
+    assert await store.claim_many(owner="other", lease_sec=1, limit=2) == []

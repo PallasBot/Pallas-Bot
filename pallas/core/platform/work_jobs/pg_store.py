@@ -97,6 +97,39 @@ class PostgresWorkJobStore:
             await session.commit()
         return WorkJob(row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts)
 
+    async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]:
+        from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
+
+        now = time.time()
+        async with get_session() as session:
+            rows = (
+                (
+                    await session.execute(
+                        select(BackgroundJobRow)
+                        .where(
+                            BackgroundJobRow.finished_at.is_(None),
+                            BackgroundJobRow.available_at <= now,
+                            or_(BackgroundJobRow.status == "pending", BackgroundJobRow.leased_until < now),
+                        )
+                        .order_by(BackgroundJobRow.created_at)
+                        .with_for_update(skip_locked=True)
+                        .limit(max(1, int(limit)))
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            for row in rows:
+                row.status = "leased"
+                row.lease_owner = str(owner)
+                row.leased_until = now + max(1.0, float(lease_sec))
+                row.attempts += 1
+            await session.commit()
+        return [
+            WorkJob(row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts)
+            for row in rows
+        ]
+
     async def renew(self, *, job_id: str, owner: str, lease_sec: float) -> bool:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
@@ -116,6 +149,21 @@ class PostgresWorkJobStore:
 
     async def complete(self, *, job_id: str, owner: str) -> bool:
         return await self._release(job_id=job_id, owner=owner, completed=True, retry_after_sec=0)
+
+    async def complete_many(self, *, job_ids: list[str], owner: str) -> int:
+        if not job_ids:
+            return 0
+        from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
+
+        now = time.time()
+        async with get_session() as session:
+            result = await session.execute(
+                update(BackgroundJobRow)
+                .where(BackgroundJobRow.id.in_(job_ids), BackgroundJobRow.lease_owner == owner)
+                .values(status="done", lease_owner=None, leased_until=None, finished_at=now, available_at=now)
+            )
+            await session.commit()
+        return int(result.rowcount or 0)
 
     async def fail(self, *, job_id: str, owner: str, retry_after_sec: float) -> bool:
         return await self._release(job_id=job_id, owner=owner, completed=False, retry_after_sec=retry_after_sec)

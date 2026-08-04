@@ -66,6 +66,15 @@ class MongoWorkJobStore:
         )
         return work_job_from_mongo(BackgroundJob.model_validate(raw)) if raw else None
 
+    async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]:
+        jobs: list[WorkJob] = []
+        for _ in range(max(1, int(limit))):
+            job = await self.claim(owner=owner, lease_sec=lease_sec)
+            if job is None:
+                break
+            jobs.append(job)
+        return jobs
+
     async def renew(self, *, job_id: str, owner: str, lease_sec: float) -> bool:
         from pallas.core.foundation.db.modules import BackgroundJob
 
@@ -78,6 +87,26 @@ class MongoWorkJobStore:
 
     async def complete(self, *, job_id: str, owner: str) -> bool:
         return await self._release(job_id=job_id, owner=owner, completed=True, retry_after_sec=0)
+
+    async def complete_many(self, *, job_ids: list[str], owner: str) -> int:
+        if not job_ids:
+            return 0
+        from pallas.core.foundation.db.modules import BackgroundJob
+
+        now = time.time()
+        result = await BackgroundJob.get_pymongo_collection().update_many(
+            {"job_id": {"$in": job_ids}, "lease_owner": owner},
+            {
+                "$set": {
+                    "status": "done",
+                    "lease_owner": None,
+                    "leased_until": None,
+                    "finished_at": now,
+                    "available_at": now,
+                }
+            },
+        )
+        return int(result.modified_count)
 
     async def fail(self, *, job_id: str, owner: str, retry_after_sec: float) -> bool:
         return await self._release(job_id=job_id, owner=owner, completed=False, retry_after_sec=retry_after_sec)

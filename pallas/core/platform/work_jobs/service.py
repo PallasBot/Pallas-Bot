@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import socket
 from typing import TYPE_CHECKING
@@ -26,6 +27,13 @@ def work_aux_concurrency() -> int:
     except ValueError:
         requested = 4
     return cap_by_pg_pool(max(1, min(32, requested)), workload_fraction=0.15)
+
+
+def work_aux_batch_sizes(concurrency: int) -> list[int]:
+    total = max(1, int(concurrency))
+    workers = math.ceil(total / 4)
+    base, extra = divmod(total, workers)
+    return [base + (1 if index < extra else 0) for index in range(workers)]
 
 
 async def run_work_consumer(worker: WorkJobWorker) -> None:
@@ -52,8 +60,10 @@ async def run_work_service(handlers: dict[str, WorkJobHandler]) -> None:
     store = build_work_job_store()
     concurrency = work_aux_concurrency()
     owner_prefix = f"{socket.gethostname()}:{os.getpid()}"
+    batch_sizes = work_aux_batch_sizes(concurrency)
     workers = [
-        WorkJobWorker(store=store, owner=f"{owner_prefix}:{index}", handlers=handlers) for index in range(concurrency)
+        WorkJobWorker(store=store, owner=f"{owner_prefix}:{index}", handlers=handlers, batch_size=batch_size)
+        for index, batch_size in enumerate(batch_sizes)
     ]
     logger.info("work aux started handlers={} consumers={}", sorted(handlers), concurrency)
     await asyncio.gather(
