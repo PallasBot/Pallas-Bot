@@ -56,12 +56,15 @@ async def choose_sticker_with_vision(
         return None
     import base64
 
+    from pallas.product.llm.task_metrics import record_bot_llm_task
+
     content = openai_vision_user_content(
         f"根据当前群聊选择最贴切的一张表情图。当前消息：{str(user_text or '')[:200]}。"
         '只输出 JSON：{"index":1}；不合适则 {"index":0}。',
         [f"data:image/jpeg;base64,{base64.b64encode(data).decode('ascii')}" for _key, data in candidates],
     )
     try:
+        record_bot_llm_task("sticker_vision", "submit_ok")
         result = await asyncio.wait_for(
             complete_chat_message(
                 [
@@ -79,7 +82,9 @@ async def choose_sticker_with_vision(
             timeout=max(1.0, float(timeout_sec)),
         )
     except (LlmProviderError, TimeoutError):
+        record_bot_llm_task("sticker_vision", "callback_fail")
         return None
+    record_bot_llm_task("sticker_vision", "callback_ok")
     index = parse_sticker_vision_choice(str(result.get("content") or ""), candidate_count=len(candidates))
     return candidates[index][0] if index is not None else None
 
