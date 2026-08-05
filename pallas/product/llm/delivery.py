@@ -24,7 +24,66 @@ from pallas.product.llm.behavior_store import append_behavior_run
 from pallas.product.llm.config import get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_write_runtime_state_summary
 from pallas.product.llm.session_store import append_llm_message, compact_user_llm_history_with_summary
+from pallas.product.llm.sticker_followup import should_attach_repeater_image
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
+
+
+async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user_id: int, user_text: str) -> bool:
+    """从 Repeater 命中中取一张图片，作为 LLM 回复的第二气泡。"""
+    from nonebot.adapters.onebot.v11 import Message, MessageSegment
+
+    from packages.repeater.model import Chat, ChatData
+    from pallas.core.shared.utils.media_cache import get_image
+
+    chat = Chat(
+        ChatData(
+            group_id=int(group_id),
+            user_id=int(user_id),
+            raw_message=str(user_text or ""),
+            plain_text=str(user_text or ""),
+            time=int(time.time()),
+            bot_id=int(bot_id),
+        )
+    )
+    bundle = await chat.find_reply_bundle()
+    if bundle is None:
+        return False
+    raw_image = next((item for item in bundle.answer_list if "[CQ:image," in item), "")
+    if not raw_image:
+        return False
+    message = Message()
+    for segment in Message(raw_image):
+        if segment.type != "image":
+            message += segment
+            continue
+        cached = await get_image(str(segment))
+        if not cached:
+            return False
+        message += MessageSegment.image(file=cached)
+    try:
+        await bot.call_api("send_group_msg", message=message, group_id=int(group_id))
+    except Exception as e:
+        logger.info("LLM emotion followup image skipped group={}: {}", group_id, e)
+        return False
+    return True
+
+
+async def send_cached_sticker_image(bot: Any, group_id: int) -> bool:
+    """发送一张本地已缓存的图片，用于验证协议发送链路。"""
+    from nonebot.adapters.onebot.v11 import MessageSegment
+
+    from pallas.core.shared.utils.media_cache import get_latest_image
+
+    cached = await get_latest_image()
+    if not cached:
+        return False
+    try:
+        await bot.call_api("send_group_msg", message=MessageSegment.image(file=cached), group_id=int(group_id))
+    except Exception as e:
+        logger.info("LLM cached sticker test skipped group={}: {}", group_id, e)
+        return False
+    return True
+
 
 _TRACKED_LLM_TASKS = frozenset({
     LLM_CHAT_TASK_TYPE,
@@ -292,6 +351,15 @@ async def deliver_llm_callback_success(
                 note_llm_reply_mention_sent(group_id)
             text_delivered = bool(ok) and text_delivered
         delivered = text_delivered and delivered
+        if text_delivered and task_type == LLM_CHAT_TASK_TYPE and bool(cfg.llm_chat_sticker_enabled):
+            if should_attach_repeater_image(task, reply_text, str(text or "")):
+                await send_repeater_emotion_image(
+                    bot,
+                    int(group_id),
+                    int(bot_id),
+                    int(task.get("user_id") or 0),
+                    str(task.get("user_text") or ""),
+                )
     if should_append_llm_session(task) and learned_reply_text:
         raw_group_id = task.get("group_id")
         scope_group = int(raw_group_id) if raw_group_id is not None else None

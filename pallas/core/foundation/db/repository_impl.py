@@ -299,6 +299,12 @@ class MongoImageCacheRepository:
     async def find_by_cq_code(self, cq_code: str) -> ImageCache | None:
         return await ImageCache.find_one(ImageCache.cq_code == cq_code)
 
+    async def find_latest_with_blob(self) -> ImageCache | None:
+        cache = await ImageCache.find({"blob_data": {"$nin": [None, b""]}}).sort("-date", "-id").first_or_none()
+        if cache and cache.blob_data:
+            cache.blob_data = bytes(cache.blob_data)
+        return cache
+
     async def insert(self, cache: ImageCache) -> None:
         await cache.insert()
 

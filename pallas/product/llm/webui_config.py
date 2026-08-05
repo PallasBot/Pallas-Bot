@@ -741,6 +741,14 @@ class LlmWebuiConfig(BaseModel):
             "默认关闭；开启后按反馈降级，不影响主聊天延迟太多",
         ),
     )
+    llm_chat_sticker_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "LLM 对话按需发送 Repeater 表情图",
+            "模型明确选择配图时，从 Repeater 已学习的同群或跨群候选中取图；没有可用缓存时只发文字",
+            "默认开启；不影响 QQ 气泡 Reaction",
+        ),
+    )
     llm_reply_effect_eval_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -1059,6 +1067,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_reply_split_enabled=cfg.llm_reply_split_enabled,
         llm_reply_split_max_chars=cfg.llm_reply_split_max_chars,
         llm_sticker_fit_enabled=cfg.llm_sticker_fit_enabled,
+        llm_chat_sticker_enabled=cfg.llm_chat_sticker_enabled,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,

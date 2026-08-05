@@ -28,6 +28,7 @@ class StructuredReply:
     intent: str = ""
     reasoning: str = ""
     mem: str = ""
+    sticker: str = "none"
     from_json: bool = False
 
 
@@ -80,11 +81,15 @@ def parse_structured_reply(raw: str) -> StructuredReply:
         mem = str(mem_raw).strip() if mem_raw is not None else ""
         if mem.lower() in _EMPTY_MEM_TOKENS:
             mem = ""
+        sticker = str(data.get("sticker") or "").strip().lower()
+        if sticker != "send":
+            sticker = "none"
         return StructuredReply(
             reply=reply,
             intent=intent,
             reasoning=reasoning,
             mem=mem,
+            sticker=sticker,
             from_json=True,
         )
     if "{" in s:

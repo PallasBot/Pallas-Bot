@@ -333,6 +333,7 @@ class LlmConfig(BaseModel):
     llm_reply_trim_terminal_period_rate: float = Field(default=0.65, ge=0.0, le=1.0)
     llm_reply_mention_cooldown_sec: int = Field(default=900, ge=0, le=86400)
     llm_sticker_fit_enabled: bool = Field(default=False)
+    llm_chat_sticker_enabled: bool = Field(default=True)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
     llm_reply_style_variants: dict[str, object] = Field(default_factory=dict)
     llm_corpus_learn_guard_enabled: bool = Field(default=True)
@@ -575,6 +576,7 @@ def get_llm_config() -> LlmConfig:
             llm_reply_trim_terminal_period_rate=_env_float("LLM_REPLY_TRIM_TERMINAL_PERIOD_RATE", 0.65),
             llm_reply_mention_cooldown_sec=_env_int("LLM_REPLY_MENTION_COOLDOWN_SEC", 900),
             llm_sticker_fit_enabled=_env_bool("LLM_STICKER_FIT_ENABLED", False),
+            llm_chat_sticker_enabled=_env_bool("LLM_CHAT_STICKER_ENABLED", True),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
             llm_reply_style_variants=_env_json_object("LLM_REPLY_STYLE_VARIANTS"),
             llm_corpus_learn_guard_enabled=_env_bool("LLM_CORPUS_LEARN_GUARD_ENABLED", True),

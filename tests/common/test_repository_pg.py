@@ -953,6 +953,22 @@ async def test_image_cache_insert_is_no_op_on_duplicate(pg_engine):
 
 
 @pytest.mark.asyncio
+async def test_image_cache_find_latest_with_blob_skips_empty_entries(pg_engine):
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    repo = PgImageCacheRepository()
+    await repo.insert(ImageCache.model_construct(cq_code="[CQ:image,file=empty.image]", blob_data=None, ref_times=9, date=20260806))
+    await repo.insert(ImageCache.model_construct(cq_code="[CQ:image,file=ready.image]", blob_data=b"image", ref_times=1, date=20260805))
+
+    found = await repo.find_latest_with_blob()
+
+    assert found is not None
+    assert found.cq_code == "[CQ:image,file=ready.image]"
+    assert found.blob_data == b"image"
+
+
+@pytest.mark.asyncio
 async def test_config_cache_hit_and_invalidate_on_write(pg_engine):
     """读后走 TTL 缓存；一旦 upsert_field 写入必须让缓存失效，下次读能拿到新值。"""
     from pallas.core.foundation.db.repository_pg import PgConfigRepository

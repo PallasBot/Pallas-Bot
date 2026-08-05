@@ -42,6 +42,7 @@ __plugin_meta__ = PluginMetadata(
             command_perm_row("llm_chat.switch_model", "换模型", "superuser"),
             command_perm_row("llm_chat.unload_model", "卸模型", "superuser"),
             command_perm_row("llm_chat.status", "LLM 状态", "superuser"),
+            command_perm_row("llm_chat.sticker_test", "测试表情", "superuser"),
         ),
         "command_limits": command_limit_list(
             command_limit_row("llm_chat.chat", 3),
@@ -49,6 +50,7 @@ __plugin_meta__ = PluginMetadata(
             command_limit_row("llm_chat.status", 5),
             command_limit_row("llm_chat.switch_model", 10),
             command_limit_row("llm_chat.unload_model", 10),
+            command_limit_row("llm_chat.sticker_test", 5),
         ),
         "llm_tools": [
             llm_command_tool_row(
@@ -140,6 +142,16 @@ __plugin_meta__ = PluginMetadata(
                 "command_permission": "llm_chat.status",
                 "brief_des": "查看聊天服务状态。",
                 "detail_des": "私聊查看智能对话是否可用，以及当前大致状态。",
+            },
+            {
+                "func": "测试表情",
+                "trigger_method": "on_cmd",
+                "trigger_scene": SCENE_GROUP,
+                "trigger_condition": "牛牛测试表情",
+                "help_audience": "superuser",
+                "command_permission": "llm_chat.sticker_test",
+                "brief_des": "发送一张缓存表情图验证链路。",
+                "detail_des": "仅超级用户可用；无可用缓存图片时不会发送。",
             },
             {
                 "func": "换模型",

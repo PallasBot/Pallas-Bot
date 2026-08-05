@@ -186,6 +186,10 @@ class ImageCacheRepository(Protocol):
         """根据 CQ code 查找图片缓存"""
         ...
 
+    async def find_latest_with_blob(self) -> ImageCache | None:
+        """查找最近一条带图片二进制内容的缓存。"""
+        ...
+
     async def insert(self, cache: ImageCache) -> None:
         """插入新的图片缓存"""
         ...

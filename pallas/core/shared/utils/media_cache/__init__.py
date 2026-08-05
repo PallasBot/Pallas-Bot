@@ -158,6 +158,12 @@ async def get_image(cq_code) -> bytes | None:
     return cache.blob_data
 
 
+async def get_latest_image() -> bytes | None:
+    """取最近一张可发送的缓存图片。"""
+    cache = await image_cache_repo.find_latest_with_blob()
+    return cache.blob_data if cache else None
+
+
 async def clear_image_cache(days: int = 5, times: int = 3):
     idate = int(str((datetime.now() - timedelta(days=days)).date()).replace("-", ""))
     await image_cache_repo.delete_old(idate)

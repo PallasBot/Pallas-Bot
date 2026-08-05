@@ -52,6 +52,20 @@ async def test_save_increments_ref_times(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_find_latest_with_blob_skips_empty_cache_entries(beanie_fixture):
+    repo = MongoImageCacheRepository()
+    await repo.insert(ImageCache(cq_code="[CQ:image,file=empty.image]", blob_data=None, ref_times=9, date=20260806))
+    expected = ImageCache(cq_code="[CQ:image,file=ready.image]", blob_data=b"image", ref_times=1, date=20260805)
+    await repo.insert(expected)
+
+    found = await repo.find_latest_with_blob()
+
+    assert found is not None
+    assert found.cq_code == expected.cq_code
+    assert found.blob_data == b"image"
+
+
+@pytest.mark.asyncio
 async def test_delete_low_ref(beanie_fixture):
     repo = MongoImageCacheRepository()
 
