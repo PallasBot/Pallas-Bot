@@ -19,7 +19,7 @@ from pallas.product.llm.runtime_api import (
     decide_repeater_action,
     resolve_conversation_feature_level,
     resolve_repeater_capabilities,
-    submit_corpus_assist_stages,
+    submit_repeater_corpus_select,
 )
 from pallas.product.message_scrub import is_message_scrub_blocked_async
 from pallas.product.message_scrub.log_preview import scrub_intercept_log_preview
@@ -247,7 +247,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
 
     async def stage_runner(stage_name: str) -> bool:
         if stage_name == "select":
-            return await submit_corpus_assist_stages(
+            return await submit_repeater_corpus_select(
                 event,
                 user_text=ctx.plain_body,
                 candidates=plan.candidate_pool,

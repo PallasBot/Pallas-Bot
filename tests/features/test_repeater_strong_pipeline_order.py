@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pallas.product.llm.config import LlmConfig
-from pallas.product.llm.polish_lite import submit_corpus_assist_stages
+from pallas.product.llm.select import submit_repeater_corpus_select
 from pallas.product.llm.repeater_capabilities import RepeaterCapabilities
 
 
@@ -24,7 +24,7 @@ def install_pipeline_mocks(monkeypatch: pytest.MonkeyPatch) -> list[str]:
         return False
 
     monkeypatch.setattr(
-        "pallas.product.llm.polish_lite.get_llm_config",
+        "pallas.product.llm.select.get_llm_config",
         lambda: LlmConfig(
             llm_chat_enabled=True,
             llm_select_enabled=True,
@@ -48,7 +48,7 @@ def install_pipeline_mocks(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 async def test_corpus_assist_only_attempts_select(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = install_pipeline_mocks(monkeypatch)
 
-    submitted = await submit_corpus_assist_stages(
+    submitted = await submit_repeater_corpus_select(
         FakeEvent(),
         user_text="接一下这句",
         candidates=["候选一", "候选二"],
@@ -65,7 +65,7 @@ async def test_corpus_assist_only_attempts_select(monkeypatch: pytest.MonkeyPatc
 async def test_corpus_assist_uses_supplied_capability_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = install_pipeline_mocks(monkeypatch)
 
-    submitted = await submit_corpus_assist_stages(
+    submitted = await submit_repeater_corpus_select(
         FakeEvent(),
         user_text="接一下这句",
         candidates=["候选一", "候选二"],

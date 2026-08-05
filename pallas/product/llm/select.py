@@ -22,7 +22,35 @@ from pallas.product.persona.compile_persona_prompt import resolve_select_system_
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
 
+    from pallas.product.llm.repeater_capabilities import RepeaterCapabilities
+
 _SELECT_INDEX_RE = re.compile(r"(\d+)")
+
+
+async def submit_repeater_corpus_select(
+    event: GroupMessageEvent,
+    *,
+    user_text: str,
+    candidates: list[str],
+    candidate_text: str,
+    reply_mode: str = "normal",
+    scene_tier: str = "weak",
+    capabilities: RepeaterCapabilities | None = None,
+) -> bool:
+    if capabilities is None:
+        from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
+
+        capabilities = resolve_repeater_capabilities(get_llm_config())
+    if not capabilities.llm_enabled or not capabilities.select_enabled:
+        return False
+    return await maybe_submit_repeater_llm_select(
+        event,
+        user_text=user_text,
+        candidates=candidates,
+        fallback_text=candidate_text,
+        reply_mode=reply_mode,
+        scene_tier=scene_tier,
+    )
 
 
 def load_select_system_prompt() -> str:

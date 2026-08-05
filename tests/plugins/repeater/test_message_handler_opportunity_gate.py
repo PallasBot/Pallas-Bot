@@ -60,7 +60,7 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
     monkeypatch.setattr(mod, "Chat", MagicMock(return_value=chat_instance))
     monkeypatch.setattr(mod, "should_prepare_repeater_reply", lambda *args, **kwargs: True)
     monkeypatch.setattr(mod, "should_attempt_repeater_opportunity", lambda *args, **kwargs: False)
-    monkeypatch.setattr(mod, "submit_corpus_assist_stages", AsyncMock(return_value=False))
+    monkeypatch.setattr(mod, "submit_repeater_corpus_select", AsyncMock(return_value=False))
     monkeypatch.setattr(
         mod,
         "build_repeater_llm_plan",
@@ -122,7 +122,7 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
     await mod.handle_group_message(bot, event)
 
     mod.run_repeater_llm_plan.assert_not_awaited()
-    mod.submit_corpus_assist_stages.assert_not_awaited()
+    mod.submit_repeater_corpus_select.assert_not_awaited()
     chat_instance.answer_from_bundle.assert_awaited_once_with(bundle)
     assert dispatched == [(300, 100, answers)]
     assert trace_rows
