@@ -168,6 +168,14 @@ def test_llm_style_variant_field_maps_to_runtime_env():
     assert _llm_section().field_to_env["llm_reply_style_variants"] == "LLM_REPLY_STYLE_VARIANTS"
 
 
+def test_llm_sticker_vision_fields_map_to_runtime_env():
+    from pallas.console.webui.env_sections import _llm_section
+
+    section = _llm_section()
+    assert section.field_to_env["llm_sticker_vision_enabled"] == "LLM_STICKER_VISION_ENABLED"
+    assert section.field_to_env["llm_sticker_vision_max_per_hour"] == "LLM_STICKER_VISION_MAX_PER_HOUR"
+
+
 def test_mail_patch_roundtrip_via_internal_section(tmp_path, monkeypatch):
     import json
 
