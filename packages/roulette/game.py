@@ -13,6 +13,7 @@ from nonebot.adapters.onebot.v11 import (
 )
 
 from pallas.core.foundation.config import BotConfig, GroupConfig
+from pallas.core.platform.ingress.matcher_rule_prefilter import mark_exact_plaintext_rule
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
 
 from .config import JUDGMENT_CFG, RESCUE_CFG, SHOT_CFG
@@ -175,6 +176,7 @@ async def is_roulette_msg(bot: Bot, event: GroupMessageEvent) -> bool:
     return False
 
 
+@mark_exact_plaintext_rule("牛牛开枪")
 async def is_shot_msg(bot: Bot, event: GroupMessageEvent) -> bool:
     if roulette_status[event.group_id] != 0 and event.get_plaintext().strip() == "牛牛开枪":
         return await bot_is_group_admin(bot, event)
@@ -254,6 +256,7 @@ async def shot(self_id: int, user_id: int, group_id: int) -> Callable[[], Awaita
         return group_ban
 
 
+@mark_exact_plaintext_rule("牛牛喝酒", "牛牛干杯", "牛牛继续喝")
 async def is_drink_msg(bot: Bot, event: GroupMessageEvent) -> bool:
     if roulette_status[event.group_id] != 0 and event.get_plaintext().strip() in {"牛牛喝酒", "牛牛干杯", "牛牛继续喝"}:
         return await bot_is_group_admin(bot, event)

@@ -84,6 +84,14 @@ def test_marked_exact_custom_rule_skips_non_matching_message():
     assert prefilter.matcher_rule_decision(descriptors, plain_text="牛牛喝酒", raw_text="牛牛喝酒") == "match"
 
 
+def test_roulette_exact_rules_skip_unrelated_group_chatter():
+    from packages.roulette.commands import drink_msg, shot_msg
+
+    for matcher in (drink_msg, shot_msg):
+        descriptors = prefilter.extract_matcher_rule_descriptors(matcher)
+        assert prefilter.matcher_rule_decision(descriptors, plain_text="随便聊", raw_text="随便聊") == "miss"
+
+
 def test_apply_prefilter_skips_miss():
     event = MagicMock()
     event.get_plaintext.return_value = "闲聊"
