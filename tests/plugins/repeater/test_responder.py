@@ -623,6 +623,51 @@ def test_answer_weight_prefers_ghost_style_for_short_odd_reply():
     assert ghost_weight > normal_weight
 
 
+def test_answer_weight_boosts_pure_image_candidate_by_configured_weight():
+    from packages.repeater.responder import Responder
+    from pallas.core.foundation.db import Answer
+    from pallas.product.persona.model import ResolvedPersona
+
+    persona = ResolvedPersona()
+    image_answer = Answer(
+        keywords="image",
+        group_id=1,
+        count=3,
+        time=1,
+        messages=["[CQ:image,file=sticker.image]"],
+    )
+    text_answer = Answer(
+        keywords="text",
+        group_id=1,
+        count=3,
+        time=1,
+        messages=["这句是普通回复"],
+    )
+    original_weight = Responder.IMAGE_CANDIDATE_WEIGHT
+    Responder.IMAGE_CANDIDATE_WEIGHT = 1.2
+    try:
+        image_weight = Responder._answer_weight_for_mode(
+            image_answer,
+            persona,
+            recent_sent=[],
+            recent_message=[],
+            affect_triggers=[],
+            mode="normal",
+        )
+        text_weight = Responder._answer_weight_for_mode(
+            text_answer,
+            persona,
+            recent_sent=[],
+            recent_message=[],
+            affect_triggers=[],
+            mode="normal",
+        )
+    finally:
+        Responder.IMAGE_CANDIDATE_WEIGHT = original_weight
+
+    assert image_weight > text_weight
+
+
 def test_collect_god_candidate_pool_excludes_recent_live_texts():
     from packages.repeater.responder import Responder
     from pallas.core.foundation.db import Answer

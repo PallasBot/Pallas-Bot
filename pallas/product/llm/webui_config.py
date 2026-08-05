@@ -749,6 +749,10 @@ class LlmWebuiConfig(BaseModel):
             "默认开启；不影响 QQ 气泡 Reaction",
         ),
     )
+    llm_chat_sticker_cooldown_sec: int = Field(
+        default=900,
+        description=field_help("LLM 表情图冷却秒数", "同一群两次 LLM 表情图之间至少间隔多久；0 只保留同图去重"),
+    )
     llm_reply_effect_eval_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -1068,6 +1072,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_reply_split_max_chars=cfg.llm_reply_split_max_chars,
         llm_sticker_fit_enabled=cfg.llm_sticker_fit_enabled,
         llm_chat_sticker_enabled=cfg.llm_chat_sticker_enabled,
+        llm_chat_sticker_cooldown_sec=cfg.llm_chat_sticker_cooldown_sec,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,

@@ -37,3 +37,20 @@ def test_emotion_followup_requires_a_delivered_text_reply() -> None:
     }
 
     assert not should_attach_repeater_image(task, "", '{"reply":"","sticker":"send"}')
+
+
+def test_sticker_followup_cooldown_and_recent_image_deduplication() -> None:
+    from pallas.product.llm.sticker_followup import (
+        note_repeater_image_sent,
+        reset_repeater_image_followup_state_for_tests,
+        should_send_repeater_image,
+    )
+
+    reset_repeater_image_followup_state_for_tests()
+    assert should_send_repeater_image(42, "[CQ:image,file=a.image]", cooldown_sec=60, now=100.0)
+
+    note_repeater_image_sent(42, "[CQ:image,file=a.image]", now=100.0)
+
+    assert not should_send_repeater_image(42, "[CQ:image,file=b.image]", cooldown_sec=60, now=120.0)
+    assert not should_send_repeater_image(42, "[CQ:image,file=a.image]", cooldown_sec=0, now=200.0)
+    assert should_send_repeater_image(42, "[CQ:image,file=b.image]", cooldown_sec=60, now=200.0)

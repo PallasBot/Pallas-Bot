@@ -58,6 +58,7 @@ class Responder:
     ANSWER_THRESHOLD_WEIGHTS = plugin_config.answer_threshold_weights
     TOPICS_SIZE = plugin_config.topics_size
     TOPICS_IMPORTANCE = plugin_config.topics_importance
+    IMAGE_CANDIDATE_WEIGHT = plugin_config.image_candidate_weight
     CROSS_GROUP_THRESHOLD = plugin_config.cross_group_threshold
     REPEAT_THRESHOLD = plugin_config.repeat_threshold
     DUPLICATE_REPLY = plugin_config.duplicate_reply
@@ -243,6 +244,9 @@ class Responder:
             )
             mults.append(sample_weight)
         factor = max(mults) if mults else 1.0
+        samples = [sample.removeprefix("牛牛").strip() for sample in answer.messages if sample.strip()]
+        if samples and all(sample.startswith("[CQ:image,") for sample in samples):
+            factor *= max(1.0, float(Responder.IMAGE_CANDIDATE_WEIGHT))
         if mode == "god":
             factor *= 1.18
         elif mode == "ghost":

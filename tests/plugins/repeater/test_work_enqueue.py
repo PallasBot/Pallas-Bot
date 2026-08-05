@@ -155,3 +155,9 @@ async def test_repeater_work_handler_processes_serialized_payload(monkeypatch: p
     })
 
     process.assert_awaited_once()
+
+
+def test_repeater_work_handlers_include_image_cache_capture() -> None:
+    from packages.repeater.work_handler import repeater_work_handlers
+
+    assert "image_cache.capture" in repeater_work_handlers()

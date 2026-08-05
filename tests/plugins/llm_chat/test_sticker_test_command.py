@@ -9,7 +9,7 @@ from packages.llm_chat import status_commands
 
 
 @pytest.mark.asyncio
-async def test_sticker_test_sends_cached_repeater_image(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_sticker_test_sends_cached_repeater_image_without_text_reply(monkeypatch: pytest.MonkeyPatch) -> None:
     send_image = AsyncMock(return_value=True)
     monkeypatch.setattr(status_commands, "send_cached_sticker_image", send_image, raising=False)
     bot = MagicMock()
@@ -17,7 +17,7 @@ async def test_sticker_test_sends_cached_repeater_image(monkeypatch: pytest.Monk
 
     result = await status_commands.run_sticker_test(bot, event)
 
-    assert result == "已发送一张 Repeater 缓存表情图。"
+    assert result is None
     send_image.assert_awaited_once_with(bot, 222)
 
 

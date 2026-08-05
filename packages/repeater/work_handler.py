@@ -16,4 +16,9 @@ async def handle_repeater_learn(payload: dict[str, Any]) -> None:
 
 
 def repeater_work_handlers():
-    return {"repeater.learn": handle_repeater_learn}
+    from pallas.core.shared.utils.media_cache import handle_image_cache_capture
+
+    return {
+        "repeater.learn": handle_repeater_learn,
+        "image_cache.capture": handle_image_cache_capture,
+    }

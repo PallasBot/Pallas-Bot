@@ -51,6 +51,13 @@ async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user
     raw_image = next((item for item in bundle.answer_list if "[CQ:image," in item), "")
     if not raw_image:
         return False
+    from pallas.product.llm.sticker_followup import note_repeater_image_sent, should_send_repeater_image
+
+    cfg = get_llm_config()
+    cooldown_value = getattr(cfg, "llm_chat_sticker_cooldown_sec", 900)
+    cooldown_sec = int(cooldown_value) if isinstance(cooldown_value, int | float) else 900
+    if not should_send_repeater_image(int(group_id), raw_image, cooldown_sec=cooldown_sec):
+        return False
     message = Message()
     for segment in Message(raw_image):
         if segment.type != "image":
@@ -65,6 +72,7 @@ async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user
     except Exception as e:
         logger.info("LLM emotion followup image skipped group={}: {}", group_id, e)
         return False
+    note_repeater_image_sent(int(group_id), raw_image)
     return True
 
 

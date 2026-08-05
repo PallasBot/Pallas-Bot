@@ -37,13 +37,15 @@ async def handle_llm_status(event: MessageEvent) -> None:
     await status_cmd.finish(text)
 
 
-async def run_sticker_test(bot, event: GroupMessageEvent) -> str:
+async def run_sticker_test(bot, event: GroupMessageEvent) -> str | None:
     sent = await send_cached_sticker_image(bot, int(event.group_id))
-    return "已发送一张 Repeater 缓存表情图。" if sent else "没有可发送的 Repeater 缓存表情图。"
+    return None if sent else "没有可发送的 Repeater 缓存表情图。"
 
 
 @sticker_test_cmd.handle()
 async def handle_sticker_test(bot, event: MessageEvent) -> None:
     if not isinstance(event, GroupMessageEvent):
         return
-    await sticker_test_cmd.finish(await run_sticker_test(bot, event))
+    response = await run_sticker_test(bot, event)
+    if response:
+        await sticker_test_cmd.finish(response)

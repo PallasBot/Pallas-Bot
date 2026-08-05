@@ -110,10 +110,14 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
                 plain_text=chat.chat_data.is_plain_text,
             )
 
-    if not shed_sidework:
-        for seg in event.message:
-            if seg.type == "image":
-                await insert_image(seg)
+    for seg in event.message:
+        if seg.type == "image":
+            await insert_image(
+                seg,
+                bot_id=int(event.self_id),
+                group_id=int(event.group_id),
+                message_id=int(event.message_id),
+            )
 
     await enqueue_repeater_learn(chat, event)
 
