@@ -23,6 +23,9 @@ from packages.pb_webui.console_openapi_models import (
     IngressDispatchData as _IngressDispatchData,
 )
 from packages.pb_webui.console_openapi_models import (
+    IngressDispatchHistoryData as _IngressDispatchHistoryData,
+)
+from packages.pb_webui.console_openapi_models import (
     ShardObservabilityData as _ShardObservabilityData,
 )
 from packages.pb_webui.console_openapi_models import (
@@ -629,6 +632,32 @@ def register_system_home_router(
             return aggregate_ingress_dispatch()
 
         data = await cached_read(key="ingress-dispatch", loader=_load, ttl_sec=2.0, stale_sec=8.0)
+        return {"ok": True, "data": data}
+
+    @router.get(
+        f"{x}/ingress-dispatch/history",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_IngressDispatchHistoryData],
+    )
+    async def _ingress_dispatch_history(
+        window_sec: int = Query(default=3600, ge=15 * 60, le=7 * 24 * 60 * 60),
+    ) -> dict[str, Any]:
+        from .ingress_metrics_history import read_ingress_metrics_history
+
+        bucket_sec = (
+            15
+            if window_sec <= 60 * 60
+            else 60
+            if window_sec <= 6 * 60 * 60
+            else 300
+            if window_sec <= 24 * 60 * 60
+            else 1800
+        )
+
+        async def _load() -> dict[str, Any]:
+            return read_ingress_metrics_history(window_sec=window_sec, bucket_sec=bucket_sec)
+
+        data = await cached_read(key=f"ingress-dispatch-history:{window_sec}", loader=_load, ttl_sec=2.0, stale_sec=8.0)
         return {"ok": True, "data": data}
 
     @router.get(f"{x}/bots", include_in_schema=True)

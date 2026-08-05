@@ -244,3 +244,24 @@ class IngressDispatchData(BaseModel):
 
     sharded: bool = False
     workers: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class IngressDispatchHistoryPoint(BaseModel):
+    at: int
+    ingress_p95_ms: float
+    scheduler_wait_p95_ms: float
+    scheduler_pending: int
+    scheduler_active: int
+    scheduler_capacity: int
+    work_pending: int
+    work_leased: int
+    group_messages: int
+    learn_enqueued: int
+    learn_persisted: int
+    work_completed: int
+
+
+class IngressDispatchHistoryData(BaseModel):
+    retention_sec: int
+    bucket_sec: int
+    points: list[IngressDispatchHistoryPoint] = Field(default_factory=list)

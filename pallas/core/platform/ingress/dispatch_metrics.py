@@ -279,6 +279,7 @@ def merge_pool_budget_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
 def merge_conversation_scheduler_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
     merged: dict[str, Any] = {
         "enabled": False,
+        "concurrency": 0,
         "pending": 0,
         "active": 0,
         "ready": 0,
@@ -296,6 +297,7 @@ def merge_conversation_scheduler_snapshots(rows: list[dict[str, Any]]) -> dict[s
         merged["enabled"] = bool(merged["enabled"] or row.get("enabled"))
         for key in (
             "pending",
+            "concurrency",
             "active",
             "ready",
             "max_pending",

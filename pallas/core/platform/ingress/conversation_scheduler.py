@@ -166,6 +166,7 @@ class ConversationScheduler:
             index = max(0, min(len(ordered) - 1, int(len(ordered) * 0.95)))
             wait_p95 = round(ordered[index], 2)
         return {
+            "concurrency": self.concurrency,
             "pending": self._pending_count,
             "pending_peak": self._pending_peak,
             "active": len(self._running_keys),
@@ -345,6 +346,7 @@ def conversation_scheduler_status() -> dict[str, int | float | bool | None]:
         config = get_ingress_dispatch_runtime_config()
         return {
             "enabled": config.conversation_scheduler_enabled,
+            "concurrency": config.conversation_scheduler_concurrency,
             "pending": 0,
             "pending_peak": 0,
             "active": 0,
