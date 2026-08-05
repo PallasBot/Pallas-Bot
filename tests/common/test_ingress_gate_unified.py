@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
@@ -409,6 +409,85 @@ async def test_unified_ingress_only_allows_at_target_bot(monkeypatch: pytest.Mon
     await ingress_group_message_gate(FakeBot(111), event)
     with pytest.raises(IgnoredException):
         await ingress_group_message_gate(FakeBot(222), event)
+
+
+@pytest.mark.asyncio
+async def test_unified_ingress_at_target_skips_federate_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.get_fleet_bot_ids", lambda: frozenset({111}))
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.claim_gate.try_claim_group_message_once", AsyncMock(return_value=True)
+    )
+    federate = AsyncMock(return_value=False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.claim_federate_group_message_ingress", federate)
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    class FakeBot:
+        self_id = "111"
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=733291779,
+        message_id=1,
+        message=Message("[CQ:at,qq=111]"),
+        raw_message="[CQ:at,qq=111]",
+    )
+
+    await ingress_group_message_gate(FakeBot(), event)
+
+    federate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unified_ingress_at_target_command_skips_federate_ownership(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.get_fleet_bot_ids", lambda: frozenset({111}))
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.claim_gate.try_claim_group_message_once", AsyncMock(return_value=True)
+    )
+    peer_command = MagicMock(return_value=True)
+    owner = MagicMock(return_value=False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.should_yield_federate_ingress_for_peer_command",
+        peer_command,
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.should_process_federate_group_on_current_deployment",
+        owner,
+    )
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    class FakeBot:
+        self_id = "111"
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=733291779,
+        message_id=1,
+        message=Message("[CQ:at,qq=111] 牛牛点歌 测试"),
+        raw_message="[CQ:at,qq=111] 牛牛点歌 测试",
+    )
+
+    await ingress_group_message_gate(FakeBot(), event)
+
+    peer_command.assert_not_called()
+    owner.assert_not_called()
 
 
 @pytest.mark.asyncio

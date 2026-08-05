@@ -140,16 +140,20 @@ async def ingress_group_message_gate(bot, event) -> None:
         touch_federate_present_group(int(event.group_id))
 
         # 本机无能力、对端显式有：即使本地不认作命令，也不得抢 federate claim。
-        if should_yield_federate_ingress_for_peer_command(int(event.group_id), plain=plain):
+        if not pallas_ats and should_yield_federate_ingress_for_peer_command(int(event.group_id), plain=plain):
             outcome = "federate_peer_command_yield"
             if metrics:
                 record_ingress_early_discard("federate")
             raise IgnoredException("federate peer command capability")
 
         # 仅命令走粘性群归属；闲聊 / @LLM 等 chat 车道只靠 claim，避免热群钉死一台。
-        if legacy_command_traffic(plain) and not should_process_federate_group_on_current_deployment(
-            int(event.group_id),
-            plain=plain,
+        if (
+            not pallas_ats
+            and legacy_command_traffic(plain)
+            and not should_process_federate_group_on_current_deployment(
+                int(event.group_id),
+                plain=plain,
+            )
         ):
             outcome = "federate_owner_skip"
             if metrics:
@@ -238,12 +242,13 @@ async def ingress_group_message_gate(bot, event) -> None:
         if metrics:
             record_ingress_event()
 
-        if not await claim_federate_group_message_ingress(event, plain=plain, body=body):
-            outcome = "federate_lost"
-            if metrics:
-                record_ingress_early_discard("federate")
-            raise IgnoredException("federate ingress claim lost")
-        timer.mark("federate")
+        if not pallas_ats:
+            if not await claim_federate_group_message_ingress(event, plain=plain, body=body):
+                outcome = "federate_lost"
+                if metrics:
+                    record_ingress_early_discard("federate")
+                raise IgnoredException("federate ingress claim lost")
+            timer.mark("federate")
 
         if sharding_active:
             return
