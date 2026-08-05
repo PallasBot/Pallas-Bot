@@ -313,6 +313,9 @@ async def complete_with_tool_loop(
         assistant_message = dict(last_message)
         assistant_message.setdefault("role", "assistant")
         assistant_message["content"] = content
+        provider_trace = last_message.get("_provider_trace")
+        if isinstance(provider_trace, dict):
+            assistant_message["_agent_trace"] = {"provider_calls": [provider_trace]}
         return content, assistant_message
 
     from pallas.product.llm.task_metrics import record_bot_llm_task
@@ -372,6 +375,7 @@ async def complete_with_tool_loop(
         "activated_tools": list(meta.get("activated_tools") or []),
         "background_results": background_events,
         "tool_selection": tool_selection,
+        "provider_calls": [],
     }
     reply_texts: list[str] = []
     side_effect_ok = False
@@ -393,6 +397,9 @@ async def complete_with_tool_loop(
             cfg=c,
             task=task,
         )
+        provider_trace = last_message.get("_provider_trace")
+        if isinstance(provider_trace, dict):
+            agent_trace["provider_calls"].append(provider_trace)
         tool_calls = last_message.get("tool_calls")
         round_trace: dict[str, Any] = {"round": round_idx + 1, "tool_calls": [], "calls": []}
         if not isinstance(tool_calls, list) or not tool_calls:

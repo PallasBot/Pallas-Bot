@@ -331,6 +331,51 @@ async def test_disabled_current_turn_decision_does_not_request_a_model(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_explicit_plain_chat_bypasses_current_turn_model(monkeypatch) -> None:
+    requested = False
+
+    async def request_model(*args: object, **kwargs: object) -> dict[str, str]:
+        nonlocal requested
+        requested = True
+        return {"content": '{"action":"PASS"}'}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", request_model)
+
+    result = await decide_current_turn_with_model(
+        CurrentTurnDecisionInput(text="吃饭了吗", is_to_me=True),
+        enabled=True,
+    )
+
+    assert requested is False
+    assert result.action is CurrentTurnAction.REPLY
+    assert result.trace.reason == "explicit_plain_reply"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "turn",
+    [
+        CurrentTurnDecisionInput(text="帮我找个表情", is_to_me=True, tools_permitted=True),
+        CurrentTurnDecisionInput(text="最近怎么样", is_explicitly_addressed=True),
+        CurrentTurnDecisionInput(text="你觉得呢", is_to_me=True, has_multi_party_overlap=True),
+    ],
+)
+async def test_complex_turns_keep_current_turn_model(monkeypatch, turn: CurrentTurnDecisionInput) -> None:
+    requested = False
+
+    async def request_model(*args: object, **kwargs: object) -> dict[str, str]:
+        nonlocal requested
+        requested = True
+        return {"content": '{"action":"REPLY"}'}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", request_model)
+
+    await decide_current_turn_with_model(turn, enabled=True)
+
+    assert requested is True
+
+
+@pytest.mark.asyncio
 async def test_enabled_current_turn_decision_uses_task_routing_without_legacy_model(monkeypatch) -> None:
     received: dict[str, object] = {}
 
@@ -341,7 +386,7 @@ async def test_enabled_current_turn_decision_uses_task_routing_without_legacy_mo
     monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", request_model)
 
     result = await decide_current_turn_with_model(
-        CurrentTurnDecisionInput(text="不用回复", is_to_me=True),
+        CurrentTurnDecisionInput(text="不用回复", is_to_me=True, has_multi_party_overlap=True),
         enabled=True,
     )
 
@@ -409,7 +454,7 @@ async def test_current_turn_decision_retries_configured_task_backup(
     monkeypatch.setattr("pallas.product.llm.provider_client._post_provider_chat", post_provider_chat)
 
     result = await decide_current_turn_with_model(
-        CurrentTurnDecisionInput(text="不用回复", is_to_me=True),
+        CurrentTurnDecisionInput(text="不用回复", is_to_me=True, has_multi_party_overlap=True),
         enabled=True,
     )
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
@@ -49,6 +50,7 @@ async def run_kernel_chat_job(
     cfg: LlmConfig,
     execution_slot: LlmExecutionSlot | None = None,
 ) -> None:
+    started = time.monotonic()
     try:
         generation_system_prompt = system_prompt_with_reply_target(system_prompt, metadata)
         content, assistant_message = await complete_with_tool_loop(
@@ -57,6 +59,7 @@ async def run_kernel_chat_job(
             metadata=metadata,
             cfg=cfg,
         )
+        generate_ms = int((time.monotonic() - started) * 1000)
         from pallas.product.llm.persona_output_firewall import (
             persona_output_firewall_policy_from_data,
             persona_output_retry_instruction,
@@ -130,6 +133,7 @@ async def run_kernel_chat_job(
                 reply_target=reply_target,
             )
         content = decision.text
+        firewall_ms = int((time.monotonic() - started) * 1000) - generate_ms
         agent_trace_raw = assistant_message.get("_agent_trace")
         if int(decision.trace.get("rule_count") or 0) > 0:
             agent_trace_raw = redact_agent_trace_for_firewall(agent_trace_raw)
@@ -148,6 +152,28 @@ async def run_kernel_chat_job(
             trace.update(agent_trace_raw)
         trace["retrieval_mode"] = metadata.get("retrieval_mode")
         trace["reply_target"] = metadata.get("reply_target")
+        stage_durations_ms = {
+            "generate": generate_ms,
+            "output_firewall": max(0, firewall_ms),
+            "total": int((time.monotonic() - started) * 1000),
+        }
+        pre_submit_duration_ms = metadata.get("pre_submit_duration_ms")
+        if isinstance(pre_submit_duration_ms, (int, float)):
+            stage_durations_ms["pre_submit"] = max(0, int(pre_submit_duration_ms))
+        trace["stage_durations_ms"] = stage_durations_ms
+        for field in ("pre_submit_stage_durations_ms", "pre_submit_context_durations_ms"):
+            durations = metadata.get(field)
+            if not isinstance(durations, dict):
+                continue
+            trace[field] = {
+                str(stage): max(0, int(duration))
+                for stage, duration in durations.items()
+                if isinstance(duration, (int, float))
+            }
+        if isinstance(agent_trace_raw, dict):
+            provider_calls = agent_trace_raw.get("provider_calls")
+            if isinstance(provider_calls, list):
+                trace["provider_calls"] = provider_calls
         from pallas.product.llm.runtime_debug import append_runtime_trace
 
         append_runtime_trace(request_id=request_id, trace=trace)

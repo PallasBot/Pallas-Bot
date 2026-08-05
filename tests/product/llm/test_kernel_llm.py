@@ -522,3 +522,61 @@ async def test_submit_chat_task_kernel_schedules_deliver(monkeypatch: pytest.Mon
         await asyncio.sleep(0.02)
     assert delivered == [("req-kernel-1", "success", "内核回复")]
     clear_llm_config_cache()
+
+
+@pytest.mark.asyncio
+async def test_kernel_trace_records_stage_durations_and_provider_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import kernel_runner
+
+    traces: list[dict[str, Any]] = []
+
+    async def fake_complete(*, system_prompt, messages, metadata=None, cfg=None):
+        return "内核回复", {
+            "role": "assistant",
+            "content": "内核回复",
+            "_agent_trace": {
+                "provider_calls": [
+                    {
+                        "provider": "aliyun",
+                        "model": "qwen3.7-flash",
+                        "latency_ms": 120,
+                        "ok": True,
+                    }
+                ]
+            },
+        }
+
+    async def fake_deliver(*_args, **_kwargs):
+        return {"message": "ok"}
+
+    monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", fake_complete)
+    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", fake_deliver)
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_debug.append_runtime_trace",
+        lambda **kwargs: traces.append(kwargs["trace"]),
+    )
+
+    await kernel_runner.run_kernel_chat_job(
+        "req-trace-1",
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "你好"}],
+        metadata={
+            "pre_submit_duration_ms": 55,
+            "pre_submit_stage_durations_ms": {"history": 12, "context": 34},
+            "pre_submit_context_durations_ms": {"memory": 12, "turn_decision": 34},
+        },
+        cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
+    )
+
+    assert traces[0]["stage_durations_ms"]
+    assert traces[0]["stage_durations_ms"]["pre_submit"] == 55
+    assert traces[0]["pre_submit_stage_durations_ms"] == {"history": 12, "context": 34}
+    assert traces[0]["pre_submit_context_durations_ms"] == {"memory": 12, "turn_decision": 34}
+    assert traces[0]["provider_calls"] == [
+        {
+            "provider": "aliyun",
+            "model": "qwen3.7-flash",
+            "latency_ms": 120,
+            "ok": True,
+        }
+    ]

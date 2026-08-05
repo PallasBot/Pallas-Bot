@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
 from typing import Any
 
 from pallas.product.llm.knowledge.inject import enrich_system_with_knowledge_sources
@@ -21,6 +22,7 @@ class DirectChatContext:
     knowledge_retrieval_trace: dict[str, Any]
     hybrid_retrieval_trace: dict[str, Any]
     relationship_trace: dict[str, Any]
+    stage_durations_ms: dict[str, int] = field(default_factory=dict)
 
 
 async def assemble_direct_chat_context(
@@ -33,6 +35,8 @@ async def assemble_direct_chat_context(
     cfg: Any,
     allow_persistent_memory: bool = True,
 ) -> DirectChatContext:
+    stage_durations_ms: dict[str, int] = {}
+    started = time.perf_counter()
     memory_result = await enrich_system_with_memory_context(
         system_prompt,
         bot_id=bot_id,
@@ -41,6 +45,8 @@ async def assemble_direct_chat_context(
         cfg=cfg,
         allow_persistent_memory=allow_persistent_memory,
     )
+    stage_durations_ms["memory"] = int((time.perf_counter() - started) * 1000)
+    started = time.perf_counter()
     knowledge_result = await enrich_system_with_knowledge_sources(
         memory_result.system_prompt,
         bot_id=bot_id,
@@ -49,7 +55,9 @@ async def assemble_direct_chat_context(
         query_text=query_text,
         cfg=cfg,
     )
+    stage_durations_ms["knowledge"] = int((time.perf_counter() - started) * 1000)
     if allow_persistent_memory:
+        started = time.perf_counter()
         relationship_result = await enrich_system_with_relationship_context(
             knowledge_result.system_prompt,
             bot_id=bot_id,
@@ -57,6 +65,8 @@ async def assemble_direct_chat_context(
             user_id=user_id,
             cfg=cfg,
         )
+        stage_durations_ms["relationship"] = int((time.perf_counter() - started) * 1000)
+        started = time.perf_counter()
         person_facts_result = await enrich_system_with_person_facts(
             relationship_result.system_prompt,
             bot_id=bot_id,
@@ -64,6 +74,7 @@ async def assemble_direct_chat_context(
             user_id=user_id,
             cfg=cfg,
         )
+        stage_durations_ms["person_facts"] = int((time.perf_counter() - started) * 1000)
     else:
         skipped_trace = {"hit_count": 0, "sources": [], "skipped_short_social_turn": True}
         relationship_result = RelationshipInjectionResult(
@@ -74,6 +85,8 @@ async def assemble_direct_chat_context(
             system_prompt=knowledge_result.system_prompt,
             trace=skipped_trace,
         )
+        stage_durations_ms["relationship"] = 0
+        stage_durations_ms["person_facts"] = 0
     from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
     from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
 
@@ -104,6 +117,7 @@ async def assemble_direct_chat_context(
         knowledge_retrieval_trace=knowledge_result.trace,
         hybrid_retrieval_trace=hybrid_trace,
         relationship_trace=relationship_result.trace,
+        stage_durations_ms=stage_durations_ms,
     )
 
 

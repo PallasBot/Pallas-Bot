@@ -232,6 +232,8 @@ async def decide_current_turn_with_model(
         return decide_current_turn(turn, model_enabled=False)
     if not enabled:
         return decide_current_turn(turn, model_enabled=False)
+    if turn.is_to_me and not turn.tools_permitted and not turn.has_multi_party_overlap:
+        return _decision(CurrentTurnAction.REPLY, source="rule", reason="explicit_plain_reply")
     from pallas.product.llm.provider_client import complete_chat_message
 
     try:

@@ -815,6 +815,23 @@ async def _post_provider_chat(
 ) -> dict[str, Any]:
     import time
 
+    def with_provider_trace(
+        result: dict[str, Any],
+        *,
+        latency_ms: int,
+        retried_tool_choice: bool = False,
+    ) -> dict[str, Any]:
+        traced = dict(result)
+        traced["_provider_trace"] = {
+            "provider": provider_id or host_from_url(base_url),
+            "model": model,
+            "request_method": resolve_request_method(request_method, base_url),
+            "latency_ms": latency_ms,
+            "ok": True,
+            "retried_tool_choice": retried_tool_choice,
+        }
+        return traced
+
     use_options = dict(options)
     cache_key = _tool_choice_compatibility_key(provider_id, base_url, model)
     requested_tool_choice = str(use_options.get("tool_choice") or "auto").strip().lower()
@@ -878,7 +895,7 @@ async def _post_provider_chat(
                     record_provider_request(provider=provider_id, model=model, ok=True, latency_ms=latency_ms)
                 except Exception:
                     pass
-                return result
+                return with_provider_trace(result, latency_ms=latency_ms, retried_tool_choice=True)
         latency_ms = int((time.monotonic() - started) * 1000)
         fail_cls = "provider_error"
         if isinstance(exc, LlmProviderError) and exc.status is not None:
@@ -911,7 +928,7 @@ async def _post_provider_chat(
             )
         except Exception:
             pass
-        return result
+        return with_provider_trace(result, latency_ms=latency_ms)
 
 
 async def _post_anthropic_messages(
