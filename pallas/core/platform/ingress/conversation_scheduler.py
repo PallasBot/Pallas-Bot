@@ -132,6 +132,12 @@ class ConversationScheduler:
             if self._stopping:
                 raise RuntimeError("conversation scheduler is stopping")
 
+    async def set_concurrency(self, concurrency: int) -> None:
+        async with self._condition:
+            self.concurrency = max(1, int(concurrency))
+            self._start_ready_locked()
+            self._condition.notify_all()
+
     async def stop(self) -> None:
         async with self._condition:
             if self._stopping:
@@ -284,6 +290,14 @@ async def stop_conversation_scheduler() -> None:
     _scheduler = None
     if scheduler is not None:
         await scheduler.stop()
+
+
+async def set_conversation_scheduler_concurrency(concurrency: int) -> bool:
+    scheduler = _scheduler
+    if scheduler is None:
+        return False
+    await scheduler.set_concurrency(concurrency)
+    return True
 
 
 async def submit_conversation_event(bot: Bot, event: Event, work: Work) -> None:

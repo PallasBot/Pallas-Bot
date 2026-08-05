@@ -42,6 +42,22 @@ def test_synthetic_llm_command_selects_only_its_routed_plugin_matchers() -> None
     ]
 
 
+def test_overload_chat_selection_keeps_only_core_reply_deciders() -> None:
+    class RepeaterMatcher:
+        plugin_name = "packages.repeater"
+
+    class LlmMatcher:
+        plugin_name = "packages.llm_chat"
+
+    class GreetingMatcher:
+        plugin_name = "packages.greeting"
+
+    assert dispatch.select_overload_chatter_matchers([GreetingMatcher, RepeaterMatcher, LlmMatcher]) == [
+        RepeaterMatcher,
+        LlmMatcher,
+    ]
+
+
 class _CommandMatcher:
     rule = Rule(command("foo"))
 

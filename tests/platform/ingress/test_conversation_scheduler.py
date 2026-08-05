@@ -14,6 +14,28 @@ def test_per_key_pending_is_clamped_to_positive_value() -> None:
 
 
 @pytest.mark.asyncio
+async def test_scheduler_can_raise_concurrency_for_ready_conversations() -> None:
+    scheduler = ConversationScheduler(concurrency=1, max_pending=8)
+    started: list[int] = []
+    release = asyncio.Event()
+
+    async def work(value: int) -> None:
+        started.append(value)
+        await release.wait()
+
+    first = asyncio.create_task(scheduler.submit(("10001", 1), lambda: work(1)))
+    second = asyncio.create_task(scheduler.submit(("10001", 2), lambda: work(2)))
+    await scheduler.wait_for_pending_at_least(2)
+    await scheduler.set_concurrency(2)
+    await asyncio.sleep(0)
+
+    assert started == [1, 2]
+    release.set()
+    await asyncio.gather(first, second)
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
 async def test_same_conversation_runs_in_fifo_order() -> None:
     scheduler = ConversationScheduler(concurrency=2, max_pending=8)
     seen: list[int] = []

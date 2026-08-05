@@ -137,6 +137,26 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "变更后需重启 Bot 才生效",
         ),
     )
+    conversation_scheduler_adaptive_max: int = Field(
+        default=12,
+        ge=1,
+        le=64,
+        description=field_help(
+            "积压时群消息调度最多能临时扩到多少并发",
+            "填正整数，默认 12；只在数据库和发送队列有余量时逐步扩容",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
+    conversation_scheduler_adaptive_interval_sec: float = Field(
+        default=2.0,
+        ge=0.5,
+        le=60.0,
+        description=field_help(
+            "多久检查一次是否需要临时扩容",
+            "填秒数，默认 2；积压清空后会恢复基础并发",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
     conversation_scheduler_max_pending: int = Field(
         default=512,
         ge=32,
@@ -297,6 +317,17 @@ class IngressDispatchRuntimeConfig(BaseModel):
                 default=conversation_default,
                 minimum=1,
                 maximum=64,
+            ),
+            conversation_scheduler_adaptive_max=dispatch_env_int(
+                "PALLAS_CONVERSATION_SCHEDULER_ADAPTIVE_MAX",
+                default=12,
+                minimum=1,
+                maximum=64,
+            ),
+            conversation_scheduler_adaptive_interval_sec=dispatch_env_float(
+                "PALLAS_CONVERSATION_SCHEDULER_ADAPTIVE_INTERVAL_SEC",
+                default=2.0,
+                minimum=0.5,
             ),
             conversation_scheduler_max_pending=dispatch_env_int(
                 "PALLAS_CONVERSATION_SCHEDULER_MAX_PENDING",

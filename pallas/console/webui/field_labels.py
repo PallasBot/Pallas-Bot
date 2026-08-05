@@ -116,6 +116,8 @@ FIELD_LABELS: dict[str, str] = {
     "chat_drop_on_overload": "过载时整段丢弃闲聊",
     "conversation_scheduler_enabled": "启用群消息公平调度",
     "conversation_scheduler_concurrency": "同时处理群数",
+    "conversation_scheduler_adaptive_max": "积压时最多同时处理群数",
+    "conversation_scheduler_adaptive_interval_sec": "调度扩容检查间隔（秒）",
     "conversation_scheduler_max_pending": "总待处理消息上限",
     "conversation_scheduler_per_key_pending": "单群待处理消息上限",
     "route_index_enabled": "命令快速定位（推荐开启）",

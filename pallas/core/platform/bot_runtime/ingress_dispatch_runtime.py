@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import asyncio
+
 from nonebot import get_driver, logger
 
+from pallas.core.foundation.db.pool_budget import pool_budget_status
 from pallas.core.foundation.startup_report import register_startup_fact
 from pallas.core.platform.bot_runtime.roles import is_hub_role
+from pallas.core.platform.ingress.adaptive_capacity import adaptive_scheduler_target
 from pallas.core.platform.ingress.conversation_scheduler import (
+    conversation_scheduler_status,
+    set_conversation_scheduler_concurrency,
     start_conversation_scheduler,
     stop_conversation_scheduler,
 )
+from pallas.core.platform.ingress.dispatch_runtime_config import get_ingress_dispatch_runtime_config
 from pallas.core.platform.ingress.dispatch_stats_logger import (
     start_dispatch_stats_logger,
     stop_dispatch_stats_logger,
@@ -21,12 +28,48 @@ from pallas.core.platform.ingress.onebot_backpressure import install_onebot_back
 from pallas.core.platform.ingress.route_index import build_route_index, route_index_enabled, route_index_strict
 from pallas.core.platform.ingress.send_queue import (
     install_send_queue,
+    send_queue_status,
     start_send_queue_workers,
     stop_send_queue_workers,
     uninstall_send_queue,
 )
 
 _HOOK_REGISTERED = False
+_ADAPTIVE_CAPACITY_TASK: asyncio.Task[None] | None = None
+
+
+async def adaptive_capacity_loop() -> None:
+    while True:
+        config = get_ingress_dispatch_runtime_config()
+        scheduler = conversation_scheduler_status()
+        current = int(scheduler.get("concurrency") or config.conversation_scheduler_concurrency)
+        target = adaptive_scheduler_target(
+            current=current,
+            baseline=config.conversation_scheduler_concurrency,
+            maximum=config.conversation_scheduler_adaptive_max,
+            scheduler=scheduler,
+            pool=pool_budget_status(),
+            send_queue=send_queue_status(),
+        )
+        if target != current:
+            await set_conversation_scheduler_concurrency(target)
+        await asyncio.sleep(config.conversation_scheduler_adaptive_interval_sec)
+
+
+def start_adaptive_capacity_loop() -> None:
+    global _ADAPTIVE_CAPACITY_TASK
+    if _ADAPTIVE_CAPACITY_TASK is None:
+        _ADAPTIVE_CAPACITY_TASK = asyncio.create_task(adaptive_capacity_loop(), name="ingress_adaptive_capacity")
+
+
+async def stop_adaptive_capacity_loop() -> None:
+    global _ADAPTIVE_CAPACITY_TASK
+    task = _ADAPTIVE_CAPACITY_TASK
+    _ADAPTIVE_CAPACITY_TASK = None
+    if task is None:
+        return
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
 
 
 def register_ingress_dispatch_runtime() -> None:
@@ -52,6 +95,7 @@ def register_ingress_dispatch_runtime() -> None:
         install_send_queue()
         await start_send_queue_workers()
         await start_conversation_scheduler()
+        start_adaptive_capacity_loop()
         install_onebot_backpressure()
         install_matcher_dispatch()
         start_dispatch_stats_logger()
@@ -59,6 +103,7 @@ def register_ingress_dispatch_runtime() -> None:
     @driver.on_shutdown
     async def uninstall_ingress_dispatch_on_shutdown() -> None:
         await stop_dispatch_stats_logger()
+        await stop_adaptive_capacity_loop()
         await stop_conversation_scheduler()
         uninstall_matcher_dispatch()
         uninstall_onebot_backpressure()

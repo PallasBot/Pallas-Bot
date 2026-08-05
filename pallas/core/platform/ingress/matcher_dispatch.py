@@ -52,6 +52,7 @@ _ORIGINAL_HANDLE_EVENT = None
 _ORIGINAL_ADAPTER_HANDLE_EVENTS: dict[object, object] = {}
 _OVERLOAD_SELECTED_THRESHOLD = 24
 _MATCHER_DISPATCH_BATCH = 8
+_CORE_CHATTER_MODULES = frozenset({"repeater", "llm_chat"})
 
 
 def matcher_dispatch_enabled() -> bool:
@@ -124,6 +125,11 @@ def matcher_log_name(matcher: type) -> str:
 def select_synthetic_llm_command_matchers(selected_matchers: list[type], resolution: RouteResolution) -> list[type]:
     """合成命令仅派发到其路由目标，避免无关 blocker 占满执行通道。"""
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) in resolution.matched_modules]
+
+
+def select_overload_chatter_matchers(selected_matchers: list[type]) -> list[type]:
+    """过载时仍保留核心闲聊的接话判断，暂缓其他被动能力。"""
+    return [matcher for matcher in selected_matchers if matcher_module_key(matcher) in _CORE_CHATTER_MODULES]
 
 
 async def patched_handle_event(bot: Bot, event: Event) -> None:
@@ -257,6 +263,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     )
                     if llm_command is not None and resolution is not None:
                         selected_matchers = select_synthetic_llm_command_matchers(selected_matchers, resolution)
+                    elif chat_degraded_token is not None:
+                        selected_matchers = select_overload_chatter_matchers(selected_matchers)
                     if not selected_matchers:
                         continue
 
