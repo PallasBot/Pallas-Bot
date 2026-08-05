@@ -1,12 +1,42 @@
 from __future__ import annotations
 
+from io import BytesIO
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from PIL import Image, ImageSequence
 
 from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm import delivery
+
+
+def test_prepare_sticker_image_shrinks_large_png_without_upscaling_small_png() -> None:
+    large = BytesIO()
+    Image.new("RGBA", (400, 200), "red").save(large, format="PNG")
+    small = BytesIO()
+    Image.new("RGBA", (80, 40), "blue").save(small, format="PNG")
+
+    resized = delivery.prepare_sticker_image(large.getvalue())
+
+    with Image.open(BytesIO(resized)) as image:
+        assert image.size == (160, 80)
+    assert delivery.prepare_sticker_image(small.getvalue()) == small.getvalue()
+
+
+def test_prepare_sticker_image_preserves_animated_gif_frames_and_duration() -> None:
+    first = Image.new("RGBA", (320, 160), "red")
+    second = Image.new("RGBA", (320, 160), "blue")
+    source = BytesIO()
+    first.save(source, format="GIF", save_all=True, append_images=[second], duration=[80, 120], loop=0)
+
+    resized = delivery.prepare_sticker_image(source.getvalue())
+
+    with Image.open(BytesIO(resized)) as image:
+        frames = [frame.copy() for frame in ImageSequence.Iterator(image)]
+        assert image.size == (160, 80)
+        assert image.n_frames == 2
+        assert [frame.info["duration"] for frame in frames] == [80, 120]
 
 
 @pytest.mark.asyncio
