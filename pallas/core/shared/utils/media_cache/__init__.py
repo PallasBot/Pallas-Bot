@@ -181,6 +181,11 @@ async def get_latest_image() -> bytes | None:
     return cache.blob_data if cache else None
 
 
+async def get_recent_images(limit: int) -> list[tuple[str, bytes]]:
+    rows = await image_cache_repo.find_recent_with_blob(limit)
+    return [(row.cq_code, bytes(row.blob_data)) for row in rows if row.blob_data]
+
+
 async def clear_image_cache(days: int = 5, times: int = 3):
     idate = int(str((datetime.now() - timedelta(days=days)).date()).replace("-", ""))
     await image_cache_repo.delete_old(idate)

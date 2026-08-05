@@ -34,16 +34,20 @@ async def test_sticker_test_reports_when_no_cached_image_is_available(monkeypatc
 
 @pytest.mark.asyncio
 async def test_llm_sticker_test_uses_the_text_after_command(monkeypatch: pytest.MonkeyPatch) -> None:
-    send_image = AsyncMock(return_value=True)
-    monkeypatch.setattr(status_commands, "send_repeater_emotion_image", send_image, raising=False)
+    enqueue = AsyncMock(return_value="job")
+    monkeypatch.setattr(
+        "pallas.core.shared.utils.media_cache.get_recent_images",
+        AsyncMock(return_value=[("a", b"a"), ("b", b"b"), ("c", b"c")]),
+    )
+    monkeypatch.setattr("pallas.product.llm.sticker_vision.enqueue_sticker_vision_job", enqueue)
     bot = MagicMock()
     bot.self_id = 111
-    event = SimpleNamespace(group_id=222, user_id=333, get_plaintext=lambda: "牛牛测试LLM表情 太好笑了")
+    event = SimpleNamespace(group_id=222, user_id=333, message_id=444, get_plaintext=lambda: "牛牛测试LLM表情 太好笑了")
 
     result = await status_commands.run_llm_sticker_test(bot, event)
 
     assert result is None
-    send_image.assert_awaited_once_with(bot, 222, 111, 333, "太好笑了")
+    assert enqueue.await_args.kwargs["user_text"] == "太好笑了"
 
 
 @pytest.mark.asyncio

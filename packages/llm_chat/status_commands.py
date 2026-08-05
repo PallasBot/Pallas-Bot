@@ -6,7 +6,7 @@ from nonebot import on_command
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent, PrivateMessageEvent
 
 from pallas.api.perm import group_message_permission_for_command, private_message_permission_for_command
-from pallas.product.llm.delivery import send_cached_sticker_image, send_repeater_emotion_image
+from pallas.product.llm.delivery import send_cached_sticker_image
 from pallas.product.llm.runtime_api import build_llm_status_text
 
 status_cmd = on_command(
@@ -53,14 +53,23 @@ async def run_llm_sticker_test(bot, event: GroupMessageEvent) -> str | None:
     text = str(event.get_plaintext() or "").removeprefix("牛牛测试LLM表情").strip()
     if not text:
         return "请在命令后附上待匹配的文本。"
-    sent = await send_repeater_emotion_image(
-        bot,
-        int(event.group_id),
-        int(bot.self_id),
-        int(event.user_id),
-        text,
+    from pallas.core.shared.utils.media_cache import get_recent_images
+    from pallas.product.llm.sticker_vision import enqueue_sticker_vision_job
+
+    candidates = await get_recent_images(4)
+    if len(candidates) < 3:
+        return "没有足够的缓存表情图供 LLM 选择。"
+    fallback = candidates[0][0]
+    await enqueue_sticker_vision_job(
+        candidates,
+        user_text=text,
+        timeout_sec=8.0,
+        idempotency_key=f"sticker_vision.test:{int(bot.self_id)}:{int(event.group_id)}:{int(event.message_id)}",
+        bot_id=int(bot.self_id),
+        group_id=int(event.group_id),
+        fallback_cq_code=fallback,
     )
-    return None if sent else "没有可用的 LLM 表情候选。"
+    return None
 
 
 @sticker_test_cmd.handle()

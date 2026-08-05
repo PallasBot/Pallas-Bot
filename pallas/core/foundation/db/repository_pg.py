@@ -2291,6 +2291,16 @@ class PgImageCacheRepository:
             row = (await session.execute(stmt)).scalar_one_or_none()
             return row_to_image_cache(row) if row else None
 
+    async def find_recent_with_blob(self, limit: int) -> list[ImageCache]:
+        async with get_session(read_only=True) as session:
+            stmt = (
+                select(ImageCacheRow)
+                .where(ImageCacheRow.blob_data.is_not(None), ImageCacheRow.blob_data != b"")
+                .order_by(ImageCacheRow.date.desc(), ImageCacheRow.id.desc())
+                .limit(max(1, int(limit)))
+            )
+            return [row_to_image_cache(row) for row in (await session.execute(stmt)).scalars()]
+
     async def insert(self, cache: ImageCache) -> None:
         """并发下相同 cq_code 的第二次 insert 等价为 no-op。
 

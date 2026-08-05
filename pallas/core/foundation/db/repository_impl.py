@@ -305,6 +305,14 @@ class MongoImageCacheRepository:
             cache.blob_data = bytes(cache.blob_data)
         return cache
 
+    async def find_recent_with_blob(self, limit: int) -> list[ImageCache]:
+        query = ImageCache.find({"blob_data": {"$nin": [None, b""]}}).sort("-date", "-id")
+        rows = await query.limit(max(1, int(limit))).to_list()
+        for row in rows:
+            if row.blob_data:
+                row.blob_data = bytes(row.blob_data)
+        return rows
+
     async def insert(self, cache: ImageCache) -> None:
         await cache.insert()
 
