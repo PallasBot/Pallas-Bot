@@ -25,6 +25,17 @@ _TYPO_MAP: dict[str, tuple[str, ...]] = {
 _SPLIT_RE = re.compile(r"(?<=[。！？!?；;])")
 
 
+def trim_terminal_period(text: str, *, trim_rate: float = 0.65, rng_seed: int | None = None) -> str:
+    """Occasionally omit only the terminal period on a short casual statement."""
+    plain = str(text or "").strip()
+    if len(plain) > 24 or not plain.endswith("。") or "。" in plain[:-1]:
+        return plain
+    rate = max(0.0, min(1.0, float(trim_rate)))
+    if rate <= 0 or random.Random(rng_seed).random() >= rate:
+        return plain
+    return plain[:-1]
+
+
 def apply_chinese_typo(text: str, *, error_rate: float = 0.01, rng_seed: int | None = None) -> str:
     plain = str(text or "")
     if not plain:
@@ -81,14 +92,22 @@ def apply_reply_postprocess(
     typo_rate: float = 0.01,
     split_enabled: bool = False,
     split_max_chars: int = 36,
+    trim_terminal_period_enabled: bool = True,
+    trim_terminal_period_rate: float = 0.65,
     rng_seed: int | None = None,
 ) -> list[str]:
     plain = str(text or "").strip()
     if not plain:
         return []
-    if not enabled:
-        return [plain]
     processed = plain
+    if trim_terminal_period_enabled:
+        processed = trim_terminal_period(
+            processed,
+            trim_rate=trim_terminal_period_rate,
+            rng_seed=rng_seed,
+        )
+    if not enabled:
+        return [processed]
     if typo_enabled:
         processed = apply_chinese_typo(processed, error_rate=typo_rate, rng_seed=rng_seed)
     if split_enabled:

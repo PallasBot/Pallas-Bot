@@ -6,6 +6,7 @@ import pytest
 from pallas.product.llm.current_turn_decision import (
     CurrentTurnAction,
     CurrentTurnDecisionInput,
+    CurrentTurnDeliveryStyle,
     CurrentTurnSocialAction,
     build_current_turn_decision_prompt,
     build_reply_target_instruction,
@@ -185,11 +186,33 @@ def test_legacy_current_turn_response_defaults_to_answer_social_action() -> None
     assert result.social_action.value == "ANSWER"
 
 
+def test_model_current_turn_allows_quote_for_a_direct_reply() -> None:
+    result = decide_current_turn(
+        CurrentTurnDecisionInput(text="这个怎么弄？", is_to_me=True),
+        model_enabled=True,
+        model_response='{"action":"REPLY","delivery_style":"QUOTE"}',
+    )
+
+    assert result.delivery_style is CurrentTurnDeliveryStyle.QUOTE
+
+
+def test_model_current_turn_downgrades_mention_without_multi_party_overlap() -> None:
+    result = decide_current_turn(
+        CurrentTurnDecisionInput(text="你怎么看？", is_to_me=True, has_multi_party_overlap=False),
+        model_enabled=True,
+        model_response='{"action":"REPLY","delivery_style":"MENTION"}',
+    )
+
+    assert result.delivery_style is CurrentTurnDeliveryStyle.PLAIN
+    assert result.trace.reason == "mention_without_multi_party_overlap"
+
+
 def test_current_turn_prompt_distinguishes_short_vent_from_explicit_opinion() -> None:
     prompt = build_current_turn_decision_prompt(CurrentTurnDecisionInput(text="我又改需求了，烦", is_to_me=True))
 
     assert "ACK is for a short vent" in prompt
     assert "STANCE is only for an explicit request for an opinion" in prompt
+    assert "QUOTE only when directly answering the current message" in prompt
 
 
 def test_short_vent_does_not_read_persistent_memory_even_when_model_calls_it_an_answer() -> None:
@@ -281,6 +304,7 @@ def test_current_turn_trace_is_compact_and_uses_safe_fields_only() -> None:
     assert result.trace.model_dump(mode="json") == {
         "action": "REPLY",
         "social_action": "ANSWER",
+        "delivery_style": "PLAIN",
         "source": "rule",
         "reason": "default_reply",
     }

@@ -329,6 +329,9 @@ class LlmConfig(BaseModel):
     llm_reply_typo_rate: float = Field(default=0.01, ge=0.0, le=1.0)
     llm_reply_split_enabled: bool = Field(default=False)
     llm_reply_split_max_chars: int = Field(default=36, ge=8, le=120)
+    llm_reply_trim_terminal_period_enabled: bool = Field(default=True)
+    llm_reply_trim_terminal_period_rate: float = Field(default=0.65, ge=0.0, le=1.0)
+    llm_reply_mention_cooldown_sec: int = Field(default=900, ge=0, le=86400)
     llm_sticker_fit_enabled: bool = Field(default=False)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
     llm_reply_style_variants: dict[str, object] = Field(default_factory=dict)
@@ -568,6 +571,9 @@ def get_llm_config() -> LlmConfig:
             llm_reply_typo_rate=_env_float("LLM_REPLY_TYPO_RATE", 0.01),
             llm_reply_split_enabled=_env_bool("LLM_REPLY_SPLIT_ENABLED", False),
             llm_reply_split_max_chars=_env_int("LLM_REPLY_SPLIT_MAX_CHARS", 36),
+            llm_reply_trim_terminal_period_enabled=_env_bool("LLM_REPLY_TRIM_TERMINAL_PERIOD_ENABLED", True),
+            llm_reply_trim_terminal_period_rate=_env_float("LLM_REPLY_TRIM_TERMINAL_PERIOD_RATE", 0.65),
+            llm_reply_mention_cooldown_sec=_env_int("LLM_REPLY_MENTION_COOLDOWN_SEC", 900),
             llm_sticker_fit_enabled=_env_bool("LLM_STICKER_FIT_ENABLED", False),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
             llm_reply_style_variants=_env_json_object("LLM_REPLY_STYLE_VARIANTS"),

@@ -26,6 +26,12 @@ class CurrentTurnSocialAction(StrEnum):
     ASK_ONE = "ASK_ONE"
 
 
+class CurrentTurnDeliveryStyle(StrEnum):
+    PLAIN = "PLAIN"
+    QUOTE = "QUOTE"
+    MENTION = "MENTION"
+
+
 ReplyTarget = Literal["fact", "emotion", "short_tease", "answer", "silent"]
 
 
@@ -48,6 +54,7 @@ class CurrentTurnModelResponse(BaseModel):
 
     action: CurrentTurnAction
     social_action: CurrentTurnSocialAction = CurrentTurnSocialAction.ANSWER
+    delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN
 
 
 class CurrentTurnDecisionTrace(BaseModel):
@@ -55,6 +62,7 @@ class CurrentTurnDecisionTrace(BaseModel):
 
     action: CurrentTurnAction
     social_action: CurrentTurnSocialAction
+    delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN
     source: str
     reason: str
 
@@ -64,6 +72,7 @@ class CurrentTurnDecision(BaseModel):
 
     action: CurrentTurnAction
     social_action: CurrentTurnSocialAction
+    delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN
     trace: CurrentTurnDecisionTrace
 
 
@@ -138,13 +147,18 @@ def build_current_turn_decision_prompt(turn: CurrentTurnDecisionInput) -> str:
     )
     return (
         "Classify this current chat turn. Reply with JSON only: "
-        '{"action":"REPLY|PASS|TOOL|FOLLOW_UP","social_action":"ACK|JOKE|STANCE|ANSWER|ASK_ONE"}. '
+        '{"action":"REPLY|PASS|TOOL|FOLLOW_UP",'
+        '"social_action":"ACK|JOKE|STANCE|ANSWER|ASK_ONE",'
+        '"delivery_style":"PLAIN|QUOTE|MENTION"}. '
         "social_action is the visible conversational move, not a writing style. "
         "ACK is for a short vent, acknowledgement, or low-stakes reaction. "
         "JOKE is for banter or a playful reaction. "
         "For a short ACK or JOKE without a question or request, use PASS. "
         "STANCE is only for an explicit request for an opinion or choice. "
         "ANSWER is for a direct question, and ASK_ONE is only for a necessary clarification. "
+        "Use PLAIN by default. QUOTE only when directly answering the current message. "
+        "Use MENTION only when multiple people are speaking and a specific person must be singled out; "
+        "do not mention someone back just because they mentioned the bot. "
         f"The message is {addressed}; {tool_option}. "
         f"The bot has replied {turn.recent_bot_reply_count} time(s) recently; "
         f"multi-party overlap is {turn.has_multi_party_overlap}. "
@@ -192,9 +206,17 @@ def decide_current_turn(
             source="rule",
             reason=reason,
         )
+    if parsed.delivery_style is CurrentTurnDeliveryStyle.MENTION and not turn.has_multi_party_overlap:
+        return _decision(
+            parsed.action,
+            social_action=parsed.social_action,
+            source="fallback",
+            reason="mention_without_multi_party_overlap",
+        )
     return _decision(
         parsed.action,
         social_action=parsed.social_action,
+        delivery_style=parsed.delivery_style,
         source="model",
         reason="model_action",
     )
@@ -218,15 +240,16 @@ async def decide_current_turn_with_model(
                 {
                     "role": "system",
                     "content": (
-                        "Return only a JSON object with action and social_action. "
+                        "Return only a JSON object with action, social_action, and delivery_style. "
                         "Allowed actions: REPLY, PASS, TOOL, FOLLOW_UP. "
-                        "Allowed social actions: ACK, JOKE, STANCE, ANSWER, ASK_ONE."
+                        "Allowed social actions: ACK, JOKE, STANCE, ANSWER, ASK_ONE. "
+                        "Allowed delivery styles: PLAIN, QUOTE, MENTION."
                     ),
                 },
                 {"role": "user", "content": build_current_turn_decision_prompt(turn)},
             ],
             model="",
-            options={"temperature": 0, "max_tokens": 24},
+            options={"temperature": 0, "max_tokens": 48},
             task="turn_decision",
         )
     except Exception:
@@ -239,6 +262,7 @@ def _decision(
     action: CurrentTurnAction,
     *,
     social_action: CurrentTurnSocialAction | None = None,
+    delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN,
     source: str,
     reason: str,
 ) -> CurrentTurnDecision:
@@ -249,9 +273,11 @@ def _decision(
     return CurrentTurnDecision(
         action=action,
         social_action=social_action,
+        delivery_style=delivery_style,
         trace=CurrentTurnDecisionTrace(
             action=action,
             social_action=social_action,
+            delivery_style=delivery_style,
             source=source,
             reason=reason,
         ),

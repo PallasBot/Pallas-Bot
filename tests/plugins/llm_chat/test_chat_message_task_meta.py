@@ -58,6 +58,8 @@ def test_build_recent_reply_variation_hint_flags_generic_prefix_cluster() -> Non
     hint = build_recent_reply_variation_hint(turns)
 
     assert "最近几轮别再用这些开头：行吧" in hint
+
+
 @pytest.mark.asyncio
 async def test_handle_llm_chat_skips_empty_to_me_without_reply(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.llm_chat import chat_message as mod
@@ -427,6 +429,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert payload["behavior_hint"]
     assert "persona_affect_block" not in payload
     assert payload["current_turn_trace"]["social_action"] == "ACK"
+    assert payload["reply_delivery_style"] == "PLAIN"
+    assert payload["message_id"] == 40004
     feedback_hint.assert_not_called()
     submit_request = submit_mock.await_args.args[0]
     assert "【本轮表达去重】" not in submit_request.system_prompt

@@ -677,6 +677,30 @@ class LlmWebuiConfig(BaseModel):
             "后处理结果不写回语料学习；想玩味道再开，日常可关",
         ),
     )
+    llm_reply_trim_terminal_period_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "短句末尾要不要偶尔不打句号",
+            "只作用于 24 字以内的单句陈述；问号、感叹号、多句和长答不动",
+            "默认开。关闭后始终保留模型给出的句号",
+        ),
+    )
+    llm_reply_trim_terminal_period_rate: float = Field(
+        default=0.65,
+        description=field_help(
+            "短句省略句号的概率（0～1）",
+            "默认 0.65；只在上述短单句条件满足时抽样",
+            "设为 0 可保留句号；设为 1 则符合条件时总是省略",
+        ),
+    )
+    llm_reply_mention_cooldown_sec: int = Field(
+        default=900,
+        description=field_help(
+            "群内 @ 某位成员的最短间隔（秒）",
+            "默认 900 秒。只限制模型主动选择的 @，引用和普通回复不受影响",
+            "设为 0 取消间隔；建议保持较长，避免把群聊变成提醒机器人",
+        ),
+    )
     llm_reply_typo_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -1027,6 +1051,9 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_output_filter_polish_lite_soft_phrases=cfg.llm_output_filter_polish_lite_soft_phrases,
         llm_persona_output_firewall=cfg.llm_persona_output_firewall,
         llm_reply_postprocess_enabled=cfg.llm_reply_postprocess_enabled,
+        llm_reply_trim_terminal_period_enabled=cfg.llm_reply_trim_terminal_period_enabled,
+        llm_reply_trim_terminal_period_rate=cfg.llm_reply_trim_terminal_period_rate,
+        llm_reply_mention_cooldown_sec=cfg.llm_reply_mention_cooldown_sec,
         llm_reply_typo_enabled=cfg.llm_reply_typo_enabled,
         llm_reply_typo_rate=cfg.llm_reply_typo_rate,
         llm_reply_split_enabled=cfg.llm_reply_split_enabled,

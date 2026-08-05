@@ -3,14 +3,39 @@
 from __future__ import annotations
 
 from nonebot import logger
-from nonebot.adapters.onebot.v11 import MessageSegment
+from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from nonebot.adapters.onebot.v11.exception import NetworkError
 from nonebot.exception import ActionFailed
 
 _CALLBACK_SEND_ERRORS = (ActionFailed, NetworkError)
 
 
-async def send_group_message(bot, group_id: int, message: str) -> bool:
+def build_group_text_message(
+    text: str,
+    *,
+    reply_to_message_id: int | None = None,
+    at_user_id: int | None = None,
+) -> str | Message:
+    if reply_to_message_id:
+        return MessageSegment.reply(reply_to_message_id) + text
+    if at_user_id:
+        return MessageSegment.at(at_user_id) + text
+    return text
+
+
+async def send_group_message(
+    bot,
+    group_id: int,
+    message: str,
+    *,
+    reply_to_message_id: int | None = None,
+    at_user_id: int | None = None,
+) -> bool:
+    outgoing = build_group_text_message(
+        message,
+        reply_to_message_id=reply_to_message_id,
+        at_user_id=at_user_id,
+    )
     logger.info(
         "AI callback sending group text task=unknown bot_id={} group={} length={}",
         getattr(bot, "self_id", "<unknown>"),
@@ -21,7 +46,7 @@ async def send_group_message(bot, group_id: int, message: str) -> bool:
         await bot.call_api(
             "send_group_msg",
             **{
-                "message": message,
+                "message": outgoing,
                 "group_id": group_id,
             },
         )

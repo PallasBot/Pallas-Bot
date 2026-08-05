@@ -41,6 +41,39 @@ _REPEATER_CALLBACK_TASKS = frozenset({
     REPEATER_SELECT_TASK_TYPE,
 })
 
+_MENTION_LAST_SENT_AT: dict[int, float] = {}
+
+
+def resolve_llm_reply_delivery(
+    task: dict,
+    *,
+    group_id: object,
+    mention_cooldown_sec: int,
+    now: float | None = None,
+) -> tuple[int | None, int | None]:
+    """Resolve a task's optional QQ reply decoration with local safety gates."""
+    if str(task.get("task_type") or "").strip() != LLM_CHAT_TASK_TYPE:
+        return None, None
+    style = str(task.get("reply_delivery_style") or "PLAIN").strip().upper()
+    if style == "QUOTE":
+        message_id = task.get("message_id")
+        return (int(message_id), None) if str(message_id or "").isdigit() else (None, None)
+    if style != "MENTION" or not bool(task.get("has_multi_party_overlap")):
+        return None, None
+    user_id = task.get("user_id")
+    if not str(user_id or "").isdigit() or not str(group_id or "").isdigit():
+        return None, None
+    resolved_group_id = int(group_id)
+    current = time.monotonic() if now is None else now
+    if current - _MENTION_LAST_SENT_AT.get(resolved_group_id, float("-inf")) < max(0, mention_cooldown_sec):
+        return None, None
+    return None, int(user_id)
+
+
+def note_llm_reply_mention_sent(group_id: object, *, now: float | None = None) -> None:
+    if str(group_id or "").isdigit():
+        _MENTION_LAST_SENT_AT[int(group_id)] = time.monotonic() if now is None else now
+
 
 def maybe_append_llm_repeater_feedback(task_id: str, task: dict, reply_text: str) -> None:
     from pallas.product.llm.repeater_feedback import (
@@ -214,6 +247,7 @@ async def deliver_llm_callback_success(
                 reply_text = fallback
             else:
                 reply_text = ""
+    learned_reply_text = reply_text
     reply_segments = [reply_text] if reply_text else []
     if reply_text:
         from pallas.product.llm.reply_postprocess import apply_reply_postprocess
@@ -226,6 +260,8 @@ async def deliver_llm_callback_success(
             typo_rate=float(cfg.llm_reply_typo_rate),
             split_enabled=bool(cfg.llm_reply_split_enabled),
             split_max_chars=int(cfg.llm_reply_split_max_chars),
+            trim_terminal_period_enabled=bool(cfg.llm_reply_trim_terminal_period_enabled),
+            trim_terminal_period_rate=float(cfg.llm_reply_trim_terminal_period_rate),
         )
         reply_text = "".join(reply_segments)
     if reply_segments and group_id and bot is not None:
@@ -239,11 +275,24 @@ async def deliver_llm_callback_success(
             task_type,
         )
         text_delivered = True
-        for segment in reply_segments:
-            ok = await send_group_message(bot, group_id, segment)
+        reply_to_message_id, at_user_id = resolve_llm_reply_delivery(
+            task,
+            group_id=group_id,
+            mention_cooldown_sec=int(cfg.llm_reply_mention_cooldown_sec),
+        )
+        for index, segment in enumerate(reply_segments):
+            ok = await send_group_message(
+                bot,
+                group_id,
+                segment,
+                reply_to_message_id=reply_to_message_id if index == 0 else None,
+                at_user_id=at_user_id if index == 0 else None,
+            )
+            if index == 0 and ok and at_user_id is not None:
+                note_llm_reply_mention_sent(group_id)
             text_delivered = bool(ok) and text_delivered
         delivered = text_delivered and delivered
-    if should_append_llm_session(task) and reply_text:
+    if should_append_llm_session(task) and learned_reply_text:
         raw_group_id = task.get("group_id")
         scope_group = int(raw_group_id) if raw_group_id is not None else None
         speaker_id = int(task.get("user_id") or 0)
@@ -259,15 +308,15 @@ async def deliver_llm_callback_success(
                 )
             if user_text:
                 await append_llm_message(int(bot_id), scope_group, speaker_id, "user", user_text)
-            await append_llm_message(int(bot_id), scope_group, speaker_id, "assistant", reply_text)
+            await append_llm_message(int(bot_id), scope_group, speaker_id, "assistant", learned_reply_text)
             from pallas.product.llm.memory.auto_episode import schedule_auto_save_group_episode
 
             schedule_auto_save_group_episode(bot_id=int(bot_id), group_id=scope_group)
     from pallas.product.llm.repeater_feedback import is_feedback_task_type
 
-    if is_feedback_task_type(task_type) and reply_text and text_delivered:
-        maybe_append_llm_repeater_feedback(task_id, task, reply_text)
-    if reply_text and text_delivered and group_id:
+    if is_feedback_task_type(task_type) and learned_reply_text and text_delivered:
+        maybe_append_llm_repeater_feedback(task_id, task, learned_reply_text)
+    if learned_reply_text and text_delivered and group_id:
         scene_tier = str(task.get("scene_tier") or "").strip()
         channel = "at_chat" if task_type == LLM_CHAT_TASK_TYPE else "strong" if scene_tier == "strong" else "group"
         try:
@@ -275,7 +324,7 @@ async def deliver_llm_callback_success(
 
             note_expression_from_utterance(
                 int(group_id),
-                reply_text,
+                learned_reply_text,
                 source="llm_success",
                 channel=channel,
                 scene_tier=scene_tier,
@@ -283,13 +332,13 @@ async def deliver_llm_callback_success(
             )
         except Exception as exc:
             logger.debug("AI callback expression learn skipped task={}: {}", task_id, exc)
-    if reply_text and text_delivered:
+    if learned_reply_text and text_delivered:
         if bool(get_llm_config().llm_reply_effect_eval_enabled):
             from pallas.product.llm.reply_effect import evaluate_and_record_reply_effect
 
             try:
                 evaluate_and_record_reply_effect(
-                    reply_text,
+                    learned_reply_text,
                     task_type=task_type,
                     group_id=int(group_id) if group_id is not None else None,
                     user_id=int(task.get("user_id") or 0) or None,
@@ -307,7 +356,7 @@ async def deliver_llm_callback_success(
                 created_at=int(time.time()),
                 scene=BehaviorScene(behavior_scene),
                 user_text=str(task.get("user_text") or "").strip(),
-                reply_text=reply_text,
+                reply_text=learned_reply_text,
                 selected_pattern_ids=[
                     str(item) for item in list(task.get("behavior_pattern_ids") or []) if str(item).strip()
                 ],
