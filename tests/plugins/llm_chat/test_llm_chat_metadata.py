@@ -9,10 +9,10 @@ def test_llm_status_menu_is_superuser_only_help():
 
 def test_llm_sticker_test_menu_is_superuser_only_help():
     menu = __plugin_meta__.extra.get("menu_data") or []
-    item = next(item for item in menu if item.get("command_permission") == "llm_chat.sticker_test")
+    items = [item for item in menu if item.get("command_permission") == "llm_chat.sticker_test"]
 
-    assert item.get("help_audience") == "superuser"
-    assert item.get("trigger_condition") == "牛牛测试表情"
+    assert [item.get("trigger_condition") for item in items] == ["牛牛测试缓存表情", "牛牛测试LLM表情 + 待匹配文本"]
+    assert all(item.get("help_audience") == "superuser" for item in items)
 
 
 def test_llm_chat_plugin_is_user_facing_help():

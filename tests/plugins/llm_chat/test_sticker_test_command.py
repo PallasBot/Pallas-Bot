@@ -30,3 +30,25 @@ async def test_sticker_test_reports_when_no_cached_image_is_available(monkeypatc
     result = await status_commands.run_sticker_test(bot, event)
 
     assert result == "没有可发送的 Repeater 缓存表情图。"
+
+
+@pytest.mark.asyncio
+async def test_llm_sticker_test_uses_the_text_after_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    send_image = AsyncMock(return_value=True)
+    monkeypatch.setattr(status_commands, "send_repeater_emotion_image", send_image, raising=False)
+    bot = MagicMock()
+    bot.self_id = 111
+    event = SimpleNamespace(group_id=222, user_id=333, get_plaintext=lambda: "牛牛测试LLM表情 太好笑了")
+
+    result = await status_commands.run_llm_sticker_test(bot, event)
+
+    assert result is None
+    send_image.assert_awaited_once_with(bot, 222, 111, 333, "太好笑了")
+
+
+@pytest.mark.asyncio
+async def test_llm_sticker_test_requires_matching_text() -> None:
+    bot = MagicMock()
+    event = SimpleNamespace(group_id=222, user_id=333, get_plaintext=lambda: "牛牛测试LLM表情")
+
+    assert await status_commands.run_llm_sticker_test(bot, event) == "请在命令后附上待匹配的文本。"

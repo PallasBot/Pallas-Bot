@@ -6,7 +6,7 @@ from nonebot import on_command
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent, PrivateMessageEvent
 
 from pallas.api.perm import group_message_permission_for_command, private_message_permission_for_command
-from pallas.product.llm.delivery import send_cached_sticker_image
+from pallas.product.llm.delivery import send_cached_sticker_image, send_repeater_emotion_image
 from pallas.product.llm.runtime_api import build_llm_status_text
 
 status_cmd = on_command(
@@ -18,7 +18,14 @@ status_cmd = on_command(
 )
 
 sticker_test_cmd = on_command(
-    "牛牛测试表情",
+    "牛牛测试缓存表情",
+    priority=5,
+    block=True,
+    permission=group_message_permission_for_command("llm_chat.sticker_test"),
+)
+
+llm_sticker_test_cmd = on_command(
+    "牛牛测试LLM表情",
     priority=5,
     block=True,
     permission=group_message_permission_for_command("llm_chat.sticker_test"),
@@ -42,6 +49,20 @@ async def run_sticker_test(bot, event: GroupMessageEvent) -> str | None:
     return None if sent else "没有可发送的 Repeater 缓存表情图。"
 
 
+async def run_llm_sticker_test(bot, event: GroupMessageEvent) -> str | None:
+    text = str(event.get_plaintext() or "").removeprefix("牛牛测试LLM表情").strip()
+    if not text:
+        return "请在命令后附上待匹配的文本。"
+    sent = await send_repeater_emotion_image(
+        bot,
+        int(event.group_id),
+        int(bot.self_id),
+        int(event.user_id),
+        text,
+    )
+    return None if sent else "没有可用的 LLM 表情候选。"
+
+
 @sticker_test_cmd.handle()
 async def handle_sticker_test(bot, event: MessageEvent) -> None:
     if not isinstance(event, GroupMessageEvent):
@@ -49,3 +70,12 @@ async def handle_sticker_test(bot, event: MessageEvent) -> None:
     response = await run_sticker_test(bot, event)
     if response:
         await sticker_test_cmd.finish(response)
+
+
+@llm_sticker_test_cmd.handle()
+async def handle_llm_sticker_test(bot, event: MessageEvent) -> None:
+    if not isinstance(event, GroupMessageEvent):
+        return
+    response = await run_llm_sticker_test(bot, event)
+    if response:
+        await llm_sticker_test_cmd.finish(response)
