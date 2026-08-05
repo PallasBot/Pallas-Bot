@@ -41,6 +41,60 @@ def test_merge_dispatch_metrics_sums_counters() -> None:
     assert merged["alerts"] == []
 
 
+def test_merge_dispatch_metrics_keeps_budget_and_work_aux_observability() -> None:
+    rows = [
+        {
+            "hotpath": {
+                "llm_budget_skipped_explicit": 2,
+                "llm_budget_skipped_ambient": 3,
+            },
+            "work_aux": {
+                "available": True,
+                "heartbeat_age_sec": 16.0,
+                "consumers": 3,
+                "pending": 4,
+                "leased": 2,
+                "dead_lettered": 1,
+                "oldest_pending_age_sec": 301.0,
+                "max_attempts": 5,
+            },
+        },
+        {
+            "hotpath": {
+                "llm_budget_skipped_explicit": 1,
+                "llm_budget_skipped_ambient": 4,
+            },
+            "work_aux": {
+                "available": True,
+                "heartbeat_age_sec": 20.0,
+                "consumers": 2,
+                "pending": 3,
+                "leased": 3,
+                "dead_lettered": 2,
+                "oldest_pending_age_sec": 99.0,
+                "max_attempts": 4,
+            },
+        },
+    ]
+
+    merged = dispatch_metrics.merge_dispatch_metrics(rows)
+
+    assert merged["hotpath"]["llm_budget_skipped_explicit"] == 3
+    assert merged["hotpath"]["llm_budget_skipped_ambient"] == 7
+    assert merged["work_aux"] == {
+        "available": True,
+        "heartbeat_age_sec": 16.0,
+        "consumers": 3,
+        "pending": 4,
+        "leased": 3,
+        "dead_lettered": 2,
+        "oldest_pending_age_sec": 301.0,
+        "max_attempts": 5,
+    }
+    assert "work_aux_heartbeat_stale" in merged["alerts"]
+    assert "work_aux_backlog_old" in merged["alerts"]
+
+
 def test_aggregate_ingress_dispatch_unified(monkeypatch) -> None:
     from pallas.core.platform.shard import dispatch_observability
 

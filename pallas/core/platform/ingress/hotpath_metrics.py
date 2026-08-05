@@ -344,6 +344,7 @@ def merge_hotpath_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return hotpath_metrics_snapshot()
     counters = dict.fromkeys(_COUNTERS, 0)
+    budget_counters: dict[str, int] = {}
     day_key = ""
     percentile_keys = (
         "route_ms_p50",
@@ -365,6 +366,9 @@ def merge_hotpath_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         day_key = str(row.get("day_key") or day_key)
         for key in _COUNTERS:
             counters[key] += int(row.get(key) or 0)
+        for key, value in row.items():
+            if key.startswith("llm_budget_skipped_") and isinstance(value, (int, float)):
+                budget_counters[key] = budget_counters.get(key, 0) + int(value)
         for key in percentile_keys:
             val = row.get(key)
             if isinstance(val, (int, float)):
@@ -382,6 +386,7 @@ def merge_hotpath_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "day_key": day_key or _today_key(),
         **counters,
+        **budget_counters,
         **merged_pct,
         "bundle_cache_hit_ratio": round(cache_hits / lookups, 4) if lookups else None,
         "reply_snapshot_hit_ratio": round(snap_hit / snap_total, 4) if snap_total else None,

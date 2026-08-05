@@ -346,6 +346,24 @@ def merge_snapshot_health(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any
     return merged
 
 
+def merge_work_aux_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    available = [row for row in rows if row.get("available") is True]
+    if not available:
+        return {"available": False}
+    merged: dict[str, Any] = {"available": True}
+    heartbeat_ages = [
+        float(row["heartbeat_age_sec"]) for row in available if isinstance(row.get("heartbeat_age_sec"), (int, float))
+    ]
+    if heartbeat_ages:
+        merged["heartbeat_age_sec"] = round(min(heartbeat_ages), 2)
+    for key in ("consumers", "pending", "leased", "dead_lettered", "oldest_pending_age_sec", "max_attempts"):
+        values = [float(row[key]) for row in available if isinstance(row.get(key), (int, float))]
+        if values:
+            value = max(values)
+            merged[key] = int(value) if key != "oldest_pending_age_sec" else value
+    return merged
+
+
 def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return dispatch_metrics_snapshot()
@@ -354,6 +372,7 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     send_rows: list[dict[str, Any]] = []
     pool_rows: list[dict[str, Any]] = []
     hotpath_rows: list[dict[str, Any]] = []
+    work_aux_rows: list[dict[str, Any]] = []
     scheduler_rows: list[dict[str, Any]] = []
     snapshot_health_rows: list[dict[str, Any]] = []
     day_key = ""
@@ -375,6 +394,9 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         hotpath = row.get("hotpath")
         if isinstance(hotpath, dict):
             hotpath_rows.append(hotpath)
+        work_aux = row.get("work_aux")
+        if isinstance(work_aux, dict):
+            work_aux_rows.append(work_aux)
         scheduler = row.get("conversation_scheduler")
         if isinstance(scheduler, dict):
             scheduler_rows.append(scheduler)
@@ -394,6 +416,7 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         pool_budget=pool_merged,
         pg_util=pg_util if isinstance(pg_util, float) else None,
         hotpath=merge_hotpath_metrics(hotpath_rows),
+        work_aux=merge_work_aux_snapshots(work_aux_rows),
         conversation_scheduler=merge_conversation_scheduler_snapshots(scheduler_rows),
         snapshot_health=merge_snapshot_health(snapshot_health_rows),
     )
