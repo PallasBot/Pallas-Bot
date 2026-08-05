@@ -44,11 +44,11 @@ def test_should_polish_lite_sample_deterministic() -> None:
     assert first == second
 
 
-def test_resolve_select_polish_lite_mode(monkeypatch) -> None:
+def test_resolve_select_polish_lite_mode_as_select(monkeypatch) -> None:
     monkeypatch.setattr(
         "pallas.product.llm.config.repo_env_raw_value",
         lambda key: "select_polish_lite" if key == "LLM_REPEATER_MODE" else None,
     )
-    assert resolve_llm_repeater_mode() == "select_polish_lite"
+    assert resolve_llm_repeater_mode() == "select"
     assert resolve_llm_repeater_flags() == (False, False, True)
-    assert resolve_llm_polish_lite_enabled() is True
+    assert resolve_llm_polish_lite_enabled() is False

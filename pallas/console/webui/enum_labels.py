@@ -37,9 +37,6 @@ FIELD_CHOICE_LABELS: dict[str, dict[str, str]] = {
     "llm_repeater_mode": {
         "off": "关闭 AI 接话",
         "select": "命中语料时 AI 选句（推荐）",
-        "select_polish_lite": "选句为主，少数回复轻润色",
-        "select_fallback": "选句，语料缺失时现编",
-        "fallback": "仅语料缺失时 AI 现编",
     },
     "llm_vector_retrieve": {
         "keyword": "仅关键词",

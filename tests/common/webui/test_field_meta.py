@@ -77,7 +77,7 @@ def test_field_meta_keeps_field_help_description():
 
 def test_field_meta_includes_choice_labels_for_registered_enum():
     class _Mode(BaseModel):
-        llm_repeater_mode: Literal["off", "select", "select_polish_lite"] = Field(default="select")
+        llm_repeater_mode: Literal["off", "select"] = Field(default="select")
 
     f = _Mode.model_fields["llm_repeater_mode"]
     row = field_meta_for_model_field(
@@ -89,7 +89,6 @@ def test_field_meta_includes_choice_labels_for_registered_enum():
     )
     assert row["choice_labels"]["select"] == "命中语料时 AI 选句（推荐）"
     assert row["choice_labels"]["off"] == "关闭 AI 接话"
-    assert row["choice_labels"]["select_polish_lite"] == "选句为主，少数回复轻润色"
 
 
 def test_field_meta_includes_choice_labels_for_llm_vector_retrieve():

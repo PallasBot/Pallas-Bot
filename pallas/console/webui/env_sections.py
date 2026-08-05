@@ -252,7 +252,6 @@ def _llm_section() -> WebuiEnvSection:
             "drunk_tts_min_drunkenness": "DRUNK_TTS_MIN_DRUNKENNESS",
             "drunk_tts_min_chars": "DRUNK_TTS_MIN_CHARS",
             "llm_repeater_mode": "LLM_REPEATER_MODE",
-            "llm_polish_lite_sample_rate": "LLM_POLISH_LITE_SAMPLE_RATE",
             "llm_governance_enabled": "LLM_GOVERNANCE_ENABLED",
             "llm_session_enabled": "LLM_SESSION_ENABLED",
             "llm_session_user_window": "LLM_SESSION_USER_WINDOW",

@@ -150,48 +150,20 @@ def _env_group_id_list(key: str) -> list[int]:
 
 def resolve_llm_repeater_mode() -> str:
     raw = _env_str("LLM_REPEATER_MODE").strip().lower()
-    aliases = {
-        "polish": "select_polish_lite",
-        "both": "select_fallback",
-    }
-    if raw in ("off", "fallback", "select", "select_fallback", "select_polish_lite"):
+    if raw == "off":
         return raw
-    if raw in aliases:
-        return aliases[raw]
-
-    fallback_raw = repo_env_raw_value("LLM_FALLBACK_ENABLED")
-    polish_raw = repo_env_raw_value("LLM_POLISH_ENABLED")
-    if fallback_raw is None and polish_raw is None:
-        return "select_polish_lite"
-
-    fallback = _env_bool("LLM_FALLBACK_ENABLED", False)
-    polish = _env_bool("LLM_POLISH_ENABLED", False)
-    if fallback and polish:
-        return "select_fallback"
-    if fallback:
-        return "fallback"
-    if polish:
-        return "select_polish_lite"
-    return "select_polish_lite"
+    return "select"
 
 
 def resolve_llm_repeater_flags() -> tuple[bool, bool, bool]:
     mode = resolve_llm_repeater_mode()
     if mode == "off":
         return False, False, False
-    if mode == "fallback":
-        return True, False, False
-    if mode == "select":
-        return False, False, True
-    if mode == "select_fallback":
-        return True, False, True
-    if mode == "select_polish_lite":
-        return False, False, True
     return False, False, True
 
 
 def resolve_llm_polish_lite_enabled() -> bool:
-    return resolve_llm_repeater_mode() == "select_polish_lite"
+    return False
 
 
 def resolve_conversation_feature_level_raw() -> str:
@@ -270,7 +242,7 @@ class LlmConfig(BaseModel):
     chat_tts_enable: bool = Field(default=False)
     drunk_tts_min_drunkenness: int = Field(default=1, ge=0, le=100)
     drunk_tts_min_chars: int = Field(default=6, ge=0, le=2000)
-    llm_repeater_mode: str = Field(default="select_polish_lite")
+    llm_repeater_mode: str = Field(default="select")
     llm_fallback_enabled: bool = Field(default=False)
     llm_polish_enabled: bool = Field(default=False)
     llm_select_enabled: bool = Field(default=True)

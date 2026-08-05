@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from .config import LLMConfig
 
 
-RepeaterMode = Literal["off", "select", "select_polish_lite", "select_fallback", "fallback"]
+RepeaterMode = Literal["off", "select"]
 
 
 @dataclass(frozen=True)
@@ -34,22 +34,12 @@ def resolve_repeater_capabilities(cfg: LLMConfig) -> RepeaterCapabilities:
     else:
         legacy_mode = resolve_llm_repeater_mode()
         fallback_enabled, polish_enabled, select_enabled = resolve_llm_repeater_flags()
-    canonical_modes = {"off", "select", "select_polish_lite", "select_fallback", "fallback"}
-    mode: RepeaterMode = {
-        "polish": "select_polish_lite",
-        "both": "select_fallback",
-    }.get(legacy_mode, legacy_mode if legacy_mode in canonical_modes else "select")
+    mode: RepeaterMode = "off" if legacy_mode == "off" else "select"
 
     if mode == "off":
         fallback_enabled = polish_enabled = select_enabled = False
-    elif mode == "fallback":
-        fallback_enabled, polish_enabled, select_enabled = True, False, False
-    elif mode == "select":
+    else:
         fallback_enabled, polish_enabled, select_enabled = False, False, True
-    elif mode == "select_polish_lite":
-        fallback_enabled, polish_enabled, select_enabled = False, False, True
-    elif mode == "select_fallback":
-        fallback_enabled, polish_enabled, select_enabled = True, False, True
 
     llm_enabled = bool(cfg.llm_chat_enabled)
     return RepeaterCapabilities(
@@ -58,5 +48,5 @@ def resolve_repeater_capabilities(cfg: LLMConfig) -> RepeaterCapabilities:
         fallback_enabled=llm_enabled and fallback_enabled,
         polish_enabled=llm_enabled and polish_enabled,
         select_enabled=llm_enabled and select_enabled,
-        polish_lite_enabled=llm_enabled and mode == "select_polish_lite",
+        polish_lite_enabled=False,
     )

@@ -66,18 +66,18 @@ def test_chat_token_count_with_tools_floor() -> None:
     assert chat_token_count_with_tools(None, tools_enabled=False) is None
 
 
-def test_resolve_llm_repeater_mode_default_select_polish_lite(monkeypatch) -> None:
+def test_resolve_llm_repeater_mode_defaults_to_select(monkeypatch) -> None:
     monkeypatch.setattr("pallas.product.llm.config.repo_env_raw_value", lambda key: None)
-    assert resolve_llm_repeater_mode() == "select_polish_lite"
+    assert resolve_llm_repeater_mode() == "select"
     assert resolve_llm_repeater_flags() == (False, False, True)
-    assert resolve_llm_polish_lite_enabled() is True
+    assert resolve_llm_polish_lite_enabled() is False
 
 
-def test_llm_config_defaults_to_select_polish_lite() -> None:
-    assert LlmConfig().llm_repeater_mode == "select_polish_lite"
+def test_llm_config_defaults_to_select() -> None:
+    assert LlmConfig().llm_repeater_mode == "select"
 
 
-def test_resolve_llm_repeater_mode_from_legacy_flags(monkeypatch) -> None:
+def test_resolve_llm_repeater_mode_ignores_legacy_flags(monkeypatch) -> None:
     def fake_raw(key: str) -> str | None:
         values = {
             "LLM_REPEATER_MODE": "",
@@ -88,11 +88,11 @@ def test_resolve_llm_repeater_mode_from_legacy_flags(monkeypatch) -> None:
         return raw or None
 
     monkeypatch.setattr("pallas.product.llm.config.repo_env_raw_value", fake_raw)
-    assert resolve_llm_repeater_mode() == "fallback"
-    assert resolve_llm_repeater_flags() == (True, False, False)
+    assert resolve_llm_repeater_mode() == "select"
+    assert resolve_llm_repeater_flags() == (False, False, True)
 
 
-def test_resolve_llm_repeater_mode_normalizes_explicit_both(monkeypatch) -> None:
+def test_resolve_llm_repeater_mode_normalizes_legacy_values_to_select(monkeypatch) -> None:
     def fake_raw(key: str) -> str | None:
         values = {
             "LLM_REPEATER_MODE": "both",
@@ -102,8 +102,8 @@ def test_resolve_llm_repeater_mode_normalizes_explicit_both(monkeypatch) -> None
         return values.get(key)
 
     monkeypatch.setattr("pallas.product.llm.config.repo_env_raw_value", fake_raw)
-    assert resolve_llm_repeater_mode() == "select_fallback"
-    assert resolve_llm_repeater_flags() == (True, False, True)
+    assert resolve_llm_repeater_mode() == "select"
+    assert resolve_llm_repeater_flags() == (False, False, True)
 
 
 def test_resolve_llm_repeater_mode_normalizes_explicit_polish(monkeypatch) -> None:
@@ -111,15 +111,15 @@ def test_resolve_llm_repeater_mode_normalizes_explicit_polish(monkeypatch) -> No
         return "polish" if key == "LLM_REPEATER_MODE" else None
 
     monkeypatch.setattr("pallas.product.llm.config.repo_env_raw_value", fake_raw)
-    assert resolve_llm_repeater_mode() == "select_polish_lite"
+    assert resolve_llm_repeater_mode() == "select"
     assert resolve_llm_repeater_flags() == (False, False, True)
-    assert resolve_llm_polish_lite_enabled() is True
+    assert resolve_llm_polish_lite_enabled() is False
 
 
-def test_resolve_llm_repeater_mode_select_fallback(monkeypatch) -> None:
+def test_resolve_llm_repeater_mode_legacy_select_fallback_becomes_select(monkeypatch) -> None:
     monkeypatch.setattr(
         "pallas.product.llm.config.repo_env_raw_value",
         lambda key: "select_fallback" if key == "LLM_REPEATER_MODE" else None,
     )
-    assert resolve_llm_repeater_mode() == "select_fallback"
-    assert resolve_llm_repeater_flags() == (True, False, True)
+    assert resolve_llm_repeater_mode() == "select"
+    assert resolve_llm_repeater_flags() == (False, False, True)
