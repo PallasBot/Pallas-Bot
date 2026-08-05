@@ -379,6 +379,7 @@ async def complete_chat_message(
     api_key: str | None = None,
     task: str = "llm_chat",
     request_method: str | None = None,
+    provider_id: str | None = None,
 ) -> dict[str, Any]:
     c = cfg or get_llm_config()
     explicit_base = str(base_url or "").strip()
@@ -400,7 +401,7 @@ async def complete_chat_message(
             timeout_sec=float(c.chat_timeout_sec),
             request_method=method,
             task=task,
-            provider_id="",
+            provider_id=str(provider_id or ""),
         )
 
     from pallas.product.llm.providers_store import resolve_endpoint_candidates_for_task

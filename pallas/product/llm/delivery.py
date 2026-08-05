@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from io import BytesIO
 from typing import Any
 
 from nonebot import logger
@@ -26,6 +27,46 @@ from pallas.product.llm.kernel.memory_governance import can_write_runtime_state_
 from pallas.product.llm.session_store import append_llm_message, compact_user_llm_history_with_summary
 from pallas.product.llm.sticker_followup import should_attach_repeater_image
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
+
+STICKER_IMAGE_MAX_SIDE = 160
+
+
+def prepare_sticker_image(image_bytes: bytes, *, max_side: int = STICKER_IMAGE_MAX_SIDE) -> bytes:
+    """等比缩小表情图片，保留小图和无法处理的原始内容。"""
+    from PIL import Image, ImageSequence, UnidentifiedImageError
+
+    try:
+        with Image.open(BytesIO(image_bytes)) as image:
+            width, height = image.size
+            if not width or not height or max(width, height) <= max_side:
+                return image_bytes
+            scale = max_side / max(width, height)
+            size = (max(1, round(width * scale)), max(1, round(height * scale)))
+            if image.format == "GIF" and image.n_frames > 1:
+                frames = [
+                    frame.convert("RGBA").resize(size, Image.Resampling.LANCZOS)
+                    for frame in ImageSequence.Iterator(image)
+                ]
+                durations = [frame.info.get("duration", 0) for frame in ImageSequence.Iterator(image)]
+                output = BytesIO()
+                frames[0].save(
+                    output,
+                    format="GIF",
+                    save_all=True,
+                    append_images=frames[1:],
+                    duration=durations,
+                    loop=image.info.get("loop", 0),
+                    disposal=2,
+                )
+                return output.getvalue()
+            output = BytesIO()
+            resized = image.resize(size, Image.Resampling.LANCZOS)
+            if image.format == "JPEG" and resized.mode == "RGBA":
+                resized = resized.convert("RGB")
+            resized.save(output, format=image.format)
+            return output.getvalue()
+    except (OSError, UnidentifiedImageError):
+        return image_bytes
 
 
 async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user_id: int, user_text: str) -> bool:
@@ -67,7 +108,7 @@ async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user
     if bool(getattr(cfg, "llm_sticker_vision_enabled", False)):
         from pallas.product.llm.sticker_vision import allow_sticker_vision_enqueue, enqueue_sticker_vision_job
 
-        timeout_sec = float(getattr(cfg, "llm_sticker_vision_timeout_sec", 8.0) or 8.0)
+        timeout_sec = float(getattr(cfg, "llm_sticker_vision_timeout_sec", 15.0) or 15.0)
         if allow_sticker_vision_enqueue(int(getattr(cfg, "llm_sticker_vision_max_per_hour", 12) or 0)):
             job_key = f"{int(bot_id)}:{int(group_id)}:{int(time.time() * 1000)}:{hash(raw_image)}"
             try:
@@ -96,7 +137,7 @@ async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user
         cached = await get_image(str(segment))
         if not cached:
             return False
-        message += MessageSegment.image(file=cached)
+        message += MessageSegment.image(file=prepare_sticker_image(cached))
     try:
         await bot.call_api("send_group_msg", message=message, group_id=int(group_id))
     except Exception as e:
@@ -116,7 +157,11 @@ async def send_cached_sticker_image(bot: Any, group_id: int) -> bool:
     if not cached:
         return False
     try:
-        await bot.call_api("send_group_msg", message=MessageSegment.image(file=cached), group_id=int(group_id))
+        await bot.call_api(
+            "send_group_msg",
+            message=MessageSegment.image(file=prepare_sticker_image(cached)),
+            group_id=int(group_id),
+        )
     except Exception as e:
         logger.info("LLM cached sticker test skipped group={}: {}", group_id, e)
         return False

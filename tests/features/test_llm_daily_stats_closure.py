@@ -147,6 +147,42 @@ async def test_fetch_llm_task_stats_normalizes_bot_token_snapshot_shape(
 
 
 @pytest.mark.asyncio
+async def test_fetch_llm_task_stats_includes_durable_sticker_vision_observation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bot_snapshot = {
+        "source": "bot",
+        "day_key": "2026-06-18",
+        "updated_at": 1.0,
+        "by_task": {},
+        "totals": {},
+    }
+    _patch_bot_snapshots(monkeypatch, bot_snapshot)
+    monkeypatch.setattr(
+        "pallas.product.llm.model_admin.today_key",
+        lambda: "2026-06-18",
+        raising=False,
+    )
+    _patch_bot_tokens(monkeypatch, {})
+    monkeypatch.setattr(
+        "pallas.product.llm.model_admin.load_llm_daily_stats_range",
+        lambda *, start_day, end_day: ([], start_day, end_day),
+    )
+
+    async def fetch_observation() -> dict[str, object]:
+        return {"requests": 1, "selected": 1, "failed": 0, "recent": []}
+
+    monkeypatch.setattr(
+        "pallas.product.llm.sticker_vision.fetch_sticker_vision_stats",
+        fetch_observation,
+    )
+
+    payload = await fetch_llm_task_stats(start="2026-06-18", end="2026-06-18")
+
+    assert payload["ai"]["sticker_vision"] == {"requests": 1, "selected": 1, "failed": 0, "recent": []}
+
+
+@pytest.mark.asyncio
 async def test_fetch_llm_task_stats_falls_back_to_latest_history_when_no_live_tokens(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

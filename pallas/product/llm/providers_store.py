@@ -13,6 +13,7 @@ from typing import Any
 from nonebot import logger
 
 from pallas.core.foundation.paths import DATA_ROOT, PROJECT_ROOT
+from pallas.product.llm.provider_client import mask_api_key_hint
 
 _LOCK = threading.RLock()
 _DOC_CACHE: dict[str, Any] | None = None
@@ -560,9 +561,10 @@ def export_providers_for_api(*, doc: dict[str, Any] | None = None) -> dict[str, 
             "base_url": str(raw.get("base_url") or "").strip(),
             "api_key_env": api_key_env,
             "api_key_set": _provider_api_key_set(raw),
-            # 控制台已鉴权，回传明文供芯片回显
-            "api_key": api_keys[0] if api_keys else "",
-            "api_keys": api_keys,
+            # 读取配置不回传历史密钥；空 key 保存时会保留落盘值。
+            "api_key": "",
+            "api_keys": [],
+            "api_key_hints": [mask_api_key_hint(key) for key in api_keys],
             "api_keys_count": len(api_keys),
             "default_model": str(raw.get("default_model") or "").strip(),
             "enabled": bool(raw.get("enabled", True)),

@@ -1159,6 +1159,29 @@ async def fetch_llm_task_stats(
         except Exception:
             pass
 
+    try:
+        from pallas.product.llm.sticker_vision import fetch_sticker_vision_stats
+
+        sticker_vision = await fetch_sticker_vision_stats()
+    except Exception:
+        sticker_vision = {}
+    if isinstance(sticker_vision, dict) and (
+        int(sticker_vision.get("requests") or 0) > 0 or sticker_vision.get("recent")
+    ):
+        ai_body = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
+        day = str(ai_body.get("day_key") or bot_snap.get("day_key") or today_key())
+        merged_ai = {
+            **ai_body,
+            "day_key": day,
+            "source": ai_body.get("source") or "bot",
+            "sticker_vision": sticker_vision,
+        }
+        payload["ai"] = _normalize_ai_task_stats_snapshot(merged_ai)
+        try:
+            write_llm_daily_stats_side(day, "ai", {**payload["ai"], "reachable": True})
+        except Exception:
+            pass
+
     payload["persistence"]["ai_collecting"] = _ai_snapshot_collecting(
         payload.get("ai") if isinstance(payload.get("ai"), dict) else None
     )

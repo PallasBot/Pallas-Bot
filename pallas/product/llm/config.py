@@ -337,7 +337,7 @@ class LlmConfig(BaseModel):
     llm_chat_sticker_cooldown_sec: int = Field(default=900, ge=0, le=86400)
     llm_sticker_vision_enabled: bool = Field(default=False)
     llm_sticker_vision_candidate_count: int = Field(default=4, ge=3, le=6)
-    llm_sticker_vision_timeout_sec: float = Field(default=8.0, ge=1.0, le=30.0)
+    llm_sticker_vision_timeout_sec: float = Field(default=15.0, ge=1.0, le=30.0)
     llm_sticker_vision_max_per_hour: int = Field(default=12, ge=0, le=1000)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
     llm_reply_style_variants: dict[str, object] = Field(default_factory=dict)
@@ -585,7 +585,7 @@ def get_llm_config() -> LlmConfig:
             llm_chat_sticker_cooldown_sec=_env_int("LLM_CHAT_STICKER_COOLDOWN_SEC", 900),
             llm_sticker_vision_enabled=_env_bool("LLM_STICKER_VISION_ENABLED", False),
             llm_sticker_vision_candidate_count=_env_int("LLM_STICKER_VISION_CANDIDATE_COUNT", 4),
-            llm_sticker_vision_timeout_sec=_env_float("LLM_STICKER_VISION_TIMEOUT_SEC", 8.0),
+            llm_sticker_vision_timeout_sec=_env_float("LLM_STICKER_VISION_TIMEOUT_SEC", 15.0),
             llm_sticker_vision_max_per_hour=_env_int("LLM_STICKER_VISION_MAX_PER_HOUR", 12),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
             llm_reply_style_variants=_env_json_object("LLM_REPLY_STYLE_VARIANTS"),

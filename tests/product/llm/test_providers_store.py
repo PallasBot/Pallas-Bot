@@ -39,8 +39,9 @@ def test_providers_store_roundtrip(tmp_path: Path, monkeypatch) -> None:
     })
     assert saved["file_exists"] is True
     assert saved["providers"][0]["api_key_set"] is True
-    assert saved["providers"][0]["api_keys"] == ["sk-test-key"]
-    assert saved["providers"][0]["api_key"] == "sk-test-key"
+    assert saved["providers"][0]["api_keys"] == []
+    assert saved["providers"][0]["api_key"] == ""
+    assert saved["providers"][0]["api_key_hints"] == ["…-key"]
     assert saved["providers"][0]["api_keys_count"] == 1
     assert saved["providers"][0]["model_pricing"]["deepseek-v4-flash"]["price_in"] == 0.5
     assert saved["routing"]["cost_currency"] == "CNY"
@@ -59,6 +60,9 @@ def test_providers_store_roundtrip(tmp_path: Path, monkeypatch) -> None:
 
     exported = export_providers_for_api()
     assert exported["providers"][0]["id"] == "ds"
+    assert exported["providers"][0]["api_key_set"] is True
+    assert exported["providers"][0]["api_keys"] == []
+    assert exported["providers"][0]["api_key_hints"] == ["…-key"]
     raw = json.loads(store.read_text(encoding="utf-8"))
     assert raw["providers"][0]["api_key"] == "sk-test-key"
 
@@ -158,7 +162,8 @@ def test_providers_store_multi_api_keys_and_capabilities(tmp_path: Path, monkeyp
         "routing": {"tasks": {"llm_chat": "ds"}},
     })
     assert saved["providers"][0]["api_keys_count"] == 2
-    assert saved["providers"][0]["api_keys"] == ["sk-first", "sk-second"]
+    assert saved["providers"][0]["api_keys"] == []
+    assert saved["providers"][0]["api_key_hints"] == ["…irst", "…cond"]
     assert saved["providers"][0]["capabilities"] == ["text", "image"]
     assert saved["providers"][0]["model_effort"] == "high"
     clear_providers_store_cache()

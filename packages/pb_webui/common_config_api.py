@@ -224,6 +224,7 @@ class _LlmProviderConfigRowData(BaseModel):
     base_url: str = ""
     api_key: str = ""
     api_keys: list[str] = Field(default_factory=list)
+    api_key_hints: list[str] = Field(default_factory=list)
     api_key_env: str = ""
     api_key_set: bool = False
     api_keys_count: int = 0

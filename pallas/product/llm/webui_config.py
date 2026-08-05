@@ -764,7 +764,7 @@ class LlmWebuiConfig(BaseModel):
         description=field_help("视觉选图候选数", "默认 4；候选越多越准，但更耗视觉模型额度。"),
     )
     llm_sticker_vision_timeout_sec: float = Field(
-        default=8.0,
+        default=15.0,
         ge=1.0,
         le=30.0,
         description=field_help("视觉选图超时秒数", "超时回退 Repeater 语义候选，不影响文字回复。"),

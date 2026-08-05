@@ -8,6 +8,8 @@ import time
 from collections import deque
 from dataclasses import replace
 
+from nonebot import logger
+
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
 
@@ -39,13 +41,126 @@ def parse_sticker_vision_choice(raw: str, *, candidate_count: int) -> int | None
     return index - 1
 
 
+def build_sticker_vision_stats(records: list[dict[str, object]], *, recent_limit: int = 8) -> dict[str, object]:
+    """将 durable job 里的表情视觉状态聚合为控制台可读数据。"""
+    requests = selected = failed = skipped = no_match = sent = delivery_failed = candidate_total = 0
+    durations: list[int] = []
+    latest_error = ""
+    recent: list[dict[str, object]] = []
+    ordered = sorted(records, key=lambda row: float(row.get("created_at") or 0), reverse=True)
+    for row in ordered:
+        payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
+        observation = payload.get("vision_observation") if isinstance(payload.get("vision_observation"), dict) else {}
+        delivery = payload.get("delivery") if isinstance(payload.get("delivery"), dict) else {}
+        state = str(observation.get("state") or "queued")
+        if state != "queued":
+            requests += 1
+        if state == "selected":
+            selected += 1
+        elif state == "failed":
+            failed += 1
+        elif state == "skipped":
+            skipped += 1
+        elif state == "no_match":
+            no_match += 1
+        if str(delivery.get("state") or "") == "sent":
+            sent += 1
+        elif str(delivery.get("state") or "") == "failed":
+            delivery_failed += 1
+        candidate_total += max(0, int(observation.get("candidate_count") or 0))
+        duration = max(0, int(observation.get("duration_ms") or 0))
+        if duration:
+            durations.append(duration)
+        error = str(observation.get("error") or delivery.get("error") or "").strip()[:240]
+        if error and not latest_error:
+            latest_error = error
+        if len(recent) < max(1, int(recent_limit)):
+            recent.append({
+                "job_id": str(row.get("job_id") or "")[:64],
+                "created_at": float(row.get("created_at") or 0),
+                "state": state,
+                "candidate_count": max(0, int(observation.get("candidate_count") or 0)),
+                "provider": str(observation.get("provider") or ""),
+                "model": str(observation.get("model") or ""),
+                "duration_ms": duration or None,
+                "delivery_state": str(delivery.get("state") or "pending"),
+                "error": error or None,
+            })
+    return {
+        "requests": requests,
+        "selected": selected,
+        "failed": failed,
+        "skipped": skipped,
+        "no_match": no_match,
+        "sent": sent,
+        "delivery_failed": delivery_failed,
+        "candidate_total": candidate_total,
+        "avg_duration_ms": round(sum(durations) / len(durations)) if durations else None,
+        "recent_error": latest_error or None,
+        "recent": recent,
+    }
+
+
+async def fetch_sticker_vision_stats(*, recent_limit: int = 8, aggregate_limit: int = 500) -> dict[str, object]:
+    """读取当日 VLM 表情任务，work aux 与主进程共享同一 durable store。"""
+    from datetime import datetime
+
+    from pallas.core.foundation.db.runtime import is_postgresql_backend
+
+    day_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+    records: list[dict[str, object]] = []
+    if is_postgresql_backend():
+        from sqlalchemy import select
+
+        from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
+
+        async with get_session(read_only=True) as session:
+            rows = (
+                await session.execute(
+                    select(BackgroundJobRow.id, BackgroundJobRow.created_at, BackgroundJobRow.payload)
+                    .where(BackgroundJobRow.kind == "sticker_vision.select", BackgroundJobRow.created_at >= day_start)
+                    .order_by(BackgroundJobRow.created_at.desc())
+                    .limit(max(1, int(aggregate_limit)))
+                )
+            ).all()
+        records = [
+            {"job_id": str(row.id), "created_at": float(row.created_at or 0), "payload": dict(row.payload or {})}
+            for row in rows
+        ]
+    else:
+        from pallas.core.foundation.db.modules import BackgroundJob
+
+        cursor = (
+            BackgroundJob
+            .get_pymongo_collection()
+            .find({"kind": "sticker_vision.select", "created_at": {"$gte": day_start}})
+            .sort("created_at", -1)
+            .limit(max(1, int(aggregate_limit)))
+        )
+        rows = await cursor.to_list(length=max(1, int(aggregate_limit)))
+        records = [
+            {
+                "job_id": str(row.get("job_id") or ""),
+                "created_at": float(row.get("created_at") or 0),
+                "payload": dict(row.get("payload") or {}),
+            }
+            for row in rows
+        ]
+    return build_sticker_vision_stats(records, recent_limit=recent_limit)
+
+
 async def choose_sticker_with_vision(
     candidates: list[tuple[str, bytes]],
     *,
     user_text: str,
     timeout_sec: float = 8.0,
+    observation: dict[str, object] | None = None,
 ) -> str | None:
+    details = observation if observation is not None else {}
+    details["candidate_count"] = len(candidates)
     if len(candidates) < 3:
+        details["state"] = "skipped"
+        details["error"] = "候选表情不足 3 张"
         return None
     from pallas.product.llm.provider_client import LlmProviderError, complete_chat_message
     from pallas.product.llm.providers_store import resolve_endpoint_for_task
@@ -53,10 +168,18 @@ async def choose_sticker_with_vision(
 
     endpoint = resolve_endpoint_for_task("sticker_vision")
     if endpoint is None or "image" not in endpoint.capabilities:
+        details["state"] = "skipped"
+        details["error"] = "未配置支持图片的表情视觉模型"
         return None
     import base64
 
     from pallas.product.llm.task_metrics import record_bot_llm_task
+
+    provider = str(getattr(endpoint, "provider_id", "") or "")
+    details["provider"] = provider
+    details["model"] = str(endpoint.model or "")
+    details["started_at"] = time.time()
+    started = time.monotonic()
 
     content = openai_vision_user_content(
         f"根据当前群聊选择最贴切的一张表情图。当前消息：{str(user_text or '')[:200]}。"
@@ -78,14 +201,40 @@ async def choose_sticker_with_vision(
                 api_key=endpoint.api_key,
                 request_method=endpoint.request_method,
                 task="sticker_vision",
+                provider_id=provider,
             ),
             timeout=max(1.0, float(timeout_sec)),
         )
-    except (LlmProviderError, TimeoutError):
+    except (LlmProviderError, TimeoutError) as exc:
+        details["state"] = "failed"
+        details["duration_ms"] = int((time.monotonic() - started) * 1000)
+        details["finished_at"] = time.time()
+        details["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
+        logger.warning(
+            "sticker vision failed: job_id={} provider={} model={} candidates={} duration_ms={} err={}",
+            details.get("job_id"),
+            provider,
+            endpoint.model,
+            len(candidates),
+            details["duration_ms"],
+            details["error"],
+        )
         record_bot_llm_task("sticker_vision", "callback_fail")
         return None
     record_bot_llm_task("sticker_vision", "callback_ok")
     index = parse_sticker_vision_choice(str(result.get("content") or ""), candidate_count=len(candidates))
+    details["duration_ms"] = int((time.monotonic() - started) * 1000)
+    details["finished_at"] = time.time()
+    details["state"] = "selected" if index is not None else "no_match"
+    logger.info(
+        "sticker vision finished: job_id={} provider={} model={} candidates={} state={} duration_ms={}",
+        details.get("job_id"),
+        provider,
+        endpoint.model,
+        len(candidates),
+        details["state"],
+        details["duration_ms"],
+    )
     return candidates[index][0] if index is not None else None
 
 
@@ -116,7 +265,20 @@ async def enqueue_sticker_vision_job(
             "group_id": int(group_id),
             "fallback_cq_code": str(fallback_cq_code),
         },
+        "vision_observation": {
+            "job_id": job.id,
+            "state": "queued",
+            "enqueued_at": time.time(),
+            "candidate_count": len(candidates),
+        },
     }
+    logger.info(
+        "sticker vision queued: job_id={} candidates={} bot_id={} group_id={}",
+        job.id,
+        len(candidates),
+        bot_id,
+        group_id,
+    )
     job = replace(job, payload=payload)
     return (await build_work_job_store().enqueue(job)).id
 
@@ -128,21 +290,73 @@ async def handle_sticker_vision_select(payload: dict[str, object]) -> None:
     job_id = str(payload.get("job_id") or "").strip()
     candidate_codes = [str(item) for item in list(payload.get("candidate_cq_codes") or []) if str(item).strip()]
     candidates = [(cq_code, image) for cq_code in candidate_codes if (image := await get_image(cq_code))]
-    async with _VISION_SELECT_SEMAPHORE:
-        selected = await choose_sticker_with_vision(
-            candidates,
-            user_text=str(payload.get("user_text") or ""),
-            timeout_sec=float(payload.get("timeout_sec") or 8.0),
-        )
-    await save_sticker_vision_result(job_id, dict(payload), selected)
+    observation = dict(payload.get("vision_observation") or {})
+    observation.update({
+        "job_id": job_id,
+        "state": "running",
+        "started_at": time.time(),
+        "candidate_count": len(candidates),
+    })
+    try:
+        async with _VISION_SELECT_SEMAPHORE:
+            selected = await choose_sticker_with_vision(
+                candidates,
+                user_text=str(payload.get("user_text") or ""),
+                timeout_sec=float(payload.get("timeout_sec") or 8.0),
+                observation=observation,
+            )
+    except Exception as exc:
+        observation.update({
+            "state": "failed",
+            "finished_at": time.time(),
+            "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+        })
+        await save_sticker_vision_result(job_id, dict(payload), None, observation=observation)
+        raise
+    await save_sticker_vision_result(job_id, dict(payload), selected, observation=observation)
 
 
-async def save_sticker_vision_result(job_id: str, payload: dict[str, object], selected_cq_code: str | None) -> None:
+async def save_sticker_vision_result(
+    job_id: str,
+    payload: dict[str, object],
+    selected_cq_code: str | None,
+    *,
+    observation: dict[str, object] | None = None,
+) -> None:
     """将 work 结果和任务本身放在同一条持久化记录中，避免额外结果表。"""
     from pallas.core.foundation.db.runtime import is_postgresql_backend
 
     value = dict(payload)
     value["vision_result"] = {"selected_cq_code": selected_cq_code}
+    if observation is not None:
+        value["vision_observation"] = dict(observation)
+    if is_postgresql_backend():
+        from sqlalchemy import update
+
+        from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
+
+        async with get_session() as session:
+            await session.execute(update(BackgroundJobRow).where(BackgroundJobRow.id == job_id).values(payload=value))
+            await session.commit()
+        return
+    from pallas.core.foundation.db.modules import BackgroundJob
+
+    await BackgroundJob.get_pymongo_collection().update_one({"job_id": job_id}, {"$set": {"payload": value}})
+
+
+async def save_sticker_vision_delivery(
+    job_id: str,
+    payload: dict[str, object],
+    *,
+    state: str,
+    error: str = "",
+) -> None:
+    """记录主进程实际发图结果，领取后不让任务停留在模糊的 sending。"""
+    delivery = payload.get("delivery") if isinstance(payload.get("delivery"), dict) else {}
+    value = dict(payload)
+    value["delivery"] = {**delivery, "state": state, "finished_at": time.time(), "error": error[:240] or None}
+    from pallas.core.foundation.db.runtime import is_postgresql_backend
+
     if is_postgresql_backend():
         from sqlalchemy import update
 
@@ -243,9 +457,12 @@ async def dispatch_sticker_vision_delivery_once() -> bool:
     bot = get_bots().get(str(int(delivery.get("bot_id") or 0)))
     result = payload.get("vision_result") if isinstance(payload.get("vision_result"), dict) else {}
     raw_image = str(result.get("selected_cq_code") or delivery.get("fallback_cq_code") or "")
+    job_id = str(payload.get("job_id") or "")
     if bot is None or not raw_image:
+        await save_sticker_vision_delivery(job_id, payload, state="failed", error="发送目标或图片不可用")
         return True
     from pallas.core.shared.utils.media_cache import get_image
+    from pallas.product.llm.delivery import prepare_sticker_image
 
     message = Message()
     for segment in Message(raw_image):
@@ -254,12 +471,17 @@ async def dispatch_sticker_vision_delivery_once() -> bool:
             continue
         cached = await get_image(str(segment))
         if not cached:
+            await save_sticker_vision_delivery(job_id, payload, state="failed", error="图片缓存已失效")
             return True
-        message += MessageSegment.image(file=cached)
+        message += MessageSegment.image(file=prepare_sticker_image(cached))
     try:
         await bot.call_api("send_group_msg", group_id=int(delivery.get("group_id") or 0), message=message)
-    except Exception:
+    except Exception as exc:
+        await save_sticker_vision_delivery(job_id, payload, state="failed", error=f"{type(exc).__name__}: {exc}")
+        logger.warning("sticker vision delivery failed: job_id={} err={}", job_id, type(exc).__name__)
         return True
+    await save_sticker_vision_delivery(job_id, payload, state="sent")
+    logger.info("sticker vision delivered: job_id={} group_id={}", job_id, delivery.get("group_id"))
     return True
 
 
