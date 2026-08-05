@@ -48,12 +48,42 @@ async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user
     bundle = await chat.find_reply_bundle()
     if bundle is None:
         return False
-    raw_image = next((item for item in bundle.answer_list if "[CQ:image," in item), "")
-    if not raw_image:
+    candidates: list[tuple[str, bytes]] = []
+    for item in [*bundle.answer_list, *list(getattr(bundle, "message_pool", []) or [])]:
+        if "[CQ:image," not in item or any(key == item for key, _data in candidates):
+            continue
+        for segment in Message(item):
+            if segment.type == "image":
+                cached = await get_image(str(segment))
+                if cached:
+                    candidates.append((item, cached))
+                break
+    if not candidates:
         return False
+    raw_image = candidates[0][0]
     from pallas.product.llm.sticker_followup import note_repeater_image_sent, should_send_repeater_image
 
     cfg = get_llm_config()
+    if bool(getattr(cfg, "llm_sticker_vision_enabled", False)):
+        from pallas.product.llm.sticker_vision import enqueue_sticker_vision_job
+
+        timeout_sec = float(getattr(cfg, "llm_sticker_vision_timeout_sec", 8.0) or 8.0)
+        try:
+            await enqueue_sticker_vision_job(
+                candidates[: int(getattr(cfg, "llm_sticker_vision_candidate_count", 4) or 4)],
+                user_text=user_text,
+                timeout_sec=timeout_sec,
+                idempotency_key=(
+                    f"sticker_vision.select:{int(bot_id)}:{int(group_id)}:{int(time.time() * 1000)}:{hash(raw_image)}"
+                ),
+                bot_id=int(bot_id),
+                group_id=int(group_id),
+                fallback_cq_code=raw_image,
+            )
+        except Exception as exc:
+            logger.info("LLM vision emotion followup enqueue skipped group={}: {}", group_id, exc)
+            return False
+        return True
     cooldown_value = getattr(cfg, "llm_chat_sticker_cooldown_sec", 900)
     cooldown_sec = int(cooldown_value) if isinstance(cooldown_value, int | float) else 900
     if not should_send_repeater_image(int(group_id), raw_image, cooldown_sec=cooldown_sec):

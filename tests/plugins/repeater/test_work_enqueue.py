@@ -161,3 +161,4 @@ def test_repeater_work_handlers_include_image_cache_capture() -> None:
     from packages.repeater.work_handler import repeater_work_handlers
 
     assert "image_cache.capture" in repeater_work_handlers()
+    assert "sticker_vision.select" in repeater_work_handlers()

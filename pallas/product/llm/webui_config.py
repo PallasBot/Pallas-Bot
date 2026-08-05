@@ -753,6 +753,22 @@ class LlmWebuiConfig(BaseModel):
         default=900,
         description=field_help("LLM 表情图冷却秒数", "同一群两次 LLM 表情图之间至少间隔多久；0 只保留同图去重"),
     )
+    llm_sticker_vision_enabled: bool = Field(
+        default=False,
+        description=field_help("视觉模型选表情图", "仅在 LLM 决定贴图且有至少 3 张语义候选时调用。"),
+    )
+    llm_sticker_vision_candidate_count: int = Field(
+        default=4,
+        ge=3,
+        le=6,
+        description=field_help("视觉选图候选数", "默认 4；候选越多越准，但更耗视觉模型额度。"),
+    )
+    llm_sticker_vision_timeout_sec: float = Field(
+        default=8.0,
+        ge=1.0,
+        le=30.0,
+        description=field_help("视觉选图超时秒数", "超时回退 Repeater 语义候选，不影响文字回复。"),
+    )
     llm_reply_effect_eval_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -1073,6 +1089,9 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_fit_enabled=cfg.llm_sticker_fit_enabled,
         llm_chat_sticker_enabled=cfg.llm_chat_sticker_enabled,
         llm_chat_sticker_cooldown_sec=cfg.llm_chat_sticker_cooldown_sec,
+        llm_sticker_vision_enabled=cfg.llm_sticker_vision_enabled,
+        llm_sticker_vision_candidate_count=cfg.llm_sticker_vision_candidate_count,
+        llm_sticker_vision_timeout_sec=cfg.llm_sticker_vision_timeout_sec,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
