@@ -27,7 +27,6 @@ _DEFAULT_PASSIVE_MODULES = frozenset({
     "greeting",
     "drink",
     "roulette",
-    "request_handler",
 })
 _INDEX_CACHE: RouteIndexSnapshot | None = None
 

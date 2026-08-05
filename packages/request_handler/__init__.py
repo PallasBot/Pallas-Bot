@@ -30,7 +30,6 @@ __plugin_meta__ = PluginMetadata(
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "reload_policy": "metadata",
         "disable_scope": "bot",
-        "ingress_route": {"passive": True},
         "command_permissions": command_perm_list(
             command_perm_row("request.list_friends", "查看好友申请", "bot_moderator"),
             command_perm_row("request.list_groups", "查看入群申请", "bot_moderator"),
