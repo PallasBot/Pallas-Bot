@@ -25,6 +25,7 @@ from pallas.api.perm import (
     private_message_permission_for_command,
 )
 from pallas.core.foundation.config import BotConfig, GroupConfig, UserConfig
+from pallas.core.platform.ingress.matcher_rule_prefilter import mark_exact_plaintext_rule
 from pallas.core.plugin_coord.duel import duel_qte_blocks_greeting_user
 from pallas.core.shared.utils import is_bot_admin
 from pallas.product.ban_gate.snapshot import patch_group_banned, patch_user_banned
@@ -59,6 +60,7 @@ async def greeting_plugin_disabled(
     return await is_plugin_disabled("greeting", group_id, int(bot_id), bot=bot, event=event)
 
 
+@mark_exact_plaintext_rule(*target_msgs)
 def call_me_message_rule(event: GroupMessageEvent) -> bool:
     if event.raw_message not in target_msgs:
         return False
