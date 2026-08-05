@@ -260,7 +260,7 @@ def test_should_attempt_repeater_opportunity_rejects_emoji_noise_even_with_pool(
     )
 
 
-def test_should_attempt_repeater_opportunity_rejects_mid_score_without_cue() -> None:
+def test_should_attempt_repeater_opportunity_accepts_strong_context_without_reply_cue() -> None:
     assert (
         should_attempt_repeater_opportunity(
             "拉满了",
@@ -274,7 +274,7 @@ def test_should_attempt_repeater_opportunity_rejects_mid_score_without_cue() -> 
             reply_mode="normal",
             is_to_me=False,
         )
-        is False
+        is True
     )
 
 

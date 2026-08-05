@@ -119,11 +119,15 @@ def passes_repeater_hard_bars(
         has_recent_back_and_forth=has_recent_back_and_forth,
         has_candidate_pool=has_candidate_pool,
     )
-    if necessity.score < 0 and not has_reply_cue:
+    mode = str(reply_mode or "normal").strip().lower()
+    has_strong_context = has_candidate_pool and candidate_pool_size >= 2 and has_recent_back_and_forth
+    has_ghost_style = mode == "ghost" and has_candidate_pool and candidate_style_score >= 0.72
+    if necessity.score < 0 and not has_reply_cue and not (has_strong_context or has_ghost_style):
         return False
     if not has_reply_cue and necessity.score < REPLY_NECESSITY_NO_CUE_FLOOR:
-        mode = str(reply_mode or "normal").strip().lower()
-        return bool(mode == "ghost" and has_candidate_pool and candidate_style_score >= 0.72)
+        if has_strong_context:
+            return True
+        return has_ghost_style
     return True
 
 
