@@ -49,6 +49,17 @@ cp .env.example .env
 
 默认安装 **媒体栈**（含 torch），启动 media worker + API。普通聊天不经本 Runtime。
 
+日常运维在 AI Runtime 根目录执行：
+
+```bash
+uv run pallas-ai start          # 同时启动 API 与 media worker
+uv run pallas-ai status
+uv run pallas-ai restart media  # 仅重启媒体任务进程
+uv run pallas-ai purge-stale    # 仅在需要清理遗留 Celery 任务状态时执行
+```
+
+`pallas-ai` 是单一命令入口，但 API 与 media worker 仍为独立进程；媒体进程异常或重启不会主动停止 API。
+
 **Windows**：媒体栈依赖 Redis。bootstrap 默认 `docker compose` 拉起，请先安装并启动 [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)（托盘就绪）；或本机/WSL 自备 Redis 并设置 AI 仓 `.env` 的 `REDIS_URL`。失败时以脚本日志提示为准。
 
 唱歌 / TTS 还需要本机 **ffmpeg** 在 PATH 中（否则日志会出现 `Couldn't find ffmpeg`，音频处理可能失败）。可用：
