@@ -8,6 +8,7 @@ from pallas.product.llm.current_turn_decision import (
     CurrentTurnDecisionInput,
     CurrentTurnSocialAction,
     build_current_turn_decision_prompt,
+    build_reply_target_instruction,
     decide_current_turn,
     decide_current_turn_with_model,
     resolve_reply_target,
@@ -248,6 +249,14 @@ def test_reply_target_is_only_attached_to_the_current_generation_prompt() -> Non
         "只围绕当前句开一个短玩笑，不引入角色背景、动作描写、邀约或新话题。"
     )
     assert system_prompt_with_reply_target("base persona", {}) == "base persona"
+
+
+def test_answer_reply_target_keeps_relationship_replies_in_current_context() -> None:
+    instruction = build_reply_target_instruction("answer")
+
+    assert "情感或关系确认" in instruction
+    assert "当前熟悉程度" in instruction
+    assert "不补出背景设定、爱好或新安排" in instruction
 
 
 @pytest.mark.parametrize("payload", ['{"action":"UNKNOWN"}', '{"action":"PASS"', "PASS", '{"action":"PASS","extra":1}'])

@@ -231,6 +231,14 @@ def test_at_chat_prompt_does_not_default_to_emotional_closure() -> None:
     assert "不负责把对方情绪收好" in prompt
 
 
+def test_base_prompt_uses_personality_as_judgment_not_character_performance() -> None:
+    prompt = load_base_system_prompt()
+
+    assert "角色感来自你怎么看待人和事" in prompt
+    assert "当前话题或明确的共同记忆触发" in prompt
+    assert "喜欢喝酒、看戏剧、逛庆典" not in prompt
+
+
 @pytest.mark.asyncio
 async def test_compile_persona_prompt_for_without_db(monkeypatch: pytest.MonkeyPatch) -> None:
     import importlib
