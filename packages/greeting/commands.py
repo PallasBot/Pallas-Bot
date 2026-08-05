@@ -260,6 +260,8 @@ to_me_cmd = on_message(
 
 @to_me_cmd.handle()
 async def handle_to_me(bot: Bot, event: GroupMessageEvent):
+    if event.get_plaintext().strip() or event.reply:
+        return
     if await greeting_plugin_disabled(event.group_id, event.self_id, bot=bot, event=event):
         return
 
@@ -268,11 +270,10 @@ async def handle_to_me(bot: Bot, event: GroupMessageEvent):
         return
     await config.refresh_cooldown("to_me")
 
-    if len(event.get_plaintext().strip()) == 0 and not event.reply:
-        file_path = get_random_voice(operator, greeting_voices)
-        if file_path:
-            voice_bytes = await asyncio.to_thread(file_path.read_bytes)
-            await to_me_cmd.finish(MessageSegment.record(file=voice_bytes))
+    file_path = get_random_voice(operator, greeting_voices)
+    if file_path:
+        voice_bytes = await asyncio.to_thread(file_path.read_bytes)
+        await to_me_cmd.finish(MessageSegment.record(file=voice_bytes))
 
 
 all_notice = on_notice(priority=13, block=False)
