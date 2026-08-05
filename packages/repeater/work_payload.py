@@ -9,13 +9,17 @@ _CHAT_FIELDS = ("group_id", "user_id", "bot_id", "raw_message", "plain_text", "t
 _MESSAGE_FIELDS = (*_CHAT_FIELDS, "is_plain_text", "keywords")
 
 
+def normalize_work_text(value: object) -> str:
+    return str(value).replace("\x00", "")
+
+
 def chat_data_to_dict(chat_data: Any) -> dict[str, int | str]:
     return {
         "group_id": int(chat_data.group_id),
         "user_id": int(chat_data.user_id),
         "bot_id": int(chat_data.bot_id),
-        "raw_message": str(chat_data.raw_message),
-        "plain_text": str(chat_data.plain_text),
+        "raw_message": normalize_work_text(chat_data.raw_message),
+        "plain_text": normalize_work_text(chat_data.plain_text),
         "time": int(chat_data.time),
     }
 
@@ -25,11 +29,11 @@ def message_to_dict(message: Any) -> dict[str, int | str | bool]:
         "group_id": int(message.group_id),
         "user_id": int(message.user_id),
         "bot_id": int(message.bot_id),
-        "raw_message": str(message.raw_message),
-        "plain_text": str(message.plain_text),
+        "raw_message": normalize_work_text(message.raw_message),
+        "plain_text": normalize_work_text(message.plain_text),
         "time": int(message.time),
         "is_plain_text": bool(message.is_plain_text),
-        "keywords": str(message.keywords),
+        "keywords": normalize_work_text(message.keywords),
     }
 
 

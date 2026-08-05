@@ -49,6 +49,17 @@ cp .env.example .env
 
 默认安装 **媒体栈**（含 torch），启动 media worker + API。普通聊天不经本 Runtime。
 
+日常运维在 AI Runtime 根目录执行：
+
+```bash
+uv run pallas-ai start          # 同时启动 API 与 media worker
+uv run pallas-ai status
+uv run pallas-ai restart media  # 仅重启媒体任务进程
+uv run pallas-ai purge-stale    # 仅在需要清理遗留 Celery 任务状态时执行
+```
+
+`pallas-ai` 是单一命令入口，但 API 与 media worker 仍为独立进程；媒体进程异常或重启不会主动停止 API。
+
 **Windows**：媒体栈依赖 Redis。bootstrap 默认 `docker compose` 拉起，请先安装并启动 [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)（托盘就绪）；或本机/WSL 自备 Redis 并设置 AI 仓 `.env` 的 `REDIS_URL`。失败时以脚本日志提示为准。
 
 唱歌 / TTS 还需要本机 **ffmpeg** 在 PATH 中（否则日志会出现 `Couldn't find ffmpeg`，音频处理可能失败）。可用：
@@ -171,6 +182,8 @@ git clone --depth 1 --branch 6.3 https://github.com/PallasBot/DDSP-SVC.git app/w
 | `ddsp_6.3` | 同上；权重需由 6.3 训练 | `resource/sing/models/pretrain/contentvec/pytorch_model.bin`；首次使用会从 [lengyue233/content-vec-best](https://huggingface.co/lengyue233/content-vec-best) 自动下载 |
 
 不要跨版本混用 DDSP `.pt`。`sing_pretrain` 是默认来源；若手工准备，请以该音色的 `config.yaml` 中 `encoder_ckpt` 与 vocoder 路径为准。
+
+社区训练的 DDSP-SVC / RVC 音色可在 [TogetsuDo on Hugging Face](https://huggingface.co/TogetsuDo) 获取；下载后仍须按本节要求准备匹配的配置与共享权重。
 
 ### 社区 RVC 音色（可选第三后端）
 

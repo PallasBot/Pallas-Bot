@@ -39,3 +39,15 @@ def test_unified_aux_start_includes_work_consumer(monkeypatch) -> None:
 
     assert unified_lifecycle.start_aux_services() == 0
     assert calls == ["embed", "work"]
+
+
+def test_unified_aux_start_rolls_back_embed_when_work_start_fails(monkeypatch) -> None:
+    from pallas.console.cli import unified_lifecycle
+
+    calls: list[str] = []
+    monkeypatch.setattr("pallas.console.cli.embedding_aux.start_embed_aux", lambda: calls.append("embed") or 0)
+    monkeypatch.setattr("pallas.console.cli.embedding_aux.stop_embed_aux", lambda: calls.append("stop-embed"))
+    monkeypatch.setattr("pallas.console.cli.work_aux.start_work_aux", lambda: calls.append("work") or 1)
+
+    assert unified_lifecycle.start_aux_services() == 1
+    assert calls == ["embed", "work", "stop-embed"]

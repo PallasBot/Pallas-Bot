@@ -39,7 +39,14 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
     dispatched: list[tuple[int, int, list[str]]] = []
 
     chat_instance = MagicMock()
-    chat_instance.chat_data = SimpleNamespace(group_id=100, keywords_len=1, is_plain_text=True)
+    chat_instance.chat_data = SimpleNamespace(
+        bot_id=300,
+        group_id=100,
+        raw_message="草",
+        keywords="草",
+        keywords_len=1,
+        is_plain_text=True,
+    )
     chat_instance.find_reply_bundle = AsyncMock(return_value=bundle)
     chat_instance.answer_from_bundle = AsyncMock(return_value=answers)
 

@@ -63,6 +63,7 @@ def register_lifecycle(sub: argparse._SubParsersAction) -> None:
         parser = sub.add_parser(name, help=help_text)
         add_mode_argument(parser)
         if name == "restart":
+            add_detach_argument(parser)
             parser.add_argument("--workers-only", action="store_true", help="分片：仅重启 worker")
             parser.add_argument("--hub-only", action="store_true", help="分片：仅重启 hub")
             parser.add_argument("--skip-port-sync", action="store_true", help="兼容参数；unified 默认跳过同步")
@@ -104,6 +105,8 @@ def run_lifecycle(action: str, args: argparse.Namespace) -> int:
         return 1
     extra: list[str] = []
     if action == "restart":
+        if getattr(args, "detach", False):
+            extra.append("--detach")
         if getattr(args, "workers_only", False):
             extra.append("--workers-only")
         if getattr(args, "hub_only", False):

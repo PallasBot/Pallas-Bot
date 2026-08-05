@@ -8,6 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
+from pallas.product.llm.execution_budget import (
+    LlmExecutionSlot,
+    release_llm_execution_slot,
+    try_acquire_llm_execution_slot,
+)
 from pallas.product.llm.governance import LlmChatGovernance
 from pallas.product.llm.models import ChatSubmitRequest, ChatSubmitResult
 from pallas.product.llm.repeater_limit import (
@@ -42,6 +47,7 @@ async def run_kernel_chat_job(
     messages: list[dict[str, Any]],
     metadata: dict[str, Any],
     cfg: LlmConfig,
+    execution_slot: LlmExecutionSlot | None = None,
 ) -> None:
     try:
         generation_system_prompt = system_prompt_with_reply_target(system_prompt, metadata)
@@ -164,6 +170,8 @@ async def run_kernel_chat_job(
             await deliver_llm_chat_result(request_id, status="failed")
         except Exception:
             logger.exception("llm kernel deliver failure failed: request_id={}", request_id)
+    finally:
+        release_llm_execution_slot(execution_slot, cfg=cfg)
 
 
 def schedule_kernel_chat_job(
@@ -173,6 +181,7 @@ def schedule_kernel_chat_job(
     messages: list[dict[str, Any]],
     metadata: dict[str, Any],
     cfg: LlmConfig,
+    execution_slot: LlmExecutionSlot,
 ) -> None:
     asyncio.create_task(
         run_kernel_chat_job(
@@ -181,6 +190,7 @@ def schedule_kernel_chat_job(
             messages=messages,
             metadata=metadata,
             cfg=cfg,
+            execution_slot=execution_slot,
         )
     )
 
@@ -215,12 +225,22 @@ async def submit_kernel_repeater_chat_task(
         timer.finish(status="repeater_busy", request_id=request.request_id)
         return ChatSubmitResult(status="repeater_busy", ok=False)
     try:
+        execution_slot = await try_acquire_llm_execution_slot(request.priority, cfg=cfg)
+    except Exception:
+        release_repeater_llm_slot(slot)
+        raise
+    if execution_slot is None:
+        release_repeater_llm_slot(slot)
+        timer.finish(status="shared_budget_busy", request_id=request.request_id)
+        return ChatSubmitResult(status="shared_budget_busy", ok=False)
+    try:
         schedule_kernel_chat_job(
             request.request_id,
             system_prompt=system_prompt,
             messages=messages,
             metadata=metadata,
             cfg=cfg,
+            execution_slot=execution_slot,
         )
         await refresh_repeater_group_cooldown(int(request.bot_id), int(request.group_id), scene_tier=tier)
     finally:
@@ -244,13 +264,22 @@ async def submit_kernel_llm_chat_task(
         if gov.skipped:
             timer.finish(status="skipped_busy", request_id=request.request_id)
             return ChatSubmitResult(status="busy", ok=False)
-        schedule_kernel_chat_job(
-            request.request_id,
-            system_prompt=system_prompt,
-            messages=messages,
-            metadata=metadata,
-            cfg=cfg,
-        )
+        execution_slot = await try_acquire_llm_execution_slot(request.priority, cfg=cfg)
+        if execution_slot is None:
+            timer.finish(status="shared_budget_busy", request_id=request.request_id)
+            return ChatSubmitResult(status="shared_budget_busy", ok=False)
+        try:
+            schedule_kernel_chat_job(
+                request.request_id,
+                system_prompt=system_prompt,
+                messages=messages,
+                metadata=metadata,
+                cfg=cfg,
+                execution_slot=execution_slot,
+            )
+        except Exception:
+            release_llm_execution_slot(execution_slot, cfg=cfg)
+            raise
     timer.mark("kernel_schedule")
     timer.finish(status="processing", request_id=request.request_id, message_count=message_count)
     return ChatSubmitResult(task_id=request.request_id, status="processing", ok=True)

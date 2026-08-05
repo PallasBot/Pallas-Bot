@@ -11,9 +11,11 @@ from nonebot_plugin_apscheduler import scheduler
 from pallas.api.limits import is_command_cooldown_ready, refresh_command_cooldown
 from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.config import BotConfig
+from pallas.core.platform.ingress.matcher_rule_prefilter import mark_exact_plaintext_rule
 from pallas.core.plugin_coord import dream as dream_coord
 
 
+@mark_exact_plaintext_rule("牛牛喝酒", "牛牛干杯", "牛牛继续喝")
 async def is_drink_msg(event: GroupMessageEvent) -> bool:
     return event.get_plaintext().strip() in {"牛牛喝酒", "牛牛干杯", "牛牛继续喝"}
 
@@ -80,6 +82,7 @@ async def handle_drink(event: GroupMessageEvent):
     )
 
 
+@mark_exact_plaintext_rule("牛牛醒一醒", "牛牛别喝了")
 async def is_sober_up_msg(event: GroupMessageEvent) -> bool:
     return event.get_plaintext().strip() in {"牛牛醒一醒", "牛牛别喝了"}
 

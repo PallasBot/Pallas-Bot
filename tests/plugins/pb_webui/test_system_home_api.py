@@ -14,14 +14,14 @@ class _CpuPercentPsutil:
         return [12.5, 37.5]
 
 
-def test_runtime_metrics_primes_non_blocking_cpu_sampling(monkeypatch) -> None:
+def test_runtime_metrics_reads_non_blocking_cpu_sample_without_repriming(monkeypatch) -> None:
     psutil = _CpuPercentPsutil()
     monkeypatch.setitem(__import__("sys").modules, "psutil", psutil)
     monkeypatch.setattr(mod, "_gpu_metrics", lambda: {"available": False, "devices": []})
 
     metrics = mod._runtime_metrics()
 
-    assert psutil.calls[:2] == [(None, True), (0.0, True)]
+    assert psutil.calls == [(None, True)]
     assert metrics["cpu_per_core"] == [12.5, 37.5]
     assert metrics["cpu_percent"] == 25.0
 

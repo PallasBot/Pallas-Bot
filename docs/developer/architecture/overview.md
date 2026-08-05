@@ -92,7 +92,7 @@ flowchart LR
 | --- | --- |
 | Core 与扩展判定 | [core-vs-extensions.md](core-vs-extensions.md) |
 | 分片运行时 | [shard-runtime.md](shard-runtime.md) |
-| 后台任务与 work aux | [work-aux.md](work-aux.md) |
+| 后台任务与 work aux | [单进程部署](../../maintainer/deploy/single-process.md) |
 | 配置存储 | [config-storage.md](config-storage.md) |
 | 插件治理 | [plugin-governance.md](plugin-governance.md) |
 | Bot 内置 Agent 生命周期 | [agent-lifecycle.md](agent-lifecycle.md) |

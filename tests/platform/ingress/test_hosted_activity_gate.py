@@ -100,7 +100,7 @@ def test_hosted_ingress_open_end_require_host_when_room_live(monkeypatch) -> Non
         return bot_id == 42
 
     monkeypatch.setattr(
-        "pallas.core.platform.ingress.hosted_activity_gate.is_owned_gate_holder_sync",
+        "pallas.core.platform.ingress.hosted_activity_gate.is_group_owned_gate_holder_sync",
         holder,
     )
     assert hosted_activity_ingress_passes(42, 100, "牛牛卧底") is True
@@ -124,11 +124,31 @@ def test_hosted_ingress_in_room_requires_host(monkeypatch) -> None:
         return bot_id == 42
 
     monkeypatch.setattr(
-        "pallas.core.platform.ingress.hosted_activity_gate.is_owned_gate_holder_sync",
+        "pallas.core.platform.ingress.hosted_activity_gate.is_group_owned_gate_holder_sync",
         holder,
     )
     assert spec_host_gate_passes(SPY_SPEC, 42, 100, "牛牛加入", at_fleet_bot=False) is True
     assert spec_host_gate_passes(SPY_SPEC, 99, 100, "牛牛加入", at_fleet_bot=False) is False
+
+
+def test_hosted_ingress_speak_traffic_uses_unified_owned_gate(monkeypatch) -> None:
+    from pallas.core.platform.multi_bot.dedup import bind_group_owned_gate_sync, release_group_owned_gate_sync
+
+    monkeypatch.setattr("pallas.core.platform.multi_bot.dedup.sharding_active", lambda: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.hosted_activity_gate.needs_group_host_bot_gate",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.hosted_activity_gate.hosted_activity_live",
+        lambda **_k: True,
+    )
+    bind_group_owned_gate_sync("who_is_spy", 100, 42, gate_sec=60)
+    try:
+        assert spec_host_gate_passes(SPY_SPEC, 42, 100, "回答", at_fleet_bot=True) is True
+        assert spec_host_gate_passes(SPY_SPEC, 99, 100, "回答", at_fleet_bot=True) is False
+    finally:
+        release_group_owned_gate_sync("who_is_spy", 100)
 
 
 def test_hosted_ingress_no_room_passes_join(monkeypatch) -> None:
@@ -149,7 +169,7 @@ def test_spec_speak_traffic_accepts_owned_gate_without_session_flag(monkeypatch)
         lambda _ns, _gid, **_: False,
     )
     monkeypatch.setattr(
-        "pallas.core.platform.ingress.hosted_activity_gate.read_owned_gate_bot_id_sync",
+        "pallas.core.platform.ingress.hosted_activity_gate.read_group_owned_gate_bot_id_sync",
         lambda _plugin, _gid: 42,
     )
     assert spec_matches_speak_traffic(SPY_SPEC, 7, "帕拉斯", at_fleet_bot=True) is True
@@ -161,7 +181,7 @@ def test_spec_speak_traffic_at_bot_only(monkeypatch) -> None:
         lambda ns, gid, **_: gid == 7,
     )
     monkeypatch.setattr(
-        "pallas.core.platform.ingress.hosted_activity_gate.read_owned_gate_bot_id_sync",
+        "pallas.core.platform.ingress.hosted_activity_gate.read_group_owned_gate_bot_id_sync",
         lambda _plugin, _gid: None,
     )
     assert spec_matches_speak_traffic(SPY_SPEC, 7, "随便说说", at_fleet_bot=True) is True

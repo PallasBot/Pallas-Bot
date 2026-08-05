@@ -24,6 +24,7 @@ _KNOWN_SAFE_RULE_NAMES = frozenset({
     "IsTypeRule",
     "ToMeRule",
 })
+_EXACT_PLAINTEXT_RULE_ATTR = "__pallas_prefilter_exact_plaintexts__"
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,17 @@ class RuleDescriptor:
     value: object | None = None
     flags: int = 0
     ignorecase: bool = False
+
+
+def mark_exact_plaintext_rule(*texts: str):
+    """标记自定义 Rule 的精确明文匹配范围，供入站预筛提前判 miss。"""
+    values = tuple(text.strip() for text in texts if text.strip())
+
+    def decorate(func):
+        setattr(func, _EXACT_PLAINTEXT_RULE_ATTR, values)
+        return func
+
+    return decorate
 
 
 def normalize_rule_string_tuple(value: object) -> tuple[str, ...]:
@@ -83,6 +95,10 @@ def extract_matcher_rule_descriptors(matcher_cls: type[Matcher]) -> tuple[RuleDe
 
     descriptors: list[RuleDescriptor] = []
     for call in iter_matcher_checker_calls(matcher_cls):
+        marked_exact = normalize_rule_string_tuple(getattr(call, _EXACT_PLAINTEXT_RULE_ATTR, ()))
+        if marked_exact:
+            descriptors.append(RuleDescriptor("fullmatch", marked_exact))
+            continue
         call_module = call.__class__.__module__
         call_name = call.__class__.__name__
         if not call_module.startswith("nonebot.rule"):

@@ -49,6 +49,54 @@ async def test_capture_for_work_keeps_live_message_window_and_serializes_predece
 
 
 @pytest.mark.asyncio
+async def test_capture_for_work_marks_group_style_dirty_in_message_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.repeater.learner import Learner
+    from packages.repeater.model import ChatData
+
+    monkeypatch.setattr("packages.repeater.responder.Responder._repeat_ignore_user_ids", staticmethod(set))
+    monkeypatch.setattr("pallas.core.plugin_coord.duel.should_skip_repeater_learn", AsyncMock(return_value=False))
+    monkeypatch.setattr("packages.repeater.learner.group_messages_before", AsyncMock(return_value=[]))
+    monkeypatch.setattr("packages.repeater.learner.MessageStore.capture_message", AsyncMock())
+    marked: list[int] = []
+    monkeypatch.setattr("pallas.product.persona.group_style_refresh.mark_group_style_dirty", marked.append)
+
+    payload = await Learner.capture_for_work(
+        ChatData(group_id=42, user_id=11, bot_id=100, raw_message="这一句", plain_text="这一句", time=20),
+        asyncio.Lock(),
+        defaultdict(lambda: deque(maxlen=10)),
+    )
+
+    assert payload is not None
+    assert marked == [42]
+
+
+@pytest.mark.asyncio
+async def test_capture_for_work_preserves_forced_repeat_teaching(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.repeater.learner import Learner
+    from packages.repeater.model import ChatData
+
+    monkeypatch.setattr("packages.repeater.responder.Responder._repeat_ignore_user_ids", staticmethod(set))
+    monkeypatch.setattr("pallas.core.plugin_coord.duel.should_skip_repeater_learn", AsyncMock(return_value=False))
+    monkeypatch.setattr("packages.repeater.learner.group_messages_before", AsyncMock(return_value=[]))
+    monkeypatch.setattr("packages.repeater.learner.is_forced_repeat_teaching", lambda *_args: True)
+    monkeypatch.setattr("packages.repeater.learner.MessageStore.capture_message", AsyncMock())
+    taught: list[int] = []
+    monkeypatch.setattr("pallas.product.persona.group_style_refresh.mark_group_style_forced_teach", taught.append)
+
+    await Learner.capture_for_work(
+        ChatData(group_id=42, user_id=11, bot_id=100, raw_message="这一句", plain_text="这一句", time=20),
+        asyncio.Lock(),
+        defaultdict(lambda: deque(maxlen=10)),
+    )
+
+    assert taught == [42]
+
+
+@pytest.mark.asyncio
 async def test_process_work_payload_persists_message_and_uses_captured_predecessor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -86,7 +134,7 @@ async def test_process_work_payload_persists_message_and_uses_captured_predecess
 
     context_insert.assert_awaited_once()
     persist.assert_awaited_once()
-    assert marked == [42]
+    assert marked == []
 
 
 @pytest.mark.asyncio

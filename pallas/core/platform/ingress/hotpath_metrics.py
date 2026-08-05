@@ -26,12 +26,16 @@ _COUNTERS = (
     "bundle_db_error",
     "bundle_other_error",
     "learn_enqueued",
+    "learn_buffered",
+    "learn_persisted",
+    "learn_dropped_shutdown",
     "learn_skipped_pressure",
     "learn_skipped_full",
     "learn_completed",
     "chat_shed_sidework",
     "reply_local_dispatched",
     "llm_path_skipped_shed",
+    "llm_retained_under_shed",
     "bundle_stage_db_miss",
     "bundle_stage_db_hit",
     "bundle_stage_no_candidates",
@@ -224,6 +228,21 @@ def record_learn_enqueued() -> None:
     _state["learn_enqueued"] += 1
 
 
+def record_learn_buffered() -> None:
+    _rollover_if_needed()
+    _state["learn_buffered"] += 1
+
+
+def record_learn_persisted(count: int = 1) -> None:
+    _rollover_if_needed()
+    _state["learn_persisted"] += max(0, int(count))
+
+
+def record_learn_dropped_shutdown(count: int = 1) -> None:
+    _rollover_if_needed()
+    _state["learn_dropped_shutdown"] += max(0, int(count))
+
+
 def record_learn_skipped_pressure() -> None:
     _rollover_if_needed()
     _state["learn_skipped_pressure"] += 1
@@ -252,6 +271,11 @@ def record_reply_local_dispatched() -> None:
 def record_llm_path_skipped_shed() -> None:
     _rollover_if_needed()
     _state["llm_path_skipped_shed"] += 1
+
+
+def record_llm_retained_under_shed() -> None:
+    _rollover_if_needed()
+    _state["llm_retained_under_shed"] += 1
 
 
 def _keywords_cache_stats() -> dict[str, int | float | None]:
@@ -293,9 +317,16 @@ def hotpath_metrics_snapshot() -> dict[str, Any]:
     snap_hit = int(_state["reply_snapshot_hit"])
     snap_miss = int(_state["reply_snapshot_miss"])
     snap_total = snap_hit + snap_miss
+    try:
+        from pallas.product.llm.execution_budget import llm_execution_budget_snapshot
+
+        budget = llm_execution_budget_snapshot()
+    except Exception:
+        budget = {}
     return {
         "day_key": _day_key or _today_key(),
         **{key: int(_state[key]) for key in _COUNTERS},
+        **budget,
         "route_ms_p50": _percentile(_route_ms, 0.50),
         "route_ms_p95": _percentile(_route_ms, 0.95),
         "keywords_ms_p50": _percentile(_keywords_ms, 0.50),
@@ -313,6 +344,7 @@ def merge_hotpath_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return hotpath_metrics_snapshot()
     counters = dict.fromkeys(_COUNTERS, 0)
+    budget_counters: dict[str, int] = {}
     day_key = ""
     percentile_keys = (
         "route_ms_p50",
@@ -334,6 +366,9 @@ def merge_hotpath_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         day_key = str(row.get("day_key") or day_key)
         for key in _COUNTERS:
             counters[key] += int(row.get(key) or 0)
+        for key, value in row.items():
+            if key.startswith("llm_budget_skipped_") and isinstance(value, (int, float)):
+                budget_counters[key] = budget_counters.get(key, 0) + int(value)
         for key in percentile_keys:
             val = row.get(key)
             if isinstance(val, (int, float)):
@@ -351,6 +386,7 @@ def merge_hotpath_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "day_key": day_key or _today_key(),
         **counters,
+        **budget_counters,
         **merged_pct,
         "bundle_cache_hit_ratio": round(cache_hits / lookups, 4) if lookups else None,
         "reply_snapshot_hit_ratio": round(snap_hit / snap_total, 4) if snap_total else None,

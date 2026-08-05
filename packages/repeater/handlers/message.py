@@ -75,11 +75,11 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     if shed_sidework:
         from pallas.core.platform.ingress.hotpath_metrics import (
             record_chat_shed_sidework,
-            record_llm_path_skipped_shed,
+            record_llm_retained_under_shed,
         )
 
         record_chat_shed_sidework()
-        record_llm_path_skipped_shed()
+        record_llm_retained_under_shed()
     chat = Chat(event)
     can_reply = await repeater_can_attempt_reply(int(event.self_id), int(event.group_id))
 
@@ -121,7 +121,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
         return
 
     if bundle is None:
-        if can_reply and not shed_sidework:
+        if can_reply:
             scene_tier = resolve_scene_tier(
                 ctx.plain_body,
                 candidate_pool_size=0,
@@ -146,9 +146,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     from ..message_store import MessageStore
 
     feature_level = resolve_conversation_feature_level(llm_cfg)
-    repeater_llm_enabled = (
-        (not shed_sidework) and capabilities.llm_enabled and feature_level != ConversationFeatureLevel.LEGACY_REPEATER
-    )
+    repeater_llm_enabled = capabilities.llm_enabled and feature_level != ConversationFeatureLevel.LEGACY_REPEATER
     recent_group_messages = list(MessageStore._message_dict.get(int(event.group_id), []))
     has_candidate_pool = bool(bundle.message_pool or bundle.answer_list)
     recent_human_user_ids = [

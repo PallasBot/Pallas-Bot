@@ -26,7 +26,7 @@
 
 MUST NOT：在 `usage` 或 `trigger_condition` 写死权限角色。细则：[cmd_perm](/common/cmd_perm)。
 
-帮助「谁能看见」用 `help_audience`（插件级或 `menu_data` 条目级），与「谁能执行」的 `command_permissions` 分开；普通 / 超管私聊双视图见 [牛牛帮助](/plugins/help/README.md#普通菜单与超管菜单)。
+帮助「谁能看见」用 `help_audience`（插件级或 `menu_data` 条目级），与「谁能执行」的 `command_permissions` 分开；普通 / 超管私聊双视图见 [牛牛帮助](/plugins/help.md#普通菜单与超管菜单)。
 
 ## `command_permissions`
 

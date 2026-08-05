@@ -42,9 +42,12 @@ def test_learn_concurrency_caps_more_conservatively_for_write_heavy_queue(monkey
         return {"PG_POOL_SIZE": "48", "PG_MAX_OVERFLOW": "24"}.get(key)
 
     monkeypatch.setattr(
-        "pallas.core.foundation.config.repo_settings.repo_env_raw_value",
+        "pallas.core.foundation.db.pool_budget.repo_env_raw_value",
         fake_env,
     )
+    from pallas.core.foundation.db.pool_budget import clear_pool_budget_runtime_cache
+
+    clear_pool_budget_runtime_cache()
 
     assert learn_concurrency() == 2
 

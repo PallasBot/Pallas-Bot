@@ -39,7 +39,7 @@ _CHANNEL_ALIASES = (
     ("packages.pb_webui.", "控制台"),
     ("packages.pb_core.", "内核插件"),
     ("packages.help.", "帮助"),
-    ("uvicorn.", "服务"),
+    ("uvicorn.", "HTTP 服务"),
     ("celery.", "任务队列"),
     ("httpx", "HTTP"),
     ("httpcore", "HTTP"),
@@ -82,7 +82,7 @@ def _stdlib_logger_channel_label(logger_name: str) -> str:
     """把 stdlib logger 名收成简短标签；``.error`` 易被误认为级别，故单独映射。"""
     name = (logger_name or "").strip()
     if name == "uvicorn.error":
-        return "服务"
+        return "HTTP 服务"
     for prefix, alias in _CHANNEL_ALIASES:
         if name == prefix.rstrip(".") or name.startswith(prefix):
             return alias
@@ -122,13 +122,13 @@ class ChannelLoguruHandler(LoguruHandler):
     def emit(self, record: LogRecord) -> None:
         text = record.getMessage()
         label = _stdlib_logger_channel_label(record.name)
-        if label == "服务" and any(part in text for part in _TRANSIENT_UVICORN_MESSAGES):
+        if label == "HTTP 服务" and any(part in text for part in _TRANSIENT_UVICORN_MESSAGES):
             record.levelno = logging.WARNING
             record.levelname = "WARNING"
         elif record.name == "uvicorn.access" and _is_quiet_access_line(text):
             record.levelno = logging.DEBUG
             record.levelname = "DEBUG"
-        elif label == "服务" and _is_transient_asgi_failure(record):
+        elif label == "HTTP 服务" and _is_transient_asgi_failure(record):
             # 外呼超时已在业务侧打点；避免 uvicorn 再刷 ERROR+整栈。
             record.levelno = logging.WARNING
             record.levelname = "WARNING"

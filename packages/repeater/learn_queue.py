@@ -1,4 +1,4 @@
-"""复读学习异步队列：handler 先接话，learn 后台限并发执行。"""
+"""复读学习 outbox producer：主路径只捕获并有界入队。"""
 
 from __future__ import annotations
 
@@ -19,15 +19,14 @@ if TYPE_CHECKING:
     from .model import Chat
 
 _LEARN_PLUGIN = "repeater_learn"
-_queue: asyncio.Queue[Chat] | None = None
+_queue: asyncio.Queue[WorkJob] | None = None
 _sem: asyncio.Semaphore | None = None
 _sem_limit: int | None = None
 _worker_tasks: list[asyncio.Task[None]] = []
-_dropped_full: int = 0
-_dropped_pressure: int = 0
-_completed: int = 0
 _learn_pool_wait_spins: int = 0
 _LIFECYCLE_BOUND = False
+_FLUSH_BATCH_SIZE = 64
+_SHUTDOWN_DRAIN_SEC = 0.2
 
 
 def drain_learn_pause_stats() -> int:
@@ -83,7 +82,7 @@ def learn_sem() -> asyncio.Semaphore:
     return _sem
 
 
-def learn_queue() -> asyncio.Queue[Chat]:
+def learn_queue() -> asyncio.Queue[WorkJob]:
     global _queue
     if _queue is None:
         _queue = asyncio.Queue(maxsize=learn_queue_max_size())
@@ -105,32 +104,49 @@ def should_skip_repeater_learn_enqueue() -> bool:
     return learn_queue_under_pressure()
 
 
+def is_nul_payload_error(exc: Exception) -> bool:
+    return "\\u0000 cannot be converted to text" in str(exc)
+
+
 async def run_learn_consumer() -> None:
     while True:
-        chat = await learn_queue().get()
+        first = await learn_queue().get()
+        jobs = [first]
         try:
+            while len(jobs) < _FLUSH_BATCH_SIZE:
+                try:
+                    jobs.append(learn_queue().get_nowait())
+                except asyncio.QueueEmpty:
+                    break
             await wait_pg_pool_headroom_for_learn()
-            await execute_repeater_learn(chat)
+            await build_work_job_store().enqueue_many(jobs)
+            from pallas.core.platform.ingress.hotpath_metrics import record_learn_persisted
+
+            record_learn_persisted(len(jobs))
+        except asyncio.CancelledError:
+            from pallas.core.platform.ingress.hotpath_metrics import record_learn_dropped_shutdown
+
+            record_learn_dropped_shutdown(len(jobs))
+            raise
+        except Exception as exc:
+            logger.warning("repeater learn outbox batch failed count={}: {}", len(jobs), exc)
+            if is_nul_payload_error(exc):
+                logger.warning("repeater learn outbox dropped NUL payload count={}", len(jobs))
+                continue
+            while True:
+                await asyncio.sleep(0.2)
+                try:
+                    await build_work_job_store().enqueue_many(jobs)
+                except Exception as retry_exc:
+                    logger.warning("repeater learn outbox batch retry failed count={}: {}", len(jobs), retry_exc)
+                    continue
+                from pallas.core.platform.ingress.hotpath_metrics import record_learn_persisted
+
+                record_learn_persisted(len(jobs))
+                break
         finally:
-            learn_queue().task_done()
-
-
-async def execute_repeater_learn(chat: Chat) -> None:
-    global _completed
-    try:
-        ok = await chat.learn()
-        if ok:
-            _completed += 1
-            from pallas.core.platform.ingress.hotpath_metrics import record_learn_completed
-
-            record_learn_completed()
-    except Exception as e:
-        logger.warning(
-            "repeater learn background failed bot={} group={}: {}",
-            chat.chat_data.bot_id,
-            chat.chat_data.group_id,
-            e,
-        )
+            for _job in jobs:
+                learn_queue().task_done()
 
 
 async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
@@ -149,19 +165,15 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
         idempotency_key=f"repeater.learn:{int(event.group_id)}:{int(event.message_id)}:{int(event.self_id)}",
     )
     try:
-        await build_work_job_store().enqueue(job)
-    except Exception as exc:
-        logger.warning(
-            "repeater learn outbox enqueue failed bot={} group={} message={}: {}",
-            event.self_id,
-            event.group_id,
-            event.message_id,
-            exc,
-        )
-        return False
-    from pallas.core.platform.ingress.hotpath_metrics import record_learn_enqueued
+        learn_queue().put_nowait(job)
+    except asyncio.QueueFull:
+        from pallas.core.platform.ingress.hotpath_metrics import record_learn_skipped_full
 
-    record_learn_enqueued()
+        record_learn_skipped_full()
+        return False
+    from pallas.core.platform.ingress.hotpath_metrics import record_learn_buffered
+
+    record_learn_buffered()
     return True
 
 
@@ -174,47 +186,57 @@ async def start_repeater_learn_worker() -> None:
     if _learn_workers_running():
         return
     await stop_repeater_learn_worker()
-    n = learn_concurrency()
-    configured = get_repeater_learn_runtime_config().learn_concurrency
-    if n < configured:
-        from pallas.core.foundation.db.pool_budget import pg_pool_capacity
-
-        logger.debug(
-            "repeater learn concurrency capped by PG pool: effective={} configured={} pool={}",
-            n,
-            configured,
-            pg_pool_capacity(),
-        )
-    _worker_tasks = [asyncio.create_task(run_learn_consumer(), name=f"repeater_learn_consumer_{i}") for i in range(n)]
+    _worker_tasks = [
+        asyncio.create_task(run_learn_consumer(), name=f"repeater_learn_outbox_writer:{index}")
+        for index in range(learn_concurrency())
+    ]
     logger.debug(
-        "repeater learn workers started: consumers={} queue_max={}",
-        n,
+        "repeater learn outbox writer started: queue_max={} workers={}",
         learn_queue_max_size(),
+        len(_worker_tasks),
     )
+
+
+def discard_buffered_repeater_jobs() -> None:
+    dropped = 0
+    while True:
+        try:
+            learn_queue().get_nowait()
+        except asyncio.QueueEmpty:
+            break
+        learn_queue().task_done()
+        dropped += 1
+    if dropped:
+        from pallas.core.platform.ingress.hotpath_metrics import record_learn_dropped_shutdown
+
+        record_learn_dropped_shutdown(dropped)
 
 
 async def stop_repeater_learn_worker() -> None:
     global _worker_tasks
-    if not _worker_tasks:
-        return
     tasks = list(_worker_tasks)
     _worker_tasks = []
-    for t in tasks:
-        t.cancel()
-    await asyncio.gather(*tasks, return_exceptions=True)
+    if tasks:
+        try:
+            await asyncio.wait_for(learn_queue().join(), timeout=_SHUTDOWN_DRAIN_SEC)
+        except TimeoutError:
+            pass
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+    discard_buffered_repeater_jobs()
 
 
 async def reload_repeater_learn_worker_runtime() -> None:
     """WebUI 保存 learn 配置后：失效缓存并重启 worker。"""
     from .learn_runtime_config import clear_repeater_learn_runtime_config_cache
 
+    await stop_repeater_learn_worker()
     clear_repeater_learn_runtime_config_cache()
     clear_repeater_learn_runtime_state()
-    await stop_repeater_learn_worker()
     await start_repeater_learn_worker()
     logger.info(
-        "repeater learn runtime reloaded: consumers={} queue_max={}",
-        learn_concurrency(),
+        "repeater learn runtime reloaded: queue_max={}",
         learn_queue_max_size(),
     )
 

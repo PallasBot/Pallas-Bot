@@ -89,6 +89,7 @@ uv run pallas
 | [Pallas-Bot-Docs](https://github.com/PallasBot/Pallas-Bot-Docs) | 文档站源码 |
 | [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) | 控制台前端 |
 | [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) | 唱歌 / TTS 等 AI Runtime |
+| [TogetsuDo on Hugging Face](https://huggingface.co/TogetsuDo) | 社区 RVC / DDSP-SVC 音色模型下载 |
 | [Pallas-Bot-Community-Stats](https://github.com/PallasBot/Pallas-Bot-Community-Stats) | 社区统计与语料中心服务 |
 | [community-plugin-index](https://github.com/PallasBot/community-plugin-index) | 社区插件商店索引 |
 

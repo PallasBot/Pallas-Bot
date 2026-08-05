@@ -21,6 +21,20 @@ uv run ruff check pallas/ packages/
 uv run ruff format --check pallas/ packages/
 ```
 
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the default five labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repository uses a single-context layout. See `docs/agents/domain.md`.
+
 pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；每次 commit 跑 **`sync-console-openapi`** 自动导出 `openspec`（同级有 WebUI 仓则 gen 类型）；`.env` 全局排除。详见 [workflow.md](docs/developer/workflow.md)。
 
 控制台 OpenAPI（改 API / 路由后）：`uv run python tools/sync_console_openapi.py` → `openspec/pallas-console-v1.json`；在线 `/pallas/api/openapi.json`；契约细则见 [webui.md · OpenAPI](docs/developer/webui.md#openapi-契约)。合并顺序：先合 Bot（含 openspec）→ 再合 WebUI 类型。

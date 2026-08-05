@@ -147,6 +147,16 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "达到上限时入站处理会等待空位，变更后需重启 Bot",
         ),
     )
+    conversation_scheduler_per_key_pending: int = Field(
+        default=32,
+        ge=1,
+        le=1024,
+        description=field_help(
+            "单个群最多占用多少条待处理容量，避免热点群堵住其他群",
+            "填正整数，默认 32；应小于总待处理上限",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
     lane_acquire_timeout_sec: float = Field(
         default=1.0,
         ge=0.0,
@@ -293,6 +303,12 @@ class IngressDispatchRuntimeConfig(BaseModel):
                 default=512,
                 minimum=32,
                 maximum=8192,
+            ),
+            conversation_scheduler_per_key_pending=dispatch_env_int(
+                "PALLAS_CONVERSATION_SCHEDULER_PER_KEY_PENDING",
+                default=32,
+                minimum=1,
+                maximum=1024,
             ),
             lane_acquire_timeout_sec=dispatch_env_float("PALLAS_LANE_ACQUIRE_TIMEOUT_SEC", default=1.0, minimum=0.0),
             lane_wait_overload_ms=dispatch_env_int(

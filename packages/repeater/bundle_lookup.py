@@ -14,12 +14,16 @@ from pallas.core.platform.ingress.hotpath_metrics import record_bundle_lookup
 
 from .bundle_cache import (
     lookup_cached_reply_bundle,
+    reply_bundle_cache_key,
     store_cached_reply_bundle,
     store_cached_reply_miss,
 )
 
 if TYPE_CHECKING:
     from .model import Chat
+
+
+_inflight_bundle_lookups: dict[str, asyncio.Task[Any]] = {}
 
 
 def repeater_bundle_timeout_sec() -> float:
@@ -52,11 +56,17 @@ async def find_reply_bundle_bounded(chat: Chat) -> Any | None:
         return None if negative else cached
 
     timeout = repeater_bundle_timeout_sec()
+    lookup_key = reply_bundle_cache_key(group_id, bot_id, raw_message, keywords)
+    task = _inflight_bundle_lookups.get(lookup_key)
+    if task is None:
+        task = asyncio.create_task(
+            _find_reply_bundle(chat, limit_sec=timeout),
+            name=f"repeater_bundle_lookup:{group_id}:{bot_id}",
+        )
+        _inflight_bundle_lookups[lookup_key] = task
+        task.add_done_callback(lambda completed: _discard_inflight_bundle_lookup(lookup_key, completed))
     try:
-        if timeout <= 0:
-            bundle = await chat.find_reply_bundle()
-        else:
-            bundle = await asyncio.wait_for(chat.find_reply_bundle(), timeout=timeout)
+        bundle = await asyncio.shield(task)
     except TimeoutError:
         record_bundle_lookup(
             duration_ms=(time.perf_counter() - started) * 1000.0,
@@ -106,3 +116,14 @@ async def find_reply_bundle_bounded(chat: Chat) -> Any | None:
     else:
         store_cached_reply_miss(group_id, bot_id, raw_message, keywords)
     return bundle
+
+
+async def _find_reply_bundle(chat: Chat, *, limit_sec: float) -> Any | None:
+    if limit_sec <= 0:
+        return await chat.find_reply_bundle()
+    return await asyncio.wait_for(chat.find_reply_bundle(), timeout=limit_sec)
+
+
+def _discard_inflight_bundle_lookup(lookup_key: str, completed: asyncio.Task[Any]) -> None:
+    if _inflight_bundle_lookups.get(lookup_key) is completed:
+        _inflight_bundle_lookups.pop(lookup_key, None)

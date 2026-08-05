@@ -68,6 +68,8 @@ resource/sing/models/<音色名>/
 - **SoVITS**：`G_*.pth` + `config.json`
 - 刷新控制台「唱歌」页应能探测到；在插件「音色映射」里把命令前缀（如「牛牛」「帕拉斯」）指到该 id
 
+社区训练的 DDSP-SVC / RVC 音色可在 [TogetsuDo on Hugging Face](https://huggingface.co/TogetsuDo) 获取。
+
 官方包也可在「媒体资产」下载 `sing_pallas` / `sing_pretrain`。
 
 保存后写入 `data/pallas_config/webui.json`。

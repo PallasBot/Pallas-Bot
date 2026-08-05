@@ -9,6 +9,7 @@ def test_strong_tier_config_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     for key in (
         "LLM_REPEATER_STRONG_COOLDOWN_SEC",
         "LLM_REPEATER_STRONG_ATTEMPT_RATE",
+        "LLM_SHARED_MAX_CONCURRENCY",
         "LLM_REPEATER_MAX_INFLIGHT",
         "LLM_REPEATER_GLOBAL_RPM",
         "LLM_REPEATER_FEEDBACK_ENABLED",
@@ -21,6 +22,7 @@ def test_strong_tier_config_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert cfg.llm_repeater_strong_cooldown_sec == 25
     assert cfg.llm_repeater_strong_attempt_rate == pytest.approx(0.55)
+    assert cfg.llm_shared_max_concurrency == 4
     assert cfg.llm_repeater_max_inflight == 2
     assert cfg.llm_repeater_global_rpm == 18
     assert cfg.llm_repeater_feedback_enabled is True

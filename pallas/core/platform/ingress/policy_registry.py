@@ -116,7 +116,7 @@ def fanout_policies_for_plugin(plugin_name: str) -> tuple[FanoutPolicyEntry, ...
 
     name = canonical_plugin_package((plugin_name or "").strip())
     if not name:
-        return None
+        return ()
     for plugin in get_loaded_plugins():
         if canonical_plugin_package(str(getattr(plugin, "name", "")).strip()) != name:
             continue

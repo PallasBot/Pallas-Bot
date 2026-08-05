@@ -1,0 +1,3 @@
+interface:
+  display_name: "Obsidian Vault"
+  short_description: "Manage linked notes in Obsidian"

@@ -39,12 +39,15 @@ ENV_PATH = PROJECT_ROOT / ".env"
 
 
 def start_aux_services() -> int:
-    from pallas.console.cli.embedding_aux import start_embed_aux
+    from pallas.console.cli.embedding_aux import start_embed_aux, stop_embed_aux
     from pallas.console.cli.work_aux import start_work_aux
 
     if start_embed_aux() != 0:
         return 1
-    return start_work_aux()
+    if start_work_aux() == 0:
+        return 0
+    stop_embed_aux()
+    return 1
 
 
 def stop_aux_services() -> None:
@@ -172,7 +175,10 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
         print(f"unified 已转入后台 · pid {read_pid_file(PID_FILE)} · port {port}")
         print(f"控制台 http://127.0.0.1:{port}/pallas/")
         print(f"启动器日志 {LOG_DIR}")
-        return start_aux_services()
+        if start_aux_services() == 0:
+            return 0
+        stop_bot()
+        return 1
     print(f"unified 启动失败，查看 {LOG_DIR}", file=sys.stderr)
     clear_pid_file(PID_FILE)
     return 1
@@ -237,7 +243,7 @@ def run_unified_action(
         return stop_bot()
     if normalized == "restart":
         stop_bot()
-        return start_bot(skip_port_sync=skip_port_sync)
+        return start_bot(skip_port_sync=skip_port_sync, detach=detach)
     if normalized == "status":
         return status_bot()
     if normalized == "observability":

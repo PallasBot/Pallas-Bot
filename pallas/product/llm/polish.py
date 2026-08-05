@@ -159,6 +159,7 @@ async def maybe_submit_repeater_llm_polish(
             mode="normal",
             task="repeater_polish",
             scene_tier=scene_tier,
+            priority=("repeater_strong" if scene_tier == "strong" else "repeater_weak"),
             token_count=token_count,
             temperature=temperature,
             llm_rewrite_metadata={**(rewrite_metadata or {}), "conversation_fallback_text": candidate},

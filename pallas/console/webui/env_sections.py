@@ -134,6 +134,7 @@ _INGRESS_DISPATCH_SKIP = frozenset({
     "conversation_scheduler_enabled",
     "conversation_scheduler_concurrency",
     "conversation_scheduler_max_pending",
+    "conversation_scheduler_per_key_pending",
     "lane_acquire_timeout_sec",
     "lane_wait_overload_ms",
     "lane_busy_reply",
@@ -170,6 +171,7 @@ def _ingress_dispatch_section() -> WebuiEnvSection:
             "conversation_scheduler_enabled": "PALLAS_CONVERSATION_SCHEDULER_ENABLED",
             "conversation_scheduler_concurrency": "PALLAS_CONVERSATION_SCHEDULER_CONCURRENCY",
             "conversation_scheduler_max_pending": "PALLAS_CONVERSATION_SCHEDULER_MAX_PENDING",
+            "conversation_scheduler_per_key_pending": "PALLAS_CONVERSATION_SCHEDULER_PER_KEY_PENDING",
             "lane_acquire_timeout_sec": "PALLAS_LANE_ACQUIRE_TIMEOUT_SEC",
             "lane_wait_overload_ms": "PALLAS_LANE_WAIT_OVERLOAD_MS",
             "lane_busy_reply": "PALLAS_LANE_BUSY_REPLY",
@@ -510,6 +512,16 @@ def _ingress_dispatch_payload_extras() -> dict[str, Any]:
                 "id": "route_index",
                 "title": "命令快速定位",
                 "field_names": ["route_index_enabled", "route_index_strict"],
+            },
+            {
+                "id": "conversation_scheduler",
+                "title": "群消息公平调度",
+                "field_names": [
+                    "conversation_scheduler_enabled",
+                    "conversation_scheduler_concurrency",
+                    "conversation_scheduler_max_pending",
+                    "conversation_scheduler_per_key_pending",
+                ],
             },
             {
                 "id": "lanes",

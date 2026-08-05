@@ -25,6 +25,7 @@ from pallas.api.perm import (
     private_message_permission_for_command,
 )
 from pallas.core.foundation.config import BotConfig, GroupConfig, UserConfig
+from pallas.core.platform.ingress.matcher_rule_prefilter import mark_exact_plaintext_rule
 from pallas.core.plugin_coord.duel import duel_qte_blocks_greeting_user
 from pallas.core.shared.utils import is_bot_admin
 from pallas.product.ban_gate.snapshot import patch_group_banned, patch_user_banned
@@ -59,6 +60,7 @@ async def greeting_plugin_disabled(
     return await is_plugin_disabled("greeting", group_id, int(bot_id), bot=bot, event=event)
 
 
+@mark_exact_plaintext_rule(*target_msgs)
 def call_me_message_rule(event: GroupMessageEvent) -> bool:
     if event.raw_message not in target_msgs:
         return False
@@ -260,6 +262,8 @@ to_me_cmd = on_message(
 
 @to_me_cmd.handle()
 async def handle_to_me(bot: Bot, event: GroupMessageEvent):
+    if event.get_plaintext().strip() or event.reply:
+        return
     if await greeting_plugin_disabled(event.group_id, event.self_id, bot=bot, event=event):
         return
 
@@ -268,11 +272,10 @@ async def handle_to_me(bot: Bot, event: GroupMessageEvent):
         return
     await config.refresh_cooldown("to_me")
 
-    if len(event.get_plaintext().strip()) == 0 and not event.reply:
-        file_path = get_random_voice(operator, greeting_voices)
-        if file_path:
-            voice_bytes = await asyncio.to_thread(file_path.read_bytes)
-            await to_me_cmd.finish(MessageSegment.record(file=voice_bytes))
+    file_path = get_random_voice(operator, greeting_voices)
+    if file_path:
+        voice_bytes = await asyncio.to_thread(file_path.read_bytes)
+        await to_me_cmd.finish(MessageSegment.record(file=voice_bytes))
 
 
 all_notice = on_notice(priority=13, block=False)

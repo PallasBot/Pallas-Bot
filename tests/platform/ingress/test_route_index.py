@@ -105,6 +105,20 @@ def test_build_route_index_from_menu_and_fanout(monkeypatch: pytest.MonkeyPatch)
     assert any(module == "duel" for module, _ in index.regex_entries)
 
 
+def test_request_handler_does_not_opt_into_group_chatter_dispatch() -> None:
+    from packages import request_handler
+
+    ingress_route = request_handler.__plugin_meta__.extra.get("ingress_route")
+
+    assert not isinstance(ingress_route, dict) or ingress_route.get("passive") is not True
+
+
+def test_group_chatter_defaults_do_not_select_request_handler() -> None:
+    index = route_index.build_route_index()
+
+    assert "request_handler" not in index.passive_modules
+
+
 def test_build_route_index_prefers_explicit_command_prefixes_and_exacts(monkeypatch: pytest.MonkeyPatch) -> None:
     plugins = [
         _fake_plugin(

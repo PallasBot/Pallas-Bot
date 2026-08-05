@@ -175,6 +175,8 @@ class BackgroundJobRow(Base):
     available_at: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     leased_until: Mapped[float | None] = mapped_column(Float, nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lease_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     finished_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -499,6 +501,17 @@ def _ensure_pg_group_config_blocked_user_ids(connection) -> None:
     connection.execute(text("ALTER TABLE group_config ADD COLUMN blocked_user_ids JSONB NOT NULL DEFAULT '[]'::jsonb"))
 
 
+def _ensure_pg_background_job_lease_id(connection) -> None:
+    insp = inspect(connection)
+    if not insp.has_table("background_job"):
+        return
+    names = {column["name"] for column in insp.get_columns("background_job")}
+    if "lease_id" not in names:
+        connection.execute(text("ALTER TABLE background_job ADD COLUMN lease_id TEXT"))
+    if "last_error" not in names:
+        connection.execute(text("ALTER TABLE background_job ADD COLUMN last_error TEXT"))
+
+
 def _ensure_pg_group_config_style_profile(connection) -> None:
     """旧库 group_config 缺列时补列。"""
     insp = inspect(connection)
@@ -764,6 +777,7 @@ async def get_session(*, read_only: bool = False):
 PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.image_cache_blob_data", _ensure_pg_image_cache_blob_data),
     ("ddl.group_config_blocked_user_ids", _ensure_pg_group_config_blocked_user_ids),
+    ("ddl.background_job_lease_id", _ensure_pg_background_job_lease_id),
     ("ddl.group_config_style_profile", _ensure_pg_group_config_style_profile),
     ("ddl.group_config_plugin_storage", _ensure_pg_group_config_plugin_storage),
     ("ddl.bot_config_community_roster_show_qq", _ensure_pg_bot_config_community_roster_show_qq),

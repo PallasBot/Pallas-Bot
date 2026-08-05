@@ -35,3 +35,20 @@ async def test_to_me_voice_reads_file_in_worker_thread(monkeypatch: pytest.Monke
 
     to_thread.assert_awaited_once_with(voice_file.read_bytes)
     finish.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_to_me_message_with_text_skips_greeting_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    event = MagicMock(group_id=123, self_id=10001, reply=None)
+    event.get_plaintext.return_value = "牛牛在吗"
+    disabled = AsyncMock(side_effect=AssertionError("text mention must not read greeting settings"))
+    monkeypatch.setattr(commands, "greeting_plugin_disabled", disabled)
+    monkeypatch.setattr(
+        commands,
+        "BotConfig",
+        lambda *_args: (_ for _ in ()).throw(AssertionError("text mention must not read cooldown")),
+    )
+
+    await commands.handle_to_me(MagicMock(), event)
+
+    disabled.assert_not_awaited()
