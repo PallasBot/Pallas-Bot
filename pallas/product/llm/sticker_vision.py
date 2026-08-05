@@ -16,6 +16,7 @@ from pallas.core.platform.work_jobs.runtime import build_work_job_store
 _DISPATCH_TASK: asyncio.Task[None] | None = None
 _VISION_SELECT_SEMAPHORE = asyncio.Semaphore(1)
 _VISION_ENQUEUED_AT: deque[float] = deque()
+VISION_CANDIDATE_MAX_SIDE = 384
 
 
 def allow_sticker_vision_enqueue(max_per_hour: int, *, now: float | None = None) -> bool:
@@ -39,6 +40,14 @@ def parse_sticker_vision_choice(raw: str, *, candidate_count: int) -> int | None
     if isinstance(index, bool) or not isinstance(index, int) or not 1 <= index <= int(candidate_count):
         return None
     return index - 1
+
+
+def prepare_sticker_vision_candidates(candidates: list[tuple[str, bytes]]) -> list[tuple[str, bytes]]:
+    from pallas.product.llm.delivery import prepare_sticker_image
+
+    return [
+        (cq_code, prepare_sticker_image(image, max_side=VISION_CANDIDATE_MAX_SIDE)) for cq_code, image in candidates
+    ]
 
 
 def build_sticker_vision_stats(records: list[dict[str, object]], *, recent_limit: int = 8) -> dict[str, object]:
@@ -290,6 +299,7 @@ async def handle_sticker_vision_select(payload: dict[str, object]) -> None:
     job_id = str(payload.get("job_id") or "").strip()
     candidate_codes = [str(item) for item in list(payload.get("candidate_cq_codes") or []) if str(item).strip()]
     candidates = [(cq_code, image) for cq_code in candidate_codes if (image := await get_image(cq_code))]
+    candidates = prepare_sticker_vision_candidates(candidates)
     observation = dict(payload.get("vision_observation") or {})
     observation.update({
         "job_id": job_id,

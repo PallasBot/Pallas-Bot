@@ -6,6 +6,7 @@ from nonebot import on_command
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent, PrivateMessageEvent
 
 from pallas.api.perm import group_message_permission_for_command, private_message_permission_for_command
+from pallas.product.llm.config import get_llm_config
 from pallas.product.llm.delivery import send_cached_sticker_image
 from pallas.product.llm.runtime_api import build_llm_status_text
 
@@ -27,7 +28,7 @@ sticker_test_cmd = on_command(
 llm_sticker_test_cmd = on_command(
     "牛牛测试LLM表情",
     priority=5,
-    block=True,
+    block=False,
     permission=group_message_permission_for_command("llm_chat.sticker_test"),
 )
 
@@ -63,7 +64,7 @@ async def run_llm_sticker_test(bot, event: GroupMessageEvent) -> str | None:
     await enqueue_sticker_vision_job(
         candidates,
         user_text=text,
-        timeout_sec=8.0,
+        timeout_sec=get_llm_config().llm_sticker_vision_timeout_sec,
         idempotency_key=f"sticker_vision.test:{int(bot.self_id)}:{int(event.group_id)}:{int(event.message_id)}",
         bot_id=int(bot.self_id),
         group_id=int(event.group_id),

@@ -40,6 +40,7 @@ async def test_llm_sticker_test_uses_the_text_after_command(monkeypatch: pytest.
         AsyncMock(return_value=[("a", b"a"), ("b", b"b"), ("c", b"c")]),
     )
     monkeypatch.setattr("pallas.product.llm.sticker_vision.enqueue_sticker_vision_job", enqueue)
+    monkeypatch.setattr(status_commands, "get_llm_config", lambda: SimpleNamespace(llm_sticker_vision_timeout_sec=17.0))
     bot = MagicMock()
     bot.self_id = 111
     event = SimpleNamespace(group_id=222, user_id=333, message_id=444, get_plaintext=lambda: "牛牛测试LLM表情 太好笑了")
@@ -48,6 +49,11 @@ async def test_llm_sticker_test_uses_the_text_after_command(monkeypatch: pytest.
 
     assert result is None
     assert enqueue.await_args.kwargs["user_text"] == "太好笑了"
+    assert enqueue.await_args.kwargs["timeout_sec"] == 17.0
+
+
+def test_llm_sticker_test_does_not_block_llm_chat() -> None:
+    assert status_commands.llm_sticker_test_cmd.block is False
 
 
 @pytest.mark.asyncio

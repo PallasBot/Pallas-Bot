@@ -4,6 +4,23 @@ from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.sticker_vision import build_sticker_vision_stats, parse_sticker_vision_choice
 
 
+def test_prepare_sticker_vision_candidates_downscales_images() -> None:
+    from io import BytesIO
+
+    from PIL import Image
+
+    from pallas.product.llm.sticker_vision import prepare_sticker_vision_candidates
+
+    source = BytesIO()
+    Image.new("RGB", (1024, 512), "white").save(source, format="PNG")
+
+    prepared = prepare_sticker_vision_candidates([("[CQ:image,file=demo]", source.getvalue())])
+
+    assert prepared[0][0] == "[CQ:image,file=demo]"
+    with Image.open(BytesIO(prepared[0][1])) as image:
+        assert image.size == (384, 192)
+
+
 def test_parse_sticker_vision_choice_accepts_json_index() -> None:
     assert parse_sticker_vision_choice('{"index":2}', candidate_count=4) == 1
 
