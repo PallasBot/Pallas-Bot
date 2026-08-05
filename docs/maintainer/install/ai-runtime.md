@@ -172,6 +172,8 @@ git clone --depth 1 --branch 6.3 https://github.com/PallasBot/DDSP-SVC.git app/w
 
 不要跨版本混用 DDSP `.pt`。`sing_pretrain` 是默认来源；若手工准备，请以该音色的 `config.yaml` 中 `encoder_ckpt` 与 vocoder 路径为准。
 
+社区训练的 DDSP-SVC / RVC 音色可在 [TogetsuDo on Hugging Face](https://huggingface.co/TogetsuDo) 获取；下载后仍须按本节要求准备匹配的配置与共享权重。
+
 ### 社区 RVC 音色（可选第三后端）
 
 唱歌 registry 在 DDSP / SoVITS 之外支持 **`rvc`**：社区常见 `.pth`（+ 可选 `.index`）可直接当 Speaker。回退顺序默认 `DDSP → RVC → SoVITS`；仅有 `.pth` 的目录不会误进 DDSP（DDSP 认 `*.pt`）。
