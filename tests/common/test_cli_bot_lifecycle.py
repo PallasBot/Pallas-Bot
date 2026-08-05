@@ -64,6 +64,22 @@ def test_run_bot_lifecycle_unified_restart_skips_port_sync_by_default(monkeypatc
     assert called == {"action": "restart", "skip": True, "detach": False}
 
 
+def test_run_bot_lifecycle_unified_restart_forwards_detach(monkeypatch):
+    called: dict[str, object] = {}
+
+    def fake_run(action: str, *, skip_port_sync: bool = False, detach: bool = False) -> int:
+        called["action"] = action
+        called["skip"] = skip_port_sync
+        called["detach"] = detach
+        return 0
+
+    monkeypatch.setattr(bot_process, "run_unified_action", fake_run)
+    monkeypatch.setattr(bot_process, "resolve_bot_mode", lambda mode: "unified")
+
+    assert bot_process.run_bot_lifecycle("restart", mode="unified", extra_args=["--detach"]) == 0
+    assert called == {"action": "restart", "skip": True, "detach": True}
+
+
 def test_run_bot_lifecycle_unified_start_keeps_port_sync_default(monkeypatch):
     called: dict[str, object] = {}
 
@@ -123,6 +139,24 @@ def test_unified_status_prints(monkeypatch, capsys):
 def test_run_parser_accepts_detach_flag():
     args = build_parser().parse_args(["run", "unified", "-d"])
     assert args.detach is True
+
+
+def test_restart_parser_accepts_detach_flag():
+    args = build_parser().parse_args(["restart", "-d"])
+    assert args.detach is True
+
+
+def test_unified_restart_starts_detached(monkeypatch):
+    calls: list[object] = []
+    monkeypatch.setattr(unified_lifecycle, "stop_bot", lambda: calls.append("stop") or 0)
+    monkeypatch.setattr(
+        unified_lifecycle,
+        "start_bot",
+        lambda *, skip_port_sync=False, detach=False: calls.append((skip_port_sync, detach)) or 0,
+    )
+
+    assert unified_lifecycle.run_unified_action("restart", detach=True) == 0
+    assert calls == ["stop", (False, True)]
 
 
 def test_run_without_mode_uses_auto_runtime(monkeypatch):

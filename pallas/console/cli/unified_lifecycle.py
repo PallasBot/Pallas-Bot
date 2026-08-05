@@ -243,7 +243,7 @@ def run_unified_action(
         return stop_bot()
     if normalized == "restart":
         stop_bot()
-        return start_bot(skip_port_sync=skip_port_sync)
+        return start_bot(skip_port_sync=skip_port_sync, detach=detach)
     if normalized == "status":
         return status_bot()
     if normalized == "observability":
