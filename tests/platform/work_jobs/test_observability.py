@@ -8,7 +8,7 @@ def test_work_aux_status_round_trip_includes_heartbeat_age(monkeypatch, tmp_path
     monkeypatch.setattr(observability.time, "time", lambda: 100.0)
     observability.write_work_aux_status(
         consumers=4,
-        stats={"pending": 3, "leased": 2, "oldest_pending_age_sec": 11.5, "max_attempts": 5},
+        stats={"pending": 3, "leased": 2, "dead_lettered": 1, "oldest_pending_age_sec": 11.5, "max_attempts": 5},
     )
 
     monkeypatch.setattr(observability.time, "time", lambda: 107.0)
@@ -18,6 +18,7 @@ def test_work_aux_status_round_trip_includes_heartbeat_age(monkeypatch, tmp_path
         "consumers": 4,
         "pending": 3,
         "leased": 2,
+        "dead_lettered": 1,
         "oldest_pending_age_sec": 11.5,
         "max_attempts": 5,
     }

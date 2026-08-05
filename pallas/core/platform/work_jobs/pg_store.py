@@ -201,6 +201,24 @@ class PostgresWorkJobStore:
             job_id=job_id, owner=owner, lease_id=lease_id, completed=False, retry_after_sec=retry_after_sec
         )
 
+    async def dead_letter(self, *, job_id: str, owner: str, lease_id: str, reason: str) -> bool:
+        from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
+
+        async with get_session() as session:
+            result = await session.execute(
+                update(BackgroundJobRow)
+                .where(
+                    BackgroundJobRow.id == job_id,
+                    BackgroundJobRow.lease_owner == owner,
+                    BackgroundJobRow.lease_id == lease_id,
+                )
+                .values(
+                    status="dead_letter", lease_owner=None, lease_id=None, leased_until=None, last_error=reason[:2000]
+                )
+            )
+            await session.commit()
+        return bool(result.rowcount)
+
     async def _release(
         self, *, job_id: str, owner: str, lease_id: str, completed: bool, retry_after_sec: float
     ) -> bool:
@@ -245,6 +263,7 @@ class PostgresWorkJobStore:
                         .filter(pending, BackgroundJobRow.finished_at.is_(None))
                         .label("oldest_pending"),
                         func.max(BackgroundJobRow.attempts).label("max_attempts"),
+                        func.count().filter(BackgroundJobRow.status == "dead_letter").label("dead_lettered"),
                     )
                 )
             ).one()
@@ -254,4 +273,5 @@ class PostgresWorkJobStore:
             "leased": int(row.leased or 0),
             "oldest_pending_age_sec": round(max(0.0, now - oldest), 3) if oldest is not None else None,
             "max_attempts": int(row.max_attempts or 0),
+            "dead_lettered": int(row.dead_lettered or 0),
         }

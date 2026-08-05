@@ -33,6 +33,7 @@ def work_aux_status() -> dict[str, Any]:
         "consumers": int(raw.get("consumers") or 0),
         "pending": int(raw.get("pending") or 0),
         "leased": int(raw.get("leased") or 0),
+        "dead_lettered": int(raw.get("dead_lettered") or 0),
         "oldest_pending_age_sec": raw.get("oldest_pending_age_sec"),
         "max_attempts": int(raw.get("max_attempts") or 0),
     }

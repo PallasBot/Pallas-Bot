@@ -63,6 +63,7 @@ async def test_memory_store_stats_reports_pending_leased_age_and_attempts(monkey
     assert stats == {
         "pending": 0,
         "leased": 1,
+        "dead_lettered": 0,
         "oldest_pending_age_sec": None,
         "max_attempts": 1,
     }

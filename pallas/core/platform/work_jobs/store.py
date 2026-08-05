@@ -29,6 +29,8 @@ class WorkJobStore(Protocol):
 
     async def fail(self, *, job_id: str, owner: str, lease_id: str, retry_after_sec: float) -> bool: ...
 
+    async def dead_letter(self, *, job_id: str, owner: str, lease_id: str, reason: str) -> bool: ...
+
     async def stats(self) -> dict[str, float | int | None]: ...
 
 
@@ -42,6 +44,7 @@ class MemoryWorkJobStore:
         self._enqueued_at: dict[str, float] = {}
         self._leases: dict[str, tuple[str, float, str]] = {}
         self._completed: set[str] = set()
+        self._dead_lettered: set[str] = set()
         self._lock = asyncio.Lock()
 
     async def enqueue(self, job: WorkJob) -> WorkJob:
@@ -62,7 +65,11 @@ class MemoryWorkJobStore:
         now = time.monotonic()
         async with self._lock:
             for job_id, job in self._jobs.items():
-                if job_id in self._completed or self._available_at.get(job_id, 0.0) > now:
+                if (
+                    job_id in self._completed
+                    or job_id in self._dead_lettered
+                    or self._available_at.get(job_id, 0.0) > now
+                ):
                     continue
                 lease = self._leases.get(job_id)
                 if lease is not None and lease[1] > now:
@@ -81,7 +88,11 @@ class MemoryWorkJobStore:
             for job_id, job in self._jobs.items():
                 if len(claimed) >= max(1, int(limit)):
                     break
-                if job_id in self._completed or self._available_at.get(job_id, 0.0) > now:
+                if (
+                    job_id in self._completed
+                    or job_id in self._dead_lettered
+                    or self._available_at.get(job_id, 0.0) > now
+                ):
                     continue
                 lease = self._leases.get(job_id)
                 if lease is not None and lease[1] > now:
@@ -133,6 +144,15 @@ class MemoryWorkJobStore:
             self._available_at[job_id] = time.monotonic() + max(0.0, float(retry_after_sec))
             return True
 
+    async def dead_letter(self, *, job_id: str, owner: str, lease_id: str, reason: str) -> bool:
+        async with self._lock:
+            lease = self._leases.get(job_id)
+            if lease is None or lease[0] != owner or lease[2] != lease_id:
+                return False
+            self._leases.pop(job_id, None)
+            self._dead_lettered.add(job_id)
+            return True
+
     async def stats(self) -> dict[str, float | int | None]:
         now = time.monotonic()
         async with self._lock:
@@ -150,6 +170,7 @@ class MemoryWorkJobStore:
             return {
                 "pending": len(pending),
                 "leased": len(leased),
+                "dead_lettered": len(self._dead_lettered),
                 "oldest_pending_age_sec": round(now - oldest_created, 3) if oldest_created is not None else None,
                 "max_attempts": max((job.attempts for job in self._jobs.values()), default=0),
             }

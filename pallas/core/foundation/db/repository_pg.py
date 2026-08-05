@@ -176,6 +176,7 @@ class BackgroundJobRow(Base):
     leased_until: Mapped[float | None] = mapped_column(Float, nullable=True)
     lease_owner: Mapped[str | None] = mapped_column(Text, nullable=True)
     lease_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     finished_at: Mapped[float | None] = mapped_column(Float, nullable=True)
 
@@ -507,6 +508,8 @@ def _ensure_pg_background_job_lease_id(connection) -> None:
     names = {column["name"] for column in insp.get_columns("background_job")}
     if "lease_id" not in names:
         connection.execute(text("ALTER TABLE background_job ADD COLUMN lease_id TEXT"))
+    if "last_error" not in names:
+        connection.execute(text("ALTER TABLE background_job ADD COLUMN last_error TEXT"))
 
 
 def _ensure_pg_group_config_style_profile(connection) -> None:

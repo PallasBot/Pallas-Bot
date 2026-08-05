@@ -24,6 +24,7 @@ class WorkJobWorker:
         lease_sec: float = 60.0,
         retry_after_sec: float = 5.0,
         batch_size: int = 1,
+        max_attempts: int = 8,
     ) -> None:
         self.store = store
         self.owner = str(owner)
@@ -31,6 +32,7 @@ class WorkJobWorker:
         self.lease_sec = max(1.0, float(lease_sec))
         self.retry_after_sec = max(0.0, float(retry_after_sec))
         self.batch_size = max(1, int(batch_size))
+        self.max_attempts = max(1, int(max_attempts))
 
     async def run_once(self) -> bool:
         jobs = await self.store.claim_many(owner=self.owner, lease_sec=self.lease_sec, limit=self.batch_size)
@@ -68,9 +70,7 @@ class WorkJobWorker:
         handler = self.handlers.get(job.kind)
         if handler is None:
             logger.error("work aux: unknown job kind={} id={}", job.kind, job.id)
-            await self.store.fail(
-                job_id=job.id, owner=self.owner, lease_id=job.lease_id or "", retry_after_sec=self.retry_after_sec
-            )
+            await self._fail_or_dead_letter(job, f"unknown job kind: {job.kind}")
             return None
         lease_task = asyncio.create_task(self._renew_lease(job), name=f"work_job_lease:{job.id}")
         handler_task = asyncio.create_task(handler(job.payload), name=f"work_job_handler:{job.id}")
@@ -89,9 +89,7 @@ class WorkJobWorker:
             await handler_task
         except Exception as exc:
             logger.warning("work aux: job failed kind={} id={}: {}", job.kind, job.id, exc)
-            await self.store.fail(
-                job_id=job.id, owner=self.owner, lease_id=job.lease_id or "", retry_after_sec=self.retry_after_sec
-            )
+            await self._fail_or_dead_letter(job, str(exc))
             return None
         finally:
             if not handler_task.done():
@@ -100,6 +98,17 @@ class WorkJobWorker:
             lease_task.cancel()
             await asyncio.gather(lease_task, return_exceptions=True)
         return job.id
+
+    async def _fail_or_dead_letter(self, job, reason: str) -> None:
+        if job.attempts >= self.max_attempts:
+            await self.store.dead_letter(job_id=job.id, owner=self.owner, lease_id=job.lease_id or "", reason=reason)
+            return
+        await self.store.fail(
+            job_id=job.id,
+            owner=self.owner,
+            lease_id=job.lease_id or "",
+            retry_after_sec=self.retry_after_sec,
+        )
 
     async def _renew_lease(self, job) -> None:
         while True:

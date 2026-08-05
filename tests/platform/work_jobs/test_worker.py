@@ -42,6 +42,24 @@ async def test_worker_requeues_a_failed_job() -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_dead_letters_job_after_max_attempts() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+    from pallas.core.platform.work_jobs.worker import WorkJobWorker
+
+    store = MemoryWorkJobStore()
+    await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:dead-letter"))
+
+    async def handler(_payload: dict) -> None:
+        raise RuntimeError("permanent failure")
+
+    worker = WorkJobWorker(store=store, owner="worker", handlers={"test": handler}, max_attempts=1)
+    assert await worker.run_once() is True
+    assert await store.claim(owner="other", lease_sec=1) is None
+    assert (await store.stats())["dead_lettered"] == 1
+
+
+@pytest.mark.asyncio
 async def test_worker_requeues_unknown_job_kind() -> None:
     from pallas.core.platform.work_jobs.models import WorkJob
     from pallas.core.platform.work_jobs.store import MemoryWorkJobStore

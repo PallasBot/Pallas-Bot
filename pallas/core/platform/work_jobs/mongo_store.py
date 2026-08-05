@@ -121,6 +121,23 @@ class MongoWorkJobStore:
             job_id=job_id, owner=owner, lease_id=lease_id, completed=False, retry_after_sec=retry_after_sec
         )
 
+    async def dead_letter(self, *, job_id: str, owner: str, lease_id: str, reason: str) -> bool:
+        from pallas.core.foundation.db.modules import BackgroundJob
+
+        result = await BackgroundJob.get_pymongo_collection().update_one(
+            {"job_id": job_id, "lease_owner": owner, "lease_id": lease_id},
+            {
+                "$set": {
+                    "status": "dead_letter",
+                    "lease_owner": None,
+                    "lease_id": None,
+                    "leased_until": None,
+                    "last_error": reason[:2000],
+                }
+            },
+        )
+        return bool(result.modified_count)
+
     async def _release(
         self, *, job_id: str, owner: str, lease_id: str, completed: bool, retry_after_sec: float
     ) -> bool:
@@ -155,6 +172,7 @@ class MongoWorkJobStore:
                     "leased": {"$sum": {"$cond": [{"$eq": ["$status", "leased"]}, 1, 0]}},
                     "oldest_pending": {"$min": {"$cond": [{"$eq": ["$status", "pending"]}, "$created_at", None]}},
                     "max_attempts": {"$max": "$attempts"},
+                    "dead_lettered": {"$sum": {"$cond": [{"$eq": ["$status", "dead_letter"]}, 1, 0]}},
                 }
             },
         ]
@@ -166,4 +184,5 @@ class MongoWorkJobStore:
             "leased": int(row.get("leased") or 0),
             "oldest_pending_age_sec": round(max(0.0, now - float(oldest)), 3) if oldest is not None else None,
             "max_attempts": int(row.get("max_attempts") or 0),
+            "dead_lettered": int(row.get("dead_lettered") or 0),
         }
