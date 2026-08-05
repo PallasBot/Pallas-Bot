@@ -237,6 +237,74 @@ async def test_complete_chat_message_parses_openai_response(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
+async def test_complete_chat_message_downgrades_incompatible_required_tool_choice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm.provider_client import clear_tool_choice_compatibility_cache
+
+    clear_tool_choice_compatibility_cache()
+    payloads: list[dict[str, Any]] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+            self.text = (
+                '{"error":{"message":'
+                '"The tool_choice parameter does not support being set to required in thinking mode"}}'
+                if status_code == 400
+                else ""
+            )
+
+        def json(self) -> dict[str, Any]:
+            return {"choices": [{"message": {"role": "assistant", "content": "你好"}}]}
+
+    class FakeClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> FakeClient:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None) -> FakeResponse:
+            assert json is not None
+            payloads.append(json)
+            return FakeResponse(400 if len(payloads) == 1 else 200)
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.httpx.AsyncClient", FakeClient)
+    cfg = LlmConfig(llm_runtime="bot_kernel", chat_timeout_sec=5.0)
+    tools = [{"type": "function", "function": {"name": "demo", "parameters": {"type": "object"}}}]
+
+    first = await complete_chat_message(
+        [{"role": "user", "content": "hi"}],
+        model="demo",
+        base_url="http://example.test/v1",
+        api_key="sk-test",
+        provider_id="demo-provider",
+        options={"tool_choice": "required"},
+        tools=tools,
+        cfg=cfg,
+    )
+    assert first["content"] == "你好"
+    assert [payload["tool_choice"] for payload in payloads] == ["required", "auto"]
+
+    second = await complete_chat_message(
+        [{"role": "user", "content": "again"}],
+        model="demo",
+        base_url="http://example.test/v1",
+        api_key="sk-test",
+        provider_id="demo-provider",
+        options={"tool_choice": "required"},
+        tools=tools,
+        cfg=cfg,
+    )
+    assert second["content"] == "你好"
+    assert payloads[-1]["tool_choice"] == "auto"
+
+
+@pytest.mark.asyncio
 async def test_complete_chat_message_falls_back_to_next_provider(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
