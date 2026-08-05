@@ -128,7 +128,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
         ),
     )
     conversation_scheduler_concurrency: int = Field(
-        default=6,
+        default=8,
         ge=1,
         le=64,
         description=field_help(
@@ -278,7 +278,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
     def from_env(cls) -> Self:
         pool_size = dispatch_env_int("PG_POOL_SIZE", default=10, minimum=1, maximum=128)
         storage_default = min(8, pool_size)
-        conversation_default = cap_by_pg_pool(8, workload_fraction=0.30)
+        conversation_default = cap_by_pg_pool(8, workload_fraction=0.40)
         return cls(
             matcher_dispatch_enabled=dispatch_env_bool("PALLAS_MATCHER_DISPATCH_ENABLED", default=True),
             matcher_dispatch_overload_threshold=dispatch_env_int(

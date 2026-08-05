@@ -8,6 +8,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_worker_completes_a_claimed_job() -> None:
     from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.observability import WorkAuxRuntimeMetrics
     from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
     from pallas.core.platform.work_jobs.worker import WorkJobWorker
 
@@ -18,15 +19,23 @@ async def test_worker_completes_a_claimed_job() -> None:
     async def handler(payload: dict) -> None:
         seen.append(payload)
 
-    worker = WorkJobWorker(store=store, owner="test-worker", handlers={"test": handler})
+    metrics = WorkAuxRuntimeMetrics()
+    worker = WorkJobWorker(store=store, owner="test-worker", handlers={"test": handler}, metrics=metrics)
     assert await worker.run_once() is True
     assert seen == [{"value": 1}]
     assert await store.claim(owner="other", lease_sec=1) is None
+    assert metrics.snapshot() == {
+        "completed_since_start": 1,
+        "failed_since_start": 0,
+        "retried_since_start": 0,
+        "dead_lettered_since_start": 0,
+    }
 
 
 @pytest.mark.asyncio
 async def test_worker_requeues_a_failed_job() -> None:
     from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.observability import WorkAuxRuntimeMetrics
     from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
     from pallas.core.platform.work_jobs.worker import WorkJobWorker
 
@@ -36,14 +45,28 @@ async def test_worker_requeues_a_failed_job() -> None:
     async def handler(_payload: dict) -> None:
         raise RuntimeError("retry")
 
-    worker = WorkJobWorker(store=store, owner="test-worker", handlers={"test": handler}, retry_after_sec=0)
+    metrics = WorkAuxRuntimeMetrics()
+    worker = WorkJobWorker(
+        store=store,
+        owner="test-worker",
+        handlers={"test": handler},
+        retry_after_sec=0,
+        metrics=metrics,
+    )
     assert await worker.run_once() is True
     assert (await store.claim(owner="other", lease_sec=1)).attempts == 2
+    assert metrics.snapshot() == {
+        "completed_since_start": 0,
+        "failed_since_start": 1,
+        "retried_since_start": 1,
+        "dead_lettered_since_start": 0,
+    }
 
 
 @pytest.mark.asyncio
 async def test_worker_dead_letters_job_after_max_attempts() -> None:
     from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.observability import WorkAuxRuntimeMetrics
     from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
     from pallas.core.platform.work_jobs.worker import WorkJobWorker
 
@@ -53,10 +76,17 @@ async def test_worker_dead_letters_job_after_max_attempts() -> None:
     async def handler(_payload: dict) -> None:
         raise RuntimeError("permanent failure")
 
-    worker = WorkJobWorker(store=store, owner="worker", handlers={"test": handler}, max_attempts=1)
+    metrics = WorkAuxRuntimeMetrics()
+    worker = WorkJobWorker(store=store, owner="worker", handlers={"test": handler}, max_attempts=1, metrics=metrics)
     assert await worker.run_once() is True
     assert await store.claim(owner="other", lease_sec=1) is None
     assert (await store.stats())["dead_lettered"] == 1
+    assert metrics.snapshot() == {
+        "completed_since_start": 0,
+        "failed_since_start": 1,
+        "retried_since_start": 0,
+        "dead_lettered_since_start": 1,
+    }
 
 
 @pytest.mark.asyncio

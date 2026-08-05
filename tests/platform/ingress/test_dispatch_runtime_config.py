@@ -29,7 +29,7 @@ def test_conversation_scheduler_defaults_follow_pool_budget(monkeypatch: pytest.
     cfg = config.IngressDispatchRuntimeConfig.from_env()
 
     assert cfg.conversation_scheduler_enabled is True
-    assert cfg.conversation_scheduler_concurrency == 6
+    assert cfg.conversation_scheduler_concurrency == 8
     assert cfg.conversation_scheduler_max_pending == 512
     assert cfg.conversation_scheduler_per_key_pending == 32
 

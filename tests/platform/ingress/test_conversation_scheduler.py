@@ -47,6 +47,10 @@ async def test_hot_conversation_does_not_starve_ready_conversation() -> None:
     a2 = asyncio.create_task(scheduler.submit(("10001", 1), lambda: record("a2")))
     b1 = asyncio.create_task(scheduler.submit(("10001", 2), lambda: record("b1")))
     await scheduler.wait_for_pending_at_least(3)
+    snapshot = scheduler.snapshot()
+    assert snapshot["pending_peak"] == 3
+    assert snapshot["active_peak"] == 1
+    assert snapshot["ready_peak"] == 1
     release_first.set()
 
     await asyncio.gather(a1, a2, b1)

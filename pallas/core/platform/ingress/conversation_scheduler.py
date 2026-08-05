@@ -49,6 +49,9 @@ class ConversationScheduler:
         self._tasks: set[asyncio.Task[None]] = set()
         self._pending_count = 0
         self._pending_by_key: dict[ConversationKey, int] = {}
+        self._pending_peak = 0
+        self._ready_peak = 0
+        self._active_peak = 0
         self._backpressure_waits = 0
         self._per_key_backpressure_waits = 0
         self._wait_samples_ms: deque[float] = deque(maxlen=256)
@@ -89,6 +92,7 @@ class ConversationScheduler:
                 self._pending_by_key[key] = self._pending_by_key.get(key, 0) + 1
             self._queues.setdefault(key, deque()).append(item)
             self._queue_ready_key_locked(key)
+            self._record_peaks_locked()
             self._start_ready_locked()
             self._condition.notify_all()
         await asyncio.shield(future)
@@ -106,6 +110,7 @@ class ConversationScheduler:
                 raise RuntimeError("conversation scheduler is stopping")
             self._pending_count += 1
             self._pending_by_key[key] = self._pending_by_key.get(key, 0) + 1
+            self._record_peaks_locked()
             return ConversationCapacityReservation(scheduler=self, key=key)
 
     async def release_reservation(self, reservation: ConversationCapacityReservation) -> None:
@@ -162,8 +167,11 @@ class ConversationScheduler:
             wait_p95 = round(ordered[index], 2)
         return {
             "pending": self._pending_count,
+            "pending_peak": self._pending_peak,
             "active": len(self._running_keys),
+            "active_peak": self._active_peak,
             "ready": len(self._ready),
+            "ready_peak": self._ready_peak,
             "max_pending": self.max_pending,
             "per_key_pending_limit": self.per_key_pending,
             "active_keys": len(self._pending_by_key),
@@ -171,6 +179,11 @@ class ConversationScheduler:
             "backpressure_waits": self._backpressure_waits,
             "per_key_backpressure_waits": self._per_key_backpressure_waits,
         }
+
+    def _record_peaks_locked(self) -> None:
+        self._pending_peak = max(self._pending_peak, self._pending_count)
+        self._ready_peak = max(self._ready_peak, len(self._ready))
+        self._active_peak = max(self._active_peak, len(self._running_keys))
 
     def _release_pending_locked(self, key: ConversationKey) -> None:
         self._pending_count = max(0, self._pending_count - 1)
@@ -195,6 +208,7 @@ class ConversationScheduler:
             if key in self._running_keys or not self._queues.get(key):
                 continue
             self._running_keys.add(key)
+            self._record_peaks_locked()
             task = asyncio.create_task(self._run_one(key), name=f"conversation_scheduler:{key[0]}:{key[1]}")
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
@@ -332,8 +346,11 @@ def conversation_scheduler_status() -> dict[str, int | float | bool | None]:
         return {
             "enabled": config.conversation_scheduler_enabled,
             "pending": 0,
+            "pending_peak": 0,
             "active": 0,
+            "active_peak": 0,
             "ready": 0,
+            "ready_peak": 0,
             "max_pending": config.conversation_scheduler_max_pending,
             "per_key_pending_limit": config.conversation_scheduler_per_key_pending,
             "active_keys": 0,

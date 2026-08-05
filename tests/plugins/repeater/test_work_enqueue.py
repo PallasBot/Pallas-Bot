@@ -10,6 +10,7 @@ import pytest
 @pytest.mark.asyncio
 async def test_enqueue_repeater_learn_captures_idempotent_work_job(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater import learn_queue
+    from pallas.core.platform.ingress import hotpath_metrics
 
     payload = SimpleNamespace(to_dict=lambda: {"chat": {"group_id": 42}})
     chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
@@ -17,6 +18,7 @@ async def test_enqueue_repeater_learn_captures_idempotent_work_job(monkeypatch: 
     monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
     monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", AsyncMock(return_value=payload))
     learn_queue.clear_repeater_learn_runtime_state()
+    hotpath_metrics.clear_hotpath_metrics_for_tests()
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
@@ -24,6 +26,8 @@ async def test_enqueue_repeater_learn_captures_idempotent_work_job(monkeypatch: 
     assert job.kind == "repeater.learn"
     assert job.idempotency_key == "repeater.learn:42:99:100"
     assert job.payload == {"chat": {"group_id": 42}}
+    assert hotpath_metrics.hotpath_metrics_snapshot()["learn_enqueued"] == 1
+    assert hotpath_metrics.hotpath_metrics_snapshot()["learn_buffered"] == 1
 
 
 @pytest.mark.asyncio

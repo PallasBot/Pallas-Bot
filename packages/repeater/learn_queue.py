@@ -171,8 +171,9 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
 
         record_learn_skipped_full()
         return False
-    from pallas.core.platform.ingress.hotpath_metrics import record_learn_buffered
+    from pallas.core.platform.ingress.hotpath_metrics import record_learn_buffered, record_learn_enqueued
 
+    record_learn_enqueued()
     record_learn_buffered()
     return True
 
