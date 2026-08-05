@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections import deque
 from dataclasses import replace
 
 from pallas.core.platform.work_jobs.models import WorkJob
@@ -12,6 +13,17 @@ from pallas.core.platform.work_jobs.runtime import build_work_job_store
 
 _DISPATCH_TASK: asyncio.Task[None] | None = None
 _VISION_SELECT_SEMAPHORE = asyncio.Semaphore(1)
+_VISION_ENQUEUED_AT: deque[float] = deque()
+
+
+def allow_sticker_vision_enqueue(max_per_hour: int, *, now: float | None = None) -> bool:
+    current = time.monotonic() if now is None else float(now)
+    while _VISION_ENQUEUED_AT and current - _VISION_ENQUEUED_AT[0] >= 3600:
+        _VISION_ENQUEUED_AT.popleft()
+    if max(0, int(max_per_hour)) <= len(_VISION_ENQUEUED_AT):
+        return False
+    _VISION_ENQUEUED_AT.append(current)
+    return True
 
 
 def parse_sticker_vision_choice(raw: str, *, candidate_count: int) -> int | None:

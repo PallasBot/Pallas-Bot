@@ -769,6 +769,12 @@ class LlmWebuiConfig(BaseModel):
         le=30.0,
         description=field_help("视觉选图超时秒数", "超时回退 Repeater 语义候选，不影响文字回复。"),
     )
+    llm_sticker_vision_max_per_hour: int = Field(
+        default=12,
+        ge=0,
+        le=1000,
+        description=field_help("视觉选图每小时上限", "0 表示关闭视觉选图；达到上限时直接回退 Repeater 候选。"),
+    )
     llm_reply_effect_eval_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -1092,6 +1098,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_vision_enabled=cfg.llm_sticker_vision_enabled,
         llm_sticker_vision_candidate_count=cfg.llm_sticker_vision_candidate_count,
         llm_sticker_vision_timeout_sec=cfg.llm_sticker_vision_timeout_sec,
+        llm_sticker_vision_max_per_hour=cfg.llm_sticker_vision_max_per_hour,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,

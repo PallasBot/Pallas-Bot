@@ -65,25 +65,25 @@ async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user
 
     cfg = get_llm_config()
     if bool(getattr(cfg, "llm_sticker_vision_enabled", False)):
-        from pallas.product.llm.sticker_vision import enqueue_sticker_vision_job
+        from pallas.product.llm.sticker_vision import allow_sticker_vision_enqueue, enqueue_sticker_vision_job
 
         timeout_sec = float(getattr(cfg, "llm_sticker_vision_timeout_sec", 8.0) or 8.0)
-        try:
-            await enqueue_sticker_vision_job(
-                candidates[: int(getattr(cfg, "llm_sticker_vision_candidate_count", 4) or 4)],
-                user_text=user_text,
-                timeout_sec=timeout_sec,
-                idempotency_key=(
-                    f"sticker_vision.select:{int(bot_id)}:{int(group_id)}:{int(time.time() * 1000)}:{hash(raw_image)}"
-                ),
-                bot_id=int(bot_id),
-                group_id=int(group_id),
-                fallback_cq_code=raw_image,
-            )
-        except Exception as exc:
-            logger.info("LLM vision emotion followup enqueue skipped group={}: {}", group_id, exc)
-            return False
-        return True
+        if allow_sticker_vision_enqueue(int(getattr(cfg, "llm_sticker_vision_max_per_hour", 12) or 0)):
+            job_key = f"{int(bot_id)}:{int(group_id)}:{int(time.time() * 1000)}:{hash(raw_image)}"
+            try:
+                await enqueue_sticker_vision_job(
+                    candidates[: int(getattr(cfg, "llm_sticker_vision_candidate_count", 4) or 4)],
+                    user_text=user_text,
+                    timeout_sec=timeout_sec,
+                    idempotency_key=f"sticker_vision.select:{job_key}",
+                    bot_id=int(bot_id),
+                    group_id=int(group_id),
+                    fallback_cq_code=raw_image,
+                )
+            except Exception as exc:
+                logger.info("LLM vision emotion followup enqueue skipped group={}: {}", group_id, exc)
+            else:
+                return True
     cooldown_value = getattr(cfg, "llm_chat_sticker_cooldown_sec", 900)
     cooldown_sec = int(cooldown_value) if isinstance(cooldown_value, int | float) else 900
     if not should_send_repeater_image(int(group_id), raw_image, cooldown_sec=cooldown_sec):
