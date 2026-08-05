@@ -76,3 +76,36 @@ async def test_find_reply_bundle_negative_cache_shared_across_bots(monkeypatch: 
     assert await mod.find_reply_bundle_bounded(Chat(2)) is None
     assert await mod.find_reply_bundle_bounded(Chat(3)) is None
     assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_find_reply_bundle_bounded_coalesces_same_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater import bundle_cache
+
+    bundle_cache.clear_repeater_bundle_cache_for_tests()
+    monkeypatch.setattr(mod, "repeater_bundle_timeout_sec", lambda: 1.0)
+    monkeypatch.setattr(bundle_cache, "repeater_bundle_cache_ttl_sec", lambda: 5.0)
+    monkeypatch.setattr(bundle_cache, "repeater_bundle_negative_cache_ttl_sec", lambda: 5.0)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    sentinel = object()
+    calls = {"n": 0}
+
+    class Chat:
+        chat_data = type("D", (), {"bot_id": 1, "group_id": 2, "raw_message": "hi", "keywords": "hi"})()
+
+        async def find_reply_bundle(self):
+            calls["n"] += 1
+            started.set()
+            await release.wait()
+            return sentinel
+
+    first = asyncio.create_task(mod.find_reply_bundle_bounded(Chat()))
+    await started.wait()
+    second = asyncio.create_task(mod.find_reply_bundle_bounded(Chat()))
+    await asyncio.sleep(0)
+    release.set()
+
+    assert await first is sentinel
+    assert await second is sentinel
+    assert calls["n"] == 1

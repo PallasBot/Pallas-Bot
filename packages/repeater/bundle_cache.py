@@ -52,6 +52,11 @@ def _cache_key(group_id: int, bot_id: int, raw_message: str, keywords: str) -> s
     return digest
 
 
+def reply_bundle_cache_key(group_id: int, bot_id: int, raw_message: str, keywords: str) -> str:
+    """返回同一 bot 候选查询的进程内去重键。"""
+    return _cache_key(group_id, bot_id, raw_message, keywords)
+
+
 def _shared_negative_key(group_id: int, raw_message: str, keywords: str) -> str:
     digest = hashlib.blake2b(
         f"neg|{int(group_id)}|{raw_message}|{keywords}".encode(),
