@@ -462,6 +462,33 @@ def bind_group_owned_gate_sync(plugin: str, group_id: int, bot_id: int, *, gate_
     _owned_gate[(plugin, int(group_id))] = (int(bot_id), time.time() + ttl)
 
 
+def read_group_owned_gate_bot_id_sync(plugin: str, group_id: int) -> int | None:
+    """同步读取同群主持牛；统一模式读取本进程占位。"""
+    if sharding_active():
+        from pallas.core.platform.shard.coord.group_gate import read_owned_gate_bot_id_sync
+
+        return read_owned_gate_bot_id_sync(plugin, int(group_id))
+    rec = _owned_gate.get((plugin, int(group_id)))
+    if rec is None:
+        return None
+    owner, until = rec
+    return owner if time.time() < until else None
+
+
+def is_group_owned_gate_holder_sync(plugin: str, group_id: int, bot_id: int) -> bool:
+    """同步读取同群主持牛；统一模式读取本进程占位。"""
+    if sharding_active():
+        from pallas.core.platform.shard.coord.group_gate import is_owned_gate_holder_sync
+
+        return is_owned_gate_holder_sync(plugin, int(group_id), int(bot_id))
+    now = time.time()
+    rec = _owned_gate.get((plugin, int(group_id)))
+    if rec is None:
+        return True
+    owner, until = rec
+    return now >= until or owner == int(bot_id)
+
+
 async def is_group_owned_gate_holder(plugin: str, group_id: int, bot_id: int) -> bool:
 
     if sharding_active():

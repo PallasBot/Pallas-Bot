@@ -9,10 +9,10 @@ from nonebot import get_loaded_plugins
 
 from pallas.core.foundation.command_prefix import matches_command_prefix
 from pallas.core.platform.ingress.plugin_command_plaintext import extract_command_prefixes_from_menu_data
-from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
-from pallas.core.platform.shard.coord.group_gate import (
-    is_owned_gate_holder_sync,
-    read_owned_gate_bot_id_sync,
+from pallas.core.platform.multi_bot.dedup import (
+    is_group_owned_gate_holder_sync,
+    needs_group_host_bot_gate,
+    read_group_owned_gate_bot_id_sync,
 )
 from pallas.core.platform.shard.coord.hosted_activity_coord import coord_session_active, hosted_activity_live
 
@@ -116,7 +116,7 @@ def spec_matches_speak_traffic(
     if _matches_prefix(text, spec.command_prefixes):
         return False
     session_active = coord_session_active(spec.activity_namespace, group_id, session_flag=spec.session_flag)
-    owner_active = read_owned_gate_bot_id_sync(spec.plugin_key, int(group_id)) is not None
+    owner_active = read_group_owned_gate_bot_id_sync(spec.plugin_key, int(group_id)) is not None
     if not session_active and not owner_active:
         return False
     if spec.speak_at_fleet_bot_only:
@@ -150,7 +150,7 @@ def spec_host_gate_passes(
     ):
         return True
 
-    return is_owned_gate_holder_sync(spec.plugin_key, int(group_id), int(bot_id))
+    return is_group_owned_gate_holder_sync(spec.plugin_key, int(group_id), int(bot_id))
 
 
 def hosted_activity_claim_is_hosted(
