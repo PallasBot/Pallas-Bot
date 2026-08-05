@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from nonebot.adapters import Event
 from nonebot.internal.rule import Rule
 from nonebot.rule import command, startswith
 
@@ -14,6 +15,15 @@ class _FooCommandMatcher:
 
 class _BarStartMatcher:
     rule = Rule(startswith("bar"))
+
+
+@prefilter.mark_exact_plaintext_rule("牛牛喝酒", "牛牛干杯")
+async def _drink_rule(_event: Event) -> bool:
+    return False
+
+
+class _DrinkMatcher:
+    rule = Rule(_drink_rule)
 
 
 def test_command_rule_miss():
@@ -65,6 +75,13 @@ def test_startswith_miss():
         )
         == "miss"
     )
+
+
+def test_marked_exact_custom_rule_skips_non_matching_message():
+    descriptors = prefilter.extract_matcher_rule_descriptors(_DrinkMatcher)
+
+    assert prefilter.matcher_rule_decision(descriptors, plain_text="随便聊", raw_text="随便聊") == "miss"
+    assert prefilter.matcher_rule_decision(descriptors, plain_text="牛牛喝酒", raw_text="牛牛喝酒") == "match"
 
 
 def test_apply_prefilter_skips_miss():
