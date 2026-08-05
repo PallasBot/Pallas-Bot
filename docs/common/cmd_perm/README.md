@@ -89,7 +89,7 @@ from pallas.api.metadata import SCENE_GROUP, join_usage, usage_line
 | `menu_data[].help_audience` | 同上 | 该条目不出现在**普通**详情；超管私聊详情可见 |
 | 缺省 / `user` | — | 可见 |
 
-超管**私聊**发「牛牛帮助」可看到插件级受限与配置忽略名单中的插件（内置 hidden 除外）。机制与排障见 [牛牛帮助 · 普通菜单与超管菜单](/plugins/help/README.md#普通菜单与超管菜单)。
+超管**私聊**发「牛牛帮助」可看到插件级受限与配置忽略名单中的插件（内置 hidden 除外）。机制与排障见 [牛牛帮助 · 普通菜单与超管菜单](/plugins/help.md#普通菜单与超管菜单)。
 
 ## 排障
 
@@ -122,6 +122,6 @@ from pallas.api.metadata import SCENE_GROUP, join_usage, usage_line
 ## 后续阅读
 
 - [命令冷却](/common/command_limits)
-- [牛牛帮助（含双菜单）](/plugins/help/README.md#普通菜单与超管菜单)
+- [牛牛帮助（含双菜单）](/plugins/help.md#普通菜单与超管菜单)
 - [写第一个插件](/developer/plugin-development/first-plugin)
 - [元数据](/developer/plugin-development/metadata)
