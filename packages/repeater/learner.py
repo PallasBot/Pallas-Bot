@@ -86,12 +86,19 @@ class Learner:
 
         group_msgs = await group_messages_before(chat_data)
         predecessor = group_msgs[-1] if group_msgs else None
+        forced_teaching = is_forced_repeat_teaching(chat_data, group_msgs)
 
         async def topics_callback(group_id: int, keywords_list: list[str]):
             async with topics_lock:
                 recent_topics[group_id] += filtered_recent_topics(keywords_list)
 
         await MessageStore.capture_message(chat_data, topics_callback=topics_callback)
+        from pallas.product.persona.group_style_refresh import mark_group_style_dirty, mark_group_style_forced_teach
+
+        if forced_teaching:
+            mark_group_style_forced_teach(chat_data.group_id)
+        else:
+            mark_group_style_dirty(chat_data.group_id)
         return RepeaterLearnPayload(
             chat=chat_data_to_dict(chat_data),
             predecessor=message_to_dict(predecessor) if predecessor is not None else None,
@@ -107,9 +114,6 @@ class Learner:
         if predecessor is not None:
             await Learner._context_insert(chat_data, predecessor)
         await MessageStore.persist_message(chat_data)
-        from pallas.product.persona.group_style_refresh import mark_group_style_dirty
-
-        mark_group_style_dirty(chat_data.group_id)
 
     @staticmethod
     async def _context_insert(chat_data: "ChatData", pre_msg: MessageModel | None):

@@ -2,11 +2,16 @@ from __future__ import annotations
 
 from pallas.core.platform.ingress.policy_registry import (
     FanoutScope,
+    fanout_policies_for_plugin,
     parse_fanout_policies,
     parse_fanout_policy,
     policy_matches_text,
     text_matches_plugin_fanout,
 )
+
+
+def test_empty_plugin_name_has_no_fanout_policies() -> None:
+    assert fanout_policies_for_plugin("") == ()
 
 
 def test_parse_fanout_policy_shard_only() -> None:
