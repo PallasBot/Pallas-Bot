@@ -72,6 +72,36 @@ async def test_repeater_outbox_writer_flushes_buffered_jobs_as_a_batch(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_repeater_outbox_writer_drops_nul_payload_without_retrying(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater import learn_queue
+    from pallas.core.platform.work_jobs.models import WorkJob
+
+    learn_queue.clear_repeater_learn_runtime_state()
+    store = SimpleNamespace(
+        enqueue_many=AsyncMock(
+            side_effect=RuntimeError("unsupported Unicode escape sequence: \\u0000 cannot be converted to text")
+        )
+    )
+    monkeypatch.setattr(learn_queue, "build_work_job_store", lambda: store)
+    monkeypatch.setattr(learn_queue, "wait_pg_pool_headroom_for_learn", AsyncMock())
+    learn_queue.learn_queue().put_nowait(
+        WorkJob.create(kind="repeater.learn", payload={"raw_message": "bad\\x00payload"}, idempotency_key="repeater:nul")
+    )
+    writer = asyncio.create_task(learn_queue.run_learn_consumer())
+
+    try:
+        for _ in range(20):
+            if store.enqueue_many.await_count:
+                break
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.25)
+        store.enqueue_many.assert_awaited_once()
+    finally:
+        writer.cancel()
+        await asyncio.gather(writer, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_repeater_shutdown_discards_buffer_when_writer_never_started() -> None:
     from packages.repeater import learn_queue
     from pallas.core.platform.work_jobs.models import WorkJob

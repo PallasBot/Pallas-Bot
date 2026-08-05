@@ -104,6 +104,10 @@ def should_skip_repeater_learn_enqueue() -> bool:
     return learn_queue_under_pressure()
 
 
+def is_nul_payload_error(exc: Exception) -> bool:
+    return "\\u0000 cannot be converted to text" in str(exc)
+
+
 async def run_learn_consumer() -> None:
     while True:
         first = await learn_queue().get()
@@ -126,6 +130,9 @@ async def run_learn_consumer() -> None:
             raise
         except Exception as exc:
             logger.warning("repeater learn outbox batch failed count={}: {}", len(jobs), exc)
+            if is_nul_payload_error(exc):
+                logger.warning("repeater learn outbox dropped NUL payload count={}", len(jobs))
+                continue
             while True:
                 await asyncio.sleep(0.2)
                 try:
