@@ -87,6 +87,21 @@ async def test_repeater_shutdown_discards_buffer_when_writer_never_started() -> 
 
 
 @pytest.mark.asyncio
+async def test_repeater_starts_one_outbox_writer_per_effective_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater import learn_queue
+
+    learn_queue.clear_repeater_learn_runtime_state()
+    await learn_queue.stop_repeater_learn_worker()
+    monkeypatch.setattr(learn_queue, "learn_concurrency", lambda: 3)
+
+    await learn_queue.start_repeater_learn_worker()
+    try:
+        assert len(learn_queue._worker_tasks) == 3
+    finally:
+        await learn_queue.stop_repeater_learn_worker()
+
+
+@pytest.mark.asyncio
 async def test_repeater_work_handler_processes_serialized_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater.work_handler import handle_repeater_learn
 

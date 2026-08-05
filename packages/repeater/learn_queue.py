@@ -179,10 +179,14 @@ async def start_repeater_learn_worker() -> None:
     if _learn_workers_running():
         return
     await stop_repeater_learn_worker()
-    _worker_tasks = [asyncio.create_task(run_learn_consumer(), name="repeater_learn_outbox_writer")]
+    _worker_tasks = [
+        asyncio.create_task(run_learn_consumer(), name=f"repeater_learn_outbox_writer:{index}")
+        for index in range(learn_concurrency())
+    ]
     logger.debug(
-        "repeater learn outbox writer started: queue_max={}",
+        "repeater learn outbox writer started: queue_max={} workers={}",
         learn_queue_max_size(),
+        len(_worker_tasks),
     )
 
 
