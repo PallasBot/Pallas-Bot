@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import time
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from nonebot import logger
 from ulid import ULID
@@ -179,10 +179,9 @@ async def submit_corpus_assist_stages(
     candidate_text: str,
     reply_mode: str = "normal",
     scene_tier: str = "weak",
-    profile: Literal["repeater", "direct_chat"] = "repeater",
     capabilities: RepeaterCapabilities | None = None,
 ) -> bool:
-    """Submit grounded corpus-assist stages for repeater or direct chat."""
+    """Select an existing grounded corpus reply for repeater."""
     cfg = get_llm_config()
     if capabilities is None:
         from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
@@ -191,109 +190,21 @@ async def submit_corpus_assist_stages(
     if not capabilities.llm_enabled:
         return False
 
-    from packages.repeater.opportunity_gate import looks_like_reply_cue
     from pallas.product.llm.corpus_contamination import is_llm_learning_safe
 
     pool = [str(item).strip() for item in candidates if str(item).strip() and is_llm_learning_safe(str(item))]
     candidate = str(candidate_text or "").strip()
-    if not is_llm_learning_safe(candidate):
-        candidate = ""
-
-    cue = looks_like_reply_cue(user_text)
-    if scene_tier == "strong":
-        if len(pool) >= 2 and capabilities.select_enabled:
-            from pallas.product.llm.select import maybe_submit_repeater_llm_select
-
-            if await maybe_submit_repeater_llm_select(
-                event,
-                user_text=user_text,
-                candidates=pool,
-                fallback_text=candidate,
-                reply_mode=reply_mode,
-                scene_tier=scene_tier,
-            ):
-                return True
-
-        if profile == "repeater" and capabilities.polish_enabled and cue and candidate and len(pool) >= 2:
-            from pallas.product.llm.polish import maybe_submit_repeater_llm_polish
-
-            if await maybe_submit_repeater_llm_polish(
-                event,
-                candidate_text=candidate,
-                trigger_user_text=user_text,
-                reply_mode=reply_mode,
-                force_for_cue=True,
-                intensity="medium",
-                scene_tier=scene_tier,
-            ):
-                return True
-
-        if capabilities.polish_lite_enabled and candidate and pool:
-            if await maybe_submit_repeater_llm_polish_lite(
-                event,
-                user_text=user_text,
-                candidate_text=candidate,
-                reply_mode=reply_mode,
-                scene_tier=scene_tier,
-            ):
-                return True
-
-        return False
-
-    if profile == "repeater" and capabilities.polish_enabled and cue and candidate and len(pool) >= 2:
-        from pallas.product.llm.polish import maybe_submit_repeater_llm_polish
-
-        if await maybe_submit_repeater_llm_polish(
-            event,
-            candidate_text=candidate,
-            trigger_user_text=user_text,
-            reply_mode=reply_mode,
-            force_for_cue=True,
-            intensity="medium",
-            scene_tier=scene_tier,
-        ):
-            return True
-
-    if capabilities.polish_lite_enabled and candidate and pool:
-        if should_polish_lite_sample(
-            int(event.self_id),
-            int(event.group_id),
-            int(event.message_id),
-            sample_rate=cfg.llm_polish_lite_sample_rate,
-        ):
-            if await maybe_submit_repeater_llm_polish_lite(
-                event,
-                user_text=user_text,
-                candidate_text=candidate,
-                reply_mode=reply_mode,
-                scene_tier=scene_tier,
-            ):
-                return True
-
     if len(pool) >= 2 and capabilities.select_enabled:
         from pallas.product.llm.select import maybe_submit_repeater_llm_select
 
-        if await maybe_submit_repeater_llm_select(
+        return await maybe_submit_repeater_llm_select(
             event,
             user_text=user_text,
             candidates=pool,
             fallback_text=candidate,
             reply_mode=reply_mode,
             scene_tier=scene_tier,
-        ):
-            return True
-
-    if profile == "repeater" and candidate and capabilities.polish_enabled:
-        from pallas.product.llm.polish import maybe_submit_repeater_llm_polish
-
-        if await maybe_submit_repeater_llm_polish(
-            event,
-            candidate_text=candidate,
-            trigger_user_text=user_text,
-            reply_mode=reply_mode,
-            scene_tier=scene_tier,
-        ):
-            return True
+        )
 
     return False
 

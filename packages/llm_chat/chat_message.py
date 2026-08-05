@@ -46,7 +46,6 @@ from pallas.product.llm.memory import (
 from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.persona_context import build_persona_llm_context
-from pallas.product.llm.polish_lite import submit_corpus_assist_stages
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_necessity import evaluate_reply_necessity_gate
 from pallas.product.llm.reply_variation import should_wait_for_more
@@ -112,16 +111,6 @@ async def _resolve_speak_aliases(bot_id: int) -> list[str]:
     except Exception:
         persona_dict = None
     return extract_self_aliases(persona_dict, login_nickname=login_nick or None)
-
-
-def resolve_corpus_llm_route(llm_cfg, pool: list[str], candidate: str) -> str:
-    if llm_cfg.llm_polish_lite_enabled and candidate and pool:
-        return "corpus_polish_lite"
-    if len(pool) >= 2 and llm_cfg.llm_select_enabled:
-        return "corpus_select"
-    if candidate and llm_cfg.llm_polish_enabled:
-        return "corpus_polish"
-    return "corpus_fallback"
 
 
 async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id: int) -> str:
@@ -358,48 +347,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
         return
     record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_proceed")
 
-    if llm_cfg.llm_select_enabled and group_id is not None and isinstance(event, GroupMessageEvent):
-        from packages.repeater.model import Chat
-
-        chat = Chat(event)
-        try:
-            from packages.repeater.bundle_lookup import find_reply_bundle_bounded
-
-            bundle = await find_reply_bundle_bounded(chat)
-        except Exception:
-            bundle = None
-        if bundle is not None:
-            pool = [item for item in bundle.message_pool if item and "[CQ:" not in item]
-            candidate = next((item for item in bundle.answer_list if item and "[CQ:" not in item), "")
-            from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
-
-            # 任一工具已命中时不要被语料 polish 抢走（硬域 / 软召回 / 盘点通用）
-            tool_preview = assemble_tool_bundle(task="llm_chat", user_text=plain or msg)
-            prefer_tools = bool(tool_preview.get("tools_enabled")) and bool(tool_preview.get("tool_schemas"))
-            if (
-                not prefer_tools
-                and (pool or candidate)
-                and await submit_corpus_assist_stages(
-                    event,
-                    user_text=plain or msg,
-                    candidates=pool,
-                    candidate_text=candidate,
-                    profile="direct_chat",
-                    capabilities=resolve_repeater_capabilities(llm_cfg),
-                )
-            ):
-                gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
-                if gate is None:
-                    await refresh_llm_chat_cooldown(event, default_cd_sec=llm_cfg.llm_chat_cooldown_sec)
-                return
-            corpus_fallback = candidate or (pool[0] if pool else "")
-            llm_route = "plain_llm_chat" if prefer_tools else resolve_corpus_llm_route(llm_cfg, pool, candidate)
-        else:
-            corpus_fallback = ""
-            llm_route = "plain_llm_chat"
-    else:
-        corpus_fallback = ""
-        llm_route = "plain_llm_chat"
+    corpus_fallback = ""
+    llm_route = "plain_llm_chat"
 
     gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
     if gate is not None:

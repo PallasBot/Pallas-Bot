@@ -62,28 +62,6 @@ def build_repeater_llm_plan(
     return RepeaterLlmPlan(stage_names, candidate, candidate, pool, generation_plan)
 
 
-def build_stitch_candidate(candidate_pool: list[str]) -> str:
-    unique = []
-    for item in candidate_pool:
-        text = str(item or "").strip()
-        if not text or "[CQ:" in text or text in unique:
-            continue
-        unique.append(text)
-        if len(unique) >= 2:
-            break
-    if len(unique) < 2:
-        return ""
-    left, right = unique[0], unique[1]
-    if left == right or left in right or right in left:
-        return ""
-    if len(left) > 18 or len(right) > 18:
-        return ""
-    stitched = f"{left}，{right}"
-    if len(stitched) > 36:
-        return ""
-    return stitched
-
-
 async def run_repeater_llm_plan(
     plan: RepeaterLlmPlan,
     *,

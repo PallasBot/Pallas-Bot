@@ -41,7 +41,7 @@ def test_decision_trace_serializes_kernel_fields() -> None:
     assert row["scene"] == "banter"
 
 
-def test_plan_generation_stages_orders_grounded_before_generate() -> None:
+def test_plan_generation_stages_only_allows_selecting_grounded_corpus_reply() -> None:
     stages = plan_generation_stages(
         has_candidate_pool=True,
         candidate_pool_size=3,
@@ -50,8 +50,7 @@ def test_plan_generation_stages_orders_grounded_before_generate() -> None:
         polish_enabled=True,
         polish_lite_enabled=False,
     )
-    assert stages[0] == GenerationStage.SELECT
-    assert stages[-1] == GenerationStage.GENERATE
+    assert stages == [GenerationStage.SELECT]
 
 
 def test_decide_repeater_action_skips_when_opportunity_rejected() -> None:
@@ -108,11 +107,7 @@ def test_decide_repeater_action_plans_stages_for_plus_decision() -> None:
         opportunity_accepted=True,
         feature_level=ConversationFeatureLevel.REPEATER_PLUS_DECISION,
     )
-    assert result.generation_stages == [
-        GenerationStage.SELECT,
-        GenerationStage.STITCH,
-        GenerationStage.GENERATE,
-    ]
+    assert result.generation_stages == [GenerationStage.SELECT]
 
 
 def test_decide_repeater_action_blocks_llm_stages_for_legacy_repeater() -> None:

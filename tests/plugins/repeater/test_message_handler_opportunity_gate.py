@@ -61,7 +61,6 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
     monkeypatch.setattr(mod, "should_prepare_repeater_reply", lambda *args, **kwargs: True)
     monkeypatch.setattr(mod, "should_attempt_repeater_opportunity", lambda *args, **kwargs: False)
     monkeypatch.setattr(mod, "submit_corpus_assist_stages", AsyncMock(return_value=False))
-    monkeypatch.setattr(mod, "maybe_submit_repeater_llm_fallback", AsyncMock(return_value=False))
     monkeypatch.setattr(
         mod,
         "build_repeater_llm_plan",
@@ -99,7 +98,6 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
         "packages.repeater.fanout_reply.dispatch_repeater_reply",
         lambda bot_id, group_id, payload: dispatched.append((bot_id, group_id, payload)),
     )
-    monkeypatch.setattr(mod, "record_bot_llm_route", lambda *args, **kwargs: None)
     from pallas.product.llm.kernel.models import ConversationFeatureLevel
 
     monkeypatch.setattr(
@@ -125,7 +123,6 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
 
     mod.run_repeater_llm_plan.assert_not_awaited()
     mod.submit_corpus_assist_stages.assert_not_awaited()
-    mod.maybe_submit_repeater_llm_fallback.assert_not_awaited()
     chat_instance.answer_from_bundle.assert_awaited_once_with(bundle)
     assert dispatched == [(300, 100, answers)]
     assert trace_rows

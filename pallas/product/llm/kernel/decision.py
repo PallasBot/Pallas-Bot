@@ -146,18 +146,9 @@ def plan_generation_stages(
     polish_enabled: bool,
     polish_lite_enabled: bool,
 ) -> list[GenerationStage]:
-    stages: list[GenerationStage] = []
     if candidate_pool_size >= 2 and select_enabled:
-        stages.append(GenerationStage.SELECT)
-    if has_grounded_candidate and (polish_enabled or polish_lite_enabled):
-        stages.append(GenerationStage.REWRITE)
-    if candidate_pool_size >= 2:
-        stages.append(GenerationStage.STITCH)
-    if not stages or not (has_candidate_pool or has_grounded_candidate):
-        return [GenerationStage.GENERATE]
-    if GenerationStage.GENERATE not in stages:
-        stages.append(GenerationStage.GENERATE)
-    return stages
+        return [GenerationStage.SELECT]
+    return []
 
 
 def stages_to_primary_action(stages: list[GenerationStage]) -> ConversationAction:

@@ -17,8 +17,6 @@ from pallas.product.llm.runtime_api import (
     behavior_scene_to_conversation_scene,
     classify_behavior_scene,
     decide_repeater_action,
-    maybe_submit_repeater_llm_fallback,
-    record_bot_llm_route,
     resolve_conversation_feature_level,
     resolve_repeater_capabilities,
     submit_corpus_assist_stages,
@@ -28,7 +26,7 @@ from pallas.product.message_scrub.log_preview import scrub_intercept_log_preview
 
 from ..event_gate import build_repeater_event_context
 from ..learn_queue import enqueue_repeater_learn
-from ..llm_pipeline import build_repeater_llm_plan, build_stitch_candidate, run_repeater_llm_plan
+from ..llm_pipeline import build_repeater_llm_plan, run_repeater_llm_plan
 from ..model import Chat
 from ..opportunity_gate import (
     build_opportunity_trace_payload,
@@ -39,7 +37,6 @@ from ..opportunity_gate import (
 )
 from ..opportunity_trace import append_conversation_decision_trace
 from ..reply_gate import should_prepare_repeater_reply
-from ..responder import Responder
 
 any_msg = on_message(
     priority=15,
@@ -125,20 +122,6 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
         return
 
     if bundle is None:
-        if can_reply:
-            scene_tier = resolve_scene_tier(
-                ctx.plain_body,
-                candidate_pool_size=0,
-                has_candidate_pool=False,
-                has_recent_back_and_forth=False,
-                is_to_me=bool(event.is_tome()),
-            )
-            await maybe_submit_repeater_llm_fallback(
-                event,
-                user_text=ctx.plain_body,
-                reply_mode="normal",
-                scene_tier=scene_tier,
-            )
         return
 
     if fanout_gate is not None and fanout_gate.won:
@@ -263,7 +246,7 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     })
 
     async def stage_runner(stage_name: str) -> bool:
-        if stage_name in {"select", "rewrite"}:
+        if stage_name == "select":
             return await submit_corpus_assist_stages(
                 event,
                 user_text=ctx.plain_body,
@@ -272,50 +255,6 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
                 reply_mode=bundle.reply_mode,
                 scene_tier=scene_tier,
                 capabilities=capabilities,
-            )
-        if stage_name == "stitch":
-            from pallas.product.persona import resolve_persona_for_message
-            from pallas.product.persona.loader import load_affect_triggers
-
-            stitched = build_stitch_candidate(plan.candidate_pool)
-            recent_sent = [
-                str(r.get("reply") or "")
-                for r in Chat._reply_dict[int(event.group_id)][int(event.self_id)][-Responder.DUPLICATE_REPLY :]
-                if r.get("reply") and r["reply"] != Responder.REPLY_FLAG
-            ]
-            persona = await resolve_persona_for_message(
-                int(event.self_id),
-                int(event.group_id),
-                ctx.plain_body,
-            )
-            affect_triggers = await load_affect_triggers(int(event.group_id))
-            accepted, _score = Responder.evaluate_llm_candidate_text(
-                stitched,
-                base_score=0.7,
-                min_score=0.55,
-                recent_sent=recent_sent,
-                persona=persona,
-                affect_triggers=affect_triggers,
-                reply_mode=bundle.reply_mode,
-            )
-            if not accepted:
-                return False
-            answers = await chat.answer_from_bundle(bundle, plan=([stitched], bundle.answer_keywords))
-            if answers is None:
-                return False
-            await config.refresh_cooldown("repeat")
-            from ..fanout_reply import dispatch_repeater_reply
-
-            # 本地拼接发出才记账（无 LLM callback）
-            record_bot_llm_route("repeater_polish", "pipeline_stitch")
-            dispatch_repeater_reply(int(event.self_id), int(event.group_id), answers)
-            return True
-        if stage_name == "generate":
-            return await maybe_submit_repeater_llm_fallback(
-                event,
-                user_text=ctx.plain_body,
-                reply_mode=bundle.reply_mode,
-                scene_tier=scene_tier,
             )
         return False
 

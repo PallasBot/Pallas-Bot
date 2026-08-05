@@ -5,14 +5,13 @@ import pytest
 from packages.repeater.llm_pipeline import (
     RepeaterLlmPlan,
     build_repeater_llm_plan,
-    build_stitch_candidate,
     run_repeater_llm_plan,
 )
 from packages.repeater.responder import ReplyBundle, Responder
 from pallas.product.persona.model import ResolvedPersona
 
 
-def test_build_repeater_llm_plan_orders_grounded_stages_before_fallback() -> None:
+def test_build_repeater_llm_plan_only_selects_grounded_corpus_reply() -> None:
     bundle = ReplyBundle(
         answer_list=["候选一", "候选二"],
         answer_keywords="测试",
@@ -25,11 +24,11 @@ def test_build_repeater_llm_plan_orders_grounded_stages_before_fallback() -> Non
         polish_enabled=True,
         polish_lite_enabled=False,
     )
-    assert plan.stage_names == ["select", "rewrite", "stitch", "generate"]
+    assert plan.stage_names == ["select"]
     assert plan.fallback_text == "候选一"
 
 
-def test_build_repeater_llm_plan_uses_generate_only_when_no_grounded_candidate() -> None:
+def test_build_repeater_llm_plan_skips_llm_without_selectable_corpus_reply() -> None:
     bundle = ReplyBundle(
         answer_list=[],
         answer_keywords="测试",
@@ -42,7 +41,7 @@ def test_build_repeater_llm_plan_uses_generate_only_when_no_grounded_candidate()
         polish_enabled=True,
         polish_lite_enabled=False,
     )
-    assert plan.stage_names == ["generate"]
+    assert plan.stage_names == []
     assert plan.fallback_text == ""
 
 
@@ -56,11 +55,6 @@ def test_evaluate_llm_candidate_text_accepts_grounded_text_above_threshold() -> 
     accepted, score = Responder.evaluate_llm_candidate_text("这句挺像群里会说的话", base_score=0.9, min_score=0.5)
     assert accepted is True
     assert score == 0.9
-
-
-def test_build_stitch_candidate_joins_two_unique_short_candidates() -> None:
-    stitched = build_stitch_candidate(["好耶", "这下稳了", "好耶"])
-    assert stitched == "好耶，这下稳了"
 
 
 def test_evaluate_llm_candidate_text_penalizes_duplicate_recent_reply() -> None:

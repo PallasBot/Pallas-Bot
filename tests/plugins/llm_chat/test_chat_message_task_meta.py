@@ -391,35 +391,13 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
     monkeypatch.setattr(mod.TaskManager, "add_task", fake_add_task)
 
-    bundle = SimpleNamespace(
-        message_pool=["候选一", "候选二"],
-        answer_list=["候选一"],
-    )
-
-    class FakeChat:
-        def __init__(self, _event):
-            pass
-
-        async def find_reply_bundle(self):
-            return bundle
-
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "packages.repeater.model",
-        SimpleNamespace(Chat=FakeChat, ChatData=SimpleNamespace),
-    )
-    from packages.repeater import bundle_lookup
-
-    monkeypatch.setattr(bundle_lookup, "find_reply_bundle_bounded", AsyncMock(return_value=bundle))
-    monkeypatch.setattr(mod, "submit_corpus_assist_stages", AsyncMock(return_value=False))
-
     await mod.handle_llm_chat(bot, event)
 
     payload = added["payload"]
     assert isinstance(payload, dict)
     assert payload["task_type"] == "llm_chat"
-    assert payload["fallback_text"] == "候选一"
-    assert payload["llm_route"] == "corpus_select"
+    assert payload["fallback_text"] == ""
+    assert payload["llm_route"] == "plain_llm_chat"
     assert payload["last_reply_text"] == "上一句"
     assert payload["recent_reply_texts"] == ["群内上一句", "群内更早一句"]
     assert "variation_hint" not in payload
