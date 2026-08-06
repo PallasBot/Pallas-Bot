@@ -58,6 +58,7 @@ from pallas.product.persona.self_identity import (
     maybe_persist_self_alias_from_utterance,
     resolve_cached_login_nickname,
     resolve_login_nickname,
+    resolve_managed_display_name,
     save_self_alias_from_teach,
 )
 
@@ -105,6 +106,7 @@ async def _resolve_speak_aliases(bot_id: int) -> list[str]:
     login_nick = await resolve_login_nickname(int(bot_id))
     if not login_nick:
         login_nick = resolve_cached_login_nickname(int(bot_id))
+    managed_display_name = resolve_managed_display_name(int(bot_id))
     persona_dict = None
     try:
         from pallas.core.foundation.db import make_bot_config_repository
@@ -115,7 +117,11 @@ async def _resolve_speak_aliases(bot_id: int) -> list[str]:
             persona_dict = raw
     except Exception:
         persona_dict = None
-    return extract_self_aliases(persona_dict, login_nickname=login_nick or None)
+    return extract_self_aliases(
+        persona_dict,
+        login_nickname=login_nick or None,
+        managed_display_name=managed_display_name or None,
+    )
 
 
 async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id: int) -> str:
@@ -601,7 +607,11 @@ async def handle_llm_chat(bot: Bot, event: Event):
     login_nickname_started = time.perf_counter()
     login_nick = await resolve_login_nickname(int(bot.self_id))
     pre_submit_context_durations_ms["login_nickname"] = int((time.perf_counter() - login_nickname_started) * 1000)
-    self_aliases = extract_self_aliases(persona_dict, login_nickname=login_nick or None)
+    self_aliases = extract_self_aliases(
+        persona_dict,
+        login_nickname=login_nick or None,
+        managed_display_name=resolve_managed_display_name(int(bot.self_id)) or None,
+    )
     llm_user_text = (
         normalize_llm_chat_user_text(
             msg,

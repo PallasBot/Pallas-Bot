@@ -122,9 +122,11 @@ def extract_exclusive_self_aliases(
     bot_persona: dict[str, Any] | None,
     *,
     login_nickname: str | None = None,
+    managed_display_name: str | None = None,
 ) -> list[str]:
     aliases: list[str] = []
     seen: set[str] = set()
+    _append_exclusive_alias(aliases, seen, str(managed_display_name or ""))
     _append_exclusive_alias(aliases, seen, str(login_nickname or ""))
     if not isinstance(bot_persona, dict):
         return aliases
@@ -157,10 +159,15 @@ def extract_self_aliases(
     bot_persona: dict[str, Any] | None,
     *,
     login_nickname: str | None = None,
+    managed_display_name: str | None = None,
 ) -> list[str]:
     aliases: list[str] = []
     seen: set[str] = set()
-    for item in extract_exclusive_self_aliases(bot_persona, login_nickname=login_nickname):
+    for item in extract_exclusive_self_aliases(
+        bot_persona,
+        login_nickname=login_nickname,
+        managed_display_name=managed_display_name,
+    ):
         _append_alias(aliases, seen, item)
     for item in extract_generic_self_aliases():
         _append_alias(aliases, seen, item)
@@ -216,6 +223,15 @@ def resolve_cached_login_nickname(bot_id: int) -> str:
         from pallas.console.webui.protocol_accounts import protocol_account_display_names
 
         return str(protocol_account_display_names().get(sid) or "").strip()
+    except Exception:
+        return ""
+
+
+def resolve_managed_display_name(bot_id: int) -> str:
+    try:
+        from pallas.console.webui.protocol_accounts import protocol_account_display_names
+
+        return str(protocol_account_display_names().get(str(int(bot_id))) or "").strip()
     except Exception:
         return ""
 
