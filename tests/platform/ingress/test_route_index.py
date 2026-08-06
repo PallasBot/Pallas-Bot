@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from packages import greeting
 from pallas.core.platform.ingress import matcher_activation as activation
 from pallas.core.platform.ingress import route_index
 
@@ -151,6 +152,19 @@ def test_build_route_index_prefers_explicit_command_prefixes_and_exacts(monkeypa
     assert index.prefix_to_modules["牛牛点歌"] == frozenset({"sing"})
     assert index.exact_to_modules["牛牛连通"] == frozenset({"connectivity"})
     assert index.exact_to_modules["牛牛网关"] == frozenset({"connectivity"})
+
+
+def test_greeting_exact_wake_words_are_indexed(monkeypatch: pytest.MonkeyPatch) -> None:
+    plugin = SimpleNamespace(
+        module=SimpleNamespace(__name__="packages.greeting"),
+        metadata=greeting.__plugin_meta__,
+    )
+    monkeypatch.setattr(route_index, "get_loaded_plugins", lambda: [plugin])
+
+    index = route_index.build_route_index()
+
+    assert index.exact_to_modules["牛牛"] == frozenset({"greeting"})
+    assert index.exact_to_modules["帕拉斯"] == frozenset({"greeting"})
 
 
 def test_build_route_index_supports_multiple_explicit_plugin_routes(monkeypatch: pytest.MonkeyPatch) -> None:

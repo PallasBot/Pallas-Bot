@@ -33,6 +33,7 @@ __plugin_meta__ = PluginMetadata(
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "reload_policy": "metadata",
         "ingress_route": {"passive": True},
+        "exact_plaintexts": ["牛牛", "帕拉斯"],
         "command_permissions": command_perm_list(
             command_perm_row("greeting.set_friend_welcome", "设置好友欢迎", "bot_moderator"),
             command_perm_row("greeting.clear_friend_welcome", "清除好友欢迎", "bot_moderator"),
