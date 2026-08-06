@@ -25,7 +25,6 @@ from pallas.product.llm.behavior_store import append_behavior_run
 from pallas.product.llm.config import get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_write_runtime_state_summary
 from pallas.product.llm.session_store import append_llm_message, compact_user_llm_history_with_summary
-from pallas.product.llm.sticker_followup import should_attach_repeater_image
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
 
 STICKER_IMAGE_MAX_SIDE = 160
@@ -69,7 +68,9 @@ def prepare_sticker_image(image_bytes: bytes, *, max_side: int = STICKER_IMAGE_M
         return image_bytes
 
 
-async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user_id: int, user_text: str) -> bool:
+async def send_repeater_emotion_image(
+    bot: Any, group_id: int, bot_id: int, user_id: int, user_text: str, *, cooldown_sec: int | None = None
+) -> bool:
     """从 Repeater 命中中取一张图片，作为 LLM 回复的第二气泡。"""
     from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
@@ -125,9 +126,9 @@ async def send_repeater_emotion_image(bot: Any, group_id: int, bot_id: int, user
                 logger.info("LLM vision emotion followup enqueue skipped group={}: {}", group_id, exc)
             else:
                 return True
-    cooldown_value = getattr(cfg, "llm_chat_sticker_cooldown_sec", 900)
-    cooldown_sec = int(cooldown_value) if isinstance(cooldown_value, int | float) else 900
-    if not should_send_repeater_image(int(group_id), raw_image, cooldown_sec=cooldown_sec):
+    configured_cooldown = getattr(cfg, "llm_chat_sticker_cooldown_sec", 90)
+    resolved_cooldown = cooldown_sec if cooldown_sec is not None else configured_cooldown
+    if not should_send_repeater_image(int(group_id), raw_image, cooldown_sec=int(resolved_cooldown)):
         return False
     message = Message()
     for segment in Message(raw_image):
@@ -434,15 +435,6 @@ async def deliver_llm_callback_success(
                 note_llm_reply_mention_sent(group_id)
             text_delivered = bool(ok) and text_delivered
         delivered = text_delivered and delivered
-        if text_delivered and task_type == LLM_CHAT_TASK_TYPE and bool(cfg.llm_chat_sticker_enabled):
-            if should_attach_repeater_image(task, reply_text, str(text or "")):
-                await send_repeater_emotion_image(
-                    bot,
-                    int(group_id),
-                    int(bot_id),
-                    int(task.get("user_id") or 0),
-                    str(task.get("user_text") or ""),
-                )
     if should_append_llm_session(task) and learned_reply_text:
         raw_group_id = task.get("group_id")
         scope_group = int(raw_group_id) if raw_group_id is not None else None

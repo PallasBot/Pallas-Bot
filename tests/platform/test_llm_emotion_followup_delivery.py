@@ -40,7 +40,7 @@ def test_prepare_sticker_image_preserves_animated_gif_frames_and_duration() -> N
 
 
 @pytest.mark.asyncio
-async def test_llm_delivery_sends_repeater_image_after_model_requests_sticker(
+async def test_llm_delivery_leaves_sticker_followup_to_outgoing_message_hook(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     bot = MagicMock()
@@ -62,8 +62,6 @@ async def test_llm_delivery_sends_repeater_image_after_model_requests_sticker(
             llm_chat_sticker_enabled=True,
         ),
     )
-    monkeypatch.setattr(delivery, "should_attach_repeater_image", lambda task, reply, raw: True)
-
     await delivery.deliver_llm_callback_success(
         "task-emotion",
         {
@@ -83,7 +81,7 @@ async def test_llm_delivery_sends_repeater_image_after_model_requests_sticker(
         history_keep_messages=None,
     )
 
-    send_image.assert_awaited_once_with(bot, 222, 111, 333, "牛牛我喜欢你")
+    send_image.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -107,8 +105,6 @@ async def test_llm_delivery_keeps_text_when_no_repeater_image_is_available(monke
             llm_chat_sticker_enabled=True,
         ),
     )
-    monkeypatch.setattr(delivery, "should_attach_repeater_image", lambda task, reply, raw: True)
-
     reply_text, text_delivered, delivered = await delivery.deliver_llm_callback_success(
         "task-no-image",
         {"task_type": LLM_CHAT_TASK_TYPE, "group_id": 222, "user_id": 333, "bot_id": 111, "user_text": "我想你"},

@@ -722,14 +722,20 @@ class LlmWebuiConfig(BaseModel):
     llm_chat_sticker_enabled: bool = Field(
         default=True,
         description=field_help(
-            "LLM 对话按需发送 Repeater 表情图",
-            "模型明确选择配图时，从 Repeater 已学习的同群或跨群候选中取图；没有可用缓存时只发文字",
+            "Bot 文本按需发送 Repeater 表情图",
+            "群消息送达后按冷却和候选情况决定是否配图；没有可用缓存时只发文字",
             "默认开启；不影响 QQ 气泡 Reaction",
         ),
     )
     llm_chat_sticker_cooldown_sec: int = Field(
-        default=900,
-        description=field_help("LLM 表情图冷却秒数", "同一群两次 LLM 表情图之间至少间隔多久；0 只保留同图去重"),
+        default=90,
+        description=field_help("Bot 表情图冷却秒数", "同一群两次 Bot 表情图之间至少间隔多久；0 只保留同图去重"),
+    )
+    llm_chat_sticker_max_per_hour: int = Field(
+        default=8,
+        ge=0,
+        le=1000,
+        description=field_help("Bot 表情图每小时上限", "每个群每小时最多发送多少张跟随表情图；0 表示关闭。"),
     )
     llm_sticker_vision_enabled: bool = Field(
         default=False,
@@ -1072,6 +1078,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_fit_enabled=cfg.llm_sticker_fit_enabled,
         llm_chat_sticker_enabled=cfg.llm_chat_sticker_enabled,
         llm_chat_sticker_cooldown_sec=cfg.llm_chat_sticker_cooldown_sec,
+        llm_chat_sticker_max_per_hour=cfg.llm_chat_sticker_max_per_hour,
         llm_sticker_vision_enabled=cfg.llm_sticker_vision_enabled,
         llm_sticker_vision_candidate_count=cfg.llm_sticker_vision_candidate_count,
         llm_sticker_vision_timeout_sec=cfg.llm_sticker_vision_timeout_sec,

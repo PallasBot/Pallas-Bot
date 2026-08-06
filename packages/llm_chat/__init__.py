@@ -11,6 +11,7 @@ from pallas.api.metadata import (
     usage_line,
 )
 from pallas.product.llm.runtime_api import knowledge_source_row, llm_command_tool_row
+from pallas.product.llm.sticker_followup import bind_outgoing_sticker_followup
 from pallas.product.llm.sticker_vision import bind_sticker_vision_delivery_dispatcher
 
 from . import admin_commands as _admin_commands  # noqa: F401
@@ -20,6 +21,7 @@ from . import drunk_chat as _drunk_chat  # noqa: F401
 from . import status_commands as _status_commands  # noqa: F401
 
 bind_sticker_vision_delivery_dispatcher()
+bind_outgoing_sticker_followup()
 
 __plugin_meta__ = PluginMetadata(
     name="智能对话",
