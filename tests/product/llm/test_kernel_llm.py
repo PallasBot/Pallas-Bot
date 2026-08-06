@@ -522,3 +522,39 @@ async def test_submit_chat_task_kernel_schedules_deliver(monkeypatch: pytest.Mon
         await asyncio.sleep(0.02)
     assert delivered == [("req-kernel-1", "success", "内核回复")]
     clear_llm_config_cache()
+
+
+@pytest.mark.asyncio
+async def test_kernel_delivers_approved_semantic_style_direct_candidate_without_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import kernel_runner
+    from pallas.product.llm.repeater_semantic_style import clear_semantic_style_direct_quota_for_tests
+
+    delivered: list[tuple[str, str, str]] = []
+    clear_semantic_style_direct_quota_for_tests()
+
+    async def provider_must_not_run(**_kwargs):
+        raise AssertionError("direct candidate must bypass provider")
+
+    async def fake_deliver(task_id, *, status, text=None, **_kwargs):
+        delivered.append((task_id, status, text or ""))
+        return {"message": "ok"}
+
+    monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", provider_must_not_run)
+    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", fake_deliver)
+    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
+
+    await kernel_runner.run_kernel_chat_job(
+        "direct-candidate-task",
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "又炸了"}],
+        metadata={
+            "bot_id": 99,
+            "group_id": 42,
+            "semantic_style_direct_candidate": "没救了",
+        },
+        cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
+    )
+
+    assert delivered == [("direct-candidate-task", "success", "没救了")]

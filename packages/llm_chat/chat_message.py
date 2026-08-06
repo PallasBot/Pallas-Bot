@@ -498,6 +498,16 @@ async def handle_llm_chat(bot: Bot, event: Event):
         allow_persistent_memory=include_session_history,
     )
     system_prompt = assembled_context.system_prompt
+    from pallas.product.llm.repeater_semantic_style import resolve_cached_semantic_style
+
+    semantic_style = resolve_cached_semantic_style(
+        int(bot.self_id),
+        group_id,
+        "group_chat",
+        request_id=request_id,
+    )
+    if semantic_style.prompt_block:
+        system_prompt = f"{system_prompt.rstrip()}\n\n{semantic_style.prompt_block}"
     knowledge_retrieval_trace = assembled_context.knowledge_retrieval_trace
     hybrid_retrieval_trace = assembled_context.hybrid_retrieval_trace
     direct_decision = decide_direct_chat_action(
@@ -612,6 +622,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 "command_source_segments": command_source_segments,
                 "social_action": current_turn_decision.social_action,
                 "reply_target": reply_target,
+                "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
             },
             tool_metadata=tool_meta,
         ),

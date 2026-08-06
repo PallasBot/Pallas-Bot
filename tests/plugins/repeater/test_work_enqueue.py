@@ -50,6 +50,37 @@ async def test_enqueue_repeater_learn_buffers_job_without_waiting_for_outbox(mon
 
 
 @pytest.mark.asyncio
+async def test_enqueue_repeater_learn_also_buffers_semantic_style_job(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater import learn_queue
+
+    learn_queue.clear_repeater_learn_runtime_state()
+    payload = SimpleNamespace(
+        to_dict=lambda: {
+            "chat": {
+                "group_id": 42,
+                "user_id": 11,
+                "bot_id": 100,
+                "plain_text": "没救了",
+                "time": 20,
+            },
+            "predecessor": {"plain_text": "又炸了"},
+        }
+    )
+    chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
+    event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
+    monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
+    monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", AsyncMock(return_value=payload))
+
+    assert await learn_queue.enqueue_repeater_learn(chat, event) is True
+
+    jobs = [learn_queue.learn_queue().get_nowait(), learn_queue.learn_queue().get_nowait()]
+    semantic_job = next(job for job in jobs if job.kind == "repeater.semantic_style")
+    assert semantic_job.idempotency_key == "repeater.semantic_style:42:99:100"
+    assert semantic_job.payload["trigger_text"] == "又炸了"
+    assert semantic_job.payload["reply_text"] == "没救了"
+
+
+@pytest.mark.asyncio
 async def test_repeater_outbox_writer_flushes_buffered_jobs_as_a_batch(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater import learn_queue
     from pallas.core.platform.work_jobs.models import WorkJob
@@ -157,8 +188,22 @@ async def test_repeater_work_handler_processes_serialized_payload(monkeypatch: p
     process.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_repeater_work_handler_processes_semantic_style_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater.work_handler import repeater_work_handlers
+
+    process = AsyncMock()
+    monkeypatch.setattr("pallas.product.llm.repeater_semantic_style.handle_repeater_semantic_style", process)
+
+    await repeater_work_handlers()["repeater.semantic_style"]({"bot_id": 100, "group_id": 42})
+
+    process.assert_awaited_once_with({"bot_id": 100, "group_id": 42})
+
+
 def test_repeater_work_handlers_include_image_cache_capture() -> None:
     from packages.repeater.work_handler import repeater_work_handlers
 
     assert "image_cache.capture" in repeater_work_handlers()
     assert "sticker_vision.select" in repeater_work_handlers()
+    assert "repeater.semantic_style" in repeater_work_handlers()
+    assert "repeater.semantic_style.visual" in repeater_work_handlers()
