@@ -90,6 +90,27 @@ def test_iter_registered_tools_filters_by_source_and_domain(monkeypatch: pytest.
     assert [item.name for item in dice_items] == ["plugin.roll"]
 
 
+def test_catalog_skips_registered_command_text_before_tool_domain_selection(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_tool_runtime(monkeypatch)
+    registry.clear_tool_registry()
+    registry.register_tool(_make_spec(name="memes.recommend", domains=frozenset({"memes"})))
+    monkeypatch.setattr(
+        registry,
+        "get_llm_config",
+        lambda: SimpleNamespace(
+            llm_tools_enabled=True,
+            llm_tools_blacklist=[],
+            llm_tools_desc_max_len=120,
+            llm_tools_selective=True,
+            llm_tools_soft_recall_enabled=False,
+        ),
+    )
+    monkeypatch.setattr(registry, "infer_tool_domains", lambda _text: frozenset({"memes"}))
+    monkeypatch.setattr(registry, "is_plugin_command_plaintext", lambda _text: True, raising=False)
+
+    assert registry.tool_catalog_for_chat(task="llm_chat", user_text="牛牛测试缓存表情") is None
+
+
 def test_build_tools_ui_rows_exposes_source(monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_tool_runtime(monkeypatch)
     registry.clear_tool_registry()
