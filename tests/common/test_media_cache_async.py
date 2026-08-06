@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -28,10 +28,19 @@ async def test_insert_image_buffers_durable_capture_job_under_ingress_pressure(m
     await mod.reset_image_cache_runtime_state_for_tests()
 
 
+def test_image_capture_payload_rejects_query_parameters_in_hostname(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.shared.utils import media_cache as mod
+
+    seg = SimpleNamespace(data={"url": "https://multimedia.nt.qq.com.cn&rkey=invalid"})
+    monkeypatch.setattr(mod, "normalize_image_cq_code", lambda _seg: "[CQ:image,file=x.image]")
+
+    assert mod.image_capture_payload(seg) is None
+
+
 @pytest.mark.asyncio
 async def test_image_capture_consumer_persists_buffered_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.core.shared.utils import media_cache as mod
     from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.shared.utils import media_cache as mod
 
     await mod.reset_image_cache_runtime_state_for_tests()
     store = SimpleNamespace(enqueue_many=AsyncMock())
@@ -62,6 +71,17 @@ async def test_image_capture_work_handler_rejects_non_http_url() -> None:
 
     with pytest.raises(ValueError, match="http"):
         await mod.handle_image_cache_capture({"cq_code": "[CQ:image,file=x.image]", "url": "file:///tmp/x.png"})
+
+
+@pytest.mark.asyncio
+async def test_image_capture_work_handler_rejects_malformed_http_url() -> None:
+    from pallas.core.shared.utils import media_cache as mod
+
+    with pytest.raises(ValueError, match="valid http"):
+        await mod.handle_image_cache_capture({
+            "cq_code": "[CQ:image,file=x.image]",
+            "url": "https://multimedia.nt.qq.com.cn&rkey=invalid",
+        })
 
 
 @pytest.mark.asyncio

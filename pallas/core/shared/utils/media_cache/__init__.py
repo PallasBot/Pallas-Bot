@@ -37,10 +37,19 @@ def normalize_image_cq_code(image_seg: MessageSegment) -> str:
     return re.sub(r"\.image,.+?\]", ".image]", str(image_seg))
 
 
+def is_valid_image_http_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    hostname = parsed.hostname
+    return parsed.scheme in {"http", "https"} and bool(hostname) and "&" not in hostname and bool(parsed.path)
+
+
 def image_capture_payload(image_seg: MessageSegment) -> dict[str, str] | None:
     cq_code = normalize_image_cq_code(image_seg)
     url = str(image_seg.data.get("url") or "").strip()
-    if not cq_code or not url or urlparse(url).scheme not in {"http", "https"}:
+    if not cq_code or not is_valid_image_http_url(url):
         return None
     return {"cq_code": cq_code, "url": url}
 
@@ -51,8 +60,8 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
     url = str(payload.get("url") or "").strip()
     if not cq_code:
         raise ValueError("image cache capture cq_code is required")
-    if urlparse(url).scheme not in {"http", "https"}:
-        raise ValueError("image cache capture url must use http or https")
+    if not is_valid_image_http_url(url):
+        raise ValueError("image cache capture url must use a valid http or https URL")
     cache = await image_cache_repo.find_by_cq_code(cq_code)
     if cache is None:
         rsp = await HTTPXClient.get(url)

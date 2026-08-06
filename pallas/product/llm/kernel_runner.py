@@ -52,6 +52,22 @@ async def run_kernel_chat_job(
 ) -> None:
     started = time.monotonic()
     try:
+        from pallas.product.llm.repeater_semantic_style import should_deliver_semantic_style_direct_candidate
+
+        direct_candidate = str(metadata.get("semantic_style_direct_candidate") or "").strip()
+        if should_deliver_semantic_style_direct_candidate(
+            bot_id=metadata.get("bot_id"),
+            group_id=metadata.get("group_id"),
+            candidate=direct_candidate,
+        ):
+            from pallas.product.llm.runtime_debug import append_runtime_trace
+
+            append_runtime_trace(
+                request_id=request_id,
+                trace={"status": "success", "semantic_style_direct": True, "agent_trace": None},
+            )
+            await deliver_llm_chat_result(request_id, status="success", text=direct_candidate)
+            return
         generation_system_prompt = system_prompt_with_reply_target(system_prompt, metadata)
         content, assistant_message = await complete_with_tool_loop(
             system_prompt=generation_system_prompt,

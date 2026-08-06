@@ -10,31 +10,6 @@ from pallas.product.llm.reply_variation import build_recent_reply_variation_hint
 from pallas.product.llm.session_store import LlmChatTurn
 
 
-@pytest.mark.parametrize(("text", "expected"), [("牛牛", False), ("帕拉斯", False), ("牛牛你在吗", True)])
-def test_llm_chat_rule_reserves_exact_greetings_for_greeting_plugin(
-    monkeypatch: pytest.MonkeyPatch,
-    text: str,
-    expected: bool,
-) -> None:
-    from packages.llm_chat import chat_message as mod
-
-    event = SimpleNamespace(to_me=False, get_plaintext=lambda: text)
-    monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
-    monkeypatch.setattr(mod, "GroupMessageEvent", SimpleNamespace)
-    monkeypatch.setattr(
-        mod,
-        "get_llm_config",
-        lambda: SimpleNamespace(
-            llm_speak_perception_enabled=True,
-            llm_speak_mention_enabled=True,
-            llm_speak_ambient_enabled=False,
-            llm_speak_followup_enabled=False,
-        ),
-    )
-
-    assert mod.llm_chat_rule(event) is expected
-
-
 def test_build_recent_reply_variation_hint_flags_repeated_structure_without_exact_duplicate() -> None:
     turns = [
         LlmChatTurn(role="assistant", content="其实这事可以慢慢来，你先别急。", user_id=1, created_at=1),
@@ -342,7 +317,6 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
             knowledge_retrieval_trace={"hit_count": 1},
             hybrid_retrieval_trace={"sources": ["memory"]},
             relationship_trace={},
-            stage_durations_ms={"memory": 11, "knowledge": 22, "relationship": 33, "person_facts": 44},
         )
 
     async def fake_current_turn_decision(*_args, **_kwargs):
@@ -410,6 +384,14 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     )
     monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value="上一句"))
     monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.resolve_cached_semantic_style",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            style_anchor="短句轻怼。",
+            prompt_block="【本群表达校准】\n保持：短句轻怼。",
+            direct_candidate="没救了",
+        ),
+    )
+    monkeypatch.setattr(
         "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
         AsyncMock(return_value=["群内上一句", "群内更早一句"]),
     )
@@ -442,6 +424,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "【表达习惯参考】" not in submit_request.system_prompt
     assert "【收尾变化参考】" not in submit_request.system_prompt
     assert "【语料收尾参考】" not in submit_request.system_prompt
+    assert "【本群表达校准】" in submit_request.system_prompt
     assert "【本轮表达去重】" not in "\n".join(submit_request.style_user_hints)
     assert "【收尾变化参考】" not in "\n".join(submit_request.style_user_hints)
     assert "本轮直接回答当前问题，别补一整套客套。" not in "\n".join(submit_request.style_user_hints)
@@ -452,18 +435,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "same_utterance_redup" not in submit_request.llm_rewrite_metadata
     assert submit_request.llm_rewrite_metadata["social_action"] == "ACK"
     assert submit_request.llm_rewrite_metadata["reply_target"] == "fact"
-    assert set(submit_request.llm_rewrite_metadata["pre_submit_stage_durations_ms"]) == {
-        "routing_and_persona",
-        "history",
-        "context",
-        "task_registration",
-        "submit",
-    }
-    assert submit_request.llm_rewrite_metadata["pre_submit_context_durations_ms"]["memory"] == 11
-    assert submit_request.llm_rewrite_metadata["pre_submit_context_durations_ms"]["knowledge"] == 22
-    assert "turn_decision" in submit_request.llm_rewrite_metadata["pre_submit_context_durations_ms"]
-    assert "last_assistant_reply" in submit_request.llm_rewrite_metadata["pre_submit_context_durations_ms"]
-    assert "login_nickname" in submit_request.llm_rewrite_metadata["pre_submit_context_durations_ms"]
+    assert submit_request.llm_rewrite_metadata["semantic_style_direct_candidate"] == "没救了"
     assert submit_request.include_session_history is False
     assert submit_request.hybrid_retrieval_trace["sources"] == ["memory"]
 

@@ -39,6 +39,12 @@ def _llm_ext():
     return extended_api
 
 
+def _semantic_style():
+    from pallas.product.llm import repeater_semantic_style
+
+    return repeater_semantic_style
+
+
 def register_llm_product_router(
     router: APIRouter,
     *,
@@ -47,6 +53,93 @@ def register_llm_product_router(
     router_pub: APIRouter | None = None,
 ) -> None:
     """Register console routes."""
+
+    @router.get(f"{x}/llm/repeater-semantic-style", include_in_schema=True)
+    async def _repeater_semantic_style_get(
+        bot_id: int | None = Query(default=None, ge=1),
+        group_id: int | None = Query(default=None, ge=1),
+    ) -> JSONResponse:
+        if (bot_id is None) != (group_id is None):
+            raise HTTPException(status_code=422, detail="bot_id 和 group_id 必须同时提供")
+        try:
+            data = (
+                _semantic_style().semantic_style_status(bot_id=bot_id, group_id=group_id)
+                if bot_id
+                else _semantic_style().semantic_style_status()
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/llm/repeater-semantic-style/manage", include_in_schema=True)
+    async def _repeater_semantic_style_manage(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        action = str(body.get("action") or "").strip().lower()
+        allowed_actions = {"status", "overrides", "clear", "rebuild", "quality", "recover", "disable"}
+        if action not in allowed_actions:
+            raise HTTPException(status_code=400, detail="action 无效")
+        bot_id = body.get("bot_id")
+        group_id = body.get("group_id")
+        if (bot_id is None) != (group_id is None):
+            raise HTTPException(status_code=422, detail="bot_id 和 group_id 必须同时提供")
+        try:
+            scope = {"bot_id": int(bot_id), "group_id": int(group_id)} if bot_id is not None else {}
+        except (TypeError, ValueError) as e:
+            raise HTTPException(status_code=422, detail="bot_id 和 group_id 必须为整数") from e
+        if scope and (scope["bot_id"] <= 0 or scope["group_id"] <= 0):
+            raise HTTPException(status_code=422, detail="bot_id 和 group_id 必须为正整数")
+        try:
+            semantic_style = _semantic_style()
+            if action == "status":
+                data = (
+                    semantic_style.semantic_style_status(**scope) if scope else semantic_style.semantic_style_status()
+                )
+            elif action == "overrides":
+                overrides = body.get("overrides")
+                if not isinstance(overrides, dict):
+                    raise HTTPException(status_code=400, detail="overrides 必须为对象")
+                data = (
+                    semantic_style.update_semantic_style_overrides(overrides, **scope)
+                    if scope
+                    else semantic_style.update_semantic_style_overrides(overrides)
+                )
+            elif action == "clear":
+                data = (
+                    semantic_style.clear_semantic_style_data(**scope)
+                    if scope
+                    else semantic_style.clear_semantic_style_data()
+                )
+            elif action == "rebuild":
+                data = (
+                    semantic_style.rebuild_semantic_style_profiles(**scope)
+                    if scope
+                    else semantic_style.rebuild_semantic_style_profiles()
+                )
+            elif action == "quality":
+                data = (
+                    semantic_style.semantic_style_quality(**scope) if scope else semantic_style.semantic_style_quality()
+                )
+            elif action == "recover":
+                data = (
+                    semantic_style.recover_semantic_style_data(**scope)
+                    if scope
+                    else semantic_style.recover_semantic_style_data()
+                )
+            else:
+                data = (
+                    semantic_style.set_semantic_style_enabled(False, **scope)
+                    if scope
+                    else semantic_style.set_semantic_style_enabled(False)
+                )
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/llm/repeater-feedback", include_in_schema=True)
     async def _llm_repeater_feedback_get(
