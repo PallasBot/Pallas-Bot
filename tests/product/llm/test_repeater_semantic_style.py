@@ -147,6 +147,47 @@ async def test_semantic_style_backfill_handler_skips_expired_and_retries_label_t
 
 
 @pytest.mark.asyncio
+async def test_semantic_style_handlers_skip_disabled_scope(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    worker = AsyncMock()
+    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
+    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda *, bot_id, group_id: False)
+    payload = {
+        "example_id": "42:99:100",
+        "message_id": 99,
+        "created_at": 10_000,
+        "expires_at": 10_001,
+        "bot_id": 100,
+        "group_id": 42,
+        "scene": "group_chat",
+        "trigger_text": "前句",
+        "reply_text": "接话",
+    }
+
+    await mod.handle_repeater_semantic_style(payload)
+    await mod.handle_repeater_semantic_style_backfill(payload, now=10_000)
+
+    worker.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    complete = AsyncMock(return_value={"content": "{}"})
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", complete)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_model="test-model"),
+    )
+
+    await mod.label_semantic_style_with_llm(trigger_text="前句", reply_text="接话")
+
+    assert complete.await_args.kwargs["options"] == {"temperature": 0, "max_tokens": 160}
+
+
+@pytest.mark.asyncio
 async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_reply_samples(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

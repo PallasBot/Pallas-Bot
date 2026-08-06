@@ -81,6 +81,34 @@ async def test_enqueue_repeater_learn_also_buffers_semantic_style_job(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_enqueue_repeater_learn_skips_semantic_style_when_scope_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.repeater import learn_queue
+
+    learn_queue.clear_repeater_learn_runtime_state()
+    payload = SimpleNamespace(
+        to_dict=lambda: {
+            "chat": {"group_id": 42, "bot_id": 100, "plain_text": "没救了", "time": 20},
+            "predecessor": {"plain_text": "又炸了"},
+        }
+    )
+    chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
+    event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
+    monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
+    monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", AsyncMock(return_value=payload))
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.semantic_style_collection_enabled",
+        lambda *, bot_id, group_id: False,
+    )
+
+    assert await learn_queue.enqueue_repeater_learn(chat, event) is True
+
+    jobs = [learn_queue.learn_queue().get_nowait()]
+    assert [job.kind for job in jobs] == ["repeater.learn"]
+
+
+@pytest.mark.asyncio
 async def test_repeater_outbox_writer_flushes_buffered_jobs_as_a_batch(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater import learn_queue
     from pallas.core.platform.work_jobs.models import WorkJob

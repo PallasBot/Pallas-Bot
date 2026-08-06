@@ -315,6 +315,9 @@ def build_semantic_style_backfill_batch(
         if not trigger or not reply or bot_id <= 0 or group_id <= 0:
             next_cursor = candidate_cursor
             continue
+        if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
+            next_cursor = candidate_cursor
+            continue
         job = WorkJob.create(
             kind="repeater.semantic_style.backfill",
             payload={
@@ -418,6 +421,8 @@ async def collect_semantic_style_backfill_candidates(
             continue
         for group_id in group_ids:
             gid = int(group_id)
+            if not semantic_style_collection_enabled(bot_id=bot_id, group_id=gid):
+                continue
             try:
                 answers = await list_answers(gid, cutoff)
             except Exception as exc:
@@ -954,10 +959,16 @@ def semantic_style_injection_enabled(
     request_id: str, *, bot_id: int | None = None, group_id: int | None = None
 ) -> bool:
     """保留稳定的 10% 对照组。"""
-    if not load_semantic_style_settings(bot_id=bot_id, group_id=group_id).enabled:
+    if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
         return False
     digest = hashlib.blake2b(str(request_id).encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big") % 10 != 0
+
+
+def semantic_style_collection_enabled(*, bot_id: int | None = None, group_id: int | None = None) -> bool:
+    if bot_id is not None and group_id is not None and (int(bot_id) <= 0 or int(group_id) <= 0):
+        return False
+    return load_semantic_style_settings(bot_id=bot_id, group_id=group_id).enabled
 
 
 def resolve_cached_semantic_style(
@@ -1047,7 +1058,7 @@ async def label_semantic_style_with_llm(*, trigger_text: str, reply_text: str) -
     response = await complete_chat_message(
         [{"role": "user", "content": prompt}],
         model=str(cfg.llm_model or ""),
-        options={"temperature": 0.1, "max_tokens": 300},
+        options={"temperature": 0, "max_tokens": 160},
         cfg=cfg,
         task="repeater.semantic_style",
     )
@@ -1134,6 +1145,10 @@ async def label_semantic_style_with_retry(*, trigger_text: str, reply_text: str)
 
 
 async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
+    if not semantic_style_collection_enabled(
+        bot_id=int(payload.get("bot_id") or 0), group_id=int(payload.get("group_id") or 0)
+    ):
+        return
     trigger = str(payload.get("trigger_text") or "").strip()
     reply = str(payload.get("reply_text") or "").strip()
     if not trigger or not reply:
@@ -1162,6 +1177,10 @@ async def handle_repeater_semantic_style_visual(payload: dict[str, Any]) -> None
 
 async def handle_repeater_semantic_style_backfill(payload: dict[str, Any], *, now: int | None = None) -> None:
     """处理有限期历史标注；失败在本次任务内最多重试两次。"""
+    if not semantic_style_collection_enabled(
+        bot_id=int(payload.get("bot_id") or 0), group_id=int(payload.get("group_id") or 0)
+    ):
+        return
     current_time = int(time.time()) if now is None else int(now)
     if int(payload.get("expires_at") or 0) <= current_time:
         return

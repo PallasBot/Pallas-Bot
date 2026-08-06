@@ -36,9 +36,11 @@ def system_prompt_with_reply_target(system_prompt: str | None, metadata: dict[st
     from pallas.product.llm.current_turn_decision import build_reply_target_instruction
 
     instruction = build_reply_target_instruction(metadata.get("reply_target"))
-    if not instruction:
-        return system_prompt
-    return f"{str(system_prompt or '').strip()}\n\n【本轮回复目标】\n{instruction}".strip()
+    prompt = str(system_prompt or "").strip()
+    if instruction:
+        prompt = f"{prompt}\n\n【本轮回复目标】\n{instruction}".strip()
+    semantic_style_prompt_block = str(metadata.get("semantic_style_prompt_block") or "").strip()
+    return f"{prompt}\n\n{semantic_style_prompt_block}".strip() if semantic_style_prompt_block else (prompt or None)
 
 
 async def run_kernel_chat_job(

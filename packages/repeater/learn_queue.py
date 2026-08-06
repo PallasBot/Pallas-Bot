@@ -200,6 +200,10 @@ def build_semantic_style_job(payload: dict[str, object], event: GroupMessageEven
     bot_id = int(chat.get("bot_id") or 0)
     if group_id <= 0 or bot_id <= 0:
         return None
+    from pallas.product.llm.repeater_semantic_style import semantic_style_collection_enabled
+
+    if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
+        return None
     return WorkJob.create(
         kind="repeater.semantic_style",
         payload={
