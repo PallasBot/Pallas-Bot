@@ -582,7 +582,7 @@ async def test_kernel_falls_back_to_brief_presence_confirmation_after_second_fai
         cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
-    assert delivered == ["在。"]
+    assert delivered == ["在"]
 
 
 @pytest.mark.asyncio

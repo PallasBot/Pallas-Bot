@@ -285,7 +285,7 @@ def resolve_persona_output(
         return PersonaOutputDecision(action="retry", text="", trace=trace)
     fallback = str(fallback_text or "").strip()
     if not fallback and "presence_check_overexplained" in inspection.rule_ids:
-        fallback = "在。"
+        fallback = "在"
     fallback_inspection = inspect_persona_output(
         fallback,
         self_aliases=self_aliases,

@@ -25,7 +25,7 @@ _TYPO_MAP: dict[str, tuple[str, ...]] = {
 _SPLIT_RE = re.compile(r"(?<=[。！？!?；;])")
 
 
-def trim_terminal_period(text: str, *, trim_rate: float = 0.65, rng_seed: int | None = None) -> str:
+def trim_terminal_period(text: str, *, trim_rate: float = 0.9, rng_seed: int | None = None) -> str:
     """Occasionally omit only the terminal period on a short casual statement."""
     plain = str(text or "").strip()
     if len(plain) > 24 or not plain.endswith("。") or "。" in plain[:-1]:
@@ -93,7 +93,7 @@ def apply_reply_postprocess(
     split_enabled: bool = False,
     split_max_chars: int = 36,
     trim_terminal_period_enabled: bool = True,
-    trim_terminal_period_rate: float = 0.65,
+    trim_terminal_period_rate: float = 0.9,
     rng_seed: int | None = None,
 ) -> list[str]:
     plain = str(text or "").strip()

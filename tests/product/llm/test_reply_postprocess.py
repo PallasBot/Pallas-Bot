@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.reply_postprocess import (
     apply_chinese_typo,
     apply_reply_postprocess,
@@ -44,6 +45,10 @@ def test_apply_reply_postprocess_split_enabled() -> None:
 
 def test_trim_terminal_period_only_changes_a_short_single_statement() -> None:
     assert trim_terminal_period("行吧。", trim_rate=1.0, rng_seed=1) == "行吧"
+
+
+def test_trim_terminal_period_default_rate_is_ninety_percent() -> None:
+    assert LlmConfig().llm_reply_trim_terminal_period_rate == 0.9
 
 
 def test_trim_terminal_period_keeps_questions_emphasis_and_long_or_multi_sentence_text() -> None:

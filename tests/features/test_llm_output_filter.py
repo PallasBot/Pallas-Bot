@@ -64,6 +64,11 @@ def test_resolve_output_filtered_reply_allows_clean_text() -> None:
     assert resolve_output_filtered_reply(task, "在的，咋了") == "在的，咋了"
 
 
+def test_resolve_output_filtered_reply_preserves_single_character_confirmation() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE}
+    assert resolve_output_filtered_reply(task, "在。") == "在。"
+
+
 def test_output_filter_enabled_defaults_true(monkeypatch) -> None:
     monkeypatch.setattr(
         "pallas.product.llm.config.get_llm_config",

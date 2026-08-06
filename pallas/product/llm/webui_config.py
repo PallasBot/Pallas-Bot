@@ -664,10 +664,10 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_reply_trim_terminal_period_rate: float = Field(
-        default=0.65,
+        default=0.9,
         description=field_help(
             "短句省略句号的概率（0～1）",
-            "默认 0.65；只在上述短单句条件满足时抽样",
+            "默认 0.9；只在上述短单句条件满足时抽样",
             "设为 0 可保留句号；设为 1 则符合条件时总是省略",
         ),
     )
