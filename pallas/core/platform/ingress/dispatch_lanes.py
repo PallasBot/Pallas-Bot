@@ -62,6 +62,14 @@ class LaneController:
             return max(1, limit // 2)
         return limit
 
+    async def set_limit(self, limit: int) -> None:
+        async with self._cond:
+            self.base_limit = max(1, int(limit))
+            self._cond.notify_all()
+
+    def snapshot(self) -> dict[str, int]:
+        return {"limit": self.effective_limit(), "in_use": self.in_use}
+
     async def acquire(self, wait_budget_sec: float) -> tuple[bool, float]:
         start = time.monotonic()
         async with self._cond:
@@ -237,6 +245,20 @@ def lane_controller(lane: str) -> LaneController | None:
     if normalized is None:
         return None
     return _LANES.get(normalized)
+
+
+def lane_status() -> dict[str, dict[str, int]]:
+    if _LANES is None:
+        return {}
+    return {str(lane): controller.snapshot() for lane, controller in _LANES.items()}
+
+
+async def set_lane_limit(lane: str, limit: int) -> bool:
+    controller = lane_controller(lane)
+    if controller is None:
+        return False
+    await controller.set_limit(limit)
+    return True
 
 
 async def acquire_lane(lane: str, *, wait_budget_sec: float | None = None) -> tuple[bool, float]:

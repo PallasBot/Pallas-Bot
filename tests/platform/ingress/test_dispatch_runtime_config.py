@@ -51,3 +51,13 @@ def test_conversation_scheduler_reads_explicit_values(monkeypatch: pytest.Monkey
     assert cfg.conversation_scheduler_concurrency == 9
     assert cfg.conversation_scheduler_max_pending == 1024
     assert cfg.conversation_scheduler_per_key_pending == 12
+
+
+def test_chat_lane_adaptive_max_reads_explicit_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        config,
+        "dispatch_env_raw",
+        lambda key: {"PALLAS_LANE_CHAT_ADAPTIVE_MAX": "14"}.get(key),
+    )
+
+    assert config.IngressDispatchRuntimeConfig.from_env().lane_chat_adaptive_max == 14

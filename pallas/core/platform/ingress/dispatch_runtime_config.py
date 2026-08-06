@@ -225,6 +225,16 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "保存后立即调整档位上限",
         ),
     )
+    lane_chat_adaptive_max: int = Field(
+        default=12,
+        ge=1,
+        le=256,
+        description=field_help(
+            "积压时 chat lane 最多临时扩到多少并发",
+            "填正整数，默认 12；只在数据库和发送队列有余量时逐步扩容",
+            "保存后立即调整上限",
+        ),
+    )
     lane_storage: int = Field(
         default=8,
         ge=1,
@@ -351,6 +361,12 @@ class IngressDispatchRuntimeConfig(BaseModel):
             lane_busy_reply=dispatch_env_bool("PALLAS_LANE_BUSY_REPLY", default=True),
             lane_command=dispatch_env_int("PALLAS_LANE_COMMAND", default=16, minimum=1, maximum=128),
             lane_chat=dispatch_env_int("PALLAS_LANE_CHAT", default=32, minimum=1, maximum=256),
+            lane_chat_adaptive_max=dispatch_env_int(
+                "PALLAS_LANE_CHAT_ADAPTIVE_MAX",
+                default=12,
+                minimum=1,
+                maximum=256,
+            ),
             lane_storage=dispatch_env_int("PALLAS_LANE_STORAGE", default=storage_default, minimum=1, maximum=64),
             lane_remote=dispatch_env_int("PALLAS_LANE_REMOTE", default=4, minimum=1, maximum=64),
             send_queue_enabled=dispatch_env_bool("PALLAS_SEND_QUEUE_ENABLED", default=True),

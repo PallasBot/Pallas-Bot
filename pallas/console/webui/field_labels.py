@@ -107,6 +107,7 @@ FIELD_LABELS: dict[str, str] = {
     "lane_acquire_timeout_sec": "排队等待超时（秒）",
     "lane_busy_reply": "太忙时的自动回复",
     "lane_chat": "LLM 对话类同时处理上限",
+    "lane_chat_adaptive_max": "积压时 LLM 对话类最高并发",
     "lane_command": "命令类同时处理上限",
     "lane_remote": "访问外网服务同时处理上限",
     "lane_storage": "读写数据库同时处理上限",

@@ -487,6 +487,7 @@ async def test_patched_handle_event_stays_silent_when_all_selected_matchers_are_
     event = FakeGroupMessageEvent()
     pre_mock = AsyncMock(return_value=True)
     post_mock = AsyncMock()
+    metrics: list[dict] = []
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
     monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
@@ -497,7 +498,7 @@ async def test_patched_handle_event_stays_silent_when_all_selected_matchers_are_
     monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
     monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(dispatch, "select_priority_matchers", lambda priority_matchers, **_kwargs: priority_matchers)
-    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **kwargs: metrics.append(kwargs))
     monkeypatch.setattr(dispatch, "signal_overload", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
     monkeypatch.setattr(dispatch, "matchers", {1: [BusyMatcher]})
@@ -514,6 +515,8 @@ async def test_patched_handle_event_stays_silent_when_all_selected_matchers_are_
 
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
+    assert len(metrics) == 1
+    assert metrics[0]["matchers_run"] == 0
 
     for _ in range(controller.base_limit):
         await controller.release()

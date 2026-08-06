@@ -239,7 +239,6 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
 
                 async def run_selected_matcher(matcher) -> None:
                     nonlocal any_matcher_executed, matchers_run
-                    matchers_run += 1
                     result = await check_and_run_matcher_with_lane(
                         matcher,
                         bot,
@@ -258,6 +257,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         ),
                     )
                     if result.acquired:
+                        matchers_run += 1
                         any_matcher_executed = True
                         if llm_command is not None:
                             acquired_matcher_modules.append(matcher_log_name(matcher))

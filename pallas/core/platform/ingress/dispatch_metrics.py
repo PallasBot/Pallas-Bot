@@ -158,6 +158,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
     _rollover_if_needed()
     from pallas.core.foundation.db.pool_budget import pool_budget_status
     from pallas.core.platform.ingress.conversation_scheduler import conversation_scheduler_status
+    from pallas.core.platform.ingress.dispatch_lanes import lane_status
     from pallas.core.platform.ingress.hotpath_metrics import hotpath_metrics_snapshot
     from pallas.core.platform.ingress.send_queue import send_queue_status
     from pallas.core.platform.work_jobs.observability import work_aux_status
@@ -176,6 +177,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
         hotpath=hotpath_metrics_snapshot(),
         work_aux=work_aux_status(),
         conversation_scheduler=conversation_scheduler_status(),
+        lanes=lane_status(),
         snapshot_health=ingress_snapshot_health(),
     )
 
@@ -191,6 +193,7 @@ def build_dispatch_metrics_payload(
     hotpath: dict[str, Any] | None = None,
     work_aux: dict[str, Any] | None = None,
     conversation_scheduler: dict[str, Any] | None = None,
+    lanes: dict[str, dict[str, int]] | None = None,
     snapshot_health: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     group_messages = int(counters.get("group_messages") or 0)
@@ -212,6 +215,7 @@ def build_dispatch_metrics_payload(
         "hotpath": hotpath or {},
         "work_aux": work_aux or {},
         "conversation_scheduler": conversation_scheduler or {},
+        "lanes": lanes or {},
         "snapshot_health": snapshot_health or {},
         "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util, work_aux=work_aux),
         "matchers_selected_ratio": round(selected / considered, 4) if considered else None,
