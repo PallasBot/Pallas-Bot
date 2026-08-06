@@ -80,7 +80,9 @@ class WorkJobWorker:
         handler_task = asyncio.create_task(handler(job.payload), name=f"work_job_handler:{job.id}")
         try:
             done, _ = await asyncio.wait((handler_task, lease_task), return_when=asyncio.FIRST_COMPLETED)
-            if lease_task in done:
+            if handler_task in done:
+                await handler_task
+            elif lease_task in done:
                 handler_task.cancel()
                 await asyncio.gather(handler_task, return_exceptions=True)
                 self.metrics.record_failed()
@@ -92,7 +94,6 @@ class WorkJobWorker:
                 ):
                     self.metrics.record_retried()
                 return None
-            await handler_task
         except Exception as exc:
             logger.warning("work aux: job failed kind={} id={}: {}", job.kind, job.id, exc)
             self.metrics.record_failed()

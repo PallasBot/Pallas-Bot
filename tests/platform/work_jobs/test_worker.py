@@ -153,6 +153,40 @@ async def test_worker_cancels_handler_after_losing_its_lease(monkeypatch: pytest
 
 
 @pytest.mark.asyncio
+async def test_worker_completes_handler_when_lease_check_finishes_in_same_turn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.observability import WorkAuxRuntimeMetrics
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+    from pallas.core.platform.work_jobs.worker import WorkJobWorker
+
+    store = MemoryWorkJobStore()
+    await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:simultaneous-completion"))
+
+    async def lost_lease(_self, _job) -> None:
+        return None
+
+    monkeypatch.setattr(WorkJobWorker, "_renew_lease", lost_lease)
+    metrics = WorkAuxRuntimeMetrics()
+    worker = WorkJobWorker(
+        store=store,
+        owner="worker",
+        handlers={"test": lambda _payload: asyncio.sleep(0)},
+        metrics=metrics,
+    )
+
+    assert await worker.run_once() is True
+    assert await store.claim(owner="replacement", lease_sec=1) is None
+    assert metrics.snapshot() == {
+        "completed_since_start": 1,
+        "failed_since_start": 0,
+        "retried_since_start": 0,
+        "dead_lettered_since_start": 0,
+    }
+
+
+@pytest.mark.asyncio
 async def test_worker_runs_claimed_batch_concurrently_and_acknowledges_it() -> None:
     from pallas.core.platform.work_jobs.models import WorkJob
     from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
