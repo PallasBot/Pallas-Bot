@@ -536,6 +536,14 @@ async def handle_llm_chat(bot: Bot, event: Event):
         focus_text,
         current_turn_decision.social_action,
     )
+    from pallas.product.llm.repeater_semantic_style import resolve_cached_semantic_style
+
+    semantic_style = resolve_cached_semantic_style(
+        int(bot.self_id),
+        group_id,
+        "group_chat",
+        request_id=request_id,
+    )
     direct_context_started = time.perf_counter()
     assembled_context = await assemble_direct_chat_context(
         system_prompt,
@@ -545,20 +553,13 @@ async def handle_llm_chat(bot: Bot, event: Event):
         query_text=focus_text,
         cfg=llm_cfg,
         allow_persistent_memory=include_session_history,
+        allow_expression_reference=not bool(semantic_style.prompt_block),
     )
     pre_submit_context_durations_ms["direct_context"] = int((time.perf_counter() - direct_context_started) * 1000)
     for stage, duration in getattr(assembled_context, "stage_durations_ms", {}).items():
         if isinstance(duration, (int, float)):
             pre_submit_context_durations_ms[str(stage)] = max(0, int(duration))
     system_prompt = assembled_context.system_prompt
-    from pallas.product.llm.repeater_semantic_style import resolve_cached_semantic_style
-
-    semantic_style = resolve_cached_semantic_style(
-        int(bot.self_id),
-        group_id,
-        "group_chat",
-        request_id=request_id,
-    )
     knowledge_retrieval_trace = assembled_context.knowledge_retrieval_trace
     hybrid_retrieval_trace = assembled_context.hybrid_retrieval_trace
     direct_decision = decide_direct_chat_action(

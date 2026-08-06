@@ -328,6 +328,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     async def fake_context(*_args, **kwargs) -> SimpleNamespace:
         assert decision_called, "current turn decision must run before context assembly"
         assert kwargs["allow_persistent_memory"] is False
+        assert kwargs["allow_expression_reference"] is False
         return SimpleNamespace(
             system_prompt="sys",
             knowledge_retrieval_trace={"hit_count": 1},
