@@ -13,7 +13,7 @@ class FakeBot:
 
 
 @pytest.mark.asyncio
-async def test_ingress_notice_discards_emoji_like(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_ingress_notice_allows_emoji_like_for_repeater(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pallas.core.platform.ingress.notice_gate.ingress_gate_runtime_active", lambda: True)
     event = NoticeEvent.model_construct(
         time=100,
@@ -24,8 +24,7 @@ async def test_ingress_notice_discards_emoji_like(monkeypatch: pytest.MonkeyPatc
         user_id=999,
         message_id=1,
     )
-    with pytest.raises(IgnoredException, match="ingress notice discard"):
-        await ingress_notice_gate(FakeBot(111), event)
+    await ingress_notice_gate(FakeBot(111), event)
 
 
 @pytest.mark.asyncio

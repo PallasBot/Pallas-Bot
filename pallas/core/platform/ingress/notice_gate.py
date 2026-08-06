@@ -16,14 +16,11 @@ if TYPE_CHECKING:
 
 INGRESS_NOTICE_PLUGIN = "ingress_notice"
 
-_DISCARD_NOTICE_TYPES = frozenset({"group_msg_emoji_like"})
 _ONCE_NOTICE_TYPES = frozenset({"group_recall"})
 
 
 def notice_once_body(event: NoticeEvent) -> str | None:
     notice_type = getattr(event, "notice_type", None)
-    if notice_type in _DISCARD_NOTICE_TYPES:
-        return str(notice_type)
     if notice_type not in _ONCE_NOTICE_TYPES:
         return None
     if notice_type == "group_recall":
@@ -48,9 +45,6 @@ async def ingress_notice_gate(bot: Bot, event: NoticeEvent) -> None:
         return
 
     notice_type = getattr(event, "notice_type", None)
-    if notice_type in _DISCARD_NOTICE_TYPES:
-        raise IgnoredException("ingress notice discard")
-
     if notice_type == "notify" and getattr(event, "sub_type", None) == "poke":
         target_id = int(getattr(event, "target_id", 0) or 0)
         if target_id != int(bot.self_id):
