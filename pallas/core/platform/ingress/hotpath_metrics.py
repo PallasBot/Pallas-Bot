@@ -207,10 +207,10 @@ def record_reply_snapshot(*, hit: bool, skipped: bool = False) -> None:
 
 def record_reply_query_stages(
     *,
-    context_ms: float,
-    ban_ms: float,
-    answer_ms: float,
-    message_ms: float,
+    context_ms: float | None,
+    ban_ms: float | None,
+    answer_ms: float | None,
+    message_ms: float | None,
     total_ms: float,
 ) -> None:
     """未走 snapshot 缓存时的 SQL 分段（每次 uncached loader）。"""
