@@ -157,7 +157,7 @@ def test_allows_praise_when_current_turn_is_already_about_achievement() -> None:
 
 def test_detects_overextended_fact_reply() -> None:
     result = inspect_persona_output(
-        "改呗，反正又不是改我牛脾气。",
+        "改呗，反正又不是改我牛脾气，难不成还能省事。",
         self_aliases=[],
         current_user_text="这也能改？",
         social_action="ACK",
@@ -172,6 +172,18 @@ def test_allows_brief_fact_reply() -> None:
         "能。",
         self_aliases=[],
         current_user_text="这也能改？",
+        social_action="ACK",
+        reply_target="fact",
+    )
+
+    assert result.rule_ids == ()
+
+
+def test_allows_complete_short_fact_reply() -> None:
+    result = inspect_persona_output(
+        "还得再跑一趟才行。",
+        self_aliases=[],
+        current_user_text="这也要再动？",
         social_action="ACK",
         reply_target="fact",
     )
@@ -356,6 +368,22 @@ def test_retry_is_capped_at_one_then_uses_safe_conversation_fallback() -> None:
     assert second.action == "fallback"
     assert second.text == "你刚才问的是天气，我这边看着还行。"
     assert second.trace["retry_count"] == 1
+
+
+def test_short_vent_uses_safe_fallback_after_retry_fails() -> None:
+    decision = resolve_persona_output(
+        "改来改去确实磨人，先歇口气再说吧。",
+        policy=enabled_policy(strategy="retry_then_fallback"),
+        self_aliases=[],
+        fallback_text="",
+        retry_count=1,
+        current_user_text="又临时改了，烦",
+        social_action="ACK",
+        reply_target="emotion",
+    )
+
+    assert decision.action == "fallback"
+    assert decision.text == "确实烦。"
 
 
 @pytest.mark.asyncio

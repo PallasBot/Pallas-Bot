@@ -108,7 +108,7 @@ def test_persona_output_retry_instruction_describes_fact_template_without_prompt
 def test_persona_output_retry_instruction_requires_a_fact_conclusion_after_overextension() -> None:
     instruction = persona_output_retry_instruction(("fact_reply_overextended",))
 
-    assert "能、得、在、不是" in instruction
+    assert "完整短结论" in instruction
     assert "不要先说行/好" in instruction
 
 
