@@ -260,8 +260,13 @@ async def wait_shard_bot_count_turn(
     plaintext: str,
     message_time: int,
     bot_id: int,
+    allow_timeout: bool = True,
 ) -> bool:
-    """等待报数顺序中的前序账号确认，超时后让调用端降级继续。"""
+    """等待报数顺序中的前序账号确认，超时后让调用端降级继续。
+
+    ``allow_timeout`` 为旧版 bot-status 插件的调用兼容参数；本函数始终以
+    ``False`` 表示未等到轮次，由调用方决定是否降级继续。
+    """
     claim_key = cross_bot_group_message_key(
         group_id,
         user_id,

@@ -240,6 +240,7 @@ async def test_turn_is_ready_after_previous_bot_reported(fake_coord_redis):
         plaintext="牛牛报数",
         message_time=message_time,
         bot_id=200,
+        allow_timeout=False,
     )
 
 
