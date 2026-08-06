@@ -440,7 +440,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "【表达习惯参考】" not in submit_request.system_prompt
     assert "【收尾变化参考】" not in submit_request.system_prompt
     assert "【语料收尾参考】" not in submit_request.system_prompt
-    assert "【本群表达校准】" in submit_request.system_prompt
+    assert "【本群表达校准】" not in submit_request.system_prompt
     assert "【本轮表达去重】" not in "\n".join(submit_request.style_user_hints)
     assert "【收尾变化参考】" not in "\n".join(submit_request.style_user_hints)
     assert "本轮直接回答当前问题，别补一整套客套。" not in "\n".join(submit_request.style_user_hints)
@@ -451,6 +451,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "same_utterance_redup" not in submit_request.llm_rewrite_metadata
     assert submit_request.llm_rewrite_metadata["social_action"] == "ACK"
     assert submit_request.llm_rewrite_metadata["reply_target"] == "fact"
+    assert submit_request.llm_rewrite_metadata["semantic_style_prompt_block"] == "【本群表达校准】\n保持：短句轻怼。"
     assert submit_request.llm_rewrite_metadata["semantic_style_direct_candidate"] == "没救了"
     assert submit_request.include_session_history is False
     assert submit_request.hybrid_retrieval_trace["sources"] == ["memory"]
