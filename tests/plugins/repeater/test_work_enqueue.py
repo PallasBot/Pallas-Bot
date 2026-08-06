@@ -50,6 +50,27 @@ async def test_enqueue_repeater_learn_buffers_job_without_waiting_for_outbox(mon
 
 
 @pytest.mark.asyncio
+async def test_enqueue_repeater_learn_skips_capture_under_pressure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater import learn_queue
+    from pallas.core.platform.ingress import hotpath_metrics
+
+    chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
+    event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
+    capture = AsyncMock(return_value=None)
+    monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
+    monkeypatch.setattr(learn_queue, "should_skip_repeater_learn_enqueue", lambda: True)
+    monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", capture)
+    learn_queue.clear_repeater_learn_runtime_state()
+    hotpath_metrics.clear_hotpath_metrics_for_tests()
+
+    assert await learn_queue.enqueue_repeater_learn(chat, event) is False
+
+    capture.assert_not_awaited()
+    assert learn_queue.learn_queue().empty()
+    assert hotpath_metrics.hotpath_metrics_snapshot()["learn_skipped_pressure"] == 1
+
+
+@pytest.mark.asyncio
 async def test_enqueue_repeater_learn_also_buffers_semantic_style_job(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater import learn_queue
 

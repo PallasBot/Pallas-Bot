@@ -155,6 +155,11 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
     """仅抢占成功的牛写入 durable outbox，实际学习在 work aux 执行。"""
     if not await claim_group_message_event(_LEARN_PLUGIN, event, int(event.self_id)):
         return False
+    if should_skip_repeater_learn_enqueue():
+        from pallas.core.platform.ingress.hotpath_metrics import record_learn_skipped_pressure
+
+        record_learn_skipped_pressure()
+        return False
     from .learner import Learner
     from .model import Chat
 
