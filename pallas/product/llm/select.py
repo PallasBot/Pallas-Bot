@@ -244,6 +244,12 @@ async def maybe_submit_repeater_llm_select(
     user_id = int(event.user_id)
     bot_id = int(event.self_id)
 
+    from pallas.product.llm.execution_budget import is_llm_execution_idle
+
+    if not is_llm_execution_idle(cfg=cfg):
+        record_bot_llm_task(REPEATER_SELECT_TASK_TYPE, "submit_skip")
+        return None
+
     raw_pool = [str(item).strip() for item in candidates if str(item).strip() and "[CQ:" not in str(item)]
     safe_pool, _filter_diag = filter_select_candidate_pool(raw_pool)
     if len(safe_pool) < 2:

@@ -10,7 +10,7 @@
 | `src/plugins/ollama/` 或 pip `pallas-plugin-llm-chat` | **core 内置** `llm_chat`（仓库里已无 `ollama` 插件目录） |
 | 主仓直连 Ollama `/api/chat` | Bot 内核经已配置的 Provider 调用模型 |
 | `CHAT_ENABLE` / `OLLAMA_ENABLE` 等分散开关 | **`LLM_CHAT_ENABLED`**（LLM）与遗留 **`CHAT_ENABLE`**（RWKV）可并存 |
-| 无 repeater fallback/polish | `LLM_REPEATER_MODE`：`off` / `select` / `select_polish_lite` / `select_fallback` / `fallback` |
+| 无 Repeater 辅助选句 | `LLM_REPEATER_MODE`：`off` / `select` |
 | 无方舟 tool | `pallas/product/llm/tools` + `ARKNIGHTS_KB_ENABLED` |
 
 酒后 `chat`、随时 @、接话 LLM 共用 **`LLM_CHAT_ENABLED`**（Bot 内核 Provider）。  
@@ -25,7 +25,7 @@
 | `OLLAMA_HOST` / `OLLAMA_PORT` | Provider 接入配置 | 在 Bot WebUI「AI 配置 → 接入」填写 Base URL |
 | `OLLAMA_MODEL` | Provider 接入配置 | 在 Bot WebUI 为 Provider 选择模型 |
 | `OLLAMA_SYSTEM_PROMPT` 等 | `llm_chat` 插件页 | 可选自定义人设文件；默认走 `compile_persona_prompt` |
-| — | `LLM_REPEATER_MODE` | 接话策略，使用上表的五种模式 |
+| — | `LLM_REPEATER_MODE` | 接话策略：`off` 或 `select` |
 | — | `LLM_TOOLS_ENABLED` | 方舟等 tool，默认 `true`（总闸开时生效） |
 | — | `LLM_SESSION_ENABLED` | 多轮会话，默认 `true` |
 | — | `LLM_GOVERNANCE_ENABLED` | 冷却/并发/字数，默认 `true` |

@@ -57,7 +57,7 @@
 - `config.py`：接话 / 复读 / 主动发言配置
 - `handlers/`：学习、接话、禁用与决策
 
-若开启 `LLM_REPEATER_MODE`，LLM 可作为选句 / 轻润色参与；默认仍以语料底盘为主。接话决策与 `llm_chat` 共用 conversation kernel。牛格与群风格见 [persona](../persona/README.md)。
+若开启 `LLM_REPEATER_MODE=select`，LLM 仅可从原始候选中辅助选句；默认仍以语料底盘为主。接话决策与 `llm_chat` 共用 conversation kernel。牛格与群风格见 [persona](../persona/README.md)。
 
 ## 相关链接
 
