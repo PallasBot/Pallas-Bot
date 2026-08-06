@@ -118,6 +118,25 @@ def test_completion_claims_once_after_report_window(fake_coord_redis):
     assert data["completion_claimed_by"] == 100
 
 
+def test_dispatch_progress_does_not_claim_completion_after_report_window(fake_coord_redis):
+    path = mod._session_path(10086, 999005)
+    mod._ensure_session(
+        path,
+        group_id=10086,
+        user_id=1,
+        message_time=1,
+        seed="2026-05-22:10086",
+    )
+    data = mod._read_session(path)
+    assert data is not None
+    data["order"] = [100, 200]
+    data["report_until"] = time.time() - 0.01
+    mod._write_session_atomic(path, data)
+
+    assert not mod._mark_bot_count_reported_and_claim_completion(path, 100, allow_timeout=False)
+    assert mod._read_session(path).get("completion_claimed_by") is None
+
+
 async def test_reads_finalized_order_for_local_dispatch(fake_coord_redis):
     from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
 
