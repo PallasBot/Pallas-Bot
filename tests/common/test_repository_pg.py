@@ -214,6 +214,44 @@ async def test_find_by_keywords_for_reply_keeps_bans(pg_engine):
     assert found.ban[0].group_id == 1
 
 
+@pytest.mark.asyncio
+async def test_find_by_keywords_for_reply_uses_one_read_round_trip(pg_engine):
+    from sqlalchemy import event
+
+    from pallas.core.foundation.db.modules import Ban, Context
+    from pallas.core.foundation.db.repository_pg import PgContextRepository, clear_reply_query_snapshot_cache
+
+    repo = PgContextRepository()
+    await repo.insert(
+        Context.model_construct(
+            keywords="one-round-trip",
+            time=100,
+            trigger_count=3,
+            answers=[],
+            ban=[Ban.model_construct(keywords="forbidden", group_id=1, reason="r", time=50)],
+            clear_time=9,
+        )
+    )
+    await repo.upsert_answer("one-round-trip", 1, "answer", 101, "reply", append_on_existing=True)
+    await clear_reply_query_snapshot_cache("one-round-trip")
+    statements: list[str] = []
+
+    def record_statement(_conn, _cursor, statement, _parameters, _context, _executemany) -> None:
+        if statement.lstrip().upper().startswith(("SELECT", "WITH")):
+            statements.append(statement)
+
+    event.listen(pg_engine.sync_engine, "before_cursor_execute", record_statement)
+    try:
+        found = await repo.find_by_keywords_for_reply("one-round-trip")
+    finally:
+        event.remove(pg_engine.sync_engine, "before_cursor_execute", record_statement)
+
+    assert found is not None
+    assert found.answers[0].messages == ["reply"]
+    assert [ban.keywords for ban in found.ban] == ["forbidden"]
+    assert len(statements) == 1
+
+
 def test_reply_message_query_limits_to_selected_answer_ids():
     """接话消息查询必须只扫描已入选的 answer_id，不能退回按整个 context 扫描。"""
     from pallas.core.foundation.db import repository_pg as pg_mod

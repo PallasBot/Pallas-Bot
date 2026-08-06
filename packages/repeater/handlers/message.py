@@ -11,7 +11,6 @@ from nonebot.adapters import Bot  # noqa: TC002
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 
 from pallas.core.foundation.config import BotConfig
-from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from pallas.core.shared.utils.media_cache import insert_image
 from pallas.product.llm.runtime_api import (
     ConversationContext,
@@ -38,7 +37,7 @@ from ..opportunity_gate import (
     should_attempt_repeater_opportunity,
 )
 from ..opportunity_trace import append_conversation_decision_trace
-from ..reply_gate import should_prepare_repeater_reply
+from ..reply_preparation import prepare_repeater_reply
 
 any_msg = on_message(
     priority=15,
@@ -68,8 +67,6 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
     capabilities = resolve_repeater_capabilities(llm_cfg)
     from pallas.core.platform.ingress.message_load import should_shed_chat_sidework
 
-    from ..fanout_reply import repeater_can_attempt_reply
-
     shed_sidework = should_shed_chat_sidework()
     if shed_sidework:
         from pallas.core.platform.ingress.hotpath_metrics import (
@@ -80,34 +77,14 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
         record_chat_shed_sidework()
         record_llm_retained_under_shed()
     chat = Chat(event)
-    can_reply = await repeater_can_attempt_reply(int(event.self_id), int(event.group_id))
-
-    bundle = None
-    fanout_gate = None
-    if can_reply and should_prepare_repeater_reply(ctx.plain_body, sharding_active=ctx.sharding_active):
-        from ..fanout_reply import resolve_fanout_gate
-
-        fanout_gate = await resolve_fanout_gate(event)
-        if fanout_gate.lost:
-            bundle = None
-        else:
-            reply_timer = SlowPathTimer(
-                "repeater.find_reply_bundle",
-                threshold_ms=slow_path_threshold_ms("PALLAS_SLOW_REPEATER_BUNDLE_MS", 120.0),
-            )
-            from ..bundle_lookup import find_reply_bundle_bounded
-
-            bundle = await find_reply_bundle_bounded(chat)
-            reply_timer.mark("find_reply_bundle")
-            reply_timer.finish(
-                bot_id=int(event.self_id),
-                group_id=int(event.group_id),
-                user_id=int(event.user_id),
-                can_reply=can_reply,
-                found=bundle is not None,
-                keywords_len=chat.chat_data.keywords_len,
-                plain_text=chat.chat_data.is_plain_text,
-            )
+    prepared = await prepare_repeater_reply(
+        event,
+        chat,
+        plain_body=ctx.plain_body,
+        sharding_active=ctx.sharding_active,
+    )
+    bundle = prepared.bundle
+    fanout_gate = prepared.fanout_gate
 
     for seg in event.message:
         if seg.type == "image":
