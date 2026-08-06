@@ -289,6 +289,7 @@ async def check_and_run_matcher_with_lane(
     *,
     command_traffic: bool,
     synthetic_llm_command: bool = False,
+    hard_speak_trigger: bool = False,
 ) -> MatcherLaneResult:
     import nonebot.message as nb_message
 
@@ -298,7 +299,12 @@ async def check_and_run_matcher_with_lane(
         await nb_message.check_and_run_matcher(matcher, bot, event, state, stack, dependency_cache)
         return MatcherLaneResult(acquired=True, lane_busy=False)
 
-    lane = DispatchLane.TOOL if synthetic_llm_command else lane_for_matcher(matcher)
+    if synthetic_llm_command:
+        lane = DispatchLane.TOOL
+    elif hard_speak_trigger:
+        lane = DispatchLane.COMMAND
+    else:
+        lane = lane_for_matcher(matcher)
     acquired, wait_ms = await acquire_lane(lane)
     record_lane_wait(wait_ms, busy=not acquired)
     if not acquired:

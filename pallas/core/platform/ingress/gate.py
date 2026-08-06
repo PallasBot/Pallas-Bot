@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar, Token
 
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, NoticeEvent
@@ -46,6 +47,7 @@ from pallas.core.platform.shard.ingress_metrics import (
 )
 
 _GATE_REGISTERED = False
+_PRE_SCHEDULER_GATE_COMPLETE: ContextVar[bool] = ContextVar("pre_scheduler_ingress_gate_complete", default=False)
 
 
 def ingress_gate_active() -> bool:
@@ -92,6 +94,8 @@ async def ingress_notice_preprocess(bot, event) -> None:
 
 async def ingress_group_message_gate(bot, event) -> None:
     if not isinstance(event, GroupMessageEvent):
+        return
+    if _PRE_SCHEDULER_GATE_COMPLETE.get():
         return
 
     self_id = int(bot.self_id)
@@ -175,8 +179,12 @@ async def ingress_group_message_gate(bot, event) -> None:
             at_fleet_bot=at_fleet,
         )
 
-        from pallas.core.platform.ingress.alias_route import should_yield_ingress_for_peer_alias
+        from pallas.core.platform.ingress.alias_route import (
+            fleet_bots_matching_plain,
+            should_yield_ingress_for_peer_alias,
+        )
 
+        alias_matched_bot_ids = fleet_bots_matching_plain(plain)
         alias_target_is_hosted = hosted_activity_claim_is_hosted(
             int(event.group_id),
             plain,
@@ -243,11 +251,29 @@ async def ingress_group_message_gate(bot, event) -> None:
             record_ingress_event()
 
         if not pallas_ats:
-            if not await claim_federate_group_message_ingress(event, plain=plain, body=body):
+            candidate_capability: str | None = None
+            if alias_target_is_hosted:
+                candidate_capability = "hosted_activity"
+            elif self_id in alias_matched_bot_ids:
+                candidate_capability = "llm_alias"
+            elif legacy_command_traffic(plain):
+                candidate_capability = "command"
+            candidate_wait = bool(legacy_command_traffic(plain) or alias_matched_bot_ids)
+            candidate_wait = candidate_wait or alias_target_is_hosted
+            if not await claim_federate_group_message_ingress(
+                event,
+                plain=plain,
+                body=body,
+                candidate_capability=candidate_capability,
+                candidate_bot_id=self_id if candidate_capability else None,
+                candidate_wait=candidate_wait and candidate_capability is None,
+            ):
                 outcome = "federate_lost"
                 if metrics:
                     record_ingress_early_discard("federate")
                 raise IgnoredException("federate ingress claim lost")
+            if candidate_capability == "llm_alias":
+                event._pallas_llm_alias_hard_trigger = True
             timer.mark("federate")
 
         if sharding_active:
@@ -264,6 +290,19 @@ async def ingress_group_message_gate(bot, event) -> None:
             fanout_bypass=fanout_bypass,
             sharding=sharding_active,
         )
+
+
+async def pre_schedule_ingress_group_message_gate(bot, event) -> Token[bool] | None:
+    """在 conversation scheduler 前完成群 ingress gate，避免失败副本占用车道。"""
+    if not isinstance(event, GroupMessageEvent):
+        return None
+    await ingress_group_message_gate(bot, event)
+    return _PRE_SCHEDULER_GATE_COMPLETE.set(True)
+
+
+def reset_pre_schedule_ingress_group_message_gate(token: Token[bool] | None) -> None:
+    if token is not None:
+        _PRE_SCHEDULER_GATE_COMPLETE.reset(token)
 
 
 async def log_ingress_gate_startup() -> None:

@@ -520,3 +520,36 @@ async def test_unified_ingress_discards_self_sent_message_before_claims(monkeypa
         await ingress_group_message_gate(FakeBot(), event)
     once.assert_not_awaited()
     federate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_unified_ingress_marks_winning_alias_for_llm_chat(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.alias_route.fleet_bots_matching_plain",
+        lambda _plain, **_kwargs: frozenset({111}),
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.claim_federate_group_message_ingress",
+        AsyncMock(return_value=True),
+    )
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("泰坦牛牛吃饭了没"),
+        raw_message="泰坦牛牛吃饭了没",
+    )
+
+    await ingress_group_message_gate(type("Bot", (), {"self_id": "111"})(), event)
+
+    assert getattr(event, "_pallas_llm_alias_hard_trigger", False) is True

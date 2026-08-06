@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from nonebot.exception import IgnoredException
 from nonebot.internal.rule import Rule
 from nonebot.rule import command, to_me
 
@@ -168,6 +169,27 @@ def test_chat_degraded_contextvar_roundtrip():
     assert message_load.should_shed_chat_sidework() is True
     message_load.reset_chat_degraded(token)
     assert message_load.is_chat_degraded() is False
+
+
+@pytest.mark.asyncio
+async def test_patched_handle_event_discards_pre_scheduler_federate_loser(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        pass
+
+    bot = MagicMock()
+    event = FakeGroupMessageEvent()
+    pre_gate = AsyncMock(side_effect=IgnoredException("federate ingress claim lost"))
+    submit = AsyncMock()
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch, "conversation_scheduler_enabled", lambda: True)
+    monkeypatch.setattr(dispatch, "pre_schedule_ingress_group_message_gate", pre_gate)
+    monkeypatch.setattr(dispatch, "submit_conversation_event", submit)
+
+    await dispatch.patched_handle_event(bot, event)
+
+    pre_gate.assert_awaited_once_with(bot, event)
+    submit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

@@ -179,6 +179,42 @@ async def test_check_and_run_matcher_with_lane_skips_when_busy(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
+async def test_check_and_run_matcher_with_lane_runs_hard_wake_when_remote_is_busy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dispatch_lanes.install_dispatch_lanes()
+    remote = dispatch_lanes.lane_controller(DispatchLane.REMOTE)
+    assert remote is not None
+    for _ in range(remote.base_limit):
+        ok, _ = await remote.acquire(0.01)
+        assert ok is True
+
+    run_mock = AsyncMock()
+    monkeypatch.setattr(
+        dispatch_lanes,
+        "plugin_lane_override",
+        lambda module: "remote" if module in {"llm_chat", "ollama"} else None,
+    )
+    monkeypatch.setattr("nonebot.message.check_and_run_matcher", run_mock)
+
+    result = await dispatch_lanes.check_and_run_matcher_with_lane(
+        _AiMatcher,
+        AsyncMock(),
+        MagicMock(),
+        {},
+        MagicMock(),
+        {},
+        command_traffic=False,
+        hard_speak_trigger=True,
+    )
+
+    assert result.acquired is True
+    run_mock.assert_awaited_once()
+    for _ in range(remote.base_limit):
+        await remote.release()
+
+
+@pytest.mark.asyncio
 async def test_synthetic_llm_command_uses_dedicated_tool_lane(monkeypatch: pytest.MonkeyPatch) -> None:
     dispatch_lanes.install_dispatch_lanes()
     command_lane = dispatch_lanes.lane_controller(DispatchLane.COMMAND)

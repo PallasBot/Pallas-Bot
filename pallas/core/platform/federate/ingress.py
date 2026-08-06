@@ -18,11 +18,15 @@ from pallas.product.community_stats.store import load_or_create_deployment_id
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from pallas.core.platform.federate.dedup import try_claim_cross_federate_message
+from pallas.core.platform.federate.ingress_audit import record_federate_ingress_audit
 from pallas.core.platform.multi_bot.dedup import cross_bot_message_signature
 
 FEDERATE_INGRESS_CLAIM_PLUGIN = "federate_ingress"
+FEDERATE_INGRESS_V2_CLAIM_PLUGIN = "federate_ingress_v2"
 _WIN_CACHE_TTL_SEC = float(os.getenv("PALLAS_FEDERATE_WIN_CACHE_SEC", "8"))
 _WIN_CACHE_MAX = 20_000
+_CANDIDATE_WAIT_SEC = 0.15
+_INFLIGHT_CLAIM_WAIT_SEC = 0.5
 _win_cache: dict[tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str], float] = {}
 _inflight_claims: dict[
     tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str],
@@ -32,8 +36,10 @@ _win_lock = asyncio.Lock()
 
 
 def reset_federate_ingress_win_cache_for_tests() -> None:
+    global _win_lock
     _win_cache.clear()
     _inflight_claims.clear()
+    _win_lock = asyncio.Lock()
 
 
 def bypass_federate_ingress_for_current_mode() -> bool:
@@ -79,6 +85,9 @@ async def claim_federate_group_message_ingress(
     include_message_time: bool = True,
     plain: str | None = None,
     body: str | None = None,
+    candidate_capability: str | None = None,
+    candidate_bot_id: int | None = None,
+    candidate_wait: bool = False,
 ) -> bool:
     """未启用联邦 ingress 或本 deployment 抢占成功时返回 True。"""
     timer = SlowPathTimer(
@@ -94,6 +103,55 @@ async def claim_federate_group_message_ingress(
         return True
     plain = (plain if plain is not None else event.get_plaintext() or "").strip()
     body = body if body is not None else (plain or event.raw_message)
+    from pallas.core.platform.federate import candidates
+
+    if candidate_capability and candidate_bot_id is not None:
+        record_federate_ingress_audit(capability=candidate_capability, outcome="eligible")
+        registered = await asyncio.to_thread(
+            candidates.register_federate_ingress_candidate_sync,
+            group_id=int(event.group_id),
+            user_id=int(event.user_id),
+            body=body,
+            message_time=int(event.time),
+            capability=candidate_capability,
+            bot_id=int(candidate_bot_id),
+        )
+        if not registered:
+            record_federate_ingress_audit(capability=candidate_capability, outcome="candidate_registration_failed")
+            timer.finish(
+                outcome="candidate_registration_failed",
+                group_id=int(event.group_id),
+                user_id=int(event.user_id),
+            )
+            return False
+        record_federate_ingress_audit(capability=candidate_capability, outcome="candidate_registered")
+        await asyncio.sleep(_CANDIDATE_WAIT_SEC)
+        candidate_ids = await asyncio.to_thread(
+            candidates.read_federate_ingress_candidate_bot_ids_sync,
+            group_id=int(event.group_id),
+            user_id=int(event.user_id),
+            body=body,
+            message_time=int(event.time),
+            capability="",
+        )
+        if candidate_ids and int(candidate_bot_id) != min(candidate_ids):
+            record_federate_ingress_audit(capability=candidate_capability, outcome="candidate_yield")
+            timer.finish(outcome="candidate_yield", group_id=int(event.group_id), user_id=int(event.user_id))
+            return False
+        plugin = FEDERATE_INGRESS_V2_CLAIM_PLUGIN
+    elif candidate_wait:
+        candidate_ids = await asyncio.to_thread(
+            candidates.read_federate_ingress_candidate_bot_ids_sync,
+            group_id=int(event.group_id),
+            user_id=int(event.user_id),
+            body=body,
+            message_time=int(event.time),
+            capability="",
+        )
+        if candidate_ids:
+            record_federate_ingress_audit(capability=None, outcome="candidate_yield")
+            timer.finish(outcome="candidate_yield", group_id=int(event.group_id), user_id=int(event.user_id))
+            return False
     deployment_id = load_or_create_deployment_id().strip().lower()
     if not deployment_id:
         timer.finish(outcome="missing_deployment_id", group_id=int(event.group_id), user_id=int(event.user_id))
@@ -131,7 +189,21 @@ async def claim_federate_group_message_ingress(
                 _win_cache.clear()
 
     if not claim_owner:
-        won = await wait_for
+        try:
+            won = await asyncio.wait_for(wait_for, timeout=_INFLIGHT_CLAIM_WAIT_SEC)
+        except TimeoutError:
+            async with _win_lock:
+                if _inflight_claims.get(cache_key) is wait_for:
+                    _inflight_claims.pop(cache_key, None)
+            timer.finish(
+                outcome="claim_timeout",
+                cache_hit=False,
+                shared_result=True,
+                group_id=int(event.group_id),
+                user_id=int(event.user_id),
+            )
+            record_federate_ingress_audit(capability=candidate_capability, outcome="claim_timeout")
+            return False
         timer.mark("inflight_wait")
         timer.finish(
             outcome="won" if won else "lost",
@@ -153,11 +225,14 @@ async def claim_federate_group_message_ingress(
             use_plaintext=True,
             include_message_time=include_message_time,
         )
-    except Exception as exc:
+    except BaseException as exc:
         async with _win_lock:
             future = _inflight_claims.pop(cache_key, None)
         if future is not None and not future.done():
-            future.set_exception(exc)
+            if isinstance(exc, asyncio.CancelledError):
+                future.cancel()
+            else:
+                future.set_exception(exc)
         raise
 
     timer.mark("redis_claim")
@@ -175,4 +250,5 @@ async def claim_federate_group_message_ingress(
         group_id=int(event.group_id),
         user_id=int(event.user_id),
     )
+    record_federate_ingress_audit(capability=candidate_capability, outcome="winner" if won else "lost")
     return won

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import nonebot.message as nb_message
 from nonebot.adapters.onebot.v11 import GroupMessageEvent
+from nonebot.exception import IgnoredException
 from nonebot.log import logger
 from nonebot.matcher import matchers
 
@@ -132,9 +133,28 @@ def select_overload_chatter_matchers(selected_matchers: list[type]) -> list[type
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) in _CORE_CHATTER_MODULES]
 
 
+async def pre_schedule_ingress_group_message_gate(bot: Bot, event: Event):
+    from pallas.core.platform.ingress.gate import pre_schedule_ingress_group_message_gate as run_gate
+
+    return await run_gate(bot, event)
+
+
+def reset_pre_schedule_ingress_group_message_gate(token) -> None:
+    from pallas.core.platform.ingress.gate import reset_pre_schedule_ingress_group_message_gate as reset_gate
+
+    reset_gate(token)
+
+
 async def patched_handle_event(bot: Bot, event: Event) -> None:
     if isinstance(event, GroupMessageEvent) and conversation_scheduler_enabled():
-        await submit_conversation_event(bot, event, lambda: patched_handle_event_now(bot, event))
+        try:
+            gate_token = await pre_schedule_ingress_group_message_gate(bot, event)
+        except IgnoredException:
+            return
+        try:
+            await submit_conversation_event(bot, event, lambda: patched_handle_event_now(bot, event))
+        finally:
+            reset_pre_schedule_ingress_group_message_gate(gate_token)
         return
     await patched_handle_event_now(bot, event)
 
@@ -229,6 +249,13 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         dependency_cache,
                         command_traffic=command_traffic,
                         synthetic_llm_command=llm_command is not None,
+                        hard_speak_trigger=bool(
+                            matcher_module_key(matcher) == "llm_chat"
+                            and (
+                                getattr(event, "to_me", False)
+                                or getattr(event, "_pallas_llm_alias_hard_trigger", False)
+                            )
+                        ),
                     )
                     if result.acquired:
                         any_matcher_executed = True

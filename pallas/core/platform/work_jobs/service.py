@@ -47,7 +47,11 @@ async def run_work_status_publisher(store, *, consumers: int, metrics) -> None:
 
     while True:
         try:
-            write_work_aux_status(consumers=consumers, stats=await store.stats(), runtime_metrics=metrics.snapshot())
+            from pallas.core.platform.federate.ingress_audit import federate_ingress_audit_summary_sync
+
+            runtime_metrics = metrics.snapshot()
+            runtime_metrics.update(await asyncio.to_thread(federate_ingress_audit_summary_sync))
+            write_work_aux_status(consumers=consumers, stats=await store.stats(), runtime_metrics=runtime_metrics)
         except Exception as exc:
             logger.warning("work aux status publish failed: {}", exc)
         await asyncio.sleep(5.0)

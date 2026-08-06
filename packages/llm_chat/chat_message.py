@@ -77,7 +77,7 @@ from .replies import (
 def llm_chat_rule(event: Event) -> bool:
     if not is_llm_chat_service_enabled():
         return False
-    is_to_me = bool(getattr(event, "to_me", False))
+    is_to_me = bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False))
     plain_text = str(getattr(event, "get_plaintext", lambda: "")() or "").strip()
     raw_message = str(getattr(event, "raw_message", "") or "").strip()
     if not is_to_me and plain_text in {"牛牛", "帕拉斯"} and (not raw_message or raw_message == plain_text):
@@ -158,8 +158,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
     raw_group_id = getattr(event, "group_id", None)
     group_id = int(raw_group_id) if raw_group_id is not None else None
     user_id = int(getattr(event, "user_id", 0) or 0)
-    is_to_me = bool(getattr(event, "to_me", False))
-    speak_trigger = "to_me" if is_to_me else ""
+    is_alias_hard_trigger = bool(getattr(event, "_pallas_llm_alias_hard_trigger", False))
+    is_to_me = bool(getattr(event, "to_me", False) or is_alias_hard_trigger)
+    speak_trigger = "alias" if is_alias_hard_trigger else ("to_me" if is_to_me else "")
     followup_window_sec = int(llm_cfg.llm_speak_followup_window_sec)
     followup_max_total = int(llm_cfg.llm_speak_followup_max_total_sec)
 
@@ -468,7 +469,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "detail": necessity.detail,
             "speak_trigger": speak_trigger or "to_me",
         })
-    if necessity.decision == "skip" and not required_tool_intent:
+    if necessity.decision == "skip" and not required_tool_intent and not is_to_me:
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_necessity_skip")
         logger.debug(
             "llm chat route skipped: reason=reply_necessity message_id={} group={} user={} score={} detail={}",
@@ -496,7 +497,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         CurrentTurnDecisionInput(
             text=focus_text,
             is_to_me=is_to_me,
-            is_explicitly_addressed=speak_trigger in {"mention", "followup"},
+            is_explicitly_addressed=speak_trigger in {"alias", "mention", "followup"},
             tools_permitted=bool(tool_meta.get("tools_enabled")),
             required_tool_intent=required_tool_intent,
             recent_bot_reply_count=min(6, recent_bot_reply_count),
