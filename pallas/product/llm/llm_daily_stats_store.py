@@ -83,6 +83,8 @@ def _metric_weight(key: str, value: object) -> int:
         return int(value.get("ok_count") or 0) + int(value.get("fail_count") or 0) + int(value.get("image_count") or 0)
     if key == "gates":
         return int(value.get("skip") or 0) + int(value.get("defer") or 0) + int(value.get("proceed") or 0)
+    if key == "sticker_vision":
+        return int(value.get("requests") or 0)
     if key == "totals":
         return sum(int(v or 0) for v in value.values() if not isinstance(v, dict))
     if key == "by_task":
@@ -294,6 +296,7 @@ _PREFER_COMPLETE_KEYS = frozenset({
     "by_task",
     "totals",
     "gates",
+    "sticker_vision",
 })
 
 
@@ -318,6 +321,7 @@ def merge_side_snapshot(existing: dict[str, Any] | None, snapshot: dict[str, Any
         "rag",
         "memory_rag",
         "gates",
+        "sticker_vision",
     ):
         if key not in snapshot:
             continue

@@ -49,6 +49,11 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
     )
     chat_instance.find_reply_bundle = AsyncMock(return_value=bundle)
     chat_instance.answer_from_bundle = AsyncMock(return_value=answers)
+    monkeypatch.setattr(
+        mod,
+        "prepare_repeater_reply",
+        AsyncMock(return_value=SimpleNamespace(bundle=bundle, fanout_gate=SimpleNamespace(lost=False, won=False))),
+    )
 
     monkeypatch.setattr(
         mod,
@@ -58,10 +63,8 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
     monkeypatch.setattr(mod, "is_message_scrub_blocked_async", AsyncMock(return_value=False))
     monkeypatch.setattr(mod, "enqueue_repeater_learn", AsyncMock())
     monkeypatch.setattr(mod, "Chat", MagicMock(return_value=chat_instance))
-    monkeypatch.setattr(mod, "should_prepare_repeater_reply", lambda *args, **kwargs: True)
     monkeypatch.setattr(mod, "should_attempt_repeater_opportunity", lambda *args, **kwargs: False)
-    monkeypatch.setattr(mod, "submit_corpus_assist_stages", AsyncMock(return_value=False))
-    monkeypatch.setattr(mod, "maybe_submit_repeater_llm_fallback", AsyncMock(return_value=False))
+    monkeypatch.setattr(mod, "submit_repeater_corpus_select", AsyncMock(return_value=False))
     monkeypatch.setattr(
         mod,
         "build_repeater_llm_plan",
@@ -88,18 +91,9 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
         raising=False,
     )
     monkeypatch.setattr(
-        "packages.repeater.fanout_reply.repeater_can_attempt_reply",
-        AsyncMock(return_value=True),
-    )
-    monkeypatch.setattr(
-        "packages.repeater.fanout_reply.resolve_fanout_gate",
-        AsyncMock(return_value=SimpleNamespace(lost=False, won=False, bot_ids=[])),
-    )
-    monkeypatch.setattr(
         "packages.repeater.fanout_reply.dispatch_repeater_reply",
         lambda bot_id, group_id, payload: dispatched.append((bot_id, group_id, payload)),
     )
-    monkeypatch.setattr(mod, "record_bot_llm_route", lambda *args, **kwargs: None)
     from pallas.product.llm.kernel.models import ConversationFeatureLevel
 
     monkeypatch.setattr(
@@ -119,15 +113,47 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
         "BotConfig",
         lambda *_args, **_kwargs: SimpleNamespace(refresh_cooldown=AsyncMock()),
     )
-    monkeypatch.setattr(mod, "SlowPathTimer", MagicMock())
-
     await mod.handle_group_message(bot, event)
 
     mod.run_repeater_llm_plan.assert_not_awaited()
-    mod.submit_corpus_assist_stages.assert_not_awaited()
-    mod.maybe_submit_repeater_llm_fallback.assert_not_awaited()
+    mod.submit_repeater_corpus_select.assert_not_awaited()
     chat_instance.answer_from_bundle.assert_awaited_once_with(bundle)
     assert dispatched == [(300, 100, answers)]
     assert trace_rows
     assert trace_rows[0]["kind"] == "conversation_decision_trace"
     assert trace_rows[0]["opportunity_accepted"] is False
+
+
+@pytest.mark.asyncio
+async def test_message_handler_uses_reply_preparation_seam(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater.handlers import message as mod
+
+    event = _group_event()
+    bot = MagicMock()
+    bot.self_id = "300"
+    chat_instance = MagicMock()
+    prepared = SimpleNamespace(bundle=None, fanout_gate=None)
+
+    monkeypatch.setattr(
+        mod,
+        "build_repeater_event_context",
+        AsyncMock(return_value=SimpleNamespace(plain_body="好耶", norm_raw="好耶", sharding_active=False)),
+    )
+    monkeypatch.setattr(mod, "is_message_scrub_blocked_async", AsyncMock(return_value=False))
+    monkeypatch.setattr(mod, "Chat", MagicMock(return_value=chat_instance))
+    monkeypatch.setattr(mod, "BotConfig", MagicMock())
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr(mod, "resolve_repeater_capabilities", lambda _cfg: SimpleNamespace())
+    monkeypatch.setattr(mod, "prepare_repeater_reply", AsyncMock(return_value=prepared))
+    learn = AsyncMock()
+    monkeypatch.setattr(mod, "enqueue_repeater_learn", learn)
+
+    await mod.handle_group_message(bot, event)
+
+    mod.prepare_repeater_reply.assert_awaited_once_with(
+        event,
+        chat_instance,
+        plain_body="好耶",
+        sharding_active=False,
+    )
+    learn.assert_awaited_once_with(chat_instance, event)

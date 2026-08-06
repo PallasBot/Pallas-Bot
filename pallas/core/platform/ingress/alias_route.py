@@ -31,24 +31,34 @@ def speak_aliases_for_bot_sync(bot_id: int) -> list[str]:
     from pallas.product.persona.self_identity import (
         extract_self_aliases,
         resolve_cached_login_nickname,
+        resolve_managed_display_name,
     )
 
     nick = resolve_cached_login_nickname(int(bot_id))
     learned = cached_learned_self_aliases(int(bot_id))
     persona = {"self_aliases": learned} if learned else None
-    return extract_self_aliases(persona, login_nickname=nick or None)
+    return extract_self_aliases(
+        persona,
+        login_nickname=nick or None,
+        managed_display_name=resolve_managed_display_name(int(bot_id)) or None,
+    )
 
 
 def speak_exclusive_aliases_for_bot_sync(bot_id: int) -> list[str]:
     from pallas.product.persona.self_identity import (
         extract_exclusive_self_aliases,
         resolve_cached_login_nickname,
+        resolve_managed_display_name,
     )
 
     nick = resolve_cached_login_nickname(int(bot_id))
     learned = cached_learned_self_aliases(int(bot_id))
     persona = {"self_aliases": learned} if learned else None
-    return extract_exclusive_self_aliases(persona, login_nickname=nick or None)
+    return extract_exclusive_self_aliases(
+        persona,
+        login_nickname=nick or None,
+        managed_display_name=resolve_managed_display_name(int(bot_id)) or None,
+    )
 
 
 def fleet_bots_matching_plain(plain_text: str, *, min_alias_len: int = 2) -> frozenset[int]:

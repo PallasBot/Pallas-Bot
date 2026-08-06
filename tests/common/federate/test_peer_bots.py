@@ -13,6 +13,7 @@ def test_publish_local_federate_peer_bot_ids_sync_writes_current_catalog(monkeyp
     monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
     monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({111, 222}))
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", list)
     monkeypatch.setattr(
         mod,
         "collect_local_federate_command_capabilities",
@@ -25,6 +26,8 @@ def test_publish_local_federate_peer_bot_ids_sync_writes_current_catalog(monkeyp
     data = json.loads(payload)
     assert set(data["bot_ids"]) == {111, 222}
     assert set(data["command_capabilities"]) == {"牛牛塔罗牌", "牛牛帮助"}
+    assert data["ingress_protocol"] == mod.INGRESS_PROTOCOL_VERSION
+    assert set(data["ingress_capabilities"]) == {"command", "llm_alias", "hosted_activity"}
     assert data["present_group_ids"] == []
     assert client.set.call_args.kwargs["ex"] > 0
 
@@ -49,6 +52,7 @@ def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
     monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
     monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({10001}))
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", list)
     monkeypatch.setattr(mod, "collect_local_federate_online_bot_ids", lambda: frozenset({10001}))
     monkeypatch.setattr(mod, "local_federate_deployment_name", lambda: "部署 A")
     monkeypatch.setattr(
@@ -69,6 +73,8 @@ def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
         "updated_at": json.loads(payload)["updated_at"],
         "present_group_ids": [],
         "command_capability_protocol": mod.COMMAND_CAPABILITY_PROTOCOL_VERSION,
+        "ingress_protocol": mod.INGRESS_PROTOCOL_VERSION,
+        "ingress_capabilities": ["command", "hosted_activity", "llm_alias"],
     }
 
     mod.refresh_federate_peer_bot_ids_sync()

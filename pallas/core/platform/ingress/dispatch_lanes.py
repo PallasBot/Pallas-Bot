@@ -62,6 +62,14 @@ class LaneController:
             return max(1, limit // 2)
         return limit
 
+    async def set_limit(self, limit: int) -> None:
+        async with self._cond:
+            self.base_limit = max(1, int(limit))
+            self._cond.notify_all()
+
+    def snapshot(self) -> dict[str, int]:
+        return {"limit": self.effective_limit(), "in_use": self.in_use}
+
     async def acquire(self, wait_budget_sec: float) -> tuple[bool, float]:
         start = time.monotonic()
         async with self._cond:
@@ -239,6 +247,20 @@ def lane_controller(lane: str) -> LaneController | None:
     return _LANES.get(normalized)
 
 
+def lane_status() -> dict[str, dict[str, int]]:
+    if _LANES is None:
+        return {}
+    return {str(lane): controller.snapshot() for lane, controller in _LANES.items()}
+
+
+async def set_lane_limit(lane: str, limit: int) -> bool:
+    controller = lane_controller(lane)
+    if controller is None:
+        return False
+    await controller.set_limit(limit)
+    return True
+
+
 async def acquire_lane(lane: str, *, wait_budget_sec: float | None = None) -> tuple[bool, float]:
     normalized = normalize_lane(lane) or lane
     controller = lane_controller(normalized)
@@ -289,6 +311,7 @@ async def check_and_run_matcher_with_lane(
     *,
     command_traffic: bool,
     synthetic_llm_command: bool = False,
+    hard_speak_trigger: bool = False,
 ) -> MatcherLaneResult:
     import nonebot.message as nb_message
 
@@ -298,7 +321,12 @@ async def check_and_run_matcher_with_lane(
         await nb_message.check_and_run_matcher(matcher, bot, event, state, stack, dependency_cache)
         return MatcherLaneResult(acquired=True, lane_busy=False)
 
-    lane = DispatchLane.TOOL if synthetic_llm_command else lane_for_matcher(matcher)
+    if synthetic_llm_command:
+        lane = DispatchLane.TOOL
+    elif hard_speak_trigger:
+        lane = DispatchLane.COMMAND
+    else:
+        lane = lane_for_matcher(matcher)
     acquired, wait_ms = await acquire_lane(lane)
     record_lane_wait(wait_ms, busy=not acquired)
     if not acquired:

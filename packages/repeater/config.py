@@ -36,6 +36,13 @@ class Config(BaseModel, extra="ignore"):
         description="命中上下文关键词时对接话权重的额外加成。",
         json_schema_extra=_ui("接话", 40),
     )
+    image_candidate_weight: float = Field(
+        default=1.2,
+        ge=1.0,
+        le=3.0,
+        description="纯图片候选在接话选择中的额外权重；1 表示不额外提高。",
+        json_schema_extra=_ui("接话", 45),
+    )
     cross_group_threshold: int = Field(
         default=2,
         description="至少多少个群出现相同短句后，才将其提升为全局可复用语料。",
@@ -180,6 +187,7 @@ def sync_repeater_runtime_constants(cfg: Config) -> None:
         "ANSWER_THRESHOLD_WEIGHTS": cfg.answer_threshold_weights,
         "TOPICS_SIZE": cfg.topics_size,
         "TOPICS_IMPORTANCE": cfg.topics_importance,
+        "IMAGE_CANDIDATE_WEIGHT": cfg.image_candidate_weight,
         "CROSS_GROUP_THRESHOLD": cfg.cross_group_threshold,
         "REPEAT_THRESHOLD": cfg.repeat_threshold,
         "SPEAK_THRESHOLD": cfg.speak_threshold,
@@ -198,6 +206,7 @@ def sync_repeater_runtime_constants(cfg: Config) -> None:
         "ANSWER_THRESHOLD_WEIGHTS": cfg.answer_threshold_weights,
         "TOPICS_SIZE": cfg.topics_size,
         "TOPICS_IMPORTANCE": cfg.topics_importance,
+        "IMAGE_CANDIDATE_WEIGHT": cfg.image_candidate_weight,
         "CROSS_GROUP_THRESHOLD": cfg.cross_group_threshold,
         "REPEAT_THRESHOLD": cfg.repeat_threshold,
         "DUPLICATE_REPLY": cfg.duplicate_reply,

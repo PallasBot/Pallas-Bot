@@ -117,7 +117,7 @@ def is_filler_only_reply(text: str) -> bool:
 
 
 def strip_orphan_leading_particles(text: str) -> str:
-    """去掉开头的续写语气残片；剥干净后过短则返回空串。"""
+    """去掉开头的续写语气残片；只剩标点时返回空串。"""
     plain = str(text or "").strip()
     if not plain:
         return ""
@@ -130,7 +130,7 @@ def strip_orphan_leading_particles(text: str) -> str:
     if not cleaned:
         return ""
     # 只剩标点/语气
-    if len(cleaned.strip("，,。！!？?~～ ….")) < 2:
+    if not cleaned.strip("，,。！!？?~～ …."):
         return ""
     return cleaned
 

@@ -31,6 +31,7 @@ class ConversationCapacityReservation:
     scheduler: ConversationScheduler
     key: ConversationKey
     _claimed: bool = False
+    _queued: bool = False
     _released: bool = False
 
     async def release(self) -> None:
@@ -49,6 +50,10 @@ class ConversationScheduler:
         self._tasks: set[asyncio.Task[None]] = set()
         self._pending_count = 0
         self._pending_by_key: dict[ConversationKey, int] = {}
+        self._scheduled_by_key: dict[ConversationKey, int] = {}
+        self._pending_peak = 0
+        self._ready_peak = 0
+        self._active_peak = 0
         self._backpressure_waits = 0
         self._per_key_backpressure_waits = 0
         self._wait_samples_ms: deque[float] = deque(maxlen=256)
@@ -71,12 +76,16 @@ class ConversationScheduler:
                 if reservation.key != key or reservation._claimed or reservation._released:
                     raise RuntimeError("conversation capacity reservation is no longer available")
                 reservation._claimed = True
+                while not self._stopping and self._scheduled_by_key.get(key, 0) >= self.per_key_pending:
+                    self._per_key_backpressure_waits += 1
+                    await self._condition.wait()
             else:
                 while not self._stopping and (
-                    self._pending_count >= self.max_pending or self._pending_by_key.get(key, 0) >= self.per_key_pending
+                    self._pending_count >= self.max_pending
+                    or self._scheduled_by_key.get(key, 0) >= self.per_key_pending
                 ):
                     self._backpressure_waits += 1
-                    if self._pending_by_key.get(key, 0) >= self.per_key_pending:
+                    if self._scheduled_by_key.get(key, 0) >= self.per_key_pending:
                         self._per_key_backpressure_waits += 1
                     await self._condition.wait()
             if self._stopping:
@@ -88,24 +97,25 @@ class ConversationScheduler:
                 self._pending_count += 1
                 self._pending_by_key[key] = self._pending_by_key.get(key, 0) + 1
             self._queues.setdefault(key, deque()).append(item)
+            self._scheduled_by_key[key] = self._scheduled_by_key.get(key, 0) + 1
+            if reserved:
+                reservation._queued = True
             self._queue_ready_key_locked(key)
+            self._record_peaks_locked()
             self._start_ready_locked()
             self._condition.notify_all()
         await asyncio.shield(future)
 
     async def reserve(self, key: ConversationKey) -> ConversationCapacityReservation:
         async with self._condition:
-            while not self._stopping and (
-                self._pending_count >= self.max_pending or self._pending_by_key.get(key, 0) >= self.per_key_pending
-            ):
+            while not self._stopping and (self._pending_count >= self.max_pending):
                 self._backpressure_waits += 1
-                if self._pending_by_key.get(key, 0) >= self.per_key_pending:
-                    self._per_key_backpressure_waits += 1
                 await self._condition.wait()
             if self._stopping:
                 raise RuntimeError("conversation scheduler is stopping")
             self._pending_count += 1
             self._pending_by_key[key] = self._pending_by_key.get(key, 0) + 1
+            self._record_peaks_locked()
             return ConversationCapacityReservation(scheduler=self, key=key)
 
     async def release_reservation(self, reservation: ConversationCapacityReservation) -> None:
@@ -113,7 +123,7 @@ class ConversationScheduler:
             self._release_reservation_locked(reservation)
 
     def _release_reservation_locked(self, reservation: ConversationCapacityReservation) -> None:
-        if reservation.scheduler is not self or reservation._claimed or reservation._released:
+        if reservation.scheduler is not self or reservation._queued or reservation._released:
             return
         reservation._released = True
         self._release_pending_locked(reservation.key)
@@ -127,6 +137,12 @@ class ConversationScheduler:
             if self._stopping:
                 raise RuntimeError("conversation scheduler is stopping")
 
+    async def set_concurrency(self, concurrency: int) -> None:
+        async with self._condition:
+            self.concurrency = max(1, int(concurrency))
+            self._start_ready_locked()
+            self._condition.notify_all()
+
     async def stop(self) -> None:
         async with self._condition:
             if self._stopping:
@@ -139,6 +155,7 @@ class ConversationScheduler:
             self._ready_keys.clear()
             for key in queued_keys:
                 self._release_pending_locked(key)
+                self._release_scheduled_locked(key)
             for item in queued:
                 if not item.future.done():
                     item.future.cancel()
@@ -161,9 +178,13 @@ class ConversationScheduler:
             index = max(0, min(len(ordered) - 1, int(len(ordered) * 0.95)))
             wait_p95 = round(ordered[index], 2)
         return {
+            "concurrency": self.concurrency,
             "pending": self._pending_count,
+            "pending_peak": self._pending_peak,
             "active": len(self._running_keys),
+            "active_peak": self._active_peak,
             "ready": len(self._ready),
+            "ready_peak": self._ready_peak,
             "max_pending": self.max_pending,
             "per_key_pending_limit": self.per_key_pending,
             "active_keys": len(self._pending_by_key),
@@ -172,6 +193,11 @@ class ConversationScheduler:
             "per_key_backpressure_waits": self._per_key_backpressure_waits,
         }
 
+    def _record_peaks_locked(self) -> None:
+        self._pending_peak = max(self._pending_peak, self._pending_count)
+        self._ready_peak = max(self._ready_peak, len(self._ready))
+        self._active_peak = max(self._active_peak, len(self._running_keys))
+
     def _release_pending_locked(self, key: ConversationKey) -> None:
         self._pending_count = max(0, self._pending_count - 1)
         remaining = self._pending_by_key.get(key, 0) - 1
@@ -179,6 +205,13 @@ class ConversationScheduler:
             self._pending_by_key[key] = remaining
         else:
             self._pending_by_key.pop(key, None)
+
+    def _release_scheduled_locked(self, key: ConversationKey) -> None:
+        remaining = self._scheduled_by_key.get(key, 0) - 1
+        if remaining > 0:
+            self._scheduled_by_key[key] = remaining
+        else:
+            self._scheduled_by_key.pop(key, None)
 
     def _queue_ready_key_locked(self, key: ConversationKey) -> None:
         if key in self._running_keys or key in self._ready_keys:
@@ -195,6 +228,7 @@ class ConversationScheduler:
             if key in self._running_keys or not self._queues.get(key):
                 continue
             self._running_keys.add(key)
+            self._record_peaks_locked()
             task = asyncio.create_task(self._run_one(key), name=f"conversation_scheduler:{key[0]}:{key[1]}")
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
@@ -227,6 +261,7 @@ class ConversationScheduler:
             async with self._condition:
                 if item is not None:
                     self._release_pending_locked(key)
+                    self._release_scheduled_locked(key)
                 self._running_keys.discard(key)
                 if not self._stopping:
                     self._queue_ready_key_locked(key)
@@ -269,6 +304,14 @@ async def stop_conversation_scheduler() -> None:
     _scheduler = None
     if scheduler is not None:
         await scheduler.stop()
+
+
+async def set_conversation_scheduler_concurrency(concurrency: int) -> bool:
+    scheduler = _scheduler
+    if scheduler is None:
+        return False
+    await scheduler.set_concurrency(concurrency)
+    return True
 
 
 async def submit_conversation_event(bot: Bot, event: Event, work: Work) -> None:
@@ -331,9 +374,13 @@ def conversation_scheduler_status() -> dict[str, int | float | bool | None]:
         config = get_ingress_dispatch_runtime_config()
         return {
             "enabled": config.conversation_scheduler_enabled,
+            "concurrency": config.conversation_scheduler_concurrency,
             "pending": 0,
+            "pending_peak": 0,
             "active": 0,
+            "active_peak": 0,
             "ready": 0,
+            "ready_peak": 0,
             "max_pending": config.conversation_scheduler_max_pending,
             "per_key_pending_limit": config.conversation_scheduler_per_key_pending,
             "active_keys": 0,

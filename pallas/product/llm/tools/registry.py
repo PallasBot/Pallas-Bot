@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
+from pallas.core.platform.ingress.plugin_command_plaintext import is_plugin_command_plaintext
 from pallas.product.arknights_kb.config import get_arknights_kb_config
 from pallas.product.llm.config import get_llm_config
 from pallas.product.llm.tools.contracts import (
@@ -290,6 +291,8 @@ def tool_catalog_for_chat(
 
     normalized = str(task or "").strip().lower()
     if normalized in _NO_TOOL_TASKS:
+        return None
+    if user_text and is_plugin_command_plaintext(user_text):
         return None
     cfg = get_llm_config()
     inventory = is_inventory_intent(user_text)

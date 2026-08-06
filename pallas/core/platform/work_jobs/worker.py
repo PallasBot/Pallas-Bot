@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
+from .observability import WorkAuxRuntimeMetrics
+
 if TYPE_CHECKING:
     from .store import WorkJobStore
 
@@ -25,6 +27,7 @@ class WorkJobWorker:
         retry_after_sec: float = 5.0,
         batch_size: int = 1,
         max_attempts: int = 8,
+        metrics: WorkAuxRuntimeMetrics | None = None,
     ) -> None:
         self.store = store
         self.owner = str(owner)
@@ -33,6 +36,7 @@ class WorkJobWorker:
         self.retry_after_sec = max(0.0, float(retry_after_sec))
         self.batch_size = max(1, int(batch_size))
         self.max_attempts = max(1, int(max_attempts))
+        self.metrics = metrics or WorkAuxRuntimeMetrics()
 
     async def run_once(self) -> bool:
         jobs = await self.store.claim_many(owner=self.owner, lease_sec=self.lease_sec, limit=self.batch_size)
@@ -50,7 +54,7 @@ class WorkJobWorker:
                 if len(completed_jobs) != len(completed):
                     refill_slots = False
                 if completed_jobs:
-                    await self.store.complete_many(jobs=completed_jobs, owner=self.owner)
+                    self.metrics.record_completed(await self.store.complete_many(jobs=completed_jobs, owner=self.owner))
                 available_slots = self.batch_size - len(tasks)
                 if refill_slots and available_slots > 0:
                     next_jobs = await self.store.claim_many(
@@ -76,19 +80,23 @@ class WorkJobWorker:
         handler_task = asyncio.create_task(handler(job.payload), name=f"work_job_handler:{job.id}")
         try:
             done, _ = await asyncio.wait((handler_task, lease_task), return_when=asyncio.FIRST_COMPLETED)
-            if lease_task in done:
+            if handler_task in done:
+                await handler_task
+            elif lease_task in done:
                 handler_task.cancel()
                 await asyncio.gather(handler_task, return_exceptions=True)
-                await self.store.fail(
+                self.metrics.record_failed()
+                if await self.store.fail(
                     job_id=job.id,
                     owner=self.owner,
                     lease_id=job.lease_id or "",
                     retry_after_sec=self.retry_after_sec,
-                )
+                ):
+                    self.metrics.record_retried()
                 return None
-            await handler_task
         except Exception as exc:
             logger.warning("work aux: job failed kind={} id={}: {}", job.kind, job.id, exc)
+            self.metrics.record_failed()
             await self._fail_or_dead_letter(job, str(exc))
             return None
         finally:
@@ -101,14 +109,22 @@ class WorkJobWorker:
 
     async def _fail_or_dead_letter(self, job, reason: str) -> None:
         if job.attempts >= self.max_attempts:
-            await self.store.dead_letter(job_id=job.id, owner=self.owner, lease_id=job.lease_id or "", reason=reason)
+            dead_lettered = await self.store.dead_letter(
+                job_id=job.id,
+                owner=self.owner,
+                lease_id=job.lease_id or "",
+                reason=reason,
+            )
+            if dead_lettered:
+                self.metrics.record_dead_lettered()
             return
-        await self.store.fail(
+        if await self.store.fail(
             job_id=job.id,
             owner=self.owner,
             lease_id=job.lease_id or "",
             retry_after_sec=self.retry_after_sec,
-        )
+        ):
+            self.metrics.record_retried()
 
     async def _renew_lease(self, job) -> None:
         while True:

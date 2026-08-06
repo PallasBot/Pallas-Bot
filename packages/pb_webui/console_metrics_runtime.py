@@ -89,6 +89,7 @@ _MATCHER_DURATION_LOG_DIRTY = False
 _WORKER_STATS_SYNC_STARTED = False
 _UNIFIED_STATS_SYNC_STARTED = False
 _REPEATER_HISTORY_SYNC_STARTED = False
+_INGRESS_HISTORY_SYNC_STARTED = False
 _WORKER_STATS_FAST_FLUSH_SEC = 10.0
 _WORKER_STATS_HIST_FLUSH_SEC = 30.0
 _WORKER_SHARD_STATS_FAST_FLUSH_SEC = 10.0
@@ -102,6 +103,7 @@ def _worker_stats_fast_flush_sec() -> float:
 
 # repeater 指标历史按小时落盘；与 repeater_metrics_history._MAX_LINES(24*14) 的 14 天窗口对齐
 _REPEATER_HISTORY_FLUSH_SEC = 3600.0
+_INGRESS_HISTORY_FLUSH_SEC = 15.0
 _EMPTY_MATCHER_HIST_SERIES: dict[str, list[Any]] = {
     "matcher_runs_by_plugin": [],
     "matcher_errors_by_plugin": [],
@@ -811,6 +813,21 @@ async def flush_repeater_metrics_history_async() -> bool:
     return await asyncio.to_thread(flush_repeater_metrics_history_sync)
 
 
+def flush_ingress_metrics_history_sync() -> bool:
+    """仅 hub / 单进程追加集群入站采样，避免分片 worker 重复写盘。"""
+    if shard_worker_console():
+        return False
+    from pallas.core.platform.shard.dispatch_observability import aggregate_ingress_dispatch
+
+    from .ingress_metrics_history import append_ingress_metrics_history
+
+    return append_ingress_metrics_history(snapshot=aggregate_ingress_dispatch())
+
+
+async def flush_ingress_metrics_history_async() -> bool:
+    return await asyncio.to_thread(flush_ingress_metrics_history_sync)
+
+
 def _apply_console_stats_boot_snapshot(bots: dict[str, dict[str, Any]]) -> bool:
     if not bots:
         return False
@@ -982,6 +999,23 @@ def start_repeater_metrics_history_sync() -> None:
     asyncio.create_task(_loop())
 
 
+def start_ingress_metrics_history_sync() -> None:
+    global _INGRESS_HISTORY_SYNC_STARTED
+    if _INGRESS_HISTORY_SYNC_STARTED or shard_worker_console():
+        return
+    _INGRESS_HISTORY_SYNC_STARTED = True
+
+    async def _loop() -> None:
+        while True:
+            try:
+                await flush_ingress_metrics_history_async()
+            except Exception:  # noqa: BLE001
+                pass
+            await asyncio.sleep(_INGRESS_HISTORY_FLUSH_SEC)
+
+    asyncio.create_task(_loop())
+
+
 def ensure_console_metrics_hooks() -> None:
     """单进程 / hub WebUI 与分片 worker共用。"""
     from .system_home_api import _ensure_bot_session_hooks
@@ -991,6 +1025,7 @@ def ensure_console_metrics_hooks() -> None:
     _init_plugin_run_tracking()
     start_unified_console_stats_sync()
     start_repeater_metrics_history_sync()
+    start_ingress_metrics_history_sync()
 
 
 def _msg_stats_get_mut(sid: str) -> dict[str, Any]:

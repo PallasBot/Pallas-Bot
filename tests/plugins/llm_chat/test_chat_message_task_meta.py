@@ -58,6 +58,23 @@ def test_build_recent_reply_variation_hint_flags_generic_prefix_cluster() -> Non
     hint = build_recent_reply_variation_hint(turns)
 
     assert "最近几轮别再用这些开头：行吧" in hint
+
+
+def test_llm_chat_rule_accepts_federated_alias_winner(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.llm_chat import chat_message as mod
+
+    event = SimpleNamespace(
+        to_me=False,
+        _pallas_llm_alias_hard_trigger=True,
+        raw_message="泰坦牛牛吃饭了没",
+        get_plaintext=lambda: "泰坦牛牛吃饭了没",
+    )
+
+    monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
+
+    assert mod.llm_chat_rule(event) is True
+
+
 @pytest.mark.asyncio
 async def test_handle_llm_chat_skips_empty_to_me_without_reply(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.llm_chat import chat_message as mod
@@ -91,7 +108,7 @@ async def test_handle_llm_chat_skips_empty_to_me_without_reply(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
-async def test_handle_llm_chat_skips_low_value_direct_social_before_turn_decision(
+async def test_handle_llm_chat_sends_low_value_direct_social_to_turn_decision(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from packages.llm_chat import chat_message as mod
@@ -132,14 +149,15 @@ async def test_handle_llm_chat_skips_low_value_direct_social_before_turn_decisio
         "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
         AsyncMock(return_value=[]),
     )
-    turn_decision = AsyncMock(side_effect=AssertionError("low-value social turn must not reach the model"))
+    turn_decision = AsyncMock(side_effect=AssertionError("explicit trigger must reach current-turn decision"))
     monkeypatch.setattr(mod, "decide_current_turn_with_model", turn_decision)
     submit_mock = AsyncMock()
     monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
 
-    await mod.handle_llm_chat(bot, event)
+    with pytest.raises(AssertionError, match="explicit trigger must reach current-turn decision"):
+        await mod.handle_llm_chat(bot, event)
 
-    turn_decision.assert_not_awaited()
+    turn_decision.assert_awaited_once()
     submit_mock.assert_not_awaited()
 
 
@@ -310,6 +328,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     async def fake_context(*_args, **kwargs) -> SimpleNamespace:
         assert decision_called, "current turn decision must run before context assembly"
         assert kwargs["allow_persistent_memory"] is False
+        assert kwargs["allow_expression_reference"] is False
         return SimpleNamespace(
             system_prompt="sys",
             knowledge_retrieval_trace={"hit_count": 1},
@@ -382,6 +401,14 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     )
     monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value="上一句"))
     monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.resolve_cached_semantic_style",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            style_anchor="短句轻怼。",
+            prompt_block="【本群表达校准】\n保持：短句轻怼。",
+            direct_candidate="没救了",
+        ),
+    )
+    monkeypatch.setattr(
         "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
         AsyncMock(return_value=["群内上一句", "群内更早一句"]),
     )
@@ -389,35 +416,13 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
     monkeypatch.setattr(mod.TaskManager, "add_task", fake_add_task)
 
-    bundle = SimpleNamespace(
-        message_pool=["候选一", "候选二"],
-        answer_list=["候选一"],
-    )
-
-    class FakeChat:
-        def __init__(self, _event):
-            pass
-
-        async def find_reply_bundle(self):
-            return bundle
-
-    monkeypatch.setitem(
-        __import__("sys").modules,
-        "packages.repeater.model",
-        SimpleNamespace(Chat=FakeChat, ChatData=SimpleNamespace),
-    )
-    from packages.repeater import bundle_lookup
-
-    monkeypatch.setattr(bundle_lookup, "find_reply_bundle_bounded", AsyncMock(return_value=bundle))
-    monkeypatch.setattr(mod, "submit_corpus_assist_stages", AsyncMock(return_value=False))
-
     await mod.handle_llm_chat(bot, event)
 
     payload = added["payload"]
     assert isinstance(payload, dict)
     assert payload["task_type"] == "llm_chat"
-    assert payload["fallback_text"] == "候选一"
-    assert payload["llm_route"] == "corpus_select"
+    assert payload["fallback_text"] == ""
+    assert payload["llm_route"] == "plain_llm_chat"
     assert payload["last_reply_text"] == "上一句"
     assert payload["recent_reply_texts"] == ["群内上一句", "群内更早一句"]
     assert "variation_hint" not in payload
@@ -427,6 +432,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert payload["behavior_hint"]
     assert "persona_affect_block" not in payload
     assert payload["current_turn_trace"]["social_action"] == "ACK"
+    assert payload["reply_delivery_style"] == "PLAIN"
+    assert payload["message_id"] == 40004
     feedback_hint.assert_not_called()
     submit_request = submit_mock.await_args.args[0]
     assert "【本轮表达去重】" not in submit_request.system_prompt
@@ -434,6 +441,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "【表达习惯参考】" not in submit_request.system_prompt
     assert "【收尾变化参考】" not in submit_request.system_prompt
     assert "【语料收尾参考】" not in submit_request.system_prompt
+    assert "【本群表达校准】" not in submit_request.system_prompt
     assert "【本轮表达去重】" not in "\n".join(submit_request.style_user_hints)
     assert "【收尾变化参考】" not in "\n".join(submit_request.style_user_hints)
     assert "本轮直接回答当前问题，别补一整套客套。" not in "\n".join(submit_request.style_user_hints)
@@ -444,6 +452,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "same_utterance_redup" not in submit_request.llm_rewrite_metadata
     assert submit_request.llm_rewrite_metadata["social_action"] == "ACK"
     assert submit_request.llm_rewrite_metadata["reply_target"] == "fact"
+    assert submit_request.llm_rewrite_metadata["semantic_style_prompt_block"] == "【本群表达校准】\n保持：短句轻怼。"
+    assert submit_request.llm_rewrite_metadata["semantic_style_direct_candidate"] == "没救了"
     assert submit_request.include_session_history is False
     assert submit_request.hybrid_retrieval_trace["sources"] == ["memory"]
 
@@ -503,6 +513,85 @@ async def test_handle_llm_chat_submits_explicit_mention_without_wait(monkeypatch
                 None,
             )
         ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "assemble_direct_chat_context",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                system_prompt="sys",
+                knowledge_retrieval_trace={},
+                hybrid_retrieval_trace={},
+                relationship_trace={},
+            )
+        ),
+    )
+    monkeypatch.setattr(mod, "resolve_conversation_feature_level", lambda *_args, **_kwargs: "full_conversation_kernel")
+    monkeypatch.setattr(mod, "can_read_behavioral_learning", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        mod,
+        "evaluate_llm_reply_gate_result",
+        lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
+    )
+    monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "refresh_llm_chat_cooldown", AsyncMock())
+    monkeypatch.setattr(mod, "list_user_llm_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value=""))
+    submit_mock = AsyncMock(return_value=SimpleNamespace(ok=True, task_id="ai-task-1", status="queued"))
+    monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
+
+    await mod.handle_llm_chat(bot, event)
+
+    submit_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_llm_chat_submits_federated_alias_hard_wake(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.llm_chat import chat_message as mod
+
+    event = SimpleNamespace(
+        to_me=False,
+        _pallas_llm_alias_hard_trigger=True,
+        self_id="10001",
+        group_id=20002,
+        user_id=30003,
+        message_id=40004,
+        time=123456,
+        raw_message="泰坦牛牛出来",
+        get_plaintext=lambda: "泰坦牛牛出来",
+        get_message=lambda: "泰坦牛牛出来",
+        get_session_id=lambda: "group_20002_30003",
+    )
+    bot = SimpleNamespace(self_id="10001")
+
+    monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "get_llm_chat_config",
+        lambda: SimpleNamespace(llm_chat_system_prompt_path="", llm_chat_min_priority=40),
+    )
+    monkeypatch.setattr(
+        mod,
+        "get_llm_config",
+        lambda: SimpleNamespace(
+            llm_memory_rag_enabled=False,
+            llm_relationship_notes_enabled=False,
+            llm_chat_enabled=True,
+            llm_select_enabled=False,
+            llm_polish_lite_enabled=False,
+            llm_polish_enabled=False,
+            llm_chat_cooldown_sec=3,
+            llm_chat_queue_merge=True,
+            llm_speak_followup_enabled=False,
+            llm_speak_followup_window_sec=30,
+            llm_speak_followup_max_total_sec=120,
+            llm_speak_perception_enabled=False,
+        ),
+    )
+    monkeypatch.setattr(
+        mod,
+        "build_persona_llm_context",
+        AsyncMock(return_value=(SimpleNamespace(system="sys", metadata=SimpleNamespace(persona={})), None, None)),
     )
     monkeypatch.setattr(
         mod,

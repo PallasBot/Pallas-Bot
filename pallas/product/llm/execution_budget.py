@@ -56,6 +56,11 @@ def _budget_sem_for(cfg: LlmConfig) -> asyncio.BoundedSemaphore:
     return _budget_sem
 
 
+def is_llm_execution_idle(*, cfg: LlmConfig | None = None) -> bool:
+    c = cfg or get_llm_config()
+    return not c.llm_governance_enabled or _budget_sem_for(c)._value == llm_execution_concurrency_limit(c)
+
+
 class LlmExecutionSlot:
     __slots__ = ("acquired",)
 

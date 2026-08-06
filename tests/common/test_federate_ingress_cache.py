@@ -7,13 +7,25 @@ import pytest
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from pallas.core.platform.federate import ingress as fed_ingress
+from pallas.core.platform.federate import ingress_audit
+
+
+@pytest.fixture(autouse=True)
+def no_federate_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    ingress_audit.reset_federate_ingress_audit_for_tests()
+    monkeypatch.setattr(fed_ingress, "_CANDIDATE_WAIT_SEC", 0.0)
+    monkeypatch.setattr(fed_ingress, "record_federate_ingress_audit", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "pallas.core.platform.federate.candidates.read_federate_ingress_candidate_bot_ids_sync",
+        lambda **_kwargs: frozenset(),
+    )
 
 
 @pytest.mark.asyncio
 async def test_federate_ingress_win_cache_skips_second_redis(monkeypatch: pytest.MonkeyPatch) -> None:
     fed_ingress.reset_federate_ingress_win_cache_for_tests()
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
-    monkeypatch.setattr("pallas.core.platform.federate.ingress.is_sharding_active", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
     monkeypatch.setattr(
         "pallas.core.platform.federate.ingress.load_or_create_deployment_id",
@@ -44,7 +56,7 @@ async def test_federate_ingress_win_cache_skips_second_redis(monkeypatch: pytest
 async def test_federate_ingress_coalesces_concurrent_same_message(monkeypatch: pytest.MonkeyPatch) -> None:
     fed_ingress.reset_federate_ingress_win_cache_for_tests()
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
-    monkeypatch.setattr("pallas.core.platform.federate.ingress.is_sharding_active", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
     monkeypatch.setattr(
         "pallas.core.platform.federate.ingress.load_or_create_deployment_id",
@@ -82,10 +94,87 @@ async def test_federate_ingress_coalesces_concurrent_same_message(monkeypatch: p
 
 
 @pytest.mark.asyncio
+async def test_federate_ingress_cancelled_owner_releases_inflight_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
+    started = asyncio.Event()
+
+    async def blocked_claim(*_args, **_kwargs) -> bool:
+        started.set()
+        await asyncio.Event().wait()
+        return True
+
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", blocked_claim)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hi"),
+        raw_message="hi",
+    )
+
+    owner = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
+    await started.wait()
+    owner.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await owner
+
+    assert fed_ingress._inflight_claims == {}
+
+
+@pytest.mark.asyncio
+async def test_federate_ingress_follower_timeout_clears_inflight_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
+    monkeypatch.setattr(fed_ingress, "_INFLIGHT_CLAIM_WAIT_SEC", 0.01)
+    started = asyncio.Event()
+
+    async def blocked_claim(*_args, **_kwargs) -> bool:
+        started.set()
+        await asyncio.Event().wait()
+        return True
+
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", blocked_claim)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hi"),
+        raw_message="hi",
+    )
+
+    owner = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
+    await started.wait()
+
+    assert await fed_ingress.claim_federate_group_message_ingress(event) is False
+    assert fed_ingress._inflight_claims == {}
+
+    owner.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await owner
+
+
+@pytest.mark.asyncio
 async def test_federate_ingress_bypass_unified_skips_claim(monkeypatch: pytest.MonkeyPatch) -> None:
     fed_ingress.reset_federate_ingress_win_cache_for_tests()
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: True)
-    monkeypatch.setattr("pallas.core.platform.federate.ingress.is_sharding_active", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
     claim = AsyncMock(return_value=True)
     monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", claim)
 
@@ -110,7 +199,7 @@ async def test_federate_ingress_bypass_unified_skips_claim(monkeypatch: pytest.M
 def test_federate_ingress_cached_win_reuses_precomputed_body(monkeypatch: pytest.MonkeyPatch) -> None:
     fed_ingress.reset_federate_ingress_win_cache_for_tests()
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
-    monkeypatch.setattr("pallas.core.platform.federate.ingress.is_sharding_active", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
     monkeypatch.setattr(
         "pallas.core.platform.federate.ingress.load_or_create_deployment_id",
@@ -150,7 +239,7 @@ def test_federate_ingress_cached_win_reuses_precomputed_body(monkeypatch: pytest
 async def test_federate_ingress_claim_reuses_precomputed_body(monkeypatch: pytest.MonkeyPatch) -> None:
     fed_ingress.reset_federate_ingress_win_cache_for_tests()
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
-    monkeypatch.setattr("pallas.core.platform.federate.ingress.is_sharding_active", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
     monkeypatch.setattr(
         "pallas.core.platform.federate.ingress.load_or_create_deployment_id",

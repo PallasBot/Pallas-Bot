@@ -77,15 +77,17 @@ async def dispatch_stats_log_loop() -> None:
         considered = int(snap.get("matchers_considered") or 0)
         selected = int(snap.get("matchers_selected") or 0)
         scheduler = snap.get("conversation_scheduler") or {}
+        chat_lane = (snap.get("lanes") or {}).get("chat") or {}
         log = logger.info if dispatch_stats_tick_notable(snap, prev=prev) else logger.debug
         prev = snap
         log(
             "ingress_dispatch: stats group_messages={} cmd={} chat={} route_hit={} route_fallback={} "
             "matchers {}/{} run={} p95={}ms lane_wait_avg={} overload={} chat_drop={} chat_degraded={} "
-            "lane_busy={} sched={}/{} active={} ready={} wait_p95={}ms backpressure={} send_q={}/{} dropped={} "
+            "lane_busy={} chat_lane={}/{} sched={}/{} active={} ready={} wait_p95={}ms backpressure={} "
+            "send_q={}/{} dropped={} "
             "| hotpath route_p95={}ms kw_p95={}ms bundle_p95={}ms "
             "bundle_cache_hit={} db_find_p95={}ms persona_p95={}ms sql_total_p95={}ms snap_hit={} "
-            "learn_skip_p={} shed={} llm_retained={} llm_budget_skip={}/{}/{}/{}/{}",
+            "learn={}/{}/{}/{} work={}/{}/{} shed={} llm_retained={} llm_budget_skip={}/{}/{}/{}/{}",
             group_messages,
             int(snap.get("command_traffic") or 0),
             int(snap.get("chatter_traffic") or 0),
@@ -100,6 +102,8 @@ async def dispatch_stats_log_loop() -> None:
             int(snap.get("chatter_overload_dropped") or 0),
             int(snap.get("chatter_overload_degraded") or 0),
             int(snap.get("lane_busy") or 0),
+            chat_lane.get("in_use"),
+            chat_lane.get("limit"),
             scheduler.get("pending"),
             scheduler.get("max_pending"),
             scheduler.get("active"),
@@ -117,7 +121,13 @@ async def dispatch_stats_log_loop() -> None:
             (snap.get("hotpath") or {}).get("persona_ms_p95"),
             (snap.get("hotpath") or {}).get("sql_total_ms_p95"),
             (snap.get("hotpath") or {}).get("reply_snapshot_hit_ratio"),
-            int((snap.get("hotpath") or {}).get("learn_skipped_pressure") or 0),
+            int((snap.get("hotpath") or {}).get("learn_buffered") or 0),
+            int((snap.get("hotpath") or {}).get("learn_persisted") or 0),
+            int((snap.get("hotpath") or {}).get("learn_skipped_full") or 0),
+            int((snap.get("hotpath") or {}).get("learn_dropped_shutdown") or 0),
+            int((snap.get("work_aux") or {}).get("completed_since_start") or 0),
+            int((snap.get("work_aux") or {}).get("retried_since_start") or 0),
+            int((snap.get("work_aux") or {}).get("dead_lettered_since_start") or 0),
             int((snap.get("hotpath") or {}).get("chat_shed_sidework") or 0),
             int((snap.get("hotpath") or {}).get("llm_retained_under_shed") or 0),
             int((snap.get("hotpath") or {}).get("llm_budget_skipped_explicit") or 0),

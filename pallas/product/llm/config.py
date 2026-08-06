@@ -150,48 +150,20 @@ def _env_group_id_list(key: str) -> list[int]:
 
 def resolve_llm_repeater_mode() -> str:
     raw = _env_str("LLM_REPEATER_MODE").strip().lower()
-    aliases = {
-        "polish": "select_polish_lite",
-        "both": "select_fallback",
-    }
-    if raw in ("off", "fallback", "select", "select_fallback", "select_polish_lite"):
+    if raw == "off":
         return raw
-    if raw in aliases:
-        return aliases[raw]
-
-    fallback_raw = repo_env_raw_value("LLM_FALLBACK_ENABLED")
-    polish_raw = repo_env_raw_value("LLM_POLISH_ENABLED")
-    if fallback_raw is None and polish_raw is None:
-        return "select_polish_lite"
-
-    fallback = _env_bool("LLM_FALLBACK_ENABLED", False)
-    polish = _env_bool("LLM_POLISH_ENABLED", False)
-    if fallback and polish:
-        return "select_fallback"
-    if fallback:
-        return "fallback"
-    if polish:
-        return "select_polish_lite"
-    return "select_polish_lite"
+    return "select"
 
 
 def resolve_llm_repeater_flags() -> tuple[bool, bool, bool]:
     mode = resolve_llm_repeater_mode()
     if mode == "off":
         return False, False, False
-    if mode == "fallback":
-        return True, False, False
-    if mode == "select":
-        return False, False, True
-    if mode == "select_fallback":
-        return True, False, True
-    if mode == "select_polish_lite":
-        return False, False, True
     return False, False, True
 
 
 def resolve_llm_polish_lite_enabled() -> bool:
-    return resolve_llm_repeater_mode() == "select_polish_lite"
+    return False
 
 
 def resolve_conversation_feature_level_raw() -> str:
@@ -270,7 +242,7 @@ class LlmConfig(BaseModel):
     chat_tts_enable: bool = Field(default=False)
     drunk_tts_min_drunkenness: int = Field(default=1, ge=0, le=100)
     drunk_tts_min_chars: int = Field(default=6, ge=0, le=2000)
-    llm_repeater_mode: str = Field(default="select_polish_lite")
+    llm_repeater_mode: str = Field(default="select")
     llm_fallback_enabled: bool = Field(default=False)
     llm_polish_enabled: bool = Field(default=False)
     llm_select_enabled: bool = Field(default=True)
@@ -329,7 +301,17 @@ class LlmConfig(BaseModel):
     llm_reply_typo_rate: float = Field(default=0.01, ge=0.0, le=1.0)
     llm_reply_split_enabled: bool = Field(default=False)
     llm_reply_split_max_chars: int = Field(default=36, ge=8, le=120)
+    llm_reply_trim_terminal_period_enabled: bool = Field(default=True)
+    llm_reply_trim_terminal_period_rate: float = Field(default=0.9, ge=0.0, le=1.0)
+    llm_reply_mention_cooldown_sec: int = Field(default=900, ge=0, le=86400)
     llm_sticker_fit_enabled: bool = Field(default=False)
+    llm_chat_sticker_enabled: bool = Field(default=True)
+    llm_chat_sticker_cooldown_sec: int = Field(default=90, ge=0, le=86400)
+    llm_chat_sticker_max_per_hour: int = Field(default=8, ge=0, le=1000)
+    llm_sticker_vision_enabled: bool = Field(default=False)
+    llm_sticker_vision_candidate_count: int = Field(default=4, ge=3, le=6)
+    llm_sticker_vision_timeout_sec: float = Field(default=15.0, ge=1.0, le=30.0)
+    llm_sticker_vision_max_per_hour: int = Field(default=12, ge=0, le=1000)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
     llm_reply_style_variants: dict[str, object] = Field(default_factory=dict)
     llm_corpus_learn_guard_enabled: bool = Field(default=True)
@@ -568,7 +550,17 @@ def get_llm_config() -> LlmConfig:
             llm_reply_typo_rate=_env_float("LLM_REPLY_TYPO_RATE", 0.01),
             llm_reply_split_enabled=_env_bool("LLM_REPLY_SPLIT_ENABLED", False),
             llm_reply_split_max_chars=_env_int("LLM_REPLY_SPLIT_MAX_CHARS", 36),
+            llm_reply_trim_terminal_period_enabled=_env_bool("LLM_REPLY_TRIM_TERMINAL_PERIOD_ENABLED", True),
+            llm_reply_trim_terminal_period_rate=_env_float("LLM_REPLY_TRIM_TERMINAL_PERIOD_RATE", 0.9),
+            llm_reply_mention_cooldown_sec=_env_int("LLM_REPLY_MENTION_COOLDOWN_SEC", 900),
             llm_sticker_fit_enabled=_env_bool("LLM_STICKER_FIT_ENABLED", False),
+            llm_chat_sticker_enabled=_env_bool("LLM_CHAT_STICKER_ENABLED", True),
+            llm_chat_sticker_cooldown_sec=_env_int("LLM_CHAT_STICKER_COOLDOWN_SEC", 90),
+            llm_chat_sticker_max_per_hour=_env_int("LLM_CHAT_STICKER_MAX_PER_HOUR", 8),
+            llm_sticker_vision_enabled=_env_bool("LLM_STICKER_VISION_ENABLED", False),
+            llm_sticker_vision_candidate_count=_env_int("LLM_STICKER_VISION_CANDIDATE_COUNT", 4),
+            llm_sticker_vision_timeout_sec=_env_float("LLM_STICKER_VISION_TIMEOUT_SEC", 15.0),
+            llm_sticker_vision_max_per_hour=_env_int("LLM_STICKER_VISION_MAX_PER_HOUR", 12),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
             llm_reply_style_variants=_env_json_object("LLM_REPLY_STYLE_VARIANTS"),
             llm_corpus_learn_guard_enabled=_env_bool("LLM_CORPUS_LEARN_GUARD_ENABLED", True),

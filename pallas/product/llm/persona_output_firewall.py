@@ -194,7 +194,7 @@ def inspect_persona_output(
     ):
         quality_rule_ids.append("fact_reply_ungrounded_praise")
         rule_ids.append("fact_reply_ungrounded_praise")
-    if target == "fact" and len(plain) > 8:
+    if target == "fact" and len(plain) > 14:
         quality_rule_ids.append("fact_reply_overextended")
         rule_ids.append("fact_reply_overextended")
     if target == "fact" and _FACT_REPLY_COMPLIANCE_RE.fullmatch(plain):
@@ -285,7 +285,9 @@ def resolve_persona_output(
         return PersonaOutputDecision(action="retry", text="", trace=trace)
     fallback = str(fallback_text or "").strip()
     if not fallback and "presence_check_overexplained" in inspection.rule_ids:
-        fallback = "在。"
+        fallback = "在"
+    if not fallback and inspection.short_vent and str(reply_target or "").strip().lower() == "emotion":
+        fallback = "确实烦。"
     fallback_inspection = inspect_persona_output(
         fallback,
         self_aliases=self_aliases,
@@ -315,7 +317,7 @@ def persona_output_retry_instruction(rule_ids: tuple[str, ...] | list[str]) -> s
     if "fact_reply_ungrounded_praise" in rules:
         return "上一句无根据地夸人了。只接当前这句话，不泛夸、不鼓励。"
     if "fact_reply_overextended" in rules:
-        return "上一句接得太长。八字以内直接给结论；能否/是否类就答能、得、在、不是，不要先说行/好或补理由。"
+        return "上一句接得太长。十四字以内直接给完整短结论，不要先说行/好，不补理由、邀请或新安排。"
     if "fact_reply_compliance_template" in rules:
         return "上一句只是顺着安排的模板句。换成直接反应，不用改吧、改呗、行吧或好吧。"
     if "short_social_deferential_template" in rules:

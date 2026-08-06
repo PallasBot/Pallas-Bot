@@ -28,6 +28,18 @@ def test_extract_includes_short_from_login() -> None:
     assert "牛牛" in aliases
 
 
+def test_extract_includes_managed_display_name_alongside_login_nickname() -> None:
+    aliases = extract_self_aliases(
+        None,
+        login_nickname="QQ 原昵称",
+        managed_display_name="漂亮牛牛",
+    )
+
+    assert aliases[:2] == ["漂亮牛牛", "漂亮"]
+    assert "QQ 原昵称" in aliases
+    assert "牛牛" in aliases
+
+
 def test_exclusive_vs_generic_split() -> None:
     exclusives = extract_exclusive_self_aliases(None, login_nickname="豆包牛牛")
     generics = extract_generic_self_aliases()
@@ -35,6 +47,17 @@ def test_exclusive_vs_generic_split() -> None:
     assert "豆包" in exclusives
     assert "牛牛" not in exclusives
     assert generics == ["牛牛"]
+
+
+def test_extract_exclusive_includes_managed_display_name() -> None:
+    aliases = extract_exclusive_self_aliases(
+        None,
+        login_nickname="QQ 原昵称",
+        managed_display_name="漂亮牛牛",
+    )
+
+    assert aliases[:2] == ["漂亮牛牛", "漂亮"]
+    assert "QQ 原昵称" in aliases
 
 
 @pytest.mark.asyncio

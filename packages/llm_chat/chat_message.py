@@ -46,7 +46,6 @@ from pallas.product.llm.memory import (
 from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.persona_context import build_persona_llm_context
-from pallas.product.llm.polish_lite import submit_corpus_assist_stages
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_necessity import evaluate_reply_necessity_gate
 from pallas.product.llm.reply_variation import should_wait_for_more
@@ -59,6 +58,7 @@ from pallas.product.persona.self_identity import (
     maybe_persist_self_alias_from_utterance,
     resolve_cached_login_nickname,
     resolve_login_nickname,
+    resolve_managed_display_name,
     save_self_alias_from_teach,
 )
 
@@ -77,7 +77,12 @@ from .replies import (
 def llm_chat_rule(event: Event) -> bool:
     if not is_llm_chat_service_enabled():
         return False
-    if bool(getattr(event, "to_me", False)):
+    is_to_me = bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False))
+    plain_text = str(getattr(event, "get_plaintext", lambda: "")() or "").strip()
+    raw_message = str(getattr(event, "raw_message", "") or "").strip()
+    if not is_to_me and plain_text in {"牛牛", "帕拉斯"} and (not raw_message or raw_message == plain_text):
+        return False
+    if is_to_me:
         return True
     llm_cfg = get_llm_config()
     if not llm_cfg.llm_speak_perception_enabled:
@@ -101,6 +106,7 @@ async def _resolve_speak_aliases(bot_id: int) -> list[str]:
     login_nick = await resolve_login_nickname(int(bot_id))
     if not login_nick:
         login_nick = resolve_cached_login_nickname(int(bot_id))
+    managed_display_name = resolve_managed_display_name(int(bot_id))
     persona_dict = None
     try:
         from pallas.core.foundation.db import make_bot_config_repository
@@ -111,17 +117,11 @@ async def _resolve_speak_aliases(bot_id: int) -> list[str]:
             persona_dict = raw
     except Exception:
         persona_dict = None
-    return extract_self_aliases(persona_dict, login_nickname=login_nick or None)
-
-
-def resolve_corpus_llm_route(llm_cfg, pool: list[str], candidate: str) -> str:
-    if llm_cfg.llm_polish_lite_enabled and candidate and pool:
-        return "corpus_polish_lite"
-    if len(pool) >= 2 and llm_cfg.llm_select_enabled:
-        return "corpus_select"
-    if candidate and llm_cfg.llm_polish_enabled:
-        return "corpus_polish"
-    return "corpus_fallback"
+    return extract_self_aliases(
+        persona_dict,
+        login_nickname=login_nick or None,
+        managed_display_name=managed_display_name or None,
+    )
 
 
 async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id: int) -> str:
@@ -137,6 +137,7 @@ async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id:
 
 @llm_chat_msg.handle()
 async def handle_llm_chat(bot: Bot, event: Event):
+    route_started = time.perf_counter()
     if not is_llm_chat_service_enabled():
         return
 
@@ -157,8 +158,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
     raw_group_id = getattr(event, "group_id", None)
     group_id = int(raw_group_id) if raw_group_id is not None else None
     user_id = int(getattr(event, "user_id", 0) or 0)
-    is_to_me = bool(getattr(event, "to_me", False))
-    speak_trigger = "to_me" if is_to_me else ""
+    is_alias_hard_trigger = bool(getattr(event, "_pallas_llm_alias_hard_trigger", False))
+    is_to_me = bool(getattr(event, "to_me", False) or is_alias_hard_trigger)
+    speak_trigger = "alias" if is_alias_hard_trigger else ("to_me" if is_to_me else "")
     followup_window_sec = int(llm_cfg.llm_speak_followup_window_sec)
     followup_max_total = int(llm_cfg.llm_speak_followup_max_total_sec)
 
@@ -346,71 +348,48 @@ async def handle_llm_chat(bot: Bot, event: Event):
         if skip_metric:
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, skip_metric)
         logger.debug(
-            "llm chat reply gate skip group={} user={} reason={}",
+            "llm chat route skipped: reason=reply_gate:{} message_id={} group={} user={}",
+            gate_result.reason,
+            getattr(event, "message_id", None),
             group_id,
             user_id,
-            gate_result.reason,
         )
         return
     if should_wait_for_more(plain or msg, is_to_me=is_to_me):
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_defer")
-        logger.debug("llm chat wait-for-more group={} user={}", group_id, user_id)
+        logger.debug(
+            "llm chat route skipped: reason=wait_for_more message_id={} group={} user={}",
+            getattr(event, "message_id", None),
+            group_id,
+            user_id,
+        )
         return
     record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_proceed")
 
-    if llm_cfg.llm_select_enabled and group_id is not None and isinstance(event, GroupMessageEvent):
-        from packages.repeater.model import Chat
-
-        chat = Chat(event)
-        try:
-            from packages.repeater.bundle_lookup import find_reply_bundle_bounded
-
-            bundle = await find_reply_bundle_bounded(chat)
-        except Exception:
-            bundle = None
-        if bundle is not None:
-            pool = [item for item in bundle.message_pool if item and "[CQ:" not in item]
-            candidate = next((item for item in bundle.answer_list if item and "[CQ:" not in item), "")
-            from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
-
-            # 任一工具已命中时不要被语料 polish 抢走（硬域 / 软召回 / 盘点通用）
-            tool_preview = assemble_tool_bundle(task="llm_chat", user_text=plain or msg)
-            prefer_tools = bool(tool_preview.get("tools_enabled")) and bool(tool_preview.get("tool_schemas"))
-            if (
-                not prefer_tools
-                and (pool or candidate)
-                and await submit_corpus_assist_stages(
-                    event,
-                    user_text=plain or msg,
-                    candidates=pool,
-                    candidate_text=candidate,
-                    profile="direct_chat",
-                    capabilities=resolve_repeater_capabilities(llm_cfg),
-                )
-            ):
-                gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
-                if gate is None:
-                    await refresh_llm_chat_cooldown(event, default_cd_sec=llm_cfg.llm_chat_cooldown_sec)
-                return
-            corpus_fallback = candidate or (pool[0] if pool else "")
-            llm_route = "plain_llm_chat" if prefer_tools else resolve_corpus_llm_route(llm_cfg, pool, candidate)
-        else:
-            corpus_fallback = ""
-            llm_route = "plain_llm_chat"
-    else:
-        corpus_fallback = ""
-        llm_route = "plain_llm_chat"
+    corpus_fallback = ""
+    llm_route = "plain_llm_chat"
 
     gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
     if gate is not None:
         if gate == "cooldown" and llm_cfg.llm_chat_queue_merge:
             stash_chat_during_cooldown(int(bot.self_id), group_id, user_id, msg, cfg=llm_cfg)
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_defer")
-            logger.debug("llm chat queued during cooldown group={} user={}", group_id, user_id)
+            logger.debug(
+                "llm chat route deferred: reason=cooldown message_id={} group={} user={}",
+                getattr(event, "message_id", None),
+                group_id,
+                user_id,
+            )
             return
         if gate == "cooldown":
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_skip")
-        logger.debug("llm chat gated: reason={} group={} user={}", gate, group_id, user_id)
+        logger.debug(
+            "llm chat route skipped: reason={} message_id={} group={} user={}",
+            gate,
+            getattr(event, "message_id", None),
+            group_id,
+            user_id,
+        )
         return
 
     merge_result = merge_queued_chat(int(bot.self_id), group_id, user_id, msg, cfg=llm_cfg)
@@ -418,7 +397,11 @@ async def handle_llm_chat(bot: Bot, event: Event):
     if merge_result.merged:
         logger.debug("llm chat merged queued message group={} user={}", group_id, user_id)
 
+    pre_submit_stage_durations_ms = {
+        "routing_and_persona": int((time.perf_counter() - route_started) * 1000),
+    }
     request_id = str(ULID())
+    history_started = time.perf_counter()
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
     recent_reply_texts: list[str] = []
     if group_id is not None:
@@ -432,6 +415,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
             )
         except Exception:
             recent_reply_texts = []
+    pre_submit_stage_durations_ms["history"] = int((time.perf_counter() - history_started) * 1000)
+    context_started = time.perf_counter()
     focus_text = plain or msg
     recent_plain = [str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]]
     has_multi_party = (
@@ -484,10 +469,11 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "detail": necessity.detail,
             "speak_trigger": speak_trigger or "to_me",
         })
-    if necessity.decision == "skip" and not required_tool_intent:
+    if necessity.decision == "skip" and not required_tool_intent and not is_to_me:
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_necessity_skip")
         logger.debug(
-            "llm chat reply necessity skip group={} user={} score={} detail={}",
+            "llm chat route skipped: reason=reply_necessity message_id={} group={} user={} score={} detail={}",
+            getattr(event, "message_id", None),
             group_id,
             user_id,
             necessity.score,
@@ -503,11 +489,15 @@ async def handle_llm_chat(bot: Bot, event: Event):
         recent_texts=recent_plain,
         has_multi_party_overlap=has_multi_party,
     )
+    pre_submit_context_durations_ms = {
+        "before_turn_decision": int((time.perf_counter() - context_started) * 1000),
+    }
+    turn_decision_started = time.perf_counter()
     current_turn_decision = await decide_current_turn_with_model(
         CurrentTurnDecisionInput(
             text=focus_text,
             is_to_me=is_to_me,
-            is_explicitly_addressed=speak_trigger in {"mention", "followup"},
+            is_explicitly_addressed=speak_trigger in {"alias", "mention", "followup"},
             tools_permitted=bool(tool_meta.get("tools_enabled")),
             required_tool_intent=required_tool_intent,
             recent_bot_reply_count=min(6, recent_bot_reply_count),
@@ -515,6 +505,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         ),
         enabled=bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)),
     )
+    pre_submit_context_durations_ms["turn_decision"] = int((time.perf_counter() - turn_decision_started) * 1000)
     if group_id is not None:
         from packages.repeater.opportunity_trace import append_conversation_decision_trace
 
@@ -525,6 +516,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
             **current_turn_decision.trace.model_dump(mode="json"),
         })
     if current_turn_decision.action is CurrentTurnAction.PASS:
+        logger.debug(
+            "llm chat route skipped: reason=current_turn_pass message_id={} group={} user={}",
+            getattr(event, "message_id", None),
+            group_id,
+            user_id,
+        )
         return
     reply_target = resolve_reply_target(
         focus_text,
@@ -539,6 +536,15 @@ async def handle_llm_chat(bot: Bot, event: Event):
         focus_text,
         current_turn_decision.social_action,
     )
+    from pallas.product.llm.repeater_semantic_style import resolve_cached_semantic_style
+
+    semantic_style = resolve_cached_semantic_style(
+        int(bot.self_id),
+        group_id,
+        "group_chat",
+        request_id=request_id,
+    )
+    direct_context_started = time.perf_counter()
     assembled_context = await assemble_direct_chat_context(
         system_prompt,
         bot_id=int(bot.self_id),
@@ -547,7 +553,12 @@ async def handle_llm_chat(bot: Bot, event: Event):
         query_text=focus_text,
         cfg=llm_cfg,
         allow_persistent_memory=include_session_history,
+        allow_expression_reference=not bool(semantic_style.prompt_block),
     )
+    pre_submit_context_durations_ms["direct_context"] = int((time.perf_counter() - direct_context_started) * 1000)
+    for stage, duration in getattr(assembled_context, "stage_durations_ms", {}).items():
+        if isinstance(duration, (int, float)):
+            pre_submit_context_durations_ms[str(stage)] = max(0, int(duration))
     system_prompt = assembled_context.system_prompt
     knowledge_retrieval_trace = assembled_context.knowledge_retrieval_trace
     hybrid_retrieval_trace = assembled_context.hybrid_retrieval_trace
@@ -582,7 +593,11 @@ async def handle_llm_chat(bot: Bot, event: Event):
     behavior_hint = ""
     if can_read_behavioral_learning(llm_cfg):
         behavior_hint = build_behavior_hint_text(scene=behavior_scene, actions=behavior_actions)
+    last_assistant_reply_started = time.perf_counter()
     last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
+    pre_submit_context_durations_ms["last_assistant_reply"] = int(
+        (time.perf_counter() - last_assistant_reply_started) * 1000
+    )
     persona_dict = None
     if persona_bundle is not None:
         try:
@@ -591,8 +606,14 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 persona_dict = persona_raw
         except Exception:
             persona_dict = None
+    login_nickname_started = time.perf_counter()
     login_nick = await resolve_login_nickname(int(bot.self_id))
-    self_aliases = extract_self_aliases(persona_dict, login_nickname=login_nick or None)
+    pre_submit_context_durations_ms["login_nickname"] = int((time.perf_counter() - login_nickname_started) * 1000)
+    self_aliases = extract_self_aliases(
+        persona_dict,
+        login_nickname=login_nick or None,
+        managed_display_name=resolve_managed_display_name(int(bot.self_id)) or None,
+    )
     llm_user_text = (
         normalize_llm_chat_user_text(
             msg,
@@ -605,6 +626,8 @@ async def handle_llm_chat(bot: Bot, event: Event):
     from pallas.product.llm.tools.command_invoke import serialize_event_source_segments
 
     command_source_segments = serialize_event_source_segments(event, bot_id=int(bot.self_id))
+    pre_submit_stage_durations_ms["context"] = int((time.perf_counter() - context_started) * 1000)
+    task_registration_started = time.perf_counter()
     await TaskManager.add_task(
         request_id,
         {
@@ -618,6 +641,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "agent_loop_enabled": bool(tool_meta.get("tools_enabled")),
             "current_turn_action": current_turn_decision.action,
             "current_turn_trace": current_turn_decision.trace.model_dump(mode="json"),
+            "reply_delivery_style": getattr(current_turn_decision, "delivery_style", "PLAIN"),
+            "message_id": getattr(event, "message_id", None),
+            "has_multi_party_overlap": has_multi_party,
             "reply_target": reply_target,
             "agent_stage_plan": list(direct_decision.agent_stages),
             "tool_schema_count": len(tool_meta.get("tool_schemas") or []),
@@ -634,7 +660,9 @@ async def handle_llm_chat(bot: Bot, event: Event):
             "command_source_segments": command_source_segments,
         },
     )
+    pre_submit_stage_durations_ms["task_registration"] = int((time.perf_counter() - task_registration_started) * 1000)
 
+    submit_started = time.perf_counter()
     result = await submit_chat_task(
         ChatSubmitRequest(
             request_id=request_id,
@@ -660,11 +688,17 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 "command_source_segments": command_source_segments,
                 "social_action": current_turn_decision.social_action,
                 "reply_target": reply_target,
+                "pre_submit_duration_ms": int((time.perf_counter() - route_started) * 1000),
+                "pre_submit_stage_durations_ms": pre_submit_stage_durations_ms,
+                "pre_submit_context_durations_ms": pre_submit_context_durations_ms,
+                "semantic_style_prompt_block": semantic_style.prompt_block or None,
+                "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
             },
             tool_metadata=tool_meta,
         ),
         cfg=llm_cfg,
     )
+    pre_submit_stage_durations_ms["submit"] = int((time.perf_counter() - submit_started) * 1000)
     if not result.ok:
         await TaskManager.remove_task(request_id)
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "submit_skip")
@@ -674,8 +708,10 @@ async def handle_llm_chat(bot: Bot, event: Event):
         if hint:
             await llm_chat_msg.send(hint)
         logger.info(
-            "llm chat submit skipped: status={} group={} user={}",
+            "llm chat submit skipped: status={} request_id={} message_id={} group={} user={}",
             result.status,
+            request_id,
+            getattr(event, "message_id", None),
             group_id,
             user_id,
         )

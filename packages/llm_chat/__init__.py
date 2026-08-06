@@ -11,12 +11,17 @@ from pallas.api.metadata import (
     usage_line,
 )
 from pallas.product.llm.runtime_api import knowledge_source_row, llm_command_tool_row
+from pallas.product.llm.sticker_followup import bind_outgoing_sticker_followup
+from pallas.product.llm.sticker_vision import bind_sticker_vision_delivery_dispatcher
 
 from . import admin_commands as _admin_commands  # noqa: F401
 from . import chat_message as _chat_message  # noqa: F401
 from . import commands as _commands  # noqa: F401
 from . import drunk_chat as _drunk_chat  # noqa: F401
 from . import status_commands as _status_commands  # noqa: F401
+
+bind_sticker_vision_delivery_dispatcher()
+bind_outgoing_sticker_followup()
 
 __plugin_meta__ = PluginMetadata(
     name="智能对话",
@@ -42,6 +47,7 @@ __plugin_meta__ = PluginMetadata(
             command_perm_row("llm_chat.switch_model", "换模型", "superuser"),
             command_perm_row("llm_chat.unload_model", "卸模型", "superuser"),
             command_perm_row("llm_chat.status", "LLM 状态", "superuser"),
+            command_perm_row("llm_chat.sticker_test", "测试缓存/LLM 表情", "superuser"),
         ),
         "command_limits": command_limit_list(
             command_limit_row("llm_chat.chat", 3),
@@ -49,6 +55,7 @@ __plugin_meta__ = PluginMetadata(
             command_limit_row("llm_chat.status", 5),
             command_limit_row("llm_chat.switch_model", 10),
             command_limit_row("llm_chat.unload_model", 10),
+            command_limit_row("llm_chat.sticker_test", 5),
         ),
         "llm_tools": [
             llm_command_tool_row(
@@ -140,6 +147,26 @@ __plugin_meta__ = PluginMetadata(
                 "command_permission": "llm_chat.status",
                 "brief_des": "查看聊天服务状态。",
                 "detail_des": "私聊查看智能对话是否可用，以及当前大致状态。",
+            },
+            {
+                "func": "测试缓存表情",
+                "trigger_method": "on_cmd",
+                "trigger_scene": SCENE_GROUP,
+                "trigger_condition": "牛牛测试缓存表情",
+                "help_audience": "superuser",
+                "command_permission": "llm_chat.sticker_test",
+                "brief_des": "发送一张缓存表情图验证链路。",
+                "detail_des": "仅超级用户可用；无可用缓存图片时不会发送。",
+            },
+            {
+                "func": "测试 LLM 表情",
+                "trigger_method": "on_cmd",
+                "trigger_scene": SCENE_GROUP,
+                "trigger_condition": "牛牛测试LLM表情 + 待匹配文本",
+                "help_audience": "superuser",
+                "command_permission": "llm_chat.sticker_test",
+                "brief_des": "验证 VLM 选择与表情派发。",
+                "detail_des": "仅超级用户可用；命令后需附上用于召回候选的文本。",
             },
             {
                 "func": "换模型",

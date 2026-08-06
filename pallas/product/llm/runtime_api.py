@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any
 
 from pallas.product.llm.behavior import classify_behavior_scene
 from pallas.product.llm.config import get_llm_config
-from pallas.product.llm.fallback import maybe_submit_repeater_llm_fallback
 from pallas.product.llm.kernel import (
     CandidateSource,
     ConversationAction,
@@ -52,8 +51,8 @@ from pallas.product.llm.kernel import (
     runtime_state_summary_metadata,
 )
 from pallas.product.llm.knowledge.declare import knowledge_source_row
-from pallas.product.llm.polish_lite import submit_corpus_assist_stages
 from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
+from pallas.product.llm.select import submit_repeater_corpus_select
 from pallas.product.llm.status import build_llm_status_text
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
 from pallas.product.llm.tools.declare import llm_command_tool_row
@@ -102,7 +101,6 @@ __all__ = [
     "knowledge_source_row",
     "list_recent_conversation_traces",
     "llm_command_tool_row",
-    "maybe_submit_repeater_llm_fallback",
     "normalize_conversation_mode",
     "plan_direct_chat_stages",
     "plan_generation_stages",
@@ -113,7 +111,7 @@ __all__ = [
     "resolve_memory_read_policy",
     "resolve_repeater_capabilities",
     "runtime_state_summary_metadata",
-    "submit_corpus_assist_stages",
+    "submit_repeater_corpus_select",
 ]
 
 _LAZY_MODULES = {

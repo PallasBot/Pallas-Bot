@@ -237,6 +237,74 @@ async def test_complete_chat_message_parses_openai_response(monkeypatch: pytest.
 
 
 @pytest.mark.asyncio
+async def test_complete_chat_message_downgrades_incompatible_required_tool_choice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm.provider_client import clear_tool_choice_compatibility_cache
+
+    clear_tool_choice_compatibility_cache()
+    payloads: list[dict[str, Any]] = []
+
+    class FakeResponse:
+        def __init__(self, status_code: int) -> None:
+            self.status_code = status_code
+            self.text = (
+                '{"error":{"message":'
+                '"The tool_choice parameter does not support being set to required in thinking mode"}}'
+                if status_code == 400
+                else ""
+            )
+
+        def json(self) -> dict[str, Any]:
+            return {"choices": [{"message": {"role": "assistant", "content": "你好"}}]}
+
+    class FakeClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        async def __aenter__(self) -> FakeClient:
+            return self
+
+        async def __aexit__(self, *args: Any) -> None:
+            return None
+
+        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None) -> FakeResponse:
+            assert json is not None
+            payloads.append(json)
+            return FakeResponse(400 if len(payloads) == 1 else 200)
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.httpx.AsyncClient", FakeClient)
+    cfg = LlmConfig(llm_runtime="bot_kernel", chat_timeout_sec=5.0)
+    tools = [{"type": "function", "function": {"name": "demo", "parameters": {"type": "object"}}}]
+
+    first = await complete_chat_message(
+        [{"role": "user", "content": "hi"}],
+        model="demo",
+        base_url="http://example.test/v1",
+        api_key="sk-test",
+        provider_id="demo-provider",
+        options={"tool_choice": "required"},
+        tools=tools,
+        cfg=cfg,
+    )
+    assert first["content"] == "你好"
+    assert [payload["tool_choice"] for payload in payloads] == ["required", "auto"]
+
+    second = await complete_chat_message(
+        [{"role": "user", "content": "again"}],
+        model="demo",
+        base_url="http://example.test/v1",
+        api_key="sk-test",
+        provider_id="demo-provider",
+        options={"tool_choice": "required"},
+        tools=tools,
+        cfg=cfg,
+    )
+    assert second["content"] == "你好"
+    assert payloads[-1]["tool_choice"] == "auto"
+
+
+@pytest.mark.asyncio
 async def test_complete_chat_message_falls_back_to_next_provider(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
@@ -454,3 +522,39 @@ async def test_submit_chat_task_kernel_schedules_deliver(monkeypatch: pytest.Mon
         await asyncio.sleep(0.02)
     assert delivered == [("req-kernel-1", "success", "内核回复")]
     clear_llm_config_cache()
+
+
+@pytest.mark.asyncio
+async def test_kernel_delivers_approved_semantic_style_direct_candidate_without_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import kernel_runner
+    from pallas.product.llm.repeater_semantic_style import clear_semantic_style_direct_quota_for_tests
+
+    delivered: list[tuple[str, str, str]] = []
+    clear_semantic_style_direct_quota_for_tests()
+
+    async def provider_must_not_run(**_kwargs):
+        raise AssertionError("direct candidate must bypass provider")
+
+    async def fake_deliver(task_id, *, status, text=None, **_kwargs):
+        delivered.append((task_id, status, text or ""))
+        return {"message": "ok"}
+
+    monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", provider_must_not_run)
+    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", fake_deliver)
+    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
+
+    await kernel_runner.run_kernel_chat_job(
+        "direct-candidate-task",
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "又炸了"}],
+        metadata={
+            "bot_id": 99,
+            "group_id": 42,
+            "semantic_style_direct_candidate": "没救了",
+        },
+        cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
+    )
+
+    assert delivered == [("direct-candidate-task", "success", "没救了")]

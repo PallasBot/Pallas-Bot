@@ -16,4 +16,19 @@ async def handle_repeater_learn(payload: dict[str, Any]) -> None:
 
 
 def repeater_work_handlers():
-    return {"repeater.learn": handle_repeater_learn}
+    from pallas.core.shared.utils.media_cache import handle_image_cache_capture
+    from pallas.product.llm.repeater_semantic_style import (
+        handle_repeater_semantic_style,
+        handle_repeater_semantic_style_backfill,
+        handle_repeater_semantic_style_visual,
+    )
+    from pallas.product.llm.sticker_vision import handle_sticker_vision_select
+
+    return {
+        "repeater.learn": handle_repeater_learn,
+        "repeater.semantic_style": handle_repeater_semantic_style,
+        "repeater.semantic_style.backfill": handle_repeater_semantic_style_backfill,
+        "repeater.semantic_style.visual": handle_repeater_semantic_style_visual,
+        "image_cache.capture": handle_image_cache_capture,
+        "sticker_vision.select": handle_sticker_vision_select,
+    }

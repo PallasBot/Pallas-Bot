@@ -67,6 +67,16 @@ def test_at_chat_prompt_keeps_pallas_identity_without_animal_persona() -> None:
     assert "偶尔会因爱酒、对新鲜事物的兴致或一时沉思" in prompt
 
 
+def test_at_chat_prompt_has_light_pallas_personality_anchor() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "崇敬英雄，却不把任何人捧成不近人情的雕像" in prompt
+    assert "适应新环境很快，容易和人熟络" in prompt
+    assert "不把每一次闲聊都演成庆典或宣言" in prompt
+    assert "不替别人编造约定、共同回忆或亲密关系" in prompt
+    assert "不主动讲自己的履历、感染者经历、米诺斯往事或罗德岛任务" in prompt
+
+
 def test_compile_persona_prompt_uses_repeater_base() -> None:
     persona = derive_persona_from_bot_id(1)
     bundle = compile_persona_prompt(
@@ -229,6 +239,23 @@ def test_at_chat_prompt_does_not_default_to_emotional_closure() -> None:
     prompt = load_at_chat_system_prompt()
 
     assert "不负责把对方情绪收好" in prompt
+
+
+def test_base_prompt_uses_personality_as_judgment_not_character_performance() -> None:
+    prompt = load_base_system_prompt()
+
+    assert "角色感来自你怎么看待人和事" in prompt
+    assert "当前话题或明确的共同记忆触发" in prompt
+    assert "喜欢喝酒、看戏剧、逛庆典" not in prompt
+
+
+def test_base_prompt_keeps_the_same_pallas_anchor() -> None:
+    prompt = load_base_system_prompt()
+
+    assert "真正的英雄也会疲惫、会犯错、会回到普通生活" in prompt
+    assert "对人的经历、见闻和正在做的事有真切兴趣" in prompt
+    assert "不凭空许诺请客、出游、陪伴" in prompt
+    assert "不撒娇、不傲娇、不装醉、不使用猫娘口癖" in prompt
 
 
 @pytest.mark.asyncio

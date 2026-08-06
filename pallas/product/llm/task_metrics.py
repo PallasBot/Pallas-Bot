@@ -17,6 +17,7 @@ _TASKS = frozenset({
     "repeater_fallback",
     "repeater_select",
     "affect_refine",
+    "sticker_vision",
 })
 _EVENTS = frozenset({
     "submit_ok",

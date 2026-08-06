@@ -42,12 +42,16 @@ async def run_work_consumer(worker: WorkJobWorker) -> None:
             await asyncio.sleep(0.2)
 
 
-async def run_work_status_publisher(store, *, consumers: int) -> None:
+async def run_work_status_publisher(store, *, consumers: int, metrics) -> None:
     from .observability import write_work_aux_status
 
     while True:
         try:
-            write_work_aux_status(consumers=consumers, stats=await store.stats())
+            from pallas.core.platform.federate.ingress_audit import federate_ingress_audit_summary_sync
+
+            runtime_metrics = metrics.snapshot()
+            runtime_metrics.update(await asyncio.to_thread(federate_ingress_audit_summary_sync))
+            write_work_aux_status(consumers=consumers, stats=await store.stats(), runtime_metrics=runtime_metrics)
         except Exception as exc:
             logger.warning("work aux status publish failed: {}", exc)
         await asyncio.sleep(5.0)
@@ -61,12 +65,21 @@ async def run_work_service(handlers: dict[str, WorkJobHandler]) -> None:
     concurrency = work_aux_concurrency()
     owner_prefix = f"{socket.gethostname()}:{os.getpid()}"
     batch_sizes = work_aux_batch_sizes(concurrency)
+    from .observability import WorkAuxRuntimeMetrics
+
+    metrics = WorkAuxRuntimeMetrics()
     workers = [
-        WorkJobWorker(store=store, owner=f"{owner_prefix}:{index}", handlers=handlers, batch_size=batch_size)
+        WorkJobWorker(
+            store=store,
+            owner=f"{owner_prefix}:{index}",
+            handlers=handlers,
+            batch_size=batch_size,
+            metrics=metrics,
+        )
         for index, batch_size in enumerate(batch_sizes)
     ]
     logger.info("work aux started handlers={} consumers={}", sorted(handlers), concurrency)
     await asyncio.gather(
         *(run_work_consumer(worker) for worker in workers),
-        run_work_status_publisher(store, consumers=concurrency),
+        run_work_status_publisher(store, consumers=concurrency, metrics=metrics),
     )

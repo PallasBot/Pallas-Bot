@@ -165,7 +165,12 @@ def _try_finalize_order(session_key: str, self_bot_id: int) -> dict[str, Any] | 
     return _mutate_session(session_key, finalize)
 
 
-def _mark_bot_count_reported_and_claim_completion(session_key: str, bot_id: int) -> bool:
+def _mark_bot_count_reported_and_claim_completion(
+    session_key: str,
+    bot_id: int,
+    *,
+    allow_timeout: bool = True,
+) -> bool:
     claimed = False
 
     def mark_reported(data: dict[str, Any]) -> None:
@@ -185,7 +190,7 @@ def _mark_bot_count_reported_and_claim_completion(session_key: str, bot_id: int)
         if data.get("completion_claimed_by") is not None:
             return
         report_until = float(data.get("report_until") or 0)
-        if order_ids <= reported or time.time() >= report_until:
+        if order_ids <= reported or (allow_timeout and time.time() >= report_until):
             data["completion_claimed_by"] = bot_id
             claimed = True
 
@@ -200,6 +205,7 @@ async def mark_shard_bot_count_reported_and_claim_completion(
     plaintext: str,
     message_time: int,
     bot_id: int,
+    allow_timeout: bool = True,
 ) -> bool:
     """登记成功报数，并由首个完成者负责发送收尾提示。"""
     claim_key = cross_bot_group_message_key(
@@ -211,7 +217,12 @@ async def mark_shard_bot_count_reported_and_claim_completion(
         include_message_time=True,
     )
     session_key = _session_key(group_id, claim_key)
-    return await asyncio.to_thread(_mark_bot_count_reported_and_claim_completion, session_key, bot_id)
+    return await asyncio.to_thread(
+        _mark_bot_count_reported_and_claim_completion,
+        session_key,
+        bot_id,
+        allow_timeout=allow_timeout,
+    )
 
 
 async def get_shard_bot_count_order(
@@ -249,8 +260,13 @@ async def wait_shard_bot_count_turn(
     plaintext: str,
     message_time: int,
     bot_id: int,
+    allow_timeout: bool = True,
 ) -> bool:
-    """等待报数顺序中的前序账号确认，超时后让调用端降级继续。"""
+    """等待报数顺序中的前序账号确认，超时后让调用端降级继续。
+
+    ``allow_timeout`` 为旧版 bot-status 插件的调用兼容参数；本函数始终以
+    ``False`` 表示未等到轮次，由调用方决定是否降级继续。
+    """
     claim_key = cross_bot_group_message_key(
         group_id,
         user_id,

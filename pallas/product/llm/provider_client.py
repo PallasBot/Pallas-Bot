@@ -14,6 +14,8 @@ from pallas.product.llm.config import LlmConfig, get_llm_config
 ANTHROPIC_VERSION = "2023-06-01"
 ANTHROPIC_DEFAULT_MAX_TOKENS = 8192
 
+_required_tool_choice_incompatible: set[tuple[str, str]] = set()
+
 
 class LlmProviderError(Exception):
     def __init__(self, message: str, *, status: int | None = None) -> None:
@@ -27,6 +29,24 @@ API_KEY_FAILOVER_STATUSES = frozenset({401, 403, 429, 502, 503})
 
 def should_failover_api_key(exc: BaseException) -> bool:
     return isinstance(exc, LlmProviderError) and exc.status in API_KEY_FAILOVER_STATUSES
+
+
+def clear_tool_choice_compatibility_cache() -> None:
+    _required_tool_choice_incompatible.clear()
+
+
+def _tool_choice_compatibility_key(provider_id: str, base_url: str, model: str) -> tuple[str, str]:
+    provider = str(provider_id or "").strip() or host_from_url(base_url)
+    return provider.lower(), str(model or "").strip().lower()
+
+
+def _required_tool_choice_is_incompatible(exc: BaseException) -> bool:
+    if not isinstance(exc, LlmProviderError) or exc.status != 400:
+        return False
+    detail = str(exc).lower()
+    return "tool_choice" in detail and any(
+        marker in detail for marker in ("does not support", "not support", "unsupported", "invalid_parameter")
+    )
 
 
 def mask_api_key_hint(key: str) -> str:
@@ -379,6 +399,7 @@ async def complete_chat_message(
     api_key: str | None = None,
     task: str = "llm_chat",
     request_method: str | None = None,
+    provider_id: str | None = None,
 ) -> dict[str, Any]:
     c = cfg or get_llm_config()
     explicit_base = str(base_url or "").strip()
@@ -400,7 +421,7 @@ async def complete_chat_message(
             timeout_sec=float(c.chat_timeout_sec),
             request_method=method,
             task=task,
-            provider_id="",
+            provider_id=str(provider_id or ""),
         )
 
     from pallas.product.llm.providers_store import resolve_endpoint_candidates_for_task
@@ -794,46 +815,87 @@ async def _post_provider_chat(
 ) -> dict[str, Any]:
     import time
 
-    started = time.monotonic()
-    try:
+    def with_provider_trace(
+        result: dict[str, Any],
+        *,
+        latency_ms: int,
+        retried_tool_choice: bool = False,
+    ) -> dict[str, Any]:
+        traced = dict(result)
+        traced["_provider_trace"] = {
+            "provider": provider_id or host_from_url(base_url),
+            "model": model,
+            "request_method": resolve_request_method(request_method, base_url),
+            "latency_ms": latency_ms,
+            "ok": True,
+            "retried_tool_choice": retried_tool_choice,
+        }
+        return traced
+
+    use_options = dict(options)
+    cache_key = _tool_choice_compatibility_key(provider_id, base_url, model)
+    requested_tool_choice = str(use_options.get("tool_choice") or "auto").strip().lower()
+    if tools and requested_tool_choice == "required" and cache_key in _required_tool_choice_incompatible:
+        use_options["tool_choice"] = "auto"
+
+    async def request(use_options: dict[str, Any]) -> dict[str, Any]:
         method = resolve_request_method(request_method, base_url)
         if method == "responses":
-            result = await _post_responses(
+            return await _post_responses(
                 messages,
                 base_url=base_url,
                 api_key=api_key,
                 model=model,
-                options=options,
+                options=use_options,
                 tools=tools,
                 timeout_sec=timeout_sec,
                 task=task,
                 provider_id=provider_id,
             )
-        elif method == "anthropic_messages":
-            result = await _post_anthropic_messages(
+        if method == "anthropic_messages":
+            return await _post_anthropic_messages(
                 messages,
                 base_url=base_url,
                 api_key=api_key,
                 model=model,
-                options=options,
+                options=use_options,
                 tools=tools,
                 timeout_sec=timeout_sec,
                 task=task,
                 provider_id=provider_id,
             )
-        else:
-            result = await _post_chat_completions(
-                messages,
-                base_url=base_url,
-                api_key=api_key,
-                model=model,
-                options=options,
-                tools=tools,
-                timeout_sec=timeout_sec,
-                task=task,
-                provider_id=provider_id,
-            )
+        return await _post_chat_completions(
+            messages,
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            options=use_options,
+            tools=tools,
+            timeout_sec=timeout_sec,
+            task=task,
+            provider_id=provider_id,
+        )
+
+    started = time.monotonic()
+    try:
+        result = await request(use_options)
     except Exception as exc:
+        if tools and requested_tool_choice == "required" and _required_tool_choice_is_incompatible(exc):
+            _required_tool_choice_incompatible.add(cache_key)
+            retry_options = {**use_options, "tool_choice": "auto"}
+            try:
+                result = await request(retry_options)
+            except Exception:
+                pass
+            else:
+                latency_ms = int((time.monotonic() - started) * 1000)
+                try:
+                    from pallas.product.llm.provider_request_metrics import record_provider_request
+
+                    record_provider_request(provider=provider_id, model=model, ok=True, latency_ms=latency_ms)
+                except Exception:
+                    pass
+                return with_provider_trace(result, latency_ms=latency_ms, retried_tool_choice=True)
         latency_ms = int((time.monotonic() - started) * 1000)
         fail_cls = "provider_error"
         if isinstance(exc, LlmProviderError) and exc.status is not None:
@@ -866,7 +928,7 @@ async def _post_provider_chat(
             )
         except Exception:
             pass
-        return result
+        return with_provider_trace(result, latency_ms=latency_ms)
 
 
 async def _post_anthropic_messages(
@@ -896,10 +958,7 @@ async def _post_anthropic_messages(
             response.status_code,
             (response.text or "")[:500],
         )
-        raise LlmProviderError(
-            f"provider status {response.status_code}",
-            status=response.status_code,
-        )
+        raise_provider_http_error(response)
     data = response.json()
     if not isinstance(data, dict):
         raise LlmProviderError("invalid anthropic messages payload")
@@ -995,10 +1054,7 @@ async def _post_chat_completions(
             response.status_code,
             (response.text or "")[:500],
         )
-        raise LlmProviderError(
-            f"provider status {response.status_code}",
-            status=response.status_code,
-        )
+        raise_provider_http_error(response)
 
     data = response.json()
     if isinstance(data, dict):

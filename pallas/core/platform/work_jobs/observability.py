@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from pallas.core.foundation.paths import DATA_ROOT
@@ -11,8 +12,46 @@ from pallas.core.foundation.paths import DATA_ROOT
 WORK_AUX_STATUS_PATH = DATA_ROOT / "pallas_work" / "run" / "status.json"
 
 
-def write_work_aux_status(*, consumers: int, stats: dict[str, float | int | None]) -> None:
-    payload = {"updated_at": time.time(), "consumers": max(0, int(consumers)), **stats}
+@dataclass(slots=True)
+class WorkAuxRuntimeMetrics:
+    completed_since_start: int = 0
+    failed_since_start: int = 0
+    retried_since_start: int = 0
+    dead_lettered_since_start: int = 0
+
+    def record_completed(self, count: int = 1) -> None:
+        self.completed_since_start += max(0, int(count))
+
+    def record_failed(self) -> None:
+        self.failed_since_start += 1
+
+    def record_retried(self) -> None:
+        self.retried_since_start += 1
+
+    def record_dead_lettered(self) -> None:
+        self.dead_lettered_since_start += 1
+
+    def snapshot(self) -> dict[str, int]:
+        return {
+            "completed_since_start": self.completed_since_start,
+            "failed_since_start": self.failed_since_start,
+            "retried_since_start": self.retried_since_start,
+            "dead_lettered_since_start": self.dead_lettered_since_start,
+        }
+
+
+def write_work_aux_status(
+    *,
+    consumers: int,
+    stats: dict[str, float | int | None],
+    runtime_metrics: dict[str, int] | None = None,
+) -> None:
+    payload = {
+        "updated_at": time.time(),
+        "consumers": max(0, int(consumers)),
+        **stats,
+        **(runtime_metrics or {}),
+    }
     path = WORK_AUX_STATUS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
@@ -36,4 +75,8 @@ def work_aux_status() -> dict[str, Any]:
         "dead_lettered": int(raw.get("dead_lettered") or 0),
         "oldest_pending_age_sec": raw.get("oldest_pending_age_sec"),
         "max_attempts": int(raw.get("max_attempts") or 0),
+        "completed_since_start": int(raw.get("completed_since_start") or 0),
+        "failed_since_start": int(raw.get("failed_since_start") or 0),
+        "retried_since_start": int(raw.get("retried_since_start") or 0),
+        "dead_lettered_since_start": int(raw.get("dead_lettered_since_start") or 0),
     }

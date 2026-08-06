@@ -37,6 +37,20 @@ def test_lane_wait_and_alerts() -> None:
     assert snap["lane_wait_ms_avg"] == 120.0
 
 
+def test_dispatch_metrics_include_lane_capacity_snapshot() -> None:
+    payload = dispatch_metrics.build_dispatch_metrics_payload(
+        day_key="2026-08-06",
+        counters={},
+        ingress_duration_ms_p95=None,
+        send_queue={},
+        pool_budget={},
+        pg_util=None,
+        lanes={"chat": {"limit": 8, "in_use": 6}},
+    )
+
+    assert payload["lanes"] == {"chat": {"limit": 8, "in_use": 6}}
+
+
 def test_chatter_overload_degraded_counter() -> None:
     dispatch_metrics.clear_dispatch_metrics_for_tests()
     dispatch_metrics.record_chatter_overload_degraded()

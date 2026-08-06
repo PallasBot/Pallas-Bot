@@ -128,12 +128,32 @@ class IngressDispatchRuntimeConfig(BaseModel):
         ),
     )
     conversation_scheduler_concurrency: int = Field(
-        default=6,
+        default=8,
         ge=1,
         le=64,
         description=field_help(
             "同时处理多少个群会话",
             "填正整数；默认按 PostgreSQL 连接池容量估算",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
+    conversation_scheduler_adaptive_max: int = Field(
+        default=12,
+        ge=1,
+        le=64,
+        description=field_help(
+            "积压时群消息调度最多能临时扩到多少并发",
+            "填正整数，默认 12；只在数据库和发送队列有余量时逐步扩容",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
+    conversation_scheduler_adaptive_interval_sec: float = Field(
+        default=2.0,
+        ge=0.5,
+        le=60.0,
+        description=field_help(
+            "多久检查一次是否需要临时扩容",
+            "填秒数，默认 2；积压清空后会恢复基础并发",
             "变更后需重启 Bot 才生效",
         ),
     )
@@ -203,6 +223,16 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "同时执行多少条闲聊、接话类被动插件",
             "填正整数，默认 32",
             "保存后立即调整档位上限",
+        ),
+    )
+    lane_chat_adaptive_max: int = Field(
+        default=12,
+        ge=1,
+        le=256,
+        description=field_help(
+            "积压时 chat lane 最多临时扩到多少并发",
+            "填正整数，默认 12；只在数据库和发送队列有余量时逐步扩容",
+            "保存后立即调整上限",
         ),
     )
     lane_storage: int = Field(
@@ -278,7 +308,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
     def from_env(cls) -> Self:
         pool_size = dispatch_env_int("PG_POOL_SIZE", default=10, minimum=1, maximum=128)
         storage_default = min(8, pool_size)
-        conversation_default = cap_by_pg_pool(8, workload_fraction=0.30)
+        conversation_default = cap_by_pg_pool(8, workload_fraction=0.40)
         return cls(
             matcher_dispatch_enabled=dispatch_env_bool("PALLAS_MATCHER_DISPATCH_ENABLED", default=True),
             matcher_dispatch_overload_threshold=dispatch_env_int(
@@ -297,6 +327,17 @@ class IngressDispatchRuntimeConfig(BaseModel):
                 default=conversation_default,
                 minimum=1,
                 maximum=64,
+            ),
+            conversation_scheduler_adaptive_max=dispatch_env_int(
+                "PALLAS_CONVERSATION_SCHEDULER_ADAPTIVE_MAX",
+                default=12,
+                minimum=1,
+                maximum=64,
+            ),
+            conversation_scheduler_adaptive_interval_sec=dispatch_env_float(
+                "PALLAS_CONVERSATION_SCHEDULER_ADAPTIVE_INTERVAL_SEC",
+                default=2.0,
+                minimum=0.5,
             ),
             conversation_scheduler_max_pending=dispatch_env_int(
                 "PALLAS_CONVERSATION_SCHEDULER_MAX_PENDING",
@@ -320,6 +361,12 @@ class IngressDispatchRuntimeConfig(BaseModel):
             lane_busy_reply=dispatch_env_bool("PALLAS_LANE_BUSY_REPLY", default=True),
             lane_command=dispatch_env_int("PALLAS_LANE_COMMAND", default=16, minimum=1, maximum=128),
             lane_chat=dispatch_env_int("PALLAS_LANE_CHAT", default=32, minimum=1, maximum=256),
+            lane_chat_adaptive_max=dispatch_env_int(
+                "PALLAS_LANE_CHAT_ADAPTIVE_MAX",
+                default=12,
+                minimum=1,
+                maximum=256,
+            ),
             lane_storage=dispatch_env_int("PALLAS_LANE_STORAGE", default=storage_default, minimum=1, maximum=64),
             lane_remote=dispatch_env_int("PALLAS_LANE_REMOTE", default=4, minimum=1, maximum=64),
             send_queue_enabled=dispatch_env_bool("PALLAS_SEND_QUEUE_ENABLED", default=True),

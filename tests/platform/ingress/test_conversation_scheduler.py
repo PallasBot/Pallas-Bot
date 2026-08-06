@@ -14,6 +14,28 @@ def test_per_key_pending_is_clamped_to_positive_value() -> None:
 
 
 @pytest.mark.asyncio
+async def test_scheduler_can_raise_concurrency_for_ready_conversations() -> None:
+    scheduler = ConversationScheduler(concurrency=1, max_pending=8)
+    started: list[int] = []
+    release = asyncio.Event()
+
+    async def work(value: int) -> None:
+        started.append(value)
+        await release.wait()
+
+    first = asyncio.create_task(scheduler.submit(("10001", 1), lambda: work(1)))
+    second = asyncio.create_task(scheduler.submit(("10001", 2), lambda: work(2)))
+    await scheduler.wait_for_pending_at_least(2)
+    await scheduler.set_concurrency(2)
+    await asyncio.sleep(0)
+
+    assert started == [1, 2]
+    release.set()
+    await asyncio.gather(first, second)
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
 async def test_same_conversation_runs_in_fifo_order() -> None:
     scheduler = ConversationScheduler(concurrency=2, max_pending=8)
     seen: list[int] = []
@@ -47,6 +69,10 @@ async def test_hot_conversation_does_not_starve_ready_conversation() -> None:
     a2 = asyncio.create_task(scheduler.submit(("10001", 1), lambda: record("a2")))
     b1 = asyncio.create_task(scheduler.submit(("10001", 2), lambda: record("b1")))
     await scheduler.wait_for_pending_at_least(3)
+    snapshot = scheduler.snapshot()
+    assert snapshot["pending_peak"] == 3
+    assert snapshot["active_peak"] == 1
+    assert snapshot["ready_peak"] == 1
     release_first.set()
 
     await asyncio.gather(a1, a2, b1)
@@ -167,4 +193,41 @@ async def test_reservation_occupies_capacity_before_handler_submission() -> None
     next_reservation_value = await next_reservation
     await next_reservation_value.release()
     assert scheduler.snapshot()["pending"] == 0
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
+async def test_reserved_hot_conversation_does_not_block_other_conversation() -> None:
+    scheduler = ConversationScheduler(concurrency=1, max_pending=4, per_key_pending=1)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    seen: list[str] = []
+
+    async def first() -> None:
+        seen.append("a1")
+        started.set()
+        await release.wait()
+
+    async def record(value: str) -> None:
+        seen.append(value)
+
+    first_reservation = await scheduler.reserve(("10001", 1))
+    first_task = asyncio.create_task(scheduler.submit(("10001", 1), first, reservation=first_reservation))
+    await started.wait()
+
+    hot_reservation = await scheduler.reserve(("10001", 1))
+    hot_task = asyncio.create_task(scheduler.submit(("10001", 1), lambda: record("a2"), reservation=hot_reservation))
+    other_reservation = await scheduler.reserve(("10001", 2))
+    other_task = asyncio.create_task(
+        scheduler.submit(("10001", 2), lambda: record("b1"), reservation=other_reservation)
+    )
+    await asyncio.sleep(0)
+
+    assert scheduler.snapshot()["pending"] == 3
+    assert scheduler.snapshot()["ready"] == 1
+
+    release.set()
+    await asyncio.gather(first_task, hot_task, other_task)
+
+    assert seen == ["a1", "b1", "a2"]
     await scheduler.stop()

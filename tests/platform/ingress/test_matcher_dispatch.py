@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from nonebot.exception import IgnoredException
 from nonebot.internal.rule import Rule
 from nonebot.rule import command, to_me
 
@@ -39,6 +40,22 @@ def test_synthetic_llm_command_selects_only_its_routed_plugin_matchers() -> None
 
     assert dispatch.select_synthetic_llm_command_matchers([BlockingOtherMatcher, MemesMatcher], resolution) == [
         MemesMatcher
+    ]
+
+
+def test_overload_chat_selection_keeps_only_core_reply_deciders() -> None:
+    class RepeaterMatcher:
+        plugin_name = "packages.repeater"
+
+    class LlmMatcher:
+        plugin_name = "packages.llm_chat"
+
+    class GreetingMatcher:
+        plugin_name = "packages.greeting"
+
+    assert dispatch.select_overload_chatter_matchers([GreetingMatcher, RepeaterMatcher, LlmMatcher]) == [
+        RepeaterMatcher,
+        LlmMatcher,
     ]
 
 
@@ -152,6 +169,27 @@ def test_chat_degraded_contextvar_roundtrip():
     assert message_load.should_shed_chat_sidework() is True
     message_load.reset_chat_degraded(token)
     assert message_load.is_chat_degraded() is False
+
+
+@pytest.mark.asyncio
+async def test_patched_handle_event_discards_pre_scheduler_federate_loser(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        pass
+
+    bot = MagicMock()
+    event = FakeGroupMessageEvent()
+    pre_gate = AsyncMock(side_effect=IgnoredException("federate ingress claim lost"))
+    submit = AsyncMock()
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch, "conversation_scheduler_enabled", lambda: True)
+    monkeypatch.setattr(dispatch, "pre_schedule_ingress_group_message_gate", pre_gate)
+    monkeypatch.setattr(dispatch, "submit_conversation_event", submit)
+
+    await dispatch.patched_handle_event(bot, event)
+
+    pre_gate.assert_awaited_once_with(bot, event)
+    submit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -449,6 +487,7 @@ async def test_patched_handle_event_stays_silent_when_all_selected_matchers_are_
     event = FakeGroupMessageEvent()
     pre_mock = AsyncMock(return_value=True)
     post_mock = AsyncMock()
+    metrics: list[dict] = []
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
     monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
@@ -459,7 +498,7 @@ async def test_patched_handle_event_stays_silent_when_all_selected_matchers_are_
     monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
     monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(dispatch, "select_priority_matchers", lambda priority_matchers, **_kwargs: priority_matchers)
-    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **kwargs: metrics.append(kwargs))
     monkeypatch.setattr(dispatch, "signal_overload", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
     monkeypatch.setattr(dispatch, "matchers", {1: [BusyMatcher]})
@@ -476,6 +515,8 @@ async def test_patched_handle_event_stays_silent_when_all_selected_matchers_are_
 
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
+    assert len(metrics) == 1
+    assert metrics[0]["matchers_run"] == 0
 
     for _ in range(controller.base_limit):
         await controller.release()

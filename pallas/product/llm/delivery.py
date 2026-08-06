@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+from io import BytesIO
 from typing import Any
 
 from nonebot import logger
@@ -26,6 +27,148 @@ from pallas.product.llm.kernel.memory_governance import can_write_runtime_state_
 from pallas.product.llm.session_store import append_llm_message, compact_user_llm_history_with_summary
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
 
+STICKER_IMAGE_MAX_SIDE = 160
+
+
+def prepare_sticker_image(image_bytes: bytes, *, max_side: int = STICKER_IMAGE_MAX_SIDE) -> bytes:
+    """等比缩小表情图片，保留小图和无法处理的原始内容。"""
+    from PIL import Image, ImageSequence, UnidentifiedImageError
+
+    try:
+        with Image.open(BytesIO(image_bytes)) as image:
+            width, height = image.size
+            if not width or not height or max(width, height) <= max_side:
+                return image_bytes
+            scale = max_side / max(width, height)
+            size = (max(1, round(width * scale)), max(1, round(height * scale)))
+            if image.format == "GIF" and image.n_frames > 1:
+                frames = [
+                    frame.convert("RGBA").resize(size, Image.Resampling.LANCZOS)
+                    for frame in ImageSequence.Iterator(image)
+                ]
+                durations = [frame.info.get("duration", 0) for frame in ImageSequence.Iterator(image)]
+                output = BytesIO()
+                frames[0].save(
+                    output,
+                    format="GIF",
+                    save_all=True,
+                    append_images=frames[1:],
+                    duration=durations,
+                    loop=image.info.get("loop", 0),
+                    disposal=2,
+                )
+                return output.getvalue()
+            output = BytesIO()
+            resized = image.resize(size, Image.Resampling.LANCZOS)
+            if image.format == "JPEG" and resized.mode == "RGBA":
+                resized = resized.convert("RGB")
+            resized.save(output, format=image.format)
+            return output.getvalue()
+    except (OSError, UnidentifiedImageError):
+        return image_bytes
+
+
+async def send_repeater_emotion_image(
+    bot: Any, group_id: int, bot_id: int, user_id: int, user_text: str, *, cooldown_sec: int | None = None
+) -> bool:
+    """从 Repeater 命中中取一张图片，作为 LLM 回复的第二气泡。"""
+    from nonebot.adapters.onebot.v11 import Message, MessageSegment
+
+    from packages.repeater.model import Chat, ChatData
+    from pallas.core.shared.utils.media_cache import get_image
+
+    chat = Chat(
+        ChatData(
+            group_id=int(group_id),
+            user_id=int(user_id),
+            raw_message=str(user_text or ""),
+            plain_text=str(user_text or ""),
+            time=int(time.time()),
+            bot_id=int(bot_id),
+        )
+    )
+    bundle = await chat.find_reply_bundle()
+    if bundle is None:
+        return False
+    candidates: list[tuple[str, bytes]] = []
+    for item in [*bundle.answer_list, *list(getattr(bundle, "message_pool", []) or [])]:
+        if "[CQ:image," not in item or any(key == item for key, _data in candidates):
+            continue
+        for segment in Message(item):
+            if segment.type == "image":
+                cached = await get_image(str(segment))
+                if cached:
+                    candidates.append((item, cached))
+                break
+    if not candidates:
+        return False
+    raw_image = candidates[0][0]
+    from pallas.product.llm.sticker_followup import note_repeater_image_sent, should_send_repeater_image
+
+    cfg = get_llm_config()
+    if bool(getattr(cfg, "llm_sticker_vision_enabled", False)):
+        from pallas.product.llm.sticker_vision import allow_sticker_vision_enqueue, enqueue_sticker_vision_job
+
+        timeout_sec = float(getattr(cfg, "llm_sticker_vision_timeout_sec", 15.0) or 15.0)
+        if allow_sticker_vision_enqueue(int(getattr(cfg, "llm_sticker_vision_max_per_hour", 12) or 0)):
+            job_key = f"{int(bot_id)}:{int(group_id)}:{int(time.time() * 1000)}:{hash(raw_image)}"
+            try:
+                await enqueue_sticker_vision_job(
+                    candidates[: int(getattr(cfg, "llm_sticker_vision_candidate_count", 4) or 4)],
+                    user_text=user_text,
+                    timeout_sec=timeout_sec,
+                    idempotency_key=f"sticker_vision.select:{job_key}",
+                    bot_id=int(bot_id),
+                    group_id=int(group_id),
+                    fallback_cq_code=raw_image,
+                )
+            except Exception as exc:
+                logger.info("LLM vision emotion followup enqueue skipped group={}: {}", group_id, exc)
+            else:
+                return True
+    configured_cooldown = getattr(cfg, "llm_chat_sticker_cooldown_sec", 90)
+    resolved_cooldown = cooldown_sec if cooldown_sec is not None else configured_cooldown
+    if not should_send_repeater_image(int(group_id), raw_image, cooldown_sec=int(resolved_cooldown)):
+        return False
+    message = Message()
+    for segment in Message(raw_image):
+        if segment.type != "image":
+            message += segment
+            continue
+        cached = await get_image(str(segment))
+        if not cached:
+            return False
+        message += MessageSegment.image(file=prepare_sticker_image(cached))
+    try:
+        await bot.call_api("send_group_msg", message=message, group_id=int(group_id))
+    except Exception as e:
+        logger.info("LLM emotion followup image skipped group={}: {}", group_id, e)
+        return False
+    note_repeater_image_sent(int(group_id), raw_image)
+    return True
+
+
+async def send_cached_sticker_image(bot: Any, group_id: int) -> bool:
+    """发送一张本地已缓存的图片，用于验证协议发送链路。"""
+    from nonebot.adapters.onebot.v11 import MessageSegment
+
+    from pallas.core.shared.utils.media_cache import get_latest_image
+
+    cached = await get_latest_image()
+    if not cached:
+        return False
+    try:
+        await bot.call_api(
+            "send_group_msg",
+            message=MessageSegment.image(file=prepare_sticker_image(cached)),
+            group_id=int(group_id),
+        )
+    except Exception as e:
+        logger.info("LLM cached sticker test skipped group={}: {}", group_id, e)
+        return False
+    return True
+
+
 _TRACKED_LLM_TASKS = frozenset({
     LLM_CHAT_TASK_TYPE,
     REPEATER_FALLBACK_TASK_TYPE,
@@ -40,6 +183,39 @@ _REPEATER_CALLBACK_TASKS = frozenset({
     REPEATER_POLISH_LITE_TASK_TYPE,
     REPEATER_SELECT_TASK_TYPE,
 })
+
+_MENTION_LAST_SENT_AT: dict[int, float] = {}
+
+
+def resolve_llm_reply_delivery(
+    task: dict,
+    *,
+    group_id: object,
+    mention_cooldown_sec: int,
+    now: float | None = None,
+) -> tuple[int | None, int | None]:
+    """Resolve a task's optional QQ reply decoration with local safety gates."""
+    if str(task.get("task_type") or "").strip() != LLM_CHAT_TASK_TYPE:
+        return None, None
+    style = str(task.get("reply_delivery_style") or "PLAIN").strip().upper()
+    if style == "QUOTE":
+        message_id = task.get("message_id")
+        return (int(message_id), None) if str(message_id or "").isdigit() else (None, None)
+    if style != "MENTION" or not bool(task.get("has_multi_party_overlap")):
+        return None, None
+    user_id = task.get("user_id")
+    if not str(user_id or "").isdigit() or not str(group_id or "").isdigit():
+        return None, None
+    resolved_group_id = int(group_id)
+    current = time.monotonic() if now is None else now
+    if current - _MENTION_LAST_SENT_AT.get(resolved_group_id, float("-inf")) < max(0, mention_cooldown_sec):
+        return None, None
+    return None, int(user_id)
+
+
+def note_llm_reply_mention_sent(group_id: object, *, now: float | None = None) -> None:
+    if str(group_id or "").isdigit():
+        _MENTION_LAST_SENT_AT[int(group_id)] = time.monotonic() if now is None else now
 
 
 def maybe_append_llm_repeater_feedback(task_id: str, task: dict, reply_text: str) -> None:
@@ -214,6 +390,7 @@ async def deliver_llm_callback_success(
                 reply_text = fallback
             else:
                 reply_text = ""
+    learned_reply_text = reply_text
     reply_segments = [reply_text] if reply_text else []
     if reply_text:
         from pallas.product.llm.reply_postprocess import apply_reply_postprocess
@@ -226,6 +403,8 @@ async def deliver_llm_callback_success(
             typo_rate=float(cfg.llm_reply_typo_rate),
             split_enabled=bool(cfg.llm_reply_split_enabled),
             split_max_chars=int(cfg.llm_reply_split_max_chars),
+            trim_terminal_period_enabled=bool(cfg.llm_reply_trim_terminal_period_enabled),
+            trim_terminal_period_rate=float(cfg.llm_reply_trim_terminal_period_rate),
         )
         reply_text = "".join(reply_segments)
     if reply_segments and group_id and bot is not None:
@@ -239,11 +418,24 @@ async def deliver_llm_callback_success(
             task_type,
         )
         text_delivered = True
-        for segment in reply_segments:
-            ok = await send_group_message(bot, group_id, segment)
+        reply_to_message_id, at_user_id = resolve_llm_reply_delivery(
+            task,
+            group_id=group_id,
+            mention_cooldown_sec=int(cfg.llm_reply_mention_cooldown_sec),
+        )
+        for index, segment in enumerate(reply_segments):
+            ok = await send_group_message(
+                bot,
+                group_id,
+                segment,
+                reply_to_message_id=reply_to_message_id if index == 0 else None,
+                at_user_id=at_user_id if index == 0 else None,
+            )
+            if index == 0 and ok and at_user_id is not None:
+                note_llm_reply_mention_sent(group_id)
             text_delivered = bool(ok) and text_delivered
         delivered = text_delivered and delivered
-    if should_append_llm_session(task) and reply_text:
+    if should_append_llm_session(task) and learned_reply_text:
         raw_group_id = task.get("group_id")
         scope_group = int(raw_group_id) if raw_group_id is not None else None
         speaker_id = int(task.get("user_id") or 0)
@@ -259,15 +451,15 @@ async def deliver_llm_callback_success(
                 )
             if user_text:
                 await append_llm_message(int(bot_id), scope_group, speaker_id, "user", user_text)
-            await append_llm_message(int(bot_id), scope_group, speaker_id, "assistant", reply_text)
+            await append_llm_message(int(bot_id), scope_group, speaker_id, "assistant", learned_reply_text)
             from pallas.product.llm.memory.auto_episode import schedule_auto_save_group_episode
 
             schedule_auto_save_group_episode(bot_id=int(bot_id), group_id=scope_group)
     from pallas.product.llm.repeater_feedback import is_feedback_task_type
 
-    if is_feedback_task_type(task_type) and reply_text and text_delivered:
-        maybe_append_llm_repeater_feedback(task_id, task, reply_text)
-    if reply_text and text_delivered and group_id:
+    if is_feedback_task_type(task_type) and learned_reply_text and text_delivered:
+        maybe_append_llm_repeater_feedback(task_id, task, learned_reply_text)
+    if learned_reply_text and text_delivered and group_id:
         scene_tier = str(task.get("scene_tier") or "").strip()
         channel = "at_chat" if task_type == LLM_CHAT_TASK_TYPE else "strong" if scene_tier == "strong" else "group"
         try:
@@ -275,7 +467,7 @@ async def deliver_llm_callback_success(
 
             note_expression_from_utterance(
                 int(group_id),
-                reply_text,
+                learned_reply_text,
                 source="llm_success",
                 channel=channel,
                 scene_tier=scene_tier,
@@ -283,13 +475,13 @@ async def deliver_llm_callback_success(
             )
         except Exception as exc:
             logger.debug("AI callback expression learn skipped task={}: {}", task_id, exc)
-    if reply_text and text_delivered:
+    if learned_reply_text and text_delivered:
         if bool(get_llm_config().llm_reply_effect_eval_enabled):
             from pallas.product.llm.reply_effect import evaluate_and_record_reply_effect
 
             try:
                 evaluate_and_record_reply_effect(
-                    reply_text,
+                    learned_reply_text,
                     task_type=task_type,
                     group_id=int(group_id) if group_id is not None else None,
                     user_id=int(task.get("user_id") or 0) or None,
@@ -307,7 +499,7 @@ async def deliver_llm_callback_success(
                 created_at=int(time.time()),
                 scene=BehaviorScene(behavior_scene),
                 user_text=str(task.get("user_text") or "").strip(),
-                reply_text=reply_text,
+                reply_text=learned_reply_text,
                 selected_pattern_ids=[
                     str(item) for item in list(task.get("behavior_pattern_ids") or []) if str(item).strip()
                 ],

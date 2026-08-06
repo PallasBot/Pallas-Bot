@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -179,6 +180,42 @@ async def test_check_and_run_matcher_with_lane_skips_when_busy(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
+async def test_check_and_run_matcher_with_lane_runs_hard_wake_when_remote_is_busy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    dispatch_lanes.install_dispatch_lanes()
+    remote = dispatch_lanes.lane_controller(DispatchLane.REMOTE)
+    assert remote is not None
+    for _ in range(remote.base_limit):
+        ok, _ = await remote.acquire(0.01)
+        assert ok is True
+
+    run_mock = AsyncMock()
+    monkeypatch.setattr(
+        dispatch_lanes,
+        "plugin_lane_override",
+        lambda module: "remote" if module in {"llm_chat", "ollama"} else None,
+    )
+    monkeypatch.setattr("nonebot.message.check_and_run_matcher", run_mock)
+
+    result = await dispatch_lanes.check_and_run_matcher_with_lane(
+        _AiMatcher,
+        AsyncMock(),
+        MagicMock(),
+        {},
+        MagicMock(),
+        {},
+        command_traffic=False,
+        hard_speak_trigger=True,
+    )
+
+    assert result.acquired is True
+    run_mock.assert_awaited_once()
+    for _ in range(remote.base_limit):
+        await remote.release()
+
+
+@pytest.mark.asyncio
 async def test_synthetic_llm_command_uses_dedicated_tool_lane(monkeypatch: pytest.MonkeyPatch) -> None:
     dispatch_lanes.install_dispatch_lanes()
     command_lane = dispatch_lanes.lane_controller(DispatchLane.COMMAND)
@@ -215,3 +252,38 @@ def test_install_dispatch_lanes_reads_defaults(monkeypatch: pytest.MonkeyPatch) 
     assert controller is not None
     assert controller.base_limit == 8
     assert dispatch_lanes.lane_controller(DispatchLane.REMOTE).base_limit == 4
+
+
+@pytest.mark.asyncio
+async def test_chat_lane_limit_can_be_adjusted_and_observed(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        dispatch_lanes,
+        "default_lane_limits",
+        lambda: {
+            DispatchLane.COMMAND: 16,
+            DispatchLane.TOOL: 4,
+            DispatchLane.CHAT: 6,
+            DispatchLane.STORAGE: 8,
+            DispatchLane.REMOTE: 4,
+        },
+    )
+    dispatch_lanes.install_dispatch_lanes()
+
+    assert dispatch_lanes.lane_status()[DispatchLane.CHAT] == {"limit": 6, "in_use": 0}
+    assert await dispatch_lanes.set_lane_limit(DispatchLane.CHAT, 8) is True
+    assert dispatch_lanes.lane_status()[DispatchLane.CHAT] == {"limit": 8, "in_use": 0}
+
+
+@pytest.mark.asyncio
+async def test_increasing_lane_limit_wakes_waiting_matcher() -> None:
+    controller = LaneController(DispatchLane.CHAT, 1)
+    acquired, _ = await controller.acquire(0.01)
+    assert acquired is True
+
+    waiting = asyncio.create_task(controller.acquire(0.2))
+    await asyncio.sleep(0)
+    await controller.set_limit(2)
+
+    assert (await waiting)[0] is True
+    await controller.release()
+    await controller.release()

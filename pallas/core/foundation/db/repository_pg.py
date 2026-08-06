@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import json
 import os
 import time
 from collections import OrderedDict
@@ -1148,130 +1149,110 @@ class PgContextRepository:
 
     async def _find_by_keywords_for_reply_uncached(self, keywords: str) -> Context | None:
         """接话路径：轻量列查询 + 限量 Answer/Message，避免 ORM 关联热路径放大。"""
+        return await self._find_by_keywords_for_reply_snapshot(keywords)
+
+    async def _find_by_keywords_for_reply_snapshot(self, keywords: str) -> Context | None:
+        """一次受限快照读取接话所需的 context、ban、answer 与 message。"""
+        from pallas.core.foundation.db.modules import Answer, Ban, Context
+
         khash = keywords_hash(keywords)
         from pallas.product.corpus.reply_perf_config import reply_query_caps
 
         msg_cap, ans_cap = reply_query_caps(keywords)
         t_start = time.monotonic()
-        t_context_ms = 0.0
-        t_ban_ms = 0.0
-        t_answer_ms = 0.0
-        t_message_ms = 0.0
-        ban_count = 0
-        answer_count = 0
-        message_count = 0
         async with get_session(read_only=True) as session:
-            t0 = time.monotonic()
-            result = await session.execute(
-                select(
-                    ContextRow.id,
-                    ContextRow.keywords,
-                    ContextRow.time,
-                    ContextRow.trigger_count,
-                    ContextRow.clear_time,
-                ).where(ContextRow.keywords_hash == khash)
-            )
-            t_context_ms = (time.monotonic() - t0) * 1000.0
-            ctx_row = result.one_or_none()
-            if ctx_row is None:
-                self._log_reply_query_slow(
-                    keywords=keywords,
-                    elapsed_ms=(time.monotonic() - t_start) * 1000.0,
-                    context_ms=t_context_ms,
-                    ban_ms=t_ban_ms,
-                    answer_ms=t_answer_ms,
-                    message_ms=t_message_ms,
-                    ban_count=ban_count,
-                    answer_count=answer_count,
-                    message_count=message_count,
-                    hit=False,
-                )
-                return None
-            ctx_id, ctx_keywords, ctx_time, ctx_trigger_count, ctx_clear_time = ctx_row
-            ctx_id = int(ctx_id)
-            t0 = time.monotonic()
-            ban_rows = list(
+            row = (
                 (
                     await session.execute(
-                        select(ContextBanRow).where(ContextBanRow.context_id == ctx_id).order_by(ContextBanRow.id)
+                        text(
+                            """
+                        WITH ctx AS (
+                            SELECT id, keywords, time, trigger_count, clear_time
+                            FROM context WHERE keywords_hash = :khash
+                        ), answers AS (
+                            SELECT a.id, a.keywords, a.group_id, a.count, a.time
+                            FROM context_answer a JOIN ctx ON a.context_id = ctx.id
+                            ORDER BY a.count DESC, a.time DESC LIMIT :ans_cap
+                        ), ranked_messages AS (
+                            SELECT m.answer_id, m.message, m.id,
+                                   row_number() OVER (PARTITION BY m.answer_id ORDER BY m.id DESC) AS rn
+                            FROM context_answer_message m JOIN answers a ON a.id = m.answer_id
+                        ), messages AS (
+                            SELECT answer_id, jsonb_agg(message ORDER BY id) AS values
+                            FROM ranked_messages WHERE rn <= :msg_cap GROUP BY answer_id
+                        )
+                        SELECT ctx.keywords, ctx.time, ctx.trigger_count, ctx.clear_time,
+                            COALESCE((
+                                SELECT jsonb_agg(jsonb_build_object(
+                                    'keywords', b.keywords, 'group_id', b.group_id,
+                                    'reason', b.reason, 'time', b.time
+                                ) ORDER BY b.id)
+                                FROM context_ban b WHERE b.context_id = ctx.id
+                            ), '[]'::jsonb) AS bans,
+                            COALESCE((
+                                SELECT jsonb_agg(jsonb_build_object(
+                                    'keywords', a.keywords, 'group_id', a.group_id,
+                                    'count', a.count, 'time', a.time,
+                                    'messages', COALESCE(m.values, '[]'::jsonb)
+                                ) ORDER BY a.count DESC, a.time DESC)
+                                FROM answers a LEFT JOIN messages m ON m.answer_id = a.id
+                            ), '[]'::jsonb) AS answers
+                        FROM ctx
+                        """
+                        ),
+                        {"khash": khash, "ans_cap": ans_cap, "msg_cap": msg_cap},
                     )
                 )
-                .scalars()
-                .all()
+                .mappings()
+                .one_or_none()
             )
-            t_ban_ms = (time.monotonic() - t0) * 1000.0
-            ban_count = len(ban_rows)
-            t0 = time.monotonic()
-            ans_result = await session.execute(
-                select(ContextAnswerRow)
-                .where(ContextAnswerRow.context_id == ctx_id)
-                .order_by(ContextAnswerRow.count.desc(), ContextAnswerRow.time.desc())
-                .limit(ans_cap)
-            )
-            answer_rows = list(ans_result.scalars().all())
-            t_answer_ms = (time.monotonic() - t0) * 1000.0
-            answer_count = len(answer_rows)
-            if not answer_rows:
-                self._log_reply_query_slow(
-                    keywords=keywords,
-                    elapsed_ms=(time.monotonic() - t_start) * 1000.0,
-                    context_ms=t_context_ms,
-                    ban_ms=t_ban_ms,
-                    answer_ms=t_answer_ms,
-                    message_ms=t_message_ms,
-                    ban_count=ban_count,
-                    answer_count=answer_count,
-                    message_count=message_count,
-                    hit=True,
-                )
-                return build_reply_context(
-                    keywords=ctx_keywords,
-                    time_value=ctx_time,
-                    trigger_count=ctx_trigger_count,
-                    clear_time=ctx_clear_time,
-                    answer_rows=[],
-                    ban_rows=ban_rows,
-                    reply_messages={},
-                )
-            answer_ids = [int(answer.id) for answer in answer_rows]
-            t0 = time.monotonic()
-            msg_rows = (await session.execute(build_reply_message_query(answer_ids, msg_cap))).all()
-            t_message_ms = (time.monotonic() - t0) * 1000.0
-            message_count = len(msg_rows)
-            reply_messages: dict[int, list[str]] = {}
-            for aid, message, _mid in msg_rows:
-                reply_messages.setdefault(int(aid), []).append(message)
+        elapsed_ms = (time.monotonic() - t_start) * 1000.0
+        if row is None:
             self._log_reply_query_slow(
                 keywords=keywords,
-                elapsed_ms=(time.monotonic() - t_start) * 1000.0,
-                context_ms=t_context_ms,
-                ban_ms=t_ban_ms,
-                answer_ms=t_answer_ms,
-                message_ms=t_message_ms,
-                ban_count=ban_count,
-                answer_count=answer_count,
-                message_count=message_count,
-                hit=True,
+                elapsed_ms=elapsed_ms,
+                context_ms=None,
+                ban_ms=None,
+                answer_ms=None,
+                message_ms=None,
+                ban_count=0,
+                answer_count=0,
+                message_count=0,
+                hit=False,
             )
-            return build_reply_context(
-                keywords=ctx_keywords,
-                time_value=ctx_time,
-                trigger_count=ctx_trigger_count,
-                clear_time=ctx_clear_time,
-                answer_rows=answer_rows,
-                ban_rows=ban_rows,
-                reply_messages=reply_messages,
-            )
+            return None
+        bans = row["bans"] if isinstance(row["bans"], list) else json.loads(row["bans"])
+        answers = row["answers"] if isinstance(row["answers"], list) else json.loads(row["answers"])
+        self._log_reply_query_slow(
+            keywords=keywords,
+            elapsed_ms=elapsed_ms,
+            context_ms=None,
+            ban_ms=None,
+            answer_ms=None,
+            message_ms=None,
+            ban_count=len(bans),
+            answer_count=len(answers),
+            message_count=sum(len(answer["messages"]) for answer in answers),
+            hit=True,
+        )
+        return Context.model_construct(
+            keywords=row["keywords"],
+            time=row["time"],
+            trigger_count=row["trigger_count"],
+            clear_time=row["clear_time"],
+            ban=[Ban.model_construct(**ban) for ban in bans],
+            answers=[Answer.model_construct(**answer) for answer in answers],
+        )
 
     @staticmethod
     def _log_reply_query_slow(
         *,
         keywords: str,
         elapsed_ms: float,
-        context_ms: float,
-        ban_ms: float,
-        answer_ms: float,
-        message_ms: float,
+        context_ms: float | None,
+        ban_ms: float | None,
+        answer_ms: float | None,
+        message_ms: float | None,
         ban_count: int,
         answer_count: int,
         message_count: int,
@@ -1294,10 +1275,10 @@ class PgContextRepository:
             "stages=context={:.1f}ms ban={:.1f}ms answers={:.1f}ms messages={:.1f}ms "
             "counts=ban:{} answers:{} messages:{} hit={} kw_len={}",
             elapsed_ms,
-            context_ms,
-            ban_ms,
-            answer_ms,
-            message_ms,
+            context_ms or 0.0,
+            ban_ms or 0.0,
+            answer_ms or 0.0,
+            message_ms or 0.0,
             ban_count,
             answer_count,
             message_count,
@@ -2279,6 +2260,27 @@ class PgImageCacheRepository:
             result = await session.execute(select(ImageCacheRow).where(ImageCacheRow.cq_code == cq_code))
             row = result.scalar_one_or_none()
             return row_to_image_cache(row) if row else None
+
+    async def find_latest_with_blob(self) -> ImageCache | None:
+        async with get_session(read_only=True) as session:
+            stmt = (
+                select(ImageCacheRow)
+                .where(ImageCacheRow.blob_data.is_not(None), ImageCacheRow.blob_data != b"")
+                .order_by(ImageCacheRow.date.desc(), ImageCacheRow.id.desc())
+                .limit(1)
+            )
+            row = (await session.execute(stmt)).scalar_one_or_none()
+            return row_to_image_cache(row) if row else None
+
+    async def find_recent_with_blob(self, limit: int) -> list[ImageCache]:
+        async with get_session(read_only=True) as session:
+            stmt = (
+                select(ImageCacheRow)
+                .where(ImageCacheRow.blob_data.is_not(None), ImageCacheRow.blob_data != b"")
+                .order_by(ImageCacheRow.date.desc(), ImageCacheRow.id.desc())
+                .limit(max(1, int(limit)))
+            )
+            return [row_to_image_cache(row) for row in (await session.execute(stmt)).scalars()]
 
     async def insert(self, cache: ImageCache) -> None:
         """并发下相同 cq_code 的第二次 insert 等价为 no-op。

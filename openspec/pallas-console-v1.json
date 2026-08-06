@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.26-60-g619a727d-dirty",
+    "version": "v4.1.30-40-g8f44c991-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -6722,6 +6722,83 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/_ApiOkResponse_IngressDispatchData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/ingress-dispatch/history": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Ingress Dispatch History",
+        "operationId": "_ingress_dispatch_history_pallas_api_ingress_dispatch_history_get",
+        "parameters": [
+          {
+            "name": "window_sec",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 604800,
+              "minimum": 900,
+              "default": 3600,
+              "title": "Window Sec"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_IngressDispatchHistoryData_"
                 }
               }
             }
@@ -15519,6 +15596,178 @@
         }
       }
     },
+    "/pallas/api/llm/repeater-semantic-style": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Repeater Semantic Style Get",
+        "operationId": "_repeater_semantic_style_get_pallas_api_llm_repeater_semantic_style_get",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/llm/repeater-semantic-style/manage": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Repeater Semantic Style Manage",
+        "operationId": "_repeater_semantic_style_manage_pallas_api_llm_repeater_semantic_style_manage_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/llm/repeater-feedback": {
       "get": {
         "tags": [
@@ -23684,6 +23933,99 @@
         "type": "object",
         "title": "IngressDispatchData"
       },
+      "IngressDispatchHistoryData": {
+        "properties": {
+          "retention_sec": {
+            "type": "integer",
+            "title": "Retention Sec"
+          },
+          "bucket_sec": {
+            "type": "integer",
+            "title": "Bucket Sec"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/IngressDispatchHistoryPoint"
+            },
+            "type": "array",
+            "title": "Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "retention_sec",
+          "bucket_sec"
+        ],
+        "title": "IngressDispatchHistoryData"
+      },
+      "IngressDispatchHistoryPoint": {
+        "properties": {
+          "at": {
+            "type": "integer",
+            "title": "At"
+          },
+          "ingress_p95_ms": {
+            "type": "number",
+            "title": "Ingress P95 Ms"
+          },
+          "scheduler_wait_p95_ms": {
+            "type": "number",
+            "title": "Scheduler Wait P95 Ms"
+          },
+          "scheduler_pending": {
+            "type": "integer",
+            "title": "Scheduler Pending"
+          },
+          "scheduler_active": {
+            "type": "integer",
+            "title": "Scheduler Active"
+          },
+          "scheduler_capacity": {
+            "type": "integer",
+            "title": "Scheduler Capacity"
+          },
+          "work_pending": {
+            "type": "integer",
+            "title": "Work Pending"
+          },
+          "work_leased": {
+            "type": "integer",
+            "title": "Work Leased"
+          },
+          "group_messages": {
+            "type": "integer",
+            "title": "Group Messages"
+          },
+          "learn_enqueued": {
+            "type": "integer",
+            "title": "Learn Enqueued"
+          },
+          "learn_persisted": {
+            "type": "integer",
+            "title": "Learn Persisted"
+          },
+          "work_completed": {
+            "type": "integer",
+            "title": "Work Completed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "ingress_p95_ms",
+          "scheduler_wait_p95_ms",
+          "scheduler_pending",
+          "scheduler_active",
+          "scheduler_capacity",
+          "work_pending",
+          "work_leased",
+          "group_messages",
+          "learn_enqueued",
+          "learn_persisted",
+          "work_completed"
+        ],
+        "title": "IngressDispatchHistoryPoint"
+      },
       "LlmReplayRunBody": {
         "properties": {
           "mode": {
@@ -24733,6 +25075,28 @@
           "data"
         ],
         "title": "_ApiOkResponse[IngressDispatchData]"
+      },
+      "_ApiOkResponse_IngressDispatchHistoryData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/IngressDispatchHistoryData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[IngressDispatchHistoryData]"
       },
       "_ApiOkResponse_LogsData_": {
         "properties": {
@@ -26352,6 +26716,13 @@
             },
             "type": "array",
             "title": "Api Keys"
+          },
+          "api_key_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Api Key Hints"
           },
           "api_key_env": {
             "type": "string",

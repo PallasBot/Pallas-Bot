@@ -5,9 +5,22 @@ import pytest
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.execution_budget import (
     clear_llm_execution_budget_state,
+    is_llm_execution_idle,
     release_llm_execution_slot,
     try_acquire_llm_execution_slot,
 )
+
+
+@pytest.mark.asyncio
+async def test_shared_budget_reports_idle_only_when_no_slot_is_held() -> None:
+    clear_llm_execution_budget_state()
+    cfg = LlmConfig(llm_governance_enabled=True, llm_shared_max_concurrency=4)
+    assert is_llm_execution_idle(cfg=cfg)
+    slot = await try_acquire_llm_execution_slot("explicit", cfg=cfg)
+    assert slot is not None
+    assert not is_llm_execution_idle(cfg=cfg)
+    release_llm_execution_slot(slot, cfg=cfg)
+    assert is_llm_execution_idle(cfg=cfg)
 
 
 @pytest.mark.asyncio
