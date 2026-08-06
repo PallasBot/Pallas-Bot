@@ -13,10 +13,11 @@
  │
  └─ 非 @ 接话 → packages/repeater/handlers/message.py
        resolve_scene_tier → opportunity → decide_llm_attempt
-       → maybe_submit_repeater_corpus_llm
-       → 失败 / 未抽中 → 原语料发出
-       → 成功 → kernel_runner → tool_loop.complete_with_tool_loop
-                    → delivery.deliver_llm_chat_result → Bot 内投递 / feedback + 表达学习
+       → 原始候选安全过滤、排名、精确去重
+       → 有真实竞争且共享 LLM 完全空闲 → select
+       → callback 与 500ms 本地回退原子 claim 同一任务
+       → 赢家投递一次；另一方静默退出
+       → 其余情况 → 原语料发出
 ```
 
 普通聊天与接话均在 Bot 进程内执行：`submit_chat_task` 安排 `kernel_runner`，后者调用 Provider、运行工具循环，并通过 `pallas/product/llm/delivery.py` 的 `deliver_llm_chat_result` 交给既有投递入口。
@@ -28,7 +29,7 @@
 | 步骤 | 位置 |
 | --- | --- |
 | 强弱场景 / 抽签 | `packages/repeater/opportunity_gate.py`（`resolve_scene_tier`、`decide_llm_attempt`） |
-| 接话提交管线 | `pallas/product/llm/polish_lite.py`（`maybe_submit_repeater_corpus_llm`） |
+| 接话选句提交 | `pallas/product/llm/select.py`（`maybe_submit_repeater_llm_select`） |
 | 接话人格 | `pallas/product/llm/repeater_persona_context.py` |
 | 表达库存取 / 学习 | `pallas/product/persona/expression_*.py` |
 | 进程内投递 | `pallas/product/llm/delivery.py`（`deliver_llm_chat_result`）；`kernel_runner.py` 调用 delivery |
@@ -37,8 +38,9 @@
 
 ## 约束
 
-- 日常接话主出口仍是**语料**
-- `eligible_for_writeback` / 语料 auto_promote 偏向 **strong**；fallback 不是主写回源。
+- 日常接话主出口仍是**语料**；`select` 只能从原始候选中选句，不能生成、润色、拼接或向 `llm_chat` 注入语料。
+- `select` 不等待槽位；即使强场景也只能使用完全空闲的共享 LLM 容量。超时后的本地回退会使迟到 callback 失效。
+- `@`、follow-up 与工具回合独立走 `llm_chat`，其 LLM 资源优先于 `select`。
 - 表达库当前是**单群**；跨群另开任务，不要默认同库检索。
 
 ## 后续阅读

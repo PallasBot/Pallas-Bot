@@ -43,3 +43,11 @@ def test_filter_select_candidate_pool_rejects_attack_and_plugin_status() -> None
     safe, diag = filter_select_candidate_pool(["摸摸", "我操你妈", "匹配失败，积分不足18点"])
     assert safe == ["摸摸"]
     assert diag["safe_count"] == 1
+
+
+def test_filter_select_candidate_pool_deduplicates_exact_candidates() -> None:
+    from pallas.product.llm.select import filter_select_candidate_pool
+
+    safe, diag = filter_select_candidate_pool(["摸摸", "  摸摸  ", "没事"])
+    assert safe == ["摸摸", "没事"]
+    assert diag["safe_count"] == 2

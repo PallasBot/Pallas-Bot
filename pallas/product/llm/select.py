@@ -36,13 +36,13 @@ async def submit_repeater_corpus_select(
     reply_mode: str = "normal",
     scene_tier: str = "weak",
     capabilities: RepeaterCapabilities | None = None,
-) -> bool:
+) -> str | None:
     if capabilities is None:
         from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
 
         capabilities = resolve_repeater_capabilities(get_llm_config())
     if not capabilities.llm_enabled or not capabilities.select_enabled:
-        return False
+        return None
     return await maybe_submit_repeater_llm_select(
         event,
         user_text=user_text,
@@ -66,6 +66,7 @@ def filter_select_candidate_pool(candidates: list[str]) -> tuple[list[str], dict
     raw_count = len(candidates)
     skipped_contamination = 0
     safe: list[str] = []
+    seen: set[str] = set()
     for text in candidates:
         sample = str(text or "").strip()
         if not sample or "[CQ:" in sample:
@@ -73,6 +74,9 @@ def filter_select_candidate_pool(candidates: list[str]) -> tuple[list[str], dict
         if not is_llm_learning_safe(sample) or not is_corpus_learn_safe(sample):
             skipped_contamination += 1
             continue
+        if sample in seen:
+            continue
+        seen.add(sample)
         safe.append(sample)
     return safe, {
         "raw_count": raw_count,
@@ -227,14 +231,14 @@ async def maybe_submit_repeater_llm_select(
     source: str = "repeater",
     reply_mode: str = "normal",
     scene_tier: str = "weak",
-) -> bool:
+) -> str | None:
     cfg = get_llm_config()
     if not cfg.llm_select_enabled or not cfg.llm_chat_enabled:
-        return False
+        return None
 
     plain = str(user_text or "").strip()
     if not plain or "[CQ:" in plain:
-        return False
+        return None
 
     group_id = int(event.group_id)
     user_id = int(event.user_id)
@@ -266,7 +270,7 @@ async def maybe_submit_repeater_llm_select(
             diag.get("skipped_contamination"),
             source,
         )
-        return False
+        return None
 
     ranked = await rank_select_candidates(
         bot_id,
@@ -298,7 +302,7 @@ async def maybe_submit_repeater_llm_select(
             len(safe_pool),
             source,
         )
-        return False
+        return None
 
     fallback = str(fallback_text or "").strip()
     from pallas.product.llm.corpus_contamination import is_llm_learning_safe
@@ -308,7 +312,7 @@ async def maybe_submit_repeater_llm_select(
     hints = await build_select_context_hints(bot_id, group_id, plain)
     prompt_user = build_select_user_text(plain, ranked, context_hints=hints)
     if not prompt_user:
-        return False
+        return None
 
     from pallas.product.llm.feedback_chat_hint import load_repeater_feedback_system_suffix
 
@@ -323,7 +327,7 @@ async def maybe_submit_repeater_llm_select(
         feedback_suffix=feedback_hint,
     )
     if persona_bundle is None or not persona_bundle.system_prompt:
-        return False
+        return None
 
     pool_diag = build_select_pool_diag(raw_pool=raw_pool, safe_pool=safe_pool, ranked=ranked)
     rewrite_metadata = dict(persona_bundle.llm_rewrite_metadata)
@@ -360,7 +364,8 @@ async def maybe_submit_repeater_llm_select(
             mode="normal",
             task="repeater_select",
             scene_tier=scene_tier,
-            priority=("repeater_strong" if scene_tier == "strong" else "repeater_weak"),
+            # Select is auxiliary: it may only take a completely idle shared slot.
+            priority="repeater_weak",
             token_count=persona_bundle.token_count,
             temperature=persona_bundle.temperature,
             llm_rewrite_metadata=rewrite_metadata,
@@ -377,7 +382,7 @@ async def maybe_submit_repeater_llm_select(
             user_id,
             source,
         )
-        return False
+        return None
 
     record_bot_llm_task(REPEATER_SELECT_TASK_TYPE, "submit_ok")
     logger.info(
@@ -388,4 +393,4 @@ async def maybe_submit_repeater_llm_select(
         len(ranked),
         source,
     )
-    return True
+    return request_id

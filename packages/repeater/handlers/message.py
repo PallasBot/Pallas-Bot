@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from nonebot import logger, on_message
 from nonebot.adapters import Bot  # noqa: TC002
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
@@ -245,9 +247,12 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
         **decision.trace.to_trace_row(),
     })
 
+    select_task_id: str | None = None
+
     async def stage_runner(stage_name: str) -> bool:
+        nonlocal select_task_id
         if stage_name == "select":
-            return await submit_repeater_corpus_select(
+            select_task_id = await submit_repeater_corpus_select(
                 event,
                 user_text=ctx.plain_body,
                 candidates=plan.candidate_pool,
@@ -256,9 +261,33 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
                 scene_tier=scene_tier,
                 capabilities=capabilities,
             )
+            return bool(select_task_id)
         return False
 
     if should_try_llm and await run_repeater_llm_plan(plan, stage_runner=stage_runner):
+
+        async def dispatch_local_bundle() -> None:
+            answers = await chat.answer_from_bundle(bundle)
+            if answers is None:
+                return
+            await config.refresh_cooldown("repeat")
+            from pallas.core.platform.ingress.hotpath_metrics import record_reply_local_dispatched
+
+            from ..fanout_reply import dispatch_repeater_reply
+
+            record_reply_local_dispatched()
+            dispatch_repeater_reply(int(event.self_id), int(event.group_id), answers)
+
+        async def fallback_after_select_deadline(task_id: str) -> None:
+            await asyncio.sleep(0.5)
+            from pallas.core.foundation.config import TaskManager
+
+            if await TaskManager.claim_task(task_id) is None:
+                return
+            await dispatch_local_bundle()
+
+        if select_task_id:
+            asyncio.create_task(fallback_after_select_deadline(select_task_id))
         return
 
     answers = await chat.answer_from_bundle(bundle)

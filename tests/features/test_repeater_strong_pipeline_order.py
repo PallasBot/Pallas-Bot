@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from pallas.product.llm.config import LlmConfig
-from pallas.product.llm.select import submit_repeater_corpus_select
 from pallas.product.llm.repeater_capabilities import RepeaterCapabilities
+from pallas.product.llm.select import submit_repeater_corpus_select
 
 
 class FakeEvent:
@@ -80,5 +80,5 @@ async def test_corpus_assist_uses_supplied_capability_snapshot(monkeypatch: pyte
         ),
     )
 
-    assert submitted is False
+    assert submitted is None
     assert calls == []
