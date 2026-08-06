@@ -7,6 +7,7 @@ import pytest
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from pallas.core.platform.federate import candidates, ingress
+from pallas.core.platform.federate import ingress_audit
 
 
 def test_candidate_registry_writes_capable_bot_without_message_body(monkeypatch) -> None:
@@ -64,12 +65,21 @@ def make_event() -> GroupMessageEvent:
 
 
 @pytest.fixture(autouse=True)
-def reset_ingress(monkeypatch: pytest.MonkeyPatch) -> None:
+def reset_ingress(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
     ingress.reset_federate_ingress_win_cache_for_tests()
+    ingress_audit.reset_federate_ingress_audit_for_tests()
+    monkeypatch.setattr(ingress, "_CANDIDATE_WAIT_SEC", 0.0)
+    monkeypatch.setattr(ingress, "record_federate_ingress_audit", lambda **_kwargs: None)
     monkeypatch.setattr(ingress, "federate_ingress_bypass_unified", lambda: False)
     monkeypatch.setattr(ingress.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr(ingress, "federate_ingress_active", lambda: True)
     monkeypatch.setattr(ingress, "load_or_create_deployment_id", lambda: "dep-local")
+    if not request.node.name.startswith("test_candidate_registry_"):
+        monkeypatch.setattr(
+            candidates,
+            "read_federate_ingress_candidate_bot_ids_sync",
+            lambda **_kwargs: frozenset(),
+        )
 
 
 @pytest.mark.asyncio

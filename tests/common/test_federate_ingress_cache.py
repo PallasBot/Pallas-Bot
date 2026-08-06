@@ -7,11 +7,14 @@ import pytest
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from pallas.core.platform.federate import ingress as fed_ingress
+from pallas.core.platform.federate import ingress_audit
 
 
 @pytest.fixture(autouse=True)
 def no_federate_candidate(monkeypatch: pytest.MonkeyPatch) -> None:
+    ingress_audit.reset_federate_ingress_audit_for_tests()
     monkeypatch.setattr(fed_ingress, "_CANDIDATE_WAIT_SEC", 0.0)
+    monkeypatch.setattr(fed_ingress, "record_federate_ingress_audit", lambda **_kwargs: None)
     monkeypatch.setattr(
         "pallas.core.platform.federate.candidates.read_federate_ingress_candidate_bot_ids_sync",
         lambda **_kwargs: frozenset(),
