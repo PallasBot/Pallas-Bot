@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from pallas.core.platform.federate import peer_bots as mod
 
@@ -135,6 +135,65 @@ def test_federate_bot_rosters_include_local_deployment(monkeypatch):
             public_online_bot_names={},
         ),
     )
+
+
+def test_local_roster_uses_login_nickname_when_protocol_display_name_missing(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    resolver = AsyncMock(return_value="QQ 原昵称")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({10001}))
+    monkeypatch.setattr(mod, "collect_local_federate_online_bot_ids", lambda: frozenset({10001}))
+    monkeypatch.setattr(mod, "collect_local_federate_public_bot_ids", AsyncMock(return_value=frozenset({10001})))
+    monkeypatch.setattr(mod, "collect_local_federate_public_online_bot_names", lambda *_: {})
+    monkeypatch.setattr(
+        "pallas.product.persona.self_identity.resolve_login_nickname",
+        resolver,
+    )
+
+    roster = asyncio.run(mod._build_local_federate_bot_roster())
+
+    assert roster.public_online_bot_names == {10001: "QQ 原昵称"}
+    resolver.assert_awaited_once_with(10001)
+
+
+def test_local_roster_caches_fallback_nickname_and_skips_hidden_or_offline_accounts(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    resolver = AsyncMock(return_value="QQ 原昵称")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({10001, 10002, 10003}))
+    monkeypatch.setattr(mod, "collect_local_federate_online_bot_ids", lambda: frozenset({10001, 10002}))
+    monkeypatch.setattr(mod, "collect_local_federate_public_bot_ids", AsyncMock(return_value=frozenset({10001, 10003})))
+    monkeypatch.setattr(mod, "collect_local_federate_public_online_bot_names", lambda *_: {})
+    monkeypatch.setattr(
+        "pallas.product.persona.self_identity.resolve_login_nickname",
+        resolver,
+    )
+
+    first = asyncio.run(mod._build_local_federate_bot_roster())
+    second = asyncio.run(mod._build_local_federate_bot_roster())
+
+    assert first.public_online_bot_names == {10001: "QQ 原昵称"}
+    assert second.public_online_bot_names == {10001: "QQ 原昵称"}
+    resolver.assert_awaited_once_with(10001)
+
+
+def test_federate_roster_read_does_not_trigger_login_nickname_lookup(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    resolver = AsyncMock(return_value="QQ 原昵称")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({10001}))
+    monkeypatch.setattr(mod, "collect_local_federate_online_bot_ids", lambda: frozenset({10001}))
+    monkeypatch.setattr(mod, "collect_local_federate_public_bot_ids", AsyncMock(return_value=frozenset({10001})))
+    monkeypatch.setattr(mod, "collect_local_federate_public_online_bot_names", lambda *_: {})
+    monkeypatch.setattr(
+        "pallas.product.persona.self_identity.resolve_login_nickname",
+        resolver,
+    )
+
+    rosters = asyncio.run(mod.get_federate_bot_rosters())
+
+    assert rosters[0].public_online_bot_names == {}
+    resolver.assert_not_awaited()
 
 
 def test_refresh_federate_peer_bot_ids_sync_reads_other_deployments(monkeypatch):
