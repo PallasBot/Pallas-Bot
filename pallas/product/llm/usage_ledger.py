@@ -51,6 +51,7 @@ def append_usage_record(
     cache_write_tokens: int = 0,
     cost: float = 0.0,
     currency: str = "",
+    pricing_rule: dict[str, Any] | None = None,
     day_key: str | None = None,
     ts: float | None = None,
 ) -> None:
@@ -81,6 +82,8 @@ def append_usage_record(
             "cost": round(float(cost or 0.0), 6),
             "currency": normalize_cost_currency(currency),
         }
+        if isinstance(pricing_rule, dict):
+            row["pricing_rule"] = pricing_rule
         path = ledger_path_for_day(day)
         line = json.dumps(row, ensure_ascii=False) + "\n"
         with _LOCK:

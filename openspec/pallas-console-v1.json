@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.30-40-g8f44c991-dirty",
+    "version": "v4.1.31-2-g4df7c04d-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -26744,6 +26744,14 @@
             "title": "Default Model",
             "default": ""
           },
+          "models": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Models"
+          },
           "enabled": {
             "type": "boolean",
             "title": "Enabled",
@@ -26865,6 +26873,14 @@
             "type": "string",
             "title": "Default Model",
             "default": ""
+          },
+          "models": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Models"
           },
           "enabled": {
             "type": "boolean",
