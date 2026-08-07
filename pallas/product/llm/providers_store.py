@@ -212,6 +212,46 @@ def resolve_provider_base_url(raw: dict[str, Any]) -> str:
     return ""
 
 
+def _normalize_registered_models(
+    raw: dict[str, Any],
+    *,
+    default_model: str,
+    task_models: dict[str, str],
+    model_pricing: dict[str, dict[str, float]],
+) -> list[dict[str, Any]]:
+    rows = raw.get("models") if isinstance(raw.get("models"), list) else []
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add(name_raw: object, source: dict[str, Any] | None = None) -> None:
+        name = str(name_raw or "").strip()
+        if not name or name in seen:
+            return
+        seen.add(name)
+        source = source or {}
+        rules = source.get("pricing_rules") if isinstance(source.get("pricing_rules"), list) else []
+        normalized_rules = [dict(rule) for rule in rules if isinstance(rule, dict)]
+        if not normalized_rules and name in model_pricing:
+            normalized_rules = [{"id": f"legacy-{len(out) + 1}", "kind": "token", **model_pricing[name]}]
+        out.append({
+            "model_id": str(source.get("model_id") or f"model-{len(out) + 1}").strip(),
+            "name": name,
+            "is_default": bool(source.get("is_default")) or name == default_model,
+            "capabilities": _normalize_capabilities(source),
+            "pricing_rules": normalized_rules,
+        })
+
+    for row in rows:
+        if isinstance(row, dict):
+            add(row.get("name"), row)
+    add(default_model)
+    for name in task_models.values():
+        add(name)
+    for name in model_pricing:
+        add(name)
+    return out
+
+
 def _normalize_provider_row(raw: dict[str, Any], existing: dict[str, Any] | None = None) -> dict[str, Any] | None:
     pid = str(raw.get("id") or "").strip()
     if not pid:
@@ -262,6 +302,23 @@ def _normalize_provider_row(raw: dict[str, Any], existing: dict[str, Any] | None
         model_pricing = normalize_model_pricing(existing.get("model_pricing"))
     else:
         model_pricing = {}
+    default_model = str(raw.get("default_model") or "").strip()
+    models = _normalize_registered_models(
+        raw,
+        default_model=default_model,
+        task_models=task_models,
+        model_pricing=model_pricing,
+    )
+    for model in models:
+        if model["is_default"]:
+            default_model = model["name"]
+            break
+    for model in models:
+        for rule in model["pricing_rules"]:
+            if str(rule.get("kind") or "") == "token":
+                normalized = normalize_model_pricing({model["name"]: rule})
+                if normalized:
+                    model_pricing[model["name"]] = normalized[model["name"]]
     return {
         "id": pid,
         "kind": kind,
@@ -269,7 +326,8 @@ def _normalize_provider_row(raw: dict[str, Any], existing: dict[str, Any] | None
         "api_key": api_key,
         "api_keys": api_keys,
         "api_key_env": api_key_env,
-        "default_model": str(raw.get("default_model") or "").strip(),
+        "default_model": default_model,
+        "models": models,
         "enabled": bool(raw.get("enabled", True)),
         "task_models": task_models,
         "capabilities": capabilities,
@@ -567,6 +625,7 @@ def export_providers_for_api(*, doc: dict[str, Any] | None = None) -> dict[str, 
             "api_key_hints": [mask_api_key_hint(key) for key in api_keys],
             "api_keys_count": len(api_keys),
             "default_model": str(raw.get("default_model") or "").strip(),
+            "models": list(raw.get("models") or []),
             "enabled": bool(raw.get("enabled", True)),
             "task_models": dict(raw.get("task_models") or {}),
             "capabilities": _normalize_capabilities(raw),

@@ -67,6 +67,25 @@ def test_providers_store_roundtrip(tmp_path: Path, monkeypatch) -> None:
     assert raw["providers"][0]["api_key"] == "sk-test-key"
 
 
+def test_providers_store_migrates_legacy_pricing_to_registered_models(tmp_path: Path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    clear_providers_store_cache()
+    saved = save_providers_document({
+        "providers": [{
+            "id": "ds",
+            "base_url": "https://api.deepseek.com",
+            "default_model": "deepseek-chat",
+            "task_models": {"llm_chat": "deepseek-reasoner"},
+            "model_pricing": {"deepseek-reasoner": {"price_in": 1, "price_out": 2}},
+        }],
+        "routing": {},
+    })
+    models = saved["providers"][0]["models"]
+    assert [model["name"] for model in models] == ["deepseek-chat", "deepseek-reasoner"]
+    assert models[1]["pricing_rules"][0]["kind"] == "token"
+
+
 def test_providers_store_preserves_api_key_on_blank_update(tmp_path: Path, monkeypatch) -> None:
     store = tmp_path / "llm_providers.json"
     monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
