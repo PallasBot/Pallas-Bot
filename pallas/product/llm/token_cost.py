@@ -128,7 +128,6 @@ def compute_model_rule_cost(
     rule: dict[str, Any],
     *,
     request_at: str,
-    monthly_tokens_before: int,
     prompt_tokens: int,
     completion_tokens: int,
     cache_read_tokens: int = 0,
@@ -165,7 +164,7 @@ def compute_model_rule_cost(
             if not isinstance(tier, dict):
                 continue
             limit = tier.get("up_to_tokens")
-            if limit is None or request_tokens < max(0, int(limit)):
+            if limit is None or request_tokens <= max(0, int(limit)):
                 price = tier
                 snapshot["tier_index"] = index
                 break
@@ -235,7 +234,6 @@ def cost_details_for_usage(
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
     request_at: str | None = None,
-    monthly_tokens_before: int = 0,
     doc: dict[str, Any] | None = None,
 ) -> tuple[float, str, dict[str, Any] | None]:
     if isinstance(doc, dict):
@@ -265,7 +263,6 @@ def cost_details_for_usage(
                     cost, snapshot = compute_model_rule_cost(
                         rule,
                         request_at=current,
-                        monthly_tokens_before=monthly_tokens_before,
                         prompt_tokens=prompt_tokens,
                         completion_tokens=completion_tokens,
                         cache_read_tokens=cache_read_tokens,
@@ -302,7 +299,6 @@ def cost_for_usage(
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
     request_at: str | None = None,
-    monthly_tokens_before: int = 0,
     doc: dict[str, Any] | None = None,
 ) -> tuple[float, str]:
     cost, currency, _ = cost_details_for_usage(
@@ -313,7 +309,6 @@ def cost_for_usage(
         cache_read_tokens=cache_read_tokens,
         cache_write_tokens=cache_write_tokens,
         request_at=request_at,
-        monthly_tokens_before=monthly_tokens_before,
         doc=doc,
     )
     return cost, currency

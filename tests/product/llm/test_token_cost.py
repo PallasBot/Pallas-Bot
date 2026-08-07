@@ -7,8 +7,8 @@ from pallas.product.llm.providers_store import (
     save_providers_document,
 )
 from pallas.product.llm.token_cost import (
-    compute_usage_cost,
     compute_model_rule_cost,
+    compute_usage_cost,
     cost_details_for_usage,
     cost_for_usage,
     enrich_tokens_cost_fields,
@@ -54,7 +54,6 @@ def test_compute_model_rule_cost_matches_single_request_input_range() -> None:
     cost, snapshot = compute_model_rule_cost(
         tier,
         request_at="2026-09-01T00:00:00+08:00",
-        monthly_tokens_before=0,
         prompt_tokens=32_001,
         completion_tokens=0,
     )
@@ -64,7 +63,6 @@ def test_compute_model_rule_cost_matches_single_request_input_range() -> None:
     cost, snapshot = compute_model_rule_cost(
         tier,
         request_at="2026-09-01T00:00:00+08:00",
-        monthly_tokens_before=0,
         prompt_tokens=32_000,
         completion_tokens=0,
     )
@@ -74,7 +72,6 @@ def test_compute_model_rule_cost_matches_single_request_input_range() -> None:
     cost, snapshot = compute_model_rule_cost(
         {**tier, "input_tokens_min": 32_000, "input_tokens_max": 32_000},
         request_at="2026-09-01T00:00:00+08:00",
-        monthly_tokens_before=0,
         prompt_tokens=32_000,
         completion_tokens=0,
     )
@@ -84,7 +81,6 @@ def test_compute_model_rule_cost_matches_single_request_input_range() -> None:
     cost, snapshot = compute_model_rule_cost(
         {"id": "flat", "kind": "per_request", "price_per_request": 0.02},
         request_at="2026-09-01T00:00:00+08:00",
-        monthly_tokens_before=0,
         prompt_tokens=1,
         completion_tokens=0,
     )
@@ -94,11 +90,38 @@ def test_compute_model_rule_cost_matches_single_request_input_range() -> None:
 
 def test_compute_model_rule_cost_applies_daily_time_window() -> None:
     rule = {
-        "id": "night", "kind": "per_request", "price_per_request": 0.02,
-        "daily_start": "23:00", "daily_end": "02:00",
+        "id": "night",
+        "kind": "per_request",
+        "price_per_request": 0.02,
+        "daily_start": "23:00",
+        "daily_end": "02:00",
     }
-    assert compute_model_rule_cost(rule, request_at="2026-09-01T00:30:00+08:00", monthly_tokens_before=0, prompt_tokens=1, completion_tokens=0)[0] == 0.02
-    assert compute_model_rule_cost(rule, request_at="2026-09-01T12:00:00+08:00", monthly_tokens_before=0, prompt_tokens=1, completion_tokens=0)[0] == 0.0
+    assert (
+        compute_model_rule_cost(rule, request_at="2026-09-01T00:30:00+08:00", prompt_tokens=1, completion_tokens=0)[0]
+        == 0.02
+    )
+    assert (
+        compute_model_rule_cost(rule, request_at="2026-09-01T12:00:00+08:00", prompt_tokens=1, completion_tokens=0)[0]
+        == 0.0
+    )
+
+
+def test_compute_model_rule_cost_keeps_legacy_tier_upper_bound_inclusive() -> None:
+    cost, snapshot = compute_model_rule_cost(
+        {
+            "id": "legacy",
+            "kind": "token_tiered",
+            "tiers": [
+                {"up_to_tokens": 100, "price_in": 1},
+                {"price_in": 2},
+            ],
+        },
+        request_at="2026-09-01T00:00:00+08:00",
+        prompt_tokens=100,
+        completion_tokens=0,
+    )
+    assert cost == 0.0001
+    assert snapshot == {"rule_id": "legacy", "kind": "token_tiered", "tier_index": 0}
 
 
 def test_normalize_model_pricing_drops_empty() -> None:
@@ -116,13 +139,24 @@ def test_cost_for_usage_prefers_registered_model_rule() -> None:
         completion_tokens=0,
         request_at="2026-09-01T00:00:00+08:00",
         doc={
-            "providers": [{
-                "id": "ds",
-                "model_pricing": {"m1": {"price_in": 100}},
-                "models": [{"name": "m1", "pricing_rules": [{
-                    "id": "per-request", "kind": "per_request", "price_per_request": 0.03,
-                }]}],
-            }],
+            "providers": [
+                {
+                    "id": "ds",
+                    "model_pricing": {"m1": {"price_in": 100}},
+                    "models": [
+                        {
+                            "name": "m1",
+                            "pricing_rules": [
+                                {
+                                    "id": "per-request",
+                                    "kind": "per_request",
+                                    "price_per_request": 0.03,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
             "routing": {"cost_currency": "cny"},
         },
     )
@@ -138,12 +172,23 @@ def test_cost_details_for_usage_returns_matched_rule_snapshot() -> None:
         completion_tokens=0,
         request_at="2026-09-01T00:00:00+08:00",
         doc={
-            "providers": [{
-                "id": "ds",
-                "models": [{"name": "m1", "pricing_rules": [{
-                    "id": "request", "kind": "per_request", "price_per_request": 0.03,
-                }]}],
-            }],
+            "providers": [
+                {
+                    "id": "ds",
+                    "models": [
+                        {
+                            "name": "m1",
+                            "pricing_rules": [
+                                {
+                                    "id": "request",
+                                    "kind": "per_request",
+                                    "price_per_request": 0.03,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
             "routing": {"cost_currency": "cny"},
         },
     )

@@ -531,7 +531,17 @@ async def run_semantic_style_backfill_round(*, now: int | None = None) -> int:
 async def handle_repeater_semantic_style_backfill_scan(payload: dict[str, Any]) -> int:
     """在 work aux 扫描历史消息，并持久化生成的语义标注任务。"""
     current_time = int(payload.get("now") or time.time())
-    bot_ids = [int(item) for item in payload.get("bot_ids", []) if int(item) > 0]
+    raw_bot_ids = payload.get("bot_ids")
+    if not isinstance(raw_bot_ids, list):
+        return 0
+    bot_ids: list[int] = []
+    for item in raw_bot_ids:
+        try:
+            bot_id = int(item)
+        except (TypeError, ValueError):
+            continue
+        if bot_id > 0:
+            bot_ids.append(bot_id)
     if not bot_ids:
         return 0
     cursor = load_semantic_style_backfill_cursor()

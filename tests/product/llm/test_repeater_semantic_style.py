@@ -386,8 +386,14 @@ async def test_backfill_scan_handler_keeps_cursor_when_enqueue_fails(monkeypatch
 
     with pytest.raises(RuntimeError, match="database unavailable"):
         await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": 2_000_000_000})
-
     saved.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_backfill_scan_handler_ignores_invalid_bot_ids() -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": ["invalid", 0, -1]}) == 0
 
 
 def test_parse_label_accepts_multi_axis_direct_example() -> None:
