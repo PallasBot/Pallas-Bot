@@ -36,6 +36,11 @@ _PUBLISH_TTL_SEC = max(60, int(os.getenv("PALLAS_FEDERATE_PEER_BOT_TTL_SEC", "18
 _REFRESH_INTERVAL_SEC = max(15.0, float(os.getenv("PALLAS_FEDERATE_PEER_BOT_REFRESH_SEC", "60")))
 _PRESENT_GROUP_WINDOW_SEC = max(_PUBLISH_TTL_SEC, int(os.getenv("PALLAS_FEDERATE_PRESENT_GROUP_WINDOW_SEC", "300")))
 _PRESENT_GROUP_PUBLISH_CAP = max(64, int(os.getenv("PALLAS_FEDERATE_PRESENT_GROUP_PUBLISH_CAP", "2000")))
+_NICKNAME_CACHE_TTL_SEC = max(60.0, float(os.getenv("PALLAS_FEDERATE_NICKNAME_CACHE_SEC", "600")))
+_NICKNAME_FAILURE_CACHE_TTL_SEC = max(15.0, min(_NICKNAME_CACHE_TTL_SEC, 60.0))
+_NICKNAME_CACHE_MAX_SIZE = max(1, int(os.getenv("PALLAS_FEDERATE_NICKNAME_CACHE_MAX_SIZE", "1024")))
+_NICKNAME_QUERY_CONCURRENCY = 4
+_NICKNAME_QUERY_TIMEOUT_SEC = 2.0
 _cache_ids: frozenset[int] = frozenset()
 _cache_deployment_ids: frozenset[str] = frozenset()
 # None = 对端未宣告（旧版），视为全能；frozenset = 明确能力集
@@ -49,6 +54,7 @@ _cache_deployment_present_groups: dict[str, frozenset[int] | None] = {}
 _cache_deployment_rosters: dict[str, FederatePeerBotRoster] = {}
 _cache_local_roster: FederatePeerBotRoster | None = None
 _local_present_groups: dict[int, float] = {}
+_local_public_online_nickname_cache: dict[int, tuple[float, str]] = {}
 _cache_updated_mono: float = 0.0
 _sync_task: asyncio.Task[None] | None = None
 _last_incompatible_capability_peers: tuple[str, ...] = ()
@@ -77,6 +83,7 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
         _cache_deployment_rosters, \
         _cache_local_roster, \
         _cache_ids, \
+        _local_public_online_nickname_cache, \
         _cache_updated_mono, \
         _local_present_groups, \
         _sync_task, \
@@ -92,6 +99,7 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
     _cache_deployment_rosters = {}
     _cache_local_roster = None
     _local_present_groups = {}
+    _local_public_online_nickname_cache = {}
     _cache_updated_mono = 0.0
     _sync_task = None
     _last_incompatible_capability_peers = ()
@@ -193,6 +201,63 @@ def collect_local_federate_public_online_bot_names(
         return {}
     visible_ids = online_bot_ids & public_bot_ids
     return {qq: name for qq in visible_ids if (name := str(display_names.get(str(qq)) or "").strip())}
+
+
+def _prune_local_public_online_nickname_cache(now: float) -> None:
+    expired = [qq for qq, (expires_at, _) in _local_public_online_nickname_cache.items() if expires_at <= now]
+    for qq in expired:
+        _local_public_online_nickname_cache.pop(qq, None)
+    overflow = len(_local_public_online_nickname_cache) - _NICKNAME_CACHE_MAX_SIZE
+    if overflow <= 0:
+        return
+    oldest = sorted(_local_public_online_nickname_cache, key=lambda qq: _local_public_online_nickname_cache[qq][0])
+    for qq in oldest[:overflow]:
+        _local_public_online_nickname_cache.pop(qq, None)
+
+
+async def collect_local_federate_public_online_bot_names_async(
+    online_bot_ids: frozenset[int],
+    public_bot_ids: frozenset[int],
+) -> dict[int, str]:
+    names = collect_local_federate_public_online_bot_names(online_bot_ids, public_bot_ids)
+    visible_ids = online_bot_ids & public_bot_ids
+    now = time.monotonic()
+    _prune_local_public_online_nickname_cache(now)
+    pending: list[int] = []
+    for qq in visible_ids:
+        if qq in names:
+            continue
+        cached = _local_public_online_nickname_cache.get(qq)
+        if cached is not None and cached[0] > now:
+            if cached[1]:
+                names[qq] = cached[1]
+            continue
+        pending.append(qq)
+    if not pending:
+        return names
+
+    from pallas.product.persona.self_identity import resolve_login_nickname
+
+    sem = asyncio.Semaphore(_NICKNAME_QUERY_CONCURRENCY)
+
+    async def resolve_one(qq: int) -> tuple[int, str]:
+        async with sem:
+            try:
+                nickname = await asyncio.wait_for(
+                    resolve_login_nickname(qq),
+                    timeout=_NICKNAME_QUERY_TIMEOUT_SEC,
+                )
+            except Exception:
+                nickname = ""
+            return qq, str(nickname or "").strip()
+
+    for qq, nickname in await asyncio.gather(*(resolve_one(qq) for qq in pending)):
+        ttl = _NICKNAME_CACHE_TTL_SEC if nickname else _NICKNAME_FAILURE_CACHE_TTL_SEC
+        _local_public_online_nickname_cache[qq] = (time.monotonic() + ttl, nickname)
+        if nickname:
+            names[qq] = nickname
+    _prune_local_public_online_nickname_cache(time.monotonic())
+    return names
 
 
 def command_capability_covers_plaintext(capabilities: frozenset[str] | None, plain: str) -> bool:
@@ -587,16 +652,22 @@ def get_federate_peer_bot_rosters() -> tuple[FederatePeerBotRoster, ...]:
     return tuple(_cache_deployment_rosters[key] for key in sorted(_cache_deployment_rosters))
 
 
-async def _build_local_federate_bot_roster() -> FederatePeerBotRoster:
+async def _build_local_federate_bot_roster(*, resolve_login_nicknames: bool = True) -> FederatePeerBotRoster:
     deployment_id = load_or_create_deployment_id().strip().lower()
     bot_ids = get_catalog_bot_ids()
     public_bot_ids = await collect_local_federate_public_bot_ids(bot_ids)
     online_bot_ids = collect_local_federate_online_bot_ids() & bot_ids
     visible_online_ids = online_bot_ids & public_bot_ids & bot_ids
-    public_online_bot_names = collect_local_federate_public_online_bot_names(
-        online_bot_ids,
-        public_bot_ids & bot_ids,
-    )
+    if resolve_login_nicknames:
+        public_online_bot_names = await collect_local_federate_public_online_bot_names_async(
+            online_bot_ids,
+            public_bot_ids & bot_ids,
+        )
+    else:
+        public_online_bot_names = collect_local_federate_public_online_bot_names(
+            online_bot_ids,
+            public_bot_ids & bot_ids,
+        )
     return FederatePeerBotRoster(
         deployment_id=deployment_id,
         deployment_name=local_federate_deployment_name() or f"部署 {deployment_id or '本机'}",
@@ -610,7 +681,7 @@ async def _build_local_federate_bot_roster() -> FederatePeerBotRoster:
 async def get_federate_bot_rosters() -> tuple[FederatePeerBotRoster, ...]:
     global _cache_local_roster
     if _cache_local_roster is None:
-        _cache_local_roster = await _build_local_federate_bot_roster()
+        _cache_local_roster = await _build_local_federate_bot_roster(resolve_login_nicknames=False)
     return (_cache_local_roster, *get_federate_peer_bot_rosters())
 
 
@@ -793,7 +864,7 @@ async def sync_federate_peer_bot_roster() -> None:
         _cache_deployment_rosters = {}
         _cache_updated_mono = time.monotonic()
         return
-    local_roster = await _build_local_federate_bot_roster()
+    local_roster = await _build_local_federate_bot_roster(resolve_login_nicknames=True)
     _cache_local_roster = local_roster
     await asyncio.to_thread(
         publish_local_federate_peer_bot_ids_sync,
