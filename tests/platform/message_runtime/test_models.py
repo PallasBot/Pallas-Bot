@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+import pytest
+
+from pallas.core.platform.message_runtime.models import (
+    HandlingOutcome,
+    HandlingPlan,
+    MessageContext,
+    RuntimeMode,
+    SendAction,
+)
+
+
+def test_runtime_mode_keeps_legacy_as_an_explicit_option() -> None:
+    assert RuntimeMode.LEGACY == "legacy"
+
+
+def test_fallback_outcome_cannot_contain_actions() -> None:
+    with pytest.raises(ValueError, match="fallback"):
+        HandlingOutcome(
+            handled=False,
+            fallback_to_legacy=True,
+            actions=(SendAction(message="reply"),),
+        )
+
+
+def test_message_context_telemetry_redacts_message_content() -> None:
+    context = MessageContext(
+        ingress_id="i-1",
+        bot_id=1,
+        group_id=2,
+        message_id=3,
+        plain_text="secret message",
+        raw_text="secret message",
+        is_to_me=False,
+        command_traffic=False,
+        route_modules=frozenset(),
+    )
+
+    fields = context.telemetry_fields()
+
+    assert fields["ingress_id"] == "i-1"
+    assert fields["bot_id_hash"] != "1"
+    assert fields["group_id_hash"] != "2"
+    assert "secret message" not in fields.values()
+
+
+def test_handling_plan_requires_a_reason_for_legacy_fallback() -> None:
+    with pytest.raises(ValueError, match="reason"):
+        HandlingPlan(kind="legacy", handler_ids=(), reason="")
