@@ -34,6 +34,8 @@ from pallas.core.platform.ingress.send_queue import (
     stop_send_queue_workers,
     uninstall_send_queue,
 )
+from pallas.core.platform.message_runtime.lifecycle import configure_shadow_experiment, flush_shadow_experiment
+from pallas.core.platform.message_runtime.models import RuntimeMode
 
 _HOOK_REGISTERED = False
 _ADAPTIVE_CAPACITY_TASK: asyncio.Task[None] | None = None
@@ -106,6 +108,14 @@ def register_ingress_dispatch_runtime() -> None:
 
     @driver.on_startup
     async def install_ingress_dispatch_on_startup() -> None:
+        config = get_ingress_dispatch_runtime_config()
+        configure_shadow_experiment(
+            mode=RuntimeMode(config.message_runtime_mode),
+            canary_groups=config.message_runtime_canary_groups,
+            telemetry_enabled=config.message_runtime_telemetry_enabled,
+            retention_hours=config.message_runtime_telemetry_retention_hours,
+            agreement_sample_rate=config.message_runtime_agreement_sample_rate,
+        )
         if route_index_enabled():
             index = build_route_index()
             register_startup_fact(
@@ -132,6 +142,7 @@ def register_ingress_dispatch_runtime() -> None:
         uninstall_onebot_backpressure()
         await stop_send_queue_workers()
         uninstall_send_queue()
+        flush_shadow_experiment()
 
     _HOOK_REGISTERED = True
     if matcher_dispatch_enabled():

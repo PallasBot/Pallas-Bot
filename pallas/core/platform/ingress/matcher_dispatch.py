@@ -43,6 +43,9 @@ from pallas.core.platform.ingress.message_load import (
     signal_overload,
 )
 from pallas.core.platform.ingress.route_index import RouteResolution, matcher_module_key
+from pallas.core.platform.message_runtime.lifecycle import shadow_experiment_for_group
+from pallas.core.platform.message_runtime.models import MessageContext
+from pallas.core.platform.message_runtime.shadow import LegacyExecution
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
 
 if TYPE_CHECKING:
@@ -121,6 +124,31 @@ def synthetic_llm_command_context(event: Event) -> dict[str, Any] | None:
 
 def matcher_log_name(matcher: type) -> str:
     return str(getattr(matcher, "plugin_name", "") or "<unknown>")
+
+
+def message_runtime_context(
+    bot: Bot,
+    event: GroupMessageEvent,
+    *,
+    command_traffic: bool,
+    resolution: RouteResolution | None,
+) -> MessageContext:
+    bot_id = int(bot.self_id)
+    group_id = int(event.group_id)
+    message_id = int(getattr(event, "message_id", 0) or 0)
+    plain_text = str(event.get_plaintext() or "")
+    raw_text = str(getattr(event, "raw_message", "") or "")
+    return MessageContext(
+        ingress_id=f"{bot_id}:{group_id}:{message_id}",
+        bot_id=bot_id,
+        group_id=group_id,
+        message_id=message_id,
+        plain_text=plain_text,
+        raw_text=raw_text,
+        is_to_me=bool(getattr(event, "to_me", False)),
+        command_traffic=command_traffic,
+        route_modules=resolution.matched_modules if resolution is not None else frozenset(),
+    )
 
 
 def select_synthetic_llm_command_matchers(selected_matchers: list[type], resolution: RouteResolution) -> list[type]:
@@ -206,6 +234,24 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
             apply_dispatch = isinstance(event, GroupMessageEvent)
             resolution = resolve_route_for_event(event) if apply_dispatch else None
             command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
+            shadow_experiment = None
+            shadow_context = None
+            shadow_plan = None
+            if apply_dispatch:
+                shadow_experiment = shadow_experiment_for_group(int(getattr(event, "group_id", 0) or 0))
+                if shadow_experiment is not None:
+                    try:
+                        shadow_context = message_runtime_context(
+                            bot,
+                            event,
+                            command_traffic=command_traffic,
+                            resolution=resolution,
+                        )
+                        shadow_plan = await shadow_experiment.plan(shadow_context)
+                    except Exception:
+                        logger.exception("MessageRuntime shadow plan failed")
+                        shadow_experiment = None
+                        shadow_context = None
             if apply_dispatch and resolution is not None:
                 record_route_index_decision(
                     index_hit=resolution.index_hit,
@@ -234,6 +280,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 total_considered = 0
                 matchers_run = 0
                 any_matcher_executed = False
+                legacy_matcher_modules: list[str] = []
 
                 break_flag = False
 
@@ -295,6 +342,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     if not selected_matchers:
                         continue
 
+                    legacy_matcher_modules.extend(matcher_log_name(matcher) for matcher in selected_matchers)
                     if llm_command is not None:
                         selected_matcher_modules.extend(matcher_log_name(matcher) for matcher in selected_matchers)
 
@@ -335,6 +383,20 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         selected_matcher_modules,
                         acquired_matcher_modules,
                     )
+                if shadow_experiment is not None and shadow_context is not None and shadow_plan is not None:
+                    try:
+                        shadow_experiment.record_legacy(
+                            shadow_context,
+                            shadow_plan,
+                            LegacyExecution(
+                                handler_ids=tuple(sorted(set(legacy_matcher_modules))),
+                                handled=any_matcher_executed,
+                                visible_actions=0,
+                            ),
+                            timestamp=int(time.time()),
+                        )
+                    except Exception:
+                        logger.exception("MessageRuntime shadow record failed")
 
                 await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
             finally:
