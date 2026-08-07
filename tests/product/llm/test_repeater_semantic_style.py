@@ -171,6 +171,40 @@ async def test_semantic_style_handlers_skip_disabled_scope(monkeypatch: pytest.M
     worker.assert_not_awaited()
 
 
+def test_realtime_admission_respects_persistent_global_and_scope_budgets(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR", 1)
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_REALTIME_MAX_PER_DAY", 2)
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY", 1)
+
+    assert mod.claim_semantic_style_realtime_admission(bot_id=100, group_id=42, example_id="a", now=10_000)
+    assert not mod.claim_semantic_style_realtime_admission(bot_id=100, group_id=42, example_id="b", now=10_000)
+    assert mod.claim_semantic_style_realtime_admission(bot_id=100, group_id=43, example_id="c", now=10_000)
+    assert not mod.claim_semantic_style_realtime_admission(bot_id=100, group_id=44, example_id="d", now=10_000)
+
+
+@pytest.mark.asyncio
+async def test_realtime_handler_drops_legacy_job_when_budget_rejects(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    worker = AsyncMock()
+    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
+    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda **_kwargs: True)
+    monkeypatch.setattr(mod, "claim_semantic_style_realtime_admission", lambda **_kwargs: False)
+
+    await mod.handle_repeater_semantic_style({
+        "example_id": "42:99:100",
+        "bot_id": 100,
+        "group_id": 42,
+        "trigger_text": "前句",
+        "reply_text": "接话",
+    })
+
+    worker.assert_not_awaited()
+
+
 @pytest.mark.asyncio
 async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
@@ -184,7 +218,7 @@ async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch
 
     await mod.label_semantic_style_with_llm(trigger_text="前句", reply_text="接话")
 
-    assert complete.await_args.kwargs["options"] == {"temperature": 0, "max_tokens": 160}
+    assert complete.await_args.kwargs["options"] == {"temperature": 0, "max_tokens": 96}
 
 
 @pytest.mark.asyncio
@@ -638,6 +672,7 @@ async def test_semantic_style_worker_labels_and_persists_relation(tmp_path, monk
         "scene": "group_chat",
         "trigger_text": "又炸了",
         "reply_text": "没救了",
+        "realtime_admitted": True,
     })
 
     worker.assert_awaited_once_with(trigger_text="又炸了", reply_text="没救了")
@@ -709,6 +744,7 @@ async def test_realtime_image_relation_uses_cached_image_and_never_persists_byte
         "trigger_text": "前句",
         "reply_text": "接话",
         "image_cq_code": "[CQ:image,file=cache.image]",
+        "realtime_admitted": True,
     })
 
     persisted = persist.call_args.args[0]

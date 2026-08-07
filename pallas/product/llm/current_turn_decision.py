@@ -131,7 +131,8 @@ def build_reply_target_instruction(target: ReplyTarget | str) -> str:
         "short_tease": "只围绕当前句开一个短玩笑，不引入角色背景、动作描写、邀约或新话题。",
         "answer": (
             "直接回答当前问题或请求；情感或关系确认时，先给明确态度，再按当前熟悉程度"
-            "自然接一句。角色只影响措辞，不改变话题，不补出背景设定、爱好或新安排。"
+            "自然接一句。角色只影响措辞，不改变话题，不补出背景设定、爱好或新安排；"
+            "除非必须澄清，不以礼貌反问收尾。"
         ),
     }
     return instructions.get(str(target or "").strip().lower(), "")

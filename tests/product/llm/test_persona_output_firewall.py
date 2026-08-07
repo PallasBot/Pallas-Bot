@@ -131,6 +131,30 @@ def test_allows_brief_presence_check_reply() -> None:
     assert result.rule_ids == ()
 
 
+def test_detects_reciprocal_social_question_after_an_answer() -> None:
+    result = inspect_persona_output(
+        "挺好，老样子，训练出任务都没落下。你呢？",
+        self_aliases=[],
+        current_user_text="最近怎么样",
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert result.rule_ids == ("reciprocal_social_question",)
+
+
+def test_allows_necessary_clarification_question() -> None:
+    result = inspect_persona_output(
+        "你说的是哪个版本？",
+        self_aliases=[],
+        current_user_text="这个怎么配",
+        social_action="ASK_ONE",
+        reply_target="answer",
+    )
+
+    assert result.rule_ids == ()
+
+
 def test_detects_ungrounded_praise_in_fact_reply() -> None:
     result = inspect_persona_output(
         "有实力啊。",

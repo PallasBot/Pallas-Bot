@@ -205,14 +205,20 @@ def build_semantic_style_job(payload: dict[str, object], event: GroupMessageEven
     bot_id = int(chat.get("bot_id") or 0)
     if group_id <= 0 or bot_id <= 0:
         return None
-    from pallas.product.llm.repeater_semantic_style import semantic_style_collection_enabled
+    from pallas.product.llm.repeater_semantic_style import (
+        claim_semantic_style_realtime_admission,
+        semantic_style_collection_enabled,
+    )
 
     if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
+        return None
+    example_id = f"{group_id}:{int(event.message_id)}:{bot_id}"
+    if not claim_semantic_style_realtime_admission(bot_id=bot_id, group_id=group_id, example_id=example_id):
         return None
     return WorkJob.create(
         kind="repeater.semantic_style",
         payload={
-            "example_id": f"{group_id}:{int(event.message_id)}:{bot_id}",
+            "example_id": example_id,
             "message_id": int(event.message_id),
             "created_at": int(chat.get("time") or 0),
             "bot_id": bot_id,
@@ -220,6 +226,7 @@ def build_semantic_style_job(payload: dict[str, object], event: GroupMessageEven
             "scene": "group_chat",
             "trigger_text": trigger,
             "reply_text": reply,
+            "realtime_admitted": True,
         },
         idempotency_key=f"repeater.semantic_style:{group_id}:{int(event.message_id)}:{bot_id}",
     )
