@@ -951,6 +951,16 @@ class _LlmModelPricingRowBody(BaseModel):
     cache_price_out: float = Field(default=0.0, ge=0)
 
 
+class _LlmProviderModelBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    model_id: str = Field(default="", max_length=128)
+    name: str = Field(min_length=1, max_length=200)
+    is_default: bool = False
+    capabilities: list[str] = Field(default_factory=list)
+    pricing_rules: list[dict[str, Any]] = Field(default_factory=list)
+
+
 class _LlmProviderRowBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -962,6 +972,7 @@ class _LlmProviderRowBody(BaseModel):
     api_key_env: str = ""
     clear_api_keys: bool = False
     default_model: str = ""
+    models: list[_LlmProviderModelBody] = Field(default_factory=list)
     enabled: bool = True
     task_models: dict[str, str] = Field(default_factory=dict)
     capabilities: list[str] = Field(default_factory=list)

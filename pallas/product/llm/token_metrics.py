@@ -207,6 +207,7 @@ def record_llm_token_usage(
     currency = ""
     try:
         from pallas.product.llm.token_cost import cost_for_usage
+        from pallas.product.llm.usage_ledger import monthly_model_tokens
 
         cost, currency = cost_for_usage(
             provider_id=provider,
@@ -215,6 +216,7 @@ def record_llm_token_usage(
             completion_tokens=completion,
             cache_read_tokens=cache_read,
             cache_write_tokens=cache_write,
+            monthly_tokens_before=monthly_model_tokens(provider, model),
         )
     except Exception:
         cost = 0.0

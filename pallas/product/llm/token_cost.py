@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 
@@ -81,6 +82,82 @@ def compute_usage_cost(
     return round(cost, 6)
 
 
+def _rule_is_active(rule: dict[str, Any], request_at: str) -> bool:
+    try:
+        current = datetime.fromisoformat(request_at)
+    except (TypeError, ValueError):
+        return False
+    for key, compare in (
+        ("effective_from", lambda value: current < value),
+        ("effective_to", lambda value: current >= value),
+    ):
+        raw = str(rule.get(key) or "").strip()
+        if not raw:
+            continue
+        try:
+            value = datetime.fromisoformat(raw)
+        except ValueError:
+            return False
+        if compare(value):
+            return False
+    return True
+
+
+def compute_model_rule_cost(
+    rule: dict[str, Any],
+    *,
+    request_at: str,
+    monthly_tokens_before: int,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+) -> tuple[float, dict[str, Any] | None]:
+    """计算一条已选费用规则；未生效或非法规则返回零费用。"""
+    if not isinstance(rule, dict) or not _rule_is_active(rule, request_at):
+        return 0.0, None
+    kind = str(rule.get("kind") or "").strip()
+    rule_id = str(rule.get("id") or "").strip()
+    snapshot: dict[str, Any] = {"rule_id": rule_id, "kind": kind}
+    if kind == "per_request":
+        return round(_nonneg_float(rule.get("price_per_request")), 6), snapshot
+    price = rule
+    if kind == "token_tiered":
+        tiers = rule.get("tiers")
+        if not isinstance(tiers, list):
+            return 0.0, None
+        price = {}
+        prior = max(0, int(monthly_tokens_before))
+        for index, tier in enumerate(tiers):
+            if not isinstance(tier, dict):
+                continue
+            limit = tier.get("up_to_tokens")
+            if limit is None or prior < max(0, int(limit)):
+                price = tier
+                snapshot["tier_index"] = index
+                break
+        if not price:
+            return 0.0, None
+    elif kind != "token":
+        return 0.0, None
+    normalized = normalize_model_price_row(price)
+    if normalized is None:
+        return 0.0, None
+    return (
+        compute_usage_cost(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+            price_in=normalized["price_in"],
+            price_out=normalized["price_out"],
+            cache_price_in=normalized["cache_price_in"],
+            cache_price_out=normalized["cache_price_out"],
+        ),
+        snapshot,
+    )
+
+
 def lookup_model_price(
     *,
     provider_id: str | None,
@@ -124,8 +201,46 @@ def cost_for_usage(
     completion_tokens: int,
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
+    request_at: str | None = None,
+    monthly_tokens_before: int = 0,
     doc: dict[str, Any] | None = None,
 ) -> tuple[float, str]:
+    if isinstance(doc, dict):
+        payload = doc
+    else:
+        from pallas.product.llm.providers_store import load_providers_document
+
+        payload = load_providers_document()
+    if payload is not None:
+        pid = str(provider_id or "").strip()
+        model_name = str(model or "").strip()
+        for provider in payload.get("providers") or []:
+            if not isinstance(provider, dict) or str(provider.get("id") or "").strip() != pid:
+                continue
+            for registered in provider.get("models") or []:
+                if not isinstance(registered, dict) or str(registered.get("name") or "").strip() != model_name:
+                    continue
+                rules = registered.get("pricing_rules")
+                if not isinstance(rules, list):
+                    break
+                current = request_at or datetime.now().astimezone().isoformat()
+                for rule in sorted(
+                    (item for item in rules if isinstance(item, dict)),
+                    key=lambda item: int(item.get("priority") or 0),
+                    reverse=True,
+                ):
+                    cost, snapshot = compute_model_rule_cost(
+                        rule,
+                        request_at=current,
+                        monthly_tokens_before=monthly_tokens_before,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        cache_read_tokens=cache_read_tokens,
+                        cache_write_tokens=cache_write_tokens,
+                    )
+                    if snapshot is not None:
+                        _, currency = lookup_model_price(provider_id=provider_id, model=model, doc=payload)
+                        return cost, currency
     price, currency = lookup_model_price(provider_id=provider_id, model=model, doc=doc)
     if price is None:
         return 0.0, currency
