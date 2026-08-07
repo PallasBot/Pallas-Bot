@@ -151,6 +151,25 @@ def message_runtime_context(
     )
 
 
+def record_message_runtime_shadow(
+    experiment: Any,
+    context: MessageContext,
+    plan: Any,
+    *,
+    handler_ids: tuple[str, ...],
+    handled: bool,
+) -> None:
+    try:
+        experiment.record_legacy(
+            context,
+            plan,
+            LegacyExecution(handler_ids=handler_ids, handled=handled, visible_actions=0),
+            timestamp=int(time.time()),
+        )
+    except Exception:
+        logger.exception("MessageRuntime shadow record failed")
+
+
 def select_synthetic_llm_command_matchers(selected_matchers: list[type], resolution: RouteResolution) -> list[type]:
     """合成命令仅派发到其路由目标，避免无关 blocker 占满执行通道。"""
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) in resolution.matched_modules]
@@ -268,6 +287,14 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         matchers_selected=0,
                         matchers_run=0,
                     )
+                    if shadow_experiment is not None and shadow_context is not None and shadow_plan is not None:
+                        record_message_runtime_shadow(
+                            shadow_experiment,
+                            shadow_context,
+                            shadow_plan,
+                            handler_ids=(),
+                            handled=False,
+                        )
                     await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
                     return
                 # 默认：继续跑闲聊 matcher，标记降质（停附属、保本地接话）
@@ -384,19 +411,13 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         acquired_matcher_modules,
                     )
                 if shadow_experiment is not None and shadow_context is not None and shadow_plan is not None:
-                    try:
-                        shadow_experiment.record_legacy(
-                            shadow_context,
-                            shadow_plan,
-                            LegacyExecution(
-                                handler_ids=tuple(sorted(set(legacy_matcher_modules))),
-                                handled=any_matcher_executed,
-                                visible_actions=0,
-                            ),
-                            timestamp=int(time.time()),
-                        )
-                    except Exception:
-                        logger.exception("MessageRuntime shadow record failed")
+                    record_message_runtime_shadow(
+                        shadow_experiment,
+                        shadow_context,
+                        shadow_plan,
+                        handler_ids=tuple(sorted(set(legacy_matcher_modules))),
+                        handled=any_matcher_executed,
+                    )
 
                 await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
             finally:

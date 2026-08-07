@@ -196,7 +196,10 @@ async def test_patched_handle_event_discards_pre_scheduler_federate_loser(monkey
 @pytest.mark.asyncio
 async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeGroupMessageEvent:
+        group_id = 100
+        message_id = 200
         raw_message = "今天天气不错"
+        to_me = False
 
         def get_log_string(self) -> str:
             return "fake group message"
@@ -214,6 +217,8 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     pre_mock = AsyncMock(return_value=True)
     post_mock = AsyncMock()
     run_matcher = AsyncMock()
+    experiment = MagicMock()
+    experiment.plan = AsyncMock(return_value=HandlingPlan(kind="legacy", handler_ids=(), reason="chat_traffic"))
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
     monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
@@ -227,6 +232,11 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     monkeypatch.setattr(dispatch, "is_overloaded", lambda: True)
     monkeypatch.setattr(dispatch, "record_chatter_overload_dropped", lambda: None)
     monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        dispatch,
+        "shadow_experiment_for_group",
+        lambda group_id: experiment if group_id == 100 else None,
+    )
     monkeypatch.setattr(dispatch, "matchers", {1: [PassiveMatcher]})
 
     await dispatch.patched_handle_event(bot, event)
@@ -234,6 +244,8 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
     run_matcher.assert_not_awaited()
+    experiment.plan.assert_awaited_once()
+    experiment.record_legacy.assert_called_once()
 
 
 @pytest.mark.asyncio
