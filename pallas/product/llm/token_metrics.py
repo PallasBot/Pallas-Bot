@@ -205,10 +205,11 @@ def record_llm_token_usage(
     task_key = str(task or "llm_chat").strip().lower() or "llm_chat"
     cost = 0.0
     currency = ""
+    pricing_rule: dict[str, Any] | None = None
     try:
-        from pallas.product.llm.token_cost import cost_for_usage
+        from pallas.product.llm.token_cost import cost_details_for_usage
 
-        cost, currency = cost_for_usage(
+        cost, currency, pricing_rule = cost_details_for_usage(
             provider_id=provider,
             model=model,
             prompt_tokens=prompt,
@@ -287,6 +288,7 @@ def record_llm_token_usage(
             cache_write_tokens=cache_write,
             cost=cost,
             currency=currency,
+            pricing_rule=pricing_rule,
             day_key=day_for_ledger,
         )
     except Exception:

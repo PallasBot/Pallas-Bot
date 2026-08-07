@@ -1,3 +1,3 @@
 """Pallas Bot 内核包（pallas-core）。"""
 
-__version__ = "4.1.31"
+__version__ = "4.1.32"

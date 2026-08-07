@@ -229,6 +229,7 @@ class _LlmProviderConfigRowData(BaseModel):
     api_key_set: bool = False
     api_keys_count: int = 0
     default_model: str = ""
+    models: list[dict[str, Any]] = Field(default_factory=list)
     enabled: bool = False
     task_models: dict[str, str] = Field(default_factory=dict)
     capabilities: list[str] = Field(default_factory=list)
@@ -349,6 +350,7 @@ class _LlmProviderRowBody(BaseModel):
     api_key_env: str = ""
     clear_api_keys: bool = False
     default_model: str = ""
+    models: list[dict[str, Any]] = Field(default_factory=list)
     enabled: bool = True
     task_models: dict[str, str] = Field(default_factory=dict)
     capabilities: list[str] = Field(default_factory=list)

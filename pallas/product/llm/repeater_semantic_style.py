@@ -20,6 +20,7 @@ from pallas.core.foundation.db import make_local_context_repository, make_messag
 from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.core.platform.work_jobs.models import WorkJob
+from pallas.core.platform.work_jobs.runtime import build_work_job_store
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -504,32 +505,61 @@ async def collect_semantic_style_backfill_candidates(
 
 
 async def run_semantic_style_backfill_round(*, now: int | None = None) -> int:
-    """在 learn 队列空档扫描并写入一日限额内的历史标注任务。"""
-    from packages.repeater.learn_queue import enqueue_semantic_style_backfill_jobs, learn_queue
-
-    queue = learn_queue()
-    if not queue.empty():
-        return 0
+    """投递由 work aux 执行的每日历史扫描任务。"""
     current_time = int(time.time()) if now is None else int(now)
-    cursor = load_semantic_style_backfill_cursor()
-    remaining = semantic_style_backfill_remaining_today(cursor, now=current_time)
-    capacity = min(remaining, queue.maxsize - queue.qsize())
-    if capacity <= 0:
+    bot_ids: list[int] = []
+    for key, bot in get_bots().items():
+        value = getattr(bot, "self_id", key)
+        try:
+            bot_id = int(value)
+        except (TypeError, ValueError):
+            continue
+        if bot_id > 0 and bot_id not in bot_ids:
+            bot_ids.append(bot_id)
+    if not bot_ids:
         return 0
-    candidates = await collect_semantic_style_backfill_candidates(now=current_time, cursor=cursor)
+    day = current_time // (24 * 60 * 60)
+    job = WorkJob.create(
+        kind="repeater.semantic_style.backfill.scan",
+        payload={"bot_ids": sorted(bot_ids), "now": current_time},
+        idempotency_key=f"repeater.semantic_style.backfill.scan:{day}",
+    )
+    await build_work_job_store().enqueue(job)
+    return 1
+
+
+async def handle_repeater_semantic_style_backfill_scan(payload: dict[str, Any]) -> int:
+    """在 work aux 扫描历史消息，并持久化生成的语义标注任务。"""
+    current_time = int(payload.get("now") or time.time())
+    raw_bot_ids = payload.get("bot_ids")
+    if not isinstance(raw_bot_ids, list):
+        return 0
+    bot_ids: list[int] = []
+    for item in raw_bot_ids:
+        try:
+            bot_id = int(item)
+        except (TypeError, ValueError):
+            continue
+        if bot_id > 0:
+            bot_ids.append(bot_id)
+    if not bot_ids:
+        return 0
+    cursor = load_semantic_style_backfill_cursor()
+    candidates = await collect_semantic_style_backfill_candidates(
+        now=current_time,
+        bot_ids=bot_ids,
+        cursor=cursor,
+    )
     batch = build_semantic_style_backfill_batch(
         candidates,
         cursor=cursor,
         now=current_time,
-        remaining_today=capacity,
-        has_pending_new_jobs=not queue.empty(),
     )
     if not batch.jobs:
         return 0
-    queued = enqueue_semantic_style_backfill_jobs(batch.jobs)
-    if queued == len(batch.jobs):
-        save_semantic_style_backfill_cursor(batch.cursor)
-    return queued
+    await build_work_job_store().enqueue_many(batch.jobs)
+    save_semantic_style_backfill_cursor(batch.cursor)
+    return len(batch.jobs)
 
 
 def parse_semantic_style_label(value: object) -> SemanticStyleLabel:

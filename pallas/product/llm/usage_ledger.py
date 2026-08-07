@@ -5,8 +5,9 @@ from __future__ import annotations
 import json
 import threading
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -50,6 +51,7 @@ def append_usage_record(
     cache_write_tokens: int = 0,
     cost: float = 0.0,
     currency: str = "",
+    pricing_rule: dict[str, Any] | None = None,
     day_key: str | None = None,
     ts: float | None = None,
 ) -> None:
@@ -80,6 +82,8 @@ def append_usage_record(
             "cost": round(float(cost or 0.0), 6),
             "currency": normalize_cost_currency(currency),
         }
+        if isinstance(pricing_rule, dict):
+            row["pricing_rule"] = pricing_rule
         path = ledger_path_for_day(day)
         line = json.dumps(row, ensure_ascii=False) + "\n"
         with _LOCK:
@@ -88,6 +92,42 @@ def append_usage_record(
                 handle.write(line)
     except Exception:
         pass
+
+
+def monthly_model_tokens(provider: str | None, model: str | None, *, ts: float | None = None) -> int:
+    """返回上海自然月内已成功落盘的单模型 Token 总量。"""
+    provider_key = str(provider or "").strip().lower()
+    model_key = str(model or "").strip()
+    if not provider_key or not model_key:
+        return 0
+    month = datetime.fromtimestamp(ts if ts is not None else time.time(), tz=ZoneInfo("Asia/Shanghai")).strftime(
+        "%Y-%m"
+    )
+    total = 0
+    try:
+        for path in usage_ledger_dir().glob("*.jsonl"):
+            with path.open(encoding="utf-8") as handle:
+                for line in handle:
+                    try:
+                        row = json.loads(line)
+                        row_month = datetime.fromtimestamp(
+                            float(row.get("ts") or 0), tz=ZoneInfo("Asia/Shanghai")
+                        ).strftime("%Y-%m")
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        continue
+                    if (
+                        row_month != month
+                        or str(row.get("provider") or "").strip().lower() != provider_key
+                        or str(row.get("model") or "").strip() != model_key
+                    ):
+                        continue
+                    total += sum(
+                        max(0, int(row.get(key) or 0))
+                        for key in ("prompt_tokens", "completion_tokens", "cache_read_tokens", "cache_write_tokens")
+                    )
+    except OSError:
+        return 0
+    return total
 
 
 def _iter_day_files(day: str) -> list[Path]:

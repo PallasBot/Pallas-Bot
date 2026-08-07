@@ -292,19 +292,108 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
 
 
 @pytest.mark.asyncio
-async def test_backfill_round_yields_to_buffered_realtime_learn_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
-    from packages.repeater import learn_queue
-    from pallas.core.platform.work_jobs.models import WorkJob
+async def test_backfill_round_enqueues_scan_without_scanning_in_unified_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
-    learn_queue.clear_repeater_learn_runtime_state()
-    learn_queue.learn_queue().put_nowait(WorkJob.create(kind="repeater.learn", payload={}, idempotency_key="realtime"))
     collect = AsyncMock()
+    store = SimpleNamespace(enqueue=AsyncMock())
     monkeypatch.setattr(mod, "collect_semantic_style_backfill_candidates", collect)
+    monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
+    monkeypatch.setattr(mod, "get_bots", lambda: {"100": SimpleNamespace(self_id="100")})
 
-    assert await mod.run_semantic_style_backfill_round(now=2_000_000_000) == 0
+    assert await mod.run_semantic_style_backfill_round(now=2_000_000_000) == 1
     collect.assert_not_awaited()
-    learn_queue.discard_buffered_repeater_jobs()
+    job = store.enqueue.await_args.args[0]
+    assert job.kind == "repeater.semantic_style.backfill.scan"
+    assert job.payload == {"bot_ids": [100], "now": 2_000_000_000}
+    assert job.idempotency_key == "repeater.semantic_style.backfill.scan:23148"
+
+
+@pytest.mark.asyncio
+async def test_backfill_scan_handler_persists_jobs_before_advancing_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    now = 2_000_000_000
+    cursor = mod.SemanticStyleBackfillCursor()
+    next_cursor = mod.SemanticStyleBackfillCursor(before_created_at=now - 10, before_message_id=99)
+    collected = [
+        {
+            "message_id": 99,
+            "created_at": now - 10,
+            "bot_id": 100,
+            "group_id": 42,
+            "trigger_text": "前句",
+            "reply_text": "接话",
+        }
+    ]
+    store = SimpleNamespace(enqueue_many=AsyncMock())
+    saved = Mock()
+    monkeypatch.setattr(mod, "load_semantic_style_backfill_cursor", lambda: cursor)
+    monkeypatch.setattr(mod, "collect_semantic_style_backfill_candidates", AsyncMock(return_value=collected))
+    monkeypatch.setattr(
+        mod,
+        "build_semantic_style_backfill_batch",
+        lambda *args, **kwargs: mod.SemanticStyleBackfillBatch(
+            jobs=[
+                mod.WorkJob.create(
+                    kind="repeater.semantic_style.backfill",
+                    payload={"message_id": 99},
+                    idempotency_key="repeater.semantic_style.backfill:42:99:100",
+                )
+            ],
+            cursor=next_cursor,
+        ),
+    )
+    monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
+    monkeypatch.setattr(mod, "save_semantic_style_backfill_cursor", saved)
+
+    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": now}) == 1
+
+    mod.collect_semantic_style_backfill_candidates.assert_awaited_once_with(now=now, bot_ids=[100], cursor=cursor)
+    store.enqueue_many.assert_awaited_once()
+    saved.assert_called_once_with(next_cursor)
+
+
+@pytest.mark.asyncio
+async def test_backfill_scan_handler_keeps_cursor_when_enqueue_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    cursor = mod.SemanticStyleBackfillCursor()
+    store = SimpleNamespace(enqueue_many=AsyncMock(side_effect=RuntimeError("database unavailable")))
+    saved = Mock()
+    monkeypatch.setattr(mod, "load_semantic_style_backfill_cursor", lambda: cursor)
+    monkeypatch.setattr(mod, "collect_semantic_style_backfill_candidates", AsyncMock(return_value=[]))
+    monkeypatch.setattr(
+        mod,
+        "build_semantic_style_backfill_batch",
+        lambda *args, **kwargs: mod.SemanticStyleBackfillBatch(
+            jobs=[
+                mod.WorkJob.create(
+                    kind="repeater.semantic_style.backfill",
+                    payload={"message_id": 99},
+                    idempotency_key="repeater.semantic_style.backfill:42:99:100",
+                )
+            ],
+            cursor=cursor,
+        ),
+    )
+    monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
+    monkeypatch.setattr(mod, "save_semantic_style_backfill_cursor", saved)
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": 2_000_000_000})
+    saved.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_backfill_scan_handler_ignores_invalid_bot_ids() -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": ["invalid", 0, -1]}) == 0
 
 
 def test_parse_label_accepts_multi_axis_direct_example() -> None:

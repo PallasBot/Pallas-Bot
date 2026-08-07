@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+from datetime import datetime
+from datetime import time as clock_time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 def normalize_cost_currency(raw: object) -> str:
@@ -81,6 +85,111 @@ def compute_usage_cost(
     return round(cost, 6)
 
 
+def _rule_is_active(rule: dict[str, Any], request_at: str) -> bool:
+    try:
+        current = datetime.fromisoformat(request_at)
+    except (TypeError, ValueError):
+        return False
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+    for key, compare in (
+        ("effective_from", lambda value: current < value),
+        ("effective_to", lambda value: current >= value),
+    ):
+        raw = str(rule.get(key) or "").strip()
+        if not raw:
+            continue
+        try:
+            value = datetime.fromisoformat(raw)
+        except ValueError:
+            return False
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+        if compare(value):
+            return False
+    start_raw = str(rule.get("daily_start") or "").strip()
+    end_raw = str(rule.get("daily_end") or "").strip()
+    if not start_raw and not end_raw:
+        return True
+    try:
+        start = clock_time.fromisoformat(start_raw or "00:00")
+        end = clock_time.fromisoformat(end_raw or "00:00")
+    except ValueError:
+        return False
+    current_time = current.timetz().replace(tzinfo=None)
+    if start == end:
+        return True
+    if start < end:
+        return start <= current_time < end
+    return current_time >= start or current_time < end
+
+
+def compute_model_rule_cost(
+    rule: dict[str, Any],
+    *,
+    request_at: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+) -> tuple[float, dict[str, Any] | None]:
+    """计算一条已选费用规则；未生效或非法规则返回零费用。"""
+    if not isinstance(rule, dict) or not _rule_is_active(rule, request_at):
+        return 0.0, None
+    input_tokens = max(0, int(prompt_tokens)) + max(0, int(cache_read_tokens)) + max(0, int(cache_write_tokens))
+    try:
+        lower = rule.get("input_tokens_min")
+        upper = rule.get("input_tokens_max")
+        if lower is not None and input_tokens < max(0, int(lower)):
+            return 0.0, None
+        if upper is not None and input_tokens > max(0, int(upper)):
+            return 0.0, None
+    except (TypeError, ValueError):
+        return 0.0, None
+    kind = str(rule.get("kind") or "").strip()
+    rule_id = str(rule.get("id") or "").strip()
+    snapshot: dict[str, Any] = {"rule_id": rule_id, "kind": kind}
+    if kind == "per_request":
+        return round(_nonneg_float(rule.get("price_per_request")), 6), snapshot
+    price = rule
+    if kind == "token_tiered":
+        tiers = rule.get("tiers")
+        if not isinstance(tiers, list):
+            return 0.0, None
+        price = {}
+        request_tokens = sum(
+            max(0, int(value)) for value in (prompt_tokens, completion_tokens, cache_read_tokens, cache_write_tokens)
+        )
+        for index, tier in enumerate(tiers):
+            if not isinstance(tier, dict):
+                continue
+            limit = tier.get("up_to_tokens")
+            if limit is None or request_tokens <= max(0, int(limit)):
+                price = tier
+                snapshot["tier_index"] = index
+                break
+        if not price:
+            return 0.0, None
+    elif kind != "token":
+        return 0.0, None
+    normalized = normalize_model_price_row(price)
+    if normalized is None:
+        return 0.0, None
+    return (
+        compute_usage_cost(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+            price_in=normalized["price_in"],
+            price_out=normalized["price_out"],
+            cache_price_in=normalized["cache_price_in"],
+            cache_price_out=normalized["cache_price_out"],
+        ),
+        snapshot,
+    )
+
+
 def lookup_model_price(
     *,
     provider_id: str | None,
@@ -116,7 +225,7 @@ def lookup_model_price(
     return None, currency
 
 
-def cost_for_usage(
+def cost_details_for_usage(
     *,
     provider_id: str | None,
     model: str | None,
@@ -124,11 +233,47 @@ def cost_for_usage(
     completion_tokens: int,
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
+    request_at: str | None = None,
     doc: dict[str, Any] | None = None,
-) -> tuple[float, str]:
+) -> tuple[float, str, dict[str, Any] | None]:
+    if isinstance(doc, dict):
+        payload = doc
+    else:
+        from pallas.product.llm.providers_store import load_providers_document
+
+        payload = load_providers_document()
+    if payload is not None:
+        pid = str(provider_id or "").strip()
+        model_name = str(model or "").strip()
+        for provider in payload.get("providers") or []:
+            if not isinstance(provider, dict) or str(provider.get("id") or "").strip() != pid:
+                continue
+            for registered in provider.get("models") or []:
+                if not isinstance(registered, dict) or str(registered.get("name") or "").strip() != model_name:
+                    continue
+                rules = registered.get("pricing_rules")
+                if not isinstance(rules, list):
+                    break
+                current = request_at or datetime.now().astimezone().isoformat()
+                for rule in sorted(
+                    (item for item in rules if isinstance(item, dict)),
+                    key=lambda item: int(item.get("priority") or 0),
+                    reverse=True,
+                ):
+                    cost, snapshot = compute_model_rule_cost(
+                        rule,
+                        request_at=current,
+                        prompt_tokens=prompt_tokens,
+                        completion_tokens=completion_tokens,
+                        cache_read_tokens=cache_read_tokens,
+                        cache_write_tokens=cache_write_tokens,
+                    )
+                    if snapshot is not None:
+                        _, currency = lookup_model_price(provider_id=provider_id, model=model, doc=payload)
+                        return cost, currency, {**snapshot, "rule": deepcopy(rule)}
     price, currency = lookup_model_price(provider_id=provider_id, model=model, doc=doc)
     if price is None:
-        return 0.0, currency
+        return 0.0, currency, None
     return (
         compute_usage_cost(
             prompt_tokens=prompt_tokens,
@@ -141,7 +286,32 @@ def cost_for_usage(
             cache_price_out=price["cache_price_out"],
         ),
         currency,
+        None,
     )
+
+
+def cost_for_usage(
+    *,
+    provider_id: str | None,
+    model: str | None,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    request_at: str | None = None,
+    doc: dict[str, Any] | None = None,
+) -> tuple[float, str]:
+    cost, currency, _ = cost_details_for_usage(
+        provider_id=provider_id,
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+        request_at=request_at,
+        doc=doc,
+    )
+    return cost, currency
 
 
 def estimate_tokens_cost_from_breakdown(

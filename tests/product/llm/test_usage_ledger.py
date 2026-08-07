@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import json
+
 from pallas.product.llm.usage_ledger import (
     aggregate_day_from_ledger,
     append_usage_record,
     tokens_look_corrupt,
+    monthly_model_tokens,
 )
 
 
@@ -62,3 +65,38 @@ def test_tokens_look_corrupt() -> None:
     assert tokens_look_corrupt({"total_tokens": 17_000_000_000})
     assert tokens_look_corrupt({"prompt_tokens": 60_000_000, "completion_tokens": 0})
     assert not tokens_look_corrupt({"total_tokens": 186_000})
+
+
+def test_monthly_model_tokens_uses_shanghai_month(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "llm_usage"
+    monkeypatch.setattr("pallas.product.llm.usage_ledger.usage_ledger_dir", lambda: root)
+    append_usage_record(task="llm_chat", provider="ds", model="m1", prompt_tokens=10, completion_tokens=5, day_key="2026-09-01", ts=1788192000)
+    assert monthly_model_tokens("ds", "m1", ts=1788192000) == 15
+
+
+def test_usage_ledger_preserves_pricing_rule_snapshot(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("pallas.product.llm.usage_ledger.usage_ledger_dir", lambda: tmp_path)
+    append_usage_record(
+        task="llm_chat",
+        provider="ds",
+        model="m1",
+        prompt_tokens=10,
+        completion_tokens=2,
+        pricing_rule={"rule_id": "sept", "kind": "token_tiered", "tier_index": 1},
+        day_key="2026-09-01",
+    )
+    rows = [json.loads(line) for line in (tmp_path / "2026-09-01.jsonl").read_text().splitlines()]
+    assert rows == [{
+        "ts": rows[0]["ts"],
+        "day": "2026-09-01",
+        "task": "llm_chat",
+        "provider": "ds",
+        "model": "m1",
+        "prompt_tokens": 10,
+        "completion_tokens": 2,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost": 0.0,
+        "currency": "",
+        "pricing_rule": {"rule_id": "sept", "kind": "token_tiered", "tier_index": 1},
+    }]

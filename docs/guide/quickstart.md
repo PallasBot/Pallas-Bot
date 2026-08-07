@@ -57,3 +57,4 @@ LLM、唱歌和画图都不是首次启动的前置条件。先让 Bot 正常上
 - 在 [网页控制台](web-console.md) 查看实例、日志和插件状态。
 - 按需 [安装插件](install-plugins.md)，或配置 [聊天、媒体与 AI Runtime](ai-runtime-choice.md)。
 - 日常配置与保存规则见 [配置从哪改](config.md)。
+- 已有实例升级、控制台一键更新与自动更新见 [更新 Pallas-Bot](update.md)。

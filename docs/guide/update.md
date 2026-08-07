@@ -1,0 +1,80 @@
+# 更新 Pallas-Bot
+
+本页用于更新已经能正常运行的 Pallas-Bot。先按部署方式选择一种路径；不要把 Docker 命令用于源码部署，也不要在 Docker 容器里执行 Git 更新。
+
+::: warning
+更新前备份 `config/pallas.toml` 和 `data/`。本地定制请放在 `local/plugins/`，不要直接修改已跟踪的源码文件，否则拉取上游时可能产生冲突。
+:::
+
+## 选择更新方式
+
+| 你的部署方式 | 推荐方式 | 适用场景 |
+| --- | --- | --- |
+| Docker Compose | [更新 Docker 镜像](#docker-compose) | 不需要改主仓代码的常规部署 |
+| 源码目录，想由 Bot 处理 | [控制台或命令更新](#控制台或命令更新) | 想更新 Bot 与 WebUI，且当前实例可正常运行 |
+| 源码目录，想自行控制过程 | [手动更新源码](#手动更新源码) | 需要先检查变更、处理定制或维护开发分支 |
+| 源码 Release 部署，接受定时升级 | [Bot 自动更新](#bot-自动更新) | 希望按计划检查并应用上游更新 |
+
+更新完成后，打开 `http://<主机>:8088/pallas/api/health`，再登录控制台确认页面不是旧版本。官方插件需要时在**插件商店**单独更新。
+
+## Docker Compose
+
+在保存 `docker-compose.yml` 和 `pallas-bot/` 的部署目录执行：
+
+```bash
+docker compose --env-file ./pallas-bot/config/compose.env pull
+docker compose --env-file ./pallas-bot/config/compose.env up -d
+docker compose --env-file ./pallas-bot/config/compose.env ps
+```
+
+镜像更新只会替换 Bot 代码；挂载的 `config/`、`data/` 与 `local/plugins/` 会保留。Docker 镜像内不是 Git 工作副本，控制台的 Bot 本体更新和自动更新不会用于该模式。完整编排与日志命令见 [Docker 部署](/deploy/docker)。
+
+## 控制台或命令更新
+
+此方式只适用于带 `.git` 的源码部署。
+
+1. 在控制台打开**版本与更新**，先检查当前版本和部署模式。
+2. 选择**应用 Bot 更新**，并按需更新 WebUI。Bot 会在更新后安排重启；若页面提示无法安排重启，按你的 systemd 或启动脚本手动重启。
+3. 不方便打开控制台时，在仓库根目录运行：
+
+```bash
+uv run pallas update bot --restart
+uv run pallas update webui
+```
+
+也可以一次执行：
+
+```bash
+uv run pallas maintenance run --update-bot --update-webui
+```
+
+该命令更新当前 Git 跟踪的 Bot 版本，并下载 Release 中的 `dist.zip` 更新 WebUI。不要添加 `--dev`，除非此机器还需要安装测试等开发依赖。
+
+## 手动更新源码
+
+在 Pallas-Bot 仓库根目录执行：
+
+```bash
+git pull --ff-only
+uv sync
+uv run pallas update webui
+```
+
+随后按当前部署方式重启 Bot：systemd 部署使用 `systemctl restart pallas-bot`；手工启动的单进程重新运行 `uv run pallas`；分片使用 `./scripts/run_sharded_bot.sh restart`。若 `git pull` 提示本地改动，先迁走定制或自行处理冲突，不要强制覆盖。
+
+若你固定在某个 Release tag，使用控制台的更新按钮或选择目标 tag 后再同步依赖；完整的 tag、分支和定制策略见[升级与站点定制](/maintainer/deploy/upgrade)。
+
+## Bot 自动更新
+
+自动更新由已运行的 Bot 按控制台设置的时间表检查更新，并在满足条件时应用更新和重启。它不是 Docker 镜像自动拉取。
+
+在控制台**版本与更新**中开启 Bot 自动更新，并选择更新轨道：
+
+| 更新轨道 | 可自动应用的部署 |
+| --- | --- |
+| Release | 干净的 Release tag 源码目录 |
+| 分支 | 可访问 Git 的非 Docker 源码目录 |
+
+也可由超管私聊 Bot 执行 `牛牛更新 自动 bot 开` 或 `牛牛更新 自动 bot 关`。自动更新前应先确认本地定制已移到 `local/plugins/`，并启用通知，以便在更新完成后收到结果。
+
+需要立即更新时，仍使用控制台的**应用 Bot 更新**或上面的 CLI 命令。自动更新检查、WebUI 和插件自动更新、失败排查见[升级与站点定制](/maintainer/deploy/upgrade)。

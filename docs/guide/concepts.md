@@ -13,7 +13,7 @@
 
 ## 通信路径
 
-![通信路径：QQ ↔ 协议端 ↔ Pallas-Bot ↔ 数据库，Web 控制台与 Bot 同进程](/assets/concepts-topology.png)
+![通信路径：QQ ↔ 协议端 ↔ Pallas-Bot ↔ 数据库，Web 控制台与 Bot 同进程](/assets/concepts-topology.svg)
 
 - 协议端与 Pallas-Bot 通过 **OneBot WebSocket** 通信。
 - Web 控制台与协议端管理页由 **同一 Bot 进程** 提供，无需另起服务。
@@ -38,8 +38,8 @@ flowchart LR
 常用命令：
 
 ```bash
-uv run pallas run unified
-uv run pallas status --mode unified
+uv run pallas
+uv run pallas status
 uv run pallas restart
 ```
 

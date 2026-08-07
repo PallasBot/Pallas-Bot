@@ -12,7 +12,7 @@
 ## 按开发任务
 
 | 任务 | 文档 | 用途 |
-| --- | --- |
+| --- | --- | --- |
 | 编写社区或站点插件 | [写第一个插件](/developer/plugin-development/first-plugin) · [插件开发入门](/developer/plugin-development/getting-started) · [发布](/developer/plugin-development/publishing) | 从本地插件开始，并完成打包发布。 |
 | 编写官方插件 | [Core vs 扩展](/developer/architecture/core-vs-extensions) · [Golden Plugin](/developer/plugin-development/golden-plugin) · [元数据](/developer/plugin-development/metadata) | 确认组件归属，按标准结构接入插件。 |
 | 接入命令与权限 | [cmd_perm](/common/cmd_perm) | 定义命令权限，并让帮助展示正确的可用范围。 |
