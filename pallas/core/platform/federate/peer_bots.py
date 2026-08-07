@@ -38,6 +38,7 @@ _PRESENT_GROUP_WINDOW_SEC = max(_PUBLISH_TTL_SEC, int(os.getenv("PALLAS_FEDERATE
 _PRESENT_GROUP_PUBLISH_CAP = max(64, int(os.getenv("PALLAS_FEDERATE_PRESENT_GROUP_PUBLISH_CAP", "2000")))
 _NICKNAME_CACHE_TTL_SEC = max(60.0, float(os.getenv("PALLAS_FEDERATE_NICKNAME_CACHE_SEC", "600")))
 _NICKNAME_FAILURE_CACHE_TTL_SEC = max(15.0, min(_NICKNAME_CACHE_TTL_SEC, 60.0))
+_NICKNAME_CACHE_MAX_SIZE = max(1, int(os.getenv("PALLAS_FEDERATE_NICKNAME_CACHE_MAX_SIZE", "1024")))
 _NICKNAME_QUERY_CONCURRENCY = 4
 _NICKNAME_QUERY_TIMEOUT_SEC = 2.0
 _cache_ids: frozenset[int] = frozenset()
@@ -202,6 +203,18 @@ def collect_local_federate_public_online_bot_names(
     return {qq: name for qq in visible_ids if (name := str(display_names.get(str(qq)) or "").strip())}
 
 
+def _prune_local_public_online_nickname_cache(now: float) -> None:
+    expired = [qq for qq, (expires_at, _) in _local_public_online_nickname_cache.items() if expires_at <= now]
+    for qq in expired:
+        _local_public_online_nickname_cache.pop(qq, None)
+    overflow = len(_local_public_online_nickname_cache) - _NICKNAME_CACHE_MAX_SIZE
+    if overflow <= 0:
+        return
+    oldest = sorted(_local_public_online_nickname_cache, key=lambda qq: _local_public_online_nickname_cache[qq][0])
+    for qq in oldest[:overflow]:
+        _local_public_online_nickname_cache.pop(qq, None)
+
+
 async def collect_local_federate_public_online_bot_names_async(
     online_bot_ids: frozenset[int],
     public_bot_ids: frozenset[int],
@@ -209,6 +222,7 @@ async def collect_local_federate_public_online_bot_names_async(
     names = collect_local_federate_public_online_bot_names(online_bot_ids, public_bot_ids)
     visible_ids = online_bot_ids & public_bot_ids
     now = time.monotonic()
+    _prune_local_public_online_nickname_cache(now)
     pending: list[int] = []
     for qq in visible_ids:
         if qq in names:
@@ -242,6 +256,7 @@ async def collect_local_federate_public_online_bot_names_async(
         _local_public_online_nickname_cache[qq] = (time.monotonic() + ttl, nickname)
         if nickname:
             names[qq] = nickname
+    _prune_local_public_online_nickname_cache(time.monotonic())
     return names
 
 

@@ -196,6 +196,24 @@ def test_federate_roster_read_does_not_trigger_login_nickname_lookup(monkeypatch
     resolver.assert_not_awaited()
 
 
+def test_prune_local_public_online_nickname_cache_removes_expired_and_oldest(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "_NICKNAME_CACHE_MAX_SIZE", 2)
+    mod._local_public_online_nickname_cache.update({
+        10001: (99.0, "过期牛"),
+        10002: (101.0, "旧牛"),
+        10003: (102.0, "新牛一"),
+        10004: (103.0, "新牛二"),
+    })
+
+    mod._prune_local_public_online_nickname_cache(100.0)
+
+    assert mod._local_public_online_nickname_cache == {
+        10003: (102.0, "新牛一"),
+        10004: (103.0, "新牛二"),
+    }
+
+
 def test_refresh_federate_peer_bot_ids_sync_reads_other_deployments(monkeypatch):
     client = MagicMock()
     client.scan_iter.return_value = iter([
