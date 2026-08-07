@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">Pallas-Bot 通信路径</title>
+  <desc id="desc">QQ 经协议端通过 OneBot WebSocket 连接 Pallas-Bot。Bot 连接数据库，并在同一进程提供 Web 控制台。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#9370e8" />
+    </marker>
+    <style>
+      .node { fill: #fff; stroke: #c6b7df; stroke-width: 3; }
+      .bot { fill: #eee9ff; stroke: #7545ff; stroke-width: 3; }
+      .edge { stroke: #9370e8; stroke-width: 4; fill: none; marker-start: url(#arrow); marker-end: url(#arrow); }
+      .down { stroke: #9370e8; stroke-width: 4; fill: none; marker-end: url(#arrow); }
+      .label { fill: #29272d; font: 28px sans-serif; text-anchor: middle; dominant-baseline: middle; }
+      .bot-label { fill: #7545ff; font: 28px sans-serif; text-anchor: middle; dominant-baseline: middle; }
+      .annotation { fill: #75717f; font: 18px sans-serif; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <rect width="1200" height="520" fill="#fbf9ff" />
+  <path class="edge" d="M 248 140 H 292" />
+  <path class="edge" d="M 508 140 H 552" />
+  <path class="edge" d="M 808 140 H 852" />
+  <path class="down" d="M 680 208 V 306" />
+
+  <rect class="node" x="60" y="80" width="180" height="120" rx="18" />
+  <rect class="node" x="300" y="80" width="200" height="120" rx="18" />
+  <rect class="bot" x="560" y="80" width="240" height="128" rx="18" />
+  <rect class="node" x="860" y="80" width="200" height="120" rx="18" />
+  <rect class="node" x="560" y="320" width="240" height="110" rx="18" />
+
+  <text class="label" x="150" y="140">QQ</text>
+  <text class="label" x="400" y="140">协议端</text>
+  <text class="bot-label" x="680" y="144">Pallas-Bot</text>
+  <text class="label" x="960" y="140">数据库</text>
+  <text class="label" x="680" y="375">Web 控制台</text>
+  <text class="annotation" x="530" y="242">OneBot WebSocket</text>
+  <text class="annotation" x="680" y="460">同一进程</text>
+</svg>

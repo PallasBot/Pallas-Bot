@@ -123,6 +123,7 @@ FILE_MAP: dict[str, str] = {
     "develop/knowledge-sources.md": "develop/knowledge-sources.md",
     # --- Guide 上手 ---
     "guide/quickstart.md": "guide/quickstart.md",
+    "guide/update.md": "guide/update.md",
     "guide/install-source.md": "guide/install-source.md",
     "guide/connect-qq.md": "guide/connect-qq.md",
     "guide/install-extensions.md": "guide/install-extensions.md",
@@ -188,9 +189,9 @@ def transform_for_vitepress(text: str) -> str:
     text = text.replace("../assets/brand-avatar.png", "/assets/brand-avatar.png")
     text = text.replace("./assets/brand-avatar.png", "/assets/brand-avatar.png")
     text = re.sub(r"(?<![./])assets/brand-avatar\.png", "/assets/brand-avatar.png", text)
-    text = text.replace("../assets/concepts-topology.png", "/assets/concepts-topology.png")
-    text = text.replace("./assets/concepts-topology.png", "/assets/concepts-topology.png")
-    text = re.sub(r"(?<![./])assets/concepts-topology\.png", "/assets/concepts-topology.png", text)
+    text = text.replace("../assets/concepts-topology.svg", "/assets/concepts-topology.svg")
+    text = text.replace("./assets/concepts-topology.svg", "/assets/concepts-topology.svg")
+    text = re.sub(r"(?<![./])assets/concepts-topology\.svg", "/assets/concepts-topology.svg", text)
     # 技能 / 源码：站内或 GitHub，避免相对路径 404
     text = re.sub(
         r"\]\((?:\.\./)*common/command_limits/README\.md([^)]*)\)",
@@ -548,12 +549,12 @@ def sync(dest_root: Path) -> int:
         avatar_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(avatar_src, avatar_dst)
         print("sync plugins/assets/brand-avatar.png -> src/public/assets/brand-avatar.png")
-    topo_src = DOCS / "assets" / "concepts-topology.png"
-    topo_dst = src_root / "public" / "assets" / "concepts-topology.png"
+    topo_src = DOCS / "assets" / "concepts-topology.svg"
+    topo_dst = src_root / "public" / "assets" / "concepts-topology.svg"
     if topo_src.is_file():
         topo_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(topo_src, topo_dst)
-        print("sync assets/concepts-topology.png -> src/public/assets/concepts-topology.png")
+        print("sync assets/concepts-topology.svg -> src/public/assets/concepts-topology.svg")
     for rel_src, rel_dst in FILE_MAP.items():
         source = DOCS / rel_src
         if not source.is_file():

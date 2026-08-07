@@ -64,3 +64,13 @@ def test_transform_common_webui_dead_link_patterns(src: str, expected: str) -> N
 
 def test_maintainer_logs_page_is_synced_to_docs_repo() -> None:
     assert FILE_MAP["maintainer/operate/logs.md"] == "maintainer/operate/logs.md"
+
+
+def test_guide_update_page_is_synced_to_docs_repo() -> None:
+    assert FILE_MAP["guide/update.md"] == "guide/update.md"
+
+
+def test_sync_copies_concepts_topology_svg(tmp_path: Path) -> None:
+    _MOD.sync(tmp_path)
+
+    assert (tmp_path / "src/public/assets/concepts-topology.svg").is_file()
