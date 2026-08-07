@@ -17,6 +17,7 @@ from nonebot import get_bots, get_driver, logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.core.foundation.db import make_local_context_repository, make_message_repository
+from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
@@ -33,6 +34,10 @@ BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT = 8
 SEMANTIC_STYLE_BACKFILL_WINDOW_SEC = 30 * 24 * 60 * 60
 SEMANTIC_STYLE_BACKFILL_JOB_TTL_SEC = 7 * 24 * 60 * 60
 SEMANTIC_STYLE_BACKFILL_MAX_PER_DAY = 128
+SEMANTIC_STYLE_REALTIME_MAX_PER_DAY = 512
+SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 32
+SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 5
+SEMANTIC_STYLE_LABEL_MAX_TOKENS = 96
 SEMANTIC_STYLE_LABEL_MAX_RETRIES = 2
 _SEMANTIC_STYLE_BACKFILL_GROUP_LIMIT = 128
 _SEMANTIC_STYLE_BACKFILL_PAGE_SIZE = 32
@@ -184,6 +189,14 @@ class SemanticStyleBackfillCursor(BaseModel):
     before_message_id: int = 0
     day_started_at: int = 0
     enqueued_today: int = 0
+
+
+class SemanticStyleRealtimeBudget(BaseModel):
+    day_started_at: int = 0
+    admitted_today: int = 0
+    sampled_out_today: int = 0
+    global_budget_skipped_today: int = 0
+    scope_budget_skipped_today: int = 0
 
 
 class SemanticStyleBackfillBatch(BaseModel):
@@ -580,6 +593,17 @@ def semantic_style_backfill_cursor_path(*, bot_id: int | None = None, group_id: 
     return semantic_style_base_dir() / "backfill_cursors" / str(scope[0]) / f"{scope[1]}.json"
 
 
+def semantic_style_realtime_budget_path(*, bot_id: int | None = None, group_id: int | None = None) -> Path:
+    scope = _semantic_style_scope(bot_id, group_id)
+    if scope is None:
+        return semantic_style_base_dir() / "realtime_budget.json"
+    return semantic_style_base_dir() / "realtime_budgets" / str(scope[0]) / f"{scope[1]}.json"
+
+
+def semantic_style_realtime_budget_lock_path() -> Path:
+    return semantic_style_base_dir() / "realtime_budget.lock"
+
+
 def _semantic_style_scope(bot_id: int | None, group_id: int | None) -> tuple[int, int] | None:
     if bot_id is None and group_id is None:
         return None
@@ -603,6 +627,77 @@ def semantic_style_settings_path(*, bot_id: int | None = None, group_id: int | N
     if scope is None:
         return semantic_style_base_dir() / "settings.json"
     return semantic_style_base_dir() / "settings" / str(scope[0]) / f"{scope[1]}.json"
+
+
+def _semantic_style_day_started_at(now: int) -> int:
+    return int(now) - int(now) % (24 * 60 * 60)
+
+
+def _load_semantic_style_realtime_budget(path: Path, *, now: int) -> SemanticStyleRealtimeBudget:
+    try:
+        budget = SemanticStyleRealtimeBudget.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        budget = SemanticStyleRealtimeBudget()
+    day_started_at = _semantic_style_day_started_at(now)
+    return (
+        budget
+        if budget.day_started_at == day_started_at
+        else SemanticStyleRealtimeBudget(day_started_at=day_started_at)
+    )
+
+
+def _save_semantic_style_realtime_budget(path: Path, budget: SemanticStyleRealtimeBudget) -> None:
+    atomic_write_text(path, budget.model_dump_json())
+
+
+def claim_semantic_style_realtime_admission(
+    *, bot_id: int, group_id: int, example_id: str, now: int | None = None
+) -> bool:
+    """稳定采样并原子占用实时语义标注预算。"""
+    current_time = int(time.time()) if now is None else int(now)
+    scope = _semantic_style_scope(bot_id, group_id)
+    assert scope is not None
+    global_path = semantic_style_realtime_budget_path()
+    scope_path = semantic_style_realtime_budget_path(bot_id=bot_id, group_id=group_id)
+    sampled = (
+        int.from_bytes(hashlib.blake2b(str(example_id).encode("utf-8"), digest_size=8).digest(), "big")
+        % (SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR)
+        == 0
+    )
+    with interprocess_file_lock(semantic_style_realtime_budget_lock_path()):
+        global_budget = _load_semantic_style_realtime_budget(global_path, now=current_time)
+        if not sampled:
+            _save_semantic_style_realtime_budget(
+                global_path,
+                global_budget.model_copy(update={"sampled_out_today": global_budget.sampled_out_today + 1}),
+            )
+            return False
+        scope_budget = _load_semantic_style_realtime_budget(scope_path, now=current_time)
+        if global_budget.admitted_today >= SEMANTIC_STYLE_REALTIME_MAX_PER_DAY:
+            _save_semantic_style_realtime_budget(
+                global_path,
+                global_budget.model_copy(
+                    update={"global_budget_skipped_today": global_budget.global_budget_skipped_today + 1}
+                ),
+            )
+            return False
+        if scope_budget.admitted_today >= SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY:
+            _save_semantic_style_realtime_budget(
+                scope_path,
+                scope_budget.model_copy(
+                    update={"scope_budget_skipped_today": scope_budget.scope_budget_skipped_today + 1}
+                ),
+            )
+            return False
+        _save_semantic_style_realtime_budget(
+            global_path,
+            global_budget.model_copy(update={"admitted_today": global_budget.admitted_today + 1}),
+        )
+        _save_semantic_style_realtime_budget(
+            scope_path,
+            scope_budget.model_copy(update={"admitted_today": scope_budget.admitted_today + 1}),
+        )
+    return True
 
 
 def load_semantic_style_settings(*, bot_id: int | None = None, group_id: int | None = None) -> SemanticStyleSettings:
@@ -631,6 +726,15 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
     profiles = _load_profiles(semantic_style_profiles_path())
     scoped_examples = [example for example in examples if _in_semantic_style_scope(example, scope)]
     scoped_profiles = [profile for profile in profiles.values() if _in_semantic_style_scope(profile, scope)]
+    now = int(time.time())
+    global_budget = _load_semantic_style_realtime_budget(semantic_style_realtime_budget_path(), now=now)
+    scope_budget = (
+        _load_semantic_style_realtime_budget(
+            semantic_style_realtime_budget_path(bot_id=bot_id, group_id=group_id), now=now
+        )
+        if scope is not None
+        else None
+    )
     return {
         "enabled": settings.enabled,
         "overrides": settings.overrides.model_dump(mode="json"),
@@ -639,6 +743,13 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
         "backfill_cursor": load_semantic_style_backfill_cursor(bot_id=bot_id, group_id=group_id).model_dump(
             mode="json"
         ),
+        "realtime_admission": {
+            "sample_divisor": SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR,
+            "global_daily_limit": SEMANTIC_STYLE_REALTIME_MAX_PER_DAY,
+            "scope_daily_limit": SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY,
+            "global": global_budget.model_dump(mode="json"),
+            "scope": scope_budget.model_dump(mode="json") if scope_budget else None,
+        },
     }
 
 
@@ -1078,7 +1189,7 @@ async def label_semantic_style_with_llm(*, trigger_text: str, reply_text: str) -
     response = await complete_chat_message(
         [{"role": "user", "content": prompt}],
         model=str(cfg.llm_model or ""),
-        options={"temperature": 0, "max_tokens": 160},
+        options={"temperature": 0, "max_tokens": SEMANTIC_STYLE_LABEL_MAX_TOKENS},
         cfg=cfg,
         task="repeater.semantic_style",
     )
@@ -1165,13 +1276,19 @@ async def label_semantic_style_with_retry(*, trigger_text: str, reply_text: str)
 
 
 async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
-    if not semantic_style_collection_enabled(
-        bot_id=int(payload.get("bot_id") or 0), group_id=int(payload.get("group_id") or 0)
-    ):
+    bot_id = int(payload.get("bot_id") or 0)
+    group_id = int(payload.get("group_id") or 0)
+    if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
         return
     trigger = str(payload.get("trigger_text") or "").strip()
     reply = str(payload.get("reply_text") or "").strip()
     if not trigger or not reply:
+        return
+    if not payload.get("realtime_admitted") and not claim_semantic_style_realtime_admission(
+        bot_id=bot_id,
+        group_id=group_id,
+        example_id=str(payload.get("example_id") or f"{group_id}:{payload.get('message_id')}:{bot_id}"),
+    ):
         return
     label = await label_semantic_style_with_llm(trigger_text=trigger, reply_text=reply)
     visual = await maybe_label_semantic_style_visual(payload)

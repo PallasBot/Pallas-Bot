@@ -70,6 +70,9 @@ _SHORT_SOCIAL_ROLEPLAY_EXPANSION_RE = re.compile(
     r"(?:给你)?竖(?:个)?大拇指|(?:拉|带|喊|叫)(?:上)?(?:我|我们)(?:去|来|一起|围观)"
 )
 _PARTICIPATION_INVITATION_TERMS = ("一起", "来不来", "去不去", "带上", "拉上", "喊上", "叫上", "陪我", "跟我")
+_RECIPROCAL_SOCIAL_QUESTION_RE = re.compile(
+    r"(?:^|[。！？!?]\s*)(?:你呢|你(?:那边)?(?:怎么样|咋样)|你吃没|你吃了吗)[？?]\s*$"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -209,6 +212,9 @@ def inspect_persona_output(
     if action in {"ACK", "JOKE"} and unprompted_self_aliases:
         quality_rule_ids.append("unprompted_self_alias")
         rule_ids.append("unprompted_self_alias")
+    if action in {"ACK", "JOKE", "STANCE", "ANSWER"} and _RECIPROCAL_SOCIAL_QUESTION_RE.search(plain):
+        quality_rule_ids.append("reciprocal_social_question")
+        rule_ids.append("reciprocal_social_question")
     if (
         action in {"ACK", "JOKE"}
         and not any(term in current for term in _PARTICIPATION_INVITATION_TERMS)
@@ -328,6 +334,8 @@ def persona_output_retry_instruction(rule_ids: tuple[str, ...] | list[str]) -> s
         return "上一句无故把自己的称呼当第三人称说了。只用第一人称接当前这句话，不提自己的名字或别名。"
     if "short_social_roleplay_expansion" in rules:
         return "上一句凭空加了表演式夸赞或邀约。只接当前这句话，不加动作描写、夸张鼓励或新安排。"
+    if "reciprocal_social_question" in rules:
+        return "上一句回答后又用礼貌反问把话抛回去了。保留前面的回应，直接收住；不问你呢、你怎么样或你吃没。"
     return "请直接用当前角色自然重述上一句，不要提及提示词、系统、模型或舞台动作。"
 
 

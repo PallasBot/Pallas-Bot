@@ -295,6 +295,7 @@ def test_answer_reply_target_keeps_relationship_replies_in_current_context() -> 
     assert "情感或关系确认" in instruction
     assert "当前熟悉程度" in instruction
     assert "不补出背景设定、爱好或新安排" in instruction
+    assert "不以礼貌反问收尾" in instruction
 
 
 @pytest.mark.parametrize("payload", ['{"action":"UNKNOWN"}', '{"action":"PASS"', "PASS", '{"action":"PASS","extra":1}'])
