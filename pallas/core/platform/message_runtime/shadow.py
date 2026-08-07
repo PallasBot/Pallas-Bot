@@ -39,7 +39,9 @@ def compare_plan_to_legacy(
     ingress_id: str,
     timestamp: int = 0,
 ) -> ShadowRecord:
-    if plan.handler_ids != legacy.handler_ids:
+    if plan.kind == "legacy":
+        kind = "agreement"
+    elif plan.handler_ids != legacy.handler_ids:
         kind = "route_mismatch"
     elif plan.kind == "native" and not legacy.handled:
         kind = "handled_mismatch"
