@@ -1,6 +1,6 @@
 [project]
 name = "pallas-bot"
-version = "4.1.31"
+version = "4.1.32"
 description = "《明日方舟》帕拉斯 Bot"
 authors = [{ name = "MistEO" }]
 maintainers = [
