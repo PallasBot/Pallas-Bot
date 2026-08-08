@@ -43,7 +43,7 @@ from pallas.core.platform.ingress.message_load import (
     signal_overload,
 )
 from pallas.core.platform.ingress.route_index import RouteResolution, matcher_module_key
-from pallas.core.platform.message_runtime.lifecycle import shadow_experiment_for_group
+from pallas.core.platform.message_runtime.lifecycle import native_runtime_for_group, shadow_experiment_for_group
 from pallas.core.platform.message_runtime.models import MessageContext
 from pallas.core.platform.message_runtime.shadow import LegacyExecution
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
@@ -271,6 +271,32 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         logger.exception("MessageRuntime shadow plan failed")
                         shadow_experiment = None
                         shadow_context = None
+            if apply_dispatch:
+                native_runtime = native_runtime_for_group(int(getattr(event, "group_id", 0) or 0))
+                if native_runtime is not None:
+                    try:
+                        native_context = message_runtime_context(
+                            bot,
+                            event,
+                            command_traffic=command_traffic,
+                            resolution=resolution,
+                        )
+                        native_outcome = await native_runtime.execute(native_context, bot=bot, event=event)
+                    except Exception:
+                        logger.exception("MessageRuntime native execution failed")
+                    else:
+                        if native_outcome.handled and not native_outcome.fallback_to_legacy:
+                            for action in native_outcome.actions:
+                                await bot.send(event, action.message)
+                            record_group_message_ingress(
+                                duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                                command_traffic=command_traffic,
+                                matchers_considered=0,
+                                matchers_selected=0,
+                                matchers_run=0,
+                            )
+                            await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
+                            return
             if apply_dispatch and resolution is not None:
                 record_route_index_decision(
                     index_hit=resolution.index_hit,

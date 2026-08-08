@@ -13,6 +13,8 @@ from .telemetry import ExperimentTelemetryWriter
 
 _shadow_experiment: ShadowExperiment | None = None
 _shadow_canary_groups: frozenset[int] = frozenset()
+_native_runtime: MessageRuntime | None = None
+_native_canary_groups: frozenset[int] = frozenset()
 _telemetry_writer: ExperimentTelemetryWriter | None = None
 _shadow_flush_task: asyncio.Task[None] | None = None
 _SHADOW_FLUSH_INTERVAL_SEC = 30.0
@@ -30,13 +32,24 @@ def configure_shadow_experiment(
     retention_hours: int,
     agreement_sample_rate: int,
 ) -> None:
-    global _shadow_experiment, _shadow_canary_groups, _telemetry_writer
+    global _shadow_experiment, _shadow_canary_groups, _telemetry_writer, _native_runtime, _native_canary_groups
     _shadow_experiment = None
     _shadow_canary_groups = frozenset()
     _telemetry_writer = None
-    if mode is not RuntimeMode.SHADOW:
+    _native_runtime = None
+    _native_canary_groups = frozenset()
+    if mode is RuntimeMode.LEGACY:
         return
     registry = NativeHandlerRegistry()
+    from packages.pb_core.native import StatusNativeHandler
+
+    registry.register(StatusNativeHandler())
+    if mode is RuntimeMode.NATIVE:
+        _native_runtime = MessageRuntime(mode, MessagePlanner(registry), registry)
+        _native_canary_groups = frozenset(canary_groups)
+        return
+    if mode is not RuntimeMode.SHADOW:
+        return
     writer = None
     if telemetry_enabled:
         writer = ExperimentTelemetryWriter(
@@ -54,6 +67,12 @@ def shadow_experiment_for_group(group_id: int) -> ShadowExperiment | None:
     if group_id not in _shadow_canary_groups:
         return None
     return _shadow_experiment
+
+
+def native_runtime_for_group(group_id: int) -> MessageRuntime | None:
+    if group_id not in _native_canary_groups:
+        return None
+    return _native_runtime
 
 
 def flush_shadow_experiment() -> None:
@@ -87,8 +106,16 @@ async def stop_shadow_experiment_flush_loop() -> None:
 
 
 def reset_shadow_experiment_for_tests() -> None:
-    global _shadow_experiment, _shadow_canary_groups, _telemetry_writer, _shadow_flush_task
+    global \
+        _shadow_experiment, \
+        _shadow_canary_groups, \
+        _telemetry_writer, \
+        _shadow_flush_task, \
+        _native_runtime, \
+        _native_canary_groups
     _shadow_experiment = None
     _shadow_canary_groups = frozenset()
     _telemetry_writer = None
     _shadow_flush_task = None
+    _native_runtime = None
+    _native_canary_groups = frozenset()

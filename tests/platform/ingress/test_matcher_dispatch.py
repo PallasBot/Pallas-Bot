@@ -14,7 +14,7 @@ from pallas.core.platform.ingress import dispatch_lanes, message_load
 from pallas.core.platform.ingress import matcher_activation as activation
 from pallas.core.platform.ingress import matcher_dispatch as dispatch
 from pallas.core.platform.ingress.route_index import RouteResolution
-from pallas.core.platform.message_runtime.models import HandlingPlan
+from pallas.core.platform.message_runtime.models import HandlingOutcome, HandlingPlan, SendAction
 
 
 def test_synthetic_llm_command_context_reads_structured_marker() -> None:
@@ -384,6 +384,113 @@ async def test_shadow_runtime_plans_after_preprocessing_and_keeps_legacy_matcher
     assert context.route_modules == frozenset({"pb_core"})
     experiment.record_legacy.assert_called_once()
     post_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_native_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        group_id = 100
+        message_id = 200
+        raw_message = "#pallas"
+        to_me = False
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "#pallas"
+
+    class StatusMatcher:
+        plugin_name = "pb_core"
+        rule = Rule()
+
+    bot = MagicMock(type="OneBot V11", self_id="10001")
+    bot.send = AsyncMock()
+    event = FakeGroupMessageEvent()
+    pre_mock = AsyncMock(return_value=True)
+    post_mock = AsyncMock()
+    native_runtime = MagicMock()
+    native_runtime.execute = AsyncMock(return_value=HandlingOutcome(handled=True, actions=(SendAction("status"),)))
+    run_matcher = AsyncMock(return_value=MagicMock(acquired=True))
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", post_mock)
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(
+        dispatch,
+        "resolve_route_for_event",
+        lambda _event: RouteResolution(frozenset({"pb_core"}), True),
+    )
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        dispatch, "native_runtime_for_group", lambda group_id: native_runtime if group_id == 100 else None
+    )
+    monkeypatch.setattr(dispatch, "shadow_experiment_for_group", lambda _group_id: None)
+    monkeypatch.setattr(dispatch, "record_route_index_decision", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "check_and_run_matcher_with_lane", run_matcher)
+    monkeypatch.setattr(dispatch, "matchers", {1: [StatusMatcher]})
+
+    await dispatch.patched_handle_event(bot, event)
+
+    native_runtime.execute.assert_awaited_once()
+    bot.send.assert_awaited_once_with(event, "status")
+    run_matcher.assert_not_awaited()
+    post_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_native_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        group_id = 100
+        message_id = 200
+        raw_message = "#pallas details"
+        to_me = False
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "#pallas details"
+
+    class StatusMatcher:
+        plugin_name = "pb_core"
+        rule = Rule()
+
+    bot = MagicMock(type="OneBot V11", self_id="10001")
+    event = FakeGroupMessageEvent()
+    native_runtime = MagicMock()
+    native_runtime.execute = AsyncMock(return_value=HandlingOutcome(handled=False, fallback_to_legacy=True))
+    run_matcher = AsyncMock(return_value=MagicMock(acquired=True))
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", AsyncMock(return_value=True))
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", AsyncMock())
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(
+        dispatch,
+        "resolve_route_for_event",
+        lambda _event: RouteResolution(frozenset({"pb_core"}), True),
+    )
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(dispatch, "native_runtime_for_group", lambda _group_id: native_runtime)
+    monkeypatch.setattr(dispatch, "shadow_experiment_for_group", lambda _group_id: None)
+    monkeypatch.setattr(dispatch, "record_route_index_decision", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "select_priority_matchers", lambda pool, **_kwargs: list(pool))
+    monkeypatch.setattr(dispatch, "matcher_dispatch_batches", lambda selected: [selected])
+    monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
+    monkeypatch.setattr(dispatch, "signal_overload", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "check_and_run_matcher_with_lane", run_matcher)
+    monkeypatch.setattr(dispatch, "matchers", {1: [StatusMatcher]})
+
+    await dispatch.patched_handle_event(bot, event)
+
+    native_runtime.execute.assert_awaited_once()
+    run_matcher.assert_awaited_once()
 
 
 def test_chat_drop_on_overload_default_off(monkeypatch: pytest.MonkeyPatch) -> None:

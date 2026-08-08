@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from nonebot.adapters import Bot, Event
+
     from .models import HandlingOutcome, MessageContext
 
 
@@ -10,7 +12,7 @@ class NativeHandler(Protocol):
     handler_id: str
     modules: frozenset[str]
 
-    async def handle(self, context: MessageContext) -> HandlingOutcome: ...
+    async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome: ...
 
 
 class NativeHandlerRegistry:

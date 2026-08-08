@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .models import HandlingOutcome
+
 if TYPE_CHECKING:
+    from nonebot.adapters import Bot, Event
+
     from .handlers import NativeHandlerRegistry
     from .models import HandlingPlan, MessageContext, RuntimeMode
     from .planner import MessagePlanner
@@ -21,3 +25,15 @@ class MessageRuntime:
 
     async def submit(self, context: MessageContext) -> HandlingPlan:
         return self._planner.plan(context)
+
+    async def execute(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
+        plan = self._planner.plan(context)
+        if plan.kind != "native" or len(plan.handler_ids) != 1:
+            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+        handler = self._registry.get(plan.handler_ids[0])
+        if handler is None:
+            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+        try:
+            return await handler.handle(context, bot=bot, event=event)
+        except Exception:
+            return HandlingOutcome(handled=False, fallback_to_legacy=True)

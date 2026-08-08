@@ -15,7 +15,7 @@ class StatusHandler:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def handle(self, context: MessageContext) -> HandlingOutcome:
+    async def handle(self, context: MessageContext, *, bot: object, event: object) -> HandlingOutcome:
         self.calls += 1
         return HandlingOutcome(handled=True)
 
@@ -45,3 +45,16 @@ async def test_shadow_runtime_plans_without_executing_native_handler() -> None:
 
     assert plan.kind == "native"
     assert handler.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_native_runtime_executes_the_planned_handler() -> None:
+    handler = StatusHandler()
+    registry = NativeHandlerRegistry()
+    registry.register(handler)
+    runtime = MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry)
+
+    outcome = await runtime.execute(_context(), bot=object(), event=object())
+
+    assert outcome == HandlingOutcome(handled=True)
+    assert handler.calls == 1
