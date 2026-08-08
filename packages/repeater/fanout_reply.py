@@ -81,14 +81,11 @@ async def repeater_fanout_enabled_for_group(group_id: int) -> bool:
     return await count_fanout_capable_bots(group_id) >= 2
 
 
-def cap_fanout_bot_ids(bot_ids: list[int]) -> list[int]:
-
-    limit = int(get_repeater_config().fanout_max_bots)
-
-    if limit <= 0:
-        return bot_ids
-
-    return bot_ids[:limit]
+def select_fanout_bot_ids(bot_ids: list[int], *, max_bots: int) -> list[int]:
+    upper = min(len(bot_ids), max_bots) if max_bots > 0 else len(bot_ids)
+    if upper <= 0:
+        return []
+    return sorted(random.sample(bot_ids, random.randint(1, upper)))
 
 
 def fanout_payload_from_event(
@@ -191,7 +188,7 @@ async def list_fanout_bot_ids(group_id: int) -> list[int]:
 
     allowed = await asyncio.gather(*(bot_may_repeater_reply(bid, group_id) for bid in ids))
 
-    result = cap_fanout_bot_ids([bid for bid, ok in zip(ids, allowed, strict=True) if ok])
+    result = [bid for bid, ok in zip(ids, allowed, strict=True) if ok]
     _FANOUT_BOT_IDS_CACHE[group_id] = (now + _FANOUT_BOT_IDS_CACHE_TTL, list(result))
     return result
 
@@ -207,6 +204,11 @@ async def resolve_fanout_gate(event: GroupMessageEvent) -> FanoutGate:
 
     if len(bot_ids) < 2:
         return FanoutGate()
+
+    bot_ids = select_fanout_bot_ids(
+        bot_ids,
+        max_bots=int(get_repeater_config().fanout_max_bots),
+    )
 
     if not await try_claim_group_message_once(
         _FANOUT_PLUGIN,
