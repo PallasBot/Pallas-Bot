@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from threading import Lock
 from typing import TYPE_CHECKING
 
 from pallas.core.foundation.fs_lock import interprocess_file_lock
@@ -25,20 +26,28 @@ class ExperimentTelemetryWriter:
         self._agreement_sample_rate = max(1, agreement_sample_rate)
         self._retention_sec = max(1, retention_sec)
         self._pending: list[ShadowRecord] = []
+        self._pending_lock = Lock()
 
     def record(self, record: ShadowRecord) -> None:
         if record.kind != "agreement" or self._sample_agreement(record.ingress_id):
-            self._pending.append(record)
+            with self._pending_lock:
+                self._pending.append(record)
 
     def flush(self) -> None:
-        if not self._pending:
-            return
+        with self._pending_lock:
+            if not self._pending:
+                return
+            pending, self._pending = self._pending, []
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        with interprocess_file_lock(self.path.with_suffix(self.path.suffix + ".lock")):
-            with self.path.open("a", encoding="utf-8") as file:
-                for record in self._pending:
-                    file.write(json.dumps(record.as_dict(), separators=(",", ":")) + "\n")
-        self._pending.clear()
+        try:
+            with interprocess_file_lock(self.path.with_suffix(self.path.suffix + ".lock")):
+                with self.path.open("a", encoding="utf-8") as file:
+                    for record in pending:
+                        file.write(json.dumps(record.as_dict(), separators=(",", ":")) + "\n")
+        except OSError:
+            with self._pending_lock:
+                self._pending[:0] = pending
+            raise
 
     def prune(self, *, now: int | None = None) -> None:
         if not self.path.is_file():

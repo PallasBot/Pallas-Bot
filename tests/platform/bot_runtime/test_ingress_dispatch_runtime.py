@@ -70,7 +70,9 @@ async def test_runtime_starts_and_stops_conversation_scheduler_in_order(monkeypa
         ),
     )
     monkeypatch.setattr(runtime, "configure_shadow_experiment", lambda **_kwargs: events.append("configure_shadow"))
+    monkeypatch.setattr(runtime, "start_shadow_experiment_flush_loop", lambda: events.append("start_shadow_flush"))
     monkeypatch.setattr(runtime, "flush_shadow_experiment", lambda: events.append("flush_shadow"))
+    monkeypatch.setattr(runtime, "stop_shadow_experiment_flush_loop", lambda: record_async("stop_shadow_flush"))
     monkeypatch.setattr(runtime, "install_send_queue", lambda: events.append("install_send"))
     monkeypatch.setattr(runtime, "start_send_queue_workers", lambda: record_async("start_send"))
     monkeypatch.setattr(runtime, "start_conversation_scheduler", lambda: record_async("start_scheduler"))
@@ -92,6 +94,7 @@ async def test_runtime_starts_and_stops_conversation_scheduler_in_order(monkeypa
 
     assert events == [
         "configure_shadow",
+        "start_shadow_flush",
         "install_send",
         "start_send",
         "start_scheduler",
@@ -102,5 +105,6 @@ async def test_runtime_starts_and_stops_conversation_scheduler_in_order(monkeypa
         "uninstall_matcher",
         "stop_send",
         "uninstall_send",
+        "stop_shadow_flush",
         "flush_shadow",
     ]

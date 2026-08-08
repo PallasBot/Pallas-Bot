@@ -34,7 +34,12 @@ from pallas.core.platform.ingress.send_queue import (
     stop_send_queue_workers,
     uninstall_send_queue,
 )
-from pallas.core.platform.message_runtime.lifecycle import configure_shadow_experiment, flush_shadow_experiment
+from pallas.core.platform.message_runtime.lifecycle import (
+    configure_shadow_experiment,
+    flush_shadow_experiment,
+    start_shadow_experiment_flush_loop,
+    stop_shadow_experiment_flush_loop,
+)
 from pallas.core.platform.message_runtime.models import RuntimeMode
 
 _HOOK_REGISTERED = False
@@ -116,6 +121,7 @@ def register_ingress_dispatch_runtime() -> None:
             retention_hours=config.message_runtime_telemetry_retention_hours,
             agreement_sample_rate=config.message_runtime_agreement_sample_rate,
         )
+        start_shadow_experiment_flush_loop()
         if route_index_enabled():
             index = build_route_index()
             register_startup_fact(
@@ -142,6 +148,7 @@ def register_ingress_dispatch_runtime() -> None:
         uninstall_onebot_backpressure()
         await stop_send_queue_workers()
         uninstall_send_queue()
+        await stop_shadow_experiment_flush_loop()
         flush_shadow_experiment()
 
     _HOOK_REGISTERED = True
