@@ -58,12 +58,14 @@ def configure_shadow_experiment(
     from packages.greeting.native import CallMeNativeHandler
     from packages.help.native import HelpNativeHandler
     from packages.pb_core.native import ConsoleNativeHandler, PluginsNativeHandler, StatusNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
 
     registry.register(CallMeNativeHandler())
     registry.register(HelpNativeHandler())
     registry.register(StatusNativeHandler())
     registry.register(ConsoleNativeHandler())
     registry.register(PluginsNativeHandler())
+    registry.register(RepeaterNativeHandler())
     writer = None
     if telemetry_enabled:
         writer = ExperimentTelemetryWriter(

@@ -7,6 +7,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def reset_message_load_state() -> None:
+    from pallas.core.platform.ingress.message_load import reset_message_load_for_tests
+
+    reset_message_load_for_tests()
+    yield
+    reset_message_load_for_tests()
+
+
 @pytest.mark.asyncio
 async def test_enqueue_repeater_learn_captures_idempotent_work_job(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater import learn_queue
