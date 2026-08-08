@@ -73,6 +73,12 @@ _PARTICIPATION_INVITATION_TERMS = ("一起", "来不来", "去不去", "带上",
 _RECIPROCAL_SOCIAL_QUESTION_RE = re.compile(
     r"(?:^|[。！？!?]\s*)(?:你呢|你(?:那边)?(?:怎么样|咋样)|你吃没|你吃了吗)[？?]\s*$"
 )
+_HARD_PRESSURE_CHAT_RE = re.compile(r"(?:少废话|闭嘴|滚|自己想|别来烦我|别烦我|爱咋咋地)[，,。!！\s]*$")
+_PRICKLY_CHAT_RE = re.compile(r"(?:关我什么事|与我无关|不关我的事|懒得理你|别找我)[，,。!！\s]*$")
+_SUPPORTIVE_CONTEXT_DEFLECTION_RE = re.compile(r"(?:哎呀)?这个我不会嘛[，,。!！\s]*$")
+_SUPPORTIVE_HELP_REQUEST_RE = re.compile(
+    r"(?:我|自己)不知道(?:该)?怎么办|(?:我|自己)不知所措[，,。！？!?\s]{0,4}(?:我)?该怎么办|(?:我|自己)撑不住"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,6 +161,7 @@ def inspect_persona_output(
     is_presence_check = bool(_PRESENCE_CHECK_RE.search(current))
     action = str(social_action or "").strip().upper()
     target = str(reply_target or "").strip().lower()
+    user_is_hostile = any(term in current for term in ("滚", "闭嘴", "别烦我", "去死"))
     current_has_persona_topic = any(anchor in current for anchor in _PERSONA_TOPIC_ANCHORS)
     persona_topic_terms = ()
     if not current_has_persona_topic:
@@ -191,6 +198,13 @@ def inspect_persona_output(
         quality_rule_ids.append("presence_check_overexplained")
         rule_ids.append("presence_check_overexplained")
     if (
+        (target in {"emotion", "help"} or (target == "answer" and _SUPPORTIVE_HELP_REQUEST_RE.search(current)))
+        and action in {"ACK", "ANSWER", "STANCE"}
+        and _SUPPORTIVE_CONTEXT_DEFLECTION_RE.fullmatch(plain)
+    ):
+        quality_rule_ids.append("supportive_context_deflection")
+        rule_ids.append("supportive_context_deflection")
+    if (
         target == "fact"
         and any(term in plain for term in _GENERIC_PRAISE_TERMS)
         and not any(term in current for term in _GENERIC_PRAISE_TERMS)
@@ -222,6 +236,12 @@ def inspect_persona_output(
     ):
         quality_rule_ids.append("short_social_roleplay_expansion")
         rule_ids.append("short_social_roleplay_expansion")
+    if action in {"ACK", "ANSWER", "STANCE"} and _HARD_PRESSURE_CHAT_RE.search(plain):
+        quality_rule_ids.append("chat_hard_pressure_tone")
+        rule_ids.append("chat_hard_pressure_tone")
+    if action in {"ACK", "ANSWER", "STANCE"} and not user_is_hostile and _PRICKLY_CHAT_RE.search(plain):
+        quality_rule_ids.append("chat_prickly_tone")
+        rule_ids.append("chat_prickly_tone")
     return PersonaOutputInspection(
         rule_ids=tuple(rule_ids),
         quality_rule_ids=tuple(quality_rule_ids),
