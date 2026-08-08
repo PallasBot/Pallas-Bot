@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import tomllib
 from typing import TYPE_CHECKING, Any, Literal
 
 from nonebot import logger
@@ -554,12 +555,19 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
         )
         return {"result": "up_to_date", "updated": [], "failed": []}
 
-    updated: list[str] = []
+    updated: list[dict[str, str]] = []
     failed: list[dict[str, str]] = []
     for pkg in official_todo:
         try:
             await update_official_extension_with_options(pkg, restart=False)
-            updated.append(pkg)
+            entry = official.get(pkg) or {}
+            updated.append({
+                "id": pkg,
+                "source": "official",
+                "from_ref": str(entry.get("installed_ref") or "").strip(),
+                "to_ref": str(entry.get("latest_ref") or "").strip(),
+                "ref_kind": "version",
+            })
         except ExtensionInstallError as e:
             failed.append({"id": pkg, "error": e.detail})
         except Exception as e:  # noqa: BLE001
@@ -567,8 +575,23 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
 
     for pid in community_todo:
         try:
+            before_version = _community_plugin_version(pid)
             await update_community_plugin(pid)
-            updated.append(pid)
+            after_version = _community_plugin_version(pid)
+            entry = community.get(pid) or {}
+            if before_version and after_version and before_version != after_version:
+                from_ref, to_ref, ref_kind = before_version, after_version, "version"
+            else:
+                from_ref = str(entry.get("installed_ref") or "").strip()
+                to_ref = str(entry.get("latest_ref") or "").strip()
+                ref_kind = "commit"
+            updated.append({
+                "id": pid,
+                "source": "community",
+                "from_ref": from_ref,
+                "to_ref": to_ref,
+                "ref_kind": ref_kind,
+            })
         except CommunityPluginInstallError as e:
             failed.append({"id": pid, "error": str(e)})
         except Exception as e:  # noqa: BLE001
@@ -590,20 +613,22 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
                 "skip_reason": None,
             },
         )
+        restart_scheduled = False
+        try:
+            from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
+
+            if bot_lifecycle_available():
+                restart_scheduled = bool(schedule_bot_restart(delay_s=3.0))
+        except Exception:  # noqa: BLE001
+            logger.warning("Pallas-Bot 控制台: 插件自动更新后安排重启失败")
         _append_pending_item({
             "kind": "plugins",
             "tag": f"{len(updated)} 个插件",
             "updated": updated,
             "failed": failed,
+            "restart_scheduled": restart_scheduled,
             "applied_at": applied_at,
         })
-        try:
-            from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
-
-            if bot_lifecycle_available():
-                schedule_bot_restart(delay_s=3.0)
-        except Exception:  # noqa: BLE001
-            logger.warning("Pallas-Bot 控制台: 插件自动更新后安排重启失败")
         try:
             from .console_read_cache import drop_read_cache
 
@@ -614,6 +639,7 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
             "result": result,
             "updated": updated,
             "failed": failed,
+            "restart_scheduled": restart_scheduled,
             "message": f"已更新 {len(updated)} 个插件",
         }
 
@@ -710,17 +736,62 @@ async def run_auto_update_tick(
     return {"result": overall, "targets": results}
 
 
+def _community_plugin_version(plugin_id: str) -> str:
+    from pallas.console.webui.community_plugin_install import plugin_install_path
+
+    root = plugin_install_path(plugin_id)
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+            project = data.get("project") if isinstance(data, dict) else None
+            version = project.get("version") if isinstance(project, dict) else None
+            if isinstance(version, str) and version.strip():
+                return version.strip()
+        except (OSError, tomllib.TOMLDecodeError):
+            pass
+    return ""
+
+
+def format_plugin_update_item(item: Any) -> str:
+    if isinstance(item, str):
+        return item
+    if not isinstance(item, dict):
+        return str(item)
+    plugin_id = str(item.get("id") or item.get("plugin_id") or "未知插件").strip()
+    from_ref = str(item.get("from_ref") or "").strip()
+    to_ref = str(item.get("to_ref") or "").strip()
+    ref_kind = str(item.get("ref_kind") or "").strip()
+    detail = f"{from_ref} -> {to_ref}" if from_ref and to_ref else (to_ref or from_ref or "版本未知")
+    suffix = "（提交）" if ref_kind == "commit" else ""
+    return f"{plugin_id}：{detail}{suffix}"
+
+
 def format_auto_update_notify_message(items: list[dict[str, Any]]) -> str:
-    lines = ["【自动更新】本轮已应用："]
+    lines = ["【自动更新完成】", "本轮已应用："]
     labels = {"webui": "WebUI", "bot": "Bot", "plugins": "插件"}
     for item in items:
         kind = str(item.get("kind") or "").strip()
         label = labels.get(kind, kind or "项")
         tag = str(item.get("tag") or item.get("last_applied_tag") or item.get("message") or "").strip()
+        from_tag = str(item.get("from_tag") or "").strip()
+        if kind in {"webui", "bot"} and from_tag and tag:
+            tag = f"{from_tag} -> {tag}"
         if kind == "plugins":
             updated = item.get("updated")
             if isinstance(updated, list) and updated:
-                tag = f"{len(updated)} 个" + (f"（{tag}）" if tag else "")
+                lines.append(f"· {label}（{len(updated)} 个）：")
+                lines.extend(f"  - {format_plugin_update_item(row)}" for row in updated)
+                failed = item.get("failed")
+                if isinstance(failed, list) and failed:
+                    lines.extend(
+                        f"  - 失败：{entry.get('id')}（{entry.get('error')}）"
+                        for entry in failed
+                        if isinstance(entry, dict)
+                    )
+                if item.get("restart_scheduled"):
+                    lines.append("· 已安排重启 Bot")
+                continue
             elif not tag:
                 tag = "已更新"
         lines.append(f"· {label}" + (f"：{tag}" if tag else ""))

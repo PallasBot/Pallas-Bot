@@ -312,13 +312,15 @@ async def _apply_plugins() -> dict[str, Any]:
 
 
 def _plugins_extra(out: dict[str, Any]) -> str:
+    from packages.pb_webui.webui_auto_update import format_plugin_update_item
+
     bits: list[str] = []
     updated = out.get("updated")
     if isinstance(updated, list) and updated:
-        shown = "、".join(str(x) for x in updated[:12])
+        rows = [f"- {format_plugin_update_item(item)}" for item in updated[:12]]
         if len(updated) > 12:
-            shown += f" 等 {len(updated)} 个"
-        bits.append(f"已更新：{shown}")
+            rows.append(f"- 其余 {len(updated) - 12} 个")
+        bits.append("已更新：\n" + "\n".join(rows))
     failed = out.get("failed")
     if isinstance(failed, list) and failed:
         parts: list[str] = []
@@ -329,7 +331,7 @@ def _plugins_extra(out: dict[str, Any]) -> str:
                 parts.append(str(item))
         bits.append("失败：" + "、".join(parts))
     if out.get("restart_scheduled"):
-        bits.append("已安排重启。")
+        bits.append("后续：已安排重启 Bot")
     return ("\n" + "\n".join(bits)) if bits else ""
 
 
@@ -399,7 +401,7 @@ async def apply_update_action(action: UpdateAction) -> str:
 
         if action == "plugins":
             out = await _apply_plugins()
-            return _summarize_target("插件", out) + _plugins_extra(out)
+            return "【插件更新】\n" + _summarize_target("插件", out) + _plugins_extra(out)
 
         out = await _apply_bot()
         return _summarize_target("Bot", out)

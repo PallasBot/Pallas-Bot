@@ -39,7 +39,7 @@ def command_override_keys(command_id: str) -> tuple[str, ...]:
 
 
 DEFAULT_COMMAND_PERMISSIONS: dict[str, PermissionLevel] = {
-    "pb_core.status": "bot_moderator",
+    "pb_core.status": "staff",
     "pb_core.console": "superuser",
     "pb_core.plugins": "superuser",
     "pb_core.update_check": "superuser",

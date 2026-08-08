@@ -87,10 +87,10 @@ def load_restart_notify_pending() -> RestartNotifyPending | None:
 
 
 def format_restart_online_message(*, bot_id: int, mode: str) -> str:
-    text = f"牛牛 {bot_id} 已重新上线"
+    lines = ["【牛牛重启完成】", f"账号：{bot_id}"]
     if mode:
-        text += f"（{mode}）"
-    return f"{text}，重启完成。"
+        lines.append(f"模式：{mode}")
+    return "\n".join(lines)
 
 
 async def maybe_notify_restart_online(bot: Bot) -> None:

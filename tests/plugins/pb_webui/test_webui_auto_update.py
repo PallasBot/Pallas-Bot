@@ -315,12 +315,42 @@ async def test_tick_skips_when_other_job_busy_but_not_own(state_dir) -> None:
 
 def test_format_auto_update_notify_message() -> None:
     text = auto.format_auto_update_notify_message([
-        {"kind": "webui", "tag": "v1.2.3"},
+        {"kind": "webui", "from_tag": "v1.2.2", "tag": "v1.2.3"},
         {"kind": "plugins", "updated": ["a", "b"], "result": "partial"},
     ])
-    assert "【自动更新】" in text
-    assert "WebUI：v1.2.3" in text
-    assert "插件：2 个" in text
+    assert "【自动更新完成】" in text
+    assert "WebUI：v1.2.2 -> v1.2.3" in text
+    assert "插件（2 个）：" in text
+
+
+def test_format_auto_update_notify_message_lists_plugin_versions() -> None:
+    text = auto.format_auto_update_notify_message([
+        {
+            "kind": "plugins",
+            "updated": [
+                {
+                    "id": "pallas-plugin-afdian",
+                    "source": "official",
+                    "from_ref": "0.1.8",
+                    "to_ref": "0.1.9",
+                },
+                {
+                    "id": "local_plugin",
+                    "source": "community",
+                    "from_ref": "a1b2c3d4",
+                    "to_ref": "e5f6g7h8",
+                    "ref_kind": "commit",
+                },
+            ],
+            "restart_scheduled": True,
+        },
+    ])
+
+    assert "【自动更新完成】" in text
+    assert "插件（2 个）：" in text
+    assert "pallas-plugin-afdian：0.1.8 -> 0.1.9" in text
+    assert "local_plugin：a1b2c3d4 -> e5f6g7h8（提交）" in text
+    assert "已安排重启 Bot" in text
 
 
 @pytest.mark.asyncio

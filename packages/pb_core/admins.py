@@ -121,16 +121,17 @@ def format_add_bot_admin_result(
     merged: list[int],
     added: list[int],
 ) -> str:
+    current = ", ".join(map(str, merged)) or "（无）"
     if created and added:
-        return (
-            f"已为牛牛 {bot_id} 初始化库配置，并添加号主：{', '.join(map(str, added))}。"
-            f"当前号主：{', '.join(map(str, merged)) or '（无）'}"
-        )
-    if created and not added:
-        return f"已为牛牛 {bot_id} 初始化库配置；未指定新的号主 QQ。"
+        status = "已初始化配置并添加号主"
+    elif created:
+        status = "已初始化配置，未添加新号主"
+    elif added:
+        status = "已添加号主"
+    else:
+        status = "指定号主已存在，无需变更"
+    lines = ["【号主已更新】", f"牛牛：{bot_id}", f"结果：{status}"]
     if added:
-        return (
-            f"已为牛牛 {bot_id} 添加号主：{', '.join(map(str, added))}。"
-            f"当前号主：{', '.join(map(str, merged)) or '（无）'}"
-        )
-    return f"牛牛 {bot_id} 已在库中，指定号主均已在 admins 中。当前号主：{', '.join(map(str, merged)) or '（无）'}"
+        lines.append(f"新增：{', '.join(map(str, added))}")
+    lines.append(f"当前号主：{current}")
+    return "\n".join(lines)

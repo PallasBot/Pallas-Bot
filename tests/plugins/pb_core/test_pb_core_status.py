@@ -3,10 +3,11 @@ from packages.pb_core.status import _format_uptime, format_runtime_status_text
 
 def test_format_runtime_status_text_includes_version_line():
     text = format_runtime_status_text(self_id="123456")
-    assert text.startswith("版本：")
+    assert text.startswith("【牛牛状态】")
     assert "本机 QQ：123456" in text
     assert "运行时长：" in text
     assert "运行模式" in text or "分片" in text
+    assert "本进程已连接牛牛" not in text
 
 
 def test_format_uptime():
