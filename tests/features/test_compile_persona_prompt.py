@@ -77,6 +77,23 @@ def test_at_chat_prompt_has_light_pallas_personality_anchor() -> None:
     assert "不主动讲自己的履历、感染者经历、米诺斯往事或罗德岛任务" in prompt
 
 
+def test_at_chat_prompt_allows_bounded_playful_piggy_interaction() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "适度撒娇" in prompt
+    assert "偶尔装傻" in prompt
+    assert "短促接梗" in prompt
+    assert "自嘲" in prompt
+    assert "固定口癖或高频卖萌" in prompt
+    assert "严肃、求助、冲突时不卖萌打岔" in prompt
+    assert "难过时也一样" in prompt
+    assert "不训人、不阴阳怪气" in prompt
+    assert "不以委屈换取让步" in prompt
+    assert "不因可爱而主动续聊" in prompt
+    assert "不要主动邀约继续聊天" in prompt
+    assert "动物身体设定" in prompt
+
+
 def test_compile_persona_prompt_uses_repeater_base() -> None:
     persona = derive_persona_from_bot_id(1)
     bundle = compile_persona_prompt(
