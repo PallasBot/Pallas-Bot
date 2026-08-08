@@ -558,3 +558,40 @@ async def test_kernel_delivers_approved_semantic_style_direct_candidate_without_
     )
 
     assert delivered == [("direct-candidate-task", "success", "没救了")]
+
+
+@pytest.mark.asyncio
+async def test_kernel_select_late_after_local_fallback_is_not_an_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fastapi import HTTPException
+
+    from pallas.product.llm import kernel_runner
+
+    deliveries: list[str] = []
+    traces: list[dict] = []
+
+    async def fake_complete(**_kwargs):
+        return "2", {"role": "assistant", "content": "2"}
+
+    async def local_fallback_won(task_id, *, status, **_kwargs):
+        deliveries.append(status)
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", fake_complete)
+    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", local_fallback_won)
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_debug.append_runtime_trace",
+        lambda **kwargs: traces.append(kwargs["trace"]),
+    )
+
+    await kernel_runner.run_kernel_chat_job(
+        "late-select-task",
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "选一个"}],
+        metadata={"task": "repeater_select"},
+        cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
+    )
+
+    assert deliveries == ["success"]
+    assert traces[-1]["status"] == "superseded_by_local_fallback"

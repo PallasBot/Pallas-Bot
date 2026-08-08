@@ -7,8 +7,10 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
+from fastapi import HTTPException
 from nonebot import logger
 
+from pallas.core.platform.ai_callback.task_types import REPEATER_SELECT_TASK_TYPE
 from pallas.product.llm.execution_budget import (
     LlmExecutionSlot,
     release_llm_execution_slot,
@@ -200,6 +202,19 @@ async def run_kernel_chat_job(
             delivery_kwargs["suppress_empty_fallback"] = True
         await deliver_llm_chat_result(request_id, **delivery_kwargs)
     except Exception as exc:
+        if (
+            isinstance(exc, HTTPException)
+            and exc.status_code == 404
+            and str(metadata.get("task") or "").strip() == REPEATER_SELECT_TASK_TYPE
+        ):
+            logger.info("llm kernel select superseded by local fallback: request_id={}", request_id)
+            from pallas.product.llm.runtime_debug import append_runtime_trace
+
+            append_runtime_trace(
+                request_id=request_id,
+                trace={"status": "superseded_by_local_fallback", "agent_trace": None},
+            )
+            return
         logger.exception("llm kernel chat failed: request_id={}", request_id)
         try:
             from pallas.product.llm.runtime_debug import append_runtime_trace
