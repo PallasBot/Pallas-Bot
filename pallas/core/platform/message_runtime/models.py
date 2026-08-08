@@ -33,7 +33,7 @@ class MessageContext:
 
 @dataclass(frozen=True, slots=True)
 class SendAction:
-    message: str
+    message: object
 
 
 @dataclass(frozen=True, slots=True)

@@ -47,8 +47,10 @@ def configure_shadow_experiment(
     if mode is RuntimeMode.LEGACY:
         return
     registry = NativeHandlerRegistry()
+    from packages.greeting.native import CallMeNativeHandler
     from packages.pb_core.native import StatusNativeHandler
 
+    registry.register(CallMeNativeHandler())
     registry.register(StatusNativeHandler())
     writer = None
     if telemetry_enabled:
