@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import time
+from typing import TYPE_CHECKING
 
 from pallas.core.foundation.paths import DATA_ROOT
 
@@ -9,7 +11,11 @@ from .handlers import NativeHandlerRegistry
 from .models import RuntimeMode
 from .planner import MessagePlanner
 from .runtime import MessageRuntime
+from .shadow import ShadowRecord
 from .telemetry import ExperimentTelemetryWriter
+
+if TYPE_CHECKING:
+    from .models import HandlingOutcome, MessageContext
 
 _shadow_experiment: ShadowExperiment | None = None
 _shadow_canary_groups: frozenset[int] = frozenset()
@@ -44,12 +50,6 @@ def configure_shadow_experiment(
     from packages.pb_core.native import StatusNativeHandler
 
     registry.register(StatusNativeHandler())
-    if mode is RuntimeMode.NATIVE:
-        _native_runtime = MessageRuntime(mode, MessagePlanner(registry), registry)
-        _native_canary_groups = frozenset(canary_groups)
-        return
-    if mode is not RuntimeMode.SHADOW:
-        return
     writer = None
     if telemetry_enabled:
         writer = ExperimentTelemetryWriter(
@@ -59,6 +59,12 @@ def configure_shadow_experiment(
         )
         writer.prune()
     _telemetry_writer = writer
+    if mode is RuntimeMode.NATIVE:
+        _native_runtime = MessageRuntime(mode, MessagePlanner(registry), registry)
+        _native_canary_groups = frozenset(canary_groups)
+        return
+    if mode is not RuntimeMode.SHADOW:
+        return
     _shadow_experiment = ShadowExperiment(MessageRuntime(mode, MessagePlanner(registry), registry), writer)
     _shadow_canary_groups = frozenset(canary_groups)
 
@@ -73,6 +79,27 @@ def native_runtime_for_group(group_id: int) -> MessageRuntime | None:
     if group_id not in _native_canary_groups:
         return None
     return _native_runtime
+
+
+def record_native_execution(
+    context: MessageContext,
+    outcome: HandlingOutcome,
+    *,
+    duration_ms: float,
+    timestamp: int | None = None,
+) -> None:
+    if _telemetry_writer is None:
+        return
+    kind = "native_handled" if outcome.handled and not outcome.fallback_to_legacy else "native_fallback"
+    _telemetry_writer.record(
+        ShadowRecord(
+            ingress_id=context.ingress_id,
+            timestamp=int(time.time()) if timestamp is None else timestamp,
+            kind=kind,
+            action_count=len(outcome.actions),
+            duration_ms=round(duration_ms, 2),
+        )
+    )
 
 
 def flush_shadow_experiment() -> None:

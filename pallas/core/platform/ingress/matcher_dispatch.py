@@ -43,7 +43,11 @@ from pallas.core.platform.ingress.message_load import (
     signal_overload,
 )
 from pallas.core.platform.ingress.route_index import RouteResolution, matcher_module_key
-from pallas.core.platform.message_runtime.lifecycle import native_runtime_for_group, shadow_experiment_for_group
+from pallas.core.platform.message_runtime.lifecycle import (
+    native_runtime_for_group,
+    record_native_execution,
+    shadow_experiment_for_group,
+)
 from pallas.core.platform.message_runtime.models import MessageContext
 from pallas.core.platform.message_runtime.shadow import LegacyExecution
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
@@ -281,7 +285,13 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                             command_traffic=command_traffic,
                             resolution=resolution,
                         )
+                        native_started = time.perf_counter()
                         native_outcome = await native_runtime.execute(native_context, bot=bot, event=event)
+                        record_native_execution(
+                            native_context,
+                            native_outcome,
+                            duration_ms=(time.perf_counter() - native_started) * 1000.0,
+                        )
                     except Exception:
                         logger.exception("MessageRuntime native execution failed")
                     else:

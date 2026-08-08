@@ -20,6 +20,8 @@ class ShadowRecord:
     timestamp: int
     kind: str
     error_class: str | None = None
+    action_count: int | None = None
+    duration_ms: float | None = None
 
     def as_dict(self) -> dict[str, str | int]:
         record: dict[str, str | int] = {
@@ -29,6 +31,10 @@ class ShadowRecord:
         }
         if self.error_class:
             record["error_class"] = self.error_class
+        if self.action_count is not None:
+            record["action_count"] = self.action_count
+        if self.duration_ms is not None:
+            record["duration_ms"] = self.duration_ms
         return record
 
 
