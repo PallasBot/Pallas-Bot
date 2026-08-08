@@ -184,6 +184,12 @@ def select_overload_chatter_matchers(selected_matchers: list[type]) -> list[type
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) in _CORE_CHATTER_MODULES]
 
 
+def exclude_native_matchers(selected_matchers: list[type], modules: frozenset[str]) -> list[type]:
+    if not modules:
+        return selected_matchers
+    return [matcher for matcher in selected_matchers if matcher_module_key(matcher) not in modules]
+
+
 async def pre_schedule_ingress_group_message_gate(bot: Bot, event: Event):
     from pallas.core.platform.ingress.gate import pre_schedule_ingress_group_message_gate as run_gate
 
@@ -276,6 +282,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         shadow_experiment = None
                         shadow_context = None
             if apply_dispatch:
+                native_legacy_exclude_modules = frozenset()
                 native_runtime = native_runtime_for_group(int(getattr(event, "group_id", 0) or 0))
                 if native_runtime is not None:
                     try:
@@ -286,7 +293,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                             resolution=resolution,
                         )
                         native_started = time.perf_counter()
-                        native_outcome = await native_runtime.execute(native_context, bot=bot, event=event)
+                        native_outcome = await native_runtime.execute_and_commit(native_context, bot=bot, event=event)
                         record_native_execution(
                             native_context,
                             native_outcome,
@@ -296,17 +303,19 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         logger.exception("MessageRuntime native execution failed")
                     else:
                         if native_outcome.handled and not native_outcome.fallback_to_legacy:
-                            for action in native_outcome.actions:
-                                await bot.send(event, action.message)
-                            record_group_message_ingress(
-                                duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
-                                command_traffic=command_traffic,
-                                matchers_considered=0,
-                                matchers_selected=0,
-                                matchers_run=0,
-                            )
-                            await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
-                            return
+                            if not native_outcome.continue_legacy:
+                                record_group_message_ingress(
+                                    duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                                    command_traffic=command_traffic,
+                                    matchers_considered=0,
+                                    matchers_selected=0,
+                                    matchers_run=0,
+                                )
+                                await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
+                                return
+                            native_legacy_exclude_modules = native_outcome.legacy_exclude_modules
+            else:
+                native_legacy_exclude_modules = frozenset()
             if apply_dispatch and resolution is not None:
                 record_route_index_decision(
                     index_hit=resolution.index_hit,
@@ -402,6 +411,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         selected_matchers = select_synthetic_llm_command_matchers(selected_matchers, resolution)
                     elif chat_degraded_token is not None:
                         selected_matchers = select_overload_chatter_matchers(selected_matchers)
+                    selected_matchers = exclude_native_matchers(selected_matchers, native_legacy_exclude_modules)
                     if not selected_matchers:
                         continue
 

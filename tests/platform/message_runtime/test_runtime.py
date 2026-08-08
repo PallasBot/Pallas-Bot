@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from pallas.core.platform.message_runtime.handlers import NativeHandlerRegistry
-from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext, RuntimeMode
+from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext, RuntimeMode, SendAction
 from pallas.core.platform.message_runtime.planner import MessagePlanner
 from pallas.core.platform.message_runtime.runtime import MessageRuntime
 
@@ -30,6 +30,21 @@ class RaisingHandler(StatusHandler):
 
     async def handle(self, context: MessageContext, *, bot: object, event: object) -> HandlingOutcome:
         raise RuntimeError("secret command body")
+
+
+class SendingHandler(StatusHandler):
+    handler_id = "pb_core.sending"
+
+    async def handle(self, context: MessageContext, *, bot: object, event: object) -> HandlingOutcome:
+        return HandlingOutcome(handled=True, actions=(SendAction("reply"),))
+
+
+class SideEffectingHandler(StatusHandler):
+    handler_id = "repeater.message"
+    fallback_on_error = False
+
+    async def handle(self, context: MessageContext, *, bot: object, event: object) -> HandlingOutcome:
+        raise RuntimeError("producer failed")
 
 
 def _context() -> MessageContext:
@@ -73,6 +88,35 @@ async def test_native_runtime_executes_the_planned_handler() -> None:
 
 
 @pytest.mark.asyncio
+async def test_native_runtime_commits_actions_centrally() -> None:
+    registry = NativeHandlerRegistry()
+    registry.register(SendingHandler())
+    bot = type("Bot", (), {"send": AsyncMock()})()
+
+    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute_and_commit(
+        _context(), bot=bot, event="event"
+    )
+
+    assert outcome == HandlingOutcome(handled=True, actions=(SendAction("reply"),))
+    bot.send.assert_awaited_once_with("event", "reply")
+
+
+@pytest.mark.asyncio
+async def test_native_runtime_does_not_fallback_after_action_submission_fails() -> None:
+    registry = NativeHandlerRegistry()
+    registry.register(SendingHandler())
+    bot = type("Bot", (), {"send": AsyncMock(side_effect=RuntimeError("transport failed"))})()
+
+    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute_and_commit(
+        _context(), bot=bot, event="event"
+    )
+
+    assert outcome.handled is True
+    assert outcome.fallback_to_legacy is False
+    assert outcome.error_class == "SideEffectCommitError"
+
+
+@pytest.mark.asyncio
 async def test_native_handler_error_is_classified_without_logging_message_content(monkeypatch) -> None:
     from pallas.core.platform.message_runtime import runtime as runtime_module
 
@@ -95,3 +139,17 @@ async def test_native_handler_error_is_classified_without_logging_message_conten
         "pb_core.raising",
         "RuntimeError",
     )
+
+
+@pytest.mark.asyncio
+async def test_side_effecting_native_handler_error_does_not_fallback_to_legacy() -> None:
+    registry = NativeHandlerRegistry()
+    registry.register(SideEffectingHandler())
+
+    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute(
+        _context(), bot=object(), event=object()
+    )
+
+    assert outcome.handled is True
+    assert outcome.fallback_to_legacy is False
+    assert outcome.error_class == "RuntimeError"

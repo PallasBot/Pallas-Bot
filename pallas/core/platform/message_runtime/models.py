@@ -3,6 +3,10 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pallas.core.platform.work_jobs.models import WorkJob
 
 
 class RuntimeMode(StrEnum):
@@ -53,14 +57,19 @@ class HandlingPlan:
 class HandlingOutcome:
     handled: bool
     actions: tuple[SendAction, ...] = ()
+    work_jobs: tuple[WorkJob, ...] = ()
     fallback_to_legacy: bool = False
+    continue_legacy: bool = False
+    legacy_exclude_modules: frozenset[str] = frozenset()
     error_class: str | None = None
 
     def __post_init__(self) -> None:
-        if self.fallback_to_legacy and self.actions:
-            raise ValueError("fallback outcomes cannot contain actions")
-        if self.error_class and not self.fallback_to_legacy:
-            raise ValueError("native errors must fall back to legacy")
+        if self.fallback_to_legacy and (self.actions or self.work_jobs):
+            raise ValueError("fallback outcomes cannot contain actions or work jobs")
+        if self.error_class and not (self.fallback_to_legacy or self.handled):
+            raise ValueError("native errors must either fall back or be committed")
+        if self.continue_legacy and (not self.handled or self.fallback_to_legacy):
+            raise ValueError("continued legacy execution requires a handled native outcome")
 
 
 def _telemetry_id_hash(value: int) -> str:

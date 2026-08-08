@@ -22,6 +22,14 @@ class StatusHandler:
         return HandlingOutcome(handled=True)
 
 
+class PassiveHandler(StatusHandler):
+    handler_id = "repeater.message"
+    passive = True
+
+    def accepts(self, context: MessageContext) -> bool:
+        return not context.is_to_me
+
+
 def _context(*, route_modules: set[str], command_traffic: bool = True, plain_text: str = "#pallas") -> MessageContext:
     return MessageContext(
         ingress_id="i-1",
@@ -55,6 +63,17 @@ def test_planner_sends_ambiguous_and_chat_traffic_to_legacy() -> None:
 
     assert planner.plan(_context(route_modules={"pb_core", "help"})).reason == "multiple_native_handlers"
     assert planner.plan(_context(route_modules={"pb_core"}, command_traffic=False)).reason == "chat_traffic"
+
+
+def test_planner_selects_a_single_registered_passive_handler() -> None:
+    registry = NativeHandlerRegistry()
+    registry.register(PassiveHandler(handler_id="repeater.message"))
+
+    plan = MessagePlanner(registry).plan(_context(route_modules=set(), command_traffic=False, plain_text="闲聊"))
+
+    assert plan.kind == "native"
+    assert plan.handler_ids == ("repeater.message",)
+    assert plan.reason == "unique_passive"
 
 
 def test_planning_never_invokes_a_registered_handler() -> None:

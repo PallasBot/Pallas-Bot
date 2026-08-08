@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 class NativeHandler(Protocol):
     handler_id: str
     modules: frozenset[str]
+    passive: bool
 
     def accepts(self, context: MessageContext) -> bool: ...
 
@@ -37,6 +38,15 @@ class NativeHandlerRegistry:
             if self._handlers[handler_id].accepts(context)
         }
         return tuple(sorted(handler_ids))
+
+    def passive_handler_ids_for_context(self, context: MessageContext) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                handler_id
+                for handler_id, handler in self._handlers.items()
+                if getattr(handler, "passive", False) and handler.accepts(context)
+            )
+        )
 
     def get(self, handler_id: str) -> NativeHandler | None:
         return self._handlers.get(handler_id)

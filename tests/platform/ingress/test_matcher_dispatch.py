@@ -60,6 +60,16 @@ def test_overload_chat_selection_keeps_only_core_reply_deciders() -> None:
     ]
 
 
+def test_native_repeater_exclusion_keeps_other_passive_matchers() -> None:
+    class RepeaterMatcher:
+        plugin_name = "packages.repeater"
+
+    class LlmMatcher:
+        plugin_name = "packages.llm_chat"
+
+    assert dispatch.exclude_native_matchers([RepeaterMatcher, LlmMatcher], frozenset({"repeater"})) == [LlmMatcher]
+
+
 class _CommandMatcher:
     rule = Rule(command("foo"))
 
@@ -410,7 +420,9 @@ async def test_native_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: 
     pre_mock = AsyncMock(return_value=True)
     post_mock = AsyncMock()
     native_runtime = MagicMock()
-    native_runtime.execute = AsyncMock(return_value=HandlingOutcome(handled=True, actions=(SendAction("status"),)))
+    native_runtime.execute_and_commit = AsyncMock(
+        return_value=HandlingOutcome(handled=True, actions=(SendAction("status"),))
+    )
     run_matcher = AsyncMock(return_value=MagicMock(acquired=True))
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
@@ -435,8 +447,8 @@ async def test_native_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: 
 
     await dispatch.patched_handle_event(bot, event)
 
-    native_runtime.execute.assert_awaited_once()
-    bot.send.assert_awaited_once_with(event, "status")
+    native_runtime.execute_and_commit.assert_awaited_once()
+    bot.send.assert_not_awaited()
     run_matcher.assert_not_awaited()
     post_mock.assert_awaited_once()
 
@@ -462,7 +474,7 @@ async def test_native_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest
     bot = MagicMock(type="OneBot V11", self_id="10001")
     event = FakeGroupMessageEvent()
     native_runtime = MagicMock()
-    native_runtime.execute = AsyncMock(return_value=HandlingOutcome(handled=False, fallback_to_legacy=True))
+    native_runtime.execute_and_commit = AsyncMock(return_value=HandlingOutcome(handled=False, fallback_to_legacy=True))
     run_matcher = AsyncMock(return_value=MagicMock(acquired=True))
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
@@ -489,7 +501,7 @@ async def test_native_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest
 
     await dispatch.patched_handle_event(bot, event)
 
-    native_runtime.execute.assert_awaited_once()
+    native_runtime.execute_and_commit.assert_awaited_once()
     run_matcher.assert_awaited_once()
 
 

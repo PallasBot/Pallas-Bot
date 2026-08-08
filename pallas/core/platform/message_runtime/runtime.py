@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from nonebot import logger
 
+from pallas.core.platform.work_jobs.runtime import build_work_job_store
+
+from .committer import ActionCommitter, SideEffectCommitError
 from .models import HandlingOutcome
 
 if TYPE_CHECKING:
@@ -20,10 +24,12 @@ class MessageRuntime:
         mode: RuntimeMode,
         planner: MessagePlanner,
         registry: NativeHandlerRegistry,
+        action_committer: ActionCommitter | None = None,
     ) -> None:
         self._mode = mode
         self._planner = planner
         self._registry = registry
+        self._action_committer = action_committer or ActionCommitter(build_work_job_store)
 
     async def submit(self, context: MessageContext) -> HandlingPlan:
         return self._planner.plan(context)
@@ -44,8 +50,16 @@ class MessageRuntime:
                 handler.handler_id,
                 error_class,
             )
-            return HandlingOutcome(
-                handled=False,
-                fallback_to_legacy=True,
-                error_class=error_class,
-            )
+            if not getattr(handler, "fallback_on_error", True):
+                return HandlingOutcome(handled=True, error_class=error_class)
+            return HandlingOutcome(handled=False, fallback_to_legacy=True, error_class=error_class)
+
+    async def execute_and_commit(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
+        outcome = await self.execute(context, bot=bot, event=event)
+        if outcome.handled and not outcome.fallback_to_legacy:
+            try:
+                await self._action_committer.commit(outcome, bot=bot, event=event)
+            except SideEffectCommitError as exc:
+                logger.warning("MessageRuntime native side effect failed error_class={}", type(exc).__name__)
+                return replace(outcome, error_class=type(exc).__name__)
+        return outcome

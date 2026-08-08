@@ -14,7 +14,11 @@ class MessagePlanner:
 
     def plan(self, context: MessageContext) -> HandlingPlan:
         if not context.command_traffic:
-            return HandlingPlan(kind="legacy", handler_ids=(), reason="chat_traffic")
+            handler_ids = self._registry.passive_handler_ids_for_context(context)
+            if len(handler_ids) == 1:
+                return HandlingPlan(kind="native", handler_ids=handler_ids, reason="unique_passive")
+            reason = "chat_traffic" if not handler_ids else "multiple_passive_handlers"
+            return HandlingPlan(kind="legacy", handler_ids=(), reason=reason)
         if not context.route_modules:
             return HandlingPlan(kind="legacy", handler_ids=(), reason="no_native_route")
         handler_ids = self._registry.handler_ids_for_context(context)

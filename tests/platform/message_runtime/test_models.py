@@ -9,6 +9,7 @@ from pallas.core.platform.message_runtime.models import (
     RuntimeMode,
     SendAction,
 )
+from pallas.core.platform.work_jobs.models import WorkJob
 
 
 def test_runtime_mode_keeps_legacy_as_an_explicit_option() -> None:
@@ -22,6 +23,28 @@ def test_fallback_outcome_cannot_contain_actions() -> None:
             fallback_to_legacy=True,
             actions=(SendAction(message="reply"),),
         )
+
+
+def test_fallback_outcome_cannot_contain_work_jobs() -> None:
+    job = WorkJob.create(kind="repeater.learn", payload={"message_id": 3}, idempotency_key="repeater.learn:3")
+
+    with pytest.raises(ValueError, match="fallback"):
+        HandlingOutcome(
+            handled=False,
+            fallback_to_legacy=True,
+            work_jobs=(job,),
+        )
+
+
+def test_handled_outcome_can_continue_legacy_without_its_own_module() -> None:
+    outcome = HandlingOutcome(
+        handled=True,
+        continue_legacy=True,
+        legacy_exclude_modules=frozenset({"repeater"}),
+    )
+
+    assert outcome.continue_legacy is True
+    assert outcome.legacy_exclude_modules == frozenset({"repeater"})
 
 
 def test_message_context_telemetry_redacts_message_content() -> None:
