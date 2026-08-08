@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from pallas.core.platform.message_runtime.handlers import NativeHandlerRegistry
@@ -15,9 +17,19 @@ class StatusHandler:
     def __init__(self) -> None:
         self.calls = 0
 
+    def accepts(self, context: MessageContext) -> bool:
+        return context.plain_text == "#pallas"
+
     async def handle(self, context: MessageContext, *, bot: object, event: object) -> HandlingOutcome:
         self.calls += 1
         return HandlingOutcome(handled=True)
+
+
+class RaisingHandler(StatusHandler):
+    handler_id = "pb_core.raising"
+
+    async def handle(self, context: MessageContext, *, bot: object, event: object) -> HandlingOutcome:
+        raise RuntimeError("secret command body")
 
 
 def _context() -> MessageContext:
@@ -58,3 +70,28 @@ async def test_native_runtime_executes_the_planned_handler() -> None:
 
     assert outcome == HandlingOutcome(handled=True)
     assert handler.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_native_handler_error_is_classified_without_logging_message_content(monkeypatch) -> None:
+    from pallas.core.platform.message_runtime import runtime as runtime_module
+
+    registry = NativeHandlerRegistry()
+    registry.register(RaisingHandler())
+    logger = MagicMock()
+    monkeypatch.setattr(runtime_module, "logger", logger)
+
+    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute(
+        _context(), bot=object(), event=object()
+    )
+
+    assert outcome == HandlingOutcome(
+        handled=False,
+        fallback_to_legacy=True,
+        error_class="RuntimeError",
+    )
+    logger.warning.assert_called_once_with(
+        "MessageRuntime native handler failed handler_id={} error_class={}",
+        "pb_core.raising",
+        "RuntimeError",
+    )

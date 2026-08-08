@@ -21,8 +21,11 @@ class CallMeNativeHandler:
     handler_id = "greeting.call_me"
     modules = frozenset({"greeting"})
 
+    def accepts(self, context: MessageContext) -> bool:
+        return context.raw_text == "牛牛"
+
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
-        if context.raw_text != "牛牛":
+        if not self.accepts(context):
             return HandlingOutcome(handled=False, fallback_to_legacy=True)
         if duel_qte_blocks_greeting_user(context.group_id, int(getattr(event, "user_id", 0) or 0)):
             return HandlingOutcome(handled=False, fallback_to_legacy=True)

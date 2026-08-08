@@ -97,3 +97,37 @@ def test_native_execution_persists_outcome_without_message_content(tmp_path, mon
     assert (tmp_path / "experiment.jsonl").read_text(encoding="utf-8") == (
         '{"ingress_id":"1:100:3","ts":100,"kind":"native_handled","action_count":1,"duration_ms":1.25}\n'
     )
+
+
+def test_native_execution_persists_handler_errors_without_message_content(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(lifecycle, "message_runtime_experiment_path", lambda: tmp_path / "experiment.jsonl")
+    lifecycle.configure_shadow_experiment(
+        mode=RuntimeMode.NATIVE,
+        canary_groups=(100,),
+        telemetry_enabled=True,
+        retention_hours=24,
+        agreement_sample_rate=1,
+    )
+    context = MessageContext(
+        ingress_id="1:100:3",
+        bot_id=1,
+        group_id=100,
+        message_id=3,
+        plain_text="secret command",
+        raw_text="secret command",
+        is_to_me=False,
+        command_traffic=True,
+        route_modules=frozenset({"pb_core"}),
+    )
+
+    lifecycle.record_native_execution(
+        context,
+        HandlingOutcome(handled=False, fallback_to_legacy=True, error_class="RuntimeError"),
+        duration_ms=1.25,
+        timestamp=100,
+    )
+    lifecycle.flush_shadow_experiment()
+
+    assert (tmp_path / "experiment.jsonl").read_text(encoding="utf-8") == (
+        '{"ingress_id":"1:100:3","ts":100,"kind":"native_error","error_class":"RuntimeError","action_count":0,"duration_ms":1.25}\n'
+    )

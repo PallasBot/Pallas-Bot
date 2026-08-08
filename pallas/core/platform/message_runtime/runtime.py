@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nonebot import logger
+
 from .models import HandlingOutcome
 
 if TYPE_CHECKING:
@@ -35,5 +37,15 @@ class MessageRuntime:
             return HandlingOutcome(handled=False, fallback_to_legacy=True)
         try:
             return await handler.handle(context, bot=bot, event=event)
-        except Exception:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+        except Exception as exc:
+            error_class = type(exc).__name__
+            logger.warning(
+                "MessageRuntime native handler failed handler_id={} error_class={}",
+                handler.handler_id,
+                error_class,
+            )
+            return HandlingOutcome(
+                handled=False,
+                fallback_to_legacy=True,
+                error_class=error_class,
+            )

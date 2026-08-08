@@ -56,10 +56,14 @@ def configure_shadow_experiment(
         return
     registry = NativeHandlerRegistry()
     from packages.greeting.native import CallMeNativeHandler
-    from packages.pb_core.native import StatusNativeHandler
+    from packages.help.native import HelpNativeHandler
+    from packages.pb_core.native import ConsoleNativeHandler, PluginsNativeHandler, StatusNativeHandler
 
     registry.register(CallMeNativeHandler())
+    registry.register(HelpNativeHandler())
     registry.register(StatusNativeHandler())
+    registry.register(ConsoleNativeHandler())
+    registry.register(PluginsNativeHandler())
     writer = None
     if telemetry_enabled:
         writer = ExperimentTelemetryWriter(
@@ -101,12 +105,16 @@ def record_native_execution(
 ) -> None:
     if _telemetry_writer is None:
         return
-    kind = "native_handled" if outcome.handled and not outcome.fallback_to_legacy else "native_fallback"
+    if outcome.error_class:
+        kind = "native_error"
+    else:
+        kind = "native_handled" if outcome.handled and not outcome.fallback_to_legacy else "native_fallback"
     _telemetry_writer.record(
         ShadowRecord(
             ingress_id=context.ingress_id,
             timestamp=int(time.time()) if timestamp is None else timestamp,
             kind=kind,
+            error_class=outcome.error_class,
             action_count=len(outcome.actions),
             duration_ms=round(duration_ms, 2),
         )

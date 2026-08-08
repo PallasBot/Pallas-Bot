@@ -12,6 +12,8 @@ class NativeHandler(Protocol):
     handler_id: str
     modules: frozenset[str]
 
+    def accepts(self, context: MessageContext) -> bool: ...
+
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome: ...
 
 
@@ -27,8 +29,13 @@ class NativeHandlerRegistry:
         for module in handler.modules:
             self._module_handlers.setdefault(module, set()).add(handler.handler_id)
 
-    def handler_ids_for_modules(self, modules: frozenset[str]) -> tuple[str, ...]:
-        handler_ids = {handler_id for module in modules for handler_id in self._module_handlers.get(module, ())}
+    def handler_ids_for_context(self, context: MessageContext) -> tuple[str, ...]:
+        handler_ids = {
+            handler_id
+            for module in context.route_modules
+            for handler_id in self._module_handlers.get(module, ())
+            if self._handlers[handler_id].accepts(context)
+        }
         return tuple(sorted(handler_ids))
 
     def get(self, handler_id: str) -> NativeHandler | None:

@@ -54,10 +54,13 @@ class HandlingOutcome:
     handled: bool
     actions: tuple[SendAction, ...] = ()
     fallback_to_legacy: bool = False
+    error_class: str | None = None
 
     def __post_init__(self) -> None:
         if self.fallback_to_legacy and self.actions:
             raise ValueError("fallback outcomes cannot contain actions")
+        if self.error_class and not self.fallback_to_legacy:
+            raise ValueError("native errors must fall back to legacy")
 
 
 def _telemetry_id_hash(value: int) -> str:

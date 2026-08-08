@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -50,3 +51,39 @@ async def test_status_native_handler_falls_back_when_command_is_not_exact() -> N
     )
 
     assert outcome.fallback_to_legacy is True
+
+
+@pytest.mark.asyncio
+async def test_console_native_handler_sends_the_existing_console_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.pb_core.native import ConsoleNativeHandler
+
+    monkeypatch.setattr("packages.pb_core.native.satisfies_command_permission", AsyncMock(return_value=True))
+    monkeypatch.setattr("packages.pb_core.native.is_command_cooldown_ready", AsyncMock(return_value=True))
+    refresh = AsyncMock()
+    monkeypatch.setattr("packages.pb_core.native.refresh_command_cooldown", refresh)
+    monkeypatch.setattr("packages.pb_core.native.format_console_hint_text", lambda: "console")
+
+    event = MagicMock()
+    outcome = await ConsoleNativeHandler().handle(context(plain_text="牛牛控制台"), bot=MagicMock(), event=event)
+
+    assert outcome.handled is True
+    assert outcome.actions == (SendAction(message="console"),)
+    refresh.assert_awaited_once_with(event, "pb_core.console", default_cd_sec=10)
+
+
+@pytest.mark.asyncio
+async def test_plugins_native_handler_uses_the_existing_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.pb_core.native import PluginsNativeHandler
+
+    monkeypatch.setattr("packages.pb_core.native.satisfies_command_permission", AsyncMock(return_value=True))
+    monkeypatch.setattr("packages.pb_core.native.is_command_cooldown_ready", AsyncMock(return_value=True))
+    monkeypatch.setattr("packages.pb_core.native.refresh_command_cooldown", AsyncMock())
+    monkeypatch.setattr("packages.pb_core.native.get_loaded_plugins", lambda: [SimpleNamespace(name="pb_core")])
+    monkeypatch.setattr(
+        "packages.pb_core.native.format_plugins_summary_text",
+        lambda *, loaded_names: f"plugins:{','.join(sorted(loaded_names))}",
+    )
+
+    outcome = await PluginsNativeHandler().handle(context(plain_text="牛牛插件"), bot=MagicMock(), event=MagicMock())
+
+    assert outcome.actions == (SendAction(message="plugins:pb_core"),)
