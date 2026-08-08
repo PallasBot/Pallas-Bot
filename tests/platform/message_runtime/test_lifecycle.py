@@ -52,6 +52,19 @@ def test_native_runtime_is_limited_to_configured_canary_groups() -> None:
     assert lifecycle.native_runtime_for_group(999) is None
 
 
+def test_native_runtime_uses_all_groups_when_canary_groups_is_empty() -> None:
+    lifecycle.configure_shadow_experiment(
+        mode=RuntimeMode.NATIVE,
+        canary_groups=(),
+        telemetry_enabled=False,
+        retention_hours=24,
+        agreement_sample_rate=1,
+    )
+
+    assert lifecycle.native_runtime_for_group(100) is not None
+    assert lifecycle.native_runtime_for_group(999) is not None
+
+
 def test_native_execution_persists_outcome_without_message_content(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(lifecycle, "message_runtime_experiment_path", lambda: tmp_path / "experiment.jsonl")
     lifecycle.configure_shadow_experiment(

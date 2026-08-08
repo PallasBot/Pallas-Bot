@@ -21,6 +21,7 @@ _shadow_experiment: ShadowExperiment | None = None
 _shadow_canary_groups: frozenset[int] = frozenset()
 _native_runtime: MessageRuntime | None = None
 _native_canary_groups: frozenset[int] = frozenset()
+_native_all_groups = False
 _telemetry_writer: ExperimentTelemetryWriter | None = None
 _shadow_flush_task: asyncio.Task[None] | None = None
 _SHADOW_FLUSH_INTERVAL_SEC = 30.0
@@ -38,12 +39,19 @@ def configure_shadow_experiment(
     retention_hours: int,
     agreement_sample_rate: int,
 ) -> None:
-    global _shadow_experiment, _shadow_canary_groups, _telemetry_writer, _native_runtime, _native_canary_groups
+    global \
+        _shadow_experiment, \
+        _shadow_canary_groups, \
+        _telemetry_writer, \
+        _native_runtime, \
+        _native_canary_groups, \
+        _native_all_groups
     _shadow_experiment = None
     _shadow_canary_groups = frozenset()
     _telemetry_writer = None
     _native_runtime = None
     _native_canary_groups = frozenset()
+    _native_all_groups = False
     if mode is RuntimeMode.LEGACY:
         return
     registry = NativeHandlerRegistry()
@@ -64,6 +72,7 @@ def configure_shadow_experiment(
     if mode is RuntimeMode.NATIVE:
         _native_runtime = MessageRuntime(mode, MessagePlanner(registry), registry)
         _native_canary_groups = frozenset(canary_groups)
+        _native_all_groups = not canary_groups
         return
     if mode is not RuntimeMode.SHADOW:
         return
@@ -78,7 +87,7 @@ def shadow_experiment_for_group(group_id: int) -> ShadowExperiment | None:
 
 
 def native_runtime_for_group(group_id: int) -> MessageRuntime | None:
-    if group_id not in _native_canary_groups:
+    if not _native_all_groups and group_id not in _native_canary_groups:
         return None
     return _native_runtime
 
@@ -141,10 +150,12 @@ def reset_shadow_experiment_for_tests() -> None:
         _telemetry_writer, \
         _shadow_flush_task, \
         _native_runtime, \
-        _native_canary_groups
+        _native_canary_groups, \
+        _native_all_groups
     _shadow_experiment = None
     _shadow_canary_groups = frozenset()
     _telemetry_writer = None
     _shadow_flush_task = None
     _native_runtime = None
     _native_canary_groups = frozenset()
+    _native_all_groups = False
