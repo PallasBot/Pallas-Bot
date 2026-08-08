@@ -57,6 +57,7 @@ def configure_shadow_experiment(
     registry = NativeHandlerRegistry()
     from packages.greeting.native import CallMeNativeHandler
     from packages.help.native import HelpNativeHandler
+    from packages.llm_chat.message_runtime_handler import LlmChatNativeHandler
     from packages.pb_core.native import ConsoleNativeHandler, PluginsNativeHandler, StatusNativeHandler
     from packages.repeater.message_runtime_handler import RepeaterNativeHandler
 
@@ -66,6 +67,7 @@ def configure_shadow_experiment(
     registry.register(ConsoleNativeHandler())
     registry.register(PluginsNativeHandler())
     registry.register(RepeaterNativeHandler())
+    registry.register(LlmChatNativeHandler())
     writer = None
     if telemetry_enabled:
         writer = ExperimentTelemetryWriter(

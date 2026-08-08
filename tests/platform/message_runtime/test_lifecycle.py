@@ -80,6 +80,21 @@ def test_native_runtime_registers_repeater_as_a_passive_handler() -> None:
     assert runtime._registry.get("repeater.message") is not None  # noqa: SLF001
 
 
+def test_native_runtime_registers_llm_chat_as_a_passive_handler() -> None:
+    lifecycle.configure_shadow_experiment(
+        mode=RuntimeMode.NATIVE,
+        canary_groups=(100,),
+        telemetry_enabled=False,
+        retention_hours=24,
+        agreement_sample_rate=1,
+    )
+
+    runtime = lifecycle.native_runtime_for_group(100)
+
+    assert runtime is not None
+    assert runtime._registry.get("llm_chat.message") is not None  # noqa: SLF001
+
+
 def test_native_execution_persists_outcome_without_message_content(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(lifecycle, "message_runtime_experiment_path", lambda: tmp_path / "experiment.jsonl")
     lifecycle.configure_shadow_experiment(

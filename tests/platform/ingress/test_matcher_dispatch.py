@@ -70,6 +70,22 @@ def test_native_repeater_exclusion_keeps_other_passive_matchers() -> None:
     assert dispatch.exclude_native_matchers([RepeaterMatcher, LlmMatcher], frozenset({"repeater"})) == [LlmMatcher]
 
 
+def test_message_runtime_context_treats_alias_hard_trigger_as_direct_address() -> None:
+    bot = MagicMock(self_id="10001")
+    event = MagicMock(group_id=42, message_id=3, to_me=False, _pallas_llm_alias_hard_trigger=True)
+    event.get_plaintext.return_value = "牛牛出来"
+    event.raw_message = "牛牛出来"
+
+    context = dispatch.message_runtime_context(
+        bot,
+        event,
+        command_traffic=False,
+        resolution=RouteResolution(frozenset(), False),
+    )
+
+    assert context.is_to_me is True
+
+
 class _CommandMatcher:
     rule = Rule(command("foo"))
 

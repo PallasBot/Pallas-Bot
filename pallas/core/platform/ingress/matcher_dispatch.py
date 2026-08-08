@@ -149,7 +149,7 @@ def message_runtime_context(
         message_id=message_id,
         plain_text=plain_text,
         raw_text=raw_text,
-        is_to_me=bool(getattr(event, "to_me", False)),
+        is_to_me=bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False)),
         command_traffic=command_traffic,
         route_modules=resolution.matched_modules if resolution is not None else frozenset(),
     )

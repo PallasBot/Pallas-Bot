@@ -1,4 +1,5 @@
 import time
+from collections.abc import Awaitable, Callable
 
 from nonebot import logger, on_message
 from nonebot.adapters import Bot, Event
@@ -136,8 +137,15 @@ async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id:
 
 
 @llm_chat_msg.handle()
-async def handle_llm_chat(bot: Bot, event: Event):
+async def handle_llm_chat(
+    bot: Bot,
+    event: Event,
+    *,
+    send_message: Callable[[object], Awaitable[object]] | None = None,
+):
     route_started = time.perf_counter()
+    if send_message is None:
+        send_message = llm_chat_msg.send
     if not is_llm_chat_service_enabled():
         return
 
@@ -151,7 +159,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
     if not msg:
         if not plain and not getattr(event, "reply", None):
             return
-        await llm_chat_msg.send(LLM_CHAT_VAGUE_REPLY)
+        await send_message(LLM_CHAT_VAGUE_REPLY)
         return
 
     llm_cfg = get_llm_config()
@@ -249,15 +257,15 @@ async def handle_llm_chat(bot: Bot, event: Event):
     if teach_body is not None and llm_cfg.llm_memory_rag_enabled:
         saved = await save_memory_entry(int(bot.self_id), group_id, teach_body, cfg=llm_cfg)
         if saved:
-            await llm_chat_msg.send(LLM_CHAT_MEMORY_SAVED_REPLY)
+            await send_message(LLM_CHAT_MEMORY_SAVED_REPLY)
             return
 
     if await save_self_alias_from_teach(int(bot.self_id), plain or msg):
-        await llm_chat_msg.send(LLM_CHAT_ALIAS_SAVED_REPLY)
+        await send_message(LLM_CHAT_ALIAS_SAVED_REPLY)
         return
 
     if await save_peer_alias_from_teach(int(bot.self_id), plain or msg):
-        await llm_chat_msg.send(LLM_CHAT_PEER_ALIAS_SAVED_REPLY)
+        await send_message(LLM_CHAT_PEER_ALIAS_SAVED_REPLY)
         return
 
     # 弱模式称呼静默沉淀，不打断闲聊
@@ -282,7 +290,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
                 target_id,
                 relationship_body[:48],
             )
-            await llm_chat_msg.send(LLM_CHAT_RELATIONSHIP_SAVED_REPLY)
+            await send_message(LLM_CHAT_RELATIONSHIP_SAVED_REPLY)
             return
 
     # 硬触发后静默沉淀关系事实/态度；ambient 不写
@@ -321,7 +329,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
         system_prompt = get_system_prompt()
     if not system_prompt:
         logger.error("llm chat system prompt file is missing or empty")
-        await llm_chat_msg.send(LLM_CHAT_VAGUE_REPLY)
+        await send_message(LLM_CHAT_VAGUE_REPLY)
         return
 
     persona_for_gate = None
@@ -706,7 +714,7 @@ async def handle_llm_chat(bot: Bot, event: Event):
 
         hint = "" if result.status == "shared_budget_busy" else user_message_for_submit_status(result.status)
         if hint:
-            await llm_chat_msg.send(hint)
+            await send_message(hint)
         logger.info(
             "llm chat submit skipped: status={} request_id={} message_id={} group={} user={}",
             result.status,
