@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import time
 from collections import defaultdict, deque
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 _LAST_REPEATER_IMAGE_SENT_AT: dict[int, float] = {}
@@ -12,6 +14,24 @@ _RECENT_REPEATER_IMAGES: dict[int, deque[str]] = defaultdict(lambda: deque(maxle
 _STICKER_FOLLOWUP_SCHEDULED_AT: dict[int, deque[float]] = defaultdict(deque)
 _SENSITIVE_RESULT_TERMS = ("权限", "封禁", "风控", "安全", "隐私", "密钥", "token", "密码")
 _OUTGOING_HOOK_BOUND = False
+_SUPPRESS_OUTGOING_STICKER_FOLLOWUP: ContextVar[bool] = ContextVar("suppress_outgoing_sticker_followup", default=False)
+
+
+@contextmanager
+def suppress_outgoing_sticker_followup():
+    token = _SUPPRESS_OUTGOING_STICKER_FOLLOWUP.set(True)
+    try:
+        yield
+    finally:
+        _SUPPRESS_OUTGOING_STICKER_FOLLOWUP.reset(token)
+
+
+def outgoing_sticker_followup_suppressed() -> bool:
+    return _SUPPRESS_OUTGOING_STICKER_FOLLOWUP.get()
+
+
+def should_handle_outgoing_sticker_followup(exception: Exception | None, api: str) -> bool:
+    return exception is None and api == "send_group_msg" and not outgoing_sticker_followup_suppressed()
 
 
 def should_send_repeater_image(group_id: int, image_key: str, *, cooldown_sec: int, now: float | None = None) -> bool:
@@ -78,7 +98,7 @@ def bind_outgoing_sticker_followup() -> None:
         data: dict[str, Any],
         result: Any,
     ) -> None:
-        if exception is not None or api != "send_group_msg":
+        if not should_handle_outgoing_sticker_followup(exception, api):
             return
         group_id = int(data.get("group_id") or 0)
         message = str(data.get("message") or "")

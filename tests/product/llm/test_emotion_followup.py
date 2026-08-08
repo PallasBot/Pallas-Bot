@@ -1,6 +1,21 @@
 from __future__ import annotations
 
 
+def test_outgoing_sticker_followup_can_be_suppressed_for_one_send() -> None:
+    from pallas.product.llm.sticker_followup import (
+        outgoing_sticker_followup_suppressed,
+        should_handle_outgoing_sticker_followup,
+        suppress_outgoing_sticker_followup,
+    )
+
+    assert not outgoing_sticker_followup_suppressed()
+    assert should_handle_outgoing_sticker_followup(None, "send_group_msg")
+    with suppress_outgoing_sticker_followup():
+        assert outgoing_sticker_followup_suppressed()
+        assert not should_handle_outgoing_sticker_followup(None, "send_group_msg")
+    assert not outgoing_sticker_followup_suppressed()
+
+
 def test_sticker_followup_cooldown_and_recent_image_deduplication() -> None:
     from pallas.product.llm.sticker_followup import (
         note_repeater_image_sent,

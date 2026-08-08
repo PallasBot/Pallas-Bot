@@ -39,13 +39,20 @@ async def speak_up():
     for msg in messages:
         logger.info(f"bot [{bot_id}] ready to speak [{msg}] to group [{group_id}]")
         try:
-            await bot.call_api(
-                "send_group_msg",
-                **{
-                    "message": msg,
-                    "group_id": group_id,
-                },
-            )
+            from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
+
+            with suppress_outgoing_sticker_followup():
+                await bot.call_api(
+                    "send_group_msg",
+                    **{
+                        "message": msg,
+                        "group_id": group_id,
+                    },
+                )
+
+            from ..sticker_followup import maybe_send_repeater_sticker_followup
+
+            await maybe_send_repeater_sticker_followup(bot, group_id, str(msg))
             if target_id:
                 await bot.call_api(
                     "group_poke",

@@ -270,7 +270,14 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
         await config.refresh_cooldown("repeat")
 
         try:
-            await bot.send_group_msg(group_id=group_id, message=msg)
+            from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
+
+            with suppress_outgoing_sticker_followup():
+                await bot.send_group_msg(group_id=group_id, message=msg)
+
+            from .sticker_followup import maybe_send_repeater_sticker_followup
+
+            await maybe_send_repeater_sticker_followup(bot, group_id, str(msg))
 
         except BOT_SEND_UNAVAILABLE_ERRORS as e:
             log_bot_send_unavailable(e, context=send_context, bot=bot_id, group=group_id)
