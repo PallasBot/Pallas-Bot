@@ -80,6 +80,15 @@ def test_at_chat_prompt_has_light_pallas_personality_anchor() -> None:
 def test_at_chat_prompt_allows_bounded_playful_piggy_interaction() -> None:
     prompt = load_at_chat_system_prompt()
 
+    assert "可爱又亲切的年轻女性" in prompt
+    assert "只顶一下" in prompt
+    assert "一半嘴硬、一半顺着回应" in prompt
+    assert "立即认真" in prompt
+    assert "【短正例】" in prompt
+    assert "漂亮牛牛真厉害" in prompt
+    assert "你是不是就爱欺负我" in prompt
+    assert "我想你了" in prompt
+    assert "今天真的很难受" in prompt
     assert "适度撒娇" in prompt
     assert "偶尔装傻" in prompt
     assert "短促接梗" in prompt
@@ -328,7 +337,7 @@ async def test_build_persona_llm_context_chat_uses_at_chat_prompt(monkeypatch: p
     ):
         assert base_system_path is not None
         text = load_base_system_prompt(custom_path=base_system_path)
-        assert "群聊 @ 任务" in text
+        assert "【群聊任务】" in text
         return compile_persona_prompt(
             derive_persona_from_bot_id(bot_id),
             None,
@@ -351,6 +360,6 @@ async def test_build_persona_llm_context_chat_uses_at_chat_prompt(monkeypatch: p
         purpose="chat",
     )
 
-    assert "群聊 @ 任务" in bundle.sections.base
+    assert "【群聊任务】" in bundle.sections.base
     assert temperature is not None
     assert token_count is not None

@@ -13,6 +13,7 @@ from pallas.product.llm.current_turn_decision import (
     decide_current_turn,
     decide_current_turn_with_model,
     resolve_reply_target,
+    should_include_recent_pair_for_turn,
     should_read_persistent_memory_for_turn,
 )
 
@@ -223,6 +224,33 @@ def test_short_vent_does_not_read_persistent_memory_even_when_model_calls_it_an_
     assert should_read_persistent_memory_for_turn(
         "刚才那个输出怎么改的？",
         CurrentTurnSocialAction.ANSWER,
+    )
+
+
+def test_explicit_short_social_turn_uses_recent_pair_when_assistant_replied() -> None:
+    assert should_include_recent_pair_for_turn(
+        "继续讲",
+        CurrentTurnSocialAction.ACK,
+        explicitly_addressed=True,
+        has_recent_assistant_turn=True,
+    )
+    assert not should_include_recent_pair_for_turn(
+        "继续讲",
+        CurrentTurnSocialAction.ACK,
+        explicitly_addressed=False,
+        has_recent_assistant_turn=True,
+    )
+    assert not should_include_recent_pair_for_turn(
+        "继续讲",
+        CurrentTurnSocialAction.ACK,
+        explicitly_addressed=True,
+        has_recent_assistant_turn=False,
+    )
+    assert not should_include_recent_pair_for_turn(
+        "刚才那个输出怎么改的？",
+        CurrentTurnSocialAction.ANSWER,
+        explicitly_addressed=True,
+        has_recent_assistant_turn=True,
     )
 
 

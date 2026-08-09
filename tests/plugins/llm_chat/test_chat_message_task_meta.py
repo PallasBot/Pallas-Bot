@@ -454,7 +454,9 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert submit_request.llm_rewrite_metadata["reply_target"] == "fact"
     assert submit_request.llm_rewrite_metadata["semantic_style_prompt_block"] == "【本群表达校准】\n保持：短句轻怼。"
     assert submit_request.llm_rewrite_metadata["semantic_style_direct_candidate"] == "没救了"
-    assert submit_request.include_session_history is False
+    assert submit_request.include_session_history is True
+    assert submit_request.session_history_limit == 2
+    assert submit_request.include_group_ambient_history is False
     assert submit_request.hybrid_retrieval_trace["sources"] == ["memory"]
 
 

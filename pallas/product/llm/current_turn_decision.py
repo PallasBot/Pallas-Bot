@@ -96,6 +96,19 @@ def should_read_persistent_memory_for_turn(
     return not (len(current) <= 24 and bool(_SHORT_SOCIAL_MEMORY_TURN_RE.search(current)))
 
 
+def should_include_recent_pair_for_turn(
+    text: str,
+    social_action: CurrentTurnSocialAction | str,
+    *,
+    explicitly_addressed: bool,
+    has_recent_assistant_turn: bool,
+) -> bool:
+    """Keep one direct-chat exchange when a short social turn omits context."""
+    if not explicitly_addressed or not has_recent_assistant_turn:
+        return False
+    return not should_read_persistent_memory_for_turn(text, social_action)
+
+
 def resolve_reply_target(
     text: str,
     *,

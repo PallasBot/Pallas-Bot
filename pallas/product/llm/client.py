@@ -34,6 +34,8 @@ async def resolve_chat_messages(
             request.user_text,
             cfg=c,
             include_history=request.include_session_history,
+            history_limit=request.session_history_limit,
+            include_group_ambient=request.include_group_ambient_history,
         )
     else:
         user_turn = format_user_turn(request.user_text, max_len=c.user_message_max_len)

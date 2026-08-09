@@ -25,6 +25,7 @@ from pallas.product.llm.current_turn_decision import (
     CurrentTurnDecisionInput,
     decide_current_turn_with_model,
     resolve_reply_target,
+    should_include_recent_pair_for_turn,
     should_read_persistent_memory_for_turn,
 )
 from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
@@ -540,9 +541,15 @@ async def handle_llm_chat(
         current_turn_decision.action is not CurrentTurnAction.TOOL
     ):
         tool_meta = {**tool_meta, "tools_enabled": False, "tool_schemas": []}
-    include_session_history = should_read_persistent_memory_for_turn(
+    include_persistent_history = should_read_persistent_memory_for_turn(
         focus_text,
         current_turn_decision.social_action,
+    )
+    include_recent_pair = should_include_recent_pair_for_turn(
+        focus_text,
+        current_turn_decision.social_action,
+        explicitly_addressed=is_to_me or speak_trigger in {"alias", "mention", "followup"},
+        has_recent_assistant_turn=any(str(getattr(turn, "role", "")).strip() == "assistant" for turn in recent_turns),
     )
     from pallas.product.llm.repeater_semantic_style import resolve_cached_semantic_style
 
@@ -560,7 +567,7 @@ async def handle_llm_chat(
         user_id=user_id,
         query_text=focus_text,
         cfg=llm_cfg,
-        allow_persistent_memory=include_session_history,
+        allow_persistent_memory=include_persistent_history,
         allow_expression_reference=not bool(semantic_style.prompt_block),
     )
     pre_submit_context_durations_ms["direct_context"] = int((time.perf_counter() - direct_context_started) * 1000)
@@ -686,7 +693,9 @@ async def handle_llm_chat(
             temperature=temperature,
             knowledge_retrieval_trace=knowledge_retrieval_trace,
             hybrid_retrieval_trace=hybrid_retrieval_trace,
-            include_session_history=include_session_history,
+            include_session_history=include_persistent_history or include_recent_pair,
+            session_history_limit=2 if include_recent_pair else None,
+            include_group_ambient_history=not include_recent_pair,
             llm_rewrite_metadata={
                 "task": "llm_chat",
                 "current_turn_action": current_turn_decision.action,
