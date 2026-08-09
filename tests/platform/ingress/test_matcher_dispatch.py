@@ -519,6 +519,8 @@ async def test_native_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest
 
     native_runtime.execute_and_commit.assert_awaited_once()
     run_matcher.assert_awaited_once()
+    post = dispatch.nb_message._apply_event_postprocessors
+    post.assert_awaited_once()
 
 
 def test_chat_drop_on_overload_default_off(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -125,6 +125,24 @@ async def test_native_runtime_does_not_fallback_after_action_submission_fails() 
 
 
 @pytest.mark.asyncio
+async def test_native_fallback_does_not_commit_or_retry_native_side_effects() -> None:
+    registry = NativeHandlerRegistry()
+    registry.register(PassiveLegacyBridgeHandler())
+    committer = type("Committer", (), {"commit": AsyncMock()})()
+    runtime = MessageRuntime(
+        RuntimeMode.NATIVE,
+        MessagePlanner(registry),
+        registry,
+        action_committer=committer,
+    )
+
+    outcome = await runtime.execute_and_commit(_context(), bot=object(), event=object())
+
+    assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
+    committer.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_native_handler_error_is_classified_without_logging_message_content(monkeypatch) -> None:
     from pallas.core.platform.message_runtime import runtime as runtime_module
 

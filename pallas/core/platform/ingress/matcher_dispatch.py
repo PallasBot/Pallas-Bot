@@ -43,6 +43,7 @@ from pallas.core.platform.ingress.message_load import (
     signal_overload,
 )
 from pallas.core.platform.ingress.route_index import RouteResolution, matcher_module_key
+from pallas.core.platform.message_runtime.legacy_adapter import LegacyMatcherAdapter
 from pallas.core.platform.message_runtime.lifecycle import (
     native_runtime_for_group,
     record_native_execution,
@@ -111,6 +112,12 @@ def chat_drop_on_overload_enabled() -> bool:
 def matcher_dispatch_batches(selected_matchers: list[type]) -> list[list[type]]:
     batch_size = matcher_dispatch_batch_size()
     return [selected_matchers[i : i + batch_size] for i in range(0, len(selected_matchers), batch_size)]
+
+
+_legacy_matcher_adapter = LegacyMatcherAdapter(
+    batch_size=matcher_dispatch_batches,
+    threshold=overload_selected_threshold,
+)
 
 
 def synthetic_llm_command_context(event: Event) -> dict[str, Any] | None:
@@ -347,57 +354,17 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 chat_degraded_token = mark_chat_degraded(True)
 
             try:
-                threshold = overload_selected_threshold()
                 total_selected = 0
                 total_considered = 0
                 matchers_run = 0
                 any_matcher_executed = False
                 legacy_matcher_modules: list[str] = []
 
-                break_flag = False
+                if show_log:
+                    nb_message.logger.debug("Checking for matchers completed")
 
-                async def run_selected_matcher(matcher) -> None:
-                    nonlocal any_matcher_executed, matchers_run
-                    result = await check_and_run_matcher_with_lane(
-                        matcher,
-                        bot,
-                        event,
-                        state.copy(),
-                        stack,
-                        dependency_cache,
-                        command_traffic=command_traffic,
-                        synthetic_llm_command=llm_command is not None,
-                        hard_speak_trigger=bool(
-                            matcher_module_key(matcher) == "llm_chat"
-                            and (
-                                getattr(event, "to_me", False)
-                                or getattr(event, "_pallas_llm_alias_hard_trigger", False)
-                            )
-                        ),
-                    )
-                    if result.acquired:
-                        matchers_run += 1
-                        any_matcher_executed = True
-                        if llm_command is not None:
-                            acquired_matcher_modules.append(matcher_log_name(matcher))
-                    return
-
-                def handle_stop_propagation(_exc_group) -> None:
-                    nonlocal break_flag
-                    break_flag = True
-                    nb_message.logger.debug("Stop event propagation")
-
-                for priority in sorted(matchers.keys()):
-                    if break_flag:
-                        break
-
-                    if show_log:
-                        nb_message.logger.debug("Checking for matchers in priority {}...", priority)
-
-                    if not (priority_matchers := matchers[priority]):
-                        continue
-
-                    selected_matchers = (
+                def select_legacy_matchers(priority_matchers: list[type]) -> list[type]:
+                    selected = (
                         select_priority_matchers(
                             priority_matchers,
                             command_traffic=command_traffic,
@@ -408,37 +375,37 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         else priority_matchers
                     )
                     if llm_command is not None and resolution is not None:
-                        selected_matchers = select_synthetic_llm_command_matchers(selected_matchers, resolution)
+                        selected = select_synthetic_llm_command_matchers(selected, resolution)
                     elif chat_degraded_token is not None:
-                        selected_matchers = select_overload_chatter_matchers(selected_matchers)
-                    selected_matchers = exclude_native_matchers(selected_matchers, native_legacy_exclude_modules)
-                    if not selected_matchers:
-                        continue
+                        selected = select_overload_chatter_matchers(selected)
+                    return exclude_native_matchers(selected, native_legacy_exclude_modules)
 
-                    legacy_matcher_modules.extend(matcher_log_name(matcher) for matcher in selected_matchers)
-                    if llm_command is not None:
-                        selected_matcher_modules.extend(matcher_log_name(matcher) for matcher in selected_matchers)
-
-                    total_considered += len(priority_matchers)
-                    total_selected += len(selected_matchers)
-                    if total_selected > threshold:
-                        signal_overload(3.0)
-
-                    with nb_message.catch({
-                        nb_message.StopPropagation: handle_stop_propagation,
-                        Exception: nb_message._handle_exception(
-                            "<r><bg #f8bbd0>Error when checking Matcher.</bg #f8bbd0></r>"
-                        ),
-                    }):
-                        for batch in matcher_dispatch_batches(selected_matchers):
-                            if break_flag:
-                                break
-                            async with nb_message.anyio.create_task_group() as tg:
-                                for matcher in batch:
-                                    tg.start_soon(nb_message.run_coro_with_shield, run_selected_matcher(matcher))
-
-                if show_log:
-                    nb_message.logger.debug("Checking for matchers completed")
+                legacy_result = await _legacy_matcher_adapter.execute(
+                    bot=bot,
+                    event=event,
+                    state=state,
+                    stack=stack,
+                    dependency_cache=dependency_cache,
+                    command_traffic=command_traffic,
+                    llm_command=(
+                        dict(llm_command, route_modules=resolution.matched_modules)
+                        if llm_command is not None and resolution is not None
+                        else None
+                    ),
+                    chat_degraded=chat_degraded_token is not None,
+                    native_legacy_exclude_modules=native_legacy_exclude_modules,
+                    matcher_pools=matchers,
+                    matcher_checker=check_and_run_matcher_with_lane,
+                    select_matchers=select_legacy_matchers,
+                    signal_overload=signal_overload,
+                )
+                total_selected = legacy_result.total_selected
+                total_considered = legacy_result.total_considered
+                matchers_run = legacy_result.matchers_run
+                any_matcher_executed = legacy_result.any_matcher_executed
+                legacy_matcher_modules.extend(legacy_result.selected_matcher_modules)
+                selected_matcher_modules.extend(legacy_result.selected_matcher_modules)
+                acquired_matcher_modules.extend(legacy_result.acquired_matcher_modules)
 
                 if apply_dispatch:
                     record_group_message_ingress(
