@@ -69,6 +69,70 @@ async def test_repeater_native_handler_builds_deferred_and_remote_fanout_actions
 
 
 @pytest.mark.asyncio
+async def test_repeater_native_handler_does_not_run_side_effects_before_legacy_fallback(monkeypatch) -> None:
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+
+    handler = RepeaterNativeHandler()
+    calls: list[str] = []
+    event = type(
+        "Event",
+        (),
+        {
+            "self_id": 1,
+            "group_id": 2,
+            "message_id": 3,
+            "message": [type("Segment", (), {"type": "image"})()],
+            "is_tome": lambda self: False,
+        },
+    )()
+
+    async def build_context(_bot_id, _event):
+        return type("Context", (), {"plain_body": "闲聊", "norm_raw": "闲聊", "sharding_active": False})()
+
+    async def not_scrubbed(**_kwargs):
+        return False
+
+    async def prepare(_event, _chat, **_kwargs):
+        return type("Prepared", (), {"bundle": object(), "fanout_gate": None})()
+
+    def chat(_event):
+        return object()
+
+    async def insert_image(*_args, **_kwargs):
+        calls.append("image")
+
+    async def enqueue_learn(*_args, **_kwargs):
+        calls.append("learn")
+
+    monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
+    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", not_scrubbed)
+    monkeypatch.setattr("packages.repeater.reply_preparation.prepare_repeater_reply", prepare)
+    monkeypatch.setattr("packages.repeater.model.Chat", chat)
+    monkeypatch.setattr("pallas.core.shared.utils.media_cache.insert_image", insert_image)
+    monkeypatch.setattr("packages.repeater.learn_queue.enqueue_repeater_learn", enqueue_learn)
+
+    outcome = await handler.build_fanout_plan(_context(), bot=type("Bot", (), {"self_id": 1})(), event=event)
+
+    assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_repeater_native_handler_keeps_to_me_traffic_for_legacy(monkeypatch) -> None:
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+
+    handler = RepeaterNativeHandler()
+    expected = HandlingOutcome(handled=False, fallback_to_legacy=True)
+
+    async def fallback_plan(_context, *, bot, event):
+        return expected
+
+    monkeypatch.setattr(handler, "build_fanout_plan", fallback_plan)
+
+    assert await handler.handle(_context(is_to_me=True), bot="bot", event="event") == expected
+
+
+@pytest.mark.asyncio
 async def test_repeater_native_handler_uses_native_outcome_for_fanout(monkeypatch) -> None:
     from packages.repeater.message_runtime_handler import RepeaterNativeHandler
 

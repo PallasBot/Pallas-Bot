@@ -89,6 +89,9 @@ class RepeaterNativeHandler:
             plain_body=repeater_context.plain_body,
             sharding_active=repeater_context.sharding_active,
         )
+        if event.is_tome() or prepared.bundle is None or prepared.fanout_gate is None or not prepared.fanout_gate.won:
+            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+
         for segment in event.message:
             if segment.type == "image":
                 await insert_image(
@@ -98,11 +101,6 @@ class RepeaterNativeHandler:
                     message_id=int(event.message_id),
                 )
         await enqueue_repeater_learn(chat, event)
-
-        if event.is_tome() or prepared.bundle is None:
-            return HandlingOutcome(handled=True)
-        if prepared.fanout_gate is None or not prepared.fanout_gate.won:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
         return build_repeater_fanout_outcome(event, prepared.fanout_gate.bot_ids, prepared.bundle)
 
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
