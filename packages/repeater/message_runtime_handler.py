@@ -155,6 +155,9 @@ async def try_build_repeater_llm_select_outcome(
     )
     if plan.stage_names != ["select"]:
         return None
+    candidates = plan.candidate_pool or ([plan.candidate_text] if plan.candidate_text else [])
+    if not candidates:
+        return None
     recent_messages = list(MessageStore._message_dict.get(int(event.group_id), []))
     recent_human_user_ids = [
         int(getattr(message, "user_id", 0) or 0)
@@ -181,7 +184,7 @@ async def try_build_repeater_llm_select_outcome(
         has_candidate_pool=bool(bundle.message_pool or bundle.answer_list),
         candidate_pool_size=len(plan.candidate_pool),
         candidate_style_score=estimate_candidate_style_score(
-            plan.candidate_pool or ([plan.candidate_text] if plan.candidate_text else []),
+            candidates,
             reply_mode=bundle.reply_mode,
         ),
         has_recent_back_and_forth=has_recent_back_and_forth,
@@ -215,7 +218,7 @@ async def try_build_repeater_llm_select_outcome(
     return build_repeater_llm_select_outcome(
         event,
         user_text=plain_body,
-        candidates=plan.candidate_pool,
+        candidates=candidates,
         candidate_text=plan.candidate_text,
         reply_mode=bundle.reply_mode,
         scene_tier=scene_tier,

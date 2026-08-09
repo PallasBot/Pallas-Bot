@@ -163,7 +163,11 @@ async def test_repeater_llm_opportunity_scores_fallback_candidate(monkeypatch) -
         "packages.repeater.opportunity_gate.estimate_candidate_style_score",
         lambda candidates, **_kwargs: captured.update(scored=list(candidates)) or 0.5,
     )
-    monkeypatch.setattr(module, "build_repeater_llm_select_outcome", lambda *_args, **_kwargs: "outcome")
+    monkeypatch.setattr(
+        module,
+        "build_repeater_llm_select_outcome",
+        lambda *_args, **kwargs: captured.update(submitted=list(kwargs["candidates"])) or "outcome",
+    )
 
     result = await module.try_build_repeater_llm_select_outcome(
         event,
@@ -174,6 +178,7 @@ async def test_repeater_llm_opportunity_scores_fallback_candidate(monkeypatch) -
 
     assert result == "outcome"
     assert captured["scored"] == ["fallback"]
+    assert captured["submitted"] == ["fallback"]
 
 
 @pytest.mark.asyncio
