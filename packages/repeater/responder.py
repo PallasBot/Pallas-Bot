@@ -34,6 +34,28 @@ if TYPE_CHECKING:
 plugin_config = get_repeater_config()
 
 
+async def load_feedback_snapshot(
+    *,
+    group_id: int,
+    user_text: str,
+    behavior_scene: str,
+) -> dict | None:
+    if not can_apply_feedback_bias():
+        return None
+    try:
+        return await asyncio.to_thread(
+            group_feedback_bias_snapshot,
+            group_id=group_id,
+            limit=Responder.FEEDBACK_BIAS_LIMIT,
+            user_text=user_text,
+            behavior_scene=behavior_scene,
+            hotpath=True,
+        )
+    except Exception as exc:
+        logger.warning("repeater.llm_feedback_bias_snapshot_failed group_id={}: {}", group_id, exc)
+        return None
+
+
 @dataclass(frozen=True)
 class ReplyBundle:
     """一次 context 检索结果；fanout 时各牛从 message_pool 轻量随机，不再重复查库。"""
@@ -668,7 +690,6 @@ class Responder:
             for r in reply_dict[group_id][bot_id][-Responder.DUPLICATE_REPLY :]
             if r.get("reply") and r["reply"] != Responder.REPLY_FLAG
         ]
-        feedback_snapshot = None
         trigger_text = str(getattr(chat_data, "plain_text", "") or chat_data.raw_message or "").strip()
         behavior_scene = ""
         try:
@@ -686,18 +707,11 @@ class Responder:
         except Exception as exc:
             logger.warning("repeater.behavior_scene_failed group_id={}: {}", group_id, exc)
         t_feedback = time.perf_counter()
-        if can_apply_feedback_bias():
-            try:
-                feedback_snapshot = await asyncio.to_thread(
-                    group_feedback_bias_snapshot,
-                    group_id=group_id,
-                    limit=Responder.FEEDBACK_BIAS_LIMIT,
-                    user_text=trigger_text,
-                    behavior_scene=behavior_scene,
-                    hotpath=True,
-                )
-            except Exception as exc:
-                logger.warning("repeater.llm_feedback_bias_snapshot_failed group_id={}: {}", group_id, exc)
+        feedback_snapshot = await load_feedback_snapshot(
+            group_id=group_id,
+            user_text=trigger_text,
+            behavior_scene=behavior_scene,
+        )
         feedback_ms = (time.perf_counter() - t_feedback) * 1000.0
 
         t_select = time.perf_counter()
