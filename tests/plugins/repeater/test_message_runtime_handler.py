@@ -94,6 +94,63 @@ def test_repeater_native_handler_builds_deferred_local_reply_action(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_repeater_llm_opportunity_scores_fallback_candidate(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    import packages.repeater.message_runtime_handler as module
+    from pallas.product.llm.kernel.models import ConversationFeatureLevel
+
+    captured: dict[str, object] = {}
+    plan = SimpleNamespace(stage_names=["select"], candidate_pool=[], candidate_text="fallback")
+    capabilities = SimpleNamespace(
+        llm_enabled=True,
+        select_enabled=True,
+        polish_enabled=False,
+        polish_lite_enabled=False,
+    )
+    event = type(
+        "Event",
+        (),
+        {"self_id": 10, "group_id": 2, "is_tome": lambda self: False},
+    )()
+    bundle = SimpleNamespace(message_pool=[], answer_list=["fallback"], reply_mode="normal")
+
+    monkeypatch.setattr("packages.repeater.llm_pipeline.build_repeater_llm_plan", lambda *_args, **_kwargs: plan)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_repeater_strong_attempt_rate=1.0),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_api.resolve_conversation_feature_level",
+        lambda _cfg: ConversationFeatureLevel.REPEATER_PLUS_DECISION,
+    )
+    monkeypatch.setattr("packages.repeater.opportunity_gate.resolve_scene_tier", lambda *_args, **_kwargs: "normal")
+    monkeypatch.setattr(
+        "packages.repeater.opportunity_gate.should_attempt_repeater_opportunity",
+        lambda *_args, **kwargs: captured.update(kwargs) or True,
+    )
+    monkeypatch.setattr(
+        "packages.repeater.opportunity_gate.decide_llm_attempt",
+        lambda **_kwargs: (True, 0.0, None),
+    )
+    monkeypatch.setattr(
+        "packages.repeater.opportunity_gate.estimate_candidate_style_score",
+        lambda candidates, **_kwargs: captured.update(scored=list(candidates)) or 0.5,
+    )
+    monkeypatch.setattr(module, "build_repeater_llm_select_outcome", lambda *_args, **_kwargs: "outcome")
+
+    result = await module.try_build_repeater_llm_select_outcome(
+        event,
+        plain_body="闲聊",
+        bundle=bundle,
+        capabilities=capabilities,
+    )
+
+    assert result == "outcome"
+    assert captured["scored"] == ["fallback"]
+
+
+@pytest.mark.asyncio
 async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypatch) -> None:
     from unittest.mock import AsyncMock
 
@@ -142,10 +199,16 @@ async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypat
     outcome = await handler.build_fanout_plan(_context(), bot=type("Bot", (), {"self_id": 10})(), event=event)
 
     assert outcome.handled is True
-    assert [action.name for action in outcome.deferred_actions] == ["repeater_reply_10_2"]
+    assert [action.name for action in outcome.deferred_actions] == [
+        "repeater_capture_learn_10_2_3",
+        "repeater_reply_10_2",
+    ]
     chat.answer_from_bundle.assert_awaited_once_with(bundle)
-    learn.assert_awaited_once_with(chat, event)
+    learn.assert_not_awaited()
     refresh_cooldown.assert_awaited_once_with("repeat")
+
+    await outcome.deferred_actions[0].run()
+    learn.assert_awaited_once_with(chat, event)
 
 
 @pytest.mark.asyncio
@@ -236,7 +299,11 @@ async def test_repeater_native_handler_keeps_learning_when_local_reply_has_no_an
 
     outcome = await handler.build_fanout_plan(_context(), bot=type("Bot", (), {"self_id": 10})(), event=event)
 
-    assert outcome == HandlingOutcome(handled=True)
+    assert outcome.handled is True
+    assert [action.name for action in outcome.deferred_actions] == ["repeater_capture_learn_10_2_3"]
+    learn.assert_not_awaited()
+
+    await outcome.deferred_actions[0].run()
     learn.assert_awaited_once_with(chat, event)
 
 

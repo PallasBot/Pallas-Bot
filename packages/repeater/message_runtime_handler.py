@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from pallas.core.platform.message_runtime.models import (
@@ -67,6 +68,27 @@ def build_repeater_fanout_outcome(event: Any, bot_ids: tuple[int, ...], bundle: 
         handled=True,
         deferred_actions=tuple(deferred_actions),
         cross_worker_actions=tuple(cross_worker_actions),
+    )
+
+
+def build_repeater_capture_and_learn_action(event: Any, chat: Any) -> DeferredAction:
+    async def capture_and_learn() -> None:
+        from packages.repeater.learn_queue import enqueue_repeater_learn
+        from pallas.core.shared.utils.media_cache import insert_image
+
+        for segment in event.message:
+            if segment.type == "image":
+                await insert_image(
+                    segment,
+                    bot_id=int(event.self_id),
+                    group_id=int(event.group_id),
+                    message_id=int(event.message_id),
+                )
+        await enqueue_repeater_learn(chat, event)
+
+    return DeferredAction(
+        name=f"repeater_capture_learn_{int(event.self_id)}_{int(event.group_id)}_{int(event.message_id)}",
+        run=capture_and_learn,
     )
 
 
@@ -158,7 +180,10 @@ async def try_build_repeater_llm_select_outcome(
         recent_message_count=len(recent_messages),
         has_candidate_pool=bool(bundle.message_pool or bundle.answer_list),
         candidate_pool_size=len(plan.candidate_pool),
-        candidate_style_score=estimate_candidate_style_score(plan.candidate_pool, reply_mode=bundle.reply_mode),
+        candidate_style_score=estimate_candidate_style_score(
+            plan.candidate_pool or ([plan.candidate_text] if plan.candidate_text else []),
+            reply_mode=bundle.reply_mode,
+        ),
         has_recent_back_and_forth=has_recent_back_and_forth,
         bot_recently_replied=bot_recently_replied,
         reply_mode=bundle.reply_mode,
@@ -221,10 +246,8 @@ class RepeaterNativeHandler:
 
         capabilities = resolve_repeater_capabilities(get_llm_config())
         from packages.repeater.event_gate import build_repeater_event_context
-        from packages.repeater.learn_queue import enqueue_repeater_learn
         from packages.repeater.model import Chat
         from packages.repeater.reply_preparation import prepare_repeater_reply
-        from pallas.core.shared.utils.media_cache import insert_image
         from pallas.product.message_scrub import is_message_scrub_blocked_async
 
         repeater_context = await build_repeater_event_context(int(bot.self_id), event)
@@ -245,17 +268,13 @@ class RepeaterNativeHandler:
         )
         if event.is_tome() or prepared.bundle is None:
             return HandlingOutcome(handled=False, fallback_to_legacy=True)
+        capture_action = build_repeater_capture_and_learn_action(event, chat)
         if prepared.fanout_gate is not None and prepared.fanout_gate.won:
-            for segment in event.message:
-                if segment.type == "image":
-                    await insert_image(
-                        segment,
-                        bot_id=int(event.self_id),
-                        group_id=int(event.group_id),
-                        message_id=int(event.message_id),
-                    )
-            await enqueue_repeater_learn(chat, event)
-            return build_repeater_fanout_outcome(event, prepared.fanout_gate.bot_ids, prepared.bundle)
+            fanout_outcome = build_repeater_fanout_outcome(event, prepared.fanout_gate.bot_ids, prepared.bundle)
+            return replace(
+                fanout_outcome,
+                deferred_actions=(capture_action,) + fanout_outcome.deferred_actions,
+            )
 
         llm_outcome = None
         if capabilities.llm_enabled:
@@ -268,28 +287,20 @@ class RepeaterNativeHandler:
             if llm_outcome is None:
                 return HandlingOutcome(handled=False, fallback_to_legacy=True)
 
-        for segment in event.message:
-            if segment.type == "image":
-                await insert_image(
-                    segment,
-                    bot_id=int(event.self_id),
-                    group_id=int(event.group_id),
-                    message_id=int(event.message_id),
-                )
-        await enqueue_repeater_learn(chat, event)
         if llm_outcome is not None:
-            return llm_outcome
+            return replace(llm_outcome, deferred_actions=(capture_action,) + llm_outcome.deferred_actions)
 
         answers = await chat.answer_from_bundle(prepared.bundle)
         if answers is None:
-            return HandlingOutcome(handled=True)
+            return HandlingOutcome(handled=True, deferred_actions=(capture_action,))
 
         from pallas.core.foundation.config import BotConfig
         from pallas.core.platform.ingress.hotpath_metrics import record_reply_local_dispatched
 
         await BotConfig(int(event.self_id), int(event.group_id)).refresh_cooldown("repeat")
         record_reply_local_dispatched()
-        return build_repeater_local_reply_outcome(int(event.self_id), int(event.group_id), answers)
+        local_outcome = build_repeater_local_reply_outcome(int(event.self_id), int(event.group_id), answers)
+        return replace(local_outcome, deferred_actions=(capture_action,) + local_outcome.deferred_actions)
 
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
