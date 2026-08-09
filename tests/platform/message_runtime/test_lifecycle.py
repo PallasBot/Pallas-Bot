@@ -3,7 +3,16 @@ from __future__ import annotations
 import json
 
 from pallas.core.platform.message_runtime import lifecycle
-from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext, RuntimeMode, SendAction
+from pallas.core.platform.message_runtime.models import (
+    CrossWorkerAction,
+    DeferredAction,
+    HandlingOutcome,
+    LlmSelectAction,
+    MessageContext,
+    RuntimeMode,
+    SendAction,
+)
+from pallas.core.platform.work_jobs.models import WorkJob
 
 
 def setup_function() -> None:
@@ -120,7 +129,36 @@ def test_native_execution_persists_outcome_without_message_content(tmp_path, mon
 
     lifecycle.record_native_execution(
         context,
-        HandlingOutcome(handled=True, actions=(SendAction("reply"),)),
+        HandlingOutcome(
+            handled=True,
+            handler_id="pb_core.status",
+            actions=(SendAction("reply"),),
+            work_jobs=(WorkJob.create(kind="test.work", payload={}, idempotency_key="test.work:1"),),
+            cross_worker_actions=(
+                CrossWorkerAction(
+                    kind="repeater.fanout_reply",
+                    target_bot_id=2,
+                    payload={},
+                    idempotency_key="test.fanout:1",
+                ),
+            ),
+            llm_select_actions=(
+                LlmSelectAction(
+                    bot_id=1,
+                    group_id=100,
+                    event=object(),
+                    user_text="message",
+                    candidates=("candidate",),
+                    candidate_text="candidate",
+                    reply_mode="normal",
+                    scene_tier="strong",
+                    bundle=object(),
+                    capabilities=object(),
+                    run_local_bundle=lambda: __import__("asyncio").sleep(0),
+                ),
+            ),
+            deferred_actions=(DeferredAction(name="test.deferred", run=lambda: __import__("asyncio").sleep(0)),),
+        ),
         duration_ms=1.25,
         timestamp=100,
     )
@@ -132,7 +170,12 @@ def test_native_execution_persists_outcome_without_message_content(tmp_path, mon
         "event_id_hash": context.telemetry_fields()["event_id_hash"],
         "ts": 100,
         "kind": "native_handled",
+        "handler_id": "pb_core.status",
         "action_count": 1,
+        "work_job_count": 1,
+        "cross_worker_action_count": 1,
+        "llm_select_action_count": 1,
+        "deferred_action_count": 1,
         "duration_ms": 1.25,
     }
     assert "1:100:3" not in row.values()

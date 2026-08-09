@@ -91,8 +91,20 @@ async def test_native_runtime_executes_the_planned_handler() -> None:
 
     outcome = await runtime.execute(_context(), bot=object(), event=object())
 
-    assert outcome == HandlingOutcome(handled=True)
+    assert outcome == HandlingOutcome(handled=True, handler_id="pb_core.status")
     assert handler.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_native_runtime_attributes_the_executing_handler() -> None:
+    registry = NativeHandlerRegistry()
+    registry.register(StatusHandler())
+
+    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute(
+        _context(), bot=object(), event=object()
+    )
+
+    assert outcome.handler_id == "pb_core.status"
 
 
 @pytest.mark.asyncio
@@ -105,7 +117,11 @@ async def test_native_runtime_commits_actions_centrally() -> None:
         _context(), bot=bot, event="event"
     )
 
-    assert outcome == HandlingOutcome(handled=True, actions=(SendAction("reply"),))
+    assert outcome == HandlingOutcome(
+        handled=True,
+        handler_id="pb_core.sending",
+        actions=(SendAction("reply"),),
+    )
     bot.send.assert_awaited_once_with("event", "reply")
 
 
@@ -138,7 +154,11 @@ async def test_native_fallback_does_not_commit_or_retry_native_side_effects() ->
 
     outcome = await runtime.execute_and_commit(_context(), bot=object(), event=object())
 
-    assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
+    assert outcome == HandlingOutcome(
+        handled=False,
+        handler_id="repeater.message",
+        fallback_to_legacy=True,
+    )
     committer.commit.assert_not_awaited()
 
 
@@ -157,6 +177,7 @@ async def test_native_handler_error_is_classified_without_logging_message_conten
 
     assert outcome == HandlingOutcome(
         handled=False,
+        handler_id="pb_core.raising",
         fallback_to_legacy=True,
         error_class="RuntimeError",
     )

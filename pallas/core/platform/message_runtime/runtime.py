@@ -42,7 +42,8 @@ class MessageRuntime:
         if handler is None:
             return HandlingOutcome(handled=False, fallback_to_legacy=True)
         try:
-            return await handler.handle(context, bot=bot, event=event)
+            outcome = await handler.handle(context, bot=bot, event=event)
+            return replace(outcome, handler_id=handler.handler_id)
         except Exception as exc:
             error_class = type(exc).__name__
             logger.warning(
@@ -51,8 +52,13 @@ class MessageRuntime:
                 error_class,
             )
             if not getattr(handler, "fallback_on_error", True):
-                return HandlingOutcome(handled=True, error_class=error_class)
-            return HandlingOutcome(handled=False, fallback_to_legacy=True, error_class=error_class)
+                return HandlingOutcome(handled=True, handler_id=handler.handler_id, error_class=error_class)
+            return HandlingOutcome(
+                handled=False,
+                handler_id=handler.handler_id,
+                fallback_to_legacy=True,
+                error_class=error_class,
+            )
 
     async def execute_and_commit(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         outcome = await self.execute(context, bot=bot, event=event)

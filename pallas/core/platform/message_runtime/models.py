@@ -110,6 +110,7 @@ class HandlingPlan:
 @dataclass(frozen=True, slots=True)
 class HandlingOutcome:
     handled: bool
+    handler_id: str | None = None
     actions: tuple[SendAction, ...] = ()
     work_jobs: tuple[WorkJob, ...] = ()
     deferred_actions: tuple[DeferredAction, ...] = ()
@@ -121,6 +122,8 @@ class HandlingOutcome:
     error_class: str | None = None
 
     def __post_init__(self) -> None:
+        if self.handler_id is not None and not self.handler_id:
+            raise ValueError("handler_id cannot be empty")
         if self.fallback_to_legacy and (
             self.actions
             or self.work_jobs
