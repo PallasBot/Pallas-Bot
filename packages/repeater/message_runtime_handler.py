@@ -14,10 +14,10 @@ if TYPE_CHECKING:
 
 
 def build_repeater_local_reply_outcome(bot_id: int, group_id: int, answers: Any) -> HandlingOutcome:
-    from packages.repeater.fanout_reply import dispatch_repeater_reply
+    from packages.repeater.fanout_reply import _run_repeater_reply_send
 
     async def dispatch() -> None:
-        dispatch_repeater_reply(bot_id, group_id, answers)
+        await _run_repeater_reply_send(bot_id, group_id, answers)
 
     return HandlingOutcome(
         handled=True,
@@ -83,6 +83,12 @@ class RepeaterNativeHandler:
         bot: Bot,
         event: Event,
     ) -> HandlingOutcome:
+        from pallas.product.llm.config import get_llm_config
+        from pallas.product.llm.runtime_api import resolve_repeater_capabilities
+
+        if resolve_repeater_capabilities(get_llm_config()).llm_enabled:
+            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+
         from packages.repeater.event_gate import build_repeater_event_context
         from packages.repeater.learn_queue import enqueue_repeater_learn
         from packages.repeater.model import Chat
@@ -119,12 +125,6 @@ class RepeaterNativeHandler:
                     )
             await enqueue_repeater_learn(chat, event)
             return build_repeater_fanout_outcome(event, prepared.fanout_gate.bot_ids, prepared.bundle)
-
-        from pallas.product.llm.config import get_llm_config
-        from pallas.product.llm.runtime_api import resolve_repeater_capabilities
-
-        if resolve_repeater_capabilities(get_llm_config()).llm_enabled:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
 
         for segment in event.message:
             if segment.type == "image":

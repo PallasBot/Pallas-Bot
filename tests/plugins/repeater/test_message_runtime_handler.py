@@ -75,10 +75,14 @@ def test_repeater_native_handler_builds_deferred_local_reply_action(monkeypatch)
 
     scheduled: list[tuple[int, int, object]] = []
 
-    def dispatch(bot_id: int, group_id: int, answers: object) -> None:
+    async def dispatch(bot_id: int, group_id: int, answers: object) -> None:
         scheduled.append((bot_id, group_id, answers))
 
-    monkeypatch.setattr("packages.repeater.fanout_reply.dispatch_repeater_reply", dispatch)
+    monkeypatch.setattr("packages.repeater.fanout_reply._run_repeater_reply_send", dispatch)
+    monkeypatch.setattr(
+        "packages.repeater.fanout_reply.asyncio.create_task",
+        lambda *_args, **_kwargs: pytest.fail("native deferred action must not schedule another task"),
+    )
     answers = object()
     outcome = build_repeater_local_reply_outcome(10, 2, answers)
 
@@ -142,6 +146,30 @@ async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypat
     chat.answer_from_bundle.assert_awaited_once_with(bundle)
     learn.assert_awaited_once_with(chat, event)
     refresh_cooldown.assert_awaited_once_with("repeat")
+
+
+@pytest.mark.asyncio
+async def test_repeater_native_handler_leaves_llm_traffic_unclaimed_for_legacy(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+
+    build_context = AsyncMock()
+    monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
+        lambda _config: type("Capabilities", (), {"llm_enabled": True})(),
+    )
+
+    outcome = await RepeaterNativeHandler().build_fanout_plan(
+        _context(),
+        bot=type("Bot", (), {"self_id": 10})(),
+        event=object(),
+    )
+
+    assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
+    build_context.assert_not_awaited()
 
 
 @pytest.mark.asyncio
