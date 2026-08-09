@@ -710,7 +710,7 @@ def _merge_protocol_snap_display_names(out: dict[str, dict[str, Any]]) -> None:
             continue
         disp = str(acc.get("display_name") or acc.get("nickname") or "").strip()
         if sid in out:
-            if disp and not str(out[sid].get("nickname") or "").strip():
+            if disp:
                 out[sid]["nickname"] = disp
         elif disp:
             out[sid] = {

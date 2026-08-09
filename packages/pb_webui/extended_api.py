@@ -104,6 +104,7 @@ def register_extended_api(
     from .agent_platform_api import register_agent_platform_router
     from .ai_extension_api import register_ai_extension_router
     from .auth_security_api import register_auth_security_router
+    from .bot_favorites_api import register_bot_favorites_router
     from .common_config_api import register_common_config_router
     from .db_api import register_db_router
     from .extended_common import check_pallas_write_token
@@ -124,6 +125,15 @@ def register_extended_api(
         x=x,
         plugin_config=plugin_config,
         app=app,
+    )
+    register_bot_favorites_router(
+        router,
+        x=x,
+        check_write_token=lambda *, x_pallas_token=None, token=None: check_pallas_write_token(
+            plugin_config,
+            x_pallas_token=x_pallas_token,
+            token=token,
+        ),
     )
     register_acl_router(router, x=x)
     register_llm_ops_router(
