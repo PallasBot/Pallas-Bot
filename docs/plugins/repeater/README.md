@@ -23,8 +23,8 @@
 
 | 命令 ID | 默认等级 |
 | --- | --- |
-| `repeater.ban` | 群管或号主 |
-| `repeater.ban_latest` | 群管或号主 |
+| `repeater.ban` | 所有人 |
+| `repeater.ban_latest` | 所有人 |
 
 实际生效等级以控制台「命令权限」为准。面向用户的 usage 不要写死角色名。
 
