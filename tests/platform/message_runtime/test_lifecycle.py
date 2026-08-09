@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from pallas.core.platform.message_runtime import lifecycle
 from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext, RuntimeMode, SendAction
 
@@ -124,9 +126,16 @@ def test_native_execution_persists_outcome_without_message_content(tmp_path, mon
     )
     lifecycle.flush_shadow_experiment()
 
-    assert (tmp_path / "experiment.jsonl").read_text(encoding="utf-8") == (
-        '{"ingress_id":"1:100:3","ts":100,"kind":"native_handled","action_count":1,"duration_ms":1.25}\n'
-    )
+    row = json.loads((tmp_path / "experiment.jsonl").read_text(encoding="utf-8"))
+
+    assert row == {
+        "event_id_hash": context.telemetry_fields()["event_id_hash"],
+        "ts": 100,
+        "kind": "native_handled",
+        "action_count": 1,
+        "duration_ms": 1.25,
+    }
+    assert "1:100:3" not in row.values()
 
 
 def test_native_execution_persists_handler_errors_without_message_content(tmp_path, monkeypatch) -> None:
@@ -158,6 +167,14 @@ def test_native_execution_persists_handler_errors_without_message_content(tmp_pa
     )
     lifecycle.flush_shadow_experiment()
 
-    assert (tmp_path / "experiment.jsonl").read_text(encoding="utf-8") == (
-        '{"ingress_id":"1:100:3","ts":100,"kind":"native_error","error_class":"RuntimeError","action_count":0,"duration_ms":1.25}\n'
-    )
+    row = json.loads((tmp_path / "experiment.jsonl").read_text(encoding="utf-8"))
+
+    assert row == {
+        "event_id_hash": context.telemetry_fields()["event_id_hash"],
+        "ts": 100,
+        "kind": "native_error",
+        "error_class": "RuntimeError",
+        "action_count": 0,
+        "duration_ms": 1.25,
+    }
+    assert "1:100:3" not in row.values()

@@ -46,8 +46,7 @@ any_msg = on_message(
 )
 
 
-@any_msg.handle()
-async def handle_group_message(bot: Bot, event: GroupMessageEvent):
+async def execute_repeater_message(bot: Bot, event: GroupMessageEvent) -> None:
     ctx = await build_repeater_event_context(int(bot.self_id), event)
     if ctx is None:
         return
@@ -278,3 +277,8 @@ async def handle_group_message(bot: Bot, event: GroupMessageEvent):
 
     record_reply_local_dispatched()
     dispatch_repeater_reply(int(event.self_id), int(event.group_id), answers)
+
+
+@any_msg.handle()
+async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
+    await execute_repeater_message(bot, event)

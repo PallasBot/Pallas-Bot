@@ -349,9 +349,19 @@ async def dispatch_repeater_fanout(
     bot_ids: list[int] | tuple[int, ...],
     bundle: ReplyBundle,
 ) -> None:
-    group_id = int(event.group_id)
     ids = list(bot_ids)
-    payload = fanout_payload_from_event(event, bundle, fanout_bot_ids=ids)
+    await dispatch_repeater_fanout_payload(
+        ids,
+        fanout_payload_from_event(event, bundle, fanout_bot_ids=ids),
+    )
+
+
+async def dispatch_repeater_fanout_payload(
+    bot_ids: list[int] | tuple[int, ...],
+    payload: dict[str, Any],
+) -> None:
+    group_id = int(payload["group_id"])
+    ids = [int(bot_id) for bot_id in bot_ids]
     stagger = 0.35
 
     from pallas.core.platform.shard.presence import bot_has_cluster_connection, bot_has_local_connection

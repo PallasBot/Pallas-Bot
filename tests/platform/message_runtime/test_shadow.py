@@ -23,3 +23,18 @@ def test_shadow_marks_equivalent_route_and_result_as_agreement() -> None:
     )
 
     assert record.kind == "agreement"
+
+
+def test_shadow_marks_legacy_error_before_route_comparison() -> None:
+    record = compare_plan_to_legacy(
+        HandlingPlan(kind="native", handler_ids=("pb_core.status",), reason="unique_command"),
+        LegacyExecution(
+            handler_ids=("pb_core.status",),
+            handled=True,
+            visible_actions=1,
+            error_class="RuntimeError",
+        ),
+        ingress_id="i-4",
+    )
+
+    assert record.kind == "legacy_error"

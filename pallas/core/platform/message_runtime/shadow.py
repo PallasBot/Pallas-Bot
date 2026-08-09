@@ -12,6 +12,7 @@ class LegacyExecution:
     handler_ids: tuple[str, ...]
     handled: bool
     visible_actions: int
+    error_class: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,16 +20,25 @@ class ShadowRecord:
     ingress_id: str
     timestamp: int
     kind: str
+    plan_kind: str | None = None
+    plan_reason: str | None = None
+    handler_ids: tuple[str, ...] = ()
     error_class: str | None = None
     action_count: int | None = None
     duration_ms: float | None = None
 
-    def as_dict(self) -> dict[str, str | int]:
+    def as_dict(self) -> dict[str, str | int | list[str]]:
         record: dict[str, str | int] = {
-            "ingress_id": self.ingress_id,
+            "event_id_hash": self.ingress_id,
             "ts": self.timestamp,
             "kind": self.kind,
         }
+        if self.plan_kind:
+            record["plan_kind"] = self.plan_kind
+        if self.plan_reason:
+            record["plan_reason"] = self.plan_reason
+        if self.handler_ids:
+            record["handler_ids"] = list(self.handler_ids)
         if self.error_class:
             record["error_class"] = self.error_class
         if self.action_count is not None:
@@ -45,7 +55,9 @@ def compare_plan_to_legacy(
     ingress_id: str,
     timestamp: int = 0,
 ) -> ShadowRecord:
-    if plan.kind == "legacy":
+    if legacy.error_class:
+        kind = "legacy_error"
+    elif plan.kind == "legacy":
         kind = "agreement"
     elif plan.handler_ids != legacy.handler_ids:
         kind = "route_mismatch"

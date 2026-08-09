@@ -115,9 +115,10 @@ def record_native_execution(
         kind = "native_handled" if outcome.handled and not outcome.fallback_to_legacy else "native_fallback"
     _telemetry_writer.record(
         ShadowRecord(
-            ingress_id=context.ingress_id,
+            ingress_id=context.telemetry_fields()["event_id_hash"],
             timestamp=int(time.time()) if timestamp is None else timestamp,
             kind=kind,
+            handler_ids=(),
             error_class=outcome.error_class,
             action_count=len(outcome.actions),
             duration_ms=round(duration_ms, 2),

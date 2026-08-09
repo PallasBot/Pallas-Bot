@@ -72,6 +72,11 @@ class ExperimentTelemetryWriter:
                 row = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if isinstance(row, dict) and int(row.get("ts") or 0) > cutoff:
+            if (
+                isinstance(row, dict)
+                and "ingress_id" not in row
+                and isinstance(row.get("event_id_hash"), str)
+                and int(row.get("ts") or 0) > cutoff
+            ):
                 rows.append(row)
         return rows

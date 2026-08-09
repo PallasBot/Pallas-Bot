@@ -47,6 +47,14 @@ class SideEffectingHandler(StatusHandler):
         raise RuntimeError("producer failed")
 
 
+class PassiveLegacyBridgeHandler(StatusHandler):
+    handler_id = "repeater.message"
+    fallback_on_error = True
+
+    async def handle(self, context: MessageContext, *, bot: object, event: object) -> HandlingOutcome:
+        return HandlingOutcome(handled=False, fallback_to_legacy=True)
+
+
 def _context() -> MessageContext:
     return MessageContext(
         ingress_id="i-1",
@@ -139,6 +147,29 @@ async def test_native_handler_error_is_classified_without_logging_message_conten
         "pb_core.raising",
         "RuntimeError",
     )
+
+
+@pytest.mark.asyncio
+async def test_passive_legacy_bridge_does_not_suppress_legacy_matchers() -> None:
+    registry = NativeHandlerRegistry()
+    registry.register(PassiveLegacyBridgeHandler())
+    context = MessageContext(
+        ingress_id="i-1",
+        bot_id=1,
+        group_id=2,
+        message_id=3,
+        plain_text="聊天",
+        raw_text="聊天",
+        is_to_me=False,
+        command_traffic=False,
+        route_modules=frozenset(),
+    )
+
+    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute(
+        context, bot=object(), event=object()
+    )
+
+    assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
 
 
 @pytest.mark.asyncio

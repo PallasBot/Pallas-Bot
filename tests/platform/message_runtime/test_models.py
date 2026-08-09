@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 
 from pallas.core.platform.message_runtime.models import (
+    CrossWorkerAction,
+    DeferredAction,
     HandlingOutcome,
     HandlingPlan,
     MessageContext,
@@ -22,6 +24,38 @@ def test_fallback_outcome_cannot_contain_actions() -> None:
             handled=False,
             fallback_to_legacy=True,
             actions=(SendAction(message="reply"),),
+        )
+
+
+def test_fallback_outcome_cannot_contain_deferred_actions() -> None:
+    with pytest.raises(ValueError, match="fallback"):
+        HandlingOutcome(
+            handled=False,
+            fallback_to_legacy=True,
+            deferred_actions=(DeferredAction(name="reply", run=lambda: None),),
+        )
+
+
+def test_cross_worker_action_requires_target_and_idempotency_key() -> None:
+    with pytest.raises(ValueError, match="target"):
+        CrossWorkerAction(kind="repeater.fanout_reply", target_bot_id=0, payload={}, idempotency_key="fanout:1")
+    with pytest.raises(ValueError, match="idempotency"):
+        CrossWorkerAction(kind="repeater.fanout_reply", target_bot_id=1, payload={}, idempotency_key="")
+
+
+def test_fallback_outcome_cannot_contain_cross_worker_actions() -> None:
+    with pytest.raises(ValueError, match="fallback"):
+        HandlingOutcome(
+            handled=False,
+            fallback_to_legacy=True,
+            cross_worker_actions=(
+                CrossWorkerAction(
+                    kind="repeater.fanout_reply",
+                    target_bot_id=1,
+                    payload={},
+                    idempotency_key="fanout:1",
+                ),
+            ),
         )
 
 
@@ -62,7 +96,7 @@ def test_message_context_telemetry_redacts_message_content() -> None:
 
     fields = context.telemetry_fields()
 
-    assert fields["ingress_id"] == "i-1"
+    assert fields["event_id_hash"] != "i-1"
     assert fields["bot_id_hash"] != "1"
     assert fields["group_id_hash"] != "2"
     assert "secret message" not in fields.values()

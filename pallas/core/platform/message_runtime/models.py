@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from pallas.core.platform.work_jobs.models import WorkJob
 
 
@@ -29,7 +31,7 @@ class MessageContext:
 
     def telemetry_fields(self) -> dict[str, str]:
         return {
-            "ingress_id": self.ingress_id,
+            "event_id_hash": _telemetry_text_hash(self.ingress_id),
             "bot_id_hash": _telemetry_id_hash(self.bot_id),
             "group_id_hash": _telemetry_id_hash(self.group_id),
         }
@@ -38,6 +40,35 @@ class MessageContext:
 @dataclass(frozen=True, slots=True)
 class SendAction:
     message: object
+
+
+@dataclass(frozen=True, slots=True)
+class DeferredAction:
+    name: str
+    run: Callable[[], Awaitable[None]]
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("deferred action name is required")
+
+
+@dataclass(frozen=True, slots=True)
+class CrossWorkerAction:
+    kind: str
+    target_bot_id: int
+    payload: dict[str, Any]
+    idempotency_key: str
+    timeout_sec: float = 45.0
+
+    def __post_init__(self) -> None:
+        if not self.kind:
+            raise ValueError("cross-worker action kind is required")
+        if self.target_bot_id <= 0:
+            raise ValueError("cross-worker action target bot is required")
+        if not self.idempotency_key:
+            raise ValueError("cross-worker action idempotency key is required")
+        if self.timeout_sec <= 0:
+            raise ValueError("cross-worker action timeout must be positive")
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,14 +89,18 @@ class HandlingOutcome:
     handled: bool
     actions: tuple[SendAction, ...] = ()
     work_jobs: tuple[WorkJob, ...] = ()
+    deferred_actions: tuple[DeferredAction, ...] = ()
+    cross_worker_actions: tuple[CrossWorkerAction, ...] = ()
     fallback_to_legacy: bool = False
     continue_legacy: bool = False
     legacy_exclude_modules: frozenset[str] = frozenset()
     error_class: str | None = None
 
     def __post_init__(self) -> None:
-        if self.fallback_to_legacy and (self.actions or self.work_jobs):
-            raise ValueError("fallback outcomes cannot contain actions or work jobs")
+        if self.fallback_to_legacy and (
+            self.actions or self.work_jobs or self.deferred_actions or self.cross_worker_actions
+        ):
+            raise ValueError("fallback outcomes cannot contain side effects")
         if self.error_class and not (self.fallback_to_legacy or self.handled):
             raise ValueError("native errors must either fall back or be committed")
         if self.continue_legacy and (not self.handled or self.fallback_to_legacy):
@@ -73,4 +108,8 @@ class HandlingOutcome:
 
 
 def _telemetry_id_hash(value: int) -> str:
+    return _telemetry_text_hash(str(value))
+
+
+def _telemetry_text_hash(value: str) -> str:
     return hashlib.sha256(f"message-runtime:{value}".encode()).hexdigest()[:16]

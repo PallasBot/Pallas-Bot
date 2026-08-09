@@ -4,6 +4,34 @@ from packages.repeater import fanout_reply
 from packages.repeater.responder import ReplyBundle, Responder
 
 
+@pytest.mark.asyncio
+async def test_dispatch_repeater_fanout_payload_schedules_local_and_remote_bots(monkeypatch):
+    scheduled: list[str | None] = []
+
+    def fake_create_task(coro, *, name=None):
+        scheduled.append(name)
+        coro.close()
+        return object()
+
+    monkeypatch.setattr(fanout_reply.asyncio, "create_task", fake_create_task)
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.presence.bot_has_cluster_connection",
+        lambda bot_id: bot_id in {10, 20},
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.presence.bot_has_local_connection",
+        lambda bot_id: bot_id == 10,
+    )
+    monkeypatch.setattr(fanout_reply.shard_ctx, "sharding_active", lambda: True)
+
+    await fanout_reply.dispatch_repeater_fanout_payload(
+        [10, 20],
+        {"group_id": 3, "fanout_bot_ids": [10, 20]},
+    )
+
+    assert scheduled == ["repeater_fanout_10_3", "repeater_fanout_remote_batch_3"]
+
+
 def test_select_fanout_bot_ids_picks_non_empty_random_subset(monkeypatch):
     monkeypatch.setattr(fanout_reply.random, "randint", lambda low, high: 2)
     monkeypatch.setattr(fanout_reply.random, "sample", lambda ids, count: [33, 11])

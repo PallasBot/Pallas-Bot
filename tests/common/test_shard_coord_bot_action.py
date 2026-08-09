@@ -26,6 +26,37 @@ def test_bot_action_request_roundtrip(fake_coord_redis) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.asyncio
+async def test_execute_local_repeater_fanout_reply_preserves_stagger_delay(monkeypatch):
+    delayed: list[float] = []
+
+    scheduled = []
+
+    def fake_create_task(coro, *, name=None):
+        scheduled.append(coro)
+        return object()
+
+    async def fake_sleep(delay: float) -> None:
+        delayed.append(delay)
+
+    monkeypatch.setattr(mod.asyncio, "create_task", fake_create_task)
+    monkeypatch.setattr(mod.asyncio, "sleep", fake_sleep)
+    monkeypatch.setattr("nonebot.get_bots", lambda: {"300": object()})
+
+    async def fake_run_repeater_reply_for_bot(_bot_id: int, _payload: dict[str, object]) -> None:
+        return None
+
+    from packages.repeater import fanout_reply as fanout_mod
+
+    monkeypatch.setattr(fanout_mod, "run_repeater_reply_for_bot", fake_run_repeater_reply_for_bot)
+
+    await mod._execute_local("repeater_fanout_reply", 300, {"group_id": 1, "delay_sec": 0.35})
+    await scheduled[0]
+
+    assert delayed == [0.35]
+
+
+@pytest.mark.asyncio
 async def test_execute_local_repeater_fanout_reply_schedules_background_task(monkeypatch):
     scheduled: list[str | None] = []
 

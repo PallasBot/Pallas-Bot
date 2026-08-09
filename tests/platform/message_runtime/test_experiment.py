@@ -48,5 +48,9 @@ async def test_shadow_experiment_only_plans_then_records_legacy_result() -> None
     )
 
     assert plan == HandlingPlan(kind="legacy", handler_ids=(), reason="unique_route_unregistered")
-    assert writer.records[0].kind == "agreement"
-    assert writer.records[0].timestamp == 100
+    record = writer.records[0]
+    assert record.kind == "agreement"
+    assert record.timestamp == 100
+    assert record.ingress_id == _context().telemetry_fields()["event_id_hash"]
+    assert record.plan_kind == "legacy"
+    assert record.plan_reason == "unique_route_unregistered"

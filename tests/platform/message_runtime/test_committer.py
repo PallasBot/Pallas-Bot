@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
 
 from pallas.core.platform.message_runtime.committer import ActionCommitter, SideEffectCommitError
-from pallas.core.platform.message_runtime.models import HandlingOutcome, SendAction
+from pallas.core.platform.message_runtime.models import (
+    CrossWorkerAction,
+    DeferredAction,
+    HandlingOutcome,
+    SendAction,
+)
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
 
@@ -37,3 +43,53 @@ async def test_committer_marks_failed_work_submission_as_side_effect_started() -
         )
 
     assert raised.value.committed is True
+
+
+@pytest.mark.asyncio
+async def test_committer_schedules_deferred_actions_and_dispatches_cross_worker_actions(monkeypatch) -> None:
+    from pallas.core.platform.message_runtime import committer as module
+
+    scheduled: list[str | None] = []
+    dispatched: list[CrossWorkerAction] = []
+
+    def fake_create_task(coro, *, name=None):
+        scheduled.append(name)
+        coro.close()
+        return object()
+
+    async def fake_dispatch(action: CrossWorkerAction) -> None:
+        dispatched.append(action)
+
+    monkeypatch.setattr(module.asyncio, "create_task", fake_create_task)
+    committer = ActionCommitter(lambda: MemoryWorkJobStore(), cross_worker_dispatcher=fake_dispatch)
+    outcome = HandlingOutcome(
+        handled=True,
+        deferred_actions=(DeferredAction(name="repeater_reply_1_2", run=lambda: asyncio.sleep(0)),),
+        cross_worker_actions=(
+            CrossWorkerAction(
+                kind="repeater.fanout_reply",
+                target_bot_id=3,
+                payload={"group_id": 2},
+                idempotency_key="repeater.fanout:2:3",
+            ),
+        ),
+    )
+
+    assert await committer.commit(outcome, bot=object(), event=object()) is True
+    assert scheduled == ["repeater_reply_1_2"]
+    assert dispatched == list(outcome.cross_worker_actions)
+
+
+@pytest.mark.asyncio
+async def test_cross_worker_dispatcher_rejects_unknown_action() -> None:
+    from pallas.core.platform.message_runtime.committer import dispatch_cross_worker_action
+
+    with pytest.raises(ValueError, match="unsupported"):
+        await dispatch_cross_worker_action(
+            CrossWorkerAction(
+                kind="unknown.action",
+                target_bot_id=3,
+                payload={},
+                idempotency_key="unknown:3",
+            )
+        )

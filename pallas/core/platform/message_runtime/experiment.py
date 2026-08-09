@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .shadow import compare_plan_to_legacy
+from .shadow import ShadowRecord, compare_plan_to_legacy
 
 if TYPE_CHECKING:
     from .models import HandlingPlan, MessageContext
@@ -29,4 +29,20 @@ class ShadowExperiment:
     ) -> None:
         if self._writer is None:
             return
-        self._writer.record(compare_plan_to_legacy(plan, legacy, ingress_id=context.ingress_id, timestamp=timestamp))
+        record = compare_plan_to_legacy(
+            plan,
+            legacy,
+            ingress_id=context.telemetry_fields()["event_id_hash"],
+            timestamp=timestamp,
+        )
+        self._writer.record(
+            ShadowRecord(
+                ingress_id=record.ingress_id,
+                timestamp=record.timestamp,
+                kind=record.kind,
+                plan_kind=plan.kind,
+                plan_reason=plan.reason,
+                handler_ids=plan.handler_ids,
+                error_class=legacy.error_class,
+            )
+        )
