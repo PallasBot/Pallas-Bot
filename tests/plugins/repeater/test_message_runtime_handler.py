@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext
@@ -66,6 +68,80 @@ async def test_repeater_native_handler_builds_deferred_and_remote_fanout_actions
     assert [(action.target_bot_id, action.payload["delay_sec"]) for action in outcome.cross_worker_actions] == [
         (20, 0.35)
     ]
+
+
+def test_repeater_native_handler_builds_deferred_local_reply_action(monkeypatch) -> None:
+    from packages.repeater.message_runtime_handler import build_repeater_local_reply_outcome
+
+    scheduled: list[tuple[int, int, object]] = []
+
+    def dispatch(bot_id: int, group_id: int, answers: object) -> None:
+        scheduled.append((bot_id, group_id, answers))
+
+    monkeypatch.setattr("packages.repeater.fanout_reply.dispatch_repeater_reply", dispatch)
+    answers = object()
+    outcome = build_repeater_local_reply_outcome(10, 2, answers)
+
+    assert outcome.handled is True
+    assert [action.name for action in outcome.deferred_actions] == ["repeater_reply_10_2"]
+
+    asyncio.run(outcome.deferred_actions[0].run())
+    assert scheduled == [(10, 2, answers)]
+
+
+@pytest.mark.asyncio
+async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+
+    handler = RepeaterNativeHandler()
+    answers = object()
+    bundle = object()
+    chat = type("Chat", (), {"answer_from_bundle": AsyncMock(return_value=answers)})()
+    event = type(
+        "Event",
+        (),
+        {
+            "self_id": 10,
+            "group_id": 2,
+            "message_id": 3,
+            "message": [],
+            "is_tome": lambda self: False,
+        },
+    )()
+    refresh_cooldown = AsyncMock()
+    learn = AsyncMock()
+
+    async def build_context(_bot_id, _event):
+        return type("Context", (), {"plain_body": "闲聊", "norm_raw": "闲聊", "sharding_active": False})()
+
+    monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
+    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "packages.repeater.reply_preparation.prepare_repeater_reply",
+        AsyncMock(return_value=type("Prepared", (), {"bundle": bundle, "fanout_gate": None})()),
+    )
+    monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: chat)
+    monkeypatch.setattr("packages.repeater.learn_queue.enqueue_repeater_learn", learn)
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
+        lambda _config: type("Capabilities", (), {"llm_enabled": False})(),
+    )
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.BotConfig",
+        lambda *_args: type("Config", (), {"refresh_cooldown": refresh_cooldown})(),
+    )
+    monkeypatch.setattr("pallas.core.platform.ingress.hotpath_metrics.record_reply_local_dispatched", lambda: None)
+
+    outcome = await handler.build_fanout_plan(_context(), bot=type("Bot", (), {"self_id": 10})(), event=event)
+
+    assert outcome.handled is True
+    assert [action.name for action in outcome.deferred_actions] == ["repeater_reply_10_2"]
+    chat.answer_from_bundle.assert_awaited_once_with(bundle)
+    learn.assert_awaited_once_with(chat, event)
+    refresh_cooldown.assert_awaited_once_with("repeat")
 
 
 @pytest.mark.asyncio
