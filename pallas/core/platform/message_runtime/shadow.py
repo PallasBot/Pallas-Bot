@@ -24,6 +24,7 @@ class ShadowRecord:
     plan_reason: str | None = None
     handler_ids: tuple[str, ...] = ()
     handler_id: str | None = None
+    fallback_reason: str | None = None
     error_class: str | None = None
     action_count: int | None = None
     work_job_count: int | None = None
@@ -46,6 +47,8 @@ class ShadowRecord:
             record["handler_ids"] = list(self.handler_ids)
         if self.handler_id:
             record["handler_id"] = self.handler_id
+        if self.fallback_reason:
+            record["fallback_reason"] = self.fallback_reason
         if self.error_class:
             record["error_class"] = self.error_class
         if self.action_count is not None:

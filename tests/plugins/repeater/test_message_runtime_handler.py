@@ -94,6 +94,32 @@ def test_repeater_native_handler_builds_deferred_local_reply_action(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_repeater_native_handler_labels_unavailable_event_context(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
+        lambda _config: type("Capabilities", (), {"llm_enabled": False})(),
+    )
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
+    monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", AsyncMock(return_value=None))
+
+    outcome = await RepeaterNativeHandler().build_fanout_plan(
+        _context(),
+        bot=type("Bot", (), {"self_id": 10})(),
+        event=object(),
+    )
+
+    assert outcome == HandlingOutcome(
+        handled=False,
+        fallback_to_legacy=True,
+        fallback_reason="event_context_unavailable",
+    )
+
+
+@pytest.mark.asyncio
 async def test_repeater_llm_opportunity_scores_fallback_candidate(monkeypatch) -> None:
     from types import SimpleNamespace
 
@@ -211,6 +237,67 @@ async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypat
     learn.assert_awaited_once_with(chat, event)
 
 
+@pytest.mark.parametrize(
+    ("is_to_me", "has_bundle", "fallback_reason"),
+    [
+        (False, False, "no_reply_bundle"),
+        (True, True, "unexpected_to_me"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_repeater_native_handler_labels_nonreply_fallbacks(
+    monkeypatch,
+    is_to_me: bool,
+    has_bundle: bool,
+    fallback_reason: str,
+) -> None:
+    from unittest.mock import AsyncMock
+
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+
+    event = type(
+        "Event",
+        (),
+        {
+            "self_id": 10,
+            "group_id": 2,
+            "message_id": 3,
+            "message": [],
+            "is_tome": lambda self: is_to_me,
+        },
+    )()
+
+    async def build_context(_bot_id, _event):
+        return type("Context", (), {"plain_body": "闲聊", "norm_raw": "闲聊", "sharding_active": False})()
+
+    monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
+    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "packages.repeater.reply_preparation.prepare_repeater_reply",
+        AsyncMock(
+            return_value=type("Prepared", (), {"bundle": object() if has_bundle else None, "fanout_gate": None})()
+        ),
+    )
+    monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: object())
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
+        lambda _config: type("Capabilities", (), {"llm_enabled": False})(),
+    )
+
+    outcome = await RepeaterNativeHandler().build_fanout_plan(
+        _context(),
+        bot=type("Bot", (), {"self_id": 10})(),
+        event=event,
+    )
+
+    assert outcome == HandlingOutcome(
+        handled=False,
+        fallback_to_legacy=True,
+        fallback_reason=fallback_reason,
+    )
+
+
 @pytest.mark.asyncio
 async def test_repeater_native_handler_keeps_unsupported_llm_pipeline_for_legacy(monkeypatch) -> None:
     from unittest.mock import AsyncMock
@@ -255,7 +342,11 @@ async def test_repeater_native_handler_keeps_unsupported_llm_pipeline_for_legacy
         event=event,
     )
 
-    assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
+    assert outcome == HandlingOutcome(
+        handled=False,
+        fallback_to_legacy=True,
+        fallback_reason="llm_pipeline_unsupported",
+    )
 
 
 @pytest.mark.asyncio
@@ -363,7 +454,11 @@ async def test_repeater_native_handler_does_not_run_side_effects_before_legacy_f
 
     outcome = await handler.build_fanout_plan(_context(), bot=type("Bot", (), {"self_id": 1})(), event=event)
 
-    assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
+    assert outcome == HandlingOutcome(
+        handled=False,
+        fallback_to_legacy=True,
+        fallback_reason="llm_pipeline_unsupported",
+    )
     assert calls == []
 
 

@@ -221,3 +221,52 @@ def test_native_execution_persists_handler_errors_without_message_content(tmp_pa
         "duration_ms": 1.25,
     }
     assert "1:100:3" not in row.values()
+
+
+def test_native_execution_persists_fallback_reason_without_message_content(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(lifecycle, "message_runtime_experiment_path", lambda: tmp_path / "experiment.jsonl")
+    lifecycle.configure_shadow_experiment(
+        mode=RuntimeMode.NATIVE,
+        canary_groups=(100,),
+        telemetry_enabled=True,
+        retention_hours=24,
+        agreement_sample_rate=1,
+    )
+    context = MessageContext(
+        ingress_id="1:100:3",
+        bot_id=1,
+        group_id=100,
+        message_id=3,
+        plain_text="secret command",
+        raw_text="secret command",
+        is_to_me=False,
+        command_traffic=False,
+        route_modules=frozenset({"repeater"}),
+    )
+
+    lifecycle.record_native_execution(
+        context,
+        HandlingOutcome(
+            handled=False,
+            handler_id="repeater.message",
+            fallback_to_legacy=True,
+            fallback_reason="no_reply_bundle",
+        ),
+        duration_ms=1.25,
+        timestamp=100,
+    )
+    lifecycle.flush_shadow_experiment()
+
+    row = json.loads((tmp_path / "experiment.jsonl").read_text(encoding="utf-8"))
+
+    assert row == {
+        "event_id_hash": context.telemetry_fields()["event_id_hash"],
+        "ts": 100,
+        "kind": "native_fallback",
+        "handler_id": "repeater.message",
+        "fallback_reason": "no_reply_bundle",
+        "action_count": 0,
+        "duration_ms": 1.25,
+    }
+    assert "secret command" not in row.values()
+    assert "1:100:3" not in row.values()

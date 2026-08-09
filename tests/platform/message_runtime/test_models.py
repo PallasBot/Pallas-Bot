@@ -37,6 +37,11 @@ def test_fallback_outcome_cannot_contain_deferred_actions() -> None:
         )
 
 
+def test_fallback_reason_requires_legacy_fallback() -> None:
+    with pytest.raises(ValueError, match="fallback reason"):
+        HandlingOutcome(handled=True, fallback_reason="no_reply_bundle")
+
+
 def test_cross_worker_action_requires_target_and_idempotency_key() -> None:
     with pytest.raises(ValueError, match="target"):
         CrossWorkerAction(kind="repeater.fanout_reply", target_bot_id=0, payload={}, idempotency_key="fanout:1")

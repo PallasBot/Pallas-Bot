@@ -117,6 +117,7 @@ class HandlingOutcome:
     cross_worker_actions: tuple[CrossWorkerAction, ...] = ()
     llm_select_actions: tuple[LlmSelectAction, ...] = ()
     fallback_to_legacy: bool = False
+    fallback_reason: str | None = None
     continue_legacy: bool = False
     legacy_exclude_modules: frozenset[str] = frozenset()
     error_class: str | None = None
@@ -132,6 +133,10 @@ class HandlingOutcome:
             or self.llm_select_actions
         ):
             raise ValueError("fallback outcomes cannot contain side effects")
+        if self.fallback_reason is not None and not self.fallback_reason:
+            raise ValueError("fallback reason cannot be empty")
+        if self.fallback_reason and not self.fallback_to_legacy:
+            raise ValueError("fallback reason requires legacy fallback")
         if self.error_class and not (self.fallback_to_legacy or self.handled):
             raise ValueError("native errors must either fall back or be committed")
         if self.continue_legacy and (not self.handled or self.fallback_to_legacy):

@@ -120,6 +120,7 @@ def record_native_execution(
             kind=kind,
             handler_ids=(),
             handler_id=outcome.handler_id,
+            fallback_reason=outcome.fallback_reason,
             error_class=outcome.error_class,
             action_count=len(outcome.actions),
             work_job_count=len(outcome.work_jobs) or None,

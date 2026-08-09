@@ -252,7 +252,11 @@ class RepeaterNativeHandler:
 
         repeater_context = await build_repeater_event_context(int(bot.self_id), event)
         if repeater_context is None:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(
+                handled=False,
+                fallback_to_legacy=True,
+                fallback_reason="event_context_unavailable",
+            )
         if await is_message_scrub_blocked_async(
             plain_text=repeater_context.plain_body,
             raw_message=repeater_context.norm_raw,
@@ -266,8 +270,18 @@ class RepeaterNativeHandler:
             plain_body=repeater_context.plain_body,
             sharding_active=repeater_context.sharding_active,
         )
-        if event.is_tome() or prepared.bundle is None:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+        if event.is_tome():
+            return HandlingOutcome(
+                handled=False,
+                fallback_to_legacy=True,
+                fallback_reason="unexpected_to_me",
+            )
+        if prepared.bundle is None:
+            return HandlingOutcome(
+                handled=False,
+                fallback_to_legacy=True,
+                fallback_reason="no_reply_bundle",
+            )
         capture_action = build_repeater_capture_and_learn_action(event, chat)
         if prepared.fanout_gate is not None and prepared.fanout_gate.won:
             fanout_outcome = build_repeater_fanout_outcome(event, prepared.fanout_gate.bot_ids, prepared.bundle)
@@ -285,7 +299,11 @@ class RepeaterNativeHandler:
                 capabilities=capabilities,
             )
             if llm_outcome is None:
-                return HandlingOutcome(handled=False, fallback_to_legacy=True)
+                return HandlingOutcome(
+                    handled=False,
+                    fallback_to_legacy=True,
+                    fallback_reason="llm_pipeline_unsupported",
+                )
 
         if llm_outcome is not None:
             return replace(llm_outcome, deferred_actions=(capture_action,) + llm_outcome.deferred_actions)
