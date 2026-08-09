@@ -126,13 +126,6 @@ class RepeaterNativeHandler:
         if resolve_repeater_capabilities(get_llm_config()).llm_enabled:
             return HandlingOutcome(handled=False, fallback_to_legacy=True)
 
-        answers = await chat.answer_from_bundle(prepared.bundle)
-        if answers is None:
-            return HandlingOutcome(handled=True)
-
-        from pallas.core.foundation.config import BotConfig
-        from pallas.core.platform.ingress.hotpath_metrics import record_reply_local_dispatched
-
         for segment in event.message:
             if segment.type == "image":
                 await insert_image(
@@ -142,6 +135,14 @@ class RepeaterNativeHandler:
                     message_id=int(event.message_id),
                 )
         await enqueue_repeater_learn(chat, event)
+
+        answers = await chat.answer_from_bundle(prepared.bundle)
+        if answers is None:
+            return HandlingOutcome(handled=True)
+
+        from pallas.core.foundation.config import BotConfig
+        from pallas.core.platform.ingress.hotpath_metrics import record_reply_local_dispatched
+
         await BotConfig(int(event.self_id), int(event.group_id)).refresh_cooldown("repeat")
         record_reply_local_dispatched()
         return build_repeater_local_reply_outcome(int(event.self_id), int(event.group_id), answers)

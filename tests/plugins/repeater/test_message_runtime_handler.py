@@ -145,6 +145,51 @@ async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_repeater_native_handler_keeps_learning_when_local_reply_has_no_answers(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+
+    handler = RepeaterNativeHandler()
+    bundle = object()
+    chat = type("Chat", (), {"answer_from_bundle": AsyncMock(return_value=None)})()
+    event = type(
+        "Event",
+        (),
+        {
+            "self_id": 10,
+            "group_id": 2,
+            "message_id": 3,
+            "message": [],
+            "is_tome": lambda self: False,
+        },
+    )()
+    learn = AsyncMock()
+
+    async def build_context(_bot_id, _event):
+        return type("Context", (), {"plain_body": "闲聊", "norm_raw": "闲聊", "sharding_active": False})()
+
+    monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
+    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "packages.repeater.reply_preparation.prepare_repeater_reply",
+        AsyncMock(return_value=type("Prepared", (), {"bundle": bundle, "fanout_gate": None})()),
+    )
+    monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: chat)
+    monkeypatch.setattr("packages.repeater.learn_queue.enqueue_repeater_learn", learn)
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
+        lambda _config: type("Capabilities", (), {"llm_enabled": False})(),
+    )
+
+    outcome = await handler.build_fanout_plan(_context(), bot=type("Bot", (), {"self_id": 10})(), event=event)
+
+    assert outcome == HandlingOutcome(handled=True)
+    learn.assert_awaited_once_with(chat, event)
+
+
+@pytest.mark.asyncio
 async def test_repeater_native_handler_does_not_run_side_effects_before_legacy_fallback(monkeypatch) -> None:
     from packages.repeater.message_runtime_handler import RepeaterNativeHandler
 
