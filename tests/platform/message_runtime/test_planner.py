@@ -30,6 +30,15 @@ class PassiveHandler(StatusHandler):
         return not context.is_to_me
 
 
+class GreetingHandler(StatusHandler):
+    handler_id = "greeting.call_me"
+    passive = True
+    exact_passive_primary = True
+
+    def accepts(self, context: MessageContext) -> bool:
+        return context.raw_text == "牛牛"
+
+
 def _context(*, route_modules: set[str], command_traffic: bool = True, plain_text: str = "#pallas") -> MessageContext:
     return MessageContext(
         ingress_id="i-1",
@@ -74,6 +83,30 @@ def test_planner_selects_a_single_registered_passive_handler() -> None:
     assert plan.kind == "native"
     assert plan.handler_ids == ("repeater.message",)
     assert plan.reason == "unique_passive"
+
+
+def test_planner_prefers_one_exact_passive_primary_over_broad_passive_handler() -> None:
+    registry = NativeHandlerRegistry()
+    registry.register(GreetingHandler("牛牛", "greeting.call_me"))
+    registry.register(PassiveHandler(handler_id="repeater.message"))
+
+    plan = MessagePlanner(registry).plan(_context(route_modules={"greeting"}, command_traffic=False, plain_text="牛牛"))
+
+    assert plan.kind == "native"
+    assert plan.handler_ids == ("greeting.call_me",)
+    assert plan.reason == "unique_exact_passive"
+
+
+def test_planner_keeps_multiple_exact_passive_primaries_on_legacy_path() -> None:
+    registry = NativeHandlerRegistry()
+    registry.register(GreetingHandler("牛牛", "greeting.call_me"))
+    registry.register(GreetingHandler("牛牛", "greeting.other"))
+
+    plan = MessagePlanner(registry).plan(_context(route_modules={"greeting"}, command_traffic=False, plain_text="牛牛"))
+
+    assert plan.kind == "legacy"
+    assert plan.handler_ids == ()
+    assert plan.reason == "multiple_exact_passive_primaries"
 
 
 def test_planning_never_invokes_a_registered_handler() -> None:

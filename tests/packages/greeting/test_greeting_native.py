@@ -53,3 +53,31 @@ async def test_call_me_native_handler_falls_back_for_non_exact_text() -> None:
     outcome = await CallMeNativeHandler().handle(context(raw_text="牛牛！"), bot=MagicMock(), event=MagicMock())
 
     assert outcome.fallback_to_legacy is True
+
+
+def test_call_me_native_handler_is_the_exact_passive_primary() -> None:
+    from packages.greeting.native import CallMeNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from pallas.core.platform.message_runtime.handlers import NativeHandlerRegistry
+    from pallas.core.platform.message_runtime.planner import MessagePlanner
+
+    registry = NativeHandlerRegistry()
+    registry.register(CallMeNativeHandler())
+    registry.register(RepeaterNativeHandler())
+
+    plan = MessagePlanner(registry).plan(
+        MessageContext(
+            ingress_id="1:2:3",
+            bot_id=1,
+            group_id=2,
+            message_id=3,
+            plain_text="牛牛",
+            raw_text="牛牛",
+            is_to_me=False,
+            command_traffic=False,
+            route_modules=frozenset({"greeting"}),
+        )
+    )
+
+    assert plan.handler_ids == ("greeting.call_me",)
+    assert plan.reason == "unique_exact_passive"

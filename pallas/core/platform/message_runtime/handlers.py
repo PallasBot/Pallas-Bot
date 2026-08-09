@@ -48,5 +48,16 @@ class NativeHandlerRegistry:
             )
         )
 
+    def exact_passive_primary_handler_ids_for_context(self, context: MessageContext) -> tuple[str, ...]:
+        return tuple(
+            sorted(
+                handler_id
+                for handler_id, handler in self._handlers.items()
+                if getattr(handler, "passive", False)
+                and getattr(handler, "exact_passive_primary", False)
+                and handler.accepts(context)
+            )
+        )
+
     def get(self, handler_id: str) -> NativeHandler | None:
         return self._handlers.get(handler_id)

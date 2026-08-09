@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 class CallMeNativeHandler:
     handler_id = "greeting.call_me"
     modules = frozenset({"greeting"})
+    passive = True
+    exact_passive_primary = True
 
     def accepts(self, context: MessageContext) -> bool:
         return context.raw_text == "牛牛"
