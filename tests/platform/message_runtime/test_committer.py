@@ -10,6 +10,7 @@ from pallas.core.platform.message_runtime.models import (
     CrossWorkerAction,
     DeferredAction,
     HandlingOutcome,
+    LlmSelectAction,
     SendAction,
 )
 from pallas.core.platform.work_jobs.models import WorkJob
@@ -78,6 +79,92 @@ async def test_committer_schedules_deferred_actions_and_dispatches_cross_worker_
     assert await committer.commit(outcome, bot=object(), event=object()) is True
     assert scheduled == ["repeater_reply_1_2"]
     assert dispatched == list(outcome.cross_worker_actions)
+
+
+@pytest.mark.asyncio
+async def test_committer_schedules_llm_select_deadline_after_submission(monkeypatch) -> None:
+    from pallas.core.platform.message_runtime import committer as module
+
+    scheduled: list[str | None] = []
+
+    async def submit(_event, **_kwargs) -> str | None:
+        return "select-task"
+
+    def fake_create_task(coro, *, name=None):
+        scheduled.append(name)
+        coro.close()
+        return object()
+
+    monkeypatch.setattr("pallas.product.llm.runtime_api.submit_repeater_corpus_select", submit)
+    monkeypatch.setattr(module.asyncio, "create_task", fake_create_task)
+    action = LlmSelectAction(
+        bot_id=1,
+        group_id=2,
+        event=object(),
+        user_text="消息",
+        candidates=("候选一", "候选二"),
+        candidate_text="候选一",
+        reply_mode="normal",
+        scene_tier="strong",
+        bundle=object(),
+        capabilities=object(),
+        run_local_bundle=lambda: asyncio.sleep(0),
+    )
+
+    assert await ActionCommitter(lambda: MemoryWorkJobStore()).commit(
+        HandlingOutcome(handled=True, llm_select_actions=(action,)), bot=object(), event=object()
+    )
+    assert scheduled == ["repeater_select_deadline_select-task"]
+
+
+@pytest.mark.asyncio
+async def test_llm_select_deadline_only_delivers_after_claim(monkeypatch) -> None:
+    from pallas.core.platform.message_runtime import committer as module
+
+    scheduled = []
+    delivered: list[str] = []
+
+    async def submit(_event, **_kwargs) -> str | None:
+        return "select-task"
+
+    def capture_task(coro, *, name=None):
+        scheduled.append((name, coro))
+        return object()
+
+    async def no_wait(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("pallas.product.llm.runtime_api.submit_repeater_corpus_select", submit)
+    monkeypatch.setattr(module.asyncio, "create_task", capture_task)
+    monkeypatch.setattr(module.asyncio, "sleep", no_wait)
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.TaskManager.claim_task",
+        AsyncMock(return_value={"task_type": "repeater_select"}),
+    )
+    action = LlmSelectAction(
+        bot_id=1,
+        group_id=2,
+        event=object(),
+        user_text="消息",
+        candidates=("候选一", "候选二"),
+        candidate_text="候选一",
+        reply_mode="normal",
+        scene_tier="strong",
+        bundle=object(),
+        capabilities=object(),
+        run_local_bundle=lambda: _record_delivery(delivered),
+    )
+
+    await ActionCommitter(lambda: MemoryWorkJobStore()).commit(
+        HandlingOutcome(handled=True, llm_select_actions=(action,)), bot=object(), event=object()
+    )
+    assert scheduled[0][0] == "repeater_select_deadline_select-task"
+    await scheduled[0][1]
+    assert delivered == ["sent"]
+
+
+async def _record_delivery(delivered: list[str]) -> None:
+    delivered.append("sent")
 
 
 @pytest.mark.asyncio

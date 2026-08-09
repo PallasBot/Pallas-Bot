@@ -149,27 +149,50 @@ async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_repeater_native_handler_leaves_llm_traffic_unclaimed_for_legacy(monkeypatch) -> None:
+async def test_repeater_native_handler_keeps_unsupported_llm_pipeline_for_legacy(monkeypatch) -> None:
     from unittest.mock import AsyncMock
 
     from packages.repeater.message_runtime_handler import RepeaterNativeHandler
 
-    build_context = AsyncMock()
+    event = type(
+        "Event",
+        (),
+        {
+            "self_id": 10,
+            "group_id": 2,
+            "message_id": 3,
+            "message": [],
+            "is_tome": lambda self: False,
+        },
+    )()
+
+    async def build_context(_bot_id, _event):
+        return type("Context", (), {"plain_body": "闲聊", "norm_raw": "闲聊", "sharding_active": False})()
+
     monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
+    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "packages.repeater.reply_preparation.prepare_repeater_reply",
+        AsyncMock(return_value=type("Prepared", (), {"bundle": object(), "fanout_gate": None})()),
+    )
+    monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: object())
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
     monkeypatch.setattr(
         "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
         lambda _config: type("Capabilities", (), {"llm_enabled": True})(),
     )
+    monkeypatch.setattr(
+        "packages.repeater.message_runtime_handler.try_build_repeater_llm_select_outcome",
+        AsyncMock(return_value=None),
+    )
 
     outcome = await RepeaterNativeHandler().build_fanout_plan(
         _context(),
         bot=type("Bot", (), {"self_id": 10})(),
-        event=object(),
+        event=event,
     )
 
     assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
-    build_context.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -219,6 +242,8 @@ async def test_repeater_native_handler_keeps_learning_when_local_reply_has_no_an
 
 @pytest.mark.asyncio
 async def test_repeater_native_handler_does_not_run_side_effects_before_legacy_fallback(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
     from packages.repeater.message_runtime_handler import RepeaterNativeHandler
 
     handler = RepeaterNativeHandler()
@@ -259,6 +284,15 @@ async def test_repeater_native_handler_does_not_run_side_effects_before_legacy_f
     monkeypatch.setattr("packages.repeater.model.Chat", chat)
     monkeypatch.setattr("pallas.core.shared.utils.media_cache.insert_image", insert_image)
     monkeypatch.setattr("packages.repeater.learn_queue.enqueue_repeater_learn", enqueue_learn)
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
+        lambda _config: type("Capabilities", (), {"llm_enabled": True})(),
+    )
+    monkeypatch.setattr(
+        "packages.repeater.message_runtime_handler.try_build_repeater_llm_select_outcome",
+        AsyncMock(return_value=None),
+    )
 
     outcome = await handler.build_fanout_plan(_context(), bot=type("Bot", (), {"self_id": 1})(), event=event)
 

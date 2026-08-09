@@ -7,6 +7,7 @@ from pallas.core.platform.message_runtime.models import (
     DeferredAction,
     HandlingOutcome,
     HandlingPlan,
+    LlmSelectAction,
     MessageContext,
     RuntimeMode,
     SendAction,
@@ -56,6 +57,23 @@ def test_fallback_outcome_cannot_contain_cross_worker_actions() -> None:
                     idempotency_key="fanout:1",
                 ),
             ),
+        )
+
+
+def test_llm_select_action_requires_routable_input() -> None:
+    with pytest.raises(ValueError, match="bot and group"):
+        LlmSelectAction(
+            bot_id=0,
+            group_id=2,
+            event=object(),
+            user_text="消息",
+            candidates=("候选",),
+            candidate_text="候选",
+            reply_mode="normal",
+            scene_tier="strong",
+            bundle=object(),
+            capabilities=object(),
+            run_local_bundle=lambda: None,
         )
 
 

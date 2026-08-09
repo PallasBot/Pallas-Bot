@@ -6,10 +6,13 @@ from pallas.core.platform.message_runtime.models import (
     CrossWorkerAction,
     DeferredAction,
     HandlingOutcome,
+    LlmSelectAction,
     MessageContext,
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
     from nonebot.adapters import Bot, Event
 
 
@@ -67,6 +70,136 @@ def build_repeater_fanout_outcome(event: Any, bot_ids: tuple[int, ...], bundle: 
     )
 
 
+def build_repeater_llm_select_outcome(
+    event: Any,
+    *,
+    user_text: str,
+    candidates: list[str],
+    candidate_text: str,
+    reply_mode: str,
+    scene_tier: str,
+    bundle: Any,
+    capabilities: Any,
+    run_local_bundle: Callable[[], Awaitable[None]],
+) -> HandlingOutcome:
+    return HandlingOutcome(
+        handled=True,
+        llm_select_actions=(
+            LlmSelectAction(
+                bot_id=int(event.self_id),
+                group_id=int(event.group_id),
+                event=event,
+                user_text=user_text,
+                candidates=tuple(candidates),
+                candidate_text=candidate_text,
+                reply_mode=reply_mode,
+                scene_tier=scene_tier,
+                bundle=bundle,
+                capabilities=capabilities,
+                run_local_bundle=run_local_bundle,
+            ),
+        ),
+    )
+
+
+async def try_build_repeater_llm_select_outcome(
+    event: Event,
+    *,
+    plain_body: str,
+    bundle: Any,
+    capabilities: Any,
+) -> HandlingOutcome | None:
+    from packages.repeater.llm_pipeline import build_repeater_llm_plan
+    from packages.repeater.message_store import MessageStore
+    from packages.repeater.opportunity_gate import (
+        decide_llm_attempt,
+        estimate_candidate_style_score,
+        resolve_scene_tier,
+        should_attempt_repeater_opportunity,
+    )
+    from pallas.product.llm.config import get_llm_config
+    from pallas.product.llm.runtime_api import ConversationFeatureLevel, resolve_conversation_feature_level
+
+    llm_cfg = get_llm_config()
+    feature_level = resolve_conversation_feature_level(llm_cfg)
+    if feature_level == ConversationFeatureLevel.LEGACY_REPEATER:
+        return None
+    plan = build_repeater_llm_plan(
+        bundle,
+        llm_enabled=capabilities.llm_enabled,
+        select_enabled=capabilities.select_enabled,
+        polish_enabled=capabilities.polish_enabled,
+        polish_lite_enabled=capabilities.polish_lite_enabled,
+    )
+    if plan.stage_names != ["select"]:
+        return None
+    recent_messages = list(MessageStore._message_dict.get(int(event.group_id), []))
+    recent_human_user_ids = [
+        int(getattr(message, "user_id", 0) or 0)
+        for message in recent_messages
+        if getattr(message, "user_id", None) is not None
+    ]
+    bot_recently_replied = any(
+        int(getattr(message, "user_id", 0) or 0) == int(event.self_id) for message in recent_messages[-2:]
+    )
+    has_recent_back_and_forth = (
+        len({user_id for user_id in recent_human_user_ids[-4:] if user_id and user_id != int(event.self_id)}) >= 2
+    )
+    scene_tier = resolve_scene_tier(
+        plain_body,
+        candidate_pool_size=len(plan.candidate_pool),
+        has_candidate_pool=bool(bundle.message_pool or bundle.answer_list),
+        has_recent_back_and_forth=has_recent_back_and_forth,
+        is_to_me=bool(event.is_tome()),
+    )
+    opportunity_accepted = should_attempt_repeater_opportunity(
+        plain_body,
+        unique_users=len({user_id for user_id in recent_human_user_ids if user_id}),
+        recent_message_count=len(recent_messages),
+        has_candidate_pool=bool(bundle.message_pool or bundle.answer_list),
+        candidate_pool_size=len(plan.candidate_pool),
+        candidate_style_score=estimate_candidate_style_score(plan.candidate_pool, reply_mode=bundle.reply_mode),
+        has_recent_back_and_forth=has_recent_back_and_forth,
+        bot_recently_replied=bot_recently_replied,
+        reply_mode=bundle.reply_mode,
+        is_to_me=bool(event.is_tome()),
+        bot_id=int(event.self_id),
+        scene_tier=scene_tier,
+    )
+    should_try_llm, _attempt_roll, _attempt_skip = decide_llm_attempt(
+        scene_tier=scene_tier,
+        opportunity_accepted=opportunity_accepted,
+        strong_attempt_rate=float(llm_cfg.llm_repeater_strong_attempt_rate),
+    )
+    if not should_try_llm:
+        return None
+
+    async def run_local_bundle() -> None:
+        from packages.repeater.fanout_reply import _run_repeater_reply_send
+        from packages.repeater.model import Chat
+        from pallas.core.foundation.config import BotConfig
+        from pallas.core.platform.ingress.hotpath_metrics import record_reply_local_dispatched
+
+        answers = await Chat(event).answer_from_bundle(bundle)
+        if answers is None:
+            return
+        await BotConfig(int(event.self_id), int(event.group_id)).refresh_cooldown("repeat")
+        record_reply_local_dispatched()
+        await _run_repeater_reply_send(int(event.self_id), int(event.group_id), answers)
+
+    return build_repeater_llm_select_outcome(
+        event,
+        user_text=plain_body,
+        candidates=plan.candidate_pool,
+        candidate_text=plan.candidate_text,
+        reply_mode=bundle.reply_mode,
+        scene_tier=scene_tier,
+        bundle=bundle,
+        capabilities=capabilities,
+        run_local_bundle=run_local_bundle,
+    )
+
+
 class RepeaterNativeHandler:
     handler_id = "repeater.message"
     modules = frozenset({"repeater"})
@@ -86,9 +219,7 @@ class RepeaterNativeHandler:
         from pallas.product.llm.config import get_llm_config
         from pallas.product.llm.runtime_api import resolve_repeater_capabilities
 
-        if resolve_repeater_capabilities(get_llm_config()).llm_enabled:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
-
+        capabilities = resolve_repeater_capabilities(get_llm_config())
         from packages.repeater.event_gate import build_repeater_event_context
         from packages.repeater.learn_queue import enqueue_repeater_learn
         from packages.repeater.model import Chat
@@ -126,6 +257,17 @@ class RepeaterNativeHandler:
             await enqueue_repeater_learn(chat, event)
             return build_repeater_fanout_outcome(event, prepared.fanout_gate.bot_ids, prepared.bundle)
 
+        llm_outcome = None
+        if capabilities.llm_enabled:
+            llm_outcome = await try_build_repeater_llm_select_outcome(
+                event,
+                plain_body=repeater_context.plain_body,
+                bundle=prepared.bundle,
+                capabilities=capabilities,
+            )
+            if llm_outcome is None:
+                return HandlingOutcome(handled=False, fallback_to_legacy=True)
+
         for segment in event.message:
             if segment.type == "image":
                 await insert_image(
@@ -135,6 +277,8 @@ class RepeaterNativeHandler:
                     message_id=int(event.message_id),
                 )
         await enqueue_repeater_learn(chat, event)
+        if llm_outcome is not None:
+            return llm_outcome
 
         answers = await chat.answer_from_bundle(prepared.bundle)
         if answers is None:
