@@ -21,6 +21,11 @@ async def run_change_name():
             continue
 
         bot_id = target_msg.bot_id
+        from packages.help.plugin_manager import is_plugin_disabled
+
+        if await is_plugin_disabled("take_name", group_id, bot_id):
+            continue
+
         config = BotConfig(bot_id, group_id)
         if await config.is_sleep():
             continue
