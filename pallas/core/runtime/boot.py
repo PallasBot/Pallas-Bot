@@ -10,8 +10,10 @@ from pallas.console.web import install_nonebot_log_sink
 from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
 from pallas.core.foundation.db import init_db
 from pallas.core.foundation.logging import (
+    REPO_FILE_LOG_FORMAT,
     apply_stdlib_logging_channel_prefix,
     configure_quiet_library_loggers,
+    install_repo_console_log_format,
     install_startup_log_noise_patcher,
     resolve_repo_log_level,
 )
@@ -34,11 +36,13 @@ def boot() -> nonebot.Driver:
     configure_quiet_library_loggers()
     file_log_level = resolve_repo_log_level()
     nonebot.init()
+    install_repo_console_log_format()
     install_startup_log_noise_patcher()
     bot_log_dir = plugin_data_dir("bot", create=True)
     logger.add(
         bot_log_dir / "nonebot_{time:YYYY-MM-DD_HH-mm-ss_SSSSSS}.log",
         level=file_log_level,
+        format=REPO_FILE_LOG_FORMAT,
         rotation="50 MB",
         retention="14 days",
         encoding="utf-8",

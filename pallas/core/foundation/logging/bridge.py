@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 from typing import TYPE_CHECKING
 
 from nonebot.log import LoguruHandler
@@ -11,6 +12,11 @@ from nonebot.log import LoguruHandler
 if TYPE_CHECKING:
     from logging import LogRecord
     from typing import Any
+
+REPO_CONSOLE_LOG_FORMAT = (
+    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{name:<12}}}</u></c> | {message}"
+)
+REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{name:<12}}} | {message}"
 
 _TRANSIENT_UVICORN_MESSAGES = (
     "keepalive ping failed",
@@ -143,6 +149,19 @@ def apply_stdlib_logging_channel_prefix() -> None:
     import nonebot.log as nb_log
 
     nb_log.LoguruHandler = ChannelLoguruHandler  # type: ignore[misc, assignment]
+
+
+def install_repo_console_log_format() -> None:
+    import nonebot.log as nb_log
+
+    nb_log.logger.remove(nb_log.logger_id)
+    nb_log.logger_id = nb_log.logger.add(
+        sys.stdout,
+        level=0,
+        diagnose=False,
+        filter=nb_log.default_filter,
+        format=REPO_CONSOLE_LOG_FORMAT,
+    )
 
 
 def configure_quiet_library_loggers() -> None:

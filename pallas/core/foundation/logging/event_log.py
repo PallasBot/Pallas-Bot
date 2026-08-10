@@ -29,6 +29,19 @@ def compact_inbound_event_log(text: str, *, max_len: int = 240) -> str:
     return s
 
 
+def compact_group_message_log(
+    *,
+    bot_id: str,
+    group_id: int,
+    user_id: int,
+    message: str,
+    max_len: int = 240,
+) -> str:
+    prefix = f"[Bot {bot_id}] [群 {group_id}] [用户 {user_id}] "
+    content = compact_inbound_event_log(message, max_len=max(1, max_len - len(prefix)))
+    return f"{prefix}{content}"
+
+
 def inbound_event_log_as_debug(event_type: str) -> bool:
     """notice / request / meta 默认 DEBUG，避免完整 dict 刷 SUCCESS。"""
     return event_type in {"notice", "request", "meta_event"}

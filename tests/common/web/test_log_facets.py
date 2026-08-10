@@ -39,6 +39,11 @@ from pallas.console.web.bot_web import (
             "message",
         ),
         (
+            "pallas",
+            "[Bot 1] [群 2] [用户 3] hi",
+            "message",
+        ),
+        (
             "nonebot",
             "Event will be handled by Matcher(type='message', module=packages.repeater.handlers.message, lineno=41)",
             "message",

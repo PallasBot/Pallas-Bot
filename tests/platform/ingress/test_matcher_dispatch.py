@@ -695,16 +695,17 @@ def test_install_and_uninstall_patch(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_event_command_traffic_uses_plaintext(monkeypatch: pytest.MonkeyPatch) -> None:
-    event = MagicMock()
-    event.get_plaintext.return_value = "牛牛帮助"
+    command_event = MagicMock(raw_message="牛牛帮助", group_id=None)
+    command_event.get_plaintext.return_value = "牛牛帮助"
     monkeypatch.setattr(activation, "route_index_enabled", lambda: False)
     monkeypatch.setattr(activation, "is_plugin_command_plaintext", lambda text: text == "牛牛帮助")
     monkeypatch.setattr(activation.TrieRule.prefix, "longest_prefix", lambda _text: None)
-    assert activation.event_command_traffic(event, {}) is True
+    assert activation.event_command_traffic(command_event, {}) is True
 
-    event.get_plaintext.return_value = "今天天气不错"
+    chat_event = MagicMock(raw_message="今天天气不错", group_id=None)
+    chat_event.get_plaintext.return_value = "今天天气不错"
     monkeypatch.setattr(activation, "is_plugin_command_plaintext", lambda _text: False)
-    assert activation.event_command_traffic(event, {}) is False
+    assert activation.event_command_traffic(chat_event, {}) is False
 
 
 @pytest.mark.asyncio

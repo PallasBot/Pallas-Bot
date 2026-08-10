@@ -273,15 +273,18 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
 
 
 async def patched_handle_event_now(bot: Bot, event: Event) -> None:
-    from pallas.core.foundation.logging import compact_inbound_event_log, inbound_event_log_as_debug
+    from pallas.core.foundation.logging import (
+        compact_group_message_log,
+        compact_inbound_event_log,
+        inbound_event_log_as_debug,
+    )
 
     ingress_started = time.perf_counter()
     mark_activity()
     show_log = True
-    log_msg = f" {nb_message.escape_tag(bot.type)} {nb_message.escape_tag(bot.self_id)} | "
+    event_log = ""
     try:
-        # 群消息正文可能含 `<le>` 等伪标签；colors=True 时必须 escape，否则整条事件处理失败
-        log_msg += nb_message.escape_tag(compact_inbound_event_log(event.get_log_string()))
+        event_log = compact_inbound_event_log(event.get_log_string())
     except nb_message.NoLogException:
         show_log = False
     if show_log:
@@ -289,10 +292,27 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
         event_type = ""
         with contextlib.suppress(Exception):
             event_type = str(event.get_type() or "")
-        if inbound_event_log_as_debug(event_type):
-            log.debug(log_msg)
+        if isinstance(event, GroupMessageEvent):
+            log.debug(
+                " {} {} | {}",
+                nb_message.escape_tag(bot.type),
+                nb_message.escape_tag(bot.self_id),
+                nb_message.escape_tag(event_log),
+            )
+            if all(hasattr(event, field) for field in ("group_id", "user_id", "get_message")):
+                compact_log = compact_group_message_log(
+                    bot_id=str(bot.self_id),
+                    group_id=event.group_id,
+                    user_id=event.user_id,
+                    message=str(event.get_message()),
+                )
+                log.success(nb_message.escape_tag(compact_log))
+            else:
+                log.success(nb_message.escape_tag(f" Bot {bot.self_id} | {event_log}"))
+        elif inbound_event_log_as_debug(event_type):
+            log.debug(nb_message.escape_tag(f" {bot.type} {bot.self_id} | {event_log}"))
         else:
-            log.success(log_msg)
+            log.success(nb_message.escape_tag(f" {bot.type} {bot.self_id} | {event_log}"))
 
     state: dict[Any, Any] = {}
     dependency_cache: dict[Any, Any] = {}

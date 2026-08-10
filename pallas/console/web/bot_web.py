@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from pallas.console.cli.log_paths import EMBED_AUX_LOG, WORK_AUX_LOG
+from pallas.core.foundation.logging import REPO_FILE_LOG_FORMAT
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
@@ -60,6 +61,9 @@ _stdlib_log_re = re.compile(
 )
 _nonebot_bracket_re = re.compile(
     r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(?P<lev>\w+)\] (?P<scope>[^|]+) \| (?P<msg>.*)$",
+)
+_nonebot_brace_re = re.compile(
+    r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(?P<lev>\w+)\s*\] \{(?P<scope>[^}]*)\}\s*\| (?P<msg>.*)$",
 )
 _exc_line_re = re.compile(
     r"^(?P<exc>[\w.]+(?:Error|Exception))(?:\s*:\s*(?P<msg>.*))?$",
@@ -180,7 +184,7 @@ def parse_nonebot_log_line(line: str, *, entry_id: int | None = None) -> dict[st
                 "scope": scope,
                 "message": msg,
             }
-        m3 = _nonebot_bracket_re.match(head)
+        m3 = _nonebot_brace_re.match(head) or _nonebot_bracket_re.match(head)
         if m3:
             lev_raw = (m3.group("lev") or "").strip().upper()
             scope = _compose_log_scope((m3.group("scope") or "").strip()[:120], source_tag)
@@ -760,7 +764,7 @@ def classify_log_facet(
 
     if "ready to send" in msg:
         return "message"
-    if "[message." in msg:
+    if "[message." in msg or "[Bot " in msg:
         return "message"
     if "Matcher(type='message'" in msg or 'Matcher(type="message"' in msg:
         return "message"
@@ -859,7 +863,7 @@ def install_nonebot_log_sink() -> None:
     logger.add(
         _sink_dispatch,
         level="INFO",
-        format="{time:MM-DD HH:mm:ss} | {level:<8} | {name}:{line} - {message}",
+        format=REPO_FILE_LOG_FORMAT,
         colorize=False,
         # 分片多进程同时刷启动日志时，enqueue 可能阻塞 lifespan 导致 worker 永不 listen
         enqueue=False,

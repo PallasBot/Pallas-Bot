@@ -1,6 +1,8 @@
 import logging
 
+from pallas.core.foundation.logging import event_log
 from pallas.core.foundation.logging.bridge import (
+    REPO_CONSOLE_LOG_FORMAT,
     ChannelLoguruHandler,
     _stdlib_logger_channel_label,
     is_matcher_lifecycle_noise,
@@ -33,6 +35,11 @@ def test_stdlib_logger_channel_label_uses_repo_aliases() -> None:
     assert _stdlib_logger_channel_label("uvicorn.error") == "HTTP 服务"
 
 
+def test_repo_console_log_format_aligns_level_and_source() -> None:
+    assert "{level:<8}" in REPO_CONSOLE_LOG_FORMAT
+    assert "{{{name:<12}}}" in REPO_CONSOLE_LOG_FORMAT
+
+
 def test_is_matcher_lifecycle_noise() -> None:
     assert is_matcher_lifecycle_noise(
         "Event will be handled by Matcher(type='message', module=packages.repeater.handlers.message, lineno=45)"
@@ -55,6 +62,16 @@ def test_compact_inbound_event_log_folds_long_url() -> None:
     assert "…" in out
     assert len(out) <= 240
     assert "multimedia.nt.qq.com.cn" in out
+
+
+def test_compact_group_message_log_uses_readable_fields() -> None:
+    out = event_log.compact_group_message_log(
+        bot_id="3879348674",
+        group_id=1103771828,
+        user_id=2879693316,
+        message="就是屁股根那里",
+    )
+    assert out == "[Bot 3879348674] [群 1103771828] [用户 2879693316] 就是屁股根那里"
 
 
 def test_inbound_log_with_angle_brackets_survives_loguru_colorizer() -> None:

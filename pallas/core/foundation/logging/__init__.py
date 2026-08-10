@@ -1,19 +1,24 @@
 """与 NoneBot / loguru 衔接的日志集成。"""
 
 from .bridge import (
+    REPO_FILE_LOG_FORMAT,
     apply_stdlib_logging_channel_prefix,
     configure_quiet_library_loggers,
+    install_repo_console_log_format,
     install_startup_log_noise_patcher,
     is_matcher_lifecycle_noise,
     resolve_repo_log_level,
 )
-from .event_log import compact_inbound_event_log, inbound_event_log_as_debug
+from .event_log import compact_group_message_log, compact_inbound_event_log, inbound_event_log_as_debug
 
 __all__ = [
     "apply_stdlib_logging_channel_prefix",
+    "compact_group_message_log",
     "compact_inbound_event_log",
     "configure_quiet_library_loggers",
     "inbound_event_log_as_debug",
+    "install_repo_console_log_format",
+    "REPO_FILE_LOG_FORMAT",
     "install_startup_log_noise_patcher",
     "is_matcher_lifecycle_noise",
     "resolve_repo_log_level",
