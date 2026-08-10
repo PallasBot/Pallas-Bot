@@ -6,6 +6,11 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any
 
+from pallas.core.platform.bot_runtime.plugin_matrix import (
+    BUNDLED_PLAY_PLUGIN_NAMES,
+    CORE_PLUGIN_NAMES,
+    EXTRA_PLUGIN_NAMES,
+)
 from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 from pallas.core.platform.message_runtime.candidate_ranking import rank_message_runtime_candidates
 
@@ -15,6 +20,8 @@ if TYPE_CHECKING:
 _PASSIVE_MODULES = frozenset({"repeater", "llm_chat", "greeting", "drink", "roulette"})
 _PRIVATE_ONLY_MODULES = frozenset({"request_handler"})
 _COMPLEX_REQUEST_MODULES = frozenset({"request_handler"})
+_DIRECT_MODULES = frozenset({"drink", "greeting", "help", "llm_chat", "pb_core", "repeater", "roulette"})
+_MATCHER_ONLY_MODULES = frozenset({"request_handler"})
 _RISK_LABELS = {
     "roulette": ("stateful_side_effects", "privileged_side_effects"),
     "sing": ("remote_job_chain",),
@@ -149,6 +156,10 @@ def build_message_runtime_candidate_report(*, ingress_snapshot: dict[str, Any] |
         private_only_modules=_PRIVATE_ONLY_MODULES,
         complex_request_modules=_COMPLEX_REQUEST_MODULES,
         risk_labels_by_module=_RISK_LABELS,
+        built_in_modules=CORE_PLUGIN_NAMES | BUNDLED_PLAY_PLUGIN_NAMES,
+        official_extension_modules=EXTRA_PLUGIN_NAMES,
+        direct_modules=_DIRECT_MODULES,
+        matcher_only_modules=_MATCHER_ONLY_MODULES,
         day_key=day_key,
         generated_at=generated_at,
         route_window=route_window,

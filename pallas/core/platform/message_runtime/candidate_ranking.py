@@ -7,12 +7,14 @@ from typing import Any
 _BLOCKER_ORDER = (
     "multiple_route_modules",
     "route_index_fallback",
-    "native_error",
-    "already_native",
+    "direct_error",
+    "already_direct",
     "missing_plugin_stats",
     "insufficient_route_identity",
     "private_only",
     "complex_request_flow",
+    "community_or_local",
+    "intentionally_matcher_only",
 )
 
 
@@ -24,6 +26,10 @@ def number(value: object) -> float:
 
 def integer(value: object) -> int:
     return int(number(value))
+
+
+def compatible_count(row: Mapping[str, object], current: str, historical: str) -> int:
+    return integer(row.get(current)) + integer(row.get(historical))
 
 
 def normalized_modules(value: object) -> tuple[str, ...]:
@@ -58,6 +64,10 @@ def rank_message_runtime_candidates(
     private_only_modules: Set[str] = frozenset(),
     complex_request_modules: Set[str] = frozenset(),
     risk_labels_by_module: Mapping[str, Sequence[str]] | None = None,
+    built_in_modules: Set[str] = frozenset(),
+    official_extension_modules: Set[str] = frozenset(),
+    direct_modules: Set[str] = frozenset(),
+    matcher_only_modules: Set[str] = frozenset(),
     day_key: str,
     generated_at: int,
     route_window: Mapping[str, object],
@@ -86,10 +96,14 @@ def rank_message_runtime_candidates(
             blockers.add("multiple_route_modules")
         if integer(raw.get("route_index_fallbacks")) > 0:
             blockers.add("route_index_fallback")
-        if integer(raw.get("native_error")) > 0:
-            blockers.add("native_error")
-        if messages > 0 and integer(raw.get("native_handled")) >= messages:
-            blockers.add("already_native")
+        direct_handled = compatible_count(raw, "direct_handled", "native_handled")
+        direct_fallback = compatible_count(raw, "direct_fallback", "native_fallback")
+        direct_error = compatible_count(raw, "direct_error", "native_error")
+        matcher_handled = compatible_count(raw, "matcher_handled", "legacy_handled")
+        if direct_error > 0:
+            blockers.add("direct_error")
+        if messages > 0 and direct_handled >= messages:
+            blockers.add("already_direct")
         if module_stats is None:
             blockers.add("missing_plugin_stats")
             data_quality.add("missing_plugin_stats")
@@ -99,6 +113,16 @@ def rank_message_runtime_candidates(
             blockers.add("private_only")
         if module in complex_request_modules:
             blockers.add("complex_request_flow")
+        if module in built_in_modules:
+            ownership = "built_in"
+        elif module in official_extension_modules:
+            ownership = "official_extension"
+        else:
+            ownership = "community_or_local"
+            blockers.add("community_or_local")
+        if module in matcher_only_modules:
+            blockers.add("intentionally_matcher_only")
+        runtime_path = "direct" if module in direct_modules else "matcher"
 
         average_selected = round(selected / messages, 4) if messages > 0 else None
         runs_today = int(module_stats["runs_today"]) if module_stats else 0
@@ -125,16 +149,18 @@ def rank_message_runtime_candidates(
             "matchers_considered": integer(raw.get("matchers_considered")),
             "matchers_selected": selected,
             "matchers_run": integer(raw.get("matchers_run")),
-            "native_handled": integer(raw.get("native_handled")),
-            "native_fallback": integer(raw.get("native_fallback")),
-            "native_error": integer(raw.get("native_error")),
-            "legacy_handled": integer(raw.get("legacy_handled")),
+            "direct_handled": direct_handled,
+            "direct_fallback": direct_fallback,
+            "direct_error": direct_error,
+            "matcher_handled": matcher_handled,
             "average_matchers_selected_per_route_message": average_selected,
             "ingress_duration_ms_p95": number(raw.get("ingress_duration_ms_p95")) or None,
             "estimated_matchers_avoided_today": estimate,
             "confidence": "high" if messages >= 20 else "medium" if messages >= 5 else "low",
             "blockers": ordered_blockers,
             "risk_labels": sorted(labels),
+            "ownership": ownership,
+            "runtime_path": runtime_path,
             "eligible": not ordered_blockers,
         })
 
