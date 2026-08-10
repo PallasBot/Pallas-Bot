@@ -169,7 +169,7 @@ A: 常见原因是 **volume 把整个 `/app/resource` 挂成宿主机目录**，
 
 ### 本地 `docker build` 拉 `python:3.12-slim` 报 `registry-1.docker.io` / `EOF`？
 
-A: 多为 **Docker Hub 访问不稳定**（国内常见）。可在仓库根目录使用带 **`BASE_IMAGE`** 的镜像前缀构建，例如：`docker build --build-arg BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim -t pallasbot:local .`（以你当前能访问的镜像站为准）；或为 Docker 配置 **registry-mirrors** / 代理。详见 [Docker 部署](/deploy/docker) 排障。
+A: 多为 **Docker Hub 访问不稳定**（国内常见）。可在仓库根目录使用带 **`BASE_IMAGE`** 的镜像前缀构建，例如：`docker build --build-arg BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim -t pallasbot:local .`（以你当前能访问的镜像站为准）；或为 Docker 配置 **registry-mirrors** / 代理。完整的 Compose 镜像覆盖、uv 索引与 WebUI Git 镜像边界见 [Docker 部署 · 下载慢与镜像源](/deploy/docker#下载慢与镜像源)。
 
 ### Docker Compose 起内置 Postgres 时，还要不要在 compose 里再配一套 `POSTGRES_USER`？
 

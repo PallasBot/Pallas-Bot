@@ -26,6 +26,10 @@ LLM、唱歌和画图都不是首次启动的前置条件。先让 Bot 正常上
 没有源码开发需求时，优先选择 Docker；不使用 Docker 时选择 Release 部署包。只有需要修改本体或参与开发时才 clone 源码仓库。
 :::
 
+::: tip 下载慢或失败
+先看报错来自哪里：拉容器镜像或构建基础镜像，见 [Docker 下载慢与镜像源](/deploy/docker#下载慢与镜像源)；`uv sync` 下载 Python 依赖失败，见 [Python 依赖镜像源](/deploy/deployment#python-依赖镜像源)。控制台自带的 Git 镜像源只用于 GitHub 资源，不能替代这两类配置。
+:::
+
 按所选文档完成安装、填写 `superusers` 与数据库配置，然后启动 Bot。
 
 ## 第 2 步：确认 Bot 已启动

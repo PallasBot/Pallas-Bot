@@ -12,6 +12,8 @@ ENV PALLAS_BOT_VERSION=${PALLAS_BOT_VERSION}
 
 # 默认只使用 Docker CLI 连接显式挂载的宿主机 daemon；不在容器内启动 dockerd
 ARG INSTALL_DOCKER_CLI=1
+# 可选 Python 包索引；留空时使用 pip / uv 默认索引
+ARG UV_DEFAULT_INDEX=
 
 # 合并安装依赖，清理缓存，减少镜像层数
 RUN apt-get update && \
@@ -19,8 +21,13 @@ RUN apt-get update && \
     if [ "$INSTALL_DOCKER_CLI" = "1" ]; then \
         apt-get install -y --no-install-recommends docker.io; \
     fi && \
-    pip install --upgrade pip && \
-    pip install uv && \
+    if [ -n "$UV_DEFAULT_INDEX" ]; then \
+        pip install --index-url "$UV_DEFAULT_INDEX" --upgrade pip && \
+        pip install --index-url "$UV_DEFAULT_INDEX" uv; \
+    else \
+        pip install --upgrade pip && \
+        pip install uv; \
+    fi && \
     rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml LICENSE ./
@@ -31,7 +38,11 @@ RUN printf '%s\n' '# Pallas-Bot' > README.md
 # 官方扩展不进镜像 extras，运行时用插件商店或 `pallas ext install`
 # 分片 Redis 等见 deploy/README.md；构建排除见 .dockerignore；编排见 docs/deploy/docker.md
 ARG PALLAS_UV_EXTRAS=perf,pg
-RUN uv pip install --system ".[${PALLAS_UV_EXTRAS}]" --no-cache-dir && \
+RUN if [ -n "$UV_DEFAULT_INDEX" ]; then \
+        uv pip install --system --default-index "$UV_DEFAULT_INDEX" ".[${PALLAS_UV_EXTRAS}]" --no-cache-dir; \
+    else \
+        uv pip install --system ".[${PALLAS_UV_EXTRAS}]" --no-cache-dir; \
+    fi && \
     apt-get purge -y build-essential && \
     apt-get autoremove -y && \
     rm -rf /root/.cache/pip

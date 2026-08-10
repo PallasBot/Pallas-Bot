@@ -97,6 +97,63 @@ docker compose --env-file ./pallas-bot/config/compose.env up -d
 docker compose --env-file ./pallas-bot/config/compose.env down
 ```
 
+## 下载慢与镜像源
+
+先按失败对象选择配置；下面三类来源互不替代。
+
+### 拉取 Docker 镜像
+
+`docker pull` 或 `docker compose pull` 访问 Docker Hub 失败时，可为宿主机 Docker daemon 配置 Registry mirror。Linux 通常编辑 `/etc/docker/daemon.json`，将 `https://<你的 Docker Registry mirror>` 合并到已有 JSON，不要覆盖其他 daemon 配置：
+
+```json
+{
+  "registry-mirrors": ["https://<你的 Docker Registry mirror>"]
+}
+```
+
+保存后重启并验证；Docker Desktop 用户在设置页的 Docker Engine 中修改同一字段：
+
+```bash
+sudo systemctl restart docker
+docker info --format '{{json .RegistryConfig.Mirrors}}'
+```
+
+如果镜像服务要求使用完整代理地址，而不是 daemon mirror，可在 `pallas-bot/config/compose.env` 覆盖 Compose 镜像：
+
+```dotenv
+PALLAS_BOT_IMAGE=<Registry>/pallasbot/pallas-bot:latest
+POSTGRES_IMAGE=<Registry>/library/postgres:16-alpine
+MONGO_IMAGE=<Registry>/library/mongo:8.0.10-noble
+REDIS_IMAGE=<Registry>/library/redis:7-alpine
+OLLAMA_IMAGE=<Registry>/ollama/ollama:latest
+PALLAS_AI_IMAGE=<Registry>/pallasbot/pallas-bot-ai:slim
+```
+
+不同服务的路径规则由 Registry 提供方决定。启动前检查 Compose 最终采用的地址：
+
+```bash
+docker compose --env-file ./pallas-bot/config/compose.env config --images
+```
+
+### 自建 Bot 镜像与 Python 依赖
+
+本地构建时，`BASE_IMAGE` 替换 Dockerfile 的 Python 基础镜像，`UV_DEFAULT_INDEX` 指定安装 uv 和项目依赖所用的 Python 包索引：
+
+```bash
+docker build \
+  --build-arg BASE_IMAGE=<Registry>/library/python:3.12-slim \
+  --build-arg UV_DEFAULT_INDEX=https://<你的 Python 包索引>/simple \
+  -t pallasbot:local .
+```
+
+运行中的 Bot / work 容器安装插件时也会读取 `compose.env` 的 `UV_DEFAULT_INDEX`；不设置则使用 `https://pypi.org/simple`。直接使用 pip 时另配 `PIP_INDEX_URL`。
+
+### WebUI Git 镜像源
+
+Bot 启动后可在控制台的 **更新管理 → 镜像源** 或 **插件商店 → 镜像源** 设置首选 Git 镜像、分目标覆盖并测试连通性。它用于 Bot/WebUI 更新、GitHub Release、Git clone 和插件资源下载。
+
+该配置**不影响** `docker pull`、Dockerfile 基础镜像或 uv/PyPI 依赖下载；这些仍使用上面对应的 Docker 与 Python 配置。
+
 ## 容器内更新与 Docker 权限
 
 控制台可以更新 Bot 正式 Release、WebUI 和插件。Bot Release 会覆盖当前容器，普通 `docker compose restart` 不会丢失；容器重建后会恢复为镜像版本。持久更新仍使用上面的 `pull` + `up -d`。
@@ -121,7 +178,7 @@ name: pallas-full
 services:
   pallasbot:
     container_name: pallasbot
-    image: pallasbot/pallas-bot:latest
+    image: ${PALLAS_BOT_IMAGE:-pallasbot/pallas-bot:latest}
     restart: always
     ports:
       - "${BOT_PORT:-8088}:${BOT_LISTEN_PORT:-8088}"
@@ -130,6 +187,7 @@ services:
       ENVIRONMENT: prod
       APP_MODULE: bot:app
       MAX_WORKERS: 1
+      UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
       PORT: ${BOT_LISTEN_PORT:-8088}
       DB_BACKEND: postgresql
       PG_HOST: postgres
@@ -158,7 +216,7 @@ services:
 
   postgres:
     container_name: pallasbot_postgres
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     restart: always
     command:
       - postgres
@@ -185,7 +243,7 @@ services:
       start_period: 15s
 
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     container_name: pallas-full-redis
     command: redis-server --appendonly yes
     networks:
@@ -201,7 +259,7 @@ services:
       start_period: 5s
 
   ollama:
-    image: ollama/ollama:latest
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
     container_name: pallas-full-ollama
     networks:
       - pallas-full
@@ -217,7 +275,7 @@ services:
 
   ollama-init:
     profiles: ["pull-models"]
-    image: ollama/ollama:latest
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
     container_name: pallas-full-ollama-init
     networks:
       - pallas-full
@@ -333,7 +391,7 @@ docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d
 :::
 
 ::: details 自建镜像与 extras
-官方镜像偏单进程用途。自行 `docker build` 时可用 `--build-arg PALLAS_UV_EXTRAS=perf`（PG 驱动已在主依赖）。国内拉基础镜像失败可用 `BASE_IMAGE` 换镜像站前缀。
+官方镜像偏单进程用途。自行 `docker build` 时可用 `--build-arg PALLAS_UV_EXTRAS=perf`（PG 驱动已在主依赖）。基础镜像与 Python 包索引参数见上方 [下载慢与镜像源](#下载慢与镜像源)。
 :::
 
 ::: details 多进程分片
@@ -343,12 +401,13 @@ docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d
 name: pallas-bot-shard
 
 x-pallas-common: &pallas-common
-  image: pallasbot/pallas-bot:latest
+  image: ${PALLAS_BOT_IMAGE:-pallasbot/pallas-bot:latest}
   restart: always
   environment: &pallas-env
     TZ: Asia/Shanghai
     ENVIRONMENT: prod
     MAX_WORKERS: 1
+    UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
     PALLAS_SHARD_ENABLED: "true"
     PG_HOST: postgres
     PG_PORT: "5432"
@@ -406,7 +465,7 @@ services:
 
   postgres:
     container_name: pallasbot_postgres
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     restart: always
     environment:
       TZ: Asia/Shanghai
@@ -426,7 +485,7 @@ services:
 
   redis:
     container_name: pallasbot_redis
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     restart: always
     command: ["redis-server", "--appendonly", "yes"]
     networks:

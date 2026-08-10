@@ -50,6 +50,22 @@ uv sync --extra deploy-shard  # 分片模板，另须配置 REDIS_URL
 
 单进程不需要 Redis；后台学习任务由数据库 outbox 和 `work aux` 消费。需要分片、本机 Embedding 或 Pallas-Bot-AI 队列时，可先执行 `uv run pallas redis start` 创建或复用共享 Redis。
 
+### Python 依赖镜像源
+
+`uv` 下载依赖较慢或无法连接 PyPI 时，可为单次命令指定兼容 PEP 503 的索引地址：
+
+```bash
+UV_DEFAULT_INDEX=https://<你的 Python 包索引>/simple uv sync
+```
+
+需要持续使用时，将 `UV_DEFAULT_INDEX` 写入当前用户的 shell 环境或 systemd 服务环境，再照常执行 `uv sync`、`uv run pallas ext install ...`。先用下面命令确认进程能读到配置：
+
+```bash
+UV_DEFAULT_INDEX=https://<你的 Python 包索引>/simple uv sync --dry-run
+```
+
+`UV_DEFAULT_INDEX` 是当前 uv 推荐的默认索引配置；`PIP_INDEX_URL` 只影响直接调用 pip 的场景。镜像站由用户自行选择并确认可信度、同步完整性和可用性，不建议把第三方地址提交到项目配置。
+
 ---
 
 ## 3. 写入主配置 `config/pallas.toml`
