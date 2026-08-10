@@ -8,6 +8,7 @@ import subprocess
 from collections.abc import Callable
 from typing import Any
 
+import httpx
 from nonebot import logger
 
 from packages.pb_webui.manager import (
@@ -28,6 +29,7 @@ from pallas.core.shared.utils.git_mirror import (
     git_instead_of_args,
     iter_mirrors_for_failover,
 )
+from pallas.core.shared.utils.github_release import fetch_github_releases
 
 ProgressReporter = Callable[[int, str], None]
 
@@ -344,6 +346,8 @@ async def load_bot_git_history_payload(
     branch: str = "",
     limit: int = 30,
     fetch: bool = True,
+    github_token: str = "",
+    repo: str = "PallasBot/Pallas-Bot",
 ) -> dict[str, Any]:
     history_mode = normalize_git_history_mode(mode)
     preferred_branch = normalize_bot_git_track_branch(branch) if history_mode == "commit" else ""
@@ -363,6 +367,33 @@ async def load_bot_git_history_payload(
                 "Pallas-Bot 控制台: Bot git history fetch 异常 err={}",
                 format_exception_for_log(e),
             )
+
+    if not git_available and history_mode == "release" and deploy.get("deployment_mode") == "docker":
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+            releases = await fetch_github_releases(
+                repo,
+                client=client,
+                limit=max(1, min(limit, 100)),
+                token=github_token,
+            )
+        runtime_tag = str(deploy.get("runtime_version") or deploy.get("image_version") or "")
+        raw_items = [
+            {
+                "kind": "release",
+                "ref": str(release.get("tag") or ""),
+                "short_ref": str(release.get("tag") or ""),
+                "date": str(release.get("published_at") or ""),
+                "message": str(release.get("name") or release.get("tag") or ""),
+            }
+            for release in releases
+            if is_bot_release_style_tag(str(release.get("tag") or ""))
+        ]
+        return {
+            "mode": history_mode,
+            "branch": "",
+            "items": mark_history_items(raw_items, head_tag=runtime_tag),
+            "head": {"tag": runtime_tag, "sha": "", "short_sha": ""} if runtime_tag else None,
+        }
 
     if not git_available:
         return {

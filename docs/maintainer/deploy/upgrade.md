@@ -102,12 +102,12 @@ extra_plugin_dirs = ["local/plugins"]
 
 | 模式 | 含义 | 推荐更新 |
 | --- | --- | --- |
-| `docker` | 非 git 工作副本 | `docker compose pull` + `up -d` |
+| `docker` | 镜像部署 | 控制台应用正式 Release；持久更新用 `docker compose pull` + `up -d` |
 | `release_tag` | HEAD 在 Release tag 且干净 | WebUI「应用 Bot 更新」或 `git checkout --detach vX.Y.Z` |
 | `release_tag_dirty` | tag 上有本地改动 | 先迁定制到 `local/`；更新会 stash → checkout → stash pop |
 | `dev_clone` | 非精确 tag（如 `main`） | `git pull --ff-only --autostash` |
 
-Docker 可挂载 `./pallas-bot/local/plugins:/app/local/plugins`；镜像更新只替换代码，挂载的插件与 `data/`、`config/` 保留。
+Docker 控制台更新写入当前容器文件层，`restart` 后保留、容器重建后恢复为镜像版本。WebUI 与插件更新仍可使用。Docker 可挂载 `./pallas-bot/local/plugins:/app/local/plugins`；镜像更新只替换代码，挂载的插件与 `data/`、`config/` 保留。
 
 ### Docker 外挂插件卷
 

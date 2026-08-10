@@ -1,6 +1,6 @@
 # 协议端管理 `pb_protocol`
 
-管理 NapCat / SnowLuma 协议端实例与连接配置。需要在网页里建号、启停协议端时安装本官方插件（与 [重新上号](../relogin_bot/README.md) 同属 `pallas-plugin-protocol`）。
+管理 NapCat / SnowLuma 协议端实例与连接配置，也展示反向连接进来的外置 OneBot V11 账号。需要在网页里建号、启停协议端时安装本官方插件（与 [重新上号](../relogin_bot/README.md) 同属 `pallas-plugin-protocol`）。
 
 **类型**：官方插件（需安装）
 
@@ -49,6 +49,7 @@ uv run pallas ext install pallas-plugin-protocol
 | Bot 不回复 | 确认反向 WebSocket 已连到对应 hub / worker 端口 |
 | 控制台登录失败 | 命令与主控制台共用；遗忘见 [FAQ](../../FAQ.md) |
 | Docker 下 WS 连不上 | 检查反向 WS 主机名，不要默认写 Compose 服务名 |
+| Docker 拉取/启动失败 | 查看页面 Docker 能力提示与安装任务日志；仅按需挂载 `docker.sock` |
 
 ## 源码
 

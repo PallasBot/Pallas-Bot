@@ -11,7 +11,9 @@
 | GET | `/update/bot/check` | | 主仓 Bot 版本检查 |
 | GET | `/update/bot/config-migration/check` | | 配置迁移检查 |
 | POST | `/update/bot/config-migration/apply` | 是 | 应用配置迁移 |
-| POST | `/update/bot/apply` | 是 | 拉取/应用 Bot 更新（git/部署逻辑） |
+| POST | `/update/bot/apply` | 是 | 应用 Bot 更新；Docker 仅支持官方 Release 覆盖 |
+| GET | `/update/git/bot/history` | | Git 历史，或 Docker 下的 GitHub Release 历史 |
+| POST | `/update/git/bot/apply` | 是 | 应用指定 Release / Commit；Docker 拒绝 Commit 与 force |
 
 写操作可能耗时较长；前端需处理进度与错误 `detail`。
 
@@ -34,7 +36,7 @@
 | POST | `/ai-extension/ncm/verify-sms` | 是 | 验证登录 |
 | POST | `/ai-extension/ncm/logout` | 是 | 退出 NCM |
 
-配置落盘 `data/pb_webui/ai_extension.json`（见仓库 `config/ai_extension.example.json`）。源码一键安装入口在 WebUI **AI 配置 · 连接**；Docker 不代跑。
+配置落盘 `data/pb_webui/ai_extension.json`（见仓库 `config/ai_extension.example.json`）。源码一键安装入口在 WebUI **AI 配置 · 连接**。Docker 下 AI Runtime、Redis 与 Ollama 是 Compose 管理的外部服务，上述安装接口不操作其容器。
 
 ### Bearer Token 与运维日志
 

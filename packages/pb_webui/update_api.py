@@ -122,10 +122,12 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
     update_track = normalize_bot_update_track(getattr(plugin_config, "pallas_bot_update_track", "release"))
     preferred_branch = normalize_bot_git_track_branch(getattr(plugin_config, "pallas_bot_update_branch", "") or "")
     current = get_bot_current_version()
-    current_tag = current.get("tag", "")
-    current_commit = current.get("commit", "")
     bot_repo = "PallasBot/Pallas-Bot"
     deploy = inspect_bot_deployment()
+    current_tag = current.get("tag", "")
+    current_commit = current.get("commit", "")
+    if deploy.get("deployment_mode") == "docker":
+        current_tag = str(deploy.get("runtime_version") or deploy.get("image_version") or current_tag)
     base = {
         "current_tag": current_tag,
         "current_commit": current_commit,
@@ -390,7 +392,14 @@ def register_update_router(
     ) -> JSONResponse:
         from .bot_git_manage import load_bot_git_history_payload
 
-        data = await load_bot_git_history_payload(mode=mode, branch=branch, limit=limit, fetch=True)
+        github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
+        data = await load_bot_git_history_payload(
+            mode=mode,
+            branch=branch,
+            limit=limit,
+            fetch=True,
+            github_token=github_token,
+        )
         return JSONResponse({"ok": True, "data": data})
 
     @router.post(f"{x}/update/git/bot/apply", include_in_schema=True)
@@ -402,6 +411,7 @@ def register_update_router(
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from packages.pb_webui.manager import BotGitUpdateError
         from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
+        from pallas.console.cli.update_ops import apply_docker_bot_release
         from pallas.console.webui.update_apply_progress import (
             create_update_apply_job,
             run_update_apply_job,
@@ -409,6 +419,7 @@ def register_update_router(
         from pallas.core.shared.utils.format_exception import format_exception_for_log
 
         from .bot_git_manage import apply_bot_git_target, normalize_git_apply_mode, normalize_git_apply_strategy
+        from .manager import inspect_bot_deployment
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         apply_mode = normalize_git_apply_mode(body.mode)
@@ -432,15 +443,28 @@ def register_update_router(
                 j.push("running", message, progress_percent=pct)
 
             try:
-                result = await apply_bot_git_target(
-                    github_token=github_token,
-                    repo="PallasBot/Pallas-Bot",
-                    mode=apply_mode,
-                    preferred_branch=branch,
-                    target_ref=target_ref,
-                    strategy=apply_strategy,
-                    on_progress=on_progress,
-                )
+                deployment = inspect_bot_deployment()
+                if deployment.get("deployment_mode") == "docker":
+                    if apply_mode != "release":
+                        raise BotGitUpdateError("Docker 部署仅支持正式 Release 更新；不支持 Commit 或分支更新")
+                    if apply_strategy == "force":
+                        raise BotGitUpdateError("Docker Release 更新不支持 force/reset 语义")
+                    result = await apply_docker_bot_release(
+                        github_token=github_token,
+                        repo="PallasBot/Pallas-Bot",
+                        target_tag=target_ref,
+                        on_progress=on_progress,
+                    )
+                else:
+                    result = await apply_bot_git_target(
+                        github_token=github_token,
+                        repo="PallasBot/Pallas-Bot",
+                        mode=apply_mode,
+                        preferred_branch=branch,
+                        target_ref=target_ref,
+                        strategy=apply_strategy,
+                        on_progress=on_progress,
+                    )
                 scheduled = False
                 if restart and bot_lifecycle_available():
                     on_progress(96, "安排进程重启…")

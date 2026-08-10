@@ -9,6 +9,8 @@
 | `Pallas-Bot` | 接收 OneBot 事件、运行插件、WebUI 与治理 |
 | 协议端 | 登录 QQ、维护账号实例、向 Bot 发起反向 WebSocket |
 
+协议端可由 `pb_protocol` 托管 NapCat / SnowLuma，也可完全外置。任意兼容 OneBot V11 的外置实现连接后，WebUI 会自动将账号显示为“外置账号”。
+
 记住三点：
 
 - 协议端异常 ≠ Bot 本体异常
@@ -87,6 +89,9 @@ QQ / 协议端实例
 - 容器内外主机名不一致，协议端写了错误的 WS 主机
 - 只映射了 hub 端口，未映射实际 worker 端口
 - Compose 服务名在协议端侧不可达，却被写成对外地址
+- Bot 容器虽有 Docker CLI，但未挂载 `/var/run/docker.sock`，或当前用户无权访问 socket
+
+Docker socket 只授权协议端托管 NapCat / SnowLuma。不要让协议插件管理 Bot、AI、Redis、Ollama 或数据库容器。
 
 ::: tip
 先确认协议端容器或宿主机能访问目标 worker 端口，再确认写入实例配置的地址与实际网络拓扑一致。

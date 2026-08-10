@@ -10,9 +10,15 @@ WORKDIR /app
 ARG PALLAS_BOT_VERSION=
 ENV PALLAS_BOT_VERSION=${PALLAS_BOT_VERSION}
 
+# 默认只使用 Docker CLI 连接显式挂载的宿主机 daemon；不在容器内启动 dockerd
+ARG INSTALL_DOCKER_CLI=1
+
 # 合并安装依赖，清理缓存，减少镜像层数
 RUN apt-get update && \
     apt-get install -y --no-install-recommends build-essential && \
+    if [ "$INSTALL_DOCKER_CLI" = "1" ]; then \
+        apt-get install -y --no-install-recommends docker.io; \
+    fi && \
     pip install --upgrade pip && \
     pip install uv && \
     rm -rf /var/lib/apt/lists/*

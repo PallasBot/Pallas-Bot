@@ -487,6 +487,14 @@ def inspect_bot_deployment() -> dict[str, str | bool | int]:
     except Exception:  # noqa: BLE001
         inside = False
     if not inside:
+        from pallas.core.foundation.bot_version import get_bot_image_version, get_runtime_overlay_version
+
+        image_version = get_bot_image_version()
+        overlay_version = get_runtime_overlay_version()
+        runtime_version = overlay_version or image_version
+        info["image_version"] = image_version
+        info["runtime_version"] = runtime_version
+        info["container_overlay_update"] = bool(overlay_version and overlay_version != image_version)
         return info
 
     info["git_available"] = True

@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable  # noqa: TC003
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
 from packages.pb_webui.manager import DEFAULT_WEBUI_DIST_ZIP_ASSET, DEFAULT_WEBUI_DIST_ZIP_REPO
+from pallas.core.foundation.bot_version import pallas_bot_repo_root, write_runtime_overlay_version
 from pallas.core.foundation.config.repo_settings import merged_repo_settings_upper
 from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 ProgressReporter = Callable[[int, str], None]
 
@@ -18,6 +23,77 @@ class WebuiUpdateError(Exception):
     def __init__(self, detail: str) -> None:
         self.detail = detail
         super().__init__(detail)
+
+
+async def sync_docker_release_dependencies(
+    root: Path,
+    *,
+    on_progress: ProgressReporter | None = None,
+) -> None:
+    from packages.pb_webui.manager import BotGitUpdateError
+
+    if on_progress is not None:
+        on_progress(86, "同步 Docker Runtime 依赖…")
+    process = await asyncio.create_subprocess_exec(
+        "uv",
+        "pip",
+        "install",
+        "--system",
+        ".",
+        "--no-cache-dir",
+        cwd=str(root),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=900)
+    except TimeoutError as err:
+        process.kill()
+        await process.wait()
+        raise BotGitUpdateError("Docker Release 依赖同步超时", status_code=504) from err
+    if process.returncode != 0:
+        detail = (stderr or stdout or b"").decode("utf-8", errors="replace").strip()
+        raise BotGitUpdateError(f"Docker Release 依赖同步失败：{detail[-2000:]}", status_code=500)
+
+
+async def apply_docker_bot_release(
+    *,
+    github_token: str,
+    repo: str,
+    target_tag: str = "",
+    on_progress: ProgressReporter | None = None,
+) -> dict[str, Any]:
+    from packages.pb_webui.bot_release_bundle import ReleaseBundleError, install_docker_release_bundle
+    from packages.pb_webui.manager import BotGitUpdateError, fetch_latest_bot_release
+
+    tag = (target_tag or "").strip()
+    if not tag:
+        release = await fetch_latest_bot_release(repo, token=github_token)
+        tag = str(release.get("tag") or "").strip()
+    if not tag:
+        raise BotGitUpdateError("GitHub 未返回可用的正式 Release", status_code=502)
+
+    root = pallas_bot_repo_root()
+    try:
+        result = await install_docker_release_bundle(
+            target_root=root,
+            repo=repo,
+            tag=tag,
+            github_token=github_token,
+            on_progress=on_progress,
+        )
+    except ReleaseBundleError as err:
+        raise BotGitUpdateError(str(err), status_code=400) from err
+    await sync_docker_release_dependencies(root, on_progress=on_progress)
+    if on_progress is not None:
+        on_progress(94, "写入当前容器运行版本…")
+    write_runtime_overlay_version(tag)
+    return {
+        **result,
+        "deployment_mode": "docker",
+        "container_overlay_update": True,
+        "message": "当前容器已更新；重建容器会恢复为镜像内版本。",
+    }
 
 
 def webui_update_settings_from_repo() -> dict[str, str]:
@@ -147,6 +223,7 @@ async def apply_bot_update(
     from packages.pb_webui.manager import (
         BotGitUpdateError,
         apply_bot_repository_update,
+        inspect_bot_deployment,
         normalize_bot_update_track,
     )
     from packages.pb_webui.webui_auto_update import get_pallas_webui_config
@@ -164,13 +241,23 @@ async def apply_bot_update(
         preferred_branch if preferred_branch is not None else str(getattr(cfg, "pallas_bot_update_branch", "") or "")
     )
     try:
-        result = await apply_bot_repository_update(
-            github_token=token,
-            repo=repo,
-            track=update_track,
-            preferred_branch=branch,
-            on_progress=on_progress,
-        )
+        deployment = inspect_bot_deployment()
+        if deployment.get("deployment_mode") == "docker":
+            if update_track != "release":
+                raise BotGitUpdateError("Docker 部署仅支持正式 Release 更新；分支更新需要 Git 工作副本")
+            result = await apply_docker_bot_release(
+                github_token=token,
+                repo=repo,
+                on_progress=on_progress,
+            )
+        else:
+            result = await apply_bot_repository_update(
+                github_token=token,
+                repo=repo,
+                track=update_track,
+                preferred_branch=branch,
+                on_progress=on_progress,
+            )
     except BotGitUpdateError:
         raise
     scheduled = False
