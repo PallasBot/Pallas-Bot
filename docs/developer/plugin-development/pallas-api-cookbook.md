@@ -2,7 +2,7 @@
 
 本页速查扩展作者稳定入口。实现在 `pallas.core` / `pallas.product`。社区扩展只允许 import `pallas.api.*`（及模板约定的包内模块）；官方插件可用 `pallas.api.platform`（见 [Platform API](/developer/reference/platform-api)）。
 
-手把手最小插件见 [写第一个插件](first-plugin.md)。这里按主题找 import，不展开教程。
+先按 [Pallas API 总览](/developer/reference/pallas-api) 判断依赖边界；手把手最小插件见 [写第一个插件](first-plugin.md)。这里按主题找 import，不展开教程。
 
 ## 安装 pallas-core
 
@@ -192,6 +192,55 @@ from pallas.api.safety import is_message_scrub_blocked_async
 ```python
 from pallas.api.ai_runtime_health import image_runtime_circuit_is_open
 ```
+
+## LLM Provider（按需调用）
+
+插件若确需调用已配置 Provider 的兼容 API，可只解析对应 Provider 的已配置线路；普通聊天仍应交给 Bot 的 Agent / Provider 路径，不要在插件内重建聊天管线。
+
+```python
+from pallas.api.llm import (
+    find_provider,
+    resolve_provider_api_key,
+    resolve_provider_base_url,
+)
+
+provider = find_provider("my-provider")
+if provider:
+    api_key = resolve_provider_api_key(provider)
+    base_url = resolve_provider_base_url(provider)
+```
+
+`find_provider()` 默认不返回已禁用 Provider；需要检查已配置但禁用的线路时传 `include_disabled=True`。密钥只用于实际请求，勿写入日志或插件存储。
+
+## 多 Bot 在线态
+
+分片或多 Bot 插件在选择发送 Bot 前可查询集群连接态：
+
+```python
+from pallas.api.presence import bot_has_cluster_connection
+
+if bot_has_cluster_connection(bot_id):
+    await send_with_bot(bot_id)
+```
+
+健康隔离中的 Bot 会视为未在线；多 Bot 发送、claim 和代发等平台协作仍仅限 [Platform API](/developer/reference/platform-api)。
+
+## 通用工具（按需）
+
+`pallas.api.utils` 提供共享 HTTP 客户端、流式下载、私聊发送、GitHub Release 与邮件工具。只有工具与需求准确匹配时才 import，避免把它作为通用依赖桶：
+
+```python
+from pathlib import Path
+
+from pallas.api.utils import HTTPXClient, sync_stream_download_to_file
+
+response = await HTTPXClient.get("https://example.com/metadata.json")
+
+# 仅在 work handler 或线程中运行同步下载，勿阻塞消息 matcher。
+sync_stream_download_to_file("https://example.com/model.bin", Path("model.bin"))
+```
+
+需要给用户发私聊时使用 `send_private_msg_compat()` 或 `reply_private_message()`；下载进度可配合 `StreamDownloadProgress`，大小展示使用 `format_download_byte_size()`。
 
 ## 平台协作（官方插件 / 内置）
 
