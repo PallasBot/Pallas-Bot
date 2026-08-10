@@ -245,7 +245,6 @@ async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypat
 @pytest.mark.parametrize(
     ("is_to_me", "has_bundle", "fallback_reason"),
     [
-        (False, False, "no_reply_bundle"),
         (True, True, "unexpected_to_me"),
     ],
 )
@@ -301,6 +300,65 @@ async def test_repeater_native_handler_labels_nonreply_fallbacks(
         fallback_to_legacy=True,
         fallback_reason=fallback_reason,
     )
+
+
+@pytest.mark.asyncio
+async def test_repeater_native_handler_handles_no_reply_bundle_after_capture_and_learn(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+
+    calls: list[str] = []
+    chat = object()
+    event = type(
+        "Event",
+        (),
+        {
+            "self_id": 10,
+            "group_id": 2,
+            "message_id": 3,
+            "message": [type("Segment", (), {"type": "image"})()],
+            "is_tome": lambda self: False,
+        },
+    )()
+
+    async def build_context(_bot_id, _event):
+        return type("Context", (), {"plain_body": "闲聊", "norm_raw": "闲聊", "sharding_active": False})()
+
+    async def insert_image(*_args, **_kwargs):
+        calls.append("image")
+
+    async def enqueue_learn(*_args, **_kwargs):
+        calls.append("learn")
+
+    monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
+    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "packages.repeater.reply_preparation.prepare_repeater_reply",
+        AsyncMock(return_value=type("Prepared", (), {"bundle": None, "fanout_gate": None})()),
+    )
+    monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: chat)
+    monkeypatch.setattr("pallas.core.shared.utils.media_cache.insert_image", insert_image)
+    monkeypatch.setattr("packages.repeater.learn_queue.enqueue_repeater_learn", enqueue_learn)
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
+        lambda _config: type("Capabilities", (), {"llm_enabled": False})(),
+    )
+
+    outcome = await RepeaterNativeHandler().build_fanout_plan(
+        _context(),
+        bot=type("Bot", (), {"self_id": 10})(),
+        event=event,
+    )
+
+    assert outcome.handled is True
+    assert outcome.fallback_to_legacy is False
+    assert [action.name for action in outcome.deferred_actions] == ["repeater_capture_learn_10_2_3"]
+    assert calls == []
+
+    await outcome.deferred_actions[0].run()
+    assert calls == ["image", "learn"]
 
 
 @pytest.mark.asyncio

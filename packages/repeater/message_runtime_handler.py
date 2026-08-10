@@ -279,13 +279,9 @@ class RepeaterNativeHandler:
                 fallback_to_legacy=True,
                 fallback_reason="unexpected_to_me",
             )
-        if prepared.bundle is None:
-            return HandlingOutcome(
-                handled=False,
-                fallback_to_legacy=True,
-                fallback_reason="no_reply_bundle",
-            )
         capture_action = build_repeater_capture_and_learn_action(event, chat)
+        if prepared.bundle is None:
+            return HandlingOutcome(handled=True, deferred_actions=(capture_action,))
         if prepared.fanout_gate is not None and prepared.fanout_gate.won:
             fanout_outcome = build_repeater_fanout_outcome(event, prepared.fanout_gate.bot_ids, prepared.bundle)
             return replace(
