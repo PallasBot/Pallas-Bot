@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from packages.pb_webui import extended_api as mod
+from packages.pb_webui import system_home_api
 from packages.pb_webui.config import Config
 from packages.pb_webui.console_read_cache import clear_extended_read_cache
 
@@ -107,3 +109,31 @@ async def _async_return(value):
 
 def _raise_runtime() -> None:
     raise RuntimeError("plugins failed")
+
+
+def test_home_overview_slice_logs_read_timeout_detail(monkeypatch) -> None:
+    warnings: list[tuple[str, tuple[object, ...]]] = []
+    monkeypatch.setattr(
+        system_home_api.logger,
+        "warning",
+        lambda message, *args: warnings.append((message, args)),
+    )
+    request = httpx.Request("GET", "https://stats.pallasbot.top/v1/stats")
+
+    assert (
+        system_home_api._home_overview_slice(
+            httpx.ReadTimeout("", request=request),
+            "community_stats",
+        )
+        is None
+    )
+
+    assert warnings == [
+        (
+            "[控制台] home/overview {} 失败: {}",
+            (
+                "community_stats",
+                "ReadTimeout url=https://stats.pallasbot.top/v1/stats: ReadTimeout('')",
+            ),
+        ),
+    ]

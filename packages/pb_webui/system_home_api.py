@@ -31,6 +31,7 @@ from packages.pb_webui.console_openapi_models import (
 from packages.pb_webui.console_openapi_models import (
     _ApiOkResponse,
 )
+from pallas.core.shared.utils.format_exception import format_exception_for_log
 
 from .console_meta_store import get_console_meta, merge_console_version_from_disk
 from .console_read_cache import cached_read
@@ -219,7 +220,7 @@ def _gpu_metrics() -> dict[str, Any]:
 
 def _home_overview_slice(result: Any, label: str) -> Any:
     if isinstance(result, BaseException):
-        logger.warning("[控制台] home/overview {} 失败: {}", label, result)
+        logger.warning("[控制台] home/overview {} 失败: {}", label, format_exception_for_log(result))
         return None
     return result
 
