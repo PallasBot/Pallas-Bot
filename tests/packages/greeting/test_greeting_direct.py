@@ -23,7 +23,7 @@ def context(*, raw_text: str = "牛牛") -> MessageContext:
 
 @pytest.mark.asyncio
 async def test_call_me_native_handler_returns_the_selected_voice(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    from packages.greeting.native import CallMeNativeHandler
+    from packages.greeting.direct import CallMeDirectHandler
 
     voice_path = tmp_path / "voice.mp3"
     voice_path.write_bytes(b"voice")
@@ -31,13 +31,13 @@ async def test_call_me_native_handler_returns_the_selected_voice(monkeypatch: py
     cooldown.is_cooldown = AsyncMock(return_value=True)
     cooldown.refresh_cooldown = AsyncMock()
     event = MagicMock(user_id=3)
-    monkeypatch.setattr("packages.greeting.native.duel_qte_blocks_greeting_user", lambda *_args: False)
-    monkeypatch.setattr("packages.greeting.native.greeting_plugin_disabled", AsyncMock(return_value=False))
-    monkeypatch.setattr("packages.greeting.native.BotConfig", lambda *_args: cooldown)
-    monkeypatch.setattr("packages.greeting.native.get_random_voice", lambda *_args: voice_path)
-    monkeypatch.setattr("packages.greeting.native.asyncio.to_thread", AsyncMock(return_value=b"voice"))
+    monkeypatch.setattr("packages.greeting.direct.duel_qte_blocks_greeting_user", lambda *_args: False)
+    monkeypatch.setattr("packages.greeting.direct.greeting_plugin_disabled", AsyncMock(return_value=False))
+    monkeypatch.setattr("packages.greeting.direct.BotConfig", lambda *_args: cooldown)
+    monkeypatch.setattr("packages.greeting.direct.get_random_voice", lambda *_args: voice_path)
+    monkeypatch.setattr("packages.greeting.direct.asyncio.to_thread", AsyncMock(return_value=b"voice"))
 
-    outcome = await CallMeNativeHandler().handle(context(), bot=MagicMock(), event=event)
+    outcome = await CallMeDirectHandler().handle(context(), bot=MagicMock(), event=event)
 
     assert outcome.handled is True
     assert len(outcome.actions) == 1
@@ -48,22 +48,22 @@ async def test_call_me_native_handler_returns_the_selected_voice(monkeypatch: py
 
 @pytest.mark.asyncio
 async def test_call_me_native_handler_falls_back_for_non_exact_text() -> None:
-    from packages.greeting.native import CallMeNativeHandler
+    from packages.greeting.direct import CallMeDirectHandler
 
-    outcome = await CallMeNativeHandler().handle(context(raw_text="牛牛！"), bot=MagicMock(), event=MagicMock())
+    outcome = await CallMeDirectHandler().handle(context(raw_text="牛牛！"), bot=MagicMock(), event=MagicMock())
 
-    assert outcome.fallback_to_legacy is True
+    assert outcome.fallback_to_matcher is True
 
 
 def test_call_me_native_handler_is_the_exact_passive_primary() -> None:
-    from packages.greeting.native import CallMeNativeHandler
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
-    from pallas.core.platform.message_runtime.handlers import NativeHandlerRegistry
+    from packages.greeting.direct import CallMeDirectHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
+    from pallas.core.platform.message_runtime.handlers import RuntimeHandlerRegistry
     from pallas.core.platform.message_runtime.planner import MessagePlanner
 
-    registry = NativeHandlerRegistry()
-    registry.register(CallMeNativeHandler())
-    registry.register(RepeaterNativeHandler())
+    registry = RuntimeHandlerRegistry()
+    registry.register(CallMeDirectHandler())
+    registry.register(RepeaterDirectHandler())
 
     plan = MessagePlanner(registry).plan(
         MessageContext(

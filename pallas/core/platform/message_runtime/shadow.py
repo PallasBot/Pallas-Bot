@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class LegacyExecution:
+class MatcherExecution:
     handler_ids: tuple[str, ...]
     handled: bool
     visible_actions: int
@@ -63,20 +63,20 @@ class ShadowRecord:
         return record
 
 
-def compare_plan_to_legacy(
+def compare_plan_to_matcher(
     plan: HandlingPlan,
-    legacy: LegacyExecution,
+    matcher: MatcherExecution,
     *,
     ingress_id: str,
     timestamp: int = 0,
 ) -> ShadowRecord:
-    if legacy.error_class:
-        kind = "legacy_error"
-    elif plan.kind == "legacy":
+    if matcher.error_class:
+        kind = "matcher_error"
+    elif plan.kind == "matcher":
         kind = "agreement"
-    elif plan.handler_ids != legacy.handler_ids:
+    elif plan.handler_ids != matcher.handler_ids:
         kind = "route_mismatch"
-    elif plan.kind == "native" and not legacy.handled:
+    elif plan.kind == "direct" and not matcher.handled:
         kind = "handled_mismatch"
     else:
         kind = "agreement"

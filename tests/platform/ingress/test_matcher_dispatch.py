@@ -67,7 +67,7 @@ def test_native_repeater_exclusion_keeps_other_passive_matchers() -> None:
     class LlmMatcher:
         plugin_name = "packages.llm_chat"
 
-    assert dispatch.exclude_native_matchers([RepeaterMatcher, LlmMatcher], frozenset({"repeater"})) == [LlmMatcher]
+    assert dispatch.exclude_direct_matchers([RepeaterMatcher, LlmMatcher], frozenset({"repeater"})) == [LlmMatcher]
 
 
 def test_native_drink_exclusion_keeps_roulette_drink_matcher() -> None:
@@ -77,7 +77,7 @@ def test_native_drink_exclusion_keeps_roulette_drink_matcher() -> None:
     class RouletteMatcher:
         plugin_name = "packages.roulette"
 
-    assert dispatch.exclude_native_matchers([DrinkMatcher, RouletteMatcher], frozenset({"drink"})) == [RouletteMatcher]
+    assert dispatch.exclude_direct_matchers([DrinkMatcher, RouletteMatcher], frozenset({"drink"})) == [RouletteMatcher]
 
 
 def test_route_candidate_helper_records_native_action_counts(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -92,8 +92,8 @@ def test_route_candidate_helper_records_native_action_counts(monkeypatch: pytest
         matchers_considered=0,
         matchers_selected=0,
         matchers_run=0,
-        native_outcome=outcome,
-        legacy_handled=False,
+        direct_outcome=outcome,
+        matcher_handled=False,
     )
 
     assert recorded == [
@@ -104,10 +104,10 @@ def test_route_candidate_helper_records_native_action_counts(monkeypatch: pytest
             "matchers_considered": 0,
             "matchers_selected": 0,
             "matchers_run": 0,
-            "native_outcome": "native_handled",
-            "legacy_handled": False,
-            "native_visible_actions": 1,
-            "native_effect_actions": 2,
+            "direct_outcome": "direct_handled",
+            "matcher_handled": False,
+            "direct_visible_actions": 1,
+            "direct_effect_actions": 2,
             "duration_ms": 12.0,
         }
     ]
@@ -124,8 +124,8 @@ def test_route_candidate_helper_ignores_non_command_traffic(monkeypatch: pytest.
         matchers_considered=2,
         matchers_selected=1,
         matchers_run=1,
-        native_outcome=None,
-        legacy_handled=True,
+        direct_outcome=None,
+        matcher_handled=True,
     )
 
     assert recorded == []
@@ -142,15 +142,15 @@ def test_route_candidate_helper_classifies_native_error_without_error_text(monke
         matchers_considered=1,
         matchers_selected=1,
         matchers_run=1,
-        native_outcome=HandlingOutcome(
+        direct_outcome=HandlingOutcome(
             handled=False,
-            fallback_to_legacy=True,
+            fallback_to_matcher=True,
             error_class="RuntimeError",
         ),
-        legacy_handled=True,
+        matcher_handled=True,
     )
 
-    assert recorded[0]["native_outcome"] == "native_error"
+    assert recorded[0]["direct_outcome"] == "direct_error"
     assert "error_class" not in recorded[0]
 
 
@@ -328,7 +328,7 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     post_mock = AsyncMock()
     run_matcher = AsyncMock()
     experiment = MagicMock()
-    experiment.plan = AsyncMock(return_value=HandlingPlan(kind="legacy", handler_ids=(), reason="chat_traffic"))
+    experiment.plan = AsyncMock(return_value=HandlingPlan(kind="matcher", handler_ids=(), reason="chat_traffic"))
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
     monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
@@ -355,7 +355,7 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     post_mock.assert_awaited_once()
     run_matcher.assert_not_awaited()
     experiment.plan.assert_awaited_once()
-    experiment.record_legacy.assert_called_once()
+    experiment.record_matcher.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -458,7 +458,7 @@ async def test_shadow_runtime_plans_after_preprocessing_and_keeps_legacy_matcher
     pre_mock = AsyncMock(return_value=True)
     post_mock = AsyncMock()
     experiment = MagicMock()
-    experiment.plan = AsyncMock(return_value=HandlingPlan(kind="legacy", handler_ids=(), reason="unregistered"))
+    experiment.plan = AsyncMock(return_value=HandlingPlan(kind="matcher", handler_ids=(), reason="unregistered"))
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
     monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
@@ -492,12 +492,12 @@ async def test_shadow_runtime_plans_after_preprocessing_and_keeps_legacy_matcher
     context = experiment.plan.await_args.args[0]
     assert context.group_id == 100
     assert context.route_modules == frozenset({"pb_core"})
-    experiment.record_legacy.assert_called_once()
+    experiment.record_matcher.assert_called_once()
     post_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_native_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_direct_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeGroupMessageEvent:
         group_id = 100
         message_id = 200
@@ -538,7 +538,7 @@ async def test_native_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: 
     )
     monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
-        dispatch, "native_runtime_for_group", lambda group_id: native_runtime if group_id == 100 else None
+        dispatch, "direct_runtime_for_group", lambda group_id: native_runtime if group_id == 100 else None
     )
     monkeypatch.setattr(dispatch, "shadow_experiment_for_group", lambda _group_id: None)
     monkeypatch.setattr(dispatch, "record_route_index_decision", lambda **_kwargs: None)
@@ -553,12 +553,12 @@ async def test_native_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: 
     bot.send.assert_not_awaited()
     run_matcher.assert_not_awaited()
     record_candidate.assert_called_once()
-    assert record_candidate.call_args.kwargs["legacy_handled"] is False
+    assert record_candidate.call_args.kwargs["matcher_handled"] is False
     post_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_native_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_direct_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeGroupMessageEvent:
         group_id = 100
         message_id = 200
@@ -578,7 +578,7 @@ async def test_native_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest
     bot = MagicMock(type="OneBot V11", self_id="10001")
     event = FakeGroupMessageEvent()
     native_runtime = MagicMock()
-    native_runtime.execute_and_commit = AsyncMock(return_value=HandlingOutcome(handled=False, fallback_to_legacy=True))
+    native_runtime.execute_and_commit = AsyncMock(return_value=HandlingOutcome(handled=False, fallback_to_matcher=True))
     run_matcher = AsyncMock(return_value=MagicMock(acquired=True))
     record_candidate = MagicMock()
 
@@ -593,7 +593,7 @@ async def test_native_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest
         lambda _event: RouteResolution(frozenset({"pb_core"}), True),
     )
     monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(dispatch, "native_runtime_for_group", lambda _group_id: native_runtime)
+    monkeypatch.setattr(dispatch, "direct_runtime_for_group", lambda _group_id: native_runtime)
     monkeypatch.setattr(dispatch, "shadow_experiment_for_group", lambda _group_id: None)
     monkeypatch.setattr(dispatch, "record_route_index_decision", lambda **_kwargs: None)
     monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
@@ -610,8 +610,8 @@ async def test_native_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest
     native_runtime.execute_and_commit.assert_awaited_once()
     run_matcher.assert_awaited_once()
     record_candidate.assert_called_once()
-    assert record_candidate.call_args.kwargs["native_outcome"].fallback_to_legacy is True
-    assert record_candidate.call_args.kwargs["legacy_handled"] is True
+    assert record_candidate.call_args.kwargs["direct_outcome"].fallback_to_matcher is True
+    assert record_candidate.call_args.kwargs["matcher_handled"] is True
     post = dispatch.nb_message._apply_event_postprocessors
     post.assert_awaited_once()
 

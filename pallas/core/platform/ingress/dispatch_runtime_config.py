@@ -3,7 +3,7 @@ from __future__ import annotations
 from threading import Lock
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from pallas.console.webui.field_help import field_help
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value, repo_layered_dotenv_files_exist
@@ -66,11 +66,17 @@ def dispatch_env_float(name_upper: str, *, default: float, minimum: float) -> fl
         return default
 
 
-def dispatch_env_message_runtime_mode() -> Literal["legacy", "shadow", "native"]:
+def normalize_message_runtime_mode(value: object) -> str:
+    text = str(value or "").strip().lower()
+    return {"legacy": "matcher", "native": "direct"}.get(text, text)
+
+
+def dispatch_env_message_runtime_mode() -> Literal["matcher", "shadow", "direct"]:
     raw = dispatch_env_raw("PALLAS_MESSAGE_RUNTIME_MODE")
-    if raw in {"legacy", "shadow", "native"}:
-        return raw
-    return "legacy"
+    normalized = normalize_message_runtime_mode(raw)
+    if normalized in {"matcher", "shadow", "direct"}:
+        return normalized
+    return "matcher"
 
 
 def dispatch_env_group_ids(name_upper: str) -> tuple[int, ...]:
@@ -109,11 +115,11 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "触发后社区语料 prefetch 等后台任务会暂时让路",
         ),
     )
-    message_runtime_mode: Literal["legacy", "shadow", "native"] = Field(
-        default="legacy",
+    message_runtime_mode: Literal["matcher", "shadow", "direct"] = Field(
+        default="matcher",
         description=field_help(
             "MessageRuntime 试验模式",
-            "默认 legacy 不改变现有处理；shadow 仅采样；native 仅用于明确灰度群",
+            "默认 matcher 使用 NoneBot matcher；shadow 仅采样；direct 仅用于明确灰度群",
             "变更后需重启 Bot，正式发版前会移除试验项",
         ),
     )
@@ -121,7 +127,7 @@ class IngressDispatchRuntimeConfig(BaseModel):
         default=(),
         description=field_help(
             "MessageRuntime 灰度群",
-            "逗号分隔群号；shadow 仅采样，native 只在这些群启用",
+            "逗号分隔群号；shadow 仅采样，direct 只在这些群启用",
             "变更后需重启 Bot，正式发版前会移除试验项",
         ),
     )
@@ -135,6 +141,12 @@ class IngressDispatchRuntimeConfig(BaseModel):
     )
     message_runtime_telemetry_retention_hours: int = Field(default=168, ge=1, le=720)
     message_runtime_agreement_sample_rate: int = Field(default=1000, ge=1, le=1_000_000)
+
+    @field_validator("message_runtime_mode", mode="before")
+    @classmethod
+    def normalize_runtime_mode(cls, value: object) -> object:
+        return normalize_message_runtime_mode(value)
+
     chat_drop_on_overload: bool = Field(
         default=False,
         description=field_help(

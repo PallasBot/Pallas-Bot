@@ -96,7 +96,7 @@ async def test_committer_waits_for_required_deferred_action_and_reports_failure(
         ),
     )
 
-    with pytest.raises(SideEffectCommitError, match="native deferred action failed"):
+    with pytest.raises(SideEffectCommitError, match="direct deferred action failed"):
         await ActionCommitter(lambda: MagicMock()).commit(outcome, bot=MagicMock(), event=MagicMock())
 
 

@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from nonebot.adapters import Bot, Event
 
 
-class HelpNativeHandler:
+class HelpDirectHandler:
     handler_id = "help.commands"
     modules = frozenset({"help"})
 
@@ -46,16 +46,16 @@ class HelpNativeHandler:
 
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if matches_command_prefix(context.plain_text, HELP_COMMAND):
             return await self._handle_menu(context, bot=bot, event=event)
         return await self._handle_toggle(context, bot=bot, event=event)
 
     async def _handle_menu(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not await satisfies_command_permission(bot, event, "help.help"):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if not await is_command_cooldown_ready(event, "help.help"):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         await refresh_command_cooldown(event, "help.help")
         rows = await build_help_menu_rows(
             bot_id=context.bot_id,
@@ -75,14 +75,14 @@ class HelpNativeHandler:
         text = context.plain_text.strip()
         command_id, command, action = self._toggle_command(text)
         if command_id is None:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if not await satisfies_command_permission(bot, event, command_id):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         config = get_help_config()
         plugins = get_help_menu_plugins(show_ignored=False, ignored_plugins=config.ignored_plugins)
         args = parse_plugin_toggle_args(text, command, plugin_count=len(plugins))
         if not args:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         plugin_name, error_message = await find_plugin_by_identifier(args[0], config.ignored_plugins)
         if error_message or plugin_name is None:
             return HandlingOutcome(
@@ -98,7 +98,7 @@ class HelpNativeHandler:
             is_superuser=is_superuser,
         )
         if message is None:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         return HandlingOutcome(handled=True, actions=(SendAction(message),))
 
     @staticmethod

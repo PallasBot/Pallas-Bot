@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from nonebot.adapters import Bot, Event
 
 
-class CallMeNativeHandler:
+class CallMeDirectHandler:
     handler_id = "greeting.call_me"
     modules = frozenset({"greeting"})
     passive = True
@@ -28,15 +28,15 @@ class CallMeNativeHandler:
 
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if duel_qte_blocks_greeting_user(context.group_id, int(getattr(event, "user_id", 0) or 0)):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if await greeting_plugin_disabled(context.group_id, context.bot_id, bot=bot, event=event):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
 
         config = BotConfig(context.bot_id, context.group_id)
         if not await config.is_cooldown("call_me"):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         await config.refresh_cooldown("call_me")
 
         file_path = get_random_voice(operator, greeting_voices)

@@ -4,10 +4,12 @@ import asyncio
 import time
 from typing import TYPE_CHECKING
 
+from nonebot import logger
+
 from pallas.core.foundation.paths import DATA_ROOT
 
 from .experiment import ShadowExperiment
-from .handlers import NativeHandlerRegistry
+from .handlers import RuntimeHandlerRegistry
 from .models import RuntimeMode
 from .planner import MessagePlanner
 from .runtime import MessageRuntime
@@ -19,9 +21,9 @@ if TYPE_CHECKING:
 
 _shadow_experiment: ShadowExperiment | None = None
 _shadow_canary_groups: frozenset[int] = frozenset()
-_native_runtime: MessageRuntime | None = None
-_native_canary_groups: frozenset[int] = frozenset()
-_native_all_groups = False
+_direct_runtime: MessageRuntime | None = None
+_direct_canary_groups: frozenset[int] = frozenset()
+_direct_all_groups = False
 _telemetry_writer: ExperimentTelemetryWriter | None = None
 _shadow_flush_task: asyncio.Task[None] | None = None
 _SHADOW_FLUSH_INTERVAL_SEC = 30.0
@@ -43,33 +45,46 @@ def configure_shadow_experiment(
         _shadow_experiment, \
         _shadow_canary_groups, \
         _telemetry_writer, \
-        _native_runtime, \
-        _native_canary_groups, \
-        _native_all_groups
+        _direct_runtime, \
+        _direct_canary_groups, \
+        _direct_all_groups
     _shadow_experiment = None
     _shadow_canary_groups = frozenset()
     _telemetry_writer = None
-    _native_runtime = None
-    _native_canary_groups = frozenset()
-    _native_all_groups = False
-    if mode is RuntimeMode.LEGACY:
+    _direct_runtime = None
+    _direct_canary_groups = frozenset()
+    _direct_all_groups = False
+    if mode is RuntimeMode.MATCHER:
         return
-    registry = NativeHandlerRegistry()
-    from packages.drink.native import DrinkNativeHandler
-    from packages.greeting.native import CallMeNativeHandler
-    from packages.help.native import HelpNativeHandler
-    from packages.llm_chat.message_runtime_handler import LlmChatNativeHandler
-    from packages.pb_core.native import ConsoleNativeHandler, PluginsNativeHandler, StatusNativeHandler
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    registry = RuntimeHandlerRegistry()
+    from packages.drink.direct import DrinkDirectHandler
+    from packages.greeting.direct import CallMeDirectHandler
+    from packages.help.direct import HelpDirectHandler
+    from packages.llm_chat.message_runtime_handler import LlmChatDirectHandler
+    from packages.pb_core.direct import ConsoleDirectHandler, PluginsDirectHandler, StatusDirectHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
-    registry.register(DrinkNativeHandler())
-    registry.register(CallMeNativeHandler())
-    registry.register(HelpNativeHandler())
-    registry.register(StatusNativeHandler())
-    registry.register(ConsoleNativeHandler())
-    registry.register(PluginsNativeHandler())
-    registry.register(RepeaterNativeHandler())
-    registry.register(LlmChatNativeHandler())
+    registry.register(DrinkDirectHandler())
+    registry.register(CallMeDirectHandler())
+    registry.register(HelpDirectHandler())
+    registry.register(StatusDirectHandler())
+    registry.register(ConsoleDirectHandler())
+    registry.register(PluginsDirectHandler())
+    registry.register(RepeaterDirectHandler())
+    registry.register(LlmChatDirectHandler())
+    from .declarations import build_declaration_handlers
+
+    declaration_handlers, diagnostics = build_declaration_handlers()
+    for handler in declaration_handlers:
+        registry.register(handler)
+    for diagnostic in diagnostics:
+        logger.warning(
+            "MessageRuntime direct registration skipped code={} handler_id={} module={} commands={}",
+            diagnostic.code,
+            diagnostic.handler_id,
+            diagnostic.module,
+            diagnostic.commands,
+        )
     writer = None
     if telemetry_enabled:
         writer = ExperimentTelemetryWriter(
@@ -79,10 +94,10 @@ def configure_shadow_experiment(
         )
         writer.prune()
     _telemetry_writer = writer
-    if mode is RuntimeMode.NATIVE:
-        _native_runtime = MessageRuntime(mode, MessagePlanner(registry), registry)
-        _native_canary_groups = frozenset(canary_groups)
-        _native_all_groups = not canary_groups
+    if mode is RuntimeMode.DIRECT:
+        _direct_runtime = MessageRuntime(mode, MessagePlanner(registry), registry)
+        _direct_canary_groups = frozenset(canary_groups)
+        _direct_all_groups = not canary_groups
         return
     if mode is not RuntimeMode.SHADOW:
         return
@@ -96,13 +111,13 @@ def shadow_experiment_for_group(group_id: int) -> ShadowExperiment | None:
     return _shadow_experiment
 
 
-def native_runtime_for_group(group_id: int) -> MessageRuntime | None:
-    if not _native_all_groups and group_id not in _native_canary_groups:
+def direct_runtime_for_group(group_id: int) -> MessageRuntime | None:
+    if not _direct_all_groups and group_id not in _direct_canary_groups:
         return None
-    return _native_runtime
+    return _direct_runtime
 
 
-def record_native_execution(
+def record_direct_execution(
     context: MessageContext,
     outcome: HandlingOutcome,
     *,
@@ -112,9 +127,9 @@ def record_native_execution(
     if _telemetry_writer is None:
         return
     if outcome.error_class:
-        kind = "native_error"
+        kind = "direct_error"
     else:
-        kind = "native_handled" if outcome.handled and not outcome.fallback_to_legacy else "native_fallback"
+        kind = "direct_handled" if outcome.handled and not outcome.fallback_to_matcher else "direct_fallback"
     _telemetry_writer.record(
         ShadowRecord(
             ingress_id=context.telemetry_fields()["event_id_hash"],
@@ -169,13 +184,13 @@ def reset_shadow_experiment_for_tests() -> None:
         _shadow_canary_groups, \
         _telemetry_writer, \
         _shadow_flush_task, \
-        _native_runtime, \
-        _native_canary_groups, \
-        _native_all_groups
+        _direct_runtime, \
+        _direct_canary_groups, \
+        _direct_all_groups
     _shadow_experiment = None
     _shadow_canary_groups = frozenset()
     _telemetry_writer = None
     _shadow_flush_task = None
-    _native_runtime = None
-    _native_canary_groups = frozenset()
-    _native_all_groups = False
+    _direct_runtime = None
+    _direct_canary_groups = frozenset()
+    _direct_all_groups = False

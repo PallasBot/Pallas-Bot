@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pallas.core.platform.message_runtime.handlers import NativeHandlerRegistry
+from pallas.core.platform.message_runtime.handlers import RuntimeHandlerRegistry
 from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext
 from pallas.core.platform.message_runtime.planner import MessagePlanner
 
@@ -54,64 +54,64 @@ def _context(*, route_modules: set[str], command_traffic: bool = True, plain_tex
 
 
 def test_planner_selects_a_single_registered_command_handler() -> None:
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(StatusHandler())
 
     plan = MessagePlanner(registry).plan(_context(route_modules={"pb_core"}))
 
-    assert plan.kind == "native"
+    assert plan.kind == "direct"
     assert plan.handler_ids == ("pb_core.status",)
     assert plan.reason == "unique_command"
 
 
-def test_planner_sends_ambiguous_and_chat_traffic_to_legacy() -> None:
-    registry = NativeHandlerRegistry()
+def test_planner_sends_ambiguous_and_chat_traffic_to_matcher() -> None:
+    registry = RuntimeHandlerRegistry()
     registry.register(StatusHandler())
     registry.register(StatusHandler(handler_id="help.status"))
     planner = MessagePlanner(registry)
 
-    assert planner.plan(_context(route_modules={"pb_core", "help"})).reason == "multiple_native_handlers"
+    assert planner.plan(_context(route_modules={"pb_core", "help"})).reason == "multiple_direct_handlers"
     assert planner.plan(_context(route_modules={"pb_core"}, command_traffic=False)).reason == "chat_traffic"
 
 
 def test_planner_selects_a_single_registered_passive_handler() -> None:
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(PassiveHandler(handler_id="repeater.message"))
 
     plan = MessagePlanner(registry).plan(_context(route_modules=set(), command_traffic=False, plain_text="闲聊"))
 
-    assert plan.kind == "native"
+    assert plan.kind == "direct"
     assert plan.handler_ids == ("repeater.message",)
     assert plan.reason == "unique_passive"
 
 
 def test_planner_prefers_one_exact_passive_primary_over_broad_passive_handler() -> None:
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(GreetingHandler("牛牛", "greeting.call_me"))
     registry.register(PassiveHandler(handler_id="repeater.message"))
 
     plan = MessagePlanner(registry).plan(_context(route_modules={"greeting"}, command_traffic=False, plain_text="牛牛"))
 
-    assert plan.kind == "native"
+    assert plan.kind == "direct"
     assert plan.handler_ids == ("greeting.call_me",)
     assert plan.reason == "unique_exact_passive"
 
 
 def test_planner_keeps_multiple_exact_passive_primaries_on_legacy_path() -> None:
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(GreetingHandler("牛牛", "greeting.call_me"))
     registry.register(GreetingHandler("牛牛", "greeting.other"))
 
     plan = MessagePlanner(registry).plan(_context(route_modules={"greeting"}, command_traffic=False, plain_text="牛牛"))
 
-    assert plan.kind == "legacy"
+    assert plan.kind == "matcher"
     assert plan.handler_ids == ()
     assert plan.reason == "multiple_exact_passive_primaries"
 
 
 def test_planning_never_invokes_a_registered_handler() -> None:
     handler = StatusHandler()
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(handler)
 
     MessagePlanner(registry).plan(_context(route_modules={"pb_core"}))
@@ -120,7 +120,7 @@ def test_planning_never_invokes_a_registered_handler() -> None:
 
 
 def test_planner_selects_the_exact_command_within_one_module() -> None:
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(StatusHandler())
     registry.register(StatusHandler("牛牛控制台", "pb_core.console"))
     planner = MessagePlanner(registry)
@@ -131,10 +131,10 @@ def test_planner_selects_the_exact_command_within_one_module() -> None:
 
 
 def test_planner_selects_help_toggle_despite_unhandled_route_module() -> None:
-    from packages.help.native import HelpNativeHandler
+    from packages.help.direct import HelpDirectHandler
 
-    registry = NativeHandlerRegistry()
-    registry.register(HelpNativeHandler())
+    registry = RuntimeHandlerRegistry()
+    registry.register(HelpDirectHandler())
 
     plan = MessagePlanner(registry).plan(
         _context(
@@ -143,5 +143,5 @@ def test_planner_selects_help_toggle_despite_unhandled_route_module() -> None:
         )
     )
 
-    assert plan.kind == "native"
+    assert plan.kind == "direct"
     assert plan.handler_ids == ("help.commands",)

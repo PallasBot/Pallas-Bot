@@ -22,12 +22,12 @@ _ROUTE_CANDIDATE_COUNTER_KEYS = (
     "matchers_considered",
     "matchers_selected",
     "matchers_run",
-    "native_handled",
-    "native_fallback",
-    "native_error",
-    "legacy_handled",
-    "native_visible_actions",
-    "native_effect_actions",
+    "direct_handled",
+    "direct_fallback",
+    "direct_error",
+    "matcher_handled",
+    "direct_visible_actions",
+    "direct_effect_actions",
 )
 _HISTORY_LOCK = threading.Lock()
 _last_prune_at = 0
@@ -76,7 +76,15 @@ def _sanitize_route_candidates(raw: Any) -> list[dict[str, Any]]:
             "route_modules": sorted({str(module).strip() for module in modules if str(module).strip()}),
         }
         for key in _ROUTE_CANDIDATE_COUNTER_KEYS:
-            value = item.get(key)
+            historical_key = {
+                "direct_handled": "native_handled",
+                "direct_fallback": "native_fallback",
+                "direct_error": "native_error",
+                "matcher_handled": "legacy_handled",
+                "direct_visible_actions": "native_visible_actions",
+                "direct_effect_actions": "native_effect_actions",
+            }.get(key)
+            value = int(item.get(key) or 0) + int(item.get(historical_key) or 0) if historical_key else item.get(key)
             if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)):
                 row[key] = max(0, int(value))
         p95 = item.get("ingress_duration_ms_p95")
@@ -184,10 +192,10 @@ def _public_candidate_totals(totals: dict[tuple[str, ...], dict[str, Any]]) -> l
         row.setdefault("ingress_duration_ms_p95", None)
         row["eligible"] = (
             len(row["route_modules"]) == 1
-            and int(row["legacy_handled"]) > 0
+            and int(row["matcher_handled"]) > 0
             and int(row["route_index_fallbacks"]) == 0
-            and int(row["native_error"]) == 0
-            and int(row["native_handled"]) < messages
+            and int(row["direct_error"]) == 0
+            and int(row["direct_handled"]) < messages
         )
     result.sort(key=lambda row: tuple(row["route_modules"]))
     return result

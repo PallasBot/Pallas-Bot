@@ -13,7 +13,7 @@ from .models import HandlingOutcome
 if TYPE_CHECKING:
     from nonebot.adapters import Bot, Event
 
-    from .handlers import NativeHandlerRegistry
+    from .handlers import RuntimeHandlerRegistry
     from .models import HandlingPlan, MessageContext, RuntimeMode
     from .planner import MessagePlanner
 
@@ -23,7 +23,7 @@ class MessageRuntime:
         self,
         mode: RuntimeMode,
         planner: MessagePlanner,
-        registry: NativeHandlerRegistry,
+        registry: RuntimeHandlerRegistry,
         action_committer: ActionCommitter | None = None,
     ) -> None:
         self._mode = mode
@@ -36,18 +36,18 @@ class MessageRuntime:
 
     async def execute(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         plan = self._planner.plan(context)
-        if plan.kind != "native" or len(plan.handler_ids) != 1:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+        if plan.kind != "direct" or len(plan.handler_ids) != 1:
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         handler = self._registry.get(plan.handler_ids[0])
         if handler is None:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         try:
             outcome = await handler.handle(context, bot=bot, event=event)
             return replace(outcome, handler_id=handler.handler_id)
         except Exception as exc:
             error_class = type(exc).__name__
             logger.warning(
-                "MessageRuntime native handler failed handler_id={} error_class={}",
+                "MessageRuntime direct handler failed handler_id={} error_class={}",
                 handler.handler_id,
                 error_class,
             )
@@ -56,16 +56,16 @@ class MessageRuntime:
             return HandlingOutcome(
                 handled=False,
                 handler_id=handler.handler_id,
-                fallback_to_legacy=True,
+                fallback_to_matcher=True,
                 error_class=error_class,
             )
 
     async def execute_and_commit(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         outcome = await self.execute(context, bot=bot, event=event)
-        if outcome.handled and not outcome.fallback_to_legacy:
+        if outcome.handled and not outcome.fallback_to_matcher:
             try:
                 await self._action_committer.commit(outcome, bot=bot, event=event)
             except SideEffectCommitError as exc:
-                logger.warning("MessageRuntime native side effect failed error_class={}", type(exc).__name__)
+                logger.warning("MessageRuntime direct side effect failed error_class={}", type(exc).__name__)
                 return replace(outcome, error_class=type(exc).__name__)
         return outcome

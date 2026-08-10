@@ -44,14 +44,14 @@ from pallas.core.platform.ingress.message_load import (
 )
 from pallas.core.platform.ingress.route_candidate_metrics import record_route_candidate
 from pallas.core.platform.ingress.route_index import RouteResolution, matcher_module_key
-from pallas.core.platform.message_runtime.legacy_adapter import LegacyMatcherAdapter
 from pallas.core.platform.message_runtime.lifecycle import (
-    native_runtime_for_group,
-    record_native_execution,
+    direct_runtime_for_group,
+    record_direct_execution,
     shadow_experiment_for_group,
 )
+from pallas.core.platform.message_runtime.matcher_adapter import MatcherAdapter
 from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext
-from pallas.core.platform.message_runtime.shadow import LegacyExecution
+from pallas.core.platform.message_runtime.shadow import MatcherExecution
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
 
 if TYPE_CHECKING:
@@ -115,7 +115,7 @@ def matcher_dispatch_batches(selected_matchers: list[type]) -> list[list[type]]:
     return [selected_matchers[i : i + batch_size] for i in range(0, len(selected_matchers), batch_size)]
 
 
-_legacy_matcher_adapter = LegacyMatcherAdapter(
+_matcher_adapter = MatcherAdapter(
     batch_size=matcher_dispatch_batches,
     threshold=overload_selected_threshold,
 )
@@ -172,10 +172,10 @@ def record_message_runtime_shadow(
     handled: bool,
 ) -> None:
     try:
-        experiment.record_legacy(
+        experiment.record_matcher(
             context,
             plan,
-            LegacyExecution(handler_ids=handler_ids, handled=handled, visible_actions=0),
+            MatcherExecution(handler_ids=handler_ids, handled=handled, visible_actions=0),
             timestamp=int(time.time()),
         )
     except Exception:
@@ -192,7 +192,7 @@ def select_overload_chatter_matchers(selected_matchers: list[type]) -> list[type
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) in _CORE_CHATTER_MODULES]
 
 
-def exclude_native_matchers(selected_matchers: list[type], modules: frozenset[str]) -> list[type]:
+def exclude_direct_matchers(selected_matchers: list[type], modules: frozenset[str]) -> list[type]:
     if not modules:
         return selected_matchers
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) not in modules]
@@ -206,27 +206,27 @@ def record_route_candidate_safe(
     matchers_considered: int,
     matchers_selected: int,
     matchers_run: int,
-    native_outcome: HandlingOutcome | None,
-    legacy_handled: bool,
+    direct_outcome: HandlingOutcome | None,
+    matcher_handled: bool,
 ) -> None:
     if not command_traffic:
         return
-    native_status = None
+    direct_status = None
     visible_actions = None
     effect_actions = None
-    if native_outcome is not None:
-        if native_outcome.error_class:
-            native_status = "native_error"
-        elif native_outcome.fallback_to_legacy:
-            native_status = "native_fallback"
-        elif native_outcome.handled:
-            native_status = "native_handled"
-        visible_actions = len(native_outcome.actions)
+    if direct_outcome is not None:
+        if direct_outcome.error_class:
+            direct_status = "direct_error"
+        elif direct_outcome.fallback_to_matcher:
+            direct_status = "direct_fallback"
+        elif direct_outcome.handled:
+            direct_status = "direct_handled"
+        visible_actions = len(direct_outcome.actions)
         effect_actions = (
             visible_actions
-            + len(native_outcome.work_jobs)
-            + len(native_outcome.deferred_actions)
-            + len(native_outcome.cross_worker_actions)
+            + len(direct_outcome.work_jobs)
+            + len(direct_outcome.deferred_actions)
+            + len(direct_outcome.cross_worker_actions)
         )
     try:
         record_route_candidate(
@@ -236,10 +236,10 @@ def record_route_candidate_safe(
             matchers_considered=matchers_considered,
             matchers_selected=matchers_selected,
             matchers_run=matchers_run,
-            native_outcome=native_status,
-            legacy_handled=legacy_handled,
-            native_visible_actions=visible_actions,
-            native_effect_actions=effect_actions,
+            direct_outcome=direct_status,
+            matcher_handled=matcher_handled,
+            direct_visible_actions=visible_actions,
+            direct_effect_actions=effect_actions,
             duration_ms=duration_ms,
         )
     except Exception:
@@ -338,29 +338,29 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         shadow_experiment = None
                         shadow_context = None
             if apply_dispatch:
-                native_legacy_exclude_modules = frozenset()
-                native_outcome = None
-                native_runtime = native_runtime_for_group(int(getattr(event, "group_id", 0) or 0))
-                if native_runtime is not None:
+                direct_matcher_exclude_modules = frozenset()
+                direct_outcome = None
+                direct_runtime = direct_runtime_for_group(int(getattr(event, "group_id", 0) or 0))
+                if direct_runtime is not None:
                     try:
-                        native_context = message_runtime_context(
+                        direct_context = message_runtime_context(
                             bot,
                             event,
                             command_traffic=command_traffic,
                             resolution=resolution,
                         )
-                        native_started = time.perf_counter()
-                        native_outcome = await native_runtime.execute_and_commit(native_context, bot=bot, event=event)
-                        record_native_execution(
-                            native_context,
-                            native_outcome,
-                            duration_ms=(time.perf_counter() - native_started) * 1000.0,
+                        direct_started = time.perf_counter()
+                        direct_outcome = await direct_runtime.execute_and_commit(direct_context, bot=bot, event=event)
+                        record_direct_execution(
+                            direct_context,
+                            direct_outcome,
+                            duration_ms=(time.perf_counter() - direct_started) * 1000.0,
                         )
                     except Exception:
-                        logger.exception("MessageRuntime native execution failed")
+                        logger.exception("MessageRuntime direct execution failed")
                     else:
-                        if native_outcome.handled and not native_outcome.fallback_to_legacy:
-                            if not native_outcome.continue_legacy:
+                        if direct_outcome.handled and not direct_outcome.fallback_to_matcher:
+                            if not direct_outcome.continue_matcher:
                                 record_group_message_ingress(
                                     duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
                                     command_traffic=command_traffic,
@@ -375,14 +375,14 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                                     matchers_considered=0,
                                     matchers_selected=0,
                                     matchers_run=0,
-                                    native_outcome=native_outcome,
-                                    legacy_handled=False,
+                                    direct_outcome=direct_outcome,
+                                    matcher_handled=False,
                                 )
                                 await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
                                 return
-                            native_legacy_exclude_modules = native_outcome.legacy_exclude_modules
+                            direct_matcher_exclude_modules = direct_outcome.matcher_exclude_modules
             else:
-                native_legacy_exclude_modules = frozenset()
+                direct_matcher_exclude_modules = frozenset()
             if apply_dispatch and resolution is not None:
                 record_route_index_decision(
                     index_hit=resolution.index_hit,
@@ -418,12 +418,12 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 total_considered = 0
                 matchers_run = 0
                 any_matcher_executed = False
-                legacy_matcher_modules: list[str] = []
+                matcher_modules: list[str] = []
 
                 if show_log:
                     nb_message.logger.debug("Checking for matchers completed")
 
-                def select_legacy_matchers(priority_matchers: list[type]) -> list[type]:
+                def select_matchers(priority_matchers: list[type]) -> list[type]:
                     selected = (
                         select_priority_matchers(
                             priority_matchers,
@@ -438,9 +438,9 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         selected = select_synthetic_llm_command_matchers(selected, resolution)
                     elif chat_degraded_token is not None:
                         selected = select_overload_chatter_matchers(selected)
-                    return exclude_native_matchers(selected, native_legacy_exclude_modules)
+                    return exclude_direct_matchers(selected, direct_matcher_exclude_modules)
 
-                legacy_result = await _legacy_matcher_adapter.execute(
+                matcher_result = await _matcher_adapter.execute(
                     bot=bot,
                     event=event,
                     state=state,
@@ -453,19 +453,19 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         else None
                     ),
                     chat_degraded=chat_degraded_token is not None,
-                    native_legacy_exclude_modules=native_legacy_exclude_modules,
+                    direct_matcher_exclude_modules=direct_matcher_exclude_modules,
                     matcher_pools=matchers,
                     matcher_checker=check_and_run_matcher_with_lane,
-                    select_matchers=select_legacy_matchers,
+                    select_matchers=select_matchers,
                     signal_overload=signal_overload,
                 )
-                total_selected = legacy_result.total_selected
-                total_considered = legacy_result.total_considered
-                matchers_run = legacy_result.matchers_run
-                any_matcher_executed = legacy_result.any_matcher_executed
-                legacy_matcher_modules.extend(legacy_result.selected_matcher_modules)
-                selected_matcher_modules.extend(legacy_result.selected_matcher_modules)
-                acquired_matcher_modules.extend(legacy_result.acquired_matcher_modules)
+                total_selected = matcher_result.total_selected
+                total_considered = matcher_result.total_considered
+                matchers_run = matcher_result.matchers_run
+                any_matcher_executed = matcher_result.any_matcher_executed
+                matcher_modules.extend(matcher_result.selected_matcher_modules)
+                selected_matcher_modules.extend(matcher_result.selected_matcher_modules)
+                acquired_matcher_modules.extend(matcher_result.acquired_matcher_modules)
 
                 if apply_dispatch:
                     ingress_duration_ms = (time.perf_counter() - ingress_started) * 1000.0
@@ -483,8 +483,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         matchers_considered=total_considered,
                         matchers_selected=total_selected,
                         matchers_run=matchers_run,
-                        native_outcome=native_outcome,
-                        legacy_handled=any_matcher_executed,
+                        direct_outcome=direct_outcome,
+                        matcher_handled=any_matcher_executed,
                     )
                 if llm_command is not None:
                     logger.info(
@@ -499,7 +499,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         shadow_experiment,
                         shadow_context,
                         shadow_plan,
-                        handler_ids=tuple(sorted(set(legacy_matcher_modules))),
+                        handler_ids=tuple(sorted(set(matcher_modules))),
                         handled=any_matcher_executed,
                     )
 

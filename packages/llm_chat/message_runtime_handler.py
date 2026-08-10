@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from nonebot.adapters import Bot, Event
 
 
-class LlmChatNativeHandler:
+class LlmChatDirectHandler:
     handler_id = "llm_chat.message"
     modules = frozenset({"llm_chat"})
     passive = True
@@ -21,7 +21,7 @@ class LlmChatNativeHandler:
 
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         messages: list[object] = []
 
         async def send_message(message: object) -> None:

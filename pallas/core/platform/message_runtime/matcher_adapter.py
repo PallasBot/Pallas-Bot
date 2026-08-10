@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class LegacyDispatchResult:
+class MatcherDispatchResult:
     selected_matcher_modules: tuple[str, ...]
     acquired_matcher_modules: tuple[str, ...]
     total_selected: int
@@ -23,8 +23,8 @@ class LegacyDispatchResult:
     any_matcher_executed: bool
 
 
-class LegacyMatcherAdapter:
-    """Runs the legacy matcher loop with the ingress-owned execution state."""
+class MatcherAdapter:
+    """Runs the matcher loop with the ingress-owned execution state."""
 
     def __init__(self, *, batch_size: Callable[[list[type]], list[list[type]]], threshold: Callable[[], int]) -> None:
         self._batch_size = batch_size
@@ -41,12 +41,12 @@ class LegacyMatcherAdapter:
         command_traffic: bool,
         llm_command: dict[str, Any] | None,
         chat_degraded: bool,
-        native_legacy_exclude_modules: frozenset[str],
+        direct_matcher_exclude_modules: frozenset[str],
         matcher_pools: dict[int, list[type]],
         matcher_checker: Callable[..., Any],
         select_matchers: Callable[[list[type]], list[type]],
         signal_overload: Callable[[float], None],
-    ) -> LegacyDispatchResult:
+    ) -> MatcherDispatchResult:
         total_selected = 0
         total_considered = 0
         matchers_run = 0
@@ -95,8 +95,8 @@ class LegacyMatcherAdapter:
                 selected = [
                     item for item in selected if matcher_module_key(item) in frozenset({"repeater", "llm_chat"})
                 ]
-            if native_legacy_exclude_modules:
-                selected = [item for item in selected if matcher_module_key(item) not in native_legacy_exclude_modules]
+            if direct_matcher_exclude_modules:
+                selected = [item for item in selected if matcher_module_key(item) not in direct_matcher_exclude_modules]
             if not selected:
                 continue
 
@@ -117,7 +117,7 @@ class LegacyMatcherAdapter:
                         for matcher in batch:
                             task_group.start_soon(nb_message.run_coro_with_shield, run_selected_matcher(matcher))
 
-        return LegacyDispatchResult(
+        return MatcherDispatchResult(
             selected_matcher_modules=tuple(selected_matcher_modules),
             acquired_matcher_modules=tuple(acquired_matcher_modules),
             total_selected=total_selected,

@@ -15,10 +15,10 @@ def record(**overrides) -> None:
         "matchers_considered": 10,
         "matchers_selected": 4,
         "matchers_run": 3,
-        "native_outcome": None,
-        "legacy_handled": True,
-        "native_visible_actions": None,
-        "native_effect_actions": None,
+        "direct_outcome": None,
+        "matcher_handled": True,
+        "direct_visible_actions": None,
+        "direct_effect_actions": None,
         "duration_ms": 10.0,
     }
     values.update(overrides)
@@ -34,10 +34,10 @@ def test_aggregates_normalized_route_and_exact_counters() -> None:
         matchers_considered=8,
         matchers_selected=2,
         matchers_run=1,
-        native_outcome="native_handled",
-        legacy_handled=False,
-        native_visible_actions=2,
-        native_effect_actions=5,
+        direct_outcome="direct_handled",
+        matcher_handled=False,
+        direct_visible_actions=2,
+        direct_effect_actions=5,
         duration_ms=20.0,
     )
 
@@ -50,12 +50,12 @@ def test_aggregates_normalized_route_and_exact_counters() -> None:
         "matchers_considered": 18,
         "matchers_selected": 6,
         "matchers_run": 4,
-        "native_handled": 1,
-        "native_fallback": 0,
-        "native_error": 0,
-        "legacy_handled": 1,
-        "native_visible_actions": 2,
-        "native_effect_actions": 5,
+        "direct_handled": 1,
+        "direct_fallback": 0,
+        "direct_error": 0,
+        "matcher_handled": 1,
+        "direct_visible_actions": 2,
+        "direct_effect_actions": 5,
         "ingress_duration_ms_p95": 20.0,
         "eligible": False,
     }
@@ -71,7 +71,7 @@ def test_bounds_named_routes_and_rolls_extra_routes_into_other() -> None:
     assert any(row["route_modules"] == [] for row in rows)
 
 
-def test_ranks_legacy_work_and_marks_only_safe_single_route_eligible() -> None:
+def test_ranks_matcher_work_and_marks_only_safe_single_route_eligible() -> None:
     record(route_modules=frozenset({"low"}), matchers_selected=1, matchers_run=1, duration_ms=1.0)
     record(route_modules=frozenset({"high"}), matchers_selected=5, matchers_run=4, duration_ms=5.0)
     record(route_modules=frozenset(), matchers_selected=9, matchers_run=9, duration_ms=9.0)
@@ -91,7 +91,7 @@ def test_rolls_over_with_day_key(monkeypatch) -> None:
 
 
 def test_snapshot_has_privacy_allowlisted_fields_only() -> None:
-    record(native_outcome="native_fallback")
+    record(direct_outcome="direct_fallback")
     assert set(metrics.route_candidate_metrics_snapshot()[0]) == {
         "route_modules",
         "messages",
@@ -100,12 +100,12 @@ def test_snapshot_has_privacy_allowlisted_fields_only() -> None:
         "matchers_considered",
         "matchers_selected",
         "matchers_run",
-        "native_handled",
-        "native_fallback",
-        "native_error",
-        "legacy_handled",
-        "native_visible_actions",
-        "native_effect_actions",
+        "direct_handled",
+        "direct_fallback",
+        "direct_error",
+        "matcher_handled",
+        "direct_visible_actions",
+        "direct_effect_actions",
         "ingress_duration_ms_p95",
         "eligible",
     }

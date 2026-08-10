@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from nonebot.adapters import Bot, Event
 
 
-class StatusNativeHandler:
+class StatusDirectHandler:
     handler_id = "pb_core.status"
     modules = frozenset({"pb_core"})
 
@@ -24,11 +24,11 @@ class StatusNativeHandler:
 
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if not await satisfies_command_permission(bot, event, self.handler_id):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if not await is_command_cooldown_ready(event, self.handler_id, default_cd_sec=10):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         await refresh_command_cooldown(event, self.handler_id, default_cd_sec=10)
         return HandlingOutcome(
             handled=True,
@@ -36,7 +36,7 @@ class StatusNativeHandler:
         )
 
 
-class ConsoleNativeHandler:
+class ConsoleDirectHandler:
     handler_id = "pb_core.console"
     modules = frozenset({"pb_core"})
 
@@ -45,16 +45,16 @@ class ConsoleNativeHandler:
 
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if not await satisfies_command_permission(bot, event, self.handler_id):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if not await is_command_cooldown_ready(event, self.handler_id, default_cd_sec=10):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         await refresh_command_cooldown(event, self.handler_id, default_cd_sec=10)
         return HandlingOutcome(handled=True, actions=(SendAction(message=format_console_hint_text()),))
 
 
-class PluginsNativeHandler:
+class PluginsDirectHandler:
     handler_id = "pb_core.plugins"
     modules = frozenset({"pb_core"})
 
@@ -63,11 +63,11 @@ class PluginsNativeHandler:
 
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if not await satisfies_command_permission(bot, event, self.handler_id):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if not await is_command_cooldown_ready(event, self.handler_id, default_cd_sec=15):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         await refresh_command_cooldown(event, self.handler_id, default_cd_sec=15)
         loaded = {plugin.name for plugin in get_loaded_plugins() if plugin.name}
         return HandlingOutcome(

@@ -14,15 +14,28 @@ from pallas.core.platform.message_runtime.models import (
 from pallas.core.platform.work_jobs.models import WorkJob
 
 
-def test_runtime_mode_keeps_legacy_as_an_explicit_option() -> None:
-    assert RuntimeMode.LEGACY == "legacy"
+def test_runtime_mode_uses_permanent_execution_path_names() -> None:
+    assert RuntimeMode.MATCHER == "matcher"
+    assert RuntimeMode.SHADOW == "shadow"
+    assert RuntimeMode.DIRECT == "direct"
+
+
+@pytest.mark.parametrize(
+    ("old_value", "expected"),
+    [("legacy", RuntimeMode.MATCHER), ("native", RuntimeMode.DIRECT)],
+)
+def test_runtime_mode_reads_temporary_names_as_compatibility_aliases(
+    old_value: str,
+    expected: RuntimeMode,
+) -> None:
+    assert RuntimeMode(old_value) is expected
 
 
 def test_fallback_outcome_cannot_contain_actions() -> None:
     with pytest.raises(ValueError, match="fallback"):
         HandlingOutcome(
             handled=False,
-            fallback_to_legacy=True,
+            fallback_to_matcher=True,
             actions=(SendAction(message="reply"),),
         )
 
@@ -31,12 +44,12 @@ def test_fallback_outcome_cannot_contain_deferred_actions() -> None:
     with pytest.raises(ValueError, match="fallback"):
         HandlingOutcome(
             handled=False,
-            fallback_to_legacy=True,
+            fallback_to_matcher=True,
             deferred_actions=(DeferredAction(name="reply", run=lambda: None),),
         )
 
 
-def test_fallback_reason_requires_legacy_fallback() -> None:
+def test_fallback_reason_requires_matcher_fallback() -> None:
     with pytest.raises(ValueError, match="fallback reason"):
         HandlingOutcome(handled=True, fallback_reason="no_reply_bundle")
 
@@ -52,7 +65,7 @@ def test_fallback_outcome_cannot_contain_cross_worker_actions() -> None:
     with pytest.raises(ValueError, match="fallback"):
         HandlingOutcome(
             handled=False,
-            fallback_to_legacy=True,
+            fallback_to_matcher=True,
             cross_worker_actions=(
                 CrossWorkerAction(
                     kind="repeater.fanout_reply",
@@ -70,20 +83,20 @@ def test_fallback_outcome_cannot_contain_work_jobs() -> None:
     with pytest.raises(ValueError, match="fallback"):
         HandlingOutcome(
             handled=False,
-            fallback_to_legacy=True,
+            fallback_to_matcher=True,
             work_jobs=(job,),
         )
 
 
-def test_handled_outcome_can_continue_legacy_without_its_own_module() -> None:
+def test_handled_outcome_can_continue_matcher_without_its_own_module() -> None:
     outcome = HandlingOutcome(
         handled=True,
-        continue_legacy=True,
-        legacy_exclude_modules=frozenset({"repeater"}),
+        continue_matcher=True,
+        matcher_exclude_modules=frozenset({"repeater"}),
     )
 
-    assert outcome.continue_legacy is True
-    assert outcome.legacy_exclude_modules == frozenset({"repeater"})
+    assert outcome.continue_matcher is True
+    assert outcome.matcher_exclude_modules == frozenset({"repeater"})
 
 
 def test_message_context_telemetry_redacts_message_content() -> None:
@@ -107,6 +120,17 @@ def test_message_context_telemetry_redacts_message_content() -> None:
     assert "secret message" not in fields.values()
 
 
-def test_handling_plan_requires_a_reason_for_legacy_fallback() -> None:
+def test_handling_plan_requires_a_reason_for_matcher_fallback() -> None:
     with pytest.raises(ValueError, match="reason"):
-        HandlingPlan(kind="legacy", handler_ids=(), reason="")
+        HandlingPlan(kind="matcher", handler_ids=(), reason="")
+
+
+def test_temporary_outcome_names_remain_readable() -> None:
+    outcome = HandlingOutcome(
+        handled=True,
+        continue_matcher=True,
+        matcher_exclude_modules=frozenset({"drink"}),
+    )
+
+    assert outcome.continue_legacy is True
+    assert outcome.legacy_exclude_modules == frozenset({"drink"})

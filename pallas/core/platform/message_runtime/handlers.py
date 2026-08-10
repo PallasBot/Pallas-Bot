@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .models import HandlingOutcome, MessageContext
 
 
-class NativeHandler(Protocol):
+class RuntimeHandler(Protocol):
     handler_id: str
     modules: frozenset[str]
     passive: bool
@@ -18,14 +18,14 @@ class NativeHandler(Protocol):
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome: ...
 
 
-class NativeHandlerRegistry:
+class RuntimeHandlerRegistry:
     def __init__(self) -> None:
-        self._handlers: dict[str, NativeHandler] = {}
+        self._handlers: dict[str, RuntimeHandler] = {}
         self._module_handlers: dict[str, set[str]] = {}
 
-    def register(self, handler: NativeHandler) -> None:
+    def register(self, handler: RuntimeHandler) -> None:
         if handler.handler_id in self._handlers:
-            raise ValueError(f"duplicate native handler: {handler.handler_id}")
+            raise ValueError(f"duplicate runtime handler: {handler.handler_id}")
         self._handlers[handler.handler_id] = handler
         for module in handler.modules:
             self._module_handlers.setdefault(module, set()).add(handler.handler_id)
@@ -59,5 +59,5 @@ class NativeHandlerRegistry:
             )
         )
 
-    def get(self, handler_id: str) -> NativeHandler | None:
+    def get(self, handler_id: str) -> RuntimeHandler | None:
         return self._handlers.get(handler_id)

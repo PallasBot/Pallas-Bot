@@ -89,7 +89,7 @@ def build_repeater_capture_and_learn_action(event: Any, chat: Any) -> DeferredAc
     )
 
 
-class RepeaterNativeHandler:
+class RepeaterDirectHandler:
     handler_id = "repeater.message"
     modules = frozenset({"repeater"})
     passive = True
@@ -129,7 +129,7 @@ class RepeaterNativeHandler:
         if event.is_tome():
             return HandlingOutcome(
                 handled=False,
-                fallback_to_legacy=True,
+                fallback_to_matcher=True,
                 fallback_reason="unexpected_to_me",
             )
         capture_action = build_repeater_capture_and_learn_action(event, chat)
@@ -156,5 +156,5 @@ class RepeaterNativeHandler:
 
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         return await self.build_fanout_plan(context, bot=bot, event=event)

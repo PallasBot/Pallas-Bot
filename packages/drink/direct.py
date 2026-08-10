@@ -15,8 +15,8 @@ DRINK_COMMANDS = frozenset({"牛牛喝酒", "牛牛干杯", "牛牛继续喝"})
 SOBER_UP_COMMANDS = frozenset({"牛牛醒一醒", "牛牛别喝了"})
 
 
-class DrinkNativeHandler:
-    handler_id = "drink.native"
+class DrinkDirectHandler:
+    handler_id = "drink.direct"
     modules = frozenset({"drink"})
     passive = False
     fallback_on_error = False
@@ -35,9 +35,9 @@ class DrinkNativeHandler:
             run_service = service.sober_up
             action_category = "sober_up"
         else:
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
         if not await satisfies_command_permission(bot, event, permission_id):
-            return HandlingOutcome(handled=False, fallback_to_legacy=True)
+            return HandlingOutcome(handled=False, fallback_to_matcher=True)
 
         async def send(message: str) -> object:
             return await bot.send(event, message)
@@ -54,6 +54,6 @@ class DrinkNativeHandler:
                     wait_for_completion=True,
                 ),
             ),
-            continue_legacy=permission_id == "drink.drink",
-            legacy_exclude_modules=frozenset({"drink"}) if permission_id == "drink.drink" else frozenset(),
+            continue_matcher=permission_id == "drink.drink",
+            matcher_exclude_modules=frozenset({"drink"}) if permission_id == "drink.drink" else frozenset(),
         )

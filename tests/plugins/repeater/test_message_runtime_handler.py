@@ -97,7 +97,7 @@ def test_repeater_native_handler_builds_deferred_local_reply_action(monkeypatch)
 async def test_repeater_native_handler_handles_terminal_event_context_gate(monkeypatch) -> None:
     from unittest.mock import AsyncMock
 
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
     def unexpected_llm_config():
         raise AssertionError("terminal event gate must not resolve LLM config")
@@ -105,7 +105,7 @@ async def test_repeater_native_handler_handles_terminal_event_context_gate(monke
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", unexpected_llm_config)
     monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", AsyncMock(return_value=None))
 
-    outcome = await RepeaterNativeHandler().build_fanout_plan(
+    outcome = await RepeaterDirectHandler().build_fanout_plan(
         _context(),
         bot=type("Bot", (), {"self_id": 10})(),
         event=object(),
@@ -118,9 +118,9 @@ async def test_repeater_native_handler_handles_terminal_event_context_gate(monke
 async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypatch) -> None:
     from unittest.mock import AsyncMock
 
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
-    handler = RepeaterNativeHandler()
+    handler = RepeaterDirectHandler()
     answers = object()
     bundle = object()
     chat = type("Chat", (), {"answer_from_bundle": AsyncMock(return_value=answers)})()
@@ -185,7 +185,7 @@ async def test_repeater_native_handler_labels_nonreply_fallbacks(
 ) -> None:
     from unittest.mock import AsyncMock
 
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
     event = type(
         "Event",
@@ -212,7 +212,7 @@ async def test_repeater_native_handler_labels_nonreply_fallbacks(
     )
     monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: object())
 
-    outcome = await RepeaterNativeHandler().build_fanout_plan(
+    outcome = await RepeaterDirectHandler().build_fanout_plan(
         _context(),
         bot=type("Bot", (), {"self_id": 10})(),
         event=event,
@@ -220,7 +220,7 @@ async def test_repeater_native_handler_labels_nonreply_fallbacks(
 
     assert outcome == HandlingOutcome(
         handled=False,
-        fallback_to_legacy=True,
+        fallback_to_matcher=True,
         fallback_reason=fallback_reason,
     )
 
@@ -229,7 +229,7 @@ async def test_repeater_native_handler_labels_nonreply_fallbacks(
 async def test_repeater_native_handler_handles_no_reply_bundle_after_capture_and_learn(monkeypatch) -> None:
     from unittest.mock import AsyncMock
 
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
     calls: list[str] = []
     chat = object()
@@ -268,14 +268,14 @@ async def test_repeater_native_handler_handles_no_reply_bundle_after_capture_and
     monkeypatch.setattr("packages.repeater.learn_queue.enqueue_repeater_learn", enqueue_learn)
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", unexpected_llm_config)
 
-    outcome = await RepeaterNativeHandler().build_fanout_plan(
+    outcome = await RepeaterDirectHandler().build_fanout_plan(
         _context(),
         bot=type("Bot", (), {"self_id": 10})(),
         event=event,
     )
 
     assert outcome.handled is True
-    assert outcome.fallback_to_legacy is False
+    assert outcome.fallback_to_matcher is False
     assert [action.name for action in outcome.deferred_actions] == ["repeater_capture_learn_10_2_3"]
     assert calls == []
 
@@ -320,7 +320,7 @@ async def test_repeater_native_handler_fanout_skips_llm_config(monkeypatch) -> N
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", unexpected_llm_config)
     monkeypatch.setattr(module, "build_repeater_fanout_outcome", lambda *_args: HandlingOutcome(handled=True))
 
-    outcome = await module.RepeaterNativeHandler().build_fanout_plan(
+    outcome = await module.RepeaterDirectHandler().build_fanout_plan(
         _context(),
         bot=SimpleNamespace(self_id=10),
         event=event,
@@ -334,7 +334,7 @@ async def test_repeater_native_handler_fanout_skips_llm_config(monkeypatch) -> N
 async def test_repeater_native_handler_dispatches_locally_when_llm_is_enabled(monkeypatch) -> None:
     from unittest.mock import AsyncMock
 
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
     event = type(
         "Event",
@@ -368,7 +368,7 @@ async def test_repeater_native_handler_dispatches_locally_when_llm_is_enabled(mo
     )
     monkeypatch.setattr("pallas.core.platform.ingress.hotpath_metrics.record_reply_local_dispatched", lambda: None)
 
-    outcome = await RepeaterNativeHandler().build_fanout_plan(
+    outcome = await RepeaterDirectHandler().build_fanout_plan(
         _context(),
         bot=type("Bot", (), {"self_id": 10})(),
         event=event,
@@ -386,9 +386,9 @@ async def test_repeater_native_handler_dispatches_locally_when_llm_is_enabled(mo
 async def test_repeater_native_handler_keeps_learning_when_local_reply_has_no_answers(monkeypatch) -> None:
     from unittest.mock import AsyncMock
 
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
-    handler = RepeaterNativeHandler()
+    handler = RepeaterDirectHandler()
     bundle = object()
     chat = type("Chat", (), {"answer_from_bundle": AsyncMock(return_value=None)})()
     event = type(
@@ -428,10 +428,10 @@ async def test_repeater_native_handler_keeps_learning_when_local_reply_has_no_an
 
 @pytest.mark.asyncio
 async def test_repeater_native_handler_keeps_to_me_traffic_for_legacy(monkeypatch) -> None:
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
-    handler = RepeaterNativeHandler()
-    expected = HandlingOutcome(handled=False, fallback_to_legacy=True)
+    handler = RepeaterDirectHandler()
+    expected = HandlingOutcome(handled=False, fallback_to_matcher=True)
 
     async def fallback_plan(_context, *, bot, event):
         return expected
@@ -443,9 +443,9 @@ async def test_repeater_native_handler_keeps_to_me_traffic_for_legacy(monkeypatc
 
 @pytest.mark.asyncio
 async def test_repeater_native_handler_uses_native_outcome_for_fanout(monkeypatch) -> None:
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
-    handler = RepeaterNativeHandler()
+    handler = RepeaterDirectHandler()
     expected = HandlingOutcome(handled=True)
 
     async def fake_build_fanout_plan(_context, *, bot, event):
@@ -460,21 +460,21 @@ async def test_repeater_native_handler_uses_native_outcome_for_fanout(monkeypatc
 
 @pytest.mark.asyncio
 async def test_repeater_native_handler_keeps_legacy_execution_for_non_fanout(monkeypatch) -> None:
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
-    handler = RepeaterNativeHandler()
+    handler = RepeaterDirectHandler()
 
     async def fallback_plan(_context, *, bot, event):
-        return HandlingOutcome(handled=False, fallback_to_legacy=True)
+        return HandlingOutcome(handled=False, fallback_to_matcher=True)
 
     monkeypatch.setattr(handler, "build_fanout_plan", fallback_plan)
 
     outcome = await handler.handle(_context(), bot="bot", event="event")
 
-    assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
+    assert outcome == HandlingOutcome(handled=False, fallback_to_matcher=True)
 
 
 def test_repeater_native_handler_does_not_compete_with_direct_llm_chat() -> None:
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
-    assert RepeaterNativeHandler().accepts(_context(is_to_me=True)) is False
+    assert RepeaterDirectHandler().accepts(_context(is_to_me=True)) is False

@@ -31,7 +31,7 @@ async def test_native_llm_handler_collects_direct_reply_without_matcher_send(mon
     legacy_handler = AsyncMock(side_effect=legacy_handler)
     monkeypatch.setattr(module, "handle_llm_chat", legacy_handler)
 
-    outcome = await module.LlmChatNativeHandler().handle(_context(), bot="bot", event="event")
+    outcome = await module.LlmChatDirectHandler().handle(_context(), bot="bot", event="event")
 
     legacy_handler.assert_awaited_once()
     assert [action.message for action in outcome.actions] == ["reply"]

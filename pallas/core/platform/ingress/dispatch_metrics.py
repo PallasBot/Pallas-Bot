@@ -445,12 +445,12 @@ def merge_route_candidate_snapshots(rows: list[list[dict[str, object]]]) -> list
         "matchers_considered",
         "matchers_selected",
         "matchers_run",
-        "native_handled",
-        "native_fallback",
-        "native_error",
-        "legacy_handled",
-        "native_visible_actions",
-        "native_effect_actions",
+        "direct_handled",
+        "direct_fallback",
+        "direct_error",
+        "matcher_handled",
+        "direct_visible_actions",
+        "direct_effect_actions",
     )
     merged: dict[tuple[str, ...], dict[str, object]] = {}
     for snapshot in rows:
@@ -465,7 +465,20 @@ def merge_route_candidate_snapshots(rows: list[list[dict[str, object]]]) -> list
                 route = ()
             target = merged.setdefault(route, {"route_modules": list(route), **dict.fromkeys(counter_keys, 0)})
             for key in counter_keys:
-                target[key] = int(target[key]) + max(0, int(raw.get(key) or 0))
+                historical_key = {
+                    "direct_handled": "native_handled",
+                    "direct_fallback": "native_fallback",
+                    "direct_error": "native_error",
+                    "matcher_handled": "legacy_handled",
+                    "direct_visible_actions": "native_visible_actions",
+                    "direct_effect_actions": "native_effect_actions",
+                }.get(key)
+                value = (
+                    int(raw.get(key) or 0) + int(raw.get(historical_key) or 0)
+                    if historical_key
+                    else int(raw.get(key) or 0)
+                )
+                target[key] = int(target[key]) + max(0, value)
             p95 = raw.get("ingress_duration_ms_p95")
             if isinstance(p95, (int, float)) and not isinstance(p95, bool):
                 target["ingress_duration_ms_p95"] = max(
@@ -478,10 +491,10 @@ def merge_route_candidate_snapshots(rows: list[list[dict[str, object]]]) -> list
         row.setdefault("ingress_duration_ms_p95", None)
         row["eligible"] = (
             len(row["route_modules"]) == 1
-            and int(row["legacy_handled"]) > 0
+            and int(row["matcher_handled"]) > 0
             and int(row["route_index_fallbacks"]) == 0
-            and int(row["native_error"]) == 0
-            and int(row["native_handled"]) < messages
+            and int(row["direct_error"]) == 0
+            and int(row["direct_handled"]) < messages
         )
     result.sort(key=lambda row: tuple(row["route_modules"]))
     return result

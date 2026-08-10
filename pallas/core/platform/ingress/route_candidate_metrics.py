@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 _MAX_NAMED_ROUTES = 64
 _OTHER_ROUTE: tuple[str, ...] = ()
-_NATIVE_OUTCOMES = ("native_handled", "native_fallback", "native_error")
+_DIRECT_OUTCOMES = ("direct_handled", "direct_fallback", "direct_error")
 
 
 @dataclass(slots=True)
@@ -17,12 +17,12 @@ class RouteCandidateMetrics:
     matchers_considered: int = 0
     matchers_selected: int = 0
     matchers_run: int = 0
-    native_handled: int = 0
-    native_fallback: int = 0
-    native_error: int = 0
-    legacy_handled: int = 0
-    native_visible_actions: int = 0
-    native_effect_actions: int = 0
+    direct_handled: int = 0
+    direct_fallback: int = 0
+    direct_error: int = 0
+    matcher_handled: int = 0
+    direct_visible_actions: int = 0
+    direct_effect_actions: int = 0
     durations_ms: deque[float] = field(default_factory=lambda: deque(maxlen=256))
 
 
@@ -66,10 +66,10 @@ def record_route_candidate(
     matchers_considered: int,
     matchers_selected: int,
     matchers_run: int,
-    native_outcome: str | None,
-    legacy_handled: bool,
-    native_visible_actions: int | None,
-    native_effect_actions: int | None,
+    direct_outcome: str | None,
+    matcher_handled: bool,
+    direct_visible_actions: int | None,
+    direct_effect_actions: int | None,
     duration_ms: float,
 ) -> None:
     rollover_if_needed()
@@ -81,13 +81,13 @@ def record_route_candidate(
     row.matchers_considered += max(0, matchers_considered)
     row.matchers_selected += max(0, matchers_selected)
     row.matchers_run += max(0, matchers_run)
-    if native_outcome in _NATIVE_OUTCOMES:
-        setattr(row, native_outcome, getattr(row, native_outcome) + 1)
-    row.legacy_handled += int(legacy_handled)
-    if native_visible_actions is not None:
-        row.native_visible_actions += max(0, native_visible_actions)
-    if native_effect_actions is not None:
-        row.native_effect_actions += max(0, native_effect_actions)
+    if direct_outcome in _DIRECT_OUTCOMES:
+        setattr(row, direct_outcome, getattr(row, direct_outcome) + 1)
+    row.matcher_handled += int(matcher_handled)
+    if direct_visible_actions is not None:
+        row.direct_visible_actions += max(0, direct_visible_actions)
+    if direct_effect_actions is not None:
+        row.direct_effect_actions += max(0, direct_effect_actions)
     if duration_ms >= 0:
         row.durations_ms.append(float(duration_ms))
 
@@ -113,24 +113,24 @@ def route_candidate_metrics_snapshot() -> list[dict[str, object]]:
             "matchers_considered": metrics.matchers_considered,
             "matchers_selected": metrics.matchers_selected,
             "matchers_run": metrics.matchers_run,
-            "native_handled": metrics.native_handled,
-            "native_fallback": metrics.native_fallback,
-            "native_error": metrics.native_error,
-            "legacy_handled": metrics.legacy_handled,
-            "native_visible_actions": metrics.native_visible_actions,
-            "native_effect_actions": metrics.native_effect_actions,
+            "direct_handled": metrics.direct_handled,
+            "direct_fallback": metrics.direct_fallback,
+            "direct_error": metrics.direct_error,
+            "matcher_handled": metrics.matcher_handled,
+            "direct_visible_actions": metrics.direct_visible_actions,
+            "direct_effect_actions": metrics.direct_effect_actions,
             "ingress_duration_ms_p95": p95,
             "eligible": (
                 len(route) == 1
-                and metrics.legacy_handled > 0
+                and metrics.matcher_handled > 0
                 and metrics.route_index_fallbacks == 0
-                and metrics.native_error == 0
-                and metrics.native_handled < metrics.messages
+                and metrics.direct_error == 0
+                and metrics.direct_handled < metrics.messages
             ),
         })
     rows.sort(
         key=lambda row: (
-            -int(row["legacy_handled"]),
+            -int(row["matcher_handled"]),
             -int(row["matchers_selected"]),
             -int(row["matchers_run"]),
             -float(row["ingress_duration_ms_p95"] or 0.0),

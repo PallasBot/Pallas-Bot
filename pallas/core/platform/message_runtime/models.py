@@ -12,9 +12,16 @@ if TYPE_CHECKING:
 
 
 class RuntimeMode(StrEnum):
-    LEGACY = "legacy"
+    MATCHER = "matcher"
     SHADOW = "shadow"
-    NATIVE = "native"
+    DIRECT = "direct"
+
+    @classmethod
+    def _missing_(cls, value: object) -> RuntimeMode | None:
+        return {
+            "legacy": cls.MATCHER,
+            "native": cls.DIRECT,
+        }.get(str(value).strip().lower())
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,8 +86,8 @@ class HandlingPlan:
     reason: str
 
     def __post_init__(self) -> None:
-        if self.kind not in {"native", "legacy"}:
-            raise ValueError("plan kind must be native or legacy")
+        if self.kind not in {"direct", "matcher"}:
+            raise ValueError("plan kind must be direct or matcher")
         if not self.reason:
             raise ValueError("plan reason is required")
 
@@ -93,27 +100,39 @@ class HandlingOutcome:
     work_jobs: tuple[WorkJob, ...] = ()
     deferred_actions: tuple[DeferredAction, ...] = ()
     cross_worker_actions: tuple[CrossWorkerAction, ...] = ()
-    fallback_to_legacy: bool = False
+    fallback_to_matcher: bool = False
     fallback_reason: str | None = None
-    continue_legacy: bool = False
-    legacy_exclude_modules: frozenset[str] = frozenset()
+    continue_matcher: bool = False
+    matcher_exclude_modules: frozenset[str] = frozenset()
     error_class: str | None = None
 
     def __post_init__(self) -> None:
         if self.handler_id is not None and not self.handler_id:
             raise ValueError("handler_id cannot be empty")
-        if self.fallback_to_legacy and (
+        if self.fallback_to_matcher and (
             self.actions or self.work_jobs or self.deferred_actions or self.cross_worker_actions
         ):
             raise ValueError("fallback outcomes cannot contain side effects")
         if self.fallback_reason is not None and not self.fallback_reason:
             raise ValueError("fallback reason cannot be empty")
-        if self.fallback_reason and not self.fallback_to_legacy:
-            raise ValueError("fallback reason requires legacy fallback")
-        if self.error_class and not (self.fallback_to_legacy or self.handled):
-            raise ValueError("native errors must either fall back or be committed")
-        if self.continue_legacy and (not self.handled or self.fallback_to_legacy):
-            raise ValueError("continued legacy execution requires a handled native outcome")
+        if self.fallback_reason and not self.fallback_to_matcher:
+            raise ValueError("fallback reason requires matcher fallback")
+        if self.error_class and not (self.fallback_to_matcher or self.handled):
+            raise ValueError("direct errors must either fall back or be committed")
+        if self.continue_matcher and (not self.handled or self.fallback_to_matcher):
+            raise ValueError("continued matcher execution requires a handled direct outcome")
+
+    @property
+    def fallback_to_legacy(self) -> bool:
+        return self.fallback_to_matcher
+
+    @property
+    def continue_legacy(self) -> bool:
+        return self.continue_matcher
+
+    @property
+    def legacy_exclude_modules(self) -> frozenset[str]:
+        return self.matcher_exclude_modules
 
 
 def _telemetry_id_hash(value: int) -> str:

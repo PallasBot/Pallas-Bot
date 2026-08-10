@@ -9,7 +9,7 @@ from pallas.core.platform.message_runtime.telemetry import ExperimentTelemetryWr
 def test_telemetry_persists_failures_without_message_content(tmp_path) -> None:
     writer = ExperimentTelemetryWriter(tmp_path / "message_runtime_experiment.jsonl", agreement_sample_rate=100)
     writer.record(ShadowRecord(ingress_id="ok", timestamp=100, kind="agreement"))
-    writer.record(ShadowRecord(ingress_id="bad", timestamp=101, kind="native_error", error_class="RuntimeError"))
+    writer.record(ShadowRecord(ingress_id="bad", timestamp=101, kind="direct_error", error_class="RuntimeError"))
     writer.flush()
 
     rows = [json.loads(line) for line in writer.path.read_text(encoding="utf-8").splitlines()]
@@ -18,7 +18,7 @@ def test_telemetry_persists_failures_without_message_content(tmp_path) -> None:
         {
             "error_class": "RuntimeError",
             "event_id_hash": "bad",
-            "kind": "native_error",
+            "kind": "direct_error",
             "ts": 101,
         }
     ]
@@ -30,8 +30,8 @@ def test_telemetry_records_only_non_sensitive_runtime_classification(tmp_path) -
         ShadowRecord(
             ingress_id="hashed-event-id",
             timestamp=100,
-            kind="native_fallback",
-            plan_kind="legacy",
+            kind="direct_fallback",
+            plan_kind="matcher",
             plan_reason="unregistered",
             handler_ids=("repeater.message",),
             error_class="RuntimeError",
@@ -44,8 +44,8 @@ def test_telemetry_records_only_non_sensitive_runtime_classification(tmp_path) -
     assert row == {
         "event_id_hash": "hashed-event-id",
         "ts": 100,
-        "kind": "native_fallback",
-        "plan_kind": "legacy",
+        "kind": "direct_fallback",
+        "plan_kind": "matcher",
         "plan_reason": "unregistered",
         "handler_ids": ["repeater.message"],
         "error_class": "RuntimeError",
@@ -64,7 +64,7 @@ def test_telemetry_prune_removes_legacy_rows_with_plain_event_id(tmp_path) -> No
 
 def test_telemetry_prunes_expired_records(tmp_path) -> None:
     writer = ExperimentTelemetryWriter(tmp_path / "message_runtime_experiment.jsonl", retention_sec=60)
-    writer.record(ShadowRecord(ingress_id="old", timestamp=100, kind="native_error"))
+    writer.record(ShadowRecord(ingress_id="old", timestamp=100, kind="direct_error"))
     writer.flush()
 
     writer.prune(now=161)

@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pallas.core.platform.message_runtime.handlers import NativeHandlerRegistry
+from pallas.core.platform.message_runtime.handlers import RuntimeHandlerRegistry
 from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext, RuntimeMode, SendAction
 from pallas.core.platform.message_runtime.planner import MessagePlanner
 from pallas.core.platform.message_runtime.runtime import MessageRuntime
@@ -52,7 +52,7 @@ class PassiveLegacyBridgeHandler(StatusHandler):
     fallback_on_error = True
 
     async def handle(self, context: MessageContext, *, bot: object, event: object) -> HandlingOutcome:
-        return HandlingOutcome(handled=False, fallback_to_legacy=True)
+        return HandlingOutcome(handled=False, fallback_to_matcher=True)
 
 
 def _context() -> MessageContext:
@@ -72,22 +72,22 @@ def _context() -> MessageContext:
 @pytest.mark.asyncio
 async def test_shadow_runtime_plans_without_executing_native_handler() -> None:
     handler = StatusHandler()
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(handler)
     runtime = MessageRuntime(RuntimeMode.SHADOW, MessagePlanner(registry), registry)
 
     plan = await runtime.submit(_context())
 
-    assert plan.kind == "native"
+    assert plan.kind == "direct"
     assert handler.calls == 0
 
 
 @pytest.mark.asyncio
-async def test_native_runtime_executes_the_planned_handler() -> None:
+async def test_direct_runtime_executes_the_planned_handler() -> None:
     handler = StatusHandler()
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(handler)
-    runtime = MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry)
+    runtime = MessageRuntime(RuntimeMode.DIRECT, MessagePlanner(registry), registry)
 
     outcome = await runtime.execute(_context(), bot=object(), event=object())
 
@@ -96,11 +96,11 @@ async def test_native_runtime_executes_the_planned_handler() -> None:
 
 
 @pytest.mark.asyncio
-async def test_native_runtime_attributes_the_executing_handler() -> None:
-    registry = NativeHandlerRegistry()
+async def test_direct_runtime_attributes_the_executing_handler() -> None:
+    registry = RuntimeHandlerRegistry()
     registry.register(StatusHandler())
 
-    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute(
+    outcome = await MessageRuntime(RuntimeMode.DIRECT, MessagePlanner(registry), registry).execute(
         _context(), bot=object(), event=object()
     )
 
@@ -108,12 +108,12 @@ async def test_native_runtime_attributes_the_executing_handler() -> None:
 
 
 @pytest.mark.asyncio
-async def test_native_runtime_commits_actions_centrally() -> None:
-    registry = NativeHandlerRegistry()
+async def test_direct_runtime_commits_actions_centrally() -> None:
+    registry = RuntimeHandlerRegistry()
     registry.register(SendingHandler())
     bot = type("Bot", (), {"send": AsyncMock()})()
 
-    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute_and_commit(
+    outcome = await MessageRuntime(RuntimeMode.DIRECT, MessagePlanner(registry), registry).execute_and_commit(
         _context(), bot=bot, event="event"
     )
 
@@ -126,27 +126,27 @@ async def test_native_runtime_commits_actions_centrally() -> None:
 
 
 @pytest.mark.asyncio
-async def test_native_runtime_does_not_fallback_after_action_submission_fails() -> None:
-    registry = NativeHandlerRegistry()
+async def test_direct_runtime_does_not_fallback_after_action_submission_fails() -> None:
+    registry = RuntimeHandlerRegistry()
     registry.register(SendingHandler())
     bot = type("Bot", (), {"send": AsyncMock(side_effect=RuntimeError("transport failed"))})()
 
-    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute_and_commit(
+    outcome = await MessageRuntime(RuntimeMode.DIRECT, MessagePlanner(registry), registry).execute_and_commit(
         _context(), bot=bot, event="event"
     )
 
     assert outcome.handled is True
-    assert outcome.fallback_to_legacy is False
+    assert outcome.fallback_to_matcher is False
     assert outcome.error_class == "SideEffectCommitError"
 
 
 @pytest.mark.asyncio
 async def test_native_fallback_does_not_commit_or_retry_native_side_effects() -> None:
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(PassiveLegacyBridgeHandler())
     committer = type("Committer", (), {"commit": AsyncMock()})()
     runtime = MessageRuntime(
-        RuntimeMode.NATIVE,
+        RuntimeMode.DIRECT,
         MessagePlanner(registry),
         registry,
         action_committer=committer,
@@ -157,7 +157,7 @@ async def test_native_fallback_does_not_commit_or_retry_native_side_effects() ->
     assert outcome == HandlingOutcome(
         handled=False,
         handler_id="repeater.message",
-        fallback_to_legacy=True,
+        fallback_to_matcher=True,
     )
     committer.commit.assert_not_awaited()
 
@@ -166,23 +166,23 @@ async def test_native_fallback_does_not_commit_or_retry_native_side_effects() ->
 async def test_native_handler_error_is_classified_without_logging_message_content(monkeypatch) -> None:
     from pallas.core.platform.message_runtime import runtime as runtime_module
 
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(RaisingHandler())
     logger = MagicMock()
     monkeypatch.setattr(runtime_module, "logger", logger)
 
-    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute(
+    outcome = await MessageRuntime(RuntimeMode.DIRECT, MessagePlanner(registry), registry).execute(
         _context(), bot=object(), event=object()
     )
 
     assert outcome == HandlingOutcome(
         handled=False,
         handler_id="pb_core.raising",
-        fallback_to_legacy=True,
+        fallback_to_matcher=True,
         error_class="RuntimeError",
     )
     logger.warning.assert_called_once_with(
-        "MessageRuntime native handler failed handler_id={} error_class={}",
+        "MessageRuntime direct handler failed handler_id={} error_class={}",
         "pb_core.raising",
         "RuntimeError",
     )
@@ -190,7 +190,7 @@ async def test_native_handler_error_is_classified_without_logging_message_conten
 
 @pytest.mark.asyncio
 async def test_passive_legacy_bridge_does_not_suppress_legacy_matchers() -> None:
-    registry = NativeHandlerRegistry()
+    registry = RuntimeHandlerRegistry()
     registry.register(PassiveLegacyBridgeHandler())
     context = MessageContext(
         ingress_id="i-1",
@@ -204,22 +204,22 @@ async def test_passive_legacy_bridge_does_not_suppress_legacy_matchers() -> None
         route_modules=frozenset(),
     )
 
-    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute(
+    outcome = await MessageRuntime(RuntimeMode.DIRECT, MessagePlanner(registry), registry).execute(
         context, bot=object(), event=object()
     )
 
-    assert outcome == HandlingOutcome(handled=False, fallback_to_legacy=True)
+    assert outcome == HandlingOutcome(handled=False, fallback_to_matcher=True)
 
 
 @pytest.mark.asyncio
-async def test_side_effecting_native_handler_error_does_not_fallback_to_legacy() -> None:
-    registry = NativeHandlerRegistry()
+async def test_side_effecting_native_handler_error_does_not_fallback_to_matcher() -> None:
+    registry = RuntimeHandlerRegistry()
     registry.register(SideEffectingHandler())
 
-    outcome = await MessageRuntime(RuntimeMode.NATIVE, MessagePlanner(registry), registry).execute(
+    outcome = await MessageRuntime(RuntimeMode.DIRECT, MessagePlanner(registry), registry).execute(
         _context(), bot=object(), event=object()
     )
 
     assert outcome.handled is True
-    assert outcome.fallback_to_legacy is False
+    assert outcome.fallback_to_matcher is False
     assert outcome.error_class == "RuntimeError"

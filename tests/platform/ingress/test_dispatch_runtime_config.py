@@ -69,12 +69,12 @@ def test_dispatch_env_float_applies_minimum(monkeypatch: pytest.MonkeyPatch) -> 
     assert config.dispatch_env_float("PALLAS_X", default=1.0, minimum=0.5) == 0.5
 
 
-def test_message_runtime_defaults_to_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_message_runtime_defaults_to_matcher(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(config, "dispatch_env_raw", lambda _key: None)
 
     cfg = config.IngressDispatchRuntimeConfig.from_env()
 
-    assert cfg.message_runtime_mode == "legacy"
+    assert cfg.message_runtime_mode == "matcher"
     assert cfg.message_runtime_canary_groups == ()
     assert cfg.message_runtime_telemetry_enabled is False
 
@@ -95,3 +95,18 @@ def test_message_runtime_reads_shadow_mode_and_valid_canary_groups(monkeypatch: 
     assert cfg.message_runtime_mode == "shadow"
     assert cfg.message_runtime_canary_groups == (100, 200)
     assert cfg.message_runtime_telemetry_enabled is True
+
+
+@pytest.mark.parametrize(("configured", "expected"), [("legacy", "matcher"), ("native", "direct")])
+def test_message_runtime_normalizes_temporary_mode_names(
+    monkeypatch: pytest.MonkeyPatch,
+    configured: str,
+    expected: str,
+) -> None:
+    monkeypatch.setattr(
+        config,
+        "dispatch_env_raw",
+        lambda key: configured if key == "PALLAS_MESSAGE_RUNTIME_MODE" else None,
+    )
+
+    assert config.IngressDispatchRuntimeConfig.from_env().message_runtime_mode == expected

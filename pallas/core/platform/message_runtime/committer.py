@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class SideEffectCommitError(RuntimeError):
-    """A native side effect may have been accepted, so legacy cannot retry."""
+    """A direct side effect may have been accepted, so matcher cannot retry."""
 
     committed = True
 
@@ -46,7 +46,7 @@ class ActionCommitter:
         self._cross_worker_dispatcher = cross_worker_dispatcher
 
     async def commit(self, outcome: HandlingOutcome, *, bot: Bot, event: Event) -> bool:
-        if outcome.fallback_to_legacy:
+        if outcome.fallback_to_matcher:
             raise ValueError("fallback outcomes cannot be committed")
         if not (outcome.actions or outcome.work_jobs or outcome.deferred_actions or outcome.cross_worker_actions):
             return False
@@ -54,26 +54,26 @@ class ActionCommitter:
             try:
                 await self._work_job_store().enqueue_many(list(outcome.work_jobs))
             except Exception as exc:
-                raise SideEffectCommitError("native work submission failed") from exc
+                raise SideEffectCommitError("direct work submission failed") from exc
         for action in outcome.cross_worker_actions:
             try:
                 await self._cross_worker_dispatcher(action)
             except Exception as exc:
-                raise SideEffectCommitError("native cross-worker action submission failed") from exc
+                raise SideEffectCommitError("direct cross-worker action submission failed") from exc
         for action in outcome.actions:
             try:
                 await bot.send(event, action.message)
             except Exception as exc:
-                raise SideEffectCommitError("native action submission failed") from exc
+                raise SideEffectCommitError("direct action submission failed") from exc
         for action in outcome.deferred_actions:
             if action.wait_for_completion:
                 try:
                     await action.run()
                 except Exception as exc:
-                    raise SideEffectCommitError("native deferred action failed") from exc
+                    raise SideEffectCommitError("direct deferred action failed") from exc
                 continue
             try:
                 asyncio.create_task(action.run(), name=action.name)
             except Exception as exc:
-                raise SideEffectCommitError("native deferred action submission failed") from exc
+                raise SideEffectCommitError("direct deferred action submission failed") from exc
         return True
