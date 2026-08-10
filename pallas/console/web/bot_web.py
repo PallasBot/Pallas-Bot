@@ -794,21 +794,6 @@ def entry_matches_log_scope(entry: Mapping[str, Any] | None, scope: LogScope | s
     return resolve_entry_facet(entry) == scope
 
 
-def nonebot_log_record_matches_http_facet(
-    record: Mapping[str, Any],
-    facet: Literal["webui", "protocol", "console", "message", "other"],
-) -> bool:
-    """兼容旧调用：webui→console；protocol 不再单独切面，恒为 False。"""
-    classified = classify_log_facet(record, None)
-    if facet in ("webui", "console"):
-        return classified == "console"
-    if facet == "message":
-        return classified == "message"
-    if facet == "other":
-        return classified == "other"
-    return False
-
-
 def _sink_dispatch(message: object) -> None:
     text = str(message).rstrip("\n")
     if not text:

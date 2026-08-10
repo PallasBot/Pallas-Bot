@@ -186,7 +186,7 @@ def register_extended_api(
     try:
         from nonebot_plugin_apscheduler import scheduler
     except ImportError:
-        logger.warning("Pallas-Bot 控制台: 未安装 nonebot_plugin_apscheduler，跳过控制台异常记录定时清理")
+        logger.warning("[控制台] 未安装 nonebot_plugin_apscheduler，跳过控制台异常记录定时清理")
     else:
         _matcher_cleanup_job_id = "pallas_webui_matcher_error_log_cleanup"
         if scheduler.get_job(_matcher_cleanup_job_id):
@@ -247,7 +247,7 @@ def register_extended_api(
 
             reschedule_webui_auto_update_job(plugin_config)
         except Exception:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 注册 WebUI 自动更新调度失败")
+            logger.exception("[控制台] 注册 WebUI 自动更新调度失败")
 
 
 # Re-export domain helpers / patch targets for tests and lazy imports in domain modules.

@@ -39,7 +39,7 @@ def load_snapshot() -> dict[str, Any]:
     try:
         data = json.loads(raw)
     except (ValueError, TypeError):
-        logger.warning("Pallas-Bot 控制台: 插件更新快照损坏，忽略 path={}", path)
+        logger.warning("[控制台] 插件更新快照损坏，忽略 path={}", path)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -51,7 +51,7 @@ def _save_snapshot(data: dict[str, Any]) -> None:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
     except OSError as exc:
-        logger.warning("Pallas-Bot 控制台: 插件更新快照写盘失败 err={}", exc)
+        logger.warning("[控制台] 插件更新快照写盘失败 err={}", exc)
 
 
 def community_update_entry(plugin_id: str) -> dict[str, Any] | None:
@@ -216,7 +216,7 @@ async def _gather_limited(coros: list) -> list:
             try:
                 return await coro
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Pallas-Bot 控制台: 插件更新检查异常 err={}", exc)
+                logger.warning("[控制台] 插件更新检查异常 err={}", exc)
                 return None
 
     return await asyncio.gather(*[_run(c) for c in coros])
@@ -257,7 +257,7 @@ async def refresh_plugin_update_snapshot() -> dict[str, Any]:
     }
     _save_snapshot(snapshot)
     logger.info(
-        "Pallas-Bot 控制台: 插件更新快照已刷新 community={} official={}",
+        "[控制台] 插件更新快照已刷新 community={} official={}",
         len(community),
         len(official),
     )

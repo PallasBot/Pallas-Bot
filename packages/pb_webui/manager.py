@@ -74,14 +74,14 @@ async def resolve_github_release_asset_urls(
                 except Exception as e:
                     # API 失败仍会追加 releases/download 直链候选，默认不打 WARNING 以免刷屏
                     logger.debug(
-                        "Pallas-Bot 控制台: GitHub Release API 请求异常（将尝试直链）api={} err={}",
+                        "[控制台] GitHub Release API 请求异常（将尝试直链）api={} err={}",
                         api,
                         format_exception_for_log(e),
                     )
                     continue
                 if resp.status_code != 200:
                     logger.debug(
-                        "Pallas-Bot 控制台: GitHub Release API 非 200（将尝试直链）status={} api={}",
+                        "[控制台] GitHub Release API 非 200（将尝试直链）status={} api={}",
                         resp.status_code,
                         api,
                     )
@@ -731,7 +731,7 @@ async def fetch_bot_origin_refs(*, on_progress: ProgressReporter | None = None) 
             return
         last_err = err or f"exit={code}"
         logger.warning(
-            "Pallas-Bot 控制台: Bot git fetch mirror={} 失败：{}",
+            "[控制台] Bot git fetch mirror={} 失败：{}",
             mirror.id,
             last_err[:300],
         )
@@ -852,7 +852,7 @@ async def apply_bot_repository_update(
     update_track = normalize_bot_update_track(track)
     mode = "commit" if update_track == "branch" else "release"
     logger.info(
-        "Pallas-Bot 控制台: Bot 仓库更新开始 repo={} track={} preferred_branch={}",
+        "[控制台] Bot 仓库更新开始 repo={} track={} preferred_branch={}",
         repo,
         update_track,
         (preferred_branch or "").strip() or "(auto)",
@@ -887,7 +887,7 @@ async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot", *, token:
                 mirror_scope="bot",
             )
             logger.debug(
-                "Pallas-Bot 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底（Bot）tag={}",
+                "[控制台] GitHub Release API 不可用，已用 github.com/releases/latest 兜底（Bot）tag={}",
                 fb["tag"],
             )
             return {"tag": fb["tag"], "html_url": fb["html_url"], "body": ""}
@@ -917,7 +917,7 @@ async def fetch_latest_webui_release(repo: str, *, token: str = "", asset_name: 
             tag_fb = fb["tag"]
             asset_url_fb = github_release_asset_url(repo, asset_clean, tag_fb)
             logger.debug(
-                "Pallas-Bot 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底（WebUI）tag={}",
+                "[控制台] GitHub Release API 不可用，已用 github.com/releases/latest 兜底（WebUI）tag={}",
                 tag_fb,
             )
             return {"tag": tag_fb, "html_url": fb["html_url"], "asset_url": asset_url_fb, "body": ""}

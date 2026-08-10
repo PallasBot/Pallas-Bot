@@ -37,7 +37,7 @@ def compact_group_message_log(
     message: str,
     max_len: int = 240,
 ) -> str:
-    prefix = f"[Bot {bot_id}] [群 {group_id}] [用户 {user_id}] "
+    prefix = f"[Bot {bot_id:>10}] [群 {group_id:>10}] [用户 {user_id:>10}] "
     content = compact_inbound_event_log(message, max_len=max(1, max_len - len(prefix)))
     return f"{prefix}{content}"
 

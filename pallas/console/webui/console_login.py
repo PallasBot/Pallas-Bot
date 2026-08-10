@@ -278,7 +278,7 @@ def invalidate_console_sessions() -> None:
         try:
             hook()
         except Exception:  # noqa: BLE001
-            logger.exception("控制台: 会话轮换附加步骤失败")
+            logger.exception("[控制台] 会话轮换附加步骤失败")
 
 
 def mint_session_token() -> str:

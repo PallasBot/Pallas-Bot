@@ -53,7 +53,7 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
         asset_url = str(latest.get("asset_url", "") or "").strip()
     except Exception as e:  # noqa: BLE001
         err_msg = format_exception_for_log(e)
-        logger.warning("Pallas-Bot 控制台: WebUI 更新检查失败（GitHub），repo={} err={}", repo, err_msg)
+        logger.warning("[控制台] WebUI 更新检查失败（GitHub），repo={} err={}", repo, err_msg)
         return {
             "current_tag": current_tag,
             "latest_tag": None,
@@ -167,7 +167,7 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
             )
     except Exception as e:  # noqa: BLE001
         github_err = format_exception_for_log(e)
-        logger.warning("Pallas-Bot 控制台: Bot 版本更新检查失败（GitHub） err={}", github_err)
+        logger.warning("[控制台] Bot 版本更新检查失败（GitHub） err={}", github_err)
 
     if update_track == "branch":
         if not deploy.get("git_available"):
@@ -185,10 +185,10 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
             await fetch_bot_origin_refs()
         except BotGitUpdateError as e:
             fetch_err = e.detail
-            logger.warning("Pallas-Bot 控制台: Bot 分支轨道 fetch 失败 err={}", fetch_err)
+            logger.warning("[控制台] Bot 分支轨道 fetch 失败 err={}", fetch_err)
         except Exception as e:  # noqa: BLE001
             fetch_err = format_exception_for_log(e)
-            logger.warning("Pallas-Bot 控制台: Bot 分支轨道 fetch 异常 err={}", fetch_err)
+            logger.warning("[控制台] Bot 分支轨道 fetch 异常 err={}", fetch_err)
         probe = bot_branch_update_probe(preferred_branch=preferred_branch)
         err = probe.get("error") or fetch_err or github_err
         # fetch 失败但本地仍有远端 refs 时，仍可给出 has_update；否则透传错误
@@ -366,7 +366,7 @@ def register_update_router(
         except EnvToPallasMigrationError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: .env 配置迁移失败")
+            logger.exception("[控制台] .env 配置迁移失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.get(f"{x}/update/git/bot/status", include_in_schema=True)
@@ -430,7 +430,7 @@ def register_update_router(
 
         job = await create_update_apply_job("bot", restart=restart)
         logger.info(
-            "Pallas-Bot 控制台: Bot git 定向更新任务已排队 job_id={} mode={} strategy={} ref={} restart={}",
+            "[控制台] Bot git 定向更新任务已排队 job_id={} mode={} strategy={} ref={} restart={}",
             job.job_id,
             apply_mode,
             apply_strategy,
@@ -478,7 +478,7 @@ def register_update_router(
             except BotGitUpdateError as e:
                 j.push("failed", error=e.detail, progress_percent=j.progress_percent)
             except Exception as e:  # noqa: BLE001
-                logger.exception("Pallas-Bot 控制台: Bot git 定向更新失败")
+                logger.exception("[控制台] Bot git 定向更新失败")
                 j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
 
         asyncio.create_task(run_update_apply_job(job, _runner))
@@ -511,7 +511,7 @@ def register_update_router(
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         job = await create_update_apply_job("bot", restart=restart)
         logger.info(
-            "Pallas-Bot 控制台: Bot 仓库在线更新（git）任务已排队 job_id={} restart={}",
+            "[控制台] Bot 仓库在线更新（git）任务已排队 job_id={} restart={}",
             job.job_id,
             restart,
         )
@@ -533,7 +533,7 @@ def register_update_router(
             except BotGitUpdateError as e:
                 j.push("failed", error=e.detail, progress_percent=j.progress_percent)
             except Exception as e:  # noqa: BLE001
-                logger.exception("Pallas-Bot 控制台: Bot 仓库更新失败")
+                logger.exception("[控制台] Bot 仓库更新失败")
                 j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
 
         asyncio.create_task(run_update_apply_job(job, _runner))
@@ -577,7 +577,7 @@ def register_update_router(
             except WebuiUpdateError as e:
                 j.push("failed", error=e.detail, progress_percent=j.progress_percent)
             except Exception as e:  # noqa: BLE001
-                logger.exception("Pallas-Bot 控制台: WebUI 更新失败")
+                logger.exception("[控制台] WebUI 更新失败")
                 j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
 
         asyncio.create_task(run_update_apply_job(job, _runner))
@@ -619,7 +619,7 @@ def register_update_router(
             raise HTTPException(status_code=409, detail="update_busy")
 
         job = await create_update_apply_job("auto")
-        logger.info("Pallas-Bot 控制台: 自动更新立即执行已排队 job_id={}", job.job_id)
+        logger.info("[控制台] 自动更新立即执行已排队 job_id={}", job.job_id)
 
         async def _runner(j: Any) -> None:
             def on_progress(pct: int, message: str) -> None:
@@ -648,7 +648,7 @@ def register_update_router(
                 else:
                     j.message = "本轮自动更新结束"
             except Exception as e:  # noqa: BLE001
-                logger.exception("Pallas-Bot 控制台: 自动更新立即执行失败")
+                logger.exception("[控制台] 自动更新立即执行失败")
                 j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
 
         asyncio.create_task(run_update_apply_job(job, _runner))
@@ -697,7 +697,7 @@ def register_update_router(
             try:
                 await cached_read(key=key, loader=loader, ttl_sec=ttl, stale_sec=stale)
             except Exception as e:  # noqa: BLE001
-                logger.debug("Pallas-Bot 控制台: 预热读缓存失败 key={} err={}", key, e)
+                logger.debug("[控制台] 预热读缓存失败 key={} err={}", key, e)
 
         async def load_webui() -> dict[str, Any]:
             return await _load_webui_update_check_payload(plugin_config)

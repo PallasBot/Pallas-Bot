@@ -230,7 +230,11 @@ uv run pre-commit run -a
 
 ## 日志习惯
 
-loguru 风格 `logger`（NoneBot 提供）。占位符用 `{}` 或 f-string；避免 `logger.debug("msg %s", x)` 导致消息里仍显示 `%s`。
+使用 NoneBot 提供的 loguru 风格 `logger`。日志由统一 sink 输出时间、等级与 `{模块}` 通道；业务正文只写事件语义，不重复模块名或产品名。
+
+- 日志桥会按主仓业务模块、`packages.*`、`pallas_plugin_*` 与 `nonebot_plugin_*` 补充 `[控制台]`、`[CLI]`、`[数据库]`、`[Learn]` 等方括号标签，后接一个空格；调用方已有 `[...]` 标签时不会重复添加。不要混用 `控制台:`、`Pallas-Bot 控制台:` 或裸 `Pallas CLI:`。
+- Bot / 群 / 用户标识使用 `[Bot {:>10}]`、`[群 {:>10}]`、`[用户 {:>10}]`，短 ID 右对齐以保持正文列一致；不要在同一条事件中混用裸 `Bot <id>` 或 `group=<id>`。
+- 占位符使用 `{}` 或 f-string；避免 `logger.debug("msg %s", x)` 导致消息里仍显示 `%s`。异常应包含足以定位的 ID 与 `err={}`，需要堆栈时使用 `logger.exception`。
 
 ## 后续阅读
 
