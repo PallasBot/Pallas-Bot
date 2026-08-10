@@ -4,6 +4,7 @@ import time
 from collections import deque
 from typing import Any
 
+from pallas.core.platform.ingress.route_candidate_metrics import route_candidate_metrics_snapshot
 from pallas.core.platform.ingress.snapshot_health import ingress_snapshot_health
 
 _COUNTERS = (
@@ -179,6 +180,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
         conversation_scheduler=conversation_scheduler_status(),
         lanes=lane_status(),
         snapshot_health=ingress_snapshot_health(),
+        route_candidates=route_candidate_metrics_snapshot(),
     )
 
 
@@ -195,6 +197,7 @@ def build_dispatch_metrics_payload(
     conversation_scheduler: dict[str, Any] | None = None,
     lanes: dict[str, dict[str, int]] | None = None,
     snapshot_health: dict[str, Any] | None = None,
+    route_candidates: list[dict[str, object]] | None = None,
 ) -> dict[str, Any]:
     group_messages = int(counters.get("group_messages") or 0)
     command_traffic = int(counters.get("command_traffic") or 0)
@@ -217,6 +220,7 @@ def build_dispatch_metrics_payload(
         "conversation_scheduler": conversation_scheduler or {},
         "lanes": lanes or {},
         "snapshot_health": snapshot_health or {},
+        "route_candidates": route_candidates or [],
         "alerts": dispatch_alerts(p95_ms=ingress_duration_ms_p95, pg_util=pg_util, work_aux=work_aux),
         "matchers_selected_ratio": round(selected / considered, 4) if considered else None,
         "avg_matchers_per_message": round(selected / group_messages, 2) if group_messages else None,

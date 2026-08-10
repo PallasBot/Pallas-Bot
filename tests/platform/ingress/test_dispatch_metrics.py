@@ -51,6 +51,14 @@ def test_dispatch_metrics_include_lane_capacity_snapshot() -> None:
     assert payload["lanes"] == {"chat": {"limit": 8, "in_use": 6}}
 
 
+def test_dispatch_metrics_include_route_candidates(monkeypatch) -> None:
+    monkeypatch.setattr(dispatch_metrics, "route_candidate_metrics_snapshot", lambda: [{"route_modules": ["help"]}])
+
+    snap = dispatch_metrics.dispatch_metrics_snapshot()
+
+    assert snap["route_candidates"] == [{"route_modules": ["help"]}]
+
+
 def test_chatter_overload_degraded_counter() -> None:
     dispatch_metrics.clear_dispatch_metrics_for_tests()
     dispatch_metrics.record_chatter_overload_degraded()

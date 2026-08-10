@@ -42,6 +42,7 @@ from pallas.core.platform.ingress.message_load import (
     reset_chat_degraded,
     signal_overload,
 )
+from pallas.core.platform.ingress.route_candidate_metrics import record_route_candidate
 from pallas.core.platform.ingress.route_index import RouteResolution, matcher_module_key
 from pallas.core.platform.message_runtime.legacy_adapter import LegacyMatcherAdapter
 from pallas.core.platform.message_runtime.lifecycle import (
@@ -49,7 +50,7 @@ from pallas.core.platform.message_runtime.lifecycle import (
     record_native_execution,
     shadow_experiment_for_group,
 )
-from pallas.core.platform.message_runtime.models import MessageContext
+from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext
 from pallas.core.platform.message_runtime.shadow import LegacyExecution
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
 
@@ -197,6 +198,55 @@ def exclude_native_matchers(selected_matchers: list[type], modules: frozenset[st
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) not in modules]
 
 
+def record_route_candidate_safe(
+    *,
+    command_traffic: bool,
+    resolution: RouteResolution | None,
+    duration_ms: float,
+    matchers_considered: int,
+    matchers_selected: int,
+    matchers_run: int,
+    native_outcome: HandlingOutcome | None,
+    legacy_handled: bool,
+) -> None:
+    if not command_traffic:
+        return
+    native_status = None
+    visible_actions = None
+    effect_actions = None
+    if native_outcome is not None:
+        if native_outcome.error_class:
+            native_status = "native_error"
+        elif native_outcome.fallback_to_legacy:
+            native_status = "native_fallback"
+        elif native_outcome.handled:
+            native_status = "native_handled"
+        visible_actions = len(native_outcome.actions)
+        effect_actions = (
+            visible_actions
+            + len(native_outcome.work_jobs)
+            + len(native_outcome.deferred_actions)
+            + len(native_outcome.cross_worker_actions)
+            + len(native_outcome.llm_select_actions)
+        )
+    try:
+        record_route_candidate(
+            route_modules=resolution.matched_modules if resolution is not None else frozenset(),
+            index_hit=bool(resolution and resolution.index_hit),
+            route_fallback=not bool(resolution and resolution.index_hit),
+            matchers_considered=matchers_considered,
+            matchers_selected=matchers_selected,
+            matchers_run=matchers_run,
+            native_outcome=native_status,
+            legacy_handled=legacy_handled,
+            native_visible_actions=visible_actions,
+            native_effect_actions=effect_actions,
+            duration_ms=duration_ms,
+        )
+    except Exception:
+        logger.exception("Route candidate metrics record failed")
+
+
 async def pre_schedule_ingress_group_message_gate(bot: Bot, event: Event):
     from pallas.core.platform.ingress.gate import pre_schedule_ingress_group_message_gate as run_gate
 
@@ -290,6 +340,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         shadow_context = None
             if apply_dispatch:
                 native_legacy_exclude_modules = frozenset()
+                native_outcome = None
                 native_runtime = native_runtime_for_group(int(getattr(event, "group_id", 0) or 0))
                 if native_runtime is not None:
                     try:
@@ -317,6 +368,16 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                                     matchers_considered=0,
                                     matchers_selected=0,
                                     matchers_run=0,
+                                )
+                                record_route_candidate_safe(
+                                    command_traffic=command_traffic,
+                                    resolution=resolution,
+                                    duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                                    matchers_considered=0,
+                                    matchers_selected=0,
+                                    matchers_run=0,
+                                    native_outcome=native_outcome,
+                                    legacy_handled=False,
                                 )
                                 await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
                                 return
@@ -408,12 +469,23 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 acquired_matcher_modules.extend(legacy_result.acquired_matcher_modules)
 
                 if apply_dispatch:
+                    ingress_duration_ms = (time.perf_counter() - ingress_started) * 1000.0
                     record_group_message_ingress(
-                        duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                        duration_ms=ingress_duration_ms,
                         command_traffic=command_traffic,
                         matchers_considered=total_considered,
                         matchers_selected=total_selected,
                         matchers_run=matchers_run,
+                    )
+                    record_route_candidate_safe(
+                        command_traffic=command_traffic,
+                        resolution=resolution,
+                        duration_ms=ingress_duration_ms,
+                        matchers_considered=total_considered,
+                        matchers_selected=total_selected,
+                        matchers_run=matchers_run,
+                        native_outcome=native_outcome,
+                        legacy_handled=any_matcher_executed,
                     )
                 if llm_command is not None:
                     logger.info(
