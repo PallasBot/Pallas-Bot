@@ -24,6 +24,12 @@ _STATS = {
     "errors": 0,
     "depth": 0,
 }
+_ERROR_DIMENSION_LIMIT = 16
+_ERRORS_BY_API: dict[str, int] = {}
+_ERRORS_BY_CLASS: dict[str, int] = {}
+_ERRORS_BY_RETCODE: dict[str, int] = {}
+_LAST_ERROR: dict[str, Any] | None = None
+_LAST_ERROR_AT = 0.0
 _LAST_SEND_AT: dict[str, float] = {}
 
 _HIGH_PRIORITY_APIS = frozenset({
@@ -116,6 +122,12 @@ def is_droppable_api(api: str) -> bool:
 def send_queue_status() -> dict[str, Any]:
     queue = _QUEUE
     depth = queue.qsize() if queue is not None else 0
+    last_error = None
+    if _LAST_ERROR is not None:
+        last_error = {
+            **_LAST_ERROR,
+            "age_sec": round(max(0.0, time.monotonic() - _LAST_ERROR_AT), 2),
+        }
     return {
         "enabled": send_queue_enabled(),
         "installed": _PATCHED,
@@ -124,18 +136,53 @@ def send_queue_status() -> dict[str, Any]:
         "workers": send_queue_worker_count(),
         "min_interval_ms": send_queue_min_interval_sec() * 1000.0,
         **dict(_STATS),
+        "errors_by_api": dict(_ERRORS_BY_API),
+        "errors_by_class": dict(_ERRORS_BY_CLASS),
+        "errors_by_retcode": dict(_ERRORS_BY_RETCODE),
+        "last_error": last_error,
         "depth_live": depth,
     }
 
 
 def reset_send_queue_for_tests() -> None:
-    global _SEQ, _PATCHED, _ORIGINAL_CALL_API
+    global _SEQ, _PATCHED, _ORIGINAL_CALL_API, _LAST_ERROR, _LAST_ERROR_AT
     _SEQ = 0
     _PATCHED = False
     _ORIGINAL_CALL_API = None
     for key in _STATS:
         _STATS[key] = 0
+    _ERRORS_BY_API.clear()
+    _ERRORS_BY_CLASS.clear()
+    _ERRORS_BY_RETCODE.clear()
+    _LAST_ERROR = None
+    _LAST_ERROR_AT = 0.0
     _LAST_SEND_AT.clear()
+
+
+def record_send_queue_error(api: str, exc: Exception) -> None:
+    global _LAST_ERROR, _LAST_ERROR_AT
+
+    error_class = type(exc).__name__
+    info = getattr(exc, "info", None)
+    retcode = info.get("retcode") if isinstance(info, dict) else None
+    if not isinstance(retcode, int) or isinstance(retcode, bool):
+        retcode = None
+
+    def increment(counter: dict[str, int], key: str) -> None:
+        if key not in counter and len(counter) >= _ERROR_DIMENSION_LIMIT - 1:
+            key = "other"
+        counter[key] = counter.get(key, 0) + 1
+
+    increment(_ERRORS_BY_API, str(api))
+    increment(_ERRORS_BY_CLASS, error_class)
+    if retcode is not None:
+        increment(_ERRORS_BY_RETCODE, str(retcode))
+    _LAST_ERROR = {
+        "api": str(api),
+        "error_class": error_class,
+        "retcode": retcode,
+    }
+    _LAST_ERROR_AT = time.monotonic()
 
 
 async def _rate_limit_wait(bot_self_id: str) -> None:
@@ -164,6 +211,7 @@ async def _execute_queue_item(item: SendQueueItem) -> None:
             item.future.set_result(result)
     except Exception as exc:
         _STATS["errors"] += 1
+        record_send_queue_error(item.api, exc)
         if not item.future.done():
             item.future.set_exception(exc)
     finally:

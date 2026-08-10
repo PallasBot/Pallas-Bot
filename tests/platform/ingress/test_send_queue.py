@@ -46,6 +46,67 @@ async def test_enqueue_executes_via_original_call_api(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
+async def test_send_queue_attributes_failures_without_exposing_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    original = AsyncMock(
+        side_effect=ActionFailed(
+            status="failed",
+            retcode=1200,
+            message="sensitive message body",
+        )
+    )
+    monkeypatch.setattr(send_queue, "_ORIGINAL_CALL_API", original)
+    monkeypatch.setattr(send_queue, "send_queue_min_interval_sec", lambda: 0.0)
+    await send_queue.start_send_queue_workers()
+
+    with pytest.raises(ActionFailed):
+        await send_queue.enqueue_call_api(
+            MagicMock(),
+            MagicMock(self_id="123"),
+            "send_group_msg",
+            group_id=1,
+            message="private content",
+        )
+
+    status = send_queue.send_queue_status()
+    assert status["errors_by_api"] == {"send_group_msg": 1}
+    assert status["errors_by_class"] == {"ActionFailed": 1}
+    assert status["errors_by_retcode"] == {"1200": 1}
+    assert set(status["last_error"]) == {"api", "error_class", "retcode", "age_sec"}
+    assert status["last_error"]["api"] == "send_group_msg"
+    assert status["last_error"]["error_class"] == "ActionFailed"
+    assert status["last_error"]["retcode"] == 1200
+    assert "sensitive" not in str(status)
+    assert "private content" not in str(status)
+
+    await send_queue.stop_send_queue_workers()
+
+
+def test_send_queue_error_dimensions_are_bounded_and_resettable() -> None:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    for retcode in range(20):
+        send_queue.record_send_queue_error(
+            f"api_{retcode}",
+            ActionFailed(retcode=retcode),
+        )
+
+    status = send_queue.send_queue_status()
+    assert len(status["errors_by_api"]) == 16
+    assert len(status["errors_by_retcode"]) == 16
+    assert status["errors_by_api"]["other"] == 5
+    assert status["errors_by_retcode"]["other"] == 5
+
+    send_queue.reset_send_queue_for_tests()
+    status = send_queue.send_queue_status()
+    assert status["errors_by_api"] == {}
+    assert status["errors_by_class"] == {}
+    assert status["errors_by_retcode"] == {}
+    assert status["last_error"] is None
+
+
+@pytest.mark.asyncio
 async def test_droppable_api_skipped_when_depth_high(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(send_queue, "send_queue_max_depth", lambda: 10)
     await send_queue.start_send_queue_workers()
