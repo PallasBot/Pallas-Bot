@@ -558,6 +558,8 @@ async def handle_llm_chat(
         group_id,
         "group_chat",
         request_id=request_id,
+        query_text=focus_text,
+        recent_assistant_replies=recent_reply_texts[:6],
     )
     direct_context_started = time.perf_counter()
     assembled_context = await assemble_direct_chat_context(

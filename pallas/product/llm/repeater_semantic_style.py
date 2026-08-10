@@ -144,6 +144,11 @@ class SemanticStyleExample(BaseModel):
     bot_style_positive: bool = False
 
 
+class SemanticStyleDirectPair(BaseModel):
+    trigger_text: str
+    reply_text: str
+
+
 class SemanticStyleProfile(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -152,6 +157,7 @@ class SemanticStyleProfile(BaseModel):
     scene: str
     style_anchor: str = ""
     direct_examples: list[str] = Field(default_factory=list)
+    direct_pairs: list[SemanticStyleDirectPair] = Field(default_factory=list)
     rewrite_seeds: list[str] = Field(default_factory=list)
     interaction_actions: list[str] = Field(default_factory=list)
     semantic_relations: list[str] = Field(default_factory=list)
@@ -218,6 +224,9 @@ _semantic_style_visual_circuit = SemanticStyleVisualCircuitState()
 _DIRECT_QUOTA_WINDOW = 100
 _DIRECT_QUOTA_RATE = 0.15
 _DIRECT_QUOTA_WARMUP = 20
+_DIRECT_PAIR_LIMIT = 6
+_DIRECT_TRIGGER_SIMILARITY = 0.6
+_DIRECT_REPLY_DEDUP_SIMILARITY = 0.8
 
 
 def _items(value: object, vocabulary: frozenset[str] | None = None) -> list[str]:
@@ -934,11 +943,18 @@ def _build_profile(
     prior_relations = list(existing.semantic_relations) if existing else []
     prior_affinities = list(existing.persona_affinities) if existing else []
     direct_examples = list(existing.direct_examples) if existing else []
+    direct_pairs = list(existing.direct_pairs) if existing else []
     rewrite_seeds = list(existing.rewrite_seeds) if existing else []
     reply_text = _short_text(example.reply_text, _MAX_SEED_LEN)
     if label.reuse == "direct" and reply_text:
         direct_examples = [item for item in direct_examples if item != reply_text]
         direct_examples.append(reply_text)
+        pair = SemanticStyleDirectPair(
+            trigger_text=_short_text(example.trigger_text, 240),
+            reply_text=reply_text,
+        )
+        direct_pairs = [item for item in direct_pairs if item != pair]
+        direct_pairs.append(pair)
     elif label.reuse == "rewrite" and reply_text:
         rewrite_seeds = [item for item in rewrite_seeds if item != reply_text]
         rewrite_seeds.append(reply_text)
@@ -952,6 +968,7 @@ def _build_profile(
         scene=example.scene,
         style_anchor=label.style_anchor or (existing.style_anchor if existing else ""),
         direct_examples=direct_examples[-3:],
+        direct_pairs=direct_pairs[-_DIRECT_PAIR_LIMIT:],
         rewrite_seeds=rewrite_seeds[-3:],
         interaction_actions=_popular([*prior_actions, *label.interaction_actions]),
         semantic_relations=_popular([*prior_relations, *label.semantic_relations]),
@@ -1118,6 +1135,8 @@ def resolve_cached_semantic_style(
     scene: str,
     *,
     request_id: str,
+    query_text: str = "",
+    recent_assistant_replies: Iterable[str] = (),
 ) -> SemanticStyleResolution:
     if not semantic_style_injection_enabled(request_id, bot_id=bot_id, group_id=group_id):
         return SemanticStyleResolution()
@@ -1127,11 +1146,60 @@ def resolve_cached_semantic_style(
     rewrite_seed = profile.rewrite_seeds[-1] if profile.rewrite_seeds else ""
     if not rewrite_seed and profile.direct_examples:
         rewrite_seed = profile.direct_examples[-1]
+    direct_candidate = select_semantic_style_direct_candidate(
+        profile.direct_pairs,
+        query_text=query_text,
+        recent_assistant_replies=recent_assistant_replies,
+    )
     return SemanticStyleResolution(
         style_anchor=_short_text(profile.style_anchor, _MAX_STYLE_ANCHOR_LEN),
         prompt_block=append_cached_semantic_style_block("", profile.style_anchor, rewrite_seed),
-        direct_candidate=_short_text(profile.direct_examples[-1] if profile.direct_examples else "", _MAX_SEED_LEN),
+        direct_candidate=direct_candidate,
     )
+
+
+def normalize_semantic_style_match_text(value: str) -> str:
+    return "".join(character.lower() for character in str(value or "") if character.isalnum())
+
+
+def semantic_style_text_similarity(left: str, right: str) -> float:
+    normalized_left = normalize_semantic_style_match_text(left)
+    normalized_right = normalize_semantic_style_match_text(right)
+    if not normalized_left or not normalized_right:
+        return 0.0
+    if normalized_left == normalized_right:
+        return 1.0
+    if min(len(normalized_left), len(normalized_right)) < 2:
+        return 0.0
+    left_pairs = {normalized_left[index : index + 2] for index in range(len(normalized_left) - 1)}
+    right_pairs = {normalized_right[index : index + 2] for index in range(len(normalized_right) - 1)}
+    return len(left_pairs & right_pairs) / min(len(left_pairs), len(right_pairs))
+
+
+def select_semantic_style_direct_candidate(
+    pairs: Iterable[SemanticStyleDirectPair],
+    *,
+    query_text: str,
+    recent_assistant_replies: Iterable[str] = (),
+) -> str:
+    recent = [reply for reply in recent_assistant_replies if normalize_semantic_style_match_text(reply)]
+    ranked = sorted(
+        (
+            (semantic_style_text_similarity(query_text, pair.trigger_text), index, pair.reply_text)
+            for index, pair in enumerate(pairs)
+        ),
+        reverse=True,
+    )
+    for score, _index, reply_text in ranked:
+        if score < _DIRECT_TRIGGER_SIMILARITY:
+            break
+        if any(
+            semantic_style_text_similarity(reply_text, previous) >= _DIRECT_REPLY_DEDUP_SIMILARITY
+            for previous in recent
+        ):
+            continue
+        return _short_text(reply_text, _MAX_SEED_LEN)
+    return ""
 
 
 def should_deliver_semantic_style_direct_candidate(

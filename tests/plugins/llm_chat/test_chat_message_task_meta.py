@@ -400,13 +400,16 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
         ),
     )
     monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value="上一句"))
-    monkeypatch.setattr(
-        "pallas.product.llm.repeater_semantic_style.resolve_cached_semantic_style",
-        lambda *_args, **_kwargs: SimpleNamespace(
+    semantic_style_mock = Mock(
+        return_value=SimpleNamespace(
             style_anchor="短句轻怼。",
             prompt_block="【本群表达校准】\n保持：短句轻怼。",
             direct_candidate="没救了",
-        ),
+        )
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.resolve_cached_semantic_style",
+        semantic_style_mock,
     )
     monkeypatch.setattr(
         "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
@@ -425,6 +428,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert payload["llm_route"] == "plain_llm_chat"
     assert payload["last_reply_text"] == "上一句"
     assert payload["recent_reply_texts"] == ["群内上一句", "群内更早一句"]
+    assert semantic_style_mock.call_args.kwargs["query_text"] == "你还在吗"
+    assert semantic_style_mock.call_args.kwargs["recent_assistant_replies"] == ["群内上一句", "群内更早一句"]
     assert "variation_hint" not in payload
     assert payload["behavior_scene"] == "provocation"
     assert payload["behavior_pattern_ids"] == ["p1"]
