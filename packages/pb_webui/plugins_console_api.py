@@ -4,7 +4,7 @@ import asyncio
 import json
 from typing import Any
 
-from fastapi import APIRouter, Header, HTTPException, Query
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from nonebot import logger
 from pydantic import BaseModel, ConfigDict, Field
@@ -137,11 +137,11 @@ class _GlobalPluginDisableBody(BaseModel):
 class _PluginGovernanceBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    command_permission_overrides: dict[str, str] = Field(default_factory=dict)
-    command_limit_overrides: dict[str, int] = Field(default_factory=dict)
-    global_disable: bool = False
-    help_hidden: bool = False
-    blocked_user_ids: list[int] = Field(default_factory=list)
+    command_permission_overrides: dict[str, str] | None = None
+    command_limit_overrides: dict[str, int] | None = None
+    global_disable: bool | None = None
+    help_hidden: bool | None = None
+    blocked_user_ids: list[int] | None = None
 
 
 class _GroupFleetWhitelistEntryBody(BaseModel):
@@ -407,6 +407,7 @@ def register_plugins_console_router(
     async def _plugin_governance_put(
         plugin_name: str,
         body: PluginGovernanceBody,
+        request: Request,
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
@@ -424,9 +425,10 @@ def register_plugins_console_router(
         from pallas.api.config import upsert_repo_settings_items
         from pallas.core.limits.config import get_command_limits_config, normalize_command_limit_overrides
         from pallas.core.perm.config import get_cmd_perm_config
-        from pallas.core.perm.plugin_acl import sync_plugin_blocked_user_ids
+        from pallas.core.perm.plugin_acl import list_plugin_blocked_user_ids, sync_plugin_blocked_user_ids
         from pallas.core.perm.ui_labels import plugin_name_for_command_id
 
+        fields_set = body.model_fields_set
         target_ids = {
             str(cid).strip()
             for cid in (
@@ -442,6 +444,7 @@ def register_plugins_console_router(
         current_limit_overrides = normalize_command_limit_overrides(
             get_command_limits_config().command_limit_overrides or {},
         )
+        audit_changes: dict[str, dict[str, Any]] = {}
 
         perm_overrides = {
             str(k): str(v) for k, v in (body.command_permission_overrides or {}).items() if str(k).strip() in target_ids
@@ -450,7 +453,7 @@ def register_plugins_console_router(
             str(k): int(v) for k, v in (body.command_limit_overrides or {}).items() if str(k).strip() in target_ids
         }
         env_items: dict[str, str] = {}
-        if target_ids:
+        if "command_permission_overrides" in fields_set and target_ids:
             merged_perm_overrides = {
                 cid: level for cid, level in current_perm_overrides.items() if cid not in target_ids
             }
@@ -460,7 +463,11 @@ def register_plugins_console_router(
                 ensure_ascii=False,
                 separators=(",", ":"),
             )
-        if target_ids:
+            audit_changes["command_permission_overrides"] = {
+                "before": {cid: current_perm_overrides[cid] for cid in target_ids if cid in current_perm_overrides},
+                "after": perm_overrides,
+            }
+        if "command_limit_overrides" in fields_set and target_ids:
             merged_limit_overrides = {cid: cd for cid, cd in current_limit_overrides.items() if cid not in target_ids}
             merged_limit_overrides.update(limit_overrides)
             env_items["PALLAS_COMMAND_LIMIT_OVERRIDES"] = json.dumps(
@@ -468,6 +475,10 @@ def register_plugins_console_router(
                 ensure_ascii=False,
                 separators=(",", ":"),
             )
+            audit_changes["command_limit_overrides"] = {
+                "before": {cid: current_limit_overrides[cid] for cid in target_ids if cid in current_limit_overrides},
+                "after": limit_overrides,
+            }
         if env_items:
             upsert_repo_settings_items(env_items)
             if "PALLAS_COMMAND_PERMISSION_OVERRIDES" in env_items:
@@ -480,21 +491,44 @@ def register_plugins_console_router(
                 clear_command_limits_cache()
 
         hidden = set(load_help_hidden_plugins())
-        if body.help_hidden:
-            hidden.add(target)
+        hidden_before = target in hidden
+        if "help_hidden" in fields_set:
+            if body.help_hidden:
+                hidden.add(target)
+            else:
+                hidden.discard(target)
+            hidden_saved = save_help_hidden_plugins(sorted(hidden))
+            audit_changes["help_hidden"] = {"before": hidden_before, "after": target in hidden_saved}
         else:
-            hidden.discard(target)
-        hidden_saved = save_help_hidden_plugins(sorted(hidden))
+            hidden_saved = sorted(hidden)
 
         disabled = set(load_global_disabled_plugins())
-        if body.global_disable:
-            disabled.add(target)
+        disabled_before = target in disabled
+        if "global_disable" in fields_set:
+            if body.global_disable:
+                disabled.add(target)
+            else:
+                disabled.discard(target)
+            disabled_saved = save_global_disabled_plugins(sorted(disabled))
+            await invalidate_disabled_plugin_gate_cache(clear_all=True)
+            audit_changes["global_disable"] = {"before": disabled_before, "after": target in disabled_saved}
         else:
-            disabled.discard(target)
-        disabled_saved = save_global_disabled_plugins(sorted(disabled))
-        await invalidate_disabled_plugin_gate_cache(clear_all=True)
+            disabled_saved = sorted(disabled)
 
-        blocked_saved = await sync_plugin_blocked_user_ids(target, list(body.blocked_user_ids or []))
+        blocked_before = await list_plugin_blocked_user_ids(target)
+        if "blocked_user_ids" in fields_set:
+            blocked_saved = await sync_plugin_blocked_user_ids(target, list(body.blocked_user_ids or []))
+            audit_changes["blocked_user_ids"] = {"before": blocked_before, "after": blocked_saved}
+        else:
+            blocked_saved = blocked_before
+
+        client_host = request.client.host if request.client else "unknown"
+        logger.info(
+            "plugin governance audit: client={} plugin={} changes={}",
+            client_host,
+            target,
+            json.dumps(audit_changes, ensure_ascii=False, separators=(",", ":")),
+        )
 
         drop_read_cache(("plugins", "plugins-capabilities", "home-overview"))
         return JSONResponse({

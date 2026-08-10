@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from packages.pb_webui import extended_api as mod
+from packages.pb_webui import plugins_console_api
 from packages.pb_webui.config import Config
 
 
@@ -194,6 +196,7 @@ def test_plugin_governance_put_filters_only_plugin_prefix(monkeypatch) -> None:
         "pallas.core.perm.plugin_acl.sync_plugin_blocked_user_ids",
         fake_sync_blocked,
     )
+    monkeypatch.setattr("pallas.core.perm.plugin_acl.list_plugin_blocked_user_ids", AsyncMock(return_value=[]))
 
     client = _build_client(monkeypatch)
     response = client.put(
@@ -224,6 +227,90 @@ def test_plugin_governance_put_filters_only_plugin_prefix(monkeypatch) -> None:
     assert payload["data"]["runtime"]["global_disable"] is True
     assert payload["data"]["runtime"]["help_hidden"] is True
     assert payload["data"]["blocked_user_ids"] == [333]
+
+
+async def test_plugin_governance_put_omitted_fields_keep_existing_state(monkeypatch) -> None:
+    saved_disabled: list[list[str]] = []
+    unexpected_writes: list[str] = []
+    audit_messages: list[tuple[object, ...]] = []
+
+    def record_env_write(_items) -> None:
+        unexpected_writes.append("command_overrides")
+
+    async def record_acl_write(_plugin: str, _user_ids: list[int]) -> list[int]:
+        unexpected_writes.append("blocked_user_ids")
+        return []
+
+    async def fake_list_blocked(_plugin: str) -> list[int]:
+        return []
+
+    async def fake_invalidate_disabled_plugin_gate_cache(*, clear_all: bool = False) -> None:
+        assert clear_all is True
+
+    monkeypatch.setattr("pallas.api.config.upsert_repo_settings_items", record_env_write)
+    monkeypatch.setattr(
+        "pallas.core.perm.config.get_cmd_perm_config",
+        lambda: type("_Cfg", (), {"command_permission_overrides": {}})(),
+    )
+    monkeypatch.setattr(
+        "pallas.core.limits.config.get_command_limits_config",
+        lambda: type("_Cfg", (), {"command_limit_overrides": {}})(),
+    )
+    monkeypatch.setattr("packages.help.visibility.load_help_hidden_plugins", list)
+    monkeypatch.setattr("packages.help.global_disable.load_global_disabled_plugins", lambda: ["dream"])
+    monkeypatch.setattr(
+        "packages.help.visibility.save_help_hidden_plugins",
+        lambda hidden: sorted(set(hidden)),
+    )
+    monkeypatch.setattr(
+        "packages.help.global_disable.save_global_disabled_plugins",
+        lambda disabled: saved_disabled.append(list(disabled)) or sorted(set(disabled)),
+    )
+    monkeypatch.setattr(
+        "packages.help.plugin_manager.invalidate_disabled_plugin_gate_cache",
+        fake_invalidate_disabled_plugin_gate_cache,
+    )
+    monkeypatch.setattr("pallas.core.perm.plugin_acl.sync_plugin_blocked_user_ids", record_acl_write)
+    monkeypatch.setattr("pallas.core.perm.plugin_acl.list_plugin_blocked_user_ids", fake_list_blocked)
+    monkeypatch.setattr(
+        "packages.pb_webui.plugins_console_api.logger.info",
+        lambda _message, *args: audit_messages.append(args),
+    )
+    monkeypatch.setattr("packages.pb_webui.plugins_console_api.check_pallas_write_token", lambda *a, **k: None)
+    monkeypatch.setattr("packages.pb_webui.plugins_console_api.drop_read_cache", lambda *a, **k: None)
+    monkeypatch.setattr(mod, "drop_read_cache", lambda *a, **k: None)
+
+    app = FastAPI()
+    mod.register_extended_api(app, api_base="/pallas/api", plugin_config=Config())
+    route = next(
+        route
+        for route in app.routes
+        if getattr(route, "path", "") == "/pallas/api/plugins/{plugin_name}/governance"
+        and "PUT" in getattr(route, "methods", set())
+    )
+    response = await route.endpoint(
+        plugin_name="dream",
+        body=plugins_console_api.PluginGovernanceBody(help_hidden=True),
+        request=Request({"type": "http", "client": ("testclient", 123)}),
+        token=None,
+        x_pallas_token=None,
+    )
+
+    payload = json.loads(response.body)
+    assert response.status_code == 200
+    assert saved_disabled == []
+    assert unexpected_writes == []
+    assert payload["data"]["runtime"] == {
+        "global_disable": True,
+        "help_hidden": True,
+    }
+    assert audit_messages[-1:] == [
+        (
+            "testclient",
+            "dream",
+            '{"help_hidden":{"before":false,"after":true}}',
+        )
+    ]
 
 
 def test_plugin_governance_put_keeps_existing_overrides_and_honors_alias_prefix(monkeypatch) -> None:
@@ -271,6 +358,7 @@ def test_plugin_governance_put_keeps_existing_overrides_and_honors_alias_prefix(
         "pallas.core.perm.plugin_acl.sync_plugin_blocked_user_ids",
         fake_sync_blocked,
     )
+    monkeypatch.setattr("pallas.core.perm.plugin_acl.list_plugin_blocked_user_ids", AsyncMock(return_value=[]))
 
     client = _build_client(monkeypatch)
     response = client.put(
