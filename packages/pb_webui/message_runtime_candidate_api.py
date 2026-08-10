@@ -6,6 +6,7 @@ import threading
 import time
 from typing import TYPE_CHECKING, Any
 
+from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 from pallas.core.platform.message_runtime.candidate_ranking import rank_message_runtime_candidates
 
 if TYPE_CHECKING:
@@ -58,7 +59,7 @@ def aggregate_plugin_stats(overview: dict[str, Any]) -> list[dict[str, object]]:
         for plugin in bot["plugins"]:
             if not isinstance(plugin, dict):
                 continue
-            module = str(plugin.get("name") or "").strip()
+            module = canonical_plugin_package(str(plugin.get("name") or "").strip())
             if not module:
                 continue
             row = aggregated.setdefault(

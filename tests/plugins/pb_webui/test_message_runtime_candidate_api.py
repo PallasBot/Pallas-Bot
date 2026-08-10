@@ -132,3 +132,31 @@ def test_sharded_candidate_report_marks_reset_sensitive_totals(monkeypatch) -> N
 
     assert report["candidates"][0]["route_messages"] == 50
     assert "sharded_route_totals_reset_sensitive" in report["data_quality"]
+
+
+def test_plugin_stats_use_canonical_plugin_module_name() -> None:
+    rows = api.aggregate_plugin_stats({
+        "bots": [
+            {
+                "plugins": [
+                    {
+                        "name": "pallas_plugin_sing",
+                        "runs": 78,
+                        "runs_today": 3,
+                        "avg_duration_ms_today": 100.0,
+                    }
+                ]
+            }
+        ]
+    })
+
+    assert rows == [
+        {
+            "module": "sing",
+            "runs": 78,
+            "runs_today": 3,
+            "errors": 0,
+            "errors_today": 0,
+            "duration_ms_today": 300.0,
+        }
+    ]
