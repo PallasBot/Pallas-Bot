@@ -233,11 +233,11 @@ def on_pallas_webui_config_reload(cfg: Config) -> None:
         frontend = "react"
     patch_console_meta(pallas_webui_dev_mode=dev_mode, frontend=frontend)
     if dev_mode:
-        logger.warning("Pallas-Bot 控制台: 已关闭 API 与静态页鉴权（仅限本机开发）")
+        logger.warning("[控制台] 已关闭 API 与静态页鉴权（仅限本机开发）")
     else:
-        logger.info("Pallas-Bot 控制台: 已恢复控制台 API 与静态页鉴权")
+        logger.info("[控制台] 已恢复控制台 API 与静态页鉴权")
     logger.info(
-        "Pallas-Bot 控制台: frontend={}（静态目录在启动时绑定，切换栈请重启）",
+        "[控制台] frontend={}（静态目录在启动时绑定，切换栈请重启）",
         frontend,
     )
     try:
@@ -245,7 +245,7 @@ def on_pallas_webui_config_reload(cfg: Config) -> None:
 
         reschedule_webui_auto_update_job(cfg)
     except Exception:  # noqa: BLE001
-        logger.exception("Pallas-Bot 控制台: 重载 WebUI 自动更新调度失败")
+        logger.exception("[控制台] 重载 WebUI 自动更新调度失败")
 
 
 plugin_webui = install_hot_reload_config(

@@ -253,11 +253,8 @@ def _line_matches_scope(line: str, scope: str) -> bool:
     """按日志切面过滤落盘行：无结构化 facet 时用行文分类，分不出则视为 other。"""
     if scope == "all":
         return True
-    if scope not in ("message", "console", "other", "webui", "protocol"):
+    if scope not in ("message", "console", "other", "webui"):
         return True
-    # 旧枚举兼容：webui→console；protocol 已废弃，不匹配任何行
-    if scope == "protocol":
-        return False
     want = "console" if scope == "webui" else scope
     from pallas.console.web.bot_web import classify_log_facet, parse_nonebot_log_line
 

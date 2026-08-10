@@ -2112,7 +2112,7 @@ def _cleanup_log_error_archives_sync() -> None:
             if path.exists():
                 path.unlink()
         except OSError as e:
-            logger.warning("Pallas-Bot 控制台: 删除 log_errors.jsonl 失败: {}", str(e))
+            logger.warning("[控制台] 删除 log_errors.jsonl 失败: {}", str(e))
         _LOG_ERROR_BUFFER.clear()
     _invalidate_log_error_public_cache()
 
@@ -2143,7 +2143,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
             if err_path.exists():
                 err_path.unlink()
         except OSError as e:
-            logger.warning("Pallas-Bot 控制台: 删除 matcher_errors.jsonl 失败: {}", str(e))
+            logger.warning("[控制台] 删除 matcher_errors.jsonl 失败: {}", str(e))
         for rec in _PLUGIN_RUN_STATS.values():
             if isinstance(rec, dict):
                 rec["matcher_error_log"] = []
@@ -2152,7 +2152,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
             if dur_path.exists():
                 dur_path.unlink()
         except OSError as e:
-            logger.warning("Pallas-Bot 控制台: 删除 matcher_durations.jsonl 失败: {}", str(e))
+            logger.warning("[控制台] 删除 matcher_durations.jsonl 失败: {}", str(e))
         for rec in _PLUGIN_RUN_STATS.values():
             if isinstance(rec, dict):
                 rec["matcher_duration_log"] = []
@@ -2172,7 +2172,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
         pass
     drop_read_cache(("plugin-run-stats:", "log-errors:", "home-overview"))
     logger.info(
-        "Pallas-Bot 控制台: 控制台异常记录已按计划清理（每日 4:00，"
+        "[控制台] 控制台异常记录已按计划清理（每日 4:00，"
         "matcher_errors.jsonl、matcher_durations.jsonl、log_errors.jsonl、分片 errors/*.jsonl 与进程内缓冲）"
     )
 
@@ -2773,7 +2773,7 @@ async def _scheduled_refresh_plugin_update_snapshot() -> None:
         await refresh_plugin_update_snapshot()
         drop_read_cache(("plugins-community-store", "plugins-official-extensions"))
     except Exception:  # noqa: BLE001
-        logger.exception("Pallas-Bot 控制台: 定时刷新插件更新快照失败")
+        logger.exception("[控制台] 定时刷新插件更新快照失败")
 
 
 async def _scheduled_refresh_plugin_store_assets() -> None:
@@ -2783,4 +2783,4 @@ async def _scheduled_refresh_plugin_store_assets() -> None:
         await refresh_store_asset_snapshot()
         drop_read_cache(("plugins-community-store", "plugins-official-extensions"))
     except Exception:  # noqa: BLE001
-        logger.exception("Pallas-Bot 控制台: 定时刷新插件商店资源快照失败")
+        logger.exception("[控制台] 定时刷新插件商店资源快照失败")

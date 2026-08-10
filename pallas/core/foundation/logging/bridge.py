@@ -49,6 +49,38 @@ _CHANNEL_ALIASES = (
     ("httpcore", "HTTP"),
 )
 
+_BUSINESS_LOG_LABELS = (
+    ("packages.repeater.learn_queue", "Learn"),
+    ("packages.repeater.learner", "Learn"),
+    ("packages.repeater.fanout", "Reply"),
+    ("packages.repeater.emoji", "Reaction"),
+    ("packages.repeater", "Repeater"),
+    ("packages.llm_chat", "Chat"),
+    ("packages.pb_webui", "控制台"),
+    ("packages.pb_core", "Core"),
+    ("packages.pb_stats", "Stats"),
+    ("packages.help", "Help"),
+    ("packages.blacklist", "Blacklist"),
+    ("packages.request_handler", "Request"),
+    ("packages.take_name", "TakeName"),
+    ("packages.drink", "Drink"),
+    ("packages", "Plugin"),
+    ("pallas_plugin_", "Plugin"),
+    ("nonebot_plugin_", "Plugin"),
+    ("pallas.product.llm", "LLM"),
+    ("pallas.product.persona", "Persona"),
+    ("pallas.product.corpus", "Corpus"),
+    ("pallas.product.message_scrub", "消息过滤"),
+    ("pallas.product", "Product"),
+    ("pallas.core.foundation.db", "数据库"),
+    ("pallas.core.platform", "Platform"),
+    ("pallas.core", "Core"),
+    ("pallas.console.cli", "CLI"),
+    ("pallas.console", "控制台"),
+    ("pallas.extensions", "Extension"),
+    ("pallas", "Pallas"),
+)
+
 _QUIET_LIBRARY_LOGGER_NAMES = (
     "uvicorn",
     "uvicorn.access",
@@ -91,6 +123,19 @@ def _stdlib_logger_channel_label(logger_name: str) -> str:
         if name == prefix.rstrip(".") or name.startswith(prefix):
             return alias
     return name
+
+
+def prefix_business_log_message(logger_name: str, message: str) -> str:
+    """为主仓业务日志补充稳定类别标签，保留调用方已有标签。"""
+    text = str(message or "")
+    stripped = text.lstrip()
+    if not stripped or stripped.startswith("["):
+        return text
+    name = (logger_name or "").strip()
+    for prefix, label in _BUSINESS_LOG_LABELS:
+        if name == prefix or name.startswith(f"{prefix}.") or (prefix.endswith("_") and name.startswith(prefix)):
+            return f"[{label}] {stripped}"
+    return text
 
 
 def _is_quiet_access_line(text: str) -> bool:
@@ -212,10 +257,12 @@ def install_startup_log_noise_patcher() -> None:
 
     def patcher(record: dict[str, Any]) -> None:
         _log_patcher(record)
-        plain = _COLOR_TAG_RE.sub("", str(record.get("message", "")))
+        message = str(record.get("message", ""))
+        plain = _COLOR_TAG_RE.sub("", message)
         if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(plain):
             record["level"].name = "DEBUG"
             record["level"].no = debug_no
+        record["message"] = prefix_business_log_message(str(record.get("name", "")), message)
 
     logger.configure(patcher=patcher)
 

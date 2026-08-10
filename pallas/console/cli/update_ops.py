@@ -154,7 +154,7 @@ async def apply_webui_dist_update(
     public = webui_public_path()
 
     logger.info(
-        "Pallas CLI: WebUI 在线更新开始 repo={} asset={} tag={}",
+        "[CLI] WebUI 在线更新开始 repo={} asset={} tag={}",
         repo_name,
         asset_name,
         tag_name or "(latest)",
@@ -174,7 +174,7 @@ async def apply_webui_dist_update(
     download_progress = map_webui_download_progress(report, base=8, span=72)
     for i, candidate in enumerate(url_candidates, start=1):
         short = candidate if len(candidate) <= 160 else candidate[:157] + "..."
-        logger.info("Pallas CLI: WebUI 更新尝试 {}/{} {}", i, len(url_candidates), short)
+        logger.info("[CLI] WebUI 更新尝试 {}/{} {}", i, len(url_candidates), short)
         report(6, f"尝试下载源 {i}/{len(url_candidates)}…")
         try:
             await download_and_extract_dist_zip(
@@ -189,7 +189,7 @@ async def apply_webui_dist_update(
         except Exception as e:  # noqa: BLE001
             err_msg = format_exception_for_log(e)
             errors.append(f"{candidate} -> {err_msg}")
-            logger.warning("Pallas CLI: WebUI 下载/解压失败 {}", err_msg)
+            logger.warning("[CLI] WebUI 下载/解压失败 {}", err_msg)
     if errors:
         raise WebuiUpdateError("下载失败: " + " | ".join(errors))
 
@@ -199,7 +199,7 @@ async def apply_webui_dist_update(
         new_tag = str(info.get("tag", "") or tag_name).strip()
     except Exception as e:  # noqa: BLE001
         logger.warning(
-            "Pallas CLI: 获取 WebUI release 元数据失败 tag={} err={}",
+            "[CLI] 获取 WebUI release 元数据失败 tag={} err={}",
             tag_name or "(空)",
             format_exception_for_log(e),
         )
@@ -219,7 +219,7 @@ async def apply_webui_dist_update(
         set_console_meta({**get_console_meta(), "version": effective_version})
         invalidate_health_snapshot()
 
-    logger.info("Pallas CLI: WebUI 已更新至 {}（发布 tag: {}）", effective_version, new_tag)
+    logger.info("[CLI] WebUI 已更新至 {}（发布 tag: {}）", effective_version, new_tag)
     report(100, f"更新成功（{effective_version}）")
     return {
         "tag": new_tag,

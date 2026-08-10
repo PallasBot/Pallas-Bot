@@ -31,7 +31,7 @@ async def test_bot_connect_ensures_runtime_storage(monkeypatch: pytest.MonkeyPat
     await mod.on_bot_connect(bot)
 
     assert ensure_calls == [1354970010]
-    assert ("Bot {} runtime storage initialized on connect.", ("1354970010",)) in info_calls
+    assert ("[Bot {:>10}] runtime storage initialized on connect.", ("1354970010",)) in info_calls
 
 
 @pytest.mark.asyncio
@@ -55,7 +55,7 @@ async def test_bot_connect_logs_when_runtime_storage_already_ready(monkeypatch: 
 
     await mod.on_bot_connect(bot)
 
-    assert ("Bot {} runtime storage already ready on connect.", ("1354970010",)) in info_calls
+    assert ("[Bot {:>10}] runtime storage already ready on connect.", ("1354970010",)) in info_calls
 
 
 @pytest.mark.asyncio
@@ -86,7 +86,7 @@ async def test_bot_connect_ignores_runtime_storage_failure(monkeypatch: pytest.M
     assert 1354970010 in mod.connected_bot_ids()
     assert len(warnings) == 1
     msg, args = warnings[0]
-    assert msg == "Bot {} runtime storage ensure failed: {}"
+    assert msg == "[Bot {:>10}] runtime storage ensure failed: {}"
     assert args[0] == "1354970010"
     assert str(args[1]) == "boom"
 
@@ -120,7 +120,7 @@ async def test_bot_connect_ensures_bot_config_row(monkeypatch: pytest.MonkeyPatc
     await mod.on_bot_connect(bot)
 
     assert ensure_calls == [1354970010]
-    assert ("bot_config ensured for Bot {}", ("1354970010",)) in info_calls
+    assert ("[Bot {:>10}] runtime config initialized.", ("1354970010",)) in info_calls
 
 
 @pytest.mark.asyncio
@@ -153,7 +153,7 @@ async def test_bot_connect_ignores_bot_config_failure(monkeypatch: pytest.Monkey
     assert 1354970010 in mod.connected_bot_ids()
     assert len(warnings) == 1
     msg, args = warnings[0]
-    assert msg == "Bot {} bot_config ensure failed: {}"
+    assert msg == "[Bot {:>10}] runtime config ensure failed: {}"
     assert args[0] == "1354970010"
     assert str(args[1]) == "db down"
 

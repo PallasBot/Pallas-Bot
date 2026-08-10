@@ -1,4 +1,6 @@
+import ast
 import logging
+from pathlib import Path
 
 from pallas.core.foundation.logging import event_log
 from pallas.core.foundation.logging.bridge import (
@@ -6,6 +8,7 @@ from pallas.core.foundation.logging.bridge import (
     ChannelLoguruHandler,
     _stdlib_logger_channel_label,
     is_matcher_lifecycle_noise,
+    prefix_business_log_message,
 )
 from pallas.core.foundation.logging.event_log import (
     compact_inbound_event_log,
@@ -40,6 +43,40 @@ def test_repo_console_log_format_aligns_level_and_source() -> None:
     assert "{{{name:<12}}}" in REPO_CONSOLE_LOG_FORMAT
 
 
+def test_business_log_messages_get_module_labels_without_duplicates() -> None:
+    assert prefix_business_log_message("packages.repeater.learn_queue", "queued batch") == "[Learn] queued batch"
+    assert prefix_business_log_message("packages.repeater.fanout_reply", "[Reply] sent") == "[Reply] sent"
+    assert prefix_business_log_message("packages.llm_chat.chat_message", "completed") == "[Chat] completed"
+    assert prefix_business_log_message("packages.roulette.service", "started") == "[Plugin] started"
+    assert prefix_business_log_message("pallas_plugin_protocol.runtime", "started") == "[Plugin] started"
+    assert prefix_business_log_message("nonebot_plugin_apscheduler", "job added") == "[Plugin] job added"
+    assert prefix_business_log_message("pallas.product.llm.client", "request failed") == "[LLM] request failed"
+    assert prefix_business_log_message("third_party.client", "unchanged") == "unchanged"
+
+
+def test_console_log_messages_use_bracketed_prefix() -> None:
+    root = Path(__file__).parents[2]
+    source_roots = (root / "packages" / "pb_webui", root / "pallas" / "console" / "webui")
+    legacy_prefixes = ("Pallas-Bot 控制台:", "Pallas-Bot 控制台：", "控制台:", "控制台：")
+
+    offenders: list[str] = []
+    for source_root in source_roots:
+        for path in source_root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or not node.args:
+                    continue
+                message = node.args[0]
+                if not isinstance(message, ast.Constant) or not isinstance(message.value, str):
+                    continue
+                if any(prefix in message.value for prefix in legacy_prefixes):
+                    offenders.append(f"{path.relative_to(root)}:{node.lineno}")
+                if "[控制台]  " in message.value:
+                    offenders.append(f"{path.relative_to(root)}:{node.lineno}")
+
+    assert not offenders
+
+
 def test_is_matcher_lifecycle_noise() -> None:
     assert is_matcher_lifecycle_noise(
         "Event will be handled by Matcher(type='message', module=packages.repeater.handlers.message, lineno=45)"
@@ -72,6 +109,17 @@ def test_compact_group_message_log_uses_readable_fields() -> None:
         message="就是屁股根那里",
     )
     assert out == "[Bot 3879348674] [群 1103771828] [用户 2879693316] 就是屁股根那里"
+
+
+def test_compact_group_message_log_aligns_id_fields_to_ten_digits() -> None:
+    out = event_log.compact_group_message_log(
+        bot_id="1",
+        group_id=22,
+        user_id=333,
+        message="正文",
+    )
+
+    assert out == "[Bot          1] [群         22] [用户        333] 正文"
 
 
 def test_inbound_log_with_angle_brackets_survives_loguru_colorizer() -> None:

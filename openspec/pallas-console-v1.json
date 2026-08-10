@@ -14303,9 +14303,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Body"
+                "$ref": "#/components/schemas/_LlmSingDefaultsBody"
               }
             }
           }
@@ -14315,7 +14313,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__LlmSingDefaultsData_"
+                }
               }
             }
           },
@@ -26484,6 +26484,28 @@
         ],
         "title": "_ApiOkResponse[_LlmRuntimeOverviewData]"
       },
+      "_ApiOkResponse__LlmSingDefaultsData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_LlmSingDefaultsData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_LlmSingDefaultsData]"
+      },
       "_ApiOkResponse__ServiceGatewaysConnectivityCheckData_": {
         "properties": {
           "ok": {
@@ -28430,6 +28452,128 @@
           "ok"
         ],
         "title": "_LlmRuntimeOverviewHealthData"
+      },
+      "_LlmSingDefaultsBody": {
+        "properties": {
+          "default_speaker": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Speaker"
+          },
+          "preferred_backend": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Backend"
+          },
+          "speaker_backends": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Backends"
+          },
+          "song_cache_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Song Cache Days"
+          },
+          "song_cache_size": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Song Cache Size"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "_LlmSingDefaultsBody"
+      },
+      "_LlmSingDefaultsData": {
+        "properties": {
+          "default_speaker": {
+            "type": "string",
+            "title": "Default Speaker"
+          },
+          "preferred_backend": {
+            "type": "string",
+            "title": "Preferred Backend"
+          },
+          "speaker_backends": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Speaker Backends"
+          },
+          "song_cache_days": {
+            "type": "integer",
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "Song Cache Days"
+          },
+          "song_cache_size": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 0.0,
+            "title": "Song Cache Size"
+          },
+          "writable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Writable"
+          }
+        },
+        "type": "object",
+        "required": [
+          "default_speaker",
+          "preferred_backend",
+          "speaker_backends",
+          "song_cache_days",
+          "song_cache_size"
+        ],
+        "title": "_LlmSingDefaultsData"
       },
       "_LlmTtsHealthData": {
         "properties": {

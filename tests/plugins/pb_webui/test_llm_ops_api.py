@@ -6,6 +6,8 @@ from fastapi.testclient import TestClient
 from packages.pb_webui import extended_api as mod
 from packages.pb_webui.config import Config
 
+SING_DEFAULTS_PATH = "/pallas/api/common-config/llm/media-models/sing/defaults"
+
 
 def _build_client(monkeypatch) -> TestClient:
     monkeypatch.setattr(mod, "_check_pallas_write_token", lambda *a, **k: None)
@@ -14,6 +16,58 @@ def _build_client(monkeypatch) -> TestClient:
     app = FastAPI()
     mod.register_extended_api(app, api_base="/pallas/api", plugin_config=Config())
     return TestClient(app)
+
+
+def test_sing_defaults_accepts_cache_settings_only(monkeypatch) -> None:
+    received: dict[str, object] = {}
+    defaults = {
+        "default_speaker": "pallas",
+        "preferred_backend": "ddsp-svc",
+        "speaker_backends": {"pallas": "ddsp-svc"},
+        "song_cache_days": 90,
+        "song_cache_size": 250,
+        "writable": True,
+    }
+
+    async def fake_put_sing_defaults(body):
+        received.update(body)
+        return defaults
+
+    monkeypatch.setattr("pallas.product.llm.ops_api.put_sing_defaults", fake_put_sing_defaults)
+
+    client = _build_client(monkeypatch)
+    response = client.put(
+        SING_DEFAULTS_PATH,
+        json={"song_cache_days": 90, "song_cache_size": 250},
+    )
+
+    assert response.status_code == 200, response.text
+    assert received == {"song_cache_days": 90, "song_cache_size": 250}
+    assert response.json() == {"ok": True, "data": defaults}
+
+
+def test_sing_defaults_rejects_invalid_cache_settings(monkeypatch) -> None:
+    client = _build_client(monkeypatch)
+
+    for body in (
+        {"song_cache_days": 0},
+        {"song_cache_days": 3651},
+        {"song_cache_size": -1},
+        {"song_cache_size": 10001},
+        {"song_cache_days": True},
+        {"song_cache_days": "90"},
+        {"song_cache_size": 2.5},
+    ):
+        response = client.put(SING_DEFAULTS_PATH, json=body)
+        assert response.status_code == 422, response.text
+
+
+def test_sing_defaults_rejects_empty_body(monkeypatch) -> None:
+    client = _build_client(monkeypatch)
+
+    response = client.put(SING_DEFAULTS_PATH, json={})
+
+    assert response.status_code == 400, response.text
 
 
 def test_llm_history_stats_and_clear(monkeypatch) -> None:
