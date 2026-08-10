@@ -25,6 +25,23 @@ class WebuiUpdateError(Exception):
         super().__init__(detail)
 
 
+def validate_docker_bot_update(
+    deployment: dict[str, Any],
+    *,
+    mode: str,
+    strategy: str = "safe",
+) -> bool:
+    if deployment.get("deployment_mode") != "docker":
+        return False
+    from packages.pb_webui.manager import BotGitUpdateError
+
+    if mode != "release":
+        raise BotGitUpdateError("Docker 部署仅支持正式 Release 更新；不支持 Commit 或分支更新")
+    if strategy == "force":
+        raise BotGitUpdateError("Docker Release 更新不支持 force/reset 语义")
+    return True
+
+
 async def sync_docker_release_dependencies(
     root: Path,
     *,
@@ -242,9 +259,7 @@ async def apply_bot_update(
     )
     try:
         deployment = inspect_bot_deployment()
-        if deployment.get("deployment_mode") == "docker":
-            if update_track != "release":
-                raise BotGitUpdateError("Docker 部署仅支持正式 Release 更新；分支更新需要 Git 工作副本")
+        if validate_docker_bot_update(deployment, mode=update_track):
             result = await apply_docker_bot_release(
                 github_token=token,
                 repo=repo,

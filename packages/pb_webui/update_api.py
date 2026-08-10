@@ -411,7 +411,7 @@ def register_update_router(
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from packages.pb_webui.manager import BotGitUpdateError
         from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
-        from pallas.console.cli.update_ops import apply_docker_bot_release
+        from pallas.console.cli.update_ops import apply_docker_bot_release, validate_docker_bot_update
         from pallas.console.webui.update_apply_progress import (
             create_update_apply_job,
             run_update_apply_job,
@@ -444,11 +444,7 @@ def register_update_router(
 
             try:
                 deployment = inspect_bot_deployment()
-                if deployment.get("deployment_mode") == "docker":
-                    if apply_mode != "release":
-                        raise BotGitUpdateError("Docker 部署仅支持正式 Release 更新；不支持 Commit 或分支更新")
-                    if apply_strategy == "force":
-                        raise BotGitUpdateError("Docker Release 更新不支持 force/reset 语义")
+                if validate_docker_bot_update(deployment, mode=apply_mode, strategy=apply_strategy):
                     result = await apply_docker_bot_release(
                         github_token=github_token,
                         repo="PallasBot/Pallas-Bot",

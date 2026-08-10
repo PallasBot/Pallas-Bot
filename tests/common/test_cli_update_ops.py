@@ -6,7 +6,14 @@ import pytest
 
 from packages.pb_webui.manager import BotGitUpdateError
 from pallas.console.cli import update_ops
-from pallas.console.cli.update_ops import apply_bot_update
+from pallas.console.cli.update_ops import apply_bot_update, validate_docker_bot_update
+
+
+def test_validate_docker_bot_update_capabilities() -> None:
+    assert validate_docker_bot_update({"deployment_mode": "release_tag"}, mode="branch") is False
+    assert validate_docker_bot_update({"deployment_mode": "docker"}, mode="release") is True
+    with pytest.raises(BotGitUpdateError, match="force/reset"):
+        validate_docker_bot_update({"deployment_mode": "docker"}, mode="release", strategy="force")
 
 
 @pytest.mark.asyncio

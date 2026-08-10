@@ -182,6 +182,15 @@ def _any_auto_enabled(cfg: Any) -> bool:
     )
 
 
+def bot_auto_update_eligibility(deploy: dict[str, Any], update_track: str) -> tuple[bool, str]:
+    mode = str(deploy.get("deployment_mode") or "").strip()
+    if update_track == "branch":
+        eligible = bool(deploy.get("git_available")) and mode != "docker"
+    else:
+        eligible = mode in {"release_tag", "docker"}
+    return eligible, "" if eligible else mode or "unknown"
+
+
 def auto_update_status_payload(config: Any | None = None) -> dict[str, Any]:
     cfg = config if config is not None else get_pallas_webui_config()
     state = load_auto_update_state()
@@ -194,10 +203,7 @@ def auto_update_status_payload(config: Any | None = None) -> dict[str, Any]:
 
     update_track = normalize_bot_update_track(getattr(cfg, "pallas_bot_update_track", "release"))
     update_branch = normalize_bot_git_track_branch(getattr(cfg, "pallas_bot_update_branch", "") or "")
-    if update_track == "branch":
-        auto_apply_eligible = bool(deploy.get("git_available")) and mode != "docker"
-    else:
-        auto_apply_eligible = mode in {"release_tag", "docker"}
+    auto_apply_eligible, _ = bot_auto_update_eligibility(deploy, update_track)
     web = state["targets"]["webui"]
     bot = state["targets"]["bot"]
     plugins = state["targets"]["plugins"]
@@ -378,13 +384,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         return out
 
     deploy = inspect_bot_deployment()
-    mode = str(deploy.get("deployment_mode") or "").strip()
-    if update_track == "branch":
-        eligible = bool(deploy.get("git_available")) and mode != "docker"
-        skip_reason = (mode or "unknown") if not eligible else ""
-    else:
-        eligible = mode in {"release_tag", "docker"}
-        skip_reason = (mode or "unknown") if not eligible else ""
+    eligible, skip_reason = bot_auto_update_eligibility(deploy, update_track)
     if not eligible:
         out = {"result": "skipped", "reason": f"deploy:{skip_reason or 'unknown'}"}
         _patch_target(
