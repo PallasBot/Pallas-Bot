@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from threading import Lock
-from typing import Literal, Self
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.console.webui.field_help import field_help
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value, repo_layered_dotenv_files_exist
@@ -66,34 +66,6 @@ def dispatch_env_float(name_upper: str, *, default: float, minimum: float) -> fl
         return default
 
 
-def normalize_message_runtime_mode(value: object) -> str:
-    text = str(value or "").strip().lower()
-    return {"legacy": "matcher", "native": "direct"}.get(text, text)
-
-
-def dispatch_env_message_runtime_mode() -> Literal["matcher", "shadow", "direct"]:
-    raw = dispatch_env_raw("PALLAS_MESSAGE_RUNTIME_MODE")
-    normalized = normalize_message_runtime_mode(raw)
-    if normalized in {"matcher", "shadow", "direct"}:
-        return normalized
-    return "matcher"
-
-
-def dispatch_env_group_ids(name_upper: str) -> tuple[int, ...]:
-    raw = dispatch_env_raw(name_upper)
-    if raw is None:
-        return ()
-    group_ids: list[int] = []
-    for part in raw.split(","):
-        try:
-            group_id = int(part.strip())
-        except ValueError:
-            continue
-        if group_id > 0 and group_id not in group_ids:
-            group_ids.append(group_id)
-    return tuple(group_ids)
-
-
 class IngressDispatchRuntimeConfig(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
@@ -115,38 +87,6 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "触发后社区语料 prefetch 等后台任务会暂时让路",
         ),
     )
-    message_runtime_mode: Literal["matcher", "shadow", "direct"] = Field(
-        default="matcher",
-        description=field_help(
-            "MessageRuntime 试验模式",
-            "默认 matcher 使用 NoneBot matcher；shadow 仅采样；direct 仅用于明确灰度群",
-            "变更后需重启 Bot，正式发版前会移除试验项",
-        ),
-    )
-    message_runtime_canary_groups: tuple[int, ...] = Field(
-        default=(),
-        description=field_help(
-            "MessageRuntime 灰度群",
-            "逗号分隔群号；shadow 仅采样，direct 只在这些群启用",
-            "变更后需重启 Bot，正式发版前会移除试验项",
-        ),
-    )
-    message_runtime_telemetry_enabled: bool = Field(
-        default=False,
-        description=field_help(
-            "保存 MessageRuntime 试验差异",
-            "仅保存结构化结果，不保存消息正文；默认关闭",
-            "变更后需重启 Bot，正式发版前会移除试验项",
-        ),
-    )
-    message_runtime_telemetry_retention_hours: int = Field(default=168, ge=1, le=720)
-    message_runtime_agreement_sample_rate: int = Field(default=1000, ge=1, le=1_000_000)
-
-    @field_validator("message_runtime_mode", mode="before")
-    @classmethod
-    def normalize_runtime_mode(cls, value: object) -> object:
-        return normalize_message_runtime_mode(value)
-
     chat_drop_on_overload: bool = Field(
         default=False,
         description=field_help(
@@ -376,23 +316,6 @@ class IngressDispatchRuntimeConfig(BaseModel):
                 default=24,
                 minimum=1,
                 maximum=256,
-            ),
-            message_runtime_mode=dispatch_env_message_runtime_mode(),
-            message_runtime_canary_groups=dispatch_env_group_ids("PALLAS_MESSAGE_RUNTIME_CANARY_GROUPS"),
-            message_runtime_telemetry_enabled=dispatch_env_bool(
-                "PALLAS_MESSAGE_RUNTIME_TELEMETRY_ENABLED", default=False
-            ),
-            message_runtime_telemetry_retention_hours=dispatch_env_int(
-                "PALLAS_MESSAGE_RUNTIME_TELEMETRY_RETENTION_HOURS",
-                default=168,
-                minimum=1,
-                maximum=720,
-            ),
-            message_runtime_agreement_sample_rate=dispatch_env_int(
-                "PALLAS_MESSAGE_RUNTIME_AGREEMENT_SAMPLE_RATE",
-                default=1000,
-                minimum=1,
-                maximum=1_000_000,
             ),
             chat_drop_on_overload=dispatch_env_bool("PALLAS_INGRESS_CHAT_DROP_ON_OVERLOAD", default=False),
             route_index_enabled=dispatch_env_bool("PALLAS_ROUTE_INDEX_ENABLED", default=True),

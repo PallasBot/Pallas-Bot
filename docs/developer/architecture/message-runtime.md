@@ -55,21 +55,9 @@ fallback 表示 direct **没有处理**本次消息，由 matcher 接管；conti
 
 常见 fallback 原因包括权限不满足、玩法当前未激活或 handler 约束不成立。continuation 只用于同一消息确实需要 direct 与 matcher 协作的少数场景，不应作为迁移期间的默认保险开关。
 
-## 观测
+## 运行指标
 
-入口按处理结果记录以下稳定字段：
-
-| 字段 | 含义 |
-| --- | --- |
-| `direct_handled` | direct 完成且没有 fallback。 |
-| `direct_fallback` | direct 未接管，消息继续进入 matcher。 |
-| `direct_error` | direct handler 或提交阶段发生错误。 |
-| `direct_visible_actions` | direct 产生的可见回复动作数。 |
-| `direct_effect_actions` | direct 产生的任务与完成效果数。 |
-
-分析迁移效果时应同时比较消息量、命令构成、`matchers_selected`、耗时和完成结果，不能只用“考虑过多少 matcher”推断吞吐提升。候选命令应先依据真实使用量和当前 fallback 原因排序，再逐个验证。
-
-历史记录中的 `native_*` / `legacy_*` 字段仍可兼容读取；旧配置值 `native` 也会归一化为 `direct`。新代码、配置说明和 telemetry 展示统一使用 `direct` / `matcher`，避免把 matcher 描述成待淘汰的 legacy。
+入口持续维护不含消息正文的聚合 ingress 指标，包括消息量、`matchers_selected`、耗时与 direct/matcher 完成结果。它们用于发现过载和选择后续迁移候选；不再写入逐消息的试验 JSONL 或保留灰度差异记录。
 
 ## 插件归属与渐进接入
 

@@ -46,12 +46,9 @@ from pallas.core.platform.ingress.route_candidate_metrics import record_route_ca
 from pallas.core.platform.ingress.route_index import RouteResolution, matcher_module_key
 from pallas.core.platform.message_runtime.lifecycle import (
     direct_runtime_for_group,
-    record_direct_execution,
-    shadow_experiment_for_group,
 )
 from pallas.core.platform.message_runtime.matcher_adapter import MatcherAdapter
 from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext
-from pallas.core.platform.message_runtime.shadow import MatcherExecution
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
 
 if TYPE_CHECKING:
@@ -161,25 +158,6 @@ def message_runtime_context(
         command_traffic=command_traffic,
         route_modules=resolution.matched_modules if resolution is not None else frozenset(),
     )
-
-
-def record_message_runtime_shadow(
-    experiment: Any,
-    context: MessageContext,
-    plan: Any,
-    *,
-    handler_ids: tuple[str, ...],
-    handled: bool,
-) -> None:
-    try:
-        experiment.record_matcher(
-            context,
-            plan,
-            MatcherExecution(handler_ids=handler_ids, handled=handled, visible_actions=0),
-            timestamp=int(time.time()),
-        )
-    except Exception:
-        logger.exception("MessageRuntime shadow record failed")
 
 
 def select_synthetic_llm_command_matchers(selected_matchers: list[type], resolution: RouteResolution) -> list[type]:
@@ -339,24 +317,6 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
             apply_dispatch = isinstance(event, GroupMessageEvent)
             resolution = resolve_route_for_event(event) if apply_dispatch else None
             command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
-            shadow_experiment = None
-            shadow_context = None
-            shadow_plan = None
-            if apply_dispatch:
-                shadow_experiment = shadow_experiment_for_group(int(getattr(event, "group_id", 0) or 0))
-                if shadow_experiment is not None:
-                    try:
-                        shadow_context = message_runtime_context(
-                            bot,
-                            event,
-                            command_traffic=command_traffic,
-                            resolution=resolution,
-                        )
-                        shadow_plan = await shadow_experiment.plan(shadow_context)
-                    except Exception:
-                        logger.exception("MessageRuntime shadow plan failed")
-                        shadow_experiment = None
-                        shadow_context = None
             if apply_dispatch:
                 direct_matcher_exclude_modules = frozenset()
                 direct_outcome = None
@@ -369,13 +329,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                             command_traffic=command_traffic,
                             resolution=resolution,
                         )
-                        direct_started = time.perf_counter()
                         direct_outcome = await direct_runtime.execute_and_commit(direct_context, bot=bot, event=event)
-                        record_direct_execution(
-                            direct_context,
-                            direct_outcome,
-                            duration_ms=(time.perf_counter() - direct_started) * 1000.0,
-                        )
                     except Exception:
                         logger.exception("MessageRuntime direct execution failed")
                     else:
@@ -419,14 +373,6 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         matchers_selected=0,
                         matchers_run=0,
                     )
-                    if shadow_experiment is not None and shadow_context is not None and shadow_plan is not None:
-                        record_message_runtime_shadow(
-                            shadow_experiment,
-                            shadow_context,
-                            shadow_plan,
-                            handler_ids=(),
-                            handled=False,
-                        )
                     await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
                     return
                 # 默认：继续跑闲聊 matcher，标记降质（停附属、保本地接话）
@@ -514,15 +460,6 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         selected_matcher_modules,
                         acquired_matcher_modules,
                     )
-                if shadow_experiment is not None and shadow_context is not None and shadow_plan is not None:
-                    record_message_runtime_shadow(
-                        shadow_experiment,
-                        shadow_context,
-                        shadow_plan,
-                        handler_ids=tuple(sorted(set(matcher_modules))),
-                        handled=any_matcher_executed,
-                    )
-
                 await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
             finally:
                 if chat_degraded_token is not None:

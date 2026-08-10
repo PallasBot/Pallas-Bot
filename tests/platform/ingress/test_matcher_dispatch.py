@@ -14,7 +14,7 @@ from pallas.core.platform.ingress import dispatch_lanes, message_load
 from pallas.core.platform.ingress import matcher_activation as activation
 from pallas.core.platform.ingress import matcher_dispatch as dispatch
 from pallas.core.platform.ingress.route_index import RouteResolution
-from pallas.core.platform.message_runtime.models import HandlingOutcome, HandlingPlan, SendAction
+from pallas.core.platform.message_runtime.models import HandlingOutcome, SendAction
 
 
 def test_synthetic_llm_command_context_reads_structured_marker() -> None:
@@ -327,8 +327,6 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     pre_mock = AsyncMock(return_value=True)
     post_mock = AsyncMock()
     run_matcher = AsyncMock()
-    experiment = MagicMock()
-    experiment.plan = AsyncMock(return_value=HandlingPlan(kind="matcher", handler_ids=(), reason="chat_traffic"))
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
     monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
@@ -342,11 +340,6 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     monkeypatch.setattr(dispatch, "is_overloaded", lambda: True)
     monkeypatch.setattr(dispatch, "record_chatter_overload_dropped", lambda: None)
     monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
-    monkeypatch.setattr(
-        dispatch,
-        "shadow_experiment_for_group",
-        lambda group_id: experiment if group_id == 100 else None,
-    )
     monkeypatch.setattr(dispatch, "matchers", {1: [PassiveMatcher]})
 
     await dispatch.patched_handle_event(bot, event)
@@ -354,8 +347,6 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
     run_matcher.assert_not_awaited()
-    experiment.plan.assert_awaited_once()
-    experiment.record_matcher.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -434,69 +425,6 @@ async def test_patched_handle_event_degrades_chat_when_overloaded_by_default(
 
 
 @pytest.mark.asyncio
-async def test_shadow_runtime_plans_after_preprocessing_and_keeps_legacy_matchers(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    class FakeGroupMessageEvent:
-        group_id = 100
-        message_id = 200
-        raw_message = "#pallas"
-        to_me = False
-
-        def get_log_string(self) -> str:
-            return "fake group message"
-
-        def get_plaintext(self) -> str:
-            return "#pallas"
-
-    class StatusMatcher:
-        plugin_name = "pb_core"
-        rule = Rule()
-
-    bot = MagicMock(type="OneBot V11", self_id="10001")
-    event = FakeGroupMessageEvent()
-    pre_mock = AsyncMock(return_value=True)
-    post_mock = AsyncMock()
-    experiment = MagicMock()
-    experiment.plan = AsyncMock(return_value=HandlingPlan(kind="matcher", handler_ids=(), reason="unregistered"))
-
-    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
-    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
-    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", post_mock)
-    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
-    monkeypatch.setattr(
-        dispatch,
-        "resolve_route_for_event",
-        lambda _event: RouteResolution(frozenset({"pb_core"}), True),
-    )
-    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(dispatch, "is_overloaded", lambda: False)
-    monkeypatch.setattr(dispatch, "select_priority_matchers", lambda pool, **_kwargs: list(pool))
-    monkeypatch.setattr(dispatch, "check_and_run_matcher_with_lane", AsyncMock(return_value=MagicMock(acquired=True)))
-    monkeypatch.setattr(dispatch, "matcher_dispatch_batches", lambda selected: [selected])
-    monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
-    monkeypatch.setattr(dispatch, "signal_overload", lambda *_args, **_kwargs: None)
-    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
-    monkeypatch.setattr(
-        dispatch,
-        "shadow_experiment_for_group",
-        lambda group_id: experiment if group_id == 100 else None,
-    )
-    monkeypatch.setattr(dispatch, "matchers", {1: [StatusMatcher]})
-
-    await dispatch.patched_handle_event(bot, event)
-
-    pre_mock.assert_awaited_once()
-    experiment.plan.assert_awaited_once()
-    context = experiment.plan.await_args.args[0]
-    assert context.group_id == 100
-    assert context.route_modules == frozenset({"pb_core"})
-    experiment.record_matcher.assert_called_once()
-    post_mock.assert_awaited_once()
-
-
-@pytest.mark.asyncio
 async def test_direct_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeGroupMessageEvent:
         group_id = 100
@@ -540,7 +468,6 @@ async def test_direct_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: 
     monkeypatch.setattr(
         dispatch, "direct_runtime_for_group", lambda group_id: native_runtime if group_id == 100 else None
     )
-    monkeypatch.setattr(dispatch, "shadow_experiment_for_group", lambda _group_id: None)
     monkeypatch.setattr(dispatch, "record_route_index_decision", lambda **_kwargs: None)
     monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
     monkeypatch.setattr(dispatch, "record_route_candidate_safe", record_candidate)
@@ -594,7 +521,6 @@ async def test_direct_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest
     )
     monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(dispatch, "direct_runtime_for_group", lambda _group_id: native_runtime)
-    monkeypatch.setattr(dispatch, "shadow_experiment_for_group", lambda _group_id: None)
     monkeypatch.setattr(dispatch, "record_route_index_decision", lambda **_kwargs: None)
     monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
     monkeypatch.setattr(dispatch, "record_route_candidate_safe", record_candidate)

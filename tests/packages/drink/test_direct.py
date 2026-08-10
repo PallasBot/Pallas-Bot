@@ -7,7 +7,7 @@ import pytest
 
 from packages.drink.direct import DrinkDirectHandler
 from pallas.core.platform.message_runtime.handlers import RuntimeHandlerRegistry
-from pallas.core.platform.message_runtime.models import MessageContext, RuntimeMode
+from pallas.core.platform.message_runtime.models import MessageContext
 from pallas.core.platform.message_runtime.planner import MessagePlanner
 from pallas.core.platform.message_runtime.runtime import MessageRuntime
 
@@ -48,14 +48,14 @@ def test_drink_native_handler_only_owns_drink_route() -> None:
 
 
 @pytest.mark.asyncio
-async def test_shadow_planning_has_no_permission_or_service_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_planning_has_no_permission_or_service_side_effects(monkeypatch: pytest.MonkeyPatch) -> None:
     permission = AsyncMock()
     drink = AsyncMock()
     monkeypatch.setattr("packages.drink.direct.satisfies_command_permission", permission)
     monkeypatch.setattr("packages.drink.direct.service.drink", drink)
     registry = RuntimeHandlerRegistry()
     registry.register(DrinkDirectHandler())
-    runtime = MessageRuntime(RuntimeMode.SHADOW, MessagePlanner(registry), registry)
+    runtime = MessageRuntime(MessagePlanner(registry), registry)
 
     plan = await runtime.submit(context("牛牛喝酒"))
 
@@ -135,7 +135,7 @@ async def test_deferred_failure_does_not_turn_into_legacy_fallback(monkeypatch: 
     )
     registry = RuntimeHandlerRegistry()
     registry.register(DrinkDirectHandler())
-    runtime = MessageRuntime(RuntimeMode.DIRECT, MessagePlanner(registry), registry)
+    runtime = MessageRuntime(MessagePlanner(registry), registry)
 
     outcome = await runtime.execute_and_commit(
         context("牛牛喝酒"),

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pytest
 
 from pallas.core.platform.bot_runtime import ingress_dispatch_runtime as runtime
@@ -58,21 +56,8 @@ async def test_runtime_starts_and_stops_conversation_scheduler_in_order(monkeypa
     monkeypatch.setattr(runtime, "is_hub_role", lambda: False)
     monkeypatch.setattr(runtime, "get_driver", lambda: driver)
     monkeypatch.setattr(runtime, "route_index_enabled", lambda: False)
-    monkeypatch.setattr(
-        runtime,
-        "get_ingress_dispatch_runtime_config",
-        lambda: SimpleNamespace(
-            message_runtime_mode="shadow",
-            message_runtime_canary_groups=(100,),
-            message_runtime_telemetry_enabled=True,
-            message_runtime_telemetry_retention_hours=24,
-            message_runtime_agreement_sample_rate=10,
-        ),
-    )
-    monkeypatch.setattr(runtime, "configure_shadow_experiment", lambda **_kwargs: events.append("configure_shadow"))
-    monkeypatch.setattr(runtime, "start_shadow_experiment_flush_loop", lambda: events.append("start_shadow_flush"))
-    monkeypatch.setattr(runtime, "flush_shadow_experiment", lambda: events.append("flush_shadow"))
-    monkeypatch.setattr(runtime, "stop_shadow_experiment_flush_loop", lambda: record_async("stop_shadow_flush"))
+    monkeypatch.setattr(runtime, "get_ingress_dispatch_runtime_config", lambda: object())
+    monkeypatch.setattr(runtime, "configure_direct_runtime", lambda: events.append("configure_direct"))
     monkeypatch.setattr(runtime, "install_send_queue", lambda: events.append("install_send"))
     monkeypatch.setattr(runtime, "start_send_queue_workers", lambda: record_async("start_send"))
     monkeypatch.setattr(runtime, "start_conversation_scheduler", lambda: record_async("start_scheduler"))
@@ -93,8 +78,7 @@ async def test_runtime_starts_and_stops_conversation_scheduler_in_order(monkeypa
     await driver.shutdown()
 
     assert events == [
-        "configure_shadow",
-        "start_shadow_flush",
+        "configure_direct",
         "install_send",
         "start_send",
         "start_scheduler",
@@ -105,6 +89,4 @@ async def test_runtime_starts_and_stops_conversation_scheduler_in_order(monkeypa
         "uninstall_matcher",
         "stop_send",
         "uninstall_send",
-        "stop_shadow_flush",
-        "flush_shadow",
     ]

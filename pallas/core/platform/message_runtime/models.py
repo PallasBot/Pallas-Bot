@@ -1,27 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from pallas.core.platform.work_jobs.models import WorkJob
-
-
-class RuntimeMode(StrEnum):
-    MATCHER = "matcher"
-    SHADOW = "shadow"
-    DIRECT = "direct"
-
-    @classmethod
-    def _missing_(cls, value: object) -> RuntimeMode | None:
-        return {
-            "legacy": cls.MATCHER,
-            "native": cls.DIRECT,
-        }.get(str(value).strip().lower())
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,13 +20,6 @@ class MessageContext:
     is_to_me: bool
     command_traffic: bool
     route_modules: frozenset[str]
-
-    def telemetry_fields(self) -> dict[str, str]:
-        return {
-            "event_id_hash": _telemetry_text_hash(self.ingress_id),
-            "bot_id_hash": _telemetry_id_hash(self.bot_id),
-            "group_id_hash": _telemetry_id_hash(self.group_id),
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,11 +111,3 @@ class HandlingOutcome:
     @property
     def legacy_exclude_modules(self) -> frozenset[str]:
         return self.matcher_exclude_modules
-
-
-def _telemetry_id_hash(value: int) -> str:
-    return _telemetry_text_hash(str(value))
-
-
-def _telemetry_text_hash(value: str) -> str:
-    return hashlib.sha256(f"message-runtime:{value}".encode()).hexdigest()[:16]

@@ -14,19 +14,17 @@ if TYPE_CHECKING:
     from nonebot.adapters import Bot, Event
 
     from .handlers import RuntimeHandlerRegistry
-    from .models import HandlingPlan, MessageContext, RuntimeMode
+    from .models import HandlingPlan, MessageContext
     from .planner import MessagePlanner
 
 
 class MessageRuntime:
     def __init__(
         self,
-        mode: RuntimeMode,
         planner: MessagePlanner,
         registry: RuntimeHandlerRegistry,
         action_committer: ActionCommitter | None = None,
     ) -> None:
-        self._mode = mode
         self._planner = planner
         self._registry = registry
         self._action_committer = action_committer or ActionCommitter(build_work_job_store)
