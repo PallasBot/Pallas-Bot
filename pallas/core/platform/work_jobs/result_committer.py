@@ -37,6 +37,10 @@ class WorkResultCommitter:
         if not result.actions:
             return False
         for action in result.actions:
+            try:
+                action.validate()
+            except ValueError as exc:
+                raise WorkResultCommitError(str(exc)) from exc
             ok, _response = await self._dispatcher(
                 action.action,
                 action.target_bot_id,

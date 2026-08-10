@@ -28,11 +28,13 @@ from pallas.core.foundation.config.repo_settings import (
     repo_settings_files_exist,
     upsert_repo_settings_items,
 )
+from pallas.core.foundation.db.modules import SingProgress
 
 __all__ = [
     # 配置模型
     "BotConfig",
     "GroupConfig",
+    "SingProgress",
     "TaskManager",
     "UserConfig",
     # 管理员

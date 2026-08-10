@@ -46,19 +46,7 @@ async def resolve_callback_task(task_id: str) -> dict | None:
     rec = claim_ai_task_record(task_id)
     if not rec:
         return None
-    return {
-        "bot_id": rec.get("bot_id"),
-        "group_id": rec.get("group_id"),
-        "user_id": rec.get("user_id"),
-        "task_type": rec.get("task_type"),
-        "user_text": rec.get("user_text"),
-        "fallback_text": rec.get("fallback_text"),
-        "candidate_pool": rec.get("candidate_pool"),
-        "llm_route": rec.get("llm_route"),
-        "behavior_scene": rec.get("behavior_scene"),
-        "last_reply_text": rec.get("last_reply_text"),
-        "recent_reply_texts": rec.get("recent_reply_texts"),
-    }
+    return dict(rec)
 
 
 async def run_ai_callback(

@@ -1057,6 +1057,98 @@ async def test_run_ai_callback_sing_registry_fallback_uses_registered_bot(monkey
 
 
 @pytest.mark.asyncio
+async def test_resolve_callback_task_recovers_unified_task_after_memory_loss(monkeypatch) -> None:
+    import asyncio
+
+    from pallas.core.platform.shard.coord import ai_task_registry
+
+    records: dict[str, dict] = {}
+
+    def write_record(rec: dict, *, ttl_sec: int) -> bool:
+        assert ttl_sec > 0
+        records[str(rec["task_id"])] = dict(rec)
+        return True
+
+    monkeypatch.setattr(ai_task_registry, "write_ai_task_redis_sync", write_record)
+    monkeypatch.setattr(ai_task_registry, "read_ai_task_redis_sync", lambda task_id: records.get(task_id))
+    monkeypatch.setattr(ai_task_registry, "claim_ai_task_redis_sync", lambda task_id: records.pop(task_id, None))
+    monkeypatch.setattr(ai_task_registry, "remove_ai_task_redis_sync", lambda task_id: records.pop(task_id, None))
+    monkeypatch.setattr(ai_task_registry.shard_ctx, "sharding_active", lambda: False)
+    ai_callback_runner.TaskManager._tasks = {}
+    ai_callback_runner.TaskManager._lock = asyncio.Lock()
+    ai_task_registry.register_ai_task(
+        "sing-task-unified-restart",
+        {
+            "bot_id": "2927116873",
+            "group_id": 626266902,
+            "user_id": 123456789,
+            "task_type": "chat_drunk",
+            "user_text": "再来一杯",
+            "fallback_text": "语料原文",
+            "candidate_pool": ["第一条", "第二条"],
+            "llm_route": "repeater_polish",
+            "behavior_scene": "drunk_chat",
+            "last_reply_text": "上一条回复",
+            "recent_reply_texts": ["较早回复", "上一条回复"],
+            "want_tts": True,
+        },
+    )
+
+    result = await ai_callback_runner.resolve_callback_task("sing-task-unified-restart")
+
+    assert result is not None
+    assert result["bot_id"] == "2927116873"
+    assert result["group_id"] == 626266902
+    assert result["candidate_pool"] == ["第一条", "第二条"]
+    assert result["want_tts"] is True
+    assert await ai_callback_runner.resolve_callback_task("sing-task-unified-restart") is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_callback_task_does_not_claim_memory_and_registry_concurrently(monkeypatch) -> None:
+    import asyncio
+    import time
+
+    task = {
+        "bot_id": "2927116873",
+        "group_id": 626266902,
+        "user_id": 123456789,
+        "task_type": "sing",
+        "start_time": time.time(),
+    }
+    records = {"sing-task-race": dict(task)}
+    remove_started = asyncio.Event()
+    allow_remove = asyncio.Event()
+
+    def remove_record(task_id: str) -> None:
+        records.pop(task_id, None)
+
+    async def deferred_to_thread(function, *args):
+        remove_started.set()
+        await allow_remove.wait()
+        return function(*args)
+
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.coord.ai_task_registry.remove_ai_task",
+        remove_record,
+    )
+    monkeypatch.setattr("pallas.core.foundation.config.asyncio.to_thread", deferred_to_thread)
+    monkeypatch.setattr(ai_callback_runner, "claim_ai_task_record", lambda task_id: records.pop(task_id, None))
+    ai_callback_runner.TaskManager._tasks = {"sing-task-race": dict(task)}
+    ai_callback_runner.TaskManager._lock = asyncio.Lock()
+
+    first = asyncio.create_task(ai_callback_runner.resolve_callback_task("sing-task-race"))
+    await asyncio.wait_for(remove_started.wait(), timeout=1)
+    second = asyncio.create_task(ai_callback_runner.resolve_callback_task("sing-task-race"))
+    await asyncio.sleep(0.05)
+    allow_remove.set()
+    first_result, second_result = await asyncio.gather(first, second)
+
+    assert first_result == task
+    assert second_result is None
+
+
+@pytest.mark.asyncio
 async def test_send_group_voice_uses_message_segment_record() -> None:
     from nonebot.adapters.onebot.v11 import MessageSegment
 

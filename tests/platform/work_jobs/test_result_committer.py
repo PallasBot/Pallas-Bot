@@ -30,7 +30,9 @@ async def test_result_committer_dispatches_actions_in_order() -> None:
 async def test_result_committer_raises_when_an_action_is_not_accepted() -> None:
     dispatch = AsyncMock(return_value=(False, None))
     committer = WorkResultCommitter(dispatcher=dispatch)
-    result = DirectWorkResult(actions=(DirectBotAction("send_group_msg", 1001, {"group_id": 42}),))
+    result = DirectWorkResult(
+        actions=(DirectBotAction("send_group_msg", 1001, {"group_id": 42, "message_text": "hello"}),)
+    )
 
     with pytest.raises(WorkResultCommitError, match="was not accepted"):
         await committer.commit(result)
@@ -41,4 +43,16 @@ async def test_result_committer_reports_no_work_for_an_empty_result() -> None:
     dispatch = AsyncMock()
 
     assert await WorkResultCommitter(dispatcher=dispatch).commit(DirectWorkResult()) is False
+    dispatch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_result_committer_revalidates_mutated_action_before_dispatch() -> None:
+    dispatch = AsyncMock(return_value=(True, None))
+    action = DirectBotAction("send_group_msg", 1001, {"group_id": 42, "message_text": "hello"})
+    action.payload["group_id"] = 0
+
+    with pytest.raises(WorkResultCommitError, match="group_id must be positive"):
+        await WorkResultCommitter(dispatcher=dispatch).commit(DirectWorkResult(actions=(action,)))
+
     dispatch.assert_not_awaited()

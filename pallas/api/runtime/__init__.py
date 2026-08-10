@@ -63,6 +63,20 @@ class DirectBotAction:
             raise ValueError("timeout must be positive")
         object.__setattr__(self, "action", normalized_action)
         object.__setattr__(self, "payload", copy.deepcopy(self.payload))
+        self.validate()
+
+    def validate(self) -> None:
+        if self.action not in {"send_group_msg", "send_private_msg"}:
+            raise ValueError(f"unsupported action: {self.action}")
+        target_key = "group_id" if self.action == "send_group_msg" else "user_id"
+        try:
+            target_id = int(self.payload.get(target_key) or 0)
+        except (TypeError, ValueError):
+            target_id = 0
+        if target_id <= 0:
+            raise ValueError(f"{target_key} must be positive")
+        if not any(self.payload.get(key) for key in ("message_text", "message_cq", "image_b64")):
+            raise ValueError("message payload is required")
 
 
 @dataclass(frozen=True, slots=True)

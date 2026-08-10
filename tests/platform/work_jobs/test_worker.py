@@ -42,7 +42,9 @@ async def test_worker_commits_a_handler_result_before_completing_the_job() -> No
 
     store = MemoryWorkJobStore()
     await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:result"))
-    result = DirectWorkResult(actions=(DirectBotAction("send_group_msg", 1001, {"group_id": 42}),))
+    result = DirectWorkResult(
+        actions=(DirectBotAction("send_group_msg", 1001, {"group_id": 42, "message_text": "hello"}),)
+    )
     result_committer = SimpleResultCommitter()
 
     async def handler(_payload: dict) -> DirectWorkResult:
@@ -69,7 +71,9 @@ async def test_worker_dead_letters_when_result_commit_fails() -> None:
 
     store = MemoryWorkJobStore()
     await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:result-failure"))
-    result = DirectWorkResult(actions=(DirectBotAction("send_group_msg", 1001, {"group_id": 42}),))
+    result = DirectWorkResult(
+        actions=(DirectBotAction("send_group_msg", 1001, {"group_id": 42, "message_text": "hello"}),)
+    )
     result_committer = SimpleResultCommitter(error=WorkResultCommitError("delivery failed"))
 
     async def handler(_payload: dict) -> DirectWorkResult:
