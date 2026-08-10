@@ -59,6 +59,61 @@ def test_dispatch_metrics_include_route_candidates(monkeypatch) -> None:
     assert snap["route_candidates"] == [{"route_modules": ["help"]}]
 
 
+def test_merge_dispatch_metrics_aggregates_route_candidates() -> None:
+    merged = dispatch_metrics.merge_dispatch_metrics([
+        {
+            "day_key": "2026-08-10",
+            "route_candidates": [
+                {
+                    "route_modules": ["drink"],
+                    "messages": 3,
+                    "route_index_hits": 3,
+                    "matchers_selected": 6,
+                    "native_error": 0,
+                    "native_handled": 0,
+                    "legacy_handled": 3,
+                    "ingress_duration_ms_p95": 12.0,
+                }
+            ],
+        },
+        {
+            "day_key": "2026-08-10",
+            "route_candidates": [
+                {
+                    "route_modules": ["drink"],
+                    "messages": 4,
+                    "route_index_hits": 4,
+                    "matchers_selected": 8,
+                    "native_error": 0,
+                    "native_handled": 0,
+                    "legacy_handled": 4,
+                    "ingress_duration_ms_p95": 20.0,
+                }
+            ],
+        },
+    ])
+
+    assert merged["route_candidates"] == [
+        {
+            "route_modules": ["drink"],
+            "messages": 7,
+            "route_index_hits": 7,
+            "route_index_fallbacks": 0,
+            "matchers_considered": 0,
+            "matchers_selected": 14,
+            "matchers_run": 0,
+            "native_handled": 0,
+            "native_fallback": 0,
+            "native_error": 0,
+            "legacy_handled": 7,
+            "native_visible_actions": 0,
+            "native_effect_actions": 0,
+            "ingress_duration_ms_p95": 20.0,
+            "eligible": True,
+        }
+    ]
+
+
 def test_chatter_overload_degraded_counter() -> None:
     dispatch_metrics.clear_dispatch_metrics_for_tests()
     dispatch_metrics.record_chatter_overload_degraded()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 from contextlib import contextmanager
@@ -14,8 +15,33 @@ if TYPE_CHECKING:
 
 INGRESS_HISTORY_RETENTION_SEC = 7 * 24 * 60 * 60
 _COUNTER_KEYS = ("group_messages", "learn_enqueued", "learn_persisted", "work_completed")
+_ROUTE_CANDIDATE_COUNTER_KEYS = (
+    "messages",
+    "route_index_hits",
+    "route_index_fallbacks",
+    "matchers_considered",
+    "matchers_selected",
+    "matchers_run",
+    "native_handled",
+    "native_fallback",
+    "native_error",
+    "legacy_handled",
+    "native_visible_actions",
+    "native_effect_actions",
+)
 _HISTORY_LOCK = threading.Lock()
 _last_prune_at = 0
+_ROUTE_HISTORY_CACHE: dict[str, Any] = {
+    "retention_sec": INGRESS_HISTORY_RETENTION_SEC,
+    "day_key": "",
+    "latest": [],
+    "today_totals": [],
+    "write_ok": True,
+    "sharded": False,
+    "_last_by_route": {},
+    "_totals_by_route": {},
+}
+_ROUTE_HISTORY_CACHE_PATH = ""
 
 
 def ingress_metrics_history_path() -> Path:
@@ -36,12 +62,39 @@ def _number(value: Any) -> float | int | None:
     return None
 
 
+def _sanitize_route_candidates(raw: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    candidates: list[dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        modules = item.get("route_modules")
+        if not isinstance(modules, list):
+            continue
+        row: dict[str, Any] = {
+            "route_modules": sorted({str(module).strip() for module in modules if str(module).strip()}),
+        }
+        for key in _ROUTE_CANDIDATE_COUNTER_KEYS:
+            value = item.get(key)
+            if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)):
+                row[key] = max(0, int(value))
+        p95 = item.get("ingress_duration_ms_p95")
+        if isinstance(p95, (int, float)) and not isinstance(p95, bool) and math.isfinite(float(p95)):
+            row["ingress_duration_ms_p95"] = max(0.0, float(p95))
+        if isinstance(item.get("eligible"), bool):
+            row["eligible"] = item["eligible"]
+        candidates.append(row)
+    candidates.sort(key=lambda row: tuple(row["route_modules"]))
+    return candidates
+
+
 def _sample(snapshot: dict[str, Any], *, ts: int) -> dict[str, Any]:
     scheduler = snapshot.get("conversation_scheduler")
     scheduler = scheduler if isinstance(scheduler, dict) else {}
     work = snapshot.get("work_aux") if isinstance(snapshot.get("work_aux"), dict) else {}
     hotpath = snapshot.get("hotpath") if isinstance(snapshot.get("hotpath"), dict) else {}
-    return {
+    row = {
         "ts": int(ts),
         "ingress_p95_ms": _number(snapshot.get("ingress_duration_ms_p95")),
         "scheduler_wait_p95_ms": _number(scheduler.get("wait_ms_p95")),
@@ -55,6 +108,11 @@ def _sample(snapshot: dict[str, Any], *, ts: int) -> dict[str, Any]:
         "learn_persisted": int(hotpath.get("learn_persisted") or 0),
         "work_completed": int(work.get("completed_since_start") or 0),
     }
+    day_key = snapshot.get("day_key")
+    if isinstance(day_key, str) and day_key:
+        row["day_key"] = day_key
+    row["sharded"] = bool(snapshot.get("sharded"))
+    return row
 
 
 def _read_rows(path: Path) -> list[dict[str, Any]]:
@@ -73,6 +131,105 @@ def _read_rows(path: Path) -> list[dict[str, Any]]:
         if isinstance(row, dict) and isinstance(row.get("ts"), int):
             rows.append(row)
     return rows
+
+
+def _candidate_changes(rows: list[dict[str, Any]], *, cutoff: int, now: int) -> list[dict[str, Any]]:
+    changes: list[dict[str, Any]] = []
+    for row in sorted(rows, key=lambda item: int(item["ts"])):
+        ts = int(row["ts"])
+        candidates = row.get("route_candidates")
+        if ts <= cutoff or ts > now or not isinstance(candidates, list):
+            continue
+        changes.append({
+            "ts": ts,
+            "day_key": str(row.get("day_key") or ""),
+            "sharded": bool(row.get("sharded")),
+            "route_candidates": _sanitize_route_candidates(candidates),
+        })
+    return changes
+
+
+def _apply_candidate_delta(
+    *,
+    candidates: list[dict[str, Any]],
+    previous: dict[tuple[str, ...], dict[str, Any]],
+    totals: dict[tuple[str, ...], dict[str, Any]],
+) -> dict[tuple[str, ...], dict[str, Any]]:
+    current: dict[tuple[str, ...], dict[str, Any]] = {}
+    for row in candidates:
+        route = tuple(row["route_modules"])
+        current[route] = row
+        total = totals.setdefault(
+            route,
+            {"route_modules": list(route), **dict.fromkeys(_ROUTE_CANDIDATE_COUNTER_KEYS, 0)},
+        )
+        prior = previous.get(route)
+        for key in _ROUTE_CANDIDATE_COUNTER_KEYS:
+            value = int(row.get(key) or 0)
+            prior_value = int(prior.get(key) or 0) if prior is not None else 0
+            total[key] += value - prior_value if value >= prior_value else value
+        p95 = row.get("ingress_duration_ms_p95")
+        if isinstance(p95, (int, float)):
+            total["ingress_duration_ms_p95"] = max(
+                float(total.get("ingress_duration_ms_p95") or 0.0),
+                float(p95),
+            )
+    return current
+
+
+def _public_candidate_totals(totals: dict[tuple[str, ...], dict[str, Any]]) -> list[dict[str, Any]]:
+    result = list(totals.values())
+    for row in result:
+        messages = int(row["messages"])
+        row.setdefault("ingress_duration_ms_p95", None)
+        row["eligible"] = (
+            len(row["route_modules"]) == 1
+            and int(row["legacy_handled"]) > 0
+            and int(row["route_index_fallbacks"]) == 0
+            and int(row["native_error"]) == 0
+            and int(row["native_handled"]) < messages
+        )
+    result.sort(key=lambda row: tuple(row["route_modules"]))
+    return result
+
+
+def _history_cache_from_rows(rows: list[dict[str, Any]], *, now: int) -> dict[str, Any]:
+    changes = _candidate_changes(rows, cutoff=now - INGRESS_HISTORY_RETENTION_SEC, now=now)
+    latest = changes[-1] if changes else {}
+    day_key = str(latest.get("day_key") or "")
+    sharded = bool(latest.get("sharded"))
+    previous: dict[tuple[str, ...], dict[str, Any]] = {}
+    totals: dict[tuple[str, ...], dict[str, Any]] = {}
+    for change in changes:
+        if change.get("day_key") != day_key:
+            continue
+        if sharded:
+            break
+        previous = _apply_candidate_delta(
+            candidates=change["route_candidates"],
+            previous=previous,
+            totals=totals,
+        )
+    return {
+        "retention_sec": INGRESS_HISTORY_RETENTION_SEC,
+        "day_key": day_key,
+        "latest": latest.get("route_candidates", []),
+        "today_totals": _public_candidate_totals(totals),
+        "latest_at": latest.get("ts"),
+        "write_ok": True,
+        "sharded": sharded,
+        "_last_by_route": previous,
+        "_totals_by_route": totals,
+    }
+
+
+def hydrate_route_candidate_history_cache(*, now: int | None = None) -> None:
+    global _ROUTE_HISTORY_CACHE, _ROUTE_HISTORY_CACHE_PATH
+    now_sec = int(now if now is not None else time.time())
+    path = ingress_metrics_history_path()
+    with _HISTORY_LOCK:
+        _ROUTE_HISTORY_CACHE = _history_cache_from_rows(_read_rows(path), now=now_sec)
+        _ROUTE_HISTORY_CACHE_PATH = str(path)
 
 
 def prune_ingress_metrics_history(*, now: int | None = None) -> bool:
@@ -94,22 +251,79 @@ def prune_ingress_metrics_history(*, now: int | None = None) -> bool:
 
 
 def append_ingress_metrics_history(*, snapshot: dict[str, Any], ts: int | None = None) -> bool:
-    global _last_prune_at
+    global _ROUTE_HISTORY_CACHE, _ROUTE_HISTORY_CACHE_PATH, _last_prune_at
     now = int(ts if ts is not None else time.time())
     path = ingress_metrics_history_path()
     row = _sample(snapshot, ts=now)
+    candidates = _sanitize_route_candidates(snapshot.get("route_candidates"))
     with _HISTORY_LOCK:
+        if _ROUTE_HISTORY_CACHE_PATH != str(path):
+            _ROUTE_HISTORY_CACHE = _history_cache_from_rows(_read_rows(path), now=now)
+            _ROUTE_HISTORY_CACHE_PATH = str(path)
+        day_key = str(snapshot.get("day_key") or "")
+        sharded = bool(snapshot.get("sharded"))
+        previous_candidates = _ROUTE_HISTORY_CACHE.get("latest")
+        previous_day_key = str(_ROUTE_HISTORY_CACHE.get("day_key") or "")
+        previous_sharded = bool(_ROUTE_HISTORY_CACHE.get("sharded"))
+        candidates_changed = (
+            previous_candidates != candidates or previous_day_key != day_key or previous_sharded != sharded
+        )
+        if candidates_changed:
+            row["route_candidates"] = candidates
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with _interprocess_history_lock(path):
                 with path.open("a", encoding="utf-8") as file:
                     file.write(json.dumps(row, separators=(",", ":")) + "\n")
         except OSError:
+            _ROUTE_HISTORY_CACHE = {**_ROUTE_HISTORY_CACHE, "write_ok": False}
             return False
+        previous = _ROUTE_HISTORY_CACHE.get("_last_by_route")
+        totals = _ROUTE_HISTORY_CACHE.get("_totals_by_route")
+        if (
+            previous_day_key != day_key
+            or previous_sharded != sharded
+            or not isinstance(previous, dict)
+            or not isinstance(totals, dict)
+        ):
+            previous = {}
+            totals = {}
+        if candidates_changed and not sharded:
+            previous = _apply_candidate_delta(candidates=candidates, previous=previous, totals=totals)
+        _ROUTE_HISTORY_CACHE = {
+            "retention_sec": INGRESS_HISTORY_RETENTION_SEC,
+            "day_key": day_key,
+            "latest": candidates,
+            "today_totals": _public_candidate_totals(totals),
+            "latest_at": now,
+            "write_ok": True,
+            "sharded": sharded,
+            "_last_by_route": previous,
+            "_totals_by_route": totals,
+        }
     if now - _last_prune_at >= 300:
         _last_prune_at = now
         prune_ingress_metrics_history(now=now)
     return True
+
+
+def read_route_candidate_history(*, now: int | None = None) -> dict[str, Any]:
+    now_sec = int(now if now is not None else time.time())
+    rows = _read_rows(ingress_metrics_history_path())
+    result = _history_cache_from_rows(rows, now=now_sec)
+    return {
+        **{key: value for key, value in result.items() if not key.startswith("_")},
+        "changes": _candidate_changes(
+            rows,
+            cutoff=now_sec - INGRESS_HISTORY_RETENTION_SEC,
+            now=now_sec,
+        ),
+    }
+
+
+def route_candidate_history_snapshot() -> dict[str, Any]:
+    with _HISTORY_LOCK:
+        return {key: value for key, value in _ROUTE_HISTORY_CACHE.items() if not key.startswith("_")}
 
 
 def _counter_delta(current: dict[str, Any], previous: dict[str, Any] | None, key: str) -> int:

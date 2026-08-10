@@ -385,6 +385,7 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     work_aux_rows: list[dict[str, Any]] = []
     scheduler_rows: list[dict[str, Any]] = []
     snapshot_health_rows: list[dict[str, Any]] = []
+    route_candidate_rows: list[list[dict[str, object]]] = []
     day_key = ""
     for row in rows:
         if not isinstance(row, dict):
@@ -413,6 +414,9 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         snapshot_health = row.get("snapshot_health")
         if isinstance(snapshot_health, dict):
             snapshot_health_rows.append(snapshot_health)
+        route_candidates = row.get("route_candidates")
+        if isinstance(route_candidates, list):
+            route_candidate_rows.append(route_candidates)
     p95_cluster = round(max(p95_values), 2) if p95_values else None
     pool_merged = merge_pool_budget_snapshots(pool_rows)
     pg_util = pool_merged.get("utilization")
@@ -429,4 +433,55 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         work_aux=merge_work_aux_snapshots(work_aux_rows),
         conversation_scheduler=merge_conversation_scheduler_snapshots(scheduler_rows),
         snapshot_health=merge_snapshot_health(snapshot_health_rows),
+        route_candidates=merge_route_candidate_snapshots(route_candidate_rows),
     )
+
+
+def merge_route_candidate_snapshots(rows: list[list[dict[str, object]]]) -> list[dict[str, object]]:
+    counter_keys = (
+        "messages",
+        "route_index_hits",
+        "route_index_fallbacks",
+        "matchers_considered",
+        "matchers_selected",
+        "matchers_run",
+        "native_handled",
+        "native_fallback",
+        "native_error",
+        "legacy_handled",
+        "native_visible_actions",
+        "native_effect_actions",
+    )
+    merged: dict[tuple[str, ...], dict[str, object]] = {}
+    for snapshot in rows:
+        for raw in snapshot:
+            if not isinstance(raw, dict):
+                continue
+            modules_raw = raw.get("route_modules")
+            if not isinstance(modules_raw, list):
+                continue
+            route = tuple(sorted({str(module).strip() for module in modules_raw if str(module).strip()}))
+            if route not in merged and route and len([key for key in merged if key]) >= 64:
+                route = ()
+            target = merged.setdefault(route, {"route_modules": list(route), **dict.fromkeys(counter_keys, 0)})
+            for key in counter_keys:
+                target[key] = int(target[key]) + max(0, int(raw.get(key) or 0))
+            p95 = raw.get("ingress_duration_ms_p95")
+            if isinstance(p95, (int, float)) and not isinstance(p95, bool):
+                target["ingress_duration_ms_p95"] = max(
+                    float(target.get("ingress_duration_ms_p95") or 0.0),
+                    max(0.0, float(p95)),
+                )
+    result = list(merged.values())
+    for row in result:
+        messages = int(row["messages"])
+        row.setdefault("ingress_duration_ms_p95", None)
+        row["eligible"] = (
+            len(row["route_modules"]) == 1
+            and int(row["legacy_handled"]) > 0
+            and int(row["route_index_fallbacks"]) == 0
+            and int(row["native_error"]) == 0
+            and int(row["native_handled"]) < messages
+        )
+    result.sort(key=lambda row: tuple(row["route_modules"]))
+    return result
