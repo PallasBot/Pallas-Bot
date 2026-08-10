@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from pallas.core.platform.ingress.plugin_command_plaintext import (
     clear_plugin_command_plaintext_cache,
     extract_command_prefixes_from_menu_data,
+    is_group_plugin_command_plaintext,
     is_plugin_command_plaintext,
 )
 
@@ -50,6 +51,50 @@ def test_extract_command_prefixes_keeps_command_before_plus_args() -> None:
     assert "文字" not in prefixes
     assert "关键词" not in prefixes
     assert "牛牛" not in prefixes
+
+
+def test_group_command_prefixes_exclude_private_only_menu_rows() -> None:
+    menu_data = [
+        {"trigger_condition": "同意", "trigger_scene": "私聊"},
+        {"trigger_condition": "牛牛帮助", "trigger_scene": "群内"},
+        {"trigger_condition": "牛牛状态", "trigger_scene": "群内或私聊"},
+        {"trigger_condition": "牛牛版本"},
+    ]
+
+    assert "同意" in extract_command_prefixes_from_menu_data(menu_data)
+    assert extract_command_prefixes_from_menu_data(menu_data, scene="group") == (
+        "牛牛帮助",
+        "牛牛状态",
+        "牛牛版本",
+    )
+
+
+def test_group_command_plaintext_excludes_private_only_menu_rows(monkeypatch) -> None:
+    fake_plugins = [
+        SimpleNamespace(
+            metadata=SimpleNamespace(
+                extra={
+                    "menu_data": [
+                        {"trigger_condition": "同意", "trigger_scene": "私聊"},
+                        {"trigger_condition": "牛牛帮助", "trigger_scene": "群内"},
+                    ]
+                }
+            )
+        )
+    ]
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.plugin_command_plaintext.get_loaded_plugins",
+        lambda: fake_plugins,
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.plugin_command_plaintext.TrieRule.prefix.longest_prefix",
+        lambda text: SimpleNamespace(key="同意") if text == "同意" else None,
+    )
+    clear_plugin_command_plaintext_cache()
+
+    assert not is_group_plugin_command_plaintext("同意")
+    assert is_plugin_command_plaintext("同意")
+    assert is_group_plugin_command_plaintext("牛牛帮助")
 
 
 def test_is_plugin_command_plaintext_uses_trie_and_menu_prefixes(monkeypatch) -> None:

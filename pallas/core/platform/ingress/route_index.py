@@ -110,9 +110,17 @@ def matcher_module_key(matcher: type[Matcher]) -> str:
     return canonical_plugin_package(text.rsplit(".", 1)[-1])
 
 
-def extract_exact_plaintexts_from_menu_data(menu_data: list[dict[str, Any]] | None) -> tuple[str, ...]:
+def extract_exact_plaintexts_from_menu_data(
+    menu_data: list[dict[str, Any]] | None,
+    *,
+    scene: str = "all",
+) -> tuple[str, ...]:
+    from pallas.core.platform.ingress.plugin_command_plaintext import menu_item_matches_scene
+
     exacts: list[str] = []
     for item in menu_data or []:
+        if not menu_item_matches_scene(item, scene=scene):
+            continue
         trigger = str(item.get("trigger_condition") or "").strip()
         if not trigger:
             continue
@@ -175,9 +183,9 @@ def build_route_index() -> RouteIndexSnapshot:
         route_exacts = extract_explicit_route_strings(extra.get("exact_plaintexts"))
         if isinstance(menu_data, list):
             if not route_prefixes:
-                route_prefixes = extract_command_prefixes_from_menu_data(menu_data)
+                route_prefixes = extract_command_prefixes_from_menu_data(menu_data, scene="group")
             if not route_exacts:
-                route_exacts = extract_exact_plaintexts_from_menu_data(menu_data)
+                route_exacts = extract_exact_plaintexts_from_menu_data(menu_data, scene="group")
         for prefix in route_prefixes:
             _add_module_mapping(prefix_map, prefix, module_key)
             indexed.add(module_key)
@@ -185,12 +193,12 @@ def build_route_index() -> RouteIndexSnapshot:
             _add_module_mapping(exact_map, exact, module_key)
             indexed.add(module_key)
         if isinstance(menu_data, list):
-            for prefix in extract_command_prefixes_from_menu_data(menu_data):
+            for prefix in extract_command_prefixes_from_menu_data(menu_data, scene="group"):
                 if prefix in route_prefixes:
                     continue
                 _add_module_mapping(prefix_map, prefix, module_key)
                 indexed.add(module_key)
-            for exact in extract_exact_plaintexts_from_menu_data(menu_data):
+            for exact in extract_exact_plaintexts_from_menu_data(menu_data, scene="group"):
                 if exact in route_exacts:
                     continue
                 _add_module_mapping(exact_map, exact, module_key)

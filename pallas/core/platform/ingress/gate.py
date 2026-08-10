@@ -153,7 +153,7 @@ async def ingress_group_message_gate(bot, event) -> None:
         # 仅命令走粘性群归属；闲聊 / @LLM 等 chat 车道只靠 claim，避免热群钉死一台。
         if (
             not pallas_ats
-            and legacy_command_traffic(plain)
+            and legacy_command_traffic(plain, group_only=True)
             and not should_process_federate_group_on_current_deployment(
                 int(event.group_id),
                 plain=plain,
@@ -256,9 +256,9 @@ async def ingress_group_message_gate(bot, event) -> None:
                 candidate_capability = "hosted_activity"
             elif self_id in alias_matched_bot_ids:
                 candidate_capability = "llm_alias"
-            elif legacy_command_traffic(plain):
+            elif legacy_command_traffic(plain, group_only=True):
                 candidate_capability = "command"
-            candidate_wait = bool(legacy_command_traffic(plain) or alias_matched_bot_ids)
+            candidate_wait = bool(legacy_command_traffic(plain, group_only=True) or alias_matched_bot_ids)
             candidate_wait = candidate_wait or alias_target_is_hosted
             if not await claim_federate_group_message_ingress(
                 event,
