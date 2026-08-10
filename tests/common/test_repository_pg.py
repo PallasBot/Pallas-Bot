@@ -991,19 +991,78 @@ async def test_image_cache_insert_is_no_op_on_duplicate(pg_engine):
 
 
 @pytest.mark.asyncio
+async def test_image_cache_touch_increments_ref_and_refreshes_date_without_replacing_blob(pg_engine):
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    repo = PgImageCacheRepository()
+    await repo.insert(ImageCache.model_construct(cq_code="touch", blob_data=b"original", ref_times=1, date=20260101))
+
+    await repo.touch("touch", date=20260810)
+
+    found = await repo.find_by_cq_code("touch")
+    assert found is not None
+    assert found.ref_times == 2
+    assert found.date == 20260810
+    assert found.blob_data == b"original"
+
+
+@pytest.mark.asyncio
 async def test_image_cache_find_latest_with_blob_skips_empty_entries(pg_engine):
     from pallas.core.foundation.db.modules import ImageCache
     from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
 
     repo = PgImageCacheRepository()
-    await repo.insert(ImageCache.model_construct(cq_code="[CQ:image,file=empty.image]", blob_data=None, ref_times=9, date=20260806))
-    await repo.insert(ImageCache.model_construct(cq_code="[CQ:image,file=ready.image]", blob_data=b"image", ref_times=1, date=20260805))
+    await repo.insert(
+        ImageCache.model_construct(cq_code="[CQ:image,file=empty.image]", blob_data=None, ref_times=9, date=20260806)
+    )
+    await repo.insert(
+        ImageCache.model_construct(
+            cq_code="[CQ:image,file=ready.image]", blob_data=b"image", ref_times=1, date=20260805
+        )
+    )
 
     found = await repo.find_latest_with_blob()
 
     assert found is not None
     assert found.cq_code == "[CQ:image,file=ready.image]"
     assert found.blob_data == b"image"
+
+
+@pytest.mark.asyncio
+async def test_image_cache_prune_applies_retention_tiers_and_byte_limit(pg_engine):
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    repo = PgImageCacheRepository()
+    rows = [
+        ImageCache.model_construct(cq_code="absolute-old", blob_data=b"a" * 4, ref_times=9, date=20260101),
+        ImageCache.model_construct(cq_code="single-old", blob_data=b"b" * 4, ref_times=1, date=20260701),
+        ImageCache.model_construct(cq_code="single-new", blob_data=b"c" * 4, ref_times=1, date=20260801),
+        ImageCache.model_construct(cq_code="popular-oldest", blob_data=b"d" * 4, ref_times=5, date=20260720),
+        ImageCache.model_construct(cq_code="popular-newest", blob_data=b"e" * 4, ref_times=5, date=20260802),
+    ]
+    for row in rows:
+        await repo.insert(row)
+
+    result = await repo.prune(
+        ImageCachePrunePolicy(
+            single_use_before=20260711,
+            absolute_before=20260512,
+            max_blob_bytes=10,
+            batch_size=2,
+        )
+    )
+
+    assert result.deleted_rows == 3
+    assert result.deleted_blob_bytes == 15
+    assert result.remaining_blob_bytes == 10
+    assert await repo.find_by_cq_code("absolute-old") is None
+    assert await repo.find_by_cq_code("single-old") is None
+    assert await repo.find_by_cq_code("single-new") is None
+    assert await repo.find_by_cq_code("popular-oldest") is not None
+    assert await repo.find_by_cq_code("popular-newest") is not None
 
 
 @pytest.mark.asyncio

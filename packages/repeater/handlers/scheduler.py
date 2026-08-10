@@ -5,17 +5,39 @@ from __future__ import annotations
 import asyncio
 import random
 
-from nonebot import get_bot, logger
+from nonebot import get_bot, get_driver, logger
 from nonebot.exception import ActionFailed
 from nonebot_plugin_apscheduler import scheduler
 
 from pallas.core.platform.ingress.message_load import should_pause_tasks
 from pallas.core.platform.shard import context as shard_ctx
+from pallas.core.shared.utils.media_cache import prune_image_cache
 
 from ..message_store import MessageStore
 from ..model import Chat
 from ..runtime_stats import prune_repeater_runtime_caches
 from ..shard_opt import repeater_maintenance_runs_on_worker, repeater_scheduler_runs_on_worker
+
+driver = get_driver()
+
+
+async def run_image_cache_prune() -> None:
+    if not repeater_maintenance_runs_on_worker():
+        return
+    try:
+        await prune_image_cache()
+    except Exception:
+        logger.exception("image cache prune failed")
+
+
+@driver.on_startup
+async def schedule_image_cache_prune_after_startup() -> None:
+    asyncio.create_task(run_image_cache_prune(), name="image_cache_prune_startup")
+
+
+@scheduler.scheduled_job("cron", hour=4, minute=30)
+async def prune_image_cache_daily() -> None:
+    await run_image_cache_prune()
 
 
 @scheduler.scheduled_job("interval", seconds=60)

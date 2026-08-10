@@ -22,6 +22,8 @@ from pallas.core.shared.utils.invalidate_cache import clear_model_cache
 if TYPE_CHECKING:
     from beanie import Document
 
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
+
 
 class MongoContextRepository:
     """MongoDB 版 ContextRepository 实现"""
@@ -319,11 +321,86 @@ class MongoImageCacheRepository:
     async def save(self, cache: ImageCache) -> None:
         await cache.save()
 
+    async def touch(self, cq_code: str, *, date: int) -> None:
+        await ImageCache.get_pymongo_collection().update_one(
+            {"cq_code": cq_code},
+            {"$inc": {"ref_times": 1}, "$set": {"date": int(date)}},
+        )
+
     async def delete_old(self, before_date: int) -> None:
         await ImageCache.find(ImageCache.date < before_date).delete()
 
     async def delete_low_ref(self, ref_threshold: int) -> None:
         await ImageCache.find(ImageCache.ref_times < ref_threshold).delete()
+
+    async def prune(self, policy: ImageCachePrunePolicy) -> ImageCachePruneResult:
+        from pallas.core.foundation.db.repository import ImageCachePruneResult
+
+        collection = ImageCache.get_pymongo_collection()
+        batch_size = max(1, int(policy.batch_size))
+        max_blob_bytes = max(0, int(policy.max_blob_bytes))
+        deleted_rows = 0
+        deleted_blob_bytes = 0
+
+        async def total_blob_bytes() -> int:
+            pipeline = [
+                {"$project": {"size": {"$binarySize": {"$ifNull": ["$blob_data", b""]}}}},
+                {"$group": {"_id": None, "total": {"$sum": "$size"}}},
+            ]
+            try:
+                rows = await collection.aggregate(pipeline).to_list(length=1)
+                return int(rows[0]["total"]) if rows else 0
+            except Exception:
+                total = 0
+                async for row in collection.find({}, {"blob_data": 1}):
+                    total += len(row.get("blob_data") or b"")
+                return total
+
+        async def delete_batch(query: dict[str, Any], *, size_limit: int | None = None) -> tuple[int, int]:
+            cursor = collection.find(query, {"_id": 1, "blob_data": 1}).sort([("date", 1), ("_id", 1)])
+            rows = await cursor.to_list(length=batch_size)
+            if size_limit is not None:
+                selected = []
+                selected_bytes = 0
+                for row in rows:
+                    selected.append(row)
+                    selected_bytes += len(row.get("blob_data") or b"")
+                    if selected_bytes >= size_limit:
+                        break
+                rows = selected
+            if not rows:
+                return 0, 0
+            result = await collection.delete_many({"_id": {"$in": [row["_id"] for row in rows]}})
+            return int(result.deleted_count), sum(len(row.get("blob_data") or b"") for row in rows)
+
+        expired = {
+            "$or": [
+                {"date": {"$lt": int(policy.absolute_before)}},
+                {"date": {"$lt": int(policy.single_use_before)}, "ref_times": {"$lte": 1}},
+            ]
+        }
+        while True:
+            rows, blob_bytes = await delete_batch(expired)
+            deleted_rows += rows
+            deleted_blob_bytes += blob_bytes
+            if rows < batch_size:
+                break
+
+        remaining_blob_bytes = await total_blob_bytes()
+        while remaining_blob_bytes > max_blob_bytes:
+            rows, blob_bytes = await delete_batch(
+                {"ref_times": {"$lte": 1}},
+                size_limit=remaining_blob_bytes - max_blob_bytes,
+            )
+            if not rows:
+                rows, blob_bytes = await delete_batch({}, size_limit=remaining_blob_bytes - max_blob_bytes)
+            if not rows:
+                break
+            deleted_rows += rows
+            deleted_blob_bytes += blob_bytes
+            remaining_blob_bytes = max(0, remaining_blob_bytes - blob_bytes)
+
+        return ImageCachePruneResult(deleted_rows, deleted_blob_bytes, remaining_blob_bytes)
 
 
 class MongoAdminRepository:

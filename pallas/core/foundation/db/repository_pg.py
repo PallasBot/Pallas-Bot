@@ -25,6 +25,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     and_,
+    case,
     delete,
     func,
     insert,
@@ -46,6 +47,7 @@ from pallas.product.llm.corpus_contamination import reject_corpus_learn_message
 
 if TYPE_CHECKING:
     from pallas.core.foundation.db.modules import Answer, Ban, Context, ImageCache, Message
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
 
 _JsonB = JSONB().with_variant(JSON(), "sqlite")
 
@@ -2317,6 +2319,15 @@ class PgImageCacheRepository:
             await session.execute(stmt)
             await session.commit()
 
+    async def touch(self, cq_code: str, *, date: int) -> None:
+        async with get_session() as session:
+            await session.execute(
+                update(ImageCacheRow)
+                .where(ImageCacheRow.cq_code == cq_code)
+                .values(ref_times=ImageCacheRow.ref_times + 1, date=int(date))
+            )
+            await session.commit()
+
     async def delete_old(self, before_date: int) -> None:
         async with get_session() as session:
             await session.execute(delete(ImageCacheRow).where(ImageCacheRow.date < before_date))
@@ -2326,3 +2337,73 @@ class PgImageCacheRepository:
         async with get_session() as session:
             await session.execute(delete(ImageCacheRow).where(ImageCacheRow.ref_times < ref_threshold))
             await session.commit()
+
+    async def prune(self, policy: ImageCachePrunePolicy) -> ImageCachePruneResult:
+        from pallas.core.foundation.db.repository import ImageCachePruneResult
+
+        batch_size = max(1, int(policy.batch_size))
+        max_blob_bytes = max(0, int(policy.max_blob_bytes))
+        deleted_rows = 0
+        deleted_blob_bytes = 0
+
+        async def total_blob_bytes() -> int:
+            async with get_session(read_only=True) as session:
+                stmt = select(func.coalesce(func.sum(func.pg_column_size(ImageCacheRow.blob_data)), 0))
+                return int((await session.execute(stmt)).scalar_one())
+
+        async def delete_batch(where_clause, *, size_limit: int | None = None) -> tuple[int, int]:
+            async with get_session() as session:
+                stmt = (
+                    select(ImageCacheRow.id, func.coalesce(func.pg_column_size(ImageCacheRow.blob_data), 0))
+                    .where(where_clause)
+                    .order_by(
+                        case((ImageCacheRow.ref_times <= 1, 0), else_=1),
+                        ImageCacheRow.date,
+                        ImageCacheRow.id,
+                    )
+                    .limit(batch_size)
+                )
+                rows = list((await session.execute(stmt)).all())
+                if size_limit is not None:
+                    selected = []
+                    selected_bytes = 0
+                    for row in rows:
+                        selected.append(row)
+                        selected_bytes += int(row[1])
+                        if selected_bytes >= size_limit:
+                            break
+                    rows = selected
+                if not rows:
+                    return 0, 0
+                await session.execute(delete(ImageCacheRow).where(ImageCacheRow.id.in_([int(row[0]) for row in rows])))
+                await session.commit()
+                return len(rows), sum(int(row[1]) for row in rows)
+
+        expired = or_(
+            ImageCacheRow.date < int(policy.absolute_before),
+            and_(ImageCacheRow.date < int(policy.single_use_before), ImageCacheRow.ref_times <= 1),
+        )
+        while True:
+            rows, blob_bytes = await delete_batch(expired)
+            deleted_rows += rows
+            deleted_blob_bytes += blob_bytes
+            if rows < batch_size:
+                break
+
+        remaining_blob_bytes = await total_blob_bytes()
+        while remaining_blob_bytes > max_blob_bytes:
+            rows, blob_bytes = await delete_batch(
+                literal_column("true"),
+                size_limit=remaining_blob_bytes - max_blob_bytes,
+            )
+            if not rows:
+                break
+            deleted_rows += rows
+            deleted_blob_bytes += blob_bytes
+            remaining_blob_bytes = max(0, remaining_blob_bytes - blob_bytes)
+
+        return ImageCachePruneResult(
+            deleted_rows=deleted_rows,
+            deleted_blob_bytes=deleted_blob_bytes,
+            remaining_blob_bytes=remaining_blob_bytes,
+        )

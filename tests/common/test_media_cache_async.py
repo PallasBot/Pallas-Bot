@@ -111,3 +111,41 @@ async def test_insert_image_io_uses_detached_model_for_postgresql(monkeypatch: p
 
     assert len(inserted) == 1
     assert inserted[0].blob_data == b"image"
+
+
+@pytest.mark.asyncio
+async def test_image_cache_hit_touches_metadata_without_rewriting_blob(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.shared.utils import media_cache as mod
+
+    existing = SimpleNamespace(blob_data=b"large-image", ref_times=1, date=20260101)
+    repo = SimpleNamespace(
+        find_by_cq_code=AsyncMock(return_value=existing),
+        touch=AsyncMock(),
+        save=AsyncMock(),
+    )
+    monkeypatch.setattr(mod, "image_cache_repo", repo)
+
+    await mod.handle_image_cache_capture({
+        "cq_code": "[CQ:image,file=existing.image]",
+        "url": "https://example.com/image.png",
+    })
+
+    repo.touch.assert_awaited_once()
+    assert repo.touch.await_args.args[0] == "[CQ:image,file=existing.image]"
+    repo.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_prune_image_cache_uses_default_retention_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.shared.utils import media_cache as mod
+
+    prune = AsyncMock(return_value=SimpleNamespace(deleted_rows=0, deleted_blob_bytes=0, remaining_blob_bytes=0))
+    monkeypatch.setattr(mod.image_cache_repo, "prune", prune, raising=False)
+
+    await mod.prune_image_cache(today=__import__("datetime").date(2026, 8, 10))
+
+    policy = prune.await_args.args[0]
+    assert policy.single_use_before == 20260711
+    assert policy.absolute_before == 20260512
+    assert policy.max_blob_bytes == 20 * 1024**3
+    assert policy.batch_size == 1000
