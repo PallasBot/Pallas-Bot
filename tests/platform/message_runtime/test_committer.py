@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -78,6 +78,26 @@ async def test_committer_schedules_deferred_actions_and_dispatches_cross_worker_
     assert await committer.commit(outcome, bot=object(), event=object()) is True
     assert scheduled == ["repeater_reply_1_2"]
     assert dispatched == list(outcome.cross_worker_actions)
+
+
+@pytest.mark.asyncio
+async def test_committer_waits_for_required_deferred_action_and_reports_failure() -> None:
+    async def fail() -> None:
+        raise RuntimeError("state mutation failed")
+
+    outcome = HandlingOutcome(
+        handled=True,
+        deferred_actions=(
+            DeferredAction(
+                name="drink_1_2",
+                run=fail,
+                wait_for_completion=True,
+            ),
+        ),
+    )
+
+    with pytest.raises(SideEffectCommitError, match="native deferred action failed"):
+        await ActionCommitter(lambda: MagicMock()).commit(outcome, bot=MagicMock(), event=MagicMock())
 
 
 @pytest.mark.asyncio

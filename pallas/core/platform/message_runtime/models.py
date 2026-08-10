@@ -46,6 +46,7 @@ class SendAction:
 class DeferredAction:
     name: str
     run: Callable[[], Awaitable[None]]
+    wait_for_completion: bool = False
 
     def __post_init__(self) -> None:
         if not self.name:

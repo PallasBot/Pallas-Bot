@@ -55,12 +55,14 @@ def configure_shadow_experiment(
     if mode is RuntimeMode.LEGACY:
         return
     registry = NativeHandlerRegistry()
+    from packages.drink.native import DrinkNativeHandler
     from packages.greeting.native import CallMeNativeHandler
     from packages.help.native import HelpNativeHandler
     from packages.llm_chat.message_runtime_handler import LlmChatNativeHandler
     from packages.pb_core.native import ConsoleNativeHandler, PluginsNativeHandler, StatusNativeHandler
     from packages.repeater.message_runtime_handler import RepeaterNativeHandler
 
+    registry.register(DrinkNativeHandler())
     registry.register(CallMeNativeHandler())
     registry.register(HelpNativeHandler())
     registry.register(StatusNativeHandler())

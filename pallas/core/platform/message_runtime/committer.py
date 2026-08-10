@@ -66,6 +66,12 @@ class ActionCommitter:
             except Exception as exc:
                 raise SideEffectCommitError("native action submission failed") from exc
         for action in outcome.deferred_actions:
+            if action.wait_for_completion:
+                try:
+                    await action.run()
+                except Exception as exc:
+                    raise SideEffectCommitError("native deferred action failed") from exc
+                continue
             try:
                 asyncio.create_task(action.run(), name=action.name)
             except Exception as exc:

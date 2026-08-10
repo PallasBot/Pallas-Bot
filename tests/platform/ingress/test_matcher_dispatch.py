@@ -70,6 +70,16 @@ def test_native_repeater_exclusion_keeps_other_passive_matchers() -> None:
     assert dispatch.exclude_native_matchers([RepeaterMatcher, LlmMatcher], frozenset({"repeater"})) == [LlmMatcher]
 
 
+def test_native_drink_exclusion_keeps_roulette_drink_matcher() -> None:
+    class DrinkMatcher:
+        plugin_name = "packages.drink"
+
+    class RouletteMatcher:
+        plugin_name = "packages.roulette"
+
+    assert dispatch.exclude_native_matchers([DrinkMatcher, RouletteMatcher], frozenset({"drink"})) == [RouletteMatcher]
+
+
 def test_route_candidate_helper_records_native_action_counts(monkeypatch: pytest.MonkeyPatch) -> None:
     recorded: list[dict] = []
     monkeypatch.setattr(dispatch, "record_route_candidate", lambda **values: recorded.append(values))
