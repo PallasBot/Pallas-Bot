@@ -73,10 +73,11 @@ async def test_send_queue_attributes_failures_without_exposing_payload(monkeypat
     assert status["errors_by_api"] == {"send_group_msg": 1}
     assert status["errors_by_class"] == {"ActionFailed": 1}
     assert status["errors_by_retcode"] == {"1200": 1}
-    assert set(status["last_error"]) == {"api", "error_class", "retcode", "age_sec"}
+    assert set(status["last_error"]) == {"api", "error_class", "retcode", "reason", "age_sec"}
     assert status["last_error"]["api"] == "send_group_msg"
     assert status["last_error"]["error_class"] == "ActionFailed"
     assert status["last_error"]["retcode"] == 1200
+    assert status["last_error"]["reason"] == "other"
     assert "sensitive" not in str(status)
     assert "private content" not in str(status)
 
@@ -103,7 +104,29 @@ def test_send_queue_error_dimensions_are_bounded_and_resettable() -> None:
     assert status["errors_by_api"] == {}
     assert status["errors_by_class"] == {}
     assert status["errors_by_retcode"] == {}
+    assert status["errors_by_reason"] == {}
     assert status["last_error"] is None
+
+
+@pytest.mark.parametrize(
+    ("api", "message", "reason"),
+    [
+        ("set_msg_emoji_like", "OIDB error 65002: 已经设置过该表情", "already_reacted"),
+        ("set_msg_emoji_like", "message not found", "message_not_found"),
+        ("send_group_msg", "发送失败，你已被移出该群，请重新加群。", "bot_not_in_group"),
+        ("send_group_msg", "HTTP download failed: 404", "media_download_failed"),
+        ("send_group_msg", "unclassified sensitive wording", "other"),
+    ],
+)
+def test_send_queue_classifies_failure_reason_without_exposing_wording(api: str, message: str, reason: str) -> None:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    send_queue.record_send_queue_error(api, ActionFailed(retcode=100, message=message))
+
+    status = send_queue.send_queue_status()
+    assert status["errors_by_reason"] == {reason: 1}
+    assert status["last_error"]["reason"] == reason
+    assert message not in str(status)
 
 
 @pytest.mark.asyncio

@@ -1,4 +1,5 @@
 import pytest
+from nonebot.adapters.onebot.v11 import ActionFailed, Message
 
 from packages.repeater import fanout_reply
 from packages.repeater.responder import ReplyBundle, Responder
@@ -78,3 +79,83 @@ async def test_list_fanout_bot_ids_keeps_all_eligible_bots_for_random_selection(
     monkeypatch.setattr(fanout_reply, "bot_may_repeater_reply", may_reply)
 
     assert await fanout_reply.list_fanout_bot_ids(1) == [11, 22, 33]
+
+
+@pytest.mark.asyncio
+async def test_send_repeater_answers_forgets_bot_removed_from_group(monkeypatch):
+    import packages.repeater as repeater
+    from pallas.core.platform.multi_bot import group_online_cache
+
+    group_id = 626266906
+    bot_id = 111
+
+    class FakeConfig:
+        async def refresh_cooldown(self, _key: str) -> None:
+            return None
+
+        async def security(self) -> bool:
+            return False
+
+    class FakeBot:
+        async def send_group_msg(self, **_kwargs):
+            raise ActionFailed(retcode=100, message="发送失败，你已被移出该群，请重新加群。")
+
+    async def answers():
+        yield "reply"
+
+    async def post_proc(item, *_args):
+        return item
+
+    async def no_sleep(_delay):
+        return None
+
+    group_online_cache.clear_group_online_cache()
+    group_online_cache.remember_local_group_bot(group_id, bot_id)
+    fanout_reply._FANOUT_BOT_IDS_CACHE[group_id] = (float("inf"), [bot_id, 222])
+    monkeypatch.setattr(fanout_reply, "BotConfig", lambda *_args, **_kwargs: FakeConfig())
+    monkeypatch.setattr(fanout_reply, "get_bot", lambda _bot_id: FakeBot())
+    monkeypatch.setattr(fanout_reply.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(repeater, "post_proc", post_proc)
+
+    try:
+        await fanout_reply.send_repeater_answers(bot_id, group_id, answers(), fanout=True)
+
+        assert group_online_cache.recent_local_group_bot_ids(group_id) == []
+        assert group_id not in fanout_reply._FANOUT_BOT_IDS_CACHE
+    finally:
+        group_online_cache.clear_group_online_cache()
+        fanout_reply._FANOUT_BOT_IDS_CACHE.clear()
+
+
+@pytest.mark.asyncio
+async def test_send_repeater_answers_skips_empty_post_processed_message(monkeypatch):
+    import packages.repeater as repeater
+
+    class FakeConfig:
+        async def refresh_cooldown(self, _key: str) -> None:
+            return None
+
+    class FakeBot:
+        calls = 0
+
+        async def send_group_msg(self, **_kwargs):
+            self.calls += 1
+
+    async def answers():
+        yield "expired image"
+
+    async def empty_post_proc(*_args):
+        return Message()
+
+    async def no_sleep(_delay):
+        return None
+
+    bot = FakeBot()
+    monkeypatch.setattr(fanout_reply, "BotConfig", lambda *_args, **_kwargs: FakeConfig())
+    monkeypatch.setattr(fanout_reply, "get_bot", lambda _bot_id: bot)
+    monkeypatch.setattr(fanout_reply.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(repeater, "post_proc", empty_post_proc)
+
+    await fanout_reply.send_repeater_answers(111, 222, answers())
+
+    assert bot.calls == 0

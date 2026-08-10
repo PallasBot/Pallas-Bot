@@ -279,6 +279,7 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
         logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id}")
         return
 
+    mark_reaction_sent(bot_id, message_id)
     try:
         # Uniseg 仅识别 NapCat/LLOneBot/Lagrange/ws-plugin；SnowLuma 会 WARNING 且不发送。
         app_name = await onebot_app_name(bot)
@@ -286,16 +287,20 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
             await send_msg_emoji_like(bot, int(message_id), emoji_code)
         else:
             await message_reaction(emoji_code, str(message_id), event, bot, delete=False)
-        mark_reaction_sent(bot_id, message_id)
         _maybe_feedback_emoji_fit(emoji_code, score=3)
         logger.debug(f"[Reaction] Bot {bot_id} successfully sent emoji {emoji_code} in group {event.group_id}")  # type: ignore[attr-defined]
+    except asyncio.CancelledError:
+        sent_reactions.get(bot_id, {}).pop(message_id, None)
+        raise
     except ActionFailed as e:
+        sent_reactions.get(bot_id, {}).pop(message_id, None)
         logger.debug(
             f"[Reaction] Bot {bot_id} failed to send emoji {emoji_code} in group {event.group_id}: {str(e)}",  # type: ignore[attr-defined]
             exc_info=True,
         )
         raise
     except Exception as e:
+        sent_reactions.get(bot_id, {}).pop(message_id, None)
         logger.debug(
             f"[Reaction] Unexpected error when sending emoji {emoji_code}: {str(e)}",
             exc_info=True,

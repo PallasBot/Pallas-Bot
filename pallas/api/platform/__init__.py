@@ -38,6 +38,7 @@ from pallas.core.platform.ingress.dream_host_gate import (
     dream_session_ingress_passes,
 )
 from pallas.core.platform.ingress.policy_registry import text_matches_plugin_fanout
+from pallas.core.platform.ingress.send_queue import classify_send_queue_error
 
 # ── 多 Bot 去重与舰队 ──
 from pallas.core.platform.multi_bot.at_targets import message_at_fleet_bot
@@ -72,6 +73,7 @@ from pallas.core.platform.multi_bot.group_online_cache import (
     NS_FLEET,
     NS_LOCAL_CONNECTED,
     clear_group_online_cache,
+    forget_group_bot,
     get_cached_group_bot_ids,
     resolve_local_connected_bots_in_group,
     store_cached_group_bot_ids,
@@ -145,6 +147,7 @@ __all__ = [
     "bind_group_owned_gate_sync",
     "claim_group_handler",
     "claim_group_message_event",
+    "classify_send_queue_error",
     "connected_bot_ids",
     "get_catalog_bot_ids",
     "get_fleet_bot_ids",
@@ -173,6 +176,7 @@ __all__ = [
     "NS_FLEET",
     "NS_LOCAL_CONNECTED",
     "clear_group_online_cache",
+    "forget_group_bot",
     "get_cached_group_bot_ids",
     "resolve_local_connected_bots_in_group",
     "store_cached_group_bot_ids",

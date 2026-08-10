@@ -264,6 +264,8 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
 
     async for item in answers:
         msg = await post_proc(item, bot_id, group_id)
+        if not msg:
+            continue
 
         logger.info(f"bot [{bot_id}] ready to send [{str(msg)[:30]}] to group [{group_id}] ({log_tag})")
 
@@ -286,7 +288,14 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
 
             return
 
-        except ActionFailed:
+        except ActionFailed as e:
+            from pallas.api.platform import classify_send_queue_error, forget_group_bot
+
+            if classify_send_queue_error("send_group_msg", e) == "bot_not_in_group":
+                forget_group_bot(group_id, bot_id)
+                _FANOUT_BOT_IDS_CACHE.pop(group_id, None)
+                return
+
             if not await BotConfig(bot_id).security():
                 continue
 

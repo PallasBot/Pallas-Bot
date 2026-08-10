@@ -32,3 +32,19 @@ async def test_local_connected_bots_prefers_recent_group_event_observations(monk
     monkeypatch.setattr(mod, "get_bots", dict)
 
     assert await mod.resolve_local_connected_bots_in_group(626266906) == [111, 222]
+
+
+@pytest.mark.asyncio
+async def test_forget_group_bot_removes_only_target_from_all_group_caches() -> None:
+    group_id = 626266906
+    mod.clear_group_online_cache()
+    mod.remember_local_group_bot(group_id, 111)
+    mod.remember_local_group_bot(group_id, 222)
+    await mod.store_cached_group_bot_ids(group_id, [111, 222], namespace=mod.NS_FLEET)
+    await mod.store_cached_group_bot_ids(group_id, [111, 222], namespace=mod.NS_LOCAL_CONNECTED)
+
+    mod.forget_group_bot(group_id, 111)
+
+    assert mod.recent_local_group_bot_ids(group_id) == [222]
+    assert mod.get_cached_group_bot_ids(group_id, namespace=mod.NS_FLEET) == [222]
+    assert mod.get_cached_group_bot_ids(group_id, namespace=mod.NS_LOCAL_CONNECTED) == [222]

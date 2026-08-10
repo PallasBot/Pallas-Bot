@@ -155,3 +155,75 @@ async def test_send_reaction_uses_native_api_for_snowluma(monkeypatch):
 
     assert uniseg_called["n"] == 0
     assert calls == [("set_msg_emoji_like", {"message_id": 99, "emoji_id": "66", "set": True})]
+
+
+@pytest.mark.asyncio
+async def test_send_reaction_reserves_message_before_awaiting_protocol(monkeypatch):
+    import packages.repeater.emoji_reaction as mod
+
+    bot_id = "test_bot_concurrent"
+    event = SimpleNamespace(message_id=99, group_id=1, self_id=bot_id)
+    started = asyncio.Event()
+    release = asyncio.Event()
+    calls = 0
+
+    async def send_native(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        started.set()
+        await release.wait()
+
+    async def app_name(_bot):
+        return "SnowLuma"
+
+    bot = SimpleNamespace(self_id=bot_id)
+    monkeypatch.setattr(mod, "send_msg_emoji_like", send_native)
+    monkeypatch.setattr(mod, "onebot_app_name", app_name)
+    monkeypatch.setattr(mod, "_maybe_feedback_emoji_fit", lambda *_a, **_k: None)
+
+    first = asyncio.create_task(mod.send_reaction(bot, event, "66"))
+    second: asyncio.Task[None] | None = None
+    try:
+        await asyncio.wait_for(started.wait(), timeout=0.1)
+        second = asyncio.create_task(mod.send_reaction(bot, event, "66"))
+        await asyncio.sleep(0)
+        assert calls == 1
+    finally:
+        release.set()
+        await first
+        if second is not None:
+            second.cancel()
+            await asyncio.gather(second, return_exceptions=True)
+        mod.sent_reactions.pop(bot_id, None)
+
+
+@pytest.mark.asyncio
+async def test_send_reaction_releases_reservation_when_cancelled(monkeypatch):
+    import packages.repeater.emoji_reaction as mod
+
+    bot_id = "test_bot_cancelled"
+    event = SimpleNamespace(message_id=99, group_id=1, self_id=bot_id)
+    started = asyncio.Event()
+
+    async def send_native(*_args, **_kwargs):
+        started.set()
+        await asyncio.Event().wait()
+
+    async def app_name(_bot):
+        return "SnowLuma"
+
+    bot = SimpleNamespace(self_id=bot_id)
+    monkeypatch.setattr(mod, "send_msg_emoji_like", send_native)
+    monkeypatch.setattr(mod, "onebot_app_name", app_name)
+
+    task = asyncio.create_task(mod.send_reaction(bot, event, "66"))
+    try:
+        await asyncio.wait_for(started.wait(), timeout=0.1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert mod.has_sent_reaction(bot_id, 99) is False
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        mod.sent_reactions.pop(bot_id, None)

@@ -28,6 +28,7 @@ _ERROR_DIMENSION_LIMIT = 16
 _ERRORS_BY_API: dict[str, int] = {}
 _ERRORS_BY_CLASS: dict[str, int] = {}
 _ERRORS_BY_RETCODE: dict[str, int] = {}
+_ERRORS_BY_REASON: dict[str, int] = {}
 _LAST_ERROR: dict[str, Any] | None = None
 _LAST_ERROR_AT = 0.0
 _LAST_SEND_AT: dict[str, float] = {}
@@ -139,6 +140,7 @@ def send_queue_status() -> dict[str, Any]:
         "errors_by_api": dict(_ERRORS_BY_API),
         "errors_by_class": dict(_ERRORS_BY_CLASS),
         "errors_by_retcode": dict(_ERRORS_BY_RETCODE),
+        "errors_by_reason": dict(_ERRORS_BY_REASON),
         "last_error": last_error,
         "depth_live": depth,
     }
@@ -154,9 +156,26 @@ def reset_send_queue_for_tests() -> None:
     _ERRORS_BY_API.clear()
     _ERRORS_BY_CLASS.clear()
     _ERRORS_BY_RETCODE.clear()
+    _ERRORS_BY_REASON.clear()
     _LAST_ERROR = None
     _LAST_ERROR_AT = 0.0
     _LAST_SEND_AT.clear()
+
+
+def classify_send_queue_error(api: str, exc: Exception) -> str:
+    info = getattr(exc, "info", None)
+    detail = ""
+    if isinstance(info, dict):
+        detail = " ".join(str(info.get(key) or "") for key in ("message", "wording", "msg")).lower()
+    if api == "set_msg_emoji_like" and ("already set" in detail or "已经设置过" in detail or "65002" in detail):
+        return "already_reacted"
+    if api == "set_msg_emoji_like" and "message not found" in detail:
+        return "message_not_found"
+    if api in _HIGH_PRIORITY_APIS and ("removed from the group" in detail or "已被移出该群" in detail):
+        return "bot_not_in_group"
+    if api in _HIGH_PRIORITY_APIS and "http download failed" in detail:
+        return "media_download_failed"
+    return "other"
 
 
 def record_send_queue_error(api: str, exc: Exception) -> None:
@@ -167,6 +186,7 @@ def record_send_queue_error(api: str, exc: Exception) -> None:
     retcode = info.get("retcode") if isinstance(info, dict) else None
     if not isinstance(retcode, int) or isinstance(retcode, bool):
         retcode = None
+    reason = classify_send_queue_error(api, exc)
 
     def increment(counter: dict[str, int], key: str) -> None:
         if key not in counter and len(counter) >= _ERROR_DIMENSION_LIMIT - 1:
@@ -177,10 +197,12 @@ def record_send_queue_error(api: str, exc: Exception) -> None:
     increment(_ERRORS_BY_CLASS, error_class)
     if retcode is not None:
         increment(_ERRORS_BY_RETCODE, str(retcode))
+    increment(_ERRORS_BY_REASON, reason)
     _LAST_ERROR = {
         "api": str(api),
         "error_class": error_class,
         "retcode": retcode,
+        "reason": reason,
     }
     _LAST_ERROR_AT = time.monotonic()
 
