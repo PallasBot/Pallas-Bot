@@ -306,6 +306,10 @@ def register_db_router(
 ) -> None:
     """Register console routes."""
 
+    from .db_lifecycle_api import register_db_lifecycle_router
+
+    register_db_lifecycle_router(router, x=x, plugin_config=plugin_config)
+
     @router.get(f"{x}/db/overview", include_in_schema=True)
     async def _db_overview() -> JSONResponse:
         from pallas.core.foundation.db.pallas_console_data import database_overview

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.32-53-gc48827e3-dirty",
+    "version": "v4.1.32-70-g7020dfb8-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -18195,6 +18195,433 @@
         }
       }
     },
+    "/pallas/api/db/lifecycle/catalog": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": "Lifecycle Catalog",
+        "operationId": "lifecycle_catalog_pallas_api_db_lifecycle_catalog_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleCatalogResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/db/lifecycle/policies": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": "Lifecycle Policies",
+        "operationId": "lifecycle_policies_pallas_api_db_lifecycle_policies_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecyclePoliciesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": "Update Lifecycle Policies",
+        "operationId": "update_lifecycle_policies_pallas_api_db_lifecycle_policies_put",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecyclePoliciesModel"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecyclePoliciesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/db/lifecycle/preview": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": "Preview Lifecycle Job",
+        "operationId": "preview_lifecycle_job_pallas_api_db_lifecycle_preview_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecyclePreviewBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecyclePreviewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/db/lifecycle/jobs": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": "Start Lifecycle Job",
+        "operationId": "start_lifecycle_job_pallas_api_db_lifecycle_jobs_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LifecycleJobBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/db/lifecycle/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": "Lifecycle Job",
+        "operationId": "lifecycle_job_pallas_api_db_lifecycle_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LifecycleJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/db/overview": {
       "get": {
         "tags": [
@@ -24240,6 +24667,486 @@
           "work_completed"
         ],
         "title": "IngressDispatchHistoryPoint"
+      },
+      "LifecycleCatalogModel": {
+        "properties": {
+          "backend": {
+            "type": "string",
+            "title": "Backend"
+          },
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/LifecycleDatasetModel"
+            },
+            "type": "array",
+            "title": "Datasets"
+          },
+          "unmanaged_objects": {
+            "items": {
+              "$ref": "#/components/schemas/LifecycleObjectModel"
+            },
+            "type": "array",
+            "title": "Unmanaged Objects"
+          }
+        },
+        "type": "object",
+        "required": [
+          "backend",
+          "datasets",
+          "unmanaged_objects"
+        ],
+        "title": "LifecycleCatalogModel"
+      },
+      "LifecycleCatalogResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/LifecycleCatalogModel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "LifecycleCatalogResponse"
+      },
+      "LifecycleDatasetModel": {
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "title": "Dataset Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "risk": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Risk"
+          },
+          "registered_objects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Registered Objects"
+          },
+          "present_objects": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Present Objects"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/LifecyclePolicyModel"
+          },
+          "supports_retention": {
+            "type": "boolean",
+            "title": "Supports Retention"
+          },
+          "supports_max_bytes": {
+            "type": "boolean",
+            "title": "Supports Max Bytes"
+          },
+          "errors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "label",
+          "risk",
+          "registered_objects",
+          "present_objects",
+          "row_count",
+          "size_bytes",
+          "policy",
+          "supports_retention",
+          "supports_max_bytes",
+          "errors"
+        ],
+        "title": "LifecycleDatasetModel"
+      },
+      "LifecycleJobBody": {
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Dataset Id"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/LifecyclePolicyModel"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Confirmation Token"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "policy",
+          "confirmation_token"
+        ],
+        "title": "LifecycleJobBody"
+      },
+      "LifecycleJobModel": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "dataset_id": {
+            "type": "string",
+            "title": "Dataset Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "deleted_rows": {
+            "type": "integer",
+            "title": "Deleted Rows"
+          },
+          "freed_bytes": {
+            "type": "integer",
+            "title": "Freed Bytes"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "dataset_id",
+          "status",
+          "deleted_rows",
+          "freed_bytes",
+          "error",
+          "created_at",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "LifecycleJobModel"
+      },
+      "LifecycleJobResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/LifecycleJobModel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "LifecycleJobResponse"
+      },
+      "LifecycleObjectModel": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "size_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size Bytes"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "protected": {
+            "type": "boolean",
+            "title": "Protected"
+          },
+          "protection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protection Reason"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "row_count",
+          "size_bytes",
+          "dataset_id",
+          "protected",
+          "protection_reason"
+        ],
+        "title": "LifecycleObjectModel"
+      },
+      "LifecyclePoliciesModel": {
+        "properties": {
+          "policies": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/LifecyclePolicyModel"
+            },
+            "type": "object",
+            "title": "Policies"
+          }
+        },
+        "type": "object",
+        "required": [
+          "policies"
+        ],
+        "title": "LifecyclePoliciesModel"
+      },
+      "LifecyclePoliciesResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/LifecyclePoliciesModel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "LifecyclePoliciesResponse"
+      },
+      "LifecyclePolicyModel": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "retention_days": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 3650.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retention Days"
+          },
+          "max_bytes": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2199023255552.0,
+                "minimum": 16777216.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Bytes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "LifecyclePolicyModel"
+      },
+      "LifecyclePreviewBody": {
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Dataset Id"
+          },
+          "policy": {
+            "$ref": "#/components/schemas/LifecyclePolicyModel"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "policy"
+        ],
+        "title": "LifecyclePreviewBody"
+      },
+      "LifecyclePreviewModel": {
+        "properties": {
+          "dataset_id": {
+            "type": "string",
+            "title": "Dataset Id"
+          },
+          "candidate_rows": {
+            "type": "integer",
+            "title": "Candidate Rows"
+          },
+          "candidate_bytes": {
+            "type": "integer",
+            "title": "Candidate Bytes"
+          },
+          "confirmation_token": {
+            "type": "string",
+            "title": "Confirmation Token"
+          },
+          "expires_at": {
+            "type": "number",
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "dataset_id",
+          "candidate_rows",
+          "candidate_bytes",
+          "confirmation_token",
+          "expires_at"
+        ],
+        "title": "LifecyclePreviewModel"
+      },
+      "LifecyclePreviewResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/LifecyclePreviewModel"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "LifecyclePreviewResponse"
       },
       "LlmReplayRunBody": {
         "properties": {

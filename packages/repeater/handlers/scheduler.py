@@ -9,9 +9,9 @@ from nonebot import get_bot, get_driver, logger
 from nonebot.exception import ActionFailed
 from nonebot_plugin_apscheduler import scheduler
 
+from pallas.core.foundation.db.lifecycle_service import run_lifecycle_dataset_maintenance
 from pallas.core.platform.ingress.message_load import should_pause_tasks
 from pallas.core.platform.shard import context as shard_ctx
-from pallas.core.shared.utils.media_cache import prune_image_cache
 
 from ..message_store import MessageStore
 from ..model import Chat
@@ -25,7 +25,7 @@ async def run_image_cache_prune() -> None:
     if not repeater_maintenance_runs_on_worker():
         return
     try:
-        await prune_image_cache()
+        await run_lifecycle_dataset_maintenance("image_cache")
     except Exception:
         logger.exception("image cache prune failed")
 
