@@ -80,6 +80,8 @@ def _safe_alias(raw: str) -> str | None:
         return None
     if any(token in safe for token in ("哪只", "什么牛", "傻逼")):
         return None
+    if len(safe) >= 3 and safe.endswith(("不", "没", "非")):
+        return None
     if safe.endswith(("吗", "？", "?")):
         return None
     return safe

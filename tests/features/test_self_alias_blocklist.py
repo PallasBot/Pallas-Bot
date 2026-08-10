@@ -30,3 +30,16 @@ def test_parse_observe_rejects_question_fragments() -> None:
 
 def test_parse_teach_still_allows_real_alias() -> None:
     assert parse_self_alias_teach("漂亮牛就是你") == ["漂亮牛"]
+
+
+def test_parse_teach_rejects_negated_identity_statements() -> None:
+    assert parse_self_alias_teach("新郎不是我") == []
+    assert parse_self_alias_teach("他并不是我") == []
+    assert parse_self_alias_teach("这才不是你") == []
+
+
+def test_extract_self_aliases_drops_negation_fragments() -> None:
+    aliases = extract_self_aliases({"self_aliases": ["新郎不", "漂亮牛"]})
+
+    assert "新郎不" not in aliases
+    assert "漂亮牛" in aliases
