@@ -28,6 +28,8 @@ def test_pb_core_plugin_config_payload(monkeypatch):
     from packages.pb_core.config import field_section_id
 
     assert field_section_id("chat_drop_on_overload") == "ingress_dispatch"
+    unroutable = {name for name in names if field_section_id(name) is None}
+    assert unroutable == set()
     clear_webui_env_sections_cache()
 
 
