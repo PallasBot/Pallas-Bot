@@ -50,6 +50,7 @@ FILE_MAP: dict[str, str] = {
     "developer/index.md": "developer/index.md",
     "developer/author/index.md": "developer/author/index.md",
     "developer/architecture/overview.md": "developer/architecture/overview.md",
+    "developer/architecture/message-runtime.md": "developer/architecture/message-runtime.md",
     "developer/architecture/core-vs-extensions.md": "developer/architecture/core-vs-extensions.md",
     "developer/architecture/config-storage.md": "developer/architecture/config-storage.md",
     "developer/architecture/plugin-governance.md": "developer/architecture/plugin-governance.md",
@@ -555,6 +556,15 @@ def sync(dest_root: Path) -> int:
         topo_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(topo_src, topo_dst)
         print("sync assets/concepts-topology.svg -> src/public/assets/concepts-topology.svg")
+    runtime_src = DOCS / "assets" / "message-runtime-architecture.svg"
+    runtime_dst = src_root / "public" / "assets" / "message-runtime-architecture.svg"
+    if runtime_src.is_file():
+        runtime_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(runtime_src, runtime_dst)
+        print(
+            "sync assets/message-runtime-architecture.svg -> "
+            "src/public/assets/message-runtime-architecture.svg"
+        )
     for rel_src, rel_dst in FILE_MAP.items():
         source = DOCS / rel_src
         if not source.is_file():
