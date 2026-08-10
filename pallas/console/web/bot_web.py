@@ -63,7 +63,7 @@ _nonebot_bracket_re = re.compile(
     r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(?P<lev>\w+)\] (?P<scope>[^|]+) \| (?P<msg>.*)$",
 )
 _nonebot_brace_re = re.compile(
-    r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(?P<lev>\w+)\s*\] \{(?P<scope>[^}]*)\}\s*\| (?P<msg>.*)$",
+    r"^(?P<dt>\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \[(?P<lev>\w+)\s*\] \{(?P<scope>[^}]*)\}\s*(?:\| )?(?P<msg>.*)$",
 )
 _exc_line_re = re.compile(
     r"^(?P<exc>[\w.]+(?:Error|Exception))(?:\s*:\s*(?P<msg>.*))?$",

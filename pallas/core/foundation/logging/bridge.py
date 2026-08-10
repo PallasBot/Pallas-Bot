@@ -13,10 +13,8 @@ if TYPE_CHECKING:
     from logging import LogRecord
     from typing import Any
 
-REPO_CONSOLE_LOG_FORMAT = (
-    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{name:<12}}}</u></c> | {message}"
-)
-REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{name:<12}}} | {message}"
+REPO_CONSOLE_LOG_FORMAT = "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{name:<12}}}</u></c> {message}"
+REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{name:<12}}} {message}"
 
 _TRANSIENT_UVICORN_MESSAGES = (
     "keepalive ping failed",

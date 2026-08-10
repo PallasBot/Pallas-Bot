@@ -109,7 +109,7 @@ def test_parse_nonebot_bracket_line():
 
 def test_parse_aligned_brace_source_line():
     e = parse_nonebot_log_line(
-        "05-22 00:38:12 [SUCCESS ] {pallas      } | [Bot 1] [群 2] [用户 3] hello",
+        "05-22 00:38:12 [SUCCESS ] {pallas      } [Bot 1] [群 2] [用户 3] hello",
     )
     assert e["time"]
     assert e["scope"] == "pallas"
