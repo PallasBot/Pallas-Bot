@@ -407,17 +407,17 @@ def transform_for_vitepress(text: str) -> str:
     )
     text = re.sub(
         r"\]\(\.\./config/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/config/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/config/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./tools/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/tools/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/tools/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./scripts/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
         text,
     )
     text = re.sub(
@@ -430,17 +430,17 @@ def transform_for_vitepress(text: str) -> str:
     text = re.sub(r"\]\(Migration-v3\.md([^)]*)\)", r"](/about/migration\1)", text)
     text = re.sub(
         r"\]\(\.\./\.\./\.\./resource/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/resource/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/resource/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./\.\./\.\./tools/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/tools/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/tools/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./\.\./\.\./config/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/config/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/config/\1)",
         text,
     )
     text = re.sub(
@@ -450,7 +450,7 @@ def transform_for_vitepress(text: str) -> str:
     )
     text = re.sub(
         r"\]\(\.\./\.\./\.\./scripts/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
         text,
     )
     text = re.sub(r"\]\(guide/([a-z0-9.-]+)\.md([^)]*)\)", r"](/guide/\1\2)", text)
@@ -486,12 +486,12 @@ def transform_for_vitepress(text: str) -> str:
     )
     text = re.sub(
         r"\]\(\.\./\.\./skills/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./skills/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
         text,
     )
     text = re.sub(r"\]\(4\.0-start\.md([^)]*)\)", r"](/guide/4.0-start\1)", text)

@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import shutil
 import tarfile
 import tempfile
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from packages.pb_webui.manager import resolve_github_release_asset_urls
 from pallas.core.shared.utils.stream_download import sync_stream_download_to_file
@@ -116,7 +117,7 @@ def replace_file(source: Path, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     staged = target.with_name(f".{target.name}.pallas-update-{uuid.uuid4().hex}")
     shutil.copy2(source, staged)
-    os.replace(staged, target)
+    staged.replace(target)
 
 
 def apply_release_bundle(bundle: ReleaseBundle, target_root: Path) -> dict[str, Any]:
