@@ -244,10 +244,6 @@ class RepeaterNativeHandler:
         bot: Bot,
         event: Event,
     ) -> HandlingOutcome:
-        from pallas.product.llm.config import get_llm_config
-        from pallas.product.llm.runtime_api import resolve_repeater_capabilities
-
-        capabilities = resolve_repeater_capabilities(get_llm_config())
         from packages.repeater.event_gate import build_repeater_event_context
         from packages.repeater.model import Chat
         from packages.repeater.reply_preparation import prepare_repeater_reply
@@ -255,11 +251,7 @@ class RepeaterNativeHandler:
 
         repeater_context = await build_repeater_event_context(int(bot.self_id), event)
         if repeater_context is None:
-            return HandlingOutcome(
-                handled=False,
-                fallback_to_legacy=True,
-                fallback_reason="event_context_unavailable",
-            )
+            return HandlingOutcome(handled=True)
         if await is_message_scrub_blocked_async(
             plain_text=repeater_context.plain_body,
             raw_message=repeater_context.norm_raw,
@@ -289,6 +281,10 @@ class RepeaterNativeHandler:
                 deferred_actions=(capture_action,) + fanout_outcome.deferred_actions,
             )
 
+        from pallas.product.llm.config import get_llm_config
+        from pallas.product.llm.runtime_api import resolve_repeater_capabilities
+
+        capabilities = resolve_repeater_capabilities(get_llm_config())
         llm_outcome = None
         if capabilities.llm_enabled:
             llm_outcome = await try_build_repeater_llm_select_outcome(
