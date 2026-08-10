@@ -16,7 +16,7 @@
 | 编写社区或站点插件 | [写第一个插件](/developer/plugin-development/first-plugin) · [插件开发入门](/developer/plugin-development/getting-started) · [发布](/developer/plugin-development/publishing) | 从本地插件开始，并完成打包发布。 |
 | 编写官方插件 | [Core vs 扩展](/developer/architecture/core-vs-extensions) · [Golden Plugin](/developer/plugin-development/golden-plugin) · [元数据](/developer/plugin-development/metadata) | 确认组件归属，按标准结构接入插件。 |
 | 接入命令与权限 | [cmd_perm](/common/cmd_perm) | 定义命令权限，并让帮助展示正确的可用范围。 |
-| 查询插件 API | [Cookbook](/developer/plugin-development/pallas-api-cookbook) | 查找 `pallas.api.*` 的常用调用方式。 |
+| 查询插件 API / 接入 direct | [Cookbook](/developer/plugin-development/pallas-api-cookbook) | 查找 `pallas.api.*`，判断精确命令是否适合统一运行时。 |
 | 开发或联调控制台 | [WebUI 前端](/developer/webui) · [WebUI API](/common/webui/api/) | 了解 Pallas-Bot-WebUI 的联调、构建和 JSON API 分域。 |
 | 发布官方包 | [官方插件 PyPI](/developer/extension-pypi-publish) | 发布 `pallas-plugin-*` 或 `pallas-core`。 |
 
@@ -31,7 +31,7 @@
 | 配置合并 | `pallas.toml` → `.env` → `webui.json` |
 | 分片 | hub / worker / Redis；消息主路径在 worker |
 
-主仓或平台开发时，可按 [架构总览](/developer/architecture/overview) → [Bot 内置 Agent 生命周期](/developer/architecture/agent-lifecycle) → [LLM 输出路径](/developer/architecture/llm-output-path) → [分片](/developer/architecture/shard-runtime) → [配置存储](/developer/architecture/config-storage) → [治理](/developer/architecture/plugin-governance) 的顺序阅读。
+主仓或平台开发时，可按 [架构总览](/developer/architecture/overview) → [统一消息入口](/developer/architecture/message-runtime) → [Bot 内置 Agent 生命周期](/developer/architecture/agent-lifecycle) → [LLM 输出路径](/developer/architecture/llm-output-path) → [分片](/developer/architecture/shard-runtime) → [配置存储](/developer/architecture/config-storage) → [治理](/developer/architecture/plugin-governance) 的顺序阅读。
 
 ## 后续阅读：目录索引
 

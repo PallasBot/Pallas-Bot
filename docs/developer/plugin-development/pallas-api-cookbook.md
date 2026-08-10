@@ -27,6 +27,58 @@ from pallas.api.commands import (
 )
 ```
 
+## 精确命令与统一运行时
+
+`pallas.api.runtime` 为适合的精确命令提供 `direct` 路径。它不是 matcher 的替代品，也不要求整个插件一次迁移。
+
+| 命令形态 | 推荐路径 |
+| --- | --- |
+| 精确文本、单次处理、权限和副作用边界清晰 | `pallas.api.runtime` direct |
+| 状态 matcher、复杂前缀、`@` 语义、多步会话 | NoneBot matcher |
+| 同一插件同时包含两类命令 | 按命令混合接入 |
+
+最小注册示例：
+
+```python
+from pallas.api.runtime import (
+    DirectCommandContext,
+    DirectCommandResult,
+    register_exact_command_handler,
+    reply,
+)
+
+
+async def handle_ping(context: DirectCommandContext) -> DirectCommandResult:
+    return reply(f"pong: {context.command_text}")
+
+
+PING_DECLARATION = register_exact_command_handler(
+    handler_id="example.ping.direct",
+    module="example",
+    commands=("牛牛 ping",),
+    command_id="example.ping",
+    execute=handle_ping,
+)
+```
+
+`command_id` 继续使用插件已有的权限 ID；运行时会按同一 ID 检查命令权限。声明应在插件加载时注册，代码热载卸载时由运行时按 `module` 清理。
+
+### 处理结果
+
+| API | 用途 |
+| --- | --- |
+| `reply(message)` | 返回一条由运行时统一发送的回复。 |
+| `DirectWorkJob(...)` | 提交可持久化、带幂等键的后台任务。 |
+| `completion_effect(name, run)` | 在统一提交阶段执行需要等待完成的异步效果。 |
+| `matcher_fallback(reason)` | 当前 direct handler 不适用且尚未产生副作用时，交回 matcher。 |
+| `continue_matcher=True` | direct 已处理后仍允许 matcher 继续，用于确实需要两条路径协作的命令。 |
+
+`matcher_fallback()` 的结果不能同时携带回复、任务或完成效果。副作用提交一旦开始，发送或任务可能已经被下游接受；此后即使发生错误也不会回落 matcher 重试，以免产生重复操作。
+
+`continue_matcher` 可以在 `register_exact_command_handler()` 声明上设置，也可以由 `reply(..., continue_matcher=True)` 或 `DirectCommandResult` 针对单次结果设置。除非命令明确需要两套处理共同执行，否则保持默认 `False`。
+
+公共契约止于 `pallas.api.runtime`。插件不要导入 `pallas.core.platform.message_runtime`；内部 planner、registry 和 committer 可以独立演进。维护者可继续阅读[统一消息入口架构](/developer/architecture/message-runtime)。
+
 ## 配置与 WebUI 热载
 
 ```python
