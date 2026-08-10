@@ -10,7 +10,7 @@
 flowchart LR
     A[OneBot 消息] --> B[统一消息入口]
     B --> C[轻量分类与命令规划]
-    C -->|已接入的精确命令| D[direct 路径]
+    C -->|已接入的声明式命令| D[direct 路径]
     C -->|复杂交互或兼容插件| E[matcher 路径]
     D --> F[统一副作用提交]
     E --> I[NoneBot 执行]
@@ -26,12 +26,12 @@ flowchart LR
 direct 路径按以下顺序工作：
 
 1. 入站层从事件构造 `MessageContext`，记录账号、群、消息文本、路由候选等本次处理所需信息。
-2. 生命周期从 `pallas.api.runtime` 的精确命令声明构造 registry snapshot。运行中的一次规划只读取该快照，不让插件注册变化破坏当前决策。
+2. 生命周期从 `pallas.api.runtime` 的精确文本或前缀命令声明构造 registry snapshot。运行中的一次规划只读取该快照，不让插件注册变化破坏当前决策。
 3. `MessagePlanner` 根据消息分类、路由候选与 handler 声明生成 `HandlingPlan`。只有唯一且满足约束的 direct handler 才会进入 direct 执行；其他情况明确交回 matcher。
 4. `MessageRuntime` 执行 handler，并将公共 `DirectCommandResult` 转换为内部 `HandlingOutcome`。
 5. `ActionCommitter` 统一提交回复、持久任务、跨 worker 动作和完成效果；提交结果随后写入 telemetry。
 
-planner、registry、`HandlingPlan`、`HandlingOutcome` 和 `ActionCommitter` 都是内部 ABI。插件只声明“哪些精确命令由谁处理”以及“处理结果包含哪些受支持效果”。
+planner、registry、`HandlingPlan`、`HandlingOutcome` 和 `ActionCommitter` 都是内部 ABI。插件只声明“哪些命令文本或前缀由谁处理”以及“处理结果包含哪些受支持效果”。前缀声明仍由框架执行 `startswith` 匹配，不接受插件自定义 planner predicate。
 
 ## 副作用与失败边界
 
@@ -46,6 +46,8 @@ planner、registry、`HandlingPlan`、`HandlingOutcome` 和 `ActionCommitter` �
 关键不变量是：**只有尚未开始 direct 副作用时才能 fallback。** handler 在产生结果前失败，且该 handler 允许错误回落时，可以交回 matcher；显式 `matcher_fallback()` 也必须是无副作用结果。
 
 一旦 `ActionCommitter` 开始提交，下游可能已经接受任务或发送动作。此时提交失败会记录为 `SideEffectCommitError`，但运行时仍把本次消息视为已经由 direct 取得所有权，不再用 matcher 重试。这避免“发送成功但确认失败”一类情况造成重复回复或重复执行。
+
+durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotAction` 由 work auxiliary 按顺序交给现有 `bot_action` 设施，单机直接投递，分片时路由到持有目标 Bot 连接的 worker。handler 在返回结果前失败仍使用 work job 的重试策略；结果提交一旦开始便可能已经产生可见动作，此后失败会直接 dead-letter，不再重跑整个 job。
 
 ## fallback 与 continuation
 
@@ -71,7 +73,7 @@ fallback 表示 direct **没有处理**本次消息，由 matcher 接管；conti
 
 ## 插件归属与渐进接入
 
-每个精确命令声明包含稳定的 `handler_id`、插件 `module`、命令文本集合和 `command_id`。`module` 用于生命周期清理和候选归属，`command_id` 复用现有权限配置。多个 direct handler 同时声称同一条消息时，planner 不猜测胜者，而是保守交回 matcher。
+每个命令声明包含稳定的 `handler_id`、插件 `module`、精确文本或前缀集合和 `command_id`。`module` 用于生命周期清理和候选归属，`command_id` 复用现有权限配置。同模块内相交的精确文本/前缀声明会在构造快照时跳过；多个 direct handler 仍声称同一条消息时，planner 不猜测胜者，而是保守交回 matcher。
 
 迁移单位是**命令**，不是插件：一个插件可以让高频、精确、单次处理的命令走 direct，同时保留救人、补枪、状态 matcher 或多步会话等复杂路径。社区插件可以永久只使用 matcher；只有确实需要缩短高频命令路径时才接入公共 API。
 
@@ -81,6 +83,7 @@ fallback 表示 direct **没有处理**本次消息，由 matcher 接管；conti
 | --- | --- |
 | 插件公共声明与结果类型 | `pallas/api/runtime/__init__.py` |
 | planner、registry、模型与提交器 | `pallas/core/platform/message_runtime/` |
+| durable work result 提交 | `pallas/core/platform/work_jobs/` |
 | NoneBot 入站衔接与路径指标 | `pallas/core/platform/ingress/` |
 | direct / matcher 历史指标展示 | `packages/pb_webui/` |
 | 公共 API 契约测试 | `tests/api/runtime/` |

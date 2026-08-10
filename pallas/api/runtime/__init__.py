@@ -45,6 +45,38 @@ class DirectWorkJob:
 
 
 @dataclass(frozen=True, slots=True)
+class DirectBotAction:
+    action: str
+    target_bot_id: int
+    payload: dict[str, Any]
+    timeout_sec: float = 45.0
+
+    def __post_init__(self) -> None:
+        normalized_action = self.action.strip()
+        if not normalized_action:
+            raise ValueError("action is required")
+        if self.target_bot_id <= 0:
+            raise ValueError("target bot is required")
+        if not isinstance(self.payload, dict):
+            raise ValueError("payload must be a dict")
+        if self.timeout_sec <= 0:
+            raise ValueError("timeout must be positive")
+        object.__setattr__(self, "action", normalized_action)
+        object.__setattr__(self, "payload", copy.deepcopy(self.payload))
+
+
+@dataclass(frozen=True, slots=True)
+class DirectWorkResult:
+    actions: tuple[DirectBotAction, ...] = ()
+
+    def __post_init__(self) -> None:
+        actions = tuple(self.actions)
+        if any(not isinstance(action, DirectBotAction) for action in actions):
+            raise ValueError("actions must contain DirectBotAction values")
+        object.__setattr__(self, "actions", actions)
+
+
+@dataclass(frozen=True, slots=True)
 class DirectCompletionEffect:
     name: str
     run: Callable[[], Awaitable[None]]
@@ -89,7 +121,20 @@ class ExactCommandDeclaration:
     continue_matcher: bool = False
 
 
-_declarations: list[ExactCommandDeclaration] = []
+@dataclass(frozen=True, slots=True)
+class PrefixCommandDeclaration:
+    handler_id: str
+    module: str
+    prefixes: frozenset[str]
+    command_id: str
+    execute: DirectCommandCallback
+    continue_matcher: bool = False
+
+
+type CommandDeclaration = ExactCommandDeclaration | PrefixCommandDeclaration
+
+
+_declarations: list[CommandDeclaration] = []
 
 
 def reply(message: object, *, continue_matcher: bool = False) -> DirectCommandResult:
@@ -137,7 +182,48 @@ def register_exact_command_handler(
     return declaration
 
 
+def register_prefix_command_handler(
+    *,
+    handler_id: str,
+    module: str,
+    prefixes: Iterable[str],
+    command_id: str,
+    execute: DirectCommandCallback,
+    continue_matcher: bool = False,
+) -> PrefixCommandDeclaration:
+    normalized_handler_id = handler_id.strip()
+    normalized_module = module.strip()
+    normalized_command_id = command_id.strip()
+    normalized_prefixes = frozenset(prefix.strip() for prefix in prefixes if prefix.strip())
+    if not normalized_handler_id:
+        raise ValueError("handler_id is required")
+    if not normalized_module:
+        raise ValueError("module is required")
+    if not normalized_command_id:
+        raise ValueError("command_id is required")
+    if not normalized_prefixes:
+        raise ValueError("at least one command prefix is required")
+    declaration = PrefixCommandDeclaration(
+        handler_id=normalized_handler_id,
+        module=normalized_module,
+        prefixes=normalized_prefixes,
+        command_id=normalized_command_id,
+        execute=execute,
+        continue_matcher=continue_matcher,
+    )
+    _declarations.append(declaration)
+    return declaration
+
+
 def exact_command_declarations() -> tuple[ExactCommandDeclaration, ...]:
+    return tuple(item for item in _declarations if isinstance(item, ExactCommandDeclaration))
+
+
+def prefix_command_declarations() -> tuple[PrefixCommandDeclaration, ...]:
+    return tuple(item for item in _declarations if isinstance(item, PrefixCommandDeclaration))
+
+
+def command_declarations() -> tuple[CommandDeclaration, ...]:
     return tuple(_declarations)
 
 
@@ -154,11 +240,17 @@ __all__ = [
     "DirectCommandContext",
     "DirectCommandResult",
     "DirectCompletionEffect",
+    "DirectBotAction",
     "DirectReply",
     "DirectWorkJob",
+    "DirectWorkResult",
     "ExactCommandDeclaration",
+    "PrefixCommandDeclaration",
+    "command_declarations",
     "completion_effect",
     "matcher_fallback",
+    "prefix_command_declarations",
     "register_exact_command_handler",
+    "register_prefix_command_handler",
     "reply",
 ]

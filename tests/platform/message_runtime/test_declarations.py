@@ -9,6 +9,7 @@ from pallas.api.runtime import (
     DirectWorkJob,
     completion_effect,
     register_exact_command_handler,
+    register_prefix_command_handler,
     reply,
     reset_exact_command_handlers,
 )
@@ -160,3 +161,65 @@ async def test_permission_denial_falls_back_without_invoking_plugin(monkeypatch:
 
     assert outcome.fallback_to_matcher is True
     execute_callback.assert_not_awaited()
+
+
+def test_prefix_handler_accepts_the_declared_prefix_and_preserves_full_command_text() -> None:
+    register_prefix_command_handler(
+        handler_id="sing.generate",
+        module="sing",
+        prefixes=("牛牛唱歌",),
+        command_id="sing.sing",
+        execute=execute,
+    )
+    handler = build_declaration_handlers()[0][0]
+    context = MessageContext(
+        ingress_id="1:2:3",
+        bot_id=1,
+        group_id=2,
+        message_id=3,
+        plain_text="牛牛唱歌 星间飞行",
+        raw_text="牛牛唱歌 星间飞行",
+        is_to_me=False,
+        command_traffic=True,
+        route_modules=frozenset({"sing"}),
+    )
+
+    assert handler.accepts(context) is True
+
+
+def test_snapshot_rejects_overlapping_prefixes_within_one_module() -> None:
+    register_prefix_command_handler(
+        handler_id="sing.general",
+        module="sing",
+        prefixes=("牛牛唱歌",),
+        command_id="sing.sing",
+        execute=execute,
+    )
+    register_prefix_command_handler(
+        handler_id="sing.named",
+        module="sing",
+        prefixes=("牛牛唱歌 ",),
+        command_id="sing.sing",
+        execute=execute,
+    )
+
+    handlers, diagnostics = build_declaration_handlers()
+
+    assert [handler.handler_id for handler in handlers] == ["sing.general"]
+    assert [(item.code, item.handler_id) for item in diagnostics] == [("overlapping_command", "sing.named")]
+
+
+def test_snapshot_rejects_exact_command_owned_by_a_prefix_handler_in_the_same_module() -> None:
+    register_prefix_command_handler(
+        handler_id="sing.general",
+        module="sing",
+        prefixes=("牛牛唱歌",),
+        command_id="sing.sing",
+        execute=execute,
+    )
+    declaration("sing.random", "sing", "牛牛唱歌")
+
+    handlers, diagnostics = build_declaration_handlers()
+
+    assert [handler.handler_id for handler in handlers] == ["sing.general"]
+    assert [(item.code, item.handler_id) for item in diagnostics] == [("overlapping_command", "sing.random")]

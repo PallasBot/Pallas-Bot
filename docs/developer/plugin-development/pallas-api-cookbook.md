@@ -29,12 +29,13 @@ from pallas.api.commands import (
 
 ## 精确命令与统一运行时
 
-`pallas.api.runtime` 为适合的精确命令提供 `direct` 路径。它不是 matcher 的替代品，也不要求整个插件一次迁移。
+`pallas.api.runtime` 为适合的声明式命令提供 `direct` 路径。它不是 matcher 的替代品，也不要求整个插件一次迁移。
 
 | 命令形态 | 推荐路径 |
 | --- | --- |
 | 精确文本、单次处理、权限和副作用边界清晰 | `pallas.api.runtime` direct |
-| 状态 matcher、复杂前缀、`@` 语义、多步会话 | NoneBot matcher |
+| 固定前缀、参数由 callback 继续解析 | `register_prefix_command_handler()` direct |
+| 状态 matcher、复杂规则、`@` 语义、多步会话 | NoneBot matcher |
 | 同一插件同时包含两类命令 | 按命令混合接入 |
 
 最小注册示例：
@@ -61,6 +62,22 @@ PING_DECLARATION = register_exact_command_handler(
 )
 ```
 
+固定前缀命令使用 `register_prefix_command_handler()`，callback 收到的 `context.command_text` 仍是完整文本：
+
+```python
+from pallas.api.runtime import register_prefix_command_handler
+
+SING_DECLARATION = register_prefix_command_handler(
+    handler_id="example.sing.direct",
+    module="example",
+    prefixes=("牛牛唱歌", "帕拉斯唱歌"),
+    command_id="example.sing",
+    execute=handle_sing,
+)
+```
+
+前缀只做框架内置的 `startswith` 匹配，不支持自定义 predicate。同一模块的精确文本与前缀、两个互相包含的前缀不能分属不同 handler；有歧义的后注册声明会被跳过并保留 matcher 路径。
+
 `command_id` 继续使用插件已有的权限 ID；运行时会按同一 ID 检查命令权限。声明应在插件加载时注册，代码热载卸载时由运行时按 `module` 清理。
 
 ### 处理结果
@@ -76,6 +93,40 @@ PING_DECLARATION = register_exact_command_handler(
 `matcher_fallback()` 的结果不能同时携带回复、任务或完成效果。副作用提交一旦开始，发送或任务可能已经被下游接受；此后即使发生错误也不会回落 matcher 重试，以免产生重复操作。
 
 `continue_matcher` 可以在 `register_exact_command_handler()` 声明上设置，也可以由 `reply(..., continue_matcher=True)` 或 `DirectCommandResult` 针对单次结果设置。除非命令明确需要两套处理共同执行，否则保持默认 `False`。
+
+### 外置 durable work handler
+
+扩展可以通过 Python entry point 向 work auxiliary 注册任务 handler：
+
+```toml
+[project.entry-points."pallas.work_handlers"]
+example = "pallas_plugin_example.work:work_handlers"
+```
+
+provider 返回 `kind -> async handler` 映射；handler 接收 `DirectWorkJob.payload`，成功时返回 `None`，或返回需要投递 Bot 动作的 `DirectWorkResult`：
+
+```python
+from pallas.api.runtime import DirectBotAction, DirectWorkResult
+
+
+async def generate(payload: dict) -> DirectWorkResult:
+    message = await build_message(payload)
+    return DirectWorkResult(
+        actions=(
+            DirectBotAction(
+                action="send_group_msg",
+                target_bot_id=int(payload["bot_id"]),
+                payload={"group_id": int(payload["group_id"]), "message_text": message},
+            ),
+        )
+    )
+
+
+def work_handlers():
+    return {"example.generate": generate}
+```
+
+内置 handler 优先于外置 entry point；重复 kind 与无效 provider 会被隔离并记录。handler 在返回结果前抛错按队列策略重试；`DirectWorkResult` 开始提交后若失败则直接进入 dead letter，避免重跑造成重复发送。因此耗时计算应在 handler 内完成，可见动作只放进返回结果，不要由 handler 自己调用 Bot API。
 
 公共契约止于 `pallas.api.runtime`。插件不要导入 `pallas.core.platform.message_runtime`；内部 planner、registry 和 committer 可以独立演进。维护者可继续阅读[统一消息入口架构](/developer/architecture/message-runtime)。
 

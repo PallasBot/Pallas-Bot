@@ -8,12 +8,15 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
+from pallas.api.runtime import DirectWorkResult
+
 from .observability import WorkAuxRuntimeMetrics
 
 if TYPE_CHECKING:
+    from .result_committer import WorkResultCommitter
     from .store import WorkJobStore
 
-WorkJobHandler = Callable[[dict[str, Any]], Awaitable[None]]
+WorkJobHandler = Callable[[dict[str, Any]], Awaitable[DirectWorkResult | None]]
 
 
 class WorkJobWorker:
@@ -28,6 +31,7 @@ class WorkJobWorker:
         batch_size: int = 1,
         max_attempts: int = 8,
         metrics: WorkAuxRuntimeMetrics | None = None,
+        result_committer: WorkResultCommitter | None = None,
     ) -> None:
         self.store = store
         self.owner = str(owner)
@@ -37,6 +41,11 @@ class WorkJobWorker:
         self.batch_size = max(1, int(batch_size))
         self.max_attempts = max(1, int(max_attempts))
         self.metrics = metrics or WorkAuxRuntimeMetrics()
+        if result_committer is None:
+            from .result_committer import WorkResultCommitter
+
+            result_committer = WorkResultCommitter()
+        self.result_committer = result_committer
 
     async def run_once(self) -> bool:
         jobs = await self.store.claim_many(owner=self.owner, lease_sec=self.lease_sec, limit=self.batch_size)
@@ -81,7 +90,9 @@ class WorkJobWorker:
         try:
             done, _ = await asyncio.wait((handler_task, lease_task), return_when=asyncio.FIRST_COMPLETED)
             if handler_task in done:
-                await handler_task
+                result = await handler_task
+                if result is not None:
+                    await self.result_committer.commit(result)
             elif lease_task in done:
                 handler_task.cancel()
                 await asyncio.gather(handler_task, return_exceptions=True)
@@ -97,6 +108,16 @@ class WorkJobWorker:
         except Exception as exc:
             logger.warning("work aux: job failed kind={} id={}: {}", job.kind, job.id, exc)
             self.metrics.record_failed()
+            if getattr(exc, "committed", False):
+                dead_lettered = await self.store.dead_letter(
+                    job_id=job.id,
+                    owner=self.owner,
+                    lease_id=job.lease_id or "",
+                    reason=str(exc),
+                )
+                if dead_lettered:
+                    self.metrics.record_dead_lettered()
+                return None
             await self._fail_or_dead_letter(job, str(exc))
             return None
         finally:
