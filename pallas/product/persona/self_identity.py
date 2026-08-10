@@ -13,21 +13,19 @@ DEFAULT_GENERIC_ALIASES: tuple[str, ...] = ("牛牛",)
 DEFAULT_SELF_ALIASES: tuple[str, ...] = DEFAULT_GENERIC_ALIASES
 
 _SELF_ALIAS_TEACH_RE = re.compile(
-    r"^(?:记住[：:]?\s*)?"
-    r"(?P<alias>.+?)"
+    r"^(?P<alias>.+?)"
     r"(?:就是我|是我)$"
 )
 _SELF_ALIAS_IS_YOU_RE = re.compile(
-    r"^(?:记住[：:]?\s*)?"
-    r"(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})"
+    r"^(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12}?)"
     r"(?:就是你|是你)$"
 )
 _SELF_ALIAS_POINTS_YOU_RE = re.compile(
-    r"^(?:记住[：:]?\s*)?"
     r"(?P<alias>.+?)"
     r"(?:指的是你|就是指你|指的是bot|指的是机器人)$",
     re.IGNORECASE,
 )
+_SELF_ALIAS_TEACH_PREFIX_RE = re.compile(r"^记住[：:]?\s*(?P<body>.+)$")
 _SELF_ALIAS_EQUALS_RE = re.compile(r"^(?P<left>[\u4e00-\u9fffA-Za-z·]{1,12})\s*[=＝]\s*(?:我|你|bot|Bot|机器人)$")
 _SELF_ALIAS_MEANS_RE = re.compile(
     r"^(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})\s*(?:指的是|就是指|就是)\s*(?:你|我|bot|Bot|机器人)$"
@@ -38,7 +36,6 @@ _SELF_ALIAS_OBSERVE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^群友(?:都)?叫你(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})$"),
     re.compile(r"^你的(?:外号|昵称|群名片)(?:是|叫)(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})$"),
     re.compile(r"^(?P<alias>[\u4e00-\u9fffA-Za-z·]{1,12})是你的(?:外号|昵称|群名片)$"),
-    re.compile(r"^你(?:就)?是(?P<alias>[\u4e00-\u9fffA-Za-z·]{2,12})$"),
 )
 _ALIAS_BLOCKLIST = frozenset({
     "我",
@@ -77,6 +74,8 @@ def _safe_alias(raw: str) -> str | None:
     if not safe or safe.casefold() in _ALIAS_BLOCKLIST_CASEFOLDS:
         return None
     if len(safe) < 2:
+        return None
+    if any(token in safe for token in ("，", ",", "。", "！", "!", "？", "?", "：", ":", "；", ";")):
         return None
     if any(token in safe for token in ("哪只", "什么牛", "傻逼")):
         return None
@@ -260,14 +259,19 @@ def parse_self_alias_teach(plain_text: str) -> list[str]:
     body = str(plain_text or "").strip()
     if not body or len(body) > 48:
         return []
-    for pattern in (
-        _SELF_ALIAS_POINTS_YOU_RE,
-        _SELF_ALIAS_MEANS_RE,
-        _SELF_ALIAS_EQUALS_RE,
-        _SELF_ALIAS_IS_YOU_RE,
-        _SELF_ALIAS_TEACH_RE,
-    ):
-        matched = pattern.match(body)
+
+    explicit = _SELF_ALIAS_TEACH_PREFIX_RE.match(body)
+    definition = str(explicit.group("body") or "").strip() if explicit else body
+    patterns = (_SELF_ALIAS_EQUALS_RE,)
+    if explicit:
+        patterns += (
+            _SELF_ALIAS_POINTS_YOU_RE,
+            _SELF_ALIAS_MEANS_RE,
+            _SELF_ALIAS_IS_YOU_RE,
+            _SELF_ALIAS_TEACH_RE,
+        )
+    for pattern in patterns:
+        matched = pattern.match(definition)
         if not matched:
             continue
         alias = str(matched.groupdict().get("alias") or matched.groupdict().get("left") or "").strip()
