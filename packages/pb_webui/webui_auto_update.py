@@ -197,7 +197,7 @@ def auto_update_status_payload(config: Any | None = None) -> dict[str, Any]:
     if update_track == "branch":
         auto_apply_eligible = bool(deploy.get("git_available")) and mode != "docker"
     else:
-        auto_apply_eligible = mode == "release_tag"
+        auto_apply_eligible = mode in {"release_tag", "docker"}
     web = state["targets"]["webui"]
     bot = state["targets"]["bot"]
     plugins = state["targets"]["plugins"]
@@ -383,7 +383,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         eligible = bool(deploy.get("git_available")) and mode != "docker"
         skip_reason = (mode or "unknown") if not eligible else ""
     else:
-        eligible = mode == "release_tag"
+        eligible = mode in {"release_tag", "docker"}
         skip_reason = (mode or "unknown") if not eligible else ""
     if not eligible:
         out = {"result": "skipped", "reason": f"deploy:{skip_reason or 'unknown'}"}

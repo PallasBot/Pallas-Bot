@@ -6,10 +6,17 @@ from packages.pb_webui.manager import inspect_bot_deployment
 
 
 def test_inspect_bot_deployment_docker_when_not_git() -> None:
-    with patch("subprocess.check_output", side_effect=OSError("no git")):
+    with (
+        patch("subprocess.check_output", side_effect=OSError("no git")),
+        patch("pallas.core.foundation.bot_version.get_bot_image_version", return_value="v4.1.0"),
+        patch("pallas.core.foundation.bot_version.get_runtime_overlay_version", return_value="v4.2.0"),
+    ):
         info = inspect_bot_deployment()
     assert info["deployment_mode"] == "docker"
     assert info["git_available"] is False
+    assert info["image_version"] == "v4.1.0"
+    assert info["runtime_version"] == "v4.2.0"
+    assert info["container_overlay_update"] is True
 
 
 def test_inspect_bot_deployment_release_tag_dirty() -> None:

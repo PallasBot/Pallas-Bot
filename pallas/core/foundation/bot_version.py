@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.metadata
+import json
 import os
 import re
 import subprocess
@@ -17,6 +18,7 @@ _GIT_TAIL_RE = re.compile(r"\s+git\s+[0-9a-f]{4,40}\s*$", re.IGNORECASE)
 _PLUS_G_RE = re.compile(r"\+g[0-9a-f]{4,40}", re.IGNORECASE)
 _BRACKET_SHA_RE = re.compile(r"\[[0-9a-f]{4,40}\]", re.IGNORECASE)
 _PAREN_SHA_RE = re.compile(r"\s*\(\s*[0-9a-f]{7,40}\s*\)\s*$", re.IGNORECASE)
+RUNTIME_VERSION_MARKER = ".pallas-runtime-version.json"
 
 
 def pallas_bot_repo_root() -> Path:
@@ -64,9 +66,36 @@ def get_bot_current_version() -> dict[str, str]:
     return {"tag": tag, "commit": commit}
 
 
+def get_bot_image_version() -> str:
+    return (os.environ.get("PALLAS_BOT_VERSION") or os.environ.get("PALLAS_VERSION") or "").strip()
+
+
+def get_runtime_overlay_version() -> str:
+    try:
+        payload = json.loads((pallas_bot_repo_root() / RUNTIME_VERSION_MARKER).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    return str(payload.get("tag") or "").strip()
+
+
+def write_runtime_overlay_version(tag: str) -> None:
+    value = (tag or "").strip()
+    if not value:
+        raise ValueError("运行版本不能为空")
+    path = pallas_bot_repo_root() / RUNTIME_VERSION_MARKER
+    staged = path.with_suffix(".tmp")
+    staged.write_text(json.dumps({"tag": value}, ensure_ascii=False), encoding="utf-8")
+    staged.replace(path)
+
+
 def get_pallas_bot_version_for_health() -> str:
     """供 ``/health`` 的 ``pallas_bot``：优先环境变量、git describe，其次已安装发行版号，最后 pyproject。"""
-    env = (os.environ.get("PALLAS_BOT_VERSION") or os.environ.get("PALLAS_VERSION") or "").strip()
+    overlay = get_runtime_overlay_version()
+    if overlay:
+        return overlay
+    env = get_bot_image_version()
     if env:
         return env
     root = pallas_bot_repo_root()

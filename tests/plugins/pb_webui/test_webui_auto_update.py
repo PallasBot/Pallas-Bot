@@ -235,6 +235,42 @@ async def test_bot_tick_applies_on_clean_release_tag(state_dir) -> None:
 
 
 @pytest.mark.asyncio
+async def test_bot_tick_applies_release_in_docker(state_dir) -> None:
+    check = {
+        "current_tag": "v1.0.0",
+        "latest_tag": "v1.1.0",
+        "has_update": True,
+        "error": None,
+    }
+    apply = AsyncMock(return_value={"tag": "v1.1.0", "message": "ok", "container_overlay_update": True})
+    with (
+        patch(
+            "packages.pb_webui.manager.inspect_bot_deployment",
+            return_value={"deployment_mode": "docker", "git_available": False},
+        ),
+        patch.object(auto, "_load_bot_check", AsyncMock(return_value=check)),
+        patch.object(auto, "apply_bot_update", apply),
+    ):
+        result = await auto._run_bot_target(
+            config=_cfg(pallas_bot_auto_update_enabled=True, pallas_bot_update_track="release"),
+            force=True,
+        )
+    assert result["result"] == "applied"
+    apply.assert_awaited_once()
+
+
+def test_auto_update_status_allows_docker_release(state_dir) -> None:
+    with patch(
+        "packages.pb_webui.manager.inspect_bot_deployment",
+        return_value={"deployment_mode": "docker", "git_available": False},
+    ):
+        status = auto.auto_update_status_payload(
+            _cfg(pallas_bot_auto_update_enabled=True, pallas_bot_update_track="release")
+        )
+    assert status["bot"]["auto_apply_eligible"] is True
+
+
+@pytest.mark.asyncio
 async def test_unified_tick_runs_enabled_targets(state_dir) -> None:
     webui = AsyncMock(return_value={"result": "up_to_date"})
     bot = AsyncMock(return_value={"result": "skipped", "reason": "deploy:docker"})

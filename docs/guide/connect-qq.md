@@ -1,72 +1,69 @@
 # 连接 QQ
 
-```text
-QQ  ←→  NapCat  ←→  Pallas-Bot  ←→  数据库
-```
+Pallas-Bot 通过 OneBot V11 反向 WebSocket 接收 QQ 消息。你可以让控制台托管 NapCat / SnowLuma，也可以连接已经部署好的任意 OneBot V11 协议端。
 
-::: tip
-完成本页后，NapCat 会连接到正在运行的 Pallas-Bot，Bot 可以在群内响应消息。
+开始前先确认 Bot 已运行，并能打开 `http://<Bot主机>:8088/pallas/`。端口以 `config/pallas.toml` 的 `[bootstrap] port` 为准。
 
-开始前，Pallas-Bot 应已运行且能打开网页控制台。端口以 `pallas.toml` 的 `[bootstrap] port` 为准，默认 **8088**。
-:::
+## 连接地址
 
-## 1. 打开协议端管理：进入实例页面
-
-| 页面 | 地址 |
-| --- | --- |
-| 协议端管理 | `http://<主机>:8088/pallas/protocol` |
-| Web 控制台 | `http://<主机>:8088/pallas/` |
-| OneBot WebSocket | `ws://<主机>:8088/onebot/v11/ws` |
-
-本机 `<主机>` 填 `127.0.0.1`；远程填服务器 IP 或域名。
-
-能打开协议端页，说明可以继续创建或管理 NapCat 实例。
-
-## 2. 【推荐】控制台新建 NapCat：实例显示在线
-
-1. 打开协议端页，用和控制台**同一密码**登录
-2. 点 **新建实例** → 选 **NapCat** → 扫码
-3. 等实例变成 **在线**（WS 一般是 `ws://127.0.0.1:8088/onebot/v11/ws`）
-
-扫码后等待实例显示 **在线** 属于正常状态。协议端显示在线、控制台能看到 Bot、群里能收到消息，说明已经连上。
-
-::: details Docker 里用「Docker 模式」拉 NapCat
-需给 `pallasbot` 挂载 `/var/run/docker.sock`（见 compose 注释）。挂载 sock 有安全风险，仅建议可信内网。
-:::
-
-## 3. 自己装 NapCat：配置反向 WebSocket
-
-按 [NapCat 文档](https://napneko.github.io/) 安装并登录，添加 **反向 WebSocket**（由 NapCat 连到 Bot），URL 填：
+协议端需要主动连接：
 
 ```text
 ws://<Bot主机>:8088/onebot/v11/ws
 ```
 
-::: tip
-Bot 和 NapCat 不在同一台时，**不要**写 `127.0.0.1`，写 Bot 那台对 NapCat 可达的地址。
-:::
+- 协议端与 Bot 在同一主机且都不在隔离容器中，可用 `127.0.0.1`。
+- 协议端在另一台主机或另一容器中，填写它能访问到的 Bot 地址，不能照抄 `127.0.0.1`。
+- 分片部署应连接实际承载账号的 worker 端口，不连接 hub。
 
-NapCat 连接后，协议端实例会显示 **在线**。
+## 方式一：由控制台托管协议端
 
-## 4. 群里验证：收到帮助图
+打开 `http://<Bot主机>:8088/pallas/protocol`，使用与主控制台相同的登录密钥：
 
-让牛进群后发送：
+1. 新建账号并选择 NapCat 或 SnowLuma。
+2. 选择本机进程或 Docker Runtime，按页面提示安装、拉取镜像和启动。
+3. 扫码登录 QQ，等待账号状态变为在线。
+
+协议端缺失或镜像拉取会进入页面中的安装任务，可查看实时进度与失败日志。
+
+### Docker Bot 的额外授权
+
+官方 Bot 镜像已包含 Docker CLI，但默认不挂载 Docker socket。只有需要控制台创建、更新 NapCat / SnowLuma 容器时，才在可信环境取消 Compose 中这一行的注释：
+
+```yaml
+- /var/run/docker.sock:/var/run/docker.sock
+```
+
+`docker.sock` 接近宿主机 root 权限。此授权只用于协议端 Runtime；Bot 不用它更新自身，也不管理 PostgreSQL、Redis、Ollama 或 AI 服务。页面会分别提示 CLI 缺失、socket 未挂载、权限不足或 Docker daemon 不可达。
+
+## 方式二：连接外置 OneBot V11
+
+如果 NapCat、Lagrange、LLOneBot 或其他 OneBot V11 实现已经由你管理：
+
+1. 在协议端启用反向 WebSocket。
+2. URL 填本页开头的 `/onebot/v11/ws` 地址。
+3. 启动连接并登录 QQ。
+
+连接成功后，账号会自动出现在 Pallas WebUI 的账号列表中，并标记为“外置账号”。外置账号的安装、升级、扫码和进程生命周期仍由原协议端负责；Pallas 只显示连接状态并使用该连接收发消息。
+
+## 验收
+
+把机器人拉进测试群并发送：
 
 ```text
 牛牛帮助
 ```
 
-收到帮助图，说明 Pallas-Bot 已在群里正常工作。也可以发 `牛牛` 测打招呼；多只牛同群时可能齐回，属于正常现象。
+收到帮助图即表示 QQ、OneBot V11、Bot 和数据库链路正常。
 
 ## 按现象排查
 
-| 现象 | 先看 |
+| 现象 | 先检查 |
 | --- | --- |
-| 打不开协议端页 | Bot 是否在跑、端口是否放行 |
-| 协议端离线 | NapCat 日志；重启实例 |
-| 在线但群无反应 | 牛是否在群；运行日志有没有进消息 |
-| 要多只 QQ | 再建实例，或部署多只牛 |
+| 打不开协议端管理页 | Bot 是否运行、8088 是否放行 |
+| Docker Runtime 无法创建或更新 | 页面中的 Docker 能力状态和安装任务日志 |
+| 外置账号未出现 | 协议端反向 WS URL、网络可达性和协议端日志 |
+| 已连接但群里无响应 | 账号是否在群、Bot 日志是否收到事件、插件是否启用 |
+| 分片账号离线 | 是否连接了对应 worker，而非 hub |
 
-## 你已经连上 QQ
-
-▶ [安装插件](install-plugins.md)
+下一步：[安装插件](install-plugins.md)。

@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 from pallas.core.foundation.bot_version import (
     display_version_without_sha,
+    get_bot_image_version,
     get_pallas_bot_version_for_health,
     get_pallas_bot_version_for_reporting,
 )
@@ -17,6 +18,15 @@ def test_display_version_without_sha():
 def test_get_pallas_bot_version_for_health_env(monkeypatch):
     monkeypatch.setenv("PALLAS_BOT_VERSION", "v9.9.9")
     assert get_pallas_bot_version_for_health() == "v9.9.9"
+
+
+def test_runtime_overlay_version_precedes_image_version(monkeypatch, tmp_path):
+    monkeypatch.setenv("PALLAS_BOT_VERSION", "v4.1.0")
+    monkeypatch.setattr("pallas.core.foundation.bot_version.pallas_bot_repo_root", lambda: tmp_path)
+    (tmp_path / ".pallas-runtime-version.json").write_text('{"tag":"v4.2.0"}', encoding="utf-8")
+
+    assert get_pallas_bot_version_for_health() == "v4.2.0"
+    assert get_bot_image_version() == "v4.1.0"
 
 
 def test_get_pallas_bot_version_for_reporting_prefers_exact_tag():

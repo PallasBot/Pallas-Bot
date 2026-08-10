@@ -1,6 +1,6 @@
 # 使用 Docker 部署
 
-完成本页后，Bot、PostgreSQL 和网页控制台会由 Docker Compose 启动。适合希望用官方镜像部署、无需修改源码的使用者。
+完成本页后，Bot、PostgreSQL 和网页控制台会由 Docker Compose 启动。没有源码开发需求时，优先使用本方式。
 
 ::: tip
 **不要** `git clone` 整仓。镜像内已有代码；本机只需 compose 文件与配置。
@@ -83,7 +83,7 @@ docker compose --env-file ./pallas-bot/config/compose.env logs pallasbot | head 
 
 ## 接下来：登录控制台并连接 QQ
 
-先在 [网页控制台](/guide/web-console) 登录并完成首次设置。然后打开 `http://<主机>:8088/pallas/protocol`，用同一密码登录 → 新建 NapCat → 扫码。群里发 **牛牛帮助**，应能出图。
+先在 [网页控制台](/guide/web-console) 登录并完成首次设置。随后可在协议端管理中托管 NapCat / SnowLuma，或让已有 OneBot V11 协议端反向连接。群里发 **牛牛帮助**，应能出图。
 
 完整说明见 [连接 QQ](/guide/connect-qq)。
 
@@ -96,6 +96,14 @@ docker compose --env-file ./pallas-bot/config/compose.env pull
 docker compose --env-file ./pallas-bot/config/compose.env up -d
 docker compose --env-file ./pallas-bot/config/compose.env down
 ```
+
+## 容器内更新与 Docker 权限
+
+控制台可以更新 Bot 正式 Release、WebUI 和插件。Bot Release 会覆盖当前容器，普通 `docker compose restart` 不会丢失；容器重建后会恢复为镜像版本。持久更新仍使用上面的 `pull` + `up -d`。
+
+官方镜像默认包含 Docker CLI。只有让协议端管理 NapCat / SnowLuma 容器时，才按 `docker-compose.yml` 注释挂载 `/var/run/docker.sock`；该 socket 接近宿主机 root 权限，不用于管理 Bot 自身、AI、数据库、Redis 或 Ollama。自建镜像可用 `--build-arg INSTALL_DOCKER_CLI=0` 移除 CLI。
+
+AI Runtime、Redis、Ollama 和数据库始终由 Compose 或外部运维负责。控制台不会因为拥有 Docker socket 而创建、更新或重建这些服务。
 
 ::: details 全栈（Bot + PG + Redis + Ollama + AI）
 仓库根目录只提供默认 `docker-compose.yml`（Bot + PostgreSQL）。需要 AI Runtime / Ollama 时，将下面 YAML 另存为部署目录中的 `docker-compose.full.yml`，再启动。
@@ -329,7 +337,7 @@ docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d
 :::
 
 ::: details 多进程分片
-官方根目录 Compose 面向单进程。源码部署优先 `./scripts/run_sharded_bot.sh`（见 [分片部署](/maintainer/deploy/sharded)）。若坚持用 Docker，可将下面示例另存为 `docker-compose.shard.yml`（hub + 2 worker；按需复制 worker 段并改端口 / `PALLAS_SHARD_ID`）。协议端反向 WS 须连 **worker** 端口（8090+），不是 hub 8088。`pallas.toml` 的 `[env]` 可设 `REDIS_URL=redis://redis:6379/0`，或依赖下方环境变量。
+官方根目录 Compose 面向单进程。分片可使用源码脚本（见 [分片部署](/maintainer/deploy/sharded)），也可将下面示例另存为 `docker-compose.shard.yml`（hub + 2 worker；按需复制 worker 段并改端口 / `PALLAS_SHARD_ID`）。协议端反向 WS 须连 **worker** 端口（8090+），不是 hub 8088。`pallas.toml` 的 `[env]` 可设 `REDIS_URL=redis://redis:6379/0`，或依赖下方环境变量。
 
 ```yaml
 name: pallas-bot-shard

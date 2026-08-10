@@ -105,15 +105,15 @@ A: **WebUI「数据库」页**有「数据库备份」面板；若未检测到 `
 
 ### Docker 和 git clone，更新方式有啥区别？
 
-A: **Docker**：代码在镜像里，更新主要是 **`docker compose pull`** 后重建容器，一般没有本机 git 冲突；数据与配置应在卷（`data/`、`config/pallas.toml` 等）里。**git clone**：更新是 **`git pull`**（或控制台「Bot 更新」在检测到 git 工作副本时的等价操作）；若你改过与上游同一已跟踪文件，可能冲突，需本地处理后再拉。详见 [标准部署 - 后续更新](/deploy/deployment) 与 [Docker 部署](/deploy/docker)。
+A: **Docker** 可在控制台安装正式 Release 到当前容器，也可用 **`docker compose pull`** 后重建实现持久更新。容器内覆盖在 `restart` 后保留、重建后失效；WebUI 与插件可独立更新。**git clone** 可跟踪 Release 或分支，并处理本地改动与 Git 冲突。详见 [更新 Pallas-Bot](/guide/update) 与 [Docker 部署](/deploy/docker)。
 
 ### `git pull --autostash` 能避免所有冲突吗？
 
 A: **不能。**它只缓解「有未提交改动时 checkout/merge 被挡住」的情况；**双方改了同一行**等仍会产生冲突标记，必须人工解决。脚本或定时任务若需无人值守，更稳妥的是使用 **`git pull --ff-only`**，失败即停止并告警，而不是强行合并。
 
-### 控制台「版本与更新」里 Bot 一键更新失败，提示不是 git 工作副本？
+### Docker 控制台更新后，为什么重建容器又变回旧版本？
 
-A: 典型于 **Docker 镜像内运行**：容器里没有完整 `.git` 目录，更新页会显示 **`deployment_mode: docker`**，请用 **镜像拉取** 更新 Bot。若在 clone 目录运行仍失败，请根据返回的 **HTTP 详情原文**（或日志）排查：`git fetch` 网络、`fetch` 后仍无对应标签、**stash pop 冲突**，或 **非快进**（开发路径使用 `pull --ff-only`）等。
+A: Docker 控制台的 Bot Release 更新覆盖的是当前容器文件层，不会构建新镜像。`docker compose restart` 仍使用原容器，所以会保留；`docker compose up -d` 重建后会从镜像重新创建。要持久更新，请拉取目标版本镜像并重建。
 
 ### 怎样减少以后 `git pull` 跟上游冲突？
 
@@ -121,7 +121,7 @@ A: 尽量**不要**在仓库里直接改已跟踪源码；自定义用 **`config
 
 ### 控制台更新页显示的 deployment_mode 是什么？
 
-A: **`docker`**：请用镜像更新；**`release_tag`** / **`release_tag_dirty`** / **`dev_clone`**：分别表示发布 tag 干净目录、tag 上有本地改动、开发分支克隆；后三者可用 WebUI git 更新（dirty 时会自动 stash）。见 [升级与站点定制](/maintainer/deploy/upgrade)。
+A: **`docker`**：可用控制台 Release 覆盖更新，不支持 Commit/分支；**`release_tag`** / **`release_tag_dirty`** / **`dev_clone`**：分别表示发布 tag 干净目录、tag 上有本地改动、开发分支克隆。见 [升级与站点定制](/maintainer/deploy/upgrade)。
 
 ## 启动、连接与 Docker 排障
 
