@@ -113,6 +113,7 @@ def register_extended_api(
     from .llm_product_api import register_llm_product_router
     from .logs_api import register_logs_router
     from .memory_graph_api import register_memory_graph_router
+    from .message_runtime_candidate_api import register_message_runtime_candidate_router
     from .plugins_console_api import register_plugins_console_router
     from .social_api import register_social_router
     from .stats_dashboard_api import register_stats_dashboard_router
@@ -148,6 +149,7 @@ def register_extended_api(
         plugin_config=plugin_config,
         check_write_token=check_pallas_write_token,
     )
+    register_message_runtime_candidate_router(router, x=x)
     register_agent_platform_router(
         router,
         x=x,

@@ -820,8 +820,12 @@ def flush_ingress_metrics_history_sync() -> bool:
     from pallas.core.platform.shard.dispatch_observability import aggregate_ingress_dispatch
 
     from .ingress_metrics_history import append_ingress_metrics_history
+    from .message_runtime_candidate_api import refresh_message_runtime_candidate_report
 
-    return append_ingress_metrics_history(snapshot=aggregate_ingress_dispatch())
+    snapshot = aggregate_ingress_dispatch()
+    written = append_ingress_metrics_history(snapshot=snapshot)
+    refresh_message_runtime_candidate_report(ingress_snapshot=snapshot)
+    return written
 
 
 async def flush_ingress_metrics_history_async() -> bool:
