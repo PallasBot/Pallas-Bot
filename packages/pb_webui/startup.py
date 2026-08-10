@@ -22,6 +22,7 @@ from .manager import (
     bot_is_development_build,
     check_webui_exists,
     download_and_extract_dist_zip,
+    extract_bundled_webui_dist,
     fetch_latest_bot_release,
     fetch_latest_webui_release,
     get_bot_current_version,
@@ -117,7 +118,13 @@ if not is_sharded_worker():
         async def bootstrap_webui_dist() -> None:
             if check_webui_exists(public):
                 return
-            logger.info("[控制台] 首次部署，后台拉取静态资源")
+            logger.info("[控制台] 首次部署，正在初始化静态资源")
+            if await extract_bundled_webui_dist(public):
+                webui_ver = get_webui_dist_version()
+                set_console_meta({"static_root": str(public), "http_base": base, "version": webui_ver})
+                logger.info("[控制台] 静态资源就绪，请刷新页面")
+                return
+            logger.info("[控制台] 未找到可用内置 dist，后台拉取静态资源")
             tok = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
             url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
             url_candidates: list[str] = []

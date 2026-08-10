@@ -9,8 +9,6 @@ from typing import Literal
 
 from pillowmd import Setting
 
-from pallas.core.foundation.paths import project_path
-
 HelpVisualMode = Literal["light", "dark"]
 
 # 布局常量（两套主题共用）
@@ -150,7 +148,6 @@ def resolve_help_visual_mode_from_env() -> HelpVisualMode:
 set_help_visual_mode(resolve_help_visual_mode_from_env())
 
 PILLOWMD_DEFAULT_FONT = Setting.FONT_PATH / "smSans.ttf"
-BUNDLED_SOURCE_HAN_SERIF = project_path("resource/fonts/SourceHanSerifCN-Regular.otf")
 _FC_SANS_FAMILIES = ("Source Han Sans SC", "思源黑体", "Noto Sans CJK SC", "WenQuanYi Micro Hei")
 _FC_SERIF_FAMILIES = ("Source Han Serif SC", "思源宋体", "Noto Serif CJK SC")
 
@@ -179,8 +176,6 @@ def resolve_help_font_path() -> Path:
         candidate = Path((proc.stdout or "").strip())
         if candidate.is_file():
             return candidate
-    if BUNDLED_SOURCE_HAN_SERIF.is_file():
-        return BUNDLED_SOURCE_HAN_SERIF
     for family in _FC_SERIF_FAMILIES:
         try:
             proc = subprocess.run(

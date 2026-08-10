@@ -167,6 +167,47 @@ jobs:
           name: webui-dist-zip
           path: .
 
+      - name: Setup Python for deployment smoke check
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Build clean deployment bundle
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+          WEBUI_VERSION: ${{ needs.build-webui-dist.outputs.webui_console_version }}
+        run: |
+          set -euo pipefail
+          BUNDLE_NAME="pallas-bot-${VERSION}"
+          git clone --filter=blob:none --no-checkout --depth 1 \
+            "https://github.com/${GITHUB_REPOSITORY}.git" "${BUNDLE_NAME}"
+          git -C "${BUNDLE_NAME}" fetch --depth 1 origin "${GITHUB_SHA}"
+          git -C "${BUNDLE_NAME}" sparse-checkout init --no-cone
+          cp .github/release-runtime-sparse-checkout "${BUNDLE_NAME}/.git/info/sparse-checkout"
+          git -C "${BUNDLE_NAME}" checkout --detach "${GITHUB_SHA}"
+          git -C "${BUNDLE_NAME}" tag -f "${VERSION}" "${GITHUB_SHA}"
+
+          mkdir -p "${BUNDLE_NAME}/data/pb_webui"
+          unzip -q dist.zip -d "${BUNDLE_NAME}/data/pb_webui"
+          test -f "${BUNDLE_NAME}/data/pb_webui/public-react/index.html"
+          test -f "${BUNDLE_NAME}/data/pb_webui/public-react/console-version.json"
+          python - "${BUNDLE_NAME}/data/pb_webui/public-react/console-version.json" "${WEBUI_VERSION}" <<'PY'
+          import json
+          import sys
+
+          payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+          if payload.get("version") != sys.argv[2]:
+              raise SystemExit(f"WebUI version mismatch: {payload.get('version')!r} != {sys.argv[2]!r}")
+          PY
+
+          test -z "$(git -C "${BUNDLE_NAME}" status --porcelain)"
+          test "$(git -C "${BUNDLE_NAME}" rev-parse HEAD)" = "${GITHUB_SHA}"
+          test "$(git -C "${BUNDLE_NAME}" remote get-url origin)" = \
+            "https://github.com/${GITHUB_REPOSITORY}.git"
+          PYTHONPYCACHEPREFIX="${RUNNER_TEMP}/pallas-release-pyc" \
+            python -m compileall -q "${BUNDLE_NAME}/pallas" "${BUNDLE_NAME}/packages"
+          tar -czf "pallas-bot-${VERSION}.tar.gz" "${BUNDLE_NAME}"
+
       - name: Create Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
@@ -187,9 +228,24 @@ jobs:
 
             附件 **`dist.zip`**：控制台前端静态资源（来自 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) `${{ needs.build-webui-dist.outputs.webui_git_ref }}`，console `${{ needs.build-webui-dist.outputs.webui_console_version }}`）。
 
+            ## 非 Docker 部署包
+
+            下载 **`pallas-bot-${{ steps.get_version.outputs.version }}.tar.gz`** 后解压。部署包已包含本次 WebUI、浅层 Git 元数据和运行/运维所需文件，不需要执行 `git init`；安装依赖后即可配置并启动：
+
+            ```bash
+            tar -xzf pallas-bot-${{ steps.get_version.outputs.version }}.tar.gz
+            cd pallas-bot-${{ steps.get_version.outputs.version }}
+            uv sync --extra perf
+            cp config/pallas.example.toml config/pallas.toml
+            uv run pallas
+            ```
+
+            Bot 与 WebUI 更新保持独立；部署包可继续使用控制台或 `uv run pallas update bot --restart` 跟踪后续 Release。
+
             | 方式 | 说明 |
             | --- | --- |
-            | 自动 | 本地尚无 `data/pb_webui/public-react` 时，启动会从本仓库 Release 拉取并解压 |
+            | 内置 | 将本附件保存为 `resource/webui/dist.zip`；本地尚无前端资源时，启动会优先自动解压。Docker 镜像已内置该文件 |
+            | 自动 | 内置包不存在时，启动会从本仓库 Release 拉取并解压 |
             | 手动 | 将本附件解压到仓库根下的 `data/pb_webui/`（得到 `public-react/`）|
             | 控制台 | 「更新」页可检查并应用同名 `dist.zip` |
 
@@ -201,6 +257,7 @@ jobs:
             访问：`http://<host>:<port>/pallas/` · 说明见 [WebUI 部署](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/maintainer/install/webui.md) / [开发者文档](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/developer/webui.md)。
           files: |
             dist.zip
+            pallas-bot-${{ steps.get_version.outputs.version }}.tar.gz
           draft: false
           prerelease: false
         env:
@@ -208,6 +265,7 @@ jobs:
 
   build-tagged-image:
     runs-on: ubuntu-latest
+    needs: build-webui-dist
     permissions:
       contents: read
       packages: write
@@ -217,6 +275,12 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Download WebUI dist for image
+        uses: actions/download-artifact@v4
+        with:
+          name: webui-dist-zip
+          path: resource/webui
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8  # v4

@@ -11,7 +11,7 @@
 | 你的部署方式 | 推荐方式 | 适用场景 |
 | --- | --- | --- |
 | Docker Compose | [更新 Docker 镜像](#docker-compose) | 不需要改主仓代码的常规部署 |
-| 源码目录，想由 Bot 处理 | [控制台或命令更新](#控制台或命令更新) | 想更新 Bot 与 WebUI，且当前实例可正常运行 |
+| Release 部署包或源码目录，想由 Bot 处理 | [控制台或命令更新](#控制台或命令更新) | 想更新 Bot 或 WebUI，且当前实例可正常运行 |
 | 源码目录，想自行控制过程 | [手动更新源码](#手动更新源码) | 需要先检查变更、处理定制或维护开发分支 |
 | 源码 Release 部署，接受定时升级 | [Bot 自动更新](#bot-自动更新) | 希望按计划检查并应用上游更新 |
 
@@ -31,7 +31,7 @@ docker compose --env-file ./pallas-bot/config/compose.env ps
 
 ## 控制台或命令更新
 
-此方式只适用于带 `.git` 的源码部署。
+此方式适用于带 `.git` 的源码部署，以及官方 `pallas-bot-<version>.tar.gz` 部署包。部署包已经包含浅层 Git 元数据和 `origin`，无需自行执行 `git init`。
 
 1. 在控制台打开**版本与更新**，先检查当前版本和部署模式。
 2. 选择**应用 Bot 更新**，并按需更新 WebUI。Bot 会在更新后安排重启；若页面提示无法安排重启，按你的 systemd 或启动脚本手动重启。
@@ -48,7 +48,7 @@ uv run pallas update webui
 uv run pallas maintenance run --update-bot --update-webui
 ```
 
-该命令更新当前 Git 跟踪的 Bot 版本，并下载 Release 中的 `dist.zip` 更新 WebUI。不要添加 `--dev`，除非此机器还需要安装测试等开发依赖。
+两条命令分别更新当前 Git 跟踪的 Bot 版本和 Release 中的 WebUI `dist.zip`，互不强制绑定。不要添加 `--dev`，除非此机器还需要安装测试等开发依赖。
 
 ## 手动更新源码
 
@@ -72,9 +72,9 @@ uv run pallas update webui
 
 | 更新轨道 | 可自动应用的部署 |
 | --- | --- |
-| Release | 干净的 Release tag 源码目录 |
+| Release | 干净的 Release tag 源码目录或官方部署包 |
 | 分支 | 可访问 Git 的非 Docker 源码目录 |
 
-也可由超管私聊 Bot 执行 `牛牛更新 自动 bot 开` 或 `牛牛更新 自动 bot 关`。自动更新前应先确认本地定制已移到 `local/plugins/`，并启用通知，以便在更新完成后收到结果。
+也可由超管私聊 Bot 执行 `牛牛更新 自动 bot 开` 或 `牛牛更新 自动 bot 关`。WebUI 自动更新是独立开关，Bot 更新不会强制替换当前 WebUI。自动更新前应先确认本地定制已移到 `local/plugins/`，并启用通知，以便在更新完成后收到结果。
 
 需要立即更新时，仍使用控制台的**应用 Bot 更新**或上面的 CLI 命令。自动更新检查、WebUI 和插件自动更新、失败排查见[升级与站点定制](/maintainer/deploy/upgrade)。

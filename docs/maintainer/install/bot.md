@@ -16,10 +16,28 @@
 | 场景 | 文档 |
 | --- | --- |
 | 快速跑通 | [快速开始](/guide/quickstart) |
-| 源码长期部署 | [标准部署](/deploy/deployment) |
+| 非 Docker 长期部署 | [Release 部署包](#release-部署包推荐) |
 | 容器部署 | [Docker 部署](/deploy/docker) |
+| 修改本体源码 | [源码安装](/guide/install-source) |
 | 插件与扩展 | [安装插件](/guide/install-plugins) · [AI 扩展](/guide/ai) |
 | 本地开发 | [开发环境](/developer/environment) |
+
+## Release 部署包（推荐）
+
+不使用 Docker、也不准备修改 Bot 本体时，从 [GitHub Releases](https://github.com/PallasBot/Pallas-Bot/releases/latest) 下载当前版本的 `pallas-bot-<version>.tar.gz`：
+
+```bash
+tar -xzf pallas-bot-<version>.tar.gz
+cd pallas-bot-<version>
+uv sync --extra perf
+cp config/pallas.example.toml config/pallas.toml
+# 编辑 config/pallas.toml 的 [bootstrap]、superusers 与数据库连接
+uv run pallas
+```
+
+部署包已经包含对应版本的 WebUI，以及用于后续 Release 更新的浅层 Git 元数据；**不需要执行 `git init`**。`config/pallas.toml`、`data/` 与 `local/plugins/` 不进入版本控制，更新时会保留。
+
+Bot 本体和 WebUI 使用独立的更新开关。需要更新时见[更新 Pallas-Bot](/guide/update)。需要自行修改内核、运行测试或提交 PR 时，再使用[源码安装](/guide/install-source)。
 
 ## 4.0 本体职责
 

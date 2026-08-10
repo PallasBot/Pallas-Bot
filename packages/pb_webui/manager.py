@@ -19,6 +19,7 @@ from pallas.core.foundation.bot_version import (
     get_bot_current_version,
     pallas_bot_repo_root,
 )
+from pallas.core.foundation.paths import resource_dir
 from pallas.core.shared.utils.format_exception import format_exception_for_log
 from pallas.core.shared.utils.git_mirror import (
     MirrorSpec,
@@ -119,6 +120,7 @@ async def resolve_github_release_asset_urls(
 
 DEFAULT_WEBUI_DIST_ZIP_REPO = "PallasBot/Pallas-Bot"
 DEFAULT_WEBUI_DIST_ZIP_ASSET = "dist.zip"
+BUNDLED_WEBUI_DIST_ZIP = resource_dir("webui", "dist.zip")
 
 
 def webui_frontend_stack() -> str:
@@ -195,6 +197,21 @@ def _sync_extract_dist_zip_file(zip_path: Path, public_dir: Path) -> None:
             shutil.rmtree(public_dir)
         public_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, public_dir, dirs_exist_ok=True)
+
+
+async def extract_bundled_webui_dist(
+    public_dir: Path,
+    archive_path: Path = BUNDLED_WEBUI_DIST_ZIP,
+) -> bool:
+    if not await asyncio.to_thread(archive_path.is_file):
+        return False
+    try:
+        await asyncio.to_thread(_sync_extract_dist_zip_file, archive_path, public_dir)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[控制台] 内置 WebUI dist 解压失败：{}", format_exception_for_log(e))
+        return False
+    logger.info("[控制台] 已从内置 dist 初始化静态资源")
+    return True
 
 
 def _sync_write_dist_from_zip_bytes(public_dir: Path, content: bytes) -> None:
