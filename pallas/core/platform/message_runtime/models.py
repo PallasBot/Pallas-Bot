@@ -72,29 +72,6 @@ class CrossWorkerAction:
 
 
 @dataclass(frozen=True, slots=True)
-class LlmSelectAction:
-    bot_id: int
-    group_id: int
-    event: object
-    user_text: str
-    candidates: tuple[str, ...]
-    candidate_text: str
-    reply_mode: str
-    scene_tier: str
-    bundle: object
-    capabilities: object
-    run_local_bundle: Callable[[], Awaitable[None]]
-
-    def __post_init__(self) -> None:
-        if self.bot_id <= 0 or self.group_id <= 0:
-            raise ValueError("llm select action requires bot and group")
-        if not self.user_text:
-            raise ValueError("llm select action requires user text")
-        if not self.candidates:
-            raise ValueError("llm select action requires candidates")
-
-
-@dataclass(frozen=True, slots=True)
 class HandlingPlan:
     kind: str
     handler_ids: tuple[str, ...]
@@ -115,7 +92,6 @@ class HandlingOutcome:
     work_jobs: tuple[WorkJob, ...] = ()
     deferred_actions: tuple[DeferredAction, ...] = ()
     cross_worker_actions: tuple[CrossWorkerAction, ...] = ()
-    llm_select_actions: tuple[LlmSelectAction, ...] = ()
     fallback_to_legacy: bool = False
     fallback_reason: str | None = None
     continue_legacy: bool = False
@@ -126,11 +102,7 @@ class HandlingOutcome:
         if self.handler_id is not None and not self.handler_id:
             raise ValueError("handler_id cannot be empty")
         if self.fallback_to_legacy and (
-            self.actions
-            or self.work_jobs
-            or self.deferred_actions
-            or self.cross_worker_actions
-            or self.llm_select_actions
+            self.actions or self.work_jobs or self.deferred_actions or self.cross_worker_actions
         ):
             raise ValueError("fallback outcomes cannot contain side effects")
         if self.fallback_reason is not None and not self.fallback_reason:

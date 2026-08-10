@@ -13,12 +13,6 @@ def test_merge_order_choice_labels():
     assert labels == {"local,community": "先本机，再共享池", "local": "只用本机"}
 
 
-def test_llm_repeater_mode_overrides_global_off():
-    labels = field_choice_labels("llm_repeater_mode", ["off", "select"])
-    assert labels["off"] == "关闭 AI 接话"
-    assert labels["select"] == "命中语料时 AI 选句（推荐）"
-
-
 def test_interval_sec_uses_global():
     labels = field_choice_labels("community_stats_interval_sec", ["300", "600"])
     assert labels == {"300": "5 分钟", "600": "10 分钟"}
@@ -36,4 +30,3 @@ def test_conversation_feature_level_choice_labels():
     assert labels is not None
     assert labels[""] == "自动推断（推荐）"
     assert labels["full_conversation_kernel"] == "决策 + 生成 + 反馈全链路"
-

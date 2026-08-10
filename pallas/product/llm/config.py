@@ -149,17 +149,11 @@ def _env_group_id_list(key: str) -> list[int]:
 
 
 def resolve_llm_repeater_mode() -> str:
-    raw = _env_str("LLM_REPEATER_MODE").strip().lower()
-    if raw == "off":
-        return raw
-    return "select"
+    return "off"
 
 
 def resolve_llm_repeater_flags() -> tuple[bool, bool, bool]:
-    mode = resolve_llm_repeater_mode()
-    if mode == "off":
-        return False, False, False
-    return False, False, True
+    return False, False, False
 
 
 def resolve_llm_polish_lite_enabled() -> bool:
@@ -242,10 +236,10 @@ class LlmConfig(BaseModel):
     chat_tts_enable: bool = Field(default=False)
     drunk_tts_min_drunkenness: int = Field(default=1, ge=0, le=100)
     drunk_tts_min_chars: int = Field(default=6, ge=0, le=2000)
-    llm_repeater_mode: str = Field(default="select")
+    llm_repeater_mode: str = Field(default="off")
     llm_fallback_enabled: bool = Field(default=False)
     llm_polish_enabled: bool = Field(default=False)
-    llm_select_enabled: bool = Field(default=True)
+    llm_select_enabled: bool = Field(default=False)
     llm_select_max_candidates: int = Field(default=12, ge=2, le=32)
     llm_polish_lite_enabled: bool = Field(default=False)
     llm_polish_lite_sample_rate: float = Field(default=0.12, ge=0.0, le=1.0)

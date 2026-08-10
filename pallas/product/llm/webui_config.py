@@ -12,12 +12,6 @@ from pallas.product.llm.config import LlmMcpServerConfig, get_llm_config
 
 VectorRetrieveMode = Literal["keyword", "embedding", "hybrid", "vector"]
 EmbeddingProviderChoice = Literal["", "stub", "openai", "local"]
-RepeaterMode = Literal["off", "select"]
-
-
-def normalize_repeater_mode_for_webui(mode: str) -> RepeaterMode:
-    raw = str(mode or "").strip().lower()
-    return "off" if raw == "off" else "select"
 
 
 def _embedding_provider_choice(raw: object) -> EmbeddingProviderChoice:
@@ -121,14 +115,6 @@ class LlmWebuiConfig(BaseModel):
             "酒后回文至少多少字才附带语音",
             "默认 6：回文字数（去首尾空白）≥ 此值才 enqueue TTS，避免极短应答也念",
             "与「最低醉酒度」同时满足才会文+音；仅统计本次酒后回复正文",
-        ),
-    )
-    llm_repeater_mode: RepeaterMode = Field(
-        default="select",
-        description=field_help(
-            "群里自动接话时，是否让智能对话从命中语料中选一句",
-            "推荐「命中语料时 AI 选句」；关闭后只由复读器直接使用语料。",
-            "off=只用语料不调模型；select=有语料时让模型挑一句。",
         ),
     )
     llm_governance_enabled: bool = Field(
@@ -539,8 +525,8 @@ class LlmWebuiConfig(BaseModel):
     llm_repeater_bias_enabled: bool = Field(
         default=True,
         description=field_help(
-            "接话选句时，要不要略微偏向「以前智能对话验证过」的短句",
-            "开=有足够样本时轻微偏向（保守）；关=选句完全不看这些反馈",
+            "Repeater 选择语料时，要不要略微偏向「以前智能对话验证过」的短句",
+            "开=有足够样本时轻微偏向（保守）；关=本地语料排序完全不看这些反馈",
             "样本太少时不会强行生效；依赖上方「收集反哺」",
         ),
     )
@@ -1000,7 +986,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
     from pallas.product.llm.config import resolve_chat_tts_enabled, resolve_legacy_rwkv_drunk_chat_enabled
 
     cfg = get_llm_config()
-    mode = normalize_repeater_mode_for_webui(cfg.llm_repeater_mode)
     return LlmWebuiConfig(
         ai_server_host=cfg.ai_server_host,
         ai_server_port=cfg.ai_server_port,
@@ -1009,7 +994,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         chat_tts_enable=resolve_chat_tts_enabled(),
         drunk_tts_min_drunkenness=cfg.drunk_tts_min_drunkenness,
         drunk_tts_min_chars=cfg.drunk_tts_min_chars,
-        llm_repeater_mode=mode,  # type: ignore[arg-type]
         llm_governance_enabled=cfg.llm_governance_enabled,
         llm_session_enabled=cfg.llm_session_enabled,
         llm_session_user_window=cfg.llm_session_user_window,

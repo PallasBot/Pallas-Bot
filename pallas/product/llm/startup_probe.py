@@ -108,17 +108,11 @@ def install_llm_startup_probe() -> None:
             flags.append("FALLBACK")
         if cfg.llm_polish_lite_enabled:
             flags.append("POLISH_LITE")
-        if cfg.llm_select_enabled:
-            flags.append("SELECT")
         if cfg.llm_polish_enabled:
             flags.append("POLISH")
         flag_text = ",".join(flags) if flags else "off"
         llm_switches_on = (
-            cfg.llm_chat_enabled
-            or cfg.llm_fallback_enabled
-            or cfg.llm_polish_enabled
-            or cfg.llm_select_enabled
-            or cfg.llm_polish_lite_enabled
+            cfg.llm_chat_enabled or cfg.llm_fallback_enabled or cfg.llm_polish_enabled or cfg.llm_polish_lite_enabled
         )
 
         result = await probe_llm_provider()

@@ -115,68 +115,6 @@ async def test_repeater_native_handler_handles_terminal_event_context_gate(monke
 
 
 @pytest.mark.asyncio
-async def test_repeater_llm_opportunity_scores_fallback_candidate(monkeypatch) -> None:
-    from types import SimpleNamespace
-
-    import packages.repeater.message_runtime_handler as module
-    from pallas.product.llm.kernel.models import ConversationFeatureLevel
-
-    captured: dict[str, object] = {}
-    plan = SimpleNamespace(stage_names=["select"], candidate_pool=[], candidate_text="fallback")
-    capabilities = SimpleNamespace(
-        llm_enabled=True,
-        select_enabled=True,
-        polish_enabled=False,
-        polish_lite_enabled=False,
-    )
-    event = type(
-        "Event",
-        (),
-        {"self_id": 10, "group_id": 2, "is_tome": lambda self: False},
-    )()
-    bundle = SimpleNamespace(message_pool=[], answer_list=["fallback"], reply_mode="normal")
-
-    monkeypatch.setattr("packages.repeater.llm_pipeline.build_repeater_llm_plan", lambda *_args, **_kwargs: plan)
-    monkeypatch.setattr(
-        "pallas.product.llm.config.get_llm_config",
-        lambda: SimpleNamespace(llm_repeater_strong_attempt_rate=1.0),
-    )
-    monkeypatch.setattr(
-        "pallas.product.llm.runtime_api.resolve_conversation_feature_level",
-        lambda _cfg: ConversationFeatureLevel.REPEATER_PLUS_DECISION,
-    )
-    monkeypatch.setattr("packages.repeater.opportunity_gate.resolve_scene_tier", lambda *_args, **_kwargs: "normal")
-    monkeypatch.setattr(
-        "packages.repeater.opportunity_gate.should_attempt_repeater_opportunity",
-        lambda *_args, **kwargs: captured.update(kwargs) or True,
-    )
-    monkeypatch.setattr(
-        "packages.repeater.opportunity_gate.decide_llm_attempt",
-        lambda **_kwargs: (True, 0.0, None),
-    )
-    monkeypatch.setattr(
-        "packages.repeater.opportunity_gate.estimate_candidate_style_score",
-        lambda candidates, **_kwargs: captured.update(scored=list(candidates)) or 0.5,
-    )
-    monkeypatch.setattr(
-        module,
-        "build_repeater_llm_select_outcome",
-        lambda *_args, **kwargs: captured.update(submitted=list(kwargs["candidates"])) or "outcome",
-    )
-
-    result = await module.try_build_repeater_llm_select_outcome(
-        event,
-        plain_body="闲聊",
-        bundle=bundle,
-        capabilities=capabilities,
-    )
-
-    assert result == "outcome"
-    assert captured["scored"] == ["fallback"]
-    assert captured["submitted"] == ["fallback"]
-
-
-@pytest.mark.asyncio
 async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypatch) -> None:
     from unittest.mock import AsyncMock
 
@@ -211,11 +149,6 @@ async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypat
     )
     monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: chat)
     monkeypatch.setattr("packages.repeater.learn_queue.enqueue_repeater_learn", learn)
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
-    monkeypatch.setattr(
-        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
-        lambda _config: type("Capabilities", (), {"llm_enabled": False})(),
-    )
     monkeypatch.setattr(
         "pallas.core.foundation.config.BotConfig",
         lambda *_args: type("Config", (), {"refresh_cooldown": refresh_cooldown})(),
@@ -278,11 +211,6 @@ async def test_repeater_native_handler_labels_nonreply_fallbacks(
         ),
     )
     monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: object())
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
-    monkeypatch.setattr(
-        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
-        lambda _config: type("Capabilities", (), {"llm_enabled": False})(),
-    )
 
     outcome = await RepeaterNativeHandler().build_fanout_plan(
         _context(),
@@ -403,7 +331,7 @@ async def test_repeater_native_handler_fanout_skips_llm_config(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
-async def test_repeater_native_handler_keeps_unsupported_llm_pipeline_for_legacy(monkeypatch) -> None:
+async def test_repeater_native_handler_dispatches_locally_when_llm_is_enabled(monkeypatch) -> None:
     from unittest.mock import AsyncMock
 
     from packages.repeater.message_runtime_handler import RepeaterNativeHandler
@@ -425,20 +353,20 @@ async def test_repeater_native_handler_keeps_unsupported_llm_pipeline_for_legacy
 
     monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
     monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", AsyncMock(return_value=False))
+    bundle = object()
+    answers = object()
+    chat = type("Chat", (), {"answer_from_bundle": AsyncMock(return_value=answers)})()
     monkeypatch.setattr(
         "packages.repeater.reply_preparation.prepare_repeater_reply",
-        AsyncMock(return_value=type("Prepared", (), {"bundle": object(), "fanout_gate": None})()),
+        AsyncMock(return_value=type("Prepared", (), {"bundle": bundle, "fanout_gate": None})()),
     )
-    monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: object())
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
+    monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: chat)
+    refresh_cooldown = AsyncMock()
     monkeypatch.setattr(
-        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
-        lambda _config: type("Capabilities", (), {"llm_enabled": True})(),
+        "pallas.core.foundation.config.BotConfig",
+        lambda *_args: type("Config", (), {"refresh_cooldown": refresh_cooldown})(),
     )
-    monkeypatch.setattr(
-        "packages.repeater.message_runtime_handler.try_build_repeater_llm_select_outcome",
-        AsyncMock(return_value=None),
-    )
+    monkeypatch.setattr("pallas.core.platform.ingress.hotpath_metrics.record_reply_local_dispatched", lambda: None)
 
     outcome = await RepeaterNativeHandler().build_fanout_plan(
         _context(),
@@ -446,11 +374,12 @@ async def test_repeater_native_handler_keeps_unsupported_llm_pipeline_for_legacy
         event=event,
     )
 
-    assert outcome == HandlingOutcome(
-        handled=False,
-        fallback_to_legacy=True,
-        fallback_reason="llm_pipeline_unsupported",
-    )
+    assert outcome.handled is True
+    assert [action.name for action in outcome.deferred_actions] == [
+        "repeater_capture_learn_10_2_3",
+        "repeater_reply_10_2",
+    ]
+    chat.answer_from_bundle.assert_awaited_once_with(bundle)
 
 
 @pytest.mark.asyncio
@@ -486,11 +415,6 @@ async def test_repeater_native_handler_keeps_learning_when_local_reply_has_no_an
     )
     monkeypatch.setattr("packages.repeater.model.Chat", lambda _event: chat)
     monkeypatch.setattr("packages.repeater.learn_queue.enqueue_repeater_learn", learn)
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
-    monkeypatch.setattr(
-        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
-        lambda _config: type("Capabilities", (), {"llm_enabled": False})(),
-    )
 
     outcome = await handler.build_fanout_plan(_context(), bot=type("Bot", (), {"self_id": 10})(), event=event)
 
@@ -500,70 +424,6 @@ async def test_repeater_native_handler_keeps_learning_when_local_reply_has_no_an
 
     await outcome.deferred_actions[0].run()
     learn.assert_awaited_once_with(chat, event)
-
-
-@pytest.mark.asyncio
-async def test_repeater_native_handler_does_not_run_side_effects_before_legacy_fallback(monkeypatch) -> None:
-    from unittest.mock import AsyncMock
-
-    from packages.repeater.message_runtime_handler import RepeaterNativeHandler
-
-    handler = RepeaterNativeHandler()
-    calls: list[str] = []
-    event = type(
-        "Event",
-        (),
-        {
-            "self_id": 1,
-            "group_id": 2,
-            "message_id": 3,
-            "message": [type("Segment", (), {"type": "image"})()],
-            "is_tome": lambda self: False,
-        },
-    )()
-
-    async def build_context(_bot_id, _event):
-        return type("Context", (), {"plain_body": "闲聊", "norm_raw": "闲聊", "sharding_active": False})()
-
-    async def not_scrubbed(**_kwargs):
-        return False
-
-    async def prepare(_event, _chat, **_kwargs):
-        return type("Prepared", (), {"bundle": object(), "fanout_gate": None})()
-
-    def chat(_event):
-        return object()
-
-    async def insert_image(*_args, **_kwargs):
-        calls.append("image")
-
-    async def enqueue_learn(*_args, **_kwargs):
-        calls.append("learn")
-
-    monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
-    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", not_scrubbed)
-    monkeypatch.setattr("packages.repeater.reply_preparation.prepare_repeater_reply", prepare)
-    monkeypatch.setattr("packages.repeater.model.Chat", chat)
-    monkeypatch.setattr("pallas.core.shared.utils.media_cache.insert_image", insert_image)
-    monkeypatch.setattr("packages.repeater.learn_queue.enqueue_repeater_learn", enqueue_learn)
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: object())
-    monkeypatch.setattr(
-        "pallas.product.llm.runtime_api.resolve_repeater_capabilities",
-        lambda _config: type("Capabilities", (), {"llm_enabled": True})(),
-    )
-    monkeypatch.setattr(
-        "packages.repeater.message_runtime_handler.try_build_repeater_llm_select_outcome",
-        AsyncMock(return_value=None),
-    )
-
-    outcome = await handler.build_fanout_plan(_context(), bot=type("Bot", (), {"self_id": 1})(), event=event)
-
-    assert outcome == HandlingOutcome(
-        handled=False,
-        fallback_to_legacy=True,
-        fallback_reason="llm_pipeline_unsupported",
-    )
-    assert calls == []
 
 
 @pytest.mark.asyncio

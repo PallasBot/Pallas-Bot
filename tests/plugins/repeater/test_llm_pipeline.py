@@ -1,48 +1,7 @@
 from __future__ import annotations
 
-import pytest
-
-from packages.repeater.llm_pipeline import (
-    RepeaterLlmPlan,
-    build_repeater_llm_plan,
-    run_repeater_llm_plan,
-)
-from packages.repeater.responder import ReplyBundle, Responder
+from packages.repeater.responder import Responder
 from pallas.product.persona.model import ResolvedPersona
-
-
-def test_build_repeater_llm_plan_only_selects_grounded_corpus_reply() -> None:
-    bundle = ReplyBundle(
-        answer_list=["候选一", "候选二"],
-        answer_keywords="测试",
-        message_pool=["候选一", "候选二", "候选三"],
-    )
-    plan = build_repeater_llm_plan(
-        bundle,
-        llm_enabled=True,
-        select_enabled=True,
-        polish_enabled=True,
-        polish_lite_enabled=False,
-    )
-    assert plan.stage_names == ["select"]
-    assert plan.fallback_text == "候选一"
-
-
-def test_build_repeater_llm_plan_skips_llm_without_selectable_corpus_reply() -> None:
-    bundle = ReplyBundle(
-        answer_list=[],
-        answer_keywords="测试",
-        message_pool=[],
-    )
-    plan = build_repeater_llm_plan(
-        bundle,
-        llm_enabled=True,
-        select_enabled=True,
-        polish_enabled=True,
-        polish_lite_enabled=False,
-    )
-    assert plan.stage_names == []
-    assert plan.fallback_text == ""
 
 
 def test_evaluate_llm_candidate_text_rejects_empty_text() -> None:
@@ -117,45 +76,3 @@ def test_evaluate_llm_candidate_text_ghost_prefers_short_expressive_text() -> No
     )
     assert accepted_short is True
     assert score_short > score_long
-
-
-@pytest.mark.asyncio
-async def test_run_repeater_llm_plan_stops_after_first_success() -> None:
-    calls: list[str] = []
-
-    async def stage_runner(name: str) -> bool:
-        calls.append(name)
-        return name == "rewrite"
-
-    ok = await run_repeater_llm_plan(
-        RepeaterLlmPlan(
-            stage_names=["select", "rewrite", "stitch", "generate"],
-            fallback_text="候选一",
-            candidate_text="候选一",
-            candidate_pool=["候选一", "候选二"],
-        ),
-        stage_runner=stage_runner,
-    )
-    assert ok is True
-    assert calls == ["select", "rewrite"]
-
-
-@pytest.mark.asyncio
-async def test_pipeline_generate_runs_only_after_grounded_stages_fail() -> None:
-    calls: list[str] = []
-
-    async def stage_runner(name: str) -> bool:
-        calls.append(name)
-        return False
-
-    ok = await run_repeater_llm_plan(
-        RepeaterLlmPlan(
-            stage_names=["select", "rewrite", "stitch", "generate"],
-            fallback_text="候选一",
-            candidate_text="候选一",
-            candidate_pool=["候选一", "候选二"],
-        ),
-        stage_runner=stage_runner,
-    )
-    assert ok is False
-    assert calls == ["select", "rewrite", "stitch", "generate"]

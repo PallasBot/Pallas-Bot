@@ -252,7 +252,6 @@ def _llm_section() -> WebuiEnvSection:
             "chat_tts_enable": "CHAT_TTS_ENABLE",
             "drunk_tts_min_drunkenness": "DRUNK_TTS_MIN_DRUNKENNESS",
             "drunk_tts_min_chars": "DRUNK_TTS_MIN_CHARS",
-            "llm_repeater_mode": "LLM_REPEATER_MODE",
             "llm_governance_enabled": "LLM_GOVERNANCE_ENABLED",
             "llm_session_enabled": "LLM_SESSION_ENABLED",
             "llm_session_user_window": "LLM_SESSION_USER_WINDOW",

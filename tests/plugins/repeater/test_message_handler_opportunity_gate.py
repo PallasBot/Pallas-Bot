@@ -21,7 +21,7 @@ def _group_event(*, plain_text: str = "好耶", to_me: bool = False) -> MagicMoc
 
 
 @pytest.mark.asyncio
-async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_repeater_dispatches_locally_without_llm_select(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater.handlers import message as mod
     from packages.repeater.responder import ReplyBundle
 
@@ -63,51 +63,10 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
     monkeypatch.setattr(mod, "is_message_scrub_blocked_async", AsyncMock(return_value=False))
     monkeypatch.setattr(mod, "enqueue_repeater_learn", AsyncMock())
     monkeypatch.setattr(mod, "Chat", MagicMock(return_value=chat_instance))
-    monkeypatch.setattr(mod, "should_attempt_repeater_opportunity", lambda *args, **kwargs: False)
-    monkeypatch.setattr(mod, "submit_repeater_corpus_select", AsyncMock(return_value=False))
-    monkeypatch.setattr(
-        mod,
-        "build_repeater_llm_plan",
-        lambda *args, **kwargs: SimpleNamespace(
-            stage_names=["select"],
-            candidate_pool=["经典接话"],
-            candidate_text="经典接话",
-        ),
-    )
-    monkeypatch.setattr(mod, "run_repeater_llm_plan", AsyncMock(return_value=False))
-    monkeypatch.setattr(
-        "pallas.product.llm.config.get_llm_config",
-        lambda: SimpleNamespace(
-            llm_chat_enabled=True,
-            llm_select_enabled=True,
-            llm_polish_enabled=True,
-            llm_polish_lite_enabled=False,
-            llm_repeater_strong_attempt_rate=1,
-        ),
-    )
-    monkeypatch.setattr(
-        "packages.repeater.message_store.MessageStore._message_dict",
-        {100: [SimpleNamespace(user_id=200), SimpleNamespace(user_id=201)]},
-        raising=False,
-    )
     monkeypatch.setattr(
         "packages.repeater.fanout_reply.dispatch_repeater_reply",
         lambda bot_id, group_id, payload: dispatched.append((bot_id, group_id, payload)),
     )
-    from pallas.product.llm.kernel.models import ConversationFeatureLevel
-
-    monkeypatch.setattr(
-        mod,
-        "resolve_conversation_feature_level",
-        lambda _cfg: ConversationFeatureLevel.FULL_CONVERSATION_KERNEL,
-    )
-    monkeypatch.setattr(
-        mod,
-        "classify_behavior_scene",
-        lambda *args, **kwargs: type("S", (), {"value": "smalltalk"})(),
-    )
-    trace_rows: list[dict[str, object]] = []
-    monkeypatch.setattr(mod, "append_conversation_decision_trace", lambda row: trace_rows.append(dict(row)) or True)
     monkeypatch.setattr(
         mod,
         "BotConfig",
@@ -115,13 +74,8 @@ async def test_opportunity_gate_only_skips_llm_enhancement(monkeypatch: pytest.M
     )
     await mod.handle_group_message(bot, event)
 
-    mod.run_repeater_llm_plan.assert_not_awaited()
-    mod.submit_repeater_corpus_select.assert_not_awaited()
     chat_instance.answer_from_bundle.assert_awaited_once_with(bundle)
     assert dispatched == [(300, 100, answers)]
-    assert trace_rows
-    assert trace_rows[0]["kind"] == "conversation_decision_trace"
-    assert trace_rows[0]["opportunity_accepted"] is False
 
 
 @pytest.mark.asyncio
@@ -142,8 +96,6 @@ async def test_message_handler_uses_reply_preparation_seam(monkeypatch: pytest.M
     monkeypatch.setattr(mod, "is_message_scrub_blocked_async", AsyncMock(return_value=False))
     monkeypatch.setattr(mod, "Chat", MagicMock(return_value=chat_instance))
     monkeypatch.setattr(mod, "BotConfig", MagicMock())
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: SimpleNamespace())
-    monkeypatch.setattr(mod, "resolve_repeater_capabilities", lambda _cfg: SimpleNamespace())
     monkeypatch.setattr(mod, "prepare_repeater_reply", AsyncMock(return_value=prepared))
     learn = AsyncMock()
     monkeypatch.setattr(mod, "enqueue_repeater_learn", learn)

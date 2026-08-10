@@ -125,7 +125,6 @@ def record_native_execution(
             action_count=len(outcome.actions),
             work_job_count=len(outcome.work_jobs) or None,
             cross_worker_action_count=len(outcome.cross_worker_actions) or None,
-            llm_select_action_count=len(outcome.llm_select_actions) or None,
             deferred_action_count=len(outcome.deferred_actions) or None,
             duration_ms=round(duration_ms, 2),
         )

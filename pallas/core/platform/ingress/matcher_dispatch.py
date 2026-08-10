@@ -227,7 +227,6 @@ def record_route_candidate_safe(
             + len(native_outcome.work_jobs)
             + len(native_outcome.deferred_actions)
             + len(native_outcome.cross_worker_actions)
-            + len(native_outcome.llm_select_actions)
         )
     try:
         record_route_candidate(

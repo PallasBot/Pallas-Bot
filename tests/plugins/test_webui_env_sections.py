@@ -33,7 +33,7 @@ def test_list_webui_env_sections_is_empty():
     env_keys = {f["env_key"] for f in data["fields"]}
     assert "LLM_CHAT_ENABLED" in env_keys
     assert "CHAT_ENABLE" in env_keys
-    assert "LLM_REPEATER_MODE" in env_keys
+    assert "LLM_REPEATER_MODE" not in env_keys
     assert "LLM_REPEATER_FEEDBACK_ENABLED" in env_keys
     assert "LLM_REPEATER_STRONG_COOLDOWN_SEC" in env_keys
     assert "LLM_REPEATER_STRONG_ATTEMPT_RATE" in env_keys

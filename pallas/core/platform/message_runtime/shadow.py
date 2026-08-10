@@ -29,7 +29,6 @@ class ShadowRecord:
     action_count: int | None = None
     work_job_count: int | None = None
     cross_worker_action_count: int | None = None
-    llm_select_action_count: int | None = None
     deferred_action_count: int | None = None
     duration_ms: float | None = None
 
@@ -57,8 +56,6 @@ class ShadowRecord:
             record["work_job_count"] = self.work_job_count
         if self.cross_worker_action_count is not None:
             record["cross_worker_action_count"] = self.cross_worker_action_count
-        if self.llm_select_action_count is not None:
-            record["llm_select_action_count"] = self.llm_select_action_count
         if self.deferred_action_count is not None:
             record["deferred_action_count"] = self.deferred_action_count
         if self.duration_ms is not None:
