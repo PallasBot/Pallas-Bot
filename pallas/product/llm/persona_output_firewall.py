@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from pallas.product.llm.reply_necessity import is_short_vent
+
 FirewallAction = Literal["allow", "retry", "fallback", "silent"]
 FirewallSeverity = Literal["soft", "strict"]
 FirewallStrategy = Literal["fallback", "retry_then_fallback"]
@@ -37,7 +39,6 @@ _GENDER_IDENTITY_CONFLICT_RE = re.compile(r"(?:哥们|兄弟们|爷们|老子)(?
 _GENERIC_TEMPLATE_CLOSURE_RE = re.compile(
     r"(?:行吧|好吧)[，,。!！\s]*那?[旧就]当我没说[，,。!！\s]*(?:你|你们).{0,6}(?:乐呵|高兴|开心).{0,3}就行"
 )
-_SHORT_VENT_RE = re.compile(r"(?:烦|唉|累|难受|没绷住|服了|崩溃)[，,。.!！?？~～\s]*$")
 _SHORT_VENT_GENERIC_QUESTION_RE = re.compile(
     r"^(?:咋了|怎么了|咋回事|什么情况|啥情况|然后呢|咋整)[，,。.!！?？~～\s]*$"
 )
@@ -159,7 +160,7 @@ def inspect_persona_output(
     rule_ids: list[str] = []
     quality_rule_ids: list[str] = []
     current = str(current_user_text or "").strip().rsplit("\n", 1)[-1].strip()
-    short_vent = len(current) <= 24 and bool(_SHORT_VENT_RE.search(current))
+    short_vent = is_short_vent(current)
     is_presence_check = bool(_PRESENCE_CHECK_RE.search(current))
     action = str(social_action or "").strip().upper()
     target = str(reply_target or "").strip().lower()

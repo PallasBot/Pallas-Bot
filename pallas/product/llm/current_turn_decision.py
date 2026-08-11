@@ -10,7 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from pallas.product.llm.inference_params import task_token_budget
-from pallas.product.llm.reply_necessity import has_reply_obligation, is_low_value_social_turn
+from pallas.product.llm.reply_necessity import has_reply_obligation, is_low_value_social_turn, is_short_vent
 
 
 class CurrentTurnAction(StrEnum):
@@ -250,6 +250,36 @@ def _format_reply_candidates(candidates: list[ReplyTargetCandidate]) -> str:
     )
 
 
+def decide_current_turn_by_rule(turn: CurrentTurnDecisionInput) -> CurrentTurnDecision:
+    """Deterministic decision for the no-model path; mirrors the model rule overrides."""
+    text = str(turn.text or "").strip()
+    if turn.required_tool_intent and turn.tools_permitted:
+        # 保持自包含；decide_current_turn 的调用路径上该分支已被提前短路
+        return _decision(CurrentTurnAction.TOOL, source="rule", reason="required_tool_intent")
+    if is_short_vent(text):
+        return _decision(
+            CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.ACK,
+            source="rule",
+            reason="rule_short_vent_ack",
+        )
+    if not (turn.is_to_me or turn.is_explicitly_addressed) and should_pass_low_value_social_turn(text):
+        return _decision(
+            CurrentTurnAction.PASS,
+            social_action=CurrentTurnSocialAction.ACK,
+            source="rule",
+            reason="rule_low_value_social_pass",
+        )
+    if has_reply_obligation(text):
+        return _decision(
+            CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.ANSWER,
+            source="rule",
+            reason="rule_reply_obligation",
+        )
+    return _decision(CurrentTurnAction.REPLY, source="rule", reason="rule_default_reply")
+
+
 def decide_current_turn(
     turn: CurrentTurnDecisionInput,
     *,
@@ -260,7 +290,7 @@ def decide_current_turn(
     if turn.required_tool_intent and turn.tools_permitted:
         return _decision(CurrentTurnAction.TOOL, source="rule", reason="required_tool_intent")
     if not model_enabled:
-        return _decision(CurrentTurnAction.REPLY, source="rule", reason="default_reply")
+        return decide_current_turn_by_rule(turn)
     try:
         parsed = CurrentTurnModelResponse.model_validate_json(str(model_response or ""))
     except (ValidationError, ValueError):

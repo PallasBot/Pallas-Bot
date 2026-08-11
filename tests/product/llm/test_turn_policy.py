@@ -146,3 +146,48 @@ def test_reply_action_does_not_need_tool_just_because_tools_are_enabled() -> Non
 
     assert policy.needs_tool is False
     assert policy.needs_grounding is False
+
+
+def test_rule_turn_decision_silences_unaddressed_low_value_social_turn() -> None:
+    decision = decide_current_turn(
+        CurrentTurnDecisionInput(text="哈哈哈"),
+        model_enabled=False,
+    )
+    assert decision.action is CurrentTurnAction.PASS
+    assert decision.trace.reason == "rule_low_value_social_pass"
+
+
+def test_rule_turn_decision_acks_short_vent() -> None:
+    decision = decide_current_turn(
+        CurrentTurnDecisionInput(text="又临时改了，烦"),
+        model_enabled=False,
+    )
+    assert decision.action is CurrentTurnAction.REPLY
+    assert decision.social_action is CurrentTurnSocialAction.ACK
+    assert decision.trace.reason == "rule_short_vent_ack"
+
+
+def test_rule_turn_decision_answers_direct_question() -> None:
+    decision = decide_current_turn(
+        CurrentTurnDecisionInput(text="这个参数怎么配？", is_to_me=True),
+        model_enabled=False,
+    )
+    assert decision.action is CurrentTurnAction.REPLY
+    assert decision.social_action is CurrentTurnSocialAction.ANSWER
+
+
+def test_rule_turn_decision_keeps_required_tool_intent() -> None:
+    decision = decide_current_turn(
+        CurrentTurnDecisionInput(text="帮我查一下", tools_permitted=True, required_tool_intent=True),
+        model_enabled=False,
+    )
+    assert decision.action is CurrentTurnAction.TOOL
+
+
+def test_rule_turn_decision_replies_addressed_low_value_turn() -> None:
+    decision = decide_current_turn(
+        CurrentTurnDecisionInput(text="哈哈哈", is_to_me=True),
+        model_enabled=False,
+    )
+    assert decision.action is CurrentTurnAction.REPLY
+    assert decision.trace.reason == "rule_default_reply"

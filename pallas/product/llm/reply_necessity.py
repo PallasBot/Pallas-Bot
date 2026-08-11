@@ -49,6 +49,7 @@ _SHORT_REACTIONS = frozenset({
     "!",
 })
 _NOISE_RE = re.compile(r"^[\W_\d]{1,6}$", re.UNICODE)
+_SHORT_VENT_RE = re.compile(r"(?:烦|唉|累|难受|没绷住|服了|崩溃)[，,。.!！?？~～\s]*$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,11 @@ class ReplyNecessityGateResult:
     decision: ReplyNecessityGateDecision
     score: int
     detail: str
+
+
+def is_short_vent(text: str) -> bool:
+    plain = str(text or "").strip()
+    return len(plain) <= 24 and bool(_SHORT_VENT_RE.search(plain))
 
 
 def is_low_value_social_turn(text: str) -> bool:

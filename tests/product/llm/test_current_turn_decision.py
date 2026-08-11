@@ -27,7 +27,7 @@ def test_default_current_turn_decision_preserves_reply_behavior() -> None:
 
     assert result.action == CurrentTurnAction.REPLY
     assert result.trace.source == "rule"
-    assert result.trace.reason == "default_reply"
+    assert result.trace.reason == "rule_reply_obligation"
 
 
 @pytest.mark.parametrize(
@@ -354,7 +354,7 @@ def test_current_turn_trace_is_compact_and_uses_safe_fields_only() -> None:
         "social_action": "ANSWER",
         "delivery_style": "PLAIN",
         "source": "rule",
-        "reason": "default_reply",
+        "reason": "rule_reply_obligation",
     }
 
 
