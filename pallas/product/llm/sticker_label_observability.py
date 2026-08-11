@@ -155,8 +155,8 @@ async def requeue_stale_sticker_labels(
             },
             idempotency_key=f"{STICKER_LABEL_JOB_KIND}:{label.content_hash}:{STICKER_LABEL_PROMPT_VERSION}",
         )
-        result = await jobs.requeue_terminal(job)
-        if result.reactivated:
+        _, reactivated = await jobs.requeue_terminal(job)
+        if reactivated:
             queued += 1
         else:
             skipped += 1

@@ -31,6 +31,36 @@ async def test_memory_store_deduplicates_and_releases_expired_leases() -> None:
 
 
 @pytest.mark.asyncio
+async def test_memory_store_requeue_terminal_only_reactivates_terminal_jobs() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+
+    store = MemoryWorkJobStore()
+    job = WorkJob.create(kind="test", payload={}, idempotency_key="test:requeue-terminal")
+
+    first, reactivated = await store.requeue_terminal(job)
+    assert first == job
+    assert reactivated is True
+
+    pending, reactivated = await store.requeue_terminal(job)
+    assert pending == job
+    assert reactivated is False
+
+    leased = await store.claim(owner="worker", lease_sec=1)
+    assert leased is not None
+    active, reactivated = await store.requeue_terminal(job)
+    assert active.id == job.id
+    assert reactivated is False
+
+    assert await store.complete(job_id=leased.id, owner="worker", lease_id=leased.lease_id or "")
+    replacement = WorkJob.create(kind="test", payload={"retry": True}, idempotency_key=job.idempotency_key)
+    revived, reactivated = await store.requeue_terminal(replacement)
+
+    assert revived == replacement
+    assert reactivated is True
+
+
+@pytest.mark.asyncio
 async def test_memory_store_batch_enqueue_preserves_order_and_idempotency() -> None:
     from pallas.core.platform.work_jobs.models import WorkJob
     from pallas.core.platform.work_jobs.store import MemoryWorkJobStore

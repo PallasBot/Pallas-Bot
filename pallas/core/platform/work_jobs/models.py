@@ -18,7 +18,6 @@ class WorkJob:
     created_at: float
     attempts: int = 0
     lease_id: str | None = None
-    reactivated: bool = False
 
     @classmethod
     def create(cls, *, kind: str, payload: dict[str, Any], idempotency_key: str) -> WorkJob:

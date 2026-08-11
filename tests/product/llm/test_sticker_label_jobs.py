@@ -205,20 +205,23 @@ async def test_terminal_label_job_is_reactivated_with_same_idempotency_key() -> 
     from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
 
     store = MemoryWorkJobStore()
-    first = await store.enqueue(WorkJob.create(kind="sticker.label.visual", payload={}, idempotency_key="label:hash:1"))
+    await store.enqueue(WorkJob.create(kind="sticker.label.visual", payload={}, idempotency_key="label:hash:1"))
     claimed = await store.claim(owner="worker", lease_sec=1)
     assert claimed is not None
     assert await store.dead_letter(job_id=claimed.id, owner="worker", lease_id=claimed.lease_id or "", reason="bad")
 
-    reactivated = await store.requeue_terminal(
-        WorkJob.create(kind="sticker.label.visual", payload={"content_hash": "a" * 64}, idempotency_key="label:hash:1")
+    replacement = WorkJob.create(
+        kind="sticker.label.visual",
+        payload={"content_hash": "a" * 64},
+        idempotency_key="label:hash:1",
     )
+    reactivated, was_reactivated = await store.requeue_terminal(replacement)
 
-    assert reactivated.id == first.id
-    assert reactivated.reactivated is True
+    assert reactivated.id == replacement.id
+    assert was_reactivated is True
     next_claim = await store.claim(owner="worker-2", lease_sec=1)
     assert next_claim is not None
-    assert next_claim.id == first.id
+    assert next_claim.id == replacement.id
 
 
 @pytest.mark.asyncio
@@ -232,12 +235,12 @@ async def test_inflight_label_job_is_not_reactivated() -> None:
     )
     assert await store.claim(owner="worker", lease_sec=10)
 
-    reactivated = await store.requeue_terminal(
+    reactivated, was_reactivated = await store.requeue_terminal(
         WorkJob.create(kind="sticker.label.visual", payload={}, idempotency_key="label:inflight:1")
     )
 
     assert reactivated.id == first.id
-    assert reactivated.reactivated is False
+    assert was_reactivated is False
     assert await store.claim(owner="worker-2", lease_sec=1) is None
 
 

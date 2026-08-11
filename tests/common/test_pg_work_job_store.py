@@ -17,8 +17,8 @@ async def test_requeue_terminal_is_single_flight_for_concurrent_postgres_produce
 
     first, second = await asyncio.gather(store.requeue_terminal(new_job()), store.requeue_terminal(new_job()))
 
-    assert first.id == second.id
-    assert sorted((first.reactivated, second.reactivated)) == [False, True]
+    assert first[0].id == second[0].id
+    assert sorted((first[1], second[1])) == [False, True]
     claimed = await store.claim(owner="worker", lease_sec=30)
     assert claimed is not None
     assert await store.claim(owner="other", lease_sec=30) is None
@@ -26,5 +26,5 @@ async def test_requeue_terminal_is_single_flight_for_concurrent_postgres_produce
 
     reactivated, competing = await asyncio.gather(store.requeue_terminal(new_job()), store.requeue_terminal(new_job()))
 
-    assert reactivated.id == competing.id == first.id
-    assert sorted((reactivated.reactivated, competing.reactivated)) == [False, True]
+    assert reactivated[0].id == competing[0].id == first[0].id
+    assert sorted((reactivated[1], competing[1])) == [False, True]
