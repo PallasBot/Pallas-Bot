@@ -109,6 +109,18 @@ def test_startup_summary_lists_component_ready_scheduled_and_skipped_states() ->
     assert warning_lines == ["[消息过滤] 已降级：reason=lexicon_unreadable"]
 
 
+def test_startup_summary_aggregates_plugin_ready_events() -> None:
+    import pallas.core.foundation.startup_report as startup_report
+
+    startup_report.reset_startup_report_for_tests()
+    startup_report.register_plugin_startup_ready("arcana", ["arcana.draw"])
+
+    info_lines, warning_lines = startup_report.build_startup_summary_lines(base_lines=[])
+
+    assert "[Ready] Plugin [arcana] registered commands [Draw]." in info_lines
+    assert warning_lines == []
+
+
 def test_startup_summary_lists_failed_and_slow_plugins() -> None:
     import pallas.core.foundation.startup_report as startup_report
 

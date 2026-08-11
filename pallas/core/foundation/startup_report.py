@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 
 from nonebot import get_driver, logger
 
+from .logging.bridge import format_plugin_event
+
 _ROLE_LABELS = {
     "unified": "统一进程",
     "hub": "Hub",
@@ -74,6 +76,20 @@ def register_startup_warning(key: str, value: str | None) -> None:
 
 def register_startup_ready(component: str, detail: str | None = None) -> None:
     _collector.set_event(component, "已就绪", detail)
+
+
+def register_plugin_startup_ready(plugin: str, commands: list[str] | tuple[str, ...] | None = None) -> None:
+    """将插件的就绪事件并入启动摘要，避免逐插件启动刷屏。"""
+    plugin_id = str(plugin or "").strip()
+    if plugin_id:
+        command_names = ", ".join(_command_log_name(command) for command in commands or ()) or "-"
+        detail = format_plugin_event("ready", f"Plugin [{plugin_id}] registered commands [{command_names}]")
+        _collector.set_event(plugin_id, "plugin_ready", detail)
+
+
+def _command_log_name(command: str) -> str:
+    name = str(command or "").strip().rsplit(".", maxsplit=1)[-1]
+    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[_-]+", name) if part) or "-"
 
 
 def register_startup_scheduled(component: str, detail: str | None = None) -> None:
@@ -304,6 +320,9 @@ def build_startup_summary_lines(
         *fact_lines,
     ]
     for component, event in _collector.events.items():
+        if event.state == "plugin_ready":
+            info_lines.append(event.detail)
+            continue
         if event.state != "已降级":
             detail = f"：{event.detail}" if event.detail else ""
             info_lines.append(f"[{component}] {event.state}{detail}")

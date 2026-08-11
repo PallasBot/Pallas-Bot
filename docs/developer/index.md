@@ -31,7 +31,7 @@
 | 配置合并 | `pallas.toml` → `.env` → `webui.json` |
 | 分片 | hub / worker / Redis；消息主路径在 worker |
 
-主仓或平台开发时，可按 [架构总览](/developer/architecture/overview) → [统一消息入口](/developer/architecture/message-runtime) → [Bot 内置 Agent 生命周期](/developer/architecture/agent-lifecycle) → [LLM 输出路径](/developer/architecture/llm-output-path) → [分片](/developer/architecture/shard-runtime) → [配置存储](/developer/architecture/config-storage) → [治理](/developer/architecture/plugin-governance) 的顺序阅读。
+主仓或平台开发时，可按 [架构总览](/developer/architecture/overview) → [统一消息入口](/developer/architecture/message-runtime) → [Bot 内置 Agent 生命周期](/developer/architecture/agent-lifecycle) → [LLM 输出路径](/developer/architecture/llm-output-path) → [分片](/developer/architecture/shard-runtime) → [配置存储](/developer/architecture/config-storage) → [治理](/developer/architecture/plugin-governance) → [插件业务事件日志](/developer/architecture/plugin-event-logging) 的顺序阅读。
 
 ## 后续阅读：目录索引
 

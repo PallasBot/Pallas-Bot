@@ -2,9 +2,11 @@ import ast
 import logging
 from pathlib import Path
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.logging import event_log
 from pallas.core.foundation.logging.bridge import (
     REPO_CONSOLE_LOG_FORMAT,
+    REPO_FILE_LOG_FORMAT,
     ChannelLoguruHandler,
     _stdlib_logger_channel_label,
     display_log_name,
@@ -45,7 +47,9 @@ def test_stdlib_logger_channel_label_uses_repo_aliases() -> None:
 
 def test_repo_console_log_format_aligns_level_and_source() -> None:
     assert "{level:<8}" in REPO_CONSOLE_LOG_FORMAT
-    assert "{{{extra[display_name]:<12}}}" in REPO_CONSOLE_LOG_FORMAT
+    assert "{{{extra[display_name]:<8}}}" in REPO_CONSOLE_LOG_FORMAT
+    assert "{level:<8}" in REPO_FILE_LOG_FORMAT
+    assert "{{{extra[display_name]:<8}}}" in REPO_FILE_LOG_FORMAT
 
 
 def test_repo_console_log_uses_core_display_name_without_rewriting_logger_name() -> None:
@@ -66,6 +70,8 @@ def test_repo_console_log_capitalizes_other_display_names() -> None:
 
 def test_display_log_name_normalizes_builtin_and_external_plugin_packages() -> None:
     assert display_log_name("packages.take_name.handlers") == "TakeName"
+    assert display_log_name("packages.llm_chat.chat_message") == "LLMChat"
+    assert display_log_name("packages.llm_chat.drunk_chat") == "Drink"
     assert display_log_name("pallas_plugin_protocol.runtime") == "Protocol"
     assert display_log_name("nonebot_plugin_apscheduler") == "Apscheduler"
 
@@ -80,6 +86,7 @@ def test_business_log_messages_get_module_labels_without_duplicates() -> None:
     assert prefix_business_log_message("packages.repeater.learn_queue", "queued batch") == "[Learn] queued batch"
     assert prefix_business_log_message("packages.repeater.fanout_reply", "[Reply] sent") == "[Reply] sent"
     assert prefix_business_log_message("packages.llm_chat.chat_message", "completed") == "[Chat] completed"
+    assert prefix_business_log_message("packages.llm_chat.drunk_chat", "session cleared") == "[Drink] session cleared"
     assert prefix_business_log_message("packages.roulette.service", "started") == "[Roulette] started"
     assert prefix_business_log_message("pallas_plugin_protocol.runtime", "started") == "[Protocol] started"
     assert prefix_business_log_message("nonebot_plugin_apscheduler", "job added") == "[Apscheduler] job added"
@@ -87,11 +94,63 @@ def test_business_log_messages_get_module_labels_without_duplicates() -> None:
     assert prefix_business_log_message("third_party.client", "unchanged") == "unchanged"
 
 
-def test_format_business_event_writes_reply_as_a_narrative_with_body() -> None:
+def test_format_business_event_writes_action_tagged_narratives() -> None:
     assert format_business_event("复读回复", "已发送", bot=10001, group=20002, content="line one\nline two") == (
-        "Bot 10001 replied in group 20002: line one\\nline two"
+        "[Reply] Bot [10001] replied in group [20002]: line one\\nline two"
+    )
+    assert format_business_event("复读回复", "已发送", bot=10001, group=20002, mode="fanout", content="ok") == (
+        "[Fanout] Bot [10001] replied in group [20002]: ok"
+    )
+    assert format_business_event("饮酒", "已完成", bot=10001, group=20002, duration=133) == (
+        "[Drink] Bot [10001] started drinking in group [20002], sober up after 133s."
+    )
+    assert (
+        format_business_event("清醒", "已完成", bot=10001, group=20002)
+        == "[SoberUp] Bot [10001] sobered up in group [20002]."
+    )
+    assert format_business_event("酒后会话", "已完成", bot=10001, group=20002, session_id="10001_20002") == (
+        "[Session] Bot [10001] cleared drunk-chat session [10001_20002] in group [20002]."
+    )
+    assert format_business_event("表情回应", "已发送", bot=10001, group=20002, message_id=99, emoji="66") == (
+        "[Reaction] Bot [10001] reacted to message [99] in group [20002] with emoji [66]."
+    )
+    assert format_business_event("表情回应", "已跳过", bot=10001, group=20002, message_id=99) == (
+        "[Reaction] Bot [10001] skipped message [99] in group [20002]: already reacted."
+    )
+    assert format_business_event("表情回应", "已超时", bot=10001, group=20002, message_id=99, timeout=5) == (
+        "[Reaction] Bot [10001] timed out reacting to message [99] in group [20002] after [5s]."
+    )
+    assert (
+        format_business_event(
+            "表情回应", "发送失败", bot=10001, group=20002, message_id=99, emoji="66", error="ActionFailed"
+        )
+        == "[Reaction] Bot [10001] failed to react to message [99] in group [20002] with emoji [66]: ActionFailed."
+    )
+    assert format_business_event(
+        "自动表情回应", "已跳过", bot=10001, group=20002, message_id=99, pending=64, limit=64
+    ) == (
+        "[Reaction] Bot [10001] skipped auto reaction for message [99] in group [20002]: "
+        "pending [64] reached limit [64]."
     )
     assert format_business_event("语料回填批次", "已跳过", reason=None) == "Corpus backfill batch skipped"
+
+
+def test_format_plugin_event_writes_pascal_case_operation_narrative() -> None:
+    assert format_plugin_event("ready", "Registered command [Draw]") == "[Ready] Registered command [Draw]."
+    assert (
+        format_plugin_event(
+            "draw",
+            "Bot [100000001] drew [The Fool upright] for user [100000003] in group [100000002] in [18ms]",
+        )
+        == "[Draw] Bot [100000001] drew [The Fool upright] for user [100000003] in group [100000002] in [18ms]."
+    )
+    assert (
+        format_plugin_event(
+            "clear_session",
+            "Bot [100000001] cleared session [100000001_100000002] in group [100000002]",
+        )
+        == "[ClearSession] Bot [100000001] cleared session [100000001_100000002] in group [100000002]."
+    )
 
 
 def test_console_log_messages_use_bracketed_prefix() -> None:

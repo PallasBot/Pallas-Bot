@@ -14,9 +14,9 @@ if TYPE_CHECKING:
     from typing import Any
 
 REPO_CONSOLE_LOG_FORMAT = (
-    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{extra[display_name]:<12}}}</u></c> {message}\n"
+    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{extra[display_name]:<8}}}</u></c> {message}\n"
 )
-REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{extra[display_name]:<12}}} {message}\n"
+REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{extra[display_name]:<8}}} {message}\n"
 
 _TRANSIENT_UVICORN_MESSAGES = (
     "keepalive ping failed",
@@ -57,6 +57,7 @@ _BUSINESS_LOG_LABELS = (
     ("packages.repeater.fanout", "Reply"),
     ("packages.repeater.emoji", "Reaction"),
     ("packages.repeater", "Repeater"),
+    ("packages.llm_chat.drunk_chat", "Drink"),
     ("packages.llm_chat", "Chat"),
     ("packages.pb_webui", "控制台"),
     ("packages.pb_core", "Core"),
@@ -161,6 +162,10 @@ def display_log_name(logger_name: str) -> str:
     name = (logger_name or "").strip()
     if name in {"pallas", "pallas.core"} or name.startswith("pallas.core."):
         return "Core"
+    if name == "packages.llm_chat.drunk_chat" or name.startswith("packages.llm_chat.drunk_chat."):
+        return "Drink"
+    if name == "packages.llm_chat" or name.startswith("packages.llm_chat."):
+        return "LLMChat"
     if name.startswith("packages."):
         return _pascal_case(name.split(".", 2)[1])
     for prefix in ("pallas_plugin_", "nonebot_plugin_"):
@@ -224,13 +229,63 @@ def format_business_event(action: str, result: str, /, **fields: object) -> str:
         bot = fields.get("bot")
         group = fields.get("group")
         content = _format_business_field(fields.get("content"))
-        return f"Bot {bot} replied in group {group}: {content}"
+        tag = "Fanout" if fields.get("mode") == "fanout" else "Reply"
+        return f"[{tag}] Bot [{bot}] replied in group [{group}]: {content}"
+    if action == "饮酒" and result == "已完成":
+        bot = fields.get("bot")
+        group = fields.get("group")
+        duration = fields.get("duration")
+        return f"[Drink] Bot [{bot}] started drinking in group [{group}], sober up after {duration}s."
+    if action == "清醒" and result == "已完成":
+        return f"[SoberUp] Bot [{fields.get('bot')}] sobered up in group [{fields.get('group')}]."
+    if action == "酒后会话" and result == "已完成":
+        return (
+            f"[Session] Bot [{fields.get('bot')}] cleared drunk-chat session [{fields.get('session_id')}] "
+            f"in group [{fields.get('group')}]."
+        )
+    if action == "表情回应" and result == "已发送":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] reacted to message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}] with emoji [{fields.get('emoji')}]."
+        )
+    if action == "表情回应" and result == "已跳过":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] skipped message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}]: already reacted."
+        )
+    if action == "表情回应" and result == "已超时":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] timed out reacting to message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}] after [{fields.get('timeout')}s]."
+        )
+    if action == "表情回应" and result == "发送失败":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] failed to react to message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}] with emoji [{fields.get('emoji')}]: {fields.get('error')}."
+        )
+    if action == "自动表情回应" and result == "已跳过":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] skipped auto reaction for message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}]: pending [{fields.get('pending')}] "
+            f"reached limit [{fields.get('limit')}]."
+        )
 
     subject = _BUSINESS_EVENT_ACTIONS.get(action, action)
     outcome = _BUSINESS_EVENT_RESULTS.get(result, result)
     text = f"{subject} {outcome}".strip()
     values = [f"{key}={_format_business_field(value)}" for key, value in fields.items() if value not in (None, "")]
     return f"{text}: {' '.join(values)}" if values else text
+
+
+def format_plugin_event(
+    operation: str,
+    narrative: str,
+    /,
+) -> str:
+    """生成带 PascalCase 操作标签的单行领域叙事。"""
+    tag = _pascal_case(operation.strip())
+    text = _format_business_field(narrative).strip().rstrip(".")
+    return f"[{tag}] {text}." if text else f"[{tag}]"
 
 
 def _format_business_field(value: object) -> str:

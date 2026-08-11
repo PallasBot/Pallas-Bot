@@ -12,6 +12,7 @@ from nonebot_plugin_apscheduler import scheduler
 
 from pallas.api.limits import is_command_cooldown_ready, refresh_command_cooldown
 from pallas.core.foundation.config import BotConfig
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.plugin_coord import dream as dream_coord
 
 if TYPE_CHECKING:
@@ -27,7 +28,7 @@ def now() -> datetime:
 async def sober_up_later(bot_id: int, group_id: int) -> None:
     config = BotConfig(bot_id, group_id)
     if await config.sober_up() and not await config.is_sleep():
-        logger.info(f"bot [{bot_id}] sober up in group [{group_id}]")
+        logger.info(format_business_event("清醒", "已完成", bot=bot_id, group=group_id))
         await get_bot(str(bot_id)).call_api(
             "send_group_msg",
             message="呃......咳嗯，下次不能喝、喝这么多了......",
@@ -43,7 +44,7 @@ async def drink(event: GroupMessageEvent, send: SendMessage) -> None:
 
     drunk_duration = random.randint(60, 600)
     logger.info(
-        f"bot [{event.self_id}] ready to drink in group [{event.group_id}], sober up after {drunk_duration} sec"
+        format_business_event("饮酒", "已完成", bot=event.self_id, group=event.group_id, duration=drunk_duration)
     )
 
     await config.drink()

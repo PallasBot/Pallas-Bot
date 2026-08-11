@@ -96,6 +96,7 @@ flowchart LR
 | 后台任务与 work aux | [单进程部署](../../maintainer/deploy/single-process.md) |
 | 配置存储 | [config-storage.md](config-storage.md) |
 | 插件治理 | [plugin-governance.md](plugin-governance.md) |
+| 插件业务事件日志 | [plugin-event-logging.md](plugin-event-logging.md) |
 | Bot 内置 Agent 生命周期 | [agent-lifecycle.md](agent-lifecycle.md) |
 | LLM 输出路径（@ / 接话 / 表达库） | [llm-output-path.md](llm-output-path.md) |
 | 插件骨架 | [Golden Plugin](/developer/plugin-development/golden-plugin) |
