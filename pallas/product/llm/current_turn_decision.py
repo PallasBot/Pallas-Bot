@@ -38,6 +38,17 @@ class CurrentTurnDeliveryStyle(StrEnum):
 ReplyTarget = Literal["fact", "emotion", "short_tease", "answer", "silent"]
 
 
+class ReplyTargetCandidate(BaseModel):
+    """A recent group message the current turn may quote."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    message_id: int = Field(gt=0)
+    sender_id: int = Field(ge=0)
+    text: str = Field(min_length=1, max_length=160)
+    is_current: bool = False
+
+
 def current_turn_field(decision: object, name: str, default: Any = None) -> Any:
     """Read a decision field from either the validated model or a mapping."""
     if isinstance(decision, Mapping):
@@ -85,6 +96,7 @@ class CurrentTurnDecisionInput(BaseModel):
     required_tool_intent: bool = False
     recent_bot_reply_count: int = Field(default=0, ge=0, le=6)
     has_multi_party_overlap: bool = False
+    reply_candidates: list[ReplyTargetCandidate] = Field(default_factory=list, max_length=6)
 
 
 class CurrentTurnModelResponse(BaseModel):
@@ -93,6 +105,7 @@ class CurrentTurnModelResponse(BaseModel):
     action: CurrentTurnAction
     social_action: CurrentTurnSocialAction = CurrentTurnSocialAction.ANSWER
     delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN
+    reply_message_id: int | None = Field(default=None, gt=0)
 
 
 class CurrentTurnDecisionTrace(BaseModel):
@@ -111,6 +124,7 @@ class CurrentTurnDecision(BaseModel):
     action: CurrentTurnAction
     social_action: CurrentTurnSocialAction
     delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN
+    reply_message_id: int | None = None
     trace: CurrentTurnDecisionTrace
 
 
@@ -207,7 +221,7 @@ def build_current_turn_decision_prompt(turn: CurrentTurnDecisionInput) -> str:
         "Classify this current chat turn. Reply with JSON only: "
         '{"action":"REPLY|PASS|TOOL|FOLLOW_UP",'
         '"social_action":"ACK|AFFECTION|JOKE|STANCE|ANSWER|ASK_ONE",'
-        '"delivery_style":"PLAIN|QUOTE|MENTION"}. '
+        '"delivery_style":"PLAIN|QUOTE|MENTION","reply_message_id":number|null}. '
         "social_action is the visible conversational move, not a writing style. "
         "ACK is for a short vent, acknowledgement, or low-stakes reaction. "
         "AFFECTION is for warmly receiving praise or responding to affectionate, clingy, or cute behavior. "
@@ -215,13 +229,24 @@ def build_current_turn_decision_prompt(turn: CurrentTurnDecisionInput) -> str:
         "For a short ACK or JOKE without a question or request, use PASS. "
         "STANCE is only for an explicit request for an opinion or choice. "
         "ANSWER is for a direct question, and ASK_ONE is only for a necessary clarification. "
-        "Use PLAIN by default. QUOTE only when directly answering the current message. "
+        "Use PLAIN by default. QUOTE only when directly answering the current message or an offered reply target. "
+        "To quote one offered message, set reply_message_id to its id; never invent an id. "
         "Use MENTION only when multiple people are speaking and a specific person must be singled out; "
         "do not mention someone back just because they mentioned the bot. "
         f"The message is {addressed}; {tool_option}. "
         f"The bot has replied {turn.recent_bot_reply_count} time(s) recently; "
         f"multi-party overlap is {turn.has_multi_party_overlap}. "
+        f"Reply candidates: {_format_reply_candidates(turn.reply_candidates)}. "
         f"Message: {turn.text}"
+    )
+
+
+def _format_reply_candidates(candidates: list[ReplyTargetCandidate]) -> str:
+    if not candidates:
+        return "none"
+    return " | ".join(
+        f"id={item.message_id};sender={item.sender_id};current={str(item.is_current).lower()};text={item.text}"
+        for item in candidates
     )
 
 
@@ -272,13 +297,26 @@ def decide_current_turn(
             source="fallback",
             reason="mention_without_multi_party_overlap",
         )
+    reply_message_id = _resolve_reply_message_id(parsed.reply_message_id, turn.reply_candidates)
+    delivery_style = CurrentTurnDeliveryStyle.QUOTE if reply_message_id is not None else parsed.delivery_style
     return _decision(
         parsed.action,
         social_action=parsed.social_action,
-        delivery_style=parsed.delivery_style,
+        delivery_style=delivery_style,
+        reply_message_id=reply_message_id,
         source="model",
         reason="model_action",
     )
+
+
+def _resolve_reply_message_id(
+    selected_id: int | None,
+    candidates: list[ReplyTargetCandidate],
+) -> int | None:
+    if selected_id is None:
+        return None
+    candidate_ids = {item.message_id for item in candidates}
+    return selected_id if selected_id in candidate_ids else None
 
 
 async def decide_current_turn_with_model(
@@ -291,8 +329,6 @@ async def decide_current_turn_with_model(
         return decide_current_turn(turn, model_enabled=False)
     if not enabled:
         return decide_current_turn(turn, model_enabled=False)
-    if turn.is_to_me and not turn.tools_permitted and not turn.has_multi_party_overlap:
-        return _decision(CurrentTurnAction.REPLY, source="rule", reason="explicit_plain_reply")
     from pallas.product.llm.provider_client import complete_chat_message
 
     try:
@@ -301,7 +337,7 @@ async def decide_current_turn_with_model(
                 {
                     "role": "system",
                     "content": (
-                        "Return only a JSON object with action, social_action, and delivery_style. "
+                        "Return only a JSON object with action, social_action, delivery_style, and reply_message_id. "
                         "Allowed actions: REPLY, PASS, TOOL, FOLLOW_UP. "
                         "Allowed social actions: ACK, AFFECTION, JOKE, STANCE, ANSWER, ASK_ONE. "
                         "Allowed delivery styles: PLAIN, QUOTE, MENTION."
@@ -324,6 +360,7 @@ def _decision(
     *,
     social_action: CurrentTurnSocialAction | None = None,
     delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN,
+    reply_message_id: int | None = None,
     source: str,
     reason: str,
 ) -> CurrentTurnDecision:
@@ -335,6 +372,7 @@ def _decision(
         action=action,
         social_action=social_action,
         delivery_style=delivery_style,
+        reply_message_id=reply_message_id,
         trace=CurrentTurnDecisionTrace(
             action=action,
             social_action=social_action,

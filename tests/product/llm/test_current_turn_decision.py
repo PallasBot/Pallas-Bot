@@ -8,6 +8,7 @@ from pallas.product.llm.current_turn_decision import (
     CurrentTurnDecisionInput,
     CurrentTurnDeliveryStyle,
     CurrentTurnSocialAction,
+    ReplyTargetCandidate,
     build_current_turn_decision_prompt,
     build_reply_target_instruction,
     decide_current_turn,
@@ -197,6 +198,39 @@ def test_model_current_turn_allows_quote_for_a_direct_reply() -> None:
     assert result.delivery_style is CurrentTurnDeliveryStyle.QUOTE
 
 
+def test_model_current_turn_selects_an_offered_reply_target() -> None:
+    result = decide_current_turn(
+        CurrentTurnDecisionInput(
+            text="这个怎么弄？",
+            is_to_me=True,
+            reply_candidates=[
+                ReplyTargetCandidate(message_id=101, sender_id=7, text="前面的配置报错了", is_current=False),
+                ReplyTargetCandidate(message_id=102, sender_id=8, text="这个怎么弄？", is_current=True),
+            ],
+        ),
+        model_enabled=True,
+        model_response='{"action":"REPLY","reply_message_id":101}',
+    )
+
+    assert result.reply_message_id == 101
+    assert result.delivery_style is CurrentTurnDeliveryStyle.QUOTE
+
+
+def test_model_current_turn_drops_unknown_reply_target() -> None:
+    result = decide_current_turn(
+        CurrentTurnDecisionInput(
+            text="这个怎么弄？",
+            is_to_me=True,
+            reply_candidates=[ReplyTargetCandidate(message_id=102, sender_id=8, text="这个怎么弄？", is_current=True)],
+        ),
+        model_enabled=True,
+        model_response='{"action":"REPLY","reply_message_id":999}',
+    )
+
+    assert result.reply_message_id is None
+    assert result.delivery_style is CurrentTurnDeliveryStyle.PLAIN
+
+
 def test_model_current_turn_downgrades_mention_without_multi_party_overlap() -> None:
     result = decide_current_turn(
         CurrentTurnDecisionInput(text="你怎么看？", is_to_me=True, has_multi_party_overlap=False),
@@ -345,13 +379,9 @@ async def test_disabled_current_turn_decision_does_not_request_a_model(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_explicit_plain_chat_bypasses_current_turn_model(monkeypatch) -> None:
-    requested = False
-
+async def test_explicit_direct_chat_uses_current_turn_model(monkeypatch) -> None:
     async def request_model(*args: object, **kwargs: object) -> dict[str, str]:
-        nonlocal requested
-        requested = True
-        return {"content": '{"action":"PASS"}'}
+        return {"content": '{"action":"REPLY"}'}
 
     monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", request_model)
 
@@ -360,9 +390,24 @@ async def test_explicit_plain_chat_bypasses_current_turn_model(monkeypatch) -> N
         enabled=True,
     )
 
-    assert requested is False
     assert result.action is CurrentTurnAction.REPLY
-    assert result.trace.reason == "explicit_plain_reply"
+    assert result.trace.source == "model"
+
+
+@pytest.mark.asyncio
+async def test_explicit_direct_chat_uses_current_turn_model_for_quote_delivery(monkeypatch) -> None:
+    async def request_model(*args: object, **kwargs: object) -> dict[str, str]:
+        return {"content": '{"action":"REPLY","delivery_style":"QUOTE"}'}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", request_model)
+
+    result = await decide_current_turn_with_model(
+        CurrentTurnDecisionInput(text="群里聊啥呢", is_to_me=True),
+        enabled=True,
+    )
+
+    assert result.delivery_style is CurrentTurnDeliveryStyle.QUOTE
+    assert result.trace.source == "model"
 
 
 @pytest.mark.asyncio

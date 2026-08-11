@@ -56,6 +56,10 @@ from pallas.product.llm.persona_context import build_persona_llm_context
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_necessity import evaluate_reply_necessity_gate
 from pallas.product.llm.reply_shape import resolve_reply_shape
+from pallas.product.llm.reply_target_candidates import (
+    list_reply_target_candidates,
+    record_reply_target_candidate,
+)
 from pallas.product.llm.reply_variation import should_wait_for_more
 from pallas.product.llm.session_store import list_user_llm_messages
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
@@ -198,6 +202,14 @@ async def handle_llm_chat(
     raw_group_id = getattr(event, "group_id", None)
     group_id = int(raw_group_id) if raw_group_id is not None else None
     user_id = int(getattr(event, "user_id", 0) or 0)
+    message_id = int(getattr(event, "message_id", 0) or 0)
+    if group_id is not None and message_id > 0:
+        record_reply_target_candidate(
+            group_id=group_id,
+            message_id=message_id,
+            sender_id=user_id,
+            text=plain or msg,
+        )
     is_alias_hard_trigger = bool(getattr(event, "_pallas_llm_alias_hard_trigger", False))
     is_to_me = bool(getattr(event, "to_me", False) or is_alias_hard_trigger)
     speak_trigger = "alias" if is_alias_hard_trigger else ("to_me" if is_to_me else "")
@@ -523,6 +535,9 @@ async def handle_llm_chat(
         "before_turn_decision": int((time.perf_counter() - context_started) * 1000),
     }
     turn_decision_started = time.perf_counter()
+    reply_candidates = (
+        list_reply_target_candidates(group_id=group_id, current_message_id=message_id) if group_id is not None else []
+    )
     current_turn_decision = await decide_current_turn_with_model(
         CurrentTurnDecisionInput(
             text=focus_text,
@@ -532,6 +547,7 @@ async def handle_llm_chat(
             required_tool_intent=required_tool_intent,
             recent_bot_reply_count=min(6, recent_bot_reply_count),
             has_multi_party_overlap=has_multi_party,
+            reply_candidates=reply_candidates,
         ),
         enabled=bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)),
     )
@@ -732,6 +748,8 @@ async def handle_llm_chat(
             "current_turn_action": current_turn_decision.action,
             "current_turn_trace": current_turn_decision.trace.model_dump(mode="json"),
             "reply_delivery_style": getattr(current_turn_decision, "delivery_style", "PLAIN"),
+            "reply_to_message_id": getattr(current_turn_decision, "reply_message_id", None),
+            "reply_candidate_ids": [item.message_id for item in reply_candidates],
             "message_id": getattr(event, "message_id", None),
             "has_multi_party_overlap": has_multi_party,
             "reply_target": reply_target,

@@ -117,7 +117,8 @@ async def test_llm_callback_delivers_json_reply_segments_in_order_with_first_dec
             "group_id": 42,
             "user_id": 7,
             "reply_delivery_style": "QUOTE",
-            "message_id": 88,
+            "reply_to_message_id": 88,
+            "reply_candidate_ids": [87, 88],
         },
         bot=SimpleNamespace(self_id="99"),
         group_id=42,
@@ -137,6 +138,47 @@ async def test_llm_callback_delivers_json_reply_segments_in_order_with_first_dec
         ("回头再说", {"reply_to_message_id": None, "at_user_id": None}),
     ]
     assert delays == [llm_delivery.bubble_delay_seconds("先这样吧")]
+
+
+@pytest.mark.asyncio
+async def test_llm_callback_quote_target_absent_from_candidates_degrades_to_plain(monkeypatch) -> None:
+    sent: list[tuple[str, dict]] = []
+
+    async def fake_send_with_receipt(_bot, _group_id, text, **_kwargs):
+        sent.append((text, _kwargs))
+        return SimpleNamespace(message_id=len(sent), delivered=True)
+
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        fake_send_with_receipt,
+    )
+    monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: False)
+    monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: LlmConfig(llm_reply_postprocess_enabled=False))
+
+    _reply_text, delivered, _ = await llm_delivery.deliver_llm_callback_success(
+        "task-quote-missing",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "reply_delivery_style": "QUOTE",
+            "reply_to_message_id": 999,
+            "reply_candidate_ids": [87, 88],
+        },
+        bot=SimpleNamespace(self_id="99"),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="先这样吧",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert delivered is True
+    assert sent == [("先这样吧", {"reply_to_message_id": None, "at_user_id": None})]
 
 
 @pytest.mark.asyncio
@@ -249,6 +291,31 @@ async def test_direct_candidate_bypasses_structured_parser(monkeypatch) -> None:
     assert reply_text == "第一句。\n第二句。"
     assert delivered is True
     assert sent == ["第一句。\n第二句。"]
+
+
+def test_llm_quote_delivery_uses_validated_candidate_id() -> None:
+    task = {
+        "task_type": "llm_chat",
+        "reply_delivery_style": "QUOTE",
+        "reply_to_message_id": 88,
+        "reply_candidate_ids": [87, 88],
+    }
+
+    assert llm_delivery.resolve_llm_reply_delivery(
+        task,
+        group_id=123,
+        mention_cooldown_sec=900,
+    ) == (88, None)
+    assert llm_delivery.resolve_llm_reply_delivery(
+        {**task, "reply_to_message_id": 999},
+        group_id=123,
+        mention_cooldown_sec=900,
+    ) == (None, None)
+    assert llm_delivery.resolve_llm_reply_delivery(
+        {**task, "reply_candidate_ids": [87]},
+        group_id=123,
+        mention_cooldown_sec=900,
+    ) == (None, None)
 
 
 def test_llm_mention_delivery_requires_multi_party_and_respects_group_cooldown(monkeypatch) -> None:

@@ -38,6 +38,15 @@ async def execute_repeater_message(bot: Bot, event: GroupMessageEvent) -> None:
         )
         return
 
+    from pallas.product.llm.reply_target_candidates import record_reply_target_candidate
+
+    record_reply_target_candidate(
+        group_id=int(event.group_id),
+        message_id=int(event.message_id),
+        sender_id=int(event.user_id),
+        text=ctx.plain_body,
+    )
+
     config = BotConfig(event.self_id, event.group_id)
     chat = Chat(event)
     prepared = await prepare_repeater_reply(

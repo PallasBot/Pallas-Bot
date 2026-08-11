@@ -276,8 +276,7 @@ def resolve_llm_reply_delivery(
         return None, None
     style = str(task.get("reply_delivery_style") or "PLAIN").strip().upper()
     if style == "QUOTE":
-        message_id = task.get("message_id")
-        return (int(message_id), None) if str(message_id or "").isdigit() else (None, None)
+        return _resolve_quote_reply_target(task)
     if style != "MENTION" or not bool(task.get("has_multi_party_overlap")):
         return None, None
     user_id = task.get("user_id")
@@ -288,6 +287,16 @@ def resolve_llm_reply_delivery(
     if current - _MENTION_LAST_SENT_AT.get(resolved_group_id, float("-inf")) < max(0, mention_cooldown_sec):
         return None, None
     return None, int(user_id)
+
+
+def _resolve_quote_reply_target(task: dict) -> tuple[int | None, int | None]:
+    """Quote only an offered candidate id recorded in the task; unknown ids degrade to plain."""
+    selected = task.get("reply_to_message_id")
+    selected_id = int(selected) if str(selected or "").isdigit() else None
+    candidate_ids = {int(item) for item in list(task.get("reply_candidate_ids") or []) if str(item or "").isdigit()}
+    if selected_id is not None and selected_id in candidate_ids:
+        return selected_id, None
+    return None, None
 
 
 def note_llm_reply_mention_sent(group_id: object, *, now: float | None = None) -> None:

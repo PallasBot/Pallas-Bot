@@ -266,6 +266,13 @@ async def test_handle_llm_chat_submits_required_tool_intent_despite_low_social_s
 @pytest.mark.asyncio
 async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.llm_chat import chat_message as mod
+    from pallas.product.llm.reply_target_candidates import (
+        clear_reply_target_candidates,
+        record_reply_target_candidate,
+    )
+
+    clear_reply_target_candidates()
+    record_reply_target_candidate(group_id=20002, message_id=40003, sender_id=30004, text="配置好像有问题")
 
     event = SimpleNamespace(
         to_me=True,
@@ -341,11 +348,15 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
             relationship_trace={},
         )
 
-    async def fake_current_turn_decision(*_args, **_kwargs):
+    async def fake_current_turn_decision(turn, **_kwargs):
         decision_called.append(True)
+        assert [item.message_id for item in turn.reply_candidates] == [40003, 40004]
+        assert turn.reply_candidates[-1].is_current is True
         return SimpleNamespace(
             action=mod.CurrentTurnAction.REPLY,
             social_action="ACK",
+            delivery_style="QUOTE",
+            reply_message_id=40003,
             trace=SimpleNamespace(
                 model_dump=lambda **_kwargs: {
                     "action": "REPLY",
@@ -444,8 +455,10 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert payload["behavior_hint"]
     assert "persona_affect_block" not in payload
     assert payload["current_turn_trace"]["social_action"] == "ACK"
-    assert payload["reply_delivery_style"] == "PLAIN"
+    assert payload["reply_delivery_style"] == "QUOTE"
     assert payload["message_id"] == 40004
+    assert payload["reply_to_message_id"] == 40003
+    assert payload["reply_candidate_ids"] == [40003, 40004]
     feedback_hint.assert_not_called()
     submit_request = submit_mock.await_args.args[0]
     assert "【本轮表达去重】" not in submit_request.system_prompt
