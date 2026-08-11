@@ -430,12 +430,18 @@ def catalog_plugin_source(plugin_id: str, source: PluginSourceKind) -> PluginSou
     return source
 
 
-def installed_distribution_version(package: str, module_name: str) -> str | None:
+def installed_distribution_version(
+    package: str,
+    module_name: str,
+    *,
+    top_level_distributions: dict[str, list[str]] | None = None,
+) -> str | None:
     candidates = [extra_package_for_plugin(package)]
     top_level = (module_name or "").split(".", 1)[0]
     if top_level:
         try:
-            candidates.extend(importlib.metadata.packages_distributions().get(top_level, ()))
+            distributions = top_level_distributions or importlib.metadata.packages_distributions()
+            candidates.extend(distributions.get(top_level, ()))
         except Exception:  # noqa: BLE001
             pass
     for candidate in candidates:
@@ -454,8 +460,16 @@ def plugin_version(
     *,
     package_root: Path | None = None,
     module_name: str = "",
+    top_level_distributions: dict[str, list[str]] | None = None,
 ) -> str | None:
-    installed = installed_distribution_version(package, module_name)
+    if top_level_distributions is None:
+        installed = installed_distribution_version(package, module_name)
+    else:
+        installed = installed_distribution_version(
+            package,
+            module_name,
+            top_level_distributions=top_level_distributions,
+        )
     if installed:
         return installed
     if source not in ("local", "community") or package_root is None:
@@ -568,6 +582,10 @@ def build_plugin_catalog_rows(
     global_disable_protected = global_disable_protected or set()
     _, by_package = _loaded_plugin_index()
     extra_pkgs = discover_extra_plugin_packages()
+    try:
+        top_level_distributions = importlib.metadata.packages_distributions()
+    except Exception:  # noqa: BLE001
+        top_level_distributions = {}
     rows: list[dict[str, Any]] = []
     seen_packages: set[str] = set()
 
@@ -609,6 +627,7 @@ def build_plugin_catalog_rows(
             plugin_source,
             package_root=root,
             module_name=module_name,
+            top_level_distributions=top_level_distributions,
         )
         visuals = resolve_catalog_visuals(
             plugin_id=resolved_plugin_id,

@@ -838,7 +838,7 @@ def register_plugins_console_router(
             await refresh_store_asset_snapshot()
 
         async def _load() -> dict[str, Any]:
-            return await build_community_plugin_store()
+            return await build_community_plugin_store(force_refresh=refresh)
 
         data = await cached_read(key="plugins-community-store", loader=_load, ttl_sec=30.0, stale_sec=120.0)
         return JSONResponse({"ok": True, "data": data})

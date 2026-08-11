@@ -74,20 +74,20 @@ async def cached_read(
         return await inflight
 
     async def run() -> Any:
-        t = time.monotonic()
         stale_hit = _READ_CACHE.get(key)
         try:
             data = await loader()
         except Exception as exc:
-            if stale_hit and t < float(stale_hit["stale_exp"]):
+            if stale_hit and time.monotonic() < float(stale_hit["stale_exp"]):
                 logger.warning(format_cache_fallback_warning(key=key, stale_sec=stale_sec, err=exc))
                 return cache_value_copy(stale_hit["data"])
             raise
         stored = cache_value_copy(data)
+        cached_at = time.monotonic()
         _READ_CACHE[key] = {
             "data": stored,
-            "exp": t + max(0.05, ttl_sec),
-            "stale_exp": t + max(ttl_sec, stale_sec),
+            "exp": cached_at + max(0.05, ttl_sec),
+            "stale_exp": cached_at + max(ttl_sec, stale_sec),
         }
         return cache_value_copy(stored)
 

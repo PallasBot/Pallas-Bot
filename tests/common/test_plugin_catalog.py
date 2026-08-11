@@ -40,6 +40,46 @@ def test_plugin_version_prefers_distribution_then_local_pyproject(tmp_path, monk
     assert plugin_version("demo", "local", package_root=root) == "1.2.3"
 
 
+def test_catalog_scans_distribution_metadata_once_per_build(monkeypatch) -> None:
+    calls = 0
+
+    def packages_distributions() -> dict[str, list[str]]:
+        nonlocal calls
+        calls += 1
+        return {
+            "acme_first": ["acme-first"],
+            "acme_second": ["acme-second"],
+        }
+
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_plugin_packages", list)
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_extra_plugin_packages", dict)
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.discover_pyproject_plugin_modules",
+        lambda: ["acme_first", "acme_second"],
+    )
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.EXTRA_PACKAGE_MODULES", {})
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog._loaded_plugin_index", lambda: ({}, {}))
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog._pip_plugin_metadata_stub",
+        lambda module_name: {"name": module_name},
+    )
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.module_has_config_module", lambda _module_name: False)
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.importlib.metadata.packages_distributions",
+        packages_distributions,
+    )
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.importlib.metadata.version",
+        lambda distribution: {"acme-first": "1.0.0", "acme-second": "2.0.0"}[distribution],
+    )
+    monkeypatch.setattr("nonebot.get_loaded_plugins", list)
+
+    rows = build_plugin_catalog_rows()
+
+    assert calls == 1
+    assert {row["plugin_version"] for row in rows} == {"1.0.0", "2.0.0"}
+
+
 def test_discover_bundled_packages():
     pkgs = discover_plugin_packages()
     assert "draw" not in pkgs  # pip 扩展，不在 packages/
