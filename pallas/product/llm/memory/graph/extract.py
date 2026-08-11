@@ -7,6 +7,7 @@ from typing import Any
 from nonebot import logger
 
 from pallas.product.llm.config import get_llm_config
+from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.memory.graph.json_parse import parse_llm_json
 from pallas.product.llm.memory.graph.scope import make_scope_key
 from pallas.product.llm.memory.graph.store import is_memory_graph_store_available, upsert_edge, upsert_entity
@@ -56,7 +57,7 @@ async def _call_extract_llm(text: str, *, scope_key: str) -> str:
             {"role": "user", "content": user},
         ],
         model=model,
-        options={"temperature": 0.2, "num_predict": 1200},
+        options={"temperature": 0.2, "num_predict": task_token_budget("memory_graph_extract")},
         task=task,
     )
     return str(message.get("content") or "").strip()

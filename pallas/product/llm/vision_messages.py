@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 from nonebot import logger
 
+from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.providers_store import (
     find_provider,
     load_providers_document,
@@ -166,7 +167,7 @@ async def describe_images_as_text(
                 {"role": "user", "content": content},
             ],
             model=model,
-            options={"num_predict": 256, "temperature": 0.2},
+            options={"num_predict": task_token_budget("vision_messages"), "temperature": 0.2},
             tools=None,
             base_url=base_url,
             api_key=resolve_provider_api_key(helper),

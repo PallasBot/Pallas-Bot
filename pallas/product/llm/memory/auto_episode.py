@@ -9,6 +9,7 @@ from typing import Any
 from nonebot import logger
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
+from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
 from pallas.product.llm.memory.policy import classify_memory_candidate
 from pallas.product.llm.memory.store import is_llm_memory_store_available, save_memory_entry
@@ -122,7 +123,10 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
             message = await complete_chat_message(
                 [{"role": "system", "content": _GROUP_EPISODE_SYSTEM}, {"role": "user", "content": transcript}],
                 model="",
-                options={"temperature": 0.2, "max_tokens": 160},
+                options={
+                    "temperature": 0.2,
+                    "max_tokens": task_token_budget("memory_extract"),
+                },
                 task="memory_extract",
                 cfg=c,
             )

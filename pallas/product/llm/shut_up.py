@@ -1,4 +1,4 @@
-"""闭嘴/别回 指令关键词（reply_gate / behavior / situational_rules 共用）。"""
+"""闭嘴/别回 指令关键词（reply_gate 与 behavior 共用）。"""
 
 from __future__ import annotations
 

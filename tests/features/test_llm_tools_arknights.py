@@ -71,10 +71,5 @@ def test_tool_metadata_skips_empty_llm_chat_when_selective() -> None:
     assert tool_metadata_for_chat(task="llm_chat", user_text="") == {}
 
 
-def test_tool_metadata_skips_casual_chat_when_selective() -> None:
-    assert tool_metadata_for_chat(task="repeater_polish", user_text="今天天气不错") == {}
-
-
-def test_tool_metadata_skips_repeater_tasks() -> None:
-    assert tool_metadata_for_chat(task="repeater_polish") == {}
-    assert tool_metadata_for_chat(task="repeater_fallback") == {}
+def test_tool_metadata_skips_drunk_task() -> None:
+    assert tool_metadata_for_chat(task="drunk") == {}

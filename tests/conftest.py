@@ -27,6 +27,7 @@ async def beanie_fixture():
         LlmMemoryEntry,
         LlmRelationshipNote,
         Message,
+        StickerLabel,
         UserConfigModule,
     )
 
@@ -55,6 +56,7 @@ async def beanie_fixture():
             LlmChatMessage,
             LlmMemoryEntry,
             LlmRelationshipNote,
+            StickerLabel,
         ],
         allow_index_dropping=True,
     )
@@ -71,6 +73,7 @@ async def beanie_fixture():
     await motor_db.drop_collection("llm_chat_message")
     await motor_db.drop_collection("llm_memory_entry")
     await motor_db.drop_collection("llm_relationship_note")
+    await motor_db.drop_collection("sticker_label")
     motor_client.close()
 
 

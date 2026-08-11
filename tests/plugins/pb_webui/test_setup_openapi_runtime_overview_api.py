@@ -101,6 +101,9 @@ def test_export_console_openapi_matches_console_prefix(monkeypatch) -> None:
     assert password_schema["$ref"].endswith("_ApiOkResponse__ConsoleLoginChangeData_")
     assert "/pallas/api/common-config/llm/wizard/status" not in payload["paths"]
 
+    local_routing_tasks = payload["components"]["schemas"]["_LlmLocalRoutingTaskModelsBody"]["properties"]
+    assert set(local_routing_tasks) == {"llm_chat", "drunk"}
+
     wave2_paths = (
         "/pallas/api/shard-observability",
         "/pallas/api/ingress-dispatch",

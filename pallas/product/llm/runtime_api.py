@@ -11,9 +11,7 @@ from typing import TYPE_CHECKING, Any
 from pallas.product.llm.behavior import classify_behavior_scene
 from pallas.product.llm.config import get_llm_config
 from pallas.product.llm.kernel import (
-    CandidateSource,
     ConversationAction,
-    ConversationCandidate,
     ConversationContext,
     ConversationFeatureLevel,
     ConversationMode,
@@ -23,15 +21,12 @@ from pallas.product.llm.kernel import (
     DecisionResult,
     DecisionTrace,
     FeedbackBiasSnapshot,
-    GenerationPlan,
     GenerationStage,
-    GenerationTask,
     MemoryAssetKind,
     MemoryReadPolicy,
     PromotionCandidate,
     behavior_scene_to_conversation_scene,
     build_conversation_kernel_status,
-    build_repeater_generation_plan,
     can_apply_feedback_bias,
     can_collect_feedback,
     can_promote_writeback,
@@ -45,13 +40,11 @@ from pallas.product.llm.kernel import (
     list_recent_conversation_traces,
     normalize_conversation_mode,
     plan_direct_chat_stages,
-    plan_generation_stages,
     resolve_conversation_feature_level,
     resolve_memory_read_policy,
     runtime_state_summary_metadata,
 )
 from pallas.product.llm.knowledge.declare import knowledge_source_row
-from pallas.product.llm.repeater_capabilities import resolve_repeater_capabilities
 from pallas.product.llm.status import build_llm_status_text
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
 from pallas.product.llm.tools.declare import llm_command_tool_row
@@ -61,9 +54,7 @@ if TYPE_CHECKING:
     from pallas.product.llm.delivery import deliver_llm_callback_success, deliver_llm_chat_result
 
 __all__ = [
-    "CandidateSource",
     "ConversationAction",
-    "ConversationCandidate",
     "ConversationContext",
     "ConversationFeatureLevel",
     "ConversationMode",
@@ -73,16 +64,13 @@ __all__ = [
     "DecisionResult",
     "DecisionTrace",
     "FeedbackBiasSnapshot",
-    "GenerationPlan",
     "GenerationStage",
-    "GenerationTask",
     "MemoryAssetKind",
     "MemoryReadPolicy",
     "PromotionCandidate",
     "behavior_scene_to_conversation_scene",
     "build_conversation_kernel_status",
     "build_llm_status_text",
-    "build_repeater_generation_plan",
     "can_apply_feedback_bias",
     "can_collect_feedback",
     "can_promote_writeback",
@@ -102,13 +90,11 @@ __all__ = [
     "llm_command_tool_row",
     "normalize_conversation_mode",
     "plan_direct_chat_stages",
-    "plan_generation_stages",
     "record_bot_llm_route",
     "record_bot_llm_task",
     "register_llm_tools_startup_hook",
     "resolve_conversation_feature_level",
     "resolve_memory_read_policy",
-    "resolve_repeater_capabilities",
     "runtime_state_summary_metadata",
 ]
 

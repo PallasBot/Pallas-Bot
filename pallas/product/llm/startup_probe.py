@@ -101,19 +101,8 @@ def install_llm_startup_probe() -> None:
         from pallas.product.llm.legacy_guard import log_legacy_chat_config_warnings
 
         log_legacy_chat_config_warnings(cfg)
-        flags = []
-        if cfg.llm_chat_enabled:
-            flags.append("LLM_CHAT")
-        if cfg.llm_fallback_enabled:
-            flags.append("FALLBACK")
-        if cfg.llm_polish_lite_enabled:
-            flags.append("POLISH_LITE")
-        if cfg.llm_polish_enabled:
-            flags.append("POLISH")
-        flag_text = ",".join(flags) if flags else "off"
-        llm_switches_on = (
-            cfg.llm_chat_enabled or cfg.llm_fallback_enabled or cfg.llm_polish_enabled or cfg.llm_polish_lite_enabled
-        )
+        flag_text = "LLM_CHAT" if cfg.llm_chat_enabled else "off"
+        llm_switches_on = cfg.llm_chat_enabled
 
         result = await probe_llm_provider()
         _llm_provider_ready = bool(result.get("ok"))

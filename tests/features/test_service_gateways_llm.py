@@ -9,10 +9,6 @@ from pallas.product.service_gateways.registry import registered_service_probe_na
 async def test_probe_llm_when_all_switches_off(monkeypatch) -> None:
     class FakeCfg:
         llm_chat_enabled = False
-        llm_fallback_enabled = False
-        llm_polish_enabled = False
-        llm_select_enabled = False
-        llm_polish_lite_enabled = False
 
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: FakeCfg())
     results = await probe_llm_service(timeout_sec=5.0)
@@ -31,10 +27,6 @@ async def test_probe_llm_when_all_switches_off(monkeypatch) -> None:
 async def test_probe_llm_ok_without_url(monkeypatch) -> None:
     class FakeCfg:
         llm_chat_enabled = True
-        llm_fallback_enabled = False
-        llm_polish_enabled = False
-        llm_select_enabled = False
-        llm_polish_lite_enabled = False
 
     async def fake_provider(*, timeout_sec: float = 3.0):
         _ = timeout_sec
@@ -70,10 +62,6 @@ async def test_probe_llm_ok_without_url(monkeypatch) -> None:
 async def test_probe_llm_failure_without_url(monkeypatch) -> None:
     class FakeCfg:
         llm_chat_enabled = True
-        llm_fallback_enabled = False
-        llm_polish_enabled = False
-        llm_select_enabled = False
-        llm_polish_lite_enabled = False
 
     async def fake_provider(*, timeout_sec: float = 3.0):
         _ = timeout_sec
@@ -109,10 +97,6 @@ async def test_probe_llm_failure_without_url(monkeypatch) -> None:
 async def test_probe_llm_http_failure_uses_runtime_normalizer(monkeypatch) -> None:
     class FakeCfg:
         llm_chat_enabled = True
-        llm_fallback_enabled = False
-        llm_polish_enabled = False
-        llm_select_enabled = False
-        llm_polish_lite_enabled = False
 
     async def fake_provider(*, timeout_sec: float = 3.0):
         _ = timeout_sec
@@ -142,10 +126,6 @@ async def test_probe_llm_http_failure_uses_runtime_normalizer(monkeypatch) -> No
 async def test_probe_llm_not_configured(monkeypatch) -> None:
     class FakeCfg:
         llm_chat_enabled = True
-        llm_fallback_enabled = False
-        llm_polish_enabled = False
-        llm_select_enabled = False
-        llm_polish_lite_enabled = False
 
     async def fake_provider(*, timeout_sec: float = 3.0):
         _ = timeout_sec

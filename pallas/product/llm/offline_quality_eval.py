@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pallas.product.llm.kernel_runner import system_prompt_with_reply_target
+from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.persona_output_firewall import (
     PersonaFirewallPolicy,
     inspect_persona_output,
@@ -231,10 +231,7 @@ async def evaluate_offline_case(
     judge: Completion | None = None,
 ) -> OfflineQualityResult:
     """Generate one anonymous case without delivery, storage, or memory writes."""
-    system_prompt = system_prompt_with_reply_target(
-        base_system_prompt,
-        {"reply_target": case.reply_target},
-    )
+    system_prompt = base_system_prompt
     messages = [
         {"role": "system", "content": str(system_prompt or "")},
         {"role": "user", "content": f"{_OFFLINE_USER_PREFIX}{case.user_text}"},
@@ -317,7 +314,7 @@ async def run_configured_offline_quality_eval(
         response = await complete_chat_message(
             messages,
             model="",
-            options={"temperature": 0, "max_tokens": 96},
+            options={"temperature": 0, "max_tokens": task_token_budget("offline_quality_eval")},
             tools=None,
             task="llm_chat",
         )
