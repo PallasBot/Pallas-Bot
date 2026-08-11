@@ -360,10 +360,10 @@ def persona_output_retry_instruction(rule_ids: tuple[str, ...] | list[str]) -> s
     if "presence_check_overexplained" in rules:
         return "上一句在确认是否在线时补了状态和反问。只回答是否在，四字以内，不追加任何话。"
     if "alias_wake_generic_reply" in rules:
-        return (
-            "对方只是在叫你的别名，不要用说吧、什么事、怎么了这类客服式泛问。"
-            "换成像群友被叫到名的短回应，例如？或干嘛。"
-        )
+        return "".join((
+            "对方只是在叫你的别名，不要用说吧、什么事、怎么了这类客服式泛问。",
+            "换成像群友被叫到名的短回应，例如？或干嘛。",
+        ))
     if "fact_reply_ungrounded_praise" in rules:
         return "上一句无根据地夸人了。只接当前这句话，不泛夸、不鼓励。"
     if "fact_reply_overextended" in rules:
