@@ -47,7 +47,7 @@ async def drink(event: GroupMessageEvent, send: SendMessage) -> None:
     logger.info(
         format_plugin_event(
             "drink",
-            f"Bot [{event.self_id}] started drinking in group [{event.group_id}]; sober up in [{drunk_duration}s]",
+            f"Bot [{event.self_id}] started drinking in group [{event.group_id}], sober up after [{drunk_duration}s]",
         )
     )
     drunkenness = await config.drunkenness()
@@ -57,7 +57,7 @@ async def drink(event: GroupMessageEvent, send: SendMessage) -> None:
         logger.info(
             format_plugin_event(
                 "sleep",
-                f"Bot [{event.self_id}] fell asleep in group [{event.group_id}]; wake up in [{int(sleep_duration)}s]",
+                f"Bot [{event.self_id}] fell asleep in group [{event.group_id}], wake up in [{int(sleep_duration)}s]",
             )
         )
         await config.sleep(int(sleep_duration))
