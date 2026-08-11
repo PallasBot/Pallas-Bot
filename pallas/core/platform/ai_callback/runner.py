@@ -88,12 +88,8 @@ async def run_ai_callback(
     except Exception as e:
         logger.warning("AI callback get_bot failed task={} bot_id={}: {}", task_id, bot_id_str, e)
     logger.info(
-        "AI callback resolved task={} status={} task_type={} bot_id={} group_id={}",
-        task_id,
-        status,
-        str(task.get("task_type") or "").strip(),
-        bot_id_str or "<missing>",
-        group_id,
+        f"Bot [{bot_id_str or '<missing>'}] resolved AI task [id={task_id}], "
+        f"status [{status}], task_type [{str(task.get('task_type') or '').strip()}], group [{group_id}]"
     )
     logger.debug(
         "AI callback resolved detail task={} has_text={} has_file={} song_id={} chunk_index={} "
@@ -226,12 +222,8 @@ async def run_ai_callback(
                 logger.exception("enqueue drunk tts failed task={}", task_id)
 
         logger.info(
-            "AI callback completed task={} delivered={} bot_id={} group_id={} task_type={}",
-            task_id,
-            delivered,
-            bot_id_str or "<missing>",
-            group_id,
-            str(task.get("task_type") or "").strip(),
+            f"Bot [{bot_id_str or '<missing>'}] completed AI task [id={task_id}], "
+            f"delivered [{delivered}], task_type [{str(task.get('task_type') or '').strip()}], group [{group_id}]"
         )
         return {"message": "ok" if delivered else "failed"}
 

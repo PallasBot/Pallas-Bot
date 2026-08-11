@@ -75,11 +75,9 @@ async def send_group_message_with_receipt(
         reply_to_message_id=reply_to_message_id,
         at_user_id=at_user_id,
     )
-    logger.info(
-        "AI callback sending group text task=unknown bot_id={} group={} length={}",
-        getattr(bot, "self_id", "<unknown>"),
-        group_id,
-        len(message or ""),
+    logger.debug(
+        f"Bot [{getattr(bot, 'self_id', '<unknown>')}] sending a message to group [{group_id}], "
+        f"length [{len(message or '')}]"
     )
     try:
         result = await bot.call_api(
@@ -89,11 +87,9 @@ async def send_group_message_with_receipt(
                 "group_id": group_id,
             },
         )
-        logger.info(
-            "AI callback sent group text task=unknown bot_id={} group={} length={}",
-            getattr(bot, "self_id", "<unknown>"),
-            group_id,
-            len(message or ""),
+        logger.debug(
+            f"Bot [{getattr(bot, 'self_id', '<unknown>')}] sent a message to group [{group_id}], "
+            f"length [{len(message or '')}]"
         )
         return DeliveryReceipt(
             delivered=True,

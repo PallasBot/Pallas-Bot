@@ -483,13 +483,8 @@ async def deliver_llm_callback_success(
     )
     if delivery_segments and group_id and bot is not None:
         logger.info(
-            "AI callback delivering text task={} bot_id={} group_id={} length={} segments={} task_type={}",
-            task_id,
-            getattr(bot, "self_id", bot_id_str or "<missing>"),
-            group_id,
-            len(learned_reply_text),
-            len(delivery_segments),
-            task_type,
+            f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a reply "
+            f"[id={task_id}] to group [{group_id}], task_type [{task_type}], length [{len(learned_reply_text)}]"
         )
         bubble_sleeper = sleeper or asyncio.sleep
         reply_to_message_id, at_user_id = resolve_llm_reply_delivery(
