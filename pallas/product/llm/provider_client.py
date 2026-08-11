@@ -51,9 +51,9 @@ def _required_tool_choice_is_incompatible(exc: BaseException) -> bool:
 
 def mask_api_key_hint(key: str) -> str:
     text = str(key or "").strip()
-    if len(text) <= 4:
+    if len(text) <= 9:
         return "****"
-    return f"…{text[-4:]}"
+    return f"{text[:6]}*****{text[-3:]}"
 
 
 def host_from_url(url: str) -> str:

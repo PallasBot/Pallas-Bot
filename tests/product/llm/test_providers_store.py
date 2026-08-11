@@ -41,7 +41,7 @@ def test_providers_store_roundtrip(tmp_path: Path, monkeypatch) -> None:
     assert saved["providers"][0]["api_key_set"] is True
     assert saved["providers"][0]["api_keys"] == []
     assert saved["providers"][0]["api_key"] == ""
-    assert saved["providers"][0]["api_key_hints"] == ["…-key"]
+    assert saved["providers"][0]["api_key_hints"] == ["sk-tes*****key"]
     assert saved["providers"][0]["api_keys_count"] == 1
     assert saved["providers"][0]["model_pricing"]["deepseek-v4-flash"]["price_in"] == 0.5
     assert saved["routing"]["cost_currency"] == "CNY"
@@ -62,7 +62,7 @@ def test_providers_store_roundtrip(tmp_path: Path, monkeypatch) -> None:
     assert exported["providers"][0]["id"] == "ds"
     assert exported["providers"][0]["api_key_set"] is True
     assert exported["providers"][0]["api_keys"] == []
-    assert exported["providers"][0]["api_key_hints"] == ["…-key"]
+    assert exported["providers"][0]["api_key_hints"] == ["sk-tes*****key"]
     raw = json.loads(store.read_text(encoding="utf-8"))
     assert raw["providers"][0]["api_key"] == "sk-test-key"
 
@@ -72,13 +72,15 @@ def test_providers_store_migrates_legacy_pricing_to_registered_models(tmp_path: 
     monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
     clear_providers_store_cache()
     saved = save_providers_document({
-        "providers": [{
-            "id": "ds",
-            "base_url": "https://api.deepseek.com",
-            "default_model": "deepseek-chat",
-            "task_models": {"llm_chat": "deepseek-reasoner"},
-            "model_pricing": {"deepseek-reasoner": {"price_in": 1, "price_out": 2}},
-        }],
+        "providers": [
+            {
+                "id": "ds",
+                "base_url": "https://api.deepseek.com",
+                "default_model": "deepseek-chat",
+                "task_models": {"llm_chat": "deepseek-reasoner"},
+                "model_pricing": {"deepseek-reasoner": {"price_in": 1, "price_out": 2}},
+            }
+        ],
         "routing": {},
     })
     models = saved["providers"][0]["models"]
@@ -182,7 +184,7 @@ def test_providers_store_multi_api_keys_and_capabilities(tmp_path: Path, monkeyp
     })
     assert saved["providers"][0]["api_keys_count"] == 2
     assert saved["providers"][0]["api_keys"] == []
-    assert saved["providers"][0]["api_key_hints"] == ["…irst", "…cond"]
+    assert saved["providers"][0]["api_key_hints"] == ["****", "****"]
     assert saved["providers"][0]["capabilities"] == ["text", "image"]
     assert saved["providers"][0]["model_effort"] == "high"
     clear_providers_store_cache()

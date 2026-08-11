@@ -36,8 +36,8 @@ def test_should_failover_api_key_statuses() -> None:
 
 
 def test_mask_api_key_hint() -> None:
-    assert mask_api_key_hint("sk-abcdefgh") == "…efgh"
-    assert mask_api_key_hint("ab") == "****"
+    assert mask_api_key_hint("sk-abcdefgh") == "sk-abc*****fgh"
+    assert mask_api_key_hint("short-key") == "****"
 
 
 def test_endpoint_api_keys_prefers_tuple() -> None:
