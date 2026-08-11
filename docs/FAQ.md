@@ -157,7 +157,7 @@ A: 表示 **Postgres 里没有叫 `PallasBot` 的库**，而 Bot 的 **`PG_DB`**
 
 ### PostgreSQL 是否一定要用超级用户 / 管理员账号？
 
-A: **不必。** 4.0 默认路径只连目标库做建表与迁移；`pg_stat_statements` 在独立事务里尝试启用，失败只降级诊断。Compose 用 `POSTGRES_DB` 建好库即可。托管 PG 请先建空库再填连接信息；可选扩展见 `deploy/pg/extensions.sql`。对应需求：[Issue #222](https://github.com/PallasBot/Pallas-Bot/issues/222)。
+A: **不必。** 默认路径只连目标库做建表与迁移，不会尝试安装 `pg_stat_statements`。需要慢查询统计时，在 `[env]` 显式设置 `PG_STAT_STATEMENTS_ENABLED = "true"`；数据库管理员还须预加载 `pg_stat_statements`，并让该账号能够创建扩展或预先创建它。Compose 用 `POSTGRES_DB` 建好库即可。托管 PG 请先建空库再填连接信息；可选扩展见 `deploy/pg/extensions.sql`。对应需求：[Issue #222](https://github.com/PallasBot/Pallas-Bot/issues/222)。
 
 ### Docker 里日志写「连接 MongoDB 127.0.0.1:27017」对吗？
 

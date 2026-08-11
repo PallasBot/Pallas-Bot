@@ -98,11 +98,48 @@ async def test_init_postgresql_skips_auto_create_by_default(monkeypatch: pytest.
             "pallas.core.foundation.db.repository_pg.try_enable_pg_stat_statements",
             new_callable=AsyncMock,
             return_value=False,
-        ),
+        ) as try_enable_pg_statements,
         patch("nonebot.get_driver", side_effect=RuntimeError("no driver")),
     ):
         await db_mod.init_postgresql_db()
         init_pg.assert_awaited_once()
+        try_enable_pg_statements.assert_not_awaited()
 
     assert all("/postgres" not in url for url in urls)
     assert any(url.endswith("/PallasBot") for url in urls)
+
+
+@pytest.mark.asyncio
+async def test_init_postgresql_enables_pg_stat_statements_only_when_configured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.core.foundation import db as db_mod
+
+    values = {
+        "PG_HOST": "127.0.0.1",
+        "PG_PORT": "5432",
+        "PG_USER": "pallas",
+        "PG_PASSWORD": "pallas",
+        "PG_DB": "PallasBot",
+        "PG_STAT_STATEMENTS_ENABLED": "true",
+    }
+    monkeypatch.setattr(db_mod, "_cfg", lambda key, default="": values.get(key, default))
+
+    def fake_create_async_engine(*_args, **_kwargs):
+        engine = MagicMock()
+        engine.dispose = AsyncMock()
+        return engine
+
+    with (
+        patch("sqlalchemy.ext.asyncio.create_async_engine", side_effect=fake_create_async_engine),
+        patch("pallas.core.foundation.db.repository_pg.init_pg", new_callable=AsyncMock),
+        patch(
+            "pallas.core.foundation.db.repository_pg.try_enable_pg_stat_statements",
+            new_callable=AsyncMock,
+            return_value=True,
+        ) as try_enable_pg_statements,
+        patch("nonebot.get_driver", side_effect=RuntimeError("no driver")),
+    ):
+        await db_mod.init_postgresql_db()
+
+    try_enable_pg_statements.assert_awaited_once()

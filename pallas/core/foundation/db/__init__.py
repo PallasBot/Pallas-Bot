@@ -449,7 +449,8 @@ async def init_postgresql_db() -> None:
         else:
             logger.error("[数据库] 初始化 PostgreSQL 库 {!r} 失败: {}", db_name, exc)
         raise
-    await try_enable_pg_stat_statements(engine)
+    if _cfg_bool("PG_STAT_STATEMENTS_ENABLED"):
+        await try_enable_pg_stat_statements(engine)
     logger.info(
         "[数据库] PostgreSQL {} 已连接 pool={}+{} recycle={}s",
         db_name,
