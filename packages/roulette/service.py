@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.log import logger
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import BotConfig, GroupConfig
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
 
@@ -49,7 +50,6 @@ async def start_roulette(
     if mode_override is not None:
         await GroupConfig(event.group_id).set_roulette_mode(mode_override)
     chamber = random.randint(1, 6)
-    logger.info("bot [{}] roulette started roll={} in group [{}]", event.self_id, chamber, event.group_id)
     game.roulette_status[event.group_id] = chamber
     game.roulette_count[event.group_id] = 0
     game.roulette_time[event.group_id] = int(time.time())
@@ -61,6 +61,13 @@ async def start_roulette(
     type_msg = "踢出群聊" if mode == 0 else "禁言"
     await send(
         f"这是一把充满荣耀与死亡的左轮手枪，六个弹槽只有一颗子弹，中弹的那个人将会被{type_msg}。勇敢的战士们啊，扣动你们的扳机吧！"
+    )
+    mode_name = "mute" if mode else "kick"
+    logger.info(
+        format_plugin_event(
+            "start_roulette",
+            f"Bot [{event.self_id}] opened a {mode_name} roulette in group [{event.group_id}] with chamber [{chamber}]",
+        )
     )
 
 

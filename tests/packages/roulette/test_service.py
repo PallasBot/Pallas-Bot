@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -37,6 +37,25 @@ async def test_start_roulette_preserves_dedup_and_state(monkeypatch: pytest.Monk
     assert game.roulette_count[100] == 0
     assert game.roulette_player.get_user_ids(100) == [2]
     send.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_start_roulette_logs_opened_mode_after_sending_invitation(monkeypatch: pytest.MonkeyPatch) -> None:
+    event = Event(self_id=1, group_id=100, user_id=2, time=123, plain_text="牛牛轮盘")
+    send = AsyncMock()
+    log_info = MagicMock()
+    monkeypatch.setattr(service, "try_claim_group_message_once", AsyncMock(return_value=True))
+    monkeypatch.setattr(service.random, "randint", lambda _start, _end: 4)
+    monkeypatch.setattr(service, "participate_in_roulette_mode", AsyncMock(return_value=False))
+    monkeypatch.setattr(service.GroupConfig, "roulette_mode", AsyncMock(return_value=1))
+    monkeypatch.setattr(service.logger, "info", log_info)
+
+    await service.start_roulette(event, send)
+
+    send.assert_awaited_once()
+    assert log_info.call_args.args == (
+        "[StartRoulette] Bot [1] opened a mute roulette in group [100] with chamber [4].",
+    )
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,7 @@ from nonebot.adapters.onebot.v11 import (
     MessageSegment,
 )
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import BotConfig, GroupConfig
 from pallas.core.platform.ingress.matcher_rule_prefilter import mark_exact_plaintext_rule
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
@@ -138,7 +139,12 @@ async def roulette(messagae_handle, event: GroupMessageEvent, *, mode_override: 
         )
         return
     rand = random.randint(1, 6)
-    logger.info(f"bot [{event.self_id}] roulette started roll={rand} in group [{event.group_id}]")
+    logger.info(
+        format_plugin_event(
+            "start_roulette",
+            f"Bot [{event.self_id}] opened a roulette in group [{event.group_id}] with chamber [{rand}]",
+        )
+    )
     roulette_status[event.group_id] = rand
     roulette_count[event.group_id] = 0
     roulette_time[event.group_id] = int(time.time())
@@ -250,7 +256,10 @@ async def shot(self_id: int, user_id: int, group_id: int) -> Callable[[], Awaita
             ban_players.append(user_id, group_id)
             dur = SHOT_CFG.ban_duration()
             logger.info(
-                f"bot [{self_id}] roulette ban applied user [{user_id}] in group [{group_id}] duration_sec={dur}"
+                format_plugin_event(
+                    "fire_roulette",
+                    f"Bot [{self_id}] muted user [{user_id}] in group [{group_id}] for [{dur}s]",
+                )
             )
 
         return group_ban
@@ -348,8 +357,11 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
                 ban_players.find_and_refresh(target_user_id, current_group_id)
             except Exception as e:
                 logger.error(
-                    f"bot [{event.self_id}] roulette judgment set_group_ban failed in group [{current_group_id}] "
-                    f"target [{target_user_id}]: {e}"
+                    format_plugin_event(
+                        "resolve_judgment",
+                        f"Bot [{event.self_id}] failed to mute user [{target_user_id}] "
+                        f"in group [{current_group_id}]: {type(e).__name__}",
+                    )
                 )
 
         if processed_users:
@@ -379,8 +391,11 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
             ban_players.find_and_refresh(user_id, current_group_id)
         except Exception as e:
             logger.error(
-                f"bot [{event.self_id}] roulette judgment set_group_ban failed in group [{current_group_id}] "
-                f"user [{user_id}]: {e}"
+                format_plugin_event(
+                    "resolve_judgment",
+                    f"Bot [{event.self_id}] failed to mute user [{user_id}] "
+                    f"in group [{current_group_id}]: {type(e).__name__}",
+                )
             )
 
     if is_rescue:

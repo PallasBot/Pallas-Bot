@@ -7,9 +7,9 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent
 from nonebot.rule import Rule
 from ulid import ULID
 
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.config import TaskManager
-from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm import ChatSubmitRequest, get_llm_config, is_llm_chat_service_enabled, submit_chat_task
 from pallas.product.llm.assembler import assemble_tool_bundle
@@ -728,14 +728,10 @@ async def handle_llm_chat(
         if hint:
             await send_message(hint)
         logger.debug(
-            format_business_event(
-                "智能对话提交",
-                "已跳过",
-                status=result.status,
-                request_id=request_id,
-                message_id=getattr(event, "message_id", None),
-                group=group_id,
-                user=user_id,
+            format_plugin_event(
+                "skip_generate",
+                f"Bot [{bot.self_id}] skipped generating a reply for user [{user_id}] "
+                f"in group [{group_id or '-'}]: {result.status}",
             )
         )
         return

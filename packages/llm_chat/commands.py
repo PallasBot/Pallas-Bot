@@ -1,4 +1,7 @@
+from nonebot import logger
+
 from pallas.api.commands import PluginHandlerContext, bind_alias_handlers, group_command
+from pallas.api.logging import format_plugin_event
 from pallas.product.llm import delete_llm_chat_session, get_llm_config, is_llm_chat_service_enabled
 from pallas.product.llm.session_store import clear_llm_messages, clear_user_llm_messages
 
@@ -42,6 +45,13 @@ async def handle_llm_clear(ctx: PluginHandlerContext) -> None:
     else:
         await clear_llm_messages(bot_id, ctx.group_id)
     await ctx.matcher.send(LLM_CHAT_CLEAR_OK)
+    logger.info(
+        format_plugin_event(
+            "clear_session",
+            f"Bot [{bot_id}] cleared LLM chat session [{session_id}] "
+            f"for user [{user_id or '-'}] in group [{ctx.group_id}]",
+        )
+    )
 
 
 bind_alias_handlers(clear_cmd, handle_llm_clear)

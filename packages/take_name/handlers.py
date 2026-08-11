@@ -7,6 +7,7 @@ from nonebot.exception import ActionFailed
 from nonebot.rule import Rule
 
 from packages.repeater.message_store import MessageStore
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import BotConfig
 from pallas.core.shared.utils import is_bot_admin
 
@@ -31,8 +32,6 @@ async def run_change_name():
             continue
 
         target_user_id = target_msg.user_id
-        logger.info(f"bot [{bot_id}] ready to change name by using [{target_user_id}] in group [{group_id}]")
-
         bot_key = str(bot_id)
         local_bots = get_bots()
         if bot_key not in local_bots:
@@ -52,7 +51,6 @@ async def run_change_name():
             continue
 
         card = info["card"] or info["nickname"]
-        logger.info(f"bot [{bot_id}] ready to change name to [{card}] in group [{group_id}]")
         try:
             await bot.call_api(
                 "set_group_card",
@@ -82,6 +80,12 @@ async def run_change_name():
             )
 
             await config.update_taken_name(target_user_id)
+            logger.info(
+                format_plugin_event(
+                    "take_name",
+                    f"Bot [{bot_id}] adopted [{card}] from user [{target_user_id}] in group [{group_id}]",
+                )
+            )
 
         except ActionFailed:
             continue
@@ -120,7 +124,6 @@ async def watch_name_handle(bot: Bot, event: NoticeEvent):
     except ActionFailed:
         return
     card = info["card"] or info["nickname"]
-    logger.info(f"bot [{bot.self_id}] watch name change by [{user_id}] in group [{group_id}]")
     config = BotConfig(int(bot.self_id), group_id)
 
     try:
@@ -133,5 +136,11 @@ async def watch_name_handle(bot: Bot, event: NoticeEvent):
             },
         )
         await config.update_taken_name(user_id)
+        logger.info(
+            format_plugin_event(
+                "mirror_name",
+                f"Bot [{bot_id}] mirrored [{card}] from user [{user_id}] in group [{group_id}]",
+            )
+        )
     except ActionFailed:
         return

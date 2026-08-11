@@ -10,8 +10,8 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
 from nonebot.rule import Rule
 from ulid import ULID
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import BotConfig, GroupConfig, TaskManager
-from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.ai_callback.task_types import CHAT_DRUNK_TASK_TYPE
 from pallas.product.llm import (
     ChatSubmitRequest,
@@ -52,11 +52,21 @@ async def on_sober_up(bot_id, group_id, drunkenness) -> None:
     if extension_drunk_chat_loaded():
         return
     session = f"{bot_id}_{group_id}"
-    logger.info(format_business_event("酒后会话", "已完成", bot=bot_id, group=group_id, session_id=session))
+    logger.info(
+        format_plugin_event(
+            "clear_session",
+            f"Bot [{bot_id}] cleared drunk-chat session [{session}] in group [{group_id}]",
+        )
+    )
     try:
         await clear_llm_messages(int(bot_id), int(group_id))
     except Exception:
-        logger.exception("clear llm messages on sober_up failed: bot={} group={}", bot_id, group_id)
+        logger.exception(
+            format_plugin_event(
+                "clear_session",
+                f"Bot [{bot_id}] failed to clear drunk-chat session [{session}] in group [{group_id}]",
+            )
+        )
     await delete_llm_chat_session(session)
     if is_legacy_rwkv_drunk_chat_enabled():
         await delete_rwkv_chat_session(session)
@@ -161,3 +171,11 @@ async def handle_drunk_chat(bot: Bot, event: GroupMessageEvent):
     task_id = str(getattr(result, "task_id", "") or "")
     if not task_id:
         await TaskManager.remove_task(request_id)
+        return
+    logger.info(
+        format_plugin_event(
+            "queue_generate",
+            f"Bot [{bot.self_id}] queued a drunk reply for user [{event.user_id}] "
+            f"in group [{event.group_id}] as task [{task_id}]",
+        )
+    )

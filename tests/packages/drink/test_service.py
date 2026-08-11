@@ -74,6 +74,23 @@ async def test_drink_refreshes_before_mutating_state_and_sends_normal_reply(
 
 
 @pytest.mark.asyncio
+async def test_drink_logs_domain_narrative_after_state_changes(monkeypatch: pytest.MonkeyPatch) -> None:
+    bot_config = config(drunkenness=10)
+    log_info = MagicMock()
+    monkeypatch.setattr(service, "is_command_cooldown_ready", AsyncMock(return_value=True))
+    monkeypatch.setattr(service, "refresh_command_cooldown", AsyncMock())
+    monkeypatch.setattr(service, "BotConfig", MagicMock(return_value=bot_config))
+    monkeypatch.setattr(service.random, "randint", lambda *_args: 60)
+    monkeypatch.setattr(service.random, "random", lambda: 0.5)
+    monkeypatch.setattr(service.scheduler, "add_job", MagicMock())
+    monkeypatch.setattr(service.logger, "info", log_info)
+
+    await service.drink(event(), AsyncMock())
+
+    assert log_info.call_args_list[0].args == ("[Drink] Bot [1] started drinking in group [2]; sober up in [60s].",)
+
+
+@pytest.mark.asyncio
 async def test_drink_sleep_branch_persists_sleep_and_keeps_reply_delay(monkeypatch: pytest.MonkeyPatch) -> None:
     bot_config = config(drunkenness=60)
     random_values = iter((0.1, 0.25))
