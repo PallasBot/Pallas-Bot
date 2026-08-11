@@ -12,6 +12,7 @@ from packages.request_handler.storage import (
     merge_write_bot_nested_entries,
     save_json_file,
 )
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import get_bot_admins
 from pallas.core.foundation.paths import plugin_data_dir
 
@@ -451,6 +452,12 @@ async def approve_friend_by_uid(bot: Bot, bot_key: str, uid_str: str) -> tuple[b
         bot_pending.pop(uid_str, None)
         persist_pending_friend(bot_key)
         nickname = await get_nickname(bot, int(uid_str))
+        logger.info(
+            format_plugin_event(
+                "approve_friend",
+                f"Bot [{bot.self_id}] approved a friend request from user [{uid_str}]",
+            )
+        )
         return True, f"已同意好友：{nickname}（{uid_str}）"
 
     doubt_cache = cached_doubt_friend.get(bot_key) or await fetch_doubt_friends(bot)
@@ -469,6 +476,12 @@ async def approve_friend_by_uid(bot: Bot, bot_key: str, uid_str: str) -> tuple[b
         return False, f"操作未成功：{e}（请稍后重试）"
     cached_doubt_friend[bot_key].pop(uid_str, None)
     nickname = await get_nickname(bot, int(uid_str))
+    logger.info(
+        format_plugin_event(
+            "approve_friend",
+            f"Bot [{bot.self_id}] approved a filtered friend request from user [{uid_str}]",
+        )
+    )
     return True, f"已同意好友：{nickname}（{uid_str}）"
 
 
@@ -486,6 +499,12 @@ async def reject_friend_by_uid(bot: Bot, bot_key: str, uid_str: str) -> tuple[bo
         bot_pending.pop(uid_str, None)
         persist_pending_friend(bot_key)
         nickname = await get_nickname(bot, int(uid_str))
+        logger.info(
+            format_plugin_event(
+                "reject_friend",
+                f"Bot [{bot.self_id}] rejected a friend request from user [{uid_str}]",
+            )
+        )
         return True, f"已拒绝好友：{nickname}（{uid_str}）"
 
     doubt_cache = cached_doubt_friend.get(bot_key) or await fetch_doubt_friends(bot)
@@ -504,6 +523,12 @@ async def reject_friend_by_uid(bot: Bot, bot_key: str, uid_str: str) -> tuple[bo
         return False, f"操作未成功：{e}（请稍后重试）"
     cached_doubt_friend[bot_key].pop(uid_str, None)
     nickname = await get_nickname(bot, int(uid_str))
+    logger.info(
+        format_plugin_event(
+            "reject_friend",
+            f"Bot [{bot.self_id}] rejected a filtered friend request from user [{uid_str}]",
+        )
+    )
     return True, f"已拒绝好友：{nickname}（{uid_str}）"
 
 
@@ -526,6 +551,12 @@ async def approve_group_invite_by_gid(bot: Bot, bot_key: str, group_key: str) ->
     persist_pending_group(bot_key)
     nickname = await get_nickname(bot, req["user_id"])
     group_name = await get_group_name(bot, group_id)
+    logger.info(
+        format_plugin_event(
+            "approve_group",
+            f"Bot [{bot.self_id}] approved an invitation to group [{group_id}] from user [{req['user_id']}]",
+        )
+    )
     return True, f"已同意入群申请：{group_name}（{group_id}），邀请人 {nickname}（{req['user_id']}）"
 
 
@@ -548,6 +579,12 @@ async def reject_group_invite_by_gid(bot: Bot, bot_key: str, group_key: str) -> 
     persist_pending_group(bot_key)
     nickname = await get_nickname(bot, req["user_id"])
     group_name = await get_group_name(bot, group_id)
+    logger.info(
+        format_plugin_event(
+            "reject_group",
+            f"Bot [{bot.self_id}] rejected an invitation to group [{group_id}] from user [{req['user_id']}]",
+        )
+    )
     return True, f"已拒绝入群申请：{group_name}（{group_id}），邀请人 {nickname}（{req['user_id']}）"
 
 
@@ -588,4 +625,12 @@ async def notify_admins(bot: Bot, msg: str, *, kind: str, target_id: str) -> boo
             pass
     if registered:
         persist_approval_notice_map(bot_key)
+    if delivered_any:
+        logger.info(
+            format_plugin_event(
+                "notify_admin",
+                f"Bot [{bot.self_id}] notified [{len(recipients)}] admins about a pending {kind} request "
+                f"from [{target_id}]",
+            )
+        )
     return delivered_any
