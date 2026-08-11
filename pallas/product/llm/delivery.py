@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.ai_callback.handlers import (
     should_append_llm_session,
@@ -649,6 +650,13 @@ async def deliver_llm_callback_success(
             )
         )
     track_llm_callback(task, "callback_ok")
+    if task_type == LLM_CHAT_TASK_TYPE and delivered and reply_text:
+        logger.info(
+            format_plugin_event(
+                "deliver_reply",
+                f"Bot [{bot_id}] delivered a reply in group [{group_id}]: {reply_text[:200]}",
+            )
+        )
     return reply_text, text_delivered, delivered
 
 

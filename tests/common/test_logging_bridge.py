@@ -86,6 +86,10 @@ def test_business_log_messages_get_module_labels_without_duplicates() -> None:
     assert prefix_business_log_message("packages.repeater.learn_queue", "queued batch") == "[Learn] queued batch"
     assert prefix_business_log_message("packages.repeater.fanout_reply", "[Reply] sent") == "[Reply] sent"
     assert prefix_business_log_message("packages.llm_chat.chat_message", "completed") == "[Chat] completed"
+    assert (
+        prefix_business_log_message("pallas.core.platform.ai_callback.runner", "AI callback resolved task=x")
+        == "[AICallback] AI callback resolved task=x"
+    )
     assert prefix_business_log_message("packages.llm_chat.drunk_chat", "session cleared") == "[Drink] session cleared"
     assert prefix_business_log_message("packages.roulette.service", "started") == "[Roulette] started"
     assert prefix_business_log_message("pallas_plugin_protocol.runtime", "started") == "[Protocol] started"
@@ -136,20 +140,20 @@ def test_format_business_event_writes_action_tagged_narratives() -> None:
 
 
 def test_format_plugin_event_writes_pascal_case_operation_narrative() -> None:
-    assert format_plugin_event("ready", "Registered command [Draw]") == "[Ready] Registered command [Draw]."
+    assert format_plugin_event("ready", "Registered command [Draw]") == "[Ready] Registered command [Draw]"
     assert (
         format_plugin_event(
             "draw",
             "Bot [100000001] drew [The Fool upright] for user [100000003] in group [100000002] in [18ms]",
         )
-        == "[Draw] Bot [100000001] drew [The Fool upright] for user [100000003] in group [100000002] in [18ms]."
+        == "[Draw] Bot [100000001] drew [The Fool upright] for user [100000003] in group [100000002] in [18ms]"
     )
     assert (
         format_plugin_event(
             "clear_session",
             "Bot [100000001] cleared session [100000001_100000002] in group [100000002]",
         )
-        == "[ClearSession] Bot [100000001] cleared session [100000001_100000002] in group [100000002]."
+        == "[ClearSession] Bot [100000001] cleared session [100000001_100000002] in group [100000002]"
     )
 
 

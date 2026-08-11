@@ -181,7 +181,7 @@ async def test_send_reaction_logs_successful_reaction_at_info(monkeypatch):
     finally:
         mod.sent_reactions.pop("10001", None)
 
-    assert info_logs == ["[Reaction] Bot [10001] reacted to message [99] in group [1] with [66]."]
+    assert info_logs == ["[Reaction] Bot [10001] reacted to message [99] in group [1] with emoji [66]"]
 
 
 @pytest.mark.asyncio

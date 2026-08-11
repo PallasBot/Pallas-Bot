@@ -72,6 +72,7 @@ _BUSINESS_LOG_LABELS = (
     ("pallas.product.corpus", "Corpus"),
     ("pallas.product.message_scrub", "消息过滤"),
     ("pallas.product", "Product"),
+    ("pallas.core.platform.ai_callback", "AICallback"),
     ("pallas.core.foundation.db", "数据库"),
     ("pallas.core.platform", "Platform"),
     ("pallas.core", "Core"),
@@ -180,17 +181,20 @@ def display_log_name(logger_name: str) -> str:
     return _pascal_case(name.split(".", 1)[0]) if name else ""
 
 
-_PASCAL_CASE_ACRONYMS = {"tts": "TTS"}
+_PASCAL_CASE_ACRONYMS = {"llm": "LLM", "tts": "TTS"}
 
 
 def _pascal_case(value: str) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
-    lowered = text.casefold()
-    if lowered in _PASCAL_CASE_ACRONYMS:
-        return _PASCAL_CASE_ACRONYMS[lowered]
-    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[_-]+", text) if part)
+    parts: list[str] = []
+    for part in re.split(r"[_-]+", text):
+        if not part:
+            continue
+        lowered = part.casefold()
+        parts.append(_PASCAL_CASE_ACRONYMS.get(lowered, part[:1].upper() + part[1:]))
+    return "".join(parts)
 
 
 def _format_repo_log(record: dict[str, Any], template: str) -> str:
@@ -293,8 +297,8 @@ def format_plugin_event(
 ) -> str:
     """生成带 PascalCase 操作标签的单行领域叙事。"""
     tag = _pascal_case(operation.strip())
-    text = _format_business_field(narrative).strip().rstrip(".")
-    return f"[{tag}] {text}." if text else f"[{tag}]"
+    text = _format_business_field(narrative).strip()
+    return f"[{tag}] {text}" if text else f"[{tag}]"
 
 
 def _format_business_field(value: object) -> str:

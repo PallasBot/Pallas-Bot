@@ -88,16 +88,17 @@ async def run_ai_callback(
     except Exception as e:
         logger.warning("AI callback get_bot failed task={} bot_id={}: {}", task_id, bot_id_str, e)
     logger.info(
-        (
-            "AI callback resolved task={} status={} task_type={} bot_id={} group_id={} "
-            "has_text={} has_file={} song_id={} chunk_index={} key={} history_summary={} "
-            "history_keep_messages={} agent_trace={}"
-        ),
+        "AI callback resolved task={} status={} task_type={} bot_id={} group_id={}",
         task_id,
         status,
         str(task.get("task_type") or "").strip(),
         bot_id_str or "<missing>",
         group_id,
+    )
+    logger.debug(
+        "AI callback resolved detail task={} has_text={} has_file={} song_id={} chunk_index={} "
+        "key={} history_summary={} history_keep_messages={} agent_trace={}",
+        task_id,
         bool(str(text or "").strip()),
         file is not None,
         song_id,
@@ -105,7 +106,7 @@ async def run_ai_callback(
         key,
         bool(history_summary),
         history_keep_messages,
-        bool(parsed_agent_trace),
+        bool(agent_trace),
     )
 
     if group_id and song_id is not None and chunk_index is not None and key is not None and bot is not None:
@@ -150,11 +151,9 @@ async def run_ai_callback(
         task_type = str(task.get("task_type") or "").strip()
         if file and group_id and bot is not None:
             file_bytes = await file.read()
-            logger.info(
-                (
-                    "AI callback read file task={} bot_id={} group_id={} task_type={} "
-                    "bytes={} song_id={} chunk_index={} key={}"
-                ),
+            logger.debug(
+                "AI callback read file task={} bot_id={} group_id={} task_type={} "
+                "bytes={} song_id={} chunk_index={} key={}",
                 task_id,
                 getattr(bot, "self_id", bot_id_str or "<missing>"),
                 group_id,
@@ -188,18 +187,12 @@ async def run_ai_callback(
                     invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
             elif task_type in VOICE_TASK_TYPES or (song_id is not None and chunk_index is not None):
                 logger.info(
-                    (
-                        "AI callback delivering voice task={} bot_id={} group_id={} task_type={} "
-                        "bytes={} song_id={} chunk_index={} key={}"
-                    ),
+                    "AI callback delivering voice task={} bot_id={} group_id={} task_type={} bytes={}",
                     task_id,
                     getattr(bot, "self_id", bot_id_str or "<missing>"),
                     group_id,
                     task_type,
                     len(file_bytes),
-                    song_id,
-                    chunk_index,
-                    key,
                 )
                 delivered = await send_group_voice(bot, group_id, file_bytes) and delivered
                 if delivered and file_bytes:

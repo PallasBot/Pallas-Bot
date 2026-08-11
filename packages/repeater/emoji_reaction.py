@@ -295,7 +295,7 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
         logger.info(
             format_plugin_event(
                 "reaction",
-                f"Bot [{bot_id}] reacted to message [{message_id}] in group [{group_id}] with [{emoji_code}]",
+                f"Bot [{bot_id}] reacted to message [{message_id}] in group [{group_id}] with emoji [{emoji_code}]",
             )
         )
     except asyncio.CancelledError:

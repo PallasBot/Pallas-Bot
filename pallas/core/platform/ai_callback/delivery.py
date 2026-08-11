@@ -118,7 +118,7 @@ async def send_group_image(bot, group_id: int, image_bytes: bytes, *, at_user_id
         )
         return False
     message = image_api.optional_message_at_user(at_user_id, MessageSegment.image(image_bytes))
-    logger.info(
+    logger.debug(
         "AI callback sending group image task=unknown bot_id={} group={} bytes={} at_user_id={}",
         getattr(bot, "self_id", "<unknown>"),
         group_id,
@@ -133,7 +133,7 @@ async def send_group_image(bot, group_id: int, image_bytes: bytes, *, at_user_id
                 "group_id": group_id,
             },
         )
-        logger.info(
+        logger.debug(
             "AI callback sent group image task=unknown bot_id={} group={} bytes={} at_user_id={}",
             getattr(bot, "self_id", "<unknown>"),
             group_id,
@@ -149,7 +149,7 @@ async def send_group_image(bot, group_id: int, image_bytes: bytes, *, at_user_id
 async def send_group_voice(bot, group_id: int, audio_bytes: bytes) -> bool:
     if not audio_bytes:
         return False
-    logger.info(
+    logger.debug(
         "AI callback sending group voice task=unknown bot_id={} group={} bytes={}",
         getattr(bot, "self_id", "<unknown>"),
         group_id,
@@ -163,7 +163,7 @@ async def send_group_voice(bot, group_id: int, audio_bytes: bytes) -> bool:
                 "group_id": group_id,
             },
         )
-        logger.info(
+        logger.debug(
             "AI callback sent group voice task=unknown bot_id={} group={} bytes={}",
             getattr(bot, "self_id", "<unknown>"),
             group_id,
