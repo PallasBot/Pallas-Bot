@@ -53,6 +53,11 @@ def extract_keyword_tags(plain_text: str, top_k: int = 2) -> tuple[str, ...]:
     return tuple(cast("list[str]", result))
 
 
+def warmup_keyword_extraction() -> None:
+    """预载 jieba 词典与前缀表，避免首条消息在入口路径触发加载。"""
+    jieba_analyse.extract_tags("预热", topK=1)
+
+
 @dataclass
 class ChatData:
     group_id: int

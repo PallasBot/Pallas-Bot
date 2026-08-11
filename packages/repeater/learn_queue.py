@@ -362,6 +362,9 @@ def bind_repeater_learn_lifecycle() -> None:
 
     @driver.on_startup
     async def _on_startup():
+        from .model import warmup_keyword_extraction
+
+        await asyncio.to_thread(warmup_keyword_extraction)
         await start_repeater_learn_worker()
         register_startup_ready(
             "复读学习队列",
