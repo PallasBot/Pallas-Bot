@@ -33,13 +33,7 @@ def build_persona_affect_contract(
     user_warmth_delta: float = 0.0,
     user_assertiveness_delta: float = 0.0,
 ) -> PersonaAffectContract:
-    length_pref = str(getattr(persona, "length_pref", "") or "").strip().lower() if persona else ""
-    if length_pref == "short":
-        preferred_min, preferred_max = 1, 16
-    elif length_pref == "long":
-        preferred_min, preferred_max = 8, 64
-    else:
-        preferred_min, preferred_max = 1, 36
+    preferred_min, preferred_max = 1, 36
 
     if mode == ConversationMode.GHOST:
         preferred_max = min(preferred_max, 12)
@@ -52,12 +46,7 @@ def build_persona_affect_contract(
     if group_flavor_summary:
         stance_hints.append(group_flavor_summary)
 
-    if length_pref == "short":
-        stance_hints.append("优先 1-2 句短口语，像顺手回一句，别展开解释。")
-    elif length_pref == "long":
-        stance_hints.append("可稍多说一两句，但仍要像群聊接话，别写小作文。")
-    else:
-        stance_hints.append("像被 @ 后顺口接话，2 句内为主，别写成完整答复。")
+    stance_hints.append("像被 @ 后顺口接话，2 句内为主，别写成完整答复。")
 
     if persona is not None:
         from pallas.product.persona.affect_baseline import clamp_affect

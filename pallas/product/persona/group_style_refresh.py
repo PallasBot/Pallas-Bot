@@ -40,8 +40,11 @@ def pop_forced_teach_events(group_id: int) -> int:
 def merge_forced_teach_weight(previous_profile: dict | None, pending_events: int) -> float:
     prev = 0.0
     if isinstance(previous_profile, dict):
+        aggregate = previous_profile.get("aggregate")
         sample = previous_profile.get("sample")
-        if isinstance(sample, dict):
+        if isinstance(aggregate, dict):
+            prev = float(aggregate.get("forced_teach_weight") or 0.0)
+        elif isinstance(sample, dict):
             prev = float(sample.get("forced_teach_weight") or 0.0)
     decayed = prev * _FORCED_TEACH_DECAY
     added = max(0, int(pending_events)) * _FORCED_TEACH_EVENT_WEIGHT
@@ -67,27 +70,15 @@ async def refresh_dirty_group_style_batch(
     limit: int = _DEFAULT_REFRESH_BATCH_SIZE,
     window_hours: int = DEFAULT_WINDOW_HOURS,
 ) -> int:
-    from pallas.product.persona.affect_refine import affect_refine_llm_batch_limit
-
     refreshed = 0
-    llm_budget = affect_refine_llm_batch_limit()
-    llm_used = 0
     for group_id in pop_dirty_group_style_batch(limit):
-        allow_llm = llm_used < llm_budget
         try:
-            ok, used_llm = await refresh_group_style_profile(
-                group_id,
-                window_hours=window_hours,
-                allow_llm_refine=allow_llm,
-            )
+            ok = await refresh_group_style_profile(group_id, window_hours=window_hours)
         except Exception as exc:
             logger.warning("group_style_refresh failed group={}: {}", group_id, exc)
             continue
         if ok:
             refreshed += 1
-        if used_llm:
-            llm_used += 1
-            await asyncio.sleep(1.0)
     return refreshed
 
 
@@ -95,8 +86,7 @@ async def refresh_group_style_profile(
     group_id: int,
     *,
     window_hours: int = DEFAULT_WINDOW_HOURS,
-    allow_llm_refine: bool = True,
-) -> tuple[bool, bool]:
+) -> bool:
     gid = int(group_id)
     now_ts = int(time.time())
 
@@ -120,9 +110,6 @@ async def refresh_group_style_profile(
         forced_teach_weight=forced_teach_weight,
     )
 
-    from pallas.product.persona.affect_refine import refine_group_style_affect
-    from pallas.product.persona.affect_refine_client import collect_affect_refine_samples
-
     recent_messages = await message_repo.find_recent_in_group(gid, before_time=now_ts + 1, limit=32)
     try:
         from pallas.product.persona.expression_learn import (
@@ -141,22 +128,13 @@ async def refresh_group_style_profile(
             learn_expressions_from_group_messages(gid, texts, bot_id=bot_id)
     except Exception as exc:
         logger.debug("group expression observe skipped group={}: {}", gid, exc)
-    profile, used_llm = await refine_group_style_affect(
-        profile,
-        group_id=gid,
-        message_samples=collect_affect_refine_samples(list(recent_messages)),
-        allow_llm=allow_llm_refine,
-        prev_profile=prev_profile if isinstance(prev_profile, dict) else None,
-        force_llm=pending_teach > 0,
-    )
-
     await repo.upsert_field(gid, "style_profile", profile)
     invalidate_persona_cache()
 
     from pallas.product.persona.cross_group_refresh import mark_bots_cross_group_dirty_for_group
 
     await mark_bots_cross_group_dirty_for_group(gid, window_hours=window_hours)
-    return True, used_llm
+    return True
 
 
 def bind_group_style_refresh_lifecycle() -> None:

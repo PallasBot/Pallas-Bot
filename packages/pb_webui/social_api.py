@@ -1027,10 +1027,6 @@ class _LlmLocalRoutingTaskModelsBody(BaseModel):
 
     llm_chat: str = ""
     drunk: str = ""
-    repeater_fallback: str = ""
-    repeater_polish: str = ""
-    repeater_polish_lite: str = ""
-    repeater_select: str = ""
 
 
 class _LlmLocalRoutingConfigBody(BaseModel):

@@ -48,7 +48,7 @@ async def test_learner_marks_group_style_dirty_on_success(monkeypatch: pytest.Mo
         return False
 
     monkeypatch.setattr(
-        "packages.duel.duel_session.should_skip_repeater_learn",
+        "pallas.core.plugin_coord.duel.should_skip_repeater_learn",
         fake_should_skip_repeater_learn,
     )
 
@@ -111,12 +111,12 @@ async def test_refresh_group_style_profile_writes_profile_and_invalidates_cache(
         lambda bot_id=None: invalidated.append(bot_id),
     )
 
-    ok, used_llm = await refresh_group_style_profile(777)
+    ok = await refresh_group_style_profile(777)
     assert ok is True
-    assert used_llm is False
     assert written
     assert written[0][0] == 777
-    assert "sample" in written[0][1]
+    assert "aggregate" in written[0][1]
+    assert "derived" not in written[0][1]
     assert invalidated == [None]
 
 
@@ -178,13 +178,11 @@ async def test_refresh_dirty_group_style_batch_isolates_failures(monkeypatch: py
 
     seen: list[int] = []
 
-    async def fake_refresh(
-        group_id: int, *, window_hours: int = 168, allow_llm_refine: bool = True
-    ) -> tuple[bool, bool]:  # noqa: ARG001
+    async def fake_refresh(group_id: int, *, window_hours: int = 168) -> bool:  # noqa: ARG001
         seen.append(group_id)
         if group_id == 2:
             raise RuntimeError("boom")
-        return True, False
+        return True
 
     monkeypatch.setattr("pallas.product.persona.group_style_refresh.refresh_group_style_profile", fake_refresh)
     clear_group_style_dirty_state()

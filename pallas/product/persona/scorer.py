@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .affect_triggers import trigger_phrase_weight_multiplier
 from .config import persona_scorer_content_tags_enabled
-from .model import ResolvedPersona
+
+if TYPE_CHECKING:
+    from .group_expression_profile import GroupReplyShapeHint
+    from .model import ResolvedPersona
 
 _LOW_INFO_RE = re.compile(r"^[\W_]+$", re.UNICODE)
 
@@ -91,6 +96,7 @@ def message_weight_multiplier(
     persona: ResolvedPersona,
     *,
     affect_triggers: list[dict[str, Any]] | None = None,
+    reply_shape: GroupReplyShapeHint | None = None,
 ) -> float:
     plain = (text or "").strip()
     if not plain:
@@ -99,21 +105,34 @@ def message_weight_multiplier(
     weight = 1.0
     n = len(plain)
 
-    if persona.length_pref == "short":
+    length_pref = reply_shape.length_pref if reply_shape is not None else "any"
+    if length_pref == "short":
         weight *= 1.35 if n <= 15 else 0.55
-    elif persona.length_pref == "long":
+    elif length_pref == "long":
         weight *= 1.35 if n >= 30 else 0.65
-    elif persona.length_pref == "medium":
+    elif length_pref == "medium":
         weight *= 1.2 if 15 < n < 30 else 0.85
 
     if persona.tone == "terse":
-        weight *= 1.25 if n <= 12 else 0.7
+        weight *= 0.98
     elif persona.tone == "dramatic":
-        weight *= 1.15 if n >= 20 or "！" in plain or "!" in plain else 0.9
+        weight *= 1.15 if "！" in plain or "!" in plain else 0.9
     elif persona.tone == "enthusiastic":
         weight *= 1.1 if ("？" in plain or "?" in plain or "！" in plain or "!" in plain) else 1.0
     elif persona.tone == "calm":
-        weight *= 1.05 if n <= 18 else 0.95
+        weight *= 1.02
+
+    from .account_profile import AccountPersonaProfile
+
+    account = getattr(persona, "account_profile", AccountPersonaProfile())
+    weight *= 1.0 + float(account.energy) * 0.1
+    weight *= 1.0 - float(account.restraint) * 0.1
+    warm_markers = ("谢谢", "辛苦", "好呀", "可以", "哈哈", "笑")
+    if any(marker in plain for marker in warm_markers):
+        weight *= 1.0 + float(account.warmth) * 0.1
+    mischievous_markers = ("草", "离谱", "笑死", "？", "?", "！", "!")
+    if any(marker in plain for marker in mischievous_markers):
+        weight *= 1.0 + float(account.mischief) * 0.12
 
     weight *= low_info_multiplier(plain)
     weight *= chaos_message_multiplier(plain, persona)
@@ -125,7 +144,7 @@ def message_weight_multiplier(
         )
         if affect_triggers:
             weight *= trigger_phrase_weight_multiplier(plain, affect_triggers)
-    return max(0.05, weight)
+    return max(0.05, min(weight, 2.5))
 
 
 def freshness_multiplier(text: str, recent_sent: list[str], *, persona: ResolvedPersona | None = None) -> float:
@@ -137,13 +156,20 @@ def freshness_multiplier(text: str, recent_sent: list[str], *, persona: Resolved
     return penalty
 
 
-def speak_message_weight(text: str, persona: ResolvedPersona, *, recent_speaks: list[str]) -> float:
+def speak_message_weight(
+    text: str,
+    persona: ResolvedPersona,
+    *,
+    recent_speaks: list[str],
+    reply_shape: GroupReplyShapeHint | None = None,
+) -> float:
     plain = (text or "").strip()
     if not plain:
         return 0.05
     return max(
         0.05,
-        message_weight_multiplier(plain, persona) * freshness_multiplier(plain, recent_speaks, persona=persona),
+        message_weight_multiplier(plain, persona, reply_shape=reply_shape)
+        * freshness_multiplier(plain, recent_speaks, persona=persona),
     )
 
 
@@ -152,6 +178,7 @@ def speak_keyword_group_weight(
     persona: ResolvedPersona,
     *,
     recent_speaks: list[str],
+    reply_shape: GroupReplyShapeHint | None = None,
 ) -> float:
     """主动发言选 topic：同 keywords 消息越多越热门；chaos 高时进一步偏热门。"""
     if not messages:
@@ -163,6 +190,7 @@ def speak_keyword_group_weight(
             str(getattr(msg, "plain_text", None) or getattr(msg, "raw_message", "") or ""),
             persona,
             recent_speaks=recent_speaks,
+            reply_shape=reply_shape,
         )
         for msg in messages
     ]

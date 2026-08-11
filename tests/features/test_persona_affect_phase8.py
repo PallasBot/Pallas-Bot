@@ -9,7 +9,7 @@ from pallas.product.persona.activity_ingress import (
 from pallas.product.persona.affect_axes import derive_bluntness, warmth_behavior_hint
 from pallas.product.persona.compile_persona_prompt import build_bot_behavior_prompt, compile_persona_prompt
 from pallas.product.persona.model import ResolvedPersona
-from pallas.product.persona.preset_layers import PresetLayers, compile_preset_layers_prompt, extract_preset_layers
+from pallas.product.persona.preset_layers import extract_preset_layers
 
 
 def test_derive_bluntness_prefers_harsh_over_polite() -> None:
@@ -55,14 +55,6 @@ def test_activity_speak_threshold_multiplier() -> None:
     assert activity_speak_threshold_multiplier("quiet") > activity_speak_threshold_multiplier("active")
 
 
-def test_compile_preset_layers_prompt() -> None:
-    layers = PresetLayers(knowledges=["罗德岛"], relationships=["博士：信任"])
-    prompt = compile_preset_layers_prompt(layers)
-    assert "<<STATS:preset_layers>>" in prompt
-    assert "罗德岛" in prompt
-    assert "博士" in prompt
-
-
 def test_extract_preset_layers_merges_bot_and_sample() -> None:
     layers = extract_preset_layers(
         {"knowledges": ["A"], "relationships": ["R1"]},
@@ -74,7 +66,7 @@ def test_extract_preset_layers_merges_bot_and_sample() -> None:
     assert "R2" in layers.relationships
 
 
-def test_compile_persona_prompt_includes_preset_layers() -> None:
+def test_compile_persona_prompt_keeps_preset_layers_out_of_final_prompt() -> None:
     persona = ResolvedPersona()
     bundle = compile_persona_prompt(
         persona,
@@ -82,5 +74,4 @@ def test_compile_persona_prompt_includes_preset_layers() -> None:
         bot_id=1,
         bot_persona={"knowledges": ["测试知识"], "relationships": ["测试关系"]},
     )
-    assert "<<STATS:preset_layers>>" in bundle.sections.preset_layers
-    assert "测试知识" in bundle.system
+    assert "测试知识" not in bundle.system

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,6 +10,7 @@ from pallas.product.persona.cross_group_profiler import (
     build_bot_cross_group_persona,
     group_style_weight,
 )
+from pallas.product.persona.group_profiler import build_group_style_profile
 
 
 def _style_profile(
@@ -70,7 +72,7 @@ def test_build_bot_cross_group_persona_requires_multiple_groups() -> None:
         group_profiles=[(1, _style_profile(answer_count=500))],
     )
     assert "derived" not in profile
-    assert profile["sample"]["group_count"] == 1
+    assert profile["summary"]["group_count"] == 1
 
 
 def test_build_bot_cross_group_persona_weighted_average() -> None:
@@ -79,12 +81,38 @@ def test_build_bot_cross_group_persona_weighted_average() -> None:
         (2, _style_profile(answer_count=200, reply_bias_mul=1.0, chaos_bias=0.0, length_pref="short")),
     ]
     profile = build_bot_cross_group_persona(bot_id=1001, group_profiles=profiles)
-    derived = profile["derived"]
-    assert derived["reply_bias_mul"] > 1.0
-    assert derived["chaos_bias"] > 0.0
-    assert derived["length_pref"] in {"short", "medium", "long"}
-    assert profile["sample"]["group_count"] == 2
-    assert profile["source"] == "cross_group"
+    assert "derived" not in profile
+    assert profile["summary"]["group_count"] == 2
+    assert profile["aggregate"]["answer_count"] == 700
+    assert profile["reply_shape"]["length_pref"] in {"short", "medium", "long", "any"}
+    assert profile["source"] == "cross_group_expression"
+
+
+def test_cross_group_consumes_real_group_profiler_schema() -> None:
+    now = int(time.time())
+
+    def built(group_id: int, text: str) -> dict:
+        messages = [
+            SimpleNamespace(group_id=group_id, user_id=index + 1, time=now, plain_text=text) for index in range(30)
+        ]
+        answers = [
+            SimpleNamespace(group_id=group_id, time=now, keywords=f"k{index}", count=2, messages=[text])
+            for index in range(5)
+        ]
+        return build_group_style_profile(group_id=group_id, messages=messages, answers=answers, now_ts=now)
+
+    first = built(1, "短句")
+    second = built(2, "这是一个明显更长的群聊消息样本用于聚合")
+    profile = build_bot_cross_group_persona(
+        bot_id=1001,
+        group_profiles=[(1, first), (2, second)],
+        now_ts=now,
+    )
+
+    assert group_style_weight(first, now_ts=now) > 0
+    assert profile["aggregate"]["sample_count"] == 70
+    assert profile["summary"]["group_count"] == 2
+    assert "derived" not in profile
 
 
 @pytest.mark.asyncio
@@ -145,5 +173,5 @@ async def test_resolve_persona_applies_cross_group_before_group(monkeypatch: pyt
     resolved = await resolve_persona(10001, 20002)
 
     assert resolved.reply_bias == pytest.approx(1.2 * 1.1)
-    assert resolved.length_pref == "long"
+    assert "length_pref" not in type(resolved).model_fields
     assert resolved.chaos_bias == pytest.approx(0.2)

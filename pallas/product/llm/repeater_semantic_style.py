@@ -8,7 +8,9 @@ import json
 import os
 import re
 import time
+import unicodedata
 from collections import Counter, deque
+from contextlib import contextmanager
 from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, Any, Literal
@@ -21,11 +23,12 @@ from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
+from pallas.product.llm.inference_params import task_token_budget
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
-SEMANTIC_STYLE_LABEL_VERSION = 1
+SEMANTIC_STYLE_LABEL_VERSION = 2
 SEMANTIC_STYLE_RETENTION_SEC = 90 * 24 * 60 * 60
 BOT_STYLE_RECENT_SEC = 14 * 24 * 60 * 60
 BOT_STYLE_POSITIVE_REPLY_SEC = 90
@@ -37,16 +40,13 @@ SEMANTIC_STYLE_BACKFILL_MAX_PER_DAY = 128
 SEMANTIC_STYLE_REALTIME_MAX_PER_DAY = 512
 SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 32
 SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 5
-SEMANTIC_STYLE_LABEL_MAX_TOKENS = 96
 SEMANTIC_STYLE_LABEL_MAX_RETRIES = 2
 _SEMANTIC_STYLE_BACKFILL_GROUP_LIMIT = 128
 _SEMANTIC_STYLE_BACKFILL_PAGE_SIZE = 32
 _SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC = 30.0
 _SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC = 24 * 60 * 60
 
-_REUSE_VALUES = {"direct", "rewrite", "style"}
 _INTENSITY_VALUES = {"quiet", "soft", "neutral", "sharp", "strong"}
-_OUTCOME_VALUES = {"engaged", "flat", "ignored", "conflict", "unknown"}
 INTERACTION_ACTION_VOCABULARY = frozenset({
     "agree",
     "challenge",
@@ -73,7 +73,6 @@ SEMANTIC_RELATION_VOCABULARY = frozenset({
     "topic_shift",
 })
 FORM_VOCABULARY = frozenset({"call_response", "emoji", "fragment", "question", "short", "template"})
-PERSONA_AFFINITY_VOCABULARY = frozenset({"calm", "chaotic", "concise", "deadpan", "mouthy", "playful", "warm"})
 _MAX_LABEL_ITEMS = 8
 _MAX_STYLE_ANCHOR_LEN = 80
 _MAX_SEED_LEN = 80
@@ -123,10 +122,6 @@ class SemanticStyleLabel(BaseModel):
     semantic_relations: list[str] = Field(default_factory=list)
     intensity: Literal["quiet", "soft", "neutral", "sharp", "strong"] = "neutral"
     forms: list[str] = Field(default_factory=list)
-    outcome: Literal["engaged", "flat", "ignored", "conflict", "unknown"] = "unknown"
-    reuse: Literal["direct", "rewrite", "style"] = "style"
-    persona_affinities: list[str] = Field(default_factory=list)
-    style_anchor: str = ""
     visual: SemanticStyleVisualLabel | None = None
 
 
@@ -142,11 +137,16 @@ class SemanticStyleExample(BaseModel):
     reply_text: str
     label: SemanticStyleLabel
     bot_style_positive: bool = False
+    annotation_source: Literal["llm_v2", "legacy_persisted_v1"] = "llm_v2"
+    legacy_reuse: Literal["direct", "rewrite", "style", ""] = ""
+    legacy_style_anchor: str = ""
+    legacy_persona_affinities: list[str] = Field(default_factory=list)
 
 
 class SemanticStyleDirectPair(BaseModel):
     trigger_text: str
     reply_text: str
+    source_example_id: str = ""
 
 
 class SemanticStyleProfile(BaseModel):
@@ -162,6 +162,11 @@ class SemanticStyleProfile(BaseModel):
     interaction_actions: list[str] = Field(default_factory=list)
     semantic_relations: list[str] = Field(default_factory=list)
     persona_affinities: list[str] = Field(default_factory=list)
+    intensity_counts: dict[str, int] = Field(default_factory=dict)
+    form_counts: dict[str, int] = Field(default_factory=dict)
+    bubble_counts: list[int] = Field(default_factory=list)
+    segment_char_lengths: list[int] = Field(default_factory=list)
+    rhythm_counts: dict[str, int] = Field(default_factory=lambda: {"single": 0, "multi": 0})
     sample_count: int = 0
     common_style_sample_count: int = 0
     bot_style_sample_count: int = 0
@@ -173,7 +178,9 @@ class SemanticStyleProfile(BaseModel):
 class SemanticStyleResolution(BaseModel):
     style_anchor: str = ""
     prompt_block: str = ""
+    matched_examples: list[tuple[str, str]] = Field(default_factory=list)
     direct_candidate: str = ""
+    source_example_id: str = ""
 
 
 class SemanticStyleOverride(BaseModel):
@@ -214,6 +221,7 @@ class SemanticStyleBackfillBatch(BaseModel):
 
 
 _profiles_lock = RLock()
+_semantic_data_thread_lock = RLock()
 _profiles: dict[tuple[int, int, str], SemanticStyleProfile] = {}
 _profiles_revision: tuple[int, int] | None = None
 _reload_task: asyncio.Task[None] | None = None
@@ -573,18 +581,12 @@ async def handle_repeater_semantic_style_backfill_scan(payload: dict[str, Any]) 
 
 def parse_semantic_style_label(value: object) -> SemanticStyleLabel:
     raw = value if isinstance(value, dict) else {}
-    reuse = str(raw.get("reuse") or "").strip().lower()
     intensity = str(raw.get("intensity") or "").strip().lower()
-    outcome = str(raw.get("outcome") or "").strip().lower()
     return SemanticStyleLabel(
         interaction_actions=_items(raw.get("interaction_actions"), INTERACTION_ACTION_VOCABULARY),
         semantic_relations=_items(raw.get("semantic_relations"), SEMANTIC_RELATION_VOCABULARY),
         intensity=intensity if intensity in _INTENSITY_VALUES else "neutral",
         forms=_items(raw.get("forms"), FORM_VOCABULARY),
-        outcome=outcome if outcome in _OUTCOME_VALUES else "unknown",
-        reuse=reuse if reuse in _REUSE_VALUES else "style",
-        persona_affinities=_items(raw.get("persona_affinities"), PERSONA_AFFINITY_VOCABULARY),
-        style_anchor=_short_text(raw.get("style_anchor"), _MAX_STYLE_ANCHOR_LEN),
         visual=parse_semantic_style_visual_label(raw.get("visual")) if isinstance(raw.get("visual"), dict) else None,
     )
 
@@ -603,6 +605,20 @@ def semantic_style_examples_path() -> Path:
 
 def semantic_style_profiles_path() -> Path:
     return semantic_style_base_dir() / "profiles.json"
+
+
+def semantic_style_data_lock_path() -> Path:
+    return semantic_style_base_dir() / "semantic_style_data.lock"
+
+
+def semantic_style_legacy_migration_marker_path() -> Path:
+    return semantic_style_base_dir() / "legacy_profiles_migrated_v2.json"
+
+
+@contextmanager
+def semantic_style_data_lock():
+    with _semantic_data_thread_lock, interprocess_file_lock(semantic_style_data_lock_path()):
+        yield
 
 
 def semantic_style_backfill_cursor_path(*, bot_id: int | None = None, group_id: int | None = None) -> Path:
@@ -745,15 +761,6 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
     profiles = _load_profiles(semantic_style_profiles_path())
     scoped_examples = [example for example in examples if _in_semantic_style_scope(example, scope)]
     scoped_profiles = [profile for profile in profiles.values() if _in_semantic_style_scope(profile, scope)]
-    now = int(time.time())
-    global_budget = _load_semantic_style_realtime_budget(semantic_style_realtime_budget_path(), now=now)
-    scope_budget = (
-        _load_semantic_style_realtime_budget(
-            semantic_style_realtime_budget_path(bot_id=bot_id, group_id=group_id), now=now
-        )
-        if scope is not None
-        else None
-    )
     return {
         "enabled": settings.enabled,
         "overrides": settings.overrides.model_dump(mode="json"),
@@ -762,13 +769,6 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
         "backfill_cursor": load_semantic_style_backfill_cursor(bot_id=bot_id, group_id=group_id).model_dump(
             mode="json"
         ),
-        "realtime_admission": {
-            "sample_divisor": SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR,
-            "global_daily_limit": SEMANTIC_STYLE_REALTIME_MAX_PER_DAY,
-            "scope_daily_limit": SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY,
-            "global": global_budget.model_dump(mode="json"),
-            "scope": scope_budget.model_dump(mode="json") if scope_budget else None,
-        },
     }
 
 
@@ -797,28 +797,19 @@ def set_semantic_style_enabled(
 
 def clear_semantic_style_data(*, bot_id: int | None = None, group_id: int | None = None) -> dict[str, Any]:
     scope = _semantic_style_scope(bot_id, group_id)
-    examples = _load_semantic_style_examples(semantic_style_examples_path())
-    retained = [example for example in examples if not _in_semantic_style_scope(example, scope)] if scope else []
-    _write_semantic_style_examples(semantic_style_examples_path(), retained)
-    _write_profiles(_rebuild_profiles(retained, now=int(time.time())))
+    with semantic_style_data_lock():
+        examples = load_examples_with_legacy_migration_locked()
+        retained = [example for example in examples if not _in_semantic_style_scope(example, scope)] if scope else []
+        _write_semantic_style_examples(semantic_style_examples_path(), retained)
+        _write_profiles(_rebuild_profiles(retained, now=int(time.time())))
     save_semantic_style_backfill_cursor(SemanticStyleBackfillCursor(), bot_id=bot_id, group_id=group_id)
     return semantic_style_status(bot_id=bot_id, group_id=group_id)
 
 
 def rebuild_semantic_style_profiles(*, bot_id: int | None = None, group_id: int | None = None) -> dict[str, Any]:
-    scope = _semantic_style_scope(bot_id, group_id)
-    examples = _load_semantic_style_examples(semantic_style_examples_path())
-    if scope is None:
-        profiles = _rebuild_profiles(examples, now=int(time.time()))
-    else:
-        existing = _load_profiles(semantic_style_profiles_path())
-        profiles = {key: profile for key, profile in existing.items() if not _in_semantic_style_scope(profile, scope)}
-        profiles.update(
-            _rebuild_profiles(
-                [example for example in examples if _in_semantic_style_scope(example, scope)], now=int(time.time())
-            )
-        )
-    _write_profiles(profiles)
+    with semantic_style_data_lock():
+        examples = load_examples_with_legacy_migration_locked()
+        _write_profiles(_rebuild_profiles(examples, now=int(time.time())))
     return semantic_style_status(bot_id=bot_id, group_id=group_id)
 
 
@@ -829,14 +820,15 @@ def semantic_style_quality(*, bot_id: int | None = None, group_id: int | None = 
     return {
         **semantic_style_status(bot_id=bot_id, group_id=group_id),
         "label_version": SEMANTIC_STYLE_LABEL_VERSION,
-        "reuse_counts": dict(Counter(example.label.reuse for example in scoped_examples)),
-        "outcome_counts": dict(Counter(example.label.outcome for example in scoped_examples)),
         "positive_bot_style_count": sum(example.bot_style_positive for example in scoped_examples),
     }
 
 
 def recover_semantic_style_data(*, bot_id: int | None = None, group_id: int | None = None) -> dict[str, Any]:
-    rebuild_semantic_style_profiles(bot_id=bot_id, group_id=group_id)
+    with semantic_style_data_lock():
+        examples = load_examples_with_legacy_migration_locked()
+        _write_semantic_style_examples(semantic_style_examples_path(), examples)
+        _write_profiles(_rebuild_profiles(examples, now=int(time.time())))
     refresh_semantic_style_cache(force=True)
     return semantic_style_status(bot_id=bot_id, group_id=group_id)
 
@@ -932,6 +924,14 @@ def _popular(values: list[str], limit: int = 3) -> list[str]:
     return [item for item, _count in Counter(values).most_common(limit)]
 
 
+def deterministic_reply_shape(reply_text: str) -> tuple[int, list[int], str]:
+    segments = [item.strip() for item in str(reply_text or "").splitlines() if item.strip()]
+    if not segments:
+        segments = [str(reply_text or "").strip()] if str(reply_text or "").strip() else []
+    bubble_count = len(segments)
+    return bubble_count, [len(item) for item in segments], "multi" if bubble_count > 1 else "single"
+
+
 def _build_profile(
     example: SemanticStyleExample,
     existing: SemanticStyleProfile | None,
@@ -946,57 +946,75 @@ def _build_profile(
     direct_pairs = list(existing.direct_pairs) if existing else []
     rewrite_seeds = list(existing.rewrite_seeds) if existing else []
     reply_text = _short_text(example.reply_text, _MAX_SEED_LEN)
-    if label.reuse == "direct" and reply_text:
+    bubble_count, segment_char_lengths, rhythm = deterministic_reply_shape(example.reply_text)
+    bubble_counts = list(existing.bubble_counts) if existing else []
+    prior_segment_lengths = list(existing.segment_char_lengths) if existing else []
+    rhythm_counts = dict(existing.rhythm_counts) if existing else {"single": 0, "multi": 0}
+    if bubble_count:
+        bubble_counts.append(bubble_count)
+        prior_segment_lengths.extend(segment_char_lengths)
+        rhythm_counts[rhythm] = int(rhythm_counts.get(rhythm) or 0) + 1
+    bot_style_sample_count = (existing.bot_style_sample_count if existing else 0) + int(example.bot_style_positive)
+    recent_bot_style_sample_count = (existing.recent_bot_style_sample_count if existing else 0) + int(
+        example.bot_style_positive and (now is None or example.created_at >= now - BOT_STYLE_RECENT_SEC)
+    )
+    bot_style_promoted = (
+        bot_style_sample_count >= BOT_STYLE_PROMOTION_SAMPLE_COUNT
+        and recent_bot_style_sample_count >= BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT
+    )
+    legacy_direct = example.annotation_source == "legacy_persisted_v1" and example.legacy_reuse == "direct"
+    if (legacy_direct or (bot_style_promoted and example.bot_style_positive)) and reply_text:
         direct_examples = [item for item in direct_examples if item != reply_text]
         direct_examples.append(reply_text)
         pair = SemanticStyleDirectPair(
             trigger_text=_short_text(example.trigger_text, 240),
             reply_text=reply_text,
+            source_example_id=example.example_id,
         )
         direct_pairs = [item for item in direct_pairs if item != pair]
         direct_pairs.append(pair)
-    elif label.reuse == "rewrite" and reply_text:
+    elif reply_text and example.legacy_reuse != "style":
         rewrite_seeds = [item for item in rewrite_seeds if item != reply_text]
         rewrite_seeds.append(reply_text)
-    bot_style_sample_count = (existing.bot_style_sample_count if existing else 0) + int(example.bot_style_positive)
-    recent_bot_style_sample_count = (existing.recent_bot_style_sample_count if existing else 0) + int(
-        example.bot_style_positive and (now is None or example.created_at >= now - BOT_STYLE_RECENT_SEC)
-    )
+    intensity_counts = dict(existing.intensity_counts) if existing else {}
+    intensity_counts[label.intensity] = int(intensity_counts.get(label.intensity) or 0) + 1
+    form_counts = dict(existing.form_counts) if existing else {}
+    for form in label.forms:
+        form_counts[form] = int(form_counts.get(form) or 0) + 1
     return SemanticStyleProfile(
         bot_id=example.bot_id,
         group_id=example.group_id,
         scene=example.scene,
-        style_anchor=label.style_anchor or (existing.style_anchor if existing else ""),
+        style_anchor=example.legacy_style_anchor or (existing.style_anchor if existing else ""),
         direct_examples=direct_examples[-3:],
         direct_pairs=direct_pairs[-_DIRECT_PAIR_LIMIT:],
         rewrite_seeds=rewrite_seeds[-3:],
         interaction_actions=_popular([*prior_actions, *label.interaction_actions]),
         semantic_relations=_popular([*prior_relations, *label.semantic_relations]),
-        persona_affinities=_popular([*prior_affinities, *label.persona_affinities]),
+        persona_affinities=_popular([*prior_affinities, *example.legacy_persona_affinities]),
+        intensity_counts=intensity_counts,
+        form_counts=form_counts,
+        bubble_counts=bubble_counts[-100:],
+        segment_char_lengths=prior_segment_lengths[-300:],
+        rhythm_counts=rhythm_counts,
         sample_count=(existing.sample_count if existing else 0) + 1,
         common_style_sample_count=(existing.common_style_sample_count if existing else 0)
         + int(not example.bot_style_positive),
         bot_style_sample_count=bot_style_sample_count,
         recent_bot_style_sample_count=recent_bot_style_sample_count,
-        bot_style_promoted=(
-            bot_style_sample_count >= BOT_STYLE_PROMOTION_SAMPLE_COUNT
-            and recent_bot_style_sample_count >= BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT
-        ),
+        bot_style_promoted=bot_style_promoted,
         updated_at=example.created_at,
     )
 
 
 def persist_semantic_style_example(example: SemanticStyleExample) -> SemanticStyleProfile:
-    examples_path = semantic_style_examples_path()
-    with examples_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(example.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")) + "\n")
-    profiles_path = semantic_style_profiles_path()
-    profiles = _load_profiles(profiles_path)
-    key = _profile_key(example.bot_id, example.group_id, example.scene)
-    profile = _build_profile(example, profiles.get(key), now=int(time.time()))
-    profiles[key] = profile
-    _write_profiles(profiles)
-    return profile
+    with semantic_style_data_lock():
+        examples = load_examples_with_legacy_migration_locked()
+        examples.append(example)
+        _write_semantic_style_examples(semantic_style_examples_path(), examples)
+        profiles = _rebuild_profiles(examples, now=int(time.time()))
+        _write_profiles(profiles)
+        return profiles[_profile_key(example.bot_id, example.group_id, example.scene)]
 
 
 def is_positive_bot_style_outcome(
@@ -1020,6 +1038,7 @@ def is_positive_bot_style_outcome(
 def record_bot_style_outcome(
     example: SemanticStyleExample,
     *,
+    bot_reply_created_at: int | None = None,
     following_created_at: int,
     following_is_bot: bool,
     following_text: str,
@@ -1027,7 +1046,7 @@ def record_bot_style_outcome(
     following_has_negative_feedback: bool = False,
 ) -> SemanticStyleProfile | None:
     if not is_positive_bot_style_outcome(
-        reply_created_at=example.created_at,
+        reply_created_at=int(bot_reply_created_at if bot_reply_created_at is not None else example.created_at),
         following_created_at=following_created_at,
         following_is_bot=following_is_bot,
         following_text=following_text,
@@ -1035,24 +1054,38 @@ def record_bot_style_outcome(
         following_has_negative_feedback=following_has_negative_feedback,
     ):
         return None
-    positive_example = example.model_copy(update={"bot_style_positive": True})
-    examples_path = semantic_style_examples_path()
-    updated_examples: list[SemanticStyleExample] = []
-    found = False
-    for stored_example in _load_semantic_style_examples(examples_path):
-        if stored_example.example_id != positive_example.example_id:
-            updated_examples.append(stored_example)
-            continue
+    with semantic_style_data_lock():
+        positive_example = example.model_copy(update={"bot_style_positive": True})
+        examples_path = semantic_style_examples_path()
+        updated_examples: list[SemanticStyleExample] = []
+        found = False
+        for stored_example in load_examples_with_legacy_migration_locked():
+            if stored_example.example_id != positive_example.example_id:
+                updated_examples.append(stored_example)
+                continue
+            if not found:
+                updated_examples.append(positive_example)
+                found = True
         if not found:
-            updated_examples.append(positive_example)
-            found = True
-    if not found:
-        updated_examples.append(positive_example)
-    _write_semantic_style_examples(examples_path, updated_examples)
-    examples = updated_examples
-    profiles = _rebuild_profiles(examples, now=max(item.created_at for item in examples))
-    _write_profiles(profiles)
-    return profiles.get(_profile_key(positive_example.bot_id, positive_example.group_id, positive_example.scene))
+            return None
+        _write_semantic_style_examples(examples_path, updated_examples)
+        profiles = _rebuild_profiles(updated_examples, now=max(item.created_at for item in updated_examples))
+        _write_profiles(profiles)
+        return profiles.get(_profile_key(positive_example.bot_id, positive_example.group_id, positive_example.scene))
+
+
+def find_semantic_style_example(
+    *, example_id: str, bot_id: int, group_id: int, scene: str
+) -> SemanticStyleExample | None:
+    for example in reversed(_load_semantic_style_examples(semantic_style_examples_path())):
+        if (
+            example.example_id == str(example_id)
+            and example.bot_id == int(bot_id)
+            and example.group_id == int(group_id)
+            and example.scene == str(scene)
+        ):
+            return example
+    return None
 
 
 def _load_semantic_style_examples(path: Path) -> list[SemanticStyleExample]:
@@ -1064,10 +1097,76 @@ def _load_semantic_style_examples(path: Path) -> list[SemanticStyleExample]:
     for line in lines:
         try:
             raw = json.loads(line)
+            label_raw = raw.get("label") if isinstance(raw, dict) else None
+            if isinstance(label_raw, dict) and int(label_raw.get("version") or 1) < SEMANTIC_STYLE_LABEL_VERSION:
+                legacy_reuse = str(label_raw.get("reuse") or "").strip().lower()
+                if legacy_reuse in {"direct", "rewrite", "style"}:
+                    raw["annotation_source"] = "legacy_persisted_v1"
+                    raw["legacy_reuse"] = legacy_reuse
+                    raw["legacy_style_anchor"] = _short_text(label_raw.get("style_anchor"), _MAX_STYLE_ANCHOR_LEN)
+                    raw["legacy_persona_affinities"] = _items(label_raw.get("persona_affinities"))
             example = SemanticStyleExample.model_validate(raw)
         except (json.JSONDecodeError, ValueError, TypeError):
             continue
         examples.append(example.model_copy(update={"label": parse_semantic_style_label(example.label.model_dump())}))
+    return examples
+
+
+def migrate_legacy_profiles_to_examples(
+    examples: list[SemanticStyleExample],
+    profiles: dict[tuple[int, int, str], SemanticStyleProfile],
+    *,
+    now: int,
+) -> list[SemanticStyleExample]:
+    migrated = list(examples)
+    known_ids = {item.example_id for item in migrated}
+    for profile in profiles.values():
+        pairs = list(profile.direct_pairs)
+        if not pairs:
+            pairs = [SemanticStyleDirectPair(trigger_text="", reply_text=text) for text in profile.direct_examples]
+        if not pairs and (profile.style_anchor or profile.persona_affinities):
+            pairs = [SemanticStyleDirectPair(trigger_text="", reply_text="")]
+        for index, pair in enumerate(pairs):
+            digest = hashlib.blake2s(
+                f"{profile.bot_id}:{profile.group_id}:{profile.scene}:{pair.trigger_text}:{pair.reply_text}".encode(),
+                digest_size=8,
+            ).hexdigest()
+            example_id = f"legacy-profile-v1:{digest}"
+            if example_id in known_ids:
+                continue
+            migrated.append(
+                SemanticStyleExample(
+                    example_id=example_id,
+                    created_at=max(int(profile.updated_at or 0), now),
+                    bot_id=profile.bot_id,
+                    group_id=profile.group_id,
+                    scene=profile.scene,
+                    trigger_text=pair.trigger_text,
+                    reply_text=pair.reply_text,
+                    label=SemanticStyleLabel(),
+                    annotation_source="legacy_persisted_v1",
+                    legacy_reuse="direct" if pair.reply_text else "style",
+                    legacy_style_anchor=profile.style_anchor if index == 0 else "",
+                    legacy_persona_affinities=profile.persona_affinities if index == 0 else [],
+                )
+            )
+            known_ids.add(example_id)
+    return migrated
+
+
+def load_examples_with_legacy_migration_locked() -> list[SemanticStyleExample]:
+    examples_path = semantic_style_examples_path()
+    examples = _load_semantic_style_examples(examples_path)
+    marker = semantic_style_legacy_migration_marker_path()
+    if marker.exists():
+        return examples
+    examples = migrate_legacy_profiles_to_examples(
+        examples,
+        _load_profiles(semantic_style_profiles_path()),
+        now=int(time.time()),
+    )
+    _write_semantic_style_examples(examples_path, examples)
+    atomic_write_text(marker, '{"version":2,"source":"legacy_profiles"}')
     return examples
 
 
@@ -1093,15 +1192,16 @@ def _rebuild_profiles(
 
 def prune_semantic_style_examples(*, now: int | None = None) -> int:
     current_time = int(time.time()) if now is None else int(now)
-    examples_path = semantic_style_examples_path()
-    retained = [
-        example
-        for example in _load_semantic_style_examples(examples_path)
-        if example.created_at >= current_time - SEMANTIC_STYLE_RETENTION_SEC
-    ]
-    _write_semantic_style_examples(examples_path, retained)
-    _write_profiles(_rebuild_profiles(retained, now=current_time))
-    return len(retained)
+    with semantic_style_data_lock():
+        examples_path = semantic_style_examples_path()
+        retained = [
+            example
+            for example in load_examples_with_legacy_migration_locked()
+            if example.created_at >= current_time - SEMANTIC_STYLE_RETENTION_SEC
+        ]
+        _write_semantic_style_examples(examples_path, retained)
+        _write_profiles(_rebuild_profiles(retained, now=current_time))
+        return len(retained)
 
 
 def cached_semantic_style_profile(bot_id: int, group_id: int | None, scene: str) -> SemanticStyleProfile | None:
@@ -1111,6 +1211,39 @@ def cached_semantic_style_profile(bot_id: int, group_id: int | None, scene: str)
     with _profiles_lock:
         exact = _profiles.get(key)
         return exact.model_copy(deep=True) if exact is not None else None
+
+
+def semantic_style_profile_summary(profile: SemanticStyleProfile | None) -> dict[str, Any] | None:
+    if profile is None:
+        return None
+    bubble_counts = sorted(int(value) for value in profile.bubble_counts if int(value) > 0)
+    segment_lengths = sorted(int(value) for value in profile.segment_char_lengths if int(value) > 0)
+    rhythm_counts = {str(key): max(0, int(value)) for key, value in profile.rhythm_counts.items()}
+    rhythm_total = sum(rhythm_counts.values())
+
+    def percentile(values: list[int], fraction: float) -> int:
+        return values[round((len(values) - 1) * fraction)] if values else 0
+
+    return {
+        "profile_ref": f"{profile.bot_id}:{profile.group_id}:{profile.scene}",
+        "scene": profile.scene,
+        "sample_count": profile.sample_count,
+        "direct_example_count": len(profile.direct_examples),
+        "direct_pair_count": len(profile.direct_pairs),
+        "rewrite_seed_count": len(profile.rewrite_seeds),
+        "intensity_counts": dict(profile.intensity_counts),
+        "form_counts": dict(profile.form_counts),
+        "bubble_count_p50": percentile(bubble_counts, 0.5),
+        "bubble_count_p90": percentile(bubble_counts, 0.9),
+        "segment_char_length_p50": percentile(segment_lengths, 0.5),
+        "segment_char_length_p90": percentile(segment_lengths, 0.9),
+        "rhythm_distribution": {
+            key: round(value / rhythm_total, 4) for key, value in rhythm_counts.items()
+        }
+        if rhythm_total
+        else {},
+        "updated_at": profile.updated_at,
+    }
 
 
 def semantic_style_injection_enabled(
@@ -1146,16 +1279,44 @@ def resolve_cached_semantic_style(
     rewrite_seed = profile.rewrite_seeds[-1] if profile.rewrite_seeds else ""
     if not rewrite_seed and profile.direct_examples:
         rewrite_seed = profile.direct_examples[-1]
-    direct_candidate = select_semantic_style_direct_candidate(
+    direct_pair = select_semantic_style_direct_pair(
         profile.direct_pairs,
         query_text=query_text,
         recent_assistant_replies=recent_assistant_replies,
     )
+    safe_examples = [
+        pair
+        for pair in profile.direct_pairs[-2:]
+        if prompt_safe_expression_sample(pair.trigger_text) and prompt_safe_expression_sample(pair.reply_text)
+    ]
+    safe_anchor = prompt_safe_expression_sample(profile.style_anchor)
+    safe_seed = prompt_safe_expression_sample(rewrite_seed)
+    safe_direct_candidate = prompt_safe_expression_sample(direct_pair.reply_text) if direct_pair is not None else ""
     return SemanticStyleResolution(
-        style_anchor=_short_text(profile.style_anchor, _MAX_STYLE_ANCHOR_LEN),
-        prompt_block=append_cached_semantic_style_block("", profile.style_anchor, rewrite_seed),
-        direct_candidate=direct_candidate,
+        style_anchor=safe_anchor,
+        prompt_block=append_cached_semantic_style_block("", safe_anchor, safe_seed),
+        matched_examples=[
+            (_short_text(pair.trigger_text, _MAX_SEED_LEN), _short_text(pair.reply_text, _MAX_SEED_LEN))
+            for pair in safe_examples
+        ],
+        direct_candidate=safe_direct_candidate,
+        source_example_id=direct_pair.source_example_id if direct_pair is not None else "",
     )
+
+
+def prompt_safe_expression_sample(value: str) -> str:
+    text = str(value or "").strip()
+    if not text or len(text) > _MAX_SEED_LEN:
+        return ""
+    if any(unicodedata.category(character).startswith("C") for character in text):
+        return ""
+    normalized = unicodedata.normalize("NFKC", text).casefold()
+    blocked = ("@", "http", "www.", "system", "developer", "ignore", "指令", "规则", "角色", "<|", "[inst]")
+    if any(token in normalized for token in blocked):
+        return ""
+    if re.search(r"\d{7,}|\[cq:|qq(?:号)?\d|\brole\s*[:=]", normalized):
+        return ""
+    return _short_text(text, _MAX_SEED_LEN)
 
 
 def normalize_semantic_style_match_text(value: str) -> str:
@@ -1182,24 +1343,38 @@ def select_semantic_style_direct_candidate(
     query_text: str,
     recent_assistant_replies: Iterable[str] = (),
 ) -> str:
+    pair = select_semantic_style_direct_pair(
+        pairs,
+        query_text=query_text,
+        recent_assistant_replies=recent_assistant_replies,
+    )
+    return _short_text(pair.reply_text, _MAX_SEED_LEN) if pair is not None else ""
+
+
+def select_semantic_style_direct_pair(
+    pairs: Iterable[SemanticStyleDirectPair],
+    *,
+    query_text: str,
+    recent_assistant_replies: Iterable[str] = (),
+) -> SemanticStyleDirectPair | None:
     recent = [reply for reply in recent_assistant_replies if normalize_semantic_style_match_text(reply)]
     ranked = sorted(
         (
-            (semantic_style_text_similarity(query_text, pair.trigger_text), index, pair.reply_text)
+            (semantic_style_text_similarity(query_text, pair.trigger_text), index, pair)
             for index, pair in enumerate(pairs)
         ),
         reverse=True,
     )
-    for score, _index, reply_text in ranked:
+    for score, _index, pair in ranked:
         if score < _DIRECT_TRIGGER_SIMILARITY:
             break
         if any(
-            semantic_style_text_similarity(reply_text, previous) >= _DIRECT_REPLY_DEDUP_SIMILARITY
+            semantic_style_text_similarity(pair.reply_text, previous) >= _DIRECT_REPLY_DEDUP_SIMILARITY
             for previous in recent
         ):
             continue
-        return _short_text(reply_text, _MAX_SEED_LEN)
-    return ""
+        return pair
+    return None
 
 
 def should_deliver_semantic_style_direct_candidate(
@@ -1258,16 +1433,14 @@ async def label_semantic_style_with_llm(*, trigger_text: str, reply_text: str) -
     cfg = get_llm_config()
     prompt = (
         "分析一组真实群聊接话，输出严格 JSON。保留无意义附和、攻击性和胡话等表达特征，"
-        "不要做价值判断。字段：interaction_actions、semantic_relations、intensity、forms、outcome、"
-        "reuse、persona_affinities、style_anchor。reuse 只能 direct/rewrite/style；"
-        "intensity 只能 quiet/soft/neutral/sharp/strong；outcome 只能 engaged/flat/ignored/conflict/unknown。"
-        "style_anchor 用一句不超过 30 字的中文写法提示。\n"
+        "不要做价值判断。字段只能是 interaction_actions、semantic_relations、intensity、forms。"
+        "intensity 只能 quiet/soft/neutral/sharp/strong；其余字段使用受控词表。\n"
         f"前句：{_short_text(trigger_text, 160)}\n接话：{_short_text(reply_text, 160)}"
     )
     response = await complete_chat_message(
         [{"role": "user", "content": prompt}],
         model=str(cfg.llm_model or ""),
-        options={"temperature": 0, "max_tokens": SEMANTIC_STYLE_LABEL_MAX_TOKENS},
+        options={"temperature": 0, "max_tokens": task_token_budget("repeater.semantic_style")},
         cfg=cfg,
         task="repeater.semantic_style",
     )
@@ -1301,7 +1474,10 @@ async def label_semantic_style_visual_with_cached_image(*, cq_code: str) -> Sema
     response = await complete_chat_message(
         [{"role": "user", "content": content}],
         model=endpoint.model,
-        options={"temperature": 0.1, "max_tokens": 100},
+        options={
+            "temperature": 0.1,
+            "max_tokens": task_token_budget("repeater.semantic_style", operation="vision"),
+        },
         base_url=endpoint.base_url,
         api_key=endpoint.api_key,
         request_method=endpoint.request_method,

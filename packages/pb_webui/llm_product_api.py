@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.product.llm.ops_api import (
     build_conversation_kernel_status,
@@ -27,6 +28,7 @@ from pallas.product.llm.ops_api import (
 from pallas.product.persona.expression_bank import ExpressionStatus, list_group_expressions
 from pallas.product.persona.expression_promote import resolve_expression
 
+from .console_openapi_models import _ApiOkResponse
 from .extended_common import check_pallas_write_token
 
 if TYPE_CHECKING:
@@ -45,6 +47,103 @@ def _semantic_style():
     return repeater_semantic_style
 
 
+class _SemanticStyleOverridesPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    aggressive: bool | None = None
+    nonsense: bool | None = None
+    direct: bool | None = None
+    image: bool | None = None
+
+
+class _SemanticStyleOverridesData(BaseModel):
+    aggressive: bool
+    nonsense: bool
+    direct: bool
+    image: bool
+
+
+class _SemanticStyleManageBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["status", "overrides", "clear", "rebuild", "quality", "recover", "disable"]
+    bot_id: int | None = None
+    group_id: int | None = None
+    scene: str = "group_chat"
+    overrides: _SemanticStyleOverridesPatch | None = None
+
+
+class _SemanticStyleProfileSummaryData(BaseModel):
+    profile_ref: str
+    scene: str
+    sample_count: int = 0
+    direct_example_count: int = 0
+    direct_pair_count: int = 0
+    rewrite_seed_count: int = 0
+    intensity_counts: dict[str, int] = Field(default_factory=dict)
+    form_counts: dict[str, int] = Field(default_factory=dict)
+    bubble_count_p50: int = 0
+    bubble_count_p90: int = 0
+    segment_char_length_p50: int = 0
+    segment_char_length_p90: int = 0
+    rhythm_distribution: dict[str, float] = Field(default_factory=dict)
+    updated_at: int = 0
+
+
+class _SemanticStyleStatusData(BaseModel):
+    enabled: bool = True
+    overrides: _SemanticStyleOverridesData | None = None
+    example_count: int = 0
+    profile_count: int = 0
+    backfill_cursor: dict[str, Any] = Field(default_factory=dict)
+    profile_summary: _SemanticStyleProfileSummaryData | None = None
+
+
+class _SemanticStyleQualityData(BaseModel):
+    status: _SemanticStyleStatusData
+    label_version: int
+    positive_bot_style_count: int = 0
+
+
+def semantic_style_response_data(
+    data: dict[str, Any],
+    *,
+    bot_id: int | None,
+    group_id: int | None,
+    scene: str,
+) -> dict[str, Any]:
+    payload = dict(data)
+    if bot_id is not None and group_id is not None:
+        semantic_style = _semantic_style()
+        semantic_style.refresh_semantic_style_cache()
+        profile = semantic_style.cached_semantic_style_profile(bot_id, group_id, scene)
+        payload["profile_summary"] = semantic_style.semantic_style_profile_summary(profile)
+    return _SemanticStyleStatusData.model_validate(payload).model_dump(
+        mode="json",
+        exclude_none=True,
+        exclude_unset=True,
+    )
+
+
+def semantic_style_quality_response_data(
+    data: dict[str, Any],
+    *,
+    bot_id: int | None,
+    group_id: int | None,
+    scene: str,
+) -> dict[str, Any]:
+    return _SemanticStyleQualityData(
+        status=semantic_style_response_data(
+            data,
+            bot_id=bot_id,
+            group_id=group_id,
+            scene=scene,
+        ),
+        label_version=int(data.get("label_version") or 0),
+        positive_bot_style_count=int(data.get("positive_bot_style_count") or 0),
+    ).model_dump(mode="json", exclude_none=True)
+
+
 def register_llm_product_router(
     router: APIRouter,
     *,
@@ -54,10 +153,15 @@ def register_llm_product_router(
 ) -> None:
     """Register console routes."""
 
-    @router.get(f"{x}/llm/repeater-semantic-style", include_in_schema=True)
+    @router.get(
+        f"{x}/llm/repeater-semantic-style",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_SemanticStyleStatusData],
+    )
     async def _repeater_semantic_style_get(
         bot_id: int | None = Query(default=None, ge=1),
         group_id: int | None = Query(default=None, ge=1),
+        scene: str = Query(default="group_chat", min_length=1, max_length=64),
     ) -> JSONResponse:
         if (bot_id is None) != (group_id is None):
             raise HTTPException(status_code=422, detail="bot_id 和 group_id 必须同时提供")
@@ -69,21 +173,30 @@ def register_llm_product_router(
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        return JSONResponse({"ok": True, "data": data})
+        return JSONResponse({
+            "ok": True,
+            "data": semantic_style_response_data(
+                data,
+                bot_id=bot_id,
+                group_id=group_id,
+                scene=scene,
+            ),
+        })
 
-    @router.post(f"{x}/llm/repeater-semantic-style/manage", include_in_schema=True)
+    @router.post(
+        f"{x}/llm/repeater-semantic-style/manage",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_SemanticStyleStatusData | _SemanticStyleQualityData],
+    )
     async def _repeater_semantic_style_manage(
-        body: dict[str, Any],
+        body: _SemanticStyleManageBody,
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        action = str(body.get("action") or "").strip().lower()
-        allowed_actions = {"status", "overrides", "clear", "rebuild", "quality", "recover", "disable"}
-        if action not in allowed_actions:
-            raise HTTPException(status_code=400, detail="action 无效")
-        bot_id = body.get("bot_id")
-        group_id = body.get("group_id")
+        action = body.action
+        bot_id = body.bot_id
+        group_id = body.group_id
         if (bot_id is None) != (group_id is None):
             raise HTTPException(status_code=422, detail="bot_id 和 group_id 必须同时提供")
         try:
@@ -99,13 +212,14 @@ def register_llm_product_router(
                     semantic_style.semantic_style_status(**scope) if scope else semantic_style.semantic_style_status()
                 )
             elif action == "overrides":
-                overrides = body.get("overrides")
-                if not isinstance(overrides, dict):
+                overrides = body.overrides
+                if overrides is None:
                     raise HTTPException(status_code=400, detail="overrides 必须为对象")
+                override_patch = overrides.model_dump(exclude_unset=True, exclude_none=True)
                 data = (
-                    semantic_style.update_semantic_style_overrides(overrides, **scope)
+                    semantic_style.update_semantic_style_overrides(override_patch, **scope)
                     if scope
-                    else semantic_style.update_semantic_style_overrides(overrides)
+                    else semantic_style.update_semantic_style_overrides(override_patch)
                 )
             elif action == "clear":
                 data = (
@@ -139,7 +253,25 @@ def register_llm_product_router(
             raise
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        return JSONResponse({"ok": True, "data": data})
+        response_data = (
+            semantic_style_quality_response_data(
+                data,
+                bot_id=scope.get("bot_id"),
+                group_id=scope.get("group_id"),
+                scene=body.scene,
+            )
+            if action == "quality"
+            else semantic_style_response_data(
+                data,
+                bot_id=scope.get("bot_id"),
+                group_id=scope.get("group_id"),
+                scene=body.scene,
+            )
+        )
+        return JSONResponse({
+            "ok": True,
+            "data": response_data,
+        })
 
     @router.get(f"{x}/llm/repeater-feedback", include_in_schema=True)
     async def _llm_repeater_feedback_get(

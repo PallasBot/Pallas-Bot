@@ -1,22 +1,30 @@
 from __future__ import annotations
 
+import pytest
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
 from packages.pb_webui import extended_api as mod
 from packages.pb_webui.config import Config
 
 
-def _build_client(monkeypatch) -> TestClient:
+def _build_app(monkeypatch) -> FastAPI:
     monkeypatch.setattr(mod, "_check_pallas_write_token", lambda *args, **kwargs: None)
     monkeypatch.setattr(mod, "_require_pallas_token_configured", lambda *args, **kwargs: None)
     monkeypatch.setattr(mod, "ensure_console_metrics_hooks", lambda: None)
     app = FastAPI()
     mod.register_extended_api(app, api_base="/pallas/api", plugin_config=Config())
-    return TestClient(app)
+    return app
 
 
-def test_repeater_semantic_style_status_api(monkeypatch) -> None:
+async def request(monkeypatch, method: str, url: str, **kwargs):
+    app = _build_app(monkeypatch)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        return await client.request(method, url, **kwargs)
+
+
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_status_api(monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as semantic_style
 
     monkeypatch.setattr(
@@ -26,7 +34,7 @@ def test_repeater_semantic_style_status_api(monkeypatch) -> None:
         raising=False,
     )
 
-    response = _build_client(monkeypatch).get("/pallas/api/llm/repeater-semantic-style")
+    response = await request(monkeypatch, "GET", "/pallas/api/llm/repeater-semantic-style")
 
     assert response.status_code == 200, response.text
     assert response.json() == {
@@ -35,7 +43,56 @@ def test_repeater_semantic_style_status_api(monkeypatch) -> None:
     }
 
 
-def test_repeater_semantic_style_api_forwards_bot_group_scope(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_quality_response_is_typed_and_has_no_quota(monkeypatch) -> None:
+    from packages.pb_webui import llm_product_api
+    from packages.pb_webui.llm_product_api import register_llm_product_router
+    from pallas.product.llm import repeater_semantic_style as semantic_style
+
+    monkeypatch.setattr(
+        semantic_style,
+        "semantic_style_quality",
+        lambda **scope: {
+            "enabled": True,
+            "overrides": {"aggressive": True, "nonsense": True, "direct": True, "image": True},
+            "example_count": 3,
+            "profile_count": 1,
+            "backfill_cursor": {},
+            "label_version": 2,
+            "positive_bot_style_count": 2,
+            "outcome_counts": {"engaged": 2},
+            "reuse_counts": {"direct": 1},
+            "realtime_admission": {"quota": 100},
+        },
+    )
+
+    monkeypatch.setattr(llm_product_api, "check_pallas_write_token", lambda *args, **kwargs: None)
+    monkeypatch.setattr(semantic_style, "refresh_semantic_style_cache", lambda *, force=False: None)
+    monkeypatch.setattr(semantic_style, "cached_semantic_style_profile", lambda *args: None)
+    app = FastAPI()
+    register_llm_product_router(app.router, x="/pallas/api", plugin_config=Config())
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/pallas/api/llm/repeater-semantic-style/manage",
+            json={"action": "quality", "bot_id": 100, "group_id": 42},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == {
+        "status": {
+            "enabled": True,
+            "overrides": {"aggressive": True, "nonsense": True, "direct": True, "image": True},
+            "example_count": 3,
+            "profile_count": 1,
+            "backfill_cursor": {},
+        },
+        "label_version": 2,
+        "positive_bot_style_count": 2,
+    }
+
+
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_api_forwards_bot_group_scope(monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as semantic_style
 
     calls: list[tuple[str, int | None, int | None]] = []
@@ -48,17 +105,25 @@ def test_repeater_semantic_style_api_forwards_bot_group_scope(monkeypatch) -> No
         semantic_style,
         "update_semantic_style_overrides",
         lambda overrides, *, bot_id=None, group_id=None: (
-            calls.append(("overrides", bot_id, group_id)) or {"overrides": overrides}
+            calls.append(("overrides", bot_id, group_id))
+            or {
+                "overrides": {
+                    "aggressive": False,
+                    "nonsense": False,
+                    "direct": overrides.get("direct", False),
+                    "image": False,
+                },
+            }
         ),
     )
-    client = _build_client(monkeypatch)
-
-    status = client.get("/pallas/api/llm/repeater-semantic-style?bot_id=100&group_id=42")
-    updated = client.post(
-        "/pallas/api/llm/repeater-semantic-style/manage",
-        json={"action": "overrides", "bot_id": 100, "group_id": 42, "overrides": {"direct": False}},
-    )
-    incomplete = client.get("/pallas/api/llm/repeater-semantic-style?bot_id=100")
+    app = _build_app(monkeypatch)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        status = await client.get("/pallas/api/llm/repeater-semantic-style?bot_id=100&group_id=42")
+        updated = await client.post(
+            "/pallas/api/llm/repeater-semantic-style/manage",
+            json={"action": "overrides", "bot_id": 100, "group_id": 42, "overrides": {"direct": False}},
+        )
+        incomplete = await client.get("/pallas/api/llm/repeater-semantic-style?bot_id=100")
 
     assert status.status_code == 200, status.text
     assert updated.status_code == 200, updated.text
@@ -66,14 +131,26 @@ def test_repeater_semantic_style_api_forwards_bot_group_scope(monkeypatch) -> No
     assert calls == [("status", 100, 42), ("overrides", 100, 42)]
 
 
-def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as semantic_style
 
     calls: list[tuple[str, object]] = []
     monkeypatch.setattr(
         semantic_style,
         "update_semantic_style_overrides",
-        lambda overrides: calls.append(("overrides", overrides)) or {"enabled": True, "overrides": overrides},
+        lambda overrides: (
+            calls.append(("overrides", overrides))
+            or {
+                "enabled": True,
+                "overrides": {
+                    "aggressive": False,
+                    "nonsense": False,
+                    "direct": overrides.get("direct", False),
+                    "image": False,
+                },
+            }
+        ),
         raising=False,
     )
     monkeypatch.setattr(
@@ -106,19 +183,19 @@ def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch) -> N
         lambda enabled: calls.append(("disable", enabled)) or {"enabled": enabled},
         raising=False,
     )
-    client = _build_client(monkeypatch)
-
-    for body in (
-        {"action": "overrides", "overrides": {"direct": False}},
-        {"action": "clear"},
-        {"action": "rebuild"},
-        {"action": "quality"},
-        {"action": "recover"},
-        {"action": "disable"},
-    ):
-        response = client.post("/pallas/api/llm/repeater-semantic-style/manage", json=body)
-        assert response.status_code == 200, response.text
-        assert response.json()["ok"] is True
+    app = _build_app(monkeypatch)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for body in (
+            {"action": "overrides", "overrides": {"direct": False}},
+            {"action": "clear"},
+            {"action": "rebuild"},
+            {"action": "quality"},
+            {"action": "recover"},
+            {"action": "disable"},
+        ):
+            response = await client.post("/pallas/api/llm/repeater-semantic-style/manage", json=body)
+            assert response.status_code == 200, response.text
+            assert response.json()["ok"] is True
 
     assert calls == [
         ("overrides", {"direct": False}),
@@ -130,17 +207,73 @@ def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch) -> N
     ]
 
 
-def test_repeater_semantic_style_manage_rejects_unknown_action(monkeypatch) -> None:
-    response = _build_client(monkeypatch).post(
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_override_patch_preserves_unspecified_values(monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as semantic_style
+
+    current = {"aggressive": True, "nonsense": True, "direct": True, "image": True}
+
+    def update(overrides):
+        current.update(overrides)
+        return {"enabled": True, "overrides": current}
+
+    monkeypatch.setattr(semantic_style, "update_semantic_style_overrides", update)
+
+    response = await request(
+        monkeypatch,
+        "POST",
+        "/pallas/api/llm/repeater-semantic-style/manage",
+        json={"action": "overrides", "overrides": {"direct": False}},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["overrides"] == {
+        "aggressive": True,
+        "nonsense": True,
+        "direct": False,
+        "image": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_null_override_is_a_noop(monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as semantic_style
+
+    current = {"aggressive": True, "nonsense": False, "direct": True, "image": False}
+
+    def update(overrides):
+        assert all(isinstance(value, bool) for value in overrides.values())
+        current.update(overrides)
+        return {"enabled": True, "overrides": current}
+
+    monkeypatch.setattr(semantic_style, "update_semantic_style_overrides", update)
+
+    response = await request(
+        monkeypatch,
+        "POST",
+        "/pallas/api/llm/repeater-semantic-style/manage",
+        json={"action": "overrides", "overrides": {"direct": None}},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["overrides"] == current
+
+
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_manage_rejects_unknown_action(monkeypatch) -> None:
+    response = await request(
+        monkeypatch,
+        "POST",
         "/pallas/api/llm/repeater-semantic-style/manage",
         json={"action": "unknown"},
     )
 
-    assert response.status_code == 400
-    assert "action" in response.json()["detail"]
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "action"]
 
 
-def test_repeater_semantic_style_manage_checks_write_token(monkeypatch) -> None:
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_manage_checks_write_token(monkeypatch) -> None:
     from packages.pb_webui import llm_product_api
     from pallas.product.llm import repeater_semantic_style as semantic_style
 
@@ -152,7 +285,9 @@ def test_repeater_semantic_style_manage_checks_write_token(monkeypatch) -> None:
     )
     monkeypatch.setattr(semantic_style, "semantic_style_status", lambda: {"enabled": True})
 
-    response = _build_client(monkeypatch).post(
+    response = await request(
+        monkeypatch,
+        "POST",
         "/pallas/api/llm/repeater-semantic-style/manage",
         json={"action": "status"},
     )

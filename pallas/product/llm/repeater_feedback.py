@@ -14,13 +14,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.core.foundation.paths import plugin_data_dir
-from pallas.core.platform.ai_callback.task_types import (
-    LLM_CHAT_TASK_TYPE,
-    REPEATER_FALLBACK_TASK_TYPE,
-    REPEATER_POLISH_LITE_TASK_TYPE,
-    REPEATER_POLISH_TASK_TYPE,
-    REPEATER_SELECT_TASK_TYPE,
-)
+from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm.kernel.memory_governance import (
     can_collect_feedback,
     can_promote_writeback,
@@ -40,20 +34,7 @@ _SYSTEM_PROMOTE_BLOCK_RE = re.compile(
     r"亚托莉|思考中|（发呆）|\(发呆\))"
 )
 
-_FEEDBACK_TASK_TYPES = frozenset({
-    LLM_CHAT_TASK_TYPE,
-    REPEATER_FALLBACK_TASK_TYPE,
-    REPEATER_POLISH_TASK_TYPE,
-    REPEATER_POLISH_LITE_TASK_TYPE,
-    REPEATER_SELECT_TASK_TYPE,
-})
-
-_TASK_TYPE_TO_LLM_ROUTE = {
-    REPEATER_FALLBACK_TASK_TYPE: "corpus_fallback",
-    REPEATER_POLISH_TASK_TYPE: "corpus_polish",
-    REPEATER_POLISH_LITE_TASK_TYPE: "corpus_polish_lite",
-    REPEATER_SELECT_TASK_TYPE: "corpus_select",
-}
+_FEEDBACK_TASK_TYPES = frozenset({LLM_CHAT_TASK_TYPE})
 
 
 class LlmRepeaterFeedbackEntry(BaseModel):
@@ -76,6 +57,9 @@ class LlmRepeaterFeedbackEntry(BaseModel):
     eligible_for_writeback: bool = False
     corrected_reply_text: str = ""
     corrected_at: int = 0
+    bot_message_id: int = 0
+    semantic_source_example_id: str = ""
+    semantic_scene: str = ""
 
 
 _GROUP_ENTRIES_CACHE_TTL_SEC = 5.0
@@ -87,16 +71,28 @@ _group_entries_index_path = ""
 _group_entries_index_revision: tuple[int, int] | None = None
 _group_entries_index: dict[int, list[LlmRepeaterFeedbackEntry]] = {}
 _group_entries_revisions: dict[int, int] = {}
+_bot_message_index_path = ""
+_bot_message_index_revision: tuple[int, int] | None = None
+_bot_message_index: dict[tuple[int, int, int], LlmRepeaterFeedbackEntry] = {}
 
 
 def clear_group_feedback_entries_cache() -> None:
-    global _group_entries_index_path, _group_entries_index_revision, _group_entries_index
+    global \
+        _bot_message_index, \
+        _bot_message_index_path, \
+        _bot_message_index_revision, \
+        _group_entries_index, \
+        _group_entries_index_path, \
+        _group_entries_index_revision
     with _group_entries_index_lock:
         _group_entries_cache.clear()
         _group_entries_index_path = ""
         _group_entries_index_revision = None
         _group_entries_index = {}
         _group_entries_revisions.clear()
+        _bot_message_index_path = ""
+        _bot_message_index_revision = None
+        _bot_message_index = {}
 
 
 def feedback_base_dir() -> Path:
@@ -161,10 +157,14 @@ def _note_feedback_entry_append(
     before_revision: tuple[int, int],
     after_revision: tuple[int, int],
 ) -> None:
-    global _group_entries_index_path, _group_entries_index_revision, _group_entries_index
+    global _bot_message_index_revision, _group_entries_index, _group_entries_index_path, _group_entries_index_revision
     path_key = _feedback_entries_path_key(path)
     group_id = int(entry.group_id)
     with _group_entries_index_lock:
+        if _bot_message_index_path == path_key and _bot_message_index_revision == before_revision:
+            if entry.bot_message_id > 0:
+                _bot_message_index[(entry.bot_id, entry.group_id, entry.bot_message_id)] = entry
+            _bot_message_index_revision = after_revision
         if _group_entries_index_path != path_key:
             return
         if _group_entries_index_revision != before_revision:
@@ -179,11 +179,8 @@ def _note_feedback_entry_append(
         _group_entries_revisions[group_id] = _group_entries_revisions.get(group_id, 0) + 1
 
 
-def resolve_feedback_llm_route(*, task_type: str, llm_route: str = "") -> str:
-    explicit = str(llm_route or "").strip()
-    if explicit:
-        return explicit
-    return _TASK_TYPE_TO_LLM_ROUTE.get(str(task_type or "").strip().lower(), "")
+def normalize_feedback_llm_route(llm_route: str = "") -> str:
+    return str(llm_route or "").strip()
 
 
 def is_feedback_task_type(task_type: str) -> bool:
@@ -215,7 +212,6 @@ def should_collect_llm_repeater_feedback(
     user_text: str,
     reply_text: str,
     source_tags: list[str],
-    fallback_text: str = "",
     llm_route: str = "",
 ) -> bool:
     normalized_task = str(task_type or "").strip().lower()
@@ -224,8 +220,6 @@ def should_collect_llm_repeater_feedback(
     if int(group_id or 0) <= 0:
         return False
     trigger_text = str(user_text or "").strip()
-    if normalized_task != LLM_CHAT_TASK_TYPE and not trigger_text:
-        trigger_text = str(fallback_text or "").strip()
     if not trigger_text:
         return False
     plain_reply = str(reply_text or "").strip()
@@ -261,6 +255,9 @@ def build_feedback_entry(**kwargs: Any) -> LlmRepeaterFeedbackEntry:
         eligible_for_writeback=bool(kwargs.get("eligible_for_writeback", False)),
         corrected_reply_text=str(kwargs.get("corrected_reply_text") or "").strip(),
         corrected_at=int(kwargs.get("corrected_at") or 0),
+        bot_message_id=int(kwargs.get("bot_message_id") or 0),
+        semantic_source_example_id=str(kwargs.get("semantic_source_example_id") or "").strip(),
+        semantic_scene=str(kwargs.get("semantic_scene") or "").strip(),
     )
 
 
@@ -347,6 +344,62 @@ def find_feedback_entry(*, entry_id: str = "", request_id: str = "") -> LlmRepea
         if target_request_id and str(item.request_id).strip() == target_request_id:
             return item
     return None
+
+
+def find_feedback_entry_by_bot_message_id(
+    *, bot_id: int, group_id: int, bot_message_id: int
+) -> LlmRepeaterFeedbackEntry | None:
+    global _bot_message_index_path, _bot_message_index_revision, _bot_message_index
+    path = feedback_entries_path()
+    path_key = _feedback_entries_path_key(path)
+    revision = _feedback_entries_revision(path)
+    with _group_entries_index_lock:
+        if _bot_message_index_path != path_key or _bot_message_index_revision != revision:
+            rows = deque(_iter_feedback_entries(path), maxlen=4096) if path.exists() else ()
+            _bot_message_index = {
+                (item.bot_id, item.group_id, item.bot_message_id): item for item in rows if item.bot_message_id > 0
+            }
+            _bot_message_index_path = path_key
+            _bot_message_index_revision = revision
+        return _bot_message_index.get((int(bot_id), int(group_id), int(bot_message_id)))
+
+
+def record_quoted_semantic_style_feedback(
+    *,
+    bot_id: int,
+    group_id: int,
+    replied_bot_message_id: int,
+    following_created_at: int,
+    following_user_id: int,
+    following_text: str,
+) -> object | None:
+    entry = find_feedback_entry_by_bot_message_id(
+        bot_id=bot_id,
+        group_id=group_id,
+        bot_message_id=replied_bot_message_id,
+    )
+    if entry is None or not entry.semantic_source_example_id or not entry.semantic_scene:
+        return None
+    from pallas.product.llm.repeater_semantic_style import (
+        find_semantic_style_example,
+        record_bot_style_outcome,
+    )
+
+    example = find_semantic_style_example(
+        example_id=entry.semantic_source_example_id,
+        bot_id=entry.bot_id,
+        group_id=entry.group_id,
+        scene=entry.semantic_scene,
+    )
+    if example is None:
+        return None
+    return record_bot_style_outcome(
+        example,
+        bot_reply_created_at=entry.created_at,
+        following_created_at=following_created_at,
+        following_is_bot=int(following_user_id) == int(bot_id),
+        following_text=following_text,
+    )
 
 
 def effective_feedback_reply_text(entry: LlmRepeaterFeedbackEntry) -> str:

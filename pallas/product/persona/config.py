@@ -26,7 +26,3 @@ def persona_affect_gate_enabled() -> bool:
 
 def persona_activity_ingress_enabled() -> bool:
     return _env_bool("PERSONA_ACTIVITY_INGRESS_ENABLED", True)
-
-
-def persona_preset_layers_enabled() -> bool:
-    return _env_bool("PERSONA_PRESET_LAYERS_ENABLED", True)

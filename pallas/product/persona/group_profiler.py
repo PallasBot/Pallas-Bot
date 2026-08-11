@@ -5,16 +5,22 @@ import time
 from collections import Counter, defaultdict
 from typing import TYPE_CHECKING, Any
 
-from .affect_baseline import derive_group_affect_bias, merge_affect_refine_into_profile
-from .affect_tone_scan import summarize_group_message_tones
+from .group_expression_profile import (
+    MIN_READY_ANSWER_COUNT,
+    MIN_READY_MESSAGE_COUNT,
+    GroupExpressionAggregate,
+    GroupExpressionProfile,
+    GroupReplyShapeHint,
+    MessageLengthDistribution,
+)
 
 if TYPE_CHECKING:
     from pallas.core.foundation.db.modules import Answer, Message
 
 
 DEFAULT_WINDOW_HOURS = 168
-MIN_MESSAGE_COUNT = 30
-MIN_ANSWER_COUNT = 5
+MIN_MESSAGE_COUNT = MIN_READY_MESSAGE_COUNT
+MIN_ANSWER_COUNT = MIN_READY_ANSWER_COUNT
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -97,8 +103,6 @@ def build_group_style_profile(
     })
     local_answer_ratio = round(answer_count / message_count, 4) if message_count else 0.0
 
-    short_message_count = sum(1 for n in non_empty_plain_lengths if n <= 4)
-    short_message_ratio = short_message_count / message_count if message_count else 0.0
     keyword_counts = Counter(str(answer.keywords) for answer in recent_answers if str(answer.keywords or "").strip())
     repeated_answer_entries = sum(1 for answer in recent_answers if int(getattr(answer, "count", 0) or 0) >= 2)
     repeated_keywords = sum(1 for count in keyword_counts.values() if count >= 2)
@@ -106,81 +110,41 @@ def build_group_style_profile(
     if answer_count:
         repeat_chain_rate = round(
             _clamp(
-                (repeated_answer_entries + repeated_keywords + short_message_ratio * answer_count) / (answer_count * 3),
+                (repeated_answer_entries + repeated_keywords) / (answer_count * 2),
                 0.0,
                 1.0,
             ),
             4,
         )
 
-    plain_texts = [
-        str(getattr(m, "plain_text", "") or "").strip()
-        for m in recent_messages
-        if str(getattr(m, "plain_text", "") or "").strip()
-    ]
-    affect_tone = summarize_group_message_tones(plain_texts)
-
-    profile: dict[str, Any] = {
-        "version": 1,
-        "updated_at": now,
-        "sample": {
-            "window_hours": int(window_hours),
-            "message_count": message_count,
-            "answer_count": answer_count,
-            "distinct_answer_keywords": distinct_answer_keywords,
-            "forced_teach_weight": round(max(0.0, float(forced_teach_weight)), 3),
-            "contamination_skipped": {
-                "message_count": int(message_skipped_contamination),
-                "answer_count": int(answer_skipped_contamination),
-            },
-        },
-        "raw": {
-            "avg_plain_len": avg_plain_len,
-            "p50_plain_len": p50_plain_len,
-            "p90_plain_len": p90_plain_len,
-            "msgs_per_hour_active": msgs_per_hour_active,
-            "local_answer_ratio": local_answer_ratio,
-            "repeat_chain_rate": repeat_chain_rate,
-            "affect_tone": affect_tone,
-        },
-    }
-
-    if message_count < MIN_MESSAGE_COUNT or answer_count < MIN_ANSWER_COUNT:
-        return profile
-
-    answer_diversity = distinct_answer_keywords / answer_count if answer_count else 0.0
-    reply_bias_mul = _clamp(0.92 + local_answer_ratio * 0.35 + min(msgs_per_hour_active, 12.0) * 0.01, 0.85, 1.15)
-    speak_bias_mul = _clamp(0.95 + min(msgs_per_hour_active, 10.0) * 0.008 + repeat_chain_rate * 0.08, 0.9, 1.1)
-    chaos_bias = _clamp(
-        repeat_chain_rate * 0.45 + short_message_ratio * 0.15 + max(0.0, (1.0 - answer_diversity)) * 0.05, 0.0, 0.25
+    profile = GroupExpressionProfile(
+        aggregate=GroupExpressionAggregate(
+            sample_count=message_count + answer_count,
+            window_hours=int(window_hours),
+            message_count=message_count,
+            answer_count=answer_count,
+            distinct_answer_keywords=distinct_answer_keywords,
+            active_hour_count=len(hour_buckets),
+            messages_per_active_hour=msgs_per_hour_active,
+            message_length=MessageLengthDistribution(
+                average=avg_plain_len,
+                p50=p50_plain_len,
+                p90=p90_plain_len,
+            ),
+            answer_ratio=local_answer_ratio,
+            repetition_rate=repeat_chain_rate,
+            forced_teach_weight=round(max(0.0, float(forced_teach_weight)), 3),
+            contamination_skipped_messages=message_skipped_contamination,
+            contamination_skipped_answers=answer_skipped_contamination,
+        ),
+        reply_shape=GroupReplyShapeHint(
+            length_pref=_length_pref(p50_plain_len, p90_plain_len)
+            if message_count >= MIN_MESSAGE_COUNT and answer_count >= MIN_ANSWER_COUNT
+            else "any"
+        ),
+        updated_at=now,
     )
-
-    teach_weight = max(0.0, float(forced_teach_weight))
-    if teach_weight > 0:
-        teach_mul = 1.0 + min(0.4, teach_weight * 0.06)
-        speak_bias_mul = _clamp(speak_bias_mul * teach_mul, 0.9, 1.1)
-        chaos_bias = _clamp(chaos_bias * teach_mul, 0.0, 0.25)
-
-    affect = derive_group_affect_bias(
-        repeat_chain_rate=repeat_chain_rate,
-        short_message_ratio=short_message_ratio,
-        local_answer_ratio=local_answer_ratio,
-        forced_teach_weight=teach_weight,
-        civility_score=float(affect_tone.get("civility_score") or 0.0),
-        harsh_msg_ratio=float(affect_tone.get("harsh_msg_ratio") or 0.0),
-        polite_msg_ratio=float(affect_tone.get("polite_msg_ratio") or 0.0),
-        punct_aggression_avg=float(affect_tone.get("punct_aggression_avg") or 0.0),
-    )
-
-    profile["derived"] = {
-        "reply_bias_mul": round(reply_bias_mul, 3),
-        "speak_bias_mul": round(speak_bias_mul, 3),
-        "length_pref": _length_pref(p50_plain_len, p90_plain_len),
-        "chaos_bias": round(chaos_bias, 3),
-        "warmth_bias": affect["warmth_bias"],
-        "assertiveness_bias": affect["assertiveness_bias"],
-    }
-    return merge_affect_refine_into_profile(profile, None)
+    return profile.model_dump(mode="json")
 
 
 async def build_group_style_profile_from_recent_repos(

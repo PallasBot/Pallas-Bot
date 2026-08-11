@@ -38,10 +38,10 @@ def test_build_group_style_profile_ignores_stale_data_and_requires_enough_sample
         window_hours=168,
     )
 
-    assert profile["sample"]["message_count"] == 1
-    assert profile["sample"]["answer_count"] == 1
+    assert profile["aggregate"]["message_count"] == 1
+    assert profile["aggregate"]["answer_count"] == 1
+    assert profile["reply_shape"]["length_pref"] == "any"
     assert "derived" not in profile
-    assert "affect_tone" in profile["raw"]
 
 
 def test_build_group_style_profile_prefers_short_lively_groups() -> None:
@@ -59,12 +59,10 @@ def test_build_group_style_profile_prefers_short_lively_groups() -> None:
         window_hours=168,
     )
 
-    assert profile["derived"]["length_pref"] == "short"
-    assert profile["derived"]["reply_bias_mul"] > 1.0
-    assert profile["derived"]["chaos_bias"] > 0.0
-    assert "warmth_bias" in profile["derived"]
-    assert "assertiveness_bias" in profile["derived"]
-    assert profile["sample"]["affect_refine"]["source"] == "none"
+    assert profile["reply_shape"]["length_pref"] == "short"
+    assert profile["aggregate"]["messages_per_active_hour"] > 0
+    assert profile["aggregate"]["repetition_rate"] > 0.0
+    assert "warmth_bias" not in str(profile)
 
 
 def test_build_group_style_profile_boosts_forced_teach_weight() -> None:
@@ -91,8 +89,8 @@ def test_build_group_style_profile_boosts_forced_teach_weight() -> None:
         forced_teach_weight=5.0,
     )
 
-    assert boosted["sample"]["forced_teach_weight"] == 5.0
-    assert boosted["derived"]["chaos_bias"] >= base["derived"]["chaos_bias"]
+    assert boosted["aggregate"]["forced_teach_weight"] == 5.0
+    assert boosted["aggregate"]["repetition_rate"] == base["aggregate"]["repetition_rate"]
 
 
 def test_build_group_style_profile_prefers_long_calm_groups() -> None:
@@ -116,12 +114,11 @@ def test_build_group_style_profile_prefers_long_calm_groups() -> None:
         window_hours=168,
     )
 
-    assert profile["derived"]["length_pref"] == "long"
-    assert profile["derived"]["reply_bias_mul"] <= 1.05
-    assert profile["derived"]["chaos_bias"] <= 0.1
+    assert profile["reply_shape"]["length_pref"] == "long"
+    assert profile["aggregate"]["message_length"]["p50"] >= 20
 
 
-def test_build_group_style_profile_tracks_affect_tone() -> None:
+def test_build_group_style_profile_does_not_write_account_persona_fields() -> None:
     from pallas.product.persona.group_profiler import build_group_style_profile
 
     now = 1_700_000_000
@@ -136,7 +133,6 @@ def test_build_group_style_profile_tracks_affect_tone() -> None:
         window_hours=168,
     )
 
-    tone = profile["raw"]["affect_tone"]
-    assert tone["polite_msg_ratio"] > 0.0
-    assert tone["civility_score"] > 0.0
-    assert profile["derived"]["warmth_bias"] > 0.0
+    assert "warmth" not in str(profile)
+    assert "assertiveness" not in str(profile)
+    assert "chaos" not in str(profile)
